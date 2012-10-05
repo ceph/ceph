@@ -614,7 +614,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
 {
   MOSDOp *m = (MOSDOp*)op->request;
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
-  if ((m->get_rmw_flags() & CEPH_OSD_FLAG_PGOP)) {
+  if (m->includes_pg_op()) {
     if (pg_op_must_wait(m)) {
       wait_for_all_missing(op);
       return;
@@ -683,7 +683,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
       // If we're not the primary of this OSD, and we have
       // CEPH_OSD_FLAG_LOCALIZE_READS set, we just return -EAGAIN. Otherwise,
       // we have to wait for the object.
-      if (is_primary() || (!(m->get_rmw_flags() & CEPH_OSD_FLAG_LOCALIZE_READS))) {
+      if (is_primary() || (!(m->get_flags() & CEPH_OSD_FLAG_LOCALIZE_READS))) {
 	// missing the specific snap we need; requeue and wait.
 	assert(!can_create); // only happens on a read
 	hobject_t soid(m->get_oid(), m->get_object_locator().key,

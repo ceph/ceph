@@ -33,8 +33,14 @@ ostream& operator<<(ostream& out, rwxa_t p)
     out << "r";
   if (p & OSD_CAP_W)
     out << "w";
-  if (p & OSD_CAP_X)
+  if ((p & OSD_CAP_X) == OSD_CAP_X) {
     out << "x";
+  } else {
+    if (p & OSD_CAP_CLS_R)
+      out << " class-read";
+    if (p & OSD_CAP_CLS_W)
+      out << " class-write";
+  }
   return out;
 }
 
@@ -98,18 +104,20 @@ void OSDCap::set_allow_all()
   grants.push_back(OSDCapGrant(OSDCapMatch(), OSDCapSpec(OSD_CAP_ANY)));
 }
 
-bool OSDCap::is_capable(const string& pool_name, int64_t pool_auid, const string& object,
-			bool op_may_read, bool op_may_write, bool op_may_exec) const
+bool OSDCap::is_capable(const string& pool_name, int64_t pool_auid,
+			const string& object, bool op_may_read,
+			bool op_may_write, bool op_may_class_read,
+			bool op_may_class_write) const
 {
   rwxa_t allow = 0;
-  for (vector<OSDCapGrant>::const_iterator p = grants.begin(); p != grants.end(); ++p) {
+  for (vector<OSDCapGrant>::const_iterator p = grants.begin();
+       p != grants.end(); ++p) {
     if (p->match.is_match(pool_name, pool_auid, object)) {
       allow |= p->spec.allow;
-      if (op_may_read && !(allow & OSD_CAP_R))
-	continue;
-      if (op_may_write && !(allow & OSD_CAP_W))
-	continue;
-      if (op_may_exec && !(allow & OSD_CAP_X))
+      if ((op_may_read && !(allow & OSD_CAP_R)) ||
+	  (op_may_write && !(allow & OSD_CAP_W)) ||
+	  (op_may_class_read && !(allow & OSD_CAP_CLS_R)) ||
+	  (op_may_class_write && !(allow & OSD_CAP_CLS_W)))
 	continue;
       return true;
     }
@@ -124,7 +132,7 @@ namespace ascii = boost::spirit::ascii;
 namespace phoenix = boost::phoenix;
 
 template <typename Iterator>
-struct OSDCapParser : qi::grammar<Iterator, OSDCap(), ascii::space_type>
+struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
 {
   OSDCapParser() : OSDCapParser::base_type(osdcap)
   {
@@ -145,46 +153,56 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap(), ascii::space_type>
     unquoted_word %= +(alnum | '_' | '-');
     str %= quoted_string | unquoted_word;
 
-    // match := [pool <poolname> | auid <123>] [object_prefix <prefix>]
-    pool_name %= -(lit("pool") >> str);
-    object_prefix %= -(lit("object_prefix") >> str);
-    match = ( (lit("auid") >> int_ >> object_prefix)   [_val = phoenix::construct<OSDCapMatch>(_1, _2)] |
-	      (pool_name >> object_prefix)             [_val = phoenix::construct<OSDCapMatch>(_1, _2)]);
-	      
+    spaces = +lit(' ');
 
-    // rwxa := * | [r][w][x]
+    // match := [pool[=]<poolname> | auid <123>] [object_prefix <prefix>]
+    pool_name %= -(spaces >> lit("pool") >> (lit('=') | spaces) >> str);
+    auid %= (spaces >> lit("auid") >> spaces >> int_);
+    object_prefix %= -(spaces >> lit("object_prefix") >> spaces >> str);
+
+    match = ( (auid >> object_prefix)                 [_val = phoenix::construct<OSDCapMatch>(_1, _2)] |
+	      (pool_name >> object_prefix)            [_val = phoenix::construct<OSDCapMatch>(_1, _2)]);
+
+    // rwxa := * | [r][w][x] [class-read] [class-write]
     rwxa =
-      lit('*')[_val = OSD_CAP_ANY] |
+      (spaces >> lit("*")[_val = OSD_CAP_ANY]) |
       ( eps[_val = 0] >>
-	( lit('r')[_val |= OSD_CAP_R] ||
-	  lit('w')[_val |= OSD_CAP_W] ||
-	  lit('x')[_val |= OSD_CAP_X] ));
+	(
+	 spaces >>
+	 ( lit('r')[_val |= OSD_CAP_R] ||
+	   lit('w')[_val |= OSD_CAP_W] ||
+	   lit('x')[_val |= OSD_CAP_X] )) ||
+	( (spaces >> lit("class-read")[_val |= OSD_CAP_CLS_R]) ||
+	  (spaces >> lit("class-write")[_val |= OSD_CAP_CLS_W]) ));
 
     // capspec := * | rwx | class <name> [classcap]
     capspec =
       rwxa                                            [_val = phoenix::construct<OSDCapSpec>(_1)] |
-      ( lit("class") >> ((str >> str)                 [_val = phoenix::construct<OSDCapSpec>(_1, _2)] |
+      ( spaces >> lit("class") >> spaces >> ((str >> spaces >> str)   [_val = phoenix::construct<OSDCapSpec>(_1, _2)] |
 			 str                          [_val = phoenix::construct<OSDCapSpec>(_1, string())] ));
 
     // grant := allow match capspec
-    grant = lit("allow") >> ((capspec >> match)       [_val = phoenix::construct<OSDCapGrant>(_2, _1)] |
-			     (match >> capspec)       [_val = phoenix::construct<OSDCapGrant>(_1, _2)]);
-
+    grant = (*lit(' ') >> lit("allow") >>
+	     ((capspec >> match)       [_val = phoenix::construct<OSDCapGrant>(_2, _1)] |
+	      (match >> capspec)       [_val = phoenix::construct<OSDCapGrant>(_1, _2)]) >>
+	     *lit(' '));
     // osdcap := grant [grant ...]
-    grants %= (grant % (lit(';') | lit(',')));
+    grants %= (grant % (*lit(' ') >> (lit(';') | lit(',')) >> *lit(' ')));
     osdcap = grants  [_val = phoenix::construct<OSDCap>(_1)]; 
   }
-  qi::rule<Iterator, unsigned(), ascii::space_type> rwxa;
-  qi::rule<Iterator, string(), ascii::space_type> quoted_string;
+  qi::rule<Iterator> spaces;
+  qi::rule<Iterator, unsigned()> rwxa;
+  qi::rule<Iterator, string()> quoted_string;
   qi::rule<Iterator, string()> unquoted_word;
-  qi::rule<Iterator, string(), ascii::space_type> str;
-  qi::rule<Iterator, OSDCapSpec(), ascii::space_type> capspec;
-  qi::rule<Iterator, string(), ascii::space_type> pool_name;
-  qi::rule<Iterator, string(), ascii::space_type> object_prefix;
-  qi::rule<Iterator, OSDCapMatch(), ascii::space_type> match;
-  qi::rule<Iterator, OSDCapGrant(), ascii::space_type> grant;
-  qi::rule<Iterator, std::vector<OSDCapGrant>(), ascii::space_type> grants;
-  qi::rule<Iterator, OSDCap(), ascii::space_type> osdcap;
+  qi::rule<Iterator, string()> str;
+  qi::rule<Iterator, int()> auid;
+  qi::rule<Iterator, OSDCapSpec()> capspec;
+  qi::rule<Iterator, string()> pool_name;
+  qi::rule<Iterator, string()> object_prefix;
+  qi::rule<Iterator, OSDCapMatch()> match;
+  qi::rule<Iterator, OSDCapGrant()> grant;
+  qi::rule<Iterator, std::vector<OSDCapGrant>()> grants;
+  qi::rule<Iterator, OSDCap()> osdcap;
 };
 
 bool OSDCap::parse(const string& str, ostream *err)

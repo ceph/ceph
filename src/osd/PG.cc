@@ -1569,14 +1569,17 @@ bool PG::op_has_sufficient_caps(OpRequestRef op)
     key = req->get_oid().name;
 
   bool cap = caps.is_capable(pool.name, pool.auid, key,
-			     req->may_read(), req->may_write(), req->require_exec_caps());
+			     req->need_read_cap(),
+			     req->need_write_cap(),
+			     req->need_class_read_cap(),
+			     req->need_class_write_cap());
 
   dout(20) << "op_has_sufficient_caps pool=" << pool.id << " (" << pool.name
 	   << ") owner=" << pool.auid
-	   << " may_read=" << req->may_read()
-	   << " may_write=" << req->may_write()
-	   << " may_exec=" << req->may_exec()
-           << " require_exec_caps=" << req->require_exec_caps()
+	   << " need_read_cap=" << req->need_read_cap()
+	   << " need_write_cap=" << req->need_write_cap()
+	   << " need_class_read_cap=" << req->need_class_read_cap()
+	   << " need_class_write_cap=" << req->need_class_write_cap()
 	   << " -> " << (cap ? "yes" : "NO")
 	   << dendl;
   return cap;
