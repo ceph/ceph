@@ -48,13 +48,14 @@ namespace librbd {
 
   void AioRequest::read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents)
   {
-    ldout(m_ictx->cct, 20) << "read_from_parent this = " << this << dendl;
-
     assert(!m_parent_completion);
     assert(m_ictx->parent_lock.is_locked());
-
     m_parent_completion = aio_create_completion_internal(this, rbd_req_cb);
-    aio_read(m_ictx->parent, image_extents, m_read_data.c_str(), NULL,
+    ldout(m_ictx->cct, 20) << "read_from_parent this = " << this
+			   << " parent completion " << m_parent_completion
+			   << " extents " << image_extents
+			   << dendl;
+    aio_read(m_ictx->parent, image_extents, NULL, &m_read_data,
 	     m_parent_completion);
   }
 
@@ -82,16 +83,6 @@ namespace librbd {
       uint64_t object_overlap = m_ictx->prune_parent_extents(image_extents, image_overlap);
       if (object_overlap) {
 	m_tried_parent = true;
-
-	ceph::buffer::ptr bp(object_overlap);
-	m_read_data.append(bp);
-	if (object_overlap < m_object_len) {
-	  ceph::buffer::ptr bp2(m_object_len - object_overlap);
-	  bp2.zero();
-	  m_read_data.append(bp2);
-	}
-
-	m_ext_map[m_object_off] = m_object_len;	 // the parent IO will read this extent
 	read_from_parent(image_extents);
 	return false;
       }
@@ -176,8 +167,6 @@ namespace librbd {
 	assert(m_object_image_extents.size());
 
 	m_state = LIBRBD_AIO_WRITE_COPYUP;
-	ceph::buffer::ptr bp(m_parent_overlap);
-	m_read_data.append(bp);
 	read_from_parent(m_object_image_extents);
 	break;
       }
