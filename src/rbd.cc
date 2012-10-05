@@ -1220,12 +1220,24 @@ static int get_cmd(const char *cmd, bool snapcmd, bool lockcmd)
   return OPT_NO_CMD;
 }
 
-static void set_conf_param(const char *param, const char **var1, const char **var2)
+/*
+ * Called 1-N times depending on how many args the command needs.  If
+ * the positional varN is already set, set the next one; this handles
+ * both --args above and unadorned args below.  Calling with all args
+ * filled is an error.
+ */
+static bool set_conf_param(const char *param, const char **var1,
+			   const char **var2, const char **var3)
 {
   if (!*var1)
     *var1 = param;
   else if (var2 && !*var2)
     *var2 = param;
+  else if (var3 && !*var3)
+    *var3 = param;
+  else
+    return false;
+  return true;
 }
 
 int main(int argc, const char **argv)
@@ -1344,11 +1356,22 @@ int main(int argc, const char **argv)
     return EXIT_FAILURE;
   }
 
+  // loop across all remaining arguments; by command, accumulate any
+  // that are still missing into the appropriate variables, one at a
+  // time (i.e. SET_CONF_PARAM will be called N times for N remaining
+  // arguments).
+
+#define SET_CONF_PARAM(v, p1, p2, p3) \
+if (!set_conf_param(v, p1, p2, p3)) { \
+  cerr << "rbd: extraneous parameter " << v << std::endl; \
+  return EXIT_FAILURE; \
+}
+
   for (i = args.erase(i); i != args.end(); ++i) {
     const char *v = *i;
     switch (opt_cmd) {
       case OPT_LIST:
-	set_conf_param(v, &poolname, NULL);
+	SET_CONF_PARAM(v, &poolname, NULL, NULL);
 	break;
       case OPT_INFO:
       case OPT_CREATE:
@@ -1365,53 +1388,33 @@ int main(int argc, const char **argv)
       case OPT_WATCH:
       case OPT_MAP:
       case OPT_LOCK_LIST:
-	set_conf_param(v, &imgname, NULL);
+	SET_CONF_PARAM(v, &imgname, NULL, NULL);
 	break;
       case OPT_UNMAP:
-	set_conf_param(v, &devpath, NULL);
+	SET_CONF_PARAM(v, &devpath, NULL, NULL);
 	break;
       case OPT_EXPORT:
-	set_conf_param(v, &imgname, &path);
+	SET_CONF_PARAM(v, &imgname, &path, NULL);
 	break;
       case OPT_IMPORT:
-	set_conf_param(v, &path, &destname);
+	SET_CONF_PARAM(v, &path, &destname, NULL);
 	break;
       case OPT_COPY:
       case OPT_RENAME:
-	set_conf_param(v, &imgname, &destname);
-	break;
       case OPT_CLONE:
-	if (imgname == NULL) {
-	  set_conf_param(v, &imgname, NULL);
-        } else {
-	  set_conf_param(v, &destname, NULL);
-	}
+	SET_CONF_PARAM(v, &imgname, &destname, NULL);
 	break;
       case OPT_SHOWMAPPED:
 	usage();
 	return EXIT_FAILURE;
       case OPT_CHILDREN:
-	set_conf_param(v, &imgname, NULL);
+	SET_CONF_PARAM(v, &imgname, NULL, NULL);
 	break;
       case OPT_LOCK_ADD:
-	if (args.size() < 2) {
-	  cerr << "error: not enough arguments to lock add" << std::endl;
-	  return EXIT_FAILURE;
-	}
-	set_conf_param(v, &imgname, NULL);
-	v = *(++i);
-	set_conf_param(v, &lock_cookie, NULL);
+	SET_CONF_PARAM(v, &imgname, &lock_cookie, NULL);
 	break;
       case OPT_LOCK_REMOVE:
-	if (args.size() < 3) {
-	  cerr << "error: not enough arguments to lock remove" << std::endl;
-	  return EXIT_FAILURE;
-	}
-	set_conf_param(v, &imgname, NULL);
-	v = *(++i);
-	set_conf_param(v, &lock_client, NULL);
-	v = *(++i);
-	set_conf_param(v, &lock_cookie, NULL);
+	SET_CONF_PARAM(v, &imgname, &lock_client, &lock_cookie);
 	break;
     default:
 	assert(0);
