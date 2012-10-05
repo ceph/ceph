@@ -53,6 +53,10 @@ private:
   snapid_t snapid;
   snapid_t snap_seq;
   vector<snapid_t> snaps;
+  bool check_rmw(int flag) {
+    assert(rmw_flags);
+    return rmw_flags & flag;
+  }
 
 public:
   int rmw_flags;
@@ -92,10 +96,28 @@ public:
   
   utime_t get_mtime() { return mtime; }
 
-  int get_rmw_flags() { assert(rmw_flags); return rmw_flags; }
-  bool may_read() { assert(rmw_flags); return rmw_flags & CEPH_OSD_FLAG_READ; }
-  bool may_write() { assert(rmw_flags); return rmw_flags & CEPH_OSD_FLAG_WRITE; }
-  bool may_exec() { assert(rmw_flags); return rmw_flags & CEPH_OSD_FLAG_EXEC; }
+  bool may_read() { return need_read_cap() || need_class_read_cap(); }
+  bool may_write() { return need_write_cap() || need_class_write_cap(); }
+  bool includes_pg_op() { return check_rmw(CEPH_OSD_RMW_FLAG_PGOP); }
+
+  bool need_read_cap() {
+    return check_rmw(CEPH_OSD_RMW_FLAG_READ);
+  }
+  bool need_write_cap() {
+    return check_rmw(CEPH_OSD_RMW_FLAG_WRITE);
+  }
+  bool need_class_read_cap() {
+    return check_rmw(CEPH_OSD_RMW_FLAG_CLASS_READ);
+  }
+  bool need_class_write_cap() {
+    return check_rmw(CEPH_OSD_RMW_FLAG_CLASS_WRITE);
+  }
+
+  void set_read() { rmw_flags |= CEPH_OSD_RMW_FLAG_READ; }
+  void set_write() { rmw_flags |= CEPH_OSD_RMW_FLAG_WRITE; }
+  void set_class_read() { rmw_flags |= CEPH_OSD_RMW_FLAG_CLASS_READ; }
+  void set_class_write() { rmw_flags |= CEPH_OSD_RMW_FLAG_CLASS_WRITE; }
+  void set_pg_op() { rmw_flags |= CEPH_OSD_RMW_FLAG_PGOP; }
 
   MOSDOp()
     : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION) { }

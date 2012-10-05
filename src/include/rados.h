@@ -282,11 +282,11 @@ static inline int ceph_osd_op_mode_subop(int op)
 }
 static inline int ceph_osd_op_mode_read(int op)
 {
-	return (op & CEPH_OSD_OP_MODE) == CEPH_OSD_OP_MODE_RD;
+	return op & CEPH_OSD_OP_MODE_RD;
 }
 static inline int ceph_osd_op_mode_modify(int op)
 {
-	return (op & CEPH_OSD_OP_MODE) == CEPH_OSD_OP_MODE_WR;
+	return op & CEPH_OSD_OP_MODE_WR;
 }
 
 /*
