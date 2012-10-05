@@ -46,6 +46,7 @@ namespace librbd {
       refresh_lock("librbd::ImageCtx::refresh_lock"),
       old_format(true),
       order(0), size(0), features(0),	id(image_id), parent(NULL),
+      stripe_unit(0), stripe_count(0),
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL)
   {
     md_ctx.dup(p);
@@ -120,6 +121,14 @@ namespace librbd {
 					     &object_prefix, &order);
       if (r < 0) {
 	lderr(cct) << "error reading immutable metadata: "
+		   << cpp_strerror(r) << dendl;
+	return r;
+      }
+
+      r = cls_client::get_stripe_unit_count(&md_ctx, header_oid,
+					    &stripe_unit, &stripe_count);
+      if (r < 0 && r != -ENOEXEC && r != -EINVAL) {
+	lderr(cct) << "error reading striping metadata: "
 		   << cpp_strerror(r) << dendl;
 	return r;
       }
