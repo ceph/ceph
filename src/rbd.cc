@@ -1344,87 +1344,79 @@ int main(int argc, const char **argv)
     return EXIT_FAILURE;
   }
 
-  i = args.erase(i);
-  const char *v = *i;
-  switch (opt_cmd) {
-    case OPT_LIST:
-      set_conf_param(v, &poolname, NULL);
-      break;
-    case OPT_INFO:
-    case OPT_CREATE:
-    case OPT_FLATTEN:
-    case OPT_RESIZE:
-    case OPT_RM:
-    case OPT_SNAP_CREATE:
-    case OPT_SNAP_ROLLBACK:
-    case OPT_SNAP_REMOVE:
-    case OPT_SNAP_LIST:
-    case OPT_SNAP_PURGE:
-    case OPT_SNAP_PROTECT:
-    case OPT_SNAP_UNPROTECT:
-    case OPT_WATCH:
-    case OPT_MAP:
-    case OPT_LOCK_LIST:
-      set_conf_param(v, &imgname, NULL);
-      break;
-    case OPT_UNMAP:
-      set_conf_param(v, &devpath, NULL);
-      break;
-    case OPT_EXPORT:
-      set_conf_param(v, &imgname, &path);
-      break;
-    case OPT_IMPORT:
-      set_conf_param(v, &path, &destname);
-      break;
-    case OPT_COPY:
-    case OPT_RENAME:
-      set_conf_param(v, &imgname, &destname);
-      break;
-    case OPT_CLONE:
-      if (imgname == NULL) {
+  for (i = args.erase(i); i != args.end(); ++i) {
+    const char *v = *i;
+    switch (opt_cmd) {
+      case OPT_LIST:
+	set_conf_param(v, &poolname, NULL);
+	break;
+      case OPT_INFO:
+      case OPT_CREATE:
+      case OPT_FLATTEN:
+      case OPT_RESIZE:
+      case OPT_RM:
+      case OPT_SNAP_CREATE:
+      case OPT_SNAP_ROLLBACK:
+      case OPT_SNAP_REMOVE:
+      case OPT_SNAP_LIST:
+      case OPT_SNAP_PURGE:
+      case OPT_SNAP_PROTECT:
+      case OPT_SNAP_UNPROTECT:
+      case OPT_WATCH:
+      case OPT_MAP:
+      case OPT_LOCK_LIST:
 	set_conf_param(v, &imgname, NULL);
-      } else {
-	set_conf_param(v, &destname, NULL);
-      }
-      break;
-    case OPT_SHOWMAPPED:
-      usage();
-      return EXIT_FAILURE;
-    case OPT_CHILDREN:
-      set_conf_param(v, &imgname, NULL);
-      break;
-    case OPT_LOCK_ADD:
-      if (args.size() < 2) {
-	cerr << "error: not enough arguments to lock add" << std::endl;
+	break;
+      case OPT_UNMAP:
+	set_conf_param(v, &devpath, NULL);
+	break;
+      case OPT_EXPORT:
+	set_conf_param(v, &imgname, &path);
+	break;
+      case OPT_IMPORT:
+	set_conf_param(v, &path, &destname);
+	break;
+      case OPT_COPY:
+      case OPT_RENAME:
+	set_conf_param(v, &imgname, &destname);
+	break;
+      case OPT_CLONE:
+	if (imgname == NULL) {
+	  set_conf_param(v, &imgname, NULL);
+        } else {
+	  set_conf_param(v, &destname, NULL);
+	}
+	break;
+      case OPT_SHOWMAPPED:
+	usage();
 	return EXIT_FAILURE;
-      }
-      set_conf_param(v, &imgname, NULL);
-      v = *(++i);
-      set_conf_param(v, &lock_cookie, NULL);
-      break;
-    case OPT_LOCK_REMOVE:
-      if (args.size() < 3) {
-	cerr << "error: not enough arguments to lock remove" << std::endl;
-	return EXIT_FAILURE;
-      }
-      set_conf_param(v, &imgname, NULL);
-      v = *(++i);
-      set_conf_param(v, &lock_client, NULL);
-      v = *(++i);
-      set_conf_param(v, &lock_cookie, NULL);
-      break;
+      case OPT_CHILDREN:
+	set_conf_param(v, &imgname, NULL);
+	break;
+      case OPT_LOCK_ADD:
+	if (args.size() < 2) {
+	  cerr << "error: not enough arguments to lock add" << std::endl;
+	  return EXIT_FAILURE;
+	}
+	set_conf_param(v, &imgname, NULL);
+	v = *(++i);
+	set_conf_param(v, &lock_cookie, NULL);
+	break;
+      case OPT_LOCK_REMOVE:
+	if (args.size() < 3) {
+	  cerr << "error: not enough arguments to lock remove" << std::endl;
+	  return EXIT_FAILURE;
+	}
+	set_conf_param(v, &imgname, NULL);
+	v = *(++i);
+	set_conf_param(v, &lock_client, NULL);
+	v = *(++i);
+	set_conf_param(v, &lock_cookie, NULL);
+	break;
     default:
-      assert(0);
-      break;
-  }
-  if (i != args.end()) {
-    cerr << "rbd: extra arguments given: ";
-    while (i < args.end()) {
-      cerr << *i << " ";
-      i++;
+	assert(0);
+	break;
     }
-    cerr << std::endl;
-    return EXIT_FAILURE;
   }
 
   if (format_specified && opt_cmd != OPT_IMPORT && opt_cmd != OPT_CREATE) {
