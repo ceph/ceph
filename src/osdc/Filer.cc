@@ -436,9 +436,11 @@ void Filer::extent_to_file(CephContext *cct, ceph_file_layout *layout,
 
 // StripedReadResult
 
-void Filer::StripedReadResult::add_partial_result(bufferlist& bl,
+void Filer::StripedReadResult::add_partial_result(CephContext *cct,
+						  bufferlist& bl,
 						  const vector<pair<uint64_t,uint64_t> >& buffer_extents)
 {
+  ldout(cct, 10) << "add_partial_result(" << this << ") " << bl.length() << " to " << buffer_extents << dendl;
   for (vector<pair<uint64_t,uint64_t> >::const_iterator p = buffer_extents.begin();
        p != buffer_extents.end();
        ++p) {
@@ -449,10 +451,14 @@ void Filer::StripedReadResult::add_partial_result(bufferlist& bl,
   }
 }
 
-void Filer::add_partial_sparse_result(bufferlist& bl, const map<uint64_t, uint64_t>& bl_map,
-				      uint64_t bl_off,
-				      const vector<pair<uint64_t,uint64_t> >& buffer_extents)
+void Filer::StripedReadResult::add_partial_sparse_result(CephContext *cct,
+							 bufferlist& bl, const map<uint64_t, uint64_t>& bl_map,
+							 uint64_t bl_off,
+							 const vector<pair<uint64_t,uint64_t> >& buffer_extents)
 {
+  ldout(cct, 10) << "add_partial_sparse_result(" << this << ") " << bl.length()
+		 << " covering " << bl_map << " (offset " << bl_off << ")"
+		 << " to " << buffer_extents << dendl;
   map<uint64_t, uint64_t>::const_iterator s = bl_map.begin();
   for (vector<pair<uint64_t,uint64_t> >::const_iterator p = buffer_extents.begin();
        p != buffer_extents.end();
@@ -500,8 +506,10 @@ void Filer::add_partial_sparse_result(bufferlist& bl, const map<uint64_t, uint64
   }
 }
 
-void Filer::StripedReadResult::assemble_result(bufferlist& bl, bool zero_tail)
+void Filer::StripedReadResult::assemble_result(CephContext *cct, bufferlist& bl, bool zero_tail)
 {
+  ldout(cct, 10) << "assemble_result(" << this << ") zero_tail=" << zero_tail << dendl;
+
   // go backwards, so that we can efficiently discard zeros
   map<uint64_t,pair<bufferlist,uint64_t> >::reverse_iterator p = partial.rbegin();
   if (p == partial.rend())
