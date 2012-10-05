@@ -2219,12 +2219,10 @@ FileStore::Op *FileStore::build_op(list<Transaction*>& tls,
 
 void FileStore::queue_op(OpSequencer *osr, Op *o)
 {
-  assert(journal_lock.is_locked());
-
   // mark apply start _now_, because we need to drain the entire apply
   // queue during commit in order to put the store in a consistent
   // state.
-  _op_apply_start(o->op);
+  op_apply_start(o->op);
   op_tp.lock();
 
   osr->queue(o);
@@ -2377,7 +2375,8 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
     op_queue_reserve_throttle(o);
     journal->throttle();
-    o->op = op_submit_start();
+    uint64_t op_num = submit_manager.op_submit_start();
+    o->op = op_num;
 
     if (m_filestore_do_dump)
       dump_transactions(o->tls, o->op, osr);
@@ -2387,7 +2386,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
       
       _op_journal_transactions(o->tls, o->op, ondisk, osd_op);
       
-      // queue inside journal lock, to preserve ordering
+      // queue inside submit_manager op submission lock
       queue_op(osr, o);
     } else if (m_filestore_journal_writeahead) {
       dout(5) << "queue_transactions (writeahead) " << o->op << " " << o->tls << dendl;
@@ -2400,17 +2399,17 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     } else {
       assert(0);
     }
-    op_submit_finish(o->op);
+    submit_manager.op_submit_finish(op_num);
     return 0;
   }
 
-  uint64_t op = op_submit_start();
+  uint64_t op = submit_manager.op_submit_start();
   dout(5) << "queue_transactions (trailing journal) " << op << " " << tls << dendl;
 
   if (m_filestore_do_dump)
     dump_transactions(tls, op, osr);
 
-  _op_apply_start(op);
+  op_apply_start(op);
   int r = do_transactions(tls, op);
     
   if (r >= 0) {
@@ -2427,7 +2426,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   }
   op_finisher.queue(onreadable, r);
 
-  op_submit_finish(op);
+  submit_manager.op_submit_finish(op);
   op_apply_finish(op);
 
   return r;
@@ -2438,9 +2437,7 @@ void FileStore::_journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk)
   dout(5) << "_journaled_ahead " << o << " seq " << o->op << " " << *osr << " " << o->tls << dendl;
 
   // this should queue in order because the journal does it's completions in order.
-  journal_lock.Lock();
   queue_op(osr, o);
-  journal_lock.Unlock();
 
   osr->dequeue_journal();
 

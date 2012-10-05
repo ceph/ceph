@@ -39,7 +39,7 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
   }
 
   journal_lock.Lock();
-  op_seq = fs_op_seq;
+  uint64_t op_seq = fs_op_seq;
   committed_seq = fs_op_seq;
   committing_seq = fs_op_seq;
   applied_seq = fs_op_seq;
@@ -106,6 +106,8 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
 
   replaying = false;
 
+  submit_manager.set_op_seq(op_seq);
+
   journal_lock.Unlock();
 
   // done reading, make writeable.
@@ -165,25 +167,26 @@ void JournalingObjectStore::op_apply_finish(uint64_t op)
   journal_lock.Unlock();
 }
 
-uint64_t JournalingObjectStore::op_submit_start()
+uint64_t JournalingObjectStore::SubmitManager::op_submit_start()
 {
-  journal_lock.Lock();
+  lock.Lock();
   uint64_t op = ++op_seq;
   dout(10) << "op_submit_start " << op << dendl;
   ops_submitting.push_back(op);
   return op;
 }
 
-void JournalingObjectStore::op_submit_finish(uint64_t op)
+void JournalingObjectStore::SubmitManager::op_submit_finish(uint64_t op)
 {
   dout(10) << "op_submit_finish " << op << dendl;
   if (op != ops_submitting.front()) {
-    dout(0) << "op_submit_finish " << op << " expected " << ops_submitting.front()
+    dout(0) << "op_submit_finish " << op << " expected "
+	    << ops_submitting.front()
 	    << ", OUT OF ORDER" << dendl;
     assert(0 == "out of order op_submit_finish");
   }
   ops_submitting.pop_front();
-  journal_lock.Unlock();
+  lock.Unlock();
 }
 
 
@@ -194,9 +197,9 @@ bool JournalingObjectStore::commit_start()
   bool ret = false;
 
   journal_lock.Lock();
-  dout(10) << "commit_start op_seq " << op_seq
-	   << ", applied_seq " << applied_seq
-	   << ", committed_seq " << committed_seq << dendl;
+  dout(10) << "commit_start op_seq " << submit_manager.get_op_seq()
+					 << ", applied_seq " << applied_seq
+					 << ", committed_seq " << committed_seq << dendl;
   blocked = true;
   while (open_ops > 0) {
     dout(10) << "commit_start blocked, waiting for " << open_ops << " open ops" << dendl;
@@ -265,7 +268,6 @@ void JournalingObjectStore::_op_journal_transactions(
   list<ObjectStore::Transaction*>& tls, uint64_t op,
   Context *onjournal, TrackedOpRef osd_op)
 {
-  assert(journal_lock.is_locked());
   dout(10) << "op_journal_transactions " << op << " " << tls << dendl;
 
   if (journal && journal->is_writeable()) {
