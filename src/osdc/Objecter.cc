@@ -1872,10 +1872,10 @@ void Objecter::_sg_read_finish(vector<ObjectExtent>& extents, vector<bufferlist>
     for (vector<ObjectExtent>::iterator eit = extents.begin();
 	 eit != extents.end();
 	 eit++, bit++) {
-      r.add_partial_result(*bit, eit->buffer_extents);
+      r.add_partial_result(cct, *bit, eit->buffer_extents);
     }
     bl->clear();
-    r.assemble_result(*bl, false);
+    r.assemble_result(cct, *bl, false);
   } else {
     ldout(cct, 15) << "  only one frag" << dendl;
     bl->claim(resultbl[0]);

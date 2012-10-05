@@ -37,7 +37,7 @@ namespace librbd {
 	// FIXME: make the destriper write directly into a buffer so
 	// that we avoid shuffling pointers and copying zeros around.
 	bufferlist bl;
-	destriper.assemble_result(bl, true);
+	destriper.assemble_result(cct, bl, true);
 
 	if (read_buf) {
 	  assert(bl.length() == read_buf_len);
@@ -70,7 +70,8 @@ namespace librbd {
       if (m_req->m_ext_map.empty())
 	m_req->m_ext_map[m_req->m_object_off] = m_req->data().length();
 
-      m_completion->destriper.add_partial_sparse_result(m_req->data(),
+      m_completion->destriper.add_partial_sparse_result(m_cct,
+							m_req->data(),
 							m_req->m_ext_map, m_req->m_object_off,
 							m_req->m_buffer_extents);
       r = m_req->m_object_len;
