@@ -1012,14 +1012,13 @@ out:
 
 void Client::connect_mds_targets(int mds)
 {
-  //this function shouldn't be called unless we lost a connection
   ldout(cct, 10) << "connect_mds_targets for mds." << mds << dendl;
   assert(mds_sessions.count(mds));
   const MDSMap::mds_info_t& info = mdsmap->get_mds_info(mds);
   for (set<int>::const_iterator q = info.export_targets.begin();
        q != info.export_targets.end();
        q++) {
-    if (mds_sessions.count(*q) == 0 && waiting_for_session.count(mds) == 0) {
+    if (mds_sessions.count(*q) == 0 && waiting_for_session.count(*q) == 0) {
       ldout(cct, 10) << "check_mds_sessions opening mds." << mds
 	       << " export target mds." << *q << dendl;
       messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN),
@@ -1254,8 +1253,8 @@ void Client::_closed_mds_session(int mds, MetaSession *s)
 
 void Client::handle_client_session(MClientSession *m) 
 {
-  ldout(cct, 10) << "handle_client_session " << *m << dendl;
   int from = m->get_source().num();
+  ldout(cct, 10) << "handle_client_session " << *m << " from mds." << from << dendl;
   MetaSession *mds_session = NULL;
   if (mds_sessions.count(from))
     mds_session = mds_sessions[from];
