@@ -1898,7 +1898,7 @@ reprotect_and_return_err:
       uint64_t object_overlap = ictx->prune_parent_extents(objectx, overlap);
       assert(object_overlap <= object_size);
 
-      if ((r = read(ictx->parent, objectx, buf)) < 0) {
+      if ((r = read(ictx->parent, objectx, buf, NULL)) < 0) {
 	lderr(ictx->cct) << "reading from parent failed" << dendl;
 	goto err;
       }
@@ -2090,7 +2090,7 @@ reprotect_and_return_err:
 
       Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
       AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      r = aio_read(ictx, off, read_len, bl.c_str(), c);
+      r = aio_read(ictx, off, read_len, bl.c_str(), NULL, c);
       if (r < 0) {
 	c->release();
 	delete ctx;
@@ -2138,7 +2138,7 @@ reprotect_and_return_err:
     return read_iterate(ictx, ofs, len, simple_read_cb, buf);
   }
 
-  ssize_t read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents, char *buf)
+  ssize_t read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents, char *buf, bufferlist *pbl)
   {
     Mutex mylock("IoCtxImpl::write::mylock");
     Cond cond;
@@ -2147,7 +2147,7 @@ reprotect_and_return_err:
 
     Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
     AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-    int r = aio_read(ictx, image_extents, buf, c);
+    int r = aio_read(ictx, image_extents, buf, pbl, c);
     if (r < 0) {
       c->release();
       delete ctx;
@@ -2524,17 +2524,16 @@ reprotect_and_return_err:
   }
 
   int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
-	       char *buf,
+	       char *buf, bufferlist *bl,
 	       AioCompletion *c)
   {
     vector<pair<uint64_t,uint64_t> > image_extents(1);
     image_extents[0] = make_pair(off, len);
-    return aio_read(ictx, image_extents, buf, c);
+    return aio_read(ictx, image_extents, buf, bl, c);
   }
 
   int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
-	       char *buf,
-	       AioCompletion *c)
+	       char *buf, bufferlist *pbl, AioCompletion *c)
   {
     ldout(ictx->cct, 20) << "aio_read " << ictx << " " << image_extents << dendl;
 
@@ -2566,6 +2565,7 @@ reprotect_and_return_err:
 
     c->read_buf = buf;
     c->read_buf_len = buffer_ofs;
+    c->read_bl = pbl;
 
     c->get();
     c->init_time(ictx, AIO_TYPE_READ);
