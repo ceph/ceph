@@ -131,7 +131,8 @@ class Filer {
     map<uint64_t, pair<bufferlist, uint64_t> > partial;  // offset -> (data, intended length)
 
   public:
-    void add_partial_result(bufferlist& bl,
+    void add_partial_result(CephContext *cct,
+			    bufferlist& bl,
 			    const vector<pair<uint64_t,uint64_t> >& buffer_extents);
     /**
      * add sparse read into results
@@ -141,11 +142,12 @@ class Filer {
      * @param bl_off logical buffer offset (e.g., first bl_map key if the buffer is not sparse)
      * @param buffer_extents output buffer extents the data maps to
      */
-    void add_partial_sparse_result(bufferlist& bl, const map<uint64_t, uint64_t>& bl_map,
+    void add_partial_sparse_result(CephContext *cct,
+				   bufferlist& bl, const map<uint64_t, uint64_t>& bl_map,
 				   uint64_t bl_off,
 				   const vector<pair<uint64_t,uint64_t> >& buffer_extents);
 
-    void assemble_result(bufferlist& bl, bool zero_tail);
+    void assemble_result(CephContext *cct, bufferlist& bl, bool zero_tail);
   };
 
   /*** async file interface.  scatter/gather as needed. ***/
