@@ -1553,7 +1553,7 @@ class ObjectExtent {
 
   object_locator_t oloc;   // object locator (pool etc)
 
-  map<uint64_t, uint64_t>  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
+  vector<pair<uint64_t,uint64_t> >  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
   
   ObjectExtent() : objectno(0), offset(0), length(0) {}
   ObjectExtent(object_t o, uint64_t ono, uint64_t off, uint64_t l) : oid(o), objectno(ono), offset(off), length(l) { }

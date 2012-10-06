@@ -1890,7 +1890,7 @@ void Objecter::_sg_read_finish(vector<ObjectExtent>& extents, vector<bufferlist>
       assert(ox_len <= eit->length);           
       
       // for each buffer extent we're mapping into...
-      for (map<uint64_t, uint64_t>::iterator bit = eit->buffer_extents.begin();
+      for (vector<pair<uint64_t, uint64_t> >::iterator bit = eit->buffer_extents.begin();
 	   bit != eit->buffer_extents.end();
 	   bit++) {
 	ldout(cct, 21) << " object " << eit->oid
