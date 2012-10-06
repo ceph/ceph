@@ -777,13 +777,17 @@ reprotect_and_return_err:
    */
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
 	    IoCtx& c_ioctx, const char *c_name,
-	    uint64_t features, int *c_order)
+	    uint64_t features, int *c_order,
+	    uint64_t stripe_unit, int stripe_count)
   {
     CephContext *cct = (CephContext *)p_ioctx.cct();
     ldout(cct, 20) << "clone " << &p_ioctx << " name " << p_name << " snap "
 		   << p_snap_name << "to child " << &c_ioctx << " name "
 		   << c_name << " features = " << features << " order = "
-		   << *c_order << dendl;
+		   << *c_order
+		   << " stripe_unit = " << stripe_unit
+		   << " stripe_count = " << stripe_count
+		   << dendl;
 
     if (features & ~RBD_FEATURES_ALL) {
       lderr(cct) << "librbd does not support requested features" << dendl;
@@ -851,7 +855,7 @@ reprotect_and_return_err:
     if (!order)
       order = p_imctx->order;
 
-    r = create(c_ioctx, c_name, size, false, features, &order, p_imctx->stripe_unit, p_imctx->stripe_count);
+    r = create(c_ioctx, c_name, size, false, features, &order, stripe_unit, stripe_count);
     if (r < 0) {
       lderr(cct) << "error creating child: " << cpp_strerror(r) << dendl;
       goto err_close_parent;
