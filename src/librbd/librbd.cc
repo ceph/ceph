@@ -123,7 +123,15 @@ namespace librbd {
 		 int *c_order)
   {
     return librbd::clone(p_ioctx, p_name, p_snap_name, c_ioctx, c_name,
-			 features, c_order);
+			 features, c_order, 0, 0);
+  }
+
+  int RBD::clone2(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
+		  IoCtx& c_ioctx, const char *c_name, uint64_t features,
+		  int *c_order, uint64_t stripe_unit, int stripe_count)
+  {
+    return librbd::clone(p_ioctx, p_name, p_snap_name, c_ioctx, c_name,
+			 features, c_order, stripe_unit, stripe_count);
   }
 
   int RBD::remove(IoCtx& io_ctx, const char *name)
@@ -515,7 +523,19 @@ extern "C" int rbd_clone(rados_ioctx_t p_ioctx, const char *p_name,
   librados::IoCtx::from_rados_ioctx_t(p_ioctx, p_ioc);
   librados::IoCtx::from_rados_ioctx_t(c_ioctx, c_ioc);
   return librbd::clone(p_ioc, p_name, p_snap_name, c_ioc, c_name,
-		       features, c_order);
+		       features, c_order, 0, 0);
+}
+
+extern "C" int rbd_clone2(rados_ioctx_t p_ioctx, const char *p_name,
+			  const char *p_snap_name, rados_ioctx_t c_ioctx,
+			  const char *c_name, uint64_t features, int *c_order,
+			  uint64_t stripe_unit, int stripe_count)
+{
+  librados::IoCtx p_ioc, c_ioc;
+  librados::IoCtx::from_rados_ioctx_t(p_ioctx, p_ioc);
+  librados::IoCtx::from_rados_ioctx_t(c_ioctx, c_ioc);
+  return librbd::clone(p_ioc, p_name, p_snap_name, c_ioc, c_name,
+		       features, c_order, stripe_unit, stripe_count);
 }
 
 extern "C" int rbd_remove(rados_ioctx_t p, const char *name)

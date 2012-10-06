@@ -83,7 +83,8 @@ namespace librbd {
 	     uint64_t stripe_unit, uint64_t stripe_count);
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
 	    IoCtx& c_ioctx, const char *c_name,
-	    uint64_t features, int *c_order);
+	    uint64_t features, int *c_order,
+	    uint64_t stripe_unit, int stripe_count);
   int rename(librados::IoCtx& io_ctx, const char *srcname, const char *dstname);
   int info(ImageCtx *ictx, image_info_t& info, size_t image_size);
   int get_old_format(ImageCtx *ictx, uint8_t *old);
