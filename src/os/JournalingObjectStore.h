@@ -21,9 +21,9 @@
 
 class JournalingObjectStore : public ObjectStore {
 protected:
-  uint64_t applied_seq;
-  uint64_t committing_seq, committed_seq;
-  map<version_t, vector<Context*> > commit_waiters;
+  Journal *journal;
+  Finisher finisher;
+
 
   class SubmitManager {
     Mutex lock;
@@ -38,25 +38,69 @@ protected:
     void op_submit_finish(uint64_t op);
     void set_op_seq(uint64_t seq) {
       Mutex::Locker l(lock);
-      seq = op_seq;
+      op_seq = seq;
     }
     uint64_t get_op_seq() {
       return op_seq;
     }
   } submit_manager;
 
-  int open_ops;
-  bool blocked;
+  class ApplyManager {
+    Journal *&journal;
+    Finisher &finisher;
 
-  Journal *journal;
-  Finisher finisher;
+    Mutex apply_lock;
+    bool blocked;
+    Cond blocked_cond;
+    int open_ops;
+    Cond open_ops_cond;
+    uint64_t applied_seq;
 
-  Cond cond;
-  Mutex journal_lock;
-  Mutex com_lock;
+    Mutex com_lock;
+    map<version_t, vector<Context*> > commit_waiters;
+    uint64_t committing_seq, committed_seq;
+    list<uint64_t> ops_submitting;
+    list<Cond*> ops_apply_blocked;
 
-  list<uint64_t> ops_submitting;
-  list<Cond*> ops_apply_blocked;
+  public:
+    ApplyManager(Journal *&j, Finisher &f) :
+      journal(j), finisher(f),
+      apply_lock("JOS::ApplyManager::apply_lock"),
+      blocked(false),
+      open_ops(0),
+      applied_seq(0),
+      com_lock("JOS::ApplyManager::com_lock"),
+      committing_seq(0), committed_seq(0) {}
+    void add_waiter(uint64_t, Context*);
+    uint64_t op_apply_start(uint64_t op);
+    void op_apply_finish(uint64_t op);
+    bool commit_start();
+    void commit_started();
+    void commit_finish();
+    bool is_committing() {
+      Mutex::Locker l(com_lock);
+      return committing_seq != committed_seq;
+    }
+    uint64_t get_committed_seq() {
+      Mutex::Locker l(com_lock);
+      return committed_seq;
+    }
+    uint64_t get_committing_seq() {
+      Mutex::Locker l(com_lock);
+      return committing_seq;
+    }
+    void init_seq(uint64_t fs_op_seq) {
+      {
+	Mutex::Locker l(com_lock);
+	committed_seq = fs_op_seq;
+	committing_seq = fs_op_seq;
+      }
+      {
+	Mutex::Locker l(apply_lock);
+	applied_seq = fs_op_seq;
+      }
+    }
+  } apply_manager;
 
   bool replaying;
 
@@ -65,39 +109,22 @@ protected:
   void journal_stop();
   int journal_replay(uint64_t fs_op_seq);
 
-  // --
-  uint64_t op_submit_start();
-  void op_submit_finish(uint64_t op_seq);
-
-  uint64_t op_apply_start(uint64_t op);
-  uint64_t _op_apply_start(uint64_t op);
-  void op_apply_finish(uint64_t op);
-
   void _op_journal_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op,
 				Context *onjournal, TrackedOpRef osd_op);
 
   virtual int do_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op_seq) = 0;
 
-  bool commit_start();
-  void commit_started();  // allow new ops (underlying fs should now be committing all prior ops)
-  void commit_finish();
-  
 public:
   bool is_committing() {
-    Mutex::Locker l(com_lock);
-    return committing_seq != committed_seq;
+    return apply_manager.is_committing();
   }
   uint64_t get_committed_seq() {
-    Mutex::Locker l(com_lock);
-    return committed_seq;
+    return apply_manager.get_committed_seq();
   }
 
 public:
-  JournalingObjectStore() : applied_seq(0), committing_seq(0), committed_seq(0),
-			    open_ops(0), blocked(false),
-			    journal(NULL), finisher(g_ceph_context),
-			    journal_lock("JournalingObjectStore::journal_lock"),
-			    com_lock("JournalingObjectStore::com_lock"),
+  JournalingObjectStore() : journal(NULL), finisher(g_ceph_context),
+			    apply_manager(journal, finisher),
 			    replaying(false) {}
   
 };

@@ -38,12 +38,8 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
     fs_op_seq = g_conf->journal_replay_from - 1;
   }
 
-  journal_lock.Lock();
   uint64_t op_seq = fs_op_seq;
-  committed_seq = fs_op_seq;
-  committing_seq = fs_op_seq;
-  applied_seq = fs_op_seq;
-  journal_lock.Unlock();
+  apply_manager.init_seq(fs_op_seq);
 
   if (!journal)
     return 0;
@@ -57,8 +53,6 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
     journal = 0;
     return err;
   }
-
-  journal_lock.Lock();
 
   replaying = true;
 
@@ -85,14 +79,11 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
       tls.push_back(t);
     }
 
-    open_ops++;
-    journal_lock.Unlock();
+    apply_manager.op_apply_start(seq);
     int r = do_transactions(tls, seq);
-    journal_lock.Lock();
-    open_ops--;
-    cond.Signal();
+    apply_manager.op_apply_finish(seq);
 
-    op_seq = applied_seq = seq;
+    op_seq = seq;
 
     while (!tls.empty()) {
       delete tls.front(); 
@@ -100,15 +91,11 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
     }
 
     dout(3) << "journal_replay: r = " << r << ", op_seq now " << op_seq << dendl;
-    assert(op_seq == seq);
-    seq++;  // we expect the next op
   }
 
   replaying = false;
 
   submit_manager.set_op_seq(op_seq);
-
-  journal_lock.Unlock();
 
   // done reading, make writeable.
   journal->make_writeable();
@@ -119,16 +106,9 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
 
 // ------------------------------------
 
-uint64_t JournalingObjectStore::op_apply_start(uint64_t op) 
+uint64_t JournalingObjectStore::ApplyManager::op_apply_start(uint64_t op)
 {
-  Mutex::Locker l(journal_lock);
-  return _op_apply_start(op);
-}
-
-uint64_t JournalingObjectStore::_op_apply_start(uint64_t op) 
-{
-  assert(journal_lock.is_locked());
-
+  Mutex::Locker l(apply_lock);
   // if we ops are blocked, or there are already people (left) in
   // line, get in line.
   if (blocked || !ops_apply_blocked.empty()) {
@@ -137,7 +117,7 @@ uint64_t JournalingObjectStore::_op_apply_start(uint64_t op)
     dout(10) << "op_apply_start " << op << " blocked (getting in back of line)" << dendl;
     // sleep until we are not blocked AND we are at the front of line
     while (blocked || ops_apply_blocked.front() != &cond)
-      cond.Wait(journal_lock);
+      cond.Wait(apply_lock);
     dout(10) << "op_apply_start " << op << " woke (at front of line)" << dendl;
     ops_apply_blocked.pop_front();
     if (!ops_apply_blocked.empty()) {
@@ -147,24 +127,24 @@ uint64_t JournalingObjectStore::_op_apply_start(uint64_t op)
   }
   dout(10) << "op_apply_start " << op << " open_ops " << open_ops << " -> " << (open_ops+1) << dendl;
   assert(!blocked);
+
   open_ops++;
   return op;
 }
 
-void JournalingObjectStore::op_apply_finish(uint64_t op) 
+void JournalingObjectStore::ApplyManager::op_apply_finish(uint64_t op)
 {
-  journal_lock.Lock();
-  dout(10) << "op_apply_finish " << op << " open_ops " << open_ops << " -> " << (open_ops-1) << dendl;
+  Mutex::Locker l(apply_lock);
+  dout(10) << "op_apply_finish " << op << " open_ops " << open_ops
+					 << " -> " << (open_ops-1) << dendl;
   if (--open_ops == 0)
-    cond.Signal();
+    open_ops_cond.Signal();
 
   // there can be multiple applies in flight; track the max value we
   // note.  note that we can't _read_ this value and learn anything
   // meaningful unless/until we've quiesced all in-flight applies.
   if (op > applied_seq)
     applied_seq = op;
-
-  journal_lock.Unlock();
 }
 
 uint64_t JournalingObjectStore::SubmitManager::op_submit_start()
@@ -192,51 +172,57 @@ void JournalingObjectStore::SubmitManager::op_submit_finish(uint64_t op)
 
 // ------------------------------------------
 
-bool JournalingObjectStore::commit_start() 
+void JournalingObjectStore::ApplyManager::add_waiter(uint64_t op, Context *c)
+{
+  Mutex::Locker l(com_lock);
+  assert(c);
+  commit_waiters[op].push_back(c);
+}
+
+bool JournalingObjectStore::ApplyManager::commit_start()
 {
   bool ret = false;
 
-  journal_lock.Lock();
-  dout(10) << "commit_start op_seq " << submit_manager.get_op_seq()
-					 << ", applied_seq " << applied_seq
-					 << ", committed_seq " << committed_seq << dendl;
-  blocked = true;
-  while (open_ops > 0) {
-    dout(10) << "commit_start blocked, waiting for " << open_ops << " open ops" << dendl;
-    cond.Wait(journal_lock);
+  {
+    Mutex::Locker l(apply_lock);
+    dout(10) << "commit_start "
+	     << ", applied_seq " << applied_seq << dendl;
+    blocked = true;
+    while (open_ops > 0) {
+      dout(10) << "commit_start blocked, waiting for " << open_ops << " open ops" << dendl;
+      open_ops_cond.Wait(apply_lock);
+    }
+    assert(open_ops == 0);
+
+    dout(10) << "commit_start blocked, all open_ops have completed" << dendl;
+    {
+      Mutex::Locker l(com_lock);
+      if (applied_seq == committed_seq) {
+	dout(10) << "commit_start nothing to do" << dendl;
+	blocked = false;
+	if (!ops_apply_blocked.empty())
+	  ops_apply_blocked.front()->Signal();
+	assert(commit_waiters.empty());
+	goto out;
+      }
+
+      committing_seq = applied_seq;
+
+      dout(10) << "commit_start committing " << committing_seq
+	       << ", still blocked" << dendl;
+    }
   }
-  dout(10) << "commit_start blocked, all open_ops have completed" << dendl;
-  assert(open_ops == 0);
-
-  if (applied_seq == committed_seq) {
-    dout(10) << "commit_start nothing to do" << dendl;
-    blocked = false;
-    if (!ops_apply_blocked.empty())
-      ops_apply_blocked.front()->Signal();
-    assert(commit_waiters.empty());
-    goto out;
-  }
-
-
-  com_lock.Lock();
-  // we can _only_ read applied_seq here because open_ops == 0 (we've
-  // quiesced all in-flight applies).
-  committing_seq = applied_seq;
-  com_lock.Unlock();
-
-  dout(10) << "commit_start committing " << committing_seq << ", still blocked" << dendl;
   ret = true;
 
  out:
   if (journal)
     journal->commit_start();  // tell the journal too
-  journal_lock.Unlock();
   return ret;
 }
 
-void JournalingObjectStore::commit_started() 
+void JournalingObjectStore::ApplyManager::commit_started()
 {
-  Mutex::Locker l(journal_lock);
+  Mutex::Locker l(apply_lock);
   // allow new ops. (underlying fs should now be committing all prior ops)
   dout(10) << "commit_started committing " << committing_seq << ", unblocking" << dendl;
   blocked = false;
@@ -244,21 +230,19 @@ void JournalingObjectStore::commit_started()
     ops_apply_blocked.front()->Signal();
 }
 
-void JournalingObjectStore::commit_finish()
+void JournalingObjectStore::ApplyManager::commit_finish()
 {
-  Mutex::Locker l(journal_lock);
+  Mutex::Locker l(com_lock);
   dout(10) << "commit_finish thru " << committing_seq << dendl;
   
   if (journal)
     journal->committed_thru(committing_seq);
 
-  com_lock.Lock();
   committed_seq = committing_seq;
-  com_lock.Unlock();
   
   map<version_t, vector<Context*> >::iterator p = commit_waiters.begin();
   while (p != commit_waiters.end() &&
-	 p->first <= committing_seq) {
+    p->first <= committing_seq) {
     finisher.queue(p->second);
     commit_waiters.erase(p++);
   }
@@ -285,6 +269,7 @@ void JournalingObjectStore::_op_journal_transactions(
       ::encode(*t, tbl);
     }
     journal->submit_entry(op, tbl, data_align, onjournal, osd_op);
-  } else if (onjournal)
-    commit_waiters[op].push_back(onjournal);
+  } else if (onjournal) {
+    apply_manager.add_waiter(op, onjournal);
+  }
 }
