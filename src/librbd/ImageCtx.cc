@@ -405,7 +405,7 @@ namespace librbd {
     snap_lock.Unlock();
     ObjectExtent extent(o, 0 /* a lie */, off, len);
     extent.oloc.pool = data_ctx.get_id();
-    extent.buffer_extents[0] = len;
+    extent.buffer_extents.push_back(make_pair(0, len));
     rd->extents.push_back(extent);
     cache_lock.Lock();
     int r = object_cacher->readx(rd, object_set, onfinish);
@@ -422,7 +422,7 @@ namespace librbd {
     snap_lock.Unlock();
     ObjectExtent extent(o, 0, off, len);
     extent.oloc.pool = data_ctx.get_id();
-    extent.buffer_extents[0] = len;
+    extent.buffer_extents.push_back(make_pair(0, len));
     wr->extents.push_back(extent);
     {
       Mutex::Locker l(cache_lock);
