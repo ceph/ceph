@@ -115,7 +115,14 @@ class Filer {
 
     file_to_extents(cct, buf, layout, offset, len, extents);
   }
-  
+
+  /**
+   * reverse map an object extent to file extents
+   */
+  static void extent_to_file(CephContext *cct, ceph_file_layout *layout,
+			     uint64_t objectno, uint64_t off, uint64_t len,
+			     vector<pair<uint64_t, uint64_t> >& extents);
+
 
   /*** async file interface.  scatter/gather as needed. ***/
 

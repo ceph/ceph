@@ -395,3 +395,39 @@ void Filer::file_to_extents(CephContext *cct, const char *object_format,
     extents.push_back(it->second);
   }
 }
+
+void Filer::extent_to_file(CephContext *cct, ceph_file_layout *layout,
+			   uint64_t objectno, uint64_t off, uint64_t len,
+			   vector<pair<uint64_t, uint64_t> >& extents)
+{
+  ldout(cct, 10) << "extent_to_file " << objectno << " " << off << "~" << len << dendl;
+
+  __u32 object_size = layout->fl_object_size;
+  __u32 su = layout->fl_stripe_unit;
+  __u32 stripe_count = layout->fl_stripe_count;
+  assert(object_size >= su);
+  uint64_t stripes_per_object = object_size / su;
+  ldout(cct, 20) << " stripes_per_object " << stripes_per_object << dendl;
+
+  uint64_t off_in_block = off % su;
+
+  extents.reserve(len / su + 1);
+
+  while (len > 0) {
+    uint64_t stripepos = objectno % stripe_count;
+    uint64_t objectsetno = objectno / stripe_count;
+    uint64_t stripeno = off / su + objectsetno * stripes_per_object;
+    uint64_t blockno = stripeno * stripe_count + stripepos;
+    uint64_t extent_off = blockno * su + off_in_block;
+    uint64_t extent_len = MIN(len, su - off_in_block);
+    extents.push_back(make_pair(extent_off, extent_len));
+
+    ldout(cct, 20) << " object " << off << "~" << extent_len
+		   << " -> file " << extent_off << "~" << extent_len
+		   << dendl;
+
+    off_in_block = 0;
+    off += extent_len;
+    len -= extent_len;
+  }
+}
