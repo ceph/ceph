@@ -178,7 +178,7 @@ to explore the system as is. Adding a top-level::
 as a config file for ``teuthology`` will make that possible. With that
 option, any *task* that fails, will have the ``interactive`` task
 called after it. This means that before any cleanup happens, you get a
-change to inspect the system -- both through Teuthology and via extra
+chance to inspect the system -- both through Teuthology and via extra
 SSH connections -- and the cleanup completes only when you choose so.
 Just exit the interactive Python session to continue the cleanup.
 
