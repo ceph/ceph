@@ -385,7 +385,7 @@ These tests passed:
             timeout=args.timeout,
             )
     else:
-        subject = 'All tests passed in {suite}!'.format(suite=args.name)
+        subject = 'All {num_passed} tests passed in {suite}!'.format(suite=args.name, num_passed=len(passed))
         body = '\n'.join(descriptions)
 
     try:
