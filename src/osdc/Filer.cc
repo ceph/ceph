@@ -168,7 +168,7 @@ void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mt
       // aha, we found the end!
       // calc offset into buffer_extent to get distance from probe->from.
       uint64_t oleft = probe->known_size[p->oid] - p->offset;
-      for (map<uint64_t, uint64_t>::iterator i = p->buffer_extents.begin();
+      for (vector<pair<uint64_t, uint64_t> >::iterator i = p->buffer_extents.begin();
 	   i != p->buffer_extents.end();
 	   i++) {
 	if (oleft <= (uint64_t)i->second) {
@@ -379,7 +379,7 @@ void Filer::file_to_extents(CephContext *cct, const char *object_format,
       ex->offset = x_offset;
       ex->length = x_len;
     }
-    ex->buffer_extents[cur-offset] = x_len;
+    ex->buffer_extents.push_back(make_pair(cur-offset, x_len));
         
     ldout(cct, 15) << "file_to_extents  " << *ex << " in " << ex->oloc << dendl;
     //ldout(cct, 0) << "map: ino " << ino << " oid " << ex.oid << " osd " << ex.osd << " offset " << ex.offset << " len " << ex.len << " ... left " << left << dendl;
