@@ -9,6 +9,7 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 AC_INIT([ceph], [0.52], [ceph-devel@vger.kernel.org])
+AC_CONFIG_MACRO_DIR([m4])
 
 AC_CONFIG_SUBDIRS([src/gtest])
 AC_CONFIG_SUBDIRS([src/leveldb])
@@ -359,6 +360,9 @@ AC_CHECK_HEADER([boost/random/discrete_distribution.hpp],
 
 AC_CHECK_HEADER([boost/statechart/state.hpp], [],
     AC_MSG_FAILURE(["Can't find boost statechart headers; need 1.34 or later"]))
+
+AC_CHECK_LIB(boost_system-mt, main, [],
+    AC_MSG_ERROR(["Boost system library not found."]))
 
 AC_LANG([C])
 
