@@ -55,8 +55,13 @@ using ceph::crypto::MD5;
 #define RGW_MAX_PENDING_CHUNKS  16
 #define RGW_MAX_PUT_SIZE        (5ULL*1024*1024*1024)
 
+#define RGW_FORMAT_PLAIN        0
 #define RGW_FORMAT_XML          1
 #define RGW_FORMAT_JSON         2
+
+#define RGW_CAP_READ            0x1
+#define RGW_CAP_WRITE           0x2
+#define RGW_CAP_ALL             (RGW_CAP_READ | RGW_CAP_WRITE)
 
 #define RGW_REST_SWIFT          0x1
 #define RGW_REST_SWIFT_AUTH     0x2
@@ -64,32 +69,6 @@ using ceph::crypto::MD5;
 #define RGW_SUSPENDED_USER_AUID (uint64_t)-2
 
 #define RGW_DEFAULT_MAX_BUCKETS 1000
-
-#define CGI_PRINTF(state, format, ...) do { \
-   int __ret = FCGX_FPrintF(state->fcgx->out, format, __VA_ARGS__); \
-   if (state->header_ended) \
-     state->bytes_sent += __ret; \
-   int l = 32, n; \
-   while (1) { \
-     char __buf[l]; \
-     n = snprintf(__buf, sizeof(__buf), format, __VA_ARGS__); \
-     if (n != l) \
-       dout(10) << "--> " << __buf << dendl; \
-       break; \
-     l *= 2; \
-   } \
-} while (0)
-
-#define CGI_PutStr(state, buf, len) do { \
-  FCGX_PutStr(buf, len, state->fcgx->out); \
-  if (state->header_ended) \
-    state->bytes_sent += len; \
-} while (0)
-
-#define CGI_GetStr(state, buf, buf_len, olen) do { \
-  olen = FCGX_GetStr(buf, buf_len, state->fcgx->in); \
-  state->bytes_received += olen; \
-} while (0)
 
 #define STATUS_CREATED           1900
 #define STATUS_ACCEPTED          1901
@@ -221,7 +200,7 @@ class XMLArgs
   /** parse the received arguments */
   int parse();
   /** Get the value for a specific argument parameter */
-  string& get(string& name, bool *exists = NULL);
+  string& get(const string& name, bool *exists = NULL);
   string& get(const char *name, bool *exists = NULL);
   /** see if a parameter is contained in this XMLArgs */
   bool exists(const char *name) {
@@ -328,6 +307,33 @@ struct RGWSubUser {
 };
 WRITE_CLASS_ENCODER(RGWSubUser);
 
+class RGWUserCaps
+{
+  map<string, uint32_t> caps;
+
+  int get_cap(const string& cap, string& type, uint32_t *perm);
+  int parse_cap_perm(const string& str, uint32_t *perm);
+  int add_cap(const string& cap);
+  int remove_cap(const string& cap);
+public:
+  int add_from_string(const string& str);
+  int remove_from_string(const string& str);
+
+  void encode(bufferlist& bl) const {
+     ENCODE_START(1, 1, bl);
+     ::encode(caps, bl);
+     ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+     ::decode(caps, bl);
+     DECODE_FINISH(bl);
+  }
+  int check_cap(const string& cap, uint32_t perm);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(RGWUserCaps);
+
 
 struct RGWUserInfo
 {
@@ -340,11 +346,12 @@ struct RGWUserInfo
   map<string, RGWSubUser> subusers;
   __u8 suspended;
   uint32_t max_buckets;
+  RGWUserCaps caps;
 
   RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS) {}
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(10, 9, bl);
+     ENCODE_START(11, 9, bl);
      ::encode(auid, bl);
      string access_key;
      string secret_key;
@@ -374,10 +381,11 @@ struct RGWUserInfo
      ::encode(suspended, bl);
      ::encode(swift_keys, bl);
      ::encode(max_buckets, bl);
+     ::encode(caps, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(10, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(11, 9, 9, bl);
      if (struct_v >= 2) ::decode(auid, bl);
      else auid = CEPH_AUTH_UID_DEFAULT;
      string access_key;
@@ -415,6 +423,9 @@ struct RGWUserInfo
       ::decode(max_buckets, bl);
     } else {
       max_buckets = RGW_DEFAULT_MAX_BUCKETS;
+    }
+    if (struct_v >= 11) {
+      ::decode(caps, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -536,12 +547,13 @@ struct RGWBucketStats
 struct req_state;
 
 struct RGWEnv;
-struct FCGX_Request;
+
+class RGWClientIO;
 
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
    CephContext *cct;
-   FCGX_Request *fcgx;
+   RGWClientIO *cio;
    http_op op;
    bool content_started;
    int format;
@@ -569,8 +581,6 @@ struct req_state {
 
    const char *bucket_name;
    const char *object;
-
-   const char *host_bucket;
 
    rgw_bucket bucket;
    string bucket_name_str;
@@ -1006,6 +1016,7 @@ static inline const char *rgw_obj_category_name(RGWObjCategory category)
 /** time parsing */
 extern int parse_time(const char *time_str, time_t *time);
 extern bool parse_rfc2616(const char *s, struct tm *t);
+extern int parse_date(string& date, uint64_t *epoch, string *out_date = NULL, string *out_time = NULL);
 
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */

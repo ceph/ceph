@@ -50,4 +50,44 @@ private:
   size_t min_stack_level;
 };
 
+class RGWFormatterFlusher {
+protected:
+  Formatter *formatter;
+  bool flushed;
+  bool started;
+  virtual void do_flush() = 0;
+  virtual void do_start(int ret) {}
+  void set_formatter(Formatter *f) {
+    formatter = f;
+  }
+public:
+  RGWFormatterFlusher(Formatter *f) : formatter(f), flushed(false), started(false) {}
+  virtual ~RGWFormatterFlusher() {}
+
+  void flush() {
+    do_flush();
+    flushed = true;
+  }
+
+  virtual void start(int client_ret) {
+    if (!started)
+      do_start(client_ret);
+    started = true;
+  }
+
+  Formatter *get_formatter() { return formatter; }
+  bool did_flush() { return flushed; }
+  bool did_start() { return started; }
+};
+
+class RGWStreamFlusher : public RGWFormatterFlusher {
+  ostream& os;
+protected:
+  virtual void do_flush() {
+    formatter->flush(os);
+  }
+public:
+  RGWStreamFlusher(Formatter *f, ostream& _os) : RGWFormatterFlusher(f), os(_os) {}
+};
+
 #endif

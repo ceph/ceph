@@ -7,6 +7,8 @@
     user rm                    remove user
     user suspend               suspend a user
     user enable                reenable user after suspension
+    caps add                   add user capabilities
+    caps rm                    remove user capabilities
     subuser create             create a new subuser
     subuser modify             modify subuser
     subuser rm                 remove subuser
@@ -67,6 +69,7 @@
      --skip-zero-entries       log show only dumps entries that don't have zero value
                                in one of the numeric field
      --categories=<list>       comma separated list of categories, used in usage show
+     --caps=<caps>             list of caps (e.g., "usage=read, write; user=read"
      --yes-i-really-mean-it    required for certain operations
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"

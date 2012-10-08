@@ -6,19 +6,13 @@
 
 #include "auth/Crypto.h"
 
-#ifdef FASTCGI_INCLUDE_DIR
-# include "fastcgi/fcgiapp.h"
-#else
-# include "fcgiapp.h"
-#endif
+#include "rgw_client_io.h"
 
 #define dout_subsys ceph_subsys_rgw
 
 #define DEFAULT_SWIFT_PREFIX "swift"
 
 using namespace ceph::crypto;
-
-static RGW_SWIFT_Auth_Get rgw_swift_auth_get;
 
 static int build_token(string& swift_user, string& key, uint64_t nonce, utime_t& expiration, bufferlist& bl)
 {
@@ -202,8 +196,8 @@ void RGW_SWIFT_Auth_Get::execute()
     goto done;
   }
 
-  CGI_PRINTF(s, "X-Storage-Url: %s/%s/v1\n", swift_url.c_str(),
-	     swift_prefix.c_str());
+  s->cio->print("X-Storage-Url: %s/%s/v1\n", swift_url.c_str(),
+	        swift_prefix.c_str());
 
   if ((ret = encode_token(s->cct, swift_key->id, swift_key->key, bl)) < 0)
     goto done;
@@ -212,8 +206,8 @@ void RGW_SWIFT_Auth_Get::execute()
     char buf[bl.length() * 2 + 1];
     buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf);
 
-    CGI_PRINTF(s, "X-Storage-Token: AUTH_rgwtk%s\n", buf);
-    CGI_PRINTF(s, "X-Auth-Token: AUTH_rgwtk%s\n", buf);
+    s->cio->print("X-Storage-Token: AUTH_rgwtk%s\n", buf);
+    s->cio->print("X-Auth-Token: AUTH_rgwtk%s\n", buf);
   }
 
   ret = STATUS_NO_CONTENT;
@@ -224,11 +218,13 @@ done:
   end_header(s);
 }
 
-int RGWHandler_SWIFT_Auth::init(RGWRados *store, struct req_state *state, FCGX_Request *fcgx)
+int RGWHandler_SWIFT_Auth::init(RGWRados *store, struct req_state *state, RGWClientIO *cio)
 {
   state->dialect = "swift-auth";
+  state->formatter = new JSONFormatter;
+  state->format = RGW_FORMAT_JSON;
 
-  return RGWHandler::init(store, state, fcgx);
+  return RGWHandler::init(store, state, cio);
 }
 
 int RGWHandler_SWIFT_Auth::authorize()
@@ -236,24 +232,8 @@ int RGWHandler_SWIFT_Auth::authorize()
   return 0;
 }
 
-RGWOp *RGWHandler_SWIFT_Auth::get_op()
+RGWOp *RGWHandler_SWIFT_Auth::op_get()
 {
-  RGWOp *op;
-  switch (s->op) {
-   case OP_GET:
-     op = &rgw_swift_auth_get;
-     break;
-   default:
-     return NULL;
-  }
-
-  if (op) {
-    op->init(store, s, this);
-  }
-  return op;
-}
-
-void RGWHandler_SWIFT_Auth::put_op(RGWOp *op)
-{
+  return new RGW_SWIFT_Auth_Get;
 }
 
