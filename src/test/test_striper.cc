@@ -4,9 +4,9 @@
 #include "global/global_init.h"
 #include "common/common_init.h"
 
-#include "osdc/Filer.h"
+#include "osdc/Striper.h"
 
-TEST(Filer, Stripe1)
+TEST(Striper, Stripe1)
 {
   ceph_file_layout l;
   memset(&l, 0, sizeof(l));
@@ -16,7 +16,7 @@ TEST(Filer, Stripe1)
   l.fl_stripe_count = 3;
 
   vector<ObjectExtent> ex;
-  Filer::file_to_extents(g_ceph_context, 1, &l, 5006035, 46419, ex);
+  Striper::file_to_extents(g_ceph_context, 1, &l, 5006035, 46419, ex);
 
   cout << "result " << ex << std::endl;
 

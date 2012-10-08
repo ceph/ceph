@@ -12,7 +12,7 @@
 #include "common/Thread.h"
 
 #include "Objecter.h"
-#include "Filer.h"
+#include "Striper.h"
 
 class CephContext;
 class WritebackHandler;
@@ -565,7 +565,7 @@ public:
   int file_is_cached(ObjectSet *oset, ceph_file_layout *layout, snapid_t snapid,
 		     loff_t offset, uint64_t len) {
     vector<ObjectExtent> extents;
-    Filer::file_to_extents(cct, oset->ino, layout, offset, len, extents);
+    Striper::file_to_extents(cct, oset->ino, layout, offset, len, extents);
     return is_cached(oset, extents, snapid);
   }
 
@@ -575,7 +575,7 @@ public:
 		int flags,
                 Context *onfinish) {
     OSDRead *rd = prepare_read(snapid, bl, flags);
-    Filer::file_to_extents(cct, oset->ino, layout, offset, len, rd->extents);
+    Striper::file_to_extents(cct, oset->ino, layout, offset, len, rd->extents);
     return readx(rd, oset, onfinish);
   }
 
@@ -584,7 +584,7 @@ public:
                  bufferlist& bl, utime_t mtime, int flags,
 		 Mutex& wait_on_lock) {
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags);
-    Filer::file_to_extents(cct, oset->ino, layout, offset, len, wr->extents);
+    Striper::file_to_extents(cct, oset->ino, layout, offset, len, wr->extents);
     return writex(wr, oset, wait_on_lock);
   }
 };

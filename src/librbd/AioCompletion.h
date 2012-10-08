@@ -14,7 +14,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 
-#include "osdc/Filer.h"
+#include "osdc/Striper.h"
 
 namespace librbd {
 
@@ -54,7 +54,7 @@ namespace librbd {
     utime_t start_time;
     aio_type_t aio_type;
 
-    Filer::StripedReadResult destriper;
+    Striper::StripedReadResult destriper;
     bufferlist *read_bl;
     char *read_buf;
     size_t read_buf_len;
