@@ -492,17 +492,19 @@ void Filer::StripedReadResult::add_partial_sparse_result(CephContext *cct,
       size_t left = (s->first + s->second) - bl_off;
       size_t actual = MIN(left, tlen);
 
-      pair<bufferlist, uint64_t>& r = partial[tofs];
-      bl.splice(0, actual, &r.first);
-      r.second = actual;
-      bl_off += actual;
-      tofs += actual;
-      tlen -= actual;
-
-      if (actual == left)
+      if (actual > 0) {
+	pair<bufferlist, uint64_t>& r = partial[tofs];
+	bl.splice(0, actual, &r.first);
+	r.second = actual;
+	bl_off += actual;
+	tofs += actual;
+	tlen -= actual;
+      }
+      if (actual == left) {
+	ldout(cct, 30) << "  s advancing" << dendl;
 	s++;
+      }
     }
-    bl_off += p->second;
   }
 }
 
