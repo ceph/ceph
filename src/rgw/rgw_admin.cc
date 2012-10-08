@@ -21,6 +21,7 @@ using namespace std;
 #include "rgw_acl_s3.h"
 #include "rgw_log.h"
 #include "rgw_formats.h"
+#include "rgw_usage.h"
 #include "auth/Crypto.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -40,6 +41,8 @@ void _usage()
   cerr << "  user rm                    remove user\n";
   cerr << "  user suspend               suspend a user\n";
   cerr << "  user enable                reenable user after suspension\n";
+  cerr << "  caps add                   add user capabilities\n";
+  cerr << "  caps rm                    remove user capabilities\n";
   cerr << "  subuser create             create a new subuser\n" ;
   cerr << "  subuser modify             modify subuser\n";
   cerr << "  subuser rm                 remove subuser\n";
@@ -100,6 +103,7 @@ void _usage()
   cerr << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
   cerr << "                             in one of the numeric field\n";
   cerr << "   --categories=<list>       comma separated list of categories, used in usage show\n";
+  cerr << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\"\n";
   cerr << "   --yes-i-really-mean-it    required for certain operations\n";
   cerr << "\n";
   cerr << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
@@ -152,6 +156,8 @@ enum {
   OPT_GC_LIST,
   OPT_GC_PROCESS,
   OPT_CLUSTER_INFO,
+  OPT_CAPS_ADD,
+  OPT_CAPS_RM,
 };
 
 static uint32_t str_to_perm(const char *str)
@@ -226,6 +232,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "object") == 0 ||
       strcmp(cmd, "cluster") == 0 ||
       strcmp(cmd, "temp") == 0 ||
+      strcmp(cmd, "caps") == 0 ||
       strcmp(cmd, "gc") == 0) {
     *need_more = true;
     return 0;
@@ -293,6 +300,11 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "temp") == 0) {
     if (strcmp(cmd, "remove") == 0)
       return OPT_TEMP_REMOVE;
+  } else if (strcmp(prev_cmd, "caps") == 0) {
+    if (strcmp(cmd, "add") == 0)
+      return OPT_CAPS_ADD;
+    if (strcmp(cmd, "rm") == 0)
+      return OPT_CAPS_RM;
   } else if (strcmp(prev_cmd, "pool") == 0) {
     if (strcmp(cmd, "add") == 0)
       return OPT_POOL_ADD;
@@ -392,6 +404,8 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
     formatter->close_section();
   }
   formatter->close_section();
+
+  info.caps.dump(formatter);
 
   formatter->close_section();
   formatter->flush(cout);
@@ -558,37 +572,6 @@ enum ObjectKeyType {
   KEY_TYPE_S3,
 };
 
-static void parse_date(string& date, uint64_t *epoch, string *out_date = NULL, string *out_time = NULL)
-{
-  struct tm tm;
-
-  memset(&tm, 0, sizeof(tm));
-
-  const char *p = strptime(date.c_str(), "%Y-%m-%d", &tm);
-  if (p) {
-    if (*p == ' ') {
-      p++;
-      strptime(p, " %H:%M:%S", &tm);
-    }
-  } else {
-    return;
-  }
-  time_t t = timegm(&tm);
-  if (epoch)
-    *epoch = (uint64_t)t;
-
-  if (out_date) {
-    char buf[32];
-    strftime(buf, sizeof(buf), "%F", &tm);
-    *out_date = buf;
-  }
-  if (out_time) {
-    char buf[32];
-    strftime(buf, sizeof(buf), "%T", &tm);
-    *out_time = buf;
-  }
-}
-
 static int remove_object(RGWRados *store, rgw_bucket& bucket, std::string& object)
 {
   int ret = -EINVAL;
@@ -600,7 +583,7 @@ static int remove_object(RGWRados *store, rgw_bucket& bucket, std::string& objec
   return ret;
 }
 
-static int remove_bucket(rgw_bucket& bucket, bool delete_children)
+static int remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
 {
   int ret;
   map<RGWObjCategory, RGWBucketStats> stats;
@@ -665,34 +648,6 @@ static int remove_bucket(rgw_bucket& bucket, bool delete_children)
   return ret;
 }
 
-void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log_entry& entry, map<string, bool>& categories)
-{
-  formatter->open_array_section("categories");
-  map<string, rgw_usage_data>::const_iterator uiter;
-  for (uiter = entry.usage_map.begin(); uiter != entry.usage_map.end(); ++uiter) {
-    if (categories.size() && !categories.count(uiter->first))
-      continue;
-    const rgw_usage_data& usage = uiter->second;
-    formatter->open_object_section("entry");
-    formatter->dump_string("category", uiter->first);
-    formatter->dump_int("bytes_sent", usage.bytes_sent);
-    formatter->dump_int("bytes_received", usage.bytes_received);
-    formatter->dump_int("ops", usage.ops);
-    formatter->dump_int("successful_ops", usage.successful_ops);
-    formatter->close_section(); // entry
-  }
-  formatter->close_section(); // categories
-}
-
-class StoreRef {
-  RGWRados *s;
-public:
-  StoreRef(RGWRados *_s) : s(_s) {}
-  ~StoreRef() {
-    RGWStoreManager::close_storage(s);
-  }
-};
-
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -735,6 +690,7 @@ int main(int argc, char **argv)
   int fix = false;
   int max_buckets = -1;
   map<string, bool> categories;
+  string caps;
 
   std::string val;
   std::ostringstream errs;
@@ -830,6 +786,8 @@ int main(int argc, char **argv)
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &fix, NULL, "--fix", (char*)NULL)) {
       // do nothing
+    } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
+      caps = val;
     } else {
       ++i;
     }
@@ -894,15 +852,14 @@ int main(int argc, char **argv)
 
   user_modify_op = (opt_cmd == OPT_USER_MODIFY || opt_cmd == OPT_SUBUSER_MODIFY ||
                     opt_cmd == OPT_SUBUSER_CREATE || opt_cmd == OPT_SUBUSER_RM ||
-                    opt_cmd == OPT_KEY_CREATE || opt_cmd == OPT_KEY_RM || opt_cmd == OPT_USER_RM);
+                    opt_cmd == OPT_KEY_CREATE || opt_cmd == OPT_KEY_RM || opt_cmd == OPT_USER_RM ||
+		    opt_cmd == OPT_CAPS_ADD || opt_cmd == OPT_CAPS_RM);
 
   store = RGWStoreManager::get_storage(g_ceph_context, false);
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
     return 5; //EIO
   }
-
-  StoreRef s(store);
 
   if (opt_cmd != OPT_USER_CREATE && 
       opt_cmd != OPT_LOG_SHOW && opt_cmd != OPT_LOG_LIST && opt_cmd != OPT_LOG_RM && 
@@ -1046,6 +1003,8 @@ int main(int argc, char **argv)
   case OPT_SUBUSER_CREATE:
   case OPT_SUBUSER_MODIFY:
   case OPT_KEY_CREATE:
+  case OPT_CAPS_ADD:
+  case OPT_CAPS_RM:
     if (!user_id.empty())
       info.user_id = user_id;
     if (max_buckets >= 0)
@@ -1075,6 +1034,18 @@ int main(int argc, char **argv)
       else
         cerr << "access key modification requires both access key and secret key" << std::endl;
       return 1;
+    } else if (opt_cmd == OPT_CAPS_ADD) {
+      err = info.caps.add_from_string(caps);
+      if (err < 0) {
+        cerr << "failed to add caps, err=" << cpp_strerror(-err) << std::endl;
+	return 1;
+      }
+    } else if (opt_cmd == OPT_CAPS_RM) {
+      err = info.caps.remove_from_string(caps);
+      if (err < 0) {
+        cerr << "failed to remove caps, err=" << cpp_strerror(-err) << std::endl;
+	return 1;
+      }
     }
     if (!display_name.empty())
       info.display_name = display_name;
@@ -1281,8 +1252,12 @@ int main(int argc, char **argv)
       return usage();
     }
     string parsed_date, parsed_time;
-    parse_date(date, NULL, &parsed_date, &parsed_time);
-    int r = store->remove_temp_objects(parsed_date, parsed_time);
+    int r = parse_date(date, NULL, &parsed_date, &parsed_time);
+    if (r < 0) {
+      cerr << "failure parsing date: " << cpp_strerror(r) << std::endl;
+      return 1;
+    }
+    r = store->remove_temp_objects(parsed_date, parsed_time);
     if (r < 0) {
       cerr << "failure removing temp objects: " << cpp_strerror(r) << std::endl;
       return 1;
@@ -1448,7 +1423,7 @@ next:
 
       if (m.size() > 0 && purge_data) {
         for (std::map<string, RGWBucketEnt>::iterator it = m.begin(); it != m.end(); it++) {
-          ret = remove_bucket(((*it).second).bucket, true);
+          ret = remove_bucket(store, ((*it).second).bucket, true);
 
           if (ret < 0)
             return ret;
@@ -1575,103 +1550,26 @@ next:
     uint64_t start_epoch = 0;
     uint64_t end_epoch = (uint64_t)-1;
 
-    parse_date(start_date, &start_epoch);
-    parse_date(end_date, &end_epoch);
-
-    uint32_t max_entries = 1000;
-
-    bool is_truncated = true;
-
-    RGWUsageIter usage_iter;
-
-    map<rgw_user_bucket, rgw_usage_log_entry> usage;
-
-    formatter->open_object_section("usage");
-    if (show_log_entries) {
-      formatter->open_array_section("entries");
+    int ret = parse_date(start_date, &start_epoch);
+    if (ret < 0) {
+      cerr << "ERROR: failed to parse start date" << std::endl;
+      return 1;
     }
-    string last_owner;
-    bool user_section_open = false;
-    map<string, rgw_usage_log_entry> summary_map;
-    while (is_truncated) {
-      int ret = store->read_usage(user_id, start_epoch, end_epoch, max_entries,
-                                     &is_truncated, usage_iter, usage);
-
-      if (ret == -ENOENT) {
-        ret = 0;
-        is_truncated = false;
-      }
-
-      if (ret < 0) {
-        cerr << "ERROR: read_usage() returned ret=" << ret << std::endl;
-        break;
-      }
-
-      map<rgw_user_bucket, rgw_usage_log_entry>::iterator iter;
-      for (iter = usage.begin(); iter != usage.end(); ++iter) {
-        const rgw_user_bucket& ub = iter->first;
-        const rgw_usage_log_entry& entry = iter->second;
-
-        if (show_log_entries) {
-          if (ub.user.compare(last_owner) != 0) {
-            if (user_section_open) {
-              formatter->close_section();
-              formatter->close_section();
-            }
-            formatter->open_object_section("user");
-            formatter->dump_string("owner", ub.user);
-            formatter->open_array_section("buckets");
-            user_section_open = true;
-            last_owner = ub.user;
-          }
-          formatter->open_object_section("bucket");
-          formatter->dump_string("bucket", ub.bucket);
-          utime_t ut(entry.epoch, 0);
-          ut.gmtime(formatter->dump_stream("time"));
-          formatter->dump_int("epoch", entry.epoch);
-	  dump_usage_categories_info(formatter, entry, categories);
-          formatter->close_section(); // bucket
-          formatter->flush(cout);
-        }
-
-        summary_map[ub.user].aggregate(entry, &categories);
-      }
-    }
-    if (show_log_entries) {
-      if (user_section_open) {
-        formatter->close_section(); // buckets
-        formatter->close_section(); //user
-      }
-      formatter->close_section(); // entries
+    ret = parse_date(end_date, &end_epoch);
+    if (ret < 0) {
+      cerr << "ERROR: failed to parse end date" << std::endl;
+      return 1;
     }
 
-    if (show_log_sum) {
-      formatter->open_array_section("summary");
-      map<string, rgw_usage_log_entry>::iterator siter;
-      for (siter = summary_map.begin(); siter != summary_map.end(); ++siter) {
-        const rgw_usage_log_entry& entry = siter->second;
-        formatter->open_object_section("user");
-        formatter->dump_string("user", siter->first);
-	dump_usage_categories_info(formatter, entry, categories);
-	rgw_usage_data total_usage;
-	entry.sum(total_usage, categories);
-        formatter->open_object_section("total");
-        formatter->dump_int("bytes_sent", total_usage.bytes_sent);
-        formatter->dump_int("bytes_received", total_usage.bytes_received);
-        formatter->dump_int("ops", total_usage.ops);
-        formatter->dump_int("successful_ops", total_usage.successful_ops);
-        formatter->close_section(); // total
+    RGWStreamFlusher f(formatter, cout);
 
-        formatter->close_section(); // user
-
-        formatter->flush(cout);
-      }
-
-      formatter->close_section(); // summary
+    ret = RGWUsage::show(store, user_id, start_epoch, end_epoch,
+			 show_log_entries, show_log_sum, &categories,
+			 f);
+    if (ret < 0) {
+      cerr << "ERROR: failed to show usage" << std::endl;
+      return 1;
     }
-
-    formatter->close_section(); // usage
-    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT_USAGE_TRIM) {
@@ -1683,10 +1581,18 @@ next:
     uint64_t start_epoch = 0;
     uint64_t end_epoch = (uint64_t)-1;
 
-    parse_date(start_date, &start_epoch);
-    parse_date(end_date, &end_epoch);
+    int ret = parse_date(start_date, &start_epoch);
+    if (ret < 0) {
+      cerr << "ERROR: failed to parse start date" << std::endl;
+      return 1;
+    }
+    ret = parse_date(end_date, &end_epoch);
+    if (ret < 0) {
+      cerr << "ERROR: failed to parse end date" << std::endl;
+      return 1;
+    }
 
-    int ret = store->trim_usage(user_id, start_epoch, end_epoch);
+    ret = RGWUsage::trim(store, user_id, start_epoch, end_epoch);
     if (ret < 0) {
       cerr << "ERROR: read_usage() returned ret=" << ret << std::endl;
       return 1;
@@ -1732,7 +1638,7 @@ next:
   }
 
   if (opt_cmd == OPT_BUCKET_RM) {
-    int ret = remove_bucket(bucket, delete_child_objects);
+    int ret = remove_bucket(store, bucket, delete_child_objects);
 
     if (ret < 0) {
       cerr << "ERROR: bucket remove returned: " << cpp_strerror(-ret) << std::endl;
