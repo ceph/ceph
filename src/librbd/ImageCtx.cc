@@ -271,7 +271,7 @@ namespace librbd {
     return -ENOENT;
   }
 
-  uint64_t ImageCtx::get_size() const
+  uint64_t ImageCtx::get_current_size() const
   {
     return size;
   }

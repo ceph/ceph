@@ -105,7 +105,7 @@ namespace librbd {
     int get_snap_size(std::string in_snap_name, uint64_t *out_size) const;
     int is_snap_protected(string in_snap_name, bool *is_protected) const;
 
-    uint64_t get_size() const;
+    uint64_t get_current_size() const;
     uint64_t get_object_size() const;
     string get_object_name(uint64_t num) const;
     uint64_t get_num_objects() const;

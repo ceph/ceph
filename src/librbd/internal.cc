@@ -144,12 +144,11 @@ namespace librbd {
     assert(ictx->md_lock.is_locked());
     CephContext *cct = (CephContext *)ictx->data_ctx.cct();
 
-    // first object we can delete free and clear
-    uint64_t size = ictx->get_size();
+    uint64_t size = ictx->get_current_size();
     uint64_t period = ictx->get_stripe_period();
     uint64_t num_period = ((newsize + period - 1) / period);
     uint64_t delete_off = MIN(num_period * period, size);
-    uint64_t delete_start = num_period * ictx->get_stripe_count();
+    uint64_t delete_start = num_period * ictx->get_stripe_count();     // first object we can delete free and clear
     uint64_t num_objects = ictx->get_num_objects();
     uint64_t object_size = ictx->get_object_size();
 
