@@ -532,7 +532,7 @@ bool url_decode(string& src_str, string& dest_str)
 
 static struct {
   const char *type_name;
-  int perm;
+  uint32_t perm;
 } cap_names[] = { {"*",     RGW_CAP_ALL},
                   {"read",  RGW_CAP_READ},
 		  {"write", RGW_CAP_WRITE},
