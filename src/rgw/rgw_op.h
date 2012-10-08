@@ -32,7 +32,7 @@ protected:
   RGWHandler *dialect_handler;
   RGWRados *store;
 public:
-  RGWOp() {}
+  RGWOp() : s(NULL), dialect_handler(NULL) {}
   virtual ~RGWOp() {}
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *dialect_handler) {
@@ -90,6 +90,7 @@ public:
     unmod_time = 0;
     mod_ptr = NULL;
     unmod_ptr = NULL;
+    get_data = false;
     partial_content = false;
     ret = 0;
  }
@@ -173,6 +174,7 @@ public:
   RGWListBucket() {
     max = 0;
     ret = 0;
+    default_max = 0;
     is_truncated = false;
   }
   int verify_permission();
@@ -670,7 +672,7 @@ protected:
   virtual RGWOp *op_post() { return NULL; }
   virtual RGWOp *op_copy() { return NULL; }
 public:
-  RGWHandler() {}
+  RGWHandler() : s(NULL) {}
   virtual ~RGWHandler();
   virtual int init(RGWRados *store, struct req_state *_s, RGWClientIO *cio);
 
