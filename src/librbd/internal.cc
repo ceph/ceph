@@ -172,7 +172,7 @@ namespace librbd {
     // discard the weird boundary, if any
     if (delete_off > newsize) {
       vector<ObjectExtent> extents;
-      Filer::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, newsize, delete_off - newsize, extents);
+      Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, newsize, delete_off - newsize, extents);
 
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
 	ldout(ictx->cct, 20) << " ex " << *p << dendl;
@@ -1921,7 +1921,7 @@ reprotect_and_return_err:
 
       // map child object onto the parent
       vector<pair<uint64_t,uint64_t> > objectx;
-      Filer::extent_to_file(ictx->cct, &ictx->layout,
+      Striper::extent_to_file(ictx->cct, &ictx->layout,
 			    ono, 0, object_size,
 			    objectx);
       uint64_t object_overlap = ictx->prune_parent_extents(objectx, overlap);
@@ -2411,7 +2411,7 @@ reprotect_and_return_err:
 
     // map
     vector<ObjectExtent> extents;
-    Filer::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, off, len, extents);
+    Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, off, len, extents);
 
     size_t total_write = 0;
 
@@ -2435,7 +2435,7 @@ reprotect_and_return_err:
       } else {
 	// reverse map this object extent onto the parent
 	vector<pair<uint64_t,uint64_t> > objectx;
-	Filer::extent_to_file(ictx->cct, &ictx->layout,
+	Striper::extent_to_file(ictx->cct, &ictx->layout,
 			      p->objectno, 0, ictx->layout.fl_object_size,
 			      objectx);
 	uint64_t object_overlap = ictx->prune_parent_extents(objectx, overlap);
@@ -2491,7 +2491,7 @@ reprotect_and_return_err:
 
     // map
     vector<ObjectExtent> extents;
-    Filer::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, off, len, extents);
+    Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, off, len, extents);
 
     c->get();
     c->init_time(ictx, AIO_TYPE_DISCARD);
@@ -2506,7 +2506,7 @@ reprotect_and_return_err:
       vector<pair<uint64_t,uint64_t> > objectx;
       uint64_t object_overlap = 0;
       if (off < overlap) {   // we might overlap...
-	Filer::extent_to_file(ictx->cct, &ictx->layout,
+	Striper::extent_to_file(ictx->cct, &ictx->layout,
 			      p->objectno, 0, ictx->layout.fl_object_size,
 			      objectx);
 	object_overlap = ictx->prune_parent_extents(objectx, overlap);
@@ -2583,7 +2583,7 @@ reprotect_and_return_err:
       if (r < 0)
 	return r;
       
-      Filer::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout,
+      Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout,
 			     p->first, p->second, extents, buffer_ofs);
       buffer_ofs += p->second;
     }

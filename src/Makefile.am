@@ -297,7 +297,7 @@ librados_SOURCES = \
 	librados/RadosClient.cc \
 	librados/IoCtxImpl.cc \
 	osdc/Objecter.cc \
-	osdc/Filer.cc
+	osdc/Striper.cc
 librados_la_SOURCES = ${librados_SOURCES}
 librados_la_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librados_la_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
@@ -373,7 +373,7 @@ librbd_la_SOURCES = \
 	librbd/LibrbdWriteback.cc \
 	librbd/WatchCtx.cc \
 	osdc/ObjectCacher.cc \
-	osdc/Filer.cc \
+	osdc/Striper.cc \
 	cls/lock/cls_lock_client.cc \
 	cls/lock/cls_lock_types.cc \
 	cls/lock/cls_lock_ops.cc
@@ -594,10 +594,10 @@ unittest_workqueue_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 unittest_workqueue_LDADD = libglobal.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
 check_PROGRAMS += unittest_workqueue
 
-unittest_filer_SOURCES = test/test_filer.cc 
-unittest_filer_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-unittest_filer_LDADD = libglobal.la libosdc.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
-check_PROGRAMS += unittest_filer
+unittest_striper_SOURCES = test/test_striper.cc 
+unittest_striper_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_striper_LDADD = libglobal.la libosdc.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
+check_PROGRAMS += unittest_striper
 
 unittest_prebufferedstreambuf_SOURCES = test/test_prebufferedstreambuf.cc common/PrebufferedStreambuf.cc
 unittest_prebufferedstreambuf_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
@@ -1299,7 +1299,8 @@ noinst_LIBRARIES += libosd.a
 libosdc_la_SOURCES = \
 	osdc/Objecter.cc \
 	osdc/ObjectCacher.cc \
-	osdc/Filer.cc
+	osdc/Filer.cc \
+	osdc/Striper.cc
 libosdc_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 libosdc_la_LIBADD = libcommon.la
 noinst_LTLIBRARIES += libosdc.la
@@ -1746,6 +1747,7 @@ noinst_HEADERS = \
         osdc/Journaler.h\
         osdc/ObjectCacher.h\
         osdc/Objecter.h\
+	osdc/Striper.h\
 	osdc/WritebackHandler.h\
         perfglue/cpu_profiler.h\
         perfglue/heap_profiler.h\
