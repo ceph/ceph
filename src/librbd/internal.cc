@@ -2573,7 +2573,7 @@ reprotect_and_return_err:
     ictx->snap_lock.Unlock();
 
     // map
-    vector<ObjectExtent> extents;
+    map<object_t,vector<ObjectExtent> > object_extents;
 
     uint64_t buffer_ofs = 0;
     for (vector<pair<uint64_t,uint64_t> >::const_iterator p = image_extents.begin();
@@ -2584,7 +2584,7 @@ reprotect_and_return_err:
 	return r;
       
       Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout,
-			     p->first, p->second, extents, buffer_ofs);
+			       p->first, p->second, object_extents, buffer_ofs);
       buffer_ofs += p->second;
     }
 
@@ -2596,36 +2596,38 @@ reprotect_and_return_err:
 
     c->get();
     c->init_time(ictx, AIO_TYPE_READ);
-    for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
-      ldout(ictx->cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
-			   << " from " << p->buffer_extents << dendl;
+    for (map<object_t,vector<ObjectExtent> >::iterator p = object_extents.begin(); p != object_extents.end(); ++p) {
+      for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
+	ldout(ictx->cct, 20) << " oid " << q->oid << " " << q->offset << "~" << q->length
+			     << " from " << q->buffer_extents << dendl;
 
-      C_AioRead *req_comp = new C_AioRead(ictx->cct, c);
-      AioRead *req = new AioRead(ictx, p->oid.name, 
-				 p->objectno, p->offset, p->length,
-				 p->buffer_extents,
-				 snap_id, true, req_comp);
-      req_comp->set_req(req);
-      c->add_request();
+	C_AioRead *req_comp = new C_AioRead(ictx->cct, c);
+	AioRead *req = new AioRead(ictx, q->oid.name, 
+				   q->objectno, q->offset, q->length,
+				   q->buffer_extents,
+				   snap_id, true, req_comp);
+	req_comp->set_req(req);
+	c->add_request();
 
-      if (ictx->object_cacher) {
-	// cache has already handled possible reading from parent, so
-	// this AioRead is just used to pass data to the
-	// AioCompletion. The AioRead isn't being used as a
-	// completion, so wrap the completion in a C_CacheRead to
-	// delete it
-	C_CacheRead *cache_comp = new C_CacheRead(req_comp, req);
-	req->m_ext_map[p->offset] = p->length;
-	ictx->aio_read_from_cache(p->oid, &req->data(),
-				  p->length, p->offset,
-				  cache_comp);
-      } else {
-	r = req->send();
-	if (r < 0 && r == -ENOENT)
-	  r = 0;
-	if (r < 0) {
-	  ret = r;
-	  goto done;
+	if (ictx->object_cacher) {
+	  // cache has already handled possible reading from parent, so
+	  // this AioRead is just used to pass data to the
+	  // AioCompletion. The AioRead isn't being used as a
+	  // completion, so wrap the completion in a C_CacheRead to
+	  // delete it
+	  C_CacheRead *cache_comp = new C_CacheRead(req_comp, req);
+	  req->m_ext_map[q->offset] = q->length;
+	  ictx->aio_read_from_cache(q->oid, &req->data(),
+				    q->length, q->offset,
+				    cache_comp);
+	} else {
+	  r = req->send();
+	  if (r < 0 && r == -ENOENT)
+	    r = 0;
+	  if (r < 0) {
+	    ret = r;
+	    goto done;
+	  }
 	}
       }
     }
