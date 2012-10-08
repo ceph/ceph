@@ -32,16 +32,27 @@ void Striper::file_to_extents(CephContext *cct, const char *object_format,
 			    vector<ObjectExtent>& extents,
 			    uint64_t buffer_offset)
 {
+  map<object_t,vector<ObjectExtent> > object_extents;
+  file_to_extents(cct, object_format, layout, offset, len, object_extents, buffer_offset);
+  assimilate_extents(object_extents, extents);
+}
+
+void Striper::file_to_extents(CephContext *cct, const char *object_format,
+			      ceph_file_layout *layout,
+			      uint64_t offset, uint64_t len,
+			      map<object_t,vector<ObjectExtent> >& object_extents,
+			      uint64_t buffer_offset)
+{
   ldout(cct, 10) << "file_to_extents " << offset << "~" << len 
 		 << " format " << object_format
 		 << dendl;
   assert(len > 0);
 
-  /* we want only one extent per object!
+  /*
+   * we want only one extent per object!
    * this means that each extent we read may map into different bits of the 
    * final read buffer.. hence OSDExtent.buffer_extents
    */
-  map< object_t, ObjectExtent > object_extents;
   
   __u32 object_size = layout->fl_object_size;
   __u32 su = layout->fl_stripe_unit;
@@ -66,16 +77,6 @@ void Striper::file_to_extents(CephContext *cct, const char *object_format,
     snprintf(buf, sizeof(buf), object_format, (long long unsigned)objectno);
     object_t oid = buf;
 
-    ObjectExtent *ex = 0;
-    if (object_extents.count(oid)) 
-      ex = &object_extents[oid];
-    else {
-      ex = &object_extents[oid];
-      ex->oid = oid;
-      ex->objectno = objectno;
-      ex->oloc = OSDMap::file_to_object_locator(*layout);
-    }
-    
     // map range into object
     uint64_t block_start = (stripeno % stripes_per_object) * su;
     uint64_t block_off = cur % su;
@@ -95,18 +96,24 @@ void Striper::file_to_extents(CephContext *cct, const char *object_format,
 		   << " block_off " << block_off
 		   << " " << x_offset << "~" << x_len
 		   << dendl;
-    
-    if (ex->offset + (uint64_t)ex->length == x_offset) {
-      // add to extent
-      ldout(cct, 20) << " adding in to " << *ex << dendl;
-      ex->length += x_len;
-    } else {
-      // new extent
-      assert(ex->length == 0);
-      assert(ex->offset == 0);
+
+    ObjectExtent *ex = 0;
+    vector<ObjectExtent>& exv = object_extents[oid];
+    if (exv.empty() || exv.back().offset + exv.back().length != x_offset) {
+      exv.resize(exv.size() + 1);
+      ex = &exv.back();
+      ex->oid = oid;
+      ex->objectno = objectno;
+      ex->oloc = OSDMap::file_to_object_locator(*layout);
+
       ex->offset = x_offset;
       ex->length = x_len;
       ldout(cct, 20) << " added new " << *ex << dendl;
+    } else {
+      // add to extent
+      ex = &exv.back();
+      ldout(cct, 20) << " adding in to " << *ex << dendl;
+      ex->length += x_len;
     }
     ex->buffer_extents.push_back(make_pair(cur - offset + buffer_offset, x_len));
         
@@ -116,12 +123,18 @@ void Striper::file_to_extents(CephContext *cct, const char *object_format,
     left -= x_len;
     cur += x_len;
   }
-  
+}
+
+void Striper::assimilate_extents(map<object_t,vector<ObjectExtent> >& object_extents,
+				 vector<ObjectExtent>& extents)
+{
   // make final list
-  for (map<object_t, ObjectExtent>::iterator it = object_extents.begin();
+  for (map<object_t, vector<ObjectExtent> >::iterator it = object_extents.begin();
        it != object_extents.end();
        it++) {
-    extents.push_back(it->second);
+    for (vector<ObjectExtent>::iterator p = it->second.begin(); p != it->second.end(); ++p) {
+      extents.push_back(*p);
+    }
   }
 }
 
