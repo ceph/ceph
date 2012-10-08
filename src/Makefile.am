@@ -316,7 +316,10 @@ librgw_a_SOURCES =  \
 	rgw/rgw_acl.cc \
 	rgw/rgw_acl_s3.cc \
 	rgw/rgw_acl_swift.cc \
+	rgw/rgw_client_io.cc \
+	rgw/rgw_fcgi.cc \
 	rgw/rgw_xml.cc \
+	rgw/rgw_usage.cc \
 	rgw/rgw_user.cc \
 	rgw/rgw_tools.cc \
 	rgw/rgw_rados.cc \
@@ -342,6 +345,7 @@ radosgw_SOURCES = \
         rgw/rgw_rest.cc \
         rgw/rgw_rest_swift.cc \
         rgw/rgw_rest_s3.cc \
+        rgw/rgw_rest_usage.cc \
         rgw/rgw_swift.cc \
 	rgw/rgw_swift_auth.cc \
 	rgw/rgw_main.cc
@@ -1745,6 +1749,8 @@ noinst_HEADERS = \
 	rgw/rgw_acl.h\
 	rgw/rgw_acl_s3.h\
 	rgw/rgw_acl_swift.h\
+	rgw/rgw_client_io.h\
+	rgw/rgw_fcgi.h\
 	rgw/rgw_xml.h\
 	rgw/rgw_cache.h\
 	rgw/rgw_common.h\
@@ -1761,7 +1767,10 @@ noinst_HEADERS = \
 	rgw/rgw_rest.h\
 	rgw/rgw_rest_swift.h\
 	rgw/rgw_rest_s3.h\
+	rgw/rgw_rest_admin.h\
+	rgw/rgw_rest_usage.h\
 	rgw/rgw_tools.h\
+	rgw/rgw_usage.h\
 	rgw/rgw_user.h\
 	sample.ceph.conf\
 	tools/common.h\

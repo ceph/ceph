@@ -44,6 +44,8 @@ public:
   virtual bool prefetch_data() { return false; }
   virtual int verify_permission() = 0;
   virtual void execute() = 0;
+  virtual void send_response() {}
+  virtual void complete() { send_response(); }
   virtual const char *name() = 0;
 };
 
@@ -72,12 +74,7 @@ protected:
 
   int init_common();
 public:
-  RGWGetObj() {}
-
-  virtual bool prefetch_data() { return true; }
-
-  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
-    RGWOp::init(store, s, h);
+  RGWGetObj() {
     range_str = NULL;
     if_mod = NULL;
     if_unmod = NULL;
@@ -93,12 +90,12 @@ public:
     unmod_time = 0;
     mod_ptr = NULL;
     unmod_ptr = NULL;
-    attrs.clear();
     partial_content = false;
     ret = 0;
+ }
 
-    /* get_data should not be initialized here! */
-  }
+  virtual bool prefetch_data() { return true; }
+
   void set_get_data(bool get_data) {
     this->get_data = get_data;
   }
@@ -121,16 +118,12 @@ protected:
   RGWUserBuckets buckets;
 
 public:
-  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
-    RGWOp::init(store, s, h);
-    buckets.clear();
-  }
-  RGWListBuckets() {}
+  RGWListBuckets() : ret(0) {}
 
   int verify_permission();
   void execute();
 
-  virtual int get_params()= 0;
+  virtual int get_params() = 0;
   virtual void send_response() = 0;
 
   virtual const char *name() { return "list_buckets"; }
@@ -145,15 +138,13 @@ protected:
   uint64_t buckets_size_rounded;
 
 public:
-  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
-    RGWOp::init(store, s, h);
+  RGWStatAccount() {
     ret = 0;
     buckets_count = 0;
     buckets_objcount = 0;
     buckets_size = 0;
     buckets_size_rounded = 0;
   }
-  RGWStatAccount() {}
 
   int verify_permission();
   void execute();
@@ -179,18 +170,9 @@ protected:
   int parse_max_keys();
 
 public:
-  RGWListBucket() {}
-
-  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
-    RGWOp::init(store, s, h);
-    prefix.clear();
-    marker.clear();
-    max_keys.clear();
-    delimiter.clear();
+  RGWListBucket() {
     max = 0;
     ret = 0;
-    objs.clear();
-    common_prefixes.clear();
     is_truncated = false;
   }
   int verify_permission();
@@ -207,12 +189,7 @@ protected:
   RGWBucketEnt bucket;
 
 public:
-  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
-    RGWOp::init(store, s, h);
-    ret = 0;
-    bucket.clear();
-  }
-  RGWStatBucket() {}
+  RGWStatBucket() : ret(0) {}
   ~RGWStatBucket() {}
 
   int verify_permission();
@@ -228,14 +205,13 @@ protected:
   RGWAccessControlPolicy policy;
 
 public:
-  RGWCreateBucket() {}
+  RGWCreateBucket() : ret(0) {}
 
   int verify_permission();
   void execute();
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
-    ret = 0;
   }
   virtual int get_params() { return 0; }
   virtual void send_response() = 0;
@@ -247,12 +223,8 @@ protected:
   int ret;
 
 public:
-  RGWDeleteBucket() {}
+  RGWDeleteBucket() : ret(0) {}
 
-  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
-    RGWOp::init(store, s, h);
-    ret = 0;
-  }
   int verify_permission();
   void execute();
 
@@ -292,17 +264,17 @@ protected:
   const char *obj_manifest;
 
 public:
-  RGWPutObj() {}
-
-  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
-    RGWOp::init(store, s, h);
+  RGWPutObj() {
     ret = 0;
     ofs = 0;
     supplied_md5_b64 = NULL;
     supplied_etag = NULL;
-    etag = "";
     chunked_upload = false;
     obj_manifest = NULL;
+  }
+
+  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
+    RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
   }
 
@@ -326,12 +298,13 @@ protected:
   RGWAccessControlPolicy policy;
 
 public:
-  RGWPutMetadata() {}
+  RGWPutMetadata() {
+    has_policy = false;
+    ret = 0;
+  }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
-    has_policy = false;
-    ret = 0;
     policy.set_ctx(s->cct);
   }
   int verify_permission();
@@ -347,12 +320,8 @@ protected:
   int ret;
 
 public:
-  RGWDeleteObj() {}
+  RGWDeleteObj() : ret(0) {}
 
-  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
-    RGWOp::init(store, s, h);
-    ret = 0;
-  }
   int verify_permission();
   void execute();
 
@@ -391,10 +360,7 @@ protected:
   bool parse_copy_location(const char *src, string& bucket_name, string& object);
 
 public:
-  RGWCopyObj() {}
-
-  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
-    RGWOp::init(store, s, h);
+  RGWCopyObj() {
     if_mod = NULL;
     if_unmod = NULL;
     if_match = NULL;
@@ -402,14 +368,17 @@ public:
     ofs = 0;
     len = 0;
     end = -1;
+    mod_time = 0;
+    unmod_time = 0;
     mod_ptr = NULL;
     unmod_ptr = NULL;
     ret = 0;
-    attrs.clear();
-    src_bucket.clear();
-    src_object.clear();
     mtime = 0;
     replace_attrs = false;
+  }
+
+  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
+    RGWOp::init(store, s, h);
     dest_policy.set_ctx(s->cct);
   }
   int verify_permission();
@@ -427,13 +396,8 @@ protected:
   string acls;
 
 public:
-  RGWGetACLs() {}
+  RGWGetACLs() : ret(0) {}
 
-  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
-    RGWOp::init(store, s, h);
-    ret = 0;
-    acls.clear();
-  }
   int verify_permission();
   void execute();
 
@@ -448,14 +412,12 @@ protected:
   char *data;
 
 public:
-  RGWPutACLs() {}
-
-  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
-    RGWOp::init(store, s, h);
+  RGWPutACLs() {
     ret = 0;
     len = 0;
     data = NULL;
   }
+
   int verify_permission();
   void execute();
 
@@ -472,12 +434,12 @@ protected:
   RGWAccessControlPolicy policy;
 
 public:
-  RGWInitMultipart() {}
+  RGWInitMultipart() {
+    ret = 0;
+  }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
-    ret = 0;
-    upload_id = "";
     policy.set_ctx(s->cct);
   }
   int verify_permission();
@@ -497,16 +459,12 @@ protected:
   int len;
 
 public:
-  RGWCompleteMultipart() {}
-
-  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
-    RGWOp::init(store, s, h);
+  RGWCompleteMultipart() {
     ret = 0;
-    upload_id = "";
-    etag="";
     data = NULL;
     len = 0;
   }
+
   int verify_permission();
   void execute();
 
@@ -520,12 +478,8 @@ protected:
   int ret;
 
 public:
-  RGWAbortMultipart() {}
+  RGWAbortMultipart() : ret(0) {}
 
-  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
-    RGWOp::init(store, s, h);
-    ret = 0;
-  }
   int verify_permission();
   void execute();
 
@@ -543,15 +497,14 @@ protected:
   RGWAccessControlPolicy policy;
 
 public:
-  RGWListMultipart() {}
+  RGWListMultipart() {
+    ret = 0;
+    max_parts = 1000;
+    marker = 0;
+  }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
-    ret = 0;
-    upload_id = "";
-    parts.clear();
-    max_parts = 1000;
-    marker = 0;
     policy = RGWAccessControlPolicy(s->cct);
   }
   int verify_permission();
@@ -652,21 +605,16 @@ protected:
   int default_max;
 
 public:
-  RGWListBucketMultiparts() {}
+  RGWListBucketMultiparts() {
+    ret = 0;
+    is_truncated = false;
+  }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
-    prefix.clear();
-    marker.clear();
-    next_marker.clear();
     max_uploads = default_max;
-    delimiter.clear();
-    max_uploads = default_max;
-    ret = 0;
-    uploads.clear();
-    is_truncated = false;
-    common_prefixes.clear();
   }
+
   int verify_permission();
   void execute();
 
@@ -688,15 +636,11 @@ protected:
 
 
 public:
-  RGWDeleteMultiObj() {}
-
-  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
-    RGWOp::init(store, s, h);
+  RGWDeleteMultiObj() {
     ret = 0;
     max_to_delete = 1000;
     len = 0;
     data = NULL;
-    bucket_name = "";
     quiet = false;
     status_dumped = false;
   }
@@ -718,13 +662,20 @@ protected:
   struct req_state *s;
 
   int do_read_permissions(RGWOp *op, bool only_bucket);
+
+  virtual RGWOp *op_get() { return NULL; }
+  virtual RGWOp *op_put() { return NULL; }
+  virtual RGWOp *op_delete() { return NULL; }
+  virtual RGWOp *op_head() { return NULL; }
+  virtual RGWOp *op_post() { return NULL; }
+  virtual RGWOp *op_copy() { return NULL; }
 public:
   RGWHandler() {}
-  virtual ~RGWHandler() {}
-  virtual int init(RGWRados *store, struct req_state *_s, FCGX_Request *fcgx);
+  virtual ~RGWHandler();
+  virtual int init(RGWRados *store, struct req_state *_s, RGWClientIO *cio);
 
-  virtual RGWOp *get_op() = 0;
-  virtual void put_op(RGWOp *op) = 0;
+  virtual RGWOp *get_op(RGWRados *store);
+  virtual void put_op(RGWOp *op);
   virtual int read_permissions(RGWOp *op) = 0;
   virtual int authorize() = 0;
 };

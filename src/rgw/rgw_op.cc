@@ -19,11 +19,7 @@
 #include "rgw_multi.h"
 #include "rgw_multi_del.h"
 
-#ifdef FASTCGI_INCLUDE_DIR
-# include "fastcgi/fcgiapp.h"
-#else
-# include "fcgiapp.h"
-#endif
+#include "rgw_client_io.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -641,7 +637,7 @@ void RGWListBuckets::execute()
 {
   ret = get_params();
   if (ret < 0)
-    goto done;
+    return;
 
   ret = rgw_read_user_buckets(store, s->user.user_id, buckets, !!(s->prot_flags & RGW_REST_SWIFT));
   if (ret < 0) {
@@ -658,9 +654,6 @@ void RGWListBuckets::execute()
 
     */
   }
-
-done:
-  send_response();
 }
 
 int RGWStatAccount::verify_permission()
@@ -697,8 +690,6 @@ void RGWStatAccount::execute()
     }
     buckets_count = m.size();
   }
-
-  send_response();
 }
 
 int RGWStatBucket::verify_permission()
@@ -727,8 +718,6 @@ void RGWStatBucket::execute()
       ret = -EINVAL;
     }
   }
-
-  send_response();
 }
 
 int RGWListBucket::verify_permission()
@@ -764,13 +753,10 @@ void RGWListBucket::execute()
 
   ret = get_params();
   if (ret < 0)
-    goto done;
+    return;
 
   ret = store->list_objects(s->bucket, max, prefix, delimiter, marker, objs, common_prefixes,
                                !!(s->prot_flags & RGW_REST_SWIFT), no_ns, &is_truncated, NULL);
-
-done:
-  send_response();
 }
 
 int RGWCreateBucket::verify_permission()
@@ -803,14 +789,14 @@ void RGWCreateBucket::execute()
 
   ret = get_params();
   if (ret < 0)
-    goto done;
+    return;
 
   s->bucket_owner = s->user.user_id;
   r = get_policy_from_attr(s->cct, store, s->obj_ctx, &old_policy, obj);
   if (r >= 0)  {
     if (old_policy.get_owner().get_id().compare(s->user.user_id) != 0) {
       ret = -EEXIST;
-      goto done;
+      return;
     }
   }
   policy.encode(aclbl);
@@ -824,7 +810,7 @@ void RGWCreateBucket::execute()
   ldout(s->cct, 20) << "rgw_create_bucket returned ret=" << ret << " bucket=" << s->bucket << dendl;
 
   if (ret && ret != -EEXIST)   
-    goto done;
+    return;
 
   existed = (ret == -EEXIST);
 
@@ -834,9 +820,6 @@ void RGWCreateBucket::execute()
 
   if (ret == -EEXIST)
     ret = -ERR_BUCKET_EXISTS;
-
-done:
-  send_response();
 }
 
 int RGWDeleteBucket::verify_permission()
@@ -861,8 +844,6 @@ void RGWDeleteBucket::execute()
       }
     }
   }
-
-  send_response();
 }
 
 struct put_obj_aio_info {
@@ -1036,9 +1017,9 @@ public:
     if (!ofs) {
       first_chunk.claim(bl);
       *phandle = NULL;
+      obj_len = (uint64_t)first_chunk.length();
       return 0;
     }
-    assert (ofs >= RGW_MAX_CHUNK_SIZE);
     int r = RGWPutObjProcessor_Aio::handle_data(bl, ofs, phandle);
 
     return r;
@@ -1283,8 +1264,6 @@ done:
   dispose_processor(processor);
   perfcounter->finc(l_rgw_put_lat,
                    (ceph_clock_now(s->cct) - s->time));
-  send_response();
-  return;
 }
 
 int RGWPutMetadata::verify_permission()
@@ -1309,14 +1288,14 @@ void RGWPutMetadata::execute()
 
   ret = get_params();
   if (ret < 0)
-    goto done;
+    return;
 
   rgw_get_request_metadata(s, attrs);
 
   /* check if obj exists, read orig attrs */
   ret = get_obj_attrs(store, s, obj, orig_attrs, NULL);
   if (ret < 0)
-    goto done;
+    return;
 
   /* only remove meta attrs */
   for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
@@ -1333,9 +1312,6 @@ void RGWPutMetadata::execute()
     attrs[RGW_ATTR_ACL] = bl;
   }
   ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs);
-
-done:
-  send_response();
 }
 
 int RGWDeleteObj::verify_permission()
@@ -1354,8 +1330,6 @@ void RGWDeleteObj::execute()
     store->set_atomic(s->obj_ctx, obj);
     ret = store->delete_obj(s->obj_ctx, obj);
   }
-
-  send_response();
 }
 
 bool RGWCopyObj::parse_copy_location(const char *src, string& bucket_name, string& object)
@@ -1484,7 +1458,7 @@ void RGWCopyObj::execute()
   rgw_obj src_obj, dst_obj;
 
   if (init_common() < 0)
-    goto done;
+    return;
 
   src_obj.init(src_bucket, src_object);
   dst_obj.init(dest_bucket, dest_object);
@@ -1501,9 +1475,6 @@ void RGWCopyObj::execute()
                         if_nomatch,
                         replace_attrs,
                         attrs, RGW_OBJ_CATEGORY_MAIN, &s->err);
-
-done:
-  send_response();
 }
 
 int RGWGetACLs::verify_permission()
@@ -1527,7 +1498,6 @@ void RGWGetACLs::execute()
   RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(acl);
   s3policy->to_xml(ss);
   acls = ss.str(); 
-  send_response();
 }
 
 
@@ -1623,8 +1593,6 @@ void RGWPutACLs::execute()
 done:
   free(orig_data);
   free(new_data);
-
-  send_response();
 }
 
 int RGWInitMultipart::verify_permission()
@@ -1642,10 +1610,10 @@ void RGWInitMultipart::execute()
   rgw_obj obj;
 
   if (get_params() < 0)
-    goto done;
+    return;
   ret = -EINVAL;
   if (!s->object)
-    goto done;
+    return;
 
   policy.encode(aclbl);
 
@@ -1672,8 +1640,6 @@ void RGWInitMultipart::execute()
     // the meta object will be indexed with 0 size, we c
     ret = store->put_obj_meta(s->obj_ctx, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, true, NULL, NULL, NULL, NULL);
   } while (ret == -EEXIST);
-done:
-  send_response();
 }
 
 static int get_multiparts_info(RGWRados *store, struct req_state *s, string& meta_oid, map<uint32_t, RGWUploadPartInfo>& parts,
@@ -1771,27 +1737,27 @@ void RGWCompleteMultipart::execute()
 
   ret = get_params();
   if (ret < 0)
-    goto done;
+    return;
 
   if (!data) {
     ret = -EINVAL;
-    goto done;
+    return;
   }
 
   if (!parser.init()) {
     ret = -EINVAL;
-    goto done;
+    return;
   }
 
   if (!parser.parse(data, len, 1)) {
     ret = -EINVAL;
-    goto done;
+    return;
   }
 
   parts = (RGWMultiCompleteUpload *)parser.find_first("CompleteMultipartUpload");
   if (!parts) {
     ret = -EINVAL;
-    goto done;
+    return;
   }
 
   mp.init(s->object_str, upload_id);
@@ -1803,7 +1769,7 @@ void RGWCompleteMultipart::execute()
   if (parts->parts.size() != obj_parts.size())
     ret = -ERR_INVALID_PART;
   if (ret < 0)
-    goto done;
+    return;
 
   for (iter = parts->parts.begin(), obj_iter = obj_parts.begin();
        iter != parts->parts.end() && obj_iter != obj_parts.end();
@@ -1812,13 +1778,13 @@ void RGWCompleteMultipart::execute()
     if (iter->first != (int)obj_iter->first) {
       ldout(s->cct, 0) << "NOTICE: parts num mismatch: next requested: " << iter->first << " next uploaded: " << obj_iter->first << dendl;
       ret = -ERR_INVALID_PART;
-      goto done;
+      return;
     }
     string part_etag = string_unquote(iter->second);
     if (part_etag.compare(obj_iter->second.etag) != 0) {
       ldout(s->cct, 0) << "NOTICE: etag mismatch: part: " << iter->first << " etag: " << iter->second << dendl;
       ret = -ERR_INVALID_PART;
-      goto done;
+      return;
     }
 
     hex_to_buf(obj_iter->second.etag.c_str(), etag, CEPH_CRYPTO_MD5_DIGESTSIZE);
@@ -1839,7 +1805,7 @@ void RGWCompleteMultipart::execute()
   store->set_atomic(s->obj_ctx, target_obj);
   ret = store->put_obj_meta(s->obj_ctx, target_obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, false, NULL, NULL, NULL, NULL);
   if (ret < 0)
-    goto done;
+    return;
   
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
     string oid = mp.get_part(obj_iter->second.num);
@@ -1862,14 +1828,11 @@ void RGWCompleteMultipart::execute()
   ret = store->put_obj_meta(s->obj_ctx, target_obj, ofs, NULL, attrs,
                             RGW_OBJ_CATEGORY_MAIN, false, NULL, NULL, &manifest, NULL);
   if (ret < 0)
-    goto done;
+    return;
 
   // remove the upload obj
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
   store->delete_obj(s->obj_ctx, meta_obj);
-
-done:
-  send_response();
 }
 
 int RGWAbortMultipart::verify_permission()
@@ -1895,14 +1858,14 @@ void RGWAbortMultipart::execute()
   RGWMPObj mp;
 
   if (upload_id.empty() || s->object_str.empty())
-    goto done;
+    return;
 
   mp.init(s->object_str, upload_id); 
   meta_oid = mp.get_meta();
 
   ret = get_multiparts_info(store, s, meta_oid, obj_parts, policy, attrs);
   if (ret < 0)
-    goto done;
+    return;
 
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
     string oid = mp.get_part(obj_iter->second.num);
@@ -1910,7 +1873,7 @@ void RGWAbortMultipart::execute()
     obj.init_ns(s->bucket, oid, mp_ns);
     ret = store->delete_obj(s->obj_ctx, obj);
     if (ret < 0 && ret != -ENOENT)
-      goto done;
+      return;
   }
   // and also remove the metadata obj
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
@@ -1918,9 +1881,6 @@ void RGWAbortMultipart::execute()
   if (ret == -ENOENT) {
     ret = -ERR_NO_SUCH_BUCKET;
   }
-done:
-
-  send_response();
 }
 
 int RGWListMultipart::verify_permission()
@@ -1939,15 +1899,12 @@ void RGWListMultipart::execute()
 
   ret = get_params();
   if (ret < 0)
-    goto done;
+    return;
 
   mp.init(s->object_str, upload_id);
   meta_oid = mp.get_meta();
 
   ret = get_multiparts_info(store, s, meta_oid, parts, policy, xattrs);
-
-done:
-  send_response();
 }
 
 int RGWListBucketMultiparts::verify_permission()
@@ -1965,7 +1922,7 @@ void RGWListBucketMultiparts::execute()
 
   ret = get_params();
   if (ret < 0)
-    goto done;
+    return;
 
   if (s->prot_flags & RGW_REST_SWIFT) {
     string path_args;
@@ -1973,7 +1930,7 @@ void RGWListBucketMultiparts::execute()
     if (!path_args.empty()) {
       if (!delimiter.empty() || !prefix.empty()) {
         ret = -EINVAL;
-        goto done;
+        return;
       }
       prefix = path_args;
       delimiter="/";
@@ -1994,8 +1951,6 @@ void RGWListBucketMultiparts::execute()
     }
     next_marker = entry;
   }
-done:
-  send_response();
 }
 
 int RGWDeleteMultiObj::verify_permission()
@@ -2077,17 +2032,23 @@ error:
 
 }
 
-int RGWHandler::init(RGWRados *_store, struct req_state *_s, FCGX_Request *fcgx)
+RGWHandler::~RGWHandler()
+{
+}
+
+int RGWHandler::init(RGWRados *_store, struct req_state *_s, RGWClientIO *cio)
 {
   store = _store;
   s = _s;
 
   if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
-    char *p;
-    for (int i=0; (p = fcgx->envp[i]); ++i) {
+    const char *p;
+    const char **envp = cio->envp();
+    for (int i=0; (p = envp[i]); ++i) {
       ldout(s->cct, 20) << p << dendl;
     }
   }
+
   return 0;
 }
 
@@ -2102,5 +2063,43 @@ int RGWHandler::do_read_permissions(RGWOp *op, bool only_bucket)
   }
 
   return ret;
+}
+
+
+RGWOp *RGWHandler::get_op(RGWRados *store)
+{
+  RGWOp *op;
+  switch (s->op) {
+   case OP_GET:
+     op = op_get();
+     break;
+   case OP_PUT:
+     op = op_put();
+     break;
+   case OP_DELETE:
+     op = op_delete();
+     break;
+   case OP_HEAD:
+     op = op_head();
+     break;
+   case OP_POST:
+     op = op_post();
+     break;
+   case OP_COPY:
+     op = op_copy();
+     break;
+   default:
+     return NULL;
+  }
+
+  if (op) {
+    op->init(store, s, this);
+  }
+  return op;
+}
+
+void RGWHandler::put_op(RGWOp *op)
+{
+  delete op;
 }
 

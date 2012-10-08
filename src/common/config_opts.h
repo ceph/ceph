@@ -410,6 +410,7 @@ OPTION(rbd_cache_max_dirty, OPT_LONGLONG, 24<<20)    // dirty limit in bytes - s
 OPTION(rbd_cache_target_dirty, OPT_LONGLONG, 16<<20) // target dirty limit in bytes
 OPTION(rbd_cache_max_dirty_age, OPT_FLOAT, 1.0)      // seconds in cache before writeback starts
 OPTION(rgw_data, OPT_STR, "/var/lib/ceph/radosgw/$cluster-$id")
+OPTION(rgw_enable_apis, OPT_STR, "s3, swift, swift_auth, admin")
 OPTION(rgw_cache_enabled, OPT_BOOL, true)   // rgw cache enabled
 OPTION(rgw_cache_lru_size, OPT_INT, 10000)   // num of entries in rgw cache
 OPTION(rgw_socket_path, OPT_STR, "")   // path to unix domain socket, if not specified, rgw will not run as external fcgi
@@ -417,6 +418,7 @@ OPTION(rgw_dns_name, OPT_STR, "")
 OPTION(rgw_swift_url, OPT_STR, "")              // 
 OPTION(rgw_swift_url_prefix, OPT_STR, "swift")  // 
 OPTION(rgw_swift_auth_entry, OPT_STR, "auth")  // entry point for which a url is considered a swift auth url
+OPTION(rgw_admin_entry, OPT_STR, "admin")  // entry point for which a url is considered an admin request
 OPTION(rgw_enforce_swift_acls, OPT_BOOL, true)
 OPTION(rgw_print_continue, OPT_BOOL, true)  // enable if 100-Continue works
 OPTION(rgw_remote_addr_param, OPT_STR, "REMOTE_ADDR")  // e.g. X-Forwarded-For, if you have a reverse proxy

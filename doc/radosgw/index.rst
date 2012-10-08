@@ -40,5 +40,6 @@ one API and retrieve it with the other.
 	Config Reference <config-ref>
 	S3 API <s3>
 	Swift API <swift/index>
+	Admin API <admin/index>
 	troubleshooting
 	

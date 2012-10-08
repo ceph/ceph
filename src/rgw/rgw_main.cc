@@ -17,6 +17,8 @@
 # include "fcgiapp.h"
 #endif
 
+#include "rgw_fcgi.h"
+
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "global/signal_handler.h"
@@ -25,12 +27,18 @@
 #include "common/WorkQueue.h"
 #include "common/Timer.h"
 #include "common/Throttle.h"
+#include "include/str_list.h"
 #include "rgw_common.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 #include "rgw_user.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
+#include "rgw_rest_s3.h"
+#include "rgw_rest_swift.h"
+#include "rgw_rest_admin.h"
+#include "rgw_rest_usage.h"
+#include "rgw_swift_auth.h"
 #include "rgw_swift.h"
 #include "rgw_log.h"
 #include "rgw_tools.h"
@@ -109,10 +117,6 @@ struct RGWRequest
     if (s->method && req_str.size() == 0) {
       req_str = s->method;
       req_str.append(" ");
-      if (s->host_bucket) {
-        req_str.append(s->host_bucket);
-        req_str.append("/");
-      }
       req_str.append(s->request_uri);
     }
     utime_t t = ceph_clock_now(g_ceph_context) - ts;
@@ -125,6 +129,7 @@ class RGWProcess {
   deque<RGWRequest *> m_req_queue;
   ThreadPool m_tp;
   Throttle req_throttle;
+  RGWREST *rest;
 
   struct RGWWQ : public ThreadPool::WorkQueue<RGWRequest> {
     RGWProcess *process;
@@ -179,9 +184,10 @@ class RGWProcess {
   uint64_t max_req_id;
 
 public:
-  RGWProcess(CephContext *cct, RGWRados *rgwstore, int num_threads)
+  RGWProcess(CephContext *cct, RGWRados *rgwstore, int num_threads, RGWREST *_rest)
     : store(rgwstore), m_tp(cct, "RGWProcess::m_tp", num_threads),
       req_throttle(cct, "rgw_ops", num_threads * 2),
+      rest(_rest),
       req_wq(this, g_conf->rgw_op_thread_timeout,
 	     g_conf->rgw_op_thread_suicide_timeout, &m_tp),
       max_req_id(0) {}
@@ -246,9 +252,9 @@ static int call_log_intent(RGWRados *store, void *ctx, rgw_obj& obj, RGWIntentEv
 void RGWProcess::handle_request(RGWRequest *req)
 {
   FCGX_Request *fcgx = &req->fcgx;
-  RGWRESTMgr rest;
   int ret;
   RGWEnv rgw_env;
+  RGWFCGX client_io(fcgx);
 
   req->log_init();
 
@@ -265,14 +271,14 @@ void RGWProcess::handle_request(RGWRequest *req)
 
   RGWOp *op = NULL;
   int init_error = 0;
-  RGWHandler *handler = rest.get_handler(store, s, fcgx, &init_error);
+  RGWHandler *handler = rest->get_handler(store, s, &client_io, &init_error);
   if (init_error != 0) {
     abort_early(s, init_error);
     goto done;
   }
 
   req->log(s, "getting op");
-  op = handler->get_op();
+  op = handler->get_op(store);
   if (!op) {
     abort_early(s, -ERR_METHOD_NOT_ALLOWED);
     goto done;
@@ -318,6 +324,7 @@ void RGWProcess::handle_request(RGWRequest *req)
 
   req->log(s, "executing");
   op->execute();
+  op->complete();
 done:
   rgw_log_op(store, s, (op ? op->name() : "unknown"));
 
@@ -325,7 +332,9 @@ done:
 
   req->log_format(s, "http status=%d", http_ret);
 
-  handler->put_op(op);
+  if (handler)
+    handler->put_op(op);
+  rest->put_handler(handler);
   store->destroy_context(s->obj_ctx);
   FCGX_Finish_r(fcgx);
 
@@ -438,7 +447,33 @@ int main(int argc, const char **argv)
 
   rgw_log_usage_init(g_ceph_context, store);
 
-  RGWProcess process(g_ceph_context, store, g_conf->rgw_thread_pool_size);
+  RGWREST rest;
+
+  list<string> apis;
+
+  get_str_list(g_conf->rgw_enable_apis, apis);
+
+  map<string, bool> apis_map;
+  for (list<string>::iterator li = apis.begin(); li != apis.end(); ++li) {
+    apis_map[*li] = true;
+  }
+
+  if (apis_map.count("s3") > 0)
+    rest.register_default_mgr(new RGWRESTMgr_S3);
+
+  if (apis_map.count("swift") > 0)
+    rest.register_resource(g_conf->rgw_swift_url_prefix, new RGWRESTMgr_SWIFT);
+
+  if (apis_map.count("swift_auth") > 0)
+    rest.register_resource(g_conf->rgw_swift_auth_entry, new RGWRESTMgr_SWIFT_Auth);
+
+  if (apis_map.count("admin") > 0) {
+    RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;
+    admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
+    rest.register_resource(g_conf->rgw_admin_entry, admin_resource);
+  }
+
+  RGWProcess process(g_ceph_context, store, g_conf->rgw_thread_pool_size, &rest);
   process.run();
 
   rgw_log_usage_finalize();

@@ -9,6 +9,7 @@
 #include "common/Clock.h"
 #include "common/Formatter.h"
 #include "common/perf_counters.h"
+#include "include/str_list.h"
 #include "auth/Crypto.h"
 
 #include <sstream>
@@ -90,9 +91,19 @@ req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), os_auth_t
   enable_usage_log = env->conf->enable_usage_log;
   content_started = false;
   format = 0;
+  formatter = NULL;
   bucket_acl = NULL;
   object_acl = NULL;
   expect_cont = false;
+
+  bucket_name = NULL;
+  object = NULL;
+
+  header_ended = false;
+  bytes_sent = 0;
+  bytes_received = 0;
+  obj_size = 0;
+  prot_flags = 0;
 
   os_auth_token = NULL;
   os_user = NULL;
@@ -104,7 +115,6 @@ req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), os_auth_t
   bucket_name = NULL;
   has_bad_meta = false;
   method = NULL;
-  host_bucket = NULL;
 }
 
 req_state::~req_state() {
@@ -199,6 +209,40 @@ int parse_time(const char *time_str, time_t *time)
     return -EINVAL;
 
   *time = timegm(&tm);
+
+  return 0;
+}
+
+int parse_date(string& date, uint64_t *epoch, string *out_date, string *out_time)
+{
+  struct tm tm;
+
+  memset(&tm, 0, sizeof(tm));
+
+  const char *p = strptime(date.c_str(), "%Y-%m-%d", &tm);
+  if (p) {
+    if (*p == ' ') {
+      p++;
+      if (!strptime(p, " %H:%M:%S", &tm))
+	return -EINVAL;
+    }
+  } else {
+    return -EINVAL;
+  }
+  time_t t = timegm(&tm);
+  if (epoch)
+    *epoch = (uint64_t)t;
+
+  if (out_date) {
+    char buf[32];
+    strftime(buf, sizeof(buf), "%F", &tm);
+    *out_date = buf;
+  }
+  if (out_time) {
+    char buf[32];
+    strftime(buf, sizeof(buf), "%T", &tm);
+    *out_time = buf;
+  }
 
   return 0;
 }
@@ -352,7 +396,7 @@ int XMLArgs::parse()
   return 0;
 }
 
-string& XMLArgs::get(string& name, bool *exists)
+string& XMLArgs::get(const string& name, bool *exists)
 {
   map<string, string>::iterator iter;
   iter = val_map.find(name);
@@ -478,3 +522,179 @@ bool url_decode(string& src_str, string& dest_str)
 
   return true;
 }
+
+static struct {
+  const char *type_name;
+  int perm;
+} cap_names[] = { {"*",     RGW_CAP_ALL},
+                  {"read",  RGW_CAP_READ},
+		  {"write", RGW_CAP_WRITE},
+		  {NULL, 0} };
+
+int RGWUserCaps::parse_cap_perm(const string& str, uint32_t *perm)
+{
+  list<string> strs;
+  get_str_list(str, strs);
+  list<string>::iterator iter;
+  uint32_t v = 0;
+  for (iter = strs.begin(); iter != strs.end(); ++iter) {
+    string& s = *iter;
+    for (int i = 0; cap_names[i].type_name; i++) {
+      if (s.compare(cap_names[i].type_name) == 0)
+        v |= cap_names[i].perm;
+    }
+  }
+
+  *perm = v;
+  return 0;
+}
+
+static void trim_whitespace(const string& src, string& dst)
+{
+  const char *spacestr = " \t\n\r\f\v";
+  int start = src.find_first_not_of(spacestr);
+  if (start < 0)
+    return;
+
+  int end = src.find_last_not_of(spacestr);
+  dst = src.substr(start, end - start + 1);
+}
+
+int RGWUserCaps::get_cap(const string& cap, string& type, uint32_t *pperm)
+{
+  int pos = cap.find('=');
+  if (pos >= 0) {
+    trim_whitespace(cap.substr(0, pos), type);
+  }
+
+  if (type.size() == 0)
+    return -EINVAL;
+
+  string cap_perm;
+  uint32_t perm = 0;
+  if (pos < (int)cap.size() - 1) {
+    cap_perm = cap.substr(pos + 1);
+    int r = parse_cap_perm(cap_perm, &perm);
+    if (r < 0)
+      return r;
+  }
+
+  *pperm = perm;
+
+  return 0;
+}
+
+int RGWUserCaps::add_cap(const string& cap)
+{
+  uint32_t perm;
+  string type;
+
+  int r = get_cap(cap, type, &perm);
+  if (r < 0)
+    return r;
+
+  caps[type] |= perm;
+
+  return 0;
+}
+
+int RGWUserCaps::remove_cap(const string& cap)
+{
+  uint32_t perm;
+  string type;
+
+  int r = get_cap(cap, type, &perm);
+  if (r < 0)
+    return r;
+
+  map<string, uint32_t>::iterator iter = caps.find(type);
+  if (iter == caps.end())
+    return 0;
+
+  uint32_t& old_perm = iter->second;
+  old_perm &= ~perm;
+  if (!old_perm)
+    caps.erase(iter);
+
+  return 0;
+}
+
+int RGWUserCaps::add_from_string(const string& str)
+{
+  int start = 0;
+  int end;
+  do {
+    end = str.find(';', start);
+    if (end < 0)
+      end = str.size();
+
+    int r = add_cap(str.substr(start, end - start));
+    if (r < 0)
+      return r;
+
+    start = end + 1;
+  } while (start < (int)str.size());
+
+  return 0;
+}
+
+int RGWUserCaps::remove_from_string(const string& str)
+{
+  int start = 0;
+  int end;
+  do {
+    end = str.find(';', start);
+    if (end < 0)
+      end = str.size();
+
+    int r = remove_cap(str.substr(start, end - start));
+    if (r < 0)
+      return r;
+
+    start = end + 1;
+  } while (start < (int)str.size());
+
+  return 0;
+}
+
+void RGWUserCaps::dump(Formatter *f) const
+{
+  f->open_array_section("caps");
+  map<string, uint32_t>::const_iterator iter;
+  for (iter = caps.begin(); iter != caps.end(); ++iter)
+  {
+    f->open_object_section("cap");
+    f->dump_string("type", iter->first);
+    uint32_t perm = iter->second;
+    string perm_str;
+    for (int i=0; cap_names[i].type_name; i++) {
+      if ((perm & cap_names[i].perm) == cap_names[i].perm) {
+	if (perm_str.size())
+	  perm_str.append(", ");
+
+	perm_str.append(cap_names[i].type_name);
+	perm &= ~cap_names[i].perm;
+      }
+    }
+    if (perm_str.empty())
+      perm_str = "<none>";
+
+    f->dump_string("perm", perm_str);
+    f->close_section();
+  }
+
+  f->close_section();
+}
+
+int RGWUserCaps::check_cap(const string& cap, uint32_t perm)
+{
+  map<string, uint32_t>::iterator iter = caps.find(cap);
+
+  if ((iter == caps.end()) ||
+      (iter->second & perm) != perm) {
+    return -EPERM;
+  }
+
+  return 0;
+}
+
