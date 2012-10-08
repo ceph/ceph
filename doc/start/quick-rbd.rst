@@ -7,23 +7,25 @@ execute this quick start on a separate host if you have the Ceph packages and
 the ``/etc/ceph/ceph.conf`` file installed with the appropriate IP address
 and host name settings modified in the ``/etc/ceph/ceph.conf`` file.
 
-Create a RADOS Block Device image. :: 
+.. important:: Mount the RBD device on a separate host from your Ceph cluster.
+
+#. Create a RADOS Block Device image. :: 
 
 	rbd create foo --size 4096	
 
-Load the ``rbd`` client module. ::
+#. Load the ``rbd`` client module. ::
 
 	sudo modprobe rbd
 
-Map the image to a block device. :: 
+#. Map the image to a block device. :: 
 
 	sudo rbd map foo --pool rbd --name client.admin
 	
-Use the block device. In the following example, create a file system. :: 
+#. Use the block device. In the following example, create a file system. :: 
 
 	sudo mkfs.ext4 -m0 /dev/rbd/rbd/foo
 	
-Mount the file system. ::
+#. Mount the file system. ::
 
 	sudo mkdir /mnt/myrbd
 	sudo mount /dev/rbd/rbd/foo /mnt/myrbd
