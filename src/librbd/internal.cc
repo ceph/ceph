@@ -1763,6 +1763,7 @@ reprotect_and_return_err:
     dest->md_lock.Unlock();
 
     if (dest_size < src_size) {
+      lderr(src->cct) << " src size " << src_size << " != dest size " << dest_size << dendl;
       return -EINVAL;
     }
 
