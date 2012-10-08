@@ -1564,6 +1564,7 @@ inline ostream& operator<<(ostream& out, const ObjectExtent &ex)
   return out << "extent(" 
              << ex.oid << " (" << ex.objectno << ") in " << ex.oloc
              << " " << ex.offset << "~" << ex.length
+	     << " -> " << ex.buffer_extents
              << ")";
 }
 
