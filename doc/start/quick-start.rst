@@ -11,13 +11,15 @@ recent Debian/Ubuntu operating system. The intent is to help you exercise
 Ceph functionality without the deployment overhead associated with a 
 production-ready storage cluster.
 
+.. important:: Once you have your cluster running, mount block devices and filesystems using a separate host.
+
 Install Debian/Ubuntu
----------------------
+=====================
 
 Install a recent release of Debian or Ubuntu (e.g., 12.04 precise). 
 
 Add Ceph Packages
------------------
+=================
 
 To get the latest Ceph packages, add a release key to APT, add a source
 location to your ``/etc/apt/sources.list``, update your system and 
@@ -28,7 +30,7 @@ install Ceph. ::
 	sudo apt-get update && sudo apt-get install ceph
 	
 Add a Configuration File
-------------------------
+========================
 
 Execute ``hostname -s`` on the command line to retrieve the name of your 
 host. Then, replace ``{hostname}`` in the sample configuration file
@@ -43,7 +45,8 @@ and one metadata server on your local machine.
    :language: ini
    
 Deploy the Configuration
-------------------------
+========================
+
 To deploy the configuration, create a directory for each daemon as follows::
 
 	sudo mkdir /var/lib/ceph/osd/ceph-0
@@ -55,7 +58,7 @@ To deploy the configuration, create a directory for each daemon as follows::
 	sudo mkcephfs -a -c /etc/ceph/ceph.conf -k ceph.keyring
 
 Start the Ceph Cluster
-----------------------
+======================
 
 Once you have deployed the configuration, start the Ceph cluster. :: 
 
