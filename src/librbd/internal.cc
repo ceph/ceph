@@ -1715,42 +1715,67 @@ reprotect_and_return_err:
     return ret;
   }
 
-  int copy(ImageCtx *ictx, IoCtx& dest_md_ctx, const char *destname,
+  int copy(ImageCtx *src, IoCtx& dest_md_ctx, const char *destname,
 	   ProgressContext &prog_ctx)
   {
     CephContext *cct = (CephContext *)dest_md_ctx.cct();
-    CopyProgressCtx cp(prog_ctx);
-    ictx->md_lock.Lock();
-    ictx->snap_lock.Lock();
-    uint64_t src_size = ictx->get_image_size(ictx->snap_id);
-    ictx->snap_lock.Unlock();
-    ictx->md_lock.Unlock();
-    int64_t r;
+    int order = src->order;
 
-    int order = ictx->order;
-    r = create(dest_md_ctx, destname, src_size, ictx->old_format,
-	       ictx->features, &order, ictx->stripe_unit, ictx->stripe_count);
+    src->md_lock.Lock();
+    src->snap_lock.Lock();
+    uint64_t src_size = src->get_image_size(src->snap_id);
+    src->snap_lock.Unlock();
+    src->md_lock.Unlock();
+
+    int r = create(dest_md_ctx, destname, src_size, src->old_format,
+		   src->features, &order, src->stripe_unit, src->stripe_count);
     if (r < 0) {
       lderr(cct) << "header creation failed" << dendl;
       return r;
     }
 
-    cp.destictx = new librbd::ImageCtx(destname, "", NULL, dest_md_ctx);
-    cp.src_size = src_size;
-    r = open_image(cp.destictx, true);
+    ImageCtx *dest = new librbd::ImageCtx(destname, "", NULL, dest_md_ctx);
+    r = open_image(dest, true);
     if (r < 0) {
       lderr(cct) << "failed to read newly created header" << dendl;
       return r;
     }
 
-    r = read_iterate(ictx, 0, src_size, do_copy_extent, &cp);
+    r = copy(src, dest, prog_ctx);
+    close_image(dest);    
+    return r;
+  }
+
+  int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx)
+  {
+    CopyProgressCtx cp(prog_ctx);
+
+    src->md_lock.Lock();
+    src->snap_lock.Lock();
+    uint64_t src_size = src->get_image_size(src->snap_id);
+    src->snap_lock.Unlock();
+    src->md_lock.Unlock();
+
+    dest->md_lock.Lock();
+    dest->snap_lock.Lock();
+    uint64_t dest_size = dest->get_image_size(src->snap_id);
+    dest->snap_lock.Unlock();
+    dest->md_lock.Unlock();
+
+    if (dest_size < src_size) {
+      return -EINVAL;
+    }
+
+    cp.destictx = dest;
+    cp.src_size = src_size;
+
+    int64_t r = read_iterate(src, 0, src_size, do_copy_extent, &cp);
 
     if (r >= 0) {
       // don't return total bytes read, which may not fit in an int
       r = 0;
       prog_ctx.update_progress(cp.src_size, cp.src_size);
     }
-    close_image(cp.destictx);
     return r;
   }
 
