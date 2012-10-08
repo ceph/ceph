@@ -273,11 +273,26 @@ namespace librbd {
     return librbd::copy(ictx, dest_io_ctx, destname, prog_ctx);
   }
 
+  int Image::copy2(Image& dest)
+  {
+    ImageCtx *srcctx = (ImageCtx *)ctx;
+    ImageCtx *destctx = (ImageCtx *)dest.ctx;
+    librbd::NoOpProgressContext prog_ctx;
+    return librbd::copy(srcctx, destctx, prog_ctx);
+  }
+
   int Image::copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
 				librbd::ProgressContext &pctx)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     return librbd::copy(ictx, dest_io_ctx, destname, pctx);
+  }
+
+  int Image::copy_with_progress2(Image& dest, librbd::ProgressContext &pctx)
+  {
+    ImageCtx *srcctx = (ImageCtx *)ctx;
+    ImageCtx *destctx = (ImageCtx *)dest.ctx;
+    return librbd::copy(srcctx, destctx, pctx);
   }
 
   int Image::flatten()
@@ -565,6 +580,14 @@ extern "C" int rbd_copy(rbd_image_t image, rados_ioctx_t dest_p,
   return librbd::copy(ictx, dest_io_ctx, destname, prog_ctx);
 }
 
+extern "C" int rbd_copy2(rbd_image_t srcp, rbd_image_t destp)
+{
+  librbd::ImageCtx *src = (librbd::ImageCtx *)srcp;
+  librbd::ImageCtx *dest = (librbd::ImageCtx *)destp;
+  librbd::NoOpProgressContext prog_ctx;
+  return librbd::copy(src, dest, prog_ctx);
+}
+
 extern "C" int rbd_copy_with_progress(rbd_image_t image, rados_ioctx_t dest_p,
 				      const char *destname,
 				      librbd_progress_fn_t fn, void *data)
@@ -574,6 +597,16 @@ extern "C" int rbd_copy_with_progress(rbd_image_t image, rados_ioctx_t dest_p,
   librados::IoCtx::from_rados_ioctx_t(dest_p, dest_io_ctx);
   librbd::CProgressContext prog_ctx(fn, data);
   int ret = librbd::copy(ictx, dest_io_ctx, destname, prog_ctx);
+  return ret;
+}
+
+extern "C" int rbd_copy_with_progress2(rbd_image_t srcp, rbd_image_t destp,
+				      librbd_progress_fn_t fn, void *data)
+{
+  librbd::ImageCtx *src = (librbd::ImageCtx *)srcp;
+  librbd::ImageCtx *dest = (librbd::ImageCtx *)destp;
+  librbd::CProgressContext prog_ctx(fn, data);
+  int ret = librbd::copy(src, dest, prog_ctx);
   return ret;
 }
 

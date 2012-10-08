@@ -111,8 +111,10 @@ public:
   int features(uint64_t *features);
   int overlap(uint64_t *overlap);
   int copy(IoCtx& dest_io_ctx, const char *destname);
+  int copy2(Image& dest);
   int copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
 			 ProgressContext &prog_ctx);
+  int copy_with_progress2(Image& dest, ProgressContext &prog_ctx);
 
   /* striping */
   uint64_t get_stripe_unit() const;
