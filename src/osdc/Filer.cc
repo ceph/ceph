@@ -331,7 +331,8 @@ void Filer::file_to_extents(CephContext *cct, const char *object_format,
   __u32 stripe_count = layout->fl_stripe_count;
   assert(object_size >= su);
   uint64_t stripes_per_object = object_size / su;
-  ldout(cct, 20) << " stripes_per_object " << stripes_per_object << dendl;
+  ldout(cct, 20) << " su " << su << " sc " << stripe_count << " os " << object_size
+		 << " stripes_per_object " << stripes_per_object << dendl;
 
   uint64_t cur = offset;
   uint64_t left = len;
@@ -342,7 +343,7 @@ void Filer::file_to_extents(CephContext *cct, const char *object_format,
     uint64_t stripepos = blockno % stripe_count;   // which object in the object set (X)
     uint64_t objectsetno = stripeno / stripes_per_object;       // which object set
     uint64_t objectno = objectsetno * stripe_count + stripepos;  // object id
-    
+
     // find oid, extent
     char buf[strlen(object_format) + 32];
     snprintf(buf, sizeof(buf), object_format, (long long unsigned)objectno);
@@ -359,19 +360,28 @@ void Filer::file_to_extents(CephContext *cct, const char *object_format,
     }
     
     // map range into object
-    uint64_t block_start = (stripeno % stripes_per_object)*su;
+    uint64_t block_start = (stripeno % stripes_per_object) * su;
     uint64_t block_off = cur % su;
     uint64_t max = su - block_off;
-    
+
     uint64_t x_offset = block_start + block_off;
     uint64_t x_len;
     if (left > max)
       x_len = max;
     else
       x_len = left;
+
+    ldout(cct, 20) << " off " << cur << " blockno " << blockno << " stripeno " << stripeno
+		   << " stripepos " << stripepos << " objectsetno " << objectsetno
+		   << " objectno " << objectno
+		   << " block_start " << block_start
+		   << " block_off " << block_off
+		   << " " << x_offset << "~" << x_len
+		   << dendl;
     
     if (ex->offset + (uint64_t)ex->length == x_offset) {
       // add to extent
+      ldout(cct, 20) << " adding in to " << *ex << dendl;
       ex->length += x_len;
     } else {
       // new extent
@@ -379,6 +389,7 @@ void Filer::file_to_extents(CephContext *cct, const char *object_format,
       assert(ex->offset == 0);
       ex->offset = x_offset;
       ex->length = x_len;
+      ldout(cct, 20) << " added new " << *ex << dendl;
     }
     ex->buffer_extents.push_back(make_pair(cur - offset + buffer_offset, x_len));
         
@@ -465,15 +476,24 @@ void Filer::StripedReadResult::add_partial_sparse_result(CephContext *cct,
        ++p) {
     uint64_t tofs = p->first;
     uint64_t tlen = p->second;
+    ldout(cct, 30) << " be " << tofs << "~" << tlen << dendl;
     while (tlen > 0) {
+      ldout(cct, 20) << "  t " << tofs << "~" << tlen
+		     << " bl has " << bl.length()
+		     << " off " << bl_off
+		     << dendl;
       if (s == bl_map.end()) {
+	ldout(cct, 20) << "  s at end" << dendl;
 	pair<bufferlist, uint64_t>& r = partial[tofs];
 	r.second = tlen;
 	break;
       }
 
+      ldout(cct, 30) << "  s " << s->first << "~" << s->second << dendl;
+
       // skip zero-length extent
       if (s->second == 0) {
+	ldout(cct, 30) << "  s len 0, skipping" << dendl;
 	s++;
 	continue;
       }
@@ -482,6 +502,7 @@ void Filer::StripedReadResult::add_partial_sparse_result(CephContext *cct,
 	// gap in sparse read result
 	pair<bufferlist, uint64_t>& r = partial[tofs];
 	size_t gap = s->first - bl_off;
+	ldout(cct, 20) << "  s gap " << gap << ", skipping" << dendl;
 	r.second = gap;
 	bl_off += gap;
 	tofs += gap;
@@ -493,6 +514,7 @@ void Filer::StripedReadResult::add_partial_sparse_result(CephContext *cct,
       size_t actual = MIN(left, tlen);
 
       if (actual > 0) {
+	ldout(cct, 20) << "  s has " << actual << ", copying" << dendl;
 	pair<bufferlist, uint64_t>& r = partial[tofs];
 	bl.splice(0, actual, &r.first);
 	r.second = actual;
