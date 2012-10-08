@@ -49,11 +49,28 @@ void rgw_get_errno_s3(rgw_html_errors *e , int err_no)
   }
 }
 
+struct response_attr_param {
+  const char *param;
+  const char *http_attr;
+};
+
+static struct response_attr_param resp_attr_params[] = {
+  {"response-content-type", "Content-Type"},
+  {"response-content-language", "Content-Language"},
+  {"response-expires", "Expires"},
+  {"response-cache-control", "Cache-Control"},
+  {"response-content-disposition", "Content-Disposition"},
+  {"response-content-encoding", "Content-Encoding"},
+  {NULL, NULL},
+};
+
 int RGWGetObj_ObjStore_S3::send_response(bufferlist& bl)
 {
-  string content_type_str;
   const char *content_type = NULL;
+  string content_type_str;
   int orig_ret = ret;
+  map<string, string> response_attrs;
+  map<string, string>::iterator riter;
 
   if (ret)
     goto done;
@@ -77,36 +94,37 @@ int RGWGetObj_ObjStore_S3::send_response(bufferlist& bl)
       }
     }
 
-    if (s->args.has_response_modifier()) {
+    for (struct response_attr_param *p = resp_attr_params; p->param; p++) {
       bool exists;
-      content_type_str = s->args.get("response-content-type", &exists);
-      if (exists)
-	content_type = content_type_str.c_str();
-      string val = s->args.get("response-content-language", &exists);
-      if (exists)
-        s->cio->print("Content-Language: %s\n", val.c_str());
-      val = s->args.get("response-expires", &exists);
-      if (exists)
-        s->cio->print("Expires: %s\n", val.c_str());
-      val = s->args.get("response-cache-control", &exists);
-      if (exists)
-        s->cio->print("Cache-Control: %s\n", val.c_str());
-      val = s->args.get("response-content-disposition", &exists);
-      if (exists)
-        s->cio->print("Content-Disposition: %s\n", val.c_str());
-      val = s->args.get("response-content-encoding", &exists);
-      if (exists)
-        s->cio->print("Content-Encoding: %s\n", val.c_str());
+      string val = s->args.get(p->param, &exists);
+      if (exists) {
+	if (strcmp(p->param, "response-content-type") != 0) {
+	  response_attrs[p->http_attr] = val;
+	} else {
+	  content_type_str = val;
+	  content_type = content_type_str.c_str();
+	}
+      }
     }
 
     for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-       const char *name = iter->first.c_str();
-       if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
-         name += sizeof(RGW_ATTR_PREFIX) - 1;
-         s->cio->print("%s: %s\r\n", name, iter->second.c_str());
-       } else if (!content_type && strcmp(name, RGW_ATTR_CONTENT_TYPE) == 0) {
-         content_type = iter->second.c_str();
-       }
+      const char *name = iter->first.c_str();
+      map<string, string>::iterator aiter = rgw_to_http_attrs.find(name);
+      if (aiter != rgw_to_http_attrs.end()) {
+	if (response_attrs.count(aiter->second) > 0) // was already overridden by a response param
+	  continue;
+
+	if ((!content_type) && aiter->first.compare(RGW_ATTR_CONTENT_TYPE) == 0) { // special handling for content_type
+	  content_type = iter->second.c_str();
+	  continue;
+        }
+	response_attrs[aiter->second] = iter->second.c_str();
+      } else {
+        if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
+          name += sizeof(RGW_ATTR_PREFIX) - 1;
+          s->cio->print("%s: %s\r\n", name, iter->second.c_str());
+        }
+      }
     }
   }
 
@@ -116,6 +134,11 @@ done:
   set_req_state_err(s, ret);
 
   dump_errno(s);
+
+  for (riter = response_attrs.begin(); riter != response_attrs.end(); ++riter) {
+    s->cio->print("%s: %s\n", riter->first.c_str(), riter->second.c_str());
+  }
+
   if (!content_type)
     content_type = "binary/octet-stream";
   end_header(s, content_type);
