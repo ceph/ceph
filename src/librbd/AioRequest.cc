@@ -71,7 +71,7 @@ namespace librbd {
 
       // calculate reverse mapping onto the image
       vector<pair<uint64_t,uint64_t> > image_extents;
-      Filer::extent_to_file(m_ictx->cct, &m_ictx->layout,
+      Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
 			    m_object_no, m_object_off, m_object_len,
 			    image_extents);
 
