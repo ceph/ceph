@@ -130,7 +130,9 @@ struct RGWObjState {
   bool prefetch_data;
 
   map<string, bufferlist> attrset;
-  RGWObjState() : is_atomic(false), has_attrs(0), exists(false), epoch(0), fake_tag(false), has_manifest(false), prefetch_data(false) {}
+  RGWObjState() : is_atomic(false), has_attrs(0), exists(false),
+                  size(0), mtime(0), epoch(0), fake_tag(false), has_manifest(false),
+                  has_data(false), prefetch_data(false) {}
 
   bool get_attr(string name, bufferlist& dest) {
     map<string, bufferlist>::iterator iter = attrset.find(name);
@@ -329,7 +331,8 @@ protected:
   bool pools_initialized;
 
 public:
-  RGWRados() : lock("rados_timer_lock"), timer(NULL), gc(NULL), use_gc_thread(false),
+  RGWRados() : lock("rados_timer_lock"), timer(NULL),
+               gc(NULL), use_gc_thread(false),
                num_watchers(0), watchers(NULL), watch_handles(NULL),
                bucket_id_lock("rados_bucket_id"), max_bucket_id(0),
                cct(NULL), rados(NULL),

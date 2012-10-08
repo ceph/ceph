@@ -393,8 +393,10 @@ int RGWRados::log_list_init(const string& prefix, RGWAccessHandle *handle)
   log_list_state *state = new log_list_state;
   const char *log_pool = params.log_pool.name.c_str();
   int r = rados->ioctx_create(log_pool, state->io_ctx);
-  if (r < 0)
+  if (r < 0) {
+    delete state;
     return r;
+  }
   state->prefix = prefix;
   state->obit = state->io_ctx.objects_begin();
   *handle = (RGWAccessHandle)state;
@@ -446,8 +448,10 @@ int RGWRados::log_show_init(const string& name, RGWAccessHandle *handle)
   log_show_state *state = new log_show_state;
   const char *log_pool = params.log_pool.name.c_str();
   int r = rados->ioctx_create(log_pool, state->io_ctx);
-  if (r < 0)
+  if (r < 0) {
+    delete state;
     return r;
+  }
   state->name = name;
   *handle = (RGWAccessHandle)state;
   return 0;
@@ -471,7 +475,11 @@ int RGWRados::log_show_next(RGWAccessHandle handle, rgw_log_entry *entry)
       return r;
     state->pos += r;
     bufferlist old;
-    old.substr_of(state->bl, off, state->bl.length() - off);
+    try {
+      old.substr_of(state->bl, off, state->bl.length() - off);
+    } catch (buffer::error& err) {
+      return -EINVAL;
+    }
     state->bl.clear();
     state->bl.claim(old);
     state->bl.claim_append(more);
@@ -3374,7 +3382,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
     }
     switch (entry.intent) {
     case DEL_OBJ:
-      if (!flags & I_DEL_OBJ) {
+      if (!(flags & I_DEL_OBJ)) {
         complete = false;
         break;
       }
@@ -3385,7 +3393,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
       }
       break;
     case DEL_DIR:
-      if (!flags & I_DEL_DIR) {
+      if (!(flags & I_DEL_DIR)) {
         complete = false;
         break;
       } else {

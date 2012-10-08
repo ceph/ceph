@@ -130,6 +130,7 @@ static int ext_mime_map_init(CephContext *cct, const char *ext_map)
   if (ret != st.st_size) {
     // huh? file size has changed, what are the odds?
     ldout(cct, 0) << "ext_mime_map_init(): raced! will retry.." << dendl;
+    free(buf);
     close(fd);
     return ext_mime_map_init(cct, ext_map);
   }

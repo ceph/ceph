@@ -297,7 +297,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   // write out new key to disk
   bufferlist info_bl;
   ::encode(entry, info_bl);
-  cls_cxx_map_set_val(hctx, op.name, &info_bl);
+  rc = cls_cxx_map_set_val(hctx, op.name, &info_bl);
   return rc;
 }
 
@@ -1023,7 +1023,8 @@ static int gc_iterate_entries(cls_method_context_t hctx, const string& marker,
         return ret;
 
       if (max_entries && (i >= max_entries)) {
-        *truncated = true;
+        if (truncated)
+          *truncated = true;
         key_iter = key;
         return 0;
       }
