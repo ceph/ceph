@@ -31,6 +31,12 @@ class CephContext;
     static void file_to_extents(CephContext *cct, const char *object_format,
 				ceph_file_layout *layout,
 				uint64_t offset, uint64_t len,
+				map<object_t, vector<ObjectExtent> >& extents,
+				uint64_t buffer_offset=0);
+
+    static void file_to_extents(CephContext *cct, const char *object_format,
+				ceph_file_layout *layout,
+				uint64_t offset, uint64_t len,
 				vector<ObjectExtent>& extents,
 				uint64_t buffer_offset=0);
 
@@ -44,6 +50,9 @@ class CephContext;
 
       file_to_extents(cct, buf, layout, offset, len, extents);
     }
+
+    static void assimilate_extents(map<object_t,vector<ObjectExtent> >& object_extents,
+				   vector<ObjectExtent>& extents);
 
     /**
      * reverse map an object extent to file extents
