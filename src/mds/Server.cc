@@ -3454,7 +3454,9 @@ void Server::handle_client_removexattr(MDRequest *mdr)
     return;
 
   string name(req->get_path2());
-  if (cur->xattrs.count(name) == 0) {
+
+  map<string, bufferptr> *pxattrs = cur->get_projected_xattrs();
+  if (pxattrs->count(name) == 0) {
     dout(10) << "removexattr '" << name << "' and ENODATA on " << *cur << dendl;
     reply_request(mdr, -ENODATA);
     return;
