@@ -44,6 +44,11 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_BUCKETS	RGW_ATTR_PREFIX "buckets"
 #define RGW_ATTR_META_PREFIX	RGW_ATTR_PREFIX "x-amz-meta-"
 #define RGW_ATTR_CONTENT_TYPE	RGW_ATTR_PREFIX "content_type"
+#define RGW_ATTR_CACHE_CONTROL	RGW_ATTR_PREFIX "cache_control"
+#define RGW_ATTR_CONTENT_DISP	RGW_ATTR_PREFIX "content_disposition"
+#define RGW_ATTR_CONTENT_ENC	RGW_ATTR_PREFIX "content_encoding"
+#define RGW_ATTR_CONTENT_LANG	RGW_ATTR_PREFIX "content_language"
+#define RGW_ATTR_EXPIRES	RGW_ATTR_PREFIX "expires"
 #define RGW_ATTR_ID_TAG    	RGW_ATTR_PREFIX "idtag"
 #define RGW_ATTR_SHADOW_OBJ    	RGW_ATTR_PREFIX "shadow_name"
 #define RGW_ATTR_MANIFEST    	RGW_ATTR_PREFIX "manifest"
@@ -565,7 +570,7 @@ struct req_state {
    const char *method;
    const char *length;
    uint64_t content_length;
-   const char *content_type;
+   map<string, string> generic_attrs;
    struct rgw_err err;
    bool expect_cont;
    bool header_ended;

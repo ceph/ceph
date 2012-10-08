@@ -297,14 +297,14 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
 
   supplied_etag = s->env->get("HTTP_ETAG");
 
-  if (!s->content_type) {
+  if (!s->generic_attrs.count(RGW_ATTR_CONTENT_TYPE)) {
     dout(5) << "content type wasn't provided, trying to guess" << dendl;
     const char *suffix = strrchr(s->object, '.');
     if (suffix) {
       suffix++;
       if (*suffix) {
         string suffix_str(suffix);
-        s->content_type = rgw_find_mime_by_ext(suffix_str);
+        s->generic_attrs[RGW_ATTR_CONTENT_TYPE] = rgw_find_mime_by_ext(suffix_str);
       }
     }
   }
@@ -433,6 +433,8 @@ int RGWGetObj_ObjStore_SWIFT::send_response(bufferlist& bl)
 {
   const char *content_type = NULL;
   int orig_ret = ret;
+  map<string, string> response_attrs;
+  map<string, string>::iterator riter;
 
   if (sent_header)
     goto send_data;
@@ -454,13 +456,20 @@ int RGWGetObj_ObjStore_SWIFT::send_response(bufferlist& bl)
     }
 
     for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-       const char *name = iter->first.c_str();
-       if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
-         name += sizeof(RGW_ATTR_META_PREFIX) - 1;
-         s->cio->print("X-%s-Meta-%s: %s\r\n", (s->object ? "Object" : "Container"), name, iter->second.c_str());
-       } else if (!content_type && strcmp(name, RGW_ATTR_CONTENT_TYPE) == 0) {
-         content_type = iter->second.c_str();
-       }
+      const char *name = iter->first.c_str();
+      map<string, string>::iterator aiter = rgw_to_http_attrs.find(name);
+      if (aiter != rgw_to_http_attrs.end()) {
+	if (aiter->first.compare(RGW_ATTR_CONTENT_TYPE) == 0) { // special handling for content_type
+	  content_type = iter->second.c_str();
+	  continue;
+        }
+        response_attrs[aiter->second] = iter->second.c_str();
+      } else {
+        if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
+          name += sizeof(RGW_ATTR_META_PREFIX) - 1;
+          s->cio->print("X-%s-Meta-%s: %s\r\n", (s->object ? "Object" : "Container"), name, iter->second.c_str());
+        }
+      }
     }
   }
 
@@ -470,6 +479,11 @@ int RGWGetObj_ObjStore_SWIFT::send_response(bufferlist& bl)
   if (ret)
     set_req_state_err(s, ret);
   dump_errno(s);
+
+  for (riter = response_attrs.begin(); riter != response_attrs.end(); ++riter) {
+    s->cio->print("%s: %s\n", riter->first.c_str(), riter->second.c_str());
+  }
+
   if (!content_type)
     content_type = "binary/octet-stream";
   end_header(s, content_type);

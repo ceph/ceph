@@ -416,6 +416,8 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   rgw_tools_init(g_ceph_context);
+
+  rgw_rest_init();
   
   curl_global_init(CURL_GLOBAL_ALL);
   

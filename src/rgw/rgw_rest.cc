@@ -17,6 +17,53 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+
+struct rgw_http_attr {
+  const char *rgw_attr;
+  const char *http_attr;
+};
+
+/*
+ * mapping between rgw object attrs and output http fields
+ */
+static struct rgw_http_attr rgw_to_http_attr_list[] = {
+  { RGW_ATTR_CONTENT_TYPE, "Content-Type"},
+  { RGW_ATTR_CONTENT_LANG, "Content-Language"},
+  { RGW_ATTR_EXPIRES, "Expires"},
+  { RGW_ATTR_CACHE_CONTROL, "Cache-Control"},
+  { RGW_ATTR_CONTENT_DISP, "Content-Disposition"},
+  { RGW_ATTR_CONTENT_ENC, "Content-Encoding"},
+  { NULL, NULL},
+};
+
+
+map<string, string> rgw_to_http_attrs;
+
+void rgw_rest_init()
+{
+  for (struct rgw_http_attr *attr = rgw_to_http_attr_list; attr->rgw_attr; attr++) {
+    rgw_to_http_attrs[attr->rgw_attr] = attr->http_attr;
+  }
+}
+
+struct generic_attr {
+  const char *http_header;
+  const char *rgw_attr;
+};
+
+/*
+ * mapping between http env fields and rgw object attrs
+ */
+struct generic_attr generic_attrs[] = {
+  { "CONTENT_TYPE", RGW_ATTR_CONTENT_TYPE },
+  { "HTTP_CONTENT_LANGUAGE", RGW_ATTR_CONTENT_LANG },
+  { "HTTP_EXPIRES", RGW_ATTR_EXPIRES },
+  { "HTTP_CACHE_CONTROL", RGW_ATTR_CACHE_CONTROL },
+  { "HTTP_CONTENT_DISPOSITION", RGW_ATTR_CONTENT_DISP },
+  { "HTTP_CONTENT_ENCODING", RGW_ATTR_CONTENT_ENC },
+  { NULL, NULL },
+};
+
 static void dump_status(struct req_state *s, const char *status)
 {
   int r = s->cio->print("Status: %s\n", status);
@@ -964,7 +1011,13 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
     s->content_length = atoll(s->length);
   }
 
-  s->content_type = s->env->get("CONTENT_TYPE");
+  for (int i = 0; generic_attrs[i].http_header; i++) {
+    const char *env = s->env->get(generic_attrs[i].http_header);
+    if (env) {
+      s->generic_attrs[generic_attrs[i].rgw_attr] = env;
+    }
+  }
+
   s->http_auth = s->env->get("HTTP_AUTHORIZATION");
 
   if (g_conf->rgw_print_continue) {
