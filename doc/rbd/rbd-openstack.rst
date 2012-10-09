@@ -35,7 +35,7 @@ There are two parts of OpenStack integrated with RBD: images and
 volumes. In OpenStack, images are templates for VM images, and are
 managed by Glance, the OpenStack image service. Volumes are block
 devices that can be used to run VMs. These are managed by the
-nova-volume (prior to Folsom) or Cinder (post-Folsom).
+nova-volume (prior to Folsom) or Cinder (Folsom and after).
 
 RBD is integrated into each of these components, so you can store
 images in RBD through Glance, and then boot off of copy-on-write
@@ -151,9 +151,8 @@ endpoint with this option enabled should not be publicly accessible.
 Configuring Cinder/nova-volume
 ------------------------------
 OpenStack requires a driver to interact with RADOS block devices. You must also
-specify the pool name for the block device. On your OpenStack host, navigate to
-the ``/etc/cinder`` directory. Open the ``cinder.conf`` file in a text editor using
-sudo privileges and add the following lines to the file::
+specify the pool name for the block device. On your OpenStack host,
+edit ``/etc/cinder/cinder.conf`` and add::
 
 	volume_driver=cinder.volume.driver.RBDDriver
 	rbd_pool=volumes
