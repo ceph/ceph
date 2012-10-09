@@ -361,8 +361,10 @@ AC_CHECK_HEADER([boost/random/discrete_distribution.hpp],
 AC_CHECK_HEADER([boost/statechart/state.hpp], [],
     AC_MSG_FAILURE(["Can't find boost statechart headers; need 1.34 or later"]))
 
+# If we have the boost system library installed, then we may want to link
+# with it.
 AC_CHECK_LIB(boost_system-mt, main, [],
-    AC_MSG_ERROR(["Boost system library not found."]))
+    AC_MSG_NOTICE(["Boost system library not found."]))
 
 AC_LANG([C])
 
