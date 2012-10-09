@@ -364,7 +364,8 @@ AC_CHECK_HEADER([boost/statechart/state.hpp], [],
 # If we have the boost system library installed, then we may want to link
 # with it.
 AC_CHECK_LIB(boost_system-mt, main, [],
-    AC_MSG_NOTICE(["Boost system library not found."]))
+    [AC_CHECK_LIB(boost_system, main, [],
+        AC_MSG_NOTICE(["Boost system library not found."]))])
 
 AC_LANG([C])
 
