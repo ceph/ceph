@@ -338,6 +338,7 @@ void Elector::dispatch(Message *m)
 	mon->monmon()->paxos->stash_latest(mon->monmap->epoch, em->monmap_bl);
 	mon->bootstrap();
 	m->put();
+	delete peermap;
 	return;
       }
       if (peermap->epoch < mon->monmap->epoch) {
