@@ -27,7 +27,7 @@
 
 ``osd journal size`` 
 
-:Description: The size of the journal in megabytes. If this is 0, and the journal is a block device, the entire block device is used.
+:Description: The size of the journal in megabytes. If this is 0, and the journal is a block device, the entire block device is used. Since v0.54, this is ignored if the journal is a block device, and the entire block device is used.
 :Type: 32-bit Integer
 :Default: ``1024``
 :Recommended: Begin with 1GB. Should at least twice the product of the expected speed multiplied by ``filestore min sync interval``.
