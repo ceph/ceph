@@ -695,8 +695,10 @@ reprotect_and_return_err:
       stripe_count = 0;
     }
     if ((stripe_unit || stripe_count) &&
-	(features & RBD_FEATURE_STRIPINGV2) == 0)
+	(features & RBD_FEATURE_STRIPINGV2) == 0) {
+      lderr(cct) << "STRIPINGV2 and format 2 or later required for non-default striping" << dendl;
       return -EINVAL;
+    }
     if ((stripe_unit && !stripe_count) ||
 	(!stripe_unit && stripe_count))
       return -EINVAL;
