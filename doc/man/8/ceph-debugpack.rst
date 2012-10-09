@@ -17,10 +17,10 @@ Description
 useful for debugging crashes. The resulting tarball can be shared with
 Ceph developers when debugging a problem.
 
-The tarball will include the binaries for ceph-mds, ceph-osd, and ceph-mon, any
+The tarball will include the binaries for ceph-mds, ceph-osd, and ceph-mon, radosgw, any
 log files, the ceph.conf configuration file, any core files we can
-find, and (if the system is running) dumps of the current osd, mds,
-and pg maps from the monitor.
+find, and (if the system is running) dumps of the current cluster state
+as reported by 'ceph report'.
 
 
 Options

@@ -1,7 +1,5 @@
 #!/bin/sh
 
-
-
 # if we start up as ./init-ceph, assume everything else is in the
 # current directory too.
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
@@ -34,11 +32,9 @@ wait_pid_exit() {
 	fi
 }
 
-
 . $LIBDIR/ceph_common.sh
 
-dest_tar=""
-
+dest_tar=''
 while [ $# -ge 1 ]; do
 case $1 in
     --conf | -c)
@@ -47,7 +43,7 @@ case $1 in
 	    conf=$1
 	    ;;
     *)
-	    if [ "$dest_tar" != "" ]; then
+	    if [ -n "$dest_tar" ]; then
 	    	echo unrecognized option \'$1\'
 	    	usage_exit
 	    fi
@@ -59,72 +55,59 @@ done
 
 [ "$dest_tar" = "" ] && usage_exit
 
-# get absolute path for dest_tar
-[ `echo $dest_tar | cut -c 1` != "/" ] && dest_tar="`pwd`/$dest_tar"
+echo "$0: generating debugpack tarball..."
 
-bins="ceph-mon ceph-mds ceph-osd"
+if [ -e $dest_tar ]; then
+    echo "$0: dest $dest_tar already exists, aborting"
+    exit 1
+fi
+
+# get absolute path for dest_tar
+bins="ceph-mon ceph-mds ceph-osd radosgw"
 core_paths="/ $BINDIR $BINDBGDIR"
 [ "$conf" = "" ] && conf=$ETCDIR/ceph.conf
 log_path=`$CCONF -c $conf "log dir"`
 
 [ -z "$conf" ] && usage_exit
 
+# all configs
+files='/etc/ceph'
 
-tmp_path=`mktemp -d /tmp/ceph-debugpack.XXXXXXXXXX`
-tmp_path_bin=$tmp_path/bin
-tmp_path_bin_dbg=$tmp_path/bin.dbg
-tmp_path_log=$tmp_path/out
-tmp_path_core=$tmp_path/core
-tmp_path_etc=$tmp_path/etc
-
-echo tmp_path=$tmp_path
-
-mkdir -p $tmp_path_bin
-mkdir -p $tmp_path_bin_dbg
-mkdir -p $tmp_path_log
-mkdir -p $tmp_path_core
-mkdir -p $tmp_path_etc
-
-
-#copy the binaries
-
-for name in $bins; do
-	[ -e $BINDIR/$name ] && cp $BINDIR/$name $tmp_path_bin
-	[ -e $BINDBGDIR/$name ] && cp $BINDBGDIR/$name $tmp_path_bin_dbg
+# binaries
+for bin in bins; do
+    if [ -e "/usr/bin/$bin" ]; then
+	files="$files /usr/bin/$bin"
+    fi
+    if [ -e "/usr/lib/debug/usr/bin/$bin" ]; then
+	files="$files /usr/lib/debug/usr/bin/$bin"
+    fi
 done
 
-
-# copy the logs
-cp -rp $log_path/* $tmp_path_log
+# logs (the non-rotated ones)
+for f in `find $path -maxdepth 1 -name 'core*'`; do
+    files="$files $f"
+done
 
 # copy cores (if exist)
-
 for path in $core_paths; do
-  files="`find $path -maxdepth 1 -name 'core*'`"
-  if [ "$files" != "" ]; then
-    for core_file in `ls $path/core*`; do
-      tmp_core=`mktemp $tmp_path_core/core.XXXX`
-      cp $core_file $tmp_core
-    done
-  fi
+    if [ -d $path ]; then
+        for f in `find $path -maxdepth 1 -name 'core*'`; do
+	    files="$files $f"
+	done
+    fi
 done
 
-# copy config
-cp $conf $tmp_path_etc
+# cluster state
+tmp_path=`mktemp -d /tmp/ceph-debugpack.XXXXXXXXXX`
 
-# other output
-$BINDIR/ceph -s > $tmp_path_log/ceph-s &
-wait_pid_exit $!
-$BINDIR/ceph osd dump -o $tmp_path_log/ceph-osd-dump &
-wait_pid_exit $!
-$BINDIR/ceph mds dump -o $tmp_path_log/ceph-mds-dump &
-wait_pid_exit $!
-$BINDIR/ceph pg dump -o $tmp_path_log/ceph-pg-dump &
+$BINDIR/ceph report > $tmp_path/ceph-report &
 wait_pid_exit $!
 
+files="$files $tmp_path"
 
 # now create a tarball
-tmp_path_dir=`echo $tmp_path | cut -d / -f 3`
-tar cvfz $dest_tar -C /tmp $tmp_path_dir
-rm -fR $tmp_path
+tar cvfz $dest_tar $files
+rm -rf $tmp_path
+
+echo "$0: created debugpack tarball at $dest_tar"
 
