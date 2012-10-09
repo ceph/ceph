@@ -1440,7 +1440,8 @@ void OSDMap::print_osd_line(int cur, ostream *out, Formatter *f) const
   if (out)
     *out << "osd." << cur << "\t";
   if (!exists(cur)) {
-    *out << "DNE\t\t";
+    if (out)
+      *out << "DNE\t\t";
   } else {
     if (is_up(cur)) {
       if (out)
