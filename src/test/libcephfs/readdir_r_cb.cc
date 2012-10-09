@@ -23,7 +23,8 @@ TEST(LibCephFS, Readdir_r_cb) {
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
 
-  const char *c_dir = "/readdir_r_cb_tests";
+  char c_dir[256];
+  sprintf(c_dir, "/readdir_r_cb_tests_%d", getpid());
   struct ceph_dir_result *dirp;
   ASSERT_EQ(0, ceph_mkdirs(cmount, c_dir, 0777));
   ASSERT_LE(0, ceph_opendir(cmount, c_dir, &dirp));
@@ -33,7 +34,8 @@ TEST(LibCephFS, Readdir_r_cb) {
   char *buf = new char[buflen];
   // . is 2, .. is 3 (for null terminators)
   ASSERT_EQ(5, ceph_getdnames(cmount, dirp, buf, buflen));
-  const char *c_file = "/readdir_r_cb_tests/foo";
+  char c_file[256];
+  sprintf(c_file, "/readdir_r_cb_tests_%d/foo", getpid());
   int fd = ceph_open(cmount, c_file, O_CREAT, 0777);
   ASSERT_LT(0, fd);
 
