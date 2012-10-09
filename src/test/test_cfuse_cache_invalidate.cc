@@ -19,7 +19,10 @@ int main(int argc, char *argv[]) {
   if (p != 0) {
     int done = 0;
     int fd = open(argv[1], O_RDWR|O_CREAT, 0644);
-    if (fd < 0) perror(argv[1]);
+    if (fd < 0) {
+      perror(argv[1]);
+      return 1;
+    }
 
     int i = 0;
     while(!done) {
@@ -36,6 +39,11 @@ int main(int argc, char *argv[]) {
   } else {
     sleep(1);
     int fd = open(argv[2], O_RDONLY, 0644);
+    if (fd < 0) {
+      perror(argv[2]);
+      return 1;
+    }
+
     printf("reading\n");
     assert(pread(fd, buf, REGION, 0) == REGION);
     close(fd);
