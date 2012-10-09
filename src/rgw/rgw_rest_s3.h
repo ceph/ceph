@@ -5,6 +5,7 @@
 #include "rgw_op.h"
 #include "rgw_html_errors.h"
 #include "rgw_acl_s3.h"
+#include "rgw_policy_s3.h"
 
 #define RGW_AUTH_GRACE_MINS 15
 
@@ -105,6 +106,7 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
   string boundary;
   bufferlist in_data;
   map<string, post_form_part, const ltstr_nocase> parts;  
+  RGWPolicyEnv env;
 
   int read_with_boundary(bufferlist& bl, uint64_t max, bool check_eol,
                          bool *reached_boundary,
@@ -118,6 +120,9 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
   int read_form_part_header(struct post_form_part *part,
                             bool *done);
   bool part_str(const string& name, string *val);
+  bool part_bl(const string& name, bufferlist *pbl);
+
+  int get_policy();
 public:
   RGWPostObj_ObjStore_S3() {}
   ~RGWPostObj_ObjStore_S3() {}
