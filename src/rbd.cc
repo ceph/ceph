@@ -265,9 +265,9 @@ static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   else {
     if (features == 0) {
       features = RBD_FEATURE_LAYERING;
-      if (stripe_unit != (1ull << *order) && stripe_count != 1)
-	features |= RBD_FEATURE_STRIPINGV2;
     }
+    if (stripe_unit != (1ull << *order) && stripe_count != 1)
+      features |= RBD_FEATURE_STRIPINGV2;
     r = rbd.create3(io_ctx, imgname, size, features, order, stripe_unit, stripe_count);
   }
   if (r < 0)
