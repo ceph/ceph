@@ -33,16 +33,18 @@ processor. The following diagram depicts the OpenStack/Ceph technology stack.
 
 There are two parts of OpenStack integrated with RBD: images and
 volumes. In OpenStack, images are templates for VM images, and are
-managed by Glance, the OpenStack image service. Volumes are block
-devices that can be used to run VMs. These are managed by the
-nova-volume (prior to Folsom) or Cinder (Folsom and after).
+managed by Glance, the OpenStack image service. They are immutable,
+and treated as binary blobs to be downloaded wholesale. Volumes are
+block devices that can be used to boot VMs, or attached to already
+running VMs. These are managed by the nova-volume (prior to Folsom) or
+Cinder (Folsom and after) services.
 
 RBD is integrated into each of these components, so you can store
 images in RBD through Glance, and then boot off of copy-on-write
 clones of them created by Cinder or nova-volume (since OpenStack
 Folsom and Ceph 0.52).
 
-The instructions below detail the setup for both Glance and Nova,
+The instructions below detail the setup for Glance and Nova/Cinder,
 although they do not have to be used together. You could store images
 in RBD while running VMs off of local disk, or vice versa.
 
@@ -125,8 +127,12 @@ the temporary copy of the key::
 Save the uuid of the secret for configuring nova-compute later.
 
 Finally, on each host running cinder-volume or nova-volume, add
-``CEPH_ARGS="--id volumes"`` to the init script or other place that
-starts it.
+``CEPH_ARGS="--id volumes"`` to the init/upstart script that starts
+it.
+
+For example, on Ubuntu, add ``env CEPH_ARGS="--id volumes"``
+to the top of ``/etc/init/cinder-volume``.
+
 
 Configure OpenStack to use RBD
 ==============================
@@ -174,9 +180,12 @@ OpenStack, and execute the following::
 
 	./rejoin-stack.sh
 
-If you have OpenStack configured as a service, you can also execute:: 
+If you have OpenStack configured as a service, you can also execute
+these commands on the appropriate hosts::
 
-	sudo service nova-volume restart
+    sudo service glance-api restart
+    sudo service nova-compute restart
+    sudo service cinder-volume restart
 
 Once OpenStack is up and running, you should be able to create a volume with 
 OpenStack on a Ceph RADOS block device.
