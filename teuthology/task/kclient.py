@@ -23,11 +23,11 @@ def task(ctx, config):
         - kclient:
         - interactive:
 
-    Example that uses both ``kclient` and ``cfuse``::
+    Example that uses both ``kclient` and ``ceph-fuse``::
 
         tasks:
         - ceph:
-        - cfuse: [client.0]
+        - ceph-fuse: [client.0]
         - kclient: [client.1]
         - interactive:
     """
