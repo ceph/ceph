@@ -122,7 +122,7 @@ def ceph_log(ctx, config):
 def ship_utilities(ctx, config):
     assert config is None
     FILES = ['daemon-helper', 'enable-coredump', 'chdir-coredump',
-             'valgrind.supp']
+             'valgrind.supp', 'kcon_most']
     for filename in FILES:
         log.info('Shipping %r...', filename)
         src = os.path.join(os.path.dirname(__file__), filename)
