@@ -1718,6 +1718,7 @@ bool MDS::handle_deferrable_message(Message *m)
     case CEPH_MSG_CLIENT_SESSION:
     case CEPH_MSG_CLIENT_RECONNECT:
       ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_CLIENT);
+      // fall-thru
     case CEPH_MSG_CLIENT_REQUEST:
       server->dispatch(m);
       break;
