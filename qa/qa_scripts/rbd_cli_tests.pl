@@ -29,15 +29,20 @@ Negative cases
 =head1 ARGUMENTS
 
 rbd_cli_tests.pl takes the following arguments:
-	--pool
-	(optional) If not specified, rbd pool is used. 
-        --help
-        (optional) Displays the usage message.
+   --pool
+   (optional) If not specified, rbd pool is used. 
+   --help
+   (optional) Displays the usage message.
+
+If cephx is enabled, set 'export CEPH_ARGS="--keyring /etc/ceph/ceph.keyring --id <user>"' 
+and execute the script as root.
+
+For Example,for "nova" user, 'export CEPH_ARGS="--keyring /etc/ceph/ceph.keyring --id nova"'
 
 =cut
 
 use Cwd;
-use RbdLib qw(perform_action create_image resize_image rename_image copy_image list_image info_image export_image import_image remove_image create_snapshots rollback_snapshots purge_snapshots list_snapshots remove_snapshot rbd_map rbd_unmap rbd_showmapped display_result _clean_up _create_rados_pool display_ceph_os_info $RADOS_MKPOOL $RADOS_RMPOOL $RBD_CREATE $RBD_RESIZE $RBD_INFO $RBD_REMOVE $RBD_RENAME $RBD_MV $RBD_LS $RBD_LIST $RBD_CLONE $RBD_EXPORT $RBD_IMPORT $RBD_CP $RBD_COPY $SNAP_CREATE $SNAP_LS $SNAP_LIST $SNAP_ROLLBACK $SNAP_PURGE $SNAP_REMOVE $POOL_RM_SUCCESS $POOL_MK_SUCCESS $RBD_EXISTS_ERR $RBD_WATCH $RBD_MAP $RBD_UNMAP $RBD_SHOWMAPPED get_command_output debug_msg );
+use RbdLib qw(perform_action create_image resize_image rename_image copy_image list_image info_image export_image import_image remove_image create_snapshots rollback_snapshots purge_snapshots list_snapshots remove_snapshot rbd_map rbd_unmap rbd_showmapped display_result _pre_clean_up _post_clean_up _create_rados_pool display_ceph_os_info $RADOS_MKPOOL $RADOS_RMPOOL $RBD_CREATE $RBD_RESIZE $RBD_INFO $RBD_REMOVE $RBD_RENAME $RBD_MV $RBD_LS $RBD_LIST $RBD_CLONE $RBD_EXPORT $RBD_IMPORT $RBD_CP $RBD_COPY $SNAP_CREATE $SNAP_LS $SNAP_LIST $SNAP_ROLLBACK $SNAP_PURGE $SNAP_REMOVE $POOL_RM_SUCCESS $POOL_MK_SUCCESS $RBD_EXISTS_ERR $RBD_WATCH $RBD_MAP $RBD_UNMAP $RBD_SHOWMAPPED get_command_output debug_msg );
 
 use Pod::Usage();
 use Getopt::Long();
@@ -54,8 +59,6 @@ Pod::Usage::pod2usage( -verbose => 1 ) if ($help);
 
 our $pool_name = "rbd";
 $pool_name = $pool if ($pool);
-
-RbdLib::banner ("Starting Test Execution");
 
 #===========Variables used in the script========
 
@@ -90,7 +93,6 @@ our $PASS_FLAG;
 our $MSG;
 our $pool_name;
 
-print "rbd $RBD_CREATE \n";
 # Tests for create image
 sub create_image {
     perform_action ( $RBD_CREATE, "$img_name,pool $pool_name,size 1024", 0 );
@@ -113,7 +115,7 @@ sub create_image {
 
 }
 
-#Tests to create snapshot
+# Tests to create snapshot
 sub create_snapshots {
     perform_action( $SNAP_CREATE, "--snap $snap_name $pool_name\/$img_name",
         0 );
@@ -128,7 +130,7 @@ sub create_snapshots {
         0 );
 }
 
-#Tests to rollback snapshot
+# Tests to rollback snapshot
 sub rollback_snapshot {
     perform_action( $SNAP_ROLLBACK, "--snap $snap_name2 $pool_name\/$img_name",
         0 );
@@ -138,13 +140,13 @@ sub rollback_snapshot {
         "--snap $snap_name $pool_name\/$new_rbd_img", 2 );
 }
 
-#Tests to purge snapshots
+# Tests to purge snapshots
 sub purge_snapshots {
     perform_action( $SNAP_PURGE, "$pool_name\/$img_name",    0 );
     perform_action( $SNAP_PURGE, "$pool_name\/$new_rbd_img", 2 );
 }
 
-#Tests to list snapshots for an image
+# Tests to list snapshots for an image
 sub list_snapshots {
     perform_action( $SNAP_LIST, "$pool_name\/$non_existing_img", 2 );
 }
@@ -176,7 +178,7 @@ sub copy_image {
     perform_action( $RBD_CP, "$pool_name\/$non_existing_img",             2 );
 }
 
-#Tests for rbd info
+# Tests for rbd info
 sub info_image {
     perform_action( $RBD_INFO, "$pool_name\/$img_name", 0 );
     perform_action( $RBD_INFO, "--snap $snap_name $pool_name\/$img_name_mv",
@@ -185,7 +187,7 @@ sub info_image {
     perform_action( $RBD_INFO, "$pool_name\/$non_existing_img",         2 );
 }
 
-#Tests for rename image
+# Tests for rename image
 sub rename_image {
     perform_action( $RBD_RENAME,
         "$pool_name\/$img_name_mv $pool_name\/$new_rbd_img", 0 );
@@ -197,8 +199,8 @@ sub rename_image {
 sub remove_image {
     perform_action( $RBD_REMOVE,"$pool_name\/$img_name",0);
     perform_action( $RBD_REMOVE, "$pool_name\/$new_rbd_img", 2 );
-    perform_action( $RBD_REMOVE, "--pool $pool_name $rbd_imp_image", 0 );
-    perform_action( $RBD_REMOVE, "-p $pool_name $cp_new",            0 );
+    perform_action( $RBD_REMOVE, "$pool_name\/$rbd_imp_image", 0 );
+    perform_action( $RBD_REMOVE, "$pool_name\/$cp_new",            2 );
     perform_action( $RBD_REMOVE, " ",                                2 );
 }
 
@@ -215,19 +217,18 @@ sub export_image {
         "--snap $snap_name $pool_name\/$non_existing_img $exp_file2", 2 );
 }
 
-#Tests for import file to rbd image
+# Tests for import file to rbd image
 sub import_image {
     my $i = create_test_file( $rbd_imp_file, $content );
     if ( $i == 0 ) {
-        perform_action( $RBD_IMPORT, "$rbd_imp_file $rbd_imp_image", 0 );
+        perform_action( $RBD_IMPORT, "$rbd_imp_file $pool_name\/$rbd_imp_image", 0 );
     }
     create_test_file( "$rbd_imp_test", 0 );
-    perform_action( $RBD_IMPORT, "$rbd_imp_test $pool_name\/$rbd_imp_image",
-        2 );
+    perform_action( $RBD_IMPORT, "$rbd_imp_test $pool_name\/$rbd_imp_image", 2);
     perform_action( $RBD_IMPORT, "$exp_file $pool_name\/$rbd_imp_image", 2 );
 }
 
-#To map rbd image to device
+# To map rbd image to device
 sub rbd_map {
 
     # Execute "modprobe rbd"
@@ -272,6 +273,7 @@ sub create_test_file {
     return 0;
 }
 
+# deletes and creates a given rados pool  
 sub _create_rados_pool {
     $exec_cmd = get_command_output("$RADOS_RMPOOL $pool_name");
     if (   ( $exec_cmd =~ /$POOL_RM_SUCCESS/ )
@@ -287,8 +289,18 @@ sub _create_rados_pool {
     }
 }
 
-#main() starts here
+sub _del_pool {
+    $exec_cmd = get_command_output("$RADOS_RMPOOL $pool_name");
+    if (   ( $exec_cmd =~ /$POOL_RM_SUCCESS/ )
+        || ( $exec_cmd =~ /does not exist/ ) )
+    {
+        debug_msg("Pool $pool_name deleted");
+    }
+}
 
+#== Main starts here===
+
+_pre_clean_up();
 display_ceph_os_info();
 _create_rados_pool();
 create_image();
@@ -303,11 +315,8 @@ list_snapshots();
 rollback_snapshot();
 remove_snapshot();
 purge_snapshots();
-rbd_map();
-rbd_unmap();
 copy_image();
 remove_image();
 display_result();
-_clean_up();
-
-
+_post_clean_up();
+_del_pool();
