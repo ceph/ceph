@@ -8,6 +8,7 @@
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_acl.h"
+#include "rgw_policy_s3.h"
 
 #include "common/armor.h"
 
@@ -655,6 +656,16 @@ bool RGWPostObj_ObjStore_S3::part_str(const string& name, string *val)
   return true;
 }
 
+bool RGWPostObj_ObjStore_S3::part_bl(const string& name, bufferlist *pbl)
+{
+  map<string, struct post_form_part, ltstr_nocase>::iterator iter = parts.find(name);
+  if (iter == parts.end())
+    return false;
+
+  *pbl = iter->second.data;
+  return true;
+}
+
 int RGWPostObj_ObjStore_S3::get_params()
 {
   string temp_line;
@@ -692,6 +703,9 @@ int RGWPostObj_ObjStore_S3::get_params()
     }
   }
 
+  ldout(s->cct, 20) << "adding bucket to policy env: " << s->bucket.name << dendl;
+  env.add_var("bucket", s->bucket.name);
+
   map<string, string>::iterator iter = params.find("boundary");
   if (iter == params.end())
     return -EINVAL;
@@ -707,13 +721,13 @@ int RGWPostObj_ObjStore_S3::get_params()
     if (r < 0)
       return r;
     
-    if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    map<string, struct post_part_field>::iterator piter;
+    for (piter = part.fields.begin(); piter != part.fields.end(); ++piter) {
       ldout(s->cct, 20) << "read part header: name=" << part.name << " content_type=" << part.content_type << dendl;
-      ldout(s->cct, 20) << "params:" << dendl;
-      map<string, struct post_part_field>::iterator piter;
-      for (piter = part.fields.begin(); piter != part.fields.end(); ++piter) {
-        ldout(s->cct, 20) << "name=" << piter->first << dendl;
-        ldout(s->cct, 20) << "val=" << piter->second.val << dendl;
+      ldout(s->cct, 20) << "name=" << piter->first << dendl;
+      ldout(s->cct, 20) << "val=" << piter->second.val << dendl;
+      if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+        ldout(s->cct, 20) << "params:" << dendl;
         map<string, string>& params = piter->second.params;
         for (iter = params.begin(); iter != params.end(); ++iter) {
           ldout(s->cct, 20) << " " << iter->first << " -> " << iter->second << dendl;
@@ -736,12 +750,15 @@ int RGWPostObj_ObjStore_S3::get_params()
       return -EINVAL;
     }
     parts[part.name] = part;
+    string part_str(part.data.c_str(), part.data.length());
+    env.add_var(part.name, part_str);
   } while (!done);
 
   if (!part_str("key", &s->object_str))
     return -EINVAL;
 
   part_str("Content-Type", &content_type);
+  env.add_var("Content-Type", content_type);
 
   map<string, struct post_form_part, ltstr_nocase>::iterator piter = parts.upper_bound(RGW_AMZ_META_PREFIX);
   for (; piter != parts.end(); ++piter) {
@@ -760,6 +777,90 @@ int RGWPostObj_ObjStore_S3::get_params()
     attr_bl.append(str.c_str(), str.size() + 1);
 
     attrs[attr_name] = attr_bl;
+  }
+
+  int r = get_policy();
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int RGWPostObj_ObjStore_S3::get_policy()
+{
+  bufferlist encoded_policy;
+  string uid;
+
+  if (part_bl("policy", &encoded_policy)) {
+
+    // check that the signature matches the encoded policy
+    string s3_access_key;
+    if (!part_str("AWSAccessKeyId", &s3_access_key)) {
+      ldout(s->cct, 0) << "No S3 access key found!" << dendl;
+      return -EINVAL;
+    }
+    string signature_str;
+    if (!part_str("signature", &signature_str)) {
+      ldout(s->cct, 0) << "No signature found!" << dendl;
+      return -EINVAL;
+    }
+
+    RGWUserInfo user_info;
+
+    ret = rgw_get_user_info_by_access_key(store, s3_access_key, user_info);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "User lookup failed!" << dendl;
+      return -EINVAL;
+    }
+
+    map<string, RGWAccessKey> access_keys  = user_info.access_keys;
+
+    map<string, RGWAccessKey>::const_iterator iter = access_keys.begin();
+    string s3_secret_key = (iter->second).key;
+
+    char calc_signature[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
+
+    calc_hmac_sha1(s3_secret_key.c_str(), s3_secret_key.size(), encoded_policy.c_str(), encoded_policy.length(), calc_signature);
+    bufferlist encoded_hmac;
+    bufferlist raw_hmac;
+    raw_hmac.append(calc_signature, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
+    raw_hmac.encode_base64(encoded_hmac);
+    encoded_hmac.append((char)0); /* null terminate */
+
+    if (signature_str.compare(encoded_hmac.c_str()) != 0) {
+      ldout(s->cct, 0) << "Signature verification failed!" << dendl;
+      ldout(s->cct, 0) << "expected: " << signature_str.c_str() << dendl;
+      ldout(s->cct, 0) << "got: " << encoded_hmac.c_str() << dendl;
+      return -EINVAL;
+    }
+    ldout(s->cct, 0) << "Successful Signature Verification!" << dendl;
+    bufferlist decoded_policy;
+    try {
+      decoded_policy.decode_base64(encoded_policy);
+    } catch (buffer::error& err) {
+      ldout(s->cct, 0) << "failed to decode_base64 policy" << dendl;
+      return -EINVAL;
+    }
+
+    decoded_policy.append('\0'); // NULL terminate
+
+    ldout(s->cct, 0) << "POST policy: " << decoded_policy.c_str() << dendl;
+
+    RGWPolicy post_policy;
+    int r = post_policy.from_json(decoded_policy);
+    if (r < 0) {
+      ldout(s->cct, 0) << "failed to parse policy" << dendl;
+      return -EINVAL;
+    }
+
+    if (!post_policy.check(&env)) {
+      ldout(s->cct, 0) << "policy check failed" << dendl;
+      return -EINVAL;
+    }
+
+    s->user = user_info;
+  } else {
+    ldout(s->cct, 0) << "No attached policy found!" << dendl;
   }
 
   string canned_acl;
