@@ -1,7 +1,7 @@
 #! /usr/bin/perl
 =head1 NAME
 
-RbdLib.pm - Perl Module that contains the functions used by CLI and functionality scripts for testing RBD
+RbdLib.pm - Perl Module that contains the functions used by CLI script for testing RBD.
 
 =cut
 
@@ -9,12 +9,13 @@ package RbdLib;
 use Cwd;
 use Exporter;
 @ISA = 'Exporter';
-@EXPORT_OK = qw(perform_action create_image resize_image rename_image copy_image list_image info_image export_image import_image remove_image create_snapshots rollback_snapshots purge_snapshots list_snapshots remove_snapshot rbd_map rbd_unmap rbd_showmapped display_result _clean_up _create_rados_pool display_ceph_os_info $RADOS_MKPOOL $RADOS_RMPOOL $RBD_CREATE $RBD_RESIZE $RBD_INFO $RBD_REMOVE $RBD_RENAME $RBD_MV $RBD_LS $RBD_LIST $RBD_CLONE $RBD_EXPORT $RBD_IMPORT $RBD_CP $RBD_COPY $SNAP_CREATE $SNAP_LS $SNAP_LIST $SNAP_ROLLBACK $SNAP_PURGE $SNAP_REMOVE $POOL_RM_SUCCESS $POOL_MK_SUCCESS $RBD_EXISTS_ERR $RBD_WATCH $RBD_MAP $RBD_UNMAP $RBD_SHOWMAPPED get_command_output debug_msg );
+@EXPORT_OK = qw(perform_action create_image resize_image rename_image copy_image list_image info_image export_image import_image remove_image create_snapshots rollback_snapshots purge_snapshots list_snapshots remove_snapshot rbd_map rbd_unmap rbd_showmapped display_result _pre_clean_up _post_clean_up _create_rados_pool display_ceph_os_info $RADOS_MKPOOL $RADOS_RMPOOL $RBD_CREATE $RBD_RESIZE $RBD_INFO $RBD_REMOVE $RBD_RENAME $RBD_MV $RBD_LS $RBD_LIST $RBD_CLONE $RBD_EXPORT $RBD_IMPORT $RBD_CP $RBD_COPY $SNAP_CREATE $SNAP_LS $SNAP_LIST $SNAP_ROLLBACK $SNAP_PURGE $SNAP_REMOVE $POOL_RM_SUCCESS $POOL_MK_SUCCESS $RBD_EXISTS_ERR $RBD_WATCH $RBD_MAP $RBD_UNMAP $RBD_SHOWMAPPED get_command_output debug_msg );
 use Pod::Usage();
 use Getopt::Long();
 
 use strict;
-#use warnings;
+use warnings;
+
 $|=1;
 
 # variables
@@ -80,25 +81,32 @@ our $SNAP_ROLLBACK_SUCCESS = "Rolling back to snapshot: 100%";
 our $SNAP_PURGE_SUCCESS    = "Removing all snapshots: 100%";
 
 #===========Variables used in the script========
+
 our $test_log      = "logfile.txt";
-our $success       = "test_completed.txt";
-our $fail          = "log.txt";
+our $success_file  = "test_completed.txt";
+our $log_file     = "log.txt";
 our $exec_cmd;
 our $PASS_FLAG;
 our $MSG;
-our $pool_name;
 our $rbd_imp_file     = "test_file";
 our $exp_file         = "rbd_test_file1";
 our $exp_file1        = "rbd_test_file2";
 our $rbd_imp_test     = "new_test_file";
 our $img_name         = "test_img";
+our $pool_name;
 
-sub _clean_up {
+sub _post_clean_up {
     my $exec_cmd = get_command_output(
-"rm $img_name $rbd_imp_file $rbd_imp_test $exp_file $exp_file1"
+"rm -rf $img_name $rbd_imp_file $rbd_imp_test $exp_file $exp_file1"
     );
 }
 
+sub _pre_clean_up {
+    my $exec_cmd = get_command_output(
+"rm -rf logfile.txt log.txt test_completed.txt"
+    );
+}
+ 
 sub perform_action {
     my ( $action, $cmd_args, $option ) = @_;
     my $command = frame_command( $action, $cmd_args, $option );
@@ -144,15 +152,15 @@ sub debug_msg {
 }
 
 sub print_border {
-    print "=" x 70 . "\n";
+    print "=" x 90 . "\n";
 }
 
 sub print_border2 {
-    print "~" x 70 . "\n";
+    print "~" x 90 . "\n";
 }
 
 sub print_border3 {
-    print "+" x 70 . "\n";
+    print "+" x 90 . "\n";
 }
 
 sub banner {
@@ -173,10 +181,11 @@ sub display_result {
 sub get_command_output {
     my $cmd_output = shift;
     open( FH, ">>$test_log" );
-    print "\"$cmd_output\"\n";
+    print FH "*" x 90 . "\n";
+    print FH "\"$cmd_output\"\n";
     my $exec_cmd = `$cmd_output 2>&1`;
-    print "$exec_cmd\n";
     print FH "$exec_cmd\n";
+    print FH "*" x 90 . "\n";
     close(FH);
     return $exec_cmd;
 }
@@ -205,8 +214,7 @@ sub check_if_not_listed {
     my $check_op = get_command_output($chk_cmd);
     if ( $check_op =~ /$check_arg/ ) {
         fail("$cmd $args failed");
-    }
-    else {
+    } else {
         pass("$cmd $args passed");
     }
 }
@@ -215,30 +223,34 @@ sub validate_cmd_output {
     $TC_CNT++; 
     $PASS_FLAG      = "FALSE";
     $MSG            = " ";
-    my ( $arg, $snap, $arg1 );
+    my ( $arg, $snap, $arg1, $parg );
     my $snaps;
     my ( $cmd_op, $act, $args, $test_flag ) = @_;
     if ( !$test_flag ) {
         if ( ( $act =~ /$RBD_CREATE/ ) && ( !$cmd_op ) ) {
             $arg = ( split /,/, $args )[0];
+            $parg = ( split /,/, $args )[1];
+            $pool_name = ( split / /, $parg )[1];
             check_if_listed( "$RBD_LS $pool_name", $arg, $act , $args);
         }
         elsif (( ( $act =~ /$RBD_RENAME/ ) || ( $act =~ /$RBD_MV/ ) )
             && ( !$cmd_op ) )
         {
             $arg = ( split /\//, $args )[-1];
+            $pool_name = ( split /\//, $args )[0];
             check_if_listed( "$RBD_LS $pool_name", $arg, $act, $args );
         }
         elsif ( ( $act =~ /$SNAP_CREATE/ ) && ( !$cmd_op ) ) {
             $snaps = ( split / /,  $args )[1];
-            $arg   = ( split /\//, $args )[-1];
+            $arg   = ( split / /, $args )[2];
             check_if_listed( "$SNAP_LS $arg", $snaps, $act, $args );
         }
         elsif ( ( $act =~ /$SNAP_REMOVE/ ) && ( !$cmd_op ) ) {
             $snaps = ( split /\@/, $args )[-1];
             $arg1  = ( split /\@/, $args )[-2];
             $arg   = ( split /\//, $arg1 )[-1];
-            check_if_not_listed( "$SNAP_LS $arg", $snaps , $act, $args);
+	    $pool_name = ( split /\@/,$args )[0];
+            check_if_not_listed( "$SNAP_LS $pool_name", $snaps , $act, $args);
         }
         elsif (( $act =~ /$SNAP_PURGE/ )
             && ( $cmd_op =~ /$SNAP_PURGE_SUCCESS/ ) )
@@ -253,7 +265,9 @@ sub validate_cmd_output {
         }
         elsif ( ( $act =~ /$RBD_REMOVE/ ) && ( $cmd_op =~ /$RBD_RM_SUCCESS/ ) )
         {
-            check_if_not_listed( "$RBD_LS $pool_name", $args, $act );
+            $pool_name = ( split /\//, $args )[0];
+            my $img_name = ( split /\//, $args )[1];
+            check_if_not_listed( "$RBD_LS $pool_name",$img_name , $act, $args );
         }
         elsif (( $act =~ /$RBD_RESIZE/ )
             && ( $cmd_op =~ /$RBD_RESIZE_SUCCESS/ ) )
@@ -342,32 +356,39 @@ sub validate_cmd_output {
 sub log_results
 {
 	if ( $PASS_FLAG eq "TRUE" ) {
-	    open( TC, '>>test_completed.txt' );
-	    print TC "[Test Case $TC_CNT: Success] $MSG\n";	
-	    close(TC);
-	    open( TC, '>>log.txt' );
-	    print TC "[Test Case $TC_CNT: Success] $MSG\n";
-	    close(TC);
+            open( TC, '>>test_completed.txt' );
+            close(TC);
+            open( TC, '>>log.txt' );
+	    print TC "[Success] Test Case $TC_CNT $MSG\n";
+            close(TC);
 	}
 	else {
-	    open( TC, '>>test_completed.txt' );
-	    print TC "[Test Case $TC_CNT: Failure] $MSG\n";
-	    close(TC);
-	    open( TC, '>>log.txt' );
-	    print TC "[Test Case $TC_CNT: Failure] $MSG\n";
-	    close(TC);
+            open( TC, '>>test_completed.txt' );
+            close(TC);
+            open( TC, '>>log.txt' );
+	    print TC "[Failure] Test Case $TC_CNT $MSG\n";
+            close(TC);
 	}
 }
 
-sub display_ceph_os_info
+sub ceph_os_info
 {
         my $ceph_v = get_command_output ( "ceph -v" );
         my @ceph_arr = split(" ",$ceph_v);
         $ceph_v = "Ceph Version:   $ceph_arr[2]";
-        my $msg = "The Tests are running on";
         my $os_distro = get_command_output ( "lsb_release -d" );
         my @os_arr = split(":",$os_distro);
         $os_distro = "Linux Flavor:$os_arr[1]";
-        debug_msg ( "$msg\n$os_distro$ceph_v",1 );
+        return ($ceph_v, $os_distro);
+}
+
+sub display_ceph_os_info
+{
+	my ($vceph, $vos) = ceph_os_info();
+        my $msg = "The Tests are running on";
+        debug_msg ( "$msg\n$vos$vceph",1 );
+	open( TC, '>>log.txt' );
+        print TC "[Log] $vceph\n";
+	close (TC);
 }
 1;
