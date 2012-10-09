@@ -1,11 +1,17 @@
 /*.substvars
 /*.debhelper.log
-/ceph-client-tools-dbg
-/ceph-client-tools
+/ceph-common-dbg
+/ceph-common
 /ceph-dbg
 /ceph-fuse-dbg
 /ceph-fuse
+/ceph-fs-common-dbg
+/ceph-fs-common
+/ceph-mds-dbg
+/ceph-mds
+/ceph-resource-agents
 /ceph.init
+/radosgw.init
 /ceph.logrotate
 /*.debhelper
 /ceph
@@ -21,5 +27,7 @@
 /librbd1
 /radosgw-dbg
 /radosgw
+/rest-bench-dbg
+/rest-bench
 /python-ceph
 /tmp
