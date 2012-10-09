@@ -57,6 +57,12 @@ class MountError(ActivateError):
     """
 
 
+class UnmountError(ActivateError):
+    """
+    Unmounting filesystem failed
+    """
+
+
 def maybe_mkdir(*a, **kw):
     try:
         os.mkdir(*a, **kw)
@@ -309,25 +315,56 @@ def detect_fstype(
     return fstype
 
 
+def get_conf(cluster, variable):
+    try:
+        p = subprocess.Popen(
+            args=[
+                'ceph-conf',
+                '--cluster={cluster}'.format(
+                    cluster=cluster,
+                    ),
+                '--name=osd.',
+                '--lookup',
+                variable,
+                ],
+            stdout=subprocess.PIPE,
+            close_fds=True,
+            )
+    except OSError as e:
+        raise ActivateError('error executing ceph-conf', e)
+    (out, _err) = p.communicate()
+    ret = p.wait()
+    if ret == 1:
+        # config entry not found
+        return None
+    elif ret != 0:
+        raise ActivateError('getting variable from configuration failed')
+    value = out.split('\n', 1)[0]
+    # don't differentiate between "var=" and no var set
+    if not value:
+        return None
+    return value
+
+
 MOUNT_OPTIONS = dict(
-    ext4='user_xattr',
+    btrfs='noatime,user_subvol_rm_allowed',
+    # user_xattr is default ever since linux 2.6.39 / 3.0, but we'll
+    # delay a moment before removing it fully because we did have some
+    # issues with ext4 before the xatts-in-leveldb work, and it seemed
+    # that user_xattr helped
+    ext4='noatime,user_xattr',
+    xfs='noatime',
     )
 
 
 def mount(
     dev,
+    fstype,
+    options,
     ):
     # pick best-of-breed mount options based on fs type
-    try:
-        fstype = detect_fstype(dev)
-    except (subprocess.CalledProcessError,
-            TruncatedLineError,
-            TooManyLinesError) as e:
-        raise FilesystemTypeError(
-            'device {dev}'.format(dev=dev),
-            e,
-            )
-    options = MOUNT_OPTIONS.get(fstype, '')
+    if options is None:
+        options = MOUNT_OPTIONS.get(fstype, '')
 
     # mount
     path = tempfile.mkdtemp(
@@ -354,74 +391,110 @@ def mount(
     return path
 
 
+def unmount(
+    path,
+    ):
+    try:
+        subprocess.check_call(
+            args=[
+                'umount',
+                '--',
+                path,
+                ],
+            )
+    except subprocess.CalledProcessError as e:
+        raise UnmountError(e)
+
+
 def activate(
     path,
     activate_key_template,
     do_mount,
     ):
+
     if do_mount:
-        path = mount(dev=path)
+        try:
+            fstype = detect_fstype(dev=path)
+        except (subprocess.CalledProcessError,
+                TruncatedLineError,
+                TooManyLinesError) as e:
+            raise FilesystemTypeError(
+                'device {dev}'.format(dev=path),
+                e,
+                )
 
-    # TODO unmount on errors?
-
-    check_osd_magic(path)
-
-    ceph_fsid = read_one_line(path, 'ceph_fsid')
-    if ceph_fsid is None:
-        raise ActivateError('No cluster uuid assigned.')
-    log.debug('Cluster uuid is %s', ceph_fsid)
-
-    # TODO use ceph_fsid to find the right cluster
-    cluster = 'ceph'
-    log.debug('Cluster name is %s', cluster)
-
-    fsid = read_one_line(path, 'fsid')
-    if fsid is None:
-        raise ActivateError('No OSD uuid assigned.')
-    log.debug('OSD uuid is %s', fsid)
-
-    keyring = activate_key_template.format(cluster=cluster)
-
-    osd_id = get_osd_id(path)
-    if osd_id is None:
-        osd_id = allocate_osd_id(
-            cluster=cluster,
-            fsid=fsid,
-            keyring=keyring,
+        mount_options = get_conf(
+            # TODO always using mount options from cluster=ceph for
+            # now; see http://tracker.newdream.net/issues/3253
+            cluster='ceph',
+            variable='osd_fs_mount_options_{fstype}'.format(
+                fstype=fstype,
+                ),
             )
-        write_one_line(path, 'whoami', osd_id)
-    log.debug('OSD id is %s', osd_id)
 
-    if not os.path.exists(os.path.join(path, 'ready')):
-        log.debug('Initializing OSD...')
-        # re-running mkfs is safe, so just run until it completes
-        mkfs(
+        path = mount(dev=path, fstype=fstype, options=mount_options)
+
+    try:
+        check_osd_magic(path)
+
+        ceph_fsid = read_one_line(path, 'ceph_fsid')
+        if ceph_fsid is None:
+            raise ActivateError('No cluster uuid assigned.')
+        log.debug('Cluster uuid is %s', ceph_fsid)
+
+        # TODO use ceph_fsid to find the right cluster
+        cluster = 'ceph'
+        log.debug('Cluster name is %s', cluster)
+
+        fsid = read_one_line(path, 'fsid')
+        if fsid is None:
+            raise ActivateError('No OSD uuid assigned.')
+        log.debug('OSD uuid is %s', fsid)
+
+        keyring = activate_key_template.format(cluster=cluster)
+
+        osd_id = get_osd_id(path)
+        if osd_id is None:
+            osd_id = allocate_osd_id(
+                cluster=cluster,
+                fsid=fsid,
+                keyring=keyring,
+                )
+            write_one_line(path, 'whoami', osd_id)
+        log.debug('OSD id is %s', osd_id)
+
+        if not os.path.exists(os.path.join(path, 'ready')):
+            log.debug('Initializing OSD...')
+            # re-running mkfs is safe, so just run until it completes
+            mkfs(
+                path=path,
+                cluster=cluster,
+                osd_id=osd_id,
+                fsid=fsid,
+                keyring=keyring,
+                )
+
+        if not os.path.exists(os.path.join(path, 'active')):
+            log.debug('Authorizing OSD key...')
+            auth_key(
+                path=path,
+                cluster=cluster,
+                osd_id=osd_id,
+                keyring=keyring,
+                )
+            write_one_line(path, 'active', 'ok')
+
+        move_mount(
             path=path,
             cluster=cluster,
             osd_id=osd_id,
-            fsid=fsid,
-            keyring=keyring,
             )
-
-    if not os.path.exists(os.path.join(path, 'active')):
-        log.debug('Authorizing OSD key...')
-        auth_key(
-            path=path,
-            cluster=cluster,
-            osd_id=osd_id,
-            keyring=keyring,
-            )
-        write_one_line(path, 'active', 'ok')
-
-    move_mount(
-        path=path,
-        cluster=cluster,
-        osd_id=osd_id,
-        )
-
-    if do_mount:
-        # if we created a temp dir to mount it, remove it
-        os.rmdir(path)
+    except:
+        unmount(path)
+    finally:
+        if do_mount:
+            # if we created a temp dir to mount it, remove it
+            os.rmdir(path)
 
     upstart_start(
         cluster=cluster,
