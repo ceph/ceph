@@ -1550,15 +1550,21 @@ next:
     uint64_t start_epoch = 0;
     uint64_t end_epoch = (uint64_t)-1;
 
-    int ret = parse_date(start_date, &start_epoch);
-    if (ret < 0) {
-      cerr << "ERROR: failed to parse start date" << std::endl;
-      return 1;
+    int ret;
+    
+    if (!start_date.empty()) {
+      ret = parse_date(start_date, &start_epoch);
+      if (ret < 0) {
+        cerr << "ERROR: failed to parse start date" << std::endl;
+        return 1;
+      }
     }
-    ret = parse_date(end_date, &end_epoch);
-    if (ret < 0) {
-      cerr << "ERROR: failed to parse end date" << std::endl;
-      return 1;
+    if (!end_date.empty()) {
+      ret = parse_date(end_date, &end_epoch);
+      if (ret < 0) {
+        cerr << "ERROR: failed to parse end date" << std::endl;
+        return 1;
+      }
     }
 
     RGWStreamFlusher f(formatter, cout);
