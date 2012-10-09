@@ -1526,7 +1526,8 @@ void OSDMap::print_tree(ostream *out, Formatter *f) const
       for (int k=s-1; k>=0; k--) {
 	int item = crush->get_bucket_item(cur, k);
 	q.push_front(qi(item, depth+1, (float)crush->get_bucket_item_weight(cur, k) / (float)0x10000));
-	f->dump_int("child", item);
+	if (f)
+	  f->dump_int("child", item);
       }
       if (f)
 	f->close_section();
