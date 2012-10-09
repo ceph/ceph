@@ -139,20 +139,10 @@ int FileJournal::_open_block_device()
   int64_t conf_journal_sz(g_conf->osd_journal_size);
   conf_journal_sz <<= 20;
 
-  if (conf_journal_sz == 0) {
-    dout(10) << __func__ << ": no journal size specified in configuration. "
-      << "We'll use the entire block device (size: " << bdev_sz << ")" << dendl;
-    max_size = bdev_sz;
-  }
-  else if (bdev_sz > conf_journal_sz) {
-    dout(10) << __func__ << ": using " << conf_journal_sz << " bytes "
-             << "of a " << bdev_sz << " byte block device." << dendl;
-    max_size = conf_journal_sz;
-  } else {
-    dout(0) << __func__ << ": WARNING: configured 'osd journal size' is "
-	    << conf_journal_sz << ", but " << fn << " is only "
-      << bdev_sz << " bytes." << dendl;
-  }
+  dout(10) << __func__ << ": ignoring osd journal size. "
+	   << "We'll use the entire block device (size: " << bdev_sz << ")"
+	   << dendl;
+  max_size = bdev_sz;
 
   /* block devices have to write in blocks of CEPH_PAGE_SIZE */
   block_size = CEPH_PAGE_SIZE;
