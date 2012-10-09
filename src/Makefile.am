@@ -283,10 +283,6 @@ libcephfs_la_LDFLAGS =  $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(EXTRALIBS) \
             ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
 lib_LTLIBRARIES += libcephfs.la
 
-testceph_SOURCES = client/testceph.cc
-testceph_LDADD = libcephfs.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-bin_DEBUGPROGRAMS += testceph
-
 testtimers_SOURCES = test/TestTimers.cc
 testtimers_LDADD = $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += testtimers
