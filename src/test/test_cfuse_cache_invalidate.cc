@@ -14,6 +14,7 @@ int main(int argc, char *argv[]) {
 
   pid_t p = fork();
   char buf[REGION];
+  memset(buf, 0, sizeof(buf));
 
   if (p != 0) {
     int done = 0;
