@@ -260,9 +260,15 @@ static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 {
   int r;
 
-  if (format == 1)
+  if (format == 1) {
+    // weird striping not allowed with format 1!
+    if ((stripe_unit || stripe_count) &&
+	(stripe_unit != (1ull << *order) && stripe_count != 1)) {
+      cerr << "non-default striping not allowed with format 1; use --format 2" << std::endl;
+      return -EINVAL;
+    }
     r = rbd.create(io_ctx, imgname, size, order);
-  else {
+  } else {
     if (features == 0) {
       features = RBD_FEATURE_LAYERING;
     }
