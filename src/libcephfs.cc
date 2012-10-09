@@ -256,6 +256,9 @@ extern "C" int ceph_conf_set(struct ceph_mount_info *cmount, const char *option,
 extern "C" int ceph_conf_get(struct ceph_mount_info *cmount, const char *option,
 			     char *buf, size_t len)
 {
+  if (buf == NULL) {
+    return -EINVAL;
+  }
   return cmount->conf_get(option, buf, len);
 }
 
