@@ -354,7 +354,7 @@ AC_CHECK_HEADER([boost/spirit/include/classic_core.hpp], [],
 AM_CONDITIONAL(USE_BOOST_SPIRIT_OLD_HDR, [test "$use_bspirit_old_hdr" = "yes"])
 
 AC_CHECK_HEADER([boost/random/discrete_distribution.hpp],
-	[AC_DEFINE([HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION], [], [have boost::random::discrete_distrubition])],
+	[AC_DEFINE([HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION], [], [have boost::random::discrete_distribution])],
 	[])
 
 AC_CHECK_HEADER([boost/statechart/state.hpp], [],
