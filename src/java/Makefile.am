@@ -24,7 +24,7 @@ CEPH_PROXY=java/com/ceph/fs/CephMount.class
 
 $(CEPH_PROXY): $(JAVA_SRC)
 	export CLASSPATH=java/ ;
-	$(JAVAC) java/com/ceph/fs/*.java
+	$(JAVAC) -source 1.5 -target 1.5 java/com/ceph/fs/*.java
 
 $(JAVA_H): $(CEPH_PROXY)
 	export CLASSPATH=java/ ; \
