@@ -465,6 +465,12 @@ extern "C" int ceph_chown(struct ceph_mount_info *cmount, const char *path,
 {
   return cmount->get_client()->chown(path, uid, gid);
 }
+extern "C" int ceph_lchown(struct ceph_mount_info *cmount, const char *path,
+			   uid_t uid, gid_t gid)
+{
+  return cmount->get_client()->lchown(path, uid, gid);
+}
+
 
 extern "C" int ceph_utime(struct ceph_mount_info *cmount, const char *path,
 			  struct utimbuf *buf)

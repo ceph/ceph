@@ -4242,6 +4242,25 @@ int Client::chown(const char *relpath, uid_t uid, gid_t gid)
   return _setattr(in, &attr, CEPH_SETATTR_UID|CEPH_SETATTR_GID);
 }
 
+int Client::lchown(const char *relpath, uid_t uid, gid_t gid)
+{
+  Mutex::Locker lock(client_lock);
+  tout(cct) << "chown" << std::endl;
+  tout(cct) << relpath << std::endl;
+  tout(cct) << uid << std::endl;
+  tout(cct) << gid << std::endl;
+  filepath path(relpath);
+  Inode *in;
+  // don't follow symlinks
+  int r = path_walk(path, &in, false);
+  if (r < 0)
+    return r;
+  struct stat attr;
+  attr.st_uid = uid;
+  attr.st_gid = gid;
+  return _setattr(in, &attr, CEPH_SETATTR_UID|CEPH_SETATTR_GID);
+}
+
 int Client::utime(const char *relpath, struct utimbuf *buf)
 {
   Mutex::Locker lock(client_lock);
