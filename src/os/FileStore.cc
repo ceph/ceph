@@ -2223,14 +2223,11 @@ void FileStore::queue_op(OpSequencer *osr, Op *o)
   // queue during commit in order to put the store in a consistent
   // state.
   apply_manager.op_apply_start(o->op);
-  op_tp.lock();
 
   osr->queue(o);
 
   logger->inc(l_os_ops);
   logger->inc(l_os_bytes, o->bytes);
-
-  op_tp.unlock();
 
   dout(5) << "queue_op " << o << " seq " << o->op
 	  << " " << *osr
