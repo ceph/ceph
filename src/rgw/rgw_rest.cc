@@ -555,11 +555,12 @@ int RGWPostObj_ObjStore::verify_params()
   /*  check that we have enough memory to store the object
   note that this test isn't exact and may fail unintentionally
   for large requests is */
-  if (s->length) {
-    off_t len = atoll(s->length);
-    if (len > (off_t)RGW_MAX_PUT_SIZE) {
-      return -ERR_TOO_LARGE;
-    }
+  if (!s->length) {
+    return -ERR_LENGTH_REQUIRED;
+  }
+  off_t len = atoll(s->length);
+  if (len > (off_t)RGW_MAX_PUT_SIZE) {
+    return -ERR_TOO_LARGE;
   }
 
   return 0;
