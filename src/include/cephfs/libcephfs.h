@@ -667,9 +667,9 @@ int ceph_getxattr(struct ceph_mount_info *cmount, const char *path, const char *
 	void *value, size_t size);
 
 /**
- * Get an extended attribute and follow symbolic links.  This function is
+ * Get an extended attribute wihtout following symbolic links.  This function is
  * identical to ceph_getxattr, but if the path refers to a symbolic link,
- * we get the extended attributes of the link target rather than the attributes
+ * we get the extended attributes of the symlink rather than the attributes
  * of the link itself.
  *
  * @param cmount the ceph mount handle to use for performing the lgetxattr.
@@ -694,7 +694,7 @@ int ceph_lgetxattr(struct ceph_mount_info *cmount, const char *path, const char 
 int ceph_listxattr(struct ceph_mount_info *cmount, const char *path, char *list, size_t size);
 
 /**
- * Get the list of extended attribute keys on a file, following symbolic links.
+ * Get the list of extended attribute keys on a file, but do not follow symbolic links.
  *
  * @param cmount the ceph mount handle to use for performing the llistxattr.
  * @param path the path to the file.
@@ -715,7 +715,7 @@ int ceph_llistxattr(struct ceph_mount_info *cmount, const char *path, char *list
 int ceph_removexattr(struct ceph_mount_info *cmount, const char *path, const char *name);
 
 /**
- * Remove the extended attribute from a file, following symbolic links.
+ * Remove the extended attribute from a file, do not follow symbolic links.
  *
  * @param cmount the ceph mount handle to use for performing the lremovexattr.
  * @param path the path to the file.
@@ -741,7 +741,7 @@ int ceph_setxattr(struct ceph_mount_info *cmount, const char *path, const char *
 	const void *value, size_t size, int flags);
 
 /**
- * Set an extended attribute on a file, following symbolic links.
+ * Set an extended attribute on a file, do not follow symbolic links.
  *
  * @param cmount the ceph mount handle to use for performing the lsetxattr.
  * @param path the path to the file.
