@@ -450,6 +450,10 @@ extern "C" int ceph_chmod(struct ceph_mount_info *cmount, const char *path, mode
 {
   return cmount->get_client()->chmod(path, mode);
 }
+extern "C" int ceph_fchmod(struct ceph_mount_info *cmount, int fd, mode_t mode)
+{
+  return cmount->get_client()->fchmod(fd, mode);
+}
 extern "C" int ceph_chown(struct ceph_mount_info *cmount, const char *path,
 			  uid_t uid, gid_t gid)
 {

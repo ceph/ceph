@@ -4188,6 +4188,19 @@ int Client::chmod(const char *relpath, mode_t mode)
   return _setattr(in, &attr, CEPH_SETATTR_MODE);
 }
 
+int Client::fchmod(int fd, mode_t mode)
+{
+  Mutex::Locker lock(client_lock);
+  tout(cct) << "fchmod" << std::endl;
+  tout(cct) << fd << std::endl;
+  tout(cct) << mode << std::endl;
+  assert(fd_map.count(fd));
+  Fh *f = fd_map[fd];
+  struct stat attr;
+  attr.st_mode = mode;
+  return _setattr(f->inode, &attr, CEPH_SETATTR_MODE);
+}
+
 int Client::chown(const char *relpath, uid_t uid, gid_t gid)
 {
   Mutex::Locker lock(client_lock);
