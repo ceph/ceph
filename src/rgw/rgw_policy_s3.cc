@@ -25,10 +25,11 @@ public:
     v2 = _v2;
   }
 
-  bool check(RGWPolicyEnv *env) {
+  bool check(RGWPolicyEnv *env, map<string, bool>& checked_vars) {
      string first, second;
-     env->get_value(v1, first);
-     env->get_value(v2, second);
+     env->get_value(v1, first, checked_vars);
+     env->get_value(v2, second, checked_vars);
+
      dout(1) << "policy condition check " << v1 << " [" << first << "] " << v2 << " [" << second << "]" << dendl;
      return check(first, second);
   }
@@ -66,16 +67,31 @@ bool RGWPolicyEnv::get_var(const string& name, string& val)
   return true;
 }
 
-bool RGWPolicyEnv::get_value(const string& s, string& val)
+bool RGWPolicyEnv::get_value(const string& s, string& val, map<string, bool>& checked_vars)
 {
   if (s.empty() || s[0] != '$') {
     val = s;
     return true;
   }
 
-  return get_var(s.substr(1), val);
+  const string& var = s.substr(1);
+  checked_vars[var] = true;
+
+  return get_var(var, val);
 }
 
+
+bool RGWPolicyEnv::match_policy_vars(map<string, bool>& policy_vars)
+{
+  map<string, string>::iterator iter;
+  for (iter = vars.begin(); iter != vars.end(); ++iter) {
+    if (policy_vars.count(iter->first) == 0) {
+      dout(1) << "env var missing in policy: " << iter->first << dendl;
+      return false;
+    }
+  }
+  return true;
+}
 
 RGWPolicy::~RGWPolicy()
 {
@@ -115,6 +131,8 @@ bool RGWPolicy::check(RGWPolicyEnv *env)
     if (!env->get_var(name, val))
       return false;
 
+    set_var_checked(name);
+
     dout(20) << "comparing " << name << " [" << val << "], " << check_val << dendl;
     if (val.compare(check_val) != 0) {
       dout(1) << "policy check failed, val=" << val << " != " << check_val << dendl;
@@ -125,9 +143,14 @@ bool RGWPolicy::check(RGWPolicyEnv *env)
   list<RGWPolicyCondition *>::iterator citer;
   for (citer = conditions.begin(); citer != conditions.end(); ++citer) {
     RGWPolicyCondition *cond = *citer;
-    if (!cond->check(env)) {
+    if (!cond->check(env, checked_vars)) {
       return false;
     }
+  }
+
+  if (!env->match_policy_vars(checked_vars)) {
+    dout(1) << "missing policy condition" << dendl;
+    return false;
   }
   return true;
 }
