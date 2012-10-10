@@ -462,6 +462,7 @@ int ceph_lstat(struct ceph_mount_info *cmount, const char *path, struct stat *st
  * @returns 0 on success or negative error code on failure.
  */
 int ceph_setattr(struct ceph_mount_info *cmount, const char *relpath, struct stat *attr, int mask);
+
 /**
  * Change the mode bits (permissions) of a file/directory.
  *
@@ -471,6 +472,16 @@ int ceph_setattr(struct ceph_mount_info *cmount, const char *relpath, struct sta
  * @returns 0 on success or a negative error code on failure.
  */
 int ceph_chmod(struct ceph_mount_info *cmount, const char *path, mode_t mode);
+
+/**
+ * Change the mode bits (permissions) of an open file.
+ *
+ * @param cmount the ceph mount handle to use for performing the chmod.
+ * @param fd the open file descriptor to change the mode bits on.
+ * @param mode the new permissions to set.
+ * @returns 0 on success or a negative error code on failure.
+ */
+int ceph_fchmod(struct ceph_mount_info *cmount, int fd, mode_t mode);
 
 /**
  * Change the ownership of a file/directory.
