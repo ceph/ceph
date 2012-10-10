@@ -392,6 +392,12 @@ extern "C" int ceph_symlink(struct ceph_mount_info *cmount, const char *existing
 }
 
 // inode stuff
+extern "C" int ceph_stat(struct ceph_mount_info *cmount, const char *path,
+			 struct stat *stbuf)
+{
+  return cmount->get_client()->stat(path, stbuf);
+}
+
 extern "C" int ceph_lstat(struct ceph_mount_info *cmount, const char *path,
 			  struct stat *stbuf)
 {

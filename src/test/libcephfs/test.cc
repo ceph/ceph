@@ -18,6 +18,7 @@
 #include <sys/fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <dirent.h>
 #include <sys/xattr.h>
 
@@ -96,7 +97,7 @@ TEST(LibCephFS, Dir_ls) {
 
   ASSERT_EQ(ceph_mkdir(cmount, foostr, 0777), 0);
   struct stat stbuf;
-  ASSERT_EQ(ceph_lstat(cmount, foostr, &stbuf), 0);
+  ASSERT_EQ(ceph_stat(cmount, foostr, &stbuf), 0);
   ASSERT_NE(S_ISDIR(stbuf.st_mode), 0);
 
   char barstr[256];

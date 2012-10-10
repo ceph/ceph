@@ -4103,6 +4103,28 @@ int Client::setattr(const char *relpath, struct stat *attr, int mask)
   return _setattr(in, attr, mask); 
 }
 
+int Client::stat(const char *relpath, struct stat *stbuf,
+			  frag_info_t *dirstat, int mask)
+{
+  ldout(cct, 3) << "stat enter (relpath" << relpath << " mask " << mask << ")" << dendl;
+  Mutex::Locker lock(client_lock);
+  tout(cct) << "stat" << std::endl;
+  tout(cct) << relpath << std::endl;
+  filepath path(relpath);
+  Inode *in;
+  int r = path_walk(path, &in);
+  if (r < 0)
+    return r;
+  r = _getattr(in, mask);
+  if (r < 0) {
+    ldout(cct, 3) << "stat exit on error!" << dendl;
+    return r;
+  }
+  fill_stat(in, stbuf, dirstat);
+  ldout(cct, 3) << "stat exit (relpath" << relpath << " mask " << mask << ")" << dendl;
+  return r;
+}
+
 int Client::lstat(const char *relpath, struct stat *stbuf,
 			  frag_info_t *dirstat, int mask)
 {
@@ -4112,7 +4134,8 @@ int Client::lstat(const char *relpath, struct stat *stbuf,
   tout(cct) << relpath << std::endl;
   filepath path(relpath);
   Inode *in;
-  int r = path_walk(path, &in);
+  // don't follow symlinks
+  int r = path_walk(path, &in, false);
   if (r < 0)
     return r;
   r = _getattr(in, mask);
