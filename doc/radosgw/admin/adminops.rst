@@ -1,13 +1,13 @@
-====================
+==================
  Admin Operations
-====================
+==================
 
 An admin API request will be done on a URI that starts with the configurable 'admin'
 resource entry point. Authorization for the admin API duplicates the S3 authorization
 mechanism. Some operations require that the user holds special administrative capabilities.
 
 Get Usage
-===============
+=========
 
 Request usage information.
 
@@ -147,7 +147,7 @@ If successful, the response contains the requested information.
 
 
 Trim Usage
-===============
+==========
 
 Remove usage information.
 
