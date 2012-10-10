@@ -38,6 +38,7 @@ one API and retrieve it with the other.
 	Manual Install <manual-install>
 	Configuration <config>
 	Config Reference <config-ref>
+	Purging Temp Data <purge-temp>
 	S3 API <s3>
 	Swift API <swift/index>
 	Admin API <admin/index>
