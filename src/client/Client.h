@@ -583,6 +583,7 @@ public:
   int symlink(const char *existing, const char *newname);
 
   // inode stuff
+  int stat(const char *path, struct stat *stbuf, frag_info_t *dirstat=0, int mask=CEPH_STAT_CAP_INODE_ALL);
   int lstat(const char *path, struct stat *stbuf, frag_info_t *dirstat=0, int mask=CEPH_STAT_CAP_INODE_ALL);
   int lstatlite(const char *path, struct statlite *buf);
 

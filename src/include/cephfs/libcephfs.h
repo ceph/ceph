@@ -450,6 +450,16 @@ int ceph_rename(struct ceph_mount_info *cmount, const char *from, const char *to
  * @param stbuf the stat struct that will be filled in with the file's statistics.
  * @returns 0 on success or negative error code on failure.
  */
+int ceph_stat(struct ceph_mount_info *cmount, const char *path, struct stat *stbuf);
+
+/**
+ * Get a file's statistics and attributes, without following symlinks.
+ *
+ * @param cmount the ceph mount handle to use for performing the stat.
+ * @param path the file or directory to get the statistics of.
+ * @param stbuf the stat struct that will be filled in with the file's statistics.
+ * @returns 0 on success or negative error code on failure.
+ */
 int ceph_lstat(struct ceph_mount_info *cmount, const char *path, struct stat *stbuf);
 
 /**
