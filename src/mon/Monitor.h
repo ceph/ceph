@@ -43,6 +43,8 @@
 
 #include "perfglue/heap_profiler.h"
 
+#include "messages/MMonCommand.h"
+
 #include <memory>
 
 
@@ -388,7 +390,10 @@ public:
     C_Command(Monitor *_mm, MMonCommand *_m, int r, string s, bufferlist rd, version_t v) :
       mon(_mm), m(_m), rc(r), rs(s), rdata(rd), version(v){}
     void finish(int r) {
-      mon->reply_command(m, rc, rs, rdata, version);
+      if (r >= 0)
+	mon->reply_command(m, rc, rs, rdata, version);
+      else
+	mon->_ms_dispatch(m);
     }
   };
 
