@@ -202,6 +202,7 @@ private:
   deque<OpSequencer*> op_queue;
   uint64_t op_queue_len, op_queue_bytes;
   Cond op_throttle_cond;
+  Mutex op_throttle_lock;
   Finisher op_finisher;
 
   ThreadPool op_tp;
@@ -245,8 +246,7 @@ private:
 	       TrackedOpRef osd_op);
   void queue_op(OpSequencer *osr, Op *o);
   void op_queue_reserve_throttle(Op *o);
-  void _op_queue_reserve_throttle(Op *o, const char *caller = 0);
-  void _op_queue_release_throttle(Op *o);
+  void op_queue_release_throttle(Op *o);
   void _journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk);
   friend class C_JournaledAhead;
 
