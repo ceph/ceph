@@ -14,7 +14,8 @@ class RGWPolicyEnv {
 public:
   void add_var(const string& name, const string& value);
   bool get_var(const string& name, string& val);
-  bool get_value(const string& s, string& val);
+  bool get_value(const string& s, string& val, std::map<std::string, bool>& checked_vars);
+  bool match_policy_vars(map<string, bool>& policy_vars);
 };
 
 class RGWPolicyCondition;
@@ -24,11 +25,16 @@ class RGWPolicy {
   utime_t expires;
   std::list<RGWPolicyCondition *> conditions;
   std::list<pair<std::string, std::string> > var_checks;
+  std::map<std::string, bool> checked_vars;
 
 public:
   RGWPolicy() {}
   ~RGWPolicy();
   void set_expires(utime_t& e) { expires = e; }
+
+  void set_var_checked(const std::string& var) {
+    checked_vars[var] = true;
+  }
 
   int add_condition(const std::string& op, const std::string& first, const std::string& second);
   void add_simple_check(const std::string& var, const std::string& value) {
