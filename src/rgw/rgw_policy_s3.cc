@@ -3,7 +3,6 @@
 
 #include "rgw_policy_s3.h"
 #include "rgw_json.h"
-
 #include "rgw_common.h"
 
 
@@ -25,7 +24,7 @@ public:
     v2 = _v2;
   }
 
-  bool check(RGWPolicyEnv *env, map<string, bool>& checked_vars) {
+  bool check(RGWPolicyEnv *env, map<string, bool, ltstr_nocase>& checked_vars) {
      string first, second;
      env->get_value(v1, first, checked_vars);
      env->get_value(v2, second, checked_vars);
@@ -58,7 +57,7 @@ void RGWPolicyEnv::add_var(const string& name, const string& value)
 
 bool RGWPolicyEnv::get_var(const string& name, string& val)
 {
-  map<string, string>::iterator iter = vars.find(name);
+  map<string, string, ltstr_nocase>::iterator iter = vars.find(name);
   if (iter == vars.end())
     return false;
 
@@ -67,7 +66,7 @@ bool RGWPolicyEnv::get_var(const string& name, string& val)
   return true;
 }
 
-bool RGWPolicyEnv::get_value(const string& s, string& val, map<string, bool>& checked_vars)
+bool RGWPolicyEnv::get_value(const string& s, string& val, map<string, bool, ltstr_nocase>& checked_vars)
 {
   if (s.empty() || s[0] != '$') {
     val = s;
@@ -81,9 +80,9 @@ bool RGWPolicyEnv::get_value(const string& s, string& val, map<string, bool>& ch
 }
 
 
-bool RGWPolicyEnv::match_policy_vars(map<string, bool>& policy_vars)
+bool RGWPolicyEnv::match_policy_vars(map<string, bool, ltstr_nocase>& policy_vars)
 {
-  map<string, string>::iterator iter;
+  map<string, string, ltstr_nocase>::iterator iter;
   string ignore_prefix = "x-ignore-";
   for (iter = vars.begin(); iter != vars.end(); ++iter) {
     const string& var = iter->first;
@@ -109,9 +108,9 @@ RGWPolicy::~RGWPolicy()
 int RGWPolicy::add_condition(const string& op, const string& first, const string& second)
 {
   RGWPolicyCondition *cond = NULL;
-  if (op.compare("eq") == 0)
+  if (stringcasecmp(op, "eq") == 0)
     cond = new RGWPolicyCondition_StrEqual;
-  else if (op.compare("starts-with") == 0)
+  else if (stringcasecmp(op, "starts-with") == 0)
     cond = new RGWPolicyCondition_StrStartsWith;
 
   if (!cond)

@@ -738,7 +738,7 @@ int RGWPostObj_ObjStore_S3::get_params()
     if (done) /* unexpected here */
       return -EINVAL;
 
-    if (part.name.compare("file") == 0) { /* beginning of data transfer */
+    if (stringcasecmp(part.name, "file") == 0) { /* beginning of data transfer */
       parts[part.name] = part;
       data_pending = true;
       break;
