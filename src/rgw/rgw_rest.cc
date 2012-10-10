@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <limits.h>
 
 #include "common/Formatter.h"
 #include "common/utf8.h"
