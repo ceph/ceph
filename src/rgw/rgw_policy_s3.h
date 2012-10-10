@@ -7,15 +7,17 @@
 
 #include "include/utime.h"
 
+#include "rgw_string.h"
+
 
 class RGWPolicyEnv {
-  std::map<std::string, std::string> vars;
+  std::map<std::string, std::string, ltstr_nocase> vars;
 
 public:
   void add_var(const string& name, const string& value);
   bool get_var(const string& name, string& val);
-  bool get_value(const string& s, string& val, std::map<std::string, bool>& checked_vars);
-  bool match_policy_vars(map<string, bool>& policy_vars);
+  bool get_value(const string& s, string& val, std::map<std::string, bool, ltstr_nocase>& checked_vars);
+  bool match_policy_vars(map<string, bool, ltstr_nocase>& policy_vars);
 };
 
 class RGWPolicyCondition;
@@ -25,7 +27,7 @@ class RGWPolicy {
   utime_t expires;
   std::list<RGWPolicyCondition *> conditions;
   std::list<pair<std::string, std::string> > var_checks;
-  std::map<std::string, bool> checked_vars;
+  std::map<std::string, bool, ltstr_nocase> checked_vars;
 
 public:
   RGWPolicy() {}
