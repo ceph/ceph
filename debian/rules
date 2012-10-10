@@ -93,6 +93,7 @@ install: build
 # Add here commands to install the package into debian/testpack.
 # Build architecture-independent files here.
 binary-indep: build install
+	jh_installlibs -v -i
 
 # We have nothing to do by default.
 # Build architecture-dependent files here.

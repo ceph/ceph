@@ -30,5 +30,6 @@
 /rest-bench-dbg
 /rest-bench
 /python-ceph
-/libceph1-java
+/libcephfs-java
+/libcephfs-jni
 /tmp
