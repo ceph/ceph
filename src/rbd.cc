@@ -675,14 +675,14 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 
   if (fd < 0) {
     r = -errno;
-    cerr << "error opening " << path << std::endl;
+    cerr << "rbd: error opening " << path << std::endl;
     return r;
   }
 
   r = fstat(fd, &stat_buf);
   if (r < 0) {
     r = -errno;
-    cerr << "stat error " << path << std::endl;
+    cerr << "rbd: stat error " << path << std::endl;
     close(fd);
     return r;
   }
@@ -692,7 +692,8 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   if (!size) {
     r = get_block_device_size(fd, &size);
     if (r < 0) {
-      cerr << "unable to get size of file/block device: " << cpp_strerror(r) << std::endl;
+      cerr << "rbd: unable to get size of file/block device: "
+	   << cpp_strerror(r) << std::endl;
       close(fd);
       return r;
     }
@@ -702,28 +703,28 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 
   r = do_create(rbd, io_ctx, imgname, size, order, format, features);
   if (r < 0) {
-    cerr << "image creation failed" << std::endl;
+    cerr << "rbd: image creation failed" << std::endl;
     close(fd);
     return r;
   }
   librbd::Image image;
   r = rbd.open(io_ctx, image, imgname);
   if (r < 0) {
-    cerr << "failed to open image" << std::endl;
+    cerr << "rbd: failed to open image" << std::endl;
     close(fd);
     return r;
   }
   fsync(fd); /* flush it first, otherwise extents information might not have been flushed yet */
   fiemap = read_fiemap(fd);
   if (fiemap && !fiemap->fm_mapped_extents) {
-    cerr << "empty fiemap!" << std::endl;
+    cerr << "rbd: empty fiemap!" << std::endl;
     free(fiemap);
     fiemap = NULL;
   }
   if (!fiemap) {
     fiemap = (struct fiemap *)malloc(sizeof(struct fiemap) +  sizeof(struct fiemap_extent));
     if (!fiemap) {
-      cerr << "Failed to allocate fiemap, not enough memory." << std::endl;
+      cerr << "rbd: failed to allocate fiemap, not enough memory." << std::endl;
       close(fd);
       return -ENOMEM;
     }
@@ -761,7 +762,6 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 
     } while (end_ofs == (off_t)fiemap->fm_extents[extent].fe_logical);
 
-    //cerr << "rbd import file_pos=" << file_pos << " extent_len=" << extent_len << std::endl;
 #define READ_BLOCK_LEN (4 * 1024 * 1024)
     uint64_t left = end_ofs - file_pos;
     while (left) {
@@ -769,7 +769,6 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
       uint64_t cur_seg = (left < READ_BLOCK_LEN ? left : READ_BLOCK_LEN);
       while (cur_seg) {
         bufferptr p(cur_seg);
-        //cerr << "reading " << cur_seg << " bytes at offset " << file_pos << std::endl;
 	ssize_t rval;
 	if(extent == 0 && fiemap->fm_extents[extent].fe_logical == 0) {
 	  rval = TEMP_FAILURE_RETRY(::read(fd, p.c_str(), cur_seg));
@@ -778,7 +777,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 	}
         if (rval < 0) {
           r = -errno;
-          cerr << "error reading file: " << cpp_strerror(r) << std::endl;
+          cerr << "rbd: error reading file: " << cpp_strerror(r) << std::endl;
           goto done;
         }
 	size_t len = rval;
@@ -800,7 +799,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 	r = completion->get_return_value();
 	completion->release();
         if (r < 0) {
-          cerr << "error writing to image block" << std::endl;
+          cerr << "rbd: error writing to image block" << std::endl;
           goto done;
         }
 
@@ -868,7 +867,7 @@ static int do_watch(librados::IoCtx& pp, const char *imgname)
   r = pp.watch(old_format ? old_header_oid : new_header_oid,
 	       0, &cookie, &ctx);
   if (r < 0) {
-    cerr << "watch failed" << std::endl;
+    cerr << "rbd: watch failed" << std::endl;
     return r;
   }
 
@@ -905,7 +904,7 @@ static int do_kernel_add(const char *poolname, const char *imgname, const char *
 			g_conf->key.length()))
     r = 0;
   if (r < 0) {
-    cerr << "failed to get secret: " << cpp_strerror(r) << std::endl;
+    cerr << "rbd: failed to get secret: " << cpp_strerror(r) << std::endl;
     return r;
   }
   CryptoKey secret;
@@ -916,14 +915,14 @@ static int do_kernel_add(const char *poolname, const char *imgname, const char *
     r = set_kernel_secret(secret_str.c_str(), key_name);
     if (r >= 0) {
       if (r == 0)
-	cerr << "warning: secret has length 0" << std::endl;
+	cerr << "rbd: warning: secret has length 0" << std::endl;
       oss << ",key=" << key_name;
     } else if (r == -ENODEV || r == -ENOSYS) {
       /* running against older kernel; fall back to secret= in options */
       oss << ",secret=" << secret_str;
     } else {
-      cerr << "failed to add ceph secret key '" << key_name << "' to kernel: "
-	   << cpp_strerror(r) << std::endl;
+      cerr << "rbd: failed to add ceph secret key '" << key_name
+	   << "' to kernel: " << cpp_strerror(r) << std::endl;
       return r;
     }
   } else if (is_kernel_secret(key_name)) {
@@ -941,7 +940,7 @@ static int do_kernel_add(const char *poolname, const char *imgname, const char *
   if (fd < 0) {
     r = -errno;
     if (r == -ENOENT) {
-      cerr << "/sys/bus/rbd/add does not exist!" << std::endl
+      cerr << "rbd: /sys/bus/rbd/add does not exist!" << std::endl
 	   << "Did you run 'modprobe rbd' or is your rbd module too old?" << std::endl;
     }
     return r;
@@ -962,7 +961,8 @@ static int read_file(const char *filename, char *buf, size_t bufsize)
 
     int r = safe_read(fd, buf, bufsize);
     if (r < 0) {
-      cerr << "Warning: could not read " << filename << ": " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: could not read " << filename << ": "
+	   << cpp_strerror(-r) << std::endl;
       close(fd);
       return r;
     }
@@ -991,7 +991,8 @@ static int do_kernel_showmapped()
   std::tr1::shared_ptr<DIR> device_dir(opendir(devices_path), do_closedir);
   if (!device_dir.get()) {
     r = -errno;
-    cerr << "Could not open " << devices_path << ": " << cpp_strerror(-r) << std::endl;
+    cerr << "rbd: could not open " << devices_path << ": "
+	 << cpp_strerror(-r) << std::endl;
     return r;
   }
 
@@ -999,7 +1000,8 @@ static int do_kernel_showmapped()
   dent = readdir(device_dir.get());
   if (!dent) {
     r = -errno;
-    cerr << "Error reading " << devices_path << ": " << cpp_strerror(-r) << std::endl;
+    cerr << "rbd: error reading " << devices_path << ": "
+	 << cpp_strerror(-r) << std::endl;
     return r;
   }
 
@@ -1023,7 +1025,8 @@ static int do_kernel_showmapped()
     snprintf(fn, sizeof(fn), "%s/%s/name", devices_path, dent->d_name);
     r = read_file(fn, name, sizeof(name));
     if (r < 0) {
-      cerr << "could not read name from " << fn << ": " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: could not read name from " << fn << ": "
+	   << cpp_strerror(-r) << std::endl;
       continue;
     }
 
@@ -1031,7 +1034,8 @@ static int do_kernel_showmapped()
     snprintf(fn, sizeof(fn), "%s/%s/pool", devices_path, dent->d_name);
     r = read_file(fn, pool, sizeof(pool));
     if (r < 0) {
-      cerr << "could not read name from " << fn << ": " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: could not read name from " << fn << ": "
+	   << cpp_strerror(-r) << std::endl;
       continue;
     }
 
@@ -1039,7 +1043,8 @@ static int do_kernel_showmapped()
     snprintf(fn, sizeof(fn), "%s/%s/current_snap", devices_path, dent->d_name);
     r = read_file(fn, snap, sizeof(snap));
     if (r < 0) {
-      cerr << "could not read name from " << fn << ": " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: could not read name from " << fn << ": "
+	   << cpp_strerror(-r) << std::endl;
       continue;
     }
 
@@ -1060,7 +1065,8 @@ static int get_rbd_seq(int major_num, string &seq)
   DIR *device_dir = opendir(devices_path);
   if (!device_dir) {
     r = -errno;
-    cerr << "Could not open " << devices_path << ": " << cpp_strerror(-r) << std::endl;
+    cerr << "rbd: could not open " << devices_path << ": " << cpp_strerror(-r)
+	 << std::endl;
     return r;
   }
 
@@ -1068,7 +1074,8 @@ static int get_rbd_seq(int major_num, string &seq)
   dent = readdir(device_dir);
   if (!dent) {
     r = -errno;
-    cerr << "Error reading " << devices_path << ": " << cpp_strerror(-r) << std::endl;
+    cerr << "Error reading " << devices_path << ": " << cpp_strerror(-r)
+	 << std::endl;
     closedir(device_dir);
     return r;
   }
@@ -1083,7 +1090,8 @@ static int get_rbd_seq(int major_num, string &seq)
     snprintf(fn, sizeof(fn), "%s/%s/major", devices_path, dent->d_name);
     r = read_file(fn, major, sizeof(major));
     if (r < 0) {
-      cerr << "could not read major number from " << fn << ": " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: could not read major number from " << fn << ": "
+	   << cpp_strerror(-r) << std::endl;
       continue;
     }
 
@@ -1105,7 +1113,7 @@ static int do_kernel_rm(const char *dev)
   struct stat dev_stat;
   int r = stat(dev, &dev_stat);
   if (!S_ISBLK(dev_stat.st_mode)) {
-    cerr << dev << " is not a block device" << std::endl;
+    cerr << "rbd: " << dev << " is not a block device" << std::endl;
     return -EINVAL;
   }
 
@@ -1113,7 +1121,7 @@ static int do_kernel_rm(const char *dev)
   string seq_num;
   r = get_rbd_seq(major, seq_num);
   if (r == -ENOENT) {
-    cerr << dev << " is not an rbd device" << std::endl;
+    cerr << "rbd: " << dev << " is not an rbd device" << std::endl;
     return -EINVAL;
   }
   if (r < 0)
@@ -1126,7 +1134,8 @@ static int do_kernel_rm(const char *dev)
 
   r = safe_write(fd, seq_num.c_str(), seq_num.size());
   if (r < 0) {
-    cerr << "Failed to remove rbd device" << ": " << cpp_strerror(-r) << std::endl;
+    cerr << "rbd: failed to remove rbd device" << ": " << cpp_strerror(-r)
+	 << std::endl;
     close(fd);
     return r;
   }
@@ -1304,7 +1313,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_withint(args, i, &format, &err, "--format",
 				     (char*)NULL)) {
       if (!err.str().empty()) {
-	cerr << err.str() << std::endl;
+	cerr << "rbd: " << err.str() << std::endl;
 	return EXIT_FAILURE;
       }
       format_specified = true;
@@ -1318,7 +1327,7 @@ int main(int argc, const char **argv)
       imgname = strdup(val.c_str());
     } else if (ceph_argparse_withlonglong(args, i, &sizell, &err, "-s", "--size", (char*)NULL)) {
       if (!err.str().empty()) {
-	cerr << err.str() << std::endl;
+	cerr << "rbd: " << err.str() << std::endl;
 	return EXIT_FAILURE;
       }
       size = sizell << 20;   // bytes to MB
@@ -1326,7 +1335,7 @@ int main(int argc, const char **argv)
       lflag = true;
     } else if (ceph_argparse_withint(args, i, &order, &err, "--order", (char*)NULL)) {
       if (!err.str().empty()) {
-	cerr << err.str() << std::endl;
+	cerr << "rbd: " << err.str() << std::endl;
 	return EXIT_FAILURE;
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--path", (char*)NULL)) {
@@ -1346,22 +1355,19 @@ int main(int argc, const char **argv)
 
   i = args.begin();
   if (i == args.end()) {
-    cerr << "you must specify a command." << std::endl;
-    usage();
+    cerr << "rbd: you must specify a command." << std::endl;
     return EXIT_FAILURE;
   } else if (strcmp(*i, "snap") == 0) {
     i = args.erase(i);
     if (i == args.end()) {
-      cerr << "which snap command do you want?" << std::endl;
-      usage();
+      cerr << "rbd: which snap command do you want?" << std::endl;
       return EXIT_FAILURE;
     }
     opt_cmd = get_cmd(*i, true, false);
   } else if (strcmp(*i, "lock") == 0) {
     i = args.erase(i);
     if (i == args.end()) {
-      cerr << "which lock command do you want?" << std::endl;
-      usage();
+      cerr << "rbd: which lock command do you want?" << std::endl;
       return EXIT_FAILURE;
     }
     opt_cmd = get_cmd(*i, false, true);
@@ -1369,8 +1375,7 @@ int main(int argc, const char **argv)
     opt_cmd = get_cmd(*i, false, false);
   }
   if (opt_cmd == OPT_NO_CMD) {
-    cerr << "error parsing command '" << *i << "'" << std::endl;
-    usage();
+    cerr << "rbd: error parsing command '" << *i << "'" << std::endl;
     return EXIT_FAILURE;
   }
 
@@ -1423,7 +1428,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 	SET_CONF_PARAM(v, &imgname, &destname, NULL);
 	break;
       case OPT_SHOWMAPPED:
-	usage();
+	cerr << "rbd: showmapped takes no parameters" << std::endl;
 	return EXIT_FAILURE;
       case OPT_CHILDREN:
 	SET_CONF_PARAM(v, &imgname, NULL, NULL);
@@ -1441,29 +1446,25 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   }
 
   if (format_specified && opt_cmd != OPT_IMPORT && opt_cmd != OPT_CREATE) {
-    cerr << "error: format can only be set when "
+    cerr << "rbd: format can only be set when "
 	 << "creating or importing an image" << std::endl;
-    usage();
     return EXIT_FAILURE;
   }
 
   if (format_specified) {
     if (format < 1 || format > 2) {
-      cerr << "error: format must be 1 or 2" << std::endl;
-      usage();
+      cerr << "rbd: format must be 1 or 2" << std::endl;
       return EXIT_FAILURE;
     }
   }
 
   if (opt_cmd == OPT_EXPORT && !imgname) {
-    cerr << "error: image name was not specified" << std::endl;
-    usage();
+    cerr << "rbd: image name was not specified" << std::endl;
     return EXIT_FAILURE;
   }
 
   if (opt_cmd == OPT_IMPORT && !path) {
-    cerr << "error: path was not specified" << std::endl;
-    usage();
+    cerr << "rbd: path was not specified" << std::endl;
     return EXIT_FAILURE;
   }
 
@@ -1474,29 +1475,25 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   }
 
   if (opt_cmd != OPT_LOCK_ADD && lock_tag) {
-    cerr << "error: only the lock add command uses the --shared option"
+    cerr << "rbd: only the lock add command uses the --shared option"
 	 << std::endl;
-    usage();
     return EXIT_FAILURE;
   }
 
   if ((opt_cmd == OPT_LOCK_ADD || opt_cmd == OPT_LOCK_REMOVE) &&
       !lock_cookie) {
-    cerr << "error: lock id was not specified" << std::endl;
-    usage();
+    cerr << "rbd: lock id was not specified" << std::endl;
     return EXIT_FAILURE;
   }
 
   if (opt_cmd != OPT_LIST && opt_cmd != OPT_IMPORT && opt_cmd != OPT_UNMAP && opt_cmd != OPT_SHOWMAPPED &&
       !imgname) {
-    cerr << "error: image name was not specified" << std::endl;
-    usage();
+    cerr << "rbd: image name was not specified" << std::endl;
     return EXIT_FAILURE;
   }
 
   if (opt_cmd == OPT_UNMAP && !devpath) {
-    cerr << "error: device path was not specified" << std::endl;
-    usage();
+    cerr << "rbd: device path was not specified" << std::endl;
     return EXIT_FAILURE;
   }
 
@@ -1510,16 +1507,15 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       opt_cmd != OPT_MAP && opt_cmd != OPT_CLONE &&
       opt_cmd != OPT_SNAP_PROTECT && opt_cmd != OPT_SNAP_UNPROTECT &&
       opt_cmd != OPT_CHILDREN) {
-    cerr << "error: snapname specified for a command that doesn't use it" << std::endl;
-    usage();
+    cerr << "rbd: snapname specified for a command that doesn't use it"
+	 << std::endl;
     return EXIT_FAILURE;
   }
   if ((opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
        opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_CLONE ||
        opt_cmd == OPT_SNAP_PROTECT || opt_cmd == OPT_SNAP_UNPROTECT ||
        opt_cmd == OPT_CHILDREN) && !snapname) {
-    cerr << "error: snap name was not specified" << std::endl;
-    usage();
+    cerr << "rbd: snap name was not specified" << std::endl;
     return EXIT_FAILURE;
   }
 
@@ -1534,25 +1530,22 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     path = imgname;
 
   if ((opt_cmd == OPT_COPY || opt_cmd == OPT_CLONE) && !destname ) {
-    cerr << "error: destination image name was not specified" << std::endl;
-    usage();
+    cerr << "rbd: destination image name was not specified" << std::endl;
     return EXIT_FAILURE;
   }
 
   if ((opt_cmd == OPT_CLONE) && dest_snapname) {
-    cerr << "error: cannot clone to a snapshot" << std::endl;
-    usage();
+    cerr << "rbd: cannot clone to a snapshot" << std::endl;
     return EXIT_FAILURE;
   }
 
   if ((opt_cmd == OPT_CLONE) && size) {
-    cerr << "error: clone must begin at size of parent" << std::endl;
-    usage();
+    cerr << "rbd: clone must begin at size of parent" << std::endl;
     return EXIT_FAILURE;
   }
 
   if ((opt_cmd == OPT_RENAME) && (strcmp(poolname, dest_poolname) != 0)) {
-    cerr << "error: mv/rename across pools not supported" << std::endl;
+    cerr << "rbd: mv/rename across pools not supported" << std::endl;
     cerr << "source pool: " << poolname << " dest pool: " << dest_poolname
       << std::endl;
     return EXIT_FAILURE;
@@ -1562,12 +1555,12 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 			  opt_cmd != OPT_UNMAP &&
 			  opt_cmd != OPT_SHOWMAPPED);
   if (talk_to_cluster && rados.init_with_context(g_ceph_context) < 0) {
-    cerr << "error: couldn't initialize rados!" << std::endl;
+    cerr << "rbd: couldn't initialize rados!" << std::endl;
     return EXIT_FAILURE;
   }
 
   if (talk_to_cluster && rados.connect() < 0) {
-    cerr << "error: couldn't connect to the cluster!" << std::endl;
+    cerr << "rbd: couldn't connect to the cluster!" << std::endl;
     return EXIT_FAILURE;
   }
 
@@ -1575,7 +1568,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   if (talk_to_cluster && opt_cmd != OPT_IMPORT) {
     r = rados.ioctx_create(poolname, io_ctx);
     if (r < 0) {
-      cerr << "error opening pool " << poolname << ": " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: error opening pool " << poolname << ": "
+	   << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
   }
@@ -1592,7 +1586,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
        opt_cmd == OPT_LOCK_REMOVE)) {
     r = rbd.open(io_ctx, image, imgname);
     if (r < 0) {
-      cerr << "error opening image " << imgname << ": " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: error opening image " << imgname << ": "
+	   << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
   }
@@ -1602,7 +1597,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
        opt_cmd == OPT_CHILDREN)) {
     r = image.snap_set(snapname);
     if (r < 0) {
-      cerr << "error setting snapshot context: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: error setting snapshot context: " << cpp_strerror(-r)
+	   << std::endl;
       return EXIT_FAILURE;
     }
   }
@@ -1610,7 +1606,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   if (opt_cmd == OPT_COPY || opt_cmd == OPT_IMPORT || opt_cmd == OPT_CLONE) {
     r = rados.ioctx_create(dest_poolname, dest_io_ctx);
     if (r < 0) {
-      cerr << "error opening pool " << dest_poolname << ": " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: error opening pool " << dest_poolname << ": "
+	   << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
   }
@@ -1621,10 +1618,11 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     if (r < 0) {
       switch (r) {
       case -ENOENT:
-        cerr << "pool " << poolname << " doesn't contain rbd images" << std::endl;
+        cerr << "rbd: pool " << poolname << " doesn't contain rbd images"
+	     << std::endl;
         break;
       default:
-        cerr << "error: " << cpp_strerror(-r) << std::endl;
+        cerr << "rbd: list: " << cpp_strerror(-r) << std::endl;
       }
       return EXIT_FAILURE;
     }
@@ -1632,33 +1630,33 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 
   case OPT_CREATE:
     if (!size) {
-      cerr << "must specify size in MB to create an rbd image" << std::endl;
-      usage();
+      cerr << "rbd: must specify size in MB to create an rbd image"
+	   << std::endl;
       return EXIT_FAILURE;
     }
     if (order && (order < 12 || order > 25)) {
-      cerr << "order must be between 12 (4 KB) and 25 (32 MB)" << std::endl;
-      usage();
+      cerr << "rbd: order must be between 12 (4 KB) and 25 (32 MB)"
+	   << std::endl;
       return EXIT_FAILURE;
     }
     r = do_create(rbd, io_ctx, imgname, size, &order, format, features);
     if (r < 0) {
-      cerr << "create error: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: create error: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
     break;
 
   case OPT_CLONE:
     if (order && (order < 12 || order > 25)) {
-      cerr << "order must be between 12 (4 KB) and 25 (32 MB)" << std::endl;
-      usage();
+      cerr << "rbd: order must be between 12 (4 KB) and 25 (32 MB)"
+	   << std::endl;
       return EXIT_FAILURE;
     }
 
     r = do_clone(rbd, io_ctx, imgname, snapname, dest_io_ctx, destname,
 		 features, &order);
     if (r < 0) {
-      cerr << "clone error: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: clone error: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
     break;
@@ -1666,7 +1664,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   case OPT_FLATTEN:
     r = do_flatten(image);
     if (r < 0) {
-      cerr << "flatten error: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: flatten error: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
     break;
@@ -1674,7 +1672,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   case OPT_RENAME:
     r = do_rename(rbd, io_ctx, imgname, destname);
     if (r < 0) {
-      cerr << "rename error: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: rename error: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
     break;
@@ -1682,7 +1680,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   case OPT_INFO:
     r = do_show_info(imgname, image, snapname);
     if (r < 0) {
-      cerr << "error: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: info: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
     break;
@@ -1691,18 +1689,18 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     r = do_delete(rbd, io_ctx, imgname);
     if (r < 0) {
       if (r == -ENOTEMPTY) {
-	cerr << "delete error: image has snapshots - these must be deleted"
+	cerr << "rbd: image has snapshots - these must be deleted"
 	     << " with 'rbd snap purge' before the image can be removed."
 	     << std::endl;
       } else if (r == -EBUSY) {
-	cerr << "delete error: image still has watchers"
+	cerr << "rbd: error: image still has watchers"
 	     << std::endl
 	     << "This means the image is still open or the client using "
 	     << "it crashed. Try again after closing/unmapping it or "
 	     << "waiting 30s for the crashed client to timeout."
 	     << std::endl;
       } else {
-	cerr << "delete error: " << cpp_strerror(-r) << std::endl;
+	cerr << "rbd: delete error: " << cpp_strerror(-r) << std::endl;
       }
       return -r ;
     }
@@ -1711,95 +1709,100 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   case OPT_RESIZE:
     r = do_resize(image, size);
     if (r < 0) {
-      cerr << "resize error: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: resize error: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
     break;
 
   case OPT_SNAP_LIST:
     if (!imgname) {
-      usage();
+      cerr << "rbd: snap list requires an image parameter" << std::endl;
       return EXIT_FAILURE;
     }
     r = do_list_snaps(image);
     if (r < 0) {
-      cerr << "failed to list snapshots: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: failed to list snapshots: " << cpp_strerror(-r)
+	   << std::endl;
       return EXIT_FAILURE;
     }
     break;
 
   case OPT_SNAP_CREATE:
     if (!imgname || !snapname) {
-      usage();
+      cerr << "rbd: snap create requires image and snapname" << std::endl;
       return EXIT_FAILURE;
     }
     r = do_add_snap(image, snapname);
     if (r < 0) {
-      cerr << "failed to create snapshot: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: failed to create snapshot: " << cpp_strerror(-r)
+	   << std::endl;
       return EXIT_FAILURE;
     }
     break;
 
   case OPT_SNAP_ROLLBACK:
     if (!imgname) {
-      usage();
+      cerr << "rbd: snap rollback requires image name" << std::endl;
       return EXIT_FAILURE;
     }
     r = do_rollback_snap(image, snapname);
     if (r < 0) {
-      cerr << "rollback failed: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: rollback failed: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
     break;
 
   case OPT_SNAP_REMOVE:
     if (!imgname) {
-      usage();
+      cerr << "rbd: snap remove requires image name" << std::endl;
       return EXIT_FAILURE;
     }
     r = do_remove_snap(image, snapname);
     if (r == -EBUSY) {
-      cerr << "Snapshot '" << snapname << "' is protected from removal." << std::endl;
+      cerr << "rbd: snapshot '" << snapname << "' is protected from removal."
+	   << std::endl;
       return EXIT_FAILURE;
     }
     if (r < 0) {
-      cerr << "failed to remove snapshot: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: failed to remove snapshot: " << cpp_strerror(-r)
+	   << std::endl;
       return EXIT_FAILURE;
     }
     break;
 
   case OPT_SNAP_PURGE:
     if (!imgname) {
-      usage();
+      cerr << "rbd: snap purge requires image name" << std::endl;
       return EXIT_FAILURE;
     }
     r = do_purge_snaps(image);
     if (r < 0) {
-      cerr << "removing snaps failed: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: removing snaps failed: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
     break;
 
   case OPT_SNAP_PROTECT:
     if (!imgname) {
-      usage();
+      cerr << "rbd: snap protect requires image name" << std::endl;
       return EXIT_FAILURE;
     }
     r = do_protect_snap(image, snapname);
     if (r < 0) {
-      cerr << "protecting snap failed: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: protecting snap failed: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
     break;
 
   case OPT_SNAP_UNPROTECT:
     if (!imgname) {
-      usage();
+      cerr << "rbd: snap unprotect requires image name" << std::endl;
       return EXIT_FAILURE;
     }
     r = do_unprotect_snap(image, snapname);
     if (r < 0) {
-      cerr << "unprotecting snap failed: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: unprotecting snap failed: " << cpp_strerror(-r)
+	   << std::endl;
       return EXIT_FAILURE;
     }
     break;
@@ -1807,32 +1810,32 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   case OPT_CHILDREN:
     r = do_list_children(image);
     if (r < 0) {
-      cerr << "listing children failed: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: listing children failed: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
     break;
 
   case OPT_EXPORT:
     if (!path) {
-      cerr << "pathname should be specified" << std::endl;
+      cerr << "rbd: export requires pathname" << std::endl;
       return EXIT_FAILURE;
     }
     r = do_export(image, path);
     if (r < 0) {
-      cerr << "export error: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: export error: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
     break;
 
   case OPT_IMPORT:
     if (!path) {
-      cerr << "pathname should be specified" << std::endl;
+      cerr << "rbd: import requires pathname" << std::endl;
       return EXIT_FAILURE;
     }
     r = do_import(rbd, dest_io_ctx, destname, &order, path,
 		  format, features, size);
     if (r < 0) {
-      cerr << "import failed: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: import failed: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
     break;
@@ -1840,7 +1843,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   case OPT_COPY:
     r = do_copy(image, dest_io_ctx, destname);
     if (r < 0) {
-      cerr << "copy failed: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: copy failed: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
     break;
@@ -1848,7 +1851,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   case OPT_WATCH:
     r = do_watch(io_ctx, imgname);
     if (r < 0) {
-      cerr << "watch failed: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: watch failed: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
     break;
@@ -1856,7 +1859,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   case OPT_MAP:
     r = do_kernel_add(poolname, imgname, snapname);
     if (r < 0) {
-      cerr << "add failed: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: add failed: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
     break;
@@ -1864,7 +1867,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   case OPT_UNMAP:
     r = do_kernel_rm(devpath);
     if (r < 0) {
-      cerr << "remove failed: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: remove failed: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
     break;
@@ -1872,7 +1875,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   case OPT_SHOWMAPPED:
     r = do_kernel_showmapped();
     if (r < 0) {
-      cerr << "showmapped failed: " << cpp_strerror(-r) << std::endl;
+      cerr << "rbd: showmapped failed: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
     break;
@@ -1880,7 +1883,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   case OPT_LOCK_LIST:
     r = do_lock_list(image);
     if (r < 0) {
-      cerr << "listing locks failed: " << cpp_strerror(r) << std::endl;
+      cerr << "rbd: listing locks failed: " << cpp_strerror(r) << std::endl;
       return EXIT_FAILURE;
     }
     break;
@@ -1890,13 +1893,13 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     if (r < 0) {
       if (r == -EBUSY || r == -EEXIST) {
 	if (lock_tag) {
-	  cerr << "lock is alrady held by someone else with a different tag"
-	       << std::endl;
+	  cerr << "rbd: lock is alrady held by someone else"
+	       << " with a different tag" << std::endl;
 	} else {
-	  cerr << "lock is already held by someone else" << std::endl;
+	  cerr << "rbd: lock is already held by someone else" << std::endl;
 	}
       } else {
-	cerr << "taking lock failed: " << cpp_strerror(r) << std::endl;
+	cerr << "rbd: taking lock failed: " << cpp_strerror(r) << std::endl;
       }
       return EXIT_FAILURE;
     }
@@ -1905,7 +1908,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   case OPT_LOCK_REMOVE:
     r = do_lock_remove(image, lock_cookie, lock_client);
     if (r < 0) {
-      cerr << "releasing lock failed: " << cpp_strerror(r) << std::endl;
+      cerr << "rbd: releasing lock failed: " << cpp_strerror(r) << std::endl;
       return EXIT_FAILURE;
     }
     break;
