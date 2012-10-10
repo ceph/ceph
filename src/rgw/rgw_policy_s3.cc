@@ -84,8 +84,12 @@ bool RGWPolicyEnv::get_value(const string& s, string& val, map<string, bool>& ch
 bool RGWPolicyEnv::match_policy_vars(map<string, bool>& policy_vars)
 {
   map<string, string>::iterator iter;
+  string ignore_prefix = "x-ignore-";
   for (iter = vars.begin(); iter != vars.end(); ++iter) {
-    if (policy_vars.count(iter->first) == 0) {
+    const string& var = iter->first;
+    if (strncasecmp(ignore_prefix.c_str(), var.c_str(), ignore_prefix.size()) == 0)
+      continue;
+    if (policy_vars.count(var) == 0) {
       dout(1) << "env var missing in policy: " << iter->first << dendl;
       return false;
     }
