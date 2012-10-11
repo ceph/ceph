@@ -106,6 +106,10 @@ TEST(LibCephFS, Dir_ls) {
   // insert files into directory and test open
   char bazstr[256];
   int i = 0, r = rand() % 4096;
+  if (getenv("LIBCEPHFS_RAND")) {
+    r = atoi(getenv("LIBCEPHFS_RAND"));
+  }
+  printf("rand: %d\n", r);
   for(; i < r; ++i) {
 
     sprintf(bazstr, "dir_ls%d/dirf%d", mypid, i);
