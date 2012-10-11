@@ -105,13 +105,49 @@ RGWPolicy::~RGWPolicy()
   }
 }
 
+uint64_t RGWPolicy::get_current_epoch()
+{
+  uint64_t current_epoch = 0;
+  time_t local_time = ceph_clock_now(NULL).sec();
+  struct tm *gmt_time_struct = gmtime(&local_time);
+
+  current_epoch = timegm(gmt_time_struct);
+
+
+//  string gmt_time_string = asctime(gmt_time_struct);
+
+//  parse_date(gmt_time_string, &current_epoch, NULL, NULL);
+
+  return current_epoch;
+}
+
+void RGWPolicy::set_expires(utime_t& e)
+{
+  time_t e_time = e.sec();
+  struct tm *gmt_time_struct = gmtime(&e_time);
+  string gmt_time_string = asctime(gmt_time_struct);
+  parse_date(gmt_time_string, &expires, NULL, NULL);
+}
+
+void RGWPolicy::set_expires(string& e)
+{
+  parse_date(e, &expires, NULL, NULL);
+}
+
 int RGWPolicy::add_condition(const string& op, const string& first, const string& second)
 {
   RGWPolicyCondition *cond = NULL;
-  if (stringcasecmp(op, "eq") == 0)
+  if (stringcasecmp(op, "eq") == 0) {
     cond = new RGWPolicyCondition_StrEqual;
-  else if (stringcasecmp(op, "starts-with") == 0)
+  } else if (stringcasecmp(op, "starts-with") == 0) {
     cond = new RGWPolicyCondition_StrStartsWith;
+  } else if (stringcasecmp(op, "content-length-range") == 0) {
+    stringstream min_string(first);
+    stringstream max_string(second);
+
+    if ( !(min_string >> min_length) || !(max_string >> max_length) )
+      return -EINVAL;
+  }
 
   if (!cond)
     return -EINVAL;
@@ -166,11 +202,31 @@ int RGWPolicy::from_json(bufferlist& bl)
   if (!parser.parse(bl.c_str(), bl.length()))
     return -EINVAL;
 
-  JSONObjIter iter = parser.find_first("conditions");
+  // as no time was included in the request, we hope that the user has included a short timeout
+  JSONObjIter iter = parser.find_first("expiration");
   if (iter.end())
-    return 0;
+    return -EINVAL; // change to a "no expiration" error following S3
 
   JSONObj *obj = *iter;
+  string expiration_string = obj->get_data();
+  set_expires(expiration_string);
+
+  uint64_t current_epoch = get_current_epoch();
+  if (current_epoch == 0) {
+    dout(0) << "NOTICE: failed to get current epoch!" << dendl;
+    return -EINVAL;
+  }
+
+  if (expires < current_epoch) {
+    dout(0) << "NOTICE: policy calculated as  expired: " << expiration_string << dendl;
+    return -EINVAL; // change to condition about expired policy following S3
+  }
+
+  iter = parser.find_first("conditions");
+  if (iter.end())
+    return -EINVAL; // change to a "no conditions" error following S3
+
+  obj = *iter;
 
   iter = obj->find_first();
   for (; !iter.end(); ++iter) {
@@ -187,6 +243,7 @@ int RGWPolicy::from_json(bufferlist& bl)
       }
       if (i != 3 || !aiter.end())  /* we expect exactly 3 arguments here */
         return -EINVAL;
+
       add_condition(v[0], v[1], v[2]);
     } else {
       add_simple_check(child->get_name(), child->get_data());

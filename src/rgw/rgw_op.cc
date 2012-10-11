@@ -1313,7 +1313,7 @@ void RGWPostObj::execute()
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
   bufferlist bl, aclbl;
-  int len;
+  int len = 0;
 
   ret = verify_params();
   if (ret < 0)
@@ -1356,7 +1356,13 @@ void RGWPostObj::execute()
        goto done;
 
      ofs += len;
+
+     if (ofs > max_allowable_content_length)
+       goto done;
    }
+
+  if (len < min_allowable_content_length)
+    goto done;
 
   s->obj_size = ofs;
 

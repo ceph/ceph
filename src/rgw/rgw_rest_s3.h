@@ -100,6 +100,7 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
   bufferlist in_data;
   map<string, post_form_part, const ltstr_nocase> parts;  
   RGWPolicyEnv env;
+  RGWPolicy post_policy;
 
   int read_with_boundary(bufferlist& bl, uint64_t max, bool check_eol,
                          bool *reached_boundary,
