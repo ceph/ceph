@@ -31,7 +31,7 @@ protected:
     list<uint64_t> ops_submitting;
   public:
     SubmitManager() :
-      lock("JOS::SubmitManager::lock"),
+      lock("JOS::SubmitManager::lock", false, true, false, g_ceph_context),
       op_seq(0)
     {}
     uint64_t op_submit_start();
@@ -65,11 +65,11 @@ protected:
   public:
     ApplyManager(Journal *&j, Finisher &f) :
       journal(j), finisher(f),
-      apply_lock("JOS::ApplyManager::apply_lock"),
+      apply_lock("JOS::ApplyManager::apply_lock", false, true, false, g_ceph_context),
       blocked(false),
       open_ops(0),
       applied_seq(0),
-      com_lock("JOS::ApplyManager::com_lock"),
+      com_lock("JOS::ApplyManager::com_lock", false, true, false, g_ceph_context),
       committing_seq(0), committed_seq(0) {}
     void add_waiter(uint64_t, Context*);
     uint64_t op_apply_start(uint64_t op);
