@@ -292,7 +292,7 @@ private:
  public:
   FileJournal(uuid_d fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false, bool ai=true) : 
     Journal(fsid, fin, sync_cond),
-    queue_lock("FileJournal::queue_lock"),
+    queue_lock("FileJournal::queue_lock", false, true, false, g_ceph_context),
     journaled_seq(0),
     plug_journal_completions(false),
     fn(f),
@@ -312,7 +312,7 @@ private:
     writing_seq(0),
     throttle_ops(g_ceph_context, "filestore_ops"),
     throttle_bytes(g_ceph_context, "filestore_bytes"),
-    write_lock("FileJournal::write_lock"),
+    write_lock("FileJournal::write_lock", false, true, false, g_ceph_context),
     write_stop(false),
     write_thread(this),
     write_finish_thread(this) { }
