@@ -868,13 +868,6 @@ int RGWPutObj::verify_permission()
 
 int RGWPostObj::verify_permission()
 {
-  // read in the data from the POST form 
-  ret = get_params();
-  if (ret < 0)
-    return -EINVAL;
-
-  /* we'll handle permissions later in the process, as user needs to attach policy */
-
   return 0;
 }
 
@@ -1315,6 +1308,11 @@ void RGWPostObj::execute()
   bufferlist bl, aclbl;
   int len = 0;
 
+  // read in the data from the POST form 
+  ret = get_params();
+  if (ret < 0)
+    goto done;
+
   ret = verify_params();
   if (ret < 0)
     goto done;
@@ -1357,12 +1355,16 @@ void RGWPostObj::execute()
 
      ofs += len;
 
-     if (ofs > max_allowable_content_length)
+     if (ofs > max_len) {
+       ret = -ERR_TOO_LARGE;
        goto done;
+     }
    }
 
-  if (len < min_allowable_content_length)
+  if (len < min_len) {
+    ret = -ERR_TOO_SMALL;
     goto done;
+  }
 
   s->obj_size = ofs;
 
