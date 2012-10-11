@@ -631,7 +631,7 @@ int RGWPostObj_ObjStore_S3::read_form_part_header(struct post_form_part *part,
 
     part->fields[field_name] = field;
 
-    if (field_name.compare("Content-Disposition") == 0) {
+    if (stringcasecmp(field_name, "Content-Disposition") == 0) {
       part->name = field.params["name"];
     }
 
@@ -664,6 +664,20 @@ bool RGWPostObj_ObjStore_S3::part_bl(const string& name, bufferlist *pbl)
 
   *pbl = iter->second.data;
   return true;
+}
+
+void RGWPostObj_ObjStore_S3::rebuild_key(string& key)
+{
+  static string var = "${filename}";
+  int pos = key.find(var);
+  if (pos < 0)
+    return;
+
+  string new_key = key.substr(0, pos);
+  new_key.append(filename);
+  new_key.append(key.substr(pos + var.size()));
+
+  key = new_key;
 }
 
 int RGWPostObj_ObjStore_S3::get_params()
@@ -721,12 +735,12 @@ int RGWPostObj_ObjStore_S3::get_params()
     if (r < 0)
       return r;
     
-    map<string, struct post_part_field>::iterator piter;
-    for (piter = part.fields.begin(); piter != part.fields.end(); ++piter) {
-      ldout(s->cct, 20) << "read part header: name=" << part.name << " content_type=" << part.content_type << dendl;
-      ldout(s->cct, 20) << "name=" << piter->first << dendl;
-      ldout(s->cct, 20) << "val=" << piter->second.val << dendl;
-      if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+      map<string, struct post_part_field, ltstr_nocase>::iterator piter;
+      for (piter = part.fields.begin(); piter != part.fields.end(); ++piter) {
+        ldout(s->cct, 20) << "read part header: name=" << part.name << " content_type=" << part.content_type << dendl;
+        ldout(s->cct, 20) << "name=" << piter->first << dendl;
+        ldout(s->cct, 20) << "val=" << piter->second.val << dendl;
         ldout(s->cct, 20) << "params:" << dendl;
         map<string, string>& params = piter->second.params;
         for (iter = params.begin(); iter != params.end(); ++iter) {
@@ -739,6 +753,11 @@ int RGWPostObj_ObjStore_S3::get_params()
       return -EINVAL;
 
     if (stringcasecmp(part.name, "file") == 0) { /* beginning of data transfer */
+      struct post_part_field& field = part.fields["Content-Disposition"];
+      map<string, string>::iterator iter = field.params.find("filename");
+      if (iter != field.params.end()) {
+        filename = iter->second;
+      }
       parts[part.name] = part;
       data_pending = true;
       break;
@@ -756,6 +775,8 @@ int RGWPostObj_ObjStore_S3::get_params()
 
   if (!part_str("key", &s->object_str))
     return -EINVAL;
+
+  rebuild_key(s->object_str);
 
   part_str("Content-Type", &content_type);
   env.add_var("Content-Type", content_type);
