@@ -2,6 +2,7 @@
 
 #include "rgw_common.h"
 #include "rgw_acl.h"
+#include "rgw_string.h"
 
 #include "common/ceph_crypto.h"
 #include "common/armor.h"
@@ -139,6 +140,17 @@ std::ostream& operator<<(std::ostream& oss, const rgw_err &err)
   return oss;
 }
 
+static void trim_whitespace(const string& src, string& dst)
+{
+  const char *spacestr = " \t\n\r\f\v";
+  int start = src.find_first_not_of(spacestr);
+  if (start < 0)
+    return;
+
+  int end = src.find_last_not_of(spacestr);
+  dst = src.substr(start, end - start + 1);
+}
+
 static bool check_str_end(const char *s)
 {
   if (!s)
@@ -207,6 +219,34 @@ bool parse_rfc2616(const char *s, struct tm *t)
   return parse_rfc850(s, t) || parse_asctime(s, t) || parse_rfc1123(s, t) || parse_rfc1123_alt(s,t);
 }
 
+bool parse_iso8601(const char *s, struct tm *t)
+{
+  memset(t, 0, sizeof(*t));
+  const char *p = strptime(s, "%Y-%m-%dT%T", t);
+  if (!p) {
+    dout(0) << "parse_iso8601 failed" << dendl;
+    return false;
+  }
+  string str;
+  trim_whitespace(p, str);
+  if (str.size() == 1 && str[0] == 'Z')
+    return true;
+
+  if (str.size() != 5) {
+    return false;
+  }
+  if (str[0] != '.' ||
+      str[str.size() - 1] != 'Z')
+    return false;
+
+  uint32_t ms;
+  int r = stringtoul(str.substr(1, 3), &ms);
+  if (r < 0)
+    return false;
+
+  return true;
+}
+
 int parse_time(const char *time_str, time_t *time)
 {
   struct tm tm;
@@ -219,7 +259,7 @@ int parse_time(const char *time_str, time_t *time)
   return 0;
 }
 
-int parse_date(string& date, uint64_t *epoch, string *out_date, string *out_time)
+int parse_date(const string& date, uint64_t *epoch, string *out_date, string *out_time)
 {
   struct tm tm;
 
@@ -554,17 +594,6 @@ int RGWUserCaps::parse_cap_perm(const string& str, uint32_t *perm)
 
   *perm = v;
   return 0;
-}
-
-static void trim_whitespace(const string& src, string& dst)
-{
-  const char *spacestr = " \t\n\r\f\v";
-  int start = src.find_first_not_of(spacestr);
-  if (start < 0)
-    return;
-
-  int end = src.find_last_not_of(spacestr);
-  dst = src.substr(start, end - start + 1);
 }
 
 int RGWUserCaps::get_cap(const string& cap, string& type, uint32_t *pperm)

@@ -105,33 +105,15 @@ RGWPolicy::~RGWPolicy()
   }
 }
 
-uint64_t RGWPolicy::get_current_epoch()
+int RGWPolicy::set_expires(const string& e)
 {
-  uint64_t current_epoch = 0;
-  time_t local_time = ceph_clock_now(NULL).sec();
-  struct tm *gmt_time_struct = gmtime(&local_time);
+  struct tm t;
+  if (!parse_iso8601(e.c_str(), &t))
+      return -EINVAL;
 
-  current_epoch = timegm(gmt_time_struct);
+  expires = timegm(&t);
 
-
-//  string gmt_time_string = asctime(gmt_time_struct);
-
-//  parse_date(gmt_time_string, &current_epoch, NULL, NULL);
-
-  return current_epoch;
-}
-
-void RGWPolicy::set_expires(utime_t& e)
-{
-  time_t e_time = e.sec();
-  struct tm *gmt_time_struct = gmtime(&e_time);
-  string gmt_time_string = asctime(gmt_time_struct);
-  parse_date(gmt_time_string, &expires, NULL, NULL);
-}
-
-void RGWPolicy::set_expires(string& e)
-{
-  parse_date(e, &expires, NULL, NULL);
+  return 0;
 }
 
 int RGWPolicy::add_condition(const string& op, const string& first, const string& second)
@@ -142,11 +124,22 @@ int RGWPolicy::add_condition(const string& op, const string& first, const string
   } else if (stringcasecmp(op, "starts-with") == 0) {
     cond = new RGWPolicyCondition_StrStartsWith;
   } else if (stringcasecmp(op, "content-length-range") == 0) {
-    stringstream min_string(first);
-    stringstream max_string(second);
+    off_t min, max;
+    int r = stringtoll(first, &min);
+    if (r < 0)
+      return r;
 
-    if ( !(min_string >> min_length) || !(max_string >> max_length) )
-      return -EINVAL;
+    r = stringtoll(second, &max);
+    if (r < 0)
+      return r;
+
+    if (min > min_length)
+      min_length = min;
+
+    if (max < max_length)
+      max_length = max;
+
+    return 0;
   }
 
   if (!cond)
@@ -159,8 +152,14 @@ int RGWPolicy::add_condition(const string& op, const string& first, const string
   return 0;
 }
 
-bool RGWPolicy::check(RGWPolicyEnv *env)
+int RGWPolicy::check(RGWPolicyEnv *env)
 {
+  uint64_t now = ceph_clock_now(NULL).sec();
+  if (expires <= now) {
+    dout(0) << "NOTICE: policy calculated as expired: " << expiration_str << dendl;
+    return -EACCES; // change to condition about expired policy following S3
+  }
+
   list<pair<string, string> >::iterator viter;
   for (viter = var_checks.begin(); viter != var_checks.end(); ++viter) {
     pair<string, string>& p = *viter;
@@ -168,14 +167,14 @@ bool RGWPolicy::check(RGWPolicyEnv *env)
     const string& check_val = p.second;
     string val;
     if (!env->get_var(name, val))
-      return false;
+      return -EINVAL;
 
     set_var_checked(name);
 
     dout(20) << "comparing " << name << " [" << val << "], " << check_val << dendl;
     if (val.compare(check_val) != 0) {
       dout(1) << "policy check failed, val=" << val << " != " << check_val << dendl;
-      return false;
+      return -EINVAL;
     }
   }
 
@@ -183,15 +182,15 @@ bool RGWPolicy::check(RGWPolicyEnv *env)
   for (citer = conditions.begin(); citer != conditions.end(); ++citer) {
     RGWPolicyCondition *cond = *citer;
     if (!cond->check(env, checked_vars)) {
-      return false;
+      return -EINVAL;
     }
   }
 
   if (!env->match_policy_vars(checked_vars)) {
     dout(1) << "missing policy condition" << dendl;
-    return false;
+    return -EINVAL;
   }
-  return true;
+  return 0;
 }
 
 
@@ -208,19 +207,10 @@ int RGWPolicy::from_json(bufferlist& bl)
     return -EINVAL; // change to a "no expiration" error following S3
 
   JSONObj *obj = *iter;
-  string expiration_string = obj->get_data();
-  set_expires(expiration_string);
-
-  uint64_t current_epoch = get_current_epoch();
-  if (current_epoch == 0) {
-    dout(0) << "NOTICE: failed to get current epoch!" << dendl;
-    return -EINVAL;
-  }
-
-  if (expires < current_epoch) {
-    dout(0) << "NOTICE: policy calculated as  expired: " << expiration_string << dendl;
-    return -EINVAL; // change to condition about expired policy following S3
-  }
+  expiration_str = obj->get_data();
+  int r = set_expires(expiration_str);
+  if (r < 0)
+    return r;
 
   iter = parser.find_first("conditions");
   if (iter.end())
@@ -244,7 +234,9 @@ int RGWPolicy::from_json(bufferlist& bl)
       if (i != 3 || !aiter.end())  /* we expect exactly 3 arguments here */
         return -EINVAL;
 
-      add_condition(v[0], v[1], v[2]);
+      int r = add_condition(v[0], v[1], v[2]);
+      if (r < 0)
+        return r;
     } else {
       add_simple_check(child->get_name(), child->get_data());
     }
