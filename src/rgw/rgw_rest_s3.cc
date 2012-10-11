@@ -926,18 +926,19 @@ int RGWPostObj_ObjStore_S3::get_data(bufferlist& bl)
 
 void RGWPostObj_ObjStore_S3::send_response()
 {
-  set_req_state_err(s, ret);
-
   if (ret == 0 && parts.count("success_action_redirect")) {
     string success_action_redirect;
     part_str("success_action_redirect", &success_action_redirect);
-    if (check_utf8(success_action_redirect.c_str(), success_action_redirect.size())) {
-      dump_redirect(s, form_param["success_action_redirect"].c_str());
+    if (check_utf8(success_action_redirect.c_str(), success_action_redirect.size()) == 0) {
+      dump_redirect(s, success_action_redirect);
+      set_req_state_err(s, STATUS_REDIRECT);
+      dump_errno(s);
       end_header(s, "text/plain");
       return;
     }
   } else if (ret == 0 && parts.count("success_action_status")) {
-    string status_string = form_param["success_action_status"];
+    string status_string;
+    part_str("success_action_status", &status_string);
     int status_int;
     if ( !(istringstream(status_string) >> status_int) )
       status_int = 200;
@@ -946,6 +947,8 @@ void RGWPostObj_ObjStore_S3::send_response()
   } else {
     dump_errno(s);
   }
+  set_req_state_err(s, ret);
+
   end_header(s);
   if (ret < 0)
     return;

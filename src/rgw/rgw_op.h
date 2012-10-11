@@ -320,7 +320,6 @@ protected:
   bool data_pending;
   string content_type;
   RGWAccessControlPolicy policy;
-  map<string, string> form_param;
   map<string, bufferlist> attrs;
 
 public:

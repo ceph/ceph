@@ -203,12 +203,12 @@ void dump_uri_from_state(struct req_state *s)
   }
 }
 
-void dump_redirect(struct req_state *s, const char *url)
+void dump_redirect(struct req_state *s, const string& redirect)
 {
-  if (strlen(url) > 0) {
-    dump_errno(s, 301);
-    s->cio->print("Location: %s\n", url);
-  }
+  if (redirect.empty())
+    return;
+
+  s->cio->print("Location: %s\n", redirect.c_str());
 }
 
 void dump_last_modified(struct req_state *s, time_t t)
