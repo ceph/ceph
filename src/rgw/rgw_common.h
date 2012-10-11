@@ -568,6 +568,7 @@ struct req_state {
    ceph::Formatter *formatter;
    string decoded_uri;
    string request_uri;
+   string script_uri;
    string request_params;
    const char *host;
    const char *method;
