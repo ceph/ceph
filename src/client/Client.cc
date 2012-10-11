@@ -3720,18 +3720,25 @@ int Client::path_walk(const filepath& origpath, Inode **final, bool followsym)
     int r = _lookup(cur, dname.c_str(), &next);
     if (r < 0)
       return r;
-    cur = next;
     if (i == path.depth() - 1 && followsym &&
-	cur && cur->is_symlink()) {
+	next && next->is_symlink()) {
       // resolve symlink
       if (cur->symlink[0] == '/') {
-	path = cur->symlink.c_str();
-	cur = root;
+	path = next->symlink.c_str();
+	next = root;
       } else {
-	filepath more(cur->symlink.c_str());
+	filepath more(next->symlink.c_str());
+	// we need to remove the symlink component from off of the path
+	// before adding the target that the symlink points to
+	path.pop_dentry();
 	path.append(more);
+	// reset position in path walk
+	--i;
+	// remain at the same inode
+	next = cur;
       }
     }
+    cur = next;
   }
   if (!cur)
     return -ENOENT;
