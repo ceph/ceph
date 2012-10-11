@@ -370,14 +370,9 @@ int RESTArgs::get_uint64(struct req_state *s, const string& name, uint64_t def_v
     return 0;
   }
 
-  char *end;
-
-  *val = (uint64_t)strtoull(sval.c_str(), &end, 10);
-  if (*val == ULLONG_MAX)
-    return -EINVAL;
-
-  if (*end)
-    return -EINVAL;
+  int r = stringtoull(sval, val);
+  if (r < 0)
+    return r;
 
   return 0;
 }
@@ -395,14 +390,9 @@ int RESTArgs::get_int64(struct req_state *s, const string& name, int64_t def_val
     return 0;
   }
 
-  char *end;
-
-  *val = (int64_t)strtoll(sval.c_str(), &end, 10);
-  if (*val == LLONG_MAX)
-    return -EINVAL;
-
-  if (*end)
-    return -EINVAL;
+  int r = stringtoll(sval, val);
+  if (r < 0)
+    return r;
 
   return 0;
 }
@@ -1047,6 +1037,7 @@ RGWRESTMgr::~RGWRESTMgr()
 int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
 {
   s->cio = cio;
+  s->script_uri = s->env->get("SCRIPT_URI");
   s->request_uri = s->env->get("REQUEST_URI");
   int pos = s->request_uri.find('?');
   if (pos >= 0) {

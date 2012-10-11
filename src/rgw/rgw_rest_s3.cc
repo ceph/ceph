@@ -928,36 +928,57 @@ void RGWPostObj_ObjStore_S3::send_response()
 {
   if (ret == 0 && parts.count("success_action_redirect")) {
     string success_action_redirect;
+
     part_str("success_action_redirect", &success_action_redirect);
-    if (check_utf8(success_action_redirect.c_str(), success_action_redirect.size()) == 0) {
-      dump_redirect(s, success_action_redirect);
-      set_req_state_err(s, STATUS_REDIRECT);
-      dump_errno(s);
-      end_header(s, "text/plain");
-      return;
+
+    int r = check_utf8(success_action_redirect.c_str(), success_action_redirect.size());
+    if (r < 0) {
+      ret = r;
+      goto done;
     }
+    dump_redirect(s, success_action_redirect);
+    ret = STATUS_REDIRECT;
   } else if (ret == 0 && parts.count("success_action_status")) {
     string status_string;
-    part_str("success_action_status", &status_string);
-    int status_int;
-    if ( !(istringstream(status_string) >> status_int) )
-      status_int = 200;
+    uint32_t status_int;
 
-    dump_errno(s, status_int);
-  } else {
-    dump_errno(s);
+    part_str("success_action_status", &status_string);
+
+    int r = stringtoul(status_string, &status_int);
+    if (r < 0) {
+      ret = r;
+      goto done;
+    }
+
+    switch (status_int) {
+      case 200:
+	break;
+      case 201:
+	ret = STATUS_CREATED;
+	break;
+      default:
+	ret = STATUS_NO_CONTENT;
+	break;
+    }
+  }
+
+done:
+  if (ret == STATUS_CREATED) {
+    s->formatter->open_object_section("PostResponse");
+    if (g_conf->rgw_dns_name.length())
+      s->formatter->dump_format("Location", "%s/%s", s->script_uri.c_str(), s->object_str.c_str());
+    s->formatter->dump_string("Bucket", s->bucket_name);
+    s->formatter->dump_string("Key", s->object_str.c_str());
+    s->formatter->close_section();
   }
   set_req_state_err(s, ret);
-
+  dump_errno(s);
+  dump_content_length(s, s->formatter->get_len());
   end_header(s);
-  if (ret < 0)
+  if (ret != STATUS_CREATED)
     return;
-#if 0
-  dump_common_s3_headers(s, etag.c_str(), 0, "close");
-  dump_bucket_from_state(s);
-  dump_object_from_state(s);
-  dump_uri_from_state(s);
-#endif
+
+  rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 
