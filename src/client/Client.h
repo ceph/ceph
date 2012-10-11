@@ -176,6 +176,7 @@ struct dir_result_t {
 
   void reset() {
     last_name.clear();
+    at_cache_name.clear();
     next_offset = 2;
     this_offset = 0;
     offset = 0;
