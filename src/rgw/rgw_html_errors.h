@@ -15,6 +15,7 @@ const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { STATUS_ACCEPTED, 202, "Accepted" },
     { STATUS_NO_CONTENT, 204, "NoContent" },
     { STATUS_PARTIAL_CONTENT, 206, "" },
+    { STATUS_REDIRECT, 303, "" },
     { ERR_NOT_MODIFIED, 304, "NotModified" },
     { EINVAL, 400, "InvalidArgument" },
     { ERR_INVALID_REQUEST, 400, "InvalidRequest" },
