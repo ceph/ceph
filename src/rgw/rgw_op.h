@@ -9,6 +9,8 @@
 #ifndef CEPH_RGW_OP_H
 #define CEPH_RGW_OP_H
 
+#include <limits.h>
+
 #include <string>
 #include <map>
 
@@ -310,8 +312,8 @@ class RGWPostObj : public RGWOp {
   friend class RGWPutObjProcessor;
 
 protected:
-  int min_allowable_content_length;
-  int max_allowable_content_length;
+  off_t min_len;
+  off_t max_len;
   int ret;
   int len;
   off_t ofs;
@@ -329,6 +331,8 @@ public:
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
+    min_len = 0;
+    max_len = LLONG_MAX;
     ret = 0;
     len = 0;
     ofs = 0;

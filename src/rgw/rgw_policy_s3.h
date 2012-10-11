@@ -1,6 +1,8 @@
 #ifndef CEPH_RGW_POLICY_H
 #define CEPH_RGW_POLICY_H
 
+#include <limits.h>
+
 #include <map>
 #include <list>
 #include <string>
@@ -25,20 +27,19 @@ class RGWPolicyCondition;
 
 class RGWPolicy {
   uint64_t expires;
+  string expiration_str;
   std::list<RGWPolicyCondition *> conditions;
   std::list<pair<std::string, std::string> > var_checks;
   std::map<std::string, bool, ltstr_nocase> checked_vars;
 
 public:
-  int min_length;
-  int max_length;
+  off_t min_length;
+  off_t max_length;
 
-  RGWPolicy() : expires(0), min_length(-1), max_length(-1) {}
+  RGWPolicy() : expires(0), min_length(0), max_length(LLONG_MAX) {}
   ~RGWPolicy();
 
-  uint64_t get_current_epoch();
-  void set_expires(utime_t& e);
-  void set_expires(string& e);
+  int set_expires(const string& e);
 
   void set_var_checked(const std::string& var) {
     checked_vars[var] = true;
@@ -49,7 +50,7 @@ public:
     var_checks.push_back(pair<string, string>(var, value));
   }
 
-  bool check(RGWPolicyEnv *env);
+  int check(RGWPolicyEnv *env);
   int from_json(bufferlist& bl);
 };
 #endif

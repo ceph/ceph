@@ -105,6 +105,7 @@ using ceph::crypto::MD5;
 #define ERR_TOO_LARGE            2019
 #define ERR_TOO_MANY_BUCKETS     2020
 #define ERR_INVALID_REQUEST      2021
+#define ERR_TOO_SMALL            2022
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 
@@ -1025,7 +1026,8 @@ static inline const char *rgw_obj_category_name(RGWObjCategory category)
 /** time parsing */
 extern int parse_time(const char *time_str, time_t *time);
 extern bool parse_rfc2616(const char *s, struct tm *t);
-extern int parse_date(string& date, uint64_t *epoch, string *out_date = NULL, string *out_time = NULL);
+extern bool parse_iso8601(const char *s, struct tm *t);
+extern int parse_date(const string& date, uint64_t *epoch, string *out_date = NULL, string *out_time = NULL);
 
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */
