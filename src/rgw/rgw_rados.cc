@@ -3125,10 +3125,8 @@ int RGWRados::cls_obj_usage_log_add(const string& oid, rgw_usage_log_info& info)
   const char *usage_log_pool = params.usage_log_pool.name.c_str();
   int r = rados->ioctx_create(usage_log_pool, io_ctx);
   if (r == -ENOENT) {
-    string id;
-    map<std::string, bufferlist> attrs;
     rgw_bucket pool(usage_log_pool);
-    r = create_bucket(id, pool, attrs);
+    r = create_pool(pool);
     if (r < 0)
       return r;
  
