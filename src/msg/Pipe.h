@@ -133,6 +133,8 @@ class DispatchQueue;
     void writer();
     void unlock_maybe_reap();
 
+    void randomize_out_seq();
+
     int read_message(Message **pm);
     int write_message(Message *m);
     /**
