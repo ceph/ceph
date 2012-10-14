@@ -408,3 +408,83 @@ TEST(LibCephFS, Double_chmod) {
 
   ceph_shutdown(cmount);
 }
+
+/*
+TEST(LibCephFS, Chmod) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char test_file[256];
+  sprintf(test_file, "test_perms_%d", getpid());
+
+  int fd = ceph_open(cmount, test_file, O_CREAT|O_RDWR, 0666);
+  ASSERT_GT(fd, 0);
+
+  // write some stuff
+  const char *bytes = "foobarbaz";
+  ASSERT_EQ(ceph_write(cmount, fd, bytes, strlen(bytes), 0), (int)strlen(bytes));
+
+  // set perms to read but can't write
+  ASSERT_EQ(ceph_fchmod(cmount, fd, 0400), 0);
+
+  char buf[100];
+  int ret = ceph_read(cmount, fd, buf, 100, 0);
+  ASSERT_EQ(ret, (int)strlen(bytes));
+  buf[ret] = '\0';
+  ASSERT_STREQ(buf, bytes);
+
+  ASSERT_EQ(ceph_write(cmount, fd, bytes, strlen(bytes), 0), -EPERM);
+
+  ceph_close(cmount, fd);
+
+  // reset back to writeable
+  ASSERT_EQ(ceph_chmod(cmount, test_file, 0600), 0);
+
+  fd = ceph_open(cmount, test_file, O_RDWR, 0);
+  ASSERT_GT(fd, 0);
+
+  ASSERT_EQ(ceph_write(cmount, fd, bytes, strlen(bytes), 0), (int)strlen(bytes));
+  ceph_close(cmount, fd);
+
+  ceph_shutdown(cmount);
+}
+
+*/
+
+TEST(LibCephFS, Symlinks) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char test_file[256];
+  sprintf(test_file, "test_symlinks_%d", getpid());
+
+  int fd = ceph_open(cmount, test_file, O_CREAT|O_RDWR, 0666);
+  ASSERT_GT(fd, 0);
+
+  ceph_close(cmount, fd);
+
+  char test_symlink[256];
+  sprintf(test_symlink, "test_symlinks_sym_%d", getpid());
+
+  ASSERT_EQ(ceph_symlink(cmount, test_file, test_symlink), 0);
+
+  // stat the original file
+  struct stat stbuf_orig;
+  ASSERT_EQ(ceph_stat(cmount, test_file, &stbuf_orig), 0);
+  // stat the symlink
+  struct stat stbuf_symlink_orig;
+  ASSERT_EQ(ceph_stat(cmount, test_symlink, &stbuf_symlink_orig), 0);
+  // ensure the stat bufs are equal
+  ASSERT_TRUE(!memcmp(&stbuf_orig, &stbuf_symlink_orig, sizeof(stbuf_orig)));
+
+  // test lstat
+  struct stat stbuf_symlink;
+  ASSERT_EQ(ceph_lstat(cmount, test_symlink, &stbuf_symlink), 0);
+  ASSERT_TRUE(S_ISLNK(stbuf_symlink.st_mode));
+
+  ceph_shutdown(cmount);
+}
