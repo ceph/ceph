@@ -42,14 +42,6 @@ add the following line to the ``[osd]`` section of your ``ceph.conf`` file. ::
 
 	filestore xattr use omap = true
 
-.. warning:: XATTR limits.
-
-   The RADOS Gateway's ACL and Ceph snapshots easily surpass the 4-kilobyte limit
-   for XATTRs in ``ext4``, causing the ``ceph-osd`` process to crash. Version 0.45
-   or newer uses ``leveldb`` to bypass this limitation. ``ext4`` is a poor file
-   system choice if you intend to deploy the RADOS Gateway or use snapshots on
-   versions earlier than 0.45.
-
 .. tip:: Use ``xfs`` initially and ``btrfs`` when it is ready for production.
 
    The Ceph team believes that the best performance and stability will come from
@@ -64,13 +56,6 @@ add the following line to the ``[osd]`` section of your ``ceph.conf`` file. ::
 
 FS Background Info
 ==================
-
-Before ``ext3``, ``ReiserFS`` was the only journaling file system available for
-Linux. However, ``ext3`` doesn't provide Extended Attribute (XATTR) support.
-While ``ext4`` provides XATTR support, it only allows XATTRs up to 4kb. The 
-4kb limit is not enough for RADOS GW ACLs, snapshots, and other features. As of
-version 0.45, Ceph provides a ``leveldb`` feature for ``ext4`` file systems 
-that stores XATTRs in excess of 4kb in a ``leveldb`` database.  
 
 The ``XFS`` and ``btrfs`` file systems provide numerous advantages in highly 
 scaled data storage environments when `compared`_ to ``ext3`` and ``ext4``.
