@@ -409,8 +409,7 @@ TEST(LibCephFS, Double_chmod) {
   ceph_shutdown(cmount);
 }
 
-/*
-TEST(LibCephFS, Chmod) {
+TEST(LibCephFS, Fchmod) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
@@ -435,9 +434,11 @@ TEST(LibCephFS, Chmod) {
   buf[ret] = '\0';
   ASSERT_STREQ(buf, bytes);
 
-  ASSERT_EQ(ceph_write(cmount, fd, bytes, strlen(bytes), 0), -EPERM);
+  ASSERT_EQ(ceph_write(cmount, fd, bytes, strlen(bytes), 0), (int)strlen(bytes));
 
   ceph_close(cmount, fd);
+
+  ASSERT_EQ(ceph_open(cmount, test_file, O_RDWR, 0), -EACCES);
 
   // reset back to writeable
   ASSERT_EQ(ceph_chmod(cmount, test_file, 0600), 0);
@@ -450,8 +451,6 @@ TEST(LibCephFS, Chmod) {
 
   ceph_shutdown(cmount);
 }
-
-*/
 
 TEST(LibCephFS, Symlinks) {
   struct ceph_mount_info *cmount;
