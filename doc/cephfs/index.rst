@@ -2,8 +2,6 @@
  Ceph FS
 =========
 
-.. important:: **WE DO NOT RECOMMEND USING CEPH FS IN PRODUCTION YET!**  RBD, ``librbd``, RADOS, ``librados``, and RADOS Gateway are stable for production.
-
 The Ceph FS file system is a POSIX-compliant file system that uses a RADOS
 cluster to store its data. Ceph FS uses the same RADOS object storage device 
 system as RADOS block devices and RADOS object stores such as the RADOS gateway
