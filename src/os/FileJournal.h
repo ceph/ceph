@@ -58,15 +58,36 @@ public:
     }
     write_item() : seq(0), alignment(0) {}
   };
+
   Mutex queue_lock;
   Cond queue_cond;
   uint64_t journaled_seq;
   bool plug_journal_completions;
+
+  Mutex writeq_lock;
+  Cond writeq_cond;
   deque<write_item> writeq;
-  deque<completion_item> completions;
   bool writeq_empty();
   write_item &peek_write();
   void pop_write();
+
+  Mutex completions_lock;
+  deque<completion_item> completions;
+  bool completions_empty() {
+    Mutex::Locker l(completions_lock);
+    return completions.empty();
+  }
+  completion_item completion_peek_front() {
+    Mutex::Locker l(completions_lock);
+    assert(!completions.empty());
+    return completions.front();
+  }
+  void completion_pop_front() {
+    Mutex::Locker l(completions_lock);
+    assert(!completions.empty());
+    completions.pop_front();
+  }
+
   void submit_entry(uint64_t seq, bufferlist& bl, int alignment,
 		    Context *oncommit,
 		    TrackedOpRef osd_op = TrackedOpRef());
@@ -295,6 +316,9 @@ private:
     queue_lock("FileJournal::queue_lock", false, true, false, g_ceph_context),
     journaled_seq(0),
     plug_journal_completions(false),
+    writeq_lock("FileJournal::writeq_lock", false, true, false, g_ceph_context),
+    completions_lock(
+      "FileJournal::completions_lock", false, true, false, g_ceph_context),
     fn(f),
     zero_buf(NULL),
     max_size(0), block_size(0),
