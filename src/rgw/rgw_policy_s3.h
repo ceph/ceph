@@ -19,7 +19,7 @@ public:
   void add_var(const string& name, const string& value);
   bool get_var(const string& name, string& val);
   bool get_value(const string& s, string& val, std::map<std::string, bool, ltstr_nocase>& checked_vars);
-  bool match_policy_vars(map<string, bool, ltstr_nocase>& policy_vars);
+  bool match_policy_vars(map<string, bool, ltstr_nocase>& policy_vars, string& err_msg);
 };
 
 class RGWPolicyCondition;
@@ -45,12 +45,12 @@ public:
     checked_vars[var] = true;
   }
 
-  int add_condition(const std::string& op, const std::string& first, const std::string& second);
+  int add_condition(const std::string& op, const std::string& first, const std::string& second, string& err_msg);
   void add_simple_check(const std::string& var, const std::string& value) {
     var_checks.push_back(pair<string, string>(var, value));
   }
 
-  int check(RGWPolicyEnv *env);
-  int from_json(bufferlist& bl);
+  int check(RGWPolicyEnv *env, string& err_msg);
+  int from_json(bufferlist& bl, string& err_msg);
 };
 #endif
