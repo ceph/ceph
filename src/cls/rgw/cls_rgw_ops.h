@@ -10,7 +10,7 @@ struct rgw_cls_tag_timeout_op
 {
   uint64_t tag_timeout;
 
-  rgw_cls_tag_timeout_op() {}
+  rgw_cls_tag_timeout_op() : tag_timeout(0) {}
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
