@@ -168,7 +168,7 @@ void RGW_SWIFT_Auth_Get::execute()
     swift_url = protocol;
     swift_url.append("://");
     swift_url.append(host);
-    if (add_port) {
+    if (add_port && !strchr(host, ':')) {
       swift_url.append(":");
       swift_url.append(server_port);
     }
