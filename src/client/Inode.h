@@ -186,7 +186,7 @@ class Inode {
     ll_ref -= n;
   }
 
-  Inode(CephContext *cct_, vinodeno_t vino, ceph_file_layout *layout)
+  Inode(CephContext *cct_, vinodeno_t vino, ceph_file_layout *newlayout)
     : cct(cct_), ino(vino.ino), snapid(vino.snapid),
       rdev(0), mode(0), uid(0), gid(0), nlink(0),
       size(0), truncate_seq(1), truncate_size(-1),
@@ -198,7 +198,7 @@ class Inode {
       exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
       cap_item(this), flushing_cap_item(this), last_flush_tid(0),
       snaprealm(0), snaprealm_item(this), snapdir_parent(0),
-      oset((void *)this, layout->fl_pg_pool, ino),
+      oset((void *)this, newlayout->fl_pg_pool, ino),
       reported_size(0), wanted_max_size(0), requested_max_size(0),
       _ref(0), ll_ref(0), 
       dir(0), dn_set()
