@@ -1,1 +1,3 @@
-../../basic/fs/btrfs.yaml
+overrides:
+  ceph:
+    fs: btrfs
