@@ -1281,6 +1281,11 @@ void Client::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_RENEWCAPS:
+    if (!mds_session) {
+      ldout(cct, 0) << "handle_client_session " << *m
+		    << " no open session for mds." << from << dendl;
+      break;
+    }
     if (mds_session->cap_renew_seq == m->get_seq()) {
       mds_session->cap_ttl =
 	mds_session->last_cap_renew_request + mdsmap->get_session_timeout();
