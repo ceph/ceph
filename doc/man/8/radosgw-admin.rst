@@ -50,10 +50,10 @@ Commands
 :command:`bucket unlink`
   Remove a bucket
 
-:command:'bucket rm'
+:command:`bucket rm`
   Remove a bucket
 
-:command:'object rm'
+:command:`object rm`
   Remove an object
 
 :command:`key create`
@@ -62,7 +62,7 @@ Commands
 :command:`key rm`
   Remove an access key
 
-:command:'pool add'
+:command:`pool add`
   Add an existing pool for data placement
 
 :command:`pool rm`
