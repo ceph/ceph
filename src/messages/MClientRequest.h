@@ -166,7 +166,7 @@ public:
       out << " " << ccap_string(head.args.getattr.mask);
     if (head.op == CEPH_MDS_OP_SETATTR) {
       if (head.args.setattr.mask & CEPH_SETATTR_MODE)
-	out << " mode=0" << ios::oct << head.args.setattr.mode << ios::dec;
+	out << " mode=0" << std::oct << head.args.setattr.mode << std::dec;
       if (head.args.setattr.mask & CEPH_SETATTR_UID)
 	out << " uid=" << head.args.setattr.uid;
       if (head.args.setattr.mask & CEPH_SETATTR_GID)
