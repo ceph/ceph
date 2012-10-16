@@ -37,7 +37,7 @@ CRUSH algorithm.
 
 .. raw:: html
 
-	</td></tr><tr><td><h3>Authentication</h3>
+	</td></tr><tr><td><h3>Authentication and Authorization</h3>
 
 Once you have data placement policies in place, you can begin creating users
 and assigning them capabilities, such as the ability to read and write data
@@ -45,7 +45,9 @@ to one or more pools, or the cluster as a whole.
 
 .. toctree:: 
 
+	Cephx Overview <auth-intro>
 	authentication
+	
 
 
 .. raw:: html
