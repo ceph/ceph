@@ -253,7 +253,6 @@ private:
 
   // write thread
   Mutex write_lock;
-  Cond write_cond;
   bool write_stop;
 
   Cond commit_cond;
