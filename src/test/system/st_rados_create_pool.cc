@@ -79,13 +79,10 @@ run()
   }
 
   RETURN1_IF_NONZERO(rados_connect(cl));
-  int ret = rados_pool_delete(cl, m_pool_name.c_str());
-  if (!((ret == 0) || (ret == -ENOENT))) {
-    printf("%s: rados_pool_delete error %d\n", get_id_str(), ret);
-    return ret;
-  }
+  int ret;
+
   printf("%s: creating pool %s\n", get_id_str(), m_pool_name.c_str());
-  RETURN1_IF_NONZERO(rados_pool_create(cl, m_pool_name.c_str()));
+  rados_pool_create(cl, m_pool_name.c_str());
   rados_ioctx_t io_ctx;
   RETURN1_IF_NONZERO(rados_ioctx_create(cl, m_pool_name.c_str(), &io_ctx));
 
