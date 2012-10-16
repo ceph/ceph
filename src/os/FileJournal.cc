@@ -628,7 +628,6 @@ void FileJournal::stop_writer()
 #endif
     Mutex::Locker p(writeq_lock);
     write_stop = true;
-    write_cond.Signal();
     writeq_cond.Signal();
 #ifdef HAVE_LIBAIO
     aio_cond.Signal();
