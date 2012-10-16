@@ -416,14 +416,6 @@ struct obj_info {
   size_t len;
 };
 
-uint64_t get_random(uint64_t min_val, uint64_t max_val)
-{
-  uint64_t r;
-  get_random_bytes((char *)&r, sizeof(r));
-  r = min_val + r % (max_val - min_val + 1);
-  return r;
-}
-
 class LoadGen {
   size_t total_sent;
   size_t total_completed;
