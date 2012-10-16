@@ -22,6 +22,7 @@
 #include "common/config.h"
 #include "common/Timer.h"
 #include "common/errno.h"
+#include "auth/Crypto.h"
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
@@ -345,9 +346,9 @@ AuthAuthorizer *SimpleMessenger::get_authorizer(int peer_type, bool force_new)
 
 bool SimpleMessenger::verify_authorizer(Connection *con, int peer_type,
 					int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-					bool& isvalid)
+					bool& isvalid,CryptoKey& session_key)
 {
-  return ms_deliver_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid);
+  return ms_deliver_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid,session_key);
 }
 
 Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
