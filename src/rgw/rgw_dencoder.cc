@@ -42,6 +42,8 @@ void RGWObjManifest::generate_test_instances(std::list<RGWObjManifest*>& o)
   }
   m->obj_size = 5 * 1024 * 1024;
 
+  o.push_back(m);
+
   o.push_back(new RGWObjManifest);
 }
 

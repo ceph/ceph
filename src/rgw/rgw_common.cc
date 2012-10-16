@@ -60,7 +60,7 @@ rgw_err()
 
 rgw_err::
 rgw_err(int http, const std::string& s3)
-    : http_ret(http), s3_code(s3)
+    : http_ret(http), ret(0), s3_code(s3)
 {
 }
 
@@ -121,6 +121,8 @@ req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL)
   length = NULL;
   copy_source = NULL;
   http_auth = NULL;
+
+  obj_ctx = NULL;
 }
 
 req_state::~req_state() {

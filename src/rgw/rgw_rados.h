@@ -163,7 +163,7 @@ struct RGWRadosCtx {
   int (*intent_cb)(RGWRados *store, void *user_ctx, rgw_obj& obj, RGWIntentEvent intent);
   void *user_ctx;
 
-  RGWRadosCtx(RGWRados *_store) : store(_store) { }
+  RGWRadosCtx(RGWRados *_store) : store(_store), intent_cb(NULL), user_ctx(NULL) { }
 
   RGWObjState *get_state(rgw_obj& obj);
   void set_atomic(rgw_obj& obj);
