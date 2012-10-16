@@ -282,7 +282,7 @@ bool AdminSocket::do_accept()
       if (pos == 3 && cmd[0] == '\0') {
 	switch (cmd[3]) {
 	case 0:
-	  c = "version";
+	  c = "0";
 	  break;
 	case 1:
 	  c = "perfcounters_dump";
