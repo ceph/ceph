@@ -826,7 +826,7 @@ void FileJournal::queue_write_fin(uint64_t seq, Context *fin)
 
 void FileJournal::queue_completions_thru(uint64_t seq)
 {
-  assert(queue_lock.is_locked());
+  assert(finisher_lock.is_locked());
   utime_t now = ceph_clock_now(g_ceph_context);
   while (!completions_empty()) {
     completion_item next = completion_peek_front();
@@ -847,7 +847,7 @@ void FileJournal::queue_completions_thru(uint64_t seq)
     if (next.tracked_op)
       next.tracked_op->mark_event("journaled_completion_queued");
   }
-  queue_cond.Signal();
+  finisher_cond.Signal();
 }
 
 int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64_t& orig_ops, uint64_t& orig_bytes)
@@ -1060,7 +1060,7 @@ void FileJournal::do_write(bufferlist& bl)
   assert(write_pos % header.alignment == 0);
 
   {
-    Mutex::Locker locker(queue_lock);
+    Mutex::Locker locker(finisher_lock);
     journaled_seq = writing_seq;
 
     // kick finisher?
@@ -1084,9 +1084,9 @@ void FileJournal::flush()
 {
   dout(5) << "waiting for completions to empty" << dendl;
   {
-    Mutex::Locker l(queue_lock);
+    Mutex::Locker l(finisher_lock);
     while (!completions_empty())
-      queue_cond.Wait(queue_lock);
+      finisher_cond.Wait(finisher_lock);
   }
   dout(5) << "flush waiting for finisher" << dendl;
   finisher->wait_for_empty();
@@ -1364,7 +1364,7 @@ void FileJournal::check_aio_completion()
   if (completed_something) {
     // kick finisher?  
     //  only if we haven't filled up recently!
-    Mutex::Locker locker(queue_lock);
+    Mutex::Locker locker(finisher_lock);
     journaled_seq = new_journaled_seq;
     if (full_state != FULL_NOTFULL) {
       dout(10) << "check_aio_completion NOT queueing finisher seq " << journaled_seq
@@ -1489,7 +1489,7 @@ void FileJournal::committed_thru(uint64_t seq)
   print_header();
 
   {
-    Mutex::Locker locker(queue_lock);
+    Mutex::Locker locker(finisher_lock);
     // completions!
     queue_completions_thru(seq);
     if (plug_journal_completions) {

@@ -32,11 +32,11 @@ using std::deque;
 /**
  * Implements journaling on top of block device or file.
  *
- * Lock ordering is write_lock > aio_lock > queue_lock
+ * Lock ordering is write_lock > aio_lock > finisher_lock
  */
 class FileJournal : public Journal {
 public:
-  /// Protected by queue_lock
+  /// Protected by finisher_lock
   struct completion_item {
     uint64_t seq;
     Context *finish;
@@ -59,8 +59,8 @@ public:
     write_item() : seq(0), alignment(0) {}
   };
 
-  Mutex queue_lock;
-  Cond queue_cond;
+  Mutex finisher_lock;
+  Cond finisher_cond;
   uint64_t journaled_seq;
   bool plug_journal_completions;
 
@@ -91,7 +91,7 @@ public:
   void submit_entry(uint64_t seq, bufferlist& bl, int alignment,
 		    Context *oncommit,
 		    TrackedOpRef osd_op = TrackedOpRef());
-  /// End protected by queue_lock
+  /// End protected by finisher_lock
 
   /*
    * journal header
@@ -312,7 +312,7 @@ private:
  public:
   FileJournal(uuid_d fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false, bool ai=true) : 
     Journal(fsid, fin, sync_cond),
-    queue_lock("FileJournal::queue_lock", false, true, false, g_ceph_context),
+    finisher_lock("FileJournal::finisher_lock", false, true, false, g_ceph_context),
     journaled_seq(0),
     plug_journal_completions(false),
     writeq_lock("FileJournal::writeq_lock", false, true, false, g_ceph_context),
