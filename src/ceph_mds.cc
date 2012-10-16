@@ -244,7 +244,8 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_UID |
     CEPH_FEATURE_NOSRCADDR |
     CEPH_FEATURE_DIRLAYOUTHASH |
-    CEPH_FEATURE_PGID64;
+    CEPH_FEATURE_PGID64 |
+    CEPH_FEATURE_MSG_AUTH;
   uint64_t required =
     CEPH_FEATURE_OSDREPLYMUX;
   messenger->set_default_policy(Messenger::Policy::lossy_client(supported, required));
