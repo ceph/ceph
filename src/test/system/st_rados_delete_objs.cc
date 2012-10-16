@@ -50,7 +50,7 @@ int StRadosDeleteObjs::run()
   m_setup_sem->post();
 
   rados_ioctx_t io_ctx;
-  RETURN1_IF_NOT_VAL(-EEXIST, rados_pool_create(cl, m_pool_name.c_str()));
+  rados_pool_create(cl, m_pool_name.c_str());
   RETURN1_IF_NONZERO(rados_ioctx_create(cl, m_pool_name.c_str(), &io_ctx));
 
   for (int i = 0; i < m_num_objs; ++i) {

@@ -73,7 +73,7 @@ public:
       m_pool_setup_sem->wait();
 
     printf("%s: rados_pool_create.\n", get_id_str());
-    RETURN1_IF_NOT_VAL(-EEXIST, rados_pool_create(cl, "foo"));
+    rados_pool_create(cl, "foo");
     rados_ioctx_t io_ctx;
     printf("%s: rados_ioctx_create.\n", get_id_str());
     RETURN1_IF_NOT_VAL(0, rados_ioctx_create(cl, "foo", &io_ctx));
