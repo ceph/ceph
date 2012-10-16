@@ -411,7 +411,7 @@ void MDS::send_message_client_counted(Message *m, Session *session)
   if (session->connection) {
     messenger->send_message(m, session->connection);
   } else {
-    messenger->send_message(m, session->inst);
+    session->preopen_out_queue.push_back(m);
   }
 }
 
@@ -421,7 +421,7 @@ void MDS::send_message_client(Message *m, Session *session)
  if (session->connection) {
     messenger->send_message(m, session->connection);
   } else {
-    messenger->send_message(m, session->inst);
+    session->preopen_out_queue.push_back(m);
   }
 }
 
@@ -2101,6 +2101,12 @@ void MDS::ms_handle_accept(Connection *con)
     if (s->connection != con) {
       dout(10) << " session connection " << s->connection << " -> " << con << dendl;
       s->connection = con;
+
+      // send out any queued messages
+      while (!s->preopen_out_queue.empty()) {
+	messenger->send_message(s->preopen_out_queue.front(), con);
+	s->preopen_out_queue.pop_front();
+      }
     }
   }
 }
