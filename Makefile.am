@@ -1,4 +1,5 @@
 AUTOMAKE_OPTIONS = gnu
+ACLOCAL_AMFLAGS = -I m4
 EXTRA_DIST = autogen.sh ceph.spec.in ceph.spec
 # the "." here makes sure check-local builds gtest before it is used
 SUBDIRS = . src man

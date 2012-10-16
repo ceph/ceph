@@ -61,6 +61,11 @@ src/ocf/ceph
 src/ocf/rbd
 src/omapbench
 src/kvstorebench
+ar-lib
 
 # temporary directory used by e.g. "make distcheck", e.g. ceph-0.42
 /ceph-[0-9]*/
+
+# M4 Macro directory
+m4/
+src/gtest/m4/
