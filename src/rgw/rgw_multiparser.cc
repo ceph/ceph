@@ -30,7 +30,10 @@ int main(int argc, char **argv) {
     }
     done = feof(stdin);
 
-    parser.parse(buf, len, done);
+    bool result = parser.parse(buf, len, done);
+    if (!result) {
+      cerr << "failed to parse!" << std::endl;
+    }
 
     if (done)
       break;
