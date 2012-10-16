@@ -1,5 +1,6 @@
 # Automake file
 
+ACLOCAL_AMFLAGS = -I m4
 AM_LDFLAGS = -lpthread
 
 # Nonstandard package files for distribution
