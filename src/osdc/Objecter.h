@@ -615,6 +615,7 @@ public:
     utime_t stamp;
 
     bool precalc_pgid;
+    epoch_t map_dne_bound;
 
     bool budgeted;
 
@@ -631,6 +632,7 @@ public:
       flags(f), priority(0), onack(ac), oncommit(co),
       tid(0), attempts(0),
       paused(false), objver(ov), reply_epoch(NULL), precalc_pgid(false),
+      map_dne_bound(0),
       budgeted(false),
       should_resend(true) {
       ops.swap(op);
@@ -657,7 +659,8 @@ public:
   struct C_Op_Map_Latest : public Context {
     Objecter *objecter;
     tid_t tid;
-    C_Op_Map_Latest(Objecter *o, tid_t t) : objecter(o), tid(t) {}
+    version_t latest;
+    C_Op_Map_Latest(Objecter *o, tid_t t) : objecter(o), tid(t), latest(0) {}
     void finish(int r);
   };
 
@@ -800,12 +803,14 @@ public:
     xlist<LingerOp*>::item session_item;
 
     tid_t register_tid;
+    epoch_t map_dne_bound;
 
     LingerOp() : linger_id(0), flags(0), poutbl(NULL), pobjver(NULL),
 		 registered(false),
 		 on_reg_ack(NULL), on_reg_commit(NULL),
 		 session(NULL), session_item(this),
-		 register_tid(0) {}
+		 register_tid(0),
+		 map_dne_bound(0) {}
 
     // no copy!
     const LingerOp &operator=(const LingerOp& r);
@@ -845,8 +850,9 @@ public:
   struct C_Linger_Map_Latest : public Context {
     Objecter *objecter;
     uint64_t linger_id;
+    version_t latest;
     C_Linger_Map_Latest(Objecter *o, uint64_t id) :
-      objecter(o), linger_id(id) {}
+      objecter(o), linger_id(id), latest(0) {}
     void finish(int r);
   };
 
@@ -895,9 +901,9 @@ public:
   void _linger_ack(LingerOp *info, int r);
   void _linger_commit(LingerOp *info, int r);
 
-  void op_check_for_latest_map(Op *op);
+  void check_op_pool_dne(Op *op);
   void op_cancel_map_check(Op *op);
-  void linger_check_for_latest_map(LingerOp *op);
+  void check_linger_pool_dne(LingerOp *op);
   void linger_cancel_map_check(LingerOp *op);
 
   void kick_requests(OSDSession *session);
