@@ -2034,10 +2034,7 @@ void Client::send_cap(Inode *in, int mds, Cap *cap, int used, int want, int reta
 	   << dendl;
 
   cap->issued &= retain;
-
-  if (revoking && (revoking & used) == 0) {
-    cap->implemented = cap->issued;
-  }
+  cap->implemented &= cap->issued | used;
 
   uint64_t flush_tid = 0;
   snapid_t follows = 0;
