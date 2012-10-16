@@ -86,6 +86,8 @@ public:
   Connection *connection;
   xlist<Session*>::item item_session_list;
 
+  list<Message*> preopen_out_queue;  ///< messages for client, queued before they connect
+
   elist<MDRequest*> requests;
 
   interval_set<inodeno_t> pending_prealloc_inos; // journaling prealloc, will be added to prealloc_inos
@@ -187,6 +189,10 @@ public:
     lease_seq(0) { }
   ~Session() {
     assert(!item_session_list.is_on_list());
+    while (!preopen_out_queue.empty()) {
+      preopen_out_queue.front()->put();
+      preopen_out_queue.pop_front();
+    }
   }
 
   void clear() {
