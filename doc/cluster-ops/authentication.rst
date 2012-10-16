@@ -1,40 +1,85 @@
-================
- Authentication
-================
+=============
+ Cephx Guide
+=============
 
 Ceph provides two authentication modes: 
 
 - **None:** Any user can access data without authentication.
 - **Cephx**: Ceph requires user authentication in a manner similar to Kerberos.
-
-Cephx uses shared secret keys for authentication, meaning both the client and
-the monitor cluster have a copy of the client's secret key.  The authentication
-protocol is such that both parties are able to prove to each other they have a
-copy of the key without actually revealing it.  This provides mutual
-authentication, which means the cluster is sure the user possesses the secret
-key, and the user is sure that the cluster has a copy of the secret key.
-
-Default users and pools are suitable for initial testing purposes. For test bed 
-and production environments, you should create users and assign pool access to 
-the users.
-
-.. important:: The ``cephx`` protocol supports authentication only. Cephx 
-   currently **does not** address man-in-the-middle attacks. We will address
-   this in an upcoming release.
    
 .. important: The ``cephx`` protocol does not address data encryption in transport 
-   (e.g., SSL/TLS) or encryption at rest.   
+   (e.g., SSL/TLS) or encryption at rest.
 
 
+For additional information, see our `Cephx Intro`_ and `ceph-authtool manpage`_.
 
-Enabling Authentication
-=======================
+.. _Cephx Intro: ../auth-intro
+.. _ceph-authtool manpage: ../../man/8/ceph-authtool/
 
-If you do not turn on authentication, it will be turned off by default. If you
-specify ``cephx``, Ceph will look for the keyring in the default search path,
-which includes ``/etc/ceph/keyring``.  You can override this location by adding
-a ``keyring`` option in the ``[global]`` section of your ``ceph.conf`` file, but
-this is not recommended.
+
+Configuring Cephx
+=================
+
+There are several important procedures you must follow to enable the ``cephx``
+protocol for your Ceph cluster and its daemons. First, you must generate a 
+secret key for the default ``client.admin`` user so the administrator can 
+execute Ceph commands. Second, you must generate a monitor secret key and 
+distribute it to all monitors in the cluster. Finally, you can follow the 
+remaining steps in `Enabling Cephx`_ to enable authentication.
+
+
+The ``client.admin`` Key
+------------------------
+
+When you first install Ceph, each Ceph command you execute on the command line
+assumes that you are the ``client.admin`` default user. When running Ceph with
+``cephx`` enabled, you need to have a key for the ``client.admin`` user to run
+``ceph`` commands as the administrator.
+
+.. important: To run Ceph commands on the command line with
+   ``cephx`` enabled, you need to create a key for the ``client.admin`` 
+   user, and create a secret file under ``/etc/ceph``. 
+
+The following command will generate and register a ``client.admin``
+key on the monitor with admin capabilities and write it to a keyring
+on the local file system.  If the key already exists, its current
+value will be returned.	::
+
+	sudo ceph auth get-or-create client.admin mds 'allow' osd 'allow *' mon 'allow *' > /etc/ceph/keyring
+
+See `Enabling Cephx`_ step 1 for stepwise details to enable ``cephx``.
+
+
+Monitor Keyrings
+----------------
+
+Ceph requires a keyring for the monitors. Use the `ceph-authtool`_ command to
+generate a secret monitor key and keyring. ::
+
+      sudo ceph-authtool {keyring} --create-keyring --gen-key -n mon.
+
+A cluster with multiple monitors must have identical keyrings for all 
+monitors. So you must copy the keyring to each monitor host under the
+following directory::
+
+  /var/lib/ceph/mon/$cluster-$id
+
+See `Enabling Cephx`_ step 2 and 3 for stepwise details to enable ``cephx``.
+
+.. _ceph-authtool: ../../man/8/ceph-authtool/
+
+
+.. _enable-cephx:
+
+Enabling Cephx
+--------------
+
+Current versions of Ceph disable ``cephx`` by default, but in the near future
+Ceph will enable ``cephx`` by default. When ``cephx`` is enabled, Ceph will look
+for the keyring in the default search path, which includes
+``/etc/ceph/keyring``.  You can override this location by adding a ``keyring``
+option in the ``[global]`` section of your ``ceph.conf`` file, but this is not
+recommended.
 
 To enable ``cephx`` on a cluster without authentication:
 
@@ -74,57 +119,42 @@ To enable ``cephx`` on a cluster without authentication:
 
 .. deprecated:: 0.51
 
+#. Start or restart the Ceph cluster. :: 
 
-The ``client.admin`` Key
-========================
+	sudo service ceph -a start
+	sudo service ceph -a restart
 
-By default, each Ceph command you execute on the command line assumes
-that you are the ``client.admin`` default user. When running Ceph with
-``cephx`` enabled, you need to have a ``client.admin`` key to run
-``ceph`` commands.
+.. _disable-cephx:
 
-.. important: To continue to run Ceph commands on the command line with
-   ``cephx`` enabled, you need to create a key for the ``client.admin`` 
-   user, and create a secret file under ``/etc/ceph``. 
+Disabling Cephx
+---------------
 
-The following command will generate and register a ``client.admin``
-key on the monitor with admin capabilities and write it to a keyring
-on the local file system.  If the key already exists, its current
-value will be returned.	::
+The following procedure describes how to disable Cephx. If your cluster
+environment is relatively safe, you can offset the computation expense of 
+running authentication. **We do not recommend it.** However, it may be 
+easier during setup and/or troubleshooting to temporarily disable authentication.
 
-	sudo ceph auth get-or-create client.admin mds 'allow' osd 'allow *' mon 'allow *' > /etc/ceph/keyring
+#. Disable ``cephx`` authentication for versions ``0.51`` and above by setting
+   the following options in the ``[global]`` section of your ``ceph.conf``::
 
-Generate a Key
-==============
+    auth cluster required = none
+    auth service required = none
+    auth client required = none
 
-Keys enable a specific user to access the monitor, metadata server and
-cluster according to capabilities assigned to the key.  Capabilities are
-simple strings specifying some access permissions for a given server type.
-Each server type has its own string.  All capabilities are simply listed
-in ``{type}`` and ``{capability}`` pairs on the command line::
+#. Or, disable ``cephx`` authentication for versions ``0.50`` and below 
+   (deprecated as of version 0.51) by setting the following option in the 
+   ``[global]`` section of your ``ceph.conf``::
 
-	sudo ceph auth get-or-create-key client.{username} {daemon1} {cap1} {daemon2} {cap2} ...
+    auth supported = none
 
-For example, to create a user ``client.foo`` with access 'rw' for
-daemon type 'osd' and 'r' for daemon type 'mon'::
+#. Start or restart the Ceph cluster. :: 
 
-   sudo ceph auth get-or-create-key client.foo osd rw mon r > keyring.foo
-
-.. note: User names are associated to user types, which include ``client``
-   ``admin``, ``osd``, ``mon``, and ``mds``. In most cases, you will be 
-   creating keys for ``client`` users.
-
-
-List Keys in your Cluster
-=========================
-
-To list the keys registered in your cluster::
-
-	sudo ceph auth list
+	sudo service ceph -a start
+	sudo service ceph -a restart
 
 
 Daemon Keyrings
-===============
+---------------
 
 With the exception of the monitors, daemon keyrings are generated in
 the same way that user keyrings are.  By default, the daemons store
@@ -150,7 +180,7 @@ are shown below.
 ``radosgw``
 
 :Location: ``$rgw_data/keyring``
-:Capabilities: mon 'allow r' osd 'allow rwx'
+:Capabilities: ``mon 'allow r' osd 'allow rwx'``
 
 
 Note that the monitor keyring contains a key but no capabilities, and
@@ -166,16 +196,57 @@ For example, ``osd.12`` would be::
 
 You can override these locations, but it is not recommended.
 
-Monitor Keyrings
-================
+Using Cephx
+============
 
-Use the ``ceph-authtool`` command to generate a monitor key and kerying. ::
+Cephx uses shared secret keys for authentication, meaning both the client and
+the monitor cluster have a copy of the client's secret key.  The authentication
+protocol is such that both parties are able to prove to each other they have a
+copy of the key without actually revealing it.  This provides mutual
+authentication, which means the cluster is sure the user possesses the secret
+key, and the user is sure that the cluster has a copy of the secret key.
 
-      sudo ceph-authtool {keyring} --create-keyring --gen-key -n mon.
+Default users and pools are suitable for initial testing purposes. For test bed 
+and production environments, you should create users and assign pool access to 
+the users.
 
-A cluster with multiple monitors must have identical keyrings for all 
-monitors. So you must copy the keyring to each monitor host under the
-following directory::
 
-  /var/lib/ceph/mon/$cluster-$id
+Add a Key
+---------
+
+Keys enable a specific user to access the monitor, metadata server and
+cluster according to capabilities assigned to the key.  Capabilities are
+simple strings specifying some access permissions for a given server type.
+Each server type has its own string.  All capabilities are simply listed
+in ``{type}`` and ``{capability}`` pairs on the command line::
+
+	sudo ceph auth get-or-create-key client.{username} {daemon1} {cap1} {daemon2} {cap2} ...
+
+For example, to create a user ``client.foo`` with access 'rw' for
+daemon type 'osd' and 'r' for daemon type 'mon'::
+
+   sudo ceph auth get-or-create-key client.foo osd rw mon r > keyring.foo
+
+.. note: User names are associated to user types, which include ``client``
+   ``admin``, ``osd``, ``mon``, and ``mds``. In most cases, you will be 
+   creating keys for ``client`` users.
+
+.. _auth-delete-key:
+
+Delete a Key
+------------
+
+To delete a key for a user or a daemon, use ``ceph auth del``:: 
+
+	ceph auth del {daemon-type}.{ID|username}
+	
+Where ``{daemon-type}`` is one of ``client``, ``osd``, ``mon``, or ``mds``, 
+and ``{ID|username}`` is the ID of the daemon or the username.
+
+List Keys in your Cluster
+-------------------------
+
+To list the keys registered in your cluster::
+
+	sudo ceph auth list
 
