@@ -1049,7 +1049,10 @@ int Objecter::recalc_op_target(Op *op)
 {
   vector<int> acting;
   pg_t pgid = op->pgid;
-  if (!op->precalc_pgid) {
+  if (op->precalc_pgid) {
+    if (!osdmap->have_pg_pool(pgid.pool()))
+      return RECALC_OP_TARGET_POOL_DNE;
+  } else {
     int ret = osdmap->object_locator_to_pg(op->oid, op->oloc, pgid);
     if (ret == -ENOENT)
       return RECALC_OP_TARGET_POOL_DNE;
