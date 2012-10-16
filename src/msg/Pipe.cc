@@ -1559,8 +1559,19 @@ int Pipe::read_message(Message **pm)
   }
 
   // footer
-  if (tcp_read((char*)&footer, sizeof(footer)) < 0)
-    goto out_dethrottle;
+  if (connection_state->has_feature(CEPH_FEATURE_MSG_AUTH)) {
+    if (tcp_read((char*)&footer, sizeof(footer)) < 0)
+      goto out_dethrottle;
+  } else {
+    ceph_msg_footer_old old_footer;
+    if (tcp_read((char*)&old_footer, sizeof(old_footer)) < 0)
+      goto out_dethrottle;
+    footer.front_crc = old_footer.front_crc;
+    footer.middle_crc = old_footer.middle_crc;
+    footer.data_crc = old_footer.data_crc;
+    footer.sig = 0;
+    footer.flags = old_footer.flags;
+  }
   
   aborted = (footer.flags & CEPH_MSG_FOOTER_COMPLETE) == 0;
   ldout(msgr->cct,10) << "aborted = " << aborted << dendl;
