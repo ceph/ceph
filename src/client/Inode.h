@@ -212,6 +212,8 @@ class Inode {
   vinodeno_t vino() { return vinodeno_t(ino, snapid); }
 
 
+  bool check_mode(uid_t uid, gid_t gid, gid_t *sgids, int sgid_count, uint32_t flags);
+
   // CAPS --------
   void get_open_ref(int mode);
   bool put_open_ref(int mode);
