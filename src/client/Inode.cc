@@ -264,3 +264,34 @@ Dir *Inode::open_dir()
   }
   return dir;
 }
+
+bool Inode::check_mode(uid_t ruid, gid_t rgid, gid_t *sgids, int sgids_count, uint32_t rflags)
+{
+  int mflags = rflags & O_ACCMODE;
+  int fmode = 0;
+
+  if ((mflags & O_WRONLY) == O_WRONLY)
+      fmode |= 2;
+  if ((mflags & O_RDONLY) == O_RDONLY)
+      fmode |= 4;
+  if ((mflags & O_RDWR) == O_RDWR)
+      fmode |= 6;
+
+  // if uid is owner, owner entry determines access
+  if (uid == ruid) {
+    fmode = fmode << 6;
+  } else if (gid == rgid) {
+    // if a gid or sgid matches the owning group, group entry determines access
+    fmode = fmode << 3;
+  } else {
+    int i = 0;
+    for (; i < sgids_count; ++i) {
+      if (sgids[i] == gid) {
+        fmode = fmode << 3;
+	break;
+      }
+    }
+  }
+
+  return (mode & fmode) == fmode;
+}
