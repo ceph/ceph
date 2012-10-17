@@ -205,7 +205,6 @@ private:
   uint64_t op_queue_len, op_queue_bytes;
   Cond op_throttle_cond;
   Finisher op_finisher;
-  uint64_t next_finish;
 
   ThreadPool op_tp;
   struct OpWQ : public ThreadPool::WorkQueue<OpSequencer> {
