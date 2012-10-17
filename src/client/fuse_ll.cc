@@ -464,6 +464,31 @@ static void ceph_ll_statfs(fuse_req_t req, fuse_ino_t ino)
     fuse_reply_err(req, -r);
 }
 
+static int getgroups_cb(void *handle, uid_t uid, gid_t **sgids)
+{
+#ifdef HAVE_FUSE_GETGROUPS
+  assert(sgids);
+  int c = fuse_getgroups(0, NULL);
+  if (c < 0) {
+    return c;
+  }
+  if (c == 0) {
+    return 0;
+  }
+
+  *sgids = malloc(c*sizeof(**sgids));
+  if (!*sgids) {
+    return -ENOMEM;
+  }
+  c = fuse_getgroups(c, *sgids);
+  if (c < 0) {
+    free(*sgids);
+    return c;
+  }
+  return c;
+#endif
+  return 0;
+}
 
 static void invalidate_cb(void *handle, vinodeno_t vino, int64_t off, int64_t len)
 {
@@ -606,6 +631,8 @@ int ceph_fuse_ll_main(Client *c, int argc, const char *argv[], int fd)
   }
 
   fuse_session_add_chan(se, ch);
+
+  client->ll_register_getgroups_cb(getgroups_cb, ch);
 
   if (g_conf->fuse_use_invalidate_cb)
     client->ll_register_ino_invalidate_cb(invalidate_cb, ch);

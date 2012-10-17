@@ -113,6 +113,8 @@ Client::Client(Messenger *m, MonClient *mc)
   : Dispatcher(m->cct), cct(m->cct), logger(NULL), timer(m->cct, client_lock), 
     ino_invalidate_cb(NULL),
     ino_invalidate_cb_handle(NULL),
+    getgroups_cb(NULL),
+    getgroups_cb_handle(NULL),
     async_ino_invalidator(m->cct),
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(m->get_myname().num()),
@@ -2034,10 +2036,7 @@ void Client::send_cap(Inode *in, int mds, Cap *cap, int used, int want, int reta
 	   << dendl;
 
   cap->issued &= retain;
-
-  if (revoking && (revoking & used) == 0) {
-    cap->implemented = cap->issued;
-  }
+  cap->implemented &= cap->issued | used;
 
   uint64_t flush_tid = 0;
   snapid_t follows = 0;
@@ -3283,6 +3282,24 @@ void Client::handle_cap_grant(Inode *in, int mds, Cap *cap, MClientCaps *m)
     signal_cond_list(in->waitfor_caps);
 
   m->put();
+}
+
+int Client::check_permissions(Inode *in, int flags, int uid, int gid)
+{
+  gid_t *sgids = NULL;
+  int sgid_count = 0;
+  if (getgroups_cb) {
+    sgid_count = getgroups_cb(getgroups_cb_handle, uid, &sgids);
+    if (sgid_count < 0) {
+      ldout(cct, 3) << "getgroups failed!" << dendl;
+      return sgid_count;
+    }
+  }
+  // check permissions before doing anything else
+  if (!in->check_mode(uid, gid, sgids, sgid_count, flags)) {
+    return -EACCES;
+  }
+  return 0;
 }
 
 
@@ -4830,11 +4847,6 @@ int Client::getdir(const char *relpath, list<string>& contents)
 }
 
 
-
-
-
-
-
 /****** file i/o **********/
 int Client::open(const char *relpath, int flags, mode_t mode) 
 {
@@ -4963,8 +4975,17 @@ int Client::_release_fh(Fh *f)
   return 0;
 }
 
-int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid) 
+int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
 {
+  int ret;
+  if (uid < 0) {
+    uid = geteuid();
+    gid = getegid();
+  }
+  ret = check_permissions(in, flags, uid, gid);
+  if (ret < 0)
+    return ret;
+
   int cmode = ceph_flags_to_mode(flags);
   if (cmode < 0)
     return -EINVAL;
@@ -5381,7 +5402,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
 
   // was Fh opened as writeable?
   if ((f->mode & CEPH_FILE_MODE_WR) == 0)
-    return -EINVAL;
+    return -EBADF;
 
   // use/adjust fd pos?
   if (offset < 0) {
@@ -5691,6 +5712,13 @@ void Client::ll_register_ino_invalidate_cb(client_ino_callback_t cb, void *handl
   ino_invalidate_cb = cb;
   ino_invalidate_cb_handle = handle;
   async_ino_invalidator.start();
+}
+
+void Client::ll_register_getgroups_cb(client_getgroups_callback_t cb, void *handle)
+{
+  Mutex::Locker l(client_lock);
+  getgroups_cb = cb;
+  getgroups_cb_handle = handle;
 }
 
 int Client::_sync_fs()
