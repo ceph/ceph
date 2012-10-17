@@ -456,8 +456,10 @@ int Monitor::init()
     int r = check_fsid();
     if (r == -ENOENT)
       r = write_fsid();
-    if (r < 0)
+    if (r < 0) {
+      lock.Unlock();
       return r;
+    }
   }
 
   // open compatset
@@ -517,6 +519,7 @@ int Monitor::init()
       store->put_bl_ss(bl, "keyring", NULL);
     } else {
       derr << "unable to load initial keyring " << g_conf->keyring << dendl;
+      lock.Unlock();
       return r;
     }
   }
@@ -1324,8 +1327,10 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
   while (!detail.empty()) {
     if (f)
       f->dump_string("item", detail.front().second);
-    detailbl->append(detail.front().second);
-    detailbl->append('\n');
+    if (detailbl != NULL) {
+      detailbl->append(detail.front().second);
+      detailbl->append('\n');
+    }
     detail.pop_front();
   }
   if (f)
