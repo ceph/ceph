@@ -119,6 +119,7 @@ class MetaRequest;
 
 typedef void (*client_ino_callback_t)(void *handle, vinodeno_t ino, int64_t off, int64_t len);
 
+typedef int (*client_getgroups_callback_t)(void *handle, uid_t uid, gid_t **sgids);
 
 // ========================================================
 // client interface
@@ -199,6 +200,9 @@ class Client : public Dispatcher {
 
   client_ino_callback_t ino_invalidate_cb;
   void *ino_invalidate_cb_handle;
+
+  client_getgroups_callback_t getgroups_cb;
+  void *getgroups_cb_handle;
 
   Finisher async_ino_invalidator;
 
@@ -515,6 +519,8 @@ private:
   int get_or_create(Inode *dir, const char* name,
 		    Dentry **pdn, bool expect_null=false);
 
+  int check_permissions(Inode *in, int flags, int uid, int gid);
+
 public:
   int mount(const std::string &mount_root);
   void unmount();
@@ -666,6 +672,8 @@ public:
   int ll_statfs(vinodeno_t vino, struct statvfs *stbuf);
 
   void ll_register_ino_invalidate_cb(client_ino_callback_t cb, void *handle);
+
+  void ll_register_getgroups_cb(client_getgroups_callback_t cb, void *handle);
 };
 
 #endif
