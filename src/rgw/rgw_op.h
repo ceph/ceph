@@ -32,7 +32,7 @@ protected:
   RGWHandler *dialect_handler;
   RGWRados *store;
 public:
-  RGWOp() : s(NULL), store(NULL), dialect_handler(NULL) {}
+  RGWOp() : s(NULL), dialect_handler(NULL), store(NULL) {}
   virtual ~RGWOp() {}
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *dialect_handler) {
