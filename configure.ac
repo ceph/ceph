@@ -309,6 +309,9 @@ AS_IF([test "x$with_system_leveldb" = xcheck],
 	    [AC_CHECK_LIB([leveldb], [leveldb_open], [with_system_leveldb=yes], [], [-lsnappy -lpthread])])
 AM_CONDITIONAL(WITH_SYSTEM_LEVELDB, [ test "$with_system_leveldb" = "yes" ])
 
+# look for fuse_getgroups and define FUSE_GETGROUPS if found
+AC_CHECK_FUNCS([fuse_getgroups])
+
 # use system libs3?
 AC_ARG_WITH([system-libs3],
 	[AS_HELP_STRING([--with-system-libs3], [use system libs3])],
