@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_CLIENT_METAREQUEST_H
 #define CEPH_CLIENT_METAREQUEST_H
 
@@ -70,6 +73,7 @@ struct MetaRequest {
   Inode *target;
 
   MetaRequest(int op) : 
+    tid(0),
     inode_drop(0), inode_unless(0),
     old_inode_drop(0), old_inode_unless(0),
     dentry_drop(0), dentry_unless(0),
