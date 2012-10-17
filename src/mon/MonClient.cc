@@ -690,23 +690,6 @@ int MonClient::wait_auth_rotating(double timeout)
 
 // ---------
 
-struct C_IsLatestMap : public Context {
-  Context *onfinish;
-  version_t newest;
-  version_t have;
-  C_IsLatestMap(Context *f, version_t h) : onfinish(f), newest(0), have(h) {}
-  void finish(int r) {
-    onfinish->complete(r == 0 ? (have != newest) : r);
-  }
-};
-
-void MonClient::is_latest_map(string map, version_t cur_ver, Context *onfinish)
-{
-  ldout(cct, 10) << "is_latest_map " << map << " current " << cur_ver << dendl;;
-  C_IsLatestMap *c = new C_IsLatestMap(onfinish, cur_ver);
-  get_version(map, &c->newest, NULL, c);
-}
-
 void MonClient::get_version(string map, version_t *newest, version_t *oldest, Context *onfinish)
 {
   ldout(cct, 10) << "get_version " << map << dendl;
