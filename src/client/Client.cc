@@ -2999,20 +2999,24 @@ void Client::handle_caps(MClientCaps *m)
     in = inode_map[vino];
   if (!in) {
     if (m->get_op() == CEPH_CAP_OP_IMPORT) {
-      ldout(cct, 5) << "handle_caps adding ino " << vino << " on IMPORT" << dendl;
-      in = new Inode(cct, vino, &m->get_layout());
-      inode_map[vino] = in;
-      in->ino = vino.ino;
-      in->snapid = vino.snapid;
-      in->mode = m->head.mode;
+      ldout(cct, 5) << "handle_caps don't have vino " << vino << " on IMPORT, immediately releasing" << dendl;
+      MetaSession *session = mds_sessions[mds];
+      if (!session->release)
+	session->release = new MClientCapRelease;
+      ceph_mds_cap_item i;
+      i.ino = m->get_ino();
+      i.cap_id = m->get_cap_id();
+      i.seq = m->get_seq();
+      i.migrate_seq = m->get_mseq();
+      session->release->caps.push_back(i);
     } else {
       ldout(cct, 5) << "handle_caps don't have vino " << vino << ", dropping" << dendl;
-      m->put();
-
-      // in case the mds is waiting on e.g. a revocation
-      flush_cap_releases();
-      return;
     }
+    m->put();
+
+    // in case the mds is waiting on e.g. a revocation
+    flush_cap_releases();
+    return;
   }
 
   switch (m->get_op()) {
