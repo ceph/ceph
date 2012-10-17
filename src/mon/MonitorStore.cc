@@ -164,7 +164,13 @@ void MonitorStore::put_int(version_t val, const char *a, const char *b)
   char fn[1024];
   snprintf(fn, sizeof(fn), "%s/%s", dir.c_str(), a);
   if (b) {
-    ::mkdir(fn, 0755);
+    int r = ::mkdir(fn, 0755);
+    if (r < 0) {
+      int err = -errno;
+      derr << __func__ << " failed to create dir " << fn << ": "
+	   << cpp_strerror(err) << dendl;
+      ceph_abort();
+    }
     dout(15) << "set_int " << a << "/" << b << " = " << val << dendl;
     snprintf(fn, sizeof(fn), "%s/%s/%s", dir.c_str(), a, b);
   } else {
@@ -321,10 +327,17 @@ int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
 
 int MonitorStore::write_bl_ss_impl(bufferlist& bl, const char *a, const char *b, bool append)
 {
+  int err = 0;
   char fn[1024];
   snprintf(fn, sizeof(fn), "%s/%s", dir.c_str(), a);
   if (b) {
-    ::mkdir(fn, 0755);
+    int r = ::mkdir(fn, 0755);
+    if (r < 0) {
+      err = -errno;
+      derr << __func__ << " failed to create dir " << fn
+	   << ": " << cpp_strerror(err) << dendl;
+      return err;
+    }
     dout(15) << "put_bl " << a << "/" << b << " = " << bl.length() << " bytes" << dendl;
     snprintf(fn, sizeof(fn), "%s/%s/%s", dir.c_str(), a, b);
   } else {
@@ -332,7 +345,6 @@ int MonitorStore::write_bl_ss_impl(bufferlist& bl, const char *a, const char *b,
   }
   
   char tfn[1024];
-  int err = 0;
   int fd;
   if (append) {
     fd = ::open(fn, O_WRONLY|O_CREAT|O_APPEND, 0600);
@@ -358,7 +370,13 @@ int MonitorStore::write_bl_ss_impl(bufferlist& bl, const char *a, const char *b,
     ::fsync(fd);
   ::close(fd);
   if (!append && !err) {
-    ::rename(tfn, fn);
+    int r = ::rename(tfn, fn);
+    if (r < 0) {
+      err = -errno;
+      derr << __func__ << " failed to rename '" << tfn << "' -> '"
+	   << fn << "': " << cpp_strerror(err) << dendl;
+      return err;
+    }
   }
 
   return err;
@@ -401,7 +419,13 @@ int MonitorStore::put_bl_sn_map(const char *a,
   // make sure dir exists
   char dfn[1024];
   snprintf(dfn, sizeof(dfn), "%s/%s", dir.c_str(), a);
-  ::mkdir(dfn, 0755);
+  int r = ::mkdir(dfn, 0755);
+  if (r < 0) {
+    int err = -errno;
+    derr << __func__ << " failed to create dir " << dfn << ": "
+	 << cpp_strerror(err) << dendl;
+    return err;
+  }
 
   for (map<version_t,bufferlist>::iterator p = start; p != end; ++p) {
     char tfn[1024], fn[1024];
@@ -430,6 +454,11 @@ int MonitorStore::put_bl_sn_map(const char *a,
 
   // sync them all
   int dirfd = ::open(dir.c_str(), O_RDONLY);
+  if (dirfd < 0) {
+    int err = -errno;
+    derr << "failed to open " << dir << ": " << cpp_strerror(err) << dendl;
+    return err;
+  }
   sync_filesystem(dirfd);
   ::close(dirfd);
     
@@ -447,6 +476,12 @@ int MonitorStore::put_bl_sn_map(const char *a,
     
   // fsync the dir (to commit the renames)
   dirfd = ::open(dir.c_str(), O_RDONLY);
+  if (dirfd < 0) {
+    int err = -errno;
+    derr << __func__ << " failed to open " << dir
+	 << ": " << cpp_strerror(err) << dendl;
+    return err;
+  }
   ::fsync(dirfd);
   ::close(dirfd);
 
@@ -456,6 +491,12 @@ int MonitorStore::put_bl_sn_map(const char *a,
 void MonitorStore::sync()
 {
   int dirfd = ::open(dir.c_str(), O_RDONLY);
+  if (dirfd < 0) {
+    int err = -errno;
+    derr << __func__ << " failed to open " << dir
+	 << ": " << cpp_strerror(err) << dendl;
+    return;
+  }
   sync_filesystem(dirfd);
   ::close(dirfd);
 }

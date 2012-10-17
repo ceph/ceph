@@ -720,12 +720,11 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 	err = -EINVAL;
 	goto done;
       }
-      if (!mon->key_server.contains(auth_inc.name)) {
+      if (!mon->key_server.get_auth(auth_inc.name, auth_inc.auth)) {
         ss << "couldn't find entry " << auth_inc.name;
         err = -ENOENT;
         goto done;
       }
-      mon->key_server.get_auth(auth_inc.name, auth_inc.auth);
 
       map<string,bufferlist> newcaps;
       for (unsigned i=3; i+1<m->cmd.size(); i += 2)
@@ -743,7 +742,12 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd[1] == "del" && m->cmd.size() >= 3) {
       string name = m->cmd[2];
       KeyServerData::Incremental auth_inc;
-      auth_inc.name.from_str(name);
+      bool r = auth_inc.name.from_str(name);
+      if (r == false) {
+	ss << "bad entity name " << name;
+	err = -EINVAL;
+	goto done;
+      }
       if (!mon->key_server.contains(auth_inc.name)) {
         ss << "couldn't find entry " << name;
         err = -ENOENT;
