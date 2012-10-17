@@ -1330,6 +1330,10 @@ int main(int argc, const char **argv)
 	cerr << "rbd: " << err.str() << std::endl;
 	return EXIT_FAILURE;
       }
+      if (sizell < 0) {
+	cerr << "rbd: size must be > 0" << std::endl;
+	return EXIT_FAILURE;
+      }
       size = sizell << 20;   // bytes to MB
     } else if (ceph_argparse_flag(args, i, "-l", "--long", (char*)NULL)) {
       lflag = true;
