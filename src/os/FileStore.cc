@@ -729,7 +729,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   timer(g_ceph_context, sync_entry_timeo_lock),
   stop(false), sync_thread(this),
   default_osr("default"),
-  op_queue_len(0), op_queue_bytes(0), op_finisher(g_ceph_context), next_finish(0),
+  op_queue_len(0), op_queue_bytes(0), op_finisher(g_ceph_context),
   op_tp(g_ceph_context, "FileStore::op_tp", g_conf->filestore_op_threads, "filestore_op_threads"),
   op_wq(this, g_conf->filestore_op_thread_timeout,
 	g_conf->filestore_op_thread_suicide_timeout, &op_tp),
@@ -2220,9 +2220,6 @@ FileStore::Op *FileStore::build_op(list<Transaction*>& tls,
 void FileStore::queue_op(OpSequencer *osr, Op *o)
 {
   assert(journal_lock.is_locked());
-  // initialize next_finish on first op
-  if (next_finish == 0)
-    next_finish = op_seq;
 
   // mark apply start _now_, because we need to drain the entire apply
   // queue during commit in order to put the store in a consistent
