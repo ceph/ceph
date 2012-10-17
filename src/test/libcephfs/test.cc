@@ -166,19 +166,15 @@ TEST(LibCephFS, Dir_ls) {
     ASSERT_STREQ(result->d_name, entries[i].first);
   }
 
+  ceph_rewinddir(cmount, ls_dir);
+
   int t = ceph_telldir(cmount, ls_dir);
   ASSERT_GT(t, -1);
 
-  ceph_rewinddir(cmount, ls_dir);
-
-  // test seekdir - move to end
-  ceph_seekdir(cmount, ls_dir, t);
-
-  // check that we're at the end
   ASSERT_TRUE(ceph_readdir(cmount, ls_dir) != NULL);
-  ASSERT_TRUE(ceph_readdir(cmount, ls_dir) == NULL);
 
-  ceph_rewinddir(cmount, ls_dir);
+  // test seekdir - move back to the beginning
+  ceph_seekdir(cmount, ls_dir, t);
 
   // test getdents
   struct dirent *getdents_entries;
