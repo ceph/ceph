@@ -267,8 +267,8 @@ Dir *Inode::open_dir()
 
 bool Inode::check_mode(uid_t ruid, gid_t rgid, gid_t *sgids, int sgids_count, uint32_t rflags)
 {
-  int mflags = rflags & O_ACCMODE;
-  int fmode = 0;
+  unsigned mflags = rflags & O_ACCMODE;
+  unsigned fmode = 0;
 
   if ((mflags & O_WRONLY) == O_WRONLY)
       fmode |= 2;
