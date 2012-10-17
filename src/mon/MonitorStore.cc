@@ -370,7 +370,13 @@ int MonitorStore::write_bl_ss_impl(bufferlist& bl, const char *a, const char *b,
     ::fsync(fd);
   ::close(fd);
   if (!append && !err) {
-    ::rename(tfn, fn);
+    int r = ::rename(tfn, fn);
+    if (r < 0) {
+      err = -errno;
+      derr << __func__ << " failed to rename '" << tfn << "' -> '"
+	   << fn << "': " << cpp_strerror(err) << dendl;
+      return err;
+    }
   }
 
   return err;
