@@ -150,7 +150,11 @@ void LogMonitor::update_from_paxos()
       int err = -errno;
       dout(1) << "unable to write to " << g_conf->mon_cluster_log_file << ": " << cpp_strerror(err) << dendl;
     } else {
-      blog.write_fd(fd);
+      int err = blog.write_fd(fd);
+      if (err < 0) {
+	dout(1) << "error writing to " << g_conf->mon_cluster_log_file
+		<< ": " << cpp_strerror(err) << dendl;
+      }
       TEMP_FAILURE_RETRY(::close(fd));
     }
   }
