@@ -165,7 +165,7 @@ void MonitorStore::put_int(version_t val, const char *a, const char *b)
   snprintf(fn, sizeof(fn), "%s/%s", dir.c_str(), a);
   if (b) {
     int r = ::mkdir(fn, 0755);
-    if (r < 0) {
+    if ((r < 0) && (errno != EEXIST)) {
       int err = -errno;
       derr << __func__ << " failed to create dir " << fn << ": "
 	   << cpp_strerror(err) << dendl;
@@ -332,7 +332,7 @@ int MonitorStore::write_bl_ss_impl(bufferlist& bl, const char *a, const char *b,
   snprintf(fn, sizeof(fn), "%s/%s", dir.c_str(), a);
   if (b) {
     int r = ::mkdir(fn, 0755);
-    if (r < 0) {
+    if ((r < 0) && (errno != EEXIST)) {
       err = -errno;
       derr << __func__ << " failed to create dir " << fn
 	   << ": " << cpp_strerror(err) << dendl;
@@ -420,7 +420,7 @@ int MonitorStore::put_bl_sn_map(const char *a,
   char dfn[1024];
   snprintf(dfn, sizeof(dfn), "%s/%s", dir.c_str(), a);
   int r = ::mkdir(dfn, 0755);
-  if (r < 0) {
+  if ((r < 0) && (errno != EEXIST)) {
     int err = -errno;
     derr << __func__ << " failed to create dir " << dfn << ": "
 	 << cpp_strerror(err) << dendl;
