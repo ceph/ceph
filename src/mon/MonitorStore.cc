@@ -430,6 +430,11 @@ int MonitorStore::put_bl_sn_map(const char *a,
 
   // sync them all
   int dirfd = ::open(dir.c_str(), O_RDONLY);
+  if (dirfd < 0) {
+    int err = -errno;
+    derr << "failed to open " << dir << ": " << cpp_strerror(err) << dendl;
+    return err;
+  }
   sync_filesystem(dirfd);
   ::close(dirfd);
     
@@ -447,6 +452,12 @@ int MonitorStore::put_bl_sn_map(const char *a,
     
   // fsync the dir (to commit the renames)
   dirfd = ::open(dir.c_str(), O_RDONLY);
+  if (dirfd < 0) {
+    int err = -errno;
+    derr << __func__ << " failed to open " << dir
+	 << ": " << cpp_strerror(err) << dendl;
+    return err;
+  }
   ::fsync(dirfd);
   ::close(dirfd);
 
@@ -456,6 +467,12 @@ int MonitorStore::put_bl_sn_map(const char *a,
 void MonitorStore::sync()
 {
   int dirfd = ::open(dir.c_str(), O_RDONLY);
+  if (dirfd < 0) {
+    int err = -errno;
+    derr << __func__ << " failed to open " << dir
+	 << ": " << cpp_strerror(err) << dendl;
+    return;
+  }
   sync_filesystem(dirfd);
   ::close(dirfd);
 }
