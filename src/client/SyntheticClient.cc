@@ -1684,11 +1684,10 @@ int SyntheticClient::dump_placement(string& fn) {
     int osd = client->osdmap->get_pg_primary(client->osdmap->object_locator_to_pg(i->oid, i->oloc));
 
     // run through all the buffer extents
-    for (map<uint64_t, uint64_t>::iterator j = i ->buffer_extents.begin();
+    for (vector<pair<uint64_t, uint64_t> >::iterator j = i->buffer_extents.begin();
 	 j != i->buffer_extents.end(); ++j) {
-      
-      dout(0) << "OSD " << osd << ", offset " << (*j).first <<
-	", length " << (*j).second << dendl;    
+      dout(0) << "OSD " << osd << ", offset " << (*j).first
+	      << ", length " << (*j).second << dendl;    
     }
   }
   return 0;

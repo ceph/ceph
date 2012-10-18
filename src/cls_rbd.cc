@@ -42,6 +42,19 @@
 #include "librbd/cls_rbd.h"
 
 
+/*
+ * Object keys:
+ *
+ * <partial list>
+ *
+ * stripe_unit: size in bytes of the stripe unit.  if not present,
+ *   the stripe unit is assumed to match the object size (1 << order).
+ *
+ * stripe_count: number of objects to stripe over before looping back.
+ *   if not present or 1, striping is disabled.  this is the default.
+ *
+ */
+
 CLS_VER(2,0)
 CLS_NAME(rbd)
 
@@ -54,6 +67,8 @@ cls_method_handle_t h_get_parent;
 cls_method_handle_t h_set_parent;
 cls_method_handle_t h_get_protection_status;
 cls_method_handle_t h_set_protection_status;
+cls_method_handle_t h_get_stripe_unit_count;
+cls_method_handle_t h_set_stripe_unit_count;
 cls_method_handle_t h_remove_parent;
 cls_method_handle_t h_add_child;
 cls_method_handle_t h_remove_child;
@@ -567,6 +582,123 @@ int set_protection_status(cls_method_context_t hctx, bufferlist *in,
 }
 
 /**
+ * get striping parameters
+ *
+ * Input:
+ * none
+ *
+ * Output:
+ * @param stripe unit (bytes)
+ * @param stripe count (num objects)
+ *
+ * @returns 0 on success
+ */
+int get_stripe_unit_count(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  CLS_LOG(20, "get_stripe_unit_count");
+
+  r = require_feature(hctx, RBD_FEATURE_STRIPINGV2);
+  if (r < 0)
+    return r;
+
+  uint64_t stripe_unit = 0, stripe_count = 0;
+  r = read_key(hctx, "stripe_unit", &stripe_unit);
+  if (r == -ENOENT) {
+    // default to object size
+    uint8_t order;
+    r = read_key(hctx, "order", &order);
+    if (r < 0) {
+      CLS_ERR("failed to read the order off of disk: %s", strerror(r));
+      return -EIO;
+    }
+    stripe_unit = 1ull << order;
+  }
+  if (r < 0)
+    return r;
+  r = read_key(hctx, "stripe_count", &stripe_count);
+  if (r == -ENOENT) {
+    // default to 1
+    stripe_count = 1;
+    r = 0;
+  }
+  if (r < 0)
+    return r;
+
+  ::encode(stripe_unit, *out);
+  ::encode(stripe_count, *out);
+  return 0;
+}
+
+/**
+ * set striping parameters
+ *
+ * Input:
+ * @param stripe unit (bytes)
+ * @param stripe count (num objects)
+ *
+ * @returns 0 on success
+ */
+int set_stripe_unit_count(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t stripe_unit, stripe_count;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(stripe_unit, iter);
+    ::decode(stripe_count, iter);
+  } catch (const buffer::error &err) {
+    CLS_LOG(20, "set_stripe_unit_count: invalid decode");
+    return -EINVAL;
+  }
+
+  if (!stripe_count || !stripe_unit)
+    return -EINVAL;
+
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  CLS_LOG(20, "set_stripe_unit_count");
+
+  r = require_feature(hctx, RBD_FEATURE_STRIPINGV2);
+  if (r < 0)
+    return r;
+
+  uint8_t order;
+  r = read_key(hctx, "order", &order);
+  if (r < 0) {
+    CLS_ERR("failed to read the order off of disk: %s", strerror(r));
+    return r;
+  }
+  if ((1ull << order) % stripe_unit) {
+    CLS_ERR("stripe unit %lld is not a factor of the object size %lld", stripe_unit, 1ull << order);
+    return -EINVAL;
+  }
+
+  bufferlist bl, bl2;
+  ::encode(stripe_unit, bl);
+  r = cls_cxx_map_set_val(hctx, "stripe_unit", &bl);
+  if (r < 0) {
+    CLS_ERR("error writing stripe_unit metadata: %d", r);
+    return r;
+  }
+
+  ::encode(stripe_count, bl2);
+  r = cls_cxx_map_set_val(hctx, "stripe_count", &bl2);
+  if (r < 0) {
+    CLS_ERR("error writing stripe_count metadata: %d", r);
+    return r;
+  }
+
+  return 0;
+}
+
+
+/**
  * get the current parent, if any
  *
  * Input:
@@ -970,6 +1102,8 @@ int get_snapcontext(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
     for (set<string>::const_iterator it = keys.begin();
 	 it != keys.end(); ++it) {
+      if ((*it).find(RBD_SNAP_KEY_PREFIX) != 0)
+	break;
       snapid_t snap_id = snap_id_from_key(*it);
       snap_ids.push_back(snap_id);
     }
@@ -1935,6 +2069,12 @@ void __cls_init()
   cls_register_cxx_method(h_class, "get_protection_status",
 			  CLS_METHOD_RD,
 			  get_protection_status, &h_get_protection_status);
+  cls_register_cxx_method(h_class, "get_stripe_unit_count",
+			  CLS_METHOD_RD,
+			  get_stripe_unit_count, &h_get_stripe_unit_count);
+  cls_register_cxx_method(h_class, "set_stripe_unit_count",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  set_stripe_unit_count, &h_set_stripe_unit_count);
 
   /* methods for the rbd_children object */
   cls_register_cxx_method(h_class, "add_child",

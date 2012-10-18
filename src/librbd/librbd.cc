@@ -102,13 +102,20 @@ namespace librbd {
 
   int RBD::create(IoCtx& io_ctx, const char *name, uint64_t size, int *order)
   {
-    return librbd::create(io_ctx, name, size, true, 0, order);
+    return librbd::create(io_ctx, name, size, true, 0, order, 0, 0);
   }
 
   int RBD::create2(IoCtx& io_ctx, const char *name, uint64_t size,
 		   uint64_t features, int *order)
   {
-    return librbd::create(io_ctx, name, size, false, features, order);
+    return librbd::create(io_ctx, name, size, false, features, order, 0, 0);
+  }
+
+  int RBD::create3(IoCtx& io_ctx, const char *name, uint64_t size,
+		   uint64_t features, int *order, uint64_t stripe_unit,
+		   uint64_t stripe_count)
+  {
+    return librbd::create(io_ctx, name, size, false, features, order, stripe_unit, stripe_count);
   }
 
   int RBD::clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
@@ -116,7 +123,15 @@ namespace librbd {
 		 int *c_order)
   {
     return librbd::clone(p_ioctx, p_name, p_snap_name, c_ioctx, c_name,
-			 features, c_order);
+			 features, c_order, 0, 0);
+  }
+
+  int RBD::clone2(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
+		  IoCtx& c_ioctx, const char *c_name, uint64_t features,
+		  int *c_order, uint64_t stripe_unit, int stripe_count)
+  {
+    return librbd::clone(p_ioctx, p_name, p_snap_name, c_ioctx, c_name,
+			 features, c_order, stripe_unit, stripe_count);
   }
 
   int RBD::remove(IoCtx& io_ctx, const char *name)
@@ -225,6 +240,18 @@ namespace librbd {
     return librbd::get_features(ictx, features);
   }
 
+  uint64_t Image::get_stripe_unit() const
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return ictx->get_stripe_unit();
+  }
+
+  uint64_t Image::get_stripe_count() const
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return ictx->get_stripe_count();
+  }
+
   int Image::overlap(uint64_t *overlap)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -246,11 +273,26 @@ namespace librbd {
     return librbd::copy(ictx, dest_io_ctx, destname, prog_ctx);
   }
 
+  int Image::copy2(Image& dest)
+  {
+    ImageCtx *srcctx = (ImageCtx *)ctx;
+    ImageCtx *destctx = (ImageCtx *)dest.ctx;
+    librbd::NoOpProgressContext prog_ctx;
+    return librbd::copy(srcctx, destctx, prog_ctx);
+  }
+
   int Image::copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
 				librbd::ProgressContext &pctx)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     return librbd::copy(ictx, dest_io_ctx, destname, pctx);
+  }
+
+  int Image::copy_with_progress2(Image& dest, librbd::ProgressContext &pctx)
+  {
+    ImageCtx *srcctx = (ImageCtx *)ctx;
+    ImageCtx *destctx = (ImageCtx *)dest.ctx;
+    return librbd::copy(srcctx, destctx, pctx);
   }
 
   int Image::flatten()
@@ -409,11 +451,9 @@ namespace librbd {
 		      RBD::AioCompletion *c)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    bufferptr ptr(len);
-    bl.push_back(ptr);
     ldout(ictx->cct, 10) << "Image::aio_read() buf=" << (void *)bl.c_str() << "~"
 			 << (void *)(bl.c_str() + len - 1) << dendl;
-    return librbd::aio_read(ictx, off, len, bl.c_str(), (librbd::AioCompletion *)c->pc);
+    return librbd::aio_read(ictx, off, len, NULL, &bl, (librbd::AioCompletion *)c->pc);
   }
 
   int Image::flush()
@@ -468,7 +508,7 @@ extern "C" int rbd_create(rados_ioctx_t p, const char *name, uint64_t size, int 
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  return librbd::create(io_ctx, name, size, true, 0, order);
+  return librbd::create(io_ctx, name, size, true, 0, order, 0, 0);
 }
 
 extern "C" int rbd_create2(rados_ioctx_t p, const char *name,
@@ -477,7 +517,17 @@ extern "C" int rbd_create2(rados_ioctx_t p, const char *name,
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  return librbd::create(io_ctx, name, size, false, features, order);
+  return librbd::create(io_ctx, name, size, false, features, order, 0, 0);
+}
+
+extern "C" int rbd_create3(rados_ioctx_t p, const char *name,
+			   uint64_t size, uint64_t features,
+			   int *order,
+			   uint64_t stripe_unit, uint64_t stripe_count)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  return librbd::create(io_ctx, name, size, false, features, order, stripe_unit, stripe_count);
 }
 
 extern "C" int rbd_clone(rados_ioctx_t p_ioctx, const char *p_name,
@@ -488,7 +538,19 @@ extern "C" int rbd_clone(rados_ioctx_t p_ioctx, const char *p_name,
   librados::IoCtx::from_rados_ioctx_t(p_ioctx, p_ioc);
   librados::IoCtx::from_rados_ioctx_t(c_ioctx, c_ioc);
   return librbd::clone(p_ioc, p_name, p_snap_name, c_ioc, c_name,
-		       features, c_order);
+		       features, c_order, 0, 0);
+}
+
+extern "C" int rbd_clone2(rados_ioctx_t p_ioctx, const char *p_name,
+			  const char *p_snap_name, rados_ioctx_t c_ioctx,
+			  const char *c_name, uint64_t features, int *c_order,
+			  uint64_t stripe_unit, int stripe_count)
+{
+  librados::IoCtx p_ioc, c_ioc;
+  librados::IoCtx::from_rados_ioctx_t(p_ioctx, p_ioc);
+  librados::IoCtx::from_rados_ioctx_t(c_ioctx, c_ioc);
+  return librbd::clone(p_ioc, p_name, p_snap_name, c_ioc, c_name,
+		       features, c_order, stripe_unit, stripe_count);
 }
 
 extern "C" int rbd_remove(rados_ioctx_t p, const char *name)
@@ -518,6 +580,14 @@ extern "C" int rbd_copy(rbd_image_t image, rados_ioctx_t dest_p,
   return librbd::copy(ictx, dest_io_ctx, destname, prog_ctx);
 }
 
+extern "C" int rbd_copy2(rbd_image_t srcp, rbd_image_t destp)
+{
+  librbd::ImageCtx *src = (librbd::ImageCtx *)srcp;
+  librbd::ImageCtx *dest = (librbd::ImageCtx *)destp;
+  librbd::NoOpProgressContext prog_ctx;
+  return librbd::copy(src, dest, prog_ctx);
+}
+
 extern "C" int rbd_copy_with_progress(rbd_image_t image, rados_ioctx_t dest_p,
 				      const char *destname,
 				      librbd_progress_fn_t fn, void *data)
@@ -527,6 +597,16 @@ extern "C" int rbd_copy_with_progress(rbd_image_t image, rados_ioctx_t dest_p,
   librados::IoCtx::from_rados_ioctx_t(dest_p, dest_io_ctx);
   librbd::CProgressContext prog_ctx(fn, data);
   int ret = librbd::copy(ictx, dest_io_ctx, destname, prog_ctx);
+  return ret;
+}
+
+extern "C" int rbd_copy_with_progress2(rbd_image_t srcp, rbd_image_t destp,
+				      librbd_progress_fn_t fn, void *data)
+{
+  librbd::ImageCtx *src = (librbd::ImageCtx *)srcp;
+  librbd::ImageCtx *dest = (librbd::ImageCtx *)destp;
+  librbd::CProgressContext prog_ctx(fn, data);
+  int ret = librbd::copy(src, dest, prog_ctx);
   return ret;
 }
 
@@ -609,6 +689,20 @@ extern "C" int rbd_get_features(rbd_image_t image, uint64_t *features)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   return librbd::get_features(ictx, features);
+}
+
+extern "C" int rbd_get_stripe_unit(rbd_image_t image, uint64_t *stripe_unit)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  *stripe_unit = ictx->get_stripe_unit();
+  return 0;
+}
+
+extern "C" int rbd_get_stripe_count(rbd_image_t image, uint64_t *stripe_count)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  *stripe_count = ictx->get_stripe_count();
+  return 0;
 }
 
 extern "C" int rbd_get_overlap(rbd_image_t image, uint64_t *overlap)
@@ -930,7 +1024,7 @@ extern "C" int rbd_aio_read(rbd_image_t image, uint64_t off, size_t len,
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
-  return librbd::aio_read(ictx, off, len, buf,
+  return librbd::aio_read(ictx, off, len, buf, NULL,
 			  (librbd::AioCompletion *)comp->pc);
 }
 

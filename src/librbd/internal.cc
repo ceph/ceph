@@ -113,7 +113,7 @@ namespace librbd {
     ictx->snap_lock.Unlock();
     ictx->md_lock.Unlock();
     info.obj_size = 1ULL << obj_order;
-    info.num_objs = howmany(info.size, get_block_size(obj_order));
+    info.num_objs = howmany(info.size, ictx->get_object_size());
     info.order = obj_order;
     memcpy(&info.block_name_prefix, ictx->object_prefix.c_str(),
 	   min((size_t)RBD_MAX_BLOCK_NAME_SIZE,
@@ -123,50 +123,13 @@ namespace librbd {
     info.parent_name[0] = '\0';
   }
 
-  string get_block_oid(const string &object_prefix, uint64_t num,
-		       bool old_format)
-  {
-    ostringstream oss;
-    int width = old_format ? 12 : 16;
-    oss << object_prefix << "."
-	<< std::hex << std::setw(width) << std::setfill('0') << num;
-    return oss.str();
-  }
-
-  uint64_t offset_of_object(const string &oid, const string &object_prefix,
-			    uint8_t order)
+  uint64_t oid_to_object_no(const string& oid, const string& object_prefix)
   {
     istringstream iss(oid);
     // skip object prefix and separator
     iss.ignore(object_prefix.length() + 1);
-    uint64_t num, offset;
+    uint64_t num;
     iss >> std::hex >> num;
-    offset = num * (1ULL << order);
-    return offset;
-  }
-
-  uint64_t get_max_block(uint64_t size, uint8_t obj_order)
-  {
-    uint64_t block_size = 1ULL << obj_order;
-    uint64_t numseg = (size + block_size - 1) >> obj_order;
-    return numseg;
-  }
-
-  uint64_t get_block_ofs(uint8_t order, uint64_t ofs)
-  {
-    uint64_t block_size = 1ULL << order;
-    return ofs & (block_size - 1);
-  }
-
-  uint64_t get_block_size(uint8_t order)
-  {
-    return 1ULL << order;
-  }
-
-  uint64_t get_block_num(uint8_t order, uint64_t ofs)
-  {
-    uint64_t num = ofs >> order;
-
     return num;
   }
 
@@ -180,27 +143,46 @@ namespace librbd {
   {
     assert(ictx->md_lock.is_locked());
     CephContext *cct = (CephContext *)ictx->data_ctx.cct();
-    uint64_t bsize = get_block_size(ictx->order);
-    uint64_t numseg = get_max_block(ictx->size, ictx->order);
-    uint64_t start = get_block_num(ictx->order, newsize);
 
-    uint64_t block_ofs = get_block_ofs(ictx->order, newsize);
-    if (block_ofs) {
-      ldout(cct, 2) << "trim_image object " << numseg << " truncate to "
-		    << block_ofs << dendl;
-      string oid = get_block_oid(ictx->object_prefix, start, ictx->old_format);
-      librados::ObjectWriteOperation write_op;
-      write_op.truncate(block_ofs);
-      ictx->data_ctx.operate(oid, &write_op);
-      start++;
-    }
-    if (start < numseg) {
-      ldout(cct, 2) << "trim_image objects " << start << " to "
-		    << (numseg - 1) << dendl;
-      for (uint64_t i = start; i < numseg; ++i) {
-	string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
+    uint64_t size = ictx->get_current_size();
+    uint64_t period = ictx->get_stripe_period();
+    uint64_t num_period = ((newsize + period - 1) / period);
+    uint64_t delete_off = MIN(num_period * period, size);
+    uint64_t delete_start = num_period * ictx->get_stripe_count();     // first object we can delete free and clear
+    uint64_t num_objects = ictx->get_num_objects();
+    uint64_t object_size = ictx->get_object_size();
+
+    ldout(cct, 10) << "trim_image " << size << " -> " << newsize
+		   << " periods " << num_period
+		   << " discard to offset " << delete_off
+		   << " delete objects " << delete_start << " to " << (num_objects-1)
+		   << dendl;
+
+    if (delete_start < num_objects) {
+      ldout(cct, 2) << "trim_image objects " << delete_start << " to "
+		    << (num_objects - 1) << dendl;
+      for (uint64_t i = delete_start; i < num_objects; ++i) {
+	string oid = ictx->get_object_name(i);
 	ictx->data_ctx.remove(oid);
-	prog_ctx.update_progress(i * bsize, (numseg - start) * bsize);
+	prog_ctx.update_progress((i - delete_start) * object_size,
+				 (num_objects - delete_start) * object_size);
+      }
+    }
+
+    // discard the weird boundary, if any
+    if (delete_off > newsize) {
+      vector<ObjectExtent> extents;
+      Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, newsize, delete_off - newsize, extents);
+
+      for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
+	ldout(ictx->cct, 20) << " ex " << *p << dendl;
+	if (p->offset == 0) {
+	  ictx->data_ctx.remove(p->oid.name);
+	} else {
+	  librados::ObjectWriteOperation op;
+	  op.truncate(p->offset);
+	  ictx->data_ctx.operate(p->oid.name, &op);
+	}
       }
     }
   }
@@ -327,12 +309,12 @@ namespace librbd {
 		     ProgressContext& prog_ctx)
   {
     assert(ictx->md_lock.is_locked());
-    uint64_t numseg = get_max_block(ictx->size, ictx->order);
-    uint64_t bsize = get_block_size(ictx->order);
+    uint64_t numseg = ictx->get_num_objects();
+    uint64_t bsize = ictx->get_object_size();
 
     for (uint64_t i = 0; i < numseg; i++) {
       int r;
-      string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
+      string oid = ictx->get_object_name(i);
       r = ictx->data_ctx.selfmanaged_snap_rollback(oid, snap_id);
       ldout(ictx->cct, 10) << "selfmanaged_snap_rollback on " << oid << " to "
 			   << snap_id << " returned " << r << dendl;
@@ -670,12 +652,15 @@ reprotect_and_return_err:
   }
 
   int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
-	     bool old_format, uint64_t features, int *order)
+	     bool old_format, uint64_t features, int *order,
+	     uint64_t stripe_unit, uint64_t stripe_count)
   {
     CephContext *cct = (CephContext *)io_ctx.cct();
     ldout(cct, 20) << "create " << &io_ctx << " name = " << imgname
 		   << " size = " << size << " old_format = " << old_format
 		   << " features = " << features << " order = " << *order
+		   << " stripe_unit = " << stripe_unit
+		   << " stripe_count = " << stripe_count
 		   << dendl;
 
 
@@ -704,7 +689,26 @@ reprotect_and_return_err:
     if (!*order)
       *order = RBD_DEFAULT_OBJ_ORDER;
 
+    // normalize for default striping
+    if (stripe_unit == (1ull << *order) && stripe_count == 1) {
+      stripe_unit = 0;
+      stripe_count = 0;
+    }
+    if ((stripe_unit || stripe_count) &&
+	(features & RBD_FEATURE_STRIPINGV2) == 0) {
+      lderr(cct) << "STRIPINGV2 and format 2 or later required for non-default striping" << dendl;
+      return -EINVAL;
+    }
+    if ((stripe_unit && !stripe_count) ||
+	(!stripe_unit && stripe_count))
+      return -EINVAL;
+
     if (old_format) {
+      if (stripe_unit && stripe_unit != (1ull << *order))
+	return -EINVAL;
+      if (stripe_count && stripe_count != 1)
+	return -EINVAL;
+
       ldout(cct, 2) << "adding rbd image to directory..." << dendl;
       r = tmap_set(io_ctx, imgname);
       if (r < 0) {
@@ -753,6 +757,11 @@ reprotect_and_return_err:
       oss << RBD_DATA_PREFIX << id;
       r = cls_client::create_image(&io_ctx, header_name(id), size, *order,
 				   features, oss.str());
+      if (r == 0 &&
+	  (stripe_unit || stripe_count) &&
+	  (stripe_count != 1 || stripe_unit != (1ull<<*order))) {
+	r = cls_client::set_stripe_unit_count(&io_ctx, header_name(id), stripe_unit, stripe_count);
+      }
     }
 
     if (r < 0) {
@@ -769,13 +778,17 @@ reprotect_and_return_err:
    */
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
 	    IoCtx& c_ioctx, const char *c_name,
-	    uint64_t features, int *c_order)
+	    uint64_t features, int *c_order,
+	    uint64_t stripe_unit, int stripe_count)
   {
     CephContext *cct = (CephContext *)p_ioctx.cct();
     ldout(cct, 20) << "clone " << &p_ioctx << " name " << p_name << " snap "
 		   << p_snap_name << "to child " << &c_ioctx << " name "
 		   << c_name << " features = " << features << " order = "
-		   << *c_order << dendl;
+		   << *c_order
+		   << " stripe_unit = " << stripe_unit
+		   << " stripe_count = " << stripe_count
+		   << dendl;
 
     if (features & ~RBD_FEATURES_ALL) {
       lderr(cct) << "librbd does not support requested features" << dendl;
@@ -843,7 +856,7 @@ reprotect_and_return_err:
     if (!order)
       order = p_imctx->order;
 
-    r = create(c_ioctx, c_name, size, false, features, &order);
+    r = create(c_ioctx, c_name, size, false, features, &order, stripe_unit, stripe_count);
     if (r < 0) {
       lderr(cct) << "error creating child: " << cpp_strerror(r) << dendl;
       goto err_close_parent;
@@ -1521,6 +1534,7 @@ reprotect_and_return_err:
 	  ictx->order = ictx->header.options.order;
 	  ictx->size = ictx->header.image_size;
 	  ictx->object_prefix = ictx->header.block_name;
+	  ictx->init_layout();
 	} else {
 	  do {
 	    uint64_t incompatible_features;
@@ -1703,42 +1717,68 @@ reprotect_and_return_err:
     return ret;
   }
 
-  int copy(ImageCtx *ictx, IoCtx& dest_md_ctx, const char *destname,
+  int copy(ImageCtx *src, IoCtx& dest_md_ctx, const char *destname,
 	   ProgressContext &prog_ctx)
   {
     CephContext *cct = (CephContext *)dest_md_ctx.cct();
-    CopyProgressCtx cp(prog_ctx);
-    ictx->md_lock.Lock();
-    ictx->snap_lock.Lock();
-    uint64_t src_size = ictx->get_image_size(ictx->snap_id);
-    ictx->snap_lock.Unlock();
-    ictx->md_lock.Unlock();
-    int64_t r;
+    int order = src->order;
 
-    int order = ictx->order;
-    r = create(dest_md_ctx, destname, src_size, ictx->old_format,
-	       ictx->features, &order);
+    src->md_lock.Lock();
+    src->snap_lock.Lock();
+    uint64_t src_size = src->get_image_size(src->snap_id);
+    src->snap_lock.Unlock();
+    src->md_lock.Unlock();
+
+    int r = create(dest_md_ctx, destname, src_size, src->old_format,
+		   src->features, &order, src->stripe_unit, src->stripe_count);
     if (r < 0) {
       lderr(cct) << "header creation failed" << dendl;
       return r;
     }
 
-    cp.destictx = new librbd::ImageCtx(destname, "", NULL, dest_md_ctx);
-    cp.src_size = src_size;
-    r = open_image(cp.destictx, true);
+    ImageCtx *dest = new librbd::ImageCtx(destname, "", NULL, dest_md_ctx);
+    r = open_image(dest, true);
     if (r < 0) {
       lderr(cct) << "failed to read newly created header" << dendl;
       return r;
     }
 
-    r = read_iterate(ictx, 0, src_size, do_copy_extent, &cp);
+    r = copy(src, dest, prog_ctx);
+    close_image(dest);    
+    return r;
+  }
+
+  int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx)
+  {
+    CopyProgressCtx cp(prog_ctx);
+
+    src->md_lock.Lock();
+    src->snap_lock.Lock();
+    uint64_t src_size = src->get_image_size(src->snap_id);
+    src->snap_lock.Unlock();
+    src->md_lock.Unlock();
+
+    dest->md_lock.Lock();
+    dest->snap_lock.Lock();
+    uint64_t dest_size = dest->get_image_size(src->snap_id);
+    dest->snap_lock.Unlock();
+    dest->md_lock.Unlock();
+
+    if (dest_size < src_size) {
+      lderr(src->cct) << " src size " << src_size << " != dest size " << dest_size << dendl;
+      return -EINVAL;
+    }
+
+    cp.destictx = dest;
+    cp.src_size = src_size;
+
+    int64_t r = read_iterate(src, 0, src_size, do_copy_extent, &cp);
 
     if (r >= 0) {
       // don't return total bytes read, which may not fit in an int
       r = 0;
       prog_ctx.update_progress(cp.src_size, cp.src_size);
     }
-    close_image(cp.destictx);
     return r;
   }
 
@@ -1823,25 +1863,6 @@ reprotect_and_return_err:
     delete ictx;
   }
 
-  // copy a parent block from buf to the child ictx(offset, len)
-  int copyup_block(ImageCtx *ictx, uint64_t offset, size_t len,
-		   const char *buf)
-  {
-    uint64_t blksize = get_block_size(ictx->order);
-
-    // len > blksize invalid, block-misaligned offset invalid
-    if ((len > blksize) || (get_block_ofs(ictx->order, offset) != 0))
-      return -EINVAL;
-
-    bufferlist bl;
-    string oid = get_block_oid(ictx->object_prefix,
-			       get_block_num(ictx->order, offset),
-			       ictx->old_format);
-
-    bl.append(buf, len);
-    return cls_client::copyup(&ictx->data_ctx, oid, bl);
-  }
-
   // test if an entire buf is zero in 8-byte chunks
   static bool buf_is_zero(char *buf, size_t len)
   {
@@ -1875,6 +1896,7 @@ reprotect_and_return_err:
     Mutex::Locker l(ictx->md_lock);
     Mutex::Locker l2(ictx->snap_lock);
     Mutex::Locker l3(ictx->parent_lock);
+
     // can't flatten a non-clone
     if (ictx->parent_md.spec.pool_id == -1) {
       lderr(ictx->cct) << "image has no parent" << dendl;
@@ -1888,27 +1910,41 @@ reprotect_and_return_err:
     assert(ictx->parent != NULL);
     assert(ictx->parent_md.overlap <= ictx->size);
 
+    uint64_t object_size = ictx->get_object_size();
+    uint64_t period = ictx->get_stripe_period();
     uint64_t overlap = ictx->parent_md.overlap;
-    uint64_t cblksize = get_block_size(ictx->order);
-    char *buf = new char[cblksize];
+    uint64_t overlap_periods = (overlap + period - 1) / period;
+    uint64_t overlap_objects = overlap_periods * ictx->get_stripe_count();
 
-    size_t ofs = 0;
-    while (ofs < overlap) {
-      prog_ctx.update_progress(ofs, overlap);
-      size_t readsize = min(overlap - ofs, cblksize);
-      if ((r = read(ictx->parent, ofs, readsize, buf)) < 0) {
+    char *buf = new char[object_size];
+
+    for (uint64_t ono = 0; ono < overlap_objects; ono++) {
+      prog_ctx.update_progress(ono, overlap_objects);
+
+      // map child object onto the parent
+      vector<pair<uint64_t,uint64_t> > objectx;
+      Striper::extent_to_file(ictx->cct, &ictx->layout,
+			    ono, 0, object_size,
+			    objectx);
+      uint64_t object_overlap = ictx->prune_parent_extents(objectx, overlap);
+      assert(object_overlap <= object_size);
+
+      if ((r = read(ictx->parent, objectx, buf, NULL)) < 0) {
 	lderr(ictx->cct) << "reading from parent failed" << dendl;
 	goto err;
       }
 
       // for actual amount read, if data is all zero, don't bother with block
       if (!buf_is_zero(buf, r)) {
-	if ((r = copyup_block(ictx, ofs, r, buf)) < 0) {
+	bufferlist bl;
+	string oid = ictx->get_object_name(ono);
+	bl.append(buf, r);
+	r = cls_client::copyup(&ictx->data_ctx, oid, bl);
+	if (r < 0) {
 	  lderr(ictx->cct) << "failed to copy block to child" << dendl;
 	  goto err;
 	}
       }
-      ofs += cblksize;
     }
 
     // remove parent from this (base) image
@@ -2066,19 +2102,15 @@ reprotect_and_return_err:
       return r;
 
     int64_t total_read = 0;
-    uint64_t start_block = get_block_num(ictx->order, off);
-    uint64_t end_block = get_block_num(ictx->order, off + len - 1);
-    uint64_t block_size = get_block_size(ictx->order);
+    uint64_t period = ictx->get_stripe_period();
     uint64_t left = len;
 
     start_time = ceph_clock_now(ictx->cct);
-    for (uint64_t i = start_block; i <= end_block; i++) {
-      uint64_t total_off = off + total_read;
-      uint64_t block_ofs = get_block_ofs(ictx->order, total_off);
-      uint64_t read_len = min(block_size - block_ofs, left);
-      buffer::ptr bp(read_len);
+    while (left > 0) {
+      uint64_t period_off = off - (off % period);
+      uint64_t read_len = min(period_off + period - off, left);
+
       bufferlist bl;
-      bl.append(bp);
 
       Mutex mylock("IoCtxImpl::write::mylock");
       Cond cond;
@@ -2087,7 +2119,7 @@ reprotect_and_return_err:
 
       Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
       AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      r = aio_read(ictx, total_off, read_len, bl.c_str(), c);
+      r = aio_read(ictx, off, read_len, NULL, &bl, c);
       if (r < 0) {
 	c->release();
 	delete ctx;
@@ -2109,6 +2141,7 @@ reprotect_and_return_err:
 
       total_read += ret;
       left -= ret;
+      off += ret;
     }
 
     elapsed = ceph_clock_now(ictx->cct) - start_time;
@@ -2132,6 +2165,31 @@ reprotect_and_return_err:
   ssize_t read(ImageCtx *ictx, uint64_t ofs, size_t len, char *buf)
   {
     return read_iterate(ictx, ofs, len, simple_read_cb, buf);
+  }
+
+  ssize_t read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents, char *buf, bufferlist *pbl)
+  {
+    Mutex mylock("IoCtxImpl::write::mylock");
+    Cond cond;
+    bool done;
+    int ret;
+
+    Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
+    AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
+    int r = aio_read(ictx, image_extents, buf, pbl, c);
+    if (r < 0) {
+      c->release();
+      delete ctx;
+      return r;
+    }
+
+    mylock.Lock();
+    while (!done)
+      cond.Wait(mylock);
+    mylock.Unlock();
+
+    c->release();
+    return ret;
   }
 
   ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
@@ -2214,10 +2272,8 @@ reprotect_and_return_err:
 			     const map<uint64_t, uint64_t> &data_map,
 			     uint64_t buf_ofs,   // offset into buffer
 			     size_t buf_len,     // length in buffer (not size of buffer!)
-			     int (*cb)(uint64_t, size_t, const char *, void *),
-			     void *arg)
+			     char *dest_buf)
   {
-    int r;
     uint64_t bl_ofs = 0;
     size_t buf_left = buf_len;
 
@@ -2235,10 +2291,8 @@ reprotect_and_return_err:
       if (extent_ofs > block_ofs) {
 	uint64_t gap = extent_ofs - block_ofs;
 	ldout(cct, 10) << "<1>zeroing " << buf_ofs << "~" << gap << dendl;
-	r = cb(buf_ofs, gap, NULL, arg);
-	if (r < 0) {
-	  return r;
-	}
+	memset(dest_buf + buf_ofs, 0, gap);
+
 	buf_ofs += gap;
 	buf_left -= gap;
 	block_ofs = extent_ofs;
@@ -2255,10 +2309,8 @@ reprotect_and_return_err:
       /* data */
       ldout(cct, 10) << "<2>copying " << buf_ofs << "~" << extent_len
 		     << " from ofs=" << bl_ofs << dendl;
-      r = cb(buf_ofs, extent_len, data_bl.c_str() + bl_ofs, arg);
-      if (r < 0) {
-	return r;
-      }
+      memcpy(dest_buf + buf_ofs, data_bl.c_str() + bl_ofs, extent_len);
+
       bl_ofs += extent_len;
       buf_ofs += extent_len;
       assert(buf_left >= extent_len);
@@ -2269,10 +2321,7 @@ reprotect_and_return_err:
     /* last hole */
     if (buf_left > 0) {
       ldout(cct, 10) << "<3>zeroing " << buf_ofs << "~" << buf_left << dendl;
-      r = cb(buf_ofs, buf_left, NULL, arg);
-      if (r < 0) {
-	return r;
-      }
+      memset(dest_buf + buf_ofs, 0, buf_left);
     }
 
     return buf_len;
@@ -2344,58 +2393,65 @@ reprotect_and_return_err:
     if (r < 0)
       return r;
 
-    size_t total_write = 0;
-    uint64_t start_block = get_block_num(ictx->order, off);
-    uint64_t end_block = get_block_num(ictx->order, off + len - 1);
-    uint64_t block_size = get_block_size(ictx->order);
-    ictx->snap_lock.Lock();
-    snapid_t snap_id = ictx->snap_id;
-    ::SnapContext snapc = ictx->snapc;
-    ictx->parent_lock.Lock();
-    int64_t parent_pool_id = ictx->get_parent_pool_id(ictx->snap_id);
-    uint64_t overlap = 0;
-    ictx->get_parent_overlap(ictx->snap_id, &overlap);
-    ictx->parent_lock.Unlock();
-    ictx->snap_lock.Unlock();
-    uint64_t left = len;
-
     r = check_io(ictx, off, len);
     if (r < 0)
       return r;
 
+    ictx->snap_lock.Lock();
+    snapid_t snap_id = ictx->snap_id;
+    ::SnapContext snapc = ictx->snapc;
+    ictx->parent_lock.Lock();
+    uint64_t overlap = 0;
+    ictx->get_parent_overlap(ictx->snap_id, &overlap);
+    ictx->parent_lock.Unlock();
+    ictx->snap_lock.Unlock();
+
     if (snap_id != CEPH_NOSNAP)
       return -EROFS;
 
+    ldout(cct, 20) << "  parent overlap " << overlap << dendl;
+
+    // map
+    vector<ObjectExtent> extents;
+    Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, off, len, extents);
+
+    size_t total_write = 0;
+
     c->get();
     c->init_time(ictx, AIO_TYPE_WRITE);
-    for (uint64_t i = start_block; i <= end_block; i++) {
-      string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
-      ldout(cct, 20) << "oid = '" << oid << "' i = " << i << dendl;
-      uint64_t total_off = off + total_write;
-      uint64_t block_ofs = get_block_ofs(ictx->order, total_off);
-      uint64_t write_len = min(block_size - block_ofs, left);
+    for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
+      ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
+		     << " from " << p->buffer_extents << dendl;
 
+      // assemble extent
       bufferlist bl;
-      bl.append(buf + total_write, write_len);
+      for (vector<pair<uint64_t,uint64_t> >::iterator q = p->buffer_extents.begin();
+	   q != p->buffer_extents.end();
+	   ++q) {
+	bl.append(buf + q->first, q->second);
+      }
+
       if (ictx->object_cacher) {
 	// may block
-	ictx->write_to_cache(oid, bl, write_len, block_ofs);
+	ictx->write_to_cache(p->oid, bl, p->length, p->offset);
       } else {
+	// reverse map this object extent onto the parent
+	vector<pair<uint64_t,uint64_t> > objectx;
+	Striper::extent_to_file(ictx->cct, &ictx->layout,
+			      p->objectno, 0, ictx->layout.fl_object_size,
+			      objectx);
+	uint64_t object_overlap = ictx->prune_parent_extents(objectx, overlap);
+
 	C_AioWrite *req_comp = new C_AioWrite(cct, c);
-	bool parent_exists = has_parent(parent_pool_id, total_off - block_ofs, overlap);
-	ldout(ictx->cct, 20) << "has_parent(pool=" << parent_pool_id
-			     << ", off=" << total_off
-			     << ", overlap=" << overlap << ") = "
-			     << parent_exists << dendl;
-	AioWrite *req = new AioWrite(ictx, oid, total_off, bl, snapc, snap_id,
-				     parent_exists, req_comp);
+	AioWrite *req = new AioWrite(ictx, p->oid.name, p->objectno, p->offset,
+				     objectx, object_overlap,
+				     bl, snapc, snap_id, req_comp);
 	c->add_request();
 	r = req->send();
 	if (r < 0)
 	  goto done;
       }
-      total_write += write_len;
-      left -= write_len;
+      total_write += bl.length();
     }
   done:
     c->finish_adding_requests();
@@ -2421,69 +2477,63 @@ reprotect_and_return_err:
     if (r < 0)
       return r;
 
-    // TODO: check for snap
-    size_t total_write = 0;
-    uint64_t start_block = get_block_num(ictx->order, off);
-    uint64_t end_block = get_block_num(ictx->order, off + len - 1);
-    uint64_t block_size = get_block_size(ictx->order);
-    ictx->snap_lock.Lock();
-    snapid_t snap_id = ictx->snap_id;
-    ::SnapContext snapc = ictx->snapc;
-    ictx->parent_lock.Lock();
-    int64_t parent_pool_id = ictx->get_parent_pool_id(ictx->snap_id);
-    uint64_t overlap = 0;
-    ictx->get_parent_overlap(ictx->snap_id, &overlap);
-    ictx->parent_lock.Unlock();
-    ictx->snap_lock.Unlock();
-    uint64_t left = len;
-
     r = check_io(ictx, off, len);
     if (r < 0)
       return r;
 
-    vector<ObjectExtent> v;
-    if (ictx->object_cacher)
-      v.reserve(end_block - start_block + 1);
+    // TODO: check for snap
+    ictx->snap_lock.Lock();
+    snapid_t snap_id = ictx->snap_id;
+    ::SnapContext snapc = ictx->snapc;
+    ictx->parent_lock.Lock();
+    uint64_t overlap = 0;
+    ictx->get_parent_overlap(ictx->snap_id, &overlap);
+    ictx->parent_lock.Unlock();
+    ictx->snap_lock.Unlock();
+
+    // map
+    vector<ObjectExtent> extents;
+    Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, off, len, extents);
 
     c->get();
     c->init_time(ictx, AIO_TYPE_DISCARD);
-    for (uint64_t i = start_block; i <= end_block; i++) {
-      string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
-      uint64_t total_off = off + total_write;
-      uint64_t block_ofs = get_block_ofs(ictx->order, total_off);;
-      uint64_t write_len = min(block_size - block_ofs, left);
-
-      if (ictx->object_cacher) {
-	v.push_back(ObjectExtent(oid, block_ofs, write_len));
-	v.back().oloc.pool = ictx->data_ctx.get_id();
-      }
-
+    for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
+      ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
+		     << " from " << p->buffer_extents << dendl;
       C_AioWrite *req_comp = new C_AioWrite(cct, c);
       AbstractWrite *req;
       c->add_request();
 
-      bool parent_exists = has_parent(parent_pool_id, total_off - block_ofs, overlap);
-      if (block_ofs == 0 && write_len == block_size) {
-	req = new AioRemove(ictx, oid, total_off, snapc, snap_id,
-			    parent_exists, req_comp);
-      } else if (block_ofs + write_len == block_size) {
-	req = new AioTruncate(ictx, oid, total_off, snapc, snap_id,
-			      parent_exists, req_comp);
+      // reverse map this object extent onto the parent
+      vector<pair<uint64_t,uint64_t> > objectx;
+      uint64_t object_overlap = 0;
+      if (off < overlap) {   // we might overlap...
+	Striper::extent_to_file(ictx->cct, &ictx->layout,
+			      p->objectno, 0, ictx->layout.fl_object_size,
+			      objectx);
+	object_overlap = ictx->prune_parent_extents(objectx, overlap);
+      }
+
+      if (p->offset == 0 && p->length == ictx->layout.fl_object_size) {
+	req = new AioRemove(ictx, p->oid.name, p->objectno, objectx, object_overlap,
+			    snapc, snap_id, req_comp);
+      } else if (p->offset + p->length == ictx->layout.fl_object_size) {
+	req = new AioTruncate(ictx, p->oid.name, p->objectno, p->offset, objectx, object_overlap,
+			      snapc, snap_id, req_comp);
       } else {
-	req = new AioZero(ictx, oid, total_off, write_len, snapc, snap_id,
-			  parent_exists, req_comp);
+	req = new AioZero(ictx, p->oid.name, p->objectno, p->offset, p->length,
+			  objectx, object_overlap,
+			  snapc, snap_id, req_comp);
       }
 
       r = req->send();
       if (r < 0)
 	goto done;
-      total_write += write_len;
-      left -= write_len;
     }
     r = 0;
   done:
     if (ictx->object_cacher)
-      ictx->object_cacher->discard_set(ictx->object_set, v);
+      ictx->object_cacher->discard_set(ictx->object_set, extents);
 
     c->finish_adding_requests();
     c->put();
@@ -2503,73 +2553,93 @@ reprotect_and_return_err:
   }
 
   int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
-	       char *buf,
+	       char *buf, bufferlist *bl,
 	       AioCompletion *c)
   {
-    ldout(ictx->cct, 20) << "aio_read " << ictx << " off = " << off << " len = "
-			 << len << dendl;
+    vector<pair<uint64_t,uint64_t> > image_extents(1);
+    image_extents[0] = make_pair(off, len);
+    return aio_read(ictx, image_extents, buf, bl, c);
+  }
+
+  int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
+	       char *buf, bufferlist *pbl, AioCompletion *c)
+  {
+    ldout(ictx->cct, 20) << "aio_read " << ictx << " " << image_extents << dendl;
 
     int r = ictx_check(ictx);
     if (r < 0)
       return r;
 
-    r = check_io(ictx, off, len);
-    if (r < 0)
-      return r;
-
-    int64_t ret;
-    int total_read = 0;
-    uint64_t start_block = get_block_num(ictx->order, off);
-    uint64_t end_block = get_block_num(ictx->order, off + len - 1);
-    uint64_t block_size = get_block_size(ictx->order);
     ictx->snap_lock.Lock();
     snap_t snap_id = ictx->snap_id;
     ictx->snap_lock.Unlock();
-    uint64_t left = len;
+
+    // map
+    map<object_t,vector<ObjectExtent> > object_extents;
+
+    uint64_t buffer_ofs = 0;
+    for (vector<pair<uint64_t,uint64_t> >::const_iterator p = image_extents.begin();
+	 p != image_extents.end();
+	 ++p) {
+      r = check_io(ictx, p->first, p->second);
+      if (r < 0)
+	return r;
+      
+      Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout,
+			       p->first, p->second, object_extents, buffer_ofs);
+      buffer_ofs += p->second;
+    }
+
+    int64_t ret;
+
+    c->read_buf = buf;
+    c->read_buf_len = buffer_ofs;
+    c->read_bl = pbl;
 
     c->get();
     c->init_time(ictx, AIO_TYPE_READ);
-    for (uint64_t i = start_block; i <= end_block; i++) {
-      string oid = get_block_oid(ictx->object_prefix, i, ictx->old_format);
-      uint64_t block_ofs = get_block_ofs(ictx->order, off + total_read);
-      uint64_t read_len = min(block_size - block_ofs, left);
+    for (map<object_t,vector<ObjectExtent> >::iterator p = object_extents.begin(); p != object_extents.end(); ++p) {
+      for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
+	ldout(ictx->cct, 20) << " oid " << q->oid << " " << q->offset << "~" << q->length
+			     << " from " << q->buffer_extents << dendl;
 
-      C_AioRead *req_comp = new C_AioRead(ictx->cct, c, buf + total_read);
-      AioRead *req = new AioRead(ictx, oid, off + total_read,
-				 read_len, snap_id, true, req_comp);
-      req_comp->set_req(req);
-      c->add_request();
+	C_AioRead *req_comp = new C_AioRead(ictx->cct, c);
+	AioRead *req = new AioRead(ictx, q->oid.name, 
+				   q->objectno, q->offset, q->length,
+				   q->buffer_extents,
+				   snap_id, true, req_comp);
+	req_comp->set_req(req);
+	c->add_request();
 
-      if (ictx->object_cacher) {
-	req->ext_map()[block_ofs] = read_len;
-	// cache has already handled possible reading from parent, so
-	// this AioRead is just used to pass data to the
-	// AioCompletion. The AioRead isn't being used as a
-	// completion, so wrap the completion in a C_CacheRead to
-	// delete it
-	C_CacheRead *cache_comp = new C_CacheRead(req_comp, req);
-	ictx->aio_read_from_cache(oid, &req->data(),
-				  read_len, block_ofs, cache_comp);
-      } else {
-	r = req->send();
-	if (r < 0 && r == -ENOENT)
-	  r = 0;
-	if (r < 0) {
-	  ret = r;
-	  goto done;
+	if (ictx->object_cacher) {
+	  // cache has already handled possible reading from parent, so
+	  // this AioRead is just used to pass data to the
+	  // AioCompletion. The AioRead isn't being used as a
+	  // completion, so wrap the completion in a C_CacheRead to
+	  // delete it
+	  C_CacheRead *cache_comp = new C_CacheRead(req_comp, req);
+	  req->m_ext_map[q->offset] = q->length;
+	  ictx->aio_read_from_cache(q->oid, &req->data(),
+				    q->length, q->offset,
+				    cache_comp);
+	} else {
+	  r = req->send();
+	  if (r < 0 && r == -ENOENT)
+	    r = 0;
+	  if (r < 0) {
+	    ret = r;
+	    goto done;
+	  }
 	}
       }
-
-      total_read += read_len;
-      left -= read_len;
     }
-    ret = total_read;
+    ret = buffer_ofs;
   done:
     c->finish_adding_requests();
     c->put();
 
     ictx->perfcounter->inc(l_librbd_aio_rd);
-    ictx->perfcounter->inc(l_librbd_aio_rd_bytes, len);
+    ictx->perfcounter->inc(l_librbd_aio_rd_bytes, buffer_ofs);
 
     return ret;
   }

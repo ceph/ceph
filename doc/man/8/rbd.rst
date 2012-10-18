@@ -63,6 +63,15 @@ Parameters
    Specifies the object size expressed as a number of bits, such that
    the object size is ``1 << order``. The default is 22 (4 MB).
 
+.. option:: --stripe-unit size-in-bytes
+
+   Specifies the stripe unit size in bytes.  See striping section (below) for more details.
+
+.. option:: --stripe-count num
+
+   Specifies the number of objects to stripe over before looping back
+   to the first object.  See striping section (below) for more details.
+
 .. option:: --snap snap
 
    Specifies the snapshot name for the specific operation.
@@ -108,7 +117,8 @@ Commands
   If a snapshot is specified, whether it is protected is shown as well.
 
 :command:`create` [*image-name*]
-  Will create a new rbd image. You must also specify the size via --size.
+  Will create a new rbd image. You must also specify the size via --size.  The
+  --stripe-unit and --stripe-count arguments are optional, but must be used together.
 
 :command:`clone` [*parent-snapname*] [*image-name*]
   Will create a clone (copy-on-write child) of the parent snapshot.
@@ -221,6 +231,35 @@ Thus an image name that contains a slash character ('/') requires specifying the
 name explicitly.
 
 
+Striping
+========
+
+RBD images are striped over many objects, which are then stored by the
+Ceph distributed object store (RADOS).  As a result, read and write
+requests for the image are distributed across many nodes in the
+cluster, generally preventing any single node from becoming a
+bottleneck when individual images get large or busy.
+
+The striping is controlled by three parameters:
+
+.. option:: order
+  The size of objects we stripe over is a power of two, specifially 2^[*order*] bytes.  The default
+  is 22, or 4 MB.
+
+.. option:: stripe_unit
+  Each [*stripe_unit*] contiguous bytes are stored adjacently in the same object, before we move on
+  to the next object.
+
+.. option:: stripe_count
+  After we write [*stripe_unit*] bytes to [*stripe_count*] objects, we loop back to the initial object
+  and write another stripe, until the object reaches its maximum size (as specified by [*order*].  At that
+  point, we move on to the next [*stripe_count*] objects.
+
+By default, [*stripe_unit*] is the same as the object size and [*stripe_count*] is 1.  Specifying a different
+[*stripe_unit*] requires that the STRIPINGV2 feature be supported (added in Ceph v0.53) and format 2 images be
+used.
+
+
 Examples
 ========
 
@@ -270,6 +309,10 @@ To create an image and a clone from it::
        rbd snap create --snap snapname mypool/parent
        rbd snap protect mypool/parent@snap
        rbd clone mypool/parent@snap otherpool/child
+
+To create an image with a smaller stripe_unit (to better distribute small writes in some workloads)::
+
+       rbd -p mypool create myimage --size 102400 --stripe-unit 65536 --stripe-count 16
 
 To change an image from one format to another, export it and then
 import it as the desired format::

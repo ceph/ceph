@@ -45,7 +45,10 @@ namespace librbd {
       parent_lock("librbd::ImageCtx::parent_lock"),
       refresh_lock("librbd::ImageCtx::refresh_lock"),
       old_format(true),
-      order(0), size(0), features(0),	id(image_id), parent(NULL),
+      order(0), size(0), features(0),
+      format_string(NULL),
+      id(image_id), parent(NULL),
+      stripe_unit(0), stripe_count(0),
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL)
   {
     md_ctx.dup(p);
@@ -91,6 +94,7 @@ namespace librbd {
       delete object_set;
       object_set = NULL;
     }
+    delete format_string;
   }
 
   int ImageCtx::init() {
@@ -123,11 +127,50 @@ namespace librbd {
 		   << cpp_strerror(r) << dendl;
 	return r;
       }
+
+      r = cls_client::get_stripe_unit_count(&md_ctx, header_oid,
+					    &stripe_unit, &stripe_count);
+      if (r < 0 && r != -ENOEXEC && r != -EINVAL) {
+	lderr(cct) << "error reading striping metadata: "
+		   << cpp_strerror(r) << dendl;
+	return r;
+      }
+
+      init_layout();
     } else {
       header_oid = old_header_name(name);
     }
-
     return 0;
+  }
+  
+  void ImageCtx::init_layout()
+  {
+    if (stripe_unit == 0 || stripe_count == 0) {
+      stripe_unit = 1ull << order;
+      stripe_count = 1;
+    }
+
+    memset(&layout, 0, sizeof(layout));
+    layout.fl_stripe_unit = stripe_unit;
+    layout.fl_stripe_count = stripe_count;
+    layout.fl_object_size = 1ull << order;
+    layout.fl_pg_pool = data_ctx.get_id();  // FIXME: pool id overflow?
+
+    delete format_string;
+    size_t len = object_prefix.length() + 16;
+    format_string = new char[len];
+    if (old_format) {
+      snprintf(format_string, len, "%s.%%012llx", object_prefix.c_str());
+    } else {
+      snprintf(format_string, len, "%s.%%016llx", object_prefix.c_str());
+    }
+
+    ldout(cct, 10) << "init_layout stripe_unit " << stripe_unit
+		   << " stripe_count " << stripe_count
+		   << " object_size " << layout.fl_object_size
+		   << " prefix " << object_prefix
+		   << " format " << format_string
+		   << dendl;
   }
 
   void ImageCtx::perf_start(string name) {
@@ -226,6 +269,44 @@ namespace librbd {
       }
     }
     return -ENOENT;
+  }
+
+  uint64_t ImageCtx::get_current_size() const
+  {
+    return size;
+  }
+
+  uint64_t ImageCtx::get_object_size() const
+  {
+    return 1ull << order;
+  }
+
+  string ImageCtx::get_object_name(uint64_t num) const {
+    char buf[object_prefix.length() + 32];
+    snprintf(buf, sizeof(buf), format_string, num);
+    return string(buf);
+  }
+
+  uint64_t ImageCtx::get_stripe_unit() const
+  {
+    return stripe_unit;
+  }
+
+  uint64_t ImageCtx::get_stripe_count() const
+  {
+    return stripe_count;
+  }
+
+  uint64_t ImageCtx::get_stripe_period() const
+  {
+    return stripe_count * (1ull << order);
+  }
+
+  uint64_t ImageCtx::get_num_objects() const
+  {
+    uint64_t period = get_stripe_period();
+    uint64_t num_periods = (size + period - 1) / period;
+    return num_periods * stripe_count;
   }
 
   int ImageCtx::is_snap_protected(string in_snap_name, bool *is_protected) const
@@ -373,9 +454,9 @@ namespace librbd {
     snap_lock.Lock();
     ObjectCacher::OSDRead *rd = object_cacher->prepare_read(snap_id, bl, 0);
     snap_lock.Unlock();
-    ObjectExtent extent(o, off, len);
+    ObjectExtent extent(o, 0 /* a lie */, off, len);
     extent.oloc.pool = data_ctx.get_id();
-    extent.buffer_extents[0] = len;
+    extent.buffer_extents.push_back(make_pair(0, len));
     rd->extents.push_back(extent);
     cache_lock.Lock();
     int r = object_cacher->readx(rd, object_set, onfinish);
@@ -390,9 +471,9 @@ namespace librbd {
     ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(snapc, bl,
 							      utime_t(), 0);
     snap_lock.Unlock();
-    ObjectExtent extent(o, off, len);
+    ObjectExtent extent(o, 0, off, len);
     extent.oloc.pool = data_ctx.get_id();
-    extent.buffer_extents[0] = len;
+    extent.buffer_extents.push_back(make_pair(0, len));
     wr->extents.push_back(extent);
     {
       Mutex::Locker l(cache_lock);
@@ -504,4 +585,26 @@ namespace librbd {
 		   << parent_len << dendl;
     return parent_len;
   }
+
+  uint64_t ImageCtx::prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
+					  uint64_t overlap)
+  {
+    // drop extents completely beyond the overlap
+    while (!objectx.empty() && objectx.back().first >= overlap)
+      objectx.pop_back();
+
+    // trim final overlapping extent
+    if (!objectx.empty() && objectx.back().first + objectx.back().second > overlap)
+      objectx.back().second = overlap - objectx.back().first;
+
+    uint64_t len = 0;
+    for (vector<pair<uint64_t,uint64_t> >::iterator p = objectx.begin();
+	 p != objectx.end();
+	 ++p)
+      len += p->second;
+    ldout(cct, 10) << "prune_parent_extents image overlap " << overlap
+		   << ", object overlap " << len
+		   << " from image extents " << objectx << dendl;
+    return len;
+ }
 }

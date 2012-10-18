@@ -2410,7 +2410,7 @@ void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len, bool k
   // invalidate our userspace inode cache
   if (cct->_conf->client_oc) {
     vector<ObjectExtent> ls;
-    Filer::file_to_extents(cct, in->ino, &in->layout, off, len, ls);
+    Striper::file_to_extents(cct, in->ino, &in->layout, off, len, ls);
     objectcacher->discard_set(&in->oset, ls);
   }
 
@@ -7041,7 +7041,7 @@ int Client::get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>
 
   // which object?
   vector<ObjectExtent> extents;
-  Filer::file_to_extents(cct, in->ino, &in->layout, offset, 1, extents);
+  Striper::file_to_extents(cct, in->ino, &in->layout, offset, 1, extents);
   assert(extents.size() == 1);
 
   // now we have the object and its 'layout'
@@ -7069,7 +7069,7 @@ int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
   Inode *in = f->inode;
 
   // map to a list of extents
-  Filer::file_to_extents(cct, in->ino, &in->layout, offset, length, result);
+  Striper::file_to_extents(cct, in->ino, &in->layout, offset, length, result);
 
   ldout(cct, 3) << "enumerate_layout(" << fd << ", " << length << ", " << offset << ") = 0" << dendl;
   return 0;

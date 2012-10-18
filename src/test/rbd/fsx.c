@@ -146,6 +146,7 @@ int     mapped_writes = 0;              /* -W flag disables */
 int     fallocate_calls = 0;            /* -F flag disables */
 int     punch_hole_calls = 1;           /* -H flag disables */
 int	clone_calls = 1;                /* -C flag disables */
+int     randomize_striping = 1;
 int 	mapped_reads = 0;		/* -R flag disables it */
 int	fsxgoodfd = 0;
 int	o_direct;			/* -Z */
@@ -794,11 +795,17 @@ do_clone()
 	char imagename[1024];
 	char lastimagename[1024];
 	int ret, fd;
-	int order = 0;
+	int order = 0, stripe_unit = 0, stripe_count = 0;
+
+	if (randomize_striping) {
+		order = 18 + rand() % 8;
+		stripe_unit = 1ull << (order - 1 - (rand() % 8));
+		stripe_count = 2 + rand() % 14;
+	}
 
 	log4(OP_CLONE, 0, 0, 0);
 	++num_clones;
-	prt("%lu clone\t%d\n", testcalls, num_clones);
+	prt("%lu clone\t%d order %d su %d sc %d\n", testcalls, num_clones, order, stripe_unit, stripe_count);
 
 	clone_filename(filename, sizeof(filename), num_clones);
 	if ((fd = open(filename, O_WRONLY|O_CREAT|O_TRUNC, 0666)) < 0) {
@@ -824,8 +831,9 @@ do_clone()
 	clone_imagename(imagename, sizeof(imagename), num_clones);
 	clone_imagename(lastimagename, sizeof(lastimagename),
 			num_clones - 1);
-	ret = rbd_clone(ioctx, lastimagename, "snap", ioctx, imagename,
-			RBD_FEATURE_LAYERING, &order);
+
+	ret = rbd_clone2(ioctx, lastimagename, "snap", ioctx, imagename,
+			 RBD_FEATURES_ALL, &order, stripe_unit, stripe_count);
 	if (ret < 0) {
 		simple_err("do_clone: rbd clone", ret);
 		exit(165);

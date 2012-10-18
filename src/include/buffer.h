@@ -371,6 +371,7 @@ public:
     // sort-of-like-assignment-op
     void claim(list& bl);
     void claim_append(list& bl);
+    void claim_prepend(list& bl);
 
     iterator begin() {
       return iterator(this, 0);

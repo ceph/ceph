@@ -79,10 +79,12 @@ namespace librbd {
   int list_children(ImageCtx *ictx,
 		    std::set<pair<std::string, std::string> > & names);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
-	     bool old_format, uint64_t features, int *order);
+	     bool old_format, uint64_t features, int *order,
+	     uint64_t stripe_unit, uint64_t stripe_count);
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
 	    IoCtx& c_ioctx, const char *c_name,
-	    uint64_t features, int *c_order);
+	    uint64_t features, int *c_order,
+	    uint64_t stripe_unit, int stripe_count);
   int rename(librados::IoCtx& io_ctx, const char *srcname, const char *dstname);
   int info(ImageCtx *ictx, image_info_t& info, size_t image_size);
   int get_old_format(ImageCtx *ictx, uint8_t *old);
@@ -111,6 +113,7 @@ namespace librbd {
   int ictx_refresh(ImageCtx *ictx);
   int copy(ImageCtx *ictx, IoCtx& dest_md_ctx, const char *destname,
 	   ProgressContext &prog_ctx);
+  int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx);
 
   int open_parent(ImageCtx *ictx);
   int open_image(ImageCtx *ictx, bool watch);
@@ -153,12 +156,7 @@ namespace librbd {
   void image_info(const ImageCtx *ictx, image_info_t& info, size_t info_size);
   std::string get_block_oid(const std::string &object_prefix, uint64_t num,
 			    bool old_format);
-  uint64_t offset_of_object(const string &oid, const string &object_prefix,
-			    uint8_t order);
-  uint64_t get_max_block(uint64_t size, uint8_t obj_order);
-  uint64_t get_block_size(uint8_t order);
-  uint64_t get_block_num(uint8_t order, uint64_t ofs);
-  uint64_t get_block_ofs(uint8_t order, uint64_t ofs);
+  uint64_t oid_to_object_no(const string& oid, const string& object_prefix);
   int check_io(ImageCtx *ictx, uint64_t off, uint64_t len);
   int init_rbd_info(struct rbd_info *info);
   void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
@@ -168,13 +166,17 @@ namespace librbd {
 		       int (*cb)(uint64_t, size_t, const char *, void *),
 		       void *arg);
   ssize_t read(ImageCtx *ictx, uint64_t off, size_t len, char *buf);
+  ssize_t read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
+	       char *buf, bufferlist *pbl);
   ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf);
   int discard(ImageCtx *ictx, uint64_t off, uint64_t len);
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
                 AioCompletion *c);
   int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c);
   int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
-               char *buf, AioCompletion *c);
+               char *buf, bufferlist *pbl, AioCompletion *c);
+  int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
+	       char *buf, bufferlist *pbl, AioCompletion *c);
   int flush(ImageCtx *ictx);
   int _flush(ImageCtx *ictx);
 
@@ -184,8 +186,7 @@ namespace librbd {
 			     const std::map<uint64_t, uint64_t> &data_map,
 			     uint64_t buf_ofs,
 			     size_t buf_len,
-			     int (*cb)(uint64_t, size_t, const char *, void *),
-			     void *arg);
+			     char *dest_buf);
 
   AioCompletion *aio_create_completion();
   AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete);

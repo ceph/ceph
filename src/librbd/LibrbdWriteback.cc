@@ -75,10 +75,12 @@ namespace librbd {
   {
     C_Request *req_comp = new C_Request(m_ictx->cct, onfinish, &m_lock);
     C_Read *read_comp = new C_Read(req_comp, pbl);
-    uint64_t total_off = offset_of_object(oid.name, m_ictx->object_prefix,
-					  m_ictx->order) + off;
-    AioRead *req = new AioRead(m_ictx, oid.name, total_off, len, snapid.val,
-			       false, read_comp);
+    uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
+    vector<pair<uint64_t,uint64_t> > ex(1);
+    ex[0] = make_pair(off, len);
+    AioRead *req = new AioRead(m_ictx, oid.name,
+			       object_no, off, len, ex,
+			       snapid, false, read_comp);
     read_comp->set_req(req);
     req->send();
     return ++m_tid;
@@ -95,18 +97,25 @@ namespace librbd {
     m_ictx->snap_lock.Lock();
     librados::snap_t snap_id = m_ictx->snap_id;
     m_ictx->parent_lock.Lock();
-    int64_t parent_pool_id = m_ictx->get_parent_pool_id(snap_id);
     uint64_t overlap = 0;
     m_ictx->get_parent_overlap(snap_id, &overlap);
     m_ictx->parent_lock.Unlock();
     m_ictx->snap_lock.Unlock();
 
-    uint64_t total_off = offset_of_object(oid.name, m_ictx->object_prefix,
-					  m_ictx->order) + off;
-    bool parent_exists = has_parent(parent_pool_id, total_off - off, overlap);
+    uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
+    
+    // reverse map this object extent onto the parent
+    vector<pair<uint64_t,uint64_t> > objectx;
+    Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
+			  object_no, 0, m_ictx->layout.fl_object_size,
+			  objectx);
+    uint64_t object_overlap = m_ictx->prune_parent_extents(objectx, overlap);
+
     C_Request *req_comp = new C_Request(m_ictx->cct, oncommit, &m_lock);
-    AioWrite *req = new AioWrite(m_ictx, oid.name, total_off, bl, snapc,
-				 snap_id, parent_exists, req_comp);
+    AioWrite *req = new AioWrite(m_ictx, oid.name,
+				 object_no, off, objectx, object_overlap,
+				 bl, snapc, snap_id,
+				 req_comp);
     req->send();
     return ++m_tid;
   }
