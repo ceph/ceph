@@ -52,6 +52,7 @@ char *resolve_addrs(const char *orig_str)
   char *tok, *port_str, *saveptr = NULL;
   int len, pos;
   char *buf = strdup(orig_str);
+  const char *delim = ",; ";
 
   len = BUF_SIZE;
   new_str = (char *)malloc(len);
@@ -62,7 +63,7 @@ char *resolve_addrs(const char *orig_str)
 
   pos = 0;
 
-  tok = strtok_r(buf, ",", &saveptr);
+  tok = strtok_r(buf, delim, &saveptr);
 
   while (tok) {
     struct addrinfo hint;
@@ -141,7 +142,7 @@ char *resolve_addrs(const char *orig_str)
     }
     freeaddrinfo(ores);
 
-    tok = strtok_r(NULL, ",", &saveptr);
+    tok = strtok_r(NULL, delim, &saveptr);
     if (tok)
       pos = safe_cat(&new_str, &len, pos, ",");
 
