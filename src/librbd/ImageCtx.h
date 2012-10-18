@@ -72,10 +72,14 @@ namespace librbd {
     uint64_t size;
     uint64_t features;
     std::string object_prefix;
+    char *format_string;
     std::string header_oid;
     std::string id; // only used for new-format images
     parent_info parent_md;
     ImageCtx *parent;
+    uint64_t stripe_unit, stripe_count;
+
+    ceph_file_layout layout;
 
     ObjectCacher *object_cacher;
     LibrbdWriteback *writeback_handler;
@@ -90,6 +94,7 @@ namespace librbd {
              const char *snap, IoCtx& p);
     ~ImageCtx();
     int init();
+    void init_layout();
     void perf_start(std::string name);
     void perf_stop();
     int snap_set(std::string in_snap_name);
@@ -99,6 +104,15 @@ namespace librbd {
     int get_parent_spec(snapid_t snap_id, parent_spec *pspec);
     int get_snap_size(std::string in_snap_name, uint64_t *out_size) const;
     int is_snap_protected(string in_snap_name, bool *is_protected) const;
+
+    uint64_t get_current_size() const;
+    uint64_t get_object_size() const;
+    string get_object_name(uint64_t num) const;
+    uint64_t get_num_objects() const;
+    uint64_t get_stripe_unit() const;
+    uint64_t get_stripe_count() const;
+    uint64_t get_stripe_period() const;
+
     void add_snap(std::string in_snap_name, librados::snap_t id,
 		  uint64_t in_size, uint64_t features,
 		  parent_info parent, uint8_t protection_status);
@@ -121,6 +135,9 @@ namespace librbd {
     void unregister_watch();
     size_t parent_io_len(uint64_t offset, size_t length,
 			 librados::snap_t in_snap_id);
+    uint64_t prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
+				  uint64_t overlap);
+
   };
 }
 

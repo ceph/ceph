@@ -14,6 +14,7 @@
 
 #include "Objecter.h"
 #include "osd/OSDMap.h"
+#include "Filer.h"
 
 #include "mon/MonClient.h"
 
@@ -1863,107 +1864,27 @@ void Objecter::_sg_read_finish(vector<ObjectExtent>& extents, vector<bufferlist>
 			       bufferlist *bl, Context *onfinish)
 {
   // all done
-  uint64_t bytes_read = 0;
-  
   ldout(cct, 15) << "_sg_read_finish" << dendl;
 
   if (extents.size() > 1) {
-    /** FIXME This doesn't handle holes efficiently.
-     * It allocates zero buffers to fill whole buffer, and
-     * then discards trailing ones at the end.
-     *
-     * Actually, this whole thing is pretty messy with temporary bufferlist*'s all over
-     * the heap. 
-     */
-    
-    // map extents back into buffer
-    map<uint64_t, bufferlist*> by_off;  // buffer offset -> bufferlist
-    
-    // for each object extent...
+    Striper::StripedReadResult r;
     vector<bufferlist>::iterator bit = resultbl.begin();
     for (vector<ObjectExtent>::iterator eit = extents.begin();
 	 eit != extents.end();
 	 eit++, bit++) {
-      bufferlist& ox_buf = *bit;
-      unsigned ox_len = ox_buf.length();
-      unsigned ox_off = 0;
-      assert(ox_len <= eit->length);           
-      
-      // for each buffer extent we're mapping into...
-      for (map<uint64_t, uint64_t>::iterator bit = eit->buffer_extents.begin();
-	   bit != eit->buffer_extents.end();
-	   bit++) {
-	ldout(cct, 21) << " object " << eit->oid
-		 << " extent " << eit->offset << "~" << eit->length
-		 << " : ox offset " << ox_off
-		 << " -> buffer extent " << bit->first << "~" << bit->second << dendl;
-	by_off[bit->first] = new bufferlist;
-	
-	if (ox_off + bit->second <= ox_len) {
-	  // we got the whole bx
-	  by_off[bit->first]->substr_of(ox_buf, ox_off, bit->second);
-	  if (bytes_read < bit->first + bit->second) 
-	    bytes_read = bit->first + bit->second;
-	} else if (ox_off + bit->second > ox_len && ox_off < ox_len) {
-	  // we got part of this bx
-	  by_off[bit->first]->substr_of(ox_buf, ox_off, (ox_len-ox_off));
-	  if (bytes_read < bit->first + ox_len-ox_off) 
-	    bytes_read = bit->first + ox_len-ox_off;
-	  
-	  // zero end of bx
-	  ldout(cct, 21) << "  adding some zeros to the end " << ox_off + bit->second-ox_len << dendl;
-	  bufferptr z(ox_off + bit->second - ox_len);
-	  z.zero();
-	  by_off[bit->first]->append( z );
-	} else {
-	  // we got none of this bx.  zero whole thing.
-	  assert(ox_off >= ox_len);
-	  ldout(cct, 21) << "  adding all zeros for this bit " << bit->second << dendl;
-	  bufferptr z(bit->second);
-	  z.zero();
-	  by_off[bit->first]->append( z );
-	}
-	ox_off += bit->second;
-      }
-      assert(ox_off == eit->length);
+      r.add_partial_result(cct, *bit, eit->buffer_extents);
     }
-    
-    // sort and string bits together
-    for (map<uint64_t, bufferlist*>::iterator it = by_off.begin();
-	 it != by_off.end();
-	 it++) {
-      assert(it->second->length());
-      if (it->first < (uint64_t)bytes_read) {
-	ldout(cct, 21) << "  concat buffer frag off " << it->first << " len " << it->second->length() << dendl;
-	bl->claim_append(*(it->second));
-      } else {
-	ldout(cct, 21) << "  NO concat zero buffer frag off " << it->first << " len " << it->second->length() << dendl;          
-      }
-      delete it->second;
-    }
-    
-    // trim trailing zeros?
-    if (bl->length() > bytes_read) {
-      ldout(cct, 10) << " trimming off trailing zeros . bytes_read=" << bytes_read 
-	       << " len=" << bl->length() << dendl;
-      bl->splice(bytes_read, bl->length() - bytes_read);
-      assert(bytes_read == bl->length());
-    }
-    
+    bl->clear();
+    r.assemble_result(cct, *bl, false);
   } else {
     ldout(cct, 15) << "  only one frag" << dendl;
-  
-    // only one fragment, easy
     bl->claim(resultbl[0]);
-    bytes_read = bl->length();
   }
-  
-  // finish, clean up
-  ldout(cct, 7) << " " << bytes_read << " bytes " 
-	  << bl->length()
-	  << dendl;
-    
+
   // done
+  uint64_t bytes_read = bl->length();
+  ldout(cct, 7) << "_sg_read_finish " << bytes_read << " bytes" << dendl;
+
   if (onfinish) {
     onfinish->finish(bytes_read);// > 0 ? bytes_read:m->get_result());
     delete onfinish;

@@ -15,6 +15,7 @@
 
 #include "Filer.h"
 #include "osd/OSDMap.h"
+#include "Striper.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
@@ -100,8 +101,8 @@ void Filer::_probe(Probe *probe)
   // map range onto objects
   probe->known_size.clear();
   probe->probing.clear();
-  file_to_extents(cct, probe->ino, &probe->layout,
-		  probe->probing_off, probe->probing_len, probe->probing);
+  Striper::file_to_extents(cct, probe->ino, &probe->layout,
+			   probe->probing_off, probe->probing_len, probe->probing);
   
   for (vector<ObjectExtent>::iterator p = probe->probing.begin();
        p != probe->probing.end();
@@ -168,7 +169,7 @@ void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mt
       // aha, we found the end!
       // calc offset into buffer_extent to get distance from probe->from.
       uint64_t oleft = probe->known_size[p->oid] - p->offset;
-      for (map<uint64_t, uint64_t>::iterator i = p->buffer_extents.begin();
+      for (vector<pair<uint64_t, uint64_t> >::iterator i = p->buffer_extents.begin();
 	   i != p->buffer_extents.end();
 	   i++) {
 	if (oleft <= (uint64_t)i->second) {
@@ -304,90 +305,3 @@ void Filer::_do_purge_range(PurgeRange *pr, int fin)
 }
 
 
-// -----------------------
-
-#undef dout_prefix
-#define dout_prefix *_dout << "filer "
-
-void Filer::file_to_extents(CephContext *cct, inodeno_t ino,
-			    ceph_file_layout *layout,
-			    uint64_t offset, uint64_t len,
-			    vector<ObjectExtent>& extents)
-{
-  ldout(cct, 10) << "file_to_extents " << offset << "~" << len 
-           << " on " << hex << ino << dec
-           << dendl;
-  assert(len > 0);
-
-  /* we want only one extent per object!
-   * this means that each extent we read may map into different bits of the 
-   * final read buffer.. hence OSDExtent.buffer_extents
-   */
-  map< object_t, ObjectExtent > object_extents;
-  
-  __u32 object_size = layout->fl_object_size;
-  __u32 su = layout->fl_stripe_unit;
-  __u32 stripe_count = layout->fl_stripe_count;
-  assert(object_size >= su);
-  uint64_t stripes_per_object = object_size / su;
-  ldout(cct, 20) << " stripes_per_object " << stripes_per_object << dendl;
-
-  uint64_t cur = offset;
-  uint64_t left = len;
-  while (left > 0) {
-    // layout into objects
-    uint64_t blockno = cur / su;          // which block
-    uint64_t stripeno = blockno / stripe_count;    // which horizontal stripe        (Y)
-    uint64_t stripepos = blockno % stripe_count;   // which object in the object set (X)
-    uint64_t objectsetno = stripeno / stripes_per_object;       // which object set
-    uint64_t objectno = objectsetno * stripe_count + stripepos;  // object id
-    
-    // find oid, extent
-    ObjectExtent *ex = 0;
-    object_t oid = file_object_t(ino, objectno);
-    if (object_extents.count(oid)) 
-      ex = &object_extents[oid];
-    else {
-      ex = &object_extents[oid];
-      ex->oid = oid;
-      ex->oloc = OSDMap::file_to_object_locator(*layout);
-    }
-    
-    // map range into object
-    uint64_t block_start = (stripeno % stripes_per_object)*su;
-    uint64_t block_off = cur % su;
-    uint64_t max = su - block_off;
-    
-    uint64_t x_offset = block_start + block_off;
-    uint64_t x_len;
-    if (left > max)
-      x_len = max;
-    else
-      x_len = left;
-    
-    if (ex->offset + (uint64_t)ex->length == x_offset) {
-      // add to extent
-      ex->length += x_len;
-    } else {
-      // new extent
-      assert(ex->length == 0);
-      assert(ex->offset == 0);
-      ex->offset = x_offset;
-      ex->length = x_len;
-    }
-    ex->buffer_extents[cur-offset] = x_len;
-        
-    ldout(cct, 15) << "file_to_extents  " << *ex << " in " << ex->oloc << dendl;
-    //ldout(cct, 0) << "map: ino " << ino << " oid " << ex.oid << " osd " << ex.osd << " offset " << ex.offset << " len " << ex.len << " ... left " << left << dendl;
-    
-    left -= x_len;
-    cur += x_len;
-  }
-  
-  // make final list
-  for (map<object_t, ObjectExtent>::iterator it = object_extents.begin();
-       it != object_extents.end();
-       it++) {
-    extents.push_back(it->second);
-  }
-}

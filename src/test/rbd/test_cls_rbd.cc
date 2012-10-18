@@ -45,6 +45,8 @@ using ::librbd::parent_info;
 using ::librbd::parent_spec;
 using ::librbd::cls_client::get_protection_status;
 using ::librbd::cls_client::set_protection_status;
+using ::librbd::cls_client::get_stripe_unit_count;
+using ::librbd::cls_client::set_stripe_unit_count;
 using ::librbd::cls_client::old_snapshot_add;
 
 static char *random_buf(size_t len)
@@ -855,7 +857,7 @@ TEST(cls_rbd, snapshots)
 
 TEST(cls_rbd, snapid_race)
 {
-   librados::Rados rados;
+  librados::Rados rados;
   librados::IoCtx ioctx;
   string pool_name = get_temp_pool_name();
 
@@ -872,6 +874,37 @@ TEST(cls_rbd, snapid_race)
   ASSERT_EQ(0, old_snapshot_add(&ioctx, oid, 1, "test1"));
   ASSERT_EQ(0, old_snapshot_add(&ioctx, oid, 3, "test3"));
   ASSERT_EQ(-ESTALE, old_snapshot_add(&ioctx, oid, 2, "test2"));
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
+TEST(cls_rbd, stripingv2)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  ASSERT_EQ(0, create_image(&ioctx, "foo", 10, 22, 0, "foo"));
+
+  uint64_t su = 65536, sc = 12;
+  ASSERT_EQ(-ENOEXEC, get_stripe_unit_count(&ioctx, "foo", &su, &sc));
+  ASSERT_EQ(-ENOEXEC, set_stripe_unit_count(&ioctx, "foo", su, sc));
+  
+  ASSERT_EQ(0, create_image(&ioctx, "bar", 10, 22, RBD_FEATURE_STRIPINGV2, "bar"));
+  ASSERT_EQ(0, get_stripe_unit_count(&ioctx, "bar", &su, &sc));
+  ASSERT_EQ(1ull << 22, su);
+  ASSERT_EQ(1ull, sc);
+  su = 8192;
+  sc = 456;
+  ASSERT_EQ(0, set_stripe_unit_count(&ioctx, "bar", su, sc));
+  su = sc = 0;
+  ASSERT_EQ(0, get_stripe_unit_count(&ioctx, "bar", &su, &sc));
+  ASSERT_EQ(8192ull, su);
+  ASSERT_EQ(456ull, sc);
 
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));

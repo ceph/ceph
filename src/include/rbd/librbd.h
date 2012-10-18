@@ -70,9 +70,33 @@ int rbd_list(rados_ioctx_t io, char *names, size_t *size);
 int rbd_create(rados_ioctx_t io, const char *name, uint64_t size, int *order);
 int rbd_create2(rados_ioctx_t io, const char *name, uint64_t size,
 		uint64_t features, int *order);
+/**
+ * create new rbd image
+ *
+ * The stripe_unit must be a factor of the object size (1 << order).
+ * The stripe_count can be one (no intra-object striping) or greater
+ * than one.  The RBD_FEATURE_STRIPINGV2 must be specified if the
+ * stripe_unit != the object size and the stripe_count is != 1.
+ *
+ * @param io ioctx
+ * @param name image name
+ * @param size image size in bytes
+ * @param features initial feature bits
+ * @param order object/block size, as a power of two (object size == 1 << order)
+ * @param stripe_unit stripe unit size, in bytes.
+ * @param stripe_count number of objects to stripe over before looping
+ * @return 0 on success, or negative error code
+ */
+int rbd_create3(rados_ioctx_t io, const char *name, uint64_t size,
+		uint64_t features, int *order,
+		uint64_t stripe_unit, uint64_t stripe_count);
 int rbd_clone(rados_ioctx_t p_ioctx, const char *p_name,
 	      const char *p_snapname, rados_ioctx_t c_ioctx,
 	      const char *c_name, uint64_t features, int *c_order);
+int rbd_clone2(rados_ioctx_t p_ioctx, const char *p_name,
+	       const char *p_snapname, rados_ioctx_t c_ioctx,
+	       const char *c_name, uint64_t features, int *c_order,
+	       uint64_t stripe_unit, int stripe_count);
 int rbd_remove(rados_ioctx_t io, const char *name);
 int rbd_remove_with_progress(rados_ioctx_t io, const char *name,
 			     librbd_progress_fn_t cb, void *cbdata);
@@ -87,13 +111,18 @@ int rbd_stat(rbd_image_t image, rbd_image_info_t *info, size_t infosize);
 int rbd_get_old_format(rbd_image_t image, uint8_t *old);
 int rbd_get_size(rbd_image_t image, uint64_t *size);
 int rbd_get_features(rbd_image_t image, uint64_t *features);
+int rbd_get_stripe_unit(rbd_image_t image, uint64_t *stripe_unit);
+int rbd_get_stripe_count(rbd_image_t image, uint64_t *stripe_count);
 int rbd_get_overlap(rbd_image_t image, uint64_t *overlap);
 int rbd_get_parent_info(rbd_image_t image,
 			char *parent_poolname, size_t ppoolnamelen,
 			char *parent_name, size_t pnamelen,
 			char *parent_snapname, size_t psnapnamelen);
 int rbd_copy(rbd_image_t image, rados_ioctx_t dest_io_ctx, const char *destname);
+int rbd_copy2(rbd_image_t src, rbd_image_t dest);
 int rbd_copy_with_progress(rbd_image_t image, rados_ioctx_t dest_p, const char *destname,
+			   librbd_progress_fn_t cb, void *cbdata);
+int rbd_copy_with_progress2(rbd_image_t src, rbd_image_t dest,
 			   librbd_progress_fn_t cb, void *cbdata);
 
 /* snapshots */
