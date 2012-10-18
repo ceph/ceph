@@ -18,40 +18,42 @@ check_perms() {
 	fi
 }
 
-echo "foo" > foo
+file=test_chmod.$$
+
+echo "foo" > ${file}
 if test $? != 0; then
-	echo "ERROR: Failed to create file foo"
+	echo "ERROR: Failed to create file ${file}"
 	exit 1
 fi
 
-check_perms foo "-rw-r--r--"
+check_perms ${file} "-rw-r--r--"
 
-chmod 400 foo
+chmod 400 ${file}
 if test $? != 0; then
-	echo "ERROR: Failed to change mode of foo"
+	echo "ERROR: Failed to change mode of ${file}"
 	exit 1
 fi
 
-check_perms foo "-r--------"
+check_perms ${file} "-r--------"
 
 set +e
-echo "bar" >> foo
+echo "bar" >> ${file}
 if test $? = 0; then
 	echo "ERROR: Write to read-only file should Fail"
 	exit 1
 fi
 
 set -e
-chmod 600 foo
-echo "bar" >> foo
+chmod 600 ${file}
+echo "bar" >> ${file}
 if test $? != 0; then
 	echo "ERROR: Write to writeable file failed"
 	exit 1
 fi
 
-check_perms foo "-rw-------"
+check_perms ${file} "-rw-------"
 
-echo "foo" >> foo
+echo "foo" >> ${file}
 if test $? != 0; then
 	echo "ERROR: Failed to write to file"
 	exit 1
