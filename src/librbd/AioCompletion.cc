@@ -31,6 +31,27 @@ namespace librbd {
     assert(pending_count);
     int count = --pending_count;
     if (!count) {
+      ldout(cct, 20) << "AioCompletion::complete_request() rval " << rval << " read_buf " << (void*)read_buf
+		     << " read_bl " << (void*)read_bl << dendl;
+      if (rval >= 0 && aio_type == AIO_TYPE_READ) {
+	// FIXME: make the destriper write directly into a buffer so
+	// that we avoid shuffling pointers and copying zeros around.
+	bufferlist bl;
+	destriper.assemble_result(cct, bl, true);
+
+	if (read_buf) {
+	  assert(bl.length() == read_buf_len);
+	  bl.copy(0, read_buf_len, read_buf);
+	  ldout(cct, 20) << "AioCompletion::complete_request() copied resulting " << bl.length()
+			 << " bytes to " << (void*)read_buf << dendl;
+	}
+	if (read_bl) {
+	  ldout(cct, 20) << "AioCompletion::complete_request() moving resulting " << bl.length()
+			 << " bytes to bl " << (void*)read_bl << dendl;
+	  read_bl->claim(bl);
+	}
+      }      
+
       complete();
     }
     put_unlock();
@@ -38,13 +59,22 @@ namespace librbd {
 
   void C_AioRead::finish(int r)
   {
-    ldout(m_cct, 10) << "C_AioRead::finish() " << this << dendl;
+    ldout(m_cct, 10) << "C_AioRead::finish() " << this << " r = " << r << dendl;
     if (r >= 0 || r == -ENOENT) { // this was a sparse_read operation
-      ldout(m_cct, 10) << "ofs=" << m_req->offset()
-		       << " len=" << m_req->length() << dendl;
-      r = handle_sparse_read(m_cct, m_req->data(), m_req->offset(),
-			     m_req->ext_map(), 0, m_req->length(),
-			     simple_read_cb, m_out_buf);
+      ldout(m_cct, 10) << " got " << m_req->m_ext_map
+		       << " for " << m_req->m_buffer_extents
+		       << " bl " << m_req->data().length() << dendl;
+      // reads from the parent don't populate the m_ext_map and the overlap
+      // may not be the full buffer.  compensate here by filling in m_ext_map
+      // with the read extent when it is empty.
+      if (m_req->m_ext_map.empty())
+	m_req->m_ext_map[m_req->m_object_off] = m_req->data().length();
+
+      m_completion->destriper.add_partial_sparse_result(m_cct,
+							m_req->data(),
+							m_req->m_ext_map, m_req->m_object_off,
+							m_req->m_buffer_extents);
+      r = m_req->m_object_len;
     }
     m_completion->complete_request(m_cct, r);
   }

@@ -14,6 +14,8 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 
+#include "osdc/Striper.h"
+
 namespace librbd {
 
   class AioRead;
@@ -52,11 +54,17 @@ namespace librbd {
     utime_t start_time;
     aio_type_t aio_type;
 
+    Striper::StripedReadResult destriper;
+    bufferlist *read_bl;
+    char *read_buf;
+    size_t read_buf_len;
+
     AioCompletion() : lock("AioCompletion::lock", true),
 		      done(false), rval(0), complete_cb(NULL),
 		      complete_arg(NULL), rbd_comp(NULL), pending_count(1),
 		      ref(1), released(false), ictx(NULL),
-		      aio_type(AIO_TYPE_NONE) {
+		      aio_type(AIO_TYPE_NONE),
+		      read_bl(NULL), read_buf(NULL), read_buf_len(0) {
     }
     ~AioCompletion() {
     }
@@ -155,8 +163,9 @@ namespace librbd {
 
   class C_AioRead : public Context {
   public:
-    C_AioRead(CephContext *cct, AioCompletion *completion, char *out_buf)
-      : m_cct(cct), m_completion(completion), m_req(NULL), m_out_buf(out_buf) {}
+    C_AioRead(CephContext *cct, AioCompletion *completion)
+      : m_cct(cct), m_completion(completion), m_req(NULL)
+    { }
     virtual ~C_AioRead() {}
     virtual void finish(int r);
     void set_req(AioRead *req) {
@@ -166,7 +175,6 @@ namespace librbd {
     CephContext *m_cct;
     AioCompletion *m_completion;
     AioRead *m_req;
-    char *m_out_buf;
   };
 
   class C_AioWrite : public Context {

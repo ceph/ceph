@@ -18,11 +18,11 @@
 namespace librbd {
 
   AioRequest::AioRequest() :
-    m_ictx(NULL), m_image_ofs(0), m_block_ofs(0), m_len(0),
+    m_ictx(NULL),
     m_snap_id(CEPH_NOSNAP), m_completion(NULL), m_parent_completion(NULL),
     m_hide_enoent(false) {}
   AioRequest::AioRequest(ImageCtx *ictx, const std::string &oid,
-			 uint64_t image_ofs, size_t len,
+			 uint64_t objectno, uint64_t off, uint64_t len,
 			 librados::snap_t snap_id,
 			 Context *completion,
 			 bool hide_enoent) {
@@ -30,9 +30,9 @@ namespace librbd {
     m_ioctx.dup(ictx->data_ctx);
     m_ioctx.snap_set_read(snap_id);
     m_oid = oid;
-    m_image_ofs = image_ofs;
-    m_block_ofs = get_block_ofs(ictx->order, image_ofs);
-    m_len = len;
+    m_object_no = objectno;
+    m_object_off = off;
+    m_object_len = len;
     m_snap_id = snap_id;
     m_completion = completion;
     m_parent_completion = NULL;
@@ -46,17 +46,20 @@ namespace librbd {
     }
   }
 
-  void AioRequest::read_from_parent(uint64_t image_ofs, size_t len)
+  void AioRequest::read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents)
   {
-    ldout(m_ictx->cct, 20) << "read_from_parent this = " << this << dendl;
-
     assert(!m_parent_completion);
     assert(m_ictx->parent_lock.is_locked());
-
     m_parent_completion = aio_create_completion_internal(this, rbd_req_cb);
-    aio_read(m_ictx->parent, image_ofs, len, m_read_data.c_str(),
+    ldout(m_ictx->cct, 20) << "read_from_parent this = " << this
+			   << " parent completion " << m_parent_completion
+			   << " extents " << image_extents
+			   << dendl;
+    aio_read(m_ictx->parent, image_extents, NULL, &m_read_data,
 	     m_parent_completion);
   }
+
+  /** read **/
 
   bool AioRead::should_complete(int r)
   {
@@ -65,17 +68,22 @@ namespace librbd {
     if (!m_tried_parent && r == -ENOENT) {
       Mutex::Locker l(m_ictx->snap_lock);
       Mutex::Locker l2(m_ictx->parent_lock);
-      size_t len = m_ictx->parent_io_len(m_image_ofs, m_len, m_snap_id);
-      if (len) {
+
+      // calculate reverse mapping onto the image
+      vector<pair<uint64_t,uint64_t> > image_extents;
+      Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
+			    m_object_no, m_object_off, m_object_len,
+			    image_extents);
+
+      uint64_t image_overlap = 0;
+      r = m_ictx->get_parent_overlap(m_snap_id, &image_overlap);
+      if (r < 0) {
+	assert(0 == "FIXME");
+      }
+      uint64_t object_overlap = m_ictx->prune_parent_extents(image_extents, image_overlap);
+      if (object_overlap) {
 	m_tried_parent = true;
-	// zero the buffer so we have the full requested length result,
-	// even if we actually read less due to overlap
-	ceph::buffer::ptr bp(len);
-	bp.zero();
-	m_read_data.append(bp);
-	// fill in single extent for sparse read callback
-	m_ext_map[m_block_ofs] = len;
-	read_from_parent(m_image_ofs, len);
+	read_from_parent(image_extents);
 	return false;
       }
     }
@@ -89,26 +97,32 @@ namespace librbd {
     int r;
     if (m_sparse) {
       r = m_ioctx.aio_sparse_read(m_oid, rados_completion, &m_ext_map,
-				  &m_read_data, m_len, m_block_ofs);
+				  &m_read_data, m_object_len, m_object_off);
     } else {
       r = m_ioctx.aio_read(m_oid, rados_completion, &m_read_data,
-			   m_len, m_block_ofs);
+			   m_object_len, m_object_off);
     }
     rados_completion->release();
     return r;
   }
 
-  AbstractWrite::AbstractWrite() :
-    m_state(LIBRBD_AIO_WRITE_FINAL), m_has_parent(false) {}
+  /** read **/
+
+  AbstractWrite::AbstractWrite() : m_state(LIBRBD_AIO_WRITE_FINAL) {}
   AbstractWrite::AbstractWrite(ImageCtx *ictx, const std::string &oid,
-			       uint64_t image_ofs, size_t len,
-			       librados::snap_t snap_id, Context *completion,
-			       bool has_parent, const ::SnapContext &snapc,
+			       uint64_t object_no, uint64_t object_off, uint64_t len,
+			       vector<pair<uint64_t,uint64_t> >& objectx,
+			       uint64_t object_overlap,
+			       const ::SnapContext &snapc, librados::snap_t snap_id,
+			       Context *completion,
 			       bool hide_enoent)
-    : AioRequest(ictx, oid, image_ofs, len, snap_id, completion, hide_enoent)
+    : AioRequest(ictx, oid, object_no, object_off, len, snap_id, completion, hide_enoent)
   {
     m_state = LIBRBD_AIO_WRITE_FINAL;
-    m_has_parent = has_parent;
+
+    m_object_image_extents = objectx;
+    m_parent_overlap = object_overlap;
+
     // TODO: find a way to make this less stupid
     std::vector<librados::snap_t> snaps;
     for (std::vector<snapid_t>::const_iterator it = snapc.snaps.begin();
@@ -120,11 +134,11 @@ namespace librbd {
 
   void AbstractWrite::guard_write()
   {
-    if (m_has_parent) {
+    if (has_parent()) {
       m_state = LIBRBD_AIO_WRITE_CHECK_EXISTS;
       m_read.stat(NULL, NULL, NULL);
     }
-    ldout(m_ictx->cct, 20) << __func__ << " m_has_parent = " << m_has_parent
+    ldout(m_ictx->cct, 20) << __func__ << " has_parent = " << has_parent()
 			   << " m_state = " << m_state << " check exists = "
 			   << LIBRBD_AIO_WRITE_CHECK_EXISTS << dendl;
       
@@ -147,19 +161,14 @@ namespace librbd {
       if (r == -ENOENT) {
 	Mutex::Locker l(m_ictx->snap_lock);
 	Mutex::Locker l2(m_ictx->parent_lock);
+
 	// copyup the entire object up to the overlap point
-	uint64_t block_begin = m_image_ofs - m_block_ofs;
-	size_t len = m_ictx->parent_io_len(block_begin,
-					   get_block_size(m_ictx->order),
-					   m_snap_id);
-	if (len) {
-	  ldout(m_ictx->cct, 20) << "reading from parent" << dendl;
-	  m_state = LIBRBD_AIO_WRITE_COPYUP;
-	  ceph::buffer::ptr bp(len);
-	  m_read_data.append(bp);
-	  read_from_parent(block_begin, len);
-	  break;
-	}
+	ldout(m_ictx->cct, 20) << "reading from parent " << m_object_image_extents << dendl;
+	assert(m_object_image_extents.size());
+
+	m_state = LIBRBD_AIO_WRITE_COPYUP;
+	read_from_parent(m_object_image_extents);
+	break;
       }
       ldout(m_ictx->cct, 20) << "no need to read from parent" << dendl;
       m_state = LIBRBD_AIO_WRITE_FINAL;

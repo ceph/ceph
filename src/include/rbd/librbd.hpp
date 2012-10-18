@@ -76,9 +76,15 @@ public:
   int create(IoCtx& io_ctx, const char *name, uint64_t size, int *order);
   int create2(IoCtx& io_ctx, const char *name, uint64_t size,
 	      uint64_t features, int *order);
+  int create3(IoCtx& io_ctx, const char *name, uint64_t size,
+	      uint64_t features, int *order,
+	      uint64_t stripe_unit, uint64_t stripe_count);
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snapname,
 	       IoCtx& c_ioctx, const char *c_name, uint64_t features,
 	       int *c_order);
+  int clone2(IoCtx& p_ioctx, const char *p_name, const char *p_snapname,
+	     IoCtx& c_ioctx, const char *c_name, uint64_t features,
+	     int *c_order, uint64_t stripe_unit, int stripe_count);
   int remove(IoCtx& io_ctx, const char *name);
   int remove_with_progress(IoCtx& io_ctx, const char *name, ProgressContext& pctx);
   int rename(IoCtx& src_io_ctx, const char *srcname, const char *destname);
@@ -105,8 +111,14 @@ public:
   int features(uint64_t *features);
   int overlap(uint64_t *overlap);
   int copy(IoCtx& dest_io_ctx, const char *destname);
+  int copy2(Image& dest);
   int copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
 			 ProgressContext &prog_ctx);
+  int copy_with_progress2(Image& dest, ProgressContext &prog_ctx);
+
+  /* striping */
+  uint64_t get_stripe_unit() const;
+  uint64_t get_stripe_count() const;
 
   int flatten();
   int flatten_with_progress(ProgressContext &prog_ctx);
@@ -143,6 +155,24 @@ public:
   int discard(uint64_t ofs, uint64_t len);
 
   int aio_write(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
+
+  /**
+   * read async from image
+   *
+   * The target bufferlist is populated with references to buffers
+   * that contain the data for the given extent of the image.
+   *
+   * NOTE: If caching is enabled, the bufferlist will directly
+   * reference buffers in the cache to avoid an unnecessary data copy.
+   * As a result, if the user intends to modify the buffer contents
+   * directly, they should make a copy first (unconditionally, or when
+   * the reference count on ther underlying buffer is more than 1).
+   *
+   * @param off offset in image
+   * @param len length of read
+   * @param bl bufferlist to read into
+   * @param c aio completion to notify when read is complete
+   */
   int aio_read(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
   int aio_discard(uint64_t off, uint64_t len, RBD::AioCompletion *c);
 

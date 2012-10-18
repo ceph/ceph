@@ -24,6 +24,7 @@ ANONYMOUS_AUID = 0xffffffffffffffff
 ADMIN_AUID = 0
 
 RBD_FEATURE_LAYERING = 1
+RBD_FEATURE_STRIPINGV2 = 2
 
 class Error(Exception):
     pass
@@ -131,7 +132,7 @@ class RBD(object):
         return (major.value, minor.value, extra.value)
 
     def create(self, ioctx, name, size, order=None, old_format=True,
-               features=0):
+               features=0, stripe_unit=0, stripe_count=0):
         """
         Create an rbd image.
 
@@ -149,6 +150,10 @@ class RBD(object):
         :type old_format: bool
         :param features: bitmask of features to enable
         :type features: int
+        :param stripe_unit: stripe unit in bytes (default 0 for object size)
+        :type stripe_unit: int
+        :param stripe_count: objects to stripe over before looping
+        :type stripe_count: int
         :raises: :class:`ImageExists`
         """
         if order is None:
@@ -160,10 +165,12 @@ class RBD(object):
                                          c_uint64(size),
                                          byref(c_int(order)))
         else:
-            ret = self.librbd.rbd_create2(ioctx.io, c_char_p(name),
+            ret = self.librbd.rbd_create3(ioctx.io, c_char_p(name),
                                           c_uint64(size),
                                           c_uint64(features),
-                                          byref(c_int(order)))
+                                          byref(c_int(order)),
+                                          c_uint64(stripe_unit),
+                                          c_uint64(stripe_count))
         if ret < 0:
             raise make_ex(ret, 'error creating image')
 

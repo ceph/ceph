@@ -476,6 +476,42 @@ namespace librbd {
       return ioctx->exec(oid, "rbd", "set_protection_status", in, out);
     }
 
+    int get_stripe_unit_count(librados::IoCtx *ioctx, const std::string &oid,
+			      uint64_t *stripe_unit, uint64_t *stripe_count)
+    {
+      assert(stripe_unit);
+      assert(stripe_count);
+
+      librados::ObjectReadOperation op;
+      bufferlist empty;
+      op.exec("rbd", "get_stripe_unit_count", empty);
+
+      bufferlist outbl;
+      int r = ioctx->operate(oid, &op, &outbl);
+      if (r < 0)
+	return r;
+
+      try {
+	bufferlist::iterator iter = outbl.begin();
+	::decode(*stripe_unit, iter);
+	::decode(*stripe_count, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    int set_stripe_unit_count(librados::IoCtx *ioctx, const std::string &oid,
+			      uint64_t stripe_unit, uint64_t stripe_count)
+    {
+      bufferlist in, out;
+      ::encode(stripe_unit, in);
+      ::encode(stripe_count, in);
+      return ioctx->exec(oid, "rbd", "set_stripe_unit_count", in, out);
+    }
+
+
     /************************ rbd_id object methods ************************/
 
     int get_id(librados::IoCtx *ioctx, const std::string &oid, std::string *id)
