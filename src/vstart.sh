@@ -289,6 +289,7 @@ EOF
 
 [client]
         keyring = $keyring_fn
+        log file = out/\$name.log
 
 [mds]
 $DAEMONOPTS
