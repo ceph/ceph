@@ -219,6 +219,10 @@ Commands
   Release a lock on an image. The lock id and locker are
   as output by lock ls.
 
+:command:`bench-write` [*image-name*] --io-size [*io-size-in-bytes*] --io-threads [*num-ios-in-flight*] --io-total [*total-bytes-to-write*]
+  Generate a series of sequential writes to the image and measure the
+  write throughput and latency.
+
 Image name
 ==========
 
