@@ -42,7 +42,7 @@ For Example,for "nova" user, 'export CEPH_ARGS="--keyring /etc/ceph/ceph.keyring
 =cut
 
 use Cwd;
-use RbdLib qw(perform_action create_image resize_image rename_image copy_image list_image info_image export_image import_image remove_image create_snapshots rollback_snapshots purge_snapshots list_snapshots remove_snapshot rbd_map rbd_unmap rbd_showmapped display_result _pre_clean_up _post_clean_up _create_rados_pool display_ceph_os_info $RADOS_MKPOOL $RADOS_RMPOOL $RBD_CREATE $RBD_RESIZE $RBD_INFO $RBD_REMOVE $RBD_RENAME $RBD_MV $RBD_LS $RBD_LIST $RBD_CLONE $RBD_EXPORT $RBD_IMPORT $RBD_CP $RBD_COPY $SNAP_CREATE $SNAP_LS $SNAP_LIST $SNAP_ROLLBACK $SNAP_PURGE $SNAP_REMOVE $POOL_RM_SUCCESS $POOL_MK_SUCCESS $RBD_EXISTS_ERR $RBD_WATCH $RBD_MAP $RBD_UNMAP $RBD_SHOWMAPPED get_command_output debug_msg );
+use RbdLib qw(perform_action create_image resize_image rename_image copy_image list_image info_image export_image import_image remove_image create_snapshots rollback_snapshots purge_snapshots list_snapshots remove_snapshot rbd_map rbd_unmap rbd_showmapped display_result _pre_clean_up _post_clean_up _create_rados_pool display_ceph_os_info $RADOS_MKPOOL $RADOS_RMPOOL $RBD_CREATE $RBD_RESIZE $RBD_INFO $RBD_REMOVE $RBD_RENAME $RBD_MV $RBD_LS $RBD_LIST $RBD_CLONE $RBD_EXPORT $RBD_IMPORT $RBD_CP $RBD_COPY $SNAP_CREATE $SNAP_LS $SNAP_LIST $SNAP_ROLLBACK $SNAP_PURGE $SNAP_REMOVE $POOL_RM_SUCCESS $POOL_MK_SUCCESS $RBD_EXISTS_ERR $RBD_WATCH $RBD_MAP $RBD_UNMAP $RBD_SHOWMAPPED get_command_output debug_msg $CLI_FLAG);
 
 use Pod::Usage();
 use Getopt::Long();
@@ -89,9 +89,9 @@ our $test_log      = "logfile.txt";
 our $success       = "test_completed.txt";
 our $fail          = "log.txt";
 our $exec_cmd;
-our $PASS_FLAG;
 our $MSG;
 our $pool_name;
+our $CLI_FLAG = "TRUE";
 
 # Tests for create image
 sub create_image {
@@ -200,7 +200,7 @@ sub remove_image {
     perform_action( $RBD_REMOVE,"$pool_name\/$img_name",0);
     perform_action( $RBD_REMOVE, "$pool_name\/$new_rbd_img", 2 );
     perform_action( $RBD_REMOVE, "$pool_name\/$rbd_imp_image", 0 );
-    perform_action( $RBD_REMOVE, "$pool_name\/$cp_new",            2 );
+    perform_action( $RBD_REMOVE, "$pool_name\/$cp_new",            0 );
     perform_action( $RBD_REMOVE, " ",                                2 );
 }
 
