@@ -29,6 +29,9 @@ For Example,for "nova" user, 'export CEPH_ARGS="--keyring /etc/ceph/ceph.keyring
 
 use strict;
 use warnings;
+use Cwd;
+use RbdLib qw(perform_action log_results display_result _pre_clean_up _post_clean_up _create_rados_pool display_ceph_os_info $RADOS_MKPOOL $RADOS_RMPOOL $RBD_CREATE $RBD_RESIZE $RBD_INFO $RBD_REMOVE $RBD_RENAME $RBD_MV $RBD_LS $RBD_LIST $RBD_CLONE $RBD_EXPORT $RBD_IMPORT $RBD_CP $RBD_COPY $SNAP_CREATE $SNAP_LS $SNAP_LIST $SNAP_ROLLBACK $SNAP_PURGE $SNAP_REMOVE $POOL_RM_SUCCESS $POOL_MK_SUCCESS $RBD_EXISTS_ERR $RBD_WATCH $RBD_MAP $RBD_UNMAP $RBD_SHOWMAPPED $RADOS_LS get_command_output verify_action debug_msg tpass tfail display_func_result $CLI_FLAG);
+
 use Pod::Usage();
 use Getopt::Long();
 
@@ -41,70 +44,6 @@ Getopt::Long::GetOptions(
 Pod::Usage::pod2usage( -verbose => 1 ) if ($help);
 
 my $pool_name = "rbd";
-
-# variables
-my $PASS_CNT       = 0;
-my $FAIL_CNT       = 0;
-my $TPASS_CNT      = 0;
-my $TFAIL_CNT      = 0;
-my $RADOS_MKPOOL   = "rados mkpool";
-my $RADOS_RMPOOL   = "rados rmpool";
-my $RBD_CREATE     = "rbd create";
-my $RBD_RESIZE     = "rbd resize";
-my $RBD_INFO       = "rbd info";
-my $RBD_REMOVE     = "rbd rm";
-my $RBD_RENAME     = "rbd rename";
-my $RBD_MV         = "rbd mv";
-my $RBD_LS         = "rbd ls";
-my $RBD_LIST       = "rbd list";
-my $RBD_CLONE      = "rbd clone";
-my $RBD_EXPORT     = "rbd export";
-my $RBD_IMPORT     = "rbd import";
-my $RBD_COPY       = "rbd copy";
-my $RBD_CP         = "rbd cp";
-my $SNAP_CREATE    = "rbd snap create";
-my $SNAP_LIST      = "rbd snap list";
-my $SNAP_LS        = "rbd snap ls";
-my $SNAP_ROLLBACK  = "rbd snap rollback";
-my $SNAP_REMOVE    = "rbd snap rm";
-my $SNAP_PURGE     = "rbd snap purge";
-my $RBD_WATCH      = "rbd watch";
-my $RBD_MAP        = "sudo rbd map";
-my $RBD_UNMAP      = "sudo rbd unmap";
-my $RBD_SHOWMAPPED = "rbd showmapped";
-my $RADOS_LS       = "rados ls";
-
-#====Error messages========================
-
-my $RBD_RM_ERROR      = "image name was not specified";
-my $SNAP_LS_ERROR     = "snap name was not specified";
-my $SNAP_RM_ERROR     = "remove failed";
-my $SNAP_ROLLBACK_ERR = "rollback failed";
-my $RBD_CP_ERROR      = "error: destination image name";
-my $RBD_EXISTS_ERR    = "exists";
-my $RBD_RENAME_ERROR  = "rename error";
-my $RBD_DELETE_ERROR  = "delete error";
-my $RBD_NO_IMAGE      = "error opening image";
-my $RBD_POOL_ERROR    = "error opening pool";
-my $RBD_INT_ERR       = "expected integer";
-my $RBD_ARG_ERR       = "requires an argument";
-my $RBD_EXP_ERR       = "export error";
-my $RBD_IMP_ERR       = "import failed";
-my $RBD_MAP_ERR       = "add failed";
-my $RBD_UNMAP_ERR     = "remove failed";
-my $RBD_INFO_SNAP_ERR = "error setting snapshot context";
-
-#=======Success messages=======================
-
-my $POOL_MK_SUCCESS       = "successfully created pool";
-my $POOL_RM_SUCCESS       = "successfully deleted pool";
-my $RBD_RM_SUCCESS        = "Removing image: 100%";
-my $RBD_CP_SUCCESS        = "Image copy: 100%";
-my $RBD_RESIZE_SUCCESS    = "Resizing image: 100%";
-my $RBD_EXP_SUCCESS       = "Exporting image: 100%";
-my $RBD_IMP_SUCCESS       = "Importing image: 100%";
-my $SNAP_ROLLBACK_SUCCESS = "Rolling back to snapshot: 100%";
-my $SNAP_PURGE_SUCCESS    = "Removing all snapshots: 100%";
 
 #===========Variables used in the script========
 
@@ -136,10 +75,8 @@ my $fail             = "log.txt";
 my $obj_initial      = "000000000000";
 my $obj_second       = "000000000001";
 my $exec_cmd;
-my $PASS_FLAG;
-my $TPASS_FLAG;
-my $rc = " ";
 our $MSG;
+our $CLI_FLAG = "FALSE";
 my $TC3_LOG = "verify import of file to rbd image and export the same image to file";
 my $TC5_LOG = "Export rbd image to already existing non-empty file";
 my $TC6_LOG = "Import file to an existing rbd image";
@@ -153,456 +90,25 @@ sub _create_pool {
     if (   ( $exec_cmd =~ /$POOL_RM_SUCCESS/ )
         || ( $exec_cmd =~ /does not exist/ ) )
     {
-        pass("Pool $pool_name deleted");
+        debug_msg ("Pool $pool_name deleted");
     }
     $exec_cmd = get_command_output("$RADOS_MKPOOL $pool_name");
     if (   ( $exec_cmd =~ /$POOL_MK_SUCCESS/ )
         || ( $exec_cmd =~ /RBD_EXISTS_ERR/ ) )
     {
-        pass("Pool $pool_name created");
+        debug_msg ("Pool $pool_name created");
     }
-}
-
-sub _clean_up {
-    my $exec_cmd = get_command_output(
-        "rm  $img_name $rbd_imp_file $rbd_imp_test $exp_file $exp_file1" );
-}
-
-sub _pre_clean_up {
-    my $exec_cmd = get_command_output(
-"rm -rf logfile.txt log.txt test_completed.txt"
-    );
-}
-
-sub perform_action {
-    my ( $action, $cmd_args, $option ) = @_;
-    my $command = frame_command( $action, $cmd_args, $option );
-    my $cmd_op  = get_command_output($command);
-    my $rc      = validate_cmd_output( $cmd_op, $action, $cmd_args, $option );
-    return $rc;
-}
-
-sub verify_action {
-    my ( $action, $cmd_args, $option ) = @_;
-    my $command = frame_command( $action, $cmd_args, $option );
-    my $cmd_op = get_command_output($command);
-    return $cmd_op;
-}
-
-sub pass {
-    my ($comment) = @_;
-    print "Comment required." unless length $comment;
-    chomp $comment;
-    print_border2();
-    print "PASS: $comment \n";
-    print_border2();
-    $PASS_CNT++;
-    $PASS_FLAG = "TRUE";
-}
-
-sub tpass {
-    my ($comment) = @_;
-    print "Comment required." unless length $comment;
-    chomp $comment;
-    print_border4();
-    print "PASS: $comment \n";
-    print_border4();
-    $TPASS_CNT++;
-    $TPASS_FLAG = "TRUE";
-    $MSG = "$comment";
-}
-
-sub debug_msg {
-    my ($comment) = @_;
-    print "Comment required." unless length $comment;
-    chomp $comment;
-    print_border2();
-    print "DEBUG: $comment \n";
-    print_border2();
-}
-
-sub fail {
-    my ($comment) = @_;
-    print "Comment required." unless length $comment;
-    chomp $comment;
-    print_border2();
-    print "FAIL: $comment \n";
-    print_border2();
-    $FAIL_CNT++;
-    $PASS_FLAG = "FALSE";
-}
-
-sub tfail {
-    my ($comment) = @_;
-    print "Comment required." unless length $comment;
-    chomp $comment;
-    print_border4();
-    print "FAIL: $comment \n";
-    print_border4();
-    $TFAIL_CNT++;
-    $TPASS_FLAG = "FALSE";
-    $MSG = "$comment";
-}
-
-sub print_border {
-    print "=" x 90 . "\n";
-}
-
-sub print_border2 {
-    print "~" x 90 . "\n";
-}
-
-sub print_border4 {
-    print "*" x 90 . "\n";
-}
-
-sub banner {
-    my ($string) = @_;
-    chomp $string;
-    print_border();
-    print $string, "\n";
-    print_border();
-}
-
-sub display_result {
-    banner("TEST RESULTS");
-    banner(
-"No. of test cases passed:$PASS_CNT\nNo. of test cases failed:$FAIL_CNT\n"
-    );
-}
-
-sub display_func_result {
-    banner("TEST RESULTS");
-    banner(
-"No. of test cases passed:$TPASS_CNT\nNo. of test cases failed:$TFAIL_CNT\n"
-    );
-}
-
-sub get_command_output {
-    my $cmd_output = shift;
-    open( FH, ">>$test_log" );
-    print FH "*" x 90 . "\n";
-    print FH "\"$cmd_output\"\n";
-    my $exec_cmd = `$cmd_output 2>&1`;
-    print FH "$exec_cmd\n";
-    print FH "*" x 90 . "\n";
-    close(FH);
-    return $exec_cmd;
-}
-
-sub frame_command {
-    my ( $action, $cmd_args, $option ) = @_;
-    my @command_set = split( /,/, $cmd_args );
-    my $command = join( ' --', @command_set );
-    $command = "$action $command";
-    return $command;
-}
-
-sub check_if_listed {
-    my ( $cmd, $check_arg ) = @_;
-    my $check_op = get_command_output($cmd);
-    if ( $check_op =~ /$check_arg/ ) {
-        pass("$cmd passed");
-        return 0;
-    }
-    else {
-        fail("$cmd failed");
-        return 1;
-    }
-}
-
-sub check_if_not_listed {
-    my ( $cmd, $check_arg ) = @_;
-    my $check_op = get_command_output($cmd);
-    if ( $check_op =~ /$check_arg/ ) {
-        fail("$cmd failed");
-        return 1;
-    }
-    else {
-        pass("$cmd successful");
-        return 0;
-    }
-}
-
-sub validate_cmd_output {
-    my ( $snap, $arg1 );
-    my $arg = " ";
-    my $MSG = " ";
-    my $snaps;
-    my ( $cmd_op, $act, $args, $test_flag ) = @_;
-    if ( !$test_flag ) {
-        if ( ( $act =~ /$RBD_CREATE/ ) && ( !$cmd_op ) ) {
-            $arg = ( split /,/,  $args )[0];
-            $arg = ( split /\//, $arg )[-1];
-            $rc = check_if_listed( "$RBD_LS $pool_name", $arg );
-            return $rc;
-        }
-        elsif (( ( $act =~ /$RBD_RENAME/ ) || ( $act =~ /$RBD_MV/ ) )
-            && ( !$cmd_op ) )
-        {
-            $arg = ( split /\//, $args )[-1];
-            $rc = check_if_listed( "$RBD_LS $pool_name", $arg );
-            return $rc;
-        }
-        elsif ( ( $act =~ /$SNAP_CREATE/ ) && ( !$cmd_op ) ) {
-            $snaps = ( split / /,  $args )[1];
-            $arg   = ( split /\//, $args )[-1];
-            $rc = check_if_listed( "$SNAP_LS $arg", $snaps );
-            return $rc;
-        }
-        elsif ( ( $act =~ /$SNAP_REMOVE/ ) && ( !$cmd_op ) ) {
-            $snaps = ( split /\@/, $args )[-1];
-            $arg1  = ( split /\@/, $args )[-2];
-            $arg   = ( split /\//, $arg1 )[-1];
-            $rc = check_if_not_listed( "$SNAP_LS $arg", $snaps );
-            return $rc;
-        }
-        elsif (( $act =~ /$SNAP_PURGE/ )
-            && ( $cmd_op =~ /$SNAP_PURGE_SUCCESS/ ) )
-        {
-            pass("$act $args passed");
-        }
-        elsif ( $act =~ /$RBD_INFO/ ) {
-            $arg = ( split /\//, $args )[-1];
-            my $rbd_img_quoted = "\'$arg\'";
-            pass("$act $args passed")
-              if ( $cmd_op =~ /rbd image $rbd_img_quoted/ );
-        }
-        elsif ( ( $act =~ /$RBD_REMOVE/ ) && ( $cmd_op =~ /$RBD_RM_SUCCESS/ ) )
-        {
-            $rc = check_if_not_listed( "$RBD_LS $pool_name", $args );
-            return $rc;
-        }
-        elsif (( $act =~ /$RBD_RESIZE/ )
-            && ( $cmd_op =~ /$RBD_RESIZE_SUCCESS/ ) )
-        {
-            pass("$act $args passed");
-        }
-        elsif (( ( $act =~ /$RBD_COPY/ ) || ( $act =~ /$RBD_CP/ ) )
-            && ( $cmd_op =~ /$RBD_CP_SUCCESS/ ) )
-        {
-            pass("$act $args passed");
-        }
-        elsif (
-            ( $act =~ /$RBD_EXPORT/ )
-            && (   ( $cmd_op =~ /$RBD_EXP_SUCCESS/ )
-                && ( $cmd_op !~ /$RBD_EXISTS_ERR/ ) )
-          )
-        {
-            pass("$act $args passed");
-        }
-        elsif (
-            ( $act =~ /$RBD_IMPORT/ )
-            && (   ( $cmd_op =~ /$RBD_IMP_SUCCESS/ )
-                && ( $cmd_op !~ /$RBD_EXISTS_ERR/ )
-                && ( $cmd_op !~ /$RBD_IMP_ERR/ ) )
-          )
-        {
-            pass("$act $args passed");
-        }
-        elsif (( $act =~ /$SNAP_ROLLBACK/ )
-            && ( $cmd_op =~ /$SNAP_ROLLBACK_SUCCESS/ ) )
-        {
-            pass("$act $args passed");
-        }
-        elsif ( ( $act =~ /$RBD_SHOWMAPPED/ ) && ( $cmd_op =~ /$img_name/ ) ) {
-            pass("$act $args passed");
-        }
-        elsif ( ( $act =~ /$RBD_MAP/ ) && ( $cmd_op !~ /$RBD_MAP_ERR/ ) ) {
-            pass("$act $args passed");
-        }
-        elsif ( ( $act =~ /$RBD_UNMAP/ ) && ( $cmd_op !~ /$RBD_UNMAP_ERR/ ) ) {
-            pass("$act $args passed");
-        }
-        else {
-            fail("$act $args failed");
-            return 1;
-        }
-        return 0;
-    }
-    elsif ( ( $test_flag == 1 ) && ( $cmd_op =~ /$RBD_EXISTS_ERR/ ) ) {
-        pass("Already exists: $act $args passed");
-        return 0;
-    }
-    elsif (
-        ( $test_flag == 2 )
-        && (   ( $cmd_op =~ /$RBD_RENAME_ERROR/ )
-            || ( $cmd_op =~ /$RBD_DELETE_ERROR/ )
-            || ( $cmd_op =~ /$RBD_NO_IMAGE/ )
-            || ( $cmd_op =~ /$RBD_POOL_ERROR/ )
-            || ( $cmd_op =~ /$RBD_INT_ERR/ )
-            || ( $cmd_op =~ /$RBD_ARG_ERR/ )
-            || ( $cmd_op =~ /$RBD_RM_ERROR/ )
-            || ( $cmd_op =~ /$SNAP_LS_ERROR/ )
-            || ( $cmd_op =~ /$SNAP_RM_ERROR/ )
-            || ( $cmd_op =~ /$RBD_CP_ERROR/ )
-            || ( $cmd_op =~ /$RBD_EXP_ERR/ )
-            || ( $cmd_op =~ /$RBD_IMP_ERR/ )
-            || ( $cmd_op =~ /$SNAP_ROLLBACK_ERR/ )
-            || ( $cmd_op =~ /$RBD_MAP_ERR/ )
-            || ( $cmd_op =~ /$RBD_UNMAP_ERR/ )
-            || ( $cmd_op =~ /$RBD_INFO_SNAP_ERR/ ) )
-      )
-    {
-        pass("negative case: $act $args passed");
-        return 0;
-    }
-    elsif ( ( $test_flag == 3 ) && ( $cmd_op =~ /usage/ ) ) {
-        pass("negative case: $act $args passed");
-        return 0;
-    }
-    else {
-        fail("negative case:$act $args failed");
-        return 1;
-    }
-}
-
-# main starts here
-
-banner("start tests");
-
-# Tests for create image
-sub create_image {
-    perform_action( $RBD_CREATE, "$img_name,pool $pool_name,size 1024",    0 );
-    perform_action( $RBD_CREATE, "$img_name_mv,pool $pool_name,size 1024", 0 );
-    perform_action( $RBD_CREATE, "$img_name1,pool $pool_name,size 0,order 22",
-        3 );
-    perform_action( $RBD_CREATE, "$img_name1,pool $pool_name,size 0",     3 );
-    perform_action( $RBD_CREATE, "$neg_img_name,pool $pool_name,size -1", 3 );
-    perform_action( $RBD_CREATE, "$img_name1 pool $pool_name",            3 );
-    perform_action( $RBD_CREATE, "--size 1024",                           3 );
-    perform_action( $RBD_CREATE,
-        "$max_img_name,pool $pool_name,size 1024000000000", 0 );
-    perform_action( $RBD_CREATE, "$img_name1,pool $pool_name,size 2048,order",
-        2 );
-    perform_action( $RBD_CREATE, "$img_name1,pool $pool_name,size,order 22",
-        2 );
-}
-
-#Tests to create snapshot
-sub create_snapshots {
-    perform_action( $SNAP_CREATE, "--snap $snap_name $pool_name\/$img_name",
-        0 );
-    perform_action( $SNAP_CREATE, "--snap $snap_name $pool_name\/$img_name",
-        1 );
-    perform_action( $SNAP_CREATE, "$snap_name", 2 );
-
-#perform_action($SNAP_CREATE,"--snap $snap_name2 $pool_name\/$non_existing_img",2);
-    perform_action( $SNAP_CREATE, "--snap $snap_name3 $pool_name\/$img_name",
-        0 );
-    perform_action( $SNAP_CREATE, "--snap $snap_name4 $pool_name\/$img_name",
-        0 );
-}
-
-#Tests to rollback snapshot
-sub rollback_snapshot {
-    perform_action( $SNAP_ROLLBACK, "--snap $snap_name2 $pool_name\/$img_name",
-        0 );
-    perform_action( $SNAP_ROLLBACK,
-        "--snap $rbd_snap_new $pool_name\/$img_name", 2 );
-    perform_action( $SNAP_ROLLBACK,
-        "--snap $snap_name $pool_name\/$new_rbd_img", 2 );
-}
-
-#Tests to purge snapshots
-sub purge_snapshots {
-    perform_action( $SNAP_PURGE, "$pool_name\/$img_name",    0 );
-    perform_action( $SNAP_PURGE, "$pool_name\/$new_rbd_img", 2 );
-}
-
-#Tests to list snapshots for an image
-sub list_snapshots {
-    perform_action( $SNAP_LIST, "$pool_name\/$non_existing_img", 2 );
-}
-
-# Tests for remove snapshots
-sub remove_snapshot {
-    perform_action( $SNAP_REMOVE, "$pool_name\/$img_name\@$snap_name",      0 );
-    perform_action( $SNAP_REMOVE, "$non_pool_name\/$img_name\@$snap_name3", 2 );
-    perform_action( $SNAP_REMOVE, "$pool_name\/$img_name\@$snap_name2",     0 );
-    perform_action( $SNAP_REMOVE, "$pool_name\/$non_existing_img",          2 );
-    perform_action( $SNAP_REMOVE, " ",                                      2 );
-}
-
-# Tests for resize image
-sub resize_image {
-    perform_action( $RBD_RESIZE, "$img_name,size 1024,pool $pool_name", 0 );
-    perform_action( $RBD_RESIZE, "$non_existing_img,size 1024,pool $pool_name",
-        2 );
-}
-
-# Tests for list rbd image
-sub list_image {
-    perform_action( $RBD_LIST, "$non_pool_name", 2 );
-}
-
-# Tests to copy rbd image
-sub copy_image {
-    perform_action( $RBD_CP, "$pool_name\/$img_name $pool_name\/$cp_new", 0 );
-    perform_action( $RBD_CP, "$pool_name\/$non_existing_img",             2 );
-}
-
-#Tests for rbd info
-sub info_image {
-    perform_action( $RBD_INFO, "$pool_name\/$img_name", 0 );
-    perform_action( $RBD_INFO, "--snap $snap_name $pool_name\/$img_name_mv",
-        2 );
-    perform_action( $RBD_INFO, "--snap $no_snap $pool_name\/$img_name", 2 );
-    perform_action( $RBD_INFO, "$pool_name\/$non_existing_img",         2 );
-}
-
-#Tests for rename image
-sub rename_image {
-    perform_action( $RBD_RENAME,
-        "$pool_name\/$img_name_mv $pool_name\/$new_rbd_img", 0 );
-    perform_action( $RBD_MV,
-        "$pool_name\/$new_rbd_img $pool_name\/$img_name_mv", 0 );
-}
-
-# Tests for remove image
-sub remove_image {
-
-    #perform_action($RBD_REMOVE,"$pool_name\/$img_name",0);
-    perform_action( $RBD_REMOVE, "$pool_name\/$new_rbd_img",         0 );
-    perform_action( $RBD_REMOVE, "--pool $pool_name $rbd_imp_image", 0 );
-    perform_action( $RBD_REMOVE, "-p $pool_name $cp_new",            0 );
-    perform_action( $RBD_REMOVE, " ",                                2 );
-}
-
-# Tests for export rbd image
-sub export_image {
-    perform_action( $RBD_EXPORT, "$pool_name\/$img_name $exp_file", 0 );
-    perform_action( $RBD_EXPORT, "$pool_name\/$img_name .",         2 );
-    perform_action( $RBD_EXPORT, "$pool_name\/$img_name",           2 );
-    perform_action( $RBD_EXPORT,
-        "--snap $snap_name $pool_name\/$img_name $exp_file1", 0 );
-    perform_action( $RBD_EXPORT,
-        "--snap $no_snap $pool_name\/$img_name $exp_file1", 2 );
-    perform_action( $RBD_EXPORT,
-        "--snap $snap_name $pool_name\/$non_existing_img $exp_file2", 2 );
-}
-
-#Tests for import file to rbd image
-sub import_image {
-    my $i = create_test_file( $rbd_imp_file, $content );
-    if ( $i == 0 ) {
-        perform_action( $RBD_IMPORT, "$rbd_imp_file $rbd_imp_image", 0 );
-    }
-    create_test_file( "$rbd_imp_test", 0 );
-    perform_action( $RBD_IMPORT, "$rbd_imp_test $pool_name\/$rbd_imp_image",
-        2 );
-    perform_action( $RBD_IMPORT, "$exp_file $pool_name\/$rbd_imp_image", 2 );
 }
 
 #To map rbd image to device
-sub rbd_map {
+sub rbd_mapp {
     my $img_name = shift;
 
     # Execute "modprobe rbd"
     my $cmd = get_command_output("sudo modprobe rbd");
     if ( !$cmd ) {
         perform_action( $RBD_MAP, "$pool_name\/$img_name", 0 );
-        my $ret = rbd_showmapped($img_name);
+        my $ret = rbd_showmapped1($img_name);
         print "ret is $ret \n";
         return $ret;
 
@@ -611,7 +117,7 @@ sub rbd_map {
 }
 
 # To list rbd map
-sub rbd_showmapped {
+sub rbd_showmapped1 {
     my $img     = shift;
     my $ret_map = get_command_output($RBD_SHOWMAPPED);
     my @lines   = split( /\n/, $ret_map );
@@ -647,7 +153,7 @@ sub del_mapped_img {
     my $rc_create =
       perform_action( $RBD_CREATE, "$img,pool $pool_name,size 100", 0 );
     if ( !$rc_create ) {
-        $dev = rbd_map($img);
+        $dev = rbd_mapp($img);
         if ($dev) {
             my $rc_del = perform_action( $RBD_REMOVE, "$pool_name\/$img", 0 );
             if ($rc_del) {
@@ -661,7 +167,7 @@ sub del_mapped_img {
         }
     }
     debug_msg("end of test");
-    log_results();
+    #log_results();
 }
 
 # To create a test file and write to it
@@ -699,24 +205,6 @@ sub import_verify_objs {
     return 1;
 }
 
-# Test Script execution result
-sub log_results {
-    if ( $TPASS_FLAG eq "TRUE" ) {
-        open( TC, '>>test_completed.txt' );
-        close(TC);
-        open( TC, '>>log.txt' );
-        print TC "[Success] $MSG\n";
-        close(TC);
-    }
-    else {
-        open( TC, '>>test_completed.txt' );
-        close(TC);
-        open( TC, '>>log.txt' );
-        print TC "[Failure] $MSG\n";
-        close(TC);
-    }
-}
-
 sub import_resize_checkobjs {
     my $img         = "image1";
     my $file        = "imp_file";
@@ -744,15 +232,14 @@ sub import_resize_checkobjs {
 
                 }
                 else {
-                    tfail("TC2 failed : Import file to an image, resize and verify");
+                    tfail("TC2 failed: Import file to an image, resize and verify");
                 }
             }
         }
     }
-    perform_action( $RBD_REMOVE, $img, 0 );
+    perform_action( $RBD_REMOVE, "$pool_name\/$img", 0 );
     remove_test_files($file);
     remove_test_files($exp_to_file);
-    log_results();
 }
 
 sub remove_test_files {
@@ -783,10 +270,10 @@ sub import_export {
             }
         }
     }
-    my $a = perform_action( $RBD_REMOVE, "$pool_name/$new_img", 0 );
+    #log_results();
+    my $a = perform_action( $RBD_REMOVE, "$pool_name\/$new_img", 0 );
     remove_test_files($exp_to_file);
     remove_test_files($imp_from_file);
-    log_results();
 }
 
 sub import_rename_export {
@@ -812,25 +299,23 @@ sub import_rename_export {
             }
         }
     }
-    perform_action( $RBD_REMOVE, "$new1_img", 0 );
+    #log_results();
+    perform_action( $RBD_REMOVE, "$pool_name\/$new1_img", 0 );
     remove_test_files($imp_from_file);
-    log_results();
 }
 
 sub imp_exp_existing {
-    my ( $cmd, $args, $tc, $tc_log ) = @_;
+    my ( $cmd, $imgg, $file, $tc, $tc_log ) = @_;
     my $dd_if = "/dev/zero";
-    my @arg   = split( / /, $args );
     my $rc2   = " ";
-    my $rc_create =
-      perform_action( $RBD_CREATE, "$pool_name/$arg[0],size 1024", 0 );
+    my $rc_create = perform_action( $RBD_CREATE, "$imgg, pool $pool_name, size 1024", 0 );
+    print ":rc is $rc_create \n";
     if ( !$rc_create ) {
-        my $cksum = create_test_file( $arg[1], $dd_if );
-        print "cksum is $cksum\n";
+        my $cksum = create_test_file( $file, $dd_if );
         if ( $cksum != -1 ) {
-            $rc2 = perform_action( "$cmd", "$arg[1] $pool_name/$arg[0]", 0 )
+            $rc2 = perform_action( "$cmd", "$file $pool_name\/$imgg", 0 )
               if ( $cmd eq 'rbd import' );
-            $rc2 = perform_action( "$cmd", "$pool_name/$arg[0] $arg[1]", 0 )
+            $rc2 = perform_action( "$cmd", "$pool_name\/$imgg $file", 0 )
               if ( $cmd eq 'rbd export' );
             if ($rc2) {
                 tpass("TC$tc passed: $tc_log");
@@ -840,9 +325,8 @@ sub imp_exp_existing {
             }
         }
     }
-    perform_action( $RBD_REMOVE, "$pool_name/$arg[0]", 0 );
-    remove_test_files( $arg[1] );
-    log_results();
+    perform_action( $RBD_REMOVE, "$pool_name\/$imgg", 0 );
+    remove_test_files( $file );
 }
 
 sub import_tcs {
@@ -864,7 +348,7 @@ sub import_tcs {
         tfail("TC$tc failed: $tc_log");
     }
     remove_test_files($option);
-    log_results();
+    #log_results();
 }
 
 sub get_prefix_obj {
@@ -915,14 +399,14 @@ sub check_rados_objs {
 sub create_check_objs {
     my $cmd_rc =
       perform_action( $RBD_CREATE, "$img_name,pool $pool_name,size 1024", 0 );
-    $rc = check_rados_basic_ls($img_name);
+    my $rc = check_rados_basic_ls($img_name);
     if ( !$rc ) {
         tpass("TC1 passed: rados ls passed");
     }
     else {
         tfail("TC1 failed: rados ls failed");
     }
-    log_results();
+    #log_results();
 }
 
 sub create_snap_resize_rollback {
@@ -946,7 +430,7 @@ sub create_snap_resize_rollback {
         }
     }
     debug_msg("End of the Test");
-    log_results();
+    #log_results();
 }
 
 sub create_snap_rollback {
@@ -966,7 +450,7 @@ sub create_snap_rollback {
         }
     }
     debug_msg("End of the Test");
-    log_results();
+    #log_results();
 }
 
 sub create_delete_rollback {
@@ -996,7 +480,7 @@ sub create_delete_rollback {
     }
     my $rc_rm = perform_action( $RBD_REMOVE, "$pool_name\/$img", 0 );
     debug_msg("End of the Test");
-    log_results();
+    #log_results();
 }
 
 sub create_snapshot {
@@ -1023,31 +507,9 @@ sub rollback_snapshots {
     return 1;
 }
 
-sub ceph_os_info
-{
-        my $ceph_v = get_command_output ( "ceph -v" );
-        my @ceph_arr = split(" ",$ceph_v);
-        $ceph_v = "Ceph Version:   $ceph_arr[2]";
-        my $os_distro = get_command_output ( "lsb_release -d" );
-        my @os_arr = split(":",$os_distro);
-        $os_distro = "Linux Flavor:$os_arr[1]";
-        return ($ceph_v, $os_distro);
-}
-
-sub display_ceph_os_info
-{
-        my ($vceph, $vos) = ceph_os_info();
-        my $msg = "The Tests are running on";
-        debug_msg ( "$msg\n$vos$vceph",1 );
-        open( TC, '>>log.txt' );
-        print TC "[Log] $vceph\n";
-        close (TC);
-}
-
 #===Main===
 
 my $test_img  = rand();
-my $test_img1 = rand();
 my $test_file = rand();
 my $test_dir  = rand();
 _pre_clean_up();
@@ -1057,12 +519,13 @@ create_check_objs();
 import_resize_checkobjs();
 import_export( "/dev/zero", 3, $TC3_LOG );
 import_rename_export();
-imp_exp_existing( $RBD_EXPORT, "$test_img $test_file",  5 , $TC5_LOG);
-imp_exp_existing( $RBD_IMPORT, "$test_img1 $test_file", 6 , $TC6_LOG);
+imp_exp_existing( $RBD_EXPORT, $test_img, $test_file,  5 , $TC5_LOG);
+imp_exp_existing( $RBD_IMPORT, $test_img, $test_file, 6 , $TC6_LOG);
 import_tcs( $test_file, 7, $TC7_LOG );
 import_tcs( $test_file, 8 , $TC8_LOG);
 import_tcs( $test_dir,  9 , $TC9_LOG);
 import_tcs( $test_file, 11, $TC11_LOG );
+#del_mapped_img ()  dont execute this when cluster and client is on the same m/c
 create_snap_resize_rollback();
 create_snap_rollback();
 create_delete_rollback();
