@@ -9,7 +9,7 @@ package RbdLib;
 use Cwd;
 use Exporter;
 @ISA = 'Exporter';
-@EXPORT_OK = qw(perform_action create_image resize_image rename_image copy_image list_image info_image export_image import_image remove_image create_snapshots rollback_snapshots purge_snapshots list_snapshots remove_snapshot rbd_map rbd_unmap rbd_showmapped display_result _pre_clean_up _post_clean_up _create_rados_pool display_ceph_os_info $RADOS_MKPOOL $RADOS_RMPOOL $RBD_CREATE $RBD_RESIZE $RBD_INFO $RBD_REMOVE $RBD_RENAME $RBD_MV $RBD_LS $RBD_LIST $RBD_CLONE $RBD_EXPORT $RBD_IMPORT $RBD_CP $RBD_COPY $SNAP_CREATE $SNAP_LS $SNAP_LIST $SNAP_ROLLBACK $SNAP_PURGE $SNAP_REMOVE $POOL_RM_SUCCESS $POOL_MK_SUCCESS $RBD_EXISTS_ERR $RBD_WATCH $RBD_MAP $RBD_UNMAP $RBD_SHOWMAPPED get_command_output debug_msg );
+@EXPORT_OK = qw(perform_action create_image resize_image rename_image copy_image list_image info_image export_image import_image remove_image create_snapshots rollback_snapshots purge_snapshots list_snapshots remove_snapshot rbd_map rbd_unmap rbd_showmapped display_result _pre_clean_up _post_clean_up _create_rados_pool display_ceph_os_info $RADOS_LS $RADOS_MKPOOL $RADOS_RMPOOL $RBD_CREATE $RBD_RESIZE $RBD_INFO $RBD_REMOVE $RBD_RENAME $RBD_MV $RBD_LS $RBD_LIST $RBD_CLONE $RBD_EXPORT $RBD_IMPORT $RBD_CP $RBD_COPY $SNAP_CREATE $SNAP_LS $SNAP_LIST $SNAP_ROLLBACK $SNAP_PURGE $SNAP_REMOVE $POOL_RM_SUCCESS $POOL_MK_SUCCESS $RBD_EXISTS_ERR $RBD_WATCH $RBD_MAP $RBD_UNMAP $RBD_SHOWMAPPED get_command_output verify_action debug_msg tpass tfail log_results display_func_result $CLI_FLAG);
 use Pod::Usage();
 use Getopt::Long();
 
@@ -21,7 +21,9 @@ $|=1;
 # variables
 our $TC_CNT         = " ";
 our $PASS_CNT       = 0;
+our $TPASS_CNT       = 0;
 our $FAIL_CNT       = 0;
+our $TFAIL_CNT       = 0;
 our $RADOS_MKPOOL   = "rados mkpool";
 our $RADOS_RMPOOL   = "rados rmpool";
 our $RBD_CREATE     = "rbd create";
@@ -47,7 +49,7 @@ our $RBD_WATCH      = "rbd watch";
 our $RBD_MAP        = "sudo rbd map";
 our $RBD_UNMAP      = "sudo rbd unmap";
 our $RBD_SHOWMAPPED = "rbd showmapped";
-
+our $RADOS_LS       = "rados ls";
 #====Error messages========================
 
 our $RBD_RM_ERROR      = "image name was not specified";
@@ -86,7 +88,8 @@ our $test_log      = "logfile.txt";
 our $success_file  = "test_completed.txt";
 our $log_file     = "log.txt";
 our $exec_cmd;
-our $PASS_FLAG;
+our $PASS_FLAG = "FALSE";
+our $TPASS_FLAG = "FALSE";
 our $MSG;
 our $rbd_imp_file     = "test_file";
 our $exp_file         = "rbd_test_file1";
@@ -94,6 +97,8 @@ our $exp_file1        = "rbd_test_file2";
 our $rbd_imp_test     = "new_test_file";
 our $img_name         = "test_img";
 our $pool_name;
+our $rc = " ";
+our $CLI_FLAG;
 
 sub _post_clean_up {
     my $exec_cmd = get_command_output(
@@ -111,7 +116,15 @@ sub perform_action {
     my ( $action, $cmd_args, $option ) = @_;
     my $command = frame_command( $action, $cmd_args, $option );
     my $cmd_op = get_command_output($command);
-    validate_cmd_output( $cmd_op, $action, $cmd_args, $option );
+    my $rc = validate_cmd_output( $cmd_op, $action, $cmd_args, $option );
+    return $rc;	
+}
+
+sub verify_action {
+    my ( $action, $cmd_args, $option ) = @_;
+    my $command = frame_command( $action, $cmd_args, $option );
+    my $cmd_op = get_command_output($command);
+    return $cmd_op;
 }
 
 sub pass {
@@ -124,6 +137,20 @@ sub pass {
     $PASS_CNT++;
     $PASS_FLAG = "TRUE";
     $MSG = "$comment";
+    log_cli_results();
+}
+
+sub tpass {
+    my ($comment) = @_;
+    print "Comment required." unless length $comment;
+    chomp $comment;
+    print_border4();
+    print "PASS: $comment \n";
+    print_border4();
+    $TPASS_CNT++;
+    $TPASS_FLAG = "TRUE";
+    $MSG = "$comment";
+    log_results();
 }
 
 sub fail {
@@ -136,6 +163,20 @@ sub fail {
     $FAIL_CNT++;
     $PASS_FLAG = "FALSE";
     $MSG = "$comment";
+    log_cli_results();
+}
+
+sub tfail {
+    my ($comment) = @_;
+    print "Comment required." unless length $comment;
+    chomp $comment;
+    print_border4();
+    print "FAIL: $comment \n";
+    print_border4();
+    $TFAIL_CNT++;
+    $TPASS_FLAG = "FALSE";
+    $MSG = "$comment";
+    log_results();
 }
 
 sub debug_msg {
@@ -163,6 +204,10 @@ sub print_border3 {
     print "+" x 90 . "\n";
 }
 
+sub print_border4 {
+    print "*" x 90 . "\n";
+}
+
 sub banner {
     my ($string) = @_;
     chomp $string;
@@ -175,6 +220,13 @@ sub display_result {
     banner("TEST RESULTS");
     banner(
 "No. of test cases passed:$PASS_CNT\nNo. of test cases failed:$FAIL_CNT\n"
+    );
+}
+
+sub display_func_result {
+    banner("TEST RESULTS");
+    banner(
+"No. of test cases passed:$TPASS_CNT\nNo. of test cases failed:$TFAIL_CNT\n"
     );
 }
 
@@ -203,9 +255,11 @@ sub check_if_listed {
     my $check_op = get_command_output($chk_cmd);
     if ( $check_op =~ /$check_arg/ ) {
         pass("$cmd $args passed");
+        return 0;
     }
     else {
         fail("$cmd $args failed");
+        return 1;
     }
 }
 
@@ -214,13 +268,15 @@ sub check_if_not_listed {
     my $check_op = get_command_output($chk_cmd);
     if ( $check_op =~ /$check_arg/ ) {
         fail("$cmd $args failed");
+        return 1;
     } else {
         pass("$cmd $args passed");
+        return 0;
     }
 }
 
 sub validate_cmd_output {
-    $TC_CNT++; 
+    $TC_CNT++ if ( $CLI_FLAG eq "TRUE" ) ;
     $PASS_FLAG      = "FALSE";
     $MSG            = " ";
     my ( $arg, $snap, $arg1, $parg );
@@ -231,26 +287,30 @@ sub validate_cmd_output {
             $arg = ( split /,/, $args )[0];
             $parg = ( split /,/, $args )[1];
             $pool_name = ( split / /, $parg )[1];
-            check_if_listed( "$RBD_LS $pool_name", $arg, $act , $args);
+            $rc = check_if_listed( "$RBD_LS $pool_name", $arg, $act , $args);
+	    return $rc;
         }
         elsif (( ( $act =~ /$RBD_RENAME/ ) || ( $act =~ /$RBD_MV/ ) )
             && ( !$cmd_op ) )
         {
             $arg = ( split /\//, $args )[-1];
             $pool_name = ( split /\//, $args )[0];
-            check_if_listed( "$RBD_LS $pool_name", $arg, $act, $args );
+            $rc = check_if_listed( "$RBD_LS $pool_name", $arg, $act, $args );
+	    return $rc;
         }
         elsif ( ( $act =~ /$SNAP_CREATE/ ) && ( !$cmd_op ) ) {
             $snaps = ( split / /,  $args )[1];
             $arg   = ( split / /, $args )[2];
-            check_if_listed( "$SNAP_LS $arg", $snaps, $act, $args );
+            $rc = check_if_listed( "$SNAP_LS $arg", $snaps, $act, $args );
+	    return $rc;
         }
         elsif ( ( $act =~ /$SNAP_REMOVE/ ) && ( !$cmd_op ) ) {
             $snaps = ( split /\@/, $args )[-1];
             $arg1  = ( split /\@/, $args )[-2];
             $arg   = ( split /\//, $arg1 )[-1];
 	    $pool_name = ( split /\@/,$args )[0];
-            check_if_not_listed( "$SNAP_LS $pool_name", $snaps , $act, $args);
+            $rc = check_if_not_listed( "$SNAP_LS $pool_name", $snaps , $act, $args);
+	    return $rc;
         }
         elsif (( $act =~ /$SNAP_PURGE/ )
             && ( $cmd_op =~ /$SNAP_PURGE_SUCCESS/ ) )
@@ -267,7 +327,8 @@ sub validate_cmd_output {
         {
             $pool_name = ( split /\//, $args )[0];
             my $img_name = ( split /\//, $args )[1];
-            check_if_not_listed( "$RBD_LS $pool_name",$img_name , $act, $args );
+            $rc = check_if_not_listed( "$RBD_LS $pool_name",$img_name , $act, $args );
+	    return $rc;
         }
         elsif (( $act =~ /$RBD_RESIZE/ )
             && ( $cmd_op =~ /$RBD_RESIZE_SUCCESS/ ) )
@@ -315,11 +376,14 @@ sub validate_cmd_output {
             }
             else {
                 fail("$act $args failed");
+	    	return 1;
             }
         }
+        return 0;
     }
     elsif ( ( $test_flag == 1 ) && ( $cmd_op =~ /$RBD_EXISTS_ERR/ ) ) {
         pass("Already exists: $act $args passed");
+        return 0;
     }
     elsif (
         ( $test_flag == 2 )
@@ -342,32 +406,55 @@ sub validate_cmd_output {
       )
     {
         pass("negative case: $act $args passed");
+        return 0;
     }
     elsif ( ( $test_flag == 3 ) && ( $cmd_op =~ /usage/ ) ) {
         pass("negative case: $act $args passed");
+        return 0;
     }
     else {
         fail("negative case:$act $args failed");
+        return 1;
     }
-    log_results();
 }
 
-# Test Script execution result
+# Test Script execution results for Functional tests 
 sub log_results
 {
-	if ( $PASS_FLAG eq "TRUE" ) {
+	if ( $TPASS_FLAG eq "TRUE" ) {
             open( TC, '>>test_completed.txt' );
             close(TC);
             open( TC, '>>log.txt' );
-	    print TC "[Success] Test Case $TC_CNT $MSG\n";
+	    print TC "[Success] $MSG\n";
             close(TC);
 	}
 	else {
             open( TC, '>>test_completed.txt' );
             close(TC);
             open( TC, '>>log.txt' );
-	    print TC "[Failure] Test Case $TC_CNT $MSG\n";
+	    print TC "[Failure] $MSG\n";
             close(TC);
+	}
+}
+
+# Test Script execution results for CLI tests
+sub log_cli_results
+{
+        if ($CLI_FLAG eq "TRUE") {
+        if ( $PASS_FLAG eq "TRUE" ) {
+            open( TC, '>>test_completed.txt' );
+            close(TC);
+            open( TC, '>>log.txt' );
+            print TC "[Success] TestCase $TC_CNT $MSG\n";
+            close(TC);
+        }
+        else {
+            open( TC, '>>test_completed.txt' );
+            close(TC);
+            open( TC, '>>log.txt' );
+            print TC "[Failure] TestCase $TC_CNT $MSG\n";
+            close(TC);
+        }
 	}
 }
 
