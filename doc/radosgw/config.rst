@@ -143,7 +143,7 @@ Add a ``s3gw.fcgi`` file (use the same name referenced in the first line
 of ``rgw.conf``) to ``/var/www``. The contents of the file should include:: 
 
 	#!/bin/sh
-	exec /usr/bin/radosgw -c /etc/ceph/ceph.conf -n client.rados.gateway
+	exec /usr/bin/radosgw -c /etc/ceph/ceph.conf -n client.radosgw.gateway
 	
 Ensure that you apply execute permissions to ``s3gw.fcgi``. ::
 
