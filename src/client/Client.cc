@@ -4922,6 +4922,7 @@ int Client::open(const char *relpath, int flags, mode_t mode)
 
   filepath path(relpath);
   Inode *in;
+  bool created = false;
   int r = path_walk(path, &in);
   if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
     return -EEXIST;
@@ -4934,9 +4935,19 @@ int Client::open(const char *relpath, int flags, mode_t mode)
     if (r < 0)
       return r;
     r = _create(dir, dname.c_str(), flags, mode, &in, &fh);
+    created = true;
   }
   if (r < 0)
     goto out;
+
+  if (!created) {
+    // posix says we can only check permissions of existing files
+    uid_t uid = geteuid();
+    gid_t gid = getegid();
+    r = check_permissions(in, flags, uid, gid);
+    if (r < 0)
+      goto out;
+  }
 
   if (!fh)
     r = _open(in, flags, mode, &fh);
@@ -5039,15 +5050,6 @@ int Client::_release_fh(Fh *f)
 
 int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
 {
-  int ret;
-  if (uid < 0) {
-    uid = geteuid();
-    gid = getegid();
-  }
-  ret = check_permissions(in, flags, uid, gid);
-  if (ret < 0)
-    return ret;
-
   int cmode = ceph_flags_to_mode(flags);
   if (cmode < 0)
     return -EINVAL;
@@ -6864,6 +6866,8 @@ void Client::ll_releasedir(void *dirp)
 
 int Client::ll_open(vinodeno_t vino, int flags, Fh **fhp, int uid, int gid)
 {
+  assert(!(flags & O_CREAT));
+
   Mutex::Locker lock(client_lock);
   ldout(cct, 3) << "ll_open " << vino << " " << flags << dendl;
   tout(cct) << "ll_open" << std::endl;
@@ -6871,8 +6875,19 @@ int Client::ll_open(vinodeno_t vino, int flags, Fh **fhp, int uid, int gid)
   tout(cct) << flags << std::endl;
 
   Inode *in = _ll_get_inode(vino);
-  int r = _open(in, flags, 0, fhp, uid, gid);
 
+  int r;
+  if (uid < 0) {
+    uid = geteuid();
+    gid = getegid();
+  }
+  r = check_permissions(in, flags, uid, gid);
+  if (r < 0)
+    goto out;
+
+  r = _open(in, flags, 0, fhp, uid, gid);
+
+ out:
   tout(cct) << (unsigned long)*fhp << std::endl;
   ldout(cct, 3) << "ll_open " << vino << " " << flags << " = " << r << " (" << *fhp << ")" << dendl;
   return r;
