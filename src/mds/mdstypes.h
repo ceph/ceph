@@ -422,6 +422,7 @@ struct inode_t {
 	      time_warp_seq(0),
 	      version(0), file_data_version(0), xattr_version(0), last_renamed_version(0) { 
     memset(&layout, 0, sizeof(layout));
+    memset(&dir_layout, 0, sizeof(dir_layout));
   }
 
   // file type
