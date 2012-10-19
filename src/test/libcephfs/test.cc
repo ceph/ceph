@@ -551,3 +551,44 @@ TEST(LibCephFS, Symlinks) {
 
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, Hardlink_no_original) {
+
+  int mypid = getpid();
+
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char dir[256];
+  sprintf(dir, "/test_rmdirfail%d", mypid);
+  ASSERT_EQ(ceph_mkdir(cmount, dir, 0777), 0);
+
+  ASSERT_EQ(ceph_chdir(cmount, dir), 0);
+
+  int fd = ceph_open(cmount, "f1", O_CREAT, 0644);
+  ASSERT_GT(fd, 0);
+
+  ceph_close(cmount, fd);
+
+  // create hard link
+  ASSERT_EQ(ceph_link(cmount, "f1", "hardl1"), 0);
+
+  // remove file link points to
+  ASSERT_EQ(ceph_unlink(cmount, "f1"), 0);
+
+  ceph_shutdown(cmount);
+
+  // now cleanup
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+  ASSERT_EQ(ceph_chdir(cmount, dir), 0);
+  ASSERT_EQ(ceph_unlink(cmount, "hardl1"), 0);
+  ASSERT_EQ(ceph_rmdir(cmount, dir), 0);
+
+  ceph_shutdown(cmount);
+}
+
+
