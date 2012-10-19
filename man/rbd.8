@@ -1,4 +1,4 @@
-.TH "RBD" "8" "October 03, 2012" "dev" "Ceph"
+.TH "RBD" "8" "October 19, 2012" "dev" "Ceph"
 .SH NAME
 rbd \- manage rados block device (RBD) images
 .
@@ -90,6 +90,17 @@ the object size is \fB1 << order\fP. The default is 22 (4 MB).
 .UNINDENT
 .INDENT 0.0
 .TP
+.B \-\-stripe\-unit size\-in\-bytes
+Specifies the stripe unit size in bytes.  See striping section (below) for more details.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-stripe\-count num
+Specifies the number of objects to stripe over before looping back
+to the first object.  See striping section (below) for more details.
+.UNINDENT
+.INDENT 0.0
+.TP
 .B \-\-snap snap
 Specifies the snapshot name for the specific operation.
 .UNINDENT
@@ -135,7 +146,8 @@ If image is a clone, information about its parent is also displayed.
 If a snapshot is specified, whether it is protected is shown as well.
 .TP
 .B \fBcreate\fP [\fIimage\-name\fP]
-Will create a new rbd image. You must also specify the size via \-\-size.
+Will create a new rbd image. You must also specify the size via \-\-size.  The
+\-\-stripe\-unit and \-\-stripe\-count arguments are optional, but must be used together.
 .TP
 .B \fBclone\fP [\fIparent\-snapname\fP] [\fIimage\-name\fP]
 Will create a clone (copy\-on\-write child) of the parent snapshot.
@@ -235,6 +247,10 @@ protect an image from being deleted.
 .B \fBlock\fP remove [\fIimage\-name\fP] [\fIlock\-id\fP] [\fIlocker\fP]
 Release a lock on an image. The lock id and locker are
 as output by lock ls.
+.TP
+.B \fBbench\-write\fP [\fIimage\-name\fP] \-\-io\-size [\fIio\-size\-in\-bytes\fP] \-\-io\-threads [\fInum\-ios\-in\-flight\fP] \-\-io\-total [\fItotal\-bytes\-to\-write\fP]
+Generate a series of sequential writes to the image and measure the
+write throughput and latency.
 .UNINDENT
 .SH IMAGE NAME
 .sp
@@ -249,6 +265,45 @@ the pool name and the snapshot name. The image name format is as follows:
 .sp
 Thus an image name that contains a slash character (\(aq/\(aq) requires specifying the pool
 name explicitly.
+.SH STRIPING
+.sp
+RBD images are striped over many objects, which are then stored by the
+Ceph distributed object store (RADOS).  As a result, read and write
+requests for the image are distributed across many nodes in the
+cluster, generally preventing any single node from becoming a
+bottleneck when individual images get large or busy.
+.sp
+The striping is controlled by three parameters:
+.INDENT 0.0
+.TP
+.B order
+.TP
+.B The size of objects we stripe over is a power of two, specifially 2^[*order*] bytes.  The default
+.TP
+.B is 22, or 4 MB.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B stripe_unit
+.TP
+.B Each [*stripe_unit*] contiguous bytes are stored adjacently in the same object, before we move on
+.TP
+.B to the next object.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B stripe_count
+.TP
+.B After we write [*stripe_unit*] bytes to [*stripe_count*] objects, we loop back to the initial object
+.TP
+.B and write another stripe, until the object reaches its maximum size (as specified by [*order*].  At that
+.TP
+.B point, we move on to the next [*stripe_count*] objects.
+.UNINDENT
+.sp
+By default, [\fIstripe_unit\fP] is the same as the object size and [\fIstripe_count\fP] is 1.  Specifying a different
+[\fIstripe_unit\fP] requires that the STRIPINGV2 feature be supported (added in Ceph v0.53) and format 2 images be
+used.
 .SH EXAMPLES
 .sp
 To create a new rbd image that is 100 GB:
@@ -339,6 +394,14 @@ rbd import \-\-format 2 image mypool/parent
 rbd snap create \-\-snap snapname mypool/parent
 rbd snap protect mypool/parent@snap
 rbd clone mypool/parent@snap otherpool/child
+.ft P
+.fi
+.sp
+To create an image with a smaller stripe_unit (to better distribute small writes in some workloads):
+.sp
+.nf
+.ft C
+rbd \-p mypool create myimage \-\-size 102400 \-\-stripe\-unit 65536 \-\-stripe\-count 16
 .ft P
 .fi
 .sp
