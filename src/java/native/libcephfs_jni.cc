@@ -36,6 +36,7 @@
 #define CEPH_STAT_VFS_CP "com/ceph/fs/CephStatVFS"
 #define CEPH_MOUNT_CP "com/ceph/fs/CephMount"
 #define CEPH_NOTMOUNTED_CP "com/ceph/fs/CephNotMountedException"
+#define CEPH_FILEEXISTS_CP "com/ceph/fs/CephFileAlreadyExistsException"
 
 /*
  * Flags to open(). must be synchronized with CephMount.java
@@ -191,11 +192,19 @@ static void cephThrowFNF(JNIEnv *env, const char *msg)
   THROW(env, "java/io/FileNotFoundException", msg);
 }
 
+static void cephThrowFileExists(JNIEnv *env, const char *msg)
+{
+  THROW(env, CEPH_FILEEXISTS_CP, msg);
+}
+
 static void handle_error(JNIEnv *env, int rc)
 {
   switch (rc) {
   case -ENOENT:
     cephThrowFNF(env, "");
+    return;
+  case -EEXIST:
+    cephThrowFileExists(env, "");
     return;
   default:
     break;
