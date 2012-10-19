@@ -533,6 +533,17 @@ int ceph_fchmod(struct ceph_mount_info *cmount, int fd, mode_t mode);
 int ceph_chown(struct ceph_mount_info *cmount, const char *path, uid_t uid, gid_t gid);
 
 /**
+ * Change the ownership of a file from an open file descriptor.
+ *
+ * @param cmount the ceph mount handle to use for performing the chown.
+ * @param path the path of the file/directory to change the ownership of.
+ * @param uid the user id to set on the file/directory.
+ * @param gid the group id to set on the file/directory.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_fchown(struct ceph_mount_info *cmount, int fd, uid_t uid, gid_t gid);
+
+/**
  * Change the ownership of a file/directory, don't follow symlinks.
  * 
  * @param cmount the ceph mount handle to use for performing the chown.

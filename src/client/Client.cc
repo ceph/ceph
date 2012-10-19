@@ -4254,6 +4254,21 @@ int Client::chown(const char *relpath, uid_t uid, gid_t gid)
   return _setattr(in, &attr, CEPH_SETATTR_UID|CEPH_SETATTR_GID);
 }
 
+int Client::fchown(int fd, uid_t uid, gid_t gid)
+{
+  Mutex::Locker lock(client_lock);
+  tout(cct) << "fchown" << std::endl;
+  tout(cct) << fd << std::endl;
+  tout(cct) << uid << std::endl;
+  tout(cct) << gid << std::endl;
+  assert(fd_map.count(fd));
+  Fh *f = fd_map[fd];
+  struct stat attr;
+  attr.st_uid = uid;
+  attr.st_gid = gid;
+  return _setattr(f->inode, &attr, CEPH_SETATTR_UID|CEPH_SETATTR_GID);
+}
+
 int Client::lchown(const char *relpath, uid_t uid, gid_t gid)
 {
   Mutex::Locker lock(client_lock);
