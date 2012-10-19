@@ -267,15 +267,14 @@ Dir *Inode::open_dir()
 
 bool Inode::check_mode(uid_t ruid, gid_t rgid, gid_t *sgids, int sgids_count, uint32_t rflags)
 {
-  unsigned mflags = rflags & O_ACCMODE;
   unsigned fmode = 0;
 
-  if ((mflags & O_WRONLY) == O_WRONLY)
-      fmode |= 2;
-  if ((mflags & O_RDONLY) == O_RDONLY)
-      fmode |= 4;
-  if ((mflags & O_RDWR) == O_RDWR)
-      fmode |= 6;
+  if ((rflags & O_ACCMODE) == O_WRONLY)
+      fmode = 2;
+  else if ((rflags & O_ACCMODE) == O_RDWR)
+      fmode = 6;
+  else if ((rflags & O_ACCMODE) == O_RDONLY)
+      fmode = 4;
 
   // if uid is owner, owner entry determines access
   if (uid == ruid) {
