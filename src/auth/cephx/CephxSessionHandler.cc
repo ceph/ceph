@@ -43,8 +43,7 @@ int CephxSessionHandler::sign_message(Message *m)
 
   ldout(cct, 10) <<  "sign_message: seq # " << header.seq << " CRCs are: header " << header.crc
 		 << " front " << en_footer.front_crc << " middle " << en_footer.middle_crc
-		 << " data " << en_footer.data_crc
-		 << "; key = " << key << dendl;
+		 << " data " << en_footer.data_crc << dendl;
 
   encode_encrypt(cct, bl_plaintext, key, bl_encrypted, error);
   if (!error.empty()) {
@@ -85,8 +84,7 @@ int CephxSessionHandler::check_message_signature(Message *m)
   signatures_checked++;
 
   ldout(cct, 10) << "check_message_signature: seq # = " << m->get_seq() << " front_crc_ = " << footer.front_crc
-		 << " middle_crc = " << footer.middle_crc << " data_crc = " << footer.data_crc
-		 << "; key = " << key << dendl;
+		 << " middle_crc = " << footer.middle_crc << " data_crc = " << footer.data_crc << dendl;
   ::encode(header.crc, bl_plaintext);
   ::encode(footer.front_crc, bl_plaintext);
   ::encode(footer.middle_crc, bl_plaintext);
