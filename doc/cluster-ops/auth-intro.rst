@@ -191,9 +191,12 @@ authenticated  user to exercise the functionality of the monitors, OSDs and
 metadata servers. Capabilities can also restrict access to data within one or
 more pools.
 
-.. important:: Ceph capabilities are **NOT** the same as CephFS
-   filesystem authorization permission using the POSIX file system 
-   interface (e.g., ``chmod``).
+.. important:: Ceph uses the capabilities discussed here for setting up and 
+   controlling access between various Ceph client and server instances, and 
+   are relevant regardless of what type of client accesses the Ceph object 
+   store. CephFS uses a different type of capability for files and directories 
+   internal to the CephFS filesystem. CephFS filesystem access controls are
+   relevant to CephFS, but not block devices or the RESTful gateway.
 
 A Ceph ``client.admin`` user sets a user's capabilities when creating
 the user.
