@@ -1,0 +1,67 @@
+<?xml version="1.0"?>
+<project name="cephfs-java" default="main" basedir=".">
+
+    <description>CephFS Java Bindings</description>
+
+	<property name="src.dir" location="java" />
+	<property name="doc.dir" location="doc" />
+    <property name="lib.dir" location="lib" />
+	<property name="test.src.dir" location="test" />
+    <property name="test.build.dir" location="test_build" />
+
+    <property environment="env"/>
+
+	<target name="clean">
+		<delete dir="${doc.dir}" />
+		<delete dir="${test.build.dir}" />
+	</target>
+
+	<target name="makedir">
+		<mkdir dir="${doc.dir}" />
+		<mkdir dir="${test.build.dir}" />
+	</target>
+
+	<target name="docs" depends="makedir">
+		<javadoc packagenames="src" sourcepath="${src.dir}" destdir="${doc.dir}">
+			<fileset dir="${src.dir}">
+                <include name="**/*.java" />
+			</fileset>
+		</javadoc>
+	</target>
+
+	<target name="compile-tests" depends="makedir">
+        <javac srcdir="${test.src.dir}" destdir="${test.build.dir}"
+            includeantruntime="false" source="1.5" target="1.5">
+            <classpath>
+				<pathelement location="${env.CEPHFS_JAR}"/>
+				<pathelement location="libcephfs.jar"/>
+                <fileset dir="${lib.dir}">
+                    <include name="**/*.jar"/>
+                </fileset>
+            </classpath>
+		</javac>
+	</target>
+
+	<target name="test" depends="compile-tests">
+        <junit printsummary="yes" haltonfailure="yes" showoutput="yes">
+			<sysproperty key="java.library.path" path="${env.CEPHFS_JNI_LIB}:../.libs/"/>
+            <sysproperty key="CEPH_CONF_FILE" path="${env.CEPHFS_CONF}"/>
+            <classpath>
+                <fileset dir="${lib.dir}">
+                    <include name="**/*.jar"/>
+                </fileset>
+				<pathelement location="${env.CEPHFS_JAR}"/>
+				<pathelement location="libcephfs.jar"/>
+                <pathelement path="${test.build.dir}"/>
+                <pathelement path="${test.src.dir}"/>
+            </classpath>
+            <formatter type="plain"/>
+            <batchtest fork="yes">
+                <fileset dir="${test.src.dir}">
+                    <include name="**/*Test.java"/>
+                </fileset>
+            </batchtest>
+        </junit>
+    </target>
+
+</project>
