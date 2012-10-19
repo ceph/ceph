@@ -810,7 +810,9 @@ struct cap_reconnect_t {
   mutable ceph_mds_cap_reconnect capinfo;
   bufferlist flockbl;
 
-  cap_reconnect_t() {}
+  cap_reconnect_t() {
+    memset(&capinfo, 0, sizeof(capinfo));
+  }
   cap_reconnect_t(uint64_t cap_id, inodeno_t pino, const string& p, int w, int i, inodeno_t sr) : 
     path(p) {
     capinfo.cap_id = cap_id;
