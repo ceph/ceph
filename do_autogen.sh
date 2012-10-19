@@ -17,6 +17,7 @@ do_autogen.sh: make a ceph build by running autogen, etc.
 -p                               google profiler
 -O <level>                       optimize
 -n                               use libnss
+-j                               with java
 
 EOF
 }
@@ -30,7 +31,7 @@ debug_level=0
 verbose=0
 profile=0
 CONFIGURE_FLAGS=""
-while getopts  "d:e:hHTPpnvO:" flag
+while getopts  "d:e:hHTPjpnvO:" flag
 do
     case $flag in
     d) debug_level=$OPTARG;;
@@ -48,6 +49,8 @@ do
     H) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --with-hadoop";;
 
     T) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --without-tcmalloc";;
+
+    j) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --enable-cephfs-java";;
 
     v) verbose=1;;
 

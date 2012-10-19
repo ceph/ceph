@@ -6,7 +6,7 @@ Vcs-Git: git://github.com/ceph/ceph.git
 Vcs-Browser: https://github.com/ceph/ceph
 Maintainer: Laszlo Boszormenyi (GCS) <gcs@debian.hu>
 Uploaders: Sage Weil <sage@newdream.net>
-Build-Depends: debhelper (>= 6.0.7~), autotools-dev, autoconf, automake, libfuse-dev, libboost-dev (>= 1.34), libedit-dev, libnss3-dev, libtool, libexpat1-dev, libfcgi-dev, libatomic-ops-dev, libgoogle-perftools-dev [i386 amd64], pkg-config, libcurl4-gnutls-dev, libkeyutils-dev, uuid-dev, libaio-dev, python (>= 2.6.6-3~), libxml2-dev
+Build-Depends: debhelper (>= 6.0.7~), autotools-dev, autoconf, automake, libfuse-dev, libboost-dev (>= 1.34), libedit-dev, libnss3-dev, libtool, libexpat1-dev, libfcgi-dev, libatomic-ops-dev, libgoogle-perftools-dev [i386 amd64], pkg-config, libcurl4-gnutls-dev, libkeyutils-dev, uuid-dev, libaio-dev, python (>= 2.6.6-3~), libxml2-dev, javahelper, default-jdk
 Standards-Version: 3.9.3
 
 Package: ceph
@@ -319,3 +319,14 @@ Description: Python libraries for the Ceph distributed filesystem
  This package contains Python libraries for interacting with Ceph's
  RADOS object storage, and RBD (RADOS block device).
 
+Package: libcephfs-java
+Section: java
+Architecture: all
+Depends: libcephfs-jni, ${java:Depends}, ${misc:Depends}
+Description: Java libraries for the Ceph File System.
+
+Package: libcephfs-jni
+Architecture: linux-any
+Section: libs
+Depends: libcephfs1, ${shlibs:Depends}, ${java:Depends}, ${misc:Depends}
+Description: Java Native Interface library for CephFS Java bindings.

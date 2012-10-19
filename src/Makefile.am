@@ -1,5 +1,5 @@
 AUTOMAKE_OPTIONS = gnu
-SUBDIRS = ocf
+SUBDIRS = ocf java
 DIST_SUBDIRS = gtest ocf leveldb libs3
 
 EXTRA_DIST = \
@@ -506,6 +506,19 @@ libhadoopcephfs_la_CFLAGS = ${AM_CFLAGS}
 libhadoopcephfs_la_CXXFLAGS = ${AM_CXXFLAGS}
 libhadoopcephfs_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex 'hadoopcephfs_.*'
 lib_LTLIBRARIES += libhadoopcephfs.la
+
+endif
+
+## CephFS Java Wrappers
+##  - The JNI library is here
+##  - The Java source Makefile.am is in src/java
+if ENABLE_CEPHFS_JAVA
+libcephfs_jni_la_SOURCES = java/native/libcephfs_jni.cc
+libcephfs_jni_la_LIBADD = libcephfs.la
+libcephfs_jni_la_CFLAGS = $(JDK_CPPFLAGS) ${AM_CFLAGS} -I${srcdir}/include
+libcephfs_jni_la_CXXFLAGS = $(JDK_CPPFLAGS) ${AM_CXXFLAGS} -I${srcdir}/include
+libcephfs_jni_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0
+lib_LTLIBRARIES += libcephfs_jni.la
 endif
 
 ## key_value_store classes

@@ -244,7 +244,80 @@ AS_IF([test "x$with_tcmalloc" != xno],
 		  [no tcmalloc found (use --without-tcmalloc to disable)])])])
 AM_CONDITIONAL(WITH_TCMALLOC, [test "$HAVE_LIBTCMALLOC" = "1"])
 
+#
+# Java is painful
+#   - adapted from OMPI wrappers package
+#   - this might become bigger. maybe should be own m4 file
+#
+AC_ARG_ENABLE(cephfs-java,
+    AC_HELP_STRING([--enable-cephfs-java], [build libcephfs Java bindings]),
+    [], [enable_cephfs_java=no])
+
+AM_CONDITIONAL(ENABLE_CEPHFS_JAVA, test "x$enable_cephfs_java" = "xyes")
+
+AC_ARG_WITH(jdk-dir,
+    AC_HELP_STRING([--with-jdk-dir(=DIR)], [Path to JDK directory]))
+
+AC_DEFUN([JAVA_DNE],
+	AC_MSG_ERROR([Cannot find $1 '$2'. Try setting --with-jdk-dir]))
+
+AS_IF([test "x$enable_cephfs_java" = "xyes"], [
+
+	# setup bin/include dirs from --with-jdk-dir (search for jni.h, javac)
+	AS_IF([test -n "$with_jdk_dir"], [
+		   javac_prog=`find $with_jdk_dir/ -name javac | head -n 1`
+		   AS_IF([test -x "$javac_prog"], [
+				  EXTRA_JDK_BIN_DIR=`dirname $javac_prog`])
+		   jnih=`find $with_jdk_dir/ -name jni.h | head -n 1`
+		   AS_IF([test -r "$jnih"], [
+				  EXTRA_JDK_INC_DIR=`dirname $jnih`])])
+
+	# setup defaults for Debian default-jdk package (without --with-jdk-dir)
+	AS_IF([test -z "$with_jdk_dir"], [
+		   # This works with Debian's default-jdk package
+		   dir='/usr/lib/jvm/default-java/'
+		   javac_prog=`find $dir -name javac | head -n 1`
+		   AS_IF([test -x "$javac_prog"], [
+				  EXTRA_JDK_BIN_DIR=`dirname $javac_prog`])
+		   jnih=`find $dir -name jni.h | head -n 1`
+		   AS_IF([test -r "$jnih"], [
+				  EXTRA_JDK_INC_DIR=`dirname $jnih`])])
+
+	# Check for Java programs: javac, javah, jar
+    PATH_save=$PATH
+	PATH="$PATH:$EXTRA_JDK_BIN_DIR"
+	AC_PATH_PROG(JAVAC, javac)
+    AC_PATH_PROG(JAVAH, javah)
+    AC_PATH_PROG(JAR, jar)
+    PATH=$PATH_save
+
+    # Ensure we have them...
+    AS_IF([test -z "$JAVAC"], JAVA_DNE(program, javac))
+    AS_IF([test -z "$JAVAH"], JAVA_DNE(program, javah))
+    AS_IF([test -z "$JAR"], JAVA_DNE(program, jar))
+
+    # Check for jni.h
+	CPPFLAGS_save=$CPPFLAGS
+
+	AS_IF([test -n "$EXTRA_JDK_INC_DIR"],
+		  [JDK_CPPFLAGS="-I$EXTRA_JDK_INC_DIR"
+		   AS_IF([test -d "$EXTRA_JDK_INC_DIR/linux"],
+				 [JDK_CPPFLAGS="$JDK_CPPFLAGS -I$EXTRA_JDK_INC_DIR/linux"])
+		   CPPFLAGS="$CPPFLAGS $JDK_CPPFLAGS"])
+
+	AC_CHECK_HEADER([jni.h], [], JAVA_DNE(header, jni.h))
+
+	CPPFLAGS=$CPPFLAGS_save
+
+	# Setup output var
+	AC_SUBST(JDK_CPPFLAGS)
+])
+
 # jni?
+# clear cache (from java above) -- this whole thing will get
+# folded into the bigger java package later -- for now maintain
+# backward compat
+AS_UNSET(ac_cv_header_jni_h)
 AC_ARG_WITH([hadoop],
             [AS_HELP_STRING([--with-hadoop], [build hadoop client])],
             [],
@@ -443,6 +516,7 @@ AC_CONFIG_FILES([Makefile
 	src/ocf/Makefile
 	src/ocf/ceph
 	src/ocf/rbd
+	src/java/Makefile
 	man/Makefile
 	ceph.spec])
 AC_OUTPUT

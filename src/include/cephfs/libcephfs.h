@@ -123,6 +123,13 @@ void ceph_shutdown(struct ceph_mount_info *cmount);
  */
 struct CephContext *ceph_get_mount_context(struct ceph_mount_info *cmount);
 
+/*
+ * Check mount status.
+ *
+ * Return non-zero value if mounted. Otherwise, zero.
+ */
+int ceph_is_mounted(struct ceph_mount_info *cmount);
+
 /** @} init */
 
 /**
