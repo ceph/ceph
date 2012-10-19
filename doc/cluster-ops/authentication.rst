@@ -6,10 +6,13 @@ Ceph provides two authentication modes:
 
 - **None:** Any user can access data without authentication.
 - **Cephx**: Ceph requires user authentication in a manner similar to Kerberos.
+
+If you disable ``cephx``, you do not need to generate keys using the procedures
+described here. If you re-enable ``cephx`` and have already generated keys, you 
+do not need to generate the keys again.
    
 .. important: The ``cephx`` protocol does not address data encryption in transport 
-   (e.g., SSL/TLS) or encryption at rest.
-
+   (e.g., SSL/TLS) or encryption at rest.   
 
 For additional information, see our `Cephx Intro`_ and `ceph-authtool manpage`_.
 
@@ -74,14 +77,14 @@ See `Enabling Cephx`_ step 2 and 3 for stepwise details to enable ``cephx``.
 Enabling Cephx
 --------------
 
-Current versions of Ceph disable ``cephx`` by default, but in the near future
-Ceph will enable ``cephx`` by default. When ``cephx`` is enabled, Ceph will look
-for the keyring in the default search path, which includes
-``/etc/ceph/keyring``.  You can override this location by adding a ``keyring``
-option in the ``[global]`` section of your ``ceph.conf`` file, but this is not
-recommended.
+When ``cephx`` is enabled, Ceph will look for the keyring in the default search
+path, which includes ``/etc/ceph/keyring``.  You can override this location by
+adding a ``keyring`` option in the ``[global]`` section of your `Ceph
+configuration`_ file, but this is not recommended.
 
-To enable ``cephx`` on a cluster without authentication:
+Execute the following procedures to enable ``cephx`` on a cluster with ``cephx``
+disabled. If you (or your deployment utility) have already generated the keys,
+you may skip the steps related to generating keys.
 
 #. Create a ``client.admin`` key, and save a copy of the key for your client host::
 
@@ -106,14 +109,16 @@ To enable ``cephx`` on a cluster without authentication:
     ceph auth get-or-create mds.{$id} mon 'allow rwx' osd 'allow *' mds 'allow *' -o /var/lib/ceph/mds/ceph-{$id}/keyring
 
 #. Enable ``cephx`` authentication for versions ``0.51`` and above by setting
-   the following options in the ``[global]`` section of your ``ceph.conf``::
+   the following options in the ``[global]`` section of your `Ceph configuration`_
+   file::
 
     auth cluster required = cephx
     auth service required = cephx
     auth client required = cephx
 
 #. Or, enable ``cephx`` authentication for versions ``0.50`` and below by
-   setting the following option in the ``[global]`` section of your ``ceph.conf``::
+   setting the following option in the ``[global]`` section of your `Ceph 
+   configuration`_ file::
 
     auth supported = cephx
 
@@ -135,7 +140,8 @@ running authentication. **We do not recommend it.** However, it may be
 easier during setup and/or troubleshooting to temporarily disable authentication.
 
 #. Disable ``cephx`` authentication for versions ``0.51`` and above by setting
-   the following options in the ``[global]`` section of your ``ceph.conf``::
+   the following options in the ``[global]`` section of your `Ceph configuration`_
+   file::
 
     auth cluster required = none
     auth service required = none
@@ -143,7 +149,7 @@ easier during setup and/or troubleshooting to temporarily disable authentication
 
 #. Or, disable ``cephx`` authentication for versions ``0.50`` and below 
    (deprecated as of version 0.51) by setting the following option in the 
-   ``[global]`` section of your ``ceph.conf``::
+   ``[global]`` section of your `Ceph configuration`_ file::
 
     auth supported = none
 
@@ -250,3 +256,56 @@ To list the keys registered in your cluster::
 
 	sudo ceph auth list
 
+Backward Compatibility
+======================
+
+.. versionadded:: Bobtail
+
+In Ceph Argonaut v0.48 and earlier versions, if you enable ``cephx``
+authentication, Ceph only authenticates the initial communication between the
+client and daemon; Ceph does not authenticate the subsequent messages they send
+to each other, which has security implications. In Ceph Bobtail and subsequent
+versions, Ceph authenticates all ongoing messages between the entities using the
+session key set up for that initial authentication.
+
+We identified a backward compatibility issue between Argonaut v0.48 (and prior
+versions) and Bobtail (and subsequent versions). During testing, if you
+attempted  to use Argonaut (and earlier) daemons with Bobtail (and later)
+daemons, the Argonaut daemons did not know how to perform ongoing message
+authentication, while the Bobtail versions of the daemons insist on
+authenticating message traffic subsequent to the initial
+request/response--making it impossible for Argonaut (and prior) daemons to
+interoperate with Bobtail (and subsequent) daemons.
+
+We have addressed this potential problem by providing a means for Argonaut (and
+prior) systems to interact with Botail (and subsequent) systems. Here's how it
+works: by default, the newer systems will not insist on seeing signatures from
+older systems that do not know how to perform them, but will simply accept such
+messages without authenticating them. This new default behavior provides the
+advantage of allowing two different releases to interact. **We do not recommend
+this as a long term solution**. Allowing newer daemons to forgo ongoing
+authentication has the unfortunate security effect that an attacker with control
+of some of your machines or some access to your network can disable session
+security simply by claiming to be unable to sign messages.  
+
+.. important:: Even if you don't actually run any old versions of Ceph, 
+   the attacker may be able to force some messages to be accepted unsigned in the 
+   default scenario. While running Cephx with the default scenario, Ceph still
+   authenticates the initial communication, but you lose desirable session security.
+
+If you know that you are not running older versions of Ceph, or you are willing
+to accept that old servers and new servers will not be able to interoperate, you
+can eliminate this security risk.  If you do so, any Ceph system that is new
+enough to support session authentication and that has Cephx enabled will reject
+unsigned messages.  To preclude new servers from interacting with old servers,
+include  the following line into the ``[global]`` section of your `Ceph
+configuration`_ file directly below the line that specifies  the use of Cephx
+for authentication::
+
+	cephx require signatures = true
+
+**We recommend migrating all daemons to the newer versions and enabling the 
+foregoing flag** at the nearest practical time so that you may avail yourself 
+of the enhanced authentication without compromising security.
+
+.. _Ceph configuration: ../../config-cluster/ceph-conf
