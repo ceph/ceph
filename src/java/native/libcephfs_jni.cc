@@ -53,6 +53,7 @@
 #define JAVA_O_CREAT  8
 #define JAVA_O_TRUNC  16
 #define JAVA_O_EXCL   32
+#define JAVA_O_WRONLY 64
 
 /*
  * Whence flags for seek(). sync with CephMount.java if changed.
@@ -94,6 +95,7 @@ static inline int fixup_open_flags(jint jflags)
 	FIXUP_OPEN_FLAG(O_CREAT)
 	FIXUP_OPEN_FLAG(O_TRUNC)
 	FIXUP_OPEN_FLAG(O_EXCL)
+	FIXUP_OPEN_FLAG(O_WRONLY)
 
 #undef FIXUP_OPEN_FLAG
 
