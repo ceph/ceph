@@ -442,7 +442,7 @@ struct inode_t {
   }
 
   uint64_t get_layout_size_increment() {
-    return layout.fl_object_size * layout.fl_stripe_count;
+    return (uint64_t)layout.fl_object_size * (uint64_t)layout.fl_stripe_count;
   }
 
   bool is_dirty_rstat() const { return !(rstat == accounted_rstat); }
