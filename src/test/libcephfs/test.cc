@@ -516,6 +516,31 @@ TEST(LibCephFS, Fchmod) {
   ceph_shutdown(cmount);
 }
 
+TEST(LibCephFS, Fchown) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char test_file[256];
+  sprintf(test_file, "test_fchown_%d", getpid());
+
+  int fd = ceph_open(cmount, test_file, O_CREAT|O_RDWR, 0666);
+  ASSERT_GT(fd, 0);
+
+  // set perms to readable and writeable only by owner
+  ASSERT_EQ(ceph_fchmod(cmount, fd, 0600), 0);
+
+  // change ownership to nobody -- we assume nobody exists and id is always 65534
+  ASSERT_EQ(ceph_fchown(cmount, fd, 65534, 65534), 0);
+
+  ceph_close(cmount, fd);
+
+  fd = ceph_open(cmount, test_file, O_RDWR, 0);
+  ASSERT_EQ(fd, -EACCES);
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, Symlinks) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
