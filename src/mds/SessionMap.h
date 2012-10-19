@@ -276,7 +276,7 @@ public:
       return session_map[w];
     return 0;
   }
-  Session* get_or_add_session(entity_inst_t i) {
+  Session* get_or_add_session(const entity_inst_t& i) {
     Session *s;
     if (session_map.count(i.name))
       s = session_map[i.name];
