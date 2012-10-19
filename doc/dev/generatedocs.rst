@@ -14,42 +14,23 @@ Clone the Ceph Repository
 -------------------------
 
 To clone the Ceph repository, you must have ``git`` installed
-on your local host. To install ``git``, execute:
+on your local host. To install ``git``, execute::
 
-	``$ sudo apt-get install git``
+	sudo apt-get install git
 
-You must also have a github account. If you do not have a
-github account, go to `github <http://github.com>`_ and register.
+To clone the Ceph repository, execute::
 
-You must set up SSH keys with github to clone the Ceph
-repository. If you do not have SSH keys for github, execute:
-
-	``$ ssh-keygen -d``
-
-Get the key to add to your github account:
-
-	``$ cat .ssh/id_dsa.pub``
-
-Copy the public key. Then, go to your your github account,
-click on **Account Settings** (*i.e.*, the tools icon); then,
-click **SSH Keys** on the left side navbar.
-
-Click **Add SSH key** in the **SSH Keys** list, enter a name for
-the key, paste the key you generated, and press the **Add key**
-button.
-
-To clone the Ceph repository, execute:
-
-	``$ git clone git@github:ceph/ceph.git``
+	git clone git://ceph/ceph.git
 
 You should have a full copy of the Ceph repository.
 
 
 Install the Required Tools
 --------------------------
-If you do not have Sphinx and its dependencies installed,
-a list of dependencies will appear in the output. Install
-the dependencies on your system, and then execute the build.
+
+If you do not have Sphinx and its dependencies installed, a list of
+dependencies will appear in the output. Install the dependencies on
+your system, and then execute the build.
 
 To run Sphinx, at least the following are required:
 
@@ -62,24 +43,24 @@ To run Sphinx, at least the following are required:
 - ``ditaa``
 - ``graphviz``
 
-Execute ``apt-get install`` for each dependency that isn't
-installed on your host.
+Execute ``apt-get install`` for each dependency that isn't installed
+on your host.::
 
-	``$ apt-get install python-dev python-pip python-virtualenv libxml2-dev libxslt-dev doxygen ditaa graphviz``
+	sudo apt-get install python-dev python-pip python-virtualenv libxml2-dev libxslt-dev doxygen ditaa graphviz
 
 
 
 Build the Documents
 -------------------
 
-Once you have installed all the dependencies, execute the build:
+Once you have installed all the dependencies, execute the build::
 
-	``$ cd ceph``
-	``$ admin/build-doc``
+	cd ceph
+	admin/build-doc
 
-Once you build the documentation set, you may navigate to the source directory to view it:
+Once you build the documentation set, you may navigate to the source directory to view it::
 
-	``$ cd build-doc/output``
+	cd build-doc/output
 
 There should be an ``html`` directory and a ``man`` directory containing documentation
 in HTML and manpage formats respectively.
