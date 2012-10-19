@@ -831,12 +831,17 @@ void ESession::replay(MDS *mds)
       dout(10) << " opened session " << session->inst << dendl;
     } else {
       session = mds->sessionmap.get_session(client_inst.name);
-      if (session->connection == NULL) {
-	dout(10) << " removed session " << session->inst << dendl;
-	mds->sessionmap.remove_session(session);
+      if (session) { // there always should be a session, but there's a bug
+	if (session->connection == NULL) {
+	  dout(10) << " removed session " << session->inst << dendl;
+	  mds->sessionmap.remove_session(session);
+	} else {
+	  session->clear();    // the client has reconnected; keep the Session, but reset
+	  dout(10) << " reset session " << session->inst << " (they reconnected)" << dendl;
+	}
       } else {
-	session->clear();    // the client has reconnected; keep the Session, but reset
-	dout(10) << " reset session " << session->inst << " (they reconnected)" << dendl;
+	mds->clog.warn() << "Replayed stray Session close event for " << client_inst
+			 << " from time " << stamp << ", ignoring!";
       }
     }
   }
