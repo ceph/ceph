@@ -820,6 +820,7 @@ struct cap_reconnect_t {
     capinfo.issued = i;
     capinfo.snaprealm = sr;
     capinfo.pathbase = pino;
+    capinfo.flock_len = 0;
   }
 
   void encode(bufferlist& bl) const {
