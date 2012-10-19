@@ -1245,6 +1245,7 @@ void EFragment::replay(MDS *mds)
   switch (op) {
   case OP_PREPARE:
     mds->mdcache->uncommitted_fragments.insert(desc);
+    // fall-thru
   case OP_ONESHOT:
     if (in)
       mds->mdcache->adjust_dir_fragments(in, basefrag, bits, resultfrags, waiters, true);
