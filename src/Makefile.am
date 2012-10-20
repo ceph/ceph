@@ -360,6 +360,11 @@ rgw_multiparser_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 rgw_multiparser_LDADD = $(my_radosgw_ldadd)
 bin_DEBUGPROGRAMS += rgw_multiparser
 
+rgw_jsonparser_SOURCES = rgw/rgw_jsonparser.cc
+rgw_jsonparser_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+rgw_jsonparser_LDADD = $(my_radosgw_ldadd)
+bin_DEBUGPROGRAMS += rgw_jsonparser
+
 endif
 
 # librbd
