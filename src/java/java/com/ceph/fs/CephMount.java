@@ -261,7 +261,7 @@ public class CephMount {
    * @param path The directory to create.
    * @param mode The mode of the new directory.
    */
-  public void mkdirs(String path, int mode) {
+  public void mkdirs(String path, int mode) throws IOException {
     native_ceph_mkdirs(instance_ptr, path, mode);
   }
 
