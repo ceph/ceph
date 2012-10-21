@@ -5913,14 +5913,14 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
       
       if (!parent_dir->is_auth() ||
 	  (parent_dir->is_auth() && parent_dir->is_exporting() &&
-	   // this person has acked that we're exporting
-	   migrator->get_export_state(parent_dir) == Migrator::EXPORT_WARNING &&
-	   migrator->export_has_warned(parent_dir,from))) {
+	   ((migrator->get_export_state(parent_dir) == Migrator::EXPORT_WARNING &&
+	     migrator->export_has_warned(parent_dir,from)) ||
+	    migrator->get_export_state(parent_dir) == Migrator::EXPORT_EXPORTING))) {
 	// not auth.
 	dout(7) << "delaying nonauth|warned expires for " << *parent_dir << dendl;
 	assert(parent_dir->is_frozen_tree_root());
 	
-	// make a message parent_dirtainer
+	// make a message container
 	if (delayed_expire[parent_dir].count(from) == 0)
 	  delayed_expire[parent_dir][from] = new MCacheExpire(from);
 	
