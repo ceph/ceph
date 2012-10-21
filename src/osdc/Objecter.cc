@@ -264,7 +264,7 @@ void Objecter::send_linger(LingerOp *info)
   if (info->session) {
     int r = recalc_op_target(o);
     if (r == RECALC_OP_TARGET_POOL_DNE) {
-      linger_check_for_latest_map(info);
+      check_linger_pool_dne(info);
     }
   }
 
@@ -408,7 +408,7 @@ void Objecter::scan_requests(bool skipped_map,
       linger_cancel_map_check(op);
       break;
     case RECALC_OP_TARGET_POOL_DNE:
-      linger_check_for_latest_map(op);
+      check_linger_pool_dne(op);
       break;
     }
   }
@@ -431,7 +431,7 @@ void Objecter::scan_requests(bool skipped_map,
       op_cancel_map_check(op);
       break;
     case RECALC_OP_TARGET_POOL_DNE:
-      op_check_for_latest_map(op);
+      check_op_pool_dne(op);
       break;
     }
   }
@@ -599,6 +599,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
 void Objecter::C_Op_Map_Latest::finish(int r)
 {
+  lgeneric_subdout(objecter->cct, objecter, 10) << "op_map_latest r=" << r << " tid=" << tid
+						<< " latest " << latest << dendl;
   if (r == -EAGAIN) {
     // ignore callback; we will retry in resend_mon_ops()
     return;
@@ -609,22 +611,50 @@ void Objecter::C_Op_Map_Latest::finish(int r)
   map<tid_t, Op*>::iterator iter =
     objecter->check_latest_map_ops.find(tid);
   if (iter == objecter->check_latest_map_ops.end()) {
+    lgeneric_subdout(objecter->cct, objecter, 10) << "op_map_latest op " << tid << " not found" << dendl;
     return;
   }
 
   Op *op = iter->second;
   objecter->check_latest_map_ops.erase(iter);
 
-  if (r == 0) { // we had the latest map
-    if (op->onack) {
-      op->onack->complete(-ENOENT);
+  lgeneric_subdout(objecter->cct, objecter, 20) << "op_map_latest op " << op << dendl;
+
+  if (op->map_dne_bound == 0)
+    op->map_dne_bound = latest;
+
+  objecter->check_op_pool_dne(op);
+}
+
+void Objecter::check_op_pool_dne(Op *op)
+{
+  ldout(cct, 10) << "check_op_pool_dne tid " << op->tid
+		 << " current " << osdmap->get_epoch()
+		 << " map_dne_bound " << op->map_dne_bound
+		 << dendl;
+  if (op->map_dne_bound > 0) {
+    if (osdmap->get_epoch() >= op->map_dne_bound) {
+      // we had a new enough map
+      ldout(cct, 10) << "check_op_pool_dne tid " << op->tid
+		     << " concluding pool " << op->pgid.pool() << " dne"
+		     << dendl;
+      if (op->onack) {
+	op->onack->complete(-ENOENT);
+      }
+      if (op->oncommit) {
+	op->oncommit->complete(-ENOENT);
+      }
+      op->session_item.remove_myself();
+      ops.erase(op->tid);
+      delete op;
     }
-    if (op->oncommit) {
-      op->oncommit->complete(-ENOENT);
+  } else {
+    // ask the monitor
+    if (check_latest_map_ops.count(op->tid) == 0) {
+      check_latest_map_ops[op->tid] = op;
+      C_Op_Map_Latest *c = new C_Op_Map_Latest(this, op->tid);
+      monc->get_version("osdmap", &c->latest, NULL, c);
     }
-    op->session_item.remove_myself();
-    objecter->ops.erase(op->tid);
-    delete op;
   }
 }
 
@@ -645,32 +675,39 @@ void Objecter::C_Linger_Map_Latest::finish(int r)
 
   LingerOp *op = iter->second;
   objecter->check_latest_map_lingers.erase(iter);
-
-  if (r == 0) { // we had the latest map
-    if (op->on_reg_ack) {
-      op->on_reg_ack->complete(-ENOENT);
-    }
-    if (op->on_reg_commit) {
-      op->on_reg_commit->complete(-ENOENT);
-    }
-    objecter->unregister_linger(op->linger_id);
-  }
   op->put();
+
+  if (op->map_dne_bound == 0)
+    op->map_dne_bound = latest;
+
+  objecter->check_linger_pool_dne(op);
 }
 
-void Objecter::op_check_for_latest_map(Op *op)
+void Objecter::check_linger_pool_dne(LingerOp *op)
 {
-  check_latest_map_ops[op->tid] = op;
-  monc->is_latest_map("osdmap", osdmap->get_epoch(),
-		      new C_Op_Map_Latest(this, op->tid));
-}
-
-void Objecter::linger_check_for_latest_map(LingerOp *op)
-{
-  op->get();
-  check_latest_map_lingers[op->linger_id] = op;
-  monc->is_latest_map("osdmap", osdmap->get_epoch(),
-		      new C_Linger_Map_Latest(this, op->linger_id));
+  ldout(cct, 10) << "check_linger_pool_dne linger_id " << op->linger_id
+		 << " current " << osdmap->get_epoch()
+		 << " map_dne_bound " << op->map_dne_bound
+		 << dendl;
+  if (op->map_dne_bound > 0) {
+    if (osdmap->get_epoch() >= op->map_dne_bound) {
+      if (op->on_reg_ack) {
+	op->on_reg_ack->complete(-ENOENT);
+      }
+      if (op->on_reg_commit) {
+	op->on_reg_commit->complete(-ENOENT);
+      }
+      unregister_linger(op->linger_id);
+    }
+  } else {
+    // ask the monitor
+    if (check_latest_map_lingers.count(op->linger_id) == 0) {
+      op->get();
+      check_latest_map_lingers[op->linger_id] = op;
+      C_Linger_Map_Latest *c = new C_Linger_Map_Latest(this, op->linger_id);
+      monc->get_version("osdmap", &c->latest, NULL, c);
+    }
+  }
 }
 
 void Objecter::op_cancel_map_check(Op *op)
@@ -891,15 +928,15 @@ void Objecter::resend_mon_ops()
   for (map<tid_t, Op*>::iterator p = check_latest_map_ops.begin();
        p != check_latest_map_ops.end();
        ++p) {
-    monc->is_latest_map("osdmap", osdmap->get_epoch(),
-			new C_Op_Map_Latest(this, p->second->tid));
+    C_Op_Map_Latest *c = new C_Op_Map_Latest(this, p->second->tid);
+    monc->get_version("osdmap", &c->latest, NULL, c);
   }
 
   for (map<uint64_t, LingerOp*>::iterator p = check_latest_map_lingers.begin();
        p != check_latest_map_lingers.end();
        ++p) {
-    monc->is_latest_map("osdmap", osdmap->get_epoch(),
-			new C_Linger_Map_Latest(this, p->second->linger_id));
+    C_Linger_Map_Latest *c = new C_Linger_Map_Latest(this, p->second->linger_id);
+    monc->get_version("osdmap", &c->latest, NULL, c);
   }
 }
 
@@ -1025,7 +1062,7 @@ tid_t Objecter::_op_submit(Op *op)
   }
 
   if (check_for_latest_map) {
-    op_check_for_latest_map(op);
+    check_op_pool_dne(op);
   }
 
   ldout(cct, 5) << num_unacked << " unacked, " << num_uncommitted << " uncommitted" << dendl;
@@ -1050,7 +1087,11 @@ int Objecter::recalc_op_target(Op *op)
 {
   vector<int> acting;
   pg_t pgid = op->pgid;
-  if (!op->precalc_pgid) {
+  if (op->precalc_pgid) {
+    ldout(cct, 10) << "recalc_op_target have " << pgid << " pool " << osdmap->have_pg_pool(pgid.pool()) << dendl;
+    if (!osdmap->have_pg_pool(pgid.pool()))
+      return RECALC_OP_TARGET_POOL_DNE;
+  } else {
     int ret = osdmap->object_locator_to_pg(op->oid, op->oloc, pgid);
     if (ret == -ENOENT)
       return RECALC_OP_TARGET_POOL_DNE;
