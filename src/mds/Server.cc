@@ -291,7 +291,6 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       // reset session
       mds->send_message_client(new MClientSession(CEPH_SESSION_CLOSE), session);
       mds->sessionmap.set_state(session, Session::STATE_CLOSED);
-      mds->messenger->mark_disposable(session->connection);
       session->clear();
     } else if (session->is_killing()) {
       // destroy session, close connection
