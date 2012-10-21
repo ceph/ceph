@@ -279,7 +279,7 @@ private:
     send_incremental(m, start);
   }
 
-  epoch_t blacklist(entity_addr_t a, utime_t until);
+  epoch_t blacklist(const entity_addr_t& a, utime_t until);
 
   void dump_info(Formatter *f);
 

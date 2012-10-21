@@ -1685,7 +1685,7 @@ void Monitor::handle_forward(MForward *m)
   m->put();
 }
 
-void Monitor::try_send_message(Message *m, entity_inst_t to)
+void Monitor::try_send_message(Message *m, const entity_inst_t& to)
 {
   dout(10) << "try_send_message " << *m << " to " << to << dendl;
 
