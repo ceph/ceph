@@ -1263,11 +1263,12 @@ void Client::handle_client_session(MClientSession *m)
 
   switch (m->get_op()) {
   case CEPH_SESSION_OPEN:
-    if (!mds_session)
+    if (!mds_session) {
       mds_sessions[from] = mds_session = new MetaSession();
-    mds_session->mds_num = from;
-    mds_session->seq = 0;
-    mds_session->inst = m->get_source_inst();
+      mds_session->mds_num = from;
+      mds_session->seq = 0;
+      mds_session->inst = m->get_source_inst();
+    }
     renew_caps(from);
     if (unmounting) {
       mds_session->closing = true;
