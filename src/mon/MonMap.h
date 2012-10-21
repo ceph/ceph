@@ -130,7 +130,7 @@ class MonMap {
     assert(n < rank_name.size());
     return rank_name[n];
   }
-  string get_name(entity_addr_t a) const {
+  string get_name(const entity_addr_t& a) const {
     map<entity_addr_t,string>::const_iterator p = addr_name.find(a);
     if (p == addr_name.end())
       return string();
@@ -144,13 +144,13 @@ class MonMap {
 	return i;
     return -1;
   }
-  int get_rank(entity_addr_t a) {
+  int get_rank(const entity_addr_t& a) {
     for (unsigned i=0; i<rank_addr.size(); i++)
       if (rank_addr[i] == a)
 	return i;
     return -1;
   }
-  bool get_addr_name(entity_addr_t a, string& name) {
+  bool get_addr_name(const entity_addr_t& a, string& name) {
     if (addr_name.count(a) == 0)
       return false;
     name = addr_name[a];
@@ -165,7 +165,7 @@ class MonMap {
     assert(m < rank_addr.size());
     return rank_addr[m];
   }
-  void set_addr(const string& n, entity_addr_t a) {
+  void set_addr(const string& n, const entity_addr_t& a) {
     assert(mon_addr.count(n));
     mon_addr[n] = a;
     calc_ranks();
@@ -242,7 +242,7 @@ class MonMap {
    */
   void set_initial_members(CephContext *cct,
 			   list<std::string>& initial_members,
-			   string my_name, entity_addr_t my_addr,
+			   string my_name, const entity_addr_t& my_addr,
 			   set<entity_addr_t> *removed);
 
   void print(ostream& out) const;
