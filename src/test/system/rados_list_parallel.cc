@@ -14,6 +14,7 @@
 
 #include "cross_process_sem.h"
 #include "include/rados/librados.h"
+#include "include/stringify.h"
 #include "st_rados_create_pool.h"
 #include "st_rados_list_objects.h"
 #include "systest_runnable.h"
@@ -30,6 +31,8 @@
 #include <string>
 #include <time.h>
 #include <vector>
+#include <sys/types.h>
+#include <unistd.h>
 
 using std::ostringstream;
 using std::string;
@@ -68,7 +71,7 @@ public:
     pool_setup_sem->post();
 
     rados_ioctx_t io_ctx;
-    RETURN1_IF_NOT_VAL(-EEXIST, rados_pool_create(cl, m_pool_name.c_str()));
+    rados_pool_create(cl, m_pool_name.c_str());
     RETURN1_IF_NONZERO(rados_ioctx_create(cl, m_pool_name.c_str(), &io_ctx));
 
     std::map <int, std::string> to_delete;
@@ -149,7 +152,7 @@ public:
     pool_setup_sem->post();
 
     rados_ioctx_t io_ctx;
-    RETURN1_IF_NOT_VAL(-EEXIST, rados_pool_create(cl, m_pool_name.c_str()));
+    rados_pool_create(cl, m_pool_name.c_str());
     RETURN1_IF_NONZERO(rados_ioctx_create(cl, m_pool_name.c_str(), &io_ctx));
 
     std::map <int, std::string> to_add;
@@ -210,7 +213,7 @@ const char *get_id_str()
 int main(int argc, const char **argv)
 {
   const char *num_objects = getenv("NUM_OBJECTS");
-  std::string pool = "foo";
+  std::string pool = "foo." + stringify(getpid());
   if (num_objects) {
     g_num_objects = atoi(num_objects); 
     if (g_num_objects == 0)

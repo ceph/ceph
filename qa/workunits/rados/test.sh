@@ -9,4 +9,9 @@ test_rados_api_snapshots
 test_rados_api_stat
 test_rados_api_watch_notify
 
+testrados_list_parallel
+testrados_open_pools_parallel
+testrados_delete_pools_parallel
+testrados_watch_notify
+
 exit 0
