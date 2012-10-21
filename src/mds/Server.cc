@@ -351,7 +351,11 @@ void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm,
 	dout(10) << "force_open_sessions opened " << session->inst << dendl;
 	mds->sessionmap.set_state(session, Session::STATE_OPEN);
 	mds->sessionmap.touch_session(session);
-	session->preopen_out_queue.push_back(new MClientSession(CEPH_SESSION_OPEN));
+	Message *m = new MClientSession(CEPH_SESSION_OPEN);
+	if (session->connection)
+	  messenger->send_message(m, session->connection);
+	else
+	  session->preopen_out_queue.push_back(m);
       }
     } else {
       dout(10) << "force_open_sessions skipping already-open " << session->inst << dendl;
