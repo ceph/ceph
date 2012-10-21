@@ -840,8 +840,8 @@ void ESession::replay(MDS *mds)
 	  dout(10) << " reset session " << session->inst << " (they reconnected)" << dendl;
 	}
       } else {
-	mds->clog.warn() << "Replayed stray Session close event for " << client_inst
-			 << " from time " << stamp << ", ignoring!";
+	mds->clog.err() << "replayed stray Session close event for " << client_inst
+			 << " from time " << stamp << ", ignoring";
       }
     }
   }
