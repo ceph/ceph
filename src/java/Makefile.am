@@ -7,7 +7,7 @@ JAVA_SRC = \
 	java/com/ceph/fs/CephNativeLoader.java \
 	java/com/ceph/fs/CephNotMountedException.java
 
-EXTRA_DIST = $(JAVA_SRC)
+EXTRA_DIST = $(JAVA_SRC) test
 
 if ENABLE_CEPHFS_JAVA
 
