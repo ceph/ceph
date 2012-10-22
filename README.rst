@@ -67,9 +67,9 @@ the nodes & use the live cluster ad hoc), might look like this::
 	- [mon.1, osd.1]
 	- [mon.2, client.0]
 	targets:
-	  ubuntu@host07.example.com: ssh-rsa long_key_here
-	  ubuntu@host08.example.com: ssh-rsa other_key
-	  ubuntu@host09.example.com: ssh-rsa third_key
+	  ubuntu@host07.example.com: ssh-rsa host07_ssh_key 
+	  ubuntu@host08.example.com: ssh-rsa host08_ssh_key
+	  ubuntu@host09.example.com: ssh-rsa host09_ssh_key
 	tasks:
 	- ceph:
 	- ceph-fuse: [client.0]
@@ -81,7 +81,9 @@ Note the colon after every task name in the ``tasks`` section.
 
 You need to be able to SSH in to the listed targets without
 passphrases, and the remote user needs to have passphraseless `sudo`
-access.
+access. Note that the ssh keys at the end of the ``targets``
+entries are the public ssh keys for the hosts. 
+On Ubuntu, these are located at /etc/ssh/ssh_host_rsa_key.pub
 
 If you'd save the above file as ``example.yaml``, you could run
 teuthology on it by saying::
