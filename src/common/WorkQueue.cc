@@ -106,14 +106,16 @@ void ThreadPool::worker(WorkThread *wt)
 	void *item = wq->_void_dequeue();
 	if (item) {
 	  processing++;
-	  ldout(cct,12) << "worker wq " << wq->name << " start processing " << item << dendl;
+	  ldout(cct,12) << "worker wq " << wq->name << " start processing " << item
+			<< " (" << processing << " active)" << dendl;
 	  cct->get_heartbeat_map()->reset_timeout(hb, wq->timeout_interval, wq->suicide_interval);
 	  _lock.Unlock();
 	  wq->_void_process(item);
 	  _lock.Lock();
 	  wq->_void_process_finish(item);
-	  ldout(cct,15) << "worker wq " << wq->name << " done processing " << item << dendl;
 	  processing--;
+	  ldout(cct,15) << "worker wq " << wq->name << " done processing " << item
+			<< " (" << processing << " active)" << dendl;
 	  if (_pause || _draining)
 	    _wait_cond.Signal();
 	  did = true;
@@ -124,7 +126,7 @@ void ThreadPool::worker(WorkThread *wt)
 	continue;
     }
 
-    ldout(cct,15) << "worker waiting" << dendl;
+    ldout(cct,20) << "worker waiting" << dendl;
     cct->get_heartbeat_map()->reset_timeout(hb, 4, 0);
     _cond.WaitInterval(cct, _lock, utime_t(2, 0));
   }
