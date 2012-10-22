@@ -651,6 +651,11 @@ void ReplicatedPG::do_op(OpRequestRef op)
     return;
   }
 
+  if (head == backfill_pos) {
+    wait_for_backfill_pos(op);
+    return;
+  }
+
   // missing snapdir?
   hobject_t snapdir(m->get_oid(), m->get_object_locator().key,
 		    CEPH_SNAPDIR, m->get_pg().ps(), info.pgid.pool());
