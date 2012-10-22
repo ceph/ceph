@@ -221,7 +221,8 @@ Commands
 
 :command:`bench-write` [*image-name*] --io-size [*io-size-in-bytes*] --io-threads [*num-ios-in-flight*] --io-total [*total-bytes-to-write*]
   Generate a series of sequential writes to the image and measure the
-  write throughput and latency.
+  write throughput and latency.  Defaults are: --io-size 4096, --io-threads 16, 
+  --io-total 1GB
 
 Image name
 ==========
