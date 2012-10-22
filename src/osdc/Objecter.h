@@ -902,8 +902,10 @@ public:
   void _linger_commit(LingerOp *info, int r);
 
   void check_op_pool_dne(Op *op);
+  void _send_op_map_check(Op *op);
   void op_cancel_map_check(Op *op);
   void check_linger_pool_dne(LingerOp *op);
+  void _send_linger_map_check(LingerOp *op);
   void linger_cancel_map_check(LingerOp *op);
 
   void kick_requests(OSDSession *session);
