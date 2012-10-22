@@ -1,6 +1,6 @@
 AUTOMAKE_OPTIONS = gnu
 SUBDIRS = ocf java
-DIST_SUBDIRS = gtest ocf leveldb libs3
+DIST_SUBDIRS = gtest ocf leveldb libs3 java
 
 EXTRA_DIST = \
 	libs3/COPYING \
