@@ -21,7 +21,7 @@ ip=""
 nodaemon=0
 smallmds=0
 overwrite_conf=1
-cephx=0
+cephx=1 #turn cephx on by default
 
 MON_ADDR=""
 
@@ -43,7 +43,8 @@ usage=$usage"\t--nodaemon: use ceph-run as wrapper for mon/osd/mds\n"
 usage=$usage"\t--smallmds: limit mds cache size\n"
 usage=$usage"\t-m ip:port\t\tspecify monitor address\n"
 usage=$usage"\t-k keep old configuration files\n"
-usage=$usage"\t-x disable authx\n"
+usage=$usage"\t-x enable cephx (on by default)\n"
+usage=$usage"\t-X disable cephx\n"
 usage=$usage"\t-o config\t\t add extra config parameters to mds section\n"
 
 usage_exit() {
@@ -117,7 +118,10 @@ case $1 in
 	    shift
 	    ;;
     -x )
-	    cephx=1
+	    cephx=1 # this is on be default, flag exists for historical consistency
+	    ;;
+    -X )
+	    cephx=0
 	    ;;
     -k )
 	    overwrite_conf=0
