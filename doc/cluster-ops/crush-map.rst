@@ -37,7 +37,7 @@ CRUSH map, because  it will help you manage your Ceph cluster, improve
 performance and ensure data safety. 
 
 For example, if an OSD goes down, a CRUSH Map can help you can locate
-the physical data center, room, rack and row of the host with the failed OSD in
+the physical data center, room, row and rack of the host with the failed OSD in
 the event you need to use onsite support or replace hardware. 
 
 Similarly, CRUSH may help you identify faults more quickly. For example, if all
@@ -53,6 +53,8 @@ with a failed host are in a degraded state.
 
 .. _Inktank: http://www.inktank.com
 
+.. note:: Lines of code in example boxes may extend past the edge of the box. 
+   Please scroll when reading or copying longer examples.
 
 Editing a CRUSH Map
 ===================
@@ -65,8 +67,9 @@ To edit an existing CRUSH map:
 #. `Recompile`_ the CRUSH Map.
 #. `Set the CRUSH Map`_.
 
-To activate CRUSH Map rules for a specific pool, identify the common ruleset number for those rules and specify that ruleset number
-for the pool. See `Set Pool Values`_ for details. 
+To activate CRUSH Map rules for a specific pool, identify the common ruleset
+number for those rules and specify that ruleset number for the pool. See `Set
+Pool Values`_ for details. 
 
 .. _Get the CRUSH Map: #getcrushmap
 .. _Decompile: #decompilecrushmap
@@ -86,8 +89,9 @@ To get the CRUSH Map for your cluster, execute the following::
 
 	ceph osd getcrushmap -o {compiled-crushmap-filename}
 
-Ceph will output (-o) a compiled CRUSH Map to the filename you specified. Since 
-the CRUSH Map is in a compiled form, you must decompile it first before you can edit it. 
+Ceph will output (-o) a compiled CRUSH Map to the filename you specified. Since
+the CRUSH Map is in a compiled form, you must decompile it first before you can
+edit it. 
 
 .. _decompilecrushmap:
 
@@ -123,8 +127,8 @@ To set the CRUSH Map for your cluster, execute the following::
 
 	ceph osd setcrushmap -i  {compiled-crushmap-filename}
 
-Ceph will input the compiled CRUSH Map of the filename you specified as the CRUSH Map
-for the cluster.
+Ceph will input the compiled CRUSH Map of the filename you specified as the
+CRUSH Map for the cluster.
 
 
 
@@ -133,8 +137,10 @@ CRUSH Map Parameters
 
 There are three main sections to a CRUSH Map. 
 
-#. Devices consist of any object storage device--i.e., the hard disk corresponding to a ``ceph-osd`` daemon.
-#. Buckets consist of a hierarchical aggregation of storage locations (e.g., racks, rows, hosts, etc.) and their assigned weights.
+#. Devices consist of any object storage device--i.e., the hard disk 
+   corresponding to a ``ceph-osd`` daemon.
+#. Buckets consist of a hierarchical aggregation of storage locations 
+   (e.g., rows, racks, hosts, etc.) and their assigned weights.
 #. Rules consist of the manner of selecting buckets 
 
 
@@ -166,9 +172,10 @@ As a general rule, an OSD daemon maps to a single disk or to a RAID.
 CRUSH Map Buckets
 -----------------
 
-CRUSH maps support the notion of 'buckets', which may be thought of as nodes that
-aggregate other buckets into a hierarchy of physical locations, where OSD devices
-are the leaves of the hierarchy. The following table lists the default types. 
+CRUSH maps support the notion of 'buckets', which may be thought of as nodes
+that aggregate other buckets into a hierarchy of physical locations, where OSD
+devices are the leaves of the hierarchy. The following table lists the default
+types. 
 
 +------+----------+-------------------------------------------------------+
 | Type | Location    | Description                                        |
@@ -215,7 +222,7 @@ relative weight of the item.
 		weight [the relative capacity/capability of the item(s)]
 		alg [the bucket type: uniform | list | tree | straw ]
 		hash [the hash type: 0 by default]
-		item [item-name} weight {weight]	
+		item [item-name] weight [weight]	
 	}
 
 The following example illustrates how you can use buckets to aggregate a pool and 
