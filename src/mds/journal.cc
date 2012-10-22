@@ -1214,6 +1214,7 @@ void ESubtreeMap::replay(MDS *mds)
        p != subtrees.end();
        ++p) {
     CDir *dir = mds->mdcache->get_dirfrag(p->first);
+    assert(dir);
     if (ambiguous_subtrees.count(p->first)) {
       // ambiguous!
       mds->mdcache->add_ambiguous_import(p->first, p->second);
@@ -1249,6 +1250,7 @@ void EFragment::replay(MDS *mds)
   switch (op) {
   case OP_PREPARE:
     mds->mdcache->uncommitted_fragments.insert(desc);
+    // fall-thru
   case OP_ONESHOT:
     if (in)
       mds->mdcache->adjust_dir_fragments(in, basefrag, bits, resultfrags, waiters, true);
@@ -1327,6 +1329,7 @@ void EImportStart::replay(MDS *mds)
 
   // set auth partially to us so we don't trim it
   CDir *dir = mds->mdcache->get_dirfrag(base);
+  assert(dir);
   mds->mdcache->adjust_bounded_subtree_auth(dir, bounds, pair<int,int>(mds->get_nodeid(), mds->get_nodeid()));
 
   // open client sessions?
@@ -1353,10 +1356,11 @@ void EImportFinish::replay(MDS *mds)
 {
   if (mds->mdcache->have_ambiguous_import(base)) {
     dout(10) << "EImportFinish.replay " << base << " success=" << success << dendl;
-    if (success) 
+    if (success) {
       mds->mdcache->finish_ambiguous_import(base);
-    else {
+    } else {
       CDir *dir = mds->mdcache->get_dirfrag(base);
+      assert(dir);
       vector<dirfrag_t> bounds;
       mds->mdcache->get_ambiguous_import_bounds(base, bounds);
       mds->mdcache->adjust_bounded_subtree_auth(dir, bounds, CDIR_AUTH_UNDEF);
