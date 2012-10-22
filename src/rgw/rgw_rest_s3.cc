@@ -146,7 +146,9 @@ done:
 
 send_data:
   if (get_data && !orig_ret) {
-    s->cio->write(bl.c_str(), len);
+    int r = s->cio->write(bl.c_str(), len);
+    if (r < 0)
+      return r;
   }
 
   return 0;

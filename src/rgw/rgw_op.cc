@@ -583,8 +583,13 @@ void RGWGetObj::execute()
 
     perfcounter->finc(l_rgw_get_lat,
                      (ceph_clock_now(s->cct) - start_time));
-    send_response(bl);
+    ret = send_response(bl);
     bl.clear();
+    if (ret < 0) {
+      dout(0) << "NOTICE: failed to send response to client" << dendl;
+      goto done;
+    }
+
     start_time = ceph_clock_now(s->cct);
 
     if (ofs <= end) {
