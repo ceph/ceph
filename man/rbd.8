@@ -1,4 +1,4 @@
-.TH "RBD" "8" "October 19, 2012" "dev" "Ceph"
+.TH "RBD" "8" "October 22, 2012" "dev" "Ceph"
 .SH NAME
 rbd \- manage rados block device (RBD) images
 .
@@ -250,7 +250,8 @@ as output by lock ls.
 .TP
 .B \fBbench\-write\fP [\fIimage\-name\fP] \-\-io\-size [\fIio\-size\-in\-bytes\fP] \-\-io\-threads [\fInum\-ios\-in\-flight\fP] \-\-io\-total [\fItotal\-bytes\-to\-write\fP]
 Generate a series of sequential writes to the image and measure the
-write throughput and latency.
+write throughput and latency.  Defaults are: \-\-io\-size 4096, \-\-io\-threads 16,
+\-\-io\-total 1GB
 .UNINDENT
 .SH IMAGE NAME
 .sp
