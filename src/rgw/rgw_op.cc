@@ -933,10 +933,9 @@ class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
   int drain_pending();
 
 protected:
-  rgw_obj obj;
   uint64_t obj_len;
 
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle);
+  int handle_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle);
   int throttle_data(void *handle);
 
   RGWPutObjProcessor_Aio() : max_chunks(RGW_MAX_PENDING_CHUNKS), obj_len(0) {}
@@ -945,10 +944,10 @@ protected:
   }
 };
 
-int RGWPutObjProcessor_Aio::handle_data(bufferlist& bl, off_t ofs, void **phandle)
+int RGWPutObjProcessor_Aio::handle_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle)
 {
-  if ((uint64_t)ofs + bl.length() > obj_len)
-    obj_len = ofs + bl.length();
+  if ((uint64_t)abs_ofs + bl.length() > obj_len)
+    obj_len = abs_ofs + bl.length();
 
   // For the first call pass -1 as the offset to
   // do a write_full.
@@ -1026,21 +1025,35 @@ class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
 {
   bufferlist first_chunk;
   rgw_obj head_obj;
+  rgw_obj cur_obj;
+  uint64_t part_size;
+  off_t cur_part_ofs;
+  off_t next_part_ofs;
+  string oid_prefix;
+  int cur_part_id;
+  RGWObjManifest manifest;
 protected:
   int prepare(RGWRados *store, struct req_state *s);
   int complete(string& etag, map<string, bufferlist>& attrs);
 
+  void prepare_next_part(off_t ofs);
+
 public:
   ~RGWPutObjProcessor_Atomic() {}
-  RGWPutObjProcessor_Atomic() {}
+  RGWPutObjProcessor_Atomic(uint64_t part_size) : cur_part_ofs(0),
+                                next_part_ofs(0),
+                                cur_part_id(0) {}
   int handle_data(bufferlist& bl, off_t ofs, void **phandle) {
     if (!ofs) {
       first_chunk.claim(bl);
       *phandle = NULL;
       obj_len = (uint64_t)first_chunk.length();
+      prepare_next_part(first_chunk.length());
       return 0;
     }
-    int r = RGWPutObjProcessor_Aio::handle_data(bl, ofs, phandle);
+    if (ofs >= next_part_ofs)
+      prepare_next_part(ofs);
+    int r = RGWPutObjProcessor_Aio::handle_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle);
 
     return r;
   }
@@ -1055,25 +1068,45 @@ int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, struct req_state *s)
 
   char buf[33];
   gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
-  oid.append("_");
-  oid.append(buf);
-  obj.init_ns(s->bucket, oid, shadow_ns);
+  oid_prefix.append("_");
+  oid_prefix.append(buf);
+  oid_prefix.append("_");
 
   return 0;
 }
 
+void RGWPutObjProcessor_Atomic::prepare_next_part(off_t ofs) {
+  int num_parts = manifest.objs.size();
+  RGWObjManifestPart *part;
+
+  /* first update manifest for written data */
+  if (!num_parts) {
+    part = &manifest.objs[0];
+    part->loc = head_obj;
+  } else {
+    part = &manifest.objs[cur_part_ofs];
+    part->loc = cur_obj;
+  }
+  part->loc_ofs = 0;
+  part->size = ofs - cur_part_ofs;
+
+  /* now update params for next part */
+
+  cur_part_ofs = ofs;
+  next_part_ofs = cur_part_ofs + part_size;
+  char buf[16];
+
+  cur_part_id++;
+  snprintf(buf, sizeof(buf), "%d", cur_part_id);
+  string cur_oid = oid_prefix;
+  cur_oid.append(buf);
+  cur_obj.init_ns(s->bucket, cur_oid, shadow_ns);
+};
+
 int RGWPutObjProcessor_Atomic::complete(string& etag, map<string, bufferlist>& attrs)
 {
-  uint64_t head_chunk_len = first_chunk.length();
-  RGWObjManifest manifest;
-  manifest.objs[0].loc = head_obj;
-  manifest.objs[0].loc_ofs = 0;
-  manifest.objs[0].size = head_chunk_len;
-  if (obj_len > RGW_MAX_CHUNK_SIZE) {
-    manifest.objs[RGW_MAX_CHUNK_SIZE].loc = obj;
-    manifest.objs[RGW_MAX_CHUNK_SIZE].loc_ofs = RGW_MAX_CHUNK_SIZE;
-    manifest.objs[RGW_MAX_CHUNK_SIZE].size = obj_len - head_chunk_len;
-  }
+  if (obj_len > (uint64_t)cur_part_ofs)
+    prepare_next_part(obj_len);
 
   manifest.obj_size = obj_len;
 
@@ -1089,12 +1122,16 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Aio
 {
   string part_num;
   RGWMPObj mp;
+  rgw_obj obj;
 protected:
   int prepare(RGWRados *store, struct req_state *s);
   int complete(string& etag, map<string, bufferlist>& attrs);
 
 public:
   RGWPutObjProcessor_Multipart() {}
+  int handle_data(bufferlist& bl, off_t ofs, void **phandle) {
+    return RGWPutObjProcessor_Aio::handle_data(obj, bl, ofs, ofs, phandle);
+  }
 };
 
 int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, struct req_state *s)
@@ -1150,10 +1187,13 @@ RGWPutObjProcessor *RGWPutObj::select_processor()
   bool multipart = s->args.exists("uploadId");
 
   if (!multipart) {
-    if (s->content_length <= RGW_MAX_CHUNK_SIZE && !chunked_upload)
+    if (s->content_length <= RGW_MAX_CHUNK_SIZE && !chunked_upload) {
       processor = new RGWPutObjProcessor_Plain();
-    else
-      processor = new RGWPutObjProcessor_Atomic();
+    } else {
+      uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
+
+      processor = new RGWPutObjProcessor_Atomic(part_size);
+    }
   } else {
     processor = new RGWPutObjProcessor_Multipart();
   }
