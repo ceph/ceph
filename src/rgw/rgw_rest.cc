@@ -1006,3 +1006,15 @@ void RGWHandler_REST::put_op(RGWOp *op)
   delete op;
 }
 
+int CGI_PutStr(struct req_state *state, const char *buf, uint64_t len)
+{
+  int r = FCGX_PutStr(buf, len, state->fcgx->out);
+  if (r < 0)
+    return r;
+
+  if (state->header_ended)
+    state->bytes_sent += len;
+
+  return 0;
+}
+

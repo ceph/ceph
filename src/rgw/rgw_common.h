@@ -83,11 +83,7 @@ using ceph::crypto::MD5;
    } \
 } while (0)
 
-#define CGI_PutStr(state, buf, len) do { \
-  FCGX_PutStr(buf, len, state->fcgx->out); \
-  if (state->header_ended) \
-    state->bytes_sent += len; \
-} while (0)
+extern int CGI_PutStr(struct req_state *state, const char *buf, uint64_t len);
 
 #define CGI_GetStr(state, buf, buf_len, olen) do { \
   olen = FCGX_GetStr(buf, buf_len, state->fcgx->in); \

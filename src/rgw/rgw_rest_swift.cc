@@ -479,7 +479,9 @@ int RGWGetObj_REST_SWIFT::send_response(bufferlist& bl)
 
 send_data:
   if (get_data && !orig_ret) {
-    CGI_PutStr(s, bl.c_str(), len);
+    int r = CGI_PutStr(s, bl.c_str(), len);
+    if (r < 0)
+      return r;
   }
   flush_formatter_to_req_state(s, s->formatter);
 
