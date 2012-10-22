@@ -885,7 +885,7 @@ int Pipe::connect()
   pipe_lock.Lock();
  fail_locked:
   if (state == STATE_CONNECTING)
-    fault(true);
+    fault();
   else
     ldout(msgr->cct,3) << "connect fault, but state = " << get_state_name()
 		       << " != connecting, stopping" << dendl;
@@ -986,7 +986,7 @@ void Pipe::fault(bool onread)
   shutdown_socket();
 
   // lossy channel?
-  if (policy.lossy) {
+  if (policy.lossy && state != STATE_CONNECTING) {
     ldout(msgr->cct,10) << "fault on lossy channel, failing" << dendl;
 
     stop();
