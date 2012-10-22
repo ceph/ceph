@@ -422,6 +422,7 @@ struct inode_t {
 	      time_warp_seq(0),
 	      version(0), file_data_version(0), xattr_version(0), last_renamed_version(0) { 
     memset(&layout, 0, sizeof(layout));
+    memset(&dir_layout, 0, sizeof(dir_layout));
   }
 
   // file type
@@ -441,7 +442,7 @@ struct inode_t {
   }
 
   uint64_t get_layout_size_increment() {
-    return layout.fl_object_size * layout.fl_stripe_count;
+    return (uint64_t)layout.fl_object_size * (uint64_t)layout.fl_stripe_count;
   }
 
   bool is_dirty_rstat() const { return !(rstat == accounted_rstat); }
@@ -809,7 +810,9 @@ struct cap_reconnect_t {
   mutable ceph_mds_cap_reconnect capinfo;
   bufferlist flockbl;
 
-  cap_reconnect_t() {}
+  cap_reconnect_t() {
+    memset(&capinfo, 0, sizeof(capinfo));
+  }
   cap_reconnect_t(uint64_t cap_id, inodeno_t pino, const string& p, int w, int i, inodeno_t sr) : 
     path(p) {
     capinfo.cap_id = cap_id;
@@ -817,6 +820,7 @@ struct cap_reconnect_t {
     capinfo.issued = i;
     capinfo.snaprealm = sr;
     capinfo.pathbase = pino;
+    capinfo.flock_len = 0;
   }
 
   void encode(bufferlist& bl) const {

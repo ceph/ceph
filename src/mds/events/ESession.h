@@ -31,14 +31,14 @@ class ESession : public LogEvent {
 
  public:
   ESession() : LogEvent(EVENT_SESSION) { }
-  ESession(entity_inst_t inst, bool o, version_t v) :
+  ESession(const entity_inst_t& inst, bool o, version_t v) :
     LogEvent(EVENT_SESSION),
     client_inst(inst),
     open(o),
     cmapv(v),
     inotablev(0) {
   }
-  ESession(entity_inst_t inst, bool o, version_t v,
+  ESession(const entity_inst_t& inst, bool o, version_t v,
 	   const interval_set<inodeno_t>& i, version_t iv) :
     LogEvent(EVENT_SESSION),
     client_inst(inst),
