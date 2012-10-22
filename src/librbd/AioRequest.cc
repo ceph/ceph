@@ -19,6 +19,7 @@ namespace librbd {
 
   AioRequest::AioRequest() :
     m_ictx(NULL),
+    m_object_no(0), m_object_off(0), m_object_len(0),
     m_snap_id(CEPH_NOSNAP), m_completion(NULL), m_parent_completion(NULL),
     m_hide_enoent(false) {}
   AioRequest::AioRequest(ImageCtx *ictx, const std::string &oid,
@@ -108,7 +109,9 @@ namespace librbd {
 
   /** read **/
 
-  AbstractWrite::AbstractWrite() : m_state(LIBRBD_AIO_WRITE_FINAL) {}
+  AbstractWrite::AbstractWrite()
+    : m_state(LIBRBD_AIO_WRITE_FINAL),
+      m_parent_overlap(0) {}
   AbstractWrite::AbstractWrite(ImageCtx *ictx, const std::string &oid,
 			       uint64_t object_no, uint64_t object_off, uint64_t len,
 			       vector<pair<uint64_t,uint64_t> >& objectx,
