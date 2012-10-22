@@ -26,6 +26,10 @@ esac
 VENV="$BUILDDIR/virtualenv"
 CRAM_BIN="$VENV/bin/cram"
 if [ ! -e "$CRAM_BIN" ]; then
+    # With "make distcheck", the source directory must be read-only. I
+    # patched cram to support that. See upstream ticket at
+    # https://bitbucket.org/brodie/cram/issue/9/allow-read-only-directories-for-t
+    # -- tv@inktank.com
     virtualenv "$VENV" && $VENV/bin/pip install "$SRCDIR/downloads/cram-0.5.0ceph.2011-01-14.tar.gz"
 fi
 
