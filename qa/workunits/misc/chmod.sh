@@ -26,8 +26,6 @@ if test $? != 0; then
 	exit 1
 fi
 
-check_perms ${file} "-rw-r--r--"
-
 chmod 400 ${file}
 if test $? != 0; then
 	echo "ERROR: Failed to change mode of ${file}"
