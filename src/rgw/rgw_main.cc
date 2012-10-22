@@ -227,8 +227,11 @@ void RGWProcess::run()
     FCGX_InitRequest(&req->fcgx, s, 0);
     req_throttle.get(1);
     int ret = FCGX_Accept_r(&req->fcgx);
-    if (ret < 0)
+    if (ret < 0) {
+      dout(0) << "ERROR: FCGX_Accept_r returned " << ret << dendl;
+      req_throttle.put(1);
       break;
+    }
 
     req_wq.queue(req);
   }
