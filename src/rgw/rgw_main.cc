@@ -236,6 +236,8 @@ void RGWProcess::run()
     int ret = FCGX_Accept_r(&req->fcgx);
     if (ret < 0) {
       delete req;
+      dout(0) << "ERROR: FCGX_Accept_r returned " << ret << dendl;
+      req_throttle.put(1);
       break;
     }
 
