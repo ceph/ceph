@@ -55,6 +55,7 @@ namespace librbd {
     data_ctx.dup(p);
 
     memset(&header, 0, sizeof(header));
+    memset(&layout, 0, sizeof(layout));
 
     string pname = string("librbd-") + id + string("-") +
       data_ctx.get_pool_name() + string("/") + name;
