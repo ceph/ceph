@@ -81,9 +81,9 @@ Note the colon after every task name in the ``tasks`` section.
 
 You need to be able to SSH in to the listed targets without
 passphrases, and the remote user needs to have passphraseless `sudo`
-access. Note that the ssh key at the end of the ``targets``
+access. Note that the ssh keys at the end of the ``targets``
 entries are the public ssh keys for the hosts. 
-On Ubuntu, this is located at /etc/ssh/ssh_host_rsa_key.pub
+On Ubuntu, these are located at /etc/ssh/ssh_host_rsa_key.pub
 
 If you'd save the above file as ``example.yaml``, you could run
 teuthology on it by saying::
