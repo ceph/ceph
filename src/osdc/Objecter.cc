@@ -264,7 +264,7 @@ void Objecter::send_linger(LingerOp *info)
   if (info->session) {
     int r = recalc_op_target(o);
     if (r == RECALC_OP_TARGET_POOL_DNE) {
-      check_linger_pool_dne(info);
+      _send_linger_map_check(info);
     }
   }
 
@@ -649,12 +649,17 @@ void Objecter::check_op_pool_dne(Op *op)
       delete op;
     }
   } else {
-    // ask the monitor
-    if (check_latest_map_ops.count(op->tid) == 0) {
-      check_latest_map_ops[op->tid] = op;
-      C_Op_Map_Latest *c = new C_Op_Map_Latest(this, op->tid);
-      monc->get_version("osdmap", &c->latest, NULL, c);
-    }
+    _send_op_map_check(op);
+  }
+}
+
+void Objecter::_send_op_map_check(Op *op)
+{
+  // ask the monitor
+  if (check_latest_map_ops.count(op->tid) == 0) {
+    check_latest_map_ops[op->tid] = op;
+    C_Op_Map_Latest *c = new C_Op_Map_Latest(this, op->tid);
+    monc->get_version("osdmap", &c->latest, NULL, c);
   }
 }
 
@@ -700,13 +705,18 @@ void Objecter::check_linger_pool_dne(LingerOp *op)
       unregister_linger(op->linger_id);
     }
   } else {
-    // ask the monitor
-    if (check_latest_map_lingers.count(op->linger_id) == 0) {
-      op->get();
-      check_latest_map_lingers[op->linger_id] = op;
-      C_Linger_Map_Latest *c = new C_Linger_Map_Latest(this, op->linger_id);
-      monc->get_version("osdmap", &c->latest, NULL, c);
-    }
+    _send_linger_map_check(op);
+  }
+}
+
+void Objecter::_send_linger_map_check(LingerOp *op)
+{
+  // ask the monitor
+  if (check_latest_map_lingers.count(op->linger_id) == 0) {
+    op->get();
+    check_latest_map_lingers[op->linger_id] = op;
+    C_Linger_Map_Latest *c = new C_Linger_Map_Latest(this, op->linger_id);
+    monc->get_version("osdmap", &c->latest, NULL, c);
   }
 }
 
@@ -1062,7 +1072,7 @@ tid_t Objecter::_op_submit(Op *op)
   }
 
   if (check_for_latest_map) {
-    check_op_pool_dne(op);
+    _send_op_map_check(op);
   }
 
   ldout(cct, 5) << num_unacked << " unacked, " << num_uncommitted << " uncommitted" << dendl;
