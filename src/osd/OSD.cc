@@ -5442,6 +5442,14 @@ void OSD::handle_op(OpRequestRef op)
     return;
   }
 
+  if (g_conf->osd_debug_drop_op_probability > 0 &&
+      !m->get_source().is_mds()) {
+    if ((double)rand() / (double)RAND_MAX < g_conf->osd_debug_drop_op_probability) {
+      dout(0) << "handle_op DEBUG artificially dropping op " << *m << dendl;
+      return;
+    }
+  }
+
   if (m->may_write()) {
     // full?
     if (osdmap->test_flag(CEPH_OSDMAP_FULL) &&
