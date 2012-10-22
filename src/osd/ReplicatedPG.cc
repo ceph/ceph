@@ -3966,10 +3966,10 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
 
 void ReplicatedPG::populate_obc_watchers(ObjectContext *obc)
 {
-  if (!is_active() || is_degraded_object(obc->obs.oi.soid) ||
-      is_missing_object(obc->obs.oi.soid))
-    return;
+  assert(is_active());
+  assert(!is_missing_object(obc->obs.oi.soid));
 
+  dout(10) << "populate_obc_watchers " << obc->obs.oi.soid << dendl;
   if (!obc->obs.oi.watchers.empty()) {
     Mutex::Locker l(osd->watch_lock);
     assert(obc->unconnected_watchers.size() == 0);
