@@ -19,8 +19,15 @@
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
+#include "common/perf_counters.h"
 
 class CephContext;
+
+enum {
+  l_finisher_first = 997082,
+  l_finisher_queue_len,
+  l_finisher_last
+};
 
 class Finisher {
   CephContext *cct;
@@ -29,6 +36,7 @@ class Finisher {
   bool           finisher_stop, finisher_running;
   vector<Context*> finisher_queue;
   list<pair<Context*,int> > finisher_queue_rval;
+  PerfCounters *logger;
   
   void *finisher_thread_entry();
 
@@ -48,6 +56,8 @@ class Finisher {
       finisher_queue.push_back(c);
     finisher_cond.Signal();
     finisher_lock.Unlock();
+    if (logger)
+      logger->inc(l_finisher_queue_len);
   }
   void queue(vector<Context*>& ls) {
     finisher_lock.Lock();
@@ -55,6 +65,8 @@ class Finisher {
     finisher_cond.Signal();
     finisher_lock.Unlock();
     ls.clear();
+    if (logger)
+      logger->inc(l_finisher_queue_len);
   }
   void queue(deque<Context*>& ls) {
     finisher_lock.Lock();
@@ -62,6 +74,8 @@ class Finisher {
     finisher_cond.Signal();
     finisher_lock.Unlock();
     ls.clear();
+    if (logger)
+      logger->inc(l_finisher_queue_len);
   }
   
   void start();
@@ -69,8 +83,30 @@ class Finisher {
 
   void wait_for_empty();
 
-  Finisher(CephContext *cct_) : cct(cct_), finisher_lock("Finisher::finisher_lock"),
-	       finisher_stop(false), finisher_running(false), finisher_thread(this) {}
+  Finisher(CephContext *cct_) :
+    cct(cct_), finisher_lock("Finisher::finisher_lock"),
+    finisher_stop(false), finisher_running(false),
+    logger(0),
+    finisher_thread(this) {}
+  Finisher(CephContext *cct_, string name) :
+    cct(cct_), finisher_lock("Finisher::finisher_lock"),
+    finisher_stop(false), finisher_running(false),
+    logger(0),
+    finisher_thread(this) {
+    PerfCountersBuilder b(cct, string("finisher-") + name,
+			  l_finisher_first, l_finisher_last);
+    b.add_fl_avg(l_finisher_queue_len, "queue_len");
+    logger = b.create_perf_counters();
+    cct->get_perfcounters_collection()->add(logger);
+    logger->set(l_finisher_queue_len, 0);
+  }
+
+  ~Finisher() {
+    if (logger && cct) {
+      cct->get_perfcounters_collection()->remove(logger);
+      delete logger;
+    }
+  }
 };
 
 class C_OnFinisher : public Context {
