@@ -701,7 +701,7 @@ void ObjectCacher::lock_ack(int64_t poolid, list<sobject_t>& oids, tid_t tid)
     }
 
     finish_contexts(cct, ls);
-
+    ob->put();
   }
 }
 
@@ -1249,6 +1249,8 @@ void ObjectCacher::rdlock(Object *o)
   
   // stake our claim.
   o->rdlock_ref++;  
+
+  o->get();
   
   // wait?
   if (o->lock_state == Object::LOCK_RDLOCKING ||
@@ -1295,7 +1297,9 @@ void ObjectCacher::wrlock(Object *o)
   
   // stake our claim.
   o->wrlock_ref++;  
-  
+
+  o->get();
+
   // wait?
   if (o->lock_state == Object::LOCK_WRLOCKING ||
       o->lock_state == Object::LOCK_UPGRADING) {
@@ -1330,6 +1334,8 @@ void ObjectCacher::rdunlock(Object *o)
 
   o->lock_state = Object::LOCK_RDUNLOCKING;
 
+  o->get();
+
   C_LockAck *lockack = new C_LockAck(this, o->oloc.pool, o->get_soid());
   C_WriteCommit *commit = new C_WriteCommit(this, o->oloc.pool,
                                             o->get_soid(), 0, 0);
@@ -1353,6 +1359,8 @@ void ObjectCacher::wrunlock(Object *o)
   }
 
   flush(o, 0, 0);  // flush first
+
+  o->get();
 
   int op = 0;
   if (o->rdlock_ref > 0) {
