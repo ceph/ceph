@@ -617,6 +617,8 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
 void ObjectCacher::bh_write(BufferHead *bh)
 {
   ldout(cct, 7) << "bh_write " << *bh << dendl;
+
+  bh->ob->get();
   
   // finishers
   C_WriteCommit *oncommit = new C_WriteCommit(this, bh->ob->oloc.pool,
@@ -777,6 +779,7 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
     ObjectSet *oset = ob->oset;
     if (ob->can_close())
       close_object(ob);
+    ob->put();
 
     // is the entire object set now clean?
     if (flush_set_callback &&
