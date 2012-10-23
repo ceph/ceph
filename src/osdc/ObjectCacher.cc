@@ -425,10 +425,12 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len)
 ObjectCacher::ObjectCacher(CephContext *cct_, string name, WritebackHandler& wb, Mutex& l,
 			   flush_set_callback_t flush_callback,
 			   void *flush_callback_arg,
-			   uint64_t max_size, uint64_t max_dirty, uint64_t target_dirty, double max_dirty_age)
+			   uint64_t max_bytes, uint64_t max_objects,
+			   uint64_t max_dirty, uint64_t target_dirty, double max_dirty_age)
   : perfcounter(NULL),
     cct(cct_), writeback_handler(wb), name(name), lock(l),
-    max_dirty(max_dirty), target_dirty(target_dirty), max_size(max_size),
+    max_dirty(max_dirty), target_dirty(target_dirty),
+    max_size(max_bytes), max_objects(max_objects),
     flush_set_callback(flush_callback), flush_set_callback_arg(flush_callback_arg),
     flusher_stop(false), flusher_thread(this),
     stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0),
@@ -815,22 +817,25 @@ void ObjectCacher::flush(loff_t amount)
 }
 
 
-void ObjectCacher::trim(loff_t max_bytes, loff_t max_objects)
+void ObjectCacher::trim(loff_t max_bytes, loff_t max_ob)
 {
-  if (max < 0) 
-    max = max_size;
+  if (max_bytes < 0) 
+    max_bytes = max_size;
+  if (max_ob < 0)
+    max_ob = max_objects;
   
   ldout(cct, 10) << "trim  start: bytes: max " << max_bytes << "  clean " << get_stat_clean()
-		 << ", objects: max " << max_objects << " current " << ob_lru.get_lru_size()
+		 << ", objects: max " << max_ob << " current " << ob_lru.lru_get_size()
 		 << dendl;
 
   while (get_stat_clean() > max_bytes) {
     BufferHead *bh = (BufferHead*) bh_lru_rest.lru_expire();
-    if (!bh) break;
-    
+    if (!bh)
+      break;
+
     ldout(cct, 10) << "trim trimming " << *bh << dendl;
     assert(bh->is_clean());
-    
+
     Object *ob = bh->ob;
     bh_remove(ob, bh);
     delete bh;
@@ -841,12 +846,17 @@ void ObjectCacher::trim(loff_t max_bytes, loff_t max_objects)
     }
   }
 
-  while (ob_lru.lru_get_size() > max_objects) {
-    // ...
+  while (ob_lru.lru_get_size() > max_ob) {
+    Object *ob = (Object*)ob_lru.lru_expire();
+    if (!ob)
+      break;
+
+    ldout(cct, 10) << "trim trimming " << *ob << dendl;
+    close_object(ob);
   }
   
   ldout(cct, 10) << "trim finish:  max " << max_bytes << "  clean " << get_stat_clean()
-		 << ", objects: max " << max_objects << " current " << ob_lru.get_lru_size()
+		 << ", objects: max " << max_ob << " current " << ob_lru.lru_get_size()
 		 << dendl;
 }
 
