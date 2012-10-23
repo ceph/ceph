@@ -251,12 +251,16 @@ class ObjectCacher {
     // bh
     // add to my map
     void add_bh(BufferHead *bh) {
+      if (data.empty())
+	get();
       assert(data.count(bh->start()) == 0);
       data[bh->start()] = bh;
     }
     void remove_bh(BufferHead *bh) {
       assert(data.count(bh->start()));
       data.erase(bh->start());
+      if (data.empty())
+	put();
     }
 
     bool is_empty() { return data.empty(); }
