@@ -875,6 +875,12 @@ test_rados_api_snapshots_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_snapshots_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_snapshots
 
+test_rados_api_cls_SOURCES = test/rados-api/cls.cc test/rados-api/test.cc
+test_rados_api_cls_LDFLAGS = ${AM_LDFLAGS}
+test_rados_api_cls_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
+test_rados_api_cls_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += test_rados_api_cls
+
 test_rados_api_misc_SOURCES = test/rados-api/misc.cc test/rados-api/test.cc
 test_rados_api_misc_LDFLAGS = ${AM_LDFLAGS}
 test_rados_api_misc_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
