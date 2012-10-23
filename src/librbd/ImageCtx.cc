@@ -73,6 +73,7 @@ namespace librbd {
       object_cacher = new ObjectCacher(cct, pname, *writeback_handler, cache_lock,
 				       NULL, NULL,
 				       cct->_conf->rbd_cache_size,
+				       cct->_conf->rbd_cache_size / (4 << 20) * 2 + 10,
 				       cct->_conf->rbd_cache_max_dirty,
 				       cct->_conf->rbd_cache_target_dirty,
 				       cct->_conf->rbd_cache_max_dirty_age);

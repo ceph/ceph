@@ -158,6 +158,7 @@ Client::Client(Messenger *m, MonClient *mc)
 				  client_flush_set_callback,    // all commit callback
 				  (void*)this,
 				  cct->_conf->client_oc_size,
+				  cct->_conf->client_oc_max_objects,
 				  cct->_conf->client_oc_max_dirty,
 				  cct->_conf->client_oc_target_dirty,
 				  cct->_conf->client_oc_max_dirty_age);
