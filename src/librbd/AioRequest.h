@@ -109,24 +109,25 @@ namespace librbd {
 
   private:
     /**
-     * Writes go through the following state machine to
-     * deal with layering:
-     *                           need copyup
-     * LIBRBD_AIO_CHECK_EXISTS ---------------> LIBRBD_AIO_WRITE_COPYUP
-     *           |                                       |
-     *           | no overlap or object exists           | parent data read
-     *           |                                       |
-     *           v                                       |
-     * LIBRBD_AIO_WRITE_FINAL <--------------------------/
+     * Writes go through the following state machine to deal with
+     * layering:
      *
-     * By default images start in LIBRBD_AIO_WRITE_FINAL.
-     * If the write may need a copyup, it will start in
-     * LIBRBD_AIO_WRITE_CHECK_EXISTS instead.
+     *                           need copyup
+     * LIBRBD_AIO_WRITE_GUARD ---------------> LIBRBD_AIO_WRITE_COPYUP
+     *           |        ^                              |
+     *           v        \------------------------------/
+     *         done
+     *           ^
+     *           |
+     * LIBRBD_AIO_WRITE_FLAT
+     *
+     * Writes start in LIBRBD_AIO_WRITE_GUARD or _FLAT, depending on whether
+     * there is a parent or not.
      */
     enum write_state_d {
-      LIBRBD_AIO_WRITE_CHECK_EXISTS,
+      LIBRBD_AIO_WRITE_GUARD,
       LIBRBD_AIO_WRITE_COPYUP,
-      LIBRBD_AIO_WRITE_FINAL
+      LIBRBD_AIO_WRITE_FLAT
     };
 
   protected:
@@ -135,7 +136,6 @@ namespace librbd {
     write_state_d m_state;
     vector<pair<uint64_t,uint64_t> > m_object_image_extents;
     uint64_t m_parent_overlap;
-    librados::ObjectReadOperation m_read;
     librados::ObjectWriteOperation m_write;
     librados::ObjectWriteOperation m_copyup;
 
