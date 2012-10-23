@@ -878,6 +878,34 @@ int RGWPutObj::verify_permission()
   return 0;
 }
 
+int RGWPutObjProcessor::complete(string& etag, map<string, bufferlist>& attrs)
+{
+  int r = do_complete(etag, attrs);
+  if (r < 0)
+    return r;
+
+  is_complete = true;
+  return 0;
+}
+
+RGWPutObjProcessor::~RGWPutObjProcessor()
+{
+  if (is_complete)
+    return;
+
+  if (!s)
+    return;
+
+  list<rgw_obj>::iterator iter;
+  for (iter = objs.begin(); iter != objs.end(); ++iter) {
+    rgw_obj& obj = *iter;
+    int r = store->delete_obj(s->obj_ctx, obj);
+    if (r < 0 && r != -ENOENT) {
+      ldout(s->cct, 0) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
+    }
+  }
+}
+
 class RGWPutObjProcessor_Plain : public RGWPutObjProcessor
 {
   bufferlist data;
@@ -888,7 +916,7 @@ protected:
   int prepare(RGWRados *store, struct req_state *s);
   int handle_data(bufferlist& bl, off_t ofs, void **phandle);
   int throttle_data(void *handle) { return 0; }
-  int complete(string& etag, map<string, bufferlist>& attrs);
+  int do_complete(string& etag, map<string, bufferlist>& attrs);
 
 public:
   RGWPutObjProcessor_Plain() : ofs(0) {}
@@ -914,7 +942,7 @@ int RGWPutObjProcessor_Plain::handle_data(bufferlist& bl, off_t _ofs, void **pha
   return 0;
 }
 
-int RGWPutObjProcessor_Plain::complete(string& etag, map<string, bufferlist>& attrs)
+int RGWPutObjProcessor_Plain::do_complete(string& etag, map<string, bufferlist>& attrs)
 {
   int r = store->put_obj_meta(s->obj_ctx, obj, data.length(), NULL, attrs,
                               RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE, NULL, &data, NULL, NULL);
@@ -1034,7 +1062,7 @@ class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
   RGWObjManifest manifest;
 protected:
   int prepare(RGWRados *store, struct req_state *s);
-  int complete(string& etag, map<string, bufferlist>& attrs);
+  int do_complete(string& etag, map<string, bufferlist>& attrs);
 
   void prepare_next_part(off_t ofs);
 
@@ -1101,9 +1129,11 @@ void RGWPutObjProcessor_Atomic::prepare_next_part(off_t ofs) {
   string cur_oid = oid_prefix;
   cur_oid.append(buf);
   cur_obj.init_ns(s->bucket, cur_oid, shadow_ns);
+
+  add_obj(cur_obj);
 };
 
-int RGWPutObjProcessor_Atomic::complete(string& etag, map<string, bufferlist>& attrs)
+int RGWPutObjProcessor_Atomic::do_complete(string& etag, map<string, bufferlist>& attrs)
 {
   if (obj_len > (uint64_t)cur_part_ofs)
     prepare_next_part(obj_len);
@@ -1125,7 +1155,7 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Aio
   rgw_obj obj;
 protected:
   int prepare(RGWRados *store, struct req_state *s);
-  int complete(string& etag, map<string, bufferlist>& attrs);
+  int do_complete(string& etag, map<string, bufferlist>& attrs);
 
 public:
   RGWPutObjProcessor_Multipart() {}
@@ -1150,10 +1180,12 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, struct req_state *s)
   oid = mp.get_part(part_num);
 
   obj.init_ns(s->bucket, oid, mp_ns);
+
+  add_obj(obj);
   return 0;
 }
 
-int RGWPutObjProcessor_Multipart::complete(string& etag, map<string, bufferlist>& attrs)
+int RGWPutObjProcessor_Multipart::do_complete(string& etag, map<string, bufferlist>& attrs)
 {
   int r = store->put_obj_meta(s->obj_ctx, obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, 0, NULL, NULL, NULL, NULL);
   if (r < 0)
