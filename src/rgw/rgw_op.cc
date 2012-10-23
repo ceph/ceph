@@ -1052,27 +1052,31 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle)
 class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
 {
   bufferlist first_chunk;
-  rgw_obj head_obj;
-  rgw_obj cur_obj;
   uint64_t part_size;
   off_t cur_part_ofs;
   off_t next_part_ofs;
-  string oid_prefix;
   int cur_part_id;
-  RGWObjManifest manifest;
 protected:
+  string oid_prefix;
+  rgw_obj head_obj;
+  rgw_obj cur_obj;
+  RGWObjManifest manifest;
+
+  virtual bool immutable_head() { return false; }
+
   int prepare(RGWRados *store, struct req_state *s);
-  int do_complete(string& etag, map<string, bufferlist>& attrs);
+  virtual int do_complete(string& etag, map<string, bufferlist>& attrs);
 
   void prepare_next_part(off_t ofs);
 
 public:
   ~RGWPutObjProcessor_Atomic() {}
-  RGWPutObjProcessor_Atomic(uint64_t part_size) : cur_part_ofs(0),
-                                next_part_ofs(0),
+  RGWPutObjProcessor_Atomic(uint64_t _p) : part_size(_p),
+                                cur_part_ofs(0),
+                                next_part_ofs(_p),
                                 cur_part_id(0) {}
   int handle_data(bufferlist& bl, off_t ofs, void **phandle) {
-    if (!ofs) {
+    if (!ofs && !immutable_head()) {
       first_chunk.claim(bl);
       *phandle = NULL;
       obj_len = (uint64_t)first_chunk.length();
@@ -1148,20 +1152,17 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, map<string, bufferlist>
   return r;
 }
 
-class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Aio
+class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
 {
   string part_num;
   RGWMPObj mp;
-  rgw_obj obj;
 protected:
+  bool immutable_head() { return true; }
   int prepare(RGWRados *store, struct req_state *s);
   int do_complete(string& etag, map<string, bufferlist>& attrs);
 
 public:
-  RGWPutObjProcessor_Multipart() {}
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle) {
-    return RGWPutObjProcessor_Aio::handle_data(obj, bl, ofs, ofs, phandle);
-  }
+  RGWPutObjProcessor_Multipart(uint64_t _p) : RGWPutObjProcessor_Atomic(_p) {}
 };
 
 int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, struct req_state *s)
@@ -1179,15 +1180,17 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, struct req_state *s)
   }
   oid = mp.get_part(part_num);
 
-  obj.init_ns(s->bucket, oid, mp_ns);
-
-  add_obj(obj);
+  head_obj.init_ns(s->bucket, oid, mp_ns);
+  oid_prefix = oid;
+  oid_prefix.append("_");
+  cur_obj = head_obj;
+  add_obj(head_obj);
   return 0;
 }
 
 int RGWPutObjProcessor_Multipart::do_complete(string& etag, map<string, bufferlist>& attrs)
 {
-  int r = store->put_obj_meta(s->obj_ctx, obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, 0, NULL, NULL, NULL, NULL);
+  int r = store->put_obj_meta(s->obj_ctx, head_obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, 0, NULL, NULL, NULL, NULL);
   if (r < 0)
     return r;
 
@@ -1218,16 +1221,16 @@ RGWPutObjProcessor *RGWPutObj::select_processor()
 
   bool multipart = s->args.exists("uploadId");
 
+  uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
+
   if (!multipart) {
     if (s->content_length <= RGW_MAX_CHUNK_SIZE && !chunked_upload) {
       processor = new RGWPutObjProcessor_Plain();
     } else {
-      uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
-
       processor = new RGWPutObjProcessor_Atomic(part_size);
     }
   } else {
-    processor = new RGWPutObjProcessor_Multipart();
+    processor = new RGWPutObjProcessor_Multipart(part_size);
   }
 
   return processor;
