@@ -61,6 +61,11 @@ int ClassHandler::_load_class(ClassData *cls)
 	     cls->name.c_str());
     dout(10) << "_load_class " << cls->name << " from " << fname << dendl;
 
+    struct stat st;
+    int r = ::stat(fname, &st);
+    if (r < 0)
+      return -errno;
+
     cls->handle = dlopen(fname, RTLD_NOW);
     if (!cls->handle) {
       dout(0) << "_load_class could not open class " << fname
