@@ -326,6 +326,7 @@ librgw_a_SOURCES =  \
 	rgw/rgw_formats.cc \
 	rgw/rgw_log.cc \
 	rgw/rgw_multi.cc \
+	rgw/rgw_policy_s3.cc \
 	rgw/rgw_gc.cc \
 	rgw/rgw_multi_del.cc \
 	rgw/rgw_env.cc
@@ -1761,6 +1762,7 @@ noinst_HEADERS = \
 	rgw/rgw_html_errors.h\
 	rgw/rgw_log.h\
 	rgw/rgw_multi.h\
+	rgw/rgw_policy_s3.h\
 	rgw/rgw_gc.h\
 	rgw/rgw_multi_del.h\
 	rgw/rgw_op.h\
