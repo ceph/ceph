@@ -310,7 +310,7 @@ class ObjectCacher {
   vector<hash_map<sobject_t, Object*> > objects; // indexed by pool_id
 
   set<BufferHead*>    dirty_bh;
-  LRU   lru_dirty, lru_rest;
+  LRU   bh_lru_dirty, bh_lru_rest;
 
   Cond flusher_cond;
   bool flusher_stop;
@@ -362,9 +362,9 @@ class ObjectCacher {
 
   void touch_bh(BufferHead *bh) {
     if (bh->is_dirty())
-      lru_dirty.lru_touch(bh);
+      bh_lru_dirty.lru_touch(bh);
     else
-      lru_rest.lru_touch(bh);
+      bh_lru_rest.lru_touch(bh);
   }
 
   // bh states
@@ -380,7 +380,7 @@ class ObjectCacher {
   void mark_error(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_ERROR); };
   void mark_dirty(BufferHead *bh) { 
     bh_set_state(bh, BufferHead::STATE_DIRTY); 
-    lru_dirty.lru_touch(bh);
+    bh_lru_dirty.lru_touch(bh);
     //bh->set_dirty_stamp(ceph_clock_now(g_ceph_context));
   };
 
