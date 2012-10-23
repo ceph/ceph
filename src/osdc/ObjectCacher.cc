@@ -448,6 +448,7 @@ ObjectCacher::~ObjectCacher()
     assert(!i->size());
   assert(bh_lru_rest.lru_get_size() == 0);
   assert(bh_lru_dirty.lru_get_size() == 0);
+  assert(ob_lru.lru_get_size() == 0);
   assert(dirty_bh.empty());
 }
 
@@ -495,6 +496,7 @@ ObjectCacher::Object *ObjectCacher::get_object(sobject_t oid, ObjectSet *oset,
   // create it.
   Object *o = new Object(this, oid, oset, l);
   objects[l.pool][oid] = o;
+  ob_lru.lru_insert_top(o);
   return o;
 }
 
@@ -504,6 +506,7 @@ void ObjectCacher::close_object(Object *ob)
   assert(ob->can_close());
   
   // ok!
+  ob_lru.lru_remove(ob);
   objects[ob->oloc.pool].erase(ob->get_soid());
   delete ob;
 }
@@ -812,16 +815,16 @@ void ObjectCacher::flush(loff_t amount)
 }
 
 
-void ObjectCacher::trim(loff_t max)
+void ObjectCacher::trim(loff_t max_bytes, loff_t max_objects)
 {
   if (max < 0) 
     max = max_size;
   
-  ldout(cct, 10) << "trim  start: max " << max 
-           << "  clean " << get_stat_clean()
-           << dendl;
+  ldout(cct, 10) << "trim  start: bytes: max " << max_bytes << "  clean " << get_stat_clean()
+		 << ", objects: max " << max_objects << " current " << ob_lru.get_lru_size()
+		 << dendl;
 
-  while (get_stat_clean() > max) {
+  while (get_stat_clean() > max_bytes) {
     BufferHead *bh = (BufferHead*) bh_lru_rest.lru_expire();
     if (!bh) break;
     
@@ -837,10 +840,14 @@ void ObjectCacher::trim(loff_t max)
       close_object(ob);
     }
   }
+
+  while (ob_lru.lru_get_size() > max_objects) {
+    // ...
+  }
   
-  ldout(cct, 10) << "trim finish: max " << max 
-           << "  clean " << get_stat_clean()
-           << dendl;
+  ldout(cct, 10) << "trim finish:  max " << max_bytes << "  clean " << get_stat_clean()
+		 << ", objects: max " << max_objects << " current " << ob_lru.get_lru_size()
+		 << dendl;
 }
 
 
