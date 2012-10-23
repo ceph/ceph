@@ -1862,7 +1862,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ClassHandler::ClassMethod *method = cls->get_method(mname.c_str());
 	if (!method) {
 	  dout(10) << "call method " << cname << "." << mname << " does not exist" << dendl;
-	  result = -EINVAL;
+	  result = -EOPNOTSUPP;
 	  break;
 	}
 
