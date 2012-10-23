@@ -232,6 +232,10 @@ smalliobenchdumb_SOURCES = test/bench/small_io_bench_dumb.cc test/bench/dumb_bac
 smalliobenchdumb_LDADD = librados.la -lboost_program_options $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += smalliobenchdumb
 
+tpbench_SOURCES = test/bench/tp_bench.cc test/bench/detailed_stat_collector.cc
+tpbench_LDADD = librados.la -lboost_program_options $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+bin_DEBUGPROGRAMS += tpbench
+
 omapbench_SOURCES = test/omap_bench.cc
 omapbench_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += omapbench
