@@ -331,6 +331,7 @@ class ObjectCacher {
 
   set<BufferHead*>    dirty_bh;
   LRU   bh_lru_dirty, bh_lru_rest;
+  LRU   ob_lru;
 
   Cond flusher_cond;
   bool flusher_stop;
