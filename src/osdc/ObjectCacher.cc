@@ -446,8 +446,8 @@ ObjectCacher::~ObjectCacher()
       i != objects.end();
       ++i)
     assert(!i->size());
-  assert(lru_rest.lru_get_size() == 0);
-  assert(lru_dirty.lru_get_size() == 0);
+  assert(bh_lru_rest.lru_get_size() == 0);
+  assert(bh_lru_dirty.lru_get_size() == 0);
   assert(dirty_bh.empty());
 }
 
@@ -799,7 +799,7 @@ void ObjectCacher::flush(loff_t amount)
    */
   loff_t did = 0;
   while (amount == 0 || did < amount) {
-    BufferHead *bh = (BufferHead*) lru_dirty.lru_get_next_expire();
+    BufferHead *bh = (BufferHead*) bh_lru_dirty.lru_get_next_expire();
     if (!bh) break;
     if (bh->last_write > cutoff) break;
 
@@ -819,7 +819,7 @@ void ObjectCacher::trim(loff_t max)
            << dendl;
 
   while (get_stat_clean() > max) {
-    BufferHead *bh = (BufferHead*) lru_rest.lru_expire();
+    BufferHead *bh = (BufferHead*) bh_lru_rest.lru_expire();
     if (!bh) break;
     
     ldout(cct, 10) << "trim trimming " << *bh << dendl;
@@ -1210,7 +1210,7 @@ void ObjectCacher::flusher_entry()
       utime_t cutoff = ceph_clock_now(cct);
       cutoff -= max_dirty_age;
       BufferHead *bh = 0;
-      while ((bh = (BufferHead*)lru_dirty.lru_get_next_expire()) != 0 &&
+      while ((bh = (BufferHead*)bh_lru_dirty.lru_get_next_expire()) != 0 &&
 	     bh->last_write < cutoff) {
 	ldout(cct, 10) << "flusher flushing aged dirty bh " << *bh << dendl;
 	bh_write(bh);
@@ -1879,13 +1879,13 @@ void ObjectCacher::bh_set_state(BufferHead *bh, int s)
 {
   // move between lru lists?
   if (s == BufferHead::STATE_DIRTY && bh->get_state() != BufferHead::STATE_DIRTY) {
-    lru_rest.lru_remove(bh);
-    lru_dirty.lru_insert_top(bh);
+    bh_lru_rest.lru_remove(bh);
+    bh_lru_dirty.lru_insert_top(bh);
     dirty_bh.insert(bh);
   }
   if (s != BufferHead::STATE_DIRTY && bh->get_state() == BufferHead::STATE_DIRTY) {
-    lru_dirty.lru_remove(bh);
-    lru_rest.lru_insert_top(bh);
+    bh_lru_dirty.lru_remove(bh);
+    bh_lru_rest.lru_insert_top(bh);
     dirty_bh.erase(bh);
   }
   if (s != BufferHead::STATE_ERROR && bh->get_state() == BufferHead::STATE_ERROR) {
@@ -1902,10 +1902,10 @@ void ObjectCacher::bh_add(Object *ob, BufferHead *bh)
 {
   ob->add_bh(bh);
   if (bh->is_dirty()) {
-    lru_dirty.lru_insert_top(bh);
+    bh_lru_dirty.lru_insert_top(bh);
     dirty_bh.insert(bh);
   } else {
-    lru_rest.lru_insert_top(bh);
+    bh_lru_rest.lru_insert_top(bh);
   }
   bh_stat_add(bh);
 }
@@ -1914,10 +1914,10 @@ void ObjectCacher::bh_remove(Object *ob, BufferHead *bh)
 {
   ob->remove_bh(bh);
   if (bh->is_dirty()) {
-    lru_dirty.lru_remove(bh);
+    bh_lru_dirty.lru_remove(bh);
     dirty_bh.erase(bh);
   } else {
-    lru_rest.lru_remove(bh);
+    bh_lru_rest.lru_remove(bh);
   }
   bh_stat_sub(bh);
 }
