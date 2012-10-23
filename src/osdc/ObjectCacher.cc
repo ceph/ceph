@@ -699,9 +699,6 @@ void ObjectCacher::lock_ack(int64_t poolid, list<sobject_t>& oids, tid_t tid)
       }
       
       ob->last_commit_tid = tid;
-      
-      if (ob->can_close())
-        close_object(ob);
     } else {
       ldout(cct, 10) << "lock_ack " << *ob 
                << " tid " << tid << " obsolete" << dendl;
@@ -782,8 +779,6 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
 
     // is the entire object set now clean and fully committed?
     ObjectSet *oset = ob->oset;
-    if (ob->can_close())
-      close_object(ob);
     ob->put();
 
     // is the entire object set now clean?
@@ -839,11 +834,6 @@ void ObjectCacher::trim(loff_t max_bytes, loff_t max_ob)
     Object *ob = bh->ob;
     bh_remove(ob, bh);
     delete bh;
-    
-    if (ob->can_close()) {
-      ldout(cct, 10) << "trim trimming " << *ob << dendl;
-      close_object(ob);
-    }
   }
 
   while (ob_lru.lru_get_size() > max_ob) {
@@ -1454,11 +1444,6 @@ void ObjectCacher::purge(Object *ob)
   ldout(cct, 10) << "purge " << *ob << dendl;
 
   ob->truncate(0);
-
-  if (ob->can_close()) {
-    ldout(cct, 10) << "purge closing " << *ob << dendl;
-    close_object(ob);
-  }
 }
 
 
@@ -1665,7 +1650,7 @@ loff_t ObjectCacher::release(Object *ob)
   }
 
   if (ob->can_close()) {
-    ldout(cct, 10) << "trim trimming " << *ob << dendl;
+    ldout(cct, 10) << "release trimming " << *ob << dendl;
     close_object(ob);
     assert(o_unclean == 0);
     return 0;
@@ -1771,11 +1756,6 @@ void ObjectCacher::discard_set(ObjectSet *oset, vector<ObjectExtent>& exls)
     Object *ob = objects[oset->poolid][soid];
     
     ob->discard(ex.offset, ex.length);
-
-    if (ob->can_close()) {
-      ldout(cct, 10) << " closing " << *ob << dendl;
-      close_object(ob);
-    }
   }
 
   // did we truncate off dirty data?
