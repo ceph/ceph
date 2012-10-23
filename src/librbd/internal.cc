@@ -1760,7 +1760,7 @@ reprotect_and_return_err:
 
     dest->md_lock.Lock();
     dest->snap_lock.Lock();
-    uint64_t dest_size = dest->get_image_size(src->snap_id);
+    uint64_t dest_size = dest->get_image_size(dest->snap_id);
     dest->snap_lock.Unlock();
     dest->md_lock.Unlock();
 
