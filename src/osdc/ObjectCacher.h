@@ -155,9 +155,10 @@ class ObjectCacher {
   };
 
   // ******* Object *********
-  class Object {
+  class Object : public LRUObject {
   private:
     // ObjectCacher::Object fields
+    int ref;
     ObjectCacher *oc;
     sobject_t oid;
     friend class ObjectSet;
@@ -199,6 +200,7 @@ class ObjectCacher {
     const Object& operator=(const Object& other);
 
     Object(ObjectCacher *_oc, sobject_t o, ObjectSet *os, object_locator_t& l) : 
+      ref(0),
       oc(_oc),
       oid(o), oset(os), set_item(this), oloc(l),
       last_write_tid(0), last_commit_tid(0),
@@ -208,6 +210,7 @@ class ObjectCacher {
       os->objects.push_back(&set_item);
     }
     ~Object() {
+      assert(ref == 0);
       assert(data.empty());
       assert(dirty_or_tx == 0);
       set_item.remove_myself();
@@ -273,6 +276,19 @@ class ObjectCacher {
     
     void truncate(loff_t s);
     void discard(loff_t off, loff_t len);
+
+    // reference counting
+    int get() {
+      assert(ref >= 0);
+      if (ref == 0) lru_pin();
+      return ++ref;
+    }
+    int put() {
+      assert(ref > 0);
+      if (ref == 1) lru_unpin();
+      --ref;
+      return ref;
+    }
   };
   
 
