@@ -109,6 +109,12 @@ void librados::ObjectOperation::assert_version(uint64_t ver)
   o->assert_version(ver);
 }
 
+void librados::ObjectOperation::assert_exists()
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->stat(NULL, (utime_t*)NULL, NULL);
+}
+
 void librados::ObjectOperation::exec(const char *cls, const char *method, bufferlist& inbl)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
