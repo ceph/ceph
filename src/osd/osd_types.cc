@@ -2677,6 +2677,7 @@ ostream& operator<<(ostream& out, const OSDOp& op)
   if (ceph_osd_op_type_data(op.op.op)) {
     // data extent
     switch (op.op.op) {
+    case CEPH_OSD_OP_STAT:
     case CEPH_OSD_OP_DELETE:
       break;
     case CEPH_OSD_OP_TRUNCATE:
