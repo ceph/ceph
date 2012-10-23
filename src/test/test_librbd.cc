@@ -728,8 +728,14 @@ TEST(LibRBD, TestIO)
   rbd_image_info_t info;
   rbd_completion_t comp;
   ASSERT_EQ(0, rbd_stat(image, &info, sizeof(info)));
+  // can't read or write starting past end
   ASSERT_EQ(-EINVAL, rbd_write(image, info.size, 1, test_data));
   ASSERT_EQ(-EINVAL, rbd_read(image, info.size, 1, test_data));
+  // reading through end returns amount up to end
+  ASSERT_EQ(10, rbd_read(image, info.size - 10, 100, test_data));
+  // writing through end returns amount up to end
+  ASSERT_EQ(10, rbd_write(image, info.size - 10, 100, test_data));
+
   rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
   ASSERT_EQ(-EINVAL, rbd_aio_write(image, info.size, 1, test_data, comp));
   ASSERT_EQ(-EINVAL, rbd_aio_read(image, info.size, 1, test_data, comp));
