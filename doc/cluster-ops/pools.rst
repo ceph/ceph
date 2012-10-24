@@ -153,7 +153,7 @@ You may set values for the following keys:
 
 ``size``
 
-:Description: Sets the number of replicas for objects in the pool. 
+:Description: Sets the number of replicas for objects in the pool. See `Set the Number of Object Replicas`_ for further details.
 :Type: Integer
 
 
