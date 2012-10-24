@@ -38,10 +38,6 @@ To list your cluster's pools, execute::
 
 	ceph osd lspools
 
-Alternatively, you may also execute the following:: 
-
-	rados lspools
-
 The default pools include:
 
 - ``data``
@@ -151,7 +147,7 @@ Set Pool Values
 
 To set a value to a pool, execute the following:: 
 
-	ceph osd set {pool-name} {key} {value}
+	ceph osd pool set {pool-name} {key} {value}
 	
 You may set values for the following keys: 
 
@@ -164,12 +160,6 @@ You may set values for the following keys:
 ``crash_replay_interval``
 
 :Description: The number of seconds to allow clients to replay acknowledged, but uncommitted requests. 
-:Type: Integer
-
-
-``pg_num``
-
-:Description: The number of placement groups for the pool.
 :Type: Integer
 
 
@@ -194,7 +184,7 @@ Get Pool Values
 
 To set a value to a pool, execute the following:: 
 
-	ceph osd get {pool-name} {key} {value}
+	ceph osd pool get {pool-name} {key}
 	
 
 ``pg_num``
@@ -210,29 +200,12 @@ To set a value to a pool, execute the following::
 :Valid Range: Equal to or less than ``pg_num``.
 
 
-``lpg_num``
-
-:Description: The number of local placement groups.
-:Type: Integer
-
-.. note: Deprecated. Version ``0.48`` Argonaut and above.
-
-
-``lpgp_num``
-
-:Description: The effective number of local placement groups to use when calculating data placement. 
-:Type: Integer
-:Valid Range: Equal to or less than ``lpg_num``.
-
-.. note: Deprecated. Version ``0.48`` Argonaut and above.
-
-
 Set the Number of Object Replicas
 =================================
 
 To set the number of object replicas, execute the following:: 
 
-	ceph osd set {poolname} size {num-replicas}
+	ceph osd pool set {poolname} size {num-replicas}
 
 .. important: The ``{num-replicas}`` is inclusive of the object itself.
    If you want the object and two copies of the object for a total of 
@@ -240,7 +213,7 @@ To set the number of object replicas, execute the following::
    
 For example:: 
 
-	ceph osd set data size 3
+	ceph osd pool set data size 3
 
 You may execute this command for each pool. 
 
