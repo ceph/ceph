@@ -1068,6 +1068,7 @@ protected:
   virtual int do_complete(string& etag, map<string, bufferlist>& attrs);
 
   void prepare_next_part(off_t ofs);
+  void complete_parts();
 
 public:
   ~RGWPutObjProcessor_Atomic() {}
@@ -1113,7 +1114,7 @@ void RGWPutObjProcessor_Atomic::prepare_next_part(off_t ofs) {
 
   /* first update manifest for written data */
   if (!num_parts) {
-    part = &manifest.objs[0];
+    part = &manifest.objs[cur_part_ofs];
     part->loc = head_obj;
   } else {
     part = &manifest.objs[cur_part_ofs];
@@ -1121,6 +1122,9 @@ void RGWPutObjProcessor_Atomic::prepare_next_part(off_t ofs) {
   }
   part->loc_ofs = 0;
   part->size = ofs - cur_part_ofs;
+
+  if ((uint64_t)ofs > manifest.obj_size)
+    manifest.obj_size = ofs;
 
   /* now update params for next part */
 
@@ -1137,12 +1141,15 @@ void RGWPutObjProcessor_Atomic::prepare_next_part(off_t ofs) {
   add_obj(cur_obj);
 };
 
-int RGWPutObjProcessor_Atomic::do_complete(string& etag, map<string, bufferlist>& attrs)
+void RGWPutObjProcessor_Atomic::complete_parts()
 {
   if (obj_len > (uint64_t)cur_part_ofs)
     prepare_next_part(obj_len);
+}
 
-  manifest.obj_size = obj_len;
+int RGWPutObjProcessor_Atomic::do_complete(string& etag, map<string, bufferlist>& attrs)
+{
+  complete_parts();
 
   store->set_atomic(s->obj_ctx, head_obj);
 
@@ -1190,6 +1197,8 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, struct req_state *s)
 
 int RGWPutObjProcessor_Multipart::do_complete(string& etag, map<string, bufferlist>& attrs)
 {
+  complete_parts();
+
   int r = store->put_obj_meta(s->obj_ctx, head_obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, 0, NULL, NULL, NULL, NULL);
   if (r < 0)
     return r;
@@ -1202,6 +1211,7 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, map<string, bufferli
   info.etag = etag;
   info.size = s->obj_size;
   info.modified = ceph_clock_now(s->cct);
+  info.manifest = manifest;
   ::encode(info, bl);
 
   string multipart_meta_obj = mp.get_meta();
@@ -1781,7 +1791,8 @@ static int get_multiparts_info(RGWRados *store, struct req_state *s, string& met
     try {
       ::decode(info, bli);
     } catch (buffer::error& err) {
-      ldout(s->cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+      ldout(s->cct, 0) << "ERROR: could not part info, caught buffer::error" << dendl;
+      return -EIO;
     }
     parts[info.num] = info;
   }
@@ -1902,17 +1913,23 @@ void RGWCompleteMultipart::execute()
   target_obj.init(s->bucket, s->object_str);
   
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
-    string oid = mp.get_part(obj_iter->second.num);
-    rgw_obj src_obj;
-    src_obj.init_ns(s->bucket, oid, mp_ns);
+    RGWUploadPartInfo& obj_part = obj_iter->second;
 
-    RGWObjManifestPart& part = manifest.objs[ofs];
+    if (obj_part.manifest.empty()) {
+      string oid = mp.get_part(obj_iter->second.num);
+      rgw_obj src_obj;
+      src_obj.init_ns(s->bucket, oid, mp_ns);
 
-    part.loc = src_obj;
-    part.loc_ofs = 0;
-    part.size = obj_iter->second.size;
+      RGWObjManifestPart& part = manifest.objs[ofs];
 
-    ofs += part.size;
+      part.loc = src_obj;
+      part.loc_ofs = 0;
+      part.size = obj_iter->second.size;
+    } else {
+      manifest.append(obj_part.manifest);
+    }
+
+    ofs += obj_part.size;
   }
 
   manifest.obj_size = ofs;
