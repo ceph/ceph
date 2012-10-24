@@ -12,6 +12,8 @@
  * 
  */
 
+#include <unistd.h>
+
 #include "global/signal_handler.h"
 
 #include "include/types.h"
@@ -1580,19 +1582,9 @@ void MDS::respawn()
   }
   new_argv[orig_argc] = NULL;
 
-#if defined(__linux__)
-  char *dir = get_current_dir_name();
-  dout(1) << " cwd " << dir << dendl;
-  free(dir);
-#else
-  {
-#include <sys/param.h>
-    char buf[PATH_MAX];
-    
-    getcwd(buf, sizeof(buf));
-    dout(1) << " cwd " << buf << dendl;
-  }
-#endif
+  char buf[PATH_MAX];
+  getcwd(buf, sizeof(buf));
+  dout(1) << " cwd " << buf << dendl;
 
   unblock_all_signals(NULL);
   execv(orig_argv[0], new_argv);
