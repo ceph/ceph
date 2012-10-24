@@ -209,6 +209,11 @@ using the Cinder command line tool::
 
     cinder create --image-id {id of image} --display-name {name of volume} {size of volume}
 
+Note that image must be raw format. You can use `qemu-img`_ to convert
+from one format to another, i.e.::
+
+    qemu-img convert -f qcow2 -O raw precise-cloudimg.img precise-cloudimg.raw
+
 Before Ceph 0.52 the image will be a full copy of the data. With Ceph 0.52 and
 later when Glance and Cinder are both using Ceph block devices, the image is a
 copy-on-write clone, so volume creation is very fast.
@@ -216,3 +221,5 @@ copy-on-write clone, so volume creation is very fast.
 In the OpenStack dashboard you can then boot from that volume by launching a new
 instance, choosing the image that you created the volume from, and selecting
 'boot from volume' and the volume you created.
+
+.. _qemu-img: ../qemu-rbd/#running-qemu-with-rbd
