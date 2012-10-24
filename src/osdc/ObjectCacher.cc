@@ -172,8 +172,9 @@ int ObjectCacher::Object::map_read(OSDRead *rd,
        ex_it != rd->extents.end();
        ex_it++) {
     
-    if (ex_it->oid != oid.oid) continue;
-    
+    if (ex_it->oid != oid.oid)
+      continue;
+
     ldout(oc->cct, 10) << "map_read " << ex_it->oid 
 		       << " " << ex_it->offset << "~" << ex_it->length
 		       << dendl;
@@ -190,8 +191,17 @@ int ObjectCacher::Object::map_read(OSDRead *rd,
         n->set_start(cur);
         n->set_length(left);
         oc->bh_add(this, n);
-        missing[cur] = n;
-        ldout(oc->cct, 20) << "map_read miss " << left << " left, " << *n << dendl;
+	if (complete) {
+	  bufferptr bp(left);
+	  bp.zero();
+	  n->bl.append(bp);
+	  oc->mark_clean(n);
+	  hits[cur] = n;
+	  ldout(oc->cct, 20) << "map_read miss+complete+zero " << left << " left, " << *n << dendl;
+	} else {
+	  missing[cur] = n;
+	  ldout(oc->cct, 20) << "map_read miss " << left << " left, " << *n << dendl;
+	}
         cur += left;
         left -= left;
         assert(left == 0);
@@ -228,13 +238,23 @@ int ObjectCacher::Object::map_read(OSDRead *rd,
         // gap.. miss
         loff_t next = p->first;
         BufferHead *n = new BufferHead(this);
-        n->set_start( cur );
-        n->set_length( MIN(next - cur, left) );
+	loff_t len = MIN(next - cur, left);
+        n->set_start(cur);
+	n->set_length(len);
         oc->bh_add(this,n);
-        missing[cur] = n;
+	if (complete) {
+	  bufferptr bp(len);
+	  bp.zero();
+	  n->bl.append(bp);
+	  oc->mark_clean(n);
+	  hits[cur] = n;
+	  ldout(oc->cct, 20) << "map_read gap+complete+zero " << *n << dendl;
+	} else {
+	  missing[cur] = n;
+	  ldout(oc->cct, 20) << "map_read gap " << *n << dendl;
+	}
         cur += MIN(left, n->length());
         left -= MIN(left, n->length());
-        ldout(oc->cct, 20) << "map_read gap " << *n << dendl;
         continue;    // more?
       } else {
         assert(0);
