@@ -564,10 +564,13 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
     
     // apply to bh's!
     loff_t opos = start;
-    map<loff_t, BufferHead*>::iterator p = ob->data.lower_bound(opos);
-    
-    while (p != ob->data.end() &&
-           opos < start+(loff_t)length) {
+    while (true) {
+      map<loff_t, BufferHead*>::iterator p = ob->data.lower_bound(opos);
+      if (p == ob->data.end())
+	break;
+      if (opos >= start+(loff_t)length)
+	break;
+
       BufferHead *bh = p->second;
       
       if (bh->start() > opos) {
