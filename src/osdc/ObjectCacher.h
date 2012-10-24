@@ -168,6 +168,7 @@ class ObjectCacher {
     xlist<Object*>::item set_item;
     object_locator_t oloc;
     
+    bool complete;
 
   public:
     map<loff_t, BufferHead*>     data;
@@ -203,6 +204,7 @@ class ObjectCacher {
       ref(0),
       oc(_oc),
       oid(o), oset(os), set_item(this), oloc(l),
+      complete(false),
       last_write_tid(0), last_commit_tid(0),
       dirty_or_tx(0),
       lock_state(LOCK_NONE), wrlock_ref(0), rdlock_ref(0) {
@@ -661,6 +663,9 @@ inline ostream& operator<<(ostream& out, ObjectCacher::Object &ob)
   case ObjectCacher::Object::LOCK_RDLOCK: out << " rdlock"; break;
   case ObjectCacher::Object::LOCK_RDUNLOCKING: out << " rdunlocking"; break;
   }
+
+  if (ob.complete)
+    out << " COMPLETE";
 
   out << "]";
   return out;
