@@ -578,6 +578,13 @@ void RGWGetObj::execute()
       goto done;
     }
     len = ret;
+
+    if (!len) {
+      dout(0) << "WARNING: failed to read object, returned zero length" << dendl;
+      ret = -EIO;
+      goto done;
+    }
+
     ofs += len;
     ret = 0;
 
