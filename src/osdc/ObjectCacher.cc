@@ -562,6 +562,11 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
   } else {
     Object *ob = objects[poolid][oid];
     
+    if (r == -ENOENT && !ob->complete) {
+      ldout(cct, 7) << "bh_read_finish ENOENT, marking complete on " << *ob << dendl;
+      ob->complete = true;
+    }
+
     // apply to bh's!
     loff_t opos = start;
     while (true) {
