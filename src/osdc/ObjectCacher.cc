@@ -991,13 +991,12 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
         BufferHead *bh = bh_it->second;
         assert(opos == (loff_t)(bh->start() + bhoff));
 
+        uint64_t len = MIN(f_it->second - foff, bh->length() - bhoff);
         ldout(cct, 10) << "readx rmap opos " << opos
-                 << ": " << *bh << " +" << bhoff
-                 << " frag " << f_it->first << "~" << f_it->second << " +" << foff
-                 << dendl;
+		       << ": " << *bh << " +" << bhoff
+		       << " frag " << f_it->first << "~" << f_it->second << " +" << foff << "~" << len
+		       << dendl;
 
-        uint64_t len = MIN(f_it->second - foff,
-                         bh->length() - bhoff);
 	bufferlist bit;  // put substr here first, since substr_of clobbers, and
 	                 // we may get multiple bh's at this stripe_map position
 	bit.substr_of(bh->bl,
