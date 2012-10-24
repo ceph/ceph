@@ -553,7 +553,10 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
 	    << " with " << bp.length() << " bytes of zeroes" << dendl;
     bl.push_back(bp);
   }
-  
+
+  list<Context*> ls;
+  int err = 0;
+
   if (objects[poolid].count(oid) == 0) {
     ldout(cct, 7) << "bh_read_finish no object cache" << dendl;
   } else {
@@ -603,19 +606,20 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
       p++;
 
       // finishers?
-      // called with lock held.
-      list<Context*> ls;
       for (map<loff_t, list<Context*> >::iterator p = bh->waitfor_read.begin();
            p != bh->waitfor_read.end();
            p++)
         ls.splice(ls.end(), p->second);
       bh->waitfor_read.clear();
-      finish_contexts(cct, ls, bh->error);
+      if (bh->error < 0)
+	err = bh->error;
 
-      // clean up?
       ob->try_merge_bh(bh);
     }
   }
+
+  // called with lock held.
+  finish_contexts(cct, ls, err);
 }
 
 
