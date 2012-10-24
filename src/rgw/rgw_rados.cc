@@ -999,7 +999,7 @@ int RGWRados::create_pools(vector<string>& names, vector<int>& retcodes)
  */
 int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
                   time_t *mtime, map<string, bufferlist>& attrs,
-                  RGWObjCategory category, bool exclusive,
+                  RGWObjCategory category, int flags,
                   map<string, bufferlist>* rmattrs,
                   const bufferlist *data,
                   RGWObjManifest *manifest,
@@ -1022,12 +1022,15 @@ int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
 
   RGWObjState *state = NULL;
 
-  if (!exclusive) {
-    r = prepare_atomic_for_write(rctx, obj, op, &state, true, ptag);
+  if (flags & PUT_OBJ_EXCL) {
+    if (!(flags & PUT_OBJ_CREATE))
+	return -EINVAL;
+    op.create(true); // exclusive create
+  } else {
+    bool reset_obj = (flags & PUT_OBJ_CREATE) != 0;
+    r = prepare_atomic_for_write(rctx, obj, op, &state, reset_obj, ptag);
     if (r < 0)
       return r;
-  } else {
-    op.create(true); // exclusive create
   }
 
   if (data) {
@@ -1323,7 +1326,7 @@ int RGWRados::copy_obj(void *ctx,
 
   manifest.obj_size = total_len;
 
-  ret = put_obj_meta(ctx, dest_obj, end + 1, NULL, attrset, category, false, NULL, &first_chunk, &manifest, &tag);
+  ret = put_obj_meta(ctx, dest_obj, end + 1, NULL, attrset, category, PUT_OBJ_CREATE, NULL, &first_chunk, &manifest, &tag);
   if (mtime)
     obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL, NULL);
 
@@ -1412,7 +1415,7 @@ int RGWRados::copy_obj_data(void *ctx,
   }
   manifest.obj_size = ofs;
 
-  ret = put_obj_meta(ctx, dest_obj, end + 1, NULL, attrs, category, false, NULL, &first_chunk, &manifest, NULL);
+  ret = put_obj_meta(ctx, dest_obj, end + 1, NULL, attrs, category, PUT_OBJ_CREATE, NULL, &first_chunk, &manifest, NULL);
   if (mtime)
     obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL, NULL);
 
