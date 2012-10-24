@@ -11,6 +11,26 @@ from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
+"""
+The coverage database can be created in mysql with:
+
+CREATE TABLE `coverage` (
+  `run_id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `rev` char(40) NOT NULL,
+  `test` varchar(255) NOT NULL,
+  `suite` varchar(255) NOT NULL,
+  `lines` int(10) unsigned NOT NULL,
+  `line_cov` float unsigned NOT NULL,
+  `functions` int(10) unsigned NOT NULL,
+  `function_cov` float unsigned NOT NULL,
+  `branches` int(10) unsigned NOT NULL,
+  `branch_cov` float unsigned NOT NULL,
+  `run_date` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`run_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8
+
+"""
+
 def connect_to_db(ctx):
     db = MySQLdb.connect(
         host=ctx.teuthology_config['coverage_db_host'],
