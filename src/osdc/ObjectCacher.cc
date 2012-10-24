@@ -841,6 +841,11 @@ void ObjectCacher::trim(loff_t max_bytes, loff_t max_ob)
     Object *ob = bh->ob;
     bh_remove(ob, bh);
     delete bh;
+
+    if (ob->complete) {
+      ldout(cct, 10) << "trim clearing complete on " << *ob << dendl;
+      ob->complete = false;
+    }
   }
 
   while (ob_lru.lru_get_size() > max_ob) {
@@ -1661,6 +1666,11 @@ loff_t ObjectCacher::release(Object *ob)
     close_object(ob);
     assert(o_unclean == 0);
     return 0;
+  }
+
+  if (ob->complete) {
+    ldout(cct, 10) << "release clearing complete on " << *ob << dendl;
+    ob->complete = false;
   }
 
   return o_unclean;
