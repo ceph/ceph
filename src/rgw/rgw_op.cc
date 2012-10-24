@@ -1825,10 +1825,6 @@ void RGWCompleteMultipart::execute()
   attrs[RGW_ATTR_ETAG] = etag_bl;
 
   target_obj.init(s->bucket, s->object_str);
-  store->set_atomic(s->obj_ctx, target_obj);
-  ret = store->put_obj_meta(s->obj_ctx, target_obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE, NULL, NULL, NULL, NULL);
-  if (ret < 0)
-    return;
   
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
     string oid = mp.get_part(obj_iter->second.num);
