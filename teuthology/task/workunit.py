@@ -94,6 +94,7 @@ def _make_scratch_dir(ctx, role):
     id_ = role[len(PREFIX):]
     log.debug("getting remote for {id} role {role_}".format(id=id_, role_=role))
     (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+    dir_owner = remote.shortname.split('@', 1)[0]
     mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
     remote.run(
         args=[
@@ -108,7 +109,7 @@ def _make_scratch_dir(ctx, role):
             'install',
             '-d',
             '-m', '0755',
-            '--owner={user}'.format(user='ubuntu'), #TODO
+            '--owner={user}'.format(user=dir_owner), 
             '--',
             'client.{id}'.format(id=id_),
             ],
