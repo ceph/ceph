@@ -36,3 +36,4 @@ else
 	p 'file' `grep -- --- /sys/kernel/debug/dynamic_debug/control | grep ceph | awk '{print $1}' | sed 's/:/ line /'` '-p'
 	p 'file' `grep -- === /sys/kernel/debug/dynamic_debug/control | grep ceph | awk '{print $1}' | sed 's/:/ line /'` '-p'
 fi
+exit 0
