@@ -5138,7 +5138,7 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   // is this a stray migration, reintegration or merge? (sanity checks!)
   if (mdr->reqid.name.is_mds() &&
-      !(MDS_INO_IS_STRAY(srcpath.get_ino()) &&
+      !(MDS_INO_IS_MDSDIR(srcpath.get_ino()) &&
 	MDS_INO_IS_STRAY(destpath.get_ino())) &&
       !(destdnl->is_remote() &&
 	destdnl->get_remote_ino() == srci->ino())) {
