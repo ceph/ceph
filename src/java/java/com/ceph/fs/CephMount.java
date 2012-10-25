@@ -161,15 +161,6 @@ public class CephMount {
   private static synchronized native int native_ceph_release(long mountp);
 
   /**
-   * Shutdown the mount.
-   */
-  public void shutdown() {
-    native_ceph_shutdown(instance_ptr);
-  }
-
-  private static synchronized native void native_ceph_shutdown(long mountp);
-
-  /**
    * Load configuration from a file.
    *
    * @param path The path to the configuration file.

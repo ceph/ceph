@@ -233,12 +233,6 @@ static void handle_error(JNIEnv *env, int rc)
 		return (_r); \
 	} } while (0)
 
-#define CHECK_MOUNTED_NORV(_c) do { \
-	if (!ceph_is_mounted((_c))) { \
-		THROW(env, CEPH_NOTMOUNTED_CP, "not mounted"); \
-		return; \
-	} } while (0)
-
 /*
  * Cast a jlong to ceph_mount_info. Each JNI function is expected to pass in
  * the class instance variable instance_ptr. Passing a parameter is faster
@@ -444,26 +438,6 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1release
     handle_error(env, ret);
 
   return ret;
-}
-
-/*
- * Class:     com_ceph_fs_CephMount
- * Method:    native_ceph_shutdown
- * Signature: (J)V
- */
-JNIEXPORT void JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1shutdown
-	(JNIEnv *env, jclass clz, jlong j_mntp)
-{
-	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
-	CephContext *cct = ceph_get_mount_context(cmount);
-
-	CHECK_MOUNTED_NORV(cmount);
-
-	ldout(cct, 10) << "jni: ceph_shutdown: enter" << dendl;
-
-	ceph_shutdown(cmount);
-
-	ldout(cct, 10) << "jni: ceph_shutdown: exit" << dendl;
 }
 
 /*
