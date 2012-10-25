@@ -426,6 +426,28 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1unmount
 
 /*
  * Class:     com_ceph_fs_CephMount
+ * Method:    native_ceph_release
+ * Signature: (J)I
+ */
+JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1release
+  (JNIEnv *env, jclass clz, jlong j_mntp)
+{
+  struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
+  CephContext *cct = ceph_get_mount_context(cmount);
+  int ret;
+
+  ldout(cct, 10) << "jni: ceph_release called" << dendl;
+
+  ret = ceph_release(cmount);
+
+  if (ret)
+    handle_error(env, ret);
+
+  return ret;
+}
+
+/*
+ * Class:     com_ceph_fs_CephMount
  * Method:    native_ceph_shutdown
  * Signature: (J)V
  */

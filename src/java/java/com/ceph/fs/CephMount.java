@@ -130,6 +130,11 @@ public class CephMount {
 
   private static synchronized native int native_ceph_unmount(long mountp);
 
+  /*
+   * Private access to low-level ceph_release.
+   */
+  private static synchronized native int native_ceph_release(long mountp);
+
   /**
    * Shutdown the mount.
    */
