@@ -3967,7 +3967,9 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
 void ReplicatedPG::populate_obc_watchers(ObjectContext *obc)
 {
   assert(is_active());
-  assert(!is_missing_object(obc->obs.oi.soid));
+  assert(!is_missing_object(obc->obs.oi.soid) ||
+	 (log.objects.count(obc->obs.oi.soid) && // or this is a revert... see recover_primary()
+	  log.objects[obc->obs.oi.soid]->prior_version == obc->obs.oi.version));
 
   dout(10) << "populate_obc_watchers " << obc->obs.oi.soid << dendl;
   if (!obc->obs.oi.watchers.empty()) {
