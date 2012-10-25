@@ -37,11 +37,6 @@ public class CephUnmountedTest {
   }
 
   @Test(expected=CephNotMountedException.class)
-  public void test_shutdown() throws Exception {
-    mount.shutdown();
-  }
-
-  @Test(expected=CephNotMountedException.class)
   public void test_statfs() throws Exception {
     CephStatVFS stat = new CephStatVFS();
     mount.statfs("/a/path", stat);
