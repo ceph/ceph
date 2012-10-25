@@ -37,6 +37,7 @@
 #define CEPH_MOUNT_CP "com/ceph/fs/CephMount"
 #define CEPH_NOTMOUNTED_CP "com/ceph/fs/CephNotMountedException"
 #define CEPH_FILEEXISTS_CP "com/ceph/fs/CephFileAlreadyExistsException"
+#define CEPH_ALREADYMOUNTED_CP "com/ceph/fs/CephAlreadyMountedException"
 
 /*
  * Flags to open(). must be synchronized with CephMount.java
@@ -368,6 +369,14 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1mount
 	CephContext *cct = ceph_get_mount_context(cmount);
 	const char *c_root = NULL;
 	int ret;
+
+	/*
+	 * Toss a message up if we are already mounted.
+	 */
+	if (ceph_is_mounted(cmount)) {
+		THROW(env, CEPH_ALREADYMOUNTED_CP, "");
+		return -1;
+	}
 
 	if (j_root) {
 		c_root = env->GetStringUTFChars(j_root, NULL);
