@@ -89,6 +89,30 @@ public class CephMount {
    */
   static native void native_initialize();
 
+  /*
+   * Controls clean-up synchronization between the constructor and finalize().
+   * If native_ceph_create fails, then we want a call to finalize() to not
+   * attempt to clean-up native context, because there is none.
+   */
+  private boolean initialized = false;
+
+  /*
+   * Try to clean-up. First, unmount() will catch users who forget to do the
+   * unmount manually. Second, release() will destroy the entire context. It
+   * is safe to call release after a failure in unmount.
+   */
+  protected void finalize() throws Throwable {
+    if (initialized) {
+      try {
+        unmount();
+      } catch (Exception e) {}
+      try {
+        native_ceph_release(instance_ptr);
+      } catch (Exception e) {}
+    }
+    super.finalize();
+  }
+
   /**
    * Create a new CephMount with specific client id.
    *
@@ -96,6 +120,7 @@ public class CephMount {
    */
   public CephMount(String id) {
     native_ceph_create(this, id);
+    initialized = true;
   }
 
   private static synchronized native int native_ceph_create(CephMount mount, String id);
