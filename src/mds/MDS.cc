@@ -1583,8 +1583,9 @@ void MDS::respawn()
   new_argv[orig_argc] = NULL;
 
   char buf[PATH_MAX];
-  getcwd(buf, sizeof(buf));
-  dout(1) << " cwd " << buf << dendl;
+  char *cwd = getcwd(buf, sizeof(buf));
+  assert(cwd);
+  dout(1) << " cwd " << cwd << dendl;
 
   unblock_all_signals(NULL);
   execv(orig_argv[0], new_argv);
