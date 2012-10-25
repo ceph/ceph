@@ -66,7 +66,7 @@ public class CephMountCreateTest {
         found = true;
     }
     assertTrue(found);
-    mount.shutdown();
+    mount.unmount();
 
     /* changing root to empty dir */
     mount = setupMount("/libcephfs_java_test_dir");
@@ -78,11 +78,11 @@ public class CephMountCreateTest {
         found = true;
     }
     assertFalse(found);
-    mount.shutdown();
+    mount.unmount();
 
     /* cleanup */
     mount = setupMount(null);
     mount.rmdir("/libcephfs_java_test_dir");
-    mount.shutdown();
+    mount.unmount();
   }
 }
