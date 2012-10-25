@@ -747,8 +747,10 @@ JNIEXPORT jobjectArray JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1listdir
 			}
 
 			/* filter out dot files: xref: java.io.File::list() */
-			if (ent->compare(".") && ent->compare(".."))
+			if (ent->compare(".") && ent->compare("..")) {
 				contents.push_back(*ent);
+				ldout(cct, 20) << "jni: listdir: take path " << *ent << dendl;
+			}
 
 			bufpos += ent->size() + 1;
 			delete ent;
