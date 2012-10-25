@@ -119,6 +119,18 @@ public class CephMount {
   private static synchronized native int native_ceph_mount(long mountp, String root);
 
   /**
+   * Deactivate the mount.
+   *
+   * The mount can be reactivated using mount(). Configuration parameters
+   * previously set are not reset.
+   */
+  public synchronized void unmount() {
+    native_ceph_unmount(instance_ptr);
+  }
+
+  private static synchronized native int native_ceph_unmount(long mountp);
+
+  /**
    * Shutdown the mount.
    */
   public void shutdown() {
