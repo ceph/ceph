@@ -68,6 +68,17 @@ TEST(LibCephFS, Mount_non_exist) {
   ASSERT_NE(0, ceph_mount(cmount, "/non-exist"));
 }
 
+TEST(LibCephFS, Mount_double) {
+
+  struct ceph_mount_info *cmount;
+
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_mount(cmount, "/"));
+  ASSERT_EQ(-EISCONN, ceph_mount(cmount, "/"));
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, Mount) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);

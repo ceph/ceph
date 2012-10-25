@@ -67,7 +67,7 @@ public:
     int ret;
     
     if (mounted)
-      return -EDOM;
+      return -EISCONN;
 
     common_init_finish(cct);
 
