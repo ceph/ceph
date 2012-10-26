@@ -52,7 +52,8 @@ namespace librbd {
 	}
       }      
 
-      complete();
+      if (!building)
+	complete();
     }
     put_unlock();
   }
