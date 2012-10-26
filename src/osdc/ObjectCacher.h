@@ -84,7 +84,7 @@ class ObjectCacher {
     // states
     static const int STATE_MISSING = 0;
     static const int STATE_CLEAN = 1;
-    static const int STATE_ZERO = 2;
+    static const int STATE_ZERO = 2;   // NOTE: these are *clean* zeros
     static const int STATE_DIRTY = 3;
     static const int STATE_RX = 4;
     static const int STATE_TX = 5;
