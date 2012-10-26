@@ -418,8 +418,15 @@ def task(ctx, config):
     # TESTCASE 'rm-user','user','rm','existing user','fails, still has buckets'
     (err, out) = rgwadmin(ctx, client, ['user', 'rm', '--uid', user])
     assert err
+
+    # TESTCASE 'rm-user2', 'user', 'rm', user with data', 'succeeds'
+    bucket = connection.create_bucket(bucket_name)
+    key = boto.s3.key.Key(bucket)
+    key.set_contents_from_string('eight')
+
+    (err, out) = rgwadmin(ctx, client, ['user', 'rm', '--uid', user, '--purge-data' ])
     assert not err
 
-    # TESTCASE 'rm-user2','user','rm','deleted user','fails'
+    # TESTCASE 'rm-user3','user','rm','deleted user','fails'
     (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user])
     assert err
