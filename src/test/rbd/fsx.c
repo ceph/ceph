@@ -400,6 +400,7 @@ report_failure(int status)
 		}
 		close(fsxgoodfd);
 	}
+	sleep(3);   // so the log can flush to disk.  KLUDGEY!
 	exit(status);
 }
 
