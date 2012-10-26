@@ -1015,10 +1015,16 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 
 	bufferlist bit;  // put substr here first, since substr_of clobbers, and
 	                 // we may get multiple bh's at this stripe_map position
-	bit.substr_of(bh->bl,
-		      opos - bh->start(),
-		      len);
-        stripe_map[f_it->first].claim_append(bit);
+	if (bh->is_zero()) {
+	  bufferptr bp(len);
+	  bp.zero();
+	  stripe_map[f_it->first].push_back(bp);
+	} else {
+	  bit.substr_of(bh->bl,
+			opos - bh->start(),
+			len);
+	  stripe_map[f_it->first].claim_append(bit);
+	}
 
         opos += len;
         bhoff += len;
