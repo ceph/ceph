@@ -84,10 +84,11 @@ class ObjectCacher {
     // states
     static const int STATE_MISSING = 0;
     static const int STATE_CLEAN = 1;
-    static const int STATE_DIRTY = 2;
-    static const int STATE_RX = 3;
-    static const int STATE_TX = 4;
-    static const int STATE_ERROR = 5; // a read error occurred
+    static const int STATE_ZERO = 2;
+    static const int STATE_DIRTY = 3;
+    static const int STATE_RX = 4;
+    static const int STATE_TX = 5;
+    static const int STATE_ERROR = 6; // a read error occurred
 
   private:
     // my fields
@@ -136,6 +137,7 @@ class ObjectCacher {
     bool is_missing() { return state == STATE_MISSING; }
     bool is_dirty() { return state == STATE_DIRTY; }
     bool is_clean() { return state == STATE_CLEAN; }
+    bool is_zero() { return state == STATE_ZERO; }
     bool is_tx() { return state == STATE_TX; }
     bool is_rx() { return state == STATE_RX; }
     bool is_error() { return state == STATE_ERROR; }
@@ -370,6 +372,7 @@ class ObjectCacher {
   Cond  stat_cond;
 
   loff_t stat_clean;
+  loff_t stat_zero;
   loff_t stat_dirty;
   loff_t stat_rx;
   loff_t stat_tx;
@@ -386,6 +389,7 @@ class ObjectCacher {
   loff_t get_stat_dirty() { return stat_dirty; }
   loff_t get_stat_dirty_waiting() { return stat_dirty_waiting; }
   loff_t get_stat_clean() { return stat_clean; }
+  loff_t get_stat_zero() { return stat_zero; }
 
   void touch_bh(BufferHead *bh) {
     if (bh->is_dirty())
@@ -402,6 +406,7 @@ class ObjectCacher {
   
   void mark_missing(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_MISSING); };
   void mark_clean(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_CLEAN); };
+  void mark_zero(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_ZERO); };
   void mark_rx(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_RX); };
   void mark_tx(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_TX); };
   void mark_error(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_ERROR); };
@@ -633,6 +638,7 @@ inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
   if (bh.is_rx()) out << " rx";
   if (bh.is_dirty()) out << " dirty";
   if (bh.is_clean()) out << " clean";
+  if (bh.is_zero()) out << " zero";
   if (bh.is_missing()) out << " missing";
   if (bh.bl.length() > 0) out << " firstbyte=" << (int)bh.bl[0];
   if (bh.error) out << " error=" << bh.error;
