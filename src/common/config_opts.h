@@ -147,6 +147,8 @@ OPTION(auth_cluster_required, OPT_STR, "cephx")   // required of mon, mds, osd d
 OPTION(auth_service_required, OPT_STR, "cephx")   // required by daemons of clients
 OPTION(auth_client_required, OPT_STR, "")         // what clients require of daemons
 OPTION(auth_supported, OPT_STR, "")               // deprecated; default value for above if they are not defined.
+OPTION(cephx_require_signatures, OPT_BOOL, false) //  If true, don't talk to Cephx partners if they don't support message signing; off by default
+OPTION(cephx_sign_messages, OPT_BOOL, true)  // Default to signing session messages if supported
 OPTION(auth_mon_ticket_ttl, OPT_DOUBLE, 60*60*12)
 OPTION(auth_service_ticket_ttl, OPT_DOUBLE, 60*60)
 OPTION(mon_client_hunt_interval, OPT_DOUBLE, 3.0)   // try new mon every N seconds until we connect

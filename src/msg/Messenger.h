@@ -27,6 +27,7 @@ using namespace std;
 #include "include/Context.h"
 #include "include/types.h"
 #include "include/ceph_features.h"
+#include "auth/Crypto.h"
 
 #include <errno.h>
 #include <sstream>
@@ -638,11 +639,11 @@ public:
    */
   bool ms_deliver_verify_authorizer(Connection *con, int peer_type,
 				    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-				    bool& isvalid) {
+				    bool& isvalid, CryptoKey& session_key) {
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 p++)
-      if ((*p)->ms_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid))
+      if ((*p)->ms_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid, session_key))
 	return true;
     return false;
   }
