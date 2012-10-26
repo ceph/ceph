@@ -1979,12 +1979,25 @@ void RGWAbortMultipart::execute()
     return;
 
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
-    string oid = mp.get_part(obj_iter->second.num);
-    rgw_obj obj;
-    obj.init_ns(s->bucket, oid, mp_ns);
-    ret = store->delete_obj(s->obj_ctx, obj);
-    if (ret < 0 && ret != -ENOENT)
-      return;
+    RGWUploadPartInfo& obj_part = obj_iter->second;
+
+    if (obj_part.manifest.empty()) {
+      string oid = mp.get_part(obj_iter->second.num);
+      rgw_obj obj;
+      obj.init_ns(s->bucket, oid, mp_ns);
+      ret = store->delete_obj(s->obj_ctx, obj);
+      if (ret < 0 && ret != -ENOENT)
+        return;
+    } else {
+      RGWObjManifest& manifest = obj_part.manifest;
+      map<uint64_t, RGWObjManifestPart>::iterator oiter;
+      for (oiter = manifest.objs.begin(); oiter != manifest.objs.end(); ++oiter) {
+        RGWObjManifestPart& part = oiter->second;
+        ret = store->delete_obj(s->obj_ctx, part.loc);
+        if (ret < 0 && ret != -ENOENT)
+          return;
+      }
+    }
   }
   // and also remove the metadata obj
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
