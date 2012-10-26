@@ -401,9 +401,23 @@ def task(ctx, config):
 
     key.delete()
     bucket.delete()
-    
+
+    # TESTCASE 'rm-bucket', 'bucket', 'rm', 'bucket with objects;, 'succeeds'
+    bucket = connection.create_bucket(bucket_name)
+    key_name = ['four', 'five', 'six', 'seven']
+    for i in range(4):
+        key = boto.s3.key.Key(bucket)
+        key.set_contents_from_string(key_name[i])
+
+    (err, out) = rgwadmin(ctx, client, ['bucket', 'rm', '--bucket', bucket_name, '--purge-objects'])
+    assert not err
+
+    bucket = connection.create_bucket(bucket_name)
+    key = boto.s3.key.Key(bucket)
+
     # TESTCASE 'rm-user','user','rm','existing user','fails, still has buckets'
     (err, out) = rgwadmin(ctx, client, ['user', 'rm', '--uid', user])
+    assert err
     assert not err
 
     # TESTCASE 'rm-user2','user','rm','deleted user','fails'
