@@ -454,7 +454,7 @@ ObjectCacher::ObjectCacher(CephContext *cct_, string name, WritebackHandler& wb,
     max_size(max_bytes), max_objects(max_objects),
     flush_set_callback(flush_callback), flush_set_callback_arg(flush_callback_arg),
     flusher_stop(false), flusher_thread(this),
-    stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0),
+    stat_clean(0), stat_zero(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0),
     stat_error(0), stat_dirty_waiting(0)
 {
   this->max_dirty_age.set_from_double(max_dirty_age);
@@ -862,7 +862,7 @@ void ObjectCacher::trim(loff_t max_bytes, loff_t max_ob)
       break;
 
     ldout(cct, 10) << "trim trimming " << *bh << dendl;
-    assert(bh->is_clean());
+    assert(bh->is_clean() || bh->is_zero());
 
     Object *ob = bh->ob;
     bh_remove(ob, bh);
@@ -1673,7 +1673,7 @@ loff_t ObjectCacher::release(Object *ob)
        p != ob->data.end();
        p++) {
     BufferHead *bh = p->second;
-    if (bh->is_clean()) 
+    if (bh->is_clean() || bh->is_zero())
       clean.push_back(bh);
     else 
       o_unclean += bh->length();
@@ -1811,7 +1811,7 @@ void ObjectCacher::verify_stats() const
 {
   ldout(cct, 10) << "verify_stats" << dendl;
 
-  loff_t clean = 0, dirty = 0, rx = 0, tx = 0, missing = 0, error = 0;
+  loff_t clean = 0, zero = 0, dirty = 0, rx = 0, tx = 0, missing = 0, error = 0;
   for (vector<hash_map<sobject_t, Object*> >::const_iterator i = objects.begin();
       i != objects.end();
       ++i) {
@@ -1829,6 +1829,9 @@ void ObjectCacher::verify_stats() const
           break;
         case BufferHead::STATE_CLEAN:
           clean += bh->length();
+          break;
+        case BufferHead::STATE_ZERO:
+          zero += bh->length();
           break;
         case BufferHead::STATE_DIRTY:
           dirty += bh->length();
@@ -1861,6 +1864,7 @@ void ObjectCacher::verify_stats() const
   assert(tx == stat_tx);
   assert(dirty == stat_dirty);
   assert(missing == stat_missing);
+  assert(zero == stat_zero);
   assert(error == stat_error);
 }
 
@@ -1872,6 +1876,9 @@ void ObjectCacher::bh_stat_add(BufferHead *bh)
     break;
   case BufferHead::STATE_CLEAN:
     stat_clean += bh->length();
+    break;
+  case BufferHead::STATE_ZERO:
+    stat_zero += bh->length();
     break;
   case BufferHead::STATE_DIRTY:
     stat_dirty += bh->length();
@@ -1904,6 +1911,9 @@ void ObjectCacher::bh_stat_sub(BufferHead *bh)
     break;
   case BufferHead::STATE_CLEAN:
     stat_clean -= bh->length();
+    break;
+  case BufferHead::STATE_ZERO:
+    stat_zero -= bh->length();
     break;
   case BufferHead::STATE_DIRTY:
     stat_dirty -= bh->length();
