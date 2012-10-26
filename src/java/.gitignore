@@ -2,3 +2,4 @@
 libcephfs.jar
 native/com_ceph_fs_CephMount.h
 TEST-*.txt
+doc
