@@ -56,7 +56,7 @@ public class CephMountTest {
     for (String l : list)
       System.out.println(l);
     mount.rmdir(basedir);
-    mount.shutdown();
+    mount.unmount();
   }
 
   /*
@@ -98,7 +98,7 @@ public class CephMountTest {
     if (conf_file != null)
       mount2.conf_read_file(conf_file);
     mount2.mount("/wlfkjwlekfjwlejfwe");
-    mount2.shutdown();
+    mount2.unmount();
   }
 
   /*
