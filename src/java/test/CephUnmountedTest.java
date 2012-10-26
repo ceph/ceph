@@ -32,8 +32,8 @@ public class CephUnmountedTest {
   }
 
   @Test(expected=CephNotMountedException.class)
-  public void test_shutdown() throws Exception {
-    mount.shutdown();
+  public void test_unmount() throws Exception {
+    mount.unmount();
   }
 
   @Test(expected=CephNotMountedException.class)
