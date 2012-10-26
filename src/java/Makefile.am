@@ -5,7 +5,9 @@ JAVA_SRC = \
 	java/com/ceph/fs/CephStat.java \
 	java/com/ceph/fs/CephStatVFS.java \
 	java/com/ceph/fs/CephNativeLoader.java \
-	java/com/ceph/fs/CephNotMountedException.java
+	java/com/ceph/fs/CephNotMountedException.java \
+	java/com/ceph/fs/CephFileAlreadyExistsException.java \
+	java/com/ceph/fs/CephAlreadyMountedException.java
 
 EXTRA_DIST = $(JAVA_SRC) test
 

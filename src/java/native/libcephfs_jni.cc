@@ -36,6 +36,8 @@
 #define CEPH_STAT_VFS_CP "com/ceph/fs/CephStatVFS"
 #define CEPH_MOUNT_CP "com/ceph/fs/CephMount"
 #define CEPH_NOTMOUNTED_CP "com/ceph/fs/CephNotMountedException"
+#define CEPH_FILEEXISTS_CP "com/ceph/fs/CephFileAlreadyExistsException"
+#define CEPH_ALREADYMOUNTED_CP "com/ceph/fs/CephAlreadyMountedException"
 
 /*
  * Flags to open(). must be synchronized with CephMount.java
@@ -52,6 +54,7 @@
 #define JAVA_O_CREAT  8
 #define JAVA_O_TRUNC  16
 #define JAVA_O_EXCL   32
+#define JAVA_O_WRONLY 64
 
 /*
  * Whence flags for seek(). sync with CephMount.java if changed.
@@ -93,6 +96,7 @@ static inline int fixup_open_flags(jint jflags)
 	FIXUP_OPEN_FLAG(O_CREAT)
 	FIXUP_OPEN_FLAG(O_TRUNC)
 	FIXUP_OPEN_FLAG(O_EXCL)
+	FIXUP_OPEN_FLAG(O_WRONLY)
 
 #undef FIXUP_OPEN_FLAG
 
@@ -191,11 +195,19 @@ static void cephThrowFNF(JNIEnv *env, const char *msg)
   THROW(env, "java/io/FileNotFoundException", msg);
 }
 
+static void cephThrowFileExists(JNIEnv *env, const char *msg)
+{
+  THROW(env, CEPH_FILEEXISTS_CP, msg);
+}
+
 static void handle_error(JNIEnv *env, int rc)
 {
   switch (rc) {
   case -ENOENT:
     cephThrowFNF(env, "");
+    return;
+  case -EEXIST:
+    cephThrowFileExists(env, "");
     return;
   default:
     break;
@@ -220,12 +232,6 @@ static void handle_error(JNIEnv *env, int rc)
 	if (!ceph_is_mounted((_c))) { \
 		THROW(env, CEPH_NOTMOUNTED_CP, "not mounted"); \
 		return (_r); \
-	} } while (0)
-
-#define CHECK_MOUNTED_NORV(_c) do { \
-	if (!ceph_is_mounted((_c))) { \
-		THROW(env, CEPH_NOTMOUNTED_CP, "not mounted"); \
-		return; \
 	} } while (0)
 
 /*
@@ -364,6 +370,14 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1mount
 	const char *c_root = NULL;
 	int ret;
 
+	/*
+	 * Toss a message up if we are already mounted.
+	 */
+	if (ceph_is_mounted(cmount)) {
+		THROW(env, CEPH_ALREADYMOUNTED_CP, "");
+		return -1;
+	}
+
 	if (j_root) {
 		c_root = env->GetStringUTFChars(j_root, NULL);
 		if (!c_root) {
@@ -389,22 +403,50 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1mount
 
 /*
  * Class:     com_ceph_fs_CephMount
- * Method:    native_ceph_shutdown
- * Signature: (J)V
+ * Method:    native_ceph_unmount
+ * Signature: (J)I
  */
-JNIEXPORT void JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1shutdown
-	(JNIEnv *env, jclass clz, jlong j_mntp)
+JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1unmount
+  (JNIEnv *env, jclass clz, jlong j_mntp)
 {
-	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
-	CephContext *cct = ceph_get_mount_context(cmount);
+  struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
+  CephContext *cct = ceph_get_mount_context(cmount);
+  int ret;
 
-	CHECK_MOUNTED_NORV(cmount);
+  ldout(cct, 10) << "jni: ceph_unmount enter" << dendl;
 
-	ldout(cct, 10) << "jni: ceph_shutdown: enter" << dendl;
+  CHECK_MOUNTED(cmount, -1);
 
-	ceph_shutdown(cmount);
+  ret = ceph_unmount(cmount);
 
-	ldout(cct, 10) << "jni: ceph_shutdown: exit" << dendl;
+  ldout(cct, 10) << "jni: ceph_unmount exit ret " << ret << dendl;
+
+  if (ret)
+    handle_error(env, ret);
+
+  return ret;
+}
+
+/*
+ * Class:     com_ceph_fs_CephMount
+ * Method:    native_ceph_release
+ * Signature: (J)I
+ */
+JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1release
+  (JNIEnv *env, jclass clz, jlong j_mntp)
+{
+  struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
+  CephContext *cct = ceph_get_mount_context(cmount);
+  int ret;
+
+  ldout(cct, 10) << "jni: ceph_release called" << dendl;
+
+  ret = ceph_release(cmount);
+
+  if (ret)
+    handle_error(env, ret);
+
+  return ret;
 }
 
 /*
@@ -736,8 +778,10 @@ JNIEXPORT jobjectArray JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1listdir
 			}
 
 			/* filter out dot files: xref: java.io.File::list() */
-			if (ent->compare(".") && ent->compare(".."))
+			if (ent->compare(".") && ent->compare("..")) {
 				contents.push_back(*ent);
+				ldout(cct, 20) << "jni: listdir: take path " << *ent << dendl;
+			}
 
 			bufpos += ent->size() + 1;
 			delete ent;
