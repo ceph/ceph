@@ -19,6 +19,7 @@
  */
 import java.io.FileNotFoundException;
 import org.junit.*;
+import java.util.UUID;
 import static org.junit.Assert.*;
 
 import com.ceph.fs.*;
@@ -52,37 +53,38 @@ public class CephMountCreateTest {
     CephMount mount;
     boolean found;
 
+    String dir = "libcephfs_junit_" + UUID.randomUUID();
+
     /* root dir has more than one dir */
-    mount = setupMount(null);
+    mount = setupMount("/");
 
     try {
-      mount.rmdir("/libcephfs_java_test_dir");
+      mount.rmdir("/" + dir);
     } catch (FileNotFoundException e) {}
-    mount.mkdirs("/libcephfs_java_test_dir", 777);
+    mount.mkdirs("/" + dir, 777);
     String[] subdirs = mount.listdir("/");
     found = false;
     for (String d : subdirs) {
-      if (d.compareTo("libcephfs_java_test_dir") == 0)
+      if (d.compareTo(dir) == 0)
         found = true;
     }
     assertTrue(found);
-    mount.shutdown();
+    mount.unmount();
 
     /* changing root to empty dir */
-    mount = setupMount("/libcephfs_java_test_dir");
+    mount = setupMount("/" + dir);
 
     subdirs = mount.listdir("/");
     found = false;
     for (String d : subdirs) {
-      if (d.compareTo(".") != 0 && d.compareTo("..") != 0)
-        found = true;
+      found = true;
     }
     assertFalse(found);
-    mount.shutdown();
+    mount.unmount();
 
     /* cleanup */
-    mount = setupMount(null);
-    mount.rmdir("/libcephfs_java_test_dir");
-    mount.shutdown();
+    mount = setupMount("/");
+    mount.rmdir("/" + dir);
+    mount.unmount();
   }
 }
