@@ -314,7 +314,7 @@ def prepare(
             # then again nothing guards the partition table from races
             # anyway
             num = get_free_partition_index(dev=journal)
-            journal_part = '{num}:0:{size}M'.format(
+            journal_part = '{num}:0:+{size}M'.format(
                 num=num,
                 size=journal_size,
                 )
