@@ -25,8 +25,8 @@ public:
     : AuthSessionHandler(cct_, CEPH_AUTH_UNKNOWN, session_key) {}
   ~AuthUnknownSessionHandler() {}
   
-  int no_security() {
-    return 1;
+  bool no_security() {
+    return true;
   }
 
   // The Unknown suite neither signs nor encrypts messages, so these functions just return success.

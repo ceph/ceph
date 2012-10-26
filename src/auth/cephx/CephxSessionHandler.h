@@ -24,8 +24,8 @@ public:
     : AuthSessionHandler(cct_, CEPH_AUTH_CEPHX, session_key) {}
   ~CephxSessionHandler() {}
   
-  int no_security() {
-    return 0;
+  bool no_security() {
+    return false;
   }
 
   int sign_message(Message *m);
