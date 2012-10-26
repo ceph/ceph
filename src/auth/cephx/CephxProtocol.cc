@@ -33,8 +33,7 @@ void cephx_calc_client_server_challenge(CephContext *cct, CryptoKey& secret, uin
 
   bufferlist enc;
   std::string error;
-  encode_encrypt(cct, b, secret, enc, error);
-  if (!error.empty())
+  if (encode_encrypt(cct, b, secret, enc, error))
     return;
 
   uint64_t k = 0;
@@ -107,8 +106,7 @@ bool cephx_build_service_ticket_reply(CephContext *cct,
     msg_a.session_key = info.session_key;
     msg_a.validity = info.validity;
     std::string error;
-    encode_encrypt(cct, msg_a, principal_secret, reply, error);
-    if (!error.empty()) {
+    if (encode_encrypt(cct, msg_a, principal_secret, reply, error)) {
       ldout(cct, -1) << "error encoding encrypted: " << error << dendl;
       return false;
     }
@@ -126,8 +124,7 @@ bool cephx_build_service_ticket_reply(CephContext *cct,
 
     ::encode((__u8)should_encrypt_ticket, reply);
     if (should_encrypt_ticket) {
-      encode_encrypt(cct, service_ticket_bl, ticket_enc_key, reply, error);
-      if (!error.empty()) {
+      if (encode_encrypt(cct, service_ticket_bl, ticket_enc_key, reply, error)) {
 	ldout(cct, -1) << "error encoding encrypted ticket: " << error << dendl;
         return false;
       }
@@ -150,10 +147,8 @@ bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
 
   CephXServiceTicket msg_a;
   std::string error;
-  decode_decrypt(cct, msg_a, secret, indata, error);
-  if (!error.empty()) {
-    ldout(cct, 0) << "verify_service_ticket_reply: failed decode_decrypt with secret "
-	    << secret << ": " << error << dendl;
+  if (decode_decrypt(cct, msg_a, secret, indata, error)) {
+    ldout(cct, 0) << "verify_service_ticket_reply: failed decode_decrypt, error is: " << error << dendl;
     return false;
   }
   
@@ -164,8 +159,7 @@ bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
   if (ticket_enc) {
     ldout(cct, 10) << " got encrypted ticket" << dendl;
     std::string error;
-    decode_decrypt(cct, service_ticket_bl, session_key, indata, error);
-    if (!error.empty()) {
+    if (decode_decrypt(cct, service_ticket_bl, session_key, indata, error)) {
       ldout(cct, 10) << "verify_service_ticket_reply: decode_decrypt failed "
 	    << "with " << error << dendl;
       return false;
@@ -304,7 +298,6 @@ CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id)
 
   __u8 authorizer_v = 1;
   ::encode(authorizer_v, a->bl);
-
   ::encode(global_id, a->bl);
   ::encode(service_id, a->bl);
 
@@ -314,8 +307,7 @@ CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id)
   msg.nonce = a->nonce;
 
   std::string error;
-  encode_encrypt(cct, msg, session_key, a->bl, error);
-  if (!error.empty()) {
+  if (encode_encrypt(cct, msg, session_key, a->bl, error)) {
     ldout(cct, 0) << "failed to encrypt authorizer: " << error << dendl;
     delete a;
     return 0;
@@ -452,9 +444,8 @@ bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
 
   // CephXAuthorize
   CephXAuthorize auth_msg;
-  decode_decrypt(cct, auth_msg, ticket_info.session_key, indata, error);
-  if (!error.empty()) {
-    ldout(cct, 0) << "verify_authorizercould not decrypt authorize request: error: "
+  if (decode_decrypt(cct, auth_msg, ticket_info.session_key, indata, error)) {
+    ldout(cct, 0) << "verify_authorizercould not decrypt authorize request with error: "
       << error << dendl;
     return false;
   }
@@ -466,8 +457,7 @@ bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
   CephXAuthorizeReply reply;
   // reply.trans_id = auth_msg.trans_id;
   reply.nonce_plus_one = auth_msg.nonce + 1;
-  encode_encrypt(cct, reply, ticket_info.session_key, reply_bl, error);
-  if (!error.empty()) {
+  if (encode_encrypt(cct, reply, ticket_info.session_key, reply_bl, error)) {
     ldout(cct, 10) << "verify_authorizer: encode_encrypt error: " << error << dendl;
     return false;
   }
@@ -481,17 +471,10 @@ bool CephXAuthorizer::verify_reply(bufferlist::iterator& indata)
 {
   CephXAuthorizeReply reply;
 
-  try {
-    std::string error;
-    decode_decrypt(cct, reply, session_key, indata, error);
-    if (!error.empty()) {
-      ldout(cct, 0) << "verify_authorizer_reply coudln't decrypt with " << session_key 
-	   << ": error: " << error << dendl;
+  std::string error;
+  if (decode_decrypt(cct, reply, session_key, indata, error)) {
+      ldout(cct, 0) << "verify_reply coudln't decrypt with error: " << error << dendl;
       return false;
-    }
-  } catch (const buffer::error &e) {
-    ldout(cct, 0) << "verify_authorizer_reply exception in decode_decrypt with " << session_key << dendl;
-    return false;
   }
 
   uint64_t expect = nonce + 1;

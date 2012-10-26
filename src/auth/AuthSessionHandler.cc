@@ -27,7 +27,7 @@ AuthSessionHandler *get_auth_session_handler(CephContext *cct, int protocol, Cry
 
   // Should add code to only print the SHA1 hash of the key, unless in secure debugging mode
 
-  ldout(cct,10) << "In get_auth_session_handler for protocol " << protocol << "and key " << key << dendl;
+  ldout(cct,10) << "In get_auth_session_handler for protocol " << protocol << dendl;
  
   switch (protocol) {
   case CEPH_AUTH_CEPHX:
@@ -41,7 +41,7 @@ AuthSessionHandler *get_auth_session_handler(CephContext *cct, int protocol, Cry
 }
 
 
-void AuthSessionHandler::printAuthSessionHandlerStats() {
+void AuthSessionHandler::print_auth_session_handler_stats() {
   ldout(cct,10) << "Auth Session Handler Stats " << this << dendl;
   ldout(cct,10) << "    Messages Signed    = " << messages_signed << dendl;
   ldout(cct,10) << "    Signatures Checked = " << signatures_checked << dendl;

@@ -74,7 +74,10 @@ Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
     connection_state->pipe = get();
   }
 
-  randomize_out_seq();
+  if (randomize_out_seq()) {
+    lsubdout(msgr->cct,ms,15) << "Pipe(): Could not get random bytes to set seq number for session reset; set seq number to " << out_seq << dendl;
+  }
+    
 
   msgr->timeout = msgr->cct->_conf->ms_tcp_read_timeout * 1000; //convert to ms
   if (msgr->timeout == 0)
@@ -1091,16 +1094,17 @@ void Pipe::fault(bool onread)
   }
 }
 
-void Pipe::randomize_out_seq()
+int Pipe::randomize_out_seq()
 {
-  // Set out_seq to a random value, so CRC won't be predictable PLR
+  // Set out_seq to a random value, so CRC won't be predictable.   Don't bother checking seq_error 
+  // here.  We'll check it on the call.  PLR
+
   int seq_error = get_random_bytes((char *)&out_seq, sizeof(out_seq));
-  if (seq_error < 0) {
-    lsubdout(msgr->cct,ms,15) << "Could not get random bytes to set seq number for session reset; setting seq number to 0." << dendl;
-    throw "was_session_reset(): get_random_bytes failed.";
-  }
+
+
   out_seq &= SEQ_MASK;
   lsubdout(msgr->cct, ms, 10) << "randomize_out_seq " << out_seq << dendl;
+  return seq_error;
 }
 
 void Pipe::was_session_reset()
@@ -1113,7 +1117,9 @@ void Pipe::was_session_reset()
 
   msgr->dispatch_queue.queue_remote_reset(connection_state);
 
-  randomize_out_seq();
+  if (randomize_out_seq()) {
+    lsubdout(msgr->cct,ms,15) << "was_session_reset(): Could not get random bytes to set seq number for session reset; set seq number to " << out_seq << dendl;
+  }
 
   in_seq = 0;
   connect_seq = 0;
