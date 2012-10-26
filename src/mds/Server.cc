@@ -291,7 +291,6 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       // reset session
       mds->send_message_client(new MClientSession(CEPH_SESSION_CLOSE), session);
       mds->sessionmap.set_state(session, Session::STATE_CLOSED);
-      mds->messenger->mark_disposable(session->connection);
       session->clear();
     } else if (session->is_killing()) {
       // destroy session, close connection
@@ -351,7 +350,11 @@ void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm,
 	dout(10) << "force_open_sessions opened " << session->inst << dendl;
 	mds->sessionmap.set_state(session, Session::STATE_OPEN);
 	mds->sessionmap.touch_session(session);
-	session->preopen_out_queue.push_back(new MClientSession(CEPH_SESSION_OPEN));
+	Message *m = new MClientSession(CEPH_SESSION_OPEN);
+	if (session->connection)
+	  messenger->send_message(m, session->connection);
+	else
+	  session->preopen_out_queue.push_back(m);
       }
     } else {
       dout(10) << "force_open_sessions skipping already-open " << session->inst << dendl;
