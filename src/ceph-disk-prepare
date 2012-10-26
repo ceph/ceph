@@ -227,7 +227,8 @@ def get_free_partition_index(dev):
                 ],
             )
     except subprocess.CalledProcessError as e:
-        raise PrepareError('cannot read partition index', e)
+        print 'cannot read partition index; assume it isn\'t present\n'
+        return 1
 
     if not lines:
         raise PrepareError('parted failed to output anything')
