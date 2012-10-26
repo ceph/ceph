@@ -429,6 +429,7 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len)
     }
 
     p++;
+    ldout(oc->cct, 10) << "discard " << *this << " bh " << *bh << dendl;
     oc->bh_remove(this, bh);
     delete bh;
   }
@@ -1790,6 +1791,7 @@ void ObjectCacher::discard_set(ObjectSet *oset, vector<ObjectExtent>& exls)
   for (vector<ObjectExtent>::iterator p = exls.begin();
        p != exls.end();
        ++p) {
+    ldout(cct, 10) << "discard_set " << oset << " ex " << *p << dendl;
     ObjectExtent &ex = *p;
     sobject_t soid(ex.oid, CEPH_NOSNAP);
     if (objects[oset->poolid].count(soid) == 0)
@@ -1949,6 +1951,7 @@ void ObjectCacher::bh_set_state(BufferHead *bh, int s)
 
 void ObjectCacher::bh_add(Object *ob, BufferHead *bh)
 {
+  ldout(cct, 30) << "bh_add " << *ob << " " << *bh << dendl;
   ob->add_bh(bh);
   if (bh->is_dirty()) {
     bh_lru_dirty.lru_insert_top(bh);
@@ -1961,6 +1964,7 @@ void ObjectCacher::bh_add(Object *ob, BufferHead *bh)
 
 void ObjectCacher::bh_remove(Object *ob, BufferHead *bh)
 {
+  ldout(cct, 30) << "bh_remove " << *ob << " " << *bh << dendl;
   ob->remove_bh(bh);
   if (bh->is_dirty()) {
     bh_lru_dirty.lru_remove(bh);
