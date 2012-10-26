@@ -1147,11 +1147,14 @@ libcommon_files = \
 	./ceph_ver.c \
 	auth/AuthAuthorizeHandler.cc \
 	auth/AuthClientHandler.cc \
+	auth/AuthSessionHandler.cc \
 	auth/AuthMethodList.cc \
 	auth/cephx/CephxAuthorizeHandler.cc \
 	auth/cephx/CephxClientHandler.cc \
 	auth/cephx/CephxProtocol.cc \
+	auth/cephx/CephxSessionHandler.cc \
 	auth/none/AuthNoneAuthorizeHandler.cc \
+	auth/unknown/AuthUnknownAuthorizeHandler.cc \
 	auth/Crypto.cc \
 	auth/KeyRing.cc \
 	auth/RotatingKeyRing.cc \
@@ -1243,7 +1246,9 @@ endif
 libmon_a_SOURCES = \
 	auth/cephx/CephxKeyServer.cc \
 	auth/cephx/CephxServiceHandler.cc \
+	auth/cephx/CephxSessionHandler.cc \
 	auth/AuthServiceHandler.cc \
+	auth/AuthSessionHandler.cc \
 	mon/Monitor.cc \
 	mon/Paxos.cc \
 	mon/PaxosService.cc \
@@ -1347,14 +1352,22 @@ noinst_HEADERS = \
 	auth/cephx/CephxProtocol.h\
 	auth/cephx/CephxClientHandler.h\
 	auth/cephx/CephxServiceHandler.h\
+	auth/cephx/CephxSessionHandler.h\
 	auth/none/AuthNoneAuthorizeHandler.h\
 	auth/none/AuthNoneClientHandler.h\
 	auth/none/AuthNoneServiceHandler.h\
+	auth/none/AuthNoneSessionHandler.h\
 	auth/none/AuthNoneProtocol.h\
+	auth/unknown/AuthUnknownAuthorizeHandler.h\
+	auth/unknown/AuthUnknownClientHandler.h\
+	auth/unknown/AuthUnknownServiceHandler.h\
+	auth/unknown/AuthUnknownSessionHandler.h\
+	auth/unknown/AuthUnknownProtocol.h\
 	auth/Auth.h\
 	auth/AuthMethodList.h\
 	auth/AuthClientHandler.h\
 	auth/AuthServiceHandler.h\
+	auth/AuthSessionHandler.h\
 	auth/AuthAuthorizeHandler.h\
 	auth/KeyRing.h\
 	auth/RotatingKeyRing.h\

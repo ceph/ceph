@@ -12,14 +12,14 @@
  * 
  */
 
-#ifndef CEPH_AUTHNONEAUTHORIZEHANDLER_H
-#define CEPH_AUTHNONEAUTHORIZEHANDLER_H
+#ifndef CEPH_AUTHUNKNOWNAUTHORIZEHANDLER_H
+#define CEPH_AUTHUNKNOWNAUTHORIZEHANDLER_H
 
 #include "../AuthAuthorizeHandler.h"
 
 class CephContext;
 
-struct AuthNoneAuthorizeHandler : public AuthAuthorizeHandler {
+struct AuthUnknownAuthorizeHandler : public AuthAuthorizeHandler {
   bool verify_authorizer(CephContext *cct, KeyStore *keys,
 			 bufferlist& authorizer_data, bufferlist& authorizer_reply,
                          EntityName& entity_name, uint64_t& global_id,
