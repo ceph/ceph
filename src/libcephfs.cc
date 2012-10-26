@@ -67,7 +67,7 @@ public:
     int ret;
     
     if (mounted)
-      return -EDOM;
+      return -EISCONN;
 
     common_init_finish(cct);
 
@@ -104,6 +104,14 @@ public:
   fail:
     shutdown();
     return ret;
+  }
+
+  int unmount()
+  {
+    if (!mounted)
+      return -ENOTCONN;
+    shutdown();
+    return 0;
   }
 
   void shutdown()
@@ -233,6 +241,19 @@ extern "C" int ceph_create(struct ceph_mount_info **cmount, const char * const i
   cct->_conf->parse_env(); // environment variables coverride
   cct->_conf->apply_changes(NULL);
   return ceph_create_with_context(cmount, cct);
+}
+
+extern "C" int ceph_unmount(struct ceph_mount_info *cmount)
+{
+  return cmount->unmount();
+}
+
+extern "C" int ceph_release(struct ceph_mount_info *cmount)
+{
+  if (cmount->is_mounted())
+    return -EISCONN;
+  delete cmount;
+  return 0;
 }
 
 extern "C" void ceph_shutdown(struct ceph_mount_info *cmount)

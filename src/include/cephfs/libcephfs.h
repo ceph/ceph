@@ -108,8 +108,29 @@ int ceph_create_with_context(struct ceph_mount_info **cmount, struct CephContext
 int ceph_mount(struct ceph_mount_info *cmount, const char *root);
 
 /**
- * Destroy the ceph mount handle.  This should be called on completion of all
- * libcephfs functions.
+ * Unmount a mount handle.
+ *
+ * @param cmount the mount handle
+ * @return 0 on success, negative error code on failure
+ */
+int ceph_unmount(struct ceph_mount_info *cmount);
+
+/**
+ * Destroy the mount handle.
+ *
+ * The handle should not be mounted. This should be called on completion of
+ * all libcephfs functions.
+ *
+ * @param cmount the mount handle
+ * @return 0 on success, negative error code on failure.
+ */
+int ceph_release(struct ceph_mount_info *cmount);
+
+/**
+ * Deprecated. Unmount and destroy the ceph mount handle. This should be
+ * called on completion of all libcephfs functions.
+ *
+ * Equivalent to ceph_unmount() + ceph_release() without error handling.
  *
  * @param cmount the mount handle to shutdown
  */

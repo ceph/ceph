@@ -68,6 +68,74 @@ TEST(LibCephFS, Mount_non_exist) {
   ASSERT_NE(0, ceph_mount(cmount, "/non-exist"));
 }
 
+TEST(LibCephFS, Mount_double) {
+
+  struct ceph_mount_info *cmount;
+
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_mount(cmount, "/"));
+  ASSERT_EQ(-EISCONN, ceph_mount(cmount, "/"));
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, Mount_remount) {
+
+  struct ceph_mount_info *cmount;
+
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+
+  CephContext *cct = ceph_get_mount_context(cmount);
+  ASSERT_EQ(0, ceph_mount(cmount, "/"));
+  ASSERT_EQ(0, ceph_unmount(cmount));
+
+  ASSERT_EQ(0, ceph_mount(cmount, "/"));
+  ASSERT_EQ(cct, ceph_get_mount_context(cmount));
+
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, Unmount_unmounted) {
+
+  struct ceph_mount_info *cmount;
+
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(-ENOTCONN, ceph_unmount(cmount));
+}
+
+TEST(LibCephFS, Release_unmounted) {
+
+  struct ceph_mount_info *cmount;
+
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_release(cmount));
+}
+
+TEST(LibCephFS, Release_mounted) {
+
+  struct ceph_mount_info *cmount;
+
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_mount(cmount, "/"));
+  ASSERT_EQ(-EISCONN, ceph_release(cmount));
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, Unmount_release) {
+
+  struct ceph_mount_info *cmount;
+
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_mount(cmount, "/"));
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ASSERT_EQ(0, ceph_release(cmount));
+}
+
 TEST(LibCephFS, Mount) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
