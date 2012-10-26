@@ -192,10 +192,7 @@ int ObjectCacher::Object::map_read(OSDRead *rd,
         n->set_length(left);
         oc->bh_add(this, n);
 	if (complete) {
-	  bufferptr bp(left);
-	  bp.zero();
-	  n->bl.append(bp);
-	  oc->mark_clean(n);
+	  oc->mark_zero(n);
 	  hits[cur] = n;
 	  ldout(oc->cct, 20) << "map_read miss+complete+zero " << left << " left, " << *n << dendl;
 	} else {
@@ -215,7 +212,8 @@ int ObjectCacher::Object::map_read(OSDRead *rd,
 
         if (e->is_clean() ||
             e->is_dirty() ||
-            e->is_tx()) {
+            e->is_tx() ||
+	    e->is_zero()) {
           hits[cur] = e;     // readable!
           ldout(oc->cct, 20) << "map_read hit " << *e << dendl;
         } else if (e->is_rx()) {
@@ -243,10 +241,7 @@ int ObjectCacher::Object::map_read(OSDRead *rd,
 	n->set_length(len);
         oc->bh_add(this,n);
 	if (complete) {
-	  bufferptr bp(len);
-	  bp.zero();
-	  n->bl.append(bp);
-	  oc->mark_clean(n);
+	  oc->mark_zero(n);
 	  hits[cur] = n;
 	  ldout(oc->cct, 20) << "map_read gap+complete+zero " << *n << dendl;
 	} else {
