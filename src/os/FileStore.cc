@@ -3803,15 +3803,14 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
   set<string> omap_remove;
   map<string, bufferptr> inline_set;
   int r = 0;
+  int fd = lfn_open(cid, oid, 0);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
   if (g_conf->filestore_xattr_use_omap) {
-    int fd = lfn_open(cid, oid, 0);
-    if (fd < 0) {
-      r = -errno;
-      goto out;
-    }
     r = _fgetattrs(fd, inline_set, false);
     assert(!m_filestore_fail_eio || r != -EIO);
-    TEMP_FAILURE_RETRY(::close(fd));
   }
   dout(15) << "setattrs " << cid << "/" << oid << dendl;
   r = 0;
@@ -3824,7 +3823,7 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
       if (p->second.length() > g_conf->filestore_max_inline_xattr_size) {
 	if (inline_set.count(p->first)) {
 	  inline_set.erase(p->first);
-	  r = lfn_removexattr(cid, oid, n);
+	  r = chain_fremovexattr(fd, n);
 	  if (r < 0)
 	    return r;
 	}
@@ -3836,7 +3835,7 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
 	  inline_set.size() >= g_conf->filestore_max_inline_xattrs) {
 	if (inline_set.count(p->first)) {
 	  inline_set.erase(p->first);
-	  r = lfn_removexattr(cid, oid, n);
+	  r = chain_fremovexattr(fd, n);
 	  if (r < 0)
 	    return r;
 	}
@@ -3853,7 +3852,7 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
     else
       val = "";
     // ??? Why do we skip setting all the other attrs if one fails?
-    r = lfn_setxattr(cid, oid, n, val, p->second.length());
+    r = chain_fsetxattr(fd, n, val, p->second.length());
     if (r < 0) {
       derr << "FileStore::_setattrs: chain_setxattr returned " << r << dendl;
       break;
@@ -3880,6 +3879,7 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
       return r;
     }
   }
+  TEMP_FAILURE_RETRY(::close(fd));
  out:
   dout(10) << "setattrs " << cid << "/" << oid << " = " << r << dendl;
   return r;
