@@ -1038,9 +1038,9 @@ int FileStore::_detect_fs()
     return ret;
   }
 
-  int ret = chain_setxattr(fn, "user.test", &x, sizeof(x));
+  int ret = chain_fsetxattr(tmpfd, "user.test", &x, sizeof(x));
   if (ret >= 0)
-    ret = chain_getxattr(fn, "user.test", &y, sizeof(y));
+    ret = chain_fgetxattr(tmpfd, "user.test", &y, sizeof(y));
   if ((ret < 0) || (x != y)) {
     derr << "Extended attributes don't appear to work. ";
     if (ret)
@@ -1054,11 +1054,11 @@ int FileStore::_detect_fs()
 
   char buf[1000];
   memset(buf, 0, sizeof(buf)); // shut up valgrind
-  chain_setxattr(fn, "user.test", &buf, sizeof(buf));
-  chain_setxattr(fn, "user.test2", &buf, sizeof(buf));
-  chain_setxattr(fn, "user.test3", &buf, sizeof(buf));
-  chain_setxattr(fn, "user.test4", &buf, sizeof(buf));
-  ret = chain_setxattr(fn, "user.test5", &buf, sizeof(buf));
+  chain_fsetxattr(tmpfd, "user.test", &buf, sizeof(buf));
+  chain_fsetxattr(tmpfd, "user.test2", &buf, sizeof(buf));
+  chain_fsetxattr(tmpfd, "user.test3", &buf, sizeof(buf));
+  chain_fsetxattr(tmpfd, "user.test4", &buf, sizeof(buf));
+  ret = chain_fsetxattr(tmpfd, "user.test5", &buf, sizeof(buf));
   if (ret == -ENOSPC) {
     if (!g_conf->filestore_xattr_use_omap) {
       derr << "limited size xattrs -- enable filestore_xattr_use_omap" << dendl;
@@ -1069,11 +1069,11 @@ int FileStore::_detect_fs()
       derr << "limited size xattrs -- filestore_xattr_use_omap enabled" << dendl;
     }
   }
-  chain_removexattr(fn, "user.test");
-  chain_removexattr(fn, "user.test2");
-  chain_removexattr(fn, "user.test3");
-  chain_removexattr(fn, "user.test4");
-  chain_removexattr(fn, "user.test5");
+  chain_fremovexattr(tmpfd, "user.test");
+  chain_fremovexattr(tmpfd, "user.test2");
+  chain_fremovexattr(tmpfd, "user.test3");
+  chain_fremovexattr(tmpfd, "user.test4");
+  chain_fremovexattr(tmpfd, "user.test5");
 
   ::unlink(fn);
   TEMP_FAILURE_RETRY(::close(tmpfd));
