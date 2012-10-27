@@ -272,10 +272,6 @@ private:
 
 public:
   int lfn_find(coll_t cid, const hobject_t& oid, IndexedPath *path);
-  int lfn_getxattr(coll_t cid, const hobject_t& oid, const char *name, void *val, size_t size);
-  int lfn_setxattr(coll_t cid, const hobject_t& oid, const char *name, const void *val, size_t size);
-  int lfn_removexattr(coll_t cid, const hobject_t& oid, const char *name);
-  int lfn_listxattr(coll_t cid, const hobject_t& oid, char *names, size_t len);
   int lfn_truncate(coll_t cid, const hobject_t& oid, off_t length);
   int lfn_stat(coll_t cid, const hobject_t& oid, struct stat *buf);
   int lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode,
