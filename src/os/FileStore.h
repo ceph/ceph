@@ -280,6 +280,7 @@ public:
 	       IndexedPath *path, Index *index);
   int lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode);
   int lfn_open(coll_t cid, const hobject_t& oid, int flags);
+  void lfn_close(int fd);
   int lfn_link(coll_t c, coll_t cid, const hobject_t& o) ;
   int lfn_unlink(coll_t cid, const hobject_t& o, const SequencerPosition &spos);
 
