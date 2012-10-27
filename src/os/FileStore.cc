@@ -3740,9 +3740,16 @@ int FileStore::_getattr(const char *fn, const char *name, bufferptr& bp)
 int FileStore::getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr &bp)
 {
   dout(15) << "getattr " << cid << "/" << oid << " '" << name << "'" << dendl;
+  int r;
+  int fd = lfn_open(cid, oid, 0);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
   char n[CHAIN_XATTR_MAX_NAME_LEN];
   get_attrname(name, n, CHAIN_XATTR_MAX_NAME_LEN);
-  int r = _getattr(cid, oid, n, bp);
+  r = _fgetattr(fd, n, bp);
+  TEMP_FAILURE_RETRY(::close(fd));
   if (r == -ENODATA && g_conf->filestore_xattr_use_omap) {
     map<string, bufferlist> got;
     set<string> to_get;
