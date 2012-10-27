@@ -3945,12 +3945,19 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
   map<string, bufferlist> omap_set;
   set<string> omap_remove;
   map<string, bufferptr> inline_set;
+  int r = 0;
   if (g_conf->filestore_xattr_use_omap) {
-    int r = _getattrs(cid, oid, inline_set);
+    int fd = lfn_open(cid, oid, 0);
+    if (fd < 0) {
+      r = -errno;
+      goto out;
+    }
+    r = _fgetattrs(fd, inline_set, false);
     assert(!m_filestore_fail_eio || r != -EIO);
+    TEMP_FAILURE_RETRY(::close(fd));
   }
   dout(15) << "setattrs " << cid << "/" << oid << dendl;
-  int r = 0;
+  r = 0;
   for (map<string,bufferptr>::iterator p = aset.begin();
        p != aset.end();
        ++p) {
@@ -4016,6 +4023,7 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
       return r;
     }
   }
+ out:
   dout(10) << "setattrs " << cid << "/" << oid << " = " << r << dendl;
   return r;
 }
