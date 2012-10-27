@@ -3890,9 +3890,15 @@ int FileStore::_rmattr(coll_t cid, const hobject_t& oid, const char *name,
 		       const SequencerPosition &spos)
 {
   dout(15) << "rmattr " << cid << "/" << oid << " '" << name << "'" << dendl;
+  int r = 0;
+  int fd = lfn_open(cid, oid, 0);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
   char n[CHAIN_XATTR_MAX_NAME_LEN];
   get_attrname(name, n, CHAIN_XATTR_MAX_NAME_LEN);
-  int r = lfn_removexattr(cid, oid, n);
+  r = chain_fremovexattr(fd, n);
   if (r == -ENODATA && g_conf->filestore_xattr_use_omap) {
     Index index;
     r = get_index(cid, &index);
@@ -3909,6 +3915,8 @@ int FileStore::_rmattr(coll_t cid, const hobject_t& oid, const char *name,
       return r;
     }
   }
+  TEMP_FAILURE_RETRY(::close(fd));
+ out:
   dout(10) << "rmattr " << cid << "/" << oid << " '" << name << "' = " << r << dendl;
   return r;
 }
