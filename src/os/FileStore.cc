@@ -3003,7 +3003,7 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
 
   {
     map<string, bufferptr> aset;
-    r = _getattrs(cid, oldoid, aset);
+    r = _fgetattrs(o, aset, false);
     if (r < 0)
       goto out3;
 
