@@ -170,50 +170,6 @@ int FileStore::lfn_find(coll_t cid, const hobject_t& oid, IndexedPath *path)
   return 0;
 }
 
-int FileStore::lfn_getxattr(coll_t cid, const hobject_t& oid, const char *name, void *val, size_t size)
-{
-  IndexedPath path;
-  int r = lfn_find(cid, oid, &path);
-  if (r < 0)
-    return r;
-  r = chain_getxattr(path->path(), name, val, size);
-  assert(!m_filestore_fail_eio || r != -EIO);
-  return r;
-}
-
-int FileStore::lfn_setxattr(coll_t cid, const hobject_t& oid, const char *name, const void *val, size_t size)
-{
-  IndexedPath path;
-  int r = lfn_find(cid, oid, &path);
-  if (r < 0)
-    return r;
-  r = chain_setxattr(path->path(), name, val, size);
-  assert(!m_filestore_fail_eio || r != -EIO);
-  return r;
-}
-
-int FileStore::lfn_removexattr(coll_t cid, const hobject_t& oid, const char *name)
-{
-  IndexedPath path;
-  int r = lfn_find(cid, oid, &path);
-  if (r < 0)
-    return r;
-  r = chain_removexattr(path->path(), name);
-  assert(!m_filestore_fail_eio || r != -EIO);
-  return r;
-}
-
-int FileStore::lfn_listxattr(coll_t cid, const hobject_t& oid, char *names, size_t len)
-{
-  IndexedPath path;
-  int r = lfn_find(cid, oid, &path);
-  if (r < 0)
-    return r;
-  r = chain_listxattr(path->path(), names, len);
-  assert(!m_filestore_fail_eio || r != -EIO);
-  return r;
-}
-
 int FileStore::lfn_truncate(coll_t cid, const hobject_t& oid, off_t length)
 {
   IndexedPath path;
