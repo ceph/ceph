@@ -3698,43 +3698,6 @@ int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset, bool user_only)
 }
 
 
-// low-level attr helpers
-int FileStore::_getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr& bp)
-{
-  char val[100];
-  int l = lfn_getxattr(cid, oid, name, val, sizeof(val));
-  if (l >= 0) {
-    bp = buffer::create(l);
-    memcpy(bp.c_str(), val, l);
-  } else if (l == -ERANGE) {
-    l = lfn_getxattr(cid, oid, name, 0, 0);
-    if (l > 0) {
-      bp = buffer::create(l);
-      l = lfn_getxattr(cid, oid, name, bp.c_str(), l);
-    }
-  }
-  return l;
-}
-
-int FileStore::_getattr(const char *fn, const char *name, bufferptr& bp)
-{
-  char val[100];
-  int l = chain_getxattr(fn, name, val, sizeof(val));
-  if (l >= 0) {
-    bp = buffer::create(l);
-    memcpy(bp.c_str(), val, l);
-  } else if (l == -ERANGE) {
-    l = chain_getxattr(fn, name, 0, 0);
-    if (l > 0) {
-      bp = buffer::create(l);
-      l = chain_getxattr(fn, name, bp.c_str(), l);
-    }
-  }
-  assert(!m_filestore_fail_eio || l != -EIO);
-  return l;
-}
-
-
 // objects
 
 int FileStore::getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr &bp)

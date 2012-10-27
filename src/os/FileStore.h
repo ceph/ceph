@@ -405,9 +405,6 @@ public:
   int getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr &bp);
   int getattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset, bool user_only = false);
 
-  int _getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr& bp);
-  int _getattr(const char *fn, const char *name, bufferptr& bp);
-
   int _setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset,
 		const SequencerPosition &spos);
   int _rmattr(coll_t cid, const hobject_t& oid, const char *name,
