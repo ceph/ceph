@@ -263,6 +263,11 @@ int FileStore::lfn_open(coll_t cid, const hobject_t& oid, int flags)
   return lfn_open(cid, oid, flags, 0);
 }
 
+void FileStore::lfn_close(int fd)
+{
+  TEMP_FAILURE_RETRY(::close(fd));
+}
+
 int FileStore::lfn_link(coll_t c, coll_t cid, const hobject_t& o) 
 {
   Index index_new, index_old;
@@ -2229,7 +2234,7 @@ int FileStore::_check_replay_guard(coll_t cid, hobject_t oid, const SequencerPos
     return 1;  // if file does not exist, there is no guard, and we can replay.
   }
   int ret = _check_replay_guard(fd, spos);
-  TEMP_FAILURE_RETRY(::close(fd));
+  lfn_close(fd);
   return ret;
 }
 
@@ -2697,13 +2702,13 @@ int FileStore::read(coll_t cid, const hobject_t& oid,
   got = safe_pread(fd, bptr.c_str(), len, offset);
   if (got < 0) {
     dout(10) << "FileStore::read(" << cid << "/" << oid << ") pread error: " << cpp_strerror(got) << dendl;
-    TEMP_FAILURE_RETRY(::close(fd));
+    lfn_close(fd);
     assert(!m_filestore_fail_eio || got != -EIO);
     return got;
   }
   bptr.set_length(got);   // properly size the buffer
   bl.push_back(bptr);   // put it in the target bufferlist
-  TEMP_FAILURE_RETRY(::close(fd));
+  lfn_close(fd);
 
   dout(10) << "FileStore::read " << cid << "/" << oid << " " << offset << "~"
 	   << got << "/" << len << dendl;
@@ -2778,7 +2783,7 @@ int FileStore::fiemap(coll_t cid, const hobject_t& oid,
 
 done:
   if (fd >= 0)
-    TEMP_FAILURE_RETRY(::close(fd));
+    lfn_close(fd);
   if (r >= 0)
     ::encode(exomap, bl);
 
@@ -2815,7 +2820,7 @@ int FileStore::_touch(coll_t cid, const hobject_t& oid)
   int fd = lfn_open(cid, oid, flags, 0644);
   int r;
   if (fd >= 0) {
-    TEMP_FAILURE_RETRY(::close(fd));
+    lfn_close(fd);
     r = 0;
   } else
     r = fd;
@@ -2846,13 +2851,13 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
   if (actual < 0) {
     r = -errno;
     dout(0) << "write lseek64 to " << offset << " failed: " << cpp_strerror(r) << dendl;
-    TEMP_FAILURE_RETRY(::close(fd));
+    lfn_close(fd);
     goto out;
   }
   if (actual != (int64_t)offset) {
     dout(0) << "write lseek64 to " << offset << " gave bad offset " << actual << dendl;
     r = -EIO;
-    TEMP_FAILURE_RETRY(::close(fd));
+    lfn_close(fd);
     goto out;
   }
 
@@ -2871,7 +2876,7 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
       ) {
     if (m_filestore_sync_flush)
       ::sync_file_range(fd, offset, len, SYNC_FILE_RANGE_WRITE);
-    TEMP_FAILURE_RETRY(::close(fd));
+    lfn_close(fd);
   }
 
  out:
@@ -2897,7 +2902,7 @@ int FileStore::_zero(coll_t cid, const hobject_t& oid, uint64_t offset, size_t l
   ret = fallocate(fd, FALLOC_FL_PUNCH_HOLE, offset, len);
   if (ret < 0)
     ret = -errno;
-  TEMP_FAILURE_RETRY(::close(fd));
+  lfn_close(fd);
 
   if (ret == 0)
     goto out;  // yay!
@@ -2972,9 +2977,9 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
   _set_replay_guard(n, spos, &newoid);
 
  out3:
-  TEMP_FAILURE_RETRY(::close(n));
+  lfn_close(n);
  out:
-  TEMP_FAILURE_RETRY(::close(o));
+  lfn_close(o);
  out2:
   dout(10) << "clone " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " = " << r << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
@@ -3151,9 +3156,9 @@ int FileStore::_clone_range(coll_t cid, const hobject_t& oldoid, const hobject_t
   // clone is non-idempotent; record our work.
   _set_replay_guard(n, spos, &newoid);
 
-  TEMP_FAILURE_RETRY(::close(n));
+  lfn_close(n);
  out:
-  TEMP_FAILURE_RETRY(::close(o));
+  lfn_close(o);
  out2:
   dout(10) << "clone_range " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " "
 	   << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
@@ -3668,7 +3673,7 @@ int FileStore::getattr(coll_t cid, const hobject_t& oid, const char *name, buffe
   char n[CHAIN_XATTR_MAX_NAME_LEN];
   get_attrname(name, n, CHAIN_XATTR_MAX_NAME_LEN);
   r = _fgetattr(fd, n, bp);
-  TEMP_FAILURE_RETRY(::close(fd));
+  lfn_close(fd);
   if (r == -ENODATA && g_conf->filestore_xattr_use_omap) {
     map<string, bufferlist> got;
     set<string> to_get;
@@ -3708,7 +3713,7 @@ int FileStore::getattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>&
     goto out;
   }
   r = _fgetattrs(fd, aset, user_only);
-  TEMP_FAILURE_RETRY(::close(fd));
+  lfn_close(fd);
   if (g_conf->filestore_xattr_use_omap) {
     set<string> omap_attrs;
     map<string, bufferlist> omap_aset;
@@ -3835,7 +3840,7 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
       return r;
     }
   }
-  TEMP_FAILURE_RETRY(::close(fd));
+  lfn_close(fd);
  out:
   dout(10) << "setattrs " << cid << "/" << oid << " = " << r << dendl;
   return r;
@@ -3871,7 +3876,7 @@ int FileStore::_rmattr(coll_t cid, const hobject_t& oid, const char *name,
       return r;
     }
   }
-  TEMP_FAILURE_RETRY(::close(fd));
+  lfn_close(fd);
  out:
   dout(10) << "rmattr " << cid << "/" << oid << " '" << name << "' = " << r << dendl;
   return r;
@@ -3899,7 +3904,7 @@ int FileStore::_rmattrs(coll_t cid, const hobject_t& oid,
 	break;
     }
   }
-  TEMP_FAILURE_RETRY(::close(fd));
+  lfn_close(fd);
 
   if (g_conf->filestore_xattr_use_omap) {
     set<string> omap_attrs;
@@ -4468,7 +4473,7 @@ int FileStore::_collection_add(coll_t c, coll_t oldcid, const hobject_t& o,
   if (r == 0) {
     _close_replay_guard(fd, spos);
   }
-  TEMP_FAILURE_RETRY(::close(fd));
+  lfn_close(fd);
 
   dout(10) << "collection_add " << c << "/" << o << " from " << oldcid << "/" << o << " = " << r << dendl;
   return r;
