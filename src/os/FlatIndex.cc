@@ -23,6 +23,8 @@
 #include "osd/osd_types.h"
 #include <errno.h>
 
+#include "chain_xattr.h"
+
 using ceph::crypto::SHA1;
 
 /*
@@ -46,9 +48,6 @@ using ceph::crypto::SHA1;
 #define LFN_ATTR "user.cephos.lfn"
 
 #define FILENAME_PREFIX_LEN (FILENAME_SHORT_LEN - FILENAME_HASH_LEN - (sizeof(FILENAME_COOKIE) - 1) - FILENAME_EXTRA)
-
-int do_getxattr(const char *fn, const char *name, void *val, size_t size);
-int do_setxattr(const char *fn, const char *name, const void *val, size_t size);
 
 void FlatIndex::set_ref(std::tr1::shared_ptr<CollectionIndex> ref) {
   self_ref = ref;
@@ -128,7 +127,7 @@ static void lfn_translate(const char *path, const char *name, char *new_name, in
   char buf[PATH_MAX];
 
   snprintf(buf, sizeof(buf), "%s/%s", path, name);
-  int r = do_getxattr(buf, LFN_ATTR, new_name, len - 1);
+  int r = chain_getxattr(buf, LFN_ATTR, new_name, len - 1);
   if (r < 0)
     strncpy(new_name, name, len);
   else
@@ -249,7 +248,7 @@ static int lfn_get(const char *coll_path, const hobject_t& oid, char *pathname, 
     int r;
 
     build_filename(filename, len - path_len, lfn, i);
-    r = do_getxattr(pathname, LFN_ATTR, buf, sizeof(buf));
+    r = chain_getxattr(pathname, LFN_ATTR, buf, sizeof(buf));
     if (r < 0)
       r = -errno;
     if (r > 0) {
@@ -287,7 +286,7 @@ int FlatIndex::created(const hobject_t &hoid, const char *path) {
   }
   assert(long_name[actual_len] == '\0');
   assert(long_name[actual_len - 1] != '\0');
-  int r = do_setxattr(path, LFN_ATTR, long_name, actual_len);
+  int r = chain_setxattr(path, LFN_ATTR, long_name, actual_len);
   if (r < 0)
     return r;
   return 0;
@@ -367,7 +366,7 @@ static int get_hobject_from_oinfo(const char *dir, const char *file,
   bufferptr bp(PATH_MAX);
   snprintf(path, sizeof(path), "%s/%s", dir, file);
   // Hack, user.ceph._ is the attribute used to store the object info
-  int r = do_getxattr(path, "user.ceph._", bp.c_str(), bp.length());
+  int r = chain_getxattr(path, "user.ceph._", bp.c_str(), bp.length());
   if (r < 0)
     return r;
   bufferlist bl;
