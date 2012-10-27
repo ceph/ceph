@@ -4009,9 +4009,17 @@ int FileStore::collection_getattr(coll_t c, const char *name,
   char fn[PATH_MAX];
   get_cdir(c, fn, sizeof(fn));
   dout(15) << "collection_getattr " << fn << " '" << name << "' len " << size << dendl;
+  int r;
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
   char n[PATH_MAX];
   get_attrname(name, n, PATH_MAX);
-  int r = chain_getxattr(fn, n, value, size);   
+  r = chain_fgetxattr(fd, n, value, size);
+  TEMP_FAILURE_RETRY(::close(fd));
+ out:
   dout(10) << "collection_getattr " << fn << " '" << name << "' len " << size << " = " << r << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
   return r;
@@ -4024,10 +4032,17 @@ int FileStore::collection_getattr(coll_t c, const char *name, bufferlist& bl)
   dout(15) << "collection_getattr " << fn << " '" << name << "'" << dendl;
   char n[PATH_MAX];
   get_attrname(name, n, PATH_MAX);
-  
   buffer::ptr bp;
-  int r = _getattr(fn, n, bp);
+  int r;
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
+  r = _fgetattr(fd, n, bp);
   bl.push_back(bp);
+  TEMP_FAILURE_RETRY(::close(fd));
+ out:
   dout(10) << "collection_getattr " << fn << " '" << name << "' = " << r << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
   return r;
@@ -4038,7 +4053,7 @@ int FileStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset)
   char fn[PATH_MAX];
   get_cdir(cid, fn, sizeof(fn));
   dout(10) << "collection_getattrs " << fn << dendl;
-  int r;
+  int r = 0;
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
     r = -errno;
@@ -4060,8 +4075,16 @@ int FileStore::_collection_setattr(coll_t c, const char *name,
   get_cdir(c, fn, sizeof(fn));
   dout(10) << "collection_setattr " << fn << " '" << name << "' len " << size << dendl;
   char n[PATH_MAX];
+  int r;
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
   get_attrname(name, n, PATH_MAX);
-  int r = chain_setxattr(fn, n, value, size);
+  r = chain_fsetxattr(fd, n, value, size);
+  TEMP_FAILURE_RETRY(::close(fd));
+ out:
   dout(10) << "collection_setattr " << fn << " '" << name << "' len " << size << " = " << r << dendl;
   return r;
 }
@@ -4073,7 +4096,15 @@ int FileStore::_collection_rmattr(coll_t c, const char *name)
   dout(15) << "collection_rmattr " << fn << dendl;
   char n[PATH_MAX];
   get_attrname(name, n, PATH_MAX);
-  int r = chain_removexattr(fn, n);
+  int r;
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
+  r = chain_fremovexattr(fd, n);
+  TEMP_FAILURE_RETRY(::close(fd));
+ out:
   dout(10) << "collection_rmattr " << fn << " = " << r << dendl;
   return r;
 }
@@ -4085,14 +4116,22 @@ int FileStore::_collection_setattrs(coll_t cid, map<string,bufferptr>& aset)
   get_cdir(cid, fn, sizeof(fn));
   dout(15) << "collection_setattrs " << fn << dendl;
   int r = 0;
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
   for (map<string,bufferptr>::iterator p = aset.begin();
        p != aset.end();
        ++p) {
     char n[PATH_MAX];
     get_attrname(p->first.c_str(), n, PATH_MAX);
-    r = chain_setxattr(fn, n, p->second.c_str(), p->second.length());
-    if (r < 0) break;
+    r = chain_fsetxattr(fd, n, p->second.c_str(), p->second.length());
+    if (r < 0)
+      break;
   }
+  TEMP_FAILURE_RETRY(::close(fd));
+ out:
   dout(10) << "collection_setattrs " << fn << " = " << r << dendl;
   return r;
 }
