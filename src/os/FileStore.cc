@@ -3888,7 +3888,14 @@ int FileStore::getattr(coll_t cid, const hobject_t& oid, const char *name, buffe
 int FileStore::getattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset, bool user_only) 
 {
   dout(15) << "getattrs " << cid << "/" << oid << dendl;
-  int r = _getattrs(cid, oid, aset, user_only);
+  int r;
+  int fd = lfn_open(cid, oid, 0);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
+  r = _fgetattrs(fd, aset, user_only);
+  TEMP_FAILURE_RETRY(::close(fd));
   if (g_conf->filestore_xattr_use_omap) {
     set<string> omap_attrs;
     map<string, bufferlist> omap_aset;
