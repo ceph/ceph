@@ -3623,6 +3623,81 @@ int FileStore::snapshot(const string& name)
 // -------------------------------
 // attributes
 
+int FileStore::_fgetattr(int fd, const char *name, bufferptr& bp)
+{
+  char val[100];
+  int l = chain_fgetxattr(fd, name, val, sizeof(val));
+  if (l >= 0) {
+    bp = buffer::create(l);
+    memcpy(bp.c_str(), val, l);
+  } else if (l == -ERANGE) {
+    l = chain_fgetxattr(fd, name, 0, 0);
+    if (l > 0) {
+      bp = buffer::create(l);
+      l = chain_fgetxattr(fd, name, bp.c_str(), l);
+    }
+  }
+  assert(!m_filestore_fail_eio || l != -EIO);
+  return l;
+}
+
+int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset, bool user_only)
+{
+  // get attr list
+  char names1[100];
+  int len = chain_flistxattr(fd, names1, sizeof(names1)-1);
+  char *names2 = 0;
+  char *name = 0;
+  if (len == -ERANGE) {
+    len = chain_flistxattr(fd, 0, 0);
+    if (len < 0) {
+      assert(!m_filestore_fail_eio || len != -EIO);
+      return len;
+    }
+    dout(10) << " -ERANGE, len is " << len << dendl;
+    names2 = new char[len+1];
+    len = chain_flistxattr(fd, names2, len);
+    dout(10) << " -ERANGE, got " << len << dendl;
+    if (len < 0) {
+      assert(!m_filestore_fail_eio || len != -EIO);
+      return len;
+    }
+    name = names2;
+  } else if (len < 0) {
+    assert(!m_filestore_fail_eio || len != -EIO);
+    return len;
+  } else {
+    name = names1;
+  }
+  name[len] = 0;
+
+  char *end = name + len;
+  while (name < end) {
+    char *attrname = name;
+    if (parse_attrname(&name)) {
+      char *set_name = name;
+      bool can_get = true;
+      if (user_only) {
+	if (*set_name =='_')
+	  set_name++;
+	else
+	  can_get = false;
+      }
+      if (*set_name && can_get) {
+        dout(20) << "fgetattrs " << fd << " getting '" << name << "'" << dendl;
+        int r = _fgetattr(fd, attrname, aset[set_name]);
+        if (r < 0)
+	  return r;
+      }
+    }
+    name += strlen(name) + 1;
+  }
+
+  delete[] names2;
+  return 0;
+}
+
+
 // low-level attr helpers
 int FileStore::_getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr& bp)
 {
