@@ -29,8 +29,8 @@
 #include "common/debug.h"
 #include "include/buffer.h"
 #include "common/ceph_crypto.h"
-
 #include "include/compat.h"
+#include "chain_xattr.h"
 
 #include "LFNIndex.h"
 using ceph::crypto::SHA1;
@@ -47,10 +47,6 @@ const string LFNIndex::FILENAME_COOKIE = "long";
 const int LFNIndex::FILENAME_PREFIX_LEN =  FILENAME_SHORT_LEN - FILENAME_HASH_LEN - 
 								FILENAME_COOKIE.size() - 
 								FILENAME_EXTRA;
-
-int do_getxattr(const char *fn, const char *name, void *val, size_t size);
-int do_setxattr(const char *fn, const char *name, const void *val, size_t size);
-int do_removexattr(const char *fn, const char *name);
 
 /* Public methods */
 
@@ -272,7 +268,7 @@ static int get_hobject_from_oinfo(const char *dir, const char *file,
   bufferptr bp(PATH_MAX);
   snprintf(path, sizeof(path), "%s/%s", dir, file);
   // Hack, user.ceph._ is the attribute used to store the object info
-  int r = do_getxattr(path, "user.ceph._", bp.c_str(), bp.length());
+  int r = chain_getxattr(path, "user.ceph._", bp.c_str(), bp.length());
   if (r < 0)
     return r;
   bufferlist bl;
@@ -405,7 +401,7 @@ int LFNIndex::add_attr_path(const vector<string> &path,
 			    const string &attr_name, 
 			    bufferlist &attr_value) {
   string full_path = get_full_path_subdir(path);
-  return do_setxattr(full_path.c_str(), mangle_attr_name(attr_name).c_str(),
+  return chain_setxattr(full_path.c_str(), mangle_attr_name(attr_name).c_str(),
 		     reinterpret_cast<void *>(attr_value.c_str()),
 		     attr_value.length());
 }
@@ -417,7 +413,7 @@ int LFNIndex::get_attr_path(const vector<string> &path,
   size_t size = 1024; // Initial
   while (1) {
     bufferptr buf(size);
-    int r = do_getxattr(full_path.c_str(), mangle_attr_name(attr_name).c_str(),
+    int r = chain_getxattr(full_path.c_str(), mangle_attr_name(attr_name).c_str(),
 			 reinterpret_cast<void *>(buf.c_str()),
 			 size);
     if (r > 0) {
@@ -440,7 +436,7 @@ int LFNIndex::remove_attr_path(const vector<string> &path,
 			       const string &attr_name) {
   string full_path = get_full_path_subdir(path);
   string mangled_attr_name = mangle_attr_name(attr_name);
-  return do_removexattr(full_path.c_str(), mangled_attr_name.c_str());
+  return chain_removexattr(full_path.c_str(), mangled_attr_name.c_str());
 }
   
 string LFNIndex::lfn_generate_object_name_keyless(const hobject_t &hoid) {
@@ -614,7 +610,7 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
   for ( ; ; ++i) {
     candidate = lfn_get_short_name(hoid, i);
     candidate_path = get_full_path(path, candidate);
-    r = do_getxattr(candidate_path.c_str(), get_lfn_attr().c_str(), buf, sizeof(buf));
+    r = chain_getxattr(candidate_path.c_str(), get_lfn_attr().c_str(), buf, sizeof(buf));
     if (r < 0) {
       if (errno != ENODATA && errno != ENOENT)
 	return -errno;
@@ -655,7 +651,7 @@ int LFNIndex::lfn_created(const vector<string> &path,
     return 0;
   string full_path = get_full_path(path, mangled_name);
   string full_name = lfn_generate_object_name(hoid);
-  return do_setxattr(full_path.c_str(), get_lfn_attr().c_str(), 
+  return chain_setxattr(full_path.c_str(), get_lfn_attr().c_str(), 
 		     full_name.c_str(), full_name.size());
 }
 
@@ -720,7 +716,7 @@ int LFNIndex::lfn_translate(const vector<string> &path,
   // Get lfn_attr
   string full_path = get_full_path(path, short_name);
   char attr[PATH_MAX];
-  int r = do_getxattr(full_path.c_str(), get_lfn_attr().c_str(), attr, sizeof(attr) - 1);
+  int r = chain_getxattr(full_path.c_str(), get_lfn_attr().c_str(), attr, sizeof(attr) - 1);
   if (r < 0)
     return -errno;
   if (r < (int)sizeof(attr))
