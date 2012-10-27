@@ -4062,16 +4062,24 @@ int FileStore::_rmattrs(coll_t cid, const hobject_t& oid,
   dout(15) << "rmattrs " << cid << "/" << oid << dendl;
 
   map<string,bufferptr> aset;
-  int r = _getattrs(cid, oid, aset);
+  int r = 0;
+  int fd = lfn_open(cid, oid, 0);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
+  r = _fgetattrs(fd, aset, false);
   if (r >= 0) {
     for (map<string,bufferptr>::iterator p = aset.begin(); p != aset.end(); p++) {
       char n[CHAIN_XATTR_MAX_NAME_LEN];
       get_attrname(p->first.c_str(), n, CHAIN_XATTR_MAX_NAME_LEN);
-      r = lfn_removexattr(cid, oid, n);
+      r = chain_fremovexattr(fd, n);
       if (r < 0)
 	break;
     }
   }
+  TEMP_FAILURE_RETRY(::close(fd));
+
   if (g_conf->filestore_xattr_use_omap) {
     set<string> omap_attrs;
     Index index;
@@ -4092,6 +4100,7 @@ int FileStore::_rmattrs(coll_t cid, const hobject_t& oid,
       return r;
     }
   }
+ out:
   dout(10) << "rmattrs " << cid << "/" << oid << " = " << r << dendl;
   return r;
 }
