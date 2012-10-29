@@ -172,6 +172,7 @@ OPTION(client_oc_size, OPT_INT, 1024*1024* 200)    // MB * n
 OPTION(client_oc_max_dirty, OPT_INT, 1024*1024* 100)    // MB * n  (dirty OR tx.. bigish)
 OPTION(client_oc_target_dirty, OPT_INT, 1024*1024* 8) // target dirty (keep this smallish)
 OPTION(client_oc_max_dirty_age, OPT_DOUBLE, 5.0)      // max age in cache before writeback
+OPTION(client_oc_max_objects, OPT_INT, 1000)      // max objects in cache
 // note: the max amount of "in flight" dirty data is roughly (max - target)
 OPTION(fuse_use_invalidate_cb, OPT_BOOL, false) // use fuse 2.8+ invalidate callback to keep page cache consistent
 OPTION(fuse_big_writes, OPT_BOOL, true)

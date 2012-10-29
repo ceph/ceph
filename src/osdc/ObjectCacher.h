@@ -84,10 +84,11 @@ class ObjectCacher {
     // states
     static const int STATE_MISSING = 0;
     static const int STATE_CLEAN = 1;
-    static const int STATE_DIRTY = 2;
-    static const int STATE_RX = 3;
-    static const int STATE_TX = 4;
-    static const int STATE_ERROR = 5; // a read error occurred
+    static const int STATE_ZERO = 2;   // NOTE: these are *clean* zeros
+    static const int STATE_DIRTY = 3;
+    static const int STATE_RX = 4;
+    static const int STATE_TX = 5;
+    static const int STATE_ERROR = 6; // a read error occurred
 
   private:
     // my fields
@@ -136,6 +137,7 @@ class ObjectCacher {
     bool is_missing() { return state == STATE_MISSING; }
     bool is_dirty() { return state == STATE_DIRTY; }
     bool is_clean() { return state == STATE_CLEAN; }
+    bool is_zero() { return state == STATE_ZERO; }
     bool is_tx() { return state == STATE_TX; }
     bool is_rx() { return state == STATE_RX; }
     bool is_error() { return state == STATE_ERROR; }
@@ -155,9 +157,10 @@ class ObjectCacher {
   };
 
   // ******* Object *********
-  class Object {
+  class Object : public LRUObject {
   private:
     // ObjectCacher::Object fields
+    int ref;
     ObjectCacher *oc;
     sobject_t oid;
     friend class ObjectSet;
@@ -167,6 +170,7 @@ class ObjectCacher {
     xlist<Object*>::item set_item;
     object_locator_t oloc;
     
+    bool complete;
 
   public:
     map<loff_t, BufferHead*>     data;
@@ -180,34 +184,22 @@ class ObjectCacher {
     list<Context*> waitfor_rd;
     list<Context*> waitfor_wr;
 
-    // lock
-    static const int LOCK_NONE = 0;
-    static const int LOCK_WRLOCKING = 1;
-    static const int LOCK_WRLOCK = 2;
-    static const int LOCK_WRUNLOCKING = 3;
-    static const int LOCK_RDLOCKING = 4;
-    static const int LOCK_RDLOCK = 5;
-    static const int LOCK_RDUNLOCKING = 6;
-    static const int LOCK_UPGRADING = 7;    // rd -> wr
-    static const int LOCK_DOWNGRADING = 8;  // wr -> rd
-    int lock_state;
-    int wrlock_ref;  // how many ppl want or are using a WRITE lock
-    int rdlock_ref;  // how many ppl want or are using a READ lock
-
   public:
     Object(const Object& other);
     const Object& operator=(const Object& other);
 
     Object(ObjectCacher *_oc, sobject_t o, ObjectSet *os, object_locator_t& l) : 
+      ref(0),
       oc(_oc),
       oid(o), oset(os), set_item(this), oloc(l),
+      complete(false),
       last_write_tid(0), last_commit_tid(0),
-      dirty_or_tx(0),
-      lock_state(LOCK_NONE), wrlock_ref(0), rdlock_ref(0) {
+      dirty_or_tx(0) {
       // add to set
       os->objects.push_back(&set_item);
     }
     ~Object() {
+      assert(ref == 0);
       assert(data.empty());
       assert(dirty_or_tx == 0);
       set_item.remove_myself();
@@ -222,10 +214,14 @@ class ObjectCacher {
     void set_object_locator(object_locator_t& l) { oloc = l; }
 
     bool can_close() {
-      return data.empty() && lock_state == LOCK_NONE &&
-        waitfor_commit.empty() &&
-        waitfor_rd.empty() && waitfor_wr.empty() &&
-	dirty_or_tx == 0;
+      if (data.empty() &&
+	  waitfor_commit.empty() &&
+	  waitfor_rd.empty() && waitfor_wr.empty() &&
+	  dirty_or_tx == 0) {
+	assert(lru_is_expireable());
+	return true;
+      }
+      return false;
     }
 
     /**
@@ -248,12 +244,16 @@ class ObjectCacher {
     // bh
     // add to my map
     void add_bh(BufferHead *bh) {
+      if (data.empty())
+	get();
       assert(data.count(bh->start()) == 0);
       data[bh->start()] = bh;
     }
     void remove_bh(BufferHead *bh) {
       assert(data.count(bh->start()));
       data.erase(bh->start());
+      if (data.empty())
+	put();
     }
 
     bool is_empty() { return data.empty(); }
@@ -273,6 +273,19 @@ class ObjectCacher {
     
     void truncate(loff_t s);
     void discard(loff_t off, loff_t len);
+
+    // reference counting
+    int get() {
+      assert(ref >= 0);
+      if (ref == 0) lru_pin();
+      return ++ref;
+    }
+    int put() {
+      assert(ref > 0);
+      if (ref == 1) lru_unpin();
+      --ref;
+      return ref;
+    }
   };
   
 
@@ -301,7 +314,7 @@ class ObjectCacher {
   string name;
   Mutex& lock;
   
-  int64_t max_dirty, target_dirty, max_size;
+  int64_t max_dirty, target_dirty, max_size, max_objects;
   utime_t max_dirty_age;
 
   flush_set_callback_t flush_set_callback;
@@ -310,7 +323,8 @@ class ObjectCacher {
   vector<hash_map<sobject_t, Object*> > objects; // indexed by pool_id
 
   set<BufferHead*>    dirty_bh;
-  LRU   lru_dirty, lru_rest;
+  LRU   bh_lru_dirty, bh_lru_rest;
+  LRU   ob_lru;
 
   Cond flusher_cond;
   bool flusher_stop;
@@ -343,6 +357,7 @@ class ObjectCacher {
   Cond  stat_cond;
 
   loff_t stat_clean;
+  loff_t stat_zero;
   loff_t stat_dirty;
   loff_t stat_rx;
   loff_t stat_tx;
@@ -359,12 +374,13 @@ class ObjectCacher {
   loff_t get_stat_dirty() { return stat_dirty; }
   loff_t get_stat_dirty_waiting() { return stat_dirty_waiting; }
   loff_t get_stat_clean() { return stat_clean; }
+  loff_t get_stat_zero() { return stat_zero; }
 
   void touch_bh(BufferHead *bh) {
     if (bh->is_dirty())
-      lru_dirty.lru_touch(bh);
+      bh_lru_dirty.lru_touch(bh);
     else
-      lru_rest.lru_touch(bh);
+      bh_lru_rest.lru_touch(bh);
   }
 
   // bh states
@@ -375,12 +391,13 @@ class ObjectCacher {
   
   void mark_missing(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_MISSING); };
   void mark_clean(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_CLEAN); };
+  void mark_zero(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_ZERO); };
   void mark_rx(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_RX); };
   void mark_tx(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_TX); };
   void mark_error(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_ERROR); };
   void mark_dirty(BufferHead *bh) { 
     bh_set_state(bh, BufferHead::STATE_DIRTY); 
-    lru_dirty.lru_touch(bh);
+    bh_lru_dirty.lru_touch(bh);
     //bh->set_dirty_stamp(ceph_clock_now(g_ceph_context));
   };
 
@@ -391,7 +408,7 @@ class ObjectCacher {
   void bh_read(BufferHead *bh);
   void bh_write(BufferHead *bh);
 
-  void trim(loff_t max=-1);
+  void trim(loff_t max_bytes=-1, loff_t max_objects=-1);
   void flush(loff_t amount=0);
 
   /**
@@ -409,11 +426,6 @@ class ObjectCacher {
   loff_t release(Object *o);
   void purge(Object *o);
 
-  void rdlock(Object *o);
-  void rdunlock(Object *o);
-  void wrlock(Object *o);
-  void wrunlock(Object *o);
-
   int _readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	     bool external_call);
 
@@ -422,7 +434,6 @@ class ObjectCacher {
 		      uint64_t length, bufferlist &bl, int r);
   void bh_write_commit(int64_t poolid, sobject_t oid, loff_t offset,
 		       uint64_t length, tid_t t, int r);
-  void lock_ack(int64_t poolid, list<sobject_t>& oids, tid_t tid);
 
   class C_ReadFinish : public Context {
     ObjectCacher *oc;
@@ -454,20 +465,6 @@ class ObjectCacher {
     }
   };
 
-  class C_LockAck : public Context {
-    ObjectCacher *oc;
-  public:
-    int64_t poolid;
-    list<sobject_t> oids;
-    tid_t tid;
-    C_LockAck(ObjectCacher *c, int64_t _poolid, sobject_t o) : oc(c), poolid(_poolid), tid(0) {
-      oids.push_back(o);
-    }
-    void finish(int r) {
-      oc->lock_ack(poolid, oids, tid);
-    }
-  };
-
   void perf_start();
   void perf_stop();
 
@@ -476,7 +473,8 @@ class ObjectCacher {
   ObjectCacher(CephContext *cct_, string name, WritebackHandler& wb, Mutex& l,
 	       flush_set_callback_t flush_callback,
 	       void *flush_callback_arg,
-	       uint64_t max_size, uint64_t max_dirty, uint64_t target_dirty, double max_age);
+	       uint64_t max_bytes, uint64_t max_objects,
+	       uint64_t max_dirty, uint64_t target_dirty, double max_age);
   ~ObjectCacher();
 
   void start() {
@@ -558,6 +556,10 @@ public:
   void set_max_dirty_age(double a) {
     max_dirty_age.set_from_double(a);
   }
+  void set_max_objects(int64_t v) {
+    max_objects = v;
+  }
+
 
   // file functions
 
@@ -601,6 +603,7 @@ inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
   if (bh.is_rx()) out << " rx";
   if (bh.is_dirty()) out << " dirty";
   if (bh.is_clean()) out << " clean";
+  if (bh.is_zero()) out << " zero";
   if (bh.is_missing()) out << " missing";
   if (bh.bl.length() > 0) out << " firstbyte=" << (int)bh.bl[0];
   if (bh.error) out << " error=" << bh.error;
@@ -623,14 +626,8 @@ inline ostream& operator<<(ostream& out, ObjectCacher::Object &ob)
       << ob.get_soid() << " oset " << ob.oset << dec
       << " wr " << ob.last_write_tid << "/" << ob.last_commit_tid;
 
-  switch (ob.lock_state) {
-  case ObjectCacher::Object::LOCK_WRLOCKING: out << " wrlocking"; break;
-  case ObjectCacher::Object::LOCK_WRLOCK: out << " wrlock"; break;
-  case ObjectCacher::Object::LOCK_WRUNLOCKING: out << " wrunlocking"; break;
-  case ObjectCacher::Object::LOCK_RDLOCKING: out << " rdlocking"; break;
-  case ObjectCacher::Object::LOCK_RDLOCK: out << " rdlock"; break;
-  case ObjectCacher::Object::LOCK_RDUNLOCKING: out << " rdunlocking"; break;
-  }
+  if (ob.complete)
+    out << " COMPLETE";
 
   out << "]";
   return out;
