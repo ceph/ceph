@@ -335,7 +335,7 @@ int chain_listxattr(const char *fn, char *names, size_t len) {
   int r;
 
   if (!len)
-    return ::ceph_os_listxattr(fn, names, len);
+    return ::ceph_os_listxattr(fn, names, len) * 2;
 
   r = ::ceph_os_listxattr(fn, 0, 0);
   if (r < 0)
@@ -381,7 +381,7 @@ int chain_flistxattr(int fd, char *names, size_t len) {
   int r;
 
   if (!len)
-    return ::ceph_os_flistxattr(fd, names, len);
+    return ::ceph_os_flistxattr(fd, names, len) * 2;
 
   r = ::ceph_os_flistxattr(fd, 0, 0);
   if (r < 0)
