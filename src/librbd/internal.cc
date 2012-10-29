@@ -2097,7 +2097,7 @@ reprotect_and_return_err:
     if (r < 0)
       return r;
 
-    r = check_io(ictx, off, len);
+    r = clip_io(ictx, off, &len);
     if (r < 0)
       return r;
 
@@ -2204,9 +2204,13 @@ reprotect_and_return_err:
     bool done;
     int ret;
 
+    int r = clip_io(ictx, off, &len);
+    if (r < 0)
+      return r;
+
     Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
     AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-    int r = aio_write(ictx, off, len, buf, c);
+    r = aio_write(ictx, off, len, buf, c);
     if (r < 0) {
       c->release();
       delete ctx;
@@ -2333,7 +2337,8 @@ reprotect_and_return_err:
     req->complete(rados_aio_get_return_value(c));
   }
 
-  int check_io(ImageCtx *ictx, uint64_t off, uint64_t len)
+  // validate extent against image size; clip to image size if necessary
+  int clip_io(ImageCtx *ictx, uint64_t off, uint64_t *len)
   {
     ictx->md_lock.Lock();
     ictx->snap_lock.Lock();
@@ -2345,8 +2350,14 @@ reprotect_and_return_err:
     if (!snap_exists)
       return -ENOENT;
 
-    if ((uint64_t)(off + len) > image_size)
+    // can't start past end
+    if (off >= image_size)
       return -EINVAL;
+
+    // clip requests that extend past end to just end
+    if ((off + *len) > image_size)
+      *len = image_size - off;
+
     return 0;
   }
 
@@ -2393,7 +2404,7 @@ reprotect_and_return_err:
     if (r < 0)
       return r;
 
-    r = check_io(ictx, off, len);
+    r = clip_io(ictx, off, &len);
     if (r < 0)
       return r;
 
@@ -2477,7 +2488,7 @@ reprotect_and_return_err:
     if (r < 0)
       return r;
 
-    r = check_io(ictx, off, len);
+    r = clip_io(ictx, off, &len);
     if (r < 0)
       return r;
 
@@ -2581,13 +2592,14 @@ reprotect_and_return_err:
     for (vector<pair<uint64_t,uint64_t> >::const_iterator p = image_extents.begin();
 	 p != image_extents.end();
 	 ++p) {
-      r = check_io(ictx, p->first, p->second);
+      size_t len = p->second;
+      r = clip_io(ictx, p->first, &len);
       if (r < 0)
 	return r;
-      
+
       Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout,
-			       p->first, p->second, object_extents, buffer_ofs);
-      buffer_ofs += p->second;
+			       p->first, len, object_extents, buffer_ofs);
+      buffer_ofs += len;
     }
 
     int64_t ret;
