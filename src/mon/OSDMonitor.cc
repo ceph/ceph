@@ -1876,6 +1876,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
   pending_inc.new_pools[pool].type = pg_pool_t::TYPE_REP;
 
   pending_inc.new_pools[pool].size = g_conf->osd_pool_default_size;
+  pending_inc.new_pools[pool].min_size =
+    g_conf->osd_pool_default_min_size;
   if (crush_rule >= 0)
     pending_inc.new_pools[pool].crush_ruleset = crush_rule;
   else
@@ -2653,8 +2655,19 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	      if (pending_inc.new_pools.count(pool) == 0)
 		pending_inc.new_pools[pool] = *p;
 	      pending_inc.new_pools[pool].size = n;
+	      if (n < p->min_size)
+		pending_inc.new_pools[pool].min_size = n;
 	      pending_inc.new_pools[pool].last_change = pending_inc.epoch;
 	      ss << "set pool " << pool << " size to " << n;
+	      getline(ss, rs);
+	      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	      return true;
+	    } else if (m->cmd[4] == "min_size") {
+	      if (pending_inc.new_pools.count(pool) == 0)
+		pending_inc.new_pools[pool] = *p;
+	      pending_inc.new_pools[pool].min_size = n;
+	      pending_inc.new_pools[pool].last_change = pending_inc.epoch;
+	      ss << "set pool " << pool << " min_size to " << n;
 	      getline(ss, rs);
 	      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	      return true;
