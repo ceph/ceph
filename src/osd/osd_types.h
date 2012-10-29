@@ -589,11 +589,11 @@ struct pool_snap_info_t {
   string name;
 
   void dump(Formatter *f) const;
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   static void generate_test_instances(list<pool_snap_info_t*>& o);
 };
-WRITE_CLASS_ENCODER(pool_snap_info_t)
+WRITE_CLASS_ENCODER_FEATURES(pool_snap_info_t)
 
 inline ostream& operator<<(ostream& out, const pool_snap_info_t& si) {
   return out << si.snapid << '(' << si.name << ' ' << si.stamp << ')';
