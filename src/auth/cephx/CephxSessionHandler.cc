@@ -81,6 +81,11 @@ int CephxSessionHandler::check_message_signature(Message *m)
     return 0;
   }
 
+  if ((features & CEPH_FEATURE_MSG_AUTH) == 0) {
+    // it's fine, we didn't negotiate this feature.
+    return 0;
+  }
+
   signatures_checked++;
 
   ldout(cct, 10) << "check_message_signature: seq # = " << m->get_seq() << " front_crc_ = " << footer.front_crc
