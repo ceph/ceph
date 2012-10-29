@@ -3777,7 +3777,6 @@ int Client::link(const char *relexisting, const char *relpath)
   if (r < 0)
     goto out_unlock;
   r = _link(in, dir, name.c_str());
-  put_inode(dir);
  out_unlock:
   put_inode(in);
  out:
