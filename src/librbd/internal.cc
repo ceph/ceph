@@ -2097,13 +2097,14 @@ reprotect_and_return_err:
     if (r < 0)
       return r;
 
-    r = clip_io(ictx, off, &len);
+    uint64_t mylen = len;
+    r = clip_io(ictx, off, &mylen);
     if (r < 0)
       return r;
 
     int64_t total_read = 0;
     uint64_t period = ictx->get_stripe_period();
-    uint64_t left = len;
+    uint64_t left = mylen;
 
     start_time = ceph_clock_now(ictx->cct);
     while (left > 0) {
@@ -2147,7 +2148,7 @@ reprotect_and_return_err:
     elapsed = ceph_clock_now(ictx->cct) - start_time;
     ictx->perfcounter->finc(l_librbd_rd_latency, elapsed);
     ictx->perfcounter->inc(l_librbd_rd);
-    ictx->perfcounter->inc(l_librbd_rd_bytes, len);
+    ictx->perfcounter->inc(l_librbd_rd_bytes, mylen);
     return total_read;
   }
 
@@ -2204,13 +2205,14 @@ reprotect_and_return_err:
     bool done;
     int ret;
 
-    int r = clip_io(ictx, off, &len);
+    uint64_t mylen = len;
+    int r = clip_io(ictx, off, &mylen);
     if (r < 0)
       return r;
 
     Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
     AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-    r = aio_write(ictx, off, len, buf, c);
+    r = aio_write(ictx, off, mylen, buf, c);
     if (r < 0) {
       c->release();
       delete ctx;
@@ -2229,8 +2231,8 @@ reprotect_and_return_err:
     elapsed = ceph_clock_now(ictx->cct) - start_time;
     ictx->perfcounter->finc(l_librbd_wr_latency, elapsed);
     ictx->perfcounter->inc(l_librbd_wr);
-    ictx->perfcounter->inc(l_librbd_wr_bytes, len);
-    return len;
+    ictx->perfcounter->inc(l_librbd_wr_bytes, mylen);
+    return mylen;
   }
 
   int discard(ImageCtx *ictx, uint64_t off, uint64_t len)
@@ -2356,7 +2358,7 @@ reprotect_and_return_err:
 
     // clip requests that extend past end to just end
     if ((off + *len) > image_size)
-      *len = image_size - off;
+      *len = (size_t)(image_size - off);
 
     return 0;
   }
@@ -2404,7 +2406,8 @@ reprotect_and_return_err:
     if (r < 0)
       return r;
 
-    r = clip_io(ictx, off, &len);
+    uint64_t mylen = len;
+    r = clip_io(ictx, off, &mylen);
     if (r < 0)
       return r;
 
@@ -2424,7 +2427,7 @@ reprotect_and_return_err:
 
     // map
     vector<ObjectExtent> extents;
-    Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, off, len, extents);
+    Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, off, mylen, extents);
 
     size_t total_write = 0;
 
@@ -2469,7 +2472,7 @@ reprotect_and_return_err:
     c->put();
 
     ictx->perfcounter->inc(l_librbd_aio_wr);
-    ictx->perfcounter->inc(l_librbd_aio_wr_bytes, len);
+    ictx->perfcounter->inc(l_librbd_aio_wr_bytes, mylen);
 
     /* FIXME: cleanup all the allocated stuff */
     return r;
@@ -2592,7 +2595,7 @@ reprotect_and_return_err:
     for (vector<pair<uint64_t,uint64_t> >::const_iterator p = image_extents.begin();
 	 p != image_extents.end();
 	 ++p) {
-      size_t len = p->second;
+      uint64_t len = p->second;
       r = clip_io(ictx, p->first, &len);
       if (r < 0)
 	return r;
