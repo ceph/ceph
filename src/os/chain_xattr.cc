@@ -27,6 +27,17 @@
 
 #include "common/xattr.h"
 
+/*
+ * chaining xattrs
+ *
+ * In order to support xattrs that are larger than the xattr size limit that some file systems
+ * impose, we use multiple xattrs to store the value of a single xattr. The xattrs keys
+ * are set as follows:
+ * The first xattr in the chain, has a key that holds the original xattr name, with any '@' char
+ * being esacped ("@@").
+ * The chained keys will have the first xattr's key (with the escaping), and a suffix: "@<id>"
+ * where <id> marks the num of xattr in the chain.
+ */
 
 static void get_raw_xattr_name(const char *name, int i, char *raw_name, int raw_len)
 {
