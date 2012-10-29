@@ -42,6 +42,7 @@
 #include "rgw_swift.h"
 #include "rgw_log.h"
 #include "rgw_tools.h"
+#include "rgw_resolve.h"
 
 #include <map>
 #include <string>
@@ -419,6 +420,7 @@ int main(int argc, const char **argv)
 
   rgw_tools_init(g_ceph_context);
 
+  rgw_init_resolver();
   rgw_rest_init();
   
   curl_global_init(CURL_GLOBAL_ALL);

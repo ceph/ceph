@@ -449,6 +449,7 @@ OPTION(rgw_gc_max_objs, OPT_INT, 32)
 OPTION(rgw_gc_obj_min_wait, OPT_INT, 2 * 3600)    // wait time before object may be handled by gc
 OPTION(rgw_gc_processor_max_time, OPT_INT, 3600)  // total run time for a single gc processor work
 OPTION(rgw_gc_processor_period, OPT_INT, 3600)  // gc processor cycle time
+OPTION(rgw_resolve_cname, OPT_BOOL, false)  // should rgw try to resolve hostname as a dns cname record
 
 // This will be set to true when it is safe to start threads.
 // Once it is true, it will never change.
