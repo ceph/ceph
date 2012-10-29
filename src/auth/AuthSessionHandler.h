@@ -65,6 +65,7 @@ public:
 
 };
 
-extern AuthSessionHandler *get_auth_session_handler(CephContext *cct, int protocol, CryptoKey key);
+extern AuthSessionHandler *get_auth_session_handler(CephContext *cct, int protocol, CryptoKey key,
+						    uint64_t features);
 
 #endif

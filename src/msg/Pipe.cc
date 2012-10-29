@@ -315,7 +315,8 @@ int Pipe::accept()
     // Check the authorizer.  If not good, bail out.
 
     if (!msgr->verify_authorizer(connection_state, peer_type, connect.authorizer_protocol, authorizer, 
-        authorizer_reply, authorizer_valid, session_key) || !authorizer_valid ) {
+				 authorizer_reply, authorizer_valid, session_key) ||
+	!authorizer_valid) {
       ldout(msgr->cct,0) << "accept: got bad authorizer" << dendl;
       reply.tag = CEPH_MSGR_TAG_BADAUTHORIZER;
       session_security = NULL;
@@ -325,7 +326,6 @@ int Pipe::accept()
     // We've verified the authorizer for this pipe, so set up the session security structure.  PLR
 
     ldout(msgr->cct,10) << "accept:  setting up session_security." << dendl;
-    session_security = get_auth_session_handler(msgr->cct, connect.authorizer_protocol, session_key);
 
     msgr->lock.Lock();
     if (msgr->dispatch_queue.stop)
@@ -539,6 +539,9 @@ int Pipe::accept()
 
   connection_state->set_features((int)reply.features & (int)connect.features);
   ldout(msgr->cct,10) << "accept features " << connection_state->get_features() << dendl;
+
+  session_security = get_auth_session_handler(msgr->cct, connect.authorizer_protocol, session_key,
+					      connection_state->get_features());
 
   // notify
   msgr->dispatch_queue.queue_accept(connection_state);
@@ -915,7 +918,8 @@ int Pipe::connect()
       // connection.  PLR
 
       if (authorizer != NULL) {
-        session_security = get_auth_session_handler(msgr->cct, authorizer->protocol, authorizer->session_key);
+        session_security = get_auth_session_handler(msgr->cct, authorizer->protocol, authorizer->session_key,
+						    connection_state->get_features());
       }  else {
         // We have no authorizer, so we shouldn't be applying security to messages in this pipe.  PLR
 	session_security = NULL;
@@ -1603,10 +1607,10 @@ int Pipe::read_message(Message **pm)
   //  Check the signature if one should be present.  A zero return indicates success. PLR
   //
 
-  if (session_security == NULL ) {
+  if (session_security == NULL) {
     ldout(msgr->cct, 10) << "No session security set" << dendl;
   } else {
-    if (session_security->check_message_signature(message)){
+    if (session_security->check_message_signature(message)) {
       ldout(msgr->cct, 0) << "Signature check failed" << dendl;
       ret = -EINVAL;
       goto out_dethrottle;

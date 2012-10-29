@@ -22,7 +22,7 @@
 #define dout_subsys ceph_subsys_auth
 
 
-AuthSessionHandler *get_auth_session_handler(CephContext *cct, int protocol, CryptoKey key)
+AuthSessionHandler *get_auth_session_handler(CephContext *cct, int protocol, CryptoKey key, uint64_t features)
 {
 
   // Should add code to only print the SHA1 hash of the key, unless in secure debugging mode
@@ -31,7 +31,7 @@ AuthSessionHandler *get_auth_session_handler(CephContext *cct, int protocol, Cry
  
   switch (protocol) {
   case CEPH_AUTH_CEPHX:
-    return new CephxSessionHandler(cct, key);
+    return new CephxSessionHandler(cct, key, features);
   case CEPH_AUTH_NONE:
     return new AuthNoneSessionHandler(cct, key);
   case CEPH_AUTH_UNKNOWN:
