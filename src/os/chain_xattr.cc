@@ -342,7 +342,7 @@ int chain_listxattr(const char *fn, char *names, size_t len) {
     return r;
 
   size_t total_len = r  * 2; // should be enough
-  char *full_buf = (char *)malloc(total_len * 2);
+  char *full_buf = (char *)malloc(total_len);
   if (!full_buf)
     return -ENOMEM;
 
@@ -387,8 +387,8 @@ int chain_flistxattr(int fd, char *names, size_t len) {
   if (r < 0)
     return r;
 
+  size_t total_len = r * 2; // should be enough
   size_t total_len = r  * 2; // should be enough
-  char *full_buf = (char *)malloc(total_len * 2);
   if (!full_buf)
     return -ENOMEM;
 
