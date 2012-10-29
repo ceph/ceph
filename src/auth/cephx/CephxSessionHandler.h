@@ -19,9 +19,12 @@
 class CephContext;
 
 class CephxSessionHandler  : public AuthSessionHandler {
+  uint64_t features;
+
 public:
-  CephxSessionHandler(CephContext *cct_, CryptoKey session_key)
-    : AuthSessionHandler(cct_, CEPH_AUTH_CEPHX, session_key) {}
+  CephxSessionHandler(CephContext *cct_, CryptoKey session_key, uint64_t features)
+    : AuthSessionHandler(cct_, CEPH_AUTH_CEPHX, session_key),
+      features(features) {}
   ~CephxSessionHandler() {}
   
   bool no_security() {
