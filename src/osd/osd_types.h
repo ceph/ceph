@@ -622,7 +622,7 @@ struct pg_pool_t {
 
   uint64_t flags;           /// FLAG_* 
   __u8 type;                /// TYPE_*
-  __u8 size;                /// number of osds in each pg
+  __u8 size, min_size;      /// number of osds in each pg
   __u8 crush_ruleset;       /// crush placement rule set
   __u8 object_hash;         /// hash mapping object name to ps
 private:
@@ -651,7 +651,8 @@ public:
   int pg_num_mask, pgp_num_mask;
 
   pg_pool_t()
-    : flags(0), type(0), size(0), crush_ruleset(0), object_hash(0),
+    : flags(0), type(0), size(0), min_size(0),
+      crush_ruleset(0), object_hash(0),
       pg_num(0), pgp_num(0),
       last_change(0),
       snap_seq(0), snap_epoch(0),
@@ -1139,6 +1140,7 @@ struct pg_interval_t {
     epoch_t last_epoch_clean,                   ///< [in] current
     std::tr1::shared_ptr<const OSDMap> osdmap,  ///< [in] current map
     std::tr1::shared_ptr<const OSDMap> lastmap, ///< [in] last map
+    int64_t poolid,                             ///< [in] pool for pg
     map<epoch_t, pg_interval_t> *past_intervals,///< [out] intervals
     ostream *out = 0                            ///< [out] debug ostream
     );

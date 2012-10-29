@@ -695,7 +695,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(6, 5, bl);
+  ENCODE_START(7, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -713,12 +713,13 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(auid, bl);
   ::encode(flags, bl);
   ::encode(crash_replay_interval, bl);
+  ::encode(min_size, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -761,6 +762,11 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
       crash_replay_interval = 60;
     else
       crash_replay_interval = 0;
+  }
+  if (struct_v >= 7) {
+    ::decode(min_size, bl);
+  } else {
+    min_size = MAX(size - 1, 1);
   }
   DECODE_FINISH(bl);
   calc_pg_masks();
@@ -1462,18 +1468,23 @@ bool pg_interval_t::check_new_interval(
   epoch_t last_epoch_clean,
   OSDMapRef osdmap,
   OSDMapRef lastmap,
+  int64_t pool_id,
   map<epoch_t, pg_interval_t> *past_intervals,
   std::ostream *out)
 {
   // remember past interval
-  if (new_acting != old_acting || new_up != old_up) {
+  if (new_acting != old_acting || new_up != old_up ||
+      (!(lastmap->get_pools().count(pool_id))) ||
+      lastmap->get_pools().find(pool_id)->second.min_size !=
+      osdmap->get_pools().find(pool_id)->second.min_size) {
     pg_interval_t& i = (*past_intervals)[same_interval_since];
     i.first = same_interval_since;
     i.last = osdmap->get_epoch() - 1;
     i.acting = old_acting;
     i.up = old_up;
 
-    if (i.acting.size()) {
+    if (i.acting.size() >=
+	osdmap->get_pools().find(pool_id)->second.min_size) {
       if (lastmap->get_up_thru(i.acting[0]) >= i.first &&
 	  lastmap->get_up_from(i.acting[0]) <= i.first) {
 	i.maybe_went_rw = true;
