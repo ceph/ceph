@@ -15,6 +15,7 @@
 #include "rgw_formats.h"
 
 #include "rgw_client_io.h"
+#include "rgw_resolve.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -992,6 +993,20 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
 
     ldout(s->cct, 10) << "host=" << s->host << " rgw_dns_name=" << g_conf->rgw_dns_name << dendl;
     pos = h.find(g_conf->rgw_dns_name);
+
+    if (g_conf->rgw_resolve_cname && pos < 0) {
+      string cname;
+      bool found;
+      int r = rgw_resolver->resolve_cname(h, cname, &found);
+      if (r < 0) {
+	dout(0) << "WARNING: rgw_resolver->resolve_cname() returned r=" << r << dendl;
+      }
+      if (found) {
+        dout(0) << "resolved host cname " << h << " -> " << cname << dendl;
+	h = cname;
+        pos = h.find(g_conf->rgw_dns_name);
+      }
+    }
 
     if (pos > 0 && h[pos - 1] == '.') {
       string encoded_bucket = "/";

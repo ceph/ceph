@@ -339,6 +339,7 @@ my_radosgw_ldadd = \
        $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
 radosgw_SOURCES = \
+	rgw/rgw_resolve.cc \
         rgw/rgw_rest.cc \
         rgw/rgw_rest_swift.cc \
         rgw/rgw_rest_s3.cc \
