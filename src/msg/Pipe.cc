@@ -302,8 +302,9 @@ int Pipe::accept()
     // If the server supports signing session messages, and it is configured to require the client
     // to sign, and the client can't sign, bail out.  PLR
 
-    if ((policy.features_supported & CEPH_FEATURE_MSG_AUTH) && msgr->cct->_conf->cephx_require_signatures 
-      && !(connect.features & CEPH_FEATURE_MSG_AUTH)) {
+    if ((policy.features_supported & CEPH_FEATURE_MSG_AUTH) &&
+	msgr->cct->_conf->cephx_require_signatures &&
+	!(connect.features & CEPH_FEATURE_MSG_AUTH)) {
       ldout(msgr->cct,1) << "Client can't sign messages." << dendl;
       reply.tag = CEPH_MSGR_TAG_FEATURES;
       msgr->lock.Unlock();
@@ -879,11 +880,12 @@ int Pipe::connect()
 	goto fail_locked;
       }
 
-    // If the client supports signing session messages, and it is configured to require the server
-    // to sign, and the server can't sign, bail out.  PLR
+      // If the client supports signing session messages, and it is configured to require the server
+      // to sign, and the server can't sign, bail out.  PLR
 
-      if ((policy.features_supported & CEPH_FEATURE_MSG_AUTH) && msgr->cct->_conf->cephx_require_signatures 
-          && !(reply.features & CEPH_FEATURE_MSG_AUTH)) {
+      if ((policy.features_supported & CEPH_FEATURE_MSG_AUTH) &&
+	  msgr->cct->_conf->cephx_require_signatures &&
+          !(reply.features & CEPH_FEATURE_MSG_AUTH)) {
         ldout(msgr->cct,1) << "Server can't sign messages." << dendl;
         goto fail_locked;
       }
