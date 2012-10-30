@@ -453,6 +453,8 @@ OPTION(rgw_gc_obj_min_wait, OPT_INT, 2 * 3600)    // wait time before object may
 OPTION(rgw_gc_processor_max_time, OPT_INT, 3600)  // total run time for a single gc processor work
 OPTION(rgw_gc_processor_period, OPT_INT, 3600)  // gc processor cycle time
 
+OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
+
 // This will be set to true when it is safe to start threads.
 // Once it is true, it will never change.
 OPTION(internal_safe_to_start_threads, OPT_BOOL, false)
