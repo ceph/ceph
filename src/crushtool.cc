@@ -169,7 +169,7 @@ int main(int argc, const char **argv)
   bool test = false;
   bool display = false;
   bool write_to_file = false;
-  bool verbose = false;
+  int verbose = 0;
   bool unsafe_tunables = false;
 
   bool reweight = false;
@@ -216,7 +216,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--outfn", (char*)NULL)) {
       outfn = val;
     } else if (ceph_argparse_flag(args, i, "-v", "--verbose", (char*)NULL)) {
-      verbose = true;
+      verbose += 1;
     } else if (ceph_argparse_flag(args, i, "--show_utilization", (char*)NULL)) {
       display = true;
       tester.set_output_utilization(true);
@@ -449,7 +449,7 @@ int main(int argc, const char **argv)
   }
 
   if (decompile) {
-    CrushCompiler cc(crush, cerr, (int)verbose);
+    CrushCompiler cc(crush, cerr, verbose);
     if (!outfn.empty()) {
       ofstream o;
       o.open(outfn.c_str(), ios::out | ios::binary | ios::trunc);
@@ -474,7 +474,7 @@ int main(int argc, const char **argv)
       return -ENOENT;
     }
 
-    CrushCompiler cc(crush, cerr, (int)verbose);
+    CrushCompiler cc(crush, cerr, verbose);
     if (unsafe_tunables)
       cc.enable_unsafe_tunables();
     int r = cc.compile(in, srcfn.c_str());
