@@ -420,8 +420,16 @@ void pool_snap_info_t::dump(Formatter *f) const
   f->dump_string("name", name);
 }
 
-void pool_snap_info_t::encode(bufferlist& bl) const
+void pool_snap_info_t::encode(bufferlist& bl, uint64_t features) const
 {
+  if ((features & CEPH_FEATURE_PGPOOL3) == 0) {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
+    ::encode(snapid, bl);
+    ::encode(stamp, bl);
+    ::encode(name, bl);
+    return;
+  }
   ENCODE_START(2, 2, bl);
   ::encode(snapid, bl);
   ::encode(stamp, bl);
@@ -636,7 +644,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
 
     ::encode(auid, bl);
 
-    ::encode_nohead(snaps, bl);
+    ::encode_nohead(snaps, bl, features);
     removed_snaps.encode_nohead(bl);
     return;
   }
@@ -656,7 +664,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     ::encode(last_change, bl);
     ::encode(snap_seq, bl);
     ::encode(snap_epoch, bl);
-    ::encode(snaps, bl);
+    ::encode(snaps, bl, features);
     ::encode(removed_snaps, bl);
     ::encode(auid, bl);
     ::encode(flags, bl);
@@ -677,7 +685,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(last_change, bl);
   ::encode(snap_seq, bl);
   ::encode(snap_epoch, bl);
-  ::encode(snaps, bl);
+  ::encode(snaps, bl, features);
   ::encode(removed_snaps, bl);
   ::encode(auid, bl);
   ::encode(flags, bl);
