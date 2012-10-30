@@ -440,6 +440,7 @@ public:
 
   static int check_features(MonitorStore *store);
 
+  int preinit();
   int init();
   void shutdown();
   void tick();
