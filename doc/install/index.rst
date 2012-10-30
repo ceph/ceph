@@ -19,6 +19,7 @@ Ceph:
 .. toctree::
 
    Hardware Recommendations <hardware-recommendations>
+   OS Recommendations <os-recommendations>
    Installing Debian/Ubuntu Packages <debian>
    Installing RPM Packages <rpm>
    Installing Chef <chef>
