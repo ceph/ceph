@@ -129,8 +129,8 @@ int KeystoneTokenResponseParser::parse(bufferlist& bl)
     return -EINVAL;
   }
 
-  if (!user->get_data("name", &user_name)) {
-    dout(0) << "token response is missing user name" << dendl;
+  if (!user->get_data("username", &user_name)) {
+    dout(0) << "token response is missing user username field" << dendl;
     return -EINVAL;
   }
 
@@ -181,7 +181,8 @@ static int rgw_parse_keystone_token_response(bufferlist& bl, struct rgw_swift_au
   return 0;
 }
 
-static int rgw_swift_validate_keystone_token(const char *token, struct rgw_swift_auth_info *info)
+static int rgw_swift_validate_keystone_token(RGWRados *store, const char *token, struct rgw_swift_auth_info *info,
+					     RGWUserInfo& rgw_user)
 {
   bufferlist bl;
   RGWValidateKeystoneToken validate(&bl);
@@ -203,6 +204,18 @@ static int rgw_swift_validate_keystone_token(const char *token, struct rgw_swift
   ret = rgw_parse_keystone_token_response(bl, info);
   if (ret < 0)
     return ret;
+
+  if (rgw_get_user_info_by_uid(store, info->user, rgw_user) < 0) {
+    dout(0) << "NOTICE: couldn't map swift user" << dendl;
+    rgw_user.user_id = info->user;
+    rgw_user.display_name = info->user; /* no display name available */
+
+    ret = rgw_store_user_info(store, rgw_user, true);
+    if (ret < 0) {
+      dout(0) << "ERROR: failed to store new user's info: ret=" << ret << dendl;
+      return ret;
+    }
+  }
 
   return 0;
 }
@@ -228,7 +241,7 @@ bool rgw_verify_swift_token(RGWRados *store, req_state *s)
   int ret;
 
   if (g_conf->rgw_swift_use_keystone) {
-    ret = rgw_swift_validate_keystone_token(s->os_auth_token, &info);
+    ret = rgw_swift_validate_keystone_token(store, s->os_auth_token, &info, s->user);
     return (ret >= 0);
   }
 
