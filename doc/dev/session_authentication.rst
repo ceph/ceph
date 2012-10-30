@@ -1,6 +1,6 @@
-============================================================
+==============================================
 Session Authentication for the Cephx Protocol
-============================================================
+==============================================
 Peter Reiher
 7/30/12
 
@@ -48,7 +48,7 @@ The signature code in Cephx can be turned on and off at runtime, using a Ceph bo
 must be changed to true to cause signatures to be calculated and checked.
 
 Storing the Key
------------------------------------
+---------------
 
 The key is needed to create signatures on the sending end and check signatures on the receiving end.
 In the future, if asymmetric crypto is an option, it's possible that two keys (a private one for
@@ -74,7 +74,7 @@ thus signature is not possible.  There will be a reliable authentication operati
 session before anything sensitive should be passed, so this is not a security problem.
 
 Signing Messages
---------
+----------------
 
 Messages are signed in the ``write\_message`` call located in ``msg/Pipe.cc``.  The actual
 signature process is to encrypt the CRCs for the message using the shared key.  Thus, we must
@@ -104,7 +104,7 @@ receiving end requires a signature regardless of the value of this flag.)  If th
 was computed, it returns ``SESSION\_SIGNATURE\_FAILURE``.
 
 Checking Signatures 
---------
+-------------------
 
 The signature is checked by a routine called ``check\_message\_signature()``.  This is also a
 virtual function, defined in ``auth/AuthSessionHandler.h``.  So again there are specific versions
@@ -126,7 +126,7 @@ If everything checks out, the CEPHX routine returns 0, indicating succcess.  If 
 problem, the routine returns ``SESSION\_SIGNATURE\_FAILURE``.
 
 Adding New Session Authentication Methods
---------
+-----------------------------------------
 
 For the purpose of session authentication only (not the basic authentication of client and 
 server currently performed by the Cephx protocol), in addition to adding a new protocol, that
@@ -138,7 +138,7 @@ structure will be either an ``AuthSessionHandler`` (found in ``auth/AuthSessionH
 or a structure derived from that type.
 
 Adding Encryption to Sessions
---------
+-----------------------------
 
 The existing code is partially, but not fully, set up to allow sessions to have their packets
 encrypted.  Part of adding encryption would be similar to adding a new authentication method.
@@ -148,7 +148,7 @@ with something more general that does whatever the chosen form of session securi
 rather than explicitly saying ``sign`` or ``encrypt``.
 
 Session Security Statistics
---------
+---------------------------
 
 The existing Cephx authentication code keeps statistics on how many messages were signed, how
 many message signature were checked, and how many checks succeeded and failed.  It is prepared
