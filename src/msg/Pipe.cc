@@ -1113,8 +1113,9 @@ int Pipe::randomize_out_seq()
     lsubdout(msgr->cct, ms, 10) << "randomize_out_seq " << out_seq << dendl;
     return seq_error;
   } else {
-    // previous, seq #'s always started at 1.
-    return 1;
+    // previously, seq #'s always started at 0.
+    out_seq = 0;
+    return 0;
   }
 }
 
