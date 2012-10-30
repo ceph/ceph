@@ -1103,15 +1103,17 @@ void Pipe::fault(bool onread)
 
 int Pipe::randomize_out_seq()
 {
-  // Set out_seq to a random value, so CRC won't be predictable.   Don't bother checking seq_error 
-  // here.  We'll check it on the call.  PLR
-
-  int seq_error = get_random_bytes((char *)&out_seq, sizeof(out_seq));
-
-
-  out_seq &= SEQ_MASK;
-  lsubdout(msgr->cct, ms, 10) << "randomize_out_seq " << out_seq << dendl;
-  return seq_error;
+  if (connection_state->get_features() & CEPH_FEATURE_MSG_AUTH) {
+    // Set out_seq to a random value, so CRC won't be predictable.   Don't bother checking seq_error
+    // here.  We'll check it on the call.  PLR
+    int seq_error = get_random_bytes((char *)&out_seq, sizeof(out_seq));
+    out_seq &= SEQ_MASK;
+    lsubdout(msgr->cct, ms, 10) << "randomize_out_seq " << out_seq << dendl;
+    return seq_error;
+  } else {
+    // previous, seq #'s always started at 1.
+    return 1;
+  }
 }
 
 void Pipe::was_session_reset()
