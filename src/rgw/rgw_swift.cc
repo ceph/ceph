@@ -2,21 +2,25 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include <curl/curl.h>
-#include <curl/easy.h>
-
 #include "rgw_common.h"
 #include "rgw_swift.h"
 #include "rgw_swift_auth.h"
 #include "rgw_user.h"
+#include "rgw_http_client.h"
 
 #define dout_subsys ceph_subsys_rgw
 
-static size_t read_http_header(void *ptr, size_t size, size_t nmemb, void *_info)
+class RGWValidateSwiftToken : public RGWHTTPClient {
+  struct rgw_swift_auth_info *info;
+public:
+  RGWValidateSwiftToken(struct rgw_swift_auth_info *_info) :info(_info) {}
+
+  int read_header(void *ptr, size_t len);
+};
+
+int RGWValidateSwiftToken::read_header(void *ptr, size_t len)
 {
-  size_t len = size * nmemb;
   char line[len + 1];
-  struct rgw_swift_auth_info *info = (struct rgw_swift_auth_info *)_info;
 
   char *s = (char *)ptr, *end = (char *)ptr + len;
   char *p = line;
@@ -54,13 +58,11 @@ static size_t read_http_header(void *ptr, size_t size, size_t nmemb, void *_info
     if (s != end)
       *p++ = *s++;
   }
-  return len;
+  return 0;
 }
 
 static int rgw_swift_validate_token(const char *token, struct rgw_swift_auth_info *info)
 {
-  CURL *curl_handle;
-
   if (g_conf->rgw_swift_auth_url.empty())
     return -EINVAL;
 
@@ -71,19 +73,13 @@ static int rgw_swift_validate_token(const char *token, struct rgw_swift_auth_inf
   char url_buf[auth_url.size() + 1 + strlen(token) + 1];
   sprintf(url_buf, "%s/%s", auth_url.c_str(), token);
 
+  RGWValidateSwiftToken validate(info);
+
   dout(10) << "rgw_swift_validate_token url=" << url_buf << dendl;
 
-  curl_handle = curl_easy_init();
-
-  curl_easy_setopt(curl_handle, CURLOPT_URL, url_buf);
-  curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 1L);
-
-  curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, read_http_header);
-
-  curl_easy_setopt(curl_handle,   CURLOPT_WRITEHEADER, info);
-
-  curl_easy_perform(curl_handle);
-  curl_easy_cleanup(curl_handle);
+  int ret = validate.process(url_buf);
+  if (ret < 0)
+    return ret;
 
   return 0;
 }
