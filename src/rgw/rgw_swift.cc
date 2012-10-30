@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "rgw_json.h"
 #include "rgw_common.h"
 #include "rgw_swift.h"
 #include "rgw_swift_auth.h"
@@ -44,11 +45,11 @@ int RGWValidateSwiftToken::read_header(void *ptr, size_t len)
         if (strcmp(tok, "HTTP") == 0) {
           info->status = atoi(l);
         } else if (strcasecmp(tok, "X-Auth-Groups") == 0) {
-          info->auth_groups = strdup(l);
+          info->auth_groups = l;
           char *s = strchr(l, ',');
           if (s) {
             *s = '\0';
-            info->user = strdup(l);
+            info->user = l;
           }
         } else if (strcasecmp(tok, "X-Auth-Ttl") == 0) {
           info->ttl = atoll(l);
@@ -84,6 +85,129 @@ static int rgw_swift_validate_token(const char *token, struct rgw_swift_auth_inf
   return 0;
 }
 
+class RGWValidateKeystoneToken : public RGWHTTPClient {
+  bufferlist *bl;
+public:
+  RGWValidateKeystoneToken(bufferlist *_bl) : bl(_bl) {}
+
+  int read_data(void *ptr, size_t len) {
+    bl->append((char *)ptr, len);
+    return 0;
+  }
+};
+
+class KeystoneTokenResponseParser {
+public:
+  string tenant_name;
+  string user_name;
+  string expires;
+
+  KeystoneTokenResponseParser() {}
+
+  int parse(bufferlist& bl);
+};
+
+int KeystoneTokenResponseParser::parse(bufferlist& bl)
+{
+  RGWJSONParser parser;
+
+  if (!parser.parse(bl.c_str(), bl.length())) {
+    dout(0) << "malformed json" << dendl;
+    return -EINVAL;
+  }
+
+  JSONObjIter iter = parser.find_first("access");
+  if (iter.end()) {
+    dout(0) << "token response is missing access section" << dendl;
+    return -EINVAL;
+  }  
+
+  JSONObj *access_obj = *iter;
+  JSONObj *user = access_obj->find_obj("user");
+  if (!user) {
+    dout(0) << "token response is missing user section" << dendl;
+    return -EINVAL;
+  }
+
+  if (!user->get_data("name", &user_name)) {
+    dout(0) << "token response is missing user name" << dendl;
+    return -EINVAL;
+  }
+
+  JSONObj *token = access_obj->find_obj("token");
+  if (!user) {
+    dout(0) << "missing token section in response" << dendl;
+    return -EINVAL;
+  }
+
+  if (!token->get_data("expires", &expires)) {
+    dout(0) << "token response is missing expiration field" << dendl;
+    return -EINVAL;
+  }
+
+  JSONObj *tenant = token->find_obj("tenant");
+  if (!tenant) {
+    dout(0) << "token response is missing tenant section" << dendl;
+    return -EINVAL;
+  }
+
+  if (!tenant->get_data("name", &tenant_name)) {
+    dout(0) << "tenant is missing name field" << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+static int rgw_parse_keystone_token_response(bufferlist& bl, struct rgw_swift_auth_info *info)
+{
+  RGWJSONParser parser;
+
+  if (!parser.parse(bl.c_str(), bl.length())) {
+    dout(0) << "malformed json" << dendl;
+    return -EINVAL;
+  }
+
+  KeystoneTokenResponseParser p;
+  int ret = p.parse(bl);
+  if (ret < 0)
+    return ret;
+
+  dout(0) << "validated token: " << p.tenant_name << ":" << p.user_name << " expires: " << p.expires << dendl;
+
+  info->user = p.tenant_name;
+  info->status = 200;
+
+  return 0;
+}
+
+static int rgw_swift_validate_keystone_token(const char *token, struct rgw_swift_auth_info *info)
+{
+  bufferlist bl;
+  RGWValidateKeystoneToken validate(&bl);
+
+  string url = g_conf->rgw_swift_keystone_url;
+  if (url[url.size() - 1] != '/')
+    url.append("/");
+  url.append("v2.0/tokens/");
+  url.append(token);
+
+  validate.append_header("X-Auth-Token", g_conf->rgw_swift_keystone_admin_token);
+
+  int ret = validate.process(url);
+  if (ret < 0)
+    return ret;
+
+  dout(0) << "received response: " << bl.c_str() << dendl;
+
+  ret = rgw_parse_keystone_token_response(bl, info);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
+
 bool rgw_verify_swift_token(RGWRados *store, req_state *s)
 {
   if (!s->os_auth_token)
@@ -99,25 +223,30 @@ bool rgw_verify_swift_token(RGWRados *store, req_state *s)
 
   struct rgw_swift_auth_info info;
 
-  memset(&info, 0, sizeof(info));
-
   info.status = 401; // start with access denied, validate_token might change that
 
-  int ret = rgw_swift_validate_token(s->os_auth_token, &info);
+  int ret;
+
+  if (g_conf->rgw_swift_use_keystone) {
+    ret = rgw_swift_validate_keystone_token(s->os_auth_token, &info);
+    return (ret >= 0);
+  }
+
+  ret = rgw_swift_validate_token(s->os_auth_token, &info);
   if (ret < 0)
     return ret;
 
-  if (!info.user) {
+  if (info.user.empty()) {
     dout(5) << "swift auth didn't authorize a user" << dendl;
     return false;
   }
 
-  s->os_user = info.user;
-  s->os_groups = info.auth_groups;
+  s->swift_user = info.user;
+  s->swift_groups = info.auth_groups;
 
-  string swift_user = s->os_user;
+  string swift_user = s->swift_user;
 
-  dout(10) << "swift user=" << s->os_user << dendl;
+  dout(10) << "swift user=" << s->swift_user << dendl;
 
   if (rgw_get_user_info_by_swift(store, swift_user, s->user) < 0) {
     dout(0) << "NOTICE: couldn't map swift user" << dendl;
