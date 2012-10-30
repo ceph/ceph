@@ -55,12 +55,14 @@ public:
 
   string& get_name() { return name; }
   string& get_data() { return data_string; }
+  bool get_data(const string& key, string *dest);
   JSONObj *get_parent();
   void add_child(string el, JSONObj *child);
   bool get_attr(string name, string& attr);
-  JSONObjIter find(string name);
+  JSONObjIter find(const string& name);
   JSONObjIter find_first();
-  JSONObjIter find_first(string name);
+  JSONObjIter find_first(const string& name);
+  JSONObj *find_obj(const string& name);
 
   friend ostream& operator<<(ostream& out, JSONObj& obj); // does not work, FIXME
 

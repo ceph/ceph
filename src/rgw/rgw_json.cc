@@ -2,12 +2,15 @@
 #include <include/types.h>
 
 #include "rgw_json.h"
+#include "rgw_common.h"
 
 // for testing DELETE ME
 #include <fstream>
 
 using namespace std;
 using namespace json_spirit;
+
+#define dout_subsys ceph_subsys_rgw
 
 JSONObjIter::JSONObjIter()
 {
@@ -52,7 +55,7 @@ JSONObj::~JSONObj()
 
 void JSONObj::add_child(string el, JSONObj *obj)
 {
-  cout << "add_child: " << name << " <- " << el << endl;
+  cout << "add_child: " << name << " <- " << el << std::endl;
   children.insert(pair<string, JSONObj *>(el, obj));
 }
 
@@ -65,14 +68,16 @@ bool JSONObj::get_attr(string name, string& attr)
   return true;
 }
 
-JSONObjIter JSONObj::find(string name)
+JSONObjIter JSONObj::find(const string& name)
 {
   JSONObjIter iter;
   map<string, JSONObj *>::iterator first;
   map<string, JSONObj *>::iterator last;
   first = children.find(name);
-  last = children.upper_bound(name);
-  iter.set(first, last);
+  if (first != children.end()) {
+    last = children.upper_bound(name);
+    iter.set(first, last);
+  }
   return iter;
 }
 
@@ -80,20 +85,40 @@ JSONObjIter JSONObj::find_first()
 {
   JSONObjIter iter;
   iter.set(children.begin(), children.end());
-    cout << "count=" << children.size() << endl;
+    cout << "count=" << children.size() << std::endl;
   for (map<string, JSONObj *>:: iterator i = children.begin(); i != children.end(); ++i) {
-    cout << "child: " << i->first << endl;
+    cout << "child: " << i->first << std::endl;
   }
   return iter;
 }
 
-JSONObjIter JSONObj::find_first(string name)
+JSONObjIter JSONObj::find_first(const string& name)
 {
   JSONObjIter iter;
   map<string, JSONObj *>::iterator first;
   first = children.find(name);
   iter.set(first, children.end());
   return iter;
+}
+
+JSONObj *JSONObj::find_obj(const string& name)
+{
+  JSONObjIter iter = find(name);
+  if (iter.end())
+    return NULL;
+
+  return *iter;
+}
+
+bool JSONObj::get_data(const string& key, string *dest)
+{
+  JSONObj *obj = find_obj(key);
+  if (!obj)
+    return false;
+
+  *dest = obj->get_data();
+
+  return true;
 }
 
 /* accepts a JSON Array or JSON Object contained in
