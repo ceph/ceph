@@ -161,6 +161,11 @@ ceph_fuse_LDADD = -lfuse libclient.la $(LIBGLOBAL_LDA)
 ceph_fuse_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += ceph-fuse
 
+rbd_fuse_SOURCES = rbd_fuse/rbd-fuse.c
+rbd_fuse_LDADD = -lfuse librados.la librbd.la $(LIBGLOBAL_LDA)
+rbd_fuse_CXXFLAGS = ${AM_CXXFLAGS}
+bin_PROGRAMS += rbd-fuse
+
 endif
 
 # tcmalloc?

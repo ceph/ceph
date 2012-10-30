@@ -54,6 +54,7 @@
 /fsconverter
 /xattr_bench
 /rest-bench
+/rbd-fuse
 dev
 mondata
 mnt
