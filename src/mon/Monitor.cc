@@ -409,11 +409,11 @@ void Monitor::write_features()
   store->put_bl_ss(bl, COMPAT_SET_LOC, 0);
 }
 
-int Monitor::init()
+int Monitor::preinit()
 {
   lock.Lock();
 
-  dout(1) << "init fsid " << monmap->fsid << dendl;
+  dout(1) << "preinit fsid " << monmap->fsid << dendl;
   
   assert(!logger);
   {
@@ -540,15 +540,24 @@ int Monitor::init()
   assert(r == 0);
   lock.Lock();
 
-  // i'm ready!
-  messenger->add_dispatcher_tail(this);
-  
+  lock.Unlock();
+  return 0;
+}
+
+int Monitor::init()
+{
+  dout(2) << "init" << dendl;
+  lock.Lock();
+
   // start ticker
   timer.init();
   new_tick();
 
+  // i'm ready!
+  messenger->add_dispatcher_tail(this);
+
   bootstrap();
-  
+
   lock.Unlock();
   return 0;
 }
