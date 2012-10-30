@@ -62,6 +62,8 @@ void *Finisher::finisher_thread_entry()
 	  delete c;
 	  ls_rval.pop_front();
 	}
+	if (logger)
+	  logger->dec(l_finisher_queue_len);
       }
       ldout(cct, 10) << "finisher_thread done with " << ls << dendl;
       ls.clear();
