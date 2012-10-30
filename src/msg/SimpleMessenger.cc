@@ -73,6 +73,11 @@ void SimpleMessenger::ready()
 {
   ldout(cct,10) << "ready " << get_myaddr() << dendl;
   dispatch_queue.start();
+
+  lock.Lock();
+  if (did_bind)
+    accepter.start();
+  lock.Unlock();
 }
 
 
@@ -286,9 +291,6 @@ int SimpleMessenger::start()
     my_inst.addr.nonce = nonce;
 
   lock.Unlock();
-
-  if (did_bind)
-    accepter.start();
 
   reaper_started = true;
   reaper_thread.create();
