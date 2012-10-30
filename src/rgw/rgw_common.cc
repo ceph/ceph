@@ -88,7 +88,7 @@ is_err() const
 
 req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL), op(OP_UNKNOWN), 
                                                             os_auth_token(NULL),
-                                                            os_user(NULL), os_groups(NULL), env(e)
+                                                            env(e)
 {
   enable_ops_log = env->conf->enable_ops_log;
   enable_usage_log = env->conf->enable_usage_log;
@@ -109,8 +109,6 @@ req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL)
   prot_flags = 0;
 
   os_auth_token = NULL;
-  os_user = NULL;
-  os_groups = NULL;
   time = ceph_clock_now(cct);
   perm_mask = 0;
   content_length = 0;
@@ -128,8 +126,6 @@ req_state::~req_state() {
   delete formatter;
   delete bucket_acl;
   delete object_acl;
-  free(os_user);
-  free(os_groups);
   free((void *)object);
   free((void *)bucket_name);
 }

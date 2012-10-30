@@ -611,8 +611,8 @@ struct req_state {
    int prot_flags;
 
    const char *os_auth_token;
-   char *os_user;
-   char *os_groups;
+   string swift_user;
+   string swift_groups;
 
    utime_t time;
 
