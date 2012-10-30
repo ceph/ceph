@@ -108,6 +108,19 @@ void PerfCounters::inc(int idx, uint64_t amt)
     data.avgcount++;
 }
 
+void PerfCounters::dec(int idx, uint64_t amt)
+{
+  Mutex::Locker lck(m_lock);
+  assert(idx > m_lower_bound);
+  assert(idx < m_upper_bound);
+  perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
+  assert(!(data.type & PERFCOUNTER_LONGRUNAVG));
+  if (!(data.type & PERFCOUNTER_U64))
+    return;
+  assert(data.u.u64 >= amt);
+  data.u.u64 -= amt;
+}
+
 void PerfCounters::set(int idx, uint64_t amt)
 {
   Mutex::Locker lck(m_lock);

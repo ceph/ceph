@@ -729,7 +729,9 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   timer(g_ceph_context, sync_entry_timeo_lock),
   stop(false), sync_thread(this),
   default_osr("default"),
-  op_queue_len(0), op_queue_bytes(0), op_finisher(g_ceph_context), next_finish(0),
+  op_queue_len(0), op_queue_bytes(0),
+  op_throttle_lock("FileStore::op_throttle_lock"),
+  op_finisher(g_ceph_context),
   op_tp(g_ceph_context, "FileStore::op_tp", g_conf->filestore_op_threads, "filestore_op_threads"),
   op_wq(this, g_conf->filestore_op_thread_timeout,
 	g_conf->filestore_op_thread_suicide_timeout, &op_tp),
@@ -2219,23 +2221,15 @@ FileStore::Op *FileStore::build_op(list<Transaction*>& tls,
 
 void FileStore::queue_op(OpSequencer *osr, Op *o)
 {
-  assert(journal_lock.is_locked());
-  // initialize next_finish on first op
-  if (next_finish == 0)
-    next_finish = op_seq;
-
   // mark apply start _now_, because we need to drain the entire apply
   // queue during commit in order to put the store in a consistent
   // state.
-  _op_apply_start(o->op);
-  op_tp.lock();
+  apply_manager.op_apply_start(o->op);
 
   osr->queue(o);
 
   logger->inc(l_os_ops);
   logger->inc(l_os_bytes, o->bytes);
-
-  op_tp.unlock();
 
   dout(5) << "queue_op " << o << " seq " << o->op
 	  << " " << *osr
@@ -2246,13 +2240,6 @@ void FileStore::queue_op(OpSequencer *osr, Op *o)
 }
 
 void FileStore::op_queue_reserve_throttle(Op *o)
-{
-  op_tp.lock();
-  _op_queue_reserve_throttle(o, "op_queue_reserve_throttle");
-  op_tp.unlock();
-}
-
-void FileStore::_op_queue_reserve_throttle(Op *o, const char *caller)
 {
   // Do not call while holding the journal lock!
   uint64_t max_ops = m_filestore_queue_max_ops;
@@ -2266,28 +2253,32 @@ void FileStore::_op_queue_reserve_throttle(Op *o, const char *caller)
   logger->set(l_os_oq_max_ops, max_ops);
   logger->set(l_os_oq_max_bytes, max_bytes);
 
-  while ((max_ops && (op_queue_len + 1) > max_ops) ||
-	 (max_bytes && op_queue_bytes      // let single large ops through!
-	  && (op_queue_bytes + o->bytes) > max_bytes)) {
-    dout(2) << caller << " waiting: "
-	     << op_queue_len + 1 << " > " << max_ops << " ops || "
-	     << op_queue_bytes + o->bytes << " > " << max_bytes << dendl;
-    op_tp.wait(op_throttle_cond);
-  }
+  {
+    Mutex::Locker l(op_throttle_lock);
+    while ((max_ops && (op_queue_len + 1) > max_ops) ||
+           (max_bytes && op_queue_bytes      // let single large ops through!
+	      && (op_queue_bytes + o->bytes) > max_bytes)) {
+      dout(2) << "waiting " << op_queue_len + 1 << " > " << max_ops << " ops || "
+	      << op_queue_bytes + o->bytes << " > " << max_bytes << dendl;
+      op_throttle_cond.Wait(op_throttle_lock);
+    }
 
-  op_queue_len++;
-  op_queue_bytes += o->bytes;
+    op_queue_len++;
+    op_queue_bytes += o->bytes;
+  }
 
   logger->set(l_os_oq_ops, op_queue_len);
   logger->set(l_os_oq_bytes, op_queue_bytes);
 }
 
-void FileStore::_op_queue_release_throttle(Op *o)
+void FileStore::op_queue_release_throttle(Op *o)
 {
-  // Called with op_tp lock!
-  op_queue_len--;
-  op_queue_bytes -= o->bytes;
-  op_throttle_cond.Signal();
+  {
+    Mutex::Locker l(op_throttle_lock);
+    op_queue_len--;
+    op_queue_bytes -= o->bytes;
+    op_throttle_cond.Signal();
+  }
 
   logger->set(l_os_oq_ops, op_queue_len);
   logger->set(l_os_oq_bytes, op_queue_bytes);
@@ -2300,7 +2291,7 @@ void FileStore::_do_op(OpSequencer *osr)
 
   dout(5) << "_do_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " start" << dendl;
   int r = do_transactions(o->tls, o->op);
-  op_apply_finish(o->op);
+  apply_manager.op_apply_finish(o->op);
   dout(10) << "_do_op " << o << " seq " << o->op << " r = " << r
 	   << ", finisher " << o->onreadable << " " << o->onreadable_sync << dendl;
   
@@ -2317,7 +2308,7 @@ void FileStore::_finish_op(OpSequencer *osr)
   osr->apply_lock.Unlock();  // locked in _do_op
 
   // called with tp lock held
-  _op_queue_release_throttle(o);
+  op_queue_release_throttle(o);
 
   utime_t lat = ceph_clock_now(g_ceph_context);
   lat -= o->start;
@@ -2380,7 +2371,8 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
     op_queue_reserve_throttle(o);
     journal->throttle();
-    o->op = op_submit_start();
+    uint64_t op_num = submit_manager.op_submit_start();
+    o->op = op_num;
 
     if (m_filestore_do_dump)
       dump_transactions(o->tls, o->op, osr);
@@ -2390,7 +2382,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
       
       _op_journal_transactions(o->tls, o->op, ondisk, osd_op);
       
-      // queue inside journal lock, to preserve ordering
+      // queue inside submit_manager op submission lock
       queue_op(osr, o);
     } else if (m_filestore_journal_writeahead) {
       dout(5) << "queue_transactions (writeahead) " << o->op << " " << o->tls << dendl;
@@ -2403,17 +2395,17 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     } else {
       assert(0);
     }
-    op_submit_finish(o->op);
+    submit_manager.op_submit_finish(op_num);
     return 0;
   }
 
-  uint64_t op = op_submit_start();
+  uint64_t op = submit_manager.op_submit_start();
   dout(5) << "queue_transactions (trailing journal) " << op << " " << tls << dendl;
 
   if (m_filestore_do_dump)
     dump_transactions(tls, op, osr);
 
-  _op_apply_start(op);
+  apply_manager.op_apply_start(op);
   int r = do_transactions(tls, op);
     
   if (r >= 0) {
@@ -2430,8 +2422,8 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   }
   op_finisher.queue(onreadable, r);
 
-  op_submit_finish(op);
-  op_apply_finish(op);
+  submit_manager.op_submit_finish(op);
+  apply_manager.op_apply_finish(op);
 
   return r;
 }
@@ -2441,9 +2433,7 @@ void FileStore::_journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk)
   dout(5) << "_journaled_ahead " << o << " seq " << o->op << " " << *osr << " " << o->tls << dendl;
 
   // this should queue in order because the journal does it's completions in order.
-  journal_lock.Lock();
   queue_op(osr, o);
-  journal_lock.Unlock();
 
   osr->dequeue_journal();
 
@@ -3653,9 +3643,9 @@ void FileStore::sync_entry()
     fin.swap(sync_waiters);
     lock.Unlock();
     
-    if (commit_start()) {
+    if (apply_manager.commit_start()) {
       utime_t start = ceph_clock_now(g_ceph_context);
-      uint64_t cp = committing_seq;
+      uint64_t cp = apply_manager.get_committing_seq();
 
       sync_entry_timeo_lock.Lock();
       SyncEntryTimeout *sync_entry_timeo =
@@ -3703,7 +3693,7 @@ void FileStore::sync_entry()
 
 	  snaps.push_back(cp);
 
-	  commit_started();
+	  apply_manager.commit_started();
 
 	  // wait for commit
 	  dout(20) << " waiting for transid " << async_args.transid << " to complete" << dendl;
@@ -3734,11 +3724,11 @@ void FileStore::sync_entry()
 	  assert(r == 0);
 	  snaps.push_back(cp);
 	  
-	  commit_started();
+	  apply_manager.commit_started();
 	}
       } else
       {
-	commit_started();
+	apply_manager.commit_started();
 
 	if (btrfs) {
 	  dout(15) << "sync_entry doing btrfs SYNC" << dendl;
@@ -3770,7 +3760,7 @@ void FileStore::sync_entry()
       logger->finc(l_os_commit_lat, lat);
       logger->finc(l_os_commit_len, dur);
 
-      commit_finish();
+      apply_manager.commit_finish();
 
       logger->set(l_os_committing, 0);
 
@@ -3838,23 +3828,6 @@ void FileStore::start_sync(Context *onsafe)
   sync_waiters.push_back(onsafe);
   sync_cond.Signal();
   dout(10) << "start_sync" << dendl;
-}
-
-void FileStore::trigger_commit(uint64_t seq)
-{
-  /*
-   * crib the lock -> journal_lock.  we need to start the sync under lock,
-   * but once we release lock it will block because journal_lock is held.
-   * _trigger_commit() expects journal_lock to be held by the caller.
-   */
-  lock.Lock();
-  dout(10) << "trigger_commit seq" << dendl;
-  force_sync = true;
-  sync_cond.Signal();
-  journal_lock.Lock();
-  lock.Unlock();
-  _trigger_commit(seq);
-  journal_lock.Unlock();
 }
 
 void FileStore::sync()
