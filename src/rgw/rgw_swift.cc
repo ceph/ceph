@@ -60,7 +60,14 @@ static size_t read_http_header(void *ptr, size_t size, size_t nmemb, void *_info
 static int rgw_swift_validate_token(const char *token, struct rgw_swift_auth_info *info)
 {
   CURL *curl_handle;
-  string auth_url = "http://127.0.0.1:11000/token";
+
+  if (g_conf->rgw_swift_auth_url.empty())
+    return -EINVAL;
+
+  string auth_url = g_conf->rgw_swift_auth_url;
+  if (auth_url[auth_url.size() - 1] != '/')
+    auth_url.append("/");
+  auth_url.append("token");
   char url_buf[auth_url.size() + 1 + strlen(token) + 1];
   sprintf(url_buf, "%s/%s", auth_url.c_str(), token);
 
