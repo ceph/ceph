@@ -344,6 +344,7 @@ radosgw_SOURCES = \
         rgw/rgw_rest_swift.cc \
         rgw/rgw_rest_s3.cc \
         rgw/rgw_rest_usage.cc \
+        rgw/rgw_http_client.cc \
         rgw/rgw_swift.cc \
 	rgw/rgw_swift_auth.cc \
 	rgw/rgw_main.cc
@@ -1767,6 +1768,7 @@ noinst_HEADERS = \
 	rgw/rgw_gc.h\
 	rgw/rgw_multi_del.h\
 	rgw/rgw_op.h\
+	rgw/rgw_http_client.h\
 	rgw/rgw_swift.h\
 	rgw/rgw_swift_auth.h\
 	rgw/rgw_rados.h\
