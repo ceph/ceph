@@ -791,8 +791,8 @@ public:
     Scrubber() :
       reserved(false), reserve_failed(false),
       epoch_start(0),
-      block_writes(false), active(false), waiting_on(0),
-      errors(0), fixed(0), active_rep_scrub(0),
+      block_writes(false), active(false), queue_snap_trim(false),
+      waiting_on(0), errors(0), fixed(0), active_rep_scrub(0),
       finalizing(false), is_chunky(false), state(INACTIVE),
       deep(false)
     {
@@ -806,6 +806,7 @@ public:
     // common to both scrubs
     bool block_writes;
     bool active;
+    bool queue_snap_trim;
     int waiting_on;
     set<int> waiting_on_whom;
     int errors;
@@ -860,6 +861,7 @@ public:
       finalizing = false;
       block_writes = false;
       active = false;
+      queue_snap_trim = false;
       waiting_on = 0;
       waiting_on_whom.clear();
       if (active_rep_scrub) {
