@@ -9,6 +9,8 @@
 #include "rgw_user.h"
 #include "rgw_http_client.h"
 
+#include "include/str_list.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 class RGWValidateSwiftToken : public RGWHTTPClient {
@@ -102,6 +104,8 @@ public:
   string user_name;
   string expires;
 
+  map<string, bool> roles;
+
   KeystoneTokenResponseParser() {}
 
   int parse(bufferlist& bl);
@@ -132,6 +136,23 @@ int KeystoneTokenResponseParser::parse(bufferlist& bl)
   if (!user->get_data("username", &user_name)) {
     dout(0) << "token response is missing user username field" << dendl;
     return -EINVAL;
+  }
+
+  JSONObjIter riter = user->find("roles");
+  if (riter.end()) {
+    dout(0) << "token response is missing roles section" << dendl;
+    return -EINVAL;
+  }
+
+  for (; !riter.end(); ++riter) {
+    JSONObj *o = *riter;
+    JSONObj *role_name = o->find_obj("name");
+    if (!role_name) {
+      dout(0) << "token response is missing role name section" << dendl;
+      return -EINVAL;
+    }
+    string role = role_name->get_data();
+    roles[role] = true;
   }
 
   JSONObj *token = access_obj->find_obj("token");
@@ -172,6 +193,25 @@ static int rgw_parse_keystone_token_response(bufferlist& bl, struct rgw_swift_au
   int ret = p.parse(bl);
   if (ret < 0)
     return ret;
+
+  list<string> roles_list;
+
+  get_str_list(g_conf->rgw_swift_keystone_operator_roles, roles_list);
+
+  bool found = false;
+  list<string>::iterator iter;
+  for (iter = roles_list.begin(); iter != roles_list.end(); ++iter) {
+    const string& role = *iter;
+    if (p.roles.find(role) != p.roles.end()) {
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    dout(0) << "user does not hold a matching role; required roles: " << g_conf->rgw_swift_keystone_operator_roles << dendl;
+    return -EPERM;
+  }
 
   dout(0) << "validated token: " << p.tenant_name << ":" << p.user_name << " expires: " << p.expires << dendl;
 
