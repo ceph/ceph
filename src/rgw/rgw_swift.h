@@ -18,6 +18,8 @@ struct rgw_swift_auth_info {
 
 bool rgw_verify_swift_token(RGWRados *store, req_state *s);
 
+void swift_init(CephContext *cct);
+void swift_finalize();
 
 #endif
 

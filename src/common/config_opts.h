@@ -421,9 +421,10 @@ OPTION(rgw_swift_url_prefix, OPT_STR, "swift") // entry point for which a url is
 OPTION(rgw_swift_auth_url, OPT_STR, "")        // default URL to go and verify tokens for v1 auth (if not using internal swift auth)
 OPTION(rgw_swift_auth_entry, OPT_STR, "auth")  // entry point for which a url is considered a swift auth url
 OPTION(rgw_swift_use_keystone, OPT_BOOL, false)  // should swift use keystone?
-OPTION(rgw_swift_keystone_url, OPT_STR, "")  // url for keystone server
-OPTION(rgw_swift_keystone_admin_token, OPT_STR, "")  // keystone admin token (shared secret)
-OPTION(rgw_swift_keystone_operator_roles, OPT_STR, "swiftoperator, admin")  // roles required to serve requests
+OPTION(rgw_keystone_url, OPT_STR, "")  // url for keystone server
+OPTION(rgw_keystone_admin_token, OPT_STR, "")  // keystone admin token (shared secret)
+OPTION(rgw_keystone_operator_roles, OPT_STR, "swiftoperator, admin")  // roles required to serve requests
+OPTION(rgw_keystone_token_cache_size, OPT_INT, 10000)  // max number of entries in keystone token cache
 OPTION(rgw_admin_entry, OPT_STR, "admin")  // entry point for which a url is considered an admin request
 OPTION(rgw_enforce_swift_acls, OPT_BOOL, true)
 OPTION(rgw_print_continue, OPT_BOOL, true)  // enable if 100-Continue works
