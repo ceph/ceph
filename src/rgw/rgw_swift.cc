@@ -13,12 +13,21 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+static list<string> roles_list;
+
+class RGWKeystoneTokenCache;
+
 class RGWValidateSwiftToken : public RGWHTTPClient {
   struct rgw_swift_auth_info *info;
+
+protected:
+  RGWValidateSwiftToken() {}
 public:
-  RGWValidateSwiftToken(struct rgw_swift_auth_info *_info) :info(_info) {}
+  RGWValidateSwiftToken(struct rgw_swift_auth_info *_info) : info(_info) {}
 
   int read_header(void *ptr, size_t len);
+
+  friend class RGWKeystoneTokenCache;
 };
 
 int RGWValidateSwiftToken::read_header(void *ptr, size_t len)
@@ -87,18 +96,7 @@ static int rgw_swift_validate_token(const char *token, struct rgw_swift_auth_inf
   return 0;
 }
 
-class RGWValidateKeystoneToken : public RGWHTTPClient {
-  bufferlist *bl;
-public:
-  RGWValidateKeystoneToken(bufferlist *_bl) : bl(_bl) {}
-
-  int read_data(void *ptr, size_t len) {
-    bl->append((char *)ptr, len);
-    return 0;
-  }
-};
-
-class KeystoneTokenResponseParser {
+class KeystoneToken {
 public:
   string tenant_name;
   string tenant_id;
@@ -107,12 +105,14 @@ public:
 
   map<string, bool> roles;
 
-  KeystoneTokenResponseParser() {}
+  KeystoneToken() {}
 
   int parse(bufferlist& bl);
+
+  bool expired() { return false; }
 };
 
-int KeystoneTokenResponseParser::parse(bufferlist& bl)
+int KeystoneToken::parse(bufferlist& bl)
 {
   RGWJSONParser parser;
 
@@ -187,7 +187,102 @@ int KeystoneTokenResponseParser::parse(bufferlist& bl)
   return 0;
 }
 
-static int rgw_parse_keystone_token_response(bufferlist& bl, struct rgw_swift_auth_info *info)
+struct token_entry {
+  KeystoneToken token;
+  list<string>::iterator lru_iter;
+};
+
+class RGWKeystoneTokenCache {
+  map<string, token_entry> tokens;
+  list<string> tokens_lru;
+
+  Mutex lock;
+
+  size_t max;
+
+public:
+  RGWKeystoneTokenCache(int _max) : lock("RGWKeystoneTokenCache"), max(_max) {}
+
+  bool find(const string& token_str, KeystoneToken& token);
+  void add(const string& token_str, KeystoneToken& token);
+};
+
+bool RGWKeystoneTokenCache::find(const string& token_str, KeystoneToken& token)
+{
+  lock.Lock();
+  map<string, token_entry>::iterator iter = tokens.find(token_str);
+  if (iter == tokens.end()) {
+    lock.Unlock();
+    if (perfcounter) perfcounter->inc(l_rgw_keystone_token_cache_miss);
+    return false;
+  }
+
+  token_entry& entry = iter->second;
+  tokens_lru.erase(entry.lru_iter);
+
+  if (entry.token.expired()) {
+    tokens.erase(iter);
+    lock.Unlock();
+    if (perfcounter) perfcounter->inc(l_rgw_keystone_token_cache_hit);
+    return false;
+  }
+  token = entry.token;
+
+  tokens_lru.push_front(token_str);
+  entry.lru_iter = tokens_lru.begin();
+  
+  lock.Unlock();
+  if (perfcounter) perfcounter->inc(l_rgw_keystone_token_cache_hit);
+
+  return true;
+}
+
+void RGWKeystoneTokenCache::add(const string& token_str, KeystoneToken& token)
+{
+  lock.Lock();
+  map<string, token_entry>::iterator iter = tokens.find(token_str);
+  if (iter != tokens.end()) {
+    token_entry& e = iter->second;
+    tokens_lru.erase(e.lru_iter);
+  }
+
+  tokens_lru.push_front(token_str);
+  token_entry& entry = tokens[token_str];
+  entry.token = token;
+  entry.lru_iter = tokens_lru.begin();
+
+  while (tokens_lru.size() > max) {
+    list<string>::reverse_iterator riter = tokens_lru.rbegin();
+    iter = tokens.find(*riter);
+    assert(iter != tokens.end());
+    tokens.erase(iter);
+    tokens_lru.pop_back();
+  }
+  
+  lock.Unlock();
+}
+
+class RGWValidateKeystoneToken : public RGWHTTPClient {
+  bufferlist *bl;
+public:
+  RGWValidateKeystoneToken(bufferlist *_bl) : bl(_bl) {}
+
+  int read_data(void *ptr, size_t len) {
+    bl->append((char *)ptr, len);
+    return 0;
+  }
+};
+
+static RGWKeystoneTokenCache *keystone_token_cache = NULL;
+
+static void rgw_set_keystone_token_auth_info(KeystoneToken& token, struct rgw_swift_auth_info *info)
+{
+  info->user = token.tenant_id;
+  info->display_name = token.tenant_name;
+  info->status = 200;
+}
+
+static int rgw_parse_keystone_token_response(const string& token, bufferlist& bl, struct rgw_swift_auth_info *info)
 {
   RGWJSONParser parser;
 
@@ -196,74 +291,93 @@ static int rgw_parse_keystone_token_response(bufferlist& bl, struct rgw_swift_au
     return -EINVAL;
   }
 
-  KeystoneTokenResponseParser p;
-  int ret = p.parse(bl);
+  KeystoneToken t;
+  int ret = t.parse(bl);
   if (ret < 0)
     return ret;
-
-  list<string> roles_list;
-
-  get_str_list(g_conf->rgw_swift_keystone_operator_roles, roles_list);
 
   bool found = false;
   list<string>::iterator iter;
   for (iter = roles_list.begin(); iter != roles_list.end(); ++iter) {
     const string& role = *iter;
-    if (p.roles.find(role) != p.roles.end()) {
+    if (t.roles.find(role) != t.roles.end()) {
       found = true;
       break;
     }
   }
 
   if (!found) {
-    dout(0) << "user does not hold a matching role; required roles: " << g_conf->rgw_swift_keystone_operator_roles << dendl;
+    dout(0) << "user does not hold a matching role; required roles: " << g_conf->rgw_keystone_operator_roles << dendl;
     return -EPERM;
   }
 
-  dout(0) << "validated token: " << p.tenant_name << ":" << p.user_name << " expires: " << p.expires << dendl;
+  dout(0) << "validated token: " << t.tenant_name << ":" << t.user_name << " expires: " << t.expires << dendl;
 
-  info->user = p.tenant_id;
-  info->display_name = p.tenant_name;
-  info->status = 200;
+  rgw_set_keystone_token_auth_info(t, info);
+  keystone_token_cache->add(token, t);
 
   return 0;
 }
 
-static int rgw_swift_validate_keystone_token(RGWRados *store, const char *token, struct rgw_swift_auth_info *info,
-					     RGWUserInfo& rgw_user)
+static int update_user_info(RGWRados *store, struct rgw_swift_auth_info *info, RGWUserInfo& user_info)
 {
-  bufferlist bl;
-  RGWValidateKeystoneToken validate(&bl);
-
-  string url = g_conf->rgw_swift_keystone_url;
-  if (url[url.size() - 1] != '/')
-    url.append("/");
-  url.append("v2.0/tokens/");
-  url.append(token);
-
-  validate.append_header("X-Auth-Token", g_conf->rgw_swift_keystone_admin_token);
-
-  int ret = validate.process(url);
-  if (ret < 0)
-    return ret;
-
-  dout(0) << "received response: " << bl.c_str() << dendl;
-
-  ret = rgw_parse_keystone_token_response(bl, info);
-  if (ret < 0)
-    return ret;
-
-  if (rgw_get_user_info_by_uid(store, info->user, rgw_user) < 0) {
+  if (rgw_get_user_info_by_uid(store, info->user, user_info) < 0) {
     dout(0) << "NOTICE: couldn't map swift user" << dendl;
-    rgw_user.user_id = info->user;
-    rgw_user.display_name = info->display_name;
+    user_info.user_id = info->user;
+    user_info.display_name = info->display_name;
 
-    ret = rgw_store_user_info(store, rgw_user, true);
+    int ret = rgw_store_user_info(store, user_info, true);
     if (ret < 0) {
       dout(0) << "ERROR: failed to store new user's info: ret=" << ret << dendl;
       return ret;
     }
   }
+  return 0;
+}
+
+static int rgw_swift_validate_keystone_token(RGWRados *store, const string& token, struct rgw_swift_auth_info *info,
+					     RGWUserInfo& rgw_user)
+{
+  KeystoneToken t;
+  if (keystone_token_cache->find(token, t)) {
+    rgw_set_keystone_token_auth_info(t, info);
+    int ret = update_user_info(store, info, rgw_user);
+    if (ret < 0)
+      return ret;
+
+    return 0;
+  }
+
+  bufferlist bl;
+  RGWValidateKeystoneToken validate(&bl);
+
+  string url = g_conf->rgw_keystone_url;
+  if (url.empty()) {
+    dout(0) << "ERROR: keystone url is not configured" << dendl;
+    return -EINVAL;
+  }
+  if (url[url.size() - 1] != '/')
+    url.append("/");
+  url.append("v2.0/tokens/");
+  url.append(token);
+
+  validate.append_header("X-Auth-Token", g_conf->rgw_keystone_admin_token);
+
+  int ret = validate.process(url);
+  if (ret < 0)
+    return ret;
+
+  bl.append((char)0); // NULL terminate
+
+  dout(20) << "received response: " << bl.c_str() << dendl;
+
+  ret = rgw_parse_keystone_token_response(token, bl, info);
+  if (ret < 0)
+    return ret;
+
+  ret = update_user_info(store, info, rgw_user);
+  if (ret < 0)
+    return ret;
 
   return 0;
 }
@@ -318,3 +432,18 @@ bool rgw_verify_swift_token(RGWRados *store, req_state *s)
 
   return true;
 }
+
+void swift_init(CephContext *cct)
+{
+  get_str_list(cct->_conf->rgw_keystone_operator_roles, roles_list);
+
+  keystone_token_cache = new RGWKeystoneTokenCache(cct->_conf->rgw_keystone_token_cache_size);
+}
+
+
+void swift_finalize()
+{
+  delete keystone_token_cache;
+  keystone_token_cache = NULL;
+}
+
