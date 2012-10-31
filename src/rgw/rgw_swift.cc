@@ -101,7 +101,7 @@ public:
   string tenant_name;
   string tenant_id;
   string user_name;
-  string expires;
+  time_t expiration;
 
   map<string, bool> roles;
 
@@ -109,7 +109,10 @@ public:
 
   int parse(bufferlist& bl);
 
-  bool expired() { return false; }
+  bool expired() {
+    uint64_t now = ceph_clock_now(NULL).sec();
+    return (now < (uint64_t)expiration);
+  }
 };
 
 int KeystoneToken::parse(bufferlist& bl)
@@ -162,10 +165,20 @@ int KeystoneToken::parse(bufferlist& bl)
     return -EINVAL;
   }
 
+  string expires;
+
   if (!token->get_data("expires", &expires)) {
     dout(0) << "token response is missing expiration field" << dendl;
     return -EINVAL;
   }
+
+  struct tm t;
+  if (!parse_iso8601(expires.c_str(), &t)) {
+    dout(0) << "failed to parse token expiration (" << expires << ")" << dendl;
+    return -EINVAL;
+  }
+
+  expiration = timegm(&t);
 
   JSONObj *tenant = token->find_obj("tenant");
   if (!tenant) {
@@ -311,7 +324,7 @@ static int rgw_parse_keystone_token_response(const string& token, bufferlist& bl
     return -EPERM;
   }
 
-  dout(0) << "validated token: " << t.tenant_name << ":" << t.user_name << " expires: " << t.expires << dendl;
+  dout(0) << "validated token: " << t.tenant_name << ":" << t.user_name << " expires: " << t.expiration << dendl;
 
   rgw_set_keystone_token_auth_info(t, info);
   keystone_token_cache->add(token, t);
