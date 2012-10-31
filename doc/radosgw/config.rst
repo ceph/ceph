@@ -40,7 +40,7 @@ The ``mkcephfs`` deployment script may not create the default RGW data
 directory.  Create data directories for each instance of a ``radosgw`` daemon (if
 you haven't done so already). The ``host``  variables in the ``ceph.conf`` file
 determine which host runs each instance of a ``radosgw`` daemon. The typical form
-specifes the daemon ``radosgw``, the cluster name and the daemon ID.
+specifes the daemon ``radosgw``, the cluster name and the daemon ID. ::
 
 	sudo mkdir -p /var/lib/ceph/radosgw/{$cluster}-{$id}
 
