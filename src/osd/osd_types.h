@@ -1248,7 +1248,7 @@ struct pg_log_entry_t {
 
   __s32      op;
   hobject_t  soid;
-  eversion_t version, prior_version;
+  eversion_t version, prior_version, reverting_to;
   osd_reqid_t reqid;  // caller+tid to uniquely identify request
   utime_t     mtime;  // this is the _user_ mtime, mind you
   bufferlist snaps;   // only for clone entries
