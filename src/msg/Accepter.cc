@@ -95,7 +95,7 @@ int Accepter::bind(const entity_addr_t &bind_addr, int avoid_port1, int avoid_po
     }
   } else {
     // try a range of ports
-    for (int port = CEPH_PORT_START; port <= CEPH_PORT_LAST; port++) {
+    for (int port = cct->_conf->ms_bind_port_min; port <= cct->_conf->ms_bind_port_max; port++) {
       if (port == avoid_port1 || port == avoid_port2)
 	continue;
       listen_addr.set_port(port);
@@ -106,10 +106,10 @@ int Accepter::bind(const entity_addr_t &bind_addr, int avoid_port1, int avoid_po
     if (rc < 0) {
       char buf[80];
       ldout(msgr->cct,0) << "accepter.bind unable to bind to " << listen_addr.ss_addr()
-	      << " on any port in range " << CEPH_PORT_START << "-" << CEPH_PORT_LAST
+	      << " on any port in range " << cct->_conf->ms_bind_port_min << "-" << cct->_conf->ms_bind_port_max
 	      << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       cerr << "accepter.bind unable to bind to " << listen_addr.ss_addr()
-	   << " on any port in range " << CEPH_PORT_START << "-" << CEPH_PORT_LAST
+	   << " on any port in range " << cct->_conf->ms_bind_port_min << "-" << cct->_conf->ms_bind_port_max
 	   << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
       return -errno;
     }
