@@ -1468,9 +1468,10 @@ void ReplicatedPG::snap_trimmer()
   dout(10) << "snap_trimmer entry" << dendl;
   if (is_primary()) {
     entity_inst_t nobody;
-    if (!mode.try_write(nobody) || scrubber.active) {
-      dout(10) << " can't write, requeueing" << dendl;
-      queue_snap_trim();
+    assert(mode.try_write(nobody));
+    if (scrubber.active) {
+      dout(10) << " scrubbing, will requeue snap_trimmer after" << dendl;
+      scrubber.queue_snap_trim = true;
       unlock();
       return;
     }

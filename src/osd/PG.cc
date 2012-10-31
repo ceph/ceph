@@ -3743,6 +3743,11 @@ void PG::scrub_clear_state()
 
   requeue_ops(waiting_for_active);
 
+  if (scrubber.queue_snap_trim) {
+    dout(10) << "scrub finished, requeuing snap_trimmer" << dendl;
+    queue_snap_trim();
+  }
+
   scrubber.reset();
 
   // type-specific state clear
