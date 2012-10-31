@@ -101,6 +101,7 @@ public:
 class KeystoneTokenResponseParser {
 public:
   string tenant_name;
+  string tenant_id;
   string user_name;
   string expires;
 
@@ -172,6 +173,12 @@ int KeystoneTokenResponseParser::parse(bufferlist& bl)
     return -EINVAL;
   }
 
+  if (!tenant->get_data("id", &tenant_id)) {
+    dout(0) << "tenant is missing id field" << dendl;
+    return -EINVAL;
+  }
+
+
   if (!tenant->get_data("name", &tenant_name)) {
     dout(0) << "tenant is missing name field" << dendl;
     return -EINVAL;
@@ -215,7 +222,8 @@ static int rgw_parse_keystone_token_response(bufferlist& bl, struct rgw_swift_au
 
   dout(0) << "validated token: " << p.tenant_name << ":" << p.user_name << " expires: " << p.expires << dendl;
 
-  info->user = p.tenant_name;
+  info->user = p.tenant_id;
+  info->display_name = p.tenant_name;
   info->status = 200;
 
   return 0;
@@ -248,7 +256,7 @@ static int rgw_swift_validate_keystone_token(RGWRados *store, const char *token,
   if (rgw_get_user_info_by_uid(store, info->user, rgw_user) < 0) {
     dout(0) << "NOTICE: couldn't map swift user" << dendl;
     rgw_user.user_id = info->user;
-    rgw_user.display_name = info->user; /* no display name available */
+    rgw_user.display_name = info->display_name;
 
     ret = rgw_store_user_info(store, rgw_user, true);
     if (ret < 0) {
