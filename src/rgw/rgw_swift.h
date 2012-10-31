@@ -10,6 +10,7 @@ struct rgw_swift_auth_info {
   int status;
   string auth_groups;
   string user;
+  string display_name;
   long long ttl;
 
   rgw_swift_auth_info() : status(0), ttl(0) {}
