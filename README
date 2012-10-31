@@ -119,6 +119,7 @@ To build the source code, you must install the following:
 - libkeyutils-dev
 - uuid-dev
 - libatomic-ops-dev
+- libboost-program-options-dev
 
 
 
