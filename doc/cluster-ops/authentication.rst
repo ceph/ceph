@@ -30,6 +30,7 @@ execute Ceph commands. Second, you must generate a monitor secret key and
 distribute it to all monitors in the cluster. Finally, you can follow the 
 remaining steps in `Enabling Cephx`_ to enable authentication.
 
+.. _client-admin-key:
 
 The ``client.admin`` Key
 ------------------------
@@ -216,6 +217,7 @@ Default users and pools are suitable for initial testing purposes. For test bed
 and production environments, you should create users and assign pool access to 
 the users.
 
+.. _add-a-key:
 
 Add a Key
 ---------
