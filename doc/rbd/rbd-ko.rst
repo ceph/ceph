@@ -1,46 +1,46 @@
-==============================
- RBD Kernel Object Operations
-==============================
+==========================
+ Kernel Module Operations
+==========================
 
-.. important:: To use kernel object operations, you must have a running Ceph cluster.
+.. important:: To use kernel module operations, you must have a running Ceph cluster.
 
 Load the Ceph RBD Module
 ========================
 
-To map an RBD image to a kernel object, first load the Ceph RBD module:: 
+To map a block device image to a kernel module, first load the Ceph RBD module:: 
 
 	modprobe rbd
 
-Get a List of RBD Images
-========================
+Get a List of Images
+====================
 
-To mount an RBD image, first return a list of the images. ::
+To mount a block device image, first return a list of the images. ::
 
 	rbd list
 
 Map a Block Device
 ==================
 
-Use ``rbd`` to map an image name to a kernel object. You must specify the 
-image name, the pool name, and the client name. If you use ``cephx`` 
-authentication, you must also specify a secret. ::
+Use ``rbd`` to map an image name to a kernel module. You must specify the 
+image name, the pool name, and the user name. ::
 
-  sudo rbd map {image-name} --pool {pool-name} --name {client-name}
+  sudo rbd map {image-name} --pool {pool-name} --id {user-name}
 
 For example:: 
 
-  sudo rbd map foo --pool rbd myimage --name client.admin
+  sudo rbd map foo --pool rbd myimage --id client.admin
  
-If you use ``cephx`` authentication, you must also specify a secret.  It may come from a keyring, a file containing the secret, or be specified explicitly on the command line. ::
+If you use `cephx`_ authentication, you must also specify a secret.  It may come
+from a keyring or a file containing the secret. ::
 
-  sudo rbd map foo --pool rbd myimage --name client.foo --keyring /path/to/keyring
-  sudo rbd map foo --pool rbd myimage --name client.foo --keyfile /path/to/file
+  sudo rbd map foo --pool rbd myimage --id client.foo --keyring /path/to/keyring
+  sudo rbd map foo --pool rbd myimage --id client.foo --keyfile /path/to/file
 
 
 Show Mapped Block Devices
 =========================
 
-To show RBD images mapped to kernel block devices with the ``rbd`` command, 
+To show block device images mapped to kernel modules with the ``rbd`` command,
 specify the ``showmapped`` option. ::
 
 	sudo rbd showmapped
@@ -49,11 +49,15 @@ specify the ``showmapped`` option. ::
 Unmapping a Block Device
 ========================	
 
-To unmap an RBD image with the ``rbd`` command, specify the ``rm`` option 
-and the device name (i.e., by convention the same as the RBD image name). :: 
+To unmap a block device image with the ``rbd`` command, specify the ``rm``
+option  and the device name (i.e., by convention the same as the block device
+image name). :: 
 
 	sudo rbd unmap /dev/rbd/{poolname}/{imagename}
 	
 For example::
 
 	sudo rbd unmap /dev/rbd/rbd/foo
+
+
+.. _cephx: ../../cluster-ops/authentication/
