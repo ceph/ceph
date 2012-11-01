@@ -31,11 +31,11 @@ When `cephx`_ is enabled,  you must specify a user and a secret file
 on the command line, or use the ``CEPH_ARGS`` environment variable
 to avoid re-entry of the following parameters. ::
 
-	rbd --user {user-name} --keyring=/path/to/secret [commands]
+	rbd --id {user-name} --keyring=/path/to/secret [commands]
 
 For example:: 
 
-	rbd --user client.admin --keyring=/etc/ceph/ceph.keyring [commands]
+	rbd --id client.admin --keyring=/etc/ceph/ceph.keyring [commands]
 
 .. tip:: Add the user and secret to the ``CEPH_ARGS`` environment 
    variable so that you don't need to enter them each time.
@@ -154,7 +154,7 @@ clones rapidly.
            |  Snapshot   | Child refers |  COW Clone  |
            |  of Image   |<------------*| of Snapshot |
            |             |  to Parent   |             |
-           | (read only) |              | (writeable) |
+           | (read only) |              | (writable)  |
            +-------------+              +-------------+
            
                Parent                        Child
