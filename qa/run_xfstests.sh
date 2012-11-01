@@ -35,6 +35,7 @@ PROGNAME=$(basename $0)
 XFSTESTS_REPO="git://oss.sgi.com/xfs/cmds/xfstests.git"
 
 # Default command line option values
+COUNT="1"
 FS_TYPE="xfs"
 SCRATCH_DEV=""	# MUST BE SPECIFIED
 TEST_DEV=""	# MUST BE SPECIFIED
@@ -105,6 +106,13 @@ function arg_count() {
 	exit 99
 }
 
+# validation function for repeat count argument
+function count_valid() {
+	arg_count 1 $#
+
+	test "$1" -gt 0	# 0 is pointless; negative is wrong
+}
+
 # validation function for filesystem type argument
 function fs_type_valid() {
 	arg_count 1 $#
@@ -139,6 +147,8 @@ function usage() {
 	echo "    options:" >&2
 	echo "        -h or --help" >&2
 	echo "            show this message" >&2
+	echo "        -c or --count" >&2
+	echo "            iteration count (1 or more)" >&2
 	echo "        -f or --fs-type" >&2
 	echo "            one of: xfs, ext4, btrfs" >&2
 	echo "            (default fs-type: xfs)" >&2
@@ -164,6 +174,7 @@ function parseargs() {
 	# Short option flags
 	SHORT_OPTS=""
 	SHORT_OPTS="${SHORT_OPTS},h"
+	SHORT_OPTS="${SHORT_OPTS},c:"
 	SHORT_OPTS="${SHORT_OPTS},f:"
 	SHORT_OPTS="${SHORT_OPTS},s:"
 	SHORT_OPTS="${SHORT_OPTS},t:"
@@ -171,6 +182,7 @@ function parseargs() {
 	# Short option flags
 	LONG_OPTS=""
 	LONG_OPTS="${LONG_OPTS},help"
+	LONG_OPTS="${LONG_OPTS},count:"
 	LONG_OPTS="${LONG_OPTS},fs-type:"
 	LONG_OPTS="${LONG_OPTS},scratch-dev:"
 	LONG_OPTS="${LONG_OPTS},test-dev:"
@@ -185,6 +197,12 @@ function parseargs() {
 		case "$1" in
 			-h|--help)
 				usage
+				;;
+			-c|--count)
+				count_valid "$2" ||
+					usage "invalid count '$2'"
+				COUNT="$2"
+				shift
 				;;
 			-f|--fs-type)
 				fs_type_valid "$2" ||
@@ -408,13 +426,20 @@ parseargs "$@"
 setup
 
 pushd "${XFSTESTS_DIR}"
-./check ${TESTS}
-status=$?
+for (( i = 1 ; i <= "${COUNT}" ; i++ )); do
+	[ "${COUNT}" -gt 1 ] && echo "=== Iteration "$i" starting at:  $(date)"
+
+	./check ${TESTS}	# Here we actually run the tests
+	status=$?
+
+	[ "${COUNT}" -gt 1 ] && echo "=== Iteration "$i" complete at:  $(date)"
+done
 popd
 
 # cleanup is called via the trap call, above
 
 echo "This xfstests run started at:  ${start_date}"
 echo "xfstests run completed at:     $(date)"
+[ "${COUNT}" -gt 1 ] && echo "xfstests run consisted of ${COUNT} iterations"
 
 exit "${status}"
