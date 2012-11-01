@@ -8,7 +8,7 @@ rotating media such as hard disks, CDs, floppy disks, and even traditional
 9-track tape. The ubiquity  of block device interfaces makes a virtual block 
 device an ideal candidate to interact with a mass data storage system like Ceph.
 
-Ceph's RADOS Block Devices (RBD) interact with RADOS OSDs using the 
+Ceph's RADOS Block Devices (RBD) interact with OSDs using the 
 ``librados`` and ``librbd`` libraries. RBDs are thin-provisioned, resizable 
 and store data striped over multiple OSDs in a Ceph cluster. RBDs inherit
 ``librados`` capabilities such as snapshotting and cloning. Ceph's RBDs deliver 
@@ -25,13 +25,13 @@ the Ceph FS filesystem, and RADOS block devices simultaneously.
 .. toctree::
 	:maxdepth: 1
 
-	RBD Commands <rados-rbd-cmds>
+	Commands <rados-rbd-cmds>
 	Kernel Objects <rbd-ko>
-	RBD Snapshots <rbd-snapshot>
-	QEMU and RBD <qemu-rbd>
+	Snapshots<rbd-snapshot>
+	QEMU <qemu-rbd>
 	libvirt <libvirt>
-	RBD and OpenStack <rbd-openstack>
-	RBD and CloudStack <rbd-cloudstack>
+	OpenStack <rbd-openstack>
+	CloudStack <rbd-cloudstack>
 	
 	
 	
