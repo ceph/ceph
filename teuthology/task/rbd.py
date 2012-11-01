@@ -397,6 +397,7 @@ def run_xfstests(ctx, config):
         - ceph:
         - rbd.run_xfstests:
             client.0:
+                count: 2
                 test_dev: 'test_dev'
                 scratch_dev: 'scratch_dev'
                 fs_type: 'xfs'
@@ -404,6 +405,7 @@ def run_xfstests(ctx, config):
     """
 
     for role, properties in config.items():
+        count = properties.get('count')
         test_dev = properties.get('test_dev')
         assert test_dev is not None, \
             "task run_xfstests requires test_dev to be defined"
@@ -435,6 +437,7 @@ def run_xfstests(ctx, config):
         remote.run(args=args)
 
         log.info('Running xfstests on {role}:'.format(role=role))
+        log.info('   iteration count: {count}:'.format(count=count))
         log.info('       test device: {dev}'.format(dev=test_dev))
         log.info('    scratch device: {dev}'.format(dev=scratch_dev))
         log.info('     using fs_type: {fs_type}'.format(fs_type=fs_type))
@@ -451,6 +454,7 @@ def run_xfstests(ctx, config):
             '/usr/bin/sudo',
             '/bin/bash',
             test_path,
+            '-c', str(count),
             '-f', fs_type,
             '-t', test_dev,
             '-s', scratch_dev,
@@ -475,7 +479,9 @@ def xfstests(ctx, config):
     Run xfstests over rbd devices.  This interface sets up all
     required configuration automatically if not otherwise specified.
     Note that only one instance of xfstests can run on a single host
-    at a time.
+    at a time.  By default, the set of tests specified is run once.
+    If a (non-zero) count value is supplied, the complete set of
+    tests will be run that number of times.
 
     For example::
 
@@ -484,6 +490,7 @@ def xfstests(ctx, config):
         # Image sizes are in MB
         - rbd.xfstests:
             client.0:
+                count: 3
                 test_image: 'test_image'
                 test_size: 250
                 test_format: 2
@@ -535,6 +542,7 @@ def xfstests(ctx, config):
         scratch_image_config['image_format'] = scratch_fmt
 
         test_config = {}
+        test_config['count'] = properties.get('count', 1)
         test_config['test_dev'] = \
                 '/dev/rbd/rbd/{image}'.format(image=test_image)
         test_config['scratch_dev'] = \
