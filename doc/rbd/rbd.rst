@@ -2,23 +2,36 @@
  Block Devices
 ===============
 
-A block is a sequence of bytes (for example, a 512-byte block of data). 
-Block-based storage interfaces are the most common way to store data with 
-rotating media such as hard disks, CDs, floppy disks, and even traditional 
-9-track tape. The ubiquity  of block device interfaces makes a virtual block 
+A block is a sequence of bytes (for example, a 512-byte block of data).
+Block-based storage interfaces are the most common way to store data with
+rotating media such as hard disks, CDs, floppy disks, and even traditional
+9-track tape. The ubiquity of block device interfaces makes a virtual block
 device an ideal candidate to interact with a mass data storage system like Ceph.
 
-Ceph's RADOS Block Devices (RBD) interact with OSDs using the 
-``librados`` and ``librbd`` libraries. RBDs are thin-provisioned, resizable 
-and store data striped over multiple OSDs in a Ceph cluster. RBDs inherit
-``librados`` capabilities such as snapshotting and cloning. Ceph's RBDs deliver 
-high performance with infinite scalability to kernel objects, kernel virtual 
-machines and cloud-based computing systems like OpenStack and CloudStack.
+Ceph block devices are thin-provisioned, resizable and store data striped over
+multiple OSDs in a Ceph cluster.  Ceph block devices leverage
+:abbr:`RADOS (Reliable Autonomic Distributed Object Store)` capabilities
+such as snapshotting, replication and consistency. Ceph's 
+:abbr:`RADOS (Reliable Autonomic Distributed Object Store)` Block Devices (RBD) 
+interact with OSDs using kernel modules or the ``librbd`` library.
 
-The ``librbd`` library converts data blocks into objects for storage in
-RADOS OSD clusters--the same storage system for ``librados`` object stores and 
-the Ceph FS filesystem. You can use the same cluster to operate object stores, 
-the Ceph FS filesystem, and RADOS block devices simultaneously.
+.. ditaa::  +------------------------+ +------------------------+
+            |     Kernel Module      | |        librbd          |
+            +------------------------+-+------------------------+
+            |                   RADOS Protocol                  |
+            +------------------------+-+------------------------+
+            |          OSDs          | |        Monitors        |
+            +------------------------+ +------------------------+
+
+.. note:: Kernel modules can use Linux page caching. For ``librbd``-based 
+   applications, Ceph supports `RBD Caching`_.
+
+Ceph's block devices deliver high performance with infinite scalability to
+`kernel modules`_, or to :abbr:`KVMs (kernel virtual machines)` such as `Qemu`_, and
+cloud-based computing systems like `OpenStack`_ and `CloudStack`_ that rely on
+libvirt and Qemu to integrate with Ceph block devices. You can use the same cluster
+to operate the `Ceph RADOS Gateway`_, the `Ceph FS filesystem`_, and Ceph block
+devices simultaneously.
 
 .. important:: To use RBD, you must have a running Ceph cluster.
 
@@ -26,12 +39,18 @@ the Ceph FS filesystem, and RADOS block devices simultaneously.
 	:maxdepth: 1
 
 	Commands <rados-rbd-cmds>
-	Kernel Objects <rbd-ko>
+	Kernel Modules <rbd-ko>
 	Snapshots<rbd-snapshot>
 	QEMU <qemu-rbd>
 	libvirt <libvirt>
+	Cache Settings <../../config-cluster/rbd-config-ref/>
 	OpenStack <rbd-openstack>
 	CloudStack <rbd-cloudstack>
-	
-	
-	
+
+.. _RBD Caching: ../../config-cluster/rbd-config-ref/
+.. _kernel modules: ../rbd-ko/
+.. _Qemu: ../qemu-rbd/
+.. _OpenStack: ../rbd-openstack
+.. _CloudStack: ../rbd-cloudstack
+.. _Ceph RADOS Gateway: ../../radosgw/
+.. _Ceph FS filesystem: ../../cephfs/
