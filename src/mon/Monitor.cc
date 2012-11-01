@@ -1512,6 +1512,7 @@ void Monitor::handle_command(MMonCommand *m)
       ss2 << "\n-------- END REPORT " << bl.crc32c(6789) << " --------\n";
       rdata.append(bl);
       rdata.append(ss2.str());
+      rs = string();
       r = 0;
     }
     if (m->cmd[0] == "quorum_status") {

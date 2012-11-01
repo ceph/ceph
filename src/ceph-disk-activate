@@ -484,11 +484,26 @@ def activate(
                 )
             write_one_line(path, 'active', 'ok')
 
-        move_mount(
-            path=path,
-            cluster=cluster,
-            osd_id=osd_id,
-            )
+        # check if the disk is already active
+        active = False
+        src_dev = os.stat(path).st_dev
+        try:
+            dst_dev = os.stat('/var/lib/ceph/osd/{cluster}-{osd_id}'.format(
+                    cluster=cluster,
+                    osd_id=osd_id)).st_dev
+            if src_dev == dst_dev:
+                active = True
+        except:
+            pass
+        if active:
+            log.debug('OSD already mounted')
+            unmount(path)
+        else:
+            move_mount(
+                path=path,
+                cluster=cluster,
+                osd_id=osd_id,
+                )
     except:
         unmount(path)
     finally:
