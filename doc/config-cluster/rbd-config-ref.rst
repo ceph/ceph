@@ -1,19 +1,23 @@
-===========================
- RBD Cache Config Settings
-===========================
+=======================
+ librbd Cache Settings
+=======================
 
-With the kernel rbd driver, the Linux page cache can be used to
-improve performance. The userspace implementation, librbd, cannot take
-advantage of the page cache, so it includes its own in-memory caching,
-called RBD caching.
+See `Block Device`_ for additional details.
 
-RBD caching behaves just like well-behaved hard disk caching.  When the OS sends
-a barrier or a flush request, all dirty data is written to the OSDs. This means
-that using write-back caching is just as safe as using a well-behaved physical
-hard disk with a VM that properly sends flushes (i.e. Linux kernel >= 2.6.32).
+.. sidebar:: Kernel Caching
 
-The cache is LRU, and in write-back mode it can coalesce contiguous
-requests for better throughput.
+	The kernel driver for Ceph block devices can use the Linux page cache to 
+	improve performance.
+
+The user space implementation of the Ceph block device (i.e., ``librbd``) cannot
+take advantage of the Linux page cache, so it includes its own in-memory
+caching, called "RBD caching." RBD caching behaves just like well-behaved hard
+disk caching.  When the OS sends a barrier or a flush request, all dirty data is
+written to the OSDs. This means that using write-back caching is just as safe as
+using a well-behaved physical hard disk with a VM that properly sends flushes
+(i.e. Linux kernel >= 2.6.32). The cache uses a Least Recently Used (LRU)
+algorithm, and in write-back mode it  can coalesce contiguous requests for
+better throughput.
 
 .. versionadded:: 0.46
 
@@ -82,3 +86,4 @@ section of your configuration file. The settings include:
 :Required: No
 :Default: ``1.0``
 
+.. _Block Device: ../../rbd/rbd/
