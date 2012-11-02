@@ -9,7 +9,13 @@ JAVA_SRC = \
 	java/com/ceph/fs/CephFileAlreadyExistsException.java \
 	java/com/ceph/fs/CephAlreadyMountedException.java
 
-EXTRA_DIST = $(JAVA_SRC) test
+JAVA_TEST_SRC = \
+  test/com/ceph/fs/CephDoubleMountTest.java \
+  test/com/ceph/fs/CephMountCreateTest.java \
+  test/com/ceph/fs/CephMountTest.java \
+  test/com/ceph/fs/CephUnmountedTest.java 
+
+EXTRA_DIST = $(JAVA_SRC) $(JAVA_TEST_SRC)
 
 if ENABLE_CEPHFS_JAVA
 
@@ -46,12 +52,6 @@ BUILT_SOURCES = $(JAVA_H)
 if WITH_DEBUG 
 
 JAVA_TEST_CLASSES = $(JAVA_TEST_SRC:test/%.java=%.class)
-
-JAVA_TEST_SRC = \
-  test/com/ceph/fs/CephDoubleMountTest.java \
-  test/com/ceph/fs/CephMountCreateTest.java \
-  test/com/ceph/fs/CephMountTest.java \
-  test/com/ceph/fs/CephUnmountedTest.java 
 
 CEPH_TEST_PROXY=test/com/ceph/fs/CephMountTest.class
 
