@@ -17,12 +17,12 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+package com.ceph.fs;
+
 import java.io.FileNotFoundException;
 import org.junit.*;
 import java.util.UUID;
 import static org.junit.Assert.*;
-
-import com.ceph.fs.*;
 
 /*
  * This tests the mount root dir functionality. It creates an empty
