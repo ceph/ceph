@@ -3729,9 +3729,11 @@ int Client::path_walk(const filepath& origpath, Inode **final, bool followsym)
     if (i == path.depth() - 1 && followsym &&
 	next && next->is_symlink()) {
       // resolve symlink
-      if (cur->symlink[0] == '/') {
+      if (next->symlink[0] == '/') {
 	path = next->symlink.c_str();
 	next = root;
+	// reset position - will get incremented to 0
+	i = -1;
       } else {
 	filepath more(next->symlink.c_str());
 	// we need to remove the symlink component from off of the path
@@ -3956,7 +3958,7 @@ int Client::readlink(const char *relpath, char *buf, loff_t size)
 
   filepath path(relpath);
   Inode *in;
-  int r = path_walk(path, &in);
+  int r = path_walk(path, &in, false);
   if (r < 0)
     return r;
   
