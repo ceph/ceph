@@ -53,12 +53,13 @@ JAVA_TEST_SRC = \
   test/com/ceph/fs/CephMountTest.java \
   test/com/ceph/fs/CephUnmountedTest.java 
 
+CEPH_TEST_PROXY=test/com/ceph/fs/CephMountTest.class
 
-java_test_src: $(JAVA_TEST_SRC) $(CEPH_PROXY)
+$(CEPH_TEST_PROXY): $(JAVA_TEST_SRC) $(CEPH_PROXY)
 	export CLASSPATH=$(CLASSPATH):$(EXTRA_CLASSPATH_JAR):java/:test/ ; \
 	$(JAVAC) -source 1.5 -target 1.5 test/com/ceph/fs/*.java
 
-libcephfs-test.jar: java_test_src 
+libcephfs-test.jar: $(CEPH_TEST_PROXY)
 	$(JAR) cf $@ $(JAVA_TEST_CLASSES:%=-C test %) 
 
 java_DATA += libcephfs-test.jar
