@@ -6710,22 +6710,6 @@ void ReplicatedPG::scan_range(hobject_t begin, int min, int max, BackfillInterva
 }
 
 
-void ReplicatedPG::remove_object_with_snap_hardlinks(ObjectStore::Transaction& t, const hobject_t& soid)
-{
-  t.remove(coll, soid);
-  if (soid.snap < CEPH_MAXSNAP) {
-    bufferlist ba;
-    int r = osd->store->getattr(coll, soid, OI_ATTR, ba);
-    if (r >= 0) {
-      // grr, need first snap bound, too.
-      object_info_t oi(ba);
-      if (oi.snaps.size() > 1)
-	t.remove(coll_t(info.pgid, oi.snaps[oi.snaps.size() - 1]), soid);
-      t.remove(coll_t(info.pgid, oi.snaps[0]), soid);
-    }
-  }
-}
-
 /** clean_up_local
  * remove any objects that we're storing but shouldn't.
  * as determined by log.
