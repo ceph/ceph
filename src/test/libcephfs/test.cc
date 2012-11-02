@@ -616,4 +616,30 @@ TEST(LibCephFS, Hardlink_no_original) {
   ceph_shutdown(cmount);
 }
 
+TEST(LibCephFS, BadFileDesc) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
+  ASSERT_EQ(ceph_fchmod(cmount, -1, 0655), -EBADF);
+  ASSERT_EQ(ceph_close(cmount, -1), -EBADF);
+  ASSERT_EQ(ceph_lseek(cmount, -1, 0, SEEK_SET), -EBADF);
+
+  char buf[0];
+  ASSERT_EQ(ceph_read(cmount, -1, buf, 0, 0), -EBADF);
+  ASSERT_EQ(ceph_write(cmount, -1, buf, 0, 0), -EBADF);
+
+  ASSERT_EQ(ceph_ftruncate(cmount, -1, 0), -EBADF);
+  ASSERT_EQ(ceph_fsync(cmount, -1, 0), -EBADF);
+
+  struct stat stat;
+  ASSERT_EQ(ceph_fstat(cmount, -1, &stat), -EBADF);
+
+  struct sockaddr_storage addr;
+  ASSERT_EQ(ceph_get_file_stripe_address(cmount, -1, 0, &addr, 1), -EBADF);
+
+  ASSERT_EQ(ceph_get_file_stripe_unit(cmount, -1), -EBADF);
+  ASSERT_EQ(ceph_get_file_pool(cmount, -1), -EBADF);
+  ASSERT_EQ(ceph_get_file_replication(cmount, -1), -EBADF);
+}
