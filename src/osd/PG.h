@@ -715,6 +715,8 @@ public:
   void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
 		       pg_missing_t& omissing, int from);
   bool proc_replica_info(int from, const pg_info_t &info);
+  void remove_object_with_snap_hardlinks(
+    ObjectStore::Transaction& t, const hobject_t& soid);
   bool merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe);
 
   /**
