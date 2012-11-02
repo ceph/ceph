@@ -319,6 +319,23 @@ bool PG::proc_replica_info(int from, const pg_info_t &oinfo)
   return true;
 }
 
+void PG::remove_object_with_snap_hardlinks(
+  ObjectStore::Transaction& t, const hobject_t& soid)
+{
+  t.remove(coll, soid);
+  if (soid.snap < CEPH_MAXSNAP) {
+    bufferlist ba;
+    int r = osd->store->getattr(coll, soid, OI_ATTR, ba);
+    if (r >= 0) {
+      // grr, need first snap bound, too.
+      object_info_t oi(ba);
+      if (oi.snaps.size() > 1)
+	t.remove(coll_t(info.pgid, oi.snaps[oi.snaps.size() - 1]), soid);
+      t.remove(coll_t(info.pgid, oi.snaps[0]), soid);
+    }
+  }
+}
+
 
 /*
  * merge an old (possibly divergent) log entry into the new log.  this 
@@ -371,13 +388,13 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe)
     dout(20) << "merge_old_entry  had " << oe
 	     << ", clone with no non-divergent log entries, "
 	     << "deleting" << dendl;
-    t.remove(coll, oe.soid);
+    remove_object_with_snap_hardlinks(t, oe.soid);
     if (missing.is_missing(oe.soid))
       missing.rm(oe.soid, missing.missing[oe.soid].need);
   } else {
     if (!oe.is_delete()) {
       dout(20) << "merge_old_entry  had " << oe << " deleting" << dendl;
-      t.remove(coll, oe.soid);
+      remove_object_with_snap_hardlinks(t, oe.soid);
     }
     dout(20) << "merge_old_entry  had " << oe << " reverting to "
 	     << oe.prior_version << dendl;
@@ -530,7 +547,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
       if (ne.soid <= info.last_backfill) {
 	missing.add_next_event(ne);
 	if (ne.is_delete())
-	  t.remove(coll, ne.soid);
+	  remove_object_with_snap_hardlinks(t, ne.soid);
       }
     }
       
