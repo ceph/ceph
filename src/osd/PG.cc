@@ -384,9 +384,8 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe)
       }
     }
   } else if (oe.prior_version > info.log_tail) {
-    assert(oe.soid.snap != CEPH_NOSNAP);
     dout(20) << "merge_old_entry  had " << oe
-	     << ", clone with no non-divergent log entries, "
+	     << ", object with no non-divergent log entries, "
 	     << "deleting" << dendl;
     remove_object_with_snap_hardlinks(t, oe.soid);
     if (missing.is_missing(oe.soid))
