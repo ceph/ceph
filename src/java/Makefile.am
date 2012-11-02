@@ -13,7 +13,8 @@ JAVA_TEST_SRC = \
   test/com/ceph/fs/CephDoubleMountTest.java \
   test/com/ceph/fs/CephMountCreateTest.java \
   test/com/ceph/fs/CephMountTest.java \
-  test/com/ceph/fs/CephUnmountedTest.java 
+  test/com/ceph/fs/CephUnmountedTest.java \
+  test/com/ceph/fs/CephAllTests.java
 
 EXTRA_DIST = $(JAVA_SRC) $(JAVA_TEST_SRC)
 
