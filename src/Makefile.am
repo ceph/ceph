@@ -1879,20 +1879,38 @@ noinst_HEADERS = \
 	test/osd/TestOpStat.h\
 	global/pidfile.h\
 	common/sync_filesystem.h \
-	test/encoding/types.h \
-	test/kv_store_bench.h \
-	test/omap_bench.h \
-	test/system/cross_process_sem.h \
-	test/system/st_rados_create_pool.h \
-	test/system/st_rados_list_objects.h \
-	test/system/st_rados_delete_objs.h \
-	test/system/st_rados_delete_pool.h \
-	test/system/st_rados_notify.h \
-	test/system/st_rados_watch.h \
-	test/system/systest_runnable.h \
-	test/system/systest_settings.h \
-	test/librados/test.h \
-	test/unit.h \
+        test/bench/distribution.h \
+        test/bench/rados_backend.h \
+        test/bench/bencher.h \
+        test/bench/backend.h \
+        test/bench/dumb_backend.h \
+        test/bench/stat_collector.h \
+        test/bench/detailed_stat_collector.h \
+        test/bench/filestore_backend.h \
+        test/common/ObjectContents.h \
+        test/encoding/types.h \
+        test/filestore/DeterministicOpSequence.h \
+        test/filestore/FileStoreTracker.h \
+        test/filestore/FileStoreDiff.h \
+        test/filestore/TestFileStoreState.h \
+        test/filestore/workload_generator.h \
+        test/kv_store_bench.h \
+        test/ObjectMap/KeyValueDBMemory.h \
+        test/omap_bench.h \
+        test/osd/Object.h \
+        test/osd/RadosModel.h \
+        test/osd/TestOpStat.h \
+        test/librados/test.h \
+        test/system/cross_process_sem.h \
+        test/system/st_rados_create_pool.h \
+        test/system/st_rados_list_objects.h \
+        test/system/st_rados_delete_objs.h \
+        test/system/st_rados_delete_pool.h \
+        test/system/st_rados_notify.h \
+        test/system/st_rados_watch.h \
+        test/system/systest_runnable.h \
+        test/system/systest_settings.h \
+        test/unit.h \
 	os/ObjectMap.h \
 	os/DBObjectMap.h \
 	os/KeyValueDB.h \
