@@ -310,6 +310,16 @@ protected:
     free_fd_set.insert(fd, 1);
   }
 
+  /*
+   * Resolve file descriptor, or return NULL.
+   */
+  Fh *get_filehandle(int fd) {
+    hash_map<int, Fh*>::iterator p = fd_map.find(fd);
+    if (p == fd_map.end())
+      return NULL;
+    return p->second;
+  }
+
   // global client lock
   //  - protects Client and buffer cache both!
   Mutex                  client_lock;
