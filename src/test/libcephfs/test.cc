@@ -544,6 +544,24 @@ TEST(LibCephFS, Symlinks) {
   // ensure the stat bufs are equal
   ASSERT_TRUE(!memcmp(&stbuf_orig, &stbuf_symlink_orig, sizeof(stbuf_orig)));
 
+  sprintf(test_file, "/test_symlinks_abs_%d", getpid());
+
+  fd = ceph_open(cmount, test_file, O_CREAT|O_RDWR, 0666);
+  ASSERT_GT(fd, 0);
+
+  ceph_close(cmount, fd);
+
+  sprintf(test_symlink, "/test_symlinks_abs_sym_%d", getpid());
+
+  ASSERT_EQ(ceph_symlink(cmount, test_file, test_symlink), 0);
+
+  // stat the original file
+  ASSERT_EQ(ceph_stat(cmount, test_file, &stbuf_orig), 0);
+  // stat the symlink
+  ASSERT_EQ(ceph_stat(cmount, test_symlink, &stbuf_symlink_orig), 0);
+  // ensure the stat bufs are equal
+  ASSERT_TRUE(!memcmp(&stbuf_orig, &stbuf_symlink_orig, sizeof(stbuf_orig)));
+
   // test lstat
   struct stat stbuf_symlink;
   ASSERT_EQ(ceph_lstat(cmount, test_symlink, &stbuf_symlink), 0);
@@ -590,5 +608,4 @@ TEST(LibCephFS, Hardlink_no_original) {
 
   ceph_shutdown(cmount);
 }
-
 
