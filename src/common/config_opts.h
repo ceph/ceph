@@ -76,6 +76,7 @@ SUBSYS(monc, 0, 5)
 SUBSYS(paxos, 0, 5)
 SUBSYS(tp, 0, 5)
 SUBSYS(auth, 1, 5)
+SUBSYS(crypto, 1, 5)
 SUBSYS(finisher, 1, 5)
 SUBSYS(heartbeatmap, 1, 5)
 SUBSYS(perfcounter, 1, 5)
@@ -409,6 +410,8 @@ OPTION(rbd_cache_size, OPT_LONGLONG, 32<<20)         // cache size in bytes
 OPTION(rbd_cache_max_dirty, OPT_LONGLONG, 24<<20)    // dirty limit in bytes - set to 0 for write-through caching
 OPTION(rbd_cache_target_dirty, OPT_LONGLONG, 16<<20) // target dirty limit in bytes
 OPTION(rbd_cache_max_dirty_age, OPT_FLOAT, 1.0)      // seconds in cache before writeback starts
+
+OPTION(nss_db_path, OPT_STR, "") // path to nss db
 
 OPTION(rgw_data, OPT_STR, "/var/lib/ceph/radosgw/$cluster-$id")
 OPTION(rgw_enable_apis, OPT_STR, "s3, swift, swift_auth, admin")
