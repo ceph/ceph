@@ -14,6 +14,7 @@
     <delete>
       <fileset dir="${test.dir}" includes="**/*.class" />
     </delete>
+    <delete file="./libcephfs-test.jar" />
 	</target>
 
 	<target name="makedir">
@@ -40,15 +41,28 @@
                 <pathelement location="${env.CLASSPATH}" />
             </classpath>
 		</javac>
-        <jar basedir="test" destfile="./libcephfs-test.jar"> 
+        <jar destfile="./libcephfs-test.jar"> 
+            <fileset dir="${test.dir}" includes="**/*.class"/>  
         </jar>
 	</target>
 
-	<target name="test-compat" depends="compile-tests-jar,test">
+	<target name="test" depends="compile-tests-jar">
+        <junit printsummary="yes" haltonfailure="yes" showoutput="yes" fork="true">
+			<sysproperty key="java.library.path" path="${env.CEPHFS_JNI_LIB}:../.libs/"/>
+            <sysproperty key="CEPH_CONF_FILE" path="${env.CEPHFS_CONF}"/>
+            <jvmarg value="-Xcheck:jni"/>
+            <classpath>
+				<pathelement location="${env.CEPHFS_JAR}"/>
+				<pathelement location="libcephfs.jar"/>
+				<pathelement location="libcephfs-test.jar"/>
+            </classpath>
+            <formatter type="plain"/>
+            <test name="com.ceph.fs.CephAllTests" haltonerror="true" />
+        </junit>
   </target>
 
-	<target name="test">
-        <junit printsummary="yes" haltonfailure="yes" showoutput="yes">
+	<target name="test-compat" depends="compile-tests-jar">
+        <junit printsummary="yes" haltonfailure="yes" showoutput="yes" fork="true">
 			<sysproperty key="java.library.path" path="${env.CEPHFS_JNI_LIB}:../.libs/"/>
             <sysproperty key="CEPH_CONF_FILE" path="${env.CEPHFS_CONF}"/>
             <classpath>
@@ -57,11 +71,7 @@
 				<pathelement location="libcephfs-test.jar"/>
             </classpath>
             <formatter type="plain"/>
-            <batchtest fork="yes">
-                <zipfileset src="libcephfs-test.jar">
-                    <include name="**/*Test.class"/>
-                </zipfileset>
-            </batchtest>
+            <test name="com.ceph.fs.CephAllTests" haltonerror="true" />
         </junit>
     </target>
 
