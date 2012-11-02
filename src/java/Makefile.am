@@ -25,7 +25,7 @@ JAVA_H = native/com_ceph_fs_CephMount.h
 CEPH_PROXY=java/com/ceph/fs/CephMount.class
 
 $(CEPH_PROXY): $(JAVA_SRC)
-	export CLASSPATH=java/ ;
+	export CLASSPATH=java/ ; \
 	$(JAVAC) -source 1.5 -target 1.5 java/com/ceph/fs/*.java
 
 $(JAVA_H): $(CEPH_PROXY)
@@ -33,13 +33,37 @@ $(JAVA_H): $(CEPH_PROXY)
 	$(JAVAH) -jni -o $@ com.ceph.fs.CephMount
 
 libcephfs.jar: $(CEPH_PROXY)
-	$(JAR) cf $@ $(JAVA_CLASSES:%=-C java %) # $(ESCAPED_JAVA_CLASSES:%=-C java %)
+	$(JAR) cf $@ $(JAVA_CLASSES:%=-C java %) 
 
 javadir = $(libdir)
 java_DATA = libcephfs.jar
 
+CLEANFILES = -rf java/com/ceph/fs/*.class $(JAVA_H) libcephfs.jar 
+
 BUILT_SOURCES = $(JAVA_H)
 
-CLEANFILES = -rf java/com/ceph/fs/*.class $(JAVA_H) libcephfs.jar
+# build the tests if *both* --enable-cephfs-java and --with-debug were specifed
+if WITH_DEBUG 
 
-endif
+JAVA_TEST_CLASSES = $(JAVA_TEST_SRC:test/%.java=%.class)
+
+JAVA_TEST_SRC = \
+  test/com/ceph/fs/CephDoubleMountTest.java \
+  test/com/ceph/fs/CephMountCreateTest.java \
+  test/com/ceph/fs/CephMountTest.java \
+  test/com/ceph/fs/CephUnmountedTest.java 
+
+EXTRA_DIST += $(JAVA_TEST_SRC)
+
+java_test_src: $(JAVA_TEST_SRC) $(CEPH_PROXY)
+	export CLASSPATH=$(CLASSPATH):$(EXTRA_CLASSPATH_JAR):java/:test/ ; \
+	$(JAVAC) -source 1.5 -target 1.5 test/com/ceph/fs/*.java
+
+libcephfs-test.jar: java_test_src 
+	$(JAR) cf $@ $(JAVA_TEST_CLASSES:%=-C test %) 
+
+java_DATA += libcephfs-test.jar
+
+CLEANFILES += test/com/ceph/fs/*.class libcephfs-test.jar
+endif # WITH_DEBUG
+endif #ENABLE_CEPHFS_JAVA

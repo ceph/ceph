@@ -17,10 +17,10 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+package com.ceph.fs;
+
 import org.junit.*;
 import static org.junit.Assert.*;
-
-import com.ceph.fs.*;
 
 public class CephUnmountedTest {
 
