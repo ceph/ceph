@@ -1209,6 +1209,7 @@ libcommon_files = \
 	common/hex.cc \
 	common/entity_name.cc \
 	common/ceph_crypto.cc \
+	common/ceph_crypto_cms.cc \
 	common/ipaddr.cc \
 	common/pick_address.cc \
 	include/addr_parsing.c \
@@ -1430,6 +1431,7 @@ noinst_HEADERS = \
         common/config_obs.h\
 	common/config_opts.h\
 	common/ceph_crypto.h\
+	common/ceph_crypto_cms.h\
 	common/utf8.h\
 	common/mime.h\
 	common/pick_address.h\

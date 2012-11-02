@@ -21,7 +21,7 @@
 namespace ceph {
   namespace crypto {
     void assert_init();
-    void init();
+    void init(CephContext *cct);
     void shutdown();
 
     using CryptoPP::Weak::MD5;
@@ -56,7 +56,7 @@ typedef unsigned char byte;
 namespace ceph {
   namespace crypto {
     void assert_init();
-    void init();
+    void init(CephContext *cct);
     void shutdown();
     class Digest {
     private:
