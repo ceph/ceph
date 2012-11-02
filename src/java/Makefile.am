@@ -53,7 +53,6 @@ JAVA_TEST_SRC = \
   test/com/ceph/fs/CephMountTest.java \
   test/com/ceph/fs/CephUnmountedTest.java 
 
-EXTRA_DIST += $(JAVA_TEST_SRC)
 
 java_test_src: $(JAVA_TEST_SRC) $(CEPH_PROXY)
 	export CLASSPATH=$(CLASSPATH):$(EXTRA_CLASSPATH_JAR):java/:test/ ; \
