@@ -233,6 +233,13 @@ def schedule():
         default='master',
         help='which branch of teuthology to use',
         )
+    parser.add_argument(
+        '-s', '--show',
+        metavar='JOBID',
+        type=int,
+        nargs='*',
+        help='output the contents of specified jobs in the queue',
+        )
 
     ctx = parser.parse_args()
     if not ctx.last_in_suite:
@@ -251,6 +258,15 @@ def schedule():
     if ctx.branch != 'master':
         tube += '-' + ctx.branch
     beanstalk.use(tube)
+
+    if ctx.list:
+        for jobid in ctx.list:
+            job = beanstalk.peek(jobid)
+            if job is None and ctx.verbose:
+                print 'job {jid} is not in the queue'.format(jid=jobid)
+            else:
+                print 'job {jid} contains: '.format(jid=jobid), job.body
+        return
 
     if ctx.delete:
         for jobid in ctx.delete:
