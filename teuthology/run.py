@@ -259,8 +259,8 @@ def schedule():
         tube += '-' + ctx.branch
     beanstalk.use(tube)
 
-    if ctx.list:
-        for jobid in ctx.list:
+    if ctx.show:
+        for jobid in ctx.show:
             job = beanstalk.peek(jobid)
             if job is None and ctx.verbose:
                 print 'job {jid} is not in the queue'.format(jid=jobid)
