@@ -11,6 +11,9 @@
 
 #include "include/str_list.h"
 
+#include "common/ceph_crypto_cms.h"
+#include "common/armor.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 static list<string> roles_list;
@@ -98,6 +101,7 @@ static int rgw_swift_validate_token(const char *token, struct rgw_swift_auth_inf
 
 class KeystoneToken {
 public:
+  string token_id;
   string tenant_name;
   string tenant_id;
   string user_name;
@@ -144,7 +148,7 @@ int KeystoneToken::parse(bufferlist& bl)
 
   JSONObjIter riter = user->find("roles");
   if (riter.end()) {
-    dout(0) << "token response is missing roles section" << dendl;
+    dout(0) << "token response is missing roles section, or section empty" << dendl;
     return -EINVAL;
   }
 
@@ -160,7 +164,7 @@ int KeystoneToken::parse(bufferlist& bl)
   }
 
   JSONObj *token = access_obj->find_obj("token");
-  if (!user) {
+  if (!token) {
     dout(0) << "missing token section in response" << dendl;
     return -EINVAL;
   }
@@ -207,17 +211,25 @@ struct token_entry {
 
 class RGWKeystoneTokenCache {
   map<string, token_entry> tokens;
+  map<string, map<string, token_entry>::iterator> token_id_map;
   list<string> tokens_lru;
 
   Mutex lock;
 
   size_t max;
 
+  void _remove_token_id(const string& token_id) {
+    map<string, map<string, token_entry>::iterator>::iterator iter = token_id_map.find(token_id);
+    if (iter != token_id_map.end())
+      token_id_map.erase(iter);
+  }
+
 public:
   RGWKeystoneTokenCache(int _max) : lock("RGWKeystoneTokenCache"), max(_max) {}
 
   bool find(const string& token_str, KeystoneToken& token);
-  void add(const string& token_str, KeystoneToken& token);
+  void add(const string& token_str, const string& token_id, KeystoneToken& token);
+  void invalidate(const string& token_str, const string& token_id, KeystoneToken& token);
 };
 
 bool RGWKeystoneTokenCache::find(const string& token_str, KeystoneToken& token)
@@ -234,6 +246,7 @@ bool RGWKeystoneTokenCache::find(const string& token_str, KeystoneToken& token)
   tokens_lru.erase(entry.lru_iter);
 
   if (entry.token.expired()) {
+    _remove_token_id(entry.token.token_id);
     tokens.erase(iter);
     lock.Unlock();
     if (perfcounter) perfcounter->inc(l_rgw_keystone_token_cache_hit);
@@ -243,19 +256,20 @@ bool RGWKeystoneTokenCache::find(const string& token_str, KeystoneToken& token)
 
   tokens_lru.push_front(token_str);
   entry.lru_iter = tokens_lru.begin();
-  
+
   lock.Unlock();
   if (perfcounter) perfcounter->inc(l_rgw_keystone_token_cache_hit);
 
   return true;
 }
 
-void RGWKeystoneTokenCache::add(const string& token_str, KeystoneToken& token)
+void RGWKeystoneTokenCache::add(const string& token_str, const string& token_id, KeystoneToken& token)
 {
   lock.Lock();
   map<string, token_entry>::iterator iter = tokens.find(token_str);
   if (iter != tokens.end()) {
     token_entry& e = iter->second;
+    _remove_token_id(e.token.token_id);
     tokens_lru.erase(e.lru_iter);
   }
 
@@ -264,10 +278,13 @@ void RGWKeystoneTokenCache::add(const string& token_str, KeystoneToken& token)
   entry.token = token;
   entry.lru_iter = tokens_lru.begin();
 
+  token_id_map[entry.token.token_id] = tokens.find(token_str);
+
   while (tokens_lru.size() > max) {
     list<string>::reverse_iterator riter = tokens_lru.rbegin();
     iter = tokens.find(*riter);
     assert(iter != tokens.end());
+    _remove_token_id(*riter);
     tokens.erase(iter);
     tokens_lru.pop_back();
   }
@@ -288,6 +305,154 @@ public:
 
 static RGWKeystoneTokenCache *keystone_token_cache = NULL;
 
+class RGWGetRevokedTokens : public RGWHTTPClient {
+  bufferlist *bl;
+public:
+  RGWGetRevokedTokens(bufferlist *_bl) : bl(_bl) {}
+
+  int read_data(void *ptr, size_t len) {
+    bl->append((char *)ptr, len);
+    return 0;
+  }
+};
+static int open_cms_envelope(string& src, string& dst)
+{
+#define BEGIN_CMS "-----BEGIN CMS-----"
+#define END_CMS "-----END CMS-----"
+
+  int start = src.find(BEGIN_CMS);
+  if (start < 0) {
+    dout(0) << "failed to find " << BEGIN_CMS << " in response" << dendl;
+    return -EINVAL;
+  }
+  start += sizeof(BEGIN_CMS) - 1;
+
+  int end = src.find(END_CMS);
+  if (end < 0) {
+    dout(0) << "failed to find " << END_CMS << " in response" << dendl;
+    return -EINVAL;
+  }
+
+  string s = src.substr(start, end - start);
+
+  int pos = 0;
+
+  do {
+    int next = s.find('\n', pos);
+    if (next < 0) {
+      dst.append(s.substr(pos));
+      break;
+    } else {
+      dst.append(s.substr(pos, next - pos));
+    }
+    pos = next + 1;
+  } while (pos < (int)s.size());
+
+  return 0;
+}
+  
+static int rgw_check_revoked()
+{
+  bufferlist bl;
+  RGWGetRevokedTokens req(&bl);
+
+  string url = g_conf->rgw_keystone_url;
+  if (url.empty()) {
+    dout(0) << "ERROR: keystone url is not configured" << dendl;
+    return -EINVAL;
+  }
+  if (url[url.size() - 1] != '/')
+    url.append("/");
+  url.append("v2.0/tokens/revoked");
+
+  req.append_header("X-Auth-Token", g_conf->rgw_keystone_admin_token);
+
+  int ret = req.process(url);
+  if (ret < 0)
+    return ret;
+
+  bl.append((char)0); // NULL terminate
+
+  dout(10) << "request returned " << bl.c_str() << dendl;
+
+  RGWJSONParser parser;
+
+  if (!parser.parse(bl.c_str(), bl.length())) {
+    dout(0) << "malformed json" << dendl;
+    return -EINVAL;
+  }
+
+  JSONObjIter iter = parser.find_first("signed");
+  if (iter.end()) {
+    dout(0) << "revoked tokens response is missing signed section" << dendl;
+    return -EINVAL;
+  }  
+
+  JSONObj *signed_obj = *iter;
+
+  string signed_str = signed_obj->get_data();
+
+  dout(10) << "signed=" << signed_str << dendl;
+
+  string signed_b64;
+  ret = open_cms_envelope(signed_str, signed_b64);
+  if (ret < 0)
+    return ret;
+
+  dout(10) << "content=" << signed_b64 << dendl;
+  
+  bufferptr signed_ber(signed_b64.size() * 2);
+  char *dest = signed_ber.c_str();
+  const char *src = signed_b64.c_str();
+  ret = ceph_unarmor(dest, dest + signed_ber.length(), src, src + signed_b64.size());
+  if (ret < 0) {
+    dout(0) << "ceph_unarmor() failed, ret=" << ret << dendl;
+    return ret;
+  }
+
+  bufferlist signed_ber_bl;
+  signed_ber_bl.append(signed_ber);
+
+  bufferlist json;
+
+  ret = ceph_decode_cms(signed_ber_bl, json);
+  if (ret < 0) {
+    dout(0) << "ceph_decode_cms returned " << ret << dendl;
+    return ret;
+  }
+
+  dout(10) << "ceph_decode_cms: decoded: " << json.c_str() << dendl;
+
+  RGWJSONParser list_parser;
+  if (!list_parser.parse(json.c_str(), json.length())) {
+    dout(0) << "malformed json" << dendl;
+    return -EINVAL;
+  }
+
+  JSONObjIter revoked_iter = list_parser.find_first("revoked");
+  if (revoked_iter.end()) {
+    dout(0) << "no revoked section in json" << dendl;
+    return -EINVAL;
+  }
+
+  JSONObj *revoked_obj = *revoked_iter;
+
+  JSONObjIter tokens_iter = revoked_obj->find_first();
+  for (; !tokens_iter.end(); ++tokens_iter) {
+    JSONObj *o = *tokens_iter;
+
+    JSONObj *token = o->find_obj("id");
+    if (!token) {
+      dout(0) << "bad token in array, missing id" << dendl;
+      continue;
+    }
+
+    dout(20) << "token id=" << token->get_data() << dendl;
+  }
+  
+  return 0;
+}
+
 static void rgw_set_keystone_token_auth_info(KeystoneToken& token, struct rgw_swift_auth_info *info)
 {
   info->user = token.tenant_id;
@@ -297,13 +462,6 @@ static void rgw_set_keystone_token_auth_info(KeystoneToken& token, struct rgw_sw
 
 static int rgw_parse_keystone_token_response(const string& token, bufferlist& bl, struct rgw_swift_auth_info *info)
 {
-  RGWJSONParser parser;
-
-  if (!parser.parse(bl.c_str(), bl.length())) {
-    dout(0) << "malformed json" << dendl;
-    return -EINVAL;
-  }
-
   KeystoneToken t;
   int ret = t.parse(bl);
   if (ret < 0)
@@ -327,7 +485,7 @@ static int rgw_parse_keystone_token_response(const string& token, bufferlist& bl
   dout(0) << "validated token: " << t.tenant_name << ":" << t.user_name << " expires: " << t.expiration << dendl;
 
   rgw_set_keystone_token_auth_info(t, info);
-  keystone_token_cache->add(token, t);
+  keystone_token_cache->add(token, t.token_id, t);
 
   return 0;
 }
@@ -352,6 +510,9 @@ static int rgw_swift_validate_keystone_token(RGWRados *store, const string& toke
 					     RGWUserInfo& rgw_user)
 {
   KeystoneToken t;
+
+  rgw_check_revoked();
+
   if (keystone_token_cache->find(token, t)) {
     rgw_set_keystone_token_auth_info(t, info);
     int ret = update_user_info(store, info, rgw_user);

@@ -61,7 +61,7 @@
 
 #ifndef USE_NSS
 
-int decode_cms(bufferlist& cms_bl, bufferlist& decoded_bl)
+int ceph_decode_cms(bufferlist& cms_bl, bufferlist& decoded_bl)
 {
   return -ENOTSUP;
 }
@@ -310,7 +310,7 @@ loser:
     return NULL;
 }
 
-int decode_cms(bufferlist& cms_bl, bufferlist& decoded_bl)
+int ceph_decode_cms(bufferlist& cms_bl, bufferlist& decoded_bl)
 {
     NSSCMSMessage *cmsg = NULL;
     struct decodeOptionsStr decodeOptions = { 0 };
@@ -353,7 +353,6 @@ int decode_cms(bufferlist& cms_bl, bufferlist& decoded_bl)
 	NSS_CMSMessage_Destroy(cmsg);
 
     SECITEM_FreeItem(&decodeOptions.content, PR_FALSE);
-    SECITEM_FreeItem(&input, PR_FALSE);
 
     return ret;
 }
