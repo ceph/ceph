@@ -914,6 +914,28 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
       if (rd->extents.size() == 1) {
 	ldout(cct, 10) << "readx  object !exists, 1 extent..." << dendl;
 
+	// should we worry about COW underneaeth us?
+	if (writeback_handler.may_copy_on_write(soid.oid, ex_it->offset, ex_it->length, soid.snap)) {
+	  ldout(cct, 20) << "readx  may copy on write" << dendl;
+	  bool wait = false;
+	  for (map<loff_t, BufferHead*>::iterator bh_it = o->data.begin();
+	       bh_it != o->data.end();
+	       bh_it++) {
+	    BufferHead *bh = bh_it->second;
+	    if (bh->is_dirty() || bh->is_tx()) {
+	      ldout(cct, 10) << "readx  flushing " << *bh << dendl;
+	      wait = true;
+	      if (bh->is_dirty())
+		bh_write(bh);
+	    }
+	  }
+	  if (wait) {
+	    ldout(cct, 10) << "readx  waiting on tid " << o->last_write_tid << " on " << *o << dendl;
+	    o->waitfor_commit[o->last_write_tid].push_back(new C_RetryRead(this, rd, oset, onfinish));
+	    // FIXME: perfcounter!
+	    return 0;
+	  }
+	}
 
 	// can we return ENOENT?
 	bool allzero = true;
