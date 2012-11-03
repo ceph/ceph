@@ -471,7 +471,7 @@ namespace librbd {
     cache_lock.Lock();
     int r = object_cacher->readx(rd, object_set, onfinish);
     cache_lock.Unlock();
-    if (r > 0)
+    if (r != 0)
       onfinish->complete(r);
   }
 
