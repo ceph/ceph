@@ -171,6 +171,7 @@ class ObjectCacher {
     object_locator_t oloc;
     
     bool complete;
+    bool exists;
 
   public:
     map<loff_t, BufferHead*>     data;
@@ -192,7 +193,7 @@ class ObjectCacher {
       ref(0),
       oc(_oc),
       oid(o), oset(os), set_item(this), oloc(l),
-      complete(false),
+      complete(false), exists(true),
       last_write_tid(0), last_commit_tid(0),
       dirty_or_tx(0) {
       // add to set
@@ -628,6 +629,8 @@ inline ostream& operator<<(ostream& out, ObjectCacher::Object &ob)
 
   if (ob.complete)
     out << " COMPLETE";
+  if (!ob.exists)
+    out << " !EXISTS";
 
   out << "]";
   return out;
