@@ -405,6 +405,15 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len)
 {
   ldout(oc->cct, 10) << "discard " << *this << " " << off << "~" << len << dendl;
 
+  if (!exists) {
+    ldout(oc->cct, 10) << " setting exists on " << *this << dendl;
+    exists = true;
+  }
+  if (complete) {
+    ldout(oc->cct, 10) << " clearing complete on " << *this << dendl;
+    complete = false;
+  }
+
   map<loff_t, BufferHead*>::iterator p = data_lower_bound(off);
   while (p != data.end()) {
     BufferHead *bh = p->second;
@@ -579,8 +588,9 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
     Object *ob = objects[poolid][oid];
     
     if (r == -ENOENT && !ob->complete) {
-      ldout(cct, 7) << "bh_read_finish ENOENT, marking complete on " << *ob << dendl;
+      ldout(cct, 7) << "bh_read_finish ENOENT, marking complete and !exists on " << *ob << dendl;
       ob->complete = true;
+      ob->exists = false;
     }
 
     // apply to bh's!
@@ -694,6 +704,11 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
   } else {
     Object *ob = objects[poolid][oid];
     
+    if (!ob->exists) {
+      ldout(cct, 10) << "bh_write_commit marking exists on " << *ob << dendl;
+      ob->exists = true;
+    }
+
     // apply to bh's!
     for (map<loff_t, BufferHead*>::iterator p = ob->data.lower_bound(start);
          p != ob->data.end();
@@ -1480,6 +1495,10 @@ loff_t ObjectCacher::release(Object *ob)
   if (ob->complete) {
     ldout(cct, 10) << "release clearing complete on " << *ob << dendl;
     ob->complete = false;
+  }
+  if (!ob->exists) {
+    ldout(cct, 10) << "release setting exists on " << *ob << dendl;
+    ob->exists = true;
   }
 
   return o_unclean;
