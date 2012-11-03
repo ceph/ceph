@@ -2628,13 +2628,7 @@ reprotect_and_return_err:
 	c->add_request();
 
 	if (ictx->object_cacher) {
-	  // cache has already handled possible reading from parent, so
-	  // this AioRead is just used to pass data to the
-	  // AioCompletion. The AioRead isn't being used as a
-	  // completion, so wrap the completion in a C_CacheRead to
-	  // delete it
 	  C_CacheRead *cache_comp = new C_CacheRead(req_comp, req);
-	  req->m_ext_map[q->offset] = q->length;
 	  ictx->aio_read_from_cache(q->oid, &req->data(),
 				    q->length, q->offset,
 				    cache_comp);
