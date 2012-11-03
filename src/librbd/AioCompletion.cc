@@ -85,7 +85,6 @@ namespace librbd {
 
   void C_CacheRead::finish(int r)
   {
-    m_completion->complete(r);
-    delete m_req;
+    m_req->complete(r);
   }
 }

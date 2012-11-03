@@ -23,6 +23,26 @@
 
 namespace librbd {
 
+  /**
+   * callback to finish a rados completion as a Context
+   *
+   * @param c completion
+   * @param arg Context* recast as void*
+   */
+  void context_cb(rados_completion_t c, void *arg)
+  {
+    Context *con = reinterpret_cast<Context *>(arg);
+    con->finish(rados_aio_get_return_value(c));
+    delete con;
+  }
+
+  /**
+   * context to wrap another context in a Mutex
+   *
+   * @param cct cct
+   * @param c context to finish
+   * @param l mutex to lock
+   */
   class C_Request : public Context {
   public:
     C_Request(CephContext *cct, Context *c, Mutex *l)
@@ -43,25 +63,6 @@ namespace librbd {
     Mutex *m_lock;
   };
 
-  class C_Read : public Context {
-  public:
-    C_Read(Context *real_context, bufferlist *pbl)
-      : m_ctx(real_context), m_req(NULL), m_out_bl(pbl) {}
-    virtual ~C_Read() {}
-    virtual void finish(int r) {
-      if (r >= 0)
-	*m_out_bl = m_req->data();
-      m_ctx->complete(r);
-    }
-    void set_req(AioRead *req) {
-      m_req = req;
-    }
-  private:
-    Context *m_ctx;
-    AioRead *m_req;
-    bufferlist *m_out_bl;
-  };
-
   LibrbdWriteback::LibrbdWriteback(ImageCtx *ictx, Mutex& lock)
     : m_tid(0), m_lock(lock), m_ictx(ictx)
   {
@@ -73,16 +74,13 @@ namespace librbd {
 			      bufferlist *pbl, uint64_t trunc_size,
 			      __u32 trunc_seq, Context *onfinish)
   {
-    C_Request *req_comp = new C_Request(m_ictx->cct, onfinish, &m_lock);
-    C_Read *read_comp = new C_Read(req_comp, pbl);
-    uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
-    vector<pair<uint64_t,uint64_t> > ex(1);
-    ex[0] = make_pair(off, len);
-    AioRead *req = new AioRead(m_ictx, oid.name,
-			       object_no, off, len, ex,
-			       snapid, false, read_comp);
-    read_comp->set_req(req);
-    req->send();
+    // on completion, take the mutex and then call onfinish.
+    Context *req = new C_Request(m_ictx->cct, onfinish, &m_lock);
+    librados::AioCompletion *rados_completion =
+      librados::Rados::aio_create_completion(req, context_cb, NULL);
+    int r = m_ictx->data_ctx.aio_read(oid.name, rados_completion, pbl,
+				      len, off);
+    assert(r >= 0);
     return ++m_tid;
   }
 
