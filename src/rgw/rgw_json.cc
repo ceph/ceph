@@ -85,10 +85,6 @@ JSONObjIter JSONObj::find_first()
 {
   JSONObjIter iter;
   iter.set(children.begin(), children.end());
-    cout << "count=" << children.size() << std::endl;
-  for (map<string, JSONObj *>:: iterator i = children.begin(); i != children.end(); ++i) {
-    cout << "child: " << i->first << std::endl;
-  }
   return iter;
 }
 
@@ -143,16 +139,11 @@ void JSONObj::handle_value(Value v)
 
     for (unsigned j = 0; j < temp_array.size(); j++) {
       Value cur = temp_array[j];
-      
-      if (cur.type() == obj_type) {
-	handle_value(cur);
-      } else {
-        string temp_name;
+      string temp_name;
 
-        JSONObj *child = new JSONObj;
-        child->init(this, cur, temp_name);
-        add_child(child->get_name(), child);
-      }
+      JSONObj *child = new JSONObj;
+      child->init(this, cur, temp_name);
+      add_child(child->get_name(), child);
     }
   }
 }

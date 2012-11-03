@@ -3,6 +3,6 @@
 
 #include "include/buffer.h"
 
-int decode_cms(bufferlist& cms_bl, bufferlist& decoded_bl);
+int ceph_decode_cms(bufferlist& cms_bl, bufferlist& decoded_bl);
 
 #endif
