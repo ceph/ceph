@@ -2469,7 +2469,7 @@ reprotect_and_return_err:
       total_write += bl.length();
     }
   done:
-    c->finish_adding_requests();
+    c->finish_adding_requests(ictx->cct);
     c->put();
 
     ictx->perfcounter->inc(l_librbd_aio_wr);
@@ -2550,7 +2550,7 @@ reprotect_and_return_err:
     if (ictx->object_cacher)
       ictx->object_cacher->discard_set(ictx->object_set, extents);
 
-    c->finish_adding_requests();
+    c->finish_adding_requests(ictx->cct);
     c->put();
 
     ictx->perfcounter->inc(l_librbd_aio_discard);
@@ -2651,7 +2651,7 @@ reprotect_and_return_err:
     }
     ret = buffer_ofs;
   done:
-    c->finish_adding_requests();
+    c->finish_adding_requests(ictx->cct);
     c->put();
 
     ictx->perfcounter->inc(l_librbd_aio_rd);

@@ -17,6 +17,30 @@
 
 namespace librbd {
 
+  void AioCompletion::finalize(CephContext *cct, ssize_t rval)
+  {
+    ldout(cct, 20) << "AioCompletion::finalize() rval " << rval << " read_buf " << (void*)read_buf
+		   << " read_bl " << (void*)read_bl << dendl;
+    if (rval >= 0 && aio_type == AIO_TYPE_READ) {
+      // FIXME: make the destriper write directly into a buffer so
+      // that we avoid shuffling pointers and copying zeros around.
+      bufferlist bl;
+      destriper.assemble_result(cct, bl, true);
+
+      if (read_buf) {
+	assert(bl.length() == read_buf_len);
+	bl.copy(0, read_buf_len, read_buf);
+	ldout(cct, 20) << "AioCompletion::finalize() copied resulting " << bl.length()
+		       << " bytes to " << (void*)read_buf << dendl;
+      }
+      if (read_bl) {
+	ldout(cct, 20) << "AioCompletion::finalize() moving resulting " << bl.length()
+		       << " bytes to bl " << (void*)read_bl << dendl;
+	read_bl->claim(bl);
+      }
+    }
+  }
+
   void AioCompletion::complete_request(CephContext *cct, ssize_t r)
   {
     ldout(cct, 20) << "AioCompletion::complete_request() this="
@@ -30,30 +54,9 @@ namespace librbd {
     }
     assert(pending_count);
     int count = --pending_count;
-    if (!count) {
-      ldout(cct, 20) << "AioCompletion::complete_request() rval " << rval << " read_buf " << (void*)read_buf
-		     << " read_bl " << (void*)read_bl << dendl;
-      if (rval >= 0 && aio_type == AIO_TYPE_READ) {
-	// FIXME: make the destriper write directly into a buffer so
-	// that we avoid shuffling pointers and copying zeros around.
-	bufferlist bl;
-	destriper.assemble_result(cct, bl, true);
-
-	if (read_buf) {
-	  assert(bl.length() == read_buf_len);
-	  bl.copy(0, read_buf_len, read_buf);
-	  ldout(cct, 20) << "AioCompletion::complete_request() copied resulting " << bl.length()
-			 << " bytes to " << (void*)read_buf << dendl;
-	}
-	if (read_bl) {
-	  ldout(cct, 20) << "AioCompletion::complete_request() moving resulting " << bl.length()
-			 << " bytes to bl " << (void*)read_bl << dendl;
-	  read_bl->claim(bl);
-	}
-      }      
-
-      if (!building)
-	complete();
+    if (!count && !building) {
+      finalize(cct, rval);
+      complete();
     }
     put_unlock();
   }
