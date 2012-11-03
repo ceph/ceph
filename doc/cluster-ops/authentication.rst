@@ -203,8 +203,8 @@ For example, ``osd.12`` would be::
 
 You can override these locations, but it is not recommended.
 
-Using Cephx
-============
+Cephx Administration
+====================
 
 Cephx uses shared secret keys for authentication, meaning both the client and
 the monitor cluster have a copy of the client's secret key.  The authentication
@@ -258,6 +258,76 @@ To list the keys registered in your cluster::
 
 	sudo ceph auth list
 
+
+Cephx Commandline Options
+=========================
+
+When Ceph runs with Cephx enabled, you must specify a user name and a secret key
+on the command line. Alternatively, you may use the ``CEPH_ARGS`` environment
+variable to avoid re-entry of the user name and secret. ::
+
+	ceph --id {user-name} --keyring=/path/to/secret [commands]
+
+For example::
+
+	ceph --id client.admin --keyring=/etc/ceph/ceph.keyring [commands]
+
+
+Ceph supports the following usage for user name and secret:
+
+``--id``
+
+:Description: A user name consists of a type and an ID (e.g., ``TYPE.ID`` or
+              ``client.admin``, ``client.user1``). The ``id`` argument enables
+              you to specify the ID portion of the user name (e.g., ``admin``, 
+              ``user1``, ``foo``, etc.). You can specify the user with the 
+              ``--id`` and omit the type. For example, to specify user 
+              ``client.foo`` enter the following:: 
+              
+               ceph --id foo --keyring /path/to/keyring health
+
+
+``--user`` | ``--name``
+
+:Description: Newer versions of Ceph support ``--name``, ``-n`` and ``--user`` 
+              arguments in addition to ``--id``. However, you must specify the
+              user type (typically ``client``). For example:: 
+
+               ceph --name client.foo --keyring /path/to/keyring health
+               ceph -n client.foo --keyring /path/to/keyring health
+               ceph --user client.foo --keyring /path/to/keyring health
+              
+
+
+``--keyring``
+
+:Description: The path to the keyring containing one or more user name and 
+              secret. The ``--secret`` option provides the same functionality, 
+              but it does not work with Ceph RADOS Gateway, which uses 
+              ``--secret`` for another purpose. You may retrieve a keyring with 
+              ``ceph auth get-or-create`` and store it locally. This is a 
+              preferred approach, because you can switch user names without 
+              switching the keyring path. For example:: 
+
+               sudo rbd map foo --pool rbd myimage --id client.foo --keyring /path/to/keyring
+
+
+``--keyfile``
+
+:Description: The path to the key file containing the secret key for the user 
+              specified by ``--id``, ``--name``, ``-n``, or ``--user``. You may 
+              retrieve the key for a specific user with ``ceph auth get`` and 
+              store it locally. Then, specify the path to the keyfile. 
+              For example::
+
+               sudo rbd map foo --pool rbd myimage --id client.foo --keyfile /path/to/file
+
+
+.. note:: Add the user and secret to the ``CEPH_ARGS`` environment variable so that 
+   you don’t need to enter them each time. You can override the environment 
+   variable settings on the command line.
+
+
 Backward Compatibility
 ======================
 
@@ -280,7 +350,7 @@ request/response--making it impossible for Argonaut (and prior) daemons to
 interoperate with Bobtail (and subsequent) daemons.
 
 We have addressed this potential problem by providing a means for Argonaut (and
-prior) systems to interact with Botail (and subsequent) systems. Here's how it
+prior) systems to interact with Bobtail (and subsequent) systems. Here's how it
 works: by default, the newer systems will not insist on seeing signatures from
 older systems that do not know how to perform them, but will simply accept such
 messages without authenticating them. This new default behavior provides the
