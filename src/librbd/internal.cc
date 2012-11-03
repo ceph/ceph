@@ -2579,7 +2579,7 @@ reprotect_and_return_err:
   int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
 	       char *buf, bufferlist *pbl, AioCompletion *c)
   {
-    ldout(ictx->cct, 20) << "aio_read " << ictx << " " << image_extents << dendl;
+    ldout(ictx->cct, 20) << "aio_read " << ictx << " completion " << c << " " << image_extents << dendl;
 
     int r = ictx_check(ictx);
     if (r < 0)
