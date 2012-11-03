@@ -622,22 +622,6 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
       assert(opos >= bh->start());
       assert(bh->start() == opos);   // we don't merge rx bh's... yet!
       assert(bh->length() <= start+(loff_t)length-opos);
-      
-      bh->bl.substr_of(bl,
-                       opos-bh->start(),
-                       bh->length());
-
-      if (r < 0 && r != -ENOENT) {
-	mark_error(bh);
-	bh->error = r;
-      } else {
-	mark_clean(bh);
-      }
-
-      ldout(cct, 10) << "bh_read_finish read " << *bh << dendl;
-      
-      opos = bh->end();
-      p++;
 
       // finishers?
       for (map<loff_t, list<Context*> >::iterator p = bh->waitfor_read.begin();
@@ -647,6 +631,29 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
       bh->waitfor_read.clear();
       if (bh->error < 0)
 	err = bh->error;
+
+      loff_t oldpos = opos;
+      opos = bh->end();
+
+      if (r == -ENOENT) {
+	ldout(cct, 10) << "bh_read_finish removing " << *bh << dendl;
+	p++;
+	bh_remove(ob, bh);
+	continue;
+      }
+
+      if (r < 0) {
+	bh->error = r;
+	mark_error(bh);
+      } else {
+	bh->bl.substr_of(bl,
+			 oldpos-bh->start(),
+			 bh->length());
+	mark_clean(bh);
+      }
+
+      ldout(cct, 10) << "bh_read_finish read " << *bh << dendl;
+      p++;
 
       ob->try_merge_bh(bh);
     }
