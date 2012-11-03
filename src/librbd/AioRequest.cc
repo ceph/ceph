@@ -64,7 +64,8 @@ namespace librbd {
 
   bool AioRead::should_complete(int r)
   {
-    ldout(m_ictx->cct, 20) << "read should_complete: r = " << r << dendl;
+    ldout(m_ictx->cct, 20) << "should_complete " << this << " " << m_oid << " " << m_object_off << "~" << m_object_len
+			   << " r = " << r << dendl;
 
     if (!m_tried_parent && r == -ENOENT) {
       Mutex::Locker l(m_ictx->snap_lock);
@@ -93,6 +94,8 @@ namespace librbd {
   }
 
   int AioRead::send() {
+    ldout(m_ictx->cct, 20) << "send " << this << " " << m_oid << " " << m_object_off << "~" << m_object_len << dendl;
+
     librados::AioCompletion *rados_completion =
       librados::Rados::aio_create_completion(this, rados_req_cb, NULL);
     int r;
@@ -145,8 +148,8 @@ namespace librbd {
 
   bool AbstractWrite::should_complete(int r)
   {
-    ldout(m_ictx->cct, 20) << "write " << this << " should_complete: r = "
-			   << r << dendl;
+    ldout(m_ictx->cct, 20) << "write " << this << " " << m_oid << " " << m_object_off << "~" << m_object_len
+			   << " should_complete: r = " << r << dendl;
 
     bool finished = true;
     switch (m_state) {
@@ -195,6 +198,7 @@ namespace librbd {
   }
 
   int AbstractWrite::send() {
+    ldout(m_ictx->cct, 20) << "send " << this << " " << m_oid << " " << m_object_off << "~" << m_object_len << dendl;
     librados::AioCompletion *rados_completion =
       librados::Rados::aio_create_completion(this, NULL, rados_req_cb);
     int r;

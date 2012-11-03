@@ -698,6 +698,7 @@ void ObjectCacher::bh_write(BufferHead *bh)
 				      bh->snapc, bh->bl, bh->last_write,
 				      oset->truncate_size, oset->truncate_seq,
 				      oncommit);
+  ldout(cct, 20) << " tid " << tid << " on " << bh->ob->get_oid() << dendl;
 
   // set bh last_write_tid
   oncommit->tid = tid;

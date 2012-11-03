@@ -17,9 +17,22 @@
 
 namespace librbd {
 
+  void AioCompletion::finish_adding_requests(CephContext *cct)
+  {
+    ldout(cct, 20) << "AioCompletion::finish_adding_requests " << (void*)this << " pending " << pending_count << dendl;
+    lock.Lock();
+    assert(building);
+    building = false;
+    if (!pending_count) {
+      finalize(cct, rval);
+      complete();
+    }
+    lock.Unlock();
+  }
+
   void AioCompletion::finalize(CephContext *cct, ssize_t rval)
   {
-    ldout(cct, 20) << "AioCompletion::finalize() rval " << rval << " read_buf " << (void*)read_buf
+    ldout(cct, 20) << "AioCompletion::finalize() " << (void*)this << " rval " << rval << " read_buf " << (void*)read_buf
 		   << " read_bl " << (void*)read_bl << dendl;
     if (rval >= 0 && aio_type == AIO_TYPE_READ) {
       // FIXME: make the destriper write directly into a buffer so
@@ -43,8 +56,9 @@ namespace librbd {
 
   void AioCompletion::complete_request(CephContext *cct, ssize_t r)
   {
-    ldout(cct, 20) << "AioCompletion::complete_request() this="
-		   << (void *)this << " complete_cb=" << (void *)complete_cb << dendl;
+    ldout(cct, 20) << "AioCompletion::complete_request() "
+		   << (void *)this << " complete_cb=" << (void *)complete_cb
+		   << " pending " << pending_count << dendl;
     lock.Lock();
     if (rval >= 0) {
       if (r < 0 && r != -EEXIST)
