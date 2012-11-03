@@ -707,6 +707,11 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
     if (!ob->exists) {
       ldout(cct, 10) << "bh_write_commit marking exists on " << *ob << dendl;
       ob->exists = true;
+
+      if (writeback_handler.may_copy_on_write(ob->get_oid(), start, length, ob->get_snap())) {
+	ldout(cct, 10) << "bh_write_commit may copy on write, clearing complete on " << *ob << dendl;
+	ob->complete = false;
+      }
     }
 
     // apply to bh's!
