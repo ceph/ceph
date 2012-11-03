@@ -86,6 +86,29 @@ namespace librbd {
     return ++m_tid;
   }
 
+  bool LibrbdWriteback::may_copy_on_write(const object_t& oid, uint64_t read_off, uint64_t read_len, snapid_t snapid)
+  {
+    m_ictx->snap_lock.Lock();
+    librados::snap_t snap_id = m_ictx->snap_id;
+    m_ictx->parent_lock.Lock();
+    uint64_t overlap = 0;
+    m_ictx->get_parent_overlap(snap_id, &overlap);
+    m_ictx->parent_lock.Unlock();
+    m_ictx->snap_lock.Unlock();
+
+    uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
+
+    // reverse map this object extent onto the parent
+    vector<pair<uint64_t,uint64_t> > objectx;
+    Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
+			  object_no, 0, m_ictx->layout.fl_object_size,
+			  objectx);
+    uint64_t object_overlap = m_ictx->prune_parent_extents(objectx, overlap);
+    bool may = object_overlap > 0;
+    ldout(m_ictx->cct, 10) << "may_copy_on_write " << oid << " " << read_off << "~" << read_len << " = " << may << dendl;
+    return may;
+  }
+
   tid_t LibrbdWriteback::write(const object_t& oid,
 			       const object_locator_t& oloc,
 			       uint64_t off, uint64_t len,
