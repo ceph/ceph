@@ -1119,6 +1119,83 @@ TEST(LibRBD, TestClone)
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
+TEST(LibRBD, TestClone2)
+{
+  rados_t cluster;
+  rados_ioctx_t ioctx;
+  string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
+  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+
+  int features = RBD_FEATURE_LAYERING;
+  rbd_image_t parent, child;
+  int order = 0;
+
+  // make a parent to clone from
+  ASSERT_EQ(0, create_image_full(ioctx, "parent", 4<<20, &order, false, features));
+  ASSERT_EQ(0, rbd_open(ioctx, "parent", &parent, NULL));
+  printf("made parent image \"parent\"\n");
+
+  char *data = (char *)"testdata";
+  char *childata = (char *)"childata";
+  ASSERT_EQ((ssize_t)strlen(data), rbd_write(parent, 0, strlen(data), data));
+  ASSERT_EQ((ssize_t)strlen(data), rbd_write(parent, 12, strlen(data), data));
+
+  // can't clone a non-snapshot, expect failure
+  EXPECT_NE(0, rbd_clone(ioctx, "parent", NULL, ioctx, "child", features, &order));
+
+  // verify that there is no parent info on "parent"
+  char ppool[1], pname[1], psnapname[1];
+  ASSERT_EQ(-ENOENT, rbd_get_parent_info(parent, ppool, sizeof(ppool),
+	    pname, sizeof(pname), psnapname, sizeof(psnapname)));
+  printf("parent has no parent info\n");
+
+  // create a snapshot, reopen as the parent we're interested in
+  ASSERT_EQ(0, rbd_snap_create(parent, "parent_snap"));
+  printf("made snapshot \"parent@parent_snap\"\n");
+  ASSERT_EQ(0, rbd_close(parent));
+  ASSERT_EQ(0, rbd_open(ioctx, "parent", &parent, "parent_snap"));
+
+  ASSERT_EQ(-EINVAL, rbd_clone(ioctx, "parent", "parent_snap", ioctx, "child",
+	    features, &order));
+
+  // unprotected image should fail unprotect
+  ASSERT_EQ(-EINVAL, rbd_snap_unprotect(parent, "parent_snap"));
+  printf("can't unprotect an unprotected snap\n");
+
+  ASSERT_EQ(0, rbd_snap_protect(parent, "parent_snap"));
+  // protecting again should fail
+  ASSERT_EQ(-EBUSY, rbd_snap_protect(parent, "parent_snap"));
+  printf("can't protect a protected snap\n");
+
+  // This clone and open should work
+  ASSERT_EQ(0, rbd_clone(ioctx, "parent", "parent_snap", ioctx, "child",
+	    features, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, "child", &child, NULL));
+  printf("made and opened clone \"child\"\n");
+
+  // write something in
+  ASSERT_EQ((ssize_t)strlen(childata), rbd_write(child, 20, strlen(childata), childata));
+
+  char test[strlen(data) * 2];
+  ASSERT_EQ((ssize_t)strlen(data), rbd_read(child, 20, strlen(data), test));
+  ASSERT_EQ(0, memcmp(test, childata, strlen(childata)));
+
+  // overlap
+  ASSERT_EQ((ssize_t)sizeof(test), rbd_read(child, 20 - strlen(data), sizeof(test), test));
+  ASSERT_EQ(0, memcmp(test, data, strlen(data)));
+  ASSERT_EQ(0, memcmp(test + strlen(data), childata, strlen(childata)));
+
+  // all parent
+  ASSERT_EQ((ssize_t)sizeof(test), rbd_read(child, 0, sizeof(test), test));
+  ASSERT_EQ(0, memcmp(test, data, strlen(data)));
+
+  ASSERT_EQ(0, rbd_close(child));
+  ASSERT_EQ(0, rbd_close(parent));
+  rados_ioctx_destroy(ioctx);
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
+
 static void test_list_children(rbd_image_t image, ssize_t num_expected, ...)
 {
   va_list ap;
