@@ -905,7 +905,35 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
     // get Object cache
     sobject_t soid(ex_it->oid, rd->snap);
     Object *o = get_object(soid, oset, ex_it->oloc);
-    
+
+    // does not exist and no hits?
+    if (!o->exists) {
+      // WARNING: we can only meaningfully return ENOENT if the read request
+      // passed in a single ObjectExtent.  Any caller who wants ENOENT instead of
+      // zeroed buffers needs to feed single extents into readx().
+      if (rd->extents.size() == 1) {
+	ldout(cct, 10) << "readx  object !exists, 1 extent..." << dendl;
+
+
+	// can we return ENOENT?
+	bool allzero = true;
+	for (map<loff_t, BufferHead*>::iterator bh_it = o->data.begin();
+	     bh_it != o->data.end();
+	     bh_it++) {
+	  ldout(cct, 20) << "readx  ob has bh " << *bh_it->second << dendl;
+	  if (!bh_it->second->is_zero() && !bh_it->second->is_rx()) {
+	    allzero = false;
+	    break;
+	  }
+	}
+	if (allzero) {
+	  ldout(cct, 10) << "readx  ob has all zero|rx, returning ENOENT" << dendl;
+	  delete rd;
+	  return -ENOENT;
+	}
+      }
+    }
+
     // map extent into bufferheads
     map<loff_t, BufferHead*> hits, missing, rx, errors;
     o->map_read(rd, hits, missing, rx, errors);
