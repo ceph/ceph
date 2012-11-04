@@ -1,5 +1,5 @@
 #include "include/rados/librados.h"
-#include "test/rados-api/test.h"
+#include "test/librados/test.h"
 
 #include "gtest/gtest.h"
 #include <errno.h>
