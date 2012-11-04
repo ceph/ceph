@@ -28,6 +28,8 @@
 
 #include "messages/MMonSubscribe.h"
 
+#include "common/SimpleRNG.h"
+
 #include <memory>
 
 class MonMap;
@@ -59,6 +61,8 @@ private:
 
   string cur_mon;
   Connection *cur_con;
+
+  SimpleRNG rng;
 
   EntityName entity_name;
 
@@ -119,6 +123,7 @@ private:
 
   list<Message*> waiting_for_session;
 
+  string _pick_random_mon();
   void _finish_hunting();
   void _reopen_session();
   void _pick_new_mon();
