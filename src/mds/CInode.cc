@@ -2554,7 +2554,7 @@ void CInode::replicate_relax_locks()
 // =============================================
 
 int CInode::encode_inodestat(bufferlist& bl, Session *session,
-			      SnapRealm *realm,
+			      SnapRealm *dir_realm,
 			      snapid_t snapid, unsigned max_bytes)
 {
   int client = session->inst.name.num();
@@ -2565,7 +2565,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   bool valid = true;
 
   // do not issue caps if inode differs from readdir snaprealm
-  bool no_caps = (realm && snaprealm && realm != snaprealm);
+  SnapRealm *realm = find_snaprealm();
+  bool no_caps = (realm && dir_realm && realm != dir_realm);
   if (no_caps)
     dout(20) << "encode_inodestat realm=" << realm << " snaprealm " << snaprealm
 	     << " no_caps=" << no_caps << dendl;
@@ -2724,7 +2725,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   } else {
     if (!no_caps && valid && !cap) {
       // add a new cap
-      cap = add_client_cap(client, session, find_snaprealm());
+      cap = add_client_cap(client, session, realm);
       if (is_auth()) {
 	if (choose_ideal_loner() >= 0)
 	  try_set_loner();
@@ -2747,7 +2748,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       e.cap.seq = cap->get_last_seq();
       dout(10) << "encode_inodestat issueing " << ccap_string(issue) << " seq " << cap->get_last_seq() << dendl;
       e.cap.mseq = cap->get_mseq();
-      e.cap.realm = find_snaprealm()->inode->ino();
+      e.cap.realm = realm->inode->ino();
     } else {
       e.cap.cap_id = 0;
       e.cap.caps = 0;

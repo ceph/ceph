@@ -834,12 +834,7 @@ void Locker::try_eval(MDSCacheObject *p, int mask)
     return;
   }
 
-  if (!p->is_auth()) {
-    dout(7) << "try_eval not auth for " << *p << dendl;
-    return;
-  }
-
-  if (!p->can_auth_pin()) {
+  if (p->is_auth() && !p->can_auth_pin()) {
     dout(7) << "try_eval can't auth_pin, waiting on " << *p << dendl;
     p->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_Locker_Eval(this, p, mask));
     return;
@@ -849,7 +844,7 @@ void Locker::try_eval(MDSCacheObject *p, int mask)
     assert(mask == CEPH_LOCK_DN);
     bool need_issue = false;  // ignore this, no caps on dentries
     CDentry *dn = (CDentry *)p;
-    simple_eval(&dn->lock, &need_issue);
+    eval_any(&dn->lock, &need_issue);
   } else {
     CInode *in = (CInode *)p;
     eval(in, mask);
