@@ -383,7 +383,7 @@ librbd_la_SOURCES = \
 	librbd/librbd.cc \
 	librbd/AioCompletion.cc \
 	librbd/AioRequest.cc \
-	librbd/cls_rbd_client.cc \
+	cls/rbd/cls_rbd_client.cc \
 	librbd/ImageCtx.cc \
 	librbd/internal.cc \
 	librbd/LibrbdWriteback.cc \
@@ -457,7 +457,7 @@ endif
 ## rados object classes
 
 # rbd: rados block device class
-libcls_rbd_la_SOURCES = cls_rbd.cc
+libcls_rbd_la_SOURCES = cls/rbd/cls_rbd.cc
 libcls_rbd_la_CFLAGS = ${AM_CFLAGS}
 libcls_rbd_la_CXXFLAGS= ${AM_CXXFLAGS}
 libcls_rbd_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
@@ -819,7 +819,7 @@ bin_DEBUGPROGRAMS += test_librbd_fsx
 
 test_cls_rbd_SOURCES = test/rbd/test_cls_rbd.cc \
 	test/rados-api/test.cc \
-	librbd/cls_rbd_client.cc \
+	cls/rbd/cls_rbd_client.cc \
 	cls/lock/cls_lock_client.cc \
 	cls/lock/cls_lock_types.cc \
 	cls/lock/cls_lock_ops.cc
@@ -1412,6 +1412,8 @@ noinst_HEADERS = \
 	cls/lock/cls_lock_types.h\
 	cls/lock/cls_lock_ops.h\
 	cls/lock/cls_lock_client.h\
+	cls/rbd/cls_rbd.h\
+	cls/rbd/cls_rbd_client.h\
 	cls/refcount/cls_refcount_ops.h\
 	cls/refcount/cls_refcount_client.h\
 	cls/rgw/cls_rgw_client.h\
@@ -1562,8 +1564,6 @@ noinst_HEADERS = \
 	librados/RadosClient.h\
 	librbd/AioCompletion.h\
 	librbd/AioRequest.h\
-	librbd/cls_rbd.h\
-	librbd/cls_rbd_client.h\
 	librbd/ImageCtx.h\
 	librbd/internal.h\
 	librbd/LibrbdWriteback.h\
