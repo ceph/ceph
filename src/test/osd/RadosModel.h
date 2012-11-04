@@ -16,7 +16,7 @@
 #include "Object.h"
 #include "TestOpStat.h"
 #include "inttypes.h"
-#include "test/rados-api/test.h"
+#include "test/librados/test.h"
 
 #ifndef RADOSMODEL_H
 #define RADOSMODEL_H

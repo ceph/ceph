@@ -244,7 +244,7 @@ kvstorebench_SOURCES = test/kv_store_bench.cc key_value_store/kv_flat_btree_asyn
 kvstorebench_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += kvstorebench
 
-multi_stress_watch_SOURCES = test/multi_stress_watch.cc test/rados-api/test.cc
+multi_stress_watch_SOURCES = test/multi_stress_watch.cc test/librados/test.cc
 multi_stress_watch_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += multi_stress_watch 
 
@@ -807,7 +807,7 @@ unittest_texttable_LDADD = librados.la ${UNITTEST_LDADD}
 unittest_texttable_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_texttable
 
-test_librbd_SOURCES = test/librbd/test_librbd.cc test/rados-api/test.cc
+test_librbd_SOURCES = test/librbd/test_librbd.cc test/librados/test.cc
 test_librbd_LDADD =  librbd.la librados.la ${UNITTEST_STATIC_LDADD}
 test_librbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_librbd
@@ -818,7 +818,7 @@ test_librbd_fsx_CFLAGS = ${AM_CFLAGS} -Wno-format
 bin_DEBUGPROGRAMS += test_librbd_fsx
 
 test_cls_rbd_SOURCES = test/cls_rbd/test_cls_rbd.cc \
-	test/rados-api/test.cc \
+	test/librados/test.cc \
 	cls/rbd/cls_rbd_client.cc \
 	cls/lock/cls_lock_client.cc \
 	cls/lock/cls_lock_types.cc \
@@ -828,12 +828,12 @@ test_cls_rbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_cls_rbd
 
 test_cls_refcount_SOURCES = test/cls_refcount/test_cls_refcount.cc \
-	test/rados-api/test.cc
+	test/librados/test.cc
 test_cls_refcount_LDADD = librados.la libcls_refcount_client.a ${UNITTEST_STATIC_LDADD}
 test_cls_refcount_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_cls_refcount
 
-test_cls_lock_SOURCES = test/cls_lock/test_cls_lock.cc test/rados-api/test.cc
+test_cls_lock_SOURCES = test/cls_lock/test_cls_lock.cc test/librados/test.cc
 test_cls_lock_LDFLAGS = ${AM_LDFLAGS}
 test_cls_lock_LDADD =  libcls_lock_client.a librados.la ${UNITTEST_STATIC_LDADD}
 test_cls_lock_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
@@ -842,62 +842,62 @@ bin_DEBUGPROGRAMS += test_cls_lock
 if WITH_RADOSGW
 
 test_cls_rgw_SOURCES = test/cls_rgw/test_cls_rgw.cc \
-	test/rados-api/test.cc
+	test/librados/test.cc
 test_cls_rgw_LDADD = librados.la libcls_rgw_client.a ${UNITTEST_STATIC_LDADD}
 test_cls_rgw_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_cls_rgw
 
 endif
 
-test_rados_api_io_SOURCES = test/rados-api/io.cc test/rados-api/test.cc
+test_rados_api_io_SOURCES = test/librados/io.cc test/librados/test.cc
 test_rados_api_io_LDFLAGS = ${AM_LDFLAGS}
 test_rados_api_io_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_io_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_io
 
-test_rados_api_aio_SOURCES = test/rados-api/aio.cc test/rados-api/test.cc
+test_rados_api_aio_SOURCES = test/librados/aio.cc test/librados/test.cc
 test_rados_api_aio_LDFLAGS = ${AM_LDFLAGS}
 test_rados_api_aio_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_aio_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_aio
 
-test_rados_api_list_SOURCES = test/rados-api/list.cc test/rados-api/test.cc
+test_rados_api_list_SOURCES = test/librados/list.cc test/librados/test.cc
 test_rados_api_list_LDFLAGS = ${AM_LDFLAGS}
 test_rados_api_list_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_list_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_list
 
-test_rados_api_pool_SOURCES = test/rados-api/pool.cc test/rados-api/test.cc
+test_rados_api_pool_SOURCES = test/librados/pool.cc test/librados/test.cc
 test_rados_api_pool_LDFLAGS = ${AM_LDFLAGS}
 test_rados_api_pool_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_pool_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_pool
 
-test_rados_api_stat_SOURCES = test/rados-api/stat.cc test/rados-api/test.cc
+test_rados_api_stat_SOURCES = test/librados/stat.cc test/librados/test.cc
 test_rados_api_stat_LDFLAGS = ${AM_LDFLAGS}
 test_rados_api_stat_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_stat_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_stat
 
-test_rados_api_watch_notify_SOURCES = test/rados-api/watch_notify.cc test/rados-api/test.cc
+test_rados_api_watch_notify_SOURCES = test/librados/watch_notify.cc test/librados/test.cc
 test_rados_api_watch_notify_LDFLAGS = ${AM_LDFLAGS}
 test_rados_api_watch_notify_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_watch_notify_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_watch_notify
 
-test_rados_api_snapshots_SOURCES = test/rados-api/snapshots.cc test/rados-api/test.cc
+test_rados_api_snapshots_SOURCES = test/librados/snapshots.cc test/librados/test.cc
 test_rados_api_snapshots_LDFLAGS = ${AM_LDFLAGS}
 test_rados_api_snapshots_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_snapshots_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_snapshots
 
-test_rados_api_cls_SOURCES = test/rados-api/cls.cc test/rados-api/test.cc
+test_rados_api_cls_SOURCES = test/librados/cls.cc test/librados/test.cc
 test_rados_api_cls_LDFLAGS = ${AM_LDFLAGS}
 test_rados_api_cls_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_cls_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_cls
 
-test_rados_api_misc_SOURCES = test/rados-api/misc.cc test/rados-api/test.cc
+test_rados_api_misc_SOURCES = test/librados/misc.cc test/librados/test.cc
 test_rados_api_misc_LDFLAGS = ${AM_LDFLAGS}
 test_rados_api_misc_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_misc_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
@@ -947,7 +947,7 @@ test_filejournal_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 test_filejournal_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_filejournal
 
-test_stress_watch_SOURCES = test/test_stress_watch.cc test/rados-api/test.cc
+test_stress_watch_SOURCES = test/test_stress_watch.cc test/librados/test.cc
 test_stress_watch_LDFLAGS = ${AM_LDFLAGS}
 test_stress_watch_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_stress_watch_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
@@ -1845,7 +1845,7 @@ noinst_HEADERS = \
 	test/system/st_rados_watch.h \
 	test/system/systest_runnable.h \
 	test/system/systest_settings.h \
-	test/rados-api/test.h \
+	test/librados/test.h \
 	test/unit.h \
 	os/ObjectMap.h \
 	os/DBObjectMap.h \

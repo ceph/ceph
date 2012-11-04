@@ -1,6 +1,6 @@
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
-#include "test/rados-api/test.h"
+#include "test/librados/test.h"
 
 #include <errno.h>
 #include <semaphore.h>

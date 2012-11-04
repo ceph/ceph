@@ -10,7 +10,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 
 #include "gtest/gtest.h"
-#include "test/rados-api/test.h"
+#include "test/librados/test.h"
 
 #include <errno.h>
 #include <string>

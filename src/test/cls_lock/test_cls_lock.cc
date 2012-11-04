@@ -19,7 +19,7 @@
 #include "msg/msg_types.h"
 #include "include/rados/librados.hpp"
 
-#include "test/rados-api/test.h"
+#include "test/librados/test.h"
 #include "gtest/gtest.h"
 
 using namespace librados;
