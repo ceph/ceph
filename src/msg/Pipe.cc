@@ -59,6 +59,7 @@ Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
     peer_type(-1),
     pipe_lock("SimpleMessenger::Pipe::pipe_lock"),
     state(st),
+    session_security(NULL),
     connection_state(NULL),
     reader_running(false), reader_joining(false), writer_running(false),
     in_q(r->dispatch_queue.create_queue(this)),
@@ -91,6 +92,7 @@ Pipe::~Pipe()
   assert(sent.empty());
   if (connection_state)
     connection_state->put();
+  delete session_security;
 }
 
 void Pipe::handle_ack(uint64_t seq)
