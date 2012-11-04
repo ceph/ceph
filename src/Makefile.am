@@ -681,7 +681,7 @@ unittest_simple_spin_LDADD = libcephfs.la ${UNITTEST_LDADD}
 unittest_simple_spin_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_simple_spin
 
-unittest_librados_SOURCES = test/librados.cc
+unittest_librados_SOURCES = test/librados/librados.cc
 unittest_librados_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_librados_LDADD = librados.la ${UNITTEST_LDADD}
 unittest_librados_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
@@ -764,7 +764,7 @@ unittest_libcephfs_config_LDADD =  libcephfs.la ${UNITTEST_LDADD}
 unittest_libcephfs_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_libcephfs_config
 
-unittest_librados_config_SOURCES = test/librados_config.cc
+unittest_librados_config_SOURCES = test/librados/librados_config.cc
 unittest_librados_config_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_librados_config_LDADD =  librados.la ${UNITTEST_LDADD}
 unittest_librados_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
