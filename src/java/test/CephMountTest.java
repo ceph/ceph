@@ -372,7 +372,7 @@ public class CephMountTest {
     mount.mkdir(path, 0777);
     CephStat st = new CephStat();
     mount.lstat(path, st);
-    assertTrue(st.is_directory);
+    assertTrue(st.isDir());
     mount.rmdir(path);
   }
 
@@ -383,13 +383,13 @@ public class CephMountTest {
 
     CephStat st = new CephStat();
     mount.lstat(path, st);
-    assertTrue(st.is_directory);
+    assertTrue(st.isDir());
 
     mount.lstat(path + "/x", st);
-    assertTrue(st.is_directory);
+    assertTrue(st.isDir());
 
     mount.lstat(path + "/x/y", st);
-    assertTrue(st.is_directory);
+    assertTrue(st.isDir());
 
     mount.rmdir(path + "/x/y");
     mount.rmdir(path + "/x");
@@ -403,7 +403,7 @@ public class CephMountTest {
     mount.mkdir(path, 0777);
     CephStat st = new CephStat();
     mount.lstat(path, st);
-    assertTrue(st.is_directory);
+    assertTrue(st.isDir());
     /* remove it */
     mount.rmdir(path);
     /* should not exist now */
