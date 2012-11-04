@@ -3719,34 +3719,36 @@ int Client::path_walk(const filepath& origpath, Inode **final, bool followsym)
 
   ldout(cct, 10) << "path_walk " << path << dendl;
 
-  for (unsigned i=0; i<path.depth() && cur; i++) {
+  unsigned i=0;
+  while (i < path.depth() && cur) {
     const string &dname = path[i];
     ldout(cct, 10) << " " << i << " " << *cur << " " << dname << dendl;
     Inode *next;
     int r = _lookup(cur, dname.c_str(), &next);
     if (r < 0)
       return r;
-    if (i == path.depth() - 1 && followsym &&
-	next && next->is_symlink()) {
+    if (i == path.depth() - 1 &&
+	followsym &&
+	next &&
+	next->is_symlink()) {
       // resolve symlink
       if (next->symlink[0] == '/') {
 	path = next->symlink.c_str();
-	next = root;
-	// reset position - will get incremented to 0
-	i = -1;
+	// reset position
+	cur = root;
+	i = 0;
       } else {
 	filepath more(next->symlink.c_str());
 	// we need to remove the symlink component from off of the path
-	// before adding the target that the symlink points to
+	// before adding the target that the symlink points to.  remain
+	// at the same position in the path.
 	path.pop_dentry();
 	path.append(more);
-	// reset position in path walk
-	--i;
-	// remain at the same inode
-	next = cur;
       }
+      continue;
     }
     cur = next;
+    i++;
   }
   if (!cur)
     return -ENOENT;
