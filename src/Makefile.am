@@ -807,17 +807,17 @@ unittest_texttable_LDADD = librados.la ${UNITTEST_LDADD}
 unittest_texttable_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_texttable
 
-test_librbd_SOURCES = test/test_librbd.cc test/rados-api/test.cc
+test_librbd_SOURCES = test/librbd/test_librbd.cc test/rados-api/test.cc
 test_librbd_LDADD =  librbd.la librados.la ${UNITTEST_STATIC_LDADD}
 test_librbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_librbd
 
-test_librbd_fsx_SOURCES = test/rbd/fsx.c
+test_librbd_fsx_SOURCES = test/librbd/fsx.c
 test_librbd_fsx_LDADD =  librbd.la librados.la -lm
 test_librbd_fsx_CFLAGS = ${AM_CFLAGS} -Wno-format
 bin_DEBUGPROGRAMS += test_librbd_fsx
 
-test_cls_rbd_SOURCES = test/rbd/test_cls_rbd.cc \
+test_cls_rbd_SOURCES = test/cls_rbd/test_cls_rbd.cc \
 	test/rados-api/test.cc \
 	cls/rbd/cls_rbd_client.cc \
 	cls/lock/cls_lock_client.cc \
