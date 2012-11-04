@@ -39,7 +39,7 @@
 #include "objclass/objclass.h"
 #include "include/rbd_types.h"
 
-#include "librbd/cls_rbd.h"
+#include "cls/rbd/cls_rbd.h"
 
 
 /*
