@@ -3727,11 +3727,11 @@ int Client::path_walk(const filepath& origpath, Inode **final, bool followsym)
     int r = _lookup(cur, dname.c_str(), &next);
     if (r < 0)
       return r;
-    if (i == path.depth() - 1 &&
-	followsym &&
-	next &&
-	next->is_symlink()) {
-      // resolve symlink
+    // only follow trailing symlink if followsym.  always follow
+    // 'directory' symlinks.
+    if (next &&
+	next->is_symlink() &&
+	(followsym || i < path.depth() - 1)) {
       if (next->symlink[0] == '/') {
 	path = next->symlink.c_str();
 	// reset position
