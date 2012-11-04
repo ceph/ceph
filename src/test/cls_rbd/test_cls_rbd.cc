@@ -6,8 +6,8 @@
 #include "include/rados.h"
 #include "include/rados/librados.h"
 #include "include/types.h"
-#include "librbd/cls_rbd.h"
-#include "librbd/cls_rbd_client.h"
+#include "cls/rbd/cls_rbd.h"
+#include "cls/rbd/cls_rbd_client.h"
 
 #include "gtest/gtest.h"
 #include "test/rados-api/test.h"
