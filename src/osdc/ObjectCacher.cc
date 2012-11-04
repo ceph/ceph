@@ -591,6 +591,22 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
       ldout(cct, 7) << "bh_read_finish ENOENT, marking complete and !exists on " << *ob << dendl;
       ob->complete = true;
       ob->exists = false;
+
+      // wake up *all* rx waiters, or else we risk reordering identical reads. e.g.
+      //   read 1~1
+      //   reply to unrelated 3~1 -> !exists
+      //   read 1~1 -> immediate ENOENT
+      //   reply to first 1~1 -> ooo ENOENT
+      for (map<loff_t, BufferHead*>::iterator p = ob->data.begin(); p != ob->data.end(); ++p) {
+	BufferHead *bh = p->second;
+	if (!bh->is_rx())
+	  continue;
+	for (map<loff_t, list<Context*> >::iterator p = bh->waitfor_read.begin();
+	     p != bh->waitfor_read.end();
+	     p++)
+	  ls.splice(ls.end(), p->second);
+	bh->waitfor_read.clear();
+      }
     }
 
     // apply to bh's!
