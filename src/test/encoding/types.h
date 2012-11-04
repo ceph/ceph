@@ -135,7 +135,7 @@ TYPE(rgw_obj)
 TYPE(rgw_log_entry)
 TYPE(rgw_intent_log_entry)
 
-#include "librbd/cls_rbd.h"
+#include "cls/rbd/cls_rbd.h"
 TYPE(cls_rbd_parent)
 TYPE(cls_rbd_snap)
 
