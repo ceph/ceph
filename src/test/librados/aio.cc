@@ -1,6 +1,6 @@
 #include "common/errno.h"
 #include "include/rados/librados.h"
-#include "test/rados-api/test.h"
+#include "test/librados/test.h"
 #include "include/types.h"
 
 #include "gtest/gtest.h"
