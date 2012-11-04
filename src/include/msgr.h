@@ -17,8 +17,6 @@
  * that would like to identify the protocol.
  */
 #define CEPH_PORT_FIRST  6789
-#define CEPH_PORT_START  6800  /* non-monitors start here */
-#define CEPH_PORT_LAST   6900
 
 /*
  * tcp connection banner.  include a protocol version. and adjust
