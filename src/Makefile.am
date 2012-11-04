@@ -841,7 +841,7 @@ bin_DEBUGPROGRAMS += test_cls_lock
 
 if WITH_RADOSGW
 
-test_cls_rgw_SOURCES = test/rgw/test_cls_rgw.cc \
+test_cls_rgw_SOURCES = test/cls_rgw/test_cls_rgw.cc \
 	test/rados-api/test.cc
 test_cls_rgw_LDADD = librados.la libcls_rgw_client.a ${UNITTEST_STATIC_LDADD}
 test_cls_rgw_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
