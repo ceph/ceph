@@ -10,9 +10,10 @@
 #include "include/inttypes.h"
 #include "include/stringify.h"
 
+#include "cls/rbd/cls_rbd.h"
+
 #include "librbd/AioCompletion.h"
 #include "librbd/AioRequest.h"
-#include "librbd/cls_rbd.h"
 #include "librbd/ImageCtx.h"
 
 #include "librbd/internal.h"

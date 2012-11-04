@@ -31,7 +31,7 @@
 #include <algorithm>
 #include <sstream>
 
-#include "rados-api/test.h"
+#include "test/librados/test.h"
 #include "common/errno.h"
 #include "include/stringify.h"
 
