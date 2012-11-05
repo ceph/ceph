@@ -3729,23 +3729,34 @@ int Client::path_walk(const filepath& origpath, Inode **final, bool followsym)
       return r;
     // only follow trailing symlink if followsym.  always follow
     // 'directory' symlinks.
-    if (next &&
-	next->is_symlink() &&
-	(followsym || i < path.depth() - 1)) {
-      if (next->symlink[0] == '/') {
-	path = next->symlink.c_str();
-	// reset position
-	cur = root;
+    if (next && next->is_symlink()) {
+      if (i < path.depth() - 1) {
+	// dir symlink
+	// replace consumed components of path with symlink dir target
+	filepath resolved(next->symlink.c_str());
+	resolved.append(path.postfixpath(i));
+	path = resolved;
 	i = 0;
-      } else {
-	filepath more(next->symlink.c_str());
-	// we need to remove the symlink component from off of the path
-	// before adding the target that the symlink points to.  remain
-	// at the same position in the path.
-	path.pop_dentry();
-	path.append(more);
+	if (next->symlink[0] == '/') {
+	  cur = root;
+	}
+	continue;
+      } else if (followsym) {
+	if (next->symlink[0] == '/') {
+	  path = next->symlink.c_str();
+	  i = 0;
+	  // reset position
+	  cur = root;
+	} else {
+	  filepath more(next->symlink.c_str());
+	  // we need to remove the symlink component from off of the path
+	  // before adding the target that the symlink points to.  remain
+	  // at the same position in the path.
+	  path.pop_dentry();
+	  path.append(more);
+	}
+	continue;
       }
-      continue;
     }
     cur = next;
     i++;
