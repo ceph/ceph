@@ -232,7 +232,7 @@ public:
 
   bool find(const string& token_id, KeystoneToken& token);
   void add(const string& token_id, KeystoneToken& token);
-  void invalidate(const string& token_id, KeystoneToken& token);
+  void invalidate(const string& token_id);
 };
 
 bool RGWKeystoneTokenCache::find(const string& token_id, KeystoneToken& token)
@@ -288,6 +288,19 @@ void RGWKeystoneTokenCache::add(const string& token_id, KeystoneToken& token)
   }
   
   lock.Unlock();
+}
+
+void RGWKeystoneTokenCache::invalidate(const string& token_id)
+{
+  Mutex::Locker l(lock);
+  map<string, token_entry>::iterator iter = tokens.find(token_id);
+  if (iter == tokens.end())
+    return;
+
+  dout(20) << "invalidating revoked token id=" << token_id << dendl;
+  token_entry& e = iter->second;
+  tokens_lru.erase(e.lru_iter);
+  tokens.erase(iter);
 }
 
 class RGWValidateKeystoneToken : public RGWHTTPClient {
@@ -369,7 +382,7 @@ static int rgw_check_revoked()
   if (ret < 0)
     return ret;
 
-  bl.append((char)0); // NULL terminate
+  bl.append((char)0); // NULL terminate for debug output
 
   dout(10) << "request returned " << bl.c_str() << dendl;
 
@@ -445,7 +458,8 @@ static int rgw_check_revoked()
       continue;
     }
 
-    dout(20) << "revoked token id=" << token->get_data() << dendl;
+    string token_id = token->get_data();
+    keystone_token_cache->invalidate(token_id);
   }
   
   return 0;
@@ -569,7 +583,7 @@ static int rgw_swift_validate_keystone_token(RGWRados *store, const string& toke
   if (ret < 0)
     return ret;
 
-  bl.append((char)0); // NULL terminate
+  bl.append((char)0); // NULL terminate for debug output
 
   dout(20) << "received response: " << bl.c_str() << dendl;
 
