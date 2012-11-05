@@ -281,6 +281,19 @@ public:
     uint64_t zero_to;                // first non-zeroed byte of log.
     bool has_checksums;
 
+    /**
+     * We reconstruct the missing set by comparing the recorded log against
+     * the objects in the pg collection.  Unfortunately, it's possible to
+     * have an object in the missing set which is not in the log due to
+     * a divergent operation with a prior_version pointing before the
+     * pg log tail.  To deal with this, we store alongside the log a mapping
+     * of divergent priors to be checked along with the log during read_state.
+     */
+    map<eversion_t, hobject_t> divergent_priors;
+    void add_divergent_prior(eversion_t version, hobject_t obj) {
+      divergent_priors.insert(make_pair(version, obj));
+    }
+
     OndiskLog() : tail(0), head(0), zero_to(0),
 		  has_checksums(true) {}
 
@@ -294,10 +307,11 @@ public:
     }
 
     void encode(bufferlist& bl) const {
-      ENCODE_START(4, 3, bl);
+      ENCODE_START(5, 3, bl);
       ::encode(tail, bl);
       ::encode(head, bl);
       ::encode(zero_to, bl);
+      ::encode(divergent_priors, bl);
       ENCODE_FINISH(bl);
     }
     void decode(bufferlist::iterator& bl) {
@@ -309,6 +323,8 @@ public:
 	::decode(zero_to, bl);
       else
 	zero_to = 0;
+      if (struct_v >= 5)
+	::decode(divergent_priors, bl);
       DECODE_FINISH(bl);
     }
     void dump(Formatter *f) const {
