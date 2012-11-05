@@ -381,7 +381,7 @@ static int do_show_info(const char *imgname, librbd::Image& image,
   // striping info, if feature is set
   if (features & RBD_FEATURE_STRIPINGV2) {
     cout << "\tstripe unit: " << prettybyte_t(image.get_stripe_unit()) << std::endl
-	 << "\tstripe count: " << prettybyte_t(image.get_stripe_count()) << std::endl;
+	 << "\tstripe count: " << image.get_stripe_count() << std::endl;
   }
   return 0;
 }
