@@ -361,7 +361,40 @@ static int open_cms_envelope(string& src, string& dst)
 
   return 0;
 }
-  
+
+static int decode_b64_cms(const string& signed_b64, bufferlist& bl)
+{
+  bufferptr signed_ber(signed_b64.size() * 2);
+  char *dest = signed_ber.c_str();
+  const char *src = signed_b64.c_str();
+  size_t len = signed_b64.size();
+  char buf[len + 1];
+  buf[len] = '\0';
+  for (size_t i = 0; i < len; i++, src++) {
+    if (*src != '-')
+      buf[i] = *src;
+    else
+      buf[i] = '/';
+  }
+  int ret = ceph_unarmor(dest, dest + signed_ber.length(), buf, buf + signed_b64.size());
+  if (ret < 0) {
+    dout(0) << "ceph_unarmor() failed, ret=" << ret << dendl;
+    return ret;
+  }
+
+  bufferlist signed_ber_bl;
+  signed_ber_bl.append(signed_ber);
+
+  ret = ceph_decode_cms(signed_ber_bl, bl);
+  if (ret < 0) {
+    dout(0) << "ceph_decode_cms returned " << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
+
 static int rgw_check_revoked()
 {
   bufferlist bl;
@@ -412,23 +445,9 @@ static int rgw_check_revoked()
 
   dout(10) << "content=" << signed_b64 << dendl;
   
-  bufferptr signed_ber(signed_b64.size() * 2);
-  char *dest = signed_ber.c_str();
-  const char *src = signed_b64.c_str();
-  ret = ceph_unarmor(dest, dest + signed_ber.length(), src, src + signed_b64.size());
-  if (ret < 0) {
-    dout(0) << "ceph_unarmor() failed, ret=" << ret << dendl;
-    return ret;
-  }
-
-  bufferlist signed_ber_bl;
-  signed_ber_bl.append(signed_ber);
-
   bufferlist json;
-
-  ret = ceph_decode_cms(signed_ber_bl, json);
+  ret = decode_b64_cms(signed_b64, json);
   if (ret < 0) {
-    dout(0) << "ceph_decode_cms returned " << ret << dendl;
     return ret;
   }
 
@@ -545,6 +564,20 @@ static void get_token_id(const string& token, string& token_id)
   dout(0) << "token_id=" << token_id << dendl;
 }
 
+static bool decode_pki_token(const string& token, bufferlist& bl)
+{
+  if (!is_pki_token(token))
+    return false;
+
+  int ret = decode_b64_cms(token, bl);
+  if (ret < 0)
+    return false;
+
+  dout(20) << "successfully decoded pki token" << dendl;
+
+  return true;
+}
+
 static int rgw_swift_validate_keystone_token(RGWRados *store, const string& token, struct rgw_swift_auth_info *info,
 					     RGWUserInfo& rgw_user)
 {
@@ -565,29 +598,32 @@ static int rgw_swift_validate_keystone_token(RGWRados *store, const string& toke
   }
 
   bufferlist bl;
-  RGWValidateKeystoneToken validate(&bl);
 
-  string url = g_conf->rgw_keystone_url;
-  if (url.empty()) {
-    dout(0) << "ERROR: keystone url is not configured" << dendl;
-    return -EINVAL;
+  if (!decode_pki_token(token, bl)) {
+    RGWValidateKeystoneToken validate(&bl);
+
+    string url = g_conf->rgw_keystone_url;
+    if (url.empty()) {
+      dout(0) << "ERROR: keystone url is not configured" << dendl;
+      return -EINVAL;
+    }
+    if (url[url.size() - 1] != '/')
+      url.append("/");
+    url.append("v2.0/tokens/");
+    url.append(token);
+
+    validate.append_header("X-Auth-Token", g_conf->rgw_keystone_admin_token);
+
+    int ret = validate.process(url);
+    if (ret < 0)
+      return ret;
   }
-  if (url[url.size() - 1] != '/')
-    url.append("/");
-  url.append("v2.0/tokens/");
-  url.append(token);
-
-  validate.append_header("X-Auth-Token", g_conf->rgw_keystone_admin_token);
-
-  int ret = validate.process(url);
-  if (ret < 0)
-    return ret;
 
   bl.append((char)0); // NULL terminate for debug output
 
   dout(20) << "received response: " << bl.c_str() << dendl;
 
-  ret = rgw_parse_keystone_token_response(token, bl, info);
+  int ret = rgw_parse_keystone_token_response(token, bl, info);
   if (ret < 0)
     return ret;
 
