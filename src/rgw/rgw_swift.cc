@@ -101,7 +101,6 @@ static int rgw_swift_validate_token(const char *token, struct rgw_swift_auth_inf
 
 class KeystoneToken {
 public:
-  string token_id;
   string tenant_name;
   string tenant_id;
   string user_name;
@@ -146,15 +145,26 @@ int KeystoneToken::parse(bufferlist& bl)
     return -EINVAL;
   }
 
-  JSONObjIter riter = user->find("roles");
-  if (riter.end()) {
+  JSONObj *roles_obj = user->find_obj("roles");
+  if (!roles_obj) {
     dout(0) << "token response is missing roles section, or section empty" << dendl;
     return -EINVAL;
   }
 
+  JSONObjIter riter = roles_obj->find_first();
+  if (riter.end()) {
+    dout(0) << "token response has an empty roles list" << dendl;
+    return -EINVAL;
+  }
+
   for (; !riter.end(); ++riter) {
-    JSONObj *o = *riter;
-    JSONObj *role_name = o->find_obj("name");
+    JSONObj *role_obj = *riter;
+    if (!role_obj) {
+      dout(0) << "ERROR: role object is NULL" << dendl;
+      return -EINVAL;
+    }
+
+    JSONObj *role_name = role_obj->find_obj("name");
     if (!role_name) {
       dout(0) << "token response is missing role name section" << dendl;
       return -EINVAL;
@@ -211,31 +221,24 @@ struct token_entry {
 
 class RGWKeystoneTokenCache {
   map<string, token_entry> tokens;
-  map<string, map<string, token_entry>::iterator> token_id_map;
   list<string> tokens_lru;
 
   Mutex lock;
 
   size_t max;
 
-  void _remove_token_id(const string& token_id) {
-    map<string, map<string, token_entry>::iterator>::iterator iter = token_id_map.find(token_id);
-    if (iter != token_id_map.end())
-      token_id_map.erase(iter);
-  }
-
 public:
   RGWKeystoneTokenCache(int _max) : lock("RGWKeystoneTokenCache"), max(_max) {}
 
-  bool find(const string& token_str, KeystoneToken& token);
-  void add(const string& token_str, const string& token_id, KeystoneToken& token);
-  void invalidate(const string& token_str, const string& token_id, KeystoneToken& token);
+  bool find(const string& token_id, KeystoneToken& token);
+  void add(const string& token_id, KeystoneToken& token);
+  void invalidate(const string& token_id, KeystoneToken& token);
 };
 
-bool RGWKeystoneTokenCache::find(const string& token_str, KeystoneToken& token)
+bool RGWKeystoneTokenCache::find(const string& token_id, KeystoneToken& token)
 {
   lock.Lock();
-  map<string, token_entry>::iterator iter = tokens.find(token_str);
+  map<string, token_entry>::iterator iter = tokens.find(token_id);
   if (iter == tokens.end()) {
     lock.Unlock();
     if (perfcounter) perfcounter->inc(l_rgw_keystone_token_cache_miss);
@@ -246,7 +249,6 @@ bool RGWKeystoneTokenCache::find(const string& token_str, KeystoneToken& token)
   tokens_lru.erase(entry.lru_iter);
 
   if (entry.token.expired()) {
-    _remove_token_id(entry.token.token_id);
     tokens.erase(iter);
     lock.Unlock();
     if (perfcounter) perfcounter->inc(l_rgw_keystone_token_cache_hit);
@@ -254,7 +256,7 @@ bool RGWKeystoneTokenCache::find(const string& token_str, KeystoneToken& token)
   }
   token = entry.token;
 
-  tokens_lru.push_front(token_str);
+  tokens_lru.push_front(token_id);
   entry.lru_iter = tokens_lru.begin();
 
   lock.Unlock();
@@ -263,28 +265,24 @@ bool RGWKeystoneTokenCache::find(const string& token_str, KeystoneToken& token)
   return true;
 }
 
-void RGWKeystoneTokenCache::add(const string& token_str, const string& token_id, KeystoneToken& token)
+void RGWKeystoneTokenCache::add(const string& token_id, KeystoneToken& token)
 {
   lock.Lock();
-  map<string, token_entry>::iterator iter = tokens.find(token_str);
+  map<string, token_entry>::iterator iter = tokens.find(token_id);
   if (iter != tokens.end()) {
     token_entry& e = iter->second;
-    _remove_token_id(e.token.token_id);
     tokens_lru.erase(e.lru_iter);
   }
 
-  tokens_lru.push_front(token_str);
-  token_entry& entry = tokens[token_str];
+  tokens_lru.push_front(token_id);
+  token_entry& entry = tokens[token_id];
   entry.token = token;
   entry.lru_iter = tokens_lru.begin();
-
-  token_id_map[entry.token.token_id] = tokens.find(token_str);
 
   while (tokens_lru.size() > max) {
     list<string>::reverse_iterator riter = tokens_lru.rbegin();
     iter = tokens.find(*riter);
     assert(iter != tokens.end());
-    _remove_token_id(*riter);
     tokens.erase(iter);
     tokens_lru.pop_back();
   }
@@ -447,7 +445,7 @@ static int rgw_check_revoked()
       continue;
     }
 
-    dout(20) << "token id=" << token->get_data() << dendl;
+    dout(20) << "revoked token id=" << token->get_data() << dendl;
   }
   
   return 0;
@@ -485,7 +483,6 @@ static int rgw_parse_keystone_token_response(const string& token, bufferlist& bl
   dout(0) << "validated token: " << t.tenant_name << ":" << t.user_name << " expires: " << t.expiration << dendl;
 
   rgw_set_keystone_token_auth_info(t, info);
-  keystone_token_cache->add(token, t.token_id, t);
 
   return 0;
 }
@@ -506,6 +503,34 @@ static int update_user_info(RGWRados *store, struct rgw_swift_auth_info *info, R
   return 0;
 }
 
+#define PKI_ANS1_PREFIX "MII"
+
+static bool is_pki_token(const string& token)
+{
+  return token.compare(0, sizeof(PKI_ANS1_PREFIX) - 1, PKI_ANS1_PREFIX) == 0;
+}
+
+static void get_token_id(const string& token, string& token_id)
+{
+  if (!is_pki_token(token)) {
+    token_id = token;
+    return;
+  }
+
+  unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
+
+  MD5 hash;
+  hash.Update((const byte *)token.c_str(), token.size());
+  hash.Final(m);
+
+
+  char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+  token_id = calc_md5;
+
+  dout(0) << "token_id=" << token_id << dendl;
+}
+
 static int rgw_swift_validate_keystone_token(RGWRados *store, const string& token, struct rgw_swift_auth_info *info,
 					     RGWUserInfo& rgw_user)
 {
@@ -513,7 +538,10 @@ static int rgw_swift_validate_keystone_token(RGWRados *store, const string& toke
 
   rgw_check_revoked();
 
-  if (keystone_token_cache->find(token, t)) {
+  string token_id;
+  get_token_id(token, token_id);
+
+  if (keystone_token_cache->find(token_id, t)) {
     rgw_set_keystone_token_auth_info(t, info);
     int ret = update_user_info(store, info, rgw_user);
     if (ret < 0)
@@ -548,6 +576,8 @@ static int rgw_swift_validate_keystone_token(RGWRados *store, const string& toke
   ret = rgw_parse_keystone_token_response(token, bl, info);
   if (ret < 0)
     return ret;
+
+  keystone_token_cache->add(token_id, t);
 
   ret = update_user_info(store, info, rgw_user);
   if (ret < 0)
