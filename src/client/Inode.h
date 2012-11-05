@@ -211,6 +211,14 @@ class Inode {
 
   vinodeno_t vino() { return vinodeno_t(ino, snapid); }
 
+  struct Compare {
+    bool operator() (Inode* const & left, Inode* const & right) {
+      if (left->ino.val < right->ino.val) {
+	return (left->snapid.val < right->snapid.val);
+      }
+      return false;
+    }
+  };
 
   bool check_mode(uid_t uid, gid_t gid, gid_t *sgids, int sgid_count, uint32_t flags);
 
