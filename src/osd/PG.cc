@@ -410,6 +410,8 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe)
     dout(20) << "merge_old_entry  had " << oe << " updating missing to "
 	     << oe.prior_version << dendl;
     if (oe.prior_version > eversion_t()) {
+      ondisklog.add_divergent_prior(oe.prior_version, oe.soid);
+      dirty_log = true;
       missing.revise_need(oe.soid, oe.prior_version);
     } else if (missing.is_missing(oe.soid)) {
       missing.rm(oe.soid, missing.missing[oe.soid].need);
@@ -2214,6 +2216,10 @@ void PG::trim(ObjectStore::Transaction& t, eversion_t trim_to)
 {
   // trim?
   if (trim_to > log.tail) {
+    /* If we are trimming, we must be complete up to trim_to, time
+     * to throw out any divergent_priors
+     */
+    ondisklog.divergent_priors.clear();
     // We shouldn't be trimming the log past last_complete
     assert(trim_to <= info.last_complete);
 
@@ -2488,6 +2494,34 @@ void PG::read_log(ObjectStore *store)
       } else {
 	dout(15) << "read_log  missing " << *i << dendl;
 	missing.add(i->soid, i->version, eversion_t());
+      }
+    }
+    for (map<eversion_t, hobject_t>::reverse_iterator i =
+	   ondisklog.divergent_priors.rbegin();
+	 i != ondisklog.divergent_priors.rend();
+	 ++i) {
+      if (i->first <= info.last_complete) break;
+      if (did.count(i->second)) continue;
+      did.insert(i->second);
+      bufferlist bv;
+      int r = osd->store->getattr(coll, i->second, OI_ATTR, bv);
+      if (r >= 0) {
+	object_info_t oi(bv);
+	/**
+	 * 1) we see this entry in the divergent priors mapping
+	 * 2) we didn't see an entry for this object in the log
+	 *
+	 * From 1 & 2 we know that either the object does not exist
+	 * or it is at the version specified in the divergent_priors
+	 * map since the object would have been deleted atomically
+	 * with the addition of the divergent_priors entry, an older
+	 * version would not have been recovered, and a newer version
+	 * would show up in the log above.
+	 */
+	assert(oi.version == i->first);
+      } else {
+	dout(15) << "read_log  missing " << *i << dendl;
+	missing.add(i->second, i->first, eversion_t());
       }
     }
   }
