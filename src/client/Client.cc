@@ -3719,6 +3719,7 @@ int Client::path_walk(const filepath& origpath, Inode **final, bool followsym)
 
   ldout(cct, 10) << "path_walk " << path << dendl;
 
+  set<Inode*,Inode::Compare> visited;
   unsigned i=0;
   while (i < path.depth() && cur) {
     const string &dname = path[i];
@@ -3731,6 +3732,13 @@ int Client::path_walk(const filepath& origpath, Inode **final, bool followsym)
     // 'directory' symlinks.
     if (next && next->is_symlink()) {
       if (i < path.depth() - 1) {
+	// check for loops
+	if(visited.find(next) != visited.end()) {
+	  // already hit this one, return error
+	  return -ELOOP;
+	}
+	visited.insert(next);
+
 	// dir symlink
 	// replace consumed components of path with symlink dir target
 	filepath resolved(next->symlink.c_str());
