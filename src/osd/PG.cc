@@ -384,29 +384,33 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe)
 	missing.revise_need(ne.soid, ne.version);
       }
     }
-  } else if (oe.prior_version > info.log_tail) {
+  } else if (oe.op == pg_log_entry_t::CLONE) {
+    assert(oe.soid.snap != CEPH_NOSNAP);
     dout(20) << "merge_old_entry  had " << oe
-	     << ", object with no non-divergent log entries, "
+	     << ", clone with no non-divergent log entries, "
 	     << "deleting" << dendl;
     remove_object_with_snap_hardlinks(t, oe.soid);
     if (missing.is_missing(oe.soid))
       missing.rm(oe.soid, missing.missing[oe.soid].need);
+  } else if (oe.prior_version > info.log_tail) {
+    /**
+     * oe.prior_version is a previously divergent log entry
+     * oe.soid must have already been handled and the missing
+     * set updated appropriately
+     */
+    dout(20) << "merge_old_entry  had oe " << oe
+	     << " with divergent prior_version " << oe.prior_version
+	     << " oe.soid " << oe.soid
+	     << " must already have been merged" << dendl;
   } else {
     if (!oe.is_delete()) {
       dout(20) << "merge_old_entry  had " << oe << " deleting" << dendl;
       remove_object_with_snap_hardlinks(t, oe.soid);
     }
-    dout(20) << "merge_old_entry  had " << oe << " reverting to "
+    dout(20) << "merge_old_entry  had " << oe << " updating missing to "
 	     << oe.prior_version << dendl;
     if (oe.prior_version > eversion_t()) {
-      /* If missing.missing[oe.soid].need is before info.log_tail
-       * then we filled it in on a previous call to merge_old_entry
-       * and this entry refers to a previous divergent entry.
-       */
-      if (!missing.is_missing(oe.soid) ||
-	  missing.missing[oe.soid].need > info.log_tail) {
-	missing.revise_need(oe.soid, oe.prior_version);
-      }
+      missing.revise_need(oe.soid, oe.prior_version);
     } else if (missing.is_missing(oe.soid)) {
       missing.rm(oe.soid, missing.missing[oe.soid].need);
     }
