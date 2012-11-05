@@ -246,7 +246,7 @@ int chain_setxattr(const char *fn, const char *name, const void *val, size_t siz
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
     size -= chunk_size;
 
-    int r = ::ceph_os_setxattr(fn, raw_name, (char *)val + pos, chunk_size);
+    int r = sys_setxattr(fn, raw_name, (char *)val + pos, chunk_size);
     if (r < 0) {
       ret = r;
       break;
@@ -260,7 +260,7 @@ int chain_setxattr(const char *fn, const char *name, const void *val, size_t siz
      before) */
   if (ret >= 0 && chunk_size == CHAIN_XATTR_MAX_BLOCK_LEN) {
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-    int r = ::ceph_os_removexattr(fn, raw_name);
+    int r = sys_removexattr(fn, raw_name);
     if (r < 0 && r != -ENODATA)
       ret = r;
   }
@@ -280,7 +280,7 @@ int chain_fsetxattr(int fd, const char *name, const void *val, size_t size)
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
     size -= chunk_size;
 
-    int r = ::ceph_os_fsetxattr(fd, raw_name, (char *)val + pos, chunk_size);
+    int r = sys_fsetxattr(fd, raw_name, (char *)val + pos, chunk_size);
     if (r < 0) {
       ret = r;
       break;
@@ -294,7 +294,7 @@ int chain_fsetxattr(int fd, const char *name, const void *val, size_t size)
      before) */
   if (ret >= 0 && chunk_size == CHAIN_XATTR_MAX_BLOCK_LEN) {
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-    int r = ::ceph_os_fremovexattr(fd, raw_name);
+    int r = sys_fremovexattr(fd, raw_name);
     if (r < 0 && r != -ENODATA)
       ret = r;
   }
@@ -313,7 +313,7 @@ int chain_removexattr(const char *fn, const char *name)
 
   do {
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-    r = ::ceph_os_removexattr(fn, raw_name);
+    r = sys_removexattr(fn, raw_name);
     if (!i && r < 0) {
       return r;
     }
@@ -330,7 +330,7 @@ int chain_fremovexattr(int fd, const char *name)
 
   do {
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-    r = ::ceph_os_fremovexattr(fd, raw_name);
+    r = sys_fremovexattr(fd, raw_name);
     if (!i && r < 0) {
       return r;
     }
@@ -346,9 +346,9 @@ int chain_listxattr(const char *fn, char *names, size_t len) {
   int r;
 
   if (!len)
-    return ::ceph_os_listxattr(fn, names, len) * 2;
+    return sys_listxattr(fn, names, len) * 2;
 
-  r = ::ceph_os_listxattr(fn, 0, 0);
+  r = sys_listxattr(fn, 0, 0);
   if (r < 0)
     return r;
 
@@ -357,7 +357,7 @@ int chain_listxattr(const char *fn, char *names, size_t len) {
   if (!full_buf)
     return -ENOMEM;
 
-  r = ::ceph_os_listxattr(fn, full_buf, total_len);
+  r = sys_listxattr(fn, full_buf, total_len);
   if (r < 0)
     return r;
 
@@ -392,9 +392,9 @@ int chain_flistxattr(int fd, char *names, size_t len) {
   int r;
 
   if (!len)
-    return ::ceph_os_flistxattr(fd, names, len) * 2;
+    return sys_flistxattr(fd, names, len) * 2;
 
-  r = ::ceph_os_flistxattr(fd, 0, 0);
+  r = sys_flistxattr(fd, 0, 0);
   if (r < 0)
     return r;
 
@@ -403,7 +403,7 @@ int chain_flistxattr(int fd, char *names, size_t len) {
   if (!full_buf)
     return -ENOMEM;
 
-  r = ::ceph_os_flistxattr(fd, full_buf, total_len);
+  r = sys_flistxattr(fd, full_buf, total_len);
   if (r < 0)
     return r;
 
