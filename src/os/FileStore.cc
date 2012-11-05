@@ -2180,7 +2180,6 @@ void FileStore::_set_replay_guard(int fd,
   ::encode(in_progress, v);
   int r = chain_fsetxattr(fd, REPLAY_GUARD_XATTR, v.c_str(), v.length());
   if (r < 0) {
-    r = -errno;
     derr << "fsetxattr " << REPLAY_GUARD_XATTR << " got " << cpp_strerror(r) << dendl;
     assert(0 == "fsetxattr failed");
   }
@@ -2209,7 +2208,6 @@ void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos)
   ::encode(in_progress, v);
   int r = chain_fsetxattr(fd, REPLAY_GUARD_XATTR, v.c_str(), v.length());
   if (r < 0) {
-    r = -errno;
     derr << "fsetxattr " << REPLAY_GUARD_XATTR << " got " << cpp_strerror(r) << dendl;
     assert(0 == "fsetxattr failed");
   }
