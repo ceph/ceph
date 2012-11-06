@@ -12,6 +12,11 @@ class SafeTimer;
 class ACLOwner;
 class RGWGC;
 
+/* flags for put_obj_meta() */
+#define PUT_OBJ_CREATE      0x01
+#define PUT_OBJ_EXCL        0x02
+#define PUT_OBJ_CREATE_EXCL (PUT_OBJ_CREATE | PUT_OBJ_EXCL)
+
 static inline void prepend_bucket_marker(rgw_bucket& bucket, string& orig_oid, string& oid)
 {
   if (bucket.marker.empty() || orig_oid.empty()) {
@@ -413,7 +418,7 @@ public:
 
   /** Write/overwrite an object to the bucket storage. */
   virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
-              map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
+              map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
               map<std::string, bufferlist>* rmattrs, const bufferlist *data,
               RGWObjManifest *manifest, const string *ptag);
   virtual int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
@@ -425,7 +430,10 @@ public:
               time_t *mtime, map<std::string, bufferlist>& attrs) {
     bufferlist bl;
     bl.append(data, len);
-    int ret = put_obj_meta(ctx, obj, len, mtime, attrs, RGW_OBJ_CATEGORY_NONE, exclusive, NULL, &bl, NULL, NULL);
+    int flags = PUT_OBJ_CREATE;
+    if (exclusive)
+      flags |= PUT_OBJ_EXCL;
+    int ret = put_obj_meta(ctx, obj, len, mtime, attrs, RGW_OBJ_CATEGORY_NONE, flags, NULL, &bl, NULL, NULL);
     return ret;
   }
   virtual int aio_wait(void *handle);

@@ -1707,7 +1707,7 @@ int dir_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 	break;
     }
     if (vals.size() > 0) {
-      last_read = images.rbegin()->first;
+      last_read = dir_key_for_name(images.rbegin()->first);
     }
   }
 
