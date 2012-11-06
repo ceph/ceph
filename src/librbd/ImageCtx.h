@@ -18,7 +18,7 @@
 #include "include/types.h"
 #include "osdc/ObjectCacher.h"
 
-#include "librbd/cls_rbd_client.h"
+#include "cls/rbd/cls_rbd_client.h"
 #include "librbd/LibrbdWriteback.h"
 #include "librbd/SnapInfo.h"
 #include "librbd/parent_types.h"

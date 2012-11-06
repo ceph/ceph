@@ -3,7 +3,7 @@
 ==============
 
 Ceph provides an infinitely scalable object storage system. It is based 
-upon on :abbr:`RADOS (Reliable Autonomic Distributed Object Store)`, which
+upon :abbr:`RADOS (Reliable Autonomic Distributed Object Store)`, which
 you can read about in 
 `RADOS - A Scalable, Reliable Storage Service for Petabyte-scale Storage Clusters`_. 
 Its high-level features include providing a native interface to the 
@@ -69,7 +69,7 @@ The operational challenges of managing legacy technologies with the burgeoning
 growth in the demand for unstructured storage makes legacy technologies
 inadequate for scaling into petabytes. Some legacy technologies (e.g., SAN) can
 be considerably more expensive, and  more challenging to maintain when compared
-to using commodity hardware. Ceph  uses commodity hardware, becaues it is
+to using commodity hardware. Ceph  uses commodity hardware, because it is
 substantially less expensive to purchase (or to replace), and it only requires
 standard system administration skills to  use it.
 
@@ -81,7 +81,7 @@ In traditional architectures, clients talk to a centralized component (e.g., a g
 broker, API, facade, etc.), which acts as a single point of entry to a complex subsystem.
 This imposes a limit to both performance and scalability, while introducing a single
 point of failure (i.e., if the centralized component goes down, the whole system goes 
-down too).
+down, too).
 
 Ceph uses a new and innovative approach. Ceph clients contact a Ceph monitor
 and retrieve a copy of the cluster map. The :abbr:`CRUSH (Controlled Replication
@@ -136,7 +136,7 @@ exactly which OSD to use when reading or writing a particular piece of data.
 
 In a typical write scenario, a client uses the CRUSH algorithm to compute where
 to store data, maps the data to a placement group, then looks at the CRUSH map
-to identify the primary primary OSD for the placement group. Clients write data
+to identify the primary OSD for the placement group. Clients write data
 to the identified placement group in the primary OSD. Then, the primary OSD with
 its own copy of the CRUSH map identifies the secondary and tertiary OSDs for
 replication purposes, and replicates the data to the appropriate placement
@@ -292,11 +292,20 @@ intance for high availability.
 Client Interfaces
 =================
 
+Authentication and Authorization
+--------------------------------
+
+Ceph clients can authenticate their users with Ceph monitors, OSDs and metadata
+servers. Authenticated users gain authorization to read, write and execute Ceph
+commands. The Cephx authentication system is similar to Kerberos, but avoids a
+single point of failure to ensure scalability and high availability.  For
+details on Cephx, see `Ceph Authentication and Authorization`_.
+
+.. _Ceph Authentication and Authorization: ../cluster-ops/auth-intro/
+
 librados
 --------
 
-.. todo:: Cephx. Summarize how much Ceph trusts the client, for what parts (security vs reliability).
-.. todo:: Access control
 .. todo:: Snapshotting, Import/Export, Backup
 .. todo:: native APIs
 
@@ -328,7 +337,7 @@ RGW
 
 The RADOS Gateway daemon, ``radosgw``, is a FastCGI service that provides a
 RESTful_ HTTP API to store objects and metadata. It layers on top of RADOS with
-its own data formats, and maintains it's own user database, authentication, and
+its own data formats, and maintains its own user database, authentication, and
 access control. The RADOS Gateway uses a unified namespace, which means you can
 use either the OpenStack Swift-compatible API or the Amazon S3-compatible API.
 For example, you can write data using the S3-comptable API with one application

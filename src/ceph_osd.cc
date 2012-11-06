@@ -344,7 +344,8 @@ int main(int argc, const char **argv)
   uint64_t supported =
     CEPH_FEATURE_UID | 
     CEPH_FEATURE_NOSRCADDR |
-    CEPH_FEATURE_PGID64;
+    CEPH_FEATURE_PGID64 |
+    CEPH_FEATURE_MSG_AUTH;
 
   client_messenger->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
   client_messenger->set_policy_throttler(entity_name_t::TYPE_CLIENT, &client_throttler);  // default, actually

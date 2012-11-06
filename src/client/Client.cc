@@ -158,6 +158,7 @@ Client::Client(Messenger *m, MonClient *mc)
 				  client_flush_set_callback,    // all commit callback
 				  (void*)this,
 				  cct->_conf->client_oc_size,
+				  cct->_conf->client_oc_max_objects,
 				  cct->_conf->client_oc_max_dirty,
 				  cct->_conf->client_oc_target_dirty,
 				  cct->_conf->client_oc_max_dirty_age);
@@ -3777,7 +3778,6 @@ int Client::link(const char *relexisting, const char *relpath)
   if (r < 0)
     goto out_unlock;
   r = _link(in, dir, name.c_str());
-  put_inode(dir);
  out_unlock:
   put_inode(in);
  out:
@@ -4229,8 +4229,9 @@ int Client::fchmod(int fd, mode_t mode)
   tout(cct) << "fchmod" << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << mode << std::endl;
-  assert(fd_map.count(fd));
-  Fh *f = fd_map[fd];
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
   struct stat attr;
   attr.st_mode = mode;
   return _setattr(f->inode, &attr, CEPH_SETATTR_MODE);
@@ -4252,6 +4253,21 @@ int Client::chown(const char *relpath, uid_t uid, gid_t gid)
   attr.st_uid = uid;
   attr.st_gid = gid;
   return _setattr(in, &attr, CEPH_SETATTR_UID|CEPH_SETATTR_GID);
+}
+
+int Client::fchown(int fd, uid_t uid, gid_t gid)
+{
+  Mutex::Locker lock(client_lock);
+  tout(cct) << "fchown" << std::endl;
+  tout(cct) << fd << std::endl;
+  tout(cct) << uid << std::endl;
+  tout(cct) << gid << std::endl;
+  assert(fd_map.count(fd));
+  Fh *f = fd_map[fd];
+  struct stat attr;
+  attr.st_uid = uid;
+  attr.st_gid = gid;
+  return _setattr(f->inode, &attr, CEPH_SETATTR_UID|CEPH_SETATTR_GID);
 }
 
 int Client::lchown(const char *relpath, uid_t uid, gid_t gid)
@@ -5103,8 +5119,9 @@ int Client::close(int fd)
   tout(cct) << "close" << std::endl;
   tout(cct) << fd << std::endl;
 
-  assert(fd_map.count(fd));
-  Fh *fh = fd_map[fd];
+  Fh *fh = get_filehandle(fd);
+  if (!fh)
+    return -EBADF;
   _release_fh(fh);
   fd_map.erase(fd);
   ldout(cct, 3) << "close exit(" << fd << ")" << dendl;
@@ -5123,8 +5140,9 @@ loff_t Client::lseek(int fd, loff_t offset, int whence)
   tout(cct) << offset << std::endl;
   tout(cct) << whence << std::endl;
 
-  assert(fd_map.count(fd));
-  Fh *f = fd_map[fd];
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
   return _lseek(f, offset, whence);
 }
 
@@ -5195,8 +5213,9 @@ int Client::read(int fd, char *buf, loff_t size, loff_t offset)
   tout(cct) << size << std::endl;
   tout(cct) << offset << std::endl;
 
-  assert(fd_map.count(fd));
-  Fh *f = fd_map[fd];
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
   bufferlist bl;
   int r = _read(f, offset, size, &bl);
   ldout(cct, 3) << "read(" << fd << ", " << (void*)buf << ", " << size << ", " << offset << ") = " << r << dendl;
@@ -5448,8 +5467,9 @@ int Client::write(int fd, const char *buf, loff_t size, loff_t offset)
   tout(cct) << size << std::endl;
   tout(cct) << offset << std::endl;
 
-  assert(fd_map.count(fd));
-  Fh *fh = fd_map[fd];
+  Fh *fh = get_filehandle(fd);
+  if (!fh)
+    return -EBADF;
   int r = _write(fh, offset, size, buf);
   ldout(cct, 3) << "write(" << fd << ", \"...\", " << size << ", " << offset << ") = " << r << dendl;
   return r;
@@ -5597,8 +5617,9 @@ int Client::ftruncate(int fd, loff_t length)
   tout(cct) << fd << std::endl;
   tout(cct) << length << std::endl;
 
-  assert(fd_map.count(fd));
-  Fh *f = fd_map[fd];
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
   struct stat attr;
   attr.st_size = length;
   return _setattr(f->inode, &attr, CEPH_SETATTR_SIZE);
@@ -5611,8 +5632,9 @@ int Client::fsync(int fd, bool syncdataonly)
   tout(cct) << fd << std::endl;
   tout(cct) << syncdataonly << std::endl;
 
-  assert(fd_map.count(fd));
-  Fh *f = fd_map[fd];
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
   int r = _fsync(f, syncdataonly);
   ldout(cct, 3) << "fsync(" << fd << ", " << syncdataonly << ") = " << r << dendl;
   return r;
@@ -5662,8 +5684,9 @@ int Client::fstat(int fd, struct stat *stbuf)
   tout(cct) << "fstat" << std::endl;
   tout(cct) << fd << std::endl;
 
-  assert(fd_map.count(fd));
-  Fh *f = fd_map[fd];
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
   int r = _getattr(f->inode, -1);
   if (r < 0)
     return r;
@@ -5826,8 +5849,9 @@ int Client::lazyio_propogate(int fd, loff_t offset, size_t count)
   ldout(cct, 3) << "op: client->lazyio_propogate(" << fd
           << ", " << offset << ", " << count << ")" << dendl;
   
-  assert(fd_map.count(fd));
-  Fh *f = fd_map[fd];
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
 
   // for now
   _fsync(f, true);
@@ -5842,8 +5866,9 @@ int Client::lazyio_synchronize(int fd, loff_t offset, size_t count)
   ldout(cct, 3) << "op: client->lazyio_synchronize(" << fd
           << ", " << offset << ", " << count << ")" << dendl;
   
-  assert(fd_map.count(fd));
-  Fh *f = fd_map[fd];
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
   Inode *in = f->inode;
   
   _fsync(f, true);
@@ -7030,8 +7055,9 @@ int Client::describe_layout(int fd, ceph_file_layout *lp)
 {
   Mutex::Locker lock(client_lock);
 
-  assert(fd_map.count(fd));
-  Fh *f = fd_map[fd];
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
   Inode *in = f->inode;
 
   *lp = in->layout;
@@ -7055,8 +7081,9 @@ int Client::get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>
 {
   Mutex::Locker lock(client_lock);
 
-  assert(fd_map.count(fd));
-  Fh *f = fd_map[fd];
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
   Inode *in = f->inode;
 
   // which object?
@@ -7084,8 +7111,9 @@ int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
 {
   Mutex::Locker lock(client_lock);
 
-  assert(fd_map.count(fd));
-  Fh *f = fd_map[fd];
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
   Inode *in = f->inode;
 
   // map to a list of extents

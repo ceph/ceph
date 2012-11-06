@@ -651,6 +651,11 @@ void ReplicatedPG::do_op(OpRequestRef op)
     return;
   }
 
+  if (head == backfill_pos) {
+    wait_for_backfill_pos(op);
+    return;
+  }
+
   // missing snapdir?
   hobject_t snapdir(m->get_oid(), m->get_object_locator().key,
 		    CEPH_SNAPDIR, m->get_pg().ps(), info.pgid.pool());
@@ -1463,9 +1468,10 @@ void ReplicatedPG::snap_trimmer()
   dout(10) << "snap_trimmer entry" << dendl;
   if (is_primary()) {
     entity_inst_t nobody;
-    if (!mode.try_write(nobody) || scrubber.active) {
-      dout(10) << " can't write, requeueing" << dendl;
-      queue_snap_trim();
+    assert(mode.try_write(nobody));
+    if (scrubber.active) {
+      dout(10) << " scrubbing, will requeue snap_trimmer after" << dendl;
+      scrubber.queue_snap_trim = true;
       unlock();
       return;
     }
@@ -6703,22 +6709,6 @@ void ReplicatedPG::scan_range(hobject_t begin, int min, int max, BackfillInterva
   }
 }
 
-
-void ReplicatedPG::remove_object_with_snap_hardlinks(ObjectStore::Transaction& t, const hobject_t& soid)
-{
-  t.remove(coll, soid);
-  if (soid.snap < CEPH_MAXSNAP) {
-    bufferlist ba;
-    int r = osd->store->getattr(coll, soid, OI_ATTR, ba);
-    if (r >= 0) {
-      // grr, need first snap bound, too.
-      object_info_t oi(ba);
-      if (oi.snaps.size() > 1)
-	t.remove(coll_t(info.pgid, oi.snaps[oi.snaps.size() - 1]), soid);
-      t.remove(coll_t(info.pgid, oi.snaps[0]), soid);
-    }
-  }
-}
 
 /** clean_up_local
  * remove any objects that we're storing but shouldn't.

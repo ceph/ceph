@@ -67,6 +67,7 @@ public:
   ~PerfCounters();
 
   void inc(int idx, uint64_t v = 1);
+  void dec(int idx, uint64_t v = 1);
   void set(int idx, uint64_t v);
   uint64_t get(int idx) const;
 

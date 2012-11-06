@@ -569,6 +569,14 @@ inline void encode_nohead(const std::map<T,U>& m, bufferlist& bl)
   }
 }
 template<class T, class U>
+inline void encode_nohead(const std::map<T,U>& m, bufferlist& bl, uint64_t features)
+{
+  for (typename std::map<T,U>::const_iterator p = m.begin(); p != m.end(); ++p) {
+    encode(p->first, bl, features);
+    encode(p->second, bl, features);
+  }
+}
+template<class T, class U>
 inline void decode_nohead(int n, std::map<T,U>& m, bufferlist::iterator& p)
 {
   m.clear();

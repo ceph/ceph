@@ -227,7 +227,8 @@ def get_free_partition_index(dev):
                 ],
             )
     except subprocess.CalledProcessError as e:
-        raise PrepareError('cannot read partition index', e)
+        print 'cannot read partition index; assume it isn\'t present\n'
+        return 1
 
     if not lines:
         raise PrepareError('parted failed to output anything')
@@ -313,7 +314,7 @@ def prepare(
             # then again nothing guards the partition table from races
             # anyway
             num = get_free_partition_index(dev=journal)
-            journal_part = '{num}:0:{size}M'.format(
+            journal_part = '{num}:0:+{size}M'.format(
                 num=num,
                 size=journal_size,
                 )
@@ -336,6 +337,13 @@ def prepare(
                     journal,
                     ],
                 )
+            subprocess.check_call(
+                args=[
+                    # also make sure the kernel refreshes the new table
+                    'partprobe',
+                    journal,
+                    ],
+                )
         except subprocess.CalledProcessError as e:
             raise PrepareError(e)
 
@@ -350,6 +358,13 @@ def prepare(
                     ),
                 '--typecode=1:89c57f98-2fe5-4dc0-89c1-f3ad0ceff2be',
                 '--',
+                disk,
+                ],
+            )
+        subprocess.check_call(
+            args=[
+                # also make sure the kernel refreshes the new table
+                'partprobe',
                 disk,
                 ],
             )
