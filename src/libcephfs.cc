@@ -565,6 +565,11 @@ extern "C" int ceph_chown(struct ceph_mount_info *cmount, const char *path,
     return -ENOTCONN;
   return cmount->get_client()->chown(path, uid, gid);
 }
+extern "C" int ceph_fchown(struct ceph_mount_info *cmount, int fd,
+			   uid_t uid, gid_t gid)
+{
+  return cmount->get_client()->fchown(fd, uid, gid);
+}
 extern "C" int ceph_lchown(struct ceph_mount_info *cmount, const char *path,
 			   uid_t uid, gid_t gid)
 {

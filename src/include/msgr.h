@@ -17,8 +17,6 @@
  * that would like to identify the protocol.
  */
 #define CEPH_PORT_FIRST  6789
-#define CEPH_PORT_START  6800  /* non-monitors start here */
-#define CEPH_PORT_LAST   6900
 
 /*
  * tcp connection banner.  include a protocol version. and adjust
@@ -170,14 +168,24 @@ struct ceph_msg_header {
 
 /*
  * follows data payload
+ * ceph_msg_footer_old does not support digital signatures on messages PLR
  */
+
+struct ceph_msg_footer_old {
+	__le32 front_crc, middle_crc, data_crc;
+	__u8 flags;
+} __attribute__ ((packed));
+
 struct ceph_msg_footer {
 	__le32 front_crc, middle_crc, data_crc;
+	// sig holds the 64 bits of the digital signature for the message PLR
+	__le64  sig;
 	__u8 flags;
 } __attribute__ ((packed));
 
 #define CEPH_MSG_FOOTER_COMPLETE  (1<<0)   /* msg wasn't aborted */
 #define CEPH_MSG_FOOTER_NOCRC     (1<<1)   /* no data crc */
+#define CEPH_MSG_FOOTER_SIGNED	  (1<<2)   /* msg was signed */
 
 
 #endif

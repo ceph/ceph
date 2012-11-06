@@ -137,7 +137,7 @@ Finally, on each host running ``cinder-volume`` or ``nova-volume``, add
 ``CEPH_ARGS="--id volumes"`` to the init/upstart script that starts it.
 
 For example, on Ubuntu, add ``env CEPH_ARGS="--id volumes"``
-to the top of ``/etc/init/cinder-volume``.
+to the top of ``/etc/init/cinder-volume.conf``.
 
 
 Configure OpenStack to use Ceph

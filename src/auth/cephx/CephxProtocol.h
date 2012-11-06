@@ -81,6 +81,7 @@
 #define CEPHX_GET_ROTATING_KEY          0x0400
 
 #define CEPHX_REQUEST_TYPE_MASK            0x0F00
+#define CEPHX_CRYPT_ERR			1
 
 #include "../Auth.h"
 #include "../RotatingKeyRing.h"
@@ -275,7 +276,6 @@ private:
   CephContext *cct;
 public:
   uint64_t nonce;
-  CryptoKey session_key;
 
   CephXAuthorizer(CephContext *cct_)
     : AuthAuthorizer(CEPH_AUTH_CEPHX), cct(cct_), nonce(0) {}
@@ -466,23 +466,28 @@ void encode_encrypt_enc_bl(CephContext *cct, const T& t, const CryptoKey& key,
 }
 
 template <typename T>
-void decode_decrypt(CephContext *cct, T& t, const CryptoKey key,
+int decode_decrypt(CephContext *cct, T& t, const CryptoKey key,
 		    bufferlist::iterator& iter, std::string &error)
 {
   bufferlist bl_enc;
   ::decode(bl_enc, iter);
   decode_decrypt_enc_bl(cct, t, key, bl_enc, error);
+  if (!error.empty())
+    return CEPHX_CRYPT_ERR;
+  return 0;
 }
 
 template <typename T>
-void encode_encrypt(CephContext *cct, const T& t, const CryptoKey& key,
+int encode_encrypt(CephContext *cct, const T& t, const CryptoKey& key,
 		    bufferlist& out, std::string &error)
 {
   bufferlist bl_enc;
   encode_encrypt_enc_bl(cct, t, key, bl_enc, error);
-  if (!error.empty())
-    return;
+  if (!error.empty()){
+    return CEPHX_CRYPT_ERR;
+  }
   ::encode(bl_enc, out);
+  return 0;
 }
 
 

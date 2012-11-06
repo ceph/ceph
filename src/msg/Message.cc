@@ -11,7 +11,10 @@ using namespace std;
 
 #include "include/types.h"
 
+#include "global/global_context.h"
+
 #include "Message.h"
+#include "Pipe.h"
 #include "messages/MPGStats.h"
 
 #include "messages/MGenericMessage.h"
@@ -254,7 +257,7 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
 	return 0;
       }
     }
-  }
+  } 
 
   // make message
   Message *m = 0;
@@ -657,24 +660,52 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
 }
 
 
+// This routine is not used for ordinary messages, but only when encapsulating a message
+// for forwarding and routing.  It's also used in a backward compatibility test, which only
+// effectively tests backward compability for those functions.  To avoid backward compatibility
+// problems, we currently always encode and decode using the old footer format that doesn't
+// allow for message authentication.  Eventually we should fix that.  PLR
+
 void encode_message(Message *msg, uint64_t features, bufferlist& payload)
 {
   bufferlist front, middle, data;
+  ceph_msg_footer_old old_footer;
+  ceph_msg_footer footer;
   msg->encode(features, true);
   ::encode(msg->get_header(), payload);
-  ::encode(msg->get_footer(), payload);
+
+  // Here's where we switch to the old footer format.  PLR
+
+  footer = msg->get_footer();
+  old_footer.front_crc = footer.front_crc;   
+  old_footer.middle_crc = footer.middle_crc;   
+  old_footer.data_crc = footer.data_crc;   
+  old_footer.flags = footer.flags;   
+  ::encode(old_footer, payload);
+
   ::encode(msg->get_payload(), payload);
   ::encode(msg->get_middle(), payload);
   ::encode(msg->get_data(), payload);
 }
 
+// See above for somewhat bogus use of the old message footer.  We switch to the current footer
+// after decoding the old one so the other form of decode_message() doesn't have to change.
+// We've slipped in a 0 signature at this point, so any signature checking after this will
+// fail.  PLR
+
 Message *decode_message(CephContext *cct, bufferlist::iterator& p)
 {
   ceph_msg_header h;
+  ceph_msg_footer_old fo;
   ceph_msg_footer f;
   bufferlist fr, mi, da;
   ::decode(h, p);
-  ::decode(f, p);
+  ::decode(fo, p);
+  f.front_crc = fo.front_crc;
+  f.middle_crc = fo.middle_crc;
+  f.data_crc = fo.data_crc;
+  f.flags = fo.flags;
+  f.sig = 0;
   ::decode(fr, p);
   ::decode(mi, p);
   ::decode(da, p);

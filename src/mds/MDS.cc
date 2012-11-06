@@ -2013,7 +2013,7 @@ void MDS::ms_handle_remote_reset(Connection *con)
 
 bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			       bool& is_valid)
+			       bool& is_valid, CryptoKey& session_key)
 {
   Mutex::Locker l(mds_lock);
   if (want_state == CEPH_MDS_STATE_DNE)
@@ -2038,7 +2038,7 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
   uint64_t global_id;
 
   is_valid = authorize_handler->verify_authorizer(cct, monc->rotating_secrets,
-						  authorizer_data, authorizer_reply, name, global_id, caps_info);
+						  authorizer_data, authorizer_reply, name, global_id, caps_info, session_key);
 
   if (is_valid) {
     // wire up a Session* to this connection, and add it to the session map

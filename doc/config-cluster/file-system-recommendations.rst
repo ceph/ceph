@@ -23,36 +23,29 @@ your OSD cluster.
 File Systems
 ============
 
-Ceph OSDs depend on the Extended Attributes (XATTRs) of the underlying file
-system for:
+Ceph OSDs rely heavily upon the stability and performance of the
+underlying file system.
 
-- Internal object state
-- Snapshot metadata
-- RADOS Gateway Access Control Lists (ACLs).
+.. tip:: We currently recommend ``XFS`` for production deployments.
 
-Ceph OSDs rely heavily upon the stability and performance of the underlying file
-system. The underlying file system must provide sufficient capacity for XATTRs.
-File system candidates for Ceph include B tree and B+ tree file systems such as:
+.. tip:: We recommend ``btrfs`` for testing, development, and any
+non-critical deployments.  We believe that ``btrfs`` has the correct
+feature set and roadmap to serve Ceph in the long-term, but ``XFS``
+and ``ext4`` provide the necessary stability for today's deployments.
+``btrfs`` development is proceeding rapidly: users should be
+comfortable installing the latest released upstream kernels and be
+able to track development activity for critical bug fixes.
 
-- ``btrfs``
-- ``XFS``
-
-If you are using ``ext4``, mount your file system to enable XATTRs. You must also
-add the following line to the ``[osd]`` section of your ``ceph.conf`` file. ::
+Ceph OSDs depend on the Extended Attributes (XATTRs) of the underlying
+file system for various forms of internal object state and metadata.
+The underlying file system must provide sufficient capacity for
+XATTRs.  ``btrfs`` does not bound the total xattr metadata stored with
+a file.  ``XFS`` has a relatively large limit (64 KB) that most
+deployments won't encounter, but the ``ext4`` is too small to be
+usable.  To use these file systems, you should add the following like
+to the ``[osd]`` section of your ``ceph.conf`` file.::
 
 	filestore xattr use omap = true
-
-.. tip:: Use ``xfs`` initially and ``btrfs`` when it is ready for production.
-
-   The Ceph team believes that the best performance and stability will come from
-   ``btrfs.`` The ``btrfs`` file system has internal transactions that keep the
-   local data set in a consistent state. This makes OSDs based on ``btrfs`` simple
-   to deploy, while providing scalability not currently available from block-based
-   file systems. The 64-kb XATTR limit for ``xfs`` XATTRS is enough to accommodate
-   RDB snapshot metadata and RADOS Gateway ACLs. So ``xfs`` is the second-choice
-   file system of the Ceph team in the long run, but ``xfs`` is currently more
-   stable than ``btrfs``.  If you only plan to use RADOS and ``rbd`` without
-   snapshots and without ``radosgw``, the ``ext4`` file system should work just fine.
 
 FS Background Info
 ==================

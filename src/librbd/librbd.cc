@@ -25,7 +25,7 @@
 #include "osdc/ObjectCacher.h"
 
 #include "librbd/AioCompletion.h"
-#include "librbd/cls_rbd_client.h"
+#include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 #include "librbd/LibrbdWriteback.h"

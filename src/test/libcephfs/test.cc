@@ -516,6 +516,31 @@ TEST(LibCephFS, Fchmod) {
   ceph_shutdown(cmount);
 }
 
+TEST(LibCephFS, Fchown) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char test_file[256];
+  sprintf(test_file, "test_fchown_%d", getpid());
+
+  int fd = ceph_open(cmount, test_file, O_CREAT|O_RDWR, 0666);
+  ASSERT_GT(fd, 0);
+
+  // set perms to readable and writeable only by owner
+  ASSERT_EQ(ceph_fchmod(cmount, fd, 0600), 0);
+
+  // change ownership to nobody -- we assume nobody exists and id is always 65534
+  ASSERT_EQ(ceph_fchown(cmount, fd, 65534, 65534), 0);
+
+  ceph_close(cmount, fd);
+
+  fd = ceph_open(cmount, test_file, O_RDWR, 0);
+  ASSERT_EQ(fd, -EACCES);
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, Symlinks) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
@@ -550,4 +575,71 @@ TEST(LibCephFS, Symlinks) {
   ASSERT_TRUE(S_ISLNK(stbuf_symlink.st_mode));
 
   ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, Hardlink_no_original) {
+
+  int mypid = getpid();
+
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char dir[256];
+  sprintf(dir, "/test_rmdirfail%d", mypid);
+  ASSERT_EQ(ceph_mkdir(cmount, dir, 0777), 0);
+
+  ASSERT_EQ(ceph_chdir(cmount, dir), 0);
+
+  int fd = ceph_open(cmount, "f1", O_CREAT, 0644);
+  ASSERT_GT(fd, 0);
+
+  ceph_close(cmount, fd);
+
+  // create hard link
+  ASSERT_EQ(ceph_link(cmount, "f1", "hardl1"), 0);
+
+  // remove file link points to
+  ASSERT_EQ(ceph_unlink(cmount, "f1"), 0);
+
+  ceph_shutdown(cmount);
+
+  // now cleanup
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+  ASSERT_EQ(ceph_chdir(cmount, dir), 0);
+  ASSERT_EQ(ceph_unlink(cmount, "hardl1"), 0);
+  ASSERT_EQ(ceph_rmdir(cmount, dir), 0);
+
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, BadFileDesc) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  ASSERT_EQ(ceph_fchmod(cmount, -1, 0655), -EBADF);
+  ASSERT_EQ(ceph_close(cmount, -1), -EBADF);
+  ASSERT_EQ(ceph_lseek(cmount, -1, 0, SEEK_SET), -EBADF);
+
+  char buf[0];
+  ASSERT_EQ(ceph_read(cmount, -1, buf, 0, 0), -EBADF);
+  ASSERT_EQ(ceph_write(cmount, -1, buf, 0, 0), -EBADF);
+
+  ASSERT_EQ(ceph_ftruncate(cmount, -1, 0), -EBADF);
+  ASSERT_EQ(ceph_fsync(cmount, -1, 0), -EBADF);
+
+  struct stat stat;
+  ASSERT_EQ(ceph_fstat(cmount, -1, &stat), -EBADF);
+
+  struct sockaddr_storage addr;
+  ASSERT_EQ(ceph_get_file_stripe_address(cmount, -1, 0, &addr, 1), -EBADF);
+
+  ASSERT_EQ(ceph_get_file_stripe_unit(cmount, -1), -EBADF);
+  ASSERT_EQ(ceph_get_file_pool(cmount, -1), -EBADF);
+  ASSERT_EQ(ceph_get_file_replication(cmount, -1), -EBADF);
 }

@@ -361,7 +361,8 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_UID |
     CEPH_FEATURE_NOSRCADDR |
     CEPH_FEATURE_MONCLOCKCHECK |
-    CEPH_FEATURE_PGID64;
+    CEPH_FEATURE_PGID64 |
+    CEPH_FEATURE_MSG_AUTH;
   messenger->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
   messenger->set_policy(entity_name_t::TYPE_MON,
                         Messenger::Policy::lossless_peer_reuse(supported,
@@ -403,10 +404,13 @@ int main(int argc, const char **argv)
   // start monitor
   mon = new Monitor(g_ceph_context, g_conf->name.get_id(), &store, messenger, &monmap);
 
+  err = mon->preinit();
+  if (err < 0)
+    return 1;
+
   global_init_daemonize(g_ceph_context, 0);
   common_init_finish(g_ceph_context);
   global_init_chdir(g_ceph_context);
-  messenger->start();
 
   // set up signal handlers, now that we've daemonized/forked.
   init_async_signal_handler();
@@ -414,7 +418,10 @@ int main(int argc, const char **argv)
   register_async_signal_handler_oneshot(SIGINT, handle_mon_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_mon_signal);
 
+  messenger->start();
+
   mon->init();
+
   messenger->wait();
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);

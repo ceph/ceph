@@ -23,6 +23,12 @@ package com.ceph.fs;
  * Holds struct stat fields.
  */
 public class CephStat {
+
+  /* Set from native */
+  private boolean is_file;       /* S_ISREG */
+  private boolean is_directory;  /* S_ISDIR */
+  private boolean is_symlink;    /* S_ISLNK */
+
   public int mode;
   public int uid;
   public int gid;
@@ -32,14 +38,16 @@ public class CephStat {
   public long a_time;
   public long m_time;
 
-  /*
-   * Results from the following tests:
-   *
-   *   - S_ISREG
-   *   - S_ISDIR
-   *   - S_ISLNK
-   */
-  public boolean is_file;
-  public boolean is_directory;
-  public boolean is_symlink;
+  public boolean isFile() {
+    return is_file;
+  }
+
+  public boolean isDir() {
+    return is_directory;
+  }
+
+  public boolean isSymlink() {
+    return is_symlink;
+  }
+
 }

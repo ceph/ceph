@@ -59,10 +59,8 @@ int Accepter::bind(const entity_addr_t &bind_addr, int avoid_port1, int avoid_po
   listen_sd = ::socket(family, SOCK_STREAM, 0);
   if (listen_sd < 0) {
     char buf[80];
-    ldout(msgr->cct,0) << "accepter.bind unable to create socket: "
-	    << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    cerr << "accepter.bind unable to create socket: "
-	 << strerror_r(errno, buf, sizeof(buf)) << std::endl;
+    lderr(msgr->cct) << "accepter.bind unable to create socket: "
+		     << strerror_r(errno, buf, sizeof(buf)) << dendl;
     return -errno;
   }
 
@@ -87,15 +85,13 @@ int Accepter::bind(const entity_addr_t &bind_addr, int avoid_port1, int avoid_po
     rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), listen_addr.addr_size());
     if (rc < 0) {
       char buf[80];
-      ldout(msgr->cct,0) << "accepter.bind unable to bind to " << listen_addr.ss_addr()
-	      << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-      cerr << "accepter.bind unable to bind to " << listen_addr.ss_addr()
-	   << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
+      lderr(msgr->cct) << "accepter.bind unable to bind to " << listen_addr.ss_addr()
+		       << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       return -errno;
     }
   } else {
     // try a range of ports
-    for (int port = CEPH_PORT_START; port <= CEPH_PORT_LAST; port++) {
+    for (int port = msgr->cct->_conf->ms_bind_port_min; port <= msgr->cct->_conf->ms_bind_port_max; port++) {
       if (port == avoid_port1 || port == avoid_port2)
 	continue;
       listen_addr.set_port(port);
@@ -105,12 +101,11 @@ int Accepter::bind(const entity_addr_t &bind_addr, int avoid_port1, int avoid_po
     }
     if (rc < 0) {
       char buf[80];
-      ldout(msgr->cct,0) << "accepter.bind unable to bind to " << listen_addr.ss_addr()
-	      << " on any port in range " << CEPH_PORT_START << "-" << CEPH_PORT_LAST
-	      << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-      cerr << "accepter.bind unable to bind to " << listen_addr.ss_addr()
-	   << " on any port in range " << CEPH_PORT_START << "-" << CEPH_PORT_LAST
-	   << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
+      lderr(msgr->cct) << "accepter.bind unable to bind to " << listen_addr.ss_addr()
+		       << " on any port in range " << msgr->cct->_conf->ms_bind_port_min
+		       << "-" << msgr->cct->_conf->ms_bind_port_max
+		       << ": " << strerror_r(errno, buf, sizeof(buf))
+		       << dendl;
       return -errno;
     }
     ldout(msgr->cct,10) << "accepter.bind bound on random port " << listen_addr << dendl;

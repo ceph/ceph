@@ -518,6 +518,12 @@ public:
       return osd->heartbeat_reset(con);
     }
     void ms_handle_remote_reset(Connection *con) {}
+    bool ms_verify_authorizer(Connection *con, int peer_type,
+			      int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
+			      bool& isvalid, CryptoKey& session_key) {
+      isvalid = true;
+      return true;
+    }
   public:
     OSD *osd;
     HeartbeatDispatcher(OSD *o) 
@@ -1278,7 +1284,7 @@ protected:
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
   bool ms_verify_authorizer(Connection *con, int peer_type,
 			    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-			    bool& isvalid);
+			    bool& isvalid, CryptoKey& session_key);
   void ms_handle_connect(Connection *con);
   bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con) {}

@@ -153,6 +153,21 @@ test_remove() {
     rados -p rbd rm rbd_id.test2
     rbd rm test2
     rbd ls | wc -l | grep "^0$"
+
+    # remove with rbd_children object missing (and, by extension,
+    # with child not mentioned in rbd_children)
+    rbd create --new-format -s 1 test2
+    rbd snap create test2@snap
+    rbd snap protect test2@snap
+    rbd clone test2@snap clone
+
+    rados -p rbd rm rbd_children
+    rbd rm clone
+    rbd ls | grep clone | wc -l | grep '^0$'
+
+    rbd snap unprotect test2@snap
+    rbd snap rm test2@snap
+    rbd rm test2
 }
 
 test_locking() {

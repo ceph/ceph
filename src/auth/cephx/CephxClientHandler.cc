@@ -156,13 +156,12 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 	CryptoKey secret_key;
 	keyring->get_secret(cct->_conf->name, secret_key);
 	std::string error;
-	decode_decrypt(cct, secrets, secret_key, indata, error);
-	if (error.empty()) {
-	  rotating_secrets->set_secrets(secrets);
-	} else {
+	if (decode_decrypt(cct, secrets, secret_key, indata, error)) {
 	  ldout(cct, 0) << "could not set rotating key: decode_decrypt failed. error:"
 	    << error << dendl;
 	  error.clear();
+	} else {
+	  rotating_secrets->set_secrets(secrets);
 	}
       }
     }

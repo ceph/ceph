@@ -4,6 +4,7 @@
 #include "Mutex.h"
 #include "Cond.h"
 #include <list>
+#include "include/atomic.h"
 
 class CephContext;
 class PerfCounters;
@@ -12,7 +13,7 @@ class Throttle {
   CephContext *cct;
   std::string name;
   PerfCounters *logger;
-  int64_t count, max;
+	ceph::atomic_t count, max;
   Mutex lock;
   list<Cond*> cond;
   
@@ -23,21 +24,22 @@ public:
 private:
   void _reset_max(int64_t m);
   bool _should_wait(int64_t c) {
+		int64_t m = max.read();
+		int64_t cur = count.read();
     return
-      max &&
-      ((c <= max && count + c > max) ||   // normally stay under max
-       (c >= max && count > max));       // except for large c
+      m &&
+      ((c <= m && cur + c > m) || // normally stay under max
+       (c >= m && cur > m));     // except for large c
   }
 
   bool _wait(int64_t c);
 
 public:
   int64_t get_current() {
-    Mutex::Locker l(lock);
-    return count;
+    return count.read();
   }
 
-  int64_t get_max() { return max; }
+  int64_t get_max() { return max.read(); }
 
   bool wait(int64_t m = 0);
 

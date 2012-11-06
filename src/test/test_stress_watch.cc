@@ -4,7 +4,7 @@
 #include "include/utime.h"
 #include "common/Thread.h"
 #include "common/Clock.h"
-#include "test/rados-api/test.h"
+#include "test/librados/test.h"
 
 #include "gtest/gtest.h"
 #include <semaphore.h>

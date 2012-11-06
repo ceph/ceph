@@ -38,6 +38,8 @@ class MMonSubscribeAck;
 class MAuthReply;
 class MAuthRotating;
 class LogClient;
+class AuthSupported;
+class AuthAuthorizeHandlerRegistry;
 class AuthMethodList;
 
 enum MonClientState {
@@ -65,6 +67,11 @@ private:
   Mutex monc_lock;
   SafeTimer timer;
   Finisher finisher;
+
+  // Added to support session signatures.  PLR
+
+  AuthAuthorizeHandlerRegistry *authorize_handler_registry;
+
   bool initialized;
 
   LogClient *log_client;
