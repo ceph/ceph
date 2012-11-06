@@ -80,6 +80,7 @@ namespace librbd {
       librados::Rados::aio_create_completion(req, context_cb, NULL);
     int r = m_ictx->data_ctx.aio_read(oid.name, rados_completion, pbl,
 				      len, off);
+    rados_completion->release();
     assert(r >= 0);
     return ++m_tid;
   }
