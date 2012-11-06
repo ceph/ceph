@@ -409,11 +409,11 @@ void Monitor::write_features()
   store->put_bl_ss(bl, COMPAT_SET_LOC, 0);
 }
 
-int Monitor::init()
+int Monitor::preinit()
 {
   lock.Lock();
 
-  dout(1) << "init fsid " << monmap->fsid << dendl;
+  dout(1) << "preinit fsid " << monmap->fsid << dendl;
   
   assert(!logger);
   {
@@ -540,15 +540,24 @@ int Monitor::init()
   assert(r == 0);
   lock.Lock();
 
-  // i'm ready!
-  messenger->add_dispatcher_tail(this);
-  
+  lock.Unlock();
+  return 0;
+}
+
+int Monitor::init()
+{
+  dout(2) << "init" << dendl;
+  lock.Lock();
+
   // start ticker
   timer.init();
   new_tick();
 
+  // i'm ready!
+  messenger->add_dispatcher_tail(this);
+
   bootstrap();
-  
+
   lock.Unlock();
   return 0;
 }
@@ -1503,6 +1512,7 @@ void Monitor::handle_command(MMonCommand *m)
       ss2 << "\n-------- END REPORT " << bl.crc32c(6789) << " --------\n";
       rdata.append(bl);
       rdata.append(ss2.str());
+      rs = string();
       r = 0;
     }
     if (m->cmd[0] == "quorum_status") {
@@ -2494,7 +2504,7 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
 
 bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
 				   int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-				   bool& isvalid)
+				   bool& isvalid, CryptoKey& session_key)
 {
   dout(10) << "ms_verify_authorizer " << con->get_peer_addr()
 	   << " " << ceph_entity_type_name(peer_type)
@@ -2514,10 +2524,12 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
       if (authorizer_data.length()) {
 	int ret = cephx_verify_authorizer(g_ceph_context, &keyring, iter,
 					  auth_ticket_info, authorizer_reply);
-	if (ret >= 0)
+	if (ret >= 0) {
+	  session_key = auth_ticket_info.session_key;
 	  isvalid = true;
-	else
+	} else {
 	  dout(0) << "ms_verify_authorizer bad authorizer from mon " << con->get_peer_addr() << dendl;
+        }
       }
     } else {
       dout(0) << "ms_verify_authorizer cephx enabled, but no authorizer (required for mon)" << dendl;

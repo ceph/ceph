@@ -715,6 +715,8 @@ public:
   void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
 		       pg_missing_t& omissing, int from);
   bool proc_replica_info(int from, const pg_info_t &info);
+  void remove_object_with_snap_hardlinks(
+    ObjectStore::Transaction& t, const hobject_t& soid);
   bool merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe);
 
   /**
@@ -791,8 +793,8 @@ public:
     Scrubber() :
       reserved(false), reserve_failed(false),
       epoch_start(0),
-      block_writes(false), active(false), waiting_on(0),
-      errors(0), fixed(0), active_rep_scrub(0),
+      block_writes(false), active(false), queue_snap_trim(false),
+      waiting_on(0), errors(0), fixed(0), active_rep_scrub(0),
       finalizing(false), is_chunky(false), state(INACTIVE),
       deep(false)
     {
@@ -806,6 +808,7 @@ public:
     // common to both scrubs
     bool block_writes;
     bool active;
+    bool queue_snap_trim;
     int waiting_on;
     set<int> waiting_on_whom;
     int errors;
@@ -860,6 +863,7 @@ public:
       finalizing = false;
       block_writes = false;
       active = false;
+      queue_snap_trim = false;
       waiting_on = 0;
       waiting_on_whom.clear();
       if (active_rep_scrub) {

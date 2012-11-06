@@ -10,9 +10,10 @@
 #include "include/inttypes.h"
 #include "include/stringify.h"
 
+#include "cls/rbd/cls_rbd.h"
+
 #include "librbd/AioCompletion.h"
 #include "librbd/AioRequest.h"
-#include "librbd/cls_rbd.h"
 #include "librbd/ImageCtx.h"
 
 #include "librbd/internal.h"
@@ -1229,7 +1230,7 @@ reprotect_and_return_err:
       if (scan_for_parents(ictx, parent_info.spec, CEPH_NOSNAP) == -ENOENT) {
 	r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
 				     parent_info.spec, id);
-	if (r < 0) {
+	if (r < 0 && r != -ENOENT) {
 	  lderr(cct) << "error removing child from children list" << dendl;
 	  return r;
 	}
@@ -2097,13 +2098,14 @@ reprotect_and_return_err:
     if (r < 0)
       return r;
 
-    r = check_io(ictx, off, len);
+    uint64_t mylen = len;
+    r = clip_io(ictx, off, &mylen);
     if (r < 0)
       return r;
 
     int64_t total_read = 0;
     uint64_t period = ictx->get_stripe_period();
-    uint64_t left = len;
+    uint64_t left = mylen;
 
     start_time = ceph_clock_now(ictx->cct);
     while (left > 0) {
@@ -2147,7 +2149,7 @@ reprotect_and_return_err:
     elapsed = ceph_clock_now(ictx->cct) - start_time;
     ictx->perfcounter->finc(l_librbd_rd_latency, elapsed);
     ictx->perfcounter->inc(l_librbd_rd);
-    ictx->perfcounter->inc(l_librbd_rd_bytes, len);
+    ictx->perfcounter->inc(l_librbd_rd_bytes, mylen);
     return total_read;
   }
 
@@ -2204,9 +2206,14 @@ reprotect_and_return_err:
     bool done;
     int ret;
 
+    uint64_t mylen = len;
+    int r = clip_io(ictx, off, &mylen);
+    if (r < 0)
+      return r;
+
     Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
     AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-    int r = aio_write(ictx, off, len, buf, c);
+    r = aio_write(ictx, off, mylen, buf, c);
     if (r < 0) {
       c->release();
       delete ctx;
@@ -2225,8 +2232,8 @@ reprotect_and_return_err:
     elapsed = ceph_clock_now(ictx->cct) - start_time;
     ictx->perfcounter->finc(l_librbd_wr_latency, elapsed);
     ictx->perfcounter->inc(l_librbd_wr);
-    ictx->perfcounter->inc(l_librbd_wr_bytes, len);
-    return len;
+    ictx->perfcounter->inc(l_librbd_wr_bytes, mylen);
+    return mylen;
   }
 
   int discard(ImageCtx *ictx, uint64_t off, uint64_t len)
@@ -2333,7 +2340,8 @@ reprotect_and_return_err:
     req->complete(rados_aio_get_return_value(c));
   }
 
-  int check_io(ImageCtx *ictx, uint64_t off, uint64_t len)
+  // validate extent against image size; clip to image size if necessary
+  int clip_io(ImageCtx *ictx, uint64_t off, uint64_t *len)
   {
     ictx->md_lock.Lock();
     ictx->snap_lock.Lock();
@@ -2345,8 +2353,14 @@ reprotect_and_return_err:
     if (!snap_exists)
       return -ENOENT;
 
-    if ((uint64_t)(off + len) > image_size)
+    // can't start past end
+    if (off >= image_size)
       return -EINVAL;
+
+    // clip requests that extend past end to just end
+    if ((off + *len) > image_size)
+      *len = (size_t)(image_size - off);
+
     return 0;
   }
 
@@ -2393,7 +2407,8 @@ reprotect_and_return_err:
     if (r < 0)
       return r;
 
-    r = check_io(ictx, off, len);
+    uint64_t mylen = len;
+    r = clip_io(ictx, off, &mylen);
     if (r < 0)
       return r;
 
@@ -2413,7 +2428,7 @@ reprotect_and_return_err:
 
     // map
     vector<ObjectExtent> extents;
-    Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, off, len, extents);
+    Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, off, mylen, extents);
 
     size_t total_write = 0;
 
@@ -2458,7 +2473,7 @@ reprotect_and_return_err:
     c->put();
 
     ictx->perfcounter->inc(l_librbd_aio_wr);
-    ictx->perfcounter->inc(l_librbd_aio_wr_bytes, len);
+    ictx->perfcounter->inc(l_librbd_aio_wr_bytes, mylen);
 
     /* FIXME: cleanup all the allocated stuff */
     return r;
@@ -2477,7 +2492,7 @@ reprotect_and_return_err:
     if (r < 0)
       return r;
 
-    r = check_io(ictx, off, len);
+    r = clip_io(ictx, off, &len);
     if (r < 0)
       return r;
 
@@ -2581,13 +2596,14 @@ reprotect_and_return_err:
     for (vector<pair<uint64_t,uint64_t> >::const_iterator p = image_extents.begin();
 	 p != image_extents.end();
 	 ++p) {
-      r = check_io(ictx, p->first, p->second);
+      uint64_t len = p->second;
+      r = clip_io(ictx, p->first, &len);
       if (r < 0)
 	return r;
-      
+
       Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout,
-			       p->first, p->second, object_extents, buffer_ofs);
-      buffer_ofs += p->second;
+			       p->first, len, object_extents, buffer_ofs);
+      buffer_ofs += len;
     }
 
     int64_t ret;

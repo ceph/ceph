@@ -3315,10 +3315,9 @@ void MDCache::rejoin_send_rejoins()
 	  p->second->add_scatterlock_state(root);
 	}
       }
-      for (int i = 0; i < NUM_STRAY; ++i) {
-	CInode *s = get_inode(MDS_INO_STRAY(p->first, i)); 
-	if (s)
-	  p->second->add_weak_inode(s->vino());
+      if (CInode *in = get_inode(MDS_INO_MDSDIR(p->first))) { 
+	if (in)
+	  p->second->add_weak_inode(in->vino());
       }
     } else {
       // strong
@@ -3334,15 +3333,14 @@ void MDCache::rejoin_send_rejoins()
 	  p->second->add_scatterlock_state(root);
 	}
       }
-      for (int i = 0; i < NUM_STRAY; ++i) {
-	if (CInode *in = get_inode(MDS_INO_STRAY(p->first, i))) {
-	  p->second->add_weak_inode(in->vino());
-	  p->second->add_strong_inode(in->vino(),
-				      in->get_caps_wanted(),
-				      in->filelock.get_state(),
-				      in->nestlock.get_state(),
-				      in->dirfragtreelock.get_state());
-	}
+
+      if (CInode *in = get_inode(MDS_INO_MDSDIR(p->first))) {
+	p->second->add_weak_inode(in->vino());
+	p->second->add_strong_inode(in->vino(),
+				    in->get_caps_wanted(),
+				    in->filelock.get_state(),
+				    in->nestlock.get_state(),
+				    in->dirfragtreelock.get_state());
       }
     }
   }  

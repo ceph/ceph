@@ -3055,9 +3055,10 @@ bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool for
   return *authorizer != NULL;
 }
 
+
 bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			       bool& isvalid)
+			       bool& isvalid, CryptoKey& session_key)
 {
   AuthAuthorizeHandler *authorize_handler = 0;
   switch (peer_type) {
@@ -3084,9 +3085,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
   uint64_t auid = CEPH_AUTH_UID_DEFAULT;
 
   isvalid = authorize_handler->verify_authorizer(g_ceph_context, monc->rotating_secrets,
-						 authorizer_data, authorizer_reply, name, global_id, caps_info, &auid);
-
-  dout(10) << "OSD::ms_verify_authorizer name=" << name << " auid=" << auid << dendl;
+						 authorizer_data, authorizer_reply, name, global_id, caps_info, session_key, &auid);
 
   if (isvalid) {
     Session *s = (Session *)con->get_priv();
