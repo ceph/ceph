@@ -493,7 +493,7 @@ int RGWSwift::parse_keystone_token_response(const string& token, bufferlist& bl,
   }
 
   if (!found) {
-    ldout(cct, 0) << "user does not hold a matching role; required roles: " << g_conf->rgw_keystone_operator_roles << dendl;
+    ldout(cct, 0) << "user does not hold a matching role; required roles: " << g_conf->rgw_keystone_accepted_roles << dendl;
     return -EPERM;
   }
 
@@ -677,7 +677,7 @@ bool RGWSwift::verify_swift_token(RGWRados *store, req_state *s)
 
 void RGWSwift::init()
 {
-  get_str_list(cct->_conf->rgw_keystone_operator_roles, roles_list);
+  get_str_list(cct->_conf->rgw_keystone_accepted_roles, roles_list);
 
   keystone_token_cache = new RGWKeystoneTokenCache(cct, cct->_conf->rgw_keystone_token_cache_size);
 
