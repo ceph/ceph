@@ -196,3 +196,9 @@ set automatically.
 :Description: The path and location of the MIME types. Used for Swift auto-detection of object types.
 :Type: String
 :Default: ``/etc/mime.types``
+
+``rgw resolve cname``
+
+:Description: Whether rgw should use dns cname record of the request hostname field (if hostname is not equal to ``rgw dns name``)
+:Type: Boolean
+:Default: ``false``
