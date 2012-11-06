@@ -28,13 +28,13 @@ image name, the pool name, and the user name. ::
 
 For example:: 
 
-  sudo rbd map foo --pool rbd myimage --id client.admin
+  sudo rbd map foo --pool rbd myimage --id admin
  
 If you use `cephx`_ authentication, you must also specify a secret.  It may come
 from a keyring or a file containing the secret. ::
 
-  sudo rbd map foo --pool rbd myimage --id client.foo --keyring /path/to/keyring
-  sudo rbd map foo --pool rbd myimage --id client.foo --keyfile /path/to/file
+  sudo rbd map foo --pool rbd myimage --id admin --keyring /path/to/keyring
+  sudo rbd map foo --pool rbd myimage --id admin --keyfile /path/to/file
 
 
 Show Mapped Block Devices

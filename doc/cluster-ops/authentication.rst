@@ -275,27 +275,29 @@ For example::
 
 Ceph supports the following usage for user name and secret:
 
-``--id``
+``--id`` | ``--user``
 
-:Description: A user name consists of a type and an ID (e.g., ``TYPE.ID`` or
-              ``client.admin``, ``client.user1``). The ``id`` argument enables
-              you to specify the ID portion of the user name (e.g., ``admin``, 
-              ``user1``, ``foo``, etc.). You can specify the user with the 
-              ``--id`` and omit the type. For example, to specify user 
-              ``client.foo`` enter the following:: 
+:Description: Ceph identifies users with a type and an ID (e.g., ``TYPE.ID`` or
+              ``client.admin``, ``client.user1``). The ``id``, ``name`` and 
+              ``-n`` options enable you to specify the ID portion of the user 
+              name (e.g., ``admin``, ``user1``, ``foo``, etc.). You can specify 
+              the user with the ``--id`` and omit the type. For example, 
+              to specify user ``client.foo`` enter the following:: 
               
                ceph --id foo --keyring /path/to/keyring health
+               ceph --user foo --keyring /path/to/keyring health
 
 
-``--user`` | ``--name``
+``--name``
 
-:Description: Newer versions of Ceph support ``--name``, ``-n`` and ``--user`` 
-              arguments in addition to ``--id``. However, you must specify the
-              user type (typically ``client``). For example:: 
+:Description: Ceph identifies users with a type and an ID (e.g., ``TYPE.ID`` or
+              ``client.admin``, ``client.user1``). The ``--name`` and ``-n`` 
+              options enables you to specify the fully qualified user name. 
+              You must specify the user type (typically ``client``) with the 
+              user ID. For example:: 
 
                ceph --name client.foo --keyring /path/to/keyring health
                ceph -n client.foo --keyring /path/to/keyring health
-               ceph --user client.foo --keyring /path/to/keyring health
               
 
 
