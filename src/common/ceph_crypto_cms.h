@@ -3,6 +3,8 @@
 
 #include "include/buffer.h"
 
-int ceph_decode_cms(bufferlist& cms_bl, bufferlist& decoded_bl);
+class CephContext;
+
+int ceph_decode_cms(CephContext *cct, bufferlist& cms_bl, bufferlist& decoded_bl);
 
 #endif
