@@ -370,7 +370,7 @@ static int decode_b64_cms(CephContext *cct, const string& signed_b64, bufferlist
   bufferlist signed_ber_bl;
   signed_ber_bl.append(signed_ber);
 
-  ret = ceph_decode_cms(signed_ber_bl, bl);
+  ret = ceph_decode_cms(cct, signed_ber_bl, bl);
   if (ret < 0) {
     ldout(cct, 0) << "ceph_decode_cms returned " << ret << dendl;
     return ret;
@@ -570,6 +570,7 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
 
   ldout(cct, 20) << "token_id=" << token_id << dendl;
 
+  /* check cache first */
   if (keystone_token_cache->find(token_id, t)) {
     rgw_set_keystone_token_auth_info(t, info);
 
@@ -584,7 +585,11 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
 
   bufferlist bl;
 
+  /* check if that's a self signed token that we can decode */
   if (!decode_pki_token(cct, token, bl)) {
+
+    /* can't decode, just go to the keystone server for validation */
+
     RGWValidateKeystoneToken validate(&bl);
 
     string url = g_conf->rgw_keystone_url;

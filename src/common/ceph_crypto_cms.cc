@@ -61,7 +61,7 @@
 
 #ifndef USE_NSS
 
-int ceph_decode_cms(bufferlist& cms_bl, bufferlist& decoded_bl)
+int ceph_decode_cms(CephContext *cct, bufferlist& cms_bl, bufferlist& decoded_bl)
 {
   return -ENOTSUP;
 }
@@ -105,7 +105,7 @@ struct decodeOptionsStr {
 };
 
 static NSSCMSMessage *
-decode(SECItem *input, const struct decodeOptionsStr *decodeOptions, bufferlist& out)
+decode(CephContext *cct, SECItem *input, const struct decodeOptionsStr *decodeOptions, bufferlist& out)
 {
     NSSCMSDecoderContext *dcx;
     SECStatus rv;
@@ -124,23 +124,23 @@ decode(SECItem *input, const struct decodeOptionsStr *decodeOptions, bufferlist&
 			       decodeOptions->dkcb, /* decrypt key callback */
                                decodeOptions->bulkkey);
     if (dcx == NULL) {
-	dout(0) << "ERROR: failed to set up message decoder" << dendl;
+	ldout(cct, 0) << "ERROR: failed to set up message decoder" << dendl;
 	return NULL;
     }
     rv = NSS_CMSDecoder_Update(dcx, (char *)input->data, input->len);
     if (rv != SECSuccess) {
-	dout(0) << "ERROR: failed to decode message" << dendl;
+	ldout(cct, 0) << "ERROR: failed to decode message" << dendl;
 	NSS_CMSDecoder_Cancel(dcx);
 	return NULL;
     }
     cmsg = NSS_CMSDecoder_Finish(dcx);
     if (cmsg == NULL) {
-	dout(0) << "ERROR: failed to decode message" << dendl;
+	ldout(cct, 0) << "ERROR: failed to decode message" << dendl;
 	return NULL;
     }
 
     if (decodeOptions->headerLevel >= 0) {
-	dout(20) << "SMIME: " << dendl;
+	ldout(cct, 20) << "SMIME: " << dendl;
     }
 
     nlevels = NSS_CMSMessage_ContentLevelCount(cmsg);
@@ -151,7 +151,7 @@ decode(SECItem *input, const struct decodeOptionsStr *decodeOptions, bufferlist&
 	cinfo = NSS_CMSMessage_ContentLevel(cmsg, i);
 	typetag = NSS_CMSContentInfo_GetContentTypeTag(cinfo);
 
-	dout(20) << "level=" << decodeOptions->headerLevel << "." << nlevels - i << dendl;
+	ldout(cct, 20) << "level=" << decodeOptions->headerLevel << "." << nlevels - i << dendl;
 
 	switch (typetag) {
 	case SEC_OID_PKCS7_SIGNED_DATA:
@@ -162,10 +162,10 @@ decode(SECItem *input, const struct decodeOptionsStr *decodeOptions, bufferlist&
 	    int j;
 
 	    if (decodeOptions->headerLevel >= 0)
-		dout(20) << "type=signedData; " << dendl;
+		ldout(cct, 20) << "type=signedData; " << dendl;
 	    sigd = (NSSCMSSignedData *)NSS_CMSContentInfo_GetContent(cinfo);
 	    if (sigd == NULL) {
-		dout(0) << "ERROR: signedData component missing" << dendl;
+		ldout(cct, 0) << "ERROR: signedData component missing" << dendl;
 		goto loser;
 	    }
 
@@ -179,19 +179,19 @@ decode(SECItem *input, const struct decodeOptionsStr *decodeOptions, bufferlist&
 		sitem = decodeOptions->content;
 
 		if ((poolp = PORT_NewArena(1024)) == NULL) {
-		    dout(0) << "ERROR: Out of memory" << dendl;
+		    ldout(cct, 0) << "ERROR: Out of memory" << dendl;
 		    goto loser;
 		}
 		digestalgs = NSS_CMSSignedData_GetDigestAlgs(sigd);
 		if (DigestFile (poolp, &digests, &sitem, digestalgs) 
 		      != SECSuccess) {
-		    dout(0) << "ERROR: problem computing message digest" << dendl;
+		    ldout(cct, 0) << "ERROR: problem computing message digest" << dendl;
 		    PORT_FreeArena(poolp, PR_FALSE);
 		    goto loser;
 		}
 		if (NSS_CMSSignedData_SetDigests(sigd, digestalgs, digests) 
 		    != SECSuccess) {
-		    dout(0) << "ERROR: problem setting message digests" << dendl;
+		    ldout(cct, 0) << "ERROR: problem setting message digests" << dendl;
 		    PORT_FreeArena(poolp, PR_FALSE);
 		    goto loser;
 		}
@@ -204,14 +204,14 @@ decode(SECItem *input, const struct decodeOptionsStr *decodeOptions, bufferlist&
 	                                   decodeOptions->options->certUsage, 
 	                                   decodeOptions->keepCerts) 
 	          != SECSuccess) {
-		dout(0) << "ERROR: cert import failed" << dendl;
+		ldout(cct, 0) << "ERROR: cert import failed" << dendl;
 		goto loser;
 	    }
 
 	    /* find out about signers */
 	    nsigners = NSS_CMSSignedData_SignerInfoCount(sigd);
 	    if (decodeOptions->headerLevel >= 0)
-		dout(20) << "nsigners=" << nsigners << dendl;
+		ldout(cct, 20) << "nsigners=" << nsigners << dendl;
 	    if (nsigners == 0) {
 		/* Might be a cert transport message
 		** or might be an invalid message, such as a QA test message
@@ -222,7 +222,7 @@ decode(SECItem *input, const struct decodeOptionsStr *decodeOptions, bufferlist&
 		                            decodeOptions->options->certHandle, 
 		                            decodeOptions->options->certUsage);
 		if (rv != SECSuccess) {
-		    dout(0) << "ERROR: Verify certs-only failed!" << dendl;
+		    ldout(cct, 0) << "ERROR: Verify certs-only failed!" << dendl;
 		    goto loser;
 		}
 		return cmsg;
@@ -230,7 +230,7 @@ decode(SECItem *input, const struct decodeOptionsStr *decodeOptions, bufferlist&
 
 	    /* still no digests? */
 	    if (!NSS_CMSSignedData_HasDigests(sigd)) {
-		dout(0) << "ERROR: no message digests" << dendl;
+		ldout(cct, 0) << "ERROR: no message digests" << dendl;
 		goto loser;
 	    }
 
@@ -248,7 +248,7 @@ decode(SECItem *input, const struct decodeOptionsStr *decodeOptions, bufferlist&
 		    signercn = NSS_CMSSignerInfo_GetSignerCommonName(si);
 		    if (signercn == NULL)
 			signercn = empty;
-		    dout(20) << "\t\tsigner" << j << ".id=" << signercn << dendl;
+		    ldout(cct, 20) << "\t\tsigner" << j << ".id=" << signercn << dendl;
 		    if (signercn != empty)
 		        PORT_Free(signercn);
 		}
@@ -258,10 +258,10 @@ decode(SECItem *input, const struct decodeOptionsStr *decodeOptions, bufferlist&
 		vs  = NSS_CMSSignerInfo_GetVerificationStatus(si);
 		svs = NSS_CMSUtil_VerificationStatusToString(vs);
 		if (decodeOptions->headerLevel >= 0) {
-		    dout(20) << "signer" << j << "status=" << svs << dendl;
+		    ldout(cct, 20) << "signer" << j << "status=" << svs << dendl;
 		    /* goto loser ? */
 		} else if (bad) {
-		    dout(0) << "ERROR: signer " << j << " status = " << svs << dendl;
+		    ldout(cct, 0) << "ERROR: signer " << j << " status = " << svs << dendl;
 		    goto loser;
 		}
 	    }
@@ -271,10 +271,10 @@ decode(SECItem *input, const struct decodeOptionsStr *decodeOptions, bufferlist&
 	  {
 	    NSSCMSEnvelopedData *envd;
 	    if (decodeOptions->headerLevel >= 0)
-		dout(20) << "type=envelopedData; " << dendl;
+		ldout(cct, 20) << "type=envelopedData; " << dendl;
 	    envd = (NSSCMSEnvelopedData *)NSS_CMSContentInfo_GetContent(cinfo);
 	    if (envd == NULL) {
-		dout(0) << "ERROR: envelopedData component missing" << dendl;
+		ldout(cct, 0) << "ERROR: envelopedData component missing" << dendl;
 		goto loser;
 	    }
 	  }
@@ -283,17 +283,17 @@ decode(SECItem *input, const struct decodeOptionsStr *decodeOptions, bufferlist&
 	  {
 	    NSSCMSEncryptedData *encd;
 	    if (decodeOptions->headerLevel >= 0)
-		dout(20) << "type=encryptedData; " << dendl;
+		ldout(cct, 20) << "type=encryptedData; " << dendl;
 	    encd = (NSSCMSEncryptedData *)NSS_CMSContentInfo_GetContent(cinfo);
 	    if (encd == NULL) {
-		dout(0) << "ERROR: encryptedData component missing" << dendl;
+		ldout(cct, 0) << "ERROR: encryptedData component missing" << dendl;
 		goto loser;
 	    }
 	  }
 	  break;
 	case SEC_OID_PKCS7_DATA:
 	    if (decodeOptions->headerLevel >= 0)
-		dout(20) << "type=data; " << dendl;
+		ldout(cct, 20) << "type=data; " << dendl;
 	    break;
 	default:
 	    break;
@@ -310,7 +310,7 @@ loser:
     return NULL;
 }
 
-int ceph_decode_cms(bufferlist& cms_bl, bufferlist& decoded_bl)
+int ceph_decode_cms(CephContext *cct, bufferlist& cms_bl, bufferlist& decoded_bl)
 {
     NSSCMSMessage *cmsg = NULL;
     struct decodeOptionsStr decodeOptions = { 0 };
@@ -332,7 +332,7 @@ int ceph_decode_cms(bufferlist& cms_bl, bufferlist& decoded_bl)
 
     options.certHandle = CERT_GetDefaultCertDB();
     if (!options.certHandle) {
-	dout(0) << "ERROR: No default cert DB" << dendl;
+	ldout(cct, 0) << "ERROR: No default cert DB" << dendl;
 	return -EIO;
     }
     if (cms_verbose) {
@@ -343,9 +343,9 @@ int ceph_decode_cms(bufferlist& cms_bl, bufferlist& decoded_bl)
 
     int ret = 0;
 
-    cmsg = decode(&input, &decodeOptions, decoded_bl);
+    cmsg = decode(cct, &input, &decodeOptions, decoded_bl);
     if (!cmsg) {
-        dout(0) << "ERROR: problem decoding" << dendl;
+        ldout(cct, 0) << "ERROR: problem decoding" << dendl;
 	ret = -EINVAL;
     }
 
