@@ -55,6 +55,11 @@ AC_PROG_CXX
 AC_PROG_MAKE_SET
 AC_PROG_LIBTOOL
 
+# Compiler flags
+
+AC_SUBST(AM_CXXFLAGS)
+AM_CXXFLAGS="${AM_CXXFLAGS}"
+
 # Checks for compiler warning types
 
 # AC_CHECK_CC_FLAG(FLAG_TO_TEST, VARIABLE_TO_SET_IF_SUPPORTED)
@@ -133,14 +138,16 @@ if test "x$have_cryptopp" = "xyes"; then
     AC_MSG_NOTICE([using cryptopp for cryptography])
     AC_DEFINE([USE_CRYPTOPP], [1], [Define if using CryptoPP.])
     AC_SUBST([CRYPTO_CFLAGS], [$CRYPTOPP_CFLAGS])
-    AC_SUBST([CRYPTO_CXXFLAGS], [$CRYPTOPP_CXXFLAGS])
+    #AC_SUBST([CRYPTO_CXXFLAGS], [$CRYPTOPP_CXXFLAGS])
+    AM_CXXFLAGS="${AM_CXXFLAGS} ${CRYPTOPP_CXXFLAGS}"
     AC_SUBST([CRYPTO_LIBS], [$CRYPTOPP_LIBS])
 elif test "x$have_nss" = "xyes"; then
     AC_MSG_NOTICE([using nss for cryptography])
     AC_DEFINE([USE_NSS], [1], [Define if using NSS.])
     AC_SUBST([CRYPTO_CFLAGS], [$NSS_CFLAGS])
     # this needs CFLAGS too in practise to get the includes right. ugly.
-    AC_SUBST([CRYPTO_CXXFLAGS], [$NSS_CFLAGS $NSS_CXXFLAGS])
+    #AC_SUBST([CRYPTO_CXXFLAGS], [$NSS_CFLAGS $NSS_CXXFLAGS])
+    AM_CXXFLAGS="${AM_CXXFLAGS} ${NSS_CFLAGS} ${NSS_CXXFLAGS}"
     AC_SUBST([CRYPTO_LIBS], [$NSS_LIBS])
 else
     AC_MSG_FAILURE([no suitable crypto library found])
