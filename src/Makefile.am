@@ -43,7 +43,7 @@ check-local:
 	$(srcdir)/test/encoding/check-generated.sh
 	$(srcdir)/test/encoding/readable.sh ../ceph-object-corpus
 
-EXTRALIBS = -luuid -lboost_thread-mt
+EXTRALIBS = -luuid -lboost_thread
 if FREEBSD
 EXTRALIBS += -lexecinfo
 endif
