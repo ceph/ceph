@@ -49,7 +49,7 @@ static int encode_token(CephContext *cct, string& swift_user, string& key, buffe
     return ret;
 
   utime_t expiration = ceph_clock_now(cct);
-  expiration += RGW_SWIFT_TOKEN_EXPIRATION; // 15 minutes
+  expiration += cct->_conf->rgw_swift_token_expiration;
 
   ret = build_token(swift_user, key, nonce, expiration, bl);
 
