@@ -6,7 +6,7 @@ use IO::File;
 use Getopt::Long;
 use Digest::MD5;
 
-use S3Lib qw(get_user_info $rgw_user delete_user _write_log_entry _exit_result);
+use S3Lib qw(get_hostname get_user_info $rgw_user delete_user _write_log_entry _exit_result get_status);
 
 my $exit_status=0;
 my $tc;
@@ -23,6 +23,10 @@ my $wday;
 my $yday;
 my $isdst;
 my $s3;
+my $domain = "front.sepia.ceph.com";
+my $host = get_hostname();
+my $hostname = "$host.$domain";
+
 sub get_timestamp {
    ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
    if ($mon < 10) { $mon = "0$mon"; }
@@ -45,7 +49,12 @@ system ("ceph -v >> log.txt");
 $tc=$ARGV[0];
 print "$tc\n";
 
-
+# check if service is already running
+my $state = get_status();
+if ($state){
+        _write_log_entry( "radosgw is NOT running. quitting" );
+        exit 1;
+}
     if ($tc == 1)  { system ("dd if=/dev/zero of=/tmp/10MBfile bs=10485760 count=1");
 $mytestfilename = '10MBfile'; }
     elsif ($tc == 2)  { system ("dd if=/dev/zero of=/tmp/100MBfile bs=10485760 count=10");
@@ -66,9 +75,6 @@ my $testfileloc = "/tmp/".$mytestfilename;
 print "Test file = $testfileloc\n";
 #**************************************************************************
 # Modify access keys to suit the target account
-#my $aws_access_key_id = 'YTK5QR2XKATOSU5D9462';
-#my $aws_secret_access_key = 'i6xbrQs+edkWBdG8dY7e2DGjCZNfUwLjgEXzQw0B';
-
 my ($access_key, $secret_key) = get_user_info();
 if ( ($access_key) && ($secret_key) ) {
 
@@ -78,7 +84,7 @@ if ( ($access_key) && ($secret_key) ) {
   $s3 = Amazon::S3->new(
       {   aws_access_key_id     => $access_key,
           aws_secret_access_key => $secret_key,
-          host                  => 'burnupi60.front.sepia.ceph.com',
+          host                  => $hostname, 
           secure                => 0,
           retry                 => 1,
       }
