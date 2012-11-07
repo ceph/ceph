@@ -195,7 +195,7 @@ types.
 |  6   |   Pool      | A data storage pool for storing objects.           |
 +------+-------------+----------------------------------------------------+
 
-.. note:: You can remove these types and create your own bucket types.
+.. tip:: You can remove these types and create your own bucket types.
 
 Ceph's deployment tools generate a CRUSH map that contains a bucket for each
 host, and a pool named "default," which is useful for the default ``data``,
@@ -316,7 +316,7 @@ default pools, which include:
 - ``metadata``
 - ``rbd``
 
-.. important:: In most cases, you will not need to modify the default rules. When
+.. note:: In most cases, you will not need to modify the default rules. When
    you create a new pool, its default ruleset is ``0``.
 
 A rule takes the following form:: 
