@@ -316,6 +316,18 @@ Description: synchronize data between cloud object storage providers or a local 
  storage providers, such as Amazon S3 (or compatible services), a
  Ceph RADOS cluster, or a local directory.
 
+Package: ceph-test
+Architecture: linux-any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ceph-common, xml2, curl
+Description:   Ceph test and benchmarking tools.
+
+Package: ceph-test-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: ${shlibs:Depends}, ${misc:Depends}, ceph-common, xml2, curl
+Description:  Ceph test and benchmarking tools.
+
 Package: python-ceph
 Architecture: linux-any
 Section: python

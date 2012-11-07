@@ -21,6 +21,7 @@ endif
 export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 
 extraopts += --with-ocf --with-rest-bench --with-nss
+extraopts += --with-debug
 
 ifeq ($(DEB_HOST_ARCH), armel)
   # armel supports ARMv4t or above instructions sets.
@@ -124,6 +125,7 @@ binary-arch: build install
 	dh_strip -plibcephfs1 --dbg-package=libcephfs1-dbg
 	dh_strip -pradosgw --dbg-package=radosgw-dbg
 	dh_strip -prest-bench --dbg-package=rest-bench-dbg
+	dh_strip -pceph-test --dbg-package=ceph-test-dbg
 
 	dh_compress
 	dh_fixperms
