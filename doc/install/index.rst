@@ -1,6 +1,7 @@
 ==============
  Installation
 ==============
+
 Storage clusters are the foundation of the Ceph system. Ceph storage hosts
 provide object storage. Clients access the Ceph storage cluster directly from
 an application (using ``librados``), over an object storage protocol such as
@@ -23,4 +24,3 @@ Ceph:
    Installing Debian/Ubuntu Packages <debian>
    Installing RPM Packages <rpm>
    Installing Chef <chef>
-   Installing OpenStack <openstack>
