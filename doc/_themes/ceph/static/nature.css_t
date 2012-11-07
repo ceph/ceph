@@ -240,8 +240,9 @@ div.topic {
 }
  
 div.warning {
-    background-color: #e6e8e8;
-    border: 1px solid #f05c56;
+    background-color: #F05C56;
+    border: 1px solid #9C4850;
+    color: #fff;
 }
  
 p.admonition-title {
@@ -272,6 +273,7 @@ tt {
     font-family: monospace;
 }
 
+
 .viewcode-back {
     font-family: Arial, sans-serif;
 }
@@ -285,3 +287,21 @@ div.viewcode-block:target {
 table.docutils {
     margin: 1.5em;
 }
+
+
+div.sidebar {
+border: 1px solid #5E6A71;
+background-color: #E6E8E8;
+}
+
+div.admonition.tip {
+	background-color: #80D2DC;
+   border: 1px solid #55AEBA;
+}
+
+div.admonition.important {
+	background-color: #F05C56;
+   border: 1px solid #9C4850;
+   color: #fff;
+}
+
