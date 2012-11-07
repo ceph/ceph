@@ -73,7 +73,7 @@ performance, reliability, and scalability.
 %package fuse
 Summary:	Ceph fuse-based client
 Group:		System Environment/Base
-Requires:	%{name} = %{version}-%{release}
+Requires:	%{name}
 BuildRequires:	fuse-devel
 %description fuse
 FUSE based client for Ceph distributed network file system
