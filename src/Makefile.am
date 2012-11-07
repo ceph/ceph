@@ -1819,6 +1819,7 @@ noinst_HEADERS = \
 	rgw/rgw_swift.h\
 	rgw/rgw_swift_auth.h\
 	rgw/rgw_rados.h\
+	rgw/rgw_resolve.h\
 	rgw/rgw_rest.h\
 	rgw/rgw_rest_swift.h\
 	rgw/rgw_rest_s3.h\
