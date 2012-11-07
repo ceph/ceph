@@ -26,15 +26,14 @@ File Systems
 Ceph OSDs rely heavily upon the stability and performance of the
 underlying file system.
 
-.. tip:: We currently recommend ``XFS`` for production deployments.
-
-.. tip:: We recommend ``btrfs`` for testing, development, and any
-non-critical deployments.  We believe that ``btrfs`` has the correct
-feature set and roadmap to serve Ceph in the long-term, but ``XFS``
-and ``ext4`` provide the necessary stability for today's deployments.
-``btrfs`` development is proceeding rapidly: users should be
-comfortable installing the latest released upstream kernels and be
-able to track development activity for critical bug fixes.
+.. note:: We currently recommend ``XFS`` for production deployments.
+   We recommend ``btrfs`` for testing, development, and any
+   non-critical deployments.  We believe that ``btrfs`` has the correct
+   feature set and roadmap to serve Ceph in the long-term, but ``XFS``
+   and ``ext4`` provide the necessary stability for today's deployments.
+   ``btrfs`` development is proceeding rapidly: users should be
+   comfortable installing the latest released upstream kernels and be
+   able to track development activity for critical bug fixes.
 
 Ceph OSDs depend on the Extended Attributes (XATTRs) of the underlying
 file system for various forms of internal object state and metadata.
