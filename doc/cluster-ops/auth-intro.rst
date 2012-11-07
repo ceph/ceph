@@ -88,7 +88,7 @@ subsystem generates the username and key, stores a copy with the monitor(s) and
 transmits the user's secret back to the ``client.admin`` user. This means that 
 the client and the monitor share a secret key.
 
-.. important:: The ``client.admin`` user must provide the user ID and 
+.. note:: The ``client.admin`` user must provide the user ID and 
    secret key to the user in a secure manner. 
 
 .. ditaa:: +---------+     +---------+
@@ -191,7 +191,7 @@ authenticated  user to exercise the functionality of the monitors, OSDs and
 metadata servers. Capabilities can also restrict access to data within one or
 more pools.
 
-.. important:: Ceph uses the capabilities discussed here for setting up and 
+.. note:: Ceph uses the capabilities discussed here for setting up and 
    controlling access between various Ceph client and server instances, and 
    are relevant regardless of what type of client accesses the Ceph object 
    store. CephFS uses a different type of capability for files and directories 
@@ -264,12 +264,13 @@ front end used to access the Ceph object store.  This other mechanism has the
 role of ensuring that only acceptable users and programs are able to run on the
 machine that Ceph will permit to access its object store. 
 
-The keys used to authenticate Ceph clients and servers are typically   stored in
+The keys used to authenticate Ceph clients and servers are typically stored in
 a plain text file with appropriate permissions in a trusted host.
 
-.. important:: This method has security shortcomings, but they are difficult to avoid, 
-   given the basic authentication methods Ceph uses in the background. Those setting up 
-   Ceph systems should be aware of these shortcomings.  
+.. important:: Storing keys in plaintext files has security shortcomings, but 
+   they are difficult to avoid, given the basic authentication methods Ceph 
+   uses in the background. Those setting up Ceph systems should be aware of 
+   these shortcomings.  
 
 In particular, arbitrary user machines, especially portable machines, should not
 be configured to interact directly with Ceph, since that mode of use would
