@@ -165,7 +165,7 @@ and development clusters can run successfully with modest hardware.
 |              | Network        |  2x 1GB Ethernet NICs              |
 +--------------+----------------+------------------------------------+
 
-.. important:: If you are running an OSD with a single disk, create a
+.. tip:: If you are running an OSD with a single disk, create a
    partition for your volume storage that is separate from the partition
    containing the OS. Generally, we recommend separate disks for the
    OS and the volume storage.
