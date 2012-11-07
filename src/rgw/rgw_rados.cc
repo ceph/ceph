@@ -2248,19 +2248,22 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
       goto done_err;
 
     if (if_match) {
-      ldout(cct, 10) << "ETag: " << etag.c_str() << " " << " If-Match: " << if_match << dendl;
-      if (strcmp(if_match, etag.c_str())) {
+      string if_match_str = rgw_string_unquote(if_match);
+      ldout(cct, 10) << "ETag: " << etag.c_str() << " " << " If-Match: " << if_match_str << dendl;
+      if (if_match_str.compare(etag.c_str()) != 0) {
         r = -ERR_PRECONDITION_FAILED;
         goto done_err;
       }
     }
 
     if (if_nomatch) {
-      ldout(cct, 10) << "ETag: " << etag.c_str() << " " << " If-NoMatch: " << if_nomatch << dendl;
-      if (strcmp(if_nomatch, etag.c_str()) == 0) {
+      string if_nomatch_str = rgw_string_unquote(if_nomatch);
+      ldout(cct, 10) << "ETag: " << etag.c_str() << " " << " If-NoMatch: " << if_nomatch_str << dendl;
+      if (if_nomatch_str.compare(etag.c_str()) == 0) {
         r = -ERR_NOT_MODIFIED;
         goto done_err;
       }
+      if_nomatch = if_nomatch_str.c_str();
     }
   }
 

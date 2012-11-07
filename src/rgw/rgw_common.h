@@ -1018,6 +1018,7 @@ static inline const char *rgw_obj_category_name(RGWObjCategory category)
   return "unknown";
 }
 
+extern string rgw_string_unquote(const string& s);
 /** time parsing */
 extern int parse_time(const char *time_str, time_t *time);
 extern bool parse_rfc2616(const char *s, struct tm *t);
