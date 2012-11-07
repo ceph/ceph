@@ -29,7 +29,7 @@ import static org.junit.Assert.*;
 /*
  * Coverage
  *  - Everything is covered in at least success cases.
- *  - link/symlink/readlink/l[set,get,remove]xattr are not working
+ *  - l[set,get,remove]xattr are not working
  */
 
 public class CephMountTest {
@@ -412,11 +412,24 @@ public class CephMountTest {
   }
 
   /*
-   * Missing
-   *
    * readlink
    * symlink
    */
+  @Test
+  public void test_symlink() throws Exception {
+    String oldpath = makePath();
+    String newpath = makePath();
+
+    mount.symlink(oldpath, newpath);
+    CephStat stat = new CephStat();
+    mount.lstat(newpath, stat);
+    assertTrue(stat.isSymlink());
+
+    String symlink = mount.readlink(newpath);
+    assertTrue(symlink.compareTo(oldpath) == 0);
+
+    mount.unlink(newpath);
+  }
 
   /*
    * lstat
