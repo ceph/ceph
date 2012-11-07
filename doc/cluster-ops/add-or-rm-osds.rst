@@ -134,6 +134,15 @@ hard disks than older hosts in the cluster (i.e., they may have greater weight).
 	ceph osd crush set {id} {name} {weight}  [{bucket-type}={bucket-name}, ...]
 
 
+.. topic:: Argonaut (v0.48) Best Practices
+
+   To limit impact on user I/O, add an OSD to the CRUSH map with an initial 
+   weight of ``0``. Then, ramp up the CRUSH weight a little bit at a time
+   (e.g., ``0.2``) and allow migration to complete. Continue to increment
+   the CRUSH weight until you reach your desired CRUSH weight. This practice
+   will no longer be necessary in Bobtail and subsequent releases.	
+
+
 Adding an OSD (Chef)
 --------------------
 
