@@ -362,7 +362,7 @@ authentication has the unfortunate security effect that an attacker with control
 of some of your machines or some access to your network can disable session
 security simply by claiming to be unable to sign messages.  
 
-.. important:: Even if you don't actually run any old versions of Ceph, 
+.. note:: Even if you don't actually run any old versions of Ceph, 
    the attacker may be able to force some messages to be accepted unsigned in the 
    default scenario. While running Cephx with the default scenario, Ceph still
    authenticates the initial communication, but you lose desirable session security.
@@ -380,6 +380,6 @@ for authentication::
 
 **We recommend migrating all daemons to the newer versions and enabling the 
 foregoing flag** at the nearest practical time so that you may avail yourself 
-of the enhanced authentication without compromising security.
+of the enhanced authentication.
 
 .. _Ceph configuration: ../../config-cluster/ceph-conf
