@@ -1,6 +1,7 @@
 =================
  Installing Chef
 =================
+
 Chef defines three types of entities:
  
 #. **Chef Nodes:** Run ``chef-client``, which installs and manages software.
@@ -14,7 +15,8 @@ See `Chef Architecture Introduction`_ for details.
 .. _createuser:
 
 Create a ``chef`` User
-----------------------
+======================
+
 The ``chef-client`` command requires the proper privileges to install and manage
 installations. On each Chef node, we recommend creating a ``chef`` user with 
 full ``root`` privileges. For example:: 
@@ -39,7 +41,8 @@ need to add the following to the ``/etc/sudoers`` file::
 .. _genkeys:
 
 Generate SSH Keys for Chef Clients
-----------------------------------
+==================================
+
 Chef's ``knife`` tool can run ``ssh``. To streamline deployments, we 
 recommend generating an SSH key pair without a passphrase for your 
 Chef nodes and copying the public key(s) to your Chef nodes so that you 
@@ -73,7 +76,8 @@ logging in as ``chef`` when no username is specified. ::
 .. _installruby:
 
 Installing Ruby
----------------
+===============
+
 Chef requires you to install Ruby. Use the version applicable to your current 
 Linux distribution and install Ruby on all of your hosts. ::
 
@@ -83,7 +87,8 @@ Linux distribution and install Ruby on all of your hosts. ::
 .. _installchefserver:
 
 Installing Chef and Chef Server on a Server
--------------------------------------------
+===========================================
+
 If you plan on hosting your `Chef Server at Opscode`_ you may skip this step, 
 but you must make a note of the the fully qualified domain name or IP address
 of your Chef Server for ``knife`` and ``chef-client``.
@@ -136,7 +141,8 @@ to enter a new password.
 .. _installchef:
 
 Install Chef on all Remaining Hosts
------------------------------------
+===================================
+
 Install Chef on all Chef Nodes and on the Chef Workstation (if it is not the 
 same host as the Chef Server). See `Installing Chef Client on Ubuntu or Debian`_
 for details.
@@ -168,7 +174,8 @@ For example::
 .. _configknife:
 
 Configuring Knife
------------------
+=================
+
 Once you complete the Chef server installation, install ``knife`` on the your
 Chef Workstation. If the Chef server is a remote host, use ``ssh`` to connect. :: 
 
@@ -222,7 +229,8 @@ Leave the entry field blank and press **Enter**.
 .. _addcbpath:
 
 Add a Cookbook Path
--------------------
+===================
+
 Add ``cookbook_path`` to the ``~/.chef/knife.rb`` configuration file
 on your Chef workstation. For example::
 
@@ -238,7 +246,8 @@ them to the Chef server.
 .. _cpvalpem:
 
 Copy ``validation.pem`` to Nodes
---------------------------------
+================================
+
 Copy the ``/etc/chef/validation.pem`` file from your Chef server to
 each Chef Node. In a command line shell on the Chef Server, for each node, 
 replace ``{nodename}`` in the following line with the node's host name and 
@@ -249,7 +258,8 @@ execute it. ::
 .. _runchefcli:
 
 Run ``chef-client`` on each Chef Node
--------------------------------------
+=====================================
+
 Run the ``chef-client`` on each Chef Node so that the nodes
 register with the Chef server. :: 
 
@@ -259,7 +269,8 @@ register with the Chef server. ::
 .. _verifynodes:
 
 Verify Nodes
-------------
+============
+
 Verify that you have setup all the hosts you want to use as 
 Chef nodes. :: 
 
