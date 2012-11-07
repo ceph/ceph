@@ -141,6 +141,23 @@ std::ostream& operator<<(std::ostream& oss, const rgw_err &err)
   return oss;
 }
 
+string rgw_string_unquote(const string& s)
+{
+  if (s[0] != '"' || s.size() < 2)
+    return s;
+
+  int len;
+  for (len = s.size(); len > 2; --len) {
+    if (s[len - 1] != ' ')
+      break;
+  }
+
+  if (s[len-1] != '"')
+    return s;
+
+  return s.substr(1, len - 2);
+}
+
 static bool check_str_end(const char *s)
 {
   if (!s)
