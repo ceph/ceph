@@ -1,6 +1,7 @@
 =================
  Getting Started
 =================
+
 Welcome to Ceph! The following sections provide information that will help you
 get started:
 
