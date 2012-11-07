@@ -7,8 +7,8 @@ Ceph Dependencies
 
 As a general rule, we recommend deploying Ceph on newer releases of Linux. 
 
-Linux kernel
-~~~~~~~~~~~~
+Linux Kernel
+------------
 
 - **Ceph Kernel Client:**  We recommend Linux kernel v3.6 or later.
 
@@ -16,7 +16,7 @@ Linux kernel
   a recent Linux kernel (v3.5 or later).
 
 glibc
-~~~~~
+-----
 
 - **syncfs(2)**: For non-btrfs filesystems such as XFS and ext4 where
   more than one ``ceph-osd`` daemon is used on a single server, Ceph
@@ -33,7 +33,7 @@ specific distributions aside from the kernel and system initialization
 package (i.e., sysvinit, upstart, systemd).
 
 Argonaut (0.48)
-~~~~~~~~~~~~~~~
+---------------
 
 +----------+----------+--------------------+--------------+---------+------------+
 | Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    | 
@@ -52,7 +52,7 @@ Argonaut (0.48)
 +----------+----------+--------------------+--------------+---------+------------+
 
 Bobtail (0.55)
-~~~~~~~~~~~~~~
+--------------
 
 +----------+----------+--------------------+--------------+---------+------------+
 | Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    | 
@@ -80,7 +80,7 @@ Bobtail (0.55)
 
 
 Notes
-~~~~~
+-----
 
 - **1**: The default kernel has an older version of ``btrfs`` that we do not
   recommend for ``ceph-osd`` storage nodes.  Upgrade to a recommended
@@ -96,7 +96,7 @@ Notes
   they could.
 
 Testing
-~~~~~~~
+-------
 
 - **B**: We continuously build all branches on this platform and exercise basic
   unit tests.  We build release packages for this platform.
