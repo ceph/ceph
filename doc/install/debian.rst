@@ -8,7 +8,7 @@ testing packages (for development and QA only).  Do not add multiple
 package sources at the same time.
 
 Add Stable Release Packages
----------------------------
+===========================
 
 We build Debian and Ubuntu packages for each stable release of Ceph.  These
 packages are recommended for anyone deploying Ceph in a production environment.
@@ -30,7 +30,7 @@ For the European users there is also a mirror in the Netherlands at http://eu.ce
 	echo deb http://eu.ceph.com/debian/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 Add Development Release Packages
---------------------------------
+================================
 
 Our development process generates a new release of Ceph every 3-4 weeks.
 These packages are faster-moving than the stable releases, as they get
@@ -54,7 +54,7 @@ For the European users there is also a mirror in the Netherlands at http://eu.ce
 	echo deb http://eu.ceph.com/debian-testing/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 Add Development Testing Packages
---------------------------------
+================================
 
 We automatically build Debian and Ubuntu packages for current
 development branches in the Ceph source code repository.  These
@@ -73,7 +73,7 @@ We support ``oneiric`` and ``precise`` distributions. ::
 	echo deb http://gitbuilder.ceph.com/ceph-deb-$(lsb_release -sc)-x86_64-basic/ref/{BRANCH} $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 Installing Packages
--------------------
+===================
 
 Once you have added either release or development packages to APT, 
 you should update APT's database and install Ceph::
