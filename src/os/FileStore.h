@@ -272,10 +272,6 @@ private:
 
 public:
   int lfn_find(coll_t cid, const hobject_t& oid, IndexedPath *path);
-  int lfn_getxattr(coll_t cid, const hobject_t& oid, const char *name, void *val, size_t size);
-  int lfn_setxattr(coll_t cid, const hobject_t& oid, const char *name, const void *val, size_t size);
-  int lfn_removexattr(coll_t cid, const hobject_t& oid, const char *name);
-  int lfn_listxattr(coll_t cid, const hobject_t& oid, char *names, size_t len);
   int lfn_truncate(coll_t cid, const hobject_t& oid, off_t length);
   int lfn_stat(coll_t cid, const hobject_t& oid, struct stat *buf);
   int lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode,
@@ -284,6 +280,7 @@ public:
 	       IndexedPath *path, Index *index);
   int lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode);
   int lfn_open(coll_t cid, const hobject_t& oid, int flags);
+  void lfn_close(int fd);
   int lfn_link(coll_t c, coll_t cid, const hobject_t& o) ;
   int lfn_unlink(coll_t cid, const hobject_t& o, const SequencerPosition &spos);
 
@@ -380,6 +377,9 @@ public:
   int _do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _remove(coll_t cid, const hobject_t& oid, const SequencerPosition &spos);
 
+  int _fgetattr(int fd, const char *name, bufferptr& bp);
+  int _fgetattrs(int fd, map<string,bufferptr>& aset, bool user_only);
+
   void _start_sync();
 
   void start_sync();
@@ -401,11 +401,6 @@ public:
   // attrs
   int getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr &bp);
   int getattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset, bool user_only = false);
-
-  int _getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr& bp);
-  int _getattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset, bool user_only = false) ;
-  int _getattr(const char *fn, const char *name, bufferptr& bp);
-  int _getattrs(const char *fn, map<string,bufferptr>& aset, bool user_only = false);
 
   int _setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset,
 		const SequencerPosition &spos);

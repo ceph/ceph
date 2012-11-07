@@ -1315,6 +1315,7 @@ noinst_LIBRARIES += libmds.a
 libos_a_SOURCES = \
 	os/FileJournal.cc \
 	os/FileStore.cc \
+	os/chain_xattr.cc \
 	os/ObjectStore.cc \
 	os/JournalingObjectStore.cc \
 	os/LFNIndex.cc \
@@ -1769,6 +1770,7 @@ noinst_HEADERS = \
         msg/msg_types.h\
 	objclass/objclass.h\
 	os/btrfs_ioctl.h\
+	os/chain_xattr.h\
 	os/hobject.h \
 	os/CollectionIndex.h\
         os/FileJournal.h\

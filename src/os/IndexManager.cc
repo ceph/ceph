@@ -33,19 +33,18 @@
 #include "FlatIndex.h"
 #include "CollectionIndex.h"
 
-int do_getxattr(const char *fn, const char *name, void *val, size_t size);
-int do_setxattr(const char *fn, const char *name, const void *val, size_t size);
+#include "chain_xattr.h"
 
 static int set_version(const char *path, uint32_t version) {
   bufferlist bl;
   ::encode(version, bl);
-  return do_setxattr(path, "user.cephos.collection_version", bl.c_str(), 
+  return chain_setxattr(path, "user.cephos.collection_version", bl.c_str(), 
 		     bl.length());
 }
 
 static int get_version(const char *path, uint32_t *version) {
   bufferptr bp(PATH_MAX);
-  int r = do_getxattr(path, "user.cephos.collection_version", 
+  int r = chain_getxattr(path, "user.cephos.collection_version", 
 		      bp.c_str(), bp.length());
   if (r < 0) {
     if (r != -ENOENT) {

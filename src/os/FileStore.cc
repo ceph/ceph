@@ -38,6 +38,7 @@
 #include "include/fiemap.h"
 
 #include "common/xattr.h"
+#include "chain_xattr.h"
 
 #if defined(DARWIN) || defined(__FreeBSD__)
 #include <sys/param.h>
@@ -90,9 +91,6 @@ static const __SWORD_TYPE BTRFS_SUPER_MAGIC(0x9123683E);
 # endif
 #endif
 
-#define ATTR_MAX_NAME_LEN  128
-#define ATTR_MAX_BLOCK_LEN 2048
-
 #define COMMIT_SNAP_ITEM "snap_%lld"
 #define CLUSTER_SNAP_ITEM "clustersnap_%s"
 
@@ -128,38 +126,6 @@ ostream& operator<<(ostream& out, const FileStore::OpSequencer& s)
 {
   assert(&out);
   return out << *s.parent;
-}
-
-int do_getxattr(const char *fn, const char *name, void *val, size_t size);
-int do_fgetxattr(int fd, const char *name, void *val, size_t size);
-int do_setxattr(const char *fn, const char *name, const void *val, size_t size);
-int do_fsetxattr(int fd, const char *name, const void *val, size_t size);
-int do_setxattr(const char *fn, const char *name, const void *val, size_t size);
-int do_listxattr(const char *fn, char *names, size_t len);
-int do_removexattr(const char *fn, const char *name);
-
-static int sys_fgetxattr(int fd, const char *name, void *val, size_t size)
-{
-  int r = ::ceph_os_fgetxattr(fd, name, val, size);
-  return (r < 0 ? -errno : r);
-}
-
-static int sys_setxattr(const char *fn, const char *name, const void *val, size_t size)
-{
-  int r = ::ceph_os_setxattr(fn, name, val, size);
-  return (r < 0 ? -errno : r);
-}
-
-static int sys_removexattr(const char *fn, const char *name)
-{
-  int r = ::ceph_os_removexattr(fn, name);
-  return (r < 0 ? -errno : r);
-}
-
-int sys_listxattr(const char *fn, char *names, size_t len)
-{
-  int r = ::ceph_os_listxattr(fn, names, len);
-  return (r < 0 ? -errno : r);
 }
 
 int FileStore::get_cdir(coll_t cid, char *s, int len) 
@@ -202,50 +168,6 @@ int FileStore::lfn_find(coll_t cid, const hobject_t& oid, IndexedPath *path)
   if (!exist)
     return -ENOENT;
   return 0;
-}
-
-int FileStore::lfn_getxattr(coll_t cid, const hobject_t& oid, const char *name, void *val, size_t size)
-{
-  IndexedPath path;
-  int r = lfn_find(cid, oid, &path);
-  if (r < 0)
-    return r;
-  r = do_getxattr(path->path(), name, val, size);
-  assert(!m_filestore_fail_eio || r != -EIO);
-  return r;
-}
-
-int FileStore::lfn_setxattr(coll_t cid, const hobject_t& oid, const char *name, const void *val, size_t size)
-{
-  IndexedPath path;
-  int r = lfn_find(cid, oid, &path);
-  if (r < 0)
-    return r;
-  r = do_setxattr(path->path(), name, val, size);
-  assert(!m_filestore_fail_eio || r != -EIO);
-  return r;
-}
-
-int FileStore::lfn_removexattr(coll_t cid, const hobject_t& oid, const char *name)
-{
-  IndexedPath path;
-  int r = lfn_find(cid, oid, &path);
-  if (r < 0)
-    return r;
-  r = do_removexattr(path->path(), name);
-  assert(!m_filestore_fail_eio || r != -EIO);
-  return r;
-}
-
-int FileStore::lfn_listxattr(coll_t cid, const hobject_t& oid, char *names, size_t len)
-{
-  IndexedPath path;
-  int r = lfn_find(cid, oid, &path);
-  if (r < 0)
-    return r;
-  r = do_listxattr(path->path(), names, len);
-  assert(!m_filestore_fail_eio || r != -EIO);
-  return r;
 }
 
 int FileStore::lfn_truncate(coll_t cid, const hobject_t& oid, off_t length)
@@ -341,6 +263,11 @@ int FileStore::lfn_open(coll_t cid, const hobject_t& oid, int flags)
   return lfn_open(cid, oid, flags, 0);
 }
 
+void FileStore::lfn_close(int fd)
+{
+  TEMP_FAILURE_RETRY(::close(fd));
+}
+
 int FileStore::lfn_link(coll_t c, coll_t cid, const hobject_t& o) 
 {
   Index index_new, index_old;
@@ -431,280 +358,6 @@ int FileStore::lfn_unlink(coll_t cid, const hobject_t& o,
     }
   }
   return index->unlink(o);
-}
-
-static void get_raw_xattr_name(const char *name, int i, char *raw_name, int raw_len)
-{
-  int r;
-  int pos = 0;
-
-  while (*name) {
-    switch (*name) {
-    case '@': /* escape it */
-      pos += 2;
-      assert (pos < raw_len - 1);
-      *raw_name = '@';
-      raw_name++;
-      *raw_name = '@';
-      break;
-    default:
-      pos++;
-      assert(pos < raw_len - 1);
-      *raw_name = *name;
-      break;
-    }
-    name++;
-    raw_name++;
-  }
-
-  if (!i) {
-    *raw_name = '\0';
-  } else {
-    r = snprintf(raw_name, raw_len, "@%d", i);
-    assert(r < raw_len - pos);
-  }
-}
-
-static int translate_raw_name(const char *raw_name, char *name, int name_len, bool *is_first)
-{
-  int pos = 0;
-
-  generic_dout(10) << "translate_raw_name raw_name=" << raw_name << dendl;
-  const char *n = name;
-
-  *is_first = true;
-  while (*raw_name) {
-    switch (*raw_name) {
-    case '@': /* escape it */
-      raw_name++;
-      if (!*raw_name)
-        break;
-      if (*raw_name != '@') {
-        *is_first = false;
-        goto done;
-      }
-
-    /* fall through */
-    default:
-      *name = *raw_name;
-      break;
-    }
-    pos++;
-    assert(pos < name_len);
-    name++;
-    raw_name++;
-  }
-done:
-  *name = '\0';
-  generic_dout(10) << "translate_raw_name name=" << n << dendl;
-  return pos;
-}
-
-int do_fgetxattr_len(int fd, const char *name)
-{
-  int i = 0, total = 0;
-  char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
-  int r;
-
-  do {
-    get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-    r = sys_fgetxattr(fd, raw_name, 0, 0);
-    if (!i && r < 0)
-      return r;
-    if (r < 0)
-      break;
-    total += r;
-    i++;
-  } while (r == ATTR_MAX_BLOCK_LEN);
-
-  return total;
-}
-
-int do_getxattr(const char *fn, const char *name, void *val, size_t size)
-{
-  int fd = ::open(fn, O_RDONLY);
-  int r = 0;
-  if (fd < 0) {
-    r = -errno;
-    goto out;
-  }
-  r = do_fgetxattr(fd, name, val, size);
-  TEMP_FAILURE_RETRY(::close(fd));
- out:
-  return r;
-}
-
-int do_fgetxattr(int fd, const char *name, void *val, size_t size)
-{
-  int i = 0, pos = 0;
-  char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
-  int ret = 0;
-  int r;
-  size_t chunk_size;
-
-  if (!size)
-    return do_fgetxattr_len(fd, name);
-
-  do {
-    chunk_size = (size < ATTR_MAX_BLOCK_LEN ? size : ATTR_MAX_BLOCK_LEN);
-    get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-    size -= chunk_size;
-
-    r = sys_fgetxattr(fd, raw_name, (char *)val + pos, chunk_size);
-    if (r < 0) {
-      ret = r;
-      break;
-    }
-
-    if (r > 0)
-      pos += r;
-
-    i++;
-  } while (size && r == ATTR_MAX_BLOCK_LEN);
-
-  if (r >= 0) {
-    ret = pos;
-    /* is there another chunk? that can happen if the last read size span over
-       exactly one block */
-    if (chunk_size == ATTR_MAX_BLOCK_LEN) {
-      get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-      r = sys_fgetxattr(fd, raw_name, 0, 0);
-      if (r > 0) { // there's another chunk.. the original buffer was too small
-        ret = -ERANGE;
-      }
-    }
-  }
-  return ret;
-}
-
-int do_setxattr(const char *fn, const char *name, const void *val, size_t size)
-{
-  int i = 0, pos = 0;
-  char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
-  int ret = 0;
-  size_t chunk_size;
-
-  do {
-    chunk_size = (size < ATTR_MAX_BLOCK_LEN ? size : ATTR_MAX_BLOCK_LEN);
-    get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-    size -= chunk_size;
-
-    int r = sys_setxattr(fn, raw_name, (char *)val + pos, chunk_size);
-    if (r < 0) {
-      ret = r;
-      break;
-    }
-    pos  += chunk_size;
-    ret = pos;
-    i++;
-  } while (size);
-
-  /* if we're exactly at a chunk size, remove the next one (if wasn't removed
-     before) */
-  if (ret >= 0 && chunk_size == ATTR_MAX_BLOCK_LEN) {
-    get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-    int r = do_removexattr(fn, raw_name);
-    if (r < 0 && r != -ENODATA)
-      ret = r;
-  }
-  
-  return ret;
-}
-
-int do_fsetxattr(int fd, const char *name, const void *val, size_t size)
-{
-  int i = 0, pos = 0;
-  char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
-  int ret = 0;
-  size_t chunk_size;
-
-  do {
-    chunk_size = (size < ATTR_MAX_BLOCK_LEN ? size : ATTR_MAX_BLOCK_LEN);
-    get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-    size -= chunk_size;
-
-    int r = ::ceph_os_fsetxattr(fd, raw_name, (char *)val + pos, chunk_size);
-    if (r < 0) {
-      ret = r;
-      break;
-    }
-    pos  += chunk_size;
-    ret = pos;
-    i++;
-  } while (size);
-
-  /* if we're exactly at a chunk size, remove the next one (if wasn't removed
-     before) */
-  if (ret >= 0 && chunk_size == ATTR_MAX_BLOCK_LEN) {
-    get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-    int r = ::ceph_os_fremovexattr(fd, raw_name);
-    if (r < 0 && r != -ENODATA)
-      ret = r;
-  }
-  
-  return ret;
-}
-
-int do_removexattr(const char *fn, const char *name) {
-  int i = 0;
-  char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
-  int r;
-
-  do {
-    get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-    r = sys_removexattr(fn, raw_name);
-    if (!i && r < 0) {
-      return r;
-    }
-    i++;
-  } while (r >= 0);
-  return 0;
-}
-
-int do_listxattr(const char *fn, char *names, size_t len) {
-  int r;
-
-  if (!len)
-    return sys_listxattr(fn, names, len);
-
-  r = sys_listxattr(fn, 0, 0);
-  if (r < 0)
-    return r;
-
-  size_t total_len = r  * 2; // should be enough
-  char *full_buf = (char *)malloc(total_len * 2);
-  if (!full_buf)
-    return -ENOMEM;
-
-  r = sys_listxattr(fn, full_buf, total_len);
-  if (r < 0)
-    return r;
-
-  char *p = full_buf;
-  char *end = full_buf + r;
-  char *dest = names;
-  char *dest_end = names + len;
-
-  while (p < end) {
-    char name[ATTR_MAX_NAME_LEN * 2 + 16];
-    int attr_len = strlen(p);
-    bool is_first;
-    int name_len = translate_raw_name(p, name, sizeof(name), &is_first);
-    if (is_first)  {
-      if (dest + name_len > dest_end) {
-        r = -ERANGE;
-        goto done;
-      }
-      strcpy(dest, name);
-      dest += name_len + 1;
-    }
-    p += attr_len + 1;
-  }
-  r = dest - names;
-
-done:
-  free(full_buf);
-  return r;
 }
 
 FileStore::FileStore(const std::string &base, const std::string &jdev, const char *name, bool do_update) :
@@ -1346,9 +999,9 @@ int FileStore::_detect_fs()
     return ret;
   }
 
-  int ret = do_setxattr(fn, "user.test", &x, sizeof(x));
+  int ret = chain_fsetxattr(tmpfd, "user.test", &x, sizeof(x));
   if (ret >= 0)
-    ret = do_getxattr(fn, "user.test", &y, sizeof(y));
+    ret = chain_fgetxattr(tmpfd, "user.test", &y, sizeof(y));
   if ((ret < 0) || (x != y)) {
     derr << "Extended attributes don't appear to work. ";
     if (ret)
@@ -1362,11 +1015,11 @@ int FileStore::_detect_fs()
 
   char buf[1000];
   memset(buf, 0, sizeof(buf)); // shut up valgrind
-  do_setxattr(fn, "user.test", &buf, sizeof(buf));
-  do_setxattr(fn, "user.test2", &buf, sizeof(buf));
-  do_setxattr(fn, "user.test3", &buf, sizeof(buf));
-  do_setxattr(fn, "user.test4", &buf, sizeof(buf));
-  ret = do_setxattr(fn, "user.test5", &buf, sizeof(buf));
+  chain_fsetxattr(tmpfd, "user.test", &buf, sizeof(buf));
+  chain_fsetxattr(tmpfd, "user.test2", &buf, sizeof(buf));
+  chain_fsetxattr(tmpfd, "user.test3", &buf, sizeof(buf));
+  chain_fsetxattr(tmpfd, "user.test4", &buf, sizeof(buf));
+  ret = chain_fsetxattr(tmpfd, "user.test5", &buf, sizeof(buf));
   if (ret == -ENOSPC) {
     if (!g_conf->filestore_xattr_use_omap) {
       derr << "limited size xattrs -- enable filestore_xattr_use_omap" << dendl;
@@ -1377,11 +1030,11 @@ int FileStore::_detect_fs()
       derr << "limited size xattrs -- filestore_xattr_use_omap enabled" << dendl;
     }
   }
-  do_removexattr(fn, "user.test");
-  do_removexattr(fn, "user.test2");
-  do_removexattr(fn, "user.test3");
-  do_removexattr(fn, "user.test4");
-  do_removexattr(fn, "user.test5");
+  chain_fremovexattr(tmpfd, "user.test");
+  chain_fremovexattr(tmpfd, "user.test2");
+  chain_fremovexattr(tmpfd, "user.test3");
+  chain_fremovexattr(tmpfd, "user.test4");
+  chain_fremovexattr(tmpfd, "user.test5");
 
   ::unlink(fn);
   TEMP_FAILURE_RETRY(::close(tmpfd));
@@ -2525,9 +2178,8 @@ void FileStore::_set_replay_guard(int fd,
   bufferlist v(40);
   ::encode(spos, v);
   ::encode(in_progress, v);
-  int r = do_fsetxattr(fd, REPLAY_GUARD_XATTR, v.c_str(), v.length());
+  int r = chain_fsetxattr(fd, REPLAY_GUARD_XATTR, v.c_str(), v.length());
   if (r < 0) {
-    r = -errno;
     derr << "fsetxattr " << REPLAY_GUARD_XATTR << " got " << cpp_strerror(r) << dendl;
     assert(0 == "fsetxattr failed");
   }
@@ -2554,9 +2206,8 @@ void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos)
   ::encode(spos, v);
   bool in_progress = false;
   ::encode(in_progress, v);
-  int r = do_fsetxattr(fd, REPLAY_GUARD_XATTR, v.c_str(), v.length());
+  int r = chain_fsetxattr(fd, REPLAY_GUARD_XATTR, v.c_str(), v.length());
   if (r < 0) {
-    r = -errno;
     derr << "fsetxattr " << REPLAY_GUARD_XATTR << " got " << cpp_strerror(r) << dendl;
     assert(0 == "fsetxattr failed");
   }
@@ -2581,7 +2232,7 @@ int FileStore::_check_replay_guard(coll_t cid, hobject_t oid, const SequencerPos
     return 1;  // if file does not exist, there is no guard, and we can replay.
   }
   int ret = _check_replay_guard(fd, spos);
-  TEMP_FAILURE_RETRY(::close(fd));
+  lfn_close(fd);
   return ret;
 }
 
@@ -2608,7 +2259,7 @@ int FileStore::_check_replay_guard(int fd, const SequencerPosition& spos)
     return 1;
 
   char buf[100];
-  int r = do_fgetxattr(fd, REPLAY_GUARD_XATTR, buf, sizeof(buf));
+  int r = chain_fgetxattr(fd, REPLAY_GUARD_XATTR, buf, sizeof(buf));
   if (r < 0) {
     dout(20) << "_check_replay_guard no xattr" << dendl;
     assert(!m_filestore_fail_eio || r != -EIO);
@@ -3049,13 +2700,13 @@ int FileStore::read(coll_t cid, const hobject_t& oid,
   got = safe_pread(fd, bptr.c_str(), len, offset);
   if (got < 0) {
     dout(10) << "FileStore::read(" << cid << "/" << oid << ") pread error: " << cpp_strerror(got) << dendl;
-    TEMP_FAILURE_RETRY(::close(fd));
+    lfn_close(fd);
     assert(!m_filestore_fail_eio || got != -EIO);
     return got;
   }
   bptr.set_length(got);   // properly size the buffer
   bl.push_back(bptr);   // put it in the target bufferlist
-  TEMP_FAILURE_RETRY(::close(fd));
+  lfn_close(fd);
 
   dout(10) << "FileStore::read " << cid << "/" << oid << " " << offset << "~"
 	   << got << "/" << len << dendl;
@@ -3130,7 +2781,7 @@ int FileStore::fiemap(coll_t cid, const hobject_t& oid,
 
 done:
   if (fd >= 0)
-    TEMP_FAILURE_RETRY(::close(fd));
+    lfn_close(fd);
   if (r >= 0)
     ::encode(exomap, bl);
 
@@ -3167,7 +2818,7 @@ int FileStore::_touch(coll_t cid, const hobject_t& oid)
   int fd = lfn_open(cid, oid, flags, 0644);
   int r;
   if (fd >= 0) {
-    TEMP_FAILURE_RETRY(::close(fd));
+    lfn_close(fd);
     r = 0;
   } else
     r = fd;
@@ -3198,13 +2849,13 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
   if (actual < 0) {
     r = -errno;
     dout(0) << "write lseek64 to " << offset << " failed: " << cpp_strerror(r) << dendl;
-    TEMP_FAILURE_RETRY(::close(fd));
+    lfn_close(fd);
     goto out;
   }
   if (actual != (int64_t)offset) {
     dout(0) << "write lseek64 to " << offset << " gave bad offset " << actual << dendl;
     r = -EIO;
-    TEMP_FAILURE_RETRY(::close(fd));
+    lfn_close(fd);
     goto out;
   }
 
@@ -3223,7 +2874,7 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
       ) {
     if (m_filestore_sync_flush)
       ::sync_file_range(fd, offset, len, SYNC_FILE_RANGE_WRITE);
-    TEMP_FAILURE_RETRY(::close(fd));
+    lfn_close(fd);
   }
 
  out:
@@ -3249,7 +2900,7 @@ int FileStore::_zero(coll_t cid, const hobject_t& oid, uint64_t offset, size_t l
   ret = fallocate(fd, FALLOC_FL_PUNCH_HOLE, offset, len);
   if (ret < 0)
     ret = -errno;
-  TEMP_FAILURE_RETRY(::close(fd));
+  lfn_close(fd);
 
   if (ret == 0)
     goto out;  // yay!
@@ -3311,7 +2962,7 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
 
   {
     map<string, bufferptr> aset;
-    r = _getattrs(cid, oldoid, aset);
+    r = _fgetattrs(o, aset, false);
     if (r < 0)
       goto out3;
 
@@ -3324,9 +2975,9 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
   _set_replay_guard(n, spos, &newoid);
 
  out3:
-  TEMP_FAILURE_RETRY(::close(n));
+  lfn_close(n);
  out:
-  TEMP_FAILURE_RETRY(::close(o));
+  lfn_close(o);
  out2:
   dout(10) << "clone " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " = " << r << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
@@ -3503,9 +3154,9 @@ int FileStore::_clone_range(coll_t cid, const hobject_t& oldoid, const hobject_t
   // clone is non-idempotent; record our work.
   _set_replay_guard(n, spos, &newoid);
 
-  TEMP_FAILURE_RETRY(::close(n));
+  lfn_close(n);
  out:
-  TEMP_FAILURE_RETRY(::close(o));
+  lfn_close(o);
  out2:
   dout(10) << "clone_range " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " "
 	   << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
@@ -3931,115 +3582,40 @@ int FileStore::snapshot(const string& name)
 // -------------------------------
 // attributes
 
-// low-level attr helpers
-int FileStore::_getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr& bp)
+int FileStore::_fgetattr(int fd, const char *name, bufferptr& bp)
 {
   char val[100];
-  int l = lfn_getxattr(cid, oid, name, val, sizeof(val));
+  int l = chain_fgetxattr(fd, name, val, sizeof(val));
   if (l >= 0) {
     bp = buffer::create(l);
     memcpy(bp.c_str(), val, l);
   } else if (l == -ERANGE) {
-    l = lfn_getxattr(cid, oid, name, 0, 0);
+    l = chain_fgetxattr(fd, name, 0, 0);
     if (l > 0) {
       bp = buffer::create(l);
-      l = lfn_getxattr(cid, oid, name, bp.c_str(), l);
-    }
-  }
-  return l;
-}
-
-int FileStore::_getattr(const char *fn, const char *name, bufferptr& bp)
-{
-  char val[100];
-  int l = do_getxattr(fn, name, val, sizeof(val));
-  if (l >= 0) {
-    bp = buffer::create(l);
-    memcpy(bp.c_str(), val, l);
-  } else if (l == -ERANGE) {
-    l = do_getxattr(fn, name, 0, 0);
-    if (l > 0) {
-      bp = buffer::create(l);
-      l = do_getxattr(fn, name, bp.c_str(), l);
+      l = chain_fgetxattr(fd, name, bp.c_str(), l);
     }
   }
   assert(!m_filestore_fail_eio || l != -EIO);
   return l;
 }
 
-// note that this is a clone of the method below.. any change here should be reflected there 
-int FileStore::_getattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset, bool user_only) 
+int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset, bool user_only)
 {
   // get attr list
   char names1[100];
-  int len = lfn_listxattr(cid, oid, names1, sizeof(names1)-1);
+  int len = chain_flistxattr(fd, names1, sizeof(names1)-1);
   char *names2 = 0;
   char *name = 0;
   if (len == -ERANGE) {
-    len = lfn_listxattr(cid, oid, 0, 0);
-    if (len < 0)
-      return len;
-    dout(10) << " -ERANGE, len is " << len << dendl;
-    names2 = new char[len+1];
-    len = lfn_listxattr(cid, oid, names2, len);
-    dout(10) << " -ERANGE, got " << len << dendl;
-    if (len < 0)
-      return len;
-    name = names2;
-  } else if (len < 0)
-    return len;
-  else
-    name = names1;
-  name[len] = 0;
-
-  char *end = name + len;
-  while (name < end) {
-    char *attrname = name;
-    if (parse_attrname(&name)) {
-      char *set_name = name;
-      bool can_get = true;
-      if (user_only) {
-          if (*set_name =='_')
-            set_name++;
-          else
-            can_get = false;
-      }
-      if (*set_name && can_get) {
-        dout(20) << "getattrs " << cid << "/" << oid << " getting '" << name << "'" << dendl;
-      
-        int r = _getattr(cid, oid, attrname, aset[set_name]);
-        if (r < 0) {
-	  assert(!m_filestore_fail_eio || r != -EIO);
-	  return r;
-	}
-      }
-    }
-    name += strlen(name) + 1;
-  }
-
-  delete[] names2;
-  return 0;
-}
-
-
-// note that this is a clone of the method above.. any change here should be reflected
-// there
-int FileStore::_getattrs(const char *fn, map<string,bufferptr>& aset, bool user_only) 
-{
-  // get attr list
-  char names1[100];
-  int len = do_listxattr(fn, names1, sizeof(names1)-1);
-  char *names2 = 0;
-  char *name = 0;
-  if (len == -ERANGE) {
-    len = do_listxattr(fn, 0, 0);
+    len = chain_flistxattr(fd, 0, 0);
     if (len < 0) {
       assert(!m_filestore_fail_eio || len != -EIO);
       return len;
     }
     dout(10) << " -ERANGE, len is " << len << dendl;
     names2 = new char[len+1];
-    len = do_listxattr(fn, names2, len);
+    len = chain_flistxattr(fd, names2, len);
     dout(10) << " -ERANGE, got " << len << dendl;
     if (len < 0) {
       assert(!m_filestore_fail_eio || len != -EIO);
@@ -4061,17 +3637,16 @@ int FileStore::_getattrs(const char *fn, map<string,bufferptr>& aset, bool user_
       char *set_name = name;
       bool can_get = true;
       if (user_only) {
-          if (*set_name =='_')
-            set_name++;
-          else
-            can_get = false;
+	if (*set_name =='_')
+	  set_name++;
+	else
+	  can_get = false;
       }
       if (*set_name && can_get) {
-        dout(20) << "getattrs " << fn << " getting '" << name << "'" << dendl;
-        //dout(0) << "getattrs " << fn << " set_name '" << set_name << "' user_only=" << user_only << dendl;
-      
-        int r = _getattr(fn, attrname, aset[set_name]);
-        if (r < 0) return r;
+        dout(20) << "fgetattrs " << fd << " getting '" << name << "'" << dendl;
+        int r = _fgetattr(fd, attrname, aset[set_name]);
+        if (r < 0)
+	  return r;
       }
     }
     name += strlen(name) + 1;
@@ -4081,14 +3656,22 @@ int FileStore::_getattrs(const char *fn, map<string,bufferptr>& aset, bool user_
   return 0;
 }
 
+
 // objects
 
 int FileStore::getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr &bp)
 {
   dout(15) << "getattr " << cid << "/" << oid << " '" << name << "'" << dendl;
-  char n[ATTR_MAX_NAME_LEN];
-  get_attrname(name, n, ATTR_MAX_NAME_LEN);
-  int r = _getattr(cid, oid, n, bp);
+  int r;
+  int fd = lfn_open(cid, oid, 0);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
+  char n[CHAIN_XATTR_MAX_NAME_LEN];
+  get_attrname(name, n, CHAIN_XATTR_MAX_NAME_LEN);
+  r = _fgetattr(fd, n, bp);
+  lfn_close(fd);
   if (r == -ENODATA && g_conf->filestore_xattr_use_omap) {
     map<string, bufferlist> got;
     set<string> to_get;
@@ -4121,7 +3704,14 @@ int FileStore::getattr(coll_t cid, const hobject_t& oid, const char *name, buffe
 int FileStore::getattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset, bool user_only) 
 {
   dout(15) << "getattrs " << cid << "/" << oid << dendl;
-  int r = _getattrs(cid, oid, aset, user_only);
+  int r;
+  int fd = lfn_open(cid, oid, 0);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
+  r = _fgetattrs(fd, aset, user_only);
+  lfn_close(fd);
   if (g_conf->filestore_xattr_use_omap) {
     set<string> omap_attrs;
     map<string, bufferlist> omap_aset;
@@ -4171,22 +3761,28 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
   map<string, bufferlist> omap_set;
   set<string> omap_remove;
   map<string, bufferptr> inline_set;
+  int r = 0;
+  int fd = lfn_open(cid, oid, 0);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
   if (g_conf->filestore_xattr_use_omap) {
-    int r = _getattrs(cid, oid, inline_set);
+    r = _fgetattrs(fd, inline_set, false);
     assert(!m_filestore_fail_eio || r != -EIO);
   }
   dout(15) << "setattrs " << cid << "/" << oid << dendl;
-  int r = 0;
+  r = 0;
   for (map<string,bufferptr>::iterator p = aset.begin();
        p != aset.end();
        ++p) {
-    char n[ATTR_MAX_NAME_LEN];
-    get_attrname(p->first.c_str(), n, ATTR_MAX_NAME_LEN);
+    char n[CHAIN_XATTR_MAX_NAME_LEN];
+    get_attrname(p->first.c_str(), n, CHAIN_XATTR_MAX_NAME_LEN);
     if (g_conf->filestore_xattr_use_omap) {
       if (p->second.length() > g_conf->filestore_max_inline_xattr_size) {
 	if (inline_set.count(p->first)) {
 	  inline_set.erase(p->first);
-	  r = lfn_removexattr(cid, oid, n);
+	  r = chain_fremovexattr(fd, n);
 	  if (r < 0)
 	    return r;
 	}
@@ -4198,7 +3794,7 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
 	  inline_set.size() >= g_conf->filestore_max_inline_xattrs) {
 	if (inline_set.count(p->first)) {
 	  inline_set.erase(p->first);
-	  r = lfn_removexattr(cid, oid, n);
+	  r = chain_fremovexattr(fd, n);
 	  if (r < 0)
 	    return r;
 	}
@@ -4215,9 +3811,9 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
     else
       val = "";
     // ??? Why do we skip setting all the other attrs if one fails?
-    r = lfn_setxattr(cid, oid, n, val, p->second.length());
+    r = chain_fsetxattr(fd, n, val, p->second.length());
     if (r < 0) {
-      derr << "FileStore::_setattrs: do_setxattr returned " << r << dendl;
+      derr << "FileStore::_setattrs: chain_setxattr returned " << r << dendl;
       break;
     }
   }
@@ -4242,6 +3838,8 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
       return r;
     }
   }
+  lfn_close(fd);
+ out:
   dout(10) << "setattrs " << cid << "/" << oid << " = " << r << dendl;
   return r;
 }
@@ -4251,9 +3849,15 @@ int FileStore::_rmattr(coll_t cid, const hobject_t& oid, const char *name,
 		       const SequencerPosition &spos)
 {
   dout(15) << "rmattr " << cid << "/" << oid << " '" << name << "'" << dendl;
-  char n[ATTR_MAX_NAME_LEN];
-  get_attrname(name, n, ATTR_MAX_NAME_LEN);
-  int r = lfn_removexattr(cid, oid, n);
+  int r = 0;
+  int fd = lfn_open(cid, oid, 0);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
+  char n[CHAIN_XATTR_MAX_NAME_LEN];
+  get_attrname(name, n, CHAIN_XATTR_MAX_NAME_LEN);
+  r = chain_fremovexattr(fd, n);
   if (r == -ENODATA && g_conf->filestore_xattr_use_omap) {
     Index index;
     r = get_index(cid, &index);
@@ -4270,6 +3874,8 @@ int FileStore::_rmattr(coll_t cid, const hobject_t& oid, const char *name,
       return r;
     }
   }
+  lfn_close(fd);
+ out:
   dout(10) << "rmattr " << cid << "/" << oid << " '" << name << "' = " << r << dendl;
   return r;
 }
@@ -4280,16 +3886,24 @@ int FileStore::_rmattrs(coll_t cid, const hobject_t& oid,
   dout(15) << "rmattrs " << cid << "/" << oid << dendl;
 
   map<string,bufferptr> aset;
-  int r = _getattrs(cid, oid, aset);
+  int r = 0;
+  int fd = lfn_open(cid, oid, 0);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
+  r = _fgetattrs(fd, aset, false);
   if (r >= 0) {
     for (map<string,bufferptr>::iterator p = aset.begin(); p != aset.end(); p++) {
-      char n[ATTR_MAX_NAME_LEN];
-      get_attrname(p->first.c_str(), n, ATTR_MAX_NAME_LEN);
-      r = lfn_removexattr(cid, oid, n);
+      char n[CHAIN_XATTR_MAX_NAME_LEN];
+      get_attrname(p->first.c_str(), n, CHAIN_XATTR_MAX_NAME_LEN);
+      r = chain_fremovexattr(fd, n);
       if (r < 0)
 	break;
     }
   }
+  lfn_close(fd);
+
   if (g_conf->filestore_xattr_use_omap) {
     set<string> omap_attrs;
     Index index;
@@ -4310,6 +3924,7 @@ int FileStore::_rmattrs(coll_t cid, const hobject_t& oid,
       return r;
     }
   }
+ out:
   dout(10) << "rmattrs " << cid << "/" << oid << " = " << r << dendl;
   return r;
 }
@@ -4324,9 +3939,17 @@ int FileStore::collection_getattr(coll_t c, const char *name,
   char fn[PATH_MAX];
   get_cdir(c, fn, sizeof(fn));
   dout(15) << "collection_getattr " << fn << " '" << name << "' len " << size << dendl;
+  int r;
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
   char n[PATH_MAX];
   get_attrname(name, n, PATH_MAX);
-  int r = do_getxattr(fn, n, value, size);   
+  r = chain_fgetxattr(fd, n, value, size);
+  TEMP_FAILURE_RETRY(::close(fd));
+ out:
   dout(10) << "collection_getattr " << fn << " '" << name << "' len " << size << " = " << r << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
   return r;
@@ -4339,10 +3962,17 @@ int FileStore::collection_getattr(coll_t c, const char *name, bufferlist& bl)
   dout(15) << "collection_getattr " << fn << " '" << name << "'" << dendl;
   char n[PATH_MAX];
   get_attrname(name, n, PATH_MAX);
-  
   buffer::ptr bp;
-  int r = _getattr(fn, n, bp);
+  int r;
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
+  r = _fgetattr(fd, n, bp);
   bl.push_back(bp);
+  TEMP_FAILURE_RETRY(::close(fd));
+ out:
   dout(10) << "collection_getattr " << fn << " '" << name << "' = " << r << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
   return r;
@@ -4353,7 +3983,15 @@ int FileStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset)
   char fn[PATH_MAX];
   get_cdir(cid, fn, sizeof(fn));
   dout(10) << "collection_getattrs " << fn << dendl;
-  int r = _getattrs(fn, aset);
+  int r = 0;
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
+  r = _fgetattrs(fd, aset, true);
+  TEMP_FAILURE_RETRY(::close(fd));
+ out:
   dout(10) << "collection_getattrs " << fn << " = " << r << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
   return r;
@@ -4367,8 +4005,16 @@ int FileStore::_collection_setattr(coll_t c, const char *name,
   get_cdir(c, fn, sizeof(fn));
   dout(10) << "collection_setattr " << fn << " '" << name << "' len " << size << dendl;
   char n[PATH_MAX];
+  int r;
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
   get_attrname(name, n, PATH_MAX);
-  int r = do_setxattr(fn, n, value, size);
+  r = chain_fsetxattr(fd, n, value, size);
+  TEMP_FAILURE_RETRY(::close(fd));
+ out:
   dout(10) << "collection_setattr " << fn << " '" << name << "' len " << size << " = " << r << dendl;
   return r;
 }
@@ -4380,7 +4026,15 @@ int FileStore::_collection_rmattr(coll_t c, const char *name)
   dout(15) << "collection_rmattr " << fn << dendl;
   char n[PATH_MAX];
   get_attrname(name, n, PATH_MAX);
-  int r = do_removexattr(fn, n);
+  int r;
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
+  r = chain_fremovexattr(fd, n);
+  TEMP_FAILURE_RETRY(::close(fd));
+ out:
   dout(10) << "collection_rmattr " << fn << " = " << r << dendl;
   return r;
 }
@@ -4392,14 +4046,22 @@ int FileStore::_collection_setattrs(coll_t cid, map<string,bufferptr>& aset)
   get_cdir(cid, fn, sizeof(fn));
   dout(15) << "collection_setattrs " << fn << dendl;
   int r = 0;
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
   for (map<string,bufferptr>::iterator p = aset.begin();
        p != aset.end();
        ++p) {
     char n[PATH_MAX];
     get_attrname(p->first.c_str(), n, PATH_MAX);
-    r = do_setxattr(fn, n, p->second.c_str(), p->second.length());
-    if (r < 0) break;
+    r = chain_fsetxattr(fd, n, p->second.c_str(), p->second.length());
+    if (r < 0)
+      break;
   }
+  TEMP_FAILURE_RETRY(::close(fd));
+ out:
   dout(10) << "collection_setattrs " << fn << " = " << r << dendl;
   return r;
 }
@@ -4809,7 +4471,7 @@ int FileStore::_collection_add(coll_t c, coll_t oldcid, const hobject_t& o,
   if (r == 0) {
     _close_replay_guard(fd, spos);
   }
-  TEMP_FAILURE_RETRY(::close(fd));
+  lfn_close(fd);
 
   dout(10) << "collection_add " << c << "/" << o << " from " << oldcid << "/" << o << " = " << r << dendl;
   return r;
