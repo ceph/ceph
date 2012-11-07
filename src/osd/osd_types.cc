@@ -1587,15 +1587,30 @@ void pg_query_t::generate_test_instances(list<pg_query_t*>& o)
 
 void pg_log_entry_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(5, 4, bl);
+  ENCODE_START(6, 4, bl);
   ::encode(op, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
-  ::encode(prior_version, bl);
+
+  /**
+   * Added with reverting_to:
+   * Previous code used prior_version to encode
+   * what we now call reverting_to.  This will
+   * allow older code to decode reverting_to
+   * into prior_version as expected.
+   */
+  if (op == LOST_REVERT)
+    ::encode(reverting_to, bl);
+  else
+    ::encode(prior_version, bl);
+
   ::encode(reqid, bl);
   ::encode(mtime, bl);
   if (op == CLONE)
     ::encode(snaps, bl);
+
+  if (op == LOST_REVERT)
+    ::encode(prior_version, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1615,13 +1630,27 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
   if (struct_v < 3)
     invalid_hash = true;
   ::decode(version, bl);
-  ::decode(prior_version, bl);
+
+  if (struct_v >= 6 && op == LOST_REVERT)
+    ::decode(reverting_to, bl);
+  else
+    ::decode(prior_version, bl);
+
   ::decode(reqid, bl);
   ::decode(mtime, bl);
   if (op == CLONE)
     ::decode(snaps, bl);
   if (struct_v < 5)
     invalid_pool = true;
+
+  if (op == LOST_REVERT) {
+    if (struct_v >= 6) {
+      ::decode(prior_version, bl);
+    } else {
+      reverting_to = prior_version;
+    }
+  }
+
   DECODE_FINISH(bl);
 }
 
