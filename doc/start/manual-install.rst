@@ -1,6 +1,7 @@
 ==========================
  Installing Ceph Manually
 ==========================
+
 Ceph is intended for large-scale deployments, but you may install Ceph on a
 single host. This guide is intended for Debian/Ubuntu Linux distributions.
 
