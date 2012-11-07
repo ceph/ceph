@@ -3971,7 +3971,8 @@ void ReplicatedPG::populate_obc_watchers(ObjectContext *obc)
   assert(is_active());
   assert(!is_missing_object(obc->obs.oi.soid) ||
 	 (log.objects.count(obc->obs.oi.soid) && // or this is a revert... see recover_primary()
-	  log.objects[obc->obs.oi.soid]->prior_version == obc->obs.oi.version));
+	  log.objects[obc->obs.oi.soid]->op == pg_log_entry_t::LOST_REVERT &&
+	  log.objects[obc->obs.oi.soid]->reverting_to == obc->obs.oi.version));
 
   dout(10) << "populate_obc_watchers " << obc->obs.oi.soid << dendl;
   if (!obc->obs.oi.watchers.empty()) {
@@ -4768,6 +4769,18 @@ int ReplicatedPG::pull(const hobject_t& soid, eversion_t v)
 	    << " but it is unfound" << dendl;
     return PULL_NONE;
   }
+
+  assert(peer_missing.count(fromosd));
+  if (peer_missing[fromosd].is_missing(soid, v)) {
+    assert(peer_missing[fromosd].missing[soid].have != v);
+    dout(10) << "pulling soid " << soid << " from osd " << fromosd
+	     << " at version " << peer_missing[fromosd].missing[soid].have
+	     << " rather than at version " << v << dendl;
+    v = peer_missing[fromosd].missing[soid].have;
+    assert(log.objects.count(soid) &&
+	   log.objects[soid]->op == pg_log_entry_t::LOST_REVERT &&
+	   log.objects[soid]->reverting_to == v);
+  }
   
   dout(7) << "pull " << soid
           << " v " << v 
@@ -5061,7 +5074,7 @@ void ReplicatedPG::submit_push_complete(ObjectRecoveryInfo &recovery_info,
     assert(is_primary());
     pg_log_entry_t *latest = log.objects[recovery_info.soid];
     if (latest->op == pg_log_entry_t::LOST_REVERT &&
-	latest->prior_version == recovery_info.version) {
+	latest->reverting_to == recovery_info.version) {
       dout(10) << " got old revert version " << recovery_info.version
 	       << " for " << *latest << dendl;
       recovery_info.version = latest->version;
@@ -5838,7 +5851,10 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
       if (prev > eversion_t()) {
 	// log it
 	++info.last_update.version;
-	pg_log_entry_t e(pg_log_entry_t::LOST_REVERT, oid, info.last_update, prev, osd_reqid_t(), mtime);
+	pg_log_entry_t e(
+	  pg_log_entry_t::LOST_REVERT, oid, info.last_update,
+	  m->second.need, osd_reqid_t(), mtime);
+	e.reverting_to = prev;
 	log.add(e);
 	dout(10) << e << dendl;
 
@@ -6272,7 +6288,7 @@ int ReplicatedPG::recover_primary(int max)
 
       case pg_log_entry_t::LOST_REVERT:
 	{
-	  if (item.have == latest->prior_version) {
+	  if (item.have == latest->reverting_to) {
 	    // I have it locally.  Revert.
 	    object_locator_t oloc;
 	    oloc.pool = info.pgid.pool();
@@ -6316,16 +6332,17 @@ int ReplicatedPG::recover_primary(int max)
 	     *  - this way we don't need to mangle the missing code to be general about needing an old
 	     *    version...
 	     */
-	    need = latest->prior_version;
-	    dout(10) << " need to pull prior_version " << need << " for revert " << item << dendl;
+	    eversion_t alternate_need = latest->reverting_to;
+	    dout(10) << " need to pull prior_version " << alternate_need << " for revert " << item << dendl;
 
 	    set<int>& loc = missing_loc[soid];
 	    for (map<int,pg_missing_t>::iterator p = peer_missing.begin(); p != peer_missing.end(); ++p)
-	      if (p->second.missing[soid].have == need) {
+	      if (p->second.is_missing(soid, need) &&
+		  p->second.missing[soid].have == alternate_need) {
 		missing_loc_sources.insert(p->first);
 		loc.insert(p->first);
 	      }
-	    dout(10) << " will pull " << need << " from one of " << loc << dendl;
+	    dout(10) << " will pull " << alternate_need << " or " << need << " from one of " << loc << dendl;
 	    unfound = false;
 	  }
 	}
