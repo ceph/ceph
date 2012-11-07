@@ -1098,6 +1098,9 @@ int Client::make_request(MetaRequest *request,
 	ldout(cct, 10) << "waiting for session to mds." << mds << " to open" << dendl;
 	cond.Wait(client_lock);
       }
+
+      if (mds_sessions.count(mds) == 0)
+	continue;
     }
 
     // send request.
@@ -1631,6 +1634,20 @@ void Client::handle_mds_map(MMDSMap* m)
   list<Cond*> ls;
   ls.swap(waiting_for_mdsmap);
   signal_cond_list(ls);
+
+  map<int,list<Cond*> >::iterator p = waiting_for_session.begin();
+  while (p != waiting_for_session.end()) {
+    int oldstate = oldmap->get_state(p->first);
+    int newstate = mdsmap->get_state(p->first);
+    if (newstate >= MDSMap::STATE_ACTIVE &&
+	oldstate < MDSMap::STATE_ACTIVE) {
+      ldout(cct, 20) << "kick_opening_mds_session mds." << p->first << dendl;
+      signal_cond_list(p->second);
+      waiting_for_session.erase(p++);
+    } else {
+      p++;
+    }
+  }
 
   delete oldmap;
   m->put();
