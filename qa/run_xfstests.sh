@@ -43,7 +43,7 @@ TESTS="-g auto"	# The "auto" group is supposed to be "known good"
 
 # Override the default test list with a list of tests known to pass
 # until we can work through getting them all passing reliably.
-TESTS="1-9 11-15 17 19-21 26-28 31-34 41 45-48 51-54 56 61 63-67 69-70 75-76"
+TESTS="1-9 11-15 17 19-21 26-28 31-34 41 46-48 51-54 56 61 63-67 69-70 75-76"
 TESTS="${TESTS} 79 84 88-89 91-92 103 108 116 118-120 130"
 TESTS="${TESTS} 135 137-141 166 169 179 182-183 188-190 194"
 TESTS="${TESTS} 196 199 201 203 220-226 234 238 244 253"
