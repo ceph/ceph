@@ -45,6 +45,14 @@ def task(ctx, config):
        can be either an integer (eg, 75) or a float probability (eg
        0.75).
 
+    chance_test_min_size: (0) chance to run test_pool_min_size,
+       which:
+       - kills all but one osd
+       - waits
+       - kills that osd
+       - revives all other osds
+       - verifies that the osds fully recover
+
     timeout: (360) the number of seconds to wait for the cluster
        to become clean after each cluster change. If this doesn't
        happen within the timeout, an exception will be raised.

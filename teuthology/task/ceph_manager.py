@@ -82,8 +82,33 @@ class Thrasher:
         self.stopping = True
         self.thread.get()
 
+    def test_pool_min_size(self):
+        self.log("test_pool_min_size")
+        self.all_up()
+        self.ceph_manager.wait_for_recovery(
+            timeout=self.config.get('timeout')
+            )
+        the_one = random.choice(self.in_osds)
+        self.log("Killing everyone but %s", the_one)
+        to_kill = filter(lambda x: x != the_one, self.in_osds)
+        [self.kill_osd(i) for i in to_kill]
+        [self.out_osd(i) for i in to_kill]
+        time.sleep(self.config.get("test_pool_min_size_time", 10))
+        self.log("Killing %s"%(the_one,))
+        self.kill_osd(the_one)
+        self.out_osd(the_one)
+        self.log("Reviving everyone but %s"%(the_one,))
+        [self.revive_osd(i) for i in to_kill]
+        [self.in_osd(i) for i in to_kill]
+        self.log("Revived everyone but %s"%(the_one,))
+        self.log("Waiting for clean")
+        self.ceph_manager.wait_for_recovery(
+            timeout=self.config.get('timeout')
+            )
+
     def choose_action(self):
         chance_down = self.config.get("chance_down", 0)
+        chance_test_min_size = self.config.get("chance_test_min_size", 0)
         if isinstance(chance_down, int):
             chance_down = float(chance_down) / 100
         minin = self.config.get("min_in", 2)
@@ -102,6 +127,7 @@ class Thrasher:
             actions.append((self.in_osd, 1.7,))
         if len(self.dead_osds) > mindead:
             actions.append((self.revive_osd, 1.0,))
+        actions.append((self.test_pool_min_size, chance_test_min_size,))
 
         total = sum([y for (x,y) in actions])
         val = random.uniform(0, total)
