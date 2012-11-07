@@ -191,7 +191,7 @@ def _run_tests(ctx, refspec, role, tests, env, subdir):
             for workunit in to_run:
                 log.info('Running workunit %s...', workunit)
                 args = [
-                    'mkdir', '--', scratch_tmp,
+                    'mkdir', '-p', '--', scratch_tmp,
                     run.Raw('&&'),
                     'cd', '--', scratch_tmp,
                     run.Raw('&&'),
@@ -224,6 +224,7 @@ def _run_tests(ctx, refspec, role, tests, env, subdir):
                     args=args,
                     )
     finally:
+         log.info('Stopping %s on %s...', spec, role)
         remote.run(
             logger=log.getChild(role),
             args=[
