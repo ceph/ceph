@@ -1337,17 +1337,17 @@ string OSDMap::get_flag_string(unsigned f)
   if (f & CEPH_OSDMAP_PAUSEREC)
     s += ",pauserec";
   if (f & CEPH_OSDMAP_NOUP)
-    s += ",no-up";
+    s += ",noup";
   if (f & CEPH_OSDMAP_NODOWN)
-    s += ",no-down";
+    s += ",nodown";
   if (f & CEPH_OSDMAP_NOOUT)
-    s += ",no-out";
+    s += ",noout";
   if (f & CEPH_OSDMAP_NOIN)
-    s += ",no-in";
+    s += ",noin";
   if (f & CEPH_OSDMAP_NOBACKFILL)
-    s += ",no-backfill";
+    s += ",nobackfill";
   if (f & CEPH_OSDMAP_NORECOVER)
-    s += ",no-recover";
+    s += ",norecover";
   if (s.length())
     s = s.erase(0, 1);
   return s;
