@@ -94,12 +94,15 @@
 #define MSG_COMMAND_REPLY      98
 
 #define MSG_OSD_BACKFILL_RESERVE 99
+#define MSG_OSD_RECOVERY_RESERVE 150
 
 // *** MDS ***
 
 #define MSG_MDS_BEACON             100  // to monitor
 #define MSG_MDS_SLAVE_REQUEST      101
 #define MSG_MDS_TABLE_REQUEST      102
+
+                                // 150 already in use (MSG_OSD_RECOVERY_RESERVE)
 
 #define MSG_MDS_RESOLVE            0x200
 #define MSG_MDS_RESOLVEACK         0x201

@@ -1243,7 +1243,7 @@ void ReplicatedPG::do_backfill(OpRequestRef op)
 	  new CephPeeringEvt(
 	    get_osdmap()->get_epoch(),
 	    get_osdmap()->get_epoch(),
-	    Backfilled())));
+	    RecoveryDone())));
     }
     // fall-thru
 
@@ -6149,6 +6149,12 @@ int ReplicatedPG::start_recovery_ops(int max, RecoveryCtx *prctx)
   int started = 0;
   assert(is_primary());
 
+  if (!state_test(PG_STATE_RECOVERING) &&
+      !state_test(PG_STATE_BACKFILL)) {
+    dout(10) << "recovery raced and were queued twice, ignoring!" << dendl;
+    return 0;
+  }
+
   int num_missing = missing.num_missing();
   int num_unfound = get_num_unfound();
 
@@ -6171,7 +6177,8 @@ int ReplicatedPG::start_recovery_ops(int max, RecoveryCtx *prctx)
   }
 
   bool deferred_backfill = false;
-  if (backfill_target >= 0 && started < max &&
+  if (state_test(PG_STATE_BACKFILL) &&
+      backfill_target >= 0 && started < max &&
       missing.num_missing() == 0 &&
       !waiting_on_backfill) {
     if (get_osdmap()->test_flag(CEPH_OSDMAP_NOBACKFILL)) {
@@ -6216,13 +6223,35 @@ int ReplicatedPG::start_recovery_ops(int max, RecoveryCtx *prctx)
     return started;
   }
 
-  queue_peering_event(
-    CephPeeringEvtRef(
-      new CephPeeringEvt(
-	get_osdmap()->get_epoch(),
-	get_osdmap()->get_epoch(),
-	Backfilled())));
-  handle_recovery_complete(prctx);
+  if (state_test(PG_STATE_RECOVERING)) {
+    state_clear(PG_STATE_RECOVERING);
+    if (needs_backfill()) {
+      dout(10) << "recovery done, queuing backfill" << dendl;
+      queue_peering_event(
+        CephPeeringEvtRef(
+          new CephPeeringEvt(
+            get_osdmap()->get_epoch(),
+            get_osdmap()->get_epoch(),
+            RequestBackfill())));
+    } else {
+      dout(10) << "recovery done, no backfill" << dendl;
+      queue_peering_event(
+        CephPeeringEvtRef(
+          new CephPeeringEvt(
+            get_osdmap()->get_epoch(),
+            get_osdmap()->get_epoch(),
+            AllReplicasRecovered())));
+    }
+  } else { // backfilling
+    state_clear(PG_STATE_BACKFILL);
+    dout(10) << "recovery done, backfill done" << dendl;
+    queue_peering_event(
+      CephPeeringEvtRef(
+        new CephPeeringEvt(
+          get_osdmap()->get_epoch(),
+          get_osdmap()->get_epoch(),
+          Backfilled())));
+  }
 
   return 0;
 }

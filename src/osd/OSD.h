@@ -923,6 +923,7 @@ protected:
 
   void handle_pg_backfill(OpRequestRef op);
   void handle_pg_backfill_reserve(OpRequestRef op);
+  void handle_pg_recovery_reserve(OpRequestRef op);
 
   void handle_pg_remove(OpRequestRef op);
   void _remove_pg(PG *pg);
