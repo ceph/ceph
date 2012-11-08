@@ -189,7 +189,7 @@ hard disks than older hosts in the cluster.
    also decompile the CRUSH map edit the file, recompile it and set it. See
    `Add/Move an OSD`_ for details. :: 
 
-	ceph osd crush set {id} {name} {weight} pool={pool-name}  [{bucket-type}={bucket-name} ...]
+	ceph osd crush set {name} {weight} [{bucket-type}={bucket-name} ...]
 
 
 Starting the OSD
