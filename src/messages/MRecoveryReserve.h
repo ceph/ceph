@@ -12,12 +12,12 @@
  *
  */
 
-#ifndef CEPH_MBACKFILL_H
-#define CEPH_MBACKFILL_H
+#ifndef CEPH_MRECOVERY_H
+#define CEPH_MRECOVERY_H
 
 #include "msg/Message.h"
 
-class MBackfillReserve : public Message {
+class MRecoveryReserve : public Message {
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 public:
@@ -26,35 +26,35 @@ public:
   enum {
     REQUEST = 0,
     GRANT = 1,
-    REJECT = 2,
+    RELEASE = 2,
   };
   int type;
 
-  MBackfillReserve()
-    : Message(MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+  MRecoveryReserve()
+    : Message(MSG_OSD_RECOVERY_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       query_epoch(0), type(-1) {}
-  MBackfillReserve(int type,
+  MRecoveryReserve(int type,
 		   pg_t pgid,
 		   epoch_t query_epoch)
-    : Message(MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : Message(MSG_OSD_RECOVERY_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid), query_epoch(query_epoch),
       type(type) {}
 
   const char *get_type_name() const {
-    return "MBackfillReserve";
+    return "MRecoveryReserve";
   }
 
   void print(ostream& out) const {
-    out << "MBackfillReserve ";
+    out << "MRecoveryReserve ";
     switch (type) {
     case REQUEST:
       out << "REQUEST ";
       break;
     case GRANT:
-      out << "GRANT "; 
+      out << "GRANT ";
       break;
-    case REJECT:
-      out << "REJECT ";
+    case RELEASE:
+      out << "RELEASE ";
       break;
     }
     out << " pgid: " << pgid << ", query_epoch: " << query_epoch;
