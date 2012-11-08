@@ -192,21 +192,22 @@ types.
 +------+-------------+----------------------------------------------------+
 |  5   | Data Center | A physical data center containing rooms.           |
 +------+-------------+----------------------------------------------------+
-|  6   |   Pool      | A data storage pool for storing objects.           |
+|  6   |   Root      | The root node in a tree.                           |
 +------+-------------+----------------------------------------------------+
 
 .. tip:: You can remove these types and create your own bucket types.
 
 Ceph's deployment tools generate a CRUSH map that contains a bucket for each
-host, and a pool named "default," which is useful for the default ``data``,
+host, and a root named "default," which is useful for the default ``data``,
 ``metadata`` and ``rbd`` pools. The remaining bucket types provide a means for
 storing information about the physical location of nodes/buckets, which makes
 cluster  administration much easier when OSDs, hosts, or network hardware
 malfunction and the administrator needs access to physical hardware.
 
-.. tip: The term "bucket" used in the context of CRUSH means a Ceph pool, a 
-   location, or a piece of physical hardware. It is a different concept from 
-   the term "bucket" when used in the context of RADOS Gateway APIs.
+.. tip: The term "bucket" used in the context of CRUSH means a node in
+   the hierarchy, i.e. a location or a piece of physical hardware. It
+   is a different concept from the term "bucket" when used in the
+   context of RADOS Gateway APIs.
 
 A bucket has a type, a unique name (string), a unique ID expressed as a negative
 integer, a weight relative to the total capacity/capability of its item(s), the 
@@ -225,7 +226,7 @@ relative weight of the item.
 		item [item-name] weight [weight]	
 	}
 
-The following example illustrates how you can use buckets to aggregate a pool and 
+The following example illustrates how you can use buckets to aggregate
 physical locations like a datacenter, a room, a rack and a row. :: 
 
 	host ceph-osd-server-1 {
@@ -293,7 +294,7 @@ physical locations like a datacenter, a room, a rack and a row. ::
 		item server-room-2 weight 30.00	
 	}
 	
-	pool data {
+	root default {
 		id -10		
 		alg straw
 		hash 0
@@ -387,12 +388,12 @@ A rule takes the following form::
 
 ``step emit`` 
 
-:Description: Outputs the current value and empties the stack. Typically used at the end of a rule, but may also be used to from different trees in the same rule.
+:Description: Outputs the current value and empties the stack. Typically used at the end of a rule, but may also be used to pick from different trees in the same rule.
 :Purpose: A component of the rule.
 :Prerequisite: Follows ``step choose``.
 :Example: ``step emit``
 
-.. important:: To activate one or more rules with a common ruleset number to a pool, set the ruleset number to the pool.
+.. important:: To activate one or more rules with a common ruleset number to a pool, set the ruleset number of the pool.
 
 Placing Different Pools on Different OSDS:
 ==========================================
@@ -537,7 +538,7 @@ Add/Move an OSD
 To add or move an OSD in the CRUSH map of a running cluster, execute the
 following::
 
-	ceph osd crush set {id} {name} {weight} pool={pool-name}  [{bucket-type}={bucket-name} ...]
+	ceph osd crush set {name} {weight} [{bucket-type}={bucket-name} ...]
 
 Where:
 
@@ -565,12 +566,12 @@ Where:
 :Example: ``2.0``
 
 
-``pool``
+``root``
 
-:Description:  By default, the CRUSH hierarchy contains the pool default as its root. 
+:Description: The root of the tree in which the OSD resides.
 :Type: Key/value pair.
 :Required: Yes
-:Example: ``pool=default``
+:Example: ``root=default``
 
 
 ``bucket-type``
@@ -584,7 +585,7 @@ Where:
 The following example adds ``osd.0`` to the hierarchy, or moves the OSD from a
 previous location. :: 
 
-	ceph osd crush set 0 osd.0 1.0 pool=data datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1
+	ceph osd crush set osd.0 1.0 root=default datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1
 
 
 Adjust an OSD's CRUSH Weight
