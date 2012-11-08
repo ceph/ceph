@@ -11,22 +11,23 @@ Adding Monitors
 Ceph monitors are light-weight processes that maintain a master copy of the 
 cluster map. You can run a cluster with 1 monitor. We recommend at least 3 
 monitors for a production cluster. Ceph monitors use PAXOS to establish 
-consensus about the master cluster map, so you must have an odd number of
-monitors to establish a quorum for consensus about the cluster map. 
+consensus about the master cluster map, which requires a majority of
+monitors running to establish a quorum for consensus about the cluster map
+(e.g., 1; 3 out of 5; 4 out of 6; etc.).
 
 Since monitors are light-weight, it is possible to run them on the same 
 host as an OSD; however, we recommend running them on separate hosts. 
 
-.. important:: You must have an odd number of monitors in your cluster
-   to establish a quorum.
+.. important:: A *majority* of monitors in your cluster must be able to 
+   reach each other in order to establish a quorum.
 
 Deploy your Hardware
 --------------------
 
-If you are adding a new host when adding a new monitor, 
-see `Hardware Recommendations`_ for details on minimum recommendations
-for monitor hardware. To add a monitor host to your cluster, first make sure you have 
-an up-to-date version of Linux installed (typically Ubuntu 12.04 precise). 
+If you are adding a new host when adding a new monitor,  see `Hardware
+Recommendations`_ for details on minimum recommendations for monitor hardware.
+To add a monitor host to your cluster, first make sure you have an up-to-date
+version of Linux installed (typically Ubuntu 12.04 precise). 
 
 Add your monitor host to a rack in your cluster, connect it to the network
 and ensure that it has network connectivity.
@@ -59,9 +60,10 @@ Adding a Monitor (Manual)
 -------------------------
 
 This procedure creates a ``ceph-mon`` data directory, retrieves the monitor map
-and monitor keyring, and adds a ``ceph-mon`` daemon to your cluster.  If you
-this results in an even number of daemons,  you may add another monitor by
-repeating this procedure until you have an odd number of ``ceph-mon`` daemons.
+and monitor keyring, and adds a ``ceph-mon`` daemon to your cluster.  If
+this results in only two monitor daemons, you may add more monitors by
+repeating this procedure until you have a sufficient number of ``ceph-mon`` 
+daemons to achieve a quorum.
 
 #. Create the default directory on your new monitor. :: 
 
@@ -110,16 +112,18 @@ repeating this procedure until you have an odd number of ``ceph-mon`` daemons.
 Removing Monitors
 =================
 
-When you remove monitors from a cluster, Ceph monitors use PAXOS to establish 
-consensus about the master cluster map, so you must have an odd number of
-monitors to establish a quorum for consensus about the cluster map.
+When you remove monitors from a cluster, consider that Ceph monitors use 
+PAXOS to establish consensus about the master cluster map. You must have 
+a sufficient number of monitors to establish a quorum for consensus about 
+the cluster map.
 
 Removing a Monitor (Manual)
 ---------------------------
 
 This procedure removes a ``ceph-mon`` daemon from your cluster.   If this
-procedure results in an even number of daemons, you may add or remove another
-monitor  until you have an odd number of ``ceph-mon`` daemons.
+procedure results in only two monitor daemons, you may add or remove another
+monitor until you have a number of ``ceph-mon`` daemons that can achieve a 
+quorum.
 
 #. Stop the monitor. ::
 
