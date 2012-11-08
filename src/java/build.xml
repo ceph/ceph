@@ -5,20 +5,20 @@
 
 	<property name="src.dir" location="java" />
 	<property name="doc.dir" location="doc" />
-    <property name="lib.dir" location="lib" />
-	<property name="test.src.dir" location="test" />
-    <property name="test.build.dir" location="test_build" />
+	<property name="test.dir" location="test" />
 
     <property environment="env"/>
 
 	<target name="clean">
 		<delete dir="${doc.dir}" />
-		<delete dir="${test.build.dir}" />
+    <delete>
+      <fileset dir="${test.dir}" includes="**/*.class" />
+    </delete>
+    <delete file="./libcephfs-test.jar" />
 	</target>
 
 	<target name="makedir">
 		<mkdir dir="${doc.dir}" />
-		<mkdir dir="${test.build.dir}" />
 	</target>
 
 	<target name="docs" depends="makedir">
@@ -26,41 +26,52 @@
 			<fileset dir="${src.dir}">
                 <include name="**/*.java" />
 			</fileset>
+			<fileset dir="${test.dir}">
+                <include name="**/*.java" />
+			</fileset>
 		</javadoc>
 	</target>
 
-	<target name="compile-tests" depends="makedir">
-        <javac srcdir="${test.src.dir}" destdir="${test.build.dir}"
-            includeantruntime="false" source="1.5" target="1.5">
+	<target name="compile-tests-jar">
+        <javac srcdir="${test.dir}" destdir="${test.dir}"
+            includeantruntime="false" source="1.5" target="1.5"> 
             <classpath>
 				<pathelement location="${env.CEPHFS_JAR}"/>
 				<pathelement location="libcephfs.jar"/>
-                <fileset dir="${lib.dir}">
-                    <include name="**/*.jar"/>
-                </fileset>
+                <pathelement location="${env.CLASSPATH}" />
             </classpath>
 		</javac>
+        <jar destfile="./libcephfs-test.jar"> 
+            <fileset dir="${test.dir}" includes="**/*.class"/>  
+        </jar>
 	</target>
 
-	<target name="test" depends="compile-tests">
-        <junit printsummary="yes" haltonfailure="yes" showoutput="yes">
+	<target name="test" depends="compile-tests-jar">
+        <junit printsummary="yes" haltonfailure="yes" showoutput="yes" fork="true">
+			<sysproperty key="java.library.path" path="${env.CEPHFS_JNI_LIB}:../.libs/"/>
+            <sysproperty key="CEPH_CONF_FILE" path="${env.CEPHFS_CONF}"/>
+            <jvmarg value="-Xcheck:jni"/>
+            <classpath>
+				<pathelement location="${env.CEPHFS_JAR}"/>
+				<pathelement location="libcephfs.jar"/>
+				<pathelement location="libcephfs-test.jar"/>
+            </classpath>
+            <formatter type="plain"/>
+            <test name="com.ceph.fs.CephAllTests" haltonerror="true" />
+        </junit>
+  </target>
+
+	<target name="test-compat" depends="compile-tests-jar">
+        <junit printsummary="yes" haltonfailure="yes" showoutput="yes" fork="true">
 			<sysproperty key="java.library.path" path="${env.CEPHFS_JNI_LIB}:../.libs/"/>
             <sysproperty key="CEPH_CONF_FILE" path="${env.CEPHFS_CONF}"/>
             <classpath>
-                <fileset dir="${lib.dir}">
-                    <include name="**/*.jar"/>
-                </fileset>
 				<pathelement location="${env.CEPHFS_JAR}"/>
 				<pathelement location="libcephfs.jar"/>
-                <pathelement path="${test.build.dir}"/>
-                <pathelement path="${test.src.dir}"/>
+				<pathelement location="libcephfs-test.jar"/>
             </classpath>
             <formatter type="plain"/>
-            <batchtest fork="yes">
-                <fileset dir="${test.src.dir}">
-                    <include name="**/*Test.java"/>
-                </fileset>
-            </batchtest>
+            <test name="com.ceph.fs.CephAllTests" haltonerror="true" />
         </junit>
     </target>
 

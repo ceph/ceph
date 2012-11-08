@@ -1276,8 +1276,8 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1setattr
 	st.st_mode = env->GetIntField(j_cephstat, cephstat_mode_fid);
 	st.st_uid = env->GetIntField(j_cephstat, cephstat_uid_fid);
 	st.st_gid = env->GetIntField(j_cephstat, cephstat_gid_fid);
-	st.st_mtime = env->GetIntField(j_cephstat, cephstat_m_time_fid);
-	st.st_atime = env->GetIntField(j_cephstat, cephstat_a_time_fid);
+	st.st_mtime = env->GetLongField(j_cephstat, cephstat_m_time_fid);
+	st.st_atime = env->GetLongField(j_cephstat, cephstat_a_time_fid);
 
 	ldout(cct, 10) << "jni: setattr: path " << c_path << " mask " << mask << dendl;
 
@@ -1685,7 +1685,7 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1sync_1fs
  * Method:    native_ceph_getxattr
  * Signature: (JLjava/lang/String;Ljava/lang/String;[B)J
  */
-JNIEXPORT long JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1getxattr
+JNIEXPORT jlong JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1getxattr
 	(JNIEnv *env, jclass clz, jlong j_mntp, jstring j_path, jstring j_name, jbyteArray j_buf)
 {
 	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
