@@ -1998,13 +1998,6 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	goto out;
       }
 
-      if (crush.get_max_devices() > osdmap.get_max_osd()) {
-	err = -ERANGE;
-	ss << "crushmap max_devices " << crush.get_max_devices()
-	   << " > osdmap max_osd " << osdmap.get_max_osd();
-	goto out;
-      }
-
       // sanity check: test some inputs to make sure this map isn't totally broken
       dout(10) << " testing map" << dendl;
       stringstream ess;
@@ -2228,12 +2221,6 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       int newmax = parse_pos_long(m->cmd[2].c_str(), &ss);
       if (newmax < 0) {
 	err = -EINVAL;
-	goto out;
-      }
-      if (newmax < osdmap.crush->get_max_devices()) {
-	err = -ERANGE;
-	ss << "cannot set max_osd to " << newmax << " which is < crush max_devices "
-	   << osdmap.crush->get_max_devices();
 	goto out;
       }
       if (newmax > g_conf->mon_max_osd) {
