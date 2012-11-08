@@ -3,6 +3,11 @@
 # abort on failure
 set -e
 
+[ -z "$CEPH_NUM_MON" ] && CEPH_NUM_MON="$MON"
+[ -z "$CEPH_NUM_OSD" ] && CEPH_NUM_OSD="$OSD"
+[ -z "$CEPH_NUM_MDS" ] && CEPH_NUM_MDS="$MDS"
+[ -z "$CEPH_NUM_RGW" ] && CEPH_NUM_RGW="$RGW"
+
 [ -z "$CEPH_NUM_MON" ] && CEPH_NUM_MON=3
 [ -z "$CEPH_NUM_OSD" ] && CEPH_NUM_OSD=1
 [ -z "$CEPH_NUM_MDS" ] && CEPH_NUM_MDS=3
