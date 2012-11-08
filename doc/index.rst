@@ -44,7 +44,6 @@ cluster to ensure that the storage hosts are running smoothly.
    rbd/rbd
    radosgw/index
    api/index
-   source/index
    Internals <dev/index>
    man/index
    architecture
