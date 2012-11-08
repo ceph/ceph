@@ -17,7 +17,7 @@ These options are intended to be set in the Hadoop configuration file
 |                    |                          |                            |
 |                    |                          |                            |
 +--------------------+--------------------------+----------------------------+
-|fs.ceph.config.file |Local path to ceph.conf   |/etc/ceph/ceph.conf         |
+|fs.ceph.conf.file   |Local path to ceph.conf   |/etc/ceph/ceph.conf         |
 |                    |                          |                            |
 |                    |                          |                            |
 |                    |                          |                            |
