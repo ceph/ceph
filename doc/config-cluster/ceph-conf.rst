@@ -257,8 +257,8 @@ in the daemon instance sections of your ``ceph.conf`` file.
 .. code-block:: ini
 
 	[osd.0]
-		public network {host-public-ip-address}
-		cluster network {host-cluster-ip-address}
+		public addr {host-public-ip-address}
+		cluster addr {host-cluster-ip-address}
 
 .. _hardware recommendations: ../../install/hardware-recommendations
 
