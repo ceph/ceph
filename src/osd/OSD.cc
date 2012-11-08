@@ -72,6 +72,7 @@
 #include "messages/MOSDPGBackfill.h"
 #include "messages/MOSDPGMissing.h"
 #include "messages/MBackfillReserve.h"
+#include "messages/MRecoveryReserve.h"
 
 #include "messages/MOSDAlive.h"
 
@@ -3185,6 +3186,9 @@ void OSD::dispatch_op(OpRequestRef op)
   case MSG_OSD_BACKFILL_RESERVE:
     handle_pg_backfill_reserve(op);
     break;
+  case MSG_OSD_RECOVERY_RESERVE:
+    handle_pg_recovery_reserve(op);
+    break;
 
     // client ops
   case CEPH_MSG_OSD_OP:
@@ -4941,6 +4945,52 @@ void OSD::handle_pg_backfill_reserve(OpRequestRef op)
   }
   pg->unlock();
 }
+
+void OSD::handle_pg_recovery_reserve(OpRequestRef op)
+{
+  MRecoveryReserve *m = static_cast<MRecoveryReserve*>(op->request);
+  assert(m->get_header().type == MSG_OSD_RECOVERY_RESERVE);
+
+  if (!require_osd_peer(op))
+    return;
+  if (!require_same_or_newer_map(op, m->query_epoch))
+    return;
+
+  PG *pg = 0;
+  if (!_have_pg(m->pgid))
+    return;
+
+  pg = _lookup_lock_pg(m->pgid);
+  if (!pg)
+    return;
+
+  if (m->type == MRecoveryReserve::REQUEST) {
+    pg->queue_peering_event(
+      PG::CephPeeringEvtRef(
+	new PG::CephPeeringEvt(
+	  m->query_epoch,
+	  m->query_epoch,
+	  PG::RequestRecovery())));
+  } else if (m->type == MRecoveryReserve::GRANT) {
+    pg->queue_peering_event(
+      PG::CephPeeringEvtRef(
+	new PG::CephPeeringEvt(
+	  m->query_epoch,
+	  m->query_epoch,
+	  PG::RemoteRecoveryReserved())));
+  } else if (m->type == MRecoveryReserve::RELEASE) {
+    pg->queue_peering_event(
+      PG::CephPeeringEvtRef(
+	new PG::CephPeeringEvt(
+	  m->query_epoch,
+	  m->query_epoch,
+	  PG::RecoveryDone())));
+  } else {
+    assert(0);
+  }
+  pg->unlock();
+}
+
 
 /** PGQuery
  * from primary to replica | stray

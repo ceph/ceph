@@ -124,6 +124,9 @@ User-visible PG States
 *recovering*
   objects are being migrated/synchronized with replicas
 
+*recovery_wait*
+  the PG is waiting for the local/remote recovery reservations
+
 *backfill*
   a special case of recovery, in which the entire contents of
   the PG are scanned and synchronized, instead of inferring what
@@ -131,6 +134,9 @@ User-visible PG States
 
 *backfill-wait*
   the PG is waiting in line to start backfill
+
+*backfill_toofull*
+  backfill reservation rejected, OSD too full
 
 *incomplete*
   a pg is missing a necessary period of history from its
