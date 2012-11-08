@@ -3719,32 +3719,55 @@ int Client::path_walk(const filepath& origpath, Inode **final, bool followsym)
 
   ldout(cct, 10) << "path_walk " << path << dendl;
 
-  for (unsigned i=0; i<path.depth() && cur; i++) {
+  set<Inode*,Inode::Compare> visited;
+  unsigned i=0;
+  while (i < path.depth() && cur) {
     const string &dname = path[i];
     ldout(cct, 10) << " " << i << " " << *cur << " " << dname << dendl;
     Inode *next;
     int r = _lookup(cur, dname.c_str(), &next);
     if (r < 0)
       return r;
-    if (i == path.depth() - 1 && followsym &&
-	next && next->is_symlink()) {
-      // resolve symlink
-      if (cur->symlink[0] == '/') {
-	path = next->symlink.c_str();
-	next = root;
-      } else {
-	filepath more(next->symlink.c_str());
-	// we need to remove the symlink component from off of the path
-	// before adding the target that the symlink points to
-	path.pop_dentry();
-	path.append(more);
-	// reset position in path walk
-	--i;
-	// remain at the same inode
-	next = cur;
+    // only follow trailing symlink if followsym.  always follow
+    // 'directory' symlinks.
+    if (next && next->is_symlink()) {
+      if (i < path.depth() - 1) {
+	// check for loops
+	if(visited.find(next) != visited.end()) {
+	  // already hit this one, return error
+	  return -ELOOP;
+	}
+	visited.insert(next);
+
+	// dir symlink
+	// replace consumed components of path with symlink dir target
+	filepath resolved(next->symlink.c_str());
+	resolved.append(path.postfixpath(i));
+	path = resolved;
+	i = 0;
+	if (next->symlink[0] == '/') {
+	  cur = root;
+	}
+	continue;
+      } else if (followsym) {
+	if (next->symlink[0] == '/') {
+	  path = next->symlink.c_str();
+	  i = 0;
+	  // reset position
+	  cur = root;
+	} else {
+	  filepath more(next->symlink.c_str());
+	  // we need to remove the symlink component from off of the path
+	  // before adding the target that the symlink points to.  remain
+	  // at the same position in the path.
+	  path.pop_dentry();
+	  path.append(more);
+	}
+	continue;
       }
     }
     cur = next;
+    i++;
   }
   if (!cur)
     return -ENOENT;
@@ -3956,7 +3979,7 @@ int Client::readlink(const char *relpath, char *buf, loff_t size)
 
   filepath path(relpath);
   Inode *in;
-  int r = path_walk(path, &in);
+  int r = path_walk(path, &in, false);
   if (r < 0)
     return r;
   
