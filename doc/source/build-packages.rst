@@ -1,6 +1,7 @@
 =====================
  Build Ceph Packages
 =====================
+
 To build packages, you must clone the `Ceph`_ repository. You can create 
 installation packages from the latest code using ``dpkg-buildpackage`` for 
 Debian/Ubuntu or ``rpmbuild`` for the RPM Package Manager.
@@ -10,7 +11,8 @@ Debian/Ubuntu or ``rpmbuild`` for the RPM Package Manager.
    the build.
 
 Advanced Package Tool (APT)
----------------------------
+===========================
+
 To create ``.deb`` packages for Debian/Ubuntu, ensure that you have cloned the 
 `Ceph`_ repository, installed the `build prerequisites`_ and installed 
 ``debhelper``::
@@ -24,7 +26,8 @@ Once you have installed debhelper, you can build the packages:
 For multi-processor CPUs use the ``-j`` option to accelerate the build.
 
 RPM Package Manager
--------------------
+===================
+
 To create ``.rpm`` packages, ensure that you have cloned the `Ceph`_ repository,
 installed the `build prerequisites`_ and installed ``rpm-build`` and 
 ``rpmdevtools``::
