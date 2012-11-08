@@ -9,6 +9,11 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 AC_INIT([ceph], [0.53], [ceph-devel@vger.kernel.org])
+
+# Create release string.  Used with VERSION for RPMs.
+AC_SUBST(RPM_RELEASE)
+RPM_RELEASE=`if expr index $(git describe --always) '-' > /dev/null ; then git describe --always | cut -d- -f2- | tr '-' '.' ; fi`
+
 AC_CONFIG_MACRO_DIR([m4])
 
 AC_CONFIG_SUBDIRS([src/gtest])

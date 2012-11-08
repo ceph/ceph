@@ -15,7 +15,7 @@
 #################################################################################
 Name:		ceph
 Version:	@VERSION@
-Release:	6%{?dist}
+Release:	@RPM_RELEASE@%{?dist}
 Summary:	User space components of the Ceph file system
 License:	GPL-2.0
 Group:		System Environment/Base
