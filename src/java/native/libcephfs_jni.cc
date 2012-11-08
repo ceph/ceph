@@ -1685,7 +1685,7 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1sync_1fs
  * Method:    native_ceph_getxattr
  * Signature: (JLjava/lang/String;Ljava/lang/String;[B)J
  */
-JNIEXPORT long JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1getxattr
+JNIEXPORT jlong JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1getxattr
 	(JNIEnv *env, jclass clz, jlong j_mntp, jstring j_path, jstring j_name, jbyteArray j_buf)
 {
 	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
