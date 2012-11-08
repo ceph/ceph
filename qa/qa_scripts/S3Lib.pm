@@ -14,6 +14,14 @@ use Exporter;
 #==variables ===
 my $rgw_user = "qa_user";
 
+# function to execute the command and return output
+sub get_cmd_op
+{
+    my $cmd = shift;
+    my $excmd = `$cmd`;
+    return $excmd;
+}
+
 # Function to check if radosgw is already running
 sub get_status {
         my $service = "radosgw";
