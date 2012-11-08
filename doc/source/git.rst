@@ -1,11 +1,13 @@
 ============
  Set Up Git
 ============
-To check out the Ceph source code, you must have ``git`` installed
+
+To clone the Ceph git repository, you must have ``git`` installed
 on your local host. 
 
 Install Git
------------
+===========
+
 To install ``git``, execute::
 
 	sudo apt-get install git
@@ -19,9 +21,15 @@ Follow the directions for setting up git at
 .. _Set Up Git: http://help.github.com/linux-set-up-git
 
 Generate SSH Keys
------------------
-You must generate SSH keys for github to clone the Ceph
-repository. If you do not have SSH keys for ``github``, execute::
+=================
+
+If you intend to commit code to Ceph or to clone using SSH (``git@github.com:ceph/ceph.git``), you must generate SSH keys for github. 
+
+.. tip:: If you only intend to clone the repository, you may 
+   use ``git clone --recursive https://github.com/ceph/ceph.git`` 
+   without generating SSH keys.
+
+To generate SSH keys for ``github``, execute::
 
 	ssh-keygen
 
@@ -33,11 +41,10 @@ assumes you used the default file path)::
 Copy the public key.
 
 Add the Key
------------
-Go to your your ``github`` account,
-click on "Account Settings" (i.e., the 'tools' icon); then,
-click "SSH Keys" on the left side navbar.
+===========
 
-Click "Add SSH key" in the "SSH Keys" list, enter a name for
-the key, paste the key you generated, and press the "Add key"
-button.
+Go to your your ``github`` account, click on "Account Settings" (i.e., the
+'tools' icon); then, click "SSH Keys" on the left side navbar.
+
+Click "Add SSH key" in the "SSH Keys" list, enter a name for the key, paste the
+key you generated, and press the "Add key" button.
