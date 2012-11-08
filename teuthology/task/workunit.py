@@ -216,12 +216,14 @@ def _run_tests(ctx, refspec, role, tests, env, subdir):
                             srcdir=srcdir,
                             workunit=workunit,
                             ),
-                        run.Raw('&&'),
-                        'rm', '-rf', '--', scratch_tmp,
                         ])
                 remote.run(
                     logger=log.getChild(role),
                     args=args,
+                    )
+                remote.run(
+                    logger=log.getChild(role),
+                    args=['rm', '-rf', '--', scratch_tmp],
                     )
     finally:
          log.info('Stopping %s on %s...', spec, role)
