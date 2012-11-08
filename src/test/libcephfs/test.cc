@@ -569,10 +569,88 @@ TEST(LibCephFS, Symlinks) {
   // ensure the stat bufs are equal
   ASSERT_TRUE(!memcmp(&stbuf_orig, &stbuf_symlink_orig, sizeof(stbuf_orig)));
 
+  sprintf(test_file, "/test_symlinks_abs_%d", getpid());
+
+  fd = ceph_open(cmount, test_file, O_CREAT|O_RDWR, 0666);
+  ASSERT_GT(fd, 0);
+
+  ceph_close(cmount, fd);
+
+  sprintf(test_symlink, "/test_symlinks_abs_sym_%d", getpid());
+
+  ASSERT_EQ(ceph_symlink(cmount, test_file, test_symlink), 0);
+
+  // stat the original file
+  ASSERT_EQ(ceph_stat(cmount, test_file, &stbuf_orig), 0);
+  // stat the symlink
+  ASSERT_EQ(ceph_stat(cmount, test_symlink, &stbuf_symlink_orig), 0);
+  // ensure the stat bufs are equal
+  ASSERT_TRUE(!memcmp(&stbuf_orig, &stbuf_symlink_orig, sizeof(stbuf_orig)));
+
   // test lstat
   struct stat stbuf_symlink;
   ASSERT_EQ(ceph_lstat(cmount, test_symlink, &stbuf_symlink), 0);
   ASSERT_TRUE(S_ISLNK(stbuf_symlink.st_mode));
+
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, DirSyms) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char test_dir1[256];
+  sprintf(test_dir1, "dir1_symlinks_%d", getpid());
+
+  ASSERT_EQ(ceph_mkdir(cmount, test_dir1, 0700), 0);
+
+  char test_symdir[256];
+  sprintf(test_symdir, "symdir_symlinks_%d", getpid());
+
+  ASSERT_EQ(ceph_symlink(cmount, test_dir1, test_symdir), 0);
+
+  char test_file[256];
+  sprintf(test_file, "/symdir_symlinks_%d/test_symdir_file", getpid());
+  int fd = ceph_open(cmount, test_file, O_CREAT|O_RDWR, 0600);
+  ASSERT_GT(fd, 0);
+  ceph_close(cmount, fd);
+
+  struct stat stbuf;
+  ASSERT_EQ(ceph_lstat(cmount, test_file, &stbuf), 0);
+
+  // ensure that its a file not a directory we get back
+  ASSERT_TRUE(S_ISREG(stbuf.st_mode));
+
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, LoopSyms) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char test_dir1[256];
+  sprintf(test_dir1, "dir1_loopsym_%d", getpid());
+
+  ASSERT_EQ(ceph_mkdir(cmount, test_dir1, 0700), 0);
+
+  char test_dir2[256];
+  sprintf(test_dir2, "/dir1_loopsym_%d/loop_dir", getpid());
+
+  ASSERT_EQ(ceph_mkdir(cmount, test_dir2, 0700), 0);
+
+  char test_symdir[256];
+  sprintf(test_symdir, "/dir1_loopsym_%d/loop_dir/symdir", getpid());
+
+  ASSERT_EQ(ceph_symlink(cmount, test_dir2, test_symdir), 0);
+
+  char test_file[256];
+  sprintf(test_file, "/dir1_loopsym_%d/loop_dir/symdir/test_loopsym_file", getpid());
+  int fd = ceph_open(cmount, test_file, O_CREAT|O_RDWR, 0600);
+  ASSERT_EQ(fd, -ELOOP);
 
   ceph_shutdown(cmount);
 }

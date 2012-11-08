@@ -3997,11 +3997,11 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
     in->get_caps_issued(&loner_issued, &other_issued, &xlocker_issued, CEPH_CAP_SFILE);
 
     if (!((loner_wanted|loner_issued) & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GBUFFER)) ||
-	 (other_wanted & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GBUFFER|CEPH_CAP_GRD|CEPH_CAP_GCACHE)) ||
+	 (other_wanted & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GRD)) ||
 	(in->inode.is_dir() && in->multiple_nonstale_caps())) {  // FIXME.. :/
       dout(20) << " should lose it" << dendl;
       // we should lose it.
-      if ((other_wanted & (CEPH_CAP_GRD|CEPH_CAP_GWR)) ||
+      if (((other_wanted|loner_wanted) & (CEPH_CAP_GRD|CEPH_CAP_GWR)) ||
 	  lock->is_waiter_for(SimpleLock::WAIT_WR))
 	scatter_mix(lock, need_issue);
       else if (!lock->is_wrlocked())   // let excl wrlocks drain first

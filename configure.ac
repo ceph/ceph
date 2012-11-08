@@ -283,6 +283,22 @@ AS_IF([test "x$enable_cephfs_java" = "xyes"], [
 		   AS_IF([test -r "$jnih"], [
 				  EXTRA_JDK_INC_DIR=`dirname $jnih`])])
 
+  # cephfs_java_test only makes sense if java is already turned on
+	# setup CLASSPATH for Debian default junit4.jar package 
+    #
+    # Configuring --with-debug and --enable-cephfs-java will throw an error if
+    # JUnit4 cannot be found. While currently this works for users who have
+    # installed via the package manager on Ubuntu, we need to expand this
+    # check to 1) support other distrubtions and 2) allow users to influence
+    # the search path.
+  AS_IF([test "x$with_debug" = "xyes"], [
+      dir='/usr/share/java'
+      junit4_jar=`find $dir -name junit4.jar | head -n 1`
+		  AS_IF([test -r "$junit4_jar"], [
+	      EXTRA_CLASSPATH_JAR=`dirname $junit4_jar`/junit4.jar
+      AC_SUBST(EXTRA_CLASSPATH_JAR)], [
+      AC_MSG_ERROR([Cannot find junit4.jar (apt-get install junit4)])])])
+
 	# Check for Java programs: javac, javah, jar
     PATH_save=$PATH
 	PATH="$PATH:$EXTRA_JDK_BIN_DIR"

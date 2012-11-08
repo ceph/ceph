@@ -17,13 +17,14 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+package com.ceph.fs;
+
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.UUID;
 import org.junit.*;
 import static org.junit.Assert.*;
 
-import com.ceph.fs.*;
 
 public class CephDoubleMountTest {
 

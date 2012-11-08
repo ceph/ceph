@@ -1589,6 +1589,22 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	}
       }
     }
+
+    // warn about flags
+    if (osdmap.test_flag(CEPH_OSDMAP_PAUSERD |
+			 CEPH_OSDMAP_PAUSEWR |
+			 CEPH_OSDMAP_NOUP |
+			 CEPH_OSDMAP_NODOWN |
+			 CEPH_OSDMAP_NOIN |
+			 CEPH_OSDMAP_NOOUT |
+			 CEPH_OSDMAP_NOBACKFILL |
+			 CEPH_OSDMAP_NORECOVER)) {
+      ostringstream ss;
+      ss << osdmap.get_flag_string() << " flag(s) set";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      if (detail)
+	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+    }
   }
 }
 
