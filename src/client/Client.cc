@@ -64,6 +64,8 @@ using namespace std;
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/perf_counters.h"
+#include "common/admin_socket.h"
+#include "common/errno.h"
 
 #include "common/config.h"
 
@@ -101,6 +103,29 @@ void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 
 // -------------
 
+Client::CommandHook::CommandHook(Client *client) :
+  m_client(client)
+{
+}
+
+bool Client::CommandHook::call(std::string command, std::string args, bufferlist& out)
+{
+  stringstream ss;
+  JSONFormatter formatter(true);
+  m_client->client_lock.Lock();
+  if (command == "mds_requests")
+    m_client->dump_mds_requests(&formatter);
+  else
+    assert(0 == "bad command registered");
+  m_client->client_lock.Unlock();
+  formatter.flush(ss);
+  out.append(ss);
+  return true;
+}
+
+
+// -------------
+
 dir_result_t::dir_result_t(Inode *in)
   : inode(in), offset(0), this_offset(2), next_offset(2),
     release_count(0), start_shared_gen(0),
@@ -111,7 +136,11 @@ dir_result_t::dir_result_t(Inode *in)
 // cons/des
 
 Client::Client(Messenger *m, MonClient *mc)
-  : Dispatcher(m->cct), cct(m->cct), logger(NULL), timer(m->cct, client_lock), 
+  : Dispatcher(m->cct),
+    cct(m->cct),
+    logger(NULL),
+    m_command_hook(this),
+    timer(m->cct, client_lock),
     ino_invalidate_cb(NULL),
     ino_invalidate_cb_handle(NULL),
     getgroups_cb(NULL),
@@ -310,6 +339,16 @@ int Client::init()
   cct->get_perfcounters_collection()->add(logger);
 
   initialized = true;
+
+  AdminSocket* admin_socket = cct->get_admin_socket();
+  int ret = admin_socket->register_command("mds_requests",
+					   &m_command_hook,
+					   "show in-progress mds requests");
+  if (ret < 0) {
+    lderr(cct) << "error registering admin socket command: "
+	       << cpp_strerror(-ret) << dendl;
+  }
+
   client_lock.Unlock();
   return r;
 }
@@ -1030,6 +1069,17 @@ void Client::connect_mds_targets(int mds)
 			      mdsmap->get_inst(*q));
       waiting_for_session[*q].size();
     }
+  }
+}
+
+void Client::dump_mds_requests(Formatter *f)
+{
+  for (map<tid_t, MetaRequest*>::iterator p = mds_requests.begin();
+       p != mds_requests.end();
+       ++p) {
+    f->open_object_section("request");
+    p->second->dump(f);
+    f->close_section();
   }
 }
 

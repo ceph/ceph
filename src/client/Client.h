@@ -192,6 +192,14 @@ class Client : public Dispatcher {
 
   PerfCounters *logger;
 
+  class CommandHook : public AdminSocketHook {
+    Client *m_client;
+  public:
+    CommandHook(Client *client);
+    bool call(std::string command, std::string args, bufferlist& out);
+  };
+  CommandHook m_command_hook;
+
   // cluster descriptors
   MDSMap *mdsmap; 
   OSDMap *osdmap;
@@ -234,6 +242,8 @@ public:
   tid_t last_tid, last_flush_seq;
   map<tid_t, MetaRequest*> mds_requests;
   set<int>                 failed_mds;
+
+  void dump_mds_requests(Formatter *f);
 
   int make_request(MetaRequest *req, int uid, int gid,
 		   //MClientRequest *req, int uid, int gid,
