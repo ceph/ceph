@@ -167,7 +167,8 @@ void dump_last_modified(struct req_state *s, time_t t)
 {
 
   char timestr[TIME_BUF_SIZE];
-  struct tm *tmp = gmtime(&t);
+  struct tm result;
+  struct tm *tmp = gmtime_r(&t, &result);
   if (tmp == NULL)
     return;
 
