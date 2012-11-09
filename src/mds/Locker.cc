@@ -779,7 +779,8 @@ bool Locker::eval(CInode *in, int mask)
     } else
       dout(10) << "eval doesn't want loner" << dendl;
   }
-    
+
+ retry:
   if (mask & CEPH_LOCK_IFILE)
     eval_any(&in->filelock, &need_issue);
   if (mask & CEPH_LOCK_IAUTH)
@@ -801,6 +802,16 @@ bool Locker::eval(CInode *in, int mask)
     if (in->try_drop_loner()) {
       dout(10) << "  dropped loner" << dendl;
       need_issue = true;
+
+      if (in->get_wanted_loner() >= 0) {
+	if (in->try_set_loner()) {
+	  dout(10) << "eval end set loner to client." << in->get_loner() << dendl;
+	  mask = -1;
+	  goto retry;
+	} else {
+	  dout(10) << "eval want loner client." << in->get_wanted_loner() << " but failed to set it" << dendl;
+	}
+      }
     }
   }
 
