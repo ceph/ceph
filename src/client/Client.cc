@@ -2825,21 +2825,27 @@ SnapRealm *Client::get_snap_realm(inodeno_t r)
   SnapRealm *realm = snap_realms[r];
   if (!realm)
     snap_realms[r] = realm = new SnapRealm(r);
+  ldout(cct, 20) << "get_snap_realm " << r << " " << realm << " " << realm->nref << " -> " << (realm->nref + 1) << dendl;
   realm->nref++;
   return realm;
 }
 
 SnapRealm *Client::get_snap_realm_maybe(inodeno_t r)
 {
-  if (snap_realms.count(r) == 0)
+  if (snap_realms.count(r) == 0) {
+    ldout(cct, 20) << "get_snap_realm_maybe " << r << " fail" << dendl;
     return NULL;
+  }
   SnapRealm *realm = snap_realms[r];
+  ldout(cct, 20) << "get_snap_realm_maybe " << r << " " << realm << " " << realm->nref << " -> " << (realm->nref + 1) << dendl;
   realm->nref++;
   return realm;
 }
 
 void Client::put_snap_realm(SnapRealm *realm)
 {
+  ldout(cct, 20) << "put_snap_realm " << realm->ino << " " << realm
+		 << " " << realm->nref << " -> " << (realm->nref - 1) << dendl;
   if (--realm->nref == 0) {
     snap_realms.erase(realm->ino);
     delete realm;
