@@ -73,9 +73,9 @@ daemons to achieve a quorum.
 #. Create a temporary directory ``{tmp}`` to keep the files needed during 
    this process. This directory should be different from monitor's default 
    directory created in the previous step, and can be removed after all the 
-   steps are taken. ::
+   steps are taken. :: 
 
-  mkdir {tmp}
+	mkdir {tmp}
 
 #. Retrieve the keyring for your monitors, where ``{tmp}`` is the path to 
    the retrieved keyring, and ``{filename}`` is the name of the file containing
