@@ -1122,7 +1122,7 @@ int Client::make_request(MetaRequest *request,
 
   // got it!
   MClientReply *reply = request->reply;
-  request->reply = 0;
+  request->reply = NULL;
   if (ptarget)
     *ptarget = request->target;
 
@@ -1478,6 +1478,7 @@ void Client::handle_client_reply(MClientReply *reply)
   }
   
   int mds = reply->get_source().num();
+  assert(request->reply == NULL);
   request->reply = reply;
   insert_trace(request, mds);
 
