@@ -39,6 +39,9 @@ int rgw_perf_start(CephContext *cct)
   plb.add_u64_counter(l_rgw_cache_hit, "cache_hit");
   plb.add_u64_counter(l_rgw_cache_miss, "cache_miss");
 
+  plb.add_u64_counter(l_rgw_keystone_token_cache_hit, "keystone_token_cache_hit");
+  plb.add_u64_counter(l_rgw_keystone_token_cache_miss, "keystone_token_cache_miss");
+
   perfcounter = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(perfcounter);
   return 0;
@@ -88,7 +91,7 @@ is_err() const
 
 req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL), op(OP_UNKNOWN), 
                                                             os_auth_token(NULL),
-                                                            os_user(NULL), os_groups(NULL), env(e)
+                                                            env(e)
 {
   enable_ops_log = env->conf->enable_ops_log;
   enable_usage_log = env->conf->enable_usage_log;
@@ -109,8 +112,6 @@ req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL)
   prot_flags = 0;
 
   os_auth_token = NULL;
-  os_user = NULL;
-  os_groups = NULL;
   time = ceph_clock_now(cct);
   perm_mask = 0;
   content_length = 0;
@@ -130,8 +131,6 @@ req_state::~req_state() {
   delete formatter;
   delete bucket_acl;
   delete object_acl;
-  free(os_user);
-  free(os_groups);
   free((void *)object);
   free((void *)bucket_name);
 }

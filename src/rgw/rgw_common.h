@@ -138,6 +138,9 @@ enum {
   l_rgw_cache_hit,
   l_rgw_cache_miss,
 
+  l_rgw_keystone_token_cache_hit,
+  l_rgw_keystone_token_cache_miss,
+
   l_rgw_last,
 };
 
@@ -611,8 +614,8 @@ struct req_state {
    int prot_flags;
 
    const char *os_auth_token;
-   char *os_user;
-   char *os_groups;
+   string swift_user;
+   string swift_groups;
 
    utime_t time;
 
