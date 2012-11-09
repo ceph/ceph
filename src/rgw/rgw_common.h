@@ -696,35 +696,6 @@ struct RGWBucketEnt {
 };
 WRITE_CLASS_ENCODER(RGWBucketEnt)
 
-struct RGWUploadPartInfo {
-  uint32_t num;
-  uint64_t size;
-  string etag;
-  utime_t modified;
-
-  RGWUploadPartInfo() : num(0), size(0) {}
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(2, 2, bl);
-    ::encode(num, bl);
-    ::encode(size, bl);
-    ::encode(etag, bl);
-    ::encode(modified, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-    ::decode(num, bl);
-    ::decode(size, bl);
-    ::decode(etag, bl);
-    ::decode(modified, bl);
-    DECODE_FINISH(bl);
-  }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<RGWUploadPartInfo*>& o);
-};
-WRITE_CLASS_ENCODER(RGWUploadPartInfo)
-
 class rgw_obj {
   std::string orig_obj;
   std::string orig_key;

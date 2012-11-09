@@ -249,8 +249,18 @@ class RGWPutObjProcessor
 protected:
   RGWRados *store;
   struct req_state *s;
+  bool is_complete;
+
+  virtual int do_complete(string& etag, map<string, bufferlist>& attrs) = 0;
+
+  list<rgw_obj> objs;
+
+  void add_obj(rgw_obj& obj) {
+    objs.push_back(obj);
+  }
 public:
-  virtual ~RGWPutObjProcessor() {}
+  RGWPutObjProcessor() : store(NULL), s(NULL), is_complete(false) {}
+  virtual ~RGWPutObjProcessor();
   virtual int prepare(RGWRados *_store, struct req_state *_s) {
     store = _store;
     s = _s;
@@ -258,7 +268,7 @@ public:
   };
   virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle) = 0;
   virtual int throttle_data(void *handle) = 0;
-  virtual int complete(string& etag, map<string, bufferlist>& attrs) = 0;
+  virtual int complete(string& etag, map<string, bufferlist>& attrs);
 };
 
 class RGWPutObj : public RGWOp {
