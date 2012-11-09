@@ -33,7 +33,7 @@ class Thrasher:
     def kill_osd(self, osd=None):
         if osd is None:
             osd = random.choice(self.live_osds)
-        self.log("Killing osd %s, live_osds are %s"%(str(osd),str(self.live_osds)))
+        self.log("Killing osd %s, live_osds are %s" % (str(osd),str(self.live_osds)))
         self.live_osds.remove(osd)
         self.dead_osds.append(osd)
         self.ceph_manager.kill_osd(osd)
@@ -41,7 +41,7 @@ class Thrasher:
     def blackhole_kill_osd(self, osd=None):
         if osd is None:
             osd = random.choice(self.live_osds)
-        self.log("Blackholing and then killing osd %s, live_osds are %s"%(str(osd),str(self.live_osds)))
+        self.log("Blackholing and then killing osd %s, live_osds are %s" % (str(osd),str(self.live_osds)))
         self.live_osds.remove(osd)
         self.dead_osds.append(osd)
         self.ceph_manager.blackhole_kill_osd(osd)
@@ -49,7 +49,7 @@ class Thrasher:
     def revive_osd(self, osd=None):
         if osd is None:
             osd = random.choice(self.dead_osds)
-        self.log("Reviving osd %s"%(str(osd),))
+        self.log("Reviving osd %s" % (str(osd),))
         self.live_osds.append(osd)
         self.dead_osds.remove(osd)
         self.ceph_manager.revive_osd(osd)
@@ -57,7 +57,7 @@ class Thrasher:
     def out_osd(self, osd=None):
         if osd is None:
             osd = random.choice(self.in_osds)
-        self.log("Removing osd %s, in_osds are: %s"%(str(osd),str(self.in_osds)))
+        self.log("Removing osd %s, in_osds are: %s" % (str(osd),str(self.in_osds)))
         self.ceph_manager.mark_out_osd(osd)
         self.in_osds.remove(osd)
         self.out_osds.append(osd)
@@ -67,7 +67,7 @@ class Thrasher:
             osd = random.choice(self.out_osds)
         if osd in self.dead_osds:
             return self.revive_osd(osd)
-        self.log("Adding osd %s"%(str(osd),))
+        self.log("Adding osd %s" % (str(osd),))
         self.out_osds.remove(osd)
         self.in_osds.append(osd)
         self.ceph_manager.mark_in_osd(osd)
@@ -94,13 +94,13 @@ class Thrasher:
         [self.kill_osd(i) for i in to_kill]
         [self.out_osd(i) for i in to_kill]
         time.sleep(self.config.get("test_pool_min_size_time", 10))
-        self.log("Killing %s"%(the_one,))
+        self.log("Killing %s" % (the_one,))
         self.kill_osd(the_one)
         self.out_osd(the_one)
-        self.log("Reviving everyone but %s"%(the_one,))
+        self.log("Reviving everyone but %s" % (the_one,))
         [self.revive_osd(i) for i in to_kill]
         [self.in_osd(i) for i in to_kill]
-        self.log("Revived everyone but %s"%(the_one,))
+        self.log("Revived everyone but %s" % (the_one,))
         self.log("Waiting for clean")
         self.ceph_manager.wait_for_recovery(
             timeout=self.config.get('timeout')
@@ -211,7 +211,7 @@ class CephManager:
 
     def set_config(self, osdnum, **argdict):
         return self.raw_cluster_cmd(
-            'tell', "osd.%d"%(int(osdnum),),
+            'tell', "osd.%d" % (int(osdnum),),
             'injectargs',
             " ".join(
                 [("--" + conf.replace("_", "-") + " " + str(val)) for (conf,val) in 
