@@ -487,6 +487,9 @@ class TestClone(object):
         eq(image, IMG_NAME)
         eq(snap, 'snap1')
 
+        # can't unprotect snap with children
+        assert_raises(ImageBusy, self.image.unprotect_snap, 'snap1')
+
         # 2 children, check that cannot remove the parent snap
         assert_raises(ImageBusy, self.image.remove_snap, 'snap1')
 
