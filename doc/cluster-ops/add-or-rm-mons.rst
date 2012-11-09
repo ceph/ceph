@@ -70,24 +70,31 @@ daemons to achieve a quorum.
 	ssh {new-mon-host}
 	sudo mkdir /var/lib/ceph/mon/ceph-{mon-letter}
 
-#. Retrieve the keyring for your monitors, where ``{path}`` is the path to 
+#. Create a temporary directory ``{tmp}`` to keep the files needed during 
+   this process. This directory should be different from monitor's default 
+   directory created in the previous step, and can be removed after all the 
+   steps are taken. ::
+
+  mkdir {tmp}
+
+#. Retrieve the keyring for your monitors, where ``{tmp}`` is the path to 
    the retrieved keyring, and ``{filename}`` is the name of the file containing
    the retrieved monitor key. :: 
 
-	ceph auth get mon. -o {path}/{filename}
+	ceph auth get mon. -o {tmp}/{filename}
 
-#. Retrieve the monitor map, where ``{path}`` is the path to 
-   the retrieved monitor map, and ``{filename}`` is the name of the file containing
-   the retrieved monitor monitor map. :: 
+#. Retrieve the monitor map, where ``{tmp}`` is the path to 
+   the retrieved monitor map, and ``{filename}`` is the name of the file 
+   containing the retrieved monitor monitor map. :: 
 
-	ceph mon getmap -o {path}/{filename}
+	ceph mon getmap -o {tmp}/{filename}
 
-#. Prepare the data directory you just created. You must specify
-   the path to the monitor map so that you can retrieve the information
-   about a quorum of monitors and their ``fsid``. You must also specify
-   a path to the monitor keyring:: 
+#. Prepare the monitor's data directory created in the first step. You must 
+   specify the path to the monitor map so that you can retrieve the 
+   information about a quorum of monitors and their ``fsid``. You must also 
+   specify a path to the monitor keyring:: 
 
-	sudo ceph-mon -i {mon-letter} --mkfs --monmap {path}/{filename} --keyring {path}/{filename}	
+	sudo ceph-mon -i {mon-letter} --mkfs --monmap {tmp}/{filename} --keyring {tmp}/{filename}	
 	
 
 #. Add a ``[mon.{letter}]`` entry for your new monitor in your ``ceph.conf`` file. ::
