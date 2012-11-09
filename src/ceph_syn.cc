@@ -54,8 +54,6 @@ int main(int argc, const char **argv, char *envp[])
 
   pick_addresses(g_ceph_context);
 
-  vec_to_argv(args, argc, argv);
-
   // get monmap
   MonClient mc(g_ceph_context);
   if (mc.build_initial_monmap() < 0)
