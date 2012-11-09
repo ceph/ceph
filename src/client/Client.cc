@@ -2607,9 +2607,9 @@ void Client::remove_cap(Cap *cap)
 
   if (!in->is_any_caps()) {
     ldout(cct, 15) << "remove_cap last one, closing snaprealm " << in->snaprealm << dendl;
+    in->snaprealm_item.remove_myself();
     put_snap_realm(in->snaprealm);
     in->snaprealm = 0;
-    in->snaprealm_item.remove_myself();
   }
 }
 
