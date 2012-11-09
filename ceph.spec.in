@@ -166,6 +166,13 @@ Requires:	libcephfs1 = %{version}-%{release}
 This package contains Python libraries for interacting with Cephs RADOS
 object storage.
 
+# Enable building of debug package on distributions that don't automatically
+# build it.
+
+%if (0%{?fedora} || 0%{?centos} || 0%{?opensuse})
+%debug_package
+%endif
+
 #################################################################################
 # common
 #################################################################################
