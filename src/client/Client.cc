@@ -315,6 +315,7 @@ void Client::shutdown()
   ldout(cct, 1) << "shutdown" << dendl;
 
   if (ino_invalidate_cb) {
+    ldout(cct, 10) << "shutdown stopping invalidator finisher" << dendl;
     async_ino_invalidator.wait_for_empty();
     async_ino_invalidator.stop();
   }
@@ -5705,6 +5706,9 @@ int Client::ll_statfs(vinodeno_t vino, struct statvfs *stbuf)
 void Client::ll_register_ino_invalidate_cb(client_ino_callback_t cb, void *handle)
 {
   Mutex::Locker l(client_lock);
+  ldout(cct, 10) << "ll_register_ino_invalidate_cb cb " << (void*)cb << " p " << (void*)handle << dendl;
+  if (cb == NULL)
+    return;
   ino_invalidate_cb = cb;
   ino_invalidate_cb_handle = handle;
   async_ino_invalidator.start();
