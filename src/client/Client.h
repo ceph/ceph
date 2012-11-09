@@ -244,6 +244,7 @@ public:
   set<int>                 failed_mds;
 
   void dump_mds_requests(Formatter *f);
+  void dump_mds_sessions(Formatter *f);
 
   int make_request(MetaRequest *req, int uid, int gid,
 		   //MClientRequest *req, int uid, int gid,

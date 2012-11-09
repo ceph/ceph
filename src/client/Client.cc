@@ -115,6 +115,8 @@ bool Client::CommandHook::call(std::string command, std::string args, bufferlist
   m_client->client_lock.Lock();
   if (command == "mds_requests")
     m_client->dump_mds_requests(&formatter);
+  else if (command == "mds_sessions")
+    m_client->dump_mds_sessions(&formatter);
   else if (command == "dump_cache")
     m_client->dump_cache(&formatter);
   else
@@ -367,6 +369,13 @@ int Client::init()
   int ret = admin_socket->register_command("mds_requests",
 					   &m_command_hook,
 					   "show in-progress mds requests");
+  if (ret < 0) {
+    lderr(cct) << "error registering admin socket command: "
+	       << cpp_strerror(-ret) << dendl;
+  }
+  ret = admin_socket->register_command("mds_sessions",
+				       &m_command_hook,
+				       "show mds session state");
   if (ret < 0) {
     lderr(cct) << "error registering admin socket command: "
 	       << cpp_strerror(-ret) << dendl;
@@ -1102,6 +1111,22 @@ void Client::connect_mds_targets(int mds)
   }
 }
 
+void Client::dump_mds_sessions(Formatter *f)
+{
+  f->open_array_section("open_sessions");
+  for (map<int,MetaSession*>::const_iterator p = mds_sessions.begin(); p != mds_sessions.end(); ++p) {
+    f->open_object_section("session");
+    p->second->dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("opening_sessions");
+  for (map<int,list<Cond*> >::const_iterator p = waiting_for_session.begin(); p != waiting_for_session.end(); ++p) {
+    f->dump_int("mds", p->first);
+  }
+  f->close_section();
+  f->dump_int("mdsmap_epoch", mdsmap->get_epoch());
+}
 void Client::dump_mds_requests(Formatter *f)
 {
   for (map<tid_t, MetaRequest*>::iterator p = mds_requests.begin();
