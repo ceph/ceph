@@ -146,6 +146,8 @@ struct MetaRequest {
       return true;
     return false;    
   }
+
+  void dump(Formatter *f) const;
 };
 
 #endif
