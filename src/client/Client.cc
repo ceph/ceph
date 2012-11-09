@@ -294,7 +294,8 @@ void Client::dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconne
 	it->second->dump(f);
 	f->close_section();
       }	
-      dump_inode(f, it->second->inode, did, false);
+      if (it->second->inode)
+	dump_inode(f, it->second->inode, did, false);
     }
   }
 }
