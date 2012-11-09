@@ -39,10 +39,12 @@ using ceph::crypto::MD5;
 
 #define RGW_ATTR_PREFIX  "user.rgw."
 
+#define RGW_AMZ_META_PREFIX "x-amz-meta-"
+
 #define RGW_ATTR_ACL		RGW_ATTR_PREFIX "acl"
 #define RGW_ATTR_ETAG    	RGW_ATTR_PREFIX "etag"
 #define RGW_ATTR_BUCKETS	RGW_ATTR_PREFIX "buckets"
-#define RGW_ATTR_META_PREFIX	RGW_ATTR_PREFIX "x-amz-meta-"
+#define RGW_ATTR_META_PREFIX	RGW_ATTR_PREFIX RGW_AMZ_META_PREFIX
 #define RGW_ATTR_CONTENT_TYPE	RGW_ATTR_PREFIX "content_type"
 #define RGW_ATTR_CACHE_CONTROL	RGW_ATTR_PREFIX "cache_control"
 #define RGW_ATTR_CONTENT_DISP	RGW_ATTR_PREFIX "content_disposition"
@@ -79,6 +81,7 @@ using ceph::crypto::MD5;
 #define STATUS_ACCEPTED          1901
 #define STATUS_NO_CONTENT        1902
 #define STATUS_PARTIAL_CONTENT   1903
+#define STATUS_REDIRECT          1904
 
 #define ERR_INVALID_BUCKET_NAME  2000
 #define ERR_INVALID_OBJECT_NAME  2001
@@ -102,6 +105,7 @@ using ceph::crypto::MD5;
 #define ERR_TOO_LARGE            2019
 #define ERR_TOO_MANY_BUCKETS     2020
 #define ERR_INVALID_REQUEST      2021
+#define ERR_TOO_SMALL            2022
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 
@@ -565,6 +569,7 @@ struct req_state {
    ceph::Formatter *formatter;
    string decoded_uri;
    string request_uri;
+   string script_uri;
    string request_params;
    const char *host;
    const char *method;
@@ -993,7 +998,8 @@ extern string rgw_string_unquote(const string& s);
 /** time parsing */
 extern int parse_time(const char *time_str, time_t *time);
 extern bool parse_rfc2616(const char *s, struct tm *t);
-extern int parse_date(string& date, uint64_t *epoch, string *out_date = NULL, string *out_time = NULL);
+extern bool parse_iso8601(const char *s, struct tm *t);
+extern int parse_date(const string& date, uint64_t *epoch, string *out_date = NULL, string *out_time = NULL);
 
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */

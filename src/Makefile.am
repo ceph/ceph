@@ -151,7 +151,7 @@ base: ceph-mon ceph-osd ceph-mds \
 	ceph cephfs \
 	ceph-syn \
 	rados radosgw librados-config \
-	ceph-conf monmaptool osdmaptool crushtool ceph-authtool \
+	ceph-conf monmaptool osdmaptool crushtool jsontest ceph-authtool \
 	init-ceph mkcephfs
 
 
@@ -333,6 +333,7 @@ librgw_a_SOURCES =  \
 	rgw/rgw_fcgi.cc \
 	rgw/rgw_xml.cc \
 	rgw/rgw_usage.cc \
+	rgw/rgw_json.cc \
 	rgw/rgw_user.cc \
 	rgw/rgw_tools.cc \
 	rgw/rgw_rados.cc \
@@ -342,6 +343,7 @@ librgw_a_SOURCES =  \
 	rgw/rgw_formats.cc \
 	rgw/rgw_log.cc \
 	rgw/rgw_multi.cc \
+	rgw/rgw_policy_s3.cc \
 	rgw/rgw_gc.cc \
 	rgw/rgw_multi_del.cc \
 	rgw/rgw_env.cc
@@ -376,6 +378,11 @@ rgw_multiparser_SOURCES = rgw/rgw_multiparser.cc
 rgw_multiparser_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 rgw_multiparser_LDADD = $(my_radosgw_ldadd)
 bin_DEBUGPROGRAMS += rgw_multiparser
+
+rgw_jsonparser_SOURCES = rgw/rgw_jsonparser.cc
+rgw_jsonparser_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+rgw_jsonparser_LDADD = $(my_radosgw_ldadd)
+bin_DEBUGPROGRAMS += rgw_jsonparser
 
 endif
 
@@ -1810,12 +1817,15 @@ noinst_HEADERS = \
 	rgw/rgw_client_io.h\
 	rgw/rgw_fcgi.h\
 	rgw/rgw_xml.h\
+	rgw/rgw_json.h\
 	rgw/rgw_cache.h\
 	rgw/rgw_common.h\
+	rgw/rgw_string.h\
 	rgw/rgw_formats.h\
 	rgw/rgw_html_errors.h\
 	rgw/rgw_log.h\
 	rgw/rgw_multi.h\
+	rgw/rgw_policy_s3.h\
 	rgw/rgw_gc.h\
 	rgw/rgw_multi_del.h\
 	rgw/rgw_op.h\
