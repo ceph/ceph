@@ -156,6 +156,12 @@ You may set values for the following keys:
 :Description: Sets the number of replicas for objects in the pool. See `Set the Number of Object Replicas`_ for further details.
 :Type: Integer
 
+``min_size``
+
+:Description: Sets the minimum number of replicas required for io.  See `Set the Number of Object Replicas`_ for further details
+:Type: Integer
+
+.. note: Version ``0.54`` and above
 
 ``crash_replay_interval``
 
@@ -216,6 +222,18 @@ For example::
 	ceph osd pool set data size 3
 
 You may execute this command for each pool. 
+
+Note, however, that pool size is more of a best-effort setting: an object
+might accept ios in degraded mode with fewer than size replicas.  To
+set a minimum number of required replicas for io, you should use the
+min_size setting.
+
+For example::
+
+  ceph osd pool set data min_size 2
+
+This ensures that no object in the data pool will receive io with fewer than
+min_size replicas.
 
 
 Get the Number of Object Replicas
