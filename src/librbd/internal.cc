@@ -587,8 +587,7 @@ namespace librbd {
       return r;
     notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
 
-    parent_spec pspec(ictx->md_ctx.get_id(), ictx->id,
-				  ictx->snap_id);
+    parent_spec pspec(ictx->md_ctx.get_id(), ictx->id, snap_id);
     // search all pools for children depending on this snapshot
     Rados rados(ictx->md_ctx);
     std::list<std::string> pools;
