@@ -1009,6 +1009,12 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
       perfcounter->inc(l_objectcacher_cache_bytes_miss, bytes_not_in_cache);
       perfcounter->inc(l_objectcacher_cache_ops_miss);
     }
+    if (onfinish) {
+      ldout(cct, 20) << "readx defer " << rd << dendl;
+    } else {
+      ldout(cct, 20) << "readx drop " << rd << " (no complete, but no waiter)" << dendl;
+      delete rd;
+    }
     return 0;  // wait!
   }
   if (perfcounter && external_call) {
@@ -1042,11 +1048,13 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
   // done with read.
   delete rd;
 
-  trim();
-
+  int ret = error ? error : pos;
+  ldout(cct, 20) << "readx done " << rd << " " << ret << dendl;
   assert(pos <= (uint64_t) INT_MAX);
 
-  return error ? error : pos;
+  trim();
+
+  return ret;
 }
 
 
