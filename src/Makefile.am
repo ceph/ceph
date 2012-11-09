@@ -144,7 +144,7 @@ bin_PROGRAMS += librados-config
 
 # synthetic client
 ceph_syn_SOURCES = ceph_syn.cc client/SyntheticClient.cc
-ceph_syn_LDADD = libclient.la libosdc.la $(LIBGLOBAL_LDA)
+ceph_syn_LDADD = libclient.la $(LIBGLOBAL_LDA)
 bin_PROGRAMS += ceph-syn
 
 base: ceph-mon ceph-osd ceph-mds \
@@ -158,7 +158,7 @@ base: ceph-mon ceph-osd ceph-mds \
 # fuse targets?
 if WITH_FUSE
 ceph_fuse_SOURCES = ceph_fuse.cc client/fuse_ll.cc
-ceph_fuse_LDADD = -lfuse libclient.la libosdc.la $(LIBGLOBAL_LDA)
+ceph_fuse_LDADD = -lfuse libclient.la $(LIBGLOBAL_LDA)
 ceph_fuse_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += ceph-fuse
 
@@ -288,13 +288,10 @@ noinst_LIBRARIES =
 
 # libcephfs
 libcephfs_la_SOURCES = \
-	libcephfs.cc \
-	client/Client.cc \
-	client/Inode.cc \
-	client/MetaRequest.cc
+	libcephfs.cc
 libcephfs_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libcephfs_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libcephfs_la_LIBADD = libosdc.la
+libcephfs_la_LIBADD = libclient.la
 libcephfs_la_LDFLAGS =  $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(EXTRALIBS) \
             ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
 lib_LTLIBRARIES += libcephfs.la
