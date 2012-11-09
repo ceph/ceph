@@ -2603,6 +2603,7 @@ void Client::remove_cap(Cap *cap)
   }
   assert(in->caps.count(mds));
   in->caps.erase(mds);
+  delete cap;
 
   if (!in->is_any_caps()) {
     ldout(cct, 15) << "remove_cap last one, closing snaprealm " << in->snaprealm << dendl;
