@@ -185,6 +185,38 @@ class CephManager:
             )
         return proc.stdout.getvalue()
 
+    def get_pg_primary(self, pool, pgnum):
+        """
+        get primary for pool, pgnum (e.g. (data, 0)->0
+        """
+        poolnum = self.get_pool_num(pool)
+        output = self.raw_cluster_cmd("pg", "dump", '--format=json')
+        j = json.loads('\n'.join(output.split('\n')[1:]))
+        pg_str = "%d.%d" % (poolnum, pgnum)
+        for pg in j['pg_stats']:
+            if pg['pgid'] == pg_str:
+                return int(pg['acting'][0])
+        assert False
+
+    def get_pool_num(self, pool):
+        """
+        get number for pool (e.g., data -> 2)
+        """
+        out = self.raw_cluster_cmd('--', 'osd','dump','--format=json')
+        j = json.loads('\n'.join(out.split('\n')[1:]))
+        for i in j['pools']:
+            if i['pool_name'] == pool:
+                return int(i['pool'])
+        assert False
+
+    def set_config(self, osdnum, **argdict):
+        return self.raw_cluster_cmd(
+            'tell', "osd.%d"%(int(osdnum),),
+            'injectargs',
+            " ".join(
+                [("--" + conf.replace("_", "-") + " " + str(val)) for (conf,val) in 
+                 argdict.iteritems()]))
+
     def raw_cluster_status(self):
         return self.raw_cluster_cmd('-s')
 
