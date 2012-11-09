@@ -2235,14 +2235,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
 
   /* Convert all times go GMT to make them compatible */
   if (mod_ptr || unmod_ptr) {
-    struct tm mtm;
-    struct tm *gmtm = gmtime_r(&astate->mtime, &mtm);
-    if (!gmtm) {
-       ldout(cct, 0) << "NOTICE: could not get translate mtime for object" << dendl;
-       r = -EINVAL;
-       goto done_err;
-    }
-    ctime = mktime(gmtm);
+    ctime = astate->mtime;
 
     if (mod_ptr) {
       ldout(cct, 10) << "If-Modified-Since: " << *mod_ptr << " Last-Modified: " << ctime << dendl;
