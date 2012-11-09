@@ -290,6 +290,7 @@ if [ "$start_mon" -eq 1 ]; then
 [global]
         osd pg bits = 3
         osd pgp bits = 5  ; (invalid, but ceph should cope!)
+        osd pool default min size = 1
 EOF
 			[ "$cephx" -eq 1 ] && cat<<EOF >> $conf
         auth supported = cephx
