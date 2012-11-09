@@ -1247,8 +1247,13 @@ void OSDMap::dump(Formatter *f) const
 
   f->open_array_section("pools");
   for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
+    std::string name("<unknown>");
+    map<int64_t,string>::const_iterator pni = pool_name.find(p->first);
+    if (pni != pool_name.end())
+      name = pni->second;
     f->open_object_section("pool");
     f->dump_int("pool", p->first);
+    f->dump_string("pool_name", name);
     p->second.dump(f);
     f->close_section();
   }
