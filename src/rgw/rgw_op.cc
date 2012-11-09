@@ -1807,23 +1807,6 @@ int RGWCompleteMultipart::verify_permission()
   return 0;
 }
 
-static string string_unquote(const string& s)
-{
-  if (s[0] != '"' || s.size() < 2)
-    return s;
-
-  int len;
-  for (len = s.size(); len > 2; --len) {
-    if (s[len - 1] != ' ')
-      break;
-  }
-
-  if (s[len-1] != '"')
-    return s;
-
-  return s.substr(1, len - 2);
-}
-
 void RGWCompleteMultipart::execute()
 {
   RGWMultiCompleteUpload *parts;
@@ -1889,7 +1872,7 @@ void RGWCompleteMultipart::execute()
       ret = -ERR_INVALID_PART;
       return;
     }
-    string part_etag = string_unquote(iter->second);
+    string part_etag = rgw_string_unquote(iter->second);
     if (part_etag.compare(obj_iter->second.etag) != 0) {
       ldout(s->cct, 0) << "NOTICE: etag mismatch: part: " << iter->first << " etag: " << iter->second << dendl;
       ret = -ERR_INVALID_PART;
