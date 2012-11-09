@@ -116,6 +116,17 @@ int RGWRadosParams::init(CephContext *cct, RGWRados *store)
   return 0;
 }
 
+void RGWObjManifest::append(RGWObjManifest& m)
+{
+  map<uint64_t, RGWObjManifestPart>::iterator iter;
+  uint64_t base = obj_size;
+  for (iter = m.objs.begin(); iter != m.objs.end(); ++iter) {
+    RGWObjManifestPart& part = iter->second;
+    objs[base + iter->first] = part;
+  }
+  obj_size += m.obj_size;
+}
+
 class RGWWatcher : public librados::WatchCtx {
   RGWRados *rados;
 public:
