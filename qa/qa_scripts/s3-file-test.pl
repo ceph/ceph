@@ -143,7 +143,7 @@ print "adding file to bucket: $mytestfilename\n";
 print "Downloading $mytestfilename to temp file: /tmp/downloadfilepurgeme...";
   $response = $bucket->get_key_filename( $mytestfilename, 'GET', '/tmp/downloadfilepurgeme' )
       or die $s3->err . ": " . $s3->errstr;
-  $logmsg =  "file dowloaded";
+  $logmsg =  "file downloaded";
   _write_log_entry($logmsg);
 
 
