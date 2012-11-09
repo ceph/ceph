@@ -1982,7 +1982,7 @@ void Client::put_cap_ref(Inode *in, int cap)
 }
 
 
-int Client::get_caps(Inode *in, int need, int want, int *got, loff_t endoff)
+int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
 {
   while (1) {
     if (endoff > 0 &&
@@ -2009,7 +2009,7 @@ int Client::get_caps(Inode *in, int need, int want, int *got, loff_t endoff)
 		 << " but not " << ccap_string(butnot) << " revoking " << ccap_string(revoking)
 		 << dendl;
 	if ((revoking & butnot) == 0) {
-	  *got = need | (have & want);
+	  *phave = need | (have & want);
 	  in->get_cap_ref(need);
 	  return 0;
 	}
@@ -5140,8 +5140,8 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
 
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
-  int got;
-  int r = get_caps(in, CEPH_CAP_FILE_RD, CEPH_CAP_FILE_CACHE, &got, -1);
+  int have;
+  int r = get_caps(in, CEPH_CAP_FILE_RD, CEPH_CAP_FILE_CACHE, &have, -1);
   if (r < 0)
     return r;
 
@@ -5152,7 +5152,7 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
     movepos = true;
   }
 
-  if (got & CEPH_CAP_FILE_CACHE)
+  if (have & CEPH_CAP_FILE_CACHE)
     r = _read_async(f, offset, size, bl);
   else
     r = _read_sync(f, offset, size, bl);
@@ -5428,14 +5428,14 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   bl.push_back( bp );
 
   uint64_t endoff = offset + size;
-  int got;
-  int r = get_caps(in, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER, &got, endoff);
+  int have;
+  int r = get_caps(in, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER, &have, endoff);
   if (r < 0)
     return r;
 
   ldout(cct, 10) << " snaprealm " << *in->snaprealm << dendl;
 
-  if (cct->_conf->client_oc && (got & CEPH_CAP_FILE_BUFFER)) {
+  if (cct->_conf->client_oc && (have & CEPH_CAP_FILE_BUFFER)) {
     // do buffered write
     if (!in->oset.dirty_or_tx)
       get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
