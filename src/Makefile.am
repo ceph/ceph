@@ -43,7 +43,7 @@ check-local:
 	$(srcdir)/test/encoding/check-generated.sh
 	$(srcdir)/test/encoding/readable.sh ../ceph-object-corpus
 
-EXTRALIBS = -luuid
+EXTRALIBS = -luuid -lboost_thread
 if FREEBSD
 EXTRALIBS += -lexecinfo
 endif
@@ -207,12 +207,15 @@ test_ioctls_SOURCES = client/test_ioctls.c
 bin_DEBUGPROGRAMS += test_ioctls
 
 dupstore_SOURCES = dupstore.cc
+dupstore_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 dupstore_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 streamtest_SOURCES = streamtest.cc
+streamtest_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 streamtest_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += dupstore streamtest
 
 test_trans_SOURCES = test_trans.cc
+test_trans_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 test_trans_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += test_trans
 
@@ -362,6 +365,7 @@ radosgw_SOURCES = \
         rgw/rgw_rest_swift.cc \
         rgw/rgw_rest_s3.cc \
         rgw/rgw_rest_usage.cc \
+        rgw/rgw_http_client.cc \
         rgw/rgw_swift.cc \
 	rgw/rgw_swift_auth.cc \
 	rgw/rgw_main.cc
@@ -920,7 +924,7 @@ bin_DEBUGPROGRAMS += test_libcephfs
 test_filestore_SOURCES = test/filestore/store_test.cc
 test_filestore_LDFLAGS = ${AM_LDFLAGS}
 test_filestore_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-test_filestore_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE)
+test_filestore_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE) ${CRYPTO_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_filestore
 
 test_filestore_workloadgen_SOURCES = \
@@ -928,11 +932,12 @@ test_filestore_workloadgen_SOURCES = \
      test/filestore/TestFileStoreState.cc
 test_filestore_workloadgen_LDFLAGS = ${AM_LDFLAGS}
 test_filestore_workloadgen_LDADD =  $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+test_filestore_workloadgen_CXXFLAGS =  ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_filestore_workloadgen
 
 test_filestore_idempotent_SOURCES = test/filestore/test_idempotent.cc test/filestore/FileStoreTracker.cc test/common/ObjectContents.cc
 test_filestore_idempotent_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-test_filestore_idempotent_CXXFLAGS =  $(LEVELDB_INCLUDE)
+test_filestore_idempotent_CXXFLAGS =  ${CRYPTO_CXXFLAGS} $(LEVELDB_INCLUDE)
 bin_DEBUGPROGRAMS += test_filestore_idempotent
 
 test_filestore_idempotent_sequence_SOURCES = \
@@ -940,13 +945,14 @@ test_filestore_idempotent_sequence_SOURCES = \
      test/filestore/DeterministicOpSequence.cc \
      test/filestore/TestFileStoreState.cc \
      test/filestore/FileStoreDiff.cc
+test_filestore_idempotent_sequence_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 test_filestore_idempotent_sequence_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += test_filestore_idempotent_sequence
 
 xattr_bench_SOURCES = test/xattr_bench.cc
 xattr_bench_LDFLAGS = ${AM_LDFLAGS}
 xattr_bench_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-xattr_bench_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}  $(LEVELDB_INCLUDE)
+xattr_bench_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}  $(LEVELDB_INCLUDE) ${CRYPTO_CXXFLAGS}
 bin_DEBUGPROGRAMS += xattr_bench
 
 test_filejournal_SOURCES = test/test_filejournal.cc
@@ -964,13 +970,13 @@ bin_DEBUGPROGRAMS += test_stress_watch
 test_object_map_SOURCES = test/ObjectMap/test_object_map.cc test/ObjectMap/KeyValueDBMemory.cc os/DBObjectMap.cc os/LevelDBStore.cc
 test_object_map_LDFLAGS = ${AM_LDFLAGS}
 test_object_map_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-test_object_map_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE)
+test_object_map_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE) ${CRYPTO_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_object_map
 
 test_keyvaluedb_atomicity_SOURCES = test/ObjectMap/test_keyvaluedb_atomicity.cc os/LevelDBStore.cc
 test_keyvaluedb_atomicity_LDFLAGS = ${AM_LDFLAGS}
 test_keyvaluedb_atomicity_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-test_keyvaluedb_atomicity_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE)
+test_keyvaluedb_atomicity_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE) ${CRYPTO_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_keyvaluedb_atomicity
 
 test_keyvaluedb_iterators_SOURCES = test/ObjectMap/test_keyvaluedb_iterators.cc \
@@ -978,7 +984,7 @@ test_keyvaluedb_iterators_SOURCES = test/ObjectMap/test_keyvaluedb_iterators.cc 
                                     os/LevelDBStore.cc
 test_keyvaluedb_iterators_LDFLAGS = ${AM_LDFLAGS}
 test_keyvaluedb_iterators_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-test_keyvaluedb_iterators_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE)
+test_keyvaluedb_iterators_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE) ${CRYPTO_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_keyvaluedb_iterators
 
 test_cfuse_cache_invalidate_SOURCES = test/test_cfuse_cache_invalidate.cc
@@ -1255,6 +1261,7 @@ libcommon_files = \
 	common/hex.cc \
 	common/entity_name.cc \
 	common/ceph_crypto.cc \
+	common/ceph_crypto_cms.cc \
 	common/ipaddr.cc \
 	common/pick_address.cc \
 	include/addr_parsing.c \
@@ -1490,6 +1497,7 @@ noinst_HEADERS = \
         common/config_obs.h\
 	common/config_opts.h\
 	common/ceph_crypto.h\
+	common/ceph_crypto_cms.h\
 	common/utf8.h\
 	common/mime.h\
 	common/pick_address.h\
@@ -1829,6 +1837,7 @@ noinst_HEADERS = \
 	rgw/rgw_gc.h\
 	rgw/rgw_multi_del.h\
 	rgw/rgw_op.h\
+	rgw/rgw_http_client.h\
 	rgw/rgw_swift.h\
 	rgw/rgw_swift_auth.h\
 	rgw/rgw_rados.h\
