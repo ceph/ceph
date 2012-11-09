@@ -5,12 +5,15 @@ TLIB=binary/usr/local/lib
 
 echo "starting libcephfs-java tests"
 
+export LD_LIBRARY_PATH=$BASE/$TLIB 
+command="java -DCEPH_CONF_FILE=$BASE/ceph.conf -Djava.library.path=$LD_LIBRARY_PATH -cp /usr/share/java/junit4.jar:$BASE/$TLIB/libcephfs.jar:$BASE/$TLIB/libcephfs-test.jar org.junit.runner.JUnitCore com.ceph.fs.CephAllTests"
+
 echo "----------------------"
-echo java -DCEPH_CONF_FILE=$BASE/ceph.conf -Djava.library.path=$BASE/$TLIB/libcephfs.so:$BASE/$TLIB/libcephfs_jni.so:$BASE/$TLIB -cp /home/buck/git/ceph/src/java/lib/junit-4.8.2.jar:$BASE/$TLIB/libcephfs.jar:$BASE/$TLIB/libcephfs-test.jar org.junit.runner.JUnitCore com.ceph.fs.CephAllTests
+echo $command
 echo "----------------------"
 
-java -DCEPH_CONF_FILE=$BASE/ceph.conf -Djava.library.path=$BASE/$TLIB/libcephfs.so:$BASE/$TLIB/libcephfs_jni.so:$BASE/$TLIB -cp /home/buck/git/ceph/src/java/lib/junit-4.8.2.jar:$BASE/$TLIB/libcephfs.jar:$BASE/$TLIB/libcephfs-test.jar org.junit.runner.JUnitCore com.ceph.fs.CephAllTests
+$command
 
-echo "completing libcephfs-java tests"
+echo "completed libcephfs-java tests"
 
 exit 0
