@@ -12,6 +12,8 @@
  *
  */
 
+#include "common/config.h"
+#include "common/ceph_context.h"
 #include "ceph_crypto.h"
 #include "auth/Crypto.h"
 
@@ -21,7 +23,7 @@
 void ceph::crypto::shutdown();
 
 #ifdef USE_CRYPTOPP
-void ceph::crypto::init()
+void ceph::crypto::init(CephContext *cct)
 {
 }
 
@@ -36,10 +38,14 @@ ceph::crypto::HMACSHA1::~HMACSHA1()
 
 #elif USE_NSS
 
-void ceph::crypto::init()
+void ceph::crypto::init(CephContext *cct)
 {
   SECStatus s;
-  s = NSS_NoDB_Init(NULL);
+  if (cct->_conf->nss_db_path.empty()) {
+    s = NSS_NoDB_Init(NULL);
+  } else {
+    s = NSS_Init(cct->_conf->nss_db_path.c_str());
+  }
   assert(s == SECSuccess);
 }
 
