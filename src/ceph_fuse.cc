@@ -166,12 +166,15 @@ int main(int argc, const char **argv, const char *envp[]) {
     messenger->wait();
   out_messenger_start_failed:
     delete client;
-    
+
     if (g_conf->daemonize) {
       //cout << "child signalling parent with " << r << std::endl;
       static int foo = 0;
       foo += ::write(fd[1], &r, sizeof(r));
     }
+
+    delete messenger;
+    g_ceph_context->put();
 
     //cout << "child done" << std::endl;
     return r;
