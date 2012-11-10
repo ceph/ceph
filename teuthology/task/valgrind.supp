@@ -35,3 +35,10 @@
 	fun:_dl_lookup_symbol_x
 	...
 }
+{
+	libfuse leak
+	Memcheck:Leak
+	...
+	fun:fuse_parse_cmdline
+	...
+}
