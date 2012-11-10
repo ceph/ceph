@@ -650,6 +650,7 @@ done:
   if (ch)
     fuse_unmount(mountpoint, ch);
   fuse_opt_free_args(&args);
+  free(newargv);
   //cout << "ceph_fuse_ll_main done, err=" << err << std::endl;
   return ret;
 }

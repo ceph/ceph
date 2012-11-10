@@ -66,7 +66,9 @@ int main(int argc, const char **argv, const char *envp[]) {
   }
 
   // args for fuse
-  vec_to_argv(args, argc, argv);
+  const char **newargv;
+  int newargc;
+  vec_to_argv(argv[0], args, &newargc, &newargv);
 
   // FUSE will chdir("/"); be ready.
   g_ceph_context->_conf->set_val("chdir", "/");
@@ -152,7 +154,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     }
     
     cerr << "ceph-fuse[" << getpid() << "]: starting fuse" << std::endl;
-    r = ceph_fuse_ll_main(client, argc, argv, fd[1]);
+    r = ceph_fuse_ll_main(client, newargc, newargv, fd[1]);
     cerr << "ceph-fuse[" << getpid() << "]: fuse finished with error " << r << std::endl;
     
     client->unmount();
@@ -166,12 +168,16 @@ int main(int argc, const char **argv, const char *envp[]) {
     messenger->wait();
   out_messenger_start_failed:
     delete client;
-    
+
     if (g_conf->daemonize) {
       //cout << "child signalling parent with " << r << std::endl;
       static int foo = 0;
       foo += ::write(fd[1], &r, sizeof(r));
     }
+
+    delete messenger;
+    g_ceph_context->put();
+    free(newargv);
 
     //cout << "child done" << std::endl;
     return r;
