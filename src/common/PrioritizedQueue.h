@@ -52,7 +52,7 @@ class PrioritizedQueue {
     unsigned ret = 0;
     for (typename list<pair<unsigned, T> >::iterator i = l->begin();
 	 i != l->end();
-      ) {
+	 ) {
       if (f(i->second)) {
 	l->erase(i++);
 	ret++;
@@ -137,14 +137,16 @@ class PrioritizedQueue {
 	cur = q.begin();
     }
     void remove_by_class(K k) {
-      if (!q.count(k))
+      typename map<K, list<pair<unsigned, T> > >::iterator i = q.find(k);
+      if (i == q.end())
 	return;
-      size -= q[k].size();
-      if (cur == q.find(k))
+      size -= i->second.size();
+      if (i == cur) {
 	++cur;
-      q.erase(k);
-      if (cur == q.end())
-	cur = q.begin();
+	if (cur == q.end())
+	  cur = q.begin();
+      }
+      q.erase(i);
     }
   };
   map<unsigned, SubQueue> high_queue;
