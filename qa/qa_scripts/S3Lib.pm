@@ -9,10 +9,50 @@ package S3Lib;
 use Cwd;
 use Exporter;
 @ISA = 'Exporter';
-@EXPORT_OK = qw(get_hostname get_user_info $rgw_user delete_user _write_log_entry _exit_result get_status);
+@EXPORT_OK = qw(display_ceph_os_info get_timestamp get_hostname get_user_info $rgw_user delete_user _write_log_entry _exit_result get_status);
 
 #==variables ===
 my $rgw_user = "qa_user";
+my $sec;
+my $min;
+my $hour;
+my $mon;
+my $year;
+my $mday;
+my $wday;
+my $yday;
+my $isdst;
+
+# function to get the current time stamp from the test set up
+sub get_timestamp {
+   ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
+   if ($mon < 10) { $mon = "0$mon"; }
+   if ($hour < 10) { $hour = "0$hour"; }
+   if ($min < 10) { $min = "0$min"; }
+   if ($sec < 10) { $sec = "0$sec"; }
+   $year=$year+1900;
+   return $year . '_' . $mon . '_' . $mday . '__' . $hour . '_' . $min . '_' . $sec;
+}
+
+# Function to get the Ceph and distro info
+sub ceph_os_info
+{
+        my $ceph_v = get_command_output ( "ceph -v" );
+        my @ceph_arr = split(" ",$ceph_v);
+        $ceph_v = "Ceph Version:   $ceph_arr[2]";
+        my $os_distro = get_command_output ( "lsb_release -d" );
+        my @os_arr = split(":",$os_distro);
+        $os_distro = "Linux Flavor:$os_arr[1]";
+        return ($ceph_v, $os_distro);
+}
+
+# Function to log ceph info to log file
+sub display_ceph_os_info
+{
+        my ($vceph, $vos) = ceph_os_info();
+        my $msg = "The Tests are running on";
+        _write_log_entry ( "$msg\n$vos$vceph" );
+}
 
 # function to execute the command and return output
 sub get_cmd_op
@@ -54,12 +94,19 @@ sub _write_log_entry {
     close(TC);
 }
 
-# Function that creates the test_completed.txt as required by xstudio run at the end of the test
+# Function that creates the test_completed.txt and reports success/failure to log.txt as required by xstudio run at the end of the test
 
 sub _exit_result {
     my $exit_status = shift;
+    my $REPORT_LOG = "SUCCESS";
     open (TCOMP, '>>test_completed.txt');
     close (TCOMP);
+    if ($exit_status != 0) {
+	$REPORT_LOG = "FAILURE";
+    }
+    open(TC,'>>log.txt');
+    print TC "[$REPORT_LOG]\n";
+    close(TC);
     exit($exit_status);
 }
 
@@ -116,3 +163,4 @@ sub get_hostname
     chomp($get_host);
     return($get_host);
 }
+1;
