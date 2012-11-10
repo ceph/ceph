@@ -693,6 +693,7 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
     ldout(cct, 7) << "bh_write_commit no object cache" << dendl;
   } else {
     Object *ob = objects[poolid][oid];
+    int was_dirty_or_tx = ob->oset->dirty_or_tx;
     
     // apply to bh's!
     for (map<loff_t, BufferHead*>::iterator p = ob->data.lower_bound(start);
@@ -752,6 +753,7 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
 
     // is the entire object set now clean?
     if (flush_set_callback &&
+	was_dirty_or_tx > 0 &&
 	oset->dirty_or_tx == 0) {        // nothing dirty/tx
       flush_set_callback(flush_set_callback_arg, oset);      
     }
@@ -999,6 +1001,12 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
       perfcounter->inc(l_objectcacher_cache_bytes_miss, bytes_not_in_cache);
       perfcounter->inc(l_objectcacher_cache_ops_miss);
     }
+    if (onfinish) {
+      ldout(cct, 20) << "readx defer " << rd << dendl;
+    } else {
+      ldout(cct, 20) << "readx drop " << rd << " (no complete, but no waiter)" << dendl;
+      delete rd;
+    }
     return 0;  // wait!
   }
   if (perfcounter && external_call) {
@@ -1032,11 +1040,13 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
   // done with read.
   delete rd;
 
-  trim();
-
+  int ret = error ? error : pos;
+  ldout(cct, 20) << "readx done " << rd << " " << ret << dendl;
   assert(pos <= (uint64_t) INT_MAX);
 
-  return error ? error : pos;
+  trim();
+
+  return ret;
 }
 
 
