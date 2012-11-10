@@ -36,6 +36,13 @@
 	...
 }
 {
+	deliberate onexit leak
+	Memcheck:Leak
+	...
+	fun:*set_flush_on_exit*
+	...
+}
+{
 	libfuse leak
 	Memcheck:Leak
 	...
