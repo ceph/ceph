@@ -399,7 +399,7 @@ inline ostream& operator<<(ostream& out, const si_t& b)
     return out << (b.v >> 20) << "M";
   if (b.v > bump_after << 10)
     return out << (b.v >> 10) << "K";
-  return out;
+  return out << b.v;
 }
 
 struct kb_t {
