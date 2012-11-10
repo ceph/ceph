@@ -38,7 +38,7 @@ def task(ctx, config):
         - ceph:
         - ceph-fuse:
             client.0:
-              valgrind: --tool=memcheck
+              valgrind: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
         - interactive:
 
     """
@@ -50,6 +50,9 @@ def task(ctx, config):
                   for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client'))
     elif isinstance(config, list):
         config = dict((name, None) for name in config)
+
+    overrides = ctx.config.get('overrides', {})
+    teuthology.deep_merge(config, overrides.get('ceph-fuse', {}))
 
     clients = list(teuthology.get_clients(ctx=ctx, roles=config.keys()))
 
