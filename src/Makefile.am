@@ -265,17 +265,17 @@ test_librgw_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += test_librgw_build
 
 test_libcephfs_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files) \
-			    $(libcephfs_la_SOURCES) $(libosdc_la_SOURCES)
-test_libcephfs_build_LDADD = -lexpat $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+			    $(libosdc_la_SOURCES)
+test_libcephfs_build_LDADD = libcephfs.la -lexpat $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 test_libcephfs_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += test_libcephfs_build
 endif
 
 if WITH_HADOOPCLIENT
 test_libhadoopcephfs_build_SOURCES = test/test_libcommon_build.cc \
-         $(libhadoopcephfs_la_SOURCES) $(libcephfs_la_SOURCES) \
+         $(libhadoopcephfs_la_SOURCES) \
 	 $(libosdc_la_SOURCES) $(libcommon_files)
-test_libhadoopcephfs_build_LDADD = -lexpat $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+test_libhadoopcephfs_build_LDADD = libcephfs.la -lexpat $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 test_libhadoopcephfs_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += test_libhadoopcephfs_build
 endif
