@@ -78,20 +78,17 @@ void argv_to_vec(int argc, const char **argv,
     args.push_back(argv[i]);
 }
 
-void vec_to_argv(std::vector<const char*>& args,
-                 int& argc, const char **&argv)
+void vec_to_argv(const char *argv0, std::vector<const char*>& args,
+                 int *argc, const char ***argv)
 {
-  const char *myname = "asdf";
-  if (argc && argv)
-    myname = argv[0];
-  argv = (const char**)malloc(sizeof(char*) * argc);
+  *argv = (const char**)malloc(sizeof(char*) * (args.size() + 1));
   if (!argv)
     throw bad_alloc();
-  argc = 1;
-  argv[0] = myname;
+  *argc = 1;
+  (*argv)[0] = argv0;
 
   for (unsigned i=0; i<args.size(); i++)
-    argv[argc++] = args[i];
+    (*argv)[(*argc)++] = args[i];
 }
 
 bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec)

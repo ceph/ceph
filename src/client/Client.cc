@@ -318,6 +318,7 @@ void Client::shutdown()
   ldout(cct, 1) << "shutdown" << dendl;
 
   if (ino_invalidate_cb) {
+    ldout(cct, 10) << "shutdown stopping invalidator finisher" << dendl;
     async_ino_invalidator.wait_for_empty();
     async_ino_invalidator.stop();
   }
@@ -1124,7 +1125,7 @@ int Client::make_request(MetaRequest *request,
 
   // got it!
   MClientReply *reply = request->reply;
-  request->reply = 0;
+  request->reply = NULL;
   if (ptarget)
     *ptarget = request->target;
 
@@ -1481,6 +1482,7 @@ void Client::handle_client_reply(MClientReply *reply)
   }
   
   int mds = reply->get_source().num();
+  assert(request->reply == NULL);
   request->reply = reply;
   insert_trace(request, mds);
 
@@ -1986,7 +1988,7 @@ void Client::put_cap_ref(Inode *in, int cap)
 }
 
 
-int Client::get_caps(Inode *in, int need, int want, int *got, loff_t endoff)
+int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
 {
   while (1) {
     if (endoff > 0 &&
@@ -2013,7 +2015,7 @@ int Client::get_caps(Inode *in, int need, int want, int *got, loff_t endoff)
 		 << " but not " << ccap_string(butnot) << " revoking " << ccap_string(revoking)
 		 << dendl;
 	if ((revoking & butnot) == 0) {
-	  *got = need | (have & want);
+	  *phave = need | (have & want);
 	  in->get_cap_ref(need);
 	  return 0;
 	}
@@ -2603,12 +2605,13 @@ void Client::remove_cap(Cap *cap)
   }
   assert(in->caps.count(mds));
   in->caps.erase(mds);
+  delete cap;
 
   if (!in->is_any_caps()) {
     ldout(cct, 15) << "remove_cap last one, closing snaprealm " << in->snaprealm << dendl;
+    in->snaprealm_item.remove_myself();
     put_snap_realm(in->snaprealm);
     in->snaprealm = 0;
-    in->snaprealm_item.remove_myself();
   }
 }
 
@@ -2824,21 +2827,27 @@ SnapRealm *Client::get_snap_realm(inodeno_t r)
   SnapRealm *realm = snap_realms[r];
   if (!realm)
     snap_realms[r] = realm = new SnapRealm(r);
+  ldout(cct, 20) << "get_snap_realm " << r << " " << realm << " " << realm->nref << " -> " << (realm->nref + 1) << dendl;
   realm->nref++;
   return realm;
 }
 
 SnapRealm *Client::get_snap_realm_maybe(inodeno_t r)
 {
-  if (snap_realms.count(r) == 0)
+  if (snap_realms.count(r) == 0) {
+    ldout(cct, 20) << "get_snap_realm_maybe " << r << " fail" << dendl;
     return NULL;
+  }
   SnapRealm *realm = snap_realms[r];
+  ldout(cct, 20) << "get_snap_realm_maybe " << r << " " << realm << " " << realm->nref << " -> " << (realm->nref + 1) << dendl;
   realm->nref++;
   return realm;
 }
 
 void Client::put_snap_realm(SnapRealm *realm)
 {
+  ldout(cct, 20) << "put_snap_realm " << realm->ino << " " << realm
+		 << " " << realm->nref << " -> " << (realm->nref - 1) << dendl;
   if (--realm->nref == 0) {
     snap_realms.erase(realm->ino);
     delete realm;
@@ -5272,8 +5281,8 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
 
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
-  int got;
-  int r = get_caps(in, CEPH_CAP_FILE_RD, CEPH_CAP_FILE_CACHE, &got, -1);
+  int have;
+  int r = get_caps(in, CEPH_CAP_FILE_RD, CEPH_CAP_FILE_CACHE, &have, -1);
   if (r < 0)
     return r;
 
@@ -5284,7 +5293,7 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
     movepos = true;
   }
 
-  if (got & CEPH_CAP_FILE_CACHE)
+  if (have & CEPH_CAP_FILE_CACHE)
     r = _read_async(f, offset, size, bl);
   else
     r = _read_sync(f, offset, size, bl);
@@ -5309,7 +5318,7 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
   f->last_pos = offset+bl->length();
 
   // done!
-  put_cap_ref(in, got);
+  put_cap_ref(in, CEPH_CAP_FILE_RD);
   return r;
 }
 
@@ -5561,14 +5570,14 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   bl.push_back( bp );
 
   uint64_t endoff = offset + size;
-  int got;
-  int r = get_caps(in, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER, &got, endoff);
+  int have;
+  int r = get_caps(in, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER, &have, endoff);
   if (r < 0)
     return r;
 
   ldout(cct, 10) << " snaprealm " << *in->snaprealm << dendl;
 
-  if (cct->_conf->client_oc && (got & CEPH_CAP_FILE_BUFFER)) {
+  if (cct->_conf->client_oc && (have & CEPH_CAP_FILE_BUFFER)) {
     // do buffered write
     if (!in->oset.dirty_or_tx)
       get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
@@ -5841,6 +5850,9 @@ int Client::ll_statfs(vinodeno_t vino, struct statvfs *stbuf)
 void Client::ll_register_ino_invalidate_cb(client_ino_callback_t cb, void *handle)
 {
   Mutex::Locker l(client_lock);
+  ldout(cct, 10) << "ll_register_ino_invalidate_cb cb " << (void*)cb << " p " << (void*)handle << dendl;
+  if (cb == NULL)
+    return;
   ino_invalidate_cb = cb;
   ino_invalidate_cb_handle = handle;
   async_ino_invalidator.start();

@@ -115,6 +115,10 @@ bool Inode::put_cap_ref(int cap)
   while (cap) {
     if (cap & 1) {
       int c = 1 << n;
+      if (cap_refs[c] <= 0) {
+	lderr(cct) << "put_cap_ref " << ccap_string(c) << " went negative on " << *this << dendl;
+	assert(cap_refs[c] > 0);
+      }
       if (--cap_refs[c] == 0)
 	last = true;      
       //cout << "inode " << *this << " put " << cap_string(c) << " " << (cap_refs[c]+1) << " -> " << cap_refs[c] << std::endl;

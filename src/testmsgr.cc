@@ -80,8 +80,6 @@ int main(int argc, const char **argv, const char *envp[]) {
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  vec_to_argv(args, argc, argv);
-
   dout(0) << "i am mon " << args[0] << dendl;
 
   // get monmap
