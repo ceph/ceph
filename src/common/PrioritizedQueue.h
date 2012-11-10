@@ -150,11 +150,12 @@ class PrioritizedQueue {
   map<unsigned, SubQueue> high_queue;
   map<unsigned, SubQueue> queue;
 
-  void create_queue(unsigned priority) {
-    if (queue.count(priority))
-      return;
-    queue[priority];
+  SubQueue *create_queue(unsigned priority) {
+    typename map<unsigned, SubQueue>::iterator p = queue.find(priority);
+    if (p != queue.end())
+      return &p->second;
     total_priority += priority;
+    return &queue[priority];
   }
 
   void remove_queue(unsigned priority) {
@@ -256,13 +257,11 @@ public:
   }
 
   void enqueue(K cl, unsigned priority, unsigned cost, T item) {
-    create_queue(priority);
-    queue[priority].enqueue(cl, cost, item);
+    create_queue(priority)->enqueue(cl, cost, item);
   }
 
   void enqueue_front(K cl, unsigned priority, unsigned cost, T item) {
-    create_queue(priority);
-    queue[priority].enqueue_front(cl, cost, item);
+    create_queue(priority)->enqueue_front(cl, cost, item);
   }
 
   bool empty() {
