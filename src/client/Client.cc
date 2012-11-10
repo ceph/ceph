@@ -20,6 +20,7 @@
 #include <time.h>
 #include <utime.h>
 #include <sys/stat.h>
+#include <sys/param.h>
 #include <fcntl.h>
 
 #include <sys/statvfs.h>
@@ -3736,7 +3737,8 @@ int Client::path_walk(const filepath& origpath, Inode **final, bool followsym)
 
   ldout(cct, 10) << "path_walk " << path << dendl;
 
-  set<Inode*,Inode::Compare> visited;
+  int symlinks = 0;
+
   unsigned i=0;
   while (i < path.depth() && cur) {
     const string &dname = path[i];
@@ -3749,15 +3751,13 @@ int Client::path_walk(const filepath& origpath, Inode **final, bool followsym)
     // only follow trailing symlink if followsym.  always follow
     // 'directory' symlinks.
     if (next && next->is_symlink()) {
-      ldout(cct, 20) << " symlink value is '" << next->symlink << "'" << dendl;
-      if (i < path.depth() - 1) {
-	// check for loops
-	if (visited.find(next) != visited.end()) {
-	  // already hit this one, return error
-	  return -ELOOP;
-	}
-	visited.insert(next);
+      symlinks++;
+      ldout(cct, 20) << " symlink count " << symlinks << ", value is '" << next->symlink << "'" << dendl;
+      if (symlinks > MAXSYMLINKS) {
+	return -ELOOP;
+      }
 
+      if (i < path.depth() - 1) {
 	// dir symlink
 	// replace consumed components of path with symlink dir target
 	filepath resolved(next->symlink.c_str());
