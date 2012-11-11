@@ -4,3 +4,6 @@ overrides:
       mon: [--tool=memcheck]
       osd: [--tool=memcheck]
       mds: [--tool=memcheck]
+  ceph-fuse:
+    client.0:
+      valgrind: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
