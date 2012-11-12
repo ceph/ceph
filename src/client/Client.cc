@@ -397,6 +397,11 @@ void Client::shutdown()
 {
   ldout(cct, 1) << "shutdown" << dendl;
 
+  AdminSocket* admin_socket = cct->get_admin_socket();
+  admin_socket->unregister_command("mds_requests");
+  admin_socket->unregister_command("mds_sessions");
+  admin_socket->unregister_command("dump_cache");
+
   if (ino_invalidate_cb) {
     ldout(cct, 10) << "shutdown stopping invalidator finisher" << dendl;
     async_ino_invalidator.wait_for_empty();
