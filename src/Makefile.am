@@ -1349,7 +1349,9 @@ noinst_LTLIBRARIES += libosdc.la
 libclient_la_SOURCES = \
 	client/Client.cc \
 	client/Inode.cc \
+	client/Dentry.cc \
 	client/MetaRequest.cc \
+	client/SnapRealm.cc \
 	client/Trace.cc
 libclient_la_LIBADD = libosdc.la $(LIBEDIT_LIBS)
 noinst_LTLIBRARIES += libclient.la
