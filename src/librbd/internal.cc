@@ -1720,6 +1720,9 @@ reprotect_and_return_err:
 	   ProgressContext &prog_ctx)
   {
     CephContext *cct = (CephContext *)dest_md_ctx.cct();
+    ldout(cct, 20) << "copy " << src->name
+		   << (src->snap_name.length() ? "@" + src->snap_name : "")
+		   << " -> " << destname << dendl;
     int order = src->order;
 
     src->md_lock.Lock();
