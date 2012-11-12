@@ -504,7 +504,7 @@ public class CephMount {
    * @param path File path.
    * @param name Name of the attribute.
    * @param buf Buffer to store attribute value.
-   * @param The length of the attribute value. See description for more
+   * @return The length of the attribute value. See description for more
    * details.
    */
   public long getxattr(String path, String name, byte[] buf) throws FileNotFoundException {
@@ -521,7 +521,7 @@ public class CephMount {
    *
    * @param path File path.
    * @param name Name of attribute.
-   * @param nuf Buffer to store attribute value.
+   * @param buf Buffer to store attribute value.
    * @return The length of the attribute value. See description for more
    * details.
    */
