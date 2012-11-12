@@ -78,6 +78,7 @@ namespace librbd {
 				       cct->_conf->rbd_cache_target_dirty,
 				       cct->_conf->rbd_cache_max_dirty_age);
       object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
+      object_set->return_enoent = true;
       object_cacher->start();
     }
   }
