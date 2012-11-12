@@ -96,7 +96,7 @@ static void usage()
   cout << "  ceph osd blacklist rm <address>[:source_port]\n";
   cout << "  ceph osd pool mksnap <pool> <snapname>\n";
   cout << "  ceph osd pool rmsnap <pool> <snapname>\n";
-  cout << "  ceph osd pool create <pool> [<pg_num> [<pgp_num>]]\n";
+  cout << "  ceph osd pool create <pool> <pg_num> [<pgp_num>]\n";
   cout << "  ceph osd pool delete <pool>\n";
   cout << "  ceph osd pool rename <pool> <new pool name>\n";
   cout << "  ceph osd pool set <pool> <field> <value>\n";
