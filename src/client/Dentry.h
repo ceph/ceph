@@ -38,6 +38,8 @@ class Dentry : public LRUObject {
     if (ref == 0)
       delete this;
   }
+
+  void dump(Formatter *f) const;
   
   Dentry() : dir(0), inode(0), ref(1), offset(0), lease_mds(-1), lease_gen(0), lease_seq(0), cap_shared_gen(0) { }
 private:
