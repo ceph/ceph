@@ -535,6 +535,7 @@ void ObjectCacher::close_object(Object *ob)
   // ok!
   ob_lru.lru_remove(ob);
   objects[ob->oloc.pool].erase(ob->get_soid());
+  ob->set_item.remove_myself();
   delete ob;
 }
 
