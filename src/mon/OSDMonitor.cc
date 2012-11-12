@@ -2561,27 +2561,30 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  }
 	}
       }
-      else if (m->cmd[2] == "create" && m->cmd.size() >= 4) {
+      else if (m->cmd[2] == "create" && m->cmd.size() >= 3) {
+	if (m->cmd.size() < 5) {
+	  ss << "usage: osd pool create <poolname> <pg_num> [pgp_num]";
+	  err = -EINVAL;
+	  goto out;
+	}
         int pg_num = 0;
         int pgp_num = 0;
-        if (m->cmd.size() > 4) { // try to parse out pg_num and pgp_num
-          const char *start = m->cmd[4].c_str();
-          char *end = (char*)start;
-          pgp_num = pg_num = strtol(start, &end, 10);
-          if (*end != '\0') { // failed to parse
-            err = -EINVAL;
-            ss << "usage: osd pool create <poolname> [pg_num [pgp_num]]";
-            goto out;
-          } else if (m->cmd.size() > 5) { // check for pgp_num too
-            start = m->cmd[5].c_str();
-            end = (char *)start;
-            pgp_num = strtol(start, &end, 10);
-            if (*end != '\0') { // failed to parse
-              err = -EINVAL;
-              ss << "usage: osd pool create <poolname> [pg_num [pgp_num]]";
-              goto out;
-            }
-          }
+	const char *start = m->cmd[4].c_str();
+	char *end = (char*)start;
+	pgp_num = pg_num = strtol(start, &end, 10);
+	if (*end != '\0') { // failed to parse
+	  err = -EINVAL;
+	  ss << "usage: osd pool create <poolname> <pg_num> [pgp_num]";
+	  goto out;
+	} else if (m->cmd.size() > 5) { // check for pgp_num too
+	  start = m->cmd[5].c_str();
+	  end = (char *)start;
+	  pgp_num = strtol(start, &end, 10);
+	  if (*end != '\0') { // failed to parse
+	    err = -EINVAL;
+	    ss << "usage: osd pool create <poolname> <pg_num> [pgp_num]";
+	    goto out;
+	  }
         }
 
 	if (osdmap.name_pool.count(m->cmd[3])) {
