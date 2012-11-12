@@ -642,15 +642,26 @@ TEST(LibCephFS, LoopSyms) {
 
   ASSERT_EQ(ceph_mkdir(cmount, test_dir2, 0700), 0);
 
+  // symlink it itself:  /path/to/mysym -> /path/to/mysym
   char test_symdir[256];
   sprintf(test_symdir, "/dir1_loopsym_%d/loop_dir/symdir", getpid());
 
-  ASSERT_EQ(ceph_symlink(cmount, test_dir2, test_symdir), 0);
+  ASSERT_EQ(ceph_symlink(cmount, test_symdir, test_symdir), 0);
 
   char test_file[256];
   sprintf(test_file, "/dir1_loopsym_%d/loop_dir/symdir/test_loopsym_file", getpid());
   int fd = ceph_open(cmount, test_file, O_CREAT|O_RDWR, 0600);
   ASSERT_EQ(fd, -ELOOP);
+
+  // loop: /a -> /b, /b -> /c, /c -> /a
+  char a[256], b[256], c[256];
+  sprintf(a, "/%s/a", test_dir1);
+  sprintf(b, "/%s/b", test_dir1);
+  sprintf(c, "/%s/c", test_dir1);
+  ASSERT_EQ(ceph_symlink(cmount, a, b), 0);
+  ASSERT_EQ(ceph_symlink(cmount, b, c), 0);
+  ASSERT_EQ(ceph_symlink(cmount, c, a), 0);
+  ASSERT_EQ(ceph_open(cmount, a, O_RDWR, 0), -ELOOP);
 
   ceph_shutdown(cmount);
 }
