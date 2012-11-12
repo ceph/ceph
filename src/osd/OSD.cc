@@ -912,15 +912,6 @@ int OSD::init()
   // tick
   timer.add_event_after(g_conf->osd_heartbeat_interval, new C_Tick(this));
 
-#if 0
-  int ret = monc->start_auth_rotating(ename, KEY_ROTATE_TIME);
-  if (ret < 0) {
-    dout(0) << "could not start rotating keys, err=" << ret << dendl;
-    return ret;
-  }
-  dout(0) << "started rotating keys" << dendl;
-#endif
-
   admin_ops_hook = new OpsFlightSocketHook(this);
   AdminSocket *admin_socket = cct->get_admin_socket();
   r = admin_socket->register_command("dump_ops_in_flight", admin_ops_hook,
