@@ -712,7 +712,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   dev_path(dev), journal_path(jdev),
   dispatch_running(false),
   osd_compat(get_osd_compat_set()),
-  state(STATE_BOOTING), boot_epoch(0), up_epoch(0), bind_epoch(0),
+  state(STATE_INITIALIZING), boot_epoch(0), up_epoch(0), bind_epoch(0),
   op_tp(external_messenger->cct, "OSD::op_tp", g_conf->osd_op_threads, "osd_op_threads"),
   recovery_tp(external_messenger->cct, "OSD::recovery_tp", g_conf->osd_recovery_threads, "osd_recovery_threads"),
   disk_tp(external_messenger->cct, "OSD::disk_tp", g_conf->osd_disk_threads, "osd_disk_threads"),
@@ -901,20 +901,6 @@ int OSD::init()
   // tell monc about log_client so it will know about mon session resets
   monc->set_log_client(&clog);
 
-  osd_lock.Unlock();
-
-  r = monc->authenticate();
-  if (r < 0) {
-    monc->shutdown();
-    store->umount();
-    osd_lock.Lock(); // locker is going to unlock this on function exit
-    return r;
-  }
-
-  monc->wait_auth_rotating(30.0);
-
-  osd_lock.Lock();
-
   op_tp.start();
   recovery_tp.start();
   disk_tp.start();
@@ -947,6 +933,24 @@ int OSD::init()
   service.init();
   service.publish_map(osdmap);
   service.publish_superblock(superblock);
+
+  osd_lock.Unlock();
+
+  r = monc->authenticate();
+  if (r < 0) {
+    monc->shutdown();
+    store->umount();
+    osd_lock.Lock(); // locker is going to unlock this on function exit
+    return r;
+  }
+
+  while (monc->wait_auth_rotating(30.0) < 0) {
+    derr << "unable to obtain rotating service keys; retrying" << dendl;
+  }
+
+  state = STATE_BOOTING;
+
+  osd_lock.Lock();
   return 0;
 }
 
@@ -2393,6 +2397,11 @@ void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
 {
   Mutex::Locker l(osd_lock);
   dout(10) << "_maybe_boot mon has osdmaps " << oldest << ".." << newest << dendl;
+
+  if (is_initializing()) {
+    dout(10) << "still initializing" << dendl;
+    return;
+  }
 
   // if our map within recent history, try to add ourselves to the osdmap.
   if (osdmap->test_flag(CEPH_OSDMAP_NOUP)) {
