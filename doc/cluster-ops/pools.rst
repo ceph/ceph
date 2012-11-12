@@ -52,7 +52,7 @@ Create a Pool
 
 To create a pool, execute:: 
 
-	ceph osd pool create {pool-name} [{pg-num}] [{pgp-num}]
+	ceph osd pool create {pool-name} {pg-num} [{pgp-num}]
 
 Where: 
 

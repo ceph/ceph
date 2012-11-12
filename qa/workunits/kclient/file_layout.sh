@@ -51,7 +51,7 @@ sudo ls /sys/kernel/debug/ceph
 sudo ls /sys/kernel/debug/ceph/\* || true
 sudo bash -c 'ls /sys/kernel/debug/ceph/*' || true
 sudo bash -c 'cat /sys/kernel/debug/ceph/*/mdsmap' > temp
-ceph osd pool create newpool || true
+ceph osd pool create newpool 2 || true
 ceph mds add_data_pool 3 || true
 sudo bash -c 'cat /sys/kernel/debug/ceph/*/mdsmap' > temp2
 while diff -q temp2 temp
