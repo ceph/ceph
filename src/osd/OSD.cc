@@ -3137,12 +3137,12 @@ void OSD::do_waiters()
 
     finished_lock.Unlock();
     
-    dout(2) << "do_waiters -- start" << dendl;
+    dout(10) << "do_waiters -- start" << dendl;
     for (list<OpRequestRef>::iterator it = waiting.begin();
          it != waiting.end();
          it++)
       dispatch_op(*it);
-    dout(2) << "do_waiters -- finish" << dendl;
+    dout(10) << "do_waiters -- finish" << dendl;
   }
 }
 
