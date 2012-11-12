@@ -479,6 +479,7 @@ namespace librbd {
 	return -ENOENT;
 
       parent_spec our_pspec;
+      Mutex::Locker l3(ictx->parent_lock);
       r = ictx->get_parent_spec(snap_id, &our_pspec);
       if (r < 0) {
 	lderr(ictx->cct) << "snap_remove: can't get parent spec" << dendl;
@@ -1226,13 +1227,11 @@ reprotect_and_return_err:
       parent_info parent_info = ictx->parent_md;
       ictx->parent_lock.Unlock();
 
-      if (scan_for_parents(ictx, parent_info.spec, CEPH_NOSNAP) == -ENOENT) {
-	r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
-				     parent_info.spec, id);
-	if (r < 0 && r != -ENOENT) {
-	  lderr(cct) << "error removing child from children list" << dendl;
-	  return r;
-	}
+      r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
+				   parent_info.spec, id);
+      if (r < 0 && r != -ENOENT) {
+	lderr(cct) << "error removing child from children list" << dendl;
+	return r;
       }
       close_image(ictx);
 
