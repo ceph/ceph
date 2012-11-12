@@ -673,8 +673,12 @@ reprotect_and_return_err:
     // make sure it doesn't already exist, in either format
     int r = detect_format(io_ctx, imgname, NULL, NULL);
     if (r != -ENOENT) {
-      lderr(cct) << "Could not tell if " << imgname << " already exists" << dendl;
-      return r;
+      if (r) {
+	lderr(cct) << "Could not tell if " << imgname << " already exists" << dendl;
+	return r;
+      }
+      lderr(cct) << "rbd image " << imgname << " already exists" << dendl;
+      return -EEXIST;
     }
 
     if (!order)
