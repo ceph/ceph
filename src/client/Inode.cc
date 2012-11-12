@@ -1,8 +1,11 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #include "MetaSession.h"
 #include "Inode.h"
 #include "Dentry.h"
 #include "Dir.h"
+#include "SnapRealm.h"
 
 ostream& operator<<(ostream &out, Inode &in)
 {
@@ -297,4 +300,196 @@ bool Inode::check_mode(uid_t ruid, gid_t rgid, gid_t *sgids, int sgids_count, ui
   }
 
   return (mode & fmode) == fmode;
+}
+
+
+void Inode::dump(Formatter *f) const
+{
+  f->dump_stream("ino") << ino;
+  f->dump_stream("snapid") << snapid;
+  if (rdev)
+    f->dump_unsigned("rdev", rdev);
+  f->dump_stream("ctime") << ctime;
+  f->dump_stream("mode") << '0' << std::oct << mode << std::dec;
+  f->dump_unsigned("uid", uid);
+  f->dump_unsigned("gid", gid);
+  f->dump_unsigned("nlink", nlink);
+
+  f->dump_int("size", size);
+  f->dump_int("max_size", max_size);
+  f->dump_int("truncate_seq", truncate_seq);
+  f->dump_int("truncate_size", truncate_size);
+  f->dump_stream("mtime") << mtime;
+  f->dump_stream("atime") << atime;
+  f->dump_int("time_warp_seq", time_warp_seq);
+
+  f->open_object_section("layout");
+  ::dump(layout, f);
+  f->close_section();
+  if (is_dir()) {
+    f->open_object_section("dir_layout");
+    ::dump(dir_layout, f);
+    f->close_section();
+
+    /* FIXME when wip-mds-encoding is merged ***
+    f->open_object_section("dir_stat");
+    dirstat.dump(f);
+    f->close_section();
+
+    f->open_object_section("rstat");
+    rstat.dump(f);
+    f->close_section();
+    */
+  }
+
+  f->dump_unsigned("version", version);
+  f->dump_unsigned("xattr_version", xattr_version);
+  f->dump_unsigned("flags", flags);
+
+  if (is_dir()) {
+    if (!dir_contacts.empty()) {
+      f->open_object_section("dir_contants");
+      for (set<int>::iterator p = dir_contacts.begin(); p != dir_contacts.end(); ++p)
+	f->dump_int("mds", *p);
+      f->close_section();
+    }
+    f->dump_int("dir_hashed", (int)dir_hashed);
+    f->dump_int("dir_replicated", (int)dir_replicated);
+  }
+
+  f->open_array_section("caps");
+  for (map<int,Cap*>::const_iterator p = caps.begin(); p != caps.end(); ++p) {
+    f->open_object_section("cap");
+    f->dump_int("mds", p->first);
+    if (p->second == auth_cap)
+      f->dump_int("auth", 1);
+    p->second->dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  if (auth_cap)
+    f->dump_int("auth_cap", auth_cap->session->mds_num);
+
+  f->dump_stream("dirty_caps") << ccap_string(dirty_caps);
+  if (flushing_caps) {
+    f->dump_stream("flushings_caps") << ccap_string(flushing_caps);
+    f->dump_unsigned("flushing_cap_seq", flushing_cap_seq);
+    f->open_object_section("flushing_cap_tid");
+    for (unsigned bit = 0; bit < CEPH_CAP_BITS; bit++) {
+      if (flushing_caps & (1 << bit)) {
+	string n(ccap_string(1 << bit));
+	f->dump_unsigned(n.c_str(), flushing_cap_tid[bit]);
+      }
+    }
+    f->close_section();
+  }
+  f->dump_int("shared_gen", shared_gen);
+  f->dump_int("cache_gen", cache_gen);
+  if (snap_caps) {
+    f->dump_int("snap_caps", snap_caps);
+    f->dump_int("snap_cap_refs", snap_cap_refs);
+  }
+  if (exporting_issued || exporting_mseq) {
+    f->dump_stream("exporting_issued") << ccap_string(exporting_issued);
+    f->dump_int("exporting_mseq", exporting_mds);
+  }
+
+  f->dump_stream("hold_caps_until") << hold_caps_until;
+  f->dump_unsigned("last_flush_tid", last_flush_tid);
+
+  if (snaprealm) {
+    f->open_object_section("snaprealm");
+    snaprealm->dump(f);
+    f->close_section();
+  }
+  if (!cap_snaps.empty()) {
+    for (map<snapid_t,CapSnap*>::const_iterator p = cap_snaps.begin(); p != cap_snaps.end(); ++p) {
+      f->open_object_section("cap_snap");
+      f->dump_stream("follows") << p->first;
+      p->second->dump(f);
+      f->close_section();
+    }
+  }
+
+  // open
+  if (!open_by_mode.empty()) {
+    f->open_array_section("open_by_mode");
+    for (map<int,int>::const_iterator p = open_by_mode.begin(); p != open_by_mode.end(); ++p) {
+      f->open_object_section("ref");
+      f->dump_unsigned("mode", p->first);
+      f->dump_unsigned("refs", p->second);
+      f->close_section();
+    }
+    f->close_section();
+  }
+  if (!cap_refs.empty()) {
+    f->open_array_section("cap_refs");
+    for (map<int,int>::const_iterator p = cap_refs.begin(); p != cap_refs.end(); ++p) {
+      f->open_object_section("cap_ref");
+      f->dump_stream("cap") << ccap_string(p->first);
+      f->dump_int("refs", p->second);
+      f->close_section();
+    }
+    f->close_section();
+  }
+
+  f->dump_unsigned("reported_size", reported_size);
+  if (wanted_max_size != max_size)
+    f->dump_unsigned("wanted_max_size", wanted_max_size);
+  if (requested_max_size != max_size)
+    f->dump_unsigned("requested_max_size", requested_max_size);
+
+  f->dump_int("ref", _ref);
+  f->dump_int("ll_ref", ll_ref);
+
+  if (!dn_set.empty()) {
+    f->open_array_section("parents");
+    for (set<Dentry*>::const_iterator p = dn_set.begin(); p != dn_set.end(); ++p) {
+      f->open_object_section("dentry");
+      f->dump_stream("dir_ino") << (*p)->dir->parent_inode->ino;
+      f->dump_string("name", (*p)->name);
+      f->close_section();
+    }
+    f->close_section();
+  }
+}
+
+void Cap::dump(Formatter *f) const
+{
+  f->dump_int("mds", session->mds_num);
+  f->dump_stream("ino") << inode->ino;
+  f->dump_unsigned("cap_id", cap_id);
+  f->dump_stream("issued") << ccap_string(issued);
+  if (implemented != issued)
+    f->dump_stream("implemented") << ccap_string(implemented);
+  f->dump_stream("wanted") << ccap_string(wanted);
+  f->dump_unsigned("seq", seq);
+  f->dump_unsigned("issue_seq", issue_seq);
+  f->dump_unsigned("mseq", mseq);
+  f->dump_unsigned("gen", gen);
+}
+
+void CapSnap::dump(Formatter *f) const
+{
+  f->dump_stream("ino") << in->ino;
+  f->dump_stream("issued") << ccap_string(issued);
+  f->dump_stream("dirty") << ccap_string(dirty);
+  f->dump_unsigned("size", size);
+  f->dump_stream("ctime") << ctime;
+  f->dump_stream("mtime") << mtime;
+  f->dump_stream("atime") << atime;
+  f->dump_int("time_warp_seq", time_warp_seq);
+  f->dump_stream("mode") << '0' << std::oct << mode << std::dec;
+  f->dump_unsigned("uid", uid);
+  f->dump_unsigned("gid", gid);
+  if (!xattrs.empty()) {
+    f->open_object_section("xattr_lens");
+    for (map<string,bufferptr>::const_iterator p = xattrs.begin(); p != xattrs.end(); ++p)
+      f->dump_int(p->first.c_str(), p->second.length());
+    f->close_section();
+  }
+  f->dump_unsigned("xattr_version", xattr_version);
+  f->dump_int("writing", (int)writing);
+  f->dump_int("dirty_data", (int)dirty_data);
+  f->dump_unsigned("flush_tid", flush_tid);
 }

@@ -370,8 +370,8 @@ protected:
   void trim_dentry(Dentry *dn);
   void trim_caps(int mds, int max);
   
-  void dump_inode(Inode *in, set<Inode*>& did, bool disconnected);
-  void dump_cache();  // debug
+  void dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconnected);
+  void dump_cache(Formatter *f);  // debug
   
   // trace generation
   ofstream traceout;
