@@ -272,6 +272,9 @@ void Striper::StripedReadResult::assemble_result(CephContext *cct, bufferlist& b
   uint64_t end = p->first + p->second.second;
   while (p != partial.rend()) {
     // sanity check
+    ldout(cct, 20) << "assemble_result(" << this << ") " << p->first << "~" << p->second.second
+		   << " " << p->second.first.length() << " bytes"
+		   << dendl;
     assert(p->first == end - p->second.second);
     end = p->first;
 
