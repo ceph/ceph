@@ -44,9 +44,14 @@ def get_ceph_binary_url(package=None,
 
         sha1_url = urlparse.urljoin(BASE, 'ref/{ref}/sha1'.format(ref=ref))
         log.debug('Translating ref to sha1 using url %s', sha1_url)
-        sha1_fp = urllib2.urlopen(sha1_url)
-        sha1 = sha1_fp.read().rstrip('\n')
-        sha1_fp.close()
+
+        try:
+            sha1_fp = urllib2.urlopen(sha1_url)
+            sha1 = sha1_fp.read().rstrip('\n')
+            sha1_fp.close()
+        except urllib2.HTTPError as e:
+            log.error('Failed to get url %s', sha1_url)
+            raise e
 
     log.debug('Using %s %s sha1 %s', package, format, sha1)
     bindir_url = urlparse.urljoin(BASE, 'sha1/{sha1}/'.format(sha1=sha1))
