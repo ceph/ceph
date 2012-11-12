@@ -926,52 +926,51 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
     Object *o = get_object(soid, oset, ex_it->oloc);
 
     // does not exist and no hits?
-    if (!o->exists) {
+    if (oset->return_enoent && !o->exists) {
       // WARNING: we can only meaningfully return ENOENT if the read request
       // passed in a single ObjectExtent.  Any caller who wants ENOENT instead of
       // zeroed buffers needs to feed single extents into readx().
-      if (rd->extents.size() == 1) {
-	ldout(cct, 10) << "readx  object !exists, 1 extent..." << dendl;
+      assert(rd->extents.size() == 1);
+      ldout(cct, 10) << "readx  object !exists, 1 extent..." << dendl;
 
-	// should we worry about COW underneaeth us?
-	if (writeback_handler.may_copy_on_write(soid.oid, ex_it->offset, ex_it->length, soid.snap)) {
-	  ldout(cct, 20) << "readx  may copy on write" << dendl;
-	  bool wait = false;
-	  for (map<loff_t, BufferHead*>::iterator bh_it = o->data.begin();
-	       bh_it != o->data.end();
-	       bh_it++) {
-	    BufferHead *bh = bh_it->second;
-	    if (bh->is_dirty() || bh->is_tx()) {
-	      ldout(cct, 10) << "readx  flushing " << *bh << dendl;
-	      wait = true;
-	      if (bh->is_dirty())
-		bh_write(bh);
-	    }
-	  }
-	  if (wait) {
-	    ldout(cct, 10) << "readx  waiting on tid " << o->last_write_tid << " on " << *o << dendl;
-	    o->waitfor_commit[o->last_write_tid].push_back(new C_RetryRead(this, rd, oset, onfinish));
-	    // FIXME: perfcounter!
-	    return 0;
-	  }
-	}
-
-	// can we return ENOENT?
-	bool allzero = true;
+      // should we worry about COW underneaeth us?
+      if (writeback_handler.may_copy_on_write(soid.oid, ex_it->offset, ex_it->length, soid.snap)) {
+	ldout(cct, 20) << "readx  may copy on write" << dendl;
+	bool wait = false;
 	for (map<loff_t, BufferHead*>::iterator bh_it = o->data.begin();
 	     bh_it != o->data.end();
 	     bh_it++) {
-	  ldout(cct, 20) << "readx  ob has bh " << *bh_it->second << dendl;
-	  if (!bh_it->second->is_zero() && !bh_it->second->is_rx()) {
-	    allzero = false;
-	    break;
+	  BufferHead *bh = bh_it->second;
+	  if (bh->is_dirty() || bh->is_tx()) {
+	    ldout(cct, 10) << "readx  flushing " << *bh << dendl;
+	    wait = true;
+	    if (bh->is_dirty())
+	      bh_write(bh);
 	  }
 	}
-	if (allzero) {
-	  ldout(cct, 10) << "readx  ob has all zero|rx, returning ENOENT" << dendl;
-	  delete rd;
-	  return -ENOENT;
+	if (wait) {
+	  ldout(cct, 10) << "readx  waiting on tid " << o->last_write_tid << " on " << *o << dendl;
+	  o->waitfor_commit[o->last_write_tid].push_back(new C_RetryRead(this, rd, oset, onfinish));
+	  // FIXME: perfcounter!
+	  return 0;
 	}
+      }
+
+      // can we return ENOENT?
+      bool allzero = true;
+      for (map<loff_t, BufferHead*>::iterator bh_it = o->data.begin();
+	   bh_it != o->data.end();
+	   bh_it++) {
+	ldout(cct, 20) << "readx  ob has bh " << *bh_it->second << dendl;
+	if (!bh_it->second->is_zero() && !bh_it->second->is_rx()) {
+	  allzero = false;
+	  break;
+	}
+      }
+      if (allzero) {
+	ldout(cct, 10) << "readx  ob has all zero|rx, returning ENOENT" << dendl;
+	delete rd;
+	return -ENOENT;
       }
     }
 
