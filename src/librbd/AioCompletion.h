@@ -86,15 +86,9 @@ namespace librbd {
       get();
     }
 
-    void finish_adding_requests() {
-      lock.Lock();
-      assert(building);
-      building = false;
-      if (!pending_count) {
-	complete();
-      }
-      lock.Unlock();
-    }
+    void finalize(CephContext *cct, ssize_t rval);
+
+    void finish_adding_requests(CephContext *cct);
 
     void init_time(ImageCtx *i, aio_type_t t) {
       ictx = i;

@@ -19,6 +19,10 @@ class ObjecterWriteback : public WritebackHandler {
 				  trunc_size, trunc_seq, onfinish);
   }
 
+  virtual bool may_copy_on_write(const object_t& oid, uint64_t read_off, uint64_t read_len, snapid_t snapid) {
+    return false;
+  }
+
   virtual tid_t write(const object_t& oid, const object_locator_t& oloc,
 		      uint64_t off, uint64_t len, const SnapContext& snapc,
 		      const bufferlist &bl, utime_t mtime, uint64_t trunc_size,

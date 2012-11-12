@@ -405,6 +405,15 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len)
 {
   ldout(oc->cct, 10) << "discard " << *this << " " << off << "~" << len << dendl;
 
+  if (!exists) {
+    ldout(oc->cct, 10) << " setting exists on " << *this << dendl;
+    exists = true;
+  }
+  if (complete) {
+    ldout(oc->cct, 10) << " clearing complete on " << *this << dendl;
+    complete = false;
+  }
+
   map<loff_t, BufferHead*>::iterator p = data_lower_bound(off);
   while (p != data.end()) {
     BufferHead *bh = p->second;
@@ -579,8 +588,25 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
     Object *ob = objects[poolid][oid];
     
     if (r == -ENOENT && !ob->complete) {
-      ldout(cct, 7) << "bh_read_finish ENOENT, marking complete on " << *ob << dendl;
+      ldout(cct, 7) << "bh_read_finish ENOENT, marking complete and !exists on " << *ob << dendl;
       ob->complete = true;
+      ob->exists = false;
+
+      // wake up *all* rx waiters, or else we risk reordering identical reads. e.g.
+      //   read 1~1
+      //   reply to unrelated 3~1 -> !exists
+      //   read 1~1 -> immediate ENOENT
+      //   reply to first 1~1 -> ooo ENOENT
+      for (map<loff_t, BufferHead*>::iterator p = ob->data.begin(); p != ob->data.end(); ++p) {
+	BufferHead *bh = p->second;
+	if (!bh->is_rx())
+	  continue;
+	for (map<loff_t, list<Context*> >::iterator p = bh->waitfor_read.begin();
+	     p != bh->waitfor_read.end();
+	     p++)
+	  ls.splice(ls.end(), p->second);
+	bh->waitfor_read.clear();
+      }
     }
 
     // apply to bh's!
@@ -612,22 +638,6 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
       assert(opos >= bh->start());
       assert(bh->start() == opos);   // we don't merge rx bh's... yet!
       assert(bh->length() <= start+(loff_t)length-opos);
-      
-      bh->bl.substr_of(bl,
-                       opos-bh->start(),
-                       bh->length());
-
-      if (r < 0 && r != -ENOENT) {
-	mark_error(bh);
-	bh->error = r;
-      } else {
-	mark_clean(bh);
-      }
-
-      ldout(cct, 10) << "bh_read_finish read " << *bh << dendl;
-      
-      opos = bh->end();
-      p++;
 
       // finishers?
       for (map<loff_t, list<Context*> >::iterator p = bh->waitfor_read.begin();
@@ -637,6 +647,29 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
       bh->waitfor_read.clear();
       if (bh->error < 0)
 	err = bh->error;
+
+      loff_t oldpos = opos;
+      opos = bh->end();
+
+      if (r == -ENOENT) {
+	ldout(cct, 10) << "bh_read_finish removing " << *bh << dendl;
+	p++;
+	bh_remove(ob, bh);
+	continue;
+      }
+
+      if (r < 0) {
+	bh->error = r;
+	mark_error(bh);
+      } else {
+	bh->bl.substr_of(bl,
+			 oldpos-bh->start(),
+			 bh->length());
+	mark_clean(bh);
+      }
+
+      ldout(cct, 10) << "bh_read_finish read " << *bh << dendl;
+      p++;
 
       ob->try_merge_bh(bh);
     }
@@ -665,6 +698,7 @@ void ObjectCacher::bh_write(BufferHead *bh)
 				      bh->snapc, bh->bl, bh->last_write,
 				      oset->truncate_size, oset->truncate_seq,
 				      oncommit);
+  ldout(cct, 20) << " tid " << tid << " on " << bh->ob->get_oid() << dendl;
 
   // set bh last_write_tid
   oncommit->tid = tid;
@@ -695,6 +729,16 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
     Object *ob = objects[poolid][oid];
     int was_dirty_or_tx = ob->oset->dirty_or_tx;
     
+    if (!ob->exists) {
+      ldout(cct, 10) << "bh_write_commit marking exists on " << *ob << dendl;
+      ob->exists = true;
+
+      if (writeback_handler.may_copy_on_write(ob->get_oid(), start, length, ob->get_snap())) {
+	ldout(cct, 10) << "bh_write_commit may copy on write, clearing complete on " << *ob << dendl;
+	ob->complete = false;
+      }
+    }
+
     // apply to bh's!
     for (map<loff_t, BufferHead*>::iterator p = ob->data.lower_bound(start);
          p != ob->data.end();
@@ -880,7 +924,57 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
     // get Object cache
     sobject_t soid(ex_it->oid, rd->snap);
     Object *o = get_object(soid, oset, ex_it->oloc);
-    
+
+    // does not exist and no hits?
+    if (!o->exists) {
+      // WARNING: we can only meaningfully return ENOENT if the read request
+      // passed in a single ObjectExtent.  Any caller who wants ENOENT instead of
+      // zeroed buffers needs to feed single extents into readx().
+      if (rd->extents.size() == 1) {
+	ldout(cct, 10) << "readx  object !exists, 1 extent..." << dendl;
+
+	// should we worry about COW underneaeth us?
+	if (writeback_handler.may_copy_on_write(soid.oid, ex_it->offset, ex_it->length, soid.snap)) {
+	  ldout(cct, 20) << "readx  may copy on write" << dendl;
+	  bool wait = false;
+	  for (map<loff_t, BufferHead*>::iterator bh_it = o->data.begin();
+	       bh_it != o->data.end();
+	       bh_it++) {
+	    BufferHead *bh = bh_it->second;
+	    if (bh->is_dirty() || bh->is_tx()) {
+	      ldout(cct, 10) << "readx  flushing " << *bh << dendl;
+	      wait = true;
+	      if (bh->is_dirty())
+		bh_write(bh);
+	    }
+	  }
+	  if (wait) {
+	    ldout(cct, 10) << "readx  waiting on tid " << o->last_write_tid << " on " << *o << dendl;
+	    o->waitfor_commit[o->last_write_tid].push_back(new C_RetryRead(this, rd, oset, onfinish));
+	    // FIXME: perfcounter!
+	    return 0;
+	  }
+	}
+
+	// can we return ENOENT?
+	bool allzero = true;
+	for (map<loff_t, BufferHead*>::iterator bh_it = o->data.begin();
+	     bh_it != o->data.end();
+	     bh_it++) {
+	  ldout(cct, 20) << "readx  ob has bh " << *bh_it->second << dendl;
+	  if (!bh_it->second->is_zero() && !bh_it->second->is_rx()) {
+	    allzero = false;
+	    break;
+	  }
+	}
+	if (allzero) {
+	  ldout(cct, 10) << "readx  ob has all zero|rx, returning ENOENT" << dendl;
+	  delete rd;
+	  return -ENOENT;
+	}
+      }
+    }
+
     // map extent into bufferheads
     map<loff_t, BufferHead*> hits, missing, rx, errors;
     o->map_read(rd, hits, missing, rx, errors);
@@ -1490,6 +1584,10 @@ loff_t ObjectCacher::release(Object *ob)
   if (ob->complete) {
     ldout(cct, 10) << "release clearing complete on " << *ob << dendl;
     ob->complete = false;
+  }
+  if (!ob->exists) {
+    ldout(cct, 10) << "release setting exists on " << *ob << dendl;
+    ob->exists = true;
   }
 
   return o_unclean;
