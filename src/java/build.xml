@@ -6,6 +6,7 @@
 	<property name="src.dir" location="java" />
 	<property name="doc.dir" location="doc" />
 	<property name="test.dir" location="test" />
+	<property name="src.dir" location="src" />
 
     <property environment="env"/>
 
@@ -24,9 +25,6 @@
 	<target name="docs" depends="makedir">
 		<javadoc packagenames="src" sourcepath="${src.dir}" destdir="${doc.dir}">
 			<fileset dir="${src.dir}">
-                <include name="**/*.java" />
-			</fileset>
-			<fileset dir="${test.dir}">
                 <include name="**/*.java" />
 			</fileset>
 		</javadoc>
