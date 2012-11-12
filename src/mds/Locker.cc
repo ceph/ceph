@@ -778,7 +778,8 @@ bool Locker::eval(CInode *in, int mask)
     } else
       dout(10) << "eval doesn't want loner" << dendl;
   }
-    
+
+ retry:
   if (mask & CEPH_LOCK_IFILE)
     eval_any(&in->filelock, &need_issue);
   if (mask & CEPH_LOCK_IAUTH)
@@ -800,6 +801,16 @@ bool Locker::eval(CInode *in, int mask)
     if (in->try_drop_loner()) {
       dout(10) << "  dropped loner" << dendl;
       need_issue = true;
+
+      if (in->get_wanted_loner() >= 0) {
+	if (in->try_set_loner()) {
+	  dout(10) << "eval end set loner to client." << in->get_loner() << dendl;
+	  mask = -1;
+	  goto retry;
+	} else {
+	  dout(10) << "eval want loner client." << in->get_wanted_loner() << " but failed to set it" << dendl;
+	}
+      }
     }
   }
 
@@ -4001,11 +4012,11 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
     in->get_caps_issued(&loner_issued, &other_issued, &xlocker_issued, CEPH_CAP_SFILE);
 
     if (!((loner_wanted|loner_issued) & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GBUFFER)) ||
-	 (other_wanted & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GBUFFER|CEPH_CAP_GRD|CEPH_CAP_GCACHE)) ||
+	 (other_wanted & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GRD)) ||
 	(in->inode.is_dir() && in->multiple_nonstale_caps())) {  // FIXME.. :/
       dout(20) << " should lose it" << dendl;
       // we should lose it.
-      if ((other_wanted & (CEPH_CAP_GRD|CEPH_CAP_GWR)) ||
+      if (((other_wanted|loner_wanted) & (CEPH_CAP_GRD|CEPH_CAP_GWR)) ||
 	  lock->is_waiter_for(SimpleLock::WAIT_WR))
 	scatter_mix(lock, need_issue);
       else if (!lock->is_wrlocked())   // let excl wrlocks drain first
