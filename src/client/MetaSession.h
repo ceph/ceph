@@ -36,7 +36,8 @@ struct MetaSession {
   MetaSession() : mds_num(-1), seq(0), cap_gen(0), cap_renew_seq(0), num_caps(0),
 		 closing(false), was_stale(false), release(NULL) {}
   ~MetaSession() {
-    release->put();
+    if (release)
+      release->put();
   }
 };
 
