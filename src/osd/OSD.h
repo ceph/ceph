@@ -416,9 +416,10 @@ private:
 
   // -- state --
 public:
-  static const int STATE_BOOTING = 1;
-  static const int STATE_ACTIVE = 2;
-  static const int STATE_STOPPING = 3;
+  static const int STATE_INITIALIZING = 1;
+  static const int STATE_BOOTING = 2;
+  static const int STATE_ACTIVE = 3;
+  static const int STATE_STOPPING = 4;
 
 private:
   int state;
@@ -427,6 +428,7 @@ private:
   epoch_t bind_epoch;  // epoch we last did a bind to new ip:ports
 
 public:
+  bool is_initializing() { return state == STATE_INITIALIZING; }
   bool is_booting() { return state == STATE_BOOTING; }
   bool is_active() { return state == STATE_ACTIVE; }
   bool is_stopping() { return state == STATE_STOPPING; }
