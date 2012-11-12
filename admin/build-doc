@@ -2,11 +2,12 @@
 set -e
 cd "$(dirname "$0")"
 cd ..
+TOPDIR=`pwd`
 
 install -d -m0755 build-doc
 
 if command -v dpkg >/dev/null; then
-    for package in python-dev python-pip python-virtualenv doxygen ditaa; do
+    for package in python-dev python-pip python-virtualenv doxygen ditaa ant; do
 	if [ "$(dpkg --status -- $package|sed -n 's/^Status: //p')" != "install ok installed" ]; then
             # add a space after old values
 	    missing="${missing:+$missing }$package"
@@ -18,7 +19,7 @@ if command -v dpkg >/dev/null; then
 	exit 1
     fi
 else
-    for command in virtualenv doxygen ditaa; do
+    for command in virtualenv doxygen ditaa ant; do
 	if ! command -v "$command" >/dev/null; then
             # add a space after old values
 	    missing="${missing:+$missing }$package"
@@ -51,3 +52,20 @@ install -d -m0755 \
     output/man
 PYTHONPATH=`pwd`/../src/pybind $vdir/bin/sphinx-build -a -b dirhtml -d doctrees ../doc output/html
 $vdir/bin/sphinx-build -a -b man -d doctrees ../doc output/man
+
+#
+# Build and install JavaDocs
+#
+JAVADIR=$TOPDIR/src/java
+
+# Clean and build JavaDocs
+rm -rf $JAVADIR/doc
+ant -buildfile $JAVADIR/build.xml docs
+
+# Create clean target directory
+JAVA_OUTDIR=output/html/api/libcephfs-java/javadoc
+rm -rf $JAVA_OUTDIR
+mkdir $JAVA_OUTDIR
+
+# Copy JavaDocs to target directory
+cp -a $JAVADIR/doc/* $JAVA_OUTDIR/
