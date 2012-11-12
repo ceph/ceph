@@ -1082,15 +1082,15 @@ void FileJournal::do_write(bufferlist& bl)
 
 void FileJournal::flush()
 {
-  dout(5) << "waiting for completions to empty" << dendl;
+  dout(10) << "waiting for completions to empty" << dendl;
   {
     Mutex::Locker l(finisher_lock);
     while (!completions_empty())
       finisher_cond.Wait(finisher_lock);
   }
-  dout(5) << "flush waiting for finisher" << dendl;
+  dout(10) << "flush waiting for finisher" << dendl;
   finisher->wait_for_empty();
-  dout(5) << "flush done" << dendl;
+  dout(10) << "flush done" << dendl;
 }
 
 

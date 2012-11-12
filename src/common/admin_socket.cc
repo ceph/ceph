@@ -346,7 +346,7 @@ bool AdminSocket::do_accept()
 		      << "' to " << p->second << " failed" << dendl;
       out.append("failed");
     } else {
-      ldout(m_cct, 20) << "AdminSocket: request '" << match << "' '" << args
+      ldout(m_cct, 5) << "AdminSocket: request '" << match << "' '" << args
 		       << "' to " << p->second
 		       << " returned " << out.length() << " bytes" << dendl;
     }
