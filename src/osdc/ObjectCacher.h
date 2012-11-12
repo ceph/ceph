@@ -300,10 +300,13 @@ class ObjectCacher {
     xlist<Object*> objects;
 
     int dirty_or_tx;
+    bool return_enoent;
 
     ObjectSet(void *p, int64_t _poolid, inodeno_t i)
       : parent(p), ino(i), truncate_seq(0),
-	truncate_size(0), poolid(_poolid), dirty_or_tx(0) {}
+	truncate_size(0), poolid(_poolid), dirty_or_tx(0),
+	return_enoent(false) {}
+
   };
 
 
