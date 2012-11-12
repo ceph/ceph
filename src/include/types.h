@@ -353,6 +353,13 @@ static inline bool file_mode_is_readonly(int mode) {
 // dentries
 #define MAX_DENTRY_LEN 255
 
+// --
+namespace ceph {
+  class Formatter;
+}
+void dump(const ceph_file_layout& l, ceph::Formatter *f);
+void dump(const ceph_dir_layout& l, ceph::Formatter *f);
+
 
 // --
 
