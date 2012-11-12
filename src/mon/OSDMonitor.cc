@@ -727,6 +727,12 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 	   << grace << " grace (" << orig_grace << " + " << my_grace << " + " << peer_grace << "), max_failed_since " << max_failed_since
 	   << dendl;
 
+  // already pending failure?
+  if (pending_inc.new_state[target_osd] & CEPH_OSD_UP) {
+    dout(10) << " already pending failure" << dendl;
+    return true;
+  }
+
   if (failed_for >= grace &&
       ((int)fi.reporters.size() >= g_conf->osd_min_down_reporters) &&
       (fi.num_reports >= g_conf->osd_min_down_reports)) {
