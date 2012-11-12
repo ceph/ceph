@@ -272,6 +272,10 @@ void OSDMonitor::on_active()
 
   if (mon->is_leader())
     mon->clog.info() << "osdmap " << osdmap << "\n"; 
+
+  if (!mon->is_leader()) {
+    kick_all_failures();
+  }
 }
 
 void OSDMonitor::update_logger()
@@ -816,6 +820,24 @@ void OSDMonitor::process_failures()
   }
 }
 
+void OSDMonitor::kick_all_failures()
+{
+  dout(10) << "kick_all_failures on " << failure_info.size() << " osds" << dendl;
+  assert(!mon->is_leader());
+
+  list<MOSDFailure*> ls;
+  for (map<int,failure_info_t>::iterator p = failure_info.begin();
+       p != failure_info.end();
+       ++p) {
+    p->second.take_report_messages(ls);
+  }
+  failure_info.clear();
+
+  while (!ls.empty()) {
+    dispatch(ls.front());
+    ls.pop_front();
+  }
+}
 
 
 // boot --
