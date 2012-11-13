@@ -1291,6 +1291,13 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	  ss << ", acting " << p->second.acting;
 	  if (p->second.stats.sum.num_objects_unfound)
 	    ss << ", " << p->second.stats.sum.num_objects_unfound << " unfound";
+	  if (p->second.state & PG_STATE_INCOMPLETE) {
+	    const pg_pool_t *pi = mon->osdmon()->osdmap.get_pg_pool(p->first.pool());
+	    if (pi && pi->min_size > 1) {
+	      ss << " (reducing pool " << mon->osdmon()->osdmap.get_pool_name(p->first.pool())
+		 << " min_size from " << (int)pi->min_size << " may help; search ceph.com/docs for 'incomplete')";
+	    }
+	  }
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
 	}
       }
