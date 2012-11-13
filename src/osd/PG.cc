@@ -63,7 +63,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
        const hobject_t& ioid) :
   osd(o), osdmap_ref(curmap), pool(_pool),
   _lock("PG::_lock"),
-  _qlock("PG::_qlock"),
   ref(0), deleting(false), dirty_info(false), dirty_log(false),
   info(p), coll(p), log_oid(loid), biginfo_oid(ioid),
   recovery_item(this), scrub_item(this), scrub_finalize_item(this), snap_trim_item(this), stat_queue_item(this),
@@ -384,29 +383,35 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe)
 	missing.revise_need(ne.soid, ne.version);
       }
     }
-  } else if (oe.prior_version > info.log_tail) {
+  } else if (oe.op == pg_log_entry_t::CLONE) {
+    assert(oe.soid.snap != CEPH_NOSNAP);
     dout(20) << "merge_old_entry  had " << oe
-	     << ", object with no non-divergent log entries, "
+	     << ", clone with no non-divergent log entries, "
 	     << "deleting" << dendl;
     remove_object_with_snap_hardlinks(t, oe.soid);
     if (missing.is_missing(oe.soid))
       missing.rm(oe.soid, missing.missing[oe.soid].need);
+  } else if (oe.prior_version > info.log_tail) {
+    /**
+     * oe.prior_version is a previously divergent log entry
+     * oe.soid must have already been handled and the missing
+     * set updated appropriately
+     */
+    dout(20) << "merge_old_entry  had oe " << oe
+	     << " with divergent prior_version " << oe.prior_version
+	     << " oe.soid " << oe.soid
+	     << " must already have been merged" << dendl;
   } else {
     if (!oe.is_delete()) {
       dout(20) << "merge_old_entry  had " << oe << " deleting" << dendl;
       remove_object_with_snap_hardlinks(t, oe.soid);
     }
-    dout(20) << "merge_old_entry  had " << oe << " reverting to "
+    dout(20) << "merge_old_entry  had " << oe << " updating missing to "
 	     << oe.prior_version << dendl;
     if (oe.prior_version > eversion_t()) {
-      /* If missing.missing[oe.soid].need is before info.log_tail
-       * then we filled it in on a previous call to merge_old_entry
-       * and this entry refers to a previous divergent entry.
-       */
-      if (!missing.is_missing(oe.soid) ||
-	  missing.missing[oe.soid].need > info.log_tail) {
-	missing.revise_need(oe.soid, oe.prior_version);
-      }
+      ondisklog.add_divergent_prior(oe.prior_version, oe.soid);
+      dirty_log = true;
+      missing.revise_need(oe.soid, oe.prior_version);
     } else if (missing.is_missing(oe.soid)) {
       missing.rm(oe.soid, missing.missing[oe.soid].need);
     }
@@ -2210,6 +2215,10 @@ void PG::trim(ObjectStore::Transaction& t, eversion_t trim_to)
 {
   // trim?
   if (trim_to > log.tail) {
+    /* If we are trimming, we must be complete up to trim_to, time
+     * to throw out any divergent_priors
+     */
+    ondisklog.divergent_priors.clear();
     // We shouldn't be trimming the log past last_complete
     assert(trim_to <= info.last_complete);
 
@@ -2484,6 +2493,34 @@ void PG::read_log(ObjectStore *store)
       } else {
 	dout(15) << "read_log  missing " << *i << dendl;
 	missing.add(i->soid, i->version, eversion_t());
+      }
+    }
+    for (map<eversion_t, hobject_t>::reverse_iterator i =
+	   ondisklog.divergent_priors.rbegin();
+	 i != ondisklog.divergent_priors.rend();
+	 ++i) {
+      if (i->first <= info.last_complete) break;
+      if (did.count(i->second)) continue;
+      did.insert(i->second);
+      bufferlist bv;
+      int r = osd->store->getattr(coll, i->second, OI_ATTR, bv);
+      if (r >= 0) {
+	object_info_t oi(bv);
+	/**
+	 * 1) we see this entry in the divergent priors mapping
+	 * 2) we didn't see an entry for this object in the log
+	 *
+	 * From 1 & 2 we know that either the object does not exist
+	 * or it is at the version specified in the divergent_priors
+	 * map since the object would have been deleted atomically
+	 * with the addition of the divergent_priors entry, an older
+	 * version would not have been recovered, and a newer version
+	 * would show up in the log above.
+	 */
+	assert(oi.version == i->first);
+      } else {
+	dout(15) << "read_log  missing " << *i << dendl;
+	missing.add(i->second, i->first, eversion_t());
       }
     }
   }
@@ -2768,12 +2805,12 @@ void PG::requeue_object_waiters(map<hobject_t, list<OpRequestRef> >& m)
 void PG::requeue_ops(list<OpRequestRef> &ls)
 {
   dout(15) << " requeue_ops " << ls << dendl;
-  lockq();
-  assert(&ls != &op_queue);
-  size_t requeue_size = ls.size();
-  op_queue.splice(op_queue.begin(), ls, ls.begin(), ls.end());
-  for (size_t i = 0; i < requeue_size; ++i) osd->queue_for_op(this);
-  unlockq();
+  for (list<OpRequestRef>::reverse_iterator i = ls.rbegin();
+       i != ls.rend();
+       ++i) {
+    osd->op_wq.queue_front(make_pair(PGRef(this), *i));
+  }
+  ls.clear();
 }
 
 
@@ -4686,14 +4723,6 @@ bool PG::must_delay_request(OpRequestRef op)
   }
   assert(0);
   return false;
-}
-
-void PG::queue_op(OpRequestRef op)
-{
-  _qlock.Lock();
-  op_queue.push_back(op);
-  osd->queue_for_op(this);
-  _qlock.Unlock();
 }
 
 void PG::take_waiters()

@@ -1262,6 +1262,8 @@ void Objecter::send_op(Op *op)
 
   if (op->priority)
     m->set_priority(op->priority);
+  else
+    m->set_priority(cct->_conf->osd_client_op_priority);
 
   logger->inc(l_osdc_op_send);
   logger->inc(l_osdc_op_send_bytes, m->get_data().length());
