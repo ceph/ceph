@@ -69,7 +69,7 @@ fi
 stamp=`date +%Y-%m-%d_%H:%M:%S`
 name=`whoami`"-$stamp-$suite-$ceph-$kernel-$flavor"
 
-if wget http://github.com/ceph/teuthology/tree/$ceph -O- 2>/dev/null ; then
+if wget http://github.com/ceph/teuthology/tree/$ceph -O- 2>/dev/null >/dev/null ; then
     teuthology_branch=$ceph
 else
     echo "branch $ceph not in teuthology.git; will use master for teuthology"
