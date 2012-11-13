@@ -4512,6 +4512,7 @@ void OSD::split_pgs(
     child->write_if_dirty(*(rctx->transaction));
     child->unlock();
   }
+  parent->write_if_dirty(*(rctx->transaction));
 }
   
 
