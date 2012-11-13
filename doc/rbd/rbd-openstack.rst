@@ -68,15 +68,8 @@ See `Create a Pool`_ for detail on specifying the number of placement groups for
 your pools, and `Placement Groups`_ for details on the number of placement
 groups you should set for your pools.
 
-If you have `cephx authentication`_ enabled, create a new user for Nova/Cinder
-and Glance::
-
-    ceph auth get-or-create client.volumes mon 'allow r' osd 'allow rwx pool=volumes, allow rx pool=images'
-    ceph auth get-or-create client.images mon 'allow r' osd 'allow rwx pool=images'
-
 .. _Create a Pool: ../../cluster-ops/pools#createpool
 .. _Placement Groups: ../../cluster-ops/placement-groups
-.. _cephx authentication: ../../cluster-ops/authentication
 
 
 Configure OpenStack Ceph Clients
@@ -103,8 +96,14 @@ tools::
 Setup Ceph Client Authentication
 --------------------------------
 
-If you're using cephx authentication, add the keyrings for ``client.volumes``
-and ``client.images`` to the appropriate hosts and change their ownership::
+If you have `cephx authentication`_ enabled, create a new user for Nova/Cinder
+and Glance::
+
+    ceph auth get-or-create client.volumes mon 'allow r' osd 'allow rwx pool=volumes, allow rx pool=images'
+    ceph auth get-or-create client.images mon 'allow r' osd 'allow rwx pool=images'
+
+Add the keyrings for ``client.volumes`` and ``client.images`` to the
+appropriate hosts and change their ownership::
 
   ceph auth get-or-create client.images | ssh {your-glance-api-server} sudo tee /etc/ceph/ceph.client.images.keyring
   ssh {your-glance-api-server} sudo chown glance:glance /etc/ceph/ceph.client.images.keyring
@@ -133,11 +132,7 @@ the temporary copy of the key::
 
 Save the uuid of the secret for configuring ``nova-compute`` later.
 
-Finally, on each host running ``cinder-volume`` or ``nova-volume``, add
-``CEPH_ARGS="--id volumes"`` to the init/upstart script that starts it.
-
-For example, on Ubuntu, add ``env CEPH_ARGS="--id volumes"``
-to the top of ``/etc/init/cinder-volume.conf``.
+.. _cephx authentication: ../../cluster-ops/authentication
 
 
 Configure OpenStack to use Ceph
@@ -179,6 +174,12 @@ uuid of the secret you added to libvirt earlier::
 
     rbd_user=volumes
     rbd_secret_uuid={uuid of secret}
+
+Finally, on each host running ``cinder-volume`` or ``nova-volume``, add
+``CEPH_ARGS="--id volumes"`` to the init/upstart script that starts it.
+
+For example, on Ubuntu, add ``env CEPH_ARGS="--id volumes"``
+to the top of ``/etc/init/cinder-volume.conf``.
 
 
 Restart OpenStack
