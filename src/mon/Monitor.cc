@@ -2072,6 +2072,8 @@ bool Monitor::_ms_dispatch(Message *m)
 	  !s->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
 	dout(0) << "MMonElection received from entity without enough caps!"
 		<< s->caps << dendl;
+	m->put();
+	break;
       }
       if (!is_probing() && !is_slurping()) {
 	elector.dispatch(m);
