@@ -10,7 +10,7 @@
 class CryptoEnvironment: public ::testing::Environment {
 public:
   void SetUp() {
-    ceph::crypto::init();
+    ceph::crypto::init(g_ceph_context);
   }
 };
 
