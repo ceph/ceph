@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_CLIENT_INODE_H
 #define CEPH_CLIENT_INODE_H
 
@@ -31,6 +34,8 @@ struct Cap {
 
   Cap() : session(NULL), inode(NULL), cap_item(this), cap_id(0), issued(0),
 	       implemented(0), wanted(0), seq(0), issue_seq(0), mseq(0), gen(0) {}
+
+  void dump(Formatter *f) const;
 };
 
 struct CapSnap {
@@ -58,6 +63,8 @@ struct CapSnap {
       writing(false), dirty_data(false), flush_tid(0),
       flushing_item(this)
   {}
+
+  void dump(Formatter *f) const;
 };
 
 
@@ -241,6 +248,8 @@ class Inode {
 
   bool have_valid_size();
   Dir *open_dir();
+
+  void dump(Formatter *f) const;
 };
 
 ostream& operator<<(ostream &out, Inode &in);

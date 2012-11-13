@@ -144,7 +144,7 @@ bin_PROGRAMS += librados-config
 
 # synthetic client
 ceph_syn_SOURCES = ceph_syn.cc client/SyntheticClient.cc
-ceph_syn_LDADD = libclient.la libosdc.la $(LIBGLOBAL_LDA)
+ceph_syn_LDADD = libclient.la $(LIBGLOBAL_LDA)
 bin_PROGRAMS += ceph-syn
 
 base: ceph-mon ceph-osd ceph-mds \
@@ -158,7 +158,7 @@ base: ceph-mon ceph-osd ceph-mds \
 # fuse targets?
 if WITH_FUSE
 ceph_fuse_SOURCES = ceph_fuse.cc client/fuse_ll.cc
-ceph_fuse_LDADD = -lfuse libclient.la libosdc.la $(LIBGLOBAL_LDA)
+ceph_fuse_LDADD = -lfuse libclient.la $(LIBGLOBAL_LDA)
 ceph_fuse_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += ceph-fuse
 
@@ -265,17 +265,17 @@ test_librgw_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += test_librgw_build
 
 test_libcephfs_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files) \
-			    $(libcephfs_la_SOURCES) $(libosdc_la_SOURCES)
-test_libcephfs_build_LDADD = -lexpat $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+			    $(libosdc_la_SOURCES)
+test_libcephfs_build_LDADD = libcephfs.la -lexpat $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 test_libcephfs_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += test_libcephfs_build
 endif
 
 if WITH_HADOOPCLIENT
 test_libhadoopcephfs_build_SOURCES = test/test_libcommon_build.cc \
-         $(libhadoopcephfs_la_SOURCES) $(libcephfs_la_SOURCES) \
+         $(libhadoopcephfs_la_SOURCES) \
 	 $(libosdc_la_SOURCES) $(libcommon_files)
-test_libhadoopcephfs_build_LDADD = -lexpat $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+test_libhadoopcephfs_build_LDADD = libcephfs.la -lexpat $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 test_libhadoopcephfs_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += test_libhadoopcephfs_build
 endif
@@ -288,13 +288,10 @@ noinst_LIBRARIES =
 
 # libcephfs
 libcephfs_la_SOURCES = \
-	libcephfs.cc \
-	client/Client.cc \
-	client/Inode.cc \
-	client/MetaRequest.cc
+	libcephfs.cc
 libcephfs_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libcephfs_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libcephfs_la_LIBADD = libosdc.la
+libcephfs_la_LIBADD = libclient.la
 libcephfs_la_LDFLAGS =  $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(EXTRALIBS) \
             ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
 lib_LTLIBRARIES += libcephfs.la
@@ -1184,6 +1181,7 @@ libcommon_files = \
 	common/admin_socket.cc \
 	common/admin_socket_client.cc \
 	common/escape.c \
+	common/types.cc \
 	common/Clock.cc \
 	common/Throttle.cc \
 	common/Timer.cc \
@@ -1351,7 +1349,10 @@ noinst_LTLIBRARIES += libosdc.la
 libclient_la_SOURCES = \
 	client/Client.cc \
 	client/Inode.cc \
+	client/Dentry.cc \
 	client/MetaRequest.cc \
+	client/SnapRealm.cc \
+	client/MetaSession.cc \
 	client/Trace.cc
 libclient_la_LIBADD = libosdc.la $(LIBEDIT_LIBS)
 noinst_LTLIBRARIES += libclient.la
