@@ -116,6 +116,17 @@ int RGWRadosParams::init(CephContext *cct, RGWRados *store)
   return 0;
 }
 
+void RGWObjManifest::append(RGWObjManifest& m)
+{
+  map<uint64_t, RGWObjManifestPart>::iterator iter;
+  uint64_t base = obj_size;
+  for (iter = m.objs.begin(); iter != m.objs.end(); ++iter) {
+    RGWObjManifestPart& part = iter->second;
+    objs[base + iter->first] = part;
+  }
+  obj_size += m.obj_size;
+}
+
 class RGWWatcher : public librados::WatchCtx {
   RGWRados *rados;
 public:
@@ -2224,14 +2235,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
 
   /* Convert all times go GMT to make them compatible */
   if (mod_ptr || unmod_ptr) {
-    struct tm mtm;
-    struct tm *gmtm = gmtime_r(&astate->mtime, &mtm);
-    if (!gmtm) {
-       ldout(cct, 0) << "NOTICE: could not get translate mtime for object" << dendl;
-       r = -EINVAL;
-       goto done_err;
-    }
-    ctime = mktime(gmtm);
+    ctime = astate->mtime;
 
     if (mod_ptr) {
       ldout(cct, 10) << "If-Modified-Since: " << *mod_ptr << " Last-Modified: " << ctime << dendl;
@@ -2255,19 +2259,22 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
       goto done_err;
 
     if (if_match) {
-      ldout(cct, 10) << "ETag: " << etag.c_str() << " " << " If-Match: " << if_match << dendl;
-      if (strcmp(if_match, etag.c_str())) {
+      string if_match_str = rgw_string_unquote(if_match);
+      ldout(cct, 10) << "ETag: " << etag.c_str() << " " << " If-Match: " << if_match_str << dendl;
+      if (if_match_str.compare(etag.c_str()) != 0) {
         r = -ERR_PRECONDITION_FAILED;
         goto done_err;
       }
     }
 
     if (if_nomatch) {
-      ldout(cct, 10) << "ETag: " << etag.c_str() << " " << " If-NoMatch: " << if_nomatch << dendl;
-      if (strcmp(if_nomatch, etag.c_str()) == 0) {
+      string if_nomatch_str = rgw_string_unquote(if_nomatch);
+      ldout(cct, 10) << "ETag: " << etag.c_str() << " " << " If-NoMatch: " << if_nomatch_str << dendl;
+      if (if_nomatch_str.compare(etag.c_str()) == 0) {
         r = -ERR_NOT_MODIFIED;
         goto done_err;
       }
+      if_nomatch = if_nomatch_str.c_str();
     }
   }
 

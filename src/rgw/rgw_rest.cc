@@ -163,11 +163,61 @@ void dump_etag(struct req_state *s, const char *etag)
   }
 }
 
+void dump_pair(struct req_state *s, const char *key, const char *value)
+{
+  if ( (strlen(key) > 0) && (strlen(value) > 0))
+    s->cio->print("%s: %s\n", key, value);
+}
+
+void dump_bucket_from_state(struct req_state *s)
+{
+  if (!s->bucket_name_str.empty())
+    s->cio->print("Bucket: \"%s\"\n", s->bucket_name_str.c_str());
+}
+
+void dump_object_from_state(struct req_state *s)
+{
+  if (!s->object_str.empty())
+    s->cio->print("Key: \"%s\"\n", s->object_str.c_str());
+}
+
+void dump_uri_from_state(struct req_state *s)
+{
+  if (strcmp(s->request_uri.c_str(), "/") == 0) {
+
+    string location = "http://";
+    location += s->env->get("SERVER_NAME");
+    if (!location.empty()) {
+      location += "/";
+      if (!s->bucket_name_str.empty()) {
+        location += s->bucket_name_str;
+        location += "/";
+        if (!s->object_str.empty()) {
+          location += s->object_str;
+          s->cio->print("Location: %s\n", location.c_str());
+        }
+      }
+    }
+  }
+  else {
+    s->cio->print("Location: \"%s\"\n", s->request_uri.c_str());
+  }
+}
+
+void dump_redirect(struct req_state *s, const string& redirect)
+{
+  if (redirect.empty())
+    return;
+
+  s->cio->print("Location: %s\n", redirect.c_str());
+}
+
 void dump_last_modified(struct req_state *s, time_t t)
 {
 
   char timestr[TIME_BUF_SIZE];
-  struct tm *tmp = gmtime(&t);
+  struct tm result;
+  struct tm *tmp = gmtime_r(&t, &result);
   if (tmp == NULL)
     return;
 
@@ -322,14 +372,9 @@ int RESTArgs::get_uint64(struct req_state *s, const string& name, uint64_t def_v
     return 0;
   }
 
-  char *end;
-
-  *val = (uint64_t)strtoull(sval.c_str(), &end, 10);
-  if (*val == ULLONG_MAX)
-    return -EINVAL;
-
-  if (*end)
-    return -EINVAL;
+  int r = stringtoull(sval, val);
+  if (r < 0)
+    return r;
 
   return 0;
 }
@@ -347,14 +392,9 @@ int RESTArgs::get_int64(struct req_state *s, const string& name, int64_t def_val
     return 0;
   }
 
-  char *end;
-
-  *val = (int64_t)strtoll(sval.c_str(), &end, 10);
-  if (*val == LLONG_MAX)
-    return -EINVAL;
-
-  if (*end)
-    return -EINVAL;
+  int r = stringtoll(sval, val);
+  if (r < 0)
+    return r;
 
   return 0;
 }
@@ -500,6 +540,22 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
     supplied_md5_b64 = s->env->get("HTTP_CONTENT_MD5");
 
   return len;
+}
+
+int RGWPostObj_ObjStore::verify_params()
+{
+  /*  check that we have enough memory to store the object
+  note that this test isn't exact and may fail unintentionally
+  for large requests is */
+  if (!s->length) {
+    return -ERR_LENGTH_REQUIRED;
+  }
+  off_t len = atoll(s->length);
+  if (len > (off_t)RGW_MAX_PUT_SIZE) {
+    return -ERR_TOO_LARGE;
+  }
+
+  return 0;
 }
 
 int RGWPutACLs_ObjStore::get_params()
@@ -918,8 +974,10 @@ int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
       break;
     }
     /* is it a 'create bucket' request? */
-    if (s->object_str.size() == 0)
+    if ((s->op == OP_PUT) && s->object_str.size() == 0)
       return 0;
+    only_bucket = true;
+    break;
   case OP_DELETE:
     only_bucket = true;
     break;
@@ -981,6 +1039,7 @@ RGWRESTMgr::~RGWRESTMgr()
 int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
 {
   s->cio = cio;
+  s->script_uri = s->env->get("SCRIPT_URI");
   s->request_uri = s->env->get("REQUEST_URI");
   int pos = s->request_uri.find('?');
   if (pos >= 0) {

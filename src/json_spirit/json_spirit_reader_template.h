@@ -13,7 +13,7 @@
 #include "json_spirit_value.h"
 #include "json_spirit_error_position.h"
 
-//#define BOOST_SPIRIT_THREADSAFE  // uncomment for multithreaded use, requires linking to boost.thread
+#define BOOST_SPIRIT_THREADSAFE  // uncomment for multithreaded use, requires linking to boost.thread
 
 #include <boost/bind.hpp>
 #include <boost/function.hpp>
@@ -468,7 +468,7 @@ namespace json_spirit
                     ;
 
                 members_
-                    = pair_ >> *( ',' >> pair_ )
+                    = pair_ >> *( ',' >> pair_  | ch_p(',') )
                     ;
 
                 pair_
@@ -484,7 +484,7 @@ namespace json_spirit
                     ;
 
                 elements_
-                    = value_ >> *( ',' >> value_ )
+                    = value_ >> *( ',' >> value_ | ch_p(',') )
                     ;
 
                 string_ 
