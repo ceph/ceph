@@ -3,10 +3,12 @@
 
 #include "common/ceph_crypto.h"
 #include "common/Formatter.h"
+#include "common/utf8.h"
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_acl.h"
+#include "rgw_policy_s3.h"
 
 #include "common/armor.h"
 
@@ -15,6 +17,34 @@
 #define dout_subsys ceph_subsys_rgw
 
 using namespace ceph::crypto;
+
+void dump_common_s3_headers(struct req_state *s, const char *etag,
+                            size_t content_len, const char *conn_status)
+{
+  // how many elements do we expect to include in the response
+  unsigned int expected_var_len = 4;
+  map<string, string> head_var;
+
+  utime_t date = ceph_clock_now(s->cct);
+  if (!date.is_zero()) {
+    char buf[TIME_BUF_SIZE];
+    date.sprintf(buf, TIME_BUF_SIZE);
+    head_var["date"] = buf;
+  }
+
+  head_var["etag"] = etag;
+  head_var["conn_stat"] = conn_status;
+  head_var["server"] = s->env->get("HTTP_HOST");
+
+  // if we have all the variables we want go ahead and dump
+  if (head_var.size() == expected_var_len) {
+    dump_pair(s, "Date", head_var["date"].c_str());
+    dump_etag(s, head_var["etag"].c_str());
+    dump_content_length(s, content_len);
+    dump_pair(s, "Connection", head_var["conn_stat"].c_str());
+    dump_pair(s, "Server", head_var["server"].c_str());
+  }
+}
 
 void list_all_buckets_start(struct req_state *s)
 {
@@ -333,6 +363,751 @@ void RGWPutObj_ObjStore_S3::send_response()
   dump_errno(s);
   end_header(s);
 }
+
+string trim_whitespace(const string& src)
+{
+  if (src.empty()) {
+    return string();
+  }
+
+  int start = 0;
+  for (; start != (int)src.size(); start++) {
+    if (!isspace(src[start]))
+      break;
+  }
+
+  int end = src.size() - 1;
+  if (end <= start) {
+    return string();
+  }
+
+  for (; end > start; end--) {
+    if (!isspace(src[end]))
+      break;
+  }
+
+  return src.substr(start, end - start + 1);
+}
+
+string trim_quotes(const string& val)
+{
+  string s = trim_whitespace(val);
+  if (s.size() < 2)
+    return s;
+
+  int start = 0;
+  int end = s.size() - 1;
+  int quotes_count = 0;
+
+  if (s[start] == '"') {
+    start++;
+    quotes_count++;
+  }
+  if (s[end] == '"') {
+    end--;
+    quotes_count++;
+  }
+  if (quotes_count == 2) {
+    return s.substr(start, end - start + 1);
+  }
+  return s;
+}
+
+/*
+ * parses params in the format: 'first; param1=foo; param2=bar'
+ */
+static void parse_params(const string& params_str, string& first, map<string, string>& params)
+{
+  int pos = params_str.find(';');
+  if (pos < 0) {
+    first = trim_whitespace(params_str);
+    return;
+  }
+
+  first = trim_whitespace(params_str.substr(0, pos));
+
+  pos++;
+
+  while (pos < (int)params_str.size()) {
+    ssize_t end = params_str.find(';', pos);
+    if (end < 0)
+      end = params_str.size();
+
+    string param = params_str.substr(pos, end - pos);
+
+    int eqpos = param.find('=');
+    if (eqpos > 0) {
+      string param_name = trim_whitespace(param.substr(0, eqpos));
+      string val = trim_quotes(param.substr(eqpos + 1));
+      params[param_name] = val;
+    } else {
+      params[trim_whitespace(param)] = "";
+    }
+
+    pos = end + 1;
+  }
+}
+
+static int parse_part_field(const string& line, string& field_name, struct post_part_field& field)
+{
+  int pos = line.find(':');
+  if (pos < 0)
+    return -EINVAL;
+
+  field_name = line.substr(0, pos);
+  if (pos >= (int)line.size() - 1)
+    return 0;
+
+  parse_params(line.substr(pos + 1), field.val, field.params);
+
+  return 0;
+}
+
+bool is_crlf(const char *s)
+{
+  return (*s == '\r' && *(s + 1) == '\n');
+}
+
+/*
+ * find the index of the boundary, if exists, or optionally the next end of line
+ * also returns how many bytes to skip
+ */
+static int index_of(bufferlist& bl, int max_len, const string& str, bool check_crlf,
+                    bool *reached_boundary, int *skip)
+{
+  *reached_boundary = false;
+  *skip = 0;
+
+  if (str.size() < 2) // we assume boundary is at least 2 chars (makes it easier with crlf checks)
+    return -EINVAL;
+
+  if (bl.length() < str.size())
+    return -1;
+
+  const char *buf = bl.c_str();
+  const char *s = str.c_str();
+
+  if (max_len > (int)bl.length())
+    max_len = bl.length();
+
+  int i;
+  for (i = 0; i < max_len; i++, buf++) {
+    if (check_crlf &&
+        i >= 1 &&
+        is_crlf(buf - 1)) {
+        return i + 1; // skip the crlf
+    }
+    if ((i < max_len - (int)str.size() + 1) &&
+        (buf[0] == s[0] && buf[1] == s[1]) &&
+        (strncmp(buf, s, str.size()) == 0)) {
+      *reached_boundary = true;
+      *skip = str.size();
+
+      /* oh, great, now we need to swallow the preceding crlf
+       * if exists
+       */
+      if ((i >= 2) &&
+        is_crlf(buf - 2)) {
+        i -= 2;
+        *skip += 2;
+      }
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+int RGWPostObj_ObjStore_S3::read_with_boundary(bufferlist& bl, uint64_t max, bool check_crlf,
+                                               bool *reached_boundary, bool *done)
+{
+  uint64_t cl = max + 2 + boundary.size();
+
+  if (max > in_data.length()) {
+    uint64_t need_to_read = cl - in_data.length();
+
+    bufferptr bp(need_to_read);
+
+    int read_len;
+    s->cio->read(bp.c_str(), need_to_read, &read_len);
+
+    in_data.append(bp, 0, read_len);
+  }
+
+  *done = false;
+  int skip;
+  int index = index_of(in_data, cl, boundary, check_crlf, reached_boundary, &skip);
+  if (index >= 0)
+    max = index;
+
+  if (max > in_data.length())
+    max = in_data.length();
+
+  bl.substr_of(in_data, 0, max);
+
+  bufferlist new_read_data;
+
+  /*
+   * now we need to skip boundary for next time, also skip any crlf, or
+   * check to see if it's the last final boundary (marked with "--" at the end
+   */
+  if (*reached_boundary) {
+    int left = in_data.length() - max;
+    if (left < skip + 2) {
+      int need = skip + 2 - left;
+      bufferptr boundary_bp(need);
+      int actual;
+      s->cio->read(boundary_bp.c_str(), need, &actual);
+      in_data.append(boundary_bp);
+    }
+    max += skip; // skip boundary for next time
+    if (in_data.length() >= max + 2) {
+      const char *data = in_data.c_str();
+      if (is_crlf(data + max)) {
+	max += 2;
+      } else {
+        if (*(data + max) == '-' &&
+            *(data + max + 1) == '-') {
+          *done = true;
+	  max += 2;
+	}
+      }
+    }
+  }
+
+  new_read_data.substr_of(in_data, max, in_data.length() - max);
+  in_data = new_read_data;
+
+  return 0;
+}
+
+int RGWPostObj_ObjStore_S3::read_line(bufferlist& bl, uint64_t max,
+				  bool *reached_boundary, bool *done)
+{
+  return read_with_boundary(bl, max, true, reached_boundary, done);
+}
+
+int RGWPostObj_ObjStore_S3::read_data(bufferlist& bl, uint64_t max,
+				  bool *reached_boundary, bool *done)
+{
+  return read_with_boundary(bl, max, false, reached_boundary, done);
+}
+
+
+int RGWPostObj_ObjStore_S3::read_form_part_header(struct post_form_part *part,
+                                              bool *done)
+{
+  bufferlist bl;
+  bool reached_boundary;
+  int r = read_line(bl, RGW_MAX_CHUNK_SIZE, &reached_boundary, done);
+  if (r < 0)
+    return r;
+
+  if (*done) {
+    return 0;
+  }
+
+  if (reached_boundary) { // skip the first boundary
+    r = read_line(bl, RGW_MAX_CHUNK_SIZE, &reached_boundary, done);
+    if (r < 0)
+      return r;
+    if (*done)
+      return 0;
+  }
+
+  while (true) {
+  /*
+   * iterate through fields
+   */
+    string line = trim_whitespace(string(bl.c_str(), bl.length()));
+
+    if (line.empty())
+      break;
+
+    struct post_part_field field;
+
+    string field_name;
+    r = parse_part_field(line, field_name, field);
+    if (r < 0)
+      return r;
+
+    part->fields[field_name] = field;
+
+    if (stringcasecmp(field_name, "Content-Disposition") == 0) {
+      part->name = field.params["name"];
+    }
+
+    if (reached_boundary)
+      break;
+
+    r = read_line(bl, RGW_MAX_CHUNK_SIZE, &reached_boundary, done);
+  }
+
+  return 0;
+}
+
+bool RGWPostObj_ObjStore_S3::part_str(const string& name, string *val)
+{
+  map<string, struct post_form_part, ltstr_nocase>::iterator iter = parts.find(name);
+  if (iter == parts.end())
+    return false;
+
+  bufferlist& data = iter->second.data;
+  string str = string(data.c_str(), data.length());
+  *val = trim_whitespace(str);
+  return true;
+}
+
+bool RGWPostObj_ObjStore_S3::part_bl(const string& name, bufferlist *pbl)
+{
+  map<string, struct post_form_part, ltstr_nocase>::iterator iter = parts.find(name);
+  if (iter == parts.end())
+    return false;
+
+  *pbl = iter->second.data;
+  return true;
+}
+
+void RGWPostObj_ObjStore_S3::rebuild_key(string& key)
+{
+  static string var = "${filename}";
+  int pos = key.find(var);
+  if (pos < 0)
+    return;
+
+  string new_key = key.substr(0, pos);
+  new_key.append(filename);
+  new_key.append(key.substr(pos + var.size()));
+
+  key = new_key;
+}
+
+int RGWPostObj_ObjStore_S3::get_params()
+{
+  string temp_line;
+  string param;
+  string old_param;
+  string param_value;
+
+  string whitespaces (" \t\f\v\n\r");
+
+  // get the part boundary
+  string req_content_type_str = s->env->get("CONTENT_TYPE");
+  string req_content_type;
+  map<string, string> params;
+
+  if (s->expect_cont) {
+    /* ok, here it really gets ugly. With POST, the params are embedded in the
+     * request body, so we need to continue before being able to actually look
+     * at them. This diverts from the usual request flow.
+     */
+    dump_continue(s);
+    s->expect_cont = false;
+  }
+
+  parse_params(req_content_type_str, req_content_type, params);
+
+  if (req_content_type.compare("multipart/form-data") != 0) {
+    err_msg = "Request Content-Type is not multipart/form-data";
+    return -EINVAL;
+  }
+
+  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    ldout(s->cct, 20) << "request content_type_str=" << req_content_type_str << dendl;
+    ldout(s->cct, 20) << "request content_type params:" << dendl;
+    map<string, string>::iterator iter;
+    for (iter = params.begin(); iter != params.end(); ++iter) {
+      ldout(s->cct, 20) << " " << iter->first << " -> " << iter->second << dendl;
+    }
+  }
+
+  ldout(s->cct, 20) << "adding bucket to policy env: " << s->bucket.name << dendl;
+  env.add_var("bucket", s->bucket.name);
+
+  map<string, string>::iterator iter = params.find("boundary");
+  if (iter == params.end()) {
+    err_msg = "Missing multipart boundary specification";
+    return -EINVAL;
+  }
+
+  // create the boundary
+  boundary = "--";
+  boundary.append(iter->second);
+
+  bool done;
+  do {
+    struct post_form_part part;
+    int r = read_form_part_header(&part, &done);
+    if (r < 0)
+      return r;
+    
+    if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+      map<string, struct post_part_field, ltstr_nocase>::iterator piter;
+      for (piter = part.fields.begin(); piter != part.fields.end(); ++piter) {
+        ldout(s->cct, 20) << "read part header: name=" << part.name << " content_type=" << part.content_type << dendl;
+        ldout(s->cct, 20) << "name=" << piter->first << dendl;
+        ldout(s->cct, 20) << "val=" << piter->second.val << dendl;
+        ldout(s->cct, 20) << "params:" << dendl;
+        map<string, string>& params = piter->second.params;
+        for (iter = params.begin(); iter != params.end(); ++iter) {
+          ldout(s->cct, 20) << " " << iter->first << " -> " << iter->second << dendl;
+        }
+      }
+    }
+
+    if (done) { /* unexpected here */
+      err_msg = "Malformed request";
+      return -EINVAL;
+    }
+
+    if (stringcasecmp(part.name, "file") == 0) { /* beginning of data transfer */
+      struct post_part_field& field = part.fields["Content-Disposition"];
+      map<string, string>::iterator iter = field.params.find("filename");
+      if (iter != field.params.end()) {
+        filename = iter->second;
+      }
+      parts[part.name] = part;
+      data_pending = true;
+      break;
+    }
+
+    bool boundary;
+    r = read_data(part.data, RGW_MAX_CHUNK_SIZE, &boundary, &done);
+    if (!boundary) {
+      err_msg = "Couldn't find boundary";
+      return -EINVAL;
+    }
+    parts[part.name] = part;
+    string part_str(part.data.c_str(), part.data.length());
+    env.add_var(part.name, part_str);
+  } while (!done);
+
+  if (!part_str("key", &s->object_str)) {
+    err_msg = "Key not specified";
+    return -EINVAL;
+  }
+
+  rebuild_key(s->object_str);
+
+  env.add_var("key", s->object_str);
+
+  part_str("Content-Type", &content_type);
+  env.add_var("Content-Type", content_type);
+
+  map<string, struct post_form_part, ltstr_nocase>::iterator piter = parts.upper_bound(RGW_AMZ_META_PREFIX);
+  for (; piter != parts.end(); ++piter) {
+    string n = piter->first;
+    if (strncasecmp(n.c_str(), RGW_AMZ_META_PREFIX, sizeof(RGW_AMZ_META_PREFIX) - 1) != 0)
+      break;
+
+    string attr_name = RGW_ATTR_PREFIX;
+    attr_name.append(n);
+
+    /* need to null terminate it */
+    bufferlist& data = piter->second.data;
+    string str = string(data.c_str(), data.length());
+
+    bufferlist attr_bl;
+    attr_bl.append(str.c_str(), str.size() + 1);
+
+    attrs[attr_name] = attr_bl;
+  }
+
+  int r = get_policy();
+  if (r < 0)
+    return r;
+
+  min_len = post_policy.min_length;
+  max_len = post_policy.max_length;
+
+  return 0;
+}
+
+int RGWPostObj_ObjStore_S3::get_policy()
+{
+  bufferlist encoded_policy;
+  string uid;
+
+  if (part_bl("policy", &encoded_policy)) {
+
+    // check that the signature matches the encoded policy
+    string s3_access_key;
+    if (!part_str("AWSAccessKeyId", &s3_access_key)) {
+      ldout(s->cct, 0) << "No S3 access key found!" << dendl;
+      err_msg = "Missing access key";
+      return -EINVAL;
+    }
+    string signature_str;
+    if (!part_str("signature", &signature_str)) {
+      ldout(s->cct, 0) << "No signature found!" << dendl;
+      err_msg = "Missing signature";
+      return -EINVAL;
+    }
+
+    RGWUserInfo user_info;
+
+    ret = rgw_get_user_info_by_access_key(store, s3_access_key, user_info);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "User lookup failed!" << dendl;
+      err_msg = "Bad access key / signature";
+      return -EACCES;
+    }
+
+    map<string, RGWAccessKey> access_keys  = user_info.access_keys;
+
+    map<string, RGWAccessKey>::const_iterator iter = access_keys.begin();
+    string s3_secret_key = (iter->second).key;
+
+    char calc_signature[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
+
+    calc_hmac_sha1(s3_secret_key.c_str(), s3_secret_key.size(), encoded_policy.c_str(), encoded_policy.length(), calc_signature);
+    bufferlist encoded_hmac;
+    bufferlist raw_hmac;
+    raw_hmac.append(calc_signature, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
+    raw_hmac.encode_base64(encoded_hmac);
+    encoded_hmac.append((char)0); /* null terminate */
+
+    if (signature_str.compare(encoded_hmac.c_str()) != 0) {
+      ldout(s->cct, 0) << "Signature verification failed!" << dendl;
+      ldout(s->cct, 0) << "expected: " << signature_str.c_str() << dendl;
+      ldout(s->cct, 0) << "got: " << encoded_hmac.c_str() << dendl;
+      err_msg = "Bad access key / signature";
+      return -EACCES;
+    }
+    ldout(s->cct, 0) << "Successful Signature Verification!" << dendl;
+    bufferlist decoded_policy;
+    try {
+      decoded_policy.decode_base64(encoded_policy);
+    } catch (buffer::error& err) {
+      ldout(s->cct, 0) << "failed to decode_base64 policy" << dendl;
+      err_msg = "Could not decode policy";
+      return -EINVAL;
+    }
+
+    decoded_policy.append('\0'); // NULL terminate
+
+    ldout(s->cct, 0) << "POST policy: " << decoded_policy.c_str() << dendl;
+
+    int r = post_policy.from_json(decoded_policy, err_msg);
+    if (r < 0) {
+      if (err_msg.empty()) {
+	err_msg = "Failed to parse policy";
+      }
+      ldout(s->cct, 0) << "failed to parse policy" << dendl;
+      return -EINVAL;
+    }
+
+    post_policy.set_var_checked("AWSAccessKeyId");
+    post_policy.set_var_checked("policy");
+    post_policy.set_var_checked("signature");
+
+    r = post_policy.check(&env, err_msg);
+    if (r < 0) {
+      if (err_msg.empty()) {
+	err_msg = "Policy check failed";
+      }
+      ldout(s->cct, 0) << "policy check failed" << dendl;
+      return r;
+    }
+
+    s->user = user_info;
+  } else {
+    ldout(s->cct, 0) << "No attached policy found!" << dendl;
+  }
+
+  string canned_acl;
+  part_str("acl", &canned_acl);
+
+  RGWAccessControlPolicy_S3 s3policy(s->cct);
+  ldout(s->cct, 20) << "canned_acl=" << canned_acl << dendl;
+  if (!s3policy.create_canned(s->user.user_id, "", canned_acl)) {
+    err_msg = "Bad canned ACLs";
+    return -EINVAL;
+  }
+
+  policy = s3policy;
+
+  return 0;
+}
+
+int RGWPostObj_ObjStore_S3::complete_get_params()
+{
+  bool done;
+  do {
+    struct post_form_part part;
+    int r = read_form_part_header(&part, &done);
+    if (r < 0)
+      return r;
+    
+    bufferlist part_data;
+    bool boundary;
+    r = read_data(part.data, RGW_MAX_CHUNK_SIZE, &boundary, &done);
+    if (!boundary) {
+      return -EINVAL;
+    }
+
+    parts[part.name] = part;
+  } while (!done);
+
+  return 0;
+}
+
+int RGWPostObj_ObjStore_S3::get_data(bufferlist& bl)
+{
+  bool boundary;
+  bool done;
+
+  int r = read_data(bl, RGW_MAX_CHUNK_SIZE, &boundary, &done);
+  if (r < 0)
+    return r;
+
+  if (boundary) {
+    data_pending = false;
+
+    if (!done) {  /* reached end of data, let's drain the rest of the params */
+      r = complete_get_params();
+      if (r < 0)
+        return r;
+    }
+  }
+
+  return bl.length();
+}
+
+static void escape_char(char c, string& dst)
+{
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%%%.2X", (unsigned int)c);
+  dst.append(buf);
+}
+
+static bool char_needs_url_encoding(char c)
+{
+  if (c < 0x20 || c >= 0x7f)
+    return true;
+
+  switch (c) {
+    case 0x20:
+    case 0x22:
+    case 0x23:
+    case 0x25:
+    case 0x26:
+    case 0x2B:
+    case 0x2C:
+    case 0x2F:
+    case 0x3A:
+    case 0x3B:
+    case 0x3C:
+    case 0x3E:
+    case 0x3D:
+    case 0x3F:
+    case 0x40:
+    case 0x5B:
+    case 0x5D:
+    case 0x5C:
+    case 0x5E:
+    case 0x60:
+    case 0x7B:
+    case 0x7D:
+      return true;
+  }
+  return false;
+}
+
+static void url_escape(const string& src, string& dst)
+{
+  const char *p = src.c_str();
+  for (unsigned i = 0; i < src.size(); i++, p++) {
+    if (char_needs_url_encoding(*p)) {
+      escape_char(*p, dst);
+      continue;
+    }
+
+    dst.append(p, 1);
+  }
+}
+
+void RGWPostObj_ObjStore_S3::send_response()
+{
+  if (ret == 0 && parts.count("success_action_redirect")) {
+    string redirect;
+
+    part_str("success_action_redirect", &redirect);
+
+    string bucket;
+    string key;
+    string etag_str = "\"";
+
+    etag_str.append(etag);
+    etag_str.append("\"");
+
+    string etag_url;
+
+    url_escape(s->bucket_name, bucket);
+    url_escape(s->object_str, key);
+    url_escape(etag_str, etag_url);
+
+    
+    redirect.append("?bucket=");
+    redirect.append(bucket);
+    redirect.append("&key=");
+    redirect.append(key);
+    redirect.append("&etag=");
+    redirect.append(etag_url);
+
+    int r = check_utf8(redirect.c_str(), redirect.size());
+    if (r < 0) {
+      ret = r;
+      goto done;
+    }
+    dump_redirect(s, redirect);
+    ret = STATUS_REDIRECT;
+  } else if (ret == 0 && parts.count("success_action_status")) {
+    string status_string;
+    uint32_t status_int;
+
+    part_str("success_action_status", &status_string);
+
+    int r = stringtoul(status_string, &status_int);
+    if (r < 0) {
+      ret = r;
+      goto done;
+    }
+
+    switch (status_int) {
+      case 200:
+	break;
+      case 201:
+	ret = STATUS_CREATED;
+	break;
+      default:
+	ret = STATUS_NO_CONTENT;
+	break;
+    }
+  } else if (!ret) {
+    ret = STATUS_NO_CONTENT;
+  }
+
+done:
+  if (ret == STATUS_CREATED) {
+    s->formatter->open_object_section("PostResponse");
+    if (g_conf->rgw_dns_name.length())
+      s->formatter->dump_format("Location", "%s/%s", s->script_uri.c_str(), s->object_str.c_str());
+    s->formatter->dump_string("Bucket", s->bucket_name);
+    s->formatter->dump_string("Key", s->object_str.c_str());
+    s->formatter->close_section();
+  }
+  s->err.message = err_msg;
+  set_req_state_err(s, ret);
+  dump_errno(s);
+  dump_content_length(s, s->formatter->get_len());
+  end_header(s);
+  if (ret != STATUS_CREATED)
+    return;
+
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
 
 void RGWDeleteObj_ObjStore_S3::send_response()
 {
@@ -745,7 +1520,7 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_post()
     return new RGWDeleteMultiObj_ObjStore_S3;
   }
 
-  return NULL;
+  return new RGWPostObj_ObjStore_S3;
 }
 
 RGWOp *RGWHandler_ObjStore_Obj_S3::get_obj_op(bool get_data)

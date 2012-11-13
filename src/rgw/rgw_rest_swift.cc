@@ -612,7 +612,7 @@ RGWOp *RGWHandler_ObjStore_Obj_SWIFT::op_copy()
 
 int RGWHandler_ObjStore_SWIFT::authorize()
 {
-  bool authorized = rgw_verify_swift_token(store, s);
+  bool authorized = rgw_swift->verify_swift_token(store, s);
   if (!authorized)
     return -EPERM;
 

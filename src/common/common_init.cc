@@ -109,7 +109,7 @@ void complain_about_parse_errors(CephContext *cct,
  * same application. */
 void common_init_finish(CephContext *cct)
 {
-  ceph::crypto::init();
+  ceph::crypto::init(cct);
   cct->start_service_thread();
 
   if (cct->_conf->lockdep) {

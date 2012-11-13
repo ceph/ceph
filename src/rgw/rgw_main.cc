@@ -458,6 +458,7 @@ int main(int argc, const char **argv)
   RGWREST rest;
 
   list<string> apis;
+  bool do_swift = false;
 
   get_str_list(g_conf->rgw_enable_apis, apis);
 
@@ -469,8 +470,11 @@ int main(int argc, const char **argv)
   if (apis_map.count("s3") > 0)
     rest.register_default_mgr(new RGWRESTMgr_S3);
 
-  if (apis_map.count("swift") > 0)
+  if (apis_map.count("swift") > 0) {
+    do_swift = true;
+    swift_init(g_ceph_context);
     rest.register_resource(g_conf->rgw_swift_url_prefix, new RGWRESTMgr_SWIFT);
+  }
 
   if (apis_map.count("swift_auth") > 0)
     rest.register_resource(g_conf->rgw_swift_auth_entry, new RGWRESTMgr_SWIFT_Auth);
@@ -483,6 +487,10 @@ int main(int argc, const char **argv)
 
   RGWProcess process(g_ceph_context, store, g_conf->rgw_thread_pool_size, &rest);
   process.run();
+
+  if (do_swift) {
+    swift_finalize();
+  }
 
   rgw_log_usage_finalize();
 

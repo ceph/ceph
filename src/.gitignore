@@ -23,6 +23,7 @@
 /radosgw
 /radosgw-admin
 /rbdtool
+/rgw_jsonparser
 /rgw_multiparser
 /streamtest
 /bench_log

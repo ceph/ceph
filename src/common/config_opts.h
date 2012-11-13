@@ -77,6 +77,7 @@ SUBSYS(monc, 0, 10)
 SUBSYS(paxos, 0, 5)
 SUBSYS(tp, 0, 5)
 SUBSYS(auth, 1, 5)
+SUBSYS(crypto, 1, 5)
 SUBSYS(finisher, 1, 1)
 SUBSYS(heartbeatmap, 1, 5)
 SUBSYS(perfcounter, 1, 5)
@@ -430,17 +431,28 @@ OPTION(rbd_cache_size, OPT_LONGLONG, 32<<20)         // cache size in bytes
 OPTION(rbd_cache_max_dirty, OPT_LONGLONG, 24<<20)    // dirty limit in bytes - set to 0 for write-through caching
 OPTION(rbd_cache_target_dirty, OPT_LONGLONG, 16<<20) // target dirty limit in bytes
 OPTION(rbd_cache_max_dirty_age, OPT_FLOAT, 1.0)      // seconds in cache before writeback starts
+
+OPTION(nss_db_path, OPT_STR, "") // path to nss db
+
 OPTION(rgw_data, OPT_STR, "/var/lib/ceph/radosgw/$cluster-$id")
 OPTION(rgw_enable_apis, OPT_STR, "s3, swift, swift_auth, admin")
 OPTION(rgw_cache_enabled, OPT_BOOL, true)   // rgw cache enabled
 OPTION(rgw_cache_lru_size, OPT_INT, 10000)   // num of entries in rgw cache
 OPTION(rgw_socket_path, OPT_STR, "")   // path to unix domain socket, if not specified, rgw will not run as external fcgi
 OPTION(rgw_dns_name, OPT_STR, "")
-OPTION(rgw_swift_url, OPT_STR, "")              // 
-OPTION(rgw_swift_url_prefix, OPT_STR, "swift")  // 
+OPTION(rgw_swift_url, OPT_STR, "")             // the swift url, being published by the internal swift auth
+OPTION(rgw_swift_url_prefix, OPT_STR, "swift") // entry point for which a url is considered a swift url
+OPTION(rgw_swift_auth_url, OPT_STR, "")        // default URL to go and verify tokens for v1 auth (if not using internal swift auth)
 OPTION(rgw_swift_auth_entry, OPT_STR, "auth")  // entry point for which a url is considered a swift auth url
+OPTION(rgw_swift_use_keystone, OPT_BOOL, false)  // should swift use keystone?
+OPTION(rgw_keystone_url, OPT_STR, "")  // url for keystone server
+OPTION(rgw_keystone_admin_token, OPT_STR, "")  // keystone admin token (shared secret)
+OPTION(rgw_keystone_accepted_roles, OPT_STR, "Member, admin")  // roles required to serve requests
+OPTION(rgw_keystone_token_cache_size, OPT_INT, 10000)  // max number of entries in keystone token cache
+OPTION(rgw_keystone_revocation_interval, OPT_INT, 15 * 60)  // seconds between tokens revocation check
 OPTION(rgw_admin_entry, OPT_STR, "admin")  // entry point for which a url is considered an admin request
 OPTION(rgw_enforce_swift_acls, OPT_BOOL, true)
+OPTION(rgw_swift_token_expiration, OPT_INT, 24 * 3600) // time in seconds for swift token expiration
 OPTION(rgw_print_continue, OPT_BOOL, true)  // enable if 100-Continue works
 OPTION(rgw_remote_addr_param, OPT_STR, "REMOTE_ADDR")  // e.g. X-Forwarded-For, if you have a reverse proxy
 OPTION(rgw_op_thread_timeout, OPT_INT, 10*60)
@@ -469,6 +481,7 @@ OPTION(rgw_gc_obj_min_wait, OPT_INT, 2 * 3600)    // wait time before object may
 OPTION(rgw_gc_processor_max_time, OPT_INT, 3600)  // total run time for a single gc processor work
 OPTION(rgw_gc_processor_period, OPT_INT, 3600)  // gc processor cycle time
 OPTION(rgw_resolve_cname, OPT_BOOL, false)  // should rgw try to resolve hostname as a dns cname record
+OPTION(rgw_obj_stripe_size, OPT_INT, 4 << 20)
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 

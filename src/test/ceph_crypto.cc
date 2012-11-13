@@ -5,7 +5,7 @@
 class CryptoEnvironment: public ::testing::Environment {
 public:
   void SetUp() {
-    ceph::crypto::init();
+    ceph::crypto::init(g_ceph_context);
   }
 };
 
@@ -117,7 +117,7 @@ class ForkDeathTest : public ::testing::Test {
   virtual void TearDown() {
     // undo the NSS shutdown we did in the parent process, after the
     // test is done
-    ceph::crypto::init();
+    ceph::crypto::init(g_ceph_context);
   }
 };
 
@@ -127,7 +127,7 @@ void do_simple_crypto() {
   // fork, and if you comment out the ceph::crypto::init, or if the
   // trick were to fail, you would see this ending in an assert and
   // not exit status 0
-  ceph::crypto::init();
+  ceph::crypto::init(g_ceph_context);
   ceph::crypto::MD5 h;
   h.Update((const byte*)"foo", 3);
   unsigned char digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
