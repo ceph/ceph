@@ -343,7 +343,7 @@ librgw_a_SOURCES =  \
 	rgw/rgw_multi_del.cc \
 	rgw/rgw_env.cc
 librgw_a_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
-librgw_a_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+librgw_a_CXXFLAGS = -Woverloaded-virtual ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 noinst_LIBRARIES += librgw.a
 
 my_radosgw_ldadd = \

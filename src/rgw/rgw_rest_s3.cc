@@ -64,7 +64,7 @@ static struct response_attr_param resp_attr_params[] = {
   {NULL, NULL},
 };
 
-int RGWGetObj_ObjStore_S3::send_response(bufferlist& bl)
+int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl)
 {
   const char *content_type = NULL;
   string content_type_str;
