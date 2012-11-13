@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_CLIENT_METASESSION_H
 #define CEPH_CLIENT_METASESSION_H
 
@@ -35,10 +38,9 @@ struct MetaSession {
   
   MetaSession() : mds_num(-1), seq(0), cap_gen(0), cap_renew_seq(0), num_caps(0),
 		 closing(false), was_stale(false), release(NULL) {}
-  ~MetaSession() {
-    if (release)
-      release->put();
-  }
+  ~MetaSession();
+
+  void dump(Formatter *f) const;
 };
 
 #endif

@@ -1,5 +1,12 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_CLIENT_SNAPREALM_H
 #define CEPH_CLIENT_SNAPREALM_H
+
+#include "include/types.h"
+#include "common/snap_types.h"
+#include "include/xlist.h"
 
 class Inode;
 
@@ -38,6 +45,8 @@ public:
       build_snap_context();
     return cached_snap_context;
   }
+
+  void dump(Formatter *f) const;
 };
 
 inline ostream& operator<<(ostream& out, const SnapRealm& r) {

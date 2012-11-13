@@ -64,6 +64,8 @@ using namespace std;
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/perf_counters.h"
+#include "common/admin_socket.h"
+#include "common/errno.h"
 
 #include "common/config.h"
 
@@ -101,6 +103,33 @@ void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 
 // -------------
 
+Client::CommandHook::CommandHook(Client *client) :
+  m_client(client)
+{
+}
+
+bool Client::CommandHook::call(std::string command, std::string args, bufferlist& out)
+{
+  stringstream ss;
+  JSONFormatter formatter(true);
+  m_client->client_lock.Lock();
+  if (command == "mds_requests")
+    m_client->dump_mds_requests(&formatter);
+  else if (command == "mds_sessions")
+    m_client->dump_mds_sessions(&formatter);
+  else if (command == "dump_cache")
+    m_client->dump_cache(&formatter);
+  else
+    assert(0 == "bad command registered");
+  m_client->client_lock.Unlock();
+  formatter.flush(ss);
+  out.append(ss);
+  return true;
+}
+
+
+// -------------
+
 dir_result_t::dir_result_t(Inode *in)
   : inode(in), offset(0), this_offset(2), next_offset(2),
     release_count(0), start_shared_gen(0),
@@ -111,7 +140,11 @@ dir_result_t::dir_result_t(Inode *in)
 // cons/des
 
 Client::Client(Messenger *m, MonClient *mc)
-  : Dispatcher(m->cct), cct(m->cct), logger(NULL), timer(m->cct, client_lock), 
+  : Dispatcher(m->cct),
+    cct(m->cct),
+    logger(NULL),
+    m_command_hook(this),
+    timer(m->cct, client_lock),
     ino_invalidate_cb(NULL),
     ino_invalidate_cb_handle(NULL),
     getgroups_cb(NULL),
@@ -229,7 +262,7 @@ inodeno_t Client::get_root_ino()
 
 // debug crapola
 
-void Client::dump_inode(Inode *in, set<Inode*>& did, bool disconnected)
+void Client::dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconnected)
 {
   filepath path;
   in->make_long_path(path);
@@ -239,6 +272,16 @@ void Client::dump_inode(Inode *in, set<Inode*>& did, bool disconnected)
 		<< " " << path
 		<< " ref " << in->get_num_ref()
 		<< *in << dendl;
+
+  if (f) {
+    f->open_object_section("inode");
+    f->dump_stream("path") << path;
+    if (disconnected)
+      f->dump_int("disconnected", 1);
+    in->dump(f);
+    f->close_section();
+  }
+
   did.insert(in);
   if (in->dir) {
     ldout(cct, 1) << "  dir " << in->dir << " size " << in->dir->dentries.size() << dendl;
@@ -246,19 +289,28 @@ void Client::dump_inode(Inode *in, set<Inode*>& did, bool disconnected)
          it != in->dir->dentries.end();
          it++) {
       ldout(cct, 1) << "   " << in->ino << " dn " << it->first << " " << it->second << " ref " << it->second->ref << dendl;
-      dump_inode(it->second->inode, did, false);
+      if (f) {
+	f->open_object_section("dentry");
+	it->second->dump(f);
+	f->close_section();
+      }	
+      if (it->second->inode)
+	dump_inode(f, it->second->inode, did, false);
     }
   }
 }
 
-void Client::dump_cache()
+void Client::dump_cache(Formatter *f)
 {
   set<Inode*> did;
 
   ldout(cct, 1) << "dump_cache" << dendl;
 
+  if (f)
+    f->open_array_section("cache");
+
   if (root)
-    dump_inode(root, did, true);
+    dump_inode(f, root, did, true);
 
   // make a second pass to catch anything disconnected
   for (hash_map<vinodeno_t, Inode*>::iterator it = inode_map.begin();
@@ -266,8 +318,11 @@ void Client::dump_cache()
        it++) {
     if (did.count(it->second))
       continue;
-    dump_inode(it->second, did, true);
+    dump_inode(f, it->second, did, true);
   }
+
+  if (f)
+    f->close_section();
 }
 
 int Client::init()
@@ -310,6 +365,30 @@ int Client::init()
   cct->get_perfcounters_collection()->add(logger);
 
   initialized = true;
+
+  AdminSocket* admin_socket = cct->get_admin_socket();
+  int ret = admin_socket->register_command("mds_requests",
+					   &m_command_hook,
+					   "show in-progress mds requests");
+  if (ret < 0) {
+    lderr(cct) << "error registering admin socket command: "
+	       << cpp_strerror(-ret) << dendl;
+  }
+  ret = admin_socket->register_command("mds_sessions",
+				       &m_command_hook,
+				       "show mds session state");
+  if (ret < 0) {
+    lderr(cct) << "error registering admin socket command: "
+	       << cpp_strerror(-ret) << dendl;
+  }
+  ret = admin_socket->register_command("dump_cache",
+				       &m_command_hook,
+				       "show in-memory metadata cache contents");
+  if (ret < 0) {
+    lderr(cct) << "error registering admin socket command: "
+	       << cpp_strerror(-ret) << dendl;
+  }
+
   client_lock.Unlock();
   return r;
 }
@@ -317,6 +396,11 @@ int Client::init()
 void Client::shutdown() 
 {
   ldout(cct, 1) << "shutdown" << dendl;
+
+  AdminSocket* admin_socket = cct->get_admin_socket();
+  admin_socket->unregister_command("mds_requests");
+  admin_socket->unregister_command("mds_sessions");
+  admin_socket->unregister_command("dump_cache");
 
   if (ino_invalidate_cb) {
     ldout(cct, 10) << "shutdown stopping invalidator finisher" << dendl;
@@ -1033,6 +1117,33 @@ void Client::connect_mds_targets(int mds)
   }
 }
 
+void Client::dump_mds_sessions(Formatter *f)
+{
+  f->open_array_section("open_sessions");
+  for (map<int,MetaSession*>::const_iterator p = mds_sessions.begin(); p != mds_sessions.end(); ++p) {
+    f->open_object_section("session");
+    p->second->dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("opening_sessions");
+  for (map<int,list<Cond*> >::const_iterator p = waiting_for_session.begin(); p != waiting_for_session.end(); ++p) {
+    f->dump_int("mds", p->first);
+  }
+  f->close_section();
+  f->dump_int("mdsmap_epoch", mdsmap->get_epoch());
+}
+void Client::dump_mds_requests(Formatter *f)
+{
+  for (map<tid_t, MetaRequest*>::iterator p = mds_requests.begin();
+       p != mds_requests.end();
+       ++p) {
+    f->open_object_section("request");
+    p->second->dump(f);
+    f->close_section();
+  }
+}
+
 int Client::make_request(MetaRequest *request, 
 			 int uid, int gid, 
 			 Inode **ptarget,
@@ -1587,7 +1698,7 @@ bool Client::ms_dispatch(Message *m)
     } else {
       ldout(cct, 10) << "unmounting: trim pass, size still " << lru.lru_get_size() 
                << "+" << inode_map.size() << dendl;
-      dump_cache();      
+      dump_cache(NULL);      
     }
   }
 
@@ -3479,7 +3590,7 @@ void Client::unmount()
             << "+" << inode_map.size() << " items" 
 	    << ", waiting (for caps to release?)"
             << dendl;
-    dump_cache();
+    dump_cache(NULL);
     mount_cond.Wait(client_lock);
   }
   assert(lru.lru_get_size() == 0);
