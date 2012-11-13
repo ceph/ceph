@@ -6,7 +6,6 @@
   <property name="src.dir" location="java" />
   <property name="doc.dir" location="doc" />
   <property name="test.dir" location="test" />
-  <property name="src.dir" location="src" />
 
   <property environment="env"/>
 
