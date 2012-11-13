@@ -963,7 +963,7 @@ class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
 protected:
   uint64_t obj_len;
 
-  int handle_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle);
+  int handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle);
   int throttle_data(void *handle);
 
   RGWPutObjProcessor_Aio() : max_chunks(RGW_MAX_PENDING_CHUNKS), obj_len(0) {}
@@ -972,7 +972,7 @@ protected:
   }
 };
 
-int RGWPutObjProcessor_Aio::handle_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle)
+int RGWPutObjProcessor_Aio::handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle)
 {
   if ((uint64_t)abs_ofs + bl.length() > obj_len)
     obj_len = abs_ofs + bl.length();
@@ -1086,7 +1086,7 @@ public:
     }
     if (ofs >= next_part_ofs)
       prepare_next_part(ofs);
-    int r = RGWPutObjProcessor_Aio::handle_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle);
+    int r = RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle);
 
     return r;
   }
