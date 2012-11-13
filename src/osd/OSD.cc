@@ -728,7 +728,6 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   finished_lock("OSD::finished_lock"),
   admin_ops_hook(NULL),
   historic_ops_hook(NULL),
-  op_queue_len(0),
   op_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
   peering_wq(this, g_conf->osd_op_thread_timeout, &op_tp, 200),
   map_lock("OSD::map_lock"),
@@ -5609,37 +5608,98 @@ bool OSD::op_is_discardable(MOSDOp *op)
 void OSD::enqueue_op(PG *pg, OpRequestRef op)
 {
   dout(15) << "enqueue_op " << op << " " << *(op->request) << dendl;
-  pg->queue_op(op);
+  op_wq.queue(make_pair(PGRef(pg), op));
 }
 
-bool OSD::OpWQ::_enqueue(PG *pg)
+void OSD::OpWQ::_enqueue(pair<PGRef, OpRequestRef> item)
 {
-  pg->get();
-  osd->op_queue.push_back(pg);
-  osd->op_queue_len++;
-  osd->logger->set(l_osd_opq, osd->op_queue_len);
-  return true;
+  unsigned priority = item.second->request->get_priority();
+  unsigned cost = item.second->request->get_data().length();
+  if (priority >= CEPH_MSG_PRIO_LOW)
+    pqueue.enqueue_strict(
+      item.second->request->get_source_inst(),
+      priority, item);
+  else
+    pqueue.enqueue(item.second->request->get_source_inst(),
+      priority, cost, item);
+  osd->logger->set(l_osd_opq, pqueue.length());
 }
 
-PG *OSD::OpWQ::_dequeue()
+void OSD::OpWQ::_enqueue_front(pair<PGRef, OpRequestRef> item)
 {
-  if (osd->op_queue.empty())
-    return NULL;
-  PG *pg = osd->op_queue.front();
-  osd->op_queue.pop_front();
-  osd->op_queue_len--;
-  osd->logger->set(l_osd_opq, osd->op_queue_len);
+  {
+    Mutex::Locker l(qlock);
+    if (pg_for_processing.count(&*(item.first))) {
+      pg_for_processing[&*(item.first)].push_front(item.second);
+      item.second = pg_for_processing[&*(item.first)].back();
+      pg_for_processing[&*(item.first)].pop_back();
+    }
+  }
+  unsigned priority = item.second->request->get_priority();
+  unsigned cost = item.second->request->get_data().length();
+  if (priority >= CEPH_MSG_PRIO_LOW)
+    pqueue.enqueue_strict_front(
+      item.second->request->get_source_inst(),
+      priority, item);
+  else
+    pqueue.enqueue_front(item.second->request->get_source_inst(),
+      priority, cost, item);
+  osd->logger->set(l_osd_opq, pqueue.length());
+}
+
+PGRef OSD::OpWQ::_dequeue()
+{
+  assert(!pqueue.empty());
+  PGRef pg;
+  {
+    Mutex::Locker l(qlock);
+    pair<PGRef, OpRequestRef> ret = pqueue.dequeue();
+    pg = ret.first;
+    pg_for_processing[&*pg].push_back(ret.second);
+  }
+  osd->logger->set(l_osd_opq, pqueue.length());
   return pg;
 }
+
+void OSD::OpWQ::_process(PGRef pg)
+{
+  pg->lock();
+  OpRequestRef op;
+  {
+    Mutex::Locker l(qlock);
+    assert(pg_for_processing.count(&*pg));
+    assert(pg_for_processing[&*pg].size());
+    op = pg_for_processing[&*pg].front();
+    pg_for_processing[&*pg].pop_front();
+    if (!(pg_for_processing[&*pg].size()))
+      pg_for_processing.erase(&*pg);
+  }
+  osd->dequeue_op(pg, op);
+  pg->unlock();
+}
+
+/*
+ * NOTE: dequeue called in worker thread, with pg lock
+ */
+void OSD::dequeue_op(PGRef pg, OpRequestRef op)
+{
+  dout(10) << "dequeue_op " << op << " " << *(op->request)
+	   << " pg " << *pg << dendl;
+  if (pg->deleting)
+    return;
+
+  op->mark_reached_pg();
+
+  pg->do_request(op);
+
+  // finish
+  dout(10) << "dequeue_op " << op << " finish" << dendl;
+}
+
 
 void OSDService::queue_for_peering(PG *pg)
 {
   peering_wq.queue(pg);
-}
-
-void OSDService::queue_for_op(PG *pg)
-{
-  op_wq.queue(pg);
 }
 
 void OSD::process_peering_events(const list<PG*> &pgs)
@@ -5677,44 +5737,6 @@ void OSD::process_peering_events(const list<PG*> &pgs)
 
   service.send_pg_temp();
 }
-
-/*
- * NOTE: dequeue called in worker thread, without osd_lock
- */
-void OSD::dequeue_op(PG *pg)
-{
-  OpRequestRef op;
-
-  pg->lock();
-  if (pg->deleting) {
-    pg->unlock();
-    pg->put();
-    return;
-  }
-
-  pg->lockq();
-  assert(!pg->op_queue.empty());
-  op = pg->op_queue.front();
-  pg->op_queue.pop_front();
-  pg->unlockq();
-    
-  dout(10) << "dequeue_op " << op << " " << *op->request << " pg " << *pg << dendl;
-
-  op->mark_reached_pg();
-
-  pg->do_request(op);
-
-  // unlock and put pg
-  pg->unlock();
-  pg->put();
-  
-  //#warning foo
-  //scrub_wq.queue(pg);
-
-  // finish
-  dout(10) << "dequeue_op " << op << " finish" << dendl;
-}
-
 
 // --------------------------------
 

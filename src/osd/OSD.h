@@ -53,6 +53,7 @@ using namespace __gnu_cxx;
 #include "common/shared_cache.hpp"
 #include "common/simple_cache.hpp"
 #include "common/sharedptr_registry.hpp"
+#include "common/PrioritizedQueue.h"
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */
 
@@ -172,7 +173,7 @@ public:
   Messenger *&client_messenger;
   PerfCounters *&logger;
   MonClient   *&monc;
-  ThreadPool::WorkQueue<PG> &op_wq;
+  ThreadPool::WorkQueueVal<pair<PGRef, OpRequestRef>, PGRef> &op_wq;
   ThreadPool::BatchWorkQueue<PG> &peering_wq;
   ThreadPool::WorkQueue<PG> &recovery_wq;
   ThreadPool::WorkQueue<PG> &snap_trim_wq;
@@ -279,7 +280,6 @@ public:
   void send_pg_temp();
 
   void queue_for_peering(PG *pg);
-  void queue_for_op(PG *pg);
   bool queue_for_recovery(PG *pg);
   bool queue_for_snap_trim(PG *pg) {
     return snap_trim_wq.queue(pg);
@@ -569,44 +569,43 @@ private:
   HistoricOpsSocketHook *historic_ops_hook;
 
   // -- op queue --
-  list<PG*> op_queue;
-  int op_queue_len;
 
-  struct OpWQ : public ThreadPool::WorkQueue<PG> {
+  struct OpWQ: public ThreadPool::WorkQueueVal<pair<PGRef, OpRequestRef>,
+					       PGRef > {
+    Mutex qlock;
+    map<PG*, list<OpRequestRef> > pg_for_processing;
     OSD *osd;
+    PrioritizedQueue<pair<PGRef, OpRequestRef>, entity_inst_t > pqueue;
     OpWQ(OSD *o, time_t ti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<PG>("OSD::OpWQ", ti, ti*10, tp), osd(o) {}
+      : ThreadPool::WorkQueueVal<pair<PGRef, OpRequestRef>, PGRef >(
+	"OSD::OpWQ", ti, ti*10, tp),
+	qlock("OpWQ::qlock"),
+	osd(o) {}
 
-    bool _enqueue(PG *pg);
-    void _dequeue(PG *pg) {
-      for (list<PG*>::iterator i = osd->op_queue.begin();
-	   i != osd->op_queue.end();
-	   ) {
-	if (*i == pg) {
-	  osd->op_queue.erase(i++);
-	  pg->put();
-	} else {
-	  ++i;
-	}
+    void _enqueue_front(pair<PGRef, OpRequestRef> item);
+    void _enqueue(pair<PGRef, OpRequestRef> item);
+    PGRef _dequeue();
+
+    struct Pred {
+      PG *pg;
+      Pred(PG *pg) : pg(pg) {}
+      bool operator()(const pair<PGRef, OpRequestRef> &op) {
+	return op.first == pg;
       }
+    };
+    void dequeue(PG *pg) {
+      lock();
+      pqueue.remove_by_filter(Pred(pg));
+      unlock();
     }
     bool _empty() {
-      return osd->op_queue.empty();
+      return pqueue.empty();
     }
-    PG *_dequeue();
-    void _process(PG *pg) {
-      osd->dequeue_op(pg);
-    }
-    void _clear() {
-      assert(osd->op_queue.empty());
-    }
+    void _process(PGRef pg);
   } op_wq;
 
   void enqueue_op(PG *pg, OpRequestRef op);
-  void dequeue_op(PG *pg);
-  static void static_dequeueop(OSD *o, PG *pg) {
-    o->dequeue_op(pg);
-  };
+  void dequeue_op(PGRef pg, OpRequestRef op);
 
   // -- peering queue --
   struct PeeringWQ : public ThreadPool::BatchWorkQueue<PG> {

@@ -528,8 +528,6 @@ void SimpleMessenger::wait()
       reaper_cond.Wait(lock);
       reaper();
     }
-
-    dispatch_queue.local_queue.discard_queue();
   }
   lock.Unlock();
 
