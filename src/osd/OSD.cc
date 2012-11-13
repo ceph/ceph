@@ -940,6 +940,7 @@ int OSD::init()
   }
 
   state = STATE_BOOTING;
+  start_boot();
 
   osd_lock.Lock();
   return 0;
