@@ -628,6 +628,7 @@ void Monitor::shutdown()
   // unlock before msgr shutdown...
   lock.Unlock();
 
+  remove_all_sessions();
   messenger->shutdown();  // last thing!  ceph_mon.cc will delete mon.
 }
 
@@ -1836,6 +1837,13 @@ void Monitor::remove_session(MonSession *s)
   session_map.remove_session(s);
 }
 
+void Monitor::remove_all_sessions()
+{
+  while (!session_map.sessions.empty()) {
+    MonSession *s = session_map.sessions.front();
+    remove_session(s);
+  }
+}
 
 void Monitor::send_command(const entity_inst_t& inst,
 			   const vector<string>& com, version_t version)
