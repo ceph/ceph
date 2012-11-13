@@ -16,12 +16,15 @@
 #define CEPH_DISPATCHQUEUE_H
 
 #include <map>
+#include <boost/intrusive_ptr.hpp>
+#include "include/assert.h"
 #include "include/xlist.h"
 #include "include/atomic.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
 #include "common/RefCountedObj.h"
+#include "common/PrioritizedQueue.h"
 
 class CephContext;
 class DispatchQueue;
@@ -30,43 +33,8 @@ class SimpleMessenger;
 class Message;
 class Connection;
 
-struct IncomingQueue : public RefCountedObject {
-  CephContext *cct;
-  DispatchQueue *dq;
-  SimpleMessenger *msgr;
-  void *parent;
-  Mutex lock;
-  map<int, list<Message*> > in_q; // and inbound ones
-  int in_qlen;
-  map<int, xlist<IncomingQueue *>::item* > queue_items; // protected by pipe_lock AND q.lock
-  bool halt;
-
-  void queue(Message *m, int priority, bool hold_dq_lock=false);
-  void discard_queue();
-  void restart_queue();
-
-private:
-  friend class DispatchQueue;
-  IncomingQueue(CephContext *cct, DispatchQueue *dq, SimpleMessenger *msgr, void *parent)
-    : cct(cct),
-      dq(dq),
-      msgr(msgr),
-      parent(parent),
-      lock("SimpleMessenger::IncomingQueue::lock"),
-      in_qlen(0),
-      halt(false)
-  {
-  }
-  ~IncomingQueue() {
-    for (map<int, xlist<IncomingQueue *>::item* >::iterator i = queue_items.begin();
-	 i != queue_items.end();
-	 ++i) {
-      assert(!i->second->is_on_list());
-      delete i->second;
-    }
-  }
-};
-
+typedef boost::intrusive_ptr<Connection> ConnectionRef;
+typedef boost::intrusive_ptr<Message> MessageRef;
 
 /**
  * The DispatchQueue contains all the Pipes which have Messages
@@ -74,21 +42,40 @@ private:
  * and permitted to deliver in a round-robin fashion.
  * See SimpleMessenger::dispatch_entry for details.
  */
-struct DispatchQueue {
+class DispatchQueue {
+  class QueueItem {
+    int type;
+    ConnectionRef con;
+    MessageRef m;
+  public:
+    QueueItem(Message *m) : type(-1), con(0), m(m) {}
+    QueueItem(int type, Connection *con) : type(type), con(con), m(0) {}
+    bool is_code() const {
+      return type != -1;
+    }
+    int get_code () {
+      assert(is_code());
+      return type;
+    }
+    Message *get_message() {
+      assert(!is_code());
+      return m.get();
+    }
+    Connection *get_connection() {
+      assert(is_code());
+      return con.get();
+    }
+  };
+    
   CephContext *cct;
   SimpleMessenger *msgr;
   Mutex lock;
   Cond cond;
-  bool stop;
 
-  map<int, xlist<IncomingQueue *>* > queued_pipes;
-  map<int, xlist<IncomingQueue *>::iterator> queued_pipe_iters;
-  atomic_t qlen;
+  PrioritizedQueue<QueueItem, uint64_t> mqueue;
+  uint64_t next_pipe_id;
     
   enum { D_CONNECT = 1, D_ACCEPT, D_BAD_REMOTE_RESET, D_BAD_RESET, D_NUM_CODES };
-  list<Connection*> con_q;
-
-  IncomingQueue local_queue;
 
   /**
    * The DispatchThread runs dispatch_entry to empty out the dispatch_queue.
@@ -103,57 +90,64 @@ struct DispatchQueue {
     }
   } dispatch_thread;
 
+  public:
+  bool stop;
   void local_delivery(Message *m, int priority);
 
-  IncomingQueue *create_queue(Pipe *parent) {
-    return new IncomingQueue(cct, this, msgr, parent);
-  }
-
   int get_queue_len() {
-    return qlen.read();
+    return mqueue.length();
   }
     
   void queue_connect(Connection *con) {
-    lock.Lock();
-    if (stop) {
-      lock.Unlock();
+    Mutex::Locker l(lock);
+    if (stop)
       return;
-    }
-    con_q.push_back(con->get());
-    local_queue.queue((Message*)D_CONNECT, CEPH_MSG_PRIO_HIGHEST, true);
-    lock.Unlock();
+    mqueue.enqueue_strict(
+      0,
+      CEPH_MSG_PRIO_HIGHEST,
+      QueueItem(D_CONNECT, con));
+    cond.Signal();
   }
   void queue_accept(Connection *con) {
-    lock.Lock();
-    if (stop) {
-      lock.Unlock();
+    Mutex::Locker l(lock);
+    if (stop)
       return;
-    }
-    con_q.push_back(con->get());
-    local_queue.queue((Message*)D_ACCEPT, CEPH_MSG_PRIO_HIGHEST, true);
-    lock.Unlock();
+    mqueue.enqueue_strict(
+      0,
+      CEPH_MSG_PRIO_HIGHEST,
+      QueueItem(D_ACCEPT, con));
+    cond.Signal();
   }
   void queue_remote_reset(Connection *con) {
-    lock.Lock();
-    if (stop) {
-      lock.Unlock();
+    Mutex::Locker l(lock);
+    if (stop)
       return;
-    }
-    con_q.push_back(con->get());
-    local_queue.queue((Message*)D_BAD_REMOTE_RESET, CEPH_MSG_PRIO_HIGHEST, true);
-    lock.Unlock();
+    mqueue.enqueue_strict(
+      0,
+      CEPH_MSG_PRIO_HIGHEST,
+      QueueItem(D_BAD_REMOTE_RESET, con));
+    cond.Signal();
   }
   void queue_reset(Connection *con) {
-    lock.Lock();
-    if (stop) {
-      lock.Unlock();
+    Mutex::Locker l(lock);
+    if (stop)
       return;
-    }
-    con_q.push_back(con->get());
-    local_queue.queue((Message*)D_BAD_RESET, CEPH_MSG_PRIO_HIGHEST, true);
-    lock.Unlock();
+    mqueue.enqueue_strict(
+      0,
+      CEPH_MSG_PRIO_HIGHEST,
+      QueueItem(D_BAD_RESET, con));
+    cond.Signal();
   }
 
+  void enqueue(Message *m, int priority, uint64_t id);
+  void discard_queue(uint64_t id) {
+    Mutex::Locker l(lock);
+    mqueue.remove_by_class(id);
+  }
+  uint64_t get_id() {
+    Mutex::Locker l(lock);
+    return next_pipe_id++;
+  }
   void start();
   void entry();
   void wait();
@@ -162,19 +156,10 @@ struct DispatchQueue {
   DispatchQueue(CephContext *cct, SimpleMessenger *msgr)
     : cct(cct), msgr(msgr),
       lock("SimpleMessenger::DispatchQeueu::lock"), 
-      stop(false),
-      qlen(0),
-      local_queue(cct, this, msgr, NULL),
-      dispatch_thread(this)
-  {}
-  ~DispatchQueue() {
-    for (map< int, xlist<IncomingQueue *>* >::iterator i = queued_pipes.begin();
-	 i != queued_pipes.end();
-	 ++i) {
-      i->second->clear();
-      delete i->second;
-    }
-  }
+      next_pipe_id(1),
+      dispatch_thread(this),
+      stop(false)
+    {}
 };
 
 #endif

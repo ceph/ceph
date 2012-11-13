@@ -1211,6 +1211,7 @@ libcommon_files = \
 	msg/Accepter.cc \
 	msg/DispatchQueue.cc \
 	msg/Message.cc \
+	common/RefCountedObj.cc \
 	msg/Messenger.cc \
 	msg/Pipe.cc \
 	msg/SimpleMessenger.cc \
@@ -1428,6 +1429,7 @@ noinst_HEADERS = \
 	common/LogClient.h\
 	common/LogEntry.h\
 	common/WorkQueue.h\
+	common/PrioritizedQueue.h\
 	common/ceph_argparse.h\
 	common/ceph_context.h\
 	common/xattr.h\

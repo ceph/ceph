@@ -576,6 +576,7 @@ protected:
   struct PushInfo {
     ObjectRecoveryProgress recovery_progress;
     ObjectRecoveryInfo recovery_info;
+    int priority;
 
     void dump(Formatter *f) const {
       {
@@ -596,6 +597,7 @@ protected:
   struct PullInfo {
     ObjectRecoveryProgress recovery_progress;
     ObjectRecoveryInfo recovery_info;
+    int priority;
 
     void dump(Formatter *f) const {
       {
@@ -624,11 +626,11 @@ protected:
 			       bufferlist *data_usable);
   void handle_pull_response(OpRequestRef op);
   void handle_push(OpRequestRef op);
-  int send_push(int peer,
+  int send_push(int priority, int peer,
 		const ObjectRecoveryInfo& recovery_info,
 		ObjectRecoveryProgress progress,
 		ObjectRecoveryProgress *out_progress = 0);
-  int send_pull(int peer,
+  int send_pull(int priority, int peer,
 		const ObjectRecoveryInfo& recovery_info,
 		ObjectRecoveryProgress progress);
   void submit_push_data(const ObjectRecoveryInfo &recovery_info,
@@ -741,7 +743,8 @@ protected:
   // Reverse mapping from osd peer to objects beging pulled from that peer
   map<int, set<hobject_t> > pull_from_peer;
 
-  int recover_object_replicas(const hobject_t& soid, eversion_t v);
+  int recover_object_replicas(const hobject_t& soid, eversion_t v,
+			      int priority);
   void calc_head_subsets(ObjectContext *obc, SnapSet& snapset, const hobject_t& head,
 			 pg_missing_t& missing,
 			 const hobject_t &last_backfill,
@@ -751,10 +754,16 @@ protected:
 			  const hobject_t &last_backfill,
 			  interval_set<uint64_t>& data_subset,
 			  map<hobject_t, interval_set<uint64_t> >& clone_subsets);
-  void push_to_replica(ObjectContext *obc, const hobject_t& oid, int dest);
-  void push_start(ObjectContext *obc,
+  void push_to_replica(
+    ObjectContext *obc,
+    const hobject_t& oid,
+    int dest,
+    int priority);
+  void push_start(int priority,
+		  ObjectContext *obc,
 		  const hobject_t& oid, int dest);
-  void push_start(ObjectContext *obc,
+  void push_start(int priority,
+		  ObjectContext *obc,
 		  const hobject_t& soid, int peer,
 		  eversion_t version,
 		  interval_set<uint64_t> &data_subset,
@@ -765,7 +774,9 @@ protected:
 
   // Cancels/resets pulls from peer
   void check_recovery_sources(const OSDMapRef map);
-  int pull(const hobject_t& oid, eversion_t v);
+  int pull(
+    const hobject_t& oid, eversion_t v,
+    int priority);
 
   // low level ops
 

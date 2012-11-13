@@ -281,6 +281,19 @@ public:
     uint64_t zero_to;                // first non-zeroed byte of log.
     bool has_checksums;
 
+    /**
+     * We reconstruct the missing set by comparing the recorded log against
+     * the objects in the pg collection.  Unfortunately, it's possible to
+     * have an object in the missing set which is not in the log due to
+     * a divergent operation with a prior_version pointing before the
+     * pg log tail.  To deal with this, we store alongside the log a mapping
+     * of divergent priors to be checked along with the log during read_state.
+     */
+    map<eversion_t, hobject_t> divergent_priors;
+    void add_divergent_prior(eversion_t version, hobject_t obj) {
+      divergent_priors.insert(make_pair(version, obj));
+    }
+
     OndiskLog() : tail(0), head(0), zero_to(0),
 		  has_checksums(true) {}
 
@@ -294,10 +307,11 @@ public:
     }
 
     void encode(bufferlist& bl) const {
-      ENCODE_START(4, 3, bl);
+      ENCODE_START(5, 3, bl);
       ::encode(tail, bl);
       ::encode(head, bl);
       ::encode(zero_to, bl);
+      ::encode(divergent_priors, bl);
       ENCODE_FINISH(bl);
     }
     void decode(bufferlist::iterator& bl) {
@@ -309,6 +323,8 @@ public:
 	::decode(zero_to, bl);
       else
 	zero_to = 0;
+      if (struct_v >= 5)
+	::decode(divergent_priors, bl);
       DECODE_FINISH(bl);
     }
     void dump(Formatter *f) const {
@@ -348,7 +364,6 @@ protected:
    * put_unlock() when done with the current pointer (_most common_).
    */  
   Mutex _lock;
-  Mutex _qlock;
   Cond _cond;
   atomic_t ref;
 
@@ -356,17 +371,11 @@ public:
   bool deleting;  // true while RemoveWQ should be chewing on us
 
   void lock(bool no_lockdep = false);
-  void lockq(bool no_lockdep = false) {
-    _qlock.Lock(no_lockdep);
-  }
   void unlock() {
     //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
     assert(!dirty_info);
     assert(!dirty_log);
     _lock.Unlock();
-  }
-  void unlockq() {
-    _qlock.Unlock();
   }
 
   /* During handle_osd_map, the osd holds a write lock to the osdmap.
@@ -402,8 +411,6 @@ public:
       delete this;
   }
 
-
-  list<OpRequestRef> op_queue;  // op queue
 
   bool dirty_info, dirty_log;
 
@@ -1732,7 +1739,6 @@ public:
   bool can_discard_request(OpRequestRef op);
 
   bool must_delay_request(OpRequestRef op);
-  void queue_op(OpRequestRef op);
 
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch);
   bool old_peering_evt(CephPeeringEvtRef evt) {
@@ -1809,5 +1815,7 @@ ostream& operator<<(ostream& out, const PG& pg);
 
 void intrusive_ptr_add_ref(PG *pg);
 void intrusive_ptr_release(PG *pg);
+
+typedef boost::intrusive_ptr<PG> PGRef;
 
 #endif

@@ -480,8 +480,4 @@ inline ostream& operator<<(ostream& out, Message& m) {
 extern void encode_message(Message *m, uint64_t features, bufferlist& bl);
 extern Message *decode_message(CephContext *cct, bufferlist::iterator& bl);
 
-void intrusive_ptr_add_ref(Message *p);
-void intrusive_ptr_release(Message *p);
-
-
 #endif
