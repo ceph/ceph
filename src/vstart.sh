@@ -292,9 +292,17 @@ if [ "$start_mon" -eq 1 ]; then
         osd pgp bits = 5  ; (invalid, but ceph should cope!)
         osd pool default min size = 1
 EOF
-			[ "$cephx" -eq 1 ] && cat<<EOF >> $conf
+if [ "$cephx" -eq 1 ] ; then
+cat <<EOF >> $conf
         auth supported = cephx
 EOF
+else
+cat <<EOF >> $conf
+	auth cluster required = none
+	auth service required = none
+	auth client required = none
+EOF
+fi
 			cat <<EOF >> $conf
 
 [client]
