@@ -49,25 +49,27 @@ WRITE_CLASS_ENCODER(ObjectMetaInfo)
 struct ObjectCacheInfo {
   int status;
   uint32_t flags;
+  uint64_t epoch;
   bufferlist data;
   map<string, bufferlist> xattrs;
   map<string, bufferlist> rm_xattrs;
   ObjectMetaInfo meta;
 
-  ObjectCacheInfo() : status(0), flags(0) {}
+  ObjectCacheInfo() : status(0), flags(0), epoch(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 3, bl);
+    ENCODE_START(4, 3, bl);
     ::encode(status, bl);
     ::encode(flags, bl);
     ::encode(data, bl);
     ::encode(xattrs, bl);
     ::encode(meta, bl);
     ::encode(rm_xattrs, bl);
+    ::encode(epoch, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
     ::decode(status, bl);
     ::decode(flags, bl);
     ::decode(data, bl);
@@ -75,6 +77,8 @@ struct ObjectCacheInfo {
     ::decode(meta, bl);
     if (struct_v >= 2)
       ::decode(rm_xattrs, bl);
+    if (struct_v >= 4)
+      ::decode(epoch, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -186,7 +190,7 @@ public:
                 map<string, bufferlist>& attrs,
                 map<string, bufferlist>* rmattrs);
   int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
-                   map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
+                   map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
                    map<std::string, bufferlist>* rmattrs, const bufferlist *data,
                    RGWObjManifest *manifest, const string *ptag);
 
@@ -195,7 +199,7 @@ public:
 
   int get_obj(void *ctx, void **handle, rgw_obj& obj, bufferlist& bl, off_t ofs, off_t end);
 
-  int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs, bufferlist *first_chunk);
+  int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch, map<string, bufferlist> *attrs, bufferlist *first_chunk);
 
   int delete_obj(void *ctx, rgw_obj& obj);
 };
@@ -341,7 +345,7 @@ int RGWCache<T>::set_attrs(void *ctx, rgw_obj& obj,
 
 template <class T>
 int RGWCache<T>::put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
-                              map<std::string, bufferlist>& attrs, RGWObjCategory category, bool exclusive,
+                              map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
                               map<std::string, bufferlist>* rmattrs, const bufferlist *data,
                               RGWObjManifest *manifest, const string *ptag)
 {
@@ -360,7 +364,7 @@ int RGWCache<T>::put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mt
       info.flags |= CACHE_FLAG_DATA;
     }
   }
-  int ret = T::put_obj_meta(ctx, obj, size, mtime, attrs, category, exclusive, rmattrs, data, manifest, ptag);
+  int ret = T::put_obj_meta(ctx, obj, size, mtime, attrs, category, flags, rmattrs, data, manifest, ptag);
   if (cacheable) {
     string name = normal_name(bucket, oid);
     if (ret >= 0) {
@@ -412,18 +416,21 @@ int RGWCache<T>::put_obj_data(void *ctx, rgw_obj& obj, const char *data,
 }
 
 template <class T>
-int RGWCache<T>::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, map<string, bufferlist> *attrs, bufferlist *first_chunk)
+int RGWCache<T>::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
+                          uint64_t *pepoch, map<string, bufferlist> *attrs,
+                          bufferlist *first_chunk)
 {
   rgw_bucket bucket;
   string oid;
   normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
   if (bucket.name[0] != '.')
-    return T::obj_stat(ctx, obj, psize, pmtime, attrs, first_chunk);
+    return T::obj_stat(ctx, obj, psize, pmtime, pepoch, attrs, first_chunk);
 
   string name = normal_name(bucket, oid);
 
   uint64_t size;
   time_t mtime;
+  uint64_t epoch;
 
   ObjectCacheInfo info;
   int r = cache.get(name, info, CACHE_FLAG_META | CACHE_FLAG_XATTRS);
@@ -433,9 +440,10 @@ int RGWCache<T>::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmti
 
     size = info.meta.size;
     mtime = info.meta.mtime;
+    epoch = info.epoch;
     goto done;
   }
-  r = T::obj_stat(ctx, obj, &size, &mtime, &info.xattrs, first_chunk);
+  r = T::obj_stat(ctx, obj, &size, &mtime, &epoch, &info.xattrs, first_chunk);
   if (r < 0) {
     if (r == -ENOENT) {
       info.status = r;
@@ -444,6 +452,7 @@ int RGWCache<T>::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmti
     return r;
   }
   info.status = 0;
+  info.epoch = epoch;
   info.meta.mtime = mtime;
   info.meta.size = size;
   info.flags = CACHE_FLAG_META | CACHE_FLAG_XATTRS;
@@ -453,6 +462,8 @@ done:
     *psize = size;
   if (pmtime)
     *pmtime = mtime;
+  if (pepoch)
+    *pepoch = epoch;
   if (attrs)
     *attrs = info.xattrs;
   return 0;
