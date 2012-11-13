@@ -24,7 +24,7 @@ test ! -d ~/src/teuthology/virtualenv/bin && echo "error: expects to find ~/src/
 KERNEL_SHA1=`wget http://gitbuilder.ceph.com/kernel-deb-precise-x86_64-basic/ref/$kernel/sha1 -O- 2>/dev/null`
 CEPH_SHA1=`wget http://gitbuilder.ceph.com/ceph-tarball-precise-x86_64-$flavor/ref/$ceph/sha1 -O- 2>/dev/null`
 
-if wget http://github.com/ceph/s3-tests/tree/$ceph -O- 2>/dev/null ; then
+if wget http://github.com/ceph/s3-tests/tree/$ceph -O- 2>/dev/null >/dev/null ; then
     s3branch=$ceph
 else
     echo "branch $ceph not in s3-tests.git; will use master for s3tests"
