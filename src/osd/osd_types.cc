@@ -768,7 +768,7 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 7) {
     ::decode(min_size, bl);
   } else {
-    min_size = MAX(size - 1, 1);
+    min_size = size - size/2;
   }
   DECODE_FINISH(bl);
   calc_pg_masks();
