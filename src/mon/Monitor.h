@@ -373,6 +373,7 @@ public:
   void no_reply(PaxosServiceMessage *req);
   void resend_routed_requests();
   void remove_session(MonSession *s);
+  void remove_all_sessions();
 
   void send_command(const entity_inst_t& inst,
 		    const vector<string>& com, version_t version);
