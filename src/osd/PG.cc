@@ -2038,6 +2038,11 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
 
   split_ops(child, split_bits);
   _split_into(child_pgid, child, split_bits);
+
+  child->dirty_info = true;
+  child->dirty_log = true;
+  dirty_info = true;
+  dirty_log = true;
 }
 
 void PG::defer_recovery()
