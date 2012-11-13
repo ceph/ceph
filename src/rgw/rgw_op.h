@@ -108,7 +108,7 @@ public:
   int handle_user_manifest(const char *prefix);
 
   virtual int get_params() = 0;
-  virtual int send_response(bufferlist& bl) = 0;
+  virtual int send_response_data(bufferlist& bl) = 0;
 
   virtual const char *name() { return "get_obj"; }
 };

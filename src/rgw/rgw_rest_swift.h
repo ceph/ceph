@@ -10,7 +10,7 @@ public:
   RGWGetObj_ObjStore_SWIFT() {}
   ~RGWGetObj_ObjStore_SWIFT() {}
 
-  int send_response(bufferlist& bl);
+  int send_response_data(bufferlist& bl);
 };
 
 class RGWListBuckets_ObjStore_SWIFT : public RGWListBuckets_ObjStore {

@@ -16,7 +16,7 @@ public:
   RGWGetObj_ObjStore_S3() {}
   ~RGWGetObj_ObjStore_S3() {}
 
-  int send_response(bufferlist& bl);
+  int send_response_data(bufferlist& bl);
 };
 
 class RGWListBuckets_ObjStore_S3 : public RGWListBuckets_ObjStore {
