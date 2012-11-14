@@ -39,7 +39,7 @@ use Ceph clients to interact with Ceph server daemons.
 For additional information, see our `Cephx Guide`_ and `ceph-authtool manpage`_.
 
 .. _Cephx Guide: ../authentication
-.. _ceph-authtool manpage: ../../man/8/ceph-authtool/
+.. _ceph-authtool manpage: ../../../man/8/ceph-authtool
 
 Ceph Authentication (cephx)
 ===========================

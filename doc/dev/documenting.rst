@@ -27,7 +27,7 @@ The general format for function documentation is::
 This should be in the header where the function is declared, and
 functions should be grouped into logical categories. The `librados C
 API`_ provides a complete example. It is pulled into Sphinx by
-`librados.rst`_, which is rendered at :doc:`/api/librados`.
+`librados.rst`_, which is rendered at :doc:`/rados/api/librados`.
 
 .. _`librados C API`: https://github.com/ceph/ceph/blob/master/src/include/rados/librados.h
 .. _`librados.rst`: https://raw.github.com/ceph/ceph/master/doc/api/librados.rst
