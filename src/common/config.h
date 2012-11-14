@@ -216,6 +216,12 @@ public:
 #undef SUBSYS
 #undef DEFAULT_SUBSYS
 
+  unsigned get_osd_pool_default_min_size() const {
+    return osd_pool_default_min_size ?
+      MIN(osd_pool_default_min_size, osd_pool_default_size) :
+      osd_pool_default_size - osd_pool_default_size / 2;
+  }
+
   /** A lock that protects the md_config_t internals. It is
    * recursive, for simplicity.
    * It is best if this lock comes first in the lock hierarchy. We will
