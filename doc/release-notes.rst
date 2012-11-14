@@ -5,8 +5,8 @@
 v0.54
 -----
 
-Notable changes
-~~~~~~~~~~~~~~~
+Upgrading
+~~~~~~~~~
 
 * The osd capabilities associated with a rados user have changed
   syntax since 0.48 argonaut. The new format is mostly backwards
