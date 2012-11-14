@@ -1892,11 +1892,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
   pending_inc.new_pools[pool].type = pg_pool_t::TYPE_REP;
 
   pending_inc.new_pools[pool].size = g_conf->osd_pool_default_size;
-  if (g_conf->osd_pool_default_min_size)
-    pending_inc.new_pools[pool].min_size = MIN(g_conf->osd_pool_default_size,
-					       g_conf->osd_pool_default_min_size);
-  else
-    pending_inc.new_pools[pool].min_size = g_conf->osd_pool_default_size - g_conf->osd_pool_default_size/2;
+  pending_inc.new_pools[pool].min_size = g_conf->get_osd_pool_default_min_size();
   if (crush_rule >= 0)
     pending_inc.new_pools[pool].crush_ruleset = crush_rule;
   else
