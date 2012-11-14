@@ -126,13 +126,35 @@ def task(ctx, config):
         log.info('Unmounting ceph-fuse clients...')
         for id_, remote in clients:
             mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
-            remote.run(
-                args=[
-                    'fusermount',
-                    '-u',
-                    mnt,
-                    ],
-                )
+            try:
+              remote.run(
+                  args=[
+                      'fusermount',
+                      '-u',
+                      mnt,
+                      ],
+                  )
+            except CommandFailedError as e:
+              # abort the fuse mount, killing all hung processes
+              remote.run(
+                  args=[
+                      'echo',
+                      '1',
+                      run.Raw('>'),
+                      run.Raw('/sys/fs/fuse/connections/*/abort'),
+                      ],
+                 )
+              # make sure its unmounted
+              remote.run(
+                  args=[
+                      'sudo',
+                      'umount',
+                      '-l',
+                      '-f',
+                      mnt,
+                      ],
+                  )
+
         run.wait(fuse_daemons.itervalues())
 
         for id_, remote in clients:
