@@ -127,6 +127,7 @@ struct RGWRequest
 
 class RGWProcess {
   RGWRados *store;
+  OpsLogSocket *olog;
   deque<RGWRequest *> m_req_queue;
   ThreadPool m_tp;
   Throttle req_throttle;
@@ -185,8 +186,8 @@ class RGWProcess {
   uint64_t max_req_id;
 
 public:
-  RGWProcess(CephContext *cct, RGWRados *rgwstore, int num_threads, RGWREST *_rest)
-    : store(rgwstore), m_tp(cct, "RGWProcess::m_tp", num_threads),
+  RGWProcess(CephContext *cct, RGWRados *rgwstore, OpsLogSocket *_olog, int num_threads, RGWREST *_rest)
+    : store(rgwstore), olog(_olog), m_tp(cct, "RGWProcess::m_tp", num_threads),
       req_throttle(cct, "rgw_ops", num_threads * 2),
       rest(_rest),
       req_wq(this, g_conf->rgw_op_thread_timeout,
@@ -331,7 +332,7 @@ void RGWProcess::handle_request(RGWRequest *req)
   op->execute();
   op->complete();
 done:
-  rgw_log_op(store, s, (op ? op->name() : "unknown"));
+  rgw_log_op(store, s, (op ? op->name() : "unknown"), olog);
 
   int http_ret = s->err.http_ret;
 
@@ -485,7 +486,14 @@ int main(int argc, const char **argv)
     rest.register_resource(g_conf->rgw_admin_entry, admin_resource);
   }
 
-  RGWProcess process(g_ceph_context, store, g_conf->rgw_thread_pool_size, &rest);
+  OpsLogSocket *olog = NULL;
+
+  if (!g_conf->rgw_ops_log_socket_path.empty()) {
+    olog = new OpsLogSocket(g_ceph_context, g_conf->rgw_ops_log_data_backlog);
+    olog->init(g_conf->rgw_ops_log_socket_path);
+  }
+
+  RGWProcess process(g_ceph_context, store, olog, g_conf->rgw_thread_pool_size, &rest);
   process.run();
 
   if (do_swift) {
@@ -493,6 +501,8 @@ int main(int argc, const char **argv)
   }
 
   rgw_log_usage_finalize();
+
+  delete olog;
 
   rgw_perf_stop(g_ceph_context);
 
