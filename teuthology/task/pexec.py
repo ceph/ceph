@@ -1,6 +1,7 @@
 import contextlib
 import logging
 import os
+from datetime import datetime
 
 from teuthology import misc as teuthology
 from teuthology.parallel import parallel
@@ -20,7 +21,6 @@ def _exec_role(remote, role, sudo, ls):
     r.stdin.writelines(['cd /tmp/cephtest/mnt.{cid}\n'.format(cid=cid)])
     r.stdin.flush()
     for l in ls:
-        log.info('[%s] %s', remote.name, l)
         r.stdin.writelines([l, '\n'])
         r.stdin.flush()
     r.stdin.writelines(['\n'])
