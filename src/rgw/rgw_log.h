@@ -3,6 +3,8 @@
 
 #include "rgw_common.h"
 #include "include/utime.h"
+#include "common/Formatter.h"
+#include "common/OutputDataSocket.h"
 
 class RGWRados;
 
@@ -115,11 +117,27 @@ struct rgw_intent_log_entry {
 };
 WRITE_CLASS_ENCODER(rgw_intent_log_entry)
 
-int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name);
+class OpsLogSocket : public OutputDataSocket {
+  Formatter *formatter;
+
+  void formatter_to_bl(bufferlist& bl);
+
+protected:
+  void init_connection(bufferlist& bl);
+
+public:
+  OpsLogSocket(CephContext *cct, uint64_t _backlog);
+  ~OpsLogSocket();
+
+  void log(struct rgw_log_entry& entry);
+};
+
+int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsLogSocket *olog);
 int rgw_log_intent(RGWRados *store, rgw_obj& obj, RGWIntentEvent intent, const utime_t& timestamp, bool utc);
 int rgw_log_intent(RGWRados *store, struct req_state *s, rgw_obj& obj, RGWIntentEvent intent);
 void rgw_log_usage_init(CephContext *cct, RGWRados *store);
 void rgw_log_usage_finalize();
+void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter);
 
 #endif
 
