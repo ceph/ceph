@@ -76,8 +76,9 @@ void Resetter::init(int rank)
   client_t whoami = monc->get_global_id();
   messenger->set_myname(entity_name_t::CLIENT(whoami.v));
 
+  objecter->init_unlocked();
   lock.Lock();
-  objecter->init();
+  objecter->init_locked();
   objecter->wait_for_osd_map();
   timer.init();
   lock.Unlock();
@@ -87,7 +88,9 @@ void Resetter::shutdown()
 {
   lock.Lock();
   timer.shutdown();
+  objecter->shutdown_locked();
   lock.Unlock();
+  objecter->shutdown_unlocked();
   messenger->shutdown();
   messenger->wait();
 }
