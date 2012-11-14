@@ -98,7 +98,7 @@ configuration (like any Ceph configuration option) as part of the
 
     qemu -m 1024 -drive format=raw,file=rbd:data/squeeze:rbd_cache=true
 
-.. _RBD caching: ../../config-cluster/rbd-config-ref/#rbd-cache-config-settings
+.. _RBD caching: ../rbd-config-ref/#rbd-cache-config-settings
 
 
 Enabling Discard/TRIM
@@ -147,4 +147,4 @@ QEMU command line settings override the Ceph configuration file settings.
 
 .. _QEMU Open Source Processor Emulator: http://wiki.qemu.org/Main_Page
 .. _QEMU Manual: http://wiki.qemu.org/Manual
-.. _RBD Cache: ../../config-cluster/rbd-config-ref/
+.. _RBD Cache: ../rbd-config-ref/

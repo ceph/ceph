@@ -4,8 +4,8 @@
 
 .. highlight:: c
 
-`Librados` provides low-level access to the RADOS service. For an
-overview of RADOS, see :doc:`/architecture`.
+`librados` provides low-level access to the RADOS service. For an
+overview of RADOS, see :doc:`../../architecture`.
 
 
 Example: connecting and writing an object

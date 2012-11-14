@@ -31,18 +31,12 @@ questions and how to install Ceph on various distributions.
 
 If you are deploying a Ceph cluster (that is, not developing Ceph),
 install Ceph using our stable release packages. For testing, you 
-may install development release and testing packages. If you intend
-to deploy Ceph using OpsCode Chef, review the instructions for 
-Chef below. 
-	
-.. tip:: If you are using Dell Crowbar, or Ceph-Deploy you do not 
-	need to install OpsCode Chef.
+may install development release and testing packages.
 
 .. toctree::
 
    Installing Debian/Ubuntu Packages <debian>
    Installing RPM Packages <rpm>
-   Installing OpsCode Chef <chef>
 
 .. raw:: html 
 

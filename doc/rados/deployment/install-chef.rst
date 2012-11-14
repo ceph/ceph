@@ -8,8 +8,6 @@ Chef defines three types of entities:
 #. **Chef Server:** Interacts with ``chef-client`` on Chef nodes.
 #. **Chef Workstation:** Manages the Chef server.
 
-.. image:: ../images/chef.png
-
 See `Chef Architecture Introduction`_ for details.
 
 .. _createuser:
