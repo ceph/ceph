@@ -46,6 +46,7 @@
 #include "messages/MMonCommand.h"
 
 #include <memory>
+#include <errno.h>
 
 
 #define CEPH_MON_PROTOCOL     9 /* cluster internal */
@@ -393,7 +394,9 @@ public:
     void finish(int r) {
       if (r >= 0)
 	mon->reply_command(m, rc, rs, rdata, version);
-      else
+      else if (r == -ECANCELED) {
+	m->put();
+      } else
 	mon->_ms_dispatch(m);
     }
   };
@@ -405,7 +408,10 @@ public:
   public:
     C_RetryMessage(Monitor *m, Message *ms) : mon(m), msg(ms) {}
     void finish(int r) {
-      mon->_ms_dispatch(msg);
+      if (r == -ECANCELED) {
+	msg->put();
+      } else
+	mon->_ms_dispatch(msg);
     }
   };
 

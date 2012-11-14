@@ -623,6 +623,10 @@ void Monitor::shutdown()
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->shutdown();
 
+  finish_contexts(g_ceph_context, waitfor_quorum, -ECANCELED);
+  finish_contexts(g_ceph_context, maybe_wait_for_quorum, -ECANCELED);
+
+
   timer.shutdown();
 
   // unlock before msgr shutdown...
