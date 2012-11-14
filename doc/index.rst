@@ -38,14 +38,11 @@ cluster to ensure that the storage hosts are running smoothly.
 
    start/index
    install/index
-   config-cluster/index
-   cluster-ops/index
+   rados/index
    cephfs/index
    rbd/rbd
    radosgw/index
    api/index
-   Internals <dev/index>
-   man/index
    architecture
-   faq
+   Development <dev/index>
    release-notes

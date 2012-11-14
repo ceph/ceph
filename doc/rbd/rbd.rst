@@ -43,9 +43,12 @@ devices simultaneously.
 	Snapshots<rbd-snapshot>
 	QEMU <qemu-rbd>
 	libvirt <libvirt>
-	Cache Settings <../../config-cluster/rbd-config-ref/>
+	Cache Settings <rbd-config-ref/>
 	OpenStack <rbd-openstack>
 	CloudStack <rbd-cloudstack>
+	Manpage rbd <../../man/8/rbd>
+	Manpage ceph-rbdnamer <../../man/8/ceph-rbdnamer>
+	
 
 .. _RBD Caching: ../../config-cluster/rbd-config-ref/
 .. _kernel modules: ../rbd-ko/

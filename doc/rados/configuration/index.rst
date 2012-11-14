@@ -25,19 +25,19 @@ instance (a single context).
 
 .. raw:: html
 
-	<table cellpadding="10"><colgroup><col width="50%"><col width="50%"></colgroup><tbody valign="top"><tr><td><h3>Cluster Configuration</h3>
+	<table cellpadding="10"><colgroup><col width="50%"><col width="50%"></colgroup><tbody valign="top"><tr><td><h3>Configuring the Object Store</h3>
 
-For general cluster configuration, refer to the following:
+For general object store configuration, refer to the following:
 
 .. toctree::
 
-   Disks and Filesystems <file-system-recommendations>
+   Disks and Filesystems <filesystem-recommendations>
    ceph-conf
 
 
 .. raw:: html 
 
-	</td><td><h3>Configuration Reference</h3>
+	</td><td><h3>Reference</h3>
 
 To optimize the performance of your cluster, refer to the following:
 
@@ -48,31 +48,9 @@ To optimize the performance of your cluster, refer to the following:
 	OSD Settings <osd-config-ref>
 	Filestore Settings <filestore-config-ref>
 	Journal Settings <journal-ref>
-	Metadata Server Settings <mds-config-ref>
-	librbd Cache Settings <rbd-config-ref>
-	Log / Debug Settings <log-and-debug-ref>	
+	Log / Debug Settings <log-and-debug-ref>
+	Messaging Settings <ms-ref>	
 
-
-.. raw:: html
-
-	</td></tr><tr><td><h3>Manual Deployment</h3>
-
-To deploy a cluster manually (this is recommended for testing and development only), refer to the following:
-
-.. toctree:: 
-
-   Deploy with mkcephfs <mkcephfs>
-
-
-.. raw:: html
-
-	</td><td><h3>Chef Deployment</h3>
-
-To deploy a cluster with chef, refer to the following: 
-
-.. toctree:: 
-
-   Deploy with Chef <chef>
    
 .. raw:: html
 
