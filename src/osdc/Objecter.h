@@ -969,8 +969,10 @@ public:
     assert(!logger);
   }
 
-  void init();
-  void shutdown();
+  void init_unlocked();
+  void init_locked();
+  void shutdown_locked();
+  void shutdown_unlocked();
 
   /**
    * Tell the objecter to throttle outgoing ops according to its
