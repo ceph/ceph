@@ -2,6 +2,35 @@
  Release Notes
 ===============
 
+v0.54
+-----
+
+Notable changes
+~~~~~~~~~~~~~~~
+
+* The osd capabilities associated with a rados user have changed
+  syntax since 0.48 argonaut. The new format is mostly backwards
+  compatible, but there are two backwards-incompatible changes:
+
+  * specifying a list of pools in one grant, i.e.
+    'allow r pool=foo,bar' is now done in separate grants, i.e.
+    'allow r pool=foo, allow r pool=bar'.
+
+  * restricting pool access by pool owner ('allow r uid=foo') is
+    removed. This feature was not very useful and unused in practice.
+
+  The new format is documented in the ceph-authtool man page.
+
+* Bug fixes to the new osd capability format parsing properly validate
+  the allowed operations. If an existing rados user gets permissions
+  errors after upgrading, its capabilities were probably
+  misconfigured. See the ceph-authtool man page for details on osd
+  capabilities.
+
+* 'rbd lock list' and 'rbd showmapped' no longer use tabs as
+  separators in their output.
+
+
 v0.48.2 "argonaut"
 ------------------
 
@@ -128,6 +157,7 @@ Notable changes
 The new default keyring locations mean that when enabling authentication (``auth supported = cephx``), keyring locations do not need to be specified if the keyring file is located inside the daemon's data directory (``/var/lib/ceph/$type/ceph-$id`` by default).
 
 There is also a lot of librbd code in this release that is laying the groundwork for the upcoming layering functionality, but is not actually used. Likewise, the upstart support is still incomplete and not recommended; we will backport that functionality later if it turns out to be non-disruptive.
+
 
 
 
