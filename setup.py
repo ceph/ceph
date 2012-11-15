@@ -25,6 +25,9 @@ setup(
         'fudge >=1.0.3',
         ],
 
+    # to find the code associated with entry point
+    # A.B:foo first cd into directory A, open file B
+    # and find sub foo
     entry_points={
         'console_scripts': [
             'teuthology = teuthology.run:main',
