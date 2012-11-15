@@ -151,6 +151,8 @@ void OSDMonitor::update_from_paxos()
   share_map_with_random_osd();
   update_logger();
 
+  process_failures();
+
   // make sure our feature bits reflect the latest map
   update_msgr_features();
 }
@@ -270,6 +272,10 @@ void OSDMonitor::on_active()
 
   if (mon->is_leader())
     mon->clog.info() << "osdmap " << osdmap << "\n"; 
+
+  if (!mon->is_leader()) {
+    kick_all_failures();
+  }
 }
 
 void OSDMonitor::update_logger()
@@ -727,6 +733,12 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 	   << grace << " grace (" << orig_grace << " + " << my_grace << " + " << peer_grace << "), max_failed_since " << max_failed_since
 	   << dendl;
 
+  // already pending failure?
+  if (pending_inc.new_state[target_osd] & CEPH_OSD_UP) {
+    dout(10) << " already pending failure" << dendl;
+    return true;
+  }
+
   if (failed_for >= grace &&
       ((int)fi.reporters.size() >= g_conf->osd_min_down_reporters) &&
       (fi.num_reports >= g_conf->osd_min_down_reports)) {
@@ -736,12 +748,6 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
     mon->clog.info() << osdmap.get_inst(target_osd) << " failed ("
 		     << fi.num_reports << " reports from " << (int)fi.reporters.size() << " peers after "
 		     << failed_for << " >= grace " << grace << ")\n";
-
-    list<MOSDFailure*> msgs;
-    fi.take_report_messages(msgs);
-    failure_info.erase(target_osd);
-
-    paxos->wait_for_commit(new C_Reported(this, msgs));
     return true;
   }
   return false;
@@ -762,7 +768,7 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
 
   // calculate failure time
   utime_t now = ceph_clock_now(g_ceph_context);
-  utime_t failed_since = now - utime_t(m->failed_for ? m->failed_for : g_conf->osd_heartbeat_grace, 0);
+  utime_t failed_since = m->get_recv_stamp() - utime_t(m->failed_for ? m->failed_for : g_conf->osd_heartbeat_grace, 0);
   
   if (m->if_osd_failed()) {
     // add a report
@@ -794,13 +800,42 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
   return false;
 }
 
-void OSDMonitor::_reported_failure(list<MOSDFailure*>& ls)
+void OSDMonitor::process_failures()
 {
-  dout(7) << "_reported_failure telling " << ls << dendl;
+  map<int,failure_info_t>::iterator p = failure_info.begin();
+  while (p != failure_info.end()) {
+    if (osdmap.is_up(p->first)) {
+      ++p;
+    } else {
+      dout(10) << "process_failures osd." << p->first << dendl;
+      list<MOSDFailure*> ls;
+      p->second.take_report_messages(ls);
+      failure_info.erase(p++);
+
+      while (!ls.empty()) {
+	send_latest(ls.front(), ls.front()->get_epoch());
+	ls.pop_front();
+      }
+    }
+  }
+}
+
+void OSDMonitor::kick_all_failures()
+{
+  dout(10) << "kick_all_failures on " << failure_info.size() << " osds" << dendl;
+  assert(!mon->is_leader());
+
+  list<MOSDFailure*> ls;
+  for (map<int,failure_info_t>::iterator p = failure_info.begin();
+       p != failure_info.end();
+       ++p) {
+    p->second.take_report_messages(ls);
+  }
+  failure_info.clear();
+
   while (!ls.empty()) {
-    MOSDFailure *m = ls.front();
+    dispatch(ls.front());
     ls.pop_front();
-    send_latest(m, m->get_epoch());
   }
 }
 

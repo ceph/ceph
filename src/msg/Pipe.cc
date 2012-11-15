@@ -837,6 +837,7 @@ int Pipe::connect()
         goto stop_locked;
       got_bad_auth = true;
       pipe_lock.Unlock();
+      delete authorizer;
       authorizer = msgr->get_authorizer(peer_type, true);  // try harder
       continue;
     }

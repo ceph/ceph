@@ -136,7 +136,7 @@ class PrioritizedQueue {
       if (cur == q.end())
 	cur = q.begin();
     }
-    void remove_by_class(K k) {
+    void remove_by_class(K k, list<T> *out) {
       typename map<K, list<pair<unsigned, T> > >::iterator i = q.find(k);
       if (i == q.end())
 	return;
@@ -145,6 +145,14 @@ class PrioritizedQueue {
 	++cur;
 	if (cur == q.end())
 	  cur = q.begin();
+      }
+      if (out) {
+	for (typename list<pair<unsigned, T> >::reverse_iterator j =
+	       i->second.rbegin();
+	     j != i->second.rend();
+	     ++j) {
+	  out->push_front(j->second);
+	}
       }
       q.erase(i);
     }
@@ -225,11 +233,11 @@ public:
     }
   }
 
-  void remove_by_class(K k) {
+  void remove_by_class(K k, list<T> *out = 0) {
     for (typename map<unsigned, SubQueue>::iterator i = queue.begin();
 	 i != queue.end();
 	 ) {
-      i->second.remove_by_class(k);
+      i->second.remove_by_class(k, out);
       if (i->second.empty()) {
 	unsigned priority = i->first;
 	++i;
@@ -241,7 +249,7 @@ public:
     for (typename map<unsigned, SubQueue>::iterator i = high_queue.begin();
 	 i != high_queue.end();
 	 ) {
-      i->second.remove_by_class(k);
+      i->second.remove_by_class(k, out);
       if (i->second.empty()) {
 	high_queue.erase(i++);
       } else {
