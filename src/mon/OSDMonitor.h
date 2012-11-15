@@ -169,7 +169,8 @@ private:
  
   bool preprocess_failure(class MOSDFailure *m);
   bool prepare_failure(class MOSDFailure *m);
-  void _reported_failure(list<MOSDFailure*>& m);
+  void process_failures();
+  void kick_all_failures();
 
   bool preprocess_boot(class MOSDBoot *m);
   bool prepare_boot(class MOSDBoot *m);
@@ -222,24 +223,6 @@ private:
     void finish(int r) {
       osdmon->_reply_map(m, e);
     }    
-  };
-  struct C_Reported : public Context {
-    OSDMonitor *cmon;
-    list<MOSDFailure*> msgs;
-    C_Reported(OSDMonitor *cm, list<MOSDFailure*>& m_)
-      : cmon(cm) {
-      msgs.swap(m_);
-    }
-    void finish(int r) {
-      if (r >= 0)
-	cmon->_reported_failure(msgs);
-      else {
-	while (!msgs.empty()) {
-	  cmon->dispatch((PaxosServiceMessage*)msgs.front());
-	  msgs.pop_front();
-	}
-      }
-    }
   };
   struct C_PoolOp : public Context {
     OSDMonitor *osdmon;

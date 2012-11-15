@@ -197,14 +197,6 @@ static bool check_gmt_end(const char *s)
     return false;
   }
 
-  /* trailing space */
-  s += 3;
-  while (isspace(*s)) {
-    ++s;
-  }
-  if (*s)
-    return false;
-
   return true;
 }
 
