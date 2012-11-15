@@ -754,9 +754,6 @@ static void set_pool_image_name(const char *orig_pool, const char *orig_img,
 {
   const char *sep;
 
-  if (orig_pool)
-    return;
-
   if (!orig_img)
     return;
 
