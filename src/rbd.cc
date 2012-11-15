@@ -1386,6 +1386,8 @@ static bool set_conf_param(const char *param, const char **var1,
   return true;
 }
 
+bool size_set;
+
 int main(int argc, const char **argv)
 {
   librados::Rados rados;
@@ -1452,10 +1454,11 @@ int main(int argc, const char **argv)
 	return EXIT_FAILURE;
       }
       if (sizell < 0) {
-	cerr << "rbd: size must be > 0" << std::endl;
+	cerr << "rbd: size must be >= 0" << std::endl;
 	return EXIT_FAILURE;
       }
       size = sizell << 20;   // bytes to MB
+      size_set = true;
     } else if (ceph_argparse_flag(args, i, "-l", "--long", (char*)NULL)) {
       lflag = true;
     } else if (ceph_argparse_withlonglong(args, i, &stripe_unit, &err, "--stripe-unit", (char*)NULL)) {
@@ -1745,6 +1748,13 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     }
   }
 
+  if (opt_cmd == OPT_CREATE || opt_cmd == OPT_RESIZE) {
+    if (!size_set) {
+      cerr << "rbd: must specify --size <MB>" << std::endl;
+      return EXIT_FAILURE;
+    }
+  }
+
   switch (opt_cmd) {
   case OPT_LIST:
     r = do_list(rbd, io_ctx, lflag);
@@ -1762,11 +1772,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_CREATE:
-    if (!size) {
-      cerr << "rbd: must specify size in MB to create an rbd image"
-	   << std::endl;
-      return EXIT_FAILURE;
-    }
     if (order && (order < 12 || order > 25)) {
       cerr << "rbd: order must be between 12 (4 KB) and 25 (32 MB)"
 	   << std::endl;
