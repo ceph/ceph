@@ -57,6 +57,12 @@ struct ObjectOperation {
   vector<int*> out_rval;
 
   ObjectOperation() : flags(0), priority(0) {}
+  ~ObjectOperation() {
+    while (!out_handler.empty()) {
+      delete out_handler.back();
+      out_handler.pop_back();
+    }
+  }
 
   size_t size() {
     return ops.size();
@@ -649,6 +655,12 @@ public:
 
       if (oloc.key == o)
 	oloc.key.clear();
+    }
+    ~Op() {
+      while (!out_handler.empty()) {
+	delete out_handler.back();
+	out_handler.pop_back();
+      }
     }
 
     bool operator<(const Op& other) const {
