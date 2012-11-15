@@ -194,6 +194,7 @@ int RGWPolicy::check(RGWPolicyEnv *env, string& err_msg)
     const string& check_val = p.second;
     string val;
     if (!env->get_var(name, val)) {
+      dout(20) << " policy check failed, variable not found: '" << name << "'" << dendl;
       err_msg = "Policy check failed, variable not found: ";
       err_msg.append(name);
       return -EACCES;
@@ -264,17 +265,18 @@ int RGWPolicy::from_json(bufferlist& bl, string& err_msg)
   iter = obj->find_first();
   for (; !iter.end(); ++iter) {
     JSONObj *child = *iter;
+    dout(20) << "data=" << child->get_data() << dendl;
     dout(20) << "is_object=" << child->is_object() << dendl;
     dout(20) << "is_array=" << child->is_array() << dendl;
+    JSONObjIter citer = child->find_first();
     if (child->is_array()) {
-      JSONObjIter aiter = child->find_first();
       vector<string> v;
       int i;
-      for (i = 0; !aiter.end() && i < 3; ++aiter, ++i) {
-	JSONObj *o = *aiter;
+      for (i = 0; !citer.end() && i < 3; ++citer, ++i) {
+	JSONObj *o = *citer;
         v.push_back(o->get_data());
       }
-      if (i != 3 || !aiter.end()) { /* we expect exactly 3 arguments here */
+      if (i != 3 || !citer.end()) { /* we expect exactly 3 arguments here */
         err_msg = "Bad condition array, expecting 3 arguments";
         return -EINVAL;
       }
@@ -283,7 +285,10 @@ int RGWPolicy::from_json(bufferlist& bl, string& err_msg)
       if (r < 0)
         return r;
     } else {
-      add_simple_check(child->get_name(), child->get_data());
+      JSONObj *c = *citer;
+      dout(0) << "adding simple_check: " << c->get_name() << " : " << c->get_data() << dendl;
+
+      add_simple_check(c->get_name(), c->get_data());
     }
   }
   return 0;
