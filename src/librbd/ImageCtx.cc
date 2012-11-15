@@ -97,7 +97,7 @@ namespace librbd {
       delete object_set;
       object_set = NULL;
     }
-    delete format_string;
+    delete[] format_string;
   }
 
   int ImageCtx::init() {
@@ -159,7 +159,7 @@ namespace librbd {
     layout.fl_object_size = 1ull << order;
     layout.fl_pg_pool = data_ctx.get_id();  // FIXME: pool id overflow?
 
-    delete format_string;
+    delete[] format_string;
     size_t len = object_prefix.length() + 16;
     format_string = new char[len];
     if (old_format) {
