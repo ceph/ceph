@@ -545,6 +545,8 @@ struct RetryCheckOSDMap : public Context {
   epoch_t epoch;
   RetryCheckOSDMap(PGMonitor *p, epoch_t e) : pgmon(p), epoch(e) {}
   void finish(int r) {
+    if (r == -ECANCELED)
+      return;
     pgmon->check_osd_map(epoch);
   }
 };
