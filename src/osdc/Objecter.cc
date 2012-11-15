@@ -1403,6 +1403,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     if (*ph) {
       ldout(cct, 10) << " op " << i << " handler " << *ph << dendl;
       (*ph)->complete(p->rval);
+      *ph = NULL;
     }
   }
 
