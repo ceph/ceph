@@ -53,6 +53,8 @@ int main(int argc, char **argv)
      "set file for dumping op details, omit for stderr")
     ("init-only", po::value<bool>()->default_value(false),
      "populate object set")
+    ("do-not-init", po::value<bool>()->default_value(false),
+     "use existing object set")
     ("use-prefix", po::value<string>()->default_value(""),
      "use previously populated prefix")
     ("offset-align", po::value<unsigned>()->default_value(4096),
@@ -72,6 +74,12 @@ int main(int argc, char **argv)
     return 1;
   }
 
+  if (vm["do-not-init"].as<bool>() && !vm["use-prefix"].as<string>().size()) {
+    cout << "Must supply prefix if do-not-init is specified" << std::endl;
+    cout << desc << std::endl;
+    return 1;
+  }
+
   if (vm["init-only"].as<bool>() && !vm["use-prefix"].as<string>().size()) {
     cout << "Must supply prefix for init-only" << std::endl;
     cout << desc << std::endl;
@@ -80,7 +88,7 @@ int main(int argc, char **argv)
 
   string prefix;
   if (vm["use-prefix"].as<string>().size()) {
-    prefix = vm["use_prefix"].as<string>();
+    prefix = vm["use-prefix"].as<string>();
   } else {
     char hostname_cstr[100];
     gethostname(hostname_cstr, 100);
@@ -178,10 +186,18 @@ int main(int argc, char **argv)
     vm["duration"].as<unsigned>(),
     vm["max-ops"].as<unsigned>());
 
-  bencher.init(objects, vm["object-size"].as<unsigned>(), &std::cout);
-  cout << "Created objects..." << std::endl;
+  if (!vm["do-not-init"].as<bool>()) {
+    bencher.init(objects, vm["object-size"].as<unsigned>(), &std::cout);
+    cout << "Created objects..." << std::endl;
+  } else {
+    cout << "Not initing objects..." << std::endl;
+  }
 
-  bencher.run_bench();
+  if (!vm["init-only"].as<bool>()) {
+    bencher.run_bench();
+  } else {
+    cout << "init-only" << std::endl;
+  }
 
   rados.shutdown();
   if (vm["op-dump-file"].as<string>().size()) {
