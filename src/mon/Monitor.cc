@@ -2038,14 +2038,13 @@ bool Monitor::_ms_dispatch(Message *m)
       // paxos
     case MSG_MON_PAXOS:
       {
+	MMonPaxos *pm = (MMonPaxos*)m;
 	if (!src_is_mon && 
 	    !s->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
 	  //can't send these!
-	  m->put();
+	  pm->put();
 	  break;
 	}
-
-	MMonPaxos *pm = (MMonPaxos*)m;
 
 	// sanitize
 	if (pm->epoch > get_epoch()) {
