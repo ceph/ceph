@@ -39,3 +39,5 @@ the command line).
 In practice, we can keep common/shared task and cluster definitions in
 the top-level clusters/ (which are otherwise ignored), and symlink to
 them from the collections that want to use them.
+
+The teuthology code can be found in https://github.com/ceph/teuthology.git
