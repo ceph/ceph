@@ -7064,10 +7064,15 @@ boost::statechart::result ReplicatedPG::NotTrimming::react(const SnapTrim&)
     dout(10) << "NotTrimming: obs_to_trim empty!" << dendl;
     dout(10) << "purged_snaps now " << pg->info.purged_snaps << ", snap_trimq now " 
 	     << pg->snap_trimq << dendl;
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    t->remove_collection(col_to_trim);
-    int r = pg->osd->store->queue_transaction(NULL, t, new ObjectStore::C_DeleteTransaction(t));
-    assert(r == 0);
+    if (pg->snap_collections.contains(snap_to_trim)) {
+      ObjectStore::Transaction *t = new ObjectStore::Transaction;
+      pg->snap_collections.erase(snap_to_trim);
+      t->remove_collection(col_to_trim);
+      pg->write_info(*t);
+      int r = pg->osd->store->queue_transaction(
+	NULL, t, new ObjectStore::C_DeleteTransaction(t));
+      assert(r == 0);
+    }
     post_event(SnapTrim());
     return discard_event();
   } else {
@@ -7118,9 +7123,10 @@ boost::statechart::result ReplicatedPG::RepColTrim::react(const SnapTrim&)
     t->collection_remove(col_to_trim, *i);
   }
   t->remove_collection(col_to_trim);
+  pg->snap_collections.erase(snap_to_trim);
+  pg->write_info(*t);
   int r = pg->osd->store->queue_transaction(NULL, t, new ObjectStore::C_DeleteTransaction(t));
   assert(r == 0);
-  pg->snap_collections.erase(snap_to_trim);
   return discard_event();
 }
 
