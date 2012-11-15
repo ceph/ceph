@@ -462,6 +462,8 @@ int MDS::init(int wanted_state)
   monc->authenticate();
   monc->wait_auth_rotating(30.0);
 
+  objecter->init_unlocked();
+
   mds_lock.Lock();
   if (want_state == CEPH_MDS_STATE_DNE) {
     mds_lock.Unlock();
@@ -504,8 +506,8 @@ int MDS::init(int wanted_state)
   beacon_start();
   whoami = -1;
   messenger->set_myname(entity_name_t::MDS(whoami));
-
-  objecter->init();
+  
+  objecter->init_locked();
 
   monc->sub_want("mdsmap", 0, 0);
   monc->renew_subs();
@@ -1560,7 +1562,7 @@ void MDS::suicide()
   // shut down cache
   mdcache->shutdown();
 
-  objecter->shutdown();
+  objecter->shutdown_locked();
   
   // shut down messenger
   messenger->shutdown();
