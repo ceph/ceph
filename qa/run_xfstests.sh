@@ -41,14 +41,19 @@ SCRATCH_DEV=""	# MUST BE SPECIFIED
 TEST_DEV=""	# MUST BE SPECIFIED
 TESTS="-g auto"	# The "auto" group is supposed to be "known good"
 
+# rbd presents geometry information that causes mkfs.xfs to
+# issue a warning.  This option avoids this class of problems.
+XFS_MKFS_OPTIONS="-l su=32k"
+
 # Override the default test list with a list of tests known to pass
 # until we can work through getting them all passing reliably.
-TESTS="1-9 11-15 17 19-21 26-28 31-34 41 46-48 51-54 56 61 63-67 69-70 75-76"
-TESTS="${TESTS} 79 84 88-89 91-92 103 108 116 118-120 130"
-TESTS="${TESTS} 135 137-141 166 169 179 182-183 188-190 194"
-TESTS="${TESTS} 196 199 201 203 220-226 234 238 244 253"
-TESTS="${TESTS} 262 269 273 275"
+TESTS="1-9 11-15 17 19-21 26-29 31-34 41 46-48 50-54 56 61 63-67 69-70 74-76"
+TESTS="${TESTS} 78 79 84-89 91-92 100 103 105 108 110 116-121 124 126"
+TESTS="${TESTS} 129-135 137-141 164-167 174 179 181-184 186-190 192 194"
+TESTS="${TESTS} 196 199 201 203 214-216 220-227 234 236-238 241 243-249"
+TESTS="${TESTS} 253 257-259 261 262 269 273 275 277 278 280 285 286"
 # 275 was the highest available test as of 4/10/12.
+# 289 was the highest available test as of 11/15/12.
 
 ######
 # Some explanation of why tests have been excluded above:
@@ -58,19 +63,17 @@ TESTS="${TESTS} 262 269 273 275"
 # Test 232 was pulled because it caused an XFS error
 #	http://tracker.newdream.net/issues/2302
 #
+# This test passes but takes a LONG time (1+ hours):  127
+#
 # These were not run for one (anticipated) reason or another:
-# 010 016 030 035 040 044 057 058 059 060 072 077 090 093 094
-# 095 097 098 099 104 112 113 122 123 125 128 142 143 144 145 146 147
-# 148 149 150 151 152 153 154 155 156 157 158 159 160 161 162 163 168
-# 175 176 177 178 180 185 191 193 195 197 207 208 209 210 211 212 213
-# 217 228 230 231-233 235 239 254 256 260 264 265 266 270 271 272
+# 010 016 030 035 040 044 057 058-060 072 077 090 093-095 097-099 104
+# 112 113 122 123 125 128 142 147-163 168 175-178 180 185 191 193
+# 195 197 198 207-213 217 228 230-233 235 239 240 252 254 255 264-266
+# 270-272 276 278-279 281-284 288 289
 #
 # These tests all failed (produced output different from golden):
-# 029 042 050 073 074 078 083 085 086 087 096 100 105 109 110 117
-# 121 124 126 127 129 131 132 133 134 164 165 167 170 174 181 184
-# 186 187 192 198 200 202 204 205 206 214 215 216 218 227 229 236
-# 237 240 241 242 243 245 246 247 248 249 250 252 255 257 258 259
-# 261 263
+# 042 073 083 096 109 169 170 200 202 204-206 218 229 240 242 250
+# 263 276 277 279 287
 #
 # The rest were not part of the "auto" group:
 # 018 022 023 024 025 036 037 038 039 043 055 071 080 081 082 101
@@ -311,6 +314,8 @@ function setup_host_options() {
 		SCRATCH_MNT="${scratch_dir}"
 		FSTYP="${FS_TYPE}"
 		export TEST_DEV SCRATCH_DEV TEST_DIR SCRATCH_MNT FSTYP
+		#
+		export XFS_MKFS_OPTIONS="${XFS_MKFS_OPTIONS}"
 	!
 
 	# Now ensure we are using the same values
