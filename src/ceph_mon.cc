@@ -330,6 +330,8 @@ int main(int argc, const char **argv)
     pick_addresses(g_ceph_context);
     if (!g_conf->public_addr.is_blank_ip()) {
       ipaddr = g_conf->public_addr;
+      if (ipaddr.get_port() == 0)
+	ipaddr.set_port(CEPH_MON_PORT);
     } else {
       MonMap tmpmap;
       int err = tmpmap.build_initial(g_ceph_context, cerr);

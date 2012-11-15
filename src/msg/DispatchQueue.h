@@ -140,10 +140,7 @@ class DispatchQueue {
   }
 
   void enqueue(Message *m, int priority, uint64_t id);
-  void discard_queue(uint64_t id) {
-    Mutex::Locker l(lock);
-    mqueue.remove_by_class(id);
-  }
+  void discard_queue(uint64_t id);
   uint64_t get_id() {
     Mutex::Locker l(lock);
     return next_pipe_id++;

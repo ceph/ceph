@@ -121,9 +121,8 @@ enum {
 
 // messages ------------------------------
 
-void Objecter::init()
+void Objecter::init_unlocked()
 {
-  assert(client_lock.is_locked());
   assert(!initialized);
 
   if (!logger) {
@@ -209,6 +208,12 @@ void Objecter::init()
     lderr(cct) << "error registering admin socket command: "
 	       << cpp_strerror(-ret) << dendl;
   }
+}
+
+void Objecter::init_locked()
+{
+  assert(client_lock.is_locked());
+  assert(!initialized);
 
   schedule_tick();
   maybe_request_map();
@@ -216,7 +221,7 @@ void Objecter::init()
   initialized = true;
 }
 
-void Objecter::shutdown() 
+void Objecter::shutdown_locked() 
 {
   assert(client_lock.is_locked());
   assert(initialized);
@@ -232,7 +237,10 @@ void Objecter::shutdown()
     timer.cancel_event(tick_event);
     tick_event = NULL;
   }
+}
 
+void Objecter::shutdown_unlocked()
+{
   if (m_request_state_hook) {
     AdminSocket* admin_socket = cct->get_admin_socket();
     admin_socket->unregister_command("objecter_requests");
@@ -1395,6 +1403,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     if (*ph) {
       ldout(cct, 10) << " op " << i << " handler " << *ph << dendl;
       (*ph)->complete(p->rval);
+      *ph = NULL;
     }
   }
 
