@@ -27,3 +27,13 @@ These options are intended to be set in the Hadoop configuration file
 |                    |                          |                            |
 |                    |                          |                            |
 +--------------------+--------------------------+----------------------------+
+|fs.ceph.block.size  |Default file block size   |Default value: 67108864     |
+|                    |in bytes                  |                            |
+|                    |                          |                            |
+|                    |                          |                            |
++--------------------+--------------------------+----------------------------+
+|fs.ceph.replication |Default file replication  |Default value: 3            |
+|                    |factor                    |                            |
+|                    |                          |                            |
+|                    |                          |                            |
++--------------------+--------------------------+----------------------------+
