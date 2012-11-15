@@ -4,6 +4,11 @@ import errno
 import itertools
 import logging
 import os
+
+# this file is responsible for submitting tests into the queue
+# by generating combinations of facets found in
+# https://github.com/ceph/ceph-qa-suite.git
+
 import subprocess
 import sys
 import time
