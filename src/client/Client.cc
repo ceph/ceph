@@ -347,7 +347,11 @@ int Client::init()
     return r;
   }
 
-  objecter->init();
+  client_lock.Unlock();
+  objecter->init_unlocked();
+  client_lock.Lock();
+
+  objecter->init_locked();
 
   monclient->set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
   monclient->sub_want("mdsmap", 0, 0);
@@ -364,7 +368,7 @@ int Client::init()
   logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 
-  initialized = true;
+  client_lock.Unlock();
 
   AdminSocket* admin_socket = cct->get_admin_socket();
   int ret = admin_socket->register_command("mds_requests",
@@ -389,6 +393,8 @@ int Client::init()
 	       << cpp_strerror(-ret) << dendl;
   }
 
+  client_lock.Lock();
+  initialized = true;
   client_lock.Unlock();
   return r;
 }
@@ -414,8 +420,9 @@ void Client::shutdown()
   assert(initialized);
   initialized = false;
   timer.shutdown();
-  objecter->shutdown();
+  objecter->shutdown_locked();
   client_lock.Unlock();
+  objecter->shutdown_unlocked();
   monclient->shutdown();
 
   if (logger) {
