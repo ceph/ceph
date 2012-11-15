@@ -119,6 +119,19 @@ void DispatchQueue::entry()
   lock.Unlock();
 }
 
+void DispatchQueue::discard_queue(uint64_t id) {
+  Mutex::Locker l(lock);
+  list<QueueItem> removed;
+  mqueue.remove_by_class(id, &removed);
+  for (list<QueueItem>::iterator i = removed.begin();
+       i != removed.end();
+       ++i) {
+    assert(!(i->is_code())); // We don't discard id 0, ever!
+    msgr->dispatch_throttle_release(
+      i->get_message()->get_dispatch_throttle_size());
+  }
+}
+
 void DispatchQueue::start()
 {
   assert(!stop);
