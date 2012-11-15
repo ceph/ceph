@@ -768,7 +768,7 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
 
   // calculate failure time
   utime_t now = ceph_clock_now(g_ceph_context);
-  utime_t failed_since = now - utime_t(m->failed_for ? m->failed_for : g_conf->osd_heartbeat_grace, 0);
+  utime_t failed_since = m->get_recv_stamp() - utime_t(m->failed_for ? m->failed_for : g_conf->osd_heartbeat_grace, 0);
   
   if (m->if_osd_failed()) {
     // add a report
