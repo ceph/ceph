@@ -1658,8 +1658,9 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 
   if (!poolname)
     poolname = "rbd";
+
   if (!dest_poolname)
-    dest_poolname = poolname;
+    dest_poolname = "rbd";
 
   if (opt_cmd == OPT_EXPORT && !path)
     path = imgname;
