@@ -654,7 +654,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
     // apply to bh's!
     loff_t opos = start;
     while (true) {
-      map<loff_t, BufferHead*>::iterator p = ob->data.lower_bound(opos);
+      map<loff_t, BufferHead*>::iterator p = ob->data_lower_bound(opos);
       if (p == ob->data.end())
 	break;
       if (opos >= start+(loff_t)length) {
@@ -788,7 +788,7 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
     }
 
     // apply to bh's!
-    for (map<loff_t, BufferHead*>::iterator p = ob->data.lower_bound(start);
+    for (map<loff_t, BufferHead*>::iterator p = ob->data_lower_bound(start);
          p != ob->data.end();
          p++) {
       BufferHead *bh = p->second;
