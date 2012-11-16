@@ -2346,16 +2346,13 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	if (osd < 0) {
 	  err = -EINVAL;
 	} else if (!osdmap.exists(osd)) {
-	  ss << "osd." << osd << " does not exist";
+	  ss << "osd." << osd << " does not exist. ";
 	} else if (osdmap.is_down(osd)) {
-	  ss << "osd." << osd << " is already down";
+	  ss << "osd." << osd << " is already down. ";
 	  err = 0;
 	} else {
 	  pending_inc.new_state[osd] = CEPH_OSD_UP;
-	  if (any)
-	    ss << ", osd." << osd;
-	  else 
-	    ss << "marked down osd." << osd;
+	  ss << "marked down osd." << osd << ". ";
 	  any = true;
 	}
       }
@@ -2372,16 +2369,13 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	if (osd < 0) {
 	  err = -EINVAL;
 	} else if (!osdmap.exists(osd)) {
-	  ss << "osd." << osd << " does not exist";
+	  ss << "osd." << osd << " does not exist. ";
 	} else if (osdmap.is_out(osd)) {
-	  ss << "osd." << osd << " is already out";
+	  ss << "osd." << osd << " is already out. ";
 	  err = 0;
 	} else {
 	  pending_inc.new_weight[osd] = CEPH_OSD_OUT;
-	  if (any)
-	    ss << ", osd." << osd;
-	  else
-	    ss << "marked out osd." << osd;
+	  ss << "marked out osd." << osd << ". ";
 	  any = true;
 	}
       }
@@ -2398,16 +2392,13 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	if (osd < 0) {
 	  err = -EINVAL;
 	} else if (osdmap.is_in(osd)) {
-	  ss << "osd." << osd << " is already in";
+	  ss << "osd." << osd << " is already in. ";
 	  err = 0;
 	} else if (!osdmap.exists(osd)) {
-	  ss << "osd." << osd << " does not exist";
+	  ss << "osd." << osd << " does not exist. ";
 	} else {
 	  pending_inc.new_weight[osd] = CEPH_OSD_IN;
-	  if (any)
-	    ss << ", osd." << osd;
-	  else
-	    ss << "marked in osd." << osd;
+	  ss << "marked in osd." << osd << ". ";
 	  any = true;
 	}
       }
