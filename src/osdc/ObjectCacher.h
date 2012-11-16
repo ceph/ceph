@@ -226,6 +226,14 @@ class ObjectCacher {
     }
 
     /**
+     * Check buffers and waiters for consistency
+     * - no overlapping buffers
+     * - index in map matches BH
+     * - waiters fall within BH
+     */
+    void audit_buffers();
+
+    /**
      * find first buffer that includes or follows an offset
      *
      * @param offset object byte offset

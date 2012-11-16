@@ -264,6 +264,39 @@ int ObjectCacher::Object::map_read(OSDRead *rd,
   return 0;
 }
 
+void ObjectCacher::Object::audit_buffers()
+{
+  loff_t offset = 0;
+  for (map<loff_t, BufferHead*>::const_iterator it = data.begin();
+       it != data.end(); ++it) {
+    if (it->first != it->second->start()) {
+      lderr(oc->cct) << "AUDIT FAILURE: map position " << it->first
+		     << " does not match bh start position: "
+		     << *it->second << dendl;
+      assert(it->first == it->second->start());
+    }
+    if (it->first < offset) {
+      lderr(oc->cct) << "AUDIT FAILURE: " << it->first << " " << *it->second
+		     << " overlaps with previous bh " << *((--it)->second)
+		     << dendl;
+      assert(it->first >= offset);
+    }
+    BufferHead *bh = it->second;
+    map<loff_t, list<Context*> >::const_iterator w_it;
+    for (w_it = bh->waitfor_read.begin();
+	 w_it != bh->waitfor_read.end(); ++w_it) {
+      if (w_it->first < bh->start() ||
+	    w_it->first >= bh->start() + bh->length()) {
+	lderr(oc->cct) << "AUDIT FAILURE: waiter at " << w_it->first
+		       << " is not within bh " << *bh << dendl;
+	assert(w_it->first >= bh->start());
+	assert(w_it->first < bh->start() + bh->length());
+      }
+    }
+    offset = it->first + it->second->length();
+  }
+}
+
 /*
  * map a range of extents on an object's buffer cache.
  * - combine any bh's we're writing into one
