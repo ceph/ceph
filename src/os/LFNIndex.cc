@@ -47,6 +47,18 @@ const string LFNIndex::FILENAME_COOKIE = "long";
 const int LFNIndex::FILENAME_PREFIX_LEN =  FILENAME_SHORT_LEN - FILENAME_HASH_LEN - 
 								FILENAME_COOKIE.size() - 
 								FILENAME_EXTRA;
+void LFNIndex::maybe_inject_failure() {
+  if (error_injection_enabled) {
+    if (current_failure > last_failure &&
+	(((double)(rand() % 10000))/((double)(10000))
+	 < error_injection_probability)) {
+      last_failure = current_failure;
+      current_failure = 0;
+      throw RetryException();
+    }
+    ++current_failure;
+  }
+}
 
 /* Public methods */
 
@@ -72,41 +84,47 @@ int LFNIndex::created(const hobject_t &hoid, const char *path) {
 }
 
 int LFNIndex::unlink(const hobject_t &hoid) {
+  WRAP_RETRY(
   vector<string> path;
   string short_name;
-  int r;
   r = _lookup(hoid, &path, &short_name, NULL);
-  if (r < 0)
-    return r;
+  if (r < 0) {
+    goto out;
+  }
   r = _remove(path, hoid, short_name);
-  if (r < 0)
-    return r;
-  return 0;
+  if (r < 0) {
+    goto out;
+  }
+  );
 }
 
 int LFNIndex::lookup(const hobject_t &hoid,
 		     IndexedPath *out_path,
 		     int *exist) {
+  WRAP_RETRY(
   vector<string> path;
   string short_name;
-  int r;
   r = _lookup(hoid, &path, &short_name, exist);
   if (r < 0)
-    return r;
+    goto out;
   string full_path = get_full_path(path, short_name);
   struct stat buf;
+  maybe_inject_failure();
   r = ::stat(full_path.c_str(), &buf);
+  maybe_inject_failure();
   if (r < 0) {
     if (errno == ENOENT) {
       *exist = 0;
     } else {
-      return -errno;
+      r = -errno;
+      goto out;
     }
   } else {
     *exist = 1;
   }
   *out_path = IndexedPath(new Path(full_path, self_ref));
-  return 0;
+  r = 0;
+  );
 }
 
 int LFNIndex::collection_list(vector<hobject_t> *ls) {
@@ -126,11 +144,14 @@ int LFNIndex::collection_list_partial(const hobject_t &start,
 /* Derived class utility methods */
 
 int LFNIndex::fsync_dir(const vector<string> &path) {
+  maybe_inject_failure();
   int fd = ::open(get_full_path_subdir(path).c_str(), O_RDONLY);
   if (fd < 0)
     return -errno;
+  maybe_inject_failure();
   int r = ::fsync(fd);
   TEMP_FAILURE_RETRY(::close(fd));
+  maybe_inject_failure();
   if (r < 0)
     return -errno;
   else
@@ -144,10 +165,13 @@ int LFNIndex::link_object(const vector<string> &from,
   int r;
   string from_path = get_full_path(from, from_short_name);
   string to_path;
+  maybe_inject_failure();
   r = lfn_get_name(to, hoid, 0, &to_path, 0);
   if (r < 0)
     return r;
+  maybe_inject_failure();
   r = ::link(from_path.c_str(), to_path.c_str());
+  maybe_inject_failure();
   if (r < 0)
     return -errno;
   else
@@ -162,7 +186,9 @@ int LFNIndex::remove_objects(const vector<string> &dir,
        to_clean != to_remove.end();
        ++to_clean) {
     if (!lfn_is_hashed_filename(to_clean->first)) {
+      maybe_inject_failure();
       int r = ::unlink(get_full_path(dir, to_clean->first).c_str());
+      maybe_inject_failure();
       if (r < 0)
 	return -errno;
       continue;
@@ -189,14 +215,18 @@ int LFNIndex::remove_objects(const vector<string> &dir,
       if (candidate == chain.rend() || *i > candidate->first) {
 	string remove_path_name = 
 	  get_full_path(dir, lfn_get_short_name(to_clean->second, *i)); 
+	maybe_inject_failure();
 	int r = ::unlink(remove_path_name.c_str());
+	maybe_inject_failure();
 	if (r < 0)
 	  return -errno;
 	continue;
       }
       string from = get_full_path(dir, candidate->second.first);
       string to = get_full_path(dir, lfn_get_short_name(candidate->second.second, *i));
+      maybe_inject_failure();
       int r = ::rename(from.c_str(), to.c_str());
+      maybe_inject_failure();
       if (r < 0)
 	return -errno;
       remaining->erase(candidate->second.first);
@@ -226,10 +256,13 @@ int LFNIndex::move_objects(const vector<string> &from,
     r = lfn_get_name(to, i->second, &to_name, &to_path, 0);
     if (r < 0)
       return r;
+    maybe_inject_failure();
     r = ::link(from_path.c_str(), to_path.c_str());
     if (r < 0 && errno != EEXIST)
       return -errno;
+    maybe_inject_failure();
     r = lfn_created(to, i->second, to_name);
+    maybe_inject_failure();
     if (r < 0)
       return r;
   }
@@ -239,7 +272,9 @@ int LFNIndex::move_objects(const vector<string> &from,
   for (map<string,hobject_t>::iterator i = to_move.begin();
        i != to_move.end();
        ++i) {
+    maybe_inject_failure();
     r = ::unlink(get_full_path(from, i->first).c_str());
+    maybe_inject_failure();
     if (r < 0)
       return -errno;
   }
@@ -250,7 +285,9 @@ int LFNIndex::remove_object(const vector<string> &from,
 			    const hobject_t &hoid) {
   string short_name;
   int r, exist;
+  maybe_inject_failure();
   r = get_mangled_name(from, hoid, &short_name, &exist);
+  maybe_inject_failure();
   if (r < 0)
     return r;
   return lfn_unlink(from, hoid, short_name);
@@ -412,7 +449,9 @@ int LFNIndex::list_subdirs(const vector<string> &to_list,
 }
 
 int LFNIndex::create_path(const vector<string> &to_create) {
+  maybe_inject_failure();
   int r = ::mkdir(get_full_path_subdir(to_create).c_str(), 0777);
+  maybe_inject_failure();
   if (r < 0)
     return -errno;
   else
@@ -420,7 +459,9 @@ int LFNIndex::create_path(const vector<string> &to_create) {
 }
 
 int LFNIndex::remove_path(const vector<string> &to_remove) {
+  maybe_inject_failure();
   int r = ::rmdir(get_full_path_subdir(to_remove).c_str());
+  maybe_inject_failure();
   if (r < 0)
     return -errno;
   else
@@ -448,6 +489,7 @@ int LFNIndex::add_attr_path(const vector<string> &path,
 			    const string &attr_name, 
 			    bufferlist &attr_value) {
   string full_path = get_full_path_subdir(path);
+  maybe_inject_failure();
   return chain_setxattr(full_path.c_str(), mangle_attr_name(attr_name).c_str(),
 		     reinterpret_cast<void *>(attr_value.c_str()),
 		     attr_value.length());
@@ -483,6 +525,7 @@ int LFNIndex::remove_attr_path(const vector<string> &path,
 			       const string &attr_name) {
   string full_path = get_full_path_subdir(path);
   string mangled_attr_name = mangle_attr_name(attr_name);
+  maybe_inject_failure();
   return chain_removexattr(full_path.c_str(), mangled_attr_name.c_str());
 }
   
@@ -637,6 +680,7 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
     if (exists) {
       struct stat buf;
       string full_path = get_full_path(path, full_name);
+      maybe_inject_failure();
       r = ::stat(full_path.c_str(), &buf);
       if (r < 0) {
 	if (errno == ENOENT)
@@ -663,7 +707,9 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
 	return -errno;
       if (errno == ENODATA) {
 	// Left over from incomplete transaction, it'll be replayed
+	maybe_inject_failure();
 	r = ::unlink(candidate_path.c_str());
+	maybe_inject_failure();
 	if (r < 0)
 	  return -errno;
       }
@@ -698,6 +744,7 @@ int LFNIndex::lfn_created(const vector<string> &path,
     return 0;
   string full_path = get_full_path(path, mangled_name);
   string full_name = lfn_generate_object_name(hoid);
+  maybe_inject_failure();
   return chain_setxattr(full_path.c_str(), get_lfn_attr().c_str(), 
 		     full_name.c_str(), full_name.size());
 }
@@ -707,7 +754,9 @@ int LFNIndex::lfn_unlink(const vector<string> &path,
 			 const string &mangled_name) {
   if (!lfn_is_hashed_filename(mangled_name)) {
     string full_path = get_full_path(path, mangled_name);
+    maybe_inject_failure();
     int r = ::unlink(full_path.c_str());
+    maybe_inject_failure();
     if (r < 0)
       return -errno;
     return 0;
@@ -738,7 +787,9 @@ int LFNIndex::lfn_unlink(const vector<string> &path,
   }
   if (i == removed_index + 1) {
     string full_path = get_full_path(path, mangled_name);
+    maybe_inject_failure();
     int r = ::unlink(full_path.c_str());
+    maybe_inject_failure();
     if (r < 0)
       return -errno;
     else
@@ -746,7 +797,9 @@ int LFNIndex::lfn_unlink(const vector<string> &path,
   } else {
     string rename_to = get_full_path(path, mangled_name);
     string rename_from = get_full_path(path, lfn_get_short_name(hoid, i - 1));
+    maybe_inject_failure();
     int r = ::rename(rename_from.c_str(), rename_to.c_str());
+    maybe_inject_failure();
     if (r < 0)
       return -errno;
     else

@@ -221,7 +221,7 @@ int HashIndex::col_split_level(
   return 0;
 }
 
-int HashIndex::split(
+int HashIndex::_split(
   uint32_t match,
   uint32_t bits,
   std::tr1::shared_ptr<CollectionIndex> dest) {
