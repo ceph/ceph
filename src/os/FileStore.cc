@@ -3860,7 +3860,7 @@ int FileStore::_rmattr(coll_t cid, const hobject_t& oid, const char *name,
     r = get_index(cid, &index);
     if (r < 0) {
       dout(10) << __func__ << " could not get index r = " << r << dendl;
-      return r;
+      goto out_close;
     }
     set<string> to_remove;
     to_remove.insert(string(name));
@@ -3868,9 +3868,10 @@ int FileStore::_rmattr(coll_t cid, const hobject_t& oid, const char *name,
     if (r < 0 && r != -ENOENT) {
       dout(10) << __func__ << " could not remove_xattrs index r = " << r << dendl;
       assert(!m_filestore_fail_eio || r != -EIO);
-      return r;
+      goto out_close;
     }
   }
+ out_close:
   lfn_close(fd);
  out:
   dout(10) << "rmattr " << cid << "/" << oid << " '" << name << "' = " << r << dendl;
