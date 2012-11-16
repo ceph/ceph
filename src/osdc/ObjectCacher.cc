@@ -624,10 +624,15 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
       map<loff_t, BufferHead*>::iterator p = ob->data.lower_bound(opos);
       if (p == ob->data.end())
 	break;
-      if (opos >= start+(loff_t)length)
+      if (opos >= start+(loff_t)length) {
+	ldout(cct, 20) << "break due to opos " << opos << " >= start+length "
+		       << start << "+" << length << "=" << start+(loff_t)length
+		       << dendl;
 	break;
+      }
 
       BufferHead *bh = p->second;
+      ldout(cct, 20) << "checking bh " << *bh << dendl;
       
       // finishers?
       for (map<loff_t, list<Context*> >::iterator it = bh->waitfor_read.begin();
