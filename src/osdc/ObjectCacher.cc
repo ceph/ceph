@@ -599,8 +599,6 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
       //   reply to first 1~1 -> ooo ENOENT
       for (map<loff_t, BufferHead*>::iterator p = ob->data.begin(); p != ob->data.end(); ++p) {
 	BufferHead *bh = p->second;
-	if (!bh->is_rx())
-	  continue;
 	for (map<loff_t, list<Context*> >::iterator p = bh->waitfor_read.begin();
 	     p != bh->waitfor_read.end();
 	     p++)
@@ -620,6 +618,13 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
 
       BufferHead *bh = p->second;
       
+      // finishers?
+      for (map<loff_t, list<Context*> >::iterator it = bh->waitfor_read.begin();
+           it != bh->waitfor_read.end();
+           it++)
+	ls.splice(ls.end(), it->second);
+      bh->waitfor_read.clear();
+
       if (bh->start() > opos) {
         ldout(cct, 1) << "weirdness: gap when applying read results, " 
                 << opos << "~" << bh->start() - opos 
@@ -627,24 +632,18 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
         opos = bh->start();
         continue;
       }
-      
+
       if (!bh->is_rx()) {
         ldout(cct, 10) << "bh_read_finish skipping non-rx " << *bh << dendl;
         opos = bh->end();
         p++;
         continue;
       }
-      
+
       assert(opos >= bh->start());
       assert(bh->start() == opos);   // we don't merge rx bh's... yet!
       assert(bh->length() <= start+(loff_t)length-opos);
 
-      // finishers?
-      for (map<loff_t, list<Context*> >::iterator p = bh->waitfor_read.begin();
-           p != bh->waitfor_read.end();
-           p++)
-        ls.splice(ls.end(), p->second);
-      bh->waitfor_read.clear();
       if (bh->error < 0)
 	err = bh->error;
 
