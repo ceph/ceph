@@ -2500,10 +2500,10 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	if (osd < 0) {
 	  err = -EINVAL;
 	} else if (!osdmap.exists(osd)) {
-	  ss << "osd." << osd << " does not exist";
+	  ss << "osd." << osd << " does not exist. ";
 	  err = 0;
 	} else if (osdmap.is_up(osd)) {
-	  ss << "osd." << osd << " is still up";
+	  ss << "osd." << osd << " is still up; must be down before removal. ";
 	} else {
 	  pending_inc.new_state[osd] = osdmap.get_state(osd);
 	  if (any)
