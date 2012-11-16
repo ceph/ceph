@@ -2208,9 +2208,14 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	bufferlist::iterator p = bl.begin();
 	newcrush.decode(p);
 
+	if (!newcrush.name_exists(m->cmd[3].c_str())) {
+	  err = -ENOENT;
+	  ss << "device '" << m->cmd[3] << "' does not appear in the crush map";
+	  break;
+	}
 	int id = newcrush.get_item_id(m->cmd[3].c_str());
 	if (id < 0) {
-	  ss << "device '" << m->cmd[3] << "' does not appear in the crush map";
+	  ss << "item '" << m->cmd[3] << "' is not a leaf in the crush map";
 	  break;
 	}
 	err = newcrush.remove_item(g_ceph_context, id);
@@ -2237,9 +2242,15 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	bufferlist::iterator p = bl.begin();
 	newcrush.decode(p);
 
+	if (!newcrush.name_exists(m->cmd[3].c_str())) {
+	  err = -ENOENT;
+	  ss << "device '" << m->cmd[3] << "' does not appear in the crush map";
+	  break;
+	}
+
 	int id = newcrush.get_item_id(m->cmd[3].c_str());
 	if (id < 0) {
-	  ss << "device '" << m->cmd[3] << "' does not appear in the crush map";
+	  ss << "device '" << m->cmd[3] << "' is not a leaf in the crush map";
 	  break;
 	}
 	float w = atof(m->cmd[4].c_str());
