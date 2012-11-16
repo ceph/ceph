@@ -636,7 +636,6 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
       if (!bh->is_rx()) {
         ldout(cct, 10) << "bh_read_finish skipping non-rx " << *bh << dendl;
         opos = bh->end();
-        p++;
         continue;
       }
 
@@ -652,7 +651,6 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
 
       if (r == -ENOENT) {
 	ldout(cct, 10) << "bh_read_finish removing " << *bh << dendl;
-	p++;
 	bh_remove(ob, bh);
 	continue;
       }
@@ -668,7 +666,6 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
       }
 
       ldout(cct, 10) << "bh_read_finish read " << *bh << dendl;
-      p++;
 
       ob->try_merge_bh(bh);
     }
