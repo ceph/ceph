@@ -467,6 +467,11 @@ AC_CHECK_LIB(boost_system-mt, main, [],
     [AC_CHECK_LIB(boost_system, main, [],
         AC_MSG_NOTICE(["Boost system library not found."]))])
 
+# Find the right boost_thread library.
+AC_CHECK_LIB(boost_thread-mt, main, [],
+    [AC_CHECK_LIB(boost_thread, main, [],
+        AC_MSG_FAILURE(["Boost thread library not found."]))])
+
 AC_LANG([C])
 
 AC_CHECK_MEMBER([struct fiemap_extent.fe_logical],
