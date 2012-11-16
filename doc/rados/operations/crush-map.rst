@@ -433,10 +433,10 @@ Where:
 
 ``pool``
 
-:Description:  By default, the CRUSH hierarchy contains the pool name at its root. 
+:Description:  By default, the CRUSH hierarchy contains the pool default as its root. 
 :Type: Key/value pair.
 :Required: Yes
-:Example: ``pool=data``
+:Example: ``pool=default``
 
 
 ``bucket-type``
