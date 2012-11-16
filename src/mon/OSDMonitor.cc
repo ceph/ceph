@@ -1803,7 +1803,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     else if (m->cmd[1] == "map" && m->cmd.size() == 4) {
       int64_t pool = osdmap.lookup_pg_pool_name(m->cmd[2].c_str());
       if (pool < 0) {
-	ss << "pool " << m->cmd[2] << " dne";
+	ss << "pool " << m->cmd[2] << " does not exist";
 	r = -ENOENT;
       } else {
 	object_locator_t oloc(pool);
@@ -2175,7 +2175,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 
 	if (!newcrush.name_exists(name.c_str())) {
 	  err = -ENOENT;
-	  ss << "item " << name << " dne";
+	  ss << "item " << name << " does not exist";
 	  break;
 	}
 	int id = newcrush.get_item_id(name.c_str());
@@ -2509,7 +2509,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  if (any)
 	    ss << ", osd." << osd;
 	  else 
-	    ss << "marked dne osd." << osd;
+	    ss << "removed osd." << osd;
 	  any = true;
 	}
       }
@@ -2785,7 +2785,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 		paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 		return true;
 	      } else {
-		ss << "crush ruleset " << n << " dne";
+		ss << "crush ruleset " << n << " does not exist";
 		err = -ENOENT;
 	      }
 	    } else {
