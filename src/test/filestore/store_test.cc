@@ -767,6 +767,8 @@ void colsplittest(
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
   }
+
+  ObjectStore::Transaction t;
   vector<hobject_t> objects;
   r = store->collection_list(cid, objects);
   ASSERT_EQ(r, 0);
@@ -775,6 +777,7 @@ void colsplittest(
        i != objects.end();
        ++i) {
     ASSERT_EQ(!(i->hash & (1<<common_suffix_size)), 0u);
+    t.remove(cid, *i);
   }
 
   objects.clear();
@@ -785,7 +788,13 @@ void colsplittest(
        i != objects.end();
        ++i) {
     ASSERT_EQ(i->hash & (1<<common_suffix_size), 0u);
+    t.remove(tid, *i);
   }
+
+  t.remove_collection(cid);
+  t.remove_collection(tid);
+  r = store->apply_transaction(t);
+  ASSERT_EQ(r, 0);
 }
 
 TEST_F(StoreTest, ColSplitTest1) {
@@ -794,9 +803,12 @@ TEST_F(StoreTest, ColSplitTest1) {
 TEST_F(StoreTest, ColSplitTest2) {
   colsplittest(store.get(), 100, 7);
 }
+
+#if 0
 TEST_F(StoreTest, ColSplitTest3) {
   colsplittest(store.get(), 100000, 25);
 }
+#endif
 
 int main(int argc, char **argv) {
   vector<const char*> args;
@@ -805,6 +817,9 @@ int main(int argc, char **argv) {
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->set_val("osd_journal_size", "400");
+  g_ceph_context->_conf->set_val("filestore_index_retry_probability", "1");
+  g_ceph_context->_conf->set_val("filestore_op_thread_timeout", "1000");
+  g_ceph_context->_conf->set_val("filestore_op_thread_suicide_timeout", "10000");
   g_ceph_context->_conf->apply_changes(NULL);
 
   ::testing::InitGoogleTest(&argc, argv);
