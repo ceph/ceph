@@ -52,21 +52,22 @@ ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left, loff_t o
     right->bl.substr_of(bl, left->length(), right->length());
     left->bl.substr_of(bl, 0, left->length());
   }
-  
+
   // move read waiters
   if (!left->waitfor_read.empty()) {
-    map<loff_t, list<Context*> >::iterator o, p = left->waitfor_read.end();
-    p--;
-    while (p != left->waitfor_read.begin()) {
-      if (p->first < right->start()) break;      
+    map<loff_t, list<Context*> >::iterator start_remove = left->waitfor_read.begin();
+    while (start_remove != left->waitfor_read.end() &&
+	   start_remove->first < right->start())
+      ++start_remove;
+    for (map<loff_t, list<Context*> >::iterator p = start_remove;
+	 p != left->waitfor_read.end(); ++p) {
       ldout(oc->cct, 0) << "split  moving waiters at byte " << p->first << " to right bh" << dendl;
       right->waitfor_read[p->first].swap( p->second );
-      o = p;
-      p--;
-      left->waitfor_read.erase(o);
+      assert(p->second.empty());
     }
+    left->waitfor_read.erase(start_remove, left->waitfor_read.end());
   }
-  
+
   ldout(oc->cct, 20) << "split    left is " << *left << dendl;
   ldout(oc->cct, 20) << "split   right is " << *right << dendl;
   return right;
