@@ -48,6 +48,7 @@ devices simultaneously.
 	CloudStack <rbd-cloudstack>
 	Manpage rbd <../../man/8/rbd>
 	Manpage ceph-rbdnamer <../../man/8/ceph-rbdnamer>
+	librbd <librbdpy>
 	
 
 .. _RBD Caching: ../../config-cluster/rbd-config-ref/
