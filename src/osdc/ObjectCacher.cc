@@ -672,6 +672,8 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
   }
 
   // called with lock held.
+  ldout(cct, 20) << "finishing waiters " << ls << dendl;
+
   finish_contexts(cct, ls, err);
 }
 
