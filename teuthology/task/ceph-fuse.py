@@ -135,6 +135,7 @@ def task(ctx, config):
                       ],
                   )
             except CommandFailedError as e:
+              log.info('Failed to unmount ceph-fuse on {name}, aborting...'.format(name=remote.name))
               # abort the fuse mount, killing all hung processes
               remote.run(
                   args=[
