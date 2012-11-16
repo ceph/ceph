@@ -403,7 +403,7 @@ Add/Move an OSD
 To add or move an OSD in the CRUSH map of a running cluster, execute the
 following::
 
-	ceph osd crush set {id} {name} {weight} pool={pool-name}  [{bucket-type}={bucket-name}, ...] 
+	ceph osd crush set {id} {name} {weight} pool={pool-name}  [{bucket-type}={bucket-name} ...]
 
 Where:
 
@@ -444,13 +444,13 @@ Where:
 :Description: You may specify the OSD's location in the CRUSH hierarchy. 
 :Type: Key/value pairs.
 :Required: No
-:Example: ``datacenter=dc1, room=room1, row=foo, rack=bar, host=foo-bar-1``
+:Example: ``datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1``
 
 
 The following example adds ``osd.0`` to the hierarchy, or moves the OSD from a
 previous location. :: 
 
-	ceph osd crush set 0 osd.0 1.0 pool=data datacenter=dc1, room=room1, row=foo, rack=bar, host=foo-bar-1
+	ceph osd crush set 0 osd.0 1.0 pool=data datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1
 
 
 Adjust an OSD's CRUSH Weight
@@ -520,7 +520,7 @@ Where:
 :Description: You may specify the bucket's location in the CRUSH hierarchy. 
 :Type: Key/value pairs.
 :Required: No
-:Example: ``datacenter=dc1, room=room1, row=foo, rack=bar, host=foo-bar-1``
+:Example: ``datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1``
 
 
 Tunables

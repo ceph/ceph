@@ -131,7 +131,7 @@ hard disks than older hosts in the cluster (i.e., they may have greater weight).
    host, assign it a weight, recompile it and set it. See	`Add/Move an OSD`_ for
    details. :: 
 
-	ceph osd crush set {id} {name} {weight}  [{bucket-type}={bucket-name}, ...]
+	ceph osd crush set {id} {name} {weight} pool={pool-name}  [{bucket-type}={bucket-name} ...]
 
 
 .. topic:: Argonaut (v0.48) Best Practices
@@ -190,7 +190,7 @@ hard disks than older hosts in the cluster.
    also decompile the CRUSH map edit the file, recompile it and set it. See
    `Add/Move an OSD`_ for details. :: 
 
-	ceph osd crush set {id} {name} {weight} pool={pool-name}  [{bucket-type}={bucket-name}, ...]
+	ceph osd crush set {id} {name} {weight} pool={pool-name}  [{bucket-type}={bucket-name} ...]
 
 
 Starting the OSD
