@@ -1607,6 +1607,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     destname = imgname;
     if (!destname)
       destname = imgname_from_path(path);
+    imgname = NULL;
   }
 
   if (opt_cmd != OPT_LOCK_ADD && lock_tag) {
@@ -1655,6 +1656,19 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   }
 
   set_pool_image_name(dest_poolname, destname, (char **)&dest_poolname, (char **)&destname, (char **)&dest_snapname);
+
+  if (opt_cmd == OPT_IMPORT) {
+    if (poolname && dest_poolname) {
+      cerr << "rbd: source and destination pool both specified" << std::endl;
+      return EXIT_FAILURE;
+    }
+    if (imgname && destname) {
+      cerr << "rbd: source and destination image both specified" << std::endl;
+      return EXIT_FAILURE;
+    }
+    if (poolname)
+      dest_poolname = poolname;
+  }
 
   if (!poolname)
     poolname = "rbd";
