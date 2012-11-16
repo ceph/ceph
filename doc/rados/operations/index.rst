@@ -14,6 +14,7 @@ and, monitoring an operating cluster.
 	
 	operating
 	monitoring
+	cpu-profiling
 	troubleshooting
 	debug
 
