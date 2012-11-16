@@ -2552,8 +2552,10 @@ reprotect_and_return_err:
     }
     r = 0;
   done:
-    if (ictx->object_cacher)
+    if (ictx->object_cacher) {
+      Mutex::Locker l(ictx->cache_lock);
       ictx->object_cacher->discard_set(ictx->object_set, extents);
+    }
 
     c->finish_adding_requests(ictx->cct);
     c->put();
