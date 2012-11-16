@@ -44,7 +44,6 @@
  */
 template <typename T, typename K>
 class PrioritizedQueue {
-  Mutex lock;
   int64_t total_priority;
 
   template <class F>
@@ -186,8 +185,7 @@ class PrioritizedQueue {
   }
 
 public:
-  PrioritizedQueue()
-    : lock("PrioritizedQueue::lock"), total_priority(0) {}
+  PrioritizedQueue() : total_priority(0) {}
 
   unsigned length() {
     unsigned total = 0;
