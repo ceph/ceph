@@ -19,3 +19,4 @@ one metadata server in your ``ceph.conf`` configuration file.
 	Manpage cephfs <../../man/8/cephfs>
 	Manpage ceph-fuse <../../man/8/ceph-fuse>
 	Manpage mount.ceph <../../man/8/mount.ceph>
+	libcephfs <../../api/libcephfs-java/>
