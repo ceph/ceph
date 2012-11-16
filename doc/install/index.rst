@@ -54,6 +54,7 @@ will save you time.
 	Set Up Git <git>
 	Clone the Source <clone-source>
 	Build the Source <building-ceph>
+	Install CPU Profiler <cpu-profiler>
 	Build a Package <build-packages>
 	Contributing Code <contributing>
 
