@@ -254,8 +254,22 @@ test_pool_image_args() {
     rbd import --pool test /tmp/empty
     rbd ls test | grep -q empty
 
+    # copy with no explicit pool goes to pool rbd
+    rbd copy test/test9 test10
+    rbd ls test | grep -qv test10
+    rbd ls | grep -q test10
+    rbd copy test/test9 test/test10
+    rbd ls test | grep -q test10
+    rbd copy --pool test test10 --dest-pool test test11
+    rbd ls test | grep -q test11
+    rbd copy --dest-pool rbd --pool test test11 test12
+    rbd ls | grep test12
+    rbd ls test | grep -qv test12
+
     rm -f /tmp/empty
     ceph osd pool delete test
+    ceph osd pool delete rbd
+    ceph osd pool create rbd 100
 }
 
 test_pool_image_args
