@@ -322,6 +322,7 @@ int Pipe::accept()
 	!authorizer_valid) {
       ldout(msgr->cct,0) << "accept: got bad authorizer" << dendl;
       reply.tag = CEPH_MSGR_TAG_BADAUTHORIZER;
+      delete session_security;
       session_security = NULL;
       goto reply;
     } 
@@ -539,6 +540,7 @@ int Pipe::accept()
   connection_state->set_features((int)reply.features & (int)connect.features);
   ldout(msgr->cct,10) << "accept features " << connection_state->get_features() << dendl;
 
+  delete session_security;
   session_security = get_auth_session_handler(msgr->cct, connect.authorizer_protocol, session_key,
 					      connection_state->get_features());
 
@@ -917,6 +919,7 @@ int Pipe::connect()
       // If we have an authorizer, get a new AuthSessionHandler to deal with ongoing security of the
       // connection.  PLR
 
+      delete session_security;
       if (authorizer != NULL) {
         session_security = get_auth_session_handler(msgr->cct, authorizer->protocol, authorizer->session_key,
 						    connection_state->get_features());
