@@ -136,8 +136,10 @@ public:
     const char *base_path, ///< [in] Path to the index root.
     int merge_at,          ///< [in] Merge threshhold.
     int split_multiple,	   ///< [in] Split threshhold.
-    uint32_t index_version)///< [in] Index version
-    : LFNIndex(collection, base_path, index_version), merge_threshold(merge_at),
+    uint32_t index_version,///< [in] Index version
+    double retry_probability=0) ///< [in] retry probability
+    : LFNIndex(collection, base_path, index_version, retry_probability),
+      merge_threshold(merge_at),
       split_multiplier(split_multiple) {}
 
   /// @see CollectionIndex
@@ -147,7 +149,7 @@ public:
   int cleanup();
 
   /// @see CollectionIndex
-  int split(
+  int _split(
     uint32_t match,
     uint32_t bits,
     std::tr1::shared_ptr<CollectionIndex> dest
