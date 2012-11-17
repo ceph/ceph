@@ -288,7 +288,7 @@ OPTION(osd_backfill_retry_interval, OPT_DOUBLE, 10.0)
 OPTION(osd_uuid, OPT_UUID, uuid_d())
 OPTION(osd_data, OPT_STR, "/var/lib/ceph/osd/$cluster-$id")
 OPTION(osd_journal, OPT_STR, "/var/lib/ceph/osd/$cluster-$id/journal")
-OPTION(osd_journal_size, OPT_INT, 1024)         // in mb
+OPTION(osd_journal_size, OPT_INT, 5120)         // in mb
 OPTION(osd_max_write_size, OPT_INT, 90)
 OPTION(osd_max_pgls, OPT_U64, 1024) // max number of pgls entries to return
 OPTION(osd_client_message_size_cap, OPT_U64, 500*1024L*1024L) // client data allowed in-memory (in bytes)
