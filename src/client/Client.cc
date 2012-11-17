@@ -6017,7 +6017,7 @@ int64_t Client::drop_caches()
 
 int Client::lazyio_propogate(int fd, loff_t offset, size_t count)
 {
-  client_lock.Lock();
+  Mutex::Locker l(client_lock);
   ldout(cct, 3) << "op: client->lazyio_propogate(" << fd
           << ", " << offset << ", " << count << ")" << dendl;
   
@@ -6028,13 +6028,12 @@ int Client::lazyio_propogate(int fd, loff_t offset, size_t count)
   // for now
   _fsync(f, true);
 
-  client_lock.Unlock();
   return 0;
 }
 
 int Client::lazyio_synchronize(int fd, loff_t offset, size_t count)
 {
-  client_lock.Lock();
+  Mutex::Locker l(client_lock);
   ldout(cct, 3) << "op: client->lazyio_synchronize(" << fd
           << ", " << offset << ", " << count << ")" << dendl;
   
@@ -6045,8 +6044,6 @@ int Client::lazyio_synchronize(int fd, loff_t offset, size_t count)
   
   _fsync(f, true);
   _release(in);
-  
-  client_lock.Unlock();
   return 0;
 }
 
