@@ -3780,7 +3780,7 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
 	  inline_set.erase(p->first);
 	  r = chain_fremovexattr(fd, n);
 	  if (r < 0)
-	    return r;
+	    goto out_close;
 	}
 	omap_set[p->first].push_back(p->second);
 	continue;
@@ -3792,7 +3792,7 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
 	  inline_set.erase(p->first);
 	  r = chain_fremovexattr(fd, n);
 	  if (r < 0)
-	    return r;
+	    goto out_close;
 	}
 	omap_set[p->first].push_back(p->second);
 	continue;
@@ -3819,21 +3819,22 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
     int r = get_index(cid, &index);
     if (r < 0) {
       dout(10) << __func__ << " could not get index r = " << r << dendl;
-      return r;
+      goto out_close;
     }
     r = object_map->remove_xattrs(oid, omap_remove, &spos);
     if (r < 0 && r != -ENOENT) {
       dout(10) << __func__ << " could not remove_xattrs r = " << r << dendl;
       assert(!m_filestore_fail_eio || r != -EIO);
-      return r;
+      goto out_close;
     }
     r = object_map->set_xattrs(oid, omap_set, &spos);
     if (r < 0) {
       dout(10) << __func__ << " could not set_xattrs r = " << r << dendl;
       assert(!m_filestore_fail_eio || r != -EIO);
-      return r;
+      goto out_close;
     }
   }
+ out_close:
   lfn_close(fd);
  out:
   dout(10) << "setattrs " << cid << "/" << oid << " = " << r << dendl;
@@ -3859,7 +3860,7 @@ int FileStore::_rmattr(coll_t cid, const hobject_t& oid, const char *name,
     r = get_index(cid, &index);
     if (r < 0) {
       dout(10) << __func__ << " could not get index r = " << r << dendl;
-      return r;
+      goto out_close;
     }
     set<string> to_remove;
     to_remove.insert(string(name));
@@ -3867,9 +3868,10 @@ int FileStore::_rmattr(coll_t cid, const hobject_t& oid, const char *name,
     if (r < 0 && r != -ENOENT) {
       dout(10) << __func__ << " could not remove_xattrs index r = " << r << dendl;
       assert(!m_filestore_fail_eio || r != -EIO);
-      return r;
+      goto out_close;
     }
   }
+ out_close:
   lfn_close(fd);
  out:
   dout(10) << "rmattr " << cid << "/" << oid << " '" << name << "' = " << r << dendl;
