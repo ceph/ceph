@@ -965,7 +965,8 @@ test_stress_watch_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_stress_watch
 
 test_objectcacher_stress_SOURCES = test/osdc/object_cacher_stress.cc test/osdc/FakeWriteback.cc osdc/ObjectCacher.cc
-test_objectcacher_stress_LDFLAGS = ${AM_LDFLAGS} $(LIBGLOBAL_LDA)
+test_objectcacher_stress_LDFLAGS = ${AM_LDFLAGS}
+test_objectcacher_stress_LDADD = $(LIBGLOBAL_LDA)
 test_objectcacher_stress_CXXFLAGS = ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_objectcacher_stress
 
