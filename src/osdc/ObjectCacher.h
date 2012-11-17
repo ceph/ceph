@@ -226,6 +226,14 @@ class ObjectCacher {
     }
 
     /**
+     * Check buffers and waiters for consistency
+     * - no overlapping buffers
+     * - index in map matches BH
+     * - waiters fall within BH
+     */
+    void audit_buffers();
+
+    /**
      * find first buffer that includes or follows an offset
      *
      * @param offset object byte offset
@@ -598,7 +606,7 @@ public:
 
 inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
 {
-  out << "bh["
+  out << "bh[ " << &bh << " "
       << bh.start() << "~" << bh.length()
       << " " << bh.ob
       << " (" << bh.bl.length() << ")"
@@ -612,6 +620,17 @@ inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
   if (bh.bl.length() > 0) out << " firstbyte=" << (int)bh.bl[0];
   if (bh.error) out << " error=" << bh.error;
   out << "]";
+  out << " waiters = {";
+  for (map<loff_t, list<Context*> >::const_iterator it = bh.waitfor_read.begin();
+       it != bh.waitfor_read.end(); ++it) {
+    out << " " << it->first << "->[";
+    for (list<Context*>::const_iterator lit = it->second.begin();
+	 lit != it->second.end(); ++lit) {
+	 out << *lit << ", ";
+    }
+    out << "]";
+  }
+  out << "}";
   return out;
 }
 
