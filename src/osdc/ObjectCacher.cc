@@ -1183,11 +1183,11 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
   }
 
   // done with read.
-  delete rd;
-
   int ret = error ? error : pos;
   ldout(cct, 20) << "readx done " << rd << " " << ret << dendl;
   assert(pos <= (uint64_t) INT_MAX);
+
+  delete rd;
 
   trim();
 

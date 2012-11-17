@@ -51,6 +51,7 @@ MonClient::MonClient(CephContext *cct_) :
   cur_con(NULL),
   monc_lock("MonClient::monc_lock"),
   timer(cct_, monc_lock), finisher(cct_),
+  authorize_handler_registry(NULL),
   initialized(false),
   log_client(NULL),
   more_log_pending(false),
