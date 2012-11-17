@@ -189,19 +189,7 @@ Monitor::~Monitor()
     delete *p;
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     delete *p;
-  //clean out MonSessionMap's subscriptions
-  for (map<string, xlist<Subscription*>* >::iterator i
-	 = session_map.subs.begin();
-       i != session_map.subs.end();
-       ++i) {
-    while (!i->second->empty())
-      session_map.remove_sub(i->second->front());
-    delete i->second;
-  }
-  //clean out MonSessionMap's sessions
-  while (!session_map.sessions.empty()) {
-    session_map.remove_session(session_map.sessions.front());
-  }
+  assert(session_map.sessions.empty());
   delete mon_caps;
 }
 
