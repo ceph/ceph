@@ -80,6 +80,15 @@ struct MonSessionMap {
   map<string, xlist<Subscription*>* > subs;
   multimap<int, MonSession*> by_osd;
 
+  MonSessionMap() {}
+  ~MonSessionMap() {
+    while (!subs.empty()) {
+      assert(subs.begin()->second->empty());
+      delete subs.begin()->second;
+      subs.erase(subs.begin());
+    }
+  }
+
   void remove_session(MonSession *s) {
     assert(!s->closed);
     for (map<string,Subscription*>::iterator p = s->sub_map.begin(); p != s->sub_map.end(); ++p) {
