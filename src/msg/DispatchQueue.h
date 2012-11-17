@@ -95,6 +95,7 @@ class DispatchQueue {
   void local_delivery(Message *m, int priority);
 
   int get_queue_len() {
+    Mutex::Locker l(lock);
     return mqueue.length();
   }
     
