@@ -1826,6 +1826,7 @@ void Monitor::remove_session(MonSession *s)
       routed_requests.erase(*p);
     }
   }
+  s->con->set_priv(NULL);
   session_map.remove_session(s);
 }
 
@@ -2196,9 +2197,6 @@ bool Monitor::ms_handle_reset(Connection *con)
   if (!s->closed)
     remove_session(s);
   s->put();
-    
-  // remove from connection, too.
-  con->set_priv(NULL);
   return true;
 }
 
