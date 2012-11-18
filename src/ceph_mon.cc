@@ -430,13 +430,14 @@ int main(int argc, const char **argv)
   unregister_async_signal_handler(SIGINT, handle_mon_signal);
   unregister_async_signal_handler(SIGTERM, handle_mon_signal);
 
+  shutdown_async_signal_handler();
+
   store.umount();
   delete mon;
   delete messenger;
   delete client_throttler;
   delete daemon_throttler;
   g_ceph_context->put();
-  shutdown_async_signal_handler();
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];
