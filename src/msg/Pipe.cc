@@ -62,7 +62,7 @@ Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
     state(st),
     session_security(NULL),
     connection_state(NULL),
-    reader_running(false), reader_joining(false), writer_running(false),
+    reader_running(false), reader_needs_join(false), reader_joining(false), writer_running(false),
     in_q(&(r->dispatch_queue)),
     keepalive(false),
     close_on_empty(false),
@@ -118,6 +118,10 @@ void Pipe::start_reader()
 {
   assert(pipe_lock.is_locked());
   assert(!reader_running);
+  if (reader_needs_join) {
+    reader_thread.join();
+    reader_needs_join = false;
+  }
   reader_running = true;
   reader_thread.create(msgr->cct->_conf->ms_rwthread_stack_bytes);
 }
@@ -142,6 +146,7 @@ void Pipe::join_reader()
   pipe_lock.Lock();
   assert(reader_joining);
   reader_joining = false;
+  reader_needs_join = false;
 }
 
 
@@ -1264,6 +1269,7 @@ void Pipe::reader()
  
   // reap?
   reader_running = false;
+  reader_needs_join = true;
   unlock_maybe_reap();
   ldout(msgr->cct,10) << "reader done" << dendl;
 }
