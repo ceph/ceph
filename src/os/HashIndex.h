@@ -143,7 +143,10 @@ public:
 
   /// @see CollectionIndex
   int cleanup();
-	
+
+  /// @see CollectionIndex
+  int prep_delete();
+
 protected:
   int _init();
 
@@ -175,6 +178,10 @@ protected:
     hobject_t *next
     );
 private:
+  /// Recursively remove path and its subdirs
+  int recursive_remove(
+    const vector<string> &path ///< [in] path to remove
+    ); /// @return Error Code, 0 on success
   /// Tag root directory at beginning of split
   int start_split(
     const vector<string> &path ///< [in] path to split
