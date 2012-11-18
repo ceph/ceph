@@ -62,7 +62,8 @@ Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
     state(st),
     session_security(NULL),
     connection_state(NULL),
-    reader_running(false), reader_needs_join(false), reader_joining(false), writer_running(false),
+    reader_running(false), reader_needs_join(false),
+    writer_running(false),
     in_q(&(r->dispatch_queue)),
     keepalive(false),
     close_on_empty(false),
@@ -138,14 +139,10 @@ void Pipe::join_reader()
 {
   if (!reader_running)
     return;
-  assert(!reader_joining);
-  reader_joining = true;
   cond.Signal();
   pipe_lock.Unlock();
   reader_thread.join();
   pipe_lock.Lock();
-  assert(reader_joining);
-  reader_joining = false;
   reader_needs_join = false;
 }
 
