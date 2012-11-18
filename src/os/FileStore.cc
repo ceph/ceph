@@ -4464,6 +4464,15 @@ int FileStore::_create_collection(coll_t c)
 
 int FileStore::_destroy_collection(coll_t c) 
 {
+  {
+    Index from;
+    int r = get_index(c, &from);
+    if (r < 0)
+      return r;
+    r = from->prep_delete();
+    if (r < 0)
+      return r;
+  }
   char fn[PATH_MAX];
   get_cdir(c, fn, sizeof(fn));
   dout(15) << "_destroy_collection " << fn << dendl;

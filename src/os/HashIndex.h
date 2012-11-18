@@ -149,6 +149,9 @@ public:
   int cleanup();
 
   /// @see CollectionIndex
+  int prep_delete();
+
+  /// @see CollectionIndex
   int _split(
     uint32_t match,
     uint32_t bits,
@@ -186,6 +189,10 @@ protected:
     hobject_t *next
     );
 private:
+  /// Recursively remove path and its subdirs
+  int recursive_remove(
+    const vector<string> &path ///< [in] path to remove
+    ); /// @return Error Code, 0 on success
   /// Tag root directory at beginning of col_split
   int start_col_split(
     const vector<string> &path ///< [in] path to split

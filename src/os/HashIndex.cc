@@ -333,6 +333,34 @@ int HashIndex::_collection_list_partial(const hobject_t &start,
   return list_by_hash(path, min_count, max_count, seq, next, ls);
 }
 
+int HashIndex::prep_delete() {
+  return recursive_remove(vector<string>());
+}
+
+int HashIndex::recursive_remove(const vector<string> &path) {
+  set<string> subdirs;
+  int r = list_subdirs(path, &subdirs);
+  if (r < 0)
+    return r;
+  map<string, hobject_t> objects;
+  r = list_objects(path, 0, 0, &objects);
+  if (r < 0)
+    return r;
+  if (objects.size())
+    return -ENOTEMPTY;
+  vector<string> subdir(path);
+  for (set<string>::iterator i = subdirs.begin();
+       i != subdirs.end();
+       ++i) {
+    subdir.push_back(*i);
+    r = recursive_remove(subdir);
+    if (r < 0)
+      return r;
+    subdir.pop_back();
+  }
+  return remove_path(path);
+}
+
 int HashIndex::start_col_split(const vector<string> &path) {
   bufferlist bl;
   InProgressOp op_tag(InProgressOp::COL_SPLIT, path);
