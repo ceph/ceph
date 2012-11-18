@@ -372,12 +372,11 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
   if (!s->global_id) {
     s->global_id = assign_global_id(m, paxos_writable);
     if (!s->global_id) {
-      s->put();
-
       delete s->auth_handler;
       s->auth_handler = NULL;
+      s->put();
 
-      //we don't m->put() here because assign_global_id has queued it up
+      // we don't m->put() here because assign_global_id has queued it up
       if (mon->is_leader())
 	return false;
       return true;
