@@ -180,6 +180,9 @@ protected:
     vector<hobject_t> *ls ///< [out] Listed Objects
     ) = 0;
 
+  /// Call prior to removing directory
+  virtual int prep_delete() { return 0; }
+
   /// Virtual destructor
   virtual ~CollectionIndex() {}
 };
