@@ -31,11 +31,11 @@ using namespace std;
 #include "Session.h"
 
 class Monitor;
-class MOSDBoot;
-class MMonCommand;
-class MPoolSnap;
-class MOSDMap;
-class MOSDFailure;
+#include "messages/MOSDBoot.h"
+#include "messages/MMonCommand.h"
+#include "messages/MOSDMap.h"
+#include "messages/MOSDFailure.h"
+#include "messages/MPoolOp.h"
 
 /// information about a particular peer's failure reports for one osd
 struct failure_reporter_t {
@@ -208,6 +208,12 @@ private:
     C_Booted(OSDMonitor *cm, MOSDBoot *m_, bool l=true) : 
       cmon(cm), m(m_), logit(l) {}
     void finish(int r) {
+      if (r == -ECANCELED) {
+	if (m)
+	  m->put();
+	return;
+      }
+
       if (r >= 0)
 	cmon->_booted(m, logit);
       else
@@ -221,6 +227,11 @@ private:
     epoch_t e;
     C_ReplyMap(OSDMonitor *o, PaxosServiceMessage *mm, epoch_t ee) : osdmon(o), m(mm), e(ee) {}
     void finish(int r) {
+      if (r == -ECANCELED) {
+	if (m)
+	  m->put();
+	return;
+      }
       osdmon->_reply_map(m, e);
     }    
   };
@@ -233,6 +244,11 @@ private:
     C_PoolOp(OSDMonitor * osd, MPoolOp *m_, int rc, int e, bufferlist *rd=NULL) : 
       osdmon(osd), m(m_), replyCode(rc), epoch(e), reply_data(rd) {}
     void finish(int r) {
+      if (r == -ECANCELED) {
+	if (m)
+	  m->put();
+	return;
+      }
       osdmon->_pool_op_reply(m, replyCode, epoch, reply_data);
     }
   };

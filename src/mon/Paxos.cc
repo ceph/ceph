@@ -842,6 +842,14 @@ void Paxos::cancel_events()
   }
 }
 
+void Paxos::shutdown() {
+  dout(10) << __func__ << " cancel all contexts" << dendl;
+  finish_contexts(g_ceph_context, waiting_for_writeable, -ECANCELED);
+  finish_contexts(g_ceph_context, waiting_for_commit, -ECANCELED);
+  finish_contexts(g_ceph_context, waiting_for_readable, -ECANCELED);
+  finish_contexts(g_ceph_context, waiting_for_active, -ECANCELED);
+}
+
 void Paxos::leader_init()
 {
   cancel_events();
@@ -869,8 +877,8 @@ void Paxos::peon_init()
   dout(10) << "peon_init -- i am a peon" << dendl;
 
   // no chance to write now!
-  finish_contexts(g_ceph_context, waiting_for_writeable, -1);
-  finish_contexts(g_ceph_context, waiting_for_commit, -1);
+  finish_contexts(g_ceph_context, waiting_for_writeable, -EAGAIN);
+  finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
 }
 
 void Paxos::restart()
@@ -879,8 +887,8 @@ void Paxos::restart()
   cancel_events();
   new_value.clear();
 
-  finish_contexts(g_ceph_context, waiting_for_commit, -1);
-  finish_contexts(g_ceph_context, waiting_for_active, -1);
+  finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
+  finish_contexts(g_ceph_context, waiting_for_active, -EAGAIN);
 }
 
 

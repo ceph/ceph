@@ -381,17 +381,17 @@ int main(int argc, const char **argv)
 
 
   // throttle client traffic
-  Throttle client_throttler(g_ceph_context, "mon_client_bytes",
-			    g_conf->mon_client_bytes);
-  messenger->set_policy_throttler(entity_name_t::TYPE_CLIENT, &client_throttler);
+  Throttle *client_throttler = new Throttle(g_ceph_context, "mon_client_bytes",
+					    g_conf->mon_client_bytes);
+  messenger->set_policy_throttler(entity_name_t::TYPE_CLIENT, client_throttler);
 
   // throttle daemon traffic
   // NOTE: actual usage on the leader may multiply by the number of
   // monitors if they forward large update messages from daemons.
-  Throttle daemon_throttler(g_ceph_context, "mon_daemon_bytes",
-			    g_conf->mon_daemon_bytes);
-  messenger->set_policy_throttler(entity_name_t::TYPE_OSD, &daemon_throttler);
-  messenger->set_policy_throttler(entity_name_t::TYPE_MDS, &daemon_throttler);
+  Throttle *daemon_throttler = new Throttle(g_ceph_context, "mon_daemon_bytes",
+					    g_conf->mon_daemon_bytes);
+  messenger->set_policy_throttler(entity_name_t::TYPE_OSD, daemon_throttler);
+  messenger->set_policy_throttler(entity_name_t::TYPE_MDS, daemon_throttler);
 
   cout << "starting " << g_conf->name << " rank " << rank
        << " at " << ipaddr
@@ -430,9 +430,14 @@ int main(int argc, const char **argv)
   unregister_async_signal_handler(SIGINT, handle_mon_signal);
   unregister_async_signal_handler(SIGTERM, handle_mon_signal);
 
+  shutdown_async_signal_handler();
+
   store.umount();
   delete mon;
   delete messenger;
+  delete client_throttler;
+  delete daemon_throttler;
+  g_ceph_context->put();
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];
