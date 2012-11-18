@@ -129,7 +129,7 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, subdir):
             for remote, role in client_remotes:
                 p.spawn(_run_tests, ctx, refspec, role, [unit], env, subdir)
 
-def _run_tests(ctx, refspec, role, tests, env, subdir):
+def _run_tests(ctx, refspec, role, tests, env, subdir=None):
     assert isinstance(role, basestring)
     PREFIX = 'client.'
     assert role.startswith(PREFIX)
@@ -137,10 +137,10 @@ def _run_tests(ctx, refspec, role, tests, env, subdir):
     (remote,) = ctx.cluster.only(role).remotes.iterkeys()
     mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
     # subdir so we can remove and recreate this a lot without sudo
-    if subdir:
-        scratch_tmp = os.path.join(mnt, subdir)
-    else:
+    if subdir is None:
         scratch_tmp = os.path.join(mnt, 'client.{id}'.format(id=id_), 'tmp')
+    else:
+        scratch_tmp = os.path.join(mnt, subdir)
     srcdir = '/tmp/cephtest/workunit.{role}'.format(role=role)
     secretfile = '/tmp/cephtest/data/{role}.secret'.format(role=role)
     teuthology.write_secret_file(remote, role, secretfile)
