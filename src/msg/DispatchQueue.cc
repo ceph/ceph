@@ -127,8 +127,9 @@ void DispatchQueue::discard_queue(uint64_t id) {
        i != removed.end();
        ++i) {
     assert(!(i->is_code())); // We don't discard id 0, ever!
-    msgr->dispatch_throttle_release(
-      i->get_message()->get_dispatch_throttle_size());
+    Message *m = i->get_message();
+    msgr->dispatch_throttle_release(m->get_dispatch_throttle_size());
+    m->put();
   }
 }
 

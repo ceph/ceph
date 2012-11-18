@@ -31,8 +31,8 @@ using namespace std;
 #include "msg/Messenger.h"
 #include "common/config.h"
 
-class MPGStats;
-class MPGStatsAck;
+#include "messages/MPGStats.h"
+#include "messages/MPGStatsAck.h"
 class MStatfs;
 class MMonCommand;
 class MGetPoolStats;
@@ -71,6 +71,11 @@ private:
     entity_inst_t who;
     C_Stats(PGMonitor *p, MPGStats *r, MPGStatsAck *a) : pgmon(p), req(r), ack(a) {}
     void finish(int r) {
+      if (r == -ECANCELED) {
+	req->put();
+	ack->put();
+	return;
+      }
       pgmon->_updated_stats(req, ack);
     }    
   };
