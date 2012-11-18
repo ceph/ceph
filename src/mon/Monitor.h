@@ -46,6 +46,7 @@
 #include "messages/MMonCommand.h"
 
 #include <memory>
+#include <errno.h>
 
 
 #define CEPH_MON_PROTOCOL     9 /* cluster internal */
@@ -373,6 +374,7 @@ public:
   void no_reply(PaxosServiceMessage *req);
   void resend_routed_requests();
   void remove_session(MonSession *s);
+  void remove_all_sessions();
 
   void send_command(const entity_inst_t& inst,
 		    const vector<string>& com, version_t version);
@@ -392,7 +394,9 @@ public:
     void finish(int r) {
       if (r >= 0)
 	mon->reply_command(m, rc, rs, rdata, version);
-      else
+      else if (r == -ECANCELED) {
+	m->put();
+      } else
 	mon->_ms_dispatch(m);
     }
   };
@@ -404,7 +408,10 @@ public:
   public:
     C_RetryMessage(Monitor *m, Message *ms) : mon(m), msg(ms) {}
     void finish(int r) {
-      mon->_ms_dispatch(msg);
+      if (r == -ECANCELED) {
+	msg->put();
+      } else
+	mon->_ms_dispatch(msg);
     }
   };
 

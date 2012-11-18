@@ -47,6 +47,7 @@ e 12v
 #include "include/Context.h"
 
 #include "common/Timer.h"
+#include <errno.h>
 
 class Monitor;
 class MMonPaxos;
@@ -450,6 +451,8 @@ private:
   public:
     C_CollectTimeout(Paxos *p) : paxos(p) {}
     void finish(int r) {
+      if (r == -ECANCELED)
+	return;
       paxos->collect_timeout();
     }
   };
@@ -462,6 +465,8 @@ private:
   public:
     C_AcceptTimeout(Paxos *p) : paxos(p) {}
     void finish(int r) {
+      if (r == -ECANCELED)
+	return;
       paxos->accept_timeout();
     }
   };
@@ -474,6 +479,8 @@ private:
   public:
     C_LeaseAckTimeout(Paxos *p) : paxos(p) {}
     void finish(int r) {
+      if (r == -ECANCELED)
+	return;
       paxos->lease_ack_timeout();
     }
   };
@@ -486,6 +493,8 @@ private:
   public:
     C_LeaseTimeout(Paxos *p) : paxos(p) {}
     void finish(int r) {
+      if (r == -ECANCELED)
+	return;
       paxos->lease_timeout();
     }
   };
@@ -498,6 +507,8 @@ private:
   public:
     C_LeaseRenew(Paxos *p) : paxos(p) {}
     void finish(int r) {
+      if (r == -ECANCELED)
+	return;
       paxos->lease_renew_timeout();
     }
   };
@@ -811,6 +822,10 @@ private:
    * Cancel all of Paxos' timeout/renew events. 
    */
   void cancel_events();
+  /**
+   * Shutdown this Paxos machine
+   */
+  void shutdown();
 
   /**
    * Generate a new Proposal Number based on @p gt
