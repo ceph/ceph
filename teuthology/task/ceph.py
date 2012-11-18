@@ -287,22 +287,34 @@ def valgrind_post(ctx, config):
             #look at valgrind logs for each node
             proc = remote.run(
                 args=[
-                    'grep', '-r', "<kind>", run.Raw(val_path), run.Raw('|'),
-                    'egrep', '-v', '-q', '(PossiblyLost|DefinitelyLost)'],
+                    'grep', '-r', '<kind>',
+                    run.Raw(val_path),
+                    run.Raw('|'),
+                    'sort',
+                    run.Raw('|'),
+                    'uniq',
+                    ],
                 wait = False,
-                check_status=False
+                check_status=False,
+                stdout=StringIO(),
                 )
             lookup_procs.append((proc, remote))
 
         valgrind_exception = None
         for (proc, remote) in lookup_procs:
-            result = proc.exitstatus.get()
-            if result != 1:
-                valgrind_exception = Exception("saw valgrind issues in {node}".format(node=remote.name))
+            out = proc.stdout.getvalue()
+            for line in out.split('\n'):
+                if line == '':
+                    continue
+                (file, kind) = line.split(':')
+                log.debug('file %s kind %s', file, kind)
+                if file.find('client') < 0 and file.find('mon') < 0 and kind.find('Lost') > 0:
+                    continue
+                log.error('saw valgrind issue %s in %s', kind, file)
+                valgrind_exception = Exception('saw valgrind issues')
 
         if valgrind_exception is not None:
             raise valgrind_exception
-                
 
 @contextlib.contextmanager
 def cluster(ctx, config):
