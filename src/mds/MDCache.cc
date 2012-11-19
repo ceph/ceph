@@ -7122,7 +7122,8 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
   if (!dir && in->is_auth()) {
     if (in->is_frozen_dir()) {
       dout(7) << "traverse: " << *in << " is frozen_dir, waiting" << dendl;
-      in->parent->dir->add_waiter(CDir::WAIT_UNFREEZE, onfinish);
+      in->parent->dir->add_waiter(CDir::WAIT_UNFREEZE,
+				  new C_MDC_RetryOpenRemoteIno(this, ino, onfinish));
       return;
     }
     dir = in->get_or_open_dirfrag(this, frag);
@@ -7157,7 +7158,7 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
     dout(10) << "have remote dirfrag " << *dir << ", discovering " 
 	     << anchortrace[i].ino << dendl;
     discover_ino(dir, anchortrace[i].ino, 
-		 new C_MDC_OpenRemoteIno(this, ino, anchortrace, onfinish));
+		 new C_MDC_RetryOpenRemoteIno(this, ino, onfinish));
   }
 }
 
