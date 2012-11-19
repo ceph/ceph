@@ -4404,8 +4404,12 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     if (lock->get_state() == LOCK_MIX_LOCK ||
 	lock->get_state() == LOCK_MIX_LOCK2 ||
 	lock->get_state() == LOCK_MIX_EXCL ||
-	lock->get_state() == LOCK_MIX_TSYN)
+	lock->get_state() == LOCK_MIX_TSYN) {
       lock->decode_locked_state(m->get_data());
+      // replica is waiting for AC_LOCKFLUSHED, eval_gather() should not
+      // delay calling scatter_writebehind().
+      lock->clear_flushed();
+    }
 
     if (lock->is_gathering()) {
       dout(7) << "handle_file_lock " << *in << " from " << from
