@@ -196,6 +196,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
     // augment xlock with a versionlock?
     if ((*p)->get_type() == CEPH_LOCK_DN) {
       CDentry *dn = (CDentry*)(*p)->get_parent();
+      if (!dn->is_auth())
+	continue;
 
       if (xlocks.count(&dn->versionlock))
 	continue;  // we're xlocking the versionlock too; don't wrlock it!
@@ -213,6 +215,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
     if ((*p)->get_type() > CEPH_LOCK_IVERSION) {
       // inode version lock?
       CInode *in = (CInode*)(*p)->get_parent();
+      if (!in->is_auth())
+	continue;
       if (mdr->is_master()) {
 	// master.  wrlock versionlock so we can pipeline inode updates to journal.
 	wrlocks.insert(&in->versionlock);
@@ -3920,6 +3924,7 @@ void Locker::local_wrlock_grab(LocalLock *lock, Mutation *mut)
   dout(7) << "local_wrlock_grab  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   
+  assert(lock->get_parent()->is_auth());
   assert(lock->can_wrlock());
   assert(!mut->wrlocks.count(lock));
   lock->get_wrlock(mut->get_client());
@@ -3932,6 +3937,7 @@ bool Locker::local_wrlock_start(LocalLock *lock, MDRequest *mut)
   dout(7) << "local_wrlock_start  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   
+  assert(lock->get_parent()->is_auth());
   if (lock->can_wrlock()) {
     assert(!mut->wrlocks.count(lock));
     lock->get_wrlock(mut->get_client());
@@ -3963,6 +3969,7 @@ bool Locker::local_xlock_start(LocalLock *lock, MDRequest *mut)
   dout(7) << "local_xlock_start  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   
+  assert(lock->get_parent()->is_auth());
   if (!lock->can_xlock_local()) {
     lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
     return false;
