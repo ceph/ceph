@@ -286,11 +286,12 @@ bool Locker::acquire_locks(MDRequest *mdr,
       continue;
     
     if (!object->is_auth()) {
+      if (!mdr->locks.empty())
+	mds->locker->drop_locks(mdr);
       if (object->is_ambiguous_auth()) {
 	// wait
 	dout(10) << " ambiguous auth, waiting to authpin " << *object << dendl;
 	object->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
-	mds->locker->drop_locks(mdr);
 	mdr->drop_local_auth_pins();
 	return false;
       }
