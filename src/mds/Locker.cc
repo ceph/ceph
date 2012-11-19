@@ -174,7 +174,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
 			   set<SimpleLock*> &rdlocks,
 			   set<SimpleLock*> &wrlocks,
 			   set<SimpleLock*> &xlocks,
-			   map<SimpleLock*,int> *remote_wrlocks)
+			   map<SimpleLock*,int> *remote_wrlocks,
+			   CInode *auth_pin_freeze)
 {
   if (mdr->done_locking &&
       !mdr->is_slave()) {  // not on slaves!  master requests locks piecemeal.
@@ -336,7 +337,9 @@ bool Locker::acquire_locks(MDRequest *mdr,
 	dout(10) << " req remote auth_pin of " << **q << dendl;
 	MDSCacheObjectInfo info;
 	(*q)->set_object_info(info);
-	req->get_authpins().push_back(info);      
+	req->get_authpins().push_back(info);
+	if (*q == auth_pin_freeze)
+	  (*q)->set_object_info(req->get_authpin_freeze());
 	mdr->pin(*q);
       }
       mds->send_message_mds(req, p->first);
