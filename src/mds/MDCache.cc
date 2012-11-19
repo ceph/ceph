@@ -6731,7 +6731,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
 	} else {
           dout(7) << "remote link to " << dnl->get_remote_ino() << ", which i don't have" << dendl;
 	  assert(mdr);  // we shouldn't hit non-primary dentries doing a non-mdr traversal!
-          open_remote_ino(dnl->get_remote_ino(), _get_waiter(mdr, req, fin));
+          open_remote_ino(dnl->get_remote_ino(), _get_waiter(mdr, req, fin),
+			  (null_okay && depth == path.depth() - 1));
 	  if (mds->logger) mds->logger->inc(l_mds_trino);
           return 1;
         }        
@@ -7017,12 +7018,13 @@ CInode *MDCache::get_dentry_inode(CDentry *dn, MDRequest *mdr, bool projected)
 class C_MDC_RetryOpenRemoteIno : public Context {
   MDCache *mdcache;
   inodeno_t ino;
+  bool want_xlocked;
   Context *onfinish;
 public:
-  C_MDC_RetryOpenRemoteIno(MDCache *mdc, inodeno_t i, Context *c) :
-    mdcache(mdc), ino(i), onfinish(c) {}
+  C_MDC_RetryOpenRemoteIno(MDCache *mdc, inodeno_t i, Context *c, bool wx) :
+    mdcache(mdc), ino(i), want_xlocked(wx), onfinish(c) {}
   void finish(int r) {
-    mdcache->open_remote_ino(ino, onfinish);
+    mdcache->open_remote_ino(ino, onfinish, want_xlocked);
   }
 };
 
@@ -7032,19 +7034,20 @@ class C_MDC_OpenRemoteIno : public Context {
   inodeno_t ino;
   inodeno_t hadino;
   version_t hadv;
+  bool want_xlocked;
   Context *onfinish;
 public:
   vector<Anchor> anchortrace;
 
-  C_MDC_OpenRemoteIno(MDCache *mdc, inodeno_t i, inodeno_t hi, version_t hv, Context *c) :
-    mdcache(mdc), ino(i), hadino(hi), hadv(hv), onfinish(c) {}
-  C_MDC_OpenRemoteIno(MDCache *mdc, inodeno_t i, vector<Anchor>& at, Context *c) :
-    mdcache(mdc), ino(i), hadino(0), hadv(0), onfinish(c), anchortrace(at) {}
+  C_MDC_OpenRemoteIno(MDCache *mdc, inodeno_t i, bool wx, inodeno_t hi, version_t hv, Context *c) :
+    mdcache(mdc), ino(i), hadino(hi), hadv(hv), want_xlocked(wx), onfinish(c) {}
+  C_MDC_OpenRemoteIno(MDCache *mdc, inodeno_t i, bool wx, vector<Anchor>& at, Context *c) :
+    mdcache(mdc), ino(i), hadino(0), hadv(0), want_xlocked(wx), onfinish(c), anchortrace(at) {}
 
   void finish(int r) {
     assert(r == 0);
     if (r == 0)
-      mdcache->open_remote_ino_2(ino, anchortrace, hadino, hadv, onfinish);
+      mdcache->open_remote_ino_2(ino, anchortrace, want_xlocked, hadino, hadv, onfinish);
     else {
       onfinish->finish(r);
       delete onfinish;
@@ -7052,18 +7055,18 @@ public:
   }
 };
 
-void MDCache::open_remote_ino(inodeno_t ino, Context *onfinish, inodeno_t hadino, version_t hadv)
+void MDCache::open_remote_ino(inodeno_t ino, Context *onfinish, bool want_xlocked,
+			      inodeno_t hadino, version_t hadv)
 {
-  dout(7) << "open_remote_ino on " << ino << dendl;
+  dout(7) << "open_remote_ino on " << ino << (want_xlocked ? " want_xlocked":"") << dendl;
   
-  C_MDC_OpenRemoteIno *c = new C_MDC_OpenRemoteIno(this, ino, hadino, hadv, onfinish);
+  C_MDC_OpenRemoteIno *c = new C_MDC_OpenRemoteIno(this, ino, want_xlocked,
+						   hadino, hadv, onfinish);
   mds->anchorclient->lookup(ino, c->anchortrace, c);
 }
 
-void MDCache::open_remote_ino_2(inodeno_t ino,
-                                vector<Anchor>& anchortrace,
-				inodeno_t hadino, version_t hadv,
-                                Context *onfinish)
+void MDCache::open_remote_ino_2(inodeno_t ino, vector<Anchor>& anchortrace, bool want_xlocked,
+				inodeno_t hadino, version_t hadv, Context *onfinish)
 {
   dout(7) << "open_remote_ino_2 on " << ino
 	  << ", trace depth is " << anchortrace.size() << dendl;
@@ -7106,7 +7109,7 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
 
   if (!in->dirfragtree.contains(frag)) {
     dout(10) << "frag " << frag << " not valid, requerying anchortable" << dendl;
-    open_remote_ino(ino, onfinish);
+    open_remote_ino(ino, onfinish, want_xlocked);
     return;
   }
 
@@ -7116,7 +7119,7 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
     dout(10) << "opening remote dirfrag " << frag << " under " << *in << dendl;
     /* we re-query the anchortable just to avoid a fragtree update race */
     open_remote_dirfrag(in, frag,
-			new C_MDC_RetryOpenRemoteIno(this, ino, onfinish));
+			new C_MDC_RetryOpenRemoteIno(this, ino, onfinish, want_xlocked));
     return;
   }
 
@@ -7124,7 +7127,7 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
     if (in->is_frozen_dir()) {
       dout(7) << "traverse: " << *in << " is frozen_dir, waiting" << dendl;
       in->parent->dir->add_waiter(CDir::WAIT_UNFREEZE,
-				  new C_MDC_RetryOpenRemoteIno(this, ino, onfinish));
+				  new C_MDC_RetryOpenRemoteIno(this, ino, onfinish, want_xlocked));
       return;
     }
     dir = in->get_or_open_dirfrag(this, frag);
@@ -7146,20 +7149,22 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
 		 << " in complete dir " << *dir
 		 << ", requerying anchortable"
 		 << dendl;
-	open_remote_ino(ino, onfinish, anchortrace[i].ino, anchortrace[i].updated);
+	open_remote_ino(ino, onfinish, want_xlocked,
+		        anchortrace[i].ino, anchortrace[i].updated);
       }
     } else {
       dout(10) << "need ino " << anchortrace[i].ino
 	       << ", fetching incomplete dir " << *dir
 	       << dendl;
-      dir->fetch(new C_MDC_OpenRemoteIno(this, ino, anchortrace, onfinish));
+      dir->fetch(new C_MDC_OpenRemoteIno(this, ino, want_xlocked, anchortrace, onfinish));
     }
   } else {
     // hmm, discover.
     dout(10) << "have remote dirfrag " << *dir << ", discovering " 
 	     << anchortrace[i].ino << dendl;
-    discover_ino(dir, anchortrace[i].ino, 
-		 new C_MDC_RetryOpenRemoteIno(this, ino, onfinish));
+    discover_ino(dir, anchortrace[i].ino,
+	         new C_MDC_RetryOpenRemoteIno(this, ino, onfinish, want_xlocked),
+		 (want_xlocked && i == anchortrace.size() - 1));
   }
 }
 

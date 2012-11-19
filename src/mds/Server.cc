@@ -5216,6 +5216,13 @@ void Server::handle_client_rename(MDRequest *mdr)
       if (desttrace[i]->is_auth() && desttrace[i]->is_projected())
 	  xlocks.insert(&desttrace[i]->versionlock);
     }
+    // xlock srci and oldin's primary dentries, so witnesses can call
+    // open_remote_ino() with 'want_locked=true' when the srcdn or destdn
+    // is traversed.
+    if (srcdnl->is_remote())
+      xlocks.insert(&srci->get_projected_parent_dn()->lock);
+    if (destdnl->is_remote())
+      xlocks.insert(&oldin->get_projected_parent_dn()->lock);
   }
 
   // we need to update srci's ctime.  xlock its least contended lock to do that...
