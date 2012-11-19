@@ -286,26 +286,16 @@ uint64_t AuthMonitor::assign_global_id(MAuth *m, bool should_increase_max)
     dout(10) << "next_global_id should be " << next_global_id << dendl;
   }
 
-  while (next_global_id >= max_global_id) {
-    if (!mon->is_leader()) {
-      dout(10) << "not the leader, requesting more ids from leader" << dendl;
-      int leader = mon->get_leader();
-      MMonGlobalID *req = new MMonGlobalID();
-      req->old_max_id = max_global_id;
-      mon->messenger->send_message(req, mon->monmap->get_inst(leader));
-      paxos->wait_for_commit(new C_RetryMessage(this, m));
+  if (next_global_id >= max_global_id) {
+    if (!mon->is_leader() || !should_increase_max) {
       return 0;
-    } else {
-      if (!should_increase_max)
-        return 0;
-
-      dout(10) << "increasing max_global_id" << dendl;
+    }
+    while (next_global_id >= max_global_id) {
       increase_max_global_id();
     }
   }
 
   last_allocated_id = next_global_id;
-
   return next_global_id;
 }
 
@@ -372,15 +362,22 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
   if (!s->global_id) {
     s->global_id = assign_global_id(m, paxos_writable);
     if (!s->global_id) {
-      s->put();
-
       delete s->auth_handler;
       s->auth_handler = NULL;
+      s->put();
 
-      //we don't m->put() here because assign_global_id has queued it up
-      if (mon->is_leader())
-	return false;
-      return true;
+      if (!mon->is_leader()) {
+	dout(10) << "not the leader, requesting more ids from leader" << dendl;
+	int leader = mon->get_leader();
+	MMonGlobalID *req = new MMonGlobalID();
+	req->old_max_id = max_global_id;
+	mon->messenger->send_message(req, mon->monmap->get_inst(leader));
+	paxos->wait_for_commit(new C_RetryMessage(this, m));
+	return true;
+      }
+
+      assert(!paxos_writable);
+      return false;
     }
   }
 

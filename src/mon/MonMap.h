@@ -36,7 +36,7 @@ class MonMap {
   map<entity_addr_t,string> addr_name;
   vector<string> rank_name;
   vector<entity_addr_t> rank_addr;
-  
+
   void calc_ranks() {
     rank_name.resize(mon_addr.size());
     rank_addr.resize(mon_addr.size());
@@ -65,21 +65,6 @@ class MonMap {
 
   unsigned size() {
     return mon_addr.size();
-  }
-
-  const string& pick_random_mon() {
-    unsigned n = rand() % rank_name.size();
-    return rank_name[n];
-  }
-  const string& pick_random_mon_not(const string& butnot) {
-    unsigned n = rand() % rank_name.size();
-    if (rank_name[n] == butnot && rank_name.size() > 1) {
-      if (n)
-	n--;
-      else
-	n++;
-    }
-    return rank_name[n];
   }
 
   epoch_t get_epoch() { return epoch; }

@@ -579,6 +579,7 @@ void ObjectCacher::close_object(Object *ob)
   // ok!
   ob_lru.lru_remove(ob);
   objects[ob->oloc.pool].erase(ob->get_soid());
+  ob->set_item.remove_myself();
   delete ob;
 }
 
@@ -732,8 +733,6 @@ void ObjectCacher::bh_write(BufferHead *bh)
 {
   assert(lock.is_locked());
   ldout(cct, 7) << "bh_write " << *bh << dendl;
-
-  bh->ob->get();
   
   // finishers
   C_WriteCommit *oncommit = new C_WriteCommit(this, bh->ob->oloc.pool,
@@ -842,9 +841,6 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
 
     // is the entire object set now clean and fully committed?
     ObjectSet *oset = ob->oset;
-    ob->put();
-
-    // is the entire object set now clean?
     if (flush_set_callback &&
 	was_dirty_or_tx > 0 &&
 	oset->dirty_or_tx == 0) {        // nothing dirty/tx
