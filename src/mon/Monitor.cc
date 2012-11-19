@@ -189,19 +189,7 @@ Monitor::~Monitor()
     delete *p;
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     delete *p;
-  //clean out MonSessionMap's subscriptions
-  for (map<string, xlist<Subscription*>* >::iterator i
-	 = session_map.subs.begin();
-       i != session_map.subs.end();
-       ++i) {
-    while (!i->second->empty())
-      session_map.remove_sub(i->second->front());
-    delete i->second;
-  }
-  //clean out MonSessionMap's sessions
-  while (!session_map.sessions.empty()) {
-    session_map.remove_session(session_map.sessions.front());
-  }
+  assert(session_map.sessions.empty());
   delete mon_caps;
 }
 
@@ -623,11 +611,16 @@ void Monitor::shutdown()
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->shutdown();
 
+  finish_contexts(g_ceph_context, waitfor_quorum, -ECANCELED);
+  finish_contexts(g_ceph_context, maybe_wait_for_quorum, -ECANCELED);
+
+
   timer.shutdown();
 
   // unlock before msgr shutdown...
   lock.Unlock();
 
+  remove_all_sessions();
   messenger->shutdown();  // last thing!  ceph_mon.cc will delete mon.
 }
 
@@ -1833,9 +1826,17 @@ void Monitor::remove_session(MonSession *s)
       routed_requests.erase(*p);
     }
   }
+  s->con->set_priv(NULL);
   session_map.remove_session(s);
 }
 
+void Monitor::remove_all_sessions()
+{
+  while (!session_map.sessions.empty()) {
+    MonSession *s = session_map.sessions.front();
+    remove_session(s);
+  }
+}
 
 void Monitor::send_command(const entity_inst_t& inst,
 			   const vector<string>& com, version_t version)
@@ -2026,14 +2027,13 @@ bool Monitor::_ms_dispatch(Message *m)
       // paxos
     case MSG_MON_PAXOS:
       {
+	MMonPaxos *pm = (MMonPaxos*)m;
 	if (!src_is_mon && 
 	    !s->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
 	  //can't send these!
-	  m->put();
+	  pm->put();
 	  break;
 	}
-
-	MMonPaxos *pm = (MMonPaxos*)m;
 
 	// sanitize
 	if (pm->epoch > get_epoch()) {
@@ -2064,6 +2064,8 @@ bool Monitor::_ms_dispatch(Message *m)
 	  !s->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
 	dout(0) << "MMonElection received from entity without enough caps!"
 		<< s->caps << dendl;
+	m->put();
+	break;
       }
       if (!is_probing() && !is_slurping()) {
 	elector.dispatch(m);
@@ -2195,9 +2197,6 @@ bool Monitor::ms_handle_reset(Connection *con)
   if (!s->closed)
     remove_session(s);
   s->put();
-    
-  // remove from connection, too.
-  con->set_priv(NULL);
   return true;
 }
 

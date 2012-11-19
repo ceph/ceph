@@ -24,9 +24,9 @@ using namespace std;
 #include "PaxosService.h"
 
 #include "common/LogEntry.h"
+#include "messages/MLog.h"
 
 class MMonCommand;
-class MLog;
 
 class LogMonitor : public PaxosService {
 private:
@@ -52,6 +52,11 @@ private:
     MLog *ack;
     C_Log(LogMonitor *p, MLog *a) : logmon(p), ack(a) {}
     void finish(int r) {
+      if (r == -ECANCELED) {
+	if (ack)
+	  ack->put();
+	return;
+      }
       logmon->_updated_log(ack);
     }    
   };
