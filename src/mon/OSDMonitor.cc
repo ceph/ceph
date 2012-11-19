@@ -1784,9 +1784,11 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	ss << "ok";
       } else {
 	errno = 0;
-	int who = strtol(m->cmd[0].c_str(), 0, 10);
+	int who = parse_osd_id(m->cmd[0].c_str(), &ss);
 	m->cmd.erase(m->cmd.begin()); //done with target num now
-	if (!errno && who >= 0) {
+	if (who < 0) {
+	  r = -EINVAL;
+	} else {
 	  if (osdmap.is_up(who)) {
 	    mon->send_command(osdmap.get_inst(who), m->cmd, paxos->get_version());
 	    r = 0;
@@ -1795,13 +1797,13 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	    ss << "osd." << who << " not up";
 	    r = -ENOENT;
 	  }
-	} else ss << "specify osd number or *";
+	}
       }
     }
     else if (m->cmd[1] == "map" && m->cmd.size() == 4) {
       int64_t pool = osdmap.lookup_pg_pool_name(m->cmd[2].c_str());
       if (pool < 0) {
-	ss << "pool " << m->cmd[2] << " dne";
+	ss << "pool " << m->cmd[2] << " does not exist";
 	r = -ENOENT;
       } else {
 	object_locator_t oloc(pool);
@@ -1839,16 +1841,19 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	r = 0;
 	ss << " instructed to " << m->cmd[1];
       } else {
-	long osd = strtol(m->cmd[2].c_str(), 0, 10);
-	if (osdmap.is_up(osd)) {
+	long osd = parse_osd_id(m->cmd[2].c_str(), &ss);
+	if (osd < 0) {
+	  r = -EINVAL;
+	} else if (osdmap.is_up(osd)) {
 	  mon->try_send_message(new MOSDScrub(osdmap.get_fsid(),
 					      m->cmd[1] == "repair",
 					      m->cmd[1] == "deep-scrub"),
 				osdmap.get_inst(osd));
 	  r = 0;
 	  ss << "osd." << osd << " instructed to " << m->cmd[1];
-	} else 
+	} else {
 	  ss << "osd." << osd << " is not up";
+	}
       }
     }
     else if (m->cmd[1] == "lspools") {
@@ -2170,7 +2175,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 
 	if (!newcrush.name_exists(name.c_str())) {
 	  err = -ENOENT;
-	  ss << "item " << name << " dne";
+	  ss << "item " << name << " does not exist";
 	  break;
 	}
 	int id = newcrush.get_item_id(name.c_str());
@@ -2203,9 +2208,14 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	bufferlist::iterator p = bl.begin();
 	newcrush.decode(p);
 
+	if (!newcrush.name_exists(m->cmd[3].c_str())) {
+	  err = -ENOENT;
+	  ss << "device '" << m->cmd[3] << "' does not appear in the crush map";
+	  break;
+	}
 	int id = newcrush.get_item_id(m->cmd[3].c_str());
 	if (id < 0) {
-	  ss << "device '" << m->cmd[3] << "' does not appear in the crush map";
+	  ss << "item '" << m->cmd[3] << "' is not a leaf in the crush map";
 	  break;
 	}
 	err = newcrush.remove_item(g_ceph_context, id);
@@ -2232,9 +2242,15 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	bufferlist::iterator p = bl.begin();
 	newcrush.decode(p);
 
+	if (!newcrush.name_exists(m->cmd[3].c_str())) {
+	  err = -ENOENT;
+	  ss << "device '" << m->cmd[3] << "' does not appear in the crush map";
+	  break;
+	}
+
 	int id = newcrush.get_item_id(m->cmd[3].c_str());
 	if (id < 0) {
-	  ss << "device '" << m->cmd[3] << "' does not appear in the crush map";
+	  ss << "device '" << m->cmd[3] << "' is not a leaf in the crush map";
 	  break;
 	}
 	float w = atof(m->cmd[4].c_str());
@@ -2326,18 +2342,17 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd[1] == "down" && m->cmd.size() >= 3) {
       bool any = false;
       for (unsigned j = 2; j < m->cmd.size(); j++) {
-	long osd = strtol(m->cmd[j].c_str(), 0, 10);
-	if (!osdmap.exists(osd)) {
-	  ss << "osd." << osd << " does not exist";
+	long osd = parse_osd_id(m->cmd[j].c_str(), &ss);
+	if (osd < 0) {
+	  err = -EINVAL;
+	} else if (!osdmap.exists(osd)) {
+	  ss << "osd." << osd << " does not exist. ";
 	} else if (osdmap.is_down(osd)) {
-	  ss << "osd." << osd << " is already down";
+	  ss << "osd." << osd << " is already down. ";
 	  err = 0;
 	} else {
 	  pending_inc.new_state[osd] = CEPH_OSD_UP;
-	  if (any)
-	    ss << ", osd." << osd;
-	  else 
-	    ss << "marked down osd." << osd;
+	  ss << "marked down osd." << osd << ". ";
 	  any = true;
 	}
       }
@@ -2350,18 +2365,17 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd[1] == "out" && m->cmd.size() >= 3) {
       bool any = false;
       for (unsigned j = 2; j < m->cmd.size(); j++) {
-	long osd = strtol(m->cmd[j].c_str(), 0, 10);
-	if (!osdmap.exists(osd)) {
-	  ss << "osd." << osd << " does not exist";
+	long osd = parse_osd_id(m->cmd[j].c_str(), &ss);
+	if (osd < 0) {
+	  err = -EINVAL;
+	} else if (!osdmap.exists(osd)) {
+	  ss << "osd." << osd << " does not exist. ";
 	} else if (osdmap.is_out(osd)) {
-	  ss << "osd." << osd << " is already out";
+	  ss << "osd." << osd << " is already out. ";
 	  err = 0;
 	} else {
 	  pending_inc.new_weight[osd] = CEPH_OSD_OUT;
-	  if (any)
-	    ss << ", osd." << osd;
-	  else
-	    ss << "marked out osd." << osd;
+	  ss << "marked out osd." << osd << ". ";
 	  any = true;
 	}
       }
@@ -2374,18 +2388,17 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd[1] == "in" && m->cmd.size() >= 3) {
       bool any = false;
       for (unsigned j = 2; j < m->cmd.size(); j++) {
-	long osd = strtol(m->cmd[j].c_str(), 0, 10);
-	if (osdmap.is_in(osd)) {
-	  ss << "osd." << osd << " is already in";
+	long osd = parse_osd_id(m->cmd[j].c_str(), &ss);
+	if (osd < 0) {
+	  err = -EINVAL;
+	} else if (osdmap.is_in(osd)) {
+	  ss << "osd." << osd << " is already in. ";
 	  err = 0;
 	} else if (!osdmap.exists(osd)) {
-	  ss << "osd." << osd << " does not exist";
+	  ss << "osd." << osd << " does not exist. ";
 	} else {
 	  pending_inc.new_weight[osd] = CEPH_OSD_IN;
-	  if (any)
-	    ss << ", osd." << osd;
-	  else
-	    ss << "marked in osd." << osd;
+	  ss << "marked in osd." << osd << ". ";
 	  any = true;
 	}
       }
@@ -2396,22 +2409,25 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       } 
     }
     else if (m->cmd[1] == "reweight" && m->cmd.size() == 4) {
-      long osd = strtol(m->cmd[2].c_str(), 0, 10);
-      float w = strtof(m->cmd[3].c_str(), 0);
-      long ww = (int)((float)CEPH_OSD_IN*w);
-      if (osdmap.exists(osd)) {
-	pending_inc.new_weight[osd] = ww;
-	ss << "reweighted osd." << osd << " to " << w << " (" << ios::hex << ww << ios::dec << ")";
-	getline(ss, rs);
-	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
-	return true;
-      } 
+      long osd = parse_osd_id(m->cmd[2].c_str(), &ss);
+      if (osd < 0) {
+	err = -EINVAL;
+      } else {
+	float w = strtof(m->cmd[3].c_str(), 0);
+	long ww = (int)((float)CEPH_OSD_IN*w);
+	if (osdmap.exists(osd)) {
+	  pending_inc.new_weight[osd] = ww;
+	  ss << "reweighted osd." << osd << " to " << w << " (" << ios::hex << ww << ios::dec << ")";
+	  getline(ss, rs);
+	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	  return true;
+	}
+      }
     }
     else if (m->cmd[1] == "lost" && m->cmd.size() >= 3) {
-      string err;
-      int osd = strict_strtol(m->cmd[2].c_str(), 10, &err);
-      if (!err.empty()) {
-	ss << err;
+      int osd = parse_osd_id(m->cmd[2].c_str(), &ss);
+      if (osd < 0) {
+	err = -EINVAL;
       }
       else if ((m->cmd.size() < 4) || m->cmd[3] != "--yes-i-really-mean-it") {
 	ss << "are you SURE?  this might mean real, permanent data loss.  pass "
@@ -2480,18 +2496,20 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd[1] == "rm" && m->cmd.size() >= 3) {
       bool any = false;
       for (unsigned j = 2; j < m->cmd.size(); j++) {
-	long osd = strtol(m->cmd[j].c_str(), 0, 10);
-	if (!osdmap.exists(osd)) {
-	  ss << "osd." << osd << " does not exist";
+	long osd = parse_osd_id(m->cmd[j].c_str(), &ss);
+	if (osd < 0) {
+	  err = -EINVAL;
+	} else if (!osdmap.exists(osd)) {
+	  ss << "osd." << osd << " does not exist. ";
 	  err = 0;
 	} else if (osdmap.is_up(osd)) {
-	  ss << "osd." << osd << " is still up";
+	  ss << "osd." << osd << " is still up; must be down before removal. ";
 	} else {
 	  pending_inc.new_state[osd] = osdmap.get_state(osd);
 	  if (any)
 	    ss << ", osd." << osd;
 	  else 
-	    ss << "marked dne osd." << osd;
+	    ss << "removed osd." << osd;
 	  any = true;
 	}
       }
@@ -2767,7 +2785,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 		paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 		return true;
 	      } else {
-		ss << "crush ruleset " << n << " dne";
+		ss << "crush ruleset " << n << " does not exist";
 		err = -ENOENT;
 	      }
 	    } else {
