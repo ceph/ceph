@@ -5928,6 +5928,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	continue;
       }
       assert(!(parent_dir->is_auth() && parent_dir->is_exporting()) ||
+	     migrator->get_export_state(parent_dir) <= Migrator::EXPORT_PREPPING ||
              (migrator->get_export_state(parent_dir) == Migrator::EXPORT_WARNING &&
                  !migrator->export_has_warned(parent_dir, from)));
 
