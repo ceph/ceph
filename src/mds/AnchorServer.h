@@ -50,8 +50,8 @@ class AnchorServer : public MDSTableServer {
   }
 
   bool add(inodeno_t ino, inodeno_t dirino, __u32 dn_hash, bool replace);
-  void inc(inodeno_t ino);
-  void dec(inodeno_t ino);
+  void inc(inodeno_t ino, int ref=1);
+  void dec(inodeno_t ino, int ref=1);
 
   void dump();
 
