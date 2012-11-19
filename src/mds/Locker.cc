@@ -845,8 +845,8 @@ void Locker::try_eval(MDSCacheObject *p, int mask)
     return;
   }
 
-  if (p->is_auth() && !p->can_auth_pin()) {
-    dout(7) << "try_eval can't auth_pin, waiting on " << *p << dendl;
+  if (p->is_auth() && p->is_frozen()) {
+    dout(7) << "try_eval frozen, waiting on " << *p << dendl;
     p->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_Locker_Eval(this, p, mask));
     return;
   }
