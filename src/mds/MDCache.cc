@@ -7476,13 +7476,17 @@ void MDCache::request_finish(MDRequest *mdr)
 
 void MDCache::request_forward(MDRequest *mdr, int who, int port)
 {
-  dout(7) << "request_forward " << *mdr << " to mds." << who << " req " << *mdr << dendl;
-  
-  mds->forward_message_mds(mdr->client_request, who);  
-  mdr->client_request = 0;
+  if (mdr->client_request->get_source().is_client()) {
+    dout(7) << "request_forward " << *mdr << " to mds." << who << " req "
+            << *mdr->client_request << dendl;
+    mds->forward_message_mds(mdr->client_request, who);
+    mdr->client_request = 0;
+    if (mds->logger) mds->logger->inc(l_mds_fw);
+  } else {
+    dout(7) << "request_forward drop " << *mdr << " req " << *mdr->client_request
+            << " was from mds" << dendl;
+  }
   request_cleanup(mdr);
-
-  if (mds->logger) mds->logger->inc(l_mds_fw);
 }
 
 
