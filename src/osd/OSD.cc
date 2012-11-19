@@ -1378,6 +1378,8 @@ void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
     peering_wait_for_split.erase(to_wake);
   }
   wake_pg_waiters(pg->info.pgid);
+  if (!service.get_osdmap()->have_pg_pool(pg->info.pgid.pool()))
+    _remove_pg(pg);
 }
 
 PG *OSD::_create_lock_pg(
