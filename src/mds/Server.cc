@@ -1487,6 +1487,7 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
 
   // build list of objects
   list<MDSCacheObject*> objects;
+  CInode *auth_pin_freeze = NULL;
   bool fail = false;
 
   for (vector<MDSCacheObjectInfo>::iterator p = mdr->slave_request->get_authpins().begin();
@@ -1500,6 +1501,8 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
     }
 
     objects.push_back(object);
+    if (*p == mdr->slave_request->get_authpin_freeze())
+      auth_pin_freeze = dynamic_cast<CInode*>(object);
   }
   
   // can we auth pin them?
@@ -1512,8 +1515,7 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
 	fail = true;
 	break;
       }
-      if (!mdr->is_auth_pinned(*p) &&
-	  !(*p)->can_auth_pin()) {
+      if (!mdr->can_auth_pin(*p)) {
 	// wait
 	dout(10) << " waiting for authpinnable on " << **p << dendl;
 	(*p)->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
@@ -1527,6 +1529,22 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
   if (fail) {
     mdr->drop_local_auth_pins();  // just in case
   } else {
+    /* handle_slave_rename_prep() call freeze_inode() to wait for all other operations
+     * on the source inode to complete. This happens after all locks for the rename
+     * operation are acquired. But to acquire locks, we need auth pin locks' parent
+     * objects first. So there is an ABBA deadlock if someone auth pins the source inode
+     * after locks are acquired and before Server::handle_slave_rename_prep() is called.
+     * The solution is freeze the inode and prevent other MDRequests from getting new
+     * auth pins.
+     */
+    if (auth_pin_freeze) {
+      dout(10) << " freezing auth pin on " << *auth_pin_freeze << dendl;
+      if (!mdr->freeze_auth_pin(auth_pin_freeze)) {
+	auth_pin_freeze->add_waiter(CInode::WAIT_FROZEN, new C_MDS_RetryRequest(mdcache, mdr));
+	mds->mdlog->flush();
+	return;
+      }
+    }
     for (list<MDSCacheObject*>::iterator p = objects.begin();
 	 p != objects.end();
 	 ++p) {
@@ -1923,7 +1941,8 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
     //   do NOT proceed if freezing, as cap release may defer in that case, and
     //   we could deadlock when we try to lock @ref.
     // if we're already auth_pinned, continue; the release has already been processed.
-    if (ref->is_frozen() || (ref->is_freezing() && !mdr->is_auth_pinned(ref))) {
+    if (ref->is_frozen() || ref->is_frozen_auth_pin() ||
+	(ref->is_freezing() && !mdr->is_auth_pinned(ref))) {
       dout(7) << "waiting for !frozen/authpinnable on " << *ref << dendl;
       ref->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
       /* If we have any auth pins, this will deadlock.
@@ -5246,7 +5265,9 @@ void Server::handle_client_rename(MDRequest *mdr)
   // take any locks needed for anchor creation/verification
   mds->mdcache->anchor_create_prep_locks(mdr, srci, rdlocks, xlocks);
 
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks, &remote_wrlocks))
+  CInode *auth_pin_freeze = !srcdn->is_auth() && srcdnl->is_primary() ? srci : NULL;
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks,
+				  &remote_wrlocks, auth_pin_freeze))
     return;
 
   if (oldin &&
@@ -5996,9 +6017,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
 
   // am i srcdn auth?
   if (srcdn->is_auth()) {
-    if (srcdnl->is_primary() && 
-	!srcdnl->get_inode()->is_freezing_inode() &&
-	!srcdnl->get_inode()->is_frozen_inode()) {
+    if (srcdnl->is_primary()) {
       // set ambiguous auth for srci
       /*
        * NOTE: we don't worry about ambiguous cache expire as we do
@@ -6015,7 +6034,13 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
       int allowance = 2; // 1 for the mdr auth_pin, 1 for the link lock
       allowance += srcdnl->get_inode()->is_dir(); // for the snap lock
       dout(10) << " freezing srci " << *srcdnl->get_inode() << " with allowance " << allowance << dendl;
-      if (!srcdnl->get_inode()->freeze_inode(allowance)) {
+      bool frozen_inode = srcdnl->get_inode()->freeze_inode(allowance);
+
+      // unfreeze auth pin after freezing the inode to avoid queueing waiters
+      if (srcdnl->get_inode()->is_frozen_auth_pin())
+	mdr->unfreeze_auth_pin(srcdnl->get_inode());
+
+      if (!frozen_inode) {
 	srcdnl->get_inode()->add_waiter(CInode::WAIT_FROZEN, new C_MDS_RetryRequest(mdcache, mdr));
 	return;
       }
@@ -6183,8 +6208,7 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
       destdnl->get_inode()->take_waiting(CInode::WAIT_SINGLEAUTH, finished);
 
       // unfreeze
-      assert(destdnl->get_inode()->is_frozen_inode() ||
-             destdnl->get_inode()->is_freezing_inode());
+      assert(destdnl->get_inode()->is_frozen_inode());
       destdnl->get_inode()->unfreeze_inode(finished);
 
       mds->queue_waiters(finished);
@@ -6207,8 +6231,7 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
       destdnl->get_inode()->take_waiting(CInode::WAIT_SINGLEAUTH, finished);
       
       // unfreeze
-      assert(destdnl->get_inode()->is_frozen_inode() ||
-	     destdnl->get_inode()->is_freezing_inode());
+      assert(destdnl->get_inode()->is_frozen_inode());
       destdnl->get_inode()->unfreeze_inode(finished);
       
       mds->queue_waiters(finished);
