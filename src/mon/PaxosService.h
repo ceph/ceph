@@ -17,6 +17,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 #include "include/Context.h"
+#include <errno.h>
 
 class Monitor;
 class Paxos;
@@ -63,6 +64,10 @@ protected:
   public:
     C_RetryMessage(PaxosService *s, PaxosServiceMessage *m_) : svc(s), m(m_) {}
     void finish(int r) {
+      if (r == -ECANCELED) {
+	m->put();
+	return;
+      }
       svc->dispatch(m);
     }
   };
@@ -93,7 +98,9 @@ protected:
     PaxosService *ps;
   public:
     C_Propose(PaxosService *p) : ps(p) { }
-    void finish(int r) { 
+    void finish(int r) {
+      if (r == -ECANCELED)
+	return;
       ps->proposal_timer = 0;
       ps->propose_pending(); 
     }

@@ -366,7 +366,7 @@ radosgw_SOURCES = \
         rgw/rgw_swift.cc \
 	rgw/rgw_swift_auth.cc \
 	rgw/rgw_main.cc
-radosgw_LDADD = $(my_radosgw_ldadd) -lfcgi
+radosgw_LDADD = $(my_radosgw_ldadd) -lfcgi -lresolv
 radosgw_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_PROGRAMS += radosgw
 
@@ -1485,6 +1485,7 @@ noinst_HEADERS = \
 	common/PrebufferedStreambuf.h\
         common/RWLock.h\
         common/Semaphore.h\
+	common/SimpleRNG.h\
 	common/TextTable.h\
         common/Thread.h\
         common/Throttle.h\

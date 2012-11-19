@@ -62,7 +62,8 @@ Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
     state(st),
     session_security(NULL),
     connection_state(NULL),
-    reader_running(false), reader_joining(false), writer_running(false),
+    reader_running(false), reader_needs_join(false),
+    writer_running(false),
     in_q(&(r->dispatch_queue)),
     keepalive(false),
     close_on_empty(false),
@@ -118,6 +119,10 @@ void Pipe::start_reader()
 {
   assert(pipe_lock.is_locked());
   assert(!reader_running);
+  if (reader_needs_join) {
+    reader_thread.join();
+    reader_needs_join = false;
+  }
   reader_running = true;
   reader_thread.create(msgr->cct->_conf->ms_rwthread_stack_bytes);
 }
@@ -134,14 +139,11 @@ void Pipe::join_reader()
 {
   if (!reader_running)
     return;
-  assert(!reader_joining);
-  reader_joining = true;
   cond.Signal();
   pipe_lock.Unlock();
   reader_thread.join();
   pipe_lock.Lock();
-  assert(reader_joining);
-  reader_joining = false;
+  reader_needs_join = false;
 }
 
 
@@ -322,6 +324,7 @@ int Pipe::accept()
 	!authorizer_valid) {
       ldout(msgr->cct,0) << "accept: got bad authorizer" << dendl;
       reply.tag = CEPH_MSGR_TAG_BADAUTHORIZER;
+      delete session_security;
       session_security = NULL;
       goto reply;
     } 
@@ -539,6 +542,7 @@ int Pipe::accept()
   connection_state->set_features((int)reply.features & (int)connect.features);
   ldout(msgr->cct,10) << "accept features " << connection_state->get_features() << dendl;
 
+  delete session_security;
   session_security = get_auth_session_handler(msgr->cct, connect.authorizer_protocol, session_key,
 					      connection_state->get_features());
 
@@ -917,6 +921,7 @@ int Pipe::connect()
       // If we have an authorizer, get a new AuthSessionHandler to deal with ongoing security of the
       // connection.  PLR
 
+      delete session_security;
       if (authorizer != NULL) {
         session_security = get_auth_session_handler(msgr->cct, authorizer->protocol, authorizer->session_key,
 						    connection_state->get_features());
@@ -1261,6 +1266,7 @@ void Pipe::reader()
  
   // reap?
   reader_running = false;
+  reader_needs_join = true;
   unlock_maybe_reap();
   ldout(msgr->cct,10) << "reader done" << dendl;
 }

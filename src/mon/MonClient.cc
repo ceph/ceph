@@ -49,6 +49,7 @@ MonClient::MonClient(CephContext *cct_) :
   state(MC_STATE_NONE),
   messenger(NULL),
   cur_con(NULL),
+  rng(getpid()),
   monc_lock("MonClient::monc_lock"),
   timer(cct_, monc_lock), finisher(cct_),
   authorize_handler_registry(NULL),
@@ -119,7 +120,7 @@ int MonClient::get_monmap_privately()
   ldout(cct, 10) << "have " << monmap.epoch << " fsid " << monmap.fsid << dendl;
   
   while (monmap.fsid.is_zero()) {
-    cur_mon = monmap.pick_random_mon();
+    cur_mon = _pick_random_mon();
     cur_con = messenger->get_connection(monmap.get_inst(cur_mon));
     ldout(cct, 10) << "querying mon." << cur_mon << " " << cur_con->get_peer_addr() << dendl;
     messenger->send_message(new MMonGetMap, cur_con);
@@ -292,9 +293,6 @@ int MonClient::init()
   finisher.start();
   schedule_tick();
 
-  // seed rng so we choose a different monitor each time
-  srand(getpid());
-
   string method;
   if (entity_name.get_type() == CEPH_ENTITY_TYPE_OSD ||
       entity_name.get_type() == CEPH_ENTITY_TYPE_MDS ||
@@ -443,17 +441,32 @@ void MonClient::_send_mon_message(Message *m, bool force)
   }
 }
 
+string MonClient::_pick_random_mon()
+{
+  assert(monmap.size() > 0);
+  if (monmap.size() == 1) {
+    return monmap.get_name(0);
+  } else {
+    int max = monmap.size();
+    int o = -1;
+    if (!cur_mon.empty()) {
+      o = monmap.get_rank(cur_mon);
+      if (o >= 0)
+	max--;
+    }
+
+    int32_t n = rng() % max;
+    if (o >= 0 && n >= o)
+      n++;
+    return monmap.get_name(n);
+  }
+}
+
 void MonClient::_pick_new_mon()
 {
   assert(monc_lock.is_locked());
 
-  assert(monmap.size() > 0);
-  if (!cur_mon.empty() && monmap.size() > 1) {
-    // pick a _different_ mon
-    cur_mon = monmap.pick_random_mon_not(cur_mon);
-  } else {
-    cur_mon = monmap.pick_random_mon();
-  }
+  cur_mon = _pick_random_mon();
 
   if (cur_con) {
     messenger->mark_down(cur_con);
