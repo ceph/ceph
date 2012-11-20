@@ -396,6 +396,27 @@ public class CephMount {
   private static synchronized native int native_ceph_open(long mountp, String path, int flags, int mode);
 
   /**
+   * Open a file with a specific file layout.
+   *
+   * @param path Path of file to open or create.
+   * @param flags Open flags.
+   * @param mode Permission mode.
+   * @param stripe_unit File layout stripe unit size.
+   * @param stripe_count File layout stripe count.
+   * @param object_size Size of each object.
+   * @param data_pool The target data pool.
+   * @return File descriptor.
+   */
+  public int open(String path, int flags, int mode, int stripe_unit, int stripe_count,
+      int object_size, String data_pool) throws FileNotFoundException {
+    return native_ceph_open_layout(instance_ptr, path, flags, mode, stripe_unit,
+        stripe_count, object_size, data_pool);
+  }
+
+  private static synchronized native int native_ceph_open_layout(long mountp, String path,
+      int flags, int mode, int stripe_unit, int stripe_count, int object_size, String data_pool);
+
+  /**
    * Close an open file.
    *
    * @param fd The file descriptor.
