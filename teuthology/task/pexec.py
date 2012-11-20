@@ -15,7 +15,7 @@ def _exec_role(remote, role, sudo, ls):
     args = ['bash', '-s']
     if sudo:
         args.insert(0, 'sudo')
-    r = remote.run( args=args, stdin=tor.PIPE, stderr=tor.PIPE, wait=False)
+    r = remote.run( args=args, stdin=tor.PIPE, wait=False)
     r.stdin.writelines(['set -e\n'])
     r.stdin.flush()
     r.stdin.writelines(['cd /tmp/cephtest/mnt.{cid}\n'.format(cid=cid)])
