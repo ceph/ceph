@@ -485,6 +485,20 @@ public class CephMountTest {
     assertTrue(orig_st.blocks == other_st.blocks);
   }
 
+  @Test(expected=CephNotDirectoryException.class)
+  public void test_enotdir() throws Exception {
+    String path = makePath();
+    int fd = createFile(path, 1);
+    mount.close(fd);
+
+    try {
+      CephStat stat = new CephStat();
+      mount.lstat(path + "/blah", stat);
+    } finally {
+      mount.unlink(path);
+    }
+  }
+
   /*
    * setattr
    */
