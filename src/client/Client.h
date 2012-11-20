@@ -529,7 +529,9 @@ private:
   int _setxattr(Inode *in, const char *name, const void *value, size_t len, int flags, int uid=-1, int gid=-1);
   int _removexattr(Inode *in, const char *nm, int uid=-1, int gid=-1);
   int _open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid=-1, int gid=-1);
-  int _create(Inode *in, const char *name, int flags, mode_t mode, Inode **inp, Fh **fhp, int uid=-1, int gid=-1);
+  int _create(Inode *in, const char *name, int flags, mode_t mode, Inode **inp, Fh **fhp,
+      int stripe_unit, int stripe_count, int object_size, const char *data_pool,
+	      int uid=-1, int gid=-1);
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
   int _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
   int _write(Fh *fh, int64_t offset, uint64_t size, const char *buf);
@@ -620,6 +622,7 @@ public:
   // file ops
   int mknod(const char *path, mode_t mode, dev_t rdev=0);
   int open(const char *path, int flags, mode_t mode=0);
+  int open(const char *path, int flags, mode_t mode, int stripe_unit, int stripe_count, int object_size, const char *data_pool);
   int lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name);
   int lookup_ino(inodeno_t ino);
   int close(int fd);
