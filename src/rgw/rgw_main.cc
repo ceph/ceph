@@ -500,6 +500,9 @@ int main(int argc, const char **argv)
 
   RGWStoreManager::close_storage(store);
 
+  curl_global_cleanup();
+  g_ceph_context->put();
+
   return 0;
 }
 
