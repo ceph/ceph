@@ -17,7 +17,7 @@ single host. This guide is intended for Debian/Ubuntu Linux distributions.
 
 
 .. _Install Ceph packages: ../../install/debian
-.. _Ceph Configuration Files: ../../config-cluster/ceph-conf
-.. _Deploy with mkcephfs: ../../config-cluster/mkcephfs
-.. _Starting a Cluster: ../../init/start-cluster/
+.. _Ceph Configuration Files: ../../rados/configuration/ceph-conf
+.. _Deploy with mkcephfs: ../../rados/deployment/mkcephfs
+.. _Starting a Cluster: ../../rados/operations/start-cluster/
 .. _Ceph FS: ../../cephfs/
