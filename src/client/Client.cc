@@ -5100,7 +5100,8 @@ int Client::getdir(const char *relpath, list<string>& contents)
 
 
 /****** file i/o **********/
-int Client::open(const char *relpath, int flags, mode_t mode) 
+int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
+    int stripe_count, int object_size, const char *data_pool)
 {
   ldout(cct, 3) << "open enter(" << relpath << ", " << flags << "," << mode << ") = " << dendl;
   Mutex::Locker lock(client_lock);
@@ -5124,7 +5125,8 @@ int Client::open(const char *relpath, int flags, mode_t mode)
     r = path_walk(dirpath, &dir);
     if (r < 0)
       return r;
-    r = _create(dir, dname.c_str(), flags, mode, &in, &fh);
+    r = _create(dir, dname.c_str(), flags, mode, &in, &fh, stripe_unit,
+                stripe_count, object_size, data_pool);
     created = true;
   }
   if (r < 0)
@@ -5154,6 +5156,13 @@ int Client::open(const char *relpath, int flags, mode_t mode)
   tout(cct) << r << std::endl;
   ldout(cct, 3) << "open exit(" << path << ", " << flags << ") = " << r << dendl;
   return r;
+}
+
+int Client::open(const char *relpath, int flags, mode_t mode)
+{
+  /* Use default file striping parameters */
+  return open(relpath, flags, mode, file_stripe_unit, file_stripe_count,
+      object_size, NULL);
 }
 
 int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name)
@@ -6598,7 +6607,8 @@ int Client::ll_mknod(vinodeno_t parent, const char *name, mode_t mode, dev_t rde
   return r;
 }
 
-int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode **inp, Fh **fhp, int uid, int gid) 
+int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode **inp, Fh **fhp,
+    int stripe_unit, int stripe_count, int object_size, const char *data_pool, int uid, int gid)
 { 
   ldout(cct, 3) << "_create(" << dir->ino << " " << name << ", 0" << oct << mode << dec << ")" << dendl;
   
@@ -6622,8 +6632,8 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   req->head.args.open.flags = flags | O_CREAT;
   req->head.args.open.mode = mode;
   
-  req->head.args.open.stripe_unit = file_stripe_unit;
-  req->head.args.open.stripe_count = file_stripe_count;
+  req->head.args.open.stripe_unit = stripe_unit;
+  req->head.args.open.stripe_count = stripe_count;
   req->head.args.open.object_size = object_size;
   req->head.args.open.file_replication = file_replication;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;

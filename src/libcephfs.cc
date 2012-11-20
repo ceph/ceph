@@ -610,6 +610,15 @@ extern "C" int ceph_open(struct ceph_mount_info *cmount, const char *path,
   return cmount->get_client()->open(path, flags, mode);
 }
 
+extern "C" int ceph_open_layout(struct ceph_mount_info *cmount, const char *path, int flags,
+    mode_t mode, int stripe_unit, int stripe_count, int object_size, const char *data_pool)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->open(path, flags, mode, stripe_unit,
+      stripe_count, object_size, data_pool);
+}
+
 extern "C" int ceph_close(struct ceph_mount_info *cmount, int fd)
 {
   if (!cmount->is_mounted())

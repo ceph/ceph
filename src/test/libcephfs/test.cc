@@ -149,6 +149,28 @@ TEST(LibCephFS, Mount) {
   ceph_shutdown(cmount);
 }
 
+TEST(LibCephFS, Open_layout) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  /* valid layout */
+  char test_layout_file[256];
+  sprintf(test_layout_file, "test_layout_%d_b", getpid());
+  int fd = ceph_open_layout(cmount, test_layout_file, O_CREAT, 0666, (1<<20), 7, (1<<20), NULL);
+  ASSERT_GT(fd, 0);
+  ceph_close(cmount, fd);
+
+  /* invalid layout */
+  sprintf(test_layout_file, "test_layout_%d_c", getpid());
+  fd = ceph_open_layout(cmount, test_layout_file, O_CREAT, 0666, (1<<20), 1, 19, NULL);
+  ASSERT_EQ(fd, -EINVAL);
+  ceph_close(cmount, fd);
+
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, Dir_ls) {
 
   pid_t mypid = getpid();
