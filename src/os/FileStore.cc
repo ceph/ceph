@@ -25,6 +25,7 @@
 
 #if defined(__linux__)
 #include <linux/fs.h>
+#include <syscall.h>
 #endif
 
 #include <iostream>
@@ -1227,7 +1228,16 @@ int FileStore::_detect_fs()
     dout(0) << "mount syncfs(2) syscall supported by glibc BUT NOT the kernel" << dendl;
   }
 #else
+#ifdef SYS_syncfs
+  if (syscall(SYS_syncfs, fd) == 0) {
+    dout(0) << "mount syscall(SYS_syncfs, fd) fully supported" << dendl;
+    have_syncfs = true;
+  } else {
+    dout(0) << "mount syscall(SYS_syncfs, fd) supported by libc BUT NOT the kernel" << dendl;
+  }
+#else
   dout(0) << "mount syncfs(2) syscall not support by glibc" << dendl;
+#endif
 #endif
   if (!have_syncfs) {
     if (btrfs) {
