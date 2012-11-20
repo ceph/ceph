@@ -15,8 +15,7 @@ from ..orchestra.connection import split_user
 log = logging.getLogger(__name__)
 
 
-@contextlib.contextmanager
-def download(ctx, config):
+def do_download(ctx, config):
     assert isinstance(config, dict)
     log.info('Downloading s3-tests...')
     for (client, cconf) in config.items():
@@ -52,6 +51,10 @@ def download(ctx, config):
                     ],
                 )
 
+@contextlib.contextmanager
+def download(ctx, config):
+    return do_downoad(ctx, config)
+
 def _config_user(s3tests_conf, section, user):
     s3tests_conf[section].setdefault('user_id', user)
     s3tests_conf[section].setdefault('email', '{user}+test@test.test'.format(user=user))
@@ -59,8 +62,7 @@ def _config_user(s3tests_conf, section, user):
     s3tests_conf[section].setdefault('access_key', ''.join(random.choice(string.uppercase) for i in xrange(20)))
     s3tests_conf[section].setdefault('secret_key', base64.b64encode(os.urandom(40)))
 
-@contextlib.contextmanager
-def create_users(ctx, config):
+def do_create_users(ctx, config):
     assert isinstance(config, dict)
     log.info('Creating rgw users...')
     for client in config['clients']:
@@ -87,9 +89,11 @@ def create_users(ctx, config):
             )
     yield
 
-
 @contextlib.contextmanager
-def configure(ctx, config):
+def create_users(ctx, config):
+    return do_create_users(ctx, config)
+
+def do_configure(ctx, config):
     assert isinstance(config, dict)
     log.info('Configuring s3-tests...')
     for client, properties in config['clients'].iteritems():
@@ -124,9 +128,11 @@ def configure(ctx, config):
             )
     yield
 
-
 @contextlib.contextmanager
-def run_tests(ctx, config):
+def configure(ctx, config):
+    return do_configure(ctx, config)
+
+def do_run_tests(ctx, config):
     assert isinstance(config, dict)
     for client, client_config in config.iteritems():
         args = [
@@ -143,8 +149,11 @@ def run_tests(ctx, config):
         ctx.cluster.only(client).run(
             args=args,
             )
-    yield
 
+@contextlib.contextmanager
+def run_tests(ctx, config):
+    do_run_tests(ctx, config)
+    yield
 
 @contextlib.contextmanager
 def task(ctx, config):

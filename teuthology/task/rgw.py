@@ -115,6 +115,7 @@ def start_rgw(ctx, config):
                 '/tmp/cephtest/binary/usr/local/bin/radosgw',
                 '-c', '/tmp/cephtest/ceph.conf',
                 '--log-file', '/tmp/cephtest/archive/log/rgw.log',
+                '--rgw_ops_log_socket_path', '/tmp/cephtest/rgw.opslog.sock',
                 '/tmp/cephtest/apache/apache.conf',
                 '--foreground',
                 run.Raw('>'),
@@ -145,6 +146,14 @@ def start_rgw(ctx, config):
         log.info('Stopping rgw...')
         for client, proc in rgws.iteritems():
             proc.stdin.close()
+
+            ctx.cluster.only(client).run(
+                args=[
+                    'rm',
+                    '-rf',
+                    '/tmp/cephtest/rgw.opslog.sock',
+                     ],
+             )
 
         run.wait(rgws.itervalues())
 
