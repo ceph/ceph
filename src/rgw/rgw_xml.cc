@@ -131,13 +131,16 @@ static void xml_start(void *data, const char *el, const char **attr) {
 }
 
 RGWXMLParser::
-RGWXMLParser() : p(NULL), buf(NULL), buf_len(0), cur_obj(NULL), success(true)
+RGWXMLParser() : buf(NULL), buf_len(0), cur_obj(NULL), success(true)
 {
+  p = XML_ParserCreate(NULL);
 }
 
 RGWXMLParser::
 ~RGWXMLParser()
 {
+  XML_ParserFree(p);
+
   free(buf);
   vector<XMLObj *>::iterator iter;
   for (iter = objs.begin(); iter != objs.end(); ++iter) {
@@ -194,7 +197,6 @@ void RGWXMLParser::handle_data(const char *s, int len)
 
 bool RGWXMLParser::init()
 {
-  p = XML_ParserCreate(NULL);
   if (!p) {
     return false;
   }
@@ -220,9 +222,6 @@ bool RGWXMLParser::parse(const char *_buf, int len, int done)
 	      XML_ErrorString(XML_GetErrorCode(p)));
     success = false;
   }
-
-  if (done || !success)
-    XML_ParserFree(p);
 
   return success;
 }
