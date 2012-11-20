@@ -18,7 +18,7 @@ such as Juju, Puppet, Chef or Crowbar.
 
 .. toctree:: 
 
-	mkcephfs (Deprecated) <mkcephfs>
+	mkcephfs <mkcephfs>
 	Ceph Deploy <ceph-deploy>
 
 .. raw:: html 
