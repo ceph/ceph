@@ -16,6 +16,7 @@
 #define CEPH_SYNC_FILESYSTEM_H
 
 #include <unistd.h>
+#include <syscall.h>
 
 #ifndef __CYGWIN__
 # ifndef DARWIN
@@ -32,6 +33,11 @@ inline int sync_filesystem(int fd)
    * computer. */
 #ifdef HAVE_SYS_SYNCFS
   if (syncfs(fd) == 0)
+    return 0;
+#endif
+
+#ifdef SYS_syncfs
+  if (syscall(SYS_syncfs, fd) == 0)
     return 0;
 #endif
 
