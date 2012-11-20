@@ -95,6 +95,11 @@ public class CephUnmountedTest {
   }
 
   @Test(expected=CephNotMountedException.class)
+  public void test_open_layout() throws Exception {
+    mount.open("/a/path", 0, 0, 0, 0, 0, null);
+  }
+
+  @Test(expected=CephNotMountedException.class)
   public void test_close() throws Exception {
     mount.close(0);
   }
