@@ -6,6 +6,7 @@ from cStringIO import StringIO
 from ..orchestra import run
 from teuthology import misc as teuthology
 from teuthology import contextutil
+from teuthology.parallel import parallel
 
 log = logging.getLogger(__name__)
 
@@ -403,8 +404,13 @@ def run_xfstests(ctx, config):
                 fs_type: 'xfs'
                 tests: '1-9 11-15 17 19-21 26-28 31-34 41 45-48'
     """
+    with parallel() as p:
+        for role, properties in config.items():
+            p.spawn(run_xfstests_one_client, ctx, role, properties)
+    yield
 
-    for role, properties in config.items():
+def run_xfstests_one_client(ctx, role, properties):
+    try:
         count = properties.get('count')
         test_dev = properties.get('test_dev')
         assert test_dev is not None, \
@@ -461,17 +467,11 @@ def run_xfstests(ctx, config):
             ]
         if tests:
             args.append(tests)
-
-        remote.run(args=args)
-    try:
-        yield
+        remote.run(args=args, logger=log.getChild(role))
     finally:
-        for role, properties in config.items():
-            (remote,) = ctx.cluster.only(role).remotes.keys()
-            log.info('Removing {script} on {role}'.format(script=test_script,
-                                                        role=role))
-            args = [ 'rm', '-f', test_path ]
-            remote.run(args=args)
+        log.info('Removing {script} on {role}'.format(script=test_script,
+                                                      role=role))
+        remote.run(args=['rm', '-f', test_path])
 
 @contextlib.contextmanager
 def xfstests(ctx, config):
@@ -520,52 +520,61 @@ def xfstests(ctx, config):
                     "task xfstests allows only one instance at a time per host"
                 running_xfstests[host] = True
 
+    images_config = {}
+    scratch_config = {}
+    modprobe_config = {}
+    image_map_config = {}
+    scratch_map_config = {}
+    xfstests_config = {}
     for role, properties in runs:
         if properties is None:
             properties = {}
 
-        test_image = properties.get('test_image', 'test_image')
+        test_image = properties.get('test_image', 'test_image.{role}'.format(role=role))
         test_size = properties.get('test_size', 1000)
         test_fmt = properties.get('test_format', 1)
-        scratch_image = properties.get('scratch_image', 'scratch_image')
+        scratch_image = properties.get('scratch_image', 'scratch_image.{role}'.format(role=role))
         scratch_size = properties.get('scratch_size', 1000)
         scratch_fmt = properties.get('scratch_format', 1)
 
-        test_image_config = {}
-        test_image_config['image_name'] = test_image
-        test_image_config['image_size'] = test_size
-        test_image_config['image_format'] = test_fmt
+        images_config[role] = dict(
+            image_name=test_image,
+            image_size=test_size,
+            image_format=test_fmt,
+            )
 
-        scratch_image_config = {}
-        scratch_image_config['image_name'] = scratch_image
-        scratch_image_config['image_size'] = scratch_size
-        scratch_image_config['image_format'] = scratch_fmt
+        scratch_config[role] = dict(
+            image_name=scratch_image,
+            image_size=scratch_size,
+            image_format=scratch_fmt,
+            )
 
-        test_config = {}
-        test_config['count'] = properties.get('count', 1)
-        test_config['test_dev'] = \
-                '/dev/rbd/rbd/{image}'.format(image=test_image)
-        test_config['scratch_dev'] = \
-                '/dev/rbd/rbd/{image}'.format(image=scratch_image)
-        test_config['fs_type'] = properties.get('fs_type', 'xfs')
-        test_config['tests'] = properties.get('tests', None)
+        xfstests_config[role] = dict(
+            count=properties.get('count', 1),
+            test_dev='/dev/rbd/rbd/{image}'.format(image=test_image),
+            scratch_dev='/dev/rbd/rbd/{image}'.format(image=scratch_image),
+            fs_type=properties.get('fs_type', 'xfs'),
+            tests=properties.get('tests'),
+            )
 
         log.info('Setting up xfstests using RBD images:')
         log.info('      test ({size} MB): {image}'.format(size=test_size,
                                                         image=test_image))
         log.info('   scratch ({size} MB): {image}'.format(size=scratch_size,
                                                         image=scratch_image))
-        with contextutil.nested(
-            lambda: create_image(ctx=ctx, \
-                        config={ role: test_image_config }),
-            lambda: create_image(ctx=ctx, \
-                        config={ role: scratch_image_config }),
-            lambda: modprobe(ctx=ctx, config={ role: None }),
-            lambda: dev_create(ctx=ctx, config={ role: test_image }),
-            lambda: dev_create(ctx=ctx, config={ role: scratch_image }),
-            lambda: run_xfstests(ctx=ctx, config={ role: test_config }),
-            ):
-            yield
+        modprobe_config[role] = None
+        image_map_config[role] = test_image
+        scratch_map_config[role] = scratch_image
+
+    with contextutil.nested(
+        lambda: create_image(ctx=ctx, config=images_config),
+        lambda: create_image(ctx=ctx, config=scratch_config),
+        lambda: modprobe(ctx=ctx, config=modprobe_config),
+        lambda: dev_create(ctx=ctx, config=image_map_config),
+        lambda: dev_create(ctx=ctx, config=scratch_map_config),
+        lambda: run_xfstests(ctx=ctx, config=xfstests_config),
+        ):
+        yield
 
 
 @contextlib.contextmanager
