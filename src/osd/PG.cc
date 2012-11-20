@@ -2033,6 +2033,11 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
 
   child->snap_trimq = snap_trimq;
 
+  get_osdmap()->pg_to_up_acting_osds(child->info.pgid, child->up, child->acting);
+  child->role = get_osdmap()->calc_pg_role(osd->whoami, child->acting);
+  if (get_primary() != child->get_primary())
+    child->info.history.same_primary_since = get_osdmap()->get_epoch();
+
   // History
   child->past_intervals = past_intervals;
 
