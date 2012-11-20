@@ -446,6 +446,10 @@ public:
     len = 0;
     data = NULL;
   }
+  virtual ~RGWPutACLs() {
+    free(data);
+  }
+
   int verify_permission();
   void execute();
 
@@ -497,6 +501,10 @@ public:
     data = NULL;
     len = 0;
   }
+  virtual ~RGWCompleteMultipart() {
+    free(data);
+  }
+
   int verify_permission();
   void execute();
 
