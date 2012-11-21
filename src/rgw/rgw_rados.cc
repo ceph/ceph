@@ -166,8 +166,11 @@ void RGWRadosCtx::set_prefetch_data(rgw_obj& obj) {
 
 void RGWRados::finalize()
 {
-  if (use_gc_thread)
+  if (use_gc_thread) {
     gc->stop_processor();
+    delete gc;
+    gc = NULL;
+  }
 }
 
 /** 
