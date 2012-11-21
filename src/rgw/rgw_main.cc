@@ -496,11 +496,11 @@ int main(int argc, const char **argv)
     rest.register_resource(g_conf->rgw_admin_entry, admin_resource);
   }
 
-  RGWProcess process(g_ceph_context, store, g_conf->rgw_thread_pool_size, &rest);
+  pprocess = new RGWProcess(g_ceph_context, store, g_conf->rgw_thread_pool_size, &rest);
 
-  pprocess = &process;
+  pprocess->run();
 
-  process.run();
+  delete pprocess;
 
   if (do_swift) {
     swift_finalize();
@@ -517,6 +517,10 @@ int main(int argc, const char **argv)
   rgw_tools_cleanup();
   curl_global_cleanup();
   g_ceph_context->put();
+
+  shutdown_async_signal_handler();
+
+  ceph::crypto::shutdown();
 
   return 0;
 }
