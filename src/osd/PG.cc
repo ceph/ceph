@@ -2030,6 +2030,7 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   child->info.stats = info.stats;
   info.stats.stats_invalid = true;
   child->info.stats.stats_invalid = true;
+  child->info.last_epoch_started = info.last_epoch_started;
 
   child->snap_trimq = snap_trimq;
 
