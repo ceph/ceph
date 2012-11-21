@@ -338,7 +338,7 @@ public class CephMount {
    * @param path Path of file to stat.
    * @param stat CephStat structure to hold file status.
    */
-  public void lstat(String path, CephStat stat) throws FileNotFoundException {
+  public void lstat(String path, CephStat stat) throws FileNotFoundException, CephNotDirectoryException {
     native_ceph_lstat(instance_ptr, path, stat);
   }
 
