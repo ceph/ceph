@@ -38,6 +38,7 @@
 #define CEPH_NOTMOUNTED_CP "com/ceph/fs/CephNotMountedException"
 #define CEPH_FILEEXISTS_CP "com/ceph/fs/CephFileAlreadyExistsException"
 #define CEPH_ALREADYMOUNTED_CP "com/ceph/fs/CephAlreadyMountedException"
+#define CEPH_NOTDIR_CP "com/ceph/fs/CephNotDirectoryException"
 
 /*
  * Flags to open(). must be synchronized with CephMount.java
@@ -200,6 +201,11 @@ static void cephThrowFileExists(JNIEnv *env, const char *msg)
   THROW(env, CEPH_FILEEXISTS_CP, msg);
 }
 
+static void cephThrowNotDir(JNIEnv *env, const char *msg)
+{
+  THROW(env, CEPH_NOTDIR_CP, msg);
+}
+
 static void handle_error(JNIEnv *env, int rc)
 {
   switch (rc) {
@@ -208,6 +214,9 @@ static void handle_error(JNIEnv *env, int rc)
     return;
   case -EEXIST:
     cephThrowFileExists(env, "");
+    return;
+  case -ENOTDIR:
+    cephThrowNotDir(env, "");
     return;
   default:
     break;
