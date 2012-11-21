@@ -36,6 +36,10 @@ class RGWGC {
   GCWorker *worker;
 public:
   RGWGC() : cct(NULL), store(NULL), max_objs(0), obj_names(NULL), worker(NULL) {}
+  ~RGWGC() {
+    stop_processor();
+    finalize();
+  }
 
   void add_chain(librados::ObjectWriteOperation& op, cls_rgw_obj_chain& chain, const string& tag);
   int send_chain(cls_rgw_obj_chain& chain, const string& tag, bool sync);
