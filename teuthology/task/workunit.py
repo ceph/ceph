@@ -226,8 +226,8 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None):
                     args=['rm', '-rf', '--', scratch_tmp],
                     )
     finally:
-         log.info('Stopping %s on %s...', spec, role)
-         remote.run(
+        log.info('Stopping %s on %s...', spec, role)
+        remote.run(
             logger=log.getChild(role),
             args=[
                 'rm', '-rf', '--', '/tmp/cephtest/workunits.list', srcdir,
