@@ -235,10 +235,18 @@ struct pg_t {
     m_preferred = osd;
   }
 
+  pg_t get_parent() const;
+
   int print(char *o, int maxlen) const;
   bool parse(const char *s);
 
   bool is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *pchildren) const;
+
+  /**
+   * Returns b such that for all object o:
+   *   ~((~0)<<b) & o.hash) == 0 iff o is in the pg for *this
+   */
+  unsigned get_split_bits(unsigned pg_num) const;
 
   void encode(bufferlist& bl) const {
     __u8 v = 1;
@@ -1450,6 +1458,7 @@ struct pg_missing_t {
   void rm(const std::map<hobject_t, pg_missing_t::item>::iterator &m);
   void got(const hobject_t& oid, eversion_t v);
   void got(const std::map<hobject_t, pg_missing_t::item>::iterator &m);
+  void split_into(pg_t child_pgid, unsigned split_bits, pg_missing_t *omissing);
 
   void clear() {
     missing.clear();
