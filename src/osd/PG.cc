@@ -1042,11 +1042,11 @@ map<int, pg_info_t>::const_iterator PG::find_best_info(const map<int, pg_info_t>
   for (map<int, pg_info_t>::const_iterator i = infos.begin();
        i != infos.end();
        ++i) {
-    if (max_last_epoch_started_found < i->second.history.last_epoch_started) {
+    if (max_last_epoch_started_found < i->second.last_epoch_started) {
       min_last_update_acceptable = eversion_t::max();
-      max_last_epoch_started_found = i->second.history.last_epoch_started;
+      max_last_epoch_started_found = i->second.last_epoch_started;
     }
-    if (max_last_epoch_started_found == i->second.history.last_epoch_started) {
+    if (max_last_epoch_started_found == i->second.last_epoch_started) {
       if (min_last_update_acceptable > i->second.last_update)
 	min_last_update_acceptable = i->second.last_update;
     }
@@ -1380,6 +1380,8 @@ void PG::activate(ObjectStore::Transaction& t,
   state_clear(PG_STATE_DOWN);
 
   send_notify = false;
+
+  info.last_epoch_started = query_epoch;
 
   if (is_primary()) {
     // If necessary, create might_have_unfound to help us find our unfound objects.
@@ -1774,7 +1776,8 @@ void PG::all_activated_and_committed()
   assert(is_primary());
   assert(peer_activated.size() == acting.size());
 
-  info.history.last_epoch_started = get_osdmap()->get_epoch();
+  // info.last_epoch_started is set during activate()
+  info.history.last_epoch_started = info.last_epoch_started;
 
   share_pg_info();
   update_stats();
@@ -4134,6 +4137,10 @@ void PG::share_pg_info()
   // share new pg_info_t with replicas
   for (unsigned i=1; i<acting.size(); i++) {
     int peer = acting[i];
+    if (peer_info.count(i)) {
+      peer_info[i].last_epoch_started = info.last_epoch_started;
+      peer_info[i].history.merge(info.history);
+    }
     MOSDPGInfo *m = new MOSDPGInfo(get_osdmap()->get_epoch());
     m->pg_list.push_back(
       make_pair(
@@ -4522,6 +4529,10 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
   if (info.history.merge(oinfo.history))
     dirty_info = true;
   osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+
+  assert(oinfo.last_epoch_started == info.last_epoch_started);
+  assert(info.history.last_epoch_started == oinfo.last_epoch_started);
+  assert(oinfo.history.last_epoch_started == oinfo.last_epoch_started);
 
   // Handle changes to purged_snaps ONLY IF we have caught up
   if (last_complete_ondisk.epoch >= info.history.last_epoch_started) {
@@ -6451,7 +6462,7 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
 
     // We pull the log from the peer's last_epoch_started to ensure we
     // get enough log to detect divergent updates.
-    eversion_t since(pi.history.last_epoch_started, 0);
+    eversion_t since(pi.last_epoch_started, 0);
     assert(pi.last_update >= pg->info.log_tail);  // or else choose_acting() did a bad thing
     if (pi.log_tail <= since) {
       dout(10) << " requesting log+missing since " << since << " from osd." << *i << dendl;
