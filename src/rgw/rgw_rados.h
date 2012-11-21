@@ -382,7 +382,12 @@ public:
 
   RGWRadosParams params;
 
-  virtual ~RGWRados() {}
+  virtual ~RGWRados() {
+    if (rados) {
+      rados->shutdown();
+      delete rados;
+    }
+  }
 
   void tick();
 
