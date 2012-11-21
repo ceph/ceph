@@ -472,7 +472,11 @@ static int do_purge_snaps(librbd::Image& image)
   }
 
   for (size_t i = 0; i < snaps.size(); ++i) {
-    image.snap_remove(snaps[i].name.c_str());
+    r = image.snap_remove(snaps[i].name.c_str());
+    if (r < 0) {
+      pc.fail();
+      return r;
+    }
     pc.update_progress(i + 1, snaps.size());
   }
 
