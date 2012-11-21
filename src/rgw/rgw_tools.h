@@ -12,6 +12,7 @@ int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, string& oid, cons
 int rgw_get_obj(RGWRados *rgwstore, void *ctx, rgw_bucket& bucket, string& key, bufferlist& bl, map<string, bufferlist> *pattrs = NULL);
 
 int rgw_tools_init(CephContext *cct);
+void rgw_tools_cleanup();
 const char *rgw_find_mime_by_ext(string& ext);
 
 #endif
