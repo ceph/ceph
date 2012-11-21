@@ -140,7 +140,9 @@ int Accepter::bind(const entity_addr_t &bind_addr, int avoid_port1, int avoid_po
   if (msgr->get_myaddr().get_port() == 0) {
     msgr->set_myaddr(listen_addr);
   }
-  msgr->get_myaddr().nonce = nonce;
+  entity_addr_t addr = msgr->get_myaddr();
+  addr.nonce = nonce;
+  msgr->set_myaddr(addr);
 
   msgr->init_local_connection();
 
