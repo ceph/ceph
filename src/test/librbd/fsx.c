@@ -93,7 +93,8 @@ int			logcount = 0;	/* total ops */
 #define OP_PUNCH_HOLE	6
 /* rbd-specific operations */
 #define OP_CLONE        7
-#define OP_MAX_FULL	8
+#define OP_FLATTEN	8
+#define OP_MAX_FULL	9
 
 /* operation modifiers */
 #define OP_CLOSEOPEN	100
@@ -333,6 +334,9 @@ logdump(void)
 			break;
 		case OP_CLONE:
 			prt("CLONE");
+			break;
+		case OP_FLATTEN:
+			prt("FLATTEN");
 			break;
 		case OP_SKIPPED:
 			prt("SKIPPED (no operation)");
@@ -921,6 +925,25 @@ writefileimage()
 	}
 }
 
+void
+do_flatten()
+{
+	int ret;
+
+	if (num_clones == 0 ||
+	    (rbd_get_parent_info(image, NULL, 0, NULL, 0, NULL, 0)
+	    == -ENOENT)) {
+		log4(OP_SKIPPED, OP_FLATTEN, 0, 0);
+		return;
+	}
+	log4(OP_FLATTEN, 0, 0, 0);
+	prt("%lu flatten\n", testcalls);
+
+	if ((ret = rbd_flatten(image)) < 0) {
+		simple_err("do_flatten: rbd flatten", ret);
+		exit(177);
+	}
+}
 
 void
 docloseopen(void)
@@ -1048,6 +1071,10 @@ test(void)
 
 	case OP_CLONE:
 		do_clone();
+		break;
+
+	case OP_FLATTEN:
+		do_flatten();
 		break;
 
 	default:
