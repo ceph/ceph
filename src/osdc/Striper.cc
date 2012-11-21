@@ -231,12 +231,15 @@ void Striper::StripedReadResult::add_partial_sparse_result(CephContext *cct,
       if (s->first > bl_off) {
 	// gap in sparse read result
 	pair<bufferlist, uint64_t>& r = partial[tofs];
-	size_t gap = s->first - bl_off;
+	size_t gap = MIN(s->first - bl_off, tlen);
 	ldout(cct, 20) << "  s gap " << gap << ", skipping" << dendl;
 	r.second = gap;
 	bl_off += gap;
 	tofs += gap;
 	tlen -= gap;
+	if (tlen == 0) {
+	  continue;
+	}
       }
 
       assert(s->first <= bl_off);
