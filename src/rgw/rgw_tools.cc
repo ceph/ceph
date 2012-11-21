@@ -161,3 +161,8 @@ int rgw_tools_init(CephContext *cct)
 
   return 0;
 }
+
+void rgw_tools_cleanup()
+{
+  ext_mime_map.clear();
+}
