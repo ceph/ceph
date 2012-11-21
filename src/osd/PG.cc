@@ -1907,6 +1907,85 @@ void PG::finish_recovery_op(const hobject_t& soid, bool dequeue)
   osd->osd->finish_recovery_op(this, soid, dequeue);
 }
 
+void PG::IndexedLog::split_into(
+  pg_t child_pgid,
+  unsigned split_bits,
+  PG::IndexedLog *olog)
+{
+  list<pg_log_entry_t> oldlog;
+  oldlog.swap(log);
+
+  eversion_t old_tail;
+  olog->head = head;
+  olog->tail = tail;
+  unsigned mask = ~((~0)<<split_bits);
+  for (list<pg_log_entry_t>::iterator i = oldlog.begin();
+       i != oldlog.end();
+       ) {
+    if ((i->soid.hash & mask) == child_pgid.m_seed) {
+      olog->log.push_back(*i);
+      if (log.empty())
+	tail = i->version;
+    } else {
+      log.push_back(*i);
+      if (olog->empty())
+	olog->tail = i->version;
+    }
+    oldlog.erase(i++);
+  }
+
+  if (log.empty())
+    tail = head;
+  else
+    head = log.rbegin()->version;
+
+  if (olog->empty())
+    olog->tail = olog->head;
+  else
+    olog->head = olog->log.rbegin()->version;
+
+  olog->index();
+  index();
+}
+
+void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
+{
+  child->osdmap_ref = osdmap_ref;
+
+  child->pool = pool;
+
+  // Log
+  log.split_into(child_pgid, split_bits, &(child->log));
+  child->info.last_complete = info.last_complete;
+
+  info.last_update = log.head;
+  child->info.last_update = child->log.head;
+
+  info.log_tail = log.tail;
+  child->info.log_tail = child->log.tail;
+
+  if (info.last_complete < log.tail)
+    info.last_complete = log.tail;
+  if (child->info.last_complete < child->log.tail)
+    child->info.last_complete = child->log.tail;
+
+  // Missing
+  missing.split_into(child_pgid, split_bits, &(child->missing));
+
+  // Info
+  child->info.history = info.history;
+  child->info.purged_snaps = info.purged_snaps;
+  child->info.last_backfill = info.last_backfill;
+
+  child->info.stats = info.stats;
+  info.stats.stats_invalid = true;
+  child->info.stats.stats_invalid = true;
+
+  child->snap_trimq = snap_trimq;
+
+  // History
+  child->past_intervals = past_intervals;
+}
 
 void PG::defer_recovery()
 {
