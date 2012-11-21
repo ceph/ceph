@@ -5,6 +5,7 @@
 #include "rgw_log.h"
 #include "rgw_acl.h"
 #include "rgw_rados.h"
+#include "rgw_client_io.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -175,7 +176,10 @@ static void log_usage(struct req_state *s, const string& op_name)
 
   rgw_usage_log_entry entry(user, s->bucket.name);
 
-  rgw_usage_data data(s->bytes_sent, s->bytes_received);
+  uint64_t bytes_sent = s->cio->get_bytes_sent();
+  uint64_t bytes_received = s->cio->get_bytes_received();
+
+  rgw_usage_data data(bytes_sent, bytes_received);
 
   data.ops = 1;
   if (!s->err.is_err())
@@ -240,10 +244,13 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name)
     entry.object_owner = s->object_acl->get_owner().get_id();
   entry.bucket_owner = s->bucket_owner;
 
+  uint64_t bytes_sent = s->cio->get_bytes_sent();
+  uint64_t bytes_received = s->cio->get_bytes_received();
+
   entry.time = s->time;
   entry.total_time = ceph_clock_now(s->cct) - s->time;
-  entry.bytes_sent = s->bytes_sent;
-  entry.bytes_received = s->bytes_received;
+  entry.bytes_sent = bytes_sent;
+  entry.bytes_received = bytes_received;
   if (s->err.http_ret) {
     char buf[16];
     snprintf(buf, sizeof(buf), "%d", s->err.http_ret);
