@@ -1039,6 +1039,7 @@ struct pg_info_t {
   pg_t pgid;
   eversion_t last_update;    // last object version applied to store.
   eversion_t last_complete;  // last version pg was complete through.
+  epoch_t last_epoch_started;// last epoch at which this pg started on this osd
   
   eversion_t log_tail;     // oldest log entry.
 
@@ -1051,11 +1052,11 @@ struct pg_info_t {
   pg_history_t history;
 
   pg_info_t()
-    : last_backfill(hobject_t::get_max())
+    : last_epoch_started(0), last_backfill(hobject_t::get_max())
   { }
   pg_info_t(pg_t p)
     : pgid(p),
-      last_backfill(hobject_t::get_max())
+      last_epoch_started(0), last_backfill(hobject_t::get_max())
   { }
   
   bool is_empty() const { return last_update.version == 0; }
@@ -1086,6 +1087,7 @@ inline ostream& operator<<(ostream& out, const pg_info_t& pgi)
       out << " lb " << pgi.last_backfill;
   }
   //out << " c " << pgi.epoch_created;
+  out << " local-les=" << pgi.last_epoch_started;
   out << " n=" << pgi.stats.stats.sum.num_objects;
   out << " " << pgi.history
       << ")";

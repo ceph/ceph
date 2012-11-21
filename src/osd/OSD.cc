@@ -4505,6 +4505,7 @@ void OSD::handle_pg_create(OpRequestRef op)
 	0, creating_pgs[pgid].acting, creating_pgs[pgid].acting,
 	history, pi,
 	*rctx.transaction);
+      pg->info.last_epoch_started = pg->info.history.last_epoch_started;
       creating_pgs.erase(pgid);
       wake_pg_waiters(pg->info.pgid);
       pg->handle_create(&rctx);
