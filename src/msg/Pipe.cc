@@ -54,6 +54,8 @@ ostream& Pipe::_pipe_prefix(std::ostream *_dout) {
 
 Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
   : reader_thread(this), writer_thread(this),
+    dispatch_thread(NULL), delay_queue(NULL),
+    delay_lock(NULL), delay_cond(NULL), stop_delayed_delivery(true),
     msgr(r),
     conn_id(r->dispatch_queue.get_id()),
     sd(-1), port(0),
@@ -85,6 +87,15 @@ Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
   msgr->timeout = msgr->cct->_conf->ms_tcp_read_timeout * 1000; //convert to ms
   if (msgr->timeout == 0)
     msgr->timeout = -1;
+
+  if (msgr->cct->_conf->ms_inject_delay_type.find(ceph_entity_type_name(connection_state->peer_type))
+      != string::npos) {
+    lsubdout(msgr->cct, ms, 1) << "setting up a delay queue on Pipe " << this << dendl;
+    dispatch_thread = new DelayedDelivery(this);
+    delay_queue = new std::deque< Message * >();
+    delay_lock = new Mutex("delay_lock");
+    delay_cond = new Cond();
+  }
 }
 
 Pipe::~Pipe()
@@ -94,6 +105,14 @@ Pipe::~Pipe()
   if (connection_state)
     connection_state->put();
   delete session_security;
+  if (dispatch_thread) {
+    delete dispatch_thread;
+    assert(delay_queue->empty());
+    delete delay_queue;
+    assert(!delay_lock->is_locked());
+    delete delay_lock;
+    delete delay_cond;
+  }
 }
 
 void Pipe::handle_ack(uint64_t seq)
@@ -125,6 +144,13 @@ void Pipe::start_reader()
   }
   reader_running = true;
   reader_thread.create(msgr->cct->_conf->ms_rwthread_stack_bytes);
+  if (dispatch_thread && stop_delayed_delivery) {
+    lsubdout(msgr->cct, ms, 1) << "running delayed dispatch thread on Pipe " << this << dendl;
+    delay_lock->Lock();
+    stop_delayed_delivery = false;
+    dispatch_thread->create();
+    delay_lock->Unlock();
+  }
 }
 
 void Pipe::start_writer()
@@ -150,10 +176,32 @@ void Pipe::join_reader()
 void Pipe::queue_received(Message *m, int priority)
 {
   assert(pipe_lock.is_locked());
+  if (delay_queue) {
+    lsubdout(msgr->cct, ms, 1) << "queuing message " << m << " for delayed delivery" << dendl;
+    Mutex::Locker locker(*delay_lock);
+    delay_queue->push_back(m);
+    delay_cond->Signal();
+    return;
+  }
   in_q->enqueue(m, priority, conn_id);
 }
 
-
+void Pipe::delayed_delivery() {
+  Mutex::Locker locker(*delay_lock);
+  if (delay_queue->empty())
+    lsubdout(msgr->cct, ms, 1) << "sleeping on delay_cond because delay queue is empty" << dendl;
+    delay_cond->Wait(*delay_lock);
+  while (!stop_delayed_delivery) {
+    Message *m = delay_queue->front();
+    lsubdout(msgr->cct, ms, 1) << "dequeuing message " << m << " for delayed delivery" << dendl;
+    delay_queue->pop_front();
+    in_q->enqueue(m, m->get_priority(), conn_id);
+    if (delay_queue->empty()) {
+      lsubdout(msgr->cct, ms, 1) << "sleeping on delay_cond" << dendl;
+      delay_cond->Wait(*delay_lock);
+    }
+  }
+}
 
 int Pipe::accept()
 {
@@ -1141,6 +1189,12 @@ void Pipe::stop()
   state = STATE_CLOSED;
   cond.Signal();
   shutdown_socket();
+  if (dispatch_thread) {
+    lsubdout(msgr->cct, ms, 1) << "signalling to stop delayed dispatch thread and clear out messages" << dendl;
+    Mutex::Locker locker(*delay_lock);
+    stop_delayed_delivery = true;
+    delay_cond->Signal();
+  }
 }
 
 

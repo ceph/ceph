@@ -60,6 +60,29 @@ class DispatchQueue;
     } writer_thread;
     friend class Writer;
 
+    /**
+     * The DelayedDelivery is for injecting delays into Message delivery off
+     * the socket. It is only enabled if delays are requested, and if they
+     * are then it pulls Messages off the DelayQueue and puts them into the
+     * in_q (SimpleMessenger::dispatch_queue).
+     * Please note that this probably has issues with Pipe shutdown and
+     * replacement semantics. I've tried, but no guarantees.
+     */
+    class DelayedDelivery: public Thread {
+      Pipe *pipe;
+    public:
+      DelayedDelivery(Pipe *p) : pipe(p) {}
+      void *entry() { pipe->delayed_delivery(); return 0; }
+    };
+    friend class DelayedDelivery;
+
+    DelayedDelivery *dispatch_thread;
+    // TODO: clean up the delay_queue better on shutdown
+    std::deque< Message * > *delay_queue;
+    Mutex *delay_lock;
+    Cond *delay_cond;
+    bool stop_delayed_delivery;
+
   public:
     Pipe(SimpleMessenger *r, int st, Connection *con);
     ~Pipe();
@@ -185,6 +208,8 @@ class DispatchQueue;
       queue_received(m, m->get_priority());
     }
 
+    void delayed_delivery();
+
     __u32 get_out_seq() { return out_seq; }
 
     bool is_queued() { return !out_q.empty() || keepalive; }
@@ -208,6 +233,13 @@ class DispatchQueue;
         writer_thread.join();
       if (reader_thread.is_started())
         reader_thread.join();
+      if (dispatch_thread && dispatch_thread->is_started()) {
+	delay_lock->Lock();
+	stop_delayed_delivery = true;
+	delay_cond->Signal();
+	delay_lock->Unlock();
+	dispatch_thread->join();
+      }
     }
     void stop();
 
