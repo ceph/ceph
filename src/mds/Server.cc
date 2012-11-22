@@ -1754,7 +1754,7 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino, u
     in->inode.gid = diri->inode.gid;
     if (S_ISDIR(mode)) {
       dout(10) << " new dir also sticky" << dendl;      
-      mode |= S_ISGID;
+      in->inode.mode |= S_ISGID;
     }
   } else 
     in->inode.gid = mdr->client_request->get_caller_gid();
