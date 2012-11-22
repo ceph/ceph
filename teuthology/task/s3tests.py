@@ -53,7 +53,7 @@ def do_download(ctx, config):
 
 @contextlib.contextmanager
 def download(ctx, config):
-    return do_downoad(ctx, config)
+    return do_download(ctx, config)
 
 def _config_user(s3tests_conf, section, user):
     s3tests_conf[section].setdefault('user_id', user)
