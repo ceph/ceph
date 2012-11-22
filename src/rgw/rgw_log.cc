@@ -1,6 +1,8 @@
 #include "common/Clock.h"
 #include "common/Timer.h"
 #include "common/utf8.h"
+#include "common/OutputDataSocket.h"
+#include "common/Formatter.h"
 
 #include "rgw_log.h"
 #include "rgw_acl.h"
@@ -192,7 +194,67 @@ static void log_usage(struct req_state *s, const string& op_name)
   usage_logger->insert(ts, entry);
 }
 
-int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name)
+void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
+{
+  formatter->open_object_section("log_entry");
+  formatter->dump_string("bucket", entry.bucket);
+  entry.time.gmtime(formatter->dump_stream("time"));      // UTC
+  entry.time.localtime(formatter->dump_stream("time_local"));
+  formatter->dump_string("remote_addr", entry.remote_addr);
+  if (entry.object_owner.length())
+    formatter->dump_string("object_owner", entry.object_owner);
+  formatter->dump_string("user", entry.user);
+  formatter->dump_string("operation", entry.op);
+  formatter->dump_string("uri", entry.uri);
+  formatter->dump_string("http_status", entry.http_status);
+  formatter->dump_string("error_code", entry.error_code);
+  formatter->dump_int("bytes_sent", entry.bytes_sent);
+  formatter->dump_int("bytes_received", entry.bytes_received);
+  formatter->dump_int("object_size", entry.obj_size);
+  uint64_t total_time =  entry.total_time.sec() * 1000000LL * entry.total_time.usec();
+
+  formatter->dump_int("total_time", total_time);
+  formatter->dump_string("user_agent",  entry.user_agent);
+  formatter->dump_string("referrer",  entry.referrer);
+  formatter->close_section();
+}
+
+void OpsLogSocket::formatter_to_bl(bufferlist& bl)
+{
+  stringstream ss;
+  formatter->flush(ss);
+  const string& s = ss.str();
+
+  bl.append(s);
+}
+
+void OpsLogSocket::init_connection(bufferlist& bl)
+{
+  bl.append("[");
+}
+
+OpsLogSocket::OpsLogSocket(CephContext *cct, uint64_t _backlog) : OutputDataSocket(cct, _backlog)
+{
+  formatter = new JSONFormatter;
+  delim.append(",\n");
+}
+
+OpsLogSocket::~OpsLogSocket()
+{
+  delete formatter;
+}
+
+void OpsLogSocket::log(struct rgw_log_entry& entry)
+{
+  bufferlist bl;
+
+  rgw_format_ops_log_entry(entry, formatter);
+  formatter_to_bl(bl);
+
+  append_output(bl);
+}
+
+int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsLogSocket *olog)
 {
   struct rgw_log_entry entry;
   string bucket_id;
@@ -270,19 +332,27 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name)
     gmtime_r(&t, &bdt);
   else
     localtime_r(&t, &bdt);
-  
-  string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
-				      s->bucket.bucket_id, entry.bucket.c_str());
 
-  rgw_obj obj(store->params.log_pool, oid);
+  int ret = 0;
 
-  int ret = store->append_async(obj, bl.length(), bl);
-  if (ret == -ENOENT) {
-    ret = store->create_pool(store->params.log_pool);
-    if (ret < 0)
-      goto done;
-    // retry
+  if (s->cct->_conf->rgw_ops_log_rados) {
+    string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
+				        s->bucket.bucket_id, entry.bucket.c_str());
+
+    rgw_obj obj(store->params.log_pool, oid);
+
     ret = store->append_async(obj, bl.length(), bl);
+    if (ret == -ENOENT) {
+      ret = store->create_pool(store->params.log_pool);
+      if (ret < 0)
+        goto done;
+      // retry
+      ret = store->append_async(obj, bl.length(), bl);
+    }
+  }
+
+  if (olog) {
+    olog->log(entry);
   }
 done:
   if (ret < 0)

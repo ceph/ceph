@@ -1361,25 +1361,8 @@ int main(int argc, char **argv)
           goto next;
 
         if (show_log_entries) {
-	  formatter->open_object_section("log_entry");
-	  formatter->dump_string("bucket", entry.bucket);
-	  entry.time.gmtime(formatter->dump_stream("time"));      // UTC
-	  entry.time.localtime(formatter->dump_stream("time_local"));
-	  formatter->dump_string("remote_addr", entry.remote_addr);
-	  if (entry.object_owner.length())
-	    formatter->dump_string("object_owner", entry.object_owner);
-	  formatter->dump_string("user", entry.user);
-	  formatter->dump_string("operation", entry.op);
-	  formatter->dump_string("uri", entry.uri);
-	  formatter->dump_string("http_status", entry.http_status);
-	  formatter->dump_string("error_code", entry.error_code);
-	  formatter->dump_int("bytes_sent", entry.bytes_sent);
-	  formatter->dump_int("bytes_received", entry.bytes_received);
-	  formatter->dump_int("object_size", entry.obj_size);
-	  formatter->dump_int("total_time", total_time);
-	  formatter->dump_string("user_agent",  entry.user_agent);
-	  formatter->dump_string("referrer",  entry.referrer);
-	  formatter->close_section();
+
+	  rgw_format_ops_log_entry(entry, formatter);
 	  formatter->flush(cout);
         }
 next:
