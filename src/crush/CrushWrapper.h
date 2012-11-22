@@ -212,6 +212,15 @@ public:
   void find_roots(set<int>& roots) const;
 
   /**
+   * see if an item is contained within a subtree
+   *
+   * @param root haystack
+   * @param item needle
+   * @return true if the item is located beneath the given node
+   */
+  bool subtree_contains(int root, int item) const;
+
+  /**
    * see if item is located where we think it is
    *
    * This verifies that the given item is located at a particular
