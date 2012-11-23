@@ -60,7 +60,7 @@ else
 fi
 
 usage_exit() {
-    echo "usage: $0 -a -c ceph.conf [-k adminkeyring] [--mkbtrfs]"
+    echo "usage: $0 -a -c ceph.conf [-k adminkeyring] [--mkfs]"
     echo "   to generate a new ceph cluster on all nodes; for advanced usage see man page"
     echo "   ** be careful, this WILL clobber old data; check your ceph.conf carefully **"
     exit
@@ -70,7 +70,7 @@ usage_exit() {
 
 
 allhosts=0
-mkbtrfs=0
+mkfs=0
 preparemonmap=0
 prepareosdfs=""
 initdaemon=""
@@ -130,8 +130,8 @@ case $1 in
 	    preparemon=1
             manual_action=1
 	    ;;
-    --mkbtrfs)
-	    mkbtrfs=1
+    --mkbtrfs | --mkfs)
+	    mkfs=1
 	    ;;
     --no-copy-conf)
 	    nocopyconf=1
@@ -307,21 +307,48 @@ if [ -n "$prepareosdfs" ]; then
 
     get_conf osd_data "/var/lib/ceph/osd/ceph-$id" "osd data"
     get_conf osd_journal "$osd_data/journal" "osd journal"
-    get_conf btrfs_path "$osd_data" "btrfs path"  # mount point defaults so osd data
-    get_conf btrfs_devs "" "btrfs devs"
+    get_conf fs_path "$osd_data" "fs path"  # mount point defaults so osd data
+    get_conf fs_devs "" "devs"
+    get_conf fs_type "" "osd mkfs type"
 
-    if [ -z "$btrfs_devs" ]; then
-	echo "no btrfs devs defined for $name"
-	exit 0
+    if [ -z "$fs_devs" ]; then
+	# try to fallback to old keys
+        get_conf tmp_btrfs_devs "" "btrfs devs"
+        if [ -n "$tmp_btrfs_devs" ]; then
+            fs_devs="$tmp_btrfs_devs"
+        else
+            echo "no devs defined for $name"
+            exit 0
+        fi
+    fi
+    if [ -z "$fs_type" ]; then
+        # try to fallback to to old keys
+        get_conf tmp_devs "" "btrfs devs"
+        if [ -n "$tmp_devs" ]; then
+            fs_type = "btrfs"
+        else
+            echo No filesystem type defined!
+            exit 0
+        fi
     fi
 
-    first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
-    get_conf btrfs_opt "noatime" "btrfs options"
-    [ -n "$btrfs_opt" ] && btrfs_opt="-o $btrfs_opt"
+    first_dev=`echo $fs_devs | cut '-d ' -f 1`
+    get_conf fs_opt "" "osd mount options $fs_type"
+    if [ -z "$fs_opt" ]; then
+        if [ "$fs_type" = "btrfs" ]; then
+            #try to fallback to old keys
+            get_conf fs_opt "" "btrfs options"
+        fi
+        if [ -z "$fs_opt" ]; then
+            #fallback to use at least rw,noatime
+            fs_opt="rw,noatime"
+        fi
+    fi
+    [ -n "$fs_opt" ] && fs_opt="-o $fs_opt"
     get_conf osd_user "root" "user"
     
-    if [ -n "$osd_journal" ] && echo "$btrfs_devs" | grep -q -w "$osd_journal" ; then
-	echo "ERROR: osd journal device ($osd_journal) also used by btrfs devs ($btrfs_devs)"
+    if [ -n "$osd_journal" ] && echo "fs_devs" | grep -q -w "$osd_journal" ; then
+        echo "ERROR: osd journal device ($osd_journal) also used by devs ($fs_devs)"
 	exit 1
     fi
     
@@ -331,19 +358,22 @@ if [ -n "$prepareosdfs" ]; then
 	test -d $osd_journal || mkdir -p `dirname $osd_journal`
     fi
 
-    umount $btrfs_path || true
-    for f in $btrfs_devs ; do
+    umount $fs_path || true
+    for f in $fs_devs ; do
 	umount $f || true
     done
 
-    modprobe btrfs || true
-    mkfs.btrfs $btrfs_devs
-    btrfs device scan || btrfsctl -a
-    sync   # seems to fix problems for some people...
-    mount -t btrfs $btrfs_opt $first_dev $btrfs_path
-    chown $osd_user $btrfs_path
-    chmod +w $btrfs_path
-    
+    get_conf mkfs_opt "" "osd mkfs options $fs_type"
+    if [ "$fs_type" == "xfs" ] && [ -z "$mkfs_opt" ]; then
+        echo Xfs filesystem found add missing -f mkfs option!
+	mkfs_opt="-f"
+    fi
+    modprobe $fs_type || true
+    mkfs.$fs_type $mkfs_opt $fs_devs
+    mount -t $fs_type $fs_opt $first_dev $fs_path
+    chown $osd_user $fs_path
+    chmod +w $fs_path
+
     exit 0
 fi
 
@@ -460,7 +490,7 @@ if [ $allhosts -eq 1 ]; then
 	    fi
 	fi
 	
-	if [ $mkbtrfs -eq 1 ] && [ "$type" = "osd" ]; then
+	if [ $mkfs -eq 1 ] && [ "$type" = "osd" ]; then
 	    do_root_cmd "$0 -d $rdir --prepare-osdfs $name"
 	fi
 

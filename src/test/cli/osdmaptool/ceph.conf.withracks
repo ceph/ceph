@@ -42,7 +42,9 @@
   keyring = /mnt/osd.$id/keyring
   osd data = /mnt/osd.$id
   osd journal = /dev/disk/by-label/osd.$id.journal
-  btrfs devs = /dev/disk/by-label/osd.$id.data
+  osd mkfs type = btrfs
+  osd mount options btrfs = rw,noatime
+  devs = /dev/disk/by-label/osd.$id.data
 ; temp sage
   debug osd = 20
   debug ms = 1
