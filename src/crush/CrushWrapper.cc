@@ -258,6 +258,14 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
     crush_bucket *b = get_bucket(id);
     assert(b);
 
+    if (p->first != b->type) {
+      ldout(cct, 1) << "insert_item existing bucket has type "
+	<< "'" << type_map[b->type] << "' != "
+	<< "'" << type_map[p->first] << "'" << dendl;
+      return -EINVAL;
+    }
+
+
     // make sure the item doesn't already exist in this bucket
     for (unsigned j=0; j<b->size; j++)
       if (b->items[j] == cur) {
