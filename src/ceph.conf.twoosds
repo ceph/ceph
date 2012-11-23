@@ -67,16 +67,17 @@
 	debug journal = 20
 	log dir = /data/cosd$id
 	osd data = /mnt/osd$id
-	btrfs options = "flushoncommit,usertrans"
 ;	user = root
 
 ;	osd journal = /mnt/osd$id/journal
 ;	osd journal size = 1000
 	osd journal = "/dev/disk/by-path/pci-0000:05:02.0-scsi-6:0:0:0"
+        osd mkfs type = btrfs
+	osd mount options btrfs = "flushoncommit,usertrans"
 ;	filestore max sync interval = 1
 
-	btrfs devs = "/dev/disk/by-path/pci-0000:05:01.0-scsi-2:0:0:0"
-;	btrfs devs = "/dev/disk/by-path/pci-0000:05:01.0-scsi-2:0:0:0 \
+	devs = "/dev/disk/by-path/pci-0000:05:01.0-scsi-2:0:0:0"
+;	devs = "/dev/disk/by-path/pci-0000:05:01.0-scsi-2:0:0:0 \
 ;	      	   /dev/disk/by-path/pci-0000:05:01.0-scsi-3:0:0:0 \
 ;		   /dev/disk/by-path/pci-0000:05:01.0-scsi-4:0:0:0 \
 ;		   /dev/disk/by-path/pci-0000:05:01.0-scsi-5:0:0:0 \
