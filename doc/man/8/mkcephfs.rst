@@ -7,7 +7,7 @@
 Synopsis
 ========
 
-| **mkcephfs** -c *ceph.conf* [ --mkbtrfs ] [ -a, --all-hosts [ -k
+| **mkcephfs** -c *ceph.conf* [ --mkfs ] [ -a, --all-hosts [ -k
   */path/to/admin.keyring* ] ]
 
 
@@ -70,20 +70,15 @@ Options
    default is ``/etc/ceph/keyring`` (or whatever is specified in the
    config file).
 
-.. option:: --mkbtrfs
+.. option:: --mkfs
 
-   Create and mount the any btrfs file systems specified in the
-   ceph.conf for OSD data storage using mkfs.btrfs. The "btrfs devs"
-   and (if it differs from "osd data") "btrfs path" options must be
-   defined.
+   Create and mount the any file systems specified in the
+   ceph.conf for OSD data storage using mkfs. The "devs" and (if it
+   differs from "osd data") "fs path" options must be defined.
 
    **NOTE** Btrfs is still considered experimental.  This option
-   can ease some configuration pain, but is the use of btrfs is not
-   required when ``osd data`` directories are mounted manually by the
-   adminstrator.
-
-   **NOTE** This option is deprecated and will be removed in a future
-   release.
+   can ease some configuration pain, but is not required when
+   ``osd data`` directories are mounted manually by the adminstrator.
 
 .. option:: --no-copy-conf
 
