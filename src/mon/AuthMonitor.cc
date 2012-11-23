@@ -549,7 +549,8 @@ void AuthMonitor::import_keyring(KeyRing& keyring)
     auth_inc.name = p->first;
     auth_inc.auth = p->second; 
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
-    dout(10) << " importing " << auth_inc.name << " " << auth_inc.auth << dendl;
+    dout(10) << " importing " << auth_inc.name << dendl;
+    dout(30) << "    " << auth_inc.auth << dendl;
     push_cephx_inc(auth_inc);
   }
 }
@@ -627,7 +628,8 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       for (unsigned i=3; i+1<m->cmd.size(); i += 2)
 	::encode(m->cmd[i+1], auth_inc.auth.caps[m->cmd[i]]);
 
-      dout(10) << " importing " << auth_inc.name << " " << auth_inc.auth << dendl;
+      dout(10) << " importing " << auth_inc.name << dendl;
+      dout(30) << "    " << auth_inc.auth << dendl;
       push_cephx_inc(auth_inc);
 
       ss << "added key for " << auth_inc.name;
