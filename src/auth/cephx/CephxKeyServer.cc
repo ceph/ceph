@@ -46,7 +46,7 @@ bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
 
   secret_id = riter->first;
   secret = riter->second;
-  ldout(cct, 10) << "get_service_secret service " << ceph_entity_type_name(service_id)
+  ldout(cct, 30) << "get_service_secret service " << ceph_entity_type_name(service_id)
 	   << " id " << secret_id << " " << secret << dendl;
   return true;
 }
@@ -77,12 +77,13 @@ bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
 
   if (riter == secrets.secrets.end()) {
     ldout(cct, 10) << "get_service_secret service " << ceph_entity_type_name(service_id)
-	     << " secret " << secret_id << " not found; i have:" << dendl;
+	     << " secret " << secret_id << " not found" << dendl;
+    ldout(cct, 30) << " I have:" << dendl;
     for (map<uint64_t, ExpiringCryptoKey>::const_iterator iter =
 	     secrets.secrets.begin();
         iter != secrets.secrets.end();
         ++iter)
-      ldout(cct, 10) << " id " << iter->first << " " << iter->second << dendl;
+      ldout(cct, 30) << " id " << iter->first << " " << iter->second << dendl;
     return false;
   }
 
@@ -170,7 +171,7 @@ bool KeyServer::_check_rotating_secrets()
 
 void KeyServer::_dump_rotating_secrets()
 {
-  ldout(cct, 10) << "_dump_rotating_secrets" << dendl;
+  ldout(cct, 30) << "_dump_rotating_secrets" << dendl;
   for (map<uint32_t, RotatingSecrets>::iterator iter = data.rotating_secrets.begin();
        iter != data.rotating_secrets.end();
        ++iter) {
@@ -178,7 +179,7 @@ void KeyServer::_dump_rotating_secrets()
     for (map<uint64_t, ExpiringCryptoKey>::iterator mapiter = key.secrets.begin();
 	 mapiter != key.secrets.end();
 	 ++mapiter)
-      ldout(cct, 10) << "service " << ceph_entity_type_name(iter->first)
+      ldout(cct, 30) << "service " << ceph_entity_type_name(iter->first)
 	             << " id " << mapiter->first
 	             << " key " << mapiter->second << dendl;
   }
@@ -203,7 +204,8 @@ int KeyServer::_rotate_secret(uint32_t service_id)
     }
     ek.expiration += ttl;
     uint64_t secret_id = r.add(ek);
-    ldout(cct, 10) << "_rotate_secret adding " << ceph_entity_type_name(service_id)
+    ldout(cct, 10) << "_rotate_secret adding " << ceph_entity_type_name(service_id) << dendl;
+    ldout(cct, 30) << "_rotate_secret adding " << ceph_entity_type_name(service_id)
 	           << " id " << secret_id << " " << ek
 	           << dendl;
     added++;
