@@ -236,7 +236,8 @@ void KeyRing::import(CephContext *cct, KeyRing& other)
   for (map<EntityName, EntityAuth>::iterator p = other.keys.begin();
        p != other.keys.end();
        ++p) {
-    ldout(cct, 10) << " importing " << p->first << " " << p->second << dendl;
+    ldout(cct, 10) << " importing " << p->first << dendl;
+    ldout(cct, 30) << "    " << p->second << dendl;
     keys[p->first] = p->second;
   }
 }
