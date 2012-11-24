@@ -207,14 +207,26 @@ void Monitor::recovered_leader(int id)
       require_gv_onwire();
     }
 
-    for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+    for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++) {
+      if (!(*p)->is_active())
+	continue;
       finish_contexts(g_ceph_context, (*p)->waiting_for_active);
-    for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+    }
+    for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++) {
+      if (!(*p)->is_active())
+	continue;
       finish_contexts(g_ceph_context, (*p)->waiting_for_commit);
-    for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+    }
+    for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++) {
+      if (!(*p)->is_readable())
+	continue;
       finish_contexts(g_ceph_context, (*p)->waiting_for_readable);
-    for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+    }
+    for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++) {
+      if (!(*p)->is_writeable())
+	continue;
       finish_contexts(g_ceph_context, (*p)->waiting_for_writeable);
+    }
   }
 }
 

@@ -991,12 +991,17 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       r = -EINVAL;
       if (pgid.parse(m->cmd[2].c_str())) {
 	vector<int> up, acting;
-	pg_t mpgid = mon->osdmon()->osdmap.raw_pg_to_pg(pgid);
-	mon->osdmon()->osdmap.pg_to_up_acting_osds(pgid, up, acting);
-	ss << "osdmap e" << mon->osdmon()->osdmap.get_epoch()
-	   << " pg " << pgid << " (" << mpgid << ")"
-	   << " -> up " << up << " acting " << acting;
-	r = 0;
+	if (mon->osdmon()->osdmap.have_pg_pool(pgid.pool())) {
+	  pg_t mpgid = mon->osdmon()->osdmap.raw_pg_to_pg(pgid);
+	  mon->osdmon()->osdmap.pg_to_up_acting_osds(pgid, up, acting);
+	  ss << "osdmap e" << mon->osdmon()->osdmap.get_epoch()
+	    << " pg " << pgid << " (" << mpgid << ")"
+	    << " -> up " << up << " acting " << acting;
+	  r = 0;
+	} else {
+	  r = -ENOENT;
+	  ss << "pg '" << m->cmd[2] << "' does not exist";
+	}
       } else
 	ss << "invalid pgid '" << m->cmd[2] << "'";
     }

@@ -118,7 +118,7 @@ bool cephx_build_service_ticket_reply(CephContext *cct,
     }
     ::encode(blob, service_ticket_bl);
 
-    ldout(cct, 20) << "service_ticket_blob is ";
+    ldout(cct, 30) << "service_ticket_blob is ";
     service_ticket_bl.hexdump(*_dout);
     *_dout << dendl;
 
