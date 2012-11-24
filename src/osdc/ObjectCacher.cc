@@ -703,6 +703,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
       if (r == -ENOENT) {
 	ldout(cct, 10) << "bh_read_finish removing " << *bh << dendl;
 	bh_remove(ob, bh);
+	delete bh;
 	continue;
       }
 
