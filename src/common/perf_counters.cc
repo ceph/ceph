@@ -97,6 +97,9 @@ PerfCounters::~PerfCounters()
 
 void PerfCounters::inc(int idx, uint64_t amt)
 {
+  if (!m_cct->_conf->perf)
+    return;
+
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
@@ -110,6 +113,9 @@ void PerfCounters::inc(int idx, uint64_t amt)
 
 void PerfCounters::dec(int idx, uint64_t amt)
 {
+  if (!m_cct->_conf->perf)
+    return;
+
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
@@ -123,6 +129,9 @@ void PerfCounters::dec(int idx, uint64_t amt)
 
 void PerfCounters::set(int idx, uint64_t amt)
 {
+  if (!m_cct->_conf->perf)
+    return;
+
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
@@ -136,6 +145,9 @@ void PerfCounters::set(int idx, uint64_t amt)
 
 uint64_t PerfCounters::get(int idx) const
 {
+  if (!m_cct->_conf->perf)
+    return 0;
+
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
@@ -147,6 +159,9 @@ uint64_t PerfCounters::get(int idx) const
 
 void PerfCounters::finc(int idx, double amt)
 {
+  if (!m_cct->_conf->perf)
+    return;
+
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
@@ -160,6 +175,9 @@ void PerfCounters::finc(int idx, double amt)
 
 void PerfCounters::fset(int idx, double amt)
 {
+  if (!m_cct->_conf->perf)
+    return;
+
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
@@ -173,6 +191,9 @@ void PerfCounters::fset(int idx, double amt)
 
 double PerfCounters::fget(int idx) const
 {
+  if (!m_cct->_conf->perf)
+    return 0.0;
+
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
