@@ -1646,8 +1646,70 @@ void ReplicatedPG::remove_watchers_and_notifies()
 // ========================================================================
 // low level osd ops
 
+int ReplicatedPG::do_tmapup_slow(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd_op,
+				    bufferlist& bl)
+{
+  // decode
+  bufferlist header;
+  map<string, bufferlist> m;
+  if (bl.length()) {
+    bufferlist::iterator p = bl.begin();
+    ::decode(header, p);
+    ::decode(m, p);
+    assert(p.end());
+  }
+
+  // do the update(s)
+  while (!bp.end()) {
+    __u8 op;
+    string key;
+    ::decode(op, bp);
+
+    switch (op) {
+    case CEPH_OSD_TMAP_SET: // insert key
+      {
+	::decode(key, bp);
+	bufferlist data;
+	::decode(data, bp);
+	m[key] = data;
+      }
+      break;
+    case CEPH_OSD_TMAP_RM: // remove key
+      ::decode(key, bp);
+      if (m.count(key)) {
+	m.erase(key);
+      }
+      break;
+    case CEPH_OSD_TMAP_HDR: // update header
+      {
+	::decode(header, bp);
+      }
+      break;
+    default:
+      return -EINVAL;
+    }
+  }
+
+  // reencode
+  bufferlist obl;
+  ::encode(header, obl);
+  ::encode(m, obl);
+
+  // write it out
+  vector<OSDOp> nops(1);
+  OSDOp& newop = nops[0];
+  newop.op.op = CEPH_OSD_OP_WRITEFULL;
+  newop.op.extent.offset = 0;
+  newop.op.extent.length = obl.length();
+  newop.indata = obl;
+  do_osd_ops(ctx, nops);
+  osd_op.outdata.claim(newop.outdata);
+  return 0;
+}
+
 int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd_op)
 {
+  bufferlist::iterator orig_bp = bp;
   int result = 0;
   if (bp.end()) {
     dout(10) << "tmapup is a no-op" << dendl;
@@ -1694,7 +1756,7 @@ int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
 
     // update keys
     bufferlist newkeydata;
-    string nextkey;
+    string nextkey, last_in_key;
     bufferlist nextval;
     bool have_next = false;
     if (!ip.end()) {
@@ -1713,6 +1775,13 @@ int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
       catch (buffer::error& e) {
 	return -EINVAL;
       }
+      if (key < last_in_key) {
+	dout(0) << "tmapup warning: key '" << key << "' < previous key '" << last_in_key
+		<< "', falling back to an inefficient (unsorted) update" << dendl;
+	bp = orig_bp;
+	return do_tmapup_slow(ctx, bp, osd_op, newop.outdata);
+      }
+      last_in_key = key;
 
       dout(10) << "tmapup op " << (int)op << " key " << key << dendl;
 	  

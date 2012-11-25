@@ -139,6 +139,83 @@ TEST(LibRadosMisc, TmapUpdatePP) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
+TEST(LibRadosMisc, TmapUpdateMisorderedPP) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  // create tmap
+  {
+    __u8 c = CEPH_OSD_TMAP_CREATE;
+    std::string my_tmap("my_tmap");
+    bufferlist emptybl;
+
+    bufferlist tmbl;
+    ::encode(c, tmbl);
+    ::encode(my_tmap, tmbl);
+    ::encode(emptybl, tmbl);
+    ASSERT_EQ(0, ioctx.tmap_update("foo", tmbl));
+  }
+
+  // good update
+  {
+    __u8 c = CEPH_OSD_TMAP_SET;
+    bufferlist tmbl;
+    ::encode(c, tmbl);
+    ::encode("a", tmbl);
+    bufferlist blbl;
+    ::encode("old", blbl);
+    ::encode(blbl, tmbl);
+
+    ::encode(c, tmbl);
+    ::encode("b", tmbl);
+    ::encode(blbl, tmbl);
+
+    ::encode(c, tmbl);
+    ::encode("c", tmbl);
+    ::encode(blbl, tmbl);
+
+    ASSERT_EQ(0, ioctx.tmap_update("foo", tmbl));
+  }
+
+  // bad update
+  {
+    __u8 c = CEPH_OSD_TMAP_SET;
+    bufferlist tmbl;
+    ::encode(c, tmbl);
+    ::encode("b", tmbl);
+    bufferlist blbl;
+    ::encode("new", blbl);
+    ::encode(blbl, tmbl);
+
+    ::encode(c, tmbl);
+    ::encode("a", tmbl);
+    ::encode(blbl, tmbl);
+
+    ::encode(c, tmbl);
+    ::encode("c", tmbl);
+    ::encode(blbl, tmbl);
+
+    ASSERT_EQ(0, ioctx.tmap_update("foo", tmbl));
+  }
+
+  // check
+  ASSERT_EQ(string("new"), read_key_from_tmap(ioctx, "foo", "a"));
+  ASSERT_EQ(string("new"), read_key_from_tmap(ioctx, "foo", "b"));
+  ASSERT_EQ(string("new"), read_key_from_tmap(ioctx, "foo", "c"));
+
+  ASSERT_EQ(0, remove_key_from_tmap(ioctx, "foo", "a"));
+  ASSERT_EQ(string(""), read_key_from_tmap(ioctx, "foo", "a"));
+
+  ASSERT_EQ(0, remove_key_from_tmap(ioctx, "foo", "b"));
+  ASSERT_EQ(string(""), read_key_from_tmap(ioctx, "foo", "a"));
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
 TEST(LibRadosMisc, Exec) {
   char buf[128];
   rados_t cluster;
