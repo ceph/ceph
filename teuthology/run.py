@@ -127,6 +127,9 @@ def main():
         with file(os.path.join(ctx.archive, 'owner'), 'w') as f:
             f.write(ctx.owner + '\n')
 
+        with file(os.path.join(ctx.archive, 'orig.config.yaml'), 'w') as f:
+            yaml.safe_dump(ctx.config, f, default_flow_style=False)
+
     for task in ctx.config['tasks']:
         assert 'kernel' not in task, \
             'kernel installation shouldn be a base-level item, not part of the tasks list'
