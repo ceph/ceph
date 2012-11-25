@@ -3,6 +3,8 @@
 
 #include <stdlib.h>
 
+#include "include/types.h"
+
 class RGWClientIO {
   bool account;
 
@@ -27,6 +29,9 @@ public:
   void set_account(bool _account) {
     account = _account;
   }
+
+  uint64_t get_bytes_sent() { return bytes_sent; }
+  uint64_t get_bytes_received() { return bytes_received; }
 };
 
 #endif

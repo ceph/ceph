@@ -93,7 +93,8 @@ int			logcount = 0;	/* total ops */
 #define OP_PUNCH_HOLE	6
 /* rbd-specific operations */
 #define OP_CLONE        7
-#define OP_MAX_FULL	8
+#define OP_FLATTEN	8
+#define OP_MAX_FULL	9
 
 /* operation modifiers */
 #define OP_CLOSEOPEN	100
@@ -334,6 +335,9 @@ logdump(void)
 		case OP_CLONE:
 			prt("CLONE");
 			break;
+		case OP_FLATTEN:
+			prt("FLATTEN");
+			break;
 		case OP_SKIPPED:
 			prt("SKIPPED (no operation)");
 			break;
@@ -408,7 +412,7 @@ report_failure(int status)
 				        *(((unsigned char *)(cp)) + 1)))
 
 void
-check_buffers(unsigned offset, unsigned size)
+check_buffers(char *good_buf, char *temp_buf, unsigned offset, unsigned size)
 {
 	unsigned char c, t;
 	unsigned i = 0;
@@ -586,7 +590,7 @@ doread(unsigned offset, unsigned size)
 			    ret, size);
 		report_failure(141);
 	}
-	check_buffers(offset, size);
+	check_buffers(good_buf, temp_buf, offset, size);
 }
 
 
@@ -789,6 +793,8 @@ void clone_imagename(char *buf, size_t len, int clones)
 		strncpy(buf, iname, len);
 }
 
+void check_clone(int clonenum);
+
 void
 do_clone()
 {
@@ -819,6 +825,10 @@ do_clone()
 		exit(163);
 	}
 
+	clone_imagename(imagename, sizeof(imagename), num_clones);
+	clone_imagename(lastimagename, sizeof(lastimagename),
+			num_clones - 1);
+
 	if ((ret = rbd_snap_create(image, "snap")) < 0) {
 		simple_err("do_clone: rbd create snap", ret);
 		exit(164);
@@ -828,10 +838,6 @@ do_clone()
 		simple_err("do_clone: rbd protect snap", ret);
 		exit(164);
 	}
-
-	clone_imagename(imagename, sizeof(imagename), num_clones);
-	clone_imagename(lastimagename, sizeof(lastimagename),
-			num_clones - 1);
 
 	ret = rbd_clone2(ioctx, lastimagename, "snap", ioctx, imagename,
 			 RBD_FEATURES_ALL, &order, stripe_unit, stripe_count);
@@ -844,58 +850,58 @@ do_clone()
 		simple_err("do_clone: rbd open", ret);
 		exit(166);
 	}
+
+	if (num_clones > 1)
+		check_clone(num_clones - 2);
 }
 
 void
-check_clones()
+check_clone(int clonenum)
 {
-	char filename[1024];
-	char imagename[1024];
+	char filename[128];
+	char imagename[128];
 	int ret, fd;
 	rbd_image_t cur_image;
 	struct stat file_info;
-	while (num_clones > 0) {
-		prt("checking clone #%d\n", num_clones);
-		--num_clones;
+	char *good_buf, *temp_buf;
 
-		clone_imagename(imagename, sizeof(imagename), num_clones);
-		if ((ret = rbd_open(ioctx, imagename, &cur_image, NULL)) < 0) {
-			simple_err("check_clones: rbd open", ret);
-			exit(167);
-		}
-
-		clone_filename(filename, sizeof(filename), num_clones + 1);
-		if ((fd = open(filename, O_RDONLY)) < 0) {
-			simple_err("check_clones: open", -errno);
-			exit(168);
-		}
-
-		prt("checking image %s against file %s\n", imagename, filename);
-		if ((ret = fstat(fd, &file_info)) < 0) {
-			simple_err("check_clones: fstat", -errno);
-			exit(169);
-		}
-
-		if ((ret = pread(fd, good_buf, file_info.st_size, 0)) < 0) {
-			simple_err("check_clones: pread", -errno);
-			exit(170);
-		}
-
-		if ((ret = rbd_read(cur_image, 0, file_info.st_size, temp_buf)) < 0) {
-			simple_err("check_clones: rbd_read", ret);
-			exit(171);
-		}
-		close(fd);
-		check_buffers(0, file_info.st_size);
-
-		unlink(filename);
-		/* remove the snapshot if it exists, ignore
-		   the error from the last clone. */
-		rbd_snap_unprotect(cur_image, "snap");
-		rbd_snap_remove(cur_image, "snap");
-		rbd_close(cur_image);
-		rbd_remove(ioctx, imagename);
+	clone_imagename(imagename, sizeof(imagename), clonenum);
+	if ((ret = rbd_open(ioctx, imagename, &cur_image, NULL)) < 0) {
+		simple_err("check_clone: rbd open", ret);
+		exit(167);
 	}
+
+	clone_filename(filename, sizeof(filename), clonenum + 1);
+	if ((fd = open(filename, O_RDONLY)) < 0) {
+		simple_err("check_clone: open", -errno);
+		exit(168);
+	}
+
+	prt("checking clone #%d, image %s against file %s\n",
+	    clonenum, imagename, filename);
+	if ((ret = fstat(fd, &file_info)) < 0) {
+		simple_err("check_clone: fstat", -errno);
+		exit(169);
+	}
+
+	good_buf = malloc(file_info.st_size);
+	temp_buf = malloc(file_info.st_size);
+
+	if ((ret = pread(fd, good_buf, file_info.st_size, 0)) < 0) {
+		simple_err("check_clone: pread", -errno);
+		exit(170);
+	}
+	if ((ret = rbd_read(cur_image, 0, file_info.st_size, temp_buf)) < 0) {
+		simple_err("check_clone: rbd_read", ret);
+		exit(171);
+	}
+	close(fd);
+	check_buffers(good_buf, temp_buf, 0, file_info.st_size);
+
+	unlink(filename);
+
+	free(good_buf);
+	free(temp_buf);
 }
 
 void
@@ -919,6 +925,25 @@ writefileimage()
 	}
 }
 
+void
+do_flatten()
+{
+	int ret;
+
+	if (num_clones == 0 ||
+	    (rbd_get_parent_info(image, NULL, 0, NULL, 0, NULL, 0)
+	    == -ENOENT)) {
+		log4(OP_SKIPPED, OP_FLATTEN, 0, 0);
+		return;
+	}
+	log4(OP_FLATTEN, 0, 0, 0);
+	prt("%lu flatten\n", testcalls);
+
+	if ((ret = rbd_flatten(image)) < 0) {
+		simple_err("do_flatten: rbd flatten", ret);
+		exit(177);
+	}
+}
 
 void
 docloseopen(void)
@@ -1046,6 +1071,10 @@ test(void)
 
 	case OP_CLONE:
 		do_clone();
+		break;
+
+	case OP_FLATTEN:
+		do_flatten();
 		break;
 
 	default:
@@ -1279,7 +1308,6 @@ main(int argc, char **argv)
 	char	*endp;
 	char goodfile[1024];
 	char logfile[1024];
-	char finaliname[1024];
 
 	goodfile[0] = 0;
 	logfile[0] = 0;
@@ -1514,7 +1542,7 @@ main(int argc, char **argv)
 					maxfilelen);
 			exit(98);
 		}
-	} else 
+	} else
 		check_trunc_hack();
 
 	//test_fallocate();
@@ -1527,14 +1555,48 @@ main(int argc, char **argv)
 		report_failure(99);
 	}
 
-	clone_imagename(finaliname, sizeof(finaliname), num_clones);
-	if ((ret = rbd_remove(ioctx, finaliname)) < 0) {
-		prterrcode("rbd_remove final image", ret);
-		report_failure(100);
-	}
+	if (num_clones > 0)
+		check_clone(num_clones - 1);
 
-	if (clone_calls)
-		check_clones();
+	while (num_clones >= 0) {
+		static int first = 1;
+		char clonename[128];
+		char errmsg[128];
+		clone_imagename(clonename, 128, num_clones);
+		if ((ret = rbd_open(ioctx, clonename, &image, NULL)) < 0) {
+			sprintf(errmsg, "rbd_open %s", clonename);
+			prterrcode(errmsg, ret);
+			report_failure(101);
+		}
+		if (!first) {
+			if ((ret = rbd_snap_unprotect(image, "snap")) < 0) {
+				sprintf(errmsg, "rbd_snap_unprotect %s@snap",
+					clonename);
+				prterrcode(errmsg, ret);
+			report_failure(102);
+			}
+			if ((ret = rbd_snap_remove(image, "snap")) < 0) {
+				sprintf(errmsg, "rbd_snap_remove %s@snap",
+					clonename);
+				prterrcode(errmsg, ret);
+				report_failure(103);
+			}
+		}
+		if ((ret = rbd_close(image)) < 0) {
+			sprintf(errmsg, "rbd_close %s", clonename);
+			prterrcode(errmsg, ret);
+			report_failure(104);
+		}
+
+		if ((ret = rbd_remove(ioctx, clonename)) < 0) {
+			sprintf(errmsg, "rbd_remove %s", clonename);
+			prterrcode(errmsg, ret);
+			report_failure(105);
+		}
+
+		first = 0;
+		num_clones--;
+	}
 
 	rados_ioctx_destroy(ioctx);
 	rados_shutdown(cluster);

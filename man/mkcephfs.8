@@ -32,7 +32,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .
 .SH SYNOPSIS
 .nf
-\fBmkcephfs\fP \-c \fIceph.conf\fP [ \-\-mkbtrfs ] [ \-a, \-\-all\-hosts [ \-k
+\fBmkcephfs\fP \-c \fIceph.conf\fP [ \-\-mkfs ] [ \-a, \-\-all\-hosts [ \-k
 \fI/path/to/admin.keyring\fP ] ]
 .fi
 .sp
@@ -111,19 +111,16 @@ config file).
 .UNINDENT
 .INDENT 0.0
 .TP
-.B \-\-mkbtrfs
-Create and mount the any btrfs file systems specified in the
-ceph.conf for OSD data storage using mkfs.btrfs. The "btrfs devs"
-and (if it differs from "osd data") "btrfs path" options must be
+.B \-\-mkfs
+Create and mount any file systems specified in the
+ceph.conf for OSD data storage using mkfs.*. The "devs"
+and (if it differs from "osd data") "fs path" options must be
 defined.
 .sp
 \fBNOTE\fP Btrfs is still considered experimental.  This option
-can ease some configuration pain, but is the use of btrfs is not
+can ease some configuration pain, but the use of this option is not
 required when \fBosd data\fP directories are mounted manually by the
 adminstrator.
-.sp
-\fBNOTE\fP This option is deprecated and will be removed in a future
-release.
 .UNINDENT
 .INDENT 0.0
 .TP

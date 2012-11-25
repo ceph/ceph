@@ -20,6 +20,25 @@ void CrushWrapper::find_roots(set<int>& roots) const
   }
 }
 
+bool CrushWrapper::subtree_contains(int root, int item) const
+{
+  if (root == item)
+    return true;
+
+  if (root >= 0)
+    return false;  // root is a leaf
+
+  const crush_bucket *b = get_bucket(root);
+  if (!b)
+    return false;
+
+  for (unsigned j=0; j<b->size; j++) {
+    if (subtree_contains(b->items[j], item))
+      return true;
+  }
+  return false;
+}
+
 
 int CrushWrapper::remove_item(CephContext *cct, int item)
 {
@@ -230,8 +249,22 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
       return -EINVAL;
     }
 
+    // check that we aren't creating a cycle.
+    if (subtree_contains(id, cur)) {
+      ldout(cct, 1) << "insert_item item " << cur << " already exists beneath " << id << dendl;
+      return -EINVAL;
+    }
+
     crush_bucket *b = get_bucket(id);
     assert(b);
+
+    if (p->first != b->type) {
+      ldout(cct, 1) << "insert_item existing bucket has type "
+	<< "'" << type_map[b->type] << "' != "
+	<< "'" << type_map[p->first] << "'" << dendl;
+      return -EINVAL;
+    }
+
 
     // make sure the item doesn't already exist in this bucket
     for (unsigned j=0; j<b->size; j++)

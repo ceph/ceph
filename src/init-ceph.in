@@ -100,8 +100,8 @@ docrun=
 allhosts=0
 debug=0
 monaddr=
-dobtrfs=1
-dobtrfsumount=0
+dofsmount=1
+dofsumount=0
 verbose=0
 
 while echo $1 | grep -q '^-'; do     # FIXME: why not '^-'?
@@ -130,14 +130,14 @@ case $1 in
 	    shift
 	    MON_ADDR=$1
 	    ;;
-    --btrfs)
-	    dobtrfs=1
+    --btrfs | --fsmount)
+	    dofsmount=1
 	    ;;
-    --nobtrfs)
-	    dobtrfs=0
+    --nobtrfs | --nofsmount)
+	    dofsmount=0
 	    ;;
-    --btrfsumount)
-	    dobtrfsumount=1
+    --btrfsumount | --fsumount)
+	    dofsumount=1
 	    ;;
     --conf | -c)
 	    [ -z "$2" ] && usage_exit
@@ -222,9 +222,18 @@ for name in $what; do
 
     if echo $name | grep -q ^osd; then
 	get_conf osd_data "" "osd data"
-	get_conf btrfs_path "$osd_data" "btrfs path"  # mount point defaults so osd data
-	get_conf btrfs_devs "" "btrfs devs"
-	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
+	get_conf fs_path "$osd_data" "fs path"  # mount point defaults so osd data
+        get_conf fs_devs "" "devs"
+	if [ -z "$fs_devs" ]; then
+	    # try to fallback to old keys
+	    get_conf tmp_btrfs_devs "" "btrfs devs"
+	    if [ -n "$tmp_btrfs_devs" ]; then
+		fs_devs="$tmp_btrfs_devs"
+	    else
+		echo No osd devs defined!
+	    fi
+	fi
+        first_dev=`echo $fs_devs | cut '-d ' -f 1`
     fi
 
     # do lockfile, if RH
@@ -262,13 +271,44 @@ for name in $what; do
 
 	    cmd="$wrap $cmd $runmode"
 	    
-	    if [ $dobtrfs -eq 1 ] && [ -n "$btrfs_devs" ]; then
+	    if [ $dofsmount -eq 1 ] && [ -n "$fs_devs" ]; then
 		get_conf pre_mount "true" "pre mount command"
-		get_conf btrfs_opt "noatime" "btrfs options"
-		[ -n "$btrfs_opt" ] && btrfs_opt="-o $btrfs_opt"
+		get_conf fs_type "" "osd mkfs type"
+
+		if [ -z "$fs_type" ]; then
+		    # try to fallback to to old keys
+		    get_conf tmp_devs "" "btrfs devs"
+		    if [ -n "$tmp_devs" ]; then
+			fs_type = "btrfs"
+		    else
+		        echo No filesystem type defined!
+		        exit 0
+                    fi
+		fi
+
+		get_conf fs_opt "" "osd mount options $fs_type"
+		if [ -z "$fs_opt" ]; then
+		    if [ "$fs_type" = "btrfs" ]; then
+		        #try to fallback to old keys
+			get_conf fs_opt "" "btrfs options"
+		    fi
+
+		    if [ -z "$fs_opt" ]; then
+		        #fallback to use at least noatime
+		        fs_opt="rw,noatime"
+		    fi
+		fi
+
+		[ -n "$fs_opt" ] && fs_opt="-o $fs_opt"
 		[ -n "$pre_mount" ] && do_cmd "$pre_mount"
-		echo Mounting Btrfs on $host:$btrfs_path
-		do_root_cmd "modprobe btrfs ; btrfs device scan || btrfsctl -a ; egrep -q '^[^ ]+ $btrfs_path' /proc/mounts || mount -t btrfs $btrfs_opt $first_dev $btrfs_path"
+
+		if [ "$fs_type" == "btrfs" ]; then
+		    echo Mounting Btrfs on $host:$fs_path
+		    do_root_cmd "modprobe btrfs ; btrfs device scan || btrfsctl -a ; egrep -q '^[^ ]+ $fs_path' /proc/mounts || mount -t btrfs $fs_opt $first_dev $fs_path"
+		else
+		    echo Mounting $fs_type on $host:$fs_path
+		    do_root_cmd "modprobe $fs_type ; egrep -q '^[^ ]+ $fs_path' /proc/mounts || mount -t $fs_type $fs_opt $first_dev $fs_path"
+		fi
 	    fi
 	    echo Starting Ceph $name on $host...
 	    mkdir -p $RUN_DIR
@@ -289,9 +329,9 @@ for name in $what; do
 	    stop_daemon $name ceph-$type $pid_file
 	    [ -n "$post_stop" ] && do_cmd "$post_stop"
 	    [ -n "$lockfile" ] && [ "$?" -eq 0 ] && rm -f $lockfile
-	    if [ $dobtrfsumount -eq 1 ] && [ -n "$btrfs_devs" ]; then
-		echo Unmounting Btrfs on $host:$btrfs_path
-		do_root_cmd "umount $btrfs_path || true"
+	    if [ $dofsumount -eq 1 ] && [ -n "$fs_devs" ]; then
+		echo Unmounting OSD volume on $host:$fs_path
+		do_root_cmd "umount $fs_path || true"
 	    fi
 	    ;;
 

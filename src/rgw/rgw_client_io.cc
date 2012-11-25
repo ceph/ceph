@@ -53,8 +53,7 @@ int RGWClientIO::read(char *buf, int max, int *actual)
 
   *actual = ret;
 
-  if (account)
-    bytes_received += *actual;
+  bytes_received += *actual;
 
   return 0;
 }

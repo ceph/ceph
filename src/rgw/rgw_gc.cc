@@ -34,9 +34,7 @@ void RGWGC::initialize(CephContext *_cct, RGWRados *_store) {
 
 void RGWGC::finalize()
 {
-  for (int i = 0; i < max_objs; i++) {
-    delete[] obj_names;
-  }
+  delete[] obj_names;
 }
 
 int RGWGC::tag_index(const string& tag)
