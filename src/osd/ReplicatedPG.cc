@@ -1839,9 +1839,6 @@ int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
 	dout(20) << "   create " << key << " " << val.length() << dendl;
 	nkeys++;
       } else if (op == CEPH_OSD_TMAP_RM) {
-	if (!key_exists) {
-	  return -ENOENT;
-	}
 	// do nothing.
       }
     }
