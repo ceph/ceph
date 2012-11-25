@@ -61,20 +61,12 @@ static sighandler_t sighandler_usr1;
 static sighandler_t sighandler_alrm;
 static sighandler_t sighandler_term;
 
+class RGWProcess;
+
+static RGWProcess *pprocess = NULL;
+
 
 #define SOCKET_BACKLOG 1024
-
-static void godown_handler(int signum)
-{
-  FCGX_ShutdownPending();
-  signal(signum, sighandler_usr1);
-  alarm(5);
-}
-
-static void godown_alarm(int signum)
-{
-  _exit(0);
-}
 
 struct RGWRequest
 {
@@ -127,10 +119,12 @@ struct RGWRequest
 
 class RGWProcess {
   RGWRados *store;
+  OpsLogSocket *olog;
   deque<RGWRequest *> m_req_queue;
   ThreadPool m_tp;
   Throttle req_throttle;
   RGWREST *rest;
+  int sock_fd;
 
   struct RGWWQ : public ThreadPool::WorkQueue<RGWRequest> {
     RGWProcess *process;
@@ -185,20 +179,25 @@ class RGWProcess {
   uint64_t max_req_id;
 
 public:
-  RGWProcess(CephContext *cct, RGWRados *rgwstore, int num_threads, RGWREST *_rest)
-    : store(rgwstore), m_tp(cct, "RGWProcess::m_tp", num_threads),
+  RGWProcess(CephContext *cct, RGWRados *rgwstore, OpsLogSocket *_olog, int num_threads, RGWREST *_rest)
+    : store(rgwstore), olog(_olog), m_tp(cct, "RGWProcess::m_tp", num_threads),
       req_throttle(cct, "rgw_ops", num_threads * 2),
-      rest(_rest),
+      rest(_rest), sock_fd(-1),
       req_wq(this, g_conf->rgw_op_thread_timeout,
 	     g_conf->rgw_op_thread_suicide_timeout, &m_tp),
       max_req_id(0) {}
   void run();
   void handle_request(RGWRequest *req);
+
+  void close_fd() {
+    if (sock_fd >= 0)
+      close(sock_fd);
+  }
 };
 
 void RGWProcess::run()
 {
-  int s = 0;
+  sock_fd = 0;
   if (!g_conf->rgw_socket_path.empty()) {
     string path_str = g_conf->rgw_socket_path;
 
@@ -216,9 +215,9 @@ void RGWProcess::run()
     }
 
     const char *path = path_str.c_str();
-    s = FCGX_OpenSocket(path, SOCKET_BACKLOG);
-    if (s < 0) {
-      dout(0) << "ERROR: FCGX_OpenSocket (" << path << ") returned " << s << dendl;
+    sock_fd = FCGX_OpenSocket(path, SOCKET_BACKLOG);
+    if (sock_fd < 0) {
+      dout(0) << "ERROR: FCGX_OpenSocket (" << path << ") returned " << sock_fd << dendl;
       return;
     }
     if (chmod(path, 0777) < 0) {
@@ -232,7 +231,7 @@ void RGWProcess::run()
     RGWRequest *req = new RGWRequest;
     req->id = ++max_req_id;
     dout(10) << "allocated request req=" << hex << req << dec << dendl;
-    FCGX_InitRequest(&req->fcgx, s, 0);
+    FCGX_InitRequest(&req->fcgx, sock_fd, 0);
     req_throttle.get(1);
     int ret = FCGX_Accept_r(&req->fcgx);
     if (ret < 0) {
@@ -246,6 +245,19 @@ void RGWProcess::run()
   }
 
   m_tp.stop();
+}
+
+static void godown_handler(int signum)
+{
+  FCGX_ShutdownPending();
+  pprocess->close_fd();
+  signal(signum, sighandler_usr1);
+  alarm(5);
+}
+
+static void godown_alarm(int signum)
+{
+  _exit(0);
 }
 
 static int call_log_intent(RGWRados *store, void *ctx, rgw_obj& obj, RGWIntentEvent intent)
@@ -331,7 +343,7 @@ void RGWProcess::handle_request(RGWRequest *req)
   op->execute();
   op->complete();
 done:
-  rgw_log_op(store, s, (op ? op->name() : "unknown"));
+  rgw_log_op(store, s, (op ? op->name() : "unknown"), olog);
 
   int http_ret = s->err.http_ret;
 
@@ -485,8 +497,18 @@ int main(int argc, const char **argv)
     rest.register_resource(g_conf->rgw_admin_entry, admin_resource);
   }
 
-  RGWProcess process(g_ceph_context, store, g_conf->rgw_thread_pool_size, &rest);
-  process.run();
+  OpsLogSocket *olog = NULL;
+
+  if (!g_conf->rgw_ops_log_socket_path.empty()) {
+    olog = new OpsLogSocket(g_ceph_context, g_conf->rgw_ops_log_data_backlog);
+    olog->init(g_conf->rgw_ops_log_socket_path);
+  }
+
+  pprocess = new RGWProcess(g_ceph_context, store, olog, g_conf->rgw_thread_pool_size, &rest);
+
+  pprocess->run();
+
+  delete pprocess;
 
   if (do_swift) {
     swift_finalize();
@@ -494,11 +516,21 @@ int main(int argc, const char **argv)
 
   rgw_log_usage_finalize();
 
+  delete olog;
+
   rgw_perf_stop(g_ceph_context);
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
 
   RGWStoreManager::close_storage(store);
+
+  rgw_tools_cleanup();
+  curl_global_cleanup();
+  g_ceph_context->put();
+
+  shutdown_async_signal_handler();
+
+  ceph::crypto::shutdown();
 
   return 0;
 }

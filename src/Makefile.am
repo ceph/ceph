@@ -1197,6 +1197,7 @@ libcommon_files = \
 	common/BackTrace.cc \
 	common/perf_counters.cc \
 	common/Mutex.cc \
+	common/OutputDataSocket.cc \
 	common/admin_socket.cc \
 	common/admin_socket_client.cc \
 	common/escape.c \
@@ -1475,6 +1476,7 @@ noinst_HEADERS = \
         common/Finisher.h\
 	common/Formatter.h\
         common/perf_counters.h\
+	common/OutputDataSocket.h \
 	common/admin_socket.h \
 	common/admin_socket_client.h \
 	common/shared_cache.hpp \

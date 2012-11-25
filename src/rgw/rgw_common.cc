@@ -106,8 +106,6 @@ req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL)
   object = NULL;
 
   header_ended = false;
-  bytes_sent = 0;
-  bytes_received = 0;
   obj_size = 0;
   prot_flags = 0;
 
