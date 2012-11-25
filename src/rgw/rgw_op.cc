@@ -1747,7 +1747,6 @@ void RGWPutACLs::execute()
   RGWACLXMLParser_S3 parser(s->cct);
   RGWAccessControlPolicy_S3 new_policy(s->cct);
   stringstream ss;
-  char *orig_data = data;
   char *new_data = NULL;
   ACLOwner owner;
   rgw_obj obj;
@@ -1756,27 +1755,29 @@ void RGWPutACLs::execute()
 
   if (!parser.init()) {
     ret = -EINVAL;
-    goto done;
+    return;
   }
 
   owner.set_id(s->user.user_id);
   owner.set_name(s->user.display_name);
 
-  if (get_params() < 0)
-    goto done;
+  ret = get_params();
+  if (ret < 0)
+    return;
 
   ldout(s->cct, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
 
   if (!s->canned_acl.empty() && len) {
     ret = -EINVAL;
-    goto done;
+    return;
   }
   if (!s->canned_acl.empty()) {
     ret = get_canned_policy(owner, ss);
     if (ret < 0)
-      goto done;
+      return;
 
     new_data = strdup(ss.str().c_str());
+    free(data);
     data = new_data;
     len = ss.str().size();
   }
@@ -1784,12 +1785,12 @@ void RGWPutACLs::execute()
 
   if (!parser.parse(data, len, 1)) {
     ret = -EACCES;
-    goto done;
+    return;
   }
   policy = (RGWAccessControlPolicy_S3 *)parser.find_first("AccessControlPolicy");
   if (!policy) {
     ret = -EINVAL;
-    goto done;
+    return;
   }
 
   if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
@@ -1800,7 +1801,7 @@ void RGWPutACLs::execute()
 
   ret = policy->rebuild(store, &owner, new_policy);
   if (ret < 0)
-    goto done;
+    return;
 
   if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
     ldout(s->cct, 15) << "New AccessControlPolicy:";
@@ -1812,10 +1813,6 @@ void RGWPutACLs::execute()
   obj.init(s->bucket, s->object_str);
   store->set_atomic(s->obj_ctx, obj);
   ret = store->set_attr(s->obj_ctx, obj, RGW_ATTR_ACL, bl);
-
-done:
-  free(orig_data);
-  free(new_data);
 }
 
 int RGWInitMultipart::verify_permission()

@@ -191,9 +191,13 @@ static void nss_aes_operation(CK_ATTRIBUTE_TYPE op, const bufferptr& secret,
     goto err_op;
   }
 
-  PK11_DestroyContext(ctx, PR_TRUE);
   out_tmp.set_length(written + written2);
   out.append(out_tmp);
+
+  PK11_DestroyContext(ctx, PR_TRUE);
+  SECITEM_FreeItem(param, PR_TRUE);
+  PK11_FreeSymKey(key);
+  PK11_FreeSlot(slot);
   return;
 
  err_op:

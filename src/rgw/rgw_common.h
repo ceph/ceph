@@ -582,8 +582,6 @@ struct req_state {
    struct rgw_err err;
    bool expect_cont;
    bool header_ended;
-   uint64_t bytes_sent; // bytes sent as a response, excluding header
-   uint64_t bytes_received; // data received
    uint64_t obj_size;
    bool enable_ops_log;
    bool enable_usage_log;
