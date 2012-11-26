@@ -229,8 +229,6 @@ for name in $what; do
 	    get_conf tmp_btrfs_devs "" "btrfs devs"
 	    if [ -n "$tmp_btrfs_devs" ]; then
 		fs_devs="$tmp_btrfs_devs"
-	    else
-		echo No osd devs defined!
 	    fi
 	fi
         first_dev=`echo $fs_devs | cut '-d ' -f 1`

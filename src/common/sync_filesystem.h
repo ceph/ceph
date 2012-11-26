@@ -41,6 +41,11 @@ inline int sync_filesystem(int fd)
     return 0;
 #endif
 
+#ifdef __NR_syncfs
+  if (syscall(__NR_syncfs, fd) == 0)
+    return 0;
+#endif
+
 #ifdef BTRFS_IOC_SYNC
   if (::ioctl(fd, BTRFS_IOC_SYNC) == 0)
     return 0;
