@@ -2624,13 +2624,27 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	//osd_op.data.hexdump(*_dout);
 	//_dout_lock.Unlock();
 
-	// verify
-	if (0) {
+	// verify sort order
+	bool unsorted = false;
+	if (true) {
 	  bufferlist header;
-	  map<string, bufferlist> m;
 	  ::decode(header, bp);
-	  ::decode(m, bp);
-	  assert(bp.end());
+	  uint32_t n;
+	  ::decode(n, bp);
+	  string last_key;
+	  while (n--) {
+	    string key;
+	    ::decode(key, bp);
+	    dout(10) << "tmapput key " << key << dendl;
+	    bufferlist val;
+	    ::decode(val, bp);
+	    if (key < last_key) {
+	      dout(10) << "TMAPPUT is unordered; resorting" << dendl;
+	      unsorted = true;
+	      break;
+	    }
+	    last_key = key;
+	  }
 	}
 
 	if (g_conf->osd_tmapput_sets_uses_tmap) {
@@ -2645,6 +2659,19 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	newop.op.extent.offset = 0;
 	newop.op.extent.length = osd_op.indata.length();
 	newop.indata = osd_op.indata;
+
+	if (unsorted) {
+	  bp = osd_op.indata.begin();
+	  bufferlist header;
+	  map<string, bufferlist> m;
+	  ::decode(header, bp);
+	  ::decode(m, bp);
+	  assert(bp.end());
+	  bufferlist newbl;
+	  ::encode(header, newbl);
+	  ::encode(m, newbl);
+	  newop.indata = newbl;
+	}
 	do_osd_ops(ctx, nops);
       }
       break;
