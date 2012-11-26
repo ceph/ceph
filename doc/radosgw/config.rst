@@ -224,7 +224,31 @@ For details on RADOS Gateway administration, see `radosgw-admin`_.
    in quotes, or simply regenerating the key and ensuring that it 
    does not have an escape character.
 
+Configuring the Operations Logging
+==================================
 
+By default, the RADOS Gateway will log every successful operation in the RADOS backend.
+This means that every request, whether it is a read request or a write request will
+generate a RADOS operation that writes data. This does not come without cost, and may
+affect overall performance. Turning off logging completely can be done by adding the
+following config option to ceph.conf::
+
+        rgw enable ops log = false
+
+Another way to reduce the logging load is to send operations logging data to a unix domain
+socket, instead of writing it to the RADOS backend::
+
+        rgw ops log rados = false
+        rgw enable ops log = true
+        rgw ops log socket path = <path to socket>
+
+When specifying a unix domain socket, it is also possible to specify the maximum amount
+of memory that will be used to keep the data backlog::
+
+        rgw ops log data backlog = <size in bytes>
+
+Any backlogged data in excess to the specified size will be lost, so socket needs to be
+constantly read.
 
 Enabling Swift Access
 =====================
