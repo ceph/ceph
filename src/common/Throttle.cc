@@ -43,7 +43,7 @@ Throttle::Throttle(CephContext *cct, std::string n, int64_t m)
   b.add_u64_counter(l_throttle_take_sum, "take_sum");
   b.add_u64_counter(l_throttle_put, "put");
   b.add_u64_counter(l_throttle_put_sum, "put_sum");
-  b.add_fl_avg(l_throttle_wait, "wait");
+  b.add_time_avg(l_throttle_wait, "wait");
 
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
@@ -90,7 +90,7 @@ bool Throttle::_wait(int64_t c)
     if (waited) {
       ldout(cct, 3) << "_wait finished waiting" << dendl;
       utime_t dur = ceph_clock_now(cct) - start;
-      logger->finc(l_throttle_wait, dur);
+      logger->tinc(l_throttle_wait, dur);
     }
 
     delete cv;
