@@ -1,3 +1,9 @@
+# remove the ceph directories
+sudo rm -rf /var/log/ceph
+sudo rm -rf /var/lib/ceph
+sudo rm -rf /etc/ceph
+sudo rm -rf /var/run/ceph
+# remove the ceph packages
 sudo apt-get -y  purge ceph
 sudo apt-get -y  purge ceph-dbg
 sudo apt-get -y  purge ceph-mds
@@ -24,4 +30,3 @@ sudo apt-get -y  purge rest-bench
 sudo apt-get -y  purge rest-bench-dbg
 sudo apt-get -y  purge obsync
 sudo apt-get -y  purge python-ceph
-
