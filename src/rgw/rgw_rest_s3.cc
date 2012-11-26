@@ -1237,7 +1237,7 @@ int RGWInitMultipart_ObjStore_S3::get_params()
 
   policy = s3policy;
 
-  return RGWInitMultipart_ObjStore::get_params();
+  return 0;
 }
 
 void RGWInitMultipart_ObjStore_S3::send_response()
@@ -1578,8 +1578,11 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_post()
 {
   if (s->args.exists("uploadId"))
     return new RGWCompleteMultipart_ObjStore_S3;
-  else
+
+  if (s->args.exists("uploads"))
     return new RGWInitMultipart_ObjStore_S3;
+
+  return NULL;
 }
 
 int RGWHandler_ObjStore_S3::init_from_header(struct req_state *s, int default_formatter, bool configurable_format)
