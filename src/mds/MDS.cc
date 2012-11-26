@@ -200,7 +200,7 @@ void MDS::create_logger()
 
     mds_plb.add_u64_counter(l_mds_req, "req"); // FIXME: nobody is actually setting this
     mds_plb.add_u64_counter(l_mds_reply, "reply");
-    mds_plb.add_fl_avg(l_mds_replyl, "replyl");
+    mds_plb.add_time_avg(l_mds_replyl, "replyl");
     mds_plb.add_u64_counter(l_mds_fw, "fw");
     
     mds_plb.add_u64_counter(l_mds_dir_f, "dir_f");
@@ -243,7 +243,7 @@ void MDS::create_logger()
     mds_plb.add_u64_counter(l_mds_trino, "trino");
     mds_plb.add_u64_counter(l_mds_tlock, "tlock");
     
-    mds_plb.add_fl(l_mds_l, "l");
+    mds_plb.add_u64(l_mds_l, "l");
     mds_plb.add_u64(l_mds_q, "q");
     mds_plb.add_u64(l_mds_popanyd, "popanyd"); // FIXME: unused
     mds_plb.add_u64(l_mds_popnest, "popnest");
@@ -561,7 +561,7 @@ void MDS::tick()
   if (logger) {
     req_rate = logger->get(l_mds_req);
     
-    logger->fset(l_mds_l, (int)load.mds_load());
+    logger->set(l_mds_l, 100 * load.mds_load());
     logger->set(l_mds_q, messenger->get_dispatch_queue_len());
     logger->set(l_mds_sm, mdcache->num_subtrees());
 

@@ -19,6 +19,7 @@
 #include "common/config_obs.h"
 #include "common/Mutex.h"
 #include "include/buffer.h"
+#include "include/utime.h"
 
 #include <stdint.h>
 #include <string>
@@ -31,7 +32,7 @@ class PerfCountersCollectionTest;
 enum perfcounter_type_d
 {
   PERFCOUNTER_NONE = 0,
-  PERFCOUNTER_FLOAT = 0x1,
+  PERFCOUNTER_TIME = 0x1,
   PERFCOUNTER_U64 = 0x2,
   PERFCOUNTER_LONGRUNAVG = 0x4,
   PERFCOUNTER_COUNTER = 0x8,
@@ -51,15 +52,15 @@ enum perfcounter_type_d
  * and accessed. For a counter, use the inc(counter, amount) function (note
  * that amount defaults to 1 if you don't set it). For a value, use the
  * set(index, value) function.
- * (For floats, use the finc and fset variants.)
+ * (For time, use the tinc and tset variants.)
  *
  * If for some reason you would like to reset your counters, you can do so using
  * the set functions even if they are counters, and you can also
  * increment your values if for some reason you wish to.
  *
- * For the floating-point average, it returns the current value and
+ * For the time average, it returns the current value and
  * the "avgcount" member when read off. avgcount is incremented when you call
- * finc. Calling fset on an average is an error and will assert out.
+ * tinc. Calling tset on an average is an error and will assert out.
  */
 class PerfCounters
 {
@@ -71,9 +72,9 @@ public:
   void set(int idx, uint64_t v);
   uint64_t get(int idx) const;
 
-  void fset(int idx, double v);
-  void finc(int idx, double v);
-  double fget(int idx) const;
+  void tset(int idx, utime_t v);
+  void tinc(int idx, utime_t v);
+  utime_t tget(int idx) const;
 
   void write_json_to_buf(ceph::bufferlist& bl, bool schema);
 
@@ -96,10 +97,7 @@ private:
 
     const char *name;
     enum perfcounter_type_d type;
-    union {
-      uint64_t u64;
-      double dbl;
-    } u;
+    uint64_t u64;
     uint64_t avgcount;
   };
   typedef std::vector<perf_counter_data_any_d> perf_counter_data_vec_t;
@@ -167,8 +165,8 @@ public:
   void add_u64(int key, const char *name);
   void add_u64_counter(int key, const char *name);
   void add_u64_avg(int key, const char *name);
-  void add_fl(int key, const char *name);
-  void add_fl_avg(int key, const char *name);
+  void add_time(int key, const char *name);
+  void add_time_avg(int key, const char *name);
   PerfCounters* create_perf_counters();
 private:
   PerfCountersBuilder(const PerfCountersBuilder &rhs);
