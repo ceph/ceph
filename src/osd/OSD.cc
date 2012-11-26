@@ -3763,31 +3763,28 @@ void OSD::check_osdmap_features()
   // current memory location, and setting or clearing bits in integer
   // fields, and we are the only writer, this is not a problem.
 
-  Messenger::Policy p = client_messenger->get_default_policy();
-  if (osdmap->crush->has_nondefault_tunables()) {
-    if (!(p.features_required & CEPH_FEATURE_CRUSH_TUNABLES)) {
-      dout(0) << "crush map has non-default tunables, requiring CRUSH_TUNABLES feature for clients" << dendl;
-      p.features_required |= CEPH_FEATURE_CRUSH_TUNABLES;
+  uint64_t mask = CEPH_FEATURES_CRUSH;
+  uint64_t features = 0;
+  if (osdmap->crush->has_nondefault_tunables())
+    features |= CEPH_FEATURE_CRUSH_TUNABLES;
+  if (osdmap->crush->has_nondefault_tunables2())
+    features |= CEPH_FEATURE_CRUSH_TUNABLES2;
+
+  {
+    Messenger::Policy p = client_messenger->get_default_policy();
+    if ((p.features_required & mask) != features) {
+      dout(0) << "crush map has features " << features
+	      << ", adjusting msgr requires for clients" << dendl;
+      p.features_required = (p.features_required & ~mask) | features;
       client_messenger->set_default_policy(p);
     }
-    if (!(cluster_messenger->get_policy(entity_name_t::TYPE_OSD).features_required &
-	  CEPH_FEATURE_CRUSH_TUNABLES)) {
-      dout(0) << "crush map has non-default tunables, requiring CRUSH_TUNABLES feature for osds" << dendl;
-      Messenger::Policy p = cluster_messenger->get_policy(entity_name_t::TYPE_OSD);
-      p.features_required |= CEPH_FEATURE_CRUSH_TUNABLES;
-      cluster_messenger->set_policy(entity_name_t::TYPE_OSD, p);
-    }
-  } else {
-    if (p.features_required & CEPH_FEATURE_CRUSH_TUNABLES) {
-      dout(0) << "crush map has default tunables, not requiring CRUSH_TUNABLES feature for clients" << dendl;
-      p.features_required &= ~CEPH_FEATURE_CRUSH_TUNABLES;
-      client_messenger->set_default_policy(p);
-    }
-    if (cluster_messenger->get_policy(entity_name_t::TYPE_OSD).features_required &
-	CEPH_FEATURE_CRUSH_TUNABLES) {
-      dout(0) << "crush map has default tunables, not requiring CRUSH_TUNABLES feature for osds" << dendl;
-      Messenger::Policy p = cluster_messenger->get_policy(entity_name_t::TYPE_OSD);
-      p.features_required &= ~CEPH_FEATURE_CRUSH_TUNABLES;
+  }
+  {
+    Messenger::Policy p = cluster_messenger->get_policy(entity_name_t::TYPE_OSD);
+    if ((p.features_required & mask) != features) {
+      dout(0) << "crush map has features " << features
+	      << ", adjusting msgr requires for osds" << dendl;
+      p.features_required = (p.features_required & ~mask) | features;
       cluster_messenger->set_policy(entity_name_t::TYPE_OSD, p);
     }
   }
