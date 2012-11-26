@@ -1,12 +1,13 @@
 #!/bin/sh
 
-if [ ! -d ../.git ]; then
-    echo "not updating .git_version (no ../.git)"
+dname=`dirname $0`
+
+if [ ! -d $dname/../.git ]; then
+    echo "not updating .git_version (no $dname/../.git)"
     exit 0
 fi
 
-dname=`dirname $0`
-cur=`git rev-parse HEAD 2>/dev/null; git describe 2>/dev/null`
+cur=`cd $dname && git rev-parse HEAD 2>/dev/null; git describe 2>/dev/null`
 [ -e $1 ] && old=`cat $1`
 
 if [ "$cur" != "$old" ]; then
