@@ -1759,10 +1759,18 @@ int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
     string nextkey, last_in_key;
     bufferlist nextval;
     bool have_next = false;
+    string last_disk_key;
     if (!ip.end()) {
       have_next = true;
       ::decode(nextkey, ip);
       ::decode(nextval, ip);
+      if (nextkey < last_disk_key) {
+	dout(0) << "tmapup warning: key '" << nextkey << "' < previous key '" << last_disk_key
+		<< "', falling back to an inefficient (unsorted) update" << dendl;
+	bp = orig_bp;
+	return do_tmapup_slow(ctx, bp, osd_op, newop.outdata);
+      }
+      last_disk_key = nextkey;
     }
     result = 0;
     while (!bp.end() && !result) {
