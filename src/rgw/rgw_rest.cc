@@ -582,15 +582,6 @@ int RGWPutACLs_ObjStore::get_params()
   return ret;
 }
 
-int RGWInitMultipart_ObjStore::get_params()
-{
-  if (!s->args.exists("uploads")) {
-    ret = -ENOTSUP;
-  }
-
-  return ret;
-}
-
 static int read_all_chunked_input(req_state *s, char **pdata, int *plen)
 {
 #define READ_CHUNK 4096
