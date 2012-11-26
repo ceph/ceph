@@ -216,6 +216,36 @@ TEST(LibRadosMisc, TmapUpdateMisorderedPP) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
+TEST(LibRadosMisc, TmapUpdateMisorderedPutPP) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  // create unsorted tmap
+  string h("header");
+  bufferlist bl;
+  ::encode(h, bl);
+  uint32_t n = 3;
+  ::encode(n, bl);
+  ::encode(string("b"), bl);
+  ::encode(string("bval"), bl);
+  ::encode(string("a"), bl);
+  ::encode(string("aval"), bl);
+  ::encode(string("c"), bl);
+  ::encode(string("cval"), bl);
+  ASSERT_EQ(0, ioctx.tmap_put("foo", bl));
+
+  // check
+  bufferlist newbl;
+  ASSERT_EQ(0, ioctx.read("foo", bl, 0, 0));
+  ASSERT_EQ(bl.contents_equal(newbl), false);
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
 TEST(LibRadosMisc, Exec) {
   char buf[128];
   rados_t cluster;
