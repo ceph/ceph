@@ -68,6 +68,9 @@ class FunctionNotSupported(Error):
 class ArgumentOutOfRange(Error):
     pass
 
+class ConnectionShutdown(Error):
+    pass
+
 def make_ex(ret, msg):
     """
     Translate a librbd return code into an exception.
@@ -89,7 +92,8 @@ def make_ex(ret, msg):
         errno.EBUSY     : ImageBusy,
         errno.ENOTEMPTY : ImageHasSnapshots,
         errno.ENOSYS    : FunctionNotSupported,
-        errno.EDOM      : ArgumentOutOfRange
+        errno.EDOM      : ArgumentOutOfRange,
+        errno.ESHUTDOWN : ConnectionShutdown
         }
     ret = abs(ret)
     if ret in errors:
