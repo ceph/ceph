@@ -1,0 +1,8 @@
+roles:
+- [mon.0, osd.0, osd.1, mds.a, client.0, client.1]
+tasks:
+- ceph:
+- ceph-fuse:
+- workunit:
+    all:
+      - osdc/stress_objectcacher.sh
