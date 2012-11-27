@@ -34,14 +34,10 @@ inline int sync_filesystem(int fd)
 #ifdef HAVE_SYS_SYNCFS
   if (syncfs(fd) == 0)
     return 0;
-#endif
-
-#ifdef SYS_syncfs
+#elif defined(SYS_syncfs)
   if (syscall(SYS_syncfs, fd) == 0)
     return 0;
-#endif
-
-#ifdef __NR_syncfs
+#elif defined(__NR_syncfs)
   if (syscall(__NR_syncfs, fd) == 0)
     return 0;
 #endif
