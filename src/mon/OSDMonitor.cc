@@ -165,23 +165,19 @@ void OSDMonitor::update_msgr_features()
   types.insert((int)entity_name_t::TYPE_MDS);
   types.insert((int)entity_name_t::TYPE_MON);
 
-  if (osdmap.crush->has_nondefault_tunables()) {
-    for (set<int>::iterator q = types.begin(); q != types.end(); ++q) {
-      if (!(mon->messenger->get_policy(*q).features_required & CEPH_FEATURE_CRUSH_TUNABLES)) {
-	dout(0) << "crush map has non-default tunables, requiring CRUSH_TUNABLES feature" << dendl;
-	Messenger::Policy p = mon->messenger->get_policy(*q);
-	p.features_required |= CEPH_FEATURE_CRUSH_TUNABLES;
-	mon->messenger->set_policy(*q, p);
-      }
-    }
-  } else {
-    for (set<int>::iterator q = types.begin(); q != types.end(); ++q) {
-      if (mon->messenger->get_policy(*q).features_required & CEPH_FEATURE_CRUSH_TUNABLES) {
-	dout(0) << "crush map has default tunables, not requiring CRUSH_TUNABLES feature" << dendl;
-	Messenger::Policy p = mon->messenger->get_policy(*q);
-	p.features_required &= ~CEPH_FEATURE_CRUSH_TUNABLES;
-	mon->messenger->set_policy(*q, p);
-      }
+  uint64_t mask = CEPH_FEATURES_CRUSH;
+  uint64_t features = 0;
+  if (osdmap.crush->has_nondefault_tunables())
+    features |= CEPH_FEATURE_CRUSH_TUNABLES;
+  if (osdmap.crush->has_nondefault_tunables2())
+    features |= CEPH_FEATURE_CRUSH_TUNABLES2;
+
+  for (set<int>::iterator q = types.begin(); q != types.end(); ++q) {
+    if ((mon->messenger->get_policy(*q).features_required & mask) != features) {
+      dout(0) << "crush map has features " << features << ", adjusting msgr requires" << dendl;
+      Messenger::Policy p = mon->messenger->get_policy(*q);
+      p.features_required = (p.features_required & ~mask) | features;
+      mon->messenger->set_policy(*q, p);
     }
   }
 }
