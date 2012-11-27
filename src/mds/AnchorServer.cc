@@ -73,7 +73,7 @@ bool AnchorServer::add(inodeno_t ino, inodeno_t dirino, __u32 dn_hash,
   return true;
 }
 
-void AnchorServer::inc(inodeno_t ino)
+void AnchorServer::inc(inodeno_t ino, int ref)
 {
   dout(7) << "inc " << ino << dendl;
 
@@ -81,7 +81,7 @@ void AnchorServer::inc(inodeno_t ino)
 
   while (1) {
     Anchor &anchor = anchor_map[ino];
-    anchor.nref++;
+    anchor.nref += ref;
     anchor.updated = version;
       
     dout(10) << "inc now " << anchor << dendl;
@@ -92,14 +92,14 @@ void AnchorServer::inc(inodeno_t ino)
   }
 }
 
-void AnchorServer::dec(inodeno_t ino) 
+void AnchorServer::dec(inodeno_t ino, int ref)
 {
   dout(7) << "dec " << ino << dendl;
   assert(anchor_map.count(ino));
 
   while (true) {
     Anchor &anchor = anchor_map[ino];
-    anchor.nref--;
+    anchor.nref -= ref;
     anchor.updated = version;
 
     if (anchor.nref == 0) {
@@ -186,13 +186,14 @@ void AnchorServer::_commit(version_t tid)
     if (anchor_map.count(ino)) {
       dout(7) << "commit " << tid << " update " << ino << dendl;
 
+      int ref = anchor_map[ino].nref;
       // remove old
-      dec(ino);
+      dec(ino, ref);
       
       // add new
       for (unsigned i=0; i<trace.size(); i++) 
 	add(trace[i].ino, trace[i].dirino, trace[i].dn_hash, true);
-      inc(ino);
+      inc(ino, ref);
     } else {
       dout(7) << "commit " << tid << " update " << ino << " -- DNE" << dendl;
     }
