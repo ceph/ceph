@@ -977,6 +977,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
     // get Object cache
     sobject_t soid(ex_it->oid, rd->snap);
     Object *o = get_object(soid, oset, ex_it->oloc);
+    touch_ob(o);
 
     // does not exist and no hits?
     if (oset->return_enoent && !o->exists) {
