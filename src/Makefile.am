@@ -858,6 +858,13 @@ bin_DEBUGPROGRAMS += test_cls_rgw
 
 endif
 
+test_mon_workloadgen_SOURCES = \
+     test/mon/test_mon_workloadgen.cc \
+		 osdc/Objecter.cc \
+		 osdc/Striper.cc
+test_mon_workloadgen_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+bin_DEBUGPROGRAMS += test_mon_workloadgen
+
 test_rados_api_io_SOURCES = test/librados/io.cc test/librados/test.cc
 test_rados_api_io_LDFLAGS = ${AM_LDFLAGS}
 test_rados_api_io_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}

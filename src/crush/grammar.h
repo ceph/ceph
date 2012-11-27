@@ -138,7 +138,7 @@ struct crush_grammar : public grammar<crush_grammar>
 			   >> '}';
 
       // the whole crush map
-      crushmap = *(tunable | device | bucket_type) >> *bucket >> *crushrule;
+      crushmap = *(tunable | device | bucket_type) >> *(bucket | crushrule);
     }
 
     rule<ScannerT, parser_context<>, parser_tag<_crushmap> > const&
