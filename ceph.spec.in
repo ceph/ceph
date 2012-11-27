@@ -466,6 +466,7 @@ fi
 %{_bindir}/psim
 %{_bindir}/radosacl
 %{_bindir}/rest-bench
+%{_bindir}/rgw_jsonparser
 %{_bindir}/rgw_multiparser
 %{_bindir}/scratchtool
 %{_bindir}/scratchtoolpp
@@ -489,8 +490,10 @@ fi
 %{_bindir}/test_libcephfs
 %{_bindir}/test_librbd
 %{_bindir}/test_librbd_fsx
+%{_bindir}/test_test_mon_workloadgen
 %{_bindir}/test_mutate
 %{_bindir}/test_object_map
+%{_bindir}/test_objectcacher_stress
 %{_bindir}/test_rados_api_aio
 %{_bindir}/test_rados_api_cls
 %{_bindir}/test_rados_api_io
