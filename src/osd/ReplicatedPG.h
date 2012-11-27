@@ -960,6 +960,10 @@ public:
   RepGather *trim_object(const hobject_t &coid, const snapid_t &sn);
   void snap_trimmer();
   int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops);
+
+  int do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd_op);
+  int do_tmapup_slow(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd_op, bufferlist& bl);
+
   void do_osd_op_effects(OpContext *ctx);
 private:
   bool temp_created;
