@@ -5,8 +5,8 @@ IMGS="testimg1 testimg2 testimg3 foo foo2 bar bar2 test1 test2 test3"
 remove_images() {
     for img in $IMGS
     do
-        rbd snap purge $img || true
-        rbd rm $img || true
+        (rbd snap purge $img || true) >/dev/null 2>&1
+        (rbd rm $img || true) >/dev/null 2>&1
     done
 }
 
@@ -75,6 +75,16 @@ test_rename() {
     rbd rename foo2 bar 2>&1 | grep exists
     rbd rename bar bar2
     rbd rename bar2 foo2 2>&1 | grep exists
+
+    rados mkpool rbd2
+    rbd create -p rbd2 -s 1 foo
+    rbd rename rbd2/foo rbd2/bar
+    rbd -p rbd2 ls | grep bar
+    ! rbd rename rbd2/bar foo
+    ! rbd rename rbd2/bar --dest-pool rbd foo
+    rbd rename --pool rbd2 bar --dest-pool rbd2 foo
+    rbd -p rbd2 ls | grep foo
+    rados rmpool rbd2
 
     remove_images
 }
@@ -254,8 +264,46 @@ test_pool_image_args() {
     rbd import --pool test /tmp/empty
     rbd ls test | grep -q empty
 
+    # copy with no explicit pool goes to pool rbd
+    rbd copy test/test9 test10
+    rbd ls test | grep -qv test10
+    rbd ls | grep -q test10
+    rbd copy test/test9 test/test10
+    rbd ls test | grep -q test10
+    rbd copy --pool test test10 --dest-pool test test11
+    rbd ls test | grep -q test11
+    rbd copy --dest-pool rbd --pool test test11 test12
+    rbd ls | grep test12
+    rbd ls test | grep -qv test12
+
     rm -f /tmp/empty
     ceph osd pool delete test
+    ceph osd pool delete rbd
+    ceph osd pool create rbd 100
+}
+
+test_clone() {
+    remove_images
+    rbd create test1 $RBD_CREATE_ARGS -s 1
+    rbd snap create test1@s1
+    rbd snap protect test1@s1
+
+    rados mkpool rbd2
+    rbd clone test1@s1 rbd2/clone
+    rbd -p rbd2 ls | grep clone
+    rbd -p rbd2 ls -l | grep clone | grep test1@s1
+    rbd ls | grep -v clone
+    rbd flatten rbd2/clone
+    rbd snap create rbd2/clone@s1
+    rbd snap protect rbd2/clone@s1
+    rbd clone rbd2/clone@s1 clone2
+    rbd ls | grep clone2
+    rbd ls -l | grep clone2 | grep rbd2/clone@s1
+    rbd -p rbd2 ls | grep -v clone2
+
+    rados rmpool rbd2
+    rados rmpool rbd
+    rados mkpool rbd
 }
 
 test_pool_image_args
@@ -268,5 +316,6 @@ test_locking
 RBD_CREATE_ARGS="--format 2"
 test_others
 test_locking
+test_clone
 
 echo OK

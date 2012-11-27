@@ -754,9 +754,6 @@ static void set_pool_image_name(const char *orig_pool, const char *orig_img,
 {
   const char *sep;
 
-  if (orig_pool)
-    return;
-
   if (!orig_img)
     return;
 
@@ -1389,6 +1386,8 @@ static bool set_conf_param(const char *param, const char **var1,
   return true;
 }
 
+bool size_set;
+
 int main(int argc, const char **argv)
 {
   librados::Rados rados;
@@ -1455,10 +1454,11 @@ int main(int argc, const char **argv)
 	return EXIT_FAILURE;
       }
       if (sizell < 0) {
-	cerr << "rbd: size must be > 0" << std::endl;
+	cerr << "rbd: size must be >= 0" << std::endl;
 	return EXIT_FAILURE;
       }
       size = sizell << 20;   // bytes to MB
+      size_set = true;
     } else if (ceph_argparse_flag(args, i, "-l", "--long", (char*)NULL)) {
       lflag = true;
     } else if (ceph_argparse_withlonglong(args, i, &stripe_unit, &err, "--stripe-unit", (char*)NULL)) {
@@ -1607,6 +1607,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     destname = imgname;
     if (!destname)
       destname = imgname_from_path(path);
+    imgname = NULL;
   }
 
   if (opt_cmd != OPT_LOCK_ADD && lock_tag) {
@@ -1656,10 +1657,24 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 
   set_pool_image_name(dest_poolname, destname, (char **)&dest_poolname, (char **)&destname, (char **)&dest_snapname);
 
+  if (opt_cmd == OPT_IMPORT) {
+    if (poolname && dest_poolname) {
+      cerr << "rbd: source and destination pool both specified" << std::endl;
+      return EXIT_FAILURE;
+    }
+    if (imgname && destname) {
+      cerr << "rbd: source and destination image both specified" << std::endl;
+      return EXIT_FAILURE;
+    }
+    if (poolname)
+      dest_poolname = poolname;
+  }
+
   if (!poolname)
     poolname = "rbd";
+
   if (!dest_poolname)
-    dest_poolname = poolname;
+    dest_poolname = "rbd";
 
   if (opt_cmd == OPT_EXPORT && !path)
     path = imgname;
@@ -1748,6 +1763,13 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     }
   }
 
+  if (opt_cmd == OPT_CREATE || opt_cmd == OPT_RESIZE) {
+    if (!size_set) {
+      cerr << "rbd: must specify --size <MB>" << std::endl;
+      return EXIT_FAILURE;
+    }
+  }
+
   switch (opt_cmd) {
   case OPT_LIST:
     r = do_list(rbd, io_ctx, lflag);
@@ -1765,11 +1787,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_CREATE:
-    if (!size) {
-      cerr << "rbd: must specify size in MB to create an rbd image"
-	   << std::endl;
-      return EXIT_FAILURE;
-    }
     if (order && (order < 12 || order > 25)) {
       cerr << "rbd: order must be between 12 (4 KB) and 25 (32 MB)"
 	   << std::endl;
