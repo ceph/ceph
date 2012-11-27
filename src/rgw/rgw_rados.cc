@@ -1017,7 +1017,8 @@ int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
                   map<string, bufferlist>* rmattrs,
                   const bufferlist *data,
                   RGWObjManifest *manifest,
-		  const string *ptag)
+		  const string *ptag,
+                  list<string> *remove_objs)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -1117,7 +1118,7 @@ int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
 
   ut = ceph_clock_now(cct);
   r = complete_update_index(bucket, obj.object, index_tag, epoch, size,
-                            ut, etag, content_type, &acl_bl, category);
+                            ut, etag, content_type, &acl_bl, category, remove_objs);
   if (r < 0)
     goto done_cancel;
 
@@ -1340,7 +1341,7 @@ int RGWRados::copy_obj(void *ctx,
 
   manifest.obj_size = total_len;
 
-  ret = put_obj_meta(ctx, dest_obj, end + 1, NULL, attrset, category, PUT_OBJ_CREATE, NULL, &first_chunk, &manifest, &tag);
+  ret = put_obj_meta(ctx, dest_obj, end + 1, NULL, attrset, category, PUT_OBJ_CREATE, NULL, &first_chunk, &manifest, &tag, NULL);
   if (mtime)
     obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL, NULL);
 
@@ -1429,7 +1430,7 @@ int RGWRados::copy_obj_data(void *ctx,
   }
   manifest.obj_size = ofs;
 
-  ret = put_obj_meta(ctx, dest_obj, end + 1, NULL, attrs, category, PUT_OBJ_CREATE, NULL, &first_chunk, &manifest, NULL);
+  ret = put_obj_meta(ctx, dest_obj, end + 1, NULL, attrs, category, PUT_OBJ_CREATE, NULL, &first_chunk, &manifest, NULL, NULL);
   if (mtime)
     obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL, NULL);
 
@@ -2349,7 +2350,8 @@ int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
 }
 
 int RGWRados::complete_update_index(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch, uint64_t size,
-                                    utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category)
+                                    utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category,
+                                    list<string> *remove_objs)
 {
   if (bucket_is_system(bucket))
     return 0;
@@ -2370,7 +2372,7 @@ int RGWRados::complete_update_index(rgw_bucket& bucket, string& oid, string& tag
   ent.owner_display_name = owner.get_display_name();
   ent.content_type = content_type;
 
-  int ret = cls_obj_complete_add(bucket, tag, epoch, ent, category);
+  int ret = cls_obj_complete_add(bucket, tag, epoch, ent, category, remove_objs);
 
   return ret;
 }
@@ -2489,7 +2491,7 @@ done:
   if (update_index) {
     if (ret >= 0) {
       ret = complete_update_index(bucket, dst_obj.object, tag, epoch, size,
-                                  ut, etag, content_type, &acl_bl, category);
+                                  ut, etag, content_type, &acl_bl, category, NULL);
     } else {
       int r = complete_update_index_cancel(bucket, dst_obj.object, tag);
       if (r < 0) {
@@ -3016,7 +3018,8 @@ int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag,
   return r;
 }
 
-int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category)
+int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category,
+				  list<string> *remove_objs)
 {
   librados::IoCtx io_ctx;
   string oid;
@@ -3034,7 +3037,7 @@ int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, u
   dir_meta.owner_display_name = ent.owner_display_name;
   dir_meta.content_type = ent.content_type;
   dir_meta.category = category;
-  cls_rgw_bucket_complete_op(o, op, tag, epoch, ent.name, dir_meta);
+  cls_rgw_bucket_complete_op(o, op, tag, epoch, ent.name, dir_meta, remove_objs);
 
   AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
   r = io_ctx.aio_operate(oid, c, &o);
@@ -3042,23 +3045,23 @@ int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, u
   return r;
 }
 
-int RGWRados::cls_obj_complete_add(rgw_bucket& bucket, string& tag, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category)
+int RGWRados::cls_obj_complete_add(rgw_bucket& bucket, string& tag, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category, list<string> *remove_objs)
 {
-  return cls_obj_complete_op(bucket, CLS_RGW_OP_ADD, tag, epoch, ent, category);
+  return cls_obj_complete_op(bucket, CLS_RGW_OP_ADD, tag, epoch, ent, category, remove_objs);
 }
 
 int RGWRados::cls_obj_complete_del(rgw_bucket& bucket, string& tag, uint64_t epoch, string& name)
 {
   RGWObjEnt ent;
   ent.name = name;
-  return cls_obj_complete_op(bucket, CLS_RGW_OP_DEL, tag, epoch, ent, RGW_OBJ_CATEGORY_NONE);
+  return cls_obj_complete_op(bucket, CLS_RGW_OP_DEL, tag, epoch, ent, RGW_OBJ_CATEGORY_NONE, NULL);
 }
 
 int RGWRados::cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, string& name)
 {
   RGWObjEnt ent;
   ent.name = name;
-  return cls_obj_complete_op(bucket, CLS_RGW_OP_ADD, tag, 0, ent, RGW_OBJ_CATEGORY_NONE);
+  return cls_obj_complete_op(bucket, CLS_RGW_OP_ADD, tag, 0, ent, RGW_OBJ_CATEGORY_NONE, NULL);
 }
 
 int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, string prefix,

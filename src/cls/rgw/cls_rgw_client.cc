@@ -35,7 +35,8 @@ void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, uint8_t op, string& tag,
 }
 
 void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, uint8_t op, string& tag,
-                                uint64_t epoch, string& name, rgw_bucket_dir_entry_meta& dir_meta)
+                                uint64_t epoch, string& name, rgw_bucket_dir_entry_meta& dir_meta,
+				list<string> *remove_objs)
 {
 
   bufferlist in;
@@ -45,6 +46,8 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, uint8_t op, string& tag
   call.name = name;
   call.epoch = epoch;
   call.meta = dir_meta;
+  if (remove_objs)
+    call.remove_objs = *remove_objs;
   ::encode(call, in);
   o.exec("rgw", "bucket_complete_op", in);
 }

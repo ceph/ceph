@@ -66,18 +66,21 @@ struct rgw_cls_obj_complete_op
   struct rgw_bucket_dir_entry_meta meta;
   string tag;
 
+  list<string> remove_objs;
+
   void encode(bufferlist &bl) const {
-    ENCODE_START(3, 3, bl);
+    ENCODE_START(4, 3, bl);
     ::encode(op, bl);
     ::encode(name, bl);
     ::encode(epoch, bl);
     ::encode(meta, bl);
     ::encode(tag, bl);
     ::encode(locator, bl);
+    ::encode(remove_objs, bl);
     ENCODE_FINISH(bl);
  }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
     ::decode(op, bl);
     ::decode(name, bl);
     ::decode(epoch, bl);
@@ -85,6 +88,9 @@ struct rgw_cls_obj_complete_op
     ::decode(tag, bl);
     if (struct_v >= 2) {
       ::decode(locator, bl);
+    }
+    if (struct_v >= 4) {
+      ::decode(remove_objs, bl);
     }
     DECODE_FINISH(bl);
   }
