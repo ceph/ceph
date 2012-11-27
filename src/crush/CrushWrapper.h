@@ -118,11 +118,22 @@ public:
     crush->choose_total_tries = n;
   }
 
+  int get_chooseleaf_descend_once() {
+    return crush->chooseleaf_descend_once;
+  }
+  void set_chooseleaf_descend_once(int n) {
+    crush->chooseleaf_descend_once = !!n;
+  }
+
   bool has_nondefault_tunables() const {
     return
       (crush->choose_local_tries != 2 ||
        crush->choose_local_fallback_tries != 5 ||
        crush->choose_total_tries != 19);
+  }
+  bool has_nondefault_tunables2() const {
+    return
+      crush->chooseleaf_descend_once != 0;
   }
 
   // bucket types
