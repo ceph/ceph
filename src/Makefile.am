@@ -1895,12 +1895,13 @@ noinst_HEADERS = \
         test/filestore/TestFileStoreState.h \
         test/filestore/workload_generator.h \
         test/kv_store_bench.h \
+        test/librados/test.h \
         test/ObjectMap/KeyValueDBMemory.h \
         test/omap_bench.h \
         test/osd/Object.h \
         test/osd/RadosModel.h \
         test/osd/TestOpStat.h \
-        test/librados/test.h \
+        test/osdc/FakeWriteback.h \
         test/system/cross_process_sem.h \
         test/system/st_rados_create_pool.h \
         test/system/st_rados_list_objects.h \
