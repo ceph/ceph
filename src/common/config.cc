@@ -900,7 +900,7 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
 }
 
 static const char *CONF_METAVARIABLES[] =
-  { "cluster", "type", "name", "host", "num", "id" };
+  { "cluster", "type", "name", "host", "num", "id", "pid" };
 static const int NUM_CONF_METAVARIABLES =
       (sizeof(CONF_METAVARIABLES) / sizeof(CONF_METAVARIABLES[0]));
 
@@ -976,6 +976,8 @@ bool md_config_t::expand_meta(std::string &origval) const
 	  out += name.get_id().c_str();
 	else if (var == "id")
 	  out += name.get_id().c_str();
+	else if (var == "pid")
+	  out += stringify(getpid());
 	else
 	  assert(0); // unreachable
 	found_meta = true;
