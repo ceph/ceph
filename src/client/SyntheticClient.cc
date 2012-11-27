@@ -2356,9 +2356,9 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
     lat -= start;
     if (client->logger) {
       if (write) 
-	client->logger->fset(l_c_owrlat, lat);
+	client->logger->tset(l_c_owrlat, lat);
       else 
-	client->logger->fset(l_c_ordlat, lat);
+	client->logger->tset(l_c_ordlat, lat);
     }
   }
 

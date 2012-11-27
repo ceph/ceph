@@ -1033,23 +1033,23 @@ void ReplicatedPG::log_op_stats(OpContext *ctx)
 
   osd->logger->inc(l_osd_op_outb, outb);
   osd->logger->inc(l_osd_op_inb, inb);
-  osd->logger->finc(l_osd_op_lat, latency);
+  osd->logger->tinc(l_osd_op_lat, latency);
 
   if (m->may_read() && m->may_write()) {
     osd->logger->inc(l_osd_op_rw);
     osd->logger->inc(l_osd_op_rw_inb, inb);
     osd->logger->inc(l_osd_op_rw_outb, outb);
-    osd->logger->finc(l_osd_op_rw_rlat, rlatency);
-    osd->logger->finc(l_osd_op_rw_lat, latency);
+    osd->logger->tinc(l_osd_op_rw_rlat, rlatency);
+    osd->logger->tinc(l_osd_op_rw_lat, latency);
   } else if (m->may_read()) {
     osd->logger->inc(l_osd_op_r);
     osd->logger->inc(l_osd_op_r_outb, outb);
-    osd->logger->finc(l_osd_op_r_lat, latency);
+    osd->logger->tinc(l_osd_op_r_lat, latency);
   } else if (m->may_write()) {
     osd->logger->inc(l_osd_op_w);
     osd->logger->inc(l_osd_op_w_inb, inb);
-    osd->logger->finc(l_osd_op_w_rlat, rlatency);
-    osd->logger->finc(l_osd_op_w_lat, latency);
+    osd->logger->tinc(l_osd_op_w_rlat, rlatency);
+    osd->logger->tinc(l_osd_op_w_lat, latency);
   } else
     assert(0);
 
@@ -1071,11 +1071,11 @@ void ReplicatedPG::log_subop_stats(OpRequestRef op, int tag_inb, int tag_lat)
   osd->logger->inc(l_osd_sop);
 
   osd->logger->inc(l_osd_sop_inb, inb);
-  osd->logger->finc(l_osd_sop_lat, latency);
+  osd->logger->tinc(l_osd_sop_lat, latency);
 
   if (tag_inb)
     osd->logger->inc(tag_inb, inb);
-  osd->logger->finc(tag_lat, latency);
+  osd->logger->tinc(tag_lat, latency);
 
   dout(15) << "log_subop_stats " << *op->request << " inb " << inb << " latency " << latency << dendl;
 }
@@ -1645,6 +1645,259 @@ void ReplicatedPG::remove_watchers_and_notifies()
 
 // ========================================================================
 // low level osd ops
+
+int ReplicatedPG::do_tmapup_slow(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd_op,
+				    bufferlist& bl)
+{
+  // decode
+  bufferlist header;
+  map<string, bufferlist> m;
+  if (bl.length()) {
+    bufferlist::iterator p = bl.begin();
+    ::decode(header, p);
+    ::decode(m, p);
+    assert(p.end());
+  }
+
+  // do the update(s)
+  while (!bp.end()) {
+    __u8 op;
+    string key;
+    ::decode(op, bp);
+
+    switch (op) {
+    case CEPH_OSD_TMAP_SET: // insert key
+      {
+	::decode(key, bp);
+	bufferlist data;
+	::decode(data, bp);
+	m[key] = data;
+      }
+      break;
+    case CEPH_OSD_TMAP_RM: // remove key
+      ::decode(key, bp);
+      if (m.count(key)) {
+	m.erase(key);
+      }
+      break;
+    case CEPH_OSD_TMAP_HDR: // update header
+      {
+	::decode(header, bp);
+      }
+      break;
+    default:
+      return -EINVAL;
+    }
+  }
+
+  // reencode
+  bufferlist obl;
+  ::encode(header, obl);
+  ::encode(m, obl);
+
+  // write it out
+  vector<OSDOp> nops(1);
+  OSDOp& newop = nops[0];
+  newop.op.op = CEPH_OSD_OP_WRITEFULL;
+  newop.op.extent.offset = 0;
+  newop.op.extent.length = obl.length();
+  newop.indata = obl;
+  do_osd_ops(ctx, nops);
+  osd_op.outdata.claim(newop.outdata);
+  return 0;
+}
+
+int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd_op)
+{
+  bufferlist::iterator orig_bp = bp;
+  int result = 0;
+  if (bp.end()) {
+    dout(10) << "tmapup is a no-op" << dendl;
+  } else {
+    // read the whole object
+    vector<OSDOp> nops(1);
+    OSDOp& newop = nops[0];
+    newop.op.op = CEPH_OSD_OP_READ;
+    newop.op.extent.offset = 0;
+    newop.op.extent.length = 0;
+    do_osd_ops(ctx, nops);
+
+    dout(10) << "tmapup read " << newop.outdata.length() << dendl;
+
+    dout(30) << " starting is \n";
+    newop.outdata.hexdump(*_dout);
+    *_dout << dendl;
+
+    bufferlist::iterator ip = newop.outdata.begin();
+    bufferlist obl;
+
+    dout(30) << "the update command is: \n";
+    osd_op.indata.hexdump(*_dout);
+    *_dout << dendl;
+
+    // header
+    bufferlist header;
+    __u32 nkeys = 0;
+    if (newop.outdata.length()) {
+      ::decode(header, ip);
+      ::decode(nkeys, ip);
+    }
+    dout(10) << "tmapup header " << header.length() << dendl;
+
+    if (!bp.end() && *bp == CEPH_OSD_TMAP_HDR) {
+      ++bp;
+      ::decode(header, bp);
+      dout(10) << "tmapup new header " << header.length() << dendl;
+    }
+
+    ::encode(header, obl);
+
+    dout(20) << "tmapup initial nkeys " << nkeys << dendl;
+
+    // update keys
+    bufferlist newkeydata;
+    string nextkey, last_in_key;
+    bufferlist nextval;
+    bool have_next = false;
+    string last_disk_key;
+    if (!ip.end()) {
+      have_next = true;
+      ::decode(nextkey, ip);
+      ::decode(nextval, ip);
+      if (nextkey < last_disk_key) {
+	dout(0) << "tmapup warning: key '" << nextkey << "' < previous key '" << last_disk_key
+		<< "', falling back to an inefficient (unsorted) update" << dendl;
+	bp = orig_bp;
+	return do_tmapup_slow(ctx, bp, osd_op, newop.outdata);
+      }
+      last_disk_key = nextkey;
+    }
+    result = 0;
+    while (!bp.end() && !result) {
+      __u8 op;
+      string key;
+      try {
+	::decode(op, bp);
+	::decode(key, bp);
+      }
+      catch (buffer::error& e) {
+	return -EINVAL;
+      }
+      if (key < last_in_key) {
+	dout(0) << "tmapup warning: key '" << key << "' < previous key '" << last_in_key
+		<< "', falling back to an inefficient (unsorted) update" << dendl;
+	bp = orig_bp;
+	return do_tmapup_slow(ctx, bp, osd_op, newop.outdata);
+      }
+      last_in_key = key;
+
+      dout(10) << "tmapup op " << (int)op << " key " << key << dendl;
+	  
+      // skip existing intervening keys
+      bool key_exists = false;
+      while (have_next && !key_exists) {
+	dout(20) << "  (have_next=" << have_next << " nextkey=" << nextkey << ")" << dendl;
+	if (nextkey > key)
+	  break;
+	if (nextkey < key) {
+	  // copy untouched.
+	  ::encode(nextkey, newkeydata);
+	  ::encode(nextval, newkeydata);
+	  dout(20) << "  keep " << nextkey << " " << nextval.length() << dendl;
+	} else {
+	  // don't copy; discard old value.  and stop.
+	  dout(20) << "  drop " << nextkey << " " << nextval.length() << dendl;
+	  key_exists = true;
+	  nkeys--;
+	}
+	if (!ip.end()) {
+	  ::decode(nextkey, ip);
+	  ::decode(nextval, ip);
+	} else {
+	  have_next = false;
+	}
+      }
+
+      if (op == CEPH_OSD_TMAP_SET) {
+	bufferlist val;
+	try {
+	  ::decode(val, bp);
+	}
+	catch (buffer::error& e) {
+	  return -EINVAL;
+	}
+	::encode(key, newkeydata);
+	::encode(val, newkeydata);
+	dout(20) << "   set " << key << " " << val.length() << dendl;
+	nkeys++;
+      } else if (op == CEPH_OSD_TMAP_CREATE) {
+	if (key_exists) {
+	  return -EEXIST;
+	  break;
+	}
+	bufferlist val;
+	try {
+	  ::decode(val, bp);
+	}
+	catch (buffer::error& e) {
+	  return -EINVAL;
+	}
+	::encode(key, newkeydata);
+	::encode(val, newkeydata);
+	dout(20) << "   create " << key << " " << val.length() << dendl;
+	nkeys++;
+      } else if (op == CEPH_OSD_TMAP_RM) {
+	// do nothing.
+      }
+    }
+
+    // copy remaining
+    if (have_next) {
+      ::encode(nextkey, newkeydata);
+      ::encode(nextval, newkeydata);
+      dout(20) << "  keep " << nextkey << " " << nextval.length() << dendl;
+    }
+    if (!ip.end()) {
+      bufferlist rest;
+      rest.substr_of(newop.outdata, ip.get_off(), newop.outdata.length() - ip.get_off());
+      dout(20) << "  keep trailing " << rest.length()
+	       << " at " << newkeydata.length() << dendl;
+      newkeydata.claim_append(rest);
+    }
+
+    // encode final key count + key data
+    dout(20) << "tmapup final nkeys " << nkeys << dendl;
+    ::encode(nkeys, obl);
+    obl.claim_append(newkeydata);
+
+    if (0) {
+      dout(30) << " final is \n";
+      obl.hexdump(*_dout);
+      *_dout << dendl;
+
+      // sanity check
+      bufferlist::iterator tp = obl.begin();
+      bufferlist h;
+      ::decode(h, tp);
+      map<string,bufferlist> d;
+      ::decode(d, tp);
+      assert(tp.end());
+      dout(0) << " **** debug sanity check, looks ok ****" << dendl;
+    }
+
+    // write it out
+    if (!result) {
+      dout(20) << "tmapput write " << obl.length() << dendl;
+      newop.op.op = CEPH_OSD_OP_WRITEFULL;
+      newop.op.extent.offset = 0;
+      newop.op.extent.length = obl.length();
+      newop.indata = obl;
+      do_osd_ops(ctx, nops);
+      osd_op.outdata.claim(newop.outdata);
+    }
+  }
+  return result;
+}
 
 int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 {
@@ -2379,13 +2632,27 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	//osd_op.data.hexdump(*_dout);
 	//_dout_lock.Unlock();
 
-	// verify
-	if (0) {
+	// verify sort order
+	bool unsorted = false;
+	if (true) {
 	  bufferlist header;
-	  map<string, bufferlist> m;
 	  ::decode(header, bp);
-	  ::decode(m, bp);
-	  assert(bp.end());
+	  uint32_t n;
+	  ::decode(n, bp);
+	  string last_key;
+	  while (n--) {
+	    string key;
+	    ::decode(key, bp);
+	    dout(10) << "tmapput key " << key << dendl;
+	    bufferlist val;
+	    ::decode(val, bp);
+	    if (key < last_key) {
+	      dout(10) << "TMAPPUT is unordered; resorting" << dendl;
+	      unsorted = true;
+	      break;
+	    }
+	    last_key = key;
+	  }
 	}
 
 	if (g_conf->osd_tmapput_sets_uses_tmap) {
@@ -2400,188 +2667,25 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	newop.op.extent.offset = 0;
 	newop.op.extent.length = osd_op.indata.length();
 	newop.indata = osd_op.indata;
+
+	if (unsorted) {
+	  bp = osd_op.indata.begin();
+	  bufferlist header;
+	  map<string, bufferlist> m;
+	  ::decode(header, bp);
+	  ::decode(m, bp);
+	  assert(bp.end());
+	  bufferlist newbl;
+	  ::encode(header, newbl);
+	  ::encode(m, newbl);
+	  newop.indata = newbl;
+	}
 	do_osd_ops(ctx, nops);
       }
       break;
 
     case CEPH_OSD_OP_TMAPUP:
-      if (bp.end()) {
-	dout(10) << "tmapup is a no-op" << dendl;
-      } else {
-	// read the whole object
-	vector<OSDOp> nops(1);
-	OSDOp& newop = nops[0];
-	newop.op.op = CEPH_OSD_OP_READ;
-	newop.op.extent.offset = 0;
-	newop.op.extent.length = 0;
-	do_osd_ops(ctx, nops);
-
-	dout(10) << "tmapup read " << newop.outdata.length() << dendl;
-
-	dout(30) << " starting is \n";
-	newop.outdata.hexdump(*_dout);
-	*_dout << dendl;
-
-	bufferlist::iterator ip = newop.outdata.begin();
-	bufferlist obl;
-
-	dout(30) << "the update command is: \n";
-	osd_op.indata.hexdump(*_dout);
-	*_dout << dendl;
-
-	// header
-	bufferlist header;
-	__u32 nkeys = 0;
-	if (newop.outdata.length()) {
-	  ::decode(header, ip);
-	  ::decode(nkeys, ip);
-	}
-	dout(10) << "tmapup header " << header.length() << dendl;
-
-	if (!bp.end() && *bp == CEPH_OSD_TMAP_HDR) {
-	  ++bp;
-	  ::decode(header, bp);
-	  dout(10) << "tmapup new header " << header.length() << dendl;
-	}
-
-	::encode(header, obl);
-
-	dout(20) << "tmapup initial nkeys " << nkeys << dendl;
-
-	// update keys
-	bufferlist newkeydata;
-	string nextkey;
-	bufferlist nextval;
-	bool have_next = false;
-	if (!ip.end()) {
-	  have_next = true;
-	  ::decode(nextkey, ip);
-	  ::decode(nextval, ip);
-	}
-	result = 0;
-	while (!bp.end() && !result) {
-	  __u8 op;
-	  string key;
-	  try {
-	    ::decode(op, bp);
-	    ::decode(key, bp);
-	  }
-	  catch (buffer::error& e) {
-	    result = -EINVAL;
-	    goto fail;
-	  }
-
-	  dout(10) << "tmapup op " << (int)op << " key " << key << dendl;
-	  
-	  // skip existing intervening keys
-	  bool key_exists = false;
-	  while (have_next && !key_exists) {
-	    dout(20) << "  (have_next=" << have_next << " nextkey=" << nextkey << ")" << dendl;
-	    if (nextkey > key)
-	      break;
-	    if (nextkey < key) {
-	      // copy untouched.
-	      ::encode(nextkey, newkeydata);
-	      ::encode(nextval, newkeydata);
-	      dout(20) << "  keep " << nextkey << " " << nextval.length() << dendl;
-	    } else {
-	      // don't copy; discard old value.  and stop.
-	      dout(20) << "  drop " << nextkey << " " << nextval.length() << dendl;
-	      key_exists = true;
-	      nkeys--;
-	    }
-	    if (!ip.end()) {
-	      ::decode(nextkey, ip);
-	      ::decode(nextval, ip);
-	    } else {
-	      have_next = false;
-	    }
-	  }
-
-	  if (op == CEPH_OSD_TMAP_SET) {
-	    bufferlist val;
-	    try {
-	      ::decode(val, bp);
-	    }
-	    catch (buffer::error& e) {
-	      result = -EINVAL;
-	      goto fail;
-	    }
-	    ::encode(key, newkeydata);
-	    ::encode(val, newkeydata);
-	    dout(20) << "   set " << key << " " << val.length() << dendl;
-	    nkeys++;
-	  } else if (op == CEPH_OSD_TMAP_CREATE) {
-	    if (key_exists) {
-	      result = -EEXIST;
-	      break;
-	    }
-	    bufferlist val;
-	    try {
-	      ::decode(val, bp);
-	    }
-	    catch (buffer::error& e) {
-	      result = -EINVAL;
-	      goto fail;
-	    }
-	    ::encode(key, newkeydata);
-	    ::encode(val, newkeydata);
-	    dout(20) << "   create " << key << " " << val.length() << dendl;
-	    nkeys++;
-	  } else if (op == CEPH_OSD_TMAP_RM) {
-	    if (!key_exists) {
-	      result = -ENOENT;
-	      break;
-	    }
-	    // do nothing.
-	  }
-	}
-
-	// copy remaining
-	if (have_next) {
-	  ::encode(nextkey, newkeydata);
-	  ::encode(nextval, newkeydata);
-	  dout(20) << "  keep " << nextkey << " " << nextval.length() << dendl;
-	}
-	if (!ip.end()) {
-	  bufferlist rest;
-	  rest.substr_of(newop.outdata, ip.get_off(), newop.outdata.length() - ip.get_off());
-	  dout(20) << "  keep trailing " << rest.length()
-		   << " at " << newkeydata.length() << dendl;
-	  newkeydata.claim_append(rest);
-	}
-
-	// encode final key count + key data
-	dout(20) << "tmapup final nkeys " << nkeys << dendl;
-	::encode(nkeys, obl);
-	obl.claim_append(newkeydata);
-
-	if (0) {
-	  dout(30) << " final is \n";
-	  obl.hexdump(*_dout);
-	  *_dout << dendl;
-
-	  // sanity check
-	  bufferlist::iterator tp = obl.begin();
-	  bufferlist h;
-	  ::decode(h, tp);
-	  map<string,bufferlist> d;
-	  ::decode(d, tp);
-	  assert(tp.end());
-	  dout(0) << " **** debug sanity check, looks ok ****" << dendl;
-	}
-
-	// write it out
-	if (!result) {
-	  dout(20) << "tmapput write " << obl.length() << dendl;
-	  newop.op.op = CEPH_OSD_OP_WRITEFULL;
-	  newop.op.extent.offset = 0;
-	  newop.op.extent.length = obl.length();
-	  newop.indata = obl;
-	  do_osd_ops(ctx, nops);
-	  osd_op.outdata.claim(newop.outdata);
-	}
-      }
+      result = do_tmapup(ctx, bp, osd_op);
       break;
 
       // OMAP Read ops

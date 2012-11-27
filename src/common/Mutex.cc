@@ -30,7 +30,7 @@ Mutex::Mutex(const char *n, bool r, bool ld,
   if (cct) {
     PerfCountersBuilder b(cct, string("mutex-") + name,
 			  l_mutex_first, l_mutex_last);
-    b.add_fl_avg(l_mutex_wait, "wait");
+    b.add_time_avg(l_mutex_wait, "wait");
     logger = b.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
     logger->set(l_mutex_wait, 0);
@@ -89,7 +89,7 @@ void Mutex::Lock(bool no_lockdep) {
     start = ceph_clock_now(cct);
   int r = pthread_mutex_lock(&_m);
   if (logger && cct && cct->_conf->mutex_perf_counter)
-    logger->finc(l_mutex_wait,
+    logger->tinc(l_mutex_wait,
 		 ceph_clock_now(cct) - start);
   assert(r == 0);
   if (lockdep && g_lockdep) _locked();

@@ -540,6 +540,7 @@ void CrushWrapper::encode(bufferlist& bl, bool lean) const
   ::encode(crush->choose_local_tries, bl);
   ::encode(crush->choose_local_fallback_tries, bl);
   ::encode(crush->choose_total_tries, bl);
+  ::encode(crush->chooseleaf_descend_once, bl);
 }
 
 static void decode_32_or_64_string_map(map<int32_t,string>& m, bufferlist::iterator& blp)
@@ -614,6 +615,9 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
       ::decode(crush->choose_local_tries, blp);
       ::decode(crush->choose_local_fallback_tries, blp);
       ::decode(crush->choose_total_tries, blp);
+    }
+    if (!blp.end()) {
+      ::decode(crush->chooseleaf_descend_once, blp);
     }
     finalize();
   }

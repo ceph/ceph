@@ -537,7 +537,7 @@ void ObjectCacher::perf_start()
                       "data_overwritten_while_flushing");
   plb.add_u64_counter(l_objectcacher_write_ops_blocked, "write_ops_blocked");
   plb.add_u64_counter(l_objectcacher_write_bytes_blocked, "write_bytes_blocked");
-  plb.add_fl(l_objectcacher_write_time_blocked, "write_time_blocked");
+  plb.add_time(l_objectcacher_write_time_blocked, "write_time_blocked");
 
   perfcounter = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(perfcounter);
@@ -1323,7 +1323,7 @@ int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset, M
     perfcounter->inc(l_objectcacher_write_ops_blocked);
     perfcounter->inc(l_objectcacher_write_bytes_blocked, len);
     utime_t blocked = ceph_clock_now(cct) - start;
-    perfcounter->finc(l_objectcacher_write_time_blocked, (double) blocked);
+    perfcounter->tinc(l_objectcacher_write_time_blocked, blocked);
   }
   return ret;
 }
