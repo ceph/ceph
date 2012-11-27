@@ -76,6 +76,16 @@ test_rename() {
     rbd rename bar bar2
     rbd rename bar2 foo2 2>&1 | grep exists
 
+    rados mkpool rbd2
+    rbd create -p rbd2 -s 1 foo
+    rbd rename rbd2/foo rbd2/bar
+    rbd -p rbd2 ls | grep bar
+    ! rbd rename rbd2/bar foo
+    ! rbd rename rbd2/bar --dest-pool rbd foo
+    rbd rename --pool rbd2 bar --dest-pool rbd2 foo
+    rbd -p rbd2 ls | grep foo
+    rados rmpool rbd2
+
     remove_images
 }
 
