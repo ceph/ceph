@@ -282,6 +282,30 @@ test_pool_image_args() {
     ceph osd pool create rbd 100
 }
 
+test_clone() {
+    remove_images
+    rbd create test1 $RBD_CREATE_ARGS -s 1
+    rbd snap create test1@s1
+    rbd snap protect test1@s1
+
+    rados mkpool rbd2
+    rbd clone test1@s1 rbd2/clone
+    rbd -p rbd2 ls | grep clone
+    rbd -p rbd2 ls -l | grep clone | grep test1@s1
+    rbd ls | grep -v clone
+    rbd flatten rbd2/clone
+    rbd snap create rbd2/clone@s1
+    rbd snap protect rbd2/clone@s1
+    rbd clone rbd2/clone@s1 clone2
+    rbd ls | grep clone2
+    rbd ls -l | grep clone2 | grep rbd2/clone@s1
+    rbd -p rbd2 ls | grep -v clone2
+
+    rados rmpool rbd2
+    rados rmpool rbd
+    rados mkpool rbd
+}
+
 test_pool_image_args
 test_rename
 test_ls
@@ -292,5 +316,6 @@ test_locking
 RBD_CREATE_ARGS="--format 2"
 test_others
 test_locking
+test_clone
 
 echo OK
