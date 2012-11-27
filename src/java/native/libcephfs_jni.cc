@@ -1413,6 +1413,58 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1open
 
 /*
  * Class:     com_ceph_fs_CephMount
+ * Method:    native_ceph_open_layout
+ * Signature: (JLjava/lang/String;IIIIILjava/lang/String;)I
+ */
+JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1open_1layout
+  (JNIEnv *env, jclass clz, jlong j_mntp, jstring j_path, jint j_flags, jint j_mode,
+   jint stripe_unit, jint stripe_count, jint object_size, jstring j_data_pool)
+{
+	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
+	CephContext *cct = ceph_get_mount_context(cmount);
+	const char *c_path, *c_data_pool = NULL;
+	int ret, flags = fixup_open_flags(j_flags);
+
+	CHECK_ARG_NULL(j_path, "@path is null", -1);
+	CHECK_MOUNTED(cmount, -1);
+
+	c_path = env->GetStringUTFChars(j_path, NULL);
+	if (!c_path) {
+		cephThrowInternal(env, "Failed to pin memory");
+		return -1;
+	}
+
+	if (j_data_pool) {
+		c_data_pool = env->GetStringUTFChars(j_data_pool, NULL);
+		if (!c_data_pool) {
+			env->ReleaseStringUTFChars(j_path, c_path);
+			cephThrowInternal(env, "Failed to pin memory");
+			return -1;
+		}
+	}
+
+	ldout(cct, 10) << "jni: open_layout: path " << c_path << " flags " << flags
+		<< " mode " << (int)j_mode << " stripe_unit " << stripe_unit
+		<< " stripe_count " << stripe_count << " object_size " << object_size
+		<< " data_pool " << (c_data_pool ? c_data_pool : "<NULL>") << dendl;
+
+	ret = ceph_open_layout(cmount, c_path, flags, (int)j_mode,
+			(int)stripe_unit, (int)stripe_count, (int)object_size, c_data_pool);
+
+	ldout(cct, 10) << "jni: open_layout: exit ret " << ret << dendl;
+
+	env->ReleaseStringUTFChars(j_path, c_path);
+	if (j_data_pool)
+		env->ReleaseStringUTFChars(j_data_pool, c_data_pool);
+
+  if (ret < 0)
+    handle_error(env, ret);
+
+	return ret;
+}
+
+/*
+ * Class:     com_ceph_fs_CephMount
  * Method:    native_ceph_close
  * Signature: (JI)I
  */
