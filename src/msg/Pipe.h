@@ -217,21 +217,6 @@ class DispatchQueue;
     static const Pipe& Server(int s);
     static const Pipe& Client(const entity_addr_t& pi);
 
-    //we have two queue_received's to allow local signal delivery
-    // via Message * (that doesn't actually point to a Message)
-    void queue_received(Message *m, int priority);
-    
-    void queue_received(Message *m) {
-      // this is just to make sure that a changeset is working
-      // properly; if you start using the refcounting more and have
-      // multiple people hanging on to a message, ditch the assert!
-      assert(m->nref.read() == 1);
-
-      queue_received(m, m->get_priority());
-    }
-
-    void delayed_delivery();
-
     __u32 get_out_seq() { return out_seq; }
 
     bool is_queued() { return !out_q.empty() || keepalive; }

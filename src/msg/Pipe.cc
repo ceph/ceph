@@ -157,25 +157,6 @@ void Pipe::join_reader()
   reader_needs_join = false;
 }
 
-
-void Pipe::queue_received(Message *m, int priority)
-{
-  assert(pipe_lock.is_locked());
-
-  if (delay_thread) {
-    utime_t release;
-    if (rand() % 10000 < msgr->cct->_conf->ms_inject_delay_probability * 10000.0) {
-      release = m->get_recv_stamp();
-      release += msgr->cct->_conf->ms_inject_delay_max * (double)(rand() % 10000) / 10000.0;
-      lsubdout(msgr->cct, ms, 1) << "queue_received will delay until " << release << " on " << m << " " << *m << dendl;
-    }
-    delay_thread->queue(release, m);
-    return;
-  }
-
-  in_q->enqueue(m, priority, conn_id);
-}
-
 void *Pipe::DelayedDelivery::entry()
 {
   Mutex::Locker locker(delay_lock);
@@ -1294,7 +1275,18 @@ void Pipe::reader()
       ldout(msgr->cct,10) << "reader got message "
 	       << m->get_seq() << " " << m << " " << *m
 	       << dendl;
-      queue_received(m);
+
+      if (delay_thread) {
+	utime_t release;
+	if (rand() % 10000 < msgr->cct->_conf->ms_inject_delay_probability * 10000.0) {
+	  release = m->get_recv_stamp();
+	  release += msgr->cct->_conf->ms_inject_delay_max * (double)(rand() % 10000) / 10000.0;
+	  lsubdout(msgr->cct, ms, 1) << "queue_received will delay until " << release << " on " << m << " " << *m << dendl;
+	}
+	delay_thread->queue(release, m);
+      } else {
+	in_q->enqueue(m, m->get_priority(), conn_id);
+      }
     } 
     
     else if (tag == CEPH_MSGR_TAG_CLOSE) {
