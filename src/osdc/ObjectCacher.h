@@ -215,11 +215,11 @@ class ObjectCacher {
     void set_object_locator(object_locator_t& l) { oloc = l; }
 
     bool can_close() {
-      if (data.empty() &&
-	  waitfor_commit.empty() &&
-	  waitfor_rd.empty() && waitfor_wr.empty() &&
-	  dirty_or_tx == 0) {
-	assert(lru_is_expireable());
+      if (lru_is_expireable()) {
+	assert(data.empty());
+	assert(waitfor_commit.empty());
+	assert(waitfor_rd.empty());
+	assert(waitfor_wr.empty());
 	return true;
       }
       return false;
