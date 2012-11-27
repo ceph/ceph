@@ -442,7 +442,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   plb.add_u64(l_os_jq_max_bytes, "journal_queue_max_bytes");
   plb.add_u64(l_os_jq_bytes, "journal_queue_bytes");
   plb.add_u64_counter(l_os_j_bytes, "journal_bytes");
-  plb.add_fl_avg(l_os_j_lat, "journal_latency");
+  plb.add_time_avg(l_os_j_lat, "journal_latency");
   plb.add_u64_counter(l_os_j_wr, "journal_wr");
   plb.add_u64_avg(l_os_j_wr_bytes, "journal_wr_bytes");
   plb.add_u64(l_os_oq_max_ops, "op_queue_max_ops");
@@ -451,12 +451,12 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   plb.add_u64(l_os_oq_max_bytes, "op_queue_max_bytes");
   plb.add_u64(l_os_oq_bytes, "op_queue_bytes");
   plb.add_u64_counter(l_os_bytes, "bytes");
-  plb.add_fl_avg(l_os_apply_lat, "apply_latency");
+  plb.add_time_avg(l_os_apply_lat, "apply_latency");
   plb.add_u64(l_os_committing, "committing");
 
   plb.add_u64_counter(l_os_commit, "commitcycle");
-  plb.add_fl_avg(l_os_commit_len, "commitcycle_interval");
-  plb.add_fl_avg(l_os_commit_lat, "commitcycle_latency");
+  plb.add_time_avg(l_os_commit_len, "commitcycle_interval");
+  plb.add_time_avg(l_os_commit_lat, "commitcycle_latency");
   plb.add_u64_counter(l_os_j_full, "journal_full");
 
   logger = plb.create_perf_counters();
@@ -1977,7 +1977,7 @@ void FileStore::_finish_op(OpSequencer *osr)
 
   utime_t lat = ceph_clock_now(g_ceph_context);
   lat -= o->start;
-  logger->finc(l_os_apply_lat, lat);
+  logger->tinc(l_os_apply_lat, lat);
 
   if (o->onreadable_sync) {
     o->onreadable_sync->finish(0);
@@ -3420,8 +3420,8 @@ void FileStore::sync_entry()
       dout(10) << "sync_entry commit took " << lat << ", interval was " << dur << dendl;
 
       logger->inc(l_os_commit);
-      logger->finc(l_os_commit_lat, lat);
-      logger->finc(l_os_commit_len, dur);
+      logger->tinc(l_os_commit_lat, lat);
+      logger->tinc(l_os_commit_len, dur);
 
       apply_manager.commit_finish();
 

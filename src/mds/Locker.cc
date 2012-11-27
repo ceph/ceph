@@ -2287,11 +2287,17 @@ void Locker::handle_client_caps(MClientCaps *m)
  
     // head inode, and cap
     MClientCaps *ack = 0;
+
+    int caps = m->get_caps();
+    if (caps & ~cap->issued()) {
+      dout(10) << " confirming not issued caps " << ccap_string(caps & ~cap->issued()) << dendl;
+      caps &= cap->issued();
+    }
     
-    cap->confirm_receipt(m->get_seq(), m->get_caps());
+    cap->confirm_receipt(m->get_seq(), caps);
     dout(10) << " follows " << follows
 	     << " retains " << ccap_string(m->get_caps())
-	     << " dirty " << ccap_string(m->get_caps())
+	     << " dirty " << ccap_string(m->get_dirty())
 	     << " on " << *in << dendl;
 
 
@@ -2424,6 +2430,10 @@ void Locker::process_request_cap_release(MDRequest *mdr, client_t client, const 
     return;
   }
     
+  if (caps & ~cap->issued()) {
+    dout(10) << " confirming not issued caps " << ccap_string(caps & ~cap->issued()) << dendl;
+    caps &= cap->issued();
+  }
   cap->confirm_receipt(seq, caps);
   adjust_cap_wanted(cap, wanted, issue_seq);
   

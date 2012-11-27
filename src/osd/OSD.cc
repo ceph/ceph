@@ -958,33 +958,33 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_op,       "op");           // client ops
   osd_plb.add_u64_counter(l_osd_op_inb,   "op_in_bytes");       // client op in bytes (writes)
   osd_plb.add_u64_counter(l_osd_op_outb,  "op_out_bytes");      // client op out bytes (reads)
-  osd_plb.add_fl_avg(l_osd_op_lat,   "op_latency");       // client op latency
+  osd_plb.add_time_avg(l_osd_op_lat,   "op_latency");       // client op latency
 
   osd_plb.add_u64_counter(l_osd_op_r,      "op_r");        // client reads
   osd_plb.add_u64_counter(l_osd_op_r_outb, "op_r_out_bytes");   // client read out bytes
-  osd_plb.add_fl_avg(l_osd_op_r_lat,  "op_r_latency");    // client read latency
+  osd_plb.add_time_avg(l_osd_op_r_lat,  "op_r_latency");    // client read latency
   osd_plb.add_u64_counter(l_osd_op_w,      "op_w");        // client writes
   osd_plb.add_u64_counter(l_osd_op_w_inb,  "op_w_in_bytes");    // client write in bytes
-  osd_plb.add_fl_avg(l_osd_op_w_rlat, "op_w_rlat");   // client write readable/applied latency
-  osd_plb.add_fl_avg(l_osd_op_w_lat,  "op_w_latency");    // client write latency
+  osd_plb.add_time_avg(l_osd_op_w_rlat, "op_w_rlat");   // client write readable/applied latency
+  osd_plb.add_time_avg(l_osd_op_w_lat,  "op_w_latency");    // client write latency
   osd_plb.add_u64_counter(l_osd_op_rw,     "op_rw");       // client rmw
   osd_plb.add_u64_counter(l_osd_op_rw_inb, "op_rw_in_bytes");   // client rmw in bytes
   osd_plb.add_u64_counter(l_osd_op_rw_outb,"op_rw_out_bytes");  // client rmw out bytes
-  osd_plb.add_fl_avg(l_osd_op_rw_rlat,"op_rw_rlat");  // client rmw readable/applied latency
-  osd_plb.add_fl_avg(l_osd_op_rw_lat, "op_rw_latency");   // client rmw latency
+  osd_plb.add_time_avg(l_osd_op_rw_rlat,"op_rw_rlat");  // client rmw readable/applied latency
+  osd_plb.add_time_avg(l_osd_op_rw_lat, "op_rw_latency");   // client rmw latency
 
   osd_plb.add_u64_counter(l_osd_sop,       "subop");         // subops
   osd_plb.add_u64_counter(l_osd_sop_inb,   "subop_in_bytes");     // subop in bytes
-  osd_plb.add_fl_avg(l_osd_sop_lat,   "subop_latency");     // subop latency
+  osd_plb.add_time_avg(l_osd_sop_lat,   "subop_latency");     // subop latency
 
   osd_plb.add_u64_counter(l_osd_sop_w,     "subop_w");          // replicated (client) writes
   osd_plb.add_u64_counter(l_osd_sop_w_inb, "subop_w_in_bytes");      // replicated write in bytes
-  osd_plb.add_fl_avg(l_osd_sop_w_lat, "subop_w_latency");      // replicated write latency
+  osd_plb.add_time_avg(l_osd_sop_w_lat, "subop_w_latency");      // replicated write latency
   osd_plb.add_u64_counter(l_osd_sop_pull,     "subop_pull");       // pull request
-  osd_plb.add_fl_avg(l_osd_sop_pull_lat, "subop_pull_latency");
+  osd_plb.add_time_avg(l_osd_sop_pull_lat, "subop_pull_latency");
   osd_plb.add_u64_counter(l_osd_sop_push,     "subop_push");       // push (write)
   osd_plb.add_u64_counter(l_osd_sop_push_inb, "subop_push_in_bytes");
-  osd_plb.add_fl_avg(l_osd_sop_push_lat, "subop_push_latency");
+  osd_plb.add_time_avg(l_osd_sop_push_lat, "subop_push_latency");
 
   osd_plb.add_u64_counter(l_osd_pull,      "pull");       // pull requests sent
   osd_plb.add_u64_counter(l_osd_push,      "push");       // push messages
@@ -995,7 +995,7 @@ void OSD::create_logger()
 
   osd_plb.add_u64_counter(l_osd_rop, "recovery_ops");       // recovery ops (started)
 
-  osd_plb.add_fl(l_osd_loadavg, "loadavg");
+  osd_plb.add_u64(l_osd_loadavg, "loadavg");
   osd_plb.add_u64(l_osd_buf, "buffer_bytes");       // total ceph::buffer bytes
 
   osd_plb.add_u64(l_osd_pg, "numpg");   // num pgs
@@ -2014,7 +2014,7 @@ void OSD::heartbeat()
   // get CPU load avg
   double loadavgs[1];
   if (getloadavg(loadavgs, 1) == 1)
-    logger->fset(l_osd_loadavg, loadavgs[0]);
+    logger->set(l_osd_loadavg, 100 * loadavgs[0]);
 
   dout(30) << "heartbeat checking stats" << dendl;
 
@@ -3763,31 +3763,28 @@ void OSD::check_osdmap_features()
   // current memory location, and setting or clearing bits in integer
   // fields, and we are the only writer, this is not a problem.
 
-  Messenger::Policy p = client_messenger->get_default_policy();
-  if (osdmap->crush->has_nondefault_tunables()) {
-    if (!(p.features_required & CEPH_FEATURE_CRUSH_TUNABLES)) {
-      dout(0) << "crush map has non-default tunables, requiring CRUSH_TUNABLES feature for clients" << dendl;
-      p.features_required |= CEPH_FEATURE_CRUSH_TUNABLES;
+  uint64_t mask = CEPH_FEATURES_CRUSH;
+  uint64_t features = 0;
+  if (osdmap->crush->has_nondefault_tunables())
+    features |= CEPH_FEATURE_CRUSH_TUNABLES;
+  if (osdmap->crush->has_nondefault_tunables2())
+    features |= CEPH_FEATURE_CRUSH_TUNABLES2;
+
+  {
+    Messenger::Policy p = client_messenger->get_default_policy();
+    if ((p.features_required & mask) != features) {
+      dout(0) << "crush map has features " << features
+	      << ", adjusting msgr requires for clients" << dendl;
+      p.features_required = (p.features_required & ~mask) | features;
       client_messenger->set_default_policy(p);
     }
-    if (!(cluster_messenger->get_policy(entity_name_t::TYPE_OSD).features_required &
-	  CEPH_FEATURE_CRUSH_TUNABLES)) {
-      dout(0) << "crush map has non-default tunables, requiring CRUSH_TUNABLES feature for osds" << dendl;
-      Messenger::Policy p = cluster_messenger->get_policy(entity_name_t::TYPE_OSD);
-      p.features_required |= CEPH_FEATURE_CRUSH_TUNABLES;
-      cluster_messenger->set_policy(entity_name_t::TYPE_OSD, p);
-    }
-  } else {
-    if (p.features_required & CEPH_FEATURE_CRUSH_TUNABLES) {
-      dout(0) << "crush map has default tunables, not requiring CRUSH_TUNABLES feature for clients" << dendl;
-      p.features_required &= ~CEPH_FEATURE_CRUSH_TUNABLES;
-      client_messenger->set_default_policy(p);
-    }
-    if (cluster_messenger->get_policy(entity_name_t::TYPE_OSD).features_required &
-	CEPH_FEATURE_CRUSH_TUNABLES) {
-      dout(0) << "crush map has default tunables, not requiring CRUSH_TUNABLES feature for osds" << dendl;
-      Messenger::Policy p = cluster_messenger->get_policy(entity_name_t::TYPE_OSD);
-      p.features_required &= ~CEPH_FEATURE_CRUSH_TUNABLES;
+  }
+  {
+    Messenger::Policy p = cluster_messenger->get_policy(entity_name_t::TYPE_OSD);
+    if ((p.features_required & mask) != features) {
+      dout(0) << "crush map has features " << features
+	      << ", adjusting msgr requires for osds" << dendl;
+      p.features_required = (p.features_required & ~mask) | features;
       cluster_messenger->set_policy(entity_name_t::TYPE_OSD, p);
     }
   }

@@ -360,11 +360,11 @@ int Client::init()
 
   // logger
   PerfCountersBuilder plb(cct, "client", l_c_first, l_c_last);
-  plb.add_fl_avg(l_c_reply, "reply");
-  plb.add_fl_avg(l_c_lat, "lat");
-  plb.add_fl_avg(l_c_wrlat, "wrlat");
-  plb.add_fl_avg(l_c_owrlat, "owrlat");
-  plb.add_fl_avg(l_c_ordlat, "ordlat");
+  plb.add_time_avg(l_c_reply, "reply");
+  plb.add_time_avg(l_c_lat, "lat");
+  plb.add_time_avg(l_c_wrlat, "wrlat");
+  plb.add_time_avg(l_c_owrlat, "owrlat");
+  plb.add_time_avg(l_c_ordlat, "ordlat");
   logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 
@@ -1258,8 +1258,8 @@ int Client::make_request(MetaRequest *request,
   utime_t lat = ceph_clock_now(cct);
   lat -= request->sent_stamp;
   ldout(cct, 20) << "lat " << lat << dendl;
-  logger->finc(l_c_lat,(double)lat);
-  logger->finc(l_c_reply,(double)lat);
+  logger->tinc(l_c_lat, lat);
+  logger->tinc(l_c_reply, lat);
 
   request->put();
 
@@ -5746,7 +5746,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   // time
   utime_t lat = ceph_clock_now(cct);
   lat -= start;
-  logger->finc(l_c_wrlat,(double)lat);
+  logger->tinc(l_c_wrlat, lat);
     
   // assume success for now.  FIXME.
   uint64_t totalwritten = size;

@@ -83,16 +83,16 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon) {
 
 long parse_pos_long(const char *s, ostream *pss)
 {
-  char *e = 0;
-  long r = strtol(s, &e, 10);
-  if ((e == s || e == 0 || e != s + strlen(s)) || r < 0) {
+  string err;
+  long r = strict_strtol(s, 10, &err);
+  if ((r == 0) && !err.empty()) {
     if (pss)
-      *pss << "unable to parse positive integer '" << s << "'";
+      *pss << err;
     return -1;
   }
-  if (r < 0 || r == LONG_MAX || r == LONG_MIN) {
+  if (r < 0) {
     if (pss)
-      *pss << "unable to parse positive integer '" << s << "': value is negative or too large";
+      *pss << "unable to parse positive integer '" << s << "'";
     return -1;
   }
   return r;
