@@ -2152,7 +2152,7 @@ reprotect_and_return_err:
     }
 
     elapsed = ceph_clock_now(ictx->cct) - start_time;
-    ictx->perfcounter->finc(l_librbd_rd_latency, elapsed);
+    ictx->perfcounter->tinc(l_librbd_rd_latency, elapsed);
     ictx->perfcounter->inc(l_librbd_rd);
     ictx->perfcounter->inc(l_librbd_rd_bytes, mylen);
     return total_read;
@@ -2235,7 +2235,7 @@ reprotect_and_return_err:
       return ret;
 
     elapsed = ceph_clock_now(ictx->cct) - start_time;
-    ictx->perfcounter->finc(l_librbd_wr_latency, elapsed);
+    ictx->perfcounter->tinc(l_librbd_wr_latency, elapsed);
     ictx->perfcounter->inc(l_librbd_wr);
     ictx->perfcounter->inc(l_librbd_wr_bytes, mylen);
     return mylen;

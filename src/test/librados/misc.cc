@@ -130,10 +130,117 @@ TEST(LibRadosMisc, TmapUpdatePP) {
 
   // remove key1 from tmap
   ASSERT_EQ(0, remove_key_from_tmap(ioctx, "foo", "key1"));
-  ASSERT_EQ(-ENOENT, remove_key_from_tmap(ioctx, "foo", "key1"));
+  ASSERT_EQ(0, remove_key_from_tmap(ioctx, "foo", "key1"));
 
   // key should be removed
   ASSERT_EQ(string(""), read_key_from_tmap(ioctx, "foo", "key1"));
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
+TEST(LibRadosMisc, TmapUpdateMisorderedPP) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  // create tmap
+  {
+    __u8 c = CEPH_OSD_TMAP_CREATE;
+    std::string my_tmap("my_tmap");
+    bufferlist emptybl;
+
+    bufferlist tmbl;
+    ::encode(c, tmbl);
+    ::encode(my_tmap, tmbl);
+    ::encode(emptybl, tmbl);
+    ASSERT_EQ(0, ioctx.tmap_update("foo", tmbl));
+  }
+
+  // good update
+  {
+    __u8 c = CEPH_OSD_TMAP_SET;
+    bufferlist tmbl;
+    ::encode(c, tmbl);
+    ::encode("a", tmbl);
+    bufferlist blbl;
+    ::encode("old", blbl);
+    ::encode(blbl, tmbl);
+
+    ::encode(c, tmbl);
+    ::encode("b", tmbl);
+    ::encode(blbl, tmbl);
+
+    ::encode(c, tmbl);
+    ::encode("c", tmbl);
+    ::encode(blbl, tmbl);
+
+    ASSERT_EQ(0, ioctx.tmap_update("foo", tmbl));
+  }
+
+  // bad update
+  {
+    __u8 c = CEPH_OSD_TMAP_SET;
+    bufferlist tmbl;
+    ::encode(c, tmbl);
+    ::encode("b", tmbl);
+    bufferlist blbl;
+    ::encode("new", blbl);
+    ::encode(blbl, tmbl);
+
+    ::encode(c, tmbl);
+    ::encode("a", tmbl);
+    ::encode(blbl, tmbl);
+
+    ::encode(c, tmbl);
+    ::encode("c", tmbl);
+    ::encode(blbl, tmbl);
+
+    ASSERT_EQ(0, ioctx.tmap_update("foo", tmbl));
+  }
+
+  // check
+  ASSERT_EQ(string("new"), read_key_from_tmap(ioctx, "foo", "a"));
+  ASSERT_EQ(string("new"), read_key_from_tmap(ioctx, "foo", "b"));
+  ASSERT_EQ(string("new"), read_key_from_tmap(ioctx, "foo", "c"));
+
+  ASSERT_EQ(0, remove_key_from_tmap(ioctx, "foo", "a"));
+  ASSERT_EQ(string(""), read_key_from_tmap(ioctx, "foo", "a"));
+
+  ASSERT_EQ(0, remove_key_from_tmap(ioctx, "foo", "b"));
+  ASSERT_EQ(string(""), read_key_from_tmap(ioctx, "foo", "a"));
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
+TEST(LibRadosMisc, TmapUpdateMisorderedPutPP) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  // create unsorted tmap
+  string h("header");
+  bufferlist bl;
+  ::encode(h, bl);
+  uint32_t n = 3;
+  ::encode(n, bl);
+  ::encode(string("b"), bl);
+  ::encode(string("bval"), bl);
+  ::encode(string("a"), bl);
+  ::encode(string("aval"), bl);
+  ::encode(string("c"), bl);
+  ::encode(string("cval"), bl);
+  ASSERT_EQ(0, ioctx.tmap_put("foo", bl));
+
+  // check
+  bufferlist newbl;
+  ASSERT_EQ(0, ioctx.read("foo", bl, 0, 0));
+  ASSERT_EQ(bl.contents_equal(newbl), false);
 
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));

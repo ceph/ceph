@@ -97,19 +97,25 @@ PerfCounters::~PerfCounters()
 
 void PerfCounters::inc(int idx, uint64_t amt)
 {
+  if (!m_cct->_conf->perf)
+    return;
+
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (!(data.type & PERFCOUNTER_U64))
     return;
-  data.u.u64 += amt;
+  data.u64 += amt;
   if (data.type & PERFCOUNTER_LONGRUNAVG)
     data.avgcount++;
 }
 
 void PerfCounters::dec(int idx, uint64_t amt)
 {
+  if (!m_cct->_conf->perf)
+    return;
+
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
@@ -117,69 +123,84 @@ void PerfCounters::dec(int idx, uint64_t amt)
   assert(!(data.type & PERFCOUNTER_LONGRUNAVG));
   if (!(data.type & PERFCOUNTER_U64))
     return;
-  assert(data.u.u64 >= amt);
-  data.u.u64 -= amt;
+  assert(data.u64 >= amt);
+  data.u64 -= amt;
 }
 
 void PerfCounters::set(int idx, uint64_t amt)
 {
+  if (!m_cct->_conf->perf)
+    return;
+
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (!(data.type & PERFCOUNTER_U64))
     return;
-  data.u.u64 = amt;
+  data.u64 = amt;
   if (data.type & PERFCOUNTER_LONGRUNAVG)
     data.avgcount++;
 }
 
 uint64_t PerfCounters::get(int idx) const
 {
+  if (!m_cct->_conf->perf)
+    return 0;
+
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
   const perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (!(data.type & PERFCOUNTER_U64))
     return 0;
-  return data.u.u64;
+  return data.u64;
 }
 
-void PerfCounters::finc(int idx, double amt)
+void PerfCounters::tinc(int idx, utime_t amt)
 {
+  if (!m_cct->_conf->perf)
+    return;
+
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
-  if (!(data.type & PERFCOUNTER_FLOAT))
+  if (!(data.type & PERFCOUNTER_TIME))
     return;
-  data.u.dbl += amt;
+  data.u64 += amt.to_nsec();
   if (data.type & PERFCOUNTER_LONGRUNAVG)
     data.avgcount++;
 }
 
-void PerfCounters::fset(int idx, double amt)
+void PerfCounters::tset(int idx, utime_t amt)
 {
+  if (!m_cct->_conf->perf)
+    return;
+
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
-  if (!(data.type & PERFCOUNTER_FLOAT))
+  if (!(data.type & PERFCOUNTER_TIME))
     return;
-  data.u.dbl = amt;
+  data.u64 = amt.to_nsec();
   if (data.type & PERFCOUNTER_LONGRUNAVG)
     assert(0);
 }
 
-double PerfCounters::fget(int idx) const
+utime_t PerfCounters::tget(int idx) const
 {
+  if (!m_cct->_conf->perf)
+    return utime_t();
+
   Mutex::Locker lck(m_lock);
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
   const perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
-  if (!(data.type & PERFCOUNTER_FLOAT))
-    return 0.0;
-  return data.u.dbl;
+  if (!(data.type & PERFCOUNTER_TIME))
+    return utime_t();
+  return utime_t(data.u64 / 1000000000ull, data.u64 % 1000000000ull);
 }
 
 void PerfCounters::write_json_to_buf(bufferlist& bl, bool schema)
@@ -232,9 +253,9 @@ PerfCounters::PerfCounters(CephContext *cct, const std::string &name,
 PerfCounters::perf_counter_data_any_d::perf_counter_data_any_d()
   : name(NULL),
     type(PERFCOUNTER_NONE),
+    u64(0),
     avgcount(0)
 {
-  memset(&u, 0, sizeof(u));
 }
 
 void  PerfCounters::perf_counter_data_any_d::write_schema_json(char *buf, size_t buf_sz) const
@@ -248,12 +269,12 @@ void  PerfCounters::perf_counter_data_any_d::write_json(char *buf, size_t buf_sz
     if (type & PERFCOUNTER_U64) {
       snprintf(buf, buf_sz, "\"%s\":{\"avgcount\":%" PRId64 ","
 	      "\"sum\":%" PRId64 "}", 
-	      name, avgcount, u.u64);
+	      name, avgcount, u64);
     }
-    else if (type & PERFCOUNTER_FLOAT) {
+    else if (type & PERFCOUNTER_TIME) {
       snprintf(buf, buf_sz, "\"%s\":{\"avgcount\":%" PRId64 ","
-	      "\"sum\":%g}",
-	      name, avgcount, u.dbl);
+	      "\"sum\":%llu.%09llu}",
+	       name, avgcount, u64 / 1000000000ull, u64 % 1000000000ull);
     }
     else {
       assert(0);
@@ -262,10 +283,10 @@ void  PerfCounters::perf_counter_data_any_d::write_json(char *buf, size_t buf_sz
   else {
     if (type & PERFCOUNTER_U64) {
       snprintf(buf, buf_sz, "\"%s\":%" PRId64,
-	       name, u.u64);
+	       name, u64);
     }
-    else if (type & PERFCOUNTER_FLOAT) {
-      snprintf(buf, buf_sz, "\"%s\":%g", name, u.dbl);
+    else if (type & PERFCOUNTER_TIME) {
+      snprintf(buf, buf_sz, "\"%s\":%llu.%09llu", name, u64 / 1000000000ull, u64 % 1000000000ull);
     }
     else {
       assert(0);
@@ -301,14 +322,14 @@ void PerfCountersBuilder::add_u64_avg(int idx, const char *name)
   add_impl(idx, name, PERFCOUNTER_U64 | PERFCOUNTER_LONGRUNAVG);
 }
 
-void PerfCountersBuilder::add_fl(int idx, const char *name)
+void PerfCountersBuilder::add_time(int idx, const char *name)
 {
-  add_impl(idx, name, PERFCOUNTER_FLOAT);
+  add_impl(idx, name, PERFCOUNTER_TIME);
 }
 
-void PerfCountersBuilder::add_fl_avg(int idx, const char *name)
+void PerfCountersBuilder::add_time_avg(int idx, const char *name)
 {
-  add_impl(idx, name, PERFCOUNTER_FLOAT | PERFCOUNTER_LONGRUNAVG);
+  add_impl(idx, name, PERFCOUNTER_TIME | PERFCOUNTER_LONGRUNAVG);
 }
 
 void PerfCountersBuilder::add_impl(int idx, const char *name, int ty)

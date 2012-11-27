@@ -27,9 +27,9 @@ public:
   std::deque<LogEntry> entries;
   
   MLog() : PaxosServiceMessage(MSG_LOG, 0) {}
-  MLog(uuid_d& f, const std::deque<LogEntry>& e)
+  MLog(const uuid_d& f, const std::deque<LogEntry>& e)
     : PaxosServiceMessage(MSG_LOG, 0), fsid(f), entries(e) { }
-  MLog(uuid_d& f) : PaxosServiceMessage(MSG_LOG, 0), fsid(f) { }
+  MLog(const uuid_d& f) : PaxosServiceMessage(MSG_LOG, 0), fsid(f) { }
 private:
   ~MLog() {}
 
