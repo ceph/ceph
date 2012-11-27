@@ -152,8 +152,6 @@ class RGWInitMultipart_ObjStore : public RGWInitMultipart {
 public:
   RGWInitMultipart_ObjStore() {}
   ~RGWInitMultipart_ObjStore() {}
-
-  virtual int get_params();
 };
 
 class RGWCompleteMultipart_ObjStore : public RGWCompleteMultipart {
