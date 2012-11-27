@@ -389,6 +389,10 @@ class ObjectCacher {
       bh_lru_dirty.lru_touch(bh);
     else
       bh_lru_rest.lru_touch(bh);
+    touch_ob(bh->ob);
+  }
+  void touch_ob(Object *ob) {
+    ob_lru.lru_touch(ob);
   }
 
   // bh states
