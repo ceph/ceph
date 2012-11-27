@@ -79,6 +79,7 @@ class DispatchQueue;
     DelayedDelivery *dispatch_thread;
     // TODO: clean up the delay_queue better on shutdown
     std::deque< Message * > *delay_queue;
+    std::deque< utime_t > *delay_until;
     Mutex *delay_lock;
     Cond *delay_cond;
     bool stop_delayed_delivery;
