@@ -5,8 +5,8 @@ IMGS="testimg1 testimg2 testimg3 foo foo2 bar bar2 test1 test2 test3"
 remove_images() {
     for img in $IMGS
     do
-        rbd snap purge $img || true
-        rbd rm $img || true
+        (rbd snap purge $img || true) >/dev/null 2>&1
+        (rbd rm $img || true) >/dev/null 2>&1
     done
 }
 
