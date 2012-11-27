@@ -14,7 +14,8 @@ void cls_rgw_bucket_prepare_op(librados::ObjectWriteOperation& o, uint8_t op, st
                                string& name, string& locator);
 
 void cls_rgw_bucket_complete_op(librados::ObjectWriteOperation& o, uint8_t op, string& tag,
-                                uint64_t epoch, string& name, rgw_bucket_dir_entry_meta& dir_meta);
+                                uint64_t epoch, string& name, rgw_bucket_dir_entry_meta& dir_meta,
+				list<string> *remove_objs);
 
 int cls_rgw_list_op(librados::IoCtx& io_ctx, string& oid, string& start_obj,
                     string& filter_prefix, uint32_t num_entries,
