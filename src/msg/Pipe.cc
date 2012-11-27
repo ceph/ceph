@@ -1197,6 +1197,10 @@ void Pipe::stop()
     lsubdout(msgr->cct, ms, 1) << "signalling to stop delayed dispatch thread and clear out messages" << dendl;
     Mutex::Locker locker(*delay_lock);
     stop_delayed_delivery = true;
+    while (!delay_queue->empty()) {
+      delay_queue->front()->put();
+      delay_queue->pop_front();
+    }
     delay_cond->Signal();
   }
 }
