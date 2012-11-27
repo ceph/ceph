@@ -2,6 +2,8 @@
 #include "rgw_usage.h"
 #include "rgw_rest_usage.h"
 
+#include "include/str_list.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 class RGWOp_Usage_Get : public RGWRESTOp {
@@ -30,6 +32,18 @@ void RGWOp_Usage_Get::execute() {
   RESTArgs::get_epoch(s, "end", (uint64_t)-1, &end);
   RESTArgs::get_bool(s, "show-entries", true, &show_entries);
   RESTArgs::get_bool(s, "show-summary", true, &show_summary);
+
+  string cat_str;
+  RESTArgs::get_string(s, "categories", cat_str, &cat_str);
+
+  if (!cat_str.empty()) {
+    list<string> cat_list;
+    list<string>::iterator iter;
+    get_str_list(cat_str, cat_list);
+    for (iter = cat_list.begin(); iter != cat_list.end(); ++iter) {
+      categories[*iter] = true;
+    }
+  }
 
   http_ret = RGWUsage::show(store, uid, start, end, show_entries, show_summary, &categories, flusher);
 }

@@ -182,8 +182,6 @@ class ObjectCacher {
     int dirty_or_tx;
 
     map< tid_t, list<Context*> > waitfor_commit;
-    list<Context*> waitfor_rd;
-    list<Context*> waitfor_wr;
 
   public:
     Object(const Object& other);
@@ -215,11 +213,9 @@ class ObjectCacher {
     void set_object_locator(object_locator_t& l) { oloc = l; }
 
     bool can_close() {
-      if (data.empty() &&
-	  waitfor_commit.empty() &&
-	  waitfor_rd.empty() && waitfor_wr.empty() &&
-	  dirty_or_tx == 0) {
-	assert(lru_is_expireable());
+      if (lru_is_expireable()) {
+	assert(data.empty());
+	assert(waitfor_commit.empty());
 	return true;
       }
       return false;

@@ -602,6 +602,25 @@ int ceph_mknod(struct ceph_mount_info *cmount, const char *path, mode_t mode, de
 int ceph_open(struct ceph_mount_info *cmount, const char *path, int flags, mode_t mode);
 
 /**
+ * Create and/or open a file with a specific file layout.
+ *
+ * @param cmount the ceph mount handle to use for performing the open.
+ * @param path the path of the file to open.  If the flags parameter includes O_CREAT,
+ *        the file will first be created before opening.
+ * @param flags a set of option masks that control how the file is created/opened.
+ * @param mode the permissions to place on the file if the file does not exist and O_CREAT
+ *        is specified in the flags.
+ * @param stripe_unit the stripe unit size (option, -1 for default)
+ * @param stripe_count the stripe count (optional, -1 for default)
+ * @param object_size the object size (optional, -1 for default)
+ * @param data_pool name of target data pool name (optional, NULL or empty string for default)
+ * @returns a non-negative file descriptor number on success or a negative error code on failure.
+ */
+int ceph_open_layout(struct ceph_mount_info *cmount, const char *path, int flags,
+ 		     mode_t mode, int stripe_unit, int stripe_count, int object_size,
+ 		     const char *data_pool);
+
+/**
  * Close the open file.
  *
  * @param cmount the ceph mount handle to use for performing the close.

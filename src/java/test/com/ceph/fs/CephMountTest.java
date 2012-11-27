@@ -623,6 +623,15 @@ public class CephMountTest {
     mount.unlink(path);
   }
 
+  @Test
+  public void test_open_layout() throws Exception {
+    String path = makePath();
+    int fd = mount.open(path, CephMount.O_WRONLY|CephMount.O_CREAT, 0,
+        (1<<20), 1, (1<<20), null);
+    mount.close(fd);
+    mount.unlink(path);
+  }
+
   /*
    * open/close
    */

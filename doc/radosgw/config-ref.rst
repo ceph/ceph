@@ -202,3 +202,25 @@ set automatically.
 :Description: Whether rgw should use dns cname record of the request hostname field (if hostname is not equal to ``rgw dns name``)
 :Type: Boolean
 :Default: ``false``
+
+
+
+``rgw enable ops log``
+:Description: Whether rgw will log each successful operation
+:Type: Boolean
+:Default: ``true``
+
+``rgw ops log rados``
+:Description: Whether rgw operations logging should be written into the RADOS backend
+:Type: Boolean
+:Default: ``true``
+
+``rgw ops log socket path``
+:Description: The path of a unix domain socket to which operations logging data will be written.
+:Type: String
+:Default: N/A
+
+``rgw ops log data backlog``
+:Description: Total backlog data size for unix domain socket operations logging
+:Type: Integer
+:Default: ``5ul << 20``
