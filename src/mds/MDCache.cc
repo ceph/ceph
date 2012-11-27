@@ -1917,7 +1917,8 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     // rstat
     if (!primary_dn) {
       // don't update parent this pass
-    } else if (!linkunlink && !parent->inode->nestlock.can_wrlock(-1)) {
+    } else if (!linkunlink && !(parent->inode->nestlock.can_wrlock(-1) &&
+			        parent->inode->versionlock.can_wrlock())) {
       dout(20) << " unwritable parent nestlock " << parent->inode->nestlock
 	       << ", marking dirty rstat on " << *cur << dendl;
       cur->mark_dirty_rstat();

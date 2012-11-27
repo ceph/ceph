@@ -330,6 +330,11 @@ void MDLog::trim(int m)
     assert(ls);
     p++;
     
+    if (ls->end > journaler->get_write_safe_pos()) {
+      dout(5) << "trim segment " << ls->offset << ", not fully flushed yet, safe "
+	      << journaler->get_write_safe_pos() << " < end " << ls->end << dendl;
+      break;
+    }
     if (expiring_segments.count(ls)) {
       dout(5) << "trim already expiring segment " << ls->offset << ", " << ls->num_events << " events" << dendl;
     } else if (expired_segments.count(ls)) {
@@ -412,9 +417,6 @@ void MDLog::_expired(LogSegment *ls)
 
   if (!capped && ls == get_current_segment()) {
     dout(5) << "_expired not expiring " << ls->offset << ", last one and !capped" << dendl;
-  } else if (ls->end > journaler->get_write_safe_pos()) {
-    dout(5) << "_expired not expiring " << ls->offset << ", not fully flushed yet, safe "
-	    << journaler->get_write_safe_pos() << " < end " << ls->end << dendl;
   } else {
     // expired.
     expired_segments.insert(ls);
