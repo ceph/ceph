@@ -70,19 +70,40 @@ class DispatchQueue;
      */
     class DelayedDelivery: public Thread {
       Pipe *pipe;
-    public:
-      DelayedDelivery(Pipe *p) : pipe(p) {}
-      void *entry() { pipe->delayed_delivery(); return 0; }
-    };
-    friend class DelayedDelivery;
+      std::deque< pair<utime_t,Message*> > delay_queue;
+      Mutex delay_lock;
+      Cond delay_cond;
+      bool stop_delayed_delivery;
 
-    DelayedDelivery *dispatch_thread;
-    // TODO: clean up the delay_queue better on shutdown
-    std::deque< Message * > *delay_queue;
-    std::deque< utime_t > *delay_until;
-    Mutex *delay_lock;
-    Cond *delay_cond;
-    bool stop_delayed_delivery;
+    public:
+      DelayedDelivery(Pipe *p)
+	: pipe(p),
+	  delay_lock("Pipe::DelayedDelivery::delay_lock"),
+	  stop_delayed_delivery(false) { }
+      ~DelayedDelivery() {
+	discard();
+      }
+      void *entry();
+      void queue(utime_t release, Message *m) {
+	Mutex::Locker l(delay_lock);
+	delay_queue.push_back(make_pair(release, m));
+	delay_cond.Signal();
+      }
+      void discard() {
+	Mutex::Locker l(delay_lock);
+	while (!delay_queue.empty()) {
+	  delay_queue.front().second->put();
+	  delay_queue.pop_front();
+	}
+      }
+      void stop() {
+	delay_lock.Lock();
+	stop_delayed_delivery = true;
+	delay_cond.Signal();
+	delay_lock.Unlock();
+      }
+    } *delay_thread;
+    friend class DelayedDelivery;
 
   public:
     Pipe(SimpleMessenger *r, int st, Connection *con);
@@ -234,12 +255,9 @@ class DispatchQueue;
         writer_thread.join();
       if (reader_thread.is_started())
         reader_thread.join();
-      if (dispatch_thread && dispatch_thread->is_started()) {
-	delay_lock->Lock();
-	stop_delayed_delivery = true;
-	delay_cond->Signal();
-	delay_lock->Unlock();
-	dispatch_thread->join();
+      if (delay_thread) {
+	delay_thread->stop();
+	delay_thread->join();
       }
     }
     void stop();
