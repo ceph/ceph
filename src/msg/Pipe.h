@@ -211,6 +211,7 @@ class DispatchQueue;
 
     void start_reader();
     void start_writer();
+    void maybe_start_delay_thread();
     void join_reader();
 
     // public constructors
