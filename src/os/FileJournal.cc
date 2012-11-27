@@ -840,7 +840,7 @@ void FileJournal::queue_completions_thru(uint64_t seq)
 	     << " " << next.finish
 	     << " lat " << lat << dendl;
     if (logger) {
-      logger->finc(l_os_j_lat, lat);
+      logger->tinc(l_os_j_lat, lat);
     }
     if (next.finish)
       finisher->queue(next.finish);

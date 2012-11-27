@@ -1033,23 +1033,23 @@ void ReplicatedPG::log_op_stats(OpContext *ctx)
 
   osd->logger->inc(l_osd_op_outb, outb);
   osd->logger->inc(l_osd_op_inb, inb);
-  osd->logger->finc(l_osd_op_lat, latency);
+  osd->logger->tinc(l_osd_op_lat, latency);
 
   if (m->may_read() && m->may_write()) {
     osd->logger->inc(l_osd_op_rw);
     osd->logger->inc(l_osd_op_rw_inb, inb);
     osd->logger->inc(l_osd_op_rw_outb, outb);
-    osd->logger->finc(l_osd_op_rw_rlat, rlatency);
-    osd->logger->finc(l_osd_op_rw_lat, latency);
+    osd->logger->tinc(l_osd_op_rw_rlat, rlatency);
+    osd->logger->tinc(l_osd_op_rw_lat, latency);
   } else if (m->may_read()) {
     osd->logger->inc(l_osd_op_r);
     osd->logger->inc(l_osd_op_r_outb, outb);
-    osd->logger->finc(l_osd_op_r_lat, latency);
+    osd->logger->tinc(l_osd_op_r_lat, latency);
   } else if (m->may_write()) {
     osd->logger->inc(l_osd_op_w);
     osd->logger->inc(l_osd_op_w_inb, inb);
-    osd->logger->finc(l_osd_op_w_rlat, rlatency);
-    osd->logger->finc(l_osd_op_w_lat, latency);
+    osd->logger->tinc(l_osd_op_w_rlat, rlatency);
+    osd->logger->tinc(l_osd_op_w_lat, latency);
   } else
     assert(0);
 
@@ -1071,11 +1071,11 @@ void ReplicatedPG::log_subop_stats(OpRequestRef op, int tag_inb, int tag_lat)
   osd->logger->inc(l_osd_sop);
 
   osd->logger->inc(l_osd_sop_inb, inb);
-  osd->logger->finc(l_osd_sop_lat, latency);
+  osd->logger->tinc(l_osd_sop_lat, latency);
 
   if (tag_inb)
     osd->logger->inc(tag_inb, inb);
-  osd->logger->finc(tag_lat, latency);
+  osd->logger->tinc(tag_lat, latency);
 
   dout(15) << "log_subop_stats " << *op->request << " inb " << inb << " latency " << latency << dendl;
 }

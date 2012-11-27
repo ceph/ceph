@@ -105,11 +105,11 @@ namespace librbd {
       }
       switch (aio_type) {
       case AIO_TYPE_READ: 
-	ictx->perfcounter->finc(l_librbd_aio_rd_latency, elapsed); break;
+	ictx->perfcounter->tinc(l_librbd_aio_rd_latency, elapsed); break;
       case AIO_TYPE_WRITE:
-	ictx->perfcounter->finc(l_librbd_aio_wr_latency, elapsed); break;
+	ictx->perfcounter->tinc(l_librbd_aio_wr_latency, elapsed); break;
       case AIO_TYPE_DISCARD:
-	ictx->perfcounter->finc(l_librbd_aio_discard_latency, elapsed); break;
+	ictx->perfcounter->tinc(l_librbd_aio_discard_latency, elapsed); break;
       default:
 	lderr(ictx->cct) << "completed invalid aio_type: " << aio_type << dendl;
 	break;

@@ -91,8 +91,8 @@ static PerfCounters* setup_test_perfcounters1(CephContext *cct)
   PerfCountersBuilder bld(cct, "test_perfcounter_1",
 	  TEST_PERFCOUNTERS1_ELEMENT_FIRST, TEST_PERFCOUNTERS1_ELEMENT_LAST);
   bld.add_u64(TEST_PERFCOUNTERS1_ELEMENT_1, "element1");
-  bld.add_fl(TEST_PERFCOUNTERS1_ELEMENT_2, "element2");
-  bld.add_fl_avg(TEST_PERFCOUNTERS1_ELEMENT_3, "element3");
+  bld.add_time(TEST_PERFCOUNTERS1_ELEMENT_2, "element2");
+  bld.add_time_avg(TEST_PERFCOUNTERS1_ELEMENT_3, "element3");
   return bld.create_perf_counters();
 }
 
@@ -104,18 +104,18 @@ TEST(PerfCounters, SinglePerfCounters) {
   std::string msg;
   ASSERT_EQ("", client.do_request("perfcounters_dump", &msg));
   ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':0,"
-	    "'element2':0,'element3':{'avgcount':0,'sum':0}}}"), msg);
+	    "'element2':0.000000000,'element3':{'avgcount':0,'sum':0.000000000}}}"), msg);
   fake_pf->inc(TEST_PERFCOUNTERS1_ELEMENT_1);
-  fake_pf->fset(TEST_PERFCOUNTERS1_ELEMENT_2, 0.5);
-  fake_pf->finc(TEST_PERFCOUNTERS1_ELEMENT_3, 100.0);
+  fake_pf->tset(TEST_PERFCOUNTERS1_ELEMENT_2, utime_t(0, 500000000));
+  fake_pf->tinc(TEST_PERFCOUNTERS1_ELEMENT_3, utime_t(100, 0));
   ASSERT_EQ("", client.do_request("perfcounters_dump", &msg));
   ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':1,"
-	    "'element2':0.5,'element3':{'avgcount':1,'sum':100}}}"), msg);
-  fake_pf->finc(TEST_PERFCOUNTERS1_ELEMENT_3, 0.0);
-  fake_pf->finc(TEST_PERFCOUNTERS1_ELEMENT_3, 25.0);
+	    "'element2':0.500000000,'element3':{'avgcount':1,'sum':100.000000000}}}"), msg);
+  fake_pf->tinc(TEST_PERFCOUNTERS1_ELEMENT_3, utime_t());
+  fake_pf->tinc(TEST_PERFCOUNTERS1_ELEMENT_3, utime_t(25,0));
   ASSERT_EQ("", client.do_request("perfcounters_dump", &msg));
-  ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':1,'element2':0.5,"
-	    "'element3':{'avgcount':3,'sum':125}}}"), msg);
+  ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':1,'element2':0.500000000,"
+	    "'element3':{'avgcount':3,'sum':125.000000000}}}"), msg);
 }
 
 enum {
@@ -130,7 +130,7 @@ static PerfCounters* setup_test_perfcounter2(CephContext *cct)
   PerfCountersBuilder bld(cct, "test_perfcounter_2",
 	  TEST_PERFCOUNTERS2_ELEMENT_FIRST, TEST_PERFCOUNTERS2_ELEMENT_LAST);
   bld.add_u64(TEST_PERFCOUNTERS2_ELEMENT_FOO, "foo");
-  bld.add_fl(TEST_PERFCOUNTERS2_ELEMENT_BAR, "bar");
+  bld.add_time(TEST_PERFCOUNTERS2_ELEMENT_BAR, "bar");
   return bld.create_perf_counters();
 }
 
@@ -145,19 +145,19 @@ TEST(PerfCounters, MultiplePerfCounters) {
   std::string msg;
 
   ASSERT_EQ("", client.do_request("perfcounters_dump", &msg));
-  ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':0,'element2':0,'element3':"
-	    "{'avgcount':0,'sum':0}},'test_perfcounter_2':{'foo':0,'bar':0}}"), msg);
+  ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':0,'element2':0.000000000,'element3':"
+	    "{'avgcount':0,'sum':0.000000000}},'test_perfcounter_2':{'foo':0,'bar':0.000000000}}"), msg);
 
   fake_pf1->inc(TEST_PERFCOUNTERS1_ELEMENT_1);
   fake_pf1->inc(TEST_PERFCOUNTERS1_ELEMENT_1, 5);
   ASSERT_EQ("", client.do_request("perfcounters_dump", &msg));
-  ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':6,'element2':0,'element3':"
-	    "{'avgcount':0,'sum':0}},'test_perfcounter_2':{'foo':0,'bar':0}}"), msg);
+  ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':6,'element2':0.000000000,'element3':"
+	    "{'avgcount':0,'sum':0.000000000}},'test_perfcounter_2':{'foo':0,'bar':0.000000000}}"), msg);
 
   coll->remove(fake_pf2);
   ASSERT_EQ("", client.do_request("perfcounters_dump", &msg));
-  ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':6,'element2':0,"
-	    "'element3':{'avgcount':0,'sum':0}}}"), msg);
+  ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':6,'element2':0.000000000,"
+	    "'element3':{'avgcount':0,'sum':0.000000000}}}"), msg);
   ASSERT_EQ("", client.do_request("perfcounters_schema", &msg));
   ASSERT_EQ(sd("{'test_perfcounter_1':{'element1':{'type':2},"
 	       "'element2':{'type':1},'element3':{'type':5}}}"), msg);

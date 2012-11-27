@@ -388,7 +388,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
     cur_ofs += len;
     ofs += len;
     ret = 0;
-    perfcounter->finc(l_rgw_get_lat,
+    perfcounter->tinc(l_rgw_get_lat,
                       (ceph_clock_now(s->cct) - start_time));
     send_response_data(bl);
 
@@ -449,7 +449,7 @@ int RGWGetObj::iterate_user_manifest_parts(rgw_bucket& bucket, string& obj_prefi
 	found_end = true;
       }
 
-      perfcounter->finc(l_rgw_get_lat,
+      perfcounter->tinc(l_rgw_get_lat,
                        (ceph_clock_now(s->cct) - start_time));
 
       if (found_start) {
@@ -588,7 +588,7 @@ void RGWGetObj::execute()
     ofs += len;
     ret = 0;
 
-    perfcounter->finc(l_rgw_get_lat,
+    perfcounter->tinc(l_rgw_get_lat,
                      (ceph_clock_now(s->cct) - start_time));
     ret = send_response_data(bl);
     bl.clear();
@@ -1369,7 +1369,7 @@ void RGWPutObj::execute()
   ret = processor->complete(etag, attrs);
 done:
   dispose_processor(processor);
-  perfcounter->finc(l_rgw_put_lat,
+  perfcounter->tinc(l_rgw_put_lat,
                    (ceph_clock_now(s->cct) - s->time));
 }
 
