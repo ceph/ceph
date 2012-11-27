@@ -1,0 +1,23 @@
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - osd.0
+  - osd.1
+  - mds.0
+  - client.0
+tasks:
+- ceph:
+- mon_thrash:
+    revive_delay: 20
+    thrash_delay: 1
+- ceph-fuse:
+- workunit:
+    clients:
+      all:
+        - mon/workloadgen.sh
+    env:
+      LOADGEN_NUM_OSDS: "5"
+      VERBOSE: "1"
+      DURATION: "600"
+      TEST_CEPH_CONF: /tmp/cephtest/ceph.conf
