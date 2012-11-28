@@ -1307,15 +1307,6 @@ PG *OSD::_create_lock_pg(
 
   t.create_collection(coll_t(pgid));
 
-  if (newly_created) {
-    /* This is weird, but all the peering code needs last_epoch_start
-     * to be less than same_interval_since. Make it so!
-     * This is easier to deal with if you remember that the PG, while
-     * now created in memory, still hasn't peered and started -- and
-     * the map epoch could change before that happens! */
-    history.last_epoch_started = history.epoch_created - 1;
-  }
-
   pg->init(role, up, acting, history, pi, &t);
 
   dout(7) << "_create_lock_pg " << *pg << dendl;
