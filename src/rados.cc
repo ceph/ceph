@@ -18,8 +18,6 @@
 #include "rados_sync.h"
 using namespace librados;
 
-#include "common/obj_bencher.h"
-
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
@@ -41,8 +39,6 @@ using namespace librados;
 #include <stdexcept>
 #include <climits>
 #include <locale>
-
-#include "common/errno.h"
 
 #include "cls/lock/cls_lock_client.h"
 
