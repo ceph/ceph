@@ -7,7 +7,6 @@
 #include <map>
 #include <string>
 
-#include <string>
 #include <vector>
 #include <tr1/memory>
 #include <boost/scoped_ptr.hpp>
