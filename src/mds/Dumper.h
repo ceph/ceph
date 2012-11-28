@@ -19,7 +19,6 @@
 #include "osdc/Journaler.h"
 #include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
-#include "msg/Messenger.h"
 #include "auth/Auth.h"
 
 /**
