@@ -12,7 +12,6 @@
 //#include "../client/ioctl.h"
 
 #include <linux/ioctl.h>
-#include <linux/types.h>
 #define CEPH_IOCTL_MAGIC 0x97
 #define CEPH_IOC_SYNCIO _IO(CEPH_IOCTL_MAGIC, 5)
 
