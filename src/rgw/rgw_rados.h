@@ -17,6 +17,9 @@ class RGWGC;
 #define PUT_OBJ_EXCL        0x02
 #define PUT_OBJ_CREATE_EXCL (PUT_OBJ_CREATE | PUT_OBJ_EXCL)
 
+#define RGW_OBJ_NS_MULTIPART "multipart"
+#define RGW_OBJ_NS_SHADOW    "shadow"
+
 static inline void prepend_bucket_marker(rgw_bucket& bucket, string& orig_oid, string& oid)
 {
   if (bucket.marker.empty() || orig_oid.empty()) {
@@ -462,7 +465,7 @@ public:
   virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
               map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
               map<std::string, bufferlist>* rmattrs, const bufferlist *data,
-              RGWObjManifest *manifest, const string *ptag);
+              RGWObjManifest *manifest, const string *ptag, list<string> *remove_objs);
   virtual int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len, bool exclusive);
   virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
@@ -475,7 +478,7 @@ public:
     int flags = PUT_OBJ_CREATE;
     if (exclusive)
       flags |= PUT_OBJ_EXCL;
-    int ret = put_obj_meta(ctx, obj, len, mtime, attrs, RGW_OBJ_CATEGORY_NONE, flags, NULL, &bl, NULL, NULL);
+    int ret = put_obj_meta(ctx, obj, len, mtime, attrs, RGW_OBJ_CATEGORY_NONE, flags, NULL, &bl, NULL, NULL, NULL);
     return ret;
   }
   virtual int aio_wait(void *handle);
@@ -554,6 +557,9 @@ public:
 
   /** Delete an object.*/
   virtual int delete_obj(void *ctx, rgw_obj& src_obj);
+
+  /** Remove an object from the bucket index */
+  int delete_obj_index(rgw_obj& obj);
 
   /**
    * Get the attributes for an object.
@@ -673,18 +679,20 @@ public:
   int cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag,
                          string& name, string& locator);
   int cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, uint64_t epoch,
-                          RGWObjEnt& ent, RGWObjCategory category);
-  int cls_obj_complete_add(rgw_bucket& bucket, string& tag, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category);
+                          RGWObjEnt& ent, RGWObjCategory category, list<string> *remove_objs);
+  int cls_obj_complete_add(rgw_bucket& bucket, string& tag, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category, list<string> *remove_objs);
   int cls_obj_complete_del(rgw_bucket& bucket, string& tag, uint64_t epoch, string& name);
   int cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, string& name);
+  int cls_obj_set_bucket_tag_timeout(rgw_bucket& bucket, uint64_t timeout);
   int cls_bucket_list(rgw_bucket& bucket, string start, string prefix, uint32_t num,
                       map<string, RGWObjEnt>& m, bool *is_truncated,
-                      string *last_entry = NULL);
+                      string *last_entry, bool (*force_check_filter)(const string&  name) = NULL);
   int cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header);
   int prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
                            rgw_obj& oid, string& tag);
   int complete_update_index(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch, uint64_t size,
-                            utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category);
+                            utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category,
+			    list<string> *remove_objs);
   int complete_update_index_del(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch) {
     return cls_obj_complete_del(bucket, tag, epoch, oid);
   }

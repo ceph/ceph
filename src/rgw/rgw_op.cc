@@ -26,8 +26,8 @@
 using namespace std;
 using ceph::crypto::MD5;
 
-static string mp_ns = "multipart";
-static string shadow_ns = "shadow";
+static string mp_ns = RGW_OBJ_NS_MULTIPART;
+static string shadow_ns = RGW_OBJ_NS_SHADOW;
 
 class MultipartMetaFilter : public RGWAccessListFilter {
 public:
@@ -945,7 +945,7 @@ int RGWPutObjProcessor_Plain::handle_data(bufferlist& bl, off_t _ofs, void **pha
 int RGWPutObjProcessor_Plain::do_complete(string& etag, map<string, bufferlist>& attrs)
 {
   int r = store->put_obj_meta(s->obj_ctx, obj, data.length(), NULL, attrs,
-                              RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE, NULL, &data, NULL, NULL);
+                              RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE, NULL, &data, NULL, NULL, NULL);
   return r;
 }
 
@@ -1154,7 +1154,7 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, map<string, bufferlist>
   store->set_atomic(s->obj_ctx, head_obj);
 
   int r = store->put_obj_meta(s->obj_ctx, head_obj, obj_len, NULL, attrs,
-                              RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE, NULL, &first_chunk, &manifest, NULL);
+                              RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE, NULL, &first_chunk, &manifest, NULL, NULL);
 
   return r;
 }
@@ -1199,7 +1199,7 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, map<string, bufferli
 {
   complete_parts();
 
-  int r = store->put_obj_meta(s->obj_ctx, head_obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, 0, NULL, NULL, NULL, NULL);
+  int r = store->put_obj_meta(s->obj_ctx, head_obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, 0, NULL, NULL, NULL, NULL, NULL);
   if (r < 0)
     return r;
 
@@ -1859,7 +1859,7 @@ void RGWInitMultipart::execute()
 
     obj.init_ns(s->bucket, tmp_obj_name, mp_ns);
     // the meta object will be indexed with 0 size, we c
-    ret = store->put_obj_meta(s->obj_ctx, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, PUT_OBJ_CREATE_EXCL, NULL, NULL, NULL, NULL);
+    ret = store->put_obj_meta(s->obj_ctx, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, PUT_OBJ_CREATE_EXCL, NULL, NULL, NULL, NULL, NULL);
   } while (ret == -EEXIST);
 }
 
@@ -2007,15 +2007,16 @@ void RGWCompleteMultipart::execute()
   attrs[RGW_ATTR_ETAG] = etag_bl;
 
   target_obj.init(s->bucket, s->object_str);
+
+  list<string> remove_objs; /* objects to be removed from index listing */
   
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
     RGWUploadPartInfo& obj_part = obj_iter->second;
+    string oid = mp.get_part(obj_iter->second.num);
+    rgw_obj src_obj;
+    src_obj.init_ns(s->bucket, oid, mp_ns);
 
     if (obj_part.manifest.empty()) {
-      string oid = mp.get_part(obj_iter->second.num);
-      rgw_obj src_obj;
-      src_obj.init_ns(s->bucket, oid, mp_ns);
-
       RGWObjManifestPart& part = manifest.objs[ofs];
 
       part.loc = src_obj;
@@ -2025,6 +2026,8 @@ void RGWCompleteMultipart::execute()
       manifest.append(obj_part.manifest);
     }
 
+    remove_objs.push_back(src_obj.object);
+
     ofs += obj_part.size;
   }
 
@@ -2033,7 +2036,7 @@ void RGWCompleteMultipart::execute()
   store->set_atomic(s->obj_ctx, target_obj);
 
   ret = store->put_obj_meta(s->obj_ctx, target_obj, ofs, NULL, attrs,
-                            RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE, NULL, NULL, &manifest, NULL);
+                            RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE, NULL, NULL, &manifest, NULL, &remove_objs);
   if (ret < 0)
     return;
 
