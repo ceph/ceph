@@ -36,7 +36,6 @@ using namespace std;
 #endif // DARWIN || __FreeBSD__
 
 #include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 
 extern int syn_filer_flags;
