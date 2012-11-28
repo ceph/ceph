@@ -4,5 +4,6 @@ tasks:
 - ceph:
 - ceph-fuse:
 - workunit:
-    all:
-      - osdc/stress_objectcacher.sh
+    clients:
+      all:
+        - osdc/stress_objectcacher.sh
