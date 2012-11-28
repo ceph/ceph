@@ -17,7 +17,6 @@
 #include <fcntl.h>
 #include <uuid/uuid.h>
 
-#include <sys/stat.h>
 #include <iostream>
 #include <string>
 using namespace std;
