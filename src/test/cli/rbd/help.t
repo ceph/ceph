@@ -15,9 +15,11 @@
     resize --size <MB> <image-name>             resize (expand or contract) image
     rm <image-name>                             delete an image
     export <image-name> <path>                  export image to file
+                                                "-" for stdout
     import <path> <image-name>                  import image from file
-                                                (dest defaults)
-                                                as the filename part of file)
+                                                (dest defaults
+                                                 as the filename part of file)
+                                                "-" for stdin
     (cp | copy) <src> <dest>                    copy src image to dest
     (mv | rename) <src> <dest>                  rename src image to dest
     snap ls <image-name>                        dump list of image snapshots
