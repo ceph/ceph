@@ -23,7 +23,6 @@ using namespace std;
 
 #include <memory>
 #include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 
 extern "C" {
@@ -81,7 +80,6 @@ float tick_interval = 3.0;
 
 // observe (push)
 #include "mon/PGMap.h"
-#include "osd/OSDMap.h"
 #include "mds/MDSMap.h"
 #include "common/LogEntry.h"
 
