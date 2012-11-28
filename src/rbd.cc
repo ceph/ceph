@@ -82,9 +82,11 @@ void usage()
 "  resize --size <MB> <image-name>             resize (expand or contract) image\n"
 "  rm <image-name>                             delete an image\n"
 "  export <image-name> <path>                  export image to file\n"
+"                                              \"-\" for stdout\n"
 "  import <path> <image-name>                  import image from file\n"
-"                                              (dest defaults)\n"
-"                                              as the filename part of file)\n"
+"                                              (dest defaults\n"
+"                                               as the filename part of file)\n"
+"                                              \"-\" for stdin\n"
 "  (cp | copy) <src> <dest>                    copy src image to dest\n"
 "  (mv | rename) <src> <dest>                  rename src image to dest\n"
 "  snap ls <image-name>                        dump list of image snapshots\n"
@@ -671,14 +673,45 @@ static int export_read_cb(uint64_t ofs, size_t len, const char *buf, void *arg)
   ssize_t ret;
   ExportContext *ec = (ExportContext *)arg;
   int fd = ec->fd;
+  static char *localbuf = NULL;
+  static size_t maplen = 0;
 
-  if (!buf) /* a hole */
-    return 0;
+  if (fd == 1) {
+    if (!buf) {
+      // can't seek stdout; need actual data to write
+      if (maplen < len) {
+	// never mapped, or need to map larger
+	int r;
+	if (localbuf != NULL){
+	  if ((r = munmap(localbuf, len)) < 0) {
+	    cerr << "rbd: error " << r << "munmap'ing buffer" << std::endl;
+	    return errno;
+	  }
+	}
 
-  ret = lseek64(fd, ofs, SEEK_SET);
-  if (ret < 0)
-    return -errno;
-  ret = write(fd, buf, len);
+	maplen = len;
+	localbuf = (char *)mmap(NULL, maplen, PROT_READ,
+			        MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+	if (localbuf == MAP_FAILED) {
+	  cerr << "rbd: MAP_FAILED mmap'ing buffer for zero writes"
+	       << std::endl;
+	  return -ENOMEM;
+	}
+      }
+      ret = write(fd, localbuf, len);
+    } else {
+      ret = write(fd, buf, len);
+    }
+  } else {		// not stdout
+    if (!buf) /* a hole */
+      return 0;
+
+    ret = lseek64(fd, ofs, SEEK_SET);
+    if (ret < 0)
+      return -errno;
+    ret = write(fd, buf, len);
+  }
+
   if (ret < 0)
     return -errno;
 
@@ -696,7 +729,10 @@ static int do_export(librbd::Image& image, const char *path)
   if (r < 0)
     return r;
 
-  fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
+  if (strcmp(path, "-") == 0)
+    fd = 1;
+  else
+    fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
   if (fd < 0)
     return -errno;
 
@@ -705,7 +741,8 @@ static int do_export(librbd::Image& image, const char *path)
   if (r < 0)
     goto out;
 
-  r = ftruncate(fd, info.size);
+  if (fd != 1)
+    r = ftruncate(fd, info.size);
   if (r < 0)
     goto out;
 
