@@ -362,7 +362,7 @@ int Monitor::check_features(MonitorStore *store)
   CompatSet ondisk;
 
   bufferlist features;
-  store->get_bl_ss(features, COMPAT_SET_LOC, 0);
+  store->get_bl_ss_safe(features, COMPAT_SET_LOC, 0);
   if (features.length() == 0) {
     generic_dout(0) << "WARNING: mon fs missing feature list.\n"
 	    << "Assuming it is old-style and introducing one." << dendl;
@@ -391,7 +391,7 @@ int Monitor::check_features(MonitorStore *store)
 void Monitor::read_features()
 {
   bufferlist bl;
-  store->get_bl_ss(bl, COMPAT_SET_LOC, 0);
+  store->get_bl_ss_safe(bl, COMPAT_SET_LOC, 0);
   assert(bl.length());
 
   bufferlist::iterator p = bl.begin();
@@ -497,7 +497,7 @@ int Monitor::preinit()
   if (authmon()->paxos->get_version() == 0) {
     dout(10) << "loading initial keyring to bootstrap authentication for mkfs" << dendl;
     bufferlist bl;
-    store->get_bl_ss(bl, "mkfs", "keyring");
+    store->get_bl_ss_safe(bl, "mkfs", "keyring");
     KeyRing keyring;
     bufferlist::iterator p = bl.begin();
     ::decode(keyring, p);
@@ -1032,12 +1032,14 @@ MMonProbe *Monitor::fill_probe_data(MMonProbe *m, Paxos *pax)
   version_t v = MAX(pax->get_first_committed(), m->newest_version + 1);
   int len = 0;
   for (; v <= pax->get_version(); v++) {
-    len += store->get_bl_sn(r->paxos_values[m->machine_name][v], m->machine_name.c_str(), v);
+    store->get_bl_sn_safe(r->paxos_values[m->machine_name][v], m->machine_name.c_str(), v);
+    len += r->paxos_values[m->machine_name][v].length();
     r->gv[m->machine_name][v] = store->get_global_version(m->machine_name.c_str(), v);
     for (list<string>::iterator p = pax->extra_state_dirs.begin();
          p != pax->extra_state_dirs.end();
          ++p) {
-      len += store->get_bl_sn(r->paxos_values[*p][v], p->c_str(), v);      
+      store->get_bl_sn_safe(r->paxos_values[*p][v], p->c_str(), v);
+      len += r->paxos_values[*p][v].length();
     }
     if (len >= g_conf->mon_slurp_bytes)
       break;
