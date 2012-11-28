@@ -51,9 +51,6 @@
 
 #include "Locker.h"
 
-
-#include "common/config.h"
-
 #define dout_subsys ceph_subsys_mds
 #undef DOUT_COND
 #define DOUT_COND(cct, l) (l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_log \
