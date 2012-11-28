@@ -3694,7 +3694,7 @@ void PG::chunky_scrub() {
             // search backward from the end looking for a boundary
             objects.push_back(scrubber.end);
             while (!boundary_found && objects.size() > 1) {
-              hobject_t end = objects.back();
+              hobject_t end = objects.back().get_boundary();
               objects.pop_back();
 
               if (objects.back().get_filestore_key() != end.get_filestore_key()) {
