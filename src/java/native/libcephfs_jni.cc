@@ -25,7 +25,7 @@
 #include <fcntl.h>
 #include <jni.h>
 
-#include <cephfs/libcephfs.h>
+#include "include/cephfs/libcephfs.h"
 #include "common/dout.h"
 
 #define dout_subsys ceph_subsys_javaclient
