@@ -12,8 +12,6 @@
 #include "rgw_rest_s3.h"
 #include "rgw_swift_auth.h"
 
-#include "rgw_formats.h"
-
 #include "rgw_client_io.h"
 #include "rgw_resolve.h"
 
