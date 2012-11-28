@@ -90,6 +90,8 @@ void _usage()
   cerr << "   --end-date=<date>\n";
   cerr << "   --bucket-id=<bucket-id>\n";
   cerr << "   --fix                     besides checking bucket index, will also fix it\n";
+  cerr << "   --check-objects           bucket check: rebuilds bucket index according to\n";
+  cerr << "                             actual objects state\n";
   cerr << "   --format=<format>         specify output format for certain operations: xml,\n";
   cerr << "                             json\n";
   cerr << "   --purge-data              when specified, user removal will also purge all the\n";
@@ -648,6 +650,13 @@ static int remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_childr
   return ret;
 }
 
+static bool bucket_object_check_filter(const string& name)
+{
+  string ns;
+  string obj = name;
+  return rgw_obj::translate_raw_obj_to_obj_in_ns(obj, ns);
+}
+
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -691,6 +700,7 @@ int main(int argc, char **argv)
   int max_buckets = -1;
   map<string, bool> categories;
   string caps;
+  int check_objects = false;
 
   std::string val;
   std::ostringstream errs;
@@ -785,6 +795,8 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &yes_i_really_mean_it, NULL, "--yes-i-really-mean-it", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &fix, NULL, "--fix", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &check_objects, NULL, "--check-objects", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
       caps = val;
@@ -1608,6 +1620,45 @@ next:
     map<RGWObjCategory, RGWBucketStats> existing_stats;
     map<RGWObjCategory, RGWBucketStats> calculated_stats;
 
+    if (check_objects) {
+      if (!fix) {
+	cerr << "--check-objects flag requires --fix" << std::endl;
+	return 1;
+      }
+#define BUCKET_TAG_TIMEOUT 30
+      cout << "Checking objects, decreasing bucket 2-phase commit timeout.\n"
+              "** Note that timeout will reset only when operation completes successfully **" << std::endl;
+
+      store->cls_obj_set_bucket_tag_timeout(bucket, BUCKET_TAG_TIMEOUT);
+
+      string prefix;
+      string marker;
+      bool is_truncated = true;
+
+      while (is_truncated) {
+	map<string, RGWObjEnt> result;
+	string ns;
+	int r = store->cls_bucket_list(bucket, marker, prefix, 1000, 
+	                            result, &is_truncated, &marker,
+                                    bucket_object_check_filter);
+
+	if (r < 0 && r != -ENOENT) {
+          cerr << "ERROR: failed operation r=" << r << std::endl;
+	}
+
+	if (r == -ENOENT)
+	  break;
+
+	map<string, RGWObjEnt>::iterator iter;
+	for (iter = result.begin(); iter != result.end(); ++iter) {
+	  cout << iter->first << std::endl;
+	}
+
+      }
+
+      store->cls_obj_set_bucket_tag_timeout(bucket, 0);
+
+    }
     int r = store->bucket_check_index(bucket, &existing_stats, &calculated_stats);
     if (r < 0) {
       cerr << "failed to check index err=" << cpp_strerror(-r) << std::endl;
@@ -1631,6 +1682,7 @@ next:
         return r;
       }
     }
+
   }
 
   if (opt_cmd == OPT_BUCKET_RM) {
