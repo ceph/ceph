@@ -30,7 +30,6 @@
 #ifdef HAVE_SETXATTR
 #include <sys/xattr.h>
 #endif
-#include <sys/time.h>
 #include <time.h>
 
 
