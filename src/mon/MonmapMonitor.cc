@@ -257,7 +257,7 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
 	  r = -EINVAL;
 	  goto out;
 	}
-	if (target >= mon->monmap->size()) {
+	if (target >= (long)mon->monmap->size()) {
 	  ss << "mon." << target << " does not exist";
 	  r = -ENOENT;
 	  goto out;
