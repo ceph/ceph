@@ -1858,6 +1858,9 @@ int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
 	}
       } else if (op == CEPH_OSD_TMAP_RMSLOPPY) {
 	// do nothing
+      } else {
+	dout(10) << "  invalid tmap op " << (int)op << dendl;
+	return -EINVAL;
       }
     }
 
