@@ -20,6 +20,7 @@
 
 #include <iosfwd>
 #include <string.h>
+#include <errno.h>
 
 class MonitorStore {
   string dir;
@@ -49,6 +50,10 @@ public:
   // ss and sn varieties.
   bool exists_bl_ss(const char *a, const char *b=0);
   int get_bl_ss(bufferlist& bl, const char *a, const char *b);
+  void get_bl_ss_safe(bufferlist& bl, const char *a, const char *b) {
+    int ret = get_bl_ss(bl, a, b);
+    assert (ret >= 0 || ret == -ENOENT);
+  }
   int put_bl_ss(bufferlist& bl, const char *a, const char *b) {
     return write_bl_ss(bl, a, b, false);
   }
@@ -64,6 +69,10 @@ public:
     char bs[20];
     snprintf(bs, sizeof(bs), "%llu", (unsigned long long)b);
     return get_bl_ss(bl, a, bs);
+  }
+  void get_bl_sn_safe(bufferlist& bl, const char *a, version_t b) {
+    int ret = get_bl_sn(bl, a, b);
+    assert(ret >= 0 || ret == -ENOENT);
   }
   int put_bl_sn(bufferlist& bl, const char *a, version_t b) {
     char bs[20];
