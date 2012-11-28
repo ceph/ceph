@@ -29,12 +29,10 @@ using namespace std;
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <sys/types.h>
 #include <utime.h>
 #include <math.h>
 #include <sys/statvfs.h>
 
-#include "common/config.h"
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_client
