@@ -301,6 +301,34 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   return rc;
 }
 
+static void unaccount_entry(struct rgw_bucket_dir_header& header, struct rgw_bucket_dir_entry& entry)
+{
+  struct rgw_bucket_category_stats& stats = header.stats[entry.meta.category];
+  stats.num_entries--;
+  stats.total_size -= entry.meta.size;
+  stats.total_size_rounded -= get_rounded_size(entry.meta.size);
+}
+
+static int read_index_entry(cls_method_context_t hctx, string& name, struct rgw_bucket_dir_entry *entry)
+{
+  bufferlist current_entry;
+  int rc = cls_cxx_map_get_val(hctx, name, &current_entry);
+  if (rc < 0) {
+    return rc;
+  }
+
+  bufferlist::iterator cur_iter = current_entry.begin();
+  try {
+    ::decode(*entry, cur_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: read_index_entry(): failed to decode entry\n");
+    return -EIO;
+  }
+
+  CLS_LOG(1, "read_index_entry(): existing entry: epoch=%lld name=%s locator=%s\n", entry->epoch, entry->name.c_str(), entry->locator.c_str());
+  return 0;
+}
+
 int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   // decode request
@@ -327,29 +355,18 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     return -EINVAL;
   }
 
-  bufferlist current_entry;
   struct rgw_bucket_dir_entry entry;
   bool ondisk = true;
-  rc = cls_cxx_map_get_val(hctx, op.name, &current_entry);
-  if (rc < 0) {
-    if (rc != -ENOENT) {
-      return rc;
-    } else {
-      rc = 0;
-      entry.name = op.name;
-      entry.epoch = op.epoch;
-      entry.meta = op.meta;
-      entry.locator = op.locator;
-      ondisk = false;
-    }
-  } else {
-    bufferlist::iterator cur_iter = current_entry.begin();
-    try {
-      ::decode(entry, cur_iter);
-      CLS_LOG(1, "rgw_bucket_complete_op(): existing entry: epoch=%lld name=%s locator=%s\n", entry.epoch, entry.name.c_str(), entry.locator.c_str());
-    } catch (buffer::error& err) {
-      CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to decode entry\n");
-    }
+
+  rc = read_index_entry(hctx, op.name, &entry);
+  if (rc == -ENOENT) {
+    entry.name = op.name;
+    entry.epoch = op.epoch;
+    entry.meta = op.meta;
+    entry.locator = op.locator;
+    ondisk = false;
+  } else if (rc < 0) {
+    return rc;
   }
 
   if (op.tag.size()) {
@@ -384,10 +401,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   }
 
   if (entry.exists) {
-    struct rgw_bucket_category_stats& stats = header.stats[entry.meta.category];
-    stats.num_entries--;
-    stats.total_size -= entry.meta.size;
-    stats.total_size_rounded -= get_rounded_size(entry.meta.size);
+    unaccount_entry(header, entry);
   }
 
   switch (op.op) {
@@ -427,6 +441,27 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 	return ret;
     }
     break;
+  }
+
+  list<string>::iterator remove_iter;
+  CLS_LOG(0, "rgw_bucket_complete_op(): remove_objs.size()=%d\n", op.remove_objs.size());
+  for (remove_iter = op.remove_objs.begin(); remove_iter != op.remove_objs.end(); ++remove_iter) {
+    string& remove_oid_name = *remove_iter;
+    CLS_LOG(1, "rgw_bucket_complete_op(): removing entries, read_index_entry name=%s\n", remove_oid_name.c_str());
+    struct rgw_bucket_dir_entry remove_entry;
+    int ret = read_index_entry(hctx, remove_oid_name, &remove_entry);
+    if (ret < 0) {
+      CLS_LOG(1, "rgw_bucket_complete_op(): removing entries, read_index_entry name=%s ret=%d\n", remove_oid_name.c_str(), rc);
+      continue;
+    }
+    CLS_LOG(0, "rgw_bucket_complete_op(): entry.name=%s entry.meta.category=%d\n", remove_entry.name.c_str(), remove_entry.meta.category);
+    unaccount_entry(header, remove_entry);
+
+    ret = cls_cxx_map_remove_key(hctx, remove_oid_name);
+    if (ret < 0) {
+      CLS_LOG(1, "rgw_bucket_complete_op(): cls_cxx_map_remove_key, failed to remove entry, name=%s read_index_entry ret=%d\n", remove_oid_name.c_str(), rc);
+      continue;
+    }
   }
 
   bufferlist new_header_bl;
