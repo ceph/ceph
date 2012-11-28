@@ -17,7 +17,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <unistd.h>
 
 int pipe_cloexec(int pipefd[2])
 {
