@@ -1676,9 +1676,10 @@ int ReplicatedPG::do_tmapup_slow(OpContext *ctx, bufferlist::iterator& bp, OSDOp
       break;
     case CEPH_OSD_TMAP_RM: // remove key
       ::decode(key, bp);
-      if (m.count(key)) {
-	m.erase(key);
+      if (!m.count(key)) {
+	return -ENOENT;
       }
+      m.erase(key);
       break;
     case CEPH_OSD_TMAP_HDR: // update header
       {
@@ -1848,6 +1849,9 @@ int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
 	nkeys++;
       } else if (op == CEPH_OSD_TMAP_RM) {
 	// do nothing.
+	if (!key_exists) {
+	  return -ENOENT;
+	}
       }
     }
 
