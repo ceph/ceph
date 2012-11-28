@@ -490,7 +490,7 @@ fi
 %{_bindir}/test_libcephfs
 %{_bindir}/test_librbd
 %{_bindir}/test_librbd_fsx
-%{_bindir}/test_test_mon_workloadgen
+%{_bindir}/test_mon_workloadgen
 %{_bindir}/test_mutate
 %{_bindir}/test_object_map
 %{_bindir}/test_objectcacher_stress
