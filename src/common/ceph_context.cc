@@ -139,7 +139,7 @@ public:
     }
 
     if (changed.count("log_max_recent")) {
-      log->set_max_new(conf->log_max_recent);
+      log->set_max_recent(conf->log_max_recent);
     }
   }
 };
