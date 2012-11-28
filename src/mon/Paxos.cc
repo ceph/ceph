@@ -970,7 +970,7 @@ bool Paxos::is_readable(version_t v)
 
 bool Paxos::read(version_t v, bufferlist &bl)
 {
-  if (!mon->store->get_bl_sn(bl, machine_name, v))
+  if (mon->store->get_bl_sn(bl, machine_name, v) <= 0)
     return false;
   return true;
 }
