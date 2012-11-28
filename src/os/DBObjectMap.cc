@@ -8,9 +8,7 @@
 #include <string>
 #include <tr1/memory>
 
-#include <string>
 #include <vector>
-#include <tr1/memory>
 
 #include "ObjectMap.h"
 #include "KeyValueDB.h"
