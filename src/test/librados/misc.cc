@@ -235,12 +235,13 @@ TEST(LibRadosMisc, TmapUpdateMisorderedPutPP) {
   ::encode(string("aval"), bl);
   ::encode(string("c"), bl);
   ::encode(string("cval"), bl);
+  bufferlist orig = bl;  // tmap_put steals bl content
   ASSERT_EQ(0, ioctx.tmap_put("foo", bl));
 
   // check
   bufferlist newbl;
-  ASSERT_EQ(0, ioctx.read("foo", bl, 0, 0));
-  ASSERT_EQ(bl.contents_equal(newbl), false);
+  ioctx.read("foo", newbl, orig.length(), 0);
+  ASSERT_EQ(orig.contents_equal(newbl), false);
 
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
