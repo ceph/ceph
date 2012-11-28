@@ -49,7 +49,6 @@ using namespace std;
 #include <ext/hash_set>
 using namespace __gnu_cxx;
 
-#include "OpRequest.h"
 #include "common/shared_cache.hpp"
 #include "common/simple_cache.hpp"
 #include "common/sharedptr_registry.hpp"
