@@ -17,6 +17,9 @@ class RGWGC;
 #define PUT_OBJ_EXCL        0x02
 #define PUT_OBJ_CREATE_EXCL (PUT_OBJ_CREATE | PUT_OBJ_EXCL)
 
+#define RGW_OBJ_NS_MULTIPART "multipart"
+#define RGW_OBJ_NS_SHADOW    "shadow"
+
 static inline void prepend_bucket_marker(rgw_bucket& bucket, string& orig_oid, string& oid)
 {
   if (bucket.marker.empty() || orig_oid.empty()) {
@@ -554,6 +557,9 @@ public:
 
   /** Delete an object.*/
   virtual int delete_obj(void *ctx, rgw_obj& src_obj);
+
+  /** Remove an object from the bucket index */
+  int delete_obj_index(rgw_obj& obj);
 
   /**
    * Get the attributes for an object.

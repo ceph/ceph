@@ -26,8 +26,8 @@
 using namespace std;
 using ceph::crypto::MD5;
 
-static string mp_ns = "multipart";
-static string shadow_ns = "shadow";
+static string mp_ns = RGW_OBJ_NS_MULTIPART;
+static string shadow_ns = RGW_OBJ_NS_SHADOW;
 
 class MultipartMetaFilter : public RGWAccessListFilter {
 public:
