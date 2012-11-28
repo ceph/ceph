@@ -65,8 +65,6 @@
 #include "LogMonitor.h"
 #include "AuthMonitor.h"
 
-#include "osd/OSDMap.h"
-
 #include "auth/AuthMethodList.h"
 #include "auth/KeyRing.h"
 
