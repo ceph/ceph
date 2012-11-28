@@ -25,10 +25,6 @@
 
 #include <sys/statvfs.h>
 
-#if defined(__FreeBSD__)
-#include <sys/param.h>
-#endif
-
 #include <iostream>
 using namespace std;
 
@@ -66,8 +62,6 @@ using namespace std;
 #include "common/perf_counters.h"
 #include "common/admin_socket.h"
 #include "common/errno.h"
-
-#include "common/config.h"
 
 #define dout_subsys ceph_subsys_client
 
