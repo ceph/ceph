@@ -1681,6 +1681,10 @@ int ReplicatedPG::do_tmapup_slow(OpContext *ctx, bufferlist::iterator& bp, OSDOp
       }
       m.erase(key);
       break;
+    case CEPH_OSD_TMAP_RMSLOPPY: // remove key
+      ::decode(key, bp);
+      m.erase(key);
+      break;
     case CEPH_OSD_TMAP_HDR: // update header
       {
 	::decode(header, bp);
@@ -1852,6 +1856,8 @@ int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
 	if (!key_exists) {
 	  return -ENOENT;
 	}
+      } else if (op == CEPH_OSD_TMAP_RMSLOPPY) {
+	// do nothing
       }
     }
 
