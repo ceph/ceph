@@ -30,7 +30,6 @@
 #include "IndexManager.h"
 #include "FlatIndex.h"
 #include "HashIndex.h"
-#include "FlatIndex.h"
 #include "CollectionIndex.h"
 
 #include "chain_xattr.h"
