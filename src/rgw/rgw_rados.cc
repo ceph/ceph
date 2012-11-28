@@ -3076,9 +3076,27 @@ int RGWRados::cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, string& n
   return cls_obj_complete_op(bucket, CLS_RGW_OP_ADD, tag, 0, ent, RGW_OBJ_CATEGORY_NONE, NULL);
 }
 
+int RGWRados::cls_obj_set_bucket_tag_timeout(rgw_bucket& bucket, uint64_t timeout)
+{
+  librados::IoCtx io_ctx;
+  string oid;
+
+  int r = open_bucket(bucket, io_ctx, oid);
+  if (r < 0)
+    return r;
+
+  ObjectWriteOperation o;
+  cls_rgw_bucket_set_tag_timeout(o, timeout);
+
+  r = io_ctx.operate(oid, &o);
+
+  return r;
+}
+
 int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, string prefix,
 		              uint32_t num, map<string, RGWObjEnt>& m,
-			      bool *is_truncated, string *last_entry)
+			      bool *is_truncated, string *last_entry,
+			      bool (*force_check_filter)(const string&  name))
 {
   ldout(cct, 10) << "cls_bucket_list " << bucket << " start " << start << " num " << num << dendl;
 
@@ -3114,7 +3132,9 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, string prefix,
       continue;
     }
 
-    if (!dirent.exists || !dirent.pending_map.empty()) {
+    bool force_check = force_check_filter && force_check_filter(dirent.name);
+
+    if (!dirent.exists || !dirent.pending_map.empty() || force_check) {
       /* there are uncommitted ops. We need to check the current state,
        * and if the tags are old we need to do cleanup as well. */
       librados::IoCtx sub_ctx;

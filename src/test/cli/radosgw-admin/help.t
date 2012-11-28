@@ -56,6 +56,8 @@
      --end-date=<date>
      --bucket-id=<bucket-id>
      --fix                     besides checking bucket index, will also fix it
+     --check-objects           bucket check: rebuilds bucket index according to
+                               actual objects state
      --format=<format>         specify output format for certain operations: xml,
                                json
      --purge-data              when specified, user removal will also purge all the
