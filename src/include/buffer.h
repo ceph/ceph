@@ -46,7 +46,6 @@ void	*valloc(size_t);
 #endif
 
 #include <stdint.h>
-#include <stdio.h>	// snprintf
 #include <string.h>
 
 #ifndef __CYGWIN__
