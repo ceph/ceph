@@ -17,7 +17,7 @@
 #include <errno.h>
 #include <sys/fcntl.h>
 
-TEST(LibCephFS, Readdir_r_cb) {
+TEST(LibCephFS, ReaddirRCB) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(0, ceph_create(&cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
