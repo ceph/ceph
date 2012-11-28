@@ -24,7 +24,6 @@
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
-#include <string.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <limits.h>
