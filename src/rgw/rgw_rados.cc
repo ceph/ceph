@@ -1746,6 +1746,18 @@ int RGWRados::delete_obj(void *ctx, rgw_obj& obj)
   return r;
 }
 
+int RGWRados::delete_obj_index(rgw_obj& obj)
+{
+  rgw_bucket bucket;
+  std::string oid, key;
+  get_obj_bucket_and_oid_key(obj, bucket, oid, key);
+
+  string tag;
+  int r = complete_update_index_del(bucket, obj.object, tag, 0);
+
+  return r;
+}
+
 static void generate_fake_tag(CephContext *cct, map<string, bufferlist>& attrset, RGWObjManifest& manifest, bufferlist& manifest_bl, bufferlist& tag_bl)
 {
   string tag;
@@ -3254,6 +3266,24 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
     }
   }
 
+  if (astate->has_manifest) {
+    map<uint64_t, RGWObjManifestPart>::iterator miter;
+    RGWObjManifest& manifest = astate->manifest;
+    for (miter = manifest.objs.begin(); miter != manifest.objs.end(); ++miter) {
+      RGWObjManifestPart& part = miter->second;
+
+      rgw_obj& loc = part.loc;
+
+      if (loc.ns == RGW_OBJ_NS_MULTIPART) {
+	dout(10) << "check_disk_state(): removing manifest part from index: " << loc << dendl;
+	r = delete_obj_index(loc);
+	if (r < 0) {
+	  dout(0) << "WARNING: delete_obj_index() returned r=" << r << dendl;
+	}
+      }
+    }
+  }
+
   object.etag = etag;
   object.content_type = content_type;
   object.owner = owner.get_id();
@@ -3270,7 +3300,6 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
     list_state.meta.tag = astate->obj_tag.c_str();
   list_state.meta.owner = owner.get_id();
   list_state.meta.owner_display_name = owner.get_display_name();
-
 
   list_state.exists = true;
   cls_rgw_encode_suggestion(CEPH_RGW_UPDATE, list_state, suggested_updates);
