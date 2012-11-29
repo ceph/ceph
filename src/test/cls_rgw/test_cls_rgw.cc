@@ -84,7 +84,7 @@ void index_prepare(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, int index_op
 void index_complete(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, int index_op, string& tag, int epoch, string& obj, rgw_bucket_dir_entry_meta& meta)
 {
   ObjectWriteOperation *op = mgr.write_op();
-  cls_rgw_bucket_complete_op(*op, index_op, tag, epoch, obj, meta);
+  cls_rgw_bucket_complete_op(*op, index_op, tag, epoch, obj, meta, NULL);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 }
 
