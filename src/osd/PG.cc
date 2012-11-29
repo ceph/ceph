@@ -1343,11 +1343,10 @@ void PG::build_might_have_unfound()
 struct C_PG_ActivateCommitted : public Context {
   PG *pg;
   epoch_t epoch;
-  entity_inst_t primary;
-  C_PG_ActivateCommitted(PG *p, epoch_t e, const entity_inst_t &pi)
-    : pg(p), epoch(e), primary(pi) {}
+  C_PG_ActivateCommitted(PG *p, epoch_t e)
+    : pg(p), epoch(e) {}
   void finish(int r) {
-    pg->_activate_committed(epoch, primary);
+    pg->_activate_committed(epoch);
   }
 };
 
@@ -1409,8 +1408,7 @@ void PG::activate(ObjectStore::Transaction& t,
 
   // find out when we commit
   get();   // for callback
-  tfin.push_back(new C_PG_ActivateCommitted(this, query_epoch,
-					    get_osdmap()->get_cluster_inst(acting[0])));
+  tfin.push_back(new C_PG_ActivateCommitted(this, query_epoch));
   
   // initialize snap_trimq
   if (is_primary()) {
@@ -1729,7 +1727,7 @@ void PG::replay_queued_ops()
   update_stats();
 }
 
-void PG::_activate_committed(epoch_t e, entity_inst_t& primary)
+void PG::_activate_committed(epoch_t e)
 {
   lock();
   if (e < last_peering_reset) {
@@ -1749,7 +1747,7 @@ void PG::_activate_committed(epoch_t e, entity_inst_t& primary)
 				info);
     i.info.history.last_epoch_started = e;
     m->pg_list.push_back(make_pair(i, pg_interval_map_t()));
-    osd->cluster_messenger->send_message(m, primary);
+    osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(acting[0]));
   }
 
   if (dirty_info) {
