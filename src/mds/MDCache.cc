@@ -7605,8 +7605,12 @@ void MDCache::request_cleanup(MDRequest *mdr)
 
 void MDCache::request_kill(MDRequest *mdr)
 {
-  dout(10) << "request_kill " << *mdr << dendl;
-  request_cleanup(mdr);
+  if (!mdr->committing) {
+    dout(10) << "request_kill " << *mdr << dendl;
+    request_cleanup(mdr);
+  } else {
+    dout(10) << "request_kill " << *mdr << " -- already committing, no-op" << dendl;
+  }
 }
 
 
