@@ -339,7 +339,7 @@ int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
   return len;
 }
 
-void MonitorStore::write_bl_ss_impl(bufferlist& bl, const char *a, const char *b, bool append)
+void MonitorStore::write_bl_ss(bufferlist& bl, const char *a, const char *b, bool append)
 {
   int err = 0;
   char fn[1024];
@@ -393,11 +393,6 @@ void MonitorStore::write_bl_ss_impl(bufferlist& bl, const char *a, const char *b
       assert(0 == "failed to rename");
     }
   }
-}
-
-void MonitorStore::write_bl_ss(bufferlist& bl, const char *a, const char *b, bool append)
-{
-  write_bl_ss_impl(bl, a, b, append);
 }
 
 void MonitorStore::put_bl_sn_map(const char *a,
