@@ -83,6 +83,11 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon) {
 
 long parse_pos_long(const char *s, ostream *pss)
 {
+  if (*s == '-' || *s == '+') {
+    *pss << "expected numerical value, got: " << s;
+    return -EINVAL;
+  }
+
   string err;
   long r = strict_strtol(s, 10, &err);
   if ((r == 0) && !err.empty()) {
