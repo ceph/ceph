@@ -35,7 +35,6 @@ static ostream& _prefix(std::ostream *_dout, const string& dir) {
   return *_dout << "store(" << dir << ") ";
 }
 
-
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -136,6 +135,7 @@ version_t MonitorStore::get_int(const char *a, const char *b)
     }
     derr << "MonitorStore::get_int: failed to open '" << fn << "': "
 	 << cpp_strerror(err) << dendl;
+    assert(0 == "failed to open");
     return 0;
   }
   
@@ -147,6 +147,7 @@ version_t MonitorStore::get_int(const char *a, const char *b)
 	 << cpp_strerror(r) << dendl;
     int close_err = TEMP_FAILURE_RETRY(::close(fd));
     assert(0 == close_err);
+    assert(0); // the file exists; so this is a different failure
     return 0;
   }
   int close_err = TEMP_FAILURE_RETRY(::close(fd));
@@ -260,7 +261,7 @@ bool MonitorStore::exists_bl_ss(const char *a, const char *b)
   return r == 0;
 }
 
-int MonitorStore::erase_ss(const char *a, const char *b)
+void MonitorStore::erase_ss(const char *a, const char *b)
 {
   char fn[1024];
   char dr[1024];
@@ -273,6 +274,7 @@ int MonitorStore::erase_ss(const char *a, const char *b)
     strcpy(fn, dr);
   }
   int r = ::unlink(fn);
+  assert(0 == r || ENOENT == errno); // callers don't check for existence first
 
   if (b) {
     // wipe out _gv file too, if any.  this is sloppy, but will work.
@@ -282,7 +284,6 @@ int MonitorStore::erase_ss(const char *a, const char *b)
   }
 
   ::rmdir(dr);  // sloppy attempt to clean up empty dirs
-  return r;
 }
 
 int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
@@ -338,7 +339,7 @@ int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
   return len;
 }
 
-int MonitorStore::write_bl_ss_impl(bufferlist& bl, const char *a, const char *b, bool append)
+void MonitorStore::write_bl_ss_impl(bufferlist& bl, const char *a, const char *b, bool append)
 {
   int err = 0;
   char fn[1024];
@@ -349,7 +350,7 @@ int MonitorStore::write_bl_ss_impl(bufferlist& bl, const char *a, const char *b,
       err = -errno;
       derr << __func__ << " failed to create dir " << fn
 	   << ": " << cpp_strerror(err) << dendl;
-      return err;
+      assert(0 == "failed to create dir");
     }
     dout(15) << "put_bl " << a << "/" << b << " = " << bl.length() << " bytes" << dendl;
     snprintf(fn, sizeof(fn), "%s/%s/%s", dir.c_str(), a, b);
@@ -365,7 +366,7 @@ int MonitorStore::write_bl_ss_impl(bufferlist& bl, const char *a, const char *b,
       err = -errno;
       derr << "failed to open " << fn << "for append: "
 	   << cpp_strerror(err) << dendl;
-      return err;
+      assert(0 == "failed to open for append");
     }
   } else {
     snprintf(tfn, sizeof(tfn), "%s.new", fn);
@@ -373,42 +374,33 @@ int MonitorStore::write_bl_ss_impl(bufferlist& bl, const char *a, const char *b,
     if (fd < 0) {
       err = -errno;
       derr << "failed to open " << tfn << ": " << cpp_strerror(err) << dendl;
-      return err;
+      assert(0 == "failed to open");
     }
   }
   
   err = bl.write_fd(fd);
-
-  if (!err)
-    err = ::fsync(fd);
-  int close_err = TEMP_FAILURE_RETRY(::close(fd));
-  assert (0 == close_err); // this really can't fail, right? right?...
-  if (!append && !err) {
-    int r = ::rename(tfn, fn);
-    if (r < 0) {
+  assert(!err);
+  err = ::fsync(fd);
+  assert(!err);
+  err = TEMP_FAILURE_RETRY(::close(fd));
+  assert (!err); // this really can't fail, right? right?...
+  if (!append) {
+    err = ::rename(tfn, fn);
+    if (err < 0) {
       err = -errno;
       derr << __func__ << " failed to rename '" << tfn << "' -> '"
 	   << fn << "': " << cpp_strerror(err) << dendl;
-      return err;
+      assert(0 == "failed to rename");
     }
-  } else if (err) {
-    err = -errno;
-    derr << __func__ << "failed to write or fsync " << fn  << cpp_strerror(err) << dendl;
   }
-
-  return err;
 }
 
-int MonitorStore::write_bl_ss(bufferlist& bl, const char *a, const char *b, bool append)
+void MonitorStore::write_bl_ss(bufferlist& bl, const char *a, const char *b, bool append)
 {
-  int err = write_bl_ss_impl(bl, a, b, append);
-  if (err)
-    derr << "write_bl_ss " << a << "/" << b << " got error " << cpp_strerror(err) << dendl;
-  assert(!err);  // for now
-  return 0;
+  write_bl_ss_impl(bl, a, b, append);
 }
 
-int MonitorStore::put_bl_sn_map(const char *a,
+void MonitorStore::put_bl_sn_map(const char *a,
 				map<version_t,bufferlist>::iterator start,
 				map<version_t,bufferlist>::iterator end,
 				map<version_t,version_t> *gvmap)
@@ -426,13 +418,11 @@ int MonitorStore::put_bl_sn_map(const char *a,
       last - first < (unsigned)g_conf->mon_sync_fs_threshold) {
     // just do them individually
     for (map<version_t,bufferlist>::iterator p = start; p != end; ++p) {
-      int err = put_bl_sn(p->second, a, p->first);
-      if (err < 0)
-	return err;
+      put_bl_sn(p->second, a, p->first);
       if (gvmap && gvmap->count(p->first) && (*gvmap)[p->first] > 0)
 	put_global_version(a, p->first, (*gvmap)[p->first]);
     }
-    return 0;
+    return;
   }
 
   // make sure dir exists
@@ -443,7 +433,7 @@ int MonitorStore::put_bl_sn_map(const char *a,
     err = -errno;
     derr << __func__ << " failed to create dir " << dfn << ": "
 	 << cpp_strerror(err) << dendl;
-    return err;
+    assert(0 == "failed to create dir");
   }
 
   for (map<version_t,bufferlist>::iterator p = start; p != end; ++p) {
@@ -456,14 +446,14 @@ int MonitorStore::put_bl_sn_map(const char *a,
     if (fd < 0) {
       int err = -errno;
       derr << "failed to open " << tfn << ": " << cpp_strerror(err) << dendl;
-      return err;
+      assert(0 == "failed to open");
     }
 
     err = p->second.write_fd(fd);
     close_err = TEMP_FAILURE_RETRY(::close(fd));
     assert (0 == close_err);
     if (err < 0)
-      return -errno;
+      assert(0 == "failed to write");
 
     // this doesn't try to be efficient.. too bad for you!  it may also
     // extend beyond commmitted, but that's okay; we only look at these
@@ -477,7 +467,7 @@ int MonitorStore::put_bl_sn_map(const char *a,
   if (dirfd < 0) {
     err = -errno;
     derr << "failed to open " << dir << ": " << cpp_strerror(err) << dendl;
-    return err;
+    assert(0 == "failed to open temp file");
   }
   sync_filesystem(dirfd);
   close_err = TEMP_FAILURE_RETRY(::close(dirfd));
@@ -492,7 +482,7 @@ int MonitorStore::put_bl_sn_map(const char *a,
     
     err = ::rename(tfn, fn);
     if (err < 0)
-      return -errno;
+      assert(0 == "failed to rename");
   }
     
   // fsync the dir (to commit the renames)
@@ -501,19 +491,17 @@ int MonitorStore::put_bl_sn_map(const char *a,
     err = -errno;
     derr << __func__ << " failed to open " << dir
 	 << ": " << cpp_strerror(err) << dendl;
-    return err;
+    assert(0 == "failed to open dir");
   }
   err = ::fsync(dirfd);
   if (err < 0) {
     err = -errno;
     derr << __func__ << " failed to fsync " << dir
 	 << ": " << cpp_strerror(err) << dendl;
-    return err;
+    assert(0 == "failed to fsync");
   }
   close_err = TEMP_FAILURE_RETRY(::close(dirfd));
   assert (0 == close_err);
-
-  return 0;
 }
 
 void MonitorStore::sync()
@@ -523,7 +511,7 @@ void MonitorStore::sync()
     int err = -errno;
     derr << __func__ << " failed to open " << dir
 	 << ": " << cpp_strerror(err) << dendl;
-    return;
+    assert(0 == "failed to open dir for syncing");
   }
   sync_filesystem(dirfd);
   int close_err = TEMP_FAILURE_RETRY(::close(dirfd));
