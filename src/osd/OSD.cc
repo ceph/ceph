@@ -4654,7 +4654,7 @@ void OSD::do_notifies(
 	      << " on " << it->second.size() << " PGs" << dendl;
       MOSDPGNotify *m = new MOSDPGNotify(curmap->get_epoch(),
 					 it->second);
-      cluster_messenger->send_message(m, curmap->get_cluster_inst(it->first));
+      service.send_message_osd_cluster(it->first, m, curmap->get_epoch());
     } else {
       dout(7) << "do_notify osd." << it->first
 	      << " sending seperate messages" << dendl;
@@ -4666,7 +4666,7 @@ void OSD::do_notifies(
 	list[0] = *i;
 	MOSDPGNotify *m = new MOSDPGNotify(i->first.epoch_sent,
 					   list);
-	cluster_messenger->send_message(m, curmap->get_cluster_inst(it->first));
+	service.send_message_osd_cluster(it->first, m, curmap->get_epoch());
       }
     }
   }
@@ -4692,7 +4692,7 @@ void OSD::do_queries(map< int, map<pg_t,pg_query_t> >& query_map,
       dout(7) << "do_queries querying osd." << who
 	      << " on " << pit->second.size() << " PGs" << dendl;
       MOSDPGQuery *m = new MOSDPGQuery(curmap->get_epoch(), pit->second);
-      cluster_messenger->send_message(m, curmap->get_cluster_inst(who));
+      service.send_message_osd_cluster(who, m, curmap->get_epoch());
     } else {
       dout(7) << "do_queries querying osd." << who
 	      << " sending seperate messages "
@@ -4703,7 +4703,7 @@ void OSD::do_queries(map< int, map<pg_t,pg_query_t> >& query_map,
 	map<pg_t, pg_query_t> to_send;
 	to_send.insert(*i);
 	MOSDPGQuery *m = new MOSDPGQuery(i->second.epoch_sent, to_send);
-	cluster_messenger->send_message(m, curmap->get_cluster_inst(who));
+	service.send_message_osd_cluster(who, m, curmap->get_epoch());
       }
     }
   }
@@ -4729,7 +4729,7 @@ void OSD::do_infos(map<int,vector<pair<pg_notify_t, pg_interval_map_t> > >& info
     if ((con->features & CEPH_FEATURE_INDEP_PG_MAP)) {
       MOSDPGInfo *m = new MOSDPGInfo(curmap->get_epoch());
       m->pg_list = p->second;
-      cluster_messenger->send_message(m, curmap->get_cluster_inst(p->first));
+      service.send_message_osd_cluster(p->first, m, curmap->get_epoch());
     } else {
       for (vector<pair<pg_notify_t, pg_interval_map_t> >::iterator i =
 	     p->second.begin();
@@ -4739,7 +4739,7 @@ void OSD::do_infos(map<int,vector<pair<pg_notify_t, pg_interval_map_t> > >& info
 	to_send[0] = *i;
 	MOSDPGInfo *m = new MOSDPGInfo(i->first.epoch_sent);
 	m->pg_list = to_send;
-	cluster_messenger->send_message(m, curmap->get_cluster_inst(p->first));
+	service.send_message_osd_cluster(p->first, m, curmap->get_epoch());
       }
     }
   }
@@ -5113,8 +5113,7 @@ void OSD::handle_pg_query(OpRequestRef op)
       MOSDPGLog *mlog = new MOSDPGLog(osdmap->get_epoch(), empty,
 				      it->second.epoch_sent);
       _share_map_outgoing(osdmap->get_cluster_inst(from));
-      cluster_messenger->send_message(mlog,
-				      osdmap->get_cluster_inst(from));
+      service.send_message_osd_cluster(from, mlog, osdmap->get_epoch());
     } else {
       notify_list[from].push_back(make_pair(pg_notify_t(it->second.epoch_sent,
 							osdmap->get_epoch(),
