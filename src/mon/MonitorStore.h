@@ -26,8 +26,6 @@ class MonitorStore {
   string dir;
   int lock_fd;
 
-  void write_bl_ss_impl(bufferlist& bl, const char *a, const char *b,
-		       bool append);
   void write_bl_ss(bufferlist& bl, const char *a, const char *b,
 		  bool append);
 public:
