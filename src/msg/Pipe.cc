@@ -158,6 +158,17 @@ void Pipe::join_reader()
   reader_needs_join = false;
 }
 
+void Pipe::DelayedDelivery::discard()
+{
+  Mutex::Locker l(delay_lock);
+  while (!delay_queue.empty()) {
+    Message *m = delay_queue.front().second;
+    pipe->msgr->dispatch_throttle_release(m->get_dispatch_throttle_size());
+    m->put();
+    delay_queue.pop_front();
+  }
+}
+
 void *Pipe::DelayedDelivery::entry()
 {
   Mutex::Locker locker(delay_lock);
@@ -1052,7 +1063,6 @@ void Pipe::discard_out_queue()
     }
   out_q.clear();
 }
-
 
 void Pipe::fault(bool onread)
 {
