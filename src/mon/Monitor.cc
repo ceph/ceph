@@ -2360,7 +2360,8 @@ int Monitor::write_fsid()
 
   bufferlist b;
   b.append(us);
-  return store->put_bl_ss(b, "cluster_uuid", 0);
+  store->put_bl_ss(b, "cluster_uuid", 0);
+  return 0;
 }
 
 /*
@@ -2384,9 +2385,8 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   bufferlist magicbl;
   magicbl.append(CEPH_MON_ONDISK_MAGIC);
   magicbl.append("\n");
-  r = store->put_bl_ss(magicbl, "magic", 0);
-  if (r < 0)
-    return r;
+  store->put_bl_ss(magicbl, "magic", 0);
+
 
   features = get_supported_features();
   write_features();
