@@ -1577,6 +1577,8 @@ PG *OSD::get_or_create_pg(const pg_info_t& info, pg_interval_map_t& pi,
 
   if (!_have_pg(info.pgid)) {
     // same primary?
+    if (!osdmap->have_pg_pool(info.pgid.pool()))
+      return 0;
     vector<int> up, acting;
     osdmap->pg_to_up_acting_osds(info.pgid, up, acting);
     int role = osdmap->calc_pg_role(whoami, acting, acting.size());
