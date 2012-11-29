@@ -4703,6 +4703,7 @@ void OSD::do_notifies(
 	service.send_message_osd_cluster(it->first, m, curmap->get_epoch());
       }
     }
+    con->put();
   }
 }
 
@@ -4740,6 +4741,7 @@ void OSD::do_queries(map< int, map<pg_t,pg_query_t> >& query_map,
 	service.send_message_osd_cluster(who, m, curmap->get_epoch());
       }
     }
+    con->put();
   }
 }
 
@@ -4776,6 +4778,7 @@ void OSD::do_infos(map<int,vector<pair<pg_notify_t, pg_interval_map_t> > >& info
 	service.send_message_osd_cluster(p->first, m, curmap->get_epoch());
       }
     }
+    con->put();
   }
   info_map.clear();
 }
