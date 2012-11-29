@@ -5406,6 +5406,7 @@ int Client::read(int fd, char *buf, loff_t size, loff_t offset)
 
 int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
 {
+  const md_config_t *conf = cct->_conf;
   Inode *in = f->inode;
 
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
@@ -5422,7 +5423,7 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
     movepos = true;
   }
 
-  if (have & CEPH_CAP_FILE_CACHE)
+  if (!conf->client_debug_force_sync_read && have & CEPH_CAP_FILE_CACHE)
     r = _read_async(f, offset, size, bl);
   else
     r = _read_sync(f, offset, size, bl);
@@ -5570,6 +5571,9 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
     flock.Unlock();
     client_lock.Lock();
 
+    // if we get ENOENT from OSD, assume 0 bytes returned
+    if (r == -ENOENT)
+      r = 0;
     if (r < 0)
       return r;
     if (tbl.length()) {
