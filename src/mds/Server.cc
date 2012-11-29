@@ -496,12 +496,13 @@ void Server::journal_close_session(Session *session, int state)
   mdlog->flush();
 
   // clean up requests, too
-  while (!session->requests.empty()) {
-    MDRequest *mdr = session->requests.front(member_offset(MDRequest,
-							   item_session_request));
+  elist<MDRequest*>::iterator p = session->requests.begin(member_offset(MDRequest,
+									item_session_request));
+  while (!p.end()) {
+    MDRequest *mdr = *p;
+    ++p;
     mdcache->request_kill(mdr);
   }
-
 }
 
 void Server::reconnect_clients()
