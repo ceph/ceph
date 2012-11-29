@@ -4686,15 +4686,16 @@ void OSD::do_notifies(
     }
     if (!curmap->is_up(it->first))
       continue;
-    Connection *con =
-      cluster_messenger->get_connection(curmap->get_cluster_inst(it->first));
+    Connection *con = service.get_con_osd_cluster(it->first, curmap->get_epoch());
+    if (!con)
+      continue;
     _share_map_outgoing(it->first, con, curmap);
     if ((con->features & CEPH_FEATURE_INDEP_PG_MAP)) {
       dout(7) << "do_notify osd." << it->first
 	      << " on " << it->second.size() << " PGs" << dendl;
       MOSDPGNotify *m = new MOSDPGNotify(curmap->get_epoch(),
 					 it->second);
-      service.send_message_osd_cluster(it->first, m, curmap->get_epoch());
+      cluster_messenger->send_message(m, con);
     } else {
       dout(7) << "do_notify osd." << it->first
 	      << " sending seperate messages" << dendl;
@@ -4706,7 +4707,7 @@ void OSD::do_notifies(
 	list[0] = *i;
 	MOSDPGNotify *m = new MOSDPGNotify(i->first.epoch_sent,
 					   list);
-	service.send_message_osd_cluster(it->first, m, curmap->get_epoch());
+	cluster_messenger->send_message(m, con);
       }
     }
     con->put();
@@ -4726,14 +4727,15 @@ void OSD::do_queries(map< int, map<pg_t,pg_query_t> >& query_map,
     if (!curmap->is_up(pit->first))
       continue;
     int who = pit->first;
-    Connection *con =
-      cluster_messenger->get_connection(curmap->get_cluster_inst(pit->first));
+    Connection *con = service.get_con_osd_cluster(who, curmap->get_epoch());
+    if (!con)
+      continue;
     _share_map_outgoing(who, con, curmap);
     if ((con->features & CEPH_FEATURE_INDEP_PG_MAP)) {
       dout(7) << "do_queries querying osd." << who
 	      << " on " << pit->second.size() << " PGs" << dendl;
       MOSDPGQuery *m = new MOSDPGQuery(curmap->get_epoch(), pit->second);
-      service.send_message_osd_cluster(who, m, curmap->get_epoch());
+      cluster_messenger->send_message(m, con);
     } else {
       dout(7) << "do_queries querying osd." << who
 	      << " sending seperate messages "
@@ -4744,7 +4746,7 @@ void OSD::do_queries(map< int, map<pg_t,pg_query_t> >& query_map,
 	map<pg_t, pg_query_t> to_send;
 	to_send.insert(*i);
 	MOSDPGQuery *m = new MOSDPGQuery(i->second.epoch_sent, to_send);
-	service.send_message_osd_cluster(who, m, curmap->get_epoch());
+	cluster_messenger->send_message(m, con);
       }
     }
     con->put();
@@ -4765,13 +4767,14 @@ void OSD::do_infos(map<int,vector<pair<pg_notify_t, pg_interval_map_t> > >& info
 	 ++i) {
       dout(20) << "Sending info " << i->first.info << " to osd." << p->first << dendl;
     }
-    Connection *con =
-      cluster_messenger->get_connection(curmap->get_cluster_inst(p->first));
+    Connection *con = service.get_con_osd_cluster(p->first, curmap->get_epoch());
+    if (!con)
+      continue;
     _share_map_outgoing(p->first, con, curmap);
     if ((con->features & CEPH_FEATURE_INDEP_PG_MAP)) {
       MOSDPGInfo *m = new MOSDPGInfo(curmap->get_epoch());
       m->pg_list = p->second;
-      service.send_message_osd_cluster(p->first, m, curmap->get_epoch());
+      cluster_messenger->send_message(m, con);
     } else {
       for (vector<pair<pg_notify_t, pg_interval_map_t> >::iterator i =
 	     p->second.begin();
@@ -4781,7 +4784,7 @@ void OSD::do_infos(map<int,vector<pair<pg_notify_t, pg_interval_map_t> > >& info
 	to_send[0] = *i;
 	MOSDPGInfo *m = new MOSDPGInfo(i->first.epoch_sent);
 	m->pg_list = to_send;
-	service.send_message_osd_cluster(p->first, m, curmap->get_epoch());
+	cluster_messenger->send_message(m, con);
       }
     }
     con->put();
