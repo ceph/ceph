@@ -1538,7 +1538,7 @@ void PG::activate(ObjectStore::Transaction& t,
       if (m) {
 	dout(10) << "activate peer osd." << peer << " sending " << m->log << dendl;
 	//m->log.print(cout);
-	osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(peer));
+	osd->send_message_osd_cluster(peer, m, get_osdmap()->get_epoch());
       }
 
       // peer now has 
@@ -1747,7 +1747,7 @@ void PG::_activate_committed(epoch_t e)
 				info);
     i.info.history.last_epoch_started = e;
     m->pg_list.push_back(make_pair(i, pg_interval_map_t()));
-    osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(acting[0]));
+    osd->send_message_osd_cluster(acting[0], m, get_osdmap()->get_epoch());
   }
 
   if (dirty_info) {
@@ -1954,8 +1954,7 @@ void PG::purge_strays()
       MOSDPGRemove *m = new MOSDPGRemove(
 	get_osdmap()->get_epoch(),
 	to_remove);
-      osd->cluster_messenger->send_message(
-	m, get_osdmap()->get_cluster_inst(*p));
+      osd->send_message_osd_cluster(*p, m, get_osdmap()->get_epoch());
       stray_purged.insert(*p);
     } else {
       dout(10) << "not sending PGRemove to down osd." << *p << dendl;
@@ -2268,9 +2267,10 @@ void PG::trim_peers()
   dout(10) << "trim_peers " << pg_trim_to << dendl;
   if (pg_trim_to != eversion_t()) {
     for (unsigned i=1; i<acting.size(); i++)
-      osd->cluster_messenger->send_message(new MOSDPGTrim(get_osdmap()->get_epoch(), info.pgid,
-						  pg_trim_to),
-				   get_osdmap()->get_cluster_inst(acting[i]));
+      osd->send_message_osd_cluster(acting[i],
+				    new MOSDPGTrim(get_osdmap()->get_epoch(), info.pgid,
+						   pg_trim_to),
+				    get_osdmap()->get_epoch());
   }
 }
 
@@ -2996,8 +2996,7 @@ void PG::_request_scrub_map_classic(int replica, eversion_t version)
   MOSDRepScrub *repscrubop = new MOSDRepScrub(info.pgid, version,
 					      last_update_applied,
                                               get_osdmap()->get_epoch());
-  osd->cluster_messenger->send_message(repscrubop,
-                                       get_osdmap()->get_cluster_inst(replica));
+  osd->send_message_osd_cluster(replica, repscrubop, get_osdmap()->get_epoch());
 }
 
 // send scrub v3 messages (chunky scrub)
@@ -3010,8 +3009,7 @@ void PG::_request_scrub_map(int replica, eversion_t version,
   MOSDRepScrub *repscrubop = new MOSDRepScrub(info.pgid, version,
                                               get_osdmap()->get_epoch(),
                                               start, end, deep);
-  osd->cluster_messenger->send_message(repscrubop,
-                                       get_osdmap()->get_cluster_inst(replica));
+  osd->send_message_osd_cluster(replica, repscrubop, get_osdmap()->get_epoch());
 }
 
 void PG::sub_op_scrub_reserve(OpRequestRef op)
@@ -3116,7 +3114,7 @@ void PG::scrub_reserve_replicas()
     MOSDSubOp *subop = new MOSDSubOp(reqid, info.pgid, poid, false, 0,
                                      get_osdmap()->get_epoch(), osd->get_tid(), v);
     subop->ops = scrub;
-    osd->cluster_messenger->send_message(subop, get_osdmap()->get_cluster_inst(acting[i]));
+    osd->send_message_osd_cluster(acting[i], subop, get_osdmap()->get_epoch());
   }
 }
 
@@ -3132,7 +3130,7 @@ void PG::scrub_unreserve_replicas()
     MOSDSubOp *subop = new MOSDSubOp(reqid, info.pgid, poid, false, 0,
                                      get_osdmap()->get_epoch(), osd->get_tid(), v);
     subop->ops = scrub;
-    osd->cluster_messenger->send_message(subop, get_osdmap()->get_cluster_inst(acting[i]));
+    osd->send_message_osd_cluster(acting[i], subop, get_osdmap()->get_epoch());
   }
 }
 
@@ -4140,7 +4138,7 @@ void PG::share_pg_info()
 	  get_osdmap()->get_epoch(),
 	  info),
 	pg_interval_map_t()));
-    osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(peer));
+    osd->send_message_osd_cluster(peer, m, get_osdmap()->get_epoch());
   }
 }
 
@@ -4172,7 +4170,7 @@ void PG::share_pg_log()
     }
     pinfo.last_update = m->log.head;
 
-    osd->cluster_messenger->send_message(m, get_osdmap()->get_cluster_inst(peer));
+    osd->send_message_osd_cluster(peer, m, get_osdmap()->get_epoch());
   }
 }
 
@@ -4226,8 +4224,7 @@ void PG::fulfill_log(int from, const pg_query_t &query, epoch_t query_epoch)
 
   osd->osd->_share_map_outgoing(get_osdmap()->get_cluster_inst(from),
 				get_osdmap());
-  osd->cluster_messenger->send_message(mlog, 
-				       get_osdmap()->get_cluster_inst(from));
+  osd->send_message_osd_cluster(from, mlog, get_osdmap()->get_epoch());
 }
 
 
@@ -5246,12 +5243,13 @@ PG::RecoveryState::WaitRemoteBackfillReserved::WaitRemoteBackfillReserved(my_con
     pg->osd->cluster_messenger->get_connection(
       pg->get_osdmap()->get_cluster_inst(pg->backfill_target));
   if ((con->features & CEPH_FEATURE_BACKFILL_RESERVATION)) {
-    pg->osd->cluster_messenger->send_message(
+    pg->osd->send_message_osd_cluster(
+      pg->backfill_target,
       new MBackfillReserve(
 	MBackfillReserve::REQUEST,
 	pg->info.pgid,
 	pg->get_osdmap()->get_epoch()),
-      pg->get_osdmap()->get_cluster_inst(pg->backfill_target));
+      pg->get_osdmap()->get_epoch());
   } else {
     post_event(RemoteBackfillReserved());
   }
@@ -5353,12 +5351,13 @@ boost::statechart::result
 PG::RecoveryState::RepWaitRecoveryReserved::react(const RemoteRecoveryReserved &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->osd->cluster_messenger->send_message(
+  pg->osd->send_message_osd_cluster(
+    pg->acting[0],
     new MRecoveryReserve(
       MRecoveryReserve::GRANT,
       pg->info.pgid,
       pg->get_osdmap()->get_epoch()),
-    pg->get_osdmap()->get_cluster_inst(pg->acting[0]));
+    pg->get_osdmap()->get_epoch());
   return transit<RepRecovering>();
 }
 
@@ -5400,12 +5399,13 @@ boost::statechart::result
 PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->osd->cluster_messenger->send_message(
+  pg->osd->send_message_osd_cluster(
+    pg->acting[0],
     new MBackfillReserve(
       MBackfillReserve::GRANT,
       pg->info.pgid,
       pg->get_osdmap()->get_epoch()),
-    pg->get_osdmap()->get_cluster_inst(pg->acting[0]));
+    pg->get_osdmap()->get_epoch());
   return transit<RepRecovering>();
 }
 
@@ -5413,12 +5413,13 @@ boost::statechart::result
 PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteReservationRejected &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->osd->cluster_messenger->send_message(
+  pg->osd->send_message_osd_cluster(
+    pg->acting[0],
     new MBackfillReserve(
       MBackfillReserve::REJECT,
       pg->info.pgid,
       pg->get_osdmap()->get_epoch()),
-    pg->get_osdmap()->get_cluster_inst(pg->acting[0]));
+    pg->get_osdmap()->get_epoch());
   return transit<RepNotRecovering>();
 }
 
@@ -5489,12 +5490,13 @@ PG::RecoveryState::WaitRemoteRecoveryReserved::WaitRemoteRecoveryReserved(my_con
       pg->osd->cluster_messenger->get_connection(
         pg->get_osdmap()->get_cluster_inst(*acting_osd_it));
     if ((con->features & CEPH_FEATURE_RECOVERY_RESERVATION)) {
-      pg->osd->cluster_messenger->send_message(
+      pg->osd->send_message_osd_cluster(
+	*acting_osd_it,
         new MRecoveryReserve(
           MRecoveryReserve::REQUEST,
           pg->info.pgid,
           pg->get_osdmap()->get_epoch()),
-        pg->get_osdmap()->get_cluster_inst(*acting_osd_it));
+	pg->get_osdmap()->get_epoch());
     } else {
       post_event(RemoteRecoveryReserved());
     }
@@ -5537,12 +5539,13 @@ void PG::RecoveryState::Recovering::release_reservations()
       pg->osd->cluster_messenger->get_connection(
         pg->get_osdmap()->get_cluster_inst(*i));
     if ((con->features & CEPH_FEATURE_RECOVERY_RESERVATION)) {
-      pg->osd->cluster_messenger->send_message(
+      pg->osd->send_message_osd_cluster(
+	*i,
         new MRecoveryReserve(
           MRecoveryReserve::RELEASE,
           pg->info.pgid,
           pg->get_osdmap()->get_epoch()),
-        pg->get_osdmap()->get_cluster_inst(*i));
+        pg->get_osdmap()->get_epoch());
     }
   }
 }
