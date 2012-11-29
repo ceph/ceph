@@ -555,7 +555,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       MDSMap *p = &mdsmap;
       if (epoch) {
 	bufferlist b;
-	mon->store->get_bl_sn(b, "mdsmap", epoch);
+	mon->store->get_bl_sn_safe(b, "mdsmap", epoch);
 	if (!b.length()) {
 	  p = 0;
 	  r = -ENOENT;
@@ -597,7 +597,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	}
 	epoch_t e = l;
 	bufferlist b;
-	mon->store->get_bl_sn(b,"mdsmap",e);
+	mon->store->get_bl_sn_safe(b,"mdsmap",e);
 	if (!b.length()) {
 	  r = -ENOENT;
 	} else {

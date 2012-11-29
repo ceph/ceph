@@ -212,7 +212,7 @@ TEST_F(StoreTest, ManyObjectTest) {
     ASSERT_EQ(r, 0);
     listed.insert(objects.begin(), objects.end());
     if (objects.size() < 50) {
-      ASSERT_TRUE(next.max);
+      ASSERT_TRUE(next.is_max());
       break;
     }
     objects.clear();
@@ -385,7 +385,7 @@ public:
       ASSERT_TRUE(sorted(objects));
       objects_set.insert(objects.begin(), objects.end());
       objects.clear();
-      if (next.max) break;
+      if (next.is_max()) break;
       current = next;
     }
     ASSERT_EQ(objects_set.size(), available_objects.size());
@@ -529,7 +529,7 @@ TEST_F(StoreTest, HashCollisionTest) {
       listed.insert(*i);
     }
     if (objects.size() < 50) {
-      ASSERT_TRUE(next.max);
+      ASSERT_TRUE(next.is_max());
       break;
     }
     objects.clear();
