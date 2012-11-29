@@ -754,3 +754,31 @@ TEST(LibCephFS, BadFileDesc) {
   ASSERT_EQ(ceph_get_file_pool(cmount, -1), -EBADF);
   ASSERT_EQ(ceph_get_file_replication(cmount, -1), -EBADF);
 }
+
+TEST(LibCephFS, ReadEmptyFile) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  // test the read_sync path in the client for zero files
+  ASSERT_EQ(ceph_conf_set(cmount, "client_debug_force_sync_read", "true"), 0);
+
+  int mypid = getpid();
+  char testf[256];
+
+  sprintf(testf, "test_reademptyfile%d", mypid);
+  int fd = ceph_open(cmount, testf, O_CREAT|O_TRUNC|O_WRONLY, 0644);
+  ASSERT_GT(fd, 0);
+
+  ceph_close(cmount, fd);
+
+  fd = ceph_open(cmount, testf, O_RDONLY, 0);
+  ASSERT_GT(fd, 0);
+
+  char buf[4096];
+  ASSERT_EQ(ceph_read(cmount, fd, buf, 4096, 0), 0);
+
+  ceph_close(cmount, fd);
+  ceph_shutdown(cmount);
+}
