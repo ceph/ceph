@@ -106,7 +106,7 @@ daemons to achieve a quorum.
 #. Add the new monitor to the list of monitors for you cluster (runtime). This enables 
    other nodes to use this monitor during their initial startup. ::
 
-	ceph mon add <name> <ip>[:<port>]\n";
+	ceph mon add <name> <ip>[:<port>]
 
 #. Start the new monitor and it will automatically join the cluster.
    The daemon needs to know which address to bind to, either via
