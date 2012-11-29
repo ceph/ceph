@@ -1911,8 +1911,13 @@ void OSD::handle_osd_ping(MOSDPing *m)
 
       if (curmap->is_up(from)) {
 	note_peer_epoch(from, m->map_epoch);
-	if (is_active())
-	  _share_map_outgoing(curmap->get_cluster_inst(from));
+	if (is_active()) {
+	  Connection *con = service.get_con_osd_cluster(from, curmap->get_epoch());
+	  if (con) {
+	    _share_map_outgoing(from, con);
+	    con->put();
+	  }
+	}
       }
     }
     break;
@@ -1932,8 +1937,13 @@ void OSD::handle_osd_ping(MOSDPing *m)
       if (m->map_epoch &&
 	  curmap->is_up(from)) {
 	note_peer_epoch(from, m->map_epoch);
-	if (is_active())
-	  _share_map_outgoing(curmap->get_cluster_inst(from));
+	if (is_active()) {
+	  Connection *con = service.get_con_osd_cluster(from, curmap->get_epoch());
+	  if (con) {
+	    _share_map_outgoing(from, con);
+	    con->put();
+	  }
+	}
       }
 
       // Cancel false reports
@@ -3019,25 +3029,21 @@ bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch,
 }
 
 
-void OSD::_share_map_outgoing(const entity_inst_t& inst,
-			      OSDMapRef map)
+void OSD::_share_map_outgoing(int peer, Connection *con, OSDMapRef map)
 {
   if (!map)
     map = service.get_osdmap();
-  assert(inst.name.is_osd());
-
-  int peer = inst.name.num();
 
   // send map?
   epoch_t pe = get_peer_epoch(peer);
   if (pe) {
     if (pe < map->get_epoch()) {
-      send_incremental_map(pe, inst);
+      send_incremental_map(pe, con);
       note_peer_epoch(peer, map->get_epoch());
     } else
-      dout(20) << "_share_map_outgoing " << inst << " already has epoch " << pe << dendl;
+      dout(20) << "_share_map_outgoing " << con << " already has epoch " << pe << dendl;
   } else {
-    dout(20) << "_share_map_outgoing " << inst << " don't know epoch, doing nothing" << dendl;
+    dout(20) << "_share_map_outgoing " << con << " don't know epoch, doing nothing" << dendl;
     // no idea about peer's epoch.
     // ??? send recent ???
     // do nothing.
@@ -4682,7 +4688,7 @@ void OSD::do_notifies(
       continue;
     Connection *con =
       cluster_messenger->get_connection(curmap->get_cluster_inst(it->first));
-    _share_map_outgoing(curmap->get_cluster_inst(it->first), curmap);
+    _share_map_outgoing(it->first, con, curmap);
     if ((con->features & CEPH_FEATURE_INDEP_PG_MAP)) {
       dout(7) << "do_notify osd." << it->first
 	      << " on " << it->second.size() << " PGs" << dendl;
@@ -4722,7 +4728,7 @@ void OSD::do_queries(map< int, map<pg_t,pg_query_t> >& query_map,
     int who = pit->first;
     Connection *con =
       cluster_messenger->get_connection(curmap->get_cluster_inst(pit->first));
-    _share_map_outgoing(curmap->get_cluster_inst(who), curmap);
+    _share_map_outgoing(who, con, curmap);
     if ((con->features & CEPH_FEATURE_INDEP_PG_MAP)) {
       dout(7) << "do_queries querying osd." << who
 	      << " on " << pit->second.size() << " PGs" << dendl;
@@ -4761,7 +4767,7 @@ void OSD::do_infos(map<int,vector<pair<pg_notify_t, pg_interval_map_t> > >& info
     }
     Connection *con =
       cluster_messenger->get_connection(curmap->get_cluster_inst(p->first));
-    _share_map_outgoing(curmap->get_cluster_inst(p->first), curmap);
+    _share_map_outgoing(p->first, con, curmap);
     if ((con->features & CEPH_FEATURE_INDEP_PG_MAP)) {
       MOSDPGInfo *m = new MOSDPGInfo(curmap->get_epoch());
       m->pg_list = p->second;
@@ -5147,10 +5153,14 @@ void OSD::handle_pg_query(OpRequestRef op)
     pg_info_t empty(pgid);
     if (it->second.type == pg_query_t::LOG ||
 	it->second.type == pg_query_t::FULLLOG) {
-      MOSDPGLog *mlog = new MOSDPGLog(osdmap->get_epoch(), empty,
-				      it->second.epoch_sent);
-      _share_map_outgoing(osdmap->get_cluster_inst(from));
-      service.send_message_osd_cluster(from, mlog, osdmap->get_epoch());
+      Connection *con = service.get_con_osd_cluster(from, osdmap->get_epoch());
+      if (con) {
+	MOSDPGLog *mlog = new MOSDPGLog(osdmap->get_epoch(), empty,
+					it->second.epoch_sent);
+	_share_map_outgoing(from, con, osdmap);
+	cluster_messenger->send_message(mlog, con);
+	con->put();
+      }
     } else {
       notify_list[from].push_back(make_pair(pg_notify_t(it->second.epoch_sent,
 							osdmap->get_epoch(),

@@ -710,7 +710,7 @@ private:
 
   bool _share_map_incoming(const entity_inst_t& inst, epoch_t epoch,
 			   Session *session = 0);
-  void _share_map_outgoing(const entity_inst_t& inst,
+  void _share_map_outgoing(int peer, Connection *con,
 			   OSDMapRef map = OSDMapRef());
 
   void wait_for_new_map(OpRequestRef op);

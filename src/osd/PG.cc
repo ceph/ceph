@@ -4222,9 +4222,14 @@ void PG::fulfill_log(int from, const pg_query_t &query, epoch_t query_epoch)
 
   dout(10) << " sending " << mlog->log << " " << mlog->missing << dendl;
 
-  osd->osd->_share_map_outgoing(get_osdmap()->get_cluster_inst(from),
-				get_osdmap());
-  osd->send_message_osd_cluster(from, mlog, get_osdmap()->get_epoch());
+  Connection *con = osd->get_con_osd_cluster(from, get_osdmap()->get_epoch());
+  if (con) {
+    osd->osd->_share_map_outgoing(from, con, get_osdmap());
+    osd->cluster_messenger->send_message(mlog, con);
+    con->put();
+  } else {
+    mlog->put();
+  }
 }
 
 
