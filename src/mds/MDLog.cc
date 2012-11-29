@@ -415,7 +415,7 @@ void MDLog::_expired(LogSegment *ls)
 {
   dout(5) << "_expired segment " << ls->offset << " " << ls->num_events << " events" << dendl;
 
-  if (!capped && ls == get_current_segment()) {
+  if (!capped && ls == peek_current_segment()) {
     dout(5) << "_expired not expiring " << ls->offset << ", last one and !capped" << dendl;
   } else {
     // expired.
