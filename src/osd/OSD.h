@@ -183,7 +183,7 @@ public:
   ClassHandler  *&class_handler;
 
   // -- superblock --
-  Mutex publish_lock;
+  Mutex publish_lock, pre_publish_lock;
   OSDSuperblock superblock;
   OSDSuperblock get_superblock() {
     Mutex::Locker l(publish_lock);
@@ -193,24 +193,38 @@ public:
     Mutex::Locker l(publish_lock);
     superblock = block;
   }
-  OSDMapRef osdmap, next_osdmap;
+
+  int get_nodeid() const { return whoami; }
+
+  OSDMapRef osdmap;
   OSDMapRef get_osdmap() {
     Mutex::Locker l(publish_lock);
     return osdmap;
   }
-  void pre_publish_map(OSDMapRef map) {
-    Mutex::Locker l(publish_lock);
-    next_osdmap = map;
-  }
   void publish_map(OSDMapRef map) {
     Mutex::Locker l(publish_lock);
     osdmap = map;
-    next_osdmap = map;
   }
 
-  int get_nodeid() const { return whoami; }
-
-  // -- message helpers --
+  /*
+   * osdmap - current published amp
+   * next_osdmap - pre_published map that is about to be published.
+   *
+   * We use the next_osdmap to send messages and initiate connections,
+   * but only if the target is the same instance as the one in the map
+   * epoch the current user is working from (i.e., the result is
+   * equivalent to what is in next_osdmap).
+   *
+   * This allows the helpers to start ignoring osds that are about to
+   * go down, and let OSD::handle_osd_map()/note_down_osd() mark them
+   * down, without worrying about reopening connections from threads
+   * working from old maps.
+   */
+  OSDMapRef next_osdmap;
+  void pre_publish_map(OSDMapRef map) {
+    Mutex::Locker l(pre_publish_lock);
+    next_osdmap = map;
+  }
   Connection *get_con_osd_cluster(int peer, epoch_t from_epoch);
   Connection *get_con_osd_hb(int peer, epoch_t from_epoch);
   void send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch);
