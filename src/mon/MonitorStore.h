@@ -18,6 +18,8 @@
 #include "include/types.h"
 #include "include/buffer.h"
 
+#include "common/compiler_extensions.h"
+
 #include <iosfwd>
 #include <string.h>
 #include <errno.h>
@@ -38,16 +40,16 @@ public:
   void sync();
 
   // ints (stored as ascii)
-  version_t get_int(const char *a, const char *b=0);
+  version_t get_int(const char *a, const char *b=0) WARN_UNUSED_RESULT;
   void put_int(version_t v, const char *a, const char *b=0);
 
-  version_t get_global_version(const char *a, version_t b);
+  version_t get_global_version(const char *a, version_t b) WARN_UNUSED_RESULT;
   void put_global_version(const char *a, version_t b, version_t gv);
 
   // buffers
   // ss and sn varieties.
   bool exists_bl_ss(const char *a, const char *b=0);
-  int get_bl_ss(bufferlist& bl, const char *a, const char *b);
+  int get_bl_ss(bufferlist& bl, const char *a, const char *b) WARN_UNUSED_RESULT;
   void get_bl_ss_safe(bufferlist& bl, const char *a, const char *b) {
     int ret = get_bl_ss(bl, a, b);
     assert (ret >= 0 || ret == -ENOENT);
@@ -63,7 +65,7 @@ public:
     snprintf(bs, sizeof(bs), "%llu", (unsigned long long)b);
     return exists_bl_ss(a, bs);
   }
-  int get_bl_sn(bufferlist& bl, const char *a, version_t b) {
+  int get_bl_sn(bufferlist& bl, const char *a, version_t b) WARN_UNUSED_RESULT {
     char bs[20];
     snprintf(bs, sizeof(bs), "%llu", (unsigned long long)b);
     return get_bl_ss(bl, a, bs);
