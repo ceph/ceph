@@ -5902,7 +5902,7 @@ void Client::getcwd(string& dir)
   ldout(cct, 10) << "getcwd " << *cwd << dendl;
 
   Inode *in = cwd;
-  while (in->ino != CEPH_INO_ROOT) {
+  while (in != root) {
     assert(in->dn_set.size() < 2); // dirs can't be hard-linked
     Dentry *dn = in->get_first_parent();
     if (!dn) {
