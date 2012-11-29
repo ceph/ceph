@@ -193,17 +193,27 @@ public:
     Mutex::Locker l(publish_lock);
     superblock = block;
   }
-  OSDMapRef osdmap;
+  OSDMapRef osdmap, next_osdmap;
   OSDMapRef get_osdmap() {
     Mutex::Locker l(publish_lock);
     return osdmap;
   }
+  void pre_publish_map(OSDMapRef map) {
+    Mutex::Locker l(publish_lock);
+    next_osdmap = map;
+  }
   void publish_map(OSDMapRef map) {
     Mutex::Locker l(publish_lock);
     osdmap = map;
+    next_osdmap = map;
   }
 
   int get_nodeid() const { return whoami; }
+
+  // -- message helpers --
+  Connection *get_con_osd_cluster(int peer, epoch_t from_epoch);
+  Connection *get_con_osd_hb(int peer, epoch_t from_epoch);
+  void send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch);
 
   // -- scrub scheduling --
   Mutex sched_scrub_lock;
