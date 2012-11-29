@@ -17,7 +17,7 @@ do not need to generate the keys again.
 For additional information, see our `Cephx Intro`_ and `ceph-authtool manpage`_.
 
 .. _Cephx Intro: ../auth-intro
-.. _ceph-authtool manpage: ../../man/8/ceph-authtool/
+.. _ceph-authtool manpage: ../../../man/8/ceph-authtool
 
 
 Configuring Cephx
@@ -70,7 +70,7 @@ following directory::
 
 See `Enabling Cephx`_ step 2 and 3 for stepwise details to enable ``cephx``.
 
-.. _ceph-authtool: ../../man/8/ceph-authtool/
+.. _ceph-authtool: ../../man/ceph-authtool/
 
 
 .. _enable-cephx:
@@ -382,4 +382,4 @@ for authentication::
 foregoing flag** at the nearest practical time so that you may avail yourself 
 of the enhanced authentication.
 
-.. _Ceph configuration: ../../config-cluster/ceph-conf
+.. _Ceph configuration: ../../configuration/ceph-conf

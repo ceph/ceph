@@ -43,4 +43,6 @@ one API and retrieve it with the other.
 	Swift API <swift/index>
 	Admin API <admin/index>
 	troubleshooting
+	Manpage radosgw <../../man/8/radosgw>
+	Manpage radosgw-admin <../../man/8/radosgw-admin>
 	

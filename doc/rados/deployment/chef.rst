@@ -8,7 +8,7 @@ on using ``knife``.  For Chef installation instructions, see `Installing Chef`_.
 .. _clonecbs:
 
 Clone the Required Cookbooks
-----------------------------
+============================
 
 To get the cookbooks for Ceph, clone them from git.::
 
@@ -19,7 +19,7 @@ To get the cookbooks for Ceph, clone them from git.::
 .. _addcbpaths:
 
 Add the Required Cookbook Paths
--------------------------------
+===============================
 
 If you added a default cookbook path when you installed Chef, ``knife``
 may be able to upload the cookbook you've cloned to your cookbook path
@@ -42,7 +42,7 @@ Becomes::
 .. _installcbs:
 
 Install the Cookbooks
----------------------
+=====================
 
 To install Ceph, you must upload the Ceph cookbooks and the Apache cookbooks
 (for use with RADOSGW) to your Chef server. :: 
@@ -52,7 +52,7 @@ To install Ceph, you must upload the Ceph cookbooks and the Apache cookbooks
 .. _configcephenv:
 
 Configure your Ceph Environment
--------------------------------
+===============================
 
 The Chef server can support installation of software for multiple environments.
 The environment you create for Ceph requires an ``fsid``, the secret for
@@ -121,7 +121,7 @@ wish to use (e.g., ``master``).
 .. configroles:
 
 Configure the Roles
--------------------
+===================
 
 Navigate to the Ceph cookbooks directory. :: 
 
@@ -138,7 +138,7 @@ their respective role files. ::
 .. _confignodes:
 
 Configure Nodes
----------------
+===============
 
 You must configure each node you intend to include in your Ceph cluster. 
 Identify nodes for your Ceph cluster. ::
@@ -189,7 +189,7 @@ key to the host name for the node. ::
 .. _prepdisks:
 
 Prepare OSD Disks
------------------
+=================
 
 Configuring a node with an OSD role tells Chef that the node will run at
 least one OSD. However, you may run many OSDs on one host. For example, 
@@ -230,7 +230,7 @@ Finally, simulate a hotplug event. ::
 .. _runchefclient:
 
 Run ``chef-client`` on each Node
---------------------------------
+================================
 
 Once you have completed the preceding steps, you must run ``chef-client`` 
 on each node. For example::
@@ -240,7 +240,7 @@ on each node. For example::
 .. _proceedtoops:
 
 Proceed to Operating the Cluster
---------------------------------
+================================
 
 Once you complete the deployment, you may begin operating your cluster.
 See `Operating a Cluster`_ for details.
