@@ -73,7 +73,8 @@ void Paxos::collect(version_t oldpn)
   if (mon->store->exists_bl_sn(machine_name, last_committed+1)) {
     uncommitted_v = last_committed+1;
     uncommitted_pn = accepted_pn;
-    mon->store->get_bl_sn(uncommitted_value, machine_name, last_committed+1);
+    mon->store->get_bl_sn_safe(uncommitted_value, machine_name, last_committed+1);
+    assert(uncommitted_value.length());
     dout(10) << "learned uncommitted " << (last_committed+1)
 	     << " (" << uncommitted_value.length() << " bytes) from myself" 
 	     << dendl;
@@ -146,7 +147,7 @@ void Paxos::handle_collect(MMonPaxos *collect)
   //  (it'll be at last_committed+1)
   bufferlist bl;
   if (mon->store->exists_bl_sn(machine_name, last_committed+1)) {
-    mon->store->get_bl_sn(bl, machine_name, last_committed+1);
+    mon->store->get_bl_sn_safe(bl, machine_name, last_committed+1);
     assert(bl.length() > 0);
     dout(10) << " sharing our accepted but uncommitted value for " 
 	     << last_committed+1 << " (" << bl.length() << " bytes)" << dendl;
@@ -184,7 +185,8 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed,
   // include incrementals
   for ( ; v <= last_committed; v++) {
     if (mon->store->exists_bl_sn(machine_name, v)) {
-      mon->store->get_bl_sn(m->values[v], machine_name, v);
+      mon->store->get_bl_sn_safe(m->values[v], machine_name, v);
+      assert(m->values[v].length());
       m->gv[v] = mon->store->get_global_version(machine_name, v);
       dout(10) << " sharing " << v << " (" 
 	       << m->values[v].length() << " bytes)" << dendl;
@@ -968,7 +970,7 @@ bool Paxos::is_readable(version_t v)
 
 bool Paxos::read(version_t v, bufferlist &bl)
 {
-  if (!mon->store->get_bl_sn(bl, machine_name, v))
+  if (mon->store->get_bl_sn(bl, machine_name, v) <= 0)
     return false;
   return true;
 }
@@ -1051,7 +1053,8 @@ void Paxos::stash_latest(version_t v, bufferlist& bl)
 version_t Paxos::get_stashed(bufferlist& bl)
 {
   bufferlist full;
-  if (mon->store->get_bl_ss(full, machine_name, "latest") <= 0) {
+  mon->store->get_bl_ss_safe(full, machine_name, "latest");
+  if (!full.length()) {
     dout(10) << "get_stashed not found" << dendl;
     return 0;
   }

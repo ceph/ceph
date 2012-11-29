@@ -75,7 +75,7 @@ void OSDMonitor::create_initial()
   OSDMap newmap;
 
   bufferlist bl;
-  mon->store->get_bl_ss(bl, "mkfs", "osdmap");
+  mon->store->get_bl_ss_safe(bl, "mkfs", "osdmap");
   if (bl.length()) {
     newmap.decode(bl);
     newmap.set_fsid(mon->monmap->fsid);
@@ -1309,7 +1309,8 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
   if (first < paxos->get_first_committed()) {
     first = paxos->get_first_committed();
     bufferlist bl;
-    mon->store->get_bl_sn(bl, "osdmap_full", first);
+    mon->store->get_bl_sn_safe(bl, "osdmap_full", first);
+    assert(bl.length());
     dout(20) << "send_incremental starting with base full " << first << " " << bl.length() << " bytes" << dendl;
     MOSDMap *m = new MOSDMap(osdmap.get_fsid());
     m->oldest_map = paxos->get_first_committed();
@@ -1336,7 +1337,8 @@ void OSDMonitor::send_incremental(epoch_t first, entity_inst_t& dest, bool oneti
   if (first < paxos->get_first_committed()) {
     first = paxos->get_first_committed();
     bufferlist bl;
-    mon->store->get_bl_sn(bl, "osdmap_full", first);
+    mon->store->get_bl_sn_safe(bl, "osdmap_full", first);
+    assert(bl.length());
     dout(20) << "send_incremental starting with base full " << first << " " << bl.length() << " bytes" << dendl;
     MOSDMap *m = new MOSDMap(osdmap.get_fsid());
     m->oldest_map = paxos->get_first_committed();
@@ -1701,7 +1703,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       OSDMap *p = &osdmap;
       if (epoch) {
 	bufferlist b;
-	mon->store->get_bl_sn(b,"osdmap_full", epoch);
+	mon->store->get_bl_sn_safe(b,"osdmap_full", epoch);
 	if (!b.length()) {
 	  p = 0;
 	  r = -ENOENT;

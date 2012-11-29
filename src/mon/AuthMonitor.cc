@@ -96,7 +96,7 @@ void AuthMonitor::create_initial()
 
   KeyRing keyring;
   bufferlist bl;
-  mon->store->get_bl_ss(bl, "mkfs", "keyring");
+  mon->store->get_bl_ss_safe(bl, "mkfs", "keyring");
   bufferlist::iterator p = bl.begin();
   ::decode(keyring, p);
 

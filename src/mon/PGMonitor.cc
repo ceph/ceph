@@ -579,7 +579,7 @@ void PGMonitor::check_osd_map(epoch_t epoch)
        e++) {
     dout(10) << "check_osd_map applying osdmap e" << e << " to pg_map" << dendl;
     bufferlist bl;
-    mon->store->get_bl_sn(bl, "osdmap", e);
+    mon->store->get_bl_sn_safe(bl, "osdmap", e);
     assert(bl.length());
     OSDMap::Incremental inc(bl);
     for (map<int32_t,uint32_t>::iterator p = inc.new_weight.begin();
