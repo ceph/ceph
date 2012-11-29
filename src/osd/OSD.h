@@ -753,7 +753,9 @@ private:
 
   MOSDMap *build_incremental_map_msg(epoch_t from, epoch_t to);
   void send_incremental_map(epoch_t since, const entity_inst_t& inst, bool lazy=false);
+  void send_incremental_map(epoch_t since, Connection *con);
   void send_map(MOSDMap *m, const entity_inst_t& inst, bool lazy);
+  void send_map(MOSDMap *m, Connection *con);
 
 protected:
   // -- placement groups --
