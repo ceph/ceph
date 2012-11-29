@@ -4068,6 +4068,14 @@ void OSD::send_map(MOSDMap *m, const entity_inst_t& inst, bool lazy)
     msgr->send_message(m, inst);
 }
 
+void OSD::send_map(MOSDMap *m, Connection *con)
+{
+  Messenger *msgr = client_messenger;
+  if (entity_name_t::TYPE_OSD == con->get_peer_type())
+    msgr = cluster_messenger;
+  msgr->send_message(m, con);
+}
+
 void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool lazy)
 {
   dout(10) << "send_incremental_map " << since << " -> " << osdmap->get_epoch()
@@ -4090,6 +4098,32 @@ void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool la
       to = since + g_conf->osd_map_message_max;
     MOSDMap *m = build_incremental_map_msg(since, to);
     send_map(m, inst, lazy);
+    since = to;
+  }
+}
+
+void OSD::send_incremental_map(epoch_t since, Connection *con)
+{
+  dout(10) << "send_incremental_map " << since << " -> " << osdmap->get_epoch()
+           << " to " << con << " " << con->get_peer_addr() << dendl;
+
+  if (since < superblock.oldest_map) {
+    // just send latest full map
+    MOSDMap *m = new MOSDMap(monc->get_fsid());
+    m->oldest_map = superblock.oldest_map;
+    m->newest_map = superblock.newest_map;
+    epoch_t e = osdmap->get_epoch();
+    get_map_bl(e, m->maps[e]);
+    send_map(m, con);
+    return;
+  }
+
+  while (since < osdmap->get_epoch()) {
+    epoch_t to = osdmap->get_epoch();
+    if (to - since > (epoch_t)g_conf->osd_map_message_max)
+      to = since + g_conf->osd_map_message_max;
+    MOSDMap *m = build_incremental_map_msg(since, to);
+    send_map(m, con);
     since = to;
   }
 }
