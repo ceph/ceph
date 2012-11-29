@@ -1780,9 +1780,12 @@ void OSD::_add_heartbeat_peer(int p)
 
   map<int,HeartbeatInfo>::iterator i = heartbeat_peers.find(p);
   if (i == heartbeat_peers.end()) {
+    Connection *con = service.get_con_osd_hb(p, osdmap->get_epoch());
+    if (!con)
+      return;
     hi = &heartbeat_peers[p];
-    hi->inst = osdmap->get_hb_inst(p);
-    hi->con = hbclient_messenger->get_connection(hi->inst);
+    hi->con = con;
+    hi->peer = p;
     hi->con->set_priv(new HeartbeatSession(p));
     dout(10) << "_add_heartbeat_peer: new peer osd." << p
 	     << " " << hi->con->get_peer_addr() << dendl;
@@ -2073,8 +2076,14 @@ bool OSD::heartbeat_reset(Connection *con)
     map<int,HeartbeatInfo>::iterator p = heartbeat_peers.find(s->peer);
     if (p != heartbeat_peers.end() &&
 	p->second.con == con) {
+      Connection *newcon = service.get_con_osd_hb(p->second.peer, p->second.epoch);
+      if (!newcon) {
+	dout(10) << "heartbeat_reset reopen failed hb con " << con << " but failed to reopen" << dendl;
+	s->put();
+	return true;
+      }
       dout(10) << "heartbeat_reset reopen failed hb con " << con << dendl;
-      p->second.con = hbclient_messenger->get_connection(p->second.inst);
+      p->second.con = newcon;
       p->second.con->set_priv(s);
     } else {
       dout(10) << "heartbeat_reset closing (old) failed hb con " << con << dendl;

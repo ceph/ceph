@@ -478,7 +478,7 @@ private:
   // -- heartbeat --
   /// information about a heartbeat peer
   struct HeartbeatInfo {
-    entity_inst_t inst; ///< peer
+    int peer;           ///< peer
     Connection *con;    ///< peer connection
     utime_t first_tx;   ///< time we sent our first ping request
     utime_t last_tx;    ///< last time we sent a ping request
