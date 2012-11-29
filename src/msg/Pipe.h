@@ -89,13 +89,7 @@ class DispatchQueue;
 	delay_queue.push_back(make_pair(release, m));
 	delay_cond.Signal();
       }
-      void discard() {
-	Mutex::Locker l(delay_lock);
-	while (!delay_queue.empty()) {
-	  delay_queue.front().second->put();
-	  delay_queue.pop_front();
-	}
-      }
+      void discard();
       void stop() {
 	delay_lock.Lock();
 	stop_delayed_delivery = true;
