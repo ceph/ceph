@@ -31,7 +31,9 @@ struct hobject_t {
   object_t oid;
   snapid_t snap;
   uint32_t hash;
+private:
   bool max;
+public:
   int64_t pool;
   string nspace;
 
@@ -56,6 +58,15 @@ public:
     oid(soid.oid), snap(soid.snap), hash(hash), max(false),
     pool(pool),
     key(soid.oid.name == key ? string() : key) {}
+
+  /// @return min hobject_t ret s.t. ret.hash == this->hash
+  hobject_t get_boundary() const {
+    if (is_max())
+      return *this;
+    hobject_t ret;
+    ret.hash = hash;
+    return ret;
+  }
 
   /* Do not use when a particular hash function is needed */
   explicit hobject_t(const sobject_t &o) :
@@ -108,6 +119,12 @@ public:
   void decode(json_spirit::Value& v);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<hobject_t*>& o);
+  friend bool operator<(const hobject_t&, const hobject_t&);
+  friend bool operator>(const hobject_t&, const hobject_t&);
+  friend bool operator<=(const hobject_t&, const hobject_t&);
+  friend bool operator>=(const hobject_t&, const hobject_t&);
+  friend bool operator==(const hobject_t&, const hobject_t&);
+  friend bool operator!=(const hobject_t&, const hobject_t&);
 };
 WRITE_CLASS_ENCODER(hobject_t)
 
