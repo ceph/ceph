@@ -31,7 +31,9 @@ struct hobject_t {
   object_t oid;
   snapid_t snap;
   uint32_t hash;
+private:
   bool max;
+public:
   int64_t pool;
   string nspace;
 
@@ -108,6 +110,12 @@ public:
   void decode(json_spirit::Value& v);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<hobject_t*>& o);
+  friend bool operator<(const hobject_t&, const hobject_t&);
+  friend bool operator>(const hobject_t&, const hobject_t&);
+  friend bool operator<=(const hobject_t&, const hobject_t&);
+  friend bool operator>=(const hobject_t&, const hobject_t&);
+  friend bool operator==(const hobject_t&, const hobject_t&);
+  friend bool operator!=(const hobject_t&, const hobject_t&);
 };
 WRITE_CLASS_ENCODER(hobject_t)
 
