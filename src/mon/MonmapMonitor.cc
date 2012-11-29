@@ -257,9 +257,14 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
 	  r = -EINVAL;
 	  goto out;
 	}
-        stringstream ss;
+	if (target >= (long)mon->monmap->size()) {
+	  ss << "mon." << target << " does not exist";
+	  r = -ENOENT;
+	  goto out;
+	}
 
 	// send to target, or handle if it's me
+	stringstream ss;
 	MMonCommand *newm = new MMonCommand(m->fsid, m->version);
 	newm->cmd.insert(newm->cmd.begin(), m->cmd.begin() + 3, m->cmd.end());
 	mon->messenger->send_message(newm, mon->monmap->get_inst(target));

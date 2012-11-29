@@ -29,7 +29,7 @@ using namespace std;
 #define SECRET_KEY_LEN 40
 #define PUBLIC_ID_LEN 20
 
-RGWRados *store;
+static RGWRados *store = NULL;
 
 void _usage() 
 {
@@ -657,6 +657,15 @@ static bool bucket_object_check_filter(const string& name)
   return rgw_obj::translate_raw_obj_to_obj_in_ns(obj, ns);
 }
 
+class StoreDestructor {
+  RGWRados *store;
+public:
+  StoreDestructor(RGWRados *_s) : store(_s) {}
+  ~StoreDestructor() {
+    RGWStoreManager::close_storage(store);
+  }
+};
+
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -872,6 +881,8 @@ int main(int argc, char **argv)
     cerr << "couldn't init storage provider" << std::endl;
     return 5; //EIO
   }
+
+  StoreDestructor store_destructor(store);
 
   if (opt_cmd != OPT_USER_CREATE && 
       opt_cmd != OPT_LOG_SHOW && opt_cmd != OPT_LOG_LIST && opt_cmd != OPT_LOG_RM && 

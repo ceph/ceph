@@ -33,7 +33,7 @@ OPTION(fatal_signal_handlers, OPT_BOOL, true)
 
 OPTION(log_file, OPT_STR, "/var/log/ceph/$cluster-$name.log")
 OPTION(log_max_new, OPT_INT, 1000)
-OPTION(log_max_recent, OPT_INT, 1000000)
+OPTION(log_max_recent, OPT_INT, 100000)
 OPTION(log_to_stderr, OPT_BOOL, true)
 OPTION(err_to_stderr, OPT_BOOL, true)
 OPTION(log_to_syslog, OPT_BOOL, false)
@@ -181,6 +181,7 @@ OPTION(client_oc_max_dirty, OPT_INT, 1024*1024* 100)    // MB * n  (dirty OR tx.
 OPTION(client_oc_target_dirty, OPT_INT, 1024*1024* 8) // target dirty (keep this smallish)
 OPTION(client_oc_max_dirty_age, OPT_DOUBLE, 5.0)      // max age in cache before writeback
 OPTION(client_oc_max_objects, OPT_INT, 1000)      // max objects in cache
+OPTION(client_debug_force_sync_read, OPT_BOOL, false)     // always read synchronously (go to osds)
 // note: the max amount of "in flight" dirty data is roughly (max - target)
 OPTION(fuse_use_invalidate_cb, OPT_BOOL, false) // use fuse 2.8+ invalidate callback to keep page cache consistent
 OPTION(fuse_big_writes, OPT_BOOL, true)
