@@ -9,8 +9,8 @@ using Ceph's debugging and logging. To activate and configure Ceph's debug
 logging,  refer to `Ceph Logging and Debugging`_. For additional logging
 settings, refer to the `Logging and Debugging Config Reference`_. 
 
-.. _Ceph Logging and Debugging: ../../config-cluster/ceph-conf#ceph-logging-and-debugging
-.. _Logging and Debugging Config Reference: ../../config-cluster/log-and-debug-ref
+.. _Ceph Logging and Debugging: ../../configuration/ceph-conf#ceph-logging-and-debugging
+.. _Logging and Debugging Config Reference: ../../configuration/log-and-debug-ref
 
 You can change the logging settings at runtime so that you don't have to 
 stop and restart the cluster. Refer to `Ceph Configuration - Runtime Changes`_
@@ -22,4 +22,4 @@ Valgrind. You should only use Valgrind when developing or debugging Ceph.
 Valgrind is computationally expensive, and will slow down your system otherwise. 
 Valgrind messages are logged to ``stderr``. 
 
-.. _Ceph Configuration - Runtime Changes: ../../config-cluster/ceph-conf#ceph-runtime-config
+.. _Ceph Configuration - Runtime Changes: ../../configuration/ceph-conf#ceph-runtime-config
