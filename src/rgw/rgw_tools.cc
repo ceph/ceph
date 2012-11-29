@@ -10,7 +10,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-#define READ_CHUNK_LEN (16 * 1024)
+#define READ_CHUNK_LEN (512 * 1024)
 
 static map<string, string> ext_mime_map;
 
@@ -41,25 +41,24 @@ int rgw_get_obj(RGWRados *rgwstore, void *ctx, rgw_bucket& bucket, string& key, 
   bufferlist::iterator iter;
   int request_len = READ_CHUNK_LEN;
   rgw_obj obj(bucket, key);
-  ret = rgwstore->prepare_get_obj(ctx, obj, NULL, NULL, pattrs, NULL,
-                                  NULL, NULL, NULL, NULL, NULL, NULL, &handle, &err);
-  if (ret < 0)
-    return ret;
-
   do {
-    ret = rgwstore->get_obj(ctx, &handle, obj, bl, 0, request_len - 1);
+    ret = rgwstore->prepare_get_obj(ctx, obj, NULL, NULL, pattrs, NULL,
+                                  NULL, NULL, NULL, NULL, NULL, NULL, &handle, &err);
     if (ret < 0)
-      goto done;
+      return ret;
+
+    ret = rgwstore->get_obj(ctx, &handle, obj, bl, 0, request_len - 1);
+    rgwstore->finish_get_obj(&handle);
+    if (ret < 0)
+      return ret;
+
     if (ret < request_len)
       break;
     bl.clear();
     request_len *= 2;
   } while (true);
 
-  ret = 0;
-done:
-  rgwstore->finish_get_obj(&handle);
-  return ret;
+  return 0;
 }
 
 void parse_mime_map_line(const char *start, const char *end)
