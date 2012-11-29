@@ -2445,7 +2445,11 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 
       // optional uuid provided?
       uuid_d uuid;
-      if (m->cmd.size() > 2 && uuid.parse(m->cmd[2].c_str())) {
+      if (m->cmd.size() > 2) {
+        if (!uuid.parse(m->cmd[2].c_str())) {
+          err = -EINVAL;
+          goto out;
+        }
 	dout(10) << " osd create got uuid " << uuid << dendl;
 	i = osdmap.identify_osd(uuid);
 	if (i >= 0) {
