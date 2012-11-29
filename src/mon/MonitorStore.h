@@ -18,16 +18,17 @@
 #include "include/types.h"
 #include "include/buffer.h"
 
+#include "common/compiler_extensions.h"
+
 #include <iosfwd>
 #include <string.h>
+#include <errno.h>
 
 class MonitorStore {
   string dir;
   int lock_fd;
 
-  int write_bl_ss_impl(bufferlist& bl, const char *a, const char *b,
-		       bool append);
-  int write_bl_ss(bufferlist& bl, const char *a, const char *b,
+  void write_bl_ss(bufferlist& bl, const char *a, const char *b,
 		  bool append);
 public:
   MonitorStore(const std::string &d) : dir(d), lock_fd(-1) { }
@@ -39,36 +40,44 @@ public:
   void sync();
 
   // ints (stored as ascii)
-  version_t get_int(const char *a, const char *b=0);
+  version_t get_int(const char *a, const char *b=0) WARN_UNUSED_RESULT;
   void put_int(version_t v, const char *a, const char *b=0);
 
-  version_t get_global_version(const char *a, version_t b);
+  version_t get_global_version(const char *a, version_t b) WARN_UNUSED_RESULT;
   void put_global_version(const char *a, version_t b, version_t gv);
 
   // buffers
   // ss and sn varieties.
   bool exists_bl_ss(const char *a, const char *b=0);
-  int get_bl_ss(bufferlist& bl, const char *a, const char *b);
-  int put_bl_ss(bufferlist& bl, const char *a, const char *b) {
-    return write_bl_ss(bl, a, b, false);
+  int get_bl_ss(bufferlist& bl, const char *a, const char *b) WARN_UNUSED_RESULT;
+  void get_bl_ss_safe(bufferlist& bl, const char *a, const char *b) {
+    int ret = get_bl_ss(bl, a, b);
+    assert (ret >= 0 || ret == -ENOENT);
   }
-  int append_bl_ss(bufferlist& bl, const char *a, const char *b) {
-    return write_bl_ss(bl, a, b, true);
+  void put_bl_ss(bufferlist& bl, const char *a, const char *b) {
+    write_bl_ss(bl, a, b, false);
+  }
+  void append_bl_ss(bufferlist& bl, const char *a, const char *b) {
+    write_bl_ss(bl, a, b, true);
   }
   bool exists_bl_sn(const char *a, version_t b) {
     char bs[20];
     snprintf(bs, sizeof(bs), "%llu", (unsigned long long)b);
     return exists_bl_ss(a, bs);
   }
-  int get_bl_sn(bufferlist& bl, const char *a, version_t b) {
+  int get_bl_sn(bufferlist& bl, const char *a, version_t b) WARN_UNUSED_RESULT {
     char bs[20];
     snprintf(bs, sizeof(bs), "%llu", (unsigned long long)b);
     return get_bl_ss(bl, a, bs);
   }
-  int put_bl_sn(bufferlist& bl, const char *a, version_t b) {
+  void get_bl_sn_safe(bufferlist& bl, const char *a, version_t b) {
+    int ret = get_bl_sn(bl, a, b);
+    assert(ret >= 0 || ret == -ENOENT);
+  }
+  void put_bl_sn(bufferlist& bl, const char *a, version_t b) {
     char bs[20];
     snprintf(bs, sizeof(bs), "%llu", (unsigned long long)b);
-    return put_bl_ss(bl, a, bs);
+    put_bl_ss(bl, a, bs);
   }
   /**
    * Put a whole set of values efficiently and safely.
@@ -77,16 +86,16 @@ public:
    * @param vals - map of int name -> values
    * @return 0 for success or negative error code
    */
-  int put_bl_sn_map(const char *a,
+  void put_bl_sn_map(const char *a,
 		    map<version_t,bufferlist>::iterator start,
 		    map<version_t,bufferlist>::iterator end,
 		    map<version_t,version_t> *gvmap);
 
-  int erase_ss(const char *a, const char *b);
-  int erase_sn(const char *a, version_t b) {
+  void erase_ss(const char *a, const char *b);
+  void erase_sn(const char *a, version_t b) {
     char bs[20];
     snprintf(bs, sizeof(bs), "%llu", (unsigned long long)b);
-    return erase_ss(a, bs);
+    erase_ss(a, bs);
   }
 
   /*

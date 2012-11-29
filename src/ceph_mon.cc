@@ -283,14 +283,14 @@ int main(int argc, const char **argv)
   {
     bufferlist mapbl;
     bufferlist latest;
-    store.get_bl_ss(latest, "monmap", "latest");
+    store.get_bl_ss_safe(latest, "monmap", "latest");
     if (latest.length() > 0) {
       bufferlist::iterator p = latest.begin();
       version_t v;
       ::decode(v, p);
       ::decode(mapbl, p);
     } else {
-      store.get_bl_ss(mapbl, "mkfs", "monmap");
+      store.get_bl_ss_safe(mapbl, "mkfs", "monmap");
       if (mapbl.length() == 0) {
 	cerr << "mon fs missing 'monmap/latest' and 'mkfs/monmap'" << std::endl;
 	exit(1);

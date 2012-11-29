@@ -81,6 +81,11 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon) {
 
 long parse_pos_long(const char *s, ostream *pss)
 {
+  if (*s == '-' || *s == '+') {
+    *pss << "expected numerical value, got: " << s;
+    return -EINVAL;
+  }
+
   string err;
   long r = strict_strtol(s, 10, &err);
   if ((r == 0) && !err.empty()) {
@@ -360,7 +365,7 @@ int Monitor::check_features(MonitorStore *store)
   CompatSet ondisk;
 
   bufferlist features;
-  store->get_bl_ss(features, COMPAT_SET_LOC, 0);
+  store->get_bl_ss_safe(features, COMPAT_SET_LOC, 0);
   if (features.length() == 0) {
     generic_dout(0) << "WARNING: mon fs missing feature list.\n"
 	    << "Assuming it is old-style and introducing one." << dendl;
@@ -389,7 +394,7 @@ int Monitor::check_features(MonitorStore *store)
 void Monitor::read_features()
 {
   bufferlist bl;
-  store->get_bl_ss(bl, COMPAT_SET_LOC, 0);
+  store->get_bl_ss_safe(bl, COMPAT_SET_LOC, 0);
   assert(bl.length());
 
   bufferlist::iterator p = bl.begin();
@@ -495,7 +500,7 @@ int Monitor::preinit()
   if (authmon()->paxos->get_version() == 0) {
     dout(10) << "loading initial keyring to bootstrap authentication for mkfs" << dendl;
     bufferlist bl;
-    store->get_bl_ss(bl, "mkfs", "keyring");
+    store->get_bl_ss_safe(bl, "mkfs", "keyring");
     KeyRing keyring;
     bufferlist::iterator p = bl.begin();
     ::decode(keyring, p);
@@ -1030,12 +1035,14 @@ MMonProbe *Monitor::fill_probe_data(MMonProbe *m, Paxos *pax)
   version_t v = MAX(pax->get_first_committed(), m->newest_version + 1);
   int len = 0;
   for (; v <= pax->get_version(); v++) {
-    len += store->get_bl_sn(r->paxos_values[m->machine_name][v], m->machine_name.c_str(), v);
+    store->get_bl_sn_safe(r->paxos_values[m->machine_name][v], m->machine_name.c_str(), v);
+    len += r->paxos_values[m->machine_name][v].length();
     r->gv[m->machine_name][v] = store->get_global_version(m->machine_name.c_str(), v);
     for (list<string>::iterator p = pax->extra_state_dirs.begin();
          p != pax->extra_state_dirs.end();
          ++p) {
-      len += store->get_bl_sn(r->paxos_values[*p][v], p->c_str(), v);      
+      store->get_bl_sn_safe(r->paxos_values[*p][v], p->c_str(), v);
+      len += r->paxos_values[*p][v].length();
     }
     if (len >= g_conf->mon_slurp_bytes)
       break;
@@ -2356,7 +2363,8 @@ int Monitor::write_fsid()
 
   bufferlist b;
   b.append(us);
-  return store->put_bl_ss(b, "cluster_uuid", 0);
+  store->put_bl_ss(b, "cluster_uuid", 0);
+  return 0;
 }
 
 /*
@@ -2380,9 +2388,8 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   bufferlist magicbl;
   magicbl.append(CEPH_MON_ONDISK_MAGIC);
   magicbl.append("\n");
-  r = store->put_bl_ss(magicbl, "magic", 0);
-  if (r < 0)
-    return r;
+  store->put_bl_ss(magicbl, "magic", 0);
+
 
   features = get_supported_features();
   write_features();

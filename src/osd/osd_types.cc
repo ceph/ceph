@@ -1286,7 +1286,7 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
 
 void pg_info_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(26, 26, bl);
+  ENCODE_START(27, 26, bl);
   ::encode(pgid, bl);
   ::encode(last_update, bl);
   ::encode(last_complete, bl);
@@ -1295,12 +1295,13 @@ void pg_info_t::encode(bufferlist &bl) const
   ::encode(stats, bl);
   history.encode(bl);
   ::encode(purged_snaps, bl);
+  ::encode(last_epoch_started, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_info_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(26, 26, 26, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(27, 26, 26, bl);
   if (struct_v < 23) {
     old_pg_t opgid;
     ::decode(opgid, bl);
@@ -1325,6 +1326,11 @@ void pg_info_t::decode(bufferlist::iterator &bl)
     set<snapid_t> snap_trimq;
     ::decode(snap_trimq, bl);
   }
+  if (struct_v < 27) {
+    last_epoch_started = history.last_epoch_started;
+  } else {
+    ::decode(last_epoch_started, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -1348,6 +1354,7 @@ void pg_info_t::dump(Formatter *f) const
   f->dump_int("empty", is_empty());
   f->dump_int("dne", dne());
   f->dump_int("incomplete", is_incomplete());
+  f->dump_int("last_epoch_started", last_epoch_started);
 }
 
 void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
