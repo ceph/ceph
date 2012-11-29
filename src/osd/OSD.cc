@@ -1307,15 +1307,6 @@ PG *OSD::_create_lock_pg(
 
   t.create_collection(coll_t(pgid));
 
-  if (newly_created) {
-    /* This is weird, but all the peering code needs last_epoch_start
-     * to be less than same_interval_since. Make it so!
-     * This is easier to deal with if you remember that the PG, while
-     * now created in memory, still hasn't peered and started -- and
-     * the map epoch could change before that happens! */
-    history.last_epoch_started = history.epoch_created - 1;
-  }
-
   pg->init(role, up, acting, history, pi, &t);
 
   dout(7) << "_create_lock_pg " << *pg << dendl;
@@ -1586,6 +1577,8 @@ PG *OSD::get_or_create_pg(const pg_info_t& info, pg_interval_map_t& pi,
 
   if (!_have_pg(info.pgid)) {
     // same primary?
+    if (!osdmap->have_pg_pool(info.pgid.pool()))
+      return 0;
     vector<int> up, acting;
     osdmap->pg_to_up_acting_osds(info.pgid, up, acting);
     int role = osdmap->calc_pg_role(whoami, acting, acting.size());
@@ -4502,6 +4495,7 @@ void OSD::handle_pg_create(OpRequestRef op)
 	0, creating_pgs[pgid].acting, creating_pgs[pgid].acting,
 	history, pi,
 	*rctx.transaction);
+      pg->info.last_epoch_started = pg->info.history.last_epoch_started;
       creating_pgs.erase(pgid);
       wake_pg_waiters(pg->info.pgid);
       pg->handle_create(&rctx);
