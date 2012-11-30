@@ -33,9 +33,6 @@ class SimpleMessenger;
 class Message;
 class Connection;
 
-typedef boost::intrusive_ptr<Connection> ConnectionRef;
-typedef boost::intrusive_ptr<Message> MessageRef;
-
 /**
  * The DispatchQueue contains all the Pipes which have Messages
  * they want to be dispatched, carefully organized by Message priority

@@ -3383,7 +3383,7 @@ void PG::scrub()
     OSDMapRef curmap = osd->get_osdmap();
     scrubber.is_chunky = true;
     for (unsigned i=1; i<acting.size(); i++) {
-      Connection *con = osd->get_con_osd_cluster(acting[i], get_osdmap()->get_epoch());
+      ConnectionRef con = osd->get_con_osd_cluster(acting[i], get_osdmap()->get_epoch());
       if (!con)
 	continue;
       if (!(con->features & CEPH_FEATURE_CHUNKY_SCRUB)) {
@@ -3391,10 +3391,8 @@ void PG::scrub()
                  << " does not support chunky scrubs, falling back to classic"
                  << dendl;
         scrubber.is_chunky = false;
-	con->put();
         break;
       }
-      con->put();
     }
 
     if (scrubber.is_chunky) {
@@ -4226,11 +4224,10 @@ void PG::fulfill_log(int from, const pg_query_t &query, epoch_t query_epoch)
 
   dout(10) << " sending " << mlog->log << " " << mlog->missing << dendl;
 
-  Connection *con = osd->get_con_osd_cluster(from, get_osdmap()->get_epoch());
+  ConnectionRef con = osd->get_con_osd_cluster(from, get_osdmap()->get_epoch());
   if (con) {
-    osd->osd->_share_map_outgoing(from, con, get_osdmap());
-    osd->cluster_messenger->send_message(mlog, con);
-    con->put();
+    osd->osd->_share_map_outgoing(from, con.get(), get_osdmap());
+    osd->cluster_messenger->send_message(mlog, con.get());
   } else {
     mlog->put();
   }
@@ -5248,7 +5245,8 @@ PG::RecoveryState::WaitRemoteBackfillReserved::WaitRemoteBackfillReserved(my_con
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_set(PG_STATE_BACKFILL_WAIT);
-  Connection *con = pg->osd->get_con_osd_cluster(pg->backfill_target, pg->get_osdmap()->get_epoch());
+  ConnectionRef con = pg->osd->get_con_osd_cluster(
+    pg->backfill_target, pg->get_osdmap()->get_epoch());
   if (con) {
     if ((con->features & CEPH_FEATURE_BACKFILL_RESERVATION)) {
       pg->osd->cluster_messenger->send_message(
@@ -5256,11 +5254,10 @@ PG::RecoveryState::WaitRemoteBackfillReserved::WaitRemoteBackfillReserved(my_con
 	  MBackfillReserve::REQUEST,
 	  pg->info.pgid,
 	  pg->get_osdmap()->get_epoch()),
-	con);
+	con.get());
     } else {
       post_event(RemoteBackfillReserved());
     }
-    con->put();
   }
 }
 
@@ -5495,18 +5492,17 @@ PG::RecoveryState::WaitRemoteRecoveryReserved::WaitRemoteRecoveryReserved(my_con
   }
 
   if (acting_osd_it != context< Active >().sorted_acting_set.end()) {
-    Connection *con = pg->osd->get_con_osd_cluster(*acting_osd_it, pg->get_osdmap()->get_epoch());
+    ConnectionRef con = pg->osd->get_con_osd_cluster(*acting_osd_it, pg->get_osdmap()->get_epoch());
     if (con) {
       if ((con->features & CEPH_FEATURE_RECOVERY_RESERVATION)) {
 	pg->osd->cluster_messenger->send_message(
           new MRecoveryReserve(MRecoveryReserve::REQUEST,
 			       pg->info.pgid,
 			       pg->get_osdmap()->get_epoch()),
-	  con);
+	  con.get());
       } else {
 	post_event(RemoteRecoveryReserved());
       }
-      con->put();
     }
     ++acting_osd_it;
   } else {
@@ -5543,16 +5539,15 @@ void PG::RecoveryState::Recovering::release_reservations()
         ++i) {
     if (*i == pg->osd->whoami) // skip myself
       continue;
-    Connection *con = pg->osd->get_con_osd_cluster(*i, pg->get_osdmap()->get_epoch());
+    ConnectionRef con = pg->osd->get_con_osd_cluster(*i, pg->get_osdmap()->get_epoch());
     if (con) {
       if ((con->features & CEPH_FEATURE_RECOVERY_RESERVATION)) {
 	pg->osd->cluster_messenger->send_message(
           new MRecoveryReserve(MRecoveryReserve::RELEASE,
 			       pg->info.pgid,
 			       pg->get_osdmap()->get_epoch()),
-	  con);
+	  con.get());
       }
-      con->put();
     }
   }
 }
