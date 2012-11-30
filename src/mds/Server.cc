@@ -2742,9 +2742,14 @@ void Server::handle_client_readdir(MDRequest *mdr)
   assert(dir->is_auth());
 
   if (!dir->is_complete()) {
+    if (dir->is_frozen()) {
+      dout(7) << "dir is frozen " << *dir << dendl;
+      dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
+      return;
+    }
     // fetch
     dout(10) << " incomplete dir contents for readdir on " << *dir << ", fetching" << dendl;
-    dir->fetch(new C_MDS_RetryRequest(mdcache, mdr));
+    dir->fetch(new C_MDS_RetryRequest(mdcache, mdr), true);
     return;
   }
 
