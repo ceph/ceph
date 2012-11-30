@@ -3,6 +3,7 @@
 
 #include "common/Formatter.h"
 #include "common/utf8.h"
+#include "include/str_list.h"
 #include "rgw_common.h"
 #include "rgw_rados.h"
 #include "rgw_formats.h"
@@ -37,15 +38,6 @@ static struct rgw_http_attr rgw_to_http_attr_list[] = {
 };
 
 
-map<string, string> rgw_to_http_attrs;
-
-void rgw_rest_init()
-{
-  for (struct rgw_http_attr *attr = rgw_to_http_attr_list; attr->rgw_attr; attr++) {
-    rgw_to_http_attrs[attr->rgw_attr] = attr->http_attr;
-  }
-}
-
 struct generic_attr {
   const char *http_header;
   const char *rgw_attr;
@@ -63,6 +55,106 @@ struct generic_attr generic_attrs[] = {
   { "HTTP_CONTENT_ENCODING", RGW_ATTR_CONTENT_ENC },
   { NULL, NULL },
 };
+
+map<string, string> rgw_to_http_attrs;
+static map<string, string> generic_attrs_map;
+
+/*
+ * make attrs look_like_this
+ */
+string lowercase_http_attr(const string& orig)
+{
+  const char *s = orig.c_str();
+  char buf[orig.size() + 1];
+  buf[orig.size()] = '\0';
+
+  for (size_t i = 0; i < orig.size(); ++i, ++s) {
+    switch (*s) {
+      case '-':
+	buf[i] = '_';
+	break;
+      default:
+	buf[i] = tolower(*s);
+    }
+  }
+  return string(buf);
+}
+
+/*
+ * make attrs LOOK_LIKE_THIS
+ */
+string uppercase_http_attr(const string& orig)
+{
+  const char *s = orig.c_str();
+  char buf[orig.size() + 1];
+  buf[orig.size()] = '\0';
+
+  for (size_t i = 0; i < orig.size(); ++i, ++s) {
+    switch (*s) {
+      case '-':
+	buf[i] = '_';
+	break;
+      default:
+	buf[i] = toupper(*s);
+    }
+  }
+  return string(buf);
+}
+
+/*
+ * make attrs Look-Like-This
+ */
+string camelcase_dash_http_attr(const string& orig)
+{
+  const char *s = orig.c_str();
+  char buf[orig.size() + 1];
+  buf[orig.size()] = '\0';
+
+  bool last_sep = true;
+
+  for (size_t i = 0; i < orig.size(); ++i, ++s) {
+    switch (*s) {
+      case '_':
+	buf[i] = '-';
+	last_sep = true;
+	break;
+      default:
+	if (last_sep)
+	  buf[i] = toupper(*s);
+	else
+	  buf[i] = tolower(*s);
+	last_sep = false;
+    }
+  }
+  return string(buf);
+}
+
+void rgw_rest_init(CephContext *cct)
+{
+  for (struct rgw_http_attr *attr = rgw_to_http_attr_list; attr->rgw_attr; attr++) {
+    rgw_to_http_attrs[attr->rgw_attr] = attr->http_attr;
+  }
+
+  for (struct generic_attr *gen_attr = generic_attrs; gen_attr->http_header; gen_attr++) {
+    generic_attrs_map[gen_attr->http_header] = gen_attr->rgw_attr;
+  }
+
+  list<string> extended_http_attrs;
+  get_str_list(cct->_conf->rgw_extended_http_attrs, extended_http_attrs);
+
+  list<string>::iterator iter;
+  for (iter = extended_http_attrs.begin(); iter != extended_http_attrs.end(); ++iter) {
+    string rgw_attr = RGW_ATTR_PREFIX;
+    rgw_attr.append(lowercase_http_attr(*iter));
+
+    rgw_to_http_attrs[rgw_attr] = camelcase_dash_http_attr(*iter);
+
+    string http_header = "HTTP_";
+    http_header.append(uppercase_http_attr(*iter));
+
+    generic_attrs_map[http_header] = rgw_attr;
+  }
+}
 
 static void dump_status(struct req_state *s, const char *status)
 {
@@ -1075,10 +1167,11 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
     s->content_length = atoll(s->length);
   }
 
-  for (int i = 0; generic_attrs[i].http_header; i++) {
-    const char *env = s->env->get(generic_attrs[i].http_header);
+  map<string, string>::iterator giter;
+  for (giter = generic_attrs_map.begin(); giter != generic_attrs_map.end(); ++giter) {
+    const char *env = s->env->get(giter->first.c_str());
     if (env) {
-      s->generic_attrs[generic_attrs[i].rgw_attr] = env;
+      s->generic_attrs[giter->second] = env;
     }
   }
 
