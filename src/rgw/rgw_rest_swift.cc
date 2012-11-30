@@ -612,6 +612,13 @@ RGWOp *RGWHandler_ObjStore_Obj_SWIFT::op_copy()
 
 int RGWHandler_ObjStore_SWIFT::authorize()
 {
+  if (!s->os_auth_token) {
+    /* anonymous access */
+    rgw_get_anon_user(s->user);
+    s->perm_mask = RGW_PERM_FULL_CONTROL;
+    return 0;
+  }
+
   bool authorized = rgw_swift->verify_swift_token(store, s);
   if (!authorized)
     return -EPERM;
