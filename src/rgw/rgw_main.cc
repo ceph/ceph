@@ -433,7 +433,7 @@ int main(int argc, const char **argv)
   rgw_tools_init(g_ceph_context);
 
   rgw_init_resolver();
-  rgw_rest_init();
+  rgw_rest_init(g_ceph_context);
   
   curl_global_init(CURL_GLOBAL_ALL);
   
