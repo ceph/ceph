@@ -18,6 +18,10 @@
 #include <stdlib.h>
 #include <ostream>
 
+#include <boost/intrusive_ptr.hpp>
+// Because intusive_ptr clobbers our assert...
+#include "include/assert.h"
+
 #include "include/types.h"
 #include "include/buffer.h"
 #include "common/Throttle.h"
@@ -261,6 +265,7 @@ public:
     rx_buffers.erase(tid);
   }
 };
+typedef boost::intrusive_ptr<Connection> ConnectionRef;
 
 
 
@@ -466,6 +471,7 @@ public:
 
   void encode(uint64_t features, bool datacrc);
 };
+typedef boost::intrusive_ptr<Message> MessageRef;
 
 extern Message *decode_message(CephContext *cct, ceph_msg_header &header,
 			       ceph_msg_footer& footer, bufferlist& front,
