@@ -161,8 +161,14 @@ public:
 
   // -- segments --
   void start_new_segment(Context *onsync=0);
+
+  LogSegment *peek_current_segment() {
+    return segments.empty() ? NULL : segments.rbegin()->second;
+  }
+
   LogSegment *get_current_segment() { 
-    return segments.empty() ? 0:segments.rbegin()->second; 
+    assert(!segments.empty());
+    return segments.rbegin()->second;
   }
 
   LogSegment *get_segment(uint64_t off) {

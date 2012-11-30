@@ -67,6 +67,7 @@ struct Mutation {
   bool done_locking; 
   bool committing;
   bool aborted;
+  bool killed;
 
   // for applying projected inode changes
   list<CInode*> projected_inodes;
@@ -81,13 +82,13 @@ struct Mutation {
       ls(0),
       slave_to_mds(-1),
       locking(NULL),
-      done_locking(false), committing(false), aborted(false) { }
+      done_locking(false), committing(false), aborted(false), killed(false) { }
   Mutation(metareqid_t ri, __u32 att=0, int slave_to=-1)
     : reqid(ri), attempt(att),
       ls(0),
       slave_to_mds(slave_to), 
       locking(NULL),
-      done_locking(false), committing(false), aborted(false) { }
+      done_locking(false), committing(false), aborted(false), killed(false) { }
   virtual ~Mutation() {
     assert(locking == NULL);
     assert(pins.empty());
