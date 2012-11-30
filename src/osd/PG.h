@@ -757,7 +757,7 @@ public:
 		list<Context*>& tfin,
 		map< int, map<pg_t,pg_query_t> >& query_map,
 		map<int, vector<pair<pg_notify_t, pg_interval_map_t> > > *activator_map=0);
-  void _activate_committed(epoch_t e, entity_inst_t& primary);
+  void _activate_committed(epoch_t e);
   void all_activated_and_committed();
 
   void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
