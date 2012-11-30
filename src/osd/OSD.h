@@ -169,8 +169,10 @@ public:
   ObjectStore *&store;
   LogClient &clog;
   PGRecoveryStats &pg_recovery_stats;
+private:
   Messenger *&cluster_messenger;
   Messenger *&client_messenger;
+public:
   PerfCounters *&logger;
   MonClient   *&monc;
   ThreadPool::WorkQueueVal<pair<PGRef, OpRequestRef>, PGRef> &op_wq;
@@ -228,6 +230,15 @@ public:
   ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch);
   ConnectionRef get_con_osd_hb(int peer, epoch_t from_epoch);
   void send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch);
+  void send_message_osd_cluster(Message *m, Connection *con) {
+    cluster_messenger->send_message(m, con);
+  }
+  void send_message_osd_client(Message *m, Connection *con) {
+    client_messenger->send_message(m, con);
+  }
+  entity_name_t get_cluster_msgr_name() {
+    return cluster_messenger->get_myname();
+  }
 
   // -- scrub scheduling --
   Mutex sched_scrub_lock;
