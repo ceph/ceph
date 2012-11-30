@@ -168,8 +168,10 @@ public:
   ObjectStore *&store;
   LogClient &clog;
   PGRecoveryStats &pg_recovery_stats;
+private:
   Messenger *&cluster_messenger;
   Messenger *&client_messenger;
+public:
   PerfCounters *&logger;
   MonClient   *&monc;
   ThreadPool::WorkQueueVal<pair<PGRef, OpRequestRef>, PGRef> &op_wq;
@@ -182,7 +184,7 @@ public:
   ClassHandler  *&class_handler;
 
   // -- superblock --
-  Mutex publish_lock;
+  Mutex publish_lock, pre_publish_lock;
   OSDSuperblock superblock;
   OSDSuperblock get_superblock() {
     Mutex::Locker l(publish_lock);
@@ -192,6 +194,9 @@ public:
     Mutex::Locker l(publish_lock);
     superblock = block;
   }
+
+  int get_nodeid() const { return whoami; }
+
   OSDMapRef osdmap;
   OSDMapRef get_osdmap() {
     Mutex::Locker l(publish_lock);
@@ -202,7 +207,37 @@ public:
     osdmap = map;
   }
 
-  int get_nodeid() const { return whoami; }
+  /*
+   * osdmap - current published amp
+   * next_osdmap - pre_published map that is about to be published.
+   *
+   * We use the next_osdmap to send messages and initiate connections,
+   * but only if the target is the same instance as the one in the map
+   * epoch the current user is working from (i.e., the result is
+   * equivalent to what is in next_osdmap).
+   *
+   * This allows the helpers to start ignoring osds that are about to
+   * go down, and let OSD::handle_osd_map()/note_down_osd() mark them
+   * down, without worrying about reopening connections from threads
+   * working from old maps.
+   */
+  OSDMapRef next_osdmap;
+  void pre_publish_map(OSDMapRef map) {
+    Mutex::Locker l(pre_publish_lock);
+    next_osdmap = map;
+  }
+  ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch);
+  ConnectionRef get_con_osd_hb(int peer, epoch_t from_epoch);
+  void send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch);
+  void send_message_osd_cluster(Message *m, Connection *con) {
+    cluster_messenger->send_message(m, con);
+  }
+  void send_message_osd_client(Message *m, Connection *con) {
+    client_messenger->send_message(m, con);
+  }
+  entity_name_t get_cluster_msgr_name() {
+    return cluster_messenger->get_myname();
+  }
 
   // -- scrub scheduling --
   Mutex sched_scrub_lock;
@@ -467,7 +502,7 @@ private:
   // -- heartbeat --
   /// information about a heartbeat peer
   struct HeartbeatInfo {
-    entity_inst_t inst; ///< peer
+    int peer;           ///< peer
     Connection *con;    ///< peer connection
     utime_t first_tx;   ///< time we sent our first ping request
     utime_t last_tx;    ///< last time we sent a ping request
@@ -699,7 +734,7 @@ private:
 
   bool _share_map_incoming(const entity_inst_t& inst, epoch_t epoch,
 			   Session *session = 0);
-  void _share_map_outgoing(const entity_inst_t& inst,
+  void _share_map_outgoing(int peer, Connection *con,
 			   OSDMapRef map = OSDMapRef());
 
   void wait_for_new_map(OpRequestRef op);
@@ -742,7 +777,9 @@ private:
 
   MOSDMap *build_incremental_map_msg(epoch_t from, epoch_t to);
   void send_incremental_map(epoch_t since, const entity_inst_t& inst, bool lazy=false);
+  void send_incremental_map(epoch_t since, Connection *con);
   void send_map(MOSDMap *m, const entity_inst_t& inst, bool lazy);
+  void send_map(MOSDMap *m, Connection *con);
 
 protected:
   // -- placement groups --
