@@ -149,6 +149,11 @@ void PaxosService::election_finished()
 {
   dout(10) << "election_finished" << dendl;
 
+  if (proposal_timer) {
+    mon->timer.cancel_event(proposal_timer);
+    proposal_timer = 0;
+  }
+
   if (have_pending) {
     discard_pending();
     have_pending = false;
