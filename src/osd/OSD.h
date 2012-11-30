@@ -225,8 +225,8 @@ public:
     Mutex::Locker l(pre_publish_lock);
     next_osdmap = map;
   }
-  Connection *get_con_osd_cluster(int peer, epoch_t from_epoch);
-  Connection *get_con_osd_hb(int peer, epoch_t from_epoch);
+  ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch);
+  ConnectionRef get_con_osd_hb(int peer, epoch_t from_epoch);
   void send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch);
 
   // -- scrub scheduling --
