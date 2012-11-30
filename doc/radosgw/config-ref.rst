@@ -228,3 +228,9 @@ set automatically.
 :Description: Total backlog data size for unix domain socket operations logging
 :Type: Integer
 :Default: ``5ul << 20``
+
+``rgw extended http attrs``
+:Description: Add new set of attributes that could be set on an object
+:Type: String
+:Default: N/A
+:Example: "content_foo, content_bar"
