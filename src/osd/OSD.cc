@@ -2094,8 +2094,6 @@ bool OSD::heartbeat_reset(Connection *con)
 	return true;
       }
       dout(10) << "heartbeat_reset reopen failed hb con " << con << dendl;
-      if (p->second.con)
-	p->second.con->put();
       p->second.con = newcon;
       p->second.con->set_priv(s);
     } else {
