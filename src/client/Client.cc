@@ -1692,14 +1692,14 @@ bool Client::ms_dispatch(Message *m)
   if (unmounting) {
     ldout(cct, 10) << "unmounting: trim pass, size was " << lru.lru_get_size() 
              << "+" << inode_map.size() << dendl;
+    long unsigned size = lru.lru_get_size() + inode_map.size();
     trim_cache();
-    if (lru.lru_get_size() == 0 && inode_map.empty()) {
-      ldout(cct, 10) << "unmounting: trim pass, cache now empty, waking unmount()" << dendl;
+    if (size < lru.lru_get_size() + inode_map.size()) {
+      ldout(cct, 10) << "unmounting: trim pass, cache shrank, poking unmount()" << dendl;
       mount_cond.Signal();
     } else {
       ldout(cct, 10) << "unmounting: trim pass, size still " << lru.lru_get_size() 
                << "+" << inode_map.size() << dendl;
-      dump_cache(NULL);      
     }
   }
 
@@ -3591,8 +3591,11 @@ void Client::unmount()
             << "+" << inode_map.size() << " items" 
 	    << ", waiting (for caps to release?)"
             << dendl;
-    dump_cache(NULL);
-    mount_cond.Wait(client_lock);
+    utime_t until = ceph_clock_now(cct) + utime_t(5, 0);
+    int r = mount_cond.WaitUntil(client_lock, until);
+    if (r == ETIMEDOUT) {
+      dump_cache(NULL);
+    }
   }
   assert(lru.lru_get_size() == 0);
   assert(inode_map.empty());
