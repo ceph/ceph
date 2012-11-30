@@ -352,11 +352,26 @@ int RGWPutObj_ObjStore_S3::get_params()
   return RGWPutObj_ObjStore::get_params();
 }
 
+static int get_success_retcode(int code)
+{
+  switch (code) {
+    case 201:
+      return STATUS_CREATED;
+    case 204:
+      return STATUS_NO_CONTENT;
+  }
+  return 0;
+}
+
 void RGWPutObj_ObjStore_S3::send_response()
 {
   if (ret) {
     set_req_state_err(s, ret);
   } else {
+    if (s->cct->_conf->rgw_s3_success_create_obj_status) {
+      ret = get_success_retcode(s->cct->_conf->rgw_s3_success_create_obj_status);
+      set_req_state_err(s, ret);
+    }
     dump_etag(s, etag.c_str());
     dump_content_length(s, 0);
   }
