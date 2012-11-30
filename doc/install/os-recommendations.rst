@@ -10,7 +10,10 @@ As a general rule, we recommend deploying Ceph on newer releases of Linux.
 Linux Kernel
 ------------
 
-- **Ceph Kernel Client:**  We recommend Linux kernel v3.6 or later.
+- **Ceph Kernel Client:**  We currently recommend:
+
+  - v3.6.6 or later in the v3.6 stable series
+  - v3.4.20 or later in the v3.4 stable series
 
 - **btrfs**: If you use the ``btrfs`` file system with Ceph, we recommend using 
   a recent Linux kernel (v3.5 or later).
