@@ -496,12 +496,13 @@ void Server::journal_close_session(Session *session, int state)
   mdlog->flush();
 
   // clean up requests, too
-  while (!session->requests.empty()) {
-    MDRequest *mdr = session->requests.front(member_offset(MDRequest,
-							   item_session_request));
+  elist<MDRequest*>::iterator p = session->requests.begin(member_offset(MDRequest,
+									item_session_request));
+  while (!p.end()) {
+    MDRequest *mdr = *p;
+    ++p;
     mdcache->request_kill(mdr);
   }
-
 }
 
 void Server::reconnect_clients()
@@ -3996,9 +3997,6 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
 
   if (mdr->more()->dst_reanchor_atid)
     le->metablob.add_table_transaction(TABLE_ANCHOR, mdr->more()->dst_reanchor_atid);
-
-  // mark committing (needed for proper recovery)
-  mdr->committing = true;
 
   journal_and_reply(mdr, targeti, dn, le, new C_MDS_link_remote_finish(mds, mdr, inc, dn, targeti));
 }

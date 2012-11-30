@@ -7488,12 +7488,11 @@ void MDCache::request_forward(MDRequest *mdr, int who, int port)
 
 void MDCache::dispatch_request(MDRequest *mdr)
 {
+  if (mdr->killed) {
+    dout(10) << "request " << *mdr << " was killed" << dendl;
+    return;
+  }
   if (mdr->client_request) {
-    if (!mdr->reqid.name.is_mds() &&
-	!mdr->item_session_request.is_on_list()) {
-      dout(10) << "request " << *mdr << " is canceled" << dendl;
-      return;
-    }
     mds->server->dispatch_client_request(mdr);
   } else if (mdr->slave_request) {
     mds->server->dispatch_slave_request(mdr);
@@ -7605,8 +7604,13 @@ void MDCache::request_cleanup(MDRequest *mdr)
 
 void MDCache::request_kill(MDRequest *mdr)
 {
-  dout(10) << "request_kill " << *mdr << dendl;
-  request_cleanup(mdr);
+  mdr->killed = true;
+  if (!mdr->committing) {
+    dout(10) << "request_kill " << *mdr << dendl;
+    request_cleanup(mdr);
+  } else {
+    dout(10) << "request_kill " << *mdr << " -- already committing, no-op" << dendl;
+  }
 }
 
 
