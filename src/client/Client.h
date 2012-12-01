@@ -670,6 +670,10 @@ public:
   int mksnap(const char *path, const char *name);
   int rmsnap(const char *path, const char *name);
 
+  // expose caps
+  int get_caps_issued(int fd);
+  int get_caps_issued(const char *path);
+
   // low-level interface
   int ll_lookup(vinodeno_t parent, const char *name, struct stat *attr, int uid = -1, int gid = -1);
   bool ll_forget(vinodeno_t vino, int count);
