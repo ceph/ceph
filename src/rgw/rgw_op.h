@@ -337,20 +337,12 @@ protected:
   map<string, bufferlist> attrs;
 
 public:
-  RGWPostObj() {}
+  RGWPostObj() : min_len(0), max_len(LLONG_MAX), ret(0), len(0), ofs(0),
+		 supplied_md5_b64(NULL), supplied_etag(NULL),
+		 data_pending(false) {}
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
-    min_len = 0;
-    max_len = LLONG_MAX;
-    ret = 0;
-    len = 0;
-    ofs = 0;
-    supplied_md5_b64 = NULL;
-    supplied_etag = NULL;
-    etag = "";
-    boundary = "";
-    data_pending = false;
     policy.set_ctx(s->cct);
   }
 
