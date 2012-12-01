@@ -28,7 +28,7 @@ class C_Delay : public Context {
 public:
   C_Delay(CephContext *cct, Context *c, Mutex *lock, uint64_t off,
 	  bufferlist *pbl, uint64_t delay_ns=0)
-    : m_cct(cct), m_con(c), m_delay(0, delay_ns), m_lock(lock), m_bl(pbl) {}
+    : m_cct(cct), m_con(c), m_delay(0, delay_ns), m_lock(lock), m_bl(pbl), m_off(off) {}
   void finish(int r) {
     struct timespec delay;
     m_delay.to_timespec(&delay);
