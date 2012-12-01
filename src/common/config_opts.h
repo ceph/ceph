@@ -162,11 +162,8 @@ OPTION(mon_client_ping_interval, OPT_DOUBLE, 10.0)  // ping every N seconds
 OPTION(mon_client_max_log_entries_per_message, OPT_INT, 1000)
 OPTION(client_cache_size, OPT_INT, 16384)
 OPTION(client_cache_mid, OPT_FLOAT, .75)
-OPTION(client_cache_stat_ttl, OPT_INT, 0) // seconds until cached stat results become invalid
-OPTION(client_cache_readdir_ttl, OPT_INT, 1)  // 1 second only
 OPTION(client_use_random_mds, OPT_BOOL, false)
 OPTION(client_mount_timeout, OPT_DOUBLE, 30.0)
-OPTION(client_unmount_timeout, OPT_DOUBLE, 10.0)
 OPTION(client_tick_interval, OPT_DOUBLE, 1.0)
 OPTION(client_trace, OPT_STR, "")
 OPTION(client_readahead_min, OPT_LONGLONG, 128*1024)  // readahead at _least_ this much.
@@ -187,7 +184,6 @@ OPTION(fuse_use_invalidate_cb, OPT_BOOL, false) // use fuse 2.8+ invalidate call
 OPTION(fuse_big_writes, OPT_BOOL, true)
 OPTION(fuse_debug, OPT_BOOL, false)
 OPTION(objecter_tick_interval, OPT_DOUBLE, 5.0)
-OPTION(objecter_mon_retry_interval, OPT_DOUBLE, 5.0)
 OPTION(objecter_timeout, OPT_DOUBLE, 10.0)    // before we ask for a map
 OPTION(objecter_inflight_op_bytes, OPT_U64, 1024*1024*100) // max in-flight data (both directions)
 OPTION(objecter_inflight_ops, OPT_U64, 1024)               // max in-flight ios
@@ -224,7 +220,6 @@ OPTION(mds_log_skip_corrupt_events, OPT_BOOL, false)
 OPTION(mds_log_max_events, OPT_INT, -1)
 OPTION(mds_log_max_segments, OPT_INT, 30)  // segment size defined by FileLayout, above
 OPTION(mds_log_max_expiring, OPT_INT, 20)
-OPTION(mds_log_eopen_size, OPT_INT, 100)   // # open inodes per log entry
 OPTION(mds_bal_sample_interval, OPT_FLOAT, 3.0)  // every 5 seconds
 OPTION(mds_bal_replicate_threshold, OPT_FLOAT, 8000)
 OPTION(mds_bal_unreplicate_threshold, OPT_FLOAT, 0)
@@ -296,10 +291,8 @@ OPTION(osd_journal_size, OPT_INT, 5120)         // in mb
 OPTION(osd_max_write_size, OPT_INT, 90)
 OPTION(osd_max_pgls, OPT_U64, 1024) // max number of pgls entries to return
 OPTION(osd_client_message_size_cap, OPT_U64, 500*1024L*1024L) // client data allowed in-memory (in bytes)
-OPTION(osd_stat_refresh_interval, OPT_DOUBLE, .5)
 OPTION(osd_pg_bits, OPT_INT, 6)  // bits per osd
 OPTION(osd_pgp_bits, OPT_INT, 6)  // bits per osd
-OPTION(osd_pg_layout, OPT_INT, CEPH_PG_LAYOUT_CRUSH)
 OPTION(osd_min_rep, OPT_INT, 1)
 OPTION(osd_max_rep, OPT_INT, 10)
 OPTION(osd_pool_default_crush_rule, OPT_INT, 0)
@@ -309,8 +302,6 @@ OPTION(osd_pool_default_pg_num, OPT_INT, 8)
 OPTION(osd_pool_default_pgp_num, OPT_INT, 8)
 OPTION(osd_map_dedup, OPT_BOOL, true)
 OPTION(osd_map_cache_size, OPT_INT, 500)
-OPTION(osd_map_cache_bl_size, OPT_INT, 50)
-OPTION(osd_map_cache_bl_inc_size, OPT_INT, 100)
 OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
 OPTION(osd_op_threads, OPT_INT, 2)    // 0 == no threading
 OPTION(osd_disk_threads, OPT_INT, 1)
@@ -319,8 +310,6 @@ OPTION(osd_recover_clone_overlap, OPT_BOOL, true)   // preserve clone_overlap du
 OPTION(osd_backfill_scan_min, OPT_INT, 64)
 OPTION(osd_backfill_scan_max, OPT_INT, 512)
 OPTION(osd_op_thread_timeout, OPT_INT, 30)
-OPTION(osd_backlog_thread_timeout, OPT_INT, 60*60*1)
-OPTION(osd_recovery_thread_timeout, OPT_INT, 30)
 OPTION(osd_snap_trim_thread_timeout, OPT_INT, 60*60*1)
 OPTION(osd_scrub_thread_timeout, OPT_INT, 60)
 OPTION(osd_scrub_finalize_thread_timeout, OPT_INT, 60*10)
@@ -463,9 +452,6 @@ OPTION(rgw_op_thread_timeout, OPT_INT, 10*60)
 OPTION(rgw_op_thread_suicide_timeout, OPT_INT, 0)
 OPTION(rgw_thread_pool_size, OPT_INT, 100)
 OPTION(rgw_num_control_oids, OPT_INT, 8)
-OPTION(rgw_maintenance_tick_interval, OPT_DOUBLE, 10.0)
-OPTION(rgw_pools_preallocate_max, OPT_INT, 100)
-OPTION(rgw_pools_preallocate_threshold, OPT_INT, 70)
 OPTION(rgw_cluster_root_pool, OPT_STR, ".rgw.root")
 OPTION(rgw_log_nonexistent_bucket, OPT_BOOL, false)
 OPTION(rgw_log_object_name, OPT_STR, "%Y-%m-%d-%H-%i-%n")      // man date to see codes (a subset are supported)
