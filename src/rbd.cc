@@ -135,6 +135,11 @@ static string feature_str(uint64_t features)
 
   if (features & RBD_FEATURE_LAYERING)
     s += "layering";
+  if (features & RBD_FEATURE_STRIPINGV2) {
+    if (s.size())
+      s += ", ";
+    s += "striping";
+  }
   return s;
 }
 
