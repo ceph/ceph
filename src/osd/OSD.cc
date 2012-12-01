@@ -2082,13 +2082,12 @@ bool OSD::heartbeat_reset(Connection *con)
       ConnectionRef newcon = service.get_con_osd_hb(p->second.peer, p->second.epoch);
       if (!newcon) {
 	dout(10) << "heartbeat_reset reopen failed hb con " << con << " but failed to reopen" << dendl;
-	s->put();
-	return true;
+      } else {
+	dout(10) << "heartbeat_reset reopen failed hb con " << con << dendl;
+	p->second.con = newcon.get();
+	p->second.con->get();
+	p->second.con->set_priv(s);
       }
-      dout(10) << "heartbeat_reset reopen failed hb con " << con << dendl;
-      p->second.con = newcon.get();
-      p->second.con->get();
-      p->second.con->set_priv(s);
     } else {
       dout(10) << "heartbeat_reset closing (old) failed hb con " << con << dendl;
     }
