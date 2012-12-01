@@ -937,6 +937,26 @@ int ceph_get_local_osd(struct ceph_mount_info *cmount);
 
 /** @} default_filelayout */
 
+/**
+ * Get the capabilities currently issued to the client.
+ * 
+ * @param cmount the ceph mount handle to use.
+ * @param fd the file descriptor to get issued
+ * @returns the current capabilities issued to this client
+ *       for the open file 
+ */
+int ceph_debug_get_fd_caps(struct ceph_mount_info *cmount, int fd);
+
+/**
+ * Get the capabilities currently issued to the client.
+ * 
+ * @param cmount the ceph mount handle to use.
+ * @param the path to the file
+ * @returns the current capabilities issued to this client
+ *       for the file 
+ */
+int ceph_debug_get_file_caps(struct ceph_mount_info *cmount, const char *path);
+
 #ifdef __cplusplus
 }
 #endif
