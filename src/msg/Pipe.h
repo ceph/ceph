@@ -90,6 +90,7 @@ class DispatchQueue;
 	delay_cond.Signal();
       }
       void discard();
+      void flush();
       void stop() {
 	delay_lock.Lock();
 	stop_delayed_delivery = true;
