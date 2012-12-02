@@ -4614,6 +4614,7 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
 {
   lock();
   rm->op->mark_event("sub_op_applied");
+  rm->applied = true;
 
   if (rm->epoch_started >= last_peering_reset) {
     dout(10) << "sub_op_modify_applied on " << rm << " op " << *rm->op->request << dendl;
@@ -4626,8 +4627,6 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
       ack->set_priority(CEPH_MSG_PRIO_HIGH); // this better match commit priority!
       osd->cluster_messenger->send_message(ack, get_osdmap()->get_cluster_inst(rm->ackerosd));
     }
-    
-    rm->applied = true;
     
     assert(info.last_update >= m->version);
     assert(last_update_applied < m->version);
@@ -4657,7 +4656,7 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
 {
   lock();
   rm->op->mark_event("sub_op_commit");
-
+  rm->committed = true;
 
   if (rm->epoch_started >= last_peering_reset) {
     // send commit.
@@ -4672,8 +4671,6 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
       commit->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
       osd->cluster_messenger->send_message(commit, get_osdmap()->get_cluster_inst(rm->ackerosd));
     }
-    
-    rm->committed = true;
   } else {
     dout(10) << "sub_op_modify_commit " << rm << " op " << *rm->op->request
 	     << " from epoch " << rm->epoch_started << " < last_peering_reset "
