@@ -26,7 +26,7 @@ public:
 
   map<string, bool> roles;
 
-  KeystoneToken() {}
+  KeystoneToken() : expiration(0) {}
 
   int parse(CephContext *cct, bufferlist& bl);
 
