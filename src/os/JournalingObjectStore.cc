@@ -142,7 +142,7 @@ void JournalingObjectStore::ApplyManager::op_apply_finish(uint64_t op)
   dout(10) << "op_apply_finish " << op << " open_ops " << open_ops
 	   << " -> " << (open_ops-1)
 	   << ", max_applying_seq " << max_applying_seq
-	   << ", applied_seq " << applied_seq << " -> " << MAX(op, applied_seq)
+	   << ", max_applied_seq " << max_applied_seq << " -> " << MAX(op, max_applied_seq)
 	   << dendl;
   if (--open_ops == 0)
     open_ops_cond.Signal();
@@ -150,8 +150,8 @@ void JournalingObjectStore::ApplyManager::op_apply_finish(uint64_t op)
   // there can be multiple applies in flight; track the max value we
   // note.  note that we can't _read_ this value and learn anything
   // meaningful unless/until we've quiesced all in-flight applies.
-  if (op > applied_seq)
-    applied_seq = op;
+  if (op > max_applied_seq)
+    max_applied_seq = op;
 }
 
 uint64_t JournalingObjectStore::SubmitManager::op_submit_start()
@@ -193,20 +193,20 @@ bool JournalingObjectStore::ApplyManager::commit_start()
   {
     Mutex::Locker l(apply_lock);
     dout(10) << "commit_start max_applying_seq " << max_applying_seq
-	     << ", applied_seq " << applied_seq
+	     << ", max_applied_seq " << max_applied_seq
 	     << dendl;
     blocked = true;
     while (open_ops > 0) {
       dout(10) << "commit_start blocked, waiting for " << open_ops << " open ops, "
-	       << " max_applying_seq " << max_applying_seq << " applied_seq " << applied_seq << dendl;
+	       << " max_applying_seq " << max_applying_seq << " max_applied_seq " << max_applied_seq << dendl;
       open_ops_cond.Wait(apply_lock);
     }
     assert(open_ops == 0);
-    assert(applied_seq == max_applying_seq);
+    assert(max_applied_seq == max_applying_seq);
     dout(10) << "commit_start blocked, all open_ops have completed" << dendl;
     {
       Mutex::Locker l(com_lock);
-      if (applied_seq == committed_seq) {
+      if (max_applied_seq == committed_seq) {
 	dout(10) << "commit_start nothing to do" << dendl;
 	blocked = false;
 	if (!ops_apply_blocked.empty())
