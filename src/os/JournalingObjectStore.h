@@ -54,6 +54,7 @@ protected:
     Cond blocked_cond;
     int open_ops;
     Cond open_ops_cond;
+    uint64_t max_applying_seq;
     uint64_t applied_seq;
 
     Mutex com_lock;
@@ -68,6 +69,7 @@ protected:
       apply_lock("JOS::ApplyManager::apply_lock", false, true, false, g_ceph_context),
       blocked(false),
       open_ops(0),
+      max_applying_seq(0),
       applied_seq(0),
       com_lock("JOS::ApplyManager::com_lock", false, true, false, g_ceph_context),
       committing_seq(0), committed_seq(0) {}
@@ -97,7 +99,7 @@ protected:
       }
       {
 	Mutex::Locker l(apply_lock);
-	applied_seq = fs_op_seq;
+	max_applying_seq = applied_seq = fs_op_seq;
       }
     }
   } apply_manager;
