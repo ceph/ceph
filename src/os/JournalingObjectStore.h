@@ -55,7 +55,7 @@ protected:
     int open_ops;
     Cond open_ops_cond;
     uint64_t max_applying_seq;
-    uint64_t applied_seq;
+    uint64_t max_applied_seq;
 
     Mutex com_lock;
     map<version_t, vector<Context*> > commit_waiters;
@@ -70,7 +70,7 @@ protected:
       blocked(false),
       open_ops(0),
       max_applying_seq(0),
-      applied_seq(0),
+      max_applied_seq(0),
       com_lock("JOS::ApplyManager::com_lock", false, true, false, g_ceph_context),
       committing_seq(0), committed_seq(0) {}
     void add_waiter(uint64_t, Context*);
@@ -99,7 +99,7 @@ protected:
       }
       {
 	Mutex::Locker l(apply_lock);
-	max_applying_seq = applied_seq = fs_op_seq;
+	max_applying_seq = max_applied_seq = fs_op_seq;
       }
     }
   } apply_manager;
