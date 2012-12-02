@@ -107,6 +107,7 @@ OutputDataSocket::OutputDataSocket(CephContext *cct, uint64_t _backlog)
     m_shutdown_rd_fd(-1),
     m_shutdown_wr_fd(-1),
     going_down(false),
+    data_size(0),
     m_lock("OutputDataSocket::m_lock")
 {
 }
