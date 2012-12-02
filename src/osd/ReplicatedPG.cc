@@ -5325,6 +5325,9 @@ void ReplicatedPG::handle_pull_response(OpRequestRef op)
 
     obc->ondisk_write_lock();
 
+    // keep track of active pushes for scrub
+    ++active_pushes;
+
     onreadable = new C_OSD_AppliedRecoveredObject(this, t, obc);
     onreadable_sync = new C_OSD_OndiskWriteUnlock(obc);
   } else {
@@ -5375,6 +5378,10 @@ void ReplicatedPG::handle_push(OpRequestRef op)
   bool complete = m->recovery_progress.data_complete &&
     m->recovery_progress.omap_complete;
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
+
+  // keep track of active pushes for scrub
+  ++active_pushes;
+
   Context *onreadable = new C_OSD_AppliedRecoveredObjectReplica(this, t);
   Context *onreadable_sync = 0;
   submit_push_data(m->recovery_info,
@@ -5808,9 +5815,6 @@ void ReplicatedPG::trim_pushed_data(
 void ReplicatedPG::sub_op_push(OpRequestRef op)
 {
   op->mark_started();
-
-  // keep track of active pushes for scrub
-  ++active_pushes;
 
   if (is_primary()) {
     handle_pull_response(op);

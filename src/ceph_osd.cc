@@ -458,6 +458,7 @@ int main(int argc, const char **argv)
   delete messenger_hbclient;
   delete messenger_hbserver;
   delete cluster_messenger;
+  g_ceph_context->put();
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];
