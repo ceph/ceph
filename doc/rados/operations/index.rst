@@ -46,8 +46,8 @@ to one or more pools, or the cluster as a whole.
 
 .. toctree:: 
 
-	Cephx Overview <auth-intro>
-	authentication
+	Authentication Overview <auth-intro>
+	Cephx Authentication <authentication>
 	
 
 

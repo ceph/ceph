@@ -203,7 +203,7 @@ minimal settings for  each instance of a daemon. For example:
    **ONLY** for ``mkcephfs`` and manual deployment. It **MUST NOT**
    be used with ``chef`` or ``ceph-deploy``.
 
-.. _Hardware Recommendations: ../../install/hardware-recommendations
+.. _Hardware Recommendations: ../../../install/hardware-recommendations
 
 .. _ceph-network-config:
 
@@ -260,7 +260,7 @@ in the daemon instance sections of your ``ceph.conf`` file.
 		public addr {host-public-ip-address}
 		cluster addr {host-cluster-ip-address}
 
-.. _hardware recommendations: ../../install/hardware-recommendations
+.. _hardware recommendations: ../../../install/hardware-recommendations
 
 
 .. _ceph-monitor-config:

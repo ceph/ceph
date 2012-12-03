@@ -51,7 +51,7 @@ devices simultaneously.
 	librbd <librbdpy>
 	
 
-.. _RBD Caching: ../../config-cluster/rbd-config-ref/
+.. _RBD Caching: ../rbd-config-ref/
 .. _kernel modules: ../rbd-ko/
 .. _Qemu: ../qemu-rbd/
 .. _OpenStack: ../rbd-openstack

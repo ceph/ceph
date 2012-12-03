@@ -102,5 +102,5 @@ For example::
  
 
 
-.. _Storage Pools: ../../cluster-ops/pools
+.. _Storage Pools: ../../rados/operations/pools
 .. _RBD – Manage RADOS Block Device (RBD) Images: ../../man/8/rbd/

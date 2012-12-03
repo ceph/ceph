@@ -49,13 +49,13 @@ by using a method of storing XATTRs that is extrinsic to the underlying filesyst
 Synchronization Intervals
 =========================
 
-Periodically, the filestore needs to quiesce writes and synchronize the filesystem,
-which creates a consistent commit point. It can then free journal entries up to
-the commit point. Synchronizing more frequently tends to reduce the time required 
-perform synchronization, and reduces the amount of data that needs to remain in the 
-journal. Less frequent synchronization allows the backing filesystem to coalesce 
-small writes and metadata updates more optimally--potentially resulting in more
-efficient synchronization.
+Periodically, the filestore needs to quiesce writes and synchronize the
+filesystem, which creates a consistent commit point. It can then free journal
+entries up to the commit point. Synchronizing more frequently tends to reduce
+the time required to perform synchronization, and reduces the amount of data
+that needs to remain in the  journal. Less frequent synchronization allows the
+backing filesystem to coalesce  small writes and metadata updates more
+optimally--potentially resulting in more efficient synchronization.
 
 
 ``filestore max sync interval``

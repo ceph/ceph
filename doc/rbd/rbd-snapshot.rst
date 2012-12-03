@@ -313,7 +313,7 @@ For example::
    a flattened image will take up more storage space than a layered clone.
 
 
-.. _cephx: ../../cluster-ops/authentication/
+.. _cephx: ../../rados/operations/authentication/
 .. _QEMU: ../qemu-rbd/
 .. _OpenStack: ../rbd-openstack/
 .. _CloudStack: ../rbd-cloudstack/

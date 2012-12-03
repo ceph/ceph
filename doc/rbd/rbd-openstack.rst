@@ -68,8 +68,8 @@ See `Create a Pool`_ for detail on specifying the number of placement groups for
 your pools, and `Placement Groups`_ for details on the number of placement
 groups you should set for your pools.
 
-.. _Create a Pool: ../../cluster-ops/pools#createpool
-.. _Placement Groups: ../../cluster-ops/placement-groups
+.. _Create a Pool: ../../rados/operations/pools#createpool
+.. _Placement Groups: ../../rados/operations/placement-groups
 
 
 Configure OpenStack Ceph Clients
@@ -132,7 +132,7 @@ the temporary copy of the key::
 
 Save the uuid of the secret for configuring ``nova-compute`` later.
 
-.. _cephx authentication: ../../cluster-ops/authentication
+.. _cephx authentication: ../../rados/operations/authentication
 
 
 Configure OpenStack to use Ceph
