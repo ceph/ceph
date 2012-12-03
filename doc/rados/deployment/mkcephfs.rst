@@ -17,15 +17,16 @@ on each host without a password. For each host, perform the following::
 Enter a password for the root user. 
 
 On the admin host, generate an ``ssh`` key without specifying a passphrase
-and use the default locations. :: 
+and use the default locations. ::
 
+	sudo -s 
 	ssh-keygen
 	Generating public/private key pair.
-	Enter file in which to save the key (/ceph-admin/.ssh/id_rsa): 
+	Enter file in which to save the key (/root/.ssh/id_rsa): 
 	Enter passphrase (empty for no passphrase): 
 	Enter same passphrase again: 
-	Your identification has been saved in /ceph-admin/.ssh/id_rsa.
-	Your public key has been saved in /ceph-admin/.ssh/id_rsa.pub.
+	Your identification has been saved in /root/.ssh/id_rsa.
+	Your public key has been saved in /root/.ssh/id_rsa.pub.
 
 You may use RSA or DSA keys. Once you generate your keys, copy them to each 
 OSD host. For example:: 
