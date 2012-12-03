@@ -297,6 +297,7 @@ static inline int ceph_osd_op_mode_modify(int op)
 #define CEPH_OSD_TMAP_SET 's'
 #define CEPH_OSD_TMAP_CREATE 'c' /* create key */
 #define CEPH_OSD_TMAP_RM  'r'
+#define CEPH_OSD_TMAP_RMSLOPPY 'R'
 
 extern const char *ceph_osd_op_name(int op);
 
