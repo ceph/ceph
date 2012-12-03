@@ -241,7 +241,7 @@ RGWOp *RGWHandler_SWIFT_Auth::get_op()
   RGWOp *op;
   switch (s->op) {
    case OP_GET:
-     op = &rgw_swift_auth_get;
+     op = new RGW_SWIFT_Auth_Get;
      break;
    default:
      return NULL;
