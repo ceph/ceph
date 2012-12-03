@@ -1676,9 +1676,14 @@ int ReplicatedPG::do_tmapup_slow(OpContext *ctx, bufferlist::iterator& bp, OSDOp
       break;
     case CEPH_OSD_TMAP_RM: // remove key
       ::decode(key, bp);
-      if (m.count(key)) {
-	m.erase(key);
+      if (!m.count(key)) {
+	return -ENOENT;
       }
+      m.erase(key);
+      break;
+    case CEPH_OSD_TMAP_RMSLOPPY: // remove key
+      ::decode(key, bp);
+      m.erase(key);
       break;
     case CEPH_OSD_TMAP_HDR: // update header
       {
@@ -1848,6 +1853,14 @@ int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
 	nkeys++;
       } else if (op == CEPH_OSD_TMAP_RM) {
 	// do nothing.
+	if (!key_exists) {
+	  return -ENOENT;
+	}
+      } else if (op == CEPH_OSD_TMAP_RMSLOPPY) {
+	// do nothing
+      } else {
+	dout(10) << "  invalid tmap op " << (int)op << dendl;
+	return -EINVAL;
       }
     }
 
@@ -4614,6 +4627,7 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
 {
   lock();
   rm->op->mark_event("sub_op_applied");
+  rm->applied = true;
 
   if (rm->epoch_started >= last_peering_reset) {
     dout(10) << "sub_op_modify_applied on " << rm << " op " << *rm->op->request << dendl;
@@ -4626,8 +4640,6 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
       ack->set_priority(CEPH_MSG_PRIO_HIGH); // this better match commit priority!
       osd->send_message_osd_cluster(rm->ackerosd, ack, get_osdmap()->get_epoch());
     }
-    
-    rm->applied = true;
     
     assert(info.last_update >= m->version);
     assert(last_update_applied < m->version);
@@ -4657,7 +4669,7 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
 {
   lock();
   rm->op->mark_event("sub_op_commit");
-
+  rm->committed = true;
 
   if (rm->epoch_started >= last_peering_reset) {
     // send commit.
@@ -4672,8 +4684,6 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
       commit->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
       osd->send_message_osd_cluster(rm->ackerosd, commit, get_osdmap()->get_epoch());
     }
-    
-    rm->committed = true;
   } else {
     dout(10) << "sub_op_modify_commit " << rm << " op " << *rm->op->request
 	     << " from epoch " << rm->epoch_started << " < last_peering_reset "

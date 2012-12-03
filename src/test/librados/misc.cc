@@ -130,7 +130,7 @@ TEST(LibRadosMisc, TmapUpdatePP) {
 
   // remove key1 from tmap
   ASSERT_EQ(0, remove_key_from_tmap(ioctx, "foo", "key1"));
-  ASSERT_EQ(0, remove_key_from_tmap(ioctx, "foo", "key1"));
+  ASSERT_EQ(-ENOENT, remove_key_from_tmap(ioctx, "foo", "key1"));
 
   // key should be removed
   ASSERT_EQ(string(""), read_key_from_tmap(ioctx, "foo", "key1"));

@@ -1803,7 +1803,7 @@ CDir::map_t::iterator CDir::_commit_partial(ObjectOperation& m,
 
     if (dn->get_linkage()->is_null()) {
       dout(10) << " rm " << dn->name << " " << *dn << dendl;
-      finalbl.append(CEPH_OSD_TMAP_RM);
+      finalbl.append(CEPH_OSD_TMAP_RMSLOPPY);
       dn->key().encode(finalbl);
     } else {
       dout(10) << " set " << dn->name << " " << *dn << dendl;
