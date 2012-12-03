@@ -60,4 +60,4 @@ For example::
 	sudo rbd unmap /dev/rbd/rbd/foo
 
 
-.. _cephx: ../../cluster-ops/authentication/
+.. _cephx: ../../rados/operations/authentication/

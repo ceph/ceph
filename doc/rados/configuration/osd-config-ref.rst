@@ -347,17 +347,20 @@
 :Type: Float
 :Default: Once per day. ``60*60*24`` 
 
+
 ``osd deep scrub interval``
 
-:Description: The interval for "deep" scrubbing (fully reading all data)
+:Description: The interval for "deep" scrubbing (fully reading all data).
 :Type: Float
 :Default: Once per week.  ``60*60*24*7``
 
+
 ``osd deep scrub stride``
 
-:Description: Read siez when doing a deep scrub
+:Description: Read size when doing a deep scrub.
 :Type: 32-bit Int
 :Default: 512 KB. ``524288``
+
 
 ``osd class dir`` 
 
@@ -414,9 +417,3 @@
 :Type: Boolean
 :Default: ``false`` 
 
-
-``osd kill backfill at`` 
-
-:Description: For debugging only.
-:Type: 32-bit Integer
-:Default: ``0`` 

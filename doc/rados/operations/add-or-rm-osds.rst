@@ -35,8 +35,8 @@ See `Filesystem Recommendations`_ for details.
 Add your OSD host to a rack in your cluster, connect it to the network
 and ensure that it has network connectivity.
 
-.. _Hardware Recommendations: ../../install/hardware-recommendations
-.. _Filesystem Recommendations: ../../config-cluster/file-system-recommendations
+.. _Hardware Recommendations: ../../../install/hardware-recommendations
+.. _Filesystem Recommendations: ../../configuration/filesystem-recommendations
 
 Install the Required Software
 -----------------------------
@@ -46,17 +46,17 @@ manually. See `Installing Debian/Ubuntu Packages`_ for details.
 You should configure SSH to a user with password-less authentication
 and root permissions.
 
-.. _Installing Debian/Ubuntu Packages: ../../install/debian
+.. _Installing Debian/Ubuntu Packages: ../../../install/debian
 
 For clusters deployed with Chef, create a `chef user`_, `configure
 SSH keys`_, `install Ruby`_ and `install the Chef client`_ on your host. See 
 `Installing Chef`_ for details.
 
-.. _chef user: ../../install/chef#createuser
-.. _configure SSH keys: ../../install/chef#genkeys
-.. _install the Chef client: ../../install/chef#installchef
-.. _Installing Chef: ../../install/chef
-.. _Install Ruby: ../../install/chef#installruby
+.. _chef user: ../../deployment/install-chef#createuser
+.. _configure SSH keys: ../../deployment/install-chef#genkeys
+.. _install the Chef client: ../../deployment/install-chef#installchef
+.. _Installing Chef: ../../deployment/install-chef
+.. _Install Ruby: ../../deployment/install-chef#installruby
 
 Adding an OSD (Manual)
 ----------------------
@@ -234,8 +234,8 @@ completes. (Control-c to exit.)
 
 
 .. _Add/Move an OSD: ../crush-map#addosd
-.. _Configure Nodes: ../../config-cluster/chef#confignodes
-.. _Prepare OSD Disks: ../../config-cluster/chef#prepdisks
+.. _Configure Nodes: ../../deployment/chef#confignodes
+.. _Prepare OSD Disks: ../../deployment/chef#prepdisks
 .. _ceph: ../monitoring
 
 
