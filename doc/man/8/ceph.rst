@@ -81,7 +81,7 @@ Monitor commands
 A more complete summary of commands understood by the monitor cluster can be found in the
 wiki, at
 
-       http://ceph.com/docs/master/cluster-ops/control
+       http://ceph.com/docs/master/rados/operations/control
 
 
 Availability

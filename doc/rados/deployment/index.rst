@@ -2,7 +2,7 @@
  Ceph Deployment
 =================
 
-You can deploy Chef using many different deployment systems including Chef, Juju, 
+You can deploy Ceph using many different deployment systems including Chef, Juju, 
 Puppet, and Crowbar. If you are just experimenting, Ceph provides some minimal 
 deployment tools that rely only on SSH and DNS to deploy Ceph. You need to set
 up the SSH and DNS settings manually.

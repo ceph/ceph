@@ -247,5 +247,5 @@ See `Operating a Cluster`_ for details.
 
 
 .. _Managing Cookbooks with Knife: http://wiki.opscode.com/display/chef/Managing+Cookbooks+With+Knife
-.. _Installing Chef: ../../install/chef
-.. _Operating a Cluster: ../../init/
+.. _Installing Chef: ../../deployment/chef
+.. _Operating a Cluster: ../../operations/

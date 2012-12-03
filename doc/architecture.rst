@@ -247,8 +247,8 @@ bad sectors on a disk that weren't apparent in a light scrub (weekly).
 
 .. todo:: explain "classes"
 
-.. _Placement Group States: ../cluster-ops/pg-states
-.. _Placement Group Concepts: ../cluster-ops/pg-concepts
+.. _Placement Group States: ../rados/operations/pg-states
+.. _Placement Group Concepts: ../rados/operations/pg-concepts
 
 Monitor Quorums
 ===============
@@ -301,7 +301,7 @@ commands. The Cephx authentication system is similar to Kerberos, but avoids a
 single point of failure to ensure scalability and high availability.  For
 details on Cephx, see `Ceph Authentication and Authorization`_.
 
-.. _Ceph Authentication and Authorization: ../cluster-ops/auth-intro/
+.. _Ceph Authentication and Authorization: ../rados/operations/auth-intro/
 
 librados
 --------

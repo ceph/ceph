@@ -11,7 +11,7 @@ Ceph OSDs use a journal for two reasons: speed and consistency.
   with short spurts of high-speed writes followed by periods without any
   write progress as the filesystem catches up to the journal.
 
-- **Consistency:** Ceph OSDs requires a filesystem interface that guarantees
+- **Consistency:** Ceph OSDs require a filesystem interface that guarantees
   atomic compound operations. Ceph OSDs write a description of the operation
   to the journal and apply the operation to the filesystem. This enables 
   atomic updates to an object (for example, placement group metadata). Every 

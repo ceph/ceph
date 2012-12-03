@@ -276,7 +276,7 @@ Chef nodes. ::
 
 A list of the nodes you've configured should appear.
 
-See the `Deploy With Chef <../../config-cluster/chef>`_ section for information
+See the `Deploy With Chef <../../deployment/chef>`_ section for information
 on using Chef to deploy your Ceph cluster.
 
 .. _Chef Architecture Introduction: http://wiki.opscode.com/display/chef/Architecture+Introduction
