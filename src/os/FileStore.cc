@@ -1886,10 +1886,9 @@ FileStore::Op *FileStore::build_op(list<Transaction*>& tls,
 
 void FileStore::queue_op(OpSequencer *osr, Op *o)
 {
-  // mark apply start _now_, because we need to drain the entire apply
-  // queue during commit in order to put the store in a consistent
-  // state.
-  apply_manager.op_apply_start(o->op);
+  // queue op on sequencer, then queue sequencer for the threadpool,
+  // so that regardless of which order the threads pick up the
+  // sequencer, the op order will be preserved.
 
   osr->queue(o);
 
@@ -1953,16 +1952,12 @@ void FileStore::_do_op(OpSequencer *osr)
 {
   osr->apply_lock.Lock();
   Op *o = osr->peek_queue();
-
+  apply_manager.op_apply_start(o->op);
   dout(5) << "_do_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " start" << dendl;
   int r = do_transactions(o->tls, o->op);
   apply_manager.op_apply_finish(o->op);
   dout(10) << "_do_op " << o << " seq " << o->op << " r = " << r
 	   << ", finisher " << o->onreadable << " " << o->onreadable_sync << dendl;
-  
-  /*dout(10) << "op_entry finished " << o->bytes << " bytes, queue now "
-	   << op_queue_len << " ops, " << op_queue_bytes << " bytes" << dendl;
-  */
 }
 
 void FileStore::_finish_op(OpSequencer *osr)
