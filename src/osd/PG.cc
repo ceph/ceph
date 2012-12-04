@@ -4531,10 +4531,6 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
     dirty_info = true;
   osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
 
-  assert(oinfo.last_epoch_started == info.last_epoch_started);
-  assert(info.history.last_epoch_started == oinfo.last_epoch_started);
-  assert(oinfo.history.last_epoch_started == oinfo.last_epoch_started);
-
   // Handle changes to purged_snaps ONLY IF we have caught up
   if (last_complete_ondisk.epoch >= info.history.last_epoch_started) {
     interval_set<snapid_t> p;
