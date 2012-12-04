@@ -146,15 +146,30 @@ appropriate placement groups in the secondary and tertiary OSDs (as many OSDs as
 additional replicas), and responds to the client once it has confirmed the
 object was stored successfully.
 
-.. ditaa:: +--------+     Write      +--------------+    Replica 1     +----------------+
-           | Client |*-------------->| Primary OSD  |*---------------->| Secondary OSD  |
-           |        |<--------------*|              |<----------------*|                |
-           +--------+   Write  Ack   +--------------+  Replica 1 Ack   +----------------+
-													    ^  *
-                                           |  |        Replica 2       +----------------+
-                                           |  +----------------------->|  Tertiary OSD  |
-                                           +--------------------------*|                |
-                                                     Replica 2 Ack     +----------------+
+
+.. ditaa:: 
+             +----------+
+             |  Client  |
+             |          |
+             +----------+
+                 *  ^
+      Write (1)  |  |  Ack (6)
+                 |  |
+                 v  *
+            +-------------+
+            | Primary OSD |
+            |             |
+            +-------------+
+              *  ^   ^  *
+    Write (2) |  |   |  |  Write (3)
+       +------+  |   |  +------+
+       |  +------+   +------+  |
+       |  | Ack (4)  Ack (5)|  | 
+       v  *                 *  v
+ +---------------+   +---------------+
+ | Secondary OSD |   | Tertiary OSD  |
+ |               |   |               |
+ +---------------+   +---------------+
 
 
 Since any network device has a limit to the number of concurrent connections it
@@ -222,82 +237,84 @@ of striping:
    
 
 If you anticipate large images sizes, large S3 or Swift objects (video), or
-large CephFS files, you may see considerable read/write performance improvements
-by striping client data over mulitple objects within an object set.  Significant
-write performance occurs when the client writes the stripe units to their
-corresponding objects simultaneously. Since objects get mapped to different
-placement groups and further mapped to different OSDs, each write occurs
-simultaneously at the maximum write speed. So the stripe count may serve as a
-proxy for the multiple of the performance improvement. Read performance is
-similarly affected. However, setting up connections between the client and the
-OSDs and the network latency also play a role in the overall performance.
+large CephFS directories, you may see considerable read/write performance
+improvements by striping client data over mulitple objects within an object set.
+Significant write performance occurs when the client writes the stripe units to
+their corresponding objects in parallel. Since objects get mapped to different
+placement groups and further mapped to different OSDs, each write occurs in
+parallel at the maximum write speed. A write to a single disk would be limited
+by the head movement (e.g. 6ms per seek) and bandwidth of that one device (e.g.
+100MB/s).  By spreading that write over multiple objects (which map to different
+placement groups and OSDs) Ceph can reduce the number of seeks per drive and
+combine the throughput of multiple drives to achieve much faster write (or read)
+speeds.
 
 In the following diagram, client data gets striped across an object set
 (``object set 1`` in the following diagram) consisting of 4 objects, where the
-first stripe unit is ``stripe 0`` in ``object 0``, and the fourth stripe unit is
-``stripe 3`` in ``object 3``. After writing the fourth stripe, the client
-determines if the object set is full. If the object set is not full, the client
-begins writing a stripe to the first object again (``object 0`` in the following
-diagram). If the object set is full, the client creates a new object set
-(``object set 2`` in the following diagram), and begins writing to the first
-stripe (``stripe 4``) in the first object in the new object set (``object 4`` in
-the diagram below).
+first stripe unit is ``stripe unit 0`` in ``object 0``, and the fourth stripe
+unit is ``stripe unit 3`` in ``object 3``. After writing the fourth stripe, the
+client determines if the object set is full. If the object set is not full, the
+client begins writing a stripe to the first object again (``object 0`` in the
+following diagram). If the object set is full, the client creates a new object
+set (``object set 2`` in the following diagram), and begins writing to the first
+stripe (``stripe unit 16``) in the first object in the new object set (``object
+4`` in the diagram below).
 
 .. ditaa::                 
-                           +---------------+
-                           |  Client Data  |
-                           |     Format    |
-                           | cCCC          |
-                           +---------------+
-                                   |
-        +-----------------+--------+--------+-----------------+
-        |                 |                 |                 |     +--\
-        v                 v                 v                 v        |
-  /-----------\     /-----------\     /-----------\     /-----------\  |   
-  | Begin cCCC|     | Begin cCCC|     | Begin cCCC|     | Begin cCCC|  |
-  | Object 0  |     | Object  1 |     | Object  2 |     | Object  3 |  |
-  +-----------+     +-----------+     +-----------+     +-----------+  |
-  |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |  |
-  |  unit 0   |     |  unit 1   |     |  unit 2   |     |  unit 3   |  |
-  +-----------+     +-----------+     +-----------+     +-----------+  |
-  |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |  +-\ 
-  |  unit 4   |     |  unit 5   |     |  unit 6   |     |  unit 7   |    | Object
-  +-----------+     +-----------+     +-----------+     +-----------+    +- Set 
-  |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |    |   1
-  |  unit 8   |     |  unit 9   |     |  unit 10  |     |  unit 11  |  +-/
-  +-----------+     +-----------+     +-----------+     +-----------+  |
-  |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |  |
-  |  unit 12  |     |  unit 13  |     |  unit 14  |     |  unit 15  |  |
-  +-----------+     +-----------+     +-----------+     +-----------+  |
-  | End cCCC  |     | End cCCC  |     | End cCCC  |     | End cCCC  |  |
-  | Object 0  |     | Object 1  |     | Object 2  |     | Object 3  |  |  
-  \-----------/     \-----------/     \-----------/     \-----------/  |
-                                                                       |
-                                                                    +--/
+                          +---------------+
+                          |  Client Data  |
+                          |     Format    |
+                          | cCCC          |
+                          +---------------+
+                                  |
+       +-----------------+--------+--------+-----------------+
+       |                 |                 |                 |     +--\
+       v                 v                 v                 v        |
+ /-----------\     /-----------\     /-----------\     /-----------\  |   
+ | Begin cCCC|     | Begin cCCC|     | Begin cCCC|     | Begin cCCC|  |
+ | Object 0  |     | Object  1 |     | Object  2 |     | Object  3 |  |
+ +-----------+     +-----------+     +-----------+     +-----------+  |
+ |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |  |
+ |  unit 0   |     |  unit 1   |     |  unit 2   |     |  unit 3   |  |
+ +-----------+     +-----------+     +-----------+     +-----------+  |
+ |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |  +-\ 
+ |  unit 4   |     |  unit 5   |     |  unit 6   |     |  unit 7   |    | Object
+ +-----------+     +-----------+     +-----------+     +-----------+    +- Set 
+ |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |    |   1
+ |  unit 8   |     |  unit 9   |     |  unit 10  |     |  unit 11  |  +-/
+ +-----------+     +-----------+     +-----------+     +-----------+  |
+ |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |  |
+ |  unit 12  |     |  unit 13  |     |  unit 14  |     |  unit 15  |  |
+ +-----------+     +-----------+     +-----------+     +-----------+  |
+ | End cCCC  |     | End cCCC  |     | End cCCC  |     | End cCCC  |  |
+ | Object 0  |     | Object 1  |     | Object 2  |     | Object 3  |  |  
+ \-----------/     \-----------/     \-----------/     \-----------/  |
+                                                                      |
+                                                                   +--/
   
-                                                                    +--\
-                                                                       |
-  /-----------\     /-----------\     /-----------\     /-----------\  |   
-  | Begin cCCC|     | Begin cCCC|     | Begin cCCC|     | Begin cCCC|  |
-  | Object  4 |     | Object  5 |     | Object  6 |     | Object  7 |  |  
-  +-----------+     +-----------+     +-----------+     +-----------+  |
-  |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |  |
-  |  unit 15  |     |  unit 16  |     |  unit 17  |     |  unit 18  |  |
-  +-----------+     +-----------+     +-----------+     +-----------+  |
-  |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |  +-\ 
-  |  unit 19  |     |  unit 20  |     |  unit 21  |     |  unit 22  |    | Object
-  +-----------+     +-----------+     +-----------+     +-----------+    +- Set
-  |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |    |   2 
-  |  unit 23  |     |  unit 24  |     |  unit 25  |     |  unit 26  |  +-/
-  +-----------+     +-----------+     +-----------+     +-----------+  |
-  |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |  |
-  |  unit 27  |     |  unit 28  |     |  unit 29  |     |  unit 30  |  |
-  +-----------+     +-----------+     +-----------+     +-----------+  |
-  | End cCCC  |     | End cCCC  |     | End cCCC  |     | End cCCC  |  |
-  | Object 4  |     | Object 5  |     | Object 6  |     | Object 7  |  |  
-  \-----------/     \-----------/     \-----------/     \-----------/  |
-                                                                       |
-                                                                    +--/
+                                                                   +--\
+                                                                      |
+ /-----------\     /-----------\     /-----------\     /-----------\  |   
+ | Begin cCCC|     | Begin cCCC|     | Begin cCCC|     | Begin cCCC|  |
+ | Object  4 |     | Object  5 |     | Object  6 |     | Object  7 |  |  
+ +-----------+     +-----------+     +-----------+     +-----------+  |
+ |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |  |
+ |  unit 16  |     |  unit 17  |     |  unit 18  |     |  unit 19  |  |
+ +-----------+     +-----------+     +-----------+     +-----------+  |
+ |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |  +-\ 
+ |  unit 20  |     |  unit 21  |     |  unit 22  |     |  unit 23  |    | Object
+ +-----------+     +-----------+     +-----------+     +-----------+    +- Set
+ |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |    |   2 
+ |  unit 24  |     |  unit 25  |     |  unit 26  |     |  unit 27  |  +-/
+ +-----------+     +-----------+     +-----------+     +-----------+  |
+ |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |  |
+ |  unit 28  |     |  unit 29  |     |  unit 30  |     |  unit 31  |  |
+ +-----------+     +-----------+     +-----------+     +-----------+  |
+ | End cCCC  |     | End cCCC  |     | End cCCC  |     | End cCCC  |  |
+ | Object 4  |     | Object 5  |     | Object 6  |     | Object 7  |  |  
+ \-----------/     \-----------/     \-----------/     \-----------/  |
+                                                                      |
+                                                                   +--/
 
 Three important variables determine how Ceph stripes data: 
 
@@ -306,9 +323,9 @@ Three important variables determine how Ceph stripes data:
   enough to accomodate many stripe units, and should be a multiple of
   the stripe unit.
 
-- **Stripe Unit:** Stripes have a configurable unit size (e.g., 64kb).
+- **Stripe Width:** Stripes have a configurable unit size (e.g., 64kb).
   The Ceph client divides the data it will write to objects into equally 
-  sized stripe units, except for the last stripe unit. A stripe unit, 
+  sized stripe units, except for the last stripe unit. A stripe width, 
   should be a fraction of the Object Size so that an object may contain 
   many stripe units.
 
@@ -347,7 +364,11 @@ storage disk. See `How Ceph Scales`_ for details.
    get mapped to placement groups in the same pool. So they use the same CRUSH
    map and the same access controls.  
 
-.. tip:: The objects Ceph stores in the Object Store are not striped. 
+.. tip:: The objects Ceph stores in the Object Store are not striped. RGW, RBD 
+   and CephFS automatically stripe their data over multiple RADOS objects.
+   Clients that write directly to the Object Store via ``librados`` must
+   peform the the striping (and parallel I/O) for themselves to obtain these 
+   benefits.
 
 
 Data Consistency
