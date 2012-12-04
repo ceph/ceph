@@ -88,7 +88,8 @@ public:
 		     set<SimpleLock*> &rdlocks,
 		     set<SimpleLock*> &wrlocks,
 		     set<SimpleLock*> &xlocks,
-		     map<SimpleLock*,int> *remote_wrlocks=NULL);
+		     map<SimpleLock*,int> *remote_wrlocks=NULL,
+		     CInode *auth_pin_freeze=NULL);
 
   void cancel_locking(Mutation *mut, set<CInode*> *pneed_issue);
   void drop_locks(Mutation *mut, set<CInode*> *pneed_issue=0);
