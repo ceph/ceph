@@ -4016,7 +4016,10 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
     dout(20) << " is excl" << dendl;
     int loner_issued, other_issued, xlocker_issued;
     in->get_caps_issued(&loner_issued, &other_issued, &xlocker_issued, CEPH_CAP_SFILE);
-
+    dout(7) << "file_eval loner_issued=" << gcap_string(loner_issued)
+            << " other_issued=" << gcap_string(other_issued)
+	    << " xlocker_issued=" << gcap_string(xlocker_issued)
+	    << dendl;
     if (!((loner_wanted|loner_issued) & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GBUFFER)) ||
 	 (other_wanted & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GRD)) ||
 	(in->inode.is_dir() && in->multiple_nonstale_caps())) {  // FIXME.. :/
