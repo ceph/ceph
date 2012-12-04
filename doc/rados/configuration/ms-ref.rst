@@ -5,7 +5,7 @@
 
 ``ms tcp nodelay``
 
-:Description: 
+:Description: Disables nagle's algorithm on messenger tcp sessions.
 :Type: Boolean
 :Required: No
 :Default: ``true``
@@ -29,7 +29,7 @@
 
 ``ms nocrc``
 
-:Description: 
+:Description: Disables crc on network messages.  May increase performance if cpu limited.
 :Type: Boolean
 :Required: No
 :Default: ``false``
@@ -45,7 +45,7 @@
 
 ``ms dispatch throttle bytes``
 
-:Description: 
+:Description: Throttles total size of messages waiting to be dispatched.
 :Type: 64-bit Unsigned Integer
 :Required: No
 :Default: ``100 << 20``
