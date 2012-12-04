@@ -1163,6 +1163,7 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
 {
   string part_num;
   RGWMPObj mp;
+
 protected:
   bool immutable_head() { return true; }
   int prepare(RGWRados *store, struct req_state *s);
@@ -1185,6 +1186,7 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, struct req_state *s)
   if (part_num.empty()) {
     return -EINVAL;
   }
+
   oid = mp.get_part(part_num);
 
   head_obj.init_ns(s->bucket, oid, mp_ns);
@@ -1963,6 +1965,14 @@ void RGWCompleteMultipart::execute()
   if (!parts) {
     ret = -EINVAL;
     return;
+  }
+
+  // ensure that each part if of the minimum size
+  for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
+    if ((obj_iter->second).size < min_part_size) {
+      ret = -ERR_TOO_SMALL;
+      return;
+    }
   }
 
   mp.init(s->object_str, upload_id);
