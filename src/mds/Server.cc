@@ -5704,9 +5704,10 @@ void Server::_rename_prepare(MDRequest *mdr,
     } else if (destdnl->is_remote()) {
       if (oldin->is_auth()) {
 	// auth for targeti
-	metablob->add_dir_context(oldin->get_parent_dir());
-	mdcache->journal_cow_dentry(mdr, metablob, oldin->parent, CEPH_NOSNAP, 0, destdnl);
-	metablob->add_primary_dentry(oldin->parent, true, oldin);
+	metablob->add_dir_context(oldin->get_projected_parent_dir());
+	mdcache->journal_cow_dentry(mdr, metablob, oldin->get_projected_parent_dn(),
+				    CEPH_NOSNAP, 0, destdnl);
+	metablob->add_primary_dentry(oldin->get_projected_parent_dn(), true, oldin);
       }
       if (destdn->is_auth()) {
 	// auth for dn, not targeti
@@ -5725,10 +5726,10 @@ void Server::_rename_prepare(MDRequest *mdr,
 
       if (destdn->is_auth())
         metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
-      if (srci->get_parent_dn()->is_auth()) { // it's remote
-	metablob->add_dir_context(srci->get_parent_dir());
-        mdcache->journal_cow_dentry(mdr, metablob, srci->get_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
-	metablob->add_primary_dentry(srci->get_parent_dn(), true, srci);
+      if (srci->get_projected_parent_dn()->is_auth()) { // it's remote
+	metablob->add_dir_context(srci->get_projected_parent_dir());
+        mdcache->journal_cow_dentry(mdr, metablob, srci->get_projected_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
+	metablob->add_primary_dentry(srci->get_projected_parent_dn(), true, srci);
       }
     } else {
       if (destdn->is_auth() && !destdnl->is_null())
