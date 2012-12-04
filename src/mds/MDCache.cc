@@ -5498,9 +5498,10 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
   // adjust the dir state
   // NOTE: we can safely remove a clean, null dentry without effecting
   //       directory completeness.
-  // (do this _before_ we unlink the inode, below!)
+  // (check this _before_ we unlink the inode, below!)
+  bool clear_complete = false;
   if (!(dnl->is_null() && dn->is_clean())) 
-    dir->state_clear(CDir::STATE_COMPLETE); 
+    clear_complete = true;
   
   // unlink the dentry
   if (dnl->is_remote()) {
@@ -5520,6 +5521,9 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
   // remove dentry
   dir->add_to_bloom(dn);
   dir->remove_dentry(dn);
+
+  if (clear_complete)
+    dir->state_clear(CDir::STATE_COMPLETE);
   
   // reexport?
   if (dir->get_num_head_items() == 0 && dir->is_subtree_root())
@@ -5708,9 +5712,8 @@ void MDCache::trim_non_auth()
       else {
 	assert(dnl->is_null());
       }
-      dir->add_to_bloom(dn);
+
       dir->remove_dentry(dn);
-      
       // adjust the dir state
       dir->state_clear(CDir::STATE_COMPLETE);  // dir incomplete!
     }
@@ -5811,7 +5814,6 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
         dout(20) << "trim_non_auth_subtree(" << dir << ") removing inode " << in << " with dentry" << dn << dendl;
         dir->unlink_inode(dn);
         remove_inode(in);
-        dir->add_to_bloom(dn);
         dir->remove_dentry(dn);
       } else {
         dout(20) << "trim_non_auth_subtree(" << dir << ") keeping inode " << in << " with dentry " << dn <<dendl;
