@@ -2,12 +2,12 @@
  Architecture 
 ==============
 
-Ceph provides an infinitely scalable object storage system. It is based 
+Ceph provides an infinitely scalable Object Store. It is based 
 upon :abbr:`RADOS (Reliable Autonomic Distributed Object Store)`, which
 you can read about in 
 `RADOS - A Scalable, Reliable Storage Service for Petabyte-scale Storage Clusters`_. 
 Its high-level features include providing a native interface to the 
-object storage system via ``librados``, and a number of service interfaces 
+Object Store via ``librados``, and a number of service interfaces 
 built on top of ``librados``. These include:
 
 - **Block Devices:** The RADOS Block Device (RBD) service provides
@@ -23,13 +23,11 @@ built on top of ``librados``. These include:
   
 - **Ceph FS**: The Ceph Filesystem (CephFS) service provides 
   a POSIX compliant filesystem usable with ``mount`` or as 
-  a filesytem in user space (FUSE). 
-  
-Ceph OSDs store all data--whether it comes through RBD, RGW, or 
-CephFS--as objects in the object storage system. Ceph can run
-additional instances of OSDs, MDSs, and monitors for scalability
-and high availability. The following diagram depicts the 
-high-level architecture. 
+  a filesytem in user space (FUSE).      
+
+Ceph can run additional instances of OSDs, MDSs, and monitors for scalability
+and high availability. The following diagram depicts the high-level
+architecture. 
 
 .. ditaa::  +--------+ +----------+ +-------+ +--------+ +------+
             | RBD KO | | QeMu RBD | |  RGW  | | CephFS | | FUSE |
@@ -45,58 +43,61 @@ high-level architecture.
             +---------------+ +---------------+ +---------------+
 
 
+Ceph's Object Store takes data from clients--whether it comes through RBD, RGW,
+CephFS, or a custom implementation you create using ``librados``--and stores
+them as objects. Each object corresponds to a file in a filesystem, which is
+typically stored on a single storage disk. ``ceph-osd`` daemons handle the
+read/write operations on the storage disks.
+
+.. ditaa:: /-----\       +-----+       +-----+
+           | obj |------>| {d} |------>| {s} |
+           \-----/       +-----+       +-----+
+   
+            Object         File         Disk
+
+OSDs store all data as objects in a flat namespace (e.g., no hierarchy of
+directories). An object has an identifier, binary data, and metadata consisting
+of a set of name/value pairs. The semantics are completely up to the client. For
+example, CephFS uses metadata to store file attributes such as the file owner,
+created date, last modified date, and so forth.
+
+
+.. ditaa:: /------+------------------------------+----------------\
+           | ID   | Binary Data                  | Metadata       |
+           +------+------------------------------+----------------+
+           | 1234 | 0101010101010100110101010010 | name1 = value1 | 
+           |      | 0101100001010100110101010010 | name2 = value2 |
+           |      | 0101100001010100110101010010 | nameN = valueN |
+           \------+------------------------------+----------------/    
+
+
 .. _RADOS - A Scalable, Reliable Storage Service for Petabyte-scale Storage Clusters: http://ceph.com/papers/weil-rados-pdsw07.pdf
 
+.. _how-ceph-scales:          
 
-Removing Limitations
-====================
-
-Today's storage systems have demonstrated an ability to scale out, but with some
-significant limitations: interfaces, session managers, and stateful sessions
-with a centralized point of access often limit the scalability of today's
-storage architectures. Furthermore, a centralized interface that dispatches
-requests from clients to server nodes within a cluster and subsequently routes
-responses from those server nodes back to clients will hit a scalability and/or
-performance limitation.
-
-Another problem for storage systems is the need to manually rebalance data when
-increasing or decreasing the size of a data cluster. Manual rebalancing works
-fine on small scales, but it is a nightmare at larger scales because hardware
-additions are common and hardware failure becomes an expectation rather than an 
-exception when operating at the petabyte scale and beyond. 
-
-The operational challenges of managing legacy technologies with the burgeoning
-growth in the demand for unstructured storage makes legacy technologies
-inadequate for scaling into petabytes. Some legacy technologies (e.g., SAN) can
-be considerably more expensive, and  more challenging to maintain when compared
-to using commodity hardware. Ceph  uses commodity hardware, because it is
-substantially less expensive to purchase (or to replace), and it only requires
-standard system administration skills to  use it.
-
-          
 How Ceph Scales
 ===============
 
-In traditional architectures, clients talk to a centralized component (e.g., a gateway, 
-broker, API, facade, etc.), which acts as a single point of entry to a complex subsystem.
-This imposes a limit to both performance and scalability, while introducing a single
-point of failure (i.e., if the centralized component goes down, the whole system goes 
-down, too).
+In traditional architectures, clients talk to a centralized component (e.g., a
+gateway,  broker, API, facade, etc.), which acts as a single point of entry to a
+complex subsystem. This imposes a limit to both performance and scalability,
+while introducing a single point of failure (i.e., if the centralized component
+goes down, the whole system goes  down, too).
 
-Ceph uses a new and innovative approach. Ceph clients contact a Ceph monitor
-and retrieve a copy of the cluster map. The :abbr:`CRUSH (Controlled Replication
-Under Scalable Hashing)` algorithm allows a client to compute where data
+Ceph uses a new and innovative approach. Ceph clients contact a Ceph monitor and
+retrieve a copy of the cluster map. The :abbr:`CRUSH (Controlled Replication
+Under Scalable Hashing)` algorithm allows a client to compute where objects
 *should* be stored, and enables the client to contact the primary OSD to store
-or retrieve the data. The OSD also uses the CRUSH algorithm, but the OSD uses it
-to compute where replicas of data should be stored (and for rebalancing). 
-For a detailed discussion of CRUSH, see 
-`CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data`_
+or retrieve the objects. The OSD daemon also uses the CRUSH algorithm, but the
+OSD daemon uses it to compute where replicas of objects should be stored (and
+for rebalancing). For a detailed discussion of CRUSH, see  `CRUSH - Controlled,
+Scalable, Decentralized Placement of Replicated Data`_
 
 The Ceph storage system supports the notion of 'Pools', which are logical
-partitions for storing object data. Pools set ownership/access, the number of
+partitions for storing objects. Pools set ownership/access, the number of
 object replicas, the number of placement groups, and the CRUSH rule set to use.
 Each pool has a number of placement groups that are mapped dynamically to OSDs. 
-When clients store data, CRUSH maps the object data to placement groups.
+When clients store objects, CRUSH maps each object to a placement group.
 The following diagram depicts how CRUSH maps objects to placement groups, and
 placement groups to OSDs.
 
@@ -125,24 +126,25 @@ placement groups to OSDs.
 
 Mapping objects to placement groups instead of directly to OSDs creates a layer
 of indirection between the OSD and the client.  The cluster must be able to grow
-(or shrink) and rebalance data dynamically. If the client "knew" which OSD had
-the data, that would create a tight coupling between the client and the OSD.
-Instead, the CRUSH algorithm maps the data to a placement group and then maps
-the placement group to one or more OSDs. This layer of indirection allows Ceph
-to rebalance dynamically when new OSDs come online. 
+(or shrink) and rebalance where it stores objects dynamically. If the client
+"knew" which OSD had which object, that would create a tight coupling between
+the client and the OSD. Instead, the CRUSH algorithm maps each objecct to a
+placement group and then maps each placement group to one or more OSDs. This
+layer of indirection allows Ceph to rebalance dynamically when new OSDs come
+online. 
 
 With a copy of the cluster map and the CRUSH algorithm, the client can compute
-exactly which OSD to use when reading or writing a particular piece of data.
+exactly which OSD to use when reading or writing a particular object.
 
 In a typical write scenario, a client uses the CRUSH algorithm to compute where
-to store data, maps the data to a placement group, then looks at the CRUSH map
-to identify the primary OSD for the placement group. Clients write data
-to the identified placement group in the primary OSD. Then, the primary OSD with
-its own copy of the CRUSH map identifies the secondary and tertiary OSDs for
-replication purposes, and replicates the data to the appropriate placement
-groups in the secondary and tertiary OSDs (as many OSDs as additional
-replicas), and responds to the client once it has confirmed the data was
-stored successfully.
+to store an object, maps the object to a placement group, then looks at the
+CRUSH map to identify the primary OSD for the placement group. The client writes
+the object to the identified placement group in the primary OSD. Then, the
+primary OSD with its own copy of the CRUSH map identifies the secondary and
+tertiary OSDs for replication purposes, and replicates the object to the
+appropriate placement groups in the secondary and tertiary OSDs (as many OSDs as
+additional replicas), and responds to the client once it has confirmed the
+object was stored successfully.
 
 .. ditaa:: +--------+     Write      +--------------+    Replica 1     +----------------+
            | Client |*-------------->| Primary OSD  |*---------------->| Secondary OSD  |
@@ -163,6 +165,201 @@ Ceph clients can maintain a session when they need to, and with a particular
 OSD instead of a centralized server.
           
 .. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: http://ceph.com/papers/weil-crush-sc06.pdf
+
+How Ceph Clients Stripe Data
+============================
+
+Storage devices have throughput limitations, which impact performance and
+scalability. So storage systems often support `striping`_--storing sequential
+pieces of information across across multiple storage devices--to increase
+throughput and performance. The most common form of data striping comes from
+`RAID`_. The RAID type most similar to Ceph's striping is `RAID 0`_, or a
+'striped volume.' Ceph's striping offers the throughput of RAID 0 striping,
+the reliability of n-way RAID mirroring and faster recovery.
+
+Ceph provides three types of clients: block device, CephFS filesystem, and
+Gateway. A Ceph client converts its data from the representation format it
+provides to its users (a block device image, RESTful objects, CephFS filesystem
+directories) into objects for storage in the Object Store. The simplest Ceph
+striping format involves a stripe count of 1 object. Clients write stripe units
+to an object until the object is at its maximum capacity, and then create
+another object for additional stripes of data. The simplest form of striping may
+be sufficient for small block device images, S3 or Swift objects, or CephFS
+files. However, this simple form doesn't take maximum advantage of Ceph's
+ability to distribute data across placement groups, and consequently doesn't
+improve performance very much. The following diagram depicts the simplest form
+of striping:
+
+.. ditaa::              
+                        +---------------+
+                        |  Client Data  |
+                        |     Format    |
+                        | cCCC          |
+                        +---------------+
+                                |
+                       +--------+-------+
+                       |                |
+                       v                v
+                 /-----------\    /-----------\
+                 | Begin cCCC|    | Begin cCCC|
+                 | Object  0 |    | Object  1 |
+                 +-----------+    +-----------+
+                 |  stripe   |    |  stripe   |
+                 |  unit 1   |    |  unit 5   |
+                 +-----------+    +-----------+
+                 |  stripe   |    |  stripe   |
+                 |  unit 2   |    |  unit 6   |
+                 +-----------+    +-----------+
+                 |  stripe   |    |  stripe   |
+                 |  unit 3   |    |  unit 7   |
+                 +-----------+    +-----------+
+                 |  stripe   |    |  stripe   |
+                 |  unit 4   |    |  unit 8   |
+                 +-----------+    +-----------+
+                 | End cCCC  |    | End cCCC  |
+                 | Object 0  |    | Object 1  |
+                 \-----------/    \-----------/
+   
+
+If you anticipate large images sizes, large S3 or Swift objects (video), or
+large CephFS files, you may see considerable read/write performance improvements
+by striping client data over mulitple objects within an object set.  Significant
+write performance occurs when the client writes the stripe units to their
+corresponding objects simultaneously. Since objects get mapped to different
+placement groups and further mapped to different OSDs, each write occurs
+simultaneously at the maximum write speed. So the stripe count may serve as a
+proxy for the multiple of the performance improvement. Read performance is
+similarly affected. However, setting up connections between the client and the
+OSDs and the network latency also play a role in the overall performance.
+
+In the following diagram, client data gets striped across an object set
+(``object set 1`` in the following diagram) consisting of 4 objects, where the
+first stripe unit is ``stripe 0`` in ``object 0``, and the fourth stripe unit is
+``stripe 3`` in ``object 3``. After writing the fourth stripe, the client
+determines if the object set is full. If the object set is not full, the client
+begins writing a stripe to the first object again (``object 0`` in the following
+diagram). If the object set is full, the client creates a new object set
+(``object set 2`` in the following diagram), and begins writing to the first
+stripe (``stripe 4``) in the first object in the new object set (``object 4`` in
+the diagram below).
+
+.. ditaa::                 
+                           +---------------+
+                           |  Client Data  |
+                           |     Format    |
+                           | cCCC          |
+                           +---------------+
+                                   |
+        +-----------------+--------+--------+-----------------+
+        |                 |                 |                 |     +--\
+        v                 v                 v                 v        |
+  /-----------\     /-----------\     /-----------\     /-----------\  |   
+  | Begin cCCC|     | Begin cCCC|     | Begin cCCC|     | Begin cCCC|  |
+  | Object 0  |     | Object  1 |     | Object  2 |     | Object  3 |  |
+  +-----------+     +-----------+     +-----------+     +-----------+  |
+  |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |  |
+  |  unit 0   |     |  unit 1   |     |  unit 2   |     |  unit 3   |  |
+  +-----------+     +-----------+     +-----------+     +-----------+  |
+  |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |  +-\ 
+  |  unit 4   |     |  unit 5   |     |  unit 6   |     |  unit 7   |    | Object
+  +-----------+     +-----------+     +-----------+     +-----------+    +- Set 
+  |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |    |   1
+  |  unit 8   |     |  unit 9   |     |  unit 10  |     |  unit 11  |  +-/
+  +-----------+     +-----------+     +-----------+     +-----------+  |
+  |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |  |
+  |  unit 12  |     |  unit 13  |     |  unit 14  |     |  unit 15  |  |
+  +-----------+     +-----------+     +-----------+     +-----------+  |
+  | End cCCC  |     | End cCCC  |     | End cCCC  |     | End cCCC  |  |
+  | Object 0  |     | Object 1  |     | Object 2  |     | Object 3  |  |  
+  \-----------/     \-----------/     \-----------/     \-----------/  |
+                                                                       |
+                                                                    +--/
+  
+                                                                    +--\
+                                                                       |
+  /-----------\     /-----------\     /-----------\     /-----------\  |   
+  | Begin cCCC|     | Begin cCCC|     | Begin cCCC|     | Begin cCCC|  |
+  | Object  4 |     | Object  5 |     | Object  6 |     | Object  7 |  |  
+  +-----------+     +-----------+     +-----------+     +-----------+  |
+  |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |  |
+  |  unit 15  |     |  unit 16  |     |  unit 17  |     |  unit 18  |  |
+  +-----------+     +-----------+     +-----------+     +-----------+  |
+  |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |  +-\ 
+  |  unit 19  |     |  unit 20  |     |  unit 21  |     |  unit 22  |    | Object
+  +-----------+     +-----------+     +-----------+     +-----------+    +- Set
+  |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |    |   2 
+  |  unit 23  |     |  unit 24  |     |  unit 25  |     |  unit 26  |  +-/
+  +-----------+     +-----------+     +-----------+     +-----------+  |
+  |  stripe   |     |  stripe   |     |  stripe   |     |  stripe   |  |
+  |  unit 27  |     |  unit 28  |     |  unit 29  |     |  unit 30  |  |
+  +-----------+     +-----------+     +-----------+     +-----------+  |
+  | End cCCC  |     | End cCCC  |     | End cCCC  |     | End cCCC  |  |
+  | Object 4  |     | Object 5  |     | Object 6  |     | Object 7  |  |  
+  \-----------/     \-----------/     \-----------/     \-----------/  |
+                                                                       |
+                                                                    +--/
+
+Three important variables determine how Ceph stripes data: 
+
+- **Object Size:** Objects in the Ceph Object Store have a maximum
+  configurable size (e.g., 2MB, 4MB, etc.). The object size should be large
+  enough to accomodate many stripe units, and should be a multiple of
+  the stripe unit.
+
+- **Stripe Unit:** Stripes have a configurable unit size (e.g., 64kb).
+  The Ceph client divides the data it will write to objects into equally 
+  sized stripe units, except for the last stripe unit. A stripe unit, 
+  should be a fraction of the Object Size so that an object may contain 
+  many stripe units.
+
+- **Stripe Count:** The Ceph client writes a sequence of stripe units
+  over a series of objects determined by the stripe count. The series 
+  of objects is called an object set. After the Ceph client writes to 
+  the last object in the object set, it returns to the first object in
+  the object set.
+  
+.. important:: Test the performance of your striping configuration before
+   putting your cluster into production. You CANNOT change these striping
+   parameters after you stripe the data and write it to objects.
+
+Once the Ceph client has striped data to stripe units and mapped the stripe
+units to objects, Ceph's CRUSH algorithm maps the objects to placement groups,
+and the placement groups to OSDs before the objects are stored as files on a
+storage disk. See `How Ceph Scales`_ for details.
+
+.. important:: Striping is independent of object replicas. Since CRUSH
+   replicates objects across OSDs, stripes get replicated automatically.
+
+.. _striping: http://en.wikipedia.org/wiki/Data_striping
+.. _RAID: http://en.wikipedia.org/wiki/RAID 
+.. _RAID 0: http://en.wikipedia.org/wiki/RAID_0#RAID_0
+
+.. topic:: S3/Swift Objects and Object Store Objects Compared
+
+   Ceph's Gateway uses the term *object* to describe the data it stores.
+   S3 and Swift objects from the Gateway are not the same as the objects Ceph
+   writes to the Object Store. Gateway objects are mapped to Ceph objects that
+   get written to the Object Store. The S3 and Swift objects do not necessarily 
+   correspond in a 1:1 manner with an object stored in the Object Store. It is
+   possible for an S3 or Swift object to map to multiple Ceph objects.
+
+.. note:: Since a client writes to a single pool, all data striped into objects
+   get mapped to placement groups in the same pool. So they use the same CRUSH
+   map and the same access controls.  
+
+.. tip:: The objects Ceph stores in the Object Store are not striped. 
+
+
+Data Consistency
+================
+
+As part of maintaining data consistency and cleanliness, Ceph OSDs can also
+scrub objects within placement groups. That is Ceph OSDs can compare object
+metadata in one placement group with its replicas in placement groups stored in
+other OSDs. Scrubbing (usually performed daily) catches OSD bugs or filesystem
+errors.  OSDs can also perform deeper scrubbing by comparing data in objects
+bit-for-bit.  Deep scrubbing (usually performed weekly) finds bad sectors on a
+disk that weren't apparent in a light scrub.  
 
 
 Peer-Aware Nodes
@@ -223,27 +420,6 @@ an OSD is ``down``,  the data in the placement group is said to be ``degraded``.
 If the OSD is ``down`` and ``in``, but subsequently taken ``out`` of the
 cluster,  the OSDs receive an update to the cluster map and rebalance the
 placement groups within the cluster automatically.
-
-OSDs store all data as objects in a flat namespace (e.g., no hierarchy of
-directories). An object has an identifier, binary data, and metadata consisting
-of a set of name/value pairs. The semantics are completely up to the client. For
-example, CephFS uses metadata to store file attributes such as the file owner,
-created date, last modified date, and so forth.
-
-
-.. ditaa:: /------+------------------------------+----------------\
-           | ID   | Binary Data                  | Metadata       |
-           +------+------------------------------+----------------+
-           | 1234 | 0101010101010100110101010010 | name1 = value1 | 
-           |      | 0101100001010100110101010010 | name2 = value2 |
-           |      | 0101100001010100110101010010 | nameN = valueN |
-           \------+------------------------------+----------------/
-
-As part of maintaining data consistency and cleanliness, Ceph OSDs
-can also scrub the data. That is, Ceph OSDs can compare object metadata
-across replicas to catch OSD bugs or filesystem errors (daily). OSDs can 
-also do deeper scrubbing by comparing data in objects bit-for-bit to find
-bad sectors on a disk that weren't apparent in a light scrub (weekly).
 
 .. todo:: explain "classes"
 
@@ -357,3 +533,29 @@ CephFS
 ------
 
 .. todo:: cephfs, ceph-fuse
+
+
+Limitations of Prior Art 
+========================
+
+Today's storage systems have demonstrated an ability to scale out, but with some
+significant limitations: interfaces, session managers, and stateful sessions
+with a centralized point of access often limit the scalability of today's
+storage architectures. Furthermore, a centralized interface that dispatches
+requests from clients to server nodes within a cluster and subsequently routes
+responses from those server nodes back to clients will hit a scalability and/or
+performance limitation.
+
+Another problem for storage systems is the need to manually rebalance data when
+increasing or decreasing the size of a data cluster. Manual rebalancing works
+fine on small scales, but it is a nightmare at larger scales because hardware
+additions are common and hardware failure becomes an expectation rather than an 
+exception when operating at the petabyte scale and beyond. 
+
+The operational challenges of managing legacy technologies with the burgeoning
+growth in the demand for unstructured storage makes legacy technologies
+inadequate for scaling into petabytes. Some legacy technologies (e.g., SAN) can
+be considerably more expensive, and more challenging to maintain when compared
+to using commodity hardware. Ceph uses commodity hardware, because it is
+substantially less expensive to purchase (or to replace), and it only requires
+standard system administration skills to use it.
