@@ -88,10 +88,11 @@ namespace librbd {
       if (m_req->m_ext_map.empty())
 	m_req->m_ext_map[m_req->m_object_off] = m_req->data().length();
 
-      m_completion->destriper.add_partial_sparse_result(m_cct,
-							m_req->data(),
-							m_req->m_ext_map, m_req->m_object_off,
-							m_req->m_buffer_extents);
+      m_completion->lock.Lock();
+      m_completion->destriper.add_partial_sparse_result(
+	  m_cct, m_req->data(), m_req->m_ext_map, m_req->m_object_off,
+	  m_req->m_buffer_extents);
+      m_completion->lock.Unlock();
       r = m_req->m_object_len;
     }
     m_completion->complete_request(m_cct, r);
