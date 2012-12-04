@@ -130,6 +130,7 @@ ostream& operator<<(ostream& out, CInode& in)
   if (in.state_test(CInode::STATE_DIRTYPARENT)) out << " dirtyparent";
   if (in.is_freezing_inode()) out << " FREEZING=" << in.auth_pin_freeze_allowance;
   if (in.is_frozen_inode()) out << " FROZEN";
+  if (in.is_frozen_auth_pin()) out << " FROZEN_AUTHPIN";
 
   inode_t *pi = in.get_projected_inode();
   if (pi->is_truncating())
@@ -1862,7 +1863,8 @@ void CInode::add_waiter(uint64_t tag, Context *c)
   // wait on the directory?
   //  make sure its not the inode that is explicitly ambiguous|freezing|frozen
   if (((tag & WAIT_SINGLEAUTH) && !state_test(STATE_AMBIGUOUSAUTH)) ||
-      ((tag & WAIT_UNFREEZE) && !is_frozen_inode() && !is_freezing_inode())) {
+      ((tag & WAIT_UNFREEZE) &&
+       !is_frozen_inode() && !is_freezing_inode() && !is_frozen_auth_pin())) {
     dout(15) << "passing waiter up tree" << dendl;
     parent->dir->add_waiter(tag, c);
     return;
@@ -1885,8 +1887,10 @@ bool CInode::freeze_inode(int auth_pin_allowance)
 
   dout(10) << "freeze_inode - frozen" << dendl;
   assert(auth_pins == auth_pin_allowance);
-  get(PIN_FROZEN);
-  state_set(STATE_FROZEN);
+  if (!state_test(STATE_FROZEN)) {
+    get(PIN_FROZEN);
+    state_set(STATE_FROZEN);
+  }
   return true;
 }
 
@@ -1904,10 +1908,34 @@ void CInode::unfreeze_inode(list<Context*>& finished)
   take_waiting(WAIT_UNFREEZE, finished);
 }
 
+void CInode::unfreeze_inode()
+{
+    list<Context*> finished;
+    unfreeze_inode(finished);
+    mdcache->mds->queue_waiters(finished);
+}
+
+void CInode::freeze_auth_pin()
+{
+  assert(state_test(CInode::STATE_FROZEN));
+  state_set(CInode::STATE_FROZENAUTHPIN);
+}
+
+void CInode::unfreeze_auth_pin()
+{
+  assert(state_test(CInode::STATE_FROZENAUTHPIN));
+  state_clear(CInode::STATE_FROZENAUTHPIN);
+  if (!state_test(STATE_FREEZING|STATE_FROZEN)) {
+    list<Context*> finished;
+    take_waiting(WAIT_UNFREEZE, finished);
+    mdcache->mds->queue_waiters(finished);
+  }
+}
 
 // auth_pins
 bool CInode::can_auth_pin() {
-  if (is_freezing_inode() || is_frozen_inode()) return false;
+  if (is_freezing_inode() || is_frozen_inode() || is_frozen_auth_pin())
+    return false;
   if (parent)
     return parent->can_auth_pin();
   return true;

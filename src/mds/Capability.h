@@ -297,7 +297,8 @@ public:
     int newpending = other.pending | pending();
     if (other.issued & ~newpending)
       issue(other.issued | newpending);
-    issue(newpending);
+    else
+      issue(newpending);
     last_issue_stamp = other.last_issue_stamp;
 
     client_follows = other.client_follows;
@@ -311,7 +312,8 @@ public:
     int newpending = pending();
     if (otherissued & ~newpending)
       issue(otherissued | newpending);
-    issue(newpending);
+    else
+      issue(newpending);
 
     // wanted
     _wanted = _wanted | otherwanted;

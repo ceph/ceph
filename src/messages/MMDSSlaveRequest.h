@@ -112,6 +112,7 @@ public:
 
   int get_lock_type() { return lock_type; }
   MDSCacheObjectInfo &get_object_info() { return object_info; }
+  MDSCacheObjectInfo &get_authpin_freeze() { return object_info; }
 
   vector<MDSCacheObjectInfo>& get_authpins() { return authpins; }
 
