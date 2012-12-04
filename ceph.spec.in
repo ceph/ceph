@@ -169,7 +169,7 @@ object storage.
 # Enable building of debug package on distributions that don't automatically
 # build it.
 
-%if (0%{?fedora} || 0%{?centos} || 0%{?opensuse})
+%if (0%{?centos} || 0%{?opensuse} || 0%{?suse_version})
 %debug_package
 %endif
 
