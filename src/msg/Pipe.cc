@@ -54,6 +54,7 @@ ostream& Pipe::_pipe_prefix(std::ostream *_dout) {
 
 Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
   : reader_thread(this), writer_thread(this),
+    delay_thread(NULL),
     msgr(r),
     conn_id(r->dispatch_queue.get_id()),
     sd(-1), port(0),
@@ -94,6 +95,7 @@ Pipe::~Pipe()
   if (connection_state)
     connection_state->put();
   delete session_security;
+  delete delay_thread;
 }
 
 void Pipe::handle_ack(uint64_t seq)
@@ -127,6 +129,16 @@ void Pipe::start_reader()
   reader_thread.create(msgr->cct->_conf->ms_rwthread_stack_bytes);
 }
 
+void Pipe::maybe_start_delay_thread()
+{
+  if (!delay_thread &&
+      msgr->cct->_conf->ms_inject_delay_type.find(ceph_entity_type_name(connection_state->peer_type)) != string::npos) {
+    lsubdout(msgr->cct, ms, 1) << "setting up a delay queue on Pipe " << this << dendl;
+    delay_thread = new DelayedDelivery(this);
+    delay_thread->create();
+  }
+}
+
 void Pipe::start_writer()
 {
   assert(pipe_lock.is_locked());
@@ -146,14 +158,54 @@ void Pipe::join_reader()
   reader_needs_join = false;
 }
 
-
-void Pipe::queue_received(Message *m, int priority)
+void Pipe::DelayedDelivery::discard()
 {
-  assert(pipe_lock.is_locked());
-  in_q->enqueue(m, priority, conn_id);
+  lgeneric_subdout(pipe->msgr->cct, ms, 20) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::discard" << dendl;
+  Mutex::Locker l(delay_lock);
+  while (!delay_queue.empty()) {
+    Message *m = delay_queue.front().second;
+    pipe->msgr->dispatch_throttle_release(m->get_dispatch_throttle_size());
+    m->put();
+    delay_queue.pop_front();
+  }
 }
 
+void Pipe::DelayedDelivery::flush()
+{
+  lgeneric_subdout(pipe->msgr->cct, ms, 20) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::flush" << dendl;
+  Mutex::Locker l(delay_lock);
+  while (!delay_queue.empty()) {
+    Message *m = delay_queue.front().second;
+    delay_queue.pop_front();
+    pipe->in_q->enqueue(m, m->get_priority(), pipe->conn_id);
+  }
+}
 
+void *Pipe::DelayedDelivery::entry()
+{
+  Mutex::Locker locker(delay_lock);
+  lgeneric_subdout(pipe->msgr->cct, ms, 20) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::entry start" << dendl;
+
+  while (!stop_delayed_delivery) {
+    if (delay_queue.empty()) {
+      lgeneric_subdout(pipe->msgr->cct, ms, 30) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::entry sleeping on delay_cond because delay queue is empty" << dendl;
+      delay_cond.Wait(delay_lock);
+      continue;
+    }
+    utime_t release = delay_queue.front().first;
+    if (release > ceph_clock_now(pipe->msgr->cct)) {
+      lgeneric_subdout(pipe->msgr->cct, ms, 10) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::entry sleeping on delay_cond until " << release << dendl;
+      delay_cond.WaitUntil(delay_lock, release);
+      continue;
+    }
+    Message *m = delay_queue.front().second;
+    lgeneric_subdout(pipe->msgr->cct, ms, 10) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::entry dequeuing message " << m << " for delivery, past " << release << dendl;
+    delay_queue.pop_front();
+    pipe->in_q->enqueue(m, m->get_priority(), pipe->conn_id);
+  }
+  lgeneric_subdout(pipe->msgr->cct, ms, 20) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::entry stop" << dendl;
+  return NULL;
+}
 
 int Pipe::accept()
 {
@@ -503,7 +555,11 @@ int Pipe::accept()
 
     // make existing Connection reference us
     existing->connection_state->reset_pipe(this);
- 
+
+    // flush/queue any existing delayed messages
+    if (existing->delay_thread)
+      existing->delay_thread->flush();
+
     // steal incoming queue
     uint64_t replaced_conn_id = conn_id;
     conn_id = existing->conn_id;
@@ -587,6 +643,9 @@ int Pipe::accept()
   }
   ldout(msgr->cct,20) << "accept done" << dendl;
   pipe_lock.Unlock();
+
+  maybe_start_delay_thread();
+
   return 0;   // success.
 
  fail_unlocked:
@@ -936,6 +995,7 @@ int Pipe::connect()
 	ldout(msgr->cct,20) << "connect starting reader" << dendl;
 	start_reader();
       }
+      maybe_start_delay_thread();
       delete authorizer;
       return 0;
     }
@@ -1020,7 +1080,6 @@ void Pipe::discard_out_queue()
   out_q.clear();
 }
 
-
 void Pipe::fault(bool onread)
 {
   const md_config_t *conf = msgr->cct->_conf;
@@ -1057,6 +1116,8 @@ void Pipe::fault(bool onread)
     msgr->lock.Unlock();
 
     in_q->discard_queue(conn_id);
+    if (delay_thread)
+      delay_thread->discard();
     discard_out_queue();
 
     // disconnect from Connection, and mark it failed.  future messages
@@ -1068,6 +1129,10 @@ void Pipe::fault(bool onread)
     return;
   }
 
+  // queue delayed items immediately
+  if (delay_thread)
+    delay_thread->flush();
+
   // requeue sent items
   requeue_sent();
 
@@ -1075,7 +1140,7 @@ void Pipe::fault(bool onread)
     ldout(msgr->cct,0) << "fault with nothing to send, going to standby" << dendl;
     state = STATE_STANDBY;
     return;
-  } 
+  }
 
   if (state != STATE_CONNECTING) {
     if (policy.server) {
@@ -1122,6 +1187,8 @@ void Pipe::was_session_reset()
 
   ldout(msgr->cct,10) << "was_session_reset" << dendl;
   in_q->discard_queue(conn_id);
+  if (delay_thread)
+    delay_thread->discard();
   discard_out_queue();
 
   msgr->dispatch_queue.queue_remote_reset(connection_state);
@@ -1243,7 +1310,18 @@ void Pipe::reader()
       ldout(msgr->cct,10) << "reader got message "
 	       << m->get_seq() << " " << m << " " << *m
 	       << dendl;
-      queue_received(m);
+
+      if (delay_thread) {
+	utime_t release;
+	if (rand() % 10000 < msgr->cct->_conf->ms_inject_delay_probability * 10000.0) {
+	  release = m->get_recv_stamp();
+	  release += msgr->cct->_conf->ms_inject_delay_max * (double)(rand() % 10000) / 10000.0;
+	  lsubdout(msgr->cct, ms, 1) << "queue_received will delay until " << release << " on " << m << " " << *m << dendl;
+	}
+	delay_thread->queue(release, m);
+      } else {
+	in_q->enqueue(m, m->get_priority(), conn_id);
+      }
     } 
     
     else if (tag == CEPH_MSGR_TAG_CLOSE) {
