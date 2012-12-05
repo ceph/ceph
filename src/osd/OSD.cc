@@ -5133,6 +5133,9 @@ void OSD::handle_pg_query(OpRequestRef op)
       continue;
     }
 
+    if (!osdmap->have_pg_pool(pgid.pool()))
+      continue;
+
     // get active crush mapping
     vector<int> up, acting;
     osdmap->pg_to_up_acting_osds(pgid, up, acting);
