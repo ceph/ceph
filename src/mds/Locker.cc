@@ -174,7 +174,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
 			   set<SimpleLock*> &rdlocks,
 			   set<SimpleLock*> &wrlocks,
 			   set<SimpleLock*> &xlocks,
-			   map<SimpleLock*,int> *remote_wrlocks)
+			   map<SimpleLock*,int> *remote_wrlocks,
+			   CInode *auth_pin_freeze)
 {
   if (mdr->done_locking &&
       !mdr->is_slave()) {  // not on slaves!  master requests locks piecemeal.
@@ -196,6 +197,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
     // augment xlock with a versionlock?
     if ((*p)->get_type() == CEPH_LOCK_DN) {
       CDentry *dn = (CDentry*)(*p)->get_parent();
+      if (!dn->is_auth())
+	continue;
 
       if (xlocks.count(&dn->versionlock))
 	continue;  // we're xlocking the versionlock too; don't wrlock it!
@@ -213,6 +216,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
     if ((*p)->get_type() > CEPH_LOCK_IVERSION) {
       // inode version lock?
       CInode *in = (CInode*)(*p)->get_parent();
+      if (!in->is_auth())
+	continue;
       if (mdr->is_master()) {
 	// master.  wrlock versionlock so we can pipeline inode updates to journal.
 	wrlocks.insert(&in->versionlock);
@@ -282,11 +287,12 @@ bool Locker::acquire_locks(MDRequest *mdr,
       continue;
     
     if (!object->is_auth()) {
+      if (!mdr->locks.empty())
+	mds->locker->drop_locks(mdr);
       if (object->is_ambiguous_auth()) {
 	// wait
 	dout(10) << " ambiguous auth, waiting to authpin " << *object << dendl;
 	object->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
-	mds->locker->drop_locks(mdr);
 	mdr->drop_local_auth_pins();
 	return false;
       }
@@ -331,7 +337,9 @@ bool Locker::acquire_locks(MDRequest *mdr,
 	dout(10) << " req remote auth_pin of " << **q << dendl;
 	MDSCacheObjectInfo info;
 	(*q)->set_object_info(info);
-	req->get_authpins().push_back(info);      
+	req->get_authpins().push_back(info);
+	if (*q == auth_pin_freeze)
+	  (*q)->set_object_info(req->get_authpin_freeze());
 	mdr->pin(*q);
       }
       mds->send_message_mds(req, p->first);
@@ -845,8 +853,8 @@ void Locker::try_eval(MDSCacheObject *p, int mask)
     return;
   }
 
-  if (p->is_auth() && !p->can_auth_pin()) {
-    dout(7) << "try_eval can't auth_pin, waiting on " << *p << dendl;
+  if (p->is_auth() && p->is_frozen()) {
+    dout(7) << "try_eval frozen, waiting on " << *p << dendl;
     p->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_Locker_Eval(this, p, mask));
     return;
   }
@@ -3920,6 +3928,7 @@ void Locker::local_wrlock_grab(LocalLock *lock, Mutation *mut)
   dout(7) << "local_wrlock_grab  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   
+  assert(lock->get_parent()->is_auth());
   assert(lock->can_wrlock());
   assert(!mut->wrlocks.count(lock));
   lock->get_wrlock(mut->get_client());
@@ -3932,6 +3941,7 @@ bool Locker::local_wrlock_start(LocalLock *lock, MDRequest *mut)
   dout(7) << "local_wrlock_start  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   
+  assert(lock->get_parent()->is_auth());
   if (lock->can_wrlock()) {
     assert(!mut->wrlocks.count(lock));
     lock->get_wrlock(mut->get_client());
@@ -3963,6 +3973,7 @@ bool Locker::local_xlock_start(LocalLock *lock, MDRequest *mut)
   dout(7) << "local_xlock_start  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   
+  assert(lock->get_parent()->is_auth());
   if (!lock->can_xlock_local()) {
     lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
     return false;
@@ -4397,8 +4408,12 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     if (lock->get_state() == LOCK_MIX_LOCK ||
 	lock->get_state() == LOCK_MIX_LOCK2 ||
 	lock->get_state() == LOCK_MIX_EXCL ||
-	lock->get_state() == LOCK_MIX_TSYN)
+	lock->get_state() == LOCK_MIX_TSYN) {
       lock->decode_locked_state(m->get_data());
+      // replica is waiting for AC_LOCKFLUSHED, eval_gather() should not
+      // delay calling scatter_writebehind().
+      lock->clear_flushed();
+    }
 
     if (lock->is_gathering()) {
       dout(7) << "handle_file_lock " << *in << " from " << from

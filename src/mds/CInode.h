@@ -181,6 +181,7 @@ public:
   static const int STATE_DIRTYPARENT =  (1<<14);
   static const int STATE_DIRTYRSTAT =  (1<<15);
   static const int STATE_STRAYPINNED = (1<<16);
+  static const int STATE_FROZENAUTHPIN = (1<<17);
 
   // -- waiters --
   static const uint64_t WAIT_DIR         = (1<<0);
@@ -856,6 +857,7 @@ public:
   // -- freeze --
   bool is_freezing_inode() { return state_test(STATE_FREEZING); }
   bool is_frozen_inode() { return state_test(STATE_FROZEN); }
+  bool is_frozen_auth_pin() { return state_test(STATE_FROZENAUTHPIN); }
   bool is_frozen();
   bool is_frozen_dir();
   bool is_freezing();
@@ -864,7 +866,10 @@ public:
    * auth_pins it is itself holding/responsible for. */
   bool freeze_inode(int auth_pin_allowance=0);
   void unfreeze_inode(list<Context*>& finished);
+  void unfreeze_inode();
 
+  void freeze_auth_pin();
+  void unfreeze_auth_pin();
 
   // -- reference counting --
   void bad_put(int by) {

@@ -50,6 +50,7 @@ struct Mutation {
   // auth pins
   set< MDSCacheObject* > remote_auth_pins;
   set< MDSCacheObject* > auth_pins;
+  CInode *auth_pin_freeze;
   
   // held locks
   set< SimpleLock* > rdlocks;  // always local.
@@ -81,12 +82,14 @@ struct Mutation {
     : attempt(0),
       ls(0),
       slave_to_mds(-1),
+      auth_pin_freeze(NULL),
       locking(NULL),
       done_locking(false), committing(false), aborted(false), killed(false) { }
   Mutation(metareqid_t ri, __u32 att=0, int slave_to=-1)
     : reqid(ri), attempt(att),
       ls(0),
       slave_to_mds(slave_to), 
+      auth_pin_freeze(NULL),
       locking(NULL),
       done_locking(false), committing(false), aborted(false), killed(false) { }
   virtual ~Mutation() {
@@ -120,6 +123,9 @@ struct Mutation {
   bool is_auth_pinned(MDSCacheObject *object);
   void auth_pin(MDSCacheObject *object);
   void auth_unpin(MDSCacheObject *object);
+  bool freeze_auth_pin(CInode *inode);
+  void unfreeze_auth_pin(CInode *inode);
+  bool can_auth_pin(MDSCacheObject *object);
   void drop_local_auth_pins();
   void add_projected_inode(CInode *in);
   void pop_and_dirty_projected_inodes();

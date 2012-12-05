@@ -615,8 +615,12 @@ void CDir::unlink_inode_work( CDentry *dn )
 
 void CDir::add_to_bloom(CDentry *dn)
 {
-  if (!bloom)
+  if (!bloom) {
+    /* not create bloom filter for incomplete dir that was added by log replay */
+    if (!is_complete())
+      return;
     bloom = new bloom_filter(100, 0.05, 0);
+  }
   /* This size and false positive probability is completely random.*/
   bloom->insert(dn->name.c_str(), dn->name.size());
 }
