@@ -1250,6 +1250,13 @@ public:
   }
 };
 
+inline bool operator==(const MDSCacheObjectInfo& l, const MDSCacheObjectInfo& r) {
+  if (l.ino || r.ino)
+    return l.ino == r.ino && l.snapid == r.snapid;
+  else
+    return l.dirfrag == r.dirfrag && l.dname == r.dname;
+}
+
 WRITE_CLASS_ENCODER(MDSCacheObjectInfo)
 
 
