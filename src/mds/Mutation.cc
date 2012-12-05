@@ -82,8 +82,39 @@ void Mutation::auth_unpin(MDSCacheObject *object)
   auth_pins.erase(object);
 }
 
+bool Mutation::freeze_auth_pin(CInode *inode)
+{
+  assert(!auth_pin_freeze || auth_pin_freeze == inode);
+  auth_pin_freeze = inode;
+  auth_pin(inode);
+  if (!inode->freeze_inode(1))
+    return false;
+
+  inode->freeze_auth_pin();
+  inode->unfreeze_inode();
+  return true;
+}
+
+void Mutation::unfreeze_auth_pin(CInode *inode)
+{
+  assert(auth_pin_freeze == inode);
+  assert(is_auth_pinned(inode));
+  if (inode->is_frozen_auth_pin())
+    inode->unfreeze_auth_pin();
+  else
+    inode->unfreeze_inode();
+  auth_pin_freeze = NULL;
+}
+
+bool Mutation::can_auth_pin(MDSCacheObject *object)
+{
+  return object->can_auth_pin() || (is_auth_pinned(object) && object == auth_pin_freeze);
+}
+
 void Mutation::drop_local_auth_pins()
 {
+  if (auth_pin_freeze)
+    unfreeze_auth_pin(auth_pin_freeze);
   for (set<MDSCacheObject*>::iterator it = auth_pins.begin();
        it != auth_pins.end();
        it++) {
