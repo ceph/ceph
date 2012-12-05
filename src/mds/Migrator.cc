@@ -1051,6 +1051,7 @@ void Migrator::finish_export_inode_caps(CInode *in)
     mds->send_message_client_counted(m, it->first);
   }
   in->clear_client_caps_after_export();
+  mds->locker->eval(in, CEPH_CAP_LOCKS);
 }
 
 void Migrator::finish_export_inode(CInode *in, utime_t now, list<Context*>& finished)

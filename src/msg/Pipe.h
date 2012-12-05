@@ -60,6 +60,46 @@ class DispatchQueue;
     } writer_thread;
     friend class Writer;
 
+    /**
+     * The DelayedDelivery is for injecting delays into Message delivery off
+     * the socket. It is only enabled if delays are requested, and if they
+     * are then it pulls Messages off the DelayQueue and puts them into the
+     * in_q (SimpleMessenger::dispatch_queue).
+     * Please note that this probably has issues with Pipe shutdown and
+     * replacement semantics. I've tried, but no guarantees.
+     */
+    class DelayedDelivery: public Thread {
+      Pipe *pipe;
+      std::deque< pair<utime_t,Message*> > delay_queue;
+      Mutex delay_lock;
+      Cond delay_cond;
+      bool stop_delayed_delivery;
+
+    public:
+      DelayedDelivery(Pipe *p)
+	: pipe(p),
+	  delay_lock("Pipe::DelayedDelivery::delay_lock"),
+	  stop_delayed_delivery(false) { }
+      ~DelayedDelivery() {
+	discard();
+      }
+      void *entry();
+      void queue(utime_t release, Message *m) {
+	Mutex::Locker l(delay_lock);
+	delay_queue.push_back(make_pair(release, m));
+	delay_cond.Signal();
+      }
+      void discard();
+      void flush();
+      void stop() {
+	delay_lock.Lock();
+	stop_delayed_delivery = true;
+	delay_cond.Signal();
+	delay_lock.Unlock();
+      }
+    } *delay_thread;
+    friend class DelayedDelivery;
+
   public:
     Pipe(SimpleMessenger *r, int st, Connection *con);
     ~Pipe();
@@ -166,24 +206,12 @@ class DispatchQueue;
 
     void start_reader();
     void start_writer();
+    void maybe_start_delay_thread();
     void join_reader();
 
     // public constructors
     static const Pipe& Server(int s);
     static const Pipe& Client(const entity_addr_t& pi);
-
-    //we have two queue_received's to allow local signal delivery
-    // via Message * (that doesn't actually point to a Message)
-    void queue_received(Message *m, int priority);
-    
-    void queue_received(Message *m) {
-      // this is just to make sure that a changeset is working
-      // properly; if you start using the refcounting more and have
-      // multiple people hanging on to a message, ditch the assert!
-      assert(m->nref.read() == 1);
-
-      queue_received(m, m->get_priority());
-    }
 
     __u32 get_out_seq() { return out_seq; }
 
@@ -208,6 +236,10 @@ class DispatchQueue;
         writer_thread.join();
       if (reader_thread.is_started())
         reader_thread.join();
+      if (delay_thread) {
+	delay_thread->stop();
+	delay_thread->join();
+      }
     }
     void stop();
 

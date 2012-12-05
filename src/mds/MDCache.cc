@@ -5498,9 +5498,10 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
   // adjust the dir state
   // NOTE: we can safely remove a clean, null dentry without effecting
   //       directory completeness.
-  // (do this _before_ we unlink the inode, below!)
+  // (check this _before_ we unlink the inode, below!)
+  bool clear_complete = false;
   if (!(dnl->is_null() && dn->is_clean())) 
-    dir->state_clear(CDir::STATE_COMPLETE); 
+    clear_complete = true;
   
   // unlink the dentry
   if (dnl->is_remote()) {
@@ -5520,6 +5521,9 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
   // remove dentry
   dir->add_to_bloom(dn);
   dir->remove_dentry(dn);
+
+  if (clear_complete)
+    dir->state_clear(CDir::STATE_COMPLETE);
   
   // reexport?
   if (dir->get_num_head_items() == 0 && dir->is_subtree_root())
@@ -5708,9 +5712,8 @@ void MDCache::trim_non_auth()
       else {
 	assert(dnl->is_null());
       }
-      dir->add_to_bloom(dn);
+
       dir->remove_dentry(dn);
-      
       // adjust the dir state
       dir->state_clear(CDir::STATE_COMPLETE);  // dir incomplete!
     }
@@ -5811,7 +5814,6 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
         dout(20) << "trim_non_auth_subtree(" << dir << ") removing inode " << in << " with dentry" << dn << dendl;
         dir->unlink_inode(dn);
         remove_inode(in);
-        dir->add_to_bloom(dn);
         dir->remove_dentry(dn);
       } else {
         dout(20) << "trim_non_auth_subtree(" << dir << ") keeping inode " << in << " with dentry " << dn <<dendl;
@@ -5928,6 +5930,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	continue;
       }
       assert(!(parent_dir->is_auth() && parent_dir->is_exporting()) ||
+	     migrator->get_export_state(parent_dir) <= Migrator::EXPORT_PREPPING ||
              (migrator->get_export_state(parent_dir) == Migrator::EXPORT_WARNING &&
                  !migrator->export_has_warned(parent_dir, from)));
 
@@ -6706,11 +6709,11 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
     
     // can we conclude ENOENT?
     if (dnl && dnl->is_null()) {
-      if (dn->lock.can_read(client)) {
-        dout(12) << "traverse: miss on null+readable dentry " << path[depth] << " " << *dn << dendl;
+      if (mds->locker->rdlock_try(&dn->lock, client, NULL)) {
+        dout(10) << "traverse: miss on null+readable dentry " << path[depth] << " " << *dn << dendl;
         return -ENOENT;
       } else {
-        dout(12) << "miss on dentry " << *dn << ", can't read due to lock" << dendl;
+        dout(10) << "miss on dentry " << *dn << ", can't read due to lock" << dendl;
         dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req, fin));
         return 1;
       }
@@ -6730,7 +6733,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
 	} else {
           dout(7) << "remote link to " << dnl->get_remote_ino() << ", which i don't have" << dendl;
 	  assert(mdr);  // we shouldn't hit non-primary dentries doing a non-mdr traversal!
-          open_remote_ino(dnl->get_remote_ino(), _get_waiter(mdr, req, fin));
+          open_remote_ino(dnl->get_remote_ino(), _get_waiter(mdr, req, fin),
+			  (null_okay && depth == path.depth() - 1));
 	  if (mds->logger) mds->logger->inc(l_mds_trino);
           return 1;
         }        
@@ -7016,12 +7020,13 @@ CInode *MDCache::get_dentry_inode(CDentry *dn, MDRequest *mdr, bool projected)
 class C_MDC_RetryOpenRemoteIno : public Context {
   MDCache *mdcache;
   inodeno_t ino;
+  bool want_xlocked;
   Context *onfinish;
 public:
-  C_MDC_RetryOpenRemoteIno(MDCache *mdc, inodeno_t i, Context *c) :
-    mdcache(mdc), ino(i), onfinish(c) {}
+  C_MDC_RetryOpenRemoteIno(MDCache *mdc, inodeno_t i, Context *c, bool wx) :
+    mdcache(mdc), ino(i), want_xlocked(wx), onfinish(c) {}
   void finish(int r) {
-    mdcache->open_remote_ino(ino, onfinish);
+    mdcache->open_remote_ino(ino, onfinish, want_xlocked);
   }
 };
 
@@ -7031,19 +7036,20 @@ class C_MDC_OpenRemoteIno : public Context {
   inodeno_t ino;
   inodeno_t hadino;
   version_t hadv;
+  bool want_xlocked;
   Context *onfinish;
 public:
   vector<Anchor> anchortrace;
 
-  C_MDC_OpenRemoteIno(MDCache *mdc, inodeno_t i, inodeno_t hi, version_t hv, Context *c) :
-    mdcache(mdc), ino(i), hadino(hi), hadv(hv), onfinish(c) {}
-  C_MDC_OpenRemoteIno(MDCache *mdc, inodeno_t i, vector<Anchor>& at, Context *c) :
-    mdcache(mdc), ino(i), hadino(0), hadv(0), onfinish(c), anchortrace(at) {}
+  C_MDC_OpenRemoteIno(MDCache *mdc, inodeno_t i, bool wx, inodeno_t hi, version_t hv, Context *c) :
+    mdcache(mdc), ino(i), hadino(hi), hadv(hv), want_xlocked(wx), onfinish(c) {}
+  C_MDC_OpenRemoteIno(MDCache *mdc, inodeno_t i, bool wx, vector<Anchor>& at, Context *c) :
+    mdcache(mdc), ino(i), hadino(0), hadv(0), want_xlocked(wx), onfinish(c), anchortrace(at) {}
 
   void finish(int r) {
     assert(r == 0);
     if (r == 0)
-      mdcache->open_remote_ino_2(ino, anchortrace, hadino, hadv, onfinish);
+      mdcache->open_remote_ino_2(ino, anchortrace, want_xlocked, hadino, hadv, onfinish);
     else {
       onfinish->finish(r);
       delete onfinish;
@@ -7051,18 +7057,18 @@ public:
   }
 };
 
-void MDCache::open_remote_ino(inodeno_t ino, Context *onfinish, inodeno_t hadino, version_t hadv)
+void MDCache::open_remote_ino(inodeno_t ino, Context *onfinish, bool want_xlocked,
+			      inodeno_t hadino, version_t hadv)
 {
-  dout(7) << "open_remote_ino on " << ino << dendl;
+  dout(7) << "open_remote_ino on " << ino << (want_xlocked ? " want_xlocked":"") << dendl;
   
-  C_MDC_OpenRemoteIno *c = new C_MDC_OpenRemoteIno(this, ino, hadino, hadv, onfinish);
+  C_MDC_OpenRemoteIno *c = new C_MDC_OpenRemoteIno(this, ino, want_xlocked,
+						   hadino, hadv, onfinish);
   mds->anchorclient->lookup(ino, c->anchortrace, c);
 }
 
-void MDCache::open_remote_ino_2(inodeno_t ino,
-                                vector<Anchor>& anchortrace,
-				inodeno_t hadino, version_t hadv,
-                                Context *onfinish)
+void MDCache::open_remote_ino_2(inodeno_t ino, vector<Anchor>& anchortrace, bool want_xlocked,
+				inodeno_t hadino, version_t hadv, Context *onfinish)
 {
   dout(7) << "open_remote_ino_2 on " << ino
 	  << ", trace depth is " << anchortrace.size() << dendl;
@@ -7105,7 +7111,7 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
 
   if (!in->dirfragtree.contains(frag)) {
     dout(10) << "frag " << frag << " not valid, requerying anchortable" << dendl;
-    open_remote_ino(ino, onfinish);
+    open_remote_ino(ino, onfinish, want_xlocked);
     return;
   }
 
@@ -7115,14 +7121,15 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
     dout(10) << "opening remote dirfrag " << frag << " under " << *in << dendl;
     /* we re-query the anchortable just to avoid a fragtree update race */
     open_remote_dirfrag(in, frag,
-			new C_MDC_RetryOpenRemoteIno(this, ino, onfinish));
+			new C_MDC_RetryOpenRemoteIno(this, ino, onfinish, want_xlocked));
     return;
   }
 
   if (!dir && in->is_auth()) {
     if (in->is_frozen_dir()) {
       dout(7) << "traverse: " << *in << " is frozen_dir, waiting" << dendl;
-      in->parent->dir->add_waiter(CDir::WAIT_UNFREEZE, onfinish);
+      in->parent->dir->add_waiter(CDir::WAIT_UNFREEZE,
+				  new C_MDC_RetryOpenRemoteIno(this, ino, onfinish, want_xlocked));
       return;
     }
     dir = in->get_or_open_dirfrag(this, frag);
@@ -7144,20 +7151,22 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
 		 << " in complete dir " << *dir
 		 << ", requerying anchortable"
 		 << dendl;
-	open_remote_ino(ino, onfinish, anchortrace[i].ino, anchortrace[i].updated);
+	open_remote_ino(ino, onfinish, want_xlocked,
+		        anchortrace[i].ino, anchortrace[i].updated);
       }
     } else {
       dout(10) << "need ino " << anchortrace[i].ino
 	       << ", fetching incomplete dir " << *dir
 	       << dendl;
-      dir->fetch(new C_MDC_OpenRemoteIno(this, ino, anchortrace, onfinish));
+      dir->fetch(new C_MDC_OpenRemoteIno(this, ino, want_xlocked, anchortrace, onfinish));
     }
   } else {
     // hmm, discover.
     dout(10) << "have remote dirfrag " << *dir << ", discovering " 
 	     << anchortrace[i].ino << dendl;
-    discover_ino(dir, anchortrace[i].ino, 
-		 new C_MDC_OpenRemoteIno(this, ino, anchortrace, onfinish));
+    discover_ino(dir, anchortrace[i].ino,
+	         new C_MDC_RetryOpenRemoteIno(this, ino, onfinish, want_xlocked),
+		 (want_xlocked && i == anchortrace.size() - 1));
   }
 }
 
@@ -7476,13 +7485,17 @@ void MDCache::request_finish(MDRequest *mdr)
 
 void MDCache::request_forward(MDRequest *mdr, int who, int port)
 {
-  dout(7) << "request_forward " << *mdr << " to mds." << who << " req " << *mdr << dendl;
-  
-  mds->forward_message_mds(mdr->client_request, who);  
-  mdr->client_request = 0;
+  if (mdr->client_request->get_source().is_client()) {
+    dout(7) << "request_forward " << *mdr << " to mds." << who << " req "
+            << *mdr->client_request << dendl;
+    mds->forward_message_mds(mdr->client_request, who);
+    mdr->client_request = 0;
+    if (mds->logger) mds->logger->inc(l_mds_fw);
+  } else {
+    dout(7) << "request_forward drop " << *mdr << " req " << *mdr->client_request
+            << " was from mds" << dendl;
+  }
   request_cleanup(mdr);
-
-  if (mds->logger) mds->logger->inc(l_mds_fw);
 }
 
 
