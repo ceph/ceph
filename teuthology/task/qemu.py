@@ -176,13 +176,24 @@ def run_qemu(ctx, config):
             'virtio-9p-pci,fsdev=log,mount_tag=test_log',
             ]
 
+        cachemode = 'none'
+        ceph_config = ctx.ceph.conf.get('global', {})
+        ceph_config.update(ctx.ceph.conf.get('client', {}))
+        ceph_config.update(ctx.ceph.conf.get(client, {}))
+        if ceph_config.get('rbd cache'):
+            if ceph_config.get('rbd cache max dirty', 1) > 0:
+                cachemode = 'writeback'
+            else:
+                cachemode = 'writethrough'
+
         for i in xrange(client_config.get('num_rbd', DEFAULT_NUM_RBD)):
             args.extend([
                 '-drive',
-                'file=rbd:rbd/{img}:conf={conf}:id={id},format=rbd,if=virtio'.format(
+                'file=rbd:rbd/{img}:conf={conf}:id={id},format=rbd,if=virtio,cache={cachemode}'.format(
                     conf='/tmp/cephtest/ceph.conf',
                     img='{client}.{num}'.format(client=client, num=i),
                     id=client[len('client.'):],
+                    cachemode=cachemode,
                     ),
                 ])
 
