@@ -867,53 +867,13 @@ int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int fd, loff_t 
 /** @} filelayout */
 
 /**
- * @defgroup libcephfs_h_default_filelayout Control the Default File Layout.
- * Functions for setting and getting the default file layout for new files.
- *
- * @{
- */
-
-/**
- * Set the default stripe unit of files created in this mount.
- *
- * @param cmount the ceph mount handle to use.
- * @param stripe the stripe size to use
- * @returns 0 on success or a negative error code on failure.
+ * No longer available.  Do not use.
+ * These functions will return -EOPNOTSUPP.
  */
 int ceph_set_default_file_stripe_unit(struct ceph_mount_info *cmount, int stripe);
-
-/**
- * Set the default stripe count of files created in this mount.
- *
- * @param cmount the ceph mount handle to use.
- * @param count the stripe count to use
- * @returns 0 on success or a negative error code on failure.
- */
 int ceph_set_default_file_stripe_count(struct ceph_mount_info *cmount, int count);
-
-/**
- * Set the default object size to use for striping.
- *
- * @param cmount the ceph mount handle to use.
- * @param size the default size for objects
- * @returns 0 on success or a negative error code on failure
- */
 int ceph_set_default_object_size(struct ceph_mount_info *cmount, int size);
-
-/**
- * No longer available.  Do not use.
- * Set the default preferred placement group.  This option will return
- * -EOPNOTSUPP as it is no longer supported.
- */
 int ceph_set_default_preferred_pg(struct ceph_mount_info *cmount, int osd);
-
-/**
- * Set the default file replication factor.
- *
- * @param cmount the ceph mount handle to use.
- * @param replication the default replication factor for files in this filesystem.
- * @returns 0 on success or negative error code on failure.
- */
 int ceph_set_default_file_replication(struct ceph_mount_info *cmount, int replication);
 
 /**

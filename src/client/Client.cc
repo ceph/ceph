@@ -149,10 +149,6 @@ Client::Client(Messenger *m, MonClient *mc)
     initialized(false), mounted(false), unmounting(false),
     local_osd(-1), local_osd_epoch(0),
     unsafe_sync_write(0),
-    file_stripe_unit(0),
-    file_stripe_count(0),
-    object_size(0),
-    file_replication(0),
     client_lock("Client::client_lock")
 {
   monclient->set_messenger(m);
@@ -5163,8 +5159,7 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
 int Client::open(const char *relpath, int flags, mode_t mode)
 {
   /* Use default file striping parameters */
-  return open(relpath, flags, mode, file_stripe_unit, file_stripe_count,
-      object_size, NULL);
+  return open(relpath, flags, mode, 0, 0, 0, NULL);
 }
 
 int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name)
@@ -6661,7 +6656,6 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   req->head.args.open.stripe_unit = stripe_unit;
   req->head.args.open.stripe_count = stripe_count;
   req->head.args.open.object_size = object_size;
-  req->head.args.open.file_replication = file_replication;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
@@ -6682,11 +6676,10 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   trim_cache();
 
   ldout(cct, 3) << "create(" << path << ", 0" << oct << mode << dec 
-	  << " layout " << file_stripe_unit
-	  << ' ' << file_stripe_count
-	  << ' ' << object_size
-	  << ' ' << file_replication
-	  <<") = " << res << dendl;
+		<< " layout " << stripe_unit
+		<< ' ' << stripe_count
+		<< ' ' << object_size
+		<<") = " << res << dendl;
   return res;
 
  fail:
@@ -7226,33 +7219,6 @@ int Client::ll_release(Fh *fh)
 
 // =========================================
 // layout
-
-// default layout
-
-void Client::set_default_file_stripe_unit(int stripe_unit)
-{
-  if (stripe_unit > 0)
-    file_stripe_unit = stripe_unit;
-}
-
-void Client::set_default_file_stripe_count(int count)
-{
-  if (count > 0)
-    file_stripe_count = count;
-}
-
-void Client::set_default_object_size(int size)
-{
-  if (size > 0)
-    object_size = size;
-}
-
-void Client::set_default_file_replication(int replication)
-{
-  if (replication >= 0)
-    file_replication = replication;
-}
-
 
 // expose file layouts
 
