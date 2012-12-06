@@ -12,4 +12,13 @@
  * 
  */
 
-int ceph_fuse_ll_main(Client *c, int argc, const char *argv[], int fd_on_success);
+class CephFuse {
+public:
+  CephFuse(Client *c, int fd);
+  ~CephFuse();
+  int init(int argc, const char *argv[]);
+  int loop();
+  class Handle;
+private:
+  CephFuse::Handle *_handle;
+};
