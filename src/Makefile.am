@@ -1080,7 +1080,7 @@ EXTRA_DIST += \
 	$(ceph_tool_gui_DATA) \
 	$(srcdir)/test/encoding/readable.sh \
 	$(srcdir)/test/encoding/check-generated.sh \
-	$(srcdir)/upstart/ceph.conf \
+	$(srcdir)/upstart/ceph-all.conf \
 	$(srcdir)/upstart/ceph-mon.conf \
 	$(srcdir)/upstart/ceph-mon-all.conf \
 	$(srcdir)/upstart/ceph-mon-all-starter.conf \
