@@ -1993,6 +1993,11 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       mds->locker->mark_updated_scatterlock(&pin->nestlock);
       mut->ls->dirty_dirfrag_nest.push_back(&pin->item_dirty_dirfrag_nest);
       mut->add_updated_lock(&pin->nestlock);
+      if (do_parent_mtime || linkunlink) {
+	mds->locker->mark_updated_scatterlock(&pin->filelock);
+	mut->ls->dirty_dirfrag_dir.push_back(&pin->item_dirty_dirfrag_dir);
+	mut->add_updated_lock(&pin->filelock);
+      }
       break;
     }
     if (!mut->wrlocks.count(&pin->versionlock))
