@@ -1,0 +1,3 @@
+The 'ceph osd create' command now rejects an argument that is not a
+UUID. The syntax has been 'ceph osd create [uuid]' since 0.47, but the
+older 'ceph osd create [id]' was not rejected until 0.55.
