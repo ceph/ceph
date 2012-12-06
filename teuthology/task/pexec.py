@@ -11,14 +11,12 @@ log = logging.getLogger(__name__)
 
 def _exec_role(remote, role, sudo, ls):
     log.info('Running commands on role %s host %s', role, remote.name)
-    cid=role.split('.')[1]
+    cid=role.split('.')[-1]
     args = ['bash', '-s']
     if sudo:
         args.insert(0, 'sudo')
     r = remote.run( args=args, stdin=tor.PIPE, wait=False)
     r.stdin.writelines(['set -e\n'])
-    r.stdin.flush()
-    r.stdin.writelines(['cd /tmp/cephtest/mnt.{cid}\n'.format(cid=cid)])
     r.stdin.flush()
     for l in ls:
         r.stdin.writelines([l, '\n'])
