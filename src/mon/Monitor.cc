@@ -129,17 +129,18 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   quorum_features(0),
   probe_timeout_event(NULL),
 
-  paxos(PAXOS_NUM), paxos_service(PAXOS_NUM),
+  paxos_service(PAXOS_NUM),
   admin_hook(NULL),
   routed_request_tid(0)
 {
   rank = -1;
 
-  paxos_service[PAXOS_MDSMAP] = new MDSMonitor(this, add_paxos(PAXOS_MDSMAP));
-  paxos_service[PAXOS_MONMAP] = new MonmapMonitor(this, add_paxos(PAXOS_MONMAP));
-  paxos_service[PAXOS_OSDMAP] = new OSDMonitor(this, add_paxos(PAXOS_OSDMAP));
   paxos_service[PAXOS_PGMAP] = new PGMonitor(this, add_paxos(PAXOS_PGMAP));
+  paxos_service[PAXOS_OSDMAP] = new OSDMonitor(this, add_paxos(PAXOS_OSDMAP));
+  // mdsmap should be added to the paxos vector after the osdmap
+  paxos_service[PAXOS_MDSMAP] = new MDSMonitor(this, add_paxos(PAXOS_MDSMAP));
   paxos_service[PAXOS_LOG] = new LogMonitor(this, add_paxos(PAXOS_LOG));
+  paxos_service[PAXOS_MONMAP] = new MonmapMonitor(this, add_paxos(PAXOS_MONMAP));
   paxos_service[PAXOS_AUTH] = new AuthMonitor(this, add_paxos(PAXOS_AUTH));
 
   mon_caps = new MonCaps();
@@ -152,13 +153,13 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
 Paxos *Monitor::add_paxos(int type)
 {
   Paxos *p = new Paxos(this, type);
-  paxos[type] = p;
+  paxos.push_back(p);
   return p;
 }
 
 Paxos *Monitor::get_paxos_by_name(const string& name)
 {
-  for (vector<Paxos*>::iterator p = paxos.begin();
+  for (list<Paxos*>::iterator p = paxos.begin();
        p != paxos.end();
        ++p) {
     if ((*p)->machine_name == name)
@@ -190,7 +191,7 @@ Monitor::~Monitor()
 {
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     delete *p;
-  for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+  for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     delete *p;
   assert(session_map.sessions.empty());
   delete mon_caps;
@@ -210,22 +211,22 @@ void Monitor::recovered_leader(int id)
       require_gv_onwire();
     }
 
-    for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++) {
+    for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++) {
       if (!(*p)->is_active())
 	continue;
       finish_contexts(g_ceph_context, (*p)->waiting_for_active);
     }
-    for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++) {
+    for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++) {
       if (!(*p)->is_active())
 	continue;
       finish_contexts(g_ceph_context, (*p)->waiting_for_commit);
     }
-    for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++) {
+    for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++) {
       if (!(*p)->is_readable())
 	continue;
       finish_contexts(g_ceph_context, (*p)->waiting_for_readable);
     }
-    for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++) {
+    for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++) {
       if (!(*p)->is_writeable())
 	continue;
       finish_contexts(g_ceph_context, (*p)->waiting_for_writeable);
@@ -488,9 +489,10 @@ int Monitor::preinit()
   }
 
   // init paxos
-  for (int i = 0; i < PAXOS_NUM; ++i) {
-    paxos[i]->init();
-    if (paxos[i]->is_consistent()) {
+  for (list<Paxos*>::iterator it = paxos.begin(); it != paxos.end(); ++it) {
+    (*it)->init();
+    if ((*it)->is_consistent()) {
+      int i = (*it)->machine_id;
       paxos_service[i]->update_from_paxos();
     } // else we don't do anything; handle_probe_reply will detect it's slurping
   }
@@ -737,7 +739,7 @@ void Monitor::reset()
   paxos_recovered.clear();
   global_version = 0;
 
-  for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+  for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     (*p)->restart();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->restart();
@@ -815,7 +817,7 @@ void Monitor::handle_probe_probe(MMonProbe *m)
   r->name = name;
   r->quorum = quorum;
   monmap->encode(r->monmap_bl, m->get_connection()->get_features());
-  for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); ++p)
+  for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); ++p)
     r->paxos_versions[(*p)->get_machine_name()] = (*p)->get_version();
   messenger->send_message(r, m->get_connection());
 
@@ -1171,7 +1173,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features)
   clog.info() << "mon." << name << "@" << rank
 		<< " won leader election with quorum " << quorum << "\n";
   
-  for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+  for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     (*p)->leader_init();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->election_finished();
@@ -1190,7 +1192,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features
   dout(10) << "lose_election, epoch " << epoch << " leader is mon" << leader
 	   << " quorum is " << quorum << " features are " << quorum_features << dendl;
 
-  for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+  for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     (*p)->peon_init();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->election_finished();
@@ -2065,7 +2067,7 @@ bool Monitor::_ms_dispatch(Message *m)
 
 	// send it to the right paxos instance
 	assert(pm->machine_id < PAXOS_NUM);
-	Paxos *p = paxos[pm->machine_id];
+	Paxos *p = get_paxos_by_name(get_paxos_name(pm->machine_id));
 	p->dispatch((PaxosServiceMessage*)m);
 
 	// make sure service finds out about any state changes
