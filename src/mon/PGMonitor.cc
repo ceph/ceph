@@ -775,8 +775,11 @@ void PGMonitor::send_pg_creates()
     vector<int> acting;
     int nrep = mon->osdmon()->osdmap.pg_to_acting_osds(on, acting);
 
-    if (s.acting.size())
+    if (s.acting.size()) {
       pg_map.creating_pgs_by_osd[s.acting[0]].erase(pgid);
+      if (pg_map.creating_pgs_by_osd[s.acting[0]].size() == 0)
+        pg_map.creating_pgs_by_osd.erase(s.acting[0]);
+    }
     s.acting = acting;
 
     // don't send creates for localized pgs
@@ -812,6 +815,7 @@ void PGMonitor::send_pg_creates(int osd, Connection *con)
   map<int, set<pg_t> >::iterator p = pg_map.creating_pgs_by_osd.find(osd);
   if (p == pg_map.creating_pgs_by_osd.end())
     return;
+  assert(p->second.size() > 0);
 
   dout(20) << "send_pg_creates osd." << osd << " pgs " << p->second << dendl;
   MOSDPGCreate *m = new MOSDPGCreate(mon->osdmon()->osdmap.get_epoch());
