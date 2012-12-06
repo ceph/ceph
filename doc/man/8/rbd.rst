@@ -150,10 +150,13 @@ Commands
   snapshots, this fails and nothing is deleted.
 
 :command:`export` [*image-name*] [*dest-path*]
-  Exports image to dest path.
+  Exports image to dest path (use - for stdout).
 
 :command:`import` [*path*] [*dest-image*]
-  Creates a new image and imports its data from path.
+  Creates a new image and imports its data from path (use - for
+  stdin).  The import operation will try to create sparse rbd images 
+  if possible.  For import from stdin, the sparsification unit is
+  the data block size of the destination image (1 << order).
 
 :command:`cp` [*src-image*] [*dest-image*]
   Copies the content of a src-image into the newly created dest-image.
