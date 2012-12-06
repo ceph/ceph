@@ -1709,7 +1709,9 @@ public:
   void trim_peers();
 
   std::string get_corrupt_pg_log_name() const;
-  void read_state(ObjectStore *store);
+  void read_state(ObjectStore *store, bufferlist &bl);
+  static epoch_t peek_map_epoch(ObjectStore *store,
+				coll_t coll, bufferlist *bl);
   coll_t make_snap_collection(ObjectStore::Transaction& t, snapid_t sn);
   void update_snap_collections(vector<pg_log_entry_t> &log_entries,
 			       ObjectStore::Transaction& t);

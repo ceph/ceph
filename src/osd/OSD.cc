@@ -1512,10 +1512,21 @@ void OSD::load_pgs()
       continue;
     }
 
-    PG *pg = _open_lock_pg(osdmap, pgid);
+    bufferlist bl;
+    epoch_t map_epoch = PG::peek_map_epoch(store, *it, &bl);
+
+    PG *pg = _open_lock_pg(map_epoch == 0 ? osdmap : service.get_map(map_epoch), pgid);
 
     // read pg state, log
-    pg->read_state(store);
+    pg->read_state(store, bl);
+
+    set<pg_t> split_pgs;
+    if (osdmap->have_pg_pool(pg->info.pgid.pool()) &&
+	pg->info.pgid.is_split(pg->get_osdmap()->get_pg_num(pg->info.pgid.pool()),
+			       osdmap->get_pg_num(pg->info.pgid.pool()),
+			       &split_pgs)) {
+      service.start_split(split_pgs);
+    }
 
     service.reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
 

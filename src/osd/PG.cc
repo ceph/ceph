@@ -2294,8 +2294,9 @@ void PG::write_info(ObjectStore::Transaction& t)
 {
   // pg state
   bufferlist infobl;
-  __u8 struct_v = 4;
+  __u8 struct_v = 5;
   ::encode(struct_v, infobl);
+  ::encode(get_osdmap()->get_epoch(), infobl);
   t.collection_setattr(coll, "info", infobl);
  
   // potentially big stuff
@@ -2308,6 +2309,20 @@ void PG::write_info(ObjectStore::Transaction& t)
   t.write(coll_t::META_COLL, biginfo_oid, 0, bigbl.length(), bigbl);
 
   dirty_info = false;
+}
+
+epoch_t PG::peek_map_epoch(ObjectStore *store, coll_t coll, bufferlist *bl)
+{
+  assert(bl);
+  store->collection_getattr(coll, "info", *bl);
+  bufferlist::iterator bp = bl->begin();
+  __u8 struct_v = 0;
+  ::decode(struct_v, bp);
+  if (struct_v < 5)
+    return 0;
+  epoch_t cur_epoch = 0;
+  ::decode(cur_epoch, bp);
+  return cur_epoch;
 }
 
 void PG::write_log(ObjectStore::Transaction& t)
@@ -2756,15 +2771,12 @@ std::string PG::get_corrupt_pg_log_name() const
   return buf;
 }
 
-void PG::read_state(ObjectStore *store)
+void PG::read_state(ObjectStore *store, bufferlist &bl)
 {
-  bufferlist bl;
-  bufferlist::iterator p;
+  bufferlist::iterator p = bl.begin();
   __u8 struct_v;
 
   // info
-  store->collection_getattr(coll, "info", bl);
-  p = bl.begin();
   ::decode(struct_v, p);
   if (struct_v < 4)
     ::decode(info, p);
