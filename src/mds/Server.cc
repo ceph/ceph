@@ -3294,6 +3294,12 @@ void Server::handle_client_setlayout(MDRequest *mdr)
     reply_request(mdr, -EINVAL);
     return;
   }
+  if (!mds->osdmap->have_pg_pool(layout.fl_pg_pool) ||
+      !mds->mdsmap->is_data_pg_pool(layout.fl_pg_pool)) {
+    dout(10) << " invalid data pool " << layout.fl_pg_pool << dendl;
+    reply_request(mdr, -EINVAL);
+    return;
+  }
 
   xlocks.insert(&cur->filelock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
@@ -3361,6 +3367,13 @@ void Server::handle_client_setdirlayout(MDRequest *mdr)
     layout->layout.fl_pg_pool = req->head.args.setlayout.layout.fl_pg_pool;
   if (!ceph_file_layout_is_valid(&layout->layout)) {
     dout(10) << "bad layout" << dendl;
+    reply_request(mdr, -EINVAL);
+    delete layout;
+    return;
+  }
+  if (!mds->osdmap->have_pg_pool(layout->layout.fl_pg_pool) ||
+      !mds->mdsmap->is_data_pg_pool(layout->layout.fl_pg_pool)) {
+    dout(10) << " invalid data pool " << layout->layout.fl_pg_pool << dendl;
     reply_request(mdr, -EINVAL);
     delete layout;
     return;
