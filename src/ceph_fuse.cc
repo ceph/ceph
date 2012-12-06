@@ -130,6 +130,8 @@ int main(int argc, const char **argv, const char *envp[]) {
     if (restart_log)
       g_ceph_context->_log->start();
 
+    CephFuse cfuse(client, fd[1]);
+
     cout << "ceph-fuse[" << getpid() << "]: starting ceph client" << std::endl;
     int r = messenger->start();
     if (r < 0) {
@@ -151,14 +153,19 @@ int main(int argc, const char **argv, const char *envp[]) {
       cerr << "ceph-fuse[" << getpid() << "]: ceph mount failed with " << cpp_strerror(-r) << std::endl;
       goto out_shutdown;
     }
-    
+
+    r = cfuse.init(newargc, newargv);
+    if (r < 0) {
+      cerr << "ceph-fuse[" << getpid() << "]: fuse failed to initialize" << std::endl;
+      goto out_shutdown;
+    }
     cerr << "ceph-fuse[" << getpid() << "]: starting fuse" << std::endl;
-    r = ceph_fuse_ll_main(client, newargc, newargv, fd[1]);
+    r = cfuse.loop();
     cerr << "ceph-fuse[" << getpid() << "]: fuse finished with error " << r << std::endl;
-    
+
     client->unmount();
     //cout << "unmounted" << std::endl;
-    
+
   out_shutdown:
     client->shutdown();
   out_init_failed:
