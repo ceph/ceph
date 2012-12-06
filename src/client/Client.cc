@@ -5270,6 +5270,7 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
     req->set_filepath(path); 
     req->head.args.open.flags = flags & ~O_CREAT;
     req->head.args.open.mode = mode;
+    req->head.args.open.pool = -1;
     req->head.args.open.old_size = in->size;   // for O_TRUNC
     req->inode = in;
     result = make_request(req, uid, gid);
@@ -6638,10 +6639,19 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   if (dir->snapid != CEPH_NOSNAP) {
     return -EROFS;
   }
-  
+
   int cmode = ceph_flags_to_mode(flags);
   if (cmode < 0)
     return -EINVAL;
+
+  int64_t pool_id = -1;
+  if (data_pool && *data_pool) {
+    pool_id = osdmap->lookup_pg_pool_name(data_pool);
+    if (pool_id < 0)
+      return -EINVAL;
+    if (pool_id > 0xffffffffll)
+      return -ERANGE;  // bummer!
+  }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_CREATE);
 
@@ -6656,6 +6666,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   req->head.args.open.stripe_unit = stripe_unit;
   req->head.args.open.stripe_count = stripe_count;
   req->head.args.open.object_size = object_size;
+  req->head.args.open.pool = pool_id;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
