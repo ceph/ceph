@@ -371,6 +371,7 @@ string HashIndex::get_hash_str(uint32_t hash) {
 }
 
 string HashIndex::get_path_str(const hobject_t &hoid) {
+  assert(!hoid.is_max());
   return get_hash_str(hoid.hash);
 }
 
@@ -428,7 +429,8 @@ int HashIndex::get_path_contents_by_hash(const vector<string> &path,
     if (lower_bound && candidate < lower_bound->substr(0, candidate.size()))
       continue;
     if (next_object &&
-	candidate < get_path_str(*next_object).substr(0, candidate.size()))
+        (next_object->is_max() ||
+	 candidate < get_path_str(*next_object).substr(0, candidate.size())))
       continue;
     hash_prefixes->insert(cur_prefix + *i);
   }
