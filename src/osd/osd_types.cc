@@ -1152,8 +1152,17 @@ void pool_stat_t::dump(Formatter *f) const
   f->dump_unsigned("ondisk_log_size", ondisk_log_size);
 }
 
-void pool_stat_t::encode(bufferlist &bl) const
+void pool_stat_t::encode(bufferlist &bl, uint64_t features) const
 {
+  if ((features & CEPH_FEATURE_OSDENC) == 0) {
+    __u8 v = 4;
+    ::encode(v, bl);
+    ::encode(stats, bl);
+    ::encode(log_size, bl);
+    ::encode(ondisk_log_size, bl);
+    return;
+  }
+
   ENCODE_START(5, 5, bl);
   ::encode(stats, bl);
   ::encode(log_size, bl);
