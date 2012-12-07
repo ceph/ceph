@@ -842,6 +842,20 @@ int ceph_get_file_stripe_unit(struct ceph_mount_info *cmount, int fh);
 int ceph_get_file_pool(struct ceph_mount_info *cmount, int fh);
 
 /**
+ * Get the name of the pool a file is stored in,
+ *
+ * Write the name of the file's pool to the buffer.  If buflen is 0, return
+ * a suggested length for the buffer.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param fh the open file descriptor referring to the file
+ * @param buf buffer to store the name in
+ * @param buflen size of the buffer
+ * @returns length in bytes of the pool name
+ */
+int ceph_get_file_pool_name(struct ceph_mount_info *cmount, int fh, char *buf, size_t buflen);
+
+/**
  * Get the file replication information.
  * @param cmount the ceph mount handle to use.
  * @param fh the open file descriptor referring to the file to get the striping unit of.
