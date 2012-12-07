@@ -114,7 +114,7 @@ root password. See `Authentication`_ when running with ``cephx`` enabled.
 When you start or stop your cluster, you will not have to use ``sudo`` or
 provide passwords. For example:: 
 
-	service ceph -a start
+	sudo service ceph -a start
 
 See `Operating a Cluster`_ for details.
 
