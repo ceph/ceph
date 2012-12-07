@@ -320,8 +320,10 @@ int CryptoKey::set_secret(CephContext *cct, int type, bufferptr& s)
   created = ceph_clock_now(cct);
 
   CryptoHandler *h = cct->get_crypto_handler(type);
-  if (!h)
+  if (!h) {
+    lderr(cct) << "ERROR: cct->get_crypto_handler(type=" << type << ") returned NULL" << dendl;
     return -EOPNOTSUPP;
+  }
   int ret = h->validate_secret(s);
 
   if (ret < 0)
@@ -338,8 +340,10 @@ int CryptoKey::create(CephContext *cct, int t)
   created = ceph_clock_now(cct);
 
   CryptoHandler *h = cct->get_crypto_handler(type);
-  if (!h)
+  if (!h) {
+    lderr(cct) << "ERROR: cct->get_crypto_handler(type=" << type << ") returned NULL" << dendl;
     return -EOPNOTSUPP;
+  }
   return h->create(secret);
 }
 
