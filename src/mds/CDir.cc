@@ -632,6 +632,12 @@ bool CDir::is_in_bloom(const string& name)
   return bloom->contains(name.c_str(), name.size());
 }
 
+void CDir::remove_bloom()
+{
+  delete bloom;
+  bloom = NULL;
+}
+
 void CDir::remove_null_dentries() {
   dout(12) << "remove_null_dentries " << *this << dendl;
 
@@ -1287,8 +1293,7 @@ void CDir::log_mark_dirty()
 
 void CDir::mark_complete() {
   state_set(STATE_COMPLETE);
-  delete bloom;
-  bloom = NULL;
+  remove_bloom();
 }
 
 void CDir::first_get()

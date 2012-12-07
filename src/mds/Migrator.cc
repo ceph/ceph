@@ -1196,6 +1196,7 @@ void Migrator::finish_export_dir(CDir *dir, list<Context*>& finished, utime_t no
   // mark
   assert(dir->is_auth());
   dir->state_clear(CDir::STATE_AUTH);
+  dir->remove_bloom();
   dir->replica_nonce = CDir::NONCE_EXPORT;
 
   if (dir->is_dirty())
@@ -2006,6 +2007,7 @@ void Migrator::import_reverse(CDir *dir)
     // dir
     assert(cur->is_auth());
     cur->state_clear(CDir::STATE_AUTH);
+    cur->remove_bloom();
     cur->clear_replica_map();
     if (cur->is_dirty())
       cur->mark_clean();
