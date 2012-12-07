@@ -54,9 +54,6 @@ public:
   int get_result() const { return result; }
   eversion_t get_version() { return reassert_version; }
   
-  bool may_read() const { return flags & CEPH_OSD_FLAG_READ; }
-  bool may_write() const { return flags & CEPH_OSD_FLAG_WRITE; }
-
   void set_result(int r) { result = r; }
   void set_version(eversion_t v) { reassert_version = v; }
 
@@ -200,14 +197,12 @@ public:
   void print(ostream& out) const {
     out << "osd_op_reply(" << get_tid()
 	<< " " << oid << " " << ops;
-    if (may_write()) {
-      if (is_ondisk())
-	out << " ondisk";
-      else if (is_onnvram())
-	out << " onnvram";
-      else
-	out << " ack";
-    }
+    if (is_ondisk())
+      out << " ondisk";
+    else if (is_onnvram())
+      out << " onnvram";
+    else
+      out << " ack";
     out << " = " << get_result();
     if (get_result() < 0) {
       char buf[80];
