@@ -1392,8 +1392,10 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t ver,
   prepare_assert_ops(&rd);
   rd.watch(*cookie, ver, 1);
   bufferlist bl;
-  wc->linger_id = objecter->linger(oid, oloc, rd, snap_seq, bl, NULL, 0,
-				   NULL, onfinish, &objver);
+  wc->linger_id = objecter->linger(
+    oid, oloc, rd, snap_seq, bl, NULL,
+    CEPH_OSD_FLAG_WRITE,
+    NULL, onfinish, &objver);
   lock->Unlock();
 
   mylock.Lock();
