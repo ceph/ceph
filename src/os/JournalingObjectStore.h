@@ -58,7 +58,6 @@ protected:
     Mutex com_lock;
     map<version_t, vector<Context*> > commit_waiters;
     uint64_t committing_seq, committed_seq;
-    list<uint64_t> ops_submitting;
 
   public:
     ApplyManager(Journal *&j, Finisher &f) :
