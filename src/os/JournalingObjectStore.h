@@ -28,17 +28,17 @@ protected:
   class SubmitManager {
     Mutex lock;
     uint64_t op_seq;
-    list<uint64_t> ops_submitting;
+    uint64_t op_submitted;
   public:
     SubmitManager() :
       lock("JOS::SubmitManager::lock", false, true, false, g_ceph_context),
-      op_seq(0)
+      op_seq(0), op_submitted(0)
     {}
     uint64_t op_submit_start();
     void op_submit_finish(uint64_t op);
     void set_op_seq(uint64_t seq) {
       Mutex::Locker l(lock);
-      op_seq = seq;
+      op_submitted = op_seq = seq;
     }
     uint64_t get_op_seq() {
       return op_seq;

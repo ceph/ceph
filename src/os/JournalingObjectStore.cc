@@ -138,20 +138,18 @@ uint64_t JournalingObjectStore::SubmitManager::op_submit_start()
   lock.Lock();
   uint64_t op = ++op_seq;
   dout(10) << "op_submit_start " << op << dendl;
-  ops_submitting.push_back(op);
   return op;
 }
 
 void JournalingObjectStore::SubmitManager::op_submit_finish(uint64_t op)
 {
   dout(10) << "op_submit_finish " << op << dendl;
-  if (op != ops_submitting.front()) {
-    dout(0) << "op_submit_finish " << op << " expected "
-	    << ops_submitting.front()
+  if (op != op_submitted + 1) {
+    dout(0) << "op_submit_finish " << op << " expected " << (op_submitted + 1)
 	    << ", OUT OF ORDER" << dendl;
     assert(0 == "out of order op_submit_finish");
   }
-  ops_submitting.pop_front();
+  op_submitted = op;
   lock.Unlock();
 }
 
