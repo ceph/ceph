@@ -27,12 +27,6 @@ and use the default locations. ::
 	Enter same passphrase again: 
 	Your identification has been saved in /root/.ssh/id_rsa.
 	Your public key has been saved in /root/.ssh/id_rsa.pub.
-
-You may use RSA or DSA keys. Once you generate your keys, copy them to each 
-OSD host. For example:: 
-
-	ssh-copy-id root@myserver01
-	ssh-copy-id root@myserver02	
 	
 Modify your ``/root/.ssh/config`` file to login as ``root``, as follows:: 
 
@@ -43,6 +37,11 @@ Modify your ``/root/.ssh/config`` file to login as ``root``, as follows::
 		Hostname myserver02.fully-qualified-domain.com
 		User root
 
+You may use RSA or DSA keys. Once you generate your keys, copy them to each 
+OSD host. For example:: 
+
+	ssh-copy-id root@myserver01
+	ssh-copy-id root@myserver02
 
 Copy Configuration File to All Hosts
 ====================================
