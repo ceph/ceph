@@ -60,9 +60,9 @@ void MDSMonitor::create_new_fs(MDSMap &m, int metadata_pool, int data_pool)
 {
   m.max_mds = g_conf->max_mds;
   m.created = ceph_clock_now(g_ceph_context);
-  m.data_pg_pools.push_back(data_pool);
-  m.metadata_pg_pool = metadata_pool;
-  m.cas_pg_pool = -1;
+  m.data_pools.push_back(data_pool);
+  m.metadata_pool = metadata_pool;
+  m.cas_pool = -1;
   m.compat = get_mdsmap_compat_set();
 
   m.session_timeout = g_conf->mds_session_timeout;
@@ -915,14 +915,14 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       int64_t poolid = parse_pos_long(m->cmd[2].c_str(), &ss);
       if (poolid < 0)
 	goto out;
-      pending_mdsmap.add_data_pg_pool(poolid);
+      pending_mdsmap.add_data_pool(poolid);
       ss << "added data pool " << poolid << " to mdsmap";
       r = 0;
     } else if (m->cmd[1] == "remove_data_pool" && m->cmd.size() == 3) {
       int64_t poolid = parse_pos_long(m->cmd[2].c_str(), &ss);
       if (poolid < 0)
 	goto out;
-      r = pending_mdsmap.remove_data_pg_pool(poolid);
+      r = pending_mdsmap.remove_data_pool(poolid);
       if (r == 0)
 	ss << "removed data pool " << poolid << " from mdsmap";
     } else if (m->cmd[1] == "newfs" && m->cmd.size() >= 4) {
