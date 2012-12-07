@@ -80,7 +80,7 @@ namespace librbd {
   }
 
   void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
-		       uint64_t size, int *order, uint64_t bid)
+		       uint64_t size, int order, uint64_t bid)
   {
     uint32_t hi = bid >> 32;
     uint32_t lo = bid & 0xFFFFFFFF;
@@ -96,7 +96,7 @@ namespace librbd {
 	     hi, lo, extra);
 
     ondisk.image_size = size;
-    ondisk.options.order = *order;
+    ondisk.options.order = order;
     ondisk.options.crypt_type = RBD_CRYPT_NONE;
     ondisk.options.comp_type = RBD_COMP_NONE;
     ondisk.snap_seq = 0;
@@ -653,7 +653,7 @@ reprotect_and_return_err:
   }
 
   int create_v1(IoCtx& io_ctx, const char *imgname, uint64_t bid,
-		uint64_t size, int *order)
+		uint64_t size, int order)
   {
     CephContext *cct = (CephContext *)io_ctx.cct();
     ldout(cct, 2) << "adding rbd image to directory..." << dendl;
@@ -690,7 +690,7 @@ reprotect_and_return_err:
   }
 
   int create_v2(IoCtx& io_ctx, const char *imgname, uint64_t bid, uint64_t size,
-		int *order, uint64_t features, uint64_t stripe_unit,
+		int order, uint64_t features, uint64_t stripe_unit,
 		uint64_t stripe_count)
   {
     ostringstream bid_ss;
@@ -728,7 +728,7 @@ reprotect_and_return_err:
 
     oss << RBD_DATA_PREFIX << id;
     header_oid = header_name(id);
-    r = cls_client::create_image(&io_ctx, header_oid, size, *order,
+    r = cls_client::create_image(&io_ctx, header_oid, size, order,
 				 features, oss.str());
     if (r < 0) {
       lderr(cct) << "error writing header: " << cpp_strerror(r) << dendl;
@@ -736,7 +736,7 @@ reprotect_and_return_err:
     }
 
     if ((stripe_unit || stripe_count) &&
-	(stripe_count != 1 || stripe_unit != (1ull<<*order))) {
+	(stripe_count != 1 || stripe_unit != (1ull << order))) {
       r = cls_client::set_stripe_unit_count(&io_ctx, header_oid,
 					    stripe_unit, stripe_count);
       if (r < 0) {
@@ -835,9 +835,9 @@ reprotect_and_return_err:
       if (stripe_count && stripe_count != 1)
 	return -EINVAL;
 
-      return create_v1(io_ctx, imgname, bid, size, order);
+      return create_v1(io_ctx, imgname, bid, size, *order);
     } else {
-      return create_v2(io_ctx, imgname, bid, size, order, features,
+      return create_v2(io_ctx, imgname, bid, size, *order, features,
 		       stripe_unit, stripe_count);
     }
   }

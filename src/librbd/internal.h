@@ -160,7 +160,7 @@ namespace librbd {
   int clip_io(ImageCtx *ictx, uint64_t off, uint64_t *len);
   int init_rbd_info(struct rbd_info *info);
   void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
-			      uint64_t size, int *order, uint64_t bid);
+		       uint64_t size, int order, uint64_t bid);
 
   int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
 		       int (*cb)(uint64_t, size_t, const char *, void *),
