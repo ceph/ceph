@@ -160,6 +160,10 @@ TEST(LibCephFS, OpenLayout) {
   sprintf(test_layout_file, "test_layout_%d_b", getpid());
   int fd = ceph_open_layout(cmount, test_layout_file, O_CREAT, 0666, (1<<20), 7, (1<<20), NULL);
   ASSERT_GT(fd, 0);
+  char poolname[80];
+  ASSERT_LT(0, ceph_get_file_pool_name(cmount, fd, poolname, sizeof(poolname)));
+  ASSERT_EQ(4, ceph_get_file_pool_name(cmount, fd, poolname, 0));
+  ASSERT_EQ(0, strcmp("data", poolname));
   ceph_close(cmount, fd);
 
   /* invalid layout */
@@ -171,6 +175,8 @@ TEST(LibCephFS, OpenLayout) {
   sprintf(test_layout_file, "test_layout_%d_d", getpid());
   fd = ceph_open_layout(cmount, test_layout_file, O_CREAT, 0666, (1<<20), 7, (1<<20), "data");
   ASSERT_GT(fd, 0);
+  ASSERT_EQ(4, ceph_get_file_pool_name(cmount, fd, poolname, sizeof(poolname)));
+  ASSERT_EQ(0, strcmp("data", poolname));
   ceph_close(cmount, fd);
 
   /* with metadata pool (invalid) */
