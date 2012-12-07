@@ -3301,6 +3301,7 @@ void FileStore::sync_entry()
     fin.swap(sync_waiters);
     lock.Unlock();
     
+    op_tp.pause();
     if (apply_manager.commit_start()) {
       utime_t start = ceph_clock_now(g_ceph_context);
       uint64_t cp = apply_manager.get_committing_seq();
@@ -3352,6 +3353,7 @@ void FileStore::sync_entry()
 	  snaps.push_back(cp);
 
 	  apply_manager.commit_started();
+	  op_tp.unpause();
 
 	  // wait for commit
 	  dout(20) << " waiting for transid " << async_args.transid << " to complete" << dendl;
@@ -3383,10 +3385,12 @@ void FileStore::sync_entry()
 	  snaps.push_back(cp);
 	  
 	  apply_manager.commit_started();
+	  op_tp.unpause();
 	}
       } else
       {
 	apply_manager.commit_started();
+	op_tp.unpause();
 
 	if (btrfs) {
 	  dout(15) << "sync_entry doing btrfs SYNC" << dendl;
@@ -3446,6 +3450,8 @@ void FileStore::sync_entry()
       sync_entry_timeo_lock.Lock();
       timer.cancel_event(sync_entry_timeo);
       sync_entry_timeo_lock.Unlock();
+    } else {
+      op_tp.unpause();
     }
     
     lock.Lock();
