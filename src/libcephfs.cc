@@ -705,6 +705,25 @@ extern "C" int ceph_get_file_pool(struct ceph_mount_info *cmount, int fh)
   return l.fl_pg_pool;
 }
 
+extern "C" int ceph_get_file_pool_name(struct ceph_mount_info *cmount, int fh, char *buf, size_t len)
+{
+  struct ceph_file_layout l;
+  int r;
+
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  r = cmount->get_client()->describe_layout(fh, &l);
+  if (r < 0)
+    return r;
+  string name = cmount->get_client()->get_pool_name(l.fl_pg_pool);
+  if (len == 0)
+    return name.length();
+  if (name.length() > len)
+    return -ERANGE;
+  strncpy(buf, name.c_str(), len);
+  return name.length();
+}
+
 extern "C" int ceph_get_file_replication(struct ceph_mount_info *cmount, int fh)
 {
   struct ceph_file_layout l;
