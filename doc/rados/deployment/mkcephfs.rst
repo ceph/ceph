@@ -54,9 +54,9 @@ if you are using ``mkcephfs`` to deploy Ceph.
 
 ::
 
-	ssh myserver01 sudo tee /etc/ceph/ceph.conf < /etc/ceph/ceph.conf
-	ssh myserver02 sudo tee /etc/ceph/ceph.conf < /etc/ceph/ceph.conf
-	ssh myserver03 sudo tee /etc/ceph/ceph.conf < /etc/ceph/ceph.conf
+	sudo ssh myserver01 tee /etc/ceph/ceph.conf < /etc/ceph/ceph.conf
+	sudo ssh myserver02 tee /etc/ceph/ceph.conf < /etc/ceph/ceph.conf
+	sudo ssh myserver03 tee /etc/ceph/ceph.conf < /etc/ceph/ceph.conf
 
 
 Create the Default Directories
