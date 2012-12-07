@@ -720,7 +720,6 @@ static int export_read_cb(uint64_t ofs, size_t len, const char *buf, void *arg)
   if (ret < 0)
     return -errno;
 
-  cerr << "writing " << len << " bytes at ofs " << ofs << std::endl;
   return 0;
 }
 

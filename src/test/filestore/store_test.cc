@@ -198,9 +198,22 @@ TEST_F(StoreTest, ManyObjectTest) {
   }
   ASSERT_TRUE(listed.size() == created.size());
 
+  hobject_t start, next;
+  objects.clear();
+  r = store->collection_list_partial(
+    cid,
+    hobject_t::get_max(),
+    50,
+    60,
+    0,
+    &objects,
+    &next
+    );
+  ASSERT_EQ(r, 0);
+  ASSERT_TRUE(objects.empty());
+
   objects.clear();
   listed.clear();
-  hobject_t start, next;
   while (1) {
     r = store->collection_list_partial(cid, start,
 				       50,
