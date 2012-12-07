@@ -151,7 +151,7 @@ OPTION(paxos_min_wait, OPT_DOUBLE, 0.05)  // min time to gather updates for afte
 OPTION(clock_offset, OPT_DOUBLE, 0) // how much to offset the system clock in Clock.cc
 OPTION(auth_cluster_required, OPT_STR, "cephx")   // required of mon, mds, osd daemons
 OPTION(auth_service_required, OPT_STR, "cephx")   // required by daemons of clients
-OPTION(auth_client_required, OPT_STR, "")         // what clients require of daemons
+OPTION(auth_client_required, OPT_STR, "cephx, none")     // what clients require of daemons
 OPTION(auth_supported, OPT_STR, "")               // deprecated; default value for above if they are not defined.
 OPTION(cephx_require_signatures, OPT_BOOL, false) //  If true, don't talk to Cephx partners if they don't support message signing; off by default
 OPTION(cephx_sign_messages, OPT_BOOL, true)  // Default to signing session messages if supported
