@@ -205,7 +205,7 @@ Journal
 
 ``filestore journal parallel``
 
-:Description: 
+:Description: Enables parallel journaling, default for btrfs.
 :Type: Boolean
 :Required: No
 :Default: ``false``
@@ -213,7 +213,7 @@ Journal
 
 ``filestore journal writeahead``
 
-:Description:
+:Description: Enables writeahead journaling, default for xfs.
 :Type: Boolean
 :Required: No
 :Default: ``false``
@@ -221,7 +221,7 @@ Journal
 
 ``filestore journal trailing``
 
-:Description:
+:Description: Deprecated, never use.
 :Type: Boolean
 :Required: No
 :Default: ``false``
@@ -233,7 +233,7 @@ Misc
 
 ``filestore merge threshold``
 
-:Description: 
+:Description: Min number of files in a subdir before merging into parent
 :Type: Integer
 :Required: No
 :Default: ``10``
@@ -241,7 +241,7 @@ Misc
 
 ``filestore split multiple``
 
-:Description: 
+:Description: filestore_split_multiple*filestore_merge_threshold*16 is the max files in a subdir before splitting into child directories.
 :Type: Integer
 :Required: No
 :Default: ``2``
@@ -249,7 +249,7 @@ Misc
 
 ``filestore update to``
 
-:Description: 
+:Description: Limits filestore auto upgrade to specified version.
 :Type: Integer
 :Required: No
 :Default: ``1000``
