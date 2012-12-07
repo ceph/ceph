@@ -250,7 +250,7 @@ public:
   void update_logger();
 
   // -- paxos -- These vector indices are matched
-  vector<Paxos*> paxos;
+  list<Paxos*> paxos;
   vector<PaxosService*> paxos_service;
 
   Paxos *add_paxos(int type);
