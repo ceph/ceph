@@ -159,7 +159,7 @@ WRITE_INTTYPE_ENCODER(int16_t, le16)
 
 
 // string
-inline void encode(const std::string& s, bufferlist& bl) 
+inline void encode(const std::string& s, bufferlist& bl, uint64_t features=0)
 {
   __u32 len = s.length();
   encode(len, bl);
