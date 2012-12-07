@@ -325,7 +325,7 @@ if [ -n "$prepareosdfs" ]; then
         # try to fallback to to old keys
         get_conf tmp_devs "" "btrfs devs"
         if [ -n "$tmp_devs" ]; then
-            fs_type = "btrfs"
+            fs_type="btrfs"
         else
             echo No filesystem type defined!
             exit 0
