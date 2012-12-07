@@ -80,7 +80,7 @@ namespace librbd {
   }
 
   void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
-		       uint64_t size, int *order, uint64_t bid)
+		       uint64_t size, int order, uint64_t bid)
   {
     uint32_t hi = bid >> 32;
     uint32_t lo = bid & 0xFFFFFFFF;
@@ -96,7 +96,7 @@ namespace librbd {
 	     hi, lo, extra);
 
     ondisk.image_size = size;
-    ondisk.options.order = *order;
+    ondisk.options.order = order;
     ondisk.options.crypt_type = RBD_CRYPT_NONE;
     ondisk.options.comp_type = RBD_COMP_NONE;
     ondisk.snap_seq = 0;
@@ -652,6 +652,127 @@ reprotect_and_return_err:
     return ictx->is_snap_protected(snap_name, is_protected);
   }
 
+  int create_v1(IoCtx& io_ctx, const char *imgname, uint64_t bid,
+		uint64_t size, int order)
+  {
+    CephContext *cct = (CephContext *)io_ctx.cct();
+    ldout(cct, 2) << "adding rbd image to directory..." << dendl;
+    int r = tmap_set(io_ctx, imgname);
+    if (r < 0) {
+      lderr(cct) << "error adding image to directory: " << cpp_strerror(r)
+		 << dendl;
+      return r;
+    }
+
+    ldout(cct, 2) << "creating rbd image..." << dendl;
+    struct rbd_obj_header_ondisk header;
+    init_rbd_header(header, size, order, bid);
+
+    bufferlist bl;
+    bl.append((const char *)&header, sizeof(header));
+
+    string header_oid = old_header_name(imgname);
+    r = io_ctx.write(header_oid, bl, bl.length(), 0);
+    if (r < 0) {
+      lderr(cct) << "Error writing image header: " << cpp_strerror(r)
+		 << dendl;
+      int remove_r = tmap_rm(io_ctx, imgname);
+      if (remove_r < 0) {
+	lderr(cct) << "Could not remove image from directory after "
+		   << "header creation failed: "
+		   << cpp_strerror(r) << dendl;
+      }
+      return r;
+    }
+
+    ldout(cct, 2) << "done." << dendl;
+    return 0;
+  }
+
+  int create_v2(IoCtx& io_ctx, const char *imgname, uint64_t bid, uint64_t size,
+		int order, uint64_t features, uint64_t stripe_unit,
+		uint64_t stripe_count)
+  {
+    ostringstream bid_ss;
+    uint32_t extra;
+    string id, id_obj, header_oid;
+    int remove_r;
+    ostringstream oss;
+    CephContext *cct = (CephContext *)io_ctx.cct();
+
+    id_obj = id_obj_name(imgname);
+
+    int r = io_ctx.create(id_obj, true);
+    if (r < 0) {
+      lderr(cct) << "error creating rbd id object: " << cpp_strerror(r)
+		 << dendl;
+      return r;
+    }
+
+    extra = rand() % 0xFFFFFFFF;
+    bid_ss << std::hex << bid << std::hex << extra;
+    id = bid_ss.str();
+    r = cls_client::set_id(&io_ctx, id_obj, id);
+    if (r < 0) {
+      lderr(cct) << "error setting image id: " << cpp_strerror(r) << dendl;
+      goto err_remove_id;
+    }
+
+    ldout(cct, 2) << "adding rbd image to directory..." << dendl;
+    r = cls_client::dir_add_image(&io_ctx, RBD_DIRECTORY, imgname, id);
+    if (r < 0) {
+      lderr(cct) << "error adding image to directory: " << cpp_strerror(r)
+		 << dendl;
+      goto err_remove_id;
+    }
+
+    oss << RBD_DATA_PREFIX << id;
+    header_oid = header_name(id);
+    r = cls_client::create_image(&io_ctx, header_oid, size, order,
+				 features, oss.str());
+    if (r < 0) {
+      lderr(cct) << "error writing header: " << cpp_strerror(r) << dendl;
+      goto err_remove_from_dir;
+    }
+
+    if ((stripe_unit || stripe_count) &&
+	(stripe_count != 1 || stripe_unit != (1ull << order))) {
+      r = cls_client::set_stripe_unit_count(&io_ctx, header_oid,
+					    stripe_unit, stripe_count);
+      if (r < 0) {
+	lderr(cct) << "error setting striping parameters: "
+		   << cpp_strerror(r) << dendl;
+	goto err_remove_header;
+      }
+    }
+
+    ldout(cct, 2) << "done." << dendl;
+    return 0;
+
+  err_remove_header:
+    remove_r = io_ctx.remove(header_oid);
+    if (remove_r < 0) {
+      lderr(cct) << "error cleaning up image header after creation failed: "
+		 << dendl;
+    }
+  err_remove_from_dir:
+    remove_r = cls_client::dir_remove_image(&io_ctx, RBD_DIRECTORY,
+					    imgname, id);
+    if (remove_r < 0) {
+      lderr(cct) << "error cleaning up image from rbd_directory object "
+		 << "after creation failed: " << cpp_strerror(remove_r)
+		 << dendl;
+    }
+  err_remove_id:
+    remove_r = io_ctx.remove(id_obj);
+    if (remove_r < 0) {
+      lderr(cct) << "error cleaning up id object after creation failed: "
+		 << cpp_strerror(remove_r) << dendl;
+    }
+
+    return r;
+  }
+
   int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     bool old_format, uint64_t features, int *order,
 	     uint64_t stripe_unit, uint64_t stripe_count)
@@ -714,68 +835,11 @@ reprotect_and_return_err:
       if (stripe_count && stripe_count != 1)
 	return -EINVAL;
 
-      ldout(cct, 2) << "adding rbd image to directory..." << dendl;
-      r = tmap_set(io_ctx, imgname);
-      if (r < 0) {
-	lderr(cct) << "error adding image to directory: " << cpp_strerror(r)
-		   << dendl;
-	return r;
-      }
-
-      ldout(cct, 2) << "creating rbd image..." << dendl;
-      struct rbd_obj_header_ondisk header;
-      init_rbd_header(header, size, order, bid);
-
-      bufferlist bl;
-      bl.append((const char *)&header, sizeof(header));
-
-      string header_oid = old_header_name(imgname);
-      r = io_ctx.write(header_oid, bl, bl.length(), 0);
+      return create_v1(io_ctx, imgname, bid, size, *order);
     } else {
-      string id_obj = id_obj_name(imgname);
-      r = io_ctx.create(id_obj, true);
-      if (r < 0) {
-	lderr(cct) << "error creating rbd id object: " << cpp_strerror(r)
-		   << dendl;
-	return r;
-      }
-
-      ostringstream bid_ss;
-      uint32_t extra = rand() % 0xFFFFFFFF;
-      bid_ss << std::hex << bid << std::hex << extra;
-      string id = bid_ss.str();
-      r = cls_client::set_id(&io_ctx, id_obj, id);
-      if (r < 0) {
-	lderr(cct) << "error setting image id: " << cpp_strerror(r) << dendl;
-	return r;
-      }
-
-      ldout(cct, 2) << "adding rbd image to directory..." << dendl;
-      r = cls_client::dir_add_image(&io_ctx, RBD_DIRECTORY, imgname, id);
-      if (r < 0) {
-	lderr(cct) << "error adding image to directory: " << cpp_strerror(r)
-		   << dendl;
-	return r;
-      }
-
-      ostringstream oss;
-      oss << RBD_DATA_PREFIX << id;
-      r = cls_client::create_image(&io_ctx, header_name(id), size, *order,
-				   features, oss.str());
-      if (r == 0 &&
-	  (stripe_unit || stripe_count) &&
-	  (stripe_count != 1 || stripe_unit != (1ull<<*order))) {
-	r = cls_client::set_stripe_unit_count(&io_ctx, header_name(id), stripe_unit, stripe_count);
-      }
+      return create_v2(io_ctx, imgname, bid, size, *order, features,
+		       stripe_unit, stripe_count);
     }
-
-    if (r < 0) {
-      lderr(cct) << "error writing header: " << cpp_strerror(r) << dendl;
-      return r;
-    }
-
-    ldout(cct, 2) << "done." << dendl;
-    return 0;
   }
 
   /*
