@@ -8449,7 +8449,8 @@ void MDCache::discover_path(CInode *base,
     return;
   } 
 
-  if (!base->is_waiter_for(CInode::WAIT_DIR) || !onfinish) { // FIXME: weak!
+  if ((want_xlocked && want_path.depth() == 1) ||
+      !base->is_waiter_for(CInode::WAIT_DIR) || !onfinish) { // FIXME: weak!
     discover_info_t& d = _create_discover(from);
     d.ino = base->ino();
     d.snap = snap;
@@ -8496,7 +8497,8 @@ void MDCache::discover_path(CDir *base,
     return;
   }
 
-  if (!base->is_waiting_for_dentry(want_path[0].c_str(), snap) || !onfinish) {
+  if ((want_xlocked && want_path.depth() == 1) ||
+      !base->is_waiting_for_dentry(want_path[0].c_str(), snap) || !onfinish) {
     discover_info_t& d = _create_discover(from);
     d.ino = base->ino();
     d.frag = base->get_frag();
@@ -8542,7 +8544,7 @@ void MDCache::discover_ino(CDir *base,
     return;
   } 
 
-  if (!base->is_waiting_for_ino(want_ino)) {
+  if (want_xlocked || !base->is_waiting_for_ino(want_ino) || !onfinish) {
     discover_info_t& d = _create_discover(from);
     d.ino = base->ino();
     d.frag = base->get_frag();
@@ -8551,9 +8553,10 @@ void MDCache::discover_ino(CDir *base,
     d.want_xlocked = want_xlocked;
     _send_discover(d);
   }
-  
+
   // register + wait
-  base->add_ino_waiter(want_ino, onfinish);
+  if (onfinish)
+    base->add_ino_waiter(want_ino, onfinish);
 }
 
 
@@ -8801,11 +8804,14 @@ void MDCache::handle_discover(MDiscover *dis)
       // is this the last (tail) item in the discover traversal?
       if (tailitem && dis->wants_xlocked()) {
 	dout(7) << "handle_discover allowing discovery of xlocked tail " << *dn << dendl;
-      } else {
+      } else if (reply->is_empty()) {
 	dout(7) << "handle_discover blocking on xlocked " << *dn << dendl;
 	dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryMessage(mds, dis));
 	reply->put();
 	return;
+      } else {
+	dout(7) << "handle_discover non-empty reply, xlocked tail " << *dn << dendl;
+	break;
       }
     }
 
