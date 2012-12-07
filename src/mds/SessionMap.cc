@@ -70,7 +70,7 @@ void SessionMap::load(Context *onload)
   
   C_SM_Load *c = new C_SM_Load(this);
   object_t oid = get_object_name();
-  object_locator_t oloc(mds->mdsmap->get_metadata_pg_pool());
+  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
   mds->objecter->read_full(oid, oloc, CEPH_NOSNAP, &c->bl, 0, c);
 }
 
@@ -120,7 +120,7 @@ void SessionMap::save(Context *onsave, version_t needv)
   committing = version;
   SnapContext snapc;
   object_t oid = get_object_name();
-  object_locator_t oloc(mds->mdsmap->get_metadata_pg_pool());
+  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
 
   mds->objecter->write_full(oid, oloc,
 			    snapc,
