@@ -346,6 +346,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
       type = mon->auth_service_required.pick(supported);
     s->auth_handler = get_auth_service_handler(type, g_ceph_context, &mon->key_server);
     if (!s->auth_handler) {
+      dout(1) << "client did not provide supported auth type" << dendl;
       ret = -ENOTSUP;
       goto reply;
     }
