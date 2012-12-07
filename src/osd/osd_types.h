@@ -941,11 +941,11 @@ struct pool_stat_t {
   }
 
   void dump(Formatter *f) const;
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   static void generate_test_instances(list<pool_stat_t*>& o);
 };
-WRITE_CLASS_ENCODER(pool_stat_t)
+WRITE_CLASS_ENCODER_FEATURES(pool_stat_t)
 
 
 /**
