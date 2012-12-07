@@ -109,11 +109,8 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
 uint64_t JournalingObjectStore::ApplyManager::op_apply_start(uint64_t op)
 {
   Mutex::Locker l(apply_lock);
-  dout(10) << "op_apply_start " << op << " open_ops " << open_ops << " -> " << (open_ops+1)
-	   << ", max_applying_seq " << max_applying_seq << " -> " << MAX(op, max_applying_seq) << dendl;
+  dout(10) << "op_apply_start " << op << " open_ops " << open_ops << " -> " << (open_ops+1) << dendl;
   assert(!blocked);
-  if (op > max_applying_seq)
-    max_applying_seq = op;
   assert(op > committed_seq);
   open_ops++;
   return op;
@@ -124,7 +121,6 @@ void JournalingObjectStore::ApplyManager::op_apply_finish(uint64_t op)
   Mutex::Locker l(apply_lock);
   dout(10) << "op_apply_finish " << op << " open_ops " << open_ops
 	   << " -> " << (open_ops-1)
-	   << ", max_applying_seq " << max_applying_seq
 	   << ", max_applied_seq " << max_applied_seq << " -> " << MAX(op, max_applied_seq)
 	   << dendl;
   --open_ops;
@@ -175,13 +171,11 @@ bool JournalingObjectStore::ApplyManager::commit_start()
 
   {
     Mutex::Locker l(apply_lock);
-    dout(10) << "commit_start max_applying_seq " << max_applying_seq
-	     << ", max_applied_seq " << max_applied_seq
+    dout(10) << "commit_start max_applied_seq " << max_applied_seq
 	     << ", open_ops " << open_ops
 	     << dendl;
     blocked = true;
     assert(open_ops == 0);
-    assert(max_applied_seq == max_applying_seq);
     dout(10) << "commit_start blocked, all open_ops have completed" << dendl;
     {
       Mutex::Locker l(com_lock);
@@ -192,7 +186,7 @@ bool JournalingObjectStore::ApplyManager::commit_start()
 	goto out;
       }
 
-      committing_seq = max_applying_seq;
+      committing_seq = max_applied_seq;
 
       dout(10) << "commit_start committing " << committing_seq
 	       << ", still blocked" << dendl;
