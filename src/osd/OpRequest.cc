@@ -180,6 +180,7 @@ void OpRequest::dump(utime_t now, Formatter *f) const
   stringstream name;
   m->print(name);
   f->dump_string("description", name.str().c_str()); // this OpRequest
+  f->dump_unsigned("rmw_flags", rmw_flags);
   f->dump_stream("received_at") << received_time;
   f->dump_float("age", now - received_time);
   f->dump_float("duration", get_duration());
