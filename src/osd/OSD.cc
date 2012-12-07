@@ -5814,10 +5814,13 @@ void OSD::handle_op(OpRequestRef op)
   // share our map with sender, if they're old
   _share_map_incoming(m->get_source_inst(), m->get_map_epoch(),
 		      (Session *)m->get_connection()->get_priv());
-  int r = init_op_flags(op);
-  if (r) {
-    service.reply_op_error(op, r);
-    return;
+
+  if (op->rmw_flags == 0) {
+    int r = init_op_flags(op);
+    if (r) {
+      service.reply_op_error(op, r);
+      return;
+    }
   }
 
   if (g_conf->osd_debug_drop_op_probability > 0 &&
