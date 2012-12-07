@@ -53,7 +53,6 @@ protected:
     bool blocked;
     Cond blocked_cond;
     int open_ops;
-    Cond open_ops_cond;
     uint64_t max_applying_seq;
     uint64_t max_applied_seq;
 
@@ -61,7 +60,6 @@ protected:
     map<version_t, vector<Context*> > commit_waiters;
     uint64_t committing_seq, committed_seq;
     list<uint64_t> ops_submitting;
-    list<Cond*> ops_apply_blocked;
 
   public:
     ApplyManager(Journal *&j, Finisher &f) :
