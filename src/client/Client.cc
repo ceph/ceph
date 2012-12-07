@@ -2145,8 +2145,7 @@ void Client::cap_delay_requeue(Inode *in)
 {
   ldout(cct, 10) << "cap_delay_requeue on " << *in << dendl;
   in->hold_caps_until = ceph_clock_now(cct);
-  in->hold_caps_until += 5.0;
-
+  in->hold_caps_until += cct->_conf->client_caps_release_delay;
   delayed_caps.push_back(&in->cap_item);
 }
 
