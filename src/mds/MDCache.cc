@@ -9279,14 +9279,15 @@ void MDCache::send_dentry_link(CDentry *dn)
 {
   dout(7) << "send_dentry_link " << *dn << dendl;
 
+  CDir *subtree = get_subtree_root(dn->get_dir());
   for (map<int,int>::iterator p = dn->replicas_begin(); 
        p != dn->replicas_end(); 
        p++) {
     if (mds->mdsmap->get_state(p->first) < MDSMap::STATE_REJOIN) 
       continue;
     CDentry::linkage_t *dnl = dn->get_linkage();
-    MDentryLink *m = new MDentryLink(dn->get_dir()->dirfrag(), dn->name,
-				     dnl->is_primary());
+    MDentryLink *m = new MDentryLink(subtree->dirfrag(), dn->get_dir()->dirfrag(),
+				     dn->name, dnl->is_primary());
     if (dnl->is_primary()) {
       dout(10) << "  primary " << *dnl->get_inode() << dendl;
       replicate_inode(dnl->get_inode(), p->first, m->bl);
@@ -9305,32 +9306,48 @@ void MDCache::send_dentry_link(CDentry *dn)
 /* This function DOES put the passed message before returning */
 void MDCache::handle_dentry_link(MDentryLink *m)
 {
+
+  CDentry *dn = NULL;
   CDir *dir = get_dirfrag(m->get_dirfrag());
-  assert(dir);
-  CDentry *dn = dir->lookup(m->get_dn());
-  assert(dn);
+  if (!dir) {
+    dout(7) << "handle_dentry_link don't have dirfrag " << m->get_dirfrag() << dendl;
+  } else {
+    dn = dir->lookup(m->get_dn());
+    if (!dn) {
+      dout(7) << "handle_dentry_link don't have dentry " << *dir << " dn " << m->get_dn() << dendl;
+    } else {
+      dout(7) << "handle_dentry_link on " << *dn << dendl;
+      CDentry::linkage_t *dnl = dn->get_linkage();
 
-  dout(7) << "handle_dentry_link on " << *dn << dendl;
-  CDentry::linkage_t *dnl = dn->get_linkage();
-
-  assert(!dn->is_auth());
-  assert(dnl->is_null());
+      assert(!dn->is_auth());
+      assert(dnl->is_null());
+    }
+  }
 
   bufferlist::iterator p = m->bl.begin();
   list<Context*> finished;
-  
-  if (m->get_is_primary()) {
-    // primary link.
-    add_replica_inode(p, dn, finished);
-  } else {
-    // remote link, easy enough.
-    inodeno_t ino;
-    __u8 d_type;
-    ::decode(ino, p);
-    ::decode(d_type, p);
-    dir->link_remote_inode(dn, ino, d_type);
+  if (dn) {
+    if (m->get_is_primary()) {
+      // primary link.
+      add_replica_inode(p, dn, finished);
+    } else {
+      // remote link, easy enough.
+      inodeno_t ino;
+      __u8 d_type;
+      ::decode(ino, p);
+      ::decode(d_type, p);
+      dir->link_remote_inode(dn, ino, d_type);
+    }
+  } else if (m->get_is_primary()) {
+    CInode *in = add_replica_inode(p, NULL, finished);
+    assert(in->get_num_ref() == 0);
+    assert(in->get_parent_dn() == NULL);
+    MCacheExpire* expire = new MCacheExpire(mds->get_nodeid());
+    expire->add_inode(m->get_subtree(), in->vino(), in->get_replica_nonce());
+    mds->send_message_mds(expire, m->get_source().num());
+    remove_inode(in);
   }
-  
+
   if (!finished.empty())
     mds->queue_waiters(finished);
 
@@ -9362,6 +9379,11 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequest *mdr)
 /* This function DOES put the passed message before returning */
 void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 {
+  // straydn
+  CDentry *straydn = NULL;
+  if (m->straybl.length())
+    straydn = add_replica_stray(m->straybl, m->get_source().num());
+
   CDir *dir = get_dirfrag(m->get_dirfrag());
   if (!dir) {
     dout(7) << "handle_dentry_unlink don't have dirfrag " << m->get_dirfrag() << dendl;
@@ -9372,13 +9394,6 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
     } else {
       dout(7) << "handle_dentry_unlink on " << *dn << dendl;
       CDentry::linkage_t *dnl = dn->get_linkage();
-
-      // straydn
-      CDentry *straydn = NULL;
-      if (m->straybl.length()) {
-	int from = m->get_source().num();
-	straydn = add_replica_stray(m->straybl, from);
-      }
 
       // open inode?
       if (dnl->is_primary()) {
@@ -9402,8 +9417,9 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 	  migrator->export_caps(in);
 	
 	lru.lru_bottouch(straydn);  // move stray to end of lru
-
+	straydn = NULL;
       } else {
+	assert(!straydn);
 	assert(dnl->is_remote());
 	dn->dir->unlink_inode(dn);
       }
@@ -9412,6 +9428,15 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
       // move to bottom of lru
       lru.lru_bottouch(dn);
     }
+  }
+
+  // race with trim_dentry()
+  if (straydn) {
+    assert(straydn->get_num_ref() == 0);
+    assert(straydn->get_linkage()->is_null());
+    map<int, MCacheExpire*> expiremap;
+    trim_dentry(straydn, expiremap);
+    send_expire_messages(expiremap);
   }
 
   m->put();
