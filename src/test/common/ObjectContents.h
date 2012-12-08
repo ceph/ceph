@@ -43,7 +43,7 @@ public:
     }
     void seek_to(uint64_t _pos) {
       if (pos > _pos ||
-	  iter != parent->seeds.end() && _pos >= iter->first) {
+	  (iter != parent->seeds.end() && _pos >= iter->first)) {
 	iter = parent->seeds.upper_bound(_pos);
 	--iter;
 	current_state = iter->second;
