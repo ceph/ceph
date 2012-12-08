@@ -8547,7 +8547,7 @@ void MDCache::discover_ino(CDir *base,
     d.ino = base->ino();
     d.frag = base->get_frag();
     d.want_ino = want_ino;
-    d.want_base_dir = true;
+    d.want_base_dir = false;
     d.want_xlocked = want_xlocked;
     _send_discover(d);
   }
@@ -8890,6 +8890,18 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     }
   }
 
+  // discover ino error
+  if (p.end() && m->is_flag_error_ino()) {
+    assert(cur->is_dir());
+    CDir *dir = cur->get_dirfrag(m->get_base_dir_frag());
+    if (dir) {
+      dout(7) << " flag_error on ino " << m->get_wanted_ino()
+	      << ", triggering ino" << dendl;
+      dir->take_ino_waiting(m->get_wanted_ino(), error);
+    } else
+      assert(0);
+  }
+
   // discover may start with an inode
   if (!p.end() && next == MDiscoverReply::INODE) {
     cur = add_replica_inode(p, NULL, finished);
@@ -8924,30 +8936,6 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
       } else
 	curdir = cur->get_dirfrag(m->get_base_dir_frag());
     }
-
-    // dentry error?
-    if (p.end() && (m->is_flag_error_dn() || m->is_flag_error_ino())) {
-      // error!
-      assert(cur->is_dir());
-      if (curdir) {
-	if (m->get_error_dentry().length()) {
-	  dout(7) << " flag_error on dentry " << m->get_error_dentry()
-		  << ", triggering dentry" << dendl;
-	  curdir->take_dentry_waiting(m->get_error_dentry(), 
-				      m->get_wanted_snapid(), m->get_wanted_snapid(), error);
-	} else {
-	  dout(7) << " flag_error on ino " << m->get_wanted_ino()
-		  << ", triggering ino" << dendl;
-	  curdir->take_ino_waiting(m->get_wanted_ino(), error);
-	}
-      } else {
-	dout(7) << " flag_error on dentry " << m->get_error_dentry() 
-		<< ", triggering dir?" << dendl;
-	cur->take_waiting(CInode::WAIT_DIR, error);
-      }
-      break;
-    }
-    assert(curdir);
 
     if (p.end())
       break;
