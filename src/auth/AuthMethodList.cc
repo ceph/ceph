@@ -39,6 +39,9 @@ AuthMethodList::AuthMethodList(CephContext *cct, string str)
       lderr(cct) << "WARNING: unknown auth protocol defined: " << *iter << dendl;
     }
   }
+  if (auth_supported.empty()) {
+    auth_supported.push_back(CEPH_AUTH_CEPHX);
+  }
 }
 
 bool AuthMethodList::is_supported_auth(int auth_type)
