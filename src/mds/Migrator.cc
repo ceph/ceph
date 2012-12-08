@@ -236,6 +236,8 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	dir->unfreeze_tree();  // cancel the freeze
 	dir->auth_unpin(this);
 	export_state.erase(dir); // clean up
+	export_unlock(dir);
+	export_locks.erase(dir);
 	dir->state_clear(CDir::STATE_EXPORTING);
 	if (export_peer[dir] != who) // tell them.
 	  mds->send_message_mds(new MExportDirCancel(dir->dirfrag()), export_peer[dir]);
@@ -663,6 +665,8 @@ void Migrator::export_dir(CDir *dir, int dest)
     dout(7) << "export_dir can't rdlock needed locks, failing." << dendl;
     return;
   }
+  mds->locker->rdlock_take_set(locks);
+  export_locks[dir].swap(locks);
 
   // ok.
   assert(export_state.count(dir) == 0);
@@ -705,6 +709,9 @@ void Migrator::handle_export_discover_ack(MExportDirDiscoverAck *m)
       export_peer[dir] != m->get_source().num()) {
     dout(7) << "must have aborted" << dendl;
   } else {
+    // release locks to avoid deadlock
+    export_unlock(dir);
+    export_locks.erase(dir);
     // freeze the subtree
     export_state[dir] = EXPORT_FREEZING;
     dir->auth_unpin(this);
