@@ -308,6 +308,18 @@ Depends: ${shlibs:Depends}, ${misc:Depends}, ceph-common, xml2, curl
 Description: RESTful bencher that can be used to benchmark
  radosgw performance.
 
+Package: ceph-test
+Architecture: linux-any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ceph-common, xml2, curl
+Description:   Ceph test and benchmarking tools.
+
+Package: ceph-test-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: ${shlibs:Depends}, ${misc:Depends}, ceph-common, xml2, curl
+Description:  Ceph test and benchmarking tools.
+
 Package: python-ceph
 Architecture: linux-any
 Section: python
