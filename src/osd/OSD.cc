@@ -696,13 +696,13 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   osd_lock("OSD::osd_lock"),
   timer(external_messenger->cct, osd_lock),
   authorize_handler_cluster_registry(new AuthAuthorizeHandlerRegistry(external_messenger->cct,
-								      cct->_conf->auth_cluster_required.length() ?
-								      cct->_conf->auth_cluster_required :
-								      cct->_conf->auth_supported)),
+								      cct->_conf->auth_supported.length() ?
+								      cct->_conf->auth_supported :
+								      cct->_conf->auth_cluster_required)),
   authorize_handler_service_registry(new AuthAuthorizeHandlerRegistry(external_messenger->cct,
-								      cct->_conf->auth_service_required.length() ?
-								      cct->_conf->auth_service_required :
-								      cct->_conf->auth_supported)),
+								      cct->_conf->auth_supported.length() ?
+								      cct->_conf->auth_supported :
+								      cct->_conf->auth_service_required)),
   cluster_messenger(internal_messenger),
   client_messenger(external_messenger),
   monc(mc),
