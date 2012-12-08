@@ -668,9 +668,10 @@ static int do_bench_write(librbd::Image& image, uint64_t io_size, uint64_t io_th
 
 struct ExportContext {
   int fd;
+  uint64_t totalsize;
   MyProgressContext pc;
 
-  ExportContext(int f) : fd(f), pc("Exporting image") {}
+  ExportContext(int f, uint64_t t) : fd(f), totalsize(t), pc("Exporting image") {}
 };
 
 static int export_read_cb(uint64_t ofs, size_t len, const char *buf, void *arg)
@@ -715,6 +716,7 @@ static int export_read_cb(uint64_t ofs, size_t len, const char *buf, void *arg)
     if (ret < 0)
       return -errno;
     ret = write(fd, buf, len);
+    ec->pc.update_progress(ofs, ec->totalsize);
   }
 
   if (ret < 0)
@@ -740,7 +742,7 @@ static int do_export(librbd::Image& image, const char *path)
   if (fd < 0)
     return -errno;
 
-  ExportContext ec(fd);
+  ExportContext ec(fd, info.size);
   r = image.read_iterate(0, info.size, export_read_cb, (void *)&ec);
   if (r < 0)
     goto out;
