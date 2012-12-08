@@ -166,6 +166,26 @@ Requires:	libcephfs1 = %{version}-%{release}
 This package contains Python libraries for interacting with Cephs RADOS
 object storage.
 
+%package -n rest-bench
+Summary:	RESTful benchmark
+Group:		System Environment/Libraries
+License:	LGPL-2.0
+Requires:	librados2 = %{version}-%{release}
+Requires:	librbd1 = %{version}-%{release}
+Requires:	libcephfs1 = %{version}-%{release}
+%description -n rest-bench
+RESTful bencher that can be used to benchmark radosgw performance.
+
+%package -n ceph-test
+Summary:	Ceph benchmarks and test tools
+Group:		System Environment/Libraries
+License:	LGPL-2.0
+Requires:	librados2 = %{version}-%{release}
+Requires:	librbd1 = %{version}-%{release}
+Requires:	libcephfs1 = %{version}-%{release}
+%description -n ceph-test
+This package contains Ceph benchmarks and test tools.
+
 # Enable building of debug package on distributions that don't automatically
 # build it.
 
@@ -197,6 +217,8 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 		--without-hadoop \
 		--with-nss \
 		--without-cryptopp \
+		--with-rest-bench \
+		--with-debug \
 		$MY_CONF_OPT \
 		%{?_with_ocf} \
 		%{?with_tcmalloc:--with-tcmalloc} %{!?with_tcmalloc:--without-tcmalloc} \
@@ -427,5 +449,74 @@ fi
 %defattr(-,root,root,-)
 %{python_sitelib}/rados.py*
 %{python_sitelib}/rbd.py*
+
+#################################################################################
+%files -n rest-bench
+%defattr(-,root,root,-)
+%{_bindir}/rest-bench
+
+#################################################################################
+%files -n ceph-test
+%defattr(-,root,root,-)
+%{_bindir}/bench_log
+%{_bindir}/dupstore
+%{_bindir}/kvstorebench
+%{_bindir}/multi_stress_watch
+%{_bindir}/omapbench
+%{_bindir}/psim
+%{_bindir}/radosacl
+%{_bindir}/rest-bench
+%{_bindir}/rgw_jsonparser
+%{_bindir}/rgw_multiparser
+%{_bindir}/scratchtool
+%{_bindir}/scratchtoolpp
+%{_bindir}/smalliobench
+%{_bindir}/smalliobenchdumb
+%{_bindir}/smalliobenchfs
+%{_bindir}/streamtest
+%{_bindir}/test_cfuse_cache_invalidate
+%{_bindir}/test_cls_lock
+%{_bindir}/test_cls_rbd
+%{_bindir}/test_cls_refcount
+%{_bindir}/test_cls_rgw
+%{_bindir}/test_filejournal
+%{_bindir}/test_filestore
+%{_bindir}/test_filestore_idempotent
+%{_bindir}/test_filestore_idempotent_sequence
+%{_bindir}/test_filestore_workloadgen
+%{_bindir}/test_ioctls
+%{_bindir}/test_keyvaluedb_atomicity
+%{_bindir}/test_keyvaluedb_iterators
+%{_bindir}/test_libcephfs
+%{_bindir}/test_librbd
+%{_bindir}/test_librbd_fsx
+%{_bindir}/test_mon_workloadgen
+%{_bindir}/test_mutate
+%{_bindir}/test_object_map
+%{_bindir}/test_objectcacher_stress
+%{_bindir}/test_rados_api_aio
+%{_bindir}/test_rados_api_cls
+%{_bindir}/test_rados_api_io
+%{_bindir}/test_rados_api_list
+%{_bindir}/test_rados_api_misc
+%{_bindir}/test_rados_api_pool
+%{_bindir}/test_rados_api_snapshots
+%{_bindir}/test_rados_api_stat
+%{_bindir}/test_rados_api_watch_notify
+%{_bindir}/test_rewrite_latency
+%{_bindir}/test_stress_watch
+%{_bindir}/test_trans
+%{_bindir}/testcrypto
+%{_bindir}/testkeys
+%{_bindir}/testmsgr
+%{_bindir}/testrados
+%{_bindir}/testrados_delete_pools_parallel
+%{_bindir}/testrados_list_parallel
+%{_bindir}/testrados_open_pools_parallel
+%{_bindir}/testrados_watch_notify
+%{_bindir}/testsignal_handlers
+%{_bindir}/testtimers
+%{_bindir}/tpbench
+%{_bindir}/xattr_bench
 
 %changelog
