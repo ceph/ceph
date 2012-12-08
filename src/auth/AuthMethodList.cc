@@ -26,7 +26,11 @@ AuthMethodList::AuthMethodList(CephContext *cct, string str)
 {
   list<string> sup_list;
   get_str_list(str, sup_list);
+  if (sup_list.empty()) {
+    lderr(cct) << "WARNING: empty auth protocol list" << dendl;
+  }
   for (list<string>::iterator iter = sup_list.begin(); iter != sup_list.end(); ++iter) {
+    ldout(cct, 5) << "adding auth protocol: " << *iter << dendl;
     if (iter->compare("cephx") == 0) {
       auth_supported.push_back(CEPH_AUTH_CEPHX);
     } else if (iter->compare("none") == 0) {
@@ -34,6 +38,9 @@ AuthMethodList::AuthMethodList(CephContext *cct, string str)
     } else {
       lderr(cct) << "WARNING: unknown auth protocol defined: " << *iter << dendl;
     }
+  }
+  if (auth_supported.empty()) {
+    auth_supported.push_back(CEPH_AUTH_CEPHX);
   }
 }
 
