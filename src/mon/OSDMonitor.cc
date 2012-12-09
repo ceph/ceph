@@ -2979,7 +2979,6 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
     return prepare_pool_op_auid(m);
   }
 
-  bufferlist *blp = NULL;
   int ret = 0;
   bool changed = false;
 
@@ -2989,6 +2988,8 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
     pp = pending_inc.new_pools[m->pool];
   else
     pp = *osdmap.get_pg_pool(m->pool);
+
+  bufferlist reply_data;
 
   // pool snaps vs unmanaged snaps are mutually exclusive
   switch (m->op) {
@@ -3029,10 +3030,9 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
 
   case POOL_OP_CREATE_UNMANAGED_SNAP: 
     {
-      blp = new bufferlist();
       uint64_t snapid;
       pp.add_unmanaged_snap(snapid);
-      ::encode(snapid, *blp);
+      ::encode(snapid, reply_data);
       changed = true;
     }
     break;
@@ -3055,7 +3055,7 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
   }
 
  out:
-  paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, ret, pending_inc.epoch, blp));
+  paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, ret, pending_inc.epoch, &reply_data));
   propose_pending();
   return false;
 }
