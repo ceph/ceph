@@ -2230,7 +2230,7 @@ void Migrator::import_finish(CDir *dir)
        p != cap_imports.end();
        p++)
     if (p->first->is_auth())
-      mds->locker->eval(p->first, CEPH_CAP_LOCKS);
+      mds->locker->eval(p->first, CEPH_CAP_LOCKS, true);
 
   // send pending import_maps?
   mds->mdcache->maybe_send_pending_resolves();
@@ -2614,6 +2614,7 @@ void Migrator::logged_import_caps(CInode *in,
 
   assert(cap_imports.count(in));
   finish_import_inode_caps(in, from, cap_imports[in]);  
+  mds->locker->eval(in, CEPH_CAP_LOCKS, true);
 
   mds->send_message_mds(new MExportCapsAck(in->ino()), from);
 }
