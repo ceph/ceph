@@ -2839,14 +2839,22 @@ void Server::handle_client_readdir(MDRequest *mdr)
 	dout(10) << "skipping bad remote ino on " << *dn << dendl;
 	continue;
       } else {
-	mdcache->open_remote_dentry(dn, dnp, new C_MDS_RetryRequest(mdcache, mdr));
-
 	// touch everything i _do_ have
 	for (it = dir->begin(); 
 	     it != dir->end(); 
 	     it++) 
 	  if (!it->second->get_linkage()->is_null())
 	    mdcache->lru.lru_touch(it->second);
+
+	// already issued caps and leases, reply immediately.
+	if (dnbl.length() > 0) {
+	  mdcache->open_remote_dentry(dn, dnp, new C_NoopContext);
+	  dout(10) << " open remote dentry after caps were issued, stopping at "
+		   << dnbl.length() << " < " << bytes_left << dendl;
+	  break;
+	}
+
+	mdcache->open_remote_dentry(dn, dnp, new C_MDS_RetryRequest(mdcache, mdr));
 	return;
       }
     }
