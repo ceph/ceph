@@ -2590,6 +2590,29 @@ void Server::handle_client_openc(MDRequest *mdr)
     return;
   }
 
+  if (!(req->head.args.open.flags & O_EXCL)) {
+    int r = mdcache->path_traverse(mdr, NULL, NULL, req->get_filepath(),
+				   &mdr->dn[0], NULL, MDS_TRAVERSE_FORWARD);
+    if (r > 0) return;
+    if (r == 0) {
+      // it existed.
+      handle_client_open(mdr);
+      return;
+    }
+    if (r < 0 && r != -ENOENT) {
+      if (r == -ESTALE) {
+	dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
+	Context *c = new C_MDS_TryFindInode(this, mdr);
+	mdcache->find_ino_peers(req->get_filepath().get_ino(), c);
+      } else {
+	dout(10) << "FAIL on error " << r << dendl;
+	reply_request(mdr, r);
+      }
+      return;
+    }
+    // r == -ENOENT
+  }
+
   bool excl = (req->head.args.open.flags & O_EXCL);
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   ceph_file_layout *dir_layout = NULL;
@@ -2639,13 +2662,9 @@ void Server::handle_client_openc(MDRequest *mdr)
 
   if (!dnl->is_null()) {
     // it existed.  
-    if (req->head.args.open.flags & O_EXCL) {
-      dout(10) << "O_EXCL, target exists, failing with -EEXIST" << dendl;
-      reply_request(mdr, -EEXIST, dnl->get_inode(), dn);
-      return;
-    } 
-    
-    handle_client_open(mdr);
+    assert(req->head.args.open.flags & O_EXCL);
+    dout(10) << "O_EXCL, target exists, failing with -EEXIST" << dendl;
+    reply_request(mdr, -EEXIST, dnl->get_inode(), dn);
     return;
   }
 
