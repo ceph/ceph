@@ -280,7 +280,7 @@ OPTION(osd_auto_upgrade_tmap, OPT_BOOL, true)
 OPTION(osd_tmapput_sets_uses_tmap, OPT_BOOL, false)
 
 // Maximum number of backfills to or from a single osd
-OPTION(osd_max_backfills, OPT_U64, 5)
+OPTION(osd_max_backfills, OPT_U64, 10)
 
 // Refuse backfills when OSD full ratio is above this value
 OPTION(osd_backfill_full_ratio, OPT_FLOAT, 0.85)
@@ -335,8 +335,8 @@ OPTION(osd_default_data_pool_replay_window, OPT_INT, 45)
 OPTION(osd_preserve_trimmed_log, OPT_BOOL, false)
 OPTION(osd_auto_mark_unfound_lost, OPT_BOOL, false)
 OPTION(osd_recovery_delay_start, OPT_FLOAT, 15)
-OPTION(osd_recovery_max_active, OPT_INT, 5)
-OPTION(osd_recovery_max_chunk, OPT_U64, 1<<20)  // max size of push chunk
+OPTION(osd_recovery_max_active, OPT_INT, 20)
+OPTION(osd_recovery_max_chunk, OPT_U64, 8<<20)  // max size of push chunk
 OPTION(osd_recovery_forget_lost_objects, OPT_BOOL, false)   // off for now
 OPTION(osd_max_scrubs, OPT_INT, 1)
 OPTION(osd_scrub_load_threshold, OPT_FLOAT, 0.5)
@@ -374,7 +374,7 @@ OPTION(osd_target_transaction_size, OPT_INT, 300)     // to adjust various trans
  * 1..63.
  */
 OPTION(osd_client_op_priority, OPT_INT, 63)
-OPTION(osd_recovery_op_priority, OPT_INT, 30)
+OPTION(osd_recovery_op_priority, OPT_INT, 10)
 
 OPTION(filestore, OPT_BOOL, false)
 OPTION(filestore_debug_omap_check, OPT_BOOL, 0) // Expensive debugging check on sync
