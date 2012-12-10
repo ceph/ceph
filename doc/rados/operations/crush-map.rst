@@ -394,6 +394,140 @@ A rule takes the following form::
 
 .. important:: To activate one or more rules with a common ruleset number to a pool, set the ruleset number to the pool.
 
+Placing Different Pools on Different OSDS:
+==========================================
+
+It's possible to have multiple independent crush heirarchies within the same
+crush map.  Suppose you want to have pools default to osds backed by large
+spinning disks but have some pools mapped to osds backed by fast SSDs::
+
+  device 0 osd.0
+  device 1 osd.1
+  device 2 osd.2
+  device 3 osd.3
+  device 4 osd.4
+  device 5 osd.5
+  device 6 osd.6
+  device 7 osd.7
+
+	host ceph-osd-ssd-server-1 {
+		id -1
+		alg straw
+		hash 0
+		item osd.0 weight 1.00
+		item osd.1 weight 1.00
+	}
+
+	host ceph-osd-ssd-server-2 {
+		id -2
+		alg straw
+		hash 0
+		item osd.2 weight 1.00
+		item osd.3 weight 1.00
+	}
+
+	host ceph-osd-platter-server-1 {
+		id -3
+		alg straw
+		hash 0
+		item osd.4 weight 1.00
+		item osd.5 weight 1.00
+	}
+
+	host ceph-osd-platter-server-2 {
+		id -4
+		alg straw
+		hash 0
+		item osd.6 weight 1.00
+		item osd.7 weight 1.00
+	}
+
+	root platter {
+		id -5	
+		alg straw
+		hash 0
+		item ceph-osd-platter-server-1 weight 2.00
+		item ceph-osd-platter-server-2 weight 2.00
+	}
+
+	root ssd {
+		id -6	
+		alg straw
+		hash 0
+		item ceph-osd-ssd-server-1 weight 2.00
+		item ceph-osd-ssd-server-2 weight 2.00
+	}
+
+	rule data {
+		ruleset 0
+		type replicated
+		min_size 2
+		max_size 2
+		step take platter
+		step chooseleaf 0 type host
+		step emit
+	}
+
+	rule metadata {
+		ruleset 1
+		type replicated
+		min_size 0
+		max_size 10
+		step take platter
+		step chooseleaf 0 type host
+		step emit
+	}
+
+	rule rbd {
+		ruleset 2
+		type replicated
+		min_size 0
+		max_size 10
+		step take platter
+		step chooseleaf 0 type host
+		step emit
+	}
+
+	rule platter {
+		ruleset 3
+		type replicated
+		min_size 0
+		max_size 10
+		step take platter
+		step chooseleaf 0 type host
+		step emit
+	}
+
+	rule ssd {
+		ruleset 4
+		type replicated
+		min_size 0
+		max_size 10
+		step take ssd
+		step chooseleaf 0 type host
+		step emit
+	}
+
+	rule ssd-primary {
+		ruleset 4
+		type replicated
+		min_size 0
+		max_size 10
+		step take ssd
+		step chooseleaf 1 type host
+		step emit
+		step take platter
+		step chooseleaf -1 type host
+		step emit
+	}
+
+You can then set a pool to use the ssd rule by::
+
+  ceph osd pool set <poolname> crush_ruleset 4
+
+Similarly, using the ssd-primary rule will cause
+each pg in the pool to be placed with an SSD as
+the primary and platters as the replicas.
 
 .. _addosd:
 
