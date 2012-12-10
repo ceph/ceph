@@ -171,7 +171,7 @@ Add to Ceph Keyring Entries
 Once you have created a keyring and key for RADOS GW, add it as an entry in
 the Ceph keyring. For example::
 
-	ceph -k /etc/ceph/ceph.keyring auth add client.radosgw.gateway -i /etc/ceph/keyring.radosgw.gateway
+	sudo ceph -k /etc/ceph/ceph.keyring auth add client.radosgw.gateway -i /etc/ceph/keyring.radosgw.gateway
 	
 
 Restart Services and Start the RADOS Gateway
