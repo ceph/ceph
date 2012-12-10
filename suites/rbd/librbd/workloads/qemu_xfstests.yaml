@@ -1,4 +1,6 @@
 tasks:
 - qemu:
     all:
+      type: block
+      num_rbd: 2
       test: https://raw.github.com/ceph/ceph/master/qa/run_xfstests_qemu.sh
