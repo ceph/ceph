@@ -32,9 +32,9 @@ This also prints out the bucket name and creation date of each bucket.
 .. code-block:: python
 
 	for bucket in conn.get_all_buckets():
-	print "{name}\t{created}".format(
-		name = bucket.name,
-		created = bucket.creation_date,
+		print "{name}\t{created}".format(
+			name = bucket.name,
+			created = bucket.creation_date,
 		)
 
 The output will look something like this::
