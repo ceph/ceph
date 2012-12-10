@@ -229,10 +229,12 @@ bin_DEBUGPROGRAMS += smalliobench
 
 smalliobenchfs_SOURCES = test/bench/small_io_bench_fs.cc test/bench/filestore_backend.cc test/bench/detailed_stat_collector.cc test/bench/bencher.cc
 smalliobenchfs_LDADD = librados.la -lboost_program_options $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+smalliobenchfs_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += smalliobenchfs
 
 smalliobenchdumb_SOURCES = test/bench/small_io_bench_dumb.cc test/bench/dumb_backend.cc test/bench/detailed_stat_collector.cc test/bench/bencher.cc
 smalliobenchdumb_LDADD = librados.la -lboost_program_options $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+smalliobenchdumb_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += smalliobenchdumb
 
 tpbench_SOURCES = test/bench/tp_bench.cc test/bench/detailed_stat_collector.cc
@@ -863,6 +865,7 @@ test_mon_workloadgen_SOURCES = \
 		 osdc/Objecter.cc \
 		 osdc/Striper.cc
 test_mon_workloadgen_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+test_mon_workloadgen_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_mon_workloadgen
 
 test_rados_api_io_SOURCES = test/librados/io.cc test/librados/test.cc
