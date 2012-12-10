@@ -28,17 +28,17 @@ protected:
   class SubmitManager {
     Mutex lock;
     uint64_t op_seq;
-    list<uint64_t> ops_submitting;
+    uint64_t op_submitted;
   public:
     SubmitManager() :
       lock("JOS::SubmitManager::lock", false, true, false, g_ceph_context),
-      op_seq(0)
+      op_seq(0), op_submitted(0)
     {}
     uint64_t op_submit_start();
     void op_submit_finish(uint64_t op);
     void set_op_seq(uint64_t seq) {
       Mutex::Locker l(lock);
-      op_seq = seq;
+      op_submitted = op_seq = seq;
     }
     uint64_t get_op_seq() {
       return op_seq;
@@ -53,15 +53,11 @@ protected:
     bool blocked;
     Cond blocked_cond;
     int open_ops;
-    Cond open_ops_cond;
-    uint64_t max_applying_seq;
     uint64_t max_applied_seq;
 
     Mutex com_lock;
     map<version_t, vector<Context*> > commit_waiters;
     uint64_t committing_seq, committed_seq;
-    list<uint64_t> ops_submitting;
-    list<Cond*> ops_apply_blocked;
 
   public:
     ApplyManager(Journal *&j, Finisher &f) :
@@ -69,7 +65,6 @@ protected:
       apply_lock("JOS::ApplyManager::apply_lock", false, true, false, g_ceph_context),
       blocked(false),
       open_ops(0),
-      max_applying_seq(0),
       max_applied_seq(0),
       com_lock("JOS::ApplyManager::com_lock", false, true, false, g_ceph_context),
       committing_seq(0), committed_seq(0) {}
@@ -99,7 +94,7 @@ protected:
       }
       {
 	Mutex::Locker l(apply_lock);
-	max_applying_seq = max_applied_seq = fs_op_seq;
+	max_applied_seq = fs_op_seq;
       }
     }
   } apply_manager;
