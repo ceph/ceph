@@ -113,7 +113,7 @@ See `<IfModule> Directive`_ for additional details.
 .. _<IfModule> Directive: http://httpd.apache.org/docs/2.2/mod/core.html#ifmodule
 	
 Finally, you should configure Apache to allow encoded slashes, provide paths for
-log files and to trun off server signatures. :: 	
+log files and to turn off server signatures. :: 	
 
 	<VirtualHost *:80>	
 	...	
