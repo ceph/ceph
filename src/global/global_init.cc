@@ -104,9 +104,7 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
   g_lockdep = cct->_conf->lockdep;
 
   // Now we're ready to complain about config file parse errors
-  if (conf_file_list.length()) {
-    complain_about_parse_errors(cct, &parse_errors);
-  }
+  complain_about_parse_errors(cct, &parse_errors);
 
   // signal stuff
   int siglist[] = { SIGPIPE, 0 };
