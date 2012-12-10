@@ -5919,12 +5919,22 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
       assert(expired_inode);  // we had better have this.
       CDir *parent_dir = expired_inode->get_approx_dirfrag(p->first.frag);
       assert(parent_dir);
-      
+
+      int export_state = -1;
+      if (parent_dir->is_auth() && parent_dir->is_exporting()) {
+	export_state = migrator->get_export_state(parent_dir);
+	assert(export_state >= 0);
+      }
+
       if (!parent_dir->is_auth() ||
-	  (parent_dir->is_auth() && parent_dir->is_exporting() &&
-	   ((migrator->get_export_state(parent_dir) == Migrator::EXPORT_WARNING &&
+	  (export_state != -1 &&
+	   ((export_state == Migrator::EXPORT_WARNING &&
 	     migrator->export_has_warned(parent_dir,from)) ||
-	    migrator->get_export_state(parent_dir) == Migrator::EXPORT_EXPORTING))) {
+	    export_state == Migrator::EXPORT_EXPORTING ||
+	    export_state == Migrator::EXPORT_LOGGINGFINISH ||
+	    (export_state == Migrator::EXPORT_NOTIFYING &&
+	     !migrator->export_has_notified(parent_dir,from))))) {
+
 	// not auth.
 	dout(7) << "delaying nonauth|warned expires for " << *parent_dir << dendl;
 	assert(parent_dir->is_frozen_tree_root());
@@ -5937,10 +5947,9 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	delayed_expire[parent_dir][from]->add_realm(p->first, p->second);
 	continue;
       }
-      assert(!(parent_dir->is_auth() && parent_dir->is_exporting()) ||
-	     migrator->get_export_state(parent_dir) <= Migrator::EXPORT_PREPPING ||
-             (migrator->get_export_state(parent_dir) == Migrator::EXPORT_WARNING &&
-                 !migrator->export_has_warned(parent_dir, from)));
+      assert(export_state <= Migrator::EXPORT_PREPPING ||
+             (export_state == Migrator::EXPORT_WARNING &&
+              !migrator->export_has_warned(parent_dir, from)));
 
       dout(7) << "expires for " << *parent_dir << dendl;
     } else {

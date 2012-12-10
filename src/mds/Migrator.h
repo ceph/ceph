@@ -176,8 +176,11 @@ public:
     return (export_warning_ack_waiting[dir].count(who) == 0);
   }
 
-
-
+  bool export_has_notified(CDir *dir, int who) {
+    assert(is_exporting(dir));
+    assert(export_state[dir] == EXPORT_NOTIFYING);
+    return (export_notify_ack_waiting[dir].count(who) == 0);
+  }
   // -- misc --
   void handle_mds_failure_or_stop(int who);
 
