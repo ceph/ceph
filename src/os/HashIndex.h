@@ -245,7 +245,7 @@ private:
 
   /// Resets attr to match actual subdir contents
   int reset_attr(
-    const vector<string> &path ///< [in] path to cleaup
+    const vector<string> &path ///< [in] path to cleanup
     );
 
   /// Initiate Split
