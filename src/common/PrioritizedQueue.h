@@ -51,10 +51,10 @@ class PrioritizedQueue {
     list<pair<unsigned, T> > *l, F f,
     list<T> *out) {
     unsigned ret = 0;
-    for (typename list<pair<unsigned, T> >::reverse_iterator i = l->rbegin();
-	 i != l->rend();
-	 ++i) {
-      if (out) {
+    if (out) {
+      for (typename list<pair<unsigned, T> >::reverse_iterator i = l->rbegin();
+	   i != l->rend();
+	   ++i) {
 	if (f(i->second)) {
 	  out->push_front(i->second);
 	}
