@@ -2158,6 +2158,21 @@ unsigned FileStore::apply_transactions(list<Transaction*> &tls,
   return r;
 }
 
+void FileStore::_set_replay_guard(coll_t cid,
+                                  const SequencerPosition &spos,
+                                  bool in_progress=false)
+{
+  char fn[PATH_MAX];
+  get_cdir(cid, fn, sizeof(fn));
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    derr << "_set_replay_guard " << cid << " error " << fd << dendl;
+    assert(0 == "_set_replay_guard failed");
+  }
+  _set_replay_guard(fd, spos, 0, in_progress);
+  ::close(fd);
+} 
+
 
 void FileStore::_set_replay_guard(int fd,
 				  const SequencerPosition& spos,
@@ -2199,6 +2214,20 @@ void FileStore::_set_replay_guard(int fd,
   dout(10) << "_set_replay_guard " << spos << " done" << dendl;
 }
 
+void FileStore::_close_replay_guard(coll_t cid,
+                                    const SequencerPosition &spos)
+{
+  char fn[PATH_MAX];
+  get_cdir(cid, fn, sizeof(fn));
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    derr << "_set_replay_guard " << cid << " error " << fd << dendl;
+    assert(0 == "_close_replay_guard failed");
+  }
+  _close_replay_guard(fd, spos);
+  ::close(fd);
+} 
+
 void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos)
 {
   if (btrfs_stable_commits)
@@ -2226,7 +2255,6 @@ void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos)
 
   dout(10) << "_close_replay_guard " << spos << " done" << dendl;
 }
-
 
 int FileStore::_check_replay_guard(coll_t cid, hobject_t oid, const SequencerPosition& spos)
 {
@@ -2573,6 +2601,15 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	bufferlist bl;
 	i.get_bl(bl);
 	r = _omap_setheader(cid, oid, bl, spos);
+      }
+      break;
+    case Transaction::OP_SPLIT_COLLECTION:
+      {
+	coll_t cid(i.get_cid());
+	uint32_t bits(i.get_u32());
+	uint32_t rem(i.get_u32());
+	coll_t dest(i.get_cid());
+	r = _split_collection(cid, bits, rem, dest, spos);
       }
       break;
 
@@ -4433,6 +4470,15 @@ int FileStore::_create_collection(coll_t c)
 
 int FileStore::_destroy_collection(coll_t c) 
 {
+  {
+    Index from;
+    int r = get_index(c, &from);
+    if (r < 0)
+      return r;
+    r = from->prep_delete();
+    if (r < 0)
+      return r;
+  }
   char fn[PATH_MAX];
   get_cdir(c, fn, sizeof(fn));
   dout(15) << "_destroy_collection " << fn << dendl;
@@ -4555,6 +4601,42 @@ int FileStore::_omap_setheader(coll_t cid, const hobject_t &hoid,
   return object_map->set_header(hoid, bl, &spos);
 }
 
+int FileStore::_split_collection(coll_t cid,
+				 uint32_t bits,
+				 uint32_t rem,
+				 coll_t dest,
+				 const SequencerPosition &spos)
+{
+  dout(15) << __func__ << " " << cid << " bits: " << bits << dendl;
+  int r = _create_collection(dest);
+  if (r < 0 && !(r == -EEXIST && replaying))
+    return r;
+
+  int dstcmp = _check_replay_guard(cid, spos);
+  if (dstcmp < 0)
+    return 0;
+
+  int srccmp = _check_replay_guard(dest, spos);
+  if (srccmp < 0)
+    return 0;
+
+  _set_replay_guard(cid, spos, true);
+  _set_replay_guard(dest, spos, true);
+
+  Index from;
+  r = get_index(cid, &from);
+
+  Index to;
+  if (!r) 
+    r = get_index(dest, &to);
+
+  if (!r) 
+    r = from->split(rem, bits, to);
+
+  _close_replay_guard(cid, spos);
+  _close_replay_guard(dest, spos);
+  return r;
+}
 
 const char** FileStore::get_tracked_conf_keys() const
 {

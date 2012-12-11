@@ -152,6 +152,7 @@ public:
       OP_OMAP_SETKEYS = 32, // cid, attrset
       OP_OMAP_RMKEYS = 33,  // cid, keyset
       OP_OMAP_SETHEADER = 34, // cid, header
+      OP_SPLIT_COLLECTION = 35, // cid, bits, destination
     };
 
   private:
@@ -294,6 +295,11 @@ public:
       }
       void get_keyset(set<string> &keys) {
 	::decode(keys, p);
+      }
+      uint32_t get_u32() {
+	uint32_t bits;
+	::decode(bits, p);
+	return bits;
       }
     };
 
@@ -541,6 +547,21 @@ public:
       ::encode(hoid, tbl);
       ::encode(bl, tbl);
       ops++;
+    }
+
+    /// Split collection based on given prefixes
+    void split_collection(
+      coll_t cid,
+      uint32_t bits,
+      uint32_t rem,
+      coll_t destination) {
+      __u32 op = OP_SPLIT_COLLECTION;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(bits, tbl);
+      ::encode(rem, tbl);
+      ::encode(destination, tbl);
+      ++ops;
     }
 
     // etc.
