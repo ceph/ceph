@@ -5,6 +5,6 @@
 
 # command-line arguments should override environment
   $ env -u CEPH_CONF ceph-conf -c from-args
-  global_init: unable to open config file. (re)
+  global_init: unable to open config file from search list from-args
   [1]
 
