@@ -151,6 +151,20 @@ protected:
     int *exist	           ///< [out] True if the object exists, else false
     ) = 0;
 
+  /**
+   * Moves objects matching <match> in the lsb <bits>
+   *
+   * dest and this must be the same subclass
+   *
+   * @return Error Code, 0 for success
+   */
+  virtual int split(
+    uint32_t match,                             //< [in] value to match
+    uint32_t bits,                              //< [in] bits to check
+    std::tr1::shared_ptr<CollectionIndex> dest  //< [in] destination index
+    ) { assert(0); return 0; }
+
+
   /// List contents of collection by hash
   virtual int collection_list_partial(
     const hobject_t &start, ///< [in] object at which to start
@@ -165,6 +179,9 @@ protected:
   virtual int collection_list(
     vector<hobject_t> *ls ///< [out] Listed Objects
     ) = 0;
+
+  /// Call prior to removing directory
+  virtual int prep_delete() { return 0; }
 
   /// Virtual destructor
   virtual ~CollectionIndex() {}

@@ -235,10 +235,18 @@ struct pg_t {
     m_preferred = osd;
   }
 
+  pg_t get_parent() const;
+
   int print(char *o, int maxlen) const;
   bool parse(const char *s);
 
   bool is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *pchildren) const;
+
+  /**
+   * Returns b such that for all object o:
+   *   ~((~0)<<b) & o.hash) == 0 iff o is in the pg for *this
+   */
+  unsigned get_split_bits(unsigned pg_num) const;
 
   void encode(bufferlist& bl) const {
     __u8 v = 1;
@@ -879,6 +887,7 @@ struct pg_stat_t {
   utime_t last_deep_scrub_stamp;
 
   object_stat_collection_t stats;
+  bool stats_invalid;
 
   int64_t log_size;
   int64_t ondisk_log_size;    // >= active_log_size
@@ -890,6 +899,7 @@ struct pg_stat_t {
     : state(0),
       created(0), last_epoch_clean(0),
       parent_split_bits(0), 
+      stats_invalid(false),
       log_size(0), ondisk_log_size(0),
       mapping_epoch(0)
   { }
@@ -1144,6 +1154,7 @@ struct pg_interval_t {
     std::tr1::shared_ptr<const OSDMap> osdmap,  ///< [in] current map
     std::tr1::shared_ptr<const OSDMap> lastmap, ///< [in] last map
     int64_t poolid,                             ///< [in] pool for pg
+    pg_t pgid,                                  ///< [in] pgid for pg
     map<epoch_t, pg_interval_t> *past_intervals,///< [out] intervals
     ostream *out = 0                            ///< [out] debug ostream
     );
@@ -1449,6 +1460,7 @@ struct pg_missing_t {
   void rm(const std::map<hobject_t, pg_missing_t::item>::iterator &m);
   void got(const hobject_t& oid, eversion_t v);
   void got(const std::map<hobject_t, pg_missing_t::item>::iterator &m);
+  void split_into(pg_t child_pgid, unsigned split_bits, pg_missing_t *omissing);
 
   void clear() {
     missing.clear();

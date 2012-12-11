@@ -786,6 +786,10 @@ void PGMonitor::send_pg_creates()
     if (pgid.preferred() >= 0)
       continue;
 
+    // don't send creates for splits
+    if (s.parent_split_bits)
+      continue;
+
     if (nrep) {
       pg_map.creating_pgs_by_osd[acting[0]].insert(pgid);
     } else {

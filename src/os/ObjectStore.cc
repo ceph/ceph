@@ -355,6 +355,19 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
       }
       break;
 
+    case Transaction::OP_SPLIT_COLLECTION:
+      {
+	coll_t cid(i.get_cid());
+	uint32_t bits(i.get_u32());
+	uint32_t rem(i.get_u32());
+	coll_t dest(i.get_cid());
+	f->dump_string("op_name", "op_split_collection");
+	f->dump_stream("collection") << cid;
+	f->dump_stream("bits") << bits;
+	f->dump_stream("rem") << rem;
+	f->dump_stream("dest") << dest;
+      }
+
     default:
       f->dump_string("op_name", "unknown");
       f->dump_unsigned("op_code", op);

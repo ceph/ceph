@@ -75,7 +75,8 @@ int IndexManager::init_index(coll_t c, const char *path, uint32_t version) {
     return r;
   HashIndex index(c, path, g_conf->filestore_merge_threshold,
 		  g_conf->filestore_split_multiple,
-		  CollectionIndex::HASH_INDEX_TAG_2);
+		  CollectionIndex::HASH_INDEX_TAG_2,
+		  g_conf->filestore_index_retry_probability);
   return index.init();
 }
 
@@ -110,7 +111,8 @@ int IndexManager::build_index(coll_t c, const char *path, Index *index) {
     // No need to check
     *index = Index(new HashIndex(c, path, g_conf->filestore_merge_threshold,
 				 g_conf->filestore_split_multiple,
-				 CollectionIndex::HOBJECT_WITH_POOL), 
+				 CollectionIndex::HOBJECT_WITH_POOL,
+				 g_conf->filestore_index_retry_probability),
 		   RemoveOnDelete(c, this));
     return 0;
   }

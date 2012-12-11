@@ -869,6 +869,7 @@ void PG::generate_past_intervals()
       cur_map,
       last_map,
       info.pgid.pool(),
+      info.pgid,
       &past_intervals,
       &debug);
     if (new_interval) {
@@ -1906,6 +1907,149 @@ void PG::finish_recovery_op(const hobject_t& soid, bool dequeue)
   osd->osd->finish_recovery_op(this, soid, dequeue);
 }
 
+void PG::IndexedLog::split_into(
+  pg_t child_pgid,
+  unsigned split_bits,
+  PG::IndexedLog *olog)
+{
+  list<pg_log_entry_t> oldlog;
+  oldlog.swap(log);
+
+  eversion_t old_tail;
+  olog->head = head;
+  olog->tail = tail;
+  unsigned mask = ~((~0)<<split_bits);
+  for (list<pg_log_entry_t>::iterator i = oldlog.begin();
+       i != oldlog.end();
+       ) {
+    if ((i->soid.hash & mask) == child_pgid.m_seed) {
+      olog->log.push_back(*i);
+      if (log.empty())
+	tail = i->version;
+    } else {
+      log.push_back(*i);
+      if (olog->empty())
+	olog->tail = i->version;
+    }
+    oldlog.erase(i++);
+  }
+
+  if (log.empty())
+    tail = head;
+  else
+    head = log.rbegin()->version;
+
+  if (olog->empty())
+    olog->tail = olog->head;
+  else
+    olog->head = olog->log.rbegin()->version;
+
+  olog->index();
+  index();
+}
+
+static void split_list(
+  list<OpRequestRef> *from,
+  list<OpRequestRef> *to,
+  unsigned match,
+  unsigned bits)
+{
+  for (list<OpRequestRef>::iterator i = from->begin();
+       i != from->end();
+    ) {
+    if (PG::split_request(*i, match, bits)) {
+      to->push_back(*i);
+      from->erase(i++);
+    } else {
+      ++i;
+    }
+  }
+}
+
+static void split_replay_queue(
+  map<eversion_t, OpRequestRef> *from,
+  map<eversion_t, OpRequestRef> *to,
+  unsigned match,
+  unsigned bits)
+{
+  for (map<eversion_t, OpRequestRef>::iterator i = from->begin();
+       i != from->end();
+       ) {
+    if (PG::split_request(i->second, match, bits)) {
+      to->insert(*i);
+      from->erase(i++);
+    } else {
+      ++i;
+    }
+  }
+}
+
+void PG::split_ops(PG *child, unsigned split_bits) {
+  unsigned match = child->info.pgid.m_seed;
+  assert(waiting_for_map.empty());
+  assert(waiting_for_all_missing.empty());
+  assert(waiting_for_missing_object.empty());
+  assert(waiting_for_degraded_object.empty());
+  assert(waiting_for_ack.empty());
+  assert(waiting_for_ondisk.empty());
+  split_replay_queue(&replay_queue, &(child->replay_queue), match, split_bits);
+
+  osd->dequeue_pg(this, &waiting_for_active);
+  split_list(&waiting_for_active, &(child->waiting_for_active), match, split_bits);
+}
+
+void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
+{
+  child->osdmap_ref = osdmap_ref;
+
+  child->pool = pool;
+
+  // Log
+  log.split_into(child_pgid, split_bits, &(child->log));
+  child->info.last_complete = info.last_complete;
+
+  info.last_update = log.head;
+  child->info.last_update = child->log.head;
+
+  info.log_tail = log.tail;
+  child->info.log_tail = child->log.tail;
+
+  if (info.last_complete < log.tail)
+    info.last_complete = log.tail;
+  if (child->info.last_complete < child->log.tail)
+    child->info.last_complete = child->log.tail;
+
+  // Missing
+  missing.split_into(child_pgid, split_bits, &(child->missing));
+
+  // Info
+  child->info.history = info.history;
+  child->info.purged_snaps = info.purged_snaps;
+  child->info.last_backfill = info.last_backfill;
+
+  child->info.stats = info.stats;
+  info.stats.stats_invalid = true;
+  child->info.stats.stats_invalid = true;
+  child->info.last_epoch_started = info.last_epoch_started;
+
+  child->snap_trimq = snap_trimq;
+
+  get_osdmap()->pg_to_up_acting_osds(child->info.pgid, child->up, child->acting);
+  child->role = get_osdmap()->calc_pg_role(osd->whoami, child->acting);
+  if (get_primary() != child->get_primary())
+    child->info.history.same_primary_since = get_osdmap()->get_epoch();
+
+  // History
+  child->past_intervals = past_intervals;
+
+  split_ops(child, split_bits);
+  _split_into(child_pgid, child, split_bits);
+
+  child->dirty_info = true;
+  child->dirty_log = true;
+  dirty_info = true;
+  dirty_log = true;
+}
 
 void PG::defer_recovery()
 {
@@ -2150,8 +2294,9 @@ void PG::write_info(ObjectStore::Transaction& t)
 {
   // pg state
   bufferlist infobl;
-  __u8 struct_v = 4;
+  __u8 struct_v = 5;
   ::encode(struct_v, infobl);
+  ::encode(get_osdmap()->get_epoch(), infobl);
   t.collection_setattr(coll, "info", infobl);
  
   // potentially big stuff
@@ -2164,6 +2309,20 @@ void PG::write_info(ObjectStore::Transaction& t)
   t.write(coll_t::META_COLL, biginfo_oid, 0, bigbl.length(), bigbl);
 
   dirty_info = false;
+}
+
+epoch_t PG::peek_map_epoch(ObjectStore *store, coll_t coll, bufferlist *bl)
+{
+  assert(bl);
+  store->collection_getattr(coll, "info", *bl);
+  bufferlist::iterator bp = bl->begin();
+  __u8 struct_v = 0;
+  ::decode(struct_v, bp);
+  if (struct_v < 5)
+    return 0;
+  epoch_t cur_epoch = 0;
+  ::decode(cur_epoch, bp);
+  return cur_epoch;
 }
 
 void PG::write_log(ObjectStore::Transaction& t)
@@ -2612,15 +2771,12 @@ std::string PG::get_corrupt_pg_log_name() const
   return buf;
 }
 
-void PG::read_state(ObjectStore *store)
+void PG::read_state(ObjectStore *store, bufferlist &bl)
 {
-  bufferlist bl;
-  bufferlist::iterator p;
+  bufferlist::iterator p = bl.begin();
   __u8 struct_v;
 
   // info
-  store->collection_getattr(coll, "info", bl);
-  p = bl.begin();
   ::decode(struct_v, p);
   if (struct_v < 4)
     ::decode(info, p);
@@ -4318,6 +4474,13 @@ bool PG::may_need_replay(const OSDMapRef osdmap) const
   return crashed;
 }
 
+bool PG::is_split(OSDMapRef lastmap, OSDMapRef nextmap)
+{
+  return info.pgid.is_split(
+    lastmap->get_pg_num(pool.id),
+    nextmap->get_pg_num(pool.id),
+    0);
+}
 
 bool PG::acting_up_affected(const vector<int>& newup, const vector<int>& newacting)
 {
@@ -4426,14 +4589,14 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
       info.history.same_interval_since,
       info.history.last_epoch_clean,
       osdmap,
-      lastmap, info.pgid.pool(), &past_intervals);
+      lastmap, info.pgid.pool(), info.pgid, &past_intervals);
     if (new_interval) {
       dout(10) << " noting past " << past_intervals.rbegin()->second << dendl;
       dirty_info = true;
     }
   }
 
-  if (oldacting != acting || oldup != up) {
+  if (oldacting != acting || oldup != up || is_split(lastmap, osdmap)) {
     info.history.same_interval_since = osdmap->get_epoch();
   }
   if (oldup != up) {
@@ -4706,6 +4869,24 @@ bool PG::can_discard_request(OpRequestRef op)
   return true;
 }
 
+bool PG::split_request(OpRequestRef op, unsigned match, unsigned bits)
+{
+  unsigned mask = ~((~0)<<bits);
+  switch (op->request->get_type()) {
+  case CEPH_MSG_OSD_OP:
+    return (static_cast<MOSDOp*>(op->request)->get_pg().m_seed & mask) == match;
+  case MSG_OSD_SUBOP:
+    return false;
+  case MSG_OSD_SUBOPREPLY:
+    return false;
+  case MSG_OSD_PG_SCAN:
+    return false;
+  case MSG_OSD_PG_BACKFILL:
+    return false;
+  }
+  return false;
+}
+
 bool PG::must_delay_request(OpRequestRef op)
 {
   switch (op->request->get_type()) {
@@ -4968,7 +5149,8 @@ boost::statechart::result PG::RecoveryState::Started::react(const AdvMap& advmap
 {
   dout(10) << "Started advmap" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
-  if (pg->acting_up_affected(advmap.newup, advmap.newacting)) {
+  if (pg->acting_up_affected(advmap.newup, advmap.newacting) ||
+    pg->is_split(advmap.lastmap, advmap.osdmap)) {
     dout(10) << "up or acting affected, transitioning to Reset" << dendl;
     post_event(advmap);
     return transit< Reset >();
@@ -5020,7 +5202,8 @@ boost::statechart::result PG::RecoveryState::Reset::react(const AdvMap& advmap)
   pg->generate_past_intervals();
 
   pg->remove_down_peer_info(advmap.osdmap);
-  if (pg->acting_up_affected(advmap.newup, advmap.newacting)) {
+  if (pg->acting_up_affected(advmap.newup, advmap.newacting) ||
+    pg->is_split(advmap.lastmap, advmap.osdmap)) {
     dout(10) << "up or acting affected, calling start_peering_interval again"
 	     << dendl;
     pg->start_peering_interval(advmap.lastmap, advmap.newup, advmap.newacting);
