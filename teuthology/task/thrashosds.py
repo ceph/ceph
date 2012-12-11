@@ -57,6 +57,11 @@ def task(ctx, config):
        to become clean after each cluster change. If this doesn't
        happen within the timeout, an exception will be raised.
 
+    chance_pgnum_grow: (0) chance to increase a pool's size
+    chance_pgpnum_fix: (0) chance to adjust pgpnum to pg for a pool
+    pool_grow_by: (10) amount to increase pgnum by
+    max_pgs_per_pool_osd: (1200) don't expand pools past this size per osd
+
     example:
 
     tasks:
@@ -80,6 +85,7 @@ def task(ctx, config):
         ctx=ctx,
         logger=log.getChild('ceph_manager'),
         )
+    ctx.manager = manager
     thrash_proc = ceph_manager.Thrasher(
         manager,
         config,
