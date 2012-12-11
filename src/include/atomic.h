@@ -20,6 +20,8 @@
 # include "acconfig.h"
 #endif
 
+#include <stdlib.h>
+
 #ifndef NO_ATOMIC_OPS
 
 // libatomic_ops implementation
