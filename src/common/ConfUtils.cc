@@ -101,9 +101,6 @@ parse_file(const std::string &fname, std::deque<std::string> *errors,
   FILE *fp = fopen(fname.c_str(), "r");
   if (!fp) {
     ret = -errno;
-    ostringstream oss;
-    oss << "read_conf: failed to open '" << fname << "': " << cpp_strerror(ret);
-    errors->push_back(oss.str());
     return ret;
   }
 
