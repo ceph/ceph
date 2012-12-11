@@ -155,22 +155,41 @@ class RBD(object):
         :param stripe_count: objects to stripe over before looping
         :type stripe_count: int
         :raises: :class:`ImageExists`
+        :raises: :class:`TypeError`
+        :raises: :class:`InvalidArgument`
+        :raises: :class:`FunctionNotSupported`
         """
         if order is None:
             order = 0
         if not isinstance(name, str):
             raise TypeError('name must be a string')
         if old_format:
+            if features != 0 or stripe_unit != 0 or stripe_count != 0:
+                raise InvalidArgument('format 1 images do not support feature'
+                                      ' masks or non-default striping')
             ret = self.librbd.rbd_create(ioctx.io, c_char_p(name),
                                          c_uint64(size),
                                          byref(c_int(order)))
         else:
-            ret = self.librbd.rbd_create3(ioctx.io, c_char_p(name),
-                                          c_uint64(size),
-                                          c_uint64(features),
-                                          byref(c_int(order)),
-                                          c_uint64(stripe_unit),
-                                          c_uint64(stripe_count))
+            if not hasattr(self.librbd, 'rbd_create2'):
+                raise FunctionNotSupported('installed version of librbd does'
+                                           ' not support format 2 images')
+            has_create3 = hasattr(self.librbd, 'rbd_create3')
+            if (stripe_unit != 0 or stripe_count != 0) and not has_create3:
+                raise FunctionNotSupported('installed version of librbd does'
+                                           ' not support stripe unit or count')
+            if has_create3:
+                ret = self.librbd.rbd_create3(ioctx.io, c_char_p(name),
+                                              c_uint64(size),
+                                              c_uint64(features),
+                                              byref(c_int(order)),
+                                              c_uint64(stripe_unit),
+                                              c_uint64(stripe_count))
+            else:
+                ret = self.librbd.rbd_create2(ioctx.io, c_char_p(name),
+                                              c_uint64(size),
+                                              c_uint64(features),
+                                              byref(c_int(order)))
         if ret < 0:
             raise make_ex(ret, 'error creating image')
 
