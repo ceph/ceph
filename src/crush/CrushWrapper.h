@@ -556,8 +556,12 @@ private:
     // get the parent bucket
     crush_bucket *parent_bucket = get_bucket(parent_id);
 
-    // remove the bucket from the parent
-    crush_bucket_remove_item(parent_bucket, item);
+    if (!IS_ERR(parent_bucket)) {
+      // remove the bucket from the parent
+      crush_bucket_remove_item(parent_bucket, item);
+    } else if (PTR_ERR(parent_bucket) != -ENOENT) {
+      return PTR_ERR(parent_bucket);
+    }
 
     // check that we're happy
     int test_weight = 0;

@@ -42,7 +42,7 @@ public:
   void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(fsid, payload);
-    ::encode(pool_stats, payload);
+    ::encode(pool_stats, payload, features);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();

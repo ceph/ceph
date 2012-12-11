@@ -269,13 +269,13 @@ int MonClient::init()
   if (r == -ENOENT) {
     // do we care?
     string method;
-    if (entity_name.get_type() == CEPH_ENTITY_TYPE_MDS ||
-	entity_name.get_type() == CEPH_ENTITY_TYPE_OSD)
+    if (cct->_conf->auth_supported.length() != 0) 
+      method = cct->_conf->auth_supported;
+    else if (entity_name.get_type() == CEPH_ENTITY_TYPE_MDS ||
+	     entity_name.get_type() == CEPH_ENTITY_TYPE_OSD)
       method = cct->_conf->auth_cluster_required;
     else
       method = cct->_conf->auth_client_required;
-    if (method.length() == 0)
-      method = cct->_conf->auth_supported;
     AuthMethodList supported(cct, method);
     if (!supported.is_supported_auth(CEPH_AUTH_CEPHX)) {
       ldout(cct, 2) << "cephx auth is not supported, ignoring absence of keyring" << dendl;
@@ -294,14 +294,16 @@ int MonClient::init()
   schedule_tick();
 
   string method;
-  if (entity_name.get_type() == CEPH_ENTITY_TYPE_OSD ||
-      entity_name.get_type() == CEPH_ENTITY_TYPE_MDS ||
-      entity_name.get_type() == CEPH_ENTITY_TYPE_MON)
-    method = cct->_conf->auth_cluster_required;
-  else
-    method = cct->_conf->auth_client_required;
-  auth_supported = new AuthMethodList(cct, method.length() ? method : cct->_conf->auth_supported);
-  ldout(cct, 10) << "auth_supported " << auth_supported->get_supported_set() << dendl;
+    if (cct->_conf->auth_supported.length() != 0)
+      method = cct->_conf->auth_supported;
+    else if (entity_name.get_type() == CEPH_ENTITY_TYPE_OSD ||
+             entity_name.get_type() == CEPH_ENTITY_TYPE_MDS ||
+             entity_name.get_type() == CEPH_ENTITY_TYPE_MON)
+      method = cct->_conf->auth_cluster_required;
+    else
+      method = cct->_conf->auth_client_required;
+  auth_supported = new AuthMethodList(cct, method);
+  ldout(cct, 10) << "auth_supported " << auth_supported->get_supported_set() << " method " << method << dendl;
 
   initialized = true;
   return 0;

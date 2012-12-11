@@ -240,16 +240,19 @@ private:
     MPoolOp *m;
     int replyCode;
     int epoch;
-    bufferlist *reply_data;
-    C_PoolOp(OSDMonitor * osd, MPoolOp *m_, int rc, int e, bufferlist *rd=NULL) : 
-      osdmon(osd), m(m_), replyCode(rc), epoch(e), reply_data(rd) {}
+    bufferlist reply_data;
+    C_PoolOp(OSDMonitor * osd, MPoolOp *m_, int rc, int e, bufferlist *rd=NULL) :
+      osdmon(osd), m(m_), replyCode(rc), epoch(e) {
+      if (rd)
+	reply_data = *rd;
+    }
     void finish(int r) {
       if (r == -ECANCELED) {
 	if (m)
 	  m->put();
 	return;
       }
-      osdmon->_pool_op_reply(m, replyCode, epoch, reply_data);
+      osdmon->_pool_op_reply(m, replyCode, epoch, &reply_data);
     }
   };
 
