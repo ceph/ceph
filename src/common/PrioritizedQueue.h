@@ -65,6 +65,7 @@ class PrioritizedQueue {
       ) {
       if (f(i->second)) {
 	l->erase(i++);
+	++ret;
       } else {
 	++i;
       }
