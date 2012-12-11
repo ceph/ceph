@@ -60,7 +60,7 @@ int HashIndex::cleanup() {
 int HashIndex::reset_attr(
   const vector<string> &path)
 {
-  int exists;
+  int exists = 0;
   int r = path_exists(path, &exists);
   if (r < 0)
     return r;
@@ -149,7 +149,7 @@ int HashIndex::col_split_level(
   // Make parent directories as needed
   while (*mkdirred < path.size()) {
     ++*mkdirred;
-    int exists;
+    int exists = 0;
     vector<string> creating_path(path.begin(), path.begin()+*mkdirred);
     r = to.path_exists(creating_path, &exists);
     if (r < 0)
