@@ -343,8 +343,8 @@ protected:
   static int move_subdir(
     LFNIndex &from,             ///< [in] from index
     LFNIndex &dest,             ///< [in] to index
-    const vector<string> &path, ///< [in] path to split
-    string dir                  ///< [in] path to move
+    const vector<string> &path, ///< [in] path containing dir
+    string dir                  ///< [in] dir to move
     );
 
   /// do move object from from to dest
