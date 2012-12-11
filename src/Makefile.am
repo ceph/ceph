@@ -71,8 +71,6 @@ SUBDIRS += leveldb
 LEVELDB_INCLUDE = -I$(top_srcdir)/src/leveldb/include
 endif
 
-
-
 # monitor
 ceph_mon_SOURCES = ceph_mon.cc
 ceph_mon_LDFLAGS = $(AM_LDFLAGS)
@@ -84,7 +82,7 @@ bin_PROGRAMS += ceph-mon
 ceph_osd_SOURCES = ceph_osd.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
 ceph_osd_LDADD = libosd.a $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-ceph_osd_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} $(LEVELDB_INCLUDE)
+ceph_osd_CXXFLAGS = ${AM_CXXFLAGS} $(LEVELDB_INCLUDE)
 bin_PROGRAMS += ceph-osd
 
 if LINUX
@@ -123,7 +121,7 @@ rgw_dencoder_src = rgw/rgw_dencoder.cc \
                    rgw/rgw_acl.cc
 
 ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc ${rgw_dencoder_src}
-ceph_dencoder_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+ceph_dencoder_CXXFLAGS = ${AM_CXXFLAGS}
 ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libcls_lock_client.a libcls_rgw_client.a libosd.a libmds.a $(LIBOS_LDA) libmon.a
 bin_PROGRAMS += ceph-dencoder
 
@@ -295,7 +293,7 @@ noinst_LIBRARIES =
 libcephfs_la_SOURCES = \
 	libcephfs.cc
 libcephfs_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
-libcephfs_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+libcephfs_la_CXXFLAGS= ${AM_CXXFLAGS}
 libcephfs_la_LIBADD = libclient.la
 libcephfs_la_LDFLAGS =  $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(EXTRALIBS) \
             ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
@@ -318,7 +316,7 @@ librados_SOURCES = \
 	osdc/Striper.cc
 librados_la_SOURCES = ${librados_SOURCES}
 librados_la_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
-librados_la_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+librados_la_CXXFLAGS = ${AM_CXXFLAGS}
 librados_la_LIBADD = libcommon.la $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(EXTRALIBS)
 librados_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:0:0 -export-symbols-regex '^rados_.*'
 lib_LTLIBRARIES += librados.la
@@ -350,7 +348,7 @@ librgw_a_SOURCES =  \
 	rgw/rgw_multi_del.cc \
 	rgw/rgw_env.cc
 librgw_a_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
-librgw_a_CXXFLAGS = -Woverloaded-virtual ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+librgw_a_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
 noinst_LIBRARIES += librgw.a
 
 my_radosgw_ldadd = \
@@ -369,16 +367,16 @@ radosgw_SOURCES = \
 	rgw/rgw_swift_auth.cc \
 	rgw/rgw_main.cc
 radosgw_LDADD = $(my_radosgw_ldadd) -lfcgi -lresolv
-radosgw_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+radosgw_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += radosgw
 
 radosgw_admin_SOURCES = rgw/rgw_admin.cc
-radosgw_admin_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+radosgw_admin_CXXFLAGS = ${AM_CXXFLAGS}
 radosgw_admin_LDADD = $(my_radosgw_ldadd)
 bin_PROGRAMS += radosgw-admin
 
 rgw_multiparser_SOURCES = rgw/rgw_multiparser.cc
-rgw_multiparser_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+rgw_multiparser_CXXFLAGS = ${AM_CXXFLAGS}
 rgw_multiparser_LDADD = $(my_radosgw_ldadd)
 bin_DEBUGPROGRAMS += rgw_multiparser
 
@@ -405,7 +403,7 @@ librbd_la_SOURCES = \
 	cls/lock/cls_lock_types.cc \
 	cls/lock/cls_lock_ops.cc
 librbd_la_CFLAGS = ${AM_CFLAGS} ${CRYPTO_CFLAGS}
-librbd_la_CXXFLAGS = ${AM_CXXFLAGS} ${CRYPTO_CXXFLAGS}
+librbd_la_CXXFLAGS = ${AM_CXXFLAGS}
 librbd_la_LIBADD = librados.la
 librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 \
 	-export-symbols-regex '^rbd_.*' $(PTHREAD_LIBS) $(EXTRALIBS) 
@@ -450,7 +448,7 @@ endif
 
 testcrypto_SOURCES = testcrypto.cc
 testcrypto_LDADD =  $(LIBGLOBAL_LDA)
-testcrypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+testcrypto_CXXFLAGS = ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += testcrypto
 
 testkeys_SOURCES = testkeys.cc
@@ -706,7 +704,7 @@ check_PROGRAMS += unittest_bufferlist
 unittest_crypto_SOURCES = test/crypto.cc
 unittest_crypto_LDFLAGS = ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
 unittest_crypto_LDADD =  ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
-unittest_crypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_crypto_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_crypto
 
 unittest_perf_counters_SOURCES = test/perf_counters.cc
@@ -724,7 +722,7 @@ check_PROGRAMS += unittest_admin_socket
 unittest_ceph_crypto_SOURCES = test/ceph_crypto.cc
 unittest_ceph_crypto_LDFLAGS = ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
 unittest_ceph_crypto_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
-unittest_ceph_crypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_ceph_crypto_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_ceph_crypto
 
 unittest_utf8_SOURCES = test/utf8.cc
@@ -922,7 +920,7 @@ test_rados_api_misc_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
 test_rados_api_misc_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_rados_api_misc
 
-test_libcephfs_SOURCES = test/libcephfs/test.cc test/libcephfs/readdir_r_cb.cc
+test_libcephfs_SOURCES = test/libcephfs/test.cc test/libcephfs/readdir_r_cb.cc test/libcephfs/caps.cc
 test_libcephfs_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 test_libcephfs_LDADD =  ${UNITTEST_STATIC_LDADD} libcephfs.la
 test_libcephfs_CXXFLAGS = $(AM_CXXFLAGS) ${UNITTEST_CXXFLAGS}
@@ -944,7 +942,7 @@ bin_DEBUGPROGRAMS += test_filestore_workloadgen
 
 test_filestore_idempotent_SOURCES = test/filestore/test_idempotent.cc test/filestore/FileStoreTracker.cc test/common/ObjectContents.cc
 test_filestore_idempotent_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-test_filestore_idempotent_CXXFLAGS =  ${CRYPTO_CXXFLAGS} $(LEVELDB_INCLUDE)
+test_filestore_idempotent_CXXFLAGS = $(AM_CXXFLAGS) $(LEVELDB_INCLUDE)
 bin_DEBUGPROGRAMS += test_filestore_idempotent
 
 test_filestore_idempotent_sequence_SOURCES = \
@@ -1043,7 +1041,9 @@ ${WARN_TYPE_LIMITS} ${WARN_IGNORED_QUALIFIERS} -Winit-self -Wpointer-arith \
 -fno-strict-aliasing
 
 AM_CFLAGS = $(AM_COMMON_FLAGS)
-AM_CXXFLAGS = $(AM_COMMON_FLAGS) \
+AM_CXXFLAGS = \
+	@AM_CXXFLAGS@ \
+	$(AM_COMMON_FLAGS) \
 	-DCEPH_LIBDIR=\"${libdir}\" \
 	-Wnon-virtual-dtor \
 	-Wno-invalid-offsetof \
@@ -1165,7 +1165,7 @@ clean-local:
 
 libcommon_la_SOURCES = $(libcommon_files)
 libcommon_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
-libcommon_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+libcommon_la_CXXFLAGS= ${AM_CXXFLAGS}
 libcommon_la_LDFLAGS = -lrt
 noinst_LTLIBRARIES += libcommon.la
 
@@ -1175,7 +1175,7 @@ libglobal_la_SOURCES = \
 	global/pidfile.cc \
 	global/signal_handler.cc
 libglobal_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
-libglobal_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+libglobal_la_CXXFLAGS= ${AM_CXXFLAGS}
 libglobal_la_LIBADD= libcommon.la
 noinst_LTLIBRARIES += libglobal.la
 
@@ -1312,7 +1312,7 @@ libmon_a_SOURCES = \
 	mon/AuthMonitor.cc \
 	mon/Elector.cc \
 	mon/MonitorStore.cc
-libmon_a_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+libmon_a_CXXFLAGS= ${AM_CXXFLAGS}
 noinst_LIBRARIES += libmon.a
 
 libmds_a_SOURCES = \
@@ -1357,7 +1357,7 @@ libos_a_SOURCES = \
 	os/FlatIndex.cc \
 	os/DBObjectMap.cc \
 	os/LevelDBStore.cc
-libos_a_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} $(LEVELDB_INCLUDE)
+libos_a_CXXFLAGS= ${AM_CXXFLAGS} $(LEVELDB_INCLUDE)
 noinst_LIBRARIES += libos.a
 
 libosd_a_SOURCES = \
@@ -1369,7 +1369,7 @@ libosd_a_SOURCES = \
 	osd/Watch.cc \
 	osd/ClassHandler.cc \
 	osd/OpRequest.cc
-libosd_a_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+libosd_a_CXXFLAGS= ${AM_CXXFLAGS}
 noinst_LIBRARIES += libosd.a
 
 libosdc_la_SOURCES = \
@@ -1377,7 +1377,7 @@ libosdc_la_SOURCES = \
 	osdc/ObjectCacher.cc \
 	osdc/Filer.cc \
 	osdc/Striper.cc
-libosdc_la_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+libosdc_la_CXXFLAGS= ${AM_CXXFLAGS}
 libosdc_la_LIBADD = libcommon.la
 noinst_LTLIBRARIES += libosdc.la
 
@@ -1882,20 +1882,39 @@ noinst_HEADERS = \
 	test/osd/TestOpStat.h\
 	global/pidfile.h\
 	common/sync_filesystem.h \
-	test/encoding/types.h \
-	test/kv_store_bench.h \
-	test/omap_bench.h \
-	test/system/cross_process_sem.h \
-	test/system/st_rados_create_pool.h \
-	test/system/st_rados_list_objects.h \
-	test/system/st_rados_delete_objs.h \
-	test/system/st_rados_delete_pool.h \
-	test/system/st_rados_notify.h \
-	test/system/st_rados_watch.h \
-	test/system/systest_runnable.h \
-	test/system/systest_settings.h \
-	test/librados/test.h \
-	test/unit.h \
+        test/bench/distribution.h \
+        test/bench/rados_backend.h \
+        test/bench/bencher.h \
+        test/bench/backend.h \
+        test/bench/dumb_backend.h \
+        test/bench/stat_collector.h \
+        test/bench/detailed_stat_collector.h \
+        test/bench/filestore_backend.h \
+        test/common/ObjectContents.h \
+        test/encoding/types.h \
+        test/filestore/DeterministicOpSequence.h \
+        test/filestore/FileStoreTracker.h \
+        test/filestore/FileStoreDiff.h \
+        test/filestore/TestFileStoreState.h \
+        test/filestore/workload_generator.h \
+        test/kv_store_bench.h \
+        test/librados/test.h \
+        test/ObjectMap/KeyValueDBMemory.h \
+        test/omap_bench.h \
+        test/osd/Object.h \
+        test/osd/RadosModel.h \
+        test/osd/TestOpStat.h \
+        test/osdc/FakeWriteback.h \
+        test/system/cross_process_sem.h \
+        test/system/st_rados_create_pool.h \
+        test/system/st_rados_list_objects.h \
+        test/system/st_rados_delete_objs.h \
+        test/system/st_rados_delete_pool.h \
+        test/system/st_rados_notify.h \
+        test/system/st_rados_watch.h \
+        test/system/systest_runnable.h \
+        test/system/systest_settings.h \
+        test/unit.h \
 	os/ObjectMap.h \
 	os/DBObjectMap.h \
 	os/KeyValueDB.h \

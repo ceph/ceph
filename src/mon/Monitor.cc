@@ -115,11 +115,11 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   clog(cct_, messenger, monmap, LogClient::FLAG_MON),
   key_server(cct, &keyring),
   auth_cluster_required(cct,
-			cct->_conf->auth_cluster_required.length() ?
-			cct->_conf->auth_cluster_required : cct->_conf->auth_supported),
+			cct->_conf->auth_supported.length() ?
+			cct->_conf->auth_supported : cct->_conf->auth_cluster_required),
   auth_service_required(cct,
-		       cct->_conf->auth_service_required.length() ?
-		       cct->_conf->auth_service_required : cct->_conf->auth_supported),
+			cct->_conf->auth_supported.length() ?
+			cct->_conf->auth_supported : cct->_conf->auth_service_required),
   store(s),
   
   state(STATE_PROBING),

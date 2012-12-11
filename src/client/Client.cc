@@ -6083,7 +6083,27 @@ int Client::rmsnap(const char *relpath, const char *name)
   return _rmdir(snapdir, name);
 }
 
+// =============================
+// expose caps
 
+int Client::get_caps_issued(int fd) {
+
+  Mutex::Locker lock(client_lock);
+
+  Fh *f = get_filehandle(fd);
+  return f->inode->caps_issued();
+}
+
+int Client::get_caps_issued(const char *path) {
+
+  Mutex::Locker lock(client_lock);
+  filepath p(path);
+  Inode *in;
+  int r = path_walk(p, &in, true);
+  if (r < 0)
+    return r;
+  return in->caps_issued();
+}
 
 // =========================================
 // low level
@@ -7394,3 +7414,4 @@ void Client::clear_filer_flags(int flags)
   assert(flags == CEPH_OSD_FLAG_LOCALIZE_READS);
   objecter->clear_global_op_flag(flags);
 }
+
