@@ -288,11 +288,13 @@ int main(int argc, const char **argv)
   mds->orig_argv = argv;
 
   if (shadow)
-    mds->init(shadow);
+    r = mds->init(shadow);
   else
-    mds->init();
+    r = mds->init();
 
-  messenger->wait();
+  if (r >= 0) {
+    messenger->wait();
+  }
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_mds_signal);
