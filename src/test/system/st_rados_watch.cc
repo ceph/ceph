@@ -73,10 +73,16 @@ run()
   m_notify_sem->wait();
   m_notify_sem->post();
 
-  RETURN1_IF_NOT_VAL(m_num_notifies, num_notifies);
+  int r = 0;
+  if (num_notifies < m_num_notifies) {
+    printf("Received fewer notifies than expected: %d < %d\n",
+	   num_notifies, m_num_notifies);
+    r = 1;
+  }
+
   rados_unwatch(io_ctx, m_obj_name.c_str(), handle);
   rados_ioctx_destroy(io_ctx);
   rados_shutdown(cl);
 
-  return 0;
+  return r;
 }
