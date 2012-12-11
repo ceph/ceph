@@ -69,6 +69,7 @@ void Elector::start()
   dout(5) << "start -- can i be leader?" << dendl;
 
   acked_me.clear();
+  init();
   
   // start by trying to elect me
   if (epoch % 2 == 0) 
