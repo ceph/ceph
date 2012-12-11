@@ -51,11 +51,11 @@ def task(ctx, config):
         del config['sudo']
 
     if 'all' in config and len(config) == 1:
-        a = config['all']
-        roles = teuthology.all_roles(ctx.cluster)
-        config = dict((id_, a) for id_ in roles)
-
-    with parallel() as p:
-        for role, ls in config.iteritems():
-            (remote,) = ctx.cluster.only(role).remotes.iterkeys()
-            p.spawn(_exec_role, remote, role, sudo, ls)
+        with parallel() as p:
+            for remote in ctx.cluster.remotes.iterkeys():
+                p.spawn(_exec_role, remote, role, sudo, ls)
+    else:
+        with parallel() as p:
+            for role, ls in config.iteritems():
+                (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+                p.spawn(_exec_role, remote, role, sudo, ls)
