@@ -21,6 +21,7 @@
 #include "common/Clock.h"
 #include "common/signal.h"
 #include "common/ceph_argparse.h"
+#include "common/errno.h"
 
 
 #include "msg/Messenger.h"
@@ -459,9 +460,17 @@ int MDS::init(int wanted_state)
   // tell monc about log_client so it will know about mon session resets
   monc->set_log_client(&clog);
   
-  monc->authenticate();
-  monc->wait_auth_rotating(30.0);
-
+  int r = monc->authenticate();
+  if (r < 0) {
+    derr << "ERROR: failed to authenticate: " << cpp_strerror(-r) << dendl;
+    mds_lock.Lock();
+    suicide();
+    mds_lock.Unlock();
+    return r;
+  }
+  while (monc->wait_auth_rotating(30.0) < 0) {
+    derr << "unable to obtain rotating service keys; retrying" << dendl;
+  }
   objecter->init_unlocked();
 
   mds_lock.Lock();
@@ -1562,7 +1571,8 @@ void MDS::suicide()
   // shut down cache
   mdcache->shutdown();
 
-  objecter->shutdown_locked();
+  if (objecter->initialized)
+    objecter->shutdown_locked();
   
   // shut down messenger
   messenger->shutdown();
