@@ -847,8 +847,7 @@ protected:
   PG *get_or_create_pg(const pg_info_t& info,
                        pg_interval_map_t& pi,
                        epoch_t epoch, int from, int& pcreated,
-                       bool primary,
-                       OpRequestRef op);
+                       bool primary);
   
   void load_pgs();
   void build_past_intervals_parallel();
