@@ -377,6 +377,10 @@ OPTION(osd_client_op_priority, OPT_INT, 63)
 OPTION(osd_recovery_op_priority, OPT_INT, 10)
 
 OPTION(filestore, OPT_BOOL, false)
+
+// Tests index failure paths
+OPTION(filestore_index_retry_probability, OPT_DOUBLE, 0)
+
 OPTION(filestore_debug_omap_check, OPT_BOOL, 0) // Expensive debugging check on sync
 // Use omap for xattrs for attrs over
 OPTION(filestore_xattr_use_omap, OPT_BOOL, false)

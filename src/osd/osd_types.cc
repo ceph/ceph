@@ -221,6 +221,27 @@ bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *childre
   return split;
 }
 
+unsigned pg_t::get_split_bits(unsigned pg_num) const {
+  assert(pg_num > 1);
+
+  // Find unique p such that pg_num \in [2^(p-1), 2^p)
+  unsigned p = pg_pool_t::calc_bits_of(pg_num);
+
+  if ((m_seed % (1<<(p-1))) < (pg_num % (1<<(p-1))))
+    return p;
+  else
+    return p - 1;
+}
+
+pg_t pg_t::get_parent() const
+{
+  unsigned bits = pg_pool_t::calc_bits_of(m_seed);
+  assert(bits);
+  pg_t retval = *this;
+  retval.m_seed &= ~((~0)<<(bits - 1));
+  return retval;
+}
+
 void pg_t::dump(Formatter *f) const
 {
   f->dump_unsigned("pool", m_pool);
@@ -998,6 +1019,7 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_stream("last_deep_scrub_stamp") << last_deep_scrub_stamp;
   f->dump_unsigned("log_size", log_size);
   f->dump_unsigned("ondisk_log_size", ondisk_log_size);
+  f->dump_stream("stats_invalid") << stats_invalid;
   stats.dump(f);
   f->open_array_section("up");
   for (vector<int>::const_iterator p = up.begin(); p != up.end(); ++p)
@@ -1011,7 +1033,7 @@ void pg_stat_t::dump(Formatter *f) const
 
 void pg_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(10, 8, bl);
+  ENCODE_START(11, 8, bl);
   ::encode(version, bl);
   ::encode(reported, bl);
   ::encode(state, bl);
@@ -1036,6 +1058,7 @@ void pg_stat_t::encode(bufferlist &bl) const
   ::encode(mapping_epoch, bl);
   ::encode(last_deep_scrub, bl);
   ::encode(last_deep_scrub_stamp, bl);
+  ::encode(stats_invalid, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1104,6 +1127,11 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
         ::decode(last_deep_scrub_stamp, bl);
       }
     }
+  }
+  if (struct_v < 11) {
+    stats_invalid = false;
+  } else {
+    ::decode(stats_invalid, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -1487,14 +1515,17 @@ bool pg_interval_t::check_new_interval(
   OSDMapRef osdmap,
   OSDMapRef lastmap,
   int64_t pool_id,
+  pg_t pgid,
   map<epoch_t, pg_interval_t> *past_intervals,
   std::ostream *out)
 {
   // remember past interval
   if (new_acting != old_acting || new_up != old_up ||
       (!(lastmap->get_pools().count(pool_id))) ||
-      lastmap->get_pools().find(pool_id)->second.min_size !=
-      osdmap->get_pools().find(pool_id)->second.min_size) {
+      (lastmap->get_pools().find(pool_id)->second.min_size !=
+       osdmap->get_pools().find(pool_id)->second.min_size)  ||
+      pgid.is_split(lastmap->get_pg_num(pgid.pool()),
+        osdmap->get_pg_num(pgid.pool()), 0)) {
     pg_interval_t& i = (*past_intervals)[same_interval_since];
     i.first = same_interval_since;
     i.last = osdmap->get_epoch() - 1;
@@ -2027,6 +2058,24 @@ void pg_missing_t::got(const std::map<hobject_t, pg_missing_t::item>::iterator &
 {
   rmissing.erase(m->second.need.version);
   missing.erase(m);
+}
+
+void pg_missing_t::split_into(
+  pg_t child_pgid,
+  unsigned split_bits,
+  pg_missing_t *omissing)
+{
+  unsigned mask = ~((~0)<<split_bits);
+  for (map<hobject_t, item>::iterator i = missing.begin();
+       i != missing.end();
+       ) {
+    if ((i->first.hash & mask) == child_pgid.m_seed) {
+      omissing->add(i->first, i->second.need, i->second.have);
+      rm(i++);
+    } else {
+      ++i;
+    }
+  }
 }
 
 // -- pg_create_t --

@@ -6063,6 +6063,10 @@ void ReplicatedPG::_finish_mark_all_unfound_lost(list<ObjectContext*>& obcs)
   unlock();
 }
 
+void ReplicatedPG::_split_into(pg_t child_pgid, PG *child, unsigned split_bits)
+{
+  assert(repop_queue.empty());
+}
 
 /*
  * pg status change notification
@@ -7084,6 +7088,11 @@ void ReplicatedPG::_scrub_finish()
   bool repair = state_test(PG_STATE_REPAIR);
   bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
   const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
+
+  if (info.stats.stats_invalid) {
+    info.stats.stats = scrub_cstat;
+    info.stats.stats_invalid = false;
+  }
 
   dout(10) << mode << " got "
 	   << scrub_cstat.sum.num_objects << "/" << info.stats.stats.sum.num_objects << " objects, "
