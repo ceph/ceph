@@ -1672,8 +1672,7 @@ void OSD::build_past_intervals_parallel()
  */
 PG *OSD::get_or_create_pg(
   const pg_info_t& info, pg_interval_map_t& pi,
-  epoch_t epoch, int from, int& created, bool primary,
-  OpRequestRef op)
+  epoch_t epoch, int from, int& created, bool primary)
 {
   PG *pg;
 
@@ -5036,7 +5035,7 @@ void OSD::handle_pg_notify(OpRequestRef op)
     }
 
     pg = get_or_create_pg(it->first.info, it->second,
-                          it->first.query_epoch, from, created, true, op);
+                          it->first.query_epoch, from, created, true);
     if (!pg)
       continue;
     pg->queue_notify(it->first.epoch_sent, it->first.query_epoch, from, it->first);
@@ -5072,7 +5071,7 @@ void OSD::handle_pg_log(OpRequestRef op)
 
   int created = 0;
   PG *pg = get_or_create_pg(m->info, m->past_intervals, m->get_epoch(), 
-                            from, created, false, op);
+                            from, created, false);
   if (!pg)
     return;
   op->mark_started();
@@ -5113,7 +5112,7 @@ void OSD::handle_pg_info(OpRequestRef op)
       continue;
     }
     PG *pg = get_or_create_pg(p->first.info, p->second, p->first.epoch_sent,
-                              from, created, false, op);
+                              from, created, false);
     if (!pg)
       continue;
     pg->queue_info(p->first.epoch_sent, p->first.query_epoch, from,
