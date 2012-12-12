@@ -635,12 +635,12 @@ private:
 		   dirty, complete, isnew);
   }
   dirlump& add_dir(dirfrag_t df, fnode_t *pf, version_t pv, bool dirty, bool complete=false, bool isnew=false) {
-    if (lump_map.count(df) == 0) {
+    if (lump_map.count(df) == 0)
       lump_order.push_back(df);
-      lump_map[df].fnode = *pf;
-      lump_map[df].fnode.version = pv;
-    }
+
     dirlump& l = lump_map[df];
+    l.fnode = *pf;
+    l.fnode.version = pv;
     if (complete) l.mark_complete();
     if (dirty) l.mark_dirty();
     if (isnew) l.mark_new();
