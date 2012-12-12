@@ -40,7 +40,7 @@ one API and retrieve it with the other.
 	Config Reference <config-ref>
 	Purging Temp Data <purge-temp>
 	S3 API <s3>
-	Swift API <swift/index>
+	Swift API <swift>
 	Admin API <admin/index>
 	troubleshooting
 	Manpage radosgw <../../man/8/radosgw>
