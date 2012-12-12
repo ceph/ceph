@@ -1603,8 +1603,8 @@ void ReplicatedPG::remove_notify(ObjectContext *obc, Watch::Notification *notif)
 
   assert(niter != obc->notifs.end());
 
-  niter->first->session->put();
   niter->first->session->con->put();
+  niter->first->session->put();
   obc->notifs.erase(niter);
 
   put_object_context(obc);
