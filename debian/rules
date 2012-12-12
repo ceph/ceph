@@ -94,28 +94,44 @@ install: build
 # Add here commands to install the package into debian/testpack.
 # Build architecture-independent files here.
 binary-indep: build install
+	dh_testdir
+	dh_testroot
 	jh_installlibs -v -i
+	dh_installchangelogs -i
+	dh_installdocs -i --all ChangeLog
+	dh_installexamples -i
+	dh_install -i --sourcedir=$(DESTDIR) --list-missing
+	dh_installman -i
+	dh_lintian -i
+	dh_link -i
+	dh_compress -i
+	dh_fixperms -i
+	dh_python2 -i
+	dh_installdeb -i
+	dh_gencontrol -i
+	dh_md5sums -i
+	dh_builddeb -i
 
 # We have nothing to do by default.
 # Build architecture-dependent files here.
 binary-arch: build install
 	dh_testdir
 	dh_testroot
-	dh_installchangelogs 
-	dh_installdocs --all ChangeLog
-	dh_installexamples
-	dh_install --sourcedir=$(DESTDIR) --list-missing
-	dh_installlogrotate
-	dh_installinit --no-start
+	dh_installchangelogs -a
+	dh_installdocs -a --all ChangeLog
+	dh_installexamples -a
+	dh_install -a --sourcedir=$(DESTDIR) --list-missing
+	dh_installlogrotate -a
+	dh_installinit -a --no-start
 	# dh_installinit is only set up to handle one upstart script
 	# per package, so do this ourselves
 	install -d -m0755 debian/ceph/etc/init
 	install -m0644 src/upstart/ceph*.conf debian/ceph/etc/init
 	install -d -m0755 debian/radosgw/etc/init
 	install -m0644 src/upstart/radosgw*.conf debian/radosgw/etc/init
-	dh_installman
-	dh_lintian
-	dh_link
+	dh_installman -a
+	dh_lintian -a
+	dh_link -a
 
 	dh_strip -pceph --dbg-package=ceph-dbg -k --exclude=libcls_
 	dh_strip -pceph-mds --dbg-package=ceph-mds-dbg
@@ -129,15 +145,15 @@ binary-arch: build install
 	dh_strip -prest-bench --dbg-package=rest-bench-dbg
 	dh_strip -pceph-test --dbg-package=ceph-test-dbg
 
-	dh_compress
-	dh_fixperms
-	dh_makeshlibs -X/usr/lib/rados-classes # exclude .so files in ceph package
-	dh_python2
-	dh_installdeb
-	dh_shlibdeps
-	dh_gencontrol
-	dh_md5sums
-	dh_builddeb
+	dh_compress -a
+	dh_fixperms -a
+	dh_makeshlibs -a -X/usr/lib/rados-classes # exclude .so files in ceph package
+	dh_python2 -a
+	dh_installdeb -a
+	dh_shlibdeps -a
+	dh_gencontrol -a
+	dh_md5sums -a
+	dh_builddeb -a
 
 binary: binary-indep binary-arch
 .PHONY: build clean binary-indep binary-arch binary install configure
