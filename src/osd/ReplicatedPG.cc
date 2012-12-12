@@ -628,15 +628,11 @@ void ReplicatedPG::do_op(OpRequestRef op)
 		 CEPH_NOSNAP, m->get_pg().ps(),
 		 info.pgid.pool());
 
-  if (scrubber.block_writes && m->may_write()) {
-    // classic (non chunk) scrubs block all writes
-    // chunky scrubs only block writes to a range
-    if (!scrubber.is_chunky || (head >= scrubber.start && head < scrubber.end)) {
-      dout(20) << __func__ << ": waiting for scrub" << dendl;
-      waiting_for_active.push_back(op);
-      op->mark_delayed();
-      return;
-    }
+  if (m->may_write() && scrubber.write_blocked_by_scrub(head)) {
+    dout(20) << __func__ << ": waiting for scrub" << dendl;
+    waiting_for_active.push_back(op);
+    op->mark_delayed();
+    return;
   }
 
   // missing object?
