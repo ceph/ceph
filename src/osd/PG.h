@@ -875,6 +875,21 @@ public:
 
     bool is_chunky_scrub_active() const { return state != INACTIVE; }
 
+    // classic (non chunk) scrubs block all writes
+    // chunky scrubs only block writes to a range
+    bool write_blocked_by_scrub(const hobject_t &soid) {
+      if (!block_writes)
+	return false;
+
+      if (!is_chunky)
+	return true;
+
+      if (soid >= start && soid < end)
+	return true;
+
+      return false;
+    }
+
     // clear all state
     void reset() {
       finalizing = false;
