@@ -4116,10 +4116,14 @@ void ReplicatedPG::unregister_unconnected_watcher(void *_obc,
 						  entity_name_t entity)
 {
   ObjectContext *obc = static_cast<ObjectContext *>(_obc);
-  osd->watch_timer.cancel_event(obc->unconnected_watchers[entity]);
+
+  /* If we failed to cancel the event, the event will fire and the obc
+   * ref and the pg ref will be taken care of */
+  if (osd->watch_timer.cancel_event(obc->unconnected_watchers[entity])) {
+    put_object_context(obc);
+    put();
+  }
   obc->unconnected_watchers.erase(entity);
-  put_object_context(obc);
-  put();
 }
 
 void ReplicatedPG::register_unconnected_watcher(void *_obc,
