@@ -2431,7 +2431,12 @@ void OSD::disconnect_session_watches(Session *session)
     dout(10) << "obc=" << (void *)obc << dendl;
 
     ReplicatedPG *pg = static_cast<ReplicatedPG *>(lookup_lock_raw_pg(oiter->second));
-    assert(pg);
+    if (!pg) {
+      /* pg removed between watch_unlock.Unlock() and now, all related
+       * watch structures would have been cleaned up in remove_watchers_and_notifies
+       */
+      continue; 
+    }
     service.watch_lock.Lock();
     /* NOTE! fix this one, should be able to just lookup entity name,
        however, we currently only keep EntityName on the session and not
