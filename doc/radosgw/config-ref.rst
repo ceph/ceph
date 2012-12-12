@@ -230,7 +230,7 @@ set automatically.
 :Default: ``5ul << 20``
 
 ``rgw extended http attrs``
-:Description: Add new set of attributes that could be set on an object
+:Description: Add new set of attributes that could be set on an object. These extra attributes can be set through HTTP header fields when putting the objects. If set, these attributes will return as HTTP fields when doing GET/HEAD on the object.
 :Type: String
 :Default: N/A
 :Example: "content_foo, content_bar"
