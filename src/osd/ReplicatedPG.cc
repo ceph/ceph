@@ -1586,6 +1586,7 @@ void ReplicatedPG::remove_watcher(ObjectContext *obc, entity_name_t entity)
   session->watches.erase(obc);
 
   put_object_context(obc);
+  session->con->put();
   session->put();
 }
 
@@ -3345,6 +3346,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
       if (iter == obc->watchers.end()) {
 	dout(10) << " connected to " << w << " by " << entity << " session " << session << dendl;
 	obc->watchers[entity] = session;
+	session->con->get();
 	session->get();
 	session->watches[obc] = get_osdmap()->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
 	obc->ref++;
@@ -3356,10 +3358,14 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
 	// weird: same entity, different session.
 	dout(10) << " reconnected (with different session!) watch " << w << " by " << entity
 		 << " session " << session << " (was " << iter->second << ")" << dendl;
-	iter->second->watches.erase(obc);
-	iter->second->put();
-	iter->second = session;
+	session->con->get();
 	session->get();
+
+	iter->second->watches.erase(obc);
+	iter->second->con->put();
+	iter->second->put();
+
+	iter->second = session;
 	session->watches[obc] = get_osdmap()->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
       }
       map<entity_name_t,Watch::C_WatchTimeout*>::iterator un_iter =
