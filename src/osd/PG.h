@@ -180,6 +180,11 @@ public:
       index();
     }
 
+    void split_into(
+      pg_t child_pgid,
+      unsigned split_bits,
+      IndexedLog *olog);
+
     void zero() {
       unindex();
       pg_log_t::clear();
@@ -653,6 +658,7 @@ protected:
                                         waiting_for_degraded_object;
   map<eversion_t,list<OpRequestRef> > waiting_for_ack, waiting_for_ondisk;
   map<eversion_t,OpRequestRef>   replay_queue;
+  void split_ops(PG *child, unsigned split_bits);
 
   void requeue_object_waiters(map<hobject_t, list<OpRequestRef> >& m);
   void requeue_ops(list<OpRequestRef> &l);
@@ -788,6 +794,9 @@ public:
   virtual void check_recovery_sources(const OSDMapRef newmap) = 0;
   void start_recovery_op(const hobject_t& soid);
   void finish_recovery_op(const hobject_t& soid, bool dequeue=false);
+
+  void split_into(pg_t child_pgid, PG *child, unsigned split_bits);
+  virtual void _split_into(pg_t child_pgid, PG *child, unsigned split_bits) = 0;
 
   loff_t get_log_write_pos() {
     return 0;
@@ -1700,7 +1709,9 @@ public:
   void trim_peers();
 
   std::string get_corrupt_pg_log_name() const;
-  void read_state(ObjectStore *store);
+  void read_state(ObjectStore *store, bufferlist &bl);
+  static epoch_t peek_map_epoch(ObjectStore *store,
+				coll_t coll, bufferlist *bl);
   coll_t make_snap_collection(ObjectStore::Transaction& t, snapid_t sn);
   void update_snap_collections(vector<pg_log_entry_t> &log_entries,
 			       ObjectStore::Transaction& t);
@@ -1729,6 +1740,7 @@ public:
   void fulfill_info(int from, const pg_query_t &query, 
 		    pair<int, pg_info_t> &notify_info);
   void fulfill_log(int from, const pg_query_t &query, epoch_t query_epoch);
+  bool is_split(OSDMapRef lastmap, OSDMapRef nextmap);
   bool acting_up_affected(const vector<int>& newup, const vector<int>& newacting);
 
   // OpRequest queueing
@@ -1739,6 +1751,8 @@ public:
   bool can_discard_request(OpRequestRef op);
 
   bool must_delay_request(OpRequestRef op);
+
+  static bool split_request(OpRequestRef op, unsigned match, unsigned bits);
 
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch);
   bool old_peering_evt(CephPeeringEvtRef evt) {

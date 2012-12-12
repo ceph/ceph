@@ -97,6 +97,7 @@ private:
   struct InProgressOp {
     static const int SPLIT = 0;
     static const int MERGE = 1;
+    static const int COL_SPLIT = 2;
     int op;
     vector<string> path;
 
@@ -108,6 +109,7 @@ private:
     }
 
     bool is_split() const { return op == SPLIT; }
+    bool is_col_split() const { return op == COL_SPLIT; }
     bool is_merge() const { return op == MERGE; }
 
     void encode(bufferlist &bl) const {
@@ -134,8 +136,10 @@ public:
     const char *base_path, ///< [in] Path to the index root.
     int merge_at,          ///< [in] Merge threshhold.
     int split_multiple,	   ///< [in] Split threshhold.
-    uint32_t index_version)///< [in] Index version
-    : LFNIndex(collection, base_path, index_version), merge_threshold(merge_at),
+    uint32_t index_version,///< [in] Index version
+    double retry_probability=0) ///< [in] retry probability
+    : LFNIndex(collection, base_path, index_version, retry_probability),
+      merge_threshold(merge_at),
       split_multiplier(split_multiple) {}
 
   /// @see CollectionIndex
@@ -143,6 +147,16 @@ public:
 
   /// @see CollectionIndex
   int cleanup();
+
+  /// @see CollectionIndex
+  int prep_delete();
+
+  /// @see CollectionIndex
+  int _split(
+    uint32_t match,
+    uint32_t bits,
+    std::tr1::shared_ptr<CollectionIndex> dest
+    );
 	
 protected:
   int _init();
@@ -175,6 +189,14 @@ protected:
     hobject_t *next
     );
 private:
+  /// Recursively remove path and its subdirs
+  int recursive_remove(
+    const vector<string> &path ///< [in] path to remove
+    ); /// @return Error Code, 0 on success
+  /// Tag root directory at beginning of col_split
+  int start_col_split(
+    const vector<string> &path ///< [in] path to split
+    ); ///< @return Error Code, 0 on success
   /// Tag root directory at beginning of split
   int start_split(
     const vector<string> &path ///< [in] path to split
@@ -221,6 +243,11 @@ private:
     subdir_info_s info		///< [in] Info attached to path
     ); /// @return Error Code, 0 on success
 
+  /// Resets attr to match actual subdir contents
+  int reset_attr(
+    const vector<string> &path ///< [in] path to cleanup
+    );
+
   /// Initiate Split
   int initiate_split(
     const vector<string> &path, ///< [in] Subdir to split
@@ -239,24 +266,54 @@ private:
     vector<string> *path   ///< [out] Path components for hoid.
     );
 
+  /// do collection split for path
+  static int col_split_level(
+    HashIndex &from,            ///< [in] from index
+    HashIndex &dest,            ///< [in] to index
+    const vector<string> &path, ///< [in] path to split
+    uint32_t bits,              ///< [in] num bits to match
+    uint32_t match,             ///< [in] bits to match
+    unsigned *mkdirred          ///< [in,out] path[:mkdirred] has been mkdirred
+    );
+    
+
   /** 
    * Get string representation of hobject_t/hash
    *
    * e.g: 0x01234567 -> "76543210"
    */
-  string get_path_str(
+  static string get_path_str(
     const hobject_t &hoid ///< [in] Object to get hash string for
     ); ///< @return Hash string for hoid.
 
   /// Get string from hash, @see get_path_str
-  string get_hash_str(
+  static string get_hash_str(
     uint32_t hash ///< [in] Hash to convert to a string.
     ); ///< @return String representation of hash
 
   /// Get hash from hash prefix string e.g. "FFFFAB" -> 0xFFFFAB00
-  uint32_t hash_prefix_to_hash(
+  static uint32_t hash_prefix_to_hash(
     string prefix ///< [in] string to convert
     ); ///< @return Hash
+
+  /// Get hash mod from path
+  static void path_to_hobject_hash_prefix(
+    const vector<string> &path,///< [in] path to convert
+    uint32_t *bits,            ///< [out] bits
+    uint32_t *hash             ///< [out] hash
+    ) {
+    string hash_str;
+    for (vector<string>::const_iterator i = path.begin();
+	 i != path.end();
+	 ++i) {
+      hash_str.push_back(*i->begin());
+    }
+    uint32_t rev_hash = hash_prefix_to_hash(hash_str);
+    if (hash)
+      *hash = rev_hash;
+    if (bits)
+      *bits = path.size() * 4;
+  }
 
   /// Get path contents by hash
   int get_path_contents_by_hash(

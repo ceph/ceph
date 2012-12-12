@@ -133,6 +133,7 @@ class AuthAuthorizeHandlerRegistry;
 
 class OpsFlightSocketHook;
 class HistoricOpsSocketHook;
+struct C_CompleteSplits;
 
 extern const coll_t meta_coll;
 
@@ -182,6 +183,8 @@ public:
   ThreadPool::WorkQueue<PG> &scrub_finalize_wq;
   ThreadPool::WorkQueue<MOSDRepScrub> &rep_scrub_wq;
   ClassHandler  *&class_handler;
+
+  void dequeue_pg(PG *pg, list<OpRequestRef> *dequeued);
 
   // -- superblock --
   Mutex publish_lock, pre_publish_lock;
@@ -355,7 +358,7 @@ public:
   void _add_map_inc_bl(epoch_t e, bufferlist& bl);
   bool get_inc_map_bl(epoch_t e, bufferlist& bl);
 
-  void clear_map_bl_cache_pins();
+  void clear_map_bl_cache_pins(epoch_t e);
 
   void need_heartbeat_peer_update();
 
@@ -364,6 +367,19 @@ public:
 
   void init();
   void shutdown();
+
+  // split
+  Mutex in_progress_split_lock;
+  set<pg_t> in_progress_splits;
+  void _start_split(const set<pg_t> &pgs);
+  void start_split(const set<pg_t> &pgs) {
+    Mutex::Locker l(in_progress_split_lock);
+    return _start_split(pgs);
+  }
+  void complete_split(const set<pg_t> &pgs);
+  bool splitting(pg_t pgid);
+  void expand_pg_num(OSDMapRef old_map,
+		     OSDMapRef new_map);
 
   OSDService(OSD *osd);
 };
@@ -601,6 +617,7 @@ private:
   }
   friend class OpsFlightSocketHook;
   friend class HistoricOpsSocketHook;
+  friend class C_CompleteSplits;
   OpsFlightSocketHook *admin_ops_hook;
   HistoricOpsSocketHook *historic_ops_hook;
 
@@ -629,9 +646,26 @@ private:
 	return op.first == pg;
       }
     };
-    void dequeue(PG *pg) {
+    void dequeue(PG *pg, list<OpRequestRef> *dequeued = 0) {
       lock();
-      pqueue.remove_by_filter(Pred(pg));
+      if (!dequeued) {
+	pqueue.remove_by_filter(Pred(pg));
+	pg_for_processing.erase(pg);
+      } else {
+	list<pair<PGRef, OpRequestRef> > _dequeued;
+	pqueue.remove_by_filter(Pred(pg), &_dequeued);
+	for (list<pair<PGRef, OpRequestRef> >::iterator i = _dequeued.begin();
+	     i != _dequeued.end();
+	     ++i) {
+	  dequeued->push_back(i->second);
+	}
+	if (pg_for_processing.count(pg)) {
+	  dequeued->splice(
+	    dequeued->begin(),
+	    pg_for_processing[pg]);
+	  pg_for_processing.erase(pg);
+	}
+      }
       unlock();
     }
     bool _empty() {
@@ -742,7 +776,9 @@ private:
   void note_down_osd(int osd);
   void note_up_osd(int osd);
   
-  void advance_pg(epoch_t advance_to, PG *pg, PG::RecoveryCtx *rctx);
+  void advance_pg(
+    epoch_t advance_to, PG *pg, PG::RecoveryCtx *rctx,
+    set<boost::intrusive_ptr<PG> > *split_pgs);
   void advance_map(ObjectStore::Transaction& t, C_Contexts *tfin);
   void activate_map();
 
@@ -771,9 +807,6 @@ private:
   bool get_inc_map_bl(epoch_t e, bufferlist& bl) {
     return service.get_inc_map_bl(e, bl);
   }
-  void clear_map_bl_cache_pins() {
-    service.clear_map_bl_cache_pins();
-  }
 
   MOSDMap *build_incremental_map_msg(epoch_t from, epoch_t to);
   void send_incremental_map(epoch_t since, const entity_inst_t& inst, bool lazy=false);
@@ -785,6 +818,7 @@ protected:
   // -- placement groups --
   hash_map<pg_t, PG*> pg_map;
   map<pg_t, list<OpRequestRef> > waiting_for_pg;
+  map<pg_t, list<PG::CephPeeringEvtRef> > peering_wait_for_split;
   PGRecoveryStats pg_recovery_stats;
 
   PGPool _get_pool(int id, OSDMapRef createmap);
@@ -806,11 +840,14 @@ protected:
   PG   *_lookup_qlock_pg(pg_t pgid);
 
   PG *lookup_lock_raw_pg(pg_t pgid);
+  PG* _make_pg(OSDMapRef createmap, pg_t pgid);
+  void add_newly_split_pg(PG *pg,
+			  PG::RecoveryCtx *rctx);
 
   PG *get_or_create_pg(const pg_info_t& info,
-		       pg_interval_map_t& pi,
-		       epoch_t epoch, int from, int& pcreated,
-		       bool primary);
+                       pg_interval_map_t& pi,
+                       epoch_t epoch, int from, int& pcreated,
+                       bool primary);
   
   void load_pgs();
   void build_past_intervals_parallel();
@@ -840,7 +877,6 @@ protected:
     vector<int> acting;
     set<int> prior;
     pg_t parent;
-    int split_bits;
   };
   hash_map<pg_t, create_pg_info> creating_pgs;
   double debug_drop_pg_create_probability;
@@ -852,7 +888,12 @@ protected:
 
   void do_split(PG *parent, set<pg_t>& children, ObjectStore::Transaction &t, C_Contexts *tfin);
   void split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction &t);
-
+  void split_pgs(
+    PG *parent,
+    const set<pg_t> &childpgids, set<boost::intrusive_ptr<PG> > *out_pgs,
+    OSDMapRef curmap,
+    OSDMapRef nextmap,
+    PG::RecoveryCtx *rctx);
 
   // == monitor interaction ==
   utime_t last_mon_report;

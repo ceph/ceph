@@ -764,7 +764,7 @@ check_PROGRAMS += unittest_heartbeatmap
 unittest_formatter_SOURCES = test/formatter.cc rgw/rgw_formats.cc
 unittest_formatter_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_formatter_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
-unittest_formatter_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_formatter_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_formatter
 
 unittest_libcephfs_config_SOURCES = test/libcephfs_config.cc
