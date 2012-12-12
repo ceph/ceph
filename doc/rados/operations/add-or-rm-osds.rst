@@ -107,10 +107,9 @@ hard disks than older hosts in the cluster (i.e., they may have greater weight).
 
 	ssh {new-osd} sudo tee /etc/ceph/ceph.conf < /etc/ceph/ceph.conf
 
-#. Create the OSD. ::
+#. Create the OSD. If no UUID is given, it will be set automatically when the OSD starts up. ::
 
-	ceph osd create {osd-num}
-	ceph osd create 123 #for example
+	ceph osd create [{uuid}]
 	
 #. Initialize the OSD data directory. :: 
 
