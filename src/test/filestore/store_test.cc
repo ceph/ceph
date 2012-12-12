@@ -745,6 +745,84 @@ TEST_F(StoreTest, XattrTest) {
   ASSERT_TRUE(bl2 == attrs["attr3"]);
 }
 
+void colsplittest(
+  ObjectStore *store,
+  unsigned num_objects,
+  unsigned common_suffix_size
+  ) {
+  coll_t cid("from");
+  coll_t tid("to");
+  int r = 0;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    for (uint32_t i = 0; i < 2*num_objects; ++i) {
+      stringstream objname;
+      objname << "obj" << i;
+      t.touch(cid, hobject_t(
+	  objname.str(),
+	  "",
+	  CEPH_NOSNAP,
+	  i<<common_suffix_size,
+	  0));
+    }
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.split_collection(cid, common_suffix_size+1, 0, tid);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+
+  ObjectStore::Transaction t;
+  vector<hobject_t> objects;
+  r = store->collection_list(cid, objects);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(objects.size(), num_objects);
+  for (vector<hobject_t>::iterator i = objects.begin();
+       i != objects.end();
+       ++i) {
+    ASSERT_EQ(!(i->hash & (1<<common_suffix_size)), 0u);
+    t.remove(cid, *i);
+  }
+
+  objects.clear();
+  r = store->collection_list(tid, objects);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(objects.size(), num_objects);
+  for (vector<hobject_t>::iterator i = objects.begin();
+       i != objects.end();
+       ++i) {
+    ASSERT_EQ(i->hash & (1<<common_suffix_size), 0u);
+    t.remove(tid, *i);
+  }
+
+  t.remove_collection(cid);
+  t.remove_collection(tid);
+  r = store->apply_transaction(t);
+  ASSERT_EQ(r, 0);
+}
+
+TEST_F(StoreTest, ColSplitTest1) {
+  colsplittest(store.get(), 10000, 11);
+}
+TEST_F(StoreTest, ColSplitTest2) {
+  colsplittest(store.get(), 100, 7);
+}
+
+#if 0
+TEST_F(StoreTest, ColSplitTest3) {
+  colsplittest(store.get(), 100000, 25);
+}
+#endif
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
@@ -752,6 +830,9 @@ int main(int argc, char **argv) {
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->set_val("osd_journal_size", "400");
+  g_ceph_context->_conf->set_val("filestore_index_retry_probability", "1");
+  g_ceph_context->_conf->set_val("filestore_op_thread_timeout", "1000");
+  g_ceph_context->_conf->set_val("filestore_op_thread_suicide_timeout", "10000");
   g_ceph_context->_conf->apply_changes(NULL);
 
   ::testing::InitGoogleTest(&argc, argv);

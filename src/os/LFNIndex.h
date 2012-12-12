@@ -21,6 +21,7 @@
 #include <set>
 #include <vector>
 #include <tr1/memory>
+#include <exception>
 
 #include "osd/osd_types.h"
 #include "include/object.h"
@@ -48,6 +49,31 @@
  * Unless otherwise noted, methods which return an int return 0 on sucess
  * and a negative error code on failure.
  */
+#define WRAP_RETRY(x) {				\
+  bool failed = false;				\
+  int r = 0;					\
+  init_inject_failure();			\
+  while (1) {					\
+    try {					\
+      if (failed) {				\
+	r = cleanup();				\
+	assert(r == 0);				\
+      }						\
+      { x }					\
+      out:					\
+      complete_inject_failure();		\
+      return r;					\
+    } catch (RetryException) {			\
+      failed = true;				\
+    } catch (...) {				\
+      assert(0);				\
+    }						\
+  }						\
+  return -1;					\
+  }						\
+
+  
+
 class LFNIndex : public CollectionIndex {
   /// Hash digest output size.
   static const int FILENAME_LFN_DIGEST_SIZE = CEPH_CRYPTO_SHA1_DIGESTSIZE;
@@ -78,6 +104,24 @@ class LFNIndex : public CollectionIndex {
 protected:
   const uint32_t index_version;
 
+  /// true if retry injection is enabled
+  struct RetryException : public exception {};
+  bool error_injection_enabled;
+  bool error_injection_on;
+  double error_injection_probability;
+  uint64_t last_failure;
+  uint64_t current_failure;
+  void init_inject_failure() {
+    if (error_injection_on) {
+      error_injection_enabled = true;
+      last_failure = current_failure = 0;
+    }
+  }
+  void maybe_inject_failure();
+  void complete_inject_failure() {
+    error_injection_enabled = false;
+  }
+
 private:
   string lfn_attribute;
   coll_t collection;
@@ -87,8 +131,14 @@ public:
   LFNIndex(
     coll_t collection,
     const char *base_path, ///< [in] path to Index root
-    uint32_t index_version)
-    : base_path(base_path), index_version(index_version),
+    uint32_t index_version,
+    double _error_injection_probability=0)
+    : base_path(base_path),
+      index_version(index_version),
+      error_injection_enabled(false),
+      error_injection_on(_error_injection_probability != 0),
+      error_injection_probability(_error_injection_probability),
+      last_failure(0), current_failure(0),
       collection(collection) {
     if (index_version == HASH_INDEX_TAG) {
       lfn_attribute = LFN_ATTR;
@@ -145,6 +195,25 @@ public:
     vector<hobject_t> *ls,
     hobject_t *next
     );
+
+  virtual int _split(
+    uint32_t match,                             //< [in] value to match
+    uint32_t bits,                              //< [in] bits to check
+    std::tr1::shared_ptr<CollectionIndex> dest  //< [in] destination index
+    ) = 0;
+  
+  /// @see CollectionIndex
+  int split(
+    uint32_t match,
+    uint32_t bits,
+    std::tr1::shared_ptr<CollectionIndex> dest
+    ) {
+    WRAP_RETRY(
+      r = _split(match, bits, dest);
+      goto out;
+      );
+  }
+
 
 protected:
   virtual int _init() = 0;
@@ -268,6 +337,22 @@ protected:
     const hobject_t &hoid,	///< [in] Object 
     string *mangled_name,	///< [out] Filename
     int *exists			///< [out] 1 if the file exists, else 0
+    );
+
+  /// do move subdir from from to dest
+  static int move_subdir(
+    LFNIndex &from,             ///< [in] from index
+    LFNIndex &dest,             ///< [in] to index
+    const vector<string> &path, ///< [in] path containing dir
+    string dir                  ///< [in] dir to move
+    );
+
+  /// do move object from from to dest
+  static int move_object(
+    LFNIndex &from,             ///< [in] from index
+    LFNIndex &dest,             ///< [in] to index
+    const vector<string> &path, ///< [in] path to split
+    const pair<string, hobject_t> &obj ///< [in] obj to move
     );
 
   /**

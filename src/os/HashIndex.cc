@@ -42,8 +42,198 @@ int HashIndex::cleanup() {
     return complete_split(in_progress.path, info);
   else if (in_progress.is_merge())
     return complete_merge(in_progress.path, info);
+  else if (in_progress.is_col_split()) {
+    for (vector<string>::iterator i = in_progress.path.begin();
+	 i != in_progress.path.end();
+	 ++i) {
+      vector<string> path(in_progress.path.begin(), i);
+      int r = reset_attr(path);
+      if (r < 0)
+	return r;
+    }
+    return 0;
+  }
   else
     return -EINVAL;
+}
+
+int HashIndex::reset_attr(
+  const vector<string> &path)
+{
+  int exists = 0;
+  int r = path_exists(path, &exists);
+  if (r < 0)
+    return r;
+  if (!exists)
+    return 0;
+  map<string, hobject_t> objects;
+  set<string> subdirs;
+  r = list_objects(path, 0, 0, &objects);
+  if (r < 0)
+    return r;
+  r = list_subdirs(path, &subdirs);
+  if (r < 0)
+    return r;
+
+  subdir_info_s info;
+  info.hash_level = path.size();
+  info.objs = objects.size();
+  info.subdirs = subdirs.size();
+  return set_info(path, info);
+}
+
+int HashIndex::col_split_level(
+  HashIndex &from,
+  HashIndex &to,
+  const vector<string> &path,
+  uint32_t inbits,
+  uint32_t match,
+  unsigned *mkdirred)
+{
+  /* For each subdir, move, recurse, or ignore based on comparing the low order
+   * bits of the hash represented by the subdir path with inbits, match passed
+   * in.
+   */
+  set<string> subdirs;
+  int r = from.list_subdirs(path, &subdirs);
+  if (r < 0)
+    return r;
+  map<string, hobject_t> objects;
+  r = from.list_objects(path, 0, 0, &objects);
+  if (r < 0)
+    return r;
+
+  set<string> to_move;
+  for (set<string>::iterator i = subdirs.begin();
+       i != subdirs.end();
+       ++i) {
+    uint32_t bits = 0;
+    uint32_t hash = 0;
+    vector<string> sub_path(path.begin(), path.end());
+    sub_path.push_back(*i);
+    path_to_hobject_hash_prefix(sub_path, &bits, &hash);
+    if (bits < inbits) {
+      if ((match & ~((~0)<<bits)) == (hash & ~((~0)<<bits))) {
+	r = col_split_level(
+	  from,
+	  to,
+	  sub_path,
+	  inbits,
+	  match,
+	  mkdirred);
+	if (r < 0)
+	  return r;
+	if (*mkdirred > path.size())
+	  *mkdirred = path.size();
+      } // else, skip, doesn't need to be moved or recursed into
+    } else {
+      if ((match & ~((~0)<<inbits)) == (hash & ~((~0)<<inbits))) {
+	to_move.insert(*i);
+      }
+    } // else, skip, doesn't need to be moved or recursed into
+  }
+
+  /* Then, do the same for each object */
+  map<string, hobject_t> objs_to_move;
+  for (map<string, hobject_t>::iterator i = objects.begin();
+       i != objects.end();
+       ++i) {
+    if ((i->second.hash & ~((~0)<<inbits)) == match) {
+      objs_to_move.insert(*i);
+    }
+  }
+
+  if (objs_to_move.empty() && to_move.empty())
+    return 0;
+
+  // Make parent directories as needed
+  while (*mkdirred < path.size()) {
+    ++*mkdirred;
+    int exists = 0;
+    vector<string> creating_path(path.begin(), path.begin()+*mkdirred);
+    r = to.path_exists(creating_path, &exists);
+    if (r < 0)
+      return r;
+    if (exists)
+      continue;
+    subdir_info_s info;
+    info.objs = 0;
+    info.subdirs = 0;
+    info.hash_level = creating_path.size();
+    if (*mkdirred < path.size() - 1)
+      info.subdirs = 1;
+    r = to.start_col_split(creating_path);
+    if (r < 0)
+      return r;
+    r = to.create_path(creating_path);
+    if (r < 0)
+      return r;
+    r = to.set_info(creating_path, info);
+    if (r < 0)
+      return r;
+    r = to.end_split_or_merge(creating_path);
+    if (r < 0)
+      return r;
+  }
+
+  subdir_info_s from_info;
+  subdir_info_s to_info;
+  r = from.get_info(path, &from_info);
+  if (r < 0)
+    return r;
+  r = to.get_info(path, &to_info);
+  if (r < 0)
+    return r;
+
+  from.start_col_split(path);
+  to.start_col_split(path);
+
+  // Do subdir moves
+  for (set<string>::iterator i = to_move.begin();
+       i != to_move.end();
+       ++i) {
+    from_info.subdirs--;
+    to_info.subdirs++;
+    r = move_subdir(from, to, path, *i);
+    if (r < 0)
+      return r;
+  }
+
+  for (map<string, hobject_t>::iterator i = objs_to_move.begin();
+       i != objs_to_move.end();
+       ++i) {
+    from_info.objs--;
+    to_info.objs++;
+    r = move_object(from, to, path, *i);
+    if (r < 0)
+      return r;
+  }
+       
+
+  r = to.set_info(path, to_info);
+  if (r < 0)
+    return r;
+  r = from.set_info(path, from_info);
+  if (r < 0)
+    return r;
+  from.end_split_or_merge(path);
+  to.end_split_or_merge(path);
+  return 0;
+}
+
+int HashIndex::_split(
+  uint32_t match,
+  uint32_t bits,
+  std::tr1::shared_ptr<CollectionIndex> dest) {
+  assert(collection_version() == dest->collection_version());
+  unsigned mkdirred = 0;
+  return col_split_level(
+    *this,
+    *static_cast<HashIndex*>(dest.get()),
+    vector<string>(),
+    bits,
+    match,
+    &mkdirred);
 }
 
 int HashIndex::_init() {
@@ -141,6 +331,41 @@ int HashIndex::_collection_list_partial(const hobject_t &start,
   *next = start;
   dout(20) << "_collection_list_partial " << start << " " << min_count << "-" << max_count << " ls.size " << ls->size() << dendl;
   return list_by_hash(path, min_count, max_count, seq, next, ls);
+}
+
+int HashIndex::prep_delete() {
+  return recursive_remove(vector<string>());
+}
+
+int HashIndex::recursive_remove(const vector<string> &path) {
+  set<string> subdirs;
+  int r = list_subdirs(path, &subdirs);
+  if (r < 0)
+    return r;
+  map<string, hobject_t> objects;
+  r = list_objects(path, 0, 0, &objects);
+  if (r < 0)
+    return r;
+  if (objects.size())
+    return -ENOTEMPTY;
+  vector<string> subdir(path);
+  for (set<string>::iterator i = subdirs.begin();
+       i != subdirs.end();
+       ++i) {
+    subdir.push_back(*i);
+    r = recursive_remove(subdir);
+    if (r < 0)
+      return r;
+    subdir.pop_back();
+  }
+  return remove_path(path);
+}
+
+int HashIndex::start_col_split(const vector<string> &path) {
+  bufferlist bl;
+  InProgressOp op_tag(InProgressOp::COL_SPLIT, path);
+  op_tag.encode(bl);
+  return add_attr_path(vector<string>(), IN_PROGRESS_OP_TAG, bl); 
 }
 
 int HashIndex::start_split(const vector<string> &path) {

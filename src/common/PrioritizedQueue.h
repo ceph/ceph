@@ -47,14 +47,25 @@ class PrioritizedQueue {
   int64_t total_priority;
 
   template <class F>
-  static unsigned filter_list_pairs(list<pair<unsigned, T> > *l, F f) {
+  static unsigned filter_list_pairs(
+    list<pair<unsigned, T> > *l, F f,
+    list<T> *out) {
     unsigned ret = 0;
+    if (out) {
+      for (typename list<pair<unsigned, T> >::reverse_iterator i = l->rbegin();
+	   i != l->rend();
+	   ++i) {
+	if (f(i->second)) {
+	  out->push_front(i->second);
+	}
+      }
+    }
     for (typename list<pair<unsigned, T> >::iterator i = l->begin();
 	 i != l->end();
-	 ) {
+      ) {
       if (f(i->second)) {
 	l->erase(i++);
-	ret++;
+	++ret;
       } else {
 	++i;
       }
@@ -119,11 +130,11 @@ class PrioritizedQueue {
       return q.empty();
     }
     template <class F>
-    void remove_by_filter(F f) {
+    void remove_by_filter(F f, list<T> *out) {
       for (typename map<K, list<pair<unsigned, T> > >::iterator i = q.begin();
 	   i != q.end();
 	   ) {
-	size -= filter_list_pairs(&(i->second), f);
+	size -= filter_list_pairs(&(i->second), f, out);
 	if (i->second.empty()) {
 	  if (cur == i)
 	    ++cur;
@@ -205,13 +216,13 @@ public:
   }
 
   template <class F>
-  void remove_by_filter(F f) {
+  void remove_by_filter(F f, list<T> *removed = 0) {
     for (typename map<unsigned, SubQueue>::iterator i = queue.begin();
 	 i != queue.end();
 	 ) {
       unsigned priority = i->first;
       
-      i->second.remove_by_filter(f);
+      i->second.remove_by_filter(f, removed);
       if (i->second.empty()) {
 	++i;
 	remove_queue(priority);
@@ -222,7 +233,7 @@ public:
     for (typename map<unsigned, SubQueue>::iterator i = high_queue.begin();
 	 i != high_queue.end();
 	 ) {
-      i->second.remove_by_filter(f);
+      i->second.remove_by_filter(f, removed);
       if (i->second.empty()) {
 	high_queue.erase(i++);
       } else {

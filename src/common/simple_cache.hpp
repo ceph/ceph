@@ -50,17 +50,16 @@ public:
     pinned.insert(make_pair(key, val));
   }
 
-  void clear_pinned() {
+  void clear_pinned(K e) {
     Mutex::Locker l(lock);
     for (typename map<K, V>::iterator i = pinned.begin();
-	 i != pinned.end();
-	 ++i) {
+	 i != pinned.end() && i->first <= e;
+	 pinned.erase(i++)) {
       if (!contents.count(i->first))
 	_add(i->first, i->second);
       else
 	lru.splice(lru.begin(), lru, contents[i->first]);
     }
-    pinned.clear();
   }
 
   void set_size(size_t new_size) {
