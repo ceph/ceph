@@ -199,7 +199,19 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag)
     librbd::image_info_t info;
     librbd::Image im;
 
-    rbd.open(io_ctx, im, i->c_str());
+    r = rbd.open(io_ctx, im, i->c_str());
+    // image might disappear between rbd.list() and rbd.open(); ignore
+    // that, warn about other possible errors (EPERM, say, for opening
+    // an old-format image, because you need execute permission for the
+    // class method)
+    if (r < 0) {
+      if (r != -ENOENT) {
+	cerr << "rbd: error opening " << *i << ": " << cpp_strerror(r)
+	     << std::endl;
+      }
+      // in any event, continue to next image
+      continue;
+    }
 
     // handle second-nth trips through loop
     parent.clear();
