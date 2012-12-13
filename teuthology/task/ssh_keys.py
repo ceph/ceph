@@ -9,6 +9,7 @@ import re
 from cStringIO import StringIO
 from teuthology import contextutil
 from ..orchestra import run
+from ..orchestra.connection import create_key
 
 log = logging.getLogger(__name__)
 
@@ -23,11 +24,29 @@ def generate_keys():
 def cleanup_keys(ctx, public_key):
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.load_system_host_keys()
 
     for host in ctx.cluster.remotes.iterkeys():
         username, hostname = str(host).split('@')
         log.info('cleaning up keys on {host}'.format(host=hostname, user=username))
+
+        # try to extract a public key for the host from the ctx.config entries
+        host_key_found = False
+        for t, host_key in ctx.config['targets'].iteritems():
+
+            if str(t) == str(host):
+                keytype, key = host_key.split(' ',1)
+                client.get_host_keys().add(
+                    hostname=hostname,
+                    keytype=keytype,
+                    key=create_key(keytype,key)
+                    )
+                host_key_found = True
+                log.info('ssh key found in ctx')
+
+        # if we did not find a key, load the system keys
+        if False == host_key_found:
+            client.load_system_host_keys()
+            log.info('no key found in ctx, using system host keys')
 
         client.connect(hostname, username=username)
         client.exec_command('rm ~/.ssh/id_rsa')
@@ -93,11 +112,30 @@ def push_keys_to_host(ctx, config, public_key, private_key):
 
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.load_system_host_keys()
 
     for host in ctx.cluster.remotes.iterkeys():
         log.info('host: {host}'.format(host=host))
         username, hostname = str(host).split('@')
+   
+        # try to extract a public key for the host from the ctx.config entries
+        host_key_found = False
+        for t, host_key in ctx.config['targets'].iteritems():
+
+            if str(t) == str(host):
+                keytype, key = host_key.split(' ',1)
+                client.get_host_keys().add(
+                    hostname=hostname,
+                    keytype=keytype,
+                    key=create_key(keytype,key)
+                    )
+                host_key_found = True
+                log.info('ssh key found in ctx')
+
+        # if we did not find a key, load the system keys
+        if False == host_key_found:
+            client.load_system_host_keys()
+            log.info('no key found in ctx, using system host keys')
+
         log.info('pushing keys to {host} for {user}'.format(host=hostname, user=username))
 
         client.connect(hostname, username=username)
