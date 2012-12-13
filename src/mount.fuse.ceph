@@ -1,0 +1,26 @@
+#!/bin/sh
+#
+# Helper to mount ceph-fuse from /etc/fstab.  To use, add an entry
+# like:
+#
+# # DEVICE                           PATH         TYPE        OPTIONS
+# id=admin                           /mnt/ceph    fuse.ceph   defaults   0 0
+# id=myuser,conf=/etc/ceph/foo.conf  /mnt/ceph2   fuse.ceph   defaults   0 0
+#
+# where the device field is a comma-separated list of options to pass on
+# the command line.  The examples above, for example, specify that
+# ceph-fuse will authenticated as client.admin and client.myuser
+# (respectively), and the second example also sets the 'conf' option to
+# '/etc/ceph/foo.conf' via the ceph-fuse command line.  Any valid
+# ceph-fuse can be passed in this way.
+
+set -e
+
+# convert device string to options
+cephargs='--'`echo $1 | sed 's/,/ --/g'`
+
+# strip out 'noauto' option; libfuse doesn't like it
+opts=`echo $4 | sed 's/,noauto//' | sed 's/noauto,//'`
+
+# go
+exec ceph-fuse $cephargs $2 $3 $opts

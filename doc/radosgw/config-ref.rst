@@ -206,21 +206,31 @@ set automatically.
 
 
 ``rgw enable ops log``
+
 :Description: Whether rgw will log each successful operation
 :Type: Boolean
 :Default: ``true``
 
 ``rgw ops log rados``
+
 :Description: Whether rgw operations logging should be written into the RADOS backend
 :Type: Boolean
 :Default: ``true``
 
 ``rgw ops log socket path``
+
 :Description: The path of a unix domain socket to which operations logging data will be written.
 :Type: String
 :Default: N/A
 
 ``rgw ops log data backlog``
+
 :Description: Total backlog data size for unix domain socket operations logging
 :Type: Integer
 :Default: ``5ul << 20``
+
+``rgw extended http attrs``
+:Description: Add new set of attributes that could be set on an object. These extra attributes can be set through HTTP header fields when putting the objects. If set, these attributes will return as HTTP fields when doing GET/HEAD on the object.
+:Type: String
+:Default: N/A
+:Example: "content_foo, content_bar"
