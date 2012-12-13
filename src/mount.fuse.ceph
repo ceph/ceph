@@ -15,6 +15,12 @@
 # ceph-fuse can be passed in this way.
 
 set -e
-options='--'`echo $1 | sed 's/,/ --/g'`
-shift
-exec ceph-fuse $options $@
+
+# convert device string to options
+cephargs='--'`echo $1 | sed 's/,/ --/g'`
+
+# strip out 'noauto' option; libfuse doesn't like it
+opts=`echo $4 | sed 's/,noauto//' | sed 's/noauto,//'`
+
+# go
+exec ceph-fuse $cephargs $2 $3 $opts
