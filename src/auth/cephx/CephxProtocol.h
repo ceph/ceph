@@ -470,8 +470,13 @@ int decode_decrypt(CephContext *cct, T& t, const CryptoKey key,
 		    bufferlist::iterator& iter, std::string &error)
 {
   bufferlist bl_enc;
-  ::decode(bl_enc, iter);
-  decode_decrypt_enc_bl(cct, t, key, bl_enc, error);
+  try {
+    ::decode(bl_enc, iter);
+    decode_decrypt_enc_bl(cct, t, key, bl_enc, error);
+  }
+  catch (buffer::error e) {
+    error = "error decoding block for decryption";
+  }
   if (!error.empty())
     return CEPHX_CRYPT_ERR;
   return 0;
