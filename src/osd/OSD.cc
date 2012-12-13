@@ -2438,6 +2438,14 @@ void OSD::disconnect_session_watches(Session *session)
       continue; 
     }
     service.watch_lock.Lock();
+
+    if (!session->watches.count((void*)obc)) {
+      // Raced with watch removal, obc is invalid
+      service.watch_lock.Unlock();
+      pg->unlock();
+      continue;
+    }
+
     /* NOTE! fix this one, should be able to just lookup entity name,
        however, we currently only keep EntityName on the session and not
        entity_name_t. */
