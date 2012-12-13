@@ -29,7 +29,8 @@ sbin_PROGRAMS =
 sbin_SCRIPTS = \
 	ceph-disk-prepare \
 	ceph-disk-activate \
-	ceph-create-keys
+	ceph-create-keys \
+	mount.fuse.ceph
 bin_SCRIPTS = ceph-run $(srcdir)/ceph-clsinfo ceph-debugpack ceph-rbdnamer
 dist_bin_SCRIPTS =
 # C/C++ tests to build will be appended to this
@@ -1100,7 +1101,8 @@ EXTRA_DIST += \
 	$(srcdir)/upstart/radosgw-all-starter.conf \
 	ceph-disk-prepare \
 	ceph-disk-activate \
-	ceph-create-keys
+	ceph-create-keys \
+	mount.fuse.ceph
 
 
 EXTRA_DIST += $(srcdir)/$(shell_scripts:%=%.in)
