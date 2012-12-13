@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash -ex
 
 RUN_TIME=300		# approximate duration of run (seconds)
 
