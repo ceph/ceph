@@ -2914,18 +2914,20 @@ void Locker::handle_client_lease(MClientLease *m)
 
   case CEPH_MDS_LEASE_RENEW:
     {
-      dout(7) << "handle_client_lease client." << client
-	      << " renew on " << *dn << dendl;
-      int pool = 1;   // fixme.. do something smart!
-      m->h.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
-      m->h.seq = ++l->seq;
-      m->clear_payload();
-      
-      utime_t now = ceph_clock_now(g_ceph_context);
-      now += mdcache->client_lease_durations[pool];
-      mdcache->touch_client_lease(l, pool, now);
-      
-      mds->send_message_client_counted(m, m->get_connection());
+      dout(7) << "handle_client_lease client." << client << " renew on " << *dn
+	      << (!dn->lock.can_lease(client)?", revoking lease":"") << dendl;
+      if (dn->lock.can_lease(client)) {
+	int pool = 1;   // fixme.. do something smart!
+	m->h.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
+	m->h.seq = ++l->seq;
+	m->clear_payload();
+
+	utime_t now = ceph_clock_now(g_ceph_context);
+	now += mdcache->client_lease_durations[pool];
+	mdcache->touch_client_lease(l, pool, now);
+
+	mds->send_message_client_counted(m, m->get_connection());
+      }
     }
     break;
 
