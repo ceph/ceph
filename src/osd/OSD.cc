@@ -2463,6 +2463,7 @@ void OSD::disconnect_session_watches(Session *session)
 		 << ", expires " << expire << dendl;
         obc->watchers.erase(witer++);
 	pg->put_object_context(obc);
+	session->con->put();
 	session->put();
       }
       if (witer == obc->watchers.end())
