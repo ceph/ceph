@@ -4036,6 +4036,17 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
 	(in->inode.is_dir() && in->multiple_nonstale_caps())) {  // FIXME.. :/
       dout(20) << " should lose it" << dendl;
       // we should lose it.
+      //  loner  other   want
+      //  R      R       SYNC
+      //  R      R|W     MIX
+      //  R      W       MIX
+      //  R|W    R       MIX
+      //  R|W    R|W     MIX
+      //  R|W    W       MIX
+      //  W      R       MIX
+      //  W      R|W     MIX
+      //  W      W       MIX
+      // -> any writer means MIX; RD doesn't matter.
       if (((other_wanted|loner_wanted) & CEPH_CAP_GWR) ||
 	  lock->is_waiter_for(SimpleLock::WAIT_WR))
 	scatter_mix(lock, need_issue);
