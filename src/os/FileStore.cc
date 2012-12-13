@@ -1227,16 +1227,14 @@ int FileStore::_detect_fs()
   } else {
     dout(0) << "mount syncfs(2) syscall supported by glibc BUT NOT the kernel" << dendl;
   }
-#endif
-#ifdef SYS_syncfs
+#elif defined(SYS_syncfs)
   if (syscall(SYS_syncfs, fd) == 0) {
     dout(0) << "mount syscall(SYS_syncfs, fd) fully supported" << dendl;
     have_syncfs = true;
   } else {
     dout(0) << "mount syscall(SYS_syncfs, fd) supported by libc BUT NOT the kernel" << dendl;
   }
-#endif
-#ifdef __NR_syncfs
+#elif defined(__NR_syncfs)
   if (syscall(__NR_syncfs, fd) == 0) {
     dout(0) << "mount syscall(__NR_syncfs, fd) fully supported" << dendl;
     have_syncfs = true;
