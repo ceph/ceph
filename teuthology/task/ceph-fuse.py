@@ -119,6 +119,7 @@ def task(ctx, config):
             fuse=fuse_daemons[id_],
             mountpoint=mnt,
             )
+        remote.run(args=['sudo', 'chmod', '1777', '/tmp/cephtest/mnt.{id}'.format(id=id_)],)
 
     try:
         yield
