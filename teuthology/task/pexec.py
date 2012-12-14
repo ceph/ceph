@@ -9,9 +9,8 @@ from teuthology.orchestra import run as tor
 
 log = logging.getLogger(__name__)
 
-def _exec_role(remote, role, sudo, ls):
-    log.info('Running commands on role %s host %s', role, remote.name)
-    cid=role.split('.')[-1]
+def _exec_host(remote, sudo, ls):
+    log.info('Running commands on host %s', remote.name)
     args = ['bash', '-s']
     if sudo:
         args.insert(0, 'sudo')
@@ -51,11 +50,12 @@ def task(ctx, config):
         del config['sudo']
 
     if 'all' in config and len(config) == 1:
+        ls = config['all']
         with parallel() as p:
             for remote in ctx.cluster.remotes.iterkeys():
-                p.spawn(_exec_role, remote, role, sudo, ls)
+                p.spawn(_exec_host, remote, sudo, ls)
     else:
         with parallel() as p:
             for role, ls in config.iteritems():
                 (remote,) = ctx.cluster.only(role).remotes.iterkeys()
-                p.spawn(_exec_role, remote, role, sudo, ls)
+                p.spawn(_exec_host, remote, sudo, ls)
