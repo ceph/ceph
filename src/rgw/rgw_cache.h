@@ -268,6 +268,11 @@ int RGWCache<T>::get_obj(void *ctx, void **handle, rgw_obj& obj, bufferlist& obl
     return r;
   }
 
+  if (obl.length() == end + 1) {
+    /* in this case, most likely object contains more data, we can't cache it */
+    return r;
+  }
+
   bufferptr p(r);
   bufferlist& bl = info.data;
   bl.clear();

@@ -19,7 +19,7 @@ Enter a password for the root user.
 On the admin host, generate an ``ssh`` key without specifying a passphrase
 and use the default locations. ::
 
-	sudo -s 
+	sudo -i 
 	ssh-keygen
 	Generating public/private key pair.
 	Enter file in which to save the key (/root/.ssh/id_rsa): 
@@ -27,14 +27,8 @@ and use the default locations. ::
 	Enter same passphrase again: 
 	Your identification has been saved in /root/.ssh/id_rsa.
 	Your public key has been saved in /root/.ssh/id_rsa.pub.
-
-You may use RSA or DSA keys. Once you generate your keys, copy them to each 
-OSD host. For example:: 
-
-	ssh-copy-id root@myserver01
-	ssh-copy-id root@myserver02	
 	
-Modify your ``~/.ssh/config`` file to login as ``root``, as follows:: 
+Modify your ``/root/.ssh/config`` file to login as ``root``, as follows:: 
 
 	Host myserver01
 		Hostname myserver01.fully-qualified-domain.com
@@ -43,6 +37,11 @@ Modify your ``~/.ssh/config`` file to login as ``root``, as follows::
 		Hostname myserver02.fully-qualified-domain.com
 		User root
 
+You may use RSA or DSA keys. Once you generate your keys, copy them to each 
+OSD host. For example:: 
+
+	ssh-copy-id root@myserver01
+	ssh-copy-id root@myserver02
 
 Copy Configuration File to All Hosts
 ====================================
@@ -55,9 +54,9 @@ if you are using ``mkcephfs`` to deploy Ceph.
 
 ::
 
-	ssh myserver01 sudo tee /etc/ceph/ceph.conf < /etc/ceph/ceph.conf
-	ssh myserver02 sudo tee /etc/ceph/ceph.conf < /etc/ceph/ceph.conf
-	ssh myserver03 sudo tee /etc/ceph/ceph.conf < /etc/ceph/ceph.conf
+	sudo ssh myserver01 tee /etc/ceph/ceph.conf < /etc/ceph/ceph.conf
+	sudo ssh myserver02 tee /etc/ceph/ceph.conf < /etc/ceph/ceph.conf
+	sudo ssh myserver03 tee /etc/ceph/ceph.conf < /etc/ceph/ceph.conf
 
 
 Create the Default Directories
@@ -115,7 +114,7 @@ root password. See `Authentication`_ when running with ``cephx`` enabled.
 When you start or stop your cluster, you will not have to use ``sudo`` or
 provide passwords. For example:: 
 
-	service ceph -a start
+	sudo service ceph -a start
 
 See `Operating a Cluster`_ for details.
 
