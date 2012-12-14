@@ -1,0 +1,7 @@
+tasks:
+- ceph:
+- kclient:
+- workunit:
+    clients:
+      all:
+        - suites/fsync-tester.sh
