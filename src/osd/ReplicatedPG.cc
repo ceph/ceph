@@ -119,7 +119,7 @@ void ReplicatedPG::wait_for_missing_object(const hobject_t& soid, OpRequestRef o
   }
   else {
     dout(7) << "missing " << soid << " v " << v << ", pulling." << dendl;
-    pull(soid, v, op->request->get_priority());
+    pull(soid, v, g_conf->osd_client_op_priority);
   }
   waiting_for_missing_object[soid].push_back(op);
   op->mark_delayed();
@@ -175,7 +175,7 @@ void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
 	break;
       }
     }
-    recover_object_replicas(soid, v, op->request->get_priority());
+    recover_object_replicas(soid, v, g_conf->osd_client_op_priority);
   }
   waiting_for_degraded_object[soid].push_back(op);
   op->mark_delayed();
