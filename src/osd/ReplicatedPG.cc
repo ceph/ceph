@@ -6832,7 +6832,7 @@ int ReplicatedPG::recover_backfill(int max)
     MOSDPGBackfill *m = NULL;
     if (bound.is_max()) {
       m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_FINISH, e, e, info.pgid);
-      m->set_priority(g_conf->osd_recovery_op_priority);
+      // Use default priority here, must match sub_op priority
       /* pinfo.stats might be wrong if we did log-based recovery on the
        * backfilled portion in addition to continuing backfill.
        */
@@ -6840,7 +6840,7 @@ int ReplicatedPG::recover_backfill(int max)
       start_recovery_op(hobject_t::get_max());
     } else {
       m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_PROGRESS, e, e, info.pgid);
-      m->set_priority(g_conf->osd_recovery_op_priority);
+      // Use default priority here, must match sub_op priority
     }
     m->last_backfill = bound;
     m->stats = pinfo.stats.stats;
