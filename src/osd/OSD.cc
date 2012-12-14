@@ -4756,9 +4756,9 @@ void OSD::handle_pg_create(OpRequestRef op)
       continue;
     }
     if (up != acting) {
-      dout(10) << "mkpg " << pgid << "  up " << up << " != acting " << acting << dendl;
-      clog.error() << "mkpg " << pgid << " up " << up << " != acting "
-	    << acting << "\n";
+      dout(10) << "mkpg " << pgid << "  up " << up << " != acting " << acting << ", ignoring" << dendl;
+      // we'll get a query soon anyway, since we know the pg
+      // must exist. we can ignore this.
       continue;
     }
 
