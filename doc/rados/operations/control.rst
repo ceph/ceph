@@ -151,10 +151,10 @@ Mark an OSD as lost. This may result in permanent data loss. Use with caution. :
 
 	ceph osd lost [--yes-i-really-mean-it]
 
-Create a new OSD. If no ID is given, a new ID is automatically selected
-if possible. ::
+Create a new OSD. If no UUID is given, it will be set automatically when the OSD
+starts up. ::
 
-	ceph osd create [{id}]
+	ceph osd create [{uuid}]
 
 Remove the given OSD(s). ::
 

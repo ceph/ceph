@@ -24,7 +24,8 @@ glibc
 - **syncfs(2)**: For non-btrfs filesystems such as XFS and ext4 where
   more than one ``ceph-osd`` daemon is used on a single server, Ceph
   performs signficantly better with the ``syncfs(2)`` system call
-  (added in kernel 2.6.39 and glibc 2.14).
+  (added in kernel 2.6.39 and glibc 2.14).  New versions of Ceph (v0.55 and
+  later) do not depend on glibc support.
 
 
 Platforms
@@ -49,12 +50,12 @@ Argonaut (0.48)
 +----------+----------+--------------------+--------------+---------+------------+
 | Ubuntu   | 12.10    | Quantal Quetzal    | linux-3.5.4  | 2       | B          |
 +----------+----------+--------------------+--------------+---------+------------+
-| Debian   | 6.0      | Squeeze            | linux-2.6.32 | 1, 2    | B          |
+| Debian   | 6.0      | Squeeze            | linux-2.6.32 | 1, 2, 3 | B          |
 +----------+----------+--------------------+--------------+---------+------------+
-| Debian   | 7.0      | Wheezy             | linux-3.2.0  | 1, 2    | B          |
+| Debian   | 7.0      | Wheezy             | linux-3.2.0  | 1, 2, 3 | B          |
 +----------+----------+--------------------+--------------+---------+------------+
 
-Bobtail (0.55)
+Bobtail (0.56)
 --------------
 
 +----------+----------+--------------------+--------------+---------+------------+
@@ -62,17 +63,17 @@ Bobtail (0.55)
 +==========+==========+====================+==============+=========+============+
 | Ubuntu   | 11.04    | Natty Narwhal      | linux-2.6.38 | 1, 2, 3 | B          |
 +----------+----------+--------------------+--------------+---------+------------+
-| Ubuntu   | 11.10    | Oneric Ocelot      | linux-3.0.0  | 1, 2, 3 | B          |
+| Ubuntu   | 11.10    | Oneric Ocelot      | linux-3.0.0  | 1, 2    | B          |
 +----------+----------+--------------------+--------------+---------+------------+
 | Ubuntu   | 12.04    | Precise Pangolin   | linux-3.2.0  | 1, 2    | B, I, C    |
 +----------+----------+--------------------+--------------+---------+------------+
 | Ubuntu   | 12.10    | Quantal Quetzal    | linux-3.5.4  | 2       | B          |
 +----------+----------+--------------------+--------------+---------+------------+
-| Debian   | 6.0      | Squeeze            | linux-2.6.32 | 1, 2    | B          |
+| Debian   | 6.0      | Squeeze            | linux-2.6.32 | 1, 2, 3 | B          |
 +----------+----------+--------------------+--------------+---------+------------+
 | Debian   | 7.0      | Wheezy             | linux-3.2.0  | 1, 2    | B          |
 +----------+----------+--------------------+--------------+---------+------------+
-| CentOS   | 6.3      | N/A                | linux-2.6.32 | 1, 2, 3 | B, I       |
+| CentOS   | 6.3      | N/A                | linux-2.6.32 | 1, 2    | B, I       |
 +----------+----------+--------------------+--------------+---------+------------+
 | Fedora   | 17.0     | Beefy Miracle      | linux-3.3.4  | 1, 2    | B          |
 +----------+----------+--------------------+--------------+---------+------------+
@@ -93,10 +94,10 @@ Notes
   for kernel client (kernel RBD or the Ceph file system).  Upgrade to a
   recommended kernel.
 
-- **3**: The installed version of ``glibc`` does not support the
-  ``syncfs(2)`` system call.  Putting multiple ``ceph-osd`` daemons
-  using ``XFS`` or ``ext4`` on the same host will not perform as well as
-  they could.
+- **3**: The default kernel or installed version of ``glibc`` does not
+  support the ``syncfs(2)`` system call.  Putting multiple
+  ``ceph-osd`` daemons using ``XFS`` or ``ext4`` on the same host will
+  not perform as well as they could.
 
 Testing
 -------

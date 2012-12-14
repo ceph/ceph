@@ -113,7 +113,7 @@ See `<IfModule> Directive`_ for additional details.
 .. _<IfModule> Directive: http://httpd.apache.org/docs/2.2/mod/core.html#ifmodule
 	
 Finally, you should configure Apache to allow encoded slashes, provide paths for
-log files and to trun off server signatures. :: 	
+log files and to turn off server signatures. :: 	
 
 	<VirtualHost *:80>	
 	...	
@@ -171,7 +171,7 @@ Add to Ceph Keyring Entries
 Once you have created a keyring and key for RADOS GW, add it as an entry in
 the Ceph keyring. For example::
 
-	ceph -k /etc/ceph/ceph.keyring auth add client.radosgw.gateway -i /etc/ceph/keyring.radosgw.gateway
+	sudo ceph -k /etc/ceph/ceph.keyring auth add client.radosgw.gateway -i /etc/ceph/keyring.radosgw.gateway
 	
 
 Restart Services and Start the RADOS Gateway
