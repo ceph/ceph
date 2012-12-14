@@ -474,6 +474,11 @@ def activate(
                 keyring=keyring,
                 )
 
+        # indicate this daemon is managed by upstart
+        if not os.path.exists(os.path.join(path, 'upstart')):
+            with file(os.path.join(path, 'upstart'), 'w'):
+                pass
+
         if not os.path.exists(os.path.join(path, 'active')):
             log.debug('Authorizing OSD key...')
             auth_key(
