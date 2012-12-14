@@ -26,59 +26,13 @@
 #include <sys/xattr.h>
 #include <signal.h>
 
-void do_sigusr1(int s) {}
-
-// wait_and_suspend() forks the process, waits for the
-// child to signal SIGUSR1, suspends the child with SIGSTOP
-// sleeps for s seconds, and then unsuspends the child,
-// waits for the child to exit, and then returns the exit code
-// of the child
-static int _wait_and_suspend(int s) {
-
-  int fpid = fork();
-  if (fpid != 0) {
-    // wait for child to signal
-    signal(SIGUSR1, &do_sigusr1);
-    sigset_t set;
-    sigaddset(&set, SIGUSR1);
-    int sig;
-    sigwait(&set, &sig);
-
-    // fork and suspend child, sleep for 20 secs, and resume
-    kill(fpid, SIGSTOP);
-    sleep(s);
-    kill(fpid, SIGCONT);
-    int status;
-    wait(&status);
-    if (WIFEXITED(status))
-      return WEXITSTATUS(status);
-    return 1;
-  }
-  return -1;
-}
-
-// signal_for_suspend sends the parent the SIGUSR1 signal
-// and sleeps for 1 second so that it can be suspended at the
-// point of the call
-static void _signal_for_suspend() {
-  kill(getppid(), SIGUSR1);
-}
-
 TEST(Caps, ReadZero) {
 
-  int w = _wait_and_suspend(20);
-  if (w >= 0) {
-    ASSERT_EQ(0, w);
-    return;
-  }
-
-  pid_t mypid = getpid();
+  int mypid = getpid();
   struct ceph_mount_info *cmount;
   ASSERT_EQ(0, ceph_create(&cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
-
-  ASSERT_EQ(0, ceph_conf_set(cmount, "client_cache_size", "10"));
 
   int i = 0;
   for(; i < 30; ++i) {
@@ -114,7 +68,7 @@ TEST(Caps, ReadZero) {
     ASSERT_EQ(expect, caps & expect);
   }
 
-  _signal_for_suspend();
+  ASSERT_EQ(0, ceph_conf_set(cmount, "client_debug_inject_tick_delay", "20"));
 
   for(i = 0; i < 30; ++i) {
 
