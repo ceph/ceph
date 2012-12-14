@@ -656,6 +656,8 @@ protected:
   list<OpRequestRef>            waiting_for_all_missing;
   map<hobject_t, list<OpRequestRef> > waiting_for_missing_object,
                                         waiting_for_degraded_object;
+  // Callbacks should assume pg (and nothing else) is locked
+  map<hobject_t, list<Context*> > callbacks_for_degraded_object;
   map<eversion_t,list<OpRequestRef> > waiting_for_ack, waiting_for_ondisk;
   map<eversion_t,OpRequestRef>   replay_queue;
   void split_ops(PG *child, unsigned split_bits);
@@ -857,6 +859,20 @@ public:
     // deep scrub
     bool deep;
 
+    list<Context*> callbacks;
+    void add_callback(Context *context) {
+      callbacks.push_back(context);
+    }
+    void run_callbacks() {
+      list<Context*> to_run;
+      to_run.swap(callbacks);
+      for (list<Context*>::iterator i = to_run.begin();
+	   i != to_run.end();
+	   ++i) {
+	(*i)->complete(0);
+      }
+    }
+
     static const char *state_string(const PG::Scrubber::State& state) {
       const char *ret = NULL;
       switch( state )
@@ -874,6 +890,21 @@ public:
     }
 
     bool is_chunky_scrub_active() const { return state != INACTIVE; }
+
+    // classic (non chunk) scrubs block all writes
+    // chunky scrubs only block writes to a range
+    bool write_blocked_by_scrub(const hobject_t &soid) {
+      if (!block_writes)
+	return false;
+
+      if (!is_chunky)
+	return true;
+
+      if (soid >= start && soid < end)
+	return true;
+
+      return false;
+    }
 
     // clear all state
     void reset() {
@@ -896,6 +927,7 @@ public:
       errors = 0;
       fixed = 0;
       deep = false;
+      run_callbacks();
     }
 
   } scrubber;
