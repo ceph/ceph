@@ -386,13 +386,13 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
     if (ret < 0)
       goto done_err;
 
-    len = bl.length();
+    off_t len = bl.length();
     cur_ofs += len;
     ofs += len;
     ret = 0;
     perfcounter->tinc(l_rgw_get_lat,
                       (ceph_clock_now(s->cct) - start_time));
-    send_response_data(bl);
+    send_response_data(bl, 0, len);
 
     start_time = ceph_clock_now(s->cct);
   }
@@ -526,13 +526,42 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   return 0;
 }
 
+class RGWGetObj_CB : public RGWGetDataCB
+{
+  RGWGetObj *op;
+public:
+  RGWGetObj_CB(RGWGetObj *_op) : op(_op) {}
+  virtual ~RGWGetObj_CB() {}
+  
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
+    return op->get_data_cb(bl, bl_ofs, bl_len);
+  }
+};
+
+int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
+{
+  /* garbage collection related handling */
+  utime_t start_time = ceph_clock_now(s->cct);
+  if (start_time > gc_invalidate_time) {
+    int r = store->defer_gc(s->obj_ctx, obj);
+    if (r < 0) {
+      dout(0) << "WARNING: could not defer gc entry for obj" << dendl;
+    }
+    gc_invalidate_time = start_time;
+    gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
+  }
+  return send_response_data(bl, bl_ofs, bl_len);
+}
+
 void RGWGetObj::execute()
 {
   void *handle = NULL;
   utime_t start_time = s->time;
   bufferlist bl;
-  utime_t gc_invalidate_time = ceph_clock_now(s->cct);
+  gc_invalidate_time = ceph_clock_now(s->cct);
   gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
+
+  RGWGetObj_CB cb(this);
 
   map<string, bufferlist>::iterator attr_iter;
 
@@ -541,11 +570,11 @@ void RGWGetObj::execute()
 
   ret = get_params();
   if (ret < 0)
-    goto done;
+    goto done_err;
 
   ret = init_common();
   if (ret < 0)
-    goto done;
+    goto done_err;
 
   new_ofs = ofs;
   new_end = end;
@@ -553,7 +582,7 @@ void RGWGetObj::execute()
   ret = store->prepare_get_obj(s->obj_ctx, obj, &new_ofs, &new_end, &attrs, mod_ptr,
                                unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &s->obj_size, &handle, &s->err);
   if (ret < 0)
-    goto done;
+    goto done_err;
 
   attr_iter = attrs.find(RGW_ATTR_USER_MANIFEST);
   if (attr_iter != attrs.end()) {
@@ -570,53 +599,22 @@ void RGWGetObj::execute()
   start = ofs;
 
   if (!get_data || ofs > end)
-    goto done;
+    goto done_err;
 
   perfcounter->inc(l_rgw_get_b, end - ofs);
 
-  while (ofs <= end) {
-    ret = store->get_obj(s->obj_ctx, &handle, obj, bl, ofs, end);
-    if (ret < 0) {
-      goto done;
-    }
-    len = ret;
+  ret = store->get_obj_iterate(s->obj_ctx, &handle, obj, ofs, end, &cb);
 
-    if (!len) {
-      dout(0) << "WARNING: failed to read object, returned zero length" << dendl;
-      ret = -EIO;
-      goto done;
-    }
-
-    ofs += len;
-    ret = 0;
-
-    perfcounter->tinc(l_rgw_get_lat,
-                     (ceph_clock_now(s->cct) - start_time));
-    ret = send_response_data(bl);
-    bl.clear();
-    if (ret < 0) {
-      dout(0) << "NOTICE: failed to send response to client" << dendl;
-      goto done;
-    }
-
-    start_time = ceph_clock_now(s->cct);
-
-    if (ofs <= end) {
-      if (start_time > gc_invalidate_time) {
-	int r = store->defer_gc(s->obj_ctx, obj);
-	if (r < 0) {
-	  dout(0) << "WARNING: could not defer gc entry for obj" << dendl;
-	}
-	gc_invalidate_time = start_time;
-        gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
-      }
-    }
+  perfcounter->tinc(l_rgw_get_lat,
+                   (ceph_clock_now(s->cct) - start_time));
+  if (ret < 0) {
+    goto done_err;
   }
 
-  return;
+  store->finish_get_obj(&handle);
 
-done:
-  send_response_data(bl);
+done_err:
+  send_response_data(bl, 0, 0);
   store->finish_get_obj(&handle);
 }
 

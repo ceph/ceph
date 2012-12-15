@@ -432,7 +432,7 @@ void RGWCopyObj_ObjStore_SWIFT::send_response()
   end_header(s);
 }
 
-int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl)
+int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
   const char *content_type = NULL;
   int orig_ret = ret;
@@ -495,7 +495,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl)
 
 send_data:
   if (get_data && !orig_ret) {
-    int r = s->cio->write(bl.c_str(), len);
+    int r = s->cio->write(bl.c_str() + bl_ofs, bl_len);
     if (r < 0)
       return r;
   }
