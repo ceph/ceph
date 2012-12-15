@@ -2623,22 +2623,34 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
         int pg_num = 0;
         int pgp_num = 0;
-	const char *start = m->cmd[4].c_str();
-	char *end = (char*)start;
-	pgp_num = pg_num = strtol(start, &end, 10);
-	if (*end != '\0') { // failed to parse
+
+        /* Don't allow over 65535 pgs in a single pool */
+        pg_num = parse_pos_long(m->cmd[4].c_str(), &ss);
+        if ((pg_num == 0) || (pg_num > 65535)) {
+          ss << "'pg_num' must be greater than 0 and lower or equal than 65535";
+          err = -ERANGE;
+          goto out;
+        }
+
+        if (pg_num < 0) {
 	  err = -EINVAL;
-	  ss << "usage: osd pool create <poolname> <pg_num> [pgp_num]";
 	  goto out;
-	} else if (m->cmd.size() > 5) { // check for pgp_num too
-	  start = m->cmd[5].c_str();
-	  end = (char *)start;
-	  pgp_num = strtol(start, &end, 10);
-	  if (*end != '\0') { // failed to parse
-	    err = -EINVAL;
-	    ss << "usage: osd pool create <poolname> <pg_num> [pgp_num]";
-	    goto out;
-	  }
+        }
+
+        pgp_num = pg_num;
+        if (m->cmd.size() > 5) {
+          pgp_num = parse_pos_long(m->cmd[5].c_str(), &ss);
+          if (pgp_num < 0) {
+            err = -EINVAL;
+            goto out;
+          }
+
+          if ((pgp_num == 0) || (pgp_num > pg_num)) {
+            ss << "'pgp_num' must be greater than 0 and lower or equal than 'pg_num'"
+               << ", which in this case is " << pg_num;
+            err = -ERANGE;
+            goto out;
+          }
         }
 
 	if (osdmap.name_pool.count(m->cmd[3])) {

@@ -364,7 +364,7 @@ if [ -n "$prepareosdfs" ]; then
     done
 
     get_conf mkfs_opt "" "osd mkfs options $fs_type"
-    if [ "$fs_type" == "xfs" ] && [ -z "$mkfs_opt" ]; then
+    if [ "$fs_type" = "xfs" ] && [ -z "$mkfs_opt" ]; then
         echo Xfs filesystem found add missing -f mkfs option!
 	mkfs_opt="-f"
     fi

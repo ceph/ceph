@@ -1358,6 +1358,8 @@ void PG::activate(ObjectStore::Transaction& t,
 		  map<int, vector<pair<pg_notify_t, pg_interval_map_t> > > *activator_map)
 {
   assert(!is_active());
+  assert(scrubber.callbacks.empty());
+  assert(callbacks_for_degraded_object.empty());
 
   // -- crash recovery?
   if (is_primary() &&
@@ -3941,6 +3943,7 @@ void PG::chunky_scrub() {
 
         scrub_compare_maps();
         scrubber.block_writes = false;
+	scrubber.run_callbacks();
 
         // requeue the writes from the chunk that just finished
         requeue_ops(waiting_for_active);
