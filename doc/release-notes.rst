@@ -2,6 +2,197 @@
  Release Notes
 ===============
 
+v0.56 "bobtail"
+---------------
+
+Bobtail is the second stable release of Ceph, named in honor of the
+`Bobtail Squid`: http://en.wikipedia.org/wiki/Bobtail_squid.
+
+Key features since v0.48 "argonaut"
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Object Storage Daemon (OSD): improved threading, small-io performance, and performance during recovery
+* Object Storage Daemon (OSD): regular "deep" scrubbing of all stored data to detect latent disk errors
+* RADOS Block Device (RBD): support for copy-on-write clones of images.
+* RADOS Block Device (RBD): better client-side caching.
+* Rados Gateway (RGW): support for efficient usage logging/scraping (for billing purposes)
+* Rados Gateway (RGW): expanded S3 and Swift API coverage (e.g., POST, multi-object delete)
+* Rados Gateway (RGW): improved striping for large objects
+* Rados Gateway (RGW): OpenStack Keystone integration
+* RPM packages for Fedora, RHEL/CentOS, OpenSUSE, and SLES
+* mkcephfs: support for automatically formatting and mounting XFS and ext4 (in addition to btrfs)
+
+Upgrading
+~~~~~~~~~
+
+Please refer to the document Upgrading from Argonaut to Bobtail.
+
+* Cephx authentication is now enabled by default (since v0.55).
+  Upgrading a cluster without adjusting the Ceph configuration will
+  likely prevent the system from starting up on its own.  We recommend
+  first modifying the configuration to indicate that authentication is
+  disabled, and only then upgrading to the latest version.::
+
+     auth client required = none
+     auth service required = none
+     auth cluster required = none
+
+* Ceph daemons can be upgraded one-by-one while the cluster is online
+  and in service.
+
+* The ``ceph-osd`` daemons must be upgraded and restarted *before* any
+  ``radosgw`` daemons are restarted, as they depend on some new
+  ceph-osd functionality.  (The ``ceph-mon``, ``ceph-osd``, and
+  ``ceph-mds`` daemons can be upgraded and restarted in any order.)
+
+* Once each individual daemon has been upgraded and restarted, it
+  cannot be downgraded.
+
+* The cluster of ``ceph-mon`` daemons will migrate to a new internal
+  on-wire protocol once all daemons in the quorum have been upgraded.
+  Upgrading only a majority of the nodes (e.g., two out of three) may
+  expose the cluster to a situation where a single additional failure
+  may compromise availability (because the non-upgraded daemon cannot
+  participate in the new protocol).  We recommend not waiting for an
+  extended period of time between ``ceph-mon`` upgrades.
+
+Compatibility changes
+~~~~~~~~~~~~~~~~~~~~~
+
+* The 'ceph osd create [<uuid>]' command now rejects an argument that
+  is not a UUID.  (Previously it would take take an optional integer
+  OSD id.)  This correct syntax has been 'ceph osd create [<uuid>]'
+  since v0.47, but the older calling convention was being silently
+  ignored.
+
+* The CRUSH map root nodes now have type ``root`` instead of type
+  ``pool``.  This avoids confusion with RADOS pools, which are not
+  directly related.  Any scripts or tools that use the ``ceph osd
+  crush ...`` commands may need to be adjusted accordingly.
+
+* 'rbd lock list' and 'rbd showmapped' no longer use tabs as
+  separators in their output.
+
+* Bug fixes to the new osd capability format parsing properly validate
+  the allowed operations. If an existing rados user gets permissions
+  errors after upgrading, its capabilities were probably
+  misconfigured. See the ceph-authtool man page for details on osd
+  capabilities.
+
+* The osd capabilities associated with a rados user have changed
+  syntax since 0.48 argonaut. The new format is mostly backwards
+  compatible, but there are two backwards-incompatible changes:
+
+  * specifying a list of pools in one grant, i.e.
+    'allow r pool=foo,bar' is now done in separate grants, i.e.
+    'allow r pool=foo, allow r pool=bar'.
+
+  * restricting pool access by pool owner ('allow r uid=foo') is
+    removed. This feature was not very useful and unused in practice.
+
+  The new format is documented in the ceph-authtool man page.
+
+
+Notable changes
+~~~~~~~~~~~~~~~
+
+* auth: enable cephx by default
+* auth: expanded authentication settings for greater flexibility
+* build fixes for Fedora 18, CentOS/RHEL 6
+* ceph-debugpack: misc improvements
+* ceph-disk-prepare: creates and labels GPT partitions
+* ceph-disk-prepare: support for external journals, default mount/mkfs options, etc.
+* ceph-fuse/libcephfs: many misc fixes, admin socket debugging
+* ceph-fuse: fix handling for .. in root directory
+* ceph-fuse: many fixes (including memory leaks, hangs)
+* ceph.spec: misc packaging fixes
+* common: thread pool sizes can now be adjusted at runtime
+* crush: default root of tree type is now 'root' instead of 'pool' (to avoid confusiong wrt rados pools)
+* crush: fixed retry behavior with chooseleaf via tunable
+* crush: tunables documented; feature bit now present and enforced
+* libcephfs: java wrapper
+* librados: several bug fixes (rare races, locking errors)
+* librados: some locking fixes
+* librados: watch/notify fixes, misc memory leaks
+* librbd: a few fixes to 'discard' support
+* librbd: fine-grained striping feature
+* librbd: fixed memory leaks
+* librbd: fully functional and documented image cloning
+* librbd: image (advisory) locking
+* librbd: improved caching (of object non-existence)
+* librbd: 'flatten' command to sever clone parent relationship
+* librbd: 'protect'/'unprotect' commands to prevent clone parent from being deleted
+* log: fix in-memory buffering behavior (to only write log messages on crash)
+* mds: fix ino release on abort session close, relative getattr path, mds shutdown, other misc items
+* mds: misc fixes
+* mkcephfs: fix for default keyring, osd data/journal locations
+* mkcephfs: support for formatting xfs, ext4 (as well as btrfs)
+* init: support for automatically mounting xfs and ext4 osd data directories
+* mon, radosgw, ceph-fuse: fixed memory leaks
+* mon: improved ENOSPC, fs error checking
+* mon: less-destructive ceph-mon --mkfs behavior
+* mon: misc fixes
+* mon: more informative info about stuck PGs in 'health detail'
+* mon: new 'osd crush create-or-move ...' command
+* mon: new 'osd crush move ...' command lets you rearrange your CRUSH hierarchy
+* mon: many bug fixes (various races causing ceph-mon crashes)
+* mon: new on-disk metadata to facilitate future mon changes (post-bobtail)
+* mon: election bug fixes
+* mon: throttle client messages (limit memory consumption)
+* mon: throttle osd flapping based on osd history (limits osdmap ΄thrashing' on overloaded or unhappy clusters)
+* mon: 'report' command for dumping detailed cluster status (e.g., for use when reporting bugs)
+* msgr: improved failure handling code
+* msgr: many bug fixes
+* osd, mon: honor new 'nobackfill' and 'norecover' osdmap flags
+* osd, mon: use feature bits to lock out clients lacking CRUSH tunables when they are in use
+* osd: backfill reservation framework (to avoid flooding new osds with backfill data)
+* osd: backfill target reservations (improve performance during recovery)
+* osd: better tracking of recent slow operations
+* osd: capability grammar improvements, bug fixes
+* osd: client vs recovery io priotitization
+* osd: crush performance improvements
+* osd: default journal size to 1 GB
+* osd: experimental support for PG "splitting" (pg_num adjustment for existing pools)
+* osd: fix memory leak on certain error paths
+* osd: fixed detection of EIO errors from fs on read
+* osd: major refactor of PG peering and threading
+* osd: many bug fixes
+* osd: more/better dump info about in-progress operations
+* osd: new caps structure (see compatibility notes)
+* osd: new 'deep scrub' will compare object content across replicas (once per week by default)
+* osd: new 'lock' rados class for generic object locking
+* osd: optional 'min' pg size
+* osd: recovery reservations
+* osd: scrub efficiency improvement
+* osd: several out of order reply bug fixes
+* osd: several rare peering cases fixed
+* osd: some performance improvements related to request queuing
+* osd: use entire device if journal is a block device
+* osd: use syncfs(2) when kernel supports it, even if glibc does not
+* osd: various fixes for out-of-order op replies
+* rados: ability to copy, rename pools
+* rados: bench command now cleans up after itself
+* rados: 'cppool' command to copy rados pools
+* radosgw: POST support
+* radosgw: REST API for managing usage stats
+* radosgw: fix bug in bucket stat updates
+* radosgw: fix copy-object vs attributes
+* radosgw: fix range header for large objects, ETag quoting, GMT dates, other compatibility fixes
+* radosgw: improved garbage collection framework
+* radosgw: many small fixes, cleanups
+* radosgw: openstack keystone integration
+* radosgw: stripe large (non-multipart) objects
+* radosgw: support for multi-object deletes
+* radosgw: support for swift manifest objects
+* radosgw: vanity bucket dns names
+* radosgw: various API compatibility fixes
+* rbd: fix 'list' command when more than 1024 (format 2) images
+* rbd: import from stdin, export to stdout
+* rbd: new 'ls -l' option to view images with metadata
+* upstart: job files for all daemon types (not enabled by default)
+* wireshark: ceph protocol dissector patch updated
+
+
 v0.54
 -----
 
