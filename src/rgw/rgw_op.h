@@ -62,7 +62,6 @@ protected:
   const char *if_match;
   const char *if_nomatch;
   off_t ofs;
-  uint64_t len;
   uint64_t total_len;
   off_t start;
   off_t end;
@@ -76,6 +75,7 @@ protected:
   bool get_data;
   bool partial_content;
   rgw_obj obj;
+  utime_t gc_invalidate_time;
 
   int init_common();
 public:
@@ -87,7 +87,6 @@ public:
     if_nomatch = NULL;
     start = 0;
     ofs = 0;
-    len = 0;
     total_len = 0;
     end = -1;
     mod_time = 0;
@@ -112,8 +111,10 @@ public:
                                   uint64_t *ptotal_len, bool read_data);
   int handle_user_manifest(const char *prefix);
 
+  int get_data_cb(bufferlist& bl, off_t ofs, off_t len);
+
   virtual int get_params() = 0;
-  virtual int send_response_data(bufferlist& bl) = 0;
+  virtual int send_response_data(bufferlist& bl, off_t ofs, off_t len) = 0;
 
   virtual const char *name() { return "get_obj"; }
 };

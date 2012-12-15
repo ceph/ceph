@@ -19,9 +19,10 @@ class Throttle {
 	ceph::atomic_t count, max;
   Mutex lock;
   list<Cond*> cond;
+  bool use_perf;
   
 public:
-  Throttle(CephContext *cct, std::string n, int64_t m = 0, bool use_perf = true);
+  Throttle(CephContext *cct, std::string n, int64_t m = 0, bool _use_perf = true);
   ~Throttle();
 
 private:

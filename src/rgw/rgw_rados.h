@@ -3,6 +3,7 @@
 
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
+#include "common/RefCountedObj.h"
 #include "rgw_common.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "rgw_log.h"
@@ -53,6 +54,12 @@ struct RGWUsageIter {
   uint32_t index;
 
   RGWUsageIter() : index(0) {}
+};
+
+class RGWGetDataCB {
+public:
+  virtual int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) = 0;
+  virtual ~RGWGetDataCB() {}
 };
 
 class RGWAccessListFilter {
@@ -625,7 +632,24 @@ public:
 
   virtual void finish_get_obj(void **handle);
 
- /**
+  int iterate_obj(void *ctx, rgw_obj& obj,
+                  off_t ofs, off_t end,
+                  uint64_t max_chunk_size,
+                  int (*iterate_obj_cb)(rgw_obj&, off_t, off_t, off_t, bool, RGWObjState *, void *),
+                  void *arg);
+
+  int get_obj_iterate(void *ctx, void **handle, rgw_obj& obj,
+                      off_t ofs, off_t end,
+	              RGWGetDataCB *cb);
+
+  int get_obj_iterate_cb(void *ctx, RGWObjState *astate,
+                         rgw_obj& obj,
+                         off_t obj_ofs, off_t read_ofs, off_t len,
+                         bool is_head_obj, void *arg);
+
+  void get_obj_aio_completion_cb(librados::completion_t cb, void *arg);
+
+  /**
    * a simple object read without keeping state
    */
   virtual int read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl);

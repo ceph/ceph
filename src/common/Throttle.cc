@@ -25,10 +25,11 @@ enum {
   l_throttle_last,
 };
 
-Throttle::Throttle(CephContext *cct, std::string n, int64_t m, bool use_perf)
+Throttle::Throttle(CephContext *cct, std::string n, int64_t m, bool _use_perf)
   : cct(cct), name(n), logger(NULL),
 		max(m),
-    lock("Throttle::lock")
+    lock("Throttle::lock"),
+    use_perf(_use_perf)
 {
   assert(m >= 0);
 
