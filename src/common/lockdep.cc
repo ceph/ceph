@@ -37,7 +37,7 @@ namespace __gnu_cxx {
 #define DOUT_COND(cct, l) cct && l <= XDOUT_CONDVAR(cct, dout_subsys)
 #define lockdep_dout(v) lsubdout(g_lockdep_ceph_ctx, lockdep, v)
 #define MAX_LOCKS  1000   // increase me as needed
-#define BACKTRACE_SKIP 3
+#define BACKTRACE_SKIP 2
 
 /******* Globals **********/
 int g_lockdep = get_env_int("CEPH_LOCKDEP");

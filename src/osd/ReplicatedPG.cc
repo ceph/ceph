@@ -119,7 +119,7 @@ void ReplicatedPG::wait_for_missing_object(const hobject_t& soid, OpRequestRef o
   }
   else {
     dout(7) << "missing " << soid << " v " << v << ", pulling." << dendl;
-    pull(soid, v, op->request->get_priority());
+    pull(soid, v, g_conf->osd_client_op_priority);
   }
   waiting_for_missing_object[soid].push_back(op);
   op->mark_delayed();
@@ -175,7 +175,7 @@ void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
 	break;
       }
     }
-    recover_object_replicas(soid, v, op->request->get_priority());
+    recover_object_replicas(soid, v, g_conf->osd_client_op_priority);
   }
   waiting_for_degraded_object[soid].push_back(op);
   op->mark_delayed();
@@ -628,15 +628,11 @@ void ReplicatedPG::do_op(OpRequestRef op)
 		 CEPH_NOSNAP, m->get_pg().ps(),
 		 info.pgid.pool());
 
-  if (scrubber.block_writes && m->may_write()) {
-    // classic (non chunk) scrubs block all writes
-    // chunky scrubs only block writes to a range
-    if (!scrubber.is_chunky || (head >= scrubber.start && head < scrubber.end)) {
-      dout(20) << __func__ << ": waiting for scrub" << dendl;
-      waiting_for_active.push_back(op);
-      op->mark_delayed();
-      return;
-    }
+  if (m->may_write() && scrubber.write_blocked_by_scrub(head)) {
+    dout(20) << __func__ << ": waiting for scrub" << dendl;
+    waiting_for_active.push_back(op);
+    op->mark_delayed();
+    return;
   }
 
   // missing object?
@@ -1590,6 +1586,7 @@ void ReplicatedPG::remove_watcher(ObjectContext *obc, entity_name_t entity)
   session->watches.erase(obc);
 
   put_object_context(obc);
+  session->con->put();
   session->put();
 }
 
@@ -1606,8 +1603,8 @@ void ReplicatedPG::remove_notify(ObjectContext *obc, Watch::Notification *notif)
 
   assert(niter != obc->notifs.end());
 
-  niter->first->session->put();
   niter->first->session->con->put();
+  niter->first->session->put();
   obc->notifs.erase(niter);
 
   put_object_context(obc);
@@ -3349,6 +3346,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
       if (iter == obc->watchers.end()) {
 	dout(10) << " connected to " << w << " by " << entity << " session " << session << dendl;
 	obc->watchers[entity] = session;
+	session->con->get();
 	session->get();
 	session->watches[obc] = get_osdmap()->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
 	obc->ref++;
@@ -3360,10 +3358,14 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
 	// weird: same entity, different session.
 	dout(10) << " reconnected (with different session!) watch " << w << " by " << entity
 		 << " session " << session << " (was " << iter->second << ")" << dendl;
-	iter->second->watches.erase(obc);
-	iter->second->put();
-	iter->second = session;
+	session->con->get();
 	session->get();
+
+	iter->second->watches.erase(obc);
+	iter->second->con->put();
+	iter->second->put();
+
+	iter->second = session;
 	session->watches[obc] = get_osdmap()->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
       }
       map<entity_name_t,Watch::C_WatchTimeout*>::iterator un_iter =
@@ -4114,10 +4116,14 @@ void ReplicatedPG::unregister_unconnected_watcher(void *_obc,
 						  entity_name_t entity)
 {
   ObjectContext *obc = static_cast<ObjectContext *>(_obc);
-  osd->watch_timer.cancel_event(obc->unconnected_watchers[entity]);
+
+  /* If we failed to cancel the event, the event will fire and the obc
+   * ref and the pg ref will be taken care of */
+  if (osd->watch_timer.cancel_event(obc->unconnected_watchers[entity])) {
+    put_object_context(obc);
+    put();
+  }
   obc->unconnected_watchers.erase(entity);
-  put_object_context(obc);
-  put();
 }
 
 void ReplicatedPG::register_unconnected_watcher(void *_obc,
@@ -4141,12 +4147,73 @@ void ReplicatedPG::handle_watch_timeout(void *_obc,
 					entity_name_t entity,
 					utime_t expire)
 {
+  dout(10) << "handle_watch_timeout obc " << _obc << dendl;
+  struct HandleWatchTimeout : public Context {
+    epoch_t cur_epoch;
+    boost::intrusive_ptr<ReplicatedPG> pg;
+    void *obc;
+    entity_name_t entity;
+    utime_t expire;
+    HandleWatchTimeout(
+      epoch_t cur_epoch,
+      ReplicatedPG *pg,
+      void *obc,
+      entity_name_t entity,
+      utime_t expire) : cur_epoch(cur_epoch),
+			pg(pg), obc(obc), entity(entity), expire(expire) {
+      assert(pg->is_locked());
+      static_cast<ReplicatedPG::ObjectContext*>(obc)->get();
+    }
+    void finish(int) {
+      assert(pg->is_locked());
+      if (cur_epoch < pg->last_peering_reset)
+	return;
+      // handle_watch_timeout gets its own ref
+      static_cast<ReplicatedPG::ObjectContext*>(obc)->get();
+      pg->handle_watch_timeout(obc, entity, expire);
+    }
+    ~HandleWatchTimeout() {
+      assert(pg->is_locked());
+      pg->put_object_context(static_cast<ReplicatedPG::ObjectContext*>(obc));
+    }
+  };
+
   ObjectContext *obc = static_cast<ObjectContext *>(_obc);
 
   if (obc->unconnected_watchers.count(entity) == 0 ||
-      obc->unconnected_watchers[entity]->expire != expire) {
-    dout(10) << "handle_watch_timeout must have raced, no/wrong unconnected_watcher " << entity << dendl;
+      (obc->unconnected_watchers[entity] &&
+       obc->unconnected_watchers[entity]->expire != expire)) {
+     /* If obc->unconnected_watchers[entity] == NULL we know at least that
+      * the watcher for obc,entity should expire.  We might not have been
+      * the intended Context*, but that's ok since the intended one will
+      * take this branch and assume it raced. */
+    dout(10) << "handle_watch_timeout must have raced, no/wrong unconnected_watcher "
+	     << entity << dendl;
     put_object_context(obc);
+    return;
+  }
+
+  if (is_degraded_object(obc->obs.oi.soid)) {
+    callbacks_for_degraded_object[obc->obs.oi.soid].push_back(
+      new HandleWatchTimeout(get_osdmap()->get_epoch(),
+			     this, _obc, entity, expire)
+      );
+    dout(10) << "handle_watch_timeout waiting for degraded on obj "
+	     << obc->obs.oi.soid
+	     << dendl;
+    obc->unconnected_watchers[entity] = 0; // Callback in progress, but not this one!
+    put_object_context(obc); // callback got its own ref
+    return;
+  }
+
+  if (scrubber.write_blocked_by_scrub(obc->obs.oi.soid)) {
+    dout(10) << "handle_watch_timeout waiting for scrub on obj "
+	     << obc->obs.oi.soid
+	     << dendl;
+    scrubber.add_callback(new HandleWatchTimeout(get_osdmap()->get_epoch(),
+						 this, _obc, entity, expire));
+    obc->unconnected_watchers[entity] = 0; // Callback in progress, but not this one!
+    put_object_context(obc); // callback got its own ref
     return;
   }
 
@@ -5619,6 +5686,16 @@ void ReplicatedPG::finish_degraded_object(const hobject_t& oid)
     }
     put_object_context(i->second);
   }
+  if (callbacks_for_degraded_object.count(oid)) {
+    list<Context*> contexts;
+    contexts.swap(callbacks_for_degraded_object[oid]);
+    callbacks_for_degraded_object.erase(oid);
+    for (list<Context*>::iterator i = contexts.begin();
+	 i != contexts.end();
+	 ++i) {
+      (*i)->complete(0);
+    }
+  }
 }
 
 /** op_pull
@@ -6832,7 +6909,7 @@ int ReplicatedPG::recover_backfill(int max)
     MOSDPGBackfill *m = NULL;
     if (bound.is_max()) {
       m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_FINISH, e, e, info.pgid);
-      m->set_priority(g_conf->osd_recovery_op_priority);
+      // Use default priority here, must match sub_op priority
       /* pinfo.stats might be wrong if we did log-based recovery on the
        * backfilled portion in addition to continuing backfill.
        */
@@ -6840,7 +6917,7 @@ int ReplicatedPG::recover_backfill(int max)
       start_recovery_op(hobject_t::get_max());
     } else {
       m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_PROGRESS, e, e, info.pgid);
-      m->set_priority(g_conf->osd_recovery_op_priority);
+      // Use default priority here, must match sub_op priority
     }
     m->last_backfill = bound;
     m->stats = pinfo.stats.stats;
