@@ -2431,8 +2431,21 @@ void OSD::disconnect_session_watches(Session *session)
     dout(10) << "obc=" << (void *)obc << dendl;
 
     ReplicatedPG *pg = static_cast<ReplicatedPG *>(lookup_lock_raw_pg(oiter->second));
-    assert(pg);
+    if (!pg) {
+      /* pg removed between watch_unlock.Unlock() and now, all related
+       * watch structures would have been cleaned up in remove_watchers_and_notifies
+       */
+      continue; 
+    }
     service.watch_lock.Lock();
+
+    if (!session->watches.count((void*)obc)) {
+      // Raced with watch removal, obc is invalid
+      service.watch_lock.Unlock();
+      pg->unlock();
+      continue;
+    }
+
     /* NOTE! fix this one, should be able to just lookup entity name,
        however, we currently only keep EntityName on the session and not
        entity_name_t. */
@@ -2450,6 +2463,7 @@ void OSD::disconnect_session_watches(Session *session)
 		 << ", expires " << expire << dendl;
         obc->watchers.erase(witer++);
 	pg->put_object_context(obc);
+	session->con->put();
 	session->put();
       }
       if (witer == obc->watchers.end())
@@ -4756,9 +4770,9 @@ void OSD::handle_pg_create(OpRequestRef op)
       continue;
     }
     if (up != acting) {
-      dout(10) << "mkpg " << pgid << "  up " << up << " != acting " << acting << dendl;
-      clog.error() << "mkpg " << pgid << " up " << up << " != acting "
-	    << acting << "\n";
+      dout(10) << "mkpg " << pgid << "  up " << up << " != acting " << acting << ", ignoring" << dendl;
+      // we'll get a query soon anyway, since we know the pg
+      // must exist. we can ignore this.
       continue;
     }
 

@@ -22,7 +22,7 @@
 #include <dirent.h>
 #include <sys/xattr.h>
 
-TEST(LibCephFS, Open_empty_component) {
+TEST(LibCephFS, OpenEmptyComponent) {
 
   pid_t mypid = getpid();
   struct ceph_mount_info *cmount;
@@ -59,7 +59,7 @@ TEST(LibCephFS, Open_empty_component) {
   ceph_shutdown(cmount);
 }
 
-TEST(LibCephFS, Mount_non_exist) {
+TEST(LibCephFS, MountNonExist) {
 
   struct ceph_mount_info *cmount;
 
@@ -68,7 +68,7 @@ TEST(LibCephFS, Mount_non_exist) {
   ASSERT_NE(0, ceph_mount(cmount, "/non-exist"));
 }
 
-TEST(LibCephFS, Mount_double) {
+TEST(LibCephFS, MountDouble) {
 
   struct ceph_mount_info *cmount;
 
@@ -79,7 +79,7 @@ TEST(LibCephFS, Mount_double) {
   ceph_shutdown(cmount);
 }
 
-TEST(LibCephFS, Mount_remount) {
+TEST(LibCephFS, MountRemount) {
 
   struct ceph_mount_info *cmount;
 
@@ -96,7 +96,7 @@ TEST(LibCephFS, Mount_remount) {
   ceph_shutdown(cmount);
 }
 
-TEST(LibCephFS, Unmount_unmounted) {
+TEST(LibCephFS, UnmountUnmounted) {
 
   struct ceph_mount_info *cmount;
 
@@ -105,7 +105,7 @@ TEST(LibCephFS, Unmount_unmounted) {
   ASSERT_EQ(-ENOTCONN, ceph_unmount(cmount));
 }
 
-TEST(LibCephFS, Release_unmounted) {
+TEST(LibCephFS, ReleaseUnmounted) {
 
   struct ceph_mount_info *cmount;
 
@@ -114,7 +114,7 @@ TEST(LibCephFS, Release_unmounted) {
   ASSERT_EQ(0, ceph_release(cmount));
 }
 
-TEST(LibCephFS, Release_mounted) {
+TEST(LibCephFS, ReleaseMounted) {
 
   struct ceph_mount_info *cmount;
 
@@ -125,7 +125,7 @@ TEST(LibCephFS, Release_mounted) {
   ceph_shutdown(cmount);
 }
 
-TEST(LibCephFS, Unmount_release) {
+TEST(LibCephFS, UnmountRelease) {
 
   struct ceph_mount_info *cmount;
 
@@ -149,7 +149,7 @@ TEST(LibCephFS, Mount) {
   ceph_shutdown(cmount);
 }
 
-TEST(LibCephFS, Open_layout) {
+TEST(LibCephFS, OpenLayout) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
@@ -171,7 +171,7 @@ TEST(LibCephFS, Open_layout) {
   ceph_shutdown(cmount);
 }
 
-TEST(LibCephFS, Dir_ls) {
+TEST(LibCephFS, DirLs) {
 
   pid_t mypid = getpid();
 
@@ -332,7 +332,7 @@ TEST(LibCephFS, Dir_ls) {
   ceph_shutdown(cmount);
 }
 
-TEST(LibCephFS, Many_nested_dirs) {
+TEST(LibCephFS, ManyNestedDirs) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
@@ -427,7 +427,7 @@ TEST(LibCephFS, Xattrs) {
   ceph_shutdown(cmount);
 }
 
-TEST(LibCephFS, Lstat_slashdot) {
+TEST(LibCephFS, LstatSlashdot) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
@@ -440,7 +440,7 @@ TEST(LibCephFS, Lstat_slashdot) {
   ceph_shutdown(cmount);
 }
 
-TEST(LibCephFS, Double_chmod) {
+TEST(LibCephFS, DoubleChmod) {
 
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
@@ -688,7 +688,7 @@ TEST(LibCephFS, LoopSyms) {
   ceph_shutdown(cmount);
 }
 
-TEST(LibCephFS, Hardlink_no_original) {
+TEST(LibCephFS, HardlinkNoOriginal) {
 
   int mypid = getpid();
 

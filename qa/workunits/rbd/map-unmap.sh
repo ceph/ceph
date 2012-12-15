@@ -10,8 +10,6 @@ IMAGE_SIZE="1024"	# MB
 ID_TIMEOUT="10"		# seconds to wait to get rbd id after mapping
 ID_DELAY=".1"		# floating-point seconds to delay before rescan
 
-MAP_DELAY=".25"		# floating-point seconds to delay before unmap
-
 function get_time() {
 	date '+%s'
 }
@@ -22,26 +20,34 @@ function times_up() {
 	test $(get_time) -ge "${end_time}"
 }
 
+function _get_id() {
+	[ $# -eq 1 ] || exit 99
+	local image_name="$1"
+	local id=""
+
+	cd /sys/bus/rbd/devices
+	for i in *; do
+		if [ "$(cat $i/name)" = "${image_name}" ]; then
+			id="$i"
+			break
+		fi
+	done
+	cd - >/dev/null
+
+	echo $id
+	test -n "${id}"		# return code 0 if id was found
+}
 function get_id() {
 	[ $# -eq 1 ] || exit 99
 	local image_name="$1"
 	local id=""
 	local end_time=$(expr $(get_time) + ${ID_TIMEOUT})
 
-	cd /sys/bus/rbd/devices
-
-	while [ -z "${id}" ]; do
-		if times_up "${end_time}"; then
-			break;
-		fi
-		for i in *; do
-			if [ "$(cat $i/name)" = "${image_name}" ]; then
-				id=$i
-				break
-			fi
-		done
+	while ! id=$(_get_id "${image_name}") && ! times_up "${end_time}"; do
+		echo "get_id: image not mapped; trying again after delay" >&2
 		sleep "${ID_DELAY}"
 	done
+
 	echo $id
 	test -n "${id}"		# return code 0 if id was found
 }
@@ -51,11 +57,12 @@ function map_unmap() {
 	local image_name="$1"
 
 	rbd map "${image_name}"
+	udevadm settle
+
 	RBD_ID=$(get_id "${image_name}")
 
-	sleep "${MAP_DELAY}"
-
 	rbd unmap "/dev/rbd${RBD_ID}"
+	udevadm settle
 }
 
 function setup() {
