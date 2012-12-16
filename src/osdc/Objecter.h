@@ -28,7 +28,6 @@
 #include <list>
 #include <map>
 #include <memory>
-#include <ext/hash_map>
 using namespace std;
 using namespace __gnu_cxx;
 
@@ -884,7 +883,7 @@ public:
 
  private:
   // pending ops
-  hash_map<tid_t,Op*>       ops;
+  map<tid_t,Op*>            ops;
   int                       num_homeless_ops;
   map<uint64_t, LingerOp*>  linger_ops;
   map<tid_t,PoolStatOp*>    poolstat_ops;

@@ -439,10 +439,10 @@ void Objecter::scan_requests(bool skipped_map,
   }
 
   // check for changed request mappings
-  for (hash_map<tid_t,Op*>::iterator p = ops.begin();
-       p != ops.end();
-       ++p) {
+  map<tid_t,Op*>::iterator p = ops.begin();
+  while (p != ops.end()) {
     Op *op = p->second;
+    ++p;   // check_op_pool_dne() may touch ops; prevent iterator invalidation
     ldout(cct, 10) << " checking op " << op->tid << dendl;
     int r = recalc_op_target(op);
     switch (r) {
@@ -568,7 +568,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
   // unpause requests?
   if ((was_pauserd && !pauserd) ||
       (was_pausewr && !pausewr))
-    for (hash_map<tid_t,Op*>::iterator p = ops.begin();
+    for (map<tid_t,Op*>::iterator p = ops.begin();
 	 p != ops.end();
 	 p++) {
       Op *op = p->second;
@@ -900,7 +900,7 @@ void Objecter::tick()
   cutoff -= cct->_conf->objecter_timeout;  // timeout
 
   unsigned laggy_ops = 0;
-  for (hash_map<tid_t,Op*>::iterator p = ops.begin();
+  for (map<tid_t,Op*>::iterator p = ops.begin();
        p != ops.end();
        p++) {
     Op *op = p->second;
@@ -2010,7 +2010,7 @@ void Objecter::ms_handle_remote_reset(Connection *con)
 void Objecter::dump_active()
 {
   ldout(cct, 20) << "dump_active .. " << num_homeless_ops << " homeless" << dendl;
-  for (hash_map<tid_t,Op*>::iterator p = ops.begin(); p != ops.end(); p++) {
+  for (map<tid_t,Op*>::iterator p = ops.begin(); p != ops.end(); p++) {
     Op *op = p->second;
     ldout(cct, 20) << op->tid << "\t" << op->pgid << "\tosd." << (op->session ? op->session->osd : -1)
 	    << "\t" << op->oid << "\t" << op->ops << dendl;
@@ -2033,7 +2033,7 @@ void Objecter::dump_requests(Formatter& fmt) const
 void Objecter::dump_ops(Formatter& fmt) const
 {
   fmt.open_array_section("ops");
-  for (hash_map<tid_t,Op*>::const_iterator p = ops.begin();
+  for (map<tid_t,Op*>::const_iterator p = ops.begin();
        p != ops.end();
        ++p) {
     Op *op = p->second;
