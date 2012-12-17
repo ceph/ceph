@@ -9150,12 +9150,11 @@ CInode *MDCache::add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<Co
   } else {
     in->decode_replica(p, false);
     dout(10) << "add_replica_inode had " << *in << dendl;
-    assert(!dn || dn->get_linkage()->get_inode() == in);
   }
 
   if (dn) {
-    assert(dn->get_linkage()->is_primary());
-    assert(dn->get_linkage()->get_inode() == in);
+    if (!dn->get_linkage()->is_primary() || dn->get_linkage()->get_inode() != in)
+      dout(10) << "add_replica_inode different linkage in dentry " << *dn << dendl;
     
     dn->get_dir()->take_ino_waiting(in->ino(), finished);
   }
