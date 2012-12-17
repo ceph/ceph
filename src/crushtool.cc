@@ -428,7 +428,7 @@ int main(int argc, const char **argv)
     exit(EXIT_FAILURE);
   }
   if ((!build) && (args.size() > 0)) {
-    cerr << "too many arguments!" << std::endl;
+    cerr << "unrecognized arguments: " << args << std::endl;
     exit(EXIT_FAILURE);
   }
   else {
