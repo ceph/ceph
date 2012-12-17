@@ -3250,11 +3250,10 @@ void Locker::simple_eval(SimpleLock *lock, bool *need_issue)
     return;
 
   CInode *in = 0;
-  int wanted = 0, issued = 0;
+  int wanted = 0;
   if (lock->get_type() != CEPH_LOCK_DN) {
     in = (CInode*)lock->get_parent();
-    wanted = in->get_caps_wanted(NULL, NULL, lock->get_cap_shift());
-    issued = in->get_caps_issued(NULL, NULL, NULL, lock->get_cap_shift());
+    in->get_caps_wanted(&wanted, NULL, lock->get_cap_shift());
   }
   
   // -> excl?
@@ -3270,8 +3269,7 @@ void Locker::simple_eval(SimpleLock *lock, bool *need_issue)
   else if (lock->get_state() != LOCK_SYNC &&
 	   !lock->is_xlocked() &&
 	   !lock->is_wrlocked() &&
-	   ((!(issued & CEPH_CAP_GEXCL) &&
-	     !lock->is_waiter_for(SimpleLock::WAIT_WR)) ||
+	   ((!(wanted & CEPH_CAP_GEXCL) && !lock->is_waiter_for(SimpleLock::WAIT_WR)) ||
 	    (lock->get_state() == LOCK_EXCL && in && in->get_target_loner() < 0))) {
     dout(7) << "simple_eval stable, syncing " << *lock 
 	    << " on " << *lock->get_parent() << dendl;
