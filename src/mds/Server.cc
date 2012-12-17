@@ -5616,10 +5616,10 @@ void Server::_rename_prepare(MDRequest *mdr,
   // nested beneath.
   bool force_journal = false;
   while (srci->is_dir()) {
-    // if we are auth for srci and exporting it, have any _any_ open dirfrags, we
-    // will (soon) have auth subtrees here.
-    if (srci->is_auth() && !destdn->is_auth() && srci->has_dirfrags()) {
-      dout(10) << " we are exporting srci, and have open dirfrags, will force journal" << dendl;
+    // if we are auth for srci and exporting it, force journal because we need create
+    // auth subtrees here during journal replay.
+    if (srci->is_auth() && !destdn->is_auth()) {
+      dout(10) << " we are exporting srci, will force journal" << dendl;
       force_journal = true;
       break;
     }
@@ -5720,7 +5720,8 @@ void Server::_rename_prepare(MDRequest *mdr,
 	  srci->get_dirfrags(ls);
 	  for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
 	    CDir *dir = *p;
-	    metablob->renamed_dir_frags.push_back(dir->get_frag());
+	    if (!dir->is_auth())
+	      metablob->renamed_dir_frags.push_back(dir->get_frag());
 	  }
 	  dout(10) << " noting renamed dir open frags " << metablob->renamed_dir_frags << dendl;
 	}
