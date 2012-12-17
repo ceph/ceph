@@ -4536,6 +4536,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
   if (straydn) {
     wrlocks.insert(&straydn->get_dir()->inode->filelock);
     wrlocks.insert(&straydn->get_dir()->inode->nestlock);
+    xlocks.insert(&straydn->lock);
   }
   if (in->is_dir())
     rdlocks.insert(&in->filelock);   // to verify it's empty
@@ -5300,6 +5301,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   if (straydn) {
     wrlocks.insert(&straydn->get_dir()->inode->filelock);
     wrlocks.insert(&straydn->get_dir()->inode->nestlock);
+    xlocks.insert(&straydn->lock);
   }
 
   // xlock versionlock on dentries if there are witnesses.
