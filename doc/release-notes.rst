@@ -56,6 +56,11 @@ Please refer to the document Upgrading from Argonaut to Bobtail.
   participate in the new protocol).  We recommend not waiting for an
   extended period of time between ``ceph-mon`` upgrades.
 
+* You should not create or use "format 2" RBD images until after all
+  ``ceph-osd`` daemons have been upgraded.  Note that "format 1" is
+  still the default.
+
+
 Compatibility changes
 ~~~~~~~~~~~~~~~~~~~~~
 
