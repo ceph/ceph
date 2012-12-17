@@ -5802,7 +5802,7 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
         for (list<CDir*>::iterator subdir = subdirs.begin();
             subdir != subdirs.end();
             ++subdir) {
-          if ((*subdir)->is_subtree_root()) {
+          if ((*subdir)->is_subtree_root() || my_ambiguous_imports.count((*subdir)->dirfrag())) {
             keep_inode = true;
             dout(10) << "trim_non_auth_subtree(" << dir << ") subdir " << *subdir << "is kept!" << dendl;
           }
