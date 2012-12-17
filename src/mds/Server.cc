@@ -5794,10 +5794,6 @@ void Server::_rename_prepare(MDRequest *mdr,
 				    CEPH_NOSNAP, 0, destdnl);
 	metablob->add_primary_dentry(oldin->get_projected_parent_dn(), true, oldin);
       }
-      if (destdn->is_auth()) {
-	// auth for dn, not targeti
-	metablob->add_null_dentry(destdn, true);
-      }
     }
   }
 
