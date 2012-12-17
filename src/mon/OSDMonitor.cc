@@ -2624,10 +2624,11 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
         int pg_num = 0;
         int pgp_num = 0;
 
-        /* Don't allow over 65535 pgs in a single pool */
         pg_num = parse_pos_long(m->cmd[4].c_str(), &ss);
-        if ((pg_num == 0) || (pg_num > 65535)) {
-          ss << "'pg_num' must be greater than 0 and lower or equal than 65535";
+        if ((pg_num == 0) || (pg_num > g_conf->mon_max_pool_pg_num)) {
+          ss << "'pg_num' must be greater than 0 and less than or equal to "
+             << g_conf->mon_max_pool_pg_num
+             << " (you may adjust 'mon max pool pg num' for higher values)";
           err = -ERANGE;
           goto out;
         }
