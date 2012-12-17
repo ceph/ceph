@@ -73,6 +73,12 @@ Compatibility changes
 * 'rbd lock list' and 'rbd showmapped' no longer use tabs as
   separators in their output.
 
+* There is configurable limit on the number of PGs when creating a new
+  pool, to prevent a user from accidentally specifying a ridiculous
+  number for pg_num.  It can be adjusted via the 'mon max pool pg num'
+  option on the monitor, and defaults to 65536 (the current max
+  supported by the Linux kernel client).
+
 * Bug fixes to the new osd capability format parsing properly validate
   the allowed operations. If an existing rados user gets permissions
   errors after upgrading, its capabilities were probably
