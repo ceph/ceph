@@ -42,6 +42,8 @@
                            permutation before re-descent
      --set-choose-total-tries N
                            set choose total descent attempts
+     --set-chooseleaf-descend-once <0|1>
+                           set chooseleaf to (not) retry the recursive descent
      --output-name name
                            prepend the data file(s) generated during the
                            testing routine with name
