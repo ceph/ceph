@@ -5823,6 +5823,9 @@ void OSD::handle_op(OpRequestRef op)
     if (g_conf->osd_max_write_size &&
 	m->get_data_len() > g_conf->osd_max_write_size << 20) {
       // journal can't hold commit!
+      derr << "handle_op msg data len " << m->get_data_len()
+	   << " > osd_max_write_size " << (g_conf->osd_max_write_size << 20)
+	   << " on " << *m << dendl;
       service.reply_op_error(op, -OSD_WRITETOOBIG);
       return;
     }
