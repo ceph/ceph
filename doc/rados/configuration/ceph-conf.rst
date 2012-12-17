@@ -317,7 +317,7 @@ object map (i.e., when running on the ``ext4`` filesystem). For example:
 		filestore xattr use omap = true #enables the object map. Only if running ext4.
 		
 	[osd.0]
-		hostname = {hostname}
+		host = {hostname}
 
 
 By default, Ceph expects that you will store an OSD's data with the following path:: 
