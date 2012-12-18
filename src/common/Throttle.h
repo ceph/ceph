@@ -21,7 +21,7 @@ class Throttle {
   list<Cond*> cond;
   
 public:
-  Throttle(CephContext *cct, std::string n, int64_t m = 0);
+  Throttle(CephContext *cct, std::string n, int64_t m = 0, bool use_perf = true);
   ~Throttle();
 
 private:
