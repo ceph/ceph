@@ -3,21 +3,6 @@
 export DH_VERBOSE=1
 export DESTDIR=$(CURDIR)/debian/tmp
 
-ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
-  NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
-  MAKEFLAGS += -j$(NUMJOBS)
-endif
-
-export DEB_HOST_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
-export DEB_BUILD_GNU_TYPE ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
-
-# Recommended snippet for Autoconf 2.52 or later
-ifeq ($(DEB_BUILD_GNU_TYPE), $(DEB_HOST_GNU_TYPE))
-  confflags += --build $(DEB_HOST_GNU_TYPE)
-else
-  confflags += --build $(DEB_BUILD_GNU_TYPE) --host $(DEB_HOST_GNU_TYPE)
-endif
-
 export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 
 extraopts += --with-ocf --with-rest-bench --with-nss
@@ -43,89 +28,46 @@ ifeq ($(shell grep -c -E '^Build-Depends:(.*,)?[[:space:]]*libgoogle-perftools-d
   # tcmalloc.
   extraopts += --without-tcmalloc
 endif
+ifeq ($(shell grep -c -E '^Build-Depends:(.*,)?[[:space:]]*libs3-dev([[:space:]]|,|$$)' debian/control),1)
+  # Use system provided libs3
+  extraopts += --with-system-libs3
+endif
+ifeq ($(shell grep -c -E '^Build-Depends:(.*,)?[[:space:]]*libleveldb-dev([[:space:]]|,|$$)' debian/control),1)
+  # Use system provided leveldb 
+  extraopts += --with-system-leveldb
+endif
 
-configure: configure-stamp
-configure-stamp:
-	dh_testdir
+%:
+	dh $@ --with javahelper --with python2 --parallel
+
+override_dh_auto_configure:
 	./autogen.sh
-	./configure --prefix=/usr --sbindir=/sbin --localstatedir=/var \
-	  --sysconfdir=/etc $(extraopts) $(confflags) \
-	  $(CEPH_EXTRA_CONFIGURE_ARGS)
-	touch $@
+	dh_auto_configure -- --sbindir=/sbin $(extraopts) \
+		$(CEPH_EXTRA_CONFIGURE_ARGS)
 
-build-arch: build
-build-indep: build
-
-build: build-stamp
-build-stamp: configure-stamp  
-	dh_testdir
-
-	$(MAKE)
-
+override_dh_auto_build:
+	dh_auto_build
 	cp src/init-ceph debian/ceph.init
 	cp src/init-radosgw debian/radosgw.init
 	cp src/logrotate.conf debian/ceph.logrotate
 	cp src/rgw/logrotate.conf debian/radosgw.logrotate
 
-	touch $@
-
-clean:
-	dh_testdir
-	dh_testroot
-	rm -f build-stamp configure-stamp
-
-	[ ! -f Makefile ] || $(MAKE) distclean
+override_dh_auto_clean:
+	dh_auto_clean
 	rm -f aclocal.m4 compile config.sub config.guess depcomp install-sh \
 	  ltmain.sh missing
 	rm -f configure Makefile.in man/Makefile.in src/Makefile.in
 	rm -f src/acconfig.h.in
 	rm -f debian/ceph.init debian/radosgw.init debian/ceph.logrotate debian/radosgw.logrotate
 
-	dh_clean
-
-install: build
-	dh_testdir
-	dh_testroot
-	dh_clean -k 
-	dh_installdirs
-
-	$(MAKE) DESTDIR=$(DESTDIR) install
+override_dh_auto_install:
+	dh_auto_install
 	sed -i "/dependency_libs/ s/'.*'/''/" `find . -name '*.la'`
 	install -D -m 644 udev/50-rbd.rules $(DESTDIR)/lib/udev/rules.d/50-rbd.rules
 	install -D -m 644 udev/95-ceph-osd.rules $(DESTDIR)/lib/udev/rules.d/95-ceph-osd.rules
 
-# Add here commands to install the package into debian/testpack.
-# Build architecture-independent files here.
-binary-indep: build install
-	dh_testdir
-	dh_testroot
-	jh_installlibs -v -i
-	dh_installchangelogs -i
-	dh_installdocs -i --all ChangeLog
-	dh_installexamples -i
-	dh_install -i --sourcedir=$(DESTDIR) --list-missing
-	dh_installman -i
-	dh_lintian -i
-	dh_link -i
-	dh_compress -i
-	dh_fixperms -i
-	dh_python2 -i
-	dh_installdeb -i
-	dh_gencontrol -i
-	dh_md5sums -i
-	dh_builddeb -i
-
-# We have nothing to do by default.
-# Build architecture-dependent files here.
-binary-arch: build install
-	dh_testdir
-	dh_testroot
-	dh_installchangelogs -a
-	dh_installdocs -a --all ChangeLog
-	dh_installexamples -a
-	dh_install -a --sourcedir=$(DESTDIR) --list-missing
-	dh_installlogrotate -a
-	dh_installinit -a --no-start
+override_dh_installinit:
+	dh_installinit --no-start
 	# dh_installinit is only set up to handle one upstart script
 	# per package, so do this ourselves
 	install -d -m0755 debian/ceph/etc/init
@@ -134,10 +76,8 @@ binary-arch: build install
 	mv debian/ceph/etc/init/ceph-mds* debian/ceph-mds/etc/init
 	install -d -m0755 debian/radosgw/etc/init
 	install -m0644 src/upstart/radosgw*.conf debian/radosgw/etc/init
-	dh_installman -a
-	dh_lintian -a
-	dh_link -a
 
+override_dh_strip:
 	dh_strip -pceph --dbg-package=ceph-dbg -k --exclude=libcls_
 	dh_strip -pceph-mds --dbg-package=ceph-mds-dbg
 	dh_strip -pceph-fuse --dbg-package=ceph-fuse-dbg
@@ -150,16 +90,13 @@ binary-arch: build install
 	dh_strip -pradosgw --dbg-package=radosgw-dbg
 	dh_strip -prest-bench --dbg-package=rest-bench-dbg
 	dh_strip -pceph-test --dbg-package=ceph-test-dbg
+	dh_strip -plibrados-dev
+	dh_strip -plibcephfs-jni --dbg-package=libcephfs-jni-dbg
 
-	dh_compress -a
-	dh_fixperms -a
-	dh_makeshlibs -a -X/usr/lib/rados-classes # exclude .so files in ceph package
-	dh_python2 -a
-	dh_installdeb -a
-	dh_shlibdeps -a
-	dh_gencontrol -a
-	dh_md5sums -a
-	dh_builddeb -a
+override_dh_makeshlibs:
+	dh_makeshlibs -X/usr/lib/rados-classes # exclude .so files in ceph package
 
-binary: binary-indep binary-arch
-.PHONY: build clean binary-indep binary-arch binary install configure
+override_dh_auto_test:
+	# Skip tests when building packages as they require
+	# python virtualenv
+	:
