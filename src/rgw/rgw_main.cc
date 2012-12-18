@@ -252,7 +252,9 @@ static void godown_handler(int signum)
   FCGX_ShutdownPending();
   pprocess->close_fd();
   signal(signum, sighandler_usr1);
-  alarm(5);
+  uint64_t secs = g_ceph_context->_conf->rgw_exit_timeout_secs;
+  if (secs)
+    alarm(secs);
 }
 
 static void godown_alarm(int signum)
