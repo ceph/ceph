@@ -94,7 +94,9 @@ override_dh_strip:
 	dh_strip -plibcephfs-jni --dbg-package=libcephfs-jni-dbg
 
 override_dh_makeshlibs:
-	dh_makeshlibs -X/usr/lib/rados-classes # exclude .so files in ceph package
+	# exclude .so files in ceph package
+	# exclude jni libraries in libcephfs-jni
+	dh_makeshlibs -X/usr/lib/rados-classes -X/usr/lib/jni
 
 override_dh_auto_test:
 	# Skip tests when building packages as they require
