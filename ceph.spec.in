@@ -74,6 +74,9 @@ performance, reliability, and scalability.
 Summary:	Ceph fuse-based client
 Group:		System Environment/Base
 Requires:	%{name}
+Requires:	fuse-libs
+Requires:	libstdc++
+Requires:	libuuid
 BuildRequires:	fuse-devel
 %description fuse
 FUSE based client for Ceph distributed network file system
