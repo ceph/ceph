@@ -815,14 +815,13 @@ public:
 
     tid_t register_tid;
     epoch_t map_dne_bound;
-    bool is_watch;
 
     LingerOp() : linger_id(0), flags(0), poutbl(NULL), pobjver(NULL),
 		 registered(false),
 		 on_reg_ack(NULL), on_reg_commit(NULL),
 		 session(NULL), session_item(this),
 		 register_tid(0),
-		 map_dne_bound(0), is_watch(false) {}
+		 map_dne_bound(0) {}
 
     // no copy!
     const LingerOp &operator=(const LingerOp& r);
