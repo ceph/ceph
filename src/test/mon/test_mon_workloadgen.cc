@@ -413,6 +413,7 @@ class OSDStub : public TestStub
       monc.shutdown();
       return err;
     }
+    assert(!monc.get_fsid().is_zero());
 
     monc.wait_auth_rotating(30.0);
 
