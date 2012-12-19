@@ -165,6 +165,7 @@ private:
   void send_incremental(epoch_t first, entity_inst_t& dest, bool onetime);
 
   void remove_redundant_pg_temp();
+  void remove_down_pg_temp();
   int reweight_by_utilization(int oload, std::string& out_str);
  
   bool preprocess_failure(class MOSDFailure *m);
