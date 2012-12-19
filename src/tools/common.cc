@@ -294,8 +294,12 @@ int do_command(CephToolCtx *ctx,
 	   << reply_from.name << " -> '"
 	   << reply_rs << "' (" << reply_rc << ")"
 	   << std::endl;
-  else
-    cout << reply_rs << std::endl;
+  else {
+    if (reply_rc >= 0)
+      cout << reply_rs << std::endl;
+    else
+      cerr << reply_rs << std::endl;
+  }
 
   return reply_rc;
 }
