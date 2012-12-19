@@ -1298,9 +1298,12 @@ void OSDMap::dump(Formatter *f) const
   for (map<pg_t,vector<int> >::const_iterator p = pg_temp->begin();
        p != pg_temp->end();
        p++) {
+    f->open_object_section("osds");
+    f->dump_stream("pgid") << p->first;
     f->open_array_section("osds");
     for (vector<int>::const_iterator q = p->second.begin(); q != p->second.end(); ++q)
       f->dump_int("osd", *q);
+    f->close_section();
     f->close_section();
   }
   f->close_section();
