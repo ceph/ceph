@@ -388,7 +388,7 @@ private:
     return -1;
   }
 
-  int apply_incremental(Incremental &inc);
+  int apply_incremental(const Incremental &inc);
 
   /// try to re-use/reference addrs in oldmap from newmap
   static void dedup(const OSDMap *oldmap, OSDMap *newmap);
