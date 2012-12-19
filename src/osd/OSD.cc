@@ -34,6 +34,7 @@
 #include "Watch.h"
 
 #include "common/ceph_argparse.h"
+#include "common/version.h"
 #include "os/FileStore.h"
 #include "os/FileJournal.h"
 
@@ -2872,7 +2873,12 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
 
   dout(20) << "do_command tid " << tid << " " << cmd << dendl;
 
-  if (cmd[0] == "injectargs") {
+  if (cmd[0] == "version") {
+    ss << pretty_version_to_str();
+    r = 0;
+    goto out;
+  }
+  else if (cmd[0] == "injectargs") {
     if (cmd.size() < 2) {
       r = -EINVAL;
       ss << "ignoring empty injectargs";
