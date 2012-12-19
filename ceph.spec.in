@@ -222,8 +222,8 @@ This package contains the Java libraries for the Ceph File System.
 
 %build
 # Find jni.h
-for i in -I/usr/lib/jvm/java/include{,/linux}; do
-      java_inc="$java_inc $i"
+for i in /usr/{lib64,lib}/jvm/java/include{,/linux}; do
+    [ -d $i ] && java_inc="$java_inc -I$i"
 done
 
 ./autogen.sh
