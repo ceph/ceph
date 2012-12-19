@@ -65,10 +65,17 @@ this results in only two monitor daemons, you may add more monitors by
 repeating this procedure until you have a sufficient number of ``ceph-mon`` 
 daemons to achieve a quorum.
 
+At this point you should define your monitor's id.  Traditionally, monitors 
+have been named with single letters (``a``, ``b``, ``c``, ...), but you are 
+free to define the id as you see fit.  For the purpose of this document, 
+please take into account that ``{mon-id}`` should be the id you chose, 
+without the ``mon.`` prefix (i.e., ``{mon-id}`` should be the ``a`` 
+on ``mon.a``).
+
 #. Create the default directory on your new monitor. :: 
 
 	ssh {new-mon-host}
-	sudo mkdir /var/lib/ceph/mon/ceph-{mon-letter}
+	sudo mkdir /var/lib/ceph/mon/ceph-{mon-id}
 
 #. Create a temporary directory ``{tmp}`` to keep the files needed during 
    this process. This directory should be different from monitor's default 
@@ -94,10 +101,10 @@ daemons to achieve a quorum.
    information about a quorum of monitors and their ``fsid``. You must also 
    specify a path to the monitor keyring:: 
 
-	sudo ceph-mon -i {mon-letter} --mkfs --monmap {tmp}/{filename} --keyring {tmp}/{filename}	
+	sudo ceph-mon -i {mon-id} --mkfs --monmap {tmp}/{filename} --keyring {tmp}/{filename}
 	
 
-#. Add a ``[mon.{letter}]`` entry for your new monitor in your ``ceph.conf`` file. ::
+#. Add a ``[mon.{mon-id}]`` entry for your new monitor in your ``ceph.conf`` file. ::
 
 	[mon.c]
 		host = new-mon-host
@@ -106,14 +113,14 @@ daemons to achieve a quorum.
 #. Add the new monitor to the list of monitors for you cluster (runtime). This enables 
    other nodes to use this monitor during their initial startup. ::
 
-	ceph mon add <name> <ip>[:<port>]
+	ceph mon add <mon-id> <ip>[:<port>]
 
 #. Start the new monitor and it will automatically join the cluster.
    The daemon needs to know which address to bind to, either via
    ``--public-addr {ip:port}`` or by setting ``mon addr`` in the
    appropriate section of ``ceph.conf``.  For example::
 
-	ceph-mon -i newname --public-addr {ip:port}
+	ceph-mon -i {mon-id} --public-addr {ip:port}
 
 
 Removing Monitors
@@ -134,11 +141,11 @@ quorum.
 
 #. Stop the monitor. ::
 
-	service ceph -a stop mon.{mon-letter}
+	service ceph -a stop mon.{mon-id}
 	
 #. Remove the monitor from the cluster. ::
 
-	ceph mon remove {mon-letter}	
+	ceph mon remove {mon-id}
 	
 #. Remove the monitor entry from ``ceph.conf``. 
 
@@ -157,7 +164,7 @@ a cluster that has placement groups that are persistently not ``active + clean``
 #. Navigate to a surviving monitor's ``monmap`` directory. :: 
 
 	ssh {mon-host}
-	cd /var/lib/ceph/mon/ceph-{mon-letter}/monmap
+	cd /var/lib/ceph/mon/ceph-{mon-id}/monmap
 
 #. List the directory contents and identify the last commmitted map.
    Directory contents will show a numeric list of maps. ::
@@ -172,13 +179,13 @@ a cluster that has placement groups that are persistently not ``active + clean``
 
 #. Copy the most recently committed file to a temporary directory. ::
 
-	cp /var/lib/ceph/mon/ceph-{mon-letter}/monmap/{last_committed} /tmp/surviving_map
+	cp /var/lib/ceph/mon/ceph-{mon-id}/monmap/{last_committed} /tmp/surviving_map
 	
 #. Remove the non-surviving monitors. 	For example, if you have three monitors, 
    ``mon.a``, ``mon.b``, and ``mon.c``, where only ``mon.a`` will survive, follow 
    the example below:: 
 
-	monmaptool /tmp/surviving_map --rm {mon-letter}
+	monmaptool /tmp/surviving_map --rm {mon-id}
 	#for example
 	monmaptool /tmp/surviving_map --rm b
 	monmaptool /tmp/surviving_map --rm c
@@ -190,6 +197,6 @@ a cluster that has placement groups that are persistently not ``active + clean``
 #. Inject the surviving map with the removed monitors into the surviving monitors. 
    For example, to inject a map into monitor ``mon.a``, follow the example below:: 
 
-	ceph-mon -i {mon-letter} --inject-monmap {map-path}
+	ceph-mon -i {mon-id} --inject-monmap {map-path}
 	#for example
 	ceph-mon -i a --inject-monmap /etc/surviving_map
