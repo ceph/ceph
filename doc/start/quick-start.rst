@@ -170,5 +170,8 @@ may proceed to the other Quick Start guides.
 
 #. For the CephFS filesystem, proceed to `CephFS Quick Start`_.
 
+#. For the RESTful Gateway, proceed to `Gateway Quick Start`_.
+
 .. _Block Device Quick Start: ../quick-rbd
 .. _CephFS Quick Start: ../quick-cephfs
+.. _Gateway Quick Start: ../quick-rgw
