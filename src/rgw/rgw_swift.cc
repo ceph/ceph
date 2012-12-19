@@ -644,14 +644,14 @@ bool RGWSwift::verify_swift_token(RGWRados *store, req_state *s)
 
   int ret;
 
-  if (g_conf->rgw_swift_use_keystone) {
+  if (!cct->_conf->rgw_keystone_url.empty()) {
     ret = validate_keystone_token(store, s->os_auth_token, &info, s->user);
     return (ret >= 0);
   }
 
   ret = validate_token(s->os_auth_token, &info);
   if (ret < 0)
-    return ret;
+    return false;
 
   if (info.user.empty()) {
     ldout(cct, 5) << "swift auth didn't authorize a user" << dendl;
