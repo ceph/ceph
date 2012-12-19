@@ -1,15 +1,14 @@
-=================
- RBD Quick Start
-=================
+==========================
+ Block Device Quick Start
+==========================
 
-To use RADOS block devices, you must have a running Ceph cluster. You may 
-execute this quick start on a separate host if you have the Ceph packages and 
-the ``/etc/ceph/ceph.conf`` file installed with the appropriate IP address
-and host name settings modified in the ``/etc/ceph/ceph.conf`` file.
+To use this guide, you must have executed the procedures in the `5-minute
+Quick Start`_ guide first. Execute this quick start on the client machine.
 
-.. important:: Mount the RBD device on a separate host from your Ceph cluster.
+.. important:: Mount the block device on the client machine, 
+   not the server machine.
 
-#. Create a RADOS Block Device image. :: 
+#. Create a block device image. :: 
 
 	rbd create foo --size 4096	
 
@@ -29,3 +28,8 @@ and host name settings modified in the ``/etc/ceph/ceph.conf`` file.
 
 	sudo mkdir /mnt/myrbd
 	sudo mount /dev/rbd/rbd/foo /mnt/myrbd
+
+See `block devices`_ for additional details.
+
+.. _5-minute Quick Start: ../quick-start
+.. _block devices: ../../rbd/rbd
