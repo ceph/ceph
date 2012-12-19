@@ -8,7 +8,8 @@ get started:
 .. toctree::
 
    5-minute Quick Start <quick-start>
-   Quick Start RBD <quick-rbd>
-   Quick Start CephFS <quick-cephfs>
+   Block Device Quick Start <quick-rbd>
+   CephFS Quick Start <quick-cephfs>
+   Gateway Quick Start <quick-rgw>
    Get Involved <get-involved>
    manual-install
