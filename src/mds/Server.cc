@@ -829,6 +829,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 		   mdr->client_request->get_dentry_wanted());
   }
 
+  reply->set_extra_bl(mdr->reply_extra_bl);
   messenger->send_message(reply, req->get_connection());
 
   mdr->did_early_reply = true;
@@ -2541,6 +2542,7 @@ void Server::handle_client_open(MDRequest *mdr)
     assert(mdr->dn[0].size());
     dn = mdr->dn[0].back();
   }
+
   reply_request(mdr, 0, cur, dn);
 }
 
@@ -2721,6 +2723,12 @@ void Server::handle_client_openc(MDRequest *mdr)
   ls->open_files.push_back(&in->item_open_file);
 
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in, follows);
+
+  if (mdr->client_request->get_connection()->has_feature(CEPH_FEATURE_REPLY_CREATE_INODE)) {
+    // add the file created flag onto the reply if create_flags features is supported
+    ::encode(in->inode.ino, mdr->reply_extra_bl);
+  }
+
   journal_and_reply(mdr, in, dn, le, fin);
 }
 
