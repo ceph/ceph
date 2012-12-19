@@ -1678,6 +1678,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     }
     else if (m->cmd[1] == "dump" ||
 	     m->cmd[1] == "tree" ||
+	     m->cmd[1] == "ls" ||
 	     m->cmd[1] == "getmap" ||
 	     m->cmd[1] == "getcrushmap") {
       string format = "plain";
@@ -1728,6 +1729,37 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	  if (r == 0) {
 	    rdata.append(ds);
 	    ss << "dumped osdmap epoch " << p->get_epoch();
+	  }
+	} else if (cmd == "ls") {
+	  stringstream ds;
+	  if (format == "json") {
+	    JSONFormatter jf(true);
+	    jf.open_array_section("osds");
+	    for (int i = 0; i < osdmap.get_max_osd(); i++) {
+	      if (osdmap.exists(i)) {
+		jf.dump_int("osd", i);
+	      }
+	    }
+	    jf.close_section();
+	    jf.flush(ds);
+	    r = 0;
+	  } else if (format == "plain") {
+	    bool first = true;
+	    for (int i = 0; i < osdmap.get_max_osd(); i++) {
+	      if (osdmap.exists(i)) {
+		if (!first)
+		  ds << "\n";
+		first = false;
+		ds << i;
+	      }
+	    }
+	    r = 0;
+	  } else {
+	    ss << "unrecognized format '" << format << "'";
+	    r = -EINVAL;
+	  }
+	  if (r == 0) {
+	    rdata.append(ds);
 	  }
 	} else if (cmd == "tree") {
 	  stringstream ds;
