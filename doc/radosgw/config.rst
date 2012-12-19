@@ -199,6 +199,9 @@ The RADOS Gateway user is a user of the RADOS Gateway. ::
 For example:: 	
 	
   radosgw-admin user create --uid=johndoe --display-name="John Doe" --email=john@example.com
+  
+.. code-block:: javascript
+  
   { "user_id": "johndoe",
     "rados_uid": 0,
     "display_name": "John Doe",
