@@ -46,6 +46,7 @@
 
 #include "include/rbd_types.h"
 #include "common/TextTable.h"
+#include "include/util.h"
 
 #if defined(__linux__)
 #include <linux/fs.h>
@@ -721,8 +722,10 @@ static int export_read_cb(uint64_t ofs, size_t len, const char *buf, void *arg)
       ret = write(fd, buf, len);
     }
   } else {		// not stdout
-    if (!buf) /* a hole */
+    if (!buf || buf_is_zero(buf, len)) {
+      /* a hole */
       return 0;
+    }
 
     ret = lseek64(fd, ofs, SEEK_SET);
     if (ret < 0)
