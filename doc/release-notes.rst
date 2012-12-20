@@ -93,12 +93,6 @@ Compatibility changes
   option on the monitor, and defaults to 65536 (the current max
   supported by the Linux kernel client).
 
-* Bug fixes to the new osd capability format parsing properly validate
-  the allowed operations. If an existing rados user gets permissions
-  errors after upgrading, its capabilities were probably
-  misconfigured. See the ceph-authtool man page for details on osd
-  capabilities.
-
 * The osd capabilities associated with a rados user have changed
   syntax since 0.48 argonaut. The new format is mostly backwards
   compatible, but there are two backwards-incompatible changes:
