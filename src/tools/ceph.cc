@@ -72,6 +72,7 @@ static void usage()
   cout << "\n";
   cout << "OBJECT STORAGE DEVICE (OSD) COMMANDS\n";
   cout << "  ceph osd dump [--format=json]\n";
+  cout << "  ceph osd ls [--format=json]\n";
   cout << "  ceph osd tree\n";
   cout << "  ceph osd map <pool-name> <object-name>\n";
   cout << "  ceph osd down <osd-id>\n";
@@ -103,7 +104,7 @@ static void usage()
   cout << "  ceph osd scrub <osd-id>\n";
   cout << "  ceph osd deep-scrub <osd-id>\n";
   cout << "  ceph osd repair <osd-id>\n";
-  cout << "  ceph osd tell N bench [bytes per write] [total bytes]\n";
+  cout << "  ceph osd tell <osd-id or *> bench [bytes per write] [total bytes]\n";
   cout << "\n";
   cout << "PLACEMENT GROUP (PG) COMMANDS\n";
   cout << "  ceph pg dump\n";
