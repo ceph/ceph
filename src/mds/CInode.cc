@@ -1932,6 +1932,20 @@ void CInode::unfreeze_auth_pin()
   }
 }
 
+void CInode::clear_ambiguous_auth(list<Context*>& finished)
+{
+  assert(state_test(CInode::STATE_AMBIGUOUSAUTH));
+  state_clear(CInode::STATE_AMBIGUOUSAUTH);
+  take_waiting(CInode::WAIT_SINGLEAUTH, finished);
+}
+
+void CInode::clear_ambiguous_auth()
+{
+  list<Context*> finished;
+  clear_ambiguous_auth(finished);
+  mdcache->mds->queue_waiters(finished);
+}
+
 // auth_pins
 bool CInode::can_auth_pin() {
   if (is_freezing_inode() || is_frozen_inode() || is_frozen_auth_pin())

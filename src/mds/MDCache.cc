@@ -2616,6 +2616,9 @@ void MDCache::handle_mds_failure(int who)
 	p->second->more()->waiting_on_slave.erase(who);
 	mds->wait_for_active_peer(who, new C_MDS_RetryRequest(this, p->second));
       }
+
+      if (p->second->more()->prepared_inode_exporter == who)
+	p->second->more()->prepared_inode_exporter = -1;
     }
   }
 
@@ -7606,6 +7609,9 @@ void MDCache::request_cleanup(MDRequest *mdr)
 
   // drop (local) auth pins
   mdr->drop_local_auth_pins();
+
+  if (mdr->ambiguous_auth_inode)
+    mdr->clear_ambiguous_auth(mdr->ambiguous_auth_inode);
 
   // drop stickydirs
   for (set<CInode*>::iterator p = mdr->stickydirs.begin();

@@ -5406,8 +5406,19 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   // do srcdn auth last
   int last = -1;
-  if (!srcdn->is_auth())
+  if (!srcdn->is_auth()) {
     last = srcdn->authority().first;
+    // set ambiguous auth for srci
+    mdr->set_ambiguous_auth(srci);
+    // Ask auth of srci to mark srci as ambiguous auth if more than two MDS
+    // are involved in the rename operation
+    if (srcdnl->is_primary() && mdr->more()->prepared_inode_exporter == -1) {
+      dout(10) << " preparing ambiguous auth for srci" << dendl;
+      mdr->more()->prepared_inode_exporter = last;
+      _rename_prepare_witness(mdr, last, witnesses, srcdn, destdn, straydn);
+      return;
+    }
+  }
   
   for (set<int>::iterator p = witnesses.begin();
        p != witnesses.end();
@@ -5418,7 +5429,7 @@ void Server::handle_client_rename(MDRequest *mdr)
     } else if (mdr->more()->waiting_on_slave.count(*p)) {
       dout(10) << " already waiting on witness mds." << *p << dendl;      
     } else {
-      _rename_prepare_witness(mdr, *p, srcdn, destdn, straydn);
+      _rename_prepare_witness(mdr, *p, witnesses, srcdn, destdn, straydn);
     }
   }
   if (!mdr->more()->waiting_on_slave.empty())
@@ -5428,7 +5439,7 @@ void Server::handle_client_rename(MDRequest *mdr)
       mdr->more()->witnessed.count(last) == 0 &&
       mdr->more()->waiting_on_slave.count(last) == 0) {
     dout(10) << " preparing last witness (srcdn auth)" << dendl;
-    _rename_prepare_witness(mdr, last, srcdn, destdn, straydn);
+    _rename_prepare_witness(mdr, last, witnesses, srcdn, destdn, straydn);
     return;
   }
 
@@ -5544,7 +5555,8 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
 
 // helpers
 
-void Server::_rename_prepare_witness(MDRequest *mdr, int who, CDentry *srcdn, CDentry *destdn, CDentry *straydn)
+void Server::_rename_prepare_witness(MDRequest *mdr, int who, set<int> &witnesse,
+				     CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
   dout(10) << "_rename_prepare_witness mds." << who << dendl;
   MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
@@ -5557,7 +5569,7 @@ void Server::_rename_prepare_witness(MDRequest *mdr, int who, CDentry *srcdn, CD
     mdcache->replicate_stray(straydn, who, req->stray);
   
   // srcdn auth will verify our current witness list is sufficient
-  req->witnesses = mdr->more()->witnessed;
+  req->witnesses = witnesse;
 
   mds->send_message_mds(req, who);
   
@@ -5974,6 +5986,8 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       // hack: fix auth bit
       in->state_set(CInode::STATE_AUTH);
       imported_inode = true;
+
+      mdr->clear_ambiguous_auth(in);
     }
 
     if (destdn->is_auth()) {
@@ -6100,15 +6114,8 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
 
   // am i srcdn auth?
   if (srcdn->is_auth()) {
-    if (srcdnl->is_primary()) {
-      // set ambiguous auth for srci
-      /*
-       * NOTE: we don't worry about ambiguous cache expire as we do
-       * with subtree migrations because all slaves will pin
-       * srcdn->get_inode() for duration of this rename.
-       */
-      srcdnl->get_inode()->state_set(CInode::STATE_AMBIGUOUSAUTH);
-
+    bool reply_witness = false;
+    if (srcdnl->is_primary() && !srcdnl->get_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
       // freeze?
       // we need this to
       //  - avoid conflicting lock state changes
@@ -6127,17 +6134,36 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
 	srcdnl->get_inode()->add_waiter(CInode::WAIT_FROZEN, new C_MDS_RetryRequest(mdcache, mdr));
 	return;
       }
+
+      /*
+       * set ambiguous auth for srci
+       * NOTE: we don't worry about ambiguous cache expire as we do
+       * with subtree migrations because all slaves will pin
+       * srcdn->get_inode() for duration of this rename.
+       */
+      srcdnl->get_inode()->set_ambiguous_auth();
+
+      // just mark the source inode as ambiguous auth if more than two MDS are involved.
+      // the master will send another OP_RENAMEPREP slave request later.
+      if (mdr->slave_request->witnesses.size() > 1) {
+	dout(10) << " set srci ambiguous auth; providing srcdn replica list" << dendl;
+	reply_witness = true;
+      }
     }
 
     // is witness list sufficient?
     set<int> srcdnrep;
     srcdn->list_replicas(srcdnrep);
-    for (set<int>::iterator p = srcdnrep.begin();
-	 p != srcdnrep.end();
-	 ++p) {
+    for (set<int>::iterator p = srcdnrep.begin(); p != srcdnrep.end(); ++p) {
       if (*p == mdr->slave_to_mds ||
 	  mdr->slave_request->witnesses.count(*p)) continue;
       dout(10) << " witness list insufficient; providing srcdn replica list" << dendl;
+      reply_witness = true;
+      break;
+    }
+
+    if (reply_witness) {
+      assert(srcdnrep.size());
       MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
 						     MMDSSlaveRequest::OP_RENAMEPREPACK);
       reply->witnesses.swap(srcdnrep);
@@ -6147,6 +6173,9 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
       return;	
     }
     dout(10) << " witness list sufficient: includes all srcdn replicas" << dendl;
+  } else if (srcdnl->is_primary() && srcdn->authority() != destdn->authority()) {
+    // set ambiguous auth for srci on witnesses
+    srcdnl->get_inode()->set_ambiguous_auth();
   }
 
   // encode everything we'd need to roll this back... basically, just the original state.
@@ -6255,6 +6284,7 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
   CDentry::linkage_t *destdnl = destdn->get_linkage();
 
   ESlaveUpdate *le;
+  list<Context*> finished;
   if (r == 0) {
     // write a commit to the journal
     le = new ESlaveUpdate(mdlog, "slave_rename_commit", mdr->reqid, mdr->slave_to_mds,
@@ -6263,9 +6293,7 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
 
     // unfreeze+singleauth inode
     //  hmm, do i really need to delay this?
-    if (srcdn->is_auth() && destdnl->is_primary() &&
-	destdnl->get_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
-      list<Context*> finished;
+    if (srcdn->is_auth() && destdnl->is_primary()) {
 
       CInode *in = destdnl->get_inode();
 
@@ -6285,40 +6313,36 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
       mdcache->migrator->finish_export_inode(destdnl->get_inode(), mdr->now, finished);
       mds->queue_waiters(finished);   // this includes SINGLEAUTH waiters.
 
-      // singleauth
-      assert(destdnl->get_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH));
-      destdnl->get_inode()->state_clear(CInode::STATE_AMBIGUOUSAUTH);
-      destdnl->get_inode()->take_waiting(CInode::WAIT_SINGLEAUTH, finished);
-
       // unfreeze
       assert(destdnl->get_inode()->is_frozen_inode());
       destdnl->get_inode()->unfreeze_inode(finished);
-
-      mds->queue_waiters(finished);
     }
+
+    // singleauth
+    if (destdnl->is_primary() && srcdn->authority() != destdn->authority())
+      destdnl->get_inode()->clear_ambiguous_auth(finished);
+
+    mds->queue_waiters(finished);
     mdr->cleanup();
 
     mdlog->submit_entry(le, new C_MDS_CommittedSlave(this, mdr));
     mdlog->flush();
   } else {
-    if (srcdn->is_auth() && destdnl->is_primary() &&
-	destdnl->get_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
-         list<Context*> finished;
+    if (srcdn->is_auth() && destdnl->is_primary()) {
 
       dout(10) << " reversing inode export of " << *destdnl->get_inode() << dendl;
       destdnl->get_inode()->abort_export();
     
-      // singleauth
-      assert(destdnl->get_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH));
-      destdnl->get_inode()->state_clear(CInode::STATE_AMBIGUOUSAUTH);
-      destdnl->get_inode()->take_waiting(CInode::WAIT_SINGLEAUTH, finished);
-      
       // unfreeze
       assert(destdnl->get_inode()->is_frozen_inode());
       destdnl->get_inode()->unfreeze_inode(finished);
-      
-      mds->queue_waiters(finished);
     }
+
+    // singleauth
+    if (destdnl->is_primary() && srcdn->authority() != destdn->authority())
+      destdnl->get_inode()->clear_ambiguous_auth(finished);
+
+    mds->queue_waiters(finished);
 
     // abort
     //  rollback_bl may be empty if we froze the inode but had to provide an expanded

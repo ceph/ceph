@@ -214,7 +214,7 @@ public:
   void _rmsnap_finish(MDRequest *mdr, CInode *diri, snapid_t snapid);
 
   // helpers
-  void _rename_prepare_witness(MDRequest *mdr, int who,
+  void _rename_prepare_witness(MDRequest *mdr, int who, set<int> &witnesse,
 			       CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   version_t _rename_prepare_import(MDRequest *mdr, CDentry *srcdn, bufferlist *client_map_bl);
   void _rename_prepare(MDRequest *mdr,
