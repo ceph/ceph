@@ -13,7 +13,7 @@
  */
 
 #include "common/perf_counters.h"
-#include "common/dout.h"
+#include "common/debug.h"
 #include "common/errno.h"
 
 #include <errno.h>

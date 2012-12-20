@@ -43,6 +43,7 @@ using namespace __gnu_cxx;
 
 #include "include/uuid.h"
 
+#include "global/global_context.h"
 
 // from include/linux/falloc.h:
 #ifndef FALLOC_FL_PUNCH_HOLE

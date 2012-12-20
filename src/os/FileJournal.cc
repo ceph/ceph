@@ -12,7 +12,6 @@
  * 
  */
 
-#include "common/debug.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "FileJournal.h"
@@ -30,6 +29,7 @@
 #include <sys/mount.h>
 
 #include "common/blkdev.h"
+#include "global/debug.h"
 
 
 #define dout_subsys ceph_subsys_journal

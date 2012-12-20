@@ -4,7 +4,7 @@
 #include <errno.h>
 
 #include "common/ceph_context.h"
-#include "common/dout.h"
+#include "common/debug.h"
 #include "common/Mutex.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"

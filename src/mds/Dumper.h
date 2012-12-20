@@ -20,6 +20,7 @@
 #include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
 #include "auth/Auth.h"
+#include "global/global_context.h"
 
 /**
  * This class lets you dump out an mds journal for troubleshooting or whatever.

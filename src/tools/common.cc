@@ -44,7 +44,7 @@ extern "C" {
 #include "common/Mutex.h"
 #include "common/Timer.h"
 #include "global/global_init.h"
-
+#include "global/debug.h"
 
 #include "include/assert.h"
 

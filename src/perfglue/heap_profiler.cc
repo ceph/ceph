@@ -18,7 +18,7 @@
 #include "common/environment.h"
 #include "common/LogClient.h"
 #include "global/global_context.h"
-#include "common/debug.h"
+#include "global/debug.h"
 
 bool ceph_using_tcmalloc()
 {

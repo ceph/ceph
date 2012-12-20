@@ -32,6 +32,8 @@ using namespace std;
 #include "include/CompatSet.h"
 #include "common/Formatter.h"
 
+#include "global/global_context.h"
+
 /*
 
  boot  --> standby, creating, or starting.

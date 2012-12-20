@@ -3,6 +3,7 @@
 
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
+#include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/config.h"
 #include "common/Finisher.h"

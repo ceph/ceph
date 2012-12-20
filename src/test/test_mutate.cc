@@ -19,6 +19,7 @@
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "common/config.h"
+#include "global/global_context.h"
 #include "global/global_init.h"
 #include "include/rados/librados.hpp"
 #include "include/types.h"

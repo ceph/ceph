@@ -23,6 +23,9 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDSubOp.h"
+
+#include "global/debug.h"
+
 class MOSDSubOpReply;
 
 class PGLSFilter {

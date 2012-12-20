@@ -14,13 +14,13 @@
 
 #include "MonitorStore.h"
 #include "common/Clock.h"
-#include "common/debug.h"
 #include "common/entity_name.h"
 #include "common/errno.h"
 #include "common/run_cmd.h"
 #include "common/safe_io.h"
 #include "common/config.h"
 #include "common/sync_filesystem.h"
+#include "global/debug.h"
 
 #if defined(__FreeBSD__)
 #include <sys/param.h>

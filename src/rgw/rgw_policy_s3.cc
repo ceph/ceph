@@ -1,10 +1,11 @@
 
 #include <errno.h>
 
+#include "global/debug.h"
+
 #include "rgw_policy_s3.h"
 #include "rgw_json.h"
 #include "rgw_common.h"
-
 
 #define dout_subsys ceph_subsys_rgw
 

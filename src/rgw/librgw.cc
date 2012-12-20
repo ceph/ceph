@@ -19,7 +19,7 @@
 #include "common/ceph_argparse.h"
 #include "common/ceph_context.h"
 #include "common/common_init.h"
-#include "common/dout.h"
+#include "common/debug.h"
 
 #include <errno.h>
 #include <sstream>

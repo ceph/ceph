@@ -15,7 +15,7 @@
 #include "DBObjectMap.h"
 #include <errno.h>
 
-#include "common/debug.h"
+#include "global/debug.h"
 #include "common/config.h"
 #include "include/assert.h"
 

@@ -1,6 +1,7 @@
 
 #include "common/Formatter.h"
 #include "common/utf8.h"
+#include "global/debug.h"
 #include "rgw_swift.h"
 #include "rgw_rest_swift.h"
 #include "rgw_acl_swift.h"

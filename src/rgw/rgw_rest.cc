@@ -4,6 +4,7 @@
 #include "common/Formatter.h"
 #include "common/utf8.h"
 #include "include/str_list.h"
+#include "global/debug.h"
 #include "rgw_common.h"
 #include "rgw_rados.h"
 #include "rgw_formats.h"

@@ -2,7 +2,9 @@
 #include "common/Clock.h"
 
 #include "common/config.h"
-#include "common/debug.h"
+
+#include "global/global_context.h"
+#include "global/debug.h"
 
 #define dout_subsys ceph_subsys_auth
 

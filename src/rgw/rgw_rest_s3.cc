@@ -4,6 +4,7 @@
 #include "common/ceph_crypto.h"
 #include "common/Formatter.h"
 #include "common/utf8.h"
+#include "global/debug.h"
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"

@@ -33,6 +33,8 @@
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
 
+#include "global/debug.h"
+
 #include <sstream>
 
 #define dout_subsys ceph_subsys_osd

@@ -13,7 +13,7 @@
  */
 
 #include "common/perf_counters.h"
-#include "common/dout.h"
+#include "common/debug.h"
 #include "include/Context.h"
 #include "msg/Messenger.h"
 #include "osdc/Journaler.h"

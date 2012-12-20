@@ -24,6 +24,7 @@ using std::deque;
 #include "common/Mutex.h"
 #include "common/Thread.h"
 #include "common/Throttle.h"
+#include "global/global_context.h"
 
 #ifdef HAVE_LIBAIO
 # include <libaio.h>

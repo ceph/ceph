@@ -19,7 +19,8 @@
 
 #include "HashIndex.h"
 
-#include "common/debug.h"
+#include "global/debug.h"
+
 #define dout_subsys ceph_subsys_filestore
 
 const string HashIndex::SUBDIR_ATTR = "contents";

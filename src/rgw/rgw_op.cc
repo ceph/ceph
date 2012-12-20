@@ -8,6 +8,7 @@
 #include "common/armor.h"
 #include "common/mime.h"
 #include "common/utf8.h"
+#include "global/debug.h"
 
 #include "rgw_rados.h"
 #include "rgw_op.h"

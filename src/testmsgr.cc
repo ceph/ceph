@@ -25,7 +25,9 @@ using namespace std;
 #include "messages/MPing.h"
 
 #include "common/Timer.h"
+#include "global/global_context.h"
 #include "global/global_init.h"
+#include "global/debug.h"
 #include "common/ceph_argparse.h"
 
 #ifndef DARWIN

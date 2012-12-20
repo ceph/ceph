@@ -29,6 +29,8 @@
 #include "common/config.h"
 #include "include/assert.h"
 
+#include "global/debug.h"
+
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon)
