@@ -163,6 +163,7 @@ OPTION(auth_service_ticket_ttl, OPT_DOUBLE, 60*60)
 OPTION(mon_client_hunt_interval, OPT_DOUBLE, 3.0)   // try new mon every N seconds until we connect
 OPTION(mon_client_ping_interval, OPT_DOUBLE, 10.0)  // ping every N seconds
 OPTION(mon_client_max_log_entries_per_message, OPT_INT, 1000)
+OPTION(mon_max_pool_pg_num, OPT_INT, 65536)
 OPTION(client_cache_size, OPT_INT, 16384)
 OPTION(client_cache_mid, OPT_FLOAT, .75)
 OPTION(client_use_random_mds, OPT_BOOL, false)
@@ -447,7 +448,6 @@ OPTION(rgw_swift_url, OPT_STR, "")             // the swift url, being published
 OPTION(rgw_swift_url_prefix, OPT_STR, "swift") // entry point for which a url is considered a swift url
 OPTION(rgw_swift_auth_url, OPT_STR, "")        // default URL to go and verify tokens for v1 auth (if not using internal swift auth)
 OPTION(rgw_swift_auth_entry, OPT_STR, "auth")  // entry point for which a url is considered a swift auth url
-OPTION(rgw_swift_use_keystone, OPT_BOOL, false)  // should swift use keystone?
 OPTION(rgw_keystone_url, OPT_STR, "")  // url for keystone server
 OPTION(rgw_keystone_admin_token, OPT_STR, "")  // keystone admin token (shared secret)
 OPTION(rgw_keystone_accepted_roles, OPT_STR, "Member, admin")  // roles required to serve requests

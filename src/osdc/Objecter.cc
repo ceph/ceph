@@ -267,7 +267,7 @@ void Objecter::send_linger(LingerOp *info)
   o->snapid = info->snap;
 
   // do not resend this; we will send a new op to reregister
-  o->should_resend = !info->is_watch;
+  o->should_resend = false;
 
   if (info->session) {
     int r = recalc_op_target(o);
@@ -278,7 +278,7 @@ void Objecter::send_linger(LingerOp *info)
 
   if (info->register_tid) {
     // repeat send.  cancel old registeration op, if any.
-    if (info->is_watch && ops.count(info->register_tid)) {
+    if (ops.count(info->register_tid)) {
       Op *o = ops[info->register_tid];
       cancel_op(o);
     }
@@ -335,11 +335,6 @@ void Objecter::unregister_linger(uint64_t linger_id)
   }
 }
 
-/**
- * Note that this is meant to handle a watch OR a notify, but not both in the same ObjectOperation.
- * This is because watches need to be resent with a new tid on map changes, while notifies
- * need to resend using the old tid.
- */
 tid_t Objecter::linger(const object_t& oid, const object_locator_t& oloc, 
 		       ObjectOperation& op,
 		       snapid_t snap, bufferlist& inbl, bufferlist *poutbl, int flags,
@@ -354,18 +349,6 @@ tid_t Objecter::linger(const object_t& oid, const object_locator_t& oloc,
   info->snap = snap;
   info->flags = flags;
   info->ops = op.ops;
-  bool saw_notify = false;
-  for (vector<OSDOp>::const_iterator it = info->ops.begin();
-       it != info->ops.end(); ++it) {
-    if (it->op.op == CEPH_OSD_OP_WATCH)
-      info->is_watch = true;
-    if (it->op.op == CEPH_OSD_OP_NOTIFY)
-      saw_notify = true;
-    if (info->is_watch)
-      assert(it->op.op != CEPH_OSD_OP_NOTIFY);
-    if (saw_notify)
-      assert(it->op.op != CEPH_OSD_OP_WATCH);
-  }
   info->inbl = inbl;
   info->poutbl = poutbl;
   info->pobjver = objver;
@@ -439,10 +422,10 @@ void Objecter::scan_requests(bool skipped_map,
   }
 
   // check for changed request mappings
-  for (hash_map<tid_t,Op*>::iterator p = ops.begin();
-       p != ops.end();
-       ++p) {
+  map<tid_t,Op*>::iterator p = ops.begin();
+  while (p != ops.end()) {
     Op *op = p->second;
+    ++p;   // check_op_pool_dne() may touch ops; prevent iterator invalidation
     ldout(cct, 10) << " checking op " << op->tid << dendl;
     int r = recalc_op_target(op);
     switch (r) {
@@ -568,7 +551,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
   // unpause requests?
   if ((was_pauserd && !pauserd) ||
       (was_pausewr && !pausewr))
-    for (hash_map<tid_t,Op*>::iterator p = ops.begin();
+    for (map<tid_t,Op*>::iterator p = ops.begin();
 	 p != ops.end();
 	 p++) {
       Op *op = p->second;
@@ -900,7 +883,7 @@ void Objecter::tick()
   cutoff -= cct->_conf->objecter_timeout;  // timeout
 
   unsigned laggy_ops = 0;
-  for (hash_map<tid_t,Op*>::iterator p = ops.begin();
+  for (map<tid_t,Op*>::iterator p = ops.begin();
        p != ops.end();
        p++) {
     Op *op = p->second;
@@ -2010,7 +1993,7 @@ void Objecter::ms_handle_remote_reset(Connection *con)
 void Objecter::dump_active()
 {
   ldout(cct, 20) << "dump_active .. " << num_homeless_ops << " homeless" << dendl;
-  for (hash_map<tid_t,Op*>::iterator p = ops.begin(); p != ops.end(); p++) {
+  for (map<tid_t,Op*>::iterator p = ops.begin(); p != ops.end(); p++) {
     Op *op = p->second;
     ldout(cct, 20) << op->tid << "\t" << op->pgid << "\tosd." << (op->session ? op->session->osd : -1)
 	    << "\t" << op->oid << "\t" << op->ops << dendl;
@@ -2033,7 +2016,7 @@ void Objecter::dump_requests(Formatter& fmt) const
 void Objecter::dump_ops(Formatter& fmt) const
 {
   fmt.open_array_section("ops");
-  for (hash_map<tid_t,Op*>::const_iterator p = ops.begin();
+  for (map<tid_t,Op*>::const_iterator p = ops.begin();
        p != ops.end();
        ++p) {
     Op *op = p->second;

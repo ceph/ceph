@@ -704,7 +704,7 @@ void OSDMap::dedup(const OSDMap *o, OSDMap *n)
     n->osd_uuid = o->osd_uuid;
 }
 
-int OSDMap::apply_incremental(Incremental &inc)
+int OSDMap::apply_incremental(const Incremental &inc)
 {
   if (inc.epoch == 1)
     fsid = inc.fsid;
@@ -717,7 +717,8 @@ int OSDMap::apply_incremental(Incremental &inc)
 
   // full map?
   if (inc.fullmap.length()) {
-    decode(inc.fullmap);
+    bufferlist bl(inc.fullmap);
+    decode(bl);
     return 0;
   }
 
@@ -731,20 +732,20 @@ int OSDMap::apply_incremental(Incremental &inc)
   if (inc.new_pool_max != -1)
     pool_max = inc.new_pool_max;
 
-  for (set<int64_t>::iterator p = inc.old_pools.begin();
+  for (set<int64_t>::const_iterator p = inc.old_pools.begin();
        p != inc.old_pools.end();
        p++) {
     pools.erase(*p);
     name_pool.erase(pool_name[*p]);
     pool_name.erase(*p);
   }
-  for (map<int64_t,pg_pool_t>::iterator p = inc.new_pools.begin();
+  for (map<int64_t,pg_pool_t>::const_iterator p = inc.new_pools.begin();
        p != inc.new_pools.end();
        p++) {
     pools[p->first] = p->second;
     pools[p->first].last_change = epoch;
   }
-  for (map<int64_t,string>::iterator p = inc.new_pool_names.begin();
+  for (map<int64_t,string>::const_iterator p = inc.new_pool_names.begin();
        p != inc.new_pool_names.end();
        p++) {
     if (pool_name.count(p->first))
@@ -753,7 +754,7 @@ int OSDMap::apply_incremental(Incremental &inc)
     name_pool[p->second] = p->first;
   }
 
-  for (map<int32_t,uint32_t>::iterator i = inc.new_weight.begin();
+  for (map<int32_t,uint32_t>::const_iterator i = inc.new_weight.begin();
        i != inc.new_weight.end();
        i++) {
     set_weight(i->first, i->second);
@@ -764,7 +765,7 @@ int OSDMap::apply_incremental(Incremental &inc)
   }
 
   // up/down
-  for (map<int32_t,uint8_t>::iterator i = inc.new_state.begin();
+  for (map<int32_t,uint8_t>::const_iterator i = inc.new_state.begin();
        i != inc.new_state.end();
        i++) {
     int s = i->second ? i->second : CEPH_OSD_UP;
@@ -778,7 +779,7 @@ int OSDMap::apply_incremental(Incremental &inc)
       (*osd_uuid)[i->first] = uuid_d();
     osd_state[i->first] ^= s;
   }
-  for (map<int32_t,entity_addr_t>::iterator i = inc.new_up_client.begin();
+  for (map<int32_t,entity_addr_t>::const_iterator i = inc.new_up_client.begin();
        i != inc.new_up_client.end();
        i++) {
     osd_state[i->first] |= CEPH_OSD_EXISTS | CEPH_OSD_UP;
@@ -786,38 +787,39 @@ int OSDMap::apply_incremental(Incremental &inc)
     if (inc.new_hb_up.empty())
       osd_addrs->hb_addr[i->first].reset(new entity_addr_t(i->second)); //this is a backward-compatibility hack
     else
-      osd_addrs->hb_addr[i->first].reset(new entity_addr_t(inc.new_hb_up[i->first]));
+      osd_addrs->hb_addr[i->first].reset(
+	new entity_addr_t(inc.new_hb_up.find(i->first)->second));
     osd_info[i->first].up_from = epoch;
   }
-  for (map<int32_t,entity_addr_t>::iterator i = inc.new_up_internal.begin();
+  for (map<int32_t,entity_addr_t>::const_iterator i = inc.new_up_internal.begin();
        i != inc.new_up_internal.end();
        i++)
     osd_addrs->cluster_addr[i->first].reset(new entity_addr_t(i->second));
 
   // info
-  for (map<int32_t,epoch_t>::iterator i = inc.new_up_thru.begin();
+  for (map<int32_t,epoch_t>::const_iterator i = inc.new_up_thru.begin();
        i != inc.new_up_thru.end();
        i++)
     osd_info[i->first].up_thru = i->second;
-  for (map<int32_t,pair<epoch_t,epoch_t> >::iterator i = inc.new_last_clean_interval.begin();
+  for (map<int32_t,pair<epoch_t,epoch_t> >::const_iterator i = inc.new_last_clean_interval.begin();
        i != inc.new_last_clean_interval.end();
        i++) {
     osd_info[i->first].last_clean_begin = i->second.first;
     osd_info[i->first].last_clean_end = i->second.second;
   }
-  for (map<int32_t,epoch_t>::iterator p = inc.new_lost.begin(); p != inc.new_lost.end(); p++)
+  for (map<int32_t,epoch_t>::const_iterator p = inc.new_lost.begin(); p != inc.new_lost.end(); p++)
     osd_info[p->first].lost_at = p->second;
 
   // xinfo
-  for (map<int32_t,osd_xinfo_t>::iterator p = inc.new_xinfo.begin(); p != inc.new_xinfo.end(); ++p)
+  for (map<int32_t,osd_xinfo_t>::const_iterator p = inc.new_xinfo.begin(); p != inc.new_xinfo.end(); ++p)
     osd_xinfo[p->first] = p->second;
 
   // uuid
-  for (map<int32_t,uuid_d>::iterator p = inc.new_uuid.begin(); p != inc.new_uuid.end(); ++p) 
+  for (map<int32_t,uuid_d>::const_iterator p = inc.new_uuid.begin(); p != inc.new_uuid.end(); ++p) 
     (*osd_uuid)[p->first] = p->second;
 
   // pg rebuild
-  for (map<pg_t, vector<int> >::iterator p = inc.new_pg_temp.begin(); p != inc.new_pg_temp.end(); p++) {
+  for (map<pg_t, vector<int> >::const_iterator p = inc.new_pg_temp.begin(); p != inc.new_pg_temp.end(); p++) {
     if (p->second.empty())
       pg_temp->erase(p->first);
     else
@@ -825,11 +827,11 @@ int OSDMap::apply_incremental(Incremental &inc)
   }
 
   // blacklist
-  for (map<entity_addr_t,utime_t>::iterator p = inc.new_blacklist.begin();
+  for (map<entity_addr_t,utime_t>::const_iterator p = inc.new_blacklist.begin();
        p != inc.new_blacklist.end();
        p++)
     blacklist[p->first] = p->second;
-  for (vector<entity_addr_t>::iterator p = inc.old_blacklist.begin();
+  for (vector<entity_addr_t>::const_iterator p = inc.old_blacklist.begin();
        p != inc.old_blacklist.end();
        p++)
     blacklist.erase(*p);
@@ -845,7 +847,8 @@ int OSDMap::apply_incremental(Incremental &inc)
 
   // do new crush map last (after up/down stuff)
   if (inc.crush.length()) {
-    bufferlist::iterator blp = inc.crush.begin();
+    bufferlist bl(inc.crush);
+    bufferlist::iterator blp = bl.begin();
     crush.reset(new CrushWrapper);
     crush->decode(blp);
   }
@@ -1298,9 +1301,12 @@ void OSDMap::dump(Formatter *f) const
   for (map<pg_t,vector<int> >::const_iterator p = pg_temp->begin();
        p != pg_temp->end();
        p++) {
+    f->open_object_section("osds");
+    f->dump_stream("pgid") << p->first;
     f->open_array_section("osds");
     for (vector<int>::const_iterator q = p->second.begin(); q != p->second.end(); ++q)
       f->dump_int("osd", *q);
+    f->close_section();
     f->close_section();
   }
   f->close_section();
