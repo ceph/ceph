@@ -136,13 +136,13 @@ void Log::set_stderr_level(int log, int crash)
 void Log::submit_entry(Entry *e)
 {
   pthread_mutex_lock(&m_queue_mutex);
-  pthread_cond_signal(&m_cond);
 
   // wait for flush to catch up
   while (m_new.m_len > m_max_new)
     pthread_cond_wait(&m_cond, &m_queue_mutex);
 
   m_new.enqueue(e);
+  pthread_cond_signal(&m_cond);
   pthread_mutex_unlock(&m_queue_mutex);
 }
 
