@@ -64,11 +64,16 @@ class RGWSwift {
 
   void init();
   void finalize();
+  void init_keystone();
+  void finalize_keystone();
+  bool supports_keystone() {
+    return !cct->_conf->rgw_keystone_url.empty();
+  }
 protected:
   int check_revoked();
 public:
 
-  RGWSwift(CephContext *_cct) : cct(_cct) {
+  RGWSwift(CephContext *_cct) : cct(_cct), keystone_revoke_thread(NULL) {
     init();
   }
   ~RGWSwift() {
