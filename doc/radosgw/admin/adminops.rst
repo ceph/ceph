@@ -289,7 +289,7 @@ Request Parameters
 
 :Description: The user ID to be created.
 :Type: String
-:Example ``foo_user``
+:Example: ``foo_user``
 :Required: Yes
 
 ``display-name``
@@ -304,7 +304,7 @@ Request Parameters
 
 :Description: The email address associated with the user.
 :Type: String
-:Example" ``foo@bar.com``
+:Example: ``foo@bar.com``
 :Required: No
 
 ``key-type``
@@ -393,7 +393,7 @@ Request Parameters
 
 :Description: The user ID to be modified.
 :Type: String
-:Example ``foo_user``
+:Example: ``foo_user``
 :Required: No
 
 ``display-name``
@@ -407,7 +407,7 @@ Request Parameters
 
 :Description: The email address to be associated with the user.
 :Type: String
-:Example" ``foo@bar.com``
+:Example: ``foo@bar.com``
 :Required: No
 
 ``gen-secret``
@@ -496,7 +496,7 @@ Request Parameters
 
 :Description: The user ID to be removed.
 :Type: String
-:Example ``foo_user``
+:Example: ``foo_user``
 :Required: Yes.
 
 ``purge-data``
@@ -533,7 +533,7 @@ Request Parameters
 
 :Description: The user ID under which a subuser is to  be created.
 :Type: String
-:Example ``foo_user``
+:Example: ``foo_user``
 :Required: Yes
 
 
@@ -638,7 +638,7 @@ Request Parameters
 
 :Description: The user ID under which the subuser is to be modified.
 :Type: String
-:Example ``foo_user``
+:Example: ``foo_user``
 :Required: Yes
 
 
@@ -743,7 +743,7 @@ Request Parameters
 
 :Description: The user ID under which the subuser is to be removed.
 :Type: String
-:Example ``foo_user``
+:Example: ``foo_user``
 :Required: Yes
 
 
@@ -838,7 +838,7 @@ Request Parameters
 
 :Description: The user ID to receive the new key.
 :Type: String
-:Example ``foo_user``
+:Example: ``foo_user``
 :Required: Yes
 
 ``subuser``
@@ -890,7 +890,7 @@ Request Parameters
 
 :Description: The user to remove the key from.
 :Type: String
-:Example ``foo_user``
+:Example: ``foo_user``
 :Required: No
 
 ``subuser``
@@ -1121,7 +1121,7 @@ Request Parameters
 
 :Description: The user ID to unlink the bucket from.
 :Type: String
-:Example ``foo_user``
+:Example: ``foo_user``
 :Required: Yes
 
 Response Entities
@@ -1157,7 +1157,7 @@ Request Parameters
 
 :Description: The user ID to link the bucket to.
 :Type: String
-:Example ``foo_user``
+:Example: ``foo_user``
 :Required: Yes
 
 Response Entities
@@ -1422,7 +1422,7 @@ Request Parameters
 
 :Description: The user ID to add an administrative capability to.
 :Type: String
-:Example ``foo_user``
+:Example: ``foo_user``
 :Required: Yes
 
 ``caps``
@@ -1502,7 +1502,7 @@ Request Parameters
 
 :Description: The user ID to remove an administrative capability from.
 :Type: String
-:Example ``foo_user``
+:Example: ``foo_user``
 :Required: Yes
 
 ``caps``
