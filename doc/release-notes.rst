@@ -58,7 +58,16 @@ Please refer to the document Upgrading from Argonaut to Bobtail.
 
 * You should not create or use "format 2" RBD images until after all
   ``ceph-osd`` daemons have been upgraded.  Note that "format 1" is
-  still the default.
+  still the default.  You can use the new ``ceph osd ls`` and
+  ``ceph tell osd.N version`` commands to doublecheck your cluster.
+  ``ceph osd ls`` will give a list of all OSD IDs that are part of the
+  cluster, and you can use that to write a simple shell loop to display
+  all the OSD version strings: ::
+
+      for i in $(ceph osd ls); do
+          ceph tell osd.${i} version
+      done
+
 
 
 Compatibility changes
@@ -110,6 +119,7 @@ Notable changes
 * auth: enable cephx by default
 * auth: expanded authentication settings for greater flexibility
 * build fixes for Fedora 18, CentOS/RHEL 6
+* ceph: new 'osd ls' and 'osd tell <osd.N> version' commands
 * ceph-debugpack: misc improvements
 * ceph-disk-prepare: creates and labels GPT partitions
 * ceph-disk-prepare: support for external journals, default mount/mkfs options, etc.
