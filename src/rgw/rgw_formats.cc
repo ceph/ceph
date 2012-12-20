@@ -208,7 +208,6 @@ done:
     pos--; // squash null termination
   strcpy(buf + pos, p);
   len = pos + strlen(p) + 1;
-  cerr << "RGWFormatter_Plain::write_data: len= " << len << " bytes" << std::endl;
 done_free:
   if (!p_on_stack)
     free(p);
