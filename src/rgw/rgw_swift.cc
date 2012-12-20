@@ -102,7 +102,7 @@ bool rgw_verify_os_token(req_state *s)
 
   int ret = rgw_swift_validate_token(s->os_auth_token, &info);
   if (ret < 0)
-    return ret;
+    return false;
 
   if (!info.user) {
     dout(5) << "swift auth didn't authorize a user" << dendl;
