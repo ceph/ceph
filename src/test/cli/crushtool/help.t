@@ -42,6 +42,8 @@
                            permutation before re-descent
      --set-choose-total-tries N
                            set choose total descent attempts
+     --set-chooseleaf-descend-once <0|1>
+                           set chooseleaf to (not) retry the recursive descent
      --output-name name
                            prepend the data file(s) generated during the
                            testing routine with name
@@ -49,4 +51,38 @@
                            export select data generated during testing routine
                            to CSV files for off-line post-processing
                            use --help-output for more information
-  [1]
+  $ crushtool --help-output
+  data output from testing routine ...
+            absolute_weights
+                  the decimal weight of each OSD
+                  data layout: ROW MAJOR
+                               OSD id (int), weight (int)
+             batch_device_expected_utilization_all
+                   the expected number of objects each OSD should receive per placement batch
+                   which may be a decimal value
+                   data layout: COLUMN MAJOR
+                                round (int), objects expected on OSD 0...OSD n (float)
+             batch_device_utilization_all
+                   the number of objects stored on each OSD during each placement round
+                   data layout: COLUMN MAJOR
+                                round (int), objects stored on OSD 0...OSD n (int)
+             device_utilization_all
+                    the number of objects stored on each OSD at the end of placements
+                    data_layout: ROW MAJOR
+                                 OSD id (int), objects stored (int), objects expected (float)
+             device_utilization
+                    the number of objects stored on each OSD marked 'up' at the end of placements
+                    data_layout: ROW MAJOR
+                                 OSD id (int), objects stored (int), objects expected (float)
+             placement_information
+                    the map of input -> OSD
+                    data_layout: ROW MAJOR
+                                 input (int), OSD's mapped (int)
+             proportional_weights_all
+                    the proportional weight of each OSD specified in the CRUSH map
+                    data_layout: ROW MAJOR
+                                 OSD id (int), proportional weight (float)
+             proportional_weights
+                    the proportional weight of each 'up' OSD specified in the CRUSH map
+                    data_layout: ROW MAJOR
+                                 OSD id (int), proportional weight (float)

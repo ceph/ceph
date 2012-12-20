@@ -302,6 +302,27 @@ void OSDMonitor::remove_redundant_pg_temp()
   }
 }
 
+void OSDMonitor::remove_down_pg_temp()
+{
+  dout(10) << "remove_down_pg_temp" << dendl;
+  OSDMap tmpmap(osdmap);
+  tmpmap.apply_incremental(pending_inc);
+
+  for (map<pg_t,vector<int> >::iterator p = tmpmap.pg_temp->begin();
+       p != tmpmap.pg_temp->end();
+       p++) {
+    unsigned num_up = 0;
+    for (vector<int>::iterator i = p->second.begin();
+	 i != p->second.end();
+	 ++i) {
+      if (!tmpmap.is_down(*i))
+	++num_up;
+    }
+    if (num_up == 0)
+      pending_inc.new_pg_temp[p->first].clear();
+  }
+}
+
 /* Assign a lower weight to overloaded OSDs.
  *
  * The osds that will get a lower weight are those with with a utilization
@@ -391,6 +412,9 @@ void OSDMonitor::create_pending()
 
   // drop any redundant pg_temp entries
   remove_redundant_pg_temp();
+
+  // drop any pg_temp entries with no up entries
+  remove_down_pg_temp();
 }
 
 
@@ -1678,6 +1702,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     }
     else if (m->cmd[1] == "dump" ||
 	     m->cmd[1] == "tree" ||
+	     m->cmd[1] == "ls" ||
 	     m->cmd[1] == "getmap" ||
 	     m->cmd[1] == "getcrushmap") {
       string format = "plain";
@@ -1728,6 +1753,37 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	  if (r == 0) {
 	    rdata.append(ds);
 	    ss << "dumped osdmap epoch " << p->get_epoch();
+	  }
+	} else if (cmd == "ls") {
+	  stringstream ds;
+	  if (format == "json") {
+	    JSONFormatter jf(true);
+	    jf.open_array_section("osds");
+	    for (int i = 0; i < osdmap.get_max_osd(); i++) {
+	      if (osdmap.exists(i)) {
+		jf.dump_int("osd", i);
+	      }
+	    }
+	    jf.close_section();
+	    jf.flush(ds);
+	    r = 0;
+	  } else if (format == "plain") {
+	    bool first = true;
+	    for (int i = 0; i < osdmap.get_max_osd(); i++) {
+	      if (osdmap.exists(i)) {
+		if (!first)
+		  ds << "\n";
+		first = false;
+		ds << i;
+	      }
+	    }
+	    r = 0;
+	  } else {
+	    ss << "unrecognized format '" << format << "'";
+	    r = -EINVAL;
+	  }
+	  if (r == 0) {
+	    rdata.append(ds);
 	  }
 	} else if (cmd == "tree") {
 	  stringstream ds;
@@ -2624,10 +2680,11 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
         int pg_num = 0;
         int pgp_num = 0;
 
-        /* Don't allow over 65535 pgs in a single pool */
         pg_num = parse_pos_long(m->cmd[4].c_str(), &ss);
-        if ((pg_num == 0) || (pg_num > 65535)) {
-          ss << "'pg_num' must be greater than 0 and lower or equal than 65535";
+        if ((pg_num == 0) || (pg_num > g_conf->mon_max_pool_pg_num)) {
+          ss << "'pg_num' must be greater than 0 and less than or equal to "
+             << g_conf->mon_max_pool_pg_num
+             << " (you may adjust 'mon max pool pg num' for higher values)";
           err = -ERANGE;
           goto out;
         }

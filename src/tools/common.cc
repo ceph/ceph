@@ -140,12 +140,14 @@ static void send_command(CephToolCtx *ctx)
       reply_rs = "error mapping pgid to an osd";
       reply_rc = -EINVAL;
       reply = true;
+      cmd_cond.Signal();
       return;
     }
     if (r == 0) {
       reply_rs = "pgid currently maps to no osd";
       reply_rc = -ENOENT;
       reply = true;
+      cmd_cond.Signal();
       return;
     }
     pending_target.set_name(entity_name_t::OSD(osds[0]));
@@ -156,14 +158,23 @@ static void send_command(CephToolCtx *ctx)
     char *end;
     int n = strtoll(start, &end, 10);
     if (end <= start) {
+      stringstream ss;
+      ss << "invalid osd id " << pending_target;
+      reply_rs = ss.str();
       reply_rc = -EINVAL;
       reply = true;
+      cmd_cond.Signal();
       return;
     }
     
     if (!osdmap->is_up(n)) {
+      stringstream ss;
+      ss << pending_target << " is not up";
+      reply_rs = ss.str();
       reply_rc = -ESRCH;
       reply = true;
+      cmd_cond.Signal();
+      return;
     } else {
       if (!ctx->concise)
 	*ctx->log << ceph_clock_now(g_ceph_context) << " " << pending_target << " <- " << pending_cmd << std::endl;
@@ -186,6 +197,7 @@ static void send_command(CephToolCtx *ctx)
 
   reply_rc = -EINVAL;
   reply = true;
+  cmd_cond.Signal();
 }
 
 static void handle_osd_map(CephToolCtx *ctx, MOSDMap *m)
@@ -282,8 +294,12 @@ int do_command(CephToolCtx *ctx,
 	   << reply_from.name << " -> '"
 	   << reply_rs << "' (" << reply_rc << ")"
 	   << std::endl;
-  else
-    cout << reply_rs << std::endl;
+  else {
+    if (reply_rc >= 0)
+      cout << reply_rs << std::endl;
+    else
+      cerr << reply_rs << std::endl;
+  }
 
   return reply_rc;
 }

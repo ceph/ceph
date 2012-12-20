@@ -644,14 +644,14 @@ bool RGWSwift::verify_swift_token(RGWRados *store, req_state *s)
 
   int ret;
 
-  if (g_conf->rgw_swift_use_keystone) {
+  if (supports_keystone()) {
     ret = validate_keystone_token(store, s->os_auth_token, &info, s->user);
     return (ret >= 0);
   }
 
   ret = validate_token(s->os_auth_token, &info);
   if (ret < 0)
-    return ret;
+    return false;
 
   if (info.user.empty()) {
     ldout(cct, 5) << "swift auth didn't authorize a user" << dendl;
@@ -678,7 +678,13 @@ bool RGWSwift::verify_swift_token(RGWRados *store, req_state *s)
 void RGWSwift::init()
 {
   get_str_list(cct->_conf->rgw_keystone_accepted_roles, roles_list);
+  if (supports_keystone())
+      init_keystone();
+}
 
+
+void RGWSwift::init_keystone()
+{
   keystone_token_cache = new RGWKeystoneTokenCache(cct, cct->_conf->rgw_keystone_token_cache_size);
 
   keystone_revoke_thread = new KeystoneRevokeThread(cct, this);
@@ -687,6 +693,12 @@ void RGWSwift::init()
 
 
 void RGWSwift::finalize()
+{
+  if (supports_keystone())
+    finalize_keystone();
+}
+
+void RGWSwift::finalize_keystone()
 {
   delete keystone_token_cache;
   keystone_token_cache = NULL;
