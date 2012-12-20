@@ -84,6 +84,10 @@ Compatibility changes
   directly related.  Any scripts or tools that use the ``ceph osd
   crush ...`` commands may need to be adjusted accordingly.
 
+* The ``ceph osd pool create <poolname> <pgnum>`` command now requires
+  the ``pgnum`` argument. Previously this was optional, and would
+  default to 8, which was almost never a good number.
+
 * 'rbd lock list' and 'rbd showmapped' no longer use tabs as
   separators in their output.
 
