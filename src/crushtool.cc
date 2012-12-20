@@ -80,7 +80,6 @@ cout << "           proportional_weights\n";
 cout << "                  the proportional weight of each 'up' OSD specified in the CRUSH map\n";
 cout << "                  data_layout: ROW MAJOR\n";
 cout << "                               OSD id (int), proportional weight (float)\n";
-exit(1);
 }
 
 void usage()
@@ -128,6 +127,8 @@ void usage()
   cout << "                         permutation before re-descent\n";
   cout << "   --set-choose-total-tries N\n";
   cout << "                         set choose total descent attempts\n";
+  cout << "   --set-chooseleaf-descend-once <0|1>\n";
+  cout << "                         set chooseleaf to (not) retry the recursive descent\n";
   cout << "   --output-name name\n";
   cout << "                         prepend the data file(s) generated during the\n";
   cout << "                         testing routine with name\n";
@@ -135,7 +136,6 @@ void usage()
   cout << "                         export select data generated during testing routine\n";
   cout << "                         to CSV files for off-line post-processing\n";
   cout << "                         use --help-output for more information\n";
-  exit(1);
 }
 
 struct bucket_types_t {
@@ -206,6 +206,9 @@ int main(int argc, const char **argv)
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
+    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
+      usage();
+      exit(0);
     } else if (ceph_argparse_witharg(args, i, &val, "-d", "--decompile", (char*)NULL)) {
       infn = val;
       decompile = true;
@@ -258,12 +261,16 @@ int main(int argc, const char **argv)
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
-      if (i == args.end())
-	usage();
+      if (i == args.end()) {
+	cerr << "expecting additional argument to --add-item" << std::endl;
+	exit(EXIT_FAILURE);
+      }
       add_weight = atof(*i);
       i = args.erase(i);
-      if (i == args.end())
-	usage();
+      if (i == args.end()) {
+	cerr << "expecting additional argument to --add-item" << std::endl;
+	exit(EXIT_FAILURE);
+      }
       add_name.assign(*i);
       i = args.erase(i);
     } else if (ceph_argparse_withint(args, i, &add_item, &err, "--update_item", (char*)NULL)) {
@@ -272,18 +279,24 @@ int main(int argc, const char **argv)
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
-      if (i == args.end())
-	usage();
+      if (i == args.end()) {
+	cerr << "expecting additional argument to --update-item" << std::endl;
+	exit(EXIT_FAILURE);
+      }
       add_weight = atof(*i);
       i = args.erase(i);
-      if (i == args.end())
-	usage();
+      if (i == args.end()) {
+	cerr << "expecting additional argument to --update-item" << std::endl;
+	exit(EXIT_FAILURE);
+      }
       add_name.assign(*i);
       i = args.erase(i);
     } else if (ceph_argparse_witharg(args, i, &val, "--loc", (char*)NULL)) {
       std::string type(val);
-      if (i == args.end())
-	usage();
+      if (i == args.end()) {
+	cerr << "expecting additional argument to --loc" << std::endl;
+	exit(EXIT_FAILURE);
+      }
       std::string name(*i);
       i = args.erase(i);
       add_loc[type] = name;
@@ -293,10 +306,12 @@ int main(int argc, const char **argv)
       tester.set_output_csv(true);
     } else if (ceph_argparse_flag(args, i, "--help-output", (char*)NULL)) {
       data_analysis_usage();
+      exit(0);
     } else if (ceph_argparse_witharg(args, i, &val, "--output-name", (char*)NULL)) {
       std::string name(val);
       if (i == args.end()) {
-        usage();
+	cerr << "expecting additional argument to --output-name" << std::endl;
+	exit(EXIT_FAILURE);
       }
       else {
         tester.set_output_data_file_name(name + "-");
@@ -305,8 +320,10 @@ int main(int argc, const char **argv)
       remove_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--reweight_item", (char*)NULL)) {
       reweight_name = val;
-      if (i == args.end())
-	usage();
+      if (i == args.end()) {
+	cerr << "expecting additional argument to --reweight-item" << std::endl;
+	exit(EXIT_FAILURE);
+      }
       reweight_weight = atof(*i);
       i = args.erase(i);
     } else if (ceph_argparse_flag(args, i, "--build", (char*)NULL)) {
@@ -382,8 +399,10 @@ int main(int argc, const char **argv)
 	exit(EXIT_FAILURE);
       }
       int dev = tmp;
-      if (i == args.end())
-	usage();
+      if (i == args.end()) {
+	cerr << "expecting additional argument to --weight" << std::endl;
+	exit(EXIT_FAILURE);
+      }
       float f = atof(*i);
       i = args.erase(i);
       tester.set_device_weight(dev, f);
@@ -394,27 +413,29 @@ int main(int argc, const char **argv)
   }
 
   if (test && !display && !write_to_file) {
-    cerr << "WARNING: no output selected!" << std::endl;
-    usage();
+    cerr << "WARNING: no output selected (via -o <filename>)" << std::endl;
+    exit(EXIT_FAILURE);
   }
 
   if (decompile + compile + build > 1) {
-    usage();
+    cout << "cannot specify more than one of compile, decompile, and build" << std::endl;
+    exit(EXIT_FAILURE);
   }
   if (!compile && !decompile && !build && !test && !reweight && !adjust &&
       add_item < 0 &&
       remove_name.empty() && reweight_name.empty()) {
-    usage();
+    cout << "no action specified; -h for help" << std::endl;
+    exit(EXIT_FAILURE);
   }
   if ((!build) && (args.size() > 0)) {
-    cerr << "too many arguments!" << std::endl;
-    usage();
+    cerr << "unrecognized arguments: " << args << std::endl;
+    exit(EXIT_FAILURE);
   }
   else {
     if ((args.size() % 3) != 0U) {
       cerr << "layers must be specified with 3-tuples of (name, buckettype, size)"
     	   << std::endl;
-      usage();
+      exit(EXIT_FAILURE);
     }
     for (size_t j = 0; j < args.size(); j += 3) {
       layer_t l;
@@ -519,7 +540,7 @@ int main(int argc, const char **argv)
 	}
       if (buckettype < 0) {
 	cerr << "unknown bucket type '" << l.buckettype << "'" << std::endl << std::endl;
-	usage();
+	exit(EXIT_FAILURE);
       }
 
       // build items
