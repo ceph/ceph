@@ -18,6 +18,8 @@ using namespace std;
 #include "include/frag.h"
 #include "include/xlist.h"
 
+#include "global/debug.h"
+
 #include "inode_backtrace.h"
 
 #include <boost/pool/pool.hpp>

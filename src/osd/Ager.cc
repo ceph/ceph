@@ -7,8 +7,8 @@
 #include "os/ObjectStore.h"
 
 #include "common/Clock.h"
-#include "common/debug.h"
 #include "global/global_context.h"
+#include "global/debug.h"
 
 // ick
 #include <sys/types.h>

@@ -16,6 +16,7 @@
 #include "rgw_tools.h"
 
 #include "common/Clock.h"
+#include "global/debug.h"
 
 #include "include/rados/librados.hpp"
 using namespace librados;

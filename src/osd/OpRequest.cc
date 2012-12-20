@@ -4,12 +4,13 @@
 #include "common/Formatter.h"
 #include <iostream>
 #include <vector>
-#include "common/debug.h"
 #include "common/config.h"
 #include "msg/Message.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDSubOp.h"
 #include "include/assert.h"
+#include "global/global_context.h"
+#include "global/debug.h"
 
 #define dout_subsys ceph_subsys_optracker
 #undef dout_prefix

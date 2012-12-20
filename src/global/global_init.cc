@@ -17,7 +17,6 @@
 #include "common/code_environment.h"
 #include "common/common_init.h"
 #include "common/config.h"
-#include "common/debug.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/signal.h"
@@ -26,6 +25,7 @@
 #include "global/global_init.h"
 #include "global/pidfile.h"
 #include "global/signal_handler.h"
+#include "global/debug.h"
 #include "include/compat.h"
 #include "include/color.h"
 

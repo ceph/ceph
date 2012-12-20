@@ -2,7 +2,7 @@
 
 #include "JournalingObjectStore.h"
 
-#include "common/debug.h"
+#include "global/debug.h"
 
 #define dout_subsys ceph_subsys_journal
 #undef dout_prefix

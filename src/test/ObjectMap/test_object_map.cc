@@ -11,6 +11,7 @@
 #include "os/HashIndex.h"
 #include "os/LevelDBStore.h"
 #include <sys/types.h>
+#include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include <dirent.h>

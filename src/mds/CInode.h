@@ -23,6 +23,8 @@
 #include "include/types.h"
 #include "include/lru.h"
 
+#include "global/debug.h"
+
 #include "mdstypes.h"
 #include "flock.h"
 

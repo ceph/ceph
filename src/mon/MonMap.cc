@@ -12,7 +12,7 @@
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
 
-#include "common/dout.h"
+#include "common/debug.h"
 
 using ceph::Formatter;
 

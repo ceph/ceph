@@ -11,6 +11,8 @@
 
 #include "include/str_list.h"
 
+#include "global/global_context.h"
+#include "global/debug.h"
 #include "common/ceph_crypto_cms.h"
 #include "common/armor.h"
 
