@@ -74,6 +74,9 @@ performance, reliability, and scalability.
 Summary:	Ceph fuse-based client
 Group:		System Environment/Base
 Requires:	%{name}
+Requires:	fuse-libs
+Requires:	libstdc++
+Requires:	libuuid
 BuildRequires:	fuse-devel
 %description fuse
 FUSE based client for Ceph distributed network file system
@@ -186,8 +189,26 @@ Requires:	libcephfs1 = %{version}-%{release}
 %description -n ceph-test
 This package contains Ceph benchmarks and test tools.
 
-# Enable building of debug package on distributions that don't automatically
-# build it.
+%package -n libcephfs-jni
+Summary:	Java Native Interface library for CephFS Java bindings.
+Group:		System Environment/Libraries
+License:	LGPL-2.0
+Requires:	java
+Requires:	libcephfs1 = %{version}-%{release}
+BuildRequires:  java-devel
+%description -n libcephfs-jni
+This package contains the Java Native Interface library for CephFS Java
+bindings.
+
+%package -n libcephfs-java
+Summary:	Java libraries for the Ceph File System.
+Group:		System Environment/Libraries
+License:	LGPL-2.0
+Requires:	java
+Requires:	libcephfs-jni = %{version}-%{release}-
+BuildRequires:  java-devel
+%description -n libcephfs-java
+This package contains the Java libraries for the Ceph File System.
 
 %if (0%{?centos} || 0%{?opensuse} || 0%{?suse_version})
 %debug_package
@@ -200,6 +221,11 @@ This package contains Ceph benchmarks and test tools.
 %setup -q
 
 %build
+# Find jni.h
+for i in /usr/{lib64,lib}/jvm/java/include{,/linux}; do
+    [ -d $i ] && java_inc="$java_inc -I$i"
+done
+
 ./autogen.sh
 MY_CONF_OPT=""
 
@@ -209,7 +235,8 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 
 # be explicit about --with/without-tcmalloc because the
 # autoconf default differs from what's needed for rpm
-%{configure}	--prefix=/usr \
+%{configure}	CPPFLAGS="$java_inc" \
+		--prefix=/usr \
 		--sbindir=/sbin \
 		--localstatedir=/var \
 		--sysconfdir=/etc \
@@ -219,6 +246,7 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 		--without-cryptopp \
 		--with-rest-bench \
 		--with-debug \
+		--enable-cephfs-java \
 		$MY_CONF_OPT \
 		%{?_with_ocf} \
 		%{?with_tcmalloc:--with-tcmalloc} %{!?with_tcmalloc:--without-tcmalloc} \
@@ -249,6 +277,13 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph/
+
+#  Relocate java packages to expected locations in buildroot.
+mkdir -p $RPM_BUILD_ROOT/usr/lib/jni
+mv $RPM_BUILD_ROOT/usr/lib64/libcephfs_jni.so* $RPM_BUILD_ROOT/usr/lib/jni/.
+mkdir -p $RPM_BUILD_ROOT/usr/share/java
+mv $RPM_BUILD_ROOT/usr/lib64/libcephfs.jar  $RPM_BUILD_ROOT/usr/share/java/.
+mv $RPM_BUILD_ROOT/usr/lib64/libcephfs-test.jar $RPM_BUILD_ROOT/usr/share/java/.
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -519,5 +554,14 @@ fi
 %{_bindir}/testtimers
 %{_bindir}/tpbench
 %{_bindir}/xattr_bench
+
+%files -n libcephfs-jni
+%defattr(-,root,root,-)
+/usr/lib/jni/libcephfs_jni.so*
+
+%files -n libcephfs-java
+%defattr(-,root,root,-)
+/usr/share/java/libcephfs.jar
+/usr/share/java/libcephfs-test.jar
 
 %changelog
