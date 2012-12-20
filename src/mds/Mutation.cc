@@ -106,6 +106,22 @@ void Mutation::unfreeze_auth_pin(CInode *inode)
   auth_pin_freeze = NULL;
 }
 
+void Mutation::set_ambiguous_auth(CInode *inode)
+{
+  if (!ambiguous_auth_inode) {
+    inode->set_ambiguous_auth();
+    ambiguous_auth_inode = inode;
+  } else
+    assert(ambiguous_auth_inode == inode);
+}
+
+void Mutation::clear_ambiguous_auth(CInode *inode)
+{
+  assert(ambiguous_auth_inode == inode);
+  ambiguous_auth_inode->clear_ambiguous_auth();
+  ambiguous_auth_inode = NULL;
+}
+
 bool Mutation::can_auth_pin(MDSCacheObject *object)
 {
   return object->can_auth_pin() || (is_auth_pinned(object) && object == auth_pin_freeze);
