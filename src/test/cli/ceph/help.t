@@ -29,6 +29,7 @@
   
   OBJECT STORAGE DEVICE (OSD) COMMANDS
     ceph osd dump [--format=json]
+    ceph osd ls [--format=json]
     ceph osd tree
     ceph osd map <pool-name> <object-name>
     ceph osd down <osd-id>
@@ -60,7 +61,7 @@
     ceph osd scrub <osd-id>
     ceph osd deep-scrub <osd-id>
     ceph osd repair <osd-id>
-    ceph osd tell N bench [bytes per write] [total bytes]
+    ceph osd tell <osd-id or *> bench [bytes per write] [total bytes]
   
   PLACEMENT GROUP (PG) COMMANDS
     ceph pg dump
