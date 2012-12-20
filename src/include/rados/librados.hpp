@@ -478,8 +478,10 @@ namespace librados
      * other than CEPH_NOSNAP
      */
     int aio_remove(const std::string& oid, AioCompletion *c);
-    
+
     int aio_flush();
+
+    int aio_stat(const std::string& oid, AioCompletion *c, uint64_t *psize, time_t *pmtime);
 
     int aio_exec(const std::string& oid, AioCompletion *c, const char *cls, const char *method,
 	         bufferlist& inbl, bufferlist *outbl);

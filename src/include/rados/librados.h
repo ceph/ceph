@@ -23,7 +23,7 @@ extern "C" {
 #endif
 
 #define LIBRADOS_VER_MAJOR 0
-#define LIBRADOS_VER_MINOR 48
+#define LIBRADOS_VER_MINOR 49
 #define LIBRADOS_VER_EXTRA 0
 
 #define LIBRADOS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
@@ -1443,6 +1443,20 @@ int rados_aio_read(rados_ioctx_t io, const char *oid,
  * @returns 0 on success, negative error code on failure
  */
 int rados_aio_flush(rados_ioctx_t io);
+
+
+/**
+ * Asynchronously get object stats (size/mtime)
+ *
+ * @param io ioctx
+ * @param o object name
+ * @param psize where to store object size
+ * @param pmtime where to store modification time
+ * @returns 0 on success, negative error code on failure
+ */
+int rados_aio_stat(rados_ioctx_t io, const char *o,
+		   rados_completion_t completion,
+		   uint64_t *psize, time_t *pmtime);
 
 /** @} Asynchronous I/O */
 

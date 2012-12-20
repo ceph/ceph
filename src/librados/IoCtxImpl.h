@@ -145,6 +145,14 @@ struct librados::IoCtxImpl {
     void finish(int r);
   };
 
+  struct C_aio_stat_Ack : public Context {
+    librados::AioCompletionImpl *c;
+    time_t *pmtime;
+    utime_t mtime;
+    C_aio_stat_Ack(AioCompletionImpl *_c, time_t *pm);
+    void finish(int r);
+  };
+
   struct C_aio_sparse_read_Ack : public Context {
     AioCompletionImpl *c;
     bufferlist *data_bl;
@@ -177,6 +185,7 @@ struct librados::IoCtxImpl {
   int aio_remove(const object_t &oid, AioCompletionImpl *c);
   int aio_exec(const object_t& oid, AioCompletionImpl *c, const char *cls,
 	       const char *method, bufferlist& inbl, bufferlist *outbl);
+  int aio_stat(const object_t& oid, AioCompletionImpl *c, uint64_t *psize, time_t *pmtime);
 
   int pool_change_auid(unsigned long long auid);
   int pool_change_auid_async(unsigned long long auid, PoolAsyncCompletionImpl *c);

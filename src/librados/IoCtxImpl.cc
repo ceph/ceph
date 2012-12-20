@@ -851,6 +851,21 @@ int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c)
   return 0;
 }
 
+
+int librados::IoCtxImpl::aio_stat(const object_t& oid, AioCompletionImpl *c,
+				  uint64_t *psize, time_t *pmtime)
+{
+  c->io = this;
+  C_aio_stat_Ack *onack = new C_aio_stat_Ack(c, pmtime);
+
+  Mutex::Locker l(*lock);
+  objecter->stat(oid, oloc,
+		 snap_seq, psize, &onack->mtime, 0,
+		 onack, &c->objver);
+
+  return 0;
+}
+
 int librados::IoCtxImpl::remove(const object_t& oid)
 {
   utime_t ut = ceph_clock_now(client->cct);
@@ -1559,6 +1574,33 @@ void librados::IoCtxImpl::C_aio_Ack::finish(int r)
   }
   if (c->is_read && c->callback_safe) {
     c->io->client->finisher.queue(new C_AioSafe(c));
+  }
+
+  c->put_unlock();
+}
+
+///////////////////////////// C_aio_stat_Ack ////////////////////////////
+
+librados::IoCtxImpl::C_aio_stat_Ack::C_aio_stat_Ack(AioCompletionImpl *_c,
+						    time_t *pm)
+   : c(_c), pmtime(pm)
+{
+  c->get();
+}
+
+void librados::IoCtxImpl::C_aio_stat_Ack::finish(int r)
+{
+  c->lock.Lock();
+  c->rval = r;
+  c->ack = true;
+  c->cond.Signal();
+
+  if (r >= 0 && pmtime) {
+    *pmtime = mtime.sec();
+  }
+
+  if (c->callback_complete) {
+    c->io->client->finisher.queue(new C_AioComplete(c));
   }
 
   c->put_unlock();
