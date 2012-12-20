@@ -44,6 +44,8 @@
 
 #include "common/DecayCounter.h"
 
+#include "global/global_context.h"
+
 #include <list>
 #include <memory>
 #include <string>

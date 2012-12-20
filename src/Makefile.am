@@ -1262,7 +1262,7 @@ libcommon_files = \
 	common/ceph_context.cc \
 	common/buffer.cc \
 	common/code_environment.cc \
-	common/dout.cc \
+	common/debug.cc \
 	common/signal.cc \
 	common/simple_spin.cc \
 	common/Thread.cc \
@@ -1471,8 +1471,8 @@ noinst_HEADERS = \
 	common/xattr.h\
 	common/blkdev.h\
 	common/compiler_extensions.h\
+	global/debug.h\
 	common/debug.h\
-	common/dout.h\
 	common/escape.h\
 	common/fd.h\
 	common/version.h\

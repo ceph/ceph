@@ -24,6 +24,7 @@ using namespace std;
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
+#include "global/debug.h"
 #include "mon/MonMap.h"
 #include "include/str_list.h"
 

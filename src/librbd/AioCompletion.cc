@@ -4,7 +4,7 @@
 #include <errno.h>
 
 #include "common/ceph_context.h"
-#include "common/dout.h"
+#include "common/debug.h"
 
 #include "librbd/AioRequest.h"
 #include "librbd/internal.h"

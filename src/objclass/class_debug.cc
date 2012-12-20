@@ -3,7 +3,7 @@
 
 #include "common/config.h"
 
-#include "common/debug.h"
+#include "global/debug.h"
 #include "objclass/objclass.h"
 
 #include <stdio.h>

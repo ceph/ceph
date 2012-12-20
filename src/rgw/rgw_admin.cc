@@ -10,6 +10,7 @@ using namespace std;
 #include "common/ceph_argparse.h"
 #include "common/Formatter.h"
 #include "global/global_init.h"
+#include "global/debug.h"
 #include "common/errno.h"
 #include "include/utime.h"
 #include "include/str_list.h"

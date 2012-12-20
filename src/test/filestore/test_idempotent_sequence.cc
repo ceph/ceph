@@ -18,7 +18,7 @@
 #include <stdlib.h>
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
-#include "common/debug.h"
+#include "global/debug.h"
 #include "os/FileStore.h"
 
 #include "DeterministicOpSequence.h"

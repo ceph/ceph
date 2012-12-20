@@ -39,6 +39,9 @@
 
 #include "common/config.h"
 #include "common/errno.h"
+
+#include "global/debug.h"
+
 #include <sstream>
 
 #define dout_subsys ceph_subsys_mon

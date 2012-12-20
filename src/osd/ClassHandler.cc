@@ -13,6 +13,7 @@
 #endif
 
 #include "common/config.h"
+#include "global/debug.h"
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix

@@ -22,6 +22,8 @@
 
 #include "MonCaps.h"
 
+#include "global/global_context.h"
+
 struct MonSession;
 
 struct Subscription {

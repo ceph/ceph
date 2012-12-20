@@ -17,6 +17,7 @@
 
 #include "ObjectStore.h"
 #include "Journal.h"
+#include "global/global_context.h"
 #include "common/RWLock.h"
 
 class JournalingObjectStore : public ObjectStore {

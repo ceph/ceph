@@ -12,6 +12,7 @@
 #include "common/perf_counters.h"
 #include "include/str_list.h"
 #include "auth/Crypto.h"
+#include "global/debug.h"
 
 #include <sstream>
 

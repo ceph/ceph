@@ -1,6 +1,7 @@
 #include "rgw_swift_auth.h"
 #include "rgw_rest.h"
 
+#include "global/debug.h"
 #include "common/ceph_crypto.h"
 #include "common/Clock.h"
 

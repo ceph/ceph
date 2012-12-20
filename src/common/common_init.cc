@@ -18,7 +18,7 @@
 #include "common/code_environment.h"
 #include "common/common_init.h"
 #include "common/config.h"
-#include "common/dout.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/version.h"

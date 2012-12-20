@@ -19,8 +19,8 @@
  */
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
+#include "global/debug.h"
 #include "common/errno.h"
-#include "common/debug.h"
 #include "common/config.h"
 
 #include <errno.h>

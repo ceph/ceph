@@ -24,7 +24,6 @@
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/config.h"
-#include "common/debug.h"
 #include "include/buffer.h"
 
 #include "IndexManager.h"
@@ -33,6 +32,8 @@
 #include "CollectionIndex.h"
 
 #include "chain_xattr.h"
+#include "global/global_context.h"
+#include "global/debug.h"
 
 static int set_version(const char *path, uint32_t version) {
   bufferlist bl;

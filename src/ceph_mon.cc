@@ -39,6 +39,7 @@ using namespace std;
 
 #include "global/global_init.h"
 #include "global/signal_handler.h"
+#include "global/debug.h"
 
 #include "include/assert.h"
 

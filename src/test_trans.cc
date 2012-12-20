@@ -14,9 +14,9 @@
 
 #include <iostream>
 #include "common/ceph_argparse.h"
-#include "common/debug.h"
 #include "os/FileStore.h"
 #include "global/global_init.h"
+#include "global/debug.h"
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_filestore

@@ -3,6 +3,7 @@
 #include <arpa/nameser.h>
 #include <resolv.h>
 
+#include "global/debug.h"
 #include "rgw_common.h"
 #include "rgw_resolve.h"
 

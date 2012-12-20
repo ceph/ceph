@@ -1,6 +1,6 @@
 
 #include "common/Throttle.h"
-#include "common/dout.h"
+#include "common/debug.h"
 #include "common/ceph_context.h"
 #include "common/perf_counters.h"
 
