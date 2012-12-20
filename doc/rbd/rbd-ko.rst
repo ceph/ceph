@@ -33,8 +33,8 @@ For example::
 If you use `cephx`_ authentication, you must also specify a secret.  It may come
 from a keyring or a file containing the secret. ::
 
-  sudo rbd map foo --pool rbd myimage --id admin --keyring /path/to/keyring
-  sudo rbd map foo --pool rbd myimage --id admin --keyfile /path/to/file
+  sudo rbd map --pool rbd myimage --id admin --keyring /path/to/keyring
+  sudo rbd map --pool rbd myimage --id admin --keyfile /path/to/file
 
 
 Show Mapped Block Devices
