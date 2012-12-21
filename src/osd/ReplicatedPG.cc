@@ -1608,6 +1608,7 @@ void ReplicatedPG::remove_notify(ObjectContext *obc, Watch::Notification *notif)
   obc->notifs.erase(niter);
 
   put_object_context(obc);
+  delete notif;
 }
 
 void ReplicatedPG::remove_watchers_and_notifies()
@@ -3396,17 +3397,15 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
       }
 
       // ack any pending notifies
-      map<void*, entity_name_t>::iterator p = session->notifs.begin();
-      while (p != session->notifs.end()) {
-	Watch::Notification *notif = (Watch::Notification *)p->first;
-	entity_name_t by = p->second;
+      map<Watch::Notification *, bool>::iterator p = obc->notifs.begin();
+      while (p != obc->notifs.end()) {
+	Watch::Notification *notif = p->first;
+	entity_name_t by = entity;
 	p++;
-	if (notif->obc == obc) {
-	  dout(10) << " acking pending notif " << notif->id << " by " << by << dendl;
-	  session->del_notif(notif);
-	  // TODOSAM: osd->osd-> not good
-	  osd->osd->ack_notification(entity, notif, obc, this);
-	}
+	assert(notif->obc == obc);
+	dout(10) << " acking pending notif " << notif->id << " by " << by << dendl;
+	// TODOSAM: osd->osd-> not good
+	osd->osd->ack_notification(entity, notif, obc, this);
       }
     }
 
@@ -3435,7 +3434,6 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
 	  watch_info_t& w = obc->obs.oi.watchers[q->first];
 
 	  notif->add_watcher(name, Watch::WATCHER_NOTIFIED); // adding before send_message to avoid race
-	  s->add_notif(notif, name);
 
 	  MWatchNotify *notify_msg = new MWatchNotify(w.cookie, oi.user_version.version, notif->id, WATCH_NOTIFY, notif->bl);
 	  osd->send_message_osd_client(notify_msg, s->con);
@@ -3470,7 +3468,6 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
       Watch::Notification *notif = osd->watch->get_notif(cookie);
       assert(notif);
 
-      session->del_notif(notif);
       // TODOSAM: osd->osd-> not good
       osd->osd->ack_notification(entity, notif, obc, this);
     }

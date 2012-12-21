@@ -396,32 +396,13 @@ int main(int argc, const char **argv)
   global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
 	      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
 
-  pid_t childpid = 0;
   if (g_conf->daemonize) {
     if (g_conf->rgw_socket_path.empty()) {
       cerr << "radosgw: must specify 'rgw socket path' to run as a daemon" << std::endl;
       exit(1);
     }
 
-    g_ceph_context->_log->stop();
-
-    childpid = fork();
-    if (childpid) {
-      // i am the parent
-      cout << "radosgw daemon started with pid " << childpid << std::endl;
-      exit(0);
-    }
-
-    // i am child
-    close(0);
-    close(1);
-    close(2);
-    int r = chdir(g_conf->chdir.c_str());
-    if (r < 0) {
-      dout(0) << "weird, i couldn't chdir to '" << g_conf->chdir << "'" << dendl;
-    }
-
-    g_ceph_context->_log->start();
+    global_init_daemonize(g_ceph_context, 0);
   }
   Mutex mutex("main");
   SafeTimer init_timer(g_ceph_context, mutex);
