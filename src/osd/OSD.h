@@ -501,17 +501,8 @@ public:
     epoch_t last_sent_epoch;
     Connection *con;
     std::map<void *, pg_t> watches;
-    std::map<void *, entity_name_t> notifs;
 
     Session() : auid(-1), last_sent_epoch(0), con(0) {}
-    void add_notif(void *n, entity_name_t& name) {
-      notifs[n] = name;
-    }
-    void del_notif(void *n) {
-      std::map<void *, entity_name_t>::iterator iter = notifs.find(n);
-      if (iter != notifs.end())
-        notifs.erase(iter);
-    }
   };
 
 private:
