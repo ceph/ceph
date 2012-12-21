@@ -101,7 +101,7 @@ bool SnapServer::_is_prepared(version_t tid)
     pending_destroy.count(tid);
 }
 
-void SnapServer::_commit(version_t tid)
+bool SnapServer::_commit(version_t tid, MMDSTableRequest *req)
 {
   if (pending_create.count(tid)) {
     dout(7) << "commit " << tid << " create " << pending_create[tid] << dendl;
@@ -134,6 +134,7 @@ void SnapServer::_commit(version_t tid)
   // bump version.
   version++;
   //dump();
+  return true;
 }
 
 void SnapServer::_rollback(version_t tid) 
