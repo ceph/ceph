@@ -3013,7 +3013,7 @@ bool PG::sched_scrub()
 
   if (ceph_clock_now(g_ceph_context) > info.history.last_deep_scrub_stamp + g_conf->osd_deep_scrub_interval) {
     dout(10) << "sched_scrub: scrub will be deep" << dendl;
-    scrubber.deep = true;
+    state_set(PG_STATE_DEEP_SCRUB);
   }
 
   bool ret = false;
