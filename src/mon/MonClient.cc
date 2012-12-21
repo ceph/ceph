@@ -54,6 +54,7 @@ MonClient::MonClient(CephContext *cct_) :
   timer(cct_, monc_lock), finisher(cct_),
   authorize_handler_registry(NULL),
   initialized(false),
+  no_keyring_disabled_cephx(false),
   log_client(NULL),
   more_log_pending(false),
   auth_supported(NULL),
@@ -283,11 +284,10 @@ int MonClient::init()
   if (auth_supported->is_supported_auth(CEPH_AUTH_CEPHX)) {
     r = keyring->from_ceph_context(cct);
     if (r == -ENOENT) {
-      lderr(cct) << "failed to open keyring: " << cpp_strerror(r) << dendl;
       auth_supported->remove_supported_auth(CEPH_AUTH_CEPHX);
       if (auth_supported->get_supported_set().size() > 0) {
-	lderr(cct) << "WARNING: keyring not found, will not use cephx for authentication" << dendl;
 	r = 0;
+	no_keyring_disabled_cephx = true;
       } else {
 	lderr(cct) << "ERROR: missing keyring, cannot use cephx for authentication" << dendl;
       }
@@ -355,6 +355,10 @@ int MonClient::authenticate(double timeout)
 
   if (state == MC_STATE_HAVE_SESSION) {
     ldout(cct, 5) << "authenticate success, global_id " << global_id << dendl;
+  }
+
+  if (authenticate_err < 0 && no_keyring_disabled_cephx) {
+    lderr(cct) << "authenticate NOTE: no keyring found; disabled cephx authentication" << dendl;
   }
 
   return authenticate_err;
