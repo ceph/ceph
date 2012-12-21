@@ -205,7 +205,6 @@ Notable changes
 * radosgw: support for swift manifest objects
 * radosgw: vanity bucket dns names
 * radosgw: various API compatibility fixes
-* rbd: fix 'list' command when more than 1024 (format 2) images
 * rbd: import from stdin, export to stdout
 * rbd: new 'ls -l' option to view images with metadata
 * upstart: job files for all daemon types (not enabled by default)
