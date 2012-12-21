@@ -3623,15 +3623,11 @@ void PG::classic_scrub()
     scrubber.received_maps.clear();
     scrubber.epoch_start = info.history.same_interval_since;
 
-    osd->sched_scrub_lock.Lock();
+    osd->inc_scrubs_active(scrubber.reserved);
     if (scrubber.reserved) {
-      --(osd->scrubs_pending);
-      assert(osd->scrubs_pending >= 0);
       scrubber.reserved = false;
       scrubber.reserved_peers.clear();
     }
-    ++(osd->scrubs_active);
-    osd->sched_scrub_lock.Unlock();
 
     /* scrubber.waiting_on == 0 iff all replicas have sent the requested maps and
      * the primary has done a final scrub (which in turn can only happen if
@@ -3802,15 +3798,11 @@ void PG::chunky_scrub() {
         scrubber.epoch_start = info.history.same_interval_since;
         scrubber.active = true;
 
-        osd->sched_scrub_lock.Lock();
-        if (scrubber.reserved) {
-          --(osd->scrubs_pending);
-          assert(osd->scrubs_pending >= 0);
-          scrubber.reserved = false;
-          scrubber.reserved_peers.clear();
-        }
-        ++(osd->scrubs_active);
-        osd->sched_scrub_lock.Unlock();
+	osd->inc_scrubs_active(scrubber.reserved);
+	if (scrubber.reserved) {
+	  scrubber.reserved = false;
+	  scrubber.reserved_peers.clear();
+	}
 
         scrubber.start = hobject_t();
         scrubber.state = PG::Scrubber::NEW_CHUNK;
