@@ -3589,7 +3589,7 @@ void OSD::sched_scrub()
     dout(10) << " on " << t << " " << pgid << dendl;
     PG *pg = _lookup_lock_pg(pgid);
     if (pg) {
-      if (pg->is_active() && !pg->sched_scrub()) {
+      if (pg->is_active() && pg->sched_scrub()) {
 	pg->unlock();
 	break;
       }

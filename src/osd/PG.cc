@@ -2997,18 +2997,18 @@ void PG::requeue_ops(list<OpRequestRef> &ls)
  *     osd->scrubber.active++
  */
 
-// returns false if waiting for a reply
+// returns true if a scrub has been newly kicked off
 bool PG::sched_scrub()
 {
   assert(_lock.is_locked());
   if (!(is_primary() && is_active() && is_clean() && !is_scrubbing())) {
-    return true;
+    return false;
   }
 
   // just scrubbed?
   if (info.history.last_scrub_stamp + g_conf->osd_scrub_min_interval > ceph_clock_now(g_ceph_context)) {
     dout(20) << "sched_scrub: just scrubbed, skipping" << dendl;
-    return true;
+    return false;
   }
 
   if (ceph_clock_now(g_ceph_context) > info.history.last_deep_scrub_stamp + g_conf->osd_deep_scrub_interval) {
@@ -3016,7 +3016,7 @@ bool PG::sched_scrub()
     state_set(PG_STATE_DEEP_SCRUB);
   }
 
-  bool ret = false;
+  bool ret = true;
   if (!scrubber.reserved) {
     assert(scrubber.reserved_peers.empty());
     if (osd->inc_scrubs_pending()) {
@@ -3026,6 +3026,7 @@ bool PG::sched_scrub()
       scrub_reserve_replicas();
     } else {
       dout(20) << "sched_scrub: failed to reserve locally" << dendl;
+      ret = false;
     }
   }
   if (scrubber.reserved) {
@@ -3033,11 +3034,10 @@ bool PG::sched_scrub()
       dout(20) << "sched_scrub: failed, a peer declined" << dendl;
       clear_scrub_reserved();
       scrub_unreserve_replicas();
-      ret = true;
+      ret = false;
     } else if (scrubber.reserved_peers.size() == acting.size()) {
       dout(20) << "sched_scrub: success, reserved self and replicas" << dendl;
       queue_scrub();
-      ret = true;
     } else {
       // none declined, since scrubber.reserved is set
       dout(20) << "sched_scrub: reserved " << scrubber.reserved_peers << ", waiting for replicas" << dendl;
