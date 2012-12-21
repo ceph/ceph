@@ -15,6 +15,7 @@ Key features since v0.48 "argonaut"
 * Object Storage Daemon (OSD): regular "deep" scrubbing of all stored data to detect latent disk errors
 * RADOS Block Device (RBD): support for copy-on-write clones of images.
 * RADOS Block Device (RBD): better client-side caching.
+* RADOS Block Device (RBD): advisory image locking
 * Rados Gateway (RGW): support for efficient usage logging/scraping (for billing purposes)
 * Rados Gateway (RGW): expanded S3 and Swift API coverage (e.g., POST, multi-object delete)
 * Rados Gateway (RGW): improved striping for large objects
@@ -88,6 +89,15 @@ Compatibility changes
   the ``pgnum`` argument. Previously this was optional, and would
   default to 8, which was almost never a good number.
 
+* Degraded mode (when there fewer than the desired number of replicas)
+  is now more configurable on a per-pool basis, with the min_size
+  parameter. By default, with min_size 0, this allows I/O to objects
+  with N - floor(N/2) replicas, where N is the total number of
+  expected copies. Argonaut behavior was equivalent to having min_size
+  = 1, so I/O would always be possible if any completely up to date
+  copy remained. min_size = 1 could result in lower overall
+  availability in certain cases, such as flapping network partitions.
+
 * 'rbd lock list' and 'rbd showmapped' no longer use tabs as
   separators in their output.
 
@@ -110,12 +120,30 @@ Compatibility changes
 
   The new format is documented in the ceph-authtool man page.
 
+* 'rbd cp' and 'rbd rename' use rbd as the default destination pool,
+  regardless of what pool the source image is in. Previously they
+  would default to the same pool as the source image.
+
+* 'rbd export' no longer prints a message for each object written. It
+  just reports percent complete like other long-lasting operations.
+
+* 'ceph osd tree' now uses 4 decimal places for weight so output is
+  nicer for humans
+
+* Several monitor operations are now idempotent:
+
+  * ceph osd pool create
+  * ceph osd pool delete
+  * ceph osd pool mksnap
+  * ceph osd rm
+  * ceph pg <pgid> revert
 
 Notable changes
 ~~~~~~~~~~~~~~~
 
 * auth: enable cephx by default
 * auth: expanded authentication settings for greater flexibility
+* auth: sign messages when using cephx
 * build fixes for Fedora 18, CentOS/RHEL 6
 * ceph: new 'osd ls' and 'osd tell <osd.N> version' commands
 * ceph-debugpack: misc improvements
@@ -124,8 +152,10 @@ Notable changes
 * ceph-fuse/libcephfs: many misc fixes, admin socket debugging
 * ceph-fuse: fix handling for .. in root directory
 * ceph-fuse: many fixes (including memory leaks, hangs)
+* ceph-fuse: mount helper (mount.fuse.ceph) for use with /etc/fstab
 * ceph.spec: misc packaging fixes
 * common: thread pool sizes can now be adjusted at runtime
+* config: $pid is now available as a metavariable
 * crush: default root of tree type is now 'root' instead of 'pool' (to avoid confusiong wrt rados pools)
 * crush: fixed retry behavior with chooseleaf via tunable
 * crush: tunables documented; feature bit now present and enforced
@@ -141,6 +171,8 @@ Notable changes
 * librbd: improved caching (of object non-existence)
 * librbd: 'flatten' command to sever clone parent relationship
 * librbd: 'protect'/'unprotect' commands to prevent clone parent from being deleted
+* librbd: clip requests past end-of-image.
+* librbd: fixes an issue with some windows guests running in qemu (remove floating point usage)
 * log: fix in-memory buffering behavior (to only write log messages on crash)
 * mds: fix ino release on abort session close, relative getattr path, mds shutdown, other misc items
 * mds: misc fixes
@@ -152,14 +184,18 @@ Notable changes
 * mon: less-destructive ceph-mon --mkfs behavior
 * mon: misc fixes
 * mon: more informative info about stuck PGs in 'health detail'
+* mon: information about recovery and backfill in 'pg <pgid> query'
 * mon: new 'osd crush create-or-move ...' command
 * mon: new 'osd crush move ...' command lets you rearrange your CRUSH hierarchy
+* mon: optionally dump 'osd tree' in json
+* mon: configurable cap on maximum osd number (mon max osd)
 * mon: many bug fixes (various races causing ceph-mon crashes)
 * mon: new on-disk metadata to facilitate future mon changes (post-bobtail)
 * mon: election bug fixes
 * mon: throttle client messages (limit memory consumption)
 * mon: throttle osd flapping based on osd history (limits osdmap ΄thrashing' on overloaded or unhappy clusters)
 * mon: 'report' command for dumping detailed cluster status (e.g., for use when reporting bugs)
+* mon: osdmap flags like noup, noin now cause a health warning
 * msgr: improved failure handling code
 * msgr: many bug fixes
 * osd, mon: honor new 'nobackfill' and 'norecover' osdmap flags
@@ -192,6 +228,7 @@ Notable changes
 * rados: ability to copy, rename pools
 * rados: bench command now cleans up after itself
 * rados: 'cppool' command to copy rados pools
+* rados: 'rm' now accepts a list of objects to be removed
 * radosgw: POST support
 * radosgw: REST API for managing usage stats
 * radosgw: fix bug in bucket stat updates
@@ -207,6 +244,9 @@ Notable changes
 * radosgw: various API compatibility fixes
 * rbd: import from stdin, export to stdout
 * rbd: new 'ls -l' option to view images with metadata
+* rbd: use generic id and keyring options for 'rbd map'
+* rbd: don't issue usage on errors
+* udev: fix symlink creation for rbd images containing partitions
 * upstart: job files for all daemon types (not enabled by default)
 * wireshark: ceph protocol dissector patch updated
 
