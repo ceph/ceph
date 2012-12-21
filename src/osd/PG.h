@@ -1348,6 +1348,7 @@ public:
       boost::statechart::result react(const AdvMap &advmap);
     };
 
+    struct WaitLocalRecoveryReserved;
     struct Activating;
     struct Active : boost::statechart::state< Active, Primary, Activating >, NamedState {
       Active(my_context ctx);
@@ -1380,6 +1381,9 @@ public:
     };
 
     struct Clean : boost::statechart::state< Clean, Active >, NamedState {
+      typedef boost::mpl::list<
+	boost::statechart::transition< DoRecovery, WaitLocalRecoveryReserved >
+      > reactions;
       Clean(my_context ctx);
       void exit();
     };

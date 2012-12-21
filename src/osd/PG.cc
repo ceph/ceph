@@ -2997,26 +2997,21 @@ void PG::requeue_ops(list<OpRequestRef> &ls)
  *     osd->scrubber.active++
  */
 
-// returns false if waiting for a reply
+// returns true if a scrub has been newly kicked off
 bool PG::sched_scrub()
 {
   assert(_lock.is_locked());
   if (!(is_primary() && is_active() && is_clean() && !is_scrubbing())) {
-    return true;
+    return false;
   }
 
   // just scrubbed?
   if (info.history.last_scrub_stamp + g_conf->osd_scrub_min_interval > ceph_clock_now(g_ceph_context)) {
     dout(20) << "sched_scrub: just scrubbed, skipping" << dendl;
-    return true;
+    return false;
   }
 
-  if (ceph_clock_now(g_ceph_context) > info.history.last_deep_scrub_stamp + g_conf->osd_deep_scrub_interval) {
-    dout(10) << "sched_scrub: scrub will be deep" << dendl;
-    scrubber.deep = true;
-  }
-
-  bool ret = false;
+  bool ret = true;
   if (!scrubber.reserved) {
     assert(scrubber.reserved_peers.empty());
     if (osd->inc_scrubs_pending()) {
@@ -3026,6 +3021,7 @@ bool PG::sched_scrub()
       scrub_reserve_replicas();
     } else {
       dout(20) << "sched_scrub: failed to reserve locally" << dendl;
+      ret = false;
     }
   }
   if (scrubber.reserved) {
@@ -3033,11 +3029,15 @@ bool PG::sched_scrub()
       dout(20) << "sched_scrub: failed, a peer declined" << dendl;
       clear_scrub_reserved();
       scrub_unreserve_replicas();
-      ret = true;
+      ret = false;
     } else if (scrubber.reserved_peers.size() == acting.size()) {
       dout(20) << "sched_scrub: success, reserved self and replicas" << dendl;
+      if (ceph_clock_now(g_ceph_context) >
+	  info.history.last_deep_scrub_stamp + g_conf->osd_deep_scrub_interval) {
+	dout(10) << "sched_scrub: scrub will be deep" << dendl;
+	state_set(PG_STATE_DEEP_SCRUB);
+      }
       queue_scrub();
-      ret = true;
     } else {
       // none declined, since scrubber.reserved is set
       dout(20) << "sched_scrub: reserved " << scrubber.reserved_peers << ", waiting for replicas" << dendl;
@@ -3406,6 +3406,7 @@ void PG::build_inc_scrub_map(ScrubMap &map, eversion_t v)
 
 void PG::repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer)
 {
+  dout(10) << "repair_object " << soid << " bad_peer osd." << bad_peer << " ok_peer osd." << ok_peer << dendl;
   eversion_t v;
   bufferlist bv;
   bv.push_back(po->attrs[OI_ATTR]);
@@ -3422,7 +3423,12 @@ void PG::repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer
 
     log.last_requested = 0;
   }
-  osd->queue_for_recovery(this);
+  queue_peering_event(
+    CephPeeringEvtRef(
+      new CephPeeringEvt(
+        get_osdmap()->get_epoch(),
+	get_osdmap()->get_epoch(),
+	DoRecovery())));
 }
 
 /* replica_scrub
@@ -3535,6 +3541,10 @@ void PG::scrub()
 
   if (!is_primary() || !is_active() || !is_clean() || !is_scrubbing()) {
     dout(10) << "scrub -- not primary or active or not clean" << dendl;
+    state_clear(PG_STATE_SCRUBBING);
+    state_clear(PG_STATE_REPAIR);
+    state_clear(PG_STATE_DEEP_SCRUB);
+    update_stats();
     unlock();
     return;
   }
@@ -3623,15 +3633,11 @@ void PG::classic_scrub()
     scrubber.received_maps.clear();
     scrubber.epoch_start = info.history.same_interval_since;
 
-    osd->sched_scrub_lock.Lock();
+    osd->inc_scrubs_active(scrubber.reserved);
     if (scrubber.reserved) {
-      --(osd->scrubs_pending);
-      assert(osd->scrubs_pending >= 0);
       scrubber.reserved = false;
       scrubber.reserved_peers.clear();
     }
-    ++(osd->scrubs_active);
-    osd->sched_scrub_lock.Unlock();
 
     /* scrubber.waiting_on == 0 iff all replicas have sent the requested maps and
      * the primary has done a final scrub (which in turn can only happen if
@@ -3802,15 +3808,11 @@ void PG::chunky_scrub() {
         scrubber.epoch_start = info.history.same_interval_since;
         scrubber.active = true;
 
-        osd->sched_scrub_lock.Lock();
-        if (scrubber.reserved) {
-          --(osd->scrubs_pending);
-          assert(osd->scrubs_pending >= 0);
-          scrubber.reserved = false;
-          scrubber.reserved_peers.clear();
-        }
-        ++(osd->scrubs_active);
-        osd->sched_scrub_lock.Unlock();
+	osd->inc_scrubs_active(scrubber.reserved);
+	if (scrubber.reserved) {
+	  scrubber.reserved = false;
+	  scrubber.reserved_peers.clear();
+	}
 
         scrubber.start = hobject_t();
         scrubber.state = PG::Scrubber::NEW_CHUNK;
@@ -3983,7 +3985,8 @@ void PG::scrub_clear_state()
   update_stats();
 
   // active -> nothing.
-  osd->dec_scrubs_active();
+  if (scrubber.active)
+    osd->dec_scrubs_active();
 
   requeue_ops(waiting_for_active);
 
@@ -4166,7 +4169,6 @@ void PG::scrub_compare_maps() {
       osd->clog.error(ss);
       state_set(PG_STATE_INCONSISTENT);
       if (repair) {
-	state_clear(PG_STATE_CLEAN);
 	for (map<hobject_t, int>::iterator i = authoritative.begin();
 	     i != authoritative.end();
 	     i++) {
@@ -5821,6 +5823,8 @@ PG::RecoveryState::Clean::Clean(my_context ctx)
 void PG::RecoveryState::Clean::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->state_clear(PG_STATE_CLEAN);
 }
 
 /*---------Active---------*/
