@@ -21,7 +21,7 @@ def download(ctx, config):
         ctx.cluster.only(client).run(
             args=[
                 'git', 'clone',
-                'https://github.com/ceph/swift.git',
+                'git://ceph.com/git/swift.git',
                 '/tmp/cephtest/swift',
                 ],
             )
