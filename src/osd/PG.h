@@ -836,6 +836,13 @@ public:
     map<int,ScrubMap> received_maps;
     MOSDRepScrub *active_rep_scrub;
 
+    // Maps from objects with erros to missing/inconsistent peers
+    map<hobject_t, set<int> > missing;
+    map<hobject_t, set<int> > inconsistent;
+
+    // Map from object with errors to good peer
+    map<hobject_t, pair<ScrubMap::object, int> > authoritative;
+
     // classic scrub
     bool finalizing;
 
@@ -928,6 +935,9 @@ public:
       fixed = 0;
       deep = false;
       run_callbacks();
+      inconsistent.clear();
+      missing.clear();
+      authoritative.clear();
     }
 
   } scrubber;
@@ -947,6 +957,7 @@ public:
   void classic_scrub();
   void chunky_scrub();
   void scrub_compare_maps();
+  void scrub_process_inconsistent();
   void scrub_finalize();
   void scrub_finish();
   void scrub_clear_state();
