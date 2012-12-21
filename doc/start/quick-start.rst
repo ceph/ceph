@@ -143,7 +143,7 @@ your server machine. ::
 	
 Check the health of your Ceph cluster to ensure it is ready. :: 
 
-	ceph health
+	sudo ceph health
 	
 When your cluster echoes back ``HEALTH_OK``, you may begin using Ceph.
 
