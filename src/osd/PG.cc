@@ -4184,6 +4184,7 @@ void PG::scrub_compare_maps() {
 			    &maps[i->second]->objects[i->first],
 			    acting[*j],
 			    acting[i->second]);
+              ++scrubber.fixed;
 	    }
 	  }
 	  if (inconsistent.count(i->first)) {
