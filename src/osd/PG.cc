@@ -3406,6 +3406,7 @@ void PG::build_inc_scrub_map(ScrubMap &map, eversion_t v)
 
 void PG::repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer)
 {
+  dout(10) << "repair_object " << soid << " bad_peer osd." << bad_peer << " ok_peer osd." << ok_peer << dendl;
   eversion_t v;
   bufferlist bv;
   bv.push_back(po->attrs[OI_ATTR]);
@@ -3422,7 +3423,12 @@ void PG::repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer
 
     log.last_requested = 0;
   }
-  osd->queue_for_recovery(this);
+  queue_peering_event(
+    CephPeeringEvtRef(
+      new CephPeeringEvt(
+        get_osdmap()->get_epoch(),
+	get_osdmap()->get_epoch(),
+	DoRecovery())));
 }
 
 /* replica_scrub
