@@ -4115,6 +4115,7 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
 	}
       } else {
 	cur_missing.insert(j->first);
+	++scrubber.errors;
 	errorstream << info.pgid
 		    << " osd." << acting[j->first] 
 		    << " missing " << *k << std::endl;
