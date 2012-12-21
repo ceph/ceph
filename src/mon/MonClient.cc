@@ -263,35 +263,7 @@ int MonClient::init()
 
   entity_name = cct->_conf->name;
 
-  // keyring
-  keyring = new KeyRing;
-  int r = keyring->from_ceph_context(cct);
-  if (r == -ENOENT) {
-    // do we care?
-    string method;
-    if (cct->_conf->auth_supported.length() != 0) 
-      method = cct->_conf->auth_supported;
-    else if (entity_name.get_type() == CEPH_ENTITY_TYPE_MDS ||
-	     entity_name.get_type() == CEPH_ENTITY_TYPE_OSD)
-      method = cct->_conf->auth_cluster_required;
-    else
-      method = cct->_conf->auth_client_required;
-    AuthMethodList supported(cct, method);
-    if (!supported.is_supported_auth(CEPH_AUTH_CEPHX)) {
-      ldout(cct, 2) << "cephx auth is not supported, ignoring absence of keyring" << dendl;
-      r = 0;
-    }
-  }
-  if (r < 0) {
-    lderr(cct) << "failed to open keyring: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-  rotating_secrets = new RotatingKeyRing(cct, cct->get_module_type(), keyring);
-
   Mutex::Locker l(monc_lock);
-  timer.init();
-  finisher.start();
-  schedule_tick();
 
   string method;
     if (cct->_conf->auth_supported.length() != 0)
@@ -305,7 +277,35 @@ int MonClient::init()
   auth_supported = new AuthMethodList(cct, method);
   ldout(cct, 10) << "auth_supported " << auth_supported->get_supported_set() << " method " << method << dendl;
 
+  int r = 0;
+  keyring = new KeyRing; // initializing keyring anyway
+
+  if (auth_supported->is_supported_auth(CEPH_AUTH_CEPHX)) {
+    r = keyring->from_ceph_context(cct);
+    if (r == -ENOENT) {
+      lderr(cct) << "failed to open keyring: " << cpp_strerror(r) << dendl;
+      auth_supported->remove_supported_auth(CEPH_AUTH_CEPHX);
+      if (auth_supported->get_supported_set().size() > 0) {
+	lderr(cct) << "WARNING: keyring not found, will not use cephx for authentication" << dendl;
+	r = 0;
+      } else {
+	lderr(cct) << "ERROR: missing keyring, cannot use cephx for authentication" << dendl;
+      }
+    }
+  }
+
+  if (r < 0) {
+    return r;
+  }
+
+  rotating_secrets = new RotatingKeyRing(cct, cct->get_module_type(), keyring);
+
   initialized = true;
+
+  timer.init();
+  finisher.start();
+  schedule_tick();
+
   return 0;
 }
 
