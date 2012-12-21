@@ -4169,7 +4169,6 @@ void PG::scrub_compare_maps() {
       osd->clog.error(ss);
       state_set(PG_STATE_INCONSISTENT);
       if (repair) {
-	state_clear(PG_STATE_CLEAN);
 	for (map<hobject_t, int>::iterator i = authoritative.begin();
 	     i != authoritative.end();
 	     i++) {
@@ -5824,6 +5823,8 @@ PG::RecoveryState::Clean::Clean(my_context ctx)
 void PG::RecoveryState::Clean::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->state_clear(PG_STATE_CLEAN);
 }
 
 /*---------Active---------*/
