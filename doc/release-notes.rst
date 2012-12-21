@@ -168,9 +168,9 @@ Notable changes
 * osd: backfill target reservations (improve performance during recovery)
 * osd: better tracking of recent slow operations
 * osd: capability grammar improvements, bug fixes
-* osd: client vs recovery io priotitization
+* osd: client vs recovery io prioritization
 * osd: crush performance improvements
-* osd: default journal size to 1 GB
+* osd: default journal size to 5 GB
 * osd: experimental support for PG "splitting" (pg_num adjustment for existing pools)
 * osd: fix memory leak on certain error paths
 * osd: fixed detection of EIO errors from fs on read
