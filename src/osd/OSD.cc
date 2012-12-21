@@ -3589,7 +3589,7 @@ void OSD::sched_scrub()
     dout(10) << " on " << t << " " << pgid << dendl;
     PG *pg = _lookup_lock_pg(pgid);
     if (pg) {
-      if (pg->is_active() && !pg->sched_scrub()) {
+      if (pg->is_active() && pg->sched_scrub()) {
 	pg->unlock();
 	break;
       }
@@ -3624,6 +3624,24 @@ void OSDService::dec_scrubs_pending()
 	   << " (max " << g_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
   --scrubs_pending;
   assert(scrubs_pending >= 0);
+  sched_scrub_lock.Unlock();
+}
+
+void OSDService::inc_scrubs_active(bool reserved)
+{
+  sched_scrub_lock.Lock();
+  ++(scrubs_active);
+  if (reserved) {
+    --(scrubs_pending);
+    dout(20) << "inc_scrubs_active " << (scrubs_active-1) << " -> " << scrubs_active
+	     << " (max " << g_conf->osd_max_scrubs
+	     << ", pending " << (scrubs_pending+1) << " -> " << scrubs_pending << ")" << dendl;
+    assert(scrubs_pending >= 0);
+  } else {
+    dout(20) << "inc_scrubs_active " << (scrubs_active-1) << " -> " << scrubs_active
+	     << " (max " << g_conf->osd_max_scrubs
+	     << ", pending " << scrubs_pending << ")" << dendl;
+  }
   sched_scrub_lock.Unlock();
 }
 
