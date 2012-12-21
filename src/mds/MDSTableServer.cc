@@ -82,7 +82,9 @@ void MDSTableServer::handle_commit(MMDSTableRequest *req)
 
     assert(g_conf->mds_kill_mdstable_at != 5);
 
-    _commit(tid);
+    if (!_commit(tid, req))
+      return;
+
     _note_commit(tid);
     mds->mdlog->start_submit_entry(new ETableServer(table, TABLESERVER_OP_COMMIT, 0, -1, 
 						    tid, version));

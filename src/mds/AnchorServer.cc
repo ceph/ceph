@@ -142,12 +142,13 @@ void AnchorServer::_prepare(bufferlist &bl, uint64_t reqid, int bymds)
     }
     inc(ino);
     pending_create[version] = ino;  // so we can undo
+    pending_ops[ino].push_back(pair<version_t, Context*>(version, NULL));
     break;
-
 
   case TABLE_OP_DESTROY:
     version++;
     pending_destroy[version] = ino;
+    pending_ops[ino].push_back(pair<version_t, Context*>(version, NULL));
     break;
     
   case TABLE_OP_UPDATE:
@@ -155,6 +156,7 @@ void AnchorServer::_prepare(bufferlist &bl, uint64_t reqid, int bymds)
     version++;
     pending_update[version].first = ino;
     pending_update[version].second = trace;
+    pending_ops[ino].push_back(pair<version_t, Context*>(version, NULL));
     break;
 
   default:
@@ -163,8 +165,56 @@ void AnchorServer::_prepare(bufferlist &bl, uint64_t reqid, int bymds)
   //dump();
 }
 
-void AnchorServer::_commit(version_t tid)
+bool AnchorServer::check_pending(version_t tid, MMDSTableRequest *req, list<Context *>& finished)
 {
+  inodeno_t ino;
+  if (pending_create.count(tid))
+    ino = pending_create[tid];
+  else if (pending_destroy.count(tid))
+    ino = pending_destroy[tid];
+  else if (pending_update.count(tid))
+    ino = pending_update[tid].first;
+  else
+    assert(0);
+
+  assert(pending_ops.count(ino));
+  list< pair<version_t, Context*> >& pending = pending_ops[ino];
+  list< pair<version_t, Context*> >::iterator p = pending.begin();
+  if (p->first == tid) {
+    assert(p->second == NULL);
+  } else {
+    while (p != pending.end()) {
+      if (p->first == tid)
+	break;
+      p++;
+    }
+    assert(p != pending.end());
+    assert(p->second == NULL);
+    // not the earliest pending operation, wait if it's a commit
+    if (req) {
+      p->second = new C_MDS_RetryMessage(mds, req);
+      return false;
+    }
+  }
+
+  pending.erase(p);
+  if (pending.empty()) {
+    pending_ops.erase(ino);
+  } else {
+    for (p = pending.begin(); p != pending.end() && p->second; p++) {
+      finished.push_back(p->second);
+      p->second = NULL;
+    }
+  }
+  return true;
+}
+
+bool AnchorServer::_commit(version_t tid, MMDSTableRequest *req)
+{
+  list<Context *> finished;
+  if (!check_pending(tid, req, finished))
+    return false;
+
   if (pending_create.count(tid)) {
     dout(7) << "commit " << tid << " create " << pending_create[tid] << dendl;
     pending_create.erase(tid);
@@ -206,10 +256,16 @@ void AnchorServer::_commit(version_t tid)
   // bump version.
   version++;
   //dump();
+
+  mds->queue_waiters(finished);
+  return true;
 }
 
 void AnchorServer::_rollback(version_t tid) 
 {
+  list<Context *> finished;
+  check_pending(tid, NULL, finished);
+
   if (pending_create.count(tid)) {
     inodeno_t ino = pending_create[tid];
     dout(7) << "rollback " << tid << " create " << ino << dendl;
@@ -234,6 +290,7 @@ void AnchorServer::_rollback(version_t tid)
   // bump version.
   version++;
   //dump();
+  mds->queue_waiters(finished);
 }
 
 /* This function DOES put the passed message before returning */

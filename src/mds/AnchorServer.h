@@ -30,6 +30,7 @@ class AnchorServer : public MDSTableServer {
   map<version_t, inodeno_t> pending_create;
   map<version_t, inodeno_t> pending_destroy;
   map<version_t, pair<inodeno_t, vector<Anchor> > > pending_update;
+  map<inodeno_t, list<pair<version_t, Context*> > > pending_ops;
 
   void reset_state();
   void encode_server_state(bufferlist& bl) {
@@ -47,17 +48,27 @@ class AnchorServer : public MDSTableServer {
     ::decode(pending_create, p);
     ::decode(pending_destroy, p);
     ::decode(pending_update, p);
+
+    map<version_t, inodeno_t> sort;
+    sort.insert(pending_create.begin(), pending_create.end());
+    sort.insert(pending_destroy.begin(), pending_destroy.end());
+    for (map<version_t, pair<inodeno_t, vector<Anchor> > >::iterator p = pending_update.begin();
+	 p != pending_update.end(); p++)
+      sort[p->first] = p->second.first;
+    for (map<version_t, inodeno_t>::iterator p = sort.begin(); p != sort.end(); p++)
+      pending_ops[p->second].push_back(pair<version_t, Context*>(p->first, NULL));
   }
 
   bool add(inodeno_t ino, inodeno_t dirino, __u32 dn_hash, bool replace);
   void inc(inodeno_t ino, int ref=1);
   void dec(inodeno_t ino, int ref=1);
+  bool check_pending(version_t tid, MMDSTableRequest *req, list<Context *>& finished);
 
   void dump();
 
   // server bits
   void _prepare(bufferlist &bl, uint64_t reqid, int bymds);
-  void _commit(version_t tid);
+  bool _commit(version_t tid, MMDSTableRequest *req=NULL);
   void _rollback(version_t tid);
   void handle_query(MMDSTableRequest *m);
 };
