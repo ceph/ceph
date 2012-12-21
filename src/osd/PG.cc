@@ -3011,11 +3011,6 @@ bool PG::sched_scrub()
     return false;
   }
 
-  if (ceph_clock_now(g_ceph_context) > info.history.last_deep_scrub_stamp + g_conf->osd_deep_scrub_interval) {
-    dout(10) << "sched_scrub: scrub will be deep" << dendl;
-    state_set(PG_STATE_DEEP_SCRUB);
-  }
-
   bool ret = true;
   if (!scrubber.reserved) {
     assert(scrubber.reserved_peers.empty());
@@ -3037,6 +3032,11 @@ bool PG::sched_scrub()
       ret = false;
     } else if (scrubber.reserved_peers.size() == acting.size()) {
       dout(20) << "sched_scrub: success, reserved self and replicas" << dendl;
+      if (ceph_clock_now(g_ceph_context) >
+	  info.history.last_deep_scrub_stamp + g_conf->osd_deep_scrub_interval) {
+	dout(10) << "sched_scrub: scrub will be deep" << dendl;
+	state_set(PG_STATE_DEEP_SCRUB);
+      }
       queue_scrub();
     } else {
       // none declined, since scrubber.reserved is set
