@@ -3423,12 +3423,6 @@ void PG::repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer
 
     log.last_requested = 0;
   }
-  queue_peering_event(
-    CephPeeringEvtRef(
-      new CephPeeringEvt(
-        get_osdmap()->get_epoch(),
-	get_osdmap()->get_epoch(),
-	DoRecovery())));
 }
 
 /* replica_scrub
@@ -4136,17 +4130,10 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
 
 void PG::scrub_compare_maps() {
   dout(10) << "scrub_compare_maps has maps, analyzing" << dendl;
-  bool repair = state_test(PG_STATE_REPAIR);
-  bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
-  const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
   if (acting.size() > 1) {
     dout(10) << "scrub  comparing replica scrub maps" << dendl;
 
     stringstream ss;
-
-    // Maps from objects with erros to missing/inconsistent peers
-    map<hobject_t, set<int> > missing;
-    map<hobject_t, set<int> > inconsistent;
 
     // Map from object with errors to good peer
     map<hobject_t, int> authoritative;
@@ -4161,51 +4148,76 @@ void PG::scrub_compare_maps() {
       maps[i] = &scrubber.received_maps[acting[i]];
     }
 
-    _compare_scrubmaps(maps, missing, inconsistent, authoritative, ss);
+    _compare_scrubmaps(
+      maps,
+      scrubber.missing,
+      scrubber.inconsistent,
+      authoritative,
+      ss);
+    dout(2) << ss.str() << dendl;
 
-    if (authoritative.size()) {
-      ss << info.pgid << " " << mode << " " << missing.size() << " missing, "
-	 << inconsistent.size() << " inconsistent objects\n";
-      dout(2) << ss.str() << dendl;
+    if (authoritative.size())
       osd->clog.error(ss);
-      state_set(PG_STATE_INCONSISTENT);
-      if (repair) {
-	state_clear(PG_STATE_CLEAN);
-	for (map<hobject_t, int>::iterator i = authoritative.begin();
-	     i != authoritative.end();
-	     i++) {
-	  set<int>::iterator j;
-	  
-	  if (missing.count(i->first)) {
-	    for (j = missing[i->first].begin();
-		 j != missing[i->first].end(); 
-		 j++) {
-	      repair_object(i->first, 
-			    &maps[i->second]->objects[i->first],
-			    acting[*j],
-			    acting[i->second]);
-              ++scrubber.fixed;
-	    }
-	  }
-	  if (inconsistent.count(i->first)) {
-	    for (j = inconsistent[i->first].begin(); 
-		 j != inconsistent[i->first].end(); 
-		 j++) {
-	      repair_object(i->first, 
-			    &maps[i->second]->objects[i->first],
-			    acting[*j],
-			    acting[i->second]);
-              ++scrubber.fixed;
-	    }
-	  }
 
-	}
-      }
+    for (map<hobject_t, int>::iterator i = authoritative.begin();
+	 i != authoritative.end();
+	 ++i) {
+      scrubber.authoritative.insert(
+	make_pair(
+	  i->first,
+	  make_pair(maps[i->second]->objects[i->first], i->second)));
     }
   }
 
   // ok, do the pg-type specific scrubbing
   _scrub(scrubber.primary_scrubmap);
+}
+
+void PG::scrub_process_inconsistent() {
+  dout(10) << "process_inconsistent() checking authoritative" << dendl;
+  bool repair = state_test(PG_STATE_REPAIR);
+  bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
+  const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
+  if (scrubber.authoritative.size()) {
+    stringstream ss;
+    ss << info.pgid << " " << mode << " " << scrubber.missing.size() << " missing, "
+       << scrubber.inconsistent.size() << " inconsistent objects\n";
+    dout(2) << ss.str() << dendl;
+    osd->clog.error(ss);
+    state_set(PG_STATE_INCONSISTENT);
+    if (repair) {
+      state_clear(PG_STATE_CLEAN);
+      for (map<hobject_t, pair<ScrubMap::object, int> >::iterator i =
+	     scrubber.authoritative.begin();
+	   i != scrubber.authoritative.end();
+	   i++) {
+	set<int>::iterator j;
+	
+	if (scrubber.missing.count(i->first)) {
+	  for (j = scrubber.missing[i->first].begin();
+	       j != scrubber.missing[i->first].end(); 
+	       j++) {
+	    repair_object(i->first, 
+	      &(i->second.first),
+	      acting[*j],
+	      acting[i->second.second]);
+	    ++scrubber.fixed;
+	  }
+	}
+	if (scrubber.inconsistent.count(i->first)) {
+	  for (j = scrubber.inconsistent[i->first].begin(); 
+	       j != scrubber.inconsistent[i->first].end(); 
+	       j++) {
+	    repair_object(i->first, 
+	      &(i->second.first),
+	      acting[*j],
+	      acting[i->second.second]);
+	    ++scrubber.fixed;
+	  }
+	}
+      }
+    }
+  }
 }
 
 void PG::scrub_finalize() {
@@ -4248,6 +4260,8 @@ void PG::scrub_finish() {
   // type-specific finish (can tally more errors)
   _scrub_finish();
 
+  scrub_process_inconsistent();
+
   if (scrubber.errors == 0 || (repair && (scrubber.errors - scrubber.fixed) == 0))
     state_clear(PG_STATE_INCONSISTENT);
 
@@ -4282,6 +4296,16 @@ void PG::scrub_finish() {
     write_info(*t);
     int tr = osd->store->queue_transaction(osr.get(), t);
     assert(tr == 0);
+  }
+
+
+  if (scrubber.fixed) {
+    queue_peering_event(
+      CephPeeringEvtRef(
+	new CephPeeringEvt(
+	  get_osdmap()->get_epoch(),
+	  get_osdmap()->get_epoch(),
+	  DoRecovery())));
   }
 
   scrub_clear_state();
