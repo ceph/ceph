@@ -577,3 +577,69 @@ and daemon name. For example, if the cluster name is ``ceph`` (it is by default)
 and you want to retrieve the configuration for ``osd.0``, use the following::
 
 	ceph --admin-daemon /var/run/ceph/ceph-osd.0.asok config show | less
+
+
+Running Multiple Clusters
+=========================
+
+With Ceph, you can run multiple clusters on the same hardware. Running multiple
+clusters provides a higher level of isolation compared to using different pools
+on the same cluster with different CRUSH rulesets. A separate cluster will have
+separate monitor, OSD and metadata server processes. When running Ceph with 
+default settings, the default cluster name is ``ceph``, which means you would 
+save your Ceph configuration file with the file name ``ceph.conf`` in the 
+``/etc/ceph`` default directory. 
+
+When you run multiple clusters, you must name your cluster and save the Ceph
+configuration file with the name of the cluster. For example, a cluster named
+``openstack`` will have a Ceph configuration file with the file name
+``openstack.conf`` in the  ``/etc/ceph`` default directory. 
+
+.. important:: Cluster names must consist of letters a-z and digits 0-9 only.
+
+Separate clusters imply separate data disks and journals, which are not shared
+between clusters. Referring to `Metavariables`_, the ``$cluster``  metavariable
+evaluates to the cluster name (i.e., ``openstack`` in the  foregoing example).
+Various settings use the ``$cluster`` metavariable, including: 
+
+- ``keyring``
+- ``admin socket``
+- ``log file``
+- ``pid file``
+- ``mon data``
+- ``mon cluster log file``
+- ``osd data``
+- ``osd journal``
+- ``mds data``
+- ``rgw data``
+
+See `General Settings`_, `OSD Settings`_, `Monitor Settings`_, `MDS Settings`_, 
+`RGW Settings`_ and `Log Settings`_ for relevant path defaults that use the 
+``$cluster`` metavariable.
+
+.. _General Settings: ../general-config-ref
+.. _OSD Settings: ../osd-config-ref
+.. _Monitor Settings: ../mon-config-ref
+.. _MDS Settings: ../../../cephfs/mds-config-ref
+.. _RGW Settings: ../../../radosgw/config-ref/
+.. _Log Settings: ../log-and-debug-ref
+
+When deploying the Ceph configuration file, ensure that you use the cluster name
+in your command line syntax. For example:: 
+
+	ssh myserver01 sudo tee /etc/ceph/openstack.conf < /etc/ceph/openstack.conf
+
+When creating default directories or files, you should also use the cluster
+name at the appropriate places in the path. For example:: 
+
+	sudo mkdir /var/lib/ceph/osd/openstack-0
+	sudo mkdir /var/lib/ceph/mon/openstack-a
+	
+.. important:: When running monitors on the same host, you should use 
+   different ports. By default, monitors use port 6789. If you already 
+   have monitors using port 6789, use a different port for your other cluster(s). 
+
+To invoke a cluster other than the default ``ceph`` cluster, use the 
+``--cluster=clustername`` option with the ``ceph`` command. For example:: 
+
+	ceph --cluster=openstack health
