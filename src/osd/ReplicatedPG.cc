@@ -40,6 +40,7 @@
 
 #include "common/config.h"
 #include "include/compat.h"
+#include "global/debug.h"
 
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"

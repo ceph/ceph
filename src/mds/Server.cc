@@ -59,6 +59,7 @@
 using namespace std;
 
 #include "common/config.h"
+#include "global/debug.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
