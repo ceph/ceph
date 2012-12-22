@@ -1366,7 +1366,6 @@ public:
       void exit();
 
       const set<int> sorted_acting_set;
-      set<int>::const_iterator acting_osd_it;
       bool all_replicas_activated;
 
       typedef boost::mpl::list <
@@ -1519,10 +1518,12 @@ public:
 
     struct WaitRemoteRecoveryReserved : boost::statechart::state< WaitRemoteRecoveryReserved, Active >, NamedState {
       typedef boost::mpl::list <
-	boost::statechart::transition< RemoteRecoveryReserved, WaitRemoteRecoveryReserved >,
+	boost::statechart::custom_reaction< RemoteRecoveryReserved >,
 	boost::statechart::transition< AllRemotesReserved, Recovering >
 	> reactions;
+      set<int>::const_iterator acting_osd_it;
       WaitRemoteRecoveryReserved(my_context ctx);
+      boost::statechart::result react(const RemoteRecoveryReserved &evt);
       void exit();
     };
 

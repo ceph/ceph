@@ -5699,13 +5699,17 @@ void PG::RecoveryState::WaitLocalRecoveryReserved::exit()
 }
 
 PG::RecoveryState::WaitRemoteRecoveryReserved::WaitRemoteRecoveryReserved(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx),
+    acting_osd_it(context< Active >().sorted_acting_set.begin())
 {
   state_name = "Started/Primary/Active/WaitRemoteRecoveryReserved";
   context< RecoveryMachine >().log_enter(state_name);
-  PG *pg = context< RecoveryMachine >().pg;
+  post_event(RemoteRecoveryReserved());
+}
 
-  set<int>::const_iterator &acting_osd_it = context< Active >().acting_osd_it;
+boost::statechart::result
+PG::RecoveryState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserved &evt) {
+  PG *pg = context< RecoveryMachine >().pg;
 
   if (acting_osd_it != context< Active >().sorted_acting_set.end()) {
     // skip myself
@@ -5730,6 +5734,7 @@ PG::RecoveryState::WaitRemoteRecoveryReserved::WaitRemoteRecoveryReserved(my_con
   } else {
     post_event(AllRemotesReserved());
   }
+  return discard_event();
 }
 
 void PG::RecoveryState::WaitRemoteRecoveryReserved::exit()
@@ -5857,7 +5862,6 @@ PG::RecoveryState::Active::Active(my_context ctx)
   : my_base(ctx),
     sorted_acting_set(context< RecoveryMachine >().pg->acting.begin(),
                       context< RecoveryMachine >().pg->acting.end()),
-    acting_osd_it(sorted_acting_set.begin()),
     all_replicas_activated(false)
 {
   state_name = "Started/Primary/Active";
