@@ -17,15 +17,17 @@ with a Ceph configuration file.
 
 .. _ceph-conf-file:
 
-The ceph.conf File
-==================
+The Configuration File
+======================
 
-When you start a Ceph cluster, each daemon looks for a ``ceph.conf`` file that
-provides its configuration settings. For manual deployments, you need to create
-a ``ceph.conf`` file to configure your cluster. For third party tools that
-create configuration files for you (*e.g.*, Chef), you may use the information
-contained herein as a reference. The ``ceph.conf`` file defines:
+When you start a Ceph cluster, each daemon looks for a Ceph configuration file
+(i.e., ``ceph.conf`` by default) that provides the cluster's configuration
+settings. For manual deployments, you need to create a Ceph configuration file.
+For third party tools that create configuration files for you (*e.g.*, Chef),
+you may use the information contained herein as a reference. The Ceph
+Configuration file defines:
 
+- Authentication settings
 - Cluster membership
 - Host names
 - Host addresses
@@ -43,9 +45,8 @@ The default ``ceph.conf`` locations in sequential order include:
 #. ``./ceph.conf`` (*i.e.,* in the current working directory)
 
 
-The ``ceph.conf`` file uses an *ini* style syntax. You can add comments to the
-``ceph.conf`` file by preceding comments with a semi-colon (;) or a pound sign
-(#).  For example:
+The Ceph configuration file uses an *ini* style syntax. You can add comments 
+by preceding comments with a semi-colon (;) or a pound sign (#).  For example:
 
 .. code-block:: ini
 
@@ -57,10 +58,10 @@ The ``ceph.conf`` file uses an *ini* style syntax. You can add comments to the
 
 .. _ceph-conf-settings:
 
-ceph.conf Settings
-==================
+Config Sections 
+===============
 
-The ``ceph.conf`` file can configure all daemons in a cluster, or all daemons of
+The configuration file can configure all daemons in a cluster, or all daemons of
 a particular type. To configure a series of daemons, the settings must be
 included under the processes that will receive the configuration as follows: 
 
@@ -85,6 +86,10 @@ included under the processes that will receive the configuration as follows:
 :Description: Settings under ``[mds]`` affect all ``ceph-mds`` daemons in the cluster. 
 :Example: ``host = myserver01``
 
+``[client]``
+
+:Description: Settings under ``[client]`` affect all clients (e.g., mounted CephFS filesystems, mounted block devices, etc.)
+:Example: ``log file = /var/log/ceph/radosgw.log``
 
 Global settings affect all instances of all daemon in the cluster. Use the ``[global]`` 
 setting for values that are common for all daemons in the cluster. You can override each
@@ -101,8 +106,14 @@ A typical global setting involves activating authentication. For example:
 .. code-block:: ini
 
 	[global]
-		# Enable authentication between hosts within the cluster.
+		#Enable authentication between hosts within the cluster.
+		#v 0.54 and earlier
 		auth supported = cephx
+		
+		#v 0.55 and after
+		auth cluster required = cephx
+		auth service required = cephx
+		auth client required = cephx
 
 
 You can specify settings that apply to a particular type of daemon. When you
@@ -198,7 +209,7 @@ minimal settings for  each instance of a daemon. For example:
 		host = hostName
 
 .. important:: The ``host`` setting is the short name of the host (i.e., not 
-   an fqdn). It is **NOT** and IP address either.  Enter ``hostname -s`` on 
+   an fqdn). It is **NOT** an IP address either.  Enter ``hostname -s`` on 
    the command line to retrieve the name of the host. Also, this setting is 
    **ONLY** for ``mkcephfs`` and manual deployment. It **MUST NOT**
    be used with ``chef`` or ``ceph-deploy``.
@@ -214,11 +225,11 @@ Monitors listen on port 6789 by default, while metadata servers and OSDs listen
 on the first available port beginning at 6800. Ensure that you open port 6789 on
 hosts that run a monitor daemon, and open one port beginning at port 6800 for
 each OSD or metadata server that runs on the host. Ports are host-specific, so
-you don't need to open any more ports open than the number of daemons running on
+you don't need to open any more ports than the number of daemons running on
 that host, other than potentially a few spares. You may consider opening a few
 additional ports in case a daemon fails and restarts without letting go of the
 port such that the restarted daemon binds to a new port. If you set up separate
-public and  cluster networks, you may need to make entries for each network.
+public and cluster networks, you may need to make entries for each network.
 For example:: 
 
 	iptables -A INPUT -m multiport -p tcp -s {ip-address}/{netmask} --dports 6789,6800:6810 -j ACCEPT
@@ -243,7 +254,7 @@ completely separate cluster network that doesn't connect directly to the
 internet.
 
 To configure the networks, add the following options to the ``[global]`` section
-of your ``ceph.conf`` file. 
+of your Ceph configuration file. 
 
 .. code-block:: ini
 
@@ -262,6 +273,24 @@ in the daemon instance sections of your ``ceph.conf`` file.
 
 .. _hardware recommendations: ../../../install/hardware-recommendations
 
+Authentication
+==============
+
+.. versionadded:: 0.55
+
+For Bobtail (v 0.56) and beyond, you should expressly enable or disable authentication
+in the ``[global]`` section of your Ceph configuration file. :: 
+
+		auth cluster required = cephx
+		auth service required = cephx
+		auth client required = cephx
+
+See `Cephx Authentication`_ for additional details.
+
+.. important:: When upgrading, we recommend expressly disabling authentication first, 
+   then perform the upgrade. Once the upgrade is complete, re-enable authentication.
+
+.. _Cephx Authentication: ../../operations/authentication
 
 .. _ceph-monitor-config:
 
