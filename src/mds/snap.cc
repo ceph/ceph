@@ -17,6 +17,7 @@
 #include "MDS.h"
 
 #include "messages/MClientSnap.h"
+#include "global/debug.h"
 
 /*
  * SnapRealm

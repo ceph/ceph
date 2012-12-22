@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 #include <errno.h>
 
-#include "common/debug.h"
+#include "global/debug.h"
 #include "mdstypes.h"
 #include "mds/flock.h"
 

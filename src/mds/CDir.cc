@@ -35,6 +35,7 @@
 
 #include "common/config.h"
 #include "include/assert.h"
+#include "global/debug.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix

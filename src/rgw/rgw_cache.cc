@@ -1,4 +1,5 @@
 #include "rgw_cache.h"
+#include "common/debug.h"
 
 #include <errno.h>
 

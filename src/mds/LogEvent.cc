@@ -17,6 +17,8 @@
 
 #include "MDS.h"
 
+#include "global/debug.h"
+
 // events i know of
 #include "events/EString.h"
 
