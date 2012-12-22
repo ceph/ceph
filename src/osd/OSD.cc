@@ -2241,23 +2241,22 @@ void OSD::tick()
 
     // mon report?
     utime_t now = ceph_clock_now(g_ceph_context);
-    if (now - last_pg_stats_sent > g_conf->osd_mon_report_interval_max) {
-      osd_stat_updated = true;
-      do_mon_report();
-    }
-    else if (now - last_mon_report > g_conf->osd_mon_report_interval_min) {
-      do_mon_report();
-    }
-
-    map_lock.put_read();
-
-    if (outstanding_pg_stats
-	&&(now - g_conf->osd_mon_ack_timeout) > last_pg_stats_ack) {
+    if (outstanding_pg_stats &&
+	(now - g_conf->osd_mon_ack_timeout) > last_pg_stats_ack) {
       dout(1) << "mon hasn't acked PGStats in " << now - last_pg_stats_ack
 	      << " seconds, reconnecting elsewhere" << dendl;
       monc->reopen_session();
       last_pg_stats_ack = ceph_clock_now(g_ceph_context);  // reset clock
+      last_pg_stats_sent = utime_t();
     }
+    if (now - last_pg_stats_sent > g_conf->osd_mon_report_interval_max) {
+      osd_stat_updated = true;
+      do_mon_report();
+    } else if (now - last_mon_report > g_conf->osd_mon_report_interval_min) {
+      do_mon_report();
+    }
+
+    map_lock.put_read();
   }
 
   // only do waiters if dispatch() isn't currently running.  (if it is,
