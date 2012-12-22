@@ -16,6 +16,7 @@ one metadata server in your ``ceph.conf`` configuration file.
 	Mount Ceph FS in ``fstab`` <fstab>
 	Using Ceph with Hadoop <hadoop>
 	MDS Configuration <mds-config-ref>
+	Journaler Configuration <journaler>
 	Manpage cephfs <../../man/8/cephfs>
 	Manpage ceph-fuse <../../man/8/ceph-fuse>
 	Manpage mount.ceph <../../man/8/mount.ceph>
