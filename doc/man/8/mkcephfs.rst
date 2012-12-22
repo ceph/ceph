@@ -72,13 +72,10 @@ Options
 
 .. option:: --mkfs
 
-   Create and mount the any file systems specified in the
-   ceph.conf for OSD data storage using mkfs. The "devs" and (if it
-   differs from "osd data") "fs path" options must be defined.
-
-   **NOTE** Btrfs is still considered experimental.  This option
-   can ease some configuration pain, but is not required when
-   ``osd data`` directories are mounted manually by the adminstrator.
+   Create and mount the file systems specified in the ceph.conf for
+   OSD data storage using mkfs.$type. The ``devs`` option in ceph.conf
+   must specify the device(s) and the ``osd mkfs type`` option must
+   specify the file system type (normally one of btrfs, xfs, or ext4).
 
 .. option:: --no-copy-conf
 
