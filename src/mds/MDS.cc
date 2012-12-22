@@ -78,6 +78,7 @@
 #include "perfglue/cpu_profiler.h"
 #include "perfglue/heap_profiler.h"
 
+#include "global/debug.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix

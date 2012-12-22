@@ -34,6 +34,7 @@ using namespace std;
 #include <sys/statvfs.h>
 
 #include "include/assert.h"
+#include "global/debug.h"
 
 #define dout_subsys ceph_subsys_client
 #undef dout_prefix
