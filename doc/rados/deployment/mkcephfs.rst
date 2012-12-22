@@ -91,6 +91,30 @@ Mount Disks to the Data Directories
 If you are running multiple OSDs per host and one hard disk per OSD,  you should
 mount the disk under the OSD data directory (if you haven't done so already).
 
+.. versionadded:: 0.56
+
+For Botail (v 0.56) and beyond, you may specify the file system type, filesystem
+options, and mount options. Add the following to the ``[global]`` section of your
+Ceph configuration file, and replace the values in braces with appropriate values:: 
+
+	osd mkfs type = {fs-type}
+	osd mkfs options {fs-type} = {mkfs options}   # default for xfs is "-f"
+	osd mount options {fs-type} = {mount options} # default mount option is "rw, noatime"
+
+For example:: 
+
+	osd mkfs type = btrfs
+	osd mkfs options btrfs = -m raid0
+	osd mount options btrfs = rw, noatime
+	
+For each ``[osd.n]`` section of your configuration file, specify the storage device. 
+For example:: 
+
+	[osd.1]
+		devs = /dev/sda
+	[osd.2]
+		devs = /dev/sdb
+
 
 Run ``mkcephfs``
 ================
@@ -100,24 +124,27 @@ and created the default directories, you may deploy Ceph with the
 ``mkcephfs`` script.
 
 .. note::  ``mkcephfs`` is a quick bootstrapping tool. It does not handle more 
-           complex operations, such as upgrades.
+   complex operations, such as upgrades.
 
-For production environments, deploy Ceph using Chef cookbooks. To run 
-``mkcephfs``, execute the following:: 
+To run ``mkcephfs`` for versions prior to Bobtail (v 0.55 and prior), execute 
+the following:: 
 
    cd /etc/ceph
    sudo mkcephfs -a -c /etc/ceph/ceph.conf -k ceph.keyring
 	
-The script adds an admin key to the ``ceph.keyring``, which is analogous to a 
-root password. See `Authentication`_ when running with ``cephx`` enabled.
+To run ``mkcephfs`` for Bobtail (v 0.56) and beyond, execute 
+the following:: 
 
-When you start or stop your cluster, you will not have to use ``sudo`` or
-provide passwords. For example:: 
+   cd /etc/ceph
+   sudo mkcephfs -a -c /etc/ceph/ceph.conf -k ceph.keyring --mkfs
+
+The script adds an admin key to the ``ceph.keyring``, which is analogous to a 
+root password. See `Authentication`_ when running with ``cephx`` enabled. To
+start the cluster, execute the following::  
 
 	sudo service ceph -a start
 
 See `Operating a Cluster`_ for details.
 
-
 .. _Authentication: ../authentication
-.. _Operating a Cluster: ../../init/
+.. _Operating a Cluster: ../../operations/
