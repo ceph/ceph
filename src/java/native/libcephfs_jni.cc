@@ -1189,6 +1189,35 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1symlink
 	return ret;
 }
 
+static void fill_cephstat(JNIEnv *env, jobject j_cephstat, struct stat *st)
+{
+	env->SetIntField(j_cephstat, cephstat_mode_fid, st->st_mode);
+	env->SetIntField(j_cephstat, cephstat_uid_fid, st->st_uid);
+	env->SetIntField(j_cephstat, cephstat_gid_fid, st->st_gid);
+	env->SetLongField(j_cephstat, cephstat_size_fid, st->st_size);
+	env->SetLongField(j_cephstat, cephstat_blksize_fid, st->st_blksize);
+	env->SetLongField(j_cephstat, cephstat_blocks_fid, st->st_blocks);
+
+	long long time = st->st_mtim.tv_sec;
+	time *= 1000;
+	time += st->st_mtim.tv_nsec / 1000000;
+	env->SetLongField(j_cephstat, cephstat_m_time_fid, time);
+
+	time = st->st_atim.tv_sec;
+	time *= 1000;
+	time += st->st_atim.tv_nsec / 1000000;
+	env->SetLongField(j_cephstat, cephstat_a_time_fid, time);
+
+	env->SetBooleanField(j_cephstat, cephstat_is_file_fid,
+			S_ISREG(st->st_mode) ? JNI_TRUE : JNI_FALSE);
+
+	env->SetBooleanField(j_cephstat, cephstat_is_directory_fid,
+			S_ISDIR(st->st_mode) ? JNI_TRUE : JNI_FALSE);
+
+	env->SetBooleanField(j_cephstat, cephstat_is_symlink_fid,
+			S_ISLNK(st->st_mode) ? JNI_TRUE : JNI_FALSE);
+}
+
 /*
  * Class:     com_ceph_fs_CephMount
  * Method:    native_ceph_lstat
@@ -1200,7 +1229,6 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1lstat
 	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
 	CephContext *cct = ceph_get_mount_context(cmount);
 	const char *c_path;
-	long long time;
 	struct stat st;
 	int ret;
 
@@ -1227,34 +1255,53 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1lstat
     return ret;
   }
 
-	env->SetIntField(j_cephstat, cephstat_mode_fid, st.st_mode);
-	env->SetIntField(j_cephstat, cephstat_uid_fid, st.st_uid);
-	env->SetIntField(j_cephstat, cephstat_gid_fid, st.st_gid);
-	env->SetLongField(j_cephstat, cephstat_size_fid, st.st_size);
-	env->SetLongField(j_cephstat, cephstat_blksize_fid, st.st_blksize);
-  env->SetLongField(j_cephstat, cephstat_blocks_fid, st.st_blocks);
-
-	time = st.st_mtim.tv_sec;
-	time *= 1000;
-	time += st.st_mtim.tv_nsec / 1000000;
-	env->SetLongField(j_cephstat, cephstat_m_time_fid, time);
-
-	time = st.st_atim.tv_sec;
-	time *= 1000;
-	time += st.st_atim.tv_nsec / 1000000;
-	env->SetLongField(j_cephstat, cephstat_a_time_fid, time);
-
-	env->SetBooleanField(j_cephstat, cephstat_is_file_fid,
-			S_ISREG(st.st_mode) ? JNI_TRUE : JNI_FALSE);
-
-	env->SetBooleanField(j_cephstat, cephstat_is_directory_fid,
-			S_ISDIR(st.st_mode) ? JNI_TRUE : JNI_FALSE);
-
-	env->SetBooleanField(j_cephstat, cephstat_is_symlink_fid,
-			S_ISLNK(st.st_mode) ? JNI_TRUE : JNI_FALSE);
+	fill_cephstat(env, j_cephstat, &st);
 
 	return ret;
 }
+
+/*
+ * Class:     com_ceph_fs_CephMount
+ * Method:    native_ceph_stat
+ * Signature: (JLjava/lang/String;Lcom/ceph/fs/CephStat;)I
+ */
+JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1stat
+	(JNIEnv *env, jclass clz, jlong j_mntp, jstring j_path, jobject j_cephstat)
+{
+	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
+	CephContext *cct = ceph_get_mount_context(cmount);
+	const char *c_path;
+	struct stat st;
+	int ret;
+
+	CHECK_ARG_NULL(j_path, "@path is null", -1);
+	CHECK_ARG_NULL(j_cephstat, "@stat is null", -1);
+	CHECK_MOUNTED(cmount, -1);
+
+	c_path = env->GetStringUTFChars(j_path, NULL);
+	if (!c_path) {
+		cephThrowInternal(env, "Failed to pin memory");
+		return -1;
+	}
+
+	ldout(cct, 10) << "jni: lstat: path " << c_path << dendl;
+
+	ret = ceph_stat(cmount, c_path, &st);
+
+	ldout(cct, 10) << "jni: lstat exit ret " << ret << dendl;
+
+	env->ReleaseStringUTFChars(j_path, c_path);
+
+	if (ret) {
+		handle_error(env, ret);
+		return ret;
+	}
+
+	fill_cephstat(env, j_cephstat, &st);
+
+	return ret;
+}
+
 
 /*
  * Class:     com_ceph_fs_CephMount
