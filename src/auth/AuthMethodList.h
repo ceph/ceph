@@ -33,6 +33,8 @@ public:
   const std::list<__u32>& get_supported_set() const {
     return auth_supported;
   }
+
+  void remove_supported_auth(int auth_type);
 };
 
 

@@ -77,6 +77,7 @@ private:
   AuthAuthorizeHandlerRegistry *authorize_handler_registry;
 
   bool initialized;
+  bool no_keyring_disabled_cephx;
 
   LogClient *log_client;
   bool more_log_pending;
