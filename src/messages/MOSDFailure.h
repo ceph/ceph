@@ -68,7 +68,10 @@ public:
 
   const char *get_type_name() const { return "osd_failure"; }
   void print(ostream& out) const {
-    out << "osd_failure(" << target_osd << " for " << failed_for << " e" << epoch << " v" << version << ")";
+    out << "osd_failure("
+	<< (is_failed ? "failed " : "recovered ")
+	<< target_osd << " for " << failed_for << "sec e" << epoch
+	<< " v" << version << ")";
   }
 };
 
