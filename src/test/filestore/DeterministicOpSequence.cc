@@ -21,7 +21,7 @@
 #include "os/FileStore.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
-#include "common/debug.h"
+#include "global/debug.h"
 #include <boost/scoped_ptr.hpp>
 #include <boost/lexical_cast.hpp>
 

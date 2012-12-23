@@ -97,6 +97,7 @@ extern struct ceph_file_layout g_default_file_layout;
 
 #include "common/config.h"
 #include "include/assert.h"
+#include "global/debug.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix

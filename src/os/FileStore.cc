@@ -60,7 +60,6 @@
 #include "include/buffer.h"
 
 #include "common/Timer.h"
-#include "common/debug.h"
 #include "common/errno.h"
 #include "common/run_cmd.h"
 #include "common/safe_io.h"
@@ -81,6 +80,7 @@ using ceph::crypto::SHA1;
 #include "include/assert.h"
 
 #include "common/config.h"
+#include "global/debug.h"
 
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix

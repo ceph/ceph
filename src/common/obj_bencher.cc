@@ -15,6 +15,7 @@
  * it will just loop forever.
  */
 #include "common/Cond.h"
+#include "global/global_context.h"
 #include "obj_bencher.h"
 
 #include <iostream>

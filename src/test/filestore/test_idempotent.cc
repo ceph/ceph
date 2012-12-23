@@ -17,8 +17,8 @@
 #include <boost/scoped_ptr.hpp>
 #include "os/FileStore.h"
 #include "global/global_init.h"
+#include "global/debug.h"
 #include "common/ceph_argparse.h"
-#include "common/debug.h"
 #include "test/common/ObjectContents.h"
 #include "FileStoreTracker.h"
 #include "os/LevelDBStore.h"

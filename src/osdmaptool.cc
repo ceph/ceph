@@ -28,6 +28,7 @@ using namespace std;
 #include "mon/MonMap.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
+#include "global/debug.h"
 
 void usage()
 {

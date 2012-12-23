@@ -13,6 +13,7 @@
 #include "common/config.h"
 #include "common/Mutex.h"
 #include "common/snap_types.h"
+#include "global/global_context.h"
 #include "global/global_init.h"
 #include "include/atomic.h"
 #include "include/buffer.h"

@@ -3,6 +3,7 @@
 #include "common/ceph_context.h"
 #include "include/types.h"
 #include "rgw/rgw_acl.h"
+#include "global/debug.h"
 
 #include <iostream>
 #include <map>

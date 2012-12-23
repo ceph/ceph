@@ -17,11 +17,11 @@
 
 #include "common/obj_bencher.h"
 #include "common/config.h"
-#include "common/debug.h"
 #include "common/ceph_argparse.h"
 #include "common/WorkQueue.h"
 #include "msg/Message.h"
 #include "global/global_init.h"
+#include "global/debug.h"
 
 #include "libs3.h"
 

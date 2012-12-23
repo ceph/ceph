@@ -29,6 +29,7 @@
 
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
+#include "global/debug.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/config.h"

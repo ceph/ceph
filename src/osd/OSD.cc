@@ -98,6 +98,7 @@
 
 #include "global/signal_handler.h"
 #include "global/pidfile.h"
+#include "global/debug.h"
 
 #include "include/color.h"
 #include "perfglue/cpu_profiler.h"

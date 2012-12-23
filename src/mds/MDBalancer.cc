@@ -36,6 +36,7 @@ using std::map;
 using std::vector;
 
 #include "common/config.h"
+#include "global/debug.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef DOUT_COND

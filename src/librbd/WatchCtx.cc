@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/ceph_context.h"
-#include "common/dout.h"
+#include "common/debug.h"
 #include "common/perf_counters.h"
 
 #include "librbd/ImageCtx.h"

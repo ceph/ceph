@@ -16,7 +16,7 @@
 #include <inttypes.h>
 
 #include "common/Cond.h"
-#include "common/dout.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/snap_types.h"
 #include "common/perf_counters.h"

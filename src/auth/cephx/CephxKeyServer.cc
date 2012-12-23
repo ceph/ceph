@@ -17,6 +17,8 @@
 #include "CephxKeyServer.h"
 #include "common/Timer.h"
 
+#include "global/global_context.h"
+
 #include <sstream>
 
 #define dout_subsys ceph_subsys_auth

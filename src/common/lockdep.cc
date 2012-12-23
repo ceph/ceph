@@ -13,7 +13,7 @@
  */
 #include "BackTrace.h"
 #include "Clock.h"
-#include "common/dout.h"
+#include "common/debug.h"
 #include "common/environment.h"
 #include "include/types.h"
 #include "lockdep.h"

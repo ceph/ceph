@@ -3,11 +3,11 @@
 
 #include "include/types.h"
 #include "common/Thread.h"
-#include "common/debug.h"
 #include "common/Clock.h"
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
+#include "global/debug.h"
 
 struct T : public Thread {
   int num;

@@ -15,7 +15,7 @@
 #include "common/Thread.h"
 #include "common/admin_socket.h"
 #include "common/config.h"
-#include "common/dout.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
 #include "common/pipe.h"
