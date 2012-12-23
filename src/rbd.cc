@@ -46,6 +46,7 @@
 
 #include "include/rbd_types.h"
 #include "common/TextTable.h"
+#include "include/util.h"
 
 #if defined(__linux__)
 #include <linux/fs.h>
@@ -721,8 +722,10 @@ static int export_read_cb(uint64_t ofs, size_t len, const char *buf, void *arg)
       ret = write(fd, buf, len);
     }
   } else {		// not stdout
-    if (!buf) /* a hole */
+    if (!buf || buf_is_zero(buf, len)) {
+      /* a hole */
       return 0;
+    }
 
     ret = lseek64(fd, ofs, SEEK_SET);
     if (ret < 0)
@@ -849,16 +852,27 @@ static int do_import_from_stdin(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     return r;
   }
 
-  size_t readlen;
-  off_t file_pos = 0;
+  off_t image_pos = 0;
 
-  size_t len = 1 << *order;
-  bufferptr p(len);
+  // try to fill whole imgblklen blocks for sparsification
 
-  while ((readlen = ::read(0, p.c_str(), len)) > 0) {
-    bufferlist bl;
-    bl.append(p);
-    if ((file_pos + readlen) > cur_size) {
+  size_t imgblklen = 1 << *order;
+  char *p = new char[imgblklen];
+  size_t reqlen = imgblklen;	// amount requested from read
+  ssize_t readlen;		// amount received from one read
+  size_t blklen = 0;		// amount accumulated from reads to fill blk
+
+  // loop body handles 0 return, as we may have a block to flush
+  while ((readlen = ::read(0, p + blklen, reqlen)) >= 0) {
+    blklen += readlen;
+    // if read was short, try again to fill the block before writing
+    if (readlen && ((size_t)readlen < reqlen)) {
+      reqlen -= readlen;
+      continue;
+    }
+
+    // resize output image by binary expansion as we go
+    if ((image_pos + (size_t)blklen) > cur_size) {
       cur_size *= 2;
       r = image.resize(cur_size);
       if (r < 0) {
@@ -866,19 +880,32 @@ static int do_import_from_stdin(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 	return r;
       }
     }
-    r = image.write(file_pos, readlen, bl);
-    if (r < 0) {
-      cerr << "rbd: error writing to image block" << std::endl;
-      return r;
+
+    // write as much as we got; perhaps less than imgblklen
+    bufferlist bl(blklen);
+    bl.append(p, blklen);
+    // but skip writing zeros to create sparse images
+    if (!bl.is_zero()) {
+      r = image.write(image_pos, blklen, bl);
+      if (r < 0) {
+	cerr << "rbd: error writing to image block" << cpp_strerror(r) << std::endl;
+	return r;
+      }
     }
-    file_pos += readlen;
+    // done with whole block, whether written or not 
+    image_pos += blklen;
+    // if read had returned 0, we're at EOF and should quit
+    if (readlen == 0)
+      break;
+    blklen = 0;
+    reqlen = imgblklen;
   }
-  r = image.resize(file_pos);
+  r = image.resize(image_pos);
   if (r < 0) {
     cerr << "rbd: final image resize failed" << std::endl;
     return r;
   }
-  return readlen;	// 0 or error
+  return readlen;	// 0 or -error
 }
 
 static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,

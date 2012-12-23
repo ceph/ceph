@@ -2241,23 +2241,22 @@ void OSD::tick()
 
     // mon report?
     utime_t now = ceph_clock_now(g_ceph_context);
-    if (now - last_pg_stats_sent > g_conf->osd_mon_report_interval_max) {
-      osd_stat_updated = true;
-      do_mon_report();
-    }
-    else if (now - last_mon_report > g_conf->osd_mon_report_interval_min) {
-      do_mon_report();
-    }
-
-    map_lock.put_read();
-
-    if (outstanding_pg_stats
-	&&(now - g_conf->osd_mon_ack_timeout) > last_pg_stats_ack) {
+    if (outstanding_pg_stats &&
+	(now - g_conf->osd_mon_ack_timeout) > last_pg_stats_ack) {
       dout(1) << "mon hasn't acked PGStats in " << now - last_pg_stats_ack
 	      << " seconds, reconnecting elsewhere" << dendl;
       monc->reopen_session();
       last_pg_stats_ack = ceph_clock_now(g_ceph_context);  // reset clock
+      last_pg_stats_sent = utime_t();
     }
+    if (now - last_pg_stats_sent > g_conf->osd_mon_report_interval_max) {
+      osd_stat_updated = true;
+      do_mon_report();
+    } else if (now - last_mon_report > g_conf->osd_mon_report_interval_min) {
+      do_mon_report();
+    }
+
+    map_lock.put_read();
   }
 
   // only do waiters if dispatch() isn't currently running.  (if it is,
@@ -3589,7 +3588,7 @@ void OSD::sched_scrub()
     dout(10) << " on " << t << " " << pgid << dendl;
     PG *pg = _lookup_lock_pg(pgid);
     if (pg) {
-      if (pg->is_active() && !pg->sched_scrub()) {
+      if (pg->is_active() && pg->sched_scrub()) {
 	pg->unlock();
 	break;
       }
@@ -3624,6 +3623,24 @@ void OSDService::dec_scrubs_pending()
 	   << " (max " << g_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
   --scrubs_pending;
   assert(scrubs_pending >= 0);
+  sched_scrub_lock.Unlock();
+}
+
+void OSDService::inc_scrubs_active(bool reserved)
+{
+  sched_scrub_lock.Lock();
+  ++(scrubs_active);
+  if (reserved) {
+    --(scrubs_pending);
+    dout(20) << "inc_scrubs_active " << (scrubs_active-1) << " -> " << scrubs_active
+	     << " (max " << g_conf->osd_max_scrubs
+	     << ", pending " << (scrubs_pending+1) << " -> " << scrubs_pending << ")" << dendl;
+    assert(scrubs_pending >= 0);
+  } else {
+    dout(20) << "inc_scrubs_active " << (scrubs_active-1) << " -> " << scrubs_active
+	     << " (max " << g_conf->osd_max_scrubs
+	     << ", pending " << scrubs_pending << ")" << dendl;
+  }
   sched_scrub_lock.Unlock();
 }
 

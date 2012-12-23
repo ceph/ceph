@@ -318,7 +318,7 @@ if [ -n "$prepareosdfs" ]; then
             fs_devs="$tmp_btrfs_devs"
         else
             echo "no devs defined for $name"
-            exit 0
+            exit 1
         fi
     fi
     if [ -z "$fs_type" ]; then
@@ -328,7 +328,7 @@ if [ -n "$prepareosdfs" ]; then
             fs_type="btrfs"
         else
             echo No filesystem type defined!
-            exit 0
+            exit 1
         fi
     fi
 
@@ -340,8 +340,12 @@ if [ -n "$prepareosdfs" ]; then
             get_conf fs_opt "" "btrfs options"
         fi
         if [ -z "$fs_opt" ]; then
-            #fallback to use at least rw,noatime
-            fs_opt="rw,noatime"
+	    if [ "$fs_type" = "xfs" ]; then
+		fs_opt="rw,noatime,inode64"
+	    else
+                #fallback to use at least rw,noatime
+		fs_opt="rw,noatime"
+	    fi
         fi
     fi
     [ -n "$fs_opt" ] && fs_opt="-o $fs_opt"

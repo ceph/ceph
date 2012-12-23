@@ -402,7 +402,8 @@ librbd_la_SOURCES = \
 	osdc/Striper.cc \
 	cls/lock/cls_lock_client.cc \
 	cls/lock/cls_lock_types.cc \
-	cls/lock/cls_lock_ops.cc
+	cls/lock/cls_lock_ops.cc \
+	common/util.cc
 librbd_la_CFLAGS = ${AM_CFLAGS} ${CRYPTO_CFLAGS}
 librbd_la_CXXFLAGS = ${AM_CXXFLAGS}
 librbd_la_LIBADD = librados.la
@@ -439,7 +440,7 @@ radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += scratchtool scratchtoolpp radosacl
 
-rbd_SOURCES = rbd.cc common/fiemap.cc common/secret.c common/TextTable.cc
+rbd_SOURCES = rbd.cc common/fiemap.cc common/secret.c common/TextTable.cc common/util.cc
 rbd_CXXFLAGS = ${AM_CXXFLAGS}
 rbd_LDADD = libglobal.la librbd.la librados.la $(PTHREAD_LIBS) -lm -lkeyutils $(CRYPTO_LIBS) $(EXTRALIBS)
 if LINUX
@@ -1602,6 +1603,7 @@ noinst_HEADERS = \
 	include/rbd/features.h\
 	include/rbd/librbd.h\
 	include/rbd/librbd.hpp\
+        include/util.h\
 	librados/AioCompletionImpl.h\
 	librados/IoCtxImpl.h\
 	librados/PoolAsyncCompletionImpl.h\
