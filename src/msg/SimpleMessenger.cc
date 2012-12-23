@@ -315,7 +315,8 @@ Pipe *SimpleMessenger::add_accept_pipe(int sd)
  */
 Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr,
 				    int type,
-				    Connection *con)
+				    Connection *con,
+				    Message *first)
 {
   assert(lock.is_locked());
   assert(addr != my_inst.addr);
@@ -329,6 +330,8 @@ Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr,
   pipe->set_peer_addr(addr);
   pipe->policy = get_policy(type);
   pipe->start_writer();
+  if (first)
+    pipe->_send(first);
   pipe->pipe_lock.Unlock();
   pipe->register_pipe();
   pipes.insert(pipe);
@@ -369,7 +372,7 @@ Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
       pipe = p->second;
       ldout(cct, 10) << "get_connection " << dest << " existing " << pipe << dendl;
     } else {
-      pipe = connect_rank(dest.addr, dest.name.type(), NULL);
+      pipe = connect_rank(dest.addr, dest.name.type(), NULL, NULL);
       ldout(cct, 10) << "get_connection " << dest << " new " << pipe << dendl;
     }
     Mutex::Locker l(pipe->pipe_lock);
@@ -420,9 +423,7 @@ void SimpleMessenger::submit_message(Message *m, Connection *con,
     m->put();
   } else {
     ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
-    // not connected.
-    Pipe *pipe = connect_rank(dest_addr, dest_type, con);
-    pipe->send(m);
+    connect_rank(dest_addr, dest_type, con, m);
   }
 }
 
