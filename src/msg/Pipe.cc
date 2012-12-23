@@ -40,6 +40,7 @@
 ostream& Pipe::_pipe_prefix(std::ostream *_dout) {
   return *_dout << "-- " << msgr->get_myinst().addr << " >> " << peer_addr << " pipe(" << this
 		<< " sd=" << sd << " :" << port
+		<< " s=" << state
 		<< " pgs=" << peer_global_seq
 		<< " cs=" << connect_seq
 		<< " l=" << policy.lossy
@@ -379,8 +380,8 @@ int Pipe::accept()
 
     
     // existing?
-    if (msgr->rank_pipe.count(peer_addr)) {
-      existing = msgr->rank_pipe[peer_addr];
+    existing = msgr->_lookup_pipe(peer_addr);
+    if (existing) {
       existing->pipe_lock.Lock();
 
       if (connect.global_seq < existing->peer_global_seq) {
@@ -601,13 +602,13 @@ int Pipe::accept()
 
   rc = tcp_write((char*)&reply, sizeof(reply));
   if (rc < 0) {
-    goto fail_unlocked;
+    goto fail_registered;
   }
 
   if (reply.authorizer_len) {
     rc = tcp_write(authorizer_reply.c_str(), authorizer_reply.length());
     if (rc < 0) {
-      goto fail_unlocked;
+      goto fail_registered;
     }
   }
 
@@ -615,11 +616,11 @@ int Pipe::accept()
     uint64_t newly_acked_seq = 0;
     if(tcp_write((char*)&existing_seq, sizeof(existing_seq)) < 0) {
       ldout(msgr->cct,2) << "accept write error on in_seq" << dendl;
-      goto fail_unlocked;
+      goto fail_registered;
     }
     if (tcp_read((char*)&newly_acked_seq, sizeof(newly_acked_seq)) < 0) {
       ldout(msgr->cct,2) << "accept read error on newly_acked_seq" << dendl;
-      goto fail_unlocked;
+      goto fail_registered;
     }
     requeue_sent(newly_acked_seq);
   }
@@ -636,6 +637,8 @@ int Pipe::accept()
 
   return 0;   // success.
 
+ fail_registered:
+  ldout(msgr->cct, 10) << "accept fault after register" << dendl;
  fail_unlocked:
   pipe_lock.Lock();
   if (state != STATE_CLOSED) {
@@ -1001,17 +1004,18 @@ void Pipe::register_pipe()
 {
   ldout(msgr->cct,10) << "register_pipe" << dendl;
   assert(msgr->lock.is_locked());
-  assert(msgr->rank_pipe.count(peer_addr) == 0);
+  Pipe *existing = msgr->_lookup_pipe(peer_addr);
+  assert(existing == NULL);
   msgr->rank_pipe[peer_addr] = this;
 }
 
 void Pipe::unregister_pipe()
 {
   assert(msgr->lock.is_locked());
-  if (msgr->rank_pipe.count(peer_addr) &&
-      msgr->rank_pipe[peer_addr] == this) {
+  hash_map<entity_addr_t,Pipe*>::iterator p = msgr->rank_pipe.find(peer_addr);
+  if (p != msgr->rank_pipe.end() && p->second == this) {
     ldout(msgr->cct,10) << "unregister_pipe" << dendl;
-    msgr->rank_pipe.erase(peer_addr);
+    msgr->rank_pipe.erase(p);
   } else {
     ldout(msgr->cct,10) << "unregister_pipe - not registered" << dendl;
   }

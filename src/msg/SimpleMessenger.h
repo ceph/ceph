@@ -496,7 +496,12 @@ private:
   /// lock to protect the global_seq
   pthread_spinlock_t global_seq_lock;
 
-  /// hash map of addresses to Pipes
+  /**
+   * hash map of addresses to Pipes
+   *
+   * NOTE: a Pipe* with state CLOSED may still be in the map but is considered
+   * invalid and can be replaced by anyone holding the msgr lock
+   */
   hash_map<entity_addr_t, Pipe*> rank_pipe;
   /// a set of all the Pipes we have which are somehow active
   set<Pipe*>      pipes;
@@ -523,6 +528,16 @@ private:
   Cond  wait_cond;
 
   friend class Pipe;
+
+  Pipe *_lookup_pipe(const entity_addr_t& k) {
+    hash_map<entity_addr_t, Pipe*>::iterator p = rank_pipe.find(k);
+    if (p == rank_pipe.end())
+      return NULL;
+    // see lock cribbing in Pipe::fault()
+    if (p->second->state == Pipe::STATE_CLOSED)
+      return NULL;
+    return p->second;
+  }
 
 public:
 
