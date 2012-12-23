@@ -2054,8 +2054,10 @@ void OSD::handle_osd_ping(MOSDPing *m)
       // Cancel false reports
       if (failure_queue.count(from))
 	failure_queue.erase(from);
-      if (failure_pending.count(from))
+      if (failure_pending.count(from)) {
 	send_still_alive(curmap->get_epoch(), failure_pending[from]);
+	failure_pending.erase(from);
+      }
     }
     break;
 
