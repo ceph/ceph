@@ -397,10 +397,18 @@ void SimpleMessenger::submit_message(Message *m, Connection *con,
       return;
     }
     if (pipe) {
-      ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", have pipe." << dendl;
-      pipe->send(m);
+      pipe->pipe_lock.Lock();
+      if (pipe->state != Pipe::STATE_CLOSED) {
+	ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", have pipe." << dendl;
+	pipe->_send(m);
+	pipe->pipe_lock.Unlock();
+	pipe->put();
+	return;
+      }
+      pipe->pipe_lock.Unlock();
       pipe->put();
-      return;
+      ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr
+		    << ", had pipe " << pipe << ", but it closed." << dendl;
     }
   }
 

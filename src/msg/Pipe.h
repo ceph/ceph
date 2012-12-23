@@ -243,11 +243,6 @@ class DispatchQueue;
     }
     void stop();
 
-    void send(Message *m) {
-      pipe_lock.Lock();
-      _send(m);
-      pipe_lock.Unlock();
-    }
     void _send(Message *m) {
       out_q[m->get_priority()].push_back(m);
       cond.Signal();
