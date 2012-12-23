@@ -111,7 +111,7 @@ int SimpleMessenger::_send_message(Message *m, const entity_inst_t& dest,
   }
 
   lock.Lock();
-  Pipe *pipe = rank_pipe.count(dest.addr) ? rank_pipe[ dest.addr ] : NULL;
+  Pipe *pipe = _lookup_pipe(dest.addr);
   submit_message(m, (pipe ? pipe->connection_state : NULL),
                  dest.addr, dest.name.type(), lazy);
   lock.Unlock();
@@ -366,10 +366,8 @@ Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
 
   // remote
   while (true) {
-    Pipe *pipe = NULL;
-    hash_map<entity_addr_t, Pipe*>::iterator p = rank_pipe.find(dest.addr);
-    if (p != rank_pipe.end()) {
-      pipe = p->second;
+    Pipe *pipe = _lookup_pipe(dest.addr);
+    if (pipe) {
       ldout(cct, 10) << "get_connection " << dest << " existing " << pipe << dendl;
     } else {
       pipe = connect_rank(dest.addr, dest.name.type(), NULL, NULL);
@@ -446,10 +444,9 @@ int SimpleMessenger::send_keepalive(const entity_inst_t& dest)
     // local?
     if (my_inst.addr != dest_addr) {
       // remote.
-      Pipe *pipe = 0;
-      if (rank_pipe.count( dest_proc_addr )) {
+      Pipe *pipe = _lookup_pipe(dest_proc_addr);
+      if (pipe) {
         // connected?
-        pipe = rank_pipe[ dest_proc_addr ];
 	pipe->pipe_lock.Lock();
 	ldout(cct,20) << "send_keepalive remote, " << dest_addr << ", have pipe." << dendl;
 	pipe->_send_keepalive();
@@ -567,8 +564,8 @@ void SimpleMessenger::mark_down_all()
 void SimpleMessenger::mark_down(const entity_addr_t& addr)
 {
   lock.Lock();
-  if (rank_pipe.count(addr)) {
-    Pipe *p = rank_pipe[addr];
+  Pipe *p = _lookup_pipe(addr);
+  if (p) {
     ldout(cct,1) << "mark_down " << addr << " -- " << p << dendl;
     p->unregister_pipe();
     p->pipe_lock.Lock();
