@@ -221,7 +221,7 @@ for name in $what; do
     cmd="$cmd -c $cur_conf"
 
     if echo $name | grep -q ^osd; then
-	get_conf osd_data "" "osd data"
+	get_conf osd_data "/var/lib/ceph/osd/ceph-$id" "osd data"
 	get_conf fs_path "$osd_data" "fs path"  # mount point defaults so osd data
         get_conf fs_devs "" "devs"
 	if [ -z "$fs_devs" ]; then
@@ -292,8 +292,12 @@ for name in $what; do
 		    fi
 
 		    if [ -z "$fs_opt" ]; then
-		        #fallback to use at least noatime
-		        fs_opt="rw,noatime"
+			if [ "$fs_type" = "xfs" ]; then
+			    fs_opt="rw,noatime,inode64"
+			else
+		            #fallback to use at least noatime
+		            fs_opt="rw,noatime"
+			fi
 		    fi
 		fi
 

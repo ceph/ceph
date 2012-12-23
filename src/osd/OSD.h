@@ -273,6 +273,7 @@ public:
   }
 
   bool inc_scrubs_pending();
+  void inc_scrubs_active(bool reserved);
   void dec_scrubs_pending();
   void dec_scrubs_active();
 

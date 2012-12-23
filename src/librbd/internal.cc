@@ -18,6 +18,7 @@
 
 #include "librbd/internal.h"
 #include "librbd/parent_types.h"
+#include "include/util.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -1931,25 +1932,6 @@ reprotect_and_return_err:
       ictx->unregister_watch();
 
     delete ictx;
-  }
-
-  // test if an entire buf is zero in 8-byte chunks
-  static bool buf_is_zero(char *buf, size_t len)
-  {
-    size_t ofs;
-    int chunk = sizeof(uint64_t);
-
-    for (ofs = 0; ofs < len; ofs += sizeof(uint64_t)) {
-      if (*(uint64_t *)(buf + ofs) != 0) {
-	return false;
-      }
-    }
-    for (ofs = (len / chunk) * chunk; ofs < len; ofs++) {
-      if (buf[ofs] != '\0') {
-	return false;
-      }
-    }
-    return true;
   }
 
   // 'flatten' child image by copying all parent's blocks
