@@ -20,6 +20,8 @@
 #include <time.h>
 
 #include "include/types.h"
+
+
 // --------
 // utime_t
 
@@ -131,6 +133,11 @@ public:
     ts.tv_sec = sec();
     ts.tv_nsec = nsec();
     return ts;
+  }
+
+  void sleep() {
+    struct timespec ts = { tv.tv_sec, tv.tv_nsec };
+    nanosleep(&ts, &ts);
   }
 
   // output
