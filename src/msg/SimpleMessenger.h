@@ -431,11 +431,12 @@ private:
    * @param type The peer type of the entity at the address.
    * @param con An existing Connection to associate with the new Pipe. If
    * NULL, it creates a new Connection.
+   * @param msg an initial message to queue on the new pipe
    *
    * @return a pointer to the newly-created Pipe. Caller does not own a
    * reference; take one if you need it.
    */
-  Pipe *connect_rank(const entity_addr_t& addr, int type, Connection *con);
+  Pipe *connect_rank(const entity_addr_t& addr, int type, Connection *con, Message *first);
   /**
    * Send a message, lazily or not.
    * This just glues [lazy_]send_message together and passes
