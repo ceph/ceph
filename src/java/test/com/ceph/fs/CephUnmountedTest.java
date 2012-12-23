@@ -78,6 +78,12 @@ public class CephUnmountedTest {
   }
 
   @Test(expected=CephNotMountedException.class)
+  public void test_stat() throws Exception {
+    CephStat stat = new CephStat();
+    mount.stat("/a/path", stat);
+  }
+
+  @Test(expected=CephNotMountedException.class)
   public void test_lstat() throws Exception {
     CephStat stat = new CephStat();
     mount.lstat("/a/path", stat);
