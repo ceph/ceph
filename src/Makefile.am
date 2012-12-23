@@ -150,7 +150,7 @@ base: ceph-mon ceph-osd ceph-mds \
 	ceph cephfs \
 	ceph-syn \
 	rados radosgw librados-config \
-	ceph-conf monmaptool osdmaptool crushtool jsontest ceph-authtool \
+	ceph-conf monmaptool osdmaptool crushtool ceph-authtool \
 	init-ceph mkcephfs
 
 
