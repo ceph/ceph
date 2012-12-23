@@ -340,8 +340,12 @@ if [ -n "$prepareosdfs" ]; then
             get_conf fs_opt "" "btrfs options"
         fi
         if [ -z "$fs_opt" ]; then
-            #fallback to use at least rw,noatime
-            fs_opt="rw,noatime"
+	    if [ "$fs_type" = "xfs" ]; then
+		fs_opt="rw,noatime,inode64"
+	    else
+                #fallback to use at least rw,noatime
+		fs_opt="rw,noatime"
+	    fi
         fi
     fi
     [ -n "$fs_opt" ] && fs_opt="-o $fs_opt"

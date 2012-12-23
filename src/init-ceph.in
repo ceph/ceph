@@ -292,8 +292,12 @@ for name in $what; do
 		    fi
 
 		    if [ -z "$fs_opt" ]; then
-		        #fallback to use at least noatime
-		        fs_opt="rw,noatime"
+			if [ "$fs_type" = "xfs" ]; then
+			    fs_opt="rw,noatime,inode64"
+			else
+		            #fallback to use at least noatime
+		            fs_opt="rw,noatime"
+			fi
 		    fi
 		fi
 
