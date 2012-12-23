@@ -639,10 +639,19 @@ int Pipe::accept()
 
  fail_registered:
   ldout(msgr->cct, 10) << "accept fault after register" << dendl;
+
+  if (msgr->cct->_conf->ms_inject_internal_delays) {
+    ldout(msgr->cct, 10) << " sleep for " << msgr->cct->_conf->ms_inject_internal_delays << dendl;
+    utime_t t;
+    t.set_from_double(msgr->cct->_conf->ms_inject_internal_delays);
+    t.sleep();
+  }
+
  fail_unlocked:
   pipe_lock.Lock();
   if (state != STATE_CLOSED) {
     bool queued = is_queued();
+    ldout(msgr->cct, 10) << "  queued = " << (int)queued << dendl;
     if (queued)
       state = policy.server ? STATE_STANDBY : STATE_CONNECTING;
     else if (replaced)
@@ -658,6 +667,14 @@ int Pipe::accept()
 
  shutting_down:
   msgr->lock.Unlock();
+
+  if (msgr->cct->_conf->ms_inject_internal_delays) {
+    ldout(msgr->cct, 10) << " sleep for " << msgr->cct->_conf->ms_inject_internal_delays << dendl;
+    utime_t t;
+    t.set_from_double(msgr->cct->_conf->ms_inject_internal_delays);
+    t.sleep();
+  }
+
   pipe_lock.Lock();
   state = STATE_CLOSED;
   fault();
@@ -865,6 +882,13 @@ int Pipe::connect()
       }
     }
 
+    if (conf->ms_inject_internal_delays) {
+      ldout(msgr->cct, 10) << " sleep for " << msgr->cct->_conf->ms_inject_internal_delays << dendl;
+      utime_t t;
+      t.set_from_double(msgr->cct->_conf->ms_inject_internal_delays);
+      t.sleep();
+    }
+
     pipe_lock.Lock();
     if (state != STATE_CONNECTING) {
       ldout(msgr->cct,0) << "connect got RESETSESSION but no longer connecting" << dendl;
@@ -987,6 +1011,13 @@ int Pipe::connect()
   }
 
  fail:
+  if (conf->ms_inject_internal_delays) {
+    ldout(msgr->cct, 10) << " sleep for " << msgr->cct->_conf->ms_inject_internal_delays << dendl;
+    utime_t t;
+    t.set_from_double(msgr->cct->_conf->ms_inject_internal_delays);
+    t.sleep();
+  }
+
   pipe_lock.Lock();
  fail_locked:
   if (state == STATE_CONNECTING)
@@ -1090,8 +1121,17 @@ void Pipe::fault(bool onread)
 
     stop();
 
-    // ugh
+    // crib locks, blech.  note that Pipe is now STATE_CLOSED and the
+    // rank_pipe entry is ignored by others.
     pipe_lock.Unlock();
+
+    if (conf->ms_inject_internal_delays) {
+      ldout(msgr->cct, 10) << " sleep for " << msgr->cct->_conf->ms_inject_internal_delays << dendl;
+      utime_t t;
+      t.set_from_double(msgr->cct->_conf->ms_inject_internal_delays);
+      t.sleep();
+    }
+
     msgr->lock.Lock();
     pipe_lock.Lock();
     unregister_pipe();
