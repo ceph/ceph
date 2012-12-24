@@ -4076,11 +4076,11 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
   EUpdate *le = new EUpdate(mdlog, inc ? "link_remote":"unlink_remote");
   mdlog->start_entry(le);
   le->metablob.add_client_req(mdr->reqid, mdr->client_request->get_oldest_client_tid());
-  if (!mdr->more()->slaves.empty()) {
-    dout(20) << " noting uncommitted_slaves " << mdr->more()->slaves << dendl;
+  if (!mdr->more()->witnessed.empty()) {
+    dout(20) << " noting uncommitted_slaves " << mdr->more()->witnessed << dendl;
     le->reqid = mdr->reqid;
     le->had_slaves = true;
-    mds->mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->slaves);
+    mds->mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->witnessed);
   }
 
   if (inc) {
@@ -4655,11 +4655,11 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   EUpdate *le = new EUpdate(mdlog, "unlink_local");
   mdlog->start_entry(le);
   le->metablob.add_client_req(mdr->reqid, mdr->client_request->get_oldest_client_tid());
-  if (!mdr->more()->slaves.empty()) {
-    dout(20) << " noting uncommitted_slaves " << mdr->more()->slaves << dendl;
+  if (!mdr->more()->witnessed.empty()) {
+    dout(20) << " noting uncommitted_slaves " << mdr->more()->witnessed << dendl;
     le->reqid = mdr->reqid;
     le->had_slaves = true;
-    mds->mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->slaves);
+    mds->mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->witnessed);
   }
 
   if (straydn) {
@@ -5493,13 +5493,13 @@ void Server::handle_client_rename(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "rename");
   mdlog->start_entry(le);
   le->metablob.add_client_req(mdr->reqid, mdr->client_request->get_oldest_client_tid());
-  if (!mdr->more()->slaves.empty()) {
-    dout(20) << " noting uncommitted_slaves " << mdr->more()->slaves << dendl;
+  if (!mdr->more()->witnessed.empty()) {
+    dout(20) << " noting uncommitted_slaves " << mdr->more()->witnessed << dendl;
     
     le->reqid = mdr->reqid;
     le->had_slaves = true;
     
-    mds->mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->slaves);
+    mds->mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->witnessed);
   }
   
   _rename_prepare(mdr, &le->metablob, &le->client_map, srcdn, destdn, straydn);
