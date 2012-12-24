@@ -1,19 +1,19 @@
+#include "acconfig.h"
+
 #include <inttypes.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <errno.h>
-
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mount.h>
 #include <iostream>
 
-#include "acconfig.h"
-#include "include/compat.h"
-
 #if defined(__FreeBSD__)
 #include <sys/disk.h>
 #endif
+
+#include "include/compat.h"
 
 int get_block_device_size(int fd, int64_t *psize)
 {

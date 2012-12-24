@@ -13,7 +13,9 @@
  */
 
 #include "osd_types.h"
+
 #include "include/ceph_features.h"
+
 #include "PG.h"
 #include "OSDMap.h"
 

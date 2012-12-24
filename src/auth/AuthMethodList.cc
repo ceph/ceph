@@ -12,15 +12,14 @@
  * 
  */
 
+#include "include/str_list.h"
 #include "common/Mutex.h"
 #include "common/config.h"
 #include "common/debug.h"
-#include "include/str_list.h"
 
 #include "AuthMethodList.h"
 
 const static int dout_subsys = ceph_subsys_auth;
-
 
 AuthMethodList::AuthMethodList(CephContext *cct, string str)
 {

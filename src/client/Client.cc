@@ -12,9 +12,6 @@
  * 
  */
 
-
-
-// unix-ey fs stuff
 #include <unistd.h>
 #include <sys/types.h>
 #include <time.h>
@@ -22,18 +19,24 @@
 #include <sys/stat.h>
 #include <sys/param.h>
 #include <fcntl.h>
-
 #include <sys/statvfs.h>
-
 #include <iostream>
-using namespace std;
 
+#include "include/assert.h"
+#include "include/compat.h"
+#include "common/Cond.h"
+#include "common/perf_counters.h"
 #include "common/config.h"
-
-// ceph stuff
+#include "common/admin_socket.h"
+#include "common/errno.h"
+#include "mon/MonClient.h"
+#include "mon/MonMap.h"
+#include "mds/MDSMap.h"
+#include "osd/OSDMap.h"
+#include "osdc/Filer.h"
+#include "osdc/WritebackHandler.h"
 
 #include "messages/MMonMap.h"
-
 #include "messages/MClientSession.h"
 #include "messages/MClientReconnect.h"
 #include "messages/MClientRequest.h"
@@ -43,33 +46,9 @@ using namespace std;
 #include "messages/MClientCapRelease.h"
 #include "messages/MClientLease.h"
 #include "messages/MClientSnap.h"
-
 #include "messages/MGenericMessage.h"
-
 #include "messages/MMDSMap.h"
 
-#include "mon/MonClient.h"
-
-#include "mds/MDSMap.h"
-#include "osd/OSDMap.h"
-#include "mon/MonMap.h"
-
-#include "osdc/Filer.h"
-#include "osdc/WritebackHandler.h"
-
-#include "common/Cond.h"
-#include "common/Mutex.h"
-#include "common/perf_counters.h"
-#include "common/admin_socket.h"
-#include "common/errno.h"
-
-#define dout_subsys ceph_subsys_client
-
-#include "include/lru.h"
-
-#include "include/compat.h"
-
-#include "Client.h"
 #include "Inode.h"
 #include "Dentry.h"
 #include "Dir.h"
@@ -79,8 +58,11 @@ using namespace std;
 #include "MetaRequest.h"
 #include "ObjecterWriteback.h"
 
-#include "include/assert.h"
+#include "Client.h"
 
+using namespace std;
+
+#define dout_subsys ceph_subsys_client
 #undef dout_prefix
 #define dout_prefix *_dout << "client." << whoami << " "
 

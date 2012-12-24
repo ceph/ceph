@@ -4,16 +4,15 @@
 #define LEVEL_DB_STORE_H
 
 #include "include/types.h"
-#include "include/buffer.h"
-#include "KeyValueDB.h"
-#include <set>
-#include <map>
-#include <string>
-#include <tr1/memory>
+
 #include <boost/scoped_ptr.hpp>
+
+#include "include/buffer.h"
 #include "leveldb/db.h"
 #include "leveldb/write_batch.h"
 #include "leveldb/slice.h"
+
+#include "KeyValueDB.h"
 
 /**
  * Uses LevelDB to implement the KeyValueDB interface

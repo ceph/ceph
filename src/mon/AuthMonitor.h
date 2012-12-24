@@ -15,15 +15,18 @@
 #ifndef CEPH_AUTHMONITOR_H
 #define CEPH_AUTHMONITOR_H
 
+#include "mon_types.h"
+
 #include <map>
 #include <set>
-using namespace std;
 
 #include "include/ceph_features.h"
-#include "include/types.h"
 #include "msg/Messenger.h"
+
 #include "PaxosService.h"
-#include "mon/Monitor.h"
+#include "Monitor.h"
+
+using namespace std;
 
 class MMonCommand;
 class MAuth;

@@ -11,15 +11,14 @@
  * Foundation.  See file COPYING.
  * 
  */
-
 #include "include/types.h"
-#include "include/buffer.h"
 #include "osd/osd_types.h"
+
 #include <errno.h>
 
-#include "HashIndex.h"
-
 #include "global/debug.h"
+
+#include "HashIndex.h"
 
 #define dout_subsys ceph_subsys_filestore
 

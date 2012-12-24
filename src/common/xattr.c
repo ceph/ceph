@@ -25,7 +25,7 @@
 #error "Your system is not supported!"
 #endif
 
-#include "common/xattr.h"
+#include "xattr.h"
 
 /*
  * Sets extended attribute on a file.

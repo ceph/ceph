@@ -4,12 +4,10 @@
 #ifndef CEPH_CLS_LOCK_CLIENT_H
 #define CEPH_CLS_LOCK_CLIENT_H
 
-
 #include "include/types.h"
 #include "include/rados/librados.hpp"
 
-#include "cls/lock/cls_lock_types.h"
-
+#include "cls_lock_types.h"
 
 namespace rados {
   namespace cls {

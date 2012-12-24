@@ -16,28 +16,28 @@
 #define CEPH_SIMPLEMESSENGER_H
 
 #include "include/types.h"
-#include "include/xlist.h"
 
 #include <list>
 #include <map>
-using namespace std;
 #include <ext/hash_map>
 #include <ext/hash_set>
-using namespace __gnu_cxx;
 
-#include "common/Mutex.h"
 #include "include/atomic.h"
+#include "include/assert.h"
+#include "include/xlist.h"
+#include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
 #include "common/Throttle.h"
 
 #include "Messenger.h"
 #include "Message.h"
-#include "include/assert.h"
 #include "DispatchQueue.h"
-
 #include "Pipe.h"
 #include "Accepter.h"
+
+using namespace std;
+using namespace __gnu_cxx;
 
 /*
  * This class handles transmission and reception of messages. Generally

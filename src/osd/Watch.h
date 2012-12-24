@@ -18,8 +18,9 @@
 
 #include <map>
 
-#include "OSD.h"
 #include "common/config.h"
+
+#include "OSD.h"
 
 class MWatchNotify;
 

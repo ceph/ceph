@@ -11,21 +11,27 @@
  * Foundation.  See file COPYING.
  * 
  */
-
+#include "mon_types.h"
 
 #include <sstream>
 #include <stdlib.h>
 #include <signal.h>
 #include <limits.h>
 
-#include "Monitor.h"
+#include "include/color.h"
+#include "include/ceph_fs.h"
+#include "include/str_list.h"
+#include "include/assert.h"
+#include "common/config.h"
 #include "common/version.h"
-
-#include "osd/OSDMap.h"
-
-#include "MonitorStore.h"
-
-#include "msg/Messenger.h"
+#include "common/strtol.h"
+#include "common/ceph_argparse.h"
+#include "common/Clock.h"
+#include "common/errno.h"
+#include "common/perf_counters.h"
+#include "common/admin_socket.h"
+#include "global/global_context.h"
+#include "global/debug.h"
 
 #include "messages/PaxosServiceMessage.h"
 #include "messages/MMonMap.h"
@@ -33,30 +39,15 @@
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
 #include "messages/MGenericMessage.h"
-#include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
 #include "messages/MMonProbe.h"
 #include "messages/MMonJoin.h"
 #include "messages/MMonPaxos.h"
 #include "messages/MRoute.h"
 #include "messages/MForward.h"
-
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
-
 #include "messages/MAuthReply.h"
-
-#include "common/strtol.h"
-#include "common/ceph_argparse.h"
-#include "common/Timer.h"
-#include "common/Clock.h"
-#include "common/errno.h"
-#include "common/perf_counters.h"
-#include "common/admin_socket.h"
-
-#include "include/color.h"
-#include "include/ceph_fs.h"
-#include "include/str_list.h"
 
 #include "OSDMonitor.h"
 #include "MDSMonitor.h"
@@ -64,14 +55,9 @@
 #include "PGMonitor.h"
 #include "LogMonitor.h"
 #include "AuthMonitor.h"
+#include "MonitorStore.h"
 
-#include "auth/AuthMethodList.h"
-#include "auth/KeyRing.h"
-
-#include "common/config.h"
-#include "include/assert.h"
-
-#include "global/debug.h"
+#include "Monitor.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix

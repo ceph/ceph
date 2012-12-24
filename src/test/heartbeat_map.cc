@@ -15,8 +15,9 @@
 #include "common/Mutex.h"
 #include "common/HeartbeatMap.h"
 #include "common/ceph_context.h"
-#include "test/unit.h"
 #include "common/config.h"
+
+#include "unit.h"
 
 using namespace ceph;
 

@@ -15,15 +15,16 @@
 #include <iostream>
 
 #include "common/Formatter.h"
+#include "common/perf_counters.h"
+#include "os/FileStore.h"
+#include "global/global_init.h"
+#include "global/global_context.h"
 
-#include "bencher.h"
 #include "rados_backend.h"
+#include "filestore_backend.h"
+#include "bencher.h"
 #include "detailed_stat_collector.h"
 #include "distribution.h"
-#include "global/global_init.h"
-#include "os/FileStore.h"
-#include "filestore_backend.h"
-#include "common/perf_counters.h"
 
 namespace po = boost::program_options;
 using namespace std;

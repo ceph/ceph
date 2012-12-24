@@ -15,6 +15,8 @@
 #ifndef CEPH_MON_TYPES_H
 #define CEPH_MON_TYPES_H
 
+#include "include/types.h"
+
 #define PAXOS_PGMAP      0  // before osd, for pg kick to behave
 #define PAXOS_MDSMAP     1
 #define PAXOS_OSDMAP     2

@@ -12,8 +12,6 @@
  *
  */
 
-#include "common/pick_address.h"
-
 #include <netdb.h>
 #include <errno.h>
 
@@ -21,6 +19,8 @@
 #include "include/str_list.h"
 #include "common/debug.h"
 #include "common/errno.h"
+
+#include "pick_address.h"
 
 #define dout_subsys ceph_subsys_
 

@@ -16,8 +16,9 @@
 #ifndef CEPH_INOTABLE_H
 #define CEPH_INOTABLE_H
 
-#include "MDSTable.h"
 #include "include/interval_set.h"
+
+#include "MDSTable.h"
 
 class MDS;
 

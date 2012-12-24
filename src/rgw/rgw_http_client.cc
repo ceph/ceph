@@ -2,7 +2,7 @@
 #include <curl/easy.h>
 
 #include "global/debug.h"
-#include "rgw_common.h"
+
 #include "rgw_http_client.h"
 
 #define dout_subsys ceph_subsys_rgw

@@ -18,18 +18,17 @@
 #include <limits.h>
 #include <poll.h>
 
-#include "Message.h"
-#include "Pipe.h"
-#include "SimpleMessenger.h"
-
 #include "common/debug.h"
 #include "common/errno.h"
-
 // Below included to get encode_encrypt(); That probably should be in Crypto.h, instead
-
 #include "auth/Crypto.h"
 #include "auth/cephx/CephxProtocol.h"
 #include "auth/AuthSessionHandler.h"
+
+#include "Message.h"
+#include "SimpleMessenger.h"
+
+#include "Pipe.h"
 
 // Constant to limit starting sequence number to 2^31.  Nothing special about it, just a big number.  PLR
 #define SEQ_MASK  0x7fffffff 

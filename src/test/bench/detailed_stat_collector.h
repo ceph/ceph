@@ -3,16 +3,18 @@
 #ifndef DETAILEDSTATCOLLECTERH
 #define DETAILEDSTATCOLLECTERH
 
-#include "stat_collector.h"
-#include "common/Formatter.h"
-#include <boost/scoped_ptr.hpp>
-#include "common/Mutex.h"
-#include "common/Cond.h"
-#include "include/utime.h"
 #include <list>
 #include <map>
 #include <boost/tuple/tuple.hpp>
 #include <ostream>
+#include <boost/scoped_ptr.hpp>
+
+#include "include/utime.h"
+#include "common/Formatter.h"
+#include "common/Mutex.h"
+#include "common/Cond.h"
+
+#include "stat_collector.h"
 
 class DetailedStatCollector : public StatCollector {
 public:

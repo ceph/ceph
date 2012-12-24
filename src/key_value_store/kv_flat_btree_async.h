@@ -18,19 +18,19 @@
 #define EPREFIX 136
 #define EFIRSTOBJ 138
 
-#include "key_value_store/key_value_structure.h"
-#include "include/utime.h"
+#include <cfloat>
+#include <queue>
+#include <sstream>
+#include <stdarg.h>
+
 #include "include/rados.h"
 #include "include/encoding.h"
 #include "common/Mutex.h"
 #include "common/Clock.h"
 #include "common/Formatter.h"
 #include "global/global_context.h"
-#include "include/rados/librados.hpp"
-#include <cfloat>
-#include <queue>
-#include <sstream>
-#include <stdarg.h>
+
+#include "key_value_structure.h"
 
 using namespace std;
 using ceph::bufferlist;

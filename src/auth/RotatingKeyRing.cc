@@ -1,13 +1,13 @@
 #include <errno.h>
 #include <map>
 
-#include "common/config.h"
-#include "common/debug.h"
 #include "include/str_list.h"
+#include "common/debug.h"
 
 #include "Crypto.h"
-#include "auth/RotatingKeyRing.h"
-#include "auth/KeyRing.h"
+#include "KeyRing.h"
+
+#include "RotatingKeyRing.h"
 
 #define dout_subsys ceph_subsys_auth
 #undef dout_prefix

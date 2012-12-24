@@ -16,13 +16,12 @@
 #define CEPH_HEARTBEATMAP_H
 
 #include <pthread.h>
-
 #include <string>
 #include <list>
 
 #include "include/atomic.h"
 
-#include "RWLock.h"
+#include "common/RWLock.h"
 
 class CephContext;
 

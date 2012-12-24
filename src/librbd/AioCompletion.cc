@@ -6,10 +6,10 @@
 #include "common/ceph_context.h"
 #include "common/debug.h"
 
-#include "librbd/AioRequest.h"
-#include "librbd/internal.h"
+#include "AioRequest.h"
+#include "internal.h"
 
-#include "librbd/AioCompletion.h"
+#include "AioCompletion.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

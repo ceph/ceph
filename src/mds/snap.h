@@ -15,7 +15,8 @@
 #ifndef CEPH_MDS_SNAP_H
 #define CEPH_MDS_SNAP_H
 
-#include "mdstypes.h"
+#include "mds_types.h"
+
 #include "include/xlist.h"
 #include "include/elist.h"
 #include "common/snap_types.h"

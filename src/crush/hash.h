@@ -1,6 +1,13 @@
 #ifndef CEPH_CRUSH_HASH_H
 #define CEPH_CRUSH_HASH_H
 
+#if defined(__linux__)
+#include <linux/types.h>
+#elif defined(__FreeBSD__)
+#include <sys/types.h>
+#include "include/inttypes.h"
+#endif
+
 #define CRUSH_HASH_RJENKINS1   0
 
 #define CRUSH_HASH_DEFAULT CRUSH_HASH_RJENKINS1

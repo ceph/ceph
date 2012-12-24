@@ -13,12 +13,13 @@
  */
 
 #include <iostream>
-#include "os/FileStore.h"
+#include <ext/hash_map>
+
 #include "common/ceph_argparse.h"
+#include "os/FileStore.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 
-#include <ext/hash_map>
 using __gnu_cxx::hash_map;
 
 int dupstore(ObjectStore* src, ObjectStore* dst)

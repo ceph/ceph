@@ -13,11 +13,12 @@
  */
 
 #include "acconfig.h"
-#include "ceph_ver.h"
-#include "common/version.h"
 
 #include <sstream>
-#include <string>
+
+#include "ceph_ver.h"
+
+#include "version.h"
 
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)

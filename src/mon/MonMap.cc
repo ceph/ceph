@@ -1,18 +1,16 @@
 
-#include "MonMap.h"
-
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#include "common/Formatter.h"
-
 #include "include/ceph_features.h"
 #include "include/addr_parsing.h"
+#include "common/Formatter.h"
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
-
 #include "common/debug.h"
+
+#include "MonMap.h"
 
 using ceph::Formatter;
 

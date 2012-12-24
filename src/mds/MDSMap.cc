@@ -11,13 +11,11 @@
  * Foundation.  See file COPYING.
  * 
  */
-
+#include <sstream>
 
 #include "MDSMap.h"
 
-#include <sstream>
 using std::stringstream;
-
 
 // features
 CompatSet get_mdsmap_compat_set() {

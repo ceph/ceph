@@ -5,11 +5,11 @@
 #include "common/debug.h"
 #include "common/Mutex.h"
 
-#include "librbd/AioCompletion.h"
-#include "librbd/ImageCtx.h"
-#include "librbd/internal.h"
+#include "AioCompletion.h"
+#include "ImageCtx.h"
+#include "internal.h"
 
-#include "librbd/AioRequest.h"
+#include "AioRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

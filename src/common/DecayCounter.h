@@ -15,9 +15,9 @@
 #ifndef CEPH_DECAYCOUNTER_H
 #define CEPH_DECAYCOUNTER_H
 
-#include "include/utime.h"
-
 #include <math.h>
+
+#include "include/utime.h"
 
 /**
  *

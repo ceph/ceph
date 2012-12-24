@@ -11,11 +11,8 @@
  * Foundation.  See file COPYING.
  * 
  */
+#include "osd/osd_types.h"
 
-#include <string>
-#include <map>
-#include <set>
-#include <vector>
 #include <errno.h>
 #include <string.h>
 
@@ -23,22 +20,19 @@
 #include <sys/param.h>
 #endif
 
-#include "osd/osd_types.h"
-#include "include/object.h"
+#include "include/buffer.h"
+#include "include/compat.h"
 #include "common/config.h"
 #include "common/debug.h"
-#include "include/buffer.h"
-#include "common/ceph_crypto.h"
-#include "include/compat.h"
 #include "chain_xattr.h"
 
 #include "LFNIndex.h"
+
 using ceph::crypto::SHA1;
 
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout << "LFNIndex(" << get_base_path() << ") "
-
 
 const string LFNIndex::LFN_ATTR = "user.cephos.lfn";
 const string LFNIndex::PHASH_ATTR_PREFIX = "user.cephos.phash.";

@@ -12,11 +12,6 @@
  *
  */
 
-#include "rados_sync.h"
-#include "common/errno.h"
-#include "common/strtol.h"
-#include "include/rados/librados.hpp"
-
 #include <dirent.h>
 #include <errno.h>
 #include <fstream>
@@ -26,12 +21,16 @@
 #include <stdlib.h>
 #include <string>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 
+#include "include/rados/librados.hpp"
 #include "include/compat.h"
+#include "common/errno.h"
+#include "common/strtol.h"
 #include "common/xattr.h"
+
+#include "rados_sync.h"
 
 using namespace librados;
 

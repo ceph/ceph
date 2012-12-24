@@ -1,15 +1,18 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-#include "LevelDBStore.h"
 
 #include <set>
 #include <map>
 #include <string>
 #include <tr1/memory>
+#include <errno.h>
+
 #include "leveldb/db.h"
 #include "leveldb/write_batch.h"
 #include "leveldb/slice.h"
-#include <errno.h>
+
+#include "LevelDBStore.h"
+
 using std::string;
 
 int LevelDBStore::init(ostream &out)

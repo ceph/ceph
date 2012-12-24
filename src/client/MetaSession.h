@@ -5,8 +5,9 @@
 #define CEPH_CLIENT_METASESSION_H
 
 #include "include/types.h"
-#include "include/utime.h"
 #include "msg/msg_types.h"
+
+#include "include/utime.h"
 #include "include/xlist.h"
 
 #include "messages/MClientCapRelease.h"

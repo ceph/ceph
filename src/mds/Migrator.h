@@ -22,10 +22,10 @@
 #include <map>
 #include <list>
 #include <set>
+
 using std::map;
 using std::list;
 using std::set;
-
 
 class MDS;
 class CDir;
@@ -47,7 +47,6 @@ class MExportCaps;
 class MExportCapsAck;
 
 class EImportStart;
-
 
 class Migrator {
 private:

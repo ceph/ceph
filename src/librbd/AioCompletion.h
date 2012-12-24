@@ -3,18 +3,16 @@
 #ifndef CEPH_LIBRBD_AIOCOMPLETION_H
 #define CEPH_LIBRBD_AIOCOMPLETION_H
 
+#include "include/Context.h"
+#include "include/utime.h"
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/ceph_context.h"
 #include "common/perf_counters.h"
-#include "include/Context.h"
-#include "include/utime.h"
-#include "include/rbd/librbd.hpp"
-
-#include "librbd/ImageCtx.h"
-#include "librbd/internal.h"
-
 #include "osdc/Striper.h"
+
+#include "ImageCtx.h"
+#include "internal.h"
 
 namespace librbd {
 

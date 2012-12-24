@@ -1,16 +1,17 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 
-#include "OpRequest.h"
-#include "common/Formatter.h"
 #include <iostream>
 #include <vector>
+
+#include "include/assert.h"
+#include "common/Formatter.h"
 #include "common/config.h"
-#include "msg/Message.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDSubOp.h"
-#include "include/assert.h"
 #include "global/global_context.h"
 #include "global/debug.h"
+
+#include "OpRequest.h"
 
 #define dout_subsys ceph_subsys_optracker
 #undef dout_prefix

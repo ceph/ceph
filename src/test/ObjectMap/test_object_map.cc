@@ -1,23 +1,18 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-#include <tr1/memory>
-#include <map>
-#include <set>
+#include <sys/types.h>
 #include <boost/scoped_ptr.hpp>
+#include "stdlib.h"
+#include <dirent.h>
+#include "gtest/gtest.h"
 
-#include "include/buffer.h"
-#include "test/ObjectMap/KeyValueDBMemory.h"
-#include "os/KeyValueDB.h"
+#include "common/ceph_argparse.h"
 #include "os/DBObjectMap.h"
 #include "os/HashIndex.h"
 #include "os/LevelDBStore.h"
-#include <sys/types.h>
 #include "global/global_context.h"
 #include "global/global_init.h"
-#include "common/ceph_argparse.h"
-#include <dirent.h>
 
-#include "gtest/gtest.h"
-#include "stdlib.h"
+#include "KeyValueDBMemory.h"
 
 using namespace std;
 

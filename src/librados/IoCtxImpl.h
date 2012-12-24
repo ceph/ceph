@@ -15,6 +15,9 @@
 #ifndef CEPH_LIBRADOS_IOCTXIMPL_H
 #define CEPH_LIBRADOS_IOCTXIMPL_H
 
+#include "include/types.h"
+#include "osd/osd_types.h"
+
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/snap_types.h"
@@ -22,9 +25,7 @@
 #include "include/rados.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
-#include "include/types.h"
 #include "include/xlist.h"
-#include "osd/osd_types.h"
 #include "osdc/Objecter.h"
 
 class RadosClient;

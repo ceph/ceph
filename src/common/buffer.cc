@@ -11,22 +11,21 @@
  * Foundation.  See file COPYING.
  * 
  */
-
-
-#include "armor.h"
-#include "common/environment.h"
-#include "common/errno.h"
-#include "common/safe_io.h"
-#include "common/simple_spin.h"
-#include "include/atomic.h"
 #include "include/types.h"
-#include "include/compat.h"
 
 #include <errno.h>
 #include <fstream>
 #include <sstream>
 #include <sys/uio.h>
 #include <limits.h>
+
+#include "include/atomic.h"
+#include "include/compat.h"
+#include "common/environment.h"
+#include "common/errno.h"
+#include "common/safe_io.h"
+#include "common/simple_spin.h"
+#include "common/armor.h"
 
 namespace ceph {
 

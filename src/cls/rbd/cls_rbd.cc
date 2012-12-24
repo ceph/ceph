@@ -26,6 +26,8 @@
  * in each one that they take an input and an output bufferlist.
  */
 
+#include "include/types.h"
+
 #include <algorithm>
 #include <cstring>
 #include <cstdlib>
@@ -35,11 +37,10 @@
 #include <sstream>
 #include <vector>
 
-#include "include/types.h"
-#include "objclass/objclass.h"
 #include "include/rbd_types.h"
+#include "objclass/objclass.h"
 
-#include "cls/rbd/cls_rbd.h"
+#include "cls_rbd.h"
 
 
 /*

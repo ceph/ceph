@@ -11,19 +11,20 @@
  * Foundation.  See file COPYING.
  * 
  */
+#include "mon_types.h"
 
-#include "Elector.h"
-#include "Monitor.h"
+#include "include/assert.h"
+#include "common/config.h"
+#include "global/global_context.h"
+#include "global/debug.h"
 
-#include "common/Timer.h"
-#include "MonitorStore.h"
-#include "MonmapMonitor.h"
 #include "messages/MMonElection.h"
 
-#include "common/config.h"
-#include "include/assert.h"
+#include "Monitor.h"
+#include "MonitorStore.h"
+#include "MonmapMonitor.h"
 
-#include "global/debug.h"
+#include "Elector.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix

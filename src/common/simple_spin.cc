@@ -12,11 +12,10 @@
  *
  */
 
-#include "common/simple_spin.h"
-
 #include <stdio.h>
-#include <stdint.h>
 #include <pthread.h>
+
+#include "simple_spin.h"
 
 static uint32_t bar = 13;
 static uint32_t *foo = &bar;

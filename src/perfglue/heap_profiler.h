@@ -15,6 +15,7 @@
 
 #include <string>
 #include <vector>
+
 #include "common/config.h"
 
 class LogClient;

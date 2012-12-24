@@ -11,25 +11,24 @@
  * Foundation.  See file COPYING.
  * 
  */
-
-
-
 #ifndef CEPH_CDENTRY_H
 #define CEPH_CDENTRY_H
 
+#include "mds_types.h"
+
 #include <string>
 #include <set>
-using namespace std;
 
 #include "include/types.h"
 #include "include/buffer.h"
 #include "include/lru.h"
 #include "include/elist.h"
 #include "include/filepath.h"
-#include "mdstypes.h"
 
 #include "SimpleLock.h"
 #include "LocalLock.h"
+
+using namespace std;
 
 class CInode;
 class CDir;
@@ -42,8 +41,6 @@ class CDentry;
 class LogSegment;
 
 class Session;
-
-
 
 // define an ordering
 bool operator<(const CDentry& l, const CDentry& r);

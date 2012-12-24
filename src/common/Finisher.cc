@@ -2,9 +2,10 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/config.h"
+#include "common/debug.h"
+
 #include "Finisher.h"
 
-#include "common/debug.h"
 #define dout_subsys ceph_subsys_finisher
 #undef dout_prefix
 #define dout_prefix *_dout << "finisher(" << this << ") "

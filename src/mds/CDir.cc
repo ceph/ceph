@@ -15,33 +15,27 @@
 
 #include "include/types.h"
 
-#include "CDir.h"
-#include "CDentry.h"
-#include "CInode.h"
-#include "Mutation.h"
+#include "include/bloom_filter.hpp"
+#include "include/Context.h"
+#include "include/assert.h"
+#include "common/Clock.h"
+#include "common/config.h"
+#include "osdc/Objecter.h"
+#include "global/global_context.h"
+#include "global/debug.h"
 
-#include "MDSMap.h"
+#include "CDentry.h"
+#include "Mutation.h"
 #include "MDS.h"
 #include "MDCache.h"
 #include "Locker.h"
 #include "MDLog.h"
-#include "LogSegment.h"
 
-#include "include/bloom_filter.hpp"
-#include "include/Context.h"
-#include "common/Clock.h"
-
-#include "osdc/Objecter.h"
-
-#include "common/config.h"
-#include "include/assert.h"
-#include "global/debug.h"
+#include "CDir.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") "
-
-
 
 // PINS
 //int cdir_pins[CDIR_NUM_PINS] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0 };

@@ -10,8 +10,7 @@
 
 #define EBALANCE 137
 
-#include "include/encoding.h"
-#include "key_value_store/kv_flat_btree_async.h"
+#include "kv_flat_btree_async.h"
 
 using namespace std;
 using ceph::bufferlist;

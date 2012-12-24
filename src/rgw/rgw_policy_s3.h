@@ -1,8 +1,6 @@
 #ifndef CEPH_RGW_POLICY_H
 #define CEPH_RGW_POLICY_H
 
-#include <limits.h>
-
 #include <map>
 #include <list>
 #include <string>
@@ -10,7 +8,6 @@
 #include "include/utime.h"
 
 #include "rgw_string.h"
-
 
 class RGWPolicyEnv {
   std::map<std::string, std::string, ltstr_nocase> vars;

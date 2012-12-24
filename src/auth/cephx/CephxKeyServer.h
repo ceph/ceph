@@ -16,11 +16,11 @@
 #define CEPH_KEYSSERVER_H
 
 #include "common/config.h"
-
-#include "auth/KeyRing.h"
-#include "CephxProtocol.h"
-
 #include "common/Timer.h"
+
+#include "../KeyRing.h"
+
+#include "CephxProtocol.h"
 
 class CephContext;
 

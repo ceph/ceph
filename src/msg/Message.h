@@ -14,21 +14,18 @@
 
 #ifndef CEPH_MESSAGE_H
 #define CEPH_MESSAGE_H
+
+#include "msg_types.h"
+#include "include/types.h"
  
 #include <stdlib.h>
 #include <ostream>
-
 #include <boost/intrusive_ptr.hpp>
-// Because intusive_ptr clobbers our assert...
-#include "include/assert.h"
 
-#include "include/types.h"
+#include "include/assert.h" // intusive_ptr clobbers it
 #include "include/buffer.h"
 #include "common/Throttle.h"
-#include "msg_types.h"
-
 #include "common/RefCountedObj.h"
-
 #include "common/debug.h"
 #include "common/config.h"
 

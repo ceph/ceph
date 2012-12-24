@@ -12,19 +12,16 @@
  * 
  */
 
-
-#include "CephxServiceHandler.h"
-#include "CephxProtocol.h"
-
-#include "../Auth.h"
-
-#include "mon/Monitor.h"
-
 #include <errno.h>
 #include <sstream>
 
-#include "common/config.h"
 #include "include/assert.h"
+#include "common/config.h"
+#include "mon/Monitor.h"
+
+#include "CephxProtocol.h"
+
+#include "CephxServiceHandler.h"
 
 #define dout_subsys ceph_subsys_auth
 #undef dout_prefix

@@ -16,32 +16,24 @@
 #include <string>
 #include <stdio.h>
 
-#include "CInode.h"
-#include "CDir.h"
-#include "CDentry.h"
+#include "include/assert.h"
+#include "common/Clock.h"
+#include "osdc/Objecter.h"
+#include "global/global_context.h"
 
+#include "messages/MLock.h"
+#include "messages/MClientCaps.h"
+
+#include "events/EUpdate.h"
+
+#include "CDir.h"
 #include "MDS.h"
 #include "MDCache.h"
 #include "MDLog.h"
 #include "Locker.h"
 #include "Mutation.h"
 
-#include "events/EUpdate.h"
-
-#include "osdc/Objecter.h"
-
-#include "snap.h"
-
-#include "LogSegment.h"
-
-#include "common/Clock.h"
-
-#include "messages/MLock.h"
-#include "messages/MClientCaps.h"
-
-#include "common/config.h"
-#include "global/global_context.h"
-#include "include/assert.h"
+#include "CInode.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix

@@ -4,7 +4,6 @@
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 
-
 class RGWHandler_Usage : public RGWHandler_Auth_S3 {
 protected:
   RGWOp *op_get();

@@ -1,9 +1,9 @@
-
 #ifndef CEPH_RGW_SWIFT_H
 #define CEPH_RGW_SWIFT_H
 
-#include "rgw_common.h"
 #include "common/Cond.h"
+
+#include "rgw_common.h"
 
 class RGWRados;
 

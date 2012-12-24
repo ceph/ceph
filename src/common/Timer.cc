@@ -12,23 +12,20 @@
  *
  */
 
-#include "Cond.h"
-#include "Mutex.h"
-#include "Thread.h"
-#include "Timer.h"
-
-#include "common/config.h"
-#include "include/Context.h"
-
-#define dout_subsys ceph_subsys_timer
-#undef dout_prefix
-#define dout_prefix *_dout << "timer(" << this << ")."
-
 #include <sstream>
 #include <signal.h>
 #include <sys/time.h>
 #include <math.h>
 
+#include "include/Context.h"
+#include "common/config.h"
+#include "common/Thread.h"
+
+#include "Timer.h"
+
+#define dout_subsys ceph_subsys_timer
+#undef dout_prefix
+#define dout_prefix *_dout << "timer(" << this << ")."
 
 class SafeTimerThread : public Thread {
   SafeTimer *parent;

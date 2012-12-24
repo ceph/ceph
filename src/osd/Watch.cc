@@ -1,15 +1,9 @@
-
-#include "PG.h"
-
 #include "include/types.h"
 
-#include <map>
-
-#include "OSD.h"
+#include "PG.h"
 #include "ReplicatedPG.h"
-#include "Watch.h"
 
-#include "common/config.h"
+#include "Watch.h"
 
 bool Watch::ack_notification(entity_name_t& watcher, Notification *notif)
 {

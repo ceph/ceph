@@ -11,11 +11,11 @@
  * Foundation.  See file COPYING.
  *
  */
-#include "common/utf8.h"
-
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+
+#include "common/utf8.h"
 
 int mime_encode_as_qp(const char *input, char *output, int outlen)
 {

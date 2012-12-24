@@ -12,18 +12,18 @@
  *
  */
 
-#include "common/BackTrace.h"
-#include "common/perf_counters.h"
-#include "global/pidfile.h"
-#include "common/debug.h"
-#include "common/signal.h"
-#include "common/config.h"
-
-#include <signal.h>
 #include <sstream>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#include "common/BackTrace.h"
+#include "common/perf_counters.h"
+#include "common/debug.h"
+#include "common/config.h"
+#include "global/pidfile.h"
+
+#include "signal.h"
 
 std::string signal_mask_to_str()
 {

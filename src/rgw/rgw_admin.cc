@@ -1,21 +1,20 @@
 #include <errno.h>
-
 #include <iostream>
 #include <sstream>
 #include <string>
 
-using namespace std;
-
+#include "include/utime.h"
+#include "include/str_list.h"
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "common/Formatter.h"
-#include "global/global_init.h"
-#include "global/debug.h"
 #include "common/errno.h"
-#include "include/utime.h"
-#include "include/str_list.h"
-
 #include "common/armor.h"
+#include "auth/Crypto.h"
+#include "global/global_init.h"
+#include "global/global_context.h"
+#include "global/debug.h"
+
 #include "rgw_user.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
@@ -23,7 +22,8 @@ using namespace std;
 #include "rgw_log.h"
 #include "rgw_formats.h"
 #include "rgw_usage.h"
-#include "auth/Crypto.h"
+
+using namespace std;
 
 #define dout_subsys ceph_subsys_rgw
 

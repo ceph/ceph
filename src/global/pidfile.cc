@@ -11,12 +11,6 @@
  * Foundation.  See file COPYING.
  *
  */
-
-#include "common/errno.h"
-#include "common/safe_io.h"
-#include "global/debug.h"
-#include "global/pidfile.h"
-
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -28,6 +22,11 @@
 #endif
 
 #include "include/compat.h"
+#include "common/errno.h"
+#include "common/safe_io.h"
+#include "global/debug.h"
+
+#include "pidfile.h"
 
 #define dout_prefix *_dout
 

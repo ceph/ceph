@@ -2,11 +2,10 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/config.h"
-
-#include "objclass/objclass.h"
 #include "osd/ReplicatedPG.h"
-
 #include "osd/ClassHandler.h"
+
+#include "objclass.h"
 
 static ClassHandler *ch;
 

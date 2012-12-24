@@ -12,11 +12,12 @@
  *
  */
 
-#include "common/LogClient.h"
-#include "perfglue/cpu_profiler.h"
-
 #include <vector>
 #include <string>
+
+#include "common/LogClient.h"
+
+#include "cpu_profiler.h"
 
 void cpu_profiler_handle_command(const std::vector<std::string> &cmd,
 				 ostream& out)

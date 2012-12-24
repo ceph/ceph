@@ -1,7 +1,5 @@
-
 #include <errno.h>
 #include <stdlib.h>
-
 #include <sstream>
 
 #include "common/Clock.h"
@@ -10,22 +8,19 @@
 #include "common/utf8.h"
 #include "global/debug.h"
 
-#include "rgw_rados.h"
-#include "rgw_op.h"
 #include "rgw_rest.h"
-#include "rgw_acl.h"
 #include "rgw_acl_s3.h"
-#include "rgw_user.h"
 #include "rgw_log.h"
 #include "rgw_multi.h"
 #include "rgw_multi_del.h"
-
 #include "rgw_client_io.h"
 
-#define dout_subsys ceph_subsys_rgw
+#include "rgw_op.h"
 
 using namespace std;
 using ceph::crypto::MD5;
+
+#define dout_subsys ceph_subsys_rgw
 
 static string mp_ns = RGW_OBJ_NS_MULTIPART;
 static string shadow_ns = RGW_OBJ_NS_SHADOW;

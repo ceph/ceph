@@ -1,15 +1,13 @@
-
-#include <string.h>
-
-#include <vector>
+#include "common/debug.h"
 
 #include "rgw_common.h"
 #include "rgw_user.h"
+
 #include "rgw_acl_swift.h"
 
-#define dout_subsys ceph_subsys_rgw
-
 using namespace std;
+
+#define dout_subsys ceph_subsys_rgw
 
 #define SWIFT_PERM_READ  RGW_PERM_READ_OBJS
 #define SWIFT_PERM_WRITE RGW_PERM_WRITE_OBJS

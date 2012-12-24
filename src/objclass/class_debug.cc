@@ -1,16 +1,15 @@
 // -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "common/config.h"
-
-#include "global/debug.h"
-#include "objclass/objclass.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
-
 #include <iostream>
+
+#include "common/config.h"
+#include "global/debug.h"
+
+#include "objclass.h"
 
 #define dout_subsys ceph_subsys_objclass
 

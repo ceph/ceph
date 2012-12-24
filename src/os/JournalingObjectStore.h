@@ -15,10 +15,11 @@
 #ifndef CEPH_JOURNALINGOBJECTSTORE_H
 #define CEPH_JOURNALINGOBJECTSTORE_H
 
-#include "ObjectStore.h"
-#include "Journal.h"
-#include "global/global_context.h"
 #include "common/RWLock.h"
+#include "global/global_context.h"
+
+#include "Journal.h"
+#include "ObjectStore.h"
 
 class JournalingObjectStore : public ObjectStore {
 protected:

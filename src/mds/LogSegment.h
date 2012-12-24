@@ -15,16 +15,19 @@
 #ifndef CEPH_LOGSEGMENT_H
 #define CEPH_LOGSEGMENT_H
 
+#include "mds_types.h"
+
+#include <ext/hash_set>
+
 #include "include/dlist.h"
 #include "include/elist.h"
 #include "include/interval_set.h"
 #include "include/Context.h"
-#include "mdstypes.h"
+
 #include "CInode.h"
 #include "CDentry.h"
 #include "CDir.h"
 
-#include <ext/hash_set>
 using __gnu_cxx::hash_set;
 
 class CDir;

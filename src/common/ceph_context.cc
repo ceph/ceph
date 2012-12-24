@@ -13,23 +13,22 @@
  */
 
 #include <time.h>
+#include <pthread.h>
+#include <semaphore.h>
 
 #include "common/admin_socket.h"
 #include "common/perf_counters.h"
 #include "common/Thread.h"
-#include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/HeartbeatMap.h"
 #include "common/errno.h"
 #include "common/lockdep.h"
 #include "common/Formatter.h"
-#include "log/Log.h"
 #include "auth/Crypto.h"
+#include "log/Log.h"
 
-#include <iostream>
-#include <pthread.h>
-#include <semaphore.h>
+#include "ceph_context.h"
 
 using ceph::HeartbeatMap;
 

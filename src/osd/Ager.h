@@ -4,12 +4,14 @@
 #define CEPH_AGER_H
 
 #include "include/types.h"
-#include "include/Distribution.h"
-#include "os/ObjectStore.h"
-#include "common/Clock.h"
 
 #include <list>
 #include <vector>
+
+#include "include/Distribution.h"
+#include "common/Clock.h"
+#include "os/ObjectStore.h"
+
 using namespace std;
 
 class Ager {

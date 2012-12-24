@@ -15,10 +15,10 @@
 #ifndef CEPH_TIMER_H
 #define CEPH_TIMER_H
 
-#include "Cond.h"
-#include "Mutex.h"
-
 #include <map>
+
+#include "common/Cond.h"
+#include "common/Mutex.h"
 
 class CephContext;
 class Context;

@@ -16,6 +16,8 @@
 #ifndef CEPH_SIMPLELOCK_H
 #define CEPH_SIMPLELOCK_H
 
+#include "mds_types.h"
+
 // -- lock types --
 // see CEPH_LOCK_*
 

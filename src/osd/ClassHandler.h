@@ -3,11 +3,9 @@
 
 #include "include/types.h"
 
-#include "objclass/objclass.h"
-
 #include "common/Cond.h"
 #include "common/Mutex.h"
-
+#include "objclass/objclass.h"
 
 class ClassHandler
 {

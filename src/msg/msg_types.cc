@@ -1,12 +1,12 @@
 
-#include "msg_types.h"
-
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <string.h>
 #include <netdb.h>
 
 #include "common/Formatter.h"
+
+#include "msg_types.h"
 
 void entity_name_t::dump(Formatter *f) const
 {

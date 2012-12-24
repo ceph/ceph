@@ -15,6 +15,7 @@ typedef char bool;
 #include <fcntl.h>
 
 #include "include/ceph_fs.h"
+
 #include "locks.h"
 
 static const struct sm_state_t simplelock[LOCK_MAX] = {

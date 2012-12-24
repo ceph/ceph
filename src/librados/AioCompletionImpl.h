@@ -15,14 +15,14 @@
 #ifndef CEPH_LIBRADOS_AIOCOMPLETIONIMPL_H
 #define CEPH_LIBRADOS_AIOCOMPLETIONIMPL_H
 
-#include "common/Cond.h"
-#include "common/Mutex.h"
+#include "osd/osd_types.h"
 
 #include "include/buffer.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/xlist.h"
-#include "osd/osd_types.h"
+#include "common/Cond.h"
+#include "common/Mutex.h"
 
 class IoCtxImpl;
 

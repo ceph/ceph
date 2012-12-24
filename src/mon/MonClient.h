@@ -15,22 +15,19 @@
 #ifndef CEPH_MONCLIENT_H
 #define CEPH_MONCLIENT_H
 
-#include "msg/Dispatcher.h"
-#include "msg/Messenger.h"
-
-#include "MonMap.h"
+#include <memory>
 
 #include "common/Timer.h"
 #include "common/Finisher.h"
-
+#include "common/SimpleRNG.h"
+#include "msg/Dispatcher.h"
+#include "msg/Messenger.h"
 #include "auth/AuthClientHandler.h"
 #include "auth/RotatingKeyRing.h"
 
 #include "messages/MMonSubscribe.h"
 
-#include "common/SimpleRNG.h"
-
-#include <memory>
+#include "MonMap.h"
 
 class MonMap;
 class MMonMap;

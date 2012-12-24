@@ -11,14 +11,17 @@
  * Foundation.  See file COPYING.
  *
  */
-#include "BackTrace.h"
-#include "Clock.h"
-#include "common/debug.h"
-#include "common/environment.h"
 #include "include/types.h"
-#include "lockdep.h"
 
 #include <ext/hash_map>
+
+#include "common/BackTrace.h"
+#include "common/Clock.h"
+#include "common/debug.h"
+#include "common/environment.h"
+
+#include "lockdep.h"
+
 
 #if defined(__FreeBSD__) && defined(__LP64__)	// On FreeBSD pthread_t is a pointer.
 namespace __gnu_cxx {

@@ -1,15 +1,13 @@
 #ifndef CEPH_RGW_ACL_H
 #define CEPH_RGW_ACL_H
 
+#include <include/types.h>
+
 #include <map>
 #include <string>
 #include <iostream>
-#include <include/types.h>
-
-#include "common/debug.h"
 
 using namespace std;
-
 
 #define RGW_PERM_READ            0x01
 #define RGW_PERM_WRITE           0x02

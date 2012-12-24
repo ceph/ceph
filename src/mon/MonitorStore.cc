@@ -11,29 +11,7 @@
  * Foundation.  See file COPYING.
  * 
  */
-
-#include "MonitorStore.h"
-#include "common/Clock.h"
-#include "common/entity_name.h"
-#include "common/errno.h"
-#include "common/run_cmd.h"
-#include "common/safe_io.h"
-#include "common/config.h"
-#include "common/sync_filesystem.h"
-#include "global/debug.h"
-
-#if defined(__FreeBSD__)
-#include <sys/param.h>
-#endif
-
-#include "include/compat.h"
-
-#define dout_subsys ceph_subsys_mon
-#undef dout_prefix
-#define dout_prefix _prefix(_dout, dir)
-static ostream& _prefix(std::ostream *_dout, const string& dir) {
-  return *_dout << "store(" << dir << ") ";
-}
+#include "mon_types.h"
 
 #include <stdio.h>
 #include <sys/types.h>
@@ -43,6 +21,29 @@ static ostream& _prefix(std::ostream *_dout, const string& dir) {
 #include <unistd.h>
 #include <sstream>
 #include <sys/file.h>
+
+#if defined(__FreeBSD__)
+#include <sys/param.h>
+#endif
+
+#include "include/compat.h"
+#include "common/Clock.h"
+#include "common/entity_name.h"
+#include "common/errno.h"
+#include "common/run_cmd.h"
+#include "common/safe_io.h"
+#include "common/config.h"
+#include "common/sync_filesystem.h"
+#include "global/debug.h"
+
+#include "MonitorStore.h"
+
+#define dout_subsys ceph_subsys_mon
+#undef dout_prefix
+#define dout_prefix _prefix(_dout, dir)
+static ostream& _prefix(std::ostream *_dout, const string& dir) {
+  return *_dout << "store(" << dir << ") ";
+}
 
 int MonitorStore::mount()
 {

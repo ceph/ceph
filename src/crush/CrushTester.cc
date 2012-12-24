@@ -1,8 +1,6 @@
-
-#include "CrushTester.h"
-
 #include <stdlib.h>
 
+#include "CrushTester.h"
 
 void CrushTester::set_device_weight(int dev, float f)
 {

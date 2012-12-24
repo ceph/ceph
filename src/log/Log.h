@@ -4,9 +4,9 @@
 #ifndef __CEPH_LOG_LOG_H
 #define __CEPH_LOG_LOG_H
 
-#include "common/Thread.h"
-
 #include <pthread.h>
+
+#include "common/Thread.h"
 
 #include "Entry.h"
 #include "EntryQueue.h"

@@ -11,29 +11,26 @@
  * Foundation.  See file COPYING.
  * 
  */
-
 #ifndef CEPH_MDS_SESSIONMAP_H
 #define CEPH_MDS_SESSIONMAP_H
 
-#include <set>
-using std::set;
+#include "mds_types.h"
 
+#include <set>
 #include <ext/hash_map>
-using __gnu_cxx::hash_map;
 
 #include "include/Context.h"
 #include "include/xlist.h"
 #include "include/elist.h"
 #include "include/interval_set.h"
-#include "mdstypes.h"
-
-class CInode;
-class MDRequest;
+#include "msg/Message.h"
+#include "global/global_context.h"
 
 #include "CInode.h"
 #include "Capability.h"
-#include "msg/Message.h"
 
+using std::set;
+using __gnu_cxx::hash_map;
 
 /* 
  * session

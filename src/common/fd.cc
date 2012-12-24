@@ -12,15 +12,15 @@
  *
  */
 
-#include "fd.h"
-
 #include <sys/types.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <errno.h>
 
-#include "debug.h"
-#include "errno.h"
+#include "common/debug.h"
+#include "common/errno.h"
+
+#include "fd.h"
 
 void dump_open_fds(CephContext *cct)
 {

@@ -1,19 +1,15 @@
-#include <errno.h>
-
-#include <string>
-#include <map>
+#include "include/types.h"
 
 #include "common/errno.h"
+
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 
-#include "include/types.h"
 #include "rgw_user.h"
-
-#define dout_subsys ceph_subsys_rgw
 
 using namespace std;
 
+#define dout_subsys ceph_subsys_rgw
 
 /**
  * Get the anonymous (ie, unauthenticated) user info.

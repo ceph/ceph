@@ -1,7 +1,7 @@
 
 #include "../KeyRing.h"
-
 #include "CephxProtocol.h"
+
 #include "CephxAuthorizeHandler.h"
 
 #define dout_subsys ceph_subsys_auth

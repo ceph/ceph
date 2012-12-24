@@ -15,10 +15,10 @@
 #ifndef CEPH_MCLIENTRECONNECT_H
 #define CEPH_MCLIENTRECONNECT_H
 
-#include "msg/Message.h"
-#include "mds/mdstypes.h"
-#include "include/ceph_features.h"
+#include "mds/mds_types.h"
 
+#include "include/ceph_features.h"
+#include "msg/Message.h"
 
 class MClientReconnect : public Message {
 

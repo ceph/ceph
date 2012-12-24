@@ -3,9 +3,7 @@
 
 #include "rgw_client_io.h"
 
-
 struct FCGX_Request;
-
 
 class RGWFCGX : public RGWClientIO
 {

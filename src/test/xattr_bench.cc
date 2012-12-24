@@ -18,19 +18,20 @@
 #include <iostream>
 #include <sstream>
 #include <time.h>
-#include "os/FileStore.h"
-#include "include/Context.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "common/Mutex.h"
-#include "common/Cond.h"
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 #include <boost/random/binomial_distribution.hpp>
 #include <gtest/gtest.h>
-
 #include <ext/hash_map>
+
+#include "include/Context.h"
+#include "common/ceph_argparse.h"
+#include "common/Mutex.h"
+#include "common/Cond.h"
+#include "os/FileStore.h"
+#include "global/global_context.h"
+#include "global/global_init.h"
 
 void usage(const string &name) {
   std::cerr << "Usage: " << name << " [xattr|omap] store_path store_journal"

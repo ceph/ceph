@@ -20,19 +20,23 @@
 #ifndef CEPH_PGMONITOR_H
 #define CEPH_PGMONITOR_H
 
+#include "mon_types.h"
+
 #include <map>
 #include <set>
-using namespace std;
 
-#include "PGMap.h"
-#include "PaxosService.h"
-#include "include/types.h"
 #include "include/utime.h"
-#include "msg/Messenger.h"
 #include "common/config.h"
+#include "msg/Messenger.h"
 
 #include "messages/MPGStats.h"
 #include "messages/MPGStatsAck.h"
+
+#include "PGMap.h"
+#include "PaxosService.h"
+
+using namespace std;
+
 class MStatfs;
 class MMonCommand;
 class MGetPoolStats;

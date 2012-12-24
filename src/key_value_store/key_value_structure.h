@@ -14,9 +14,10 @@
 #ifndef KEY_VALUE_STRUCTURE_HPP_
 #define KEY_VALUE_STRUCTURE_HPP_
 
+#include <vector>
+
 #include "include/rados/librados.hpp"
 #include "include/utime.h"
-#include <vector>
 
 using std::string;
 using std::map;

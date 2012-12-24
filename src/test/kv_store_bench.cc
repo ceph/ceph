@@ -5,19 +5,14 @@
  *      Author: eleanor
  */
 
-#include "test/kv_store_bench.h"
-#include "key_value_store/key_value_structure.h"
-#include "key_value_store/kv_flat_btree_async.h"
-#include "include/rados/librados.hpp"
-#include "test/omap_bench.h"
-#include "common/ceph_argparse.h"
-
-
-#include <string>
-#include <climits>
-#include <iostream>
 #include <sstream>
 #include <cmath>
+
+#include "common/ceph_argparse.h"
+
+#include "omap_bench.h"
+
+#include "kv_store_bench.h"
 
 KvStoreBench::KvStoreBench()
 : entries(30),

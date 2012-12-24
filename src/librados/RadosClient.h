@@ -14,11 +14,11 @@
 #ifndef CEPH_LIBRADOS_RADOSCLIENT_H
 #define CEPH_LIBRADOS_RADOSCLIENT_H
 
+#include "include/rados/librados.h"
+#include "include/rados/librados.hpp"
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/Timer.h"
-#include "include/rados/librados.h"
-#include "include/rados/librados.hpp"
 #include "mon/MonClient.h"
 #include "msg/Dispatcher.h"
 #include "osd/OSDMap.h"

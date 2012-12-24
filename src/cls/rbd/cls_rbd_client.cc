@@ -1,14 +1,16 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "cls/lock/cls_lock_client.h"
-#include "include/buffer.h"
-#include "include/encoding.h"
 #include "include/rbd_types.h"
 
-#include "cls_rbd_client.h"
-
 #include <errno.h>
+
+#include "include/buffer.h"
+#include "include/encoding.h"
+
+#include "../lock/cls_lock_client.h"
+
+#include "cls_rbd_client.h"
 
 namespace librbd {
   namespace cls_client {

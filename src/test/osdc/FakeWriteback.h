@@ -3,10 +3,11 @@
 #ifndef CEPH_TEST_OSDC_FAKEWRITEBACK_H
 #define CEPH_TEST_OSDC_FAKEWRITEBACK_H
 
-#include "include/atomic.h"
-#include "include/Context.h"
 #include "include/types.h"
 #include "osd/osd_types.h"
+
+#include "include/atomic.h"
+#include "include/Context.h"
 #include "osdc/WritebackHandler.h"
 
 class Finisher;

@@ -12,20 +12,21 @@
  *
  */
 
-using namespace std;
+#include "include/types.h"
 
+#include "include/rados/librados.h"
+#include "include/rados/librados.hpp"
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
-#include "include/rados/librados.h"
-#include "include/rados/librados.hpp"
-#include "include/types.h"
 
-#include "librados/AioCompletionImpl.h"
-#include "librados/IoCtxImpl.h"
-#include "librados/PoolAsyncCompletionImpl.h"
-#include "librados/RadosClient.h"
+#include "AioCompletionImpl.h"
+#include "IoCtxImpl.h"
+#include "PoolAsyncCompletionImpl.h"
+#include "RadosClient.h"
+
+using namespace std;
 
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix

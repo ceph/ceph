@@ -1,12 +1,9 @@
-#include <string.h>
-
-#include "common/ceph_context.h"
 #include "include/types.h"
-#include "rgw/rgw_acl.h"
+
+#include "global/global_context.h"
 #include "global/debug.h"
 
-#include <iostream>
-#include <map>
+#include "rgw_acl.h"
 
 #define dout_subsys ceph_subsys_rgw
 

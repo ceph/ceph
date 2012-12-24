@@ -1,7 +1,8 @@
-
 #include "include/types.h"
-#include "hobject.h"
+
 #include "common/Formatter.h"
+
+#include "hobject.h"
 
 void hobject_t::encode(bufferlist& bl) const
 {

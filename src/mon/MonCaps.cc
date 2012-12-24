@@ -11,14 +11,16 @@
  * Foundation.  See file COPYING.
  *
  */
+#include "mon_types.h"
 
 #include <errno.h>
+
+#include "include/ceph_features.h"
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/Formatter.h"
+
 #include "MonCaps.h"
-#include "mon_types.h"
-#include "include/ceph_features.h"
 
 #define dout_subsys ceph_subsys_auth
 

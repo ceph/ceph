@@ -15,12 +15,11 @@
 
 #include <errno.h>
 
-#include "CephxClientHandler.h"
-#include "CephxProtocol.h"
+#include "common/config.h"
 
 #include "../KeyRing.h"
 
-#include "common/config.h"
+#include "CephxClientHandler.h"
 
 #define dout_subsys ceph_subsys_auth
 #undef dout_prefix

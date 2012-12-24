@@ -1,9 +1,6 @@
 #ifndef CEPH_RGW_ACL_S3_H
 #define CEPH_RGW_ACL_S3_H
 
-#include <map>
-#include <string>
-#include <iostream>
 #include <include/types.h>
 
 #include <expat.h>

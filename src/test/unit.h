@@ -18,13 +18,13 @@
 #include "include/types.h" // FIXME: ordering shouldn't be important, but right 
                            // now, this include has to come before the others.
 
+#include <vector>
+#include <gtest/gtest.h>
+
+#include "include/msgr.h" // for CEPH_ENTITY_TYPE_CLIENT
 #include "common/code_environment.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
-#include "include/msgr.h" // for CEPH_ENTITY_TYPE_CLIENT
-#include "gtest/gtest.h"
-
-#include <vector>
 
 /*
  * You only need to include this file if you are testing Ceph internal code. If

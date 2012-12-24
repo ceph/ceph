@@ -15,10 +15,10 @@
 #ifndef CEPH_MDS_MUTATION_H
 #define CEPH_MDS_MUTATION_H
 
+#include "mds_types.h"
+
 #include "include/interval_set.h"
 #include "include/elist.h"
-
-#include "mdstypes.h"
 
 #include "SimpleLock.h"
 #include "Capability.h"

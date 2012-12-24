@@ -1,8 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "chain_xattr.h"
-
 #include <inttypes.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -10,12 +8,10 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/file.h>
-#include <errno.h>
 #include <dirent.h>
 #include <sys/ioctl.h>
 #include <string.h>
 #include <stdio.h>
-#include "include/assert.h"
 
 #if defined(__linux__)
 #include <linux/fs.h>
@@ -25,7 +21,9 @@
 #include "include/inttypes.h"
 #endif
 
-#include "common/xattr.h"
+#include "include/assert.h"
+
+#include "chain_xattr.h"
 
 /*
  * chaining xattrs

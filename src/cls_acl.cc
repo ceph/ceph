@@ -1,17 +1,14 @@
-
+#include "include/types.h"
 
 
 #include <iostream>
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
-
 #include <openssl/md5.h>
 #include <openssl/sha.h>
 
-#include "include/types.h"
 #include "objclass/objclass.h"
-
 
 CLS_VER(1,0)
 CLS_NAME(acl)

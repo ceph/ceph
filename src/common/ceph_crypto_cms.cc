@@ -34,30 +34,22 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-
-#include "common/config.h"
+#include <string.h>
+#include <errno.h>
 
 #ifdef USE_NSS
-
 #include <nspr.h>
 #include <cert.h>
 #include <nss.h>
 #include <smime.h>
-
 #endif
 
-#include <string.h>
-#include <errno.h>
-
-
-#include "include/buffer.h"
-
+#include "common/config.h"
 #include "common/debug.h"
 
 #include "ceph_crypto_cms.h"
 
 #define dout_subsys ceph_subsys_crypto
-
 
 #ifndef USE_NSS
 

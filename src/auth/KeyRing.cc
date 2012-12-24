@@ -17,14 +17,16 @@
 #include <memory>
 #include <sstream>
 
-#include "auth/AuthMethodList.h"
-#include "auth/Crypto.h"
-#include "auth/KeyRing.h"
+#include "include/str_list.h"
 #include "common/ConfUtils.h"
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/errno.h"
-#include "include/str_list.h"
+
+#include "AuthMethodList.h"
+#include "Crypto.h"
+
+#include "KeyRing.h"
 
 #define dout_subsys ceph_subsys_auth
 

@@ -1,20 +1,16 @@
-#include <string.h>
-
-#include <iostream>
-#include <map>
-
 #include "include/types.h"
 
 #include "common/Formatter.h"
+#include "common/debug.h"
 
-#include "rgw_acl.h"
 #include "rgw_user.h"
-
 #include "rgw_acl_s3.h" // required for backward compatibility
 
-#define dout_subsys ceph_subsys_rgw
+#include "rgw_acl.h"
 
 using namespace std;
+
+#define dout_subsys ceph_subsys_rgw
 
 void RGWAccessControlList::_add_grant(ACLGrant *grant)
 {

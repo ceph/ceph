@@ -16,19 +16,18 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
-
 #include <iostream>
 #include <string>
-using namespace std;
 
 #include "common/config.h"
-
 #include "common/errno.h"
+#include "common/ceph_argparse.h"
 #include "osd/OSDMap.h"
 #include "mon/MonMap.h"
-#include "common/ceph_argparse.h"
 #include "global/global_init.h"
-#include "global/debug.h"
+#include "global/global_context.h"
+
+using namespace std;
 
 void usage()
 {

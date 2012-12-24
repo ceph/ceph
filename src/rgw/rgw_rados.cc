@@ -1,36 +1,28 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <sys/types.h>
-
-#include "common/errno.h"
-#include "common/Formatter.h"
-
-#include "rgw_rados.h"
-#include "rgw_cache.h"
-#include "rgw_acl.h"
-
-#include "cls/rgw/cls_rgw_types.h"
-#include "cls/rgw/cls_rgw_client.h"
-#include "cls/refcount/cls_refcount_client.h"
-
-#include "rgw_tools.h"
-
-#include "common/Clock.h"
-#include "global/debug.h"
-
-#include "include/rados/librados.hpp"
-using namespace librados;
-
 #include <string>
 #include <iostream>
 #include <vector>
 #include <list>
 #include <map>
+
+#include "common/errno.h"
+#include "common/Formatter.h"
+#include "common/Clock.h"
 #include "auth/Crypto.h" // get_random_bytes()
+#include "cls/rgw/cls_rgw_client.h"
+#include "cls/refcount/cls_refcount_client.h"
+#include "global/debug.h"
 
-#include "rgw_log.h"
-
+#include "rgw_cache.h"
+#include "rgw_acl.h"
+#include "rgw_tools.h"
 #include "rgw_gc.h"
+
+#include "rgw_rados.h"
+
+using namespace librados;
 
 #define dout_subsys ceph_subsys_rgw
 

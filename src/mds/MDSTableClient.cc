@@ -12,24 +12,22 @@
  * 
  */
 
+#include "mds_types.h"
+
 #include <iostream>
 
-#include "MDSMap.h"
-
-#include "include/Context.h"
+#include "common/config.h"
 #include "msg/Messenger.h"
+#include "global/debug.h"
 
-#include "MDS.h"
-#include "MDLog.h"
-#include "LogSegment.h"
-
-#include "MDSTableClient.h"
 #include "events/ETableClient.h"
 
 #include "messages/MMDSTableRequest.h"
 
-#include "common/config.h"
-#include "global/debug.h"
+#include "MDS.h"
+#include "MDLog.h"
+
+#include "MDSTableClient.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix

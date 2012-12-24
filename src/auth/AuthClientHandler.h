@@ -15,13 +15,11 @@
 #ifndef CEPH_AUTHCLIENTHANDLER_H
 #define CEPH_AUTHCLIENTHANDLER_H
 
-
-#include "auth/Auth.h"
-
 #include "common/Mutex.h"
 #include "common/Cond.h"
-
 #include "common/Timer.h"
+
+#include "Auth.h"
 
 class CephContext;
 class MAuthReply;
