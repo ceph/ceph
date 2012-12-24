@@ -14,17 +14,16 @@
 #ifndef CEPH_REPLICATEDPG_H
 #define CEPH_REPLICATEDPG_H
 
-
-#include "PG.h"
-#include "OSD.h"
-#include "Watch.h"
-#include "OpRequest.h"
+#include "global/debug.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDSubOp.h"
 
-#include "global/debug.h"
+#include "PG.h"
+#include "OSD.h"
+#include "Watch.h"
+#include "OpRequest.h"
 
 class MOSDSubOpReply;
 

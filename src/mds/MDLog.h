@@ -16,6 +16,19 @@
 #ifndef CEPH_MDLOG_H
 #define CEPH_MDLOG_H
 
+#include "include/types.h"
+
+#include <list>
+#include <map>
+
+#include "include/Context.h"
+#include "common/Thread.h"
+#include "common/Cond.h"
+
+#include "LogSegment.h"
+
+using std::map;
+
 enum {
   l_mdl_first = 5000,
   l_mdl_evadd,
@@ -37,27 +50,12 @@ enum {
   l_mdl_last,
 };
 
-#include "include/types.h"
-#include "include/Context.h"
-
-#include "common/Thread.h"
-#include "common/Cond.h"
-
-#include "LogSegment.h"
-
-#include <list>
-
 class Journaler;
 class LogEvent;
 class MDS;
 class LogSegment;
 class ESubtreeMap;
-
 class PerfCounters;
-
-#include <map>
-using std::map;
-
 
 class MDLog {
 public:

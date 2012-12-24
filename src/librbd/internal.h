@@ -3,8 +3,9 @@
 #ifndef CEPH_LIBRBD_INTERNAL_H
 #define CEPH_LIBRBD_INTERNAL_H
 
-#include <inttypes.h>
+#include "include/rbd_types.h"
 
+#include <inttypes.h>
 #include <map>
 #include <set>
 #include <string>
@@ -12,7 +13,6 @@
 
 #include "include/buffer.h"
 #include "include/rbd/librbd.hpp"
-#include "include/rbd_types.h"
 
 enum {
   l_librbd_first = 26000,

@@ -3,12 +3,12 @@
 
 #include "include/types.h"
 #include "include/utime.h"
+#include "common/Formatter.h"
 
-#include "Dentry.h"
 #include "Dir.h"
 #include "Inode.h"
 
-#include "common/Formatter.h"
+#include "Dentry.h"
 
 void Dentry::dump(Formatter *f) const
 {

@@ -15,14 +15,14 @@
 #include <iostream>
 
 #include "common/Formatter.h"
+#include "global/global_init.h"
+#include "global/global_context.h"
 
+#include "dumb_backend.h"
 #include "bencher.h"
 #include "rados_backend.h"
 #include "detailed_stat_collector.h"
 #include "distribution.h"
-#include "global/global_init.h"
-#include "os/FileStore.h"
-#include "dumb_backend.h"
 
 namespace po = boost::program_options;
 using namespace std;

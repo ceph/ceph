@@ -18,24 +18,26 @@
 #ifndef CEPH_OSDMONITOR_H
 #define CEPH_OSDMONITOR_H
 
+#include "mon_types.h"
+
 #include <map>
 #include <set>
-using namespace std;
 
-#include "include/types.h"
 #include "msg/Messenger.h"
-
 #include "osd/OSDMap.h"
 
-#include "PaxosService.h"
-#include "Session.h"
-
-class Monitor;
 #include "messages/MOSDBoot.h"
 #include "messages/MMonCommand.h"
 #include "messages/MOSDMap.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MPoolOp.h"
+
+#include "PaxosService.h"
+#include "Session.h"
+
+using namespace std;
+
+class Monitor;
 
 /// information about a particular peer's failure reports for one osd
 struct failure_reporter_t {

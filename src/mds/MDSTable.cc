@@ -12,24 +12,22 @@
  * 
  */
 
-#include "MDSTable.h"
+#include "mds_types.h"
+
+#include "include/assert.h"
+#include "common/config.h"
+#include "osdc/Filer.h"
+#include "global/global_context.h"
+#include "global/debug.h"
 
 #include "MDS.h"
 #include "MDLog.h"
 
-#include "osdc/Filer.h"
-
-#include "include/types.h"
-
-#include "common/config.h"
-#include "include/assert.h"
-#include "global/debug.h"
-
+#include "MDSTable.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << "." << table_name << ": "
-
 
 class C_MT_Save : public Context {
   MDSTable *ida;

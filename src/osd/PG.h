@@ -15,6 +15,9 @@
 #ifndef CEPH_PG_H
 #define CEPH_PG_H
 
+#include "include/types.h"
+#include "osd_types.h"
+
 #include <boost/statechart/custom_reaction.hpp>
 #include <boost/statechart/event.hpp>
 #include <boost/statechart/simple_state.hpp>
@@ -23,38 +26,32 @@
 #include <boost/statechart/transition.hpp>
 #include <boost/statechart/event_base.hpp>
 #include <boost/scoped_ptr.hpp>
-#include <tr1/memory>
-
-// re-include our assert to clobber boost's
-#include "include/assert.h" 
-
-#include "include/types.h"
-#include "include/stringify.h"
-#include "osd_types.h"
-#include "include/buffer.h"
-#include "include/xlist.h"
-#include "include/atomic.h"
-
-#include "OpRequest.h"
-#include "OSDMap.h"
-#include "os/ObjectStore.h"
-#include "msg/Messenger.h"
-#include "messages/MOSDRepScrub.h"
-#include "messages/MOSDPGLog.h"
-
-#include "common/DecayCounter.h"
-
-#include "global/global_context.h"
-
 #include <list>
 #include <memory>
 #include <string>
-using namespace std;
-
+#include <tr1/memory>
 #include <ext/hash_map>
 #include <ext/hash_set>
-using namespace __gnu_cxx;
 
+
+#include "include/assert.h" // boost clobbers it
+#include "include/stringify.h"
+#include "include/buffer.h"
+#include "include/xlist.h"
+#include "include/atomic.h"
+#include "common/DecayCounter.h"
+#include "os/ObjectStore.h"
+#include "msg/Messenger.h"
+#include "global/global_context.h"
+
+#include "messages/MOSDRepScrub.h"
+#include "messages/MOSDPGLog.h"
+
+#include "OpRequest.h"
+#include "OSDMap.h"
+
+using namespace std;
+using namespace __gnu_cxx;
 
 //#define DEBUG_RECOVERY_OIDS   // track set of recovering oids explicitly, to find counting bugs
 

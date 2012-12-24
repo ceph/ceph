@@ -1,24 +1,21 @@
-#include <errno.h>
 #include <limits.h>
 
+#include "include/str_list.h"
 #include "common/Formatter.h"
 #include "common/utf8.h"
-#include "include/str_list.h"
 #include "global/debug.h"
+
 #include "rgw_common.h"
 #include "rgw_rados.h"
-#include "rgw_formats.h"
-#include "rgw_op.h"
-#include "rgw_rest.h"
 #include "rgw_rest_swift.h"
 #include "rgw_rest_s3.h"
 #include "rgw_swift_auth.h"
-
 #include "rgw_client_io.h"
 #include "rgw_resolve.h"
 
-#define dout_subsys ceph_subsys_rgw
+#include "rgw_rest.h"
 
+#define dout_subsys ceph_subsys_rgw
 
 struct rgw_http_attr {
   const char *rgw_attr;

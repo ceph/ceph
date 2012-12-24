@@ -4,15 +4,16 @@
 #ifndef CEPH_LIBRBD_CLS_RBD_CLIENT_H
 #define CEPH_LIBRBD_CLS_RBD_CLIENT_H
 
-#include "cls/lock/cls_lock_types.h"
-#include "common/snap_types.h"
+#include <string>
+#include <vector>
+
 #include "include/rados.h"
 #include "include/rados/librados.hpp"
 #include "include/types.h"
 #include "librbd/parent_types.h"
+#include "common/snap_types.h"
 
-#include <string>
-#include <vector>
+#include "../lock/cls_lock_types.h"
 
 namespace librbd {
   namespace cls_client {

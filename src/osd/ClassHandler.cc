@@ -1,11 +1,7 @@
 
 #include "include/types.h"
-#include "msg/Message.h"
-#include "osd/OSD.h"
-#include "ClassHandler.h"
 
 #include <dlfcn.h>
-
 #include <map>
 
 #if defined(__FreeBSD__)
@@ -13,7 +9,12 @@
 #endif
 
 #include "common/config.h"
+#include "msg/Message.h"
 #include "global/debug.h"
+
+#include "OSD.h"
+
+#include "ClassHandler.h"
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix

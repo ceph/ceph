@@ -17,15 +17,16 @@
 #ifndef CEPH_MDBALANCER_H
 #define CEPH_MDBALANCER_H
 
+#include "include/types.h"
+
 #include <list>
 #include <map>
-using std::list;
-using std::map;
 
-#include "include/types.h"
 #include "common/Clock.h"
 #include "CInode.h"
 
+using std::list;
+using std::map;
 
 class MDS;
 class Message;

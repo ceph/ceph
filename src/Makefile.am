@@ -1683,7 +1683,7 @@ noinst_HEADERS = \
 	mds/events/ETableServer.h\
         mds/events/EUpdate.h\
         mds/mds_table_types.h\
-        mds/mdstypes.h\
+        mds/mds_types.h\
         mds/snap.h\
         messages/MAuth.h\
         messages/MAuthReply.h\

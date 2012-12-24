@@ -3,12 +3,14 @@
 #ifndef KEY_VALUE_DB_H
 #define KEY_VALUE_DB_H
 
-#include "include/buffer.h"
 #include <set>
 #include <map>
 #include <string>
 #include <tr1/memory>
 #include <boost/scoped_ptr.hpp>
+
+#include "include/buffer.h"
+
 #include "ObjectMap.h"
 
 using std::string;

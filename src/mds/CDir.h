@@ -18,21 +18,21 @@
 #define CEPH_CDIR_H
 
 #include "include/types.h"
-#include "include/buffer.h"
-#include "mdstypes.h"
-#include "common/config.h"
-#include "common/DecayCounter.h"
+#include "mds_types.h"
 
 #include <iostream>
-
 #include <list>
 #include <set>
 #include <map>
 #include <string>
-using namespace std;
 
+#include "include/buffer.h"
+#include "common/config.h"
+#include "common/DecayCounter.h"
 
 #include "CInode.h"
+
+using namespace std;
 
 class CDentry;
 class MDCache;

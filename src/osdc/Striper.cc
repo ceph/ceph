@@ -12,19 +12,18 @@
  * 
  */
 
-#include "Striper.h"
-
 #include "include/types.h"
-#include "include/buffer.h"
-#include "osd/OSDMap.h"
 
+#include "include/buffer.h"
 #include "common/config.h"
 #include "common/debug.h"
+#include "osd/OSDMap.h"
+
+#include "Striper.h"
 
 #define dout_subsys ceph_subsys_striper
 #undef dout_prefix
 #define dout_prefix *_dout << "striper "
-
 
 void Striper::file_to_extents(CephContext *cct, const char *object_format,
 			    ceph_file_layout *layout,

@@ -1,11 +1,9 @@
 #ifndef CEPH_RGW_ACL_SWIFT_H
 #define CEPH_RGW_ACL_SWIFT3_H
 
-#include <map>
-#include <string>
-#include <iostream>
-#include <vector>
 #include <include/types.h>
+
+#include <vector>
 
 #include "rgw_acl.h"
 

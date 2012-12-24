@@ -11,27 +11,21 @@
  * Foundation.  See file COPYING.
  */
 
-#include "key_value_store/key_value_structure.h"
-#include "key_value_store/kv_flat_btree_async.h"
-#include "key_value_store/kvs_arg_types.h"
-#include "include/rados/librados.hpp"
-#include "/usr/include/asm-generic/errno.h"
-#include "/usr/include/asm-generic/errno-base.h"
-#include "common/ceph_context.h"
-#include "global/global_context.h"
-#include "common/Clock.h"
-#include "include/rados.h"
 #include "include/types.h"
-
 
 #include <string>
 #include <iostream>
 #include <cassert>
 #include <climits>
 #include <cmath>
-#include <sstream>
 #include <stdlib.h>
 #include <iterator>
+#include <asm-generic/errno.h>
+#include <asm-generic/errno-base.h>
+
+#include "kvs_arg_types.h"
+
+#include "kv_flat_btree_async.h"
 
 using namespace std;
 using ceph::bufferlist;

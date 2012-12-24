@@ -5,8 +5,8 @@
 #define CEPH_CLIENT_SNAPREALM_H
 
 #include "include/types.h"
-#include "common/snap_types.h"
 #include "include/xlist.h"
+#include "common/snap_types.h"
 
 class Inode;
 

@@ -14,17 +14,14 @@
 
 #define LARGE_SIZE 1024
 
-#include "assert.h"
-#include "Formatter.h"
-#include "common/escape.h"
-
-#include <inttypes.h>
-#include <iostream>
-#include <sstream>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <vector>
+
+#include "include/assert.h"
+#include "common/escape.h"
+
+#include "Formatter.h"
 
 // -----------------------
 namespace ceph {

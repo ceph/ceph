@@ -12,15 +12,6 @@
  * 
  */
 
-#include "common/errno.h"
-#include "common/safe_io.h"
-#include "FileJournal.h"
-#include "include/color.h"
-#include "common/perf_counters.h"
-#include "os/ObjectStore.h"
-
-#include "include/compat.h"
-
 #include <fcntl.h>
 #include <sstream>
 #include <stdio.h>
@@ -28,9 +19,16 @@
 #include <sys/stat.h>
 #include <sys/mount.h>
 
+#include "include/compat.h"
+#include "include/color.h"
+#include "common/errno.h"
+#include "common/safe_io.h"
+#include "common/perf_counters.h"
 #include "common/blkdev.h"
+#include "os/ObjectStore.h"
 #include "global/debug.h"
 
+#include "FileJournal.h"
 
 #define dout_subsys ceph_subsys_journal
 #undef dout_prefix

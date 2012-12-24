@@ -11,13 +11,15 @@
  * Foundation.  See file COPYING.
  * 
  */
-
-#include "snap.h"
-#include "MDCache.h"
-#include "MDS.h"
+#include "mds_types.h"
 
 #include "messages/MClientSnap.h"
 #include "global/debug.h"
+
+#include "MDS.h"
+#include "MDCache.h"
+
+#include "snap.h"
 
 /*
  * SnapRealm

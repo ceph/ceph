@@ -27,8 +27,8 @@
  */
 
 #include "include/types.h"
-
 #include "osd/OSDMap.h"
+
 #include "Objecter.h"
 #include "Striper.h"
 

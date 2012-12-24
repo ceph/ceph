@@ -3,25 +3,27 @@
 #ifndef CEPH_MDSTYPES_H
 #define CEPH_MDSTYPES_H
 
+#include "include/types.h"
+
+#include <boost/pool/pool.hpp>
 #include <inttypes.h>
 #include <math.h>
 #include <ostream>
 #include <set>
 #include <map>
-using namespace std;
 
+#include "include/Context.h"
+#include "include/assert.h"
+#include "include/frag.h"
+#include "include/xlist.h"
 #include "common/config.h"
 #include "common/Clock.h"
 #include "common/DecayCounter.h"
-#include "include/Context.h"
-
-#include "include/frag.h"
-#include "include/xlist.h"
+#include "global/global_context.h"
 
 #include "inode_backtrace.h"
 
-#include <boost/pool/pool.hpp>
-#include "include/assert.h"
+using namespace std;
 
 #define CEPH_FS_ONDISK_MAGIC "ceph fs volume v011"
 

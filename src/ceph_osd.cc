@@ -16,37 +16,28 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <uuid/uuid.h>
-
 #include <iostream>
 #include <string>
-using namespace std;
 
-#include "osd/OSD.h"
-#include "os/FileStore.h"
-#include "mon/MonClient.h"
 #include "include/ceph_features.h"
-
-#include "common/config.h"
-
-#include "mon/MonMap.h"
-
-
-#include "msg/Messenger.h"
-
+#include "include/color.h"
+#include "include/assert.h"
+#include "common/errno.h"
+#include "common/pick_address.h"
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
-
+#include "common/config.h"
+#include "mon/MonMap.h"
+#include "mon/MonClient.h"
+#include "msg/Messenger.h"
+#include "os/FileStore.h"
+#include "osd/OSD.h"
+#include "perfglue/heap_profiler.h"
 #include "global/global_init.h"
 #include "global/signal_handler.h"
 #include "global/debug.h"
 
-#include "include/color.h"
-#include "common/errno.h"
-#include "common/pick_address.h"
-
-#include "perfglue/heap_profiler.h"
-
-#include "include/assert.h"
+using namespace std;
 
 #define dout_subsys ceph_subsys_osd
 

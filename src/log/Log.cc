@@ -1,18 +1,17 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "Log.h"
-
 #include <errno.h>
 #include <syslog.h>
-
 #include <iostream>
 #include <sstream>
 
+#include "include/assert.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/Clock.h"
-#include "include/assert.h"
+
+#include "Log.h"
 
 #define DEFAULT_MAX_NEW    100
 #define DEFAULT_MAX_RECENT 10000

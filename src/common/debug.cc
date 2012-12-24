@@ -1,4 +1,3 @@
-
 #include <iostream>
 
 void dout_emergency(const char * const str)

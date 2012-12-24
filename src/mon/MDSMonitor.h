@@ -18,19 +18,20 @@
 #ifndef CEPH_MDSMONITOR_H
 #define CEPH_MDSMONITOR_H
 
+#include "mon_types.h"
+
 #include <map>
 #include <set>
-using namespace std;
 
-#include "include/types.h"
 #include "msg/Messenger.h"
-
 #include "mds/MDSMap.h"
+
+#include "messages/MMDSBeacon.h"
 
 #include "PaxosService.h"
 #include "Session.h"
 
-#include "messages/MMDSBeacon.h"
+using namespace std;
 
 class MMDSGetMap;
 class MMonCommand;

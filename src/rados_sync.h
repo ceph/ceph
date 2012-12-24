@@ -16,11 +16,11 @@
 #define CEPH_RADOS_SYNC_H
 
 #include <stddef.h>
-#include "include/atomic.h"
-#include "common/WorkQueue.h"
-
 #include <string>
 #include <sys/types.h>
+
+#include "include/atomic.h"
+#include "common/WorkQueue.h"
 
 namespace librados {
   class IoCtx;

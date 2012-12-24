@@ -3,13 +3,13 @@
 #ifndef DUMBBACKEND
 #define DUMBBACKEND
 
-#include "backend.h"
-#include "include/Context.h"
-#include "os/ObjectStore.h"
+#include <deque>
+
 #include "common/WorkQueue.h"
 #include "common/Semaphore.h"
+#include "os/ObjectStore.h"
 
-#include <deque>
+#include "backend.h"
 
 class DumbBackend : public Backend {
 	const string path;

@@ -3,7 +3,8 @@
 
 #include "include/types.h"
 #include "include/utime.h"
-#include "cls/lock/cls_lock_types.h"
+
+#include "cls_lock_types.h"
 
 struct cls_lock_lock_op
 {

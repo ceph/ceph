@@ -11,25 +11,27 @@
  * Foundation.  See file COPYING.
  * 
  */
+#include "mon_types.h"
 
-#include "MonmapMonitor.h"
-#include "Monitor.h"
-#include "MonitorStore.h"
+#include <sstream>
+
+#include "include/assert.h"
+#include "common/config.h"
+#include "common/Timer.h"
+#include "common/ceph_argparse.h"
+#include "global/global_context.h"
+#include "global/debug.h"
 
 #include "messages/MMonCommand.h"
 #include "messages/MMonJoin.h"
 
-#include "common/Timer.h"
-#include "common/ceph_argparse.h"
-#include "mon/MDSMonitor.h"
-#include "mon/OSDMonitor.h"
-#include "mon/PGMonitor.h"
+#include "MDSMonitor.h"
+#include "OSDMonitor.h"
+#include "PGMonitor.h"
+#include "MonitorStore.h"
+#include "Monitor.h"
 
-#include <sstream>
-#include "common/config.h"
-#include "include/assert.h"
-
-#include "global/debug.h"
+#include "MonmapMonitor.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix

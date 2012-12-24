@@ -12,13 +12,14 @@
  * 
  */
 
-#include "InoTable.h"
-#include "MDS.h"
-
 #include "include/types.h"
 
 #include "common/config.h"
 #include "global/debug.h"
+
+#include "MDS.h"
+
+#include "InoTable.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix

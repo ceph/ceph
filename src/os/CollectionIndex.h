@@ -19,8 +19,8 @@
 #include <vector>
 #include <tr1/memory>
 
-#include "osd/osd_types.h"
 #include "include/object.h"
+#include "osd/osd_types.h"
 
 /**
  * CollectionIndex provides an interface for manipulating indexed colelctions

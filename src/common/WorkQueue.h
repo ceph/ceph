@@ -15,9 +15,9 @@
 #ifndef CEPH_WORKQUEUE_H
 #define CEPH_WORKQUEUE_H
 
-#include "Mutex.h"
-#include "Cond.h"
-#include "Thread.h"
+#include "common/Mutex.h"
+#include "common/Cond.h"
+#include "common/Thread.h"
 #include "common/config_obs.h"
 
 class CephContext;

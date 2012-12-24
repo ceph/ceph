@@ -16,16 +16,18 @@
 #include <sstream>
 #include <time.h>
 #include <stdlib.h>
+
 #include "common/ceph_argparse.h"
+#include "common/config.h"
+#include "os/FileStore.h"
+#include "global/global_context.h"
 #include "global/global_init.h"
 #include "global/debug.h"
-#include "os/FileStore.h"
 
 #include "DeterministicOpSequence.h"
 #include "FileStoreDiff.h"
 
-#include "common/config.h"
-#include "include/assert.h"
+#include "include/assert.h" // boost in DeterministicOpSequence.h clobbers it
 
 #define dout_subsys ceph_subsys_
 #undef dout_prefix

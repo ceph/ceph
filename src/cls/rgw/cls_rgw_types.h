@@ -1,9 +1,10 @@
 #ifndef CEPH_CLS_RGW_TYPES_H
 #define CEPH_CLS_RGW_TYPES_H
 
+#include "include/types.h"
+
 #include <map>
 
-#include "include/types.h"
 #include "include/utime.h"
 
 #define CEPH_RGW_REMOVE 'r'

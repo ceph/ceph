@@ -1,9 +1,9 @@
 #ifndef CEPH_RGW_CLIENT_IO_H
 #define CEPH_RGW_CLIENT_IO_H
 
-#include <stdlib.h>
-
 #include "include/types.h"
+
+#include <stdlib.h>
 
 class RGWClientIO {
   bool account;

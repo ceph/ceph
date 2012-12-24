@@ -17,17 +17,22 @@
 #ifndef CEPH_CINODE_H
 #define CEPH_CINODE_H
 
-#include "common/config.h"
+#include "include/types.h"
+#include "mds_types.h"
+
+#include <list>
+#include <vector>
+#include <set>
+#include <map>
+#include <iostream>
+
 #include "include/dlist.h"
 #include "include/elist.h"
-#include "include/types.h"
 #include "include/lru.h"
-
+#include "common/config.h"
 #include "global/debug.h"
 
-#include "mdstypes.h"
 #include "flock.h"
-
 #include "CDentry.h"
 #include "SimpleLock.h"
 #include "ScatterLock.h"
@@ -35,11 +40,6 @@
 #include "Capability.h"
 #include "snap.h"
 
-#include <list>
-#include <vector>
-#include <set>
-#include <map>
-#include <iostream>
 using namespace std;
 
 class Context;

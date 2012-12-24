@@ -13,7 +13,8 @@
  */
 
 #include "common/ceph_context.h"
-#include "global/global_context.h"
+
+#include "global_context.h"
 
 /*
  * Global variables for use from process context.

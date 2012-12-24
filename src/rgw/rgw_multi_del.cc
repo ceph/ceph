@@ -1,15 +1,13 @@
-#include <string.h>
-
-#include <iostream>
-
 #include "include/types.h"
 
-#include "rgw_xml.h"
+#include <string.h>
+#include <iostream>
+
 #include "rgw_multi_del.h"
 
-#define dout_subsys ceph_subsys_rgw
-
 using namespace std;
+
+#define dout_subsys ceph_subsys_rgw
 
 
 bool RGWMultiDelObject::xml_end(const char *el)

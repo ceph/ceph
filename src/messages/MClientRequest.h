@@ -33,15 +33,15 @@
  *  
  */
 
-#include "msg/Message.h"
-#include "include/filepath.h"
-#include "mds/mdstypes.h"
+#include "mds/mds_types.h"
 
 #include <sys/types.h>
 #include <utime.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include "include/filepath.h"
+#include "msg/Message.h"
 
 // metadata ops.
 

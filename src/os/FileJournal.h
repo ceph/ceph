@@ -17,18 +17,20 @@
 #define CEPH_FILEJOURNAL_H
 
 #include <deque>
-using std::deque;
 
-#include "Journal.h"
+#ifdef HAVE_LIBAIO
+# include <libaio.h>
+#endif
+
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/Thread.h"
 #include "common/Throttle.h"
 #include "global/global_context.h"
 
-#ifdef HAVE_LIBAIO
-# include <libaio.h>
-#endif
+#include "Journal.h"
+
+using std::deque;
 
 /**
  * Implements journaling on top of block device or file.

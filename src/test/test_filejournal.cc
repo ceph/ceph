@@ -1,16 +1,16 @@
-#include <gtest/gtest.h>
 #include <stdlib.h>
+#include <gtest/gtest.h>
 
+#include "include/Context.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
-#include "global/global_context.h"
-#include "global/global_init.h"
 #include "common/config.h"
 #include "common/Finisher.h"
-#include "os/FileJournal.h"
-#include "include/Context.h"
 #include "common/Mutex.h"
 #include "common/safe_io.h"
+#include "os/FileJournal.h"
+#include "global/global_context.h"
+#include "global/global_init.h"
 
 Finisher *finisher;
 Cond sync_cond;

@@ -7,10 +7,10 @@
 
 #include "include/types.h"
 #include "msg/msg_types.h"
+#include "mds/mds_types.h"
+
 #include "include/xlist.h"
 #include "include/filepath.h"
-#include "mds/mdstypes.h"
-
 #include "common/Mutex.h"
 
 #include "messages/MClientRequest.h"

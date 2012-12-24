@@ -2,22 +2,13 @@
 
 #include <iostream>
 #include <inttypes.h>
-#include "include/buffer.h"
-#include <set>
-#include <map>
-#include <string>
-#include <tr1/memory>
-
-#include <vector>
-
-#include "ObjectMap.h"
-#include "KeyValueDB.h"
-#include "DBObjectMap.h"
 #include <errno.h>
 
-#include "global/debug.h"
-#include "common/config.h"
 #include "include/assert.h"
+#include "common/config.h"
+#include "global/debug.h"
+
+#include "DBObjectMap.h"
 
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix

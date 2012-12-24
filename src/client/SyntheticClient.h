@@ -18,9 +18,10 @@
 
 #include <pthread.h>
 
-#include "Client.h"
 #include "include/Distribution.h"
+#include "global/global_context.h"
 
+#include "Client.h"
 #include "Trace.h"
 
 #define SYNCLIENT_MODE_RANDOMWALK  1

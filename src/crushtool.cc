@@ -16,31 +16,27 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
-
 #include <fstream>
 
+#include "include/assert.h"
 #include "common/errno.h"
 #include "common/config.h"
-
 #include "common/ceph_argparse.h"
-#include "global/global_context.h"
-#include "global/global_init.h"
-#include "global/debug.h"
 #include "crush/CrushWrapper.h"
 #include "crush/CrushCompiler.h"
 #include "crush/CrushTester.h"
-#include "include/assert.h"
-
-#define dout_subsys ceph_subsys_crush
+#include "global/global_context.h"
+#include "global/global_init.h"
+#include "global/debug.h"
 
 using namespace std;
+
+#define dout_subsys ceph_subsys_crush
 
 void usage();
 void data_analysis();
 
-
 const char *infn = "stdin";
-
 
 ////////////////////////////////////////////////////////////////////////////
 

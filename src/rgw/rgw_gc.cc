@@ -1,18 +1,19 @@
-#include "rgw_gc.h"
+#include <list>
+
 #include "include/rados/librados.hpp"
+#include "auth/Crypto.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/refcount/cls_refcount_client.h"
 #include "cls/lock/cls_lock_client.h"
-#include "auth/Crypto.h"
-
+#include "global/global_context.h"
 #include "global/debug.h"
 
-#include <list>
-
-#define dout_subsys ceph_subsys_rgw
+#include "rgw_gc.h"
 
 using namespace std;
 using namespace librados;
+
+#define dout_subsys ceph_subsys_rgw
 
 static string gc_oid_prefix = "gc";
 static string gc_index_lock_name = "gc_process";

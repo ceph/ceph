@@ -14,12 +14,8 @@
 #ifndef CEPH_OBJECTSTORE_H
 #define CEPH_OBJECTSTORE_H
 
-#include "include/Context.h"
-#include "include/buffer.h"
 #include "include/types.h"
 #include "osd/osd_types.h"
-#include "common/TrackedOp.h"
-#include "ObjectMap.h"
 
 #include <errno.h>
 #include <sys/stat.h>
@@ -30,6 +26,12 @@
 #else
 #include <sys/vfs.h>    /* or <sys/statfs.h> */
 #endif /* DARWIN */
+
+#include "include/Context.h"
+#include "include/buffer.h"
+#include "common/TrackedOp.h"
+
+#include "ObjectMap.h"
 
 using std::vector;
 using std::string;

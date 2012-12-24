@@ -12,12 +12,14 @@
  * 
  */
 
-#include "AnchorServer.h"
-#include "MDS.h"
 #include "msg/Messenger.h"
+#include "global/debug.h"
+
 #include "messages/MMDSTableRequest.h"
 
-#include "global/debug.h"
+#include "MDS.h"
+
+#include "AnchorServer.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix

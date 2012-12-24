@@ -38,16 +38,16 @@ e 12v
 #ifndef CEPH_MON_PAXOS_H
 #define CEPH_MON_PAXOS_H
 
-#include "include/types.h"
 #include "mon_types.h"
+
+#include <errno.h>
+
 #include "include/buffer.h"
-#include "messages/PaxosServiceMessage.h"
+#include "include/Context.h"
+#include "common/Timer.h"
 #include "msg/msg_types.h"
 
-#include "include/Context.h"
-
-#include "common/Timer.h"
-#include <errno.h>
+#include "messages/PaxosServiceMessage.h"
 
 class Monitor;
 class MMonPaxos;

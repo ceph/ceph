@@ -15,9 +15,11 @@
 #ifndef CEPH_PAXOSSERVICE_H
 #define CEPH_PAXOSSERVICE_H
 
-#include "messages/PaxosServiceMessage.h"
-#include "include/Context.h"
 #include <errno.h>
+
+#include "include/Context.h"
+
+#include "messages/PaxosServiceMessage.h"
 
 class Monitor;
 class Paxos;

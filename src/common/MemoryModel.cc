@@ -1,10 +1,11 @@
-
 #include "include/types.h"
-#include "MemoryModel.h"
-#include "common/config.h"
-#include "debug.h"
 
 #include <fstream>
+
+#include "common/config.h"
+#include "common/debug.h"
+
+#include "MemoryModel.h"
 
 #define dout_subsys ceph_subsys_
 

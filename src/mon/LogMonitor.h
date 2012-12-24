@@ -15,16 +15,18 @@
 #ifndef CEPH_LOGMONITOR_H
 #define CEPH_LOGMONITOR_H
 
+#include "mon_types.h"
+
 #include <map>
 #include <set>
-using namespace std;
-
-#include "include/types.h"
-#include "msg/Messenger.h"
-#include "PaxosService.h"
 
 #include "common/LogEntry.h"
+#include "msg/Messenger.h"
 #include "messages/MLog.h"
+
+#include "PaxosService.h"
+
+using namespace std;
 
 class MMonCommand;
 

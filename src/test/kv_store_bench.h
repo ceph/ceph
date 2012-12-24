@@ -14,17 +14,17 @@
 #ifndef KVSTOREBENCH_H_
 #define KVSTOREBENCH_H_
 
-#include "key_value_store/key_value_structure.h"
-#include "key_value_store/kv_flat_btree_async.h"
-#include "common/Clock.h"
-#include "global/global_context.h"
-#include "common/Mutex.h"
-#include "common/Cond.h"
-
 #include <string>
 #include <climits>
 #include <cfloat>
 #include <iostream>
+
+#include "common/Clock.h"
+#include "common/Mutex.h"
+#include "common/Cond.h"
+#include "key_value_store/key_value_structure.h"
+#include "key_value_store/kv_flat_btree_async.h"
+#include "global/global_context.h"
 
 using namespace std;
 using ceph::bufferlist;

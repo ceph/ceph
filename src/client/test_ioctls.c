@@ -1,4 +1,3 @@
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -6,7 +5,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <limits.h>
-
 #include <sys/ioctl.h>
 #include <netinet/in.h>
 #include <sys/socket.h>

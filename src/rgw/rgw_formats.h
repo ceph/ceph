@@ -1,11 +1,11 @@
 #ifndef CEPH_RGW_FORMATS_H
 #define CEPH_RGW_FORMATS_H
 
-#include "common/Formatter.h"
-
 #include <list>
 #include <stdint.h>
 #include <string>
+
+#include "common/Formatter.h"
 
 struct plain_stack_entry {
   int size;

@@ -16,6 +16,7 @@
 #ifndef CEPH_MMONELECTION_H
 #define CEPH_MMONELECTION_H
 
+#include "include/ceph_features.h"
 #include "msg/Message.h"
 #include "mon/MonMap.h"
 

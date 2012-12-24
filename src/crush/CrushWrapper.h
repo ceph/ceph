@@ -4,14 +4,18 @@
 #ifndef CEPH_CRUSH_WRAPPER_H
 #define CEPH_CRUSH_WRAPPER_H
 
+#include "include/types.h"
+
 #include <stdlib.h>
 #include <map>
 #include <set>
 #include <string>
-
 #include <iostream> //for testing, remove
 
-#include "include/types.h"
+#include "include/assert.h"
+#include "include/err.h"
+#include "include/encoding.h"
+#include "common/Mutex.h"
 
 extern "C" {
 #include "crush.h"
@@ -20,13 +24,6 @@ extern "C" {
 #include "builder.h"
 }
 
-#include "include/err.h"
-#include "include/encoding.h"
-
-
-#include "common/Mutex.h"
-
-#include "include/assert.h"
 #define BUG_ON(x) assert(!(x))
 
 namespace ceph {

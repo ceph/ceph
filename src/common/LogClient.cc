@@ -12,16 +12,7 @@
  * 
  */
 
-
-
 #include "include/types.h"
-
-#include "msg/Messenger.h"
-#include "msg/Message.h"
-
-#include "messages/MLog.h"
-#include "messages/MLogAck.h"
-#include "mon/MonMap.h"
 
 #include <iostream>
 #include <errno.h>
@@ -33,9 +24,14 @@
 #include <sys/mount.h>
 #endif // DARWIN
 
-#include "common/LogClient.h"
-
 #include "common/config.h"
+#include "msg/Messenger.h"
+#include "mon/MonMap.h"
+
+#include "messages/MLog.h"
+#include "messages/MLogAck.h"
+
+#include "LogClient.h"
 
 #define dout_subsys ceph_subsys_monc
 

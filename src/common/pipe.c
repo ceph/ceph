@@ -12,11 +12,11 @@
  *
  */
 
-#include "common/pipe.h"
-
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
+
+#include "pipe.h"
 
 int pipe_cloexec(int pipefd[2])
 {

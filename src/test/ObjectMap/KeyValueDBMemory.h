@@ -5,9 +5,9 @@
 #include <string>
 #include <tr1/memory>
 
-#include "os/KeyValueDB.h"
 #include "include/buffer.h"
 #include "include/Context.h"
+#include "os/KeyValueDB.h"
 
 using std::string;
 

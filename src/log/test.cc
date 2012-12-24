@@ -1,8 +1,9 @@
 #include <gtest/gtest.h>
 
-#include "log/Log.h"
 #include "common/Clock.h"
 #include "common/PrebufferedStreambuf.h"
+
+#include "Log.h"
 
 using namespace ceph::log;
 

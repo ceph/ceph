@@ -50,11 +50,11 @@
 #ifndef CEPH_JOURNALER_H
 #define CEPH_JOURNALER_H
 
-#include "Objecter.h"
-#include "Filer.h"
-
 #include <list>
 #include <map>
+
+#include "Objecter.h"
+#include "Filer.h"
 
 class CephContext;
 class Context;

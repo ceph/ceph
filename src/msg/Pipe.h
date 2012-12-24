@@ -16,9 +16,10 @@
 #define CEPH_MSGR_PIPE_H
 
 #include "msg_types.h"
-#include "Messenger.h"
+
 #include "auth/AuthSessionHandler.h"
 
+#include "Messenger.h"
 
 class SimpleMessenger;
 class IncomingQueue;

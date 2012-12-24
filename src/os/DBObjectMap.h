@@ -2,20 +2,21 @@
 #ifndef DBOBJECTMAP_DB_H
 #define DBOBJECTMAP_DB_H
 
-#include "include/buffer.h"
+#include "osd/osd_types.h"
+
+#include <boost/scoped_ptr.hpp>
+#include <tr1/memory>
 #include <set>
 #include <map>
 #include <string>
-
 #include <vector>
-#include <tr1/memory>
-#include <boost/scoped_ptr.hpp>
+
+#include "include/buffer.h"
+#include "common/Mutex.h"
+#include "common/Cond.h"
 
 #include "ObjectMap.h"
 #include "KeyValueDB.h"
-#include "osd/osd_types.h"
-#include "common/Mutex.h"
-#include "common/Cond.h"
 
 /**
  * DBObjectMap: Implements ObjectMap in terms of KeyValueDB

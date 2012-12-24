@@ -15,7 +15,7 @@
 #ifndef CEPH_MCACHEEXPIRE_H
 #define CEPH_MCACHEEXPIRE_H
 
-#include "mds/mdstypes.h"
+#include "mds/mds_types.h"
 
 class MCacheExpire : public Message {
   __s32 from;

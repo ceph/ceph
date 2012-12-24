@@ -17,11 +17,10 @@
 #ifndef CEPH_MDS_H
 #define CEPH_MDS_H
 
-#include "mdstypes.h"
-
-#include "msg/Dispatcher.h"
-#include "include/CompatSet.h"
 #include "include/types.h"
+#include "mds_types.h"
+
+#include "include/CompatSet.h"
 #include "include/Context.h"
 #include "common/DecayCounter.h"
 #include "common/perf_counters.h"
@@ -29,14 +28,12 @@
 #include "common/Cond.h"
 #include "common/Timer.h"
 #include "common/LogClient.h"
+#include "msg/Dispatcher.h"
 
 #include "MDSMap.h"
-
 #include "SessionMap.h"
 
-
 #define CEPH_MDS_PROTOCOL    14 /* cluster internal */
-
 
 enum {
   l_mds_first = 2000,

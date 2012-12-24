@@ -15,11 +15,12 @@
 #ifndef OS_KEYVALUESTORE_H
 #define OS_KEYVALUESTORE_H
 
-#include "IndexManager.h"
-#include "SequencerPosition.h"
 #include <string>
 #include <vector>
 #include <tr1/memory>
+
+#include "IndexManager.h"
+#include "SequencerPosition.h"
 
 /**
  * Encapsulates the FileStore key value store

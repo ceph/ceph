@@ -12,18 +12,18 @@
  * 
  */
 
+#include "include/Context.h"
+#include "include/assert.h"
 #include "common/perf_counters.h"
 #include "common/debug.h"
-#include "include/Context.h"
-#include "msg/Messenger.h"
-#include "osdc/Journaler.h"
 #include "common/errno.h"
-#include "include/assert.h"
+#include "msg/Messenger.h"
+
+#include "Journaler.h"
 
 #define dout_subsys ceph_subsys_journaler
 #undef dout_prefix
 #define dout_prefix *_dout << objecter->messenger->get_myname() << ".journaler" << (readonly ? "(ro) ":"(rw) ")
-
 
 void Journaler::set_readonly()
 {

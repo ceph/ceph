@@ -12,8 +12,6 @@
  *
  */
 
-#include "common/errno.h"
-
 #include <errno.h>
 #include <sstream>
 #include <stdarg.h>
@@ -22,6 +20,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
+
+#include "common/errno.h"
 
 using std::ostringstream;
 

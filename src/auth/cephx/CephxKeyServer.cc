@@ -12,14 +12,13 @@
  * 
  */
 
+#include <sstream>
+
 #include "common/config.h"
-
-#include "CephxKeyServer.h"
 #include "common/Timer.h"
-
 #include "global/global_context.h"
 
-#include <sstream>
+#include "CephxKeyServer.h"
 
 #define dout_subsys ceph_subsys_auth
 #undef dout_prefix

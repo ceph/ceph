@@ -16,15 +16,15 @@
 #ifndef CEPH_MON_ELECTOR_H
 #define CEPH_MON_ELECTOR_H
 
-#include <map>
-using namespace std;
+#include "mon_types.h"
 
-#include "include/types.h"
-#include "msg/Message.h"
+#include <map>
 
 #include "include/Context.h"
-
 #include "common/Timer.h"
+#include "msg/Message.h"
+
+using namespace std;
 
 class Monitor;
 

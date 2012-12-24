@@ -17,9 +17,10 @@
 #include <boost/spirit/include/phoenix_operator.hpp>
 #include <boost/spirit/include/phoenix.hpp>
 
-#include "OSDCap.h"
 #include "common/config.h"
 #include "common/debug.h"
+
+#include "OSDCap.h"
 
 using std::ostream;
 using std::vector;

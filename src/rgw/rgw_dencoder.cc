@@ -1,3 +1,4 @@
+#include "common/Formatter.h"
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
@@ -5,8 +6,6 @@
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 #include "rgw_cache.h"
-
-#include "common/Formatter.h"
 
 void RGWObjManifestPart::generate_test_instances(std::list<RGWObjManifestPart*>& o)
 {

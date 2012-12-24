@@ -12,8 +12,9 @@
  *
  */
 
-#include "AuthUnknownAuthorizeHandler.h"
 #include "common/debug.h"
+
+#include "AuthUnknownAuthorizeHandler.h"
 
 #define dout_subsys ceph_subsys_auth
 

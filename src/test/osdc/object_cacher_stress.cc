@@ -8,18 +8,18 @@
 #include <vector>
 #include <boost/scoped_ptr.hpp>
 
+#include "include/atomic.h"
+#include "include/buffer.h"
+#include "include/Context.h"
+#include "include/stringify.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/config.h"
 #include "common/Mutex.h"
 #include "common/snap_types.h"
+#include "osdc/ObjectCacher.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
-#include "include/atomic.h"
-#include "include/buffer.h"
-#include "include/Context.h"
-#include "include/stringify.h"
-#include "osdc/ObjectCacher.h"
 
 #include "FakeWriteback.h"
 

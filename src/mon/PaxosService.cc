@@ -12,17 +12,20 @@
  * 
  */
 
-#include "PaxosService.h"
+#include "include/assert.h"
+#include "common/config.h"
 #include "common/Clock.h"
+#include "global/global_context.h"
+#include "global/debug.h"
+
 #include "Monitor.h"
 
-#include "common/config.h"
-#include "include/assert.h"
-#include "global/debug.h"
+#include "PaxosService.h"
 
 #define dout_subsys ceph_subsys_paxos
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, paxos, paxos->machine_id)
+
 static ostream& _prefix(std::ostream *_dout, Monitor *mon, Paxos *paxos, int machine_id) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name()

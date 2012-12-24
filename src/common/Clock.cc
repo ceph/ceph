@@ -12,13 +12,10 @@
  * 
  */
 
-
-#include "common/Clock.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
-#include "include/utime.h"
 
-#include <time.h>
+#include "Clock.h"
 
 utime_t ceph_clock_now(CephContext *cct)
 {

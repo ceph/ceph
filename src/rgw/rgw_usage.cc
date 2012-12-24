@@ -1,13 +1,9 @@
 
-#include <string>
-#include <map>
-
 #include "rgw_rados.h"
+
 #include "rgw_usage.h"
-#include "rgw_formats.h"
 
 using namespace std;
-
 
 static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log_entry& entry, map<string, bool> *categories)
 {

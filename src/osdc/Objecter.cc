@@ -12,35 +12,28 @@
  * 
  */
 
-#include "Objecter.h"
-#include "osd/OSDMap.h"
-#include "Filer.h"
-
-#include "mon/MonClient.h"
-
-#include "msg/Messenger.h"
-#include "msg/Message.h"
-
-#include "messages/MPing.h"
-#include "messages/MOSDOp.h"
-#include "messages/MOSDOpReply.h"
-#include "messages/MOSDMap.h"
-
-#include "messages/MPoolOp.h"
-#include "messages/MPoolOpReply.h"
-
-#include "messages/MGetPoolStats.h"
-#include "messages/MGetPoolStatsReply.h"
-#include "messages/MStatfs.h"
-#include "messages/MStatfsReply.h"
-
-#include "messages/MOSDFailure.h"
-
 #include <errno.h>
 
 #include "common/config.h"
 #include "common/perf_counters.h"
+#include "mon/MonClient.h"
+#include "msg/Messenger.h"
+#include "msg/Message.h"
 
+#include "messages/MPing.h"
+#include "messages/MOSDOpReply.h"
+#include "messages/MOSDMap.h"
+#include "messages/MPoolOp.h"
+#include "messages/MPoolOpReply.h"
+#include "messages/MGetPoolStats.h"
+#include "messages/MGetPoolStatsReply.h"
+#include "messages/MStatfs.h"
+#include "messages/MStatfsReply.h"
+#include "messages/MOSDFailure.h"
+
+#include "Filer.h"
+
+#include "Objecter.h"
 
 #define dout_subsys ceph_subsys_objecter
 #undef dout_prefix

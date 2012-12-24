@@ -17,10 +17,10 @@
 #define CEPH_CLIENT_TRACE_H
 
 #include <stdlib.h>
-
 #include <list>
 #include <string>
 #include <fstream>
+
 using std::list;
 using std::string;
 using std::ifstream;

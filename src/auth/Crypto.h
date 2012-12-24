@@ -16,9 +16,10 @@
 #define CEPH_AUTH_CRYPTO_H
 
 #include "include/types.h"
-#include "include/utime.h"
 
 #include <string>
+
+#include "include/utime.h"
 
 class CephContext;
 class CryptoHandler;

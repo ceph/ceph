@@ -11,15 +11,16 @@
  * Foundation.  See file COPYING.
  *
  */
-using namespace std;
 #include <string>
 
-#include "common/Mutex.h"
-#include "common/perf_counters.h"
-#include "common/ceph_context.h"
-#include "common/config.h"
 #include "include/utime.h"
+#include "common/perf_counters.h"
+#include "common/config.h"
 #include "common/Clock.h"
+
+#include "Mutex.h"
+
+using namespace std;
 
 Mutex::Mutex(const char *n, bool r, bool ld,
 	     bool bt,

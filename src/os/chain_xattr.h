@@ -4,9 +4,9 @@
 #ifndef __CEPH_OSD_CHAIN_XATTR_H
 #define __CEPH_OSD_CHAIN_XATTR_H
 
-#include "common/xattr.h"
-
 #include <errno.h>
+
+#include "common/xattr.h"
 
 #define CHAIN_XATTR_MAX_NAME_LEN  128
 #define CHAIN_XATTR_MAX_BLOCK_LEN 2048

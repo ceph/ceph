@@ -22,6 +22,7 @@
  * Until we do that, though, this file is the place for argv parsing
  * stuff to live.
  */
+#include "msg/msg_types.h"
 
 #include <deque>
 #include <stdint.h>
@@ -29,7 +30,6 @@
 #include <vector>
 
 #include "common/entity_name.h"
-#include "msg/msg_types.h"
 
 /////////////////////// Types ///////////////////////
 class CephInitParameters

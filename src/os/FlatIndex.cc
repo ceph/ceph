@@ -11,19 +11,20 @@
  * Foundation.  See file COPYING.
  * 
  */
+#include "osd/osd_types.h"
+
+#include <errno.h>
 
 #if defined(__FreeBSD__)
 #include <sys/cdefs.h>
 #include <sys/param.h>
 #endif
 
-#include "FlatIndex.h"
-#include "CollectionIndex.h"
 #include "common/ceph_crypto.h"
-#include "osd/osd_types.h"
-#include <errno.h>
 
 #include "chain_xattr.h"
+
+#include "FlatIndex.h"
 
 using ceph::crypto::SHA1;
 

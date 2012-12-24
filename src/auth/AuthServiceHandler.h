@@ -15,8 +15,6 @@
 #ifndef CEPH_AUTHSERVICEHANDLER_H
 #define CEPH_AUTHSERVICEHANDLER_H
 
-#include "include/types.h"
-#include "common/config.h"
 #include "Auth.h"
 
 class CephContext;

@@ -10,9 +10,11 @@
  * Foundation.  See file COPYING.
  * 
  */
+#include "include/types.h"
 
 #include <sstream>
-#include "Crypto.h"
+#include <errno.h>
+
 #ifdef USE_CRYPTOPP
 # include <cryptopp/modes.h>
 # include <cryptopp/aes.h>
@@ -24,6 +26,8 @@
 #endif
 
 #include "include/assert.h"
+#include "include/ceph_fs.h"
+#include "include/compat.h"
 #include "common/Clock.h"
 #include "common/armor.h"
 #include "common/ceph_crypto.h"
@@ -31,10 +35,8 @@
 #include "common/debug.h"
 #include "common/hex.h"
 #include "common/safe_io.h"
-#include "include/ceph_fs.h"
-#include "include/compat.h"
 
-#include <errno.h>
+#include "Crypto.h"
 
 int get_random_bytes(char *buf, int len)
 {

@@ -15,44 +15,39 @@
 #ifndef CEPH_OSD_H
 #define CEPH_OSD_H
 
-#include "boost/tuple/tuple.hpp"
+#include <boost/tuple/tuple.hpp>
+#include <map>
+#include <memory>
+#include <tr1/memory>
+#include <ext/hash_map>
+#include <ext/hash_set>
 
-#include "PG.h"
-
-#include "msg/Dispatcher.h"
-
+#include "include/CompatSet.h"
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
 #include "common/LogClient.h"
 #include "common/AsyncReserver.h"
-
-#include "os/ObjectStore.h"
-#include "OSDCap.h"
-
-#include "common/DecayCounter.h"
-#include "osd/ClassHandler.h"
-
-#include "include/CompatSet.h"
-
-#include "auth/KeyRing.h"
-#include "messages/MOSDRepScrub.h"
-#include "OpRequest.h"
-
-#include <map>
-#include <memory>
-#include <tr1/memory>
-using namespace std;
-
-#include <ext/hash_map>
-#include <ext/hash_set>
-using namespace __gnu_cxx;
-
 #include "common/shared_cache.hpp"
 #include "common/simple_cache.hpp"
 #include "common/sharedptr_registry.hpp"
 #include "common/PrioritizedQueue.h"
+#include "common/DecayCounter.h"
+#include "auth/KeyRing.h"
+#include "msg/Dispatcher.h"
+#include "os/ObjectStore.h"
+#include "global/global_context.h"
+
+#include "messages/MOSDRepScrub.h"
+
+#include "OSDCap.h"
+#include "ClassHandler.h"
+#include "OpRequest.h"
+#include "PG.h"
+
+using namespace std;
+using namespace __gnu_cxx;
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */
 

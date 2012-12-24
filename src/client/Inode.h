@@ -5,13 +5,12 @@
 #define CEPH_CLIENT_INODE_H
 
 #include "include/types.h"
+#include "mds/mds_types.h" // hrm
+
+#include "include/assert.h"
 #include "include/xlist.h"
 #include "include/filepath.h"
-
-#include "mds/mdstypes.h" // hrm
-
 #include "osdc/ObjectCacher.h"
-#include "include/assert.h"
 
 class MetaSession;
 class Dentry;

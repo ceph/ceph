@@ -1,9 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 
-#include "filestore_backend.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
-#include "os/ObjectStore.h"
+
+#include "filestore_backend.h"
 
 struct C_DeleteTransWrapper : public Context {
   Context *c;

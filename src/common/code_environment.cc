@@ -12,16 +12,17 @@
  *
  */
 
-#include "common/code_environment.h"
-
 #include <errno.h>
 #include <iostream>
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+
 #if defined(__linux__)
 #include <sys/prctl.h>
 #endif
+
+#include "code_environment.h"
 
 code_environment_t g_code_env = CODE_ENVIRONMENT_UTILITY;
 

@@ -14,12 +14,13 @@
 #ifndef OMAP_BENCH_HPP_
 #define OMAP_BENCH_HPP_
 
-#include "common/Mutex.h"
-#include "common/Cond.h"
-#include "include/rados/librados.hpp"
 #include <string>
 #include <map>
 #include <cfloat>
+
+#include "include/rados/librados.hpp"
+#include "common/Mutex.h"
+#include "common/Cond.h"
 
 using ceph::bufferlist;
 

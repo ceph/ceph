@@ -27,10 +27,11 @@
 #ifndef CEPH_OSDCAP_H
 #define CEPH_OSDCAP_H
 
-#include <ostream>
-using std::ostream;
-
 #include "include/types.h"
+
+#include <ostream>
+
+using std::ostream;
 
 static const __u8 OSD_CAP_R     = (1 << 1);      // read
 static const __u8 OSD_CAP_W     = (1 << 2);      // write

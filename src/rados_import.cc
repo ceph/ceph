@@ -20,14 +20,14 @@
 #include <sstream>
 #include <stdlib.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 
-#include "rados_sync.h"
+#include "include/rados/librados.hpp"
 #include "common/errno.h"
 #include "common/strtol.h"
-#include "include/rados/librados.hpp"
+
+#include "rados_sync.h"
 
 using namespace librados;
 using std::auto_ptr;

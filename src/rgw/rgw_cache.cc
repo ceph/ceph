@@ -1,11 +1,12 @@
-#include "rgw_cache.h"
-#include "common/debug.h"
-
 #include <errno.h>
 
-#define dout_subsys ceph_subsys_rgw
+#include "common/debug.h"
+
+#include "rgw_cache.h"
 
 using namespace std;
+
+#define dout_subsys ceph_subsys_rgw
 
 int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask)
 {

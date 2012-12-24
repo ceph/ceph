@@ -17,6 +17,8 @@
 
 extern struct ceph_file_layout g_default_file_layout;
 
+#include "msg/msg_types.h"
+
 #include <iosfwd>
 #include <vector>
 #include <map>
@@ -25,9 +27,8 @@ extern struct ceph_file_layout g_default_file_layout;
 #include "common/ConfUtils.h"
 #include "common/entity_name.h"
 #include "common/Mutex.h"
-#include "log/SubsystemMap.h"
 #include "common/config_obs.h"
-#include "msg/msg_types.h"
+#include "log/SubsystemMap.h"
 
 #define OSD_REP_PRIMARY 0
 #define OSD_REP_SPLAY   1

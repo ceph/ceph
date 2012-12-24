@@ -1,15 +1,13 @@
-#include <string.h>
-
-#include <iostream>
-#include <map>
-
 #include "include/types.h"
+
+#include <string.h>
+#include <iostream>
 
 #include "rgw_multi.h"
 
-#define dout_subsys ceph_subsys_rgw
-
 using namespace std;
+
+#define dout_subsys ceph_subsys_rgw
                                   
 int main(int argc, char **argv) {
   RGWMultiXMLParser parser;

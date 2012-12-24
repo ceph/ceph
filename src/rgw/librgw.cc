@@ -13,17 +13,19 @@
  */
 
 #include "include/types.h"
+
+#include <errno.h>
+#include <sstream>
+#include <string.h>
+
 #include "include/rados/librgw.h"
-#include "rgw/rgw_acl_s3.h"
-#include "rgw_acl.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_context.h"
 #include "common/common_init.h"
 #include "common/debug.h"
 
-#include <errno.h>
-#include <sstream>
-#include <string.h>
+#include "rgw_acl.h"
+#include "rgw_acl_s3.h"
 
 #define dout_subsys ceph_subsys_rgw
 

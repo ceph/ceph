@@ -3,9 +3,9 @@
 #ifndef RADOSBACKENDH
 #define RADOSBACKENDH
 
-#include "backend.h"
-#include "include/Context.h"
 #include "include/rados/librados.hpp"
+
+#include "backend.h"
 
 class RadosBackend : public Backend {
   librados::IoCtx *ioctx;

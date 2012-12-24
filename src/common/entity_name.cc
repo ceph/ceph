@@ -11,13 +11,14 @@
  * Foundation.  See file COPYING.
  *
  */
-
-#include "common/entity_name.h"
-#include "include/msgr.h"
+#include "include/types.h"
 
 #include <errno.h>
 #include <sstream>
-#include <string>
+
+#include "include/msgr.h"
+
+#include "entity_name.h"
 
 using std::string;
 

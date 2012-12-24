@@ -11,22 +11,7 @@
  * Foundation.  See file COPYING.
  *
  */
-
-#include "auth/Auth.h"
-#include "common/ConfUtils.h"
-#include "common/ceph_argparse.h"
-#include "common/common_init.h"
-#include "common/config.h"
-#include "common/static_assert.h"
-#include "common/strtol.h"
-#include "common/version.h"
-#include "include/str_list.h"
 #include "include/types.h"
-#include "include/stringify.h"
-#include "msg/msg_types.h"
-#include "osd/osd_types.h"
-
-#include "include/assert.h"
 
 #include <errno.h>
 #include <sstream>
@@ -34,6 +19,20 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#include "include/str_list.h"
+#include "include/stringify.h"
+#include "include/assert.h"
+#include "common/ceph_argparse.h"
+#include "common/common_init.h"
+#include "common/static_assert.h"
+#include "common/strtol.h"
+#include "common/version.h"
+#include "auth/Auth.h"
+#include "msg/msg_types.h"
+#include "osd/osd_types.h"
+
+#include "config.h"
 
 /* Don't use standard Ceph logging in this file.
  * We can't use logging until it's initialized, and a lot of the necessary

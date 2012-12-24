@@ -10,20 +10,17 @@
 * License version 2.1, as published by the Free Software
 * Foundation. See file COPYING.
 */
-#include <tr1/memory>
-#include <map>
-#include <set>
 #include <deque>
-#include <boost/scoped_ptr.hpp>
-
-#include "test/ObjectMap/KeyValueDBMemory.h"
-#include "os/KeyValueDB.h"
-#include "os/LevelDBStore.h"
 #include <sys/types.h>
+#include <boost/scoped_ptr.hpp>
+#include "gtest/gtest.h"
+
+#include "common/ceph_argparse.h"
+#include "os/LevelDBStore.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
-#include "common/ceph_argparse.h"
-#include "gtest/gtest.h"
+
+#include "KeyValueDBMemory.h"
 
 using namespace std;
 

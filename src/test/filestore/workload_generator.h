@@ -13,7 +13,6 @@
 #ifndef WORKLOAD_GENERATOR_H_
 #define WORKLOAD_GENERATOR_H_
 
-#include "os/FileStore.h"
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>

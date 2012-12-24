@@ -1,10 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-#include <errno.h>
+#include "mds_types.h"
 
 #include "global/debug.h"
-#include "mdstypes.h"
-#include "mds/flock.h"
+
+#include "flock.h"
 
 #define dout_subsys ceph_subsys_mds
 

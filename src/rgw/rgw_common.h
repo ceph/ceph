@@ -15,17 +15,17 @@
 #ifndef CEPH_RGW_COMMON_H
 #define CEPH_RGW_COMMON_H
 
-#include "common/ceph_crypto.h"
-#include "common/perf_counters.h"
-
 #include "acconfig.h"
+#include "include/types.h"
 
 #include <errno.h>
 #include <string.h>
 #include <string>
 #include <map>
-#include "include/types.h"
+
 #include "include/utime.h"
+#include "common/ceph_crypto.h"
+#include "common/perf_counters.h"
 
 using namespace std;
 

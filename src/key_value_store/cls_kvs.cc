@@ -5,14 +5,16 @@
  *      Author: Eleanor Cawthon
  */
 
-#include "objclass/objclass.h"
-#include "/usr/include/asm-generic/errno-base.h"
-#include "/usr/include/asm-generic/errno.h"
-#include "key_value_store/kvs_arg_types.h"
 #include "include/types.h"
+
 #include <iostream>
 #include <climits>
+#include <asm-generic/errno-base.h>
+#include <asm-generic/errno.h>
 
+#include "objclass/objclass.h"
+
+#include "kvs_arg_types.h"
 
 cls_handle_t h_class;
 cls_method_handle_t h_get_idata_from_key;

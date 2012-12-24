@@ -1,9 +1,8 @@
 #ifndef CEPH_RGW_TOOLS_H
 #define CEPH_RGW_TOOLS_H
 
-#include <string>
-
 #include "include/types.h"
+
 #include "rgw_common.h"
 
 class RGWRados;

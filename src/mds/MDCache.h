@@ -18,6 +18,7 @@
 #define CEPH_MDCACHE_H
 
 #include "include/types.h"
+
 #include "include/filepath.h"
 
 #include "CInode.h"

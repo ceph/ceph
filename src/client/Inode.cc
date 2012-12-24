@@ -2,10 +2,11 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "MetaSession.h"
-#include "Inode.h"
 #include "Dentry.h"
 #include "Dir.h"
 #include "SnapRealm.h"
+
+#include "Inode.h"
 
 ostream& operator<<(ostream &out, Inode &in)
 {

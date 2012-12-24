@@ -15,16 +15,16 @@
 #include <iostream>
 
 #include "common/Formatter.h"
+#include "common/WorkQueue.h"
+#include "common/Semaphore.h"
+#include "common/Finisher.h"
+#include "global/global_context.h"
+#include "global/global_init.h"
 
 #include "bencher.h"
 #include "rados_backend.h"
 #include "detailed_stat_collector.h"
 #include "distribution.h"
-#include "global/global_context.h"
-#include "global/global_init.h"
-#include "common/WorkQueue.h"
-#include "common/Semaphore.h"
-#include "common/Finisher.h"
 
 namespace po = boost::program_options;
 using namespace std;

@@ -1,8 +1,6 @@
-
-#include "cls/rgw/cls_rgw_ops.h"
-
 #include "common/Formatter.h"
 
+#include "cls_rgw_ops.h"
 
 void rgw_cls_obj_prepare_op::generate_test_instances(list<rgw_cls_obj_prepare_op*>& o)
 {

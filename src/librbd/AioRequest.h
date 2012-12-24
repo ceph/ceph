@@ -3,14 +3,13 @@
 #ifndef CEPH_LIBRBD_AIOREQUEST_H
 #define CEPH_LIBRBD_AIOREQUEST_H
 
+#include "inttypes.h"
 #include <map>
 
-#include "inttypes.h"
-
-#include "common/snap_types.h"
 #include "include/buffer.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
+#include "common/snap_types.h"
 
 namespace librbd {
 

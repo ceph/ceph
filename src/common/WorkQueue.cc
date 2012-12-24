@@ -11,15 +11,15 @@
  * Foundation.  See file COPYING.
  * 
  */
+#include "include/types.h"
 
 #include <sstream>
 
-#include "include/types.h"
 #include "include/utime.h"
-#include "WorkQueue.h"
-
 #include "common/config.h"
 #include "common/HeartbeatMap.h"
+
+#include "WorkQueue.h"
 
 #define dout_subsys ceph_subsys_tp
 #undef dout_prefix

@@ -13,12 +13,13 @@
 #ifndef TEST_FILESTORE_STATE_H_
 #define TEST_FILESTORE_STATE_H_
 
-#include "os/FileStore.h"
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 #include <map>
 #include <vector>
+
+#include "os/FileStore.h"
 
 class TestFileStoreState {
 public:

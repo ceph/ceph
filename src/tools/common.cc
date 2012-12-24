@@ -12,41 +12,35 @@
  * 
  */
 
+#include "acconfig.h"
+
 #include <sys/stat.h>
 #include <iostream>
 #include <string>
-using namespace std;
+#include <memory>
+#include <sys/types.h>
+#include <fcntl.h>
 
 #if !defined(DARWIN) && !defined(__FreeBSD__)
 #include <envz.h>
 #endif // DARWIN
 
-#include <memory>
-#include <sys/types.h>
-#include <fcntl.h>
-
 extern "C" {
 #include <histedit.h>
 }
 
-#include "acconfig.h"
-#include "messages/MMonCommand.h"
-#include "messages/MMonCommandAck.h"
-#include "messages/MLog.h"
-#include "mon/MonClient.h"
-#include "mon/MonMap.h"
-#include "osd/OSDMap.h"
-#include "msg/SimpleMessenger.h"
-#include "tools/common.h"
-
+#include "include/assert.h"
 #include "common/errno.h"
-#include "common/Cond.h"
-#include "common/Mutex.h"
-#include "common/Timer.h"
+#include "mon/MonMap.h"
+#include "msg/SimpleMessenger.h"
 #include "global/global_init.h"
 #include "global/debug.h"
 
-#include "include/assert.h"
+#include "messages/MMonCommand.h"
+
+#include "common.h"
+
+using namespace std;
 
 #define dout_subsys ceph_subsys_
 

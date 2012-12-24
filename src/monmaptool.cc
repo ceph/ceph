@@ -16,17 +16,17 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
-
 #include <iostream>
 #include <string>
-using namespace std;
 
+#include "include/str_list.h"
 #include "common/config.h"
 #include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "global/debug.h"
 #include "mon/MonMap.h"
-#include "include/str_list.h"
+#include "global/global_init.h"
+#include "global/global_context.h"
+
+using namespace std;
 
 void usage()
 {

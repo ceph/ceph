@@ -15,11 +15,11 @@
 #ifndef CEPH_LIBRADOS_POOLASYNCCOMPLETIONIMPL_H
 #define CEPH_LIBRADOS_POOLASYNCCOMPLETIONIMPL_H
 
-#include "common/Cond.h"
-#include "common/Mutex.h"
 #include "include/Context.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
+#include "common/Cond.h"
+#include "common/Mutex.h"
 
 namespace librados {
   struct PoolAsyncCompletionImpl {

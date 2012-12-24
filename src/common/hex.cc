@@ -12,11 +12,11 @@
  *
  */
 
-#include "common/debug.h"
-#include "common/hex.h"
-
 #include <stdio.h>
-#include <string>
+
+#include "common/debug.h"
+
+#include "hex.h"
 
 void hex2str(const char *s, int len, char *buf, int dest_len)
 {

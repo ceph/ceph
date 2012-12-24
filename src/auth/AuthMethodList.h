@@ -16,6 +16,7 @@
 #define CEPH_AUTHMETHODLIST_H
 
 #include "include/inttypes.h"
+
 #include <list>
 #include <set>
 #include <string>

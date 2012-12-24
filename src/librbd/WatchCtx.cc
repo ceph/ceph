@@ -5,10 +5,10 @@
 #include "common/debug.h"
 #include "common/perf_counters.h"
 
-#include "librbd/ImageCtx.h"
-#include "librbd/internal.h"
+#include "ImageCtx.h"
+#include "internal.h"
 
-#include "librbd/WatchCtx.h"
+#include "WatchCtx.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

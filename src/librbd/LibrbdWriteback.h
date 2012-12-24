@@ -3,10 +3,11 @@
 #ifndef CEPH_LIBRBD_LIBRBDWRITEBACKHANDLER_H
 #define CEPH_LIBRBD_LIBRBDWRITEBACKHANDLER_H
 
-#include "include/Context.h"
 #include "include/types.h"
-#include "include/rados/librados.hpp"
 #include "osd/osd_types.h"
+
+#include "include/Context.h"
+#include "include/rados/librados.hpp"
 #include "osdc/WritebackHandler.h"
 
 class Mutex;

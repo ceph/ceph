@@ -15,11 +15,11 @@
 #ifndef CEPH_MUTEX_H
 #define CEPH_MUTEX_H
 
-#include "include/assert.h"
-#include "lockdep.h"
-#include "common/ceph_context.h"
-
 #include <pthread.h>
+
+#include "include/assert.h"
+#include "common/lockdep.h"
+#include "common/ceph_context.h"
 
 using namespace ceph;
 

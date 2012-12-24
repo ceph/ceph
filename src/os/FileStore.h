@@ -22,28 +22,24 @@
 #include <deque>
 #include <boost/scoped_ptr.hpp>
 #include <fstream>
-using namespace std;
-
 #include <ext/hash_map>
-using namespace __gnu_cxx;
 
 #include "include/assert.h"
+#include "include/uuid.h"
+#include "common/Timer.h"
+#include "common/WorkQueue.h"
+#include "common/Mutex.h"
+#include "global/global_context.h"
 
 #include "ObjectStore.h"
 #include "JournalingObjectStore.h"
-
-#include "common/Timer.h"
-#include "common/WorkQueue.h"
-
-#include "common/Mutex.h"
 #include "HashIndex.h"
 #include "IndexManager.h"
 #include "ObjectMap.h"
 #include "SequencerPosition.h"
 
-#include "include/uuid.h"
-
-#include "global/global_context.h"
+using namespace std;
+using namespace __gnu_cxx;
 
 // from include/linux/falloc.h:
 #ifndef FALLOC_FL_PUNCH_HOLE

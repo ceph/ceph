@@ -1,23 +1,23 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+#include "include/inttypes.h"
+
 #include <errno.h>
 #include <limits.h>
 
+#include "include/stringify.h"
 #include "common/ceph_context.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "cls/lock/cls_lock_client.h"
-#include "include/inttypes.h"
-#include "include/stringify.h"
-
 #include "cls/rbd/cls_rbd.h"
 
-#include "librbd/AioCompletion.h"
-#include "librbd/AioRequest.h"
-#include "librbd/ImageCtx.h"
+#include "AioCompletion.h"
+#include "AioRequest.h"
+#include "ImageCtx.h"
+#include "parent_types.h"
 
-#include "librbd/internal.h"
-#include "librbd/parent_types.h"
+#include "internal.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

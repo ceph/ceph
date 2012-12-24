@@ -12,33 +12,34 @@
  * 
  */
 
+#include "mon_types.h"
+#include "osd/osd_types.h"
+
 #include <sstream>
 
-#include "AuthMonitor.h"
-#include "Monitor.h"
-#include "MonitorStore.h"
+#include "include/str_list.h"
+#include "include/assert.h"
+#include "common/config.h"
+#include "common/Timer.h"
+#include "auth/AuthServiceHandler.h"
+#include "auth/KeyRing.h"
+#include "global/global_context.h"
+#include "global/debug.h"
 
 #include "messages/MMonCommand.h"
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
 #include "messages/MMonGlobalID.h"
 
-#include "include/str_list.h"
-#include "common/Timer.h"
+#include "Monitor.h"
+#include "MonitorStore.h"
 
-#include "auth/AuthServiceHandler.h"
-#include "auth/KeyRing.h"
-
-#include "osd/osd_types.h"
-
-#include "common/config.h"
-#include "include/assert.h"
-
-#include "global/debug.h"
+#include "AuthMonitor.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, paxos->get_version())
+
 static ostream& _prefix(std::ostream *_dout, Monitor *mon, version_t v) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name()

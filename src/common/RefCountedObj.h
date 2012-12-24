@@ -15,10 +15,9 @@
 #ifndef CEPH_REFCOUNTEDOBJ_H
 #define CEPH_REFCOUNTEDOBJ_H
  
+#include "include/atomic.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
-#include "include/atomic.h"
-
 
 struct RefCountedObject {
   atomic_t nref;

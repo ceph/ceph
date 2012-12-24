@@ -1,17 +1,16 @@
-#include <string.h>
-
-#include <iostream>
-#include <map>
-
 #include "include/types.h"
 
-#include "rgw_acl_s3.h"
+#include <string.h>
+
+#include "common/debug.h"
+
 #include "rgw_user.h"
 
-#define dout_subsys ceph_subsys_rgw
+#include "rgw_acl_s3.h"
 
 using namespace std;
 
+#define dout_subsys ceph_subsys_rgw
 
 #define RGW_URI_ALL_USERS	"http://acs.amazonaws.com/groups/global/AllUsers"
 #define RGW_URI_AUTH_USERS	"http://acs.amazonaws.com/groups/global/AuthenticatedUsers"

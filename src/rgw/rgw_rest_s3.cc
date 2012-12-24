@@ -4,20 +4,18 @@
 #include "common/ceph_crypto.h"
 #include "common/Formatter.h"
 #include "common/utf8.h"
+#include "common/armor.h"
 #include "global/debug.h"
 
 #include "rgw_rest.h"
-#include "rgw_rest_s3.h"
 #include "rgw_acl.h"
-#include "rgw_policy_s3.h"
-
-#include "common/armor.h"
-
 #include "rgw_client_io.h"
 
-#define dout_subsys ceph_subsys_rgw
+#include "rgw_rest_s3.h"
 
 using namespace ceph::crypto;
+
+#define dout_subsys ceph_subsys_rgw
 
 void dump_common_s3_headers(struct req_state *s, const char *etag,
                             size_t content_len, const char *conn_status)

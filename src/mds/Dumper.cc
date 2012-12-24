@@ -16,14 +16,16 @@
 #define _BACKWARD_BACKWARD_WARNING_H   // make gcc 4.3 shut up about hash_*
 #endif
 
+#include "mds_types.h"
+
 #include "include/compat.h"
 #include "common/entity_name.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
-#include "mds/Dumper.h"
-#include "mds/mdstypes.h"
 #include "mon/MonClient.h"
-#include "osdc/Journaler.h"
+#include "global/debug.h"
+
+#include "Dumper.h"
 
 Dumper::~Dumper()
 {

@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  * 
  */
+#include "include/types.h"
 
 #include <fstream>
 #include <iostream>
@@ -24,32 +25,31 @@
 #include <sys/mount.h>
 #endif // DARWIN || __FreeBSD__
 
-#include "osd/PG.h"
-
-#include "include/types.h"
 #include "include/compat.h"
-
-#include "OSD.h"
-#include "OSDMap.h"
-#include "Watch.h"
-
+#include "include/color.h"
+#include "include/assert.h"
+#include "common/config.h"
+#include "common/perf_counters.h"
+#include "common/safe_io.h"
+#include "common/HeartbeatMap.h"
+#include "common/admin_socket.h"
+#include "common/errno.h"
 #include "common/ceph_argparse.h"
 #include "common/version.h"
-#include "os/FileStore.h"
-#include "os/FileJournal.h"
-
-#include "ReplicatedPG.h"
-
-#include "Ager.h"
-
-
+#include "auth/AuthAuthorizeHandler.h"
+#include "mon/MonClient.h"
 #include "msg/Messenger.h"
 #include "msg/Message.h"
-
-#include "mon/MonClient.h"
+#include "objclass/objclass.h"
+#include "os/FileStore.h"
+#include "os/FileJournal.h"
+#include "perfglue/cpu_profiler.h"
+#include "perfglue/heap_profiler.h"
+#include "global/signal_handler.h"
+#include "global/pidfile.h"
+#include "global/debug.h"
 
 #include "messages/MLog.h"
-
 #include "messages/MGenericMessage.h"
 #include "messages/MPing.h"
 #include "messages/MOSDPing.h"
@@ -60,7 +60,6 @@
 #include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDPGTemp.h"
-
 #include "messages/MOSDMap.h"
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGQuery.h"
@@ -74,47 +73,21 @@
 #include "messages/MOSDPGMissing.h"
 #include "messages/MBackfillReserve.h"
 #include "messages/MRecoveryReserve.h"
-
 #include "messages/MOSDAlive.h"
-
 #include "messages/MOSDScrub.h"
-#include "messages/MOSDRepScrub.h"
-
 #include "messages/MMonCommand.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
-
 #include "messages/MPGStats.h"
 #include "messages/MPGStatsAck.h"
-
 #include "messages/MWatchNotify.h"
 
-#include "common/perf_counters.h"
-#include "common/Timer.h"
-#include "common/LogClient.h"
-#include "common/safe_io.h"
-#include "common/HeartbeatMap.h"
-#include "common/admin_socket.h"
+#include "OSDMap.h"
+#include "Watch.h"
+#include "ReplicatedPG.h"
+#include "Ager.h"
 
-#include "global/signal_handler.h"
-#include "global/pidfile.h"
-#include "global/debug.h"
-
-#include "include/color.h"
-#include "perfglue/cpu_profiler.h"
-#include "perfglue/heap_profiler.h"
-
-#include "osd/ClassHandler.h"
-#include "osd/OpRequest.h"
-
-#include "auth/AuthAuthorizeHandler.h"
-
-#include "common/errno.h"
-
-#include "objclass/objclass.h"
-
-#include "include/assert.h"
-#include "common/config.h"
+#include "OSD.h"
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix

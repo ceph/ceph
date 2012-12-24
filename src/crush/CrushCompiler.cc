@@ -1,19 +1,15 @@
+#include <iostream>
+#include <stack>
+#include <string>
+#include <stdexcept>
+#include <map>
+#include <typeinfo>
 
 #include "CrushCompiler.h"
 
 #ifndef EBADE
 #define EBADE EFTYPE
 #endif
-
-#include <iostream>
-#include <stack>
-#include <functional>
-#include <string>
-#include <stdexcept>
-#include <map>
-
-
-#include <typeinfo>
 
 // -------------
 

@@ -1,15 +1,13 @@
-#include <string.h>
-
-#include <iostream>
-#include <map>
-
 #include "include/types.h"
+
+#include <string.h>
+#include <map>
 
 #include "rgw_json.h"
 
-#define dout_subsys ceph_subsys_rgw
-
 using namespace std;
+
+#define dout_subsys ceph_subsys_rgw
 
 void dump_array(JSONObj *obj)
 {

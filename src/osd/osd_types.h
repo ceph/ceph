@@ -15,19 +15,19 @@
 #ifndef CEPH_OSD_TYPES_H
 #define CEPH_OSD_TYPES_H
 
+#include "include/types.h"
+#include "msg/msg_types.h"
+
 #include <sstream>
 #include <stdio.h>
 #include <memory>
 
-#include "msg/msg_types.h"
-#include "include/types.h"
 #include "include/utime.h"
 #include "include/CompatSet.h"
 #include "include/interval_set.h"
 #include "common/snap_types.h"
 #include "common/Formatter.h"
 #include "os/hobject.h"
-
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 

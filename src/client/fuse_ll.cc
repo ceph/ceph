@@ -23,13 +23,14 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-// ceph
+#include "include/types.h"
+#include "include/assert.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
-#include "include/types.h"
-#include "Client.h"
 #include "common/config.h"
-#include "include/assert.h"
+#include "global/debug.h"
+
+#include "Client.h"
 
 static Client *client;
 

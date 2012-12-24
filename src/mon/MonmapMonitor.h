@@ -19,16 +19,17 @@
 #ifndef CEPH_MONMAPMONITOR_H
 #define CEPH_MONMAPMONITOR_H
 
+#include "mon_types.h"
+
 #include <map>
 #include <set>
 
-using namespace std;
-
-#include "include/types.h"
 #include "msg/Messenger.h"
 
 #include "PaxosService.h"
 #include "MonMap.h"
+
+using namespace std;
 
 class MMonGetMap;
 class MMonMap;

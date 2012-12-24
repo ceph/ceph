@@ -12,28 +12,19 @@
  * 
  */
 
-#include <tr1/memory>
-#include <map>
+#include <errno.h>
 
 #if defined(__FreeBSD__)
 #include <sys/param.h>
 #endif
 
-#include <errno.h>
-
-#include "common/Mutex.h"
-#include "common/Cond.h"
-#include "common/config.h"
 #include "include/buffer.h"
-
-#include "IndexManager.h"
-#include "FlatIndex.h"
-#include "HashIndex.h"
-#include "CollectionIndex.h"
-
-#include "chain_xattr.h"
 #include "global/global_context.h"
 #include "global/debug.h"
+
+#include "chain_xattr.h"
+
+#include "IndexManager.h"
 
 static int set_version(const char *path, uint32_t version) {
   bufferlist bl;

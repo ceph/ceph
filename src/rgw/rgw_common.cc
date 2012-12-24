@@ -1,20 +1,17 @@
-#include <errno.h>
+#include <sstream>
 
-#include "rgw_common.h"
-#include "rgw_acl.h"
-#include "rgw_string.h"
-
-#include "common/ceph_crypto.h"
+#include "include/str_list.h"
 #include "common/armor.h"
 #include "common/errno.h"
 #include "common/Clock.h"
 #include "common/Formatter.h"
-#include "common/perf_counters.h"
-#include "include/str_list.h"
 #include "auth/Crypto.h"
 #include "global/debug.h"
 
-#include <sstream>
+#include "rgw_acl.h"
+#include "rgw_string.h"
+
+#include "rgw_common.h"
 
 #define dout_subsys ceph_subsys_rgw
 

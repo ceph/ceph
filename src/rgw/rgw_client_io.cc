@@ -1,10 +1,7 @@
-
 #include <stdio.h>
-#include <stdlib.h>
 #include <stdarg.h>
 
 #include "rgw_client_io.h"
-
 
 int RGWClientIO::print(const char *format, ...)
 {

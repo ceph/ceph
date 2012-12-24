@@ -12,17 +12,16 @@
  *
  */
 
-#include "CephxProtocol.h"
+#include "include/buffer.h"
 #include "common/Clock.h"
 #include "common/config.h"
 #include "common/debug.h"
-#include "include/buffer.h"
+
+#include "CephxProtocol.h"
 
 #define dout_subsys ceph_subsys_auth
 #undef dout_prefix
 #define dout_prefix *_dout << "cephx: "
-
-
 
 void cephx_calc_client_server_challenge(CephContext *cct, CryptoKey& secret, uint64_t server_challenge, 
 		  uint64_t client_challenge, uint64_t *key, std::string &ret)

@@ -3,8 +3,9 @@
 
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
-#include "rgw_common.h"
 #include "cls/rgw/cls_rgw_types.h"
+
+#include "rgw_common.h"
 #include "rgw_log.h"
 
 class RGWWatcher;

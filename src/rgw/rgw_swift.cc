@@ -2,19 +2,18 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "include/str_list.h"
+#include "common/ceph_crypto_cms.h"
+#include "common/armor.h"
+#include "global/global_context.h"
+#include "global/debug.h"
+
 #include "rgw_json.h"
-#include "rgw_common.h"
-#include "rgw_swift.h"
 #include "rgw_swift_auth.h"
 #include "rgw_user.h"
 #include "rgw_http_client.h"
 
-#include "include/str_list.h"
-
-#include "global/global_context.h"
-#include "global/debug.h"
-#include "common/ceph_crypto_cms.h"
-#include "common/armor.h"
+#include "rgw_swift.h"
 
 #define dout_subsys ceph_subsys_rgw
 

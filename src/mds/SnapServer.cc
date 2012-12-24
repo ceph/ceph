@@ -11,21 +11,21 @@
  * Foundation.  See file COPYING.
  * 
  */
+#include "mds_types.h"
 
-#include "SnapServer.h"
-#include "MDS.h"
-#include "osd/OSDMap.h"
+#include "include/assert.h"
+#include "common/config.h"
+#include "msg/Messenger.h"
 #include "mon/MonClient.h"
+#include "osd/OSDMap.h"
+#include "global/debug.h"
 
-#include "include/types.h"
 #include "messages/MMDSTableRequest.h"
 #include "messages/MRemoveSnaps.h"
 
-#include "msg/Messenger.h"
+#include "MDS.h"
 
-#include "common/config.h"
-#include "include/assert.h"
-#include "global/debug.h"
+#include "SnapServer.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix

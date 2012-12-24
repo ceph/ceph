@@ -11,20 +11,24 @@
  * Foundation.  See file COPYING.
  * 
  */
+#include "mon_types.h"
 
-#include "Paxos.h"
-#include "Monitor.h"
-#include "MonitorStore.h"
+#include "include/assert.h"
+#include "common/config.h"
+#include "global/global_context.h"
+#include "global/debug.h"
 
 #include "messages/MMonPaxos.h"
 
-#include "common/config.h"
-#include "include/assert.h"
-#include "global/debug.h"
+#include "Monitor.h"
+#include "MonitorStore.h"
+
+#include "Paxos.h"
 
 #define dout_subsys ceph_subsys_paxos
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, mon->name, mon->rank, machine_name, state, first_committed, last_committed)
+
 static ostream& _prefix(std::ostream *_dout, Monitor *mon, const string& name,
 		        int rank, const char *machine_name, int state,
 			version_t first_committed, version_t last_committed)
