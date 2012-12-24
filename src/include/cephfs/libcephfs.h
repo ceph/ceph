@@ -842,6 +842,20 @@ int ceph_get_file_stripe_unit(struct ceph_mount_info *cmount, int fh);
 int ceph_get_file_pool(struct ceph_mount_info *cmount, int fh);
 
 /**
+ * Get the name of the pool a file is stored in,
+ *
+ * Write the name of the file's pool to the buffer.  If buflen is 0, return
+ * a suggested length for the buffer.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param fh the open file descriptor referring to the file
+ * @param buf buffer to store the name in
+ * @param buflen size of the buffer
+ * @returns length in bytes of the pool name
+ */
+int ceph_get_file_pool_name(struct ceph_mount_info *cmount, int fh, char *buf, size_t buflen);
+
+/**
  * Get the file replication information.
  * @param cmount the ceph mount handle to use.
  * @param fh the open file descriptor referring to the file to get the striping unit of.
@@ -867,53 +881,13 @@ int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int fd, loff_t 
 /** @} filelayout */
 
 /**
- * @defgroup libcephfs_h_default_filelayout Control the Default File Layout.
- * Functions for setting and getting the default file layout for new files.
- *
- * @{
- */
-
-/**
- * Set the default stripe unit of files created in this mount.
- *
- * @param cmount the ceph mount handle to use.
- * @param stripe the stripe size to use
- * @returns 0 on success or a negative error code on failure.
+ * No longer available.  Do not use.
+ * These functions will return -EOPNOTSUPP.
  */
 int ceph_set_default_file_stripe_unit(struct ceph_mount_info *cmount, int stripe);
-
-/**
- * Set the default stripe count of files created in this mount.
- *
- * @param cmount the ceph mount handle to use.
- * @param count the stripe count to use
- * @returns 0 on success or a negative error code on failure.
- */
 int ceph_set_default_file_stripe_count(struct ceph_mount_info *cmount, int count);
-
-/**
- * Set the default object size to use for striping.
- *
- * @param cmount the ceph mount handle to use.
- * @param size the default size for objects
- * @returns 0 on success or a negative error code on failure
- */
 int ceph_set_default_object_size(struct ceph_mount_info *cmount, int size);
-
-/**
- * No longer available.  Do not use.
- * Set the default preferred placement group.  This option will return
- * -EOPNOTSUPP as it is no longer supported.
- */
 int ceph_set_default_preferred_pg(struct ceph_mount_info *cmount, int osd);
-
-/**
- * Set the default file replication factor.
- *
- * @param cmount the ceph mount handle to use.
- * @param replication the default replication factor for files in this filesystem.
- * @returns 0 on success or negative error code on failure.
- */
 int ceph_set_default_file_replication(struct ceph_mount_info *cmount, int replication);
 
 /**

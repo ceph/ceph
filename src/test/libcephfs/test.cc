@@ -160,13 +160,34 @@ TEST(LibCephFS, OpenLayout) {
   sprintf(test_layout_file, "test_layout_%d_b", getpid());
   int fd = ceph_open_layout(cmount, test_layout_file, O_CREAT, 0666, (1<<20), 7, (1<<20), NULL);
   ASSERT_GT(fd, 0);
+  char poolname[80];
+  ASSERT_LT(0, ceph_get_file_pool_name(cmount, fd, poolname, sizeof(poolname)));
+  ASSERT_EQ(4, ceph_get_file_pool_name(cmount, fd, poolname, 0));
+  ASSERT_EQ(0, strcmp("data", poolname));
   ceph_close(cmount, fd);
 
   /* invalid layout */
   sprintf(test_layout_file, "test_layout_%d_c", getpid());
   fd = ceph_open_layout(cmount, test_layout_file, O_CREAT, 0666, (1<<20), 1, 19, NULL);
   ASSERT_EQ(fd, -EINVAL);
+
+  /* with data pool */
+  sprintf(test_layout_file, "test_layout_%d_d", getpid());
+  fd = ceph_open_layout(cmount, test_layout_file, O_CREAT, 0666, (1<<20), 7, (1<<20), "data");
+  ASSERT_GT(fd, 0);
+  ASSERT_EQ(4, ceph_get_file_pool_name(cmount, fd, poolname, sizeof(poolname)));
+  ASSERT_EQ(0, strcmp("data", poolname));
   ceph_close(cmount, fd);
+
+  /* with metadata pool (invalid) */
+  sprintf(test_layout_file, "test_layout_%d_e", getpid());
+  fd = ceph_open_layout(cmount, test_layout_file, O_CREAT, 0666, (1<<20), 7, (1<<20), "metadata");
+  ASSERT_EQ(fd, -EINVAL);
+
+  /* with metadata pool (does not exist) */
+  sprintf(test_layout_file, "test_layout_%d_f", getpid());
+  fd = ceph_open_layout(cmount, test_layout_file, O_CREAT, 0666, (1<<20), 7, (1<<20), "asdfjasdfjasdf");
+  ASSERT_EQ(fd, -EINVAL);
 
   ceph_shutdown(cmount);
 }

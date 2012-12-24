@@ -149,10 +149,6 @@ Client::Client(Messenger *m, MonClient *mc)
     initialized(false), mounted(false), unmounting(false),
     local_osd(-1), local_osd_epoch(0),
     unsafe_sync_write(0),
-    file_stripe_unit(0),
-    file_stripe_count(0),
-    object_size(0),
-    file_replication(0),
     client_lock("Client::client_lock")
 {
   monclient->set_messenger(m);
@@ -5163,8 +5159,7 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
 int Client::open(const char *relpath, int flags, mode_t mode)
 {
   /* Use default file striping parameters */
-  return open(relpath, flags, mode, file_stripe_unit, file_stripe_count,
-      object_size, NULL);
+  return open(relpath, flags, mode, 0, 0, 0, NULL);
 }
 
 int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name)
@@ -5275,6 +5270,7 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
     req->set_filepath(path); 
     req->head.args.open.flags = flags & ~O_CREAT;
     req->head.args.open.mode = mode;
+    req->head.args.open.pool = -1;
     req->head.args.open.old_size = in->size;   // for O_TRUNC
     req->inode = in;
     result = make_request(req, uid, gid);
@@ -6643,10 +6639,19 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   if (dir->snapid != CEPH_NOSNAP) {
     return -EROFS;
   }
-  
+
   int cmode = ceph_flags_to_mode(flags);
   if (cmode < 0)
     return -EINVAL;
+
+  int64_t pool_id = -1;
+  if (data_pool && *data_pool) {
+    pool_id = osdmap->lookup_pg_pool_name(data_pool);
+    if (pool_id < 0)
+      return -EINVAL;
+    if (pool_id > 0xffffffffll)
+      return -ERANGE;  // bummer!
+  }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_CREATE);
 
@@ -6661,7 +6666,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   req->head.args.open.stripe_unit = stripe_unit;
   req->head.args.open.stripe_count = stripe_count;
   req->head.args.open.object_size = object_size;
-  req->head.args.open.file_replication = file_replication;
+  req->head.args.open.pool = pool_id;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
@@ -6682,11 +6687,10 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   trim_cache();
 
   ldout(cct, 3) << "create(" << path << ", 0" << oct << mode << dec 
-	  << " layout " << file_stripe_unit
-	  << ' ' << file_stripe_count
-	  << ' ' << object_size
-	  << ' ' << file_replication
-	  <<") = " << res << dendl;
+		<< " layout " << stripe_unit
+		<< ' ' << stripe_count
+		<< ' ' << object_size
+		<<") = " << res << dendl;
   return res;
 
  fail:
@@ -7227,33 +7231,6 @@ int Client::ll_release(Fh *fh)
 // =========================================
 // layout
 
-// default layout
-
-void Client::set_default_file_stripe_unit(int stripe_unit)
-{
-  if (stripe_unit > 0)
-    file_stripe_unit = stripe_unit;
-}
-
-void Client::set_default_file_stripe_count(int count)
-{
-  if (count > 0)
-    file_stripe_count = count;
-}
-
-void Client::set_default_object_size(int size)
-{
-  if (size > 0)
-    object_size = size;
-}
-
-void Client::set_default_file_replication(int replication)
-{
-  if (replication >= 0)
-    file_replication = replication;
-}
-
-
 // expose file layouts
 
 int Client::describe_layout(int fd, ceph_file_layout *lp)
@@ -7273,6 +7250,14 @@ int Client::describe_layout(int fd, ceph_file_layout *lp)
 
 
 // expose osdmap
+
+string Client::get_pool_name(int64_t pool)
+{
+  Mutex::Locker lock(client_lock);
+  if (!osdmap->have_pg_pool(pool))
+    return string();
+  return osdmap->get_pool_name(pool);
+}
 
 int Client::get_pool_replication(int64_t pool)
 {

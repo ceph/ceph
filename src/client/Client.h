@@ -273,10 +273,6 @@ public:
 
   int unsafe_sync_write;
 
-  int file_stripe_unit;
-  int file_stripe_count;
-  int object_size;
-  int file_replication;
 public:
   entity_name_t get_myname() { return messenger->get_myname(); } 
   void sync_write_commit(Inode *in);
@@ -658,11 +654,7 @@ public:
   // expose osdmap 
   int get_local_osd();
   int get_pool_replication(int64_t pool);
-
-  void set_default_file_stripe_unit(int stripe_unit);
-  void set_default_file_stripe_count(int count);
-  void set_default_object_size(int size);
-  void set_default_file_replication(int replication);
+  string get_pool_name(int64_t pool);
 
   int enumerate_layout(int fd, vector<ObjectExtent>& result,
 		       loff_t length, loff_t offset);

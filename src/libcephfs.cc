@@ -705,6 +705,25 @@ extern "C" int ceph_get_file_pool(struct ceph_mount_info *cmount, int fh)
   return l.fl_pg_pool;
 }
 
+extern "C" int ceph_get_file_pool_name(struct ceph_mount_info *cmount, int fh, char *buf, size_t len)
+{
+  struct ceph_file_layout l;
+  int r;
+
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  r = cmount->get_client()->describe_layout(fh, &l);
+  if (r < 0)
+    return r;
+  string name = cmount->get_client()->get_pool_name(l.fl_pg_pool);
+  if (len == 0)
+    return name.length();
+  if (name.length() > len)
+    return -ERANGE;
+  strncpy(buf, name.c_str(), len);
+  return name.length();
+}
+
 extern "C" int ceph_get_file_replication(struct ceph_mount_info *cmount, int fh)
 {
   struct ceph_file_layout l;
@@ -722,36 +741,28 @@ extern "C" int ceph_get_file_replication(struct ceph_mount_info *cmount, int fh)
 extern "C" int ceph_set_default_file_stripe_unit(struct ceph_mount_info *cmount,
 						 int stripe)
 {
-  if (!cmount->is_mounted())
-    return -ENOTCONN;
-  cmount->get_client()->set_default_file_stripe_unit(stripe);
-  return 0;
+  // this option no longer exists
+  return -EOPNOTSUPP;
 }
 
 extern "C" int ceph_set_default_file_stripe_count(struct ceph_mount_info *cmount,
 						  int count)
 {
-  if (!cmount->is_mounted())
-    return -ENOTCONN;
-  cmount->get_client()->set_default_file_stripe_unit(count);
-  return 0;
+  // this option no longer exists
+  return -EOPNOTSUPP;
 }
 
 extern "C" int ceph_set_default_object_size(struct ceph_mount_info *cmount, int size)
 {
-  if (!cmount->is_mounted())
-    return -ENOTCONN;
-  cmount->get_client()->set_default_object_size(size);
-  return 0;
+  // this option no longer exists
+  return -EOPNOTSUPP;
 }
 
 extern "C" int ceph_set_default_file_replication(struct ceph_mount_info *cmount,
 						 int replication)
 {
-  if (!cmount->is_mounted())
-    return -ENOTCONN;
-  cmount->get_client()->set_default_file_replication(replication);
-  return 0;
+  // this option no longer exists
+  return -EOPNOTSUPP;
 }
 
 extern "C" int ceph_set_default_preferred_pg(struct ceph_mount_info *cmount, int osd)

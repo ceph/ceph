@@ -50,6 +50,7 @@
 #include "common/Timer.h"
 #include "common/perf_counters.h"
 #include "include/compat.h"
+#include "osd/OSDMap.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -2613,13 +2614,21 @@ void Server::handle_client_openc(MDRequest *mdr)
     layout.fl_stripe_count = req->head.args.open.stripe_count;
   if (req->head.args.open.object_size)
     layout.fl_object_size = req->head.args.open.object_size;
+  if (req->get_connection()->has_feature(CEPH_FEATURE_CREATEPOOLID) &&
+      (__s32)req->head.args.open.pool >= 0)
+    layout.fl_pg_pool = req->head.args.open.pool;
 
   if (!ceph_file_layout_is_valid(&layout)) {
     dout(10) << " invalid initial file layout" << dendl;
     reply_request(mdr, -EINVAL);
     return;
   }
-
+  if (!mds->osdmap->have_pg_pool(layout.fl_pg_pool) ||
+      !mds->mdsmap->is_data_pool(layout.fl_pg_pool)) {
+    dout(10) << " invalid data pool " << layout.fl_pg_pool << dendl;
+    reply_request(mdr, -EINVAL);
+    return;
+  }
 
   CInode *diri = dn->get_dir()->get_inode();
   rdlocks.insert(&diri->authlock);
@@ -3285,6 +3294,12 @@ void Server::handle_client_setlayout(MDRequest *mdr)
     reply_request(mdr, -EINVAL);
     return;
   }
+  if (!mds->osdmap->have_pg_pool(layout.fl_pg_pool) ||
+      !mds->mdsmap->is_data_pool(layout.fl_pg_pool)) {
+    dout(10) << " invalid data pool " << layout.fl_pg_pool << dendl;
+    reply_request(mdr, -EINVAL);
+    return;
+  }
 
   xlocks.insert(&cur->filelock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
@@ -3352,6 +3367,13 @@ void Server::handle_client_setdirlayout(MDRequest *mdr)
     layout->layout.fl_pg_pool = req->head.args.setlayout.layout.fl_pg_pool;
   if (!ceph_file_layout_is_valid(&layout->layout)) {
     dout(10) << "bad layout" << dendl;
+    reply_request(mdr, -EINVAL);
+    delete layout;
+    return;
+  }
+  if (!mds->osdmap->have_pg_pool(layout->layout.fl_pg_pool) ||
+      !mds->mdsmap->is_data_pool(layout->layout.fl_pg_pool)) {
+    dout(10) << " invalid data pool " << layout->layout.fl_pg_pool << dendl;
     reply_request(mdr, -EINVAL);
     delete layout;
     return;

@@ -1358,7 +1358,7 @@ void CDir::fetch(Context *c, const string& want_dn, bool ignore_authpinnability)
   // start by reading the first hunk of it
   C_Dir_Fetch *fin = new C_Dir_Fetch(this, want_dn);
   object_t oid = get_ondisk_object();
-  object_locator_t oloc(cache->mds->mdsmap->get_metadata_pg_pool());
+  object_locator_t oloc(cache->mds->mdsmap->get_metadata_pool());
   ObjectOperation rd;
   rd.tmap_get(&fin->bl, NULL);
   cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0, fin);
@@ -1961,7 +1961,7 @@ void CDir::_commit(version_t want)
 
   SnapContext snapc;
   object_t oid = get_ondisk_object();
-  object_locator_t oloc(cache->mds->mdsmap->get_metadata_pg_pool());
+  object_locator_t oloc(cache->mds->mdsmap->get_metadata_pool());
 
   m.priority = CEPH_MSG_PRIO_LOW;  // set priority lower than journal!
 
