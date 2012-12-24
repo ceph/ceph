@@ -81,7 +81,7 @@ void MDLog::init_journaler()
   
   // log streamer
   if (journaler) delete journaler;
-  journaler = new Journaler(ino, mds->mdsmap->get_metadata_pg_pool(), CEPH_FS_ONDISK_MAGIC, mds->objecter, 
+  journaler = new Journaler(ino, mds->mdsmap->get_metadata_pool(), CEPH_FS_ONDISK_MAGIC, mds->objecter,
 			    logger, l_mdl_jlat,
 			    &mds->timer);
   assert(journaler->is_readonly());
