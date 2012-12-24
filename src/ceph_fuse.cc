@@ -15,29 +15,26 @@
 #include <sys/stat.h>
 #include <iostream>
 #include <string>
-using namespace std;
+#include <sys/types.h>
+#include <fcntl.h>
 
-#include "common/config.h"
-#include "common/errno.h"
-
-#include "client/Client.h"
-#include "client/fuse_ll.h"
-
-#include "msg/Messenger.h"
-
-#include "mon/MonClient.h"
-
-#include "common/Timer.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "common/safe_io.h"
-       
 #ifndef DARWIN
 #include <envz.h>
 #endif // DARWIN
 
-#include <sys/types.h>
-#include <fcntl.h>
+#include "common/config.h"
+#include "common/errno.h"
+#include "common/Timer.h"
+#include "common/safe_io.h"
+#include "common/ceph_argparse.h"
+#include "client/Client.h"
+#include "client/fuse_ll.h"
+#include "msg/Messenger.h"
+#include "mon/MonClient.h"
+#include "global/global_init.h"
+#include "global/global_context.h"
+
+using namespace std;
 
 void usage()
 {

@@ -20,6 +20,9 @@
 #include <map>
 #include <list>
 #include <set>
+
+#include "SimpleLock.h"
+
 using std::map;
 using std::list;
 using std::set;
@@ -53,8 +56,6 @@ class SimpleLock;
 class ScatterLock;
 class LocalLock;
 class MDCache;
-
-#include "SimpleLock.h"
 
 class Locker {
 private:

@@ -21,27 +21,26 @@
  *   disks, disk groups, total # osds,
  *
  */
-#include "common/config.h"
+
 #include "include/types.h"
 #include "osd_types.h"
-#include "msg/Message.h"
-#include "common/Mutex.h"
-#include "common/Clock.h"
-
-#include "include/ceph_features.h"
-
-#include "crush/CrushWrapper.h"
-
-#include "include/interval_set.h"
 
 #include <vector>
 #include <list>
 #include <set>
 #include <map>
 #include <tr1/memory>
-using namespace std;
-
 #include <ext/hash_set>
+
+#include "include/ceph_features.h"
+#include "include/interval_set.h"
+#include "common/config.h"
+#include "common/Mutex.h"
+#include "common/Clock.h"
+#include "crush/CrushWrapper.h"
+#include "msg/Message.h"
+
+using namespace std;
 using __gnu_cxx::hash_set;
 
 /*

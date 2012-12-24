@@ -6,7 +6,7 @@
 
 #ifdef __cplusplus
 
-#include "../include/types.h"
+#include "include/types.h"
 #include "msg/msg_types.h"
 
 extern "C" {

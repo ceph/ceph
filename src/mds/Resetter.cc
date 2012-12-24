@@ -12,11 +12,13 @@
  * 
  */
 
-#include "mds/Resetter.h"
-#include "osdc/Journaler.h"
-#include "mds/mdstypes.h"
+#include "mds_types.h"
+
 #include "mon/MonClient.h"
-#include "mds/events/EResetJournal.h"
+
+#include "events/EResetJournal.h"
+
+#include "Resetter.h"
 
 Resetter::~Resetter()
 {

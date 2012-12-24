@@ -17,7 +17,7 @@
 #include <unistd.h>
 #include <errno.h>
 
-#include "common/safe_io.h"
+#include "safe_io.h"
 
 ssize_t safe_read(int fd, void *buf, size_t count)
 {

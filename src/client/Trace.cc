@@ -12,27 +12,20 @@
  * 
  */
 
-
-
-#include "Trace.h"
-#include "common/debug.h"
-
 #include <iostream>
 #include <map>
 #include <ext/rope>
-using namespace __gnu_cxx;
-
-#include "common/Mutex.h"
-
-#include "common/config.h"
-
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include "common/Mutex.h"
+#include "common/config.h"
+#include "common/debug.h"
 
+#include "Trace.h"
 
-
+using namespace __gnu_cxx;
 
 void Trace::start()
 {

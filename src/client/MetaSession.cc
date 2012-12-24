@@ -3,9 +3,9 @@
 
 #include "include/types.h"
 
-#include "MetaSession.h"
-
 #include "common/Formatter.h"
+
+#include "MetaSession.h"
 
 void MetaSession::dump(Formatter *f) const
 {

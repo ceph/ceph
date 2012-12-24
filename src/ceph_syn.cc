@@ -15,28 +15,24 @@
 #include <sys/stat.h>
 #include <iostream>
 #include <string>
-using namespace std;
-
-#include "common/config.h"
-
-#include "client/SyntheticClient.h"
-#include "client/Client.h"
-
-#include "msg/Messenger.h"
-
-#include "mon/MonClient.h"
-
-#include "common/Timer.h"
-#include "global/global_init.h"
-#include "common/ceph_argparse.h"
-#include "common/pick_address.h"
+#include <sys/types.h>
+#include <fcntl.h>
 
 #if !defined(DARWIN) && !defined(__FreeBSD__)
 #include <envz.h>
 #endif // DARWIN || __FreeBSD__
 
-#include <sys/types.h>
-#include <fcntl.h>
+#include "common/config.h"
+#include "common/Timer.h"
+#include "common/ceph_argparse.h"
+#include "common/pick_address.h"
+#include "client/SyntheticClient.h"
+#include "msg/Messenger.h"
+#include "mon/MonClient.h"
+#include "global/global_init.h"
+#include "global/global_context.h"
+
+using namespace std;
 
 extern int syn_filer_flags;
 

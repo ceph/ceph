@@ -15,8 +15,9 @@
 #ifndef CEPH_MDSTABLE_H
 #define CEPH_MDSTABLE_H
 
-#include "mdstypes.h"
+#include "mds_types.h"
 #include "mds_table_types.h"
+
 #include "include/buffer.h"
 #include "include/Context.h"
 

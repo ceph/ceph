@@ -12,10 +12,10 @@
  *
  */
 
-#include "common/escape.h"
-
 #include <stdio.h>
 #include <string.h>
+
+#include "escape.h"
 
 /*
  * Some functions for escaping RGW responses

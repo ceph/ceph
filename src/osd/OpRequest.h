@@ -13,17 +13,18 @@
 
 #ifndef OPREQUEST_H_
 #define OPREQUEST_H_
+
+#include "osd_types.h"
+
 #include <sstream>
 #include <stdint.h>
-#include <vector>
-
 #include <include/utime.h>
-#include "common/Mutex.h"
-#include "include/xlist.h"
-#include "msg/Message.h"
 #include <tr1/memory>
+
+#include "include/xlist.h"
+#include "common/Mutex.h"
 #include "common/TrackedOp.h"
-#include "osd/osd_types.h"
+#include "msg/Message.h"
 
 class OpRequest;
 class OpHistory {

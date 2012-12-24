@@ -11,40 +11,30 @@
  * 
  */
 
-#include "PG.h"
-#include "ReplicatedPG.h"
-#include "OSD.h"
-#include "OpRequest.h"
-
+#include "include/compat.h"
+#include "common/config.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
+#include "mds/inode_backtrace.h" // Ugh
+#include "global/global_context.h"
+#include "json_spirit/json_spirit_value.h"
+#include "json_spirit/json_spirit_reader.h"
+#include "include/assert.h"  // json_spirit clobbers it
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
-
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGBackfill.h"
-
 #include "messages/MOSDPing.h"
 #include "messages/MWatchNotify.h"
 
-#include "Watch.h"
-
-#include "mds/inode_backtrace.h" // Ugh
-
-#include "common/config.h"
-#include "include/compat.h"
-#include "global/debug.h"
-
-#include "json_spirit/json_spirit_value.h"
-#include "json_spirit/json_spirit_reader.h"
-#include "include/assert.h"  // json_spirit clobbers it
+#include "ReplicatedPG.h"
 
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this, osd->whoami, get_osdmap()

@@ -4,13 +4,15 @@
 #define BENCHERH
 
 #include <utility>
-#include "distribution.h"
-#include "stat_collector.h"
-#include "backend.h"
 #include <boost/scoped_ptr.hpp>
+
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
+
+#include "distribution.h"
+#include "stat_collector.h"
+#include "backend.h"
 
 class OnWriteApplied;
 class OnWriteCommit;

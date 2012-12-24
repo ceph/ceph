@@ -16,14 +16,12 @@
 #ifndef CEPH_COND_H
 #define CEPH_COND_H
 
+#include <pthread.h>
 #include <time.h>
 
-#include "Mutex.h"
-#include "Clock.h"
-
 #include "include/Context.h"
-
-#include <pthread.h>
+#include "common/Mutex.h"
+#include "common/Clock.h"
 
 class Cond {
   // my bits

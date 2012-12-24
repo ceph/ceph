@@ -4,9 +4,9 @@
 #define FILESTOREBACKENDH
 
 #include "common/Finisher.h"
-#include "backend.h"
-#include "include/Context.h"
 #include "os/ObjectStore.h"
+
+#include "backend.h"
 
 class FileStoreBackend : public Backend {
   ObjectStore *os;

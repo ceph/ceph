@@ -4,9 +4,9 @@
 #ifndef CEPH_CLS_REFCOUNT_OPS_H
 #define CEPH_CLS_REFCOUNT_OPS_H
 
-#include <map>
-
 #include "include/types.h"
+
+#include <map>
 
 struct cls_refcount_get_op {
   string tag;

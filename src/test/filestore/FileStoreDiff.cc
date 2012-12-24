@@ -12,11 +12,10 @@
 */
 #include <stdio.h>
 #include <stdlib.h>
-#include <map>
-#include <boost/scoped_ptr.hpp>
-#include "global/debug.h"
-#include "os/FileStore.h"
+
 #include "common/config.h"
+#include "os/FileStore.h"
+#include "global/debug.h"
 
 #include "FileStoreDiff.h"
 

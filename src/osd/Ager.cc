@@ -3,13 +3,6 @@
 
 #include "include/types.h"
 
-#include "Ager.h"
-#include "os/ObjectStore.h"
-
-#include "common/Clock.h"
-#include "global/global_context.h"
-#include "global/debug.h"
-
 // ick
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -20,6 +13,10 @@
 #include <sys/mount.h>
 #endif // DARWIN || __FreeBSD__
 
+#include "global/global_context.h"
+#include "global/debug.h"
+
+#include "Ager.h"
 
 int myrand() 
 {

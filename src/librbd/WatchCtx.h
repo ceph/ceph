@@ -5,9 +5,9 @@
 
 #include <inttypes.h>
 
-#include "common/Mutex.h"
 #include "include/buffer.h"
 #include "include/rados/librados.hpp"
+#include "common/Mutex.h"
 
 class ImageCtx;
 

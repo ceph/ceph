@@ -1,9 +1,9 @@
 
 #include <syslog.h>
 
-#include "LogEntry.h"
-#include "Formatter.h"
+#include "common/Formatter.h"
 
+#include "LogEntry.h"
 
 int clog_type_to_syslog_prio(clog_type t)
 {

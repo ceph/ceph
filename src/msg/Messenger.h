@@ -12,29 +12,28 @@
  * 
  */
 
-
-
 #ifndef CEPH_MESSENGER_H
 #define CEPH_MESSENGER_H
 
-#include <map>
-using namespace std;
-
-#include "Message.h"
-#include "Dispatcher.h"
-#include "common/Mutex.h"
-#include "common/Cond.h"
-#include "include/Context.h"
 #include "include/types.h"
-#include "include/ceph_features.h"
-#include "auth/Crypto.h"
 
+#include <map>
 #include <errno.h>
 #include <sstream>
 
+#include "common/Mutex.h"
+#include "common/Cond.h"
+#include "include/Context.h"
+#include "include/ceph_features.h"
+#include "auth/Crypto.h"
+
+#include "Message.h"
+#include "Dispatcher.h"
+
+using namespace std;
+
 class MDS;
 class Timer;
-
 
 class Messenger {
 private:

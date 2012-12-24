@@ -16,20 +16,23 @@
 #include <string.h>
 #include <iostream>
 #include <time.h>
-#include "os/FileStore.h"
-#include "include/Context.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "common/Mutex.h"
-#include "common/Cond.h"
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 #include <boost/random/binomial_distribution.hpp>
 #include <gtest/gtest.h>
-
 #include <ext/hash_map>
+
+#include "include/Context.h"
+#include "common/ceph_argparse.h"
+#include "common/Mutex.h"
+#include "common/Cond.h"
+#include "os/FileStore.h"
+#include "global/global_init.h"
+#include "global/global_context.h"
+
 using __gnu_cxx::hash_map;
+
 typedef boost::mt11213b gen_type;
 
 class StoreTest : public ::testing::Test {

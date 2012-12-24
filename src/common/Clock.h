@@ -15,9 +15,9 @@
 #ifndef CEPH_CLOCK_H
 #define CEPH_CLOCK_H
 
-#include "include/utime.h"
-
 #include <time.h>
+
+#include "include/utime.h"
 
 class CephContext;
 

@@ -11,9 +11,6 @@
 
 #include <limits.h>
 
-#include <string>
-#include <map>
-
 #include "rgw_common.h"
 #include "rgw_rados.h"
 #include "rgw_user.h"

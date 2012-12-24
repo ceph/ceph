@@ -5,11 +5,13 @@
 #define __CEPH_OS_SEQUENCERPOSITION_H
 
 #include "include/types.h"
+
+#include <ostream>
+
 #include "include/cmp.h"
 #include "include/encoding.h"
 #include "common/Formatter.h"
 
-#include <ostream>
 
 /**
  * transaction and op offset

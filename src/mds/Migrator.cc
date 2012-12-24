@@ -11,21 +11,12 @@
  * Foundation.  See file COPYING.
  * 
  */
-
-#include "MDS.h"
-#include "MDCache.h"
-#include "CInode.h"
-#include "CDir.h"
-#include "CDentry.h"
-#include "Migrator.h"
-#include "Locker.h"
-#include "Server.h"
-
-#include "MDBalancer.h"
-#include "MDLog.h"
-#include "MDSMap.h"
+#include "mds_types.h"
 
 #include "include/filepath.h"
+#include "common/config.h"
+#include "msg/Messenger.h"
+#include "global/debug.h"
 
 #include "events/EString.h"
 #include "events/EExport.h"
@@ -33,10 +24,7 @@
 #include "events/EImportFinish.h"
 #include "events/ESessions.h"
 
-#include "msg/Messenger.h"
-
 #include "messages/MClientCaps.h"
-
 #include "messages/MExportDirDiscover.h"
 #include "messages/MExportDirDiscoverAck.h"
 #include "messages/MExportDirCancel.h"
@@ -47,10 +35,20 @@
 #include "messages/MExportDirNotify.h"
 #include "messages/MExportDirNotifyAck.h"
 #include "messages/MExportDirFinish.h"
-
 #include "messages/MExportCaps.h"
 #include "messages/MExportCapsAck.h"
 
+#include "MDS.h"
+#include "MDCache.h"
+#include "CInode.h"
+#include "CDir.h"
+#include "CDentry.h"
+#include "Locker.h"
+#include "Server.h"
+#include "MDBalancer.h"
+#include "MDLog.h"
+
+#include "Migrator.h"
 
 /*
  * this is what the dir->dir_auth values look like
@@ -71,9 +69,6 @@
  * which implies:
  *  - auth bit is set if i am listed as first _or_ second dir_auth.
  */
-
-#include "common/config.h"
-#include "global/debug.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef DOUT_COND

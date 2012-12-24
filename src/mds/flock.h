@@ -3,11 +3,11 @@
 #ifndef CEPH_MDS_FLOCK_H
 #define CEPH_MDS_FLOCK_H
 
+#include "mds_types.h"
+
 #include <errno.h>
 
 #include "common/debug.h"
-#include "mdstypes.h"
-
 
 inline ostream& operator<<(ostream& out, ceph_filelock& l) {
   out << "start: " << l.start << ", length: " << l.length

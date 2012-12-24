@@ -15,6 +15,14 @@
 #ifndef CEPH_LOGEVENT_H
 #define CEPH_LOGEVENT_H
 
+#include <string>
+
+#include "include/buffer.h"
+#include "include/Context.h"
+#include "include/utime.h"
+
+using namespace std;
+
 #define EVENT_STRING       1
 
 #define EVENT_SUBTREEMAP   2
@@ -37,14 +45,6 @@
 #define EVENT_TABLESERVER  43
 
 #define EVENT_SUBTREEMAP_TEST   50
-
-
-#include <string>
-using namespace std;
-
-#include "include/buffer.h"
-#include "include/Context.h"
-#include "include/utime.h"
 
 class MDS;
 class LogSegment;

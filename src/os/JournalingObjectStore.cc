@@ -1,14 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 
-#include "JournalingObjectStore.h"
-
 #include "global/debug.h"
+
+#include "JournalingObjectStore.h"
 
 #define dout_subsys ceph_subsys_journal
 #undef dout_prefix
 #define dout_prefix *_dout << "journal "
-
-
 
 void JournalingObjectStore::journal_start()
 {

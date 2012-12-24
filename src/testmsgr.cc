@@ -15,28 +15,27 @@
 #include <sys/stat.h>
 #include <iostream>
 #include <string>
-using namespace std;
-
-#include "common/config.h"
-
-#include "mon/MonMap.h"
-#include "mon/MonClient.h"
-#include "msg/Messenger.h"
-#include "messages/MPing.h"
-
-#include "common/Timer.h"
-#include "global/global_context.h"
-#include "global/global_init.h"
-#include "global/debug.h"
-#include "common/ceph_argparse.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #ifndef DARWIN
 #include <envz.h>
 #endif // DARWIN
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
+#include "common/config.h"
+#include "common/Timer.h"
+#include "common/ceph_argparse.h"
+#include "mon/MonMap.h"
+#include "mon/MonClient.h"
+#include "msg/Messenger.h"
+#include "global/global_context.h"
+#include "global/global_init.h"
+#include "global/debug.h"
+
+#include "messages/MPing.h"
+
+using namespace std;
 
 #define dout_subsys ceph_subsys_ms
 

@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/types.h"
+
 #include "common/Thread.h"
 #include "common/Clock.h"
 #include "common/config.h"

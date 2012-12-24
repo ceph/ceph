@@ -23,31 +23,26 @@
 #ifndef CEPH_MONITOR_H
 #define CEPH_MONITOR_H
 
-#include "include/types.h"
-#include "msg/Messenger.h"
+#include "mon_types.h"
+
+#include <memory>
+#include <errno.h>
 
 #include "common/Timer.h"
+#include "common/LogClient.h"
+#include "auth/cephx/CephxKeyServer.h"
+#include "auth/AuthMethodList.h"
+#include "auth/KeyRing.h"
+#include "msg/Messenger.h"
+#include "osd/OSDMap.h"
+#include "perfglue/heap_profiler.h"
+
+#include "messages/MMonCommand.h"
 
 #include "MonMap.h"
 #include "Elector.h"
 #include "Paxos.h"
 #include "Session.h"
-
-#include "osd/OSDMap.h"
-
-#include "common/LogClient.h"
-
-#include "auth/cephx/CephxKeyServer.h"
-#include "auth/AuthMethodList.h"
-#include "auth/KeyRing.h"
-
-#include "perfglue/heap_profiler.h"
-
-#include "messages/MMonCommand.h"
-
-#include <memory>
-#include <errno.h>
-
 
 #define CEPH_MON_PROTOCOL     9 /* cluster internal */
 

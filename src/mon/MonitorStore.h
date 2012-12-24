@@ -15,14 +15,14 @@
 #ifndef CEPH_MON_MONITORSTORE_H
 #define CEPH_MON_MONITORSTORE_H
 
-#include "include/types.h"
-#include "include/buffer.h"
-
-#include "common/compiler_extensions.h"
+#include "mon_types.h"
 
 #include <iosfwd>
 #include <string.h>
 #include <errno.h>
+
+#include "include/buffer.h"
+#include "common/compiler_extensions.h"
 
 class MonitorStore {
   string dir;

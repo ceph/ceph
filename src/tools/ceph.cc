@@ -27,16 +27,16 @@
 #include <unistd.h>
 #include <string.h>
 
+#include "include/compat.h"
+#include "include/assert.h"
 #include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "global/debug.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/config.h"
-#include "tools/common.h"
+#include "global/global_init.h"
+#include "global/debug.h"
 
-#include "include/compat.h"
-#include "include/assert.h"
+#include "common.h"
 
 using std::vector;
 

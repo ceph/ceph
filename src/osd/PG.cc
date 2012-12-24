@@ -12,12 +12,11 @@
  * 
  */
 
-#include "PG.h"
-#include "common/config.h"
-#include "OSD.h"
-#include "OpRequest.h"
+#include <sstream>
 
 #include "common/Timer.h"
+#include "common/config.h"
+#include "global/debug.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDPGNotify.h"
@@ -29,13 +28,12 @@
 #include "messages/MOSDPGBackfill.h"
 #include "messages/MBackfillReserve.h"
 #include "messages/MRecoveryReserve.h"
-
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
 
-#include "global/debug.h"
+#include "OSD.h"
 
-#include <sstream>
+#include "PG.h"
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix

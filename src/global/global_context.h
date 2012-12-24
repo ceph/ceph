@@ -15,10 +15,10 @@
 #ifndef CEPH_GLOBAL_CONTEXT_H
 #define CEPH_GLOBAL_CONTEXT_H
 
-#include "common/ceph_context.h"
-
 #include <iostream>
 #include <stdint.h>
+
+#include "common/ceph_context.h"
 
 class md_config_t;
 

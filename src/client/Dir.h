@@ -2,6 +2,7 @@
 #define CEPH_CLIENT_DIR_H
 
 class Inode;
+class Dentry;
 
 class Dir {
  public:

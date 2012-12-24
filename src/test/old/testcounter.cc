@@ -1,7 +1,8 @@
+#include <list>
 
 #include "common/DecayCounter.h"
+#include "global/global_context.h"
 
-#include <list>
 using namespace std;
 
 struct RealCounter {

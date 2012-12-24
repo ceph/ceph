@@ -12,22 +12,20 @@
  * 
  */
 
-#include "AnchorClient.h"
-#include "MDSMap.h"
-#include "LogSegment.h"
-#include "MDS.h"
+#include "common/config.h"
 #include "msg/Messenger.h"
+#include "global/debug.h"
 
 #include "messages/MMDSTableRequest.h"
 
-#include "common/config.h"
+#include "LogSegment.h"
+#include "MDS.h"
 
-#include "global/debug.h"
+#include "AnchorClient.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".anchorclient "
-
 
 
 // LOOKUPS

@@ -12,8 +12,10 @@
  * 
  */
 #include <sstream>
-#include "ObjectStore.h"
+
 #include "common/Formatter.h"
+
+#include "ObjectStore.h"
 
 ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s)
 {

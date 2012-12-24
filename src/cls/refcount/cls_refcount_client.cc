@@ -1,11 +1,12 @@
+#include "include/types.h"
+
 #include <errno.h>
 
-#include "include/types.h"
-#include "cls/refcount/cls_refcount_ops.h"
 #include "include/rados/librados.hpp"
 
-using namespace librados;
+#include "cls_refcount_ops.h"
 
+using namespace librados;
 
 void cls_refcount_get(librados::ObjectWriteOperation& op, const string& tag, bool implicit_ref)
 {

@@ -6,8 +6,8 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
-#include "common/secret.h"
 #include "include/addr_parsing.h"
+#include "common/secret.h"
 
 #ifndef MS_RELATIME
 # define MS_RELATIME (1<<21)

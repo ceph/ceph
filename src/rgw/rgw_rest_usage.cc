@@ -1,8 +1,9 @@
+#include "include/str_list.h"
+
 #include "rgw_op.h"
 #include "rgw_usage.h"
-#include "rgw_rest_usage.h"
 
-#include "include/str_list.h"
+#include "rgw_rest_usage.h"
 
 #define dout_subsys ceph_subsys_rgw
 

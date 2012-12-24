@@ -15,13 +15,13 @@
 #ifndef CEPH_ANCHOR_H
 #define CEPH_ANCHOR_H
 
-#include <string>
-using std::string;
+#include "mds_types.h"
 
-#include "include/types.h"
-#include "mdstypes.h"
+#include <string>
+
 #include "include/buffer.h"
 
+using std::string;
 
 // identifies a anchor table mutation
 

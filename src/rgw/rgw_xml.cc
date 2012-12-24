@@ -1,11 +1,7 @@
-#include <string.h>
-
-#include <iostream>
-#include <map>
-
 #include "include/types.h"
 
 #include "rgw_common.h"
+
 #include "rgw_xml.h"
 
 #define dout_subsys ceph_subsys_rgw

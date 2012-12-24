@@ -12,6 +12,9 @@
  * 
  */
 
+#include "include/types.h"
+#include "osd/osd_types.h"
+
 #include <inttypes.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -22,65 +25,51 @@
 #include <errno.h>
 #include <dirent.h>
 #include <sys/ioctl.h>
+#include <sstream>
+#include <iostream>
 
 #if defined(__linux__)
 #include <linux/fs.h>
 #include <syscall.h>
 #endif
 
-#include <iostream>
-#include <map>
-
 #if defined(__FreeBSD__)
 #include "include/inttypes.h"
 #endif
-
-#include "include/compat.h"
-#include "include/fiemap.h"
-
-#include "common/xattr.h"
-#include "chain_xattr.h"
 
 #if defined(DARWIN) || defined(__FreeBSD__)
 #include <sys/param.h>
 #include <sys/mount.h>
 #endif // DARWIN
 
-
-#include <fstream>
-#include <sstream>
-
-#include "FileStore.h"
-#include "common/BackTrace.h"
-#include "include/types.h"
-#include "FileJournal.h"
-
-#include "osd/osd_types.h"
+#include "include/compat.h"
+#include "include/fiemap.h"
 #include "include/color.h"
 #include "include/buffer.h"
-
-#include "common/Timer.h"
+#include "common/xattr.h"
+#include "common/BackTrace.h"
+#include "common/config.h"
 #include "common/errno.h"
 #include "common/run_cmd.h"
 #include "common/safe_io.h"
 #include "common/perf_counters.h"
 #include "common/sync_filesystem.h"
 #include "common/fd.h"
-#include "HashIndex.h"
+#include "common/ceph_crypto.h"
+#include "global/debug.h"
+
+#include "chain_xattr.h"
+#include "FileJournal.h"
 #include "DBObjectMap.h"
 #include "LevelDBStore.h"
-
-#include "common/ceph_crypto.h"
-using ceph::crypto::SHA1;
 
 #ifndef __CYGWIN__
 #  include "btrfs_ioctl.h"
 #endif
 
-#include "include/assert.h"
+#include "FileStore.h"
 
-#include "common/config.h"
-#include "global/debug.h"
+using ceph::crypto::SHA1;
 
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix

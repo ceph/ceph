@@ -12,18 +12,19 @@
  *
  */
 
-#include "common/BackTrace.h"
-#include "common/perf_counters.h"
-#include "common/config.h"
-#include "global/pidfile.h"
-#include "global/debug.h"
-#include "global/signal_handler.h"
-
-#include <signal.h>
 #include <sstream>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#include "common/BackTrace.h"
+#include "common/perf_counters.h"
+#include "common/config.h"
+#include "global/global_context.h"
+#include "global/pidfile.h"
+#include "global/debug.h"
+
+#include "signal_handler.h"
 
 void install_sighandler(int signum, signal_handler_t handler, int flags)
 {

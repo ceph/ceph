@@ -15,11 +15,13 @@
 #ifndef CEPH_AUTHTYPES_H
 #define CEPH_AUTHTYPES_H
 
-#include "Crypto.h"
+#include "include/types.h"
 #include "msg/msg_types.h"
 
 #include "common/config.h"
 #include "common/entity_name.h"
+
+#include "Crypto.h"
 
 class Cond;
 

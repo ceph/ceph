@@ -11,27 +11,19 @@
  * Foundation.  See file COPYING.
  * 
  */
+#include "osd/osd_types.h"
+
 #include <iostream>
 #include <string>
 #include <map>
-
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 
-
-#include "osd/osd_types.h"
-#include "osd/OSD.h"
-#include "osd/OSDMap.h"
-#include "osdc/Objecter.h"
-#include "mon/MonClient.h"
-#include "msg/Dispatcher.h"
-#include "msg/Messenger.h"
+#include "include/uuid.h"
+#include "include/assert.h"
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "global/signal_handler.h"
-#include "global/debug.h"
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/Cond.h"
@@ -40,8 +32,15 @@
 #include "common/LogEntry.h"
 #include "auth/KeyRing.h"
 #include "auth/AuthAuthorizeHandler.h"
-#include "include/uuid.h"
-#include "include/assert.h"
+#include "osd/OSD.h"
+#include "osd/OSDMap.h"
+#include "osdc/Objecter.h"
+#include "mon/MonClient.h"
+#include "msg/Messenger.h"
+#include "global/global_init.h"
+#include "global/global_context.h"
+#include "global/signal_handler.h"
+#include "global/debug.h"
 
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDAlive.h"

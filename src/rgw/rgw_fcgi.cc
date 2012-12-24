@@ -1,14 +1,12 @@
-
-
-#include "rgw_fcgi.h"
-
 #include "acconfig.h"
+
 #ifdef FASTCGI_INCLUDE_DIR
 # include "fastcgi/fcgiapp.h"
 #else
 # include "fcgiapp.h"
 #endif
 
+#include "rgw_fcgi.h"
 
 int RGWFCGX::write_data(const char *buf, int len)
 {

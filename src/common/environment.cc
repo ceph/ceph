@@ -12,10 +12,10 @@
  *
  */
 
-#include "common/environment.h"
-
 #include <stdlib.h>
 #include <strings.h>
+
+#include "environment.h"
 
 bool get_env_bool(const char *key)
 {

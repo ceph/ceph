@@ -1,9 +1,9 @@
-#include "include/ipaddr.h"
 
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "include/ipaddr.h"
 
 static void netmask_ipv4(const struct in_addr *addr,
 			 unsigned int prefix_len,

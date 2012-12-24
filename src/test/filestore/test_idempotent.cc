@@ -15,16 +15,19 @@
 #include <iostream>
 #include <sstream>
 #include <boost/scoped_ptr.hpp>
-#include "os/FileStore.h"
-#include "global/global_init.h"
-#include "global/debug.h"
+
 #include "common/ceph_argparse.h"
-#include "test/common/ObjectContents.h"
-#include "FileStoreTracker.h"
+#include "os/FileStore.h"
 #include "os/LevelDBStore.h"
 #include "os/KeyValueDB.h"
 #include "os/ObjectStore.h"
 #include "os/FileStore.h"
+#include "global/global_init.h"
+#include "global/global_context.h"
+#include "global/debug.h"
+
+#include "../common/ObjectContents.h"
+#include "FileStoreTracker.h"
 
 void usage(const string &name) {
   std::cerr << "Usage: " << name << " [new|continue] store_path store_journal db_path"

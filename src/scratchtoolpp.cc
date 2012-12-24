@@ -11,17 +11,16 @@
  * Foundation.  See file COPYING.
  * 
  */
-
 #include "include/types.h"
-#include "include/rados/librados.hpp"
-
-using namespace librados;
 
 #include <iostream>
-
 #include <errno.h>
 #include <stdlib.h>
 #include <time.h>
+
+#include "include/rados/librados.hpp"
+
+using namespace librados;
 
 void buf_to_hex(const unsigned char *buf, int len, char *str)
 {

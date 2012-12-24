@@ -12,9 +12,10 @@
  * 
  */
 
-
 #ifndef OS_LFNINDEX_H
 #define OS_LFNINDEX_H
+
+#include "osd/osd_types.h"
 
 #include <string>
 #include <map>
@@ -23,7 +24,6 @@
 #include <tr1/memory>
 #include <exception>
 
-#include "osd/osd_types.h"
 #include "include/object.h"
 #include "common/ceph_crypto.h"
 

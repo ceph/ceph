@@ -17,7 +17,6 @@
 #include "osd/OSDMap.h"
 #include "osdc/Objecter.h"
 #include "osdc/Journaler.h"
-#include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
 #include "auth/Auth.h"
 #include "global/global_context.h"

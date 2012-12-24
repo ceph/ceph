@@ -24,7 +24,6 @@
 
 #include "mount/canonicalize.c"
 
-
 /* Updating mtab ----------------------------------------------*/
 
 /* Flag for already existing lock file. */

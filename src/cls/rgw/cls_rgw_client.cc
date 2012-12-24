@@ -1,8 +1,10 @@
+#include "include/types.h"
+
 #include <errno.h>
 
-#include "include/types.h"
-#include "cls/rgw/cls_rgw_ops.h"
 #include "include/rados/librados.hpp"
+
+#include "cls_rgw_ops.h"
 
 using namespace librados;
 

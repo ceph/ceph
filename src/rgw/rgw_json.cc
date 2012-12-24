@@ -1,11 +1,9 @@
 #include <iostream>
 #include <include/types.h>
+#include <fstream> // for testing DELETE ME
 
 #include "rgw_json.h"
 #include "rgw_common.h"
-
-// for testing DELETE ME
-#include <fstream>
 
 using namespace std;
 using namespace json_spirit;

@@ -6,8 +6,9 @@
 #include <assert.h>
 #include <errno.h>
 
-#include "builder.h"
 #include "hash.h"
+
+#include "builder.h"
 
 #define BUG_ON(x) assert(!(x))
 

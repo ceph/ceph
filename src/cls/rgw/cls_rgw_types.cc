@@ -1,7 +1,6 @@
-
-#include "cls/rgw/cls_rgw_types.h"
 #include "common/Formatter.h"
 
+#include "cls_rgw_types.h"
 
 void rgw_bucket_pending_info::generate_test_instances(list<rgw_bucket_pending_info*>& o)
 {

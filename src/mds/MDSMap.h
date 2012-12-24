@@ -16,23 +16,21 @@
 #ifndef CEPH_MDSMAP_H
 #define CEPH_MDSMAP_H
 
-#include <errno.h>
-
 #include "include/types.h"
-#include "common/Clock.h"
-#include "msg/Message.h"
 
+#include <errno.h>
 #include <set>
 #include <map>
 #include <string>
-using namespace std;
-
-#include "common/config.h"
 
 #include "include/CompatSet.h"
+#include "common/config.h"
 #include "common/Formatter.h"
-
+#include "common/Clock.h"
+#include "msg/Message.h"
 #include "global/global_context.h"
+
+using namespace std;
 
 /*
 

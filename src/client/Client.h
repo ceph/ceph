@@ -17,36 +17,28 @@
 #define CEPH_CLIENT_H
 
 #include "include/types.h"
+#include "mds/mds_types.h"
 
-// stl
 #include <string>
 #include <set>
 #include <map>
 #include <fstream>
-using std::set;
-using std::map;
-using std::fstream;
-
 #include <ext/hash_map>
-using namespace __gnu_cxx;
 
 #include "include/filepath.h"
 #include "include/interval_set.h"
 #include "include/lru.h"
-
-#include "mds/mdstypes.h"
-
-#include "msg/Message.h"
-#include "msg/Dispatcher.h"
-#include "msg/Messenger.h"
-
 #include "common/Mutex.h"
 #include "common/Timer.h"
 #include "common/Finisher.h"
-
 #include "common/compiler_extensions.h"
-
 #include "osdc/ObjectCacher.h"
+#include "msg/Messenger.h"
+
+using std::set;
+using std::map;
+using std::fstream;
+using namespace __gnu_cxx;
 
 class MDSMap;
 class OSDMap;

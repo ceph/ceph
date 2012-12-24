@@ -1,18 +1,15 @@
 #ifndef RGW_JSON_H
 #define RGW_JSON_H
 
-#include <iostream>
 #include <include/types.h>
 
-// for testing DELETE ME
-#include <fstream>
+#include <iostream>
+#include <fstream> // for testing DELETE ME
 
 #include "json_spirit/json_spirit.h"
 
-
 using namespace std;
 using namespace json_spirit;
-
 
 class JSONObj;
 

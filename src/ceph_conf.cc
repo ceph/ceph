@@ -18,13 +18,13 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include "mon/AuthMonitor.h"
+#include "include/str_list.h"
 #include "common/ConfUtils.h"
-#include "global/global_init.h"
 #include "common/entity_name.h"
 #include "common/ceph_argparse.h"
 #include "common/config.h"
-#include "include/str_list.h"
+#include "mon/AuthMonitor.h"
+#include "global/global_init.h"
 
 using std::deque;
 using std::string;

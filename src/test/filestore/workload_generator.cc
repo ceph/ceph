@@ -19,17 +19,14 @@
 #include <signal.h>
 #include <cctype>
 #include <errno.h>
-#include <sys/time.h>
-#include "os/FileStore.h"
+#include <boost/lexical_cast.hpp>
+
+#include "include/assert.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "global/debug.h"
-#include <boost/scoped_ptr.hpp>
-#include <boost/lexical_cast.hpp>
-#include "workload_generator.h"
-#include "include/assert.h"
 
-#include "TestFileStoreState.h"
+#include "workload_generator.h"
 
 static const char *our_name = NULL;
 void usage();

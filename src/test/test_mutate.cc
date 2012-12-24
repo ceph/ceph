@@ -15,18 +15,18 @@
 /*
  * Test Ioctx::operate
  */
-
-#include "common/ceph_argparse.h"
-#include "common/debug.h"
-#include "common/config.h"
-#include "global/global_context.h"
-#include "global/global_init.h"
-#include "include/rados/librados.hpp"
 #include "include/types.h"
 
 #include <errno.h>
 #include <iostream>
 #include <string>
+
+#include "include/rados/librados.hpp"
+#include "common/ceph_argparse.h"
+#include "common/debug.h"
+#include "common/config.h"
+#include "global/global_context.h"
+#include "global/global_init.h"
 
 using std::cerr;
 using std::string;

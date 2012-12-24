@@ -12,26 +12,7 @@
  *
  */
 
-#include "mon/MonClient.h"
-#include "mon/MonMap.h"
-#include "common/config.h"
-
-#include "auth/KeyRing.h"
-#include "common/errno.h"
-#include "common/ceph_argparse.h"
-#include "global/global_context.h"
-#include "global/global_init.h"
-#include "common/safe_io.h"
-#include "common/secret.h"
-#include "include/stringify.h"
-#include "include/rados/librados.hpp"
-#include "include/rbd/librbd.hpp"
-#include "include/byteorder.h"
-
-#include "include/intarith.h"
-
-#include "include/compat.h"
-#include "common/blkdev.h"
+#include "include/rbd_types.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -45,9 +26,6 @@
 #include <tr1/memory>
 #include <sys/ioctl.h>
 
-#include "include/rbd_types.h"
-#include "common/TextTable.h"
-
 #if defined(__linux__)
 #include <linux/fs.h>
 #endif
@@ -56,7 +34,25 @@
 #include <sys/param.h>
 #endif
 
+#include "include/stringify.h"
+#include "include/rados/librados.hpp"
+#include "include/rbd/librbd.hpp"
+#include "include/byteorder.h"
+#include "include/intarith.h"
+#include "include/compat.h"
 #include "include/fiemap.h"
+#include "common/config.h"
+#include "common/errno.h"
+#include "common/ceph_argparse.h"
+#include "common/safe_io.h"
+#include "common/secret.h"
+#include "common/blkdev.h"
+#include "common/TextTable.h"
+#include "auth/KeyRing.h"
+#include "mon/MonClient.h"
+#include "mon/MonMap.h"
+#include "global/global_context.h"
+#include "global/global_init.h"
 
 #define MAX_SECRET_LEN 1000
 #define MAX_POOL_NAME_SIZE 128

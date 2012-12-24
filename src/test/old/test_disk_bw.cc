@@ -1,4 +1,3 @@
-
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -9,11 +8,12 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/uio.h>
+#include <iostream>
 
 #include "common/Clock.h"
 #include "common/safe_io.h"
+#include "global/global_context.h"
 
-#include <iostream>
 using namespace std;
 
 int main(int argc, char **argv)

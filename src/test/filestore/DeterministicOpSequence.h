@@ -16,10 +16,11 @@
 #include <iostream>
 #include <fstream>
 #include <set>
-#include "os/FileStore.h"
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
+
+#include "os/FileStore.h"
 
 #include "TestFileStoreState.h"
 

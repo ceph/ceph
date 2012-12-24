@@ -2,13 +2,16 @@
 
 #ifndef FILESTORE_TRACKER_H
 #define FILESTORE_TRACKER_H
-#include "test/common/ObjectContents.h"
-#include "os/FileStore.h"
-#include "os/KeyValueDB.h"
+
 #include <boost/scoped_ptr.hpp>
 #include <list>
 #include <map>
+
 #include "common/Mutex.h"
+#include "os/FileStore.h"
+#include "os/KeyValueDB.h"
+
+#include "../common/ObjectContents.h"
 
 class FileStoreTracker {
   const static uint64_t SIZE = 4 * 1024;

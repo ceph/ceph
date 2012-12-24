@@ -17,8 +17,8 @@
 
 #include "include/buffer.h"
 #include "include/encoding.h"
-#include "LFNIndex.h"
 
+#include "LFNIndex.h"
 
 /**
  * Implements collection prehashing.

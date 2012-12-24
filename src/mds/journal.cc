@@ -14,6 +14,8 @@
 
 #include "common/config.h"
 #include "osdc/Journaler.h"
+#include "global/debug.h"
+
 #include "events/EString.h"
 #include "events/ESubtreeMap.h"
 #include "events/ESession.h"
@@ -35,9 +37,6 @@
 #include "events/ETableClient.h"
 #include "events/ETableServer.h"
 
-
-#include "LogSegment.h"
-
 #include "MDS.h"
 #include "MDLog.h"
 #include "MDCache.h"
@@ -51,7 +50,6 @@
 
 #include "Locker.h"
 
-#include "global/debug.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef DOUT_COND

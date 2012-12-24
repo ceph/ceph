@@ -14,9 +14,12 @@
 
 #ifndef CEPH_COMPATSET_H
 #define CEPH_COMPATSET_H
-#include "include/buffer.h"
+
+#include "types.h"
+
 #include <vector>
 
+#include "include/buffer.h"
 #include "common/Formatter.h"
 
 struct CompatSet {

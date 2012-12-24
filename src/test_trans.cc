@@ -13,11 +13,13 @@
  */
 
 #include <iostream>
+
+#include "include/assert.h"
 #include "common/ceph_argparse.h"
 #include "os/FileStore.h"
 #include "global/global_init.h"
+#include "global/global_context.h"
 #include "global/debug.h"
-#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix

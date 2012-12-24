@@ -1,35 +1,37 @@
+#include "acconfig.h"
+#include "include/types.h"
+
 #include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
 #include <stdarg.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <errno.h>
 #include <signal.h>
-
+#include <vector>
+#include <iostream>
+#include <sstream>
 #include <curl/curl.h>
 
-#include "acconfig.h"
 #ifdef FASTCGI_INCLUDE_DIR
 # include "fastcgi/fcgiapp.h"
 #else
 # include "fcgiapp.h"
 #endif
 
-#include "rgw_fcgi.h"
-
+#include "include/str_list.h"
 #include "common/ceph_argparse.h"
-#include "global/global_context.h"
-#include "global/global_init.h"
-#include "global/signal_handler.h"
-#include "global/debug.h"
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "common/Timer.h"
 #include "common/Throttle.h"
-#include "include/str_list.h"
+#include "common/BackTrace.h"
+#include "global/global_context.h"
+#include "global/global_init.h"
+#include "global/signal_handler.h"
+#include "global/debug.h"
+
 #include "rgw_common.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
@@ -45,19 +47,11 @@
 #include "rgw_log.h"
 #include "rgw_tools.h"
 #include "rgw_resolve.h"
-
-#include <map>
-#include <string>
-#include <vector>
-#include <iostream>
-#include <sstream>
-
-#include "include/types.h"
-#include "common/BackTrace.h"
-
-#define dout_subsys ceph_subsys_rgw
+#include "rgw_fcgi.h"
 
 using namespace std;
+
+#define dout_subsys ceph_subsys_rgw
 
 static sighandler_t sighandler_usr1;
 static sighandler_t sighandler_alrm;

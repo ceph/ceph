@@ -8,7 +8,7 @@
 #include "include/rados/librados.hpp"
 
 #include "cls/rbd/cls_rbd_client.h"
-#include "librbd/parent_types.h"
+#include "parent_types.h"
 
 namespace librbd {
 

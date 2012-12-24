@@ -11,21 +11,18 @@
  * Foundation.  See file COPYING.
  */
 
-#include "include/rados/librados.hpp"
-#include "include/Context.h"
-#include "common/ceph_context.h"
-#include "common/Mutex.h"
-#include "common/Cond.h"
-#include "include/utime.h"
-#include "global/global_context.h"
-#include "common/ceph_argparse.h"
-#include "test/omap_bench.h"
-
-#include <string>
 #include <iostream>
 #include <cassert>
 #include <climits>
 #include <cmath>
+
+#include "include/Context.h"
+#include "include/utime.h"
+#include "common/ceph_context.h"
+#include "common/ceph_argparse.h"
+#include "global/global_context.h"
+
+#include "omap_bench.h"
 
 using namespace std;
 using ceph::bufferlist;

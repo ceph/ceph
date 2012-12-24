@@ -11,16 +11,6 @@
  * Foundation.  See file COPYING.
  *
  */
-
-#include "auth/Auth.h"
-#include "common/ConfUtils.h"
-#include "common/ceph_argparse.h"
-#include "common/common_init.h"
-#include "common/config.h"
-#include "common/strtol.h"
-#include "common/version.h"
-#include "include/intarith.h"
-#include "include/str_list.h"
 #include "msg/msg_types.h"
 
 #include <errno.h>
@@ -30,6 +20,17 @@
 #include <string.h>
 #include <sstream>
 #include <vector>
+
+#include "include/intarith.h"
+#include "include/str_list.h"
+#include "common/ConfUtils.h"
+#include "common/common_init.h"
+#include "common/config.h"
+#include "common/strtol.h"
+#include "common/version.h"
+#include "auth/Auth.h"
+
+#include "ceph_argparse.h"
 
 /*
  * Ceph argument parsing library

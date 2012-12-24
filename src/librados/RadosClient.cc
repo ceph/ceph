@@ -15,27 +15,25 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-
 #include <iostream>
 #include <string>
 #include <pthread.h>
 #include <errno.h>
 
+#include "include/assert.h"
+#include "include/buffer.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/common_init.h"
 #include "common/errno.h"
-#include "include/buffer.h"
-
-#include "messages/MWatchNotify.h"
 #include "msg/SimpleMessenger.h"
 
-#include "AioCompletionImpl.h"
-#include "IoCtxImpl.h"
-#include "PoolAsyncCompletionImpl.h"
-#include "RadosClient.h"
+#include "messages/MWatchNotify.h"
 
-#include "include/assert.h"
+#include "AioCompletionImpl.h"
+#include "PoolAsyncCompletionImpl.h"
+
+#include "RadosClient.h"
 
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix

@@ -11,14 +11,13 @@
  * Foundation.  See file COPYING.
  * 
  */
+#include "messages/MMDSSlaveRequest.h"
+#include "messages/MClientRequest.h"
 
-#include "Mutation.h"
 #include "ScatterLock.h"
 #include "CDir.h"
 
-#include "messages/MClientRequest.h"
-#include "messages/MMDSSlaveRequest.h"
-
+#include "Mutation.h"
 
 // Mutation
 

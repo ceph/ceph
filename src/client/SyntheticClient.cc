@@ -14,18 +14,6 @@
 
 #include <iostream>
 #include <sstream>
-using namespace std;
-
-
-#include "common/config.h"
-#include "SyntheticClient.h"
-#include "osdc/Objecter.h"
-#include "osdc/Filer.h"
-
-
-#include "include/filepath.h"
-#include "common/perf_counters.h"
-
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -33,8 +21,17 @@ using namespace std;
 #include <math.h>
 #include <sys/statvfs.h>
 
+
 #include "include/assert.h"
+#include "common/config.h"
+#include "common/perf_counters.h"
+#include "osdc/Objecter.h"
+#include "osdc/Filer.h"
 #include "global/debug.h"
+
+#include "SyntheticClient.h"
+
+using namespace std;
 
 #define dout_subsys ceph_subsys_client
 #undef dout_prefix

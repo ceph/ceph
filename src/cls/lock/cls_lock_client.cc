@@ -14,19 +14,17 @@
 
 #include "include/types.h"
 #include "msg/msg_types.h"
-#include "include/rados/librados.hpp"
-
-using namespace librados;
 
 #include <iostream>
-
 #include <errno.h>
 #include <stdlib.h>
 #include <time.h>
 
-#include "cls/lock/cls_lock_types.h"
-#include "cls/lock/cls_lock_ops.h"
-#include "cls/lock/cls_lock_client.h"
+#include "cls_lock_ops.h"
+
+#include "cls_lock_client.h"
+
+using namespace librados;
 
 namespace rados {
   namespace cls {

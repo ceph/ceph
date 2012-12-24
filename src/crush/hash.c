@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include "include/inttypes.h"
 #endif
+
 #include "hash.h"
 
 /*

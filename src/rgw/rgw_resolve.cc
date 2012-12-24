@@ -4,7 +4,7 @@
 #include <resolv.h>
 
 #include "global/debug.h"
-#include "rgw_common.h"
+
 #include "rgw_resolve.h"
 
 #define dout_subsys ceph_subsys_rgw

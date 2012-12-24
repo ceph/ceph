@@ -8,6 +8,8 @@
  *
  */
 
+#include "include/types.h"
+
 #include <algorithm>
 #include <cstring>
 #include <cstdlib>
@@ -17,20 +19,15 @@
 #include <sstream>
 #include <vector>
 
-#include "include/types.h"
 #include "include/utime.h"
-#include "objclass/objclass.h"
-
 #include "common/Clock.h"
-
-#include "cls/lock/cls_lock_types.h"
-#include "cls/lock/cls_lock_ops.h"
-
+#include "objclass/objclass.h"
 #include "global/global_context.h"
 
+#include "cls_lock_types.h"
+#include "cls_lock_ops.h"
 
 using namespace rados::cls::lock;
-
 
 CLS_VER(1,0)
 CLS_NAME(lock)

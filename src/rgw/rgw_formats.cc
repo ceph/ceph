@@ -14,8 +14,10 @@
 
 #include "common/escape.h"
 #include "common/Formatter.h"
-#include "rgw/rgw_common.h"
-#include "rgw/rgw_formats.h"
+
+#include "rgw_common.h"
+
+#include "rgw_formats.h"
 
 #define LARGE_SIZE 8192
 

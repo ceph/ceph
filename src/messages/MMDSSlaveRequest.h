@@ -16,8 +16,11 @@
 #ifndef CEPH_MMDSSLAVEREQUEST_H
 #define CEPH_MMDSSLAVEREQUEST_H
 
+#include "mds/mds_types.h"
+
+#include "include/filepath.h"
+
 #include "msg/Message.h"
-#include "mds/mdstypes.h"
 
 class MMDSSlaveRequest : public Message {
  public:

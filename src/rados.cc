@@ -14,23 +14,6 @@
 
 #include "include/types.h"
 
-#include "include/rados/librados.hpp"
-#include "rados_sync.h"
-using namespace librados;
-
-#include "common/config.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "global/debug.h"
-#include "common/Cond.h"
-#include "common/errno.h"
-#include "common/Formatter.h"
-#include "common/obj_bencher.h"
-#include "mds/inode_backtrace.h"
-#include "auth/Crypto.h"
-#include <iostream>
-#include <fstream>
-
 #include <stdlib.h>
 #include <time.h>
 #include <sstream>
@@ -39,8 +22,27 @@ using namespace librados;
 #include <stdexcept>
 #include <climits>
 #include <locale>
+#include <iostream>
+#include <fstream>
+
+#include "include/rados/librados.hpp"
+#include "common/config.h"
+#include "common/ceph_argparse.h"
+#include "common/Cond.h"
+#include "common/errno.h"
+#include "common/Formatter.h"
+#include "common/obj_bencher.h"
+#include "auth/Crypto.h"
+#include "mds/inode_backtrace.h"
+#include "global/global_init.h"
+#include "global/global_context.h"
+#include "global/debug.h"
 
 #include "cls/lock/cls_lock_client.h"
+
+#include "rados_sync.h"
+
+using namespace librados;
 
 int rados_tool_sync(const std::map < std::string, std::string > &opts,
                              std::vector<const char*> &args);

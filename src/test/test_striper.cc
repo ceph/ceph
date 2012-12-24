@@ -1,10 +1,10 @@
 #include "gtest/gtest.h"
-#include "global/global_context.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "common/common_init.h"
 
+#include "common/ceph_argparse.h"
+#include "common/common_init.h"
 #include "osdc/Striper.h"
+#include "global/global_context.h"
+#include "global/global_init.h"
 
 TEST(Striper, Stripe1)
 {

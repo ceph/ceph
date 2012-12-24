@@ -1,19 +1,17 @@
-#include "rgw_swift_auth.h"
-#include "rgw_rest.h"
-
-#include "global/debug.h"
 #include "common/ceph_crypto.h"
 #include "common/Clock.h"
-
 #include "auth/Crypto.h"
+#include "global/debug.h"
 
 #include "rgw_client_io.h"
+
+#include "rgw_swift_auth.h"
+
+using namespace ceph::crypto;
 
 #define dout_subsys ceph_subsys_rgw
 
 #define DEFAULT_SWIFT_PREFIX "swift"
-
-using namespace ceph::crypto;
 
 static int build_token(string& swift_user, string& key, uint64_t nonce, utime_t& expiration, bufferlist& bl)
 {

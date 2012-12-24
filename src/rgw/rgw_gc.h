@@ -1,16 +1,16 @@
 #ifndef CEPH_RGW_GC_H
 #define CEPH_RGW_GC_H
 
-
 #include "include/types.h"
+
 #include "include/atomic.h"
-#include "include/rados/librados.hpp"
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
+#include "cls/rgw/cls_rgw_types.h"
+
 #include "rgw_common.h"
 #include "rgw_rados.h"
-#include "cls/rgw/cls_rgw_types.h"
 
 class RGWGC {
   CephContext *cct;

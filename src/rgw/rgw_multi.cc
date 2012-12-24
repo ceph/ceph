@@ -1,17 +1,13 @@
-#include <string.h>
-
-#include <iostream>
-#include <map>
-
 #include "include/types.h"
 
-#include "rgw_xml.h"
-#include "rgw_multi.h"
+#include <string.h>
+#include <iostream>
 
-#define dout_subsys ceph_subsys_rgw
+#include "rgw_multi.h"
 
 using namespace std;
 
+#define dout_subsys ceph_subsys_rgw
 
 bool RGWMultiPart::xml_end(const char *el)
 {

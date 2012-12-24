@@ -12,7 +12,7 @@
  * 
  */
 
-#include "common/RefCountedObj.h"
+#include "RefCountedObj.h"
 
 void intrusive_ptr_add_ref(RefCountedObject *p) {
   p->get();

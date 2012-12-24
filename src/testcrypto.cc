@@ -1,8 +1,6 @@
-#include "auth/Crypto.h"
 #include "common/Clock.h"
-
 #include "common/config.h"
-
+#include "auth/Crypto.h"
 #include "global/global_context.h"
 #include "global/debug.h"
 

@@ -15,9 +15,10 @@
 #ifndef CEPH_MSG_TYPES_H
 #define CEPH_MSG_TYPES_H
 
+#include "include/types.h"
+
 #include <netinet/in.h>
 
-#include "include/types.h"
 #include "include/blobhash.h"
 #include "include/encoding.h"
 

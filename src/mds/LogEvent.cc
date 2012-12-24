@@ -13,10 +13,6 @@
  */
 
 #include "common/config.h"
-#include "LogEvent.h"
-
-#include "MDS.h"
-
 #include "global/debug.h"
 
 // events i know of
@@ -40,6 +36,9 @@
 #include "events/ETableClient.h"
 #include "events/ETableServer.h"
 
+#include "MDS.h"
+
+#include "LogEvent.h"
 
 LogEvent *LogEvent::decode(bufferlist& bl)
 {

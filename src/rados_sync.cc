@@ -12,18 +12,6 @@
  *
  */
 
-#include "common/ceph_argparse.h"
-#include "common/config.h"
-#include "common/errno.h"
-#include "common/strtol.h"
-#include "global/global_context.h"
-#include "global/global_init.h"
-#include "include/rados/librados.hpp"
-#include "rados_sync.h"
-#include "include/compat.h"
-
-#include "common/xattr.h"
-
 #include <dirent.h>
 #include <errno.h>
 #include <fstream>
@@ -32,11 +20,21 @@
 #include <memory>
 #include <sstream>
 #include <stdlib.h>
-#include <string>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+
+#include "include/rados/librados.hpp"
+#include "include/compat.h"
+#include "common/ceph_argparse.h"
+#include "common/config.h"
+#include "common/errno.h"
+#include "common/strtol.h"
+#include "common/xattr.h"
+#include "global/global_context.h"
+#include "global/global_init.h"
+
+#include "rados_sync.h"
 
 using namespace librados;
 using std::auto_ptr;

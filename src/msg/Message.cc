@@ -1,20 +1,18 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 
+#include "include/types.h"
+
 #ifdef ENCODE_DUMP
 # include <typeinfo>
 # include <cxxabi.h>
 #endif
 
 #include <iostream>
-using namespace std;
 
-#include "include/types.h"
-
+#include "common/config.h"
 #include "global/global_context.h"
 
-#include "Message.h"
-#include "Pipe.h"
 #include "messages/MPGStats.h"
 
 #include "messages/MGenericMessage.h"
@@ -146,7 +144,11 @@ using namespace std;
 
 #include "messages/MWatchNotify.h"
 
-#include "common/config.h"
+#include "Pipe.h"
+
+#include "Message.h"
+
+using namespace std;
 
 #define DEBUGLVL  10    // debug level of output
 

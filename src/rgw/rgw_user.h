@@ -1,9 +1,8 @@
 #ifndef CEPH_RGW_USER_H
 #define CEPH_RGW_USER_H
 
-#include <string>
-
 #include "include/types.h"
+
 #include "rgw_common.h"
 #include "rgw_tools.h"
 

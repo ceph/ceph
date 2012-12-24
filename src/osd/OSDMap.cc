@@ -12,13 +12,10 @@
  *
  */
 
-#include "OSDMap.h"
-
-#include "common/config.h"
-#include "common/Formatter.h"
-#include "include/ceph_features.h"
-
 #include "common/code_environment.h"
+#include "common/Formatter.h"
+
+#include "OSDMap.h"
 
 #define dout_subsys ceph_subsys_osd
 

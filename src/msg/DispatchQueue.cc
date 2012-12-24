@@ -12,19 +12,19 @@
  * 
  */
 
-#include "msg/Message.h"
-#include "DispatchQueue.h"
-#include "SimpleMessenger.h"
 #include "common/ceph_context.h"
-
-#define dout_subsys ceph_subsys_ms
 #include "common/debug.h"
 
+#include "Message.h"
+#include "SimpleMessenger.h"
+
+#include "DispatchQueue.h"
 
 /*******************
  * DispatchQueue
  */
 
+#define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix *_dout << "-- " << msgr->get_myaddr() << " "
 

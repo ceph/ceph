@@ -4,12 +4,12 @@
 #ifndef CEPH_CRUSH_COMPILER_H
 #define CEPH_CRUSH_COMPILER_H
 
-#include "crush/CrushWrapper.h"
-#include "crush/grammar.h"
-
 #include <map>
 #include <ostream>
 #include <functional>
+
+#include "CrushWrapper.h"
+#include "grammar.h"
 
 class CrushCompiler {
   CrushWrapper& crush;

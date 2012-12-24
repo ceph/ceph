@@ -4,10 +4,11 @@
 #ifndef __CEPH_LOG_ENTRY_H
 #define __CEPH_LOG_ENTRY_H
 
-#include "include/utime.h"
-#include "common/PrebufferedStreambuf.h"
 #include <pthread.h>
 #include <string>
+
+#include "include/utime.h"
+#include "common/PrebufferedStreambuf.h"
 
 #define CEPH_LOG_ENTRY_PREALLOC 80
 

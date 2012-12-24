@@ -1,9 +1,6 @@
 #include "rgw_common.h"
 #include "rgw_log.h"
 
-#include <string>
-#include <map>
-
 #define dout_subsys ceph_subsys_rgw
 
 RGWEnv::RGWEnv()

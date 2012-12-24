@@ -3,19 +3,17 @@
 
 #include <errno.h>
 
+#include "include/assert.h"
+#include "include/rbd/librbd.hpp"
 #include "common/ceph_context.h"
 #include "common/debug.h"
 #include "common/Mutex.h"
-#include "include/Context.h"
-#include "include/rados/librados.hpp"
-#include "include/rbd/librbd.hpp"
 
-#include "librbd/AioRequest.h"
-#include "librbd/ImageCtx.h"
-#include "librbd/internal.h"
-#include "librbd/LibrbdWriteback.h"
+#include "AioRequest.h"
+#include "ImageCtx.h"
+#include "internal.h"
 
-#include "include/assert.h"
+#include "LibrbdWriteback.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

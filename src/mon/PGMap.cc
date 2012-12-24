@@ -1,14 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "include/ceph_features.h"
+#include "common/Formatter.h"
+
 #include "PGMap.h"
 
 #define dout_subsys ceph_subsys_mon
-#include "common/debug.h"
-
-#include "common/Formatter.h"
-#include "include/ceph_features.h"
-
 // --
 
 void PGMap::Incremental::encode(bufferlist &bl, uint64_t features) const

@@ -11,10 +11,10 @@
  * Foundation.  See file COPYING.
  *
  */
-#include "common/utf8.h"
-
 #include <stdio.h>
 #include <string.h>
+
+#include "utf8.h"
 
 #define MAX_UTF8_SZ 6
 #define INVALID_UTF8_CHAR 0xfffffffful

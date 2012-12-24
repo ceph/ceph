@@ -14,11 +14,13 @@
 
 #include <google/heap-profiler.h>
 #include <google/malloc_extension.h>
-#include "heap_profiler.h"
+
 #include "common/environment.h"
 #include "common/LogClient.h"
 #include "global/global_context.h"
 #include "global/debug.h"
+
+#include "heap_profiler.h"
 
 bool ceph_using_tcmalloc()
 {

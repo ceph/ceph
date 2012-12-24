@@ -3,9 +3,10 @@
 #ifndef CEPH_OSDC_WRITEBACKHANDLER_H
 #define CEPH_OSDC_WRITEBACKHANDLER_H
 
-#include "include/Context.h"
-#include "include/types.h"
 #include "osd/osd_types.h"
+#include "include/types.h"
+
+#include "include/Context.h"
 
 class WritebackHandler {
  public:

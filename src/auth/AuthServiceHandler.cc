@@ -12,11 +12,11 @@
  * 
  */
 
-#include "AuthServiceHandler.h"
 #include "cephx/CephxServiceHandler.h"
 #include "none/AuthNoneServiceHandler.h"
 #include "AuthMethodList.h"
-#include "common/config.h"
+
+#include "AuthServiceHandler.h"
 
 #define dout_subsys ceph_subsys_auth
 
