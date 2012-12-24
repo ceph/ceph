@@ -904,7 +904,7 @@ void CInode::store(Context *fin)
   m.write_full(bl);
 
   object_t oid = CInode::get_object_name(ino(), frag_t(), ".inode");
-  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pg_pool());
+  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
 
   mdcache->mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(g_ceph_context), 0,
 				 NULL, new C_Inode_Stored(this, get_version(), fin) );
@@ -938,7 +938,7 @@ void CInode::fetch(Context *fin)
   C_GatherBuilder gather(g_ceph_context, c);
 
   object_t oid = CInode::get_object_name(ino(), frag_t(), "");
-  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pg_pool());
+  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
 
   ObjectOperation rd;
   rd.getxattr("inode", &c->bl, NULL);
@@ -1031,7 +1031,7 @@ void CInode::store_parent(Context *fin)
   SnapContext snapc;
 
   object_t oid = get_object_name(ino(), frag_t(), "");
-  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pg_pool());
+  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
 
   mdcache->mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(g_ceph_context), 0,
 				 NULL, new C_Inode_StoredParent(this, inode.last_renamed_version, fin) );

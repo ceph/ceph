@@ -266,10 +266,10 @@ void MDCache::remove_inode(CInode *o)
 void MDCache::init_layouts()
 {
   default_file_layout = g_default_file_layout;
-  default_file_layout.fl_pg_pool = mds->mdsmap->get_data_pg_pool();
+  default_file_layout.fl_pg_pool = mds->mdsmap->get_data_pool();
 
   default_log_layout = g_default_file_layout;
-  default_log_layout.fl_pg_pool = mds->mdsmap->get_metadata_pg_pool();
+  default_log_layout.fl_pg_pool = mds->mdsmap->get_metadata_pool();
 }
 
 CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
@@ -314,7 +314,7 @@ CInode *MDCache::create_root_inode()
   CInode *i = create_system_inode(MDS_INO_ROOT, S_IFDIR|0755);
   i->default_layout = new struct default_file_layout;
   i->default_layout->layout = default_file_layout;
-  i->default_layout->layout.fl_pg_pool = mds->mdsmap->get_data_pg_pool();
+  i->default_layout->layout.fl_pg_pool = mds->mdsmap->get_data_pool();
   return i;
 }
 
@@ -5207,7 +5207,7 @@ void MDCache::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
 void MDCache::purge_prealloc_ino(inodeno_t ino, Context *fin)
 {
   object_t oid = CInode::get_object_name(ino, frag_t(), "");
-  object_locator_t oloc(mds->mdsmap->get_metadata_pg_pool());
+  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
 
   dout(10) << "purge_prealloc_ino " << ino << " oid " << oid << dendl;
   SnapContext snapc;
@@ -7378,7 +7378,7 @@ void MDCache::find_ino_dir(inodeno_t ino, Context *fin)
 
   // get the backtrace from the dir
   object_t oid = CInode::get_object_name(ino, frag_t(), "");
-  object_locator_t oloc(mds->mdsmap->get_metadata_pg_pool());
+  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
   
   C_MDS_FindInoDir *c = new C_MDS_FindInoDir(this, ino, fin);
   mds->objecter->getxattr(oid, oloc, "path", CEPH_NOSNAP, &c->bl, 0, c);

@@ -174,9 +174,9 @@ protected:
   __u32 session_autoclose;
   uint64_t max_file_size;
 
-  vector<int64_t> data_pg_pools;  // file data pg_pools available to clients (via an ioctl).  first is the default.
-  int64_t cas_pg_pool;            // where CAS objects go
-  int64_t metadata_pg_pool;       // where fs metadata objects go
+  vector<int64_t> data_pools;  // file data pools available to clients (via an ioctl).  first is the default.
+  int64_t cas_pool;            // where CAS objects go
+  int64_t metadata_pool;       // where fs metadata objects go
   
   /*
    * in: the set of logical mds #'s that define the cluster.  this is the set
@@ -207,8 +207,8 @@ public:
       session_timeout(0),
       session_autoclose(0),
       max_file_size(0),
-      cas_pg_pool(-1),
-      metadata_pg_pool(0),
+      cas_pool(-1),
+      metadata_pool(0),
       max_mds(0)
   { }
 
@@ -239,10 +239,13 @@ public:
   int get_tableserver() const { return tableserver; }
   int get_root() const { return root; }
 
-  const vector<int64_t> &get_data_pg_pools() const { return data_pg_pools; }
-  int64_t get_data_pg_pool() const { return data_pg_pools[0]; }
-  int64_t get_cas_pg_pool() const { return cas_pg_pool; }
-  int64_t get_metadata_pg_pool() const { return metadata_pg_pool; }
+  const vector<int64_t> &get_data_pools() const { return data_pools; }
+  int64_t get_data_pool() const { return data_pools[0]; }
+  int64_t get_cas_pool() const { return cas_pool; }
+  int64_t get_metadata_pool() const { return metadata_pool; }
+  bool is_data_pool(int64_t poolid) const {
+    return std::find(data_pools.begin(), data_pools.end(), poolid) != data_pools.end();
+  }
 
   const map<uint64_t,mds_info_t>& get_mds_info() { return mds_info; }
   const mds_info_t& get_mds_info_gid(uint64_t gid) {
@@ -274,15 +277,15 @@ public:
   }
 
   // data pools
-  void add_data_pg_pool(int64_t poolid) {
-    data_pg_pools.push_back(poolid);
+  void add_data_pool(int64_t poolid) {
+    data_pools.push_back(poolid);
   }
-  int remove_data_pg_pool(int64_t poolid) {
-    for (vector<int64_t>::iterator p = data_pg_pools.begin();
-	 p != data_pg_pools.end();
+  int remove_data_pool(int64_t poolid) {
+    for (vector<int64_t>::iterator p = data_pools.begin();
+	 p != data_pools.end();
 	 ++p) {
       if (*p == poolid) {
-	data_pg_pools.erase(p);
+	data_pools.erase(p);
 	return 0;
       }
     }
@@ -512,13 +515,13 @@ public:
     ::encode(max_file_size, bl);
     ::encode(max_mds, bl);
     ::encode(mds_info, bl);
-    __u32 n = data_pg_pools.size();
+    __u32 n = data_pools.size();
     ::encode(n, bl);
-    for (vector<int64_t>::const_iterator p = data_pg_pools.begin(); p != data_pg_pools.end(); ++p) {
+    for (vector<int64_t>::const_iterator p = data_pools.begin(); p != data_pools.end(); ++p) {
       n = *p;
       ::encode(n, bl);
     }
-    int32_t m = cas_pg_pool;
+    int32_t m = cas_pool;
     ::encode(m, bl);
   }
   void encode(bufferlist& bl) const {
@@ -533,14 +536,14 @@ public:
     ::encode(max_file_size, bl);
     ::encode(max_mds, bl);
     ::encode(mds_info, bl);
-    ::encode(data_pg_pools, bl);
-    ::encode(cas_pg_pool, bl);
+    ::encode(data_pools, bl);
+    ::encode(cas_pool, bl);
 
     // kclient ignores everything from here
     __u16 ev = 5;
     ::encode(ev, bl);
     ::encode(compat, bl);
-    ::encode(metadata_pg_pool, bl);
+    ::encode(metadata_pool, bl);
     ::encode(created, bl);
     ::encode(modified, bl);
     ::encode(tableserver, bl);
@@ -569,14 +572,14 @@ public:
       while (n--) {
 	__u32 m;
 	::decode(m, p);
-	data_pg_pools.push_back(m);
+	data_pools.push_back(m);
       }
       __s32 s;
       ::decode(s, p);
-      cas_pg_pool = s;
+      cas_pool = s;
     } else {
-      ::decode(data_pg_pools, p);
-      ::decode(cas_pg_pool, p);
+      ::decode(data_pools, p);
+      ::decode(cas_pool, p);
     }
 
     // kclient ignores everything from here
@@ -590,9 +593,9 @@ public:
     if (ev < 5) {
       __u32 n;
       ::decode(n, p);
-      metadata_pg_pool = n;
+      metadata_pool = n;
     } else {
-      ::decode(metadata_pg_pool, p);
+      ::decode(metadata_pool, p);
     }
     ::decode(created, p);
     ::decode(modified, p);
