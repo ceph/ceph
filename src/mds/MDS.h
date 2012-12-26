@@ -200,6 +200,7 @@ class MDS : public Dispatcher {
   list<Context*> replay_queue;
   map<int, list<Context*> > waiting_for_active_peer;
   list<Message*> waiting_for_nolaggy;
+  map<epoch_t, list<Context*> > waiting_for_mdsmap;
 
   map<int,version_t> peer_mdsmap_epoch;
 
@@ -217,6 +218,9 @@ class MDS : public Dispatcher {
   }
   void wait_for_reconnect(Context *c) {
     waiting_for_reconnect.push_back(c);
+  }
+  void wait_for_mdsmap(epoch_t e, Context *c) {
+    waiting_for_mdsmap[e].push_back(c);
   }
   void enqueue_replay(Context *c) {
     replay_queue.push_back(c);
