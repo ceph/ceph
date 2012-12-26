@@ -1455,6 +1455,12 @@ void Server::dispatch_slave_request(MDRequest *mdr)
     }
     break;
 
+  case MMDSSlaveRequest::OP_DROPLOCKS:
+    mds->locker->drop_locks(mdr);
+    mdr->slave_request->put();
+    mdr->slave_request = 0;
+    break;
+
   case MMDSSlaveRequest::OP_AUTHPIN:
     handle_slave_auth_pin(mdr);
     break;
