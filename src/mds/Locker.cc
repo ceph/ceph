@@ -483,22 +483,46 @@ void Locker::_drop_rdlocks(Mutation *mut, set<CInode*> *pneed_issue)
 
 void Locker::_drop_non_rdlocks(Mutation *mut, set<CInode*> *pneed_issue)
 {
+  set<int> slaves;
+
   while (!mut->xlocks.empty()) {
+    SimpleLock *lock = *mut->xlocks.begin();
+    MDSCacheObject *p = lock->get_parent();
+    if (!p->is_auth()) {
+      assert(lock->get_sm()->can_remote_xlock);
+      slaves.insert(p->authority().first);
+      lock->put_xlock();
+      mut->locks.erase(lock);
+      mut->xlocks.erase(lock);
+      continue;
+    }
     bool ni = false;
-    MDSCacheObject *p = (*mut->xlocks.begin())->get_parent();
-    xlock_finish(*mut->xlocks.begin(), mut, &ni);
+    xlock_finish(lock, mut, &ni);
     if (ni)
       pneed_issue->insert((CInode*)p);
   }
+
   while (!mut->remote_wrlocks.empty()) {
-    remote_wrlock_finish(mut->remote_wrlocks.begin()->first, mut->remote_wrlocks.begin()->second, mut);
+    slaves.insert(mut->remote_wrlocks.begin()->second);
+    mut->locks.erase(mut->remote_wrlocks.begin()->first);
+    mut->remote_wrlocks.erase(mut->remote_wrlocks.begin());
   }
+
   while (!mut->wrlocks.empty()) {
     bool ni = false;
     MDSCacheObject *p = (*mut->wrlocks.begin())->get_parent();
     wrlock_finish(*mut->wrlocks.begin(), mut, &ni);
     if (ni)
       pneed_issue->insert((CInode*)p);
+  }
+
+  for (set<int>::iterator p = slaves.begin(); p != slaves.end(); p++) {
+    if (mds->mdsmap->get_state(*p) >= MDSMap::STATE_REJOIN) {
+      dout(10) << "_drop_non_rdlocks dropping remote locks on mds." << *p << dendl;
+      MMDSSlaveRequest *slavereq = new MMDSSlaveRequest(mut->reqid, mut->attempt,
+							MMDSSlaveRequest::OP_DROPLOCKS);
+      mds->send_message_mds(slavereq, *p);
+    }
   }
 }
 
