@@ -41,6 +41,8 @@ class MMDSSlaveRequest : public Message {
   static const int OP_RMDIRPREP = 10;
   static const int OP_RMDIRPREPACK = -10;
 
+  static const int OP_DROPLOCKS	= 11;
+
   static const int OP_FINISH = 17;  
   static const int OP_COMMITTED = -18;  
 
@@ -72,6 +74,8 @@ class MMDSSlaveRequest : public Message {
 
     case OP_RMDIRPREP: return "rmdir_prep";
     case OP_RMDIRPREPACK: return "rmdir_prep_ack";
+
+    case OP_DROPLOCKS: return "drop_locks";
 
     case OP_ABORT: return "abort";
       //case OP_COMMIT: return "commit";
