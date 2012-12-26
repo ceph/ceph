@@ -96,7 +96,12 @@ If you have an older version of QEMU, you can set the ``librbd`` cache
 configuration (like any Ceph configuration option) as part of the
 'file' parameter::
 
-    qemu -m 1024 -drive format=raw,file=rbd:data/squeeze:rbd_cache=true
+    qemu -m 1024 -drive format=raw,file=rbd:data/squeeze:rbd_cache=true,cache=writeback
+
+.. important:: If you set rbd_cache=true, you must set cache=writeback
+   or risk data loss. Without cache=writeback, QEMU will not send
+   flush requests to librbd. If QEMU exits uncleanly in this
+   configuration, filesystems on top of rbd can be corrupted.
 
 .. _RBD caching: ../rbd-config-ref/#rbd-cache-config-settings
 
