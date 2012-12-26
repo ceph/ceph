@@ -93,21 +93,25 @@ rpm and indexes.::
 ::
 
     mkdir /tmp/debian-repo
-    mkdir /tmp/debian-repo/conf
-    ../ceph-build/gen_reprepro_conf.sh debian-testing main \
-		 `cat ceph-build/deb_dists`
-    ../ceph-build/push_to_deb_repo.sh /tmp/release /tmp/debian-repo main
+    ../ceph-build/gen_reprepro_conf.sh debian-testing key
+    ../ceph-build/push_to_deb_repo.sh /tmp/release /tmp/debian-repo 0.xx main
 
 9.  Push repos to ceph.org
 ==========================
 
 For a development release::
 
+    rcp ceph-0.xx.tar.bz2 ceph-0.xx.tar.gz \
+        ceph_site@ceph.com:ceph.com/downloads/.
     rsync -av /tmp/repo/0.52/ ceph_site@ceph.com:ceph.com/rpm-testing
     rsync -av /tmp/debian-repo/ ceph_site@ceph.com:ceph.com/debian-testing
 
 For a stable release, replace {CODENAME} with the release codename (e.g., ``argonaut`` or ``bobtail``)::
 
+    rcp ceph-0.xx.tar.bz2 \
+        ceph_site@ceph.com:ceph.com/downloads/ceph-0.xx{CODENAME}.tar.bz2
+    rcp ceph-0.xx.tar.gz  \
+        ceph_site@ceph.com:ceph.com/downloads/ceph-0.xx{CODENAME}.tar.gz
     rsync -av /tmp/repo/0.52/ ceph_site@ceph.com:ceph.com/rpm-{CODENAME}
     rsync -auv /tmp/debian-repo/ ceph_site@ceph.com:ceph.com/debian-{CODENAME}
 
@@ -119,6 +123,7 @@ Development release
 
 For a development release, update tags for ``ceph.git``::
 
+    git push origin v0.xx
     git push origin HEAD:testing
     git checkout master
     git merge next
