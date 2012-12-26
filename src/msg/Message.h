@@ -144,6 +144,8 @@
 
 #define MSG_MDS_HEARTBEAT          0x500  // for mds load balancer
 
+// *** generic ***
+#define MSG_TIMECHECK             0x600
 
 
 

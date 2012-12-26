@@ -145,6 +145,7 @@ using namespace std;
 #include "messages/MLock.h"
 
 #include "messages/MWatchNotify.h"
+#include "messages/MTimeCheck.h"
 
 #include "common/config.h"
 
@@ -603,6 +604,9 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     m = new MLock();
     break;
 
+  case MSG_TIMECHECK:
+    m = new MTimeCheck();
+    break;
 
     // -- simple messages without payload --
 
