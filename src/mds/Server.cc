@@ -2615,8 +2615,15 @@ void Server::handle_client_openc(MDRequest *mdr)
   if (req->head.args.open.object_size)
     layout.fl_object_size = req->head.args.open.object_size;
   if (req->get_connection()->has_feature(CEPH_FEATURE_CREATEPOOLID) &&
-      (__s32)req->head.args.open.pool >= 0)
+      (__s32)req->head.args.open.pool >= 0) {
     layout.fl_pg_pool = req->head.args.open.pool;
+
+    // make sure we have as new a map as the client
+    if (req->get_mdsmap_epoch() > mds->mdsmap->get_epoch()) {
+      mds->wait_for_mdsmap(req->get_mdsmap_epoch(), new C_MDS_RetryRequest(mdcache, mdr));
+      return;
+    }
+  }
 
   if (!ceph_file_layout_is_valid(&layout)) {
     dout(10) << " invalid initial file layout" << dendl;
@@ -3286,8 +3293,15 @@ void Server::handle_client_setlayout(MDRequest *mdr)
     layout.fl_cas_hash = req->head.args.setlayout.layout.fl_cas_hash;
   if (req->head.args.setlayout.layout.fl_object_stripe_unit > 0)
     layout.fl_object_stripe_unit = req->head.args.setlayout.layout.fl_object_stripe_unit;
-  if (req->head.args.setlayout.layout.fl_pg_pool > 0)
+  if (req->head.args.setlayout.layout.fl_pg_pool > 0) {
     layout.fl_pg_pool = req->head.args.setlayout.layout.fl_pg_pool;
+
+    // make sure we have as new a map as the client
+    if (req->get_mdsmap_epoch() > mds->mdsmap->get_epoch()) {
+      mds->wait_for_mdsmap(req->get_mdsmap_epoch(), new C_MDS_RetryRequest(mdcache, mdr));
+      return;
+    }
+  }
   if (!ceph_file_layout_is_valid(&layout)) {
     dout(10) << "bad layout" << dendl;
     reply_request(mdr, -EINVAL);
@@ -3361,8 +3375,16 @@ void Server::handle_client_setdirlayout(MDRequest *mdr)
     layout->layout.fl_cas_hash = req->head.args.setlayout.layout.fl_cas_hash;
   if (req->head.args.setlayout.layout.fl_object_stripe_unit > 0)
     layout->layout.fl_object_stripe_unit = req->head.args.setlayout.layout.fl_object_stripe_unit;
-  if (req->head.args.setlayout.layout.fl_pg_pool > 0)
+  if (req->head.args.setlayout.layout.fl_pg_pool > 0) {
     layout->layout.fl_pg_pool = req->head.args.setlayout.layout.fl_pg_pool;
+
+    // make sure we have as new a map as the client
+    if (req->get_mdsmap_epoch() > mds->mdsmap->get_epoch()) {
+      delete layout;
+      mds->wait_for_mdsmap(req->get_mdsmap_epoch(), new C_MDS_RetryRequest(mdcache, mdr));
+      return;
+    }
+  }
   if (!ceph_file_layout_is_valid(&layout->layout)) {
     dout(10) << "bad layout" << dendl;
     reply_request(mdr, -EINVAL);
