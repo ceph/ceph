@@ -810,11 +810,14 @@ struct rbd_bencher {
       in_flight(0)
   { }
 
-  bool start_write(int max, uint64_t off, uint64_t len, bufferlist& bl) {
-    Mutex::Locker l(lock);
-    if (in_flight >= max)
-      return false;
-    in_flight++;
+  bool start_write(int max, uint64_t off, uint64_t len, bufferlist& bl)
+  {
+    {
+      Mutex::Locker l(lock);
+      if (in_flight >= max)
+	return false;
+      in_flight++;
+    }
     librbd::RBD::AioCompletion *c =
       new librbd::RBD::AioCompletion((void *)this, rbd_bencher_completion);
     image->aio_write(off, len, bl, c);
@@ -869,8 +872,12 @@ static int do_bench_write(librbd::Image& image, uint64_t io_size,
   uint64_t off;
   for (off = 0; off < io_bytes; off += io_size) {
     b.wait_for(io_threads - 1);
-    while (b.start_write(io_threads, off, io_size, bl))
-      ios++;
+    uint64_t i = 0;
+    while (i < io_threads &&
+	   b.start_write(io_threads, off, io_size, bl)) {
+      ++i;
+      ++ios;
+    }
 
     utime_t now = ceph_clock_now(NULL);
     utime_t elapsed = now - start;
@@ -884,6 +891,10 @@ static int do_bench_write(librbd::Image& image, uint64_t io_size,
     }
   }
   b.wait_for(0);
+  int r = image.flush();
+  if (r < 0) {
+    cerr << "Error flushing data at the end: " << cpp_strerror(r) << std::endl;
+  }
 
   utime_t now = ceph_clock_now(NULL);
   double elapsed = now - start;
