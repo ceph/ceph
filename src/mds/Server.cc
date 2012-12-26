@@ -2623,8 +2623,7 @@ void Server::handle_client_openc(MDRequest *mdr)
     reply_request(mdr, -EINVAL);
     return;
   }
-  if (!mds->osdmap->have_pg_pool(layout.fl_pg_pool) ||
-      !mds->mdsmap->is_data_pool(layout.fl_pg_pool)) {
+  if (!mds->mdsmap->is_data_pool(layout.fl_pg_pool)) {
     dout(10) << " invalid data pool " << layout.fl_pg_pool << dendl;
     reply_request(mdr, -EINVAL);
     return;
@@ -3294,8 +3293,7 @@ void Server::handle_client_setlayout(MDRequest *mdr)
     reply_request(mdr, -EINVAL);
     return;
   }
-  if (!mds->osdmap->have_pg_pool(layout.fl_pg_pool) ||
-      !mds->mdsmap->is_data_pool(layout.fl_pg_pool)) {
+  if (!mds->mdsmap->is_data_pool(layout.fl_pg_pool)) {
     dout(10) << " invalid data pool " << layout.fl_pg_pool << dendl;
     reply_request(mdr, -EINVAL);
     return;
@@ -3371,8 +3369,7 @@ void Server::handle_client_setdirlayout(MDRequest *mdr)
     delete layout;
     return;
   }
-  if (!mds->osdmap->have_pg_pool(layout->layout.fl_pg_pool) ||
-      !mds->mdsmap->is_data_pool(layout->layout.fl_pg_pool)) {
+  if (!mds->mdsmap->is_data_pool(layout->layout.fl_pg_pool)) {
     dout(10) << " invalid data pool " << layout->layout.fl_pg_pool << dendl;
     reply_request(mdr, -EINVAL);
     delete layout;
