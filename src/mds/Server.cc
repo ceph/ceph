@@ -6261,6 +6261,7 @@ void Server::_logged_slave_rename(MDRequest *mdr,
 
     // remove mdr auth pin
     mdr->auth_unpin(srcdnl->get_inode());
+    mdr->more()->was_inode_exportor = true;
     
     dout(10) << " exported srci " << *srcdnl->get_inode() << dendl;
   }
@@ -6299,7 +6300,7 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
 
     // unfreeze+singleauth inode
     //  hmm, do i really need to delay this?
-    if (srcdn->is_auth() && destdnl->is_primary()) {
+    if (mdr->more()->was_inode_exportor) {
 
       CInode *in = destdnl->get_inode();
 

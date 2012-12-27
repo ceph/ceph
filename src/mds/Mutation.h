@@ -213,7 +213,7 @@ struct MDRequest : public Mutation {
     bufferlist inode_import;
     version_t inode_import_v;
     CInode* destdn_was_remote_inode;
-    bool was_link_merge;
+    bool was_inode_exportor;
     int prepared_inode_exporter; // has asked auth of srci to mark srci as ambiguous auth
 
     map<client_t,entity_inst_t> imported_client_map;
@@ -233,7 +233,7 @@ struct MDRequest : public Mutation {
 
     More() : 
       src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
-      destdn_was_remote_inode(0), was_link_merge(false),
+      destdn_was_remote_inode(0), was_inode_exportor(false),
       prepared_inode_exporter(-1), flock_was_waiting(false),
       stid(0),
       slave_commit(0) { }
