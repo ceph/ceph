@@ -60,7 +60,7 @@ void MDSMonitor::create_new_fs(MDSMap &m, int metadata_pool, int data_pool)
 {
   m.max_mds = g_conf->max_mds;
   m.created = ceph_clock_now(g_ceph_context);
-  m.data_pools.push_back(data_pool);
+  m.data_pools.insert(data_pool);
   m.metadata_pool = metadata_pool;
   m.cas_pool = -1;
   m.compat = get_mdsmap_compat_set();
