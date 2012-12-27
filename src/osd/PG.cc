@@ -1635,17 +1635,17 @@ bool PG::op_has_sufficient_caps(OpRequestRef op)
     key = req->get_oid().name;
 
   bool cap = caps.is_capable(pool.name, pool.auid, key,
-			     req->need_read_cap(),
-			     req->need_write_cap(),
-			     req->need_class_read_cap(),
-			     req->need_class_write_cap());
+			     op->need_read_cap(),
+			     op->need_write_cap(),
+			     op->need_class_read_cap(),
+			     op->need_class_write_cap());
 
   dout(20) << "op_has_sufficient_caps pool=" << pool.id << " (" << pool.name
 	   << ") owner=" << pool.auid
-	   << " need_read_cap=" << req->need_read_cap()
-	   << " need_write_cap=" << req->need_write_cap()
-	   << " need_class_read_cap=" << req->need_class_read_cap()
-	   << " need_class_write_cap=" << req->need_class_write_cap()
+	   << " need_read_cap=" << op->need_read_cap()
+	   << " need_write_cap=" << op->need_write_cap()
+	   << " need_class_read_cap=" << op->need_class_read_cap()
+	   << " need_class_write_cap=" << op->need_class_write_cap()
 	   << " -> " << (cap ? "yes" : "NO")
 	   << dendl;
   return cap;
@@ -4793,12 +4793,12 @@ bool PG::can_discard_op(OpRequestRef op)
   MOSDOp *m = (MOSDOp*)op->request;
   if (OSD::op_is_discardable(m)) {
     return true;
-  } else if (m->may_write() &&
+  } else if (op->may_write() &&
 	     (!is_primary() ||
 	      !same_for_modify_since(m->get_map_epoch()))) {
     osd->handle_misdirected_op(this, op);
     return true;
-  } else if (m->may_read() &&
+  } else if (op->may_read() &&
 	     !same_for_read_since(m->get_map_epoch())) {
     osd->handle_misdirected_op(this, op);
     return true;
