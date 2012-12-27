@@ -2199,12 +2199,11 @@ bool Locker::should_defer_client_cap_frozen(CInode *in)
    * Currently, a request wait if anything locked is freezing (can't
    * auth_pin), which would avoid any deadlock with cap release.  Thus @in
    * _MUST_ be in the lock/auth_pin set.
+   *
+   * auth_pins==0 implies no unstable lock and not auth pinnned by
+   * client request, otherwise continue even it's freezing.
    */
-  return (in->is_freezing() && (in->filelock.is_stable() &&
-				in->authlock.is_stable() &&
-				in->xattrlock.is_stable() &&
-				in->linklock.is_stable())) ||  // continue if freezing and lock is unstable
-    in->is_frozen();
+  return (in->is_freezing() && in->get_num_auth_pins() == 0) || in->is_frozen();
 }
 
 /*
