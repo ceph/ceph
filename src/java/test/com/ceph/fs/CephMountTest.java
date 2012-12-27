@@ -931,4 +931,21 @@ public class CephMountTest {
     assertTrue(poolid >= 0);
     assertTrue(mount.get_pool_replication(poolid) > 0);
   }
+
+  @Test
+  public void test_get_file_pool_name() throws Exception {
+    String path = makePath();
+    int fd = createFile(path, 1);
+    String pool = mount.get_file_pool_name(fd);
+    mount.close(fd);
+    assertTrue(pool != null);
+    /* assumes using default data pool "data" */
+    assertTrue(pool.compareTo("data") == 0);
+    mount.unlink(path);
+  }
+
+  @Test(expected=IOException.class)
+  public void test_get_file_pool_name_ebadf() throws Exception {
+    String pool = mount.get_file_pool_name(-40);
+  }
 }
