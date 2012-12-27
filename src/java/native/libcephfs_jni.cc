@@ -173,7 +173,7 @@ static void cephThrowNullArg(JNIEnv *env, const char *msg)
 
 static void cephThrowOutOfMemory(JNIEnv *env, const char *msg)
 {
-	THROW(env, "java/lang/OutOfMemoryException", msg);
+	THROW(env, "java/lang/OutOfMemoryError", msg);
 }
 
 static void cephThrowInternal(JNIEnv *env, const char *msg)
