@@ -6120,9 +6120,11 @@ void MDCache::dentry_remove_replica(CDentry *dn, int from)
   // fix lock
   if (dn->lock.remove_replica(from))
     mds->locker->eval_gather(&dn->lock);
+
+  CDentry::linkage_t *dnl = dn->get_projected_linkage();
+  if (dnl->is_primary())
+    maybe_eval_stray(dnl->get_inode());
 }
-
-
 
 void MDCache::trim_client_leases()
 {
