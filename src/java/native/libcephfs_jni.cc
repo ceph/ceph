@@ -1387,6 +1387,32 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1chmod
 
 /*
  * Class:     com_ceph_fs_CephMount
+ * Method:    native_ceph_fchmod
+ * Signature: (JII)I
+ */
+JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1fchmod
+  (JNIEnv *env, jclass clz, jlong j_mntp, jint j_fd, jint j_mode)
+{
+  struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
+  CephContext *cct = ceph_get_mount_context(cmount);
+  int ret;
+
+  CHECK_MOUNTED(cmount, -1);
+
+  ldout(cct, 10) << "jni: fchmod: fd " << (int)j_fd << " mode " << (int)j_mode << dendl;
+
+  ret = ceph_fchmod(cmount, (int)j_fd, (int)j_mode);
+
+  ldout(cct, 10) << "jni: fchmod: exit ret " << ret << dendl;
+
+  if (ret)
+    handle_error(env, ret);
+
+  return ret;
+}
+
+/*
+ * Class:     com_ceph_fs_CephMount
  * Method:    native_ceph_truncate
  * Signature: (JLjava/lang/String;J)I
  */
