@@ -23,13 +23,14 @@ public:
   EMetaBlob metablob;
   string type;
   bufferlist client_map;
+  version_t cmapv;
   metareqid_t reqid;
   bool had_slaves;
 
   EUpdate() : LogEvent(EVENT_UPDATE) { }
   EUpdate(MDLog *mdlog, const char *s) : 
     LogEvent(EVENT_UPDATE), metablob(mdlog),
-    type(s), had_slaves(false) { }
+    type(s), cmapv(0), had_slaves(false) { }
   
   void print(ostream& out) {
     if (type.length())
@@ -38,12 +39,13 @@ public:
   }
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 2;
+    __u8 struct_v = 3;
     ::encode(struct_v, bl);
     ::encode(stamp, bl);
     ::encode(type, bl);
     ::encode(metablob, bl);
     ::encode(client_map, bl);
+    ::encode(cmapv, bl);
     ::encode(reqid, bl);
     ::encode(had_slaves, bl);
   } 
@@ -55,6 +57,8 @@ public:
     ::decode(type, bl);
     ::decode(metablob, bl);
     ::decode(client_map, bl);
+    if (struct_v >= 3)
+      ::decode(cmapv, bl);
     ::decode(reqid, bl);
     ::decode(had_slaves, bl);
   }

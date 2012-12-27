@@ -349,6 +349,7 @@ protected:
   void add_to_bloom(CDentry *dn);
   bool is_in_bloom(const string& name);
   bool has_bloom() { return (bloom ? true : false); }
+  void remove_bloom();
 private:
   void link_inode_work( CDentry *dn, CInode *in );
   void unlink_inode_work( CDentry *dn );
