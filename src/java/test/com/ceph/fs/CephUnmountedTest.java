@@ -151,4 +151,9 @@ public class CephUnmountedTest {
   public void test_get_pool_replication() throws Exception {
     mount.get_pool_replication(1);
   }
+
+  @Test(expected=CephNotMountedException.class)
+  public void test_fchmod() throws Exception {
+    mount.fchmod(1, 0);
+  }
 }
