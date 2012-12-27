@@ -2,446 +2,434 @@
  MDS Config Reference
 ======================
 
-``mds max file size`` 
+``mds max file size``
 
-:Description: 
-:Type:  64-bit Integer Unsigned 
-:Default:  1ULL << 40  
+:Description: Maximum allowed file size to set when creating a new file system.
+:Type:  64-bit Integer Unsigned
+:Default:  1ULL << 40
 
-``mds cache size`` 
+``mds cache size``
 
-:Description: 
-:Type:  32-bit Integer          
-:Default: 100000 
+:Description: Number of inodes to cache.
+:Type:  32-bit Integer
+:Default: 100000
 
-``mds cache mid`` 
+``mds cache mid``
 
-:Description: 
-:Type:  Float                   
-:Default: 0.7 
+:Description: Insertion point for new items in the cache LRU (from the top).
+:Type:  Float
+:Default: 0.7
 
-``mds mem max`` 
+``mds dir commit ratio``
 
-:Description: // KB
-:Type:  32-bit Integer          
-:Default: 1048576 
+:Description: fraction of directory that is dirty before we commit using a full update (intead of partial update)
+:Type:  Float
+:Default: 0.5
 
-``mds dir commit ratio`` 
+``mds dir max commit size``
 
-:Description: 
-:Type:  Float                   
-:Default: 0.5 
+:Description: maximum size of a directory update (before we break it into smaller transactions) (MB)
+:Type:  32-bit Integer
+:Default: 90
 
-``mds dir max commit size`` 
+``mds decay halflife``
 
-:Description: // MB
-:Type:  32-bit Integer          
-:Default: 90 
+:Description: half-life of mds cache temperature
+:Type:  Float
+:Default: 5
 
-``mds decay halflife`` 
+``mds beacon interval``
 
-:Description: 
-:Type:  Float                   
-:Default: 5 
+:Description: frequency (in seconds) of beacon messages sent to the monitor
+:Type:  Float
+:Default: 4
 
-``mds beacon interval`` 
+``mds beacon grace``
 
-:Description: 
-:Type:  Float                   
-:Default: 4 
+:Description: interval of no beacons before we declare an mds laggy (and possibly replace it)
+:Type:  Float
+:Default: 15
 
-``mds beacon grace`` 
+``mds blacklist interval``
 
-:Description: 
-:Type:  Float                   
-:Default: 15 
+:Description: how long to blacklist failed mds's in the osdmap
+:Type:  Float
+:Default:  24.0*60.0
 
-``mds blacklist interval`` 
+``mds session timeout``
 
-:Description: // how long to blacklist failed nodes
-:Type:  Float                   
-:Default:  24.0*60.0   
+:Description: interval (in seconds) of client inactivity before we time out capabilities and leases
+:Type:  Float
+:Default: 60
 
-``mds session timeout`` 
+``mds session autoclose``
 
-:Description: // cap bits and leases time out if client idle
-:Type:  Float                   
-:Default: 60 
+:Description: interval (in seconds) before we close a laggy client's session
+:Type:  Float
+:Default: 300
 
-``mds session autoclose`` 
+``mds reconnect timeout``
 
-:Description: // autoclose idle session
-:Type:  Float                   
-:Default: 300 
+:Description: inter (in seconds) to wait for clients to reconnect during mds restart
+:Type:  Float
+:Default: 45
 
-``mds reconnect timeout`` 
+``mds tick interval``
 
-:Description: // secs to wait for clients during mds restart
-:Type:  Float                   
-:Default: 45 
+:Description: how frequently the mds does internal periodic tasks
+:Type:  Float
+:Default: 5
 
-``mds tick interval`` 
+``mds dirstat min interval``
 
-:Description: 
-:Type:  Float                   
-:Default: 5 
+:Description: minimum interval (in seconds) to try to avoid propagating recursive stats up the tree
+:Type:  Float
+:Default: 1
 
-``mds dirstat min interval`` 
+``mds scatter nudge interval``
 
-:Description: //try to avoid propagating more often than x
-:Type:  Float                   
-:Default: 1 
+:Description: how quickly dirstat changes propagate up
+:Type:  Float
+:Default: 5
 
-``mds scatter nudge interval`` 
+``mds client prealloc inos``
 
-:Description: // how quickly dirstat changes propagate up
-:Type:  Float                   
-:Default: 5 
+:Description: number of inode numbers to preallocate per client session
+:Type:  32-bit Integer
+:Default: 1000
 
-``mds client prealloc inos`` 
+``mds early reply``
 
-:Description: 
-:Type:  32-bit Integer          
-:Default: 1000 
+:Description: whether the mds should allow clients to see request results before they commit to the journal
+:Type:  Boolean
+:Default: true
 
-``mds early reply`` 
+``mds use tmap``
 
-:Description: 
-:Type:  Boolean                 
-:Default:  true        
+:Description: use trivialmap for dir updates
+:Type:  Boolean
+:Default: true
 
-``mds use tmap`` 
+``mds default dir hash``
 
-:Description: // use trivialmap for dir updates
-:Type:  Boolean                 
-:Default:  true        
+:Description: function to use for hashing files across directory fragments
+:Type:  32-bit Integer
+:Default: 2 (rjenkins)
 
-``mds default dir hash`` 
+``mds log``
 
-:Description: CEPH STR HASH RJENKINS
-:Type:  32-bit Integer          
-:Default:              
+:Description: true if the mds should journal metadata updates (disabled for benchmarking only)
+:Type:  Boolean
+:Default: true
 
-``mds log`` 
+``mds log skip corrupt events``
 
-:Description: 
-:Type:  Boolean                 
-:Default:  true        
+:Description: whether the mds should try to skip corrupt journal events during journal replay
+:Type:  Boolean
+:Default:  false
 
-``mds log skip corrupt events`` 
+``mds log max events``
 
-:Description: 
-:Type:  Boolean                 
-:Default:  false       
+:Description: maximum events in the journal before we initiate trimming; -1 to disable limit
+:Type:  32-bit Integer
+:Default: -1
 
-``mds log max events`` 
+``mds log max segments``
 
-:Description: 
-:Type:  32-bit Integer          
-:Default: -1 
+:Description: maximum segments (objects) in the journal before we initiate trimming; -1 to disable limit
+:Type:  32-bit Integer
+:Default: 30
 
-``mds log max segments`` 
+``mds log max expiring``
 
-:Description: // segment size defined by FileLayout  above
-:Type:  32-bit Integer          
-:Default: 30 
+:Description: maximum number of segments to expire in parallel
+:Type:  32-bit Integer
+:Default: 20
 
-``mds log max expiring`` 
+``mds log eopen size``
 
-:Description: 
-:Type:  32-bit Integer          
-:Default: 20 
+:Description: maximum number of inodes in an EOpen event
+:Type:  32-bit Integer
+:Default: 100
 
-``mds log eopen size`` 
+``mds bal sample interval``
 
-:Description: // # open inodes per log entry
-:Type:  32-bit Integer          
-:Default: 100 
+:Description: how frequently to sample directory temperature (for fragmentation decisions)
+:Type:  Float
+:Default: 3
 
-``mds bal sample interval`` 
+``mds bal replicate threshold``
 
-:Description: // every 5 seconds
-:Type:  Float                   
-:Default: 3 
+:Description: max temperature before we attempt to replicate metadata to other nodes
+:Type:  Float
+:Default: 8000
 
-``mds bal replicate threshold`` 
+``mds bal unreplicate threshold``
 
-:Description: 
-:Type:  Float                   
-:Default: 8000 
+:Description: min temperature before we stop replicating metadata to other nodes
+:Type:  Float
+:Default: 0
 
-``mds bal unreplicate threshold`` 
+``mds bal frag``
 
-:Description: 
-:Type:  Float                   
-:Default: 0 
+:Description: whether the MDS will fragment directories
+:Type:  Boolean
+:Default:  false
 
-``mds bal frag`` 
+``mds bal split size``
 
-:Description: 
-:Type:  Boolean                 
-:Default:  false       
+:Description: maximum directory size before the MDS will split a directory fragment into smaller bits
+:Type:  32-bit Integer
+:Default: 10000
 
-``mds bal split size`` 
+``mds bal split rd``
 
-:Description: 
-:Type:  32-bit Integer          
-:Default: 10000 
+:Description: maximum directory read temperature before we split a directory fragment
+:Type:  Float
+:Default: 25000
 
-``mds bal split rd`` 
+``mds bal split wr``
 
-:Description: 
-:Type:  Float                   
-:Default: 25000 
+:Description: maximum directory write temperature before we split a directory fragment
+:Type:  Float
+:Default: 10000
 
-``mds bal split wr`` 
+``mds bal split bits``
 
-:Description: 
-:Type:  Float                   
-:Default: 10000 
+:Description: number of bits to split a directory fragment by
+:Type:  32-bit Integer
+:Default: 3
 
-``mds bal split bits`` 
+``mds bal merge size``
 
-:Description: 
-:Type:  32-bit Integer          
-:Default: 3 
+:Description: minimum directory size before we try to merge adjacent directory fragments
+:Type:  32-bit Integer
+:Default: 50
 
-``mds bal merge size`` 
+``mds bal merge rd``
 
-:Description: 
-:Type:  32-bit Integer          
-:Default: 50 
+:Description: minimum read temperature before we merge adjacent directory fragments
+:Type:  Float
+:Default: 1000
 
-``mds bal merge rd`` 
+``mds bal merge wr``
 
-:Description: 
-:Type:  Float                   
-:Default: 1000 
+:Description: minimum write temperature before we merge adjacent directory fragments
+:Type:  Float
+:Default: 1000
 
-``mds bal merge wr`` 
+``mds bal interval``
 
-:Description: 
-:Type:  Float                   
-:Default: 1000 
+:Description: frequency (in seconds) of workload exchanges between MDSs
+:Type:  32-bit Integer
+:Default: 10
 
-``mds bal interval`` 
+``mds bal fragment interval``
 
-:Description: // seconds
-:Type:  32-bit Integer          
-:Default: 10 
+:Description: frequency (in seconds) of adjusting directory fragmentation
+:Type:  32-bit Integer
+:Default: 5
 
-``mds bal fragment interval`` 
+``mds bal idle threshold``
 
-:Description: // seconds
-:Type:  32-bit Integer          
-:Default: 5 
+:Description: minimum temperature before we migrate a subtree back to its parent
+:Type:  Float
+:Default: 0
 
-``mds bal idle threshold`` 
+``mds bal max``
 
-:Description: 
-:Type:  Float                   
-:Default: 0 
+:Description: number of iterations to run balancer before we stop (used for testing purposes only)
+:Type:  32-bit Integer
+:Default: -1
 
-``mds bal max`` 
+``mds bal max until``
 
-:Description: 
-:Type:  32-bit Integer          
-:Default: -1 
+:Description: number of seconds to run balancer before we stop (used for testing purposes only)
+:Type:  32-bit Integer
+:Default: -1
 
-``mds bal max until`` 
+``mds bal mode``
 
-:Description: 
-:Type:  32-bit Integer          
-:Default: -1 
+:Description: method for calculating MDS load (1 = hybrid, 2 = request rate and latency, 3 = cpu load)
+:Type:  32-bit Integer
+:Default: 0
 
-``mds bal mode`` 
+``mds bal min rebalance``
 
-:Description: 
-:Type:  32-bit Integer          
-:Default: 0 
+:Description: minimum subtree temperature before we migrate
+:Type:  Float
+:Default: 0.1
 
-``mds bal min rebalance`` 
+``mds bal min start``
 
-:Description: // must be x above avg before we export
-:Type:  Float                   
-:Default: 0.1 
+:Description: minimum subtree temperature before we search a subtree
+:Type:  Float
+:Default: 0.2
 
-``mds bal min start`` 
+``mds bal need min``
 
-:Description: // if we need less x. we don't do anything
-:Type:  Float                   
-:Default: 0.2 
+:Description: minimum fraction of target subtree size to accept
+:Type:  Float
+:Default: 0.8
 
-``mds bal need min`` 
+``mds bal need max``
 
-:Description: // take within this range of what we need
-:Type:  Float                   
-:Default: 0.8 
+:Description: maximum fraction of target subtree size to accept
+:Type:  Float
+:Default: 1.2
 
-``mds bal need max`` 
+``mds bal midchunk``
 
-:Description: 
-:Type:  Float                   
-:Default: 1.2 
+:Description: migrate any subtree that is larger than this fraction of the target subtree size
+:Type:  Float
+:Default: 0.3
 
-``mds bal midchunk`` 
+``mds bal minchunk``
 
-:Description: // any sub bigger than this taken in full
-:Type:  Float                   
-:Default: 0.3 
+:Description: ignore any subtree that is smaller than this fraction of the target subtree size
+:Type:  Float
+:Default: 0.001
 
-``mds bal minchunk`` 
+``mds bal target removal min``
 
-:Description: // never take anything smaller than this
-:Type:  Float                   
-:Default: 0.001 
+:Description: min number of balancer iterations before an old MDS target is removed from the mdsmap
+:Type:  32-bit Integer
+:Default: 5
 
-``mds bal target removal min`` 
+``mds bal target removal max``
 
-:Description: // min bal iters before old target is removed
-:Type:  32-bit Integer          
-:Default: 5 
+:Description: max number of balancer iteration before an old MDS target is removed from the mdsmap
+:Type:  32-bit Integer
+:Default: 10
 
-``mds bal target removal max`` 
+``mds replay interval``
 
-:Description: // max bal iters before old target is removed
-:Type:  32-bit Integer          
-:Default: 10 
+:Description: journal poll interval when in standby-replay ("hot standby") mode
+:Type:  Float
+:Default: 1
 
-``mds replay interval`` 
+``mds shutdown check``
 
-:Description: // time to wait before starting replay again
-:Type:  Float                   
-:Default: 1 
+:Description: interval for polling cache during MDS shutdown
+:Type:  32-bit Integer
+:Default: 0
 
-``mds shutdown check`` 
+``mds thrash exports``
 
-:Description: 
-:Type:  32-bit Integer          
-:Default: 0 
+:Description: randomly export subtrees between nodes (testing only)
+:Type:  32-bit Integer
+:Default: 0
 
-``mds thrash exports`` 
+``mds thrash fragments``
 
-:Description: 
-:Type:  32-bit Integer          
-:Default: 0 
+:Description: randomly fragment or merge directories
+:Type:  32-bit Integer
+:Default: 0
 
-``mds thrash fragments`` 
+``mds dump cache on map``
 
-:Description: 
-:Type:  32-bit Integer          
-:Default: 0 
+:Description: dump mds cache contents to a file on each MDSMap
+:Type:  Boolean
+:Default:  false
 
-``mds dump cache on map`` 
+``mds dump cache after rejoin``
 
-:Description: 
-:Type:  Boolean                 
-:Default:  false       
+:Description: dump mds cache contents to a file after rejoining cache (during recovery)
+:Type:  Boolean
+:Default:  false
 
-``mds dump cache after rejoin`` 
+``mds verify scatter``
 
-:Description: 
-:Type:  Boolean                 
-:Default:  false       
+:Description: assert that various scatter/gather invariants are true (dev only)
+:Type:  Boolean
+:Default:  false
 
-``mds verify scatter`` 
+``mds debug scatterstat``
 
-:Description: 
-:Type:  Boolean                 
-:Default:  false       
+:Description: assert that various recursive stat invariants are true (dev only
+:Type:  Boolean
+:Default:  false
 
-``mds debug scatterstat`` 
+``mds debug frag``
 
-:Description: 
-:Type:  Boolean                 
-:Default:  false       
+:Description: verify directory fragmentation invariants when convenient (dev only)
+:Type:  Boolean
+:Default:  false
 
-``mds debug frag`` 
+``mds debug auth pins``
 
-:Description: 
-:Type:  Boolean                 
-:Default:  false       
+:Description: debug auth pin invariants (dev only)
+:Type:  Boolean
+:Default:  false
 
-``mds debug auth pins`` 
+``mds debug subtrees``
 
-:Description: 
-:Type:  Boolean                 
-:Default:  false       
+:Description: debug subtree invariants (dev only)
+:Type:  Boolean
+:Default:  false
 
-``mds debug subtrees`` 
+``mds kill mdstable at``
 
-:Description: 
-:Type:  Boolean                 
-:Default:  false       
+:Description: inject mds failure in MDSTable code (dev only)
+:Type:  32-bit Integer
+:Default: 0
 
-``mds kill mdstable at`` 
+``mds kill export at``
 
-:Description: 
-:Type:  32-bit Integer          
-:Default: 0 
+:Description: inject mds failure in subtree export code (dev only)
+:Type:  32-bit Integer
+:Default: 0
 
-``mds kill export at`` 
+``mds kill import at``
 
-:Description: 
-:Type:  32-bit Integer          
-:Default: 0 
+:Description: inject mds failure in subtree import code (dev only)
+:Type:  32-bit Integer
+:Default: 0
 
-``mds kill import at`` 
+``mds kill link at``
 
-:Description: 
-:Type:  32-bit Integer          
-:Default: 0 
+:Description: inject mds failure in hard link code (dev only)
+:Type:  32-bit Integer
+:Default: 0
 
-``mds kill link at`` 
+``mds kill rename at``
 
-:Description: 
-:Type:  32-bit Integer          
-:Default: 0 
+:Description: inject mds failure in rename code (dev only)
+:Type:  32-bit Integer
+:Default: 0
 
-``mds kill rename at`` 
+``mds wipe sessions``
 
-:Description: 
-:Type:  32-bit Integer          
-:Default: 0 
+:Description: delete all client sessions on startup (testing only)
+:Type:  Boolean
+:Default: 0
 
-``mds wipe sessions`` 
+``mds wipe ino prealloc``
 
-:Description: 
-:Type:  Boolean                 
-:Default: 0 
+:Description: delete ino preallocation metadata on startup (testing only)
+:Type:  Boolean
+:Default: 0
 
-``mds wipe ino prealloc`` 
+``mds skip ino``
 
-:Description: 
-:Type:  Boolean                 
-:Default: 0 
+:Description: number of inode numbers to skip on startup (testing only)
+:Type:  32-bit Integer
+:Default: 0
 
-``mds skip ino`` 
+``mds standby for name``
 
-:Description: 
-:Type:  32-bit Integer          
-:Default: 0 
+:Description: name of MDS for a ceph-mds daemon to standby for
+:Type:  String
+:Default:
 
-``max mds`` 
+``mds standby for rank``
 
-:Description: 
-:Type:  32-bit Integer          
-:Default: 1 
+:Description: rank of MDS for a ceph-mds daemon to standby for
+:Type:  32-bit Integer
+:Default: -1
 
-``mds standby for name`` 
+``mds standby replay``
 
-:Description: 
-:Type:  String                  
-:Default:           
-
-``mds standby for rank`` 
-
-:Description: 
-:Type:  32-bit Integer          
-:Default: -1 
-
-``mds standby replay`` 
-
-:Description: 
-:Type:  Boolean                 
-:Default:  false      
+:Description: whether a ceph-mds should poll and replay the log an active mds (hot standby)
+:Type:  Boolean
+:Default:  false

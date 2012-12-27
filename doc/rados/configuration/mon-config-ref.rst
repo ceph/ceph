@@ -238,3 +238,10 @@
 :Description: The maximum number of log entries per event. 
 :Type: Integer
 :Default: ``4096``
+
+``max mds``
+
+:Description: set number of active MDSs during cluster creation
+:Type:  32-bit Integer
+:Default: 1
+
