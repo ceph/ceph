@@ -851,7 +851,7 @@ int ceph_get_file_pool(struct ceph_mount_info *cmount, int fh);
  * @param fh the open file descriptor referring to the file
  * @param buf buffer to store the name in
  * @param buflen size of the buffer
- * @returns length in bytes of the pool name
+ * @returns length in bytes of the pool name, or -ERANGE if the buffer is not large enough.
  */
 int ceph_get_file_pool_name(struct ceph_mount_info *cmount, int fh, char *buf, size_t buflen);
 
