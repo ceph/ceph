@@ -110,7 +110,7 @@ void MDSMap::dump(Formatter *f) const
   }
   f->close_section();
   f->open_array_section("data_pools");
-  for (vector<int64_t>::const_iterator p = data_pools.begin(); p != data_pools.end(); ++p)
+  for (set<int64_t>::const_iterator p = data_pools.begin(); p != data_pools.end(); ++p)
     f->dump_int("pool", *p);
   f->close_section();
   f->dump_int("metadata_pool", metadata_pool);
