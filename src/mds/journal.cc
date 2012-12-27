@@ -573,7 +573,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	} else {
 	  dout(10) << "EMetaBlob.replay for [" << p->dnfirst << "," << p->dnlast << "] had " << *in << dendl;
 	}
-   	in->first = p->dnfirst;
+	assert(in->first == p->dnfirst ||
+	       (in->is_multiversion() && in->first > p->dnfirst));
       }
     }
 
@@ -996,14 +997,24 @@ void EUpdate::replay(MDS *mds)
     mds->mdcache->add_uncommitted_master(reqid, _segment, slaves);
   }
   
-  // open client sessions?
-  map<client_t,entity_inst_t> cm;
-  map<client_t, uint64_t> seqm;
   if (client_map.length()) {
-    bufferlist::iterator blp = client_map.begin();
-    ::decode(cm, blp);
-    mds->server->prepare_force_open_sessions(cm, seqm);
-    mds->server->finish_force_open_sessions(cm, seqm);
+    if (mds->sessionmap.version >= cmapv) {
+      dout(10) << "EUpdate.replay sessionmap v " << cmapv
+	       << " <= table " << mds->sessionmap.version << dendl;
+    } else {
+      dout(10) << "EUpdate.replay sessionmap " << mds->sessionmap.version
+	       << " < " << cmapv << dendl;
+      // open client sessions?
+      map<client_t,entity_inst_t> cm;
+      map<client_t, uint64_t> seqm;
+      bufferlist::iterator blp = client_map.begin();
+      ::decode(cm, blp);
+      mds->server->prepare_force_open_sessions(cm, seqm);
+      mds->server->finish_force_open_sessions(cm, seqm);
+
+      assert(mds->sessionmap.version = cmapv);
+      mds->sessionmap.projected = mds->sessionmap.version;
+    }
   }
 }
 

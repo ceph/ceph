@@ -236,6 +236,8 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	dir->unfreeze_tree();  // cancel the freeze
 	dir->auth_unpin(this);
 	export_state.erase(dir); // clean up
+	export_unlock(dir);
+	export_locks.erase(dir);
 	dir->state_clear(CDir::STATE_EXPORTING);
 	if (export_peer[dir] != who) // tell them.
 	  mds->send_message_mds(new MExportDirCancel(dir->dirfrag()), export_peer[dir]);
@@ -663,6 +665,8 @@ void Migrator::export_dir(CDir *dir, int dest)
     dout(7) << "export_dir can't rdlock needed locks, failing." << dendl;
     return;
   }
+  mds->locker->rdlock_take_set(locks);
+  export_locks[dir].swap(locks);
 
   // ok.
   assert(export_state.count(dir) == 0);
@@ -705,6 +709,9 @@ void Migrator::handle_export_discover_ack(MExportDirDiscoverAck *m)
       export_peer[dir] != m->get_source().num()) {
     dout(7) << "must have aborted" << dendl;
   } else {
+    // release locks to avoid deadlock
+    export_unlock(dir);
+    export_locks.erase(dir);
     // freeze the subtree
     export_state[dir] = EXPORT_FREEZING;
     dir->auth_unpin(this);
@@ -1196,6 +1203,7 @@ void Migrator::finish_export_dir(CDir *dir, list<Context*>& finished, utime_t no
   // mark
   assert(dir->is_auth());
   dir->state_clear(CDir::STATE_AUTH);
+  dir->remove_bloom();
   dir->replica_nonce = CDir::NONCE_EXPORT;
 
   if (dir->is_dirty())
@@ -2006,6 +2014,7 @@ void Migrator::import_reverse(CDir *dir)
     // dir
     assert(cur->is_auth());
     cur->state_clear(CDir::STATE_AUTH);
+    cur->remove_bloom();
     cur->clear_replica_map();
     if (cur->is_dirty())
       cur->mark_clean();
@@ -2228,7 +2237,7 @@ void Migrator::import_finish(CDir *dir)
        p != cap_imports.end();
        p++)
     if (p->first->is_auth())
-      mds->locker->eval(p->first, CEPH_CAP_LOCKS);
+      mds->locker->eval(p->first, CEPH_CAP_LOCKS, true);
 
   // send pending import_maps?
   mds->mdcache->maybe_send_pending_resolves();
@@ -2612,6 +2621,7 @@ void Migrator::logged_import_caps(CInode *in,
 
   assert(cap_imports.count(in));
   finish_import_inode_caps(in, from, cap_imports[in]);  
+  mds->locker->eval(in, CEPH_CAP_LOCKS, true);
 
   mds->send_message_mds(new MExportCapsAck(in->ino()), from);
 }

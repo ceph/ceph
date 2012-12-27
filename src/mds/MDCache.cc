@@ -1993,6 +1993,11 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       mds->locker->mark_updated_scatterlock(&pin->nestlock);
       mut->ls->dirty_dirfrag_nest.push_back(&pin->item_dirty_dirfrag_nest);
       mut->add_updated_lock(&pin->nestlock);
+      if (do_parent_mtime || linkunlink) {
+	mds->locker->mark_updated_scatterlock(&pin->filelock);
+	mut->ls->dirty_dirfrag_dir.push_back(&pin->item_dirty_dirfrag_dir);
+	mut->add_updated_lock(&pin->filelock);
+      }
       break;
     }
     if (!mut->wrlocks.count(&pin->versionlock))
@@ -5519,7 +5524,8 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
   }
     
   // remove dentry
-  dir->add_to_bloom(dn);
+  if (dir->is_auth())
+    dir->add_to_bloom(dn);
   dir->remove_dentry(dn);
 
   if (clear_complete)
@@ -5713,6 +5719,7 @@ void MDCache::trim_non_auth()
 	assert(dnl->is_null());
       }
 
+      assert(!dir->has_bloom());
       dir->remove_dentry(dn);
       // adjust the dir state
       dir->state_clear(CDir::STATE_COMPLETE);  // dir incomplete!
@@ -5814,6 +5821,7 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
         dout(20) << "trim_non_auth_subtree(" << dir << ") removing inode " << in << " with dentry" << dn << dendl;
         dir->unlink_inode(dn);
         remove_inode(in);
+	assert(!dir->has_bloom());
         dir->remove_dentry(dn);
       } else {
         dout(20) << "trim_non_auth_subtree(" << dir << ") keeping inode " << in << " with dentry " << dn <<dendl;
@@ -5911,12 +5919,22 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
       assert(expired_inode);  // we had better have this.
       CDir *parent_dir = expired_inode->get_approx_dirfrag(p->first.frag);
       assert(parent_dir);
-      
+
+      int export_state = -1;
+      if (parent_dir->is_auth() && parent_dir->is_exporting()) {
+	export_state = migrator->get_export_state(parent_dir);
+	assert(export_state >= 0);
+      }
+
       if (!parent_dir->is_auth() ||
-	  (parent_dir->is_auth() && parent_dir->is_exporting() &&
-	   ((migrator->get_export_state(parent_dir) == Migrator::EXPORT_WARNING &&
+	  (export_state != -1 &&
+	   ((export_state == Migrator::EXPORT_WARNING &&
 	     migrator->export_has_warned(parent_dir,from)) ||
-	    migrator->get_export_state(parent_dir) == Migrator::EXPORT_EXPORTING))) {
+	    export_state == Migrator::EXPORT_EXPORTING ||
+	    export_state == Migrator::EXPORT_LOGGINGFINISH ||
+	    (export_state == Migrator::EXPORT_NOTIFYING &&
+	     !migrator->export_has_notified(parent_dir,from))))) {
+
 	// not auth.
 	dout(7) << "delaying nonauth|warned expires for " << *parent_dir << dendl;
 	assert(parent_dir->is_frozen_tree_root());
@@ -5929,10 +5947,9 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	delayed_expire[parent_dir][from]->add_realm(p->first, p->second);
 	continue;
       }
-      assert(!(parent_dir->is_auth() && parent_dir->is_exporting()) ||
-	     migrator->get_export_state(parent_dir) <= Migrator::EXPORT_PREPPING ||
-             (migrator->get_export_state(parent_dir) == Migrator::EXPORT_WARNING &&
-                 !migrator->export_has_warned(parent_dir, from)));
+      assert(export_state <= Migrator::EXPORT_PREPPING ||
+             (export_state == Migrator::EXPORT_WARNING &&
+              !migrator->export_has_warned(parent_dir, from)));
 
       dout(7) << "expires for " << *parent_dir << dendl;
     } else {
@@ -6709,13 +6726,18 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
     
     // can we conclude ENOENT?
     if (dnl && dnl->is_null()) {
-      if (mds->locker->rdlock_try(&dn->lock, client, NULL)) {
+      if (dn->lock.can_read(client) ||
+	  (dn->lock.is_xlocked() && dn->lock.get_xlock_by() == mdr)) {
         dout(10) << "traverse: miss on null+readable dentry " << path[depth] << " " << *dn << dendl;
         return -ENOENT;
-      } else {
+      } else if (curdir->is_auth()) {
         dout(10) << "miss on dentry " << *dn << ", can't read due to lock" << dendl;
         dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req, fin));
         return 1;
+      } else {
+	// non-auth and can not read, treat this as no dentry
+	dn = NULL;
+	dnl = NULL;
       }
     }
 
@@ -8441,7 +8463,8 @@ void MDCache::discover_path(CInode *base,
     return;
   } 
 
-  if (!base->is_waiter_for(CInode::WAIT_DIR) || !onfinish) { // FIXME: weak!
+  if ((want_xlocked && want_path.depth() == 1) ||
+      !base->is_waiter_for(CInode::WAIT_DIR) || !onfinish) { // FIXME: weak!
     discover_info_t& d = _create_discover(from);
     d.ino = base->ino();
     d.snap = snap;
@@ -8488,7 +8511,8 @@ void MDCache::discover_path(CDir *base,
     return;
   }
 
-  if (!base->is_waiting_for_dentry(want_path[0].c_str(), snap) || !onfinish) {
+  if ((want_xlocked && want_path.depth() == 1) ||
+      !base->is_waiting_for_dentry(want_path[0].c_str(), snap) || !onfinish) {
     discover_info_t& d = _create_discover(from);
     d.ino = base->ino();
     d.frag = base->get_frag();
@@ -8534,18 +8558,19 @@ void MDCache::discover_ino(CDir *base,
     return;
   } 
 
-  if (!base->is_waiting_for_ino(want_ino)) {
+  if (want_xlocked || !base->is_waiting_for_ino(want_ino) || !onfinish) {
     discover_info_t& d = _create_discover(from);
     d.ino = base->ino();
     d.frag = base->get_frag();
     d.want_ino = want_ino;
-    d.want_base_dir = true;
+    d.want_base_dir = false;
     d.want_xlocked = want_xlocked;
     _send_discover(d);
   }
-  
+
   // register + wait
-  base->add_ino_waiter(want_ino, onfinish);
+  if (onfinish)
+    base->add_ino_waiter(want_ino, onfinish);
 }
 
 
@@ -8793,11 +8818,14 @@ void MDCache::handle_discover(MDiscover *dis)
       // is this the last (tail) item in the discover traversal?
       if (tailitem && dis->wants_xlocked()) {
 	dout(7) << "handle_discover allowing discovery of xlocked tail " << *dn << dendl;
-      } else {
+      } else if (reply->is_empty()) {
 	dout(7) << "handle_discover blocking on xlocked " << *dn << dendl;
 	dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryMessage(mds, dis));
 	reply->put();
 	return;
+      } else {
+	dout(7) << "handle_discover non-empty reply, xlocked tail " << *dn << dendl;
+	break;
       }
     }
 
@@ -8882,6 +8910,18 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     }
   }
 
+  // discover ino error
+  if (p.end() && m->is_flag_error_ino()) {
+    assert(cur->is_dir());
+    CDir *dir = cur->get_dirfrag(m->get_base_dir_frag());
+    if (dir) {
+      dout(7) << " flag_error on ino " << m->get_wanted_ino()
+	      << ", triggering ino" << dendl;
+      dir->take_ino_waiting(m->get_wanted_ino(), error);
+    } else
+      assert(0);
+  }
+
   // discover may start with an inode
   if (!p.end() && next == MDiscoverReply::INODE) {
     cur = add_replica_inode(p, NULL, finished);
@@ -8917,30 +8957,6 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 	curdir = cur->get_dirfrag(m->get_base_dir_frag());
     }
 
-    // dentry error?
-    if (p.end() && (m->is_flag_error_dn() || m->is_flag_error_ino())) {
-      // error!
-      assert(cur->is_dir());
-      if (curdir) {
-	if (m->get_error_dentry().length()) {
-	  dout(7) << " flag_error on dentry " << m->get_error_dentry()
-		  << ", triggering dentry" << dendl;
-	  curdir->take_dentry_waiting(m->get_error_dentry(), 
-				      m->get_wanted_snapid(), m->get_wanted_snapid(), error);
-	} else {
-	  dout(7) << " flag_error on ino " << m->get_wanted_ino()
-		  << ", triggering ino" << dendl;
-	  curdir->take_ino_waiting(m->get_wanted_ino(), error);
-	}
-      } else {
-	dout(7) << " flag_error on dentry " << m->get_error_dentry() 
-		<< ", triggering dir?" << dendl;
-	cur->take_waiting(CInode::WAIT_DIR, error);
-      }
-      break;
-    }
-    assert(curdir);
-
     if (p.end())
       break;
     
@@ -8961,9 +8977,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   if (m->is_flag_error_dir() && !cur->is_dir()) {
     // not a dir.
     cur->take_waiting(CInode::WAIT_DIR, error);
-  } else if (m->is_flag_error_dir() ||
-	     (m->get_dir_auth_hint() != CDIR_AUTH_UNKNOWN &&
-	      m->get_dir_auth_hint() != mds->get_nodeid())) {
+  } else if (m->is_flag_error_dir() || m->get_dir_auth_hint() != CDIR_AUTH_UNKNOWN) {
     int who = m->get_dir_auth_hint();
     if (who == mds->get_nodeid()) who = -1;
     if (who >= 0)
@@ -8975,27 +8989,47 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
       frag_t fg = cur->pick_dirfrag(m->get_error_dentry());
       CDir *dir = cur->get_dirfrag(fg);
       filepath relpath(m->get_error_dentry(), 0);
+
+      if (cur->is_waiter_for(CInode::WAIT_DIR)) {
+	if (cur->is_auth() || dir)
+	  cur->take_waiting(CInode::WAIT_DIR, finished);
+	else
+	  discover_path(cur, m->get_wanted_snapid(), relpath, 0, m->get_wanted_xlocked(), who);
+      } else
+	  dout(7) << " doing nothing, nobody is waiting for dir" << dendl;
+
       if (dir) {
 	// don't actaully need the hint, now
-	if (dir->lookup(m->get_error_dentry()) == 0 &&
-	    dir->is_waiting_for_dentry(m->get_error_dentry().c_str(), m->get_wanted_snapid())) 
-	  discover_path(dir, m->get_wanted_snapid(), relpath, 0, m->get_wanted_xlocked()); 
-	else 
-	  dout(7) << " doing nothing, have dir but nobody is waiting on dentry " 
+	if (dir->is_waiting_for_dentry(m->get_error_dentry().c_str(), m->get_wanted_snapid())) {
+	  if (dir->is_auth() || dir->lookup(m->get_error_dentry()))
+	    dir->take_dentry_waiting(m->get_error_dentry(), m->get_wanted_snapid(),
+				     m->get_wanted_snapid(), finished);
+	  else
+	    discover_path(dir, m->get_wanted_snapid(), relpath, 0, m->get_wanted_xlocked());
+	} else
+	  dout(7) << " doing nothing, have dir but nobody is waiting on dentry "
 		  << m->get_error_dentry() << dendl;
-      } else {
-	if (cur->is_waiter_for(CInode::WAIT_DIR)) 
-	  discover_path(cur, m->get_wanted_snapid(), relpath, 0, m->get_wanted_xlocked(), who);
-	else
-	  dout(7) << " doing nothing, nobody is waiting for dir" << dendl;
       }
     } else {
-      // wanted just the dir
+      // wanted dir or ino
       frag_t fg = m->get_base_dir_frag();
-      if (cur->get_dirfrag(fg) == 0 && cur->is_waiter_for(CInode::WAIT_DIR))
-	discover_dir_frag(cur, fg, 0, who);
-      else
-	dout(7) << " doing nothing, nobody is waiting for dir" << dendl;	  
+      CDir *dir = cur->get_dirfrag(fg);
+
+      if (cur->is_waiter_for(CInode::WAIT_DIR)) {
+	if (cur->is_auth() || dir)
+	  cur->take_waiting(CInode::WAIT_DIR, finished);
+	else
+	  discover_dir_frag(cur, fg, 0, who);
+      } else
+	dout(7) << " doing nothing, nobody is waiting for dir" << dendl;
+
+      if (dir && m->get_wanted_ino() && dir->is_waiting_for_ino(m->get_wanted_ino())) {
+	if (dir->is_auth() || get_inode(m->get_wanted_ino()))
+	  dir->take_ino_waiting(m->get_wanted_ino(), finished);
+	else
+	  discover_ino(dir, m->get_wanted_ino(), 0, m->get_wanted_xlocked());
+      } else
+	dout(7) << " doing nothing, nobody is waiting for ino" << dendl;
     }
   }
 
@@ -9245,14 +9279,15 @@ void MDCache::send_dentry_link(CDentry *dn)
 {
   dout(7) << "send_dentry_link " << *dn << dendl;
 
+  CDir *subtree = get_subtree_root(dn->get_dir());
   for (map<int,int>::iterator p = dn->replicas_begin(); 
        p != dn->replicas_end(); 
        p++) {
     if (mds->mdsmap->get_state(p->first) < MDSMap::STATE_REJOIN) 
       continue;
     CDentry::linkage_t *dnl = dn->get_linkage();
-    MDentryLink *m = new MDentryLink(dn->get_dir()->dirfrag(), dn->name,
-				     dnl->is_primary());
+    MDentryLink *m = new MDentryLink(subtree->dirfrag(), dn->get_dir()->dirfrag(),
+				     dn->name, dnl->is_primary());
     if (dnl->is_primary()) {
       dout(10) << "  primary " << *dnl->get_inode() << dendl;
       replicate_inode(dnl->get_inode(), p->first, m->bl);
@@ -9271,32 +9306,48 @@ void MDCache::send_dentry_link(CDentry *dn)
 /* This function DOES put the passed message before returning */
 void MDCache::handle_dentry_link(MDentryLink *m)
 {
+
+  CDentry *dn = NULL;
   CDir *dir = get_dirfrag(m->get_dirfrag());
-  assert(dir);
-  CDentry *dn = dir->lookup(m->get_dn());
-  assert(dn);
+  if (!dir) {
+    dout(7) << "handle_dentry_link don't have dirfrag " << m->get_dirfrag() << dendl;
+  } else {
+    dn = dir->lookup(m->get_dn());
+    if (!dn) {
+      dout(7) << "handle_dentry_link don't have dentry " << *dir << " dn " << m->get_dn() << dendl;
+    } else {
+      dout(7) << "handle_dentry_link on " << *dn << dendl;
+      CDentry::linkage_t *dnl = dn->get_linkage();
 
-  dout(7) << "handle_dentry_link on " << *dn << dendl;
-  CDentry::linkage_t *dnl = dn->get_linkage();
-
-  assert(!dn->is_auth());
-  assert(dnl->is_null());
+      assert(!dn->is_auth());
+      assert(dnl->is_null());
+    }
+  }
 
   bufferlist::iterator p = m->bl.begin();
   list<Context*> finished;
-  
-  if (m->get_is_primary()) {
-    // primary link.
-    add_replica_inode(p, dn, finished);
-  } else {
-    // remote link, easy enough.
-    inodeno_t ino;
-    __u8 d_type;
-    ::decode(ino, p);
-    ::decode(d_type, p);
-    dir->link_remote_inode(dn, ino, d_type);
+  if (dn) {
+    if (m->get_is_primary()) {
+      // primary link.
+      add_replica_inode(p, dn, finished);
+    } else {
+      // remote link, easy enough.
+      inodeno_t ino;
+      __u8 d_type;
+      ::decode(ino, p);
+      ::decode(d_type, p);
+      dir->link_remote_inode(dn, ino, d_type);
+    }
+  } else if (m->get_is_primary()) {
+    CInode *in = add_replica_inode(p, NULL, finished);
+    assert(in->get_num_ref() == 0);
+    assert(in->get_parent_dn() == NULL);
+    MCacheExpire* expire = new MCacheExpire(mds->get_nodeid());
+    expire->add_inode(m->get_subtree(), in->vino(), in->get_replica_nonce());
+    mds->send_message_mds(expire, m->get_source().num());
+    remove_inode(in);
   }
-  
+
   if (!finished.empty())
     mds->queue_waiters(finished);
 
@@ -9328,6 +9379,11 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequest *mdr)
 /* This function DOES put the passed message before returning */
 void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 {
+  // straydn
+  CDentry *straydn = NULL;
+  if (m->straybl.length())
+    straydn = add_replica_stray(m->straybl, m->get_source().num());
+
   CDir *dir = get_dirfrag(m->get_dirfrag());
   if (!dir) {
     dout(7) << "handle_dentry_unlink don't have dirfrag " << m->get_dirfrag() << dendl;
@@ -9338,13 +9394,6 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
     } else {
       dout(7) << "handle_dentry_unlink on " << *dn << dendl;
       CDentry::linkage_t *dnl = dn->get_linkage();
-
-      // straydn
-      CDentry *straydn = NULL;
-      if (m->straybl.length()) {
-	int from = m->get_source().num();
-	straydn = add_replica_stray(m->straybl, from);
-      }
 
       // open inode?
       if (dnl->is_primary()) {
@@ -9368,8 +9417,9 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 	  migrator->export_caps(in);
 	
 	lru.lru_bottouch(straydn);  // move stray to end of lru
-
+	straydn = NULL;
       } else {
+	assert(!straydn);
 	assert(dnl->is_remote());
 	dn->dir->unlink_inode(dn);
       }
@@ -9378,6 +9428,15 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
       // move to bottom of lru
       lru.lru_bottouch(dn);
     }
+  }
+
+  // race with trim_dentry()
+  if (straydn) {
+    assert(straydn->get_num_ref() == 0);
+    assert(straydn->get_linkage()->is_null());
+    map<int, MCacheExpire*> expiremap;
+    trim_dentry(straydn, expiremap);
+    send_expire_messages(expiremap);
   }
 
   m->put();
