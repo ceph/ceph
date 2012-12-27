@@ -616,6 +616,36 @@ public class CephMountTest {
   }
 
   /*
+   * fchmod
+   */
+
+  @Test
+  public void test_fchmod() throws Exception {
+    /* create a file */
+    String path = makePath();
+    int fd = createFile(path, 1);
+
+    CephStat st = new CephStat();
+    mount.lstat(path, st);
+
+    /* flip a bit */
+    int mode = st.mode;
+    if ((mode & 1) != 0)
+      mode -= 1;
+    else
+      mode += 1;
+
+    mount.fchmod(fd, mode);
+    mount.close(fd);
+
+    CephStat st2 = new CephStat();
+    mount.lstat(path, st2);
+    assertTrue(st2.mode == mode);
+
+    mount.unlink(path);
+  }
+
+  /*
    * truncate
    */
 

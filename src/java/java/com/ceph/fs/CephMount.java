@@ -496,6 +496,23 @@ public class CephMount {
   private static native int native_ceph_chmod(long mountp, String path, int mode);
 
   /**
+   * Change file mode of an open file.
+   *
+   * @param fd The open file descriptor to change the mode bits on.
+   * @param mode New mode bits.
+   */
+  public void fchmod(int fd, int mode) {
+    rlock.lock();
+    try {
+      native_ceph_fchmod(instance_ptr, fd, mode);
+    } finally {
+      rlock.unlock();
+    }
+  }
+
+  private static native int native_ceph_fchmod(long mountp, int fd, int mode);
+
+  /**
    * Truncate a file to a specified length.
    *
    * @param path Path of the file.
