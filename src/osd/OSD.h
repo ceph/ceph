@@ -1424,7 +1424,7 @@ public:
 public:
   void force_remount();
 
-  int init_op_flags(MOSDOp *op);
+  int init_op_flags(OpRequestRef op);
 
 
   void put_object_context(void *_obc, pg_t pgid);

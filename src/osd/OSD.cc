@@ -5814,10 +5814,13 @@ void OSD::handle_op(OpRequestRef op)
   // share our map with sender, if they're old
   _share_map_incoming(m->get_source_inst(), m->get_map_epoch(),
 		      (Session *)m->get_connection()->get_priv());
-  int r = init_op_flags(m);
-  if (r) {
-    service.reply_op_error(op, r);
-    return;
+
+  if (op->rmw_flags == 0) {
+    int r = init_op_flags(op);
+    if (r) {
+      service.reply_op_error(op, r);
+      return;
+    }
   }
 
   if (g_conf->osd_debug_drop_op_probability > 0 &&
@@ -5828,7 +5831,7 @@ void OSD::handle_op(OpRequestRef op)
     }
   }
 
-  if (m->may_write()) {
+  if (op->may_write()) {
     // full?
     if (osdmap->test_flag(CEPH_OSDMAP_FULL) &&
 	!m->get_source().is_mds()) {  // FIXME: we'll exclude mds writes for now.
@@ -6165,15 +6168,16 @@ void OSD::process_peering_events(const list<PG*> &pgs)
 
 // --------------------------------
 
-int OSD::init_op_flags(MOSDOp *op)
+int OSD::init_op_flags(OpRequestRef op)
 {
+  MOSDOp *m = (MOSDOp*)op->request;
   vector<OSDOp>::iterator iter;
 
   // client flags have no bearing on whether an op is a read, write, etc.
   op->rmw_flags = 0;
 
   // set bits based on op codes, called methods.
-  for (iter = op->ops.begin(); iter != op->ops.end(); ++iter) {
+  for (iter = m->ops.begin(); iter != m->ops.end(); ++iter) {
     if (ceph_osd_op_mode_modify(iter->op.op))
       op->set_write();
     if (ceph_osd_op_mode_read(iter->op.op))
