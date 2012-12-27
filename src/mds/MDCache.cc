@@ -266,7 +266,7 @@ void MDCache::remove_inode(CInode *o)
 void MDCache::init_layouts()
 {
   default_file_layout = g_default_file_layout;
-  default_file_layout.fl_pg_pool = mds->mdsmap->get_data_pool();
+  default_file_layout.fl_pg_pool = mds->mdsmap->get_first_data_pool();
 
   default_log_layout = g_default_file_layout;
   default_log_layout.fl_pg_pool = mds->mdsmap->get_metadata_pool();
@@ -314,7 +314,7 @@ CInode *MDCache::create_root_inode()
   CInode *i = create_system_inode(MDS_INO_ROOT, S_IFDIR|0755);
   i->default_layout = new struct default_file_layout;
   i->default_layout->layout = default_file_layout;
-  i->default_layout->layout.fl_pg_pool = mds->mdsmap->get_data_pool();
+  i->default_layout->layout.fl_pg_pool = mds->mdsmap->get_first_data_pool();
   return i;
 }
 
