@@ -156,4 +156,9 @@ public class CephUnmountedTest {
   public void test_fchmod() throws Exception {
     mount.fchmod(1, 0);
   }
+
+  @Test(expected=CephNotMountedException.class)
+  public void test_chmod() throws Exception {
+    mount.chmod("/foo", 0);
+  }
 }
