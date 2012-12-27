@@ -3408,6 +3408,8 @@ void Locker::simple_excl(SimpleLock *lock, bool *need_issue)
   }
   
   int gather = 0;
+  if (lock->is_rdlocked())
+    gather++;
   if (lock->is_wrlocked())
     gather++;
   if (lock->is_xlocked())
@@ -4167,6 +4169,8 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
     }
 
     int gather = 0;
+    if (lock->is_rdlocked())
+      gather++;
     if (in->is_replicated()) {
       if (lock->get_state() != LOCK_EXCL_MIX &&   // EXCL replica is already LOCK
 	  lock->get_state() != LOCK_XSYN_EXCL) {  // XSYN replica is already LOCK;  ** FIXME here too!
@@ -4237,6 +4241,11 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
   }
   int gather = 0;
   
+  if (lock->is_rdlocked())
+    gather++;
+  if (lock->is_wrlocked())
+    gather++;
+
   if (in->is_replicated() &&
       lock->get_state() != LOCK_LOCK_EXCL &&
       lock->get_state() != LOCK_XSYN_EXCL) {  // if we were lock, replicas are already lock.
