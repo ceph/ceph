@@ -886,6 +886,23 @@ public class CephMount {
   private static native int native_ceph_get_file_stripe_unit(long mountp, int fd);
 
   /**
+   * Get the name of the pool a file is stored in.
+   *
+   * @param fd An open file descriptor.
+   * @return The pool name.
+   */
+  public String get_file_pool_name(int fd) {
+    rlock.lock();
+    try {
+      return native_ceph_get_file_pool_name(instance_ptr, fd);
+    } finally {
+      rlock.unlock();
+    }
+  }
+
+  private static native String native_ceph_get_file_pool_name(long mountp, int fd);
+
+  /**
    * Get the replication of a file.
    *
    * @param fd The file descriptor.
