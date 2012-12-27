@@ -99,7 +99,7 @@ class XMLFormatter : public Formatter {
  private:
   void open_section_in_ns(const char *name, const char *ns);
   void finish_pending_string();
-  void print_spaces(bool extra_space);
+  void print_spaces();
   static std::string escape_xml_str(const char *str);
 
   std::stringstream m_ss, m_pending_string;
