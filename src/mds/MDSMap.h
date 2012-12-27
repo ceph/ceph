@@ -174,7 +174,7 @@ protected:
   __u32 session_autoclose;
   uint64_t max_file_size;
 
-  vector<int64_t> data_pools;  // file data pools available to clients (via an ioctl).  first is the default.
+  set<int64_t> data_pools;  // file data pools available to clients (via an ioctl).  first is the default.
   int64_t cas_pool;            // where CAS objects go
   int64_t metadata_pool;       // where fs metadata objects go
   
@@ -239,12 +239,12 @@ public:
   int get_tableserver() const { return tableserver; }
   int get_root() const { return root; }
 
-  const vector<int64_t> &get_data_pools() const { return data_pools; }
-  int64_t get_data_pool() const { return data_pools[0]; }
+  const set<int64_t> &get_data_pools() const { return data_pools; }
+  int64_t get_first_data_pool() const { return *data_pools.begin(); }
   int64_t get_cas_pool() const { return cas_pool; }
   int64_t get_metadata_pool() const { return metadata_pool; }
   bool is_data_pool(int64_t poolid) const {
-    return std::find(data_pools.begin(), data_pools.end(), poolid) != data_pools.end();
+    return data_pools.count(poolid);
   }
 
   const map<uint64_t,mds_info_t>& get_mds_info() { return mds_info; }
@@ -278,18 +278,14 @@ public:
 
   // data pools
   void add_data_pool(int64_t poolid) {
-    data_pools.push_back(poolid);
+    data_pools.insert(poolid);
   }
   int remove_data_pool(int64_t poolid) {
-    for (vector<int64_t>::iterator p = data_pools.begin();
-	 p != data_pools.end();
-	 ++p) {
-      if (*p == poolid) {
-	data_pools.erase(p);
-	return 0;
-      }
-    }
-    return -ENOENT;
+    set<int64_t>::iterator p = data_pools.find(poolid);
+    if (p == data_pools.end())
+      return -ENOENT;
+    data_pools.erase(p);
+    return 0;
   }
 
   // sets
@@ -517,7 +513,7 @@ public:
     ::encode(mds_info, bl);
     __u32 n = data_pools.size();
     ::encode(n, bl);
-    for (vector<int64_t>::const_iterator p = data_pools.begin(); p != data_pools.end(); ++p) {
+    for (set<int64_t>::const_iterator p = data_pools.begin(); p != data_pools.end(); ++p) {
       n = *p;
       ::encode(n, bl);
     }
@@ -572,7 +568,7 @@ public:
       while (n--) {
 	__u32 m;
 	::decode(m, p);
-	data_pools.push_back(m);
+	data_pools.insert(m);
       }
       __s32 s;
       ::decode(s, p);

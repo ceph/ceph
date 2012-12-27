@@ -1056,6 +1056,16 @@ void MDS::handle_mds_map(MMDSMap *m)
   if (!is_any_replay())
     balancer->try_rebalance();
 
+  {
+    map<epoch_t,list<Context*> >::iterator p = waiting_for_mdsmap.begin();
+    while (p != waiting_for_mdsmap.end() && p->first <= mdsmap->get_epoch()) {
+      list<Context*> ls;
+      ls.swap(p->second);
+      waiting_for_mdsmap.erase(p++);
+      finish_contexts(g_ceph_context, ls);
+    }
+  }
+
  out:
   m->put();
   delete oldmap;
