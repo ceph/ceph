@@ -33,6 +33,7 @@
 #include "include/compat.h"
 #include "common/blkdev.h"
 
+#include <boost/scoped_ptr.hpp>
 #include <dirent.h>
 #include <errno.h>
 #include <inttypes.h>
@@ -135,18 +136,39 @@ void usage()
 "  --format <output-format>           output format (default: plain, json, xml)\n";
 }
 
-static string feature_str(uint64_t features)
+static string feature_str(uint64_t feature)
+{
+  switch (feature) {
+  case RBD_FEATURE_LAYERING:
+    return "layering";
+  case RBD_FEATURE_STRIPINGV2:
+    return "striping";
+  default:
+    return "";
+  }
+}
+
+static string features_str(uint64_t features)
 {
   string s = ""; 
 
-  if (features & RBD_FEATURE_LAYERING)
-    s += "layering";
-  if (features & RBD_FEATURE_STRIPINGV2) {
+  for (uint64_t feature = 1; feature <= RBD_FEATURE_STRIPINGV2;
+       feature <<= 1) {
     if (s.size())
       s += ", ";
-    s += "striping";
+    s += feature_str(feature);
   }
   return s;
+}
+
+static void format_features(Formatter *f, uint64_t features)
+{
+  f->open_array_section("features");
+  for (uint64_t feature = 1; feature <= RBD_FEATURE_STRIPINGV2;
+       feature <<= 1) {
+    f->dump_string("feature", feature_str(feature));
+  }
+  f->close_section();
 }
 
 struct MyProgressContext : public librbd::ProgressContext {
@@ -176,14 +198,15 @@ struct MyProgressContext : public librbd::ProgressContext {
   }
 };
 
-static int get_outfmt(const char *output_format, Formatter **f)
+static int get_outfmt(const char *output_format,
+		      boost::scoped_ptr<Formatter> *f)
 {
-  if (!strcmp(output_format, "json"))
-    *f = new JSONFormatter(false);
-  else if (!strcmp(output_format, "xml"))
-    *f = new XMLFormatter(false);
-  else if (strcmp(output_format, "plain")) {
-    cerr << "rbd unknown format '" << output_format << "'" << std::endl;
+  if (!strcmp(output_format, "json")) {
+    f->reset(new JSONFormatter(false));
+  } else if (!strcmp(output_format, "xml")) {
+    f->reset(new XMLFormatter(false));
+  } else if (strcmp(output_format, "plain")) {
+    cerr << "rbd: unknown format '" << output_format << "'" << std::endl;
     return -EINVAL;
   }
 
@@ -191,17 +214,11 @@ static int get_outfmt(const char *output_format, Formatter **f)
 }
 
 static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
-		   const char *output_format)
+		   Formatter *f)
 {
   std::vector<string> names;
   int r = rbd.list(io_ctx, names);
   if (r < 0 || (names.size() == 0))
-    return r;
-
-  Formatter *f = 0;
-
-  r = get_outfmt(output_format, &f);
-  if (r < 0)
     return r;
 
   if (!lflag) {
@@ -224,7 +241,7 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
   TextTable tbl;
 
   if (f) {
-    f->open_object_section("images");
+    f->open_array_section("images");
   } else {
     tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("SIZE", TextTable::RIGHT, TextTable::RIGHT);
@@ -261,8 +278,11 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
     if (r < 0 && r != -ENOENT)
       return r;
 
-    if (r != -ENOENT)
+    bool has_parent = false;
+    if (r != -ENOENT) {
       parent = pool + "/" + image + "@" + snap;
+      has_parent = true;
+    }
 
     if (im.stat(info, sizeof(info)) < 0)
       return -EINVAL;
@@ -281,12 +301,19 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
     }
 
     if (f) {
-      f->open_object_section(i->c_str());
-      f->dump_string("size", stringify(si_t(info.size)));
-      f->dump_string("parent", parent);
-      f->dump_string("fmt", (old_format) ? "1" : "2");
-      f->dump_string("prot", "");  // protect doesn't apply to images
-      f->dump_string("lock", lockstr);
+      f->open_object_section("image");
+      f->dump_string("image", *i);
+      f->dump_unsigned("size", info.size);
+      if (has_parent) {
+	f->open_object_section("parent");
+	f->dump_string("pool", pool);
+	f->dump_string("image", image);
+	f->dump_string("snapshot", snap);
+	f->close_section();
+      }
+      f->dump_int("format", old_format ? 1 : 2);
+      if (lockers.size())
+	f->dump_string("lock_type", exclusive ? "exclusive" : "shared");
       f->close_section();
     } else {
       tbl << *i
@@ -303,6 +330,7 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
       for (std::vector<librbd::snap_info_t>::iterator s = snaplist.begin();
 	   s != snaplist.end(); ++s) {
 	bool is_protected;
+	bool has_parent = false;
 	parent.clear();
 	im.snap_set(s->name.c_str());
 	r = im.snap_is_protected(s->name.c_str(), &is_protected);
@@ -310,14 +338,22 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
 	  return r;
 	if (im.parent_info(&pool, &image, &snap) >= 0) {
 	  parent = pool + "/" + image + "@" + snap;
+	  has_parent = true;
 	}
 	if (f) {
-	  f->open_object_section((*i + "@" + s->name).c_str());
-	  f->dump_string("size", stringify(si_t(s->size)));
-	  f->dump_string("parent", parent);
-	  f->dump_string("fmt", (old_format) ? "1" : "2");
-	  f->dump_string("prot", is_protected ? "yes" : "");
-	  f->dump_string("lock", "");  // locks don't apply to snaps
+	  f->open_object_section("snapshot");
+	  f->dump_string("image", *i);
+	  f->dump_string("snapshot", s->name);
+	  f->dump_unsigned("size", s->size);
+	  if (has_parent) {
+	    f->open_object_section("parent");
+	    f->dump_string("pool", pool);
+	    f->dump_string("image", image);
+	    f->dump_string("snapshot", snap);
+	    f->close_section();
+	  }
+	  f->dump_int("format", old_format ? 1 : 2);
+	  f->dump_string("protected", is_protected ? "true" : "false");
 	  f->close_section();
 	} else {
 	  tbl << *i + "@" + s->name
@@ -407,19 +443,14 @@ static int do_rename(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 }
 
 static int do_show_info(const char *imgname, librbd::Image& image,
-			const char *snapname, const char *output_format)
+			const char *snapname, Formatter *f)
 {
   librbd::image_info_t info;
   string parent_pool, parent_name, parent_snapname;
   uint8_t old_format;
   uint64_t overlap, features;
   bool snap_protected;
-  Formatter *f = 0;
   int r;
-
-  r = get_outfmt(output_format, &f);
-  if (r < 0)
-    return r;
 
   r = image.stat(info, sizeof(info));
   if (r < 0)
@@ -446,12 +477,12 @@ static int do_show_info(const char *imgname, librbd::Image& image,
   if (f) {
     f->open_object_section("image");
     f->dump_string("name", imgname);
-    f->dump_string("size", stringify(prettybyte_t(info.size)));
-    f->dump_int("objects", info.num_objs);
+    f->dump_unsigned("size", info.size);
+    f->dump_unsigned("objects", info.num_objs);
     f->dump_int("order", info.order);
-    f->dump_string("obj_size", stringify(prettybyte_t(info.obj_size)));
+    f->dump_unsigned("object_size", info.obj_size);
     f->dump_string("block_name_prefix", info.block_name_prefix);
-    f->dump_string("format", (old_format ? "1" : "2"));
+    f->dump_int("format", (old_format ? 1 : 2));
   } else {
     cout << "rbd image '" << imgname << "':\n"
 	 << "\tsize " << prettybyte_t(info.size) << " in "
@@ -468,15 +499,15 @@ static int do_show_info(const char *imgname, librbd::Image& image,
 
   if (!old_format) {
     if (f)
-      f->dump_string("features", feature_str(features));
+      format_features(f, features);
     else
-      cout << "\tfeatures: " << feature_str(features) << std::endl;
+      cout << "\tfeatures: " << features_str(features) << std::endl;
   }
 
   // snapshot info, if present
   if (snapname) {
     if (f) {
-      f->dump_string("protected", stringify(snap_protected));
+      f->dump_string("protected", snap_protected ? "true" : "false");
     } else {
       cout << "\tprotected: " << (snap_protected ? "True" : "False")
 	   << std::endl;
@@ -487,8 +518,12 @@ static int do_show_info(const char *imgname, librbd::Image& image,
   if ((image.parent_info(&parent_pool, &parent_name, &parent_snapname) == 0) &&
       parent_name.length() > 0) {
     if (f) {
-      f->dump_string("parent", parent_pool + "/" + parent_name);
-      f->dump_string("overlap", stringify(prettybyte_t(overlap)));
+      f->open_object_section("parent");
+      f->dump_string("pool", parent_pool);
+      f->dump_string("image", parent_name);
+      f->dump_string("snapshot", parent_snapname);
+      f->dump_unsigned("overlap", overlap);
+      f->close_section();
     } else {
       cout << "\tparent: " << parent_pool << "/" << parent_name
 	   << "@" << parent_snapname << std::endl;
@@ -499,8 +534,8 @@ static int do_show_info(const char *imgname, librbd::Image& image,
   // striping info, if feature is set
   if (features & RBD_FEATURE_STRIPINGV2) {
     if (f) {
-      f->dump_string("stripe_unit", stringify(prettybyte_t(image.get_stripe_unit())));
-      f->dump_string("stripe_count", stringify(image.get_stripe_count()));
+      f->dump_unsigned("stripe_unit", image.get_stripe_unit());
+      f->dump_unsigned("stripe_count", image.get_stripe_count());
     } else {
       cout << "\tstripe unit: " << prettybyte_t(image.get_stripe_unit())
 	   << std::endl
@@ -541,23 +576,18 @@ static int do_resize(librbd::Image& image, uint64_t size)
   return 0;
 }
 
-static int do_list_snaps(librbd::Image& image, const char *output_format)
+static int do_list_snaps(librbd::Image& image, Formatter *f)
 {
   std::vector<librbd::snap_info_t> snaps;
-  Formatter *f = 0;
   TextTable t;
   int r;
-
-  r = get_outfmt(output_format, &f);
-  if (r < 0)
-    return r;
 
   r = image.snap_list(snaps);
   if (r < 0 || snaps.empty())
     return r;
 
   if (f) {
-    f->open_object_section("snaps");
+    f->open_array_section("snapshots");
   } else {
     t.define_column("SNAPID", TextTable::RIGHT, TextTable::RIGHT);
     t.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
@@ -567,9 +597,10 @@ static int do_list_snaps(librbd::Image& image, const char *output_format)
   for (std::vector<librbd::snap_info_t>::iterator s = snaps.begin();
        s != snaps.end(); ++s) {
     if (f) {
-      f->open_object_section(stringify(s->id).c_str());
+      f->open_object_section("snapshot");
+      f->dump_unsigned("id", s->id);
       f->dump_string("name", s->name);
-      f->dump_string("size", stringify(prettybyte_t(s->size)));
+      f->dump_unsigned("size", s->size);
       f->close_section();
     } else {
       t << s->id << s->name << stringify(prettybyte_t(s->size))
@@ -658,15 +689,10 @@ static int do_unprotect_snap(librbd::Image& image, const char *snapname)
   return 0;
 }
 
-static int do_list_children(librbd::Image &image, const char *output_format)
+static int do_list_children(librbd::Image &image, Formatter *f)
 {
   set<pair<string, string> > children;
-  Formatter *f = 0;
   int r;
-
-  r = get_outfmt(output_format, &f);
-  if (r < 0)
-    return r;
 
   r = image.list_children(&children);
   if (r < 0)
@@ -677,10 +703,14 @@ static int do_list_children(librbd::Image &image, const char *output_format)
 
   for (set<pair<string, string> >::const_iterator child_it = children.begin();
        child_it != children.end(); child_it++) {
-    if (f)
-      f->dump_string("child", child_it->first + "/" + child_it->second);
-    else
+    if (f) {
+      f->open_object_section("child");
+      f->dump_string("pool", child_it->first);
+      f->dump_string("image", child_it->second);
+      f->close_section();
+    } else {
       cout << child_it->first << "/" << child_it->second << std::endl;
+    }
   }
 
   if (f) {
@@ -691,18 +721,13 @@ static int do_list_children(librbd::Image &image, const char *output_format)
   return 0;
 }
 
-static int do_lock_list(librbd::Image& image, const char *output_format)
+static int do_lock_list(librbd::Image& image, Formatter *f)
 {
   list<librbd::locker_t> lockers;
   bool exclusive;
   string tag;
-  Formatter *f = 0;
   TextTable tbl;
   int r;
-
-  r = get_outfmt(output_format, &f);
-  if (r < 0)
-    return r;
 
   r = image.list_lockers(&lockers, &exclusive, &tag);
   if (r < 0)
@@ -1432,16 +1457,11 @@ void do_closedir(DIR *dp)
     closedir(dp);
 }
 
-static int do_kernel_showmapped(const char *output_format)
+static int do_kernel_showmapped(Formatter *f)
 {
   int r;
   bool have_output = false;
-  Formatter *f = 0;
   TextTable tbl;
-
-  r = get_outfmt(output_format, &f);
-  if (r < 0)
-    return r;
 
   const char *devices_path = "/sys/bus/rbd/devices";
   std::tr1::shared_ptr<DIR> device_dir(opendir(devices_path), do_closedir);
@@ -1957,11 +1977,14 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     return EXIT_FAILURE;
   }
 
+  boost::scoped_ptr<Formatter> formatter;
   if (output_format_specified && opt_cmd != OPT_SHOWMAPPED &&
       opt_cmd != OPT_INFO && opt_cmd != OPT_LIST && opt_cmd != OPT_SNAP_LIST &&
       opt_cmd != OPT_LOCK_LIST && opt_cmd != OPT_CHILDREN) {
     cerr << "rbd: command doesn't use output formatting"
 	 << std::endl;
+    return EXIT_FAILURE;
+  } else if (get_outfmt(output_format, &formatter) < 0) {
     return EXIT_FAILURE;
   }
 
@@ -2159,7 +2182,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 
   switch (opt_cmd) {
   case OPT_LIST:
-    r = do_list(rbd, io_ctx, lflag, output_format);
+    r = do_list(rbd, io_ctx, lflag, formatter.get());
     if (r < 0) {
       switch (r) {
       case -ENOENT:
@@ -2225,7 +2248,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_INFO:
-    r = do_show_info(imgname, image, snapname, output_format);
+    r = do_show_info(imgname, image, snapname, formatter.get());
     if (r < 0) {
       cerr << "rbd: info: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
@@ -2266,7 +2289,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       cerr << "rbd: snap list requires an image parameter" << std::endl;
       return EXIT_FAILURE;
     }
-    r = do_list_snaps(image, output_format);
+    r = do_list_snaps(image, formatter.get());
     if (r < 0) {
       cerr << "rbd: failed to list snapshots: " << cpp_strerror(-r)
 	   << std::endl;
@@ -2355,7 +2378,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_CHILDREN:
-    r = do_list_children(image, output_format);
+    r = do_list_children(image, formatter.get());
     if (r < 0) {
       cerr << "rbd: listing children failed: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
@@ -2420,7 +2443,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_SHOWMAPPED:
-    r = do_kernel_showmapped(output_format);
+    r = do_kernel_showmapped(formatter.get());
     if (r < 0) {
       cerr << "rbd: showmapped failed: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
@@ -2428,7 +2451,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_LOCK_LIST:
-    r = do_lock_list(image, output_format);
+    r = do_lock_list(image, formatter.get());
     if (r < 0) {
       cerr << "rbd: listing locks failed: " << cpp_strerror(r) << std::endl;
       return EXIT_FAILURE;
