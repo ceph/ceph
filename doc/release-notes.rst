@@ -82,7 +82,6 @@ Please refer to the document Upgrading from Argonaut to Bobtail.
       done
 
 
-
 Compatibility changes
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -109,6 +108,16 @@ Compatibility changes
   = 1, so I/O would always be possible if any completely up to date
   copy remained. min_size = 1 could result in lower overall
   availability in certain cases, such as flapping network partitions.
+
+* The sysvinit start/stop script now defaults to adjusting the max
+  open files ulimit to 16384.  On most systems the default is 1024, so
+  this is an increase and won't break anything.  If some system has a
+  higher initial value, however, this change will lower the limit.
+  The value can be adjusted explicitly by adding an entry to the
+  ``ceph.conf`` file in the appropriate section.  For example::
+
+     [global]
+             max open files = 32768
 
 * 'rbd lock list' and 'rbd showmapped' no longer use tabs as
   separators in their output.
