@@ -181,7 +181,7 @@ private:
   set<int> quorum;       // current active set of monitors (if !starting)
   utime_t leader_since;  // when this monitor became the leader, if it is the leader
   utime_t exited_quorum; // time detected as not in quorum; 0 if in
-  unsigned quorum_features;  ///< intersection of quorum member feature bits
+  uint64_t quorum_features;  ///< intersection of quorum member feature bits
 
   set<string> outside_quorum;
   entity_inst_t slurp_source;
@@ -233,7 +233,7 @@ public:
       q.insert(monmap->get_name(*p));
     return q;
   }
-  unsigned get_quorum_features() const {
+  uint64_t get_quorum_features() const {
     return quorum_features;
   }
 

@@ -773,7 +773,7 @@ void Client::insert_readdir_results(MetaRequest *request, int mds, Inode *diri) 
 
   MClientReply *reply = request->reply;
   Connection *con = request->reply->get_connection();
-  int features = con->get_features();
+  uint64_t features = con->get_features();
 
   assert(request->readdir_result.empty());
 
@@ -907,7 +907,7 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
   }
 
   Connection *con = request->reply->get_connection();
-  int features = con->get_features();
+  uint64_t features = con->get_features();
   ldout(cct, 10) << " features 0x" << hex << features << dec << dendl;
 
   // snap trace
