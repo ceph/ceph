@@ -595,7 +595,7 @@ int Pipe::accept()
   if (policy.lossy)
     reply.flags = reply.flags | CEPH_MSG_CONNECT_LOSSY;
 
-  connection_state->set_features((int)reply.features & (int)connect.features);
+  connection_state->set_features((uint64_t)reply.features & (uint64_t)connect.features);
   ldout(msgr->cct,10) << "accept features " << connection_state->get_features() << dendl;
 
   delete session_security;
