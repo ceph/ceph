@@ -646,7 +646,7 @@ int CephFuse::Handle::init(int argc, const char *argv[])
     goto done;
   }
 
-  se = fuse_lowlevel_new(&args, &ceph_ll_oper, sizeof(ceph_ll_oper), NULL);
+  se = fuse_lowlevel_new(&args, &ceph_ll_oper, sizeof(ceph_ll_oper), this);
   if (!se) {
     derr << "fuse_lowlevel_new failed" << dendl;
     ret = EDOM;
