@@ -130,19 +130,4 @@ public class CephUnmountedTest {
   public void test_get_repl() throws Exception {
     mount.get_file_replication(0);
   }
-
-  @Test(expected=CephNotMountedException.class)
-  public void test_set_def_stripe_unit() throws Exception {
-    mount.set_default_file_stripe_unit(1);
-  }
-
-  @Test(expected=CephNotMountedException.class)
-  public void test_set_def_stripe_count() throws Exception {
-    mount.set_default_file_stripe_count(1);
-  }
-
-  @Test(expected=CephNotMountedException.class)
-  public void test_set_def_obj_size() throws Exception {
-    mount.set_default_object_size(1);
-  }
 }
