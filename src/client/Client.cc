@@ -7169,6 +7169,8 @@ int Client::ll_create(vinodeno_t parent, const char *name, mode_t mode, int flag
   tout(cct) << mode << std::endl;
   tout(cct) << flags << std::endl;
 
+  *fhp = NULL;
+
   bool created = false;
   Inode *in = NULL;
   Inode *dir = _ll_get_inode(parent);
@@ -7199,9 +7201,11 @@ int Client::ll_create(vinodeno_t parent, const char *name, mode_t mode, int flag
     if (r < 0)
       goto out;
 
-    r = _open(in, flags, mode, fhp);
-    if (r < 0)
-      goto out;
+    if (*fhp == NULL) {
+      r = _open(in, flags, mode, fhp);
+      if (r < 0)
+	goto out;
+    }
   }
 
 out:
