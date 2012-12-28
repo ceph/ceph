@@ -836,6 +836,13 @@ public:
     map<int,ScrubMap> received_maps;
     MOSDRepScrub *active_rep_scrub;
 
+    // Maps from objects with erros to missing/inconsistent peers
+    map<hobject_t, set<int> > missing;
+    map<hobject_t, set<int> > inconsistent;
+
+    // Map from object with errors to good peer
+    map<hobject_t, pair<ScrubMap::object, int> > authoritative;
+
     // classic scrub
     bool finalizing;
 
@@ -928,6 +935,9 @@ public:
       fixed = 0;
       deep = false;
       run_callbacks();
+      inconsistent.clear();
+      missing.clear();
+      authoritative.clear();
     }
 
   } scrubber;
@@ -947,6 +957,7 @@ public:
   void classic_scrub();
   void chunky_scrub();
   void scrub_compare_maps();
+  void scrub_process_inconsistent();
   void scrub_finalize();
   void scrub_finish();
   void scrub_clear_state();
@@ -1355,7 +1366,6 @@ public:
       void exit();
 
       const set<int> sorted_acting_set;
-      set<int>::const_iterator acting_osd_it;
       bool all_replicas_activated;
 
       typedef boost::mpl::list <
@@ -1508,10 +1518,12 @@ public:
 
     struct WaitRemoteRecoveryReserved : boost::statechart::state< WaitRemoteRecoveryReserved, Active >, NamedState {
       typedef boost::mpl::list <
-	boost::statechart::transition< RemoteRecoveryReserved, WaitRemoteRecoveryReserved >,
+	boost::statechart::custom_reaction< RemoteRecoveryReserved >,
 	boost::statechart::transition< AllRemotesReserved, Recovering >
 	> reactions;
+      set<int>::const_iterator acting_osd_it;
       WaitRemoteRecoveryReserved(my_context ctx);
+      boost::statechart::result react(const RemoteRecoveryReserved &evt);
       void exit();
     };
 

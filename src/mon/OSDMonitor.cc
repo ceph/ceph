@@ -778,9 +778,6 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
   dout(1) << "prepare_failure " << m->get_target() << " from " << m->get_orig_source_inst()
           << " is reporting failure:" << m->if_osd_failed() << dendl;
 
-  mon->clog.debug() << m->get_target() << " reported failed by "
-		    << m->get_orig_source_inst() << "\n";
-  
   int target_osd = m->get_target().name.num();
   int reporter = m->get_orig_source().num();
   assert(osdmap.is_up(target_osd));
@@ -792,6 +789,8 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
   
   if (m->if_osd_failed()) {
     // add a report
+    mon->clog.debug() << m->get_target() << " reported failed by "
+		      << m->get_orig_source_inst() << "\n";
     failure_info_t& fi = failure_info[target_osd];
     MOSDFailure *old = fi.add_report(reporter, failed_since, m);
     if (old)
@@ -800,6 +799,8 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
     return check_failure(now, target_osd, fi);
   } else {
     // remove the report
+    mon->clog.debug() << m->get_target() << " failure report canceled by "
+		      << m->get_orig_source_inst() << "\n";
     if (failure_info.count(target_osd)) {
       failure_info_t& fi = failure_info[target_osd];
       fi.cancel_report(reporter);
