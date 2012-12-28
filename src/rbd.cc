@@ -128,7 +128,8 @@ void usage()
 "  --image-format <format-number>     format to use when creating an image\n"
 "                                     format 1 is the original format (default)\n"
 "                                     format 2 supports cloning\n"
-"  --id <username>                    rados user (without 'client.' prefix) to authenticate as\n"
+"  --id <username>                    rados user (without 'client.'prefix) to\n"
+"                                     authenticate as\n"
 "  --keyfile <path>                   file containing secret key for use with cephx\n"
 "  --shared <tag>                     take a shared (rather than exclusive) lock\n"
 "  --format <output-format>           output format (default: plain, json, xml)\n";
@@ -170,7 +171,8 @@ struct MyProgressContext : public librbd::ProgressContext {
     cout << "\r" << operation << ": 100% complete...done." << std::endl;
   }
   void fail() {
-    cout << "\r" << operation << ": " << last_pc << "% complete...failed." << std::endl;
+    cout << "\r" << operation << ": " << last_pc << "% complete...failed."
+	 << std::endl;
   }
 };
 
@@ -188,7 +190,8 @@ static int get_outfmt(const char *output_format, Formatter **f)
   return 0;
 }
 
-static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag, const char *output_format)
+static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
+		   const char *output_format)
 {
   std::vector<string> names;
   int r = rbd.list(io_ctx, names);
@@ -349,7 +352,8 @@ static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     // weird striping not allowed with format 1!
     if ((stripe_unit || stripe_count) &&
 	(stripe_unit != (1ull << *order) && stripe_count != 1)) {
-      cerr << "non-default striping not allowed with format 1; use --format 2" << std::endl;
+      cerr << "non-default striping not allowed with format 1; use --format 2"
+	   << std::endl;
       return -EINVAL;
     }
     r = rbd.create(io_ctx, imgname, size, order);
@@ -359,7 +363,8 @@ static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     }
     if (stripe_unit != (1ull << *order) && stripe_count != 1)
       features |= RBD_FEATURE_STRIPINGV2;
-    r = rbd.create3(io_ctx, imgname, size, features, order, stripe_unit, stripe_count);
+    r = rbd.create3(io_ctx, imgname, size, features, order,
+		    stripe_unit, stripe_count);
   }
   if (r < 0)
     return r;
@@ -497,7 +502,8 @@ static int do_show_info(const char *imgname, librbd::Image& image,
       f->dump_string("stripe_unit", stringify(prettybyte_t(image.get_stripe_unit())));
       f->dump_string("stripe_count", stringify(image.get_stripe_count()));
     } else {
-      cout << "\tstripe unit: " << prettybyte_t(image.get_stripe_unit()) << std::endl
+      cout << "\tstripe unit: " << prettybyte_t(image.get_stripe_unit())
+	   << std::endl
 	   << "\tstripe count: " << image.get_stripe_count() << std::endl;
     }
   }
@@ -510,7 +516,8 @@ static int do_show_info(const char *imgname, librbd::Image& image,
   return 0;
 }
 
-static int do_delete(librbd::RBD &rbd, librados::IoCtx& io_ctx, const char *imgname)
+static int do_delete(librbd::RBD &rbd, librados::IoCtx& io_ctx,
+		     const char *imgname)
 {
   MyProgressContext pc("Removing image");
   int r = rbd.remove_with_progress(io_ctx, imgname, pc);
@@ -545,7 +552,7 @@ static int do_list_snaps(librbd::Image& image, const char *output_format)
   if (r < 0)
     return r;
 
-  r  = image.snap_list(snaps);
+  r = image.snap_list(snaps);
   if (r < 0 || snaps.empty())
     return r;
 
@@ -778,7 +785,8 @@ struct rbd_bencher {
     if (in_flight >= max)
       return false;
     in_flight++;
-    librbd::RBD::AioCompletion *c = new librbd::RBD::AioCompletion((void *)this, rbd_bencher_completion);
+    librbd::RBD::AioCompletion *c =
+      new librbd::RBD::AioCompletion((void *)this, rbd_bencher_completion);
     image->aio_write(off, len, bl, c);
     //cout << "start " << c << " at " << off << "~" << len << std::endl;
     return true;
@@ -807,7 +815,8 @@ void rbd_bencher_completion(void *vc, void *pc)
   c->release();
 }
 
-static int do_bench_write(librbd::Image& image, uint64_t io_size, uint64_t io_threads, uint64_t io_bytes)
+static int do_bench_write(librbd::Image& image, uint64_t io_size,
+			  uint64_t io_threads, uint64_t io_bytes)
 {
   rbd_bencher b(&image);
 
@@ -836,7 +845,9 @@ static int do_bench_write(librbd::Image& image, uint64_t io_size, uint64_t io_th
     utime_t now = ceph_clock_now(NULL);
     utime_t elapsed = now - start;
     if (elapsed.sec() != last.sec()) {
-      printf("%5d  %8d  %8.2lf  %8.2lf\n", (int)elapsed, (int)(ios - io_threads),
+      printf("%5d  %8d  %8.2lf  %8.2lf\n",
+	     (int)elapsed,
+	     (int)(ios - io_threads),
 	     (double)(ios - io_threads) / elapsed,
 	     (double)(off - io_threads * io_size) / elapsed);
       last = elapsed;
@@ -847,9 +858,8 @@ static int do_bench_write(librbd::Image& image, uint64_t io_size, uint64_t io_th
   utime_t now = ceph_clock_now(NULL);
   double elapsed = now - start;
 
-  printf("elapsed: %5d  ops: %8d  ops/sec: %8.2lf  bytes/sec: %8.2lf\n", (int)elapsed, ios,
-	     (double)ios / elapsed,
-	     (double)off / elapsed);
+  printf("elapsed: %5d  ops: %8d  ops/sec: %8.2lf  bytes/sec: %8.2lf\n",
+	 (int)elapsed, ios, (double)ios / elapsed, (double)off / elapsed);
 
   return 0;
 }
@@ -859,7 +869,8 @@ struct ExportContext {
   uint64_t totalsize;
   MyProgressContext pc;
 
-  ExportContext(int f, uint64_t t) : fd(f), totalsize(t), pc("Exporting image") {}
+  ExportContext(int f, uint64_t t) : fd(f), totalsize(t), pc("Exporting image")
+  {}
 };
 
 static int export_read_cb(uint64_t ofs, size_t len, const char *buf, void *arg)
@@ -1063,7 +1074,8 @@ static int do_import_from_stdin(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     if (!bl.is_zero()) {
       r = image.write(image_pos, blklen, bl);
       if (r < 0) {
-	cerr << "rbd: error writing to image block" << cpp_strerror(r) << std::endl;
+	cerr << "rbd: error writing to image block" << cpp_strerror(r)
+	     << std::endl;
 	return r;
       }
     }
@@ -1143,7 +1155,8 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     return r;
   }
 
-  fsync(fd); /* flush it first, otherwise extents information might not have been flushed yet */
+  // flush it first, otherwise extents may not be allocated or readable
+  fsync(fd);
   fiemap = read_fiemap(fd);
   if (fiemap && !fiemap->fm_mapped_extents) {
     cerr << "rbd: empty fiemap!" << std::endl;
@@ -1151,7 +1164,8 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     fiemap = NULL;
   }
   if (!fiemap) {
-    fiemap = (struct fiemap *)malloc(sizeof(struct fiemap) +  sizeof(struct fiemap_extent));
+    size_t fiemap_size = sizeof(struct fiemap) + sizeof(struct fiemap_extent);
+    fiemap = (struct fiemap *)malloc(fiemap_size);
     if (!fiemap) {
       cerr << "rbd: failed to allocate fiemap, not enough memory." << std::endl;
       close(fd);
@@ -1175,7 +1189,8 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     size_t extent_len = 0;
     size_t read_len = 1ULL << *order;
 
-    file_pos = fiemap->fm_extents[extent].fe_logical; /* position within the file we're reading */
+    /* position within the file we're reading */
+    file_pos = fiemap->fm_extents[extent].fe_logical;
 
     do { /* try to merge consecutive extents */
 #define LARGE_ENOUGH_EXTENT (32 * 1024 * 1024)
@@ -1183,7 +1198,8 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
           extent_len + fiemap->fm_extents[extent].fe_length > LARGE_ENOUGH_EXTENT)
         break; /* don't try to merge if we're big enough */
 
-      extent_len += fiemap->fm_extents[extent].fe_length;  /* length of current extent */
+      /* length of current extent */
+      extent_len += fiemap->fm_extents[extent].fe_length;
       end_ofs = MIN((off_t)size, file_pos + (off_t)extent_len);
 
       extent++;
@@ -1216,7 +1232,8 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
         }
         bufferlist bl;
         bl.append(p);
-        librbd::RBD::AioCompletion *completion = new librbd::RBD::AioCompletion(NULL, NULL);
+        librbd::RBD::AioCompletion *completion =
+	  new librbd::RBD::AioCompletion(NULL, NULL);
         if (!completion) {
           r = -ENOMEM;
           goto done;
@@ -1269,7 +1286,8 @@ public:
   RbdWatchCtx(const char *imgname) : name(imgname) {}
   virtual ~RbdWatchCtx() {}
   virtual void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) {
-    cout << name << " got notification opcode=" << (int)opcode << " ver=" << ver << " bl.length=" << bl.length() << std::endl;
+    cout << name << " got notification opcode=" << (int)opcode << " ver="
+	 << ver << " bl.length=" << bl.length() << std::endl;
   }
 };
 
@@ -1306,7 +1324,8 @@ static int do_watch(librados::IoCtx& pp, const char *imgname)
   return 0;
 }
 
-static int do_kernel_add(const char *poolname, const char *imgname, const char *snapname)
+static int do_kernel_add(const char *poolname, const char *imgname,
+			 const char *snapname)
 {
   MonMap monmap;
   int r = monmap.build_initial(g_ceph_context, cerr);
@@ -1370,7 +1389,8 @@ static int do_kernel_add(const char *poolname, const char *imgname, const char *
     r = -errno;
     if (r == -ENOENT) {
       cerr << "rbd: /sys/bus/rbd/add does not exist!" << std::endl
-	   << "Did you run 'modprobe rbd' or is your rbd module too old?" << std::endl;
+	   << "Did you run 'modprobe rbd' or is your rbd module too old?"
+	   << std::endl;
     }
     return r;
   }
@@ -1824,8 +1844,8 @@ int main(int argc, const char **argv)
       if (err.empty()) {
 	format = ret;
 	format_specified = true;
-	cerr << "rbd: using --format for specifying the rbd image format is deprecated,"
-	     << " use --image-format instead"
+	cerr << "rbd: using --format for specifying the rbd image format is"
+	     << " deprecated, use --image-format instead"
 	     << std::endl;
       } else {
 	output_format = strdup(val.c_str());
@@ -1937,9 +1957,9 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     return EXIT_FAILURE;
   }
 
-  if (output_format_specified && opt_cmd != OPT_SHOWMAPPED && opt_cmd != OPT_INFO &&
-      opt_cmd != OPT_LIST && opt_cmd != OPT_SNAP_LIST && opt_cmd != OPT_LOCK_LIST &&
-      opt_cmd != OPT_CHILDREN) {
+  if (output_format_specified && opt_cmd != OPT_SHOWMAPPED &&
+      opt_cmd != OPT_INFO && opt_cmd != OPT_LIST && opt_cmd != OPT_SNAP_LIST &&
+      opt_cmd != OPT_LOCK_LIST && opt_cmd != OPT_CHILDREN) {
     cerr << "rbd: command doesn't use output formatting"
 	 << std::endl;
     return EXIT_FAILURE;
@@ -1981,8 +2001,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     return EXIT_FAILURE;
   }
 
-  if (opt_cmd != OPT_LIST && opt_cmd != OPT_IMPORT && opt_cmd != OPT_UNMAP && opt_cmd != OPT_SHOWMAPPED &&
-      !imgname) {
+  if (opt_cmd != OPT_LIST && opt_cmd != OPT_IMPORT && opt_cmd != OPT_UNMAP &&
+      opt_cmd != OPT_SHOWMAPPED && !imgname) {
     cerr << "rbd: image name was not specified" << std::endl;
     return EXIT_FAILURE;
   }
@@ -2014,7 +2034,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     return EXIT_FAILURE;
   }
 
-  set_pool_image_name(dest_poolname, destname, (char **)&dest_poolname, (char **)&destname, (char **)&dest_snapname);
+  set_pool_image_name(dest_poolname, destname, (char **)&dest_poolname,
+		      (char **)&destname, (char **)&dest_snapname);
 
   if (opt_cmd == OPT_IMPORT) {
     if (poolname && dest_poolname) {
@@ -2159,11 +2180,13 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       return EXIT_FAILURE;
     }
     if ((stripe_unit && !stripe_count) || (!stripe_unit && stripe_count)) {
-      cerr << "must specify both (or neither) of stripe-unit and stripe-count" << std::endl;
+      cerr << "must specify both (or neither) of stripe-unit and stripe-count"
+	   << std::endl;
       usage();
       return EXIT_FAILURE;
     }
-    r = do_create(rbd, io_ctx, imgname, size, &order, format, features, stripe_unit, stripe_count);
+    r = do_create(rbd, io_ctx, imgname, size, &order, format, features,
+		  stripe_unit, stripe_count);
     if (r < 0) {
       cerr << "rbd: create error: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
