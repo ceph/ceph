@@ -51,7 +51,10 @@ Log::Log(SubsystemMap *s)
   ret = pthread_mutex_init(&m_queue_mutex, NULL);
   assert(ret == 0);
 
-  ret = pthread_cond_init(&m_cond, NULL);
+  ret = pthread_cond_init(&m_cond_loggers, NULL);
+  assert(ret == 0);
+
+  ret = pthread_cond_init(&m_cond_flusher, NULL);
   assert(ret == 0);
 
   // kludge for prealloc testing
@@ -73,7 +76,8 @@ Log::~Log()
   pthread_spin_destroy(&m_lock);
   pthread_mutex_destroy(&m_queue_mutex);
   pthread_mutex_destroy(&m_flush_mutex);
-  pthread_cond_destroy(&m_cond);
+  pthread_cond_destroy(&m_cond_loggers);
+  pthread_cond_destroy(&m_cond_flusher);
 }
 
 
@@ -139,10 +143,10 @@ void Log::submit_entry(Entry *e)
 
   // wait for flush to catch up
   while (m_new.m_len > m_max_new)
-    pthread_cond_wait(&m_cond, &m_queue_mutex);
+    pthread_cond_wait(&m_cond_loggers, &m_queue_mutex);
 
   m_new.enqueue(e);
-  pthread_cond_signal(&m_cond);
+  pthread_cond_signal(&m_cond_flusher);
   pthread_mutex_unlock(&m_queue_mutex);
 }
 
@@ -169,7 +173,7 @@ void Log::flush()
   pthread_mutex_lock(&m_queue_mutex);
   EntryQueue t;
   t.swap(m_new);
-  pthread_cond_signal(&m_cond);
+  pthread_cond_broadcast(&m_cond_loggers);
   pthread_mutex_unlock(&m_queue_mutex);
   _flush(&t, &m_recent, false);
 
@@ -299,7 +303,8 @@ void Log::stop()
   assert(is_started());
   pthread_mutex_lock(&m_queue_mutex);
   m_stop = true;
-  pthread_cond_signal(&m_cond);
+  pthread_cond_signal(&m_cond_flusher);
+  pthread_cond_broadcast(&m_cond_loggers);
   pthread_mutex_unlock(&m_queue_mutex);
   join();
 }
@@ -315,7 +320,7 @@ void *Log::entry()
       continue;
     }
 
-    pthread_cond_wait(&m_cond, &m_queue_mutex);
+    pthread_cond_wait(&m_cond_flusher, &m_queue_mutex);
   }
   pthread_mutex_unlock(&m_queue_mutex);
   flush();
