@@ -5843,7 +5843,8 @@ void ReplicatedPG::recover_got(hobject_t oid, eversion_t v)
     } else {
       dout(10) << "last_complete now " << info.last_complete
 	       << " log.complete_to at end" << dendl;
-      assert(missing.num_missing() == 0);  // otherwise, complete_to was wrong.
+      //below is not true in the repair case.
+      //assert(missing.num_missing() == 0);  // otherwise, complete_to was wrong.
       assert(info.last_complete == info.last_update);
     }
   }

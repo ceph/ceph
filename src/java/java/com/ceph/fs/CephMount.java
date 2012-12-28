@@ -655,39 +655,6 @@ public class CephMount {
   private static synchronized native int native_ceph_get_file_replication(long mountp, int fd);
 
   /**
-   * Set the default file stripe unit.
-   *
-   * @param stripe_unit The stripe unit.
-   */
-  public void set_default_file_stripe_unit(int stripe_unit) {
-    native_ceph_set_default_file_stripe_unit(instance_ptr, stripe_unit);
-  }
-
-  private static synchronized native int native_ceph_set_default_file_stripe_unit(long mountp, int stripe_unit);
-
-  /**
-   * Set the default file stripe count.
-   *
-   * @param stripe_count The stripe count.
-   */
-  public void set_default_file_stripe_count(int stripe_count) {
-    native_ceph_set_default_file_stripe_count(instance_ptr, stripe_count);
-  }
-
-  private static synchronized native int native_ceph_set_default_file_stripe_count(long mountp, int stripe_count);
-
-  /**
-   * Set the default object size.
-   *
-   * @param object_size The object size.
-   */
-  public void set_default_object_size(int object_size) {
-    native_ceph_set_default_object_size(instance_ptr, object_size);
-  }
-
-  private static synchronized native int native_ceph_set_default_object_size(long mountp, int object_size);
-
-  /**
    * Favor reading from local replicas when possible.
    *
    * @param state Enable or disable localized reads.

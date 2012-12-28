@@ -826,19 +826,4 @@ public class CephMountTest {
     mount.unlink(path);
   }
 
-  @Test
-  public void test_set_def_obj_size() throws Exception {
-    mount.set_default_object_size(1 << 21);
-  }
-
-  @Test
-  public void test_set_def_file_stripe_count() throws Exception {
-    mount.set_default_file_stripe_count(2);
-  }
-
-  @Test
-  public void test_set_def_file_stripe_unit() throws Exception {
-    mount.set_default_file_stripe_unit(1 << 10);
-  }
-
 }

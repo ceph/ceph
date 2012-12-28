@@ -2054,8 +2054,10 @@ void OSD::handle_osd_ping(MOSDPing *m)
       // Cancel false reports
       if (failure_queue.count(from))
 	failure_queue.erase(from);
-      if (failure_pending.count(from))
+      if (failure_pending.count(from)) {
 	send_still_alive(curmap->get_epoch(), failure_pending[from]);
+	failure_pending.erase(from);
+      }
     }
     break;
 
@@ -3513,7 +3515,7 @@ void OSD::handle_scrub(MOSDScrub *m)
 	if (pg->is_primary()) {
 	  if (m->repair)
 	    pg->state_set(PG_STATE_REPAIR);
-	  if (m->deep)
+	  if (m->deep || m->repair)
 	    pg->state_set(PG_STATE_DEEP_SCRUB);
 	  if (pg->queue_scrub()) {
 	    dout(10) << "queueing " << *pg << " for scrub" << dendl;

@@ -129,7 +129,8 @@ int MonClient::get_monmap_privately()
     if (--attempt == 0)
       break;
     
-    utime_t interval(1, 0);
+    utime_t interval;
+    interval.set_from_double(cct->_conf->mon_client_hunt_interval);
     map_cond.WaitInterval(cct, monc_lock, interval);
 
     if (monmap.fsid.is_zero()) {
