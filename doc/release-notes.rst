@@ -57,6 +57,18 @@ Please refer to the document Upgrading from Argonaut to Bobtail.
   participate in the new protocol).  We recommend not waiting for an
   extended period of time between ``ceph-mon`` upgrades.
 
+* The ops log and usage log for radosgw are now off by default.  If
+  you need these logs (e.g., for billing purposes), you must enable
+  them explicitly.  For logging of all operations to objects in the
+  ``.log`` pool (see ``radosgw-admin log ...``)::
+
+    rgw enable ops log = true
+
+  For usage logging of aggregated bandwidth usage (see ``radosgw-admin
+  usage ...``)::
+
+    rgw enable usage log = true
+
 * You should not create or use "format 2" RBD images until after all
   ``ceph-osd`` daemons have been upgraded.  Note that "format 1" is
   still the default.  You can use the new ``ceph osd ls`` and
