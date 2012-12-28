@@ -92,7 +92,7 @@ script, then rsyncs the results back tot the specified release directory.::
 Copy the rpms to the destination repo, creates the yum repository
 rpm and indexes.::
 
-   ../ceph-build/push_to_rpm_repo.sh /tmp/release /tmp/rpm-repo .xx
+   ../ceph-build/push_to_rpm_repo.sh /tmp/release /tmp/rpm-repo 0.xx
 
 8. Create debian repo
 =====================
