@@ -340,8 +340,8 @@ for name in $what; do
 	status)
 	    if daemon_is_running $name ceph-$type $id $pid_file; then
 		get_conf asok "/var/run/ceph/ceph-$type.$id.asok" "admin socket"
-		version=`do_cmd "$BINDIR/ceph --admin-daemon $asok version 2>/dev/null" || echo unknown`
-                echo "$name: running $version"
+		echo -n "$name: running "
+		do_cmd "$BINDIR/ceph --admin-daemon $asok version 2>/dev/null" || echo unknown
             elif [ -e "$pid_file" ]; then
                 # daemon is dead, but pid file still exists
                 echo "$name: dead."
