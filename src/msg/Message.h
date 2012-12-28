@@ -158,7 +158,7 @@ struct Connection : public RefCountedObject {
   RefCountedObject *priv;
   int peer_type;
   entity_addr_t peer_addr;
-  unsigned features;
+  uint64_t features;
   RefCountedObject *pipe;
   bool failed;              /// true if we are a lossy connection that has failed.
 
@@ -250,10 +250,10 @@ public:
   const entity_addr_t& get_peer_addr() { return peer_addr; }
   void set_peer_addr(const entity_addr_t& a) { peer_addr = a; }
 
-  int get_features() const { return features; }
-  bool has_feature(int f) const { return features & f; }
-  void set_features(unsigned f) { features = f; }
-  void set_feature(unsigned f) { features |= f; }
+  uint64_t get_features() const { return features; }
+  bool has_feature(uint64_t f) const { return features & f; }
+  void set_features(uint64_t f) { features = f; }
+  void set_feature(uint64_t f) { features |= f; }
 
   void post_rx_buffer(tid_t tid, bufferlist& bl) {
     Mutex::Locker l(lock);

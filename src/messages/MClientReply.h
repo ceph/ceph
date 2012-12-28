@@ -124,11 +124,11 @@ struct InodeStat {
 
  public:
   InodeStat() {}
-  InodeStat(bufferlist::iterator& p, int features) {
+  InodeStat(bufferlist::iterator& p, uint64_t features) {
     decode(p, features);
   }
 
-  void decode(bufferlist::iterator &p, int features) {
+  void decode(bufferlist::iterator &p, uint64_t features) {
     struct ceph_mds_reply_inode e;
     ::decode(e, p);
     vino.ino = inodeno_t(e.ino);
