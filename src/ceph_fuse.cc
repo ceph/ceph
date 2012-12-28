@@ -166,6 +166,8 @@ int main(int argc, const char **argv, const char *envp[]) {
     client->unmount();
     //cout << "unmounted" << std::endl;
 
+    cfuse.finalize();
+
   out_shutdown:
     client->shutdown();
   out_init_failed:

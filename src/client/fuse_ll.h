@@ -18,6 +18,7 @@ public:
   ~CephFuse();
   int init(int argc, const char *argv[]);
   int loop();
+  void finalize();
   class Handle;
 private:
   CephFuse::Handle *_handle;
