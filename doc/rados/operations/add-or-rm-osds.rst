@@ -286,7 +286,7 @@ After you take an OSD out of the cluster, it may still be running.
 That is, the OSD may be ``up`` and ``out``. You must stop 
 your OSD before you remove it from the configuration. :: 
 
-	ssh {new-osd-host}
+	ssh {osd-host}
 	sudo /etc/init.d/ceph stop osd.{osd-num}
 
 Once you stop your OSD, it is ``down``. 
