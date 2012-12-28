@@ -24,7 +24,8 @@ class Log : private Thread
   pthread_spinlock_t m_lock;
   pthread_mutex_t m_queue_mutex;
   pthread_mutex_t m_flush_mutex;
-  pthread_cond_t m_cond;
+  pthread_cond_t m_cond_loggers;
+  pthread_cond_t m_cond_flusher;
 
   EntryQueue m_new;    ///< new entries
   EntryQueue m_recent; ///< recent (less new) entries we've already written at low detail
