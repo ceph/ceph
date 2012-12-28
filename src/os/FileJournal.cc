@@ -1147,8 +1147,10 @@ void FileJournal::write_thread_entry()
     }
     assert(r == 0);
 
-    logger->inc(l_os_j_wr);
-    logger->inc(l_os_j_wr_bytes, bl.length());
+    if (logger) {
+      logger->inc(l_os_j_wr);
+      logger->inc(l_os_j_wr_bytes, bl.length());
+    }
 
 #ifdef HAVE_LIBAIO
     if (aio)
