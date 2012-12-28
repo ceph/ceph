@@ -32,23 +32,30 @@ The release key should be present::
 3. Set up build area
 ====================
 
-Checkout ceph and ceph-build::
+Clone the ceph and ceph-build source trees::
 
     git clone http://github.com/ceph/ceph.git
     git clone http://github.com/ceph/ceph-build.git
 
-Checkout next branch::
+In the ceph source directory, checkout next branch (for point releases use the testing branch)::
 
     git checkout next
 
-Checkout the submodules (only needed to prevent errors in recursive make)::
+Checkout the submodules::
 
     git submodule update --init
 
 4.  Update Build version numbers
 ================================
 
-Edit configure.ac and change version number::
+Substitute the ceph release number where indicated below by the string 0.xx::
+
+Edit configure.ac and update the version number. Example diff::
+
+    -AC_INIT([ceph], [0.54], [ceph-devel@vger.kernel.org])
+    +AC_INIT([ceph], [0.55], [ceph-devel@vger.kernel.org])
+ 
+Update the version number in the debian change log::
 
     DEBEMAIL user@host dch -v 0.xx-1
 
@@ -85,30 +92,34 @@ script, then rsyncs the results back tot the specified release directory.::
 Copy the rpms to the destination repo, creates the yum repository
 rpm and indexes.::
 
-   ../ceph-build/push_to_rpm_repo.sh /tmp/release /tmp/repo 0.xx
+   ../ceph-build/push_to_rpm_repo.sh /tmp/release /tmp/rpm-repo 0.xx
 
 8. Create debian repo
 =====================
 
-::
+The key-id used below is the id of the ceph release key from step 2::
 
     mkdir /tmp/debian-repo
-    mkdir /tmp/debian-repo/conf
-    ../ceph-build/gen_reprepro_conf.sh debian-testing main \
-		 `cat ceph-build/deb_dists`
-    ../ceph-build/push_to_deb_repo.sh /tmp/release /tmp/debian-repo main
+    ../ceph-build/gen_reprepro_conf.sh /tmp/debian-repo key-id
+    ../ceph-build/push_to_deb_repo.sh /tmp/release /tmp/debian-repo 0.xx main
 
 9.  Push repos to ceph.org
 ==========================
 
 For a development release::
 
-    rsync -av /tmp/repo/0.52/ ceph_site@ceph.com:ceph.com/rpm-testing
+    rcp ceph-0.xx.tar.bz2 ceph-0.xx.tar.gz \
+        ceph_site@ceph.com:ceph.com/downloads/.
+    rsync -av /tmp/repm-repo/0.xx/ ceph_site@ceph.com:ceph.com/rpm-testing
     rsync -av /tmp/debian-repo/ ceph_site@ceph.com:ceph.com/debian-testing
 
 For a stable release, replace {CODENAME} with the release codename (e.g., ``argonaut`` or ``bobtail``)::
 
-    rsync -av /tmp/repo/0.52/ ceph_site@ceph.com:ceph.com/rpm-{CODENAME}
+    rcp ceph-0.xx.tar.bz2 \
+        ceph_site@ceph.com:ceph.com/downloads/ceph-0.xx{CODENAME}.tar.bz2
+    rcp ceph-0.xx.tar.gz  \
+        ceph_site@ceph.com:ceph.com/downloads/ceph-0.xx{CODENAME}.tar.gz
+    rsync -av /tmp/rpm-repo/0.xx/ ceph_site@ceph.com:ceph.com/rpm-{CODENAME}
     rsync -auv /tmp/debian-repo/ ceph_site@ceph.com:ceph.com/debian-{CODENAME}
 
 10. Update Git
@@ -119,6 +130,7 @@ Development release
 
 For a development release, update tags for ``ceph.git``::
 
+    git push origin v0.xx
     git push origin HEAD:testing
     git checkout master
     git merge next
@@ -139,3 +151,12 @@ Stable release
 For ``ceph.git``:
 
     git push origin stable
+
+Point release
+-------------
+
+Just push the new tag:
+
+    git push origin v0.xx
+
+
