@@ -2066,12 +2066,6 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
     // wire up a Session* to this connection, and add it to the session map
     entity_name_t n(con->get_peer_type(), global_id);
     Session *s = sessionmap.get_session(n);
-    if (s && s->is_closed()) {
-      dout(10) << " have session " << s << " but it is CLOSED, removing" << dendl;
-      con->set_priv(NULL);
-      s->put();
-      s = NULL;
-    }
     if (!s) {
       s = new Session;
       s->inst.addr = con->get_peer_addr();
