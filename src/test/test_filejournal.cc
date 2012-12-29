@@ -70,8 +70,13 @@ int main(int argc, char **argv) {
 
   finisher = new Finisher(g_ceph_context);
   
-  srand(getpid()+time(0));
-  snprintf(path, sizeof(path), "/tmp/test_filejournal.tmp.%d", rand());
+  if (args.size()) {
+    strcpy(path, args[0]);
+  } else {
+    srand(getpid()+time(0));
+    snprintf(path, sizeof(path), "/tmp/test_filejournal.tmp.%d", rand());
+  }
+  cout << "path " << path << std::endl;
 
   ::testing::InitGoogleTest(&argc, argv);
 
