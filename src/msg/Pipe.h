@@ -142,6 +142,7 @@ class DispatchQueue;
     
     Mutex pipe_lock;
     int state;
+    atomic_t state_closed; // non-zero iff state = STATE_CLOSED
 
     // session_security handles any signatures or encryptions required for this pipe's msgs. PLR
 
