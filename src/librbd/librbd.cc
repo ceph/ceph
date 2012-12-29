@@ -90,9 +90,22 @@ namespace librbd {
   int RBD::open(IoCtx& io_ctx, Image& image, const char *name,
 		const char *snap_name)
   {
-    ImageCtx *ictx = new ImageCtx(name, "", snap_name, io_ctx);
+    ImageCtx *ictx = new ImageCtx(name, "", snap_name, io_ctx, false);
 
-    int r = librbd::open_image(ictx, true);
+    int r = librbd::open_image(ictx);
+    if (r < 0)
+      return r;
+
+    image.ctx = (image_ctx_t) ictx;
+    return 0;
+  }
+
+  int RBD::open_read_only(IoCtx& io_ctx, Image& image, const char *name,
+			  const char *snap_name)
+  {
+    ImageCtx *ictx = new ImageCtx(name, "", snap_name, io_ctx, true);
+
+    int r = librbd::open_image(ictx);
     if (r < 0)
       return r;
 
@@ -638,8 +651,21 @@ extern "C" int rbd_open(rados_ioctx_t p, const char *name, rbd_image_t *image,
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  librbd::ImageCtx *ictx = new librbd::ImageCtx(name, "", snap_name, io_ctx);
-  int r = librbd::open_image(ictx, true);
+  librbd::ImageCtx *ictx = new librbd::ImageCtx(name, "", snap_name, io_ctx,
+						false);
+  int r = librbd::open_image(ictx);
+  *image = (rbd_image_t)ictx;
+  return r;
+}
+
+extern "C" int rbd_open_read_only(rados_ioctx_t p, const char *name,
+				  rbd_image_t *image, const char *snap_name)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  librbd::ImageCtx *ictx = new librbd::ImageCtx(name, "", snap_name, io_ctx,
+						true);
+  int r = librbd::open_image(ictx);
   *image = (rbd_image_t)ictx;
   return r;
 }
@@ -648,7 +674,7 @@ extern "C" int rbd_close(rbd_image_t image)
 {
   librbd::ImageCtx *ctx = (librbd::ImageCtx *)image;
   librbd::close_image(ctx);
-  return 0; 
+  return 0;
 }
 
 extern "C" int rbd_resize(rbd_image_t image, uint64_t size)
