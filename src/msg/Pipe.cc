@@ -247,7 +247,7 @@ int Pipe::accept()
     return -1;
   }
 
-  ldout(msgr->cct,1) << "accept sd=" << sd << dendl;
+  ldout(msgr->cct,1) << "accept sd=" << sd << " " << socket_addr << dendl;
   
   // identify peer
   char banner[strlen(CEPH_BANNER)+1];
