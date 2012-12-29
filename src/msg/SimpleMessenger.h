@@ -534,7 +534,7 @@ private:
     if (p == rank_pipe.end())
       return NULL;
     // see lock cribbing in Pipe::fault()
-    if (p->second->state == Pipe::STATE_CLOSED)
+    if (p->second->state_closed.read())
       return NULL;
     return p->second;
   }
