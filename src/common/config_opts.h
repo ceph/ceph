@@ -469,8 +469,8 @@ OPTION(rgw_log_object_name, OPT_STR, "%Y-%m-%d-%H-%i-%n")      // man date to se
 OPTION(rgw_log_object_name_utc, OPT_BOOL, false)
 OPTION(rgw_usage_max_shards, OPT_INT, 32)
 OPTION(rgw_usage_max_user_shards, OPT_INT, 1)
-OPTION(rgw_enable_ops_log, OPT_BOOL, true) // enable logging every rgw operation
-OPTION(rgw_enable_usage_log, OPT_BOOL, true) // enable logging bandwidth usage
+OPTION(rgw_enable_ops_log, OPT_BOOL, false) // enable logging every rgw operation
+OPTION(rgw_enable_usage_log, OPT_BOOL, false) // enable logging bandwidth usage
 OPTION(rgw_ops_log_rados, OPT_BOOL, true) // whether ops log should go to rados
 OPTION(rgw_ops_log_socket_path, OPT_STR, "") // path to unix domain socket where ops log can go
 OPTION(rgw_ops_log_data_backlog, OPT_INT, 5 << 20) // max data backlog for ops log

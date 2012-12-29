@@ -247,7 +247,7 @@ int Pipe::accept()
     return -1;
   }
 
-  ldout(msgr->cct,1) << "accept sd=" << sd << dendl;
+  ldout(msgr->cct,1) << "accept sd=" << sd << " " << socket_addr << dendl;
   
   // identify peer
   char banner[strlen(CEPH_BANNER)+1];
@@ -355,18 +355,6 @@ int Pipe::accept()
       goto reply;
     }
     
-    // If the server supports signing session messages, and it is configured to require the client
-    // to sign, and the client can't sign, bail out.  PLR
-
-    if ((policy.features_supported & CEPH_FEATURE_MSG_AUTH) &&
-	msgr->cct->_conf->cephx_require_signatures &&
-	!(connect.features & CEPH_FEATURE_MSG_AUTH)) {
-      ldout(msgr->cct,1) << "Client can't sign messages." << dendl;
-      reply.tag = CEPH_MSGR_TAG_FEATURES;
-      msgr->lock.Unlock();
-      goto reply;
-    }
-
     msgr->lock.Unlock();
 
     // Check the authorizer.  If not good, bail out.
@@ -939,16 +927,6 @@ int Pipe::connect()
       if (feat_missing) {
 	ldout(msgr->cct,1) << "missing required features " << std::hex << feat_missing << std::dec << dendl;
 	goto fail_locked;
-      }
-
-      // If the client supports signing session messages, and it is configured to require the server
-      // to sign, and the server can't sign, bail out.  PLR
-
-      if ((policy.features_supported & CEPH_FEATURE_MSG_AUTH) &&
-	  msgr->cct->_conf->cephx_require_signatures &&
-          !(reply.features & CEPH_FEATURE_MSG_AUTH)) {
-        ldout(msgr->cct,1) << "Server can't sign messages." << dendl;
-        goto fail_locked;
       }
 
       if (reply.tag == CEPH_MSGR_TAG_SEQ) {

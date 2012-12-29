@@ -1769,7 +1769,7 @@ int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
       ::decode(nextkey, ip);
       ::decode(nextval, ip);
       if (nextkey < last_disk_key) {
-	dout(0) << "tmapup warning: key '" << nextkey << "' < previous key '" << last_disk_key
+	dout(5) << "tmapup warning: key '" << nextkey << "' < previous key '" << last_disk_key
 		<< "', falling back to an inefficient (unsorted) update" << dendl;
 	bp = orig_bp;
 	return do_tmapup_slow(ctx, bp, osd_op, newop.outdata);
@@ -1788,7 +1788,7 @@ int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
 	return -EINVAL;
       }
       if (key < last_in_key) {
-	dout(0) << "tmapup warning: key '" << key << "' < previous key '" << last_in_key
+	dout(5) << "tmapup warning: key '" << key << "' < previous key '" << last_in_key
 		<< "', falling back to an inefficient (unsorted) update" << dendl;
 	bp = orig_bp;
 	return do_tmapup_slow(ctx, bp, osd_op, newop.outdata);
