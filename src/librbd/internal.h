@@ -116,7 +116,7 @@ namespace librbd {
   int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx);
 
   int open_parent(ImageCtx *ictx);
-  int open_image(ImageCtx *ictx, bool watch);
+  int open_image(ImageCtx *ictx);
   void close_image(ImageCtx *ictx);
 
   int copyup_block(ImageCtx *ictx, uint64_t offset, size_t len,
@@ -134,7 +134,7 @@ namespace librbd {
 		  const std::string& tag);
   int unlock(ImageCtx *ictx, const std::string& cookie);
   int break_lock(ImageCtx *ictx, const std::string& client,
-                 const std::string& cookie);
+		 const std::string& cookie);
 
   void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx);
   int read_rbd_info(librados::IoCtx& io_ctx, const std::string& info_oid,
@@ -171,10 +171,10 @@ namespace librbd {
   ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf);
   int discard(ImageCtx *ictx, uint64_t off, uint64_t len);
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
-                AioCompletion *c);
+		AioCompletion *c);
   int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c);
   int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
-               char *buf, bufferlist *pbl, AioCompletion *c);
+	       char *buf, bufferlist *pbl, AioCompletion *c);
   int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
 	       char *buf, bufferlist *pbl, AioCompletion *c);
   int flush(ImageCtx *ictx);

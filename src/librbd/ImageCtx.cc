@@ -28,11 +28,12 @@ using librados::IoCtx;
 
 namespace librbd {
   ImageCtx::ImageCtx(const string &image_name, const string &image_id,
-		     const char *snap, IoCtx& p)
+		     const char *snap, IoCtx& p, bool ro)
     : cct((CephContext*)p.cct()),
       perfcounter(NULL),
       snap_id(CEPH_NOSNAP),
       snap_exists(true),
+      read_only(ro),
       exclusive_locked(false),
       name(image_name),
       wctx(NULL),
