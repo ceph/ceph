@@ -244,7 +244,7 @@ for name in $what; do
     case "$command" in
 	start)
             # Increase max_open_files, if the configuration calls for it.
-            get_conf max_open_files "0" "max open files"
+            get_conf max_open_files "8192" "max open files"
             if [ $max_open_files != "0" ]; then
                 # Note: Don't try to do math with these numbers, because POSIX shells
                 # can't do 64-bit math (natively). Just treat them as strings.

@@ -1498,7 +1498,8 @@ public:
     struct RepNotRecovering : boost::statechart::state< RepNotRecovering, ReplicaActive>, NamedState {
       typedef boost::mpl::list<
 	boost::statechart::transition< RequestBackfill, RepWaitBackfillReserved >,
-        boost::statechart::transition< RequestRecovery, RepWaitRecoveryReserved >
+        boost::statechart::transition< RequestRecovery, RepWaitRecoveryReserved >,
+	boost::statechart::transition< RecoveryDone, RepNotRecovering >  // for compat with pre-reservation peers
 	> reactions;
       RepNotRecovering(my_context ctx);
       void exit();
