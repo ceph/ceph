@@ -897,7 +897,7 @@ reprotect_and_return_err:
     librbd::NoOpProgressContext no_op;
     ImageCtx *c_imctx = NULL;
     // make sure parent snapshot exists
-    ImageCtx *p_imctx = new ImageCtx(p_name, "", p_snap_name, p_ioctx, false);
+    ImageCtx *p_imctx = new ImageCtx(p_name, "", p_snap_name, p_ioctx, true);
     r = open_image(p_imctx);
     if (r < 0) {
       lderr(cct) << "error opening parent image: "
