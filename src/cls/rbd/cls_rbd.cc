@@ -2084,7 +2084,7 @@ void __cls_init()
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  remove_child, &h_remove_child);
   cls_register_cxx_method(h_class, "get_children",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  CLS_METHOD_RD,
 			  get_children, &h_get_children);
 
   /* methods for the rbd_id.$image_name objects */
