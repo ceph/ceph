@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <stdlib.h>
+#include <limits.h>
 
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
@@ -158,6 +159,43 @@ TEST(TestFileJournal, WriteMany) {
   wait();
 
   j.close();
+}
+
+TEST(TestFileJournal, WriteManyVecs) {
+  fsid.generate_random();
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
+  ASSERT_EQ(0, j.create());
+  j.make_writeable();
+
+  C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&lock, &cond, &done));
+
+  bufferlist first;
+  first.append("small");
+  j.submit_entry(1, first, 0, gb.new_sub());
+
+  bufferlist bl;
+  for (int i=0; i<IOV_MAX * 2; i++) {
+    bufferptr bp = buffer::create_page_aligned(4096);
+    memset(bp.c_str(), (char)i, 4096);
+    bl.append(bp);
+  }
+  bufferlist origbl = bl;
+  j.submit_entry(2, bl, 0, gb.new_sub());
+  gb.activate();
+  wait();
+
+  j.close();
+
+  j.open(1);
+  bufferlist inbl;
+  string v;
+  uint64_t seq = 0;
+  ASSERT_EQ(true, j.read_entry(inbl, seq));
+  ASSERT_EQ(seq, 2ull);
+  ASSERT_TRUE(inbl.contents_equal(origbl));
+  j.make_writeable();
+  j.close();
+
 }
 
 TEST(TestFileJournal, ReplaySmall) {
