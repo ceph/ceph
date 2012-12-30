@@ -97,10 +97,16 @@ Setup Ceph Client Authentication
 --------------------------------
 
 If you have `cephx authentication`_ enabled, create a new user for Nova/Cinder
-and Glance::
+and Glance. For Ceph before version 0.54 or lower::
 
-    ceph auth get-or-create client.volumes mon 'allow r' osd 'allow rwx pool=volumes, allow rx pool=images'
-    ceph auth get-or-create client.images mon 'allow r' osd 'allow rwx pool=images'
+    ceph auth get-or-create client.volumes mon 'allow r' osd 'allow x, allow rwx pool=volumes, allow rx pool=images'
+    ceph auth get-or-create client.images mon 'allow r' osd 'allow x, allow rwx pool=images'
+
+In Ceph version 0.54, more specific permissions were added, so the
+users can be restricted further::
+
+    ceph auth get-or-create client.volumes mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=volumes, allow rx pool=images'
+    ceph auth get-or-create client.images mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=images'
 
 Add the keyrings for ``client.volumes`` and ``client.images`` to the
 appropriate hosts and change their ownership::

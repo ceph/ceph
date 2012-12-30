@@ -93,7 +93,7 @@ A client using rbd with read access to one pool and read/write access to another
 
         mon = "allow r"
 
-        osd = "allow pool templates r class-read, allow pool vms rwx"
+        osd = "allow class-read object_prefix rbd_children, allow pool templates r class-read, allow pool vms rwx"
 
 A client mounting the file system with minimal permissions would need caps like::
 
@@ -111,7 +111,7 @@ In general, an osd capability follows the grammar::
 
         osdcap  := grant[,grant...]
         grant   := allow (match capspec | capspec match)
-        match   := [pool[=]<poolname>]
+        match   := [pool[=]<poolname> | object_prefix <prefix>]
         capspec := * | [r][w][x] [class-read] [class-write]
 
 The capspec determines what kind of operations the entity can perform::
@@ -126,10 +126,10 @@ The capspec determines what kind of operations the entity can perform::
 
 The match criteria restrict a grant based on the pool being accessed.
 Grants are additive if the client fulfills the match condition. For
-example, if a client has the osd capabilities: "allow r, allow w pool
-foo, allow x pool bar", then it has rw access to pool foo, rx access
-to pool bar, and r access to all other pools.
-
+example, if a client has the osd capabilities: "allow r object_prefix
+prefix, allow w pool foo, allow x pool bar", then it has rw access to
+pool foo, rx access to pool bar, and r access to objects whose
+names begin with 'prefix' in any pool.
 
 Caps file format
 ================
