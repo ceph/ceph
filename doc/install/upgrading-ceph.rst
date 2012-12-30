@@ -39,7 +39,7 @@ To upgrade an OSD peform the following steps:
 #. Upgrade the OSD package:: 
 
 	ssh {osd-host}
-	apt-get update && sudo apt-get upgrade
+	sudo apt-get update && sudo apt-get install ceph-osd
 
 #. Restart the OSD, where ``N`` is the OSD number:: 
 
@@ -58,14 +58,14 @@ Upgrading a Monitor
 
 To upgrade a monitor, perform the following steps:
 
-#. Upgrade the monitor package::
+#. Upgrade the ceph package::
 
 	ssh {mon-host}
-	apt-get update && sudo apt-get upgrade
+	sudo apt-get update && sudo apt-get install ceph
  
-#. Restart the monitor, where ``A`` is the monitor letter:: 
+#. Restart the monitor::
 
-	service ceph restart mon.A
+	service ceph restart mon.{name}
 
 #. Ensure the monitor has rejoined the quorum. ::
 
@@ -78,16 +78,16 @@ until you have completed the upgrade cycle for all of your monitors.
 Upgrading a Metadata Server
 ===========================
 
-To upgrade a monitor, perform the following steps:
+To upgrade an MDS, perform the following steps:
 
-#. Upgrade the monitor package::
+#. Upgrade the ceph package::
 
 	ssh {mds-host}
-	apt-get update && sudo apt-get upgrade
+	sudo apt-get update && sudo apt-get install ceph ceph-mds
  
-#. Restart the metadata server, where ``A`` is the metadata server letter:: 
+#. Restart the metadata server::
 
-	service ceph restart mds.A
+	service ceph restart mds.{name}
 
 #. Ensure the metadata server is up and running::
 
@@ -100,18 +100,18 @@ servers.
 Upgrading a Client
 ==================
 
-Once you have upgraded the packages and restarted daemons on your Ceph cluster,
-we recommend upgrading ``ceph-common`` on your client nodes too.
+Once you have upgraded the packages and restarted daemons on your Ceph
+cluster, we recommend upgrading ``ceph-common`` and client libraries
+(``librbd1`` and ``librados2``) on your client nodes too.
 
 #. Upgrade the package:: 
 
 	ssh {client-host}
-	apt-get update && sudo apt-get upgrade
+	apt-get update && sudo apt-get install ceph-common librados2 librbd1 python-ceph
 
 #. Ensure that you have the latest version::
 
 	ceph --version
-
 
 
 Upgrading from Argonaut to Bobtail
@@ -119,7 +119,7 @@ Upgrading from Argonaut to Bobtail
 
 When upgrading from Argonaut to Bobtail, you need to be aware of three things:
 
-#. Authentication is **ON** by default.
+#. Authentication now defaults to **ON**, but used to default to off.
 #. Monitors use a new internal on-wire protocol
 #. RBD ``format2`` images require updgrading all OSDs before using it.
 
@@ -135,28 +135,27 @@ Ceph (i.e., actually v 0.55 and earlier), you could simply specify::
 
 	auth supported = [cephx | none]
 
-Bobtail supports ``client``, ``service`` and ``cluster`` authentication settings
-as follows:: 
+This option still works, but is deprecated.  New releases support
+``cluster``, ``service`` and ``client`` authentication settings as
+follows::
 
-	auth client required = [cephx | none]
-	auth service required = [cephx | none]
-	auth cluster required = [cephx | none]
+	auth cluster required = [cephx | none]  # default cephx
+	auth service required = [cephx | none] # default cephx
+	auth client required = [cephx | none] # default cephx,none
 
-See `Ceph Authentication`_ for details. When upgrading from Argonaut to Bobtail,
-you should change the authentication  settings in your Ceph configuration file
-to reflect these three new ``auth`` settings. 
+.. important:: If your cluster does not currently have an ``auth
+   supported`` line that enables authentication, you must explicitly
+   turn it off in Bobtail using the settings below.::
 
-.. important:: If you do not use authentication, you must explicitly turn it
-   off in Bobtail using the three new ``auth`` settings.
-   
-.. important:: The ``auth client`` setting must be explicitly set in the 
-   Ceph configuration file on Ceph clients.
+	auth cluster required = none
+	auth service required = none
 
-Once you have upgraded all of your daemons, we recommend addding the following
-to the ``[global]`` section of your Ceph configuration file. ::
+   This will disable authentication on the cluster, but still leave
+   clients with the default configuration where they can talk to a
+   cluster that does enable it, but do not require it.
 
-	[global]	
-		cephx require signatures = true
+.. important:: If your cluster already has an ``auth supported`` option defined in
+   the configuration file, no changes are necessary.
 
 See `Ceph Authentication - Backward Compatibility`_ for details.
 
