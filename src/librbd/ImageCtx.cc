@@ -327,7 +327,7 @@ namespace librbd {
     map<string, SnapInfo>::const_iterator it = snaps_by_name.find(in_snap_name);
     if (it != snaps_by_name.end()) {
       *is_protected =
-	(it->second.protection_status != RBD_PROTECTION_STATUS_UNPROTECTED);
+	(it->second.protection_status == RBD_PROTECTION_STATUS_PROTECTED);
       return 0;
     }
     return -ENOENT;
