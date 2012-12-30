@@ -28,11 +28,12 @@ using librados::IoCtx;
 
 namespace librbd {
   ImageCtx::ImageCtx(const string &image_name, const string &image_id,
-		     const char *snap, IoCtx& p)
+		     const char *snap, IoCtx& p, bool ro)
     : cct((CephContext*)p.cct()),
       perfcounter(NULL),
       snap_id(CEPH_NOSNAP),
       snap_exists(true),
+      read_only(ro),
       exclusive_locked(false),
       name(image_name),
       wctx(NULL),
@@ -326,7 +327,7 @@ namespace librbd {
     map<string, SnapInfo>::const_iterator it = snaps_by_name.find(in_snap_name);
     if (it != snaps_by_name.end()) {
       *is_protected =
-	(it->second.protection_status != RBD_PROTECTION_STATUS_UNPROTECTED);
+	(it->second.protection_status == RBD_PROTECTION_STATUS_PROTECTED);
       return 0;
     }
     return -ENOENT;

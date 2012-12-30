@@ -36,10 +36,12 @@ namespace librbd {
     struct rbd_obj_header_ondisk header;
     ::SnapContext snapc;
     std::vector<librados::snap_t> snaps; // this mirrors snapc.snaps, but is in
-                                         // a format librados can understand
+                                        // a format librados can understand
     std::map<std::string, SnapInfo> snaps_by_name;
     uint64_t snap_id;
     bool snap_exists; // false if our snap_id was deleted
+    // whether the image was opened read-only. cannot be changed after opening
+    bool read_only;
 
     std::map<rados::cls::lock::locker_id_t,
 	     rados::cls::lock::locker_info_t> lockers;
@@ -91,7 +93,7 @@ namespace librbd {
      * and init() will look it up.
      */
     ImageCtx(const std::string &image_name, const std::string &image_id,
-             const char *snap, IoCtx& p);
+	     const char *snap, IoCtx& p, bool read_only);
     ~ImageCtx();
     int init();
     void init_layout();

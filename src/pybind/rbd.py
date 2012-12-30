@@ -301,10 +301,15 @@ class Image(object):
     if the image has been deleted.
     """
 
-    def __init__(self, ioctx, name, snapshot=None):
+    def __init__(self, ioctx, name, snapshot=None, read_only=False):
         """
         Open the image at the given snapshot.
-        If a snapshot is specified, the image will be read-only.
+        If a snapshot is specified, the image will be read-only, unless
+        :func:`Image.set_snap` is called later.
+
+        If read-only mode is used, metadata for the :class:`Image`
+        object (such as which snapshots exist) may become obsolete. See
+        the C api for more details.
 
         To clean up from opening the image, :func:`Image.close` should
         be called.  For ease of use, this is done automatically when
@@ -316,6 +321,8 @@ class Image(object):
         :type name: str
         :param snapshot: which snapshot to read from
         :type snaphshot: str
+        :param read_only: whether to open the image in read-only mode
+        :type read_only: bool
         """
         self.closed = True
         self.librbd = CDLL('librbd.so.1')
@@ -325,8 +332,16 @@ class Image(object):
             raise TypeError('name must be a string')
         if snapshot is not None and not isinstance(snapshot, str):
             raise TypeError('snapshot must be a string or None')
-        ret = self.librbd.rbd_open(ioctx.io, c_char_p(name),
-                                   byref(self.image), c_char_p(snapshot))
+        if read_only:
+            if not hasattr(self.librbd, 'rbd_open_read_only'):
+                raise FunctionNotSupported('installed version of librbd does '
+                                           'not support open in read-only mode')
+            ret = self.librbd.rbd_open_read_only(ioctx.io, c_char_p(name),
+                                                 byref(self.image),
+                                                 c_char_p(snapshot))
+        else:
+            ret = self.librbd.rbd_open(ioctx.io, c_char_p(name),
+                                       byref(self.image), c_char_p(snapshot))
         if ret != 0:
             raise make_ex(ret, 'error opening image %s at snapshot %s' % (name, snapshot))
         self.closed = False
