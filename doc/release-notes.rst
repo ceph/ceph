@@ -26,7 +26,9 @@ Key features since v0.48 "argonaut"
 Upgrading
 ~~~~~~~~~
 
-Please refer to the document Upgrading from Argonaut to Bobtail.
+Please refer to the document `Upgrading from Argonaut to Bobtail`_ for details.
+
+.. _Upgrading from Argonaut to Bobtail: ../install/upgrading-ceph/#upgrading-from-argonaut-to-bobtail
 
 * Cephx authentication is now enabled by default (since v0.55).
   Upgrading a cluster without adjusting the Ceph configuration will
