@@ -963,10 +963,15 @@ reprotect_and_return_err:
       goto err_close_child;
     }
 
-    p_imctx->snap_lock.Lock();
-    r = p_imctx->is_snap_protected(p_imctx->snap_name, &snap_protected);
-    p_imctx->snap_lock.Unlock();
+    p_imctx->md_lock.Lock();
+    r = ictx_refresh(p_imctx);
+    p_imctx->md_lock.Unlock();
 
+    if (r == 0) {
+      p_imctx->snap_lock.Lock();
+      r = p_imctx->is_snap_protected(p_imctx->snap_name, &snap_protected);
+      p_imctx->snap_lock.Unlock();
+    }
     if (r < 0 || !snap_protected) {
       // we lost the race with unprotect
       r = -EINVAL;
