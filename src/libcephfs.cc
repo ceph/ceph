@@ -17,6 +17,7 @@
 #include <string.h>
 #include <string>
 
+#include "auth/Crypto.h"
 #include "client/Client.h"
 #include "include/cephfs/libcephfs.h"
 #include "common/Mutex.h"
@@ -222,10 +223,13 @@ extern "C" const char *ceph_version(int *pmajor, int *pminor, int *ppatch)
 
 extern "C" int ceph_create_with_context(struct ceph_mount_info **cmount, CephContext *cct)
 {
-  // Function-static variables are thread-safe in gcc and in the forthcoming C++ standard
-  static int nonce_seed = 0;
+  uint64_t nonce = 0;
 
-  uint64_t nonce = (uint64_t)++nonce_seed * 1000000ull + (uint64_t)getpid();
+  // 6 bytes of random and 2 bytes of pid
+  get_random_bytes((char*)&nonce, sizeof(nonce));
+  nonce &= ~0xffff;
+  nonce |= (uint64_t)getpid();
+
   *cmount = new struct ceph_mount_info(nonce, cct);
   return 0;
 }
