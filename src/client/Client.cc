@@ -5124,8 +5124,7 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
     if (r < 0)
       return r;
     r = _create(dir, dname.c_str(), flags, mode, &in, &fh, stripe_unit,
-                stripe_count, object_size, data_pool);
-    created = true;
+                stripe_count, object_size, data_pool, &created);
   }
   if (r < 0)
     goto out;
@@ -6630,10 +6629,10 @@ int Client::ll_mknod(vinodeno_t parent, const char *name, mode_t mode, dev_t rde
 }
 
 int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode **inp, Fh **fhp,
-    int stripe_unit, int stripe_count, int object_size, const char *data_pool, int uid, int gid)
-{ 
+    int stripe_unit, int stripe_count, int object_size, const char *data_pool, bool *created, int uid, int gid)
+{
   ldout(cct, 3) << "_create(" << dir->ino << " " << name << ", 0" << oct << mode << dec << ")" << dendl;
-  
+
   if (strlen(name) > NAME_MAX)
     return -ENAMETOOLONG;
   if (dir->snapid != CEPH_NOSNAP) {
@@ -6662,7 +6661,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   req->inode = dir;
   req->head.args.open.flags = flags | O_CREAT;
   req->head.args.open.mode = mode;
-  
+
   req->head.args.open.stripe_unit = stripe_unit;
   req->head.args.open.stripe_count = stripe_count;
   req->head.args.open.object_size = object_size;
@@ -6670,20 +6669,47 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
+  bufferlist extra_bl;
+  inodeno_t created_ino;
+  bool got_created_ino = false;
+
   int res = get_or_create(dir, name, &req->dentry);
   if (res < 0)
     goto fail;
 
-  res = make_request(req, uid, gid);
-  
-  if (res >= 0) {
-    res = _lookup(dir, name, inp);
-    if (res >= 0) {
-      (*inp)->get_open_ref(cmode);
-      *fhp = _create_fh(*inp, flags, cmode);
-    }
+  res = make_request(req, uid, gid, 0, -1, &extra_bl);
+  if (res < 0) {
+    goto reply_error;
   }
-    
+
+  // make sure we have a reply to inspect
+  assert(req->reply);
+
+  // check whether this request actually did the create, and set created flag
+  if (req->reply->get_connection()->has_feature(CEPH_FEATURE_REPLY_CREATE_INODE) && extra_bl.length() == 1) {
+    // if the extra bufferlist has a buffer, we assume its the created inode
+    // and that this request to create succeeded in actually creating
+    // the inode (won the race with other create requests)
+    ::decode(created_ino, extra_bl);
+    got_created_ino = true;
+  }
+
+  if (created)
+    *created = got_created_ino;
+
+  res = _lookup(dir, name, inp);
+  if (res < 0) {
+    goto reply_error;
+  }
+
+  // verify ino returned in reply and trace_dist are the same
+  if (got_created_ino)
+    assert(created_ino.val == (*inp)->ino.val);
+
+  (*inp)->get_open_ref(cmode);
+  *fhp = _create_fh(*inp, flags, cmode);
+
+ reply_error:
   trim_cache();
 
   ldout(cct, 3) << "create(" << path << ", 0" << oct << mode << dec 
@@ -7132,7 +7158,7 @@ int Client::ll_open(vinodeno_t vino, int flags, Fh **fhp, int uid, int gid)
   return r;
 }
 
-int Client::ll_create(vinodeno_t parent, const char *name, mode_t mode, int flags, 
+int Client::ll_create(vinodeno_t parent, const char *name, mode_t mode, int flags,
 		      struct stat *attr, Fh **fhp, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
@@ -7143,26 +7169,54 @@ int Client::ll_create(vinodeno_t parent, const char *name, mode_t mode, int flag
   tout(cct) << mode << std::endl;
   tout(cct) << flags << std::endl;
 
-  Inode *dir = _ll_get_inode(parent);
-  int r = _mknod(dir, name, mode, 0, uid, gid);
-  if (r < 0)
-    return r;
-  Dentry *dn = dir->dir->dentries[name];
-  Inode *in = dn->inode;
+  *fhp = NULL;
 
-  r = _open(in, flags, mode, fhp, uid, gid);
-  if (r >= 0) {
-    Inode *in = (*fhp)->inode;
-    fill_stat(in, attr);
-    _ll_get(in);
-  } else {
-    attr->st_ino = 0;
+  bool created = false;
+  Inode *in = NULL;
+  Inode *dir = _ll_get_inode(parent);
+  int r = _lookup(dir, name, &in);
+  if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
+    return -EEXIST;
+  if (r == -ENOENT && (flags & O_CREAT)) {
+    r = _create(dir, name, flags, mode, &in, fhp,
+	        0, 0, 0,
+		NULL, &created, uid, gid);
+    if (r < 0)
+      goto out;
+
+    in = (*fhp)->inode;
   }
+
+  if (r < 0)
+    goto out;
+
+  assert(in);
+  fill_stat(in, attr);
+  _ll_get(in);
+
+  if (!created) {
+    uid_t uid = geteuid();
+    gid_t gid = getegid();
+    r = check_permissions(in, flags, uid, gid);
+    if (r < 0)
+      goto out;
+
+    if (*fhp == NULL) {
+      r = _open(in, flags, mode, fhp);
+      if (r < 0)
+	goto out;
+    }
+  }
+
+out:
+  if (r < 0)
+    attr->st_ino = 0;
+
   tout(cct) << (unsigned long)*fhp << std::endl;
   tout(cct) << attr->st_ino << std::endl;
   ldout(cct, 3) << "ll_create " << parent << " " << name << " 0" << oct << mode << dec << " " << flags
 	  << " = " << r << " (" << *fhp << " " << hex << attr->st_ino << dec << ")" << dendl;
-  return 0;
+  return r;
 }
 
 int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)

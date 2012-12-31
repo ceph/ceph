@@ -526,8 +526,8 @@ private:
   int _removexattr(Inode *in, const char *nm, int uid=-1, int gid=-1);
   int _open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid=-1, int gid=-1);
   int _create(Inode *in, const char *name, int flags, mode_t mode, Inode **inp, Fh **fhp,
-      int stripe_unit, int stripe_count, int object_size, const char *data_pool,
-	      int uid=-1, int gid=-1);
+              int stripe_unit, int stripe_count, int object_size, const char *data_pool,
+	      bool *created = NULL, int uid=-1, int gid=-1);
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
   int _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
   int _write(Fh *fh, int64_t offset, uint64_t size, const char *buf);
