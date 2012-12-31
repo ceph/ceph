@@ -6683,7 +6683,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   }
 
   // check whether this request actually did the create, and set created flag
-  if (extra_bl.length() == 1) {
+  if (extra_bl.length() >= 8) {
     // if the extra bufferlist has a buffer, we assume its the created inode
     // and that this request to create succeeded in actually creating
     // the inode (won the race with other create requests)
