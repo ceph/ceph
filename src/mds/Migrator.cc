@@ -1135,6 +1135,9 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
     CDentry *dn = it->second;
     CInode *in = dn->get_linkage()->get_inode();
     
+    if (!dn->is_replicated())
+      dn->lock.replicate_relax();
+
     num_exported++;
     
     // -- dentry

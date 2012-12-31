@@ -1425,13 +1425,16 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
 void Locker::_finish_xlock(SimpleLock *lock, bool *pneed_issue)
 {
   assert(!lock->is_stable());
-  lock->get_parent()->auth_unpin(lock);
   if (lock->get_type() != CEPH_LOCK_DN && ((CInode*)lock->get_parent())->get_loner() >= 0)
     lock->set_state(LOCK_EXCL);
   else
     lock->set_state(LOCK_LOCK);
+  if (lock->get_type() == CEPH_LOCK_DN && lock->get_parent()->is_replicated() &&
+      !lock->is_waiter_for(SimpleLock::WAIT_WR))
+    simple_sync(lock, pneed_issue);
   if (lock->get_cap_shift())
     *pneed_issue = true;
+  lock->get_parent()->auth_unpin(lock);
 }
 
 void Locker::xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
