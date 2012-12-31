@@ -1087,5 +1087,6 @@ def task(ctx, config):
         lambda: run_daemon(ctx=ctx, config=config, type_='osd'),
         lambda: run_daemon(ctx=ctx, config=config, type_='mds'),
         ):
-        healthy(ctx=ctx, config=None)
+        if config.get('wait-for-healthy', True):
+          healthy(ctx=ctx, config=None)
         yield
