@@ -180,6 +180,8 @@ struct MDRequest : public Mutation {
   int snap_caps;
   bool did_early_reply;
 
+  bufferlist reply_extra_bl;
+
   // inos we did a embedded cap release on, and may need to eval if we haven't since reissued
   map<vinodeno_t, ceph_seq_t> cap_releases;  
 
