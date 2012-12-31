@@ -6735,14 +6735,10 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
 	  (dn->lock.is_xlocked() && dn->lock.get_xlock_by() == mdr)) {
         dout(10) << "traverse: miss on null+readable dentry " << path[depth] << " " << *dn << dendl;
         return -ENOENT;
-      } else if (curdir->is_auth()) {
+      } else {
         dout(10) << "miss on dentry " << *dn << ", can't read due to lock" << dendl;
         dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req, fin));
         return 1;
-      } else {
-	// non-auth and can not read, treat this as no dentry
-	dn = NULL;
-	dnl = NULL;
       }
     }
 
