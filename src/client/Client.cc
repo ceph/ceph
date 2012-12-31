@@ -6682,11 +6682,8 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
     goto reply_error;
   }
 
-  // make sure we have a reply to inspect
-  assert(req->reply);
-
   // check whether this request actually did the create, and set created flag
-  if (req->reply->get_connection()->has_feature(CEPH_FEATURE_REPLY_CREATE_INODE) && extra_bl.length() == 1) {
+  if (extra_bl.length() == 1) {
     // if the extra bufferlist has a buffer, we assume its the created inode
     // and that this request to create succeeded in actually creating
     // the inode (won the race with other create requests)
