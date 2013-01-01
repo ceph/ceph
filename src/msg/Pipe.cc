@@ -40,6 +40,7 @@
 ostream& Pipe::_pipe_prefix(std::ostream *_dout) {
   return *_dout << "-- " << msgr->get_myinst().addr << " >> " << peer_addr << " pipe(" << this
 		<< " sd=" << sd << " :" << port
+		<< " s=" << state
 		<< " pgs=" << peer_global_seq
 		<< " cs=" << connect_seq
 		<< " l=" << policy.lossy
@@ -219,6 +220,7 @@ int Pipe::accept()
   if (rc < 0) {
     ldout(msgr->cct,10) << "accept couldn't write banner" << dendl;
     state = STATE_CLOSED;
+    state_closed.set(1);
     return -1;
   }
 
@@ -236,6 +238,7 @@ int Pipe::accept()
     char buf[80];
     ldout(msgr->cct,0) << "accept failed to getpeername " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     state = STATE_CLOSED;
+    state_closed.set(1);
     return -1;
   }
   ::encode(socket_addr, addrs);
@@ -244,6 +247,7 @@ int Pipe::accept()
   if (rc < 0) {
     ldout(msgr->cct,10) << "accept couldn't write my+peer addr" << dendl;
     state = STATE_CLOSED;
+    state_closed.set(1);
     return -1;
   }
 
@@ -254,12 +258,14 @@ int Pipe::accept()
   if (tcp_read(banner, strlen(CEPH_BANNER)) < 0) {
     ldout(msgr->cct,10) << "accept couldn't read banner" << dendl;
     state = STATE_CLOSED;
+    state_closed.set(1);
     return -1;
   }
   if (memcmp(banner, CEPH_BANNER, strlen(CEPH_BANNER))) {
     banner[strlen(CEPH_BANNER)] = 0;
     ldout(msgr->cct,1) << "accept peer sent bad banner '" << banner << "' (should be '" << CEPH_BANNER << "')" << dendl;
     state = STATE_CLOSED;
+    state_closed.set(1);
     return -1;
   }
   bufferlist addrbl;
@@ -270,6 +276,7 @@ int Pipe::accept()
   if (tcp_read(addrbl.c_str(), addrbl.length()) < 0) {
     ldout(msgr->cct,10) << "accept couldn't read peer_addr" << dendl;
     state = STATE_CLOSED;
+    state_closed.set(1);
     return -1;
   }
   {
@@ -379,8 +386,8 @@ int Pipe::accept()
 
     
     // existing?
-    if (msgr->rank_pipe.count(peer_addr)) {
-      existing = msgr->rank_pipe[peer_addr];
+    existing = msgr->_lookup_pipe(peer_addr);
+    if (existing) {
       existing->pipe_lock.Lock();
 
       if (connect.global_seq < existing->peer_global_seq) {
@@ -601,13 +608,13 @@ int Pipe::accept()
 
   rc = tcp_write((char*)&reply, sizeof(reply));
   if (rc < 0) {
-    goto fail_unlocked;
+    goto fail_registered;
   }
 
   if (reply.authorizer_len) {
     rc = tcp_write(authorizer_reply.c_str(), authorizer_reply.length());
     if (rc < 0) {
-      goto fail_unlocked;
+      goto fail_registered;
     }
   }
 
@@ -615,11 +622,11 @@ int Pipe::accept()
     uint64_t newly_acked_seq = 0;
     if(tcp_write((char*)&existing_seq, sizeof(existing_seq)) < 0) {
       ldout(msgr->cct,2) << "accept write error on in_seq" << dendl;
-      goto fail_unlocked;
+      goto fail_registered;
     }
     if (tcp_read((char*)&newly_acked_seq, sizeof(newly_acked_seq)) < 0) {
       ldout(msgr->cct,2) << "accept read error on newly_acked_seq" << dendl;
-      goto fail_unlocked;
+      goto fail_registered;
     }
     requeue_sent(newly_acked_seq);
   }
@@ -636,16 +643,29 @@ int Pipe::accept()
 
   return 0;   // success.
 
+ fail_registered:
+  ldout(msgr->cct, 10) << "accept fault after register" << dendl;
+
+  if (msgr->cct->_conf->ms_inject_internal_delays) {
+    ldout(msgr->cct, 10) << " sleep for " << msgr->cct->_conf->ms_inject_internal_delays << dendl;
+    utime_t t;
+    t.set_from_double(msgr->cct->_conf->ms_inject_internal_delays);
+    t.sleep();
+  }
+
  fail_unlocked:
   pipe_lock.Lock();
   if (state != STATE_CLOSED) {
     bool queued = is_queued();
-    if (queued)
+    ldout(msgr->cct, 10) << "  queued = " << (int)queued << dendl;
+    if (queued) {
       state = policy.server ? STATE_STANDBY : STATE_CONNECTING;
-    else if (replaced)
+    } else if (replaced) {
       state = STATE_STANDBY;
-    else
+    } else {
       state = STATE_CLOSED;
+      state_closed.set(1);
+    }
     fault();
     if (queued || replaced)
       start_writer();
@@ -655,8 +675,17 @@ int Pipe::accept()
 
  shutting_down:
   msgr->lock.Unlock();
+
+  if (msgr->cct->_conf->ms_inject_internal_delays) {
+    ldout(msgr->cct, 10) << " sleep for " << msgr->cct->_conf->ms_inject_internal_delays << dendl;
+    utime_t t;
+    t.set_from_double(msgr->cct->_conf->ms_inject_internal_delays);
+    t.sleep();
+  }
+
   pipe_lock.Lock();
   state = STATE_CLOSED;
+  state_closed.set(1);
   fault();
   pipe_lock.Unlock();
   return -1;
@@ -862,6 +891,13 @@ int Pipe::connect()
       }
     }
 
+    if (conf->ms_inject_internal_delays) {
+      ldout(msgr->cct, 10) << " sleep for " << msgr->cct->_conf->ms_inject_internal_delays << dendl;
+      utime_t t;
+      t.set_from_double(msgr->cct->_conf->ms_inject_internal_delays);
+      t.sleep();
+    }
+
     pipe_lock.Lock();
     if (state != STATE_CONNECTING) {
       ldout(msgr->cct,0) << "connect got RESETSESSION but no longer connecting" << dendl;
@@ -984,6 +1020,13 @@ int Pipe::connect()
   }
 
  fail:
+  if (conf->ms_inject_internal_delays) {
+    ldout(msgr->cct, 10) << " sleep for " << msgr->cct->_conf->ms_inject_internal_delays << dendl;
+    utime_t t;
+    t.set_from_double(msgr->cct->_conf->ms_inject_internal_delays);
+    t.sleep();
+  }
+
   pipe_lock.Lock();
  fail_locked:
   if (state == STATE_CONNECTING)
@@ -1001,17 +1044,18 @@ void Pipe::register_pipe()
 {
   ldout(msgr->cct,10) << "register_pipe" << dendl;
   assert(msgr->lock.is_locked());
-  assert(msgr->rank_pipe.count(peer_addr) == 0);
+  Pipe *existing = msgr->_lookup_pipe(peer_addr);
+  assert(existing == NULL);
   msgr->rank_pipe[peer_addr] = this;
 }
 
 void Pipe::unregister_pipe()
 {
   assert(msgr->lock.is_locked());
-  if (msgr->rank_pipe.count(peer_addr) &&
-      msgr->rank_pipe[peer_addr] == this) {
+  hash_map<entity_addr_t,Pipe*>::iterator p = msgr->rank_pipe.find(peer_addr);
+  if (p != msgr->rank_pipe.end() && p->second == this) {
     ldout(msgr->cct,10) << "unregister_pipe" << dendl;
-    msgr->rank_pipe.erase(peer_addr);
+    msgr->rank_pipe.erase(p);
   } else {
     ldout(msgr->cct,10) << "unregister_pipe - not registered" << dendl;
   }
@@ -1086,8 +1130,17 @@ void Pipe::fault(bool onread)
 
     stop();
 
-    // ugh
+    // crib locks, blech.  note that Pipe is now STATE_CLOSED and the
+    // rank_pipe entry is ignored by others.
     pipe_lock.Unlock();
+
+    if (conf->ms_inject_internal_delays) {
+      ldout(msgr->cct, 10) << " sleep for " << msgr->cct->_conf->ms_inject_internal_delays << dendl;
+      utime_t t;
+      t.set_from_double(msgr->cct->_conf->ms_inject_internal_delays);
+      t.sleep();
+    }
+
     msgr->lock.Lock();
     pipe_lock.Lock();
     unregister_pipe();
@@ -1184,6 +1237,7 @@ void Pipe::stop()
   ldout(msgr->cct,10) << "stop" << dendl;
   assert(pipe_lock.is_locked());
   state = STATE_CLOSED;
+  state_closed.set(1);
   cond.Signal();
   shutdown_socket();
 }
@@ -1305,10 +1359,12 @@ void Pipe::reader()
     else if (tag == CEPH_MSGR_TAG_CLOSE) {
       ldout(msgr->cct,20) << "reader got CLOSE" << dendl;
       pipe_lock.Lock();
-      if (state == STATE_CLOSING)
+      if (state == STATE_CLOSING) {
 	state = STATE_CLOSED;
-      else
+	state_closed.set(1);
+      } else {
 	state = STATE_CLOSING;
+      }
       cond.Signal();
       break;
     }
@@ -1357,6 +1413,7 @@ void Pipe::writer()
       ldout(msgr->cct,20) << "writer writing CLOSE tag" << dendl;
       char tag = CEPH_MSGR_TAG_CLOSE;
       state = STATE_CLOSED;
+      state_closed.set(1);
       pipe_lock.Unlock();
       if (sd) {
 	int r = ::write(sd, &tag, 1);
