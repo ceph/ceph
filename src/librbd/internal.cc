@@ -424,6 +424,9 @@ namespace librbd {
   {
     ldout(ictx->cct, 20) << "snap_create " << ictx << " " << snap_name << dendl;
 
+    if (ictx->read_only)
+      return -EROFS;
+
     int r = ictx_check(ictx);
     if (r < 0)
       return r;
@@ -464,6 +467,9 @@ namespace librbd {
   int snap_remove(ImageCtx *ictx, const char *snap_name)
   {
     ldout(ictx->cct, 20) << "snap_remove " << ictx << " " << snap_name << dendl;
+
+    if (ictx->read_only)
+      return -EROFS;
 
     int r = ictx_check(ictx);
     if (r < 0)
@@ -516,6 +522,9 @@ namespace librbd {
     ldout(ictx->cct, 20) << "snap_protect " << ictx << " " << snap_name
 			 << dendl;
 
+    if (ictx->read_only)
+      return -EROFS;
+
     int r = ictx_check(ictx);
     if (r < 0)
       return r;
@@ -555,6 +564,9 @@ namespace librbd {
   {
     ldout(ictx->cct, 20) << "snap_unprotect " << ictx << " " << snap_name
 			 << dendl;
+
+    if (ictx->read_only)
+      return -EROFS;
 
     int r = ictx_check(ictx);
     if (r < 0)
@@ -885,8 +897,8 @@ reprotect_and_return_err:
     librbd::NoOpProgressContext no_op;
     ImageCtx *c_imctx = NULL;
     // make sure parent snapshot exists
-    ImageCtx *p_imctx = new ImageCtx(p_name, "", p_snap_name, p_ioctx);
-    r = open_image(p_imctx, true);
+    ImageCtx *p_imctx = new ImageCtx(p_name, "", p_snap_name, p_ioctx, true);
+    r = open_image(p_imctx);
     if (r < 0) {
       lderr(cct) << "error opening parent image: "
 		 << cpp_strerror(-r) << dendl;
@@ -932,8 +944,8 @@ reprotect_and_return_err:
       goto err_close_parent;
     }
 
-    c_imctx = new ImageCtx(c_name, "", NULL, c_ioctx);
-    r = open_image(c_imctx, true);
+    c_imctx = new ImageCtx(c_name, "", NULL, c_ioctx, false);
+    r = open_image(c_imctx);
     if (r < 0) {
       lderr(cct) << "Error opening new image: " << cpp_strerror(r) << dendl;
       goto err_remove;
@@ -951,10 +963,15 @@ reprotect_and_return_err:
       goto err_close_child;
     }
 
-    p_imctx->snap_lock.Lock();
-    r = p_imctx->is_snap_protected(p_imctx->snap_name, &snap_protected);
-    p_imctx->snap_lock.Unlock();
+    p_imctx->md_lock.Lock();
+    r = ictx_refresh(p_imctx);
+    p_imctx->md_lock.Unlock();
 
+    if (r == 0) {
+      p_imctx->snap_lock.Lock();
+      r = p_imctx->is_snap_protected(p_imctx->snap_name, &snap_protected);
+      p_imctx->snap_lock.Unlock();
+    }
     if (r < 0 || !snap_protected) {
       // we lost the race with unprotect
       r = -EINVAL;
@@ -1180,8 +1197,8 @@ reprotect_and_return_err:
 
     // since we don't know the image and snapshot name, set their ids and
     // reset the snap_name and snap_exists fields after we read the header
-    ictx->parent = new ImageCtx("", parent_image_id, NULL, p_ioctx);
-    r = open_image(ictx->parent, false);
+    ictx->parent = new ImageCtx("", parent_image_id, NULL, p_ioctx, true);
+    r = open_image(ictx->parent);
     if (r < 0) {
       lderr(ictx->cct) << "error opening parent image: " << cpp_strerror(r)
 		       << dendl;
@@ -1273,8 +1290,8 @@ reprotect_and_return_err:
     string id;
     bool old_format = false;
     bool unknown_format = true;
-    ImageCtx *ictx = new ImageCtx(imgname, "", NULL, io_ctx);
-    int r = open_image(ictx, true);
+    ImageCtx *ictx = new ImageCtx(imgname, "", NULL, io_ctx, false);
+    int r = open_image(ictx);
     if (r < 0) {
       ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
     } else {
@@ -1401,6 +1418,9 @@ reprotect_and_return_err:
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "resize " << ictx << " " << ictx->size << " -> "
 		   << size << dendl;
+
+    if (ictx->read_only)
+      return -EROFS;
 
     int r = ictx_check(ictx);
     if (r < 0)
@@ -1722,7 +1742,7 @@ reprotect_and_return_err:
     if (!ictx->snap_exists)
       return -ENOENT;
 
-    if (ictx->snap_id != CEPH_NOSNAP)
+    if (ictx->snap_id != CEPH_NOSNAP || ictx->read_only)
       return -EROFS;
 
     snap_t snap_id = ictx->get_snap_id(snap_name);
@@ -1807,15 +1827,16 @@ reprotect_and_return_err:
       return r;
     }
 
-    ImageCtx *dest = new librbd::ImageCtx(destname, "", NULL, dest_md_ctx);
-    r = open_image(dest, true);
+    ImageCtx *dest = new librbd::ImageCtx(destname, "", NULL,
+					  dest_md_ctx, false);
+    r = open_image(dest);
     if (r < 0) {
       lderr(cct) << "failed to read newly created header" << dendl;
       return r;
     }
 
     r = copy(src, dest, prog_ctx);
-    close_image(dest);    
+    close_image(dest);
     return r;
   }
 
@@ -1883,7 +1904,7 @@ reprotect_and_return_err:
     return _snap_set(ictx, snap_name);
   }
 
-  int open_image(ImageCtx *ictx, bool watch)
+  int open_image(ImageCtx *ictx)
   {
     ldout(ictx->cct, 20) << "open_image: ictx = " << ictx
 			 << " name = '" << ictx->name
@@ -1902,7 +1923,7 @@ reprotect_and_return_err:
 
     _snap_set(ictx, ictx->snap_name.c_str());
 
-    if (watch) {
+    if (!ictx->read_only) {
       r = ictx->register_watch();
       if (r < 0) {
 	lderr(ictx->cct) << "error registering a watch: " << cpp_strerror(r)
@@ -1938,6 +1959,10 @@ reprotect_and_return_err:
   int flatten(ImageCtx *ictx, ProgressContext &prog_ctx)
   {
     ldout(ictx->cct, 20) << "flatten" << dendl;
+
+    if (ictx->read_only)
+      return -EROFS;
+
     int r;
     // ictx_check also updates parent data
     if ((r = ictx_check(ictx)) < 0) {
@@ -1954,7 +1979,7 @@ reprotect_and_return_err:
       lderr(ictx->cct) << "image has no parent" << dendl;
       return -EINVAL;
     }
-    if (ictx->snap_id != CEPH_NOSNAP) {
+    if (ictx->snap_id != CEPH_NOSNAP || ictx->read_only) {
       lderr(ictx->cct) << "snapshots cannot be flattened" << dendl;
       return -EROFS;
     }
@@ -2472,7 +2497,7 @@ reprotect_and_return_err:
     ictx->parent_lock.Unlock();
     ictx->snap_lock.Unlock();
 
-    if (snap_id != CEPH_NOSNAP)
+    if (snap_id != CEPH_NOSNAP || ictx->read_only)
       return -EROFS;
 
     ldout(cct, 20) << "  parent overlap " << overlap << dendl;
@@ -2556,6 +2581,9 @@ reprotect_and_return_err:
     ictx->get_parent_overlap(ictx->snap_id, &overlap);
     ictx->parent_lock.Unlock();
     ictx->snap_lock.Unlock();
+
+    if (snap_id != CEPH_NOSNAP || ictx->read_only)
+      return -EROFS;
 
     // map
     vector<ObjectExtent> extents;
