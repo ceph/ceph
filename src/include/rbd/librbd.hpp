@@ -72,6 +72,9 @@ public:
 
   int open(IoCtx& io_ctx, Image& image, const char *name);
   int open(IoCtx& io_ctx, Image& image, const char *name, const char *snapname);
+  // see librbd.h
+  int open_read_only(IoCtx& io_ctx, Image& image, const char *name,
+		     const char *snapname);
   int list(IoCtx& io_ctx, std::vector<std::string>& names);
   int create(IoCtx& io_ctx, const char *name, uint64_t size, int *order);
   int create2(IoCtx& io_ctx, const char *name, uint64_t size,
