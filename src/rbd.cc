@@ -200,7 +200,7 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag)
     librbd::image_info_t info;
     librbd::Image im;
 
-    r = rbd.open(io_ctx, im, i->c_str());
+    r = rbd.open_read_only(io_ctx, im, i->c_str(), NULL);
     // image might disappear between rbd.list() and rbd.open(); ignore
     // that, warn about other possible errors (EPERM, say, for opening
     // an old-format image, because you need execute permission for the
@@ -1864,16 +1864,23 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   }
 
   if (imgname && talk_to_cluster &&
-      (opt_cmd == OPT_RESIZE || opt_cmd == OPT_INFO ||
-       opt_cmd == OPT_SNAP_LIST || opt_cmd == OPT_SNAP_CREATE ||
+      (opt_cmd == OPT_RESIZE || opt_cmd == OPT_SNAP_CREATE ||
        opt_cmd == OPT_SNAP_ROLLBACK || opt_cmd == OPT_SNAP_REMOVE ||
-       opt_cmd == OPT_SNAP_PURGE || opt_cmd == OPT_EXPORT ||
-       opt_cmd == OPT_SNAP_PROTECT || opt_cmd == OPT_SNAP_UNPROTECT ||
-       opt_cmd == OPT_WATCH || opt_cmd == OPT_COPY ||
-       opt_cmd == OPT_FLATTEN || opt_cmd == OPT_CHILDREN ||
-       opt_cmd == OPT_LOCK_LIST || opt_cmd == OPT_LOCK_ADD ||
-       opt_cmd == OPT_LOCK_REMOVE || opt_cmd == OPT_BENCH_WRITE)) {
-    r = rbd.open(io_ctx, image, imgname);
+       opt_cmd == OPT_SNAP_PURGE || opt_cmd == OPT_SNAP_PROTECT ||
+       opt_cmd == OPT_SNAP_UNPROTECT || opt_cmd == OPT_WATCH ||
+       opt_cmd == OPT_FLATTEN || opt_cmd == OPT_LOCK_ADD ||
+       opt_cmd == OPT_LOCK_REMOVE || opt_cmd == OPT_BENCH_WRITE ||
+       opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
+       opt_cmd == OPT_EXPORT || opt_cmd == OPT_COPY ||
+       opt_cmd == OPT_CHILDREN || opt_cmd == OPT_LOCK_LIST)) {
+
+    if (opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
+	opt_cmd == OPT_EXPORT || opt_cmd == OPT_COPY ||
+	opt_cmd == OPT_CHILDREN || opt_cmd == OPT_LOCK_LIST) {
+      r = rbd.open_read_only(io_ctx, image, imgname, NULL);
+    } else {
+      r = rbd.open(io_ctx, image, imgname);
+    }
     if (r < 0) {
       cerr << "rbd: error opening image " << imgname << ": "
 	   << cpp_strerror(-r) << std::endl;
