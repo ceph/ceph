@@ -31,7 +31,7 @@ extern "C" {
 
 #define LIBRBD_VER_MAJOR 0
 #define LIBRBD_VER_MINOR 1
-#define LIBRBD_VER_EXTRA 6
+#define LIBRBD_VER_EXTRA 7
 
 #define LIBRBD_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 
@@ -103,6 +103,28 @@ int rbd_remove_with_progress(rados_ioctx_t io, const char *name,
 int rbd_rename(rados_ioctx_t src_io_ctx, const char *srcname, const char *destname);
 
 int rbd_open(rados_ioctx_t io, const char *name, rbd_image_t *image, const char *snap_name);
+
+/**
+ * Open an image in read-only mode.
+ *
+ * This is intended for use by clients that cannot write to a block
+ * device due to cephx restrictions. There will be no watch
+ * established on the header object, since a watch is a write. This
+ * means the metadata reported about this image (parents, snapshots,
+ * size, etc.) may become stale. This should not be used for
+ * long-running operations, unless you can be sure that one of these
+ * properties changing is safe.
+ *
+ * Attempting to write to a read-only image will return -EROFS.
+ *
+ * @param io ioctx to determine the pool the image is in
+ * @param name image name
+ * @param image where to store newly opened image handle
+ * @param snap_name name of snapshot to open at, or NULL for no snapshot
+ * @returns 0 on success, negative error code on failure
+ */
+int rbd_open_read_only(rados_ioctx_t io, const char *name, rbd_image_t *image,
+		       const char *snap_name);
 int rbd_close(rbd_image_t image);
 int rbd_resize(rbd_image_t image, uint64_t size);
 int rbd_resize_with_progress(rbd_image_t image, uint64_t size,
