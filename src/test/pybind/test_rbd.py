@@ -77,6 +77,30 @@ def test_context_manager():
             RBD().remove(ioctx, IMG_NAME)
             eq(data, read)
 
+def test_open_read_only():
+    with Rados(conffile='') as cluster:
+        with cluster.open_ioctx('rbd') as ioctx:
+            RBD().create(ioctx, IMG_NAME, IMG_SIZE)
+            data = rand_data(256)
+            with Image(ioctx, IMG_NAME) as image:
+                image.write(data, 0)
+                image.create_snap('snap')
+            with Image(ioctx, IMG_NAME, read_only=True) as image:
+                read = image.read(0, 256)
+                eq(data, read)
+                assert_raises(ReadOnlyImage, image.write, data, 0)
+                assert_raises(ReadOnlyImage, image.create_snap, 'test')
+                assert_raises(ReadOnlyImage, image.remove_snap, 'snap')
+                assert_raises(ReadOnlyImage, image.rollback_to_snap, 'snap')
+                assert_raises(ReadOnlyImage, image.protect_snap, 'snap')
+                assert_raises(ReadOnlyImage, image.unprotect_snap, 'snap')
+                assert_raises(ReadOnlyImage, image.unprotect_snap, 'snap')
+                assert_raises(ReadOnlyImage, image.flatten)
+            with Image(ioctx, IMG_NAME) as image:
+                image.remove_snap('snap')
+            RBD().remove(ioctx, IMG_NAME)
+            eq(data, read)
+
 def test_remove_dne():
     assert_raises(ImageNotFound, remove_image)
 
