@@ -142,6 +142,7 @@ class DispatchQueue;
     
     Mutex pipe_lock;
     int state;
+    atomic_t state_closed; // non-zero iff state = STATE_CLOSED
 
     // session_security handles any signatures or encryptions required for this pipe's msgs. PLR
 
@@ -243,11 +244,6 @@ class DispatchQueue;
     }
     void stop();
 
-    void send(Message *m) {
-      pipe_lock.Lock();
-      _send(m);
-      pipe_lock.Unlock();
-    }
     void _send(Message *m) {
       out_q[m->get_priority()].push_back(m);
       cond.Signal();
