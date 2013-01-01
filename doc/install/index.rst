@@ -37,6 +37,7 @@ may install development release and testing packages.
 
    Installing Debian/Ubuntu Packages <debian>
    Installing RPM Packages <rpm>
+   Upgrading Ceph <upgrading-ceph>
 
 .. raw:: html 
 

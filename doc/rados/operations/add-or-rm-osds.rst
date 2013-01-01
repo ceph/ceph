@@ -189,7 +189,7 @@ hard disks than older hosts in the cluster.
    also decompile the CRUSH map edit the file, recompile it and set it. See
    `Add/Move an OSD`_ for details. :: 
 
-	ceph osd crush set {id} {name} {weight} pool={pool-name}  [{bucket-type}={bucket-name} ...]
+	ceph osd crush set {name} {weight} [{bucket-type}={bucket-name} ...]
 
 
 Starting the OSD
@@ -286,7 +286,7 @@ After you take an OSD out of the cluster, it may still be running.
 That is, the OSD may be ``up`` and ``out``. You must stop 
 your OSD before you remove it from the configuration. :: 
 
-	ssh {new-osd-host}
+	ssh {osd-host}
 	sudo /etc/init.d/ceph stop osd.{osd-num}
 
 Once you stop your OSD, it is ``down``. 
