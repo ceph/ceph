@@ -111,7 +111,7 @@ int SimpleMessenger::_send_message(Message *m, const entity_inst_t& dest,
   }
 
   lock.Lock();
-  Pipe *pipe = rank_pipe.count(dest.addr) ? rank_pipe[ dest.addr ] : NULL;
+  Pipe *pipe = _lookup_pipe(dest.addr);
   submit_message(m, (pipe ? pipe->connection_state : NULL),
                  dest.addr, dest.name.type(), lazy);
   lock.Unlock();
@@ -315,7 +315,8 @@ Pipe *SimpleMessenger::add_accept_pipe(int sd)
  */
 Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr,
 				    int type,
-				    Connection *con)
+				    Connection *con,
+				    Message *first)
 {
   assert(lock.is_locked());
   assert(addr != my_inst.addr);
@@ -329,6 +330,8 @@ Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr,
   pipe->set_peer_addr(addr);
   pipe->policy = get_policy(type);
   pipe->start_writer();
+  if (first)
+    pipe->_send(first);
   pipe->pipe_lock.Unlock();
   pipe->register_pipe();
   pipes.insert(pipe);
@@ -363,13 +366,11 @@ Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
 
   // remote
   while (true) {
-    Pipe *pipe = NULL;
-    hash_map<entity_addr_t, Pipe*>::iterator p = rank_pipe.find(dest.addr);
-    if (p != rank_pipe.end()) {
-      pipe = p->second;
+    Pipe *pipe = _lookup_pipe(dest.addr);
+    if (pipe) {
       ldout(cct, 10) << "get_connection " << dest << " existing " << pipe << dendl;
     } else {
-      pipe = connect_rank(dest.addr, dest.name.type(), NULL);
+      pipe = connect_rank(dest.addr, dest.name.type(), NULL, NULL);
       ldout(cct, 10) << "get_connection " << dest << " new " << pipe << dendl;
     }
     Mutex::Locker l(pipe->pipe_lock);
@@ -394,10 +395,18 @@ void SimpleMessenger::submit_message(Message *m, Connection *con,
       return;
     }
     if (pipe) {
-      ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", have pipe." << dendl;
-      pipe->send(m);
+      pipe->pipe_lock.Lock();
+      if (pipe->state != Pipe::STATE_CLOSED) {
+	ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", have pipe." << dendl;
+	pipe->_send(m);
+	pipe->pipe_lock.Unlock();
+	pipe->put();
+	return;
+      }
+      pipe->pipe_lock.Unlock();
       pipe->put();
-      return;
+      ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr
+		    << ", had pipe " << pipe << ", but it closed." << dendl;
     }
   }
 
@@ -420,9 +429,7 @@ void SimpleMessenger::submit_message(Message *m, Connection *con,
     m->put();
   } else {
     ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
-    // not connected.
-    Pipe *pipe = connect_rank(dest_addr, dest_type, con);
-    pipe->send(m);
+    connect_rank(dest_addr, dest_type, con, m);
   }
 }
 
@@ -437,10 +444,9 @@ int SimpleMessenger::send_keepalive(const entity_inst_t& dest)
     // local?
     if (my_inst.addr != dest_addr) {
       // remote.
-      Pipe *pipe = 0;
-      if (rank_pipe.count( dest_proc_addr )) {
+      Pipe *pipe = _lookup_pipe(dest_proc_addr);
+      if (pipe) {
         // connected?
-        pipe = rank_pipe[ dest_proc_addr ];
 	pipe->pipe_lock.Lock();
 	ldout(cct,20) << "send_keepalive remote, " << dest_addr << ", have pipe." << dendl;
 	pipe->_send_keepalive();
@@ -558,8 +564,8 @@ void SimpleMessenger::mark_down_all()
 void SimpleMessenger::mark_down(const entity_addr_t& addr)
 {
   lock.Lock();
-  if (rank_pipe.count(addr)) {
-    Pipe *p = rank_pipe[addr];
+  Pipe *p = _lookup_pipe(addr);
+  if (p) {
     ldout(cct,1) << "mark_down " << addr << " -- " << p << dendl;
     p->unregister_pipe();
     p->pipe_lock.Lock();
