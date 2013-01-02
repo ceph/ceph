@@ -1351,8 +1351,11 @@ void CDir::fetch(Context *c, const string& want_dn, bool ignore_authpinnability)
   assert(!is_complete());
 
   if (!can_auth_pin() && !ignore_authpinnability) {
-    dout(7) << "fetch waiting for authpinnable" << dendl;
-    add_waiter(WAIT_UNFREEZE, c);
+    if (c) {
+      dout(7) << "fetch waiting for authpinnable" << dendl;
+      add_waiter(WAIT_UNFREEZE, c);
+    } else
+      dout(7) << "fetch not authpinnable and no context" << dendl;
     return;
   }
 
