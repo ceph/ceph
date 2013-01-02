@@ -1467,6 +1467,15 @@ void Monitor::handle_command(MMonCommand *m)
     monmon()->dispatch(m);
     return;
   }
+  if (m->cmd[0] == "class") {
+    reply_command(m, -EINVAL, "class distribution is no longer handled by the monitor", 0);
+    return;
+  }
+  if (m->cmd[0] == "auth") {
+    authmon()->dispatch(m);
+    return;
+  }
+
   if (m->cmd[0] == "fsid") {
     stringstream ss;
     ss << monmap->fsid;
@@ -1520,14 +1529,6 @@ void Monitor::handle_command(MMonCommand *m)
       r = -EINVAL;
     }
   } 
-  if (m->cmd[0] == "class") {
-    reply_command(m, -EINVAL, "class distribution is no longer handled by the monitor", 0);
-    return;
-  }
-  if (m->cmd[0] == "auth") {
-    authmon()->dispatch(m);
-    return;
-  }
   if (m->cmd[0] == "status") {
     if (!access_r) {
       r = -EACCES;
