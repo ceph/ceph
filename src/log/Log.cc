@@ -252,7 +252,7 @@ void Log::_log_message(const char *s, bool crash)
 
 void Log::dump_recent()
 {
-  pthread_mutex_unlock(&m_flush_mutex);
+  pthread_mutex_lock(&m_flush_mutex);
 
   pthread_mutex_lock(&m_queue_mutex);
   EntryQueue t;
