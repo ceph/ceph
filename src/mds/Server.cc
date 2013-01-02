@@ -2901,6 +2901,8 @@ void Server::handle_client_readdir(MDRequest *mdr)
 	  break;
 	}
 
+	mds->locker->drop_locks(mdr);
+	mdr->drop_local_auth_pins();
 	mdcache->open_remote_dentry(dn, dnp, new C_MDS_RetryRequest(mdcache, mdr));
 	return;
       }
