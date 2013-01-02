@@ -90,10 +90,12 @@ Mount Disks to the Data Directories
 
 If you are running multiple OSDs per host and one hard disk per OSD,  you should
 mount the disk under the OSD data directory (if you haven't done so already).
+When mounting disks in this manner, there is no need for an entry in
+``/etc/fstab``.
 
 .. versionadded:: 0.56
 
-For Botail (v 0.56) and beyond, you may specify the file system type, filesystem
+For Bobtail (v 0.56) and beyond, you may specify the file system type, filesystem
 options, and mount options. Add the following to the ``[global]`` section of your
 Ceph configuration file, and replace the values in braces with appropriate values:: 
 
@@ -126,17 +128,13 @@ and created the default directories, you may deploy Ceph with the
 .. note::  ``mkcephfs`` is a quick bootstrapping tool. It does not handle more 
    complex operations, such as upgrades.
 
-To run ``mkcephfs`` for versions prior to Bobtail (v 0.55 and prior), execute 
-the following:: 
+To run ``mkcephfs``, execute the following:: 
 
    cd /etc/ceph
    sudo mkcephfs -a -c /etc/ceph/ceph.conf -k ceph.keyring
 	
-To run ``mkcephfs`` for Bobtail (v 0.56) and beyond, execute 
-the following:: 
-
-   cd /etc/ceph
-   sudo mkcephfs -a -c /etc/ceph/ceph.conf -k ceph.keyring --mkfs
+.. note:: For ``mkcephfs`` to use the ``mkfs`` configuration options, you MUST
+   specify a ``devs`` entry for each OSD.
 
 The script adds an admin key to the ``ceph.keyring``, which is analogous to a 
 root password. See `Authentication`_ when running with ``cephx`` enabled. To
