@@ -6563,10 +6563,15 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
       }
     } else if (soid.snap) {
       // it's a clone
-      assert(head != hobject_t());
-
       stat.num_object_clones++;
       
+      if (head == hobject_t()) {
+	osd->clog.error() << mode << " " << info.pgid << " " << soid
+			  << " found clone without head";
+	++errors;
+	continue;
+      }
+
       if (soid.snap != *curclone) {
 	osd->clog.error() << mode << " " << info.pgid << " " << soid
 			  << " expected clone " << *curclone;
