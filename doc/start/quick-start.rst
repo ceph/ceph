@@ -115,22 +115,17 @@ You must perform the following steps to deploy the configuration.
 	sudo mkdir -p /var/lib/ceph/mds/ceph-a
 
 
-#. For versions prior to Bobtail (v 0.55 and before), execute the following
-   on the Ceph server host:: 
+#. Execute the following on the Ceph server host:: 
 
 	cd /etc/ceph
 	sudo mkcephfs -a -c /etc/ceph/ceph.conf -k ceph.keyring
 	
-#. For Bobtail and subsequent versions (v 0.56 and after), execute the 
-   following on the Ceph server host:: 
-
-	cd /etc/ceph
-	sudo mkcephfs -a -c /etc/ceph/ceph.conf -k ceph.keyring --mkfs
 
 Among other things, ``mkcephfs`` will deploy Ceph and generate a
 ``client.admin`` user and key. For Bobtail and subsequent versions (v 0.56 and
-after), if you specify ``--mkfs``, the ``mkcephfs`` script will create and mount
-the file system for you.
+after), the ``mkcephfs`` script will create and mount the filesystem for you
+provided you specify ``osd mkfs`` ``osd mount`` and ``devs`` settings in your
+Ceph configuration file. 
 
 
 Start Ceph
