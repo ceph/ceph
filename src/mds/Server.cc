@@ -5228,6 +5228,7 @@ void Server::handle_client_rename(MDRequest *mdr)
       while (destbase != srcbase) {
 	desttrace.insert(desttrace.begin(),
 			 destbase->get_projected_parent_dn());
+	rdlocks.insert(&desttrace[0]->lock);
 	dout(10) << "rename prepending desttrace with " << *desttrace[0] << dendl;
 	destbase = destbase->get_projected_parent_dn()->get_dir()->get_inode();
       }
