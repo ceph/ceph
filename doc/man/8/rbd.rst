@@ -104,6 +104,10 @@ Parameters
 
    Specifies output formatting (default: plain, json, xml)
 
+.. option:: --pretty-format
+
+   Make json or xml formatted output more human-readable.
+
 
 Commands
 ========

@@ -133,7 +133,8 @@ void usage()
 "                                     authenticate as\n"
 "  --keyfile <path>                   file containing secret key for use with cephx\n"
 "  --shared <tag>                     take a shared (rather than exclusive) lock\n"
-"  --format <output-format>           output format (default: plain, json, xml)\n";
+"  --format <output-format>           output format (default: plain, json, xml)\n"
+"  --pretty-format                    make json or xml output more readable\n";
 }
 
 static string feature_str(uint64_t feature)
@@ -199,12 +200,13 @@ struct MyProgressContext : public librbd::ProgressContext {
 };
 
 static int get_outfmt(const char *output_format,
+		      bool pretty,
 		      boost::scoped_ptr<Formatter> *f)
 {
   if (!strcmp(output_format, "json")) {
-    f->reset(new JSONFormatter(false));
+    f->reset(new JSONFormatter(pretty));
   } else if (!strcmp(output_format, "xml")) {
-    f->reset(new XMLFormatter(false));
+    f->reset(new XMLFormatter(pretty));
   } else if (strcmp(output_format, "plain")) {
     cerr << "rbd: unknown format '" << output_format << "'" << std::endl;
     return -EINVAL;
@@ -1792,6 +1794,7 @@ int main(int argc, const char **argv)
     *devpath = NULL, *lock_cookie = NULL, *lock_client = NULL,
     *lock_tag = NULL, *output_format = "plain";
   bool lflag = false;
+  int pretty_format = 0;
   long long stripe_unit = 0, stripe_count = 0;
   long long bench_io_size = 4096, bench_io_threads = 16, bench_bytes = 1 << 30;
 
@@ -1871,6 +1874,7 @@ int main(int argc, const char **argv)
 	output_format = strdup(val.c_str());
 	output_format_specified = true;
       }
+    } else if (ceph_argparse_binary_flag(args, i, &pretty_format, NULL, "--pretty-format", (char*)NULL)) {
     } else {
       ++i;
     }
@@ -1977,6 +1981,12 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     return EXIT_FAILURE;
   }
 
+  if (pretty_format && !strcmp(output_format, "plain")) {
+    cerr << "rbd: --pretty-format only works when --format is json or xml"
+	 << std::endl;
+    return EXIT_FAILURE;
+  }
+
   boost::scoped_ptr<Formatter> formatter;
   if (output_format_specified && opt_cmd != OPT_SHOWMAPPED &&
       opt_cmd != OPT_INFO && opt_cmd != OPT_LIST && opt_cmd != OPT_SNAP_LIST &&
@@ -1984,7 +1994,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     cerr << "rbd: command doesn't use output formatting"
 	 << std::endl;
     return EXIT_FAILURE;
-  } else if (get_outfmt(output_format, &formatter) < 0) {
+  } else if (get_outfmt(output_format, pretty_format, &formatter) < 0) {
     return EXIT_FAILURE;
   }
 
