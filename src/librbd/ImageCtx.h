@@ -54,8 +54,6 @@ namespace librbd {
     WatchCtx *wctx;
     int refresh_seq;    ///< sequence for refresh requests
     int last_refresh;   ///< last completed refresh
-    uint64_t last_header_version; ///< last version of the header object
-                                  ///< read from librados
 
     /**
      * Lock ordering:
