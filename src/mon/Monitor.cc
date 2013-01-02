@@ -1423,6 +1423,34 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
     f->close_section();
 }
 
+void Monitor::get_status(stringstream &ss, Formatter *f)
+{
+  if (f)
+    f->open_object_section("status");
+
+  // reply with the status for all the components
+  string health;
+  get_health(health, NULL, f);
+
+  if (f) {
+    f->dump_stream("monmap") << *monmap;
+    f->dump_stream("election_epoch") << get_epoch();
+    f->dump_stream("quorum") << get_quorum();
+    f->dump_stream("quorum_names") << get_quorum_names();
+    f->dump_stream("osdmap") << osdmon()->osdmap;
+    f->dump_stream("pgmap") << pgmon()->pg_map;
+    f->dump_stream("mdsmap") << mdsmon()->mdsmap;
+    f->close_section();
+  } else {
+    ss << "   health " << health << "\n";
+    ss << "   monmap " << *monmap << ", election epoch " << get_epoch()
+      << ", quorum " << get_quorum() << " " << get_quorum_names() << "\n";
+    ss << "   osdmap " << osdmon()->osdmap << "\n";
+    ss << "    pgmap " << pgmon()->pg_map << "\n";
+    ss << "   mdsmap " << mdsmon()->mdsmap << "\n";
+  }
+}
+
 void Monitor::handle_command(MMonCommand *m)
 {
   if (m->fsid != monmap->fsid) {
@@ -1528,22 +1556,63 @@ void Monitor::handle_command(MMonCommand *m)
       rs = "must supply options to be parsed in a single string";
       r = -EINVAL;
     }
-  } else if (m->cmd[0] == "status") {
+  } else if ((m->cmd[0] == "status") || (m->cmd[0] == "health")) {
     if (!access_r) {
       r = -EACCES;
       rs = "access denied";
       goto out;
     }
-    // reply with the status for all the components
-    string health;
-    get_health(health, NULL, NULL);
+
+    vector<const char *> args;
+    for (unsigned int i = 0; i < m->cmd.size(); ++i)
+      args.push_back(m->cmd[i].c_str());
+
+    string format = "plain";
+    JSONFormatter *jf = NULL;
+    for (vector<const char*>::iterator i = args.begin(); i != args.end();) {
+      string val;
+      if (ceph_argparse_witharg(args, i, &val,
+            "-f", "--format", (char*)NULL)) {
+        format = val;
+      } else {
+        ++i;
+      }
+    }
+
+    if (format != "plain") {
+      if (format == "json") {
+        jf = new JSONFormatter(true);
+      } else {
+        r = -EINVAL;
+        stringstream err_ss;
+        err_ss << "unrecognized format '" << format
+          << "' (available: plain, json)";
+        rs = err_ss.str();
+        goto out;
+      }
+    }
+
     stringstream ss;
-    ss << "   health " << health << "\n";
-    ss << "   monmap " << *monmap << ", election epoch " << get_epoch() << ", quorum " << get_quorum()
-       << " " << get_quorum_names() << "\n";
-    ss << "   osdmap " << osdmon()->osdmap << "\n";
-    ss << "    pgmap " << pgmon()->pg_map << "\n";
-    ss << "   mdsmap " << mdsmon()->mdsmap << "\n";
+    if (string(args[0]) == "status") {
+      get_status(ss, jf);
+
+      if (jf) {
+        jf->flush(ss);
+        ss << '\n';
+      }
+    } else if (string(args[0]) == "health") {
+      string health_str;
+      get_health(health_str, (args.size() > 1) ? &rdata : NULL, jf);
+      if (jf) {
+        jf->flush(ss);
+        ss << '\n';
+      } else {
+        ss << health_str;
+      }
+    } else {
+      assert(0 == "We should never get here!");
+      return;
+    }
     rs = ss.str();
     r = 0;
   } else if (m->cmd[0] == "report") {
@@ -1614,14 +1683,6 @@ void Monitor::handle_command(MMonCommand *m)
     stringstream ss;
     _mon_status(ss);
     rs = ss.str();
-    r = 0;
-  } else if (m->cmd[0] == "health") {
-    if (!access_r) {
-      r = -EACCES;
-      rs = "access denied";
-      goto out;
-    }
-    get_health(rs, (m->cmd.size() > 1) ? &rdata : NULL, NULL);
     r = 0;
   } else if (m->cmd[0] == "heap") {
     if (!access_all) {
