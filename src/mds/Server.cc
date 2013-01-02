@@ -4531,11 +4531,14 @@ void Server::handle_client_unlink(MDRequest *mdr)
 
   // -- create stray dentry? --
   CDentry *straydn = mdr->straydn;
-  if (dnl->is_primary() && !straydn) {
-    straydn = mdcache->get_or_create_stray_dentry(dnl->get_inode());
-    mdr->pin(straydn);
-    mdr->straydn = straydn;
-  }
+  if (dnl->is_primary()) {
+    if (!straydn) {
+      straydn = mdcache->get_or_create_stray_dentry(dnl->get_inode());
+      mdr->pin(straydn);
+      mdr->straydn = straydn;
+    }
+  } else if (straydn)
+    straydn = NULL;
   if (straydn)
     dout(10) << " straydn is " << *straydn << dendl;
 
@@ -5274,11 +5277,14 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   // -- create stray dentry? --
   CDentry *straydn = mdr->straydn;
-  if (destdnl->is_primary() && !linkmerge && !straydn) {
-    straydn = mdcache->get_or_create_stray_dentry(destdnl->get_inode());
-    mdr->pin(straydn);
-    mdr->straydn = straydn;
-  }
+  if (destdnl->is_primary() && !linkmerge) {
+    if (!straydn) {
+      straydn = mdcache->get_or_create_stray_dentry(destdnl->get_inode());
+      mdr->pin(straydn);
+      mdr->straydn = straydn;
+    }
+  } else if (straydn)
+    straydn = NULL;
   if (straydn)
     dout(10) << " straydn is " << *straydn << dendl;
 
