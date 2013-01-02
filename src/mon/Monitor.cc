@@ -1448,220 +1448,221 @@ void Monitor::handle_command(MMonCommand *m)
   string rs;
   int r = -EINVAL;
   rs = "unrecognized command";
-  if (!m->cmd.empty()) {
-    if (m->cmd[0] == "mds") {
-      mdsmon()->dispatch(m);
-      return;
+  if (m->cmd.empty())
+    goto out;
+
+  if (m->cmd[0] == "mds") {
+    mdsmon()->dispatch(m);
+    return;
+  }
+  if (m->cmd[0] == "osd") {
+    osdmon()->dispatch(m);
+    return;
+  }
+  if (m->cmd[0] == "pg") {
+    pgmon()->dispatch(m);
+    return;
+  }
+  if (m->cmd[0] == "mon") {
+    monmon()->dispatch(m);
+    return;
+  }
+  if (m->cmd[0] == "fsid") {
+    stringstream ss;
+    ss << monmap->fsid;
+    reply_command(m, 0, ss.str(), rdata, 0);
+    return;
+  }
+  if (m->cmd[0] == "log") {
+    if (!access_r) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
     }
-    if (m->cmd[0] == "osd") {
-      osdmon()->dispatch(m);
-      return;
+    stringstream ss;
+    for (unsigned i=1; i<m->cmd.size(); i++) {
+      if (i > 1)
+        ss << ' ';
+      ss << m->cmd[i];
     }
-    if (m->cmd[0] == "pg") {
-      pgmon()->dispatch(m);
-      return;
+    clog.info(ss);
+    rs = "ok";
+    reply_command(m, 0, rs, rdata, 0);
+    return;
+  }
+  if (m->cmd[0] == "stop_cluster") {
+    if (!access_all) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
     }
-    if (m->cmd[0] == "mon") {
-      monmon()->dispatch(m);
-      return;
+    stop_cluster();
+    reply_command(m, 0, "initiating cluster shutdown", 0);
+    return;
+  }
+
+  if (m->cmd[0] == "injectargs") {
+    if (!access_all) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
     }
-    if (m->cmd[0] == "fsid") {
-      stringstream ss;
-      ss << monmap->fsid;
-      reply_command(m, 0, ss.str(), rdata, 0);
-      return;
+    if (m->cmd.size() == 2) {
+      dout(0) << "parsing injected options '" << m->cmd[1] << "'" << dendl;
+      ostringstream oss;
+      g_conf->injectargs(m->cmd[1], &oss);
+      derr << "injectargs:" << dendl;
+      derr << oss.str() << dendl;
+      rs = "parsed options";
+      r = 0;
+    } else {
+      rs = "must supply options to be parsed in a single string";
+      r = -EINVAL;
     }
-    if (m->cmd[0] == "log") {
-      if (!access_r) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
-      stringstream ss;
-      for (unsigned i=1; i<m->cmd.size(); i++) {
-	if (i > 1)
-	  ss << ' ';
-	ss << m->cmd[i];
-      }
-      clog.info(ss);
-      rs = "ok";
-      reply_command(m, 0, rs, rdata, 0);
-      return;
+  } 
+  if (m->cmd[0] == "class") {
+    reply_command(m, -EINVAL, "class distribution is no longer handled by the monitor", 0);
+    return;
+  }
+  if (m->cmd[0] == "auth") {
+    authmon()->dispatch(m);
+    return;
+  }
+  if (m->cmd[0] == "status") {
+    if (!access_r) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
     }
-    if (m->cmd[0] == "stop_cluster") {
-      if (!access_all) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
-      stop_cluster();
-      reply_command(m, 0, "initiating cluster shutdown", 0);
-      return;
+    // reply with the status for all the components
+    string health;
+    get_health(health, NULL, NULL);
+    stringstream ss;
+    ss << "   health " << health << "\n";
+    ss << "   monmap " << *monmap << ", election epoch " << get_epoch() << ", quorum " << get_quorum()
+       << " " << get_quorum_names() << "\n";
+    ss << "   osdmap " << osdmon()->osdmap << "\n";
+    ss << "    pgmap " << pgmon()->pg_map << "\n";
+    ss << "   mdsmap " << mdsmon()->mdsmap << "\n";
+    rs = ss.str();
+    r = 0;
+  }
+  if (m->cmd[0] == "report") {
+    if (!access_r) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
     }
 
-    if (m->cmd[0] == "injectargs") {
-      if (!access_all) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
-      if (m->cmd.size() == 2) {
-	dout(0) << "parsing injected options '" << m->cmd[1] << "'" << dendl;
-	ostringstream oss;
-	g_conf->injectargs(m->cmd[1], &oss);
-	derr << "injectargs:" << dendl;
-	derr << oss.str() << dendl;
-	rs = "parsed options";
-	r = 0;
-      } else {
-	rs = "must supply options to be parsed in a single string";
-	r = -EINVAL;
-      }
-    } 
-    if (m->cmd[0] == "class") {
-      reply_command(m, -EINVAL, "class distribution is no longer handled by the monitor", 0);
+    JSONFormatter jf(true);
+
+    jf.open_object_section("report");
+    jf.dump_string("version", ceph_version_to_str());
+    jf.dump_string("commit", git_version_to_str());
+    jf.dump_stream("timestamp") << ceph_clock_now(NULL);
+
+    string d;
+    for (unsigned i = 1; i < m->cmd.size(); i++) {
+      if (i > 1)
+        d += " ";
+      d += m->cmd[i];
+    }
+    jf.dump_string("tag", d);
+
+    string hs;
+    get_health(hs, NULL, &jf);
+    
+    monmon()->dump_info(&jf);
+    osdmon()->dump_info(&jf);
+    mdsmon()->dump_info(&jf);
+    pgmon()->dump_info(&jf);
+
+    jf.close_section();
+    stringstream ss;
+    jf.flush(ss);
+
+    bufferlist bl;
+    bl.append("-------- BEGIN REPORT --------\n");
+    bl.append(ss);
+    ostringstream ss2;
+    ss2 << "\n-------- END REPORT " << bl.crc32c(6789) << " --------\n";
+    rdata.append(bl);
+    rdata.append(ss2.str());
+    rs = string();
+    r = 0;
+  }
+  if (m->cmd[0] == "quorum_status") {
+    if (!access_r) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
+    }
+    // make sure our map is readable and up to date
+    if (!is_leader() && !is_peon()) {
+      dout(10) << " waiting for quorum" << dendl;
+      waitfor_quorum.push_back(new C_RetryMessage(this, m));
       return;
     }
-    if (m->cmd[0] == "auth") {
-      authmon()->dispatch(m);
-      return;
+    stringstream ss;
+    _quorum_status(ss);
+    rs = ss.str();
+    r = 0;
+  }
+  if (m->cmd[0] == "mon_status") {
+    if (!access_r) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
     }
-    if (m->cmd[0] == "status") {
-      if (!access_r) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
-      // reply with the status for all the components
-      string health;
-      get_health(health, NULL, NULL);
-      stringstream ss;
-      ss << "   health " << health << "\n";
-      ss << "   monmap " << *monmap << ", election epoch " << get_epoch() << ", quorum " << get_quorum()
-	 << " " << get_quorum_names() << "\n";
-      ss << "   osdmap " << osdmon()->osdmap << "\n";
-      ss << "    pgmap " << pgmon()->pg_map << "\n";
-      ss << "   mdsmap " << mdsmon()->mdsmap << "\n";
+    stringstream ss;
+    _mon_status(ss);
+    rs = ss.str();
+    r = 0;
+  }
+  if (m->cmd[0] == "health") {
+    if (!access_r) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
+    }
+    get_health(rs, (m->cmd.size() > 1) ? &rdata : NULL, NULL);
+    r = 0;
+  }
+  if (m->cmd[0] == "heap") {
+    if (!access_all) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
+    }
+    if (!ceph_using_tcmalloc())
+      rs = "tcmalloc not enabled, can't use heap profiler commands\n";
+    else {
+      ostringstream ss;
+      ceph_heap_profiler_handle_command(m->cmd, ss);
       rs = ss.str();
+    }
+  }
+  if (m->cmd[0] == "quorum") {
+    if (!access_all) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
+    }
+    if (m->cmd[1] == "exit") {
+      reset();
+      start_election();
+      elector.stop_participating();
+      rs = "stopped responding to quorum, initiated new election";
       r = 0;
-    }
-    if (m->cmd[0] == "report") {
-      if (!access_r) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
-
-      JSONFormatter jf(true);
-
-      jf.open_object_section("report");
-      jf.dump_string("version", ceph_version_to_str());
-      jf.dump_string("commit", git_version_to_str());
-      jf.dump_stream("timestamp") << ceph_clock_now(NULL);
-
-      string d;
-      for (unsigned i = 1; i < m->cmd.size(); i++) {
-	if (i > 1)
-	  d += " ";
-	d += m->cmd[i];
-      }
-      jf.dump_string("tag", d);
-
-      string hs;
-      get_health(hs, NULL, &jf);
-      
-      monmon()->dump_info(&jf);
-      osdmon()->dump_info(&jf);
-      mdsmon()->dump_info(&jf);
-      pgmon()->dump_info(&jf);
-
-      jf.close_section();
-      stringstream ss;
-      jf.flush(ss);
-
-      bufferlist bl;
-      bl.append("-------- BEGIN REPORT --------\n");
-      bl.append(ss);
-      ostringstream ss2;
-      ss2 << "\n-------- END REPORT " << bl.crc32c(6789) << " --------\n";
-      rdata.append(bl);
-      rdata.append(ss2.str());
-      rs = string();
+    } else if (m->cmd[1] == "enter") {
+      elector.start_participating();
+      reset();
+      start_election();
+      rs = "started responding to quorum, initiated new election";
       r = 0;
-    }
-    if (m->cmd[0] == "quorum_status") {
-      if (!access_r) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
-      // make sure our map is readable and up to date
-      if (!is_leader() && !is_peon()) {
-	dout(10) << " waiting for quorum" << dendl;
-	waitfor_quorum.push_back(new C_RetryMessage(this, m));
-	return;
-      }
-      stringstream ss;
-      _quorum_status(ss);
-      rs = ss.str();
-      r = 0;
-    }
-    if (m->cmd[0] == "mon_status") {
-      if (!access_r) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
-      stringstream ss;
-      _mon_status(ss);
-      rs = ss.str();
-      r = 0;
-    }
-    if (m->cmd[0] == "health") {
-      if (!access_r) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
-      get_health(rs, (m->cmd.size() > 1) ? &rdata : NULL, NULL);
-      r = 0;
-    }
-    if (m->cmd[0] == "heap") {
-      if (!access_all) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
-      if (!ceph_using_tcmalloc())
-	rs = "tcmalloc not enabled, can't use heap profiler commands\n";
-      else {
-	ostringstream ss;
-	ceph_heap_profiler_handle_command(m->cmd, ss);
-	rs = ss.str();
-      }
-    }
-    if (m->cmd[0] == "quorum") {
-      if (!access_all) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
-      if (m->cmd[1] == "exit") {
-        reset();
-        start_election();
-        elector.stop_participating();
-        rs = "stopped responding to quorum, initiated new election";
-        r = 0;
-      } else if (m->cmd[1] == "enter") {
-        elector.start_participating();
-        reset();
-        start_election();
-        rs = "started responding to quorum, initiated new election";
-        r = 0;
-      } else {
-	rs = "unknown quorum subcommand; use exit or enter";
-	r = -EINVAL;
-      }
+    } else {
+      rs = "unknown quorum subcommand; use exit or enter";
+      r = -EINVAL;
     }
   }
 
