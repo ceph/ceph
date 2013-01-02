@@ -2,7 +2,7 @@
 
 set -e
 
-wget http://ceph.com/qa/pjd.tgz
+wget http://ceph.com/qa/pjd-fstest-20090130-RC-open24.tgz
 tar zxvf pjd*.tgz
 cd pjd*
 make
@@ -12,5 +12,5 @@ cd tmp
 # must be root!
 sudo prove -r -v --exec 'bash -x' ../pjd*/tests
 cd ..
-rm -r tmp pjd*
+rm -rf tmp pjd*
 
