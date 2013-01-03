@@ -2604,17 +2604,19 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 {
   int client = session->inst.name.num();
   assert(snapid);
-
   assert(session->connection);
   
   bool valid = true;
 
   // do not issue caps if inode differs from readdir snaprealm
   SnapRealm *realm = find_snaprealm();
-  bool no_caps = (realm && dir_realm && realm != dir_realm);
+  bool no_caps = (realm && dir_realm && realm != dir_realm) ||
+		 is_frozen() || state_test(CInode::STATE_EXPORTINGCAPS);
   if (no_caps)
-    dout(20) << "encode_inodestat realm=" << realm << " snaprealm " << snaprealm
-	     << " no_caps=" << no_caps << dendl;
+    dout(20) << "encode_inodestat no caps"
+	     << ((realm && dir_realm && realm != dir_realm)?", snaprealm differs ":"")
+	     << (state_test(CInode::STATE_EXPORTINGCAPS)?", exporting caps":"")
+	     << (is_frozen()?", frozen inode":"") << dendl;
 
   // pick a version!
   inode_t *oi = &inode;
