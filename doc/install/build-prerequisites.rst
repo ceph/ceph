@@ -38,8 +38,14 @@ installed on your host. ::
 On Debian/Squeeze, execute ``aptitude install`` for each dependency that isn't 
 installed on your host. ::
 
-	aptitude install autotools-dev autoconf automake cdbs gcc g++ git libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev libfuse-dev linux-kernel-headers libcrypto++-dev libcrypto++ libexpat1-dev
+	aptitude install autotools-dev autoconf automake cdbs gcc g++ git libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev libfuse-dev linux-kernel-headers libcrypto++-dev libcrypto++ libexpat1-dev pkg-config libcurl4-gnutls-dev
+	
+On Debian/Wheezy, you may also need:: 
 
+	keyutils-dev libaio and libboost-thread-dev
+
+.. note:: Some distributions that support Google's memory profiler tool may use
+   a different package name (e.g., ``libgoogle-perftools4``).
 
 Ubuntu
 ======
