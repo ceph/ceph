@@ -64,21 +64,36 @@ Where:
 
 ``{pg-num}``
 
-:Description: The total number of placement groups for the pool 
+:Description: The total number of placement groups for the pool. See `Placement
+              Groups`_  for details on calculating a suitable number. The 
+              default value ``8`` is NOT suitable for most systems.
+
 :Type: Integer
-:Required: No
+:Required: Yes
+:Default: 8
 
 ``{pgp-num}``
 
-:Description: The total number of placement groups for placement purposes.
+:Description: The total number of placement groups for placement purposes. This
+              **should be equal to the total number of placement groups**, except 
+              for placement group splitting scenarios.
+
 :Type: Integer
-:Required: No
+:Required: Yes
+:Default: 8
 
-When you create a pool, you should consider setting the number of 
-placement groups.
+When you create a pool, set the number of placement groups to a reasonable value
+(e.g., ``100``). Consider the total number of placement groups per OSD too.
+Placement groups are computationally expensive, so performance will degrade when
+you have many pools with many placement groups (e.g., 50 pools with 100
+placement groups each). The point of diminishing returns depends upon the power
+of the OSD host.
 
-.. important:: You cannot change the number of placement groups in a pool
-   after you create it. 
+.. important:: Increasing the number of placement groups in a pool after you 
+   create the pool is still an experimental feature in Bobtail (v 0.56). We 
+   recommend defining a reasonable number of placement groups and maintaining
+   that number until Ceph's placement group splitting and merging 
+   functionality matures.
 
 See `Placement Groups`_ for details on calculating an appropriate number of 
 placement groups for your pool.
