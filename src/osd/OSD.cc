@@ -4900,6 +4900,23 @@ void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg)
   }
 }
 
+bool OSD::compat_must_dispatch_immediately(PG *pg)
+{
+  assert(pg->is_locked());
+  for (vector<int>::iterator i = pg->acting.begin();
+       i != pg->acting.end();
+       ++i) {
+    if (*i == whoami)
+      continue;
+    ConnectionRef conn =
+      service.get_con_osd_cluster(*i, pg->get_osdmap()->get_epoch());
+    if (conn && !(conn->features & CEPH_FEATURE_INDEP_PG_MAP)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap)
 {
   do_notifies(*ctx.notify_list, curmap);
@@ -6164,7 +6181,12 @@ void OSD::process_peering_events(const list<PG*> &pgs)
       rctx.on_applied->add(new C_CompleteSplits(this, split_pgs));
       split_pgs.clear();
     }
-    dispatch_context_transaction(rctx, pg);
+    if (compat_must_dispatch_immediately(pg)) {
+      dispatch_context(rctx, pg, curmap);
+      rctx = create_context();
+    } else {
+      dispatch_context_transaction(rctx, pg);
+    }
     pg->unlock();
   }
   if (need_up_thru)
