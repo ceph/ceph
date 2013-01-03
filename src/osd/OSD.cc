@@ -4142,9 +4142,6 @@ void OSD::activate_map()
   dout(7) << "activate_map version " << osdmap->get_epoch() << dendl;
 
   int num_pg_primary = 0, num_pg_replica = 0, num_pg_stray = 0;
-
-  epoch_t oldest_last_clean = osdmap->get_epoch();
-
   list<PG*> to_remove;
 
   service.expand_pg_num(service.get_osdmap(),
@@ -4162,9 +4159,6 @@ void OSD::activate_map()
       num_pg_replica++;
     else
       num_pg_stray++;
-
-    if (pg->is_primary() && pg->info.history.last_epoch_clean < oldest_last_clean)
-      oldest_last_clean = pg->info.history.last_epoch_clean;
 
     set<pg_t> split_pgs;
     if (!osdmap->have_pg_pool(pg->info.pgid.pool())) {
