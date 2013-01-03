@@ -709,7 +709,7 @@ def cluster(ctx, config):
         for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
             remote.run(
                 args=[
-                    'MALLOC_CHECK_=2',
+                    'MALLOC_CHECK_=3',
                     '/tmp/cephtest/enable-coredump',
                     '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                     coverage_dir,
