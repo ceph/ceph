@@ -772,6 +772,7 @@ private:
     epoch_t advance_to, PG *pg, PG::RecoveryCtx *rctx,
     set<boost::intrusive_ptr<PG> > *split_pgs);
   void advance_map(ObjectStore::Transaction& t, C_Contexts *tfin);
+  void consume_map();
   void activate_map();
 
   // osd map cache (past osd maps)
