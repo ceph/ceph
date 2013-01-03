@@ -4141,10 +4141,6 @@ void OSD::activate_map()
 
   dout(7) << "activate_map version " << osdmap->get_epoch() << dendl;
 
-  map< int, vector<pair<pg_notify_t,pg_interval_map_t> > >  notify_list;  // primary -> list
-  map< int, map<pg_t,pg_query_t> > query_map;    // peer -> PG -> get_summary_since
-  map<int,MOSDPGInfo*> info_map;  // peer -> message
-
   int num_pg_primary = 0, num_pg_replica = 0, num_pg_stray = 0;
 
   epoch_t oldest_last_clean = osdmap->get_epoch();
