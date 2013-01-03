@@ -1382,7 +1382,7 @@ void OSDMap::print(ostream& out) const
   out << "epoch " << get_epoch() << "\n"
       << "fsid " << get_fsid() << "\n"
       << "created " << get_created() << "\n"
-      << "modifed " << get_modified() << "\n";
+      << "modified " << get_modified() << "\n";
 
   out << "flags " << get_flag_string() << "\n";
   if (get_cluster_snapshot().length())
