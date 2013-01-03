@@ -3956,7 +3956,14 @@ void OSD::handle_osd_map(MOSDMap *m)
   check_osdmap_features();
 
   // yay!
-  activate_map();
+  consume_map();
+
+  if (!is_active()) {
+    dout(10) << " not yet active; waiting for peering wq to drain" << dendl;
+    peering_wq.drain();
+  } else {
+    activate_map();
+  }
 
   if (m->newest_map && m->newest_map > last) {
     dout(10) << " msg say newest map is " << m->newest_map << ", requesting more" << dendl;
@@ -4135,11 +4142,10 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
   }
 }
 
-void OSD::activate_map()
+void OSD::consume_map()
 {
   assert(osd_lock.is_locked());
-
-  dout(7) << "activate_map version " << osdmap->get_epoch() << dendl;
+  dout(7) << "consume_map version " << osdmap->get_epoch() << dendl;
 
   int num_pg_primary = 0, num_pg_replica = 0, num_pg_stray = 0;
   list<PG*> to_remove;
@@ -4197,21 +4203,21 @@ void OSD::activate_map()
     pg->queue_null(osdmap->get_epoch(), osdmap->get_epoch());
     pg->unlock();
   }
-
   
   logger->set(l_osd_pg, pg_map.size());
   logger->set(l_osd_pg_primary, num_pg_primary);
   logger->set(l_osd_pg_replica, num_pg_replica);
   logger->set(l_osd_pg_stray, num_pg_stray);
+}
+
+void OSD::activate_map()
+{
+  assert(osd_lock.is_locked());
+
+  dout(7) << "activate_map version " << osdmap->get_epoch() << dendl;
 
   wake_all_pg_waiters();   // the pg mapping may have shifted
   maybe_update_heartbeat_peers();
-
-  if (!is_active()) {
-    dout(10) << " not yet active; waiting for peering wq to drain" << dendl;
-    peering_wq.drain();
-    return;
-  }
 
   if (osdmap->test_flag(CEPH_OSDMAP_FULL)) {
     dout(10) << " osdmap flagged full, doing onetime osdmap subscribe" << dendl;
