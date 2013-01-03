@@ -1936,14 +1936,14 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
     want_auth = true;
 
   if (want_auth) {
+    if (ref->is_ambiguous_auth()) {
+      dout(10) << "waiting for single auth on " << *ref << dendl;
+      ref->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
+      return 0;
+    }
     if (!ref->is_auth()) {
-      if (ref->is_ambiguous_auth()) {
-	dout(10) << "waiting for single auth on " << *ref << dendl;
-	ref->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
-      } else {
-	dout(10) << "fw to auth for " << *ref << dendl;
-	mdcache->request_forward(mdr, ref->authority().first);
-      }
+      dout(10) << "fw to auth for " << *ref << dendl;
+      mdcache->request_forward(mdr, ref->authority().first);
       return 0;
     }
 
@@ -2434,6 +2434,14 @@ void Server::handle_client_open(MDRequest *mdr)
   CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, need_auth);
   if (!cur)
     return;
+
+  if (cur->is_frozen() || cur->state_test(CInode::STATE_EXPORTINGCAPS)) {
+    assert(!need_auth);
+    mdr->done_locking = false;
+    CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+    if (!cur)
+      return;
+  }
 
   if (mdr->snapid != CEPH_NOSNAP && mdr->client_request->may_write()) {
     reply_request(mdr, -EROFS);
