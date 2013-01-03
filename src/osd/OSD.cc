@@ -3956,8 +3956,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   check_osdmap_features();
 
   // yay!
-  if (is_active())
-    activate_map();
+  activate_map();
 
   if (m->newest_map && m->newest_map > last) {
     dout(10) << " msg say newest map is " << m->newest_map << ", requesting more" << dendl;
@@ -4048,7 +4047,8 @@ void OSD::advance_pg(
 
     lastmap = nextmap;
   }
-  pg->handle_activate_map(rctx);
+  if (!is_booting())
+    pg->handle_activate_map(rctx);
 }
 
 /** 
@@ -4216,6 +4216,12 @@ void OSD::activate_map()
 
   wake_all_pg_waiters();   // the pg mapping may have shifted
   maybe_update_heartbeat_peers();
+
+  if (!is_active()) {
+    dout(10) << " not yet active; waiting for peering wq to drain" << dendl;
+    peering_wq.drain();
+    return;
+  }
 
   if (osdmap->test_flag(CEPH_OSDMAP_FULL)) {
     dout(10) << " osdmap flagged full, doing onetime osdmap subscribe" << dendl;
