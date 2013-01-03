@@ -1147,8 +1147,10 @@ void FileJournal::write_thread_entry()
     }
     assert(r == 0);
 
-    logger->inc(l_os_j_wr);
-    logger->inc(l_os_j_wr_bytes, bl.length());
+    if (logger) {
+      logger->inc(l_os_j_wr);
+      logger->inc(l_os_j_wr_bytes, bl.length());
+    }
 
 #ifdef HAVE_LIBAIO
     if (aio)
@@ -1249,40 +1251,51 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
 
   dout(20) << "write_aio_bl " << pos << "~" << bl.length() << " seq " << seq << dendl;
   
-  aio_queue.push_back(aio_info(bl, pos, seq));
-  aio_info& aio = aio_queue.back();
-
-  aio.iov = new iovec[aio.bl.buffers().size()];
-  int n = 0;
-  for (std::list<buffer::ptr>::const_iterator p = aio.bl.buffers().begin(); 
-       p != aio.bl.buffers().end();
-       ++p, ++n) {
-    aio.iov[n].iov_base = (void *)p->c_str();
-    aio.iov[n].iov_len = p->length();
-  }
-  io_prep_pwritev(&aio.iocb, fd, aio.iov, n, pos);
-
-  dout(20) << "write_aio_bl .. " << aio.off << "~" << aio.len
-	   << " in " << n << dendl;
-
-  aio_num++;
-  aio_bytes += aio.len;
-
-  iocb *piocb = &aio.iocb;
-  int attempts = 10;
-  do {
-    int r = io_submit(aio_ctx, 1, &piocb);
-    if (r < 0) {
-      derr << "io_submit to " << aio.off << "~" << aio.len
-	   << " got " << cpp_strerror(r) << dendl;
-      if (r == -EAGAIN && attempts-- > 0) {
-	usleep(500);
-	continue;
-      }
-      assert(0 == "io_submit got unexpected error");
+  while (bl.length() > 0) {
+    int max = MIN(bl.buffers().size(), IOV_MAX-1);
+    iovec *iov = new iovec[max];
+    int n = 0;
+    unsigned len = 0;
+    for (std::list<buffer::ptr>::const_iterator p = bl.buffers().begin();
+	 n < max;
+	 ++p, ++n) {
+      assert(p != bl.buffers().end());
+      iov[n].iov_base = (void *)p->c_str();
+      iov[n].iov_len = p->length();
+      len += p->length();
     }
-  } while (false);
-  pos += aio.len;
+
+    bufferlist tbl;
+    bl.splice(0, len, &tbl);  // move bytes from bl -> tbl
+
+    aio_queue.push_back(aio_info(tbl, pos, bl.length() > 0 ? 0 : seq));
+    aio_info& aio = aio_queue.back();
+    aio.iov = iov;
+
+    io_prep_pwritev(&aio.iocb, fd, aio.iov, n, pos);
+
+    dout(20) << "write_aio_bl .. " << aio.off << "~" << aio.len
+	     << " in " << n << dendl;
+
+    aio_num++;
+    aio_bytes += aio.len;
+
+    iocb *piocb = &aio.iocb;
+    int attempts = 10;
+    do {
+      int r = io_submit(aio_ctx, 1, &piocb);
+      if (r < 0) {
+	derr << "io_submit to " << aio.off << "~" << aio.len
+	     << " got " << cpp_strerror(r) << dendl;
+	if (r == -EAGAIN && attempts-- > 0) {
+	  usleep(500);
+	  continue;
+	}
+	assert(0 == "io_submit got unexpected error");
+      }
+    } while (false);
+    pos += aio.len;
+  }
   write_finish_cond.Signal();
   return 0;
 }

@@ -155,14 +155,15 @@ int main(int argc, const char **argv, const char *envp[]) {
     }
 
     r = cfuse.init(newargc, newargv);
-    if (r < 0) {
+    if (r != 0) {
       cerr << "ceph-fuse[" << getpid() << "]: fuse failed to initialize" << std::endl;
-      goto out_shutdown;
+      goto out_client_unmount;
     }
     cerr << "ceph-fuse[" << getpid() << "]: starting fuse" << std::endl;
     r = cfuse.loop();
     cerr << "ceph-fuse[" << getpid() << "]: fuse finished with error " << r << std::endl;
 
+  out_client_unmount:
     client->unmount();
     //cout << "unmounted" << std::endl;
 
