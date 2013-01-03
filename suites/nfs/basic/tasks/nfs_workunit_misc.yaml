@@ -1,0 +1,18 @@
+tasks:
+- ceph:
+- kclient: [client.0]
+- knfsd: [client.0]
+- nfs:
+    client.1:
+        server: client.0
+        options: [rw,hard,intr,nfsvers=3]
+- workunit:
+    clients:
+        client.1:
+            - misc/chmod.sh
+            - misc/i_complete_vs_rename.sh
+            - misc/trivial_sync.sh
+            #- misc/multiple_rsync.sh
+            #- misc/xattrs.sh
+# Once we can run multiple_rsync.sh and xattrs.sh we can change to this
+#    - misc
