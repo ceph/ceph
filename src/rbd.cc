@@ -220,7 +220,7 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
 {
   std::vector<string> names;
   int r = rbd.list(io_ctx, names);
-  if (r < 0 || (names.size() == 0))
+  if (r < 0)
     return r;
 
   if (!lflag) {
@@ -372,7 +372,7 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
   if (f) {
     f->close_section();
     f->flush(cout);
-  } else {
+  } else if (names.size()) {
     cout << tbl;
   }
 
@@ -585,7 +585,7 @@ static int do_list_snaps(librbd::Image& image, Formatter *f)
   int r;
 
   r = image.snap_list(snaps);
-  if (r < 0 || snaps.empty())
+  if (r < 0)
     return r;
 
   if (f) {
@@ -613,7 +613,7 @@ static int do_list_snaps(librbd::Image& image, Formatter *f)
   if (f) {
     f->close_section();
     f->flush(cout);
-  } else {
+  } else if (snaps.size()) {
     cout << t;
   }
 
@@ -735,6 +735,14 @@ static int do_lock_list(librbd::Image& image, Formatter *f)
   if (r < 0)
     return r;
 
+  if (f) {
+    f->open_object_section("locks");
+  } else {
+    tbl.define_column("Locker", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("ID", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("Address", TextTable::LEFT, TextTable::LEFT);
+  }
+
   if (lockers.size()) {
     bool one = (lockers.size() == 1);
 
@@ -744,14 +752,6 @@ static int do_lock_list(librbd::Image& image, Formatter *f)
 	   << " lock" << (one ? "" : "s") << " on this image.\n";
       if (!exclusive)
 	cout << "Lock tag: " << tag << "\n";
-    }
-
-    if (f) {
-      f->open_object_section("locks");
-    } else {
-      tbl.define_column("Locker", TextTable::LEFT, TextTable::LEFT);
-      tbl.define_column("ID", TextTable::LEFT, TextTable::LEFT);
-      tbl.define_column("Address", TextTable::LEFT, TextTable::LEFT);
     }
 
     for (list<librbd::locker_t>::const_iterator it = lockers.begin();
@@ -765,13 +765,13 @@ static int do_lock_list(librbd::Image& image, Formatter *f)
 	tbl << it->client << it->cookie << it->address << TextTable::endrow;
       }
     }
-
-    if (f) {
-      f->close_section();
-      f->flush(cout);
-    } else {
+    if (!f)
       cout << tbl;
-    }
+  }
+
+  if (f) {
+    f->close_section();
+    f->flush(cout);
   }
   return 0;
 }
