@@ -19,7 +19,7 @@ To create ``.deb`` packages for Debian/Ubuntu, ensure that you have cloned the
 
 	sudo apt-get install debhelper
 
-Once you have installed debhelper, you can build the packages:
+Once you have installed debhelper, you can build the packages::
 
 	sudo dpkg-buildpackage
 
