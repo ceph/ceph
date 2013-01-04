@@ -744,6 +744,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
       case LOCK_EXCL_SYNC:
       case LOCK_LOCK_SYNC:
       case LOCK_MIX_SYNC:
+      case LOCK_XSYN_SYNC:
       case LOCK_XLOCK:
       case LOCK_XLOCKDONE:
 	if (lock->get_parent()->is_replicated()) {
@@ -3333,11 +3334,7 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
     case LOCK_MIX: lock->set_state(LOCK_MIX_SYNC); break;
     case LOCK_SCAN:
     case LOCK_LOCK: lock->set_state(LOCK_LOCK_SYNC); break;
-    case LOCK_XSYN:
-      file_excl((ScatterLock*)lock, need_issue);
-      if (lock->get_state() != LOCK_EXCL)
-	return false;
-      // fall-thru
+    case LOCK_XSYN: lock->set_state(LOCK_XSYN_SYNC); break;
     case LOCK_EXCL: lock->set_state(LOCK_EXCL_SYNC); break;
     default: assert(0);
     }
