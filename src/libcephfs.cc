@@ -123,8 +123,6 @@ public:
     }
     if (client) {
       client->shutdown();
-      delete client;
-      client = NULL;
     }
     if (messenger) {
       messenger->shutdown();
@@ -135,6 +133,10 @@ public:
     if (monclient) {
       delete monclient;
       monclient = NULL;
+    }
+    if (client) {
+      delete client;
+      client = NULL;
     }
   }
 
