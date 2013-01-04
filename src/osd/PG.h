@@ -956,6 +956,9 @@ public:
   int active_pushes;
 
   void repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
+  map<int, ScrubMap *>::const_iterator _select_auth_object(
+    const hobject_t &obj,
+    const map<int,ScrubMap*> &maps);
   bool _compare_scrub_objects(ScrubMap::object &auth,
 			      ScrubMap::object &candidate,
 			      ostream &errorstream);
