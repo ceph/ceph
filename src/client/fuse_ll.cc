@@ -84,7 +84,7 @@ public:
 
 };
 
-static void ceph_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
+static void fuse_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
@@ -102,14 +102,14 @@ static void ceph_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   }
 }
 
-static void ceph_ll_forget(fuse_req_t req, fuse_ino_t ino, long unsigned nlookup)
+static void fuse_ll_forget(fuse_req_t req, fuse_ino_t ino, long unsigned nlookup)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   cfuse->client->ll_forget(cfuse->fino_vino(ino), nlookup);
   fuse_reply_none(req);
 }
 
-static void ceph_ll_getattr(fuse_req_t req, fuse_ino_t ino,
+static void fuse_ll_getattr(fuse_req_t req, fuse_ino_t ino,
 			    struct fuse_file_info *fi)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
@@ -126,7 +126,7 @@ static void ceph_ll_getattr(fuse_req_t req, fuse_ino_t ino,
     fuse_reply_err(req, ENOENT);
 }
 
-static void ceph_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
+static void fuse_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
 			    int to_set, struct fuse_file_info *fi)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
@@ -149,7 +149,7 @@ static void ceph_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
 
 // XATTRS
 
-static void ceph_ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
+static void fuse_ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
 			     const char *value, size_t size, int flags)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
@@ -158,7 +158,7 @@ static void ceph_ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
   fuse_reply_err(req, -r);
 }
 
-static void ceph_ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
+static void fuse_ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
@@ -172,7 +172,7 @@ static void ceph_ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
     fuse_reply_err(req, -r);
 }
 
-static void ceph_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
+static void fuse_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
 			     size_t size)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
@@ -187,7 +187,7 @@ static void ceph_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
     fuse_reply_err(req, -r);
 }
 
-static void ceph_ll_removexattr(fuse_req_t req, fuse_ino_t ino, const char *name)
+static void fuse_ll_removexattr(fuse_req_t req, fuse_ino_t ino, const char *name)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
@@ -197,7 +197,7 @@ static void ceph_ll_removexattr(fuse_req_t req, fuse_ino_t ino, const char *name
 
 
 
-static void ceph_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+static void fuse_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
@@ -211,7 +211,7 @@ static void ceph_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_inf
   }
 }
 
-static void ceph_ll_readlink(fuse_req_t req, fuse_ino_t ino)
+static void fuse_ll_readlink(fuse_req_t req, fuse_ino_t ino)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
@@ -223,7 +223,7 @@ static void ceph_ll_readlink(fuse_req_t req, fuse_ino_t ino)
     fuse_reply_err(req, -r);
 }
 
-static void ceph_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
+static void fuse_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
 			  mode_t mode, dev_t rdev)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
@@ -241,7 +241,7 @@ static void ceph_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
   }
 }
 
-static void ceph_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
+static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 			  mode_t mode)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
@@ -259,7 +259,7 @@ static void ceph_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
   }
 }
 
-static void ceph_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
+static void fuse_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
@@ -267,7 +267,7 @@ static void ceph_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
   fuse_reply_err(req, -r);
 }
 
-static void ceph_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
+static void fuse_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
@@ -275,7 +275,7 @@ static void ceph_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
   fuse_reply_err(req, -r);
 }
 
-static void ceph_ll_symlink(fuse_req_t req, const char *existing, fuse_ino_t parent, const char *name)
+static void fuse_ll_symlink(fuse_req_t req, const char *existing, fuse_ino_t parent, const char *name)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
@@ -292,7 +292,7 @@ static void ceph_ll_symlink(fuse_req_t req, const char *existing, fuse_ino_t par
   }
 }
 
-static void ceph_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
+static void fuse_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
 			   fuse_ino_t newparent, const char *newname)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
@@ -301,7 +301,7 @@ static void ceph_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
   fuse_reply_err(req, -r);
 }
 
-static void ceph_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
+static void fuse_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
 			 const char *newname)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
@@ -319,7 +319,7 @@ static void ceph_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
   }
 }
 
-static void ceph_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+static void fuse_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
@@ -337,7 +337,7 @@ static void ceph_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *
   }
 }
 
-static void ceph_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
+static void fuse_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
 			 struct fuse_file_info *fi)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
@@ -350,7 +350,7 @@ static void ceph_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     fuse_reply_err(req, -r);
 }
 
-static void ceph_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
+static void fuse_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
 			   size_t size, off_t off, struct fuse_file_info *fi)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
@@ -362,13 +362,13 @@ static void ceph_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
     fuse_reply_err(req, -r);
 }
 
-static void ceph_ll_flush(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+static void fuse_ll_flush(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
   // NOOP
   fuse_reply_err(req, 0);
 }
 
-static void ceph_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+static void fuse_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   Fh *fh = (Fh*)fi->fh;
@@ -376,7 +376,7 @@ static void ceph_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_inf
   fuse_reply_err(req, -r);
 }
 
-static void ceph_ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
+static void fuse_ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
 			  struct fuse_file_info *fi)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
@@ -396,7 +396,7 @@ struct readdir_context {
 /*
  * return 0 on success, -1 if out of space
  */
-static int ceph_ll_add_dirent(void *p, struct dirent *de, struct stat *st, int stmask, off_t next_off)
+static int fuse_ll_add_dirent(void *p, struct dirent *de, struct stat *st, int stmask, off_t next_off)
 {
   struct readdir_context *c = (struct readdir_context *)p;
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(c->req);
@@ -416,7 +416,7 @@ static int ceph_ll_add_dirent(void *p, struct dirent *de, struct stat *st, int s
   return 0;
 }
 
-static void ceph_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
+static void fuse_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 			    off_t off, struct fuse_file_info *fi)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
@@ -431,7 +431,7 @@ static void ceph_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
   rc.pos = 0;
   rc.snap = cfuse->fino_snap(ino);
 
-  int r = cfuse->client->readdir_r_cb(dirp, ceph_ll_add_dirent, &rc);
+  int r = cfuse->client->readdir_r_cb(dirp, fuse_ll_add_dirent, &rc);
   if (r == 0 || r == -ENOSPC)  /* ignore ENOSPC from our callback */
     fuse_reply_buf(req, rc.buf, rc.pos);
   else
@@ -439,7 +439,7 @@ static void ceph_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
   delete[] rc.buf;
 }
 
-static void ceph_ll_releasedir(fuse_req_t req, fuse_ino_t ino,
+static void fuse_ll_releasedir(fuse_req_t req, fuse_ino_t ino,
 			       struct fuse_file_info *fi)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
@@ -448,7 +448,7 @@ static void ceph_ll_releasedir(fuse_req_t req, fuse_ino_t ino,
   fuse_reply_err(req, 0);
 }
 
-static void ceph_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
+static void fuse_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 			   mode_t mode, struct fuse_file_info *fi)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
@@ -466,7 +466,7 @@ static void ceph_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
   }
 }
 
-static void ceph_ll_statfs(fuse_req_t req, fuse_ino_t ino)
+static void fuse_ll_statfs(fuse_req_t req, fuse_ino_t ino)
 {
   struct statvfs stbuf;
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
@@ -533,38 +533,38 @@ static void do_init(void *data, fuse_conn_info *bar)
   }
 }
 
-const static struct fuse_lowlevel_ops ceph_ll_oper = {
+const static struct fuse_lowlevel_ops fuse_ll_oper = {
  init: do_init,
  destroy: 0,
- lookup: ceph_ll_lookup,
- forget: ceph_ll_forget,
- getattr: ceph_ll_getattr,
- setattr: ceph_ll_setattr,
- readlink: ceph_ll_readlink,
- mknod: ceph_ll_mknod,
- mkdir: ceph_ll_mkdir,
- unlink: ceph_ll_unlink,
- rmdir: ceph_ll_rmdir,
- symlink: ceph_ll_symlink,
- rename: ceph_ll_rename,
- link: ceph_ll_link,
- open: ceph_ll_open,
- read: ceph_ll_read,
- write: ceph_ll_write,
- flush: ceph_ll_flush,
- release: ceph_ll_release,
- fsync: ceph_ll_fsync,
- opendir: ceph_ll_opendir,
- readdir: ceph_ll_readdir,
- releasedir: ceph_ll_releasedir,
+ lookup: fuse_ll_lookup,
+ forget: fuse_ll_forget,
+ getattr: fuse_ll_getattr,
+ setattr: fuse_ll_setattr,
+ readlink: fuse_ll_readlink,
+ mknod: fuse_ll_mknod,
+ mkdir: fuse_ll_mkdir,
+ unlink: fuse_ll_unlink,
+ rmdir: fuse_ll_rmdir,
+ symlink: fuse_ll_symlink,
+ rename: fuse_ll_rename,
+ link: fuse_ll_link,
+ open: fuse_ll_open,
+ read: fuse_ll_read,
+ write: fuse_ll_write,
+ flush: fuse_ll_flush,
+ release: fuse_ll_release,
+ fsync: fuse_ll_fsync,
+ opendir: fuse_ll_opendir,
+ readdir: fuse_ll_readdir,
+ releasedir: fuse_ll_releasedir,
  fsyncdir: 0,
- statfs: ceph_ll_statfs,
- setxattr: ceph_ll_setxattr,
- getxattr: ceph_ll_getxattr,
- listxattr: ceph_ll_listxattr,
- removexattr: ceph_ll_removexattr,
+ statfs: fuse_ll_statfs,
+ setxattr: fuse_ll_setxattr,
+ getxattr: fuse_ll_getxattr,
+ listxattr: fuse_ll_listxattr,
+ removexattr: fuse_ll_removexattr,
  access: 0,
- create: ceph_ll_create,
+ create: fuse_ll_create,
  getlk: 0,
  setlk: 0,
  bmap: 0
@@ -647,7 +647,7 @@ int CephFuse::Handle::init(int argc, const char *argv[])
     goto done;
   }
 
-  se = fuse_lowlevel_new(&args, &ceph_ll_oper, sizeof(ceph_ll_oper), this);
+  se = fuse_lowlevel_new(&args, &fuse_ll_oper, sizeof(fuse_ll_oper), this);
   if (!se) {
     derr << "fuse_lowlevel_new failed" << dendl;
     ret = EDOM;
