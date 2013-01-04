@@ -93,6 +93,7 @@ enum {
   LOCK_XSYN,
   LOCK_XSYN_EXCL,
   LOCK_EXCL_XSYN,
+  LOCK_XSYN_SYNC,
 
   LOCK_MAX,
 };
