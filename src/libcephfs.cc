@@ -833,3 +833,10 @@ extern "C" int ceph_debug_get_file_caps(struct ceph_mount_info *cmount, const ch
     return -ENOTCONN;
   return cmount->get_client()->get_caps_issued(path);
 }
+
+extern "C" int ceph_get_stripe_unit_granularity(struct ceph_mount_info *cmount)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return CEPH_MIN_STRIPE_UNIT;
+}
