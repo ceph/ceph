@@ -51,7 +51,6 @@ AM_CONDITIONAL(FREEBSD, test x"$freebsd" = x"yes")
 # Checks for programs.
 AC_PROG_CXX
 #AC_PROG_CC
-#AC_PROG_RANLIB
 AC_PROG_MAKE_SET
 AC_PROG_LIBTOOL
 
