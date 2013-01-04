@@ -803,3 +803,12 @@ TEST(LibCephFS, ReadEmptyFile) {
   ceph_close(cmount, fd);
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, StripeUnitGran) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+  ASSERT_GT(ceph_get_stripe_unit_granularity(cmount), 0);
+  ceph_shutdown(cmount);
+}
