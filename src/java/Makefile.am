@@ -43,7 +43,7 @@ $(JAVA_H): $(CEPH_PROXY)
 libcephfs.jar: $(CEPH_PROXY)
 	$(JAR) cf $@ $(JAVA_CLASSES:%=-C java %) 
 
-javadir = $(libdir)
+javadir = $(datadir)/java
 java_DATA = libcephfs.jar
 
 CLEANFILES = -rf java/com/ceph/fs/*.class $(JAVA_H) libcephfs.jar 
