@@ -66,6 +66,7 @@ void usage(ostream& out)
 "OBJECT COMMANDS\n"
 "   get <obj-name> [outfile]         fetch object\n"
 "   put <obj-name> [infile]          write object\n"
+"   truncate <obj-name> length       truncate object\n"
 "   create <obj-name> [category]     create object\n"
 "   rm <obj-name> ...                remove object(s)\n"
 "   cp <obj-name> [target-obj]       copy object\n"
@@ -1397,6 +1398,25 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (ret < 0) {
       cerr << "error putting " << pool_name << "/" << nargs[1] << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       return 1;
+    }
+  }
+  else if (strcmp(nargs[0], "truncate") == 0) {
+    if (!pool_name || nargs.size() < 3)
+      usage_exit();
+
+    string oid(nargs[1]);
+    long size = atol(nargs[2]);
+    if (size < 0) {
+      cerr << "error, cannot truncate to negative value" << std::endl;
+      usage_exit();
+    }
+    ret = io_ctx.trunc(oid, size);
+    if (ret < 0) {
+      cerr << "error truncating oid "
+	   << oid << " to " << size << ": "
+	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+    } else {
+      ret = 0;
     }
   }
   else if (strcmp(nargs[0], "setxattr") == 0) {
