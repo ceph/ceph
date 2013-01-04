@@ -200,14 +200,14 @@ BuildRequires:  java-devel
 This package contains the Java Native Interface library for CephFS Java
 bindings.
 
-%package -n libcephfs-java
+%package -n cephfs-java
 Summary:	Java libraries for the Ceph File System.
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	java
 Requires:	libcephfs-jni = %{version}-%{release}-
 BuildRequires:  java-devel
-%description -n libcephfs-java
+%description -n cephfs-java
 This package contains the Java libraries for the Ceph File System.
 
 %if (0%{?centos} || 0%{?opensuse} || 0%{?suse_version})
@@ -556,7 +556,7 @@ fi
 %defattr(-,root,root,-)
 /usr/lib/jni/libcephfs_jni.so*
 
-%files -n libcephfs-java
+%files -n cephfs-java
 %defattr(-,root,root,-)
 %{_javadir}/libcephfs.jar
 %{_javadir}/libcephfs-test.jar
