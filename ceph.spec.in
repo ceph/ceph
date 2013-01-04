@@ -281,9 +281,6 @@ mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph/
 #  Relocate java packages to expected locations in buildroot.
 mkdir -p $RPM_BUILD_ROOT/usr/lib/jni
 mv $RPM_BUILD_ROOT/usr/lib64/libcephfs_jni.so* $RPM_BUILD_ROOT/usr/lib/jni/.
-mkdir -p $RPM_BUILD_ROOT/usr/share/java
-mv $RPM_BUILD_ROOT/usr/lib64/libcephfs.jar  $RPM_BUILD_ROOT/usr/share/java/.
-mv $RPM_BUILD_ROOT/usr/lib64/libcephfs-test.jar $RPM_BUILD_ROOT/usr/share/java/.
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -561,7 +558,7 @@ fi
 
 %files -n libcephfs-java
 %defattr(-,root,root,-)
-/usr/share/java/libcephfs.jar
-/usr/share/java/libcephfs-test.jar
+%{_javadir}/libcephfs.jar
+%{_javadir}/libcephfs-test.jar
 
 %changelog
