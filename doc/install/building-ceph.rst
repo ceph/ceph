@@ -11,13 +11,6 @@ following::
 	./configure
 	make
 
-.. topic:: Memory Profiling
-
-	If Google's memory profile tool isn't supported for your distribution, you may
-	use ``./configure`` with the ``--without-tcmalloc`` option. See 
-	`Memory Profiling`_ for details on using memory profiling.
-
-
 .. topic:: Hyperthreading
 
 	You can use ``make -j`` to execute multiple jobs depending upon your system. For 
