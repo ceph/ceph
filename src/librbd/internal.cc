@@ -1601,7 +1601,6 @@ reprotect_and_return_err:
 	    lderr(cct) << "Error reading header: " << cpp_strerror(r) << dendl;
 	    return r;
 	  }
-	  ictx->last_header_version = ictx->md_ctx.get_last_version();
 	  r = cls_client::old_snapshot_list(&ictx->md_ctx, ictx->header_oid,
 					    &snap_names, &snap_sizes, &new_snapc);
 	  if (r < 0) {
@@ -1639,7 +1638,6 @@ reprotect_and_return_err:
 			 << dendl;
 	      return r;
 	    }
-	    ictx->last_header_version = ictx->md_ctx.get_last_version();
 
 	    uint64_t unsupported = incompatible_features & ~RBD_FEATURES_ALL;
 	    if (unsupported) {
@@ -1915,25 +1913,29 @@ reprotect_and_return_err:
     if (r < 0)
       return r;
 
-    ictx->md_lock.Lock();
-    r = ictx_refresh(ictx);
-    ictx->md_lock.Unlock();
-    if (r < 0)
-      return r;
-
-    _snap_set(ictx, ictx->snap_name.c_str());
-
     if (!ictx->read_only) {
       r = ictx->register_watch();
       if (r < 0) {
 	lderr(ictx->cct) << "error registering a watch: " << cpp_strerror(r)
 			 << dendl;
-	close_image(ictx);
-	return r;
+	goto err_close;
       }
     }
 
+    ictx->md_lock.Lock();
+    r = ictx_refresh(ictx);
+    ictx->md_lock.Unlock();
+    if (r < 0)
+      goto err_close;
+
+    if ((r = _snap_set(ictx, ictx->snap_name.c_str())) < 0)
+      goto err_close;
+
     return 0;
+
+  err_close:
+    close_image(ictx);
+    return r;
   }
 
   void close_image(ImageCtx *ictx)
