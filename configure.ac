@@ -309,8 +309,10 @@ AS_IF([test "x$enable_cephfs_java" = "xyes"], [
       junit4_jar=`find $dir -name junit4.jar | head -n 1`
 		  AS_IF([test -r "$junit4_jar"], [
 	      EXTRA_CLASSPATH_JAR=`dirname $junit4_jar`/junit4.jar
-      AC_SUBST(EXTRA_CLASSPATH_JAR)], [
-      AC_MSG_ERROR([Cannot find junit4.jar (apt-get install junit4)])])])
+      AC_SUBST(EXTRA_CLASSPATH_JAR)
+      [have_junit4=1]], [
+      AC_MSG_NOTICE([Cannot find junit4.jar (apt-get install junit4)])
+      [have_junit4=0]])])
 
 	# Check for Java programs: javac, javah, jar
     PATH_save=$PATH
@@ -341,6 +343,7 @@ AS_IF([test "x$enable_cephfs_java" = "xyes"], [
 	# Setup output var
 	AC_SUBST(JDK_CPPFLAGS)
 ])
+AM_CONDITIONAL(HAVE_JUNIT4, [test "$have_junit4" = "1"])
 
 # jni?
 # clear cache (from java above) -- this whole thing will get
