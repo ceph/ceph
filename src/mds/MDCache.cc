@@ -7049,7 +7049,11 @@ public:
   C_MDC_RetryOpenRemoteIno(MDCache *mdc, inodeno_t i, Context *c, bool wx) :
     mdcache(mdc), ino(i), want_xlocked(wx), onfinish(c) {}
   void finish(int r) {
-    mdcache->open_remote_ino(ino, onfinish, want_xlocked);
+    if (mdcache->get_inode(ino)) {
+      onfinish->finish(0);
+      delete onfinish;
+    } else
+      mdcache->open_remote_ino(ino, onfinish, want_xlocked);
   }
 };
 
