@@ -605,3 +605,9 @@ class CephManager:
                     'failed to reach quorum size %d before timeout expired' % size
             time.sleep(3)
         self.log("quorum is size %d" % size)
+
+    def get_mon_health(self, debug=False):
+      out = self.raw_cluster_cmd('health', '--format=json')
+      if debug:
+        self.log('health:\n{h}'.format(h=out))
+      return json.loads(out)
