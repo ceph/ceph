@@ -1026,14 +1026,17 @@ void Pipe::requeue_sent(uint64_t max_acked)
   list<Message*>& rq = out_q[CEPH_MSG_PRIO_HIGHEST];
   while (!sent.empty()) {
     Message *m = sent.back();
+    sent.pop_back();
     if (m->get_seq() > max_acked) {
-      sent.pop_back();
       ldout(msgr->cct,10) << "requeue_sent " << *m << " for resend seq " << out_seq
           << " (" << m->get_seq() << ")" << dendl;
       rq.push_front(m);
       out_seq--;
-    } else
-      sent.clear();
+    } else {
+      ldout(msgr->cct,10) << "requeue_sent " << *m << " for resend seq " << out_seq
+			  << " <= max_acked " << max_acked << ", discarding" << dendl;
+      m->put();
+    }
   }
 }
 
