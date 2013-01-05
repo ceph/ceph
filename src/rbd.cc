@@ -1082,9 +1082,11 @@ static int do_copy(librbd::Image &src, librados::IoCtx& dest_pp,
 {
   MyProgressContext pc("Image copy");
   int r = src.copy_with_progress(dest_pp, destname, pc);
-  pc.finish();
-  if (r < 0)
+  if (r < 0){
+    pc.fail();
     return r;
+  }
+  pc.finish();
   return 0;
 }
 
