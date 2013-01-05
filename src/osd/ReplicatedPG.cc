@@ -5657,17 +5657,31 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
       apply_repop(repop);
     repop->aborted = true;
 
-    if (requeue && repop->ctx->op) {
-      dout(10) << " requeuing " << *repop->ctx->op->request << dendl;
-      rq.push_back(repop->ctx->op);
-      repop->ctx->op = OpRequestRef();
+    if (requeue) {
+      if (repop->ctx->op) {
+	dout(10) << " requeuing " << *repop->ctx->op->request << dendl;
+	rq.push_back(repop->ctx->op);
+	repop->ctx->op = OpRequestRef();
+      }
+
+      // also requeue any dups, interleaved into position
+      map<eversion_t, list<OpRequestRef> >::iterator p = waiting_for_ondisk.find(repop->v);
+      if (p != waiting_for_ondisk.end()) {
+	dout(10) << " also requeuing ondisk waiters " << p->second << dendl;
+	rq.splice(rq.end(), p->second);
+	waiting_for_ondisk.erase(p);
+      }
     }
 
     remove_repop(repop);
   }
 
-  if (requeue)
+  if (requeue) {
     osd->push_waiters(rq);
+    assert(waiting_for_ondisk.empty());
+  }
+
+  waiting_for_ondisk.clear();
 }
 
 void ReplicatedPG::on_shutdown()
@@ -5733,13 +5747,6 @@ void ReplicatedPG::on_change()
 void ReplicatedPG::on_role_change()
 {
   dout(10) << "on_role_change" << dendl;
-
-  // take commit waiters
-  for (map<eversion_t, list<OpRequestRef> >::iterator p = waiting_for_ondisk.begin();
-       p != waiting_for_ondisk.end();
-       p++)
-    osd->requeue_ops(this, p->second);
-  waiting_for_ondisk.clear();
 }
 
 
