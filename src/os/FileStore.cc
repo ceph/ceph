@@ -3353,11 +3353,6 @@ void FileStore::sync_entry()
       sync_epoch++;
 
       dout(15) << "sync_entry committing " << cp << " sync_epoch " << sync_epoch << dendl;
-      int err = write_op_seq(op_fd, cp);
-      if (err < 0) {
-	derr << "Error during write_op_seq: " << cpp_strerror(err) << dendl;
-	assert(0);
-      }
       stringstream errstream;
       if (g_conf->filestore_debug_omap_check && !object_map->check(errstream)) {
 	derr << errstream.str() << dendl;
@@ -3365,6 +3360,11 @@ void FileStore::sync_entry()
       }
 
       if (btrfs_stable_commits) {
+	int err = write_op_seq(op_fd, cp);
+	if (err < 0) {
+	  derr << "Error during write_op_seq: " << cpp_strerror(err) << dendl;
+	  assert(0 == "error during write_op_seq");
+	}
 
 	if (btrfs_snap_create_v2) {
 	  // be smart!
@@ -3445,6 +3445,17 @@ void FileStore::sync_entry()
 	} else {
 	  dout(15) << "sync_entry doing a full sync (syncfs(2) if possible)" << dendl;
 	  sync_filesystem(basedir_fd);
+	}
+
+	int err = write_op_seq(op_fd, cp);
+	if (err < 0) {
+	  derr << "Error during write_op_seq: " << cpp_strerror(err) << dendl;
+	  assert(0 == "error during write_op_seq");
+	}
+	err = ::fsync(op_fd);
+	if (err < 0) {
+	  derr << "Error during fsync of op_seq: " << cpp_strerror(err) << dendl;
+	  assert(0 == "error during fsync of op_seq");
 	}
       }
       

@@ -3956,8 +3956,14 @@ void OSD::handle_osd_map(MOSDMap *m)
   check_osdmap_features();
 
   // yay!
-  if (is_active())
+  consume_map();
+
+  if (!is_active()) {
+    dout(10) << " not yet active; waiting for peering wq to drain" << dendl;
+    peering_wq.drain();
+  } else {
     activate_map();
+  }
 
   if (m->newest_map && m->newest_map > last) {
     dout(10) << " msg say newest map is " << m->newest_map << ", requesting more" << dendl;
@@ -4048,7 +4054,8 @@ void OSD::advance_pg(
 
     lastmap = nextmap;
   }
-  pg->handle_activate_map(rctx);
+  if (!is_booting())
+    pg->handle_activate_map(rctx);
 }
 
 /** 
@@ -4135,20 +4142,12 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
   }
 }
 
-void OSD::activate_map()
+void OSD::consume_map()
 {
   assert(osd_lock.is_locked());
-
-  dout(7) << "activate_map version " << osdmap->get_epoch() << dendl;
-
-  map< int, vector<pair<pg_notify_t,pg_interval_map_t> > >  notify_list;  // primary -> list
-  map< int, map<pg_t,pg_query_t> > query_map;    // peer -> PG -> get_summary_since
-  map<int,MOSDPGInfo*> info_map;  // peer -> message
+  dout(7) << "consume_map version " << osdmap->get_epoch() << dendl;
 
   int num_pg_primary = 0, num_pg_replica = 0, num_pg_stray = 0;
-
-  epoch_t oldest_last_clean = osdmap->get_epoch();
-
   list<PG*> to_remove;
 
   service.expand_pg_num(service.get_osdmap(),
@@ -4166,9 +4165,6 @@ void OSD::activate_map()
       num_pg_replica++;
     else
       num_pg_stray++;
-
-    if (pg->is_primary() && pg->info.history.last_epoch_clean < oldest_last_clean)
-      oldest_last_clean = pg->info.history.last_epoch_clean;
 
     set<pg_t> split_pgs;
     if (!osdmap->have_pg_pool(pg->info.pgid.pool())) {
@@ -4207,12 +4203,18 @@ void OSD::activate_map()
     pg->queue_null(osdmap->get_epoch(), osdmap->get_epoch());
     pg->unlock();
   }
-
   
   logger->set(l_osd_pg, pg_map.size());
   logger->set(l_osd_pg_primary, num_pg_primary);
   logger->set(l_osd_pg_replica, num_pg_replica);
   logger->set(l_osd_pg_stray, num_pg_stray);
+}
+
+void OSD::activate_map()
+{
+  assert(osd_lock.is_locked());
+
+  dout(7) << "activate_map version " << osdmap->get_epoch() << dendl;
 
   wake_all_pg_waiters();   // the pg mapping may have shifted
   maybe_update_heartbeat_peers();
@@ -4886,6 +4888,23 @@ void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg)
     ctx.on_applied = new C_Contexts(g_ceph_context);
     ctx.on_safe = new C_Contexts(g_ceph_context);
   }
+}
+
+bool OSD::compat_must_dispatch_immediately(PG *pg)
+{
+  assert(pg->is_locked());
+  for (vector<int>::iterator i = pg->acting.begin();
+       i != pg->acting.end();
+       ++i) {
+    if (*i == whoami)
+      continue;
+    ConnectionRef conn =
+      service.get_con_osd_cluster(*i, pg->get_osdmap()->get_epoch());
+    if (conn && !(conn->features & CEPH_FEATURE_INDEP_PG_MAP)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap)
@@ -6158,7 +6177,12 @@ void OSD::process_peering_events(const list<PG*> &pgs)
       rctx.on_applied->add(new C_CompleteSplits(this, split_pgs));
       split_pgs.clear();
     }
-    dispatch_context_transaction(rctx, pg);
+    if (compat_must_dispatch_immediately(pg)) {
+      dispatch_context(rctx, pg, curmap);
+      rctx = create_context();
+    } else {
+      dispatch_context_transaction(rctx, pg);
+    }
     pg->unlock();
   }
   if (need_up_thru)
