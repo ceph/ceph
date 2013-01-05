@@ -670,9 +670,9 @@ public class CephMount {
    *
    * @return all block sizes must be a (non-zero) multiple of this value.
    */
-  public int get_stripe_unit_granularity() { 
+  public int get_stripe_unit_granularity() {
     return native_ceph_get_stripe_unit_granularity(instance_ptr);
   }
-  
+
   private static synchronized native int native_ceph_get_stripe_unit_granularity(long mountp);
 }

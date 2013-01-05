@@ -2434,5 +2434,3 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1get_1stripe_1uni
 
 	return ret;
 }
-
-
