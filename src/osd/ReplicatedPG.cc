@@ -5073,18 +5073,6 @@ void ReplicatedPG::push_to_replica(
   if (soid.snap && soid.snap < CEPH_NOSNAP) {	
     hobject_t head = soid;
     head.snap = CEPH_NOSNAP;
-    if (peer_missing[peer].is_missing(head) &&
-	peer_missing[peer].have_old(head) == oi.prior_version) {
-      dout(10) << "push_to_replica osd." << peer << " has correct old " << head
-	       << " v" << oi.prior_version 
-	       << ", pushing " << soid << " attrs as a clone op" << dendl;
-      interval_set<uint64_t> data_subset;
-      map<hobject_t, interval_set<uint64_t> > clone_subsets;
-      if (size)
-	clone_subsets[head].insert(0, size);
-      push_start(prio, obc, soid, peer, oi.version, data_subset, clone_subsets);
-      return;
-    }
 
     // try to base push off of clones that succeed/preceed poid
     // we need the head (and current SnapSet) locally to do that.

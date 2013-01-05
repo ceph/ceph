@@ -772,6 +772,7 @@ private:
     epoch_t advance_to, PG *pg, PG::RecoveryCtx *rctx,
     set<boost::intrusive_ptr<PG> > *split_pgs);
   void advance_map(ObjectStore::Transaction& t, C_Contexts *tfin);
+  void consume_map();
   void activate_map();
 
   // osd map cache (past osd maps)
@@ -968,6 +969,7 @@ protected:
 
   // -- generic pg peering --
   PG::RecoveryCtx create_context();
+  bool compat_must_dispatch_immediately(PG *pg);
   void dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap);
   void dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg);
   void do_notifies(map< int,vector<pair<pg_notify_t, pg_interval_map_t> > >& notify_list,
