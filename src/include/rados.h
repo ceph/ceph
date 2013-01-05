@@ -141,6 +141,10 @@ extern const char *ceph_osd_state_name(int s);
 
 /*
  * osd ops
+ *
+ * WARNING: do not use these op codes directly.  Use the helpers
+ * defined below instead.  In certain cases, op code behavior was
+ * redefined, resulting in special-cases in the helpers.
  */
 #define CEPH_OSD_OP_MODE       0xf000
 #define CEPH_OSD_OP_MODE_RD    0x1000
@@ -244,7 +248,8 @@ enum {
 	CEPH_OSD_OP_DNLOCK    = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 6,
 
 	/** exec **/
-	CEPH_OSD_OP_CALL    = CEPH_OSD_OP_TYPE_EXEC | 1,
+	/* note: the RD bit here is wrong; see special-case below in helper */
+	CEPH_OSD_OP_CALL    = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_EXEC | 1,
 
 	/** pg **/
 	CEPH_OSD_OP_PGLS      = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_PG | 1,
@@ -282,7 +287,8 @@ static inline int ceph_osd_op_mode_subop(int op)
 }
 static inline int ceph_osd_op_mode_read(int op)
 {
-	return op & CEPH_OSD_OP_MODE_RD;
+	return (op & CEPH_OSD_OP_MODE_RD) &&
+		op != CEPH_OSD_OP_CALL;
 }
 static inline int ceph_osd_op_mode_modify(int op)
 {
