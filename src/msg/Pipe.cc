@@ -1413,12 +1413,12 @@ void Pipe::writer()
 	// associate message with Connection (for benefit of encode_payload)
 	m->set_connection(connection_state->get());
 
-	pipe_lock.Unlock();
-
         ldout(msgr->cct,20) << "writer encoding " << m->get_seq() << " " << m << " " << *m << dendl;
 
 	// encode and copy out of *m
 	m->encode(connection_state->get_features(), !msgr->cct->_conf->ms_nocrc);
+
+	pipe_lock.Unlock();
 
         ldout(msgr->cct,20) << "writer sending " << m->get_seq() << " " << m << dendl;
 	int rc = write_message(m);
