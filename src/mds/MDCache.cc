@@ -8644,6 +8644,8 @@ void MDCache::handle_discover(MDiscover *dis)
       dout(7) << "handle_discover mds." << from 
 	      << " don't have base ino " << dis->get_base_ino() << "." << snapid
 	      << dendl;
+      if (!dis->wants_base_dir() && dis->get_want().depth() > 0)
+	reply->set_error_dentry(dis->get_dentry(0));
       reply->set_flag_error_dir();
     } else if (dis->wants_base_dir()) {
       dout(7) << "handle_discover mds." << from 
