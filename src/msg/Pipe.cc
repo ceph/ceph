@@ -1803,16 +1803,9 @@ int Pipe::write_keepalive()
 
 int Pipe::write_message(Message *m)
 {
-  ceph_msg_header& header = m->get_header();
-  ceph_msg_footer& footer = m->get_footer();
+  const ceph_msg_header& header = m->get_header();
+  const ceph_msg_footer& footer = m->get_footer();
   int ret;
-
-  // get envelope, buffers
-  header.front_len = m->get_payload().length();
-  header.middle_len = m->get_middle().length();
-  header.data_len = m->get_data().length();
-  footer.flags = CEPH_MSG_FOOTER_COMPLETE;
-  m->calc_header_crc();
 
   // Now that we have all the crcs calculated, handle the digital signature for the message, if the 
   // pipe has session security set up.  Some session security options do not actually calculate and 
