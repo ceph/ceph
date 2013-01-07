@@ -5909,16 +5909,22 @@ void OSD::handle_op(OpRequestRef op)
     }
     OSDMapRef send_map = get_map(m->get_map_epoch());
 
-    // remap pgid
-    pgid = m->get_pg();
-    if ((m->get_flags() & CEPH_OSD_FLAG_PGOP) == 0 &&
-	send_map->have_pg_pool(pgid.pool()))
-      pgid = send_map->raw_pg_to_pg(pgid);
-    
-    if (send_map->get_pg_acting_role(m->get_pg(), whoami) >= 0) {
+    if (send_map->get_pg_acting_role(pgid, whoami) >= 0) {
       dout(7) << "dropping request; client will resend when they get new map" << dendl;
+    } else if (!send_map->have_pg_pool(pgid.pool())) {
+      dout(7) << "dropping request; pool did not exist" << dendl;
+      clog.warn() << m->get_source_inst() << " invalid " << m->get_reqid()
+		  << " pg " << m->get_pg()
+		  << " to osd." << whoami
+		  << " in e" << osdmap->get_epoch()
+		  << ", client e" << m->get_map_epoch()
+		  << " when pool " << m->get_pg().pool() << " did not exist"
+		  << "\n";
     } else {
       dout(7) << "we are invalid target" << dendl;
+      pgid = m->get_pg();
+      if ((m->get_flags() & CEPH_OSD_FLAG_PGOP) == 0)
+	pgid = send_map->raw_pg_to_pg(pgid);
       clog.warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
 		  << " pg " << m->get_pg()
 		  << " to osd." << whoami
