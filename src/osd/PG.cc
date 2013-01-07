@@ -2919,6 +2919,7 @@ void PG::repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer
 
     log.last_requested = 0;
   }
+  state_set(PG_STATE_RECOVERING);
   osd->queue_for_recovery(this);
 }
 

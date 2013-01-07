@@ -5217,6 +5217,13 @@ void OSD::do_recovery(PG *pg)
   } else {
 
     pg->lock();
+
+    if (!pg->state_test(PG_STATE_RECOVERING) &&
+	!pg->state_test(PG_STATE_BACKFILL)) {
+      dout(10) << "do_recovery not recovering|backfill on " << *pg << dendl;
+      pg->unlock();
+      goto out;
+    }
     
     dout(10) << "do_recovery starting " << max
 	     << " (" << recovery_ops_active << "/" << g_conf->osd_recovery_max_active << " rops) on "
@@ -5269,6 +5276,7 @@ void OSD::do_recovery(PG *pg)
     }
     pg->unlock();
   }
+ out:
   pg->put();
 }
 
