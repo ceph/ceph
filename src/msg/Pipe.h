@@ -178,7 +178,7 @@ class DispatchQueue;
     int randomize_out_seq();
 
     int read_message(Message **pm);
-    int write_message(Message *m);
+    int write_message(ceph_msg_header& h, ceph_msg_footer& f, bufferlist& body);
     /**
      * Write the given data (of length len) to the Pipe's socket. This function
      * will loop until all passed data has been written out.
