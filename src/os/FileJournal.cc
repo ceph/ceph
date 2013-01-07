@@ -23,6 +23,7 @@
 #include "include/compat.h"
 
 #include <fcntl.h>
+#include <limits.h>
 #include <sstream>
 #include <stdio.h>
 #include <sys/types.h>

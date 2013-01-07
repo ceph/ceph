@@ -399,10 +399,10 @@ void Objecter::scan_requests(bool skipped_map,
 			     list<LingerOp*>& need_resend_linger)
 {
   // check for changed linger mappings (_before_ regular ops)
-  for (map<tid_t,LingerOp*>::iterator p = linger_ops.begin();
-       p != linger_ops.end();
-       p++) {
-    LingerOp *op = p->second;
+  map<tid_t,LingerOp*>::iterator lp = linger_ops.begin();
+  while (lp != linger_ops.end()) {
+    LingerOp *op = lp->second;
+    ++lp;   // check_linger_pool_dne() may touch linger_ops; prevent iterator invalidation
     ldout(cct, 10) << " checking linger op " << op->linger_id << dendl;
     int r = recalc_linger_op_target(op);
     switch (r) {
