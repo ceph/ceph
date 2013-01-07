@@ -1120,7 +1120,7 @@ RGWRESTMgr::~RGWRESTMgr()
 int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
 {
   s->cio = cio;
-  s->script_uri = s->env->get("SCRIPT_URI");
+  s->script_uri = s->env->get("SCRIPT_URI", "");
   s->request_uri = s->env->get("REQUEST_URI");
   int pos = s->request_uri.find('?');
   if (pos >= 0) {
