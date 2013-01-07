@@ -2204,7 +2204,7 @@ void PG::update_stats()
     unsigned target = MAX(get_osdmap()->get_pg_size(info.pgid), acting.size());
     pg_stats_stable.stats.calc_copies(target);
     pg_stats_stable.stats.sum.num_objects_degraded = 0;
-    if (!is_clean() && is_active()) {
+    if ((is_degraded() || !is_clean()) && is_active()) {
       // NOTE: we only generate copies, degraded, unfound values for
       // the summation, not individual stat categories.
       uint64_t num_objects = pg_stats_stable.stats.sum.num_objects;
@@ -5903,6 +5903,20 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
 	     (std::find(pg->up.begin(), pg->up.end(), *p) !=
 	      pg->up.end()));
     }
+  }
+
+  /* Check for changes in pool size (if the acting set changed as a result,
+   * this does not matter) */
+  if (advmap.lastmap->get_pg_size(pg->info.pgid) !=
+      pg->get_osdmap()->get_pg_size(pg->info.pgid)) {
+    unsigned active = pg->acting.size();
+    if (pg->backfill_target != -1)
+      --active;
+    if (pg->get_osdmap()->get_pg_size(pg->info.pgid) <= active)
+      pg->state_clear(PG_STATE_DEGRADED);
+    else
+      pg->state_set(PG_STATE_DEGRADED);
+    pg->update_stats(); // degraded may have changed
   }
   return forward_event();
 }
