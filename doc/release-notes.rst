@@ -2,6 +2,30 @@
  Release Notes
 ===============
 
+v0.56.1 "bobtail"
+-----------------
+
+This release has two critical fixes.  Please upgrade.
+
+Upgrading
+~~~~~~~~~
+
+* There is a protocol compatibility problem between v0.56 and any
+  other version that is now fixed.  If your radosgw or RBD clients are
+  running v0.56, they will need to be upgraded too.  If they are
+  running a version prior to v0.56, they can be left as is.
+
+Notable changes
+~~~~~~~~~~~~~~~
+* osd: fix commit sequence for XFS, ext4 (or any other non-btrfs) to prevent data loss on power cycle or kernel panic
+* osd: fix compatibility for CALL operation
+* osd: process old osdmaps prior to joining cluster (fixes slow startup)
+* osd: fix a couple of recovery-related crashes
+* osd: fix large io requests when journal is in (non-default) aio mode
+* log: fix possible deadlock in logging code
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.56.1.txt>`.
+
 v0.56 "bobtail"
 ---------------
 
