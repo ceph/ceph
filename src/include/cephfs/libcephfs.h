@@ -878,6 +878,13 @@ int ceph_get_file_replication(struct ceph_mount_info *cmount, int fh);
 int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int fd, loff_t offset,
 				 struct sockaddr_storage *addr, int naddr);
 
+/**
+ * Get the file layout stripe unit granularity.
+ * @param cmount the ceph mount handle.
+ * @returns the stripe unit granularity or a negative error code on failure.
+ */
+int ceph_get_stripe_unit_granularity(struct ceph_mount_info *cmount);
+
 /** @} filelayout */
 
 /**

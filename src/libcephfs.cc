@@ -477,6 +477,8 @@ extern "C" int ceph_symlink(struct ceph_mount_info *cmount, const char *existing
 extern "C" int ceph_stat(struct ceph_mount_info *cmount, const char *path,
 			 struct stat *stbuf)
 {
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
   return cmount->get_client()->stat(path, stbuf);
 }
 
@@ -562,6 +564,8 @@ extern "C" int ceph_chmod(struct ceph_mount_info *cmount, const char *path, mode
 }
 extern "C" int ceph_fchmod(struct ceph_mount_info *cmount, int fd, mode_t mode)
 {
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
   return cmount->get_client()->fchmod(fd, mode);
 }
 extern "C" int ceph_chown(struct ceph_mount_info *cmount, const char *path,
@@ -574,11 +578,15 @@ extern "C" int ceph_chown(struct ceph_mount_info *cmount, const char *path,
 extern "C" int ceph_fchown(struct ceph_mount_info *cmount, int fd,
 			   uid_t uid, gid_t gid)
 {
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
   return cmount->get_client()->fchown(fd, uid, gid);
 }
 extern "C" int ceph_lchown(struct ceph_mount_info *cmount, const char *path,
 			   uid_t uid, gid_t gid)
 {
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
   return cmount->get_client()->lchown(path, uid, gid);
 }
 
@@ -832,4 +840,11 @@ extern "C" int ceph_debug_get_file_caps(struct ceph_mount_info *cmount, const ch
   if (!cmount->is_mounted())
     return -ENOTCONN;
   return cmount->get_client()->get_caps_issued(path);
+}
+
+extern "C" int ceph_get_stripe_unit_granularity(struct ceph_mount_info *cmount)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return CEPH_MIN_STRIPE_UNIT;
 }

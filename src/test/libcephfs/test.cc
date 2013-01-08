@@ -803,3 +803,90 @@ TEST(LibCephFS, ReadEmptyFile) {
   ceph_close(cmount, fd);
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, StripeUnitGran) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+  ASSERT_GT(ceph_get_stripe_unit_granularity(cmount), 0);
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, UseUnmounted) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+
+  struct statvfs stvfs;
+  EXPECT_EQ(-ENOTCONN, ceph_statfs(cmount, "/", &stvfs));
+  EXPECT_EQ(-ENOTCONN, ceph_get_local_osd(cmount));
+  EXPECT_EQ(-ENOTCONN, ceph_chdir(cmount, "/"));
+
+  struct ceph_dir_result *dirp;
+  EXPECT_EQ(-ENOTCONN, ceph_opendir(cmount, "/", &dirp));
+  EXPECT_EQ(-ENOTCONN, ceph_closedir(cmount, dirp));
+
+  ceph_readdir(cmount, dirp);
+  EXPECT_EQ(-ENOTCONN, errno);
+
+  struct dirent rdent;
+  EXPECT_EQ(-ENOTCONN, ceph_readdir_r(cmount, dirp, &rdent));
+
+  int stmask;
+  struct stat st;
+  EXPECT_EQ(-ENOTCONN, ceph_readdirplus_r(cmount, dirp, &rdent, &st, &stmask));
+  EXPECT_EQ(-ENOTCONN, ceph_getdents(cmount, dirp, NULL, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_getdnames(cmount, dirp, NULL, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_telldir(cmount, dirp));
+  EXPECT_EQ(-ENOTCONN, ceph_link(cmount, "/", "/link"));
+  EXPECT_EQ(-ENOTCONN, ceph_unlink(cmount, "/path"));
+  EXPECT_EQ(-ENOTCONN, ceph_rename(cmount, "/path", "/path"));
+  EXPECT_EQ(-ENOTCONN, ceph_mkdir(cmount, "/", 0655));
+  EXPECT_EQ(-ENOTCONN, ceph_mkdirs(cmount, "/", 0655));
+  EXPECT_EQ(-ENOTCONN, ceph_rmdir(cmount, "/path"));
+  EXPECT_EQ(-ENOTCONN, ceph_readlink(cmount, "/path", NULL, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_symlink(cmount, "/path", "/path"));
+  EXPECT_EQ(-ENOTCONN, ceph_stat(cmount, "/path", &st));
+  EXPECT_EQ(-ENOTCONN, ceph_lstat(cmount, "/path", &st));
+  EXPECT_EQ(-ENOTCONN, ceph_setattr(cmount, "/path", &st, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_getxattr(cmount, "/path", "name", NULL, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_lgetxattr(cmount, "/path", "name", NULL, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_listxattr(cmount, "/path", NULL, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_llistxattr(cmount, "/path", NULL, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_removexattr(cmount, "/path", "name"));
+  EXPECT_EQ(-ENOTCONN, ceph_lremovexattr(cmount, "/path", "name"));
+  EXPECT_EQ(-ENOTCONN, ceph_setxattr(cmount, "/path", "name", NULL, 0, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_lsetxattr(cmount, "/path", "name", NULL, 0, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_chmod(cmount, "/path", 0));
+  EXPECT_EQ(-ENOTCONN, ceph_fchmod(cmount, 0, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_chown(cmount, "/path", 0, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_lchown(cmount, "/path", 0, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_fchown(cmount, 0, 0, 0));
+
+  struct utimbuf utb;
+  EXPECT_EQ(-ENOTCONN, ceph_utime(cmount, "/path", &utb));
+  EXPECT_EQ(-ENOTCONN, ceph_truncate(cmount, "/path", 0));
+  EXPECT_EQ(-ENOTCONN, ceph_mknod(cmount, "/path", 0, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_open(cmount, "/path", 0, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_open_layout(cmount, "/path", 0, 0, 0, 0, 0, "pool"));
+  EXPECT_EQ(-ENOTCONN, ceph_close(cmount, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_lseek(cmount, 0, 0, SEEK_SET));
+  EXPECT_EQ(-ENOTCONN, ceph_read(cmount, 0, NULL, 0, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_write(cmount, 0, NULL, 0, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_ftruncate(cmount, 0, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_fsync(cmount, 0, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_fstat(cmount, 0, &st));
+  EXPECT_EQ(-ENOTCONN, ceph_sync_fs(cmount));
+  EXPECT_EQ(-ENOTCONN, ceph_get_file_stripe_unit(cmount, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_get_file_pool(cmount, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_get_file_pool_name(cmount, 0, NULL, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_get_file_replication(cmount, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_get_file_stripe_address(cmount, 0, 0, NULL, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_localize_reads(cmount, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_debug_get_fd_caps(cmount, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_debug_get_file_caps(cmount, "/path"));
+  EXPECT_EQ(-ENOTCONN, ceph_get_stripe_unit_granularity(cmount));
+
+  ceph_release(cmount);
+}
