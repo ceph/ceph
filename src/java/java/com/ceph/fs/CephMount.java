@@ -664,4 +664,15 @@ public class CephMount {
   }
 
   private static synchronized native int native_ceph_localize_reads(long mountp, boolean on);
+
+  /**
+   * Get file layout stripe unit granularity.
+   *
+   * @return Stripe unit granularity.
+   */
+  public int get_stripe_unit_granularity() {
+    return native_ceph_get_stripe_unit_granularity(instance_ptr);
+  }
+
+  private static synchronized native int native_ceph_get_stripe_unit_granularity(long mountp);
 }
