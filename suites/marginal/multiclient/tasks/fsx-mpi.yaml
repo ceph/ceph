@@ -1,0 +1,18 @@
+tasks:
+- ceph:
+- ceph-fuse:
+- pexec:
+    clients:
+      - cd /tmp/cephtest
+      - wget http://ceph.com/qa/fsx-mpi.c
+      - mpicc fsx-mpi.c -o fsx-mpi 
+      - rm fsx-mpi.c
+      - ln -s /tmp/cephtest/mnt.* /tmp/cephtest/gmnt
+- ssh_keys:
+- mpi:
+    exec: /tmp/cephtest/fsx-mpi 1MB -N 50000 -p 10000 -l 1048576
+    workdir: /tmp/cephtest/gmnt
+- pexec:
+    all:
+      - rm /tmp/cephtest/gmnt
+      - rm /tmp/cephtest/fsx-mpi
