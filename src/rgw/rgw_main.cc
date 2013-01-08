@@ -359,6 +359,9 @@ done:
 
   dout(1) << "====== req done req=" << hex << req << dec << " http_status=" << http_ret << " ======" << dendl;
   delete req;
+
+  if (handler)
+    delete handler;
 }
 
 class C_InitTimeout : public Context {
