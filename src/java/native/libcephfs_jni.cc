@@ -2408,3 +2408,29 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1localize_1reads
 
 	return ret;
 }
+
+/*
+ * Class:     com_ceph_fs_CephMount
+ * Method:    native_ceph_get_stripe_unit_granularity
+ * Signature: (J)I
+ */
+JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1get_1stripe_1unit_1granularity
+	(JNIEnv *env, jclass clz, jlong j_mntp)
+{
+	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
+	CephContext *cct = ceph_get_mount_context(cmount);
+	int ret;
+
+	CHECK_MOUNTED(cmount, -1);
+
+	ldout(cct, 10) << "jni: get_stripe_unit_granularity" << dendl;
+
+	ret = ceph_get_stripe_unit_granularity(cmount);
+
+	ldout(cct, 10) << "jni: get_stripe_unit_granularity: exit ret " << ret << dendl;
+
+  if (ret < 0)
+    handle_error(env, ret);
+
+	return ret;
+}

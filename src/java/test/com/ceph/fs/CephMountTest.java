@@ -826,4 +826,12 @@ public class CephMountTest {
     mount.unlink(path);
   }
 
+  /*
+   * stripe unit granularity
+   */
+
+  @Test
+  public void test_get_stripe_unit_gran() throws Exception {
+    assertTrue(mount.get_stripe_unit_granularity() > 0);
+  }
 }
