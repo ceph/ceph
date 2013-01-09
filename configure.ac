@@ -271,9 +271,6 @@ AM_CONDITIONAL(ENABLE_CEPHFS_JAVA, test "x$enable_cephfs_java" = "xyes")
 AC_ARG_WITH(jdk-dir,
     AC_HELP_STRING([--with-jdk-dir(=DIR)], [Path to JDK directory]))
 
-AC_DEFUN([JAVA_DNE],
-	AC_MSG_ERROR([Cannot find $1 '$2'. Try setting --with-jdk-dir]))
-
 AS_IF([test "x$enable_cephfs_java" = "xyes"], [
 
 	# setup bin/include dirs from --with-jdk-dir (search for jni.h, javac)
@@ -314,20 +311,20 @@ AS_IF([test "x$enable_cephfs_java" = "xyes"], [
       AC_MSG_NOTICE([Cannot find junit4.jar (apt-get install junit4)])
       [have_junit4=0]])])
 
-	# Check for Java programs: javac, javah, jar
-    PATH_save=$PATH
-	PATH="$PATH:$EXTRA_JDK_BIN_DIR"
-	AC_PATH_PROG(JAVAC, javac)
-    AC_PATH_PROG(JAVAH, javah)
-    AC_PATH_PROG(JAR, jar)
-    PATH=$PATH_save
+      AC_CHECK_CLASSPATH
+      AC_PROG_JAVAC
+      AC_PROG_JAVAH
+      AC_PROG_JAR
 
-    # Ensure we have them...
-    AS_IF([test -z "$JAVAC"], JAVA_DNE(program, javac))
-    AS_IF([test -z "$JAVAH"], JAVA_DNE(program, javah))
-    AS_IF([test -z "$JAR"], JAVA_DNE(program, jar))
+      CLASSPATH=$CLASSPATH:$EXTRA_CLASSPATH_JAR
+      export CLASSPATH
+      AC_MSG_NOTICE([classpath - $CLASSPATH])
+      AS_IF([test "$have_junit4" = "1"], [
+	    AC_CHECK_CLASS([org.junit.rules.ExternalResource], [], [
+	    AC_MSG_NOTICE(Could not find org.junit.rules.ExternalResource)
+	    have_junit4=0])])
 
-    # Check for jni.h
+        # Check for jni.h
 	CPPFLAGS_save=$CPPFLAGS
 
 	AS_IF([test -n "$EXTRA_JDK_INC_DIR"],
@@ -336,7 +333,7 @@ AS_IF([test "x$enable_cephfs_java" = "xyes"], [
 				 [JDK_CPPFLAGS="$JDK_CPPFLAGS -I$EXTRA_JDK_INC_DIR/linux"])
 		   CPPFLAGS="$CPPFLAGS $JDK_CPPFLAGS"])
 
-	AC_CHECK_HEADER([jni.h], [], JAVA_DNE(header, jni.h))
+	AC_CHECK_HEADER([jni.h], [], AC_MSG_ERROR([Cannot find header 'jni.h'. Try setting --with-jdk-dir]))
 
 	CPPFLAGS=$CPPFLAGS_save
 
