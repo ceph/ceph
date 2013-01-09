@@ -756,6 +756,7 @@ public:
 			  map<hobject_t, set<int> > &missing,
 			  map<hobject_t, set<int> > &inconsistent,
 			  map<hobject_t, int> &authoritative,
+			  map<hobject_t, set<int> > &inconsistent_snapcolls,
 			  ostream &errorstream);
   void scrub();
   void scrub_finalize();
@@ -766,6 +767,17 @@ public:
   void build_scrub_map(ScrubMap &map);
   void build_inc_scrub_map(ScrubMap &map, eversion_t v);
   virtual int _scrub(ScrubMap &map, int& errors, int& fixed) { return 0; }
+  virtual bool _report_snap_collection_errors(
+    const hobject_t &hoid,
+    int osd,
+    const map<string, bufferptr> &attrs,
+    const set<snapid_t> &snapcolls,
+    uint32_t nlinks,
+    ostream &out) { return false; };
+  virtual void check_snap_collections(
+    const hobject_t &hoid,
+    const map<string, bufferptr> &attrs,
+    set<snapid_t> *snapcolls) {};
   void clear_scrub_reserved();
   void scrub_reserve_replicas();
   void scrub_unreserve_replicas();

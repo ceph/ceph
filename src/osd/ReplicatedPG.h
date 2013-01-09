@@ -788,6 +788,17 @@ protected:
 
   // -- scrub --
   virtual int _scrub(ScrubMap& map, int& errors, int& fixed);
+  virtual bool _report_snap_collection_errors(
+    const hobject_t &hoid,
+    int osd,
+    const map<string, bufferptr> &attrs,
+    const set<snapid_t> &snapcolls,
+    uint32_t nlinks,
+    ostream &out);
+  virtual void check_snap_collections(
+    const hobject_t &hoid,
+    const map<string, bufferptr> &attrs,
+    set<snapid_t> *snapcolls);
 
   void apply_and_flush_repops(bool requeue);
 
