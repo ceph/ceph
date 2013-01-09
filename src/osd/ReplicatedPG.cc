@@ -7113,7 +7113,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       if (head == hobject_t()) {
 	osd->clog.error() << mode << " " << info.pgid << " " << soid
 			  << " found clone without head";
-	++errors;
+	++scrubber.errors;
 	continue;
       }
 
