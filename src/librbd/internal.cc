@@ -2439,6 +2439,10 @@ reprotect_and_return_err:
     if (!snap_exists)
       return -ENOENT;
 
+    // special-case "len == 0" requests: always valid
+    if (*len == 0)
+      return 0;
+
     // can't start past end
     if (off >= image_size)
       return -EINVAL;

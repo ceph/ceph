@@ -57,6 +57,12 @@ test_others() {
     rbd export testimg1 /tmp/img1.snap1
     cmp /tmp/img2 /tmp/img1.snap1
 
+    # test create, copy of zero-length images
+    rbd rm testimg2
+    rbd rm testimg3
+    rbd create testimg2 -s 0
+    rbd cp testimg2 testimg3
+
     # remove snapshots
     rbd snap rm --snap=snap1 testimg1
     rbd info --snap=snap1 testimg1 2>&1 | grep 'error setting snapshot context: (2) No such file or directory'
