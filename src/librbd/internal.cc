@@ -1608,11 +1608,19 @@ reprotect_and_return_err:
 		       << dendl;
 	    return r;
 	  }
-	  ClsLockType lock_type;
+	  ClsLockType lock_type = LOCK_NONE;
 	  r = rados::cls::lock::get_lock_info(&ictx->md_ctx, ictx->header_oid,
 					      RBD_LOCK_NAME, &ictx->lockers,
 					      &lock_type, &ictx->lock_tag);
-	  if (r < 0) {
+
+	  // If EOPNOTSUPP, treat image as if there are no locks (we can't
+	  // query them).
+
+	  // Ugly: OSDs prior to eed28daaf8927339c2ecae1b1b06c1b63678ab03
+	  // return EIO when the class isn't present; should be EOPNOTSUPP.
+	  // Treat EIO or EOPNOTSUPP the same for now, as LOCK_NONE.  Blech.
+
+	  if (r < 0 && ((r != -EOPNOTSUPP) && (r != -EIO))) {
 	    lderr(cct) << "Error getting lock info: " << cpp_strerror(r)
 		       << dendl;
 	    return r;
