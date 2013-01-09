@@ -99,10 +99,14 @@ namespace librbd {
 	::decode(parent->overlap, iter);
 
 	// get_lock_info
-	ClsLockType lock_type;
+	ClsLockType lock_type = LOCK_NONE;
 	r = rados::cls::lock::get_lock_info_finish(&iter, lockers, &lock_type,
 						   lock_tag);
-	if (r < 0)
+
+	// see comment in ictx_refresh().  Ugly conflation of
+	// EOPNOTSUPP and EIO.
+
+	if (r < 0 && ((r != -EOPNOTSUPP) && (r != -EIO)))
 	  return r;
 
 	*exclusive_lock = (lock_type == LOCK_EXCLUSIVE);
