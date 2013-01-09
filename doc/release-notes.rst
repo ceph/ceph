@@ -327,6 +327,57 @@ Upgrading
   separators in their output.
 
 
+v0.48.3 "argonaut"
+------------------
+
+This release contains a critical fix that can prevent data loss or
+corruption after a power loss or kernel panic event.  Please upgrade
+immediately.
+
+Upgrading
+~~~~~~~~~
+
+* If you are using the undocumented ``ceph-disk-prepare`` and
+  ``ceph-disk-activate`` tools, they have several new features and
+  some additional functionality.  Please review the changes in
+  behavior carefully before upgrading.
+* The .deb packages now require xfsprogs.
+
+Notable changes
+~~~~~~~~~~~~~~~
+
+* filestore: fix op_seq write order (fixes journal replay after power loss)
+* osd: fix occasional indefinitely hung "slow" request
+* osd: fix encoding for pool_snap_info_t when talking to pre-v0.48 clients
+* osd: fix heartbeat check
+* osd: reduce log noise about rbd watch
+* log: fixes for deadlocks in the internal logging code
+* log: make log buffer size adjustable
+* init script: fix for 'ceph status' across machines
+* radosgw: fix swift error handling
+* radosgw: fix swift authentication concurrency bug
+* radosgw: don't cache large objects
+* radosgw: fix some memory leaks
+* radosgw: fix timezone conversion on read
+* radosgw: relax date format restrictions
+* radosgw: fix multipart overwrite
+* radosgw: stop processing requests on client disconnect
+* radosgw: avoid adding port to url that already has a port
+* radosgw: fix copy to not override ETAG
+* common: make parsing of ip address lists more forgiving
+* common: fix admin socket compatibility with old protocol (for collectd plugin)
+* mon: drop dup commands on paxos reset
+* mds: fix loner selection for multiclient workloads
+* mds: fix compat bit checks
+* ceph-fuse: fix segfault on startup when keyring is missing
+* ceph-authtool: fix usage
+* ceph-disk-activate: misc backports
+* ceph-disk-prepare: misc backports
+* debian: depend on xfsprogs (we use xfs by default)
+* rpm: build rpms, some related Makefile changes
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.48.3argonaut.txt>`.
+
 v0.48.2 "argonaut"
 ------------------
 
