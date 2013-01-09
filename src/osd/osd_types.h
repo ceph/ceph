@@ -1836,10 +1836,12 @@ struct ScrubMap {
     bool digest_present;
     uint32_t nlinks;
     set<snapid_t> snapcolls;
+    __u32 omap_digest;
+    bool omap_digest_present;
 
     object() :
       size(0), negative(false), digest(0), digest_present(false),
-      nlinks(0) {}
+      nlinks(0), omap_digest(0), omap_digest_present(false) {}
 
     void encode(bufferlist& bl) const;
     void decode(bufferlist::iterator& bl);

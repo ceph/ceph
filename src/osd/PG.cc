@@ -3153,8 +3153,8 @@ void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep)
 
       // calculate the CRC32 on deep scrubs
       if (deep) {
-        bufferhash h;
-        bufferlist bl;
+        bufferhash h, oh;
+        bufferlist bl, hdrbl;
         int r;
         __u64 pos = 0;
         while ( (r = osd->store->read(coll, poid, pos,
@@ -3165,6 +3165,33 @@ void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep)
         }
         o.digest = h.digest();
         o.digest_present = true;
+
+        bl.clear();
+        r = osd->store->omap_get_header(coll, poid, &hdrbl);
+        if (r == 0) {
+          dout(25) << "CRC header " << string(hdrbl.c_str(), hdrbl.length())
+             << dendl;
+          ::encode(hdrbl, bl);
+          oh << bl;
+          bl.clear();
+        }
+
+        ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
+          coll, poid);
+        assert(iter);
+        for (iter->seek_to_first(); iter->valid() ; iter->next()) {
+          dout(25) << "CRC key " << iter->key() << " value "
+            << string(iter->value().c_str(), iter->value().length()) << dendl;
+
+          ::encode(iter->key(), bl);
+          ::encode(iter->value(), bl);
+          oh << bl;
+          bl.clear();
+        }
+
+        //Store final calculated CRC32 of omap header & key/values
+        o.omap_digest = oh.digest();
+        o.omap_digest_present = true;
       }
 
       if (poid.snap != CEPH_SNAPDIR && poid.snap != CEPH_NOSNAP) {
@@ -4066,6 +4093,16 @@ bool PG::_compare_scrub_objects(ScrubMap::object &auth,
 
       errorstream << "digest " << candidate.digest
                   << " != known digest " << auth.digest;
+    }
+  }
+  if (auth.omap_digest_present && candidate.omap_digest_present) {
+    if (auth.omap_digest != candidate.omap_digest) {
+      if (!ok)
+        errorstream << ", ";
+      ok = false;
+
+      errorstream << "omap_digest " << candidate.omap_digest
+                  << " != known omap_digest " << auth.omap_digest;
     }
   }
   for (map<string,bufferptr>::const_iterator i = auth.attrs.begin();
