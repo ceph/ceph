@@ -1753,7 +1753,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	  }
 	  if (r == 0) {
 	    rdata.append(ds);
-	    ss << "dumped osdmap epoch " << p->get_epoch();
+            if (format != "json")
+              ss << " ";
 	  }
 	} else if (cmd == "ls") {
 	  stringstream ds;
