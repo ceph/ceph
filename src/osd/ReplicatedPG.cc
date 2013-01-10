@@ -6672,6 +6672,12 @@ bool ReplicatedPG::_report_snap_collection_errors(
 	<< std::endl;
     errors = true;
   }
+  if (nlinks != snapcolls.size() + 1) {
+    out << info.pgid << " osd." << osd << " unaccounted for links on object "
+	<< hoid << " snapcolls " << snapcolls << " nlinks " << nlinks
+	<< std::endl;
+    errors = true;
+  }
   return errors;
 }
 
