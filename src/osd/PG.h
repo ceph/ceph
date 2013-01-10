@@ -844,6 +844,7 @@ public:
     // Maps from objects with erros to missing/inconsistent peers
     map<hobject_t, set<int> > missing;
     map<hobject_t, set<int> > inconsistent;
+    map<hobject_t, set<int> > inconsistent_snapcolls;
 
     // Map from object with errors to good peer
     map<hobject_t, pair<ScrubMap::object, int> > authoritative;
@@ -966,6 +967,7 @@ public:
 			  map<hobject_t, set<int> > &missing,
 			  map<hobject_t, set<int> > &inconsistent,
 			  map<hobject_t, int> &authoritative,
+			  map<hobject_t, set<int> > &inconsistent_snapcolls,
 			  ostream &errorstream);
   void scrub();
   void classic_scrub();
@@ -989,6 +991,17 @@ public:
   virtual void _scrub_finish() { }
   virtual coll_t get_temp_coll() = 0;
   virtual bool have_temp_coll() = 0;
+  virtual bool _report_snap_collection_errors(
+    const hobject_t &hoid,
+    int osd,
+    const map<string, bufferptr> &attrs,
+    const set<snapid_t> &snapcolls,
+    uint32_t nlinks,
+    ostream &out) { return false; };
+  virtual void check_snap_collections(
+    const hobject_t &hoid,
+    const map<string, bufferptr> &attrs,
+    set<snapid_t> *snapcolls) {};
   void clear_scrub_reserved();
   void scrub_reserve_replicas();
   void scrub_unreserve_replicas();
