@@ -999,7 +999,7 @@ public:
     uint32_t nlinks,
     ostream &out) { return false; };
   virtual void check_snap_collections(
-    const hobject_t &hoid,
+    ino_t hino, const hobject_t &hoid,
     const map<string, bufferptr> &attrs,
     set<snapid_t> *snapcolls) {};
   void clear_scrub_reserved();
