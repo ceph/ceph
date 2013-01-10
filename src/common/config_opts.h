@@ -337,7 +337,7 @@ OPTION(osd_min_down_reports, OPT_INT, 3)     // number of times a down OSD must 
 OPTION(osd_default_data_pool_replay_window, OPT_INT, 45)
 OPTION(osd_preserve_trimmed_log, OPT_BOOL, false)
 OPTION(osd_auto_mark_unfound_lost, OPT_BOOL, false)
-OPTION(osd_recovery_delay_start, OPT_FLOAT, 15)
+OPTION(osd_recovery_delay_start, OPT_FLOAT, 0)
 OPTION(osd_recovery_max_active, OPT_INT, 5)
 OPTION(osd_recovery_max_chunk, OPT_U64, 8<<20)  // max size of push chunk
 OPTION(osd_recovery_forget_lost_objects, OPT_BOOL, false)   // off for now
