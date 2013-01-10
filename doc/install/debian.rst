@@ -107,4 +107,4 @@ you should update APT's database and install Ceph::
 .. _the bobtail Debian repository: http://ceph.com/debian-bobtail/dists
 .. _the argonaut Debian repository: http://ceph.com/debian-argonaut/dists
 .. _the testing Debian repository: http://ceph.com/debian-testing/dists
-.. _the gitbuidler page: http://gitbuilder.ceph.com
+.. _the gitbuilder page: http://gitbuilder.ceph.com
