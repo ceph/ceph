@@ -7250,6 +7250,7 @@ bool ReplicatedPG::_report_snap_collection_errors(
 }
 
 void ReplicatedPG::check_snap_collections(
+  ino_t hino,
   const hobject_t &hoid,
   const map<string, bufferptr> &attrs,
   set<snapid_t> *snapcolls)
@@ -7262,7 +7263,9 @@ void ReplicatedPG::check_snap_collections(
     int r = osd->store->stat(coll_t(info.pgid, *i), hoid, &st);
     if (r == -ENOENT) {
     } else if (r == 0) {
-      snapcolls->insert(*i);
+      if (hino == st.st_ino) {
+	snapcolls->insert(*i);
+      }
     } else {
       assert(0);
     }
