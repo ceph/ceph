@@ -80,6 +80,12 @@ class rados_pool_stat_t(Structure):
                 ("num_wr", c_uint64),
                 ("num_wr_kb", c_uint64)]
 
+class rados_cluster_stat_t(Structure):
+    _fields_ = [("kb", c_uint64),
+                ("kb_used", c_uint64),
+                ("kb_avail", c_uint64),
+                ("num_objects", c_uint64)]
+
 class Version(object):
     def __init__(self, major, minor, extra):
         self.major = major
@@ -184,6 +190,17 @@ Rados object in state %s." % (self.state))
         if (ret != 0):
             raise make_ex(ret, "error calling connect")
         self.state = "connected"
+
+    def get_cluster_stats(self):
+        stats = rados_cluster_stat_t()
+        ret = self.librados.rados_cluster_stat(self.cluster, byref(stats))
+        if ret < 0:
+            raise make_ex(
+                ret, "Rados.get_cluster_stats(%s): get_stats failed" % self.name)
+        return {'kb': stats.kb,
+                'kb_used': stats.kb_used,
+                'kb_avail': stats.kb_avail,
+                'num_objects': stats.num_objects}
 
     # Returns true if the pool exists; false otherwise.
     def pool_exists(self, pool_name):
