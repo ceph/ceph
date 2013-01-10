@@ -2687,7 +2687,7 @@ void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls)
       osd->store->getattrs(coll, poid, o.attrs);
       if (poid.snap != CEPH_SNAPDIR && poid.snap != CEPH_NOSNAP) {
 	// Check snap collections
-	check_snap_collections(poid, o.attrs, &o.snapcolls);
+	check_snap_collections(st.st_ino, poid, o.attrs, &o.snapcolls);
       }
       dout(25) << "_scan_list  " << poid << dendl;
     } else {
