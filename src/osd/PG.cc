@@ -3150,6 +3150,7 @@ void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep)
     if (r == 0) {
       ScrubMap::object &o = map.objects[poid];
       o.size = st.st_size;
+      o.nlinks = st.st_nlink;
       assert(!o.negative);
       osd->store->getattrs(coll, poid, o.attrs);
 
@@ -3169,6 +3170,10 @@ void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep)
         o.digest_present = true;
       }
 
+      if (poid.snap != CEPH_SNAPDIR && poid.snap != CEPH_NOSNAP) {
+	// Check snap collections
+	check_snap_collections(poid, o.attrs, &o.snapcolls);
+      }
       dout(25) << "_scan_list  " << poid << dendl;
     } else {
       dout(25) << "_scan_list  " << poid << " got " << r << ", skipping" << dendl;
@@ -4119,6 +4124,7 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
 			    map<hobject_t, set<int> > &missing,
 			    map<hobject_t, set<int> > &inconsistent,
 			    map<hobject_t, int> &authoritative,
+			    map<hobject_t, set<int> > &invalid_snapcolls,
 			    ostream &errorstream)
 {
   map<hobject_t,ScrubMap::object>::const_iterator i;
@@ -4142,6 +4148,18 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
     set<int> cur_inconsistent;
     for (j = maps.begin(); j != maps.end(); j++) {
       if (j->second->objects.count(*k)) {
+	// Check snapcolls
+	if (k->snap < CEPH_MAXSNAP) {
+	  if (_report_snap_collection_errors(
+		*k,
+		j->first,
+		j->second->objects[*k].attrs,
+		j->second->objects[*k].snapcolls,
+		j->second->objects[*k].nlinks,
+		errorstream)) {
+	    invalid_snapcolls[*k].insert(j->first);
+	  }
+	}
 	// Compare
 	stringstream ss;
 	if (!_compare_scrub_objects(auth->second->objects[*k],
@@ -4198,11 +4216,13 @@ void PG::scrub_compare_maps() {
       scrubber.missing,
       scrubber.inconsistent,
       authoritative,
+      scrubber.inconsistent_snapcolls,
       ss);
     dout(2) << ss.str() << dendl;
 
-    if (authoritative.size())
+    if (authoritative.size() || scrubber.inconsistent_snapcolls.size()) {
       osd->clog.error(ss);
+    }
 
     for (map<hobject_t, int>::iterator i = authoritative.begin();
 	 i != authoritative.end();
@@ -4223,8 +4243,22 @@ void PG::scrub_process_inconsistent() {
   bool repair = state_test(PG_STATE_REPAIR);
   bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
   const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
-  if (scrubber.authoritative.size()) {
+
+  if (scrubber.authoritative.size() || scrubber.inconsistent.size()) {
     stringstream ss;
+    for (map<hobject_t, set<int> >::iterator obj =
+	   scrubber.inconsistent_snapcolls.begin();
+	 obj != scrubber.inconsistent_snapcolls.end();
+	 ++obj) {
+      for (set<int>::iterator j = obj->second.begin();
+	   j != obj->second.end();
+	   ++j) {
+	++scrubber.errors;
+	ss << info.pgid << " " << mode << " " << " object " << obj->first
+	   << " has inconsistent snapcolls on " << *j << std::endl;
+      }
+    }
+
     ss << info.pgid << " " << mode << " " << scrubber.missing.size() << " missing, "
        << scrubber.inconsistent.size() << " inconsistent objects\n";
     dout(2) << ss.str() << dendl;
