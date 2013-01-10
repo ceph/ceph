@@ -9,9 +9,9 @@ Adding OSDs
 ===========
 
 When you want to expand a cluster, you may add an OSD at runtime. With Ceph, an
-OSD is generally one Ceph ``ceph-osd`` daemon for one storage disk within a host
-machine. If your host has multiple storage disks, you may map one ``ceph-osd``
-daemon for each disk.
+OSD is generally one Ceph ``ceph-osd`` daemon for one storage drive within a
+host machine. If your host has multiple storage drives, you may map one
+``ceph-osd`` daemon for each drive.
 
 Generally, it's a good idea to check the capacity of your cluster to see if you
 are reaching the upper end of its capacity. As your cluster reaches its ``near
@@ -29,7 +29,7 @@ If you are adding a new host when adding a new OSD,
 see `Hardware Recommendations`_ for details on minimum recommendations
 for OSD hardware. To add a OSD host to your cluster, first make sure you have 
 an up-to-date version of Linux installed (typically Ubuntu 12.04 precise), 
-and you have made some initial preparations for your storage disks. 
+and you have made some initial preparations for your storage drives. 
 See `Filesystem Recommendations`_ for details. 
 
 Add your OSD host to a rack in your cluster, connect it to the network
@@ -61,17 +61,17 @@ SSH keys`_, `install Ruby`_ and `install the Chef client`_ on your host. See
 Adding an OSD (Manual)
 ----------------------
 
-This procedure sets up an ``ceph-osd`` daemon, configures it to use one disk,
+This procedure sets up an ``ceph-osd`` daemon, configures it to use one drive,
 and configures the cluster to distribute data to the OSD. If your host has
-multiple disks,  you may add an OSD for each disk by repeating this procedure.
+multiple drives,  you may add an OSD for each drive by repeating this procedure.
 
-To add an OSD, create a data directory for it, mount a disk to that directory,
-add the OSD to your configuration file, add the OSD to the cluster, and then
-add it to the CRUSH map.
+To add an OSD, create a data directory for it, mount a drive to that directory,
+add the OSD to your configuration file, add the OSD to the cluster, and then add
+it to the CRUSH map.
 
 When you add the OSD to the CRUSH map, consider the weight you give to the new
-OSD.  Hard disk capacity grows 40% per year, so newer OSD hosts may have larger
-hard disks than older hosts in the cluster (i.e., they may have greater weight).
+OSD.  Hard drive capacity grows 40% per year, so newer OSD hosts may have larger
+hard drive than older hosts in the cluster (i.e., they may have greater weight).
 
 #. Create the default directory on your new OSD. :: 
 
@@ -79,11 +79,11 @@ hard disks than older hosts in the cluster (i.e., they may have greater weight).
 	sudo mkdir /var/lib/ceph/osd/ceph-{osd-number}
 	
 
-#. If the OSD is for a disk other than the OS disk, prepare it 
+#. If the OSD is for a drive other than the OS drive, prepare it 
    for use with Ceph, and mount it to the directory you just created:: 
 
 	ssh {new-osd-host}
-	sudo mkfs -t {fstype} /dev/{disk}
+	sudo mkfs -t {fstype} /dev/{drive}
 	sudo mount -o user_xattr /dev/{hdd} /var/lib/ceph/osd/ceph-{osd-number}
 
 
@@ -168,12 +168,12 @@ Adding an OSD (Chef)
 --------------------
 
 This procedure configures your OSD using ``chef-client``. If your host has
-multiple disks, you may need to execute the procedure for preparing an OSD disk
-for each data disk on your host.
+multiple drives, you may need to execute the procedure for preparing an OSD drive
+for each data drive on your host.
 
 When you add the OSD to the CRUSH map, consider the weight you give to the new
-OSD.  Hard disk capacity grows 40% per year, so newer OSD hosts may have larger
-hard disks than older hosts in the cluster.
+OSD.  Hard drive capacity grows 40% per year, so newer OSD hosts may have larger
+hard drive than older hosts in the cluster.
 
 #. Execute ``chef-client`` to register it with Chef as a Chef node.
 
@@ -181,7 +181,7 @@ hard disks than older hosts in the cluster.
    Change its environment to your Chef environment.
    Add ``"role[ceph-osd]"`` to the run list.
 
-#. Execute `Prepare OSD Disks`_ for each disk.
+#. Execute `Prepare OSD Drives`_ for each drive.
 
 #. Execute ``chef-client`` to invoke the run list.
 
@@ -234,18 +234,18 @@ completes. (Control-c to exit.)
 
 .. _Add/Move an OSD: ../crush-map#addosd
 .. _Configure Nodes: ../../deployment/chef#confignodes
-.. _Prepare OSD Disks: ../../deployment/chef#prepdisks
+.. _Prepare OSD Drives: ../../deployment/chef#prepdisks
 .. _ceph: ../monitoring
 
 
 
-Removing OSDs
-=============
+Removing OSDs (Manual)
+======================
 
 When you want to reduce the size of a cluster or replace hardware, you may
 remove an OSD at runtime. With Ceph, an OSD is generally one Ceph ``ceph-osd``
-daemon for one storage disk within a host machine. If your host has multiple
-storage disks, you may need to remove one ``ceph-osd`` daemon for each disk.
+daemon for one storage drive within a host machine. If your host has multiple
+storage drives, you may need to remove one ``ceph-osd`` daemon for each drive.
 Generally, it's a good idea to check the capacity of your cluster to see if you
 are reaching the upper end of its capacity. Ensure that when you remove an OSD
 that your cluster is not at its ``near full`` ratio.
@@ -292,13 +292,13 @@ your OSD before you remove it from the configuration. ::
 Once you stop your OSD, it is ``down``. 
 
 
-Removing an OSD (Manual)
-------------------------
+Removing the OSD
+----------------
 
 This procedure removes an OSD from a cluster map, removes its authentication
 key, removes the OSD from the OSD map, and removes the OSD from the
-``ceph.conf`` file. If your host has multiple disks,  you may need to remove an
-OSD for each disk by repeating this procedure.
+``ceph.conf`` file. If your host has multiple drives, you may need to remove an
+OSD for each drive by repeating this procedure.
 
 
 #. Remove the OSD from the CRUSH map so that it no longer receives data. You may
