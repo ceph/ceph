@@ -1189,7 +1189,8 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features)
     (*p)->election_finished();
 
   finish_election();
-  timecheck();
+  if (monmap->size() > 1)
+    timecheck();
 }
 
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features) 
