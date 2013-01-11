@@ -1416,6 +1416,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid,
 	 ++i) {
       if (old_snapdirs.count(*i))
 	continue;
+      make_snap_collection(ctx->local_t, *i);
       t->collection_add(coll_t(info.pgid, *i), coll, coid);
       to_create.insert(*i);
     }
