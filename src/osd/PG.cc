@@ -4158,7 +4158,7 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
 	if (k->snap < CEPH_MAXSNAP) {
 	  if (_report_snap_collection_errors(
 		*k,
-		j->first,
+		acting[j->first],
 		j->second->objects[*k].attrs,
 		j->second->objects[*k].snapcolls,
 		j->second->objects[*k].nlinks,
