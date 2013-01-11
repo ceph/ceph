@@ -93,6 +93,7 @@ class MMonSubscribe;
 class MAuthRotating;
 class MRoute;
 class MForward;
+class MTimeCheck;
 
 #define COMPAT_SET_LOC "feature_set"
 
@@ -206,6 +207,62 @@ public:
   }
 
 private:
+  /**
+   * @defgroup Monitor_h_TimeCheck Monitor Clock Drift Early Warning System
+   * @{
+   *
+   * We use time checks to keep track of any clock drifting going on in the
+   * cluster. This is accomplished by periodically ping each monitor in the
+   * quorum and register its response time on a map, assessing how much its
+   * clock has drifted. We also take this opportunity to assess the latency
+   * on response.
+   *
+   * This mechanism works as follows:
+   *
+   *  - Leader sends out a 'PING' message to each other monitor in the quorum.
+   *    The message is timestamped with the leader's current time. The leader's
+   *    current time is recorded in a map, associated with each peon's
+   *    instance.
+   *  - The peon replies to the leader with a timestamped 'PONG' message.
+   *  - The leader calculates a delta between the peon's timestamp and its
+   *    current time and stashes it.
+   *  - The leader also calculates the time it took to receive the 'PONG'
+   *    since the 'PING' was sent, and stashes an approximate latency estimate.
+   *  - Once all the quorum members have pong'ed, the leader will share the
+   *    clock skew and latency maps with all the monitors in the quorum.
+   */
+  map<entity_inst_t, utime_t> timecheck_waiting;
+  map<entity_inst_t, double> timecheck_skews;
+  map<entity_inst_t, double> timecheck_latencies;
+  version_t timecheck_epoch;
+  version_t timecheck_round;
+  /**
+   * Time Check event.
+   */
+  Context *timecheck_event;
+
+  struct C_TimeCheck : public Context {
+    Monitor *mon;
+    C_TimeCheck(Monitor *m) : mon(m) { }
+    void finish(int r) {
+      mon->timecheck();
+    }
+  };
+
+  void timecheck_cleanup();
+  void timecheck_report();
+  void timecheck();
+  health_status_t timecheck_status(ostringstream &ss,
+                                   const double skew_bound,
+                                   const double latency);
+  void handle_timecheck_leader(MTimeCheck *m);
+  void handle_timecheck_peon(MTimeCheck *m);
+  void handle_timecheck(MTimeCheck *m);
+  /**
+   * @}
+   */
+
+
   Context *probe_timeout_event;  // for probing and slurping states
 
   struct C_ProbeTimeout : public Context {
@@ -316,6 +373,7 @@ public:
    * @param detailbl optional bufferlist* to fill with a detailed report
    */
   void get_health(string& status, bufferlist *detailbl, Formatter *f);
+  void get_status(stringstream &ss, Formatter *f);
 
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);
