@@ -46,6 +46,8 @@
 
 #include "messages/MAuthReply.h"
 
+#include "messages/MTimeCheck.h"
+
 #include "common/strtol.h"
 #include "common/ceph_argparse.h"
 #include "common/Timer.h"
@@ -127,6 +129,11 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   elector(this),
   leader(0),
   quorum_features(0),
+
+  timecheck_epoch(0),
+  timecheck_round(0),
+  timecheck_event(NULL),
+
   probe_timeout_event(NULL),
 
   paxos_service(PAXOS_NUM),
@@ -729,6 +736,9 @@ void Monitor::_add_bootstrap_peer_hint(string cmd, string args, ostream& ss)
 void Monitor::reset()
 {
   dout(10) << "reset" << dendl;
+
+  timecheck_cleanup();
+
   leader_since = utime_t();
   if (!quorum.empty()) {
     exited_quorum = ceph_clock_now(g_ceph_context);
@@ -1172,13 +1182,14 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features)
 
   clog.info() << "mon." << name << "@" << rank
 		<< " won leader election with quorum " << quorum << "\n";
-  
+
   for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     (*p)->leader_init();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->election_finished();
 
   finish_election();
+  timecheck();
 }
 
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features) 
@@ -1216,7 +1227,7 @@ void Monitor::finish_election()
     messenger->send_message(new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
 			    monmap->get_inst(*quorum.begin()));
   }
-} 
+}
 
 
 bool Monitor::_allowed_command(MonSession *s, const vector<string>& cmd)
@@ -1337,6 +1348,57 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
   }
   if (f)
     f->close_section();
+
+  if (f)
+    f->open_array_section("timechecks");
+  if (timecheck_skews.size() != 0) {
+    list<string> warns;
+    for (map<entity_inst_t,double>::iterator i = timecheck_skews.begin();
+         i != timecheck_skews.end(); ++i) {
+      entity_inst_t inst = i->first;
+      double skew = i->second;
+      double latency = timecheck_latencies[inst];
+      string name = monmap->get_name(inst.addr);
+
+      ostringstream tcss;
+      health_status_t tcstatus = timecheck_status(tcss, skew, latency);
+      if (tcstatus != HEALTH_OK) {
+        overall = tcstatus;
+        warns.push_back(name);
+
+        ostringstream tmp_ss;
+        tmp_ss << "mon." << name
+               << " addr " << inst.addr << " " << tcss.str()
+	       << " (latency " << latency << "s)";
+        detail.push_back(make_pair(tcstatus, tmp_ss.str()));
+      }
+
+      if (f) {
+        f->open_object_section(name.c_str());
+        f->dump_string("name", name.c_str());
+        f->dump_float("skew", skew);
+        f->dump_float("latency", latency);
+        f->dump_stream("health") << tcstatus;
+        if (tcstatus != HEALTH_OK)
+          f->dump_stream("details") << tcss.str();
+        f->close_section();
+      }
+    }
+    if (!warns.empty()) {
+      if (!ss.str().empty())
+        ss << ";";
+      ss << " clock skew detected on";
+      while (!warns.empty()) {
+        ss << " mon." << warns.front();
+        warns.pop_front();
+        if (!warns.empty())
+          ss << ",";
+      }
+    }
+  }
+  if (f)
+    f->close_section();
+
   stringstream fss;
   fss << overall;
   status = fss.str() + ss.str();
@@ -1359,6 +1421,34 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
 
   if (f)
     f->close_section();
+}
+
+void Monitor::get_status(stringstream &ss, Formatter *f)
+{
+  if (f)
+    f->open_object_section("status");
+
+  // reply with the status for all the components
+  string health;
+  get_health(health, NULL, f);
+
+  if (f) {
+    f->dump_stream("monmap") << *monmap;
+    f->dump_stream("election_epoch") << get_epoch();
+    f->dump_stream("quorum") << get_quorum();
+    f->dump_stream("quorum_names") << get_quorum_names();
+    f->dump_stream("osdmap") << osdmon()->osdmap;
+    f->dump_stream("pgmap") << pgmon()->pg_map;
+    f->dump_stream("mdsmap") << mdsmon()->mdsmap;
+    f->close_section();
+  } else {
+    ss << "   health " << health << "\n";
+    ss << "   monmap " << *monmap << ", election epoch " << get_epoch()
+      << ", quorum " << get_quorum() << " " << get_quorum_names() << "\n";
+    ss << "   osdmap " << osdmon()->osdmap << "\n";
+    ss << "    pgmap " << pgmon()->pg_map << "\n";
+    ss << "   mdsmap " << mdsmon()->mdsmap << "\n";
+  }
 }
 
 void Monitor::handle_command(MMonCommand *m)
@@ -1386,220 +1476,248 @@ void Monitor::handle_command(MMonCommand *m)
   string rs;
   int r = -EINVAL;
   rs = "unrecognized command";
-  if (!m->cmd.empty()) {
-    if (m->cmd[0] == "mds") {
-      mdsmon()->dispatch(m);
-      return;
+  if (m->cmd.empty())
+    goto out;
+
+  if (m->cmd[0] == "mds") {
+    mdsmon()->dispatch(m);
+    return;
+  }
+  if (m->cmd[0] == "osd") {
+    osdmon()->dispatch(m);
+    return;
+  }
+  if (m->cmd[0] == "pg") {
+    pgmon()->dispatch(m);
+    return;
+  }
+  if (m->cmd[0] == "mon") {
+    monmon()->dispatch(m);
+    return;
+  }
+  if (m->cmd[0] == "class") {
+    reply_command(m, -EINVAL, "class distribution is no longer handled by the monitor", 0);
+    return;
+  }
+  if (m->cmd[0] == "auth") {
+    authmon()->dispatch(m);
+    return;
+  }
+
+  if (m->cmd[0] == "fsid") {
+    stringstream ss;
+    ss << monmap->fsid;
+    reply_command(m, 0, ss.str(), rdata, 0);
+    return;
+  }
+  if (m->cmd[0] == "log") {
+    if (!access_r) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
     }
-    if (m->cmd[0] == "osd") {
-      osdmon()->dispatch(m);
-      return;
+    stringstream ss;
+    for (unsigned i=1; i<m->cmd.size(); i++) {
+      if (i > 1)
+        ss << ' ';
+      ss << m->cmd[i];
     }
-    if (m->cmd[0] == "pg") {
-      pgmon()->dispatch(m);
-      return;
+    clog.info(ss);
+    rs = "ok";
+    reply_command(m, 0, rs, rdata, 0);
+    return;
+  }
+  if (m->cmd[0] == "stop_cluster") {
+    if (!access_all) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
     }
-    if (m->cmd[0] == "mon") {
-      monmon()->dispatch(m);
-      return;
+    stop_cluster();
+    reply_command(m, 0, "initiating cluster shutdown", 0);
+    return;
+  }
+
+  if (m->cmd[0] == "injectargs") {
+    if (!access_all) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
     }
-    if (m->cmd[0] == "fsid") {
-      stringstream ss;
-      ss << monmap->fsid;
-      reply_command(m, 0, ss.str(), rdata, 0);
-      return;
+    if (m->cmd.size() == 2) {
+      dout(0) << "parsing injected options '" << m->cmd[1] << "'" << dendl;
+      ostringstream oss;
+      g_conf->injectargs(m->cmd[1], &oss);
+      derr << "injectargs:" << dendl;
+      derr << oss.str() << dendl;
+      rs = "parsed options";
+      r = 0;
+    } else {
+      rs = "must supply options to be parsed in a single string";
+      r = -EINVAL;
     }
-    if (m->cmd[0] == "log") {
-      if (!access_r) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
-      stringstream ss;
-      for (unsigned i=1; i<m->cmd.size(); i++) {
-	if (i > 1)
-	  ss << ' ';
-	ss << m->cmd[i];
-      }
-      clog.info(ss);
-      rs = "ok";
-      reply_command(m, 0, rs, rdata, 0);
-      return;
-    }
-    if (m->cmd[0] == "stop_cluster") {
-      if (!access_all) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
-      stop_cluster();
-      reply_command(m, 0, "initiating cluster shutdown", 0);
-      return;
+  } else if ((m->cmd[0] == "status") || (m->cmd[0] == "health")) {
+    if (!access_r) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
     }
 
-    if (m->cmd[0] == "injectargs") {
-      if (!access_all) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
-      if (m->cmd.size() == 2) {
-	dout(0) << "parsing injected options '" << m->cmd[1] << "'" << dendl;
-	ostringstream oss;
-	g_conf->injectargs(m->cmd[1], &oss);
-	derr << "injectargs:" << dendl;
-	derr << oss.str() << dendl;
-	rs = "parsed options";
-	r = 0;
+    vector<const char *> args;
+    for (unsigned int i = 0; i < m->cmd.size(); ++i)
+      args.push_back(m->cmd[i].c_str());
+
+    string format = "plain";
+    JSONFormatter *jf = NULL;
+    for (vector<const char*>::iterator i = args.begin(); i != args.end();) {
+      string val;
+      if (ceph_argparse_witharg(args, i, &val,
+            "-f", "--format", (char*)NULL)) {
+        format = val;
       } else {
-	rs = "must supply options to be parsed in a single string";
-	r = -EINVAL;
+        ++i;
       }
-    } 
-    if (m->cmd[0] == "class") {
-      reply_command(m, -EINVAL, "class distribution is no longer handled by the monitor", 0);
-      return;
     }
-    if (m->cmd[0] == "auth") {
-      authmon()->dispatch(m);
-      return;
-    }
-    if (m->cmd[0] == "status") {
-      if (!access_r) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
-      // reply with the status for all the components
-      string health;
-      get_health(health, NULL, NULL);
-      stringstream ss;
-      ss << "   health " << health << "\n";
-      ss << "   monmap " << *monmap << ", election epoch " << get_epoch() << ", quorum " << get_quorum()
-	 << " " << get_quorum_names() << "\n";
-      ss << "   osdmap " << osdmon()->osdmap << "\n";
-      ss << "    pgmap " << pgmon()->pg_map << "\n";
-      ss << "   mdsmap " << mdsmon()->mdsmap << "\n";
-      rs = ss.str();
-      r = 0;
-    }
-    if (m->cmd[0] == "report") {
-      if (!access_r) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
 
-      JSONFormatter jf(true);
-
-      jf.open_object_section("report");
-      jf.dump_string("version", ceph_version_to_str());
-      jf.dump_string("commit", git_version_to_str());
-      jf.dump_stream("timestamp") << ceph_clock_now(NULL);
-
-      string d;
-      for (unsigned i = 1; i < m->cmd.size(); i++) {
-	if (i > 1)
-	  d += " ";
-	d += m->cmd[i];
-      }
-      jf.dump_string("tag", d);
-
-      string hs;
-      get_health(hs, NULL, &jf);
-      
-      monmon()->dump_info(&jf);
-      osdmon()->dump_info(&jf);
-      mdsmon()->dump_info(&jf);
-      pgmon()->dump_info(&jf);
-
-      jf.close_section();
-      stringstream ss;
-      jf.flush(ss);
-
-      bufferlist bl;
-      bl.append("-------- BEGIN REPORT --------\n");
-      bl.append(ss);
-      ostringstream ss2;
-      ss2 << "\n-------- END REPORT " << bl.crc32c(6789) << " --------\n";
-      rdata.append(bl);
-      rdata.append(ss2.str());
-      rs = string();
-      r = 0;
-    }
-    if (m->cmd[0] == "quorum_status") {
-      if (!access_r) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
-      // make sure our map is readable and up to date
-      if (!is_leader() && !is_peon()) {
-	dout(10) << " waiting for quorum" << dendl;
-	waitfor_quorum.push_back(new C_RetryMessage(this, m));
-	return;
-      }
-      stringstream ss;
-      _quorum_status(ss);
-      rs = ss.str();
-      r = 0;
-    }
-    if (m->cmd[0] == "mon_status") {
-      if (!access_r) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
-      stringstream ss;
-      _mon_status(ss);
-      rs = ss.str();
-      r = 0;
-    }
-    if (m->cmd[0] == "health") {
-      if (!access_r) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
-      get_health(rs, (m->cmd.size() > 1) ? &rdata : NULL, NULL);
-      r = 0;
-    }
-    if (m->cmd[0] == "heap") {
-      if (!access_all) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
-      if (!ceph_using_tcmalloc())
-	rs = "tcmalloc not enabled, can't use heap profiler commands\n";
-      else {
-	ostringstream ss;
-	ceph_heap_profiler_handle_command(m->cmd, ss);
-	rs = ss.str();
-      }
-    }
-    if (m->cmd[0] == "quorum") {
-      if (!access_all) {
-	r = -EACCES;
-	rs = "access denied";
-	goto out;
-      }
-      if (m->cmd[1] == "exit") {
-        reset();
-        start_election();
-        elector.stop_participating();
-        rs = "stopped responding to quorum, initiated new election";
-        r = 0;
-      } else if (m->cmd[1] == "enter") {
-        elector.start_participating();
-        reset();
-        start_election();
-        rs = "started responding to quorum, initiated new election";
-        r = 0;
+    if (format != "plain") {
+      if (format == "json") {
+        jf = new JSONFormatter(true);
       } else {
-	rs = "unknown quorum subcommand; use exit or enter";
-	r = -EINVAL;
+        r = -EINVAL;
+        stringstream err_ss;
+        err_ss << "unrecognized format '" << format
+          << "' (available: plain, json)";
+        rs = err_ss.str();
+        goto out;
       }
+    }
+
+    stringstream ss;
+    if (string(args[0]) == "status") {
+      get_status(ss, jf);
+
+      if (jf) {
+        jf->flush(ss);
+        ss << '\n';
+      }
+    } else if (string(args[0]) == "health") {
+      string health_str;
+      get_health(health_str, (args.size() > 1) ? &rdata : NULL, jf);
+      if (jf) {
+        jf->flush(ss);
+        ss << '\n';
+      } else {
+        ss << health_str;
+      }
+    } else {
+      assert(0 == "We should never get here!");
+      return;
+    }
+    rs = ss.str();
+    r = 0;
+  } else if (m->cmd[0] == "report") {
+    if (!access_r) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
+    }
+
+    JSONFormatter jf(true);
+
+    jf.open_object_section("report");
+    jf.dump_string("version", ceph_version_to_str());
+    jf.dump_string("commit", git_version_to_str());
+    jf.dump_stream("timestamp") << ceph_clock_now(NULL);
+
+    string d;
+    for (unsigned i = 1; i < m->cmd.size(); i++) {
+      if (i > 1)
+        d += " ";
+      d += m->cmd[i];
+    }
+    jf.dump_string("tag", d);
+
+    string hs;
+    get_health(hs, NULL, &jf);
+
+    monmon()->dump_info(&jf);
+    osdmon()->dump_info(&jf);
+    mdsmon()->dump_info(&jf);
+    pgmon()->dump_info(&jf);
+
+    jf.close_section();
+    stringstream ss;
+    jf.flush(ss);
+
+    bufferlist bl;
+    bl.append("-------- BEGIN REPORT --------\n");
+    bl.append(ss);
+    ostringstream ss2;
+    ss2 << "\n-------- END REPORT " << bl.crc32c(6789) << " --------\n";
+    rdata.append(bl);
+    rdata.append(ss2.str());
+    rs = string();
+    r = 0;
+  } else if (m->cmd[0] == "quorum_status") {
+    if (!access_r) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
+    }
+    // make sure our map is readable and up to date
+    if (!is_leader() && !is_peon()) {
+      dout(10) << " waiting for quorum" << dendl;
+      waitfor_quorum.push_back(new C_RetryMessage(this, m));
+      return;
+    }
+    stringstream ss;
+    _quorum_status(ss);
+    rs = ss.str();
+    r = 0;
+  } else if (m->cmd[0] == "mon_status") {
+    if (!access_r) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
+    }
+    stringstream ss;
+    _mon_status(ss);
+    rs = ss.str();
+    r = 0;
+  } else if (m->cmd[0] == "heap") {
+    if (!access_all) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
+    }
+    if (!ceph_using_tcmalloc())
+      rs = "tcmalloc not enabled, can't use heap profiler commands\n";
+    else {
+      ostringstream ss;
+      ceph_heap_profiler_handle_command(m->cmd, ss);
+      rs = ss.str();
+    }
+  } else if (m->cmd[0] == "quorum") {
+    if (!access_all) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
+    }
+    if (m->cmd[1] == "exit") {
+      reset();
+      start_election();
+      elector.stop_participating();
+      rs = "stopped responding to quorum, initiated new election";
+      r = 0;
+    } else if (m->cmd[1] == "enter") {
+      elector.start_participating();
+      reset();
+      start_election();
+      rs = "started responding to quorum, initiated new election";
+      r = 0;
+    } else {
+      rs = "unknown quorum subcommand; use exit or enter";
+      r = -EINVAL;
     }
   }
 
@@ -2097,6 +2215,10 @@ bool Monitor::_ms_dispatch(Message *m)
       handle_forward((MForward *)m);
       break;
 
+    case MSG_TIMECHECK:
+      handle_timecheck((MTimeCheck *)m);
+      break;
+
     default:
       ret = false;
     }
@@ -2106,6 +2228,283 @@ bool Monitor::_ms_dispatch(Message *m)
   }
 
   return ret;
+}
+
+void Monitor::timecheck_cleanup()
+{
+  timecheck_round = 0;
+
+  if (timecheck_event) {
+    timer.cancel_event(timecheck_event);
+    timecheck_event = NULL;
+  }
+
+  if (timecheck_waiting.size() > 0)
+    timecheck_waiting.clear();
+  timecheck_skews.clear();
+  timecheck_latencies.clear();
+}
+
+void Monitor::timecheck_report()
+{
+  dout(10) << __func__ << dendl;
+  assert(is_leader());
+  if (monmap->size() == 1) {
+    assert(0 == "We are alone; we shouldn't have gotten here!");
+    return;
+  }
+
+  assert(timecheck_latencies.size() == timecheck_skews.size());
+  for (set<int>::iterator q = quorum.begin(); q != quorum.end(); ++q) {
+    if (monmap->get_name(*q) == name)
+      continue;
+
+    MTimeCheck *m = new MTimeCheck(MTimeCheck::OP_REPORT);
+    m->epoch = get_epoch();
+    m->round = timecheck_round;
+
+    for (map<entity_inst_t, double>::iterator it = timecheck_skews.begin(); it != timecheck_skews.end(); ++it) {
+      double skew = it->second;
+      double latency = timecheck_latencies[it->first];
+
+      m->skews[it->first] = skew;
+      m->latencies[it->first] = latency;
+
+      dout(10) << __func__ << " " << it->first
+               << " latency " << latency
+               << " skew " << skew << dendl;
+    }
+    entity_inst_t inst = monmap->get_inst(*q);
+    dout(10) << __func__ << " send report to " << inst << dendl;
+    messenger->send_message(m, inst);
+  }
+}
+
+void Monitor::timecheck()
+{
+  dout(10) << __func__ << dendl;
+  assert(is_leader());
+
+  if (monmap->size() == 1) {
+    assert(0 == "We are alone; this shouldn't have been scheduled!");
+    return;
+  }
+
+  timecheck_epoch = get_epoch();
+  timecheck_round++;
+
+  dout(10) << __func__ << " start timecheck epoch " << timecheck_epoch
+           << " round " << timecheck_round << dendl;
+
+  // we are at the eye of the storm; the point of reference
+  timecheck_skews[monmap->get_inst(name)] = 0.0;
+  timecheck_latencies[monmap->get_inst(name)] = 0.0;
+
+  for (set<int>::iterator it = quorum.begin(); it != quorum.end(); ++it) {
+    if (monmap->get_name(*it) == name)
+      continue;
+
+    entity_inst_t inst = monmap->get_inst(*it);
+    utime_t curr_time = ceph_clock_now(g_ceph_context);
+    timecheck_waiting[inst] = curr_time;
+    MTimeCheck *m = new MTimeCheck(MTimeCheck::OP_PING);
+    m->epoch = get_epoch();
+    m->round = timecheck_round;
+    dout(10) << __func__ << " send " << *m << " to " << inst << dendl;
+    messenger->send_message(m, inst);
+  }
+
+  dout(10) << __func__ << " setting up next event and timeout" << dendl;
+  timecheck_event = new C_TimeCheck(this);
+
+  timer.add_event_after(g_conf->mon_timecheck_interval, timecheck_event);
+}
+
+health_status_t Monitor::timecheck_status(ostringstream &ss,
+                                          const double skew_bound,
+                                          const double latency)
+{
+  health_status_t status = HEALTH_OK;
+  double abs_skew = (skew_bound > 0 ? skew_bound : -skew_bound);
+  assert(latency >= 0);
+
+  if (abs_skew > g_conf->mon_clock_drift_allowed) {
+    status = HEALTH_WARN;
+    ss << "clock skew " << abs_skew << "s"
+       << " > max " << g_conf->mon_clock_drift_allowed << "s";
+  }
+
+  return status;
+}
+
+void Monitor::handle_timecheck_leader(MTimeCheck *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+  /* handles PONG's */
+  assert(m->op == MTimeCheck::OP_PONG);
+  assert(m->epoch == timecheck_epoch);
+
+  entity_inst_t other = m->get_source_inst();
+
+  if (m->round < timecheck_round) {
+    dout(1) << __func__ << " got old round " << m->round
+            << " from " << other
+            << " curr " << timecheck_round << " -- discard" << dendl;
+    return;
+  }
+
+  utime_t curr_time = ceph_clock_now(g_ceph_context);
+
+  assert(timecheck_waiting.count(other) > 0);
+  utime_t timecheck_sent = timecheck_waiting[other];
+  timecheck_waiting.erase(other);
+  if (curr_time < timecheck_sent) {
+    // our clock was readjusted -- drop everything until it all makes sense.
+    dout(1) << __func__ << " our clock was readjusted --"
+            << " bump round and drop current check"
+            << dendl;
+    timecheck_round++;
+    timecheck_waiting.clear();
+    return;
+  }
+
+  /* update peer latencies */
+  double latency = (double)(curr_time - timecheck_sent);
+
+  if (timecheck_latencies.count(other) == 0)
+    timecheck_latencies[other] = latency;
+  else {
+    double avg_latency = ((timecheck_latencies[other]*0.8)+(latency*0.2));
+    timecheck_latencies[other] = avg_latency;
+  }
+
+  /*
+   * update skews
+   *
+   * some nasty thing goes on if we were to do 'a - b' between two utime_t,
+   * and 'a' happens to be lower than 'b'; so we use double instead.
+   *
+   * latency is always expected to be >= 0.
+   *
+   * delta, the difference between theirs timestamp and ours, may either be
+   * lower or higher than 0; will hardly ever be 0.
+   *
+   * The absolute skew is the absolute delta minus the latency, which is
+   * taken as a whole instead of an rtt given that there is some queueing
+   * and dispatch times involved and it's hard to assess how long exactly
+   * it took for the message to travel to the other side and be handled. So
+   * we call it a bounded skew, the worst case scenario.
+   *
+   * Now, to math!
+   *
+   * Given that the latency is always positive, we can establish that the
+   * bounded skew will be:
+   *
+   *  1. positive if the absolute delta is higher than the latency and
+   *     delta is positive
+   *  2. negative if the absolute delta is higher than the latency and
+   *     delta is negative.
+   *  3. zero if the absolute delta is lower than the latency.
+   *
+   * On 3. we make a judgement call and treat the skew as non-existent.
+   * This is because that, if the absolute delta is lower than the
+   * latency, then the apparently existing skew is nothing more than a
+   * side-effect of the high latency at work.
+   *
+   * This may not be entirely true though, as a severely skewed clock
+   * may be masked by an even higher latency, but with high latencies
+   * we probably have worse issues to deal with than just skewed clocks.
+   */
+  assert(latency >= 0);
+
+  double delta = ((double) m->timestamp) - ((double) curr_time);
+  double abs_delta = (delta > 0 ? delta : -delta);
+  double skew_bound = abs_delta - latency;
+  if (skew_bound < 0)
+    skew_bound = 0;
+  else if (delta < 0)
+    skew_bound = -skew_bound;
+
+  ostringstream ss;
+  health_status_t status = timecheck_status(ss, skew_bound, latency);
+  if (status == HEALTH_ERR)
+    clog.error() << other << " " << ss.str() << "\n";
+  else if (status == HEALTH_WARN)
+    clog.warn() << other << " " << ss.str() << "\n";
+
+  dout(10) << __func__ << " from " << other << " ts " << m->timestamp
+	   << " delta " << delta << " skew_bound " << skew_bound
+	   << " latency " << latency << dendl;
+
+  if (timecheck_skews.count(other) == 0) {
+    timecheck_skews[other] = skew_bound;
+  } else {
+    timecheck_skews[other] = (timecheck_skews[other]*0.8)+(skew_bound*0.2);
+  }
+
+  if (timecheck_waiting.size() == 0)
+    timecheck_report();
+}
+
+void Monitor::handle_timecheck_peon(MTimeCheck *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+
+  assert(is_peon());
+  assert(m->op == MTimeCheck::OP_PING || m->op == MTimeCheck::OP_REPORT);
+
+  if (m->epoch != get_epoch()) {
+    dout(1) << __func__ << " got wrong epoch "
+            << "(ours " << get_epoch()
+            << " theirs: " << m->epoch << ") -- discarding" << dendl;
+    return;
+  }
+
+  if ((m->round < timecheck_round)
+      || (m->round == timecheck_round && m->op != MTimeCheck::OP_REPORT)) {
+    dout(1) << __func__ << " got old round " << m->round
+            << " current " << timecheck_round << " -- discarding" << dendl;
+    return;
+  }
+
+  if (m->op == MTimeCheck::OP_REPORT) {
+    timecheck_latencies.swap(m->latencies);
+    timecheck_skews.swap(m->skews);
+    return;
+  }
+
+  timecheck_round = m->round;
+
+  MTimeCheck *reply = new MTimeCheck(MTimeCheck::OP_PONG);
+  utime_t curr_time = ceph_clock_now(g_ceph_context);
+  reply->timestamp = curr_time;
+  reply->epoch = m->epoch;
+  reply->round = m->round;
+  dout(10) << __func__ << " send " << *m
+           << " to " << m->get_source_inst() << dendl;
+  messenger->send_message(reply, m->get_connection());
+}
+
+void Monitor::handle_timecheck(MTimeCheck *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+
+  if (is_leader()) {
+    if (m->op != MTimeCheck::OP_PONG) {
+      dout(1) << __func__ << " drop unexpected msg (not pong)" << dendl;
+    } else {
+      handle_timecheck_leader(m);
+    }
+  } else if (is_peon()) {
+    if (m->op != MTimeCheck::OP_PING && m->op != MTimeCheck::OP_REPORT) {
+      dout(1) << __func__ << " drop unexpected msg (not ping or report)" << dendl;
+    } else {
+      handle_timecheck_peon(m);
+    }
+  } else {
+    dout(1) << __func__ << " drop unexpected msg" << dendl;
+  }
+  m->put();
 }
 
 void Monitor::handle_subscribe(MMonSubscribe *m)
