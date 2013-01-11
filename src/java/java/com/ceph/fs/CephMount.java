@@ -149,7 +149,7 @@ public class CephMount {
    * The mount can be reactivated using mount(). Configuration parameters
    * previously set are not reset.
    */
-  public synchronized void unmount() {
+  public void unmount() {
     native_ceph_unmount(instance_ptr);
   }
 
