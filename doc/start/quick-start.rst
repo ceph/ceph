@@ -33,6 +33,7 @@ Install Debian/Ubuntu
 Install a recent release of Debian or Ubuntu (e.g., 12.04 precise) on your
 Ceph server machine and your client machine. 
 
+
 Add Ceph Packages
 =================
 
@@ -61,6 +62,7 @@ Debian/Ubuntu Packages`_ for further details.
 
 .. _Installing Debian/Ubuntu Packages: ../../install/debian
 	
+
 Add a Configuration File
 ========================
 
@@ -101,6 +103,7 @@ For details on Ceph authentication see `Ceph Authentication`_.
 
 .. _Ceph Authentication: ../../rados/operations/authentication
    
+
 Deploy the Configuration
 ========================
 
@@ -134,13 +137,14 @@ Start Ceph
 Once you have deployed the configuration, start Ceph from the command line of
 your server machine. :: 
 
-	sudo service ceph start
+	sudo service ceph -a start
 	
 Check the health of your Ceph cluster to ensure it is ready. :: 
 
 	sudo ceph health
 	
 When your cluster echoes back ``HEALTH_OK``, you may begin using Ceph.
+
 
 Copy The Keyring to The Client
 ==============================
@@ -155,6 +159,7 @@ command line, as the example Ceph configuration requires authentication. ::
 .. tip:: Ensure the ``ceph.keyring`` file has appropriate permissions set 
    (e.g., ``chmod 644``) on your client machine.
    
+
 Proceed to Other Quick Starts
 =============================
 
