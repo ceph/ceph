@@ -88,6 +88,12 @@ public:
     }
   }
 
+  // Returns K key s.t. key <= k for all currently cached k,v
+  K cached_key_lower_bound() {
+    Mutex::Locker l(lock);
+    return weak_refs.begin()->first;
+  }
+
   VPtr lower_bound(K key) {
     VPtr val;
     list<VPtr> to_release;
