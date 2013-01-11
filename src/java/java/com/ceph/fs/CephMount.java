@@ -141,7 +141,7 @@ public class CephMount {
     native_ceph_mount(instance_ptr, root);
   }
 
-  private static synchronized native int native_ceph_mount(long mountp, String root);
+  private static native int native_ceph_mount(long mountp, String root);
 
   /**
    * Deactivate the mount.
@@ -153,7 +153,7 @@ public class CephMount {
     native_ceph_unmount(instance_ptr);
   }
 
-  private static synchronized native int native_ceph_unmount(long mountp);
+  private static native int native_ceph_unmount(long mountp);
 
   /*
    * Private access to low-level ceph_release.
@@ -169,7 +169,7 @@ public class CephMount {
     native_ceph_conf_read_file(instance_ptr, path);
   }
 
-  private static synchronized native int native_ceph_conf_read_file(long mountp, String path);
+  private static native int native_ceph_conf_read_file(long mountp, String path);
 
   /**
    * Set the value of a configuration option.
@@ -181,7 +181,7 @@ public class CephMount {
     native_ceph_conf_set(instance_ptr, option, value);
   }
 
-  private static synchronized native int native_ceph_conf_set(long mountp, String option, String value);
+  private static native int native_ceph_conf_set(long mountp, String option, String value);
 
   /**
    * Get the value of a configuration option.
@@ -193,7 +193,7 @@ public class CephMount {
     return native_ceph_conf_get(instance_ptr, option);
   }
 
-  private static synchronized native String native_ceph_conf_get(long mountp, String option);
+  private static native String native_ceph_conf_get(long mountp, String option);
 
   /**
    * Get file system status.
@@ -205,7 +205,7 @@ public class CephMount {
     native_ceph_statfs(instance_ptr, path, statvfs);
   }
 
-  private static synchronized native int native_ceph_statfs(long mountp, String path, CephStatVFS statvfs);
+  private static native int native_ceph_statfs(long mountp, String path, CephStatVFS statvfs);
 
   /**
    * Get the current working directory.
@@ -216,7 +216,7 @@ public class CephMount {
     return native_ceph_getcwd(instance_ptr);
   }
 
-  private static synchronized native String native_ceph_getcwd(long mountp);
+  private static native String native_ceph_getcwd(long mountp);
 
   /**
    * Set the current working directory.
@@ -227,7 +227,7 @@ public class CephMount {
     native_ceph_chdir(instance_ptr, path);
   }
 
-  private static synchronized native int native_ceph_chdir(long mountp, String cwd);
+  private static native int native_ceph_chdir(long mountp, String cwd);
 
   /**
    * List the contents of a directory.
@@ -239,7 +239,7 @@ public class CephMount {
     return native_ceph_listdir(instance_ptr, dir);
   }
 
-  private static synchronized native String[] native_ceph_listdir(long mountp, String path);
+  private static native String[] native_ceph_listdir(long mountp, String path);
 
   /**
    * Create a hard link to an existing file.
@@ -251,7 +251,7 @@ public class CephMount {
     native_ceph_link(instance_ptr, oldpath, newpath);
   }
 
-  private static synchronized native int native_ceph_link(long mountp, String existing, String newname);
+  private static native int native_ceph_link(long mountp, String existing, String newname);
 
   /**
    * Unlink/delete a name from the file system.
@@ -262,7 +262,7 @@ public class CephMount {
     native_ceph_unlink(instance_ptr, path);
   }
 
-  private static synchronized native int native_ceph_unlink(long mountp, String path);
+  private static native int native_ceph_unlink(long mountp, String path);
 
   /**
    * Rename a file or directory.
@@ -274,7 +274,7 @@ public class CephMount {
     native_ceph_rename(instance_ptr, from, to);
   }
 
-  private static synchronized native int native_ceph_rename(long mountp, String from, String to);
+  private static native int native_ceph_rename(long mountp, String from, String to);
 
   /**
    * Create a directory.
@@ -286,7 +286,7 @@ public class CephMount {
     native_ceph_mkdir(instance_ptr, path, mode);
   }
 
-  private static synchronized native int native_ceph_mkdir(long mountp, String path, int mode);
+  private static native int native_ceph_mkdir(long mountp, String path, int mode);
 
   /**
    * Create a directory and all parents.
@@ -298,7 +298,7 @@ public class CephMount {
     native_ceph_mkdirs(instance_ptr, path, mode);
   }
 
-  private static synchronized native int native_ceph_mkdirs(long mountp, String path, int mode);
+  private static native int native_ceph_mkdirs(long mountp, String path, int mode);
 
   /**
    * Delete a directory.
@@ -309,7 +309,7 @@ public class CephMount {
     native_ceph_rmdir(instance_ptr, path);
   }
 
-  private static synchronized native int native_ceph_rmdir(long mountp, String path);
+  private static native int native_ceph_rmdir(long mountp, String path);
 
   /**
    * Read the value of a symbolic link.
@@ -318,7 +318,7 @@ public class CephMount {
     return native_ceph_readlink(instance_ptr, path);
   }
 
-  private static synchronized native String native_ceph_readlink(long mountp, String path);
+  private static native String native_ceph_readlink(long mountp, String path);
 
   /**
    * Create a symbolic link.
@@ -330,7 +330,7 @@ public class CephMount {
     native_ceph_symlink(instance_ptr, oldpath, newpath);
   }
 
-  private static synchronized native int native_ceph_symlink(long mountp, String existing, String newname);
+  private static native int native_ceph_symlink(long mountp, String existing, String newname);
 
   /**
    * Get file status.
@@ -342,7 +342,7 @@ public class CephMount {
     native_ceph_lstat(instance_ptr, path, stat);
   }
 
-  private static synchronized native int native_ceph_lstat(long mountp, String path, CephStat stat);
+  private static native int native_ceph_lstat(long mountp, String path, CephStat stat);
 
   /**
    * Set file attributes.
@@ -355,7 +355,7 @@ public class CephMount {
     native_ceph_setattr(instance_ptr, path, stat, mask);
   }
 
-  private static synchronized native int native_ceph_setattr(long mountp, String relpath, CephStat stat, int mask);
+  private static native int native_ceph_setattr(long mountp, String relpath, CephStat stat, int mask);
 
   /**
    * Change file mode.
@@ -367,7 +367,7 @@ public class CephMount {
     native_ceph_chmod(instance_ptr, path, mode);
   }
 
-  private static synchronized native int native_ceph_chmod(long mountp, String path, int mode);
+  private static native int native_ceph_chmod(long mountp, String path, int mode);
 
   /**
    * Truncate a file to a specified length.
@@ -379,7 +379,7 @@ public class CephMount {
     native_ceph_truncate(instance_ptr, path, size);
   }
 
-  private static synchronized native int native_ceph_truncate(long mountp, String path, long size);
+  private static native int native_ceph_truncate(long mountp, String path, long size);
 
   /**
    * Open a file.
@@ -393,7 +393,7 @@ public class CephMount {
     return native_ceph_open(instance_ptr, path, flags, mode);
   }
 
-  private static synchronized native int native_ceph_open(long mountp, String path, int flags, int mode);
+  private static native int native_ceph_open(long mountp, String path, int flags, int mode);
 
   /**
    * Open a file with a specific file layout.
@@ -413,7 +413,7 @@ public class CephMount {
         stripe_count, object_size, data_pool);
   }
 
-  private static synchronized native int native_ceph_open_layout(long mountp, String path,
+  private static native int native_ceph_open_layout(long mountp, String path,
       int flags, int mode, int stripe_unit, int stripe_count, int object_size, String data_pool);
 
   /**
@@ -425,7 +425,7 @@ public class CephMount {
     native_ceph_close(instance_ptr, fd);
   }
 
-  private static synchronized native int native_ceph_close(long mountp, int fd);
+  private static native int native_ceph_close(long mountp, int fd);
 
   /**
    * Seek to a position in a file.
@@ -439,7 +439,7 @@ public class CephMount {
     return native_ceph_lseek(instance_ptr, fd, offset, whence);
   }
 
-  private static synchronized native long native_ceph_lseek(long mountp, int fd, long offset, int whence);
+  private static native long native_ceph_lseek(long mountp, int fd, long offset, int whence);
 
   /**
    * Read from a file.
@@ -454,7 +454,7 @@ public class CephMount {
     return native_ceph_read(instance_ptr, fd, buf, size, offset);
   }
 
-  private static synchronized native long native_ceph_read(long mountp, int fd, byte[] buf, long size, long offset);
+  private static native long native_ceph_read(long mountp, int fd, byte[] buf, long size, long offset);
 
   /**
    * Write to a file at a specific offset.
@@ -469,7 +469,7 @@ public class CephMount {
     return native_ceph_write(instance_ptr, fd, buf, size, offset);
   }
 
-  private static synchronized native long native_ceph_write(long mountp, int fd, byte[] buf, long size, long offset);
+  private static native long native_ceph_write(long mountp, int fd, byte[] buf, long size, long offset);
 
   /**
    * Truncate a file.
@@ -481,7 +481,7 @@ public class CephMount {
     native_ceph_ftruncate(instance_ptr, fd, size);
   }
 
-  private static synchronized native int native_ceph_ftruncate(long mountp, int fd, long size);
+  private static native int native_ceph_ftruncate(long mountp, int fd, long size);
 
   /**
    * Synchronize a file with the file system.
@@ -493,7 +493,7 @@ public class CephMount {
     native_ceph_fsync(instance_ptr, fd, dataonly);
   }
 
-  private static synchronized native int native_ceph_fsync(long mountp, int fd, boolean dataonly);
+  private static native int native_ceph_fsync(long mountp, int fd, boolean dataonly);
 
   /**
    * Get file status.
@@ -505,7 +505,7 @@ public class CephMount {
     native_ceph_fstat(instance_ptr, fd, stat);
   }
 
-  private static synchronized native int native_ceph_fstat(long mountp, int fd, CephStat stat);
+  private static native int native_ceph_fstat(long mountp, int fd, CephStat stat);
 
   /**
    * Synchronize the client with the file system.
@@ -514,7 +514,7 @@ public class CephMount {
     native_ceph_sync_fs(instance_ptr);
   }
 
-  private static synchronized native int native_ceph_sync_fs(long mountp);
+  private static native int native_ceph_sync_fs(long mountp);
 
   /**
    * Get an extended attribute value.
@@ -532,7 +532,7 @@ public class CephMount {
     return native_ceph_getxattr(instance_ptr, path, name, buf);
   }
 
-  private static synchronized native long native_ceph_getxattr(long mountp, String path, String name, byte[] buf);
+  private static native long native_ceph_getxattr(long mountp, String path, String name, byte[] buf);
 
   /**
    * Get an extended attribute value of a symbolic link.
@@ -550,7 +550,7 @@ public class CephMount {
     return native_ceph_lgetxattr(instance_ptr, path, name, buf);
   }
 
-  private static synchronized native long native_ceph_lgetxattr(long mountp, String path, String name, byte[] buf);
+  private static native long native_ceph_lgetxattr(long mountp, String path, String name, byte[] buf);
 
   /**
    * List extended attributes.
@@ -562,7 +562,7 @@ public class CephMount {
     return native_ceph_listxattr(instance_ptr, path);
   }
 
-  private static synchronized native String[] native_ceph_listxattr(long mountp, String path);
+  private static native String[] native_ceph_listxattr(long mountp, String path);
 
   /**
    * List extended attributes of a symbolic link.
@@ -574,7 +574,7 @@ public class CephMount {
     return native_ceph_llistxattr(instance_ptr, path);
   }
 
-  private static synchronized native String[] native_ceph_llistxattr(long mountp, String path);
+  private static native String[] native_ceph_llistxattr(long mountp, String path);
 
   /**
    * Remove an extended attribute.
@@ -586,7 +586,7 @@ public class CephMount {
     native_ceph_removexattr(instance_ptr, path, name);
   }
 
-  private static synchronized native int native_ceph_removexattr(long mountp, String path, String name);
+  private static native int native_ceph_removexattr(long mountp, String path, String name);
 
   /**
    * Remove an extended attribute from a symbolic link.
@@ -598,7 +598,7 @@ public class CephMount {
     native_ceph_lremovexattr(instance_ptr, path, name);
   }
 
-  private static synchronized native int native_ceph_lremovexattr(long mountp, String path, String name);
+  private static native int native_ceph_lremovexattr(long mountp, String path, String name);
 
   /**
    * Set the value of an extended attribute.
@@ -613,7 +613,7 @@ public class CephMount {
     native_ceph_setxattr(instance_ptr, path, name, buf, size, flags);
   }
 
-  private static synchronized native int native_ceph_setxattr(long mountp, String path, String name, byte[] buf, long size, int flags);
+  private static native int native_ceph_setxattr(long mountp, String path, String name, byte[] buf, long size, int flags);
 
   /**
    * Set the value of an extended attribute on a symbolic link.
@@ -628,7 +628,7 @@ public class CephMount {
     native_ceph_lsetxattr(instance_ptr, path, name, buf, size, flags);
   }
 
-  private static synchronized native int native_ceph_lsetxattr(long mountp, String path, String name, byte[] buf, long size, int flags);
+  private static native int native_ceph_lsetxattr(long mountp, String path, String name, byte[] buf, long size, int flags);
 
   /**
    * Get the stripe unit of a file.
@@ -640,7 +640,7 @@ public class CephMount {
     return native_ceph_get_file_stripe_unit(instance_ptr, fd);
   }
 
-  private static synchronized native int native_ceph_get_file_stripe_unit(long mountp, int fd);
+  private static native int native_ceph_get_file_stripe_unit(long mountp, int fd);
 
   /**
    * Get the replication of a file.
@@ -652,7 +652,7 @@ public class CephMount {
     return native_ceph_get_file_replication(instance_ptr, fd);
   }
 
-  private static synchronized native int native_ceph_get_file_replication(long mountp, int fd);
+  private static native int native_ceph_get_file_replication(long mountp, int fd);
 
   /**
    * Favor reading from local replicas when possible.
@@ -663,7 +663,7 @@ public class CephMount {
     native_ceph_localize_reads(instance_ptr, state);
   }
 
-  private static synchronized native int native_ceph_localize_reads(long mountp, boolean on);
+  private static native int native_ceph_localize_reads(long mountp, boolean on);
 
   /**
    * Get file layout stripe unit granularity.
@@ -674,5 +674,5 @@ public class CephMount {
     return native_ceph_get_stripe_unit_granularity(instance_ptr);
   }
 
-  private static synchronized native int native_ceph_get_stripe_unit_granularity(long mountp);
+  private static native int native_ceph_get_stripe_unit_granularity(long mountp);
 }
