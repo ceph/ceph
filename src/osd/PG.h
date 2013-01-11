@@ -747,6 +747,7 @@ public:
   epoch_t scrub_epoch_start;
   ScrubMap primary_scrubmap;
   MOSDRepScrub *active_rep_scrub;
+  utime_t scrub_reg_stamp;
 
   void repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
   bool _compare_scrub_objects(ScrubMap::object &auth,
@@ -783,6 +784,8 @@ public:
   void scrub_unreserve_replicas();
   bool scrub_all_replicas_reserved() const;
   bool sched_scrub();
+  void reg_scrub();
+  void unreg_scrub();
 
   void replica_scrub(class MOSDRepScrub *op);
   void sub_op_scrub_map(OpRequestRef op);

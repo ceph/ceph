@@ -1323,7 +1323,7 @@ void OSD::load_pgs()
     // read pg state, log
     pg->read_state(store);
 
-    reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
+    pg->reg_scrub();
 
     // generate state for current mapping
     osdmap->pg_to_up_acting_osds(pgid, pg->up, pg->acting);
@@ -5126,7 +5126,7 @@ void OSD::_remove_pg(PG *pg)
   // remove from map
   pg_map.erase(pgid);
   pg->put(); // since we've taken it out of map
-  unreg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
+  pg->unreg_scrub();
 
   _put_pool(pg->pool);
 

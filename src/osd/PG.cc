@@ -263,10 +263,10 @@ bool PG::proc_replica_info(int from, pg_info_t &oinfo)
   peer_info[from] = oinfo;
   might_have_unfound.insert(from);
   
-  osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+  unreg_scrub();
   if (info.history.merge(oinfo.history))
     dirty_info = true;
-  osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+  reg_scrub();
   
   // stray?
   if (!is_acting(from)) {
@@ -1918,7 +1918,7 @@ void PG::init(int role, vector<int>& newup, vector<int>& newacting, pg_history_t
   info.stats.acting = acting;
   info.stats.mapping_epoch = info.history.same_interval_since;
 
-  osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+  reg_scrub();
 
   write_info(*t);
   write_log(*t);
@@ -2618,6 +2618,16 @@ bool PG::sched_scrub()
   return ret;
 }
 
+void PG::reg_scrub()
+{
+    scrub_reg_stamp = info.history.last_scrub_stamp;
+  osd->reg_last_pg_scrub(info.pgid, scrub_reg_stamp);
+}
+
+void PG::unreg_scrub()
+{
+  osd->unreg_last_pg_scrub(info.pgid, scrub_reg_stamp);
+}
 
 void PG::sub_op_scrub_map(OpRequestRef op)
 {
@@ -3410,10 +3420,10 @@ void PG::scrub_finalize() {
     state_clear(PG_STATE_INCONSISTENT);
 
   // finish up
-  osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+  unreg_scrub();
   info.history.last_scrub = info.last_update;
   info.history.last_scrub_stamp = ceph_clock_now(g_ceph_context);
-  osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+  reg_scrub();
 
   {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
@@ -3721,7 +3731,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     dout(10) << *this << " canceling deletion!" << dendl;
     deleting = false;
     osd->remove_wq.dequeue(this);
-    osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+    reg_scrub();
   }
     
   if (role != oldrole) {
@@ -3796,10 +3806,10 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
     dirty_info = true;
   }
 
-  osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+  unreg_scrub();
   if (info.history.merge(oinfo.history))
     dirty_info = true;
-  osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+  reg_scrub();
 
   // Handle changes to purged_snaps ONLY IF we have caught up
   if (last_complete_ondisk.epoch >= info.history.last_epoch_started) {
@@ -4503,11 +4513,9 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
 
   if (msg->info.last_backfill == hobject_t()) {
     // restart backfill
-    pg->osd->unreg_last_pg_scrub(pg->info.pgid,
-				 pg->info.history.last_scrub_stamp);
+    pg->unreg_scrub();
     pg->info = msg->info;
-    pg->osd->reg_last_pg_scrub(pg->info.pgid,
-			       pg->info.history.last_scrub_stamp);
+    pg->reg_scrub();
     pg->log.claim_log(msg->log);
     pg->missing.clear();
   } else {
