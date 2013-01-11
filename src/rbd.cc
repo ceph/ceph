@@ -64,6 +64,8 @@
 static string dir_oid = RBD_DIRECTORY;
 static string dir_info_oid = RBD_INFO;
 
+bool udevadm_settle = true;
+
 void usage()
 {
   cout << 
@@ -127,7 +129,8 @@ void usage()
 "                               format 2 supports cloning\n"
 "  --id <username>              rados user (without 'client.' prefix) to authenticate as\n"
 "  --keyfile <path>             file containing secret key for use with cephx\n"
-"  --shared <tag>               take a shared (rather than exclusive) lock\n";
+"  --shared <tag>               take a shared (rather than exclusive) lock\n"
+"  --no-settle			do not wait for udevadm to settle on map/unmap\n";
 }
 
 static string feature_str(uint64_t features)
@@ -1206,6 +1209,10 @@ static int do_kernel_add(const char *poolname, const char *imgname, const char *
   r = safe_write(fd, add.c_str(), add.size());
   close(fd);
 
+  // let udevadm do its job before we return
+  if (udevadm_settle)
+    system("/sbin/udevadm settle");
+
   return r;
 }
 
@@ -1397,6 +1404,11 @@ static int do_kernel_rm(const char *dev)
   }
 
   r = close(fd);
+
+  // let udevadm finish, if present
+  if (udevadm_settle)
+    system("/sbin/udevadm settle");
+
   if (r < 0)
     r = -errno;
   return r;
@@ -1620,6 +1632,8 @@ int main(int argc, const char **argv)
       imgname = strdup(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--shared", (char *)NULL)) {
       lock_tag = strdup(val.c_str());
+    } else if (ceph_argparse_flag(args, i, "--no-settle", (char *)NULL)) {
+      udevadm_settle = false;
     } else {
       ++i;
     }
