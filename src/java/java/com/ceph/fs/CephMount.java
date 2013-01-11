@@ -123,7 +123,7 @@ public class CephMount {
     initialized = true;
   }
 
-  private static synchronized native int native_ceph_create(CephMount mount, String id);
+  private static native int native_ceph_create(CephMount mount, String id);
 
   /**
    * Create a new CephMount with default client id.
@@ -158,7 +158,7 @@ public class CephMount {
   /*
    * Private access to low-level ceph_release.
    */
-  private static synchronized native int native_ceph_release(long mountp);
+  private static native int native_ceph_release(long mountp);
 
   /**
    * Load configuration from a file.
