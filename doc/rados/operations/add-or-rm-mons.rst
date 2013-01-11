@@ -217,7 +217,7 @@ monitors need to discover each other. Ceph has strict requirements for
 discovering monitors.
 
 Ceph clients and other Ceph daemons use ``ceph.conf`` to discover monitors.
-However, monitors discover each other using the monitor map, not ``ceph.com``.
+However, monitors discover each other using the monitor map, not ``ceph.conf``.
 For example,  if you refer to `Adding a Monitor (Manual)`_ you will see that you
 need to obtain the current monmap for the cluster when creating a new monitor,
 as it is one of the required arguments of ``ceph-mon -i {mon-id} --mkfs``. The
