@@ -32,7 +32,8 @@ set -e
 PROGNAME=$(basename $0)
 
 # xfstests is downloaded from this git repository and then built.
-XFSTESTS_REPO="git://oss.sgi.com/xfs/cmds/xfstests.git"
+# XFSTESTS_REPO="git://oss.sgi.com/xfs/cmds/xfstests.git"
+XFSTESTS_REPO="git://ceph.com/git/xfstests.git"
 
 # Default command line option values
 COUNT="1"
