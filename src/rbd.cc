@@ -130,7 +130,7 @@ void usage()
 "  --id <username>              rados user (without 'client.' prefix) to authenticate as\n"
 "  --keyfile <path>             file containing secret key for use with cephx\n"
 "  --shared <tag>               take a shared (rather than exclusive) lock\n"
-"  --no-settle			do not wait for udevadm to settle on map/unmap\n";
+"  --no-settle                  do not wait for udevadm to settle on map/unmap\n";
 }
 
 static string feature_str(uint64_t features)
