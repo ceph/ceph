@@ -814,6 +814,7 @@ public:
       epoch_start(0),
       block_writes(false), active(false), queue_snap_trim(false),
       waiting_on(0), errors(0), fixed(0), active_rep_scrub(0),
+      must_scrub(false), must_deep_scrub(false), must_repair(false),
       finalizing(false), is_chunky(false), state(INACTIVE),
       deep(false)
     {
@@ -836,6 +837,9 @@ public:
     map<int,ScrubMap> received_maps;
     MOSDRepScrub *active_rep_scrub;
     utime_t scrub_reg_stamp;  // stamp we registered for
+
+    // flags to indicate explicitly requested scrubs (by admin)
+    bool must_scrub, must_deep_scrub, must_repair;
 
     // Maps from objects with erros to missing/inconsistent peers
     map<hobject_t, set<int> > missing;
@@ -927,6 +931,10 @@ public:
         active_rep_scrub = NULL;
       }
       received_maps.clear();
+
+      must_scrub = false;
+      must_deep_scrub = false;
+      must_repair = false;
 
       state = PG::Scrubber::INACTIVE;
       start = hobject_t();
