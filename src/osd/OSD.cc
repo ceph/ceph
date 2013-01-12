@@ -1362,8 +1362,7 @@ void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
   pg->get_osdmap()->pg_to_up_acting_osds(pg->info.pgid, up, acting);
   int role = pg->get_osdmap()->calc_pg_role(service.whoami, acting);
   pg->set_role(role);
-  service.reg_last_pg_scrub(pg->info.pgid,
-			    pg->info.history.last_scrub_stamp);
+  pg->reg_next_scrub();
   pg->handle_loaded(rctx);
   pg->write_if_dirty(*(rctx->transaction));
   pg->queue_null(e, e);
@@ -1529,7 +1528,7 @@ void OSD::load_pgs()
       service.start_split(split_pgs);
     }
 
-    service.reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
+    pg->reg_next_scrub();
 
     // generate state for PG's current mapping
     pg->get_osdmap()->pg_to_up_acting_osds(pgid, pg->up, pg->acting);
@@ -5589,11 +5588,11 @@ void OSD::_remove_pg(PG *pg)
 
   pg->deleting = true;
 
+  pg->unreg_next_scrub();
+
   // remove from map
   pg_map.erase(pg->info.pgid);
   pg->put(); // since we've taken it out of map
-
-  service.unreg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
 }
 
 
