@@ -835,6 +835,7 @@ public:
     ScrubMap primary_scrubmap;
     map<int,ScrubMap> received_maps;
     MOSDRepScrub *active_rep_scrub;
+    utime_t scrub_reg_stamp;  // stamp we registered for
 
     // Maps from objects with erros to missing/inconsistent peers
     map<hobject_t, set<int> > missing;
@@ -980,6 +981,8 @@ public:
   void scrub_unreserve_replicas();
   bool scrub_all_replicas_reserved() const;
   bool sched_scrub();
+  void reg_next_scrub();
+  void unreg_next_scrub();
 
   void replica_scrub(class MOSDRepScrub *op);
   void sub_op_scrub_map(OpRequestRef op);
