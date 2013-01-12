@@ -461,13 +461,21 @@ void OSDMonitor::encode_pending(bufferlist &bl)
 
 void OSDMonitor::share_map_with_random_osd()
 {
-  // tell any osd
-  MonSession *s = mon->session_map.get_random_osd_session();
-  if (s) {
-    dout(10) << "committed, telling random " << s->inst << " all about it" << dendl;
-    MOSDMap *m = build_incremental(osdmap.get_epoch() - 1, osdmap.get_epoch());  // whatev, they'll request more if they need it
-    mon->messenger->send_message(m, s->inst);
+  if (osdmap.get_num_up_osds() == 0) {
+    dout(10) << __func__ << " no up osds, don't share with anyone" << dendl;
+    return;
   }
+
+  MonSession *s = mon->session_map.get_random_osd_session(&osdmap);
+  if (!s) {
+    dout(10) << __func__ << " no up osd on our session map" << dendl;
+    return;
+  }
+
+  dout(10) << "committed, telling random " << s->inst << " all about it" << dendl;
+  // whatev, they'll request more if they need it
+  MOSDMap *m = build_incremental(osdmap.get_epoch() - 1, osdmap.get_epoch());
+  mon->messenger->send_message(m, s->inst);
 }
 
 
