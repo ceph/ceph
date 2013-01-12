@@ -1426,7 +1426,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid,
 
     ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, coid, coi.version, coi.prior_version,
 				  osd_reqid_t(), ctx->mtime));
-    ::encode(coi, ctx->log.back().snaps);
+    ::encode(coi.snaps, ctx->log.back().snaps);
     ctx->at_version.version++;
   }
 
