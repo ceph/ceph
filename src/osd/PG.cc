@@ -1805,7 +1805,16 @@ bool PG::queue_scrub()
   if (is_scrubbing()) {
     return false;
   }
+  scrubber.must_scrub = false;
   state_set(PG_STATE_SCRUBBING);
+  if (scrubber.must_deep_scrub) {
+    state_set(PG_STATE_DEEP_SCRUB);
+    scrubber.must_deep_scrub = false;
+  }
+  if (scrubber.must_repair) {
+    state_set(PG_STATE_REPAIR);
+    scrubber.must_repair = false;
+  }
   osd->queue_for_scrub(this);
   return true;
 }
@@ -3049,7 +3058,11 @@ bool PG::sched_scrub()
 
 void PG::reg_next_scrub()
 {
+  if (scrubber.must_scrub) {
+    scrubber.scrub_reg_stamp = utime_t();
+  } else {
     scrubber.scrub_reg_stamp = info.history.last_scrub_stamp;
+  }
   osd->reg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
 }
 
