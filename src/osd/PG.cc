@@ -2187,6 +2187,7 @@ void PG::update_stats()
     info.stats.last_scrub_stamp = info.history.last_scrub_stamp;
     info.stats.last_deep_scrub = info.history.last_deep_scrub;
     info.stats.last_deep_scrub_stamp = info.history.last_deep_scrub_stamp;
+    info.stats.last_clean_scrub_stamp = info.history.last_clean_scrub_stamp;
     info.stats.last_epoch_clean = info.history.last_epoch_clean;
 
     utime_t now = ceph_clock_now(g_ceph_context);
@@ -4300,12 +4301,16 @@ void PG::scrub_finish() {
 
   // finish up
   unreg_next_scrub();
+  utime_t now = ceph_clock_now(g_ceph_context);
   info.history.last_scrub = info.last_update;
-  info.history.last_scrub_stamp = ceph_clock_now(g_ceph_context);
+  info.history.last_scrub_stamp = now;
   if (scrubber.deep) {
     info.history.last_deep_scrub = info.last_update;
-    info.history.last_deep_scrub_stamp = ceph_clock_now(g_ceph_context);
+    info.history.last_deep_scrub_stamp = now;
   }
+  if (scrubber.errors == 0)
+    info.history.last_clean_scrub_stamp = now;
+  info.stats.stats.sum.num_scrub_errors = scrubber.errors;
   reg_next_scrub();
 
   {
