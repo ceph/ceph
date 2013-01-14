@@ -7232,6 +7232,8 @@ bool ReplicatedPG::_report_snap_collection_errors(
   uint32_t nlinks,
   ostream &out)
 {
+  if (nlinks == 0)
+    return false; // replica didn't encode snap_collection information
   bool errors = false;
   set<snapid_t> to_check = get_expected_snap_colls(attrs);
   if (to_check != snapcolls) {
