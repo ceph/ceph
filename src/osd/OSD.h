@@ -248,8 +248,6 @@ public:
   int scrubs_active;
   set< pair<utime_t,pg_t> > last_scrub_pg;
 
-  bool scrub_should_schedule();
-
   void reg_last_pg_scrub(pg_t pgid, utime_t t) {
     Mutex::Locker l(sched_scrub_lock);
     last_scrub_pg.insert(pair<utime_t,pg_t>(t, pgid));
@@ -1176,8 +1174,10 @@ protected:
 
   // -- scrubbing --
   void sched_scrub();
-  xlist<PG*> scrub_queue;
+  bool scrub_random_backoff();
+  bool scrub_should_schedule();
 
+  xlist<PG*> scrub_queue;
 
   struct ScrubWQ : public ThreadPool::WorkQueue<PG> {
     OSD *osd;

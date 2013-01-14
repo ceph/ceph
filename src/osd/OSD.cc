@@ -2226,7 +2226,9 @@ void OSD::tick()
     // periodically kick recovery work queue
     recovery_tp.wake();
 
-    sched_scrub();
+    if (!scrub_random_backoff()) {
+      sched_scrub();
+    }
 
     map_lock.get_read();
 
@@ -3526,16 +3528,19 @@ void OSD::handle_scrub(MOSDScrub *m)
   m->put();
 }
 
-bool OSDService::scrub_should_schedule()
+bool OSD::scrub_random_backoff()
+{
+  bool coin_flip = (rand() % 3) == whoami % 3;
+  if (!coin_flip) {
+    dout(20) << "scrub_random_backoff lost coin flip, randomly backing off" << dendl;
+    return true;
+  }
+  return false;
+}
+
+bool OSD::scrub_should_schedule()
 {
   double loadavgs[1];
-
-  // TODOSAM: is_active should be conveyed to OSDService
-  /*
-  if (!is_active())
-    return false;
-  */
-
   if (getloadavg(loadavgs, 1) != 1) {
     dout(10) << "scrub_should_schedule couldn't read loadavgs\n" << dendl;
     return false;
@@ -3548,15 +3553,6 @@ bool OSDService::scrub_should_schedule()
     return false;
   }
 
-  bool coin_flip = (rand() % 3) == whoami % 3;
-  if (!coin_flip) {
-    dout(20) << "scrub_should_schedule loadavg " << loadavgs[0]
-	     << " < max " << g_conf->osd_scrub_load_threshold
-	     << " = no, randomly backing off"
-	     << dendl;
-    return false;
-  }
-  
   dout(20) << "scrub_should_schedule loadavg " << loadavgs[0]
 	   << " < max " << g_conf->osd_scrub_load_threshold
 	   << " = yes" << dendl;
@@ -3567,7 +3563,7 @@ void OSD::sched_scrub()
 {
   assert(osd_lock.is_locked());
 
-  bool should = service.scrub_should_schedule();
+  bool should = scrub_should_schedule();
 
   dout(20) << "sched_scrub should=" << (int)should << dendl;
 
@@ -3581,7 +3577,7 @@ void OSD::sched_scrub()
     utime_t t = pos.first;
     pg_t pgid = pos.second;
 
-    if (t > min) {
+    if (t > max) {
       dout(10) << " " << pgid << " at " << t
 	       << " > " << max << " (" << g_conf->osd_scrub_max_interval << " seconds ago)" << dendl;
       break;
