@@ -1,0 +1,11 @@
+
+
+* The meaning of 'osd scrub max interval' has been changed: it is now
+  the amount of time after which a PG will be scrubbed regardless of
+  the system load.  The option 'osd scrub min interval' now has the
+  previous meaning: the amount of time before a PG is scrubbed if the
+  load is low.  The defaults have been adjusted such that the only
+  change in behavior is that PGs will now be scrubbed after a week
+  even if the system load remains high.  However, if either of these
+  options have been changed in ceph.conf, those settings should be
+  reviewed in light of their adjusted meanings.
