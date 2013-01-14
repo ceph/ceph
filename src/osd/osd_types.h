@@ -773,12 +773,14 @@ struct object_stat_sum_t {
   int64_t num_objects_unfound;
   int64_t num_rd, num_rd_kb;
   int64_t num_wr, num_wr_kb;
+  int64_t num_scrub_errors;
 
   object_stat_sum_t()
     : num_bytes(0),
       num_objects(0), num_object_clones(0), num_object_copies(0),
       num_objects_missing_on_primary(0), num_objects_degraded(0), num_objects_unfound(0),
-      num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0)
+      num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0),
+      num_scrub_errors(0)
   {}
 
   void clear() {
