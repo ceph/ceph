@@ -847,17 +847,17 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
 
 void object_stat_sum_t::dump(Formatter *f) const
 {
-  f->dump_unsigned("num_bytes", num_bytes);
-  f->dump_unsigned("num_objects", num_objects);
-  f->dump_unsigned("num_object_clones", num_object_clones);
-  f->dump_unsigned("num_object_copies", num_object_copies);
-  f->dump_unsigned("num_objects_missing_on_primary", num_objects_missing_on_primary);
-  f->dump_unsigned("num_objects_degraded", num_objects_degraded);
-  f->dump_unsigned("num_objects_unfound", num_objects_unfound);
-  f->dump_unsigned("num_read", num_rd);
-  f->dump_unsigned("num_read_kb", num_rd_kb);
-  f->dump_unsigned("num_write", num_wr);
-  f->dump_unsigned("num_write_kb", num_wr_kb);
+  f->dump_int("num_bytes", num_bytes);
+  f->dump_int("num_objects", num_objects);
+  f->dump_int("num_object_clones", num_object_clones);
+  f->dump_int("num_object_copies", num_object_copies);
+  f->dump_int("num_objects_missing_on_primary", num_objects_missing_on_primary);
+  f->dump_int("num_objects_degraded", num_objects_degraded);
+  f->dump_int("num_objects_unfound", num_objects_unfound);
+  f->dump_int("num_read", num_rd);
+  f->dump_int("num_read_kb", num_rd_kb);
+  f->dump_int("num_write", num_wr);
+  f->dump_int("num_write_kb", num_wr_kb);
 }
 
 void object_stat_sum_t::encode(bufferlist& bl) const
