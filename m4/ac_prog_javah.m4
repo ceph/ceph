@@ -10,7 +10,7 @@ dnl @version 2002-03-25
 dnl @license AllPermissive
 
 AC_DEFUN([AC_PROG_JAVAH],[
-AC_REQUIRE([AC_CANONICAL_SYSTEM])dnl
+AC_REQUIRE([AC_CANONICAL_TARGET])dnl
 AC_REQUIRE([AC_PROG_CPP])dnl
 AC_PATH_PROG(JAVAH,javah)
 if test x"`eval 'echo $ac_cv_path_JAVAH'`" != x ; then
