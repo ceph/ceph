@@ -885,6 +885,7 @@ struct pg_stat_t {
   eversion_t last_deep_scrub;
   utime_t last_scrub_stamp;
   utime_t last_deep_scrub_stamp;
+  utime_t last_clean_scrub_stamp;
 
   object_stat_collection_t stats;
   bool stats_invalid;
@@ -898,7 +899,7 @@ struct pg_stat_t {
   pg_stat_t()
     : state(0),
       created(0), last_epoch_clean(0),
-      parent_split_bits(0), 
+      parent_split_bits(0),
       stats_invalid(false),
       log_size(0), ondisk_log_size(0),
       mapping_epoch(0)
@@ -978,6 +979,7 @@ struct pg_history_t {
   eversion_t last_deep_scrub;
   utime_t last_scrub_stamp;
   utime_t last_deep_scrub_stamp;
+  utime_t last_clean_scrub_stamp;
 
   pg_history_t()
     : epoch_created(0),
@@ -1017,6 +1019,10 @@ struct pg_history_t {
     }
     if (other.last_deep_scrub_stamp > last_deep_scrub_stamp) {
       last_deep_scrub_stamp = other.last_deep_scrub_stamp;
+      modified = true;
+    }
+    if (other.last_clean_scrub_stamp > last_clean_scrub_stamp) {
+      last_clean_scrub_stamp = other.last_clean_scrub_stamp;
       modified = true;
     }
     return modified;
