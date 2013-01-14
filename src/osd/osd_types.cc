@@ -1017,6 +1017,7 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_stream("last_scrub_stamp") << last_scrub_stamp;
   f->dump_stream("last_deep_scrub") << last_deep_scrub;
   f->dump_stream("last_deep_scrub_stamp") << last_deep_scrub_stamp;
+  f->dump_stream("last_clean_scrub_stamp") << last_clean_scrub_stamp;
   f->dump_unsigned("log_size", log_size);
   f->dump_unsigned("ondisk_log_size", ondisk_log_size);
   f->dump_stream("stats_invalid") << stats_invalid;
@@ -1033,7 +1034,7 @@ void pg_stat_t::dump(Formatter *f) const
 
 void pg_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(11, 8, bl);
+  ENCODE_START(12, 8, bl);
   ::encode(version, bl);
   ::encode(reported, bl);
   ::encode(state, bl);
@@ -1059,12 +1060,13 @@ void pg_stat_t::encode(bufferlist &bl) const
   ::encode(last_deep_scrub, bl);
   ::encode(last_deep_scrub_stamp, bl);
   ::encode(stats_invalid, bl);
+  ::encode(last_clean_scrub_stamp, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(10, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(12, 8, 8, bl);
   ::decode(version, bl);
   ::decode(reported, bl);
   ::decode(state, bl);
@@ -1133,6 +1135,11 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
   } else {
     ::decode(stats_invalid, bl);
   }
+  if (struct_v >= 12) {
+    ::decode(last_clean_scrub_stamp, bl);
+  } else {
+    last_clean_scrub_stamp = utime_t();
+  }
   DECODE_FINISH(bl);
 }
 
@@ -1160,6 +1167,7 @@ void pg_stat_t::generate_test_instances(list<pg_stat_t*>& o)
   a.last_scrub_stamp = utime_t(11, 12);
   a.last_deep_scrub = eversion_t(13, 14);
   a.last_deep_scrub_stamp = utime_t(15, 16);
+  a.last_clean_scrub_stamp = utime_t(17, 18);
   list<object_stat_collection_t*> l;
   object_stat_collection_t::generate_test_instances(l);
   a.stats = *l.back();
@@ -1247,7 +1255,7 @@ void pool_stat_t::generate_test_instances(list<pool_stat_t*>& o)
 
 void pg_history_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(5, 4, bl);
+  ENCODE_START(6, 4, bl);
   ::encode(epoch_created, bl);
   ::encode(last_epoch_started, bl);
   ::encode(last_epoch_clean, bl);
@@ -1259,12 +1267,13 @@ void pg_history_t::encode(bufferlist &bl) const
   ::encode(last_scrub_stamp, bl);
   ::encode(last_deep_scrub, bl);
   ::encode(last_deep_scrub_stamp, bl);
+  ::encode(last_clean_scrub_stamp, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_history_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 4, 4, bl);
   ::decode(epoch_created, bl);
   ::decode(last_epoch_started, bl);
   if (struct_v >= 3)
@@ -1278,10 +1287,13 @@ void pg_history_t::decode(bufferlist::iterator &bl)
   if (struct_v >= 2) {
     ::decode(last_scrub, bl);
     ::decode(last_scrub_stamp, bl);
-    if (struct_v >= 5) {
-      ::decode(last_deep_scrub, bl);
-      ::decode(last_deep_scrub_stamp, bl);
-    }
+  }
+  if (struct_v >= 5) {
+    ::decode(last_deep_scrub, bl);
+    ::decode(last_deep_scrub_stamp, bl);
+  }
+  if (struct_v >= 6) {
+    ::decode(last_clean_scrub_stamp, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -1299,6 +1311,7 @@ void pg_history_t::dump(Formatter *f) const
   f->dump_stream("last_scrub_stamp") << last_scrub_stamp;
   f->dump_stream("last_deep_scrub") << last_deep_scrub;
   f->dump_stream("last_deep_scrub_stamp") << last_deep_scrub_stamp;
+  f->dump_stream("last_clean_scrub_stamp") << last_clean_scrub_stamp;
 }
 
 void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
@@ -1316,6 +1329,7 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
   o.back()->last_scrub_stamp = utime_t(10, 11);
   o.back()->last_deep_scrub = eversion_t(12, 13);
   o.back()->last_deep_scrub_stamp = utime_t(14, 15);
+  o.back()->last_clean_scrub_stamp = utime_t(16, 17);
 }
 
 
