@@ -858,11 +858,12 @@ void object_stat_sum_t::dump(Formatter *f) const
   f->dump_int("num_read_kb", num_rd_kb);
   f->dump_int("num_write", num_wr);
   f->dump_int("num_write_kb", num_wr_kb);
+  f->dump_int("num_scrub_errors", num_scrub_errors);
 }
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(3, 3, bl);
+  ENCODE_START(4, 3, bl);
   ::encode(num_bytes, bl);
   ::encode(num_objects, bl);
   ::encode(num_object_clones, bl);
@@ -874,12 +875,13 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   ::encode(num_rd_kb, bl);
   ::encode(num_wr, bl);
   ::encode(num_wr_kb, bl);
+  ::encode(num_scrub_errors, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_stat_sum_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
   ::decode(num_bytes, bl);
   if (struct_v < 3) {
     uint64_t num_kb;
@@ -896,6 +898,10 @@ void object_stat_sum_t::decode(bufferlist::iterator& bl)
   ::decode(num_rd_kb, bl);
   ::decode(num_wr, bl);
   ::decode(num_wr_kb, bl);
+  if (struct_v >= 4)
+    ::decode(num_scrub_errors, bl);
+  else
+    num_scrub_errors = 0;
   DECODE_FINISH(bl);
 }
 
@@ -913,6 +919,7 @@ void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
   a.num_objects_unfound = 8;
   a.num_rd = 9; a.num_rd_kb = 10;
   a.num_wr = 11; a.num_wr_kb = 12;
+  a.num_scrub_errors = 13;
   o.push_back(new object_stat_sum_t(a));
 }
 
@@ -929,6 +936,7 @@ void object_stat_sum_t::add(const object_stat_sum_t& o)
   num_wr += o.num_wr;
   num_wr_kb += o.num_wr_kb;
   num_objects_unfound += o.num_objects_unfound;
+  num_scrub_errors += o.num_scrub_errors;
 }
 
 void object_stat_sum_t::sub(const object_stat_sum_t& o)
@@ -944,6 +952,7 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
   num_wr -= o.num_wr;
   num_wr_kb -= o.num_wr_kb;
   num_objects_unfound -= o.num_objects_unfound;
+  num_scrub_errors -= o.num_scrub_errors;
 }
 
 
