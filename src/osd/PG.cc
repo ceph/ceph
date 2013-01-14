@@ -3014,12 +3014,6 @@ bool PG::sched_scrub()
     return false;
   }
 
-  // just scrubbed?
-  if (info.history.last_scrub_stamp + g_conf->osd_scrub_min_interval > ceph_clock_now(g_ceph_context)) {
-    dout(20) << "sched_scrub: just scrubbed, skipping" << dendl;
-    return false;
-  }
-
   bool ret = true;
   if (!scrubber.reserved) {
     assert(scrubber.reserved_peers.empty());
