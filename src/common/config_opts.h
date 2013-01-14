@@ -344,8 +344,8 @@ OPTION(osd_recovery_max_chunk, OPT_U64, 8<<20)  // max size of push chunk
 OPTION(osd_recovery_forget_lost_objects, OPT_BOOL, false)   // off for now
 OPTION(osd_max_scrubs, OPT_INT, 1)
 OPTION(osd_scrub_load_threshold, OPT_FLOAT, 0.5)
-OPTION(osd_scrub_min_interval, OPT_FLOAT, 300)
-OPTION(osd_scrub_max_interval, OPT_FLOAT, 60*60*24)   // once a day
+OPTION(osd_scrub_min_interval, OPT_FLOAT, 60*60*24)    // if load is low
+OPTION(osd_scrub_max_interval, OPT_FLOAT, 7*60*60*24)  // regardless of load
 OPTION(osd_deep_scrub_interval, OPT_FLOAT, 60*60*24*7) // once a week
 OPTION(osd_deep_scrub_stride, OPT_INT, 524288)
 OPTION(osd_auto_weight, OPT_BOOL, false)

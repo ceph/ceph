@@ -3557,11 +3557,13 @@ void OSD::sched_scrub()
 {
   assert(osd_lock.is_locked());
 
-  bool should = scrub_should_schedule();
+  bool load_is_low = scrub_should_schedule();
 
-  dout(20) << "sched_scrub should=" << (int)should << dendl;
+  dout(20) << "sched_scrub load_is_low=" << (int)load_is_low << dendl;
 
   utime_t max = ceph_clock_now(g_ceph_context);
+  utime_t min = max;
+  min -= g_conf->osd_scrub_min_interval;
   max -= g_conf->osd_scrub_max_interval;
   
   //dout(20) << " " << last_scrub_pg << dendl;
@@ -3571,20 +3573,30 @@ void OSD::sched_scrub()
     utime_t t = pos.first;
     pg_t pgid = pos.second;
 
-    if (t > max) {
+    if (t > min) {
       dout(10) << " " << pgid << " at " << t
-	       << " > " << max << " (" << g_conf->osd_scrub_max_interval << " seconds ago)" << dendl;
+	       << " > min " << min << " (" << g_conf->osd_scrub_min_interval << " seconds ago)" << dendl;
+      break;
+    }
+    if (t > max && !load_is_low) {
+      // save ourselves some effort
       break;
     }
 
-    dout(10) << " on " << t << " " << pgid << dendl;
     PG *pg = _lookup_lock_pg(pgid);
     if (pg) {
       if (pg->is_active() &&
-	  (should || pg->scrubber.must_scrub) &&
-	  pg->sched_scrub()) {
-	pg->unlock();
-	break;
+	  (load_is_low ||
+	   t < max ||
+	   pg->scrubber.must_scrub)) {
+	dout(10) << " " << pgid << " at " << t
+		 << (pg->scrubber.must_scrub ? ", explicitly requested" : "")
+		 << (t < max ? ", last_scrub > max" : "")
+		 << dendl;
+	if (pg->sched_scrub()) {
+	  pg->unlock();
+	  break;
+	}
       }
       pg->unlock();
     }
