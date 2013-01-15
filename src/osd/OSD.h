@@ -255,17 +255,29 @@ public:
   void unreg_last_pg_scrub(pg_t pgid, utime_t t) {
     Mutex::Locker l(sched_scrub_lock);
     pair<utime_t,pg_t> p(t, pgid);
-    assert(last_scrub_pg.count(p));
-    last_scrub_pg.erase(p);
+    set<pair<utime_t,pg_t> >::iterator it = last_scrub_pg.find(p);
+    assert(it != last_scrub_pg.end());
+    last_scrub_pg.erase(it);
   }
-  bool next_scrub_stamp(pair<utime_t, pg_t> after,
+  bool first_scrub_stamp(pair<utime_t, pg_t> *out) {
+    Mutex::Locker l(sched_scrub_lock);
+    if (last_scrub_pg.size() == 0)
+      return false;
+    set< pair<utime_t, pg_t> >::iterator iter = last_scrub_pg.begin();
+    *out = *iter;
+    return true;
+  }
+  bool next_scrub_stamp(pair<utime_t, pg_t> next,
 			pair<utime_t, pg_t> *out) {
     Mutex::Locker l(sched_scrub_lock);
-    if (last_scrub_pg.size() == 0) return false;
-    set< pair<utime_t, pg_t> >::iterator iter = last_scrub_pg.lower_bound(after);
-    if (iter == last_scrub_pg.end()) return false;
+    if (last_scrub_pg.size() == 0)
+      return false;
+    set< pair<utime_t, pg_t> >::iterator iter = last_scrub_pg.lower_bound(next);
+    if (iter == last_scrub_pg.end())
+      return false;
     ++iter;
-    if (iter == last_scrub_pg.end()) return false;
+    if (iter == last_scrub_pg.end())
+      return false;
     *out = *iter;
     return true;
   }
