@@ -2190,6 +2190,11 @@ void PG::update_stats()
     info.stats.last_clean_scrub_stamp = info.history.last_clean_scrub_stamp;
     info.stats.last_epoch_clean = info.history.last_epoch_clean;
 
+    if (info.stats.stats.sum.num_scrub_errors)
+      state_set(PG_STATE_INCONSISTENT);
+    else
+      state_clear(PG_STATE_INCONSISTENT);
+
     utime_t now = ceph_clock_now(g_ceph_context);
     info.stats.last_fresh = now;
     if (info.stats.state != state) {
@@ -4202,7 +4207,6 @@ void PG::scrub_process_inconsistent() {
        << scrubber.inconsistent.size() << " inconsistent objects\n";
     dout(2) << ss.str() << dendl;
     osd->clog.error(ss);
-    state_set(PG_STATE_INCONSISTENT);
     if (repair) {
       state_clear(PG_STATE_CLEAN);
       for (map<hobject_t, pair<ScrubMap::object, int> >::iterator i =
@@ -4279,9 +4283,6 @@ void PG::scrub_finish() {
   _scrub_finish();
 
   scrub_process_inconsistent();
-
-  if (scrubber.errors == 0 || (repair && (scrubber.errors - scrubber.fixed) == 0))
-    state_clear(PG_STATE_INCONSISTENT);
 
   {
     stringstream oss;
