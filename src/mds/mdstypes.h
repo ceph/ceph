@@ -324,6 +324,8 @@ inline ostream& operator<<(ostream &out, const vinodeno_t &vino) {
 struct byte_range_t {
   uint64_t first, last;    // interval client can write to
 
+  byte_range_t() : first(0), last(0) {}
+
   void encode(bufferlist &bl) const {
     ::encode(first, bl);
     ::encode(last, bl);
