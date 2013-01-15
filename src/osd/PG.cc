@@ -82,6 +82,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   pg_stats_valid(false),
   osr(osd->osr_registry.lookup_or_create(p, (stringify(p)))),
   finish_sync_event(NULL),
+  scrub_after_recovery(false),
   active_pushes(0),
   recovery_state(this)
 {
@@ -1024,6 +1025,8 @@ void PG::clear_primary_state()
   log.reset_recovery_pointers();
 
   scrubber.reserved_peers.clear();
+  scrub_after_recovery = false;
+
   osd->recovery_wq.dequeue(this);
   osd->snap_trim_wq.dequeue(this);
 }
@@ -1873,8 +1876,9 @@ void PG::_finish_recovery(Context *c)
 
     update_stats();
 
-    if (state_test(PG_STATE_INCONSISTENT)) {
+    if (scrub_after_recovery) {
       dout(10) << "_finish_recovery requeueing for scrub" << dendl;
+      scrub_after_recovery = false;
       queue_scrub();
     }
   } else {
@@ -4209,6 +4213,7 @@ void PG::scrub_process_inconsistent() {
     osd->clog.error(ss);
     if (repair) {
       state_clear(PG_STATE_CLEAN);
+      scrub_after_recovery = true;
       for (map<hobject_t, pair<ScrubMap::object, int> >::iterator i =
 	     scrubber.authoritative.begin();
 	   i != scrubber.authoritative.end();

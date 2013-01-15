@@ -951,6 +951,8 @@ public:
 
   } scrubber;
 
+  bool scrub_after_recovery;
+
   int active_pushes;
 
   void repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
