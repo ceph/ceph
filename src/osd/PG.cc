@@ -4820,6 +4820,13 @@ ostream& operator<<(ostream& out, const PG& pg)
   if (pg.should_send_notify())
     out << " NOTIFY";
 
+  if (pg.scrubber.must_repair)
+    out << " MUST_REPAIR";
+  if (pg.scrubber.must_deep_scrub)
+    out << " MUST_DEEP_SCRUB";
+  if (pg.scrubber.must_scrub)
+    out << " MUST_SCRUB";
+
   //out << " (" << pg.log.tail << "," << pg.log.head << "]";
   if (pg.missing.num_missing()) {
     out << " m=" << pg.missing.num_missing();
