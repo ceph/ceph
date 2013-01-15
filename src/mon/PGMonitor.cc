@@ -1329,6 +1329,15 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   
   check_full_osd_health(summary, detail, pg_map.full_osds, "full", HEALTH_ERR);
   check_full_osd_health(summary, detail, pg_map.nearfull_osds, "near full", HEALTH_WARN);
+
+  if (pg_map.pg_sum.stats.sum.num_scrub_errors) {
+    ostringstream ss;
+    ss << pg_map.pg_sum.stats.sum.num_scrub_errors << " scrub errors";
+    summary.push_back(make_pair(HEALTH_ERR, ss.str()));
+    if (detail) {
+      detail->push_back(make_pair(HEALTH_ERR, ss.str()));
+    }
+  }
 }
 
 void PGMonitor::check_full_osd_health(list<pair<health_status_t,string> >& summary,
