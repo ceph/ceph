@@ -475,9 +475,7 @@ public:
       return mds_info[gid].inc;
     return -1;
   }
-
-  void encode_client_old(bufferlist& bl) const;
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& p);
   void decode(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();
@@ -491,7 +489,7 @@ public:
   void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(MDSMap::mds_info_t)
-WRITE_CLASS_ENCODER(MDSMap)
+WRITE_CLASS_ENCODER_FEATURES(MDSMap)
 
 inline ostream& operator<<(ostream& out, MDSMap& m) {
   m.print_summary(out);
