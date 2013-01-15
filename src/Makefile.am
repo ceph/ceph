@@ -1239,7 +1239,6 @@ libcommon_files = \
 	common/admin_socket.cc \
 	common/admin_socket_client.cc \
 	common/escape.c \
-	common/types.cc \
 	common/Clock.cc \
 	common/Throttle.cc \
 	common/Timer.cc \
