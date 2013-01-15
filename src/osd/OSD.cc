@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <signal.h>
+#include <ctype.h>
 #include <boost/scoped_ptr.hpp>
 
 #if defined(DARWIN) || defined(__FreeBSD__)
@@ -869,6 +870,22 @@ public:
   }
 };
 
+class TestOpsSocketHook : public AdminSocketHook {
+  OSDService *service;
+  ObjectStore *store;
+public:
+  TestOpsSocketHook(OSDService *s, ObjectStore *st) : service(s), store(st) {}
+  bool call(std::string command, std::string args, bufferlist& out) {
+    stringstream ss;
+    test_ops(service, store, command, args, ss);
+    out.append(ss);
+    return true;
+  }
+  void test_ops(OSDService *service, ObjectStore *store, std::string command,
+     std::string args, ostream &ss);
+
+};
+
 int OSD::init()
 {
   Mutex::Locker lock(osd_lock);
@@ -966,9 +983,23 @@ int OSD::init()
   AdminSocket *admin_socket = cct->get_admin_socket();
   r = admin_socket->register_command("dump_ops_in_flight", admin_ops_hook,
                                          "show the ops currently in flight");
+  assert(r == 0);
   historic_ops_hook = new HistoricOpsSocketHook(this);
   r = admin_socket->register_command("dump_historic_ops", historic_ops_hook,
                                          "show slowest recent ops");
+  assert(r == 0);
+  test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
+  r = admin_socket->register_command("setomapval", test_ops_hook,
+                              "setomap <pool-id> <obj-name> <key> <val>");
+  assert(r == 0);
+  r = admin_socket->register_command("rmomapkey", test_ops_hook,
+                               "rmomapkey <pool-id> <obj-name> <key>");
+  assert(r == 0);
+  r = admin_socket->register_command("setomapheader", test_ops_hook,
+                               "setomapheader <pool-id> <obj-name> <header>");
+  assert(r == 0);
+  r = admin_socket->register_command("getomap", test_ops_hook,
+                               "getomap <pool-id> <obj-name>");
   assert(r == 0);
 
   service.init();
@@ -1125,6 +1156,12 @@ int OSD::shutdown()
   delete historic_ops_hook;
   admin_ops_hook = NULL;
   historic_ops_hook = NULL;
+  cct->get_admin_socket()->unregister_command("setomapval");
+  cct->get_admin_socket()->unregister_command("rmomapkey");
+  cct->get_admin_socket()->unregister_command("setomapheader");
+  cct->get_admin_socket()->unregister_command("getomap");
+  delete test_ops_hook;
+  test_ops_hook = NULL;
 
   recovery_tp.stop();
   dout(10) << "recovery tp stopped" << dendl;
@@ -2290,6 +2327,120 @@ void OSD::check_ops_in_flight()
 void OSD::dump_ops_in_flight(ostream& ss)
 {
   op_tracker.dump_ops_in_flight(ss);
+}
+
+// Usage:
+//   setomapval <pool-id> <obj-name> <key> <val>
+//   rmomapkey <pool-id> <obj-name> <key>
+//   setomapheader <pool-id> <obj-name> <header>
+void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
+     std::string command, std::string args, ostream &ss)
+{
+  //Test support
+  //Support changing the omap on a single osd by using the Admin Socket to
+  //directly request the osd make a change.
+  if (command == "setomapval" || command == "rmomapkey" ||
+        command == "setomapheader" || command == "getomap") {
+    std::vector<std::string> argv;
+    pg_t rawpg, pgid;
+    int64_t pool;
+    OSDMapRef curmap = service->get_osdmap();
+    int r;
+
+    argv.push_back(command);
+    string_to_vec(argv, args);
+    int argc = argv.size();
+
+    if (argc < 3) {
+      ss << "Illegal request";
+      return;
+    }
+ 
+    pool = curmap->const_lookup_pg_pool_name(argv[1].c_str());
+    //If we can't find it my name then maybe id specified
+    if (pool < 0 && isdigit(argv[1].c_str()[0]))
+      pool = atoll(argv[1].c_str());
+    r = -1;
+    if (pool >= 0)
+        r = curmap->object_locator_to_pg(object_t(argv[2]),
+          object_locator_t(pool), rawpg);
+    if (r < 0) {
+        ss << "Invalid pool " << argv[1];
+        return;
+    }
+    pgid = curmap->raw_pg_to_pg(rawpg);
+
+    hobject_t obj(object_t(argv[2]), string(""), CEPH_NOSNAP, rawpg.ps(), pool);
+    ObjectStore::Transaction t;
+
+    if (command == "setomapval") {
+      if (argc != 5) {
+        ss << "usage: setomapval <pool> <obj-name> <key> <val>";
+        return;
+      }
+      map<string, bufferlist> newattrs;
+      bufferlist val;
+      string key(argv[3]);
+ 
+      val.append(argv[4]);
+      newattrs[key] = val;
+      t.omap_setkeys(coll_t(pgid), obj, newattrs);
+      r = store->apply_transaction(t);
+      if (r < 0)
+        ss << "error=" << r;
+      else
+        ss << "ok";
+    } else if (command == "rmomapkey") {
+      if (argc != 4) {
+        ss << "usage: rmomapkey <pool> <obj-name> <key>";
+        return;
+      }
+      set<string> keys;
+
+      keys.insert(string(argv[3]));
+      t.omap_rmkeys(coll_t(pgid), obj, keys);
+      r = store->apply_transaction(t);
+      if (r < 0)
+        ss << "error=" << r;
+      else
+        ss << "ok";
+    } else if (command == "setomapheader") {
+      if (argc != 4) {
+        ss << "usage: setomapheader <pool> <obj-name> <header>";
+        return;
+      }
+      bufferlist newheader;
+
+      newheader.append(argv[3]);
+      t.omap_setheader(coll_t(pgid), obj, newheader);
+      r = store->apply_transaction(t);
+      if (r < 0)
+        ss << "error=" << r;
+      else
+        ss << "ok";
+    } else if (command == "getomap") {
+      if (argc != 3) {
+        ss << "usage: getomap <pool> <obj-name>";
+        return;
+      }
+      //Debug: Output entire omap
+      bufferlist hdrbl;
+      map<string, bufferlist> keyvals;
+      r = store->omap_get(coll_t(pgid), obj, &hdrbl, &keyvals);
+      if (r >= 0) {
+          ss << "header=" << string(hdrbl.c_str(), hdrbl.length());
+          for (map<string, bufferlist>::iterator it = keyvals.begin();
+              it != keyvals.end(); it++)
+            ss << " key=" << (*it).first << " val="
+               << string((*it).second.c_str(), (*it).second.length());
+      } else {
+          ss << "error=" << r;
+      }
+    }
+    return;
+  }
+  ss << "Internal error - command=" << command;
+  return;
 }
 
 // =========================================
