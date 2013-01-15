@@ -133,6 +133,7 @@ class AuthAuthorizeHandlerRegistry;
 
 class OpsFlightSocketHook;
 class HistoricOpsSocketHook;
+class TestOpsSocketHook;
 struct C_CompleteSplits;
 
 extern const coll_t meta_coll;
@@ -617,11 +618,14 @@ private:
   void dump_historic_ops(ostream& ss) {
     return op_tracker.dump_historic_ops(ss);
   }
+  void test_ops(std::string command, std::string args, ostream& ss);
   friend class OpsFlightSocketHook;
   friend class HistoricOpsSocketHook;
+  friend class TestOpsSocketHook;
   friend class C_CompleteSplits;
   OpsFlightSocketHook *admin_ops_hook;
   HistoricOpsSocketHook *historic_ops_hook;
+  TestOpsSocketHook *test_ops_hook;
 
   // -- op queue --
 

@@ -45,6 +45,17 @@
 #undef generic_dout
 #undef dendl
 
+void string_to_vec(std::vector<std::string>& args, std::string argstr)
+{
+  istringstream iss(argstr);
+  while(iss) {
+    string sub;
+    iss >> sub;
+    if (sub == "") break;
+    args.push_back(sub);
+  }
+}
+
 void env_to_vec(std::vector<const char*>& args, const char *name)
 {
   if (!name)
