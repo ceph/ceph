@@ -359,8 +359,10 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
   parents.splice(parents.begin(), maybe);
 
   dout(20) << "EMetaBlob::add_dir_context final: " << parents << dendl;
-  for (list<CDentry*>::iterator p = parents.begin(); p != parents.end(); p++)
+  for (list<CDentry*>::iterator p = parents.begin(); p != parents.end(); p++) {
+    assert((*p)->get_projected_linkage()->is_primary());
     add_dentry(*p, false);
+  }
 }
 
 void EMetaBlob::update_segment(LogSegment *ls)
