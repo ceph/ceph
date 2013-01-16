@@ -472,20 +472,10 @@ struct old_rstat_t {
   snapid_t first;
   nest_info_t rstat, accounted_rstat;
 
-  void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(first, bl);
-    ::encode(rstat, bl);
-    ::encode(accounted_rstat, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    ::decode(first, bl);
-    ::decode(rstat, bl);
-    ::decode(accounted_rstat, bl);    
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<old_rstat_t*>& ls);
 };
 WRITE_CLASS_ENCODER(old_rstat_t)
 
