@@ -7208,6 +7208,79 @@ void ReplicatedPG::_scrub_finish()
   }
 }
 
+static set<snapid_t> get_expected_snap_colls(
+  const map<string, bufferptr> &attrs,
+  object_info_t *oi = 0)
+{
+  object_info_t _oi;
+  if (!oi)
+    oi = &_oi;
+
+  set<snapid_t> to_check;
+  map<string, bufferptr>::const_iterator oiiter = attrs.find(OI_ATTR);
+  if (oiiter == attrs.end())
+    return to_check;
+
+  bufferlist oiattr;
+  oiattr.push_back(oiiter->second);
+  *oi = object_info_t(oiattr);
+  if (oi->snaps.size() > 0)
+    to_check.insert(*(oi->snaps.begin()));
+  if (oi->snaps.size() > 1)
+    to_check.insert(*(oi->snaps.rbegin()));
+  return to_check;
+}
+
+bool ReplicatedPG::_report_snap_collection_errors(
+  const hobject_t &hoid,
+  int osd,
+  const map<string, bufferptr> &attrs,
+  const set<snapid_t> &snapcolls,
+  uint32_t nlinks,
+  ostream &out)
+{
+  if (nlinks == 0)
+    return false; // replica didn't encode snap_collection information
+  bool errors = false;
+  set<snapid_t> to_check = get_expected_snap_colls(attrs);
+  if (to_check != snapcolls) {
+    out << info.pgid << " osd." << osd << " inconsistent snapcolls on "
+	<< hoid << " found " << snapcolls << " expected " << to_check
+	<< std::endl;
+    errors = true;
+  }
+  if (nlinks != snapcolls.size() + 1) {
+    out << info.pgid << " osd." << osd << " unaccounted for links on object "
+	<< hoid << " snapcolls " << snapcolls << " nlinks " << nlinks
+	<< std::endl;
+    errors = true;
+  }
+  return errors;
+}
+
+void ReplicatedPG::check_snap_collections(
+  ino_t hino,
+  const hobject_t &hoid,
+  const map<string, bufferptr> &attrs,
+  set<snapid_t> *snapcolls)
+{
+  object_info_t oi;
+  set<snapid_t> to_check = get_expected_snap_colls(attrs, &oi);
+
+  for (set<snapid_t>::iterator i = to_check.begin(); i != to_check.end(); ++i) {
+    struct stat st;
+    int r = osd->store->stat(coll_t(info.pgid, *i), hoid, &st);
+    if (r == -ENOENT) {
+    } else if (r == 0) {
+      if (hino == st.st_ino) {
+	snapcolls->insert(*i);
+      }
+    } else {
+      assert(0);
+    }
+  }
+}
+
 /*---SnapTrimmer Logging---*/
 #undef dout_prefix
 #define dout_prefix *_dout << pg->gen_prefix() 
