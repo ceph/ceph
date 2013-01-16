@@ -46,6 +46,7 @@
     ceph osd crush move <bucketname> <loc1> [<loc2> ...]
     ceph osd crush create-or-move <osd-id> <initial-weight> <loc1> [<loc2> ...]
     ceph osd crush reweight <name> <weight>
+    ceph osd crush tunables <legacy|argonaut|bobtail|optimal|default>
     ceph osd create [<uuid>]
     ceph osd rm <osd-id> [<osd-id>...]
     ceph osd lost [--yes-i-really-mean-it]
