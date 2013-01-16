@@ -5738,7 +5738,8 @@ void ReplicatedPG::on_change()
     scrub_clear_state();
   } else if (is_scrubbing()) {
     state_clear(PG_STATE_SCRUBBING);
-    state_clear(PG_STATE_REPAIR);
+    must_scrub = false;
+    must_repair = false;
   }
 
   context_registry_on_change();
@@ -6461,7 +6462,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
   dout(10) << "_scrub" << dendl;
 
   coll_t c(info.pgid);
-  bool repair = state_test(PG_STATE_REPAIR);
+  bool repair = must_repair;
   const char *mode = repair ? "repair":"scrub";
 
   // traverse in reverse order.

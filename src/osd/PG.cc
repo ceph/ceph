@@ -1584,6 +1584,7 @@ bool PG::queue_scrub()
   if (is_scrubbing()) {
     return false;
   }
+  must_scrub = false;
   state_set(PG_STATE_SCRUBBING);
   osd->scrub_wq.queue(this);
   return true;
@@ -2620,7 +2621,11 @@ bool PG::sched_scrub()
 
 void PG::reg_scrub()
 {
+  if (must_scrub) {
+    scrub_reg_stamp = utime_t();
+  } else {
     scrub_reg_stamp = info.history.last_scrub_stamp;
+  }
   osd->reg_last_pg_scrub(info.pgid, scrub_reg_stamp);
 }
 
@@ -3037,7 +3042,6 @@ void PG::scrub()
 
   if (!is_primary() || !is_active() || !is_clean() || !is_scrubbing()) {
     dout(10) << "scrub -- not primary or active or not clean" << dendl;
-    state_clear(PG_STATE_REPAIR);
     state_clear(PG_STATE_SCRUBBING);
     clear_scrub_reserved();
     unlock();
@@ -3145,13 +3149,15 @@ void PG::scrub_clear_state()
 {
   assert(_lock.is_locked());
   state_clear(PG_STATE_SCRUBBING);
-  state_clear(PG_STATE_REPAIR);
   update_stats();
 
   // active -> nothing.
   osd->dec_scrubs_active();
 
   osd->requeue_ops(this, waiting_for_active);
+
+  must_scrub = false;
+  must_repair = false;
 
   finalizing_scrub = false;
   scrub_block_writes = false;
@@ -3318,7 +3324,7 @@ void PG::scrub_finalize() {
 
   dout(10) << "scrub_finalize has maps, analyzing" << dendl;
   int errors = 0, fixed = 0;
-  bool repair = state_test(PG_STATE_REPAIR);
+  bool repair = must_repair;
   const char *mode = repair ? "repair":"scrub";
   if (acting.size() > 1) {
     dout(10) << "scrub  comparing replica scrub maps" << dendl;
@@ -3715,6 +3721,9 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
   state_clear(PG_STATE_ACTIVE);
   state_clear(PG_STATE_DOWN);
   state_clear(PG_STATE_RECOVERING);
+
+  must_scrub = false;
+  must_repair = false;
 
   peer_missing.clear();
   peer_purged.clear();

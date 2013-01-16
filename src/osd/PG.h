@@ -747,6 +747,7 @@ public:
   epoch_t scrub_epoch_start;
   ScrubMap primary_scrubmap;
   MOSDRepScrub *active_rep_scrub;
+  bool must_scrub, must_repair;
   utime_t scrub_reg_stamp;
 
   void repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
@@ -1269,6 +1270,7 @@ public:
     scrub_reserved(false), scrub_reserve_failed(false),
     scrub_waiting_on(0),
     active_rep_scrub(0),
+    must_scrub(false), must_repair(false),
     recovery_state(this)
   {
     pool->get();
