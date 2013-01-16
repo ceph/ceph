@@ -45,19 +45,22 @@
   individual pieces of names with -p/--pool, --image, and/or --snap.
   
   Other input options:
-    -p, --pool <pool>            source pool name
-    --image <image-name>         image name
-    --dest <image-name>          destination [pool and] image name
-    --snap <snap-name>           snapshot name
-    --dest-pool <name>           destination pool name
-    --path <path-name>           path name for import/export
-    --size <size in MB>          size of image for create and resize
-    --order <bits>               the object size in bits; object size will be
-                                 (1 << order) bytes. Default is 22 (4 MB).
-    --format <format-number>     format to use when creating an image
-                                 format 1 is the original format (default)
-                                 format 2 supports cloning
-    --id <username>              rados user (without 'client.' prefix) to authenticate as
-    --keyfile <path>             file containing secret key for use with cephx
-    --shared <tag>               take a shared (rather than exclusive) lock
-    --no-settle                  do not wait for udevadm to settle on map/unmap
+    -p, --pool <pool>                  source pool name
+    --image <image-name>               image name
+    --dest <image-name>                destination [pool and] image name
+    --snap <snap-name>                 snapshot name
+    --dest-pool <name>                 destination pool name
+    --path <path-name>                 path name for import/export
+    --size <size in MB>                size of image for create and resize
+    --order <bits>                     the object size in bits; object size will be
+                                       (1 << order) bytes. Default is 22 (4 MB).
+    --image-format <format-number>     format to use when creating an image
+                                       format 1 is the original format (default)
+                                       format 2 supports cloning
+    --id <username>                    rados user (without 'client.'prefix) to
+                                       authenticate as
+    --keyfile <path>                   file containing secret key for use with cephx
+    --shared <tag>                     take a shared (rather than exclusive) lock
+    --format <output-format>           output format (default: plain, json, xml)
+    --pretty-format                    make json or xml output more readable
+    --no-settle                        do not wait for udevadm to settle on map/unmap

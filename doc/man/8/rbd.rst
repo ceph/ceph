@@ -41,7 +41,7 @@ Options
 Parameters
 ==========
 
-.. option:: --format format
+.. option:: --image-format format
 
    Specifies which object layout to use. The default is 1.
 
@@ -99,6 +99,14 @@ Parameters
    be open from more than one client at once, like during
    live migration of a virtual machine, or for use underneath
    a clustered filesystem.
+
+.. option:: --format format
+
+   Specifies output formatting (default: plain, json, xml)
+
+.. option:: --pretty-format
+
+   Make json or xml formatted output more human-readable.
 
 
 Commands

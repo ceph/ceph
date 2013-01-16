@@ -1,4 +1,4 @@
-.TH "RBD" "8" "December 05, 2012" "dev" "Ceph"
+.TH "RBD" "8" "January 02, 2013" "dev" "Ceph"
 .SH NAME
 rbd \- manage rados block device (RBD) images
 .
@@ -63,7 +63,7 @@ Interact with the given pool. Required by most commands.
 .SH PARAMETERS
 .INDENT 0.0
 .TP
-.B \-\-format format
+.B \-\-image\-format format
 Specifies which object layout to use. The default is 1.
 .INDENT 7.0
 .IP \(bu 2
@@ -131,6 +131,16 @@ string. This is useful for situations where an image must
 be open from more than one client at once, like during
 live migration of a virtual machine, or for use underneath
 a clustered filesystem.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-format format
+Specifies output formatting (default: plain, json, xml)
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-pretty\-format
+Make json or xml formatted output more human-readable.
 .UNINDENT
 .SH COMMANDS
 .INDENT 0.0
