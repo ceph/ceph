@@ -7302,6 +7302,12 @@ int Client::describe_layout(int fd, ceph_file_layout *lp)
 
 // expose osdmap
 
+int64_t Client::get_pool_id(const char *pool_name)
+{
+  Mutex::Locker lock(client_lock);
+  return osdmap->lookup_pg_pool_name(pool_name);
+}
+
 string Client::get_pool_name(int64_t pool)
 {
   Mutex::Locker lock(client_lock);

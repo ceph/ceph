@@ -864,6 +864,24 @@ int ceph_get_file_pool_name(struct ceph_mount_info *cmount, int fh, char *buf, s
 int ceph_get_file_replication(struct ceph_mount_info *cmount, int fh);
 
 /**
+ * Get the id of the named pool.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param pool_name the name of the pool.
+ * @returns the pool id, or a negative error code on failure.
+ */
+int ceph_get_pool_id(struct ceph_mount_info *cmount, const char *pool_name);
+
+/**
+ * Get the pool replication factor.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param pool_id the pool id to look up
+ * @returns the replication factor, or a negative error code on failure.
+ */
+int ceph_get_pool_replication(struct ceph_mount_info *cmount, int pool_id);
+
+/**
  * Get the OSD address where the primary copy of a file stripe is located.
  *
  * @param cmount the ceph mount handle to use.
