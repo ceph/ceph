@@ -91,7 +91,7 @@ void usage(ostream& out)
 "   getomapval <obj-name> <key>      show the value for the specified key\n"
 "                                    in the object's object map\n"
 "   setomapval <obj-name> <key> <val>\n"
-"   rmomapkey <obj-name> <key> <val>\n"
+"   rmomapkey <obj-name> <key>\n"
 "   getomapheader <obj-name>\n"
 "   setomapheader <obj-name> <val>\n"
 "\n"
