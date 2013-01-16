@@ -274,15 +274,18 @@ void XMLFormatter::close_section()
   assert(!m_sections.empty());
   finish_pending_string();
 
-  print_spaces(false);
-  m_ss << "</" << m_sections.back() << ">";
+  std::string section = m_sections.back();
   m_sections.pop_back();
+  print_spaces();
+  m_ss << "</" << section << ">";
+  if (m_pretty)
+    m_ss << "\n";
 }
 
 void XMLFormatter::dump_unsigned(const char *name, uint64_t u)
 {
   std::string e(name);
-  print_spaces(true);
+  print_spaces();
   m_ss << "<" << e << ">" << u << "</" << e << ">";
   if (m_pretty)
     m_ss << "\n";
@@ -291,7 +294,7 @@ void XMLFormatter::dump_unsigned(const char *name, uint64_t u)
 void XMLFormatter::dump_int(const char *name, int64_t u)
 {
   std::string e(name);
-  print_spaces(true);
+  print_spaces();
   m_ss << "<" << e << ">" << u << "</" << e << ">";
   if (m_pretty)
     m_ss << "\n";
@@ -300,7 +303,7 @@ void XMLFormatter::dump_int(const char *name, int64_t u)
 void XMLFormatter::dump_float(const char *name, double d)
 {
   std::string e(name);
-  print_spaces(true);
+  print_spaces();
   m_ss << "<" << e << ">" << d << "</" << e << ">";
   if (m_pretty)
     m_ss << "\n";
@@ -309,7 +312,7 @@ void XMLFormatter::dump_float(const char *name, double d)
 void XMLFormatter::dump_string(const char *name, std::string s)
 {
   std::string e(name);
-  print_spaces(true);
+  print_spaces();
   m_ss << "<" << e << ">" << escape_xml_str(s.c_str()) << "</" << e << ">";
   if (m_pretty)
     m_ss << "\n";
@@ -318,6 +321,7 @@ void XMLFormatter::dump_string(const char *name, std::string s)
 std::ostream& XMLFormatter::dump_stream(const char *name)
 {
   assert(m_pending_string_name.empty());
+  print_spaces();
   m_pending_string_name = name;
   m_ss << "<" << m_pending_string_name << ">";
   return m_pending_string;
@@ -332,7 +336,7 @@ void XMLFormatter::dump_format(const char *name, const char *fmt, ...)
   va_end(ap);
 
   std::string e(name);
-  print_spaces(true);
+  print_spaces();
   m_ss << "<" << e << ">" << escape_xml_str(buf) << "</" << e << ">";
   if (m_pretty)
     m_ss << "\n";
@@ -350,13 +354,15 @@ void XMLFormatter::write_raw_data(const char *data)
 
 void XMLFormatter::open_section_in_ns(const char *name, const char *ns)
 {
-  print_spaces(false);
+  print_spaces();
   if (ns) {
     m_ss << "<" << name << " xmlns=\"" << ns << "\">";
   }
   else {
     m_ss << "<" << name << ">";
   }
+  if (m_pretty)
+    m_ss << "\n";
   m_sections.push_back(name);
 }
 
@@ -373,15 +379,12 @@ void XMLFormatter::finish_pending_string()
   }
 }
 
-void XMLFormatter::print_spaces(bool extra_space)
+void XMLFormatter::print_spaces()
 {
   finish_pending_string();
   if (m_pretty) {
-    std::vector<char> spaces(m_sections.size(), ' ');
-    if (extra_space)
-      spaces.push_back(' ');
-    spaces.push_back('\0');
-    m_ss << &spaces[0];
+    std::string spaces(m_sections.size(), ' ');
+    m_ss << spaces;
   }
 }
 
