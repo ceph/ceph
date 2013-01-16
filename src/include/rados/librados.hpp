@@ -278,7 +278,7 @@ namespace librados
      *
      * Get up to max_return keys and values beginning after start_after
      *
-     * @param start_after [in] list no keys smaller than start_after
+     * @param start_after [in] list keys starting after start_after
      * @param filter_prefix [in] list only keys beginning with filter_prefix
      * @parem max_return [in] list no more than max_return key/value pairs
      * @param out_vals [out] place returned values in out_vals on completion
@@ -297,7 +297,7 @@ namespace librados
      *
      * Get up to max_return keys beginning after start_after
      *
-     * @param start_after [in] list no keys smaller than start_after
+     * @param start_after [in] list keys starting after start_after
      * @parem max_return [in] list no more than max_return keys
      * @param out_keys [out] place returned values in out_keys on completion
      * @param prval [out] place error code in prval upon completion
