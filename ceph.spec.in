@@ -189,25 +189,25 @@ Requires:	libcephfs1 = %{version}-%{release}
 %description -n ceph-test
 This package contains Ceph benchmarks and test tools.
 
-%package -n libcephfs-jni
+%package -n libcephfs_jni1
 Summary:	Java Native Interface library for CephFS Java bindings.
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	java
 Requires:	libcephfs1 = %{version}-%{release}
 BuildRequires:  java-devel
-%description -n libcephfs-jni
+%description -n libcephfs_jni1
 This package contains the Java Native Interface library for CephFS Java
 bindings.
 
-%package -n libcephfs-java
+%package -n cephfs-java
 Summary:	Java libraries for the Ceph File System.
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	java
-Requires:	libcephfs-jni = %{version}-%{release}-
+Requires:	libcephfs_jni1 = %{version}-%{release}
 BuildRequires:  java-devel
-%description -n libcephfs-java
+%description -n cephfs-java
 This package contains the Java libraries for the Ceph File System.
 
 %if (0%{?centos} || 0%{?opensuse} || 0%{?suse_version})
@@ -281,9 +281,6 @@ mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph/
 #  Relocate java packages to expected locations in buildroot.
 mkdir -p $RPM_BUILD_ROOT/usr/lib/jni
 mv $RPM_BUILD_ROOT/usr/lib64/libcephfs_jni.so* $RPM_BUILD_ROOT/usr/lib/jni/.
-mkdir -p $RPM_BUILD_ROOT/usr/share/java
-mv $RPM_BUILD_ROOT/usr/lib64/libcephfs.jar  $RPM_BUILD_ROOT/usr/share/java/.
-mv $RPM_BUILD_ROOT/usr/lib64/libcephfs-test.jar $RPM_BUILD_ROOT/usr/share/java/.
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -555,13 +552,13 @@ fi
 %{_bindir}/tpbench
 %{_bindir}/xattr_bench
 
-%files -n libcephfs-jni
+%files -n libcephfs_jni1
 %defattr(-,root,root,-)
 /usr/lib/jni/libcephfs_jni.so*
 
-%files -n libcephfs-java
+%files -n cephfs-java
 %defattr(-,root,root,-)
-/usr/share/java/libcephfs.jar
-/usr/share/java/libcephfs-test.jar
+%{_javadir}/libcephfs.jar
+%{_javadir}/libcephfs-test.jar
 
 %changelog

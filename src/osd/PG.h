@@ -1035,7 +1035,7 @@ public:
     Formatter *f;
     QueryState(Formatter *f) : f(f) {}
     void print(std::ostream *out) const {
-      *out << "Query" << std::endl;
+      *out << "Query";
     }
   };
 
@@ -1046,9 +1046,7 @@ public:
     MInfoRec(int from, pg_info_t &info, epoch_t msg_epoch) :
       from(from), info(info), msg_epoch(msg_epoch) {}
     void print(std::ostream *out) const {
-      *out << "MInfoRec from " << from
-	   << " info: " << info
-	   << std::endl;
+      *out << "MInfoRec from " << from << " info: " << info;
     }
   };
 
@@ -1058,8 +1056,7 @@ public:
     MLogRec(int from, MOSDPGLog *msg) :
       from(from), msg(msg) {}
     void print(std::ostream *out) const {
-      *out << "MLogRec from " << from
-	   << std::endl;
+      *out << "MLogRec from " << from;
     }
   };
 
@@ -1069,9 +1066,7 @@ public:
     MNotifyRec(int from, pg_notify_t &notify) :
       from(from), notify(notify) {}
     void print(std::ostream *out) const {
-      *out << "MNotifyRec from " << from
-	   << " notify: " << notify
-	   << std::endl;
+      *out << "MNotifyRec from " << from << " notify: " << notify;
     }
   };
 
@@ -1084,8 +1079,7 @@ public:
     void print(std::ostream *out) const {
       *out << "MQuery from " << from
 	   << " query_epoch " << query_epoch
-	   << " query: " << query
-	   << std::endl;
+	   << " query: " << query;
     }
   };
 
@@ -1096,14 +1090,14 @@ public:
     AdvMap(OSDMapRef osdmap, OSDMapRef lastmap, vector<int>& newup, vector<int>& newacting):
       osdmap(osdmap), lastmap(lastmap), newup(newup), newacting(newacting) {}
     void print(std::ostream *out) const {
-      *out << "AdvMap" << std::endl;
+      *out << "AdvMap";
     }
   };
 
   struct ActMap : boost::statechart::event< ActMap > {
     ActMap() : boost::statechart::event< ActMap >() {}
     void print(std::ostream *out) const {
-      *out << "ActMap" << std::endl;
+      *out << "ActMap";
     }
   };
   struct Activate : boost::statechart::event< Activate > {
@@ -1111,13 +1105,13 @@ public:
     Activate(epoch_t q) : boost::statechart::event< Activate >(),
 			  query_epoch(q) {}
     void print(std::ostream *out) const {
-      *out << "Activate from " << query_epoch << std::endl;
+      *out << "Activate from " << query_epoch;
     }
   };
 #define TrivialEvent(T) struct T : boost::statechart::event< T > { \
     T() : boost::statechart::event< T >() {}			   \
     void print(std::ostream *out) const {			   \
-      *out << #T << std::endl;					   \
+      *out << #T;						   \
     }								   \
   };
   TrivialEvent(Initialize)
