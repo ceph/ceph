@@ -33,9 +33,9 @@ void SessionMap::dump()
        ++p) 
     dout(10) << p->first << " " << p->second
 	     << " state " << p->second->get_state_name()
-	     << " completed " << p->second->completed_requests
-	     << " prealloc_inos " << p->second->prealloc_inos
-	     << " used_ions " << p->second->used_inos
+	     << " completed " << p->second->info.completed_requests
+	     << " prealloc_inos " << p->second->info.prealloc_inos
+	     << " used_ions " << p->second->info.used_inos
 	     << dendl;
 }
 
@@ -158,7 +158,7 @@ void SessionMap::encode(bufferlist& bl)
 	p->second->is_stale() ||
 	p->second->is_killing()) {
       ::encode(p->first, bl);
-      p->second->encode(bl);
+      p->second->info.encode(bl);
     }
 }
 
@@ -180,7 +180,7 @@ void SessionMap::decode(bufferlist::iterator& p)
       Session *s = get_or_add_session(inst);
       if (s->is_closed())
 	set_state(s, Session::STATE_OPEN);
-      s->decode(p);
+      s->info.decode(p);
     }
 
   } else {
@@ -194,17 +194,17 @@ void SessionMap::decode(bufferlist::iterator& p)
     while (n-- && !p.end()) {
       bufferlist::iterator p2 = p;
       Session *s = new Session;
-      s->decode(p);
-      if (session_map.count(s->inst.name)) {
+      s->info.decode(p);
+      if (session_map.count(s->info.inst.name)) {
 	// eager client connected too fast!  aie.
-	dout(10) << " already had session for " << s->inst.name << ", recovering" << dendl;
-	entity_name_t n = s->inst.name;
+	dout(10) << " already had session for " << s->info.inst.name << ", recovering" << dendl;
+	entity_name_t n = s->info.inst.name;
 	delete s;
 	s = session_map[n];
 	p = p2;
-	s->decode(p);
+	s->info.decode(p);
       } else {
-	session_map[s->inst.name] = s;
+	session_map[s->info.inst.name] = s;
       }
       set_state(s, Session::STATE_OPEN);
       s->last_cap_renew = now;
@@ -234,8 +234,8 @@ void SessionMap::wipe_ino_prealloc()
        p != session_map.end(); 
        ++p) {
     p->second->pending_prealloc_inos.clear();
-    p->second->prealloc_inos.clear();
-    p->second->used_inos.clear();
+    p->second->info.prealloc_inos.clear();
+    p->second->info.used_inos.clear();
   }
   projected = ++version;
 }

@@ -504,3 +504,29 @@ void fnode_t::generate_test_instances(list<fnode_t*>& ls)
   ls.back()->rstat = *nls.front();
   ls.back()->accounted_rstat = *nls.back();
 }
+
+
+/*
+ * session_info_t
+ */
+void session_info_t::encode(bufferlist& bl) const
+{
+  __u8 v = 1;
+  ::encode(v, bl);
+  ::encode(inst, bl);
+  ::encode(completed_requests, bl);
+  ::encode(prealloc_inos, bl);   // hacky, see below.
+  ::encode(used_inos, bl);
+}
+
+void session_info_t::decode(bufferlist::iterator& p)
+{
+  __u8 v;
+  ::decode(v, p);
+  ::decode(inst, p);
+  ::decode(completed_requests, p);
+  ::decode(prealloc_inos, p);
+  ::decode(used_inos, p);
+  prealloc_inos.insert(used_inos);
+  used_inos.clear();
+}

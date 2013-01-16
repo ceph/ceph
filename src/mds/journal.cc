@@ -782,9 +782,9 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	       << dendl;
       Session *session = mds->sessionmap.get_session(client_name);
       assert(session);
-      dout(20) << " (session prealloc " << session->prealloc_inos << ")" << dendl;
+      dout(20) << " (session prealloc " << session->info.prealloc_inos << ")" << dendl;
       if (used_preallocated_ino) {
-	if (session->prealloc_inos.empty()) {
+	if (session->info.prealloc_inos.empty()) {
 	  // HRM: badness in the journal
 	  mds->clog.warn() << " replayed op " << client_reqs << " on session for " << client_name
 			   << " with empty prealloc_inos\n";
@@ -795,12 +795,12 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	    mds->clog.warn() << " replayed op " << client_reqs << " used ino " << i
 			     << " but session next is " << next << "\n";
 	  assert(i == used_preallocated_ino);
-	  session->used_inos.clear();
+	  session->info.used_inos.clear();
 	}
 	mds->sessionmap.projected = ++mds->sessionmap.version;
       }
       if (preallocated_inos.size()) {
-	session->prealloc_inos.insert(preallocated_inos);
+	session->info.prealloc_inos.insert(preallocated_inos);
 	mds->sessionmap.projected = ++mds->sessionmap.version;
       }
       assert(sessionmapv == mds->sessionmap.version);
@@ -878,16 +878,16 @@ void ESession::replay(MDS *mds)
     if (open) {
       session = mds->sessionmap.get_or_add_session(client_inst);
       mds->sessionmap.set_state(session, Session::STATE_OPEN);
-      dout(10) << " opened session " << session->inst << dendl;
+      dout(10) << " opened session " << session->info.inst << dendl;
     } else {
       session = mds->sessionmap.get_session(client_inst.name);
       if (session) { // there always should be a session, but there's a bug
 	if (session->connection == NULL) {
-	  dout(10) << " removed session " << session->inst << dendl;
+	  dout(10) << " removed session " << session->info.inst << dendl;
 	  mds->sessionmap.remove_session(session);
 	} else {
 	  session->clear();    // the client has reconnected; keep the Session, but reset
-	  dout(10) << " reset session " << session->inst << " (they reconnected)" << dendl;
+	  dout(10) << " reset session " << session->info.inst << " (they reconnected)" << dendl;
 	}
       } else {
 	mds->clog.error() << "replayed stray Session close event for " << client_inst

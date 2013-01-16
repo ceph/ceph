@@ -408,7 +408,7 @@ void MDS::send_message_client_counted(Message *m, Connection *connection)
 void MDS::send_message_client_counted(Message *m, Session *session)
 {
   version_t seq = session->inc_push_seq();
-  dout(10) << "send_message_client_counted " << session->inst.name << " seq "
+  dout(10) << "send_message_client_counted " << session->info.inst.name << " seq "
 	   << seq << " " << *m << dendl;
   if (session->connection) {
     messenger->send_message(m, session->connection);
@@ -419,7 +419,7 @@ void MDS::send_message_client_counted(Message *m, Session *session)
 
 void MDS::send_message_client(Message *m, Session *session)
 {
-  dout(10) << "send_message_client " << session->inst << " " << *m << dendl;
+  dout(10) << "send_message_client " << session->info.inst << " " << *m << dendl;
  if (session->connection) {
     messenger->send_message(m, session->connection);
   } else {
@@ -2066,14 +2066,14 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
     Session *s = sessionmap.get_session(n);
     if (!s) {
       s = new Session;
-      s->inst.addr = con->get_peer_addr();
-      s->inst.name = n;
-      dout(10) << " new session " << s << " for " << s->inst << " con " << con << dendl;
+      s->info.inst.addr = con->get_peer_addr();
+      s->info.inst.name = n;
+      dout(10) << " new session " << s << " for " << s->info.inst << " con " << con << dendl;
       con->set_priv(s);
       s->connection = con;
       sessionmap.add_session(s);
     } else {
-      dout(10) << " existing session " << s << " for " << s->inst << " existing con " << s->connection
+      dout(10) << " existing session " << s << " for " << s->info.inst << " existing con " << s->connection
 	       << ", new/authorizing con " << con << dendl;
       con->set_priv(s->get());
 
