@@ -2434,3 +2434,63 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1get_1stripe_1uni
 
 	return ret;
 }
+
+/*
+ * Class:     com_ceph_fs_CephMount
+ * Method:    native_ceph_get_pool_id
+ * Signature: (JLjava/lang/String;)I
+ */
+JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1get_1pool_1id
+  (JNIEnv *env, jclass clz, jlong j_mntp, jstring jname)
+{
+  struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
+  CephContext *cct = ceph_get_mount_context(cmount);
+  const char *c_name;
+  int ret;
+
+  CHECK_MOUNTED(cmount, -1);
+  CHECK_ARG_NULL(jname, "@name is null", -1);
+
+  c_name = env->GetStringUTFChars(jname, NULL);
+  if (!c_name) {
+    cephThrowInternal(env, "failed to pin memory");
+    return -1;
+  }
+
+  ldout(cct, 10) << "jni: get_pool_id: name " << c_name << dendl;
+
+  ret = ceph_get_pool_id(cmount, c_name);
+  if (ret < 0)
+    handle_error(env, ret);
+
+  ldout(cct, 10) << "jni: get_pool_id: ret " << ret << dendl;
+
+  env->ReleaseStringUTFChars(jname, c_name);
+
+  return ret;
+}
+
+/*
+ * Class:     com_ceph_fs_CephMount
+ * Method:    native_ceph_get_pool_replication
+ * Signature: (JI)I
+ */
+JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1get_1pool_1replication
+  (JNIEnv *env, jclass clz, jlong j_mntp, jint jpoolid)
+{
+  struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
+  CephContext *cct = ceph_get_mount_context(cmount);
+  int ret;
+
+  CHECK_MOUNTED(cmount, -1);
+
+  ldout(cct, 10) << "jni: get_pool_replication: poolid " << jpoolid << dendl;
+
+  ret = ceph_get_pool_replication(cmount, jpoolid);
+  if (ret < 0)
+    handle_error(env, ret);
+
+  ldout(cct, 10) << "jni: get_pool_replication: ret " << ret << dendl;
+
+  return ret;
+}

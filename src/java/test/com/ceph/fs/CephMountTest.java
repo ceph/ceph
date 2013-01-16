@@ -834,4 +834,37 @@ public class CephMountTest {
   public void test_get_stripe_unit_gran() throws Exception {
     assertTrue(mount.get_stripe_unit_granularity() > 0);
   }
+
+  /*
+   * pool info. below we use "data" and "metadata" pool names which we assume
+   * to exist (they are the default pools created for file data / metadata in
+   * CephFS).
+   */
+
+  @Test
+  public void test_get_pool_id() throws Exception {
+    /* returns valid pool ids */
+    assertTrue(mount.get_pool_id("data") >= 0);
+    assertTrue(mount.get_pool_id("metadata") >= 0);
+
+    /* test non-existent pool name */
+    try {
+      mount.get_pool_id("asdlfkjlsejflkjef");
+      assertTrue(false);
+    } catch (CephPoolException e) {}
+  }
+
+  @Test
+  public void test_get_pool_replication() throws Exception {
+    /* test invalid pool id */
+    try {
+      mount.get_pool_replication(-1);
+      assertTrue(false);
+    } catch (CephPoolException e) {}
+
+    /* test valid pool id */
+    int poolid = mount.get_pool_id("data");
+    assertTrue(poolid >= 0);
+    assertTrue(mount.get_pool_replication(poolid) > 0);
+  }
 }

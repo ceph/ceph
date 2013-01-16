@@ -899,4 +899,42 @@ public class CephMount {
   }
 
   private static native int native_ceph_get_stripe_unit_granularity(long mountp);
+
+  /**
+   * Get the pool id for the named pool.
+   *
+   * @param name The pool name.
+   * @return The pool id.
+   */
+  public int get_pool_id(String name) throws CephPoolException {
+    rlock.lock();
+    try {
+      return native_ceph_get_pool_id(instance_ptr, name);
+    } catch (FileNotFoundException e) {
+      throw new CephPoolException("pool name " + name + " not found");
+    } finally {
+      rlock.unlock();
+    }
+  }
+
+  private static native int native_ceph_get_pool_id(long mountp, String name) throws FileNotFoundException;
+
+  /**
+   * Get the pool replication factor.
+   *
+   * @param pool_id The pool id.
+   * @return Number of replicas stored in the pool.
+   */
+  public int get_pool_replication(int pool_id) throws CephPoolException {
+    rlock.lock();
+    try {
+      return native_ceph_get_pool_replication(instance_ptr, pool_id);
+    } catch (FileNotFoundException e) {
+      throw new CephPoolException("pool id " + pool_id + " not found");
+    } finally {
+      rlock.unlock();
+    }
+  }
+
+  private static native int native_ceph_get_pool_replication(long mountp, int pool_id) throws FileNotFoundException;
 }
