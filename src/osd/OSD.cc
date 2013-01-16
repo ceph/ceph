@@ -1224,8 +1224,6 @@ int OSD::shutdown()
   hbserver_messenger->shutdown();
 
   monc->shutdown();
-
-  osd_lock.Unlock();
   return r;
 }
 
@@ -3456,7 +3454,8 @@ void OSD::_dispatch(Message *m)
     session = (Session *)m->get_connection()->get_priv();
     if (!session ||
 	session->entity_name.is_mon() ||
-	session->entity_name.is_osd()) shutdown();
+	session->entity_name.is_osd())
+      shutdown();
     else dout(0) << "shutdown message from connection with insufficient privs!"
 		 << m->get_connection() << dendl;
     m->put();
