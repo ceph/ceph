@@ -615,6 +615,32 @@ inline ostream& operator<<(ostream& out, const string_snap_t &k)
   return out << "(" << k.name << "," << k.snapid << ")";
 }
 
+/*
+ * mds_table_pending_t
+ *
+ * mds's requesting any pending ops.  child needs to encode the corresponding
+ * pending mutation state in the table.
+ */
+struct mds_table_pending_t {
+  uint64_t reqid;
+  __s32 mds;
+  version_t tid;
+  void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
+    ::encode(reqid, bl);
+    ::encode(mds, bl);
+    ::encode(tid, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
+    ::decode(reqid, bl);
+    ::decode(mds, bl);
+    ::decode(tid, bl);
+  }
+};
+WRITE_CLASS_ENCODER(mds_table_pending_t)
 
 
 // =========

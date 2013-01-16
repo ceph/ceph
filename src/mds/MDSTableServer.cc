@@ -156,7 +156,7 @@ void MDSTableServer::handle_mds_recovery(int who)
     dout(7) << "handle_mds_recovery mds." << who << dendl;
   
   // resend agrees for recovered mds
-  for (map<version_t,_pending>::iterator p = pending_for_mds.begin();
+  for (map<version_t,mds_table_pending_t>::iterator p = pending_for_mds.begin();
        p != pending_for_mds.end();
        p++) {
     if (who >= 0 && p->second.mds != who)
