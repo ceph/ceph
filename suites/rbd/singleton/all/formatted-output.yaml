@@ -1,0 +1,8 @@
+roles:
+- [mon.a, osd.0, osd.1, client.0]
+tasks:
+- ceph:
+- cram:
+    clients:
+      client.0:
+      - https://raw.github.com/ceph/ceph/master/src/test/cli-integration/rbd/formatted-output.t
