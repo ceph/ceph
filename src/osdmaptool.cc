@@ -35,6 +35,8 @@ void usage()
   cout << "   --export-crush <file>   write osdmap's crush map to <file>" << std::endl;
   cout << "   --import-crush <file>   replace osdmap's crush map with <file>" << std::endl;
   cout << "   --test-map-pg <pgid>    map a pgid to osds" << std::endl;
+  cout << "   --test-map-object <objectname> [--pool <poolid>] map an object to osds"
+       << std::endl;
   exit(1);
 }
 
@@ -66,6 +68,7 @@ int main(int argc, const char **argv)
   bool test_crush = false;
   int range_first = -1;
   int range_last = -1;
+  int pool = 0;
 
   std::string val;
   std::ostringstream err;
@@ -112,6 +115,7 @@ int main(int argc, const char **argv)
       test_crush = true;
     } else if (ceph_argparse_withint(args, i, &range_first, &err, "--range_first", (char*)NULL)) {
     } else if (ceph_argparse_withint(args, i, &range_last, &err, "--range_last", (char*)NULL)) {
+    } else if (ceph_argparse_withint(args, i, &pool, &err, "--pool", (char*)NULL)) {
     } else {
       ++i;
     }
@@ -242,11 +246,14 @@ int main(int argc, const char **argv)
 
   if (!test_map_object.empty()) {
     object_t oid(test_map_object);
-    ceph_object_layout ol = osdmap.make_object_layout(oid, 0);
+    if (!osdmap.have_pg_pool(pool)) {
+      cerr << "There is no pool " << pool << std::endl;
+      exit(1);
+    }
+    object_locator_t loc(pool);
+    pg_t raw_pgid = osdmap.object_locator_to_pg(oid, loc);
+    pg_t pgid = osdmap.raw_pg_to_pg(raw_pgid);
     
-    pg_t pgid;
-    pgid = ol.ol_pgid;
-
     vector<int> acting;
     osdmap.pg_to_acting_osds(pgid, acting);
     cout << " object '" << oid
