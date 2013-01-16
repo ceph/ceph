@@ -1547,9 +1547,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
     string oid(nargs[1]);
     string key(nargs[2]);
+    set<string> keys;
+    keys.insert(key);
 
     map<string, bufferlist> values;
-    ret = io_ctx.omap_get_vals(oid, key, 1, &values);
+    ret = io_ctx.omap_get_vals_by_keys(oid, keys, &values);
     if (ret < 0) {
       cerr << "error getting omap value " << pool_name << "/" << oid << "/"
 	   << key << ": " << cpp_strerror(ret) << std::endl;
