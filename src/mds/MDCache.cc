@@ -999,17 +999,19 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<in
     }
   }
   // merge stray bounds?
-  set<CDir*>::iterator p = subtrees[dir].begin();
-  while (p != subtrees[dir].end()) {
-    set<CDir*>::iterator n = p;
-    n++;
-    if (bounds.count(*p) == 0) {
-      CDir *stray = *p;
-      dout(10) << "  swallowing extra subtree at " << *stray << dendl;
-      adjust_subtree_auth(stray, auth);
-      try_subtree_merge_at(stray);
+  while (!subtrees[dir].empty()) {
+    set<CDir*> copy = subtrees[dir];
+    for (set<CDir*>::iterator p = copy.begin(); p != copy.end(); p++) {
+      if (bounds.count(*p) == 0) {
+	CDir *stray = *p;
+	dout(10) << "  swallowing extra subtree at " << *stray << dendl;
+	adjust_subtree_auth(stray, auth);
+	try_subtree_merge_at(stray);
+      }
     }
-    p = n;
+    // swallowing subtree may add new subtree bounds
+    if (copy == subtrees[dir])
+      break;
   }
 
   // bound should now match.
