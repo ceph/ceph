@@ -1092,28 +1092,32 @@ void Server::handle_client_request(MClientRequest *req)
     session->trim_completed_requests(req->get_oldest_client_tid());
   }
 
+  // request_start may drop the request, get a reference for cap release
+  if (!req->releases.empty() && req->get_source().is_client() && !req->is_replay())
+    req->get();
+
   // register + dispatch
   MDRequest *mdr = mdcache->request_start(req);
-  if (!mdr) 
-    return;
-  if (session) {
-    mdr->session = session;
-    session->requests.push_back(&mdr->item_session_request);
+  if (mdr) {
+    if (session) {
+      mdr->session = session;
+      session->requests.push_back(&mdr->item_session_request);
+    }
   }
 
   // process embedded cap releases?
   //  (only if NOT replay!)
-  if (req->get_source().is_client() &&
-      !req->is_replay()) {
+  if (!req->releases.empty() && req->get_source().is_client() && !req->is_replay()) {
     client_t client = req->get_source().num();
     for (vector<MClientRequest::Release>::iterator p = req->releases.begin();
 	 p != req->releases.end();
 	 p++)
       mds->locker->process_request_cap_release(mdr, client, p->item, p->dname);
+    req->put();
   }
 
-
-  dispatch_client_request(mdr);
+  if (mdr)
+    dispatch_client_request(mdr);
   return;
 }
 

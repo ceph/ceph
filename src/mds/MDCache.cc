@@ -7569,13 +7569,13 @@ MDRequest *MDCache::request_start(MClientRequest *req)
   if (active_requests.count(req->get_reqid())) {
     MDRequest *mdr = active_requests[req->get_reqid()];
     if (mdr->is_slave()) {
-      dout(10) << "request_start already had " << *mdr << ", cleaning up" << dendl;
-      request_cleanup(mdr);
+      dout(10) << "request_start already had " << *mdr << ", forward new msg" << dendl;
+      mds->forward_message_mds(req, mdr->slave_to_mds);
     } else {
       dout(10) << "request_start already processing " << *mdr << ", dropping new msg" << dendl;
       req->put();
-      return 0;
     }
+    return 0;
   }
 
   // register new client request
