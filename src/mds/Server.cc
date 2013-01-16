@@ -4395,7 +4395,7 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   mut->add_projected_inode(in);
 
   // parent dir rctime
-  CDir *parent = in->get_parent_dn()->get_dir();
+  CDir *parent = in->get_projected_parent_dn()->get_dir();
   fnode_t *pf = parent->project_fnode();
   mut->add_projected_fnode(parent);
   pf->version = parent->pre_dirty();
@@ -4420,7 +4420,7 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   mdlog->start_entry(le);
   le->commit.add_dir_context(parent);
   le->commit.add_dir(parent, true);
-  le->commit.add_primary_dentry(in->get_parent_dn(), true, 0);
+  le->commit.add_primary_dentry(in->get_projected_parent_dn(), true, 0);
   
   mdlog->submit_entry(le, new C_MDS_LoggedLinkRollback(this, mut, mdr));
   mdlog->flush();
