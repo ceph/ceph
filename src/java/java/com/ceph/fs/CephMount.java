@@ -21,6 +21,8 @@ package com.ceph.fs;
 
 import java.io.IOException;
 import java.io.FileNotFoundException;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.Arrays;
 import java.lang.String;
 
@@ -90,6 +92,13 @@ public class CephMount {
   static native void native_initialize();
 
   /*
+   * RW lock used for fine grained synchronization to native
+   */
+  private final ReentrantReadWriteLock rwlock = new ReentrantReadWriteLock();
+  private final Lock rlock = rwlock.readLock();
+  private final Lock wlock = rwlock.writeLock();
+
+  /*
    * Controls clean-up synchronization between the constructor and finalize().
    * If native_ceph_create fails, then we want a call to finalize() to not
    * attempt to clean-up native context, because there is none.
@@ -123,7 +132,7 @@ public class CephMount {
     initialized = true;
   }
 
-  private static synchronized native int native_ceph_create(CephMount mount, String id);
+  private static native int native_ceph_create(CephMount mount, String id);
 
   /**
    * Create a new CephMount with default client id.
@@ -138,10 +147,15 @@ public class CephMount {
    * @param root The path to use as the root (pass null for "/").
    */
   public void mount(String root) {
-    native_ceph_mount(instance_ptr, root);
+    wlock.lock();
+    try {
+      native_ceph_mount(instance_ptr, root);
+    } finally {
+      wlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_mount(long mountp, String root);
+  private static native int native_ceph_mount(long mountp, String root);
 
   /**
    * Deactivate the mount.
@@ -149,16 +163,21 @@ public class CephMount {
    * The mount can be reactivated using mount(). Configuration parameters
    * previously set are not reset.
    */
-  public synchronized void unmount() {
-    native_ceph_unmount(instance_ptr);
+  public void unmount() {
+    wlock.lock();
+    try {
+      native_ceph_unmount(instance_ptr);
+    } finally {
+      wlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_unmount(long mountp);
+  private static native int native_ceph_unmount(long mountp);
 
   /*
    * Private access to low-level ceph_release.
    */
-  private static synchronized native int native_ceph_release(long mountp);
+  private static native int native_ceph_release(long mountp);
 
   /**
    * Load configuration from a file.
@@ -166,10 +185,15 @@ public class CephMount {
    * @param path The path to the configuration file.
    */
   public void conf_read_file(String path) throws FileNotFoundException {
-    native_ceph_conf_read_file(instance_ptr, path);
+    rlock.lock();
+    try {
+      native_ceph_conf_read_file(instance_ptr, path);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_conf_read_file(long mountp, String path);
+  private static native int native_ceph_conf_read_file(long mountp, String path);
 
   /**
    * Set the value of a configuration option.
@@ -178,10 +202,15 @@ public class CephMount {
    * @param value The new value of the option.
    */
   public void conf_set(String option, String value) {
-    native_ceph_conf_set(instance_ptr, option, value);
+    rlock.lock();
+    try {
+      native_ceph_conf_set(instance_ptr, option, value);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_conf_set(long mountp, String option, String value);
+  private static native int native_ceph_conf_set(long mountp, String option, String value);
 
   /**
    * Get the value of a configuration option.
@@ -190,10 +219,15 @@ public class CephMount {
    * @return The value of the option or null if option not found
    */
   public String conf_get(String option) {
-    return native_ceph_conf_get(instance_ptr, option);
+    rlock.lock();
+    try {
+      return native_ceph_conf_get(instance_ptr, option);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native String native_ceph_conf_get(long mountp, String option);
+  private static native String native_ceph_conf_get(long mountp, String option);
 
   /**
    * Get file system status.
@@ -202,10 +236,15 @@ public class CephMount {
    * @param statvfs CephStatVFS structure to hold status.
    */
   public void statfs(String path, CephStatVFS statvfs) throws FileNotFoundException {
-    native_ceph_statfs(instance_ptr, path, statvfs);
+    rlock.lock();
+    try {
+      native_ceph_statfs(instance_ptr, path, statvfs);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_statfs(long mountp, String path, CephStatVFS statvfs);
+  private static native int native_ceph_statfs(long mountp, String path, CephStatVFS statvfs);
 
   /**
    * Get the current working directory.
@@ -213,10 +252,15 @@ public class CephMount {
    * @return The current working directory in Ceph.
    */
   public String getcwd() {
-    return native_ceph_getcwd(instance_ptr);
+    rlock.lock();
+    try {
+      return native_ceph_getcwd(instance_ptr);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native String native_ceph_getcwd(long mountp);
+  private static native String native_ceph_getcwd(long mountp);
 
   /**
    * Set the current working directory.
@@ -224,10 +268,15 @@ public class CephMount {
    * @param path The directory set as the cwd.
    */
   public void chdir(String path) throws FileNotFoundException {
-    native_ceph_chdir(instance_ptr, path);
+    rlock.lock();
+    try {
+      native_ceph_chdir(instance_ptr, path);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_chdir(long mountp, String cwd);
+  private static native int native_ceph_chdir(long mountp, String cwd);
 
   /**
    * List the contents of a directory.
@@ -236,10 +285,15 @@ public class CephMount {
    * @return List of files and directories excluding "." and "..".
    */
   public String[] listdir(String dir) throws FileNotFoundException {
-    return native_ceph_listdir(instance_ptr, dir);
+    rlock.lock();
+    try {
+      return native_ceph_listdir(instance_ptr, dir);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native String[] native_ceph_listdir(long mountp, String path);
+  private static native String[] native_ceph_listdir(long mountp, String path);
 
   /**
    * Create a hard link to an existing file.
@@ -248,10 +302,15 @@ public class CephMount {
    * @param newpath The name of the link.
    */
   public void link(String oldpath, String newpath) throws FileNotFoundException {
-    native_ceph_link(instance_ptr, oldpath, newpath);
+    rlock.lock();
+    try {
+      native_ceph_link(instance_ptr, oldpath, newpath);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_link(long mountp, String existing, String newname);
+  private static native int native_ceph_link(long mountp, String existing, String newname);
 
   /**
    * Unlink/delete a name from the file system.
@@ -259,10 +318,15 @@ public class CephMount {
    * @param path The name to unlink/delete.
    */
   public void unlink(String path) throws FileNotFoundException {
-    native_ceph_unlink(instance_ptr, path);
+    rlock.lock();
+    try {
+      native_ceph_unlink(instance_ptr, path);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_unlink(long mountp, String path);
+  private static native int native_ceph_unlink(long mountp, String path);
 
   /**
    * Rename a file or directory.
@@ -271,10 +335,15 @@ public class CephMount {
    * @param to The new path.
    */
   public void rename(String from, String to) throws FileNotFoundException {
-    native_ceph_rename(instance_ptr, from, to);
+    rlock.lock();
+    try {
+      native_ceph_rename(instance_ptr, from, to);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_rename(long mountp, String from, String to);
+  private static native int native_ceph_rename(long mountp, String from, String to);
 
   /**
    * Create a directory.
@@ -283,10 +352,15 @@ public class CephMount {
    * @param mode The mode of the new directory.
    */
   public void mkdir(String path, int mode) {
-    native_ceph_mkdir(instance_ptr, path, mode);
+    rlock.lock();
+    try {
+      native_ceph_mkdir(instance_ptr, path, mode);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_mkdir(long mountp, String path, int mode);
+  private static native int native_ceph_mkdir(long mountp, String path, int mode);
 
   /**
    * Create a directory and all parents.
@@ -295,10 +369,15 @@ public class CephMount {
    * @param mode The mode of the new directory.
    */
   public void mkdirs(String path, int mode) throws IOException {
-    native_ceph_mkdirs(instance_ptr, path, mode);
+    rlock.lock();
+    try {
+      native_ceph_mkdirs(instance_ptr, path, mode);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_mkdirs(long mountp, String path, int mode);
+  private static native int native_ceph_mkdirs(long mountp, String path, int mode);
 
   /**
    * Delete a directory.
@@ -306,19 +385,29 @@ public class CephMount {
    * @param path The directory to delete.
    */
   public void rmdir(String path) throws FileNotFoundException {
-    native_ceph_rmdir(instance_ptr, path);
+    rlock.lock();
+    try {
+      native_ceph_rmdir(instance_ptr, path);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_rmdir(long mountp, String path);
+  private static native int native_ceph_rmdir(long mountp, String path);
 
   /**
    * Read the value of a symbolic link.
    */
   public String readlink(String path) throws FileNotFoundException {
-    return native_ceph_readlink(instance_ptr, path);
+    rlock.lock();
+    try {
+      return native_ceph_readlink(instance_ptr, path);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native String native_ceph_readlink(long mountp, String path);
+  private static native String native_ceph_readlink(long mountp, String path);
 
   /**
    * Create a symbolic link.
@@ -327,10 +416,15 @@ public class CephMount {
    * @param newpath Name of the link.
    */
   public void symlink(String oldpath, String newpath) {
-    native_ceph_symlink(instance_ptr, oldpath, newpath);
+    rlock.lock();
+    try {
+      native_ceph_symlink(instance_ptr, oldpath, newpath);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_symlink(long mountp, String existing, String newname);
+  private static native int native_ceph_symlink(long mountp, String existing, String newname);
 
   /**
    * Get file status.
@@ -339,10 +433,15 @@ public class CephMount {
    * @param stat CephStat structure to hold file status.
    */
   public void lstat(String path, CephStat stat) throws FileNotFoundException, CephNotDirectoryException {
-    native_ceph_lstat(instance_ptr, path, stat);
+    rlock.lock();
+    try {
+      native_ceph_lstat(instance_ptr, path, stat);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_lstat(long mountp, String path, CephStat stat);
+  private static native int native_ceph_lstat(long mountp, String path, CephStat stat);
 
   /**
    * Set file attributes.
@@ -352,10 +451,15 @@ public class CephMount {
    * @param mask Mask specifying which attributes to set.
    */
   public void setattr(String path, CephStat stat, int mask) throws FileNotFoundException {
-    native_ceph_setattr(instance_ptr, path, stat, mask);
+    rlock.lock();
+    try {
+      native_ceph_setattr(instance_ptr, path, stat, mask);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_setattr(long mountp, String relpath, CephStat stat, int mask);
+  private static native int native_ceph_setattr(long mountp, String relpath, CephStat stat, int mask);
 
   /**
    * Change file mode.
@@ -364,10 +468,15 @@ public class CephMount {
    * @param mode New mode bits.
    */
   public void chmod(String path, int mode) throws FileNotFoundException {
-    native_ceph_chmod(instance_ptr, path, mode);
+    rlock.lock();
+    try {
+      native_ceph_chmod(instance_ptr, path, mode);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_chmod(long mountp, String path, int mode);
+  private static native int native_ceph_chmod(long mountp, String path, int mode);
 
   /**
    * Truncate a file to a specified length.
@@ -376,10 +485,15 @@ public class CephMount {
    * @param size New file length.
    */
   public void truncate(String path, long size) throws FileNotFoundException {
-    native_ceph_truncate(instance_ptr, path, size);
+    rlock.lock();
+    try {
+      native_ceph_truncate(instance_ptr, path, size);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_truncate(long mountp, String path, long size);
+  private static native int native_ceph_truncate(long mountp, String path, long size);
 
   /**
    * Open a file.
@@ -390,10 +504,15 @@ public class CephMount {
    * @return File descriptor.
    */
   public int open(String path, int flags, int mode) throws FileNotFoundException {
-    return native_ceph_open(instance_ptr, path, flags, mode);
+    rlock.lock();
+    try {
+      return native_ceph_open(instance_ptr, path, flags, mode);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_open(long mountp, String path, int flags, int mode);
+  private static native int native_ceph_open(long mountp, String path, int flags, int mode);
 
   /**
    * Open a file with a specific file layout.
@@ -409,11 +528,16 @@ public class CephMount {
    */
   public int open(String path, int flags, int mode, int stripe_unit, int stripe_count,
       int object_size, String data_pool) throws FileNotFoundException {
-    return native_ceph_open_layout(instance_ptr, path, flags, mode, stripe_unit,
-        stripe_count, object_size, data_pool);
+    rlock.lock();
+    try {
+      return native_ceph_open_layout(instance_ptr, path, flags, mode, stripe_unit,
+          stripe_count, object_size, data_pool);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_open_layout(long mountp, String path,
+  private static native int native_ceph_open_layout(long mountp, String path,
       int flags, int mode, int stripe_unit, int stripe_count, int object_size, String data_pool);
 
   /**
@@ -422,10 +546,15 @@ public class CephMount {
    * @param fd The file descriptor.
    */
   public void close(int fd) {
-    native_ceph_close(instance_ptr, fd);
+    rlock.lock();
+    try {
+      native_ceph_close(instance_ptr, fd);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_close(long mountp, int fd);
+  private static native int native_ceph_close(long mountp, int fd);
 
   /**
    * Seek to a position in a file.
@@ -436,10 +565,15 @@ public class CephMount {
    * @return The new offset.
    */
   public long lseek(int fd, long offset, int whence) {
-    return native_ceph_lseek(instance_ptr, fd, offset, whence);
+    rlock.lock();
+    try {
+      return native_ceph_lseek(instance_ptr, fd, offset, whence);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native long native_ceph_lseek(long mountp, int fd, long offset, int whence);
+  private static native long native_ceph_lseek(long mountp, int fd, long offset, int whence);
 
   /**
    * Read from a file.
@@ -451,10 +585,15 @@ public class CephMount {
    * @return The number of bytes read.
    */
   public long read(int fd, byte[] buf, long size, long offset) {
-    return native_ceph_read(instance_ptr, fd, buf, size, offset);
+    rlock.lock();
+    try {
+      return native_ceph_read(instance_ptr, fd, buf, size, offset);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native long native_ceph_read(long mountp, int fd, byte[] buf, long size, long offset);
+  private static native long native_ceph_read(long mountp, int fd, byte[] buf, long size, long offset);
 
   /**
    * Write to a file at a specific offset.
@@ -466,10 +605,15 @@ public class CephMount {
    * @return The number of bytes written.
    */
   public long write(int fd, byte[] buf, long size, long offset) {
-    return native_ceph_write(instance_ptr, fd, buf, size, offset);
+    rlock.lock();
+    try {
+      return native_ceph_write(instance_ptr, fd, buf, size, offset);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native long native_ceph_write(long mountp, int fd, byte[] buf, long size, long offset);
+  private static native long native_ceph_write(long mountp, int fd, byte[] buf, long size, long offset);
 
   /**
    * Truncate a file.
@@ -478,10 +622,15 @@ public class CephMount {
    * @param size New file size.
    */
   public void ftruncate(int fd, long size) {
-    native_ceph_ftruncate(instance_ptr, fd, size);
+    rlock.lock();
+    try {
+      native_ceph_ftruncate(instance_ptr, fd, size);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_ftruncate(long mountp, int fd, long size);
+  private static native int native_ceph_ftruncate(long mountp, int fd, long size);
 
   /**
    * Synchronize a file with the file system.
@@ -490,10 +639,15 @@ public class CephMount {
    * @param dataonly Synchronize only data.
    */
   public void fsync(int fd, boolean dataonly) {
-    native_ceph_fsync(instance_ptr, fd, dataonly);
+    rlock.lock();
+    try {
+      native_ceph_fsync(instance_ptr, fd, dataonly);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_fsync(long mountp, int fd, boolean dataonly);
+  private static native int native_ceph_fsync(long mountp, int fd, boolean dataonly);
 
   /**
    * Get file status.
@@ -502,19 +656,29 @@ public class CephMount {
    * @param stat The object in which to store the status.
    */
   public void fstat(int fd, CephStat stat) {
-    native_ceph_fstat(instance_ptr, fd, stat);
+    rlock.lock();
+    try {
+      native_ceph_fstat(instance_ptr, fd, stat);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_fstat(long mountp, int fd, CephStat stat);
+  private static native int native_ceph_fstat(long mountp, int fd, CephStat stat);
 
   /**
    * Synchronize the client with the file system.
    */
   public void sync_fs() {
-    native_ceph_sync_fs(instance_ptr);
+    rlock.lock();
+    try {
+      native_ceph_sync_fs(instance_ptr);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_sync_fs(long mountp);
+  private static native int native_ceph_sync_fs(long mountp);
 
   /**
    * Get an extended attribute value.
@@ -529,10 +693,15 @@ public class CephMount {
    * details.
    */
   public long getxattr(String path, String name, byte[] buf) throws FileNotFoundException {
-    return native_ceph_getxattr(instance_ptr, path, name, buf);
+    rlock.lock();
+    try {
+      return native_ceph_getxattr(instance_ptr, path, name, buf);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native long native_ceph_getxattr(long mountp, String path, String name, byte[] buf);
+  private static native long native_ceph_getxattr(long mountp, String path, String name, byte[] buf);
 
   /**
    * Get an extended attribute value of a symbolic link.
@@ -547,10 +716,15 @@ public class CephMount {
    * details.
    */
   public long lgetxattr(String path, String name, byte[] buf) throws FileNotFoundException {
-    return native_ceph_lgetxattr(instance_ptr, path, name, buf);
+    rlock.lock();
+    try {
+      return native_ceph_lgetxattr(instance_ptr, path, name, buf);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native long native_ceph_lgetxattr(long mountp, String path, String name, byte[] buf);
+  private static native long native_ceph_lgetxattr(long mountp, String path, String name, byte[] buf);
 
   /**
    * List extended attributes.
@@ -559,10 +733,15 @@ public class CephMount {
    * @return List of attribute names.
    */
   public String[] listxattr(String path) throws FileNotFoundException {
-    return native_ceph_listxattr(instance_ptr, path);
+    rlock.lock();
+    try {
+      return native_ceph_listxattr(instance_ptr, path);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native String[] native_ceph_listxattr(long mountp, String path);
+  private static native String[] native_ceph_listxattr(long mountp, String path);
 
   /**
    * List extended attributes of a symbolic link.
@@ -571,10 +750,15 @@ public class CephMount {
    * @return List of attribute names.
    */
   public String[] llistxattr(String path) throws FileNotFoundException {
-    return native_ceph_llistxattr(instance_ptr, path);
+    rlock.lock();
+    try {
+      return native_ceph_llistxattr(instance_ptr, path);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native String[] native_ceph_llistxattr(long mountp, String path);
+  private static native String[] native_ceph_llistxattr(long mountp, String path);
 
   /**
    * Remove an extended attribute.
@@ -583,10 +767,15 @@ public class CephMount {
    * @param name Name of attribute.
    */
   public void removexattr(String path, String name) throws FileNotFoundException {
-    native_ceph_removexattr(instance_ptr, path, name);
+    rlock.lock();
+    try {
+      native_ceph_removexattr(instance_ptr, path, name);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_removexattr(long mountp, String path, String name);
+  private static native int native_ceph_removexattr(long mountp, String path, String name);
 
   /**
    * Remove an extended attribute from a symbolic link.
@@ -595,10 +784,15 @@ public class CephMount {
    * @param name Name of attribute.
    */
   public void lremovexattr(String path, String name) throws FileNotFoundException {
-    native_ceph_lremovexattr(instance_ptr, path, name);
+    rlock.lock();
+    try {
+      native_ceph_lremovexattr(instance_ptr, path, name);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_lremovexattr(long mountp, String path, String name);
+  private static native int native_ceph_lremovexattr(long mountp, String path, String name);
 
   /**
    * Set the value of an extended attribute.
@@ -610,10 +804,15 @@ public class CephMount {
    * @param flags Flag controlling behavior (XATTR_CREATE/REPLACE/NONE).
    */
   public void setxattr(String path, String name, byte[] buf, long size, int flags) throws FileNotFoundException {
-    native_ceph_setxattr(instance_ptr, path, name, buf, size, flags);
+    rlock.lock();
+    try {
+      native_ceph_setxattr(instance_ptr, path, name, buf, size, flags);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_setxattr(long mountp, String path, String name, byte[] buf, long size, int flags);
+  private static native int native_ceph_setxattr(long mountp, String path, String name, byte[] buf, long size, int flags);
 
   /**
    * Set the value of an extended attribute on a symbolic link.
@@ -625,10 +824,15 @@ public class CephMount {
    * @param flags Flag controlling behavior (XATTR_CREATE/REPLACE/NONE).
    */
   public void lsetxattr(String path, String name, byte[] buf, long size, int flags) throws FileNotFoundException {
-    native_ceph_lsetxattr(instance_ptr, path, name, buf, size, flags);
+    rlock.lock();
+    try {
+      native_ceph_lsetxattr(instance_ptr, path, name, buf, size, flags);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_lsetxattr(long mountp, String path, String name, byte[] buf, long size, int flags);
+  private static native int native_ceph_lsetxattr(long mountp, String path, String name, byte[] buf, long size, int flags);
 
   /**
    * Get the stripe unit of a file.
@@ -637,10 +841,15 @@ public class CephMount {
    * @return The stripe unit.
    */
   public int get_file_stripe_unit(int fd) {
-    return native_ceph_get_file_stripe_unit(instance_ptr, fd);
+    rlock.lock();
+    try {
+      return native_ceph_get_file_stripe_unit(instance_ptr, fd);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_get_file_stripe_unit(long mountp, int fd);
+  private static native int native_ceph_get_file_stripe_unit(long mountp, int fd);
 
   /**
    * Get the replication of a file.
@@ -649,10 +858,15 @@ public class CephMount {
    * @return The file replication.
    */
   public int get_file_replication(int fd) {
-    return native_ceph_get_file_replication(instance_ptr, fd);
+    rlock.lock();
+    try {
+      return native_ceph_get_file_replication(instance_ptr, fd);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_get_file_replication(long mountp, int fd);
+  private static native int native_ceph_get_file_replication(long mountp, int fd);
 
   /**
    * Favor reading from local replicas when possible.
@@ -660,10 +874,15 @@ public class CephMount {
    * @param state Enable or disable localized reads.
    */
   public void localize_reads(boolean state) {
-    native_ceph_localize_reads(instance_ptr, state);
+    rlock.lock();
+    try {
+      native_ceph_localize_reads(instance_ptr, state);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_localize_reads(long mountp, boolean on);
+  private static native int native_ceph_localize_reads(long mountp, boolean on);
 
   /**
    * Get file layout stripe unit granularity.
@@ -671,8 +890,13 @@ public class CephMount {
    * @return Stripe unit granularity.
    */
   public int get_stripe_unit_granularity() {
-    return native_ceph_get_stripe_unit_granularity(instance_ptr);
+    rlock.lock();
+    try {
+      return native_ceph_get_stripe_unit_granularity(instance_ptr);
+    } finally {
+      rlock.unlock();
+    }
   }
 
-  private static synchronized native int native_ceph_get_stripe_unit_granularity(long mountp);
+  private static native int native_ceph_get_stripe_unit_granularity(long mountp);
 }

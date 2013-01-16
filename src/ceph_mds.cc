@@ -60,7 +60,7 @@ void usage()
        << "  --journal-check rank\n"
        << "        replay the journal for rank, then exit\n"
        << "  --hot-standby rank\n"
-       << "        stat up as a hot standby for rank\n"
+       << "        start up as a hot standby for rank\n"
        << "  --reset-journal rank\n"
        << "        discard the MDS journal for rank, and replace it with a single\n"
        << "        event that updates/resets inotable and sessionmap on replay.\n"
