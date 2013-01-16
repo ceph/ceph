@@ -3078,7 +3078,8 @@ void MDCache::disambiguate_imports()
       CDir *dir = get_force_dirfrag(q->first);
       if (!dir) continue;
       
-      if (dir->is_ambiguous_auth()) {     // works for me_ambig or if i am a surviving bystander
+      if (dir->is_ambiguous_auth() ||	// works for me_ambig or if i am a surviving bystander
+	  dir->authority() == CDIR_AUTH_UNDEF) { // resolving
 	dout(10) << "  mds." << who << " did import " << *dir << dendl;
 	adjust_bounded_subtree_auth(dir, q->second, who);
 	try_subtree_merge(dir);
