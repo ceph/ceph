@@ -17,6 +17,7 @@ using namespace std;
 
 #include "include/frag.h"
 #include "include/xlist.h"
+#include "include/interval_set.h"
 
 #include "inode_backtrace.h"
 
@@ -492,6 +493,31 @@ inline ostream& operator<<(ostream& out, const old_rstat_t& o) {
   return out << "old_rstat(first " << o.first << " " << o.rstat << " " << o.accounted_rstat << ")";
 }
 
+
+/*
+ * session_info_t
+ */
+
+struct session_info_t {
+  entity_inst_t inst;
+  set<tid_t> completed_requests;
+  interval_set<inodeno_t> prealloc_inos;   // preallocated, ready to use.
+  interval_set<inodeno_t> used_inos;       // journaling use
+
+  client_t get_client() const { return client_t(inst.name.num()); }
+
+  void clear_meta() {
+    prealloc_inos.clear();
+    used_inos.clear();
+    completed_requests.clear();
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<session_info_t*>& ls);
+};
+WRITE_CLASS_ENCODER(session_info_t)
 
 
 // =======

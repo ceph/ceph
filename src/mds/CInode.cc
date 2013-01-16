@@ -2599,7 +2599,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 			      SnapRealm *dir_realm,
 			      snapid_t snapid, unsigned max_bytes)
 {
-  int client = session->inst.name.num();
+  int client = session->info.inst.name.num();
   assert(snapid);
   assert(session->connection);
   
