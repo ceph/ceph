@@ -1412,7 +1412,7 @@ libclient_la_SOURCES = \
 	client/Inode.cc \
 	client/Dentry.cc \
 	client/MetaRequest.cc \
-	client/SnapRealm.cc \
+	client/ClientSnapRealm.cc \
 	client/MetaSession.cc \
 	client/Trace.cc
 libclient_la_LIBADD = libosdc.la $(LIBEDIT_LIBS)
@@ -1464,7 +1464,7 @@ noinst_HEADERS = \
 	client/Inode.h\
 	client/MetaRequest.h\
 	client/MetaSession.h\
-	client/SnapRealm.h\
+	client/ClientSnapRealm.h\
         client/SyntheticClient.h\
         client/Trace.h\
         client/fuse_ll.h\
