@@ -2331,6 +2331,39 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
       } while (false);
     }
+    else if (m->cmd.size() == 4 && m->cmd[1] == "crush" && m->cmd[2] == "tunables") {
+      bufferlist bl;
+      if (pending_inc.crush.length())
+	bl = pending_inc.crush;
+      else
+	osdmap.crush->encode(bl);
+
+      CrushWrapper newcrush;
+      bufferlist::iterator p = bl.begin();
+      newcrush.decode(p);
+
+      err = 0;
+      if (m->cmd[3] == "legacy" || m->cmd[3] == "argonaut") {
+	newcrush.set_tunables_legacy();
+      } else if (m->cmd[3] == "bobtail") {
+	newcrush.set_tunables_bobtail();
+      } else if (m->cmd[3] == "optimal") {
+	newcrush.set_tunables_optimal();
+      } else if (m->cmd[3] == "default") {
+	newcrush.set_tunables_default();
+      } else {
+	err = -EINVAL;
+	ss << "unknown tunables profile '" << m->cmd[3] << "'; allowed values are argonaut, bobtail, optimal, or default";
+      }
+      if (err == 0) {
+	pending_inc.crush.clear();
+	newcrush.encode(pending_inc.crush);
+	ss << "adjusted tunables profile to " << m->cmd[3];
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	return true;
+      }
+    }
     else if (m->cmd[1] == "setmaxosd" && m->cmd.size() > 2) {
       int newmax = parse_pos_long(m->cmd[2].c_str(), &ss);
       if (newmax < 0) {
