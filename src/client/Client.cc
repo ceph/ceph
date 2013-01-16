@@ -73,7 +73,7 @@ using namespace std;
 #include "Inode.h"
 #include "Dentry.h"
 #include "Dir.h"
-#include "SnapRealm.h"
+#include "ClientSnapRealm.h"
 #include "Fh.h"
 #include "MetaSession.h"
 #include "MetaRequest.h"
