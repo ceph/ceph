@@ -1131,6 +1131,9 @@ int RGWRados::copy_obj(void *ctx,
       attrs[RGW_ATTR_ETAG] = attrset[RGW_ATTR_ETAG];
 
     attrset = attrs;
+  } else {
+    /* copying attrs from source, however acls should not be copied */
+    attrset[RGW_ATTR_ACL] = attrs[RGW_ATTR_ACL];
   }
 
   ret = rgwstore->put_obj_meta(ctx, dest_obj, end + 1, NULL, attrset, category, false, NULL, &first_chunk, &manifest);
