@@ -507,6 +507,49 @@ void fnode_t::generate_test_instances(list<fnode_t*>& ls)
 
 
 /*
+ * old_rstat_t
+ */
+void old_rstat_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(2, 2, bl);
+  ::encode(first, bl);
+  ::encode(rstat, bl);
+  ::encode(accounted_rstat, bl);
+  ENCODE_FINISH(bl);
+}
+
+void old_rstat_t::decode(bufferlist::iterator& bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  ::decode(first, bl);
+  ::decode(rstat, bl);
+  ::decode(accounted_rstat, bl);
+  DECODE_FINISH(bl);
+}
+
+void old_rstat_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("snapid", first);
+  f->open_object_section("rstat");
+  rstat.dump(f);
+  f->close_section();
+  f->open_object_section("accounted_rstat");
+  accounted_rstat.dump(f);
+  f->close_section();
+}
+
+void old_rstat_t::generate_test_instances(list<old_rstat_t*>& ls)
+{
+  ls.push_back(new old_rstat_t());
+  ls.push_back(new old_rstat_t());
+  ls.back()->first = 12;
+  list<nest_info_t*> nls;
+  nest_info_t::generate_test_instances(nls);
+  ls.back()->rstat = *nls.back();
+  ls.back()->accounted_rstat = *nls.front();
+}
+
+/*
  * session_info_t
  */
 void session_info_t::encode(bufferlist& bl) const
