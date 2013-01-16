@@ -342,6 +342,15 @@ def get_scratch_devices(remote):
             '/dev/sdn',
             '/dev/sdo',
             '/dev/sdp',
+            '/dev/vda',
+            '/dev/vdb',
+            '/dev/vdc',
+            '/dev/vdd',
+            '/dev/vde',
+            '/dev/vdf',
+            '/dev/vdg',
+            '/dev/vdh',
+            '/dev/vdi',
             ]
 
     retval = []
