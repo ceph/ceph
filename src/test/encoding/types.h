@@ -88,6 +88,9 @@ TYPE(MonCaps)
 TYPE(DBObjectMap::_Header)
 TYPE(DBObjectMap::State)
 
+#include "mds/Anchor.h"
+TYPE(Anchor)
+
 #ifdef WITH_RADOSGW
 
 #include "rgw/rgw_rados.h"
