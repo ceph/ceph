@@ -366,7 +366,7 @@ private:
   // my lumps.  preserve the order we added them in a list.
   list<dirfrag_t>         lump_order;
   map<dirfrag_t, dirlump> lump_map;
-  fullbit *root;
+  list<std::tr1::shared_ptr<fullbit> > roots;
 
   list<pair<__u8,version_t> > table_tids;  // tableclient transactions
 
@@ -394,14 +394,11 @@ private:
 
  public:
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 3;
+    __u8 struct_v = 4;
     ::encode(struct_v, bl);
     ::encode(lump_order, bl);
     ::encode(lump_map, bl);
-    bufferlist rootbl;
-    if (root)
-      root->encode(rootbl);
-    ::encode(rootbl, bl);
+    ::encode(roots, bl);
     ::encode(table_tids, bl);
     ::encode(opened_ino, bl);
     ::encode(allocated_ino, bl);
@@ -422,11 +419,15 @@ private:
     ::decode(struct_v, bl);
     ::decode(lump_order, bl);
     ::decode(lump_map, bl);
-    bufferlist rootbl;
-    ::decode(rootbl, bl);
-    if (rootbl.length()) {
-      bufferlist::iterator p = rootbl.begin();
-      root = new fullbit(p);
+    if (struct_v >= 4) {
+      ::decode(roots, bl);
+    } else {
+      bufferlist rootbl;
+      ::decode(rootbl, bl);
+      if (rootbl.length()) {
+	bufferlist::iterator p = rootbl.begin();
+	roots.push_back(std::tr1::shared_ptr<fullbit>(new fullbit(p)));
+      }
     }
     ::decode(table_tids, bl);
     ::decode(opened_ino, bl);
@@ -464,9 +465,7 @@ private:
   //LogSegment *_segment;
 
   EMetaBlob(MDLog *mdl = 0);  // defined in journal.cc
-  ~EMetaBlob() {
-    delete root;
-  }
+  ~EMetaBlob() { }
 
   void print(ostream& out) {
     for (list<dirfrag_t>::iterator p = lump_order.begin();
@@ -620,14 +619,18 @@ private:
     else
       in->encode_snap_blob(snapbl);
 
+    for (list<std::tr1::shared_ptr<fullbit> >::iterator p = roots.begin(); p != roots.end(); p++) {
+      if ((*p)->inode.ino == in->ino()) {
+	roots.erase(p);
+	break;
+      }
+    }
+
     string empty;
-    delete root;
-    root = new fullbit(empty,
-		       in->first, in->last,
-		       0,
-		       *pi, *pdft, *px,
-		       in->symlink, snapbl,
-		       dirty, default_layout, &in->old_inodes);
+    roots.push_back(std::tr1::shared_ptr<fullbit>(new fullbit(empty, in->first, in->last,
+							      0, *pi, *pdft, *px, in->symlink,
+							      snapbl, dirty, default_layout,
+							      &in->old_inodes)));
   }
   
   dirlump& add_dir(CDir *dir, bool dirty, bool complete=false, bool isnew=false) {

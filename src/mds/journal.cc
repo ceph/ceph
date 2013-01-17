@@ -279,8 +279,7 @@ void EString::replay(MDS *mds)
 // -----------------------
 // EMetaBlob
 
-EMetaBlob::EMetaBlob(MDLog *mdlog) : root(NULL),
-				     opened_ino(0), renamed_dirino(0),
+EMetaBlob::EMetaBlob(MDLog *mdlog) : opened_ino(0), renamed_dirino(0),
 				     inotablev(0), sessionmapv(0),
 				     allocated_ino(0),
 				     last_subtree_map(mdlog ? mdlog->get_last_segment_offset() : 0),
@@ -422,15 +421,15 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 
   assert(logseg);
 
-  if (root) {
-    CInode *in = mds->mdcache->get_inode(root->inode.ino);
+  for (list<std::tr1::shared_ptr<fullbit> >::iterator p = roots.begin(); p != roots.end(); p++) {
+    CInode *in = mds->mdcache->get_inode((*p)->inode.ino);
     bool isnew = in ? false:true;
     if (!in)
       in = new CInode(mds->mdcache, true);
-    root->update_inode(mds, in);
+    (*p)->update_inode(mds, in);
     if (isnew)
       mds->mdcache->add_inode(in);
-    if (root->dirty) in->_mark_dirty(logseg);
+    if ((*p)->dirty) in->_mark_dirty(logseg);
     dout(10) << "EMetaBlob.replay " << (isnew ? " added root ":" updated root ") << *in << dendl;    
   }
 
