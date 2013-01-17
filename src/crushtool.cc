@@ -413,7 +413,7 @@ int main(int argc, const char **argv)
   }
 
   if (test && !display && !write_to_file) {
-    cerr << "WARNING: no output selected (via -o <filename>)" << std::endl;
+    cerr << "WARNING: no output selected; use --output-csv or --show-X" << std::endl;
     exit(EXIT_FAILURE);
   }
 
