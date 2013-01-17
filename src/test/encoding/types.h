@@ -103,7 +103,7 @@ TYPE(nest_info_t)
 TYPE(client_writeable_range_t)
 TYPE(inode_t)
 TYPE(old_inode_t)
-
+TYPE(fnode_t)
 
 #ifdef WITH_RADOSGW
 

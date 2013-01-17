@@ -459,26 +459,10 @@ struct fnode_t {
   frag_info_t fragstat, accounted_fragstat;
   nest_info_t rstat, accounted_rstat;
 
-  void encode(bufferlist &bl) const {
-    __u8 v = 1;
-    ::encode(v, bl);
-    ::encode(version, bl);
-    ::encode(snap_purged_thru, bl);
-    ::encode(fragstat, bl);
-    ::encode(accounted_fragstat, bl);
-    ::encode(rstat, bl);
-    ::encode(accounted_rstat, bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    __u8 v;
-    ::decode(v, bl);
-    ::decode(version, bl);
-    ::decode(snap_purged_thru, bl);
-    ::decode(fragstat, bl);
-    ::decode(accounted_fragstat, bl);
-    ::decode(rstat, bl);
-    ::decode(accounted_rstat, bl);
-  }
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<fnode_t*>& ls);
 };
 WRITE_CLASS_ENCODER(fnode_t)
 
