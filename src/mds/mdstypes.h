@@ -307,29 +307,24 @@ inline bool operator==(const byte_range_t& l, const byte_range_t& r) {
 }
 
 
+/*
+ * client_writeable_range_t
+ */
 struct client_writeable_range_t {
   byte_range_t range;
   snapid_t follows;     // aka "data+metadata flushed thru"
 
-  void encode(bufferlist &bl) const {
-    __u8 v = 1;
-    ::encode(v, bl);
-    ::encode(range, bl);
-    ::encode(follows, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    __u8 v;
-    ::decode(v, bl);
-    ::decode(range, bl);
-    ::decode(follows, bl);
-  }
+  client_writeable_range_t() : follows(0) {}
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<client_writeable_range_t*>& ls);
 };
 WRITE_CLASS_ENCODER(client_writeable_range_t)
 
-inline ostream& operator<<(ostream& out, const client_writeable_range_t& r)
-{
-  return out << r.range << "@" << r.follows;
-}
+ostream& operator<<(ostream& out, const client_writeable_range_t& r);
+
 inline bool operator==(const client_writeable_range_t& l, const client_writeable_range_t& r) {
   return l.range == r.range && l.follows == r.follows;
 }
