@@ -98,6 +98,7 @@ TYPE(sr_t)*/
 
 #include "mds/mdstypes.h"
 TYPE(default_file_layout)
+TYPE(frag_info_t)
 
 #ifdef WITH_RADOSGW
 

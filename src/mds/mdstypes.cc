@@ -4,6 +4,10 @@
 #include "mdstypes.h"
 #include "common/Formatter.h"
 
+/*
+ * default_file_layout
+ */
+
 void default_file_layout::encode(bufferlist &bl) const
 {
   ENCODE_START(2, 2, bl);
@@ -47,3 +51,61 @@ void default_file_layout::generate_test_instances(list<default_file_layout*>& ls
   ls.back()->layout.fl_object_stripe_unit = 8;
   ls.back()->layout.fl_pg_pool = 9;
 }
+
+
+/*
+ * frag_info_t
+ */
+
+void frag_info_t::encode(bufferlist &bl) const
+{
+  ENCODE_START(2, 2, bl);
+  ::encode(version, bl);
+  ::encode(mtime, bl);
+  ::encode(nfiles, bl);
+  ::encode(nsubdirs, bl);
+  ENCODE_FINISH(bl);
+}
+
+void frag_info_t::decode(bufferlist::iterator &bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  ::decode(version, bl);
+  ::decode(mtime, bl);
+  ::decode(nfiles, bl);
+  ::decode(nsubdirs, bl);
+  DECODE_FINISH(bl);
+}
+
+void frag_info_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("version", version);
+  f->dump_stream("mtime") << mtime;
+  f->dump_unsigned("num_files", nfiles);
+  f->dump_unsigned("num_subdirs", nsubdirs);
+}
+
+void frag_info_t::generate_test_instances(list<frag_info_t*>& ls)
+{
+  ls.push_back(new frag_info_t);
+  ls.push_back(new frag_info_t);
+  ls.back()->version = 1;
+  ls.back()->mtime = utime_t(2, 3);
+  ls.back()->nfiles = 4;
+  ls.back()->nsubdirs = 5;
+}
+
+ostream& operator<<(ostream &out, const frag_info_t &f)
+{
+  if (f == frag_info_t())
+    return out << "f()";
+  out << "f(v" << f.version;
+  if (f.mtime != utime_t())
+    out << " m" << f.mtime;
+  if (f.nfiles || f.nsubdirs)
+    out << " " << f.size() << "=" << f.nfiles << "+" << f.nsubdirs;
+  out << ")";
+  return out;
+}
+
+
