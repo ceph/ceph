@@ -163,24 +163,10 @@ struct frag_info_t : public scatter_info_t {
     nsubdirs += other.nsubdirs;
   }
 
-  void encode(bufferlist &bl) const {
-    __u8 v = 1;
-    ::encode(v, bl);
-
-    ::encode(version, bl);
-    ::encode(mtime, bl);
-    ::encode(nfiles, bl);
-    ::encode(nsubdirs, bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    __u8 v;
-    ::decode(v, bl);
-
-    ::decode(version, bl);
-    ::decode(mtime, bl);
-    ::decode(nfiles, bl);
-    ::decode(nsubdirs, bl);
- }
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<frag_info_t*>& ls);
 };
 WRITE_CLASS_ENCODER(frag_info_t)
 
@@ -188,17 +174,8 @@ inline bool operator==(const frag_info_t &l, const frag_info_t &r) {
   return memcmp(&l, &r, sizeof(l)) == 0;
 }
 
-inline ostream& operator<<(ostream &out, const frag_info_t &f) {
-  if (f == frag_info_t())
-    return out << "f()";
-  out << "f(v" << f.version;
-  if (f.mtime != utime_t())
-    out << " m" << f.mtime;
-  if (f.nfiles || f.nsubdirs)
-    out << " " << f.size() << "=" << f.nfiles << "+" << f.nsubdirs;
-  out << ")";    
-  return out;
-}
+ostream& operator<<(ostream &out, const frag_info_t &f);
+
 
 struct nest_info_t : public scatter_info_t {
   // this frag + children
