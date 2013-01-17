@@ -105,6 +105,7 @@ TYPE(inode_t)
 TYPE(old_inode_t)
 TYPE(fnode_t)
 TYPE(session_info_t)
+TYPE(string_snap_t)
 
 #ifdef WITH_RADOSGW
 
