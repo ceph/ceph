@@ -2019,9 +2019,15 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, int n,
   }
 
   CInode *diri = dir->get_inode();
-  if (!mdr->reqid.name.is_mds() && diri->is_system() && !diri->is_root()) {
-    reply_request(mdr, -EROFS);
-    return 0;
+  if (!mdr->reqid.name.is_mds()) {
+    if (diri->is_system() && !diri->is_root()) {
+      reply_request(mdr, -EROFS);
+      return 0;
+    }
+    if (!diri->is_base() && diri->get_projected_parent_dir()->inode->is_stray()) {
+      reply_request(mdr, -ENOENT);
+      return 0;
+    }
   }
 
   // make a null dentry?
@@ -2641,13 +2647,6 @@ void Server::handle_client_openc(MDRequest *mdr)
     reply_request(mdr, -EROFS);
     return;
   }
-
-  CInode *diri = dn->get_dir()->get_inode();
-  if (diri->is_in_stray()) {
-    reply_request(mdr, -ENOENT);
-    return;
-  }
-
   // set layout
   ceph_file_layout layout;
   if (dir_layout)
@@ -2684,6 +2683,7 @@ void Server::handle_client_openc(MDRequest *mdr)
     return;
   }
 
+  CInode *diri = dn->get_dir()->get_inode();
   rdlocks.insert(&diri->authlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -5139,11 +5139,6 @@ void Server::handle_client_rename(MDRequest *mdr)
   CDentry::linkage_t *destdnl = destdn->get_projected_linkage();
   CDir *destdir = destdn->get_dir();
   assert(destdir->is_auth());
-
-  if (destdir->get_inode()->is_in_stray()) {
-    reply_request(mdr, -ENOENT);
-    return;
-  }
 
   int r = mdcache->path_traverse(mdr, NULL, NULL, srcpath, &srctrace, NULL, MDS_TRAVERSE_DISCOVER);
   if (r > 0)
