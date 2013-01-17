@@ -11,7 +11,7 @@
 #include <string>
 #include <stdexcept>
 #include <map>
-
+#include <cctype>
 
 #include <typeinfo>
 
@@ -680,13 +680,14 @@ int CrushCompiler::parse_crush(iter_t const& i)
   return 0;
 } 
 
+// squash runs of whitespace to one space, excepting newlines
 string CrushCompiler::consolidate_whitespace(string in)
 {
   string out;
 
   bool white = false;
   for (unsigned p=0; p<in.length(); p++) {
-    if (in[p] == ' ' || in[p] == '\t') {
+    if (isspace(in[p]) && in[p] != '\n') {
       if (white)
 	continue;
       white = true;
