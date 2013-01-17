@@ -438,3 +438,69 @@ void old_inode_t::generate_test_instances(list<old_inode_t*>& ls)
   ls.back()->xattrs["user.foo"] = buffer::copy("asdf", 4);
   ls.back()->xattrs["user.unprintable"] = buffer::copy("\000\001\002", 3);
 }
+
+
+/*
+ * fnode_t
+ */
+void fnode_t::encode(bufferlist &bl) const
+{
+  ENCODE_START(2, 2, bl);
+  ::encode(version, bl);
+  ::encode(snap_purged_thru, bl);
+  ::encode(fragstat, bl);
+  ::encode(accounted_fragstat, bl);
+  ::encode(rstat, bl);
+  ::encode(accounted_rstat, bl);
+  ENCODE_FINISH(bl);
+}
+
+void fnode_t::decode(bufferlist::iterator &bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  ::decode(version, bl);
+  ::decode(snap_purged_thru, bl);
+  ::decode(fragstat, bl);
+  ::decode(accounted_fragstat, bl);
+  ::decode(rstat, bl);
+  ::decode(accounted_rstat, bl);
+  DECODE_FINISH(bl);
+}
+
+void fnode_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("version", version);
+  f->dump_unsigned("snap_purged_thru", snap_purged_thru);
+
+  f->open_object_section("fragstat");
+  fragstat.dump(f);
+  f->close_section();
+
+  f->open_object_section("accounted_fragstat");
+  accounted_fragstat.dump(f);
+  f->close_section();
+
+  f->open_object_section("rstat");
+  rstat.dump(f);
+  f->close_section();
+
+  f->open_object_section("accounted_rstat");
+  accounted_rstat.dump(f);
+  f->close_section();
+}
+
+void fnode_t::generate_test_instances(list<fnode_t*>& ls)
+{
+  ls.push_back(new fnode_t);
+  ls.push_back(new fnode_t);
+  ls.back()->version = 1;
+  ls.back()->snap_purged_thru = 2;
+  list<frag_info_t*> fls;
+  frag_info_t::generate_test_instances(fls);
+  ls.back()->fragstat = *fls.back();
+  ls.back()->accounted_fragstat = *fls.front();
+  list<nest_info_t*> nls;
+  nest_info_t::generate_test_instances(nls);
+  ls.back()->rstat = *nls.front();
+  ls.back()->accounted_rstat = *nls.back();
+}
