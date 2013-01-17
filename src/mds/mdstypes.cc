@@ -660,3 +660,41 @@ void MDSCacheObjectInfo::generate_test_instances(list<MDSCacheObjectInfo*>& ls)
   ls.back()->dname = "bar foo";
   ls.back()->snapid = 21322;
 }
+
+
+/*
+ * mds_table_pending_t
+ */
+void mds_table_pending_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(2, 2, bl);
+  ::encode(reqid, bl);
+  ::encode(mds, bl);
+  ::encode(tid, bl);
+  ENCODE_FINISH(bl);
+}
+
+void mds_table_pending_t::decode(bufferlist::iterator& bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  ::decode(reqid, bl);
+  ::decode(mds, bl);
+  ::decode(tid, bl);
+  DECODE_FINISH(bl);
+}
+
+void mds_table_pending_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("reqid", reqid);
+  f->dump_unsigned("mds", mds);
+  f->dump_unsigned("tid", tid);
+}
+
+void mds_table_pending_t::generate_test_instances(list<mds_table_pending_t*>& ls)
+{
+  ls.push_back(new mds_table_pending_t);
+  ls.push_back(new mds_table_pending_t);
+  ls.back()->reqid = 234;
+  ls.back()->mds = 2;
+  ls.back()->tid = 35434;
+}

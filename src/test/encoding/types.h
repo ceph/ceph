@@ -107,6 +107,7 @@ TYPE(fnode_t)
 TYPE(session_info_t)
 TYPE(string_snap_t)
 TYPE(MDSCacheObjectInfo)
+TYPE(mds_table_pending_t)
 
 #ifdef WITH_RADOSGW
 
