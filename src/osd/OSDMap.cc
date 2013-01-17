@@ -1680,8 +1680,10 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
     crush_rule *rule = crush_make_rule(3, ruleset, pg_pool_t::TYPE_REP, minrep, maxrep);
     assert(rule);
     crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-    // just spread across osds
-    crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, CRUSH_CHOOSE_N, 0);
+    crush_rule_set_step(rule, 1,
+			cct->_conf->osd_crush_chooseleaf_type ? CRUSH_RULE_CHOOSE_LEAF_FIRSTN : CRUSH_RULE_CHOOSE_FIRSTN,
+			CRUSH_CHOOSE_N,
+			cct->_conf->osd_crush_chooseleaf_type);
     crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
     int rno = crush_add_rule(crush.crush, rule, -1);
     crush.set_rule_name(rno, p->second);
