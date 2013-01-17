@@ -372,11 +372,20 @@ to accept that old servers and new servers will not be able to interoperate, you
 can eliminate this security risk.  If you do so, any Ceph system that is new
 enough to support session authentication and that has Cephx enabled will reject
 unsigned messages.  To preclude new servers from interacting with old servers,
-include  the following line into the ``[global]`` section of your `Ceph
-configuration`_ file directly below the line that specifies  the use of Cephx
+include the following in the ``[global]`` section of your `Ceph
+configuration`_ file directly below the line that specifies the use of Cephx
 for authentication::
 
-	cephx require signatures = true
+        cephx require signatures = true    ; everywhere possible
+
+You can also selectively require signatures for cluster internal
+communications only, separate from client-facing service::
+
+	cephx cluster require signatures = true    ; for cluster-internal communication
+	cephx service require signatures = true    ; for client-facing service
+
+An option to make a client require signatures from the cluster is not
+yet implemented.
 
 **We recommend migrating all daemons to the newer versions and enabling the 
 foregoing flag** at the nearest practical time so that you may avail yourself 
