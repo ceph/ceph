@@ -96,6 +96,9 @@ TYPE(Anchor)
 TYPE(snaplink_t)
 TYPE(sr_t)*/
 
+#include "mds/mdstypes.h"
+TYPE(default_file_layout)
+
 #ifdef WITH_RADOSGW
 
 #include "rgw/rgw_rados.h"
