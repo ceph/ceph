@@ -63,37 +63,6 @@ struct cinode_lock_info_t {
 extern cinode_lock_info_t cinode_lock_info[];
 extern int num_cinode_locks;
 
-/**
- * Default file layout stuff. This lets us set a default file layout on
- * a directory inode that all files in its tree will use on creation.
- */
-struct default_file_layout {
-
-  ceph_file_layout layout;
-
-  default_file_layout() {
-    memset(&layout, 0, sizeof(layout));
-  }
-
-  void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(layout, bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    if (struct_v != 1) { //uh-oh
-      derr << "got default layout I don't understand!" << dendl;
-      assert(0);
-    }
-    ::decode(layout, bl);
-  }
-};
-WRITE_CLASS_ENCODER(default_file_layout);
-
-
 // cached inode wrapper
 class CInode : public MDSCacheObject {
   /*
