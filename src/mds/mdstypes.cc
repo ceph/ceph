@@ -109,3 +109,76 @@ ostream& operator<<(ostream &out, const frag_info_t &f)
 }
 
 
+/*
+ * nest_info_t
+ */
+
+void nest_info_t::encode(bufferlist &bl) const
+{
+  ENCODE_START(2, 2, bl);
+  ::encode(version, bl);
+  ::encode(rbytes, bl);
+  ::encode(rfiles, bl);
+  ::encode(rsubdirs, bl);
+  ::encode(ranchors, bl);
+  ::encode(rsnaprealms, bl);
+  ::encode(rctime, bl);
+  ENCODE_FINISH(bl);
+}
+
+void nest_info_t::decode(bufferlist::iterator &bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  ::decode(version, bl);
+  ::decode(rbytes, bl);
+  ::decode(rfiles, bl);
+  ::decode(rsubdirs, bl);
+  ::decode(ranchors, bl);
+  ::decode(rsnaprealms, bl);
+  ::decode(rctime, bl);
+  DECODE_FINISH(bl);
+}
+
+void nest_info_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("version", version);
+  f->dump_unsigned("rbytes", rbytes);
+  f->dump_unsigned("rfiles", rfiles);
+  f->dump_unsigned("rsubdirs", rsubdirs);
+  f->dump_unsigned("ranchors", ranchors);
+  f->dump_unsigned("rsnaprealms", rsnaprealms);
+  f->dump_stream("rctime") << rctime;
+}
+
+void nest_info_t::generate_test_instances(list<nest_info_t*>& ls)
+{
+  ls.push_back(new nest_info_t);
+  ls.push_back(new nest_info_t);
+  ls.back()->version = 1;
+  ls.back()->rbytes = 2;
+  ls.back()->rfiles = 3;
+  ls.back()->rsubdirs = 4;
+  ls.back()->ranchors = 5;
+  ls.back()->rsnaprealms = 6;
+  ls.back()->rctime = utime_t(7, 8);
+}
+
+ostream& operator<<(ostream &out, const nest_info_t &n)
+{
+  if (n == nest_info_t())
+    return out << "n()";
+  out << "n(v" << n.version;
+  if (n.rctime != utime_t())
+    out << " rc" << n.rctime;
+  if (n.rbytes)
+    out << " b" << n.rbytes;
+  if (n.ranchors)
+    out << " a" << n.ranchors;
+  if (n.rsnaprealms)
+    out << " sr" << n.rsnaprealms;
+  if (n.rfiles || n.rsubdirs)
+    out << " " << n.rsize() << "=" << n.rfiles << "+" << n.rsubdirs;
+  out << ")";    
+  return out;
+}
+

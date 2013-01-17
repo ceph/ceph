@@ -99,6 +99,7 @@ TYPE(sr_t)*/
 #include "mds/mdstypes.h"
 TYPE(file_layout_policy_t)
 TYPE(frag_info_t)
+TYPE(nest_info_t)
 
 #ifdef WITH_RADOSGW
 

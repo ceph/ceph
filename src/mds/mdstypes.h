@@ -219,30 +219,10 @@ struct nest_info_t : public scatter_info_t {
     rsnaprealms += cur.rsnaprealms - acc.rsnaprealms;
   }
 
-  void encode(bufferlist &bl) const {
-    __u8 v = 1;
-    ::encode(v, bl);
-
-    ::encode(version, bl);
-    ::encode(rbytes, bl);
-    ::encode(rfiles, bl);
-    ::encode(rsubdirs, bl);
-    ::encode(ranchors, bl);
-    ::encode(rsnaprealms, bl);
-    ::encode(rctime, bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    __u8 v;
-    ::decode(v, bl);
-
-    ::decode(version, bl);
-    ::decode(rbytes, bl);
-    ::decode(rfiles, bl);
-    ::decode(rsubdirs, bl);
-    ::decode(ranchors, bl);
-    ::decode(rsnaprealms, bl);
-    ::decode(rctime, bl);
- }
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<nest_info_t*>& ls);
 };
 WRITE_CLASS_ENCODER(nest_info_t)
 
@@ -250,23 +230,8 @@ inline bool operator==(const nest_info_t &l, const nest_info_t &r) {
   return memcmp(&l, &r, sizeof(l)) == 0;
 }
 
-inline ostream& operator<<(ostream &out, const nest_info_t &n) {
-  if (n == nest_info_t())
-    return out << "n()";
-  out << "n(v" << n.version;
-  if (n.rctime != utime_t())
-    out << " rc" << n.rctime;
-  if (n.rbytes)
-    out << " b" << n.rbytes;
-  if (n.ranchors)
-    out << " a" << n.ranchors;
-  if (n.rsnaprealms)
-    out << " sr" << n.rsnaprealms;
-  if (n.rfiles || n.rsubdirs)
-    out << " " << n.rsize() << "=" << n.rfiles << "+" << n.rsubdirs;
-  out << ")";    
-  return out;
-}
+ostream& operator<<(ostream &out, const nest_info_t &n);
+
 
 struct vinodeno_t {
   inodeno_t ino;
