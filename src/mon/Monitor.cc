@@ -2343,9 +2343,16 @@ void Monitor::handle_timecheck_leader(MTimeCheck *m)
   dout(10) << __func__ << " " << *m << dendl;
   /* handles PONG's */
   assert(m->op == MTimeCheck::OP_PONG);
-  assert(m->epoch == timecheck_epoch);
 
   entity_inst_t other = m->get_source_inst();
+  if (m->epoch < timecheck_epoch) {
+    dout(1) << __func__ << " got old timecheck epoch " << m->epoch
+            << " from " << other
+            << " curr " << timecheck_epoch
+            << " -- severely lagged? discard" << dendl;
+    return;
+  }
+  assert(m->epoch == timecheck_epoch);
 
   if (m->round < timecheck_round) {
     dout(1) << __func__ << " got old round " << m->round
