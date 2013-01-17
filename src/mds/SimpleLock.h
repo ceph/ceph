@@ -544,22 +544,22 @@ public:
 
   // encode/decode
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(state, bl);
     if (have_more())
       ::encode(more()->gather_set, bl);
     else
       ::encode(empty_gather_set, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& p) {
-    __u8 struct_v;
-    ::decode(struct_v, p);
+    DECODE_START(2, p);
     ::decode(state, p);
     set<int> g;
     ::decode(g, p);
     if (!g.empty())
       more()->gather_set.swap(g);
+    DECODE_FINISH(p);
   }
   void encode_state_for_replica(bufferlist& bl) const {
     __s16 s = get_replica_state();
