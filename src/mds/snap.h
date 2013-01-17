@@ -27,35 +27,20 @@ struct SnapInfo {
   snapid_t snapid;
   inodeno_t ino;
   utime_t stamp;
-  string name, long_name;
+  string name;
+
+  string long_name; ///< cached _$ino_$name
   
-  void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(snapid, bl);
-    ::encode(ino, bl);
-    ::encode(stamp, bl);
-    ::encode(name, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    ::decode(snapid, bl);
-    ::decode(ino, bl);
-    ::decode(stamp, bl);
-    ::decode(name, bl);
-  }
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<SnapInfo*>& ls);
+
   const string& get_long_name();
 };
 WRITE_CLASS_ENCODER(SnapInfo)
 
-inline ostream& operator<<(ostream& out, const SnapInfo &sn) {
-  return out << "snap(" << sn.snapid
-	     << " " << sn.ino
-	     << " '" << sn.name
-	     << "' " << sn.stamp << ")";
-}
-
+ostream& operator<<(ostream& out, const SnapInfo &sn);
 
 
 /*
@@ -74,25 +59,16 @@ class MDRequest;
 struct snaplink_t {
   inodeno_t ino;
   snapid_t first;
-  void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(ino, bl);
-    ::encode(first, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    ::decode(ino, bl);
-    ::decode(first, bl);
-  }
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<snaplink_t*>& ls);
 };
 WRITE_CLASS_ENCODER(snaplink_t)
 
-inline ostream& operator<<(ostream& out, const snaplink_t &l)
-{
-  return out << l.ino << "@" << l.first;
-}
+ostream& operator<<(ostream& out, const snaplink_t &l);
+
 
 // carry data about a specific version of a SnapRealm
 struct sr_t {
@@ -104,37 +80,16 @@ struct sr_t {
   map<snapid_t, SnapInfo> snaps;
   map<snapid_t, snaplink_t> past_parents;  // key is "last" (or NOSNAP)
 
-  sr_t() :
-    seq(0), created(0),
-    last_created(0), last_destroyed(0),
-    current_parent_since(1)
+  sr_t()
+    : seq(0), created(0),
+      last_created(0), last_destroyed(0),
+      current_parent_since(1)
   {}
 
-
-  void encode(bufferlist& bl) const {
-    __u8 struct_v = 3;
-    ::encode(struct_v, bl);
-    ::encode(seq, bl);
-    ::encode(created, bl);
-    ::encode(last_created, bl);
-    ::encode(last_destroyed, bl);
-    ::encode(current_parent_since, bl);
-    ::encode(snaps, bl);
-    ::encode(past_parents, bl);
-  }
-  void decode(bufferlist::iterator& p) {
-    __u8 struct_v;
-    ::decode(struct_v, p);
-    if (struct_v == 2)
-      ::decode(struct_v, p);  // yes, really: extra byte for v2 encoding only, see 6ee52e7d.
-    ::decode(seq, p);
-    ::decode(created, p);
-    ::decode(last_created, p);
-    ::decode(last_destroyed, p);
-    ::decode(current_parent_since, p);
-    ::decode(snaps, p);
-    ::decode(past_parents, p);
-  }
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<sr_t*>& ls);
 };
 WRITE_CLASS_ENCODER(sr_t);
 
