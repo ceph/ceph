@@ -245,10 +245,7 @@ void CInode::print(ostream& out)
   out << *this;
 }
 
-bool CInode::is_in_stray()
-{
-  return !is_base() && get_projected_parent_dir()->inode->is_stray();
-}
+
 
 void CInode::add_need_snapflush(CInode *snapin, snapid_t snapid, client_t client)
 {
