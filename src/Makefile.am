@@ -1278,6 +1278,7 @@ libcommon_files = \
 	osd/OSDMap.cc \
 	osd/osd_types.cc \
 	mds/MDSMap.cc \
+	mds/inode_backtrace.cc \
 	common/blkdev.cc \
 	common/common_init.cc \
 	common/pipe.c \

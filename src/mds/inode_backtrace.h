@@ -3,6 +3,12 @@
 #ifndef CEPH_INODE_BACKTRACE_H
 #define CEPH_INODE_BACKTRACE_H
 
+#include "mdstypes.h"
+
+namespace ceph {
+  class Formatter;
+}
+
 /** metadata backpointers **/
 
 /*
@@ -21,16 +27,11 @@ struct inode_backpointer_t {
   inode_backpointer_t() : version(0) {}
   inode_backpointer_t(inodeno_t i, const string &d, version_t v) : dirino(i), dname(d), version(v) {}
 
-  void encode(bufferlist& bl) const {
-    ::encode(dirino, bl);
-    ::encode(dname, bl);
-    ::encode(version, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(dirino, bl);
-    ::decode(dname, bl);
-    ::decode(version, bl);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator &bl);
+  void decode_old(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<inode_backpointer_t*>& ls);
 };
 WRITE_CLASS_ENCODER(inode_backpointer_t)
 
@@ -47,21 +48,10 @@ struct inode_backtrace_t {
   inodeno_t ino;       // my ino
   vector<inode_backpointer_t> ancestors;
 
-  void encode(bufferlist& bl) const {
-    __u8 v = 3;
-    ::encode(v, bl);
-    ::encode(ino, bl);
-    ::encode(ancestors, bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-    __u8 v;
-    ::decode(v, bl);
-    if (v < 3)
-      return;  // sorry, the old data was crap
-    ::decode(ino, bl);
-    ::decode(ancestors, bl);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<inode_backtrace_t*>& ls);
 };
 WRITE_CLASS_ENCODER(inode_backtrace_t)
 
