@@ -493,6 +493,8 @@ def cluster(ctx, config):
                 '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
                 coverage_dir,
                 '/tmp/cephtest/binary/usr/local/bin/osdmaptool',
+                '-c',
+                '/tmp/cephtest/ceph.conf',
                 '--clobber',
                 '--createsimple', '{num:d}'.format(
                     num=teuthology.num_instances_of_type(ctx.cluster, 'osd'),
