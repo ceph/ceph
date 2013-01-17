@@ -91,6 +91,11 @@ TYPE(DBObjectMap::State)
 #include "mds/Anchor.h"
 TYPE(Anchor)
 
+#include "mds/snap.h"
+/*TYPE(SnapInfo)
+TYPE(snaplink_t)
+TYPE(sr_t)*/
+
 #ifdef WITH_RADOSGW
 
 #include "rgw/rgw_rados.h"
