@@ -182,3 +182,45 @@ ostream& operator<<(ostream &out, const nest_info_t &n)
   return out;
 }
 
+
+/*
+ * client_writeable_range_t
+ */
+
+void client_writeable_range_t::encode(bufferlist &bl) const
+{
+  ENCODE_START(2, 2, bl);
+  ::encode(range, bl);
+  ::encode(follows, bl);
+  ENCODE_FINISH(bl);
+}
+
+void client_writeable_range_t::decode(bufferlist::iterator& bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  ::decode(range, bl);
+  ::decode(follows, bl);
+  DECODE_FINISH(bl);
+}
+
+void client_writeable_range_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("first", range.first);
+  f->dump_unsigned("last", range.last);
+  f->dump_unsigned("follows", follows);
+}
+
+void client_writeable_range_t::generate_test_instances(list<client_writeable_range_t*>& ls)
+{
+  ls.push_back(new client_writeable_range_t);
+  ls.push_back(new client_writeable_range_t);
+  ls.back()->range.first = 123;
+  ls.back()->range.last = 456;
+  ls.back()->follows = 12;
+}
+
+ostream& operator<<(ostream& out, const client_writeable_range_t& r)
+{
+  return out << r.range << "@" << r.follows;
+}
+
