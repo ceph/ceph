@@ -104,6 +104,7 @@ TYPE(client_writeable_range_t)
 TYPE(inode_t)
 TYPE(old_inode_t)
 TYPE(fnode_t)
+TYPE(session_info_t)
 
 #ifdef WITH_RADOSGW
 
