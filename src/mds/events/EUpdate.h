@@ -39,8 +39,7 @@ public:
   }
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 3;
-    ::encode(struct_v, bl);
+    ENCODE_START(4, 4, bl);
     ::encode(stamp, bl);
     ::encode(type, bl);
     ::encode(metablob, bl);
@@ -48,10 +47,10 @@ public:
     ::encode(cmapv, bl);
     ::encode(reqid, bl);
     ::encode(had_slaves, bl);
+    ENCODE_FINISH(bl);
   } 
   void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
     if (struct_v >= 2)
       ::decode(stamp, bl);
     ::decode(type, bl);
@@ -61,6 +60,7 @@ public:
       ::decode(cmapv, bl);
     ::decode(reqid, bl);
     ::decode(had_slaves, bl);
+    DECODE_FINISH(bl);
   }
 
   void update_segment();
