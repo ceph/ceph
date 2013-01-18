@@ -2127,15 +2127,8 @@ int FileStore::do_transactions(list<Transaction*> &tls, uint64_t op_seq)
   return r;
 }
 
-unsigned FileStore::apply_transaction(Transaction &t,
-				      Context *ondisk)
-{
-  list<Transaction*> tls;
-  tls.push_back(&t);
-  return apply_transactions(tls, ondisk);
-}
-
-unsigned FileStore::apply_transactions(list<Transaction*> &tls,
+unsigned FileStore::apply_transactions(Sequencer *osr,
+				       list<Transaction*> &tls,
 				       Context *ondisk)
 {
   // use op pool
@@ -2146,7 +2139,7 @@ unsigned FileStore::apply_transactions(list<Transaction*> &tls,
   C_SafeCond *onreadable = new C_SafeCond(&my_lock, &my_cond, &done, &r);
   
   dout(10) << "apply queued" << dendl;
-  queue_transactions(NULL, tls, onreadable, ondisk);
+  queue_transactions(osr, tls, onreadable, ondisk);
   
   my_lock.Lock();
   while (!done)
