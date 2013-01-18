@@ -354,6 +354,13 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
 
   // boot?
   if (state == MDSMap::STATE_BOOT) {
+    // zap previous instance of this name?
+    if (g_conf->mds_enforce_unique_name) {
+      while (uint64_t existing = pending_mdsmap.find_mds_gid_by_name(m->get_name())) {
+	fail_mds_gid(existing);
+      }
+    }
+
     // add
     MDSMap::mds_info_t& info = pending_mdsmap.mds_info[gid];
     info.global_id = gid;
@@ -375,7 +382,6 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
         }
       }
     }
-
 
     // initialize the beacon timer
     last_beacon[gid].stamp = ceph_clock_now(g_ceph_context);
@@ -676,6 +682,8 @@ void MDSMonitor::fail_mds_gid(uint64_t gid)
 {
   assert(pending_mdsmap.mds_info.count(gid));
   MDSMap::mds_info_t& info = pending_mdsmap.mds_info[gid];
+  dout(10) << "fail_mds_gid " << gid << " mds." << info.name << " rank " << info.rank << dendl;
+
   utime_t until = ceph_clock_now(g_ceph_context);
   until += g_conf->mds_blacklist_interval;
 
