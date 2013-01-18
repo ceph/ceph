@@ -36,8 +36,7 @@ struct ETableServer : public LogEvent {
     table(t), op(o), reqid(ri), bymds(m), tid(ti), version(v) { }
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 2;
-    ::encode(struct_v, bl);
+    ENCODE_START(3, 3, bl);
     ::encode(stamp, bl);
     ::encode(table, bl);
     ::encode(op, bl);
@@ -46,10 +45,10 @@ struct ETableServer : public LogEvent {
     ::encode(mutation, bl);
     ::encode(tid, bl);
     ::encode(version, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
     if (struct_v >= 2)
       ::decode(stamp, bl);
     ::decode(table, bl);
@@ -59,6 +58,7 @@ struct ETableServer : public LogEvent {
     ::decode(mutation, bl);
     ::decode(tid, bl);
     ::decode(version, bl);
+    DECODE_FINISH(bl);
   }
 
   void print(ostream& out) {
