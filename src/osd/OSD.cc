@@ -3493,7 +3493,7 @@ void OSD::handle_scrub(MOSDScrub *m)
       if (pg->is_primary()) {
 	pg->unreg_next_scrub();
 	pg->scrubber.must_scrub = true;
-	pg->scrubber.must_deep_scrub = m->deep;
+	pg->scrubber.must_deep_scrub = m->deep || m->repair;
 	pg->scrubber.must_repair = m->repair;
 	pg->reg_next_scrub();
 	dout(10) << "marking " << *pg << " for scrub" << dendl;
@@ -3510,7 +3510,7 @@ void OSD::handle_scrub(MOSDScrub *m)
 	if (pg->is_primary()) {
 	  pg->unreg_next_scrub();
 	  pg->scrubber.must_scrub = true;
-	  pg->scrubber.must_deep_scrub = m->deep;
+	  pg->scrubber.must_deep_scrub = m->deep || m->repair;
 	  pg->scrubber.must_repair = m->repair;
 	  pg->reg_next_scrub();
 	  dout(10) << "marking " << *pg << " for scrub" << dendl;
