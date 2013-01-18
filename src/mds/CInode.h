@@ -520,12 +520,18 @@ private:
 
   bool is_head() { return last == CEPH_NOSNAP; }
 
+  bool is_in_stray();
+
   // note: this overloads MDSCacheObject
   bool is_ambiguous_auth() {
     return state_test(STATE_AMBIGUOUSAUTH) ||
       MDSCacheObject::is_ambiguous_auth();
   }
-
+  void set_ambiguous_auth() {
+    state_set(STATE_AMBIGUOUSAUTH);
+  }
+  void clear_ambiguous_auth(list<Context*>& finished);
+  void clear_ambiguous_auth();
 
   inodeno_t ino() const { return inode.ino; }
   vinodeno_t vino() const { return vinodeno_t(inode.ino, last); }

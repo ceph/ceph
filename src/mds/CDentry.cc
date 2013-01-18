@@ -439,22 +439,17 @@ void CDentry::decode_replica(bufferlist::iterator& p, bool is_new)
 
   inodeno_t rino;
   unsigned char rdtype;
+  __s32 ls;
   ::decode(rino, p);
   ::decode(rdtype, p);
-  if (rino) {
-    if (linkage.is_null())
-      dir->link_remote_inode(this, rino, rdtype);
-    else
-      assert(linkage.is_remote() && linkage.remote_ino == rino);
-  }
-  
-  __s32 ls;
   ::decode(ls, p);
-  if (is_new)
+
+  if (is_new) {
+    if (rino)
+      dir->link_remote_inode(this, rino, rdtype);
     lock.set_state(ls);
+  }
 }
-
-
 
 // ----------------------------
 // locking

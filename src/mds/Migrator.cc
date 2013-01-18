@@ -642,11 +642,10 @@ void Migrator::export_dir(CDir *dir, int dest)
   }
 
   if (!dir->inode->is_base() && dir->get_parent_dir()->get_inode()->is_stray() &&
-      dir->get_parent_dir()->get_parent_dir()->ino() == MDS_INO_MDSDIR(mds->get_nodeid())) {
+      dir->get_parent_dir()->get_parent_dir()->ino() != MDS_INO_MDSDIR(dest)) {
     dout(7) << "i won't export anything in stray" << dendl;
     return;
   }
-
 
   if (dir->is_frozen() ||
       dir->is_freezing()) {
@@ -1136,6 +1135,9 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
     CDentry *dn = it->second;
     CInode *in = dn->get_linkage()->get_inode();
     
+    if (!dn->is_replicated())
+      dn->lock.replicate_relax();
+
     num_exported++;
     
     // -- dentry

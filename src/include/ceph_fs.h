@@ -536,14 +536,17 @@ int ceph_flags_to_mode(int flags);
 #define CEPH_CAP_GWREXTEND  64  /* (file) client can extend EOF */
 #define CEPH_CAP_GLAZYIO   128  /* (file) client can perform lazy io */
 
+#define CEPH_CAP_SIMPLE_BITS  2
+#define CEPH_CAP_FILE_BITS    8
+
 /* per-lock shift */
 #define CEPH_CAP_SAUTH      2
 #define CEPH_CAP_SLINK      4
 #define CEPH_CAP_SXATTR     6
 #define CEPH_CAP_SFILE      8
-#define CEPH_CAP_SFLOCK    20 
+#define CEPH_CAP_SFLOCK    20
 
-#define CEPH_CAP_BITS       22
+#define CEPH_CAP_BITS      22
 
 /* composed values */
 #define CEPH_CAP_AUTH_SHARED  (CEPH_CAP_GSHARED  << CEPH_CAP_SAUTH)

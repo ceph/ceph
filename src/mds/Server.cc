@@ -1324,6 +1324,7 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
       dout(10) << "got remote xlock on " << *lock << " on " << *lock->get_parent() << dendl;
       mdr->xlocks.insert(lock);
       mdr->locks.insert(lock);
+      mdr->finish_locking(lock);
       lock->get_xlock(mdr, mdr->get_client());
       lock->finish_waiters(SimpleLock::WAIT_REMOTEXLOCK);
     }
@@ -1338,6 +1339,7 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
       dout(10) << "got remote wrlock on " << *lock << " on " << *lock->get_parent() << dendl;
       mdr->remote_wrlocks[lock] = from;
       mdr->locks.insert(lock);
+      mdr->finish_locking(lock);
       lock->finish_waiters(SimpleLock::WAIT_REMOTEXLOCK);
     }
     break;
@@ -1453,6 +1455,12 @@ void Server::dispatch_slave_request(MDRequest *mdr)
       mdr->slave_request->put();
       mdr->slave_request = 0;
     }
+    break;
+
+  case MMDSSlaveRequest::OP_DROPLOCKS:
+    mds->locker->drop_locks(mdr);
+    mdr->slave_request->put();
+    mdr->slave_request = 0;
     break;
 
   case MMDSSlaveRequest::OP_AUTHPIN:
@@ -1928,14 +1936,14 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
     want_auth = true;
 
   if (want_auth) {
+    if (ref->is_ambiguous_auth()) {
+      dout(10) << "waiting for single auth on " << *ref << dendl;
+      ref->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
+      return 0;
+    }
     if (!ref->is_auth()) {
-      if (ref->is_ambiguous_auth()) {
-	dout(10) << "waiting for single auth on " << *ref << dendl;
-	ref->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
-      } else {
-	dout(10) << "fw to auth for " << *ref << dendl;
-	mdcache->request_forward(mdr, ref->authority().first);
-      }
+      dout(10) << "fw to auth for " << *ref << dendl;
+      mdcache->request_forward(mdr, ref->authority().first);
       return 0;
     }
 
@@ -2427,6 +2435,14 @@ void Server::handle_client_open(MDRequest *mdr)
   if (!cur)
     return;
 
+  if (cur->is_frozen() || cur->state_test(CInode::STATE_EXPORTINGCAPS)) {
+    assert(!need_auth);
+    mdr->done_locking = false;
+    CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+    if (!cur)
+      return;
+  }
+
   if (mdr->snapid != CEPH_NOSNAP && mdr->client_request->may_write()) {
     reply_request(mdr, -EROFS);
     return;
@@ -2625,6 +2641,13 @@ void Server::handle_client_openc(MDRequest *mdr)
     reply_request(mdr, -EROFS);
     return;
   }
+
+  CInode *diri = dn->get_dir()->get_inode();
+  if (diri->is_in_stray()) {
+    reply_request(mdr, -ENOENT);
+    return;
+  }
+
   // set layout
   ceph_file_layout layout;
   if (dir_layout)
@@ -2661,7 +2684,6 @@ void Server::handle_client_openc(MDRequest *mdr)
     return;
   }
 
-  CInode *diri = dn->get_dir()->get_inode();
   rdlocks.insert(&diri->authlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -2887,6 +2909,8 @@ void Server::handle_client_readdir(MDRequest *mdr)
 	  break;
 	}
 
+	mds->locker->drop_locks(mdr);
+	mdr->drop_local_auth_pins();
 	mdcache->open_remote_dentry(dn, dnp, new C_MDS_RetryRequest(mdcache, mdr));
 	return;
       }
@@ -4076,11 +4100,11 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
   EUpdate *le = new EUpdate(mdlog, inc ? "link_remote":"unlink_remote");
   mdlog->start_entry(le);
   le->metablob.add_client_req(mdr->reqid, mdr->client_request->get_oldest_client_tid());
-  if (!mdr->more()->slaves.empty()) {
-    dout(20) << " noting uncommitted_slaves " << mdr->more()->slaves << dendl;
+  if (!mdr->more()->witnessed.empty()) {
+    dout(20) << " noting uncommitted_slaves " << mdr->more()->witnessed << dendl;
     le->reqid = mdr->reqid;
     le->had_slaves = true;
-    mds->mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->slaves);
+    mds->mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->witnessed);
   }
 
   if (inc) {
@@ -4515,11 +4539,14 @@ void Server::handle_client_unlink(MDRequest *mdr)
 
   // -- create stray dentry? --
   CDentry *straydn = mdr->straydn;
-  if (dnl->is_primary() && !straydn) {
-    straydn = mdcache->get_or_create_stray_dentry(dnl->get_inode());
-    mdr->pin(straydn);
-    mdr->straydn = straydn;
-  }
+  if (dnl->is_primary()) {
+    if (!straydn) {
+      straydn = mdcache->get_or_create_stray_dentry(dnl->get_inode());
+      mdr->pin(straydn);
+      mdr->straydn = straydn;
+    }
+  } else if (straydn)
+    straydn = NULL;
   if (straydn)
     dout(10) << " straydn is " << *straydn << dendl;
 
@@ -4536,6 +4563,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
   if (straydn) {
     wrlocks.insert(&straydn->get_dir()->inode->filelock);
     wrlocks.insert(&straydn->get_dir()->inode->nestlock);
+    xlocks.insert(&straydn->lock);
   }
   if (in->is_dir())
     rdlocks.insert(&in->filelock);   // to verify it's empty
@@ -4654,11 +4682,11 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   EUpdate *le = new EUpdate(mdlog, "unlink_local");
   mdlog->start_entry(le);
   le->metablob.add_client_req(mdr->reqid, mdr->client_request->get_oldest_client_tid());
-  if (!mdr->more()->slaves.empty()) {
-    dout(20) << " noting uncommitted_slaves " << mdr->more()->slaves << dendl;
+  if (!mdr->more()->witnessed.empty()) {
+    dout(20) << " noting uncommitted_slaves " << mdr->more()->witnessed << dendl;
     le->reqid = mdr->reqid;
     le->had_slaves = true;
-    mds->mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->slaves);
+    mds->mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->witnessed);
   }
 
   if (straydn) {
@@ -5114,6 +5142,11 @@ void Server::handle_client_rename(MDRequest *mdr)
   CDir *destdir = destdn->get_dir();
   assert(destdir->is_auth());
 
+  if (destdir->get_inode()->is_in_stray()) {
+    reply_request(mdr, -ENOENT);
+    return;
+  }
+
   int r = mdcache->path_traverse(mdr, NULL, NULL, srcpath, &srctrace, NULL, MDS_TRAVERSE_DISCOVER);
   if (r > 0)
     return; // delayed
@@ -5208,6 +5241,7 @@ void Server::handle_client_rename(MDRequest *mdr)
       while (destbase != srcbase) {
 	desttrace.insert(desttrace.begin(),
 			 destbase->get_projected_parent_dn());
+	rdlocks.insert(&desttrace[0]->lock);
 	dout(10) << "rename prepending desttrace with " << *desttrace[0] << dendl;
 	destbase = destbase->get_projected_parent_dn()->get_dir()->get_inode();
       }
@@ -5251,11 +5285,14 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   // -- create stray dentry? --
   CDentry *straydn = mdr->straydn;
-  if (destdnl->is_primary() && !linkmerge && !straydn) {
-    straydn = mdcache->get_or_create_stray_dentry(destdnl->get_inode());
-    mdr->pin(straydn);
-    mdr->straydn = straydn;
-  }
+  if (destdnl->is_primary() && !linkmerge) {
+    if (!straydn) {
+      straydn = mdcache->get_or_create_stray_dentry(destdnl->get_inode());
+      mdr->pin(straydn);
+      mdr->straydn = straydn;
+    }
+  } else if (straydn)
+    straydn = NULL;
   if (straydn)
     dout(10) << " straydn is " << *straydn << dendl;
 
@@ -5300,6 +5337,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   if (straydn) {
     wrlocks.insert(&straydn->get_dir()->inode->filelock);
     wrlocks.insert(&straydn->get_dir()->inode->nestlock);
+    xlocks.insert(&straydn->lock);
   }
 
   // xlock versionlock on dentries if there are witnesses.
@@ -5404,8 +5442,19 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   // do srcdn auth last
   int last = -1;
-  if (!srcdn->is_auth())
+  if (!srcdn->is_auth()) {
     last = srcdn->authority().first;
+    // set ambiguous auth for srci
+    mdr->set_ambiguous_auth(srci);
+    // Ask auth of srci to mark srci as ambiguous auth if more than two MDS
+    // are involved in the rename operation
+    if (srcdnl->is_primary() && mdr->more()->prepared_inode_exporter == -1) {
+      dout(10) << " preparing ambiguous auth for srci" << dendl;
+      mdr->more()->prepared_inode_exporter = last;
+      _rename_prepare_witness(mdr, last, witnesses, srcdn, destdn, straydn);
+      return;
+    }
+  }
   
   for (set<int>::iterator p = witnesses.begin();
        p != witnesses.end();
@@ -5416,7 +5465,7 @@ void Server::handle_client_rename(MDRequest *mdr)
     } else if (mdr->more()->waiting_on_slave.count(*p)) {
       dout(10) << " already waiting on witness mds." << *p << dendl;      
     } else {
-      _rename_prepare_witness(mdr, *p, srcdn, destdn, straydn);
+      _rename_prepare_witness(mdr, *p, witnesses, srcdn, destdn, straydn);
     }
   }
   if (!mdr->more()->waiting_on_slave.empty())
@@ -5426,7 +5475,7 @@ void Server::handle_client_rename(MDRequest *mdr)
       mdr->more()->witnessed.count(last) == 0 &&
       mdr->more()->waiting_on_slave.count(last) == 0) {
     dout(10) << " preparing last witness (srcdn auth)" << dendl;
-    _rename_prepare_witness(mdr, last, srcdn, destdn, straydn);
+    _rename_prepare_witness(mdr, last, witnesses, srcdn, destdn, straydn);
     return;
   }
 
@@ -5480,13 +5529,13 @@ void Server::handle_client_rename(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "rename");
   mdlog->start_entry(le);
   le->metablob.add_client_req(mdr->reqid, mdr->client_request->get_oldest_client_tid());
-  if (!mdr->more()->slaves.empty()) {
-    dout(20) << " noting uncommitted_slaves " << mdr->more()->slaves << dendl;
+  if (!mdr->more()->witnessed.empty()) {
+    dout(20) << " noting uncommitted_slaves " << mdr->more()->witnessed << dendl;
     
     le->reqid = mdr->reqid;
     le->had_slaves = true;
     
-    mds->mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->slaves);
+    mds->mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->witnessed);
   }
   
   _rename_prepare(mdr, &le->metablob, &le->client_map, srcdn, destdn, straydn);
@@ -5542,7 +5591,8 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
 
 // helpers
 
-void Server::_rename_prepare_witness(MDRequest *mdr, int who, CDentry *srcdn, CDentry *destdn, CDentry *straydn)
+void Server::_rename_prepare_witness(MDRequest *mdr, int who, set<int> &witnesse,
+				     CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
   dout(10) << "_rename_prepare_witness mds." << who << dendl;
   MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
@@ -5555,7 +5605,7 @@ void Server::_rename_prepare_witness(MDRequest *mdr, int who, CDentry *srcdn, CD
     mdcache->replicate_stray(straydn, who, req->stray);
   
   // srcdn auth will verify our current witness list is sufficient
-  req->witnesses = mdr->more()->witnessed;
+  req->witnesses = witnesse;
 
   mds->send_message_mds(req, who);
   
@@ -5614,10 +5664,10 @@ void Server::_rename_prepare(MDRequest *mdr,
   // nested beneath.
   bool force_journal = false;
   while (srci->is_dir()) {
-    // if we are auth for srci and exporting it, have any _any_ open dirfrags, we
-    // will (soon) have auth subtrees here.
-    if (srci->is_auth() && !destdn->is_auth() && srci->has_dirfrags()) {
-      dout(10) << " we are exporting srci, and have open dirfrags, will force journal" << dendl;
+    // if we are auth for srci and exporting it, force journal because we need create
+    // auth subtrees here during journal replay.
+    if (srci->is_auth() && !destdn->is_auth()) {
+      dout(10) << " we are exporting srci, will force journal" << dendl;
       force_journal = true;
       break;
     }
@@ -5718,7 +5768,8 @@ void Server::_rename_prepare(MDRequest *mdr,
 	  srci->get_dirfrags(ls);
 	  for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
 	    CDir *dir = *p;
-	    metablob->renamed_dir_frags.push_back(dir->get_frag());
+	    if (!dir->is_auth())
+	      metablob->renamed_dir_frags.push_back(dir->get_frag());
 	  }
 	  dout(10) << " noting renamed dir open frags " << metablob->renamed_dir_frags << dendl;
 	}
@@ -5791,10 +5842,6 @@ void Server::_rename_prepare(MDRequest *mdr,
 	mdcache->journal_cow_dentry(mdr, metablob, oldin->get_projected_parent_dn(),
 				    CEPH_NOSNAP, 0, destdnl);
 	metablob->add_primary_dentry(oldin->get_projected_parent_dn(), true, oldin);
-      }
-      if (destdn->is_auth()) {
-	// auth for dn, not targeti
-	metablob->add_null_dentry(destdn, true);
       }
     }
   }
@@ -5975,6 +6022,8 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       // hack: fix auth bit
       in->state_set(CInode::STATE_AUTH);
       imported_inode = true;
+
+      mdr->clear_ambiguous_auth(in);
     }
 
     if (destdn->is_auth()) {
@@ -6101,15 +6150,8 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
 
   // am i srcdn auth?
   if (srcdn->is_auth()) {
-    if (srcdnl->is_primary()) {
-      // set ambiguous auth for srci
-      /*
-       * NOTE: we don't worry about ambiguous cache expire as we do
-       * with subtree migrations because all slaves will pin
-       * srcdn->get_inode() for duration of this rename.
-       */
-      srcdnl->get_inode()->state_set(CInode::STATE_AMBIGUOUSAUTH);
-
+    bool reply_witness = false;
+    if (srcdnl->is_primary() && !srcdnl->get_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
       // freeze?
       // we need this to
       //  - avoid conflicting lock state changes
@@ -6128,17 +6170,36 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
 	srcdnl->get_inode()->add_waiter(CInode::WAIT_FROZEN, new C_MDS_RetryRequest(mdcache, mdr));
 	return;
       }
+
+      /*
+       * set ambiguous auth for srci
+       * NOTE: we don't worry about ambiguous cache expire as we do
+       * with subtree migrations because all slaves will pin
+       * srcdn->get_inode() for duration of this rename.
+       */
+      srcdnl->get_inode()->set_ambiguous_auth();
+
+      // just mark the source inode as ambiguous auth if more than two MDS are involved.
+      // the master will send another OP_RENAMEPREP slave request later.
+      if (mdr->slave_request->witnesses.size() > 1) {
+	dout(10) << " set srci ambiguous auth; providing srcdn replica list" << dendl;
+	reply_witness = true;
+      }
     }
 
     // is witness list sufficient?
     set<int> srcdnrep;
     srcdn->list_replicas(srcdnrep);
-    for (set<int>::iterator p = srcdnrep.begin();
-	 p != srcdnrep.end();
-	 ++p) {
+    for (set<int>::iterator p = srcdnrep.begin(); p != srcdnrep.end(); ++p) {
       if (*p == mdr->slave_to_mds ||
 	  mdr->slave_request->witnesses.count(*p)) continue;
       dout(10) << " witness list insufficient; providing srcdn replica list" << dendl;
+      reply_witness = true;
+      break;
+    }
+
+    if (reply_witness) {
+      assert(srcdnrep.size());
       MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
 						     MMDSSlaveRequest::OP_RENAMEPREPACK);
       reply->witnesses.swap(srcdnrep);
@@ -6148,6 +6209,9 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
       return;	
     }
     dout(10) << " witness list sufficient: includes all srcdn replicas" << dendl;
+  } else if (srcdnl->is_primary() && srcdn->authority() != destdn->authority()) {
+    // set ambiguous auth for srci on witnesses
+    srcdnl->get_inode()->set_ambiguous_auth();
   }
 
   // encode everything we'd need to roll this back... basically, just the original state.
@@ -6227,6 +6291,7 @@ void Server::_logged_slave_rename(MDRequest *mdr,
 
     // remove mdr auth pin
     mdr->auth_unpin(srcdnl->get_inode());
+    mdr->more()->was_inode_exportor = true;
     
     dout(10) << " exported srci " << *srcdnl->get_inode() << dendl;
   }
@@ -6256,6 +6321,7 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
   CDentry::linkage_t *destdnl = destdn->get_linkage();
 
   ESlaveUpdate *le;
+  list<Context*> finished;
   if (r == 0) {
     // write a commit to the journal
     le = new ESlaveUpdate(mdlog, "slave_rename_commit", mdr->reqid, mdr->slave_to_mds,
@@ -6264,9 +6330,7 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
 
     // unfreeze+singleauth inode
     //  hmm, do i really need to delay this?
-    if (srcdn->is_auth() && destdnl->is_primary() &&
-	destdnl->get_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
-      list<Context*> finished;
+    if (mdr->more()->was_inode_exportor) {
 
       CInode *in = destdnl->get_inode();
 
@@ -6286,40 +6350,36 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
       mdcache->migrator->finish_export_inode(destdnl->get_inode(), mdr->now, finished);
       mds->queue_waiters(finished);   // this includes SINGLEAUTH waiters.
 
-      // singleauth
-      assert(destdnl->get_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH));
-      destdnl->get_inode()->state_clear(CInode::STATE_AMBIGUOUSAUTH);
-      destdnl->get_inode()->take_waiting(CInode::WAIT_SINGLEAUTH, finished);
-
       // unfreeze
       assert(destdnl->get_inode()->is_frozen_inode());
       destdnl->get_inode()->unfreeze_inode(finished);
-
-      mds->queue_waiters(finished);
     }
+
+    // singleauth
+    if (destdnl->is_primary() && srcdn->authority() != destdn->authority())
+      destdnl->get_inode()->clear_ambiguous_auth(finished);
+
+    mds->queue_waiters(finished);
     mdr->cleanup();
 
     mdlog->submit_entry(le, new C_MDS_CommittedSlave(this, mdr));
     mdlog->flush();
   } else {
-    if (srcdn->is_auth() && destdnl->is_primary() &&
-	destdnl->get_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
-         list<Context*> finished;
+    if (srcdn->is_auth() && destdnl->is_primary()) {
 
       dout(10) << " reversing inode export of " << *destdnl->get_inode() << dendl;
       destdnl->get_inode()->abort_export();
     
-      // singleauth
-      assert(destdnl->get_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH));
-      destdnl->get_inode()->state_clear(CInode::STATE_AMBIGUOUSAUTH);
-      destdnl->get_inode()->take_waiting(CInode::WAIT_SINGLEAUTH, finished);
-      
       // unfreeze
       assert(destdnl->get_inode()->is_frozen_inode());
       destdnl->get_inode()->unfreeze_inode(finished);
-      
-      mds->queue_waiters(finished);
     }
+
+    // singleauth
+    if (destdnl->is_primary() && srcdn->authority() != destdn->authority())
+      destdnl->get_inode()->clear_ambiguous_auth(finished);
+
+    mds->queue_waiters(finished);
 
     // abort
     //  rollback_bl may be empty if we froze the inode but had to provide an expanded
