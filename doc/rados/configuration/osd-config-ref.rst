@@ -166,13 +166,6 @@
 :Default: ``1``
 
 
-``osd recover clone overlap`` 
-
-:Description: Preserves clone overlap during recovery and data migration.
-:Type: Boolean
-:Default: ``false`` 
-
-
 ``osd backfill scan min`` 
 
 :Description: The scan interval in seconds for backfill operations.
@@ -192,6 +185,27 @@
 :Description: The maximum time in seconds before timing out a backlog thread.
 :Type: 32-bit Integer
 :Default: ``60*60*1`` 
+
+
+``osd max backfills``
+
+:Description: The maximum number of backfills allowed to or from a single OSD.
+:Type: 64-bit Unsigned Integer
+:Default: 10
+
+
+``osd backfill full ratio``
+
+:Description: Refuse to accept backfill requests when the OSD's full ratio is above this value.
+:Type: Float
+:Default: ``0.85``
+
+
+``osd backfill retry interval``
+
+:Description: The number of seconds to wait before retrying backfill requests.
+:Type: Double
+:Default: ``10.0``
 
 
 ``osd recovery thread timeout`` 
@@ -257,7 +271,7 @@
 :Default: ``20``
 
 
-``osd _mon_heartbeat interval`` 
+``osd mon heartbeat interval`` 
 
 :Description: How often the OSD pings a monitor if it has no OSD peers.
 :Type: 32-bit Integer
@@ -273,9 +287,10 @@
 
 ``osd mon report interval min`` 
 
-:Description: The number of minutes between reports that include ``pg stats``, ``up thru``, ``boot`` and ``failures``.
+:Description: The minimum number of seconds for an OSD to report to a monitor to avoid the monitor considering the OSD ``down``.
 :Type: 32-bit Integer
-:Default: ``5`` 
+:Default: ``5``
+:Valid Range: Should be less than ``osd mon report interval max`` 
 
 
 ``osd mon ack timeout`` 
