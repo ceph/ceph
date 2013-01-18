@@ -545,18 +545,14 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	mds->mdcache->add_inode(in);
 	if (!dn->get_linkage()->is_null()) {
 	  if (dn->get_linkage()->is_primary()) {
-	    CInode *old_in = dn->get_linkage()->get_inode();
+	    unlinked.insert(dn->get_linkage()->get_inode());
 	    stringstream ss;
 	    ss << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
-	        << " " << *old_in
-	        << " should be " << p->inode.ino;
+	       << " " << *dn->get_linkage()->get_inode() << " should be " << p->inode.ino;
 	    dout(0) << ss.str() << dendl;
 	    mds->clog.warn(ss);
-	    dir->unlink_inode(dn);
-	    mds->mdcache->remove_inode_recursive(old_in);
-
-	    //assert(0); // hrm!  fallout from sloppy unlink?  or?  hmmm FIXME investigate further
 	  }
+	  dir->unlink_inode(dn);
 	}
 	unlinked.erase(in);
 	dir->link_primary_inode(dn, in);
@@ -574,8 +570,17 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	p->update_inode(mds, in);
 	if (p->dirty) in->_mark_dirty(logseg);
 	if (dn->get_linkage()->get_inode() != in) {
-	  if (!dn->get_linkage()->is_null())  // note: might be remote.  as with stray reintegration.
+	  if (!dn->get_linkage()->is_null()) { // note: might be remote.  as with stray reintegration.
+	    if (dn->get_linkage()->is_primary()) {
+	      unlinked.insert(dn->get_linkage()->get_inode());
+	      stringstream ss;
+	      ss << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
+		 << " " << *dn->get_linkage()->get_inode() << " should be " << p->inode.ino;
+	      dout(0) << ss.str() << dendl;
+	      mds->clog.warn(ss);
+	    }
 	    dir->unlink_inode(dn);
+	  }
 	  unlinked.erase(in);
 	  dir->link_primary_inode(dn, in);
 	  dout(10) << "EMetaBlob.replay linked " << *in << dendl;
@@ -600,10 +605,13 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       } else {
 	if (!dn->get_linkage()->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
-	  if (dn->get_linkage()->is_primary())
+	  if (dn->get_linkage()->is_primary()) {
 	    unlinked.insert(dn->get_linkage()->get_inode());
-	  if (dn->get_linkage()->get_inode() == renamed_diri)
-	    olddir = dir;
+	    stringstream ss;
+	    ss << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
+	       << " " << *dn->get_linkage()->get_inode() << " should be remote " << p->ino;
+	    dout(0) << ss.str() << dendl;
+	  }
 	  dir->unlink_inode(dn);
 	}
 	dir->link_remote_inode(dn, p->ino, p->d_type);
