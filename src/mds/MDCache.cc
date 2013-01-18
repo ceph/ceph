@@ -2616,6 +2616,9 @@ void MDCache::handle_mds_failure(int who)
 	p->second->more()->waiting_on_slave.erase(who);
 	mds->wait_for_active_peer(who, new C_MDS_RetryRequest(this, p->second));
       }
+
+      if (p->second->more()->prepared_inode_exporter == who)
+	p->second->more()->prepared_inode_exporter = -1;
     }
   }
 
@@ -5802,7 +5805,7 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
         for (list<CDir*>::iterator subdir = subdirs.begin();
             subdir != subdirs.end();
             ++subdir) {
-          if ((*subdir)->is_subtree_root()) {
+          if ((*subdir)->is_subtree_root() || my_ambiguous_imports.count((*subdir)->dirfrag())) {
             keep_inode = true;
             dout(10) << "trim_non_auth_subtree(" << dir << ") subdir " << *subdir << "is kept!" << dendl;
           }
@@ -6117,9 +6120,11 @@ void MDCache::dentry_remove_replica(CDentry *dn, int from)
   // fix lock
   if (dn->lock.remove_replica(from))
     mds->locker->eval_gather(&dn->lock);
+
+  CDentry::linkage_t *dnl = dn->get_projected_linkage();
+  if (dnl->is_primary())
+    maybe_eval_stray(dnl->get_inode());
 }
-
-
 
 void MDCache::trim_client_leases()
 {
@@ -6730,14 +6735,10 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
 	  (dn->lock.is_xlocked() && dn->lock.get_xlock_by() == mdr)) {
         dout(10) << "traverse: miss on null+readable dentry " << path[depth] << " " << *dn << dendl;
         return -ENOENT;
-      } else if (curdir->is_auth()) {
+      } else {
         dout(10) << "miss on dentry " << *dn << ", can't read due to lock" << dendl;
         dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req, fin));
         return 1;
-      } else {
-	// non-auth and can not read, treat this as no dentry
-	dn = NULL;
-	dnl = NULL;
       }
     }
 
@@ -7048,7 +7049,11 @@ public:
   C_MDC_RetryOpenRemoteIno(MDCache *mdc, inodeno_t i, Context *c, bool wx) :
     mdcache(mdc), ino(i), want_xlocked(wx), onfinish(c) {}
   void finish(int r) {
-    mdcache->open_remote_ino(ino, onfinish, want_xlocked);
+    if (mdcache->get_inode(ino)) {
+      onfinish->finish(0);
+      delete onfinish;
+    } else
+      mdcache->open_remote_ino(ino, onfinish, want_xlocked);
   }
 };
 
@@ -7606,6 +7611,9 @@ void MDCache::request_cleanup(MDRequest *mdr)
 
   // drop (local) auth pins
   mdr->drop_local_auth_pins();
+
+  if (mdr->ambiguous_auth_inode)
+    mdr->clear_ambiguous_auth(mdr->ambiguous_auth_inode);
 
   // drop stickydirs
   for (set<CInode*>::iterator p = mdr->stickydirs.begin();
@@ -9150,12 +9158,11 @@ CInode *MDCache::add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<Co
   } else {
     in->decode_replica(p, false);
     dout(10) << "add_replica_inode had " << *in << dendl;
-    assert(!dn || dn->get_linkage()->get_inode() == in);
   }
 
   if (dn) {
-    assert(dn->get_linkage()->is_primary());
-    assert(dn->get_linkage()->get_inode() == in);
+    if (!dn->get_linkage()->is_primary() || dn->get_linkage()->get_inode() != in)
+      dout(10) << "add_replica_inode different linkage in dentry " << *dn << dendl;
     
     dn->get_dir()->take_ino_waiting(in->ino(), finished);
   }

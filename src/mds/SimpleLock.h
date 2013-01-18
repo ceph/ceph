@@ -273,8 +273,8 @@ public:
   }
   int get_cap_mask() const {
     switch (get_type()) {
-    case CEPH_LOCK_IFILE: return 0xf;
-    default: return 0x3;
+    case CEPH_LOCK_IFILE: return (1 << CEPH_CAP_FILE_BITS) - 1;
+    default: return (1 << CEPH_CAP_SIMPLE_BITS) - 1;
     }
   }
 

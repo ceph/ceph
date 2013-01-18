@@ -51,6 +51,7 @@ struct Mutation {
   set< MDSCacheObject* > remote_auth_pins;
   set< MDSCacheObject* > auth_pins;
   CInode *auth_pin_freeze;
+  CInode* ambiguous_auth_inode;
   
   // held locks
   set< SimpleLock* > rdlocks;  // always local.
@@ -83,6 +84,7 @@ struct Mutation {
       ls(0),
       slave_to_mds(-1),
       auth_pin_freeze(NULL),
+      ambiguous_auth_inode(NULL),
       locking(NULL),
       done_locking(false), committing(false), aborted(false), killed(false) { }
   Mutation(metareqid_t ri, __u32 att=0, int slave_to=-1)
@@ -90,6 +92,7 @@ struct Mutation {
       ls(0),
       slave_to_mds(slave_to), 
       auth_pin_freeze(NULL),
+      ambiguous_auth_inode(NULL),
       locking(NULL),
       done_locking(false), committing(false), aborted(false), killed(false) { }
   virtual ~Mutation() {
@@ -127,6 +130,8 @@ struct Mutation {
   void unfreeze_auth_pin(CInode *inode);
   bool can_auth_pin(MDSCacheObject *object);
   void drop_local_auth_pins();
+  void set_ambiguous_auth(CInode *inode);
+  void clear_ambiguous_auth(CInode *inode);
   void add_projected_inode(CInode *in);
   void pop_and_dirty_projected_inodes();
   void add_projected_fnode(CDir *dir);
@@ -208,7 +213,8 @@ struct MDRequest : public Mutation {
     bufferlist inode_import;
     version_t inode_import_v;
     CInode* destdn_was_remote_inode;
-    bool was_link_merge;
+    bool was_inode_exportor;
+    int prepared_inode_exporter; // has asked auth of srci to mark srci as ambiguous auth
 
     map<client_t,entity_inst_t> imported_client_map;
     map<client_t,uint64_t> sseq_map;
@@ -227,8 +233,8 @@ struct MDRequest : public Mutation {
 
     More() : 
       src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
-      destdn_was_remote_inode(0), was_link_merge(false),
-      flock_was_waiting(false),
+      destdn_was_remote_inode(0), was_inode_exportor(false),
+      prepared_inode_exporter(-1), flock_was_waiting(false),
       stid(0),
       slave_commit(0) { }
   } *_more;

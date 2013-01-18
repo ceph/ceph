@@ -1022,6 +1022,9 @@ void CDir::assimilate_dirty_rstat_inodes()
   for (elist<CInode*>::iterator p = dirty_rstat_inodes.begin_use_current();
        !p.end(); ++p) {
     CInode *in = *p;
+    if (in->is_frozen())
+      continue;
+
     inode_t *pi = in->project_inode();
     pi->version = in->pre_dirty();
 
@@ -1040,8 +1043,12 @@ void CDir::assimilate_dirty_rstat_inodes_finish(Mutation *mut, EMetaBlob *blob)
   elist<CInode*>::iterator p = dirty_rstat_inodes.begin_use_current();
   while (!p.end()) {
     CInode *in = *p;
-    CDentry *dn = in->get_projected_parent_dn();
     ++p;
+
+    if (in->is_frozen())
+      continue;
+
+    CDentry *dn = in->get_projected_parent_dn();
 
     mut->auth_pin(in);
     mut->add_projected_inode(in);
@@ -1049,7 +1056,9 @@ void CDir::assimilate_dirty_rstat_inodes_finish(Mutation *mut, EMetaBlob *blob)
     in->clear_dirty_rstat();
     blob->add_primary_dentry(dn, true, in);
   }
-  assert(dirty_rstat_inodes.empty());
+
+  if (!dirty_rstat_inodes.empty())
+    inode->mdcache->mds->locker->mark_updated_scatterlock(&inode->nestlock);
 }
 
 
@@ -1342,8 +1351,11 @@ void CDir::fetch(Context *c, const string& want_dn, bool ignore_authpinnability)
   assert(!is_complete());
 
   if (!can_auth_pin() && !ignore_authpinnability) {
-    dout(7) << "fetch waiting for authpinnable" << dendl;
-    add_waiter(WAIT_UNFREEZE, c);
+    if (c) {
+      dout(7) << "fetch waiting for authpinnable" << dendl;
+      add_waiter(WAIT_UNFREEZE, c);
+    } else
+      dout(7) << "fetch not authpinnable and no context" << dendl;
     return;
   }
 

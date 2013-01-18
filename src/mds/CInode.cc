@@ -245,7 +245,10 @@ void CInode::print(ostream& out)
   out << *this;
 }
 
-
+bool CInode::is_in_stray()
+{
+  return !is_base() && get_projected_parent_dir()->inode->is_stray();
+}
 
 void CInode::add_need_snapflush(CInode *snapin, snapid_t snapid, client_t client)
 {
@@ -1932,6 +1935,20 @@ void CInode::unfreeze_auth_pin()
   }
 }
 
+void CInode::clear_ambiguous_auth(list<Context*>& finished)
+{
+  assert(state_test(CInode::STATE_AMBIGUOUSAUTH));
+  state_clear(CInode::STATE_AMBIGUOUSAUTH);
+  take_waiting(CInode::WAIT_SINGLEAUTH, finished);
+}
+
+void CInode::clear_ambiguous_auth()
+{
+  list<Context*> finished;
+  clear_ambiguous_auth(finished);
+  mdcache->mds->queue_waiters(finished);
+}
+
 // auth_pins
 bool CInode::can_auth_pin() {
   if (is_freezing_inode() || is_frozen_inode() || is_frozen_auth_pin())
@@ -2587,17 +2604,19 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 {
   int client = session->inst.name.num();
   assert(snapid);
-
   assert(session->connection);
   
   bool valid = true;
 
   // do not issue caps if inode differs from readdir snaprealm
   SnapRealm *realm = find_snaprealm();
-  bool no_caps = (realm && dir_realm && realm != dir_realm);
+  bool no_caps = (realm && dir_realm && realm != dir_realm) ||
+		 is_frozen() || state_test(CInode::STATE_EXPORTINGCAPS);
   if (no_caps)
-    dout(20) << "encode_inodestat realm=" << realm << " snaprealm " << snaprealm
-	     << " no_caps=" << no_caps << dendl;
+    dout(20) << "encode_inodestat no caps"
+	     << ((realm && dir_realm && realm != dir_realm)?", snaprealm differs ":"")
+	     << (state_test(CInode::STATE_EXPORTINGCAPS)?", exporting caps":"")
+	     << (is_frozen()?", frozen inode":"") << dendl;
 
   // pick a version!
   inode_t *oi = &inode;
