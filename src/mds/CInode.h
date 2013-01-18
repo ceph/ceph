@@ -554,46 +554,8 @@ private:
   void build_backtrace(inode_backtrace_t& bt);
   unsigned encode_parent_mutation(ObjectOperation& m);
 
-  void encode_store(bufferlist& bl) {
-    __u8 struct_v = 2;
-    ::encode(struct_v, bl);
-    ::encode(inode, bl);
-    if (is_symlink())
-      ::encode(symlink, bl);
-    ::encode(dirfragtree, bl);
-    ::encode(xattrs, bl);
-    bufferlist snapbl;
-    encode_snap_blob(snapbl);
-    ::encode(snapbl, bl);
-    ::encode(old_inodes, bl);
-    if (inode.is_dir()) {
-      ::encode((default_layout ? true : false), bl);
-      if (default_layout)
-        ::encode(*default_layout, bl);
-    }
-  }
-  void decode_store(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    ::decode(inode, bl);
-    if (is_symlink())
-      ::decode(symlink, bl);
-    ::decode(dirfragtree, bl);
-    ::decode(xattrs, bl);
-    bufferlist snapbl;
-    ::decode(snapbl, bl);
-    decode_snap_blob(snapbl);
-    ::decode(old_inodes, bl);
-    if (struct_v >= 2 && inode.is_dir()) {
-      bool default_layout_exists;
-      ::decode(default_layout_exists, bl);
-      if (default_layout_exists) {
-        delete default_layout;
-        default_layout = new file_layout_policy_t;
-        ::decode(*default_layout, bl);
-      }
-    }
-  }
+  void encode_store(bufferlist& bl);
+  void decode_store(bufferlist::iterator& bl);
 
   void encode_replica(int rep, bufferlist& bl) {
     assert(is_auth());
