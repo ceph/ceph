@@ -4375,13 +4375,11 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
 
   assert(g_conf->mds_kill_link_at != 9);
 
-  Mutation *mut = mdr;
-  if (!mut) {
-    assert(mds->is_resolve());
-    mds->mdcache->add_rollback(rollback.reqid, master);  // need to finish this update before resolve finishes
-    mut = new Mutation(rollback.reqid);
-    mut->ls = mds->mdlog->get_current_segment();
-  }
+  mds->mdcache->add_rollback(rollback.reqid, master); // need to finish this update before resolve finishes
+  assert(mdr || mds->is_resolve());
+
+  Mutation *mut = new Mutation(rollback.reqid);
+  mut->ls = mds->mdlog->get_current_segment();
 
   CInode *in = mds->mdcache->get_inode(rollback.ino);
   assert(in);
@@ -4433,8 +4431,9 @@ void Server::_link_rollback_finish(Mutation *mut, MDRequest *mdr)
   mut->apply();
   if (mdr)
     mds->mdcache->request_finish(mdr);
-  else
-    mds->mdcache->finish_rollback(mut->reqid);
+
+  mds->mdcache->finish_rollback(mut->reqid);
+
   mut->cleanup();
   delete mut;
 }
@@ -4973,10 +4972,8 @@ void Server::do_rmdir_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   ::decode(rollback, p);
   
   dout(10) << "do_rmdir_rollback on " << rollback.reqid << dendl;
-  if (!mdr) {
-    assert(mds->is_resolve());
-    mds->mdcache->add_rollback(rollback.reqid, master);  // need to finish this update before resolve finishes
-  }
+  mds->mdcache->add_rollback(rollback.reqid, master); // need to finish this update before resolve finishes
+  assert(mdr || mds->is_resolve());
 
   CDir *dir = mds->mdcache->get_dirfrag(rollback.src_dir);
   CDentry *dn = dir->lookup(rollback.src_dname);
@@ -5019,8 +5016,8 @@ void Server::_rmdir_rollback_finish(MDRequest *mdr, metareqid_t reqid, CDentry *
 
   if (mdr)
     mds->mdcache->request_finish(mdr);
-  else
-    mds->mdcache->finish_rollback(reqid);
+
+  mds->mdcache->finish_rollback(reqid);
 }
 
 
@@ -6481,10 +6478,9 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   ::decode(rollback, p);
 
   dout(10) << "do_rename_rollback on " << rollback.reqid << dendl;
-  if (!mdr) {
-    assert(mds->is_resolve());
-    mds->mdcache->add_rollback(rollback.reqid, master);  // need to finish this update before resolve finishes
-  }
+  // need to finish this update before sending resolve to claim the subtree
+  mds->mdcache->add_rollback(rollback.reqid, master);
+  assert(mdr || mds->is_resolve());
 
   Mutation *mut = new Mutation(rollback.reqid);
   mut->ls = mds->mdlog->get_current_segment();
@@ -6727,9 +6723,8 @@ void Server::_rename_rollback_finish(Mutation *mut, MDRequest *mdr, CDentry *src
 
   if (mdr)
     mds->mdcache->request_finish(mdr);
-  else {
-    mds->mdcache->finish_rollback(mut->reqid);
-  }
+
+  mds->mdcache->finish_rollback(mut->reqid);
 
   mut->cleanup();
   delete mut;
