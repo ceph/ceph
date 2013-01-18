@@ -741,3 +741,40 @@ void mds_table_pending_t::generate_test_instances(list<mds_table_pending_t*>& ls
   ls.back()->mds = 2;
   ls.back()->tid = 35434;
 }
+
+
+/*
+ * inode_load_vec_t
+ */
+void inode_load_vec_t::encode(bufferlist &bl) const
+{
+  ENCODE_START(2, 2, bl);
+  for (int i=0; i<NUM; i++)
+    ::encode(vec[i], bl);
+  ENCODE_FINISH(bl);
+}
+
+void inode_load_vec_t::decode(const utime_t &t, bufferlist::iterator &p)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
+  for (int i=0; i<NUM; i++)
+    ::decode(vec[i], t, p);
+  DECODE_FINISH(p);
+}
+
+void inode_load_vec_t::dump(Formatter *f)
+{
+  f->open_array_section("Decay Counters");
+  for (vector<DecayCounter>::const_iterator i = vec.begin(); i != vec.end(); ++i) {
+    f->open_object_section("Decay Counter");
+    i->dump(f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void inode_load_vec_t::generate_test_instances(list<inode_load_vec_t*>& ls)
+{
+  utime_t sample;
+  ls.push_back(new inode_load_vec_t(sample));
+}
