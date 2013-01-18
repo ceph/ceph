@@ -633,6 +633,7 @@ public:
     }
   };
 
+  // synchronous wrappers
   unsigned apply_transaction(Transaction& t, Context *ondisk=0) {
     list<Transaction*> tls;
     tls.push_back(&t);
@@ -646,7 +647,7 @@ public:
   unsigned apply_transactions(list<Transaction*>& tls, Context *ondisk=0) {
     return apply_transactions(NULL, tls, ondisk);
   }
-  virtual unsigned apply_transactions(Sequencer *osr, list<Transaction*>& tls, Context *ondisk=0) = 0;
+  unsigned apply_transactions(Sequencer *osr, list<Transaction*>& tls, Context *ondisk=0);
 
   virtual int queue_transaction(Sequencer *osr, Transaction* t) = 0;
   virtual int queue_transaction(Sequencer *osr, Transaction *t, Context *onreadable, Context *ondisk=0,
