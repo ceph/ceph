@@ -2,8 +2,12 @@
  Logging and Debugging Config Reference
 ========================================
 
-Logging and debugging settings are not required, but you may override default settings 
-as needed. Ceph supports the following settings:
+.. important:: See `Debugging and Logging`_ for details on log rotation.
+
+Logging and debugging settings are not required, but you may override default
+settings  as needed. Ceph supports the following settings:
+
+.. _Debugging and Logging: ../../operations/debug
 
 Logging
 =======
