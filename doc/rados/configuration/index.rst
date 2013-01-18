@@ -33,7 +33,7 @@ For general object store configuration, refer to the following:
 
    Disks and Filesystems <filesystem-recommendations>
    ceph-conf
-
+   mon-osd-interaction
 
 .. raw:: html 
 
