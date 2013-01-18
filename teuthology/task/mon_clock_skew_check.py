@@ -32,6 +32,12 @@ class ClockSkewCheck:
                 expecting it, or if no skew is detected and we were expecting
                 it. (default: False)
 
+   at-least-once          Runs at least once, even if we are told to stop.
+                          (default: True)
+   at-least-once-timeout  If we were told to stop but we are attempting to
+                          run at least once, timeout after this many seconds.
+                          (default: 300)
+
   Example:
     Expect a skew higher than 0.05 seconds, but only report it without failing
     the teuthology run.
@@ -58,6 +64,8 @@ class ClockSkewCheck:
     self.max_skew = float(self.config.get('max-skew', 0.05))
     self.expect_skew = self.config.get('expect-skew', False)
     self.never_fail = self.config.get('never-fail', False)
+    self.at_least_once = self.config.get('at-least-once', True)
+    self.at_least_once_timeout = self.config.get('at-least-once-timeout', 300.0)
 
   def info(self, x):
     self.logger.info(x)
@@ -71,7 +79,16 @@ class ClockSkewCheck:
   def do_check(self):
     self.info('start checking for clock skews')
     skews = dict()
-    while not self.stopping:
+    ran_once = False
+    started_on = time.time()
+
+    while not self.stopping or (self.at_least_once and not ran_once):
+
+      if self.at_least_once and not ran_once and self.stopping:
+        if self.at_least_once_timeout > 0.0:
+          assert time.time() - started_on < self.at_least_once_timeout, \
+              'failed to obtain a timecheck before timeout expired'
+
       quorum_size = len(teuthology.get_mon_names(self.ctx))
       self.manager.wait_for_mon_quorum_size(quorum_size)
 
@@ -96,6 +113,11 @@ class ClockSkewCheck:
             self.info('expected skew: {str}'.format(str=log_str))
           else:
             self.warn('unexpected skew: {str}'.format(str=log_str))
+
+      if len(health['timechecks']) == 0:
+        self.info('no timechecks available just yet')
+      else:
+        ran_once = True
 
       if (self.check_interval > 0.0):
         time.sleep(self.check_interval)
