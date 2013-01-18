@@ -2923,12 +2923,32 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 
 	const pg_pool_t *p = osdmap.get_pg_pool(pool);
 	if (m->cmd[4] == "pg_num") {
-	  ss << "PG_NUM: " << p->get_pg_num();
+	  ss << "pg_num: " << p->get_pg_num();
 	  err = 0;
 	  goto out;
 	}
 	if (m->cmd[4] == "pgp_num") {
-	  ss << "PGP_NUM: " << p->get_pgp_num();
+	  ss << "pgp_num: " << p->get_pgp_num();
+	  err = 0;
+	  goto out;
+	}
+	if (m->cmd[4] == "size") {
+          ss << "size: " << p->get_size();
+	  err = 0;
+	  goto out;
+	}
+	if (m->cmd[4] == "min_size") {
+	  ss << "min_size: " << p->get_min_size();
+	  err = 0;
+	  goto out;
+	}
+	if (m->cmd[4] == "crash_replay_interval") {
+	  ss << "crash_replay_interval: " << p->get_crash_replay_interval();
+	  err = 0;
+	  goto out;
+	}
+	if (m->cmd[4] == "crush_ruleset") {
+	  ss << "crush_ruleset: " << p->get_crush_ruleset();
 	  err = 0;
 	  goto out;
 	}

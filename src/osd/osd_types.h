@@ -674,6 +674,7 @@ public:
   uint64_t get_flags() const { return flags; }
   unsigned get_type() const { return type; }
   unsigned get_size() const { return size; }
+  unsigned get_min_size() const { return min_size; }
   int get_crush_ruleset() const { return crush_ruleset; }
   int get_object_hash() const { return object_hash; }
   const char *get_object_hash_name() const {
