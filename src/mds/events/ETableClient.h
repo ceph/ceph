@@ -32,21 +32,21 @@ struct ETableClient : public LogEvent {
     table(t), op(o), tid(ti) { }
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 2;
-    ::encode(struct_v, bl);
+    ENCODE_START(3, 3, bl);
     ::encode(stamp, bl);
     ::encode(table, bl);
     ::encode(op, bl);
     ::encode(tid, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
     if (struct_v >= 2)
       ::decode(stamp, bl);
     ::decode(table, bl);
     ::decode(op, bl);
     ::decode(tid, bl);
+    DECODE_FINISH(bl);
   }
 
   void print(ostream& out) {
