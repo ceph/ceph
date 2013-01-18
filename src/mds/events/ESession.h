@@ -47,18 +47,17 @@ class ESession : public LogEvent {
     inos(i), inotablev(iv) { }
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 2;
-    ::encode(struct_v, bl);
+    ENCODE_START(3, 3, bl);
     ::encode(stamp, bl);
     ::encode(client_inst, bl);
     ::encode(open, bl);
     ::encode(cmapv, bl);
     ::encode(inos, bl);
     ::encode(inotablev, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
     if (struct_v >= 2)
       ::decode(stamp, bl);
     ::decode(client_inst, bl);
@@ -66,6 +65,7 @@ class ESession : public LogEvent {
     ::decode(cmapv, bl);
     ::decode(inos, bl);
     ::decode(inotablev, bl);
+    DECODE_FINISH(bl);
   }
 
 
