@@ -2913,13 +2913,13 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
     if (!should_flush ||
 	!m_filestore_flusher ||
 	!queue_flusher(fd, offset, len)) {
-      if (m_filestore_sync_flush)
+      if (should_flush && m_filestore_sync_flush)
 	::sync_file_range(fd, offset, len, SYNC_FILE_RANGE_WRITE);
       lfn_close(fd);
     }
 #else
     // no sync_file_range; (maybe) flush inline and close.
-    if (m_filestore_sync_flush)
+    if (should_flush && m_filestore_sync_flush)
       ::fdatasync(fd);
     lfn_close(fd);
 #endif
