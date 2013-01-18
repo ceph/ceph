@@ -850,20 +850,30 @@ public:
   std::vector < DecayCounter > vec;
   dirfrag_load_vec_t(const utime_t &now)
      : vec(NUM, DecayCounter(now))
-  {
-  }
+  { }
+  // for dencoder infrastructure
+  dirfrag_load_vec_t()
+    : vec(NUM, DecayCounter())
+  {}
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
+    ENCODE_START(2, 2, bl);
     for (int i=0; i<NUM; i++)
       ::encode(vec[i], bl);
+    ENCODE_FINISH(bl);
   }
   void decode(const utime_t &t, bufferlist::iterator &p) {
-    __u8 struct_v;
-    ::decode(struct_v, p);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
     for (int i=0; i<NUM; i++)
       ::decode(vec[i], t, p);
+    DECODE_FINISH(p);
   }
+  // for dencoder infrastructure
+  void decode(bufferlist::iterator& p) {
+    utime_t sample;
+    decode(sample, p);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<dirfrag_load_vec_t*>& ls);
 
   DecayCounter &get(int t) { 
     assert(t < NUM);

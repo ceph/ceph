@@ -778,3 +778,24 @@ void inode_load_vec_t::generate_test_instances(list<inode_load_vec_t*>& ls)
   utime_t sample;
   ls.push_back(new inode_load_vec_t(sample));
 }
+
+
+/*
+ * dirfrag_load_vec_t
+ */
+void dirfrag_load_vec_t::dump(Formatter *f) const
+{
+  f->open_array_section("Decay Counters");
+  for (vector<DecayCounter>::const_iterator i = vec.begin(); i != vec.end(); ++i) {
+    f->open_object_section("Decay Counter");
+    i->dump(f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void dirfrag_load_vec_t::generate_test_instances(list<dirfrag_load_vec_t*>& ls)
+{
+  utime_t sample;
+  ls.push_back(new dirfrag_load_vec_t(sample));
+}
