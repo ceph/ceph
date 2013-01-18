@@ -1120,6 +1120,7 @@ int OSD::shutdown()
   dout(10) << "no ops" << dendl;
 
   cct->get_admin_socket()->unregister_command("dump_ops_in_flight");
+  cct->get_admin_socket()->unregister_command("dump_historic_ops");
   delete admin_ops_hook;
   delete historic_ops_hook;
   admin_ops_hook = NULL;
