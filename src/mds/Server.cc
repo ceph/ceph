@@ -5452,13 +5452,11 @@ void Server::handle_client_rename(MDRequest *mdr)
   int last = -1;
   if (!srcdn->is_auth()) {
     last = srcdn->authority().first;
-    // set ambiguous auth for srci
-    mdr->set_ambiguous_auth(srci);
-    // Ask auth of srci to mark srci as ambiguous auth if more than two MDS
-    // are involved in the rename operation
-    if (srcdnl->is_primary() && mdr->more()->prepared_inode_exporter == -1) {
+    // ask auth of srci to mark srci as ambiguous auth if more than two MDS
+    // are involved in the rename operation.
+    if (srcdnl->is_primary() && !mdr->more()->is_ambiguous_auth) {
       dout(10) << " preparing ambiguous auth for srci" << dendl;
-      mdr->more()->prepared_inode_exporter = last;
+      mdr->set_ambiguous_auth(srci);
       _rename_prepare_witness(mdr, last, witnesses, srcdn, destdn, straydn);
       return;
     }
@@ -6057,7 +6055,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       in->state_set(CInode::STATE_AUTH);
       imported_inode = true;
 
-      mdr->clear_ambiguous_auth(in);
+      mdr->clear_ambiguous_auth();
     }
 
     if (destdn->is_auth()) {
@@ -6197,7 +6195,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
 
       // unfreeze auth pin after freezing the inode to avoid queueing waiters
       if (srcdnl->get_inode()->is_frozen_auth_pin())
-	mdr->unfreeze_auth_pin(srcdnl->get_inode());
+	mdr->unfreeze_auth_pin();
 
       if (!frozen_inode) {
 	srcdnl->get_inode()->add_waiter(CInode::WAIT_FROZEN, new C_MDS_RetryRequest(mdcache, mdr));
@@ -6210,7 +6208,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
        * with subtree migrations because all slaves will pin
        * srcdn->get_inode() for duration of this rename.
        */
-      srcdnl->get_inode()->set_ambiguous_auth();
+      mdr->set_ambiguous_auth(srcdnl->get_inode());
 
       // just mark the source inode as ambiguous auth if more than two MDS are involved.
       // the master will send another OP_RENAMEPREP slave request later.
@@ -6244,7 +6242,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
     dout(10) << " witness list sufficient: includes all srcdn replicas" << dendl;
   } else if (srcdnl->is_primary() && srcdn->authority() != destdn->authority()) {
     // set ambiguous auth for srci on witnesses
-    srcdnl->get_inode()->set_ambiguous_auth();
+    mdr->set_ambiguous_auth(srcdnl->get_inode());
   }
 
   // encode everything we'd need to roll this back... basically, just the original state.
@@ -6324,7 +6322,7 @@ void Server::_logged_slave_rename(MDRequest *mdr,
 
     // remove mdr auth pin
     mdr->auth_unpin(srcdnl->get_inode());
-    mdr->more()->was_inode_exportor = true;
+    mdr->more()->is_inode_exporter = true;
     
     dout(10) << " exported srci " << *srcdnl->get_inode() << dendl;
   }
@@ -6363,7 +6361,7 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
 
     // unfreeze+singleauth inode
     //  hmm, do i really need to delay this?
-    if (mdr->more()->was_inode_exportor) {
+    if (mdr->more()->is_inode_exporter) {
 
       CInode *in = destdnl->get_inode();
 
@@ -6389,8 +6387,10 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
     }
 
     // singleauth
-    if (destdnl->is_primary() && srcdn->authority() != destdn->authority())
-      destdnl->get_inode()->clear_ambiguous_auth(finished);
+    if (mdr->more()->is_ambiguous_auth) {
+      mdr->more()->rename_inode->clear_ambiguous_auth(finished);
+      mdr->more()->is_ambiguous_auth = false;
+    }
 
     mds->queue_waiters(finished);
     mdr->cleanup();
@@ -6409,8 +6409,10 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
     }
 
     // singleauth
-    if (destdnl->is_primary() && srcdn->authority() != destdn->authority())
-      destdnl->get_inode()->clear_ambiguous_auth(finished);
+    if (mdr->more()->is_ambiguous_auth) {
+      mdr->more()->rename_inode->clear_ambiguous_auth(finished);
+      mdr->more()->is_ambiguous_auth = false;
+    }
 
     mds->queue_waiters(finished);
 

@@ -2627,7 +2627,7 @@ void MDCache::handle_mds_failure(int who)
     }
     
     // failed node is slave?
-    if (!p->second->committing) {
+    if (p->second->is_master() && !p->second->committing) {
       if (p->second->more()->witnessed.count(who)) {
 	dout(10) << " master request " << *p->second << " no longer witnessed by slave mds." << who
 		 << dendl;
@@ -2643,8 +2643,12 @@ void MDCache::handle_mds_failure(int who)
 	mds->wait_for_active_peer(who, new C_MDS_RetryRequest(this, p->second));
       }
 
-      if (p->second->more()->prepared_inode_exporter == who)
-	p->second->more()->prepared_inode_exporter = -1;
+      if (p->second->has_more() && p->second->more()->is_ambiguous_auth &&
+	  p->second->more()->rename_inode->authority().first == who) {
+	dout(10) << " master request " << *p->second << " waiting for renamed inode's auth mds." << who
+		 << " to recover" << dendl;
+	p->second->clear_ambiguous_auth();
+      }
     }
   }
 
@@ -7733,13 +7737,13 @@ void MDCache::request_cleanup(MDRequest *mdr)
 {
   dout(15) << "request_cleanup " << *mdr << dendl;
 
+  if (mdr->has_more() && mdr->more()->is_ambiguous_auth)
+    mdr->clear_ambiguous_auth();
+
   request_drop_locks(mdr);
 
   // drop (local) auth pins
   mdr->drop_local_auth_pins();
-
-  if (mdr->ambiguous_auth_inode)
-    mdr->clear_ambiguous_auth(mdr->ambiguous_auth_inode);
 
   // drop stickydirs
   for (set<CInode*>::iterator p = mdr->stickydirs.begin();
