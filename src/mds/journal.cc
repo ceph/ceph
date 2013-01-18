@@ -1536,6 +1536,43 @@ void EUpdate::replay(MDS *mds)
 // ------------------------
 // EOpen
 
+void EOpen::encode(bufferlist &bl) const {
+  ENCODE_START(3, 3, bl);
+  ::encode(stamp, bl);
+  ::encode(metablob, bl);
+  ::encode(inos, bl);
+  ENCODE_FINISH(bl);
+} 
+
+void EOpen::decode(bufferlist::iterator &bl) {
+  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  if (struct_v >= 2)
+    ::decode(stamp, bl);
+  ::decode(metablob, bl);
+  ::decode(inos, bl);
+  DECODE_FINISH(bl);
+}
+
+void EOpen::dump(Formatter *f) const
+{
+  f->open_object_section("metablob");
+  metablob.dump(f);
+  f->close_section(); // metablob
+  f->open_array_section("inos involved");
+  for (vector<inodeno_t>::const_iterator i = inos.begin();
+       i != inos.end(); ++i) {
+    f->dump_int("ino", *i);
+  }
+  f->close_section(); // inos
+}
+
+void EOpen::generate_test_instances(list<EOpen*>& ls)
+{
+  ls.push_back(new EOpen());
+  ls.push_back(new EOpen());
+  ls.back()->add_ino(0);
+}
+
 void EOpen::update_segment()
 {
   // ??

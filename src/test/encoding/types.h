@@ -139,6 +139,8 @@ TYPE(EMetaBlob::remotebit)
 TYPE(EMetaBlob::nullbit)
 TYPE(EMetaBlob::dirlump)
 TYPE(EMetaBlob)
+#include "mds/events/EOpen.h"
+TYPE(EOpen)
 
 #ifdef WITH_RADOSGW
 
