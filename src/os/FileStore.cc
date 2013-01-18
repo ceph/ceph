@@ -2127,35 +2127,6 @@ int FileStore::do_transactions(list<Transaction*> &tls, uint64_t op_seq)
   return r;
 }
 
-unsigned FileStore::apply_transaction(Transaction &t,
-				      Context *ondisk)
-{
-  list<Transaction*> tls;
-  tls.push_back(&t);
-  return apply_transactions(tls, ondisk);
-}
-
-unsigned FileStore::apply_transactions(list<Transaction*> &tls,
-				       Context *ondisk)
-{
-  // use op pool
-  Cond my_cond;
-  Mutex my_lock("FileStore::apply_transaction::my_lock");
-  int r = 0;
-  bool done;
-  C_SafeCond *onreadable = new C_SafeCond(&my_lock, &my_cond, &done, &r);
-  
-  dout(10) << "apply queued" << dendl;
-  queue_transactions(NULL, tls, onreadable, ondisk);
-  
-  my_lock.Lock();
-  while (!done)
-    my_cond.Wait(my_lock);
-  my_lock.Unlock();
-  dout(10) << "apply done r = " << r << dendl;
-  return r;
-}
-
 void FileStore::_set_replay_guard(coll_t cid,
                                   const SequencerPosition &spos,
                                   bool in_progress=false)

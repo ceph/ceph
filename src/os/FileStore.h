@@ -307,8 +307,7 @@ public:
   int statfs(struct statfs *buf);
 
   int do_transactions(list<Transaction*> &tls, uint64_t op_seq);
-  unsigned apply_transaction(Transaction& t, Context *ondisk=0);
-  unsigned apply_transactions(list<Transaction*>& tls, Context *ondisk=0);
+
   unsigned _do_transaction(Transaction& t, uint64_t op_seq, int trans_num);
 
   int queue_transaction(Sequencer *osr, Transaction* t);
