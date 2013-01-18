@@ -32,24 +32,24 @@ struct link_rollback {
   utime_t old_dir_rctime;
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(reqid, bl);
     ::encode(ino, bl);
     ::encode(was_inc, bl);
     ::encode(old_ctime, bl);
     ::encode(old_dir_mtime, bl);
     ::encode(old_dir_rctime, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(reqid, bl);
     ::decode(ino, bl);
     ::decode(was_inc, bl);
     ::decode(old_ctime, bl);
     ::decode(old_dir_mtime, bl);
     ::decode(old_dir_rctime, bl);
+    DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(link_rollback)
@@ -68,22 +68,22 @@ struct rmdir_rollback {
   string dest_dname;
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(reqid, bl);
     ::encode(src_dir, bl);
     ::encode(src_dname, bl);
     ::encode(dest_dir, bl);
     ::encode(dest_dname, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(reqid, bl);
     ::decode(src_dir, bl);
     ::decode(src_dname, bl);
     ::decode(dest_dir, bl);
     ::decode(dest_dname, bl);
+    DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(rmdir_rollback)
@@ -99,8 +99,7 @@ struct rename_rollback {
     utime_t old_ctime;
     
     void encode(bufferlist &bl) const {
-      __u8 struct_v = 1;
-      ::encode(struct_v, bl);
+      ENCODE_START(2, 2, bl);
       ::encode(dirfrag, bl);
       ::encode(dirfrag_old_mtime, bl);
       ::encode(dirfrag_old_rctime, bl);
@@ -109,10 +108,10 @@ struct rename_rollback {
       ::encode(dname, bl);
       ::encode(remote_d_type, bl);
       ::encode(old_ctime, bl);
+      ENCODE_FINISH(bl);
     }
     void decode(bufferlist::iterator &bl) {
-      __u8 struct_v;
-      ::decode(struct_v, bl);
+      DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
       ::decode(dirfrag, bl);
       ::decode(dirfrag_old_mtime, bl);
       ::decode(dirfrag_old_rctime, bl);
@@ -121,6 +120,7 @@ struct rename_rollback {
       ::decode(dname, bl);
       ::decode(remote_d_type, bl);
       ::decode(old_ctime, bl);
+      DECODE_FINISH(bl);
     }
   };
   WRITE_CLASS_MEMBER_ENCODER(drec)
@@ -131,22 +131,22 @@ struct rename_rollback {
   utime_t ctime;
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(reqid, bl);
     encode(orig_src, bl);
     encode(orig_dest, bl);
     encode(stray, bl);
     ::encode(ctime, bl);
+    ENCODE_FINISH(bl);
  }
   void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(reqid, bl);
     decode(orig_src, bl);
     decode(orig_dest, bl);
     decode(stray, bl);
     ::decode(ctime, bl);
+    DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(rename_rollback)
@@ -197,8 +197,7 @@ public:
   }
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 2;
-    ::encode(struct_v, bl);
+    ENCODE_START(3, 3, bl);
     ::encode(stamp, bl);
     ::encode(type, bl);
     ::encode(reqid, bl);
@@ -207,10 +206,10 @@ public:
     ::encode(origop, bl);
     ::encode(commit, bl);
     ::encode(rollback, bl);
+    ENCODE_FINISH(bl);
   } 
   void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
     if (struct_v >= 2)
       ::decode(stamp, bl);
     ::decode(type, bl);
@@ -220,6 +219,7 @@ public:
     ::decode(origop, bl);
     ::decode(commit, bl);
     ::decode(rollback, bl);
+    DECODE_FINISH(bl);
   }
 
   void replay(MDS *mds);
