@@ -5709,17 +5709,25 @@ void Server::_rename_prepare(MDRequest *mdr,
       force_journal = _need_force_journal(srci, false);
   }
 
+  bool force_journal_stray = false;
+  if (oldin && oldin->is_dir() && !straydn->is_auth())
+    force_journal_stray = _need_force_journal(oldin, true);
+
   if (linkmerge)
     dout(10) << " merging remote and primary links to the same inode" << dendl;
   if (silent)
     dout(10) << " reintegrating stray; will avoid changing nlink or dir mtime" << dendl;
   if (force_journal)
     dout(10) << " forcing journal of rename because we (will) have auth subtrees nested beneath it" << dendl;
+  if (force_journal_stray)
+    dout(10) << " forcing journal straydn because we (will) have auth subtrees nested beneath it" << dendl;
 
-  if (srci->is_dir() &&
-      (srcdn->is_auth() || destdn->is_auth() || force_journal)) {
+  if (srci->is_dir() && (destdn->is_auth() || force_journal)) {
     dout(10) << " noting renamed dir ino " << srci->ino() << " in metablob" << dendl;
     metablob->renamed_dirino = srci->ino();
+  } else if (oldin && oldin->is_dir() && force_journal_stray) {
+    dout(10) << " noting rename target dir " << oldin->ino() << " in metablob" << dendl;
+    metablob->renamed_dirino = oldin->ino();
   }
 
   // prepare
@@ -5854,6 +5862,10 @@ void Server::_rename_prepare(MDRequest *mdr,
 	  oldin->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
 	straydn->first = MAX(oldin->first, next_dest_snap);
 	metablob->add_primary_dentry(straydn, true, oldin);
+      } else if (force_journal_stray) {
+	dout(10) << " forced journaling straydn " << *straydn << dendl;
+	metablob->add_dir_context(straydn->get_dir());
+	metablob->add_primary_dentry(straydn, true, oldin);
       }
     } else if (destdnl->is_remote()) {
       if (oldin->is_auth()) {
@@ -5914,6 +5926,11 @@ void Server::_rename_prepare(MDRequest *mdr,
   if (srcdn->is_auth()) {
     dout(10) << " journaling srcdn " << *srcdn << dendl;
     mdcache->journal_cow_dentry(mdr, metablob, srcdn, CEPH_NOSNAP, 0, srcdnl);
+    // also journal the inode in case we need do slave rename rollback. It is Ok to add
+    // both primary and NULL dentries. Because during journal replay, null dentry is
+    // processed after primary dentry.
+    if (srcdnl->is_primary() && !srci->is_dir() && !destdn->is_auth())
+      metablob->add_primary_dentry(srcdn, true, srci);
     metablob->add_null_dentry(srcdn, true);
   } else if (force_journal) {
     dout(10) << " forced journaling srcdn " << *srcdn << dendl;
@@ -5932,6 +5949,8 @@ void Server::_rename_prepare(MDRequest *mdr,
   if (mdr->more()->dst_reanchor_atid)
     metablob->add_table_transaction(TABLE_ANCHOR, mdr->more()->dst_reanchor_atid);
 
+  if (oldin && oldin->is_dir())
+    mdcache->project_subtree_rename(oldin, destdn->get_dir(), straydn->get_dir());
   if (srci->is_dir())
     mdcache->project_subtree_rename(srci, srcdn->get_dir(), destdn->get_dir());
 }
@@ -6075,10 +6094,10 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 
   // update subtree map?
   if (destdnl->is_primary() && in->is_dir()) 
-    mdcache->adjust_subtree_after_rename(in,
-                                         srcdn->get_dir(),
-					 true,
-                                         imported_inode);
+    mdcache->adjust_subtree_after_rename(in, srcdn->get_dir(), true, imported_inode);
+
+  if (straydn && oldin->is_dir())
+    mdcache->adjust_subtree_after_rename(oldin, destdn->get_dir(), true);
 
   // removing a new dn?
   if (srcdn->is_auth())
