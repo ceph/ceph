@@ -20,6 +20,26 @@ ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s)
   return out << "osr(" << s.get_name() << " " << &s << ")";
 }
 
+unsigned ObjectStore::apply_transactions(Sequencer *osr,
+					 list<Transaction*> &tls,
+					 Context *ondisk)
+{
+  // use op pool
+  Cond my_cond;
+  Mutex my_lock("ObjectStore::apply_transaction::my_lock");
+  int r = 0;
+  bool done;
+  C_SafeCond *onreadable = new C_SafeCond(&my_lock, &my_cond, &done, &r);
+
+  queue_transactions(osr, tls, onreadable, ondisk);
+
+  my_lock.Lock();
+  while (!done)
+    my_cond.Wait(my_lock);
+  my_lock.Unlock();
+  return r;
+}
+
 void ObjectStore::Transaction::dump(ceph::Formatter *f)
 {
   f->open_array_section("ops");
