@@ -409,10 +409,16 @@ Ceph is still on the leading edge, so you may encounter situations that require
 modifying logging output and using Ceph's debugging. To activate Ceph's
 debugging output (*i.e.*, ``dout()``), you may add ``debug`` settings to your
 configuration. Ceph's logging levels operate on a scale of 1 to 20, where 1 is
-terse and 20 is verbose. Subsystems common to each daemon may be set under
-``[global]`` in your configuration  file. Subsystems for particular daemons are
-set under the daemon section in your configuration file (*e.g.*, ``[mon]``,
-``[osd]``, ``[mds]``). For example:: 
+terse and 20 is verbose. 
+
+.. note:: See `Debugging and Logging`_ for details on log rotation.
+
+.. _Debugging and Logging: ../../operations/debug
+
+Subsystems common to each daemon may be set under ``[global]`` in your
+configuration  file. Subsystems for particular daemons are set under the daemon
+section in your configuration file (*e.g.*, ``[mon]``, ``[osd]``, ``[mds]``).
+For example:: 
 
 	[global]
 		debug ms = 1
