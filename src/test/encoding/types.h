@@ -112,6 +112,7 @@ TYPE(session_info_t)
 TYPE(string_snap_t)
 TYPE(MDSCacheObjectInfo)
 TYPE(mds_table_pending_t)
+TYPE(inode_load_vec_t)
 
 #include "mds/MDSMap.h"
 TYPE_FEATUREFUL(MDSMap)
