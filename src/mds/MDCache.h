@@ -332,9 +332,12 @@ protected:
   set<int> got_resolve;     // nodes i got resolves from
   set<int> need_resolve_ack;   // nodes i need a resolve_ack from
   map<metareqid_t, int> need_resolve_rollback;  // rollbacks i'm writing to the journal
+  map<int, MMDSResolve*> delayed_resolve;
   
   void handle_resolve(MMDSResolve *m);
   void handle_resolve_ack(MMDSResolveAck *m);
+  void process_delayed_resolve();
+  void discard_delayed_resolve(int who);
   void maybe_resolve_finish();
   void disambiguate_imports();
   void recalc_auth_bits();
@@ -364,6 +367,7 @@ public:
   void finish_ambiguous_import(dirfrag_t dirino);
   void resolve_start();
   void send_resolves();
+  void send_slave_resolve(int who);
   void send_resolve_now(int who);
   void send_resolve_later(int who);
   void maybe_send_pending_resolves();
