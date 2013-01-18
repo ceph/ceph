@@ -2508,19 +2508,39 @@ void ScrubMap::generate_test_instances(list<ScrubMap*>& o)
 
 void ScrubMap::object::encode(bufferlist& bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(4, 2, bl);
   ::encode(size, bl);
   ::encode(negative, bl);
   ::encode(attrs, bl);
+  ::encode(digest, bl);
+  ::encode(digest_present, bl);
+  ::encode(nlinks, bl);
+  ::encode(snapcolls, bl);
   ENCODE_FINISH(bl);
 }
 
 void ScrubMap::object::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
   ::decode(size, bl);
   ::decode(negative, bl);
   ::decode(attrs, bl);
+  if (struct_v >= 3) {
+    ::decode(digest, bl);
+    ::decode(digest_present, bl);
+  }
+  else {
+    digest = 0;
+    digest_present = false;
+  }
+  if (struct_v >= 4) {
+    ::decode(nlinks, bl);
+    ::decode(snapcolls, bl);
+  } else {
+    /* Indicates that encoder was not aware of this field since stat must
+     * return nlink >= 1 */
+    nlinks = 0;
+  }
   DECODE_FINISH(bl);
 }
 

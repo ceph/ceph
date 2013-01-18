@@ -1749,8 +1749,14 @@ struct ScrubMap {
     uint64_t size;
     bool negative;
     map<string,bufferptr> attrs;
+    __u32 digest;
+    bool digest_present;
+    uint32_t nlinks;
+    set<snapid_t> snapcolls;
 
-    object(): size(0), negative(false) {}
+    object() :
+      size(0), negative(false), digest(0), digest_present(false),
+      nlinks(0) {}
 
     void encode(bufferlist& bl) const;
     void decode(bufferlist::iterator& bl);

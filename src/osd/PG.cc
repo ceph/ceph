@@ -263,10 +263,10 @@ bool PG::proc_replica_info(int from, pg_info_t &oinfo)
   peer_info[from] = oinfo;
   might_have_unfound.insert(from);
   
-  osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+  unreg_scrub();
   if (info.history.merge(oinfo.history))
     dirty_info = true;
-  osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+  reg_scrub();
   
   // stray?
   if (!is_acting(from)) {
@@ -1584,6 +1584,7 @@ bool PG::queue_scrub()
   if (is_scrubbing()) {
     return false;
   }
+  must_scrub = false;
   state_set(PG_STATE_SCRUBBING);
   osd->scrub_wq.queue(this);
   return true;
@@ -1918,7 +1919,7 @@ void PG::init(int role, vector<int>& newup, vector<int>& newacting, pg_history_t
   info.stats.acting = acting;
   info.stats.mapping_epoch = info.history.same_interval_since;
 
-  osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+  reg_scrub();
 
   write_info(*t);
   write_log(*t);
@@ -2618,6 +2619,20 @@ bool PG::sched_scrub()
   return ret;
 }
 
+void PG::reg_scrub()
+{
+  if (must_scrub) {
+    scrub_reg_stamp = utime_t();
+  } else {
+    scrub_reg_stamp = info.history.last_scrub_stamp;
+  }
+  osd->reg_last_pg_scrub(info.pgid, scrub_reg_stamp);
+}
+
+void PG::unreg_scrub()
+{
+  osd->unreg_last_pg_scrub(info.pgid, scrub_reg_stamp);
+}
 
 void PG::sub_op_scrub_map(OpRequestRef op)
 {
@@ -2682,8 +2697,13 @@ void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls)
     if (r == 0) {
       ScrubMap::object &o = map.objects[poid];
       o.size = st.st_size;
+      o.nlinks = st.st_nlink;
       assert(!o.negative);
       osd->store->getattrs(coll, poid, o.attrs);
+      if (poid.snap != CEPH_SNAPDIR && poid.snap != CEPH_NOSNAP) {
+	// Check snap collections
+	check_snap_collections(st.st_ino, poid, o.attrs, &o.snapcolls);
+      }
       dout(25) << "_scan_list  " << poid << dendl;
     } else {
       dout(25) << "_scan_list  " << poid << " got " << r << ", skipping" << dendl;
@@ -3022,7 +3042,6 @@ void PG::scrub()
 
   if (!is_primary() || !is_active() || !is_clean() || !is_scrubbing()) {
     dout(10) << "scrub -- not primary or active or not clean" << dendl;
-    state_clear(PG_STATE_REPAIR);
     state_clear(PG_STATE_SCRUBBING);
     clear_scrub_reserved();
     unlock();
@@ -3130,13 +3149,15 @@ void PG::scrub_clear_state()
 {
   assert(_lock.is_locked());
   state_clear(PG_STATE_SCRUBBING);
-  state_clear(PG_STATE_REPAIR);
   update_stats();
 
   // active -> nothing.
   osd->dec_scrubs_active();
 
   osd->requeue_ops(this, waiting_for_active);
+
+  must_scrub = false;
+  must_repair = false;
 
   finalizing_scrub = false;
   scrub_block_writes = false;
@@ -3215,6 +3236,7 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
 			    map<hobject_t, set<int> > &missing,
 			    map<hobject_t, set<int> > &inconsistent,
 			    map<hobject_t, int> &authoritative,
+			    map<hobject_t, set<int> > &invalid_snapcolls,
 			    ostream &errorstream)
 {
   map<hobject_t,ScrubMap::object>::const_iterator i;
@@ -3241,6 +3263,18 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
 	  // Take first osd to have it as authoritative
 	  auth = j;
 	} else {
+	  // Check snapcolls
+	  if (k->snap < CEPH_MAXSNAP) {
+	    if (_report_snap_collection_errors(
+		*k,
+		j->first,
+		j->second->objects[*k].attrs,
+		j->second->objects[*k].snapcolls,
+		j->second->objects[*k].nlinks,
+		errorstream)) {
+	      invalid_snapcolls[*k].insert(j->first);
+	    }
+	  }
 	  // Compare 
 	  stringstream ss;
 	  if (!_compare_scrub_objects(auth->second->objects[*k],
@@ -3290,7 +3324,7 @@ void PG::scrub_finalize() {
 
   dout(10) << "scrub_finalize has maps, analyzing" << dendl;
   int errors = 0, fixed = 0;
-  bool repair = state_test(PG_STATE_REPAIR);
+  bool repair = must_repair;
   const char *mode = repair ? "repair":"scrub";
   if (acting.size() > 1) {
     dout(10) << "scrub  comparing replica scrub maps" << dendl;
@@ -3300,6 +3334,7 @@ void PG::scrub_finalize() {
     // Maps from objects with erros to missing/inconsistent peers
     map<hobject_t, set<int> > missing;
     map<hobject_t, set<int> > inconsistent;
+    map<hobject_t, set<int> > inconsistent_snapcolls;
 
     // Map from object with errors to good peer
     map<hobject_t, int> authoritative;
@@ -3314,9 +3349,22 @@ void PG::scrub_finalize() {
       maps[i] = &scrub_received_maps[acting[i]];
     }
 
-    _compare_scrubmaps(maps, missing, inconsistent, authoritative, ss);
+    _compare_scrubmaps(
+      maps, missing, inconsistent, authoritative,
+      inconsistent_snapcolls,
+      ss);
 
-    if (authoritative.size()) {
+    for (map<hobject_t, set<int> >::iterator obj = inconsistent_snapcolls.begin();
+	 obj != inconsistent_snapcolls.end();
+	 ++obj) {
+      for (set<int>::iterator j = obj->second.begin(); j != obj->second.end(); ++j) {
+	++errors;
+	ss << info.pgid << " " << mode << " " << " object " << obj->first
+	   << " has inconsistent snapcolls on " << *j << std::endl;
+      }
+    }
+
+    if (authoritative.size() || inconsistent_snapcolls.size()) {
       ss << info.pgid << " " << mode << " " << missing.size() << " missing, "
 	 << inconsistent.size() << " inconsistent objects\n";
       dout(2) << ss.str() << dendl;
@@ -3378,10 +3426,10 @@ void PG::scrub_finalize() {
     state_clear(PG_STATE_INCONSISTENT);
 
   // finish up
-  osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+  unreg_scrub();
   info.history.last_scrub = info.last_update;
   info.history.last_scrub_stamp = ceph_clock_now(g_ceph_context);
-  osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+  reg_scrub();
 
   {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
@@ -3674,6 +3722,9 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
   state_clear(PG_STATE_DOWN);
   state_clear(PG_STATE_RECOVERING);
 
+  must_scrub = false;
+  must_repair = false;
+
   peer_missing.clear();
   peer_purged.clear();
 
@@ -3689,7 +3740,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     dout(10) << *this << " canceling deletion!" << dendl;
     deleting = false;
     osd->remove_wq.dequeue(this);
-    osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+    reg_scrub();
   }
     
   if (role != oldrole) {
@@ -3764,10 +3815,10 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
     dirty_info = true;
   }
 
-  osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+  unreg_scrub();
   if (info.history.merge(oinfo.history))
     dirty_info = true;
-  osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
+  reg_scrub();
 
   // Handle changes to purged_snaps ONLY IF we have caught up
   if (last_complete_ondisk.epoch >= info.history.last_epoch_started) {
@@ -4471,11 +4522,9 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
 
   if (msg->info.last_backfill == hobject_t()) {
     // restart backfill
-    pg->osd->unreg_last_pg_scrub(pg->info.pgid,
-				 pg->info.history.last_scrub_stamp);
+    pg->unreg_scrub();
     pg->info = msg->info;
-    pg->osd->reg_last_pg_scrub(pg->info.pgid,
-			       pg->info.history.last_scrub_stamp);
+    pg->reg_scrub();
     pg->log.claim_log(msg->log);
     pg->missing.clear();
   } else {

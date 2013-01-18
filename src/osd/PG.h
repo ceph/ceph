@@ -747,6 +747,8 @@ public:
   epoch_t scrub_epoch_start;
   ScrubMap primary_scrubmap;
   MOSDRepScrub *active_rep_scrub;
+  bool must_scrub, must_repair;
+  utime_t scrub_reg_stamp;
 
   void repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
   bool _compare_scrub_objects(ScrubMap::object &auth,
@@ -756,6 +758,7 @@ public:
 			  map<hobject_t, set<int> > &missing,
 			  map<hobject_t, set<int> > &inconsistent,
 			  map<hobject_t, int> &authoritative,
+			  map<hobject_t, set<int> > &inconsistent_snapcolls,
 			  ostream &errorstream);
   void scrub();
   void scrub_finalize();
@@ -766,11 +769,24 @@ public:
   void build_scrub_map(ScrubMap &map);
   void build_inc_scrub_map(ScrubMap &map, eversion_t v);
   virtual int _scrub(ScrubMap &map, int& errors, int& fixed) { return 0; }
+  virtual bool _report_snap_collection_errors(
+    const hobject_t &hoid,
+    int osd,
+    const map<string, bufferptr> &attrs,
+    const set<snapid_t> &snapcolls,
+    uint32_t nlinks,
+    ostream &out) { return false; };
+  virtual void check_snap_collections(
+    ino_t hino, const hobject_t &hoid,
+    const map<string, bufferptr> &attrs,
+    set<snapid_t> *snapcolls) {};
   void clear_scrub_reserved();
   void scrub_reserve_replicas();
   void scrub_unreserve_replicas();
   bool scrub_all_replicas_reserved() const;
   bool sched_scrub();
+  void reg_scrub();
+  void unreg_scrub();
 
   void replica_scrub(class MOSDRepScrub *op);
   void sub_op_scrub_map(OpRequestRef op);
@@ -1254,6 +1270,7 @@ public:
     scrub_reserved(false), scrub_reserve_failed(false),
     scrub_waiting_on(0),
     active_rep_scrub(0),
+    must_scrub(false), must_repair(false),
     recovery_state(this)
   {
     pool->get();
