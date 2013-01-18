@@ -25,14 +25,14 @@ class EResetJournal : public LogEvent {
   ~EResetJournal() {}
 
   void encode(bufferlist& bl) const {
-    __u8 v = 1;
-    ::encode(v, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(stamp, bl);
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    __u8 v;
-    ::decode(v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(stamp, bl);
+    DECODE_FINISH(bl);
   }
 
   void print(ostream& out) {
