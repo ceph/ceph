@@ -135,4 +135,14 @@ public class CephUnmountedTest {
   public void test_get_stripe_unit_gran() throws Exception {
     mount.get_stripe_unit_granularity();
   }
+
+  @Test(expected=CephNotMountedException.class)
+  public void test_get_pool_id() throws Exception {
+    mount.get_pool_id("data");
+  }
+
+  @Test(expected=CephNotMountedException.class)
+  public void test_get_pool_replication() throws Exception {
+    mount.get_pool_replication(1);
+  }
 }
