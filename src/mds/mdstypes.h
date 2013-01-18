@@ -819,8 +819,11 @@ class inode_load_vec_t {
 public:
   inode_load_vec_t(const utime_t &now)
      : vec(NUM, DecayCounter(now))
-  {
-  }
+  {}
+  // for dencoder infrastructure
+  inode_load_vec_t() :
+    vec(NUM, DecayCounter())
+  {}
   DecayCounter &get(int t) { 
     assert(t < NUM);
     return vec[t]; 
@@ -829,18 +832,12 @@ public:
     for (int i=0; i<NUM; i++) 
       vec[i].reset(now);
   }
-  void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    for (int i=0; i<NUM; i++)
-      ::encode(vec[i], bl);
-  }
-  void decode(const utime_t &t, bufferlist::iterator &p) {
-    __u8 struct_v;
-    ::decode(struct_v, p);
-    for (int i=0; i<NUM; i++)
-      ::decode(vec[i], t, p);
-  }
+  void encode(bufferlist &bl) const;
+  void decode(const utime_t &t, bufferlist::iterator &p);
+  // for dencoder
+  void decode(bufferlist::iterator& p) { utime_t sample; decode(sample, p); }
+  void dump(Formatter *f);
+  static void generate_test_instances(list<inode_load_vec_t*>& ls);
 };
 inline void encode(const inode_load_vec_t &c, bufferlist &bl) { c.encode(bl); }
 inline void decode(inode_load_vec_t & c, const utime_t &t, bufferlist::iterator &p) {
