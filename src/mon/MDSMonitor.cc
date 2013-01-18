@@ -672,10 +672,28 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
     return false;
 }
 
+void MDSMonitor::fail_mds_gid(uint64_t gid)
+{
+  assert(pending_mdsmap.mds_info.count(gid));
+  MDSMap::mds_info_t& info = pending_mdsmap.mds_info[gid];
+  utime_t until = ceph_clock_now(g_ceph_context);
+  until += g_conf->mds_blacklist_interval;
+
+  pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(info.addr, until);
+  mon->osdmon()->propose_pending();
+
+  if (info.rank >= 0) {
+    pending_mdsmap.up.erase(info.rank);
+    pending_mdsmap.failed.insert(info.rank);
+  }
+
+  pending_mdsmap.mds_info.erase(gid);
+}
+
 int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
 {
   std::string err;
-  int w = strict_strtol(arg.c_str(), 10, &err);
+  int w = strict_strtoll(arg.c_str(), 10, &err);
   if (!err.empty()) {
     // Try to interpret the arg as an MDS name
     const MDSMap::mds_info_t *mds_info = mdsmap.find_by_name(arg);
@@ -688,18 +706,12 @@ int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
 
   if (pending_mdsmap.up.count(w)) {
     uint64_t gid = pending_mdsmap.up[w];
-    if (pending_mdsmap.mds_info.count(gid)) {
-      utime_t until = ceph_clock_now(g_ceph_context);
-      until += g_conf->mds_blacklist_interval;
-      MDSMap::mds_info_t& info = pending_mdsmap.mds_info[pending_mdsmap.up[w]];
-      pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(info.addr, until);
-      mon->osdmon()->propose_pending();
-
-      pending_mdsmap.mds_info.erase(gid);
-    }
-    pending_mdsmap.up.erase(w);
-    pending_mdsmap.failed.insert(w);
+    if (pending_mdsmap.mds_info.count(gid))
+      fail_mds_gid(gid);
     ss << "failed mds." << w;
+  } else if (pending_mdsmap.mds_info.count(w)) {
+    fail_mds_gid(w);
+    ss << "failed mds gid " << w;
   }
   return 0;
 }
