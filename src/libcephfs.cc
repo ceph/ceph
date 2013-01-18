@@ -848,3 +848,27 @@ extern "C" int ceph_get_stripe_unit_granularity(struct ceph_mount_info *cmount)
     return -ENOTCONN;
   return CEPH_MIN_STRIPE_UNIT;
 }
+
+extern "C" int ceph_get_pool_id(struct ceph_mount_info *cmount, const char *pool_name)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+
+  if (!pool_name || !pool_name[0])
+    return -EINVAL;
+
+  /* negative range reserved for errors */
+  int64_t pool_id = cmount->get_client()->get_pool_id(pool_name);
+  if (pool_id > 0x7fffffff)
+    return -ERANGE;
+
+  /* get_pool_id error codes fit in int */
+  return (int)pool_id;
+}
+
+extern "C" int ceph_get_pool_replication(struct ceph_mount_info *cmount, int pool_id)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->get_pool_replication(pool_id);
+}
