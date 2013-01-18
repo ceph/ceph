@@ -301,6 +301,9 @@ public:
   
   // -- replication
   void encode_replica(int mds, bufferlist& bl) {
+    if (!is_replicated())
+      lock.replicate_relax();
+
     __u32 nonce = add_replica(mds);
     ::encode(nonce, bl);
     ::encode(first, bl);
