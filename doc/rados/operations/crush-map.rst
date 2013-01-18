@@ -845,7 +845,7 @@ Which client versions support CRUSH_TUNABLES
 
  * argonaut series, v0.48.1 or later
  * v0.49 or later
- * Linux kernel version v3.5 or later (for the file system and RBD kernel clients)
+ * Linux kernel version v3.6 or later (for the file system and RBD kernel clients)
 
 Which client versions support CRUSH_TUNABLES2
 ---------------------------------------------
