@@ -44,15 +44,15 @@ class InoTable : public MDSTable {
 
   void reset_state();
   void encode_state(bufferlist& bl) {
-    __u8 v = 1;
-    ::encode(v, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(free, bl);
+    ENCODE_FINISH(bl);
   }
   void decode_state(bufferlist::iterator& bl) {
-    __u8 v;
-    ::decode(v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(free, bl);
     projected_free = free;
+    DECODE_FINISH(bl);
   }
 
   void skip_inos(inodeno_t i);
