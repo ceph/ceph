@@ -48,36 +48,47 @@ Data Storage
 
 Plan your data storage configuration carefully, because there are significant
 opportunities for performance improvement by incurring the added cost of using
-solid state drives, and there are significant  cost-per-gigabyte considerations
-with hard disk drives. Metadata servers and monitors don't use a lot of storage
-space. A metadata server requires approximately 1MB of storage space per daemon
-instance. A  monitor requires approximately 10GB of storage space per daemon
-instance. One opportunity for performance improvement is to use solid-state
-drives to reduce random access time and read latency while accelerating
-throughput. Solid state drives cost more than 10x as much per gigabyte when
-compared to a hard disk, but they often exhibit access times that are at least
-100x faster than a hard disk drive. Since the storage requirements for metadata
-servers and monitors are so low, solid state drives may provide an economical
-opportunity to improve performance. OSDs should have plenty of disk space. We
-recommend a minimum disk size of 1 terabyte. We recommend dividing the  price of
-the hard disk drive by the number of gigabytes to arrive at a cost per
-gigabyte, because larger drives may have a significant impact on the
-cost-per-gigabyte. For example, a 1 terabyte hard disk priced at $75.00 has a
-cost  of $0.07 per gigabyte (i.e., $75 / 1024 = 0.0732). By contrast, a 3
-terabyte hard  disk priced at $150.00 has a cost of $0.05 per gigabyte (i.e.,
-$150 / 3072 = 0.0488). In the foregoing example, using the 1 terabyte disks
-would generally increase the cost per gigabyte by 40%--rendering your cluster
-substantially less cost efficient. For OSD hosts, we recommend using an OS disk
-for the operating system and software, and one disk for each OSD daemon you run
-on the host. While solid state drives are cost prohibitive for object storage,
-OSDs may see a performance improvement by storing an OSD's journal on a solid
-state drive and the OSD's object data on a hard disk drive. You may run multiple
-OSDs per host, but you should ensure that the sum of the total throughput of
-your OSD hard disks doesn't exceed the network bandwidth required to service a
-client's need to read or write data. You should also consider what percentage of
-the cluster's data storage is on each host. If the percentage is large and the
-host fails, it can lead to problems such as exceeding the ``full ratio``,  which
-causes Ceph to halt operations as a safety precaution that prevents data loss.
+solid state drives (SSDs), and there are significant cost-per-gigabyte
+considerations with hard disk drives. Metadata servers and monitors don't use a
+lot of storage space. A metadata server requires approximately 1MB of storage
+space per daemon instance. A monitor requires approximately 10GB of storage
+space per daemon instance. One opportunity for performance improvement is to use
+solid-state drives to reduce random access time and read latency while
+accelerating throughput. Solid state drives cost more than 10x as much per
+gigabyte when compared to a hard disk, but they often exhibit access times that
+are at least 100x faster than a hard disk drive. Since the storage requirements
+for metadata servers and monitors are so low, solid state drives may provide an
+economical opportunity to improve performance. 
+
+.. important:: We recommend exploring the use of SSDs to improve performance. 
+   However, before making a significant investment in SSDs, we **strongly
+   recommend** both reviewing the performance metrics of an SSD and testing the
+   SSD in a test configuration to gauge performance. SSD write latency may 
+   **NOT** improve performance compared to a high performance hard disk. 
+   Inexpensive SSDs may introduce write latency even as they accelerate 
+   access time, because sometimes hard drives will write faster than SSDs!
+
+OSDs should have plenty of disk space. We recommend a minimum disk size of 1
+terabyte. We recommend dividing the price of the hard disk drive by the number
+of gigabytes to arrive at a cost per gigabyte, because larger drives may have a
+significant impact on the cost-per-gigabyte. For example, a 1 terabyte hard disk
+priced at $75.00 has a cost  of $0.07 per gigabyte (i.e., $75 / 1024 = 0.0732).
+By contrast, a 3 terabyte hard  disk priced at $150.00 has a cost of $0.05 per
+gigabyte (i.e., $150 / 3072 = 0.0488). In the foregoing example, using the 1
+terabyte disks would generally increase the cost per gigabyte by 40%--rendering
+your cluster substantially less cost efficient. For OSD hosts, we recommend
+using an OS disk for the operating system and software, and one disk for each
+OSD daemon you run on the host. While solid state drives are cost prohibitive
+for object storage, OSDs may see a performance improvement by storing an OSD's
+journal on a solid state drive and the OSD's object data on a hard disk drive.
+You may run multiple OSDs per host, but you should ensure that the sum of the
+total throughput of your OSD hard disks doesn't exceed the network bandwidth
+required to service a client's need to read or write data. You should also
+consider what percentage of the cluster's data storage is on each host. If the
+percentage is large and the host fails, it can lead to problems such as
+exceeding the ``full ratio``,  which causes Ceph to halt operations as a safety
+precaution that prevents data loss.
+
 
 
 Networks
