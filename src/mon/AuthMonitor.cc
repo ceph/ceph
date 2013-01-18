@@ -336,14 +336,34 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
       goto reply;
     }
 
-    int type;
+    // do we require cephx signatures?
 
+    if (!m->get_connection()->has_feature(CEPH_FEATURE_MSG_AUTH)) {
+      if (entity_name.get_type() == CEPH_ENTITY_TYPE_MON ||
+	  entity_name.get_type() == CEPH_ENTITY_TYPE_OSD ||
+	  entity_name.get_type() == CEPH_ENTITY_TYPE_MDS) {
+	if (g_conf->cephx_cluster_require_signatures ||
+	    g_conf->cephx_require_signatures) {
+	  dout(1) << m->get_source_inst() << " supports cephx but not signatures and 'cephx [cluster] require signatures = true'; disallowing cephx" << dendl;
+	  supported.erase(CEPH_AUTH_CEPHX);
+	}
+      } else {
+	if (g_conf->cephx_service_require_signatures ||
+	    g_conf->cephx_require_signatures) {
+	  dout(1) << m->get_source_inst() << " supports cephx but not signatures and 'cephx [service] require signatures = true'; disallowing cephx" << dendl;
+	  supported.erase(CEPH_AUTH_CEPHX);
+	}
+      }
+    }
+
+    int type;
     if (entity_name.get_type() == CEPH_ENTITY_TYPE_MON ||
 	entity_name.get_type() == CEPH_ENTITY_TYPE_OSD ||
 	entity_name.get_type() == CEPH_ENTITY_TYPE_MDS)
       type = mon->auth_cluster_required.pick(supported);
     else
       type = mon->auth_service_required.pick(supported);
+
     s->auth_handler = get_auth_service_handler(type, g_ceph_context, &mon->key_server);
     if (!s->auth_handler) {
       dout(1) << "client did not provide supported auth type" << dendl;
