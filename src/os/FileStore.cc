@@ -2878,16 +2878,22 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
     r = bl.length();
 
   // flush?
-  if ((ssize_t)len < m_filestore_flush_min ||
+  {
+    bool should_flush = (ssize_t)len >= m_filestore_flush_min;
 #ifdef HAVE_SYNC_FILE_RANGE
-      !m_filestore_flusher || !queue_flusher(fd, offset, len)
+    if (!should_flush ||
+	!m_filestore_flusher ||
+	!queue_flusher(fd, offset, len)) {
+      if (m_filestore_sync_flush)
+	::sync_file_range(fd, offset, len, SYNC_FILE_RANGE_WRITE);
+      lfn_close(fd);
+    }
 #else
-      true
-#endif
-      ) {
+    // no sync_file_range; (maybe) flush inline and close.
     if (m_filestore_sync_flush)
-      ::sync_file_range(fd, offset, len, SYNC_FILE_RANGE_WRITE);
+      ::fdatasync(fd);
     lfn_close(fd);
+#endif
   }
 
  out:
