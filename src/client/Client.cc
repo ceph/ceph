@@ -2581,7 +2581,7 @@ bool Client::_flush(Inode *in)
   }
 
   Context *onfinish = new C_Client_PutInode(this, in);
-  bool safe = objectcacher->commit_set(&in->oset, onfinish);
+  bool safe = objectcacher->flush_set(&in->oset, onfinish);
   if (safe) {
     onfinish->complete(0);
   }

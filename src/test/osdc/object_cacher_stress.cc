@@ -144,7 +144,7 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
   bool done;
   Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &r);
   lock.Lock();
-  bool already_flushed = obc.commit_set(&object_set, onfinish);
+  bool already_flushed = obc.flush_set(&object_set, onfinish);
   std::cout << "already flushed = " << already_flushed << std::endl;
   lock.Unlock();
   if (!already_flushed) {

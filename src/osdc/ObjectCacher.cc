@@ -1583,53 +1583,6 @@ bool ObjectCacher::flush_set(ObjectSet *oset, vector<ObjectExtent>& exv, Context
   
   if (safe) {
     ldout(cct, 10) << "flush_set " << oset << " has no dirty|tx bhs" << dendl;
-    delete onfinish;
-    return true;
-  }
-  return false;
-}
-
-
-// commit.  non-blocking, takes callback.
-// return true if already flushed.
-bool ObjectCacher::commit_set(ObjectSet *oset, Context *onfinish)
-{
-  assert(lock.is_locked());
-  assert(onfinish);  // doesn't make any sense otherwise.
-
-  if (oset->objects.empty()) {
-    ldout(cct, 10) << "commit_set on " << oset << " dne" << dendl;
-    // need to delete this here, since this is what C_GatherBuilder does
-    // if no subs were registered
-    delete onfinish;
-    return true;
-  }
-
-  ldout(cct, 10) << "commit_set " << oset << dendl;
-
-  // make sure it's flushing.
-  flush_set(oset);
-
-  // we'll need to wait for all objects to commit
-  C_GatherBuilder gather(cct, onfinish);
-
-  bool safe = true;
-  for (xlist<Object*>::iterator i = oset->objects.begin();
-       !i.end(); ++i) {
-    Object *ob = *i;
-    
-    if (ob->last_write_tid > ob->last_commit_tid) {
-      ldout(cct, 10) << "commit_set " << oset << " " << *ob 
-               << " will finish on commit tid " << ob->last_write_tid
-               << dendl;
-      safe = false;
-      ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
-    }
-  }
-  gather.activate();
-
-  if (safe) {
-    ldout(cct, 10) << "commit_set " << oset << " all committed" << dendl;
     return true;
   }
   return false;

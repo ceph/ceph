@@ -539,7 +539,7 @@ namespace librbd {
     bool done;
     Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &r);
     cache_lock.Lock();
-    bool already_flushed = object_cacher->commit_set(object_set, onfinish);
+    bool already_flushed = object_cacher->flush_set(object_set, onfinish);
     cache_lock.Unlock();
     if (!already_flushed) {
       mylock.Lock();

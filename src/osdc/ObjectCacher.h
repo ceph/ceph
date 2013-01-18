@@ -582,8 +582,6 @@ public:
   bool flush_set(ObjectSet *oset, vector<ObjectExtent>& ex, Context *onfinish=0);
   void flush_all(Context *onfinish=0);
 
-  bool commit_set(ObjectSet *oset, Context *oncommit);
-
   void purge_set(ObjectSet *oset);
 
   loff_t release_set(ObjectSet *oset);  // returns # of bytes not released (ie non-clean)
