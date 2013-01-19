@@ -4378,11 +4378,10 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   Mutation *mut = mdr;
   if (!mut) {
     assert(mds->is_resolve());
-    mds->mdcache->add_rollback(rollback.reqid);  // need to finish this update before resolve finishes
+    mds->mdcache->add_rollback(rollback.reqid, master);  // need to finish this update before resolve finishes
     mut = new Mutation(rollback.reqid);
     mut->ls = mds->mdlog->get_current_segment();
   }
-
 
   CInode *in = mds->mdcache->get_inode(rollback.ino);
   assert(in);
@@ -4976,7 +4975,7 @@ void Server::do_rmdir_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   dout(10) << "do_rmdir_rollback on " << rollback.reqid << dendl;
   if (!mdr) {
     assert(mds->is_resolve());
-    mds->mdcache->add_rollback(rollback.reqid);  // need to finish this update before resolve finishes
+    mds->mdcache->add_rollback(rollback.reqid, master);  // need to finish this update before resolve finishes
   }
 
   CDir *dir = mds->mdcache->get_dirfrag(rollback.src_dir);
@@ -6480,8 +6479,9 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   dout(10) << "do_rename_rollback on " << rollback.reqid << dendl;
   if (!mdr) {
     assert(mds->is_resolve());
-    mds->mdcache->add_rollback(rollback.reqid);  // need to finish this update before resolve finishes
+    mds->mdcache->add_rollback(rollback.reqid, master);  // need to finish this update before resolve finishes
   }
+
   Mutation *mut = new Mutation(rollback.reqid);
   mut->ls = mds->mdlog->get_current_segment();
 
