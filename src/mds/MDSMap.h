@@ -449,6 +449,12 @@ public:
   bool is_any_failed() {
     return failed.size();
   }
+  bool is_resolving() {
+    return
+      get_num_mds(STATE_RESOLVE) > 0 &&
+      get_num_mds(STATE_REPLAY) == 0 &&
+      failed.empty();
+  }
   bool is_rejoining() {  
     // nodes are rejoining cache state
     return 

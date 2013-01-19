@@ -974,14 +974,12 @@ void MDS::handle_mds_map(MMDSMap *m)
   // RESOLVE
   // is someone else newly resolving?
   if (is_resolve() || is_rejoin() || is_clientreplay() || is_active() || is_stopping()) {
-    set<int> oldresolve, resolve;
-    oldmap->get_mds_set(oldresolve, MDSMap::STATE_RESOLVE);
-    mdsmap->get_mds_set(resolve, MDSMap::STATE_RESOLVE);
-    if (oldresolve != resolve) {
-      dout(10) << " resolve set is " << resolve << ", was " << oldresolve << dendl;
+    if (!oldmap->is_resolving() && mdsmap->is_resolving()) {
+      set<int> oldresolve, resolve;
+      mdsmap->get_mds_set(resolve, MDSMap::STATE_RESOLVE);
+      dout(10) << " resolve set is " << resolve << dendl;
       calc_recovery_set();
-      if (!mdsmap->is_any_failed())
-	mdcache->send_resolves();
+      mdcache->send_resolves();
     }
   }
   
@@ -1410,6 +1408,7 @@ void MDS::resolve_start()
   reopen_log();
 
   mdcache->resolve_start();
+  finish_contexts(g_ceph_context, waiting_for_resolve);
 }
 void MDS::resolve_done()
 {
