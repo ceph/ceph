@@ -208,6 +208,46 @@ class CephManager:
             )
         return proc.stdout.getvalue()
 
+    def do_rados(self, remote, cmd):
+        pre = [
+            'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
+            '/tmp/cephtest/enable-coredump',
+            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+            '/tmp/cephtest/archive/coverage',
+            '/tmp/cephtest/binary/usr/local/bin/rados',
+            '-c', '/tmp/cephtest/ceph.conf',
+            ];
+        pre.extend(cmd)
+        proc = remote.run(
+            args=pre,
+            wait=True,
+            )
+        return proc
+
+    def osd_admin_socket(self, osdnum, command):
+        remote = None
+        for _remote, roles_for_host in self.ctx.cluster.remotes.iteritems():
+            for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
+                if int(id_) == osdnum:
+                    remote = _remote
+        assert remote is not None
+        args=[
+                'LD_LIBRARY_PRELOAD=/tmp/cephtest/binary/usr/local/lib',
+                '/tmp/cephtest/enable-coredump',
+                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
+                '/tmp/cephtest/archive/coverage',
+                '/tmp/cephtest/binary/usr/local/bin/ceph',
+                '-k', '/tmp/cephtest/ceph.keyring',
+                '-c', '/tmp/cephtest/ceph.conf',
+                '--admin-daemon',
+                "/tmp/cephtest/asok.osd.%s"%(str(osdnum),)]
+        args.extend(command)
+        return remote.run(
+            args=args,
+            stdout=StringIO(),
+            wait=True,
+            )
+
     def get_pg_primary(self, pool, pgnum):
         """
         get primary for pool, pgnum (e.g. (data, 0)->0

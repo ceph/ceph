@@ -9,23 +9,6 @@ from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
-def rados_start(remote, cmd):
-    log.info("rados %s" % ' '.join(cmd))
-    pre = [
-        'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-        '/tmp/cephtest/enable-coredump',
-        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-        '/tmp/cephtest/archive/coverage',
-        '/tmp/cephtest/binary/usr/local/bin/rados',
-        '-c', '/tmp/cephtest/ceph.conf',
-        ];
-    pre.extend(cmd)
-    proc = remote.run(
-        args=pre,
-        wait=True,
-        )
-    return proc
-
 def task(ctx, config):
     """
     Test [deep] scrub
@@ -54,7 +37,7 @@ def task(ctx, config):
     manager.wait_for_clean()
 
     # write some data
-    p = rados_start(mon, ['-p', 'rbd', 'bench', '1', 'write', '-b', '4096'])
+    p = manager.do_rados(mon, ['-p', 'rbd', 'bench', '--no-cleanup', '1', 'write', '-b', '4096'])
     err = p.exitstatus
     log.info('err is %d' % err)
 
@@ -75,14 +58,12 @@ def task(ctx, config):
 
     log.info('messing with PG %s on osd %d' % (victim, osd))
 
-
     (osd_remote,) = ctx.cluster.only('osd.%d' % osd).remotes.iterkeys()
     data_path = os.path.join('/tmp/cephtest/data',
                              'osd.{id}.data'.format(id=osd),
                              'current',
                              '{pg}_head'.format(pg=victim)
                             )
-
 
     # fuzz time
     ls_fp = StringIO()
@@ -94,33 +75,39 @@ def task(ctx, config):
     ls_fp.close()
 
     # find an object file we can mess with
-    file = None
+    osdfilename = None
     for line in ls_out.split('\n'):
-        if line.find('object'):
-            file = line
+        if 'object' in line:
+            osdfilename = line
             break
-    assert file is not None
+    assert osdfilename is not None
 
-    log.info('fuzzing %s' % file)
+    # Get actual object name from osd stored filename
+    tmp=osdfilename.split('__')
+    objname=tmp[0]
+    objname=objname.replace('\u', '_')
+    log.info('fuzzing %s' % objname)
 
     # put a single \0 at the beginning of the file
     osd_remote.run(
         args=[ 'dd',
                'if=/dev/zero',
-               'of=%s' % os.path.join(data_path, file),
+               'of=%s' % os.path.join(data_path, osdfilename),
                'bs=1', 'count=1', 'conv=notrunc'
              ]
     )
 
     # scrub, verify inconsistent
     manager.raw_cluster_cmd('pg', 'deep-scrub', victim)
+    # Give deep-scrub a chance to start
+    time.sleep(60)
 
     while True:
         stats = manager.get_single_pg_stats(victim)
         state = stats['state']
 
         # wait for the scrub to finish
-        if state.find('scrubbing'):
+        if 'scrubbing' in state:
             time.sleep(3)
             continue
 
@@ -131,13 +118,61 @@ def task(ctx, config):
 
     # repair, verify no longer inconsistent
     manager.raw_cluster_cmd('pg', 'repair', victim)
+    # Give repair a chance to start
+    time.sleep(60)
 
     while True:
         stats = manager.get_single_pg_stats(victim)
         state = stats['state']
 
         # wait for the scrub to finish
-        if state.find('scrubbing'):
+        if 'scrubbing' in state:
+            time.sleep(3)
+            continue
+
+        inconsistent = stats['state'].find('+inconsistent') != -1
+        assert not inconsistent
+        break
+
+    # Test deep-scrub with various omap modifications
+    manager.do_rados(mon, ['-p', 'rbd', 'setomapval', objname, 'key', 'val'])
+    manager.do_rados(mon, ['-p', 'rbd', 'setomapheader', objname, 'hdr'])
+
+    # Modify omap on specific osd
+    log.info('fuzzing omap of %s' % objname)
+    manager.osd_admin_socket(osd, ['rmomapkey', 'rbd', objname, 'key']);
+    manager.osd_admin_socket(osd, ['setomapval', 'rbd', objname, 'badkey', 'badval']);
+    manager.osd_admin_socket(osd, ['setomapheader', 'rbd', objname, 'badhdr']);
+
+    # scrub, verify inconsistent
+    manager.raw_cluster_cmd('pg', 'deep-scrub', victim)
+    # Give deep-scrub a chance to start
+    time.sleep(60)
+
+    while True:
+        stats = manager.get_single_pg_stats(victim)
+        state = stats['state']
+
+        # wait for the scrub to finish
+        if 'scrubbing' in state:
+            time.sleep(3)
+            continue
+
+        inconsistent = stats['state'].find('+inconsistent') != -1
+        assert inconsistent
+        break
+
+    # repair, verify no longer inconsistent
+    manager.raw_cluster_cmd('pg', 'repair', victim)
+    # Give repair a chance to start
+    time.sleep(60)
+
+    while True:
+        stats = manager.get_single_pg_stats(victim)
+        state = stats['state']
+
+        # wait for the scrub to finish
+        if 'scrubbing' in state:
             time.sleep(3)
             continue
 
