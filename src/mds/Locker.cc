@@ -460,11 +460,14 @@ bool Locker::acquire_locks(MDRequest *mdr,
 }
 
 
-void Locker::set_xlocks_done(Mutation *mut)
+void Locker::set_xlocks_done(Mutation *mut, bool skip_dentry)
 {
   for (set<SimpleLock*>::iterator p = mut->xlocks.begin();
        p != mut->xlocks.end();
        p++) {
+    if (skip_dentry &&
+	((*p)->get_type() == CEPH_LOCK_DN || (*p)->get_type() == CEPH_LOCK_DVERSION))
+      continue;
     dout(10) << "set_xlocks_done on " << **p << " " << *(*p)->get_parent() << dendl;
     (*p)->set_xlock_done();
   }
