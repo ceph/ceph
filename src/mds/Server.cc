@@ -3508,6 +3508,51 @@ void Server::handle_set_vxattr(MDRequest *mdr, CInode *cur,
   reply_request(mdr, -EINVAL);
 }
 
+void Server::handle_remove_vxattr(MDRequest *mdr, CInode *cur,
+				  set<SimpleLock*> rdlocks,
+				  set<SimpleLock*> wrlocks,
+				  set<SimpleLock*> xlocks)
+{
+  MClientRequest *req = mdr->client_request;
+  string name(req->get_path2());
+  if (name == "ceph.dir.layout") {
+    if (!cur->is_dir()) {
+      reply_request(mdr, -ENODATA);
+      return;
+    }
+    if (cur->is_root()) {
+      dout(10) << "can't remove layout policy on the root directory" << dendl;
+      reply_request(mdr, -EINVAL);
+      return;
+    }
+
+    if (!cur->get_projected_dir_layout()) {
+      reply_request(mdr, -ENODATA);
+      return;
+    }
+
+    xlocks.insert(&cur->policylock);
+    if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+      return;
+
+    cur->project_inode();
+    cur->get_projected_node()->dir_layout = NULL;
+    cur->get_projected_inode()->version = cur->pre_dirty();
+
+    // log + wait
+    mdr->ls = mdlog->get_current_segment();
+    EUpdate *le = new EUpdate(mdlog, "remove dir layout vxattr");
+    mdlog->start_entry(le);
+    le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+    mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
+    mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
+
+    journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
+    return;
+  }
+
+  reply_request(mdr, -ENODATA);
+}
 
 class C_MDS_inode_xattr_update_finish : public Context {
   MDS *mds;
@@ -3607,24 +3652,34 @@ void Server::handle_client_setxattr(MDRequest *mdr)
 void Server::handle_client_removexattr(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
+  string name(req->get_path2());
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
-  if (!cur) return;
+  ceph_file_layout *dir_layout = NULL;
+  CInode *cur;
+  if (name == "ceph.dir.layout")
+    cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true, false, &dir_layout);
+  else
+    cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  if (!cur)
+    return;
 
   if (mdr->snapid != CEPH_NOSNAP) {
     reply_request(mdr, -EROFS);
     return;
   }
-    if (cur->is_base()) {
+  if (cur->is_base()) {
     reply_request(mdr, -EINVAL);   // for now
+    return;
+  }
+
+  if (name.find("ceph.") == 0) {
+    handle_remove_vxattr(mdr, cur, rdlocks, wrlocks, xlocks);
     return;
   }
 
   xlocks.insert(&cur->xattrlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
-
-  string name(req->get_path2());
 
   map<string, bufferptr> *pxattrs = cur->get_projected_xattrs();
   if (pxattrs->count(name) == 0) {

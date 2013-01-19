@@ -159,6 +159,10 @@ public:
 			 set<SimpleLock*> rdlocks,
 			 set<SimpleLock*> wrlocks,
 			 set<SimpleLock*> xlocks);
+  void handle_remove_vxattr(MDRequest *mdr, CInode *cur,
+			    set<SimpleLock*> rdlocks,
+			    set<SimpleLock*> wrlocks,
+			    set<SimpleLock*> xlocks);
   void handle_client_setxattr(MDRequest *mdr);
   void handle_client_removexattr(MDRequest *mdr);
 
