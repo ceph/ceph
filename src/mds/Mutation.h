@@ -61,6 +61,7 @@ struct Mutation {
   // lock we are currently trying to acquire.  if we give up for some reason,
   // be sure to eval() this.
   SimpleLock *locking;
+  int locking_target_mds;
 
   // if this flag is set, do not attempt to acquire further locks.
   //  (useful for wrlock, which may be a moving auth target)
@@ -82,12 +83,14 @@ struct Mutation {
       ls(0),
       slave_to_mds(-1),
       locking(NULL),
+      locking_target_mds(-1),
       done_locking(false), committing(false), aborted(false), killed(false) { }
   Mutation(metareqid_t ri, __u32 att=0, int slave_to=-1)
     : reqid(ri), attempt(att),
       ls(0),
       slave_to_mds(slave_to), 
       locking(NULL),
+      locking_target_mds(-1),
       done_locking(false), committing(false), aborted(false), killed(false) { }
   virtual ~Mutation() {
     assert(locking == NULL);
@@ -113,7 +116,7 @@ struct Mutation {
   void set_stickydirs(CInode *in);
   void drop_pins();
 
-  void start_locking(SimpleLock *lock);
+  void start_locking(SimpleLock *lock, int target=-1);
   void finish_locking(SimpleLock *lock);
 
   // auth pins
@@ -204,6 +207,7 @@ struct MDRequest : public Mutation {
     CInode* rename_inode;
     bool is_freeze_authpin;
     bool is_ambiguous_auth;
+    bool is_remote_frozen_authpin;
     bool is_inode_exporter;
 
     map<client_t,entity_inst_t> imported_client_map;
@@ -224,8 +228,8 @@ struct MDRequest : public Mutation {
     More() : 
       src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
       rename_inode(0), is_freeze_authpin(false), is_ambiguous_auth(false),
-      is_inode_exporter(false), flock_was_waiting(false),
-      stid(0), slave_commit(0) { }
+      is_remote_frozen_authpin(false), is_inode_exporter(false),
+      flock_was_waiting(false), stid(0), slave_commit(0) { }
   } *_more;
 
 
@@ -280,6 +284,7 @@ struct MDRequest : public Mutation {
   bool did_ino_allocation();
   bool freeze_auth_pin(CInode *inode);
   void unfreeze_auth_pin();
+  void set_remote_frozen_auth_pin(CInode *inode);
   bool can_auth_pin(MDSCacheObject *object);
   void drop_local_auth_pins();
   void set_ambiguous_auth(CInode *inode);

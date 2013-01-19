@@ -184,7 +184,9 @@ class MMDSCacheRejoin : public Message {
     }
   };
   map<vinodeno_t, slave_reqid> authpinned_inodes;
+  map<vinodeno_t, slave_reqid> frozen_authpin_inodes;
   map<vinodeno_t, map<__s32, slave_reqid> > xlocked_inodes;
+  map<vinodeno_t, map<__s32, slave_reqid> > wrlocked_inodes;
   map<dirfrag_t, map<string_snap_t, slave_reqid> > authpinned_dentries;
   map<dirfrag_t, map<string_snap_t, slave_reqid> > xlocked_dentries;
   
@@ -227,8 +229,14 @@ public:
   void add_inode_authpin(vinodeno_t ino, const metareqid_t& ri, __u32 attempt) {
     authpinned_inodes[ino] = slave_reqid(ri, attempt);
   }
+  void add_inode_frozen_authpin(vinodeno_t ino, const metareqid_t& ri, __u32 attempt) {
+    frozen_authpin_inodes[ino] = slave_reqid(ri, attempt);
+  }
   void add_inode_xlock(vinodeno_t ino, int lt, const metareqid_t& ri, __u32 attempt) {
     xlocked_inodes[ino][lt] = slave_reqid(ri, attempt);
+  }
+  void add_inode_wrlock(vinodeno_t ino, int lt, const metareqid_t& ri, __u32 attempt) {
+    wrlocked_inodes[ino][lt] = slave_reqid(ri, attempt);
   }
 
   void add_scatterlock_state(CInode *in) {
@@ -278,7 +286,9 @@ public:
     ::encode(inode_locks, payload);
     ::encode(inode_scatterlocks, payload);
     ::encode(authpinned_inodes, payload);
+    ::encode(frozen_authpin_inodes, payload);
     ::encode(xlocked_inodes, payload);
+    ::encode(wrlocked_inodes, payload);
     ::encode(cap_export_bl, payload);
     ::encode(strong_dirfrags, payload);
     ::encode(weak, payload);
@@ -296,7 +306,9 @@ public:
     ::decode(inode_locks, p);
     ::decode(inode_scatterlocks, p);
     ::decode(authpinned_inodes, p);
+    ::decode(frozen_authpin_inodes, p);
     ::decode(xlocked_inodes, p);
+    ::decode(wrlocked_inodes, p);
     ::decode(cap_export_bl, p);
     if (cap_export_bl.length()) {
       bufferlist::iterator q = cap_export_bl.begin();
