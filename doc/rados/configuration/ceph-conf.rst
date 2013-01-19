@@ -386,10 +386,10 @@ journal data (e.g., a solid state drive delivers high performance journaling).
 
 Ceph's default ``osd journal size`` is 0, so you will need to set this in your 
 ``ceph.conf`` file. A journal size should find the product of the ``filestore
-min sync interval`` and the expected throughput, and multiple the product by 
+max sync interval`` and the expected throughput, and multiply the product by 
 two (2)::  
 	  
-	osd journal size = {2 * (expected throughput * filestore min sync interval)}
+	osd journal size = {2 * (expected throughput * filestore max sync interval)}
 
 The expected throughput number should include the expected disk throughput
 (i.e., sustained data transfer rate), and network throughput. For example, 
