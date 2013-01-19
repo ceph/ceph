@@ -6469,6 +6469,13 @@ int Client::_setxattr(Inode *in, const char *name, const void *value, size_t siz
     return -EROFS;
   }
 
+  // same xattrs supported by kernel client
+  if (strncmp(name, "user.", 5) &&
+      strncmp(name, "security.", 9) &&
+      strncmp(name, "trusted.", 8) &&
+      strncmp(name, "ceph.", 5))
+    return -EOPNOTSUPP;
+
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETXATTR);
   filepath path;
   in->make_nosnap_relative_path(path);
@@ -6497,13 +6504,6 @@ int Client::ll_setxattr(vinodeno_t vino, const char *name, const void *value, si
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
 
-  // same xattrs supported by kernel client
-  if (strncmp(name, "user.", 5) &&
-      strncmp(name, "security.", 9) &&
-      strncmp(name, "trusted.", 8) &&
-      strncmp(name, "ceph.", 5))
-    return -EOPNOTSUPP;
-
   Inode *in = _ll_get_inode(vino);
   return _setxattr(in, name, value, size, flags, uid, gid);
 }
@@ -6513,6 +6513,13 @@ int Client::_removexattr(Inode *in, const char *name, int uid, int gid)
   if (in->snapid != CEPH_NOSNAP) {
     return -EROFS;
   }
+
+  // same xattrs supported by kernel client
+  if (strncmp(name, "user.", 5) &&
+      strncmp(name, "security.", 9) &&
+      strncmp(name, "trusted.", 8) &&
+      strncmp(name, "ceph.", 5))
+    return -EOPNOTSUPP;
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_RMXATTR);
   filepath path;
@@ -6536,13 +6543,6 @@ int Client::ll_removexattr(vinodeno_t vino, const char *name, int uid, int gid)
   tout(cct) << "ll_removexattr" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
-
-  // same xattrs supported by kernel client
-  if (strncmp(name, "user.", 5) &&
-      strncmp(name, "security.", 9) &&
-      strncmp(name, "trusted.", 8) &&
-      strncmp(name, "ceph.", 5))
-    return -EOPNOTSUPP;
 
   Inode *in = _ll_get_inode(vino);
   return _removexattr(in, name, uid, gid);
