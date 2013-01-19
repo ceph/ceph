@@ -115,6 +115,13 @@ class Inode {
   bool is_dir()     const { return (mode & S_IFMT) == S_IFDIR; }
   bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
 
+  bool has_dir_layout() const {
+    for (unsigned c = 0; c < sizeof(layout); c++)
+      if (*((const char *)&layout + c))
+	return true;
+    return false;
+  }
+
   unsigned flags;
 
   // about the dir (if this is one!)
