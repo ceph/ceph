@@ -1260,6 +1260,9 @@ int RGWRados::copy_obj(void *ctx,
       attrs[RGW_ATTR_ETAG] = attrset[RGW_ATTR_ETAG];
 
     attrset = attrs;
+  } else {
+    /* copying attrs from source, however acls should not be copied */
+    attrset[RGW_ATTR_ACL] = attrs[RGW_ATTR_ACL];
   }
 
   RGWObjManifest manifest;
