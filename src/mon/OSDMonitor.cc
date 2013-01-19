@@ -2512,6 +2512,11 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       } else {
 	float w = strtof(m->cmd[3].c_str(), 0);
 	long ww = (int)((float)CEPH_OSD_IN*w);
+	if (ww < 0L) {
+	  ss << "weight must be > 0";
+	  err = -EINVAL;
+	  goto out;
+	}
 	if (osdmap.exists(osd)) {
 	  pending_inc.new_weight[osd] = ww;
 	  ss << "reweighted osd." << osd << " to " << w << " (" << ios::hex << ww << ios::dec << ")";
