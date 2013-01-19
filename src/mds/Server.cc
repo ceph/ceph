@@ -811,8 +811,12 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
   reply->set_unsafe();
 
-  // mark xlocks "done", indicating that we are exposing uncommitted changes
-  mds->locker->set_xlocks_done(mdr);
+  // mark xlocks "done", indicating that we are exposing uncommitted changes.
+  //
+  //_rename_finish() does not send dentry link/unlink message to replicas.
+  // so do not set xlocks on dentries "done", the xlocks prevent dentries
+  // that have projected linkages from getting new replica.
+  mds->locker->set_xlocks_done(mdr, mdr->client_request->get_op() == CEPH_MDS_OP_RENAME);
 
   char buf[80];
   dout(10) << "early_reply " << reply->get_result() 
