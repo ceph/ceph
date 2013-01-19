@@ -5639,6 +5639,47 @@ version_t Server::_rename_prepare_import(MDRequest *mdr, CDentry *srcdn, bufferl
   return oldpv;
 }
 
+bool Server::_need_force_journal(CInode *diri, bool empty)
+{
+  list<CDir*> ls;
+  diri->get_dirfrags(ls);
+
+  bool force_journal = false;
+  if (empty) {
+    for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
+      if ((*p)->is_subtree_root() && (*p)->get_dir_auth().first == mds->whoami) {
+	dout(10) << " frag " << (*p)->get_frag() << " is auth subtree dirfrag, will force journal" << dendl;
+	force_journal = true;
+	break;
+      } else
+	dout(20) << " frag " << (*p)->get_frag() << " is not auth subtree dirfrag" << dendl;
+    }
+  } else {
+    // see if any children of our frags are auth subtrees.
+    list<CDir*> subtrees;
+    mds->mdcache->list_subtrees(subtrees);
+    dout(10) << " subtrees " << subtrees << " frags " << ls << dendl;
+    for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
+      CDir *dir = *p;
+      for (list<CDir*>::iterator q = subtrees.begin(); q != subtrees.end(); ++q) {
+	if (dir->contains(*q)) {
+	  if ((*q)->get_dir_auth().first == mds->whoami) {
+	    dout(10) << " frag " << (*p)->get_frag() << " contains (maybe) auth subtree, will force journal "
+		     << **q << dendl;
+	    force_journal = true;
+	    break;
+	  } else
+	    dout(20) << " frag " << (*p)->get_frag() << " contains but isn't auth for " << **q << dendl;
+	} else
+	  dout(20) << " frag " << (*p)->get_frag() << " does not contain " << **q << dendl;
+      }
+      if (force_journal)
+	break;
+    }
+  }
+  return force_journal;
+}
+
 void Server::_rename_prepare(MDRequest *mdr,
 			     EMetaBlob *metablob, bufferlist *client_map_bl,
 			     CDentry *srcdn, CDentry *destdn, CDentry *straydn)
@@ -5657,40 +5698,15 @@ void Server::_rename_prepare(MDRequest *mdr,
 		    (srcdnl->is_primary() || destdnl->is_primary()));
   bool silent = srcdn->get_dir()->inode->is_stray();
 
-  // we need to force journaling of this event if we (will) have any subtrees
-  // nested beneath.
   bool force_journal = false;
-  while (srci->is_dir()) {
-    // if we are auth for srci and exporting it, force journal because we need create
-    // auth subtrees here during journal replay.
-    if (srci->is_auth() && !destdn->is_auth()) {
+  if (srci->is_dir() && !destdn->is_auth()) {
+    if (srci->is_auth()) {
+      // if we are auth for srci and exporting it, force journal because journal replay needs
+      // the source inode to create auth subtrees.
       dout(10) << " we are exporting srci, will force journal" << dendl;
       force_journal = true;
-      break;
-    }
-
-    // see if any children of our frags are auth subtrees.
-    list<CDir*> subtrees;
-    mds->mdcache->list_subtrees(subtrees);
-    list<CDir*> ls;
-    srci->get_dirfrags(ls);
-    dout(10) << " subtrees " << subtrees << " frags " << ls << dendl;
-    for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
-      CDir *dir = *p;
-      for (list<CDir*>::iterator q = subtrees.begin(); q != subtrees.end(); ++q) {
-	if (dir->contains(*q)) {
-	  if ((*q)->get_dir_auth().first == mds->whoami) {
-	    dout(10) << " frag " << (*p)->get_frag() << " contains (maybe) auth subtree, will force journal "
-		     << **q << dendl;
-	    force_journal = true;
-	    break;
-	  } else
-	    dout(20) << " frag " << (*p)->get_frag() << " contains but isn't auth for " << **q << dendl;
-	} else
-	  dout(20) << " frag " << (*p)->get_frag() << " does not contain " << **q << dendl;
-      }
-    }
-    break;
+    } else
+      force_journal = _need_force_journal(srci, false);
   }
 
   if (linkmerge)
