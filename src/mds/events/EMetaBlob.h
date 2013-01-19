@@ -27,6 +27,7 @@
 class MDS;
 class MDLog;
 class LogSegment;
+class MDSlaveUpdate;
 
 /*
  * a bunch of metadata in the journal
@@ -674,7 +675,7 @@ private:
   }
 
   void update_segment(LogSegment *ls);
-  void replay(MDS *mds, LogSegment *ls=0);
+  void replay(MDS *mds, LogSegment *ls, MDSlaveUpdate *su=NULL);
 };
 WRITE_CLASS_ENCODER(EMetaBlob)
 WRITE_CLASS_ENCODER(EMetaBlob::fullbit)
