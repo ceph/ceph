@@ -6544,7 +6544,10 @@ int Client::ll_setxattr(vinodeno_t vino, const char *name, const void *value, si
   tout(cct) << name << std::endl;
 
   // same xattrs supported by kernel client
-  if (strncmp(name, "user.", 5) && strncmp(name, "security.", 9) && strncmp(name, "trusted.", 8))
+  if (strncmp(name, "user.", 5) &&
+      strncmp(name, "security.", 9) &&
+      strncmp(name, "trusted.", 8) &&
+      strncmp(name, "ceph.", 5))
     return -EOPNOTSUPP;
 
   Inode *in = _ll_get_inode(vino);
@@ -6580,8 +6583,11 @@ int Client::ll_removexattr(vinodeno_t vino, const char *name, int uid, int gid)
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
 
-  // only user xattrs, for now
-  if (strncmp(name, "user.", 5) && strncmp(name, "security.", 9) && strncmp(name, "trusted.", 8))
+  // same xattrs supported by kernel client
+  if (strncmp(name, "user.", 5) &&
+      strncmp(name, "security.", 9) &&
+      strncmp(name, "trusted.", 8) &&
+      strncmp(name, "ceph.", 5))
     return -EOPNOTSUPP;
 
   Inode *in = _ll_get_inode(vino);
