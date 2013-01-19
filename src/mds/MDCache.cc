@@ -2740,6 +2740,10 @@ void MDCache::handle_resolve(MMDSResolve *m)
   int from = m->get_source().num();
 
   if (mds->get_state() < MDSMap::STATE_RESOLVE) {
+    if (mds->get_want_state() == CEPH_MDS_STATE_RESOLVE) {
+      mds->wait_for_resolve(new C_MDS_RetryMessage(mds, m));
+      return;
+    }
     // wait until we reach the resolve stage!
     m->put();
     return;

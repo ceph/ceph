@@ -196,7 +196,7 @@ class MDS : public Dispatcher {
   int state;         // my confirmed state
   int want_state;    // the state i want
 
-  list<Context*> waiting_for_active, waiting_for_replay, waiting_for_reconnect;
+  list<Context*> waiting_for_active, waiting_for_replay, waiting_for_reconnect, waiting_for_resolve;
   list<Context*> replay_queue;
   map<int, list<Context*> > waiting_for_active_peer;
   list<Message*> waiting_for_nolaggy;
@@ -218,6 +218,9 @@ class MDS : public Dispatcher {
   }
   void wait_for_reconnect(Context *c) {
     waiting_for_reconnect.push_back(c);
+  }
+  void wait_for_resolve(Context *c) {
+    waiting_for_resolve.push_back(c);
   }
   void wait_for_mdsmap(epoch_t e, Context *c) {
     waiting_for_mdsmap[e].push_back(c);
