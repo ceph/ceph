@@ -298,10 +298,13 @@ struct MDSlaveUpdate {
   bufferlist rollback;
   elist<MDSlaveUpdate*>::item item;
   Context *waiter;
+  CDir* rename_olddir;
+  set<CInode*> unlinked;
   MDSlaveUpdate(int oo, bufferlist &rbl, elist<MDSlaveUpdate*> &list) :
     origop(oo),
     item(this),
-    waiter(0) {
+    waiter(0),
+    rename_olddir(0) {
     rollback.claim(rbl);
     list.push_back(&item);
   }

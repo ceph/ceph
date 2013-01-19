@@ -312,6 +312,8 @@ protected:
   map<int, map<dirfrag_t, vector<dirfrag_t> > > other_ambiguous_imports;  
 
   map<int, map<metareqid_t, MDSlaveUpdate*> > uncommitted_slave_updates;  // slave: for replay.
+  map<CDir*, int> uncommitted_slave_rename_olddir;  // slave: preserve the non-auth dir until seeing commit.
+  map<CInode*, int> uncommitted_slave_unlink;  // slave: preserve the unlinked inode until seeing commit.
 
   // track master requests whose slaves haven't acknowledged commit
   struct umaster {
@@ -329,7 +331,7 @@ protected:
   set<int> wants_resolve;   // nodes i need to send my resolve to
   set<int> got_resolve;     // nodes i got resolves from
   set<int> need_resolve_ack;   // nodes i need a resolve_ack from
-  set<metareqid_t> need_resolve_rollback;  // rollbacks i'm writing to the journal
+  map<metareqid_t, int> need_resolve_rollback;  // rollbacks i'm writing to the journal
   
   void handle_resolve(MMDSResolve *m);
   void handle_resolve_ack(MMDSResolveAck *m);
@@ -337,17 +339,16 @@ protected:
   void disambiguate_imports();
   void recalc_auth_bits();
   void trim_unlinked_inodes();
+  void add_uncommitted_slave_update(metareqid_t reqid, int master, MDSlaveUpdate*);
+  void finish_uncommitted_slave_update(metareqid_t reqid, int master);
+  MDSlaveUpdate* get_uncommitted_slave_update(metareqid_t reqid, int master);
 public:
   void remove_inode_recursive(CInode *in);
 
-  void add_rollback(metareqid_t reqid) {
-    need_resolve_rollback.insert(reqid);
+  void add_rollback(metareqid_t reqid, int master) {
+    need_resolve_rollback[reqid] = master;
   }
-  void finish_rollback(metareqid_t reqid) {
-    need_resolve_rollback.erase(reqid);
-    if (need_resolve_rollback.empty())
-      maybe_resolve_finish();
-  }
+  void finish_rollback(metareqid_t reqid);
 
   // ambiguous imports
   void add_ambiguous_import(dirfrag_t base, const vector<dirfrag_t>& bounds);

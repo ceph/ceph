@@ -2867,19 +2867,16 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
     
     if (mds->is_resolve()) {
       // replay
-      assert(uncommitted_slave_updates[from].count(*p));
+      MDSlaveUpdate *su = get_uncommitted_slave_update(*p, from);
+      assert(su);
+
       // log commit
       mds->mdlog->start_submit_entry(new ESlaveUpdate(mds->mdlog, "unknown", *p, from,
-						      ESlaveUpdate::OP_COMMIT,
-						      uncommitted_slave_updates[from][*p]->origop));
-
-      delete uncommitted_slave_updates[from][*p];
-      uncommitted_slave_updates[from].erase(*p);
-      if (uncommitted_slave_updates[from].empty())
-	uncommitted_slave_updates.erase(from);
-
+						      ESlaveUpdate::OP_COMMIT, su->origop));
       mds->mdlog->wait_for_safe(new C_MDC_SlaveCommit(this, from, *p));
       mds->mdlog->flush();
+
+      finish_uncommitted_slave_update(*p, from);
     } else {
       MDRequest *mdr = request_get(*p);
       assert(mdr->slave_request == 0);  // shouldn't be doing anything!
@@ -2893,28 +2890,24 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
     dout(10) << " abort on slave " << *p << dendl;
 
     if (mds->is_resolve()) {
-      assert(uncommitted_slave_updates[from].count(*p));
+      MDSlaveUpdate *su = get_uncommitted_slave_update(*p, from);
+      assert(su);
 
       // perform rollback (and journal a rollback entry)
       // note: this will hold up the resolve a bit, until the rollback entries journal.
-      switch (uncommitted_slave_updates[from][*p]->origop) {
+      switch (su->origop) {
       case ESlaveUpdate::LINK:
-	mds->server->do_link_rollback(uncommitted_slave_updates[from][*p]->rollback, from, 0);
+	mds->server->do_link_rollback(su->rollback, from, 0);
 	break;
       case ESlaveUpdate::RENAME:
-	mds->server->do_rename_rollback(uncommitted_slave_updates[from][*p]->rollback, from, 0);
+	mds->server->do_rename_rollback(su->rollback, from, 0);
 	break;
       case ESlaveUpdate::RMDIR:
-	mds->server->do_rmdir_rollback(uncommitted_slave_updates[from][*p]->rollback, from, 0);
+	mds->server->do_rmdir_rollback(su->rollback, from, 0);
 	break;
       default:
 	assert(0);
       }
-
-      delete uncommitted_slave_updates[from][*p];
-      uncommitted_slave_updates[from].erase(*p);
-      if (uncommitted_slave_updates[from].empty())
-	uncommitted_slave_updates.erase(from);
     } else {
       MDRequest *mdr = request_get(*p);
       if (mdr->more()->slave_commit) {
@@ -2939,7 +2932,67 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
   ack->put();
 }
 
+void MDCache::add_uncommitted_slave_update(metareqid_t reqid, int master, MDSlaveUpdate *su)
+{
+  assert(uncommitted_slave_updates[master].count(reqid) == 0);
+  uncommitted_slave_updates[master][reqid] = su;
+  if (su->rename_olddir)
+    uncommitted_slave_rename_olddir[su->rename_olddir]++;
+  for(set<CInode*>::iterator p = su->unlinked.begin(); p != su->unlinked.end(); p++)
+     uncommitted_slave_unlink[*p]++;
+}
 
+void MDCache::finish_uncommitted_slave_update(metareqid_t reqid, int master)
+{
+  assert(uncommitted_slave_updates[master].count(reqid));
+  MDSlaveUpdate* su = uncommitted_slave_updates[master][reqid];
+
+  uncommitted_slave_updates[master].erase(reqid);
+  if (uncommitted_slave_updates[master].empty())
+    uncommitted_slave_updates.erase(master);
+  // discard the non-auth subtree we renamed out of
+  if (su->rename_olddir) {
+    uncommitted_slave_rename_olddir[su->rename_olddir]--;
+    if (uncommitted_slave_rename_olddir[su->rename_olddir] == 0) {
+      uncommitted_slave_rename_olddir.erase(su->rename_olddir);
+      CDir *root = get_subtree_root(su->rename_olddir);
+      if (root->get_dir_auth() == CDIR_AUTH_UNDEF)
+	try_trim_non_auth_subtree(root);
+    }
+  }
+  // removed the inodes that were unlinked by slave update
+  for(set<CInode*>::iterator p = su->unlinked.begin(); p != su->unlinked.end(); p++) {
+    CInode *in = *p;
+    uncommitted_slave_unlink[in]--;
+    if (uncommitted_slave_unlink[in] == 0) {
+      uncommitted_slave_unlink.erase(in);
+      if (!in->get_projected_parent_dn())
+	mds->mdcache->remove_inode_recursive(in);
+    }
+  }
+  delete su;
+}
+
+MDSlaveUpdate* MDCache::get_uncommitted_slave_update(metareqid_t reqid, int master)
+{
+
+  MDSlaveUpdate* su = NULL;
+  if (uncommitted_slave_updates.count(master) &&
+      uncommitted_slave_updates[master].count(reqid)) {
+    su = uncommitted_slave_updates[master][reqid];
+    assert(su);
+  }
+  return su;
+}
+
+void MDCache::finish_rollback(metareqid_t reqid) {
+  assert(need_resolve_rollback.count(reqid));
+  if (mds->is_resolve())
+    finish_uncommitted_slave_update(reqid, need_resolve_rollback[reqid]);
+  need_resolve_rollback.erase(reqid);
+  if (need_resolve_rollback.empty())
+    maybe_resolve_finish();
+}
 
 void MDCache::disambiguate_imports()
 {
@@ -5788,6 +5841,10 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
 {
   dout(10) << "trim_non_auth_subtree(" << dir << ") " << *dir << dendl;
 
+  // preserve the dir for rollback
+  if (uncommitted_slave_rename_olddir.count(dir))
+    return true;
+
   bool keep_dir = false;
   CDir::map_t::iterator j = dir->begin();
   CDir::map_t::iterator i = j;
@@ -5805,7 +5862,9 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
         for (list<CDir*>::iterator subdir = subdirs.begin();
             subdir != subdirs.end();
             ++subdir) {
-          if ((*subdir)->is_subtree_root() || my_ambiguous_imports.count((*subdir)->dirfrag())) {
+          if (uncommitted_slave_rename_olddir.count(*subdir) || // preserve the dir for rollback
+	      my_ambiguous_imports.count((*subdir)->dirfrag()) ||
+	      (*subdir)->is_subtree_root()) {
             keep_inode = true;
             dout(10) << "trim_non_auth_subtree(" << dir << ") subdir " << *subdir << "is kept!" << dendl;
           }

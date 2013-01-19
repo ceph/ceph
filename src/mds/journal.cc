@@ -415,7 +415,7 @@ void EMetaBlob::fullbit::update_inode(MDS *mds, CInode *in)
   in->old_inodes = old_inodes;
 }
 
-void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
+void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 {
   dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps by " << client_name << dendl;
 
@@ -676,8 +676,12 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       
       // see if we can discard the subtree we renamed out of
       CDir *root = mds->mdcache->get_subtree_root(olddir);
-      if (root->get_dir_auth() == CDIR_AUTH_UNDEF)
-	mds->mdcache->try_trim_non_auth_subtree(root);
+      if (root->get_dir_auth() == CDIR_AUTH_UNDEF) {
+	if (slaveup) // preserve the old dir until slave commit
+	  slaveup->rename_olddir = olddir;
+	else
+	  mds->mdcache->try_trim_non_auth_subtree(root);
+      }
     }
 
     // if we are the srci importer, we'll also have some dirfrags we have to open up...
@@ -710,8 +714,12 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     for (set<CInode*>::iterator p = linked.begin(); p != linked.end(); p++)
       unlinked.erase(*p);
     dout(10) << " unlinked set contains " << unlinked << dendl;
-    for (map<CInode*, CDir*>::iterator p = unlinked.begin(); p != unlinked.end(); ++p)
-      mds->mdcache->remove_inode_recursive(p->first);
+    for (map<CInode*, CDir*>::iterator p = unlinked.begin(); p != unlinked.end(); ++p) {
+      if (slaveup) // preserve unlinked inodes until slave commit
+	slaveup->unlinked.insert(p->first);
+      else
+	mds->mdcache->remove_inode_recursive(p->first);
+    }
   }
 
   // table client transactions
@@ -1107,23 +1115,21 @@ void ECommitted::replay(MDS *mds)
 
 void ESlaveUpdate::replay(MDS *mds)
 {
+  MDSlaveUpdate *su;
   switch (op) {
   case ESlaveUpdate::OP_PREPARE:
     dout(10) << "ESlaveUpdate.replay prepare " << reqid << " for mds." << master 
 	     << ": applying commit, saving rollback info" << dendl;
-    assert(mds->mdcache->uncommitted_slave_updates[master].count(reqid) == 0);
-    commit.replay(mds, _segment);
-    mds->mdcache->uncommitted_slave_updates[master][reqid] = 
-      new MDSlaveUpdate(origop, rollback, _segment->slave_updates);
+    su = new MDSlaveUpdate(origop, rollback, _segment->slave_updates);
+    commit.replay(mds, _segment, su);
+    mds->mdcache->add_uncommitted_slave_update(reqid, master, su);
     break;
 
   case ESlaveUpdate::OP_COMMIT:
-    if (mds->mdcache->uncommitted_slave_updates[master].count(reqid)) {
+    su = mds->mdcache->get_uncommitted_slave_update(reqid, master);
+    if (su) {
       dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds." << master << dendl;
-      delete mds->mdcache->uncommitted_slave_updates[master][reqid];
-      mds->mdcache->uncommitted_slave_updates[master].erase(reqid);
-      if (mds->mdcache->uncommitted_slave_updates[master].empty())
-	mds->mdcache->uncommitted_slave_updates.erase(master);
+      mds->mdcache->finish_uncommitted_slave_update(reqid, master);
     } else {
       dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds." << master 
 	       << ": ignoring, no previously saved prepare" << dendl;
@@ -1131,19 +1137,12 @@ void ESlaveUpdate::replay(MDS *mds)
     break;
 
   case ESlaveUpdate::OP_ROLLBACK:
-    if (mds->mdcache->uncommitted_slave_updates[master].count(reqid)) {
-      dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds." << master
-	       << ": applying rollback commit blob" << dendl;
-      assert(mds->mdcache->uncommitted_slave_updates[master].count(reqid));
-      commit.replay(mds, _segment);
-      delete mds->mdcache->uncommitted_slave_updates[master][reqid];
-      mds->mdcache->uncommitted_slave_updates[master].erase(reqid);
-      if (mds->mdcache->uncommitted_slave_updates[master].empty())
-	mds->mdcache->uncommitted_slave_updates.erase(master);
-    } else {
-      dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds." << master 
-	       << ": ignoring, no previously saved prepare" << dendl;
-    }
+    dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds." << master
+	     << ": applying rollback commit blob" << dendl;
+    su = mds->mdcache->get_uncommitted_slave_update(reqid, master);
+    if (su)
+      mds->mdcache->finish_uncommitted_slave_update(reqid, master);
+    commit.replay(mds, _segment);
     break;
 
   default:
