@@ -20,6 +20,17 @@ ceph osd reweight 0 0.9
 ! ceph osd reweight 0 -1
 ceph osd reweight 0 1
 
+for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset; do
+	ceph osd pool get data $s
+done
+
+ceph osd pool get data size | grep 'size: 2'
+ceph osd pool set data size 3
+ceph osd pool get data size | grep 'size: 3'
+ceph osd pool set data size 2
+
+ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 2'
+
 for id in `ceph osd ls` ; do
 	ceph tell osd.$id version
 done
