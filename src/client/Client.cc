@@ -6435,11 +6435,47 @@ int Client::lsetxattr(const char *path, const char *name, const void *value, siz
   return Client::_setxattr(ceph_inode, name, value, size, flags, getuid(), getgid());
 }
 
-
 int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
 		      int uid, int gid)
 {
-  int r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid);
+  int r = -ENODATA;
+
+  if (strncmp(name, "ceph.", 5) == 0) {
+    string n(name);
+    char buf[32];
+    size_t buf_size = sizeof(buf);
+    if (in->is_file()) {
+      if (n == "ceph.file.layout.stripe_unit") {
+	r = snprintf(buf, buf_size, "%lu", (long unsigned)in->layout.fl_stripe_unit);
+      } else if (n == "ceph.file.layout.stripe_count") {
+	r = snprintf(buf, buf_size, "%lu", (long unsigned)in->layout.fl_stripe_count);
+      } else if (n == "ceph.file.layout.object_size") {
+	r = snprintf(buf, buf_size, "%lu", (long unsigned)in->layout.fl_object_size);
+      } else if (n == "ceph.file.layout.pool") {
+	r = snprintf(buf, buf_size, "%lu", (long unsigned)in->layout.fl_pg_pool);
+      }
+    } else if (in->is_dir() && in->has_dir_layout()) {
+      if (n == "ceph.dir.layout.stripe_unit") {
+	r = snprintf(buf, buf_size, "%lu", (long unsigned)in->layout.fl_stripe_unit);
+      } else if (n == "ceph.dir.layout.stripe_count") {
+	r = snprintf(buf, buf_size, "%lu", (long unsigned)in->layout.fl_stripe_count);
+      } else if (n == "ceph.dir.layout.object_size") {
+	r = snprintf(buf, buf_size, "%lu", (long unsigned)in->layout.fl_object_size);
+      } else if (n == "ceph.dir.layout.pool") {
+	r = snprintf(buf, buf_size, "%lu", (long unsigned)in->layout.fl_pg_pool);
+      }
+    }
+    if (size != 0) {
+      if (r > (int)size) {
+	r = -ERANGE;
+      } else if (r > 0) {
+	memcpy(value, buf, r);
+      }
+    }
+    goto out;
+  }
+
+  r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid);
   if (r == 0) {
     string n(name);
     r = -ENODATA;
@@ -6453,6 +6489,7 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
       }
     }
   }
+ out:
   ldout(cct, 3) << "_getxattr(" << in->ino << ", \"" << name << "\", " << size << ") = " << r << dendl;
   return r;
 }
@@ -6471,13 +6508,28 @@ int Client::ll_getxattr(vinodeno_t vino, const char *name, void *value, size_t s
 
 int Client::_listxattr(Inode *in, char *name, size_t size, int uid, int gid)
 {
+  const char file_vxattrs[] =
+    "ceph.file.layout.stripe_unit\0"
+    "ceph.file.layout.stripe_count\0"
+    "ceph.file.layout.object_size\0"
+    "ceph.file.layout.pool\0";
+  const char dir_vxattrs[] =
+    "ceph.dir.layout.stripe_unit\0"
+    "ceph.dir.layout.stripe_count\0"
+    "ceph.dir.layout.object_size\0"
+    "ceph.dir.layout.pool\0";
+
   int r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid);
   if (r == 0) {
     for (map<string,bufferptr>::iterator p = in->xattrs.begin();
 	 p != in->xattrs.end();
 	 p++)
       r += p->first.length() + 1;
-    
+    if (in->is_file())
+      r += sizeof(file_vxattrs);
+    else if (in->is_dir() && in->has_dir_layout())
+      r += sizeof(dir_vxattrs);
+
     if (size != 0) {
       if (size >= (unsigned)r) {
 	for (map<string,bufferptr>::iterator p = in->xattrs.begin();
@@ -6487,6 +6539,13 @@ int Client::_listxattr(Inode *in, char *name, size_t size, int uid, int gid)
 	  name += p->first.length();
 	  *name = '\0';
 	  name++;
+	}
+	if (in->is_file()) {
+	  memcpy(name, file_vxattrs, sizeof(file_vxattrs));
+	  name += sizeof(file_vxattrs);
+	} else if (in->is_dir() && in->has_dir_layout()) {
+	  memcpy(name, dir_vxattrs, sizeof(dir_vxattrs));
+	  name += sizeof(dir_vxattrs);
 	}
       } else
 	r = -ERANGE;
