@@ -13,8 +13,9 @@ ceph mon dump
 ceph mds dump
 
 ceph tell osd.0 version
-ceph tell osd.9999 version && exit 1
-ceph tell osd.foo version && exit 1
+! ceph tell osd.9999 version 
+! ceph tell osd.foo version
+
 
 for id in `ceph osd ls` ; do
 	ceph tell osd.$id version
