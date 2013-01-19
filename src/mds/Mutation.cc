@@ -47,17 +47,19 @@ void Mutation::drop_pins()
   pins.clear();
 }
 
-void Mutation::start_locking(SimpleLock *lock)
+void Mutation::start_locking(SimpleLock *lock, int target)
 {
   assert(locking == NULL);
   pin(lock->get_parent());
   locking = lock;
+  locking_target_mds = target;
 }
 
 void Mutation::finish_locking(SimpleLock *lock)
 {
   assert(locking == lock);
   locking = NULL;
+  locking_target_mds = -1;
 }
 
 
@@ -226,6 +228,13 @@ void MDRequest::unfreeze_auth_pin()
   else
     inode->unfreeze_inode();
   more()->is_freeze_authpin = false;
+}
+
+void MDRequest::set_remote_frozen_auth_pin(CInode *inode)
+{
+  assert(!more()->rename_inode || more()->rename_inode == inode);
+  more()->rename_inode = inode;
+  more()->is_remote_frozen_authpin = true;
 }
 
 void MDRequest::set_ambiguous_auth(CInode *inode)

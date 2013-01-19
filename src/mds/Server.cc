@@ -1520,7 +1520,7 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
 
     objects.push_back(object);
     if (*p == mdr->slave_request->get_authpin_freeze())
-      auth_pin_freeze = dynamic_cast<CInode*>(object);
+      auth_pin_freeze = (CInode*)object;
   }
   
   // can we auth pin them?
@@ -1583,6 +1583,9 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
     reply->get_authpins().push_back(info);
   }
 
+  if (auth_pin_freeze)
+    auth_pin_freeze->set_object_info(reply->get_authpin_freeze());
+
   mds->send_message_mds(reply, mdr->slave_to_mds);
   
   // clean up this request
@@ -1607,6 +1610,8 @@ void Server::handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
     dout(10) << " remote has pinned " << *object << dendl;
     if (!mdr->is_auth_pinned(object))
       mdr->remote_auth_pins.insert(object);
+    if (*p == ack->get_authpin_freeze())
+      mdr->set_remote_frozen_auth_pin((CInode *)object);
     pinned.insert(object);
   }
 
@@ -5542,6 +5547,8 @@ void Server::handle_client_rename(MDRequest *mdr)
     le->had_slaves = true;
     
     mds->mdcache->add_uncommitted_master(mdr->reqid, mdr->ls, mdr->more()->witnessed);
+    // no need to send frozen auth pin to recovring auth MDS of srci
+    mdr->more()->is_remote_frozen_authpin = false;
   }
   
   _rename_prepare(mdr, &le->metablob, &le->client_map, srcdn, destdn, straydn);

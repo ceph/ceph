@@ -1325,7 +1325,7 @@ void Locker::remote_wrlock_start(SimpleLock *lock, int target, MDRequest *mut)
 
   // send lock request
   if (!lock->is_waiter_for(SimpleLock::WAIT_REMOTEXLOCK)) {
-    mut->start_locking(lock);
+    mut->start_locking(lock, target);
     mut->more()->slaves.insert(target);
     MMDSSlaveRequest *r = new MMDSSlaveRequest(mut->reqid, mut->attempt,
 					       MMDSSlaveRequest::OP_WRLOCK);
@@ -1410,9 +1410,9 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
     
     // send lock request
     if (!lock->is_waiter_for(SimpleLock::WAIT_REMOTEXLOCK)) {
-      mut->start_locking(lock);
       int auth = lock->get_parent()->authority().first;
       mut->more()->slaves.insert(auth);
+      mut->start_locking(lock, auth);
       MMDSSlaveRequest *r = new MMDSSlaveRequest(mut->reqid, mut->attempt,
 						 MMDSSlaveRequest::OP_XLOCK);
       r->set_lock_type(lock->get_type());

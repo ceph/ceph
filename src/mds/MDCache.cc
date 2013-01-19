@@ -2649,6 +2649,9 @@ void MDCache::handle_mds_failure(int who)
 		 << " to recover" << dendl;
 	p->second->clear_ambiguous_auth();
       }
+
+      if (p->second->locking && p->second->locking_target_mds == who)
+	p->second->finish_locking(p->second->locking);
     }
   }
 
@@ -3500,6 +3503,11 @@ void MDCache::rejoin_send_rejoins()
 	    rejoin->add_inode_authpin(vinodeno_t(i.ino, i.snapid), p->second->reqid, p->second->attempt);
 	  else
 	    rejoin->add_dentry_authpin(i.dirfrag, i.dname, i.snapid, p->second->reqid, p->second->attempt);
+
+	  if (p->second->has_more() && p->second->more()->is_remote_frozen_authpin &&
+	      p->second->more()->rename_inode == (*q))
+	    rejoin->add_inode_frozen_authpin(vinodeno_t(i.ino, i.snapid),
+					     p->second->reqid, p->second->attempt);
 	}
       }
       // xlocks
@@ -3521,6 +3529,22 @@ void MDCache::rejoin_send_rejoins()
 	    rejoin->add_dentry_xlock(i.dirfrag, i.dname, i.snapid,
 				     p->second->reqid, p->second->attempt);
 	}
+      }
+      // remote wrlocks
+      for (map<SimpleLock*, int>::iterator q = p->second->remote_wrlocks.begin();
+	   q != p->second->remote_wrlocks.end();
+	   ++q) {
+	int who = q->second;
+	if (rejoins.count(who) == 0) continue;
+	MMDSCacheRejoin *rejoin = rejoins[who];
+
+	dout(15) << " " << *p->second << " wrlock on " << q->second
+		 << " " << q->first->get_parent() << dendl;
+	MDSCacheObjectInfo i;
+	q->first->get_parent()->set_object_info(i);
+	assert(i.ino);
+	rejoin->add_inode_wrlock(vinodeno_t(i.ino, i.snapid), q->first->get_type(),
+				 p->second->reqid, p->second->attempt);
       }
     }
   }
@@ -4215,7 +4239,9 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	dout(10) << " dn xlock by " << r << " on " << *dn << dendl;
 	MDRequest *mdr = request_get(r.reqid);  // should have this from auth_pin above.
 	assert(mdr->is_auth_pinned(dn));
-	dn->lock.set_state(LOCK_LOCK);
+	if (dn->lock.is_stable())
+	  dn->auth_pin(&dn->lock);
+	dn->lock.set_state(LOCK_XLOCK);
 	dn->lock.get_xlock(mdr, mdr->get_client());
 	mdr->xlocks.insert(&dn->lock);
 	mdr->locks.insert(&dn->lock);
@@ -4258,9 +4284,14 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	      mdr = request_get(r.reqid);
 	    else
 	      mdr = request_start_slave(r.reqid, r.attempt, from);
+	    if (strong->frozen_authpin_inodes.count(in->vino())) {
+	      assert(!in->get_num_auth_pins());
+	      mdr->freeze_auth_pin(in);
+	    } else {
+	      assert(!in->is_frozen_auth_pin());
+	    }
 	    mdr->auth_pin(in);
 	  }
-	  
 	  // xlock(s)?
 	  if (strong->xlocked_inodes.count(in->vino())) {
 	    for (map<int,MMDSCacheRejoin::slave_reqid>::iterator r = strong->xlocked_inodes[in->vino()].begin();
@@ -4270,11 +4301,30 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	      dout(10) << " inode xlock by " << r->second << " on " << *lock << " on " << *in << dendl;
 	      MDRequest *mdr = request_get(r->second.reqid);  // should have this from auth_pin above.
 	      assert(mdr->is_auth_pinned(in));
-	      lock->set_state(LOCK_LOCK);
+	      if (lock->is_stable())
+		in->auth_pin(lock);
+	      lock->set_state(LOCK_XLOCK);
 	      if (lock == &in->filelock)
 		in->loner_cap = -1;
 	      lock->get_xlock(mdr, mdr->get_client());
 	      mdr->xlocks.insert(lock);
+	      mdr->locks.insert(lock);
+	    }
+	  }
+	  // wrlock(s)?
+	  if (strong->wrlocked_inodes.count(in->vino())) {
+	    for (map<int,MMDSCacheRejoin::slave_reqid>::iterator r = strong->wrlocked_inodes[in->vino()].begin();
+		 r != strong->wrlocked_inodes[in->vino()].end();
+		 ++r) {
+	      SimpleLock *lock = in->get_lock(r->first);
+	      dout(10) << " inode wrlock by " << r->second << " on " << *lock << " on " << *in << dendl;
+	      MDRequest *mdr = request_get(r->second.reqid);  // should have this from auth_pin above.
+	      assert(mdr->is_auth_pinned(in));
+	      lock->set_state(LOCK_LOCK);
+	      if (lock == &in->filelock)
+		in->loner_cap = -1;
+	      lock->get_wrlock(true);
+	      mdr->wrlocks.insert(lock);
 	      mdr->locks.insert(lock);
 	    }
 	  }
