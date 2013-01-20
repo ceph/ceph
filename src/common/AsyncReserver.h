@@ -28,7 +28,7 @@
 template <typename T>
 class AsyncReserver {
   Finisher *f;
-  const unsigned max_allowed;
+  unsigned max_allowed;
   Mutex lock;
 
   list<pair<T, Context*> > queue;
@@ -50,6 +50,13 @@ public:
     Finisher *f,
     unsigned max_allowed)
     : f(f), max_allowed(max_allowed), lock("AsyncReserver::lock") {}
+
+  void set_max(unsigned max) {
+    Mutex::Locker l(lock);
+    assert(max > 0);
+    max_allowed = max;
+    do_queues();
+  }
 
   /**
    * Requests a reservation
