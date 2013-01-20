@@ -6215,6 +6215,7 @@ void OSD::process_peering_events(const list<PG*> &pgs)
 const char** OSD::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
+    "osd_max_backfills",
     NULL
   };
   return KEYS;
@@ -6223,6 +6224,10 @@ const char** OSD::get_tracked_conf_keys() const
 void OSD::handle_conf_change(const struct md_config_t *conf,
 			     const std::set <std::string> &changed)
 {
+  if (changed.count("osd_max_backfills")) {
+    service.local_reserver.set_max(g_conf->osd_max_backfills);
+    service.remote_reserver.set_max(g_conf->osd_max_backfills);
+  }
 }
 
 // --------------------------------
