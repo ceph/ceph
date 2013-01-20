@@ -4864,10 +4864,9 @@ void Server::handle_slave_rmdir_prep(MDRequest *mdr)
   mdlog->start_entry(le);
   le->rollback = mdr->more()->rollback_bl;
 
-  le->commit.add_dir_context(dn->get_dir());
   le->commit.add_dir_context(straydn->get_dir());
   le->commit.add_primary_dentry(straydn, true, in);
-  le->commit.add_null_dentry(dn, true);
+  // slave: no need to journal original dentry
 
   dout(10) << " noting renamed (unlinked) dir ino " << in->ino() << " in metablob" << dendl;
   le->commit.renamed_dirino = in->ino();
@@ -4993,9 +4992,8 @@ void Server::do_rmdir_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   mdlog->start_entry(le);
   
   le->commit.add_dir_context(dn->get_dir());
-  le->commit.add_dir_context(straydn->get_dir());
   le->commit.add_primary_dentry(dn, true, in);
-  le->commit.add_null_dentry(straydn, true);
+  // slave: no need to journal straydn
   
   dout(10) << " noting renamed (unlinked) dir ino " << in->ino() << " in metablob" << dendl;
   le->commit.renamed_dirino = in->ino();
@@ -5698,15 +5696,15 @@ void Server::_rename_prepare(MDRequest *mdr,
 		    (srcdnl->is_primary() || destdnl->is_primary()));
   bool silent = srcdn->get_dir()->inode->is_stray();
 
-  bool force_journal = false;
+  bool force_journal_dest = false;
   if (srci->is_dir() && !destdn->is_auth()) {
     if (srci->is_auth()) {
       // if we are auth for srci and exporting it, force journal because journal replay needs
       // the source inode to create auth subtrees.
-      dout(10) << " we are exporting srci, will force journal" << dendl;
-      force_journal = true;
+      dout(10) << " we are exporting srci, will force journal destdn" << dendl;
+      force_journal_dest = true;
     } else
-      force_journal = _need_force_journal(srci, false);
+      force_journal_dest = _need_force_journal(srci, false);
   }
 
   bool force_journal_stray = false;
@@ -5717,12 +5715,12 @@ void Server::_rename_prepare(MDRequest *mdr,
     dout(10) << " merging remote and primary links to the same inode" << dendl;
   if (silent)
     dout(10) << " reintegrating stray; will avoid changing nlink or dir mtime" << dendl;
-  if (force_journal)
-    dout(10) << " forcing journal of rename because we (will) have auth subtrees nested beneath it" << dendl;
+  if (force_journal_dest)
+    dout(10) << " forcing journal destdn because we (will) have auth subtrees nested beneath it" << dendl;
   if (force_journal_stray)
     dout(10) << " forcing journal straydn because we (will) have auth subtrees nested beneath it" << dendl;
 
-  if (srci->is_dir() && (destdn->is_auth() || force_journal)) {
+  if (srci->is_dir() && (destdn->is_auth() || force_journal_dest)) {
     dout(10) << " noting renamed dir ino " << srci->ino() << " in metablob" << dendl;
     metablob->renamed_dirino = srci->ino();
   } else if (oldin && oldin->is_dir() && force_journal_stray) {
@@ -5915,7 +5913,7 @@ void Server::_rename_prepare(MDRequest *mdr,
 
     if (destdn->is_auth())
       metablob->add_primary_dentry(destdn, true, srci);
-    else if (force_journal) {
+    else if (force_journal_dest) {
       dout(10) << " forced journaling destdn " << *destdn << dendl;
       metablob->add_dir_context(destdn->get_dir());
       metablob->add_primary_dentry(destdn, true, srci);
@@ -5931,10 +5929,6 @@ void Server::_rename_prepare(MDRequest *mdr,
     // processed after primary dentry.
     if (srcdnl->is_primary() && !srci->is_dir() && !destdn->is_auth())
       metablob->add_primary_dentry(srcdn, true, srci);
-    metablob->add_null_dentry(srcdn, true);
-  } else if (force_journal) {
-    dout(10) << " forced journaling srcdn " << *srcdn << dendl;
-    metablob->add_dir_context(srcdn->get_dir());
     metablob->add_null_dentry(srcdn, true);
   } else
     dout(10) << " NOT journaling srcdn " << *srcdn << dendl;
