@@ -841,6 +841,8 @@ int OSD::pre_init()
          << "currently in use. (Is ceph-osd already running?)" << dendl;
     return -EBUSY;
   }
+
+  g_conf->add_observer(this);
   return 0;
 }
 
@@ -1090,6 +1092,8 @@ void OSD::suicide(int exitcode)
 
 int OSD::shutdown()
 {
+  g_conf->remove_observer(this);
+
   service.shutdown();
   g_ceph_context->_conf->set_val("debug_osd", "100");
   g_ceph_context->_conf->set_val("debug_journal", "100");
@@ -6208,6 +6212,21 @@ void OSD::process_peering_events(const list<PG*> &pgs)
   dispatch_context(rctx, 0, curmap);
 
   service.send_pg_temp();
+}
+
+// --------------------------------
+
+const char** OSD::get_tracked_conf_keys() const
+{
+  static const char* KEYS[] = {
+    NULL
+  };
+  return KEYS;
+}
+
+void OSD::handle_conf_change(const struct md_config_t *conf,
+			     const std::set <std::string> &changed)
+{
 }
 
 // --------------------------------

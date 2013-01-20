@@ -394,8 +394,15 @@ public:
 
   OSDService(OSD *osd);
 };
-class OSD : public Dispatcher {
+class OSD : public Dispatcher,
+	    public md_config_obs_t {
   /** OSD **/
+public:
+  // config observer bits
+  virtual const char** get_tracked_conf_keys() const;
+  virtual void handle_conf_change(const struct md_config_t *conf,
+				  const std::set <std::string> &changed);
+
 protected:
   Mutex osd_lock;			// global lock
   SafeTimer timer;    // safe timer (osd_lock)
