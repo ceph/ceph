@@ -15,6 +15,10 @@
 #include <boost/lexical_cast.hpp>
 #include "include/assert.h"  // lexical_cast includes system assert.h
 
+#include <boost/config/warning_disable.hpp>
+#include <boost/spirit/include/qi.hpp>
+#include <boost/fusion/include/std_pair.hpp>
+
 #include "MDS.h"
 #include "Server.h"
 #include "Locker.h"
@@ -3512,12 +3516,47 @@ void Server::handle_client_setdirlayout(MDRequest *mdr)
 
 // XATTRS
 
+// parse a map of keys/values.
+namespace qi = boost::spirit::qi;
+
+template <typename Iterator>
+struct keys_and_values
+  : qi::grammar<Iterator, std::map<string, string>()>
+{
+    keys_and_values()
+      : keys_and_values::base_type(query)
+    {
+      query =  pair >> *(qi::lit(' ') >> pair);
+      pair  =  key >> '=' >> value;
+      key   =  qi::char_("a-zA-Z_") >> *qi::char_("a-zA-Z_0-9");
+      value = +qi::char_("a-zA-Z_0-9");
+    }
+    qi::rule<Iterator, std::map<string, string>()> query;
+    qi::rule<Iterator, std::pair<string, string>()> pair;
+    qi::rule<Iterator, string()> key, value;
+};
+
 int Server::parse_layout_vxattr(string name, string value, ceph_file_layout *layout)
 {
   dout(20) << "parse_layout_vxattr name " << name << " value '" << value << "'" << dendl;
   try {
     if (name == "layout") {
-      // XXX implement me
+      string::iterator begin = value.begin();
+      string::iterator end = value.end();
+      keys_and_values<string::iterator> p;    // create instance of parser
+      std::map<string, string> m;             // map to receive results
+      if (!qi::parse(begin, end, p, m)) {     // returns true if successful
+	return -EINVAL;
+      }
+      string left(begin, end);
+      dout(10) << " parsed " << m << " left '" << left << "'" << dendl;
+      if (begin != end)
+	return -EINVAL;
+      for (map<string,string>::iterator q = m.begin(); q != m.end(); ++q) {
+	int r = parse_layout_vxattr(string("layout.") + q->first, q->second, layout);
+	if (r < 0)
+	  return r;
+      }
     } else if (name == "layout.object_size") {
       layout->fl_object_size = boost::lexical_cast<unsigned>(value);
     } else if (name == "layout.stripe_unit") {
