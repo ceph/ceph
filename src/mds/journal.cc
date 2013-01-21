@@ -516,6 +516,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       dir->mark_new(logseg);
     if (lump.is_complete())
       dir->mark_complete();
+    else if (lump.is_importing())
+      dir->state_clear(CDir::STATE_COMPLETE);
     
     dout(10) << "EMetaBlob.replay updated dir " << *dir << dendl;  
 
