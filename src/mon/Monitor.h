@@ -191,22 +191,6 @@ private:
   list<Context*> waitfor_quorum;
   list<Context*> maybe_wait_for_quorum;
 
-  // multi-paxos global version sequencing kludge-o-rama
-  set<int> paxos_recovered;     ///< num paxos machines fully recovered during this election epoch
-  version_t global_version;
-
-  void require_gv_ondisk();
-  void require_gv_onwire();
-
-public:
-  void recovered_leader(int id);
-  void recovered_peon(int id);
-  version_t get_global_paxos_version();
-  bool is_all_paxos_recovered() {
-    return paxos_recovered.size() == paxos.size();
-  }
-
-private:
   /**
    * @defgroup Monitor_h_TimeCheck Monitor Clock Drift Early Warning System
    * @{

@@ -1435,8 +1435,8 @@ void OSDMonitor::check_sub(Subscription *sub)
 
 void OSDMonitor::tick()
 {
-  if (!paxos->is_active() ||
-      !mon->is_all_paxos_recovered()) return;
+  if (!paxos->is_active())
+    return;
 
   update_from_paxos();
   dout(10) << osdmap << dendl;

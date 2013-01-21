@@ -22,8 +22,8 @@
 
 class MMonPaxos : public Message {
 
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+  static const int HEAD_VERSION = 3;
+  static const int COMPAT_VERSION = 3;
 
  public:
   // op types
@@ -64,8 +64,6 @@ class MMonPaxos : public Message {
 
   map<version_t,bufferlist> values;
 
-  map<version_t,version_t> gv;  // global version map; stepping stone for bobtail -> cuttlefish transition.
-
   MMonPaxos() : Message(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION) { }
   MMonPaxos(epoch_t e, int o, int mid, utime_t now) : 
     Message(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION),
@@ -88,7 +86,6 @@ public:
 	<< " lc " << last_committed
 	<< " fc " << first_committed
 	<< " pn " << pn << " opn " << uncommitted_pn;
-    out << " gv " << gv;
     if (latest_version)
       out << " latest " << latest_version << " (" << latest_value.length() << " bytes)";
     out <<  ")";
@@ -111,7 +108,6 @@ public:
     ::encode(latest_version, payload);
     ::encode(latest_value, payload);
     ::encode(values, payload);
-    ::encode(gv, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -129,8 +125,6 @@ public:
     ::decode(latest_version, p);
     ::decode(latest_value, p);
     ::decode(values, p);
-    if (header.version >= 2)
-      ::decode(gv, p);
   }
 };
 
