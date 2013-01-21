@@ -644,6 +644,11 @@ private:
 	       o->cct->_conf->osd_op_pq_min_cost)
     {}
 
+    void dump(Formatter *f) {
+      Mutex::Locker l(qlock);
+      pqueue.dump(f);
+    }
+
     void _enqueue_front(pair<PGRef, OpRequestRef> item);
     void _enqueue(pair<PGRef, OpRequestRef> item);
     PGRef _dequeue();
