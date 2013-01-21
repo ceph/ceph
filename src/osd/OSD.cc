@@ -6036,7 +6036,11 @@ bool OSD::op_is_discardable(MOSDOp *op)
  */
 void OSD::enqueue_op(PG *pg, OpRequestRef op)
 {
-  dout(15) << "enqueue_op " << op << " " << *(op->request) << dendl;
+  utime_t latency = ceph_clock_now(g_ceph_context) - op->request->get_recv_stamp();
+  dout(15) << "enqueue_op " << op << " prio " << op->request->get_priority()
+	   << " cost " << op->request->get_data().length()
+	   << " latency " << latency
+	   << " " << *(op->request) << dendl;
   op_wq.queue(make_pair(PGRef(pg), op));
 }
 
@@ -6121,7 +6125,11 @@ void OSDService::dequeue_pg(PG *pg, list<OpRequestRef> *dequeued)
  */
 void OSD::dequeue_op(PGRef pg, OpRequestRef op)
 {
-  dout(10) << "dequeue_op " << op << " " << *(op->request)
+  utime_t latency = ceph_clock_now(g_ceph_context) - op->request->get_recv_stamp();
+  dout(10) << "dequeue_op " << op << " prio " << op->request->get_priority()
+	   << " cost " << op->request->get_data().length()
+	   << " latency " << latency
+	   << " " << *(op->request)
 	   << " pg " << *pg << dendl;
   if (pg->deleting)
     return;
