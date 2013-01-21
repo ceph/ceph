@@ -5193,6 +5193,7 @@ int ReplicatedPG::send_pull(int prio, int peer,
   subop->set_priority(prio);
   subop->ops = vector<OSDOp>(1);
   subop->ops[0].op.op = CEPH_OSD_OP_PULL;
+  subop->ops[0].op.extent.length = g_conf->osd_recovery_max_chunk;
   subop->recovery_info = recovery_info;
   subop->recovery_progress = progress;
 
