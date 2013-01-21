@@ -466,7 +466,7 @@ void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, Conte
     le->metablob.add_root(true, in);
   }
   if (mdir)
-    le->metablob.add_dir(mdir, true, true, true); // dirty AND complete AND new
+    le->metablob.add_new_dir(mdir); // dirty AND complete AND new
 
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_safe(new C_MDC_CreateSystemFile(this, mut, dn, dpv, fin));
@@ -3281,6 +3281,7 @@ void MDCache::recalc_auth_bits()
       else {
 	dir->state_set(CDir::STATE_REJOINING);
 	dir->state_clear(CDir::STATE_AUTH);
+	dir->state_clear(CDir::STATE_COMPLETE);
 	if (dir->is_dirty()) 
 	  dir->mark_clean();
       }
@@ -8385,7 +8386,7 @@ void MDCache::_purge_stray_purged(CDentry *dn, int r)
     pf->rstat.sub(in->inode.accounted_rstat);
 
     le->metablob.add_dir_context(dn->dir);
-    EMetaBlob::dirlump& dl = le->metablob.add_dir(dn->dir, true, false, false);
+    EMetaBlob::dirlump& dl = le->metablob.add_dir(dn->dir, true);
     le->metablob.add_null_dentry(dl, dn, true);
     le->metablob.add_destroyed_inode(in->ino());
 
