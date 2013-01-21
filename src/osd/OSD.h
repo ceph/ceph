@@ -440,6 +440,11 @@ protected:
 
   void check_osdmap_features();
 
+  // asok
+  friend class OSDSocketHook;
+  class OSDSocketHook *asok_hook;
+  bool asok_command(string command, string args, ostream& ss);
+
 public:
   ClassHandler  *class_handler;
   int get_nodeid() { return whoami; }
@@ -620,15 +625,7 @@ private:
   // -- op tracking --
   OpTracker op_tracker;
   void check_ops_in_flight();
-  void dump_ops_in_flight(ostream& ss);
-  void dump_historic_ops(ostream& ss) {
-    return op_tracker.dump_historic_ops(ss);
-  }
-  friend class OpsFlightSocketHook;
-  friend class HistoricOpsSocketHook;
   friend class C_CompleteSplits;
-  OpsFlightSocketHook *admin_ops_hook;
-  HistoricOpsSocketHook *historic_ops_hook;
 
   // -- op queue --
 

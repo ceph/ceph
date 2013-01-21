@@ -761,6 +761,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   whoami(id),
   dev_path(dev), journal_path(jdev),
   dispatch_running(false),
+  asok_hook(NULL),
   osd_compat(get_osd_compat_set()),
   state(STATE_INITIALIZING), boot_epoch(0), up_epoch(0), bind_epoch(0),
   op_tp(external_messenger->cct, "OSD::op_tp", g_conf->osd_op_threads, "osd_op_threads"),
@@ -776,8 +777,6 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   heartbeat_dispatcher(this),
   stat_lock("OSD::stat_lock"),
   finished_lock("OSD::finished_lock"),
-  admin_ops_hook(NULL),
-  historic_ops_hook(NULL),
   op_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
   peering_wq(this, g_conf->osd_op_thread_timeout, &op_tp, 200),
   map_lock("OSD::map_lock"),
@@ -846,30 +845,31 @@ int OSD::pre_init()
   return 0;
 }
 
-class HistoricOpsSocketHook : public AdminSocketHook {
+// asok
+
+class OSDSocketHook : public AdminSocketHook {
   OSD *osd;
 public:
-  HistoricOpsSocketHook(OSD *o) : osd(o) {}
+  OSDSocketHook(OSD *o) : osd(o) {}
   bool call(std::string command, std::string args, bufferlist& out) {
     stringstream ss;
-    osd->dump_historic_ops(ss);
+    bool r = osd->asok_command(command, args, ss);
     out.append(ss);
-    return true;
+    return r;
   }
 };
 
-
-class OpsFlightSocketHook : public AdminSocketHook {
-  OSD *osd;
-public:
-  OpsFlightSocketHook(OSD *o) : osd(o) {}
-  bool call(std::string command, std::string args, bufferlist& out) {
-    stringstream ss;
-    osd->dump_ops_in_flight(ss);
-    out.append(ss);
-    return true;
+bool OSD::asok_command(string command, string args, ostream& ss)
+{
+  if (command == "dump_ops_in_flight") {
+    op_tracker.dump_ops_in_flight(ss);
+  } else if (command == "dump_historic_ops") {
+    op_tracker.dump_historic_ops(ss);
+  } else {
+    assert(0 == "broken asok registration");
   }
-};
+  return true;
+}
 
 int OSD::init()
 {
@@ -964,13 +964,12 @@ int OSD::init()
   // tick
   timer.add_event_after(g_conf->osd_heartbeat_interval, new C_Tick(this));
 
-  admin_ops_hook = new OpsFlightSocketHook(this);
+  asok_hook = new OSDSocketHook(this);
   AdminSocket *admin_socket = cct->get_admin_socket();
-  r = admin_socket->register_command("dump_ops_in_flight", admin_ops_hook,
-                                         "show the ops currently in flight");
-  historic_ops_hook = new HistoricOpsSocketHook(this);
-  r = admin_socket->register_command("dump_historic_ops", historic_ops_hook,
-                                         "show slowest recent ops");
+  r = admin_socket->register_command("dump_ops_in_flight", asok_hook,
+				     "show the ops currently in flight");
+  r = admin_socket->register_command("dump_historic_ops", asok_hook,
+				     "show slowest recent ops");
   assert(r == 0);
 
   service.init();
@@ -1124,10 +1123,9 @@ int OSD::shutdown()
   dout(10) << "no ops" << dendl;
 
   cct->get_admin_socket()->unregister_command("dump_ops_in_flight");
-  delete admin_ops_hook;
-  delete historic_ops_hook;
-  admin_ops_hook = NULL;
-  historic_ops_hook = NULL;
+  cct->get_admin_socket()->unregister_command("dump_historic_ops");
+  delete asok_hook;
+  asok_hook = NULL;
 
   recovery_tp.stop();
   dout(10) << "recovery tp stopped" << dendl;
@@ -2290,11 +2288,6 @@ void OSD::check_ops_in_flight()
     }
   }
   return;
-}
-
-void OSD::dump_ops_in_flight(ostream& ss)
-{
-  op_tracker.dump_ops_in_flight(ss);
 }
 
 // =========================================
