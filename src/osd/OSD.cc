@@ -865,6 +865,12 @@ bool OSD::asok_command(string command, string args, ostream& ss)
     op_tracker.dump_ops_in_flight(ss);
   } else if (command == "dump_historic_ops") {
     op_tracker.dump_historic_ops(ss);
+  } else if (command == "dump_op_pq_state") {
+    JSONFormatter f(true);
+    f.open_object_section("pq");
+    op_wq.dump(&f);
+    f.close_section();
+    f.flush(ss);
   } else {
     assert(0 == "broken asok registration");
   }
@@ -970,6 +976,8 @@ int OSD::init()
 				     "show the ops currently in flight");
   r = admin_socket->register_command("dump_historic_ops", asok_hook,
 				     "show slowest recent ops");
+  r = admin_socket->register_command("dump_op_pq_state", asok_hook,
+				     "dump op priority queue state");
   assert(r == 0);
 
   service.init();
@@ -1124,6 +1132,7 @@ int OSD::shutdown()
 
   cct->get_admin_socket()->unregister_command("dump_ops_in_flight");
   cct->get_admin_socket()->unregister_command("dump_historic_ops");
+  cct->get_admin_socket()->unregister_command("dump_op_pq_state");
   delete asok_hook;
   asok_hook = NULL;
 
