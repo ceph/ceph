@@ -1528,9 +1528,9 @@ void OSD::load_pgs()
 
     pg->reg_next_scrub();
 
-    // generate state for current mapping
-    osdmap->pg_to_up_acting_osds(pgid, pg->up, pg->acting);
-    int role = osdmap->calc_pg_role(whoami, pg->acting);
+    // generate state for PG's current mapping
+    pg->get_osdmap()->pg_to_up_acting_osds(pgid, pg->up, pg->acting);
+    int role = pg->get_osdmap()->calc_pg_role(whoami, pg->acting);
     pg->set_role(role);
 
     PG::RecoveryCtx rctx(0, 0, 0, 0, 0, 0);
