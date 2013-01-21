@@ -435,6 +435,8 @@ int md_config_t::parse_option(std::vector<const char*>& args,
 	//	  cout << "subsys " << subsys.get_name(o) << " log " << log << " gather " << gather << std::endl;
 	subsys.set_log_level(o, log);
 	subsys.set_gather_level(o, gather);
+	if (oss)
+	  *oss << "debug_" << subsys.get_name(o) << "=" << log << "/" << gather << " ";
       }
       break;
     }	
