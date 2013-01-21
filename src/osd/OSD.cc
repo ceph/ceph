@@ -6042,7 +6042,7 @@ void OSD::enqueue_op(PG *pg, OpRequestRef op)
 {
   utime_t latency = ceph_clock_now(g_ceph_context) - op->request->get_recv_stamp();
   dout(15) << "enqueue_op " << op << " prio " << op->request->get_priority()
-	   << " cost " << op->request->get_data().length()
+	   << " cost " << op->request->get_cost()
 	   << " latency " << latency
 	   << " " << *(op->request) << dendl;
   op_wq.queue(make_pair(PGRef(pg), op));
@@ -6051,7 +6051,7 @@ void OSD::enqueue_op(PG *pg, OpRequestRef op)
 void OSD::OpWQ::_enqueue(pair<PGRef, OpRequestRef> item)
 {
   unsigned priority = item.second->request->get_priority();
-  unsigned cost = item.second->request->get_data().length();
+  unsigned cost = item.second->request->get_cost();
   if (priority >= CEPH_MSG_PRIO_LOW)
     pqueue.enqueue_strict(
       item.second->request->get_source_inst(),
@@ -6073,7 +6073,7 @@ void OSD::OpWQ::_enqueue_front(pair<PGRef, OpRequestRef> item)
     }
   }
   unsigned priority = item.second->request->get_priority();
-  unsigned cost = item.second->request->get_data().length();
+  unsigned cost = item.second->request->get_cost();
   if (priority >= CEPH_MSG_PRIO_LOW)
     pqueue.enqueue_strict_front(
       item.second->request->get_source_inst(),
@@ -6131,7 +6131,7 @@ void OSD::dequeue_op(PGRef pg, OpRequestRef op)
 {
   utime_t latency = ceph_clock_now(g_ceph_context) - op->request->get_recv_stamp();
   dout(10) << "dequeue_op " << op << " prio " << op->request->get_priority()
-	   << " cost " << op->request->get_data().length()
+	   << " cost " << op->request->get_cost()
 	   << " latency " << latency
 	   << " " << *(op->request)
 	   << " pg " << *pg << dendl;
