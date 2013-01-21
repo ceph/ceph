@@ -642,7 +642,10 @@ private:
       : ThreadPool::WorkQueueVal<pair<PGRef, OpRequestRef>, PGRef >(
 	"OSD::OpWQ", ti, ti*10, tp),
 	qlock("OpWQ::qlock"),
-	osd(o) {}
+	osd(o),
+	pqueue(o->cct->_conf->osd_op_pq_max_tokens_per_priority,
+	       o->cct->_conf->osd_op_pq_min_cost)
+    {}
 
     void _enqueue_front(pair<PGRef, OpRequestRef> item);
     void _enqueue(pair<PGRef, OpRequestRef> item);
