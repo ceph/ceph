@@ -203,109 +203,6 @@ Monitor::~Monitor()
   delete mon_caps;
 }
 
-void Monitor::recovered_leader(int id)
-{
-  dout(10) << "recovered_leader " << id << " " << get_paxos_name(id) << " (" << paxos_recovered << ")" << dendl;
-  assert(paxos_recovered.count(id) == 0);
-  paxos_recovered.insert(id);
-  if (paxos_recovered.size() == paxos.size()) {
-    dout(10) << "all paxos instances recovered, going writeable" << dendl;
-
-    if (!features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV) &&
-	(quorum_features & CEPH_FEATURE_MON_GV)) {
-      require_gv_ondisk();
-      require_gv_onwire();
-    }
-
-    for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++) {
-      if (!(*p)->is_active())
-	continue;
-      finish_contexts(g_ceph_context, (*p)->waiting_for_active);
-    }
-    for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++) {
-      if (!(*p)->is_active())
-	continue;
-      finish_contexts(g_ceph_context, (*p)->waiting_for_commit);
-    }
-    for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++) {
-      if (!(*p)->is_readable())
-	continue;
-      finish_contexts(g_ceph_context, (*p)->waiting_for_readable);
-    }
-    for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++) {
-      if (!(*p)->is_writeable())
-	continue;
-      finish_contexts(g_ceph_context, (*p)->waiting_for_writeable);
-    }
-  }
-}
-
-void Monitor::recovered_peon(int id)
-{
-  // unlike recovered_leader(), recovered_peon() can get called
-  // multiple times, because it is triggered by a paxos lease message,
-  // and the leader may send multiples of those out for a given paxos
-  // machine while it is waiting for another instance to recover.
-  if (paxos_recovered.count(id))
-    return;
-  dout(10) << "recovered_peon " << id << " " << get_paxos_name(id) << " (" << paxos_recovered << ")" << dendl;
-  paxos_recovered.insert(id);
-  if (paxos_recovered.size() == paxos.size()) {
-    dout(10) << "all paxos instances recovered/leased" << dendl;
-
-    if (!features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV) &&
-	(quorum_features & CEPH_FEATURE_MON_GV)) {
-      require_gv_ondisk();
-      require_gv_onwire();
-    }
-  }
-}
-
-void Monitor::require_gv_ondisk()
-{
-  dout(0) << "setting CEPH_MON_FEATURE_INCOMPAT_GV" << dendl;
-  features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_GV);
-  write_features();
-}
-
-void Monitor::require_gv_onwire()
-{
-  dout(10) << "require_gv_onwire" << dendl;
-  // require protocol feature bit of my peers
-  Messenger::Policy p = messenger->get_policy(entity_name_t::TYPE_MON);
-  p.features_required |= CEPH_FEATURE_MON_GV;
-  messenger->set_policy(entity_name_t::TYPE_MON, p);
-}
-
-version_t Monitor::get_global_paxos_version()
-{
-  // this should only be called when paxos becomes writeable, which is
-  // *after* everything settles after an election.
-  assert(is_all_paxos_recovered());
-
-  if ((quorum_features & CEPH_FEATURE_MON_GV) == 0) {
-    // do not sure issuing gv's until the entire quorum supports them.
-    // this way we synchronize the setting of the incompat GV ondisk
-    // feature with actually writing the values to the data store, and
-    // avoid having to worry about hybrid cases.
-    dout(10) << "get_global_paxos_version no-op; quorum does not support the feature" << dendl;
-    return 0;
-  }
-
-  if (global_version == 0) {
-    global_version =
-      osdmon()->paxos->get_version() +
-      mdsmon()->paxos->get_version() +
-      monmon()->paxos->get_version() +
-      pgmon()->paxos->get_version() +
-      authmon()->paxos->get_version() +
-      logmon()->paxos->get_version();
-    dout(10) << "get_global_paxos_version first call this election epoch, starting from " << global_version << dendl;
-  }
-  ++global_version;
-  dout(20) << "get_global_paxos_version " << global_version << dendl;
-  return global_version;
-}
 
 enum {
   l_mon_first = 456000,
@@ -407,9 +304,6 @@ void Monitor::read_features()
   bufferlist::iterator p = bl.begin();
   ::decode(features, p);
   dout(10) << "features " << features << dendl;
-
-  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV))
-    require_gv_onwire();
 }
 
 void Monitor::write_features()
@@ -745,9 +639,6 @@ void Monitor::reset()
   quorum.clear();
   outside_quorum.clear();
 
-  paxos_recovered.clear();
-  global_version = 0;
-
   for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     (*p)->restart();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
@@ -1048,7 +939,6 @@ MMonProbe *Monitor::fill_probe_data(MMonProbe *m, Paxos *pax)
   for (; v <= pax->get_version(); v++) {
     store->get_bl_sn_safe(r->paxos_values[m->machine_name][v], m->machine_name.c_str(), v);
     len += r->paxos_values[m->machine_name][v].length();
-    r->gv[m->machine_name][v] = store->get_global_version(m->machine_name.c_str(), v);
     for (list<string>::iterator p = pax->extra_state_dirs.begin();
          p != pax->extra_state_dirs.end();
          ++p) {
@@ -1108,7 +998,7 @@ void Monitor::handle_probe_data(MMonProbe *m)
     for (map<string, map<version_t, bufferlist> >::iterator p = m->paxos_values.begin();
 	 p != m->paxos_values.end();
 	 ++p) {
-      store->put_bl_sn_map(p->first.c_str(), p->second.begin(), p->second.end(), &m->gv[p->first]);
+      store->put_bl_sn_map(p->first.c_str(), p->second.begin(), p->second.end());
     }
 
     pax->last_committed = m->paxos_values.begin()->second.rbegin()->first;

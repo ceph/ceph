@@ -22,8 +22,8 @@
 
 class MMonProbe : public Message {
 public:
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 1;
+  static const int HEAD_VERSION = 4;
+  static const int COMPAT_VERSION = 4;
 
   enum {
     OP_PROBE = 1,
@@ -56,8 +56,6 @@ public:
   map<string, map<version_t,bufferlist> > paxos_values;
   bufferlist latest_value;
   version_t latest_version, newest_version, oldest_version;
-
-  map<string, map<version_t,version_t> > gv;
 
   MMonProbe()
     : Message(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION) {}
@@ -105,7 +103,6 @@ public:
     ::encode(latest_value, payload);
     ::encode(latest_version, payload);
     ::encode(has_ever_joined, payload);
-    ::encode(gv, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -125,8 +122,6 @@ public:
       ::decode(has_ever_joined, p);
     else
       has_ever_joined = false;
-    if (header.version >= 3)
-      ::decode(gv, p);
   }
 };
 
