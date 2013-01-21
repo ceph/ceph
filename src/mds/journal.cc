@@ -145,7 +145,7 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
       CInode *in = *p;
       assert(in->last == CEPH_NOSNAP);
       ++p;
-      if (in->is_any_caps()) {
+      if (in->is_auth() && in->is_any_caps()) {
 	if (in->is_any_caps_wanted()) {
 	  dout(20) << "try_to_expire requeueing open file " << *in << dendl;
 	  if (!le) {

@@ -1093,6 +1093,8 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, list<Context*>& fini
   
   in->clear_dirty_rstat();
 
+  in->item_open_file.remove_myself();
+
   // waiters
   in->take_waiting(CInode::WAIT_ANY_MASK, finished);
   
