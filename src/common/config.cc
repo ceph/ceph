@@ -536,7 +536,9 @@ void md_config_t::_apply_changes(std::ostream *oss)
   for (changed_set_t::const_iterator c = changed.begin();
        c != changed.end(); ++c) {
     const std::string &key(*c);
-    if ((oss) && (!_get_val(key.c_str(), &bufptr, sizeof(buf)))) {
+    if ((oss) &&
+	(!_get_val(key.c_str(), &bufptr, sizeof(buf))) &&
+	key != "internal_safe_to_start_threads") {
       (*oss) << "applying configuration change: " << key << " = '"
 		     << buf << "'\n";
     }
