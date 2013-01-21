@@ -3876,6 +3876,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	assert(entity_name_t::TYPE_OSD != m->get_connection()->peer_type);
 	osd->send_message_osd_client(reply, m->get_connection());
 	repop->sent_disk = true;
+	repop->ctx->op->mark_commit_sent();
       }
     }
 
