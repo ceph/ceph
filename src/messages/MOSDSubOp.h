@@ -86,6 +86,12 @@ public:
   // indicates that we must fix hobject_t encoding
   bool hobject_incorrect_pool;
 
+  int get_cost() const {
+    if (ops.size() == 1 && ops[0].op.op == CEPH_OSD_OP_PULL)
+      return ops[0].op.extent.length;
+    return data.length();
+  }
+
   virtual void decode_payload() {
     hobject_incorrect_pool = false;
     bufferlist::iterator p = payload.begin();
