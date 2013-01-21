@@ -16,6 +16,7 @@
 #define PRIORITY_QUEUE_H
 
 #include "common/Mutex.h"
+#include "common/Formatter.h"
 
 #include <map>
 #include <utility>
@@ -184,6 +185,13 @@ class PrioritizedQueue {
 	}
       }
       q.erase(i);
+    }
+
+    void dump(Formatter *f) const {
+      f->dump_int("tokens", tokens);
+      f->dump_int("max_tokens", max_tokens);
+      f->dump_int("size", size);
+      f->dump_int("num_keys", q.size());
     }
   };
   map<unsigned, SubQueue> high_queue;
@@ -357,6 +365,32 @@ public:
       remove_queue(queue.rbegin()->first);
     distribute_tokens(cost);
     return ret;
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_int("total_priority", total_priority);
+    f->dump_int("max_tokens_per_subqueue", max_tokens_per_subqueue);
+    f->dump_int("min_cost", min_cost);
+    f->open_array_section("high_queues");
+    for (typename map<unsigned, SubQueue>::const_iterator p = high_queue.begin();
+	 p != high_queue.end();
+	 ++p) {
+      f->open_object_section("subqueue");
+      f->dump_int("priority", p->first);
+      p->second.dump(f);
+      f->close_section();
+    }
+    f->close_section();
+    f->open_array_section("queues");
+    for (typename map<unsigned, SubQueue>::const_iterator p = queue.begin();
+	 p != queue.end();
+	 ++p) {
+      f->open_object_section("subqueue");
+      f->dump_int("priority", p->first);
+      p->second.dump(f);
+      f->close_section();
+    }
+    f->close_section();
   }
 };
 
