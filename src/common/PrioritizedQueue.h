@@ -76,22 +76,22 @@ class PrioritizedQueue {
   struct SubQueue {
   private:
     map<K, list<pair<unsigned, T> > > q;
-    unsigned bucket;
+    unsigned tokens;
     int64_t size;
     typename map<K, list<pair<unsigned, T> > >::iterator cur;
   public:
     SubQueue(const SubQueue &other)
-      : q(other.q), bucket(other.bucket), size(other.size),
+      : q(other.q), tokens(other.tokens), size(other.size),
 	cur(q.begin()) {}
-    SubQueue() : bucket(0), size(0), cur(q.begin()) {}
+    SubQueue() : tokens(0), size(0), cur(q.begin()) {}
     unsigned num_tokens() const {
-      return bucket;
+      return tokens;
     }
-    void put_tokens(unsigned tokens) {
-      bucket += tokens;
+    void put_tokens(unsigned t) {
+      tokens += t;
     }
-    void take_tokens(unsigned tokens) {
-      bucket -= tokens;
+    void take_tokens(unsigned t) {
+	tokens -= t;
     }
     void enqueue(K cl, unsigned cost, T item) {
       q[cl].push_back(make_pair(cost, item));
