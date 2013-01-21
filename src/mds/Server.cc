@@ -3823,7 +3823,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
-  le->metablob.add_dir(newdir, true, true, true); // dirty AND complete AND new
+  le->metablob.add_new_dir(newdir); // dirty AND complete AND new
   
   // issue a cap on the directory
   int cmode = CEPH_FILE_MODE_RDWR;

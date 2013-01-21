@@ -283,6 +283,7 @@ public:
     static const int STATE_COMPLETE =    (1<<1);
     static const int STATE_DIRTY =       (1<<2);  // dirty due to THIS journal item, that is!
     static const int STATE_NEW =         (1<<3);  // new directory
+    static const int STATE_IMPORTING =	 (1<<4);  // importing directory
 
     //version_t  dirv;
     fnode_t fnode;
@@ -305,6 +306,8 @@ public:
     void mark_dirty() { state |= STATE_DIRTY; }
     bool is_new() { return state & STATE_NEW; }
     void mark_new() { state |= STATE_NEW; }
+    bool is_importing() { return state & STATE_IMPORTING; }
+    void mark_importing() { state |= STATE_IMPORTING; }
 
     list<std::tr1::shared_ptr<fullbit> >   &get_dfull()   { return dfull; }
     list<remotebit> &get_dremote() { return dremote; }
@@ -634,11 +637,21 @@ private:
 							      &in->old_inodes)));
   }
   
-  dirlump& add_dir(CDir *dir, bool dirty, bool complete=false, bool isnew=false) {
+  dirlump& add_dir(CDir *dir, bool dirty, bool complete=false) {
     return add_dir(dir->dirfrag(), dir->get_projected_fnode(), dir->get_projected_version(),
-		   dirty, complete, isnew);
+		   dirty, complete);
   }
-  dirlump& add_dir(dirfrag_t df, fnode_t *pf, version_t pv, bool dirty, bool complete=false, bool isnew=false) {
+  dirlump& add_new_dir(CDir *dir) {
+    return add_dir(dir->dirfrag(), dir->get_projected_fnode(), dir->get_projected_version(),
+		   true, true, true); // dirty AND complete AND new
+  }
+  dirlump& add_import_dir(CDir *dir) {
+    // dirty=false would be okay in some cases
+    return add_dir(dir->dirfrag(), dir->get_projected_fnode(), dir->get_projected_version(),
+		   true, dir->is_complete(), false, true);
+  }
+  dirlump& add_dir(dirfrag_t df, fnode_t *pf, version_t pv, bool dirty,
+		   bool complete=false, bool isnew=false, bool importing=false) {
     if (lump_map.count(df) == 0)
       lump_order.push_back(df);
 
@@ -648,6 +661,7 @@ private:
     if (complete) l.mark_complete();
     if (dirty) l.mark_dirty();
     if (isnew) l.mark_new();
+    if (importing) l.mark_importing();
     return l;
   }
   
