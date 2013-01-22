@@ -111,6 +111,7 @@ public:
   // Expand all metavariables. Make any pending observer callbacks.
   void apply_changes(std::ostream *oss);
   void _apply_changes(std::ostream *oss);
+  bool _internal_field(const string& k);
   void call_all_observers();
 
   // Called by the Ceph daemons to make configuration changes at runtime

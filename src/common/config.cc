@@ -521,6 +521,13 @@ void md_config_t::apply_changes(std::ostream *oss)
   _apply_changes(oss);
 }
 
+bool md_config_t::_internal_field(const string& s)
+{
+  if (s == "internal_safe_to_start_threads")
+    return true;
+  return false;
+}
+
 void md_config_t::_apply_changes(std::ostream *oss)
 {
   /* Maps observers to the configuration options that they care about which
@@ -540,7 +547,7 @@ void md_config_t::_apply_changes(std::ostream *oss)
     const std::string &key(*c);
     if ((oss) &&
 	(!_get_val(key.c_str(), &bufptr, sizeof(buf))) &&
-	key != "internal_safe_to_start_threads") {
+	!_internal_field(key)) {
       (*oss) << key << " = '" << buf << "' ";
     }
     pair < obs_map_t::iterator, obs_map_t::iterator >
