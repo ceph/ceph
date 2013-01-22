@@ -51,7 +51,6 @@
 #include "events/ESubtreeMap.h"
 #include "events/EUpdate.h"
 #include "events/ESlaveUpdate.h"
-#include "events/EString.h"
 #include "events/EImportFinish.h"
 #include "events/EFragment.h"
 #include "events/ECommitted.h"

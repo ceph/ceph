@@ -27,7 +27,6 @@
 
 #include "include/filepath.h"
 
-#include "events/EString.h"
 #include "events/EExport.h"
 #include "events/EImportStart.h"
 #include "events/EImportFinish.h"
