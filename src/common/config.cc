@@ -539,8 +539,7 @@ void md_config_t::_apply_changes(std::ostream *oss)
     if ((oss) &&
 	(!_get_val(key.c_str(), &bufptr, sizeof(buf))) &&
 	key != "internal_safe_to_start_threads") {
-      (*oss) << "applying configuration change: " << key << " = '"
-		     << buf << "'\n";
+      (*oss) << key << " = '" << buf << "' ";
     }
     pair < obs_map_t::iterator, obs_map_t::iterator >
       range(observers.equal_range(key));
