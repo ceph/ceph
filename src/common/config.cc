@@ -435,6 +435,8 @@ int md_config_t::parse_option(std::vector<const char*>& args,
 	//	  cout << "subsys " << subsys.get_name(o) << " log " << log << " gather " << gather << std::endl;
 	subsys.set_log_level(o, log);
 	subsys.set_gather_level(o, gather);
+	if (oss)
+	  *oss << "debug_" << subsys.get_name(o) << "=" << log << "/" << gather << " ";
       }
       break;
     }	
@@ -536,9 +538,10 @@ void md_config_t::_apply_changes(std::ostream *oss)
   for (changed_set_t::const_iterator c = changed.begin();
        c != changed.end(); ++c) {
     const std::string &key(*c);
-    if ((oss) && (!_get_val(key.c_str(), &bufptr, sizeof(buf)))) {
-      (*oss) << "applying configuration change: " << key << " = '"
-		     << buf << "'\n";
+    if ((oss) &&
+	(!_get_val(key.c_str(), &bufptr, sizeof(buf))) &&
+	key != "internal_safe_to_start_threads") {
+      (*oss) << key << " = '" << buf << "' ";
     }
     pair < obs_map_t::iterator, obs_map_t::iterator >
       range(observers.equal_range(key));
