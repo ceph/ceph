@@ -39,7 +39,7 @@ To upgrade an OSD peform the following steps:
 #. Upgrade the OSD package:: 
 
 	ssh {osd-host}
-	sudo apt-get update && sudo apt-get install ceph-osd
+	sudo apt-get update && sudo apt-get install ceph
 
 #. Restart the OSD, where ``N`` is the OSD number:: 
 
@@ -83,7 +83,7 @@ To upgrade an MDS, perform the following steps:
 #. Upgrade the ceph package::
 
 	ssh {mds-host}
-	sudo apt-get update && sudo apt-get install ceph ceph-mds
+	sudo apt-get update && sudo apt-get install ceph
  
 #. Restart the metadata server::
 
