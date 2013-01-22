@@ -406,7 +406,7 @@ OPTION(filestore_sync_flush, OPT_BOOL, false)
 OPTION(filestore_journal_parallel, OPT_BOOL, false)
 OPTION(filestore_journal_writeahead, OPT_BOOL, false)
 OPTION(filestore_journal_trailing, OPT_BOOL, false)
-OPTION(filestore_queue_max_ops, OPT_INT, 500)
+OPTION(filestore_queue_max_ops, OPT_INT, 50)
 OPTION(filestore_queue_max_bytes, OPT_INT, 100 << 20)
 OPTION(filestore_queue_committing_max_ops, OPT_INT, 500)        // this is ON TOP of filestore_queue_max_*
 OPTION(filestore_queue_committing_max_bytes, OPT_INT, 100 << 20) //  "
