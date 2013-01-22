@@ -1097,6 +1097,7 @@ void ReplicatedPG::do_sub_op(OpRequestRef op)
 
   if (!is_active()) {
     waiting_for_active.push_back(op);
+    op->mark_delayed("waiting for active");
     return;
   }
 
@@ -4690,6 +4691,8 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
     }
   }
   
+  op->mark_started();
+
   Context *oncommit = new C_OSD_RepModifyCommit(rm);
   Context *onapply = new C_OSD_RepModifyApply(rm);
   int r = osd->store->queue_transactions(osr.get(), rm->tls, onapply, oncommit, 0, op);
@@ -4745,7 +4748,7 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
 void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
 {
   lock();
-  rm->op->mark_event("sub_op_commit");
+  rm->op->mark_commit_sent();
   rm->committed = true;
 
   if (rm->epoch_started >= last_peering_reset) {
@@ -5773,8 +5776,10 @@ void ReplicatedPG::_committed_pushed_object(OpRequestRef op, epoch_t same_since,
     dout(10) << "_committed_pushed_object pg has changed, not touching last_complete_ondisk" << dendl;
   }
 
-  if (op)
+  if (op) {
     log_subop_stats(op, l_osd_sop_push_inb, l_osd_sop_push_lat);
+    op->mark_event("committed");
+  }
 
   unlock();
 }
