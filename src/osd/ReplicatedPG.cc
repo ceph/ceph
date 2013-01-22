@@ -1086,55 +1086,45 @@ void ReplicatedPG::do_sub_op(OpRequestRef op)
   assert(m->get_header().type == MSG_OSD_SUBOP);
   dout(15) << "do_sub_op " << *op->request << dendl;
 
+  OSDOp *first = NULL;
   if (m->ops.size() >= 1) {
-    OSDOp& first = m->ops[0];
-    switch (first.op.op) {
+    first = &m->ops[0];
+    switch (first->op.op) {
     case CEPH_OSD_OP_PULL:
       sub_op_pull(op);
-      return;
-    case CEPH_OSD_OP_PUSH:
-      if (!is_active())
-	waiting_for_active.push_back(op);
-      else
-	sub_op_push(op);
-      return;
-    case CEPH_OSD_OP_DELETE:
-      if (!is_active())
-	waiting_for_active.push_back(op);
-      else
-	sub_op_remove(op);
-      return;
-    case CEPH_OSD_OP_SCRUB_RESERVE:
-      if (!is_active())
-	waiting_for_active.push_back(op);
-      else
-	sub_op_scrub_reserve(op);
-      return;
-    case CEPH_OSD_OP_SCRUB_UNRESERVE:
-      if (!is_active())
-	waiting_for_active.push_back(op);
-      else
-	sub_op_scrub_unreserve(op);
-      return;
-    case CEPH_OSD_OP_SCRUB_STOP:
-      if (!is_active())
-	waiting_for_active.push_back(op);
-      else
-	sub_op_scrub_stop(op);
-      return;
-    case CEPH_OSD_OP_SCRUB_MAP:
-      if (!is_active())
-	waiting_for_active.push_back(op);
-      else
-	sub_op_scrub_map(op);
       return;
     }
   }
 
-  if (!is_active())
+  if (!is_active()) {
     waiting_for_active.push_back(op);
-  else
-    sub_op_modify(op);
+    return;
+  }
+
+  if (first) {
+    switch (first->op.op) {
+    case CEPH_OSD_OP_PUSH:
+      sub_op_push(op);
+      return;
+    case CEPH_OSD_OP_DELETE:
+      sub_op_remove(op);
+      return;
+    case CEPH_OSD_OP_SCRUB_RESERVE:
+      sub_op_scrub_reserve(op);
+      return;
+    case CEPH_OSD_OP_SCRUB_UNRESERVE:
+      sub_op_scrub_unreserve(op);
+      return;
+    case CEPH_OSD_OP_SCRUB_STOP:
+      sub_op_scrub_stop(op);
+      return;
+    case CEPH_OSD_OP_SCRUB_MAP:
+      sub_op_scrub_map(op);
+      return;
+    }
+  }
+
+  sub_op_modify(op);
 }
 
 void ReplicatedPG::do_sub_op_reply(OpRequestRef op)
