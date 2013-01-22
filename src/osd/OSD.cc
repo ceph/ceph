@@ -3682,7 +3682,7 @@ void OSD::wait_for_new_map(OpRequestRef op)
   }
   
   waiting_for_osdmap.push_back(op);
-  op->mark_delayed();
+  op->mark_delayed("wait for new map");
 }
 
 
@@ -5910,7 +5910,7 @@ void OSD::handle_op(OpRequestRef op)
     if (osdmap->get_pg_acting_role(pgid, whoami) >= 0) {
       dout(7) << "we are valid target for op, waiting" << dendl;
       waiting_for_pg[pgid].push_back(op);
-      op->mark_delayed();
+      op->mark_delayed("waiting for pg to exist locally");
       return;
     }
 

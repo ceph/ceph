@@ -128,6 +128,7 @@ struct OpRequest : public TrackedOp {
 
 private:
   list<pair<utime_t, string> > events;
+  string current;
   Mutex lock;
   OpTracker *tracker;
   osd_reqid_t reqid;
@@ -186,30 +187,37 @@ public:
 
   void mark_queued_for_pg() {
     mark_event("queued_for_pg");
+    current = "queued for pg";
     hit_flag_points |= flag_queued_for_pg;
     latest_flag_point = flag_queued_for_pg;
   }
   void mark_reached_pg() {
     mark_event("reached_pg");
+    current = "reached pg";
     hit_flag_points |= flag_reached_pg;
     latest_flag_point = flag_reached_pg;
   }
-  void mark_delayed() {
+  void mark_delayed(string s) {
+    mark_event(s);
+    current = s;
     hit_flag_points |= flag_delayed;
     latest_flag_point = flag_delayed;
   }
   void mark_started() {
     mark_event("started");
+    current = "started";
     hit_flag_points |= flag_started;
     latest_flag_point = flag_started;
   }
-  void mark_sub_op_sent() {
-    mark_event("sub_op_sent");
+  void mark_sub_op_sent(string s) {
+    mark_event(s);
+    current = s;
     hit_flag_points |= flag_sub_op_sent;
     latest_flag_point = flag_sub_op_sent;
   }
   void mark_commit_sent() {
     mark_event("commit_sent");
+    current = "commit sent";
     hit_flag_points |= flag_commit_sent;
     latest_flag_point = flag_commit_sent;
   }
