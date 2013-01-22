@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_THROTTLE_H
 #define CEPH_THROTTLE_H
 
@@ -24,8 +27,8 @@ public:
 private:
   void _reset_max(int64_t m);
   bool _should_wait(int64_t c) {
-		int64_t m = max.read();
-		int64_t cur = count.read();
+    int64_t m = max.read();
+    int64_t cur = count.read();
     return
       m &&
       ((c <= m && cur + c > m) || // normally stay under max
