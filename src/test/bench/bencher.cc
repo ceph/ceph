@@ -181,14 +181,14 @@ void Bencher::run_bench()
       }
       case READ: {
 	stat_collector->start_read(seq, length);
-	bufferlist *bl = new bufferlist;
+	bufferlist *read_bl = new bufferlist;
 	backend->read(
 	  obj_name,
 	  offset,
 	  length,
-	  bl,
+	  read_bl,
 	  new OnReadComplete(
-	    this, seq, bl)
+	    this, seq, read_bl)
 	  );
 	break;
       }
