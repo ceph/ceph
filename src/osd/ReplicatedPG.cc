@@ -122,7 +122,7 @@ void ReplicatedPG::wait_for_missing_object(const hobject_t& soid, OpRequestRef o
     pull(soid, v, g_conf->osd_client_op_priority);
   }
   waiting_for_missing_object[soid].push_back(op);
-  op->mark_delayed();
+  op->mark_delayed("waiting for missing object");
 }
 
 void ReplicatedPG::wait_for_all_missing(OpRequestRef op)
@@ -178,7 +178,7 @@ void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
     recover_object_replicas(soid, v, g_conf->osd_client_op_priority);
   }
   waiting_for_degraded_object[soid].push_back(op);
-  op->mark_delayed();
+  op->mark_delayed("waiting for degraded object");
 }
 
 void ReplicatedPG::wait_for_backfill_pos(OpRequestRef op)
@@ -631,7 +631,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
   if (op->may_write() && scrubber.write_blocked_by_scrub(head)) {
     dout(20) << __func__ << ": waiting for scrub" << dendl;
     waiting_for_active.push_back(op);
-    op->mark_delayed();
+    op->mark_delayed("waiting for scrub");
     return;
   }
 
@@ -734,7 +734,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
   if (!ok) {
     dout(10) << "do_op waiting on mode " << mode << dendl;
     mode.waiting.push_back(op);
-    op->mark_delayed();
+    op->mark_delayed("waiting on pg mode");
     return;
   }
 
@@ -876,7 +876,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
 	}
 	dout(10) << " waiting for " << oldv << " to commit" << dendl;
 	waiting_for_ondisk[oldv].push_back(op);  // always queue ondisk waiters, so that we can requeue if needed
-	op->mark_delayed();
+	op->mark_delayed("waiting for ondisk");
       }
       return;
     }
@@ -3963,9 +3963,12 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
 
   int acks_wanted = CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK;
 
+  if (ctx->op && acting.size() > 1) {
+    ostringstream ss;
+    ss << "waiting for subops from " << vector<int>(acting.begin() + 1, acting.end());
+    ctx->op->mark_sub_op_sent(ss.str());
+  }
   for (unsigned i=1; i<acting.size(); i++) {
-    if (ctx->op)
-      ctx->op->mark_sub_op_sent();
     int peer = acting[i];
     pg_info_t &pinfo = peer_info[peer];
 
