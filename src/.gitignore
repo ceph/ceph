@@ -111,3 +111,8 @@ Makefile
 /test_librbd_fsx
 /scratchtool
 /scratchtoolpp
+/smalliobench
+/smalliobenchdumb
+/smalliobenchfs
+/tpbench
+/smalliobenchrbd
