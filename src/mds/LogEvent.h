@@ -15,7 +15,7 @@
 #ifndef CEPH_LOGEVENT_H
 #define CEPH_LOGEVENT_H
 
-#define EVENT_STRING       1
+#define EVENT_UNUSED       1 // was previously EVENT_STRING
 
 #define EVENT_SUBTREEMAP   2
 #define EVENT_EXPORT       3

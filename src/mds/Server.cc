@@ -42,7 +42,6 @@
 
 #include "messages/MDentryUnlink.h"
 
-#include "events/EString.h"
 #include "events/EUpdate.h"
 #include "events/ESlaveUpdate.h"
 #include "events/ESession.h"

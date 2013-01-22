@@ -21,6 +21,7 @@
 #include "../MDS.h"
 
 #include "EMetaBlob.h"
+#include "../LogEvent.h"
 
 class EExport : public LogEvent {
 public:

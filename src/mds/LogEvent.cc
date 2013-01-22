@@ -18,8 +18,6 @@
 #include "MDS.h"
 
 // events i know of
-#include "events/EString.h"
-
 #include "events/ESubtreeMap.h"
 #include "events/EExport.h"
 #include "events/EImportStart.h"
@@ -52,8 +50,6 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   // create event
   LogEvent *le;
   switch (type) {
-  case EVENT_STRING: le = new EString; break;
-
   case EVENT_SUBTREEMAP: le = new ESubtreeMap; break;
   case EVENT_SUBTREEMAP_TEST: 
     le = new ESubtreeMap;
