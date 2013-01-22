@@ -14,7 +14,6 @@
 
 #include "common/config.h"
 #include "osdc/Journaler.h"
-#include "events/EString.h"
 #include "events/ESubtreeMap.h"
 #include "events/ESession.h"
 #include "events/ESessions.h"
@@ -264,16 +263,6 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
 
 #undef DOUT_COND
 #define DOUT_COND(cct, l) (l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_log)
-
-
-// -----------------------
-// EString
-
-void EString::replay(MDS *mds)
-{
-  dout(10) << "EString.replay " << event << dendl; 
-}
-
 
 
 // -----------------------

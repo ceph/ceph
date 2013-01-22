@@ -19,6 +19,7 @@
 #include "include/types.h"
 
 #include "../MDS.h"
+#include "../LogEvent.h"
 
 class EImportFinish : public LogEvent {
  protected:
