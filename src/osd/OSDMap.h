@@ -450,6 +450,10 @@ public:
     return -ENOENT;
   }
 
+  int64_t const_lookup_pg_pool_name(const char *name) const {
+    return const_cast<OSDMap *>(this)->lookup_pg_pool_name(name);
+  }
+
   int64_t get_pool_max() const {
     return pool_max;
   }
