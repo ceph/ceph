@@ -5559,10 +5559,15 @@ int ReplicatedPG::send_push(int prio, int peer,
     for (iter->lower_bound(progress.omap_recovered_to);
 	 iter->valid();
 	 iter->next()) {
-      if (available < (iter->key().size() + iter->value().length()))
+      if (!subop->omap_entries.empty() &&
+	  available <= (iter->key().size() + iter->value().length()))
 	break;
       subop->omap_entries.insert(make_pair(iter->key(), iter->value()));
-      available -= (iter->key().size() + iter->value().length());
+
+      if ((iter->key().size() + iter->value().length()) <= available)
+	available -= (iter->key().size() + iter->value().length());
+      else
+	available = 0;
     }
     if (!iter->valid())
       new_progress.omap_complete = true;
