@@ -6,6 +6,7 @@ import gevent
 import json
 import threading
 from teuthology import misc as teuthology
+from teuthology.task import ceph as ceph_task
 
 class Thrasher:
     def __init__(self, manager, config, logger=None):
@@ -212,9 +213,10 @@ class Thrasher:
         self.all_up()
 
 class CephManager:
-    def __init__(self, controller, ctx=None, logger=None):
+    def __init__(self, controller, ctx=None, config=None, logger=None):
         self.lock = threading.RLock()
         self.ctx = ctx
+        self.config = config
         self.controller = controller
         if (logger):
             self.log = lambda x: logger.info(x)
@@ -645,7 +647,12 @@ class CephManager:
         self.raw_cluster_cmd('osd', 'out', str(osd))
 
     def kill_osd(self, osd):
-        self.ctx.daemons.get_daemon('osd', osd).stop()
+        if 'powercycle' in self.config and self.config['powercycle']:
+            (remote,) = self.ctx.cluster.only('osd.{o}'.format(o=osd)).remotes.iterkeys()
+            self.log('kill_osd on osd.{o} doing powercycle of {s}'.format(o=osd, s=remote.name))
+            remote.console.power_off()
+        else:
+            self.ctx.daemons.get_daemon('osd', osd).stop()
 
     def blackhole_kill_osd(self, osd):
         self.raw_cluster_cmd('--', 'tell', 'osd.%d' % osd,
@@ -654,6 +661,11 @@ class CephManager:
         self.ctx.daemons.get_daemon('osd', osd).stop()
 
     def revive_osd(self, osd):
+        if 'powercycle' in self.config and self.config['powercycle']:
+            (remote,) = self.ctx.cluster.only('osd.{o}'.format(o=osd)).remotes.iterkeys()
+            self.log('kill_osd on osd.{o} doing powercycle of {s}'.format(o=osd, s=remote.name))
+            remote.console.hard_reset()
+            ceph_task.mount_osd_data(self.ctx, remote, osd)
         self.ctx.daemons.get_daemon('osd', osd).restart()
 
     def mark_down_osd(self, osd):
@@ -666,9 +678,18 @@ class CephManager:
     ## monitors
 
     def kill_mon(self, mon):
-        self.ctx.daemons.get_daemon('mon', mon).stop()
+        if 'powercycle' in self.config and self.config['powercycle']:
+            (remote,) = self.ctx.cluster.only('mon.{m}'.format(m=mon)).remotes.iterkeys()
+            self.log('kill_mon on mon.{m} doing powercycle of {s}'.format(m=mon, s=remote.name))
+            remote.console.power_off()
+        else:
+            self.ctx.daemons.get_daemon('mon', mon).stop()
 
     def revive_mon(self, mon):
+        if 'powercycle' in self.config and self.config['powercycle']:
+            (remote,) = self.ctx.cluster.only('mon.{m}'.format(m=mon)).remotes.iterkeys()
+            self.log('revive_mon on mon.{m} doing powercycle of {s}'.format(m=mon, s=remote.name))
+            remote.console.power_on()
         self.ctx.daemons.get_daemon('mon', mon).restart()
 
     def get_mon_status(self, mon):
@@ -701,24 +722,30 @@ class CephManager:
     ## metadata servers
 
     def kill_mds(self, mds):
-        self.ctx.daemons.get_daemon('mds', mds).stop()
+        if 'powercycle' in self.config and self.config['powercycle']:
+            (remote,) = self.ctx.cluster.only('mds.{m}'.format(m=mds)).remotes.iterkeys()
+            self.log('kill_mds on mds.{m} doing powercycle of {s}'.format(m=mds, s=remote.name))
+            remote.console.power_off()
+        else:
+            self.ctx.daemons.get_daemon('mds', mds).stop()
 
     def kill_mds_by_rank(self, rank):
         status = self.get_mds_status_by_rank(rank)
-        self.ctx.daemons.get_daemon('mds', status['name']).stop()
+        self.kill_mds(status['name'])
 
     def revive_mds(self, mds, standby_for_rank=None):
+        if 'powercycle' in self.config and self.config['powercycle']:
+            (remote,) = self.ctx.cluster.only('mds.{m}'.format(m=mds)).remotes.iterkeys()
+            self.log('revive_mds on mds.{m} doing powercycle of {s}'.format(m=mds, s=remote.name))
+            remote.console.power_on()
         args = []
         if standby_for_rank:
           args.extend(['--hot-standby', standby_for_rank])
         self.ctx.daemons.get_daemon('mds', mds).restart(*args)
 
     def revive_mds_by_rank(self, rank, standby_for_rank=None):
-        args = []
-        if standby_for_rank:
-          args.extend(['--hot-standby', standby_for_rank])
         status = self.get_mds_status_by_rank(rank)
-        self.ctx.daemons.get_daemon('mds', status['name']).restart(*args)
+        self.revive_mds(status['name'], standby_for_rank)
 
     def get_mds_status(self, mds):
         out = self.raw_cluster_cmd('mds', 'dump', '--format=json')

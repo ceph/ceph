@@ -23,6 +23,7 @@ setup(
         'beanstalkc >=0.2.0',
         'nose >=1.0.0',
         'fudge >=1.0.3',
+        'pexpect',
         ],
 
     # to find the code associated with entry point

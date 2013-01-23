@@ -1,8 +1,6 @@
 import argparse
 import yaml
 
-from teuthology import misc as teuthology
-
 def parse_args():
     from teuthology.run import config_file
     from teuthology.run import MergeConfig
@@ -150,10 +148,11 @@ def remove_osd_mounts(ctx, log):
     unmount any osd data mounts (scratch disks)
     """
     from .orchestra import run
+    from teuthology.misc import get_testdir
     ctx.cluster.run(
         args=[
             'grep',
-            '{tdir}/data/'.format(tdir=teuthology.get_testdir(ctx)),
+            '{tdir}/data/'.format(tdir=get_testdir(ctx)),
             '/etc/mtab',
             run.Raw('|'),
             'awk', '{print $2}', run.Raw('|'),
@@ -223,12 +222,13 @@ def reset_syslog_dir(ctx, log):
         proc.exitstatus.get()
 
 def remove_testing_tree(ctx, log):
+    from teuthology.misc import get_testdir
     nodes = {}
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
             args=[
                 'sudo', 'rm', '-rf',
-                teuthology.get_testdir(ctx),
+                get_testdir(ctx),
                 ],
             wait=False,
             )
@@ -355,6 +355,29 @@ def nuke_one(ctx, targets, log, should_unlock, synch_clocks, reboot_all, check_l
     return ret
 
 def nuke_helper(ctx, log):
+    # ensure node is up with ipmi
+    from teuthology.orchestra import remote
+
+    (target,) = ctx.config['targets'].keys()
+    host = target.split('@')[-1]
+    shortname = host.split('.')[0]
+    log.debug('shortname: %s' % shortname)
+    console = remote.RemoteConsole(name=host,
+                                   ipmiuser=ctx.teuthology_config['ipmi_user'],
+                                   ipmipass=ctx.teuthology_config['ipmi_password'],
+                                   ipmidomain=ctx.teuthology_config['ipmi_domain'])
+    cname = '{host}.{domain}'.format(host=shortname, domain=ctx.teuthology_config['ipmi_domain'])
+    log.info('checking console status of %s' % cname)
+    if not console.check_status():
+        # not powered on or can't get IPMI status.  Try to power on
+        console.power_on()
+        # try to get status again, waiting for login prompt this time
+        if not console.check_status(100):
+            log.error('Failed to get console status for %s, disabling console...' % cname)
+        log.info('console ready on %s' % cname)
+    else:
+        log.info('console ready on %s' % cname)
+
     from teuthology.task.internal import check_lock, connect
     if ctx.check_locks:
         check_lock(ctx, None)

@@ -1,4 +1,5 @@
 from . import run
+import time
 
 class Remote(object):
     """
@@ -10,10 +11,11 @@ class Remote(object):
     # for unit tests to hook into
     _runner = staticmethod(run.run)
 
-    def __init__(self, name, ssh, shortname=None):
+    def __init__(self, name, ssh, shortname=None, console=None):
         self.name = name
         self._shortname = shortname
         self.ssh = ssh
+        self.console = console
 
     @property
     def shortname(self):
@@ -40,3 +42,164 @@ class Remote(object):
         r = self._runner(client=self.ssh, **kwargs)
         r.remote = self
         return r
+
+import pexpect
+import re
+import logging
+
+log = logging.getLogger(__name__)
+
+class RemoteConsole(object):
+
+    def __init__(self, name, ipmiuser, ipmipass, ipmidomain, logfile=None, timeout=20):
+        self.name = name
+        self.ipmiuser = ipmiuser
+        self.ipmipass = ipmipass
+        self.ipmidomain = ipmidomain
+        self.timeout = timeout
+        self.logfile = None
+
+        hn = self.name.split('@')[-1]
+        p = re.compile('([^.]+)\.?.*')
+        self.shortname = p.match(hn).groups()[0]
+
+    def _exec(self, cmd):
+        if not self.ipmiuser or not self.ipmipass or not self.ipmidomain:
+           log.error('Must set ipmi_user, ipmi_password, and ipmi_domain in .teuthology.yaml')
+        log.debug('pexpect command: ipmitool -H {s}.{dn} -I lanplus -U {ipmiuser} -P {ipmipass} {cmd}'.format(
+                                   cmd=cmd,
+                                   s=self.shortname,
+                                   dn=self.ipmidomain,
+                                   ipmiuser=self.ipmiuser,
+                                   ipmipass=self.ipmipass))
+
+        child = pexpect.spawn ('ipmitool -H {s}.{dn} -I lanplus -U {ipmiuser} -P {ipmipass} {cmd}'.format(
+                                   cmd=cmd,
+                                   s=self.shortname,
+                                   dn=self.ipmidomain,
+                                   ipmiuser=self.ipmiuser,
+                                   ipmipass=self.ipmipass))
+        if self.logfile:
+            child.logfile = self.logfile
+        return child
+
+    def check_power(self, state, timeout=None):
+       # check power
+       total_timeout = timeout
+       if not total_timeout:
+           total_timeout = self.timeout
+       t = 1
+       total = t
+       ta = time.time()
+       while total < total_timeout:
+            c = self._exec('power status')
+            r = c.expect(['Chassis Power is {s}'.format(s=state), pexpect.EOF, pexpect.TIMEOUT], timeout=t)
+            tb = time.time()
+            if r == 0:
+                return True
+            elif r == 1:
+                # keep trying if EOF is reached, first sleep for remaining
+                # timeout interval
+                if tb - ta < t:
+                    time.sleep(t - (tb - ta))
+            # go around again if EOF or TIMEOUT
+            ta = tb
+            t *= 2
+            total += t
+       return False
+
+    # returns True if console is at login prompt
+    def check_status(self, timeout=None):
+        try :
+            # check for login prompt at console
+            self._wait_for_login(timeout)
+            return True
+        except Exception as e:
+            log.info('Failed to get ipmi console status for {s}: {e}'.format(s=self.shortname, e=e))
+            return False
+
+    def _exit_session(self, child, timeout=None):
+        child.send('~.')
+        t = timeout
+        if not t:
+            t = self.timeout
+        r = child.expect(['terminated ipmitool', pexpect.TIMEOUT, pexpect.EOF], timeout=t)
+        if r != 0:
+            self._exec('sol deactivate')
+
+    def _wait_for_login(self, timeout=None, attempts=3):
+        log.debug('Waiting for login prompt on {s}'.format(s=self.shortname))
+        # wait for login prompt to indicate boot completed
+        t = timeout
+        if not t:
+            t = self.timeout
+        for i in range(0, attempts):
+            start = time.time()
+            while time.time() - start < t:
+                child = self._exec('sol activate')
+                child.send('\n')
+                log.debug('expect: {s} login'.format(s=self.shortname))
+                r = child.expect(['{s} login: '.format(s=self.shortname), pexpect.TIMEOUT, pexpect.EOF], timeout=(t - (time.time() - start)))
+                log.debug('expect before: {b}'.format(b=child.before))
+                log.debug('expect after: {a}'.format(a=child.after))
+
+                self._exit_session(child)
+                if r == 0:
+                    return
+        raise pexpect.TIMEOUT ('Timeout exceeded ({t}) for {a} attempts in _wait_for_login()'.format(t=t, a=attempts))
+
+    def power_cycle(self):
+        log.info('Power cycling {s}'.format(s=self.shortname))
+        child = self._exec('power cycle')
+        child.expect('Chassis Power Control: Cycle', timeout=self.timeout)
+        self._wait_for_login()
+        log.info('Power cycle for {s} completed'.format(s=self.shortname))
+
+    def hard_reset(self):
+        log.info('Performing hard reset of {s}'.format(s=self.shortname))
+        start = time.time()
+        while time.time() - start < self.timeout:
+            child = self._exec('power reset')
+            r = child.expect(['Chassis Power Control: Reset', pexpect.EOF], timeout=self.timeout)
+            if r == 0:
+                break
+        self._wait_for_login()
+        log.info('Hard reset for {s} completed'.format(s=self.shortname))
+
+    def power_off(self):
+        log.info('Power off {s}'.format(s=self.shortname))
+        start = time.time()
+        while time.time() - start < self.timeout:
+            child = self._exec('power off')
+            r = child.expect(['Chassis Power Control: Down/Off', pexpect.EOF], timeout=self.timeout)
+            if r == 0:
+                break
+        if not self.check_power('off', 60):
+            log.error('Failed to power off {s}'.format(s=self.shortname))
+        log.info('Power off for {s} completed'.format(s=self.shortname))
+
+    def power_on(self):
+        log.info('Power on {s}'.format(s=self.shortname))
+        start = time.time()
+        while time.time() - start < self.timeout:
+            child = self._exec('power on')
+            r = child.expect(['Chassis Power Control: Up/On', pexpect.EOF], timeout=self.timeout)
+            if r == 0:
+                break
+        if not self.check_power('on'):
+            log.error('Failed to power on {s}'.format(s=self.shortname))
+        log.info('Power on for {s} completed'.format(s=self.shortname))
+
+    def power_off_for_interval(self, interval=30):
+        log.info('Power off {s} for {i} seconds'.format(s=self.shortname, i=interval))
+        child = self._exec('power off')
+        child.expect('Chassis Power Control: Down/Off', timeout=self.timeout)
+
+        time.sleep(interval)
+
+        child = self._exec('power on')
+        child.expect('Chassis Power Control: Up/On', timeout=self.timeout)
+
+        self._wait_for_login()
+
+        log.info('Power off for {i} seconds completed'.format(s=self.shortname, i=interval))

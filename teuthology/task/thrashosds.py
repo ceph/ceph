@@ -68,6 +68,9 @@ def task(ctx, config):
     chance_inject_pause_short: (1) chance of injecting short stall
     chance_inject_pause_long: (0) chance of injecting long stall
 
+    powercycle: (false) whether to power cycle the node instead
+        of just the osd process
+
     example:
 
     tasks:
@@ -89,6 +92,7 @@ def task(ctx, config):
     manager = ceph_manager.CephManager(
         mon,
         ctx=ctx,
+        config=config,
         logger=log.getChild('ceph_manager'),
         )
     ctx.manager = manager
