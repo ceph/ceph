@@ -234,8 +234,10 @@ private:
   map<entity_inst_t, utime_t> timecheck_waiting;
   map<entity_inst_t, double> timecheck_skews;
   map<entity_inst_t, double> timecheck_latencies;
-  version_t timecheck_epoch;
+  // odd value means we are mid-round; even value means the round has
+  // finished.
   version_t timecheck_round;
+  unsigned int timecheck_acks;
   /**
    * Time Check event.
    */
