@@ -12,6 +12,7 @@
  * 
  */
 #include <sstream>
+#include <tr1/memory>
 #include "ObjectStore.h"
 #include "common/Formatter.h"
 
@@ -38,6 +39,43 @@ unsigned ObjectStore::apply_transactions(Sequencer *osr,
     my_cond.Wait(my_lock);
   my_lock.Unlock();
   return r;
+}
+
+template <class T>
+struct Wrapper : public Context {
+  Context *to_run;
+  T val;
+  Wrapper(Context *to_run, T val) : to_run(to_run), val(val) {}
+  void finish(int r) {
+    if (to_run)
+      to_run->complete(r);
+  }
+};
+struct RunOnDelete {
+  Context *to_run;
+  RunOnDelete(Context *to_run) : to_run(to_run) {}
+  ~RunOnDelete() {
+    if (to_run)
+      to_run->complete(0);
+  }
+};
+typedef std::tr1::shared_ptr<RunOnDelete> RunOnDeleteRef;
+int ObjectStore::queue_transactions(
+  Sequencer *osr,
+  list<Transaction*>& tls,
+  Context *onreadable,
+  Context *oncommit,
+  Context *onreadable_sync,
+  Context *oncomplete,
+  TrackedOpRef op = TrackedOpRef())
+{
+  RunOnDeleteRef _complete(new RunOnDelete(oncomplete));
+  Context *_onreadable = new Wrapper<RunOnDeleteRef>(
+    onreadable, _complete);
+  Context *_oncommit = new Wrapper<RunOnDeleteRef>(
+    oncommit, _complete);
+  return queue_transactions(osr, tls, _onreadable, _oncommit,
+			    onreadable_sync, op);
 }
 
 void ObjectStore::Transaction::dump(ceph::Formatter *f)

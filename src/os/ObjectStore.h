@@ -661,6 +661,29 @@ public:
 				 Context *onreadable_sync=0,
 				 TrackedOpRef op = TrackedOpRef()) = 0;
 
+  int queue_transactions(
+    Sequencer *osr,
+    list<Transaction*>& tls,
+    Context *onreadable,
+    Context *oncommit,
+    Context *onreadable_sync,
+    Context *oncomplete,
+    TrackedOpRef op);
+
+  int queue_transaction(
+    Sequencer *osr,
+    Transaction* t,
+    Context *onreadable,
+    Context *oncommit,
+    Context *onreadable_sync,
+    Context *oncomplete,
+    TrackedOpRef op) {
+    list<Transaction*> tls;
+    tls.push_back(t);
+    return queue_transactions(
+      osr, tls, onreadable, oncommit, onreadable_sync, oncomplete, op);
+  }
+
  public:
   ObjectStore() : logger(NULL) {}
   virtual ~ObjectStore() {}
