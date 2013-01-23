@@ -5577,9 +5577,13 @@ int ReplicatedPG::send_push(int prio, int peer,
       new_progress.omap_recovered_to = iter->key();
   }
 
-  subop->data_included.span_of(recovery_info.copy_subset,
-			       progress.data_recovered_to,
-			       available);
+  if (available > 0) {
+    subop->data_included.span_of(recovery_info.copy_subset,
+				 progress.data_recovered_to,
+				 available);
+  } else {
+    subop->data_included.clear();
+  }
 
   for (interval_set<uint64_t>::iterator p = subop->data_included.begin();
        p != subop->data_included.end();
