@@ -130,7 +130,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   leader(0),
   quorum_features(0),
 
-  timecheck_epoch(0),
   timecheck_round(0),
   timecheck_event(NULL),
 
@@ -1350,10 +1349,18 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
   if (f)
     f->close_section();
 
-  if (f)
-    f->open_array_section("timechecks");
+  if (f) {
+    f->open_object_section("timechecks");
+    f->dump_int("epoch", get_epoch());
+    f->dump_int("round", timecheck_round);
+    f->dump_stream("round_status")
+      << (timecheck_round%2 ? "on-going" : "finished");
+  }
+
   if (timecheck_skews.size() != 0) {
     list<string> warns;
+    if (f)
+      f->open_array_section("mons");
     for (map<entity_inst_t,double>::iterator i = timecheck_skews.begin();
          i != timecheck_skews.end(); ++i) {
       entity_inst_t inst = i->first;
@@ -1396,6 +1403,8 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
           ss << ",";
       }
     }
+    if (f)
+      f->close_section();
   }
   if (f)
     f->close_section();
@@ -2234,6 +2243,7 @@ bool Monitor::_ms_dispatch(Message *m)
 void Monitor::timecheck_cleanup()
 {
   timecheck_round = 0;
+  timecheck_acks = 0;
 
   if (timecheck_event) {
     timer.cancel_event(timecheck_event);
@@ -2250,6 +2260,7 @@ void Monitor::timecheck_report()
 {
   dout(10) << __func__ << dendl;
   assert(is_leader());
+  assert((timecheck_round % 2) == 0);
   if (monmap->size() == 1) {
     assert(0 == "We are alone; we shouldn't have gotten here!");
     return;
@@ -2291,10 +2302,17 @@ void Monitor::timecheck()
     return;
   }
 
-  timecheck_epoch = get_epoch();
-  timecheck_round++;
+  if ((timecheck_round % 2) != 0) {
+    dout(15) << __func__
+             << " timecheck still in progress; laggy monitors maybe?"
+             << dendl;
+    goto out;
+  }
 
-  dout(10) << __func__ << " start timecheck epoch " << timecheck_epoch
+  timecheck_round++;
+  timecheck_acks = 1; // we ack ourselves
+
+  dout(10) << __func__ << " start timecheck epoch " << get_epoch()
            << " round " << timecheck_round << dendl;
 
   // we are at the eye of the storm; the point of reference
@@ -2315,6 +2333,7 @@ void Monitor::timecheck()
     messenger->send_message(m, inst);
   }
 
+out:
   dout(10) << __func__ << " setting up next event and timeout" << dendl;
   timecheck_event = new C_TimeCheck(this);
 
@@ -2345,14 +2364,14 @@ void Monitor::handle_timecheck_leader(MTimeCheck *m)
   assert(m->op == MTimeCheck::OP_PONG);
 
   entity_inst_t other = m->get_source_inst();
-  if (m->epoch < timecheck_epoch) {
+  if (m->epoch < get_epoch()) {
     dout(1) << __func__ << " got old timecheck epoch " << m->epoch
             << " from " << other
-            << " curr " << timecheck_epoch
+            << " curr " << get_epoch()
             << " -- severely lagged? discard" << dendl;
     return;
   }
-  assert(m->epoch == timecheck_epoch);
+  assert(m->epoch == get_epoch());
 
   if (m->round < timecheck_round) {
     dout(1) << __func__ << " got old round " << m->round
@@ -2372,6 +2391,7 @@ void Monitor::handle_timecheck_leader(MTimeCheck *m)
             << " bump round and drop current check"
             << dendl;
     timecheck_round++;
+    timecheck_acks = 0;
     timecheck_waiting.clear();
     return;
   }
@@ -2450,8 +2470,16 @@ void Monitor::handle_timecheck_leader(MTimeCheck *m)
     timecheck_skews[other] = (timecheck_skews[other]*0.8)+(skew_bound*0.2);
   }
 
-  if (timecheck_waiting.size() == 0)
+  timecheck_acks++;
+  if (timecheck_acks == quorum.size()) {
+    dout(10) << __func__ << " got pongs from everybody ("
+             << timecheck_acks << " total)" << dendl;
+    assert(timecheck_skews.size() == timecheck_acks);
+    assert(timecheck_waiting.size() == 0);
+    // everyone has acked, so bump the round to finish it.
+    timecheck_round++;
     timecheck_report();
+  }
 }
 
 void Monitor::handle_timecheck_peon(MTimeCheck *m)
@@ -2468,21 +2496,23 @@ void Monitor::handle_timecheck_peon(MTimeCheck *m)
     return;
   }
 
-  if ((m->round < timecheck_round)
-      || (m->round == timecheck_round && m->op != MTimeCheck::OP_REPORT)) {
+  if (m->round < timecheck_round) {
     dout(1) << __func__ << " got old round " << m->round
-            << " current " << timecheck_round << " -- discarding" << dendl;
-    return;
-  }
-
-  if (m->op == MTimeCheck::OP_REPORT) {
-    timecheck_latencies.swap(m->latencies);
-    timecheck_skews.swap(m->skews);
+            << " current " << timecheck_round
+            << " (epoch " << get_epoch() << ") -- discarding" << dendl;
     return;
   }
 
   timecheck_round = m->round;
 
+  if (m->op == MTimeCheck::OP_REPORT) {
+    assert((timecheck_round % 2) == 0);
+    timecheck_latencies.swap(m->latencies);
+    timecheck_skews.swap(m->skews);
+    return;
+  }
+
+  assert((timecheck_round % 2) != 0);
   MTimeCheck *reply = new MTimeCheck(MTimeCheck::OP_PONG);
   utime_t curr_time = ceph_clock_now(g_ceph_context);
   reply->timestamp = curr_time;
