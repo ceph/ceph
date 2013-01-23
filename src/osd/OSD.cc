@@ -998,10 +998,11 @@ int OSD::init()
     derr << "unable to obtain rotating service keys; retrying" << dendl;
   }
 
+  osd_lock.Lock();
+
   state = STATE_BOOTING;
   start_boot();
 
-  osd_lock.Lock();
   return 0;
 }
 
