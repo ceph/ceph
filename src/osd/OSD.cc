@@ -2020,6 +2020,12 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	  break;
 	}
       }
+
+      if (!g_ceph_context->get_heartbeat_map()->is_healthy()) {
+	dout(10) << "internal heartbeat not healthy, dropping ping request" << dendl;
+	break;
+      }
+
       Message *r = new MOSDPing(monc->get_fsid(),
 				curmap->get_epoch(),
 				MOSDPing::PING_REPLY,
