@@ -1,6 +1,5 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
-m4_include(m4/acx_pthread.m4)
 
 # Autoconf
 AC_PREREQ(2.59)
