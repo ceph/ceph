@@ -1324,7 +1324,7 @@ int main(int argc, char **argv)
 
   if (opt_cmd == OPT_LOG_SHOW || opt_cmd == OPT_LOG_RM) {
     if (object.empty() && (date.empty() || bucket_name.empty() || bucket_id.empty())) {
-      cerr << "object or (at least one of date, bucket, bucket-id) were not specified" << std::endl;
+      cerr << "specify an object or a date, bucket and bucket-id" << std::endl;
       return usage();
     }
 
