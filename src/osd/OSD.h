@@ -395,8 +395,15 @@ public:
 
   OSDService(OSD *osd);
 };
-class OSD : public Dispatcher {
+class OSD : public Dispatcher,
+	    public md_config_obs_t {
   /** OSD **/
+public:
+  // config observer bits
+  virtual const char** get_tracked_conf_keys() const;
+  virtual void handle_conf_change(const struct md_config_t *conf,
+				  const std::set <std::string> &changed);
+
 protected:
   Mutex osd_lock;			// global lock
   SafeTimer timer;    // safe timer (osd_lock)
@@ -433,6 +440,11 @@ protected:
   void dispatch_op(OpRequestRef op);
 
   void check_osdmap_features();
+
+  // asok
+  friend class OSDSocketHook;
+  class OSDSocketHook *asok_hook;
+  bool asok_command(string command, string args, ostream& ss);
 
 public:
   ClassHandler  *class_handler;
@@ -614,18 +626,10 @@ private:
   // -- op tracking --
   OpTracker op_tracker;
   void check_ops_in_flight();
-  void dump_ops_in_flight(ostream& ss);
-  void dump_historic_ops(ostream& ss) {
-    return op_tracker.dump_historic_ops(ss);
-  }
   void test_ops(std::string command, std::string args, ostream& ss);
-  friend class OpsFlightSocketHook;
-  friend class HistoricOpsSocketHook;
   friend class TestOpsSocketHook;
-  friend class C_CompleteSplits;
-  OpsFlightSocketHook *admin_ops_hook;
-  HistoricOpsSocketHook *historic_ops_hook;
   TestOpsSocketHook *test_ops_hook;
+  friend class C_CompleteSplits;
 
   // -- op queue --
 
@@ -639,7 +643,15 @@ private:
       : ThreadPool::WorkQueueVal<pair<PGRef, OpRequestRef>, PGRef >(
 	"OSD::OpWQ", ti, ti*10, tp),
 	qlock("OpWQ::qlock"),
-	osd(o) {}
+	osd(o),
+	pqueue(o->cct->_conf->osd_op_pq_max_tokens_per_priority,
+	       o->cct->_conf->osd_op_pq_min_cost)
+    {}
+
+    void dump(Formatter *f) {
+      Mutex::Locker l(qlock);
+      pqueue.dump(f);
+    }
 
     void _enqueue_front(pair<PGRef, OpRequestRef> item);
     void _enqueue(pair<PGRef, OpRequestRef> item);

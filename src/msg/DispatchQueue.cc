@@ -37,7 +37,7 @@ void DispatchQueue::enqueue(Message *m, int priority, uint64_t id)
       id, priority, QueueItem(m));
   } else {
     mqueue.enqueue(
-      id, priority, m->get_data().length(), QueueItem(m));
+      id, priority, m->get_cost(), QueueItem(m));
   }
   cond.Signal();
 }
@@ -51,7 +51,7 @@ void DispatchQueue::local_delivery(Message *m, int priority)
       0, priority, QueueItem(m));
   } else {
     mqueue.enqueue(
-      0, priority, m->get_data().length(), QueueItem(m));
+      0, priority, m->get_cost(), QueueItem(m));
   }
   cond.Signal();
 }
