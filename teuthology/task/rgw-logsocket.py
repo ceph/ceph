@@ -28,16 +28,17 @@ def configure(ctx, config):
 @contextlib.contextmanager
 def run_tests(ctx, config):
     assert isinstance(config, dict)
+    testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
         client_config['extra_args'] = [
                                         's3tests.functional.test_s3:test_bucket_list_return_data',
                                       ]
 
 #        args = [
-#                'S3TEST_CONF=/tmp/cephtest/archive/s3-tests.{client}.conf'.format(client=client),
-#                '/tmp/cephtest/s3-tests/virtualenv/bin/nosetests',
+#                'S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
+#                '{tdir}/s3-tests/virtualenv/bin/nosetests'.format(tdir=testdir),
 #                '-w',
-#                '/tmp/cephtest/s3-tests',
+#                '{tdir}/s3-tests'.format(tdir=testdir),
 #                '-v',
 #		's3tests.functional.test_s3:test_bucket_list_return_data',
 #                ]
@@ -57,7 +58,7 @@ def run_tests(ctx, config):
             args = [
                 'netcat',
                 '-w', '5',
-                '-U', '/tmp/cephtest/rgw.opslog.sock',
+                '-U', '{tdir}/rgw.opslog.sock'.format(tdir=testdir),
                 ],
              stdout = netcat_out,
         )

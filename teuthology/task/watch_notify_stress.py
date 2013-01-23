@@ -3,6 +3,7 @@ import logging
 import proc_thrasher
 
 from ..orchestra import run
+from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +31,9 @@ def task(ctx, config):
     testwatch = {}
 
     remotes = []
+
+    testdir = teuthology.get_testdir(ctx)
+
     for role in config.get('clients', ['client.0']):
         assert isinstance(role, basestring)
         PREFIX = 'client.'
@@ -39,11 +43,11 @@ def task(ctx, config):
         remotes.append(remote)
 
         args =['CEPH_CLIENT_ID={id_}'.format(id_=id_),
-               'CEPH_CONF=/tmp/cephtest/ceph.conf',
+               'CEPH_CONF={tdir}/ceph.conf'.format(tdir=testdir),
                'CEPH_ARGS="{flags}"'.format(flags=config.get('flags', '')),
-               'LD_PRELOAD=/tmp/cephtest/binary/usr/local/lib/librados.so.2',
-               '/tmp/cephtest/daemon-helper', 'kill',
-               '/tmp/cephtest/binary/usr/local/bin/multi_stress_watch foo foo'
+               'LD_PRELOAD={tdir}/binary/usr/local/lib/librados.so.2'.format(tdir=testdir),
+               '{tdir}/daemon-helper'.format(tdir=testdir), 'kill',
+               '{tdir}/binary/usr/local/bin/multi_stress_watch foo foo'.format(tdir=testdir)
                ]
 
         log.info("args are %s" % (args,))

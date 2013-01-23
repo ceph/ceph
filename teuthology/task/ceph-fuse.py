@@ -45,6 +45,8 @@ def task(ctx, config):
     log.info('Mounting ceph-fuse clients...')
     fuse_daemons = {}
 
+    testdir = teuthology.get_testdir(ctx)
+
     if config is None:
         config = dict(('client.{id}'.format(id=id_), None)
                   for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client'))
@@ -57,7 +59,7 @@ def task(ctx, config):
     clients = list(teuthology.get_clients(ctx=ctx, roles=config.keys()))
 
     for id_, remote in clients:
-        mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+        mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
         log.info('Mounting ceph-fuse client.{id} at {remote} {mnt}...'.format(
                 id=id_, remote=remote,mnt=mnt))
 
@@ -79,17 +81,17 @@ def task(ctx, config):
             )
 
         run_cmd=[
-            '/tmp/cephtest/enable-coredump',
-            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-            '/tmp/cephtest/archive/coverage',
-            '/tmp/cephtest/daemon-helper',
+            '{tdir}/enable-coredump'.format(tdir=testdir),
+            '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+            '{tdir}/archive/coverage'.format(tdir=testdir),
+            '{tdir}/daemon-helper'.format(tdir=testdir),
             daemon_signal,
             ]
         run_cmd_tail=[
-            '/tmp/cephtest/binary/usr/local/bin/ceph-fuse',
+            '{tdir}/binary/usr/local/bin/ceph-fuse'.format(tdir=testdir),
             '-f',
             '--name', 'client.{id}'.format(id=id_),
-            '-c', '/tmp/cephtest/ceph.conf',
+            '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
             # TODO ceph-fuse doesn't understand dash dash '--',
             mnt,
             ]
@@ -113,20 +115,20 @@ def task(ctx, config):
         fuse_daemons[id_] = proc
 
     for id_, remote in clients:
-        mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+        mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
         teuthology.wait_until_fuse_mounted(
             remote=remote,
             fuse=fuse_daemons[id_],
             mountpoint=mnt,
             )
-        remote.run(args=['sudo', 'chmod', '1777', '/tmp/cephtest/mnt.{id}'.format(id=id_)],)
+        remote.run(args=['sudo', 'chmod', '1777', '{tdir}/mnt.{id}'.format(tdir=testdir, id=id_)],)
 
     try:
         yield
     finally:
         log.info('Unmounting ceph-fuse clients...')
         for id_, remote in clients:
-            mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+            mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
             try:
               remote.run(
                   args=[
@@ -160,7 +162,7 @@ def task(ctx, config):
         run.wait(fuse_daemons.itervalues())
 
         for id_, remote in clients:
-            mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+            mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
             remote.run(
                 args=[
                     'rmdir',

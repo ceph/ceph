@@ -28,6 +28,8 @@ def task(ctx, config):
         time: 360
     """
     
+    testdir = teuthology.get_testdir(ctx)
+
     log.info('creating {n} pools'.format(n=config))
     
     poolnum = int(config)
@@ -51,17 +53,17 @@ def task(ctx, config):
             log.info('creating pool{num} on {role}'.format(num=poolnum, role=role_))
 	    proc = remote.run(
 	        args=[
-		    'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-		    '/tmp/cephtest/binary/usr/local/bin/rados',
-		    '-c', '/tmp/cephtest/ceph.conf',
-		    '-k', '/tmp/cephtest/data/{role}.keyring'.format(role=role_),
+		    'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+		    '{tdir}/binary/usr/local/bin/rados'.format(tdir=testdir),
+		    '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
+		    '-k', '{tdir}/data/{role}.keyring'.format(tdir=testdir, role=role_),
 		    '--name', role_,
 		    'mkpool', 'pool{num}'.format(num=poolnum), '-1',
 		    run.Raw('&&'),
-		    'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-		    '/tmp/cephtest/binary/usr/local/bin/rados',
-		    '-c', '/tmp/cephtest/ceph.conf',
-		    '-k', '/tmp/cephtest/data/{role}.keyring'.format(role=role_),
+		    'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+		    '{tdir}/binary/usr/local/bin/rados'.format(tdir=testdir),
+		    '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
+		    '-k', '{tdir}/data/{role}.keyring'.format(tdir=testdir, role=role_),
 		    '--name', role_,
 		    '--pool', 'pool{num}'.format(num=poolnum),
 		    'bench', '0', 'write', '-t', '16', '--block-size', '1'

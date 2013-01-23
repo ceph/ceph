@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 @contextlib.contextmanager
 def task(ctx, config):
     """
-    Die if /tmp/cephtest/err exists or if an OSD dumps core
+    Die if {testdir}/err exists or if an OSD dumps core
     """
     if config is None:
         config = {}
@@ -31,13 +31,14 @@ def task(ctx, config):
     while len(manager.get_osd_status()['up']) < num_osds:
         time.sleep(10)
 
-    log_path = '/tmp/cephtest/archive/log'
+    testdir = teuthology.get_testdir(ctx)
+    log_path = '{tdir}/archive/log'.format(tdir=testdir)
 
     while True:
         for i in range(num_osds):
             (osd_remote,) = ctx.cluster.only('osd.%d' % i).remotes.iterkeys()
             p = osd_remote.run(
-                args = [ 'test', '-e', '/tmp/cephtest/err' ],
+                args = [ 'test', '-e', '{tdir}/err'.format(tdir=testdir) ],
                 wait=True,
                 check_status=False,
             )
@@ -47,7 +48,7 @@ def task(ctx, config):
                 log.info("osd %d has an error" % i)
                 raise Exception("osd %d error" % i)
 
-            log_path = '/tmp/cephtest/archive/log/osd.%d.log' % i
+            log_path = '%s/archive/log/osd.%d.log' % (testdir, i)
 
             p = osd_remote.run(
                 args = [

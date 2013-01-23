@@ -18,6 +18,7 @@ log = logging.getLogger(__name__)
 def do_download(ctx, config):
     assert isinstance(config, dict)
     log.info('Downloading s3-tests...')
+    testdir = teuthology.get_testdir(ctx)
     for (client, cconf) in config.items():
         branch = cconf.get('branch', 'master')
         sha1 = cconf.get('sha1')
@@ -27,13 +28,13 @@ def do_download(ctx, config):
                 '-b', branch,
 #                'https://github.com/ceph/s3-tests.git',
                 'git://ceph.com/git/s3-tests.git',
-                '/tmp/cephtest/s3-tests',
+                '{tdir}/s3-tests'.format(tdir=testdir),
                 ],
             )
         if sha1 is not None:
             ctx.cluster.only(client).run(
                 args=[
-                    'cd', '/tmp/cephtest/s3-tests',
+                    'cd', '{tdir}/s3-tests'.format(tdir=testdir),
                     run.Raw('&&'),
                     'git', 'reset', '--hard', sha1,
                     ],
@@ -47,7 +48,7 @@ def do_download(ctx, config):
                 args=[
                     'rm',
                     '-rf',
-                    '/tmp/cephtest/s3-tests',
+                    '{tdir}/s3-tests'.format(tdir=testdir),
                     ],
                 )
 
@@ -65,6 +66,7 @@ def _config_user(s3tests_conf, section, user):
 def do_create_users(ctx, config):
     assert isinstance(config, dict)
     log.info('Creating rgw users...')
+    testdir = teuthology.get_testdir(ctx)
     for client in config['clients']:
         s3tests_conf = config['s3tests_conf'][client]
         s3tests_conf.setdefault('fixtures', {})
@@ -73,12 +75,12 @@ def do_create_users(ctx, config):
             _config_user(s3tests_conf, section, '{user}.{client}'.format(user=user, client=client))
             ctx.cluster.only(client).run(
                 args=[
-                    'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-                    '/tmp/cephtest/enable-coredump',
-                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                    '/tmp/cephtest/archive/coverage',
-                    '/tmp/cephtest/binary/usr/local/bin/radosgw-admin',
-                    '-c', '/tmp/cephtest/ceph.conf',
+                    'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+                    '{tdir}/enable-coredump'.format(tdir=testdir),
+                    '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                    '{tdir}/archive/coverage'.format(tdir=testdir),
+                    '{tdir}/binary/usr/local/bin/radosgw-admin'.format(tdir=testdir),
+                    '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
                     'user', 'create',
                     '--uid', s3tests_conf[section]['user_id'],
                     '--display-name', s3tests_conf[section]['display_name'],
@@ -96,6 +98,7 @@ def create_users(ctx, config):
 def do_configure(ctx, config):
     assert isinstance(config, dict)
     log.info('Configuring s3-tests...')
+    testdir = teuthology.get_testdir(ctx)
     for client, properties in config['clients'].iteritems():
         s3tests_conf = config['s3tests_conf'][client]
         if properties is not None and 'rgw_server' in properties:
@@ -114,7 +117,7 @@ def do_configure(ctx, config):
         remote.run(
             args=[
                 'cd',
-                '/tmp/cephtest/s3-tests',
+                '{tdir}/s3-tests'.format(tdir=testdir),
                 run.Raw('&&'),
                 './bootstrap',
                 ],
@@ -123,7 +126,7 @@ def do_configure(ctx, config):
         s3tests_conf.write(conf_fp)
         teuthology.write_file(
             remote=remote,
-            path='/tmp/cephtest/archive/s3-tests.{client}.conf'.format(client=client),
+            path='{tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
             data=conf_fp.getvalue(),
             )
     yield
@@ -134,12 +137,13 @@ def configure(ctx, config):
 
 def do_run_tests(ctx, config):
     assert isinstance(config, dict)
+    testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
         args = [
-                'S3TEST_CONF=/tmp/cephtest/archive/s3-tests.{client}.conf'.format(client=client),
-                '/tmp/cephtest/s3-tests/virtualenv/bin/nosetests',
+                'S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
+                '{tdir}/s3-tests/virtualenv/bin/nosetests'.format(tdir=testdir),
                 '-w',
-                '/tmp/cephtest/s3-tests',
+                '{tdir}/s3-tests'.format(tdir=testdir),
                 '-v',
                 '-a', '!fails_on_rgw',
                 ]

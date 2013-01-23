@@ -62,20 +62,21 @@ def task(ctx, config):
         for client, tests in config.iteritems():
             p.spawn(_run_tests, ctx, client, tests)
 
-def _socket_command(remote, socket_path, command, args):
+def _socket_command(ctx, remote, socket_path, command, args):
     """
     Run an admin socket command and return the result as a string.
     """
     json_fp = StringIO()
+    testdir = teuthology.get_testdir(ctx)
     remote.run(
         args=[
-            'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-            '/tmp/cephtest/enable-coredump',
-            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-            '/tmp/cephtest/archive/coverage',
-            '/tmp/cephtest/binary/usr/local/bin/ceph',
-            '-k', '/tmp/cephtest/ceph.keyring',
-            '-c', '/tmp/cephtest/ceph.conf',
+            'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+            '{tdir}/enable-coredump'.format(tdir=testdir),
+            '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+            '{tdir}/archive/coverage'.format(tdir=testdir),
+            '{tdir}/binary/usr/local/bin/ceph'.format(tdir=testdir),
+            '-k', '{tdir}/ceph.keyring'.format(tdir=testdir),
+            '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
             '--admin-daemon', socket_path,
             command,
             ] + args,
@@ -87,13 +88,14 @@ def _socket_command(remote, socket_path, command, args):
     return json.loads(out)
 
 def _run_tests(ctx, client, tests):
+    testdir = teuthology.get_testdir(ctx)
     log.debug('Running admin socket tests on %s', client)
     (remote,) = ctx.cluster.only(client).remotes.iterkeys()
-    socket_path = '/tmp/cephtest/asok.{name}'.format(name=client)
+    socket_path = '{tdir}/asok.{name}'.format(tdir=testdir, name=client)
 
     try:
         tmp_dir = os.path.join(
-            '/tmp/cephtest/',
+            testdir,
             'admin_socket_{client}'.format(client=client),
             )
         remote.run(
@@ -135,7 +137,7 @@ def _run_tests(ctx, client, tests):
             args = config.get('args', [])
             assert isinstance(args, list), \
                 'admin socket command args must be a list'
-            sock_out = _socket_command(remote, socket_path, command, args)
+            sock_out = _socket_command(ctx, remote, socket_path, command, args)
             if test_path is not None:
                 remote.run(
                     args=[

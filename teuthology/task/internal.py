@@ -15,15 +15,29 @@ log = logging.getLogger(__name__)
 @contextlib.contextmanager
 def base(ctx, config):
     log.info('Creating base directory...')
+    test_basedir = teuthology.get_testdir_base(ctx)
+    testdir = teuthology.get_testdir(ctx)
+    # make base dir if it doesn't exist
     run.wait(
         ctx.cluster.run(
             args=[
-                'mkdir', '-m0755', '--',
-                '/tmp/cephtest',
+                'mkdir', '-m0755', '-p', '--',
+                test_basedir,
                 ],
-            wait=False,
-            )
+                wait=False,
+                )
         )
+    # only create testdir if its not set to basedir
+    if test_basedir != testdir:
+        run.wait(
+            ctx.cluster.run(
+                args=[
+                    'mkdir', '-m0755', '--',
+                    testdir,
+                ],
+                wait=False,
+                )
+            )
 
     try:
         yield
@@ -36,7 +50,7 @@ def base(ctx, config):
                 args=[
                     'rmdir',
                     '--',
-                    '/tmp/cephtest',
+                    testdir,
                     ],
                 wait=False,
                 ),
@@ -154,9 +168,36 @@ def connect(ctx, config):
 
 def check_conflict(ctx, config):
     log.info('Checking for old test directory...')
+    test_basedir = teuthology.get_testdir_base(ctx)
     processes = ctx.cluster.run(
         args=[
-            'test', '!', '-e', '/tmp/cephtest',
+            'test', '!', '-e', test_basedir,
+            ],
+        wait=False,
+        )
+    for proc in processes:
+        assert isinstance(proc.exitstatus, gevent.event.AsyncResult)
+        try:
+            proc.exitstatus.get()
+        except run.CommandFailedError:
+            # base dir exists
+            r = proc.remote.run(
+                args=[
+                    'ls', test_basedir, run.Raw('|'), 'wc', '-l'
+                    ],
+                stdout=StringIO(),
+                )
+
+            if int(r.stdout.getvalue()) > 0:
+                log.error('WARNING: Host %s has stale test directories, these need to be investigated and cleaned up!',
+                          proc.remote.shortname)
+
+    # testdir might be the same as base dir (if test_path is set)
+    # need to bail out in that case if the testdir exists
+    testdir = teuthology.get_testdir(ctx)
+    processes = ctx.cluster.run(
+        args=[
+            'test', '!', '-e', testdir,
             ],
         wait=False,
         )
@@ -166,7 +207,7 @@ def check_conflict(ctx, config):
         try:
             proc.exitstatus.get()
         except run.CommandFailedError:
-            log.error('Host %s has stale cephtest directory, check your lock and reboot to clean up.', proc.remote.shortname)
+            log.error('Host %s has stale test directory %s, check lock and cleanup.', proc.remote.shortname, testdir)
             failed = True
     if failed:
         raise RuntimeError('Stale jobs detected, aborting.')
@@ -174,11 +215,12 @@ def check_conflict(ctx, config):
 @contextlib.contextmanager
 def archive(ctx, config):
     log.info('Creating archive directory...')
+    testdir = teuthology.get_testdir(ctx)
+    archive_dir = '{tdir}/archive'.format(tdir=testdir)
     run.wait(
         ctx.cluster.run(
             args=[
-                'install', '-d', '-m0755', '--',
-                '/tmp/cephtest/archive',
+                'install', '-d', '-m0755', '--', archive_dir,
                 ],
             wait=False,
             )
@@ -193,7 +235,7 @@ def archive(ctx, config):
             os.mkdir(logdir)
             for remote in ctx.cluster.remotes.iterkeys():
                 path = os.path.join(logdir, remote.shortname)
-                teuthology.pull_directory(remote, '/tmp/cephtest/archive', path)
+                teuthology.pull_directory(remote, archive_dir, path)
 
         log.info('Removing archive directory...')
         run.wait(
@@ -202,7 +244,7 @@ def archive(ctx, config):
                     'rm',
                     '-rf',
                     '--',
-                    '/tmp/cephtest/archive',
+                    archive_dir,
                     ],
                 wait=False,
                 ),
@@ -211,13 +253,14 @@ def archive(ctx, config):
 @contextlib.contextmanager
 def coredump(ctx, config):
     log.info('Enabling coredump saving...')
+    archive_dir = '{tdir}/archive'.format(tdir=teuthology.get_testdir(ctx))
     run.wait(
         ctx.cluster.run(
             args=[
                 'install', '-d', '-m0755', '--',
-                '/tmp/cephtest/archive/coredump',
+                '{adir}/coredump'.format(adir=archive_dir),
                 run.Raw('&&'),
-                'sudo', 'sysctl', '-w', 'kernel.core_pattern=/tmp/cephtest/archive/coredump/%t.%p.core',
+                'sudo', 'sysctl', '-w', 'kernel.core_pattern={adir}/coredump/%t.%p.core'.format(adir=archive_dir),
                 ],
             wait=False,
             )
@@ -235,7 +278,7 @@ def coredump(ctx, config):
                     'rmdir',
                     '--ignore-fail-on-non-empty',
                     '--',
-                    '/tmp/cephtest/archive/coredump',
+                    '{adir}/coredump'.format(adir=archive_dir),
                     ],
                 wait=False,
                 )
@@ -246,7 +289,7 @@ def coredump(ctx, config):
         for remote in ctx.cluster.remotes.iterkeys():
             r = remote.run(
                 args=[
-                    'if', 'test', '!', '-e', '/tmp/cephtest/archive/coredump', run.Raw(';'), 'then',
+                    'if', 'test', '!', '-e', '{adir}/coredump'.format(adir=archive_dir), run.Raw(';'), 'then',
                     'echo', 'OK', run.Raw(';'),
                     'fi',
                     ],
@@ -268,11 +311,12 @@ def syslog(ctx, config):
 
     log.info('Starting syslog monitoring...')
 
+    archive_dir = '{tdir}/archive'.format(tdir=teuthology.get_testdir(ctx))
     run.wait(
         ctx.cluster.run(
             args=[
                 'mkdir', '-m0755', '--',
-                '/tmp/cephtest/archive/syslog',
+                '{adir}/syslog'.format(adir=archive_dir),
                 ],
             wait=False,
             )
@@ -280,9 +324,9 @@ def syslog(ctx, config):
 
     CONF = '/etc/rsyslog.d/80-cephtest.conf'
     conf_fp = StringIO("""
-kern.* -/tmp/cephtest/archive/syslog/kern.log;RSYSLOG_FileFormat
-*.*;kern.none -/tmp/cephtest/archive/syslog/misc.log;RSYSLOG_FileFormat
-""")
+kern.* -{adir}/syslog/kern.log;RSYSLOG_FileFormat
+*.*;kern.none -{adir}/syslog/misc.log;RSYSLOG_FileFormat
+""".format(adir=archive_dir))
     try:
         for rem in ctx.cluster.remotes.iterkeys():
             teuthology.sudo_write_file(
@@ -336,7 +380,7 @@ kern.* -/tmp/cephtest/archive/syslog/kern.log;RSYSLOG_FileFormat
                 args=[
                     'egrep',
                     '\\bBUG\\b|\\bINFO\\b|\\bDEADLOCK\\b',
-                    run.Raw('/tmp/cephtest/archive/syslog/*.log'),
+                    run.Raw('{adir}/archive/syslog/*.log'.format(adir=archive_dir)),
                     run.Raw('|'),
                     'grep', '-v', 'task .* blocked for more than .* seconds',
                     run.Raw('|'),
@@ -377,7 +421,7 @@ kern.* -/tmp/cephtest/archive/syslog/kern.log;RSYSLOG_FileFormat
             ctx.cluster.run(
                 args=[
                     'find',
-                    '/tmp/cephtest/archive/syslog',
+                    '{adir}/archive/syslog'.format(adir=archive_dir),
                     '-name',
                     '*.log',
                     '-print0',

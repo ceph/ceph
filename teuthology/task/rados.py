@@ -2,6 +2,7 @@ import contextlib
 import logging
 
 from ..orchestra import run
+from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
@@ -50,13 +51,14 @@ def task(ctx, config):
 
     object_size = int(config.get('object_size', 4000000))
     op_weights = config.get('op_weights', {})
+    testdir = teuthology.get_testdir(ctx)
     args = [
-        'CEPH_CONF=/tmp/cephtest/ceph.conf',
-        'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-        '/tmp/cephtest/enable-coredump',
-        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-        '/tmp/cephtest/archive/coverage',
-        '/tmp/cephtest/binary/usr/local/bin/testrados',
+        'CEPH_CONF={tdir}/ceph.conf'.format(tdir=testdir),
+        'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+        '{tdir}/enable-coredump'.format(tdir=testdir),
+        '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+        '{tdir}/archive/coverage'.format(tdir=testdir),
+        '{tdir}/binary/usr/local/bin/testrados'.format(tdir=testdir),
         '--op', 'read', str(op_weights.get('read', 100)),
         '--op', 'write', str(op_weights.get('write', 100)),
         '--op', 'delete', str(op_weights.get('delete', 10)),

@@ -59,7 +59,7 @@ def task(ctx, config):
     log.info('messing with PG %s on osd %d' % (victim, osd))
 
     (osd_remote,) = ctx.cluster.only('osd.%d' % osd).remotes.iterkeys()
-    data_path = os.path.join('/tmp/cephtest/data',
+    data_path = os.path.join('{tdir}/data'.format(tdir=teuthology.get_testdir(ctx)),
                              'osd.{id}.data'.format(id=osd),
                              'current',
                              '{pg}_head'.format(pg=victim)

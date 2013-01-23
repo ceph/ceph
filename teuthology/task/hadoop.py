@@ -40,25 +40,26 @@ def validate_config(ctx, config):
 
 ## Add required entries to conf/hadoop-env.sh
 def write_hadoop_env(ctx, config):
-    hadoopEnvFile = "/tmp/cephtest/hadoop/conf/hadoop-env.sh"
+    hadoopEnvFile = "{tdir}/hadoop/conf/hadoop-env.sh".format(tdir=teuthology.get_testdir(ctx))
 
     hadoopNodes = ctx.cluster.only(teuthology.is_type('hadoop'))
     for remote, roles_for_host in hadoopNodes.remotes.iteritems():
         teuthology.write_file(remote, hadoopEnvFile, 
 '''export JAVA_HOME=/usr/lib/jvm/default-java
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/tmp/cephtest/binary/usr/local/lib:/usr/lib
-export HADOOP_CLASSPATH=$HADOOP_CLASSPATH:/tmp/cephtest/binary/usr/local/lib/libcephfs.jar:/tmp/cephtest/hadoop/build/hadoop-core*.jar
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:{tdir}/binary/usr/local/lib:/usr/lib
+export HADOOP_CLASSPATH=$HADOOP_CLASSPATH:{tdir}/binary/usr/local/lib/libcephfs.jar:{tdir}/hadoop/build/hadoop-core*.jar
 export HADOOP_NAMENODE_OPTS="-Dcom.sun.management.jmxremote $HADOOP_NAMENODE_OPTS"
 export HADOOP_SECONDARYNAMENODE_OPTS="-Dcom.sun.management.jmxremote $HADOOP_SECONDARYNAMENODE_OPTS"
 export HADOOP_DATANODE_OPTS="-Dcom.sun.management.jmxremote $HADOOP_DATANODE_OPTS"
 export HADOOP_BALANCER_OPTS="-Dcom.sun.management.jmxremote $HADOOP_BALANCER_OPTS"
 export HADOOP_JOBTRACKER_OPTS="-Dcom.sun.management.jmxremote $HADOOP_JOBTRACKER_OPTS"
-'''     )
+'''.format(tdir=teuthology.get_testdir(ctx))     )
         log.info("wrote file: " + hadoopEnvFile + " to host: " + str(remote))
 
 ## Add required entries to conf/core-site.xml
 def write_core_site(ctx, config):
-    coreSiteFile = "/tmp/cephtest/hadoop/conf/core-site.xml" 
+    testdir = teuthology.get_testdir(ctx)
+    coreSiteFile = "{tdir}/hadoop/conf/core-site.xml".format(tdir=testdir)
 
     hadoopNodes = ctx.cluster.only(teuthology.is_type('hadoop'))
     for remote, roles_for_host in hadoopNodes.remotes.iteritems():
@@ -85,10 +86,10 @@ def write_core_site(ctx, config):
     </property>
     <property>
         <name>ceph.conf.file</name>
-        <value>/tmp/cephtest/ceph.conf</value>
+        <value>{tdir}/ceph.conf</value>
     </property>
 </configuration>
-'''.format(default_fs=default_fs_string))
+'''.format(tdir=teuthology.get_testdir(ctx), default_fs=default_fs_string))
 
         log.info("wrote file: " + coreSiteFile + " to host: " + str(remote))
 
@@ -101,7 +102,7 @@ def get_hadoop_master_ip(ctx):
 
 ## Add required entries to conf/mapred-site.xml
 def write_mapred_site(ctx):
-    mapredSiteFile = "/tmp/cephtest/hadoop/conf/mapred-site.xml"
+    mapredSiteFile = "{tdir}/hadoop/conf/mapred-site.xml".format(tdir=teuthology.get_testdir(ctx))
 
     master_ip = get_hadoop_master_ip(ctx)
     log.info('adding host {remote} as jobtracker'.format(remote=master_ip))
@@ -124,7 +125,7 @@ def write_mapred_site(ctx):
 
 ## Add required entries to conf/hdfs-site.xml
 def write_hdfs_site(ctx):
-    hdfsSiteFile = "/tmp/cephtest/hadoop/conf/hdfs-site.xml"
+    hdfsSiteFile = "{tdir}/hadoop/conf/hdfs-site.xml".format(tdir=teuthology.get_testdir(ctx))
 
     hadoopNodes = ctx.cluster.only(teuthology.is_type('hadoop'))
     for remote, roles_for_host in hadoopNodes.remotes.iteritems():
@@ -146,7 +147,7 @@ def write_hdfs_site(ctx):
 def write_slaves(ctx):
     log.info('Setting up slave nodes...')
 
-    slavesFile = "/tmp/cephtest/hadoop/conf/slaves"
+    slavesFile = "{tdir}/hadoop/conf/slaves".format(tdir=teuthology.get_testdir(ctx))
     tmpFile = StringIO()
 
     slaves = ctx.cluster.only(teuthology.is_type('hadoop.slave'))
@@ -164,7 +165,7 @@ def write_slaves(ctx):
 ## Add required entries to conf/masters 
 ## These nodes host JobTrackers and Namenodes
 def write_master(ctx):
-    mastersFile = "/tmp/cephtest/hadoop/conf/masters"
+    mastersFile = "{tdir}/hadoop/conf/masters".format(tdir=teuthology.get_testdir(ctx))
     master = _get_master(ctx)
     remote, _ = master
 
@@ -200,7 +201,9 @@ def configure_hadoop(ctx, config):
         master = _get_master(ctx)
         remote, _ = master
         remote.run(
-        args=["/tmp/cephtest/hadoop/bin/hadoop","namenode","-format"],
+        args=["{tdir}/hadoop/bin/hadoop".format(tdir=teuthology.get_testdir(ctx)),
+              "namenode",
+              "-format"],
             wait=True,
         )
 
@@ -222,30 +225,32 @@ def configure_hadoop(ctx, config):
                 ),
             )
 
-def _start_hadoop(remote, config):
+def _start_hadoop(ctx, remote, config):
+    testdir = teuthology.get_testdir(ctx)
     if config.get('hdfs'):
         remote.run(
-            args=['/tmp/cephtest/hadoop/bin/start-dfs.sh', ],
+            args=['{tdir}/hadoop/bin/start-dfs.sh'.format(tdir=testdir), ],
             wait=True,
         )
         log.info('done starting hdfs')
 
     remote.run(
-        args=['/tmp/cephtest/hadoop/bin/start-mapred.sh', ], 
+        args=['{tdir}/hadoop/bin/start-mapred.sh'.format(tdir=testdir), ],
         wait=True,
     )
     log.info('done starting mapred')
 
 
-def _stop_hadoop(remote, config):
+def _stop_hadoop(ctx, remote, config):
+    testdir = teuthology.get_testdir(ctx)
     remote.run(
-        args=['/tmp/cephtest/hadoop/bin/stop-mapred.sh', ],
+        args=['{tdir}/hadoop/bin/stop-mapred.sh'.format(tdir=testdir), ],
         wait=True,
     )
 
     if config.get('hdfs'):
         remote.run(
-            args=['/tmp/cephtest/hadoop/bin/stop-dfs.sh', ],
+            args=['{tdir}/hadoop/bin/stop-dfs.sh'.format(tdir=testdir), ],
             wait=True,
         )
 
@@ -263,22 +268,23 @@ def start_hadoop(ctx, config):
     remote, _ = master
 
     log.info('Starting hadoop on {remote}\n'.format(remote=remote.ssh.get_transport().getpeername()[0]))
-    _start_hadoop(remote, config)
+    _start_hadoop(ctx, remote, config)
 
     try: 
         yield
 
     finally:
         log.info('Running stop-mapred.sh on {remote}'.format(remote=remote.ssh.get_transport().getpeername()[0]))
-        _stop_hadoop(remote, config)
+        _stop_hadoop(ctx, remote, config)
 
-# download and untar the most recent hadoop binaries into /tmp/cephtest/hadoop
-def _download_hadoop_binaries(remote, hadoop_url):
+# download and untar the most recent hadoop binaries into {testdir}/hadoop
+def _download_hadoop_binaries(ctx, remote, hadoop_url):
     log.info('_download_hadoop_binaries: path %s' % hadoop_url)
     fileName = 'hadoop.tgz'
+    testdir = teuthology.get_testdir(ctx)
     remote.run(
         args=[
-            'mkdir', '-p', '-m0755', '/tmp/cephtest/hadoop',
+            'mkdir', '-p', '-m0755', '{tdir}/hadoop'.format(tdir=testdir),
             run.Raw('&&'),
             'echo',
             '{fileName}'.format(fileName=fileName),
@@ -290,7 +296,7 @@ def _download_hadoop_binaries(remote, hadoop_url):
             # need to use --input-file to make wget respect --base
             '--input-file=-',
             run.Raw('|'),
-            'tar', '-xzf', '-', '-C', '/tmp/cephtest/hadoop',
+            'tar', '-xzf', '-', '-C', '{tdir}/hadoop'.format(tdir=testdir),
         ],
     )
 
@@ -320,7 +326,7 @@ def binaries(ctx, config):
     with parallel() as p:
         hadoopNodes = ctx.cluster.only(teuthology.is_type('hadoop'))
         for remote in hadoopNodes.remotes.iterkeys():
-            p.spawn(_download_hadoop_binaries, remote, hadoop_bindir_url)
+            p.spawn(_download_hadoop_binaries, ctx, remote, hadoop_bindir_url)
 
     try:
         yield
@@ -328,7 +334,7 @@ def binaries(ctx, config):
         log.info('Removing hadoop binaries...')
         run.wait(
             ctx.cluster.run(
-                args=[ 'rm', '-rf', '--', '/tmp/cephtest/hadoop'],
+                args=[ 'rm', '-rf', '--', '{tdir}/hadoop'.format(tdir=teuthology.get_testdir(ctx))],
                 wait=False,
                 ),
             )
@@ -344,7 +350,10 @@ def out_of_safemode(ctx, config):
         master = _get_master(ctx)
         remote, _ = master
         remote.run(
-            args=["/tmp/cephtest/hadoop/bin/hadoop","dfsadmin","-safemode", "wait"],
+            args=["{tdir}/hadoop/bin/hadoop".format(tdir=teuthology.get_testdir(ctx)),
+                  "dfsadmin",
+                  "-safemode",
+                  "wait"],
             wait=True,
         )
     else:
@@ -395,11 +404,11 @@ def task(ctx, config):
           - mkdir -p /tmp/hadoop_input
           - wget http://ceph.com/qa/hadoop_input_files.tar -O /tmp/hadoop_input/files.tar
           - cd /tmp/hadoop_input/; tar -xf /tmp/hadoop_input/files.tar
-          - /tmp/cephtest/hadoop/bin/hadoop fs -mkdir wordcount_input 
-          - /tmp/cephtest/hadoop/bin/hadoop fs -put /tmp/hadoop_input/*txt wordcount_input/ 
-          - /tmp/cephtest/hadoop/bin/hadoop jar /tmp/cephtest/hadoop/build/hadoop-example*jar wordcount wordcount_input wordcount_output  
+          - {tdir}/hadoop/bin/hadoop fs -mkdir wordcount_input
+          - {tdir}/hadoop/bin/hadoop fs -put /tmp/hadoop_input/*txt wordcount_input/
+          - {tdir}/hadoop/bin/hadoop jar {tdir}/hadoop/build/hadoop-example*jar wordcount wordcount_input wordcount_output
           - rm -rf /tmp/hadoop_input
-    """
+    """.format(tdir=teuthology.get_testdir(ctx))
     dist = 'precise'
     format = 'jar'
     arch = 'x86_64'

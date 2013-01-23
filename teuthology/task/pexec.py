@@ -89,14 +89,14 @@ def task(ctx, config):
         tasks:
         - pexec:
             all:
-              - grep FAIL /tmp/cephtest/archive/log/*
+              - grep FAIL {testdir}/archive/log/*
 
     Or if you want to run in parallel on all clients:
 
         tasks:
         - pexec:
             clients:
-              - dd if=/dev/zero of=/tmp/cephtest/mnt.* count=1024 bs=1024
+              - dd if=/dev/zero of={testdir}/mnt.* count=1024 bs=1024
 
     You can also ensure that parallel commands are synchronized with the
     special 'barrier' statement:
@@ -104,7 +104,7 @@ def task(ctx, config):
     tasks:
     - pexec:
         clients:
-          - cd /tmp/cephtest/mnt.*
+          - cd {testdir}/mnt.*
           - while true; do
           -   barrier
           -   dd if=/dev/zero of=./foo count=1024 bs=1024

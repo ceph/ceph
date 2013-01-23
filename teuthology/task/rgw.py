@@ -12,16 +12,17 @@ log = logging.getLogger(__name__)
 @contextlib.contextmanager
 def create_dirs(ctx, config):
     log.info('Creating apache directories...')
+    testdir = teuthology.get_testdir(ctx)
     for client in config.iterkeys():
         ctx.cluster.only(client).run(
             args=[
                 'mkdir',
                 '-p',
-                '/tmp/cephtest/apache/htdocs',
-                '/tmp/cephtest/apache/tmp',
+                '{tdir}/apache/htdocs'.format(tdir=testdir),
+                '{tdir}/apache/tmp'.format(tdir=testdir),
                 run.Raw('&&'),
                 'mkdir',
-                '/tmp/cephtest/archive/apache',
+                '{tdir}/archive/apache'.format(tdir=testdir),
                 ],
             )
     try:
@@ -33,13 +34,13 @@ def create_dirs(ctx, config):
                 args=[
                     'rm',
                     '-rf',
-                    '/tmp/cephtest/apache/tmp',
+                    '{tdir}/apache/tmp'.format(tdir=testdir),
                     run.Raw('&&'),
                     'rmdir',
-                    '/tmp/cephtest/apache/htdocs',
+                    '{tdir}/apache/htdocs'.format(tdir=testdir),
                     run.Raw('&&'),
                     'rmdir',
-                    '/tmp/cephtest/apache',
+                    '{tdir}/apache'.format(tdir=testdir),
                     ],
                 )
 
@@ -47,30 +48,31 @@ def create_dirs(ctx, config):
 @contextlib.contextmanager
 def ship_config(ctx, config):
     assert isinstance(config, dict)
+    testdir = teuthology.get_testdir(ctx)
     log.info('Shipping apache config and rgw.fcgi...')
-    src = os.path.join(os.path.dirname(__file__), 'apache.conf')
+    src = os.path.join(os.path.dirname(__file__), 'apache.conf.template')
     for client in config.iterkeys():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         with file(src, 'rb') as f:
             teuthology.write_file(
                 remote=remote,
-                path='/tmp/cephtest/apache/apache.conf',
-                data=f,
+                path='{tdir}/apache/apache.conf'.format(tdir=testdir),
+                data=f.format(testdir=testdir),
                 )
         teuthology.write_file(
             remote=remote,
-            path='/tmp/cephtest/apache/htdocs/rgw.fcgi',
+            path='{tdir}/apache/htdocs/rgw.fcgi'.format(tdir=testdir),
             data="""#!/bin/sh
 ulimit -c unlimited
-export LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib
-exec /tmp/cephtest/binary/usr/local/bin/radosgw -f -c /tmp/cephtest/ceph.conf
-"""
+export LD_LIBRARY_PATH={tdir}/binary/usr/local/lib
+exec {tdir}/binary/usr/local/bin/radosgw -f -c {tdir}/ceph.conf
+""".format(tdir=testdir)
             )
         remote.run(
             args=[
                 'chmod',
                 'a=rx',
-                '/tmp/cephtest/apache/htdocs/rgw.fcgi',
+                '{tdir}/apache/htdocs/rgw.fcgi'.format(tdir=testdir),
                 ],
             )
     try:
@@ -82,11 +84,11 @@ exec /tmp/cephtest/binary/usr/local/bin/radosgw -f -c /tmp/cephtest/ceph.conf
                 args=[
                     'rm',
                     '-f',
-                    '/tmp/cephtest/apache/apache.conf',
+                    '{tdir}/apache/apache.conf'.format(tdir=testdir),
                     run.Raw('&&'),
                     'rm',
                     '-f',
-                    '/tmp/cephtest/apache/htdocs/rgw.fcgi',
+                    '{tdir}/apache/htdocs/rgw.fcgi'.format(tdir=testdir),
                     ],
                 )
 
@@ -94,6 +96,7 @@ exec /tmp/cephtest/binary/usr/local/bin/radosgw -f -c /tmp/cephtest/ceph.conf
 @contextlib.contextmanager
 def start_rgw(ctx, config):
     log.info('Starting rgw...')
+    testdir = teuthology.get_testdir(ctx)
     rgws = {}
     for client in config.iterkeys():
         (remote,) = ctx.cluster.only(client).remotes.iterkeys()
@@ -104,22 +107,22 @@ def start_rgw(ctx, config):
         log.info("rgw %s config is %s", client, client_config)
  
         run_cmd=[
-                'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-                '/tmp/cephtest/enable-coredump',
-                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                '/tmp/cephtest/archive/coverage',
-                '/tmp/cephtest/daemon-helper',
+                'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                '{tdir}/archive/coverage'.format(tdir=testdir),
+                '{tdir}/daemon-helper'.format(tdir=testdir),
                 'term',
             ]
         run_cmd_tail=[
-                '/tmp/cephtest/binary/usr/local/bin/radosgw',
-                '-c', '/tmp/cephtest/ceph.conf',
-                '--log-file', '/tmp/cephtest/archive/log/rgw.log',
-                '--rgw_ops_log_socket_path', '/tmp/cephtest/rgw.opslog.sock',
-                '/tmp/cephtest/apache/apache.conf',
+                '{tdir}/binary/usr/local/bin/radosgw'.format(tdir=testdir),
+                '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
+                '--log-file', '{tdir}/archive/log/rgw.log'.format(tdir=testdir),
+                '--rgw_ops_log_socket_path', '{tdir}/rgw.opslog.sock'.format(tdir=testdir),
+                '{tdir}/apache/apache.conf'.format(tdir=testdir),
                 '--foreground',
                 run.Raw('>'),
-                '/tmp/cephtest/archive/log/rgw.stdout',
+                '{tdir}/archive/log/rgw.stdout'.format(tdir=testdir),
                 run.Raw('2>&1'),
             ]
 
@@ -151,7 +154,7 @@ def start_rgw(ctx, config):
                 args=[
                     'rm',
                     '-rf',
-                    '/tmp/cephtest/rgw.opslog.sock',
+                    '{tdir}/rgw.opslog.sock'.format(tdir=testdir),
                      ],
              )
 
@@ -161,18 +164,19 @@ def start_rgw(ctx, config):
 @contextlib.contextmanager
 def start_apache(ctx, config):
     log.info('Starting apache...')
+    testdir = teuthology.get_testdir(ctx)
     apaches = {}
     for client in config.iterkeys():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         proc = remote.run(
             args=[
-                '/tmp/cephtest/enable-coredump',
-                '/tmp/cephtest/daemon-helper',
-                'kill',
-                'apache2',
-                '-X',
-                '-f',
-                '/tmp/cephtest/apache/apache.conf',
+                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/daemon-helper'.format(tdir=testdir),
+                'kill'.format(tdir=testdir),
+                'apache2'.format(tdir=testdir),
+                '-X'.format(tdir=testdir),
+                '-f'.format(tdir=testdir),
+                '{tdir}/apache/apache.conf'.format(tdir=testdir),
                 ],
             logger=log.getChild(client),
             stdin=run.PIPE,

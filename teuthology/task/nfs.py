@@ -50,8 +50,9 @@ def task(ctx, config):
 
     clients = list(teuthology.get_clients(ctx=ctx, roles=config.keys()))
 
+    testdir = teuthology.get_testdir(ctx)
     for id_, remote in clients:
-        mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+        mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
         client_config = config.get("client.%s" % id_)
         if client_config is None:
             client_config = {}
@@ -61,7 +62,7 @@ def task(ctx, config):
         server = client_config.get('server');
 
         svr_id = server[len('client.'):]
-        svr_mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=svr_id))
+        svr_mnt = os.path.join(testdir, 'mnt.{id}'.format(id=svr_id))
 
         svr_remote  = None
         all_config = ['client.{id}'.format(id=tmpid)
@@ -109,7 +110,7 @@ def task(ctx, config):
         log.info('Unmounting nfs clients...')
         for id_, remote in clients:
             log.debug('Unmounting nfs client client.{id}...'.format(id=id_))
-            mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+            mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
             remote.run(
                 args=[
                     'sudo',

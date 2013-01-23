@@ -35,6 +35,8 @@ def task(ctx, config):
                   for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
     clients = list(teuthology.get_clients(ctx=ctx, roles=config))
 
+    testdir = teuthology.get_testdir(ctx)
+
     for id_, remote in clients:
         # TODO: Don't have to run this more than once per node (remote)
         log.info('Enable logging on client.{id} at {remote} ...'.format(
@@ -42,7 +44,7 @@ def task(ctx, config):
         remote.run(
             args=[
                 'sudo',
-                '/tmp/cephtest/kcon_most',
+                '{tdir}/kcon_most'.format(tdir=testdir),
                 'on'
                 ],
             )
@@ -56,7 +58,7 @@ def task(ctx, config):
             remote.run(
                 args=[
                     'sudo',
-                    '/tmp/cephtest/kcon_most',
+                    '{tdir}/kcon_most'.format(tdir=testdir),
                     'off'
                     ],
                 )

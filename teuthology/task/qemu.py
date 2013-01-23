@@ -17,14 +17,15 @@ DEFAULT_MEM = 1024 # in megabytes
 
 @contextlib.contextmanager
 def create_dirs(ctx, config):
+    testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
         assert 'test' in client_config, 'You must specify a test to run'
         (remote,) = ctx.cluster.only(client).remotes.keys()
         remote.run(
             args=[
                 'install', '-d', '-m0755', '--',
-                '/tmp/cephtest/qemu',
-                '/tmp/cephtest/archive/qemu',
+                '{tdir}/qemu'.format(tdir=testdir),
+                '{tdir}/archive/qemu'.format(tdir=testdir),
                 ]
             )
     try:
@@ -35,18 +36,19 @@ def create_dirs(ctx, config):
             (remote,) = ctx.cluster.only(client).remotes.keys()
             remote.run(
                 args=[
-                    'rmdir', '/tmp/cephtest/qemu', run.Raw('||'), 'true',
+                    'rmdir', '{tdir}/qemu'.format(tdir=testdir), run.Raw('||'), 'true',
                     ]
                 )
 
 @contextlib.contextmanager
 def generate_iso(ctx, config):
     log.info('generating iso...')
+    testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
         assert 'test' in client_config, 'You must specify a test to run'
         src_dir = os.path.dirname(__file__)
-        userdata_path = os.path.join('/tmp/cephtest/qemu', 'userdata.' + client)
-        metadata_path = os.path.join('/tmp/cephtest/qemu', 'metadata.' + client)
+        userdata_path = os.path.join(testdir, 'qemu', 'userdata.' + client)
+        metadata_path = os.path.join(testdir, 'qemu', 'metadata.' + client)
 
         with file(os.path.join(src_dir, 'userdata_setup.yaml'), 'rb') as f:
             test_setup = ''.join(f.readlines())
@@ -81,7 +83,7 @@ def generate_iso(ctx, config):
         with file(os.path.join(src_dir, 'metadata.yaml'), 'rb') as f:
             teuthology.write_file(remote, metadata_path, f)
 
-        test_file = '/tmp/cephtest/qemu/{client}.test.sh'.format(client=client)
+        test_file = '{tdir}/qemu/{client}.test.sh'.format(tdir=testdir, client=client)
         remote.run(
             args=[
                 'wget', '-nv', '-O', test_file,
@@ -94,7 +96,7 @@ def generate_iso(ctx, config):
             args=[
                 'genisoimage', '-quiet', '-input-charset', 'utf-8',
                 '-volid', 'cidata', '-joliet', '-rock',
-                '-o', '/tmp/cephtest/qemu/{client}.iso'.format(client=client),
+                '-o', '{tdir}/qemu/{client}.iso'.format(tdir=testdir, client=client),
                 '-graft-points',
                 'user-data={userdata}'.format(userdata=userdata_path),
                 'meta-data={metadata}'.format(metadata=metadata_path),
@@ -109,19 +111,20 @@ def generate_iso(ctx, config):
             remote.run(
                 args=[
                     'rm', '-f',
-                    '/tmp/cephtest/qemu/{client}.iso'.format(client=client),
-                    os.path.join('/tmp/cephtest/qemu', 'userdata.' + client),
-                    os.path.join('/tmp/cephtest/qemu', 'metadata.' + client),
-                    '/tmp/cephtest/qemu/{client}.test.sh'.format(client=client),
+                    '{tdir}/qemu/{client}.iso'.format(tdir=testdir, client=client),
+                    os.path.join(testdir, 'qemu', 'userdata.' + client),
+                    os.path.join(testdir, 'qemu', 'metadata.' + client),
+                    '{tdir}/qemu/{client}.test.sh'.format(tdir=testdir, client=client),
                     ],
                 )
 
 @contextlib.contextmanager
 def download_image(ctx, config):
     log.info('downloading base image')
+    testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
         (remote,) = ctx.cluster.only(client).remotes.keys()
-        base_file = '/tmp/cephtest/qemu/base.{client}.qcow2'.format(client=client)
+        base_file = '{tdir}/qemu/base.{client}.qcow2'.format(tdir=testdir, client=client)
         remote.run(
             args=[
                 'wget', '-nv', '-O', base_file, DEFAULT_IMAGE_URL,
@@ -132,7 +135,8 @@ def download_image(ctx, config):
     finally:
         log.debug('cleaning up base image files')
         for client in config.iterkeys():
-            base_file = '/tmp/cephtest/qemu/base.{client}.qcow2'.format(
+            base_file = '{tdir}/qemu/base.{client}.qcow2'.format(
+                tdir=testdir,
                 client=client,
                 )
             (remote,) = ctx.cluster.only(client).remotes.keys()
@@ -145,22 +149,23 @@ def download_image(ctx, config):
 @contextlib.contextmanager
 def run_qemu(ctx, config):
     procs = []
+    testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
         (remote,) = ctx.cluster.only(client).remotes.keys()
-        log_dir = '/tmp/cephtest/archive/qemu/{client}'.format(client=client)
+        log_dir = '{tdir}/archive/qemu/{client}'.format(tdir=testdir, client=client)
         remote.run(
             args=[
                 'mkdir', log_dir,
                 ]
             )
 
-        base_file = '/tmp/cephtest/qemu/base.{client}.qcow2'.format(client=client)
+        base_file = '{tdir}/qemu/base.{client}.qcow2'.format(tdir=testdir, client=client)
         args=[
-            run.Raw('LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib'),
-            '/tmp/cephtest/enable-coredump',
-            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-            '/tmp/cephtest/archive/coverage',
-            '/tmp/cephtest/daemon-helper',
+            run.Raw('LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir)),
+            '{tdir}/enable-coredump'.format(tdir=testdir),
+            '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+            '{tdir}/archive/coverage'.format(tdir=testdir),
+            '{tdir}/daemon-helper'.format(tdir=testdir),
             'term',
             'kvm', '-enable-kvm', '-nographic',
             '-m', str(client_config.get('memory', DEFAULT_MEM)),
@@ -168,7 +173,7 @@ def run_qemu(ctx, config):
             '-drive',
             'file={base},format=qcow2,if=virtio'.format(base=base_file),
             # cd holding metadata for cloud-init
-            '-cdrom', '/tmp/cephtest/qemu/{client}.iso'.format(client=client),
+            '-cdrom', '{tdir}/qemu/{client}.iso'.format(tdir=testdir, client=client),
             # virtio 9p fs for logging
             '-fsdev',
             'local,id=log,path={log},security_model=none'.format(log=log_dir),
@@ -190,7 +195,7 @@ def run_qemu(ctx, config):
             args.extend([
                 '-drive',
                 'file=rbd:rbd/{img}:conf={conf}:id={id},format=rbd,if=virtio,cache={cachemode}'.format(
-                    conf='/tmp/cephtest/ceph.conf',
+                    conf='{tdir}/ceph.conf'.format(tdir=testdir),
                     img='{client}.{num}'.format(client=client, num=i),
                     id=client[len('client.'):],
                     cachemode=cachemode,
@@ -219,7 +224,8 @@ def run_qemu(ctx, config):
             remote.run(
                 args=[
                     'test', '-f',
-                    '/tmp/cephtest/archive/qemu/{client}/success'.format(
+                    '{tdir}/archive/qemu/{client}/success'.format(
+                        tdir=testdir,
                         client=client
                         ),
                     ],

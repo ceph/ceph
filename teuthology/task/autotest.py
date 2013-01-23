@@ -37,10 +37,11 @@ def task(ctx, config):
     assert isinstance(config, dict)
     config = teuthology.replace_all_with_clients(ctx.cluster, config)
     log.info('Setting up autotest...')
+    testdir = teuthology.get_testdir(ctx)
     with parallel() as p:
         for role in config.iterkeys():
             (remote,) = ctx.cluster.only(role).remotes.keys()
-            p.spawn(_download, remote)
+            p.spawn(_download, testdir, remote)
 
     log.info('Making a separate scratch dir for every client...')
     for role in config.iterkeys():
@@ -49,7 +50,7 @@ def task(ctx, config):
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
         (remote,) = ctx.cluster.only(role).remotes.iterkeys()
-        mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+        mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
         scratch = os.path.join(mnt, 'client.{id}'.format(id=id_))
         remote.run(
             args=[
@@ -66,16 +67,16 @@ def task(ctx, config):
     with parallel() as p:
         for role, tests in config.iteritems():
             (remote,) = ctx.cluster.only(role).remotes.keys()
-            p.spawn(_run_tests, remote, role, tests)
+            p.spawn(_run_tests, testdir, remote, role, tests)
 
-def _download(remote):
+def _download(testdir, remote):
     remote.run(
         args=[
             # explicitly does not support multiple autotest tasks
             # in a single run; the result archival would conflict
-            'mkdir', '/tmp/cephtest/archive/autotest',
+            'mkdir', '{tdir}/archive/autotest'.format(tdir=testdir),
             run.Raw('&&'),
-            'mkdir', '/tmp/cephtest/autotest',
+            'mkdir', '{tdir}/autotest'.format(tdir=testdir),
             run.Raw('&&'),
             'wget',
             '-nv',
@@ -84,7 +85,7 @@ def _download(remote):
             '-O-',
             run.Raw('|'),
             'tar',
-            '-C', '/tmp/cephtest/autotest',
+            '-C', '{tdir}/autotest'.format(tdir=testdir),
             '-x',
             '-z',
             '-f-',
@@ -92,12 +93,12 @@ def _download(remote):
             ],
         )
 
-def _run_tests(remote, role, tests):
+def _run_tests(testdir, remote, role, tests):
     assert isinstance(role, basestring)
     PREFIX = 'client.'
     assert role.startswith(PREFIX)
     id_ = role[len(PREFIX):]
-    mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+    mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
     scratch = os.path.join(mnt, 'client.{id}'.format(id=id_))
 
     assert isinstance(tests, list)
@@ -109,7 +110,7 @@ def _run_tests(remote, role, tests):
             testname=testname,
             id=id_,
             )
-        control = '/tmp/cephtest/control.{tag}'.format(tag=tag)
+        control = '{tdir}/control.{tag}'.format(tdir=testdir, tag=tag)
         teuthology.write_file(
             remote=remote,
             path=control,
@@ -118,14 +119,14 @@ def _run_tests(remote, role, tests):
                         url=testname,
                         dir=scratch,
                         # TODO perhaps tag
-                        # results will be in /tmp/cephtest/autotest/client/results/dbench
-                        # or /tmp/cephtest/autotest/client/results/dbench.{tag}
+                        # results will be in {testdir}/autotest/client/results/dbench
+                        # or {testdir}/autotest/client/results/dbench.{tag}
                         )),
                 ),
             )
         remote.run(
             args=[
-                '/tmp/cephtest/autotest/client/bin/autotest',
+                '{tdir}/autotest/client/bin/autotest'.format(tdir=testdir),
                 '--verbose',
                 '--harness=simple',
                 '--tag={tag}'.format(tag=tag),
@@ -144,13 +145,13 @@ def _run_tests(remote, role, tests):
             args=[
                 'mv',
                 '--',
-                '/tmp/cephtest/autotest/client/results/{tag}'.format(tag=tag),
-                '/tmp/cephtest/archive/autotest/{tag}'.format(tag=tag),
+                '{tdir}/autotest/client/results/{tag}'.format(tdir=testdir, tag=tag),
+                '{tdir}/archive/autotest/{tag}'.format(tdir=testdir, tag=tag),
                 ],
             )
 
     remote.run(
         args=[
-            'rm', '-rf', '--', '/tmp/cephtest/autotest',
+            'rm', '-rf', '--', '{tdir}/autotest'.format(tdir=testdir),
             ],
         )

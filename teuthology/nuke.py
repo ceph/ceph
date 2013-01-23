@@ -1,6 +1,8 @@
 import argparse
 import yaml
 
+from teuthology import misc as teuthology
+
 def parse_args():
     from teuthology.run import config_file
     from teuthology.run import MergeConfig
@@ -150,7 +152,10 @@ def remove_osd_mounts(ctx, log):
     from .orchestra import run
     ctx.cluster.run(
         args=[
-            'grep', '/tmp/cephtest/data/', '/etc/mtab', run.Raw('|'),
+            'grep',
+            '{tdir}/data/'.format(tdir=teuthology.get_testdir(ctx)),
+            '/etc/mtab',
+            run.Raw('|'),
             'awk', '{print $2}', run.Raw('|'),
             'xargs', '-r',
             'sudo', 'umount', run.Raw(';'),
@@ -222,7 +227,8 @@ def remove_testing_tree(ctx, log):
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
             args=[
-                'sudo', 'rm', '-rf', '/tmp/cephtest',
+                'sudo', 'rm', '-rf',
+                teuthology.get_testdir(ctx),
                 ],
             wait=False,
             )

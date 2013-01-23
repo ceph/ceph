@@ -7,12 +7,13 @@ from ..orchestra import run
 
 log = logging.getLogger(__name__)
 blktrace = '/usr/sbin/blktrace'
-log_dir = '/tmp/cephtest/archive/performance/blktrace'
 daemon_signal = 'term'
 
 @contextlib.contextmanager
 def setup(ctx, config):
     osds = ctx.cluster.only(teuthology.is_type('osd'))
+    log_dir = '{tdir}/archive/performance/blktrace'.format(tdir=teuthology.get_testdir(ctx))
+
     for remote, roles_for_host in osds.remotes.iteritems():
         log.info('Creating %s on %s' % (log_dir,remote.name))
         remote.run(
@@ -24,6 +25,9 @@ def setup(ctx, config):
 @contextlib.contextmanager
 def execute(ctx, config):
     procs = []
+    testdir=teuthology.get_testdir(ctx)
+    log_dir = '{tdir}/archive/performance/blktrace'.format(tdir=testdir)
+
     osds = ctx.cluster.only(teuthology.is_type('osd'))
     for remote, roles_for_host in osds.remotes.iteritems():
         roles_to_devs = ctx.disk_config.remote_to_roles_to_dev[remote]
@@ -37,7 +41,7 @@ def execute(ctx, config):
                         'cd',
                         log_dir,
                         run.Raw(';'),
-                        '/tmp/cephtest/daemon-helper',
+                        '{tdir}/daemon-helper'.format(tdir=testdir),
                         daemon_signal,
                         'sudo',
                         blktrace,

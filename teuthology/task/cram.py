@@ -41,17 +41,19 @@ def task(ctx, config):
 
     clients = teuthology.replace_all_with_clients(ctx.cluster,
                                                   config['clients'])
+    testdir = teuthology.get_testdir(ctx)
+
     try:
         for client, tests in clients.iteritems():
             (remote,) = ctx.cluster.only(client).remotes.iterkeys()
-            client_dir = '/tmp/cephtest/archive/cram.{role}'.format(role=client)
+            client_dir = '{tdir}/archive/cram.{role}'.format(tdir=testdir, role=client)
             remote.run(
                 args=[
                     'mkdir', '--', client_dir,
                     run.Raw('&&'),
-                    'virtualenv', '/tmp/cephtest/virtualenv',
+                    'virtualenv', '{tdir}/virtualenv'.format(tdir=testdir),
                     run.Raw('&&'),
-                    '/tmp/cephtest/virtualenv/bin/pip',
+                    '{tdir}/virtualenv/bin/pip'.format(tdir=testdir),
                     'install', 'cram',
                     ],
                 )
@@ -70,7 +72,7 @@ def task(ctx, config):
     finally:
         for client, tests in clients.iteritems():
             (remote,) = ctx.cluster.only(client).remotes.iterkeys()
-            client_dir = '/tmp/cephtest/archive/cram.{role}'.format(role=client)
+            client_dir = '{tdir}/archive/cram.{role}'.format(tdir=testdir, role=client)
             test_files = set([test.rsplit('/', 1)[1] for test in tests])
 
             # remove test files unless they failed
@@ -90,7 +92,7 @@ def task(ctx, config):
             remote.run(
                 args=[
                     'rm', '-rf', '--',
-                    '/tmp/cephtest/virtualenv',
+                    '{tdir}/virtualenv'.format(tdir=testdir),
                     run.Raw(';'),
                     'rmdir', '--ignore-fail-on-non-empty', client_dir,
                     ],
@@ -104,21 +106,22 @@ def _run_tests(ctx, role):
     (remote,) = ctx.cluster.only(role).remotes.iterkeys()
     ceph_ref = ctx.summary.get('ceph-sha1', 'master')
 
+    testdir = teuthology.get_testdir(ctx)
     log.info('Running tests for %s...', role)
     remote.run(
         args=[
             run.Raw('CEPH_REF={ref}'.format(ref=ceph_ref)),
-            run.Raw('PATH="$PATH:/tmp/cephtest/binary/usr/local/bin"'),
-            run.Raw('LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/tmp/cephtest/binary/usr/local/lib"'),
-            run.Raw('CEPH_CONF="/tmp/cephtest/ceph.conf"'),
+            run.Raw('PATH="$PATH:{tdir}/binary/usr/local/bin"'.format(tdir=testdir)),
+            run.Raw('LD_LIBRARY_PATH="$LD_LIBRARY_PATH:{tdir}/binary/usr/local/lib"'.format(tdir=testdir)),
+            run.Raw('CEPH_CONF="{tdir}/ceph.conf"'.format(tdir=testdir)),
             run.Raw('CEPH_ID="{id}"'.format(id=id_)),
-            run.Raw('PYTHONPATH="$PYTHONPATH:/tmp/cephtest/binary/usr/local/lib/python2.7/dist-packages:/tmp/cephtest/binary/usr/local/lib/python2.6/dist-packages"'),
-            '/tmp/cephtest/enable-coredump',
-            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-            '/tmp/cephtest/archive/coverage',
-            '/tmp/cephtest/virtualenv/bin/cram',
+            run.Raw('PYTHONPATH="$PYTHONPATH:{tdir}/binary/usr/local/lib/python2.7/dist-packages:{tdir}/binary/usr/local/lib/python2.6/dist-packages"'.format(tdir=testdir)),
+            '{tdir}/enable-coredump'.format(tdir=testdir),
+            '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+            '{tdir}/archive/coverage'.format(tdir=testdir),
+            '{tdir}/virtualenv/bin/cram'.format(tdir=testdir),
             '-v', '--',
-            run.Raw('/tmp/cephtest/archive/cram.{role}/*.t'.format(role=role)),
+            run.Raw('{tdir}/archive/cram.{role}/*.t'.format(tdir=testdir, role=role)),
             ],
         logger=log.getChild(role),
         )

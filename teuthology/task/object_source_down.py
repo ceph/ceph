@@ -6,15 +6,15 @@ from teuthology import misc as teuthology
 log = logging.getLogger(__name__)
 
 
-def rados(remote, cmd):
+def rados(testdir, remote, cmd):
     log.info("rados %s" % ' '.join(cmd))
     pre = [
-        'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-        '/tmp/cephtest/enable-coredump',
-        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-        '/tmp/cephtest/archive/coverage',
-        '/tmp/cephtest/binary/usr/local/bin/rados',
-        '-c', '/tmp/cephtest/ceph.conf',
+        'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+        '{tdir}/enable-coredump'.format(tdir=testdir),
+        '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+        '{tdir}/archive/coverage'.format(tdir=testdir),
+        '{tdir}/binary/usr/local/bin/rados'.format(tdir=testdir),
+        '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
         ];
     pre.extend(cmd)
     proc = remote.run(
@@ -77,12 +77,14 @@ def task(ctx, config):
             '--osd-recovery-delay-start 10000 --osd-min-pg-log-entries 100000000'
             )
 
+    testdir = teuthology.get_testdir(ctx)
+
     # kludge to make sure they get a map
-    rados(mon, ['-p', 'data', 'put', 'dummy', dummyfile])
+    rados(testdir, mon, ['-p', 'data', 'put', 'dummy', dummyfile])
 
     # create old objects
     for f in range(1, 10):
-        rados(mon, ['-p', 'data', 'put', 'existing_%d' % f, dummyfile])
+        rados(testdir, mon, ['-p', 'data', 'put', 'existing_%d' % f, dummyfile])
 
     manager.mark_out_osd(3)
     manager.wait_till_active()

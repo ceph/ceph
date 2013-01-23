@@ -226,14 +226,15 @@ class CephManager:
         self.pools['data'] = self.get_pool_property('data', 'pg_num')
 
     def raw_cluster_cmd(self, *args):
+        testdir = teuthology.get_testdir(self.ctx)
         ceph_args = [
-                'LD_LIBRARY_PRELOAD=/tmp/cephtest/binary/usr/local/lib',
-                '/tmp/cephtest/enable-coredump',
-                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                '/tmp/cephtest/archive/coverage',
-                '/tmp/cephtest/binary/usr/local/bin/ceph',
-                '-k', '/tmp/cephtest/ceph.keyring',
-                '-c', '/tmp/cephtest/ceph.conf',
+                'LD_LIBRARY_PRELOAD={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                '{tdir}/archive/coverage'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/ceph'.format(tdir=testdir),
+                '-k', '{tdir}/ceph.keyring'.format(tdir=testdir),
+                '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
                 '--concise',
                 ]
         ceph_args.extend(args)

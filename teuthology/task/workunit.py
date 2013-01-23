@@ -140,7 +140,7 @@ def _make_scratch_dir(ctx, role, subdir):
     log.debug("getting remote for {id} role {role_}".format(id=id_, role_=role))
     (remote,) = ctx.cluster.only(role).remotes.iterkeys()
     dir_owner = remote.shortname.split('@', 1)[0]
-    mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+    mnt = os.path.join(teuthology.get_testdir(ctx), 'mnt.{id}'.format(id=id_))
     # if neither kclient nor ceph-fuse are required for a workunit,
     # mnt may not exist. Stat and create the directory if it doesn't.
     try:
@@ -212,20 +212,21 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, subdir):
                 p.spawn(_run_tests, ctx, refspec, role, [unit], env, subdir)
 
 def _run_tests(ctx, refspec, role, tests, env, subdir=None):
+    testdir = teuthology.get_testdir(ctx)
     assert isinstance(role, basestring)
     PREFIX = 'client.'
     assert role.startswith(PREFIX)
     id_ = role[len(PREFIX):]
     (remote,) = ctx.cluster.only(role).remotes.iterkeys()
-    mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+    mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
     # subdir so we can remove and recreate this a lot without sudo
     if subdir is None:
         scratch_tmp = os.path.join(mnt, 'client.{id}'.format(id=id_), 'tmp')
     else:
         scratch_tmp = os.path.join(mnt, subdir)
-    srcdir = '/tmp/cephtest/workunit.{role}'.format(role=role)
-    secretfile = '/tmp/cephtest/data/{role}.secret'.format(role=role)
-    teuthology.write_secret_file(remote, role, secretfile)
+    srcdir = '{tdir}/workunit.{role}'.format(tdir=testdir, role=role)
+    secretfile = '{tdir}/data/{role}.secret'.format(tdir=testdir, role=role)
+    teuthology.write_secret_file(ctx, remote, role, secretfile)
 
     ceph_ref = ctx.summary.get('ceph-sha1', 'master')
 
@@ -249,11 +250,13 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None):
             'if', 'test', '-e', 'Makefile', run.Raw(';'), 'then', 'make', run.Raw(';'), 'fi',
             run.Raw('&&'),
             'find', '-executable', '-type', 'f', '-printf', r'%P\0'.format(srcdir=srcdir),
-            run.Raw('>/tmp/cephtest/workunits.list'),
+            run.Raw('>{tdir}/workunits.list'.format(tdir=testdir)),
             ],
         )
 
-    workunits = sorted(teuthology.get_file(remote, '/tmp/cephtest/workunits.list').split('\0'))
+    workunits = sorted(teuthology.get_file(
+                            remote,
+                            '{tdir}/workunits.list'.format(tdir=testdir)).split('\0'))
     assert workunits
 
     try:
@@ -272,13 +275,13 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None):
                     'cd', '--', scratch_tmp,
                     run.Raw('&&'),
                     run.Raw('CEPH_REF={ref}'.format(ref=ceph_ref)),
-                    run.Raw('PATH="$PATH:/tmp/cephtest/binary/usr/local/bin"'),
-                    run.Raw('LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/tmp/cephtest/binary/usr/local/lib"'),
-                    run.Raw('CEPH_JAVA_PATH="/tmp/cephtest/binary/usr/local/share/java"'),
-                    run.Raw('CEPH_CONF="/tmp/cephtest/ceph.conf"'),
+                    run.Raw('PATH="$PATH:{tdir}/binary/usr/local/bin"'.format(tdir=testdir)),
+                    run.Raw('LD_LIBRARY_PATH="$LD_LIBRARY_PATH:{tdir}/binary/usr/local/lib"'.format(tdir=testdir)),
+                    run.Raw('CEPH_JAVA_PATH="{tdir}/binary/usr/local/share/java"'.format(tdir=testdir)),
+                    run.Raw('CEPH_CONF="{tdir}/ceph.conf"'.format(tdir=testdir)),
                     run.Raw('CEPH_SECRET_FILE="{file}"'.format(file=secretfile)),
                     run.Raw('CEPH_ID="{id}"'.format(id=id_)),
-                    run.Raw('PYTHONPATH="$PYTHONPATH:/tmp/cephtest/binary/usr/local/lib/python2.7/dist-packages:/tmp/cephtest/binary/usr/local/lib/python2.6/dist-packages"'),
+                    run.Raw('PYTHONPATH="$PYTHONPATH:{tdir}/binary/usr/local/lib/python2.7/dist-packages:{tdir}/binary/usr/local/lib/python2.6/dist-packages"'.format(tdir=testdir)),
                     ]
                 if env is not None:
                     for var, val in env.iteritems():
@@ -286,9 +289,9 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None):
                         env_arg = '{var}={val}'.format(var=var, val=quoted_val)
                         args.append(run.Raw(env_arg))
                 args.extend([
-                        '/tmp/cephtest/enable-coredump',
-                        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                        '/tmp/cephtest/archive/coverage',
+                        '{tdir}/enable-coredump'.format(tdir=testdir),
+                        '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                        '{tdir}/archive/coverage'.format(tdir=testdir),
                         '{srcdir}/{workunit}'.format(
                             srcdir=srcdir,
                             workunit=workunit,
@@ -307,6 +310,6 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None):
         remote.run(
             logger=log.getChild(role),
             args=[
-                'rm', '-rf', '--', '/tmp/cephtest/workunits.list', srcdir,
+                'rm', '-rf', '--', '{tdir}/workunits.list'.format(tdir=testdir), srcdir,
                 ],
             )

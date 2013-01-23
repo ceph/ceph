@@ -99,15 +99,17 @@ class RecoveryBencher:
         osd = str(random.choice(self.osds))
         (osd_remote,) = self.ceph_manager.ctx.cluster.only('osd.%s' % osd).remotes.iterkeys()
 
+        testdir = teuthology.get_testdir(self.ceph_manager.ctx)
+
         # create the objects
         osd_remote.run(
             args=[
-                'env', 'CEPH_CONF=/tmp/cephtest/ceph.conf',
-                'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-                '/tmp/cephtest/enable-coredump',
-                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                '/tmp/cephtest/archive/coverage',
-                '/tmp/cephtest/binary/usr/local/bin/smalliobench',
+                'env', 'CEPH_CONF={tdir}/ceph.conf'.format(tdir=testdir),
+                'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                '{tdir}/archive/coverage'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/smalliobench'.format(tdir=testdir),
                 '--use-prefix', 'recovery_bench',
                 '--init-only', '1',
                 '--num-objects', str(num_objects),
@@ -120,12 +122,12 @@ class RecoveryBencher:
         log.info('non-recovery (baseline)')
         p = osd_remote.run(
             args=[
-                'env', 'CEPH_CONF=/tmp/cephtest/ceph.conf',
-                'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-                '/tmp/cephtest/enable-coredump',
-                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                '/tmp/cephtest/archive/coverage',
-                '/tmp/cephtest/binary/usr/local/bin/smalliobench',
+                'env', 'CEPH_CONF={tdir}/ceph.conf'.format(tdir=testdir),
+                'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                '{tdir}/archive/coverage'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/smalliobench'.format(tdir=testdir),
                 '--use-prefix', 'recovery_bench',
                 '--do-not-init', '1',
                 '--duration', str(duration),
@@ -144,12 +146,12 @@ class RecoveryBencher:
         log.info('recovery active')
         p = osd_remote.run(
             args=[
-                'env', 'CEPH_CONF=/tmp/cephtest/ceph.conf',
-                'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-                '/tmp/cephtest/enable-coredump',
-                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                '/tmp/cephtest/archive/coverage',
-                '/tmp/cephtest/binary/usr/local/bin/smalliobench',
+                'env', 'CEPH_CONF={tdir}/ceph.conf'.format(tdir=testdir),
+                'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                '{tdir}/archive/coverage'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/smalliobench'.format(tdir=testdir),
                 '--use-prefix', 'recovery_bench',
                 '--do-not-init', '1',
                 '--duration', str(duration),

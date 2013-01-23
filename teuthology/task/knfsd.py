@@ -63,7 +63,7 @@ def task(ctx, config):
     clients = list(teuthology.get_clients(ctx=ctx, roles=config.keys()))
 
     for id_, remote in clients:
-        mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+        mnt = os.path.join(teuthology.get_testdir(ctx), 'mnt.{id}'.format(id=id_))
         client_config = config.get("client.%s" % id_)
         if client_config is None:
             client_config = {}
@@ -127,7 +127,7 @@ def task(ctx, config):
         log.info('Unexporting nfs server...')
         for id_, remote in clients:
             log.debug('Unexporting client client.{id}...'.format(id=id_))
-            mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+            mnt = os.path.join(teuthology.get_testdir(ctx), 'mnt.{id}'.format(id=id_))
             remote.run(
                 args=[
                     'sudo',

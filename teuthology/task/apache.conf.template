@@ -5,14 +5,14 @@ LoadModule fastcgi_module /usr/lib/apache2/modules/mod_fastcgi.so
 Listen 7280
 ServerName rgwtest.example.com
 
-ServerRoot /tmp/cephtest/apache
-ErrorLog /tmp/cephtest/archive/apache/error.log
+ServerRoot {testdir}/apache
+ErrorLog {testdir}/archive/apache/error.log
 LogFormat "%h l %u %t \"%r\" %>s %b \"{Referer}i\" \"%{User-agent}i\"" combined
-CustomLog /tmp/cephtest/archive/apache/access.log combined
-PidFile /tmp/cephtest/apache/tmp/apache.pid
-DocumentRoot /tmp/cephtest/apache/htdocs
-FastCgiIPCDir /tmp/cephtest/apache/tmp/fastcgi_sock
-FastCgiExternalServer /tmp/cephtest/apache/htdocs/rgw.fcgi -socket rgw_sock
+CustomLog {testdir}/archive/apache/access.log combined
+PidFile {testdir}/apache/tmp/apache.pid
+DocumentRoot {testdir}/apache/htdocs
+FastCgiIPCDir {testdir}/apache/tmp/fastcgi_sock
+FastCgiExternalServer {testdir}/apache/htdocs/rgw.fcgi -socket rgw_sock
 RewriteEngine On
 
 RewriteRule ^/([a-zA-Z0-9-_.]*)([/]?.*) /rgw.fcgi?page=$1&params=$2&%{QUERY_STRING} [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
@@ -23,7 +23,7 @@ SetEnv RGW_LOG_LEVEL 20
 SetEnv RGW_PRINT_CONTINUE yes
 SetEnv RGW_SHOULD_LOG yes
 
-<Directory /tmp/cephtest/apache/htdocs>
+<Directory {testdir}/apache/htdocs>
   Options +ExecCGI
   AllowOverride All
   SetHandler fastcgi-script

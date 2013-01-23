@@ -2,6 +2,7 @@ import contextlib
 import logging
 
 from ..orchestra import run
+from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         "please list clients to run on"
     omapbench = {}
+    testdir = teuthology.get_testdir(ctx)
     print(str(config.get('increment',-1)))
     for role in config.get('clients', ['client.0']):
         assert isinstance(role, basestring)
@@ -51,13 +53,13 @@ def task(ctx, config):
         proc = remote.run(
             args=[
                 "/bin/sh", "-c",
-                " ".join(['CEPH_CONF=/tmp/cephtest/ceph.conf',
-                          'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-                          '/tmp/cephtest/enable-coredump',
-                          '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                          '/tmp/cephtest/archive/coverage',
-                          '/tmp/cephtest/binary/usr/local/bin/omapbench',
-                          '-k', '/tmp/cephtest/data/{role}.keyring'.format(role=role),
+                " ".join(['CEPH_CONF={tdir}/ceph.conf',
+                          'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib',
+                          '{tdir}/enable-coredump',
+                          '{tdir}/binary/usr/local/bin/ceph-coverage',
+                          '{tdir}/archive/coverage',
+                          '{tdir}/binary/usr/local/bin/omapbench',
+                          '-k', '{tdir}/data/{role}.keyring'.format(role=role),
                           '--name', role[len(PREFIX):],
                           '-t', str(config.get('threads', 30)),
                           '-o', str(config.get('objects', 1000)),
@@ -66,7 +68,7 @@ def task(ctx, config):
                           '--valsize', str(config.get('valsize',1000)),
                           '--inc', str(config.get('increment',10)),
                           '--omaptype', str(config.get('omaptype','uniform'))
-                          ]),
+                          ]).format(tdir=testdir),
                 ],
             logger=log.getChild('omapbench.{id}'.format(id=id_)),
             stdin=run.PIPE,

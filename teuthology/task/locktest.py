@@ -1,6 +1,7 @@
 import logging
 
 from ..orchestra import run
+from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
@@ -29,8 +30,9 @@ def task(ctx, config):
     (client,) = ctx.cluster.only(config[1]).remotes
     ( _, _, host_id) = config[0].partition('.')
     ( _, _, client_id) = config[1].partition('.')
-    hostmnt = '/tmp/cephtest/mnt.{id}'.format(id=host_id)
-    clientmnt = '/tmp/cephtest/mnt.{id}'.format(id=client_id)
+    testdir = teuthology.get_testdir(ctx)
+    hostmnt = '{tdir}/mnt.{id}'.format(tdir=testdir, id=host_id)
+    clientmnt = '{tdir}/mnt.{id}'.format(tdir=testdir, id=client_id)
 
     try:
         for client_name in config:
@@ -39,17 +41,17 @@ def task(ctx, config):
                 args=[
                     # explicitly does not support multiple autotest tasks
                     # in a single run; the result archival would conflict
-                    'mkdir', '/tmp/cephtest/archive/locktest',
+                    'mkdir', '{tdir}/archive/locktest'.format(tdir=testdir),
                     run.Raw('&&'),
-                    'mkdir', '/tmp/cephtest/locktest',
+                    'mkdir', '{tdir}/locktest'.format(tdir=testdir),
                     run.Raw('&&'),
                     'wget',
                     '-nv',
                     'https://raw.github.com/gregsfortytwo/xfstests-ceph/master/src/locktest.c',
-                    '-O', '/tmp/cephtest/locktest/locktest.c',
+                    '-O', '{tdir}/locktest/locktest.c'.format(tdir=testdir),
                     run.Raw('&&'),
-                    'g++', '/tmp/cephtest/locktest/locktest.c',
-                    '-o', '/tmp/cephtest/locktest/locktest'
+                    'g++', '{tdir}/locktest/locktest.c'.format(tdir=testdir),
+                    '-o', '{tdir}/locktest/locktest'.format(tdir=testdir)
                     ],
                 logger=log.getChild('locktest_client.{id}'.format(id=client_name)),
                 )
@@ -67,7 +69,7 @@ def task(ctx, config):
         log.info('starting on host')
         hostproc = host.run(
             args=[
-                '/tmp/cephtest/locktest/locktest',
+                '{tdir}/locktest/locktest'.format(tdir=testdir),
                 '-p', '6788',
                 '-d',
                 '{mnt}/locktestfile'.format(mnt=hostmnt),
@@ -79,7 +81,7 @@ def task(ctx, config):
         (_,_,hostaddr) = host.name.partition('@')
         clientproc = client.run(
             args=[
-                '/tmp/cephtest/locktest/locktest',
+                '{tdir}/locktest/locktest'.format(tdir=testdir),
                 '-p', '6788',
                 '-d',
                 '-h', hostaddr,
@@ -100,26 +102,26 @@ def task(ctx, config):
         log.info('cleaning up host dir')
         host.run(
             args=[
-                'mkdir', '-p', '/tmp/cephtest/locktest',
+                'mkdir', '-p', '{tdir}/locktest'.format(tdir=testdir),
                 run.Raw('&&'),
-                'rm', '-f', '/tmp/cephtest/locktest/locktest.c',
+                'rm', '-f', '{tdir}/locktest/locktest.c'.format(tdir=testdir),
                 run.Raw('&&'),
-                'rm', '-f', '/tmp/cephtest/locktest/locktest',
+                'rm', '-f', '{tdir}/locktest/locktest'.format(tdir=testdir),
                 run.Raw('&&'),
-                'rmdir', '/tmp/cephtest/locktest'
+                'rmdir', '{tdir}/locktest'
                 ],
             logger=log.getChild('.{id}'.format(id=config[0])),
             )
         log.info('cleaning up client dir')
         client.run(
             args=[
-                'mkdir', '-p', '/tmp/cephtest/locktest',
+                'mkdir', '-p', '{tdir}/locktest'.format(tdir=testdir),
                 run.Raw('&&'),
-                'rm', '-f', '/tmp/cephtest/locktest/locktest.c',
+                'rm', '-f', '{tdir}/locktest/locktest.c'.format(tdir=testdir),
                 run.Raw('&&'),
-                'rm', '-f', '/tmp/cephtest/locktest/locktest',
+                'rm', '-f', '{tdir}/locktest/locktest'.format(tdir=testdir),
                 run.Raw('&&'),
-                'rmdir', '/tmp/cephtest/locktest'
+                'rmdir', '{tdir}/locktest'.format(tdir=testdir)
                 ],
             logger=log.getChild('.{id}'.format(\
                     id=config[1])),

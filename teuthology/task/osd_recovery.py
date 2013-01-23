@@ -7,15 +7,15 @@ from teuthology import misc as teuthology
 log = logging.getLogger(__name__)
 
 
-def rados_start(remote, cmd):
+def rados_start(testdir, remote, cmd):
     log.info("rados %s" % ' '.join(cmd))
     pre = [
-        'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-        '/tmp/cephtest/enable-coredump',
-        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-        '/tmp/cephtest/archive/coverage',
-        '/tmp/cephtest/binary/usr/local/bin/rados',
-        '-c', '/tmp/cephtest/ceph.conf',
+        'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+        '{tdir}/enable-coredump'.format(tdir=testdir),
+        '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+        '{tdir}/archive/coverage'.format(tdir=testdir),
+        '{tdir}/binary/usr/local/bin/rados'.format(tdir=testdir),
+        '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
         ];
     pre.extend(cmd)
     proc = remote.run(
@@ -32,6 +32,7 @@ def task(ctx, config):
         config = {}
     assert isinstance(config, dict), \
         'task only accepts a dict for configuration'
+    testdir = teuthology.get_testdir(ctx)
     first_mon = teuthology.get_first_mon(ctx, config)
     (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
     
@@ -63,7 +64,7 @@ def task(ctx, config):
     manager.raw_cluster_cmd('osd', 'unset', 'nodown')
 
     # write some new data
-    p = rados_start(mon, ['-p', 'rbd', 'bench', '60', 'write', '-b', '4096',
+    p = rados_start(testdir, mon, ['-p', 'rbd', 'bench', '60', 'write', '-b', '4096',
                           '--no-cleanup'])
 
     time.sleep(15)
@@ -86,7 +87,7 @@ def task(ctx, config):
     manager.wait_for_active_or_down()
 
     # write some more (make sure osd.2 really is divergent)
-    p = rados_start(mon, ['-p', 'rbd', 'bench', '15', 'write', '-b', '4096'])
+    p = rados_start(testdir, mon, ['-p', 'rbd', 'bench', '15', 'write', '-b', '4096'])
     p.exitstatus.get();
 
     # revive divergent osd
@@ -108,6 +109,7 @@ def test_incomplete_pgs(ctx, config):
     """
     Test handling of incomplete pgs.  Requires 4 osds.
     """
+    testdir = teuthology.get_testdir(ctx)
     if config is None:
         config = {}
     assert isinstance(config, dict), \
@@ -156,7 +158,7 @@ def test_incomplete_pgs(ctx, config):
 
     # few objects in metadata pool (with pg log, normal recovery)
     for f in range(1, 20):
-        p = rados_start(mon, ['-p', 'metadata', 'put',
+        p = rados_start(testdir, mon, ['-p', 'metadata', 'put',
                               'foo.%d' % f, '/etc/passwd'])
         p.exitstatus.get()
 

@@ -1,7 +1,8 @@
 #!/bin/sh
 set -e
 
+testdir=$(realpath $(dirname $0))
 # valgrind only dumps to cwd, so cwd there...
-cd /tmp/cephtest/archive/coredump
+cd ${testdir}/archive/coredump
 
 exec "$@"

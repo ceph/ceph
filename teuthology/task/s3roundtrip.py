@@ -19,13 +19,14 @@ log = logging.getLogger(__name__)
 def download(ctx, config):
     assert isinstance(config, list)
     log.info('Downloading s3-tests...')
+    testdir = teuthology.get_testdir(ctx)
     for client in config:
         ctx.cluster.only(client).run(
             args=[
                 'git', 'clone',
 #                'https://github.com/ceph/s3-tests.git',
                 'git://ceph.com/git/s3-tests.git',
-                '/tmp/cephtest/s3-tests',
+                '{tdir}/s3-tests'.format(tdir=testdir),
                 ],
             )
     try:
@@ -37,7 +38,7 @@ def download(ctx, config):
                 args=[
                     'rm',
                     '-rf',
-                    '/tmp/cephtest/s3-tests',
+                    '{tdir}/s3-tests'.format(tdir=testdir),
                     ],
                 )
 
@@ -52,6 +53,7 @@ def _config_user(s3tests_conf, section, user):
 def create_users(ctx, config):
     assert isinstance(config, dict)
     log.info('Creating rgw users...')
+    testdir = teuthology.get_testdir(ctx)
     for client in config['clients']:
         s3tests_conf = config['s3tests_conf'][client]
         s3tests_conf.setdefault('roundtrip', {})
@@ -68,12 +70,12 @@ def create_users(ctx, config):
             _config_user(s3tests_conf, section, '{user}.{client}'.format(user=user, client=client))
             ctx.cluster.only(client).run(
                 args=[
-                    'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-                    '/tmp/cephtest/enable-coredump',
-                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                    '/tmp/cephtest/archive/coverage',
-                    '/tmp/cephtest/binary/usr/local/bin/radosgw-admin',
-                    '-c', '/tmp/cephtest/ceph.conf',
+                    'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+                    '{tdir}/enable-coredump'.format(tdir=testdir),
+                    '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                    '{tdir}/archive/coverage'.format(tdir=testdir),
+                    '{tdir}/binary/usr/local/bin/radosgw-admin'.format(tdir=testdir),
+                    '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
                     'user', 'create',
                     '--uid', s3tests_conf[section]['user_id'],
                     '--display-name', s3tests_conf[section]['display_name'],
@@ -89,6 +91,7 @@ def create_users(ctx, config):
 def configure(ctx, config):
     assert isinstance(config, dict)
     log.info('Configuring s3-roundtrip-tests...')
+    testdir = teuthology.get_testdir(ctx)
     for client, properties in config['clients'].iteritems():
         s3tests_conf = config['s3tests_conf'][client]
         if properties is not None and 'rgw_server' in properties:
@@ -111,7 +114,7 @@ def configure(ctx, config):
         remote.run(
             args=[
                 'cd',
-                '/tmp/cephtest/s3-tests',
+                '{tdir}/s3-tests'.format(tdir=testdir),
                 run.Raw('&&'),
                 './bootstrap',
                 ],
@@ -124,7 +127,7 @@ def configure(ctx, config):
         yaml.safe_dump(conf, conf_fp, default_flow_style=False)
         teuthology.write_file(
             remote=remote,
-            path='/tmp/cephtest/archive/s3roundtrip.{client}.config.yaml'.format(client=client),
+            path='{tdir}/archive/s3roundtrip.{client}.config.yaml'.format(tdir=testdir, client=client),
             data=conf_fp.getvalue(),
             )
     yield
@@ -133,11 +136,12 @@ def configure(ctx, config):
 @contextlib.contextmanager
 def run_tests(ctx, config):
     assert isinstance(config, dict)
+    testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
         (remote,) = ctx.cluster.only(client).remotes.keys()
-        conf = teuthology.get_file(remote, '/tmp/cephtest/archive/s3roundtrip.{client}.config.yaml'.format(client=client))
+        conf = teuthology.get_file(remote, '{tdir}/archive/s3roundtrip.{client}.config.yaml'.format(tdir=testdir, client=client))
         args = [
-                '/tmp/cephtest/s3-tests/virtualenv/bin/s3tests-test-roundtrip',
+                '{tdir}/s3-tests/virtualenv/bin/s3tests-test-roundtrip'.format(tdir=testdir),
                 ]
         if client_config is not None and 'extra_args' in client_config:
             args.extend(client_config['extra_args'])

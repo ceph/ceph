@@ -7,15 +7,16 @@ from teuthology import misc as teuthology
 log = logging.getLogger(__name__)
 
 
-def rados(remote, cmd):
+def rados(ctx, remote, cmd):
+    testdir = teuthology.get_testdir(ctx)
     log.info("rados %s" % ' '.join(cmd))
     pre = [
-        'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-        '/tmp/cephtest/enable-coredump',
-        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-        '/tmp/cephtest/archive/coverage',
-        '/tmp/cephtest/binary/usr/local/bin/rados',
-        '-c', '/tmp/cephtest/ceph.conf',
+        'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+        '{tdir}/enable-coredump'.format(tdir=testdir),
+        '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+        '{tdir}/archive/coverage'.format(tdir=testdir),
+        '{tdir}/binary/usr/local/bin/rados'.format(tdir=testdir),
+        '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
         ];
     pre.extend(cmd)
     proc = remote.run(
@@ -58,7 +59,7 @@ def task(ctx, config):
     manager.mark_down_osd(2)
 
     # kludge to make sure they get a map
-    rados(mon, ['-p', 'data', 'get', 'dummy', '-'])
+    rados(ctx, mon, ['-p', 'data', 'get', 'dummy', '-'])
 
     manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
     manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')

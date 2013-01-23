@@ -43,14 +43,14 @@ def task(ctx, config):
         - ceph-fuse:
         - pexec:
             clients:
-              - ln -s /tmp/cephtest/mnt.* /tmp/cephtest/gmnt
+              - ln -s {testdir}/mnt.* {testdir}/gmnt
         - ssh_keys:
         - mpi:
             exec: fsx-mpi
-            workdir: /tmp/cephtest/gmnt
+            workdir: {testdir}/gmnt
         - pexec:
             clients:
-              - rm -f /tmp/cephtest/gmnt
+              - rm -f {testdir}/gmnt
 
     """
     assert isinstance(config, dict), 'task mpi got invalid config'
@@ -89,13 +89,17 @@ def task(ctx, config):
 
     log.info('mpi rank 0 is: {name}'.format(name=master_remote.name))
 
+    testdir = teuthology.get_testdir(ctx)
+
     # write out the mpi hosts file
     log.info('mpi nodes: [%s]' % (', '.join(hosts)))
-    teuthology.write_file(remote=master_remote, path='/tmp/cephtest/mpi-hosts', data='\n'.join(hosts))
+    teuthology.write_file(remote=master_remote,
+                          path='{tdir}/mpi-hosts'.format(tdir=testdir),
+                          data='\n'.join(hosts))
     log.info('mpiexec on {name}: {cmd}'.format(name=master_remote.name, cmd=mpiexec))
-    args=['mpiexec', '-f', '/tmp/cephtest/mpi-hosts']
+    args=['mpiexec', '-f', '{tdir}/mpi-hosts'.format(tdir=testdir)]
     args.extend(workdir)
     args.extend(mpiexec.split(' '))
     master_remote.run(args=args, )
     log.info('mpi task completed')
-    master_remote.run(args=['rm', '/tmp/cephtest/mpi-hosts'])
+    master_remote.run(args=['rm', '{tdir}/mpi-hosts'.format(tdir=testdir)])

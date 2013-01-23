@@ -28,7 +28,9 @@ def task(ctx, config):
     client = clients[0];
     (remote,) = ctx.cluster.only(client).remotes.iterkeys()
 
-    dir = '/tmp/cephtest/data/test.%s' % client
+    testdir = teuthology.get_testdir(ctx)
+
+    dir = '%s/data/test.%s' % (testdir, client)
 
     seed = str(int(random.uniform(1,100)))
 
@@ -53,7 +55,7 @@ def task(ctx, config):
             args=[
                 'cd', dir,
                 run.Raw('&&'),
-                run.Raw('PATH="/tmp/cephtest/binary/usr/local/bin:$PATH"'),
+                run.Raw('PATH="{tdir}/binary/usr/local/bin:$PATH"'.format(tdir=testdir)),
                 './run_seed_to_range.sh', seed, '50', '300',
                 ],
             wait=False,
@@ -63,7 +65,7 @@ def task(ctx, config):
         if result != 0:
             remote.run(
                 args=[
-                    'cp', '-a', dir, '/tmp/cephtest/archive/idempotent_failure',
+                    'cp', '-a', dir, '{tdir}/archive/idempotent_failure'.format(tdir=testdir),
                     ])
             raise Exception("./run_seed_to_range.sh errored out")
 

@@ -27,13 +27,14 @@ def successful_ops(out):
 
 def rgwadmin(ctx, client, cmd):
     log.info('radosgw-admin: %s' % cmd)
+    testdir = teuthology.get_testdir(ctx)
     pre = [
-        'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-        '/tmp/cephtest/enable-coredump',
-        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-        '/tmp/cephtest/archive/coverage',
-        '/tmp/cephtest/binary/usr/local/bin/radosgw-admin',
-        '-c', '/tmp/cephtest/ceph.conf',
+        'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+        '{tdir}/enable-coredump'.format(tdir=testdir),
+        '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+        '{tdir}/archive/coverage'.format(tdir=testdir),
+        '{tdir}/binary/usr/local/bin/radosgw-admin'.format(tdir=testdir),
+        '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
         '--log-to-stderr',
         '--format', 'json',
         ]

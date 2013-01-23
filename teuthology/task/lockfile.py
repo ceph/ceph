@@ -2,6 +2,7 @@ import logging
 import os
 
 from ..orchestra import run
+from teuthology import misc as teuthology
 import time
 import gevent
 
@@ -66,6 +67,7 @@ def task(ctx, config):
             if badconfig:
                 raise KeyError("bad config {op_}".format(op_=op))
         
+        testdir = teuthology.get_testdir(ctx)
         clients = set(clients)
         files = set(files)
         lock_procs = list()
@@ -73,22 +75,22 @@ def task(ctx, config):
             (client_remote,) = ctx.cluster.only(client).remotes.iterkeys()
             log.info("got a client remote")
             (_, _, client_id) = client.partition('.')
-            filepath = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=client_id), op["lockfile"])
+            filepath = os.path.join(testdir, 'mnt.{id}'.format(id=client_id), op["lockfile"])
             
             proc = client_remote.run(
                 args=[
-                    'mkdir', '-p', '/tmp/cephtest/archive/lockfile',
+                    'mkdir', '-p', '{tdir}/archive/lockfile'.format(tdir=testdir),
                     run.Raw('&&'),
-                    'mkdir', '-p', '/tmp/cephtest/lockfile',
+                    'mkdir', '-p', '{tdir}/lockfile'.format(tdir=testdir),
                     run.Raw('&&'),
                     'wget',
                     '-nv',
                     '--no-check-certificate',
                     'https://raw.github.com/gregsfortytwo/FileLocker/master/sclockandhold.cpp',
-                    '-O', '/tmp/cephtest/lockfile/sclockandhold.cpp',
+                    '-O', '{tdir}/lockfile/sclockandhold.cpp'.format(tdir=testdir),
                     run.Raw('&&'),
-                    'g++', '/tmp/cephtest/lockfile/sclockandhold.cpp',
-                    '-o', '/tmp/cephtest/lockfile/sclockandhold'
+                    'g++', '{tdir}/lockfile/sclockandhold.cpp'.format(tdir=testdir),
+                    '-o', '{tdir}/lockfile/sclockandhold'.format(tdir=testdir)
                     ],
                 logger=log.getChild('lockfile_client.{id}'.format(id=client_id)),
                 wait=False
@@ -107,7 +109,7 @@ def task(ctx, config):
         (_, _, client_id) = client.partition('.')
         file_procs = list()
         for lockfile in files:
-            filepath = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=client_id), lockfile)
+            filepath = os.path.join(testdir, 'mnt.{id}'.format(id=client_id), lockfile)
             proc = client_remote.run(
                 args=[
                     'sudo',
@@ -121,7 +123,7 @@ def task(ctx, config):
         run.wait(file_procs)
         file_procs = list()
         for lockfile in files:
-            filepath = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=client_id), lockfile)
+            filepath = os.path.join(testdir, 'mnt.{id}'.format(id=client_id), lockfile)
             proc = client_remote.run(
                 args=[
                     'sudo', 'chown', 'ubuntu.ubuntu', filepath
@@ -162,10 +164,10 @@ def task(ctx, config):
         for client in clients:
             (client_remote,)  = ctx.cluster.only(client).remotes.iterkeys()
             (_, _, client_id) = client.partition('.')
-            filepath = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=client_id), op["lockfile"])
+            filepath = os.path.join(testdir, 'mnt.{id}'.format(id=client_id), op["lockfile"])
             proc = client_remote.run(
                 args=[
-                    'rm', '-rf', '/tmp/cephtest/lockfile',
+                    'rm', '-rf', '{tdir}/lockfile'.format(tdir=testdir),
                     run.Raw(';'),
                     'sudo', 'rm', '-rf', filepath
                     ],
@@ -181,7 +183,8 @@ def lock_one(op, ctx):
     result = None
     (client_remote,)  = ctx.cluster.only(op['client']).remotes.iterkeys()
     (_, _, client_id) = op['client'].partition('.')
-    filepath = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=client_id), op["lockfile"])
+    testdir = teuthology.get_testdir(ctx)
+    filepath = os.path.join(testdir, 'mnt.{id}'.format(id=client_id), op["lockfile"])
 
     if "maxwait" in op:
         timeout = gevent.Timeout(seconds=float(op["maxwait"]))
@@ -189,12 +192,12 @@ def lock_one(op, ctx):
     try:
         proc = client_remote.run(
             args=[
-                '/tmp/cephtest/enable-coredump',
-                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                '/tmp/cephtest/archive/coverage',
-                '/tmp/cephtest/daemon-helper',
+                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                '{tdir}/archive/coverage'.format(tdir=testdir),
+                '{tdir}/daemon-helper'.format(tdir=testdir),
                 'kill',
-                '/tmp/cephtest/lockfile/sclockandhold',
+                '{tdir}/lockfile/sclockandhold'.format(tdir=testdir),
                 filepath,
                 '{holdtime}'.format(holdtime=op["holdtime"]),
                 '{offset}'.format(offset=op.get("offset", '0')),

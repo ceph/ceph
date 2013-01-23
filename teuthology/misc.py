@@ -17,6 +17,32 @@ from .orchestra import run
 
 log = logging.getLogger(__name__)
 
+import datetime
+stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+
+def get_testdir(ctx):
+    if 'test_path' in ctx.teuthology_config:
+        return ctx.teuthology_config['test_path']
+
+    basedir = ctx.teuthology_config.get('base_test_dir', '/tmp/cephtest')
+
+    if hasattr(ctx, 'name') and ctx.name:
+        log.debug('with name basedir: {b}'.format(b=basedir))
+        return '{basedir}/{rundir}'.format(
+                    basedir=basedir,
+                    rundir=ctx.name)
+    else:
+        log.debug('basedir: {b}'.format(b=basedir))
+        return '{basedir}/{user}-{stamp}'.format(
+                    basedir=basedir,
+                    user=get_user(),
+                    stamp=stamp)
+
+def get_testdir_base(ctx):
+    if 'test_path' in ctx.teuthology_config:
+        return ctx.teuthology_config['test_path']
+    return ctx.teuthology_config.get('base_test_dir', '/tmp/cephtest')
+
 def get_ceph_binary_url(package=None,
                         branch=None, tag=None, sha1=None, dist=None,
                         flavor=None, format=None, arch=None):
@@ -113,7 +139,7 @@ def generate_caps(type_):
         yield subsystem
         yield capability
 
-def skeleton_config(roles, ips):
+def skeleton_config(ctx, roles, ips):
     """
     Returns a ConfigObj that's prefilled with a skeleton config.
 
@@ -121,8 +147,10 @@ def skeleton_config(roles, ips):
 
     Use conf.write to write it out, override .filename first if you want.
     """
-    path = os.path.join(os.path.dirname(__file__), 'ceph.conf')
-    conf = configobj.ConfigObj(path, file_error=True)
+    path = os.path.join(os.path.dirname(__file__), 'ceph.conf.template')
+    t = open(path, 'r')
+    skconf = t.read().format(testdir=get_testdir(ctx))
+    conf = configobj.ConfigObj(StringIO(skconf), file_error=True)
     mons = get_mons(roles=roles, ips=ips)
     for role, addr in mons.iteritems():
         conf.setdefault(role, {})
@@ -175,7 +203,7 @@ def num_instances_of_type(cluster, type_):
     num = sum(sum(1 for role in hostroles if role.startswith(prefix)) for hostroles in roles)
     return num
 
-def create_simple_monmap(remote, conf):
+def create_simple_monmap(ctx, remote, conf):
     """
     Writes a simple monmap based on current ceph.conf into <tmpdir>/monmap.
 
@@ -196,11 +224,12 @@ def create_simple_monmap(remote, conf):
     assert addresses, "There are no monitors in config!"
     log.debug('Ceph mon addresses: %s', addresses)
 
+    testdir = get_testdir(ctx)
     args = [
-        '/tmp/cephtest/enable-coredump',
-        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-        '/tmp/cephtest/archive/coverage',
-        '/tmp/cephtest/binary/usr/local/bin/monmaptool',
+        '{tdir}/enable-coredump'.format(tdir=testdir),
+        '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+        '{tdir}/archive/coverage'.format(tdir=testdir),
+        '{tdir}/binary/usr/local/bin/monmaptool'.format(tdir=testdir),
         '--create',
         '--clobber',
         ]
@@ -208,7 +237,7 @@ def create_simple_monmap(remote, conf):
         args.extend(('--add', name, addr))
     args.extend([
             '--print',
-            '/tmp/cephtest/monmap',
+            '{tdir}/monmap'.format(tdir=testdir),
             ])
     remote.run(
         args=args,
@@ -379,16 +408,17 @@ def get_scratch_devices(remote):
             pass
     return retval
 
-def wait_until_healthy(remote):
+def wait_until_healthy(ctx, remote):
     """Wait until a Ceph cluster is healthy."""
+    testdir = get_testdir(ctx)
     while True:
         r = remote.run(
             args=[
-                '/tmp/cephtest/enable-coredump',
-                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                '/tmp/cephtest/archive/coverage',
-                '/tmp/cephtest/binary/usr/local/bin/ceph',
-                '-c', '/tmp/cephtest/ceph.conf',
+                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                '{tdir}/archive/coverage'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/ceph'.format(tdir=testdir),
+                '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
                 'health',
                 '--concise',
                 ],
@@ -401,17 +431,18 @@ def wait_until_healthy(remote):
             break
         time.sleep(1)
 
-def wait_until_osds_up(cluster, remote):
+def wait_until_osds_up(ctx, cluster, remote):
     """Wait until all Ceph OSDs are booted."""
     num_osds = num_instances_of_type(cluster, 'osd')
+    testdir = get_testdir(ctx)
     while True:
         r = remote.run(
             args=[
-                '/tmp/cephtest/enable-coredump',
-                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                '/tmp/cephtest/archive/coverage',
-                '/tmp/cephtest/binary/usr/local/bin/ceph',
-                '-c', '/tmp/cephtest/ceph.conf',
+                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                '{tdir}/archive/coverage'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/ceph'.format(tdir=testdir),
+                '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
                 '--concise',
                 'osd', 'dump', '--format=json'
                 ],
@@ -485,16 +516,17 @@ def reconnect(ctx, timeout):
         log.debug('waited {elapsed}'.format(elapsed=str(time.time() - starttime)))
         time.sleep(1)
 
-def write_secret_file(remote, role, filename):
+def write_secret_file(ctx, remote, role, filename):
+    testdir = get_testdir(ctx)
     remote.run(
         args=[
-            '/tmp/cephtest/enable-coredump',
-            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-            '/tmp/cephtest/archive/coverage',
-            '/tmp/cephtest/binary/usr/local/bin/ceph-authtool',
+            '{tdir}/enable-coredump'.format(tdir=testdir),
+            '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+            '{tdir}/archive/coverage'.format(tdir=testdir),
+            '{tdir}/binary/usr/local/bin/ceph-authtool'.format(tdir=testdir),
             '--name={role}'.format(role=role),
             '--print-key',
-            '/tmp/cephtest/data/{role}.keyring'.format(role=role),
+            '{tdir}/data/{role}.keyring'.format(tdir=testdir, role=role),
             run.Raw('>'),
             filename,
             ],
@@ -569,25 +601,25 @@ def deep_merge(a, b):
         return a
     return b
 
-def get_valgrind_args(name, v):
+def get_valgrind_args(testdir, name, v):
     if v is None:
         return []
     if not isinstance(v, list):
         v = [v]
-    val_path = '/tmp/cephtest/archive/log/valgrind'
+    val_path = '{tdir}/archive/log/valgrind'.format(tdir=testdir)
     if '--tool=memcheck' in v or '--tool=helgrind' in v:
         extra_args = [
-            '/tmp/cephtest/chdir-coredump',
+            '{tdir}/chdir-coredump'.format(tdir=testdir),
             'valgrind',
-            '--suppressions=/tmp/cephtest/valgrind.supp',
+            '--suppressions={tdir}/valgrind.supp'.format(tdir=testdir),
             '--xml=yes',
             '--xml-file={vdir}/{n}.log'.format(vdir=val_path, n=name)
             ]
     else:
         extra_args = [
-            '/tmp/cephtest/chdir-coredump',
+            '{tdir}/chdir-coredump'.format(tdir=testdir),
             'valgrind',
-            '--suppressions=/tmp/cephtest/valgrind.supp',
+            '--suppressions={tdir}/valgrind.supp'.format(tdir=testdir),
             '--log-file={vdir}/{n}.log'.format(vdir=val_path, n=name)
             ]
     extra_args.extend(v)

@@ -43,6 +43,7 @@ def create_image(ctx, config):
     else:
         images = [(role, None) for role in config]
 
+    testdir = teuthology.get_testdir(ctx)
     for role, properties in images:
         if properties is None:
             properties = {}
@@ -53,12 +54,12 @@ def create_image(ctx, config):
         log.info('Creating image {name} with size {size}'.format(name=name,
                                                                  size=size))
         args = [
-            'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-                '/tmp/cephtest/enable-coredump',
-                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                '/tmp/cephtest/archive/coverage',
-                '/tmp/cephtest/binary/usr/local/bin/rbd',
-                '-c', '/tmp/cephtest/ceph.conf',
+            'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                '{tdir}/archive/coverage'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/rbd'.format(tdir=testdir),
+                '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
                 '-p', 'rbd',
                 'create',
                 '--size', str(size),
@@ -80,12 +81,12 @@ def create_image(ctx, config):
             (remote,) = ctx.cluster.only(role).remotes.keys()
             remote.run(
                 args=[
-                    'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-                    '/tmp/cephtest/enable-coredump',
-                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                    '/tmp/cephtest/archive/coverage',
-                    '/tmp/cephtest/binary/usr/local/bin/rbd',
-                    '-c', '/tmp/cephtest/ceph.conf',
+                    'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+                    '{tdir}/enable-coredump'.format(tdir=testdir),
+                    '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                    '{tdir}/archive/coverage'.format(tdir=testdir),
+                    '{tdir}/binary/usr/local/bin/rbd'.format(tdir=testdir),
+                    '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
                     '-p', 'rbd',
                     'rm',
                     name,
@@ -158,6 +159,9 @@ def dev_create(ctx, config):
         role_images = [(role, None) for role in config]
 
     log.info('Creating rbd block devices...')
+
+    testdir = teuthology.get_testdir(ctx)
+
     for role, image in role_images:
         if image is None:
             image = default_image_name(role)
@@ -167,32 +171,32 @@ def dev_create(ctx, config):
         remote.run(
             args=[
                 'echo',
-                'KERNEL=="rbd[0-9]*", PROGRAM="/tmp/cephtest/binary/usr/local/bin/ceph-rbdnamer %n", SYMLINK+="rbd/%c{1}/%c{2}"',
+                'KERNEL=="rbd[0-9]*", PROGRAM="{tdir}/binary/usr/local/bin/ceph-rbdnamer %n", SYMLINK+="rbd/%c{1}/%c{2}"'.format(tdir=testdir),
                 run.Raw('>'),
-                '/tmp/cephtest/51-rbd.rules',
+                '{tdir}/51-rbd.rules'.format(tdir=testdir),
                 ],
             )
         remote.run(
             args=[
                 'sudo',
                 'mv',
-                '/tmp/cephtest/51-rbd.rules',
+                '{tdir}/51-rbd.rules'.format(tdir=testdir),
                 '/etc/udev/rules.d/',
                 ],
             )
 
-        secretfile = '/tmp/cephtest/data/{role}.secret'.format(role=role)
-        teuthology.write_secret_file(remote, role, secretfile)
+        secretfile = '{tdir}/data/{role}.secret'.format(tdir=testdir, role=role)
+        teuthology.write_secret_file(ctx, remote, role, secretfile)
 
         remote.run(
             args=[
                 'sudo',
-                'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-                '/tmp/cephtest/enable-coredump',
-                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                '/tmp/cephtest/archive/coverage',
-                '/tmp/cephtest/binary/usr/local/bin/rbd',
-                '-c', '/tmp/cephtest/ceph.conf',
+                'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                '{tdir}/archive/coverage'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/rbd'.format(tdir=testdir),
+                '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
                 '--user', role.rsplit('.')[-1],
                 '--secret', secretfile,
                 '-p', 'rbd',
@@ -216,12 +220,12 @@ def dev_create(ctx, config):
             remote.run(
                 args=[
                     'sudo',
-                    'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-                    '/tmp/cephtest/enable-coredump',
-                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                    '/tmp/cephtest/archive/coverage',
-                    '/tmp/cephtest/binary/usr/local/bin/rbd',
-                    '-c', '/tmp/cephtest/ceph.conf',
+                    'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+                    '{tdir}/enable-coredump'.format(tdir=testdir),
+                    '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                    '{tdir}/archive/coverage'.format(tdir=testdir),
+                    '{tdir}/binary/usr/local/bin/rbd'.format(tdir=testdir),
+                    '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
                     '-p', 'rbd',
                     'unmap',
                     '/dev/rbd/rbd/{imgname}'.format(imgname=image),
@@ -311,13 +315,15 @@ def mount(ctx, config):
         id_ = role[len(PREFIX):]
         return id_
 
-    mnt_template = '/tmp/cephtest/mnt.{id}'
+    testdir = teuthology.get_testdir(ctx)
+
+    mnt_template = '{tdir}/mnt.{id}'
     for role, image in role_images:
         if image is None:
             image = default_image_name(role)
         (remote,) = ctx.cluster.only(role).remotes.keys()
         id_ = strip_client_prefix(role)
-        mnt = mnt_template.format(id=id_)
+        mnt = mnt_template.format(tdir=testdir, id=id_)
         remote.run(
             args=[
                 'mkdir',
@@ -410,6 +416,7 @@ def run_xfstests(ctx, config):
     yield
 
 def run_xfstests_one_client(ctx, role, properties):
+    testdir = teuthology.get_testdir(ctx)
     try:
         count = properties.get('count')
         test_dev = properties.get('test_dev')
@@ -428,7 +435,7 @@ def run_xfstests_one_client(ctx, role, properties):
         (remote,) = ctx.cluster.only(role).remotes.keys()
 
         # Fetch the test script
-        test_root = '/tmp/cephtest'
+        test_root = teuthology.get_testdir(ctx)
         test_script = 'run_xfstests.sh'
         test_path = os.path.join(test_root, test_script)
 
@@ -453,10 +460,10 @@ def run_xfstests_one_client(ctx, role, properties):
         # readlink -f <path> in order to get their canonical
         # pathname (so it matches what the kernel remembers).
         args = [
-            'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-            '/tmp/cephtest/enable-coredump',
-            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-            '/tmp/cephtest/archive/coverage',
+            'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+            '{tdir}/enable-coredump'.format(tdir=testdir),
+            '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+            '{tdir}/archive/coverage'.format(tdir=testdir),
             '/usr/bin/sudo',
             '/bin/bash',
             test_path,

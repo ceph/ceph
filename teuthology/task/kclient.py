@@ -40,8 +40,10 @@ def task(ctx, config):
                   for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
     clients = list(teuthology.get_clients(ctx=ctx, roles=config))
 
+    testdir = teuthology.get_testdir(ctx)
+
     for id_, remote in clients:
-        mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+        mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
         log.info('Mounting kclient client.{id} at {remote} {mnt}...'.format(
                 id=id_, remote=remote, mnt=mnt))
 
@@ -51,8 +53,8 @@ def task(ctx, config):
         ips = [host for (host, port) in (remote_.ssh.get_transport().getpeername() for (remote_, roles) in remotes_and_roles)]
         mons = teuthology.get_mons(roles, ips).values()
 
-        secret = '/tmp/cephtest/data/client.{id}.secret'.format(id=id_)
-        teuthology.write_secret_file(remote, 'client.{id}'.format(id=id_), secret)
+        secret = '{tdir}/data/client.{id}.secret'.format(tdir=testdir, id=id_)
+        teuthology.write_secret_file(ctx, remote, 'client.{id}'.format(id=id_), secret)
 
         remote.run(
             args=[
@@ -65,10 +67,10 @@ def task(ctx, config):
         remote.run(
             args=[
                 'sudo',
-                '/tmp/cephtest/enable-coredump',
-                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                '/tmp/cephtest/archive/coverage',
-                '/tmp/cephtest/binary/usr/local/sbin/mount.ceph',
+                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                '{tdir}/archive/coverage'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/sbin/mount.ceph'.format(tdir=testdir),
                 '{mons}:/'.format(mons=','.join(mons)),
                 mnt,
                 '-v',
@@ -84,7 +86,7 @@ def task(ctx, config):
         log.info('Unmounting kernel clients...')
         for id_, remote in clients:
             log.debug('Unmounting client client.{id}...'.format(id=id_))
-            mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+            mnt = os.path.join(testdir,  'mnt.{id}'.format(id=id_))
             remote.run(
                 args=[
                     'sudo',

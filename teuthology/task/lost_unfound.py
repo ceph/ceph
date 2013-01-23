@@ -6,15 +6,16 @@ from teuthology import misc as teuthology
 log = logging.getLogger(__name__)
 
 
-def rados(remote, cmd):
+def rados(ctx, remote, cmd):
+    testdir = teuthology.get_testdir(ctx)
     log.info("rados %s" % ' '.join(cmd))
     pre = [
-        'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-        '/tmp/cephtest/enable-coredump',
-        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-        '/tmp/cephtest/archive/coverage',
-        '/tmp/cephtest/binary/usr/local/bin/rados',
-        '-c', '/tmp/cephtest/ceph.conf',
+        'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+        '{tdir}/enable-coredump'.format(tdir=testdir),
+        '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+        '{tdir}/archive/coverage'.format(tdir=testdir),
+        '{tdir}/binary/usr/local/bin/rados'.format(tdir=testdir),
+        '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
         ];
     pre.extend(cmd)
     proc = remote.run(
@@ -56,7 +57,7 @@ def task(ctx, config):
     manager.mark_out_osd(2)
 
     # kludge to make sure they get a map
-    rados(mon, ['-p', 'data', 'put', 'dummy', dummyfile])
+    rados(ctx, mon, ['-p', 'data', 'put', 'dummy', dummyfile])
 
     manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
     manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
@@ -64,9 +65,9 @@ def task(ctx, config):
 
     # create old objects
     for f in range(1, 10):
-        rados(mon, ['-p', 'data', 'put', 'existing_%d' % f, dummyfile])
-        rados(mon, ['-p', 'data', 'put', 'existed_%d' % f, dummyfile])
-        rados(mon, ['-p', 'data', 'rm', 'existed_%d' % f])
+        rados(ctx, mon, ['-p', 'data', 'put', 'existing_%d' % f, dummyfile])
+        rados(ctx, mon, ['-p', 'data', 'put', 'existed_%d' % f, dummyfile])
+        rados(ctx, mon, ['-p', 'data', 'rm', 'existed_%d' % f])
 
     # delay recovery, and make the pg log very long (to prevent backfill)
     manager.raw_cluster_cmd(
@@ -79,9 +80,9 @@ def task(ctx, config):
     manager.mark_down_osd(0)
     
     for f in range(1, 10):
-        rados(mon, ['-p', 'data', 'put', 'new_%d' % f, dummyfile])
-        rados(mon, ['-p', 'data', 'put', 'existed_%d' % f, dummyfile])
-        rados(mon, ['-p', 'data', 'put', 'existing_%d' % f, dummyfile])
+        rados(ctx, mon, ['-p', 'data', 'put', 'new_%d' % f, dummyfile])
+        rados(ctx, mon, ['-p', 'data', 'put', 'existed_%d' % f, dummyfile])
+        rados(ctx, mon, ['-p', 'data', 'put', 'existing_%d' % f, dummyfile])
 
     # bring osd.0 back up, let it peer, but don't replicate the new
     # objects...
@@ -152,11 +153,11 @@ def task(ctx, config):
 
     # verify result
     for f in range(1, 10):
-        err = rados(mon, ['-p', 'data', 'get', 'new_%d' % f, '-'])
+        err = rados(ctx, mon, ['-p', 'data', 'get', 'new_%d' % f, '-'])
         assert err
-        err = rados(mon, ['-p', 'data', 'get', 'existed_%d' % f, '-'])
+        err = rados(ctx, mon, ['-p', 'data', 'get', 'existed_%d' % f, '-'])
         assert err
-        err = rados(mon, ['-p', 'data', 'get', 'existing_%d' % f, '-'])
+        err = rados(ctx, mon, ['-p', 'data', 'get', 'existing_%d' % f, '-'])
         assert not err
 
     # see if osd.1 can cope

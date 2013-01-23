@@ -7,15 +7,16 @@ from teuthology import misc as teuthology
 log = logging.getLogger(__name__)
 
 
-def rados_start(remote, cmd):
+def rados_start(ctx, remote, cmd):
     log.info("rados %s" % ' '.join(cmd))
+    testdir = teuthology.get_testdir(ctx)
     pre = [
-        'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-        '/tmp/cephtest/enable-coredump',
-        '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-        '/tmp/cephtest/archive/coverage',
-        '/tmp/cephtest/binary/usr/local/bin/rados',
-        '-c', '/tmp/cephtest/ceph.conf',
+        'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+        '{tdir}/enable-coredump'.format(tdir=testdir),
+        '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+        '{tdir}/archive/coverage'.format(tdir=testdir),
+        '{tdir}/binary/usr/local/bin/rados'.format(tdir=testdir),
+        '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
         ];
     pre.extend(cmd)
     proc = remote.run(
@@ -53,7 +54,7 @@ def task(ctx, config):
     manager.wait_for_clean()
 
     # write some data
-    p = rados_start(mon, ['-p', 'rbd', 'bench', '15', 'write', '-b', '4096',
+    p = rados_start(ctx, mon, ['-p', 'rbd', 'bench', '15', 'write', '-b', '4096',
                           '--no-cleanup'])
     err = p.exitstatus.get();
     log.info('err is %d' % err)
@@ -71,7 +72,7 @@ def task(ctx, config):
     manager.wait_for_recovery()
 
     # write some new data
-    p = rados_start(mon, ['-p', 'data', 'bench', '30', 'write', '-b', '4096',
+    p = rados_start(ctx, mon, ['-p', 'data', 'bench', '30', 'write', '-b', '4096',
                           '--no-cleanup'])
 
     time.sleep(15)
