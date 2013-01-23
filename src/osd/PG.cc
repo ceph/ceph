@@ -4964,7 +4964,7 @@ bool PG::can_discard_op(OpRequestRef op)
       dout(7) << " queueing replay at " << m->get_version()
 	      << " for " << *m << dendl;
       replay_queue[m->get_version()] = op;
-      op->mark_delayed();
+      op->mark_delayed("waiting for replay");
       return true;
     }
   }

@@ -153,7 +153,8 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
       utime_t age = now - (*i)->received_time;
       stringstream ss;
       ss << "slow request " << age << " seconds old, received at " << (*i)->received_time
-          << ": " << *((*i)->request) << " currently " << (*i)->state_string();
+	 << ": " << *((*i)->request) << " currently "
+	 << ((*i)->current.size() ? (*i)->current : (*i)->state_string());
       warning_vector.push_back(ss.str());
 
       // only those that have been shown will backoff

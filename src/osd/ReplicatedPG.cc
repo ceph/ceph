@@ -122,7 +122,7 @@ void ReplicatedPG::wait_for_missing_object(const hobject_t& soid, OpRequestRef o
     pull(soid, v, g_conf->osd_client_op_priority);
   }
   waiting_for_missing_object[soid].push_back(op);
-  op->mark_delayed();
+  op->mark_delayed("waiting for missing object");
 }
 
 void ReplicatedPG::wait_for_all_missing(OpRequestRef op)
@@ -178,7 +178,7 @@ void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
     recover_object_replicas(soid, v, g_conf->osd_client_op_priority);
   }
   waiting_for_degraded_object[soid].push_back(op);
-  op->mark_delayed();
+  op->mark_delayed("waiting for degraded object");
 }
 
 void ReplicatedPG::wait_for_backfill_pos(OpRequestRef op)
@@ -631,7 +631,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
   if (op->may_write() && scrubber.write_blocked_by_scrub(head)) {
     dout(20) << __func__ << ": waiting for scrub" << dendl;
     waiting_for_active.push_back(op);
-    op->mark_delayed();
+    op->mark_delayed("waiting for scrub");
     return;
   }
 
@@ -734,7 +734,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
   if (!ok) {
     dout(10) << "do_op waiting on mode " << mode << dendl;
     mode.waiting.push_back(op);
-    op->mark_delayed();
+    op->mark_delayed("waiting on pg mode");
     return;
   }
 
@@ -876,7 +876,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
 	}
 	dout(10) << " waiting for " << oldv << " to commit" << dendl;
 	waiting_for_ondisk[oldv].push_back(op);  // always queue ondisk waiters, so that we can requeue if needed
-	op->mark_delayed();
+	op->mark_delayed("waiting for ondisk");
       }
       return;
     }
@@ -1086,55 +1086,46 @@ void ReplicatedPG::do_sub_op(OpRequestRef op)
   assert(m->get_header().type == MSG_OSD_SUBOP);
   dout(15) << "do_sub_op " << *op->request << dendl;
 
+  OSDOp *first = NULL;
   if (m->ops.size() >= 1) {
-    OSDOp& first = m->ops[0];
-    switch (first.op.op) {
+    first = &m->ops[0];
+    switch (first->op.op) {
     case CEPH_OSD_OP_PULL:
       sub_op_pull(op);
-      return;
-    case CEPH_OSD_OP_PUSH:
-      if (!is_active())
-	waiting_for_active.push_back(op);
-      else
-	sub_op_push(op);
-      return;
-    case CEPH_OSD_OP_DELETE:
-      if (!is_active())
-	waiting_for_active.push_back(op);
-      else
-	sub_op_remove(op);
-      return;
-    case CEPH_OSD_OP_SCRUB_RESERVE:
-      if (!is_active())
-	waiting_for_active.push_back(op);
-      else
-	sub_op_scrub_reserve(op);
-      return;
-    case CEPH_OSD_OP_SCRUB_UNRESERVE:
-      if (!is_active())
-	waiting_for_active.push_back(op);
-      else
-	sub_op_scrub_unreserve(op);
-      return;
-    case CEPH_OSD_OP_SCRUB_STOP:
-      if (!is_active())
-	waiting_for_active.push_back(op);
-      else
-	sub_op_scrub_stop(op);
-      return;
-    case CEPH_OSD_OP_SCRUB_MAP:
-      if (!is_active())
-	waiting_for_active.push_back(op);
-      else
-	sub_op_scrub_map(op);
       return;
     }
   }
 
-  if (!is_active())
+  if (!is_active()) {
     waiting_for_active.push_back(op);
-  else
-    sub_op_modify(op);
+    op->mark_delayed("waiting for active");
+    return;
+  }
+
+  if (first) {
+    switch (first->op.op) {
+    case CEPH_OSD_OP_PUSH:
+      sub_op_push(op);
+      return;
+    case CEPH_OSD_OP_DELETE:
+      sub_op_remove(op);
+      return;
+    case CEPH_OSD_OP_SCRUB_RESERVE:
+      sub_op_scrub_reserve(op);
+      return;
+    case CEPH_OSD_OP_SCRUB_UNRESERVE:
+      sub_op_scrub_unreserve(op);
+      return;
+    case CEPH_OSD_OP_SCRUB_STOP:
+      sub_op_scrub_stop(op);
+      return;
+    case CEPH_OSD_OP_SCRUB_MAP:
+      sub_op_scrub_map(op);
+      return;
+    }
+  }
+
+  sub_op_modify(op);
 }
 
 void ReplicatedPG::do_sub_op_reply(OpRequestRef op)
@@ -3876,6 +3867,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	assert(entity_name_t::TYPE_OSD != m->get_connection()->peer_type);
 	osd->send_message_osd_client(reply, m->get_connection());
 	repop->sent_disk = true;
+	repop->ctx->op->mark_commit_sent();
       }
     }
 
@@ -3962,9 +3954,12 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
 
   int acks_wanted = CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK;
 
+  if (ctx->op && acting.size() > 1) {
+    ostringstream ss;
+    ss << "waiting for subops from " << vector<int>(acting.begin() + 1, acting.end());
+    ctx->op->mark_sub_op_sent(ss.str());
+  }
   for (unsigned i=1; i<acting.size(); i++) {
-    if (ctx->op)
-      ctx->op->mark_sub_op_sent();
     int peer = acting[i];
     pg_info_t &pinfo = peer_info[peer];
 
@@ -4698,6 +4693,8 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
     }
   }
   
+  op->mark_started();
+
   Context *oncommit = new C_OSD_RepModifyCommit(rm);
   Context *onapply = new C_OSD_RepModifyApply(rm);
   int r = osd->store->queue_transactions(osr.get(), rm->tls, onapply, oncommit, 0, op);
@@ -4753,7 +4750,7 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
 void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
 {
   lock();
-  rm->op->mark_event("sub_op_commit");
+  rm->op->mark_commit_sent();
   rm->committed = true;
 
   if (rm->epoch_started >= last_peering_reset) {
@@ -5192,6 +5189,7 @@ int ReplicatedPG::send_pull(int prio, int peer,
   subop->set_priority(prio);
   subop->ops = vector<OSDOp>(1);
   subop->ops[0].op.op = CEPH_OSD_OP_PULL;
+  subop->ops[0].op.extent.length = g_conf->osd_recovery_max_chunk;
   subop->recovery_info = recovery_info;
   subop->recovery_progress = progress;
 
@@ -5780,8 +5778,10 @@ void ReplicatedPG::_committed_pushed_object(OpRequestRef op, epoch_t same_since,
     dout(10) << "_committed_pushed_object pg has changed, not touching last_complete_ondisk" << dendl;
   }
 
-  if (op)
+  if (op) {
     log_subop_stats(op, l_osd_sop_push_inb, l_osd_sop_push_lat);
+    op->mark_event("committed");
+  }
 
   unlock();
 }

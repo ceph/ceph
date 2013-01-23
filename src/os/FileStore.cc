@@ -4629,6 +4629,10 @@ const char** FileStore::get_tracked_conf_keys() const
   static const char* KEYS[] = {
     "filestore_min_sync_interval",
     "filestore_max_sync_interval",
+    "filestore_queue_max_ops",
+    "filestore_queue_max_bytes",
+    "filestore_queue_committing_max_ops",
+    "filestore_queue_committing_max_bytes",
     "filestore_flusher",
     "filestore_flusher_max_fds",
     "filestore_sync_flush",
@@ -4646,6 +4650,10 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
 {
   if (changed.count("filestore_min_sync_interval") ||
       changed.count("filestore_max_sync_interval") ||
+      changed.count("filestore_queue_max_ops") ||
+      changed.count("filestore_queue_max_bytes") ||
+      changed.count("filestore_queue_committing_max_ops") ||
+      changed.count("filestore_queue_committing_max_bytes") ||
       changed.count("filestore_flusher_max_fds") ||
       changed.count("filestore_flush_min") ||
       changed.count("filestore_kill_at") ||
@@ -4653,6 +4661,10 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
     Mutex::Locker l(lock);
     m_filestore_min_sync_interval = conf->filestore_min_sync_interval;
     m_filestore_max_sync_interval = conf->filestore_max_sync_interval;
+    m_filestore_queue_max_ops = conf->filestore_queue_max_ops;
+    m_filestore_queue_max_bytes = conf->filestore_queue_max_bytes;
+    m_filestore_queue_committing_max_ops = conf->filestore_queue_committing_max_ops;
+    m_filestore_queue_committing_max_bytes = conf->filestore_queue_committing_max_bytes;
     m_filestore_flusher = conf->filestore_flusher;
     m_filestore_flusher_max_fds = conf->filestore_flusher_max_fds;
     m_filestore_flush_min = conf->filestore_flush_min;
