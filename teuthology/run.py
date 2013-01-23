@@ -61,6 +61,12 @@ def parse_args():
         default=False,
         help='block until locking machines succeeds (use with --lock)',
         )
+    parser.add_argument(
+        '--name',
+        action='store_true',
+        default=False,
+        help='name for this teuthology run',
+        )
 
     args = parser.parse_args()
     return args

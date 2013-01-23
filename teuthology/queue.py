@@ -117,6 +117,7 @@ def run_job(job_config, archive_path):
             '--block',
             '--owner', job_config['owner'],
             '--archive', archive_path,
+            '--name', job_config['name'],
             ])
     if job_config['description'] is not None:
         arg.extend(['--description', job_config['description']])
