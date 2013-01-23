@@ -2240,6 +2240,14 @@ void OSD::tick()
 
   logger->set(l_osd_buf, buffer::get_total_alloc());
 
+  if (is_waiting_for_healthy()) {
+    if (g_ceph_context->get_heartbeat_map()->is_healthy()) {
+      dout(1) << "healthy again, booting" << dendl;
+      state = STATE_BOOTING;
+      start_boot();
+    }
+  }
+
   if (is_active()) {
     // periodically kick recovery work queue
     recovery_tp.wake();
@@ -2540,6 +2548,13 @@ void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
 
   if (is_initializing()) {
     dout(10) << "still initializing" << dendl;
+    return;
+  }
+
+  // if we are not healthy, do not mark ourselves up (yet)
+  if (!g_ceph_context->get_heartbeat_map()->is_healthy()) {
+    dout(5) << "not healthy, deferring boot" << dendl;
+    state = STATE_WAITING_FOR_HEALTHY;
     return;
   }
 
