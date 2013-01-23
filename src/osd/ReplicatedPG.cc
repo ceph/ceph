@@ -5381,6 +5381,7 @@ void ReplicatedPG::handle_pull_response(OpRequestRef op)
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   Context *onreadable = 0;
   Context *onreadable_sync = 0;
+  Context *oncomplete = 0;
   submit_push_data(pi.recovery_info, first,
 		   data_included, data,
 		   m->omap_header,
@@ -5409,21 +5410,25 @@ void ReplicatedPG::handle_pull_response(OpRequestRef op)
 
     onreadable = new C_OSD_AppliedRecoveredObject(this, t, obc);
     onreadable_sync = new C_OSD_OndiskWriteUnlock(obc);
+    oncomplete = new C_OSD_CompletedPull(this, hoid, get_osdmap()->get_epoch());
   } else {
     onreadable = new ObjectStore::C_DeleteTransaction(t);
   }
 
   int r = osd->store->
-    queue_transaction(osr.get(), t,
-		      onreadable,
-		      new C_OSD_CommittedPushedObject(this, op,
-						      info.history.same_interval_since,
-						      info.last_complete),
-		      onreadable_sync);
+    queue_transaction(
+      osr.get(), t,
+      onreadable,
+      new C_OSD_CommittedPushedObject(this, op,
+				      info.history.same_interval_since,
+				      info.last_complete),
+      onreadable_sync,
+      oncomplete,
+      TrackedOpRef()
+      );
   assert(r == 0);
 
   if (complete) {
-    finish_recovery_op(hoid);
     pulling.erase(hoid);
     pull_from_peer[m->get_source().num()].erase(hoid);
     update_stats();

@@ -907,6 +907,23 @@ protected:
       osd->send_message_osd_cluster(reply, conn.get());
     }
   };
+  struct C_OSD_CompletedPull : public Context {
+    boost::intrusive_ptr<ReplicatedPG> pg;
+    hobject_t hoid;
+    epoch_t epoch;
+    C_OSD_CompletedPull(
+      ReplicatedPG *pg,
+      const hobject_t &hoid,
+      epoch_t epoch) : pg(pg), hoid(hoid), epoch(epoch) {}
+    void finish(int) {
+      pg->lock();
+      if (epoch >= pg->last_peering_reset) {
+	pg->finish_recovery_op(hoid);
+      }
+      pg->unlock();
+    }
+  };
+  friend class C_OSD_CompletedPull;
   struct C_OSD_AppliedRecoveredObjectReplica : public Context {
     boost::intrusive_ptr<ReplicatedPG> pg;
     ObjectStore::Transaction *t;
