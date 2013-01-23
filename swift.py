@@ -15,6 +15,7 @@ log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
 def download(ctx, config):
+    testdir = teuthology.get_testdir(ctx)
     assert isinstance(config, list)
     log.info('Downloading swift...')
     for client in config:
@@ -22,7 +23,7 @@ def download(ctx, config):
             args=[
                 'git', 'clone',
                 'git://ceph.com/git/swift.git',
-                '/tmp/cephtest/swift',
+                '{tdir}/swift'.format(tdir=testdir),
                 ],
             )
     try:
@@ -34,7 +35,7 @@ def download(ctx, config):
                 args=[
                     'rm',
                     '-rf',
-                    '/tmp/cephtest/swift',
+                    '{tdir}/swift'.format(tdir=testdir),
                     ],
                 )
 
@@ -49,18 +50,19 @@ def _config_user(testswift_conf, account, user, suffix):
 def create_users(ctx, config):
     assert isinstance(config, dict)
     log.info('Creating rgw users...')
+    testdir = teuthology.get_testdir(ctx)
     for client in config['clients']:
         testswift_conf = config['testswift_conf'][client]
         for user, suffix in [('foo', ''), ('bar', '2')]:
             _config_user(testswift_conf, '{user}.{client}'.format(user=user, client=client), user, suffix)
             ctx.cluster.only(client).run(
                 args=[
-                    'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-                    '/tmp/cephtest/enable-coredump',
-                    '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                    '/tmp/cephtest/archive/coverage',
-                    '/tmp/cephtest/binary/usr/local/bin/radosgw-admin',
-                    '-c', '/tmp/cephtest/ceph.conf',
+                    'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+                    '{tdir}/enable-coredump'.format(tdir=testdir),
+                    '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                    '{tdir}/archive/coverage'.format(tdir=testdir),
+                    '{tdir}/binary/usr/local/bin/radosgw-admin'.format(tdir=testdir),
+                    '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
                     'user', 'create',
                     '--subuser', '{account}:{user}'.format(account=testswift_conf['func_test']['account{s}'.format(s=suffix)],user=user),
                     '--display-name', testswift_conf['func_test']['display_name{s}'.format(s=suffix)],
@@ -76,6 +78,7 @@ def create_users(ctx, config):
 def configure(ctx, config):
     assert isinstance(config, dict)
     log.info('Configuring testswift...')
+    testdir = teuthology.get_testdir(ctx)
     for client, properties in config['clients'].iteritems():
         print 'client={c}'.format(c=client)
         print 'config={c}'.format(c=config)
@@ -97,7 +100,7 @@ def configure(ctx, config):
         remote.run(
             args=[
                 'cd',
-                '/tmp/cephtest/swift',
+                '{tdir}/swift'.format(tdir=testdir),
                 run.Raw('&&'),
                 './bootstrap',
                 ],
@@ -106,7 +109,7 @@ def configure(ctx, config):
         testswift_conf.write(conf_fp)
         teuthology.write_file(
             remote=remote,
-            path='/tmp/cephtest/archive/testswift.{client}.conf'.format(client=client),
+            path='{tdir}/archive/testswift.{client}.conf'.format(tdir=testdir, client=client),
             data=conf_fp.getvalue(),
             )
     yield
@@ -115,12 +118,13 @@ def configure(ctx, config):
 @contextlib.contextmanager
 def run_tests(ctx, config):
     assert isinstance(config, dict)
+    testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
         args = [
-                'SWIFT_TEST_CONFIG_FILE=/tmp/cephtest/archive/testswift.{client}.conf'.format(client=client),
-                '/tmp/cephtest/swift/virtualenv/bin/nosetests',
+                'SWIFT_TEST_CONFIG_FILE={tdir}/archive/testswift.{client}.conf'.format(tdir=testdir, client=client),
+                '{tdir}/swift/virtualenv/bin/nosetests'.format(tdir=testdir),
                 '-w',
-                '/tmp/cephtest/swift/test/functional',
+                '{tdir}/swift/test/functional'.format(tdir=testdir),
                 '-v',
                 '-a', '!fails_on_rgw',
                 ]
