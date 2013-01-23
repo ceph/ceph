@@ -123,6 +123,9 @@ private:
 
   map<int,double> osd_weight;
 
+  unsigned delete_pool_nonce;        // safety interlock for removing pools
+  utime_t delete_pool_nonce_timeout;
+
   void check_failures(utime_t now);
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
 
