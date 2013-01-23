@@ -12,8 +12,15 @@ AC_PREREQ(2.59)
 AC_INIT([ceph], [0.56], [ceph-devel@vger.kernel.org])
 
 # Create release string.  Used with VERSION for RPMs.
+RPM_RELEASE=0
 AC_SUBST(RPM_RELEASE)
-RPM_RELEASE=`if expr index $(git describe --always) '-' > /dev/null ; then git describe --always | cut -d- -f2- | tr '-' '.' ; else echo "0"; fi`
+if test -d ".git" ; then
+  AC_CHECK_PROG(GIT_CHECK, git, yes)
+  if test x"$GIT_CHECK" = x"yes"; then
+    RPM_RELEASE=`if expr index $(git describe --always) '-' > /dev/null ; then git describe --always | cut -d- -f2- | tr '-' '.' ; else echo "0"; fi`
+  fi
+fi
+AC_MSG_NOTICE([RPM_RELEASE='$RPM_RELEASE'])
 
 AC_CONFIG_MACRO_DIR([m4])
 
