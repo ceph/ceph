@@ -5556,7 +5556,7 @@ int ReplicatedPG::send_push(int prio, int peer,
     ObjectMap::ObjectMapIterator iter =
       osd->store->get_omap_iterator(coll,
 				    recovery_info.soid);
-    for (iter->upper_bound(progress.omap_recovered_to);
+    for (iter->lower_bound(progress.omap_recovered_to);
 	 iter->valid();
 	 iter->next()) {
       if (available < (iter->key().size() + iter->value().length()))
