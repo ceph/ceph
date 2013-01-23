@@ -895,6 +895,18 @@ protected:
       pg->put();
     }
   };
+  struct C_OSD_CompletedPushedObjectReplica : public Context {
+    OSDService *osd;
+    Message *reply;
+    ConnectionRef conn;
+    C_OSD_CompletedPushedObjectReplica (
+      OSDService *osd,
+      Message *reply,
+      ConnectionRef conn) : osd(osd), reply(reply), conn(conn) {}
+    void finish(int) {
+      osd->send_message_osd_cluster(reply, conn.get());
+    }
+  };
   struct C_OSD_AppliedRecoveredObjectReplica : public Context {
     boost::intrusive_ptr<ReplicatedPG> pg;
     ObjectStore::Transaction *t;
