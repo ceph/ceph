@@ -347,6 +347,44 @@ def pull_directory_tarball(remote, remotedir, localfile):
         )
     proc.exitstatus.get()
 
+# returns map of devices to device id links:
+# /dev/sdb: /dev/disk/by-id/wwn-0xf00bad
+def get_wwn_id_map(remote, devs):
+    stdout = None
+    try:
+        r = remote.run(
+            args=[
+                'ls',
+                '-l',
+                '/dev/disk/by-id/wwn-*',
+                ],
+            stdout=StringIO(),
+            )
+        stdout = r.stdout.getvalue()
+    except:
+        return None
+
+    devmap = {}
+
+    # lines will be:
+    # lrwxrwxrwx 1 root root  9 Jan 22 14:58 /dev/disk/by-id/wwn-0x50014ee002ddecaf -> ../../sdb
+    for line in stdout.splitlines():
+        comps = line.split(' ')
+        # comps[-1] should be:
+        # ../../sdb
+        rdev = comps[-1]
+        # translate to /dev/sdb
+        dev='/dev/{d}'.format(d=rdev.split('/')[-1])
+
+        # comps[-3] should be:
+        # /dev/disk/by-id/wwn-0x50014ee002ddecaf
+        iddev = comps[-3]
+
+        if dev in devs:
+            devmap[dev] = iddev
+
+    return devmap
+
 def get_scratch_devices(remote):
     """
     Read the scratch disk list from remote host
@@ -356,33 +394,13 @@ def get_scratch_devices(remote):
         file_data = get_file(remote, "/scratch_devs")
         devs = file_data.split()
     except:
-        devs = [
-            '/dev/sda',
-            '/dev/sdb',
-            '/dev/sdc',
-            '/dev/sdd',
-            '/dev/sde',
-            '/dev/sdf',
-            '/dev/sdg',
-            '/dev/sdh',
-            '/dev/sdi',
-            '/dev/sdj',
-            '/dev/sdk',
-            '/dev/sdl',
-            '/dev/sdm',
-            '/dev/sdn',
-            '/dev/sdo',
-            '/dev/sdp',
-            '/dev/vda',
-            '/dev/vdb',
-            '/dev/vdc',
-            '/dev/vdd',
-            '/dev/vde',
-            '/dev/vdf',
-            '/dev/vdg',
-            '/dev/vdh',
-            '/dev/vdi',
-            ]
+        r = remote.run(
+                args=['ls', run.Raw('/dev/[sv]d*')],
+                stdout=StringIO()
+                )
+        devs = r.stdout.getvalue().split('\n')
+
+    log.debug('devs={d}'.format(d=devs))
 
     retval = []
     for dev in devs:
@@ -395,7 +413,7 @@ def get_scratch_devices(remote):
                     run.Raw('&&'),
                     # readable
                     'sudo', 'dd', 'if=%s' % dev, 'of=/dev/null', 'count=1',
-                    run.Raw('&&'),                   
+                    run.Raw('&&'),
                     # not mounted
                     run.Raw('!'),
                     'mount',

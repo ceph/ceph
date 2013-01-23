@@ -332,26 +332,33 @@ def valgrind_post(ctx, config):
 
 def mount_osd_data(ctx, remote, osd):
     testdir = teuthology.get_testdir(ctx)
-    dev = ctx.disk_config.remote_to_roles_to_dev[remote][osd]
-    journal = ctx.disk_config.remote_to_roles_to_journals[remote][osd]
-    mount_options = ctx.disk_config.remote_to_roles_to_dev_mount_options[remote][osd]
-    fstype = ctx.disk_config.remote_to_roles_to_dev_fstype[remote][osd]
+    log.debug('Mounting data for osd.{o} on {r}'.format(o=osd, r=remote))
+    if remote in ctx.disk_config.remote_to_roles_to_dev and osd in ctx.disk_config.remote_to_roles_to_dev[remote]:
+        dev = ctx.disk_config.remote_to_roles_to_dev[remote][osd]
+        journal = ctx.disk_config.remote_to_roles_to_journals[remote][osd]
+        mount_options = ctx.disk_config.remote_to_roles_to_dev_mount_options[remote][osd]
+        fstype = ctx.disk_config.remote_to_roles_to_dev_fstype[remote][osd]
+        mnt = os.path.join('{tdir}/data'.format(tdir=testdir), 'osd.{id}.data'.format(id=osd))
 
-    remote.run(
+        log.info('Mounting osd.{o}: dev: {n}, mountpoint: {p}, type: {t}, options: {v}'.format(
+                 o=osd, n=remote.name, p=mnt, t=fstype, v=mount_options))
+
+        remote.run(
             args=[
                 'sudo',
                 'mount',
                 '-t', fstype,
                 '-o', ','.join(mount_options),
                 dev,
-                os.path.join('{tdir}/data'.format(tdir=testdir), 'osd.{id}.data'.format(id=osd)),
+                mnt,
             ]
             )
 
-    if journal == ('/mnt/osd.%s' % osd):
-        remote.run( args=[ 'sudo', 'mount', '-t', 'tmpfs', 'tmpfs', '/mnt' ] )
-        tmpfs = '/mnt/osd.%s' % osd
-        remote.run( args=[ 'truncate', '-s', '1500M', tmpfs ] )
+        if journal == ('/mnt/osd.%s' % osd):
+            tmpfs = '/mnt/osd.%s' % osd
+            log.info('Creating journal file on tmpfs at {t}'.format(t=tmpfs))
+            remote.run( args=[ 'sudo', 'mount', '-t', 'tmpfs', 'tmpfs', '/mnt' ] )
+            remote.run( args=[ 'truncate', '-s', '1500M', tmpfs ] )
 
 @contextlib.contextmanager
 def cluster(ctx, config):
@@ -379,18 +386,19 @@ def cluster(ctx, config):
         if config.get('fs'):
             log.info('fs option selected, checking for scratch devs')
             log.info('found devs: %s' % (str(devs),))
+            devs_id_map = teuthology.get_wwn_id_map(remote, devs)
+            iddevs = devs_id_map.items()
             roles_to_devs = assign_devs(
-                teuthology.roles_of_type(roles_for_host, 'osd'), devs
+                teuthology.roles_of_type(roles_for_host, 'osd'), iddevs
                 )
-            if len(roles_to_devs) < len(devs):
-                devs = devs[len(roles_to_devs):]
-            log.info('dev map: %s' % (str(roles_to_devs),))
+            if len(roles_to_devs) < len(iddevs):
+                iddevs = iddevs[len(roles_to_devs):]
             devs_to_clean[remote] = []
 
         if config.get('block_journal'):
             log.info('block journal enabled')
             roles_to_journals = assign_devs(
-                teuthology.roles_of_type(roles_for_host, 'osd'), devs
+                teuthology.roles_of_type(roles_for_host, 'osd'), iddevs
                 )
             log.info('journal map: %s', roles_to_journals)
 
@@ -404,6 +412,7 @@ def cluster(ctx, config):
                 remote.run( args=[ 'truncate', '-s', '1500M', tmpfs ] )
             log.info('journal map: %s', roles_to_journals)
 
+        log.info('dev map: %s' % (str(roles_to_devs),))
         remote_to_roles_to_devs[remote] = roles_to_devs
         remote_to_roles_to_journals[remote] = roles_to_journals
 
@@ -730,12 +739,12 @@ def cluster(ctx, config):
                         os.path.join('{tdir}/data'.format(tdir=testdir), 'osd.{id}.data'.format(id=id_)),
                         ]
                     )
-                if not remote in ctx.disk_config.remotes_to_roles_to_dev_mount_options:
-                    ctx.disk_config.remotes_to_roles_to_dev_mount_options[remote] = {}
-                ctx.disk_config.remotes_to_roles_to_dev_mount_options[remote][id_] = mount_options
-                if not remote in ctx.disk_config.remotes_to_roles_to_dev_fstype:
-                    ctx.disk_config.remotes_to_roles_to_dev_fstype[remote] = {}
-                ctx.disk_config.remotes_to_roles_to_dev_fstype[remote][id_] = fs
+                if not remote in ctx.disk_config.remote_to_roles_to_dev_mount_options:
+                    ctx.disk_config.remote_to_roles_to_dev_mount_options[remote] = {}
+                ctx.disk_config.remote_to_roles_to_dev_mount_options[remote][id_] = mount_options
+                if not remote in ctx.disk_config.remote_to_roles_to_dev_fstype:
+                    ctx.disk_config.remote_to_roles_to_dev_fstype[remote] = {}
+                ctx.disk_config.remote_to_roles_to_dev_fstype[remote][id_] = fs
                 remote.run(
                     args=[
                         'sudo', 'chown', '-R', 'ubuntu.ubuntu',
