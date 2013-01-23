@@ -424,6 +424,10 @@ public:
     footer.data_crc = data.crc32c(0);
   }
 
+  virtual int get_cost() const {
+    return data.length();
+  }
+
   // type
   int get_type() const { return header.type; }
   void set_type(int t) { header.type = t; }

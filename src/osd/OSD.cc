@@ -762,6 +762,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   whoami(id),
   dev_path(dev), journal_path(jdev),
   dispatch_running(false),
+  asok_hook(NULL),
   osd_compat(get_osd_compat_set()),
   state(STATE_INITIALIZING), boot_epoch(0), up_epoch(0), bind_epoch(0),
   op_tp(external_messenger->cct, "OSD::op_tp", g_conf->osd_op_threads, "osd_op_threads"),
@@ -777,8 +778,6 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   heartbeat_dispatcher(this),
   stat_lock("OSD::stat_lock"),
   finished_lock("OSD::finished_lock"),
-  admin_ops_hook(NULL),
-  historic_ops_hook(NULL),
   op_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
   peering_wq(this, g_conf->osd_op_thread_timeout, &op_tp, 200),
   map_lock("OSD::map_lock"),
@@ -842,33 +841,42 @@ int OSD::pre_init()
          << "currently in use. (Is ceph-osd already running?)" << dendl;
     return -EBUSY;
   }
+
+  g_conf->add_observer(this);
   return 0;
 }
 
-class HistoricOpsSocketHook : public AdminSocketHook {
+// asok
+
+class OSDSocketHook : public AdminSocketHook {
   OSD *osd;
 public:
-  HistoricOpsSocketHook(OSD *o) : osd(o) {}
+  OSDSocketHook(OSD *o) : osd(o) {}
   bool call(std::string command, std::string args, bufferlist& out) {
     stringstream ss;
-    osd->dump_historic_ops(ss);
+    bool r = osd->asok_command(command, args, ss);
     out.append(ss);
-    return true;
+    return r;
   }
 };
 
-
-class OpsFlightSocketHook : public AdminSocketHook {
-  OSD *osd;
-public:
-  OpsFlightSocketHook(OSD *o) : osd(o) {}
-  bool call(std::string command, std::string args, bufferlist& out) {
-    stringstream ss;
-    osd->dump_ops_in_flight(ss);
-    out.append(ss);
-    return true;
+bool OSD::asok_command(string command, string args, ostream& ss)
+{
+  if (command == "dump_ops_in_flight") {
+    op_tracker.dump_ops_in_flight(ss);
+  } else if (command == "dump_historic_ops") {
+    op_tracker.dump_historic_ops(ss);
+  } else if (command == "dump_op_pq_state") {
+    JSONFormatter f(true);
+    f.open_object_section("pq");
+    op_wq.dump(&f);
+    f.close_section();
+    f.flush(ss);
+  } else {
+    assert(0 == "broken asok registration");
   }
-};
+  return true;
+}
 
 class TestOpsSocketHook : public AdminSocketHook {
   OSDService *service;
@@ -979,14 +987,16 @@ int OSD::init()
   // tick
   timer.add_event_after(g_conf->osd_heartbeat_interval, new C_Tick(this));
 
-  admin_ops_hook = new OpsFlightSocketHook(this);
   AdminSocket *admin_socket = cct->get_admin_socket();
-  r = admin_socket->register_command("dump_ops_in_flight", admin_ops_hook,
-                                         "show the ops currently in flight");
+  asok_hook = new OSDSocketHook(this);
+  r = admin_socket->register_command("dump_ops_in_flight", asok_hook,
+				     "show the ops currently in flight");
   assert(r == 0);
-  historic_ops_hook = new HistoricOpsSocketHook(this);
-  r = admin_socket->register_command("dump_historic_ops", historic_ops_hook,
-                                         "show slowest recent ops");
+  r = admin_socket->register_command("dump_historic_ops", asok_hook,
+				     "show slowest recent ops");
+  assert(r == 0);
+  r = admin_socket->register_command("dump_op_pq_state", asok_hook,
+				     "dump op priority queue state");
   assert(r == 0);
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
   r = admin_socket->register_command("setomapval", test_ops_hook,
@@ -1121,6 +1131,8 @@ void OSD::suicide(int exitcode)
 
 int OSD::shutdown()
 {
+  g_conf->remove_observer(this);
+
   service.shutdown();
   g_ceph_context->_conf->set_val("debug_osd", "100");
   g_ceph_context->_conf->set_val("debug_journal", "100");
@@ -1152,10 +1164,10 @@ int OSD::shutdown()
 
   cct->get_admin_socket()->unregister_command("dump_ops_in_flight");
   cct->get_admin_socket()->unregister_command("dump_historic_ops");
-  delete admin_ops_hook;
-  delete historic_ops_hook;
-  admin_ops_hook = NULL;
-  historic_ops_hook = NULL;
+  cct->get_admin_socket()->unregister_command("dump_op_pq_state");
+  delete asok_hook;
+  asok_hook = NULL;
+
   cct->get_admin_socket()->unregister_command("setomapval");
   cct->get_admin_socket()->unregister_command("rmomapkey");
   cct->get_admin_socket()->unregister_command("setomapheader");
@@ -2322,11 +2334,6 @@ void OSD::check_ops_in_flight()
     }
   }
   return;
-}
-
-void OSD::dump_ops_in_flight(ostream& ss)
-{
-  op_tracker.dump_ops_in_flight(ss);
 }
 
 // Usage:
@@ -3828,7 +3835,7 @@ void OSD::wait_for_new_map(OpRequestRef op)
   }
   
   waiting_for_osdmap.push_back(op);
-  op->mark_delayed();
+  op->mark_delayed("wait for new map");
 }
 
 
@@ -6056,7 +6063,7 @@ void OSD::handle_op(OpRequestRef op)
     if (osdmap->get_pg_acting_role(pgid, whoami) >= 0) {
       dout(7) << "we are valid target for op, waiting" << dendl;
       waiting_for_pg[pgid].push_back(op);
-      op->mark_delayed();
+      op->mark_delayed("waiting for pg to exist locally");
       return;
     }
 
@@ -6188,14 +6195,18 @@ bool OSD::op_is_discardable(MOSDOp *op)
  */
 void OSD::enqueue_op(PG *pg, OpRequestRef op)
 {
-  dout(15) << "enqueue_op " << op << " " << *(op->request) << dendl;
+  utime_t latency = ceph_clock_now(g_ceph_context) - op->request->get_recv_stamp();
+  dout(15) << "enqueue_op " << op << " prio " << op->request->get_priority()
+	   << " cost " << op->request->get_cost()
+	   << " latency " << latency
+	   << " " << *(op->request) << dendl;
   op_wq.queue(make_pair(PGRef(pg), op));
 }
 
 void OSD::OpWQ::_enqueue(pair<PGRef, OpRequestRef> item)
 {
   unsigned priority = item.second->request->get_priority();
-  unsigned cost = item.second->request->get_data().length();
+  unsigned cost = item.second->request->get_cost();
   if (priority >= CEPH_MSG_PRIO_LOW)
     pqueue.enqueue_strict(
       item.second->request->get_source_inst(),
@@ -6217,7 +6228,7 @@ void OSD::OpWQ::_enqueue_front(pair<PGRef, OpRequestRef> item)
     }
   }
   unsigned priority = item.second->request->get_priority();
-  unsigned cost = item.second->request->get_data().length();
+  unsigned cost = item.second->request->get_cost();
   if (priority >= CEPH_MSG_PRIO_LOW)
     pqueue.enqueue_strict_front(
       item.second->request->get_source_inst(),
@@ -6273,7 +6284,11 @@ void OSDService::dequeue_pg(PG *pg, list<OpRequestRef> *dequeued)
  */
 void OSD::dequeue_op(PGRef pg, OpRequestRef op)
 {
-  dout(10) << "dequeue_op " << op << " " << *(op->request)
+  utime_t latency = ceph_clock_now(g_ceph_context) - op->request->get_recv_stamp();
+  dout(10) << "dequeue_op " << op << " prio " << op->request->get_priority()
+	   << " cost " << op->request->get_cost()
+	   << " latency " << latency
+	   << " " << *(op->request)
 	   << " pg " << *pg << dendl;
   if (pg->deleting)
     return;
@@ -6360,6 +6375,26 @@ void OSD::process_peering_events(const list<PG*> &pgs)
   dispatch_context(rctx, 0, curmap);
 
   service.send_pg_temp();
+}
+
+// --------------------------------
+
+const char** OSD::get_tracked_conf_keys() const
+{
+  static const char* KEYS[] = {
+    "osd_max_backfills",
+    NULL
+  };
+  return KEYS;
+}
+
+void OSD::handle_conf_change(const struct md_config_t *conf,
+			     const std::set <std::string> &changed)
+{
+  if (changed.count("osd_max_backfills")) {
+    service.local_reserver.set_max(g_conf->osd_max_backfills);
+    service.remote_reserver.set_max(g_conf->osd_max_backfills);
+  }
 }
 
 // --------------------------------

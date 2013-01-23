@@ -16,6 +16,7 @@
 #define PRIORITY_QUEUE_H
 
 #include "common/Mutex.h"
+#include "common/Formatter.h"
 
 #include <map>
 #include <utility>
@@ -45,6 +46,8 @@
 template <typename T, typename K>
 class PrioritizedQueue {
   int64_t total_priority;
+  int64_t max_tokens_per_subqueue;
+  int64_t min_cost;
 
   template <class F>
   static unsigned filter_list_pairs(
@@ -76,22 +79,39 @@ class PrioritizedQueue {
   struct SubQueue {
   private:
     map<K, list<pair<unsigned, T> > > q;
-    unsigned bucket;
+    unsigned tokens, max_tokens;
     int64_t size;
     typename map<K, list<pair<unsigned, T> > >::iterator cur;
   public:
     SubQueue(const SubQueue &other)
-      : q(other.q), bucket(other.bucket), size(other.size),
+      : q(other.q),
+	tokens(other.tokens),
+	max_tokens(other.max_tokens),
+	size(other.size),
 	cur(q.begin()) {}
-    SubQueue() : bucket(0), size(0), cur(q.begin()) {}
+    SubQueue()
+      : tokens(0),
+	max_tokens(0),
+	size(0) {}
+    void set_max_tokens(unsigned mt) {
+      max_tokens = mt;
+    }
+    unsigned get_max_tokens() const {
+      return max_tokens;
+    }
     unsigned num_tokens() const {
-      return bucket;
+      return tokens;
     }
-    void put_tokens(unsigned tokens) {
-      bucket += tokens;
+    void put_tokens(unsigned t) {
+      tokens += t;
+      if (tokens > max_tokens)
+	tokens = max_tokens;
     }
-    void take_tokens(unsigned tokens) {
-      bucket -= tokens;
+    void take_tokens(unsigned t) {
+      if (tokens > t)
+	tokens -= t;
+      else
+	tokens = 0;
     }
     void enqueue(K cl, unsigned cost, T item) {
       q[cl].push_back(make_pair(cost, item));
@@ -166,6 +186,13 @@ class PrioritizedQueue {
       }
       q.erase(i);
     }
+
+    void dump(Formatter *f) const {
+      f->dump_int("tokens", tokens);
+      f->dump_int("max_tokens", max_tokens);
+      f->dump_int("size", size);
+      f->dump_int("num_keys", q.size());
+    }
   };
   map<unsigned, SubQueue> high_queue;
   map<unsigned, SubQueue> queue;
@@ -175,7 +202,9 @@ class PrioritizedQueue {
     if (p != queue.end())
       return &p->second;
     total_priority += priority;
-    return &queue[priority];
+    SubQueue *sq = &queue[priority];
+    sq->set_max_tokens(max_tokens_per_subqueue);
+    return sq;
   }
 
   void remove_queue(unsigned priority) {
@@ -196,7 +225,11 @@ class PrioritizedQueue {
   }
 
 public:
-  PrioritizedQueue() : total_priority(0) {}
+  PrioritizedQueue(unsigned max_per, unsigned min_c)
+    : total_priority(0),
+      max_tokens_per_subqueue(max_per),
+      min_cost(min_c)
+  {}
 
   unsigned length() {
     unsigned total = 0;
@@ -276,10 +309,14 @@ public:
   }
 
   void enqueue(K cl, unsigned priority, unsigned cost, T item) {
+    if (cost < min_cost)
+      cost = min_cost;
     create_queue(priority)->enqueue(cl, cost, item);
   }
 
   void enqueue_front(K cl, unsigned priority, unsigned cost, T item) {
+    if (cost < min_cost)
+      cost = min_cost;
     create_queue(priority)->enqueue_front(cl, cost, item);
   }
 
@@ -300,6 +337,9 @@ public:
       return ret;
     }
 
+    // if there are multiple buckets/subqueues with sufficient tokens,
+    // we behave like a strict priority queue among all subqueues that
+    // are eligible to run.
     for (typename map<unsigned, SubQueue>::iterator i = queue.begin();
 	 i != queue.end();
 	 ++i) {
@@ -315,6 +355,9 @@ public:
 	return ret;
       }
     }
+
+    // if no subqueues have sufficient tokens, we behave like a strict
+    // priority queue.
     T ret = queue.rbegin()->second.front().second;
     unsigned cost = queue.rbegin()->second.front().first;
     queue.rbegin()->second.pop_front();
@@ -322,6 +365,32 @@ public:
       remove_queue(queue.rbegin()->first);
     distribute_tokens(cost);
     return ret;
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_int("total_priority", total_priority);
+    f->dump_int("max_tokens_per_subqueue", max_tokens_per_subqueue);
+    f->dump_int("min_cost", min_cost);
+    f->open_array_section("high_queues");
+    for (typename map<unsigned, SubQueue>::const_iterator p = high_queue.begin();
+	 p != high_queue.end();
+	 ++p) {
+      f->open_object_section("subqueue");
+      f->dump_int("priority", p->first);
+      p->second.dump(f);
+      f->close_section();
+    }
+    f->close_section();
+    f->open_array_section("queues");
+    for (typename map<unsigned, SubQueue>::const_iterator p = queue.begin();
+	 p != queue.end();
+	 ++p) {
+      f->open_object_section("subqueue");
+      f->dump_int("priority", p->first);
+      p->second.dump(f);
+      f->close_section();
+    }
+    f->close_section();
   }
 };
 
