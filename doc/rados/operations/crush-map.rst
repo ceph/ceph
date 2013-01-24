@@ -652,10 +652,14 @@ pool to be placed with an SSD as the primary and platters as the replicas.
 Add/Move an OSD
 ===============
 
-To add or move an OSD in the CRUSH map of a running cluster, execute the
-following::
+To add or move an OSD in the CRUSH map of a running cluster, execute the 
+``ceph osd crush set``. For Argonaut (v 0.48), execute the following::
 
-	ceph osd crush set {name} {weight} [{bucket-type}={bucket-name} ...]
+	ceph osd crush set {id} {name} {weight} pool={pool-name}  [{bucket-type}={bucket-name} ...]
+	
+For Bobtail (v 0.56), execute the following:: 
+
+	ceph osd crush set {id-or-name} {weight} pool={pool-name}  [{bucket-type}={bucket-name} ...]
 
 Where:
 
