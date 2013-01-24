@@ -4214,7 +4214,9 @@ void OSD::check_osdmap_features()
 }
 
 void OSD::advance_pg(
-  epoch_t osd_epoch, PG *pg, PG::RecoveryCtx *rctx,
+  epoch_t osd_epoch, PG *pg,
+  ThreadPool::TPHandle &handle,
+  PG::RecoveryCtx *rctx,
   set<boost::intrusive_ptr<PG> > *new_pgs)
 {
   assert(pg->is_locked());
@@ -4246,6 +4248,7 @@ void OSD::advance_pg(
     }
 
     lastmap = nextmap;
+    handle.reset_tp_timeout();
   }
   if (!is_booting())
     pg->handle_activate_map(rctx);
@@ -6353,7 +6356,10 @@ struct C_CompleteSplits : public Context {
   }
 };
 
-void OSD::process_peering_events(const list<PG*> &pgs)
+void OSD::process_peering_events(
+  const list<PG*> &pgs,
+  ThreadPool::TPHandle &handle
+  )
 {
   bool need_up_thru = false;
   epoch_t same_interval_since = 0;
@@ -6370,7 +6376,7 @@ void OSD::process_peering_events(const list<PG*> &pgs)
       pg->unlock();
       continue;
     }
-    advance_pg(curmap->get_epoch(), pg, &rctx, &split_pgs);
+    advance_pg(curmap->get_epoch(), pg, handle, &rctx, &split_pgs);
     if (!pg->peering_queue.empty()) {
       PG::CephPeeringEvtRef evt = pg->peering_queue.front();
       pg->peering_queue.pop_front();
@@ -6391,6 +6397,7 @@ void OSD::process_peering_events(const list<PG*> &pgs)
       dispatch_context_transaction(rctx, pg);
     }
     pg->unlock();
+    handle.reset_tp_timeout();
   }
   if (need_up_thru)
     queue_want_up_thru(same_interval_since);
