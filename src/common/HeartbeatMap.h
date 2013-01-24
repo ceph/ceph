@@ -19,6 +19,7 @@
 
 #include <string>
 #include <list>
+#include <time.h>
 
 #include "include/atomic.h"
 
@@ -73,6 +74,7 @@ class HeartbeatMap {
  private:
   CephContext *m_cct;
   RWLock m_rwlock;
+  time_t m_inject_unhealthy_until;
   std::list<heartbeat_handle_d*> m_workers;
 
   bool _check(heartbeat_handle_d *h, const char *who, time_t now);

@@ -1948,6 +1948,16 @@ void FileStore::op_queue_release_throttle(Op *o)
 
 void FileStore::_do_op(OpSequencer *osr)
 {
+  // inject a stall?
+  if (g_conf->filestore_inject_stall) {
+    int orig = g_conf->filestore_inject_stall;
+    dout(5) << "_do_op filestore_inject_stall " << orig << ", sleeping" << dendl;
+    for (int n = 0; n < g_conf->filestore_inject_stall; n++)
+      sleep(1);
+    g_conf->set_val("filestore_inject_stall", "0");
+    dout(5) << "_do_op done stalling" << dendl;
+  }
+
   osr->apply_lock.Lock();
   Op *o = osr->peek_queue();
   apply_manager.op_apply_start(o->op);
