@@ -546,8 +546,6 @@ public:
   bool flush_set(ObjectSet *oset, vector<ObjectExtent>& ex, Context *onfinish=0);
   void flush_all(Context *onfinish=0);
 
-  bool commit_set(ObjectSet *oset, Context *oncommit);
-
   void purge_set(ObjectSet *oset);
 
   loff_t release_set(ObjectSet *oset);  // returns # of bytes not released (ie non-clean)
@@ -600,6 +598,13 @@ public:
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags);
     Striper::file_to_extents(cct, oset->ino, layout, offset, len, wr->extents);
     return writex(wr, oset, wait_on_lock);
+  }
+
+  bool file_flush(ObjectSet *oset, ceph_file_layout *layout, const SnapContext& snapc,
+                  loff_t offset, uint64_t len, Context *onfinish) {
+    vector<ObjectExtent> extents;
+    Striper::file_to_extents(cct, oset->ino, layout, offset, len, extents);
+    return flush_set(oset, extents, onfinish);
   }
 };
 
