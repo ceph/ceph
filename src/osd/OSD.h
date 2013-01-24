@@ -494,6 +494,7 @@ public:
   static const int STATE_BOOTING = 2;
   static const int STATE_ACTIVE = 3;
   static const int STATE_STOPPING = 4;
+  static const int STATE_WAITING_FOR_HEALTHY = 5;
 
 private:
   int state;
@@ -506,6 +507,7 @@ public:
   bool is_booting() { return state == STATE_BOOTING; }
   bool is_active() { return state == STATE_ACTIVE; }
   bool is_stopping() { return state == STATE_STOPPING; }
+  bool is_waiting_for_healthy() { return state == STATE_WAITING_FOR_HEALTHY; }
 
 private:
 
