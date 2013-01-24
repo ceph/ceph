@@ -1776,6 +1776,16 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   else if (strcmp(nargs[0], "rmpool") == 0) {
     if (nargs.size() < 2)
       usage_exit();
+    if (nargs.size() < 4 ||
+	strcmp(nargs[1], nargs[2]) != 0 ||
+	strcmp(nargs[3], "--yes-i-really-really-mean-it") != 0) {
+      cerr << "WARNING:\n"
+	   << "  This will PERMANENTLY DESTROY an entire pool of object with no way back.\n"
+	   << "  To confirm, pass the pool to remove twice, followed by\n"
+	   << "  --yes-i-really-really-mean-it" << std::endl;
+      cout << nargs << std::endl;
+      return 1;
+    }
     ret = rados.pool_delete(nargs[1]);
     if (ret >= 0) {
       cout << "successfully deleted pool " << nargs[1] << std::endl;
