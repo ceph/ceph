@@ -274,6 +274,7 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None):
                     run.Raw('CEPH_REF={ref}'.format(ref=ceph_ref)),
                     run.Raw('PATH="$PATH:/tmp/cephtest/binary/usr/local/bin"'),
                     run.Raw('LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/tmp/cephtest/binary/usr/local/lib"'),
+                    run.Raw('CEPH_JAVA_PATH="/tmp/cephtest/binary/usr/local/share/java"'),
                     run.Raw('CEPH_CONF="/tmp/cephtest/ceph.conf"'),
                     run.Raw('CEPH_SECRET_FILE="{file}"'.format(file=secretfile)),
                     run.Raw('CEPH_ID="{id}"'.format(id=id_)),
