@@ -110,7 +110,18 @@ bool HeartbeatMap::is_healthy()
 {
   m_rwlock.get_read();
   time_t now = time(NULL);
+  if (m_cct->_conf->heartbeat_inject_failure) {
+    ldout(m_cct, 0) << "is_healthy injecting failure for next " << m_cct->_conf->heartbeat_inject_failure << " seconds" << dendl;
+    m_inject_unhealthy_until = now + m_cct->_conf->heartbeat_inject_failure;
+    m_cct->_conf->set_val("heartbeat_inject_failure", "0");
+  }
+
   bool healthy = true;
+  if (now < m_inject_unhealthy_until) {
+    ldout(m_cct, 0) << "is_healthy = false, injected failure for next " << (m_inject_unhealthy_until - now) << " seconds" << dendl;
+    healthy = false;
+  }
+
   for (list<heartbeat_handle_d*>::iterator p = m_workers.begin();
        p != m_workers.end();
        ++p) {
@@ -120,7 +131,7 @@ bool HeartbeatMap::is_healthy()
     }
   }
   m_rwlock.put_read();
-  ldout(m_cct, 20) << "is_healthy = " << (healthy ? "healthy" : "NOT HEALTH") << dendl;
+  ldout(m_cct, 20) << "is_healthy = " << (healthy ? "healthy" : "NOT HEALTHY") << dendl;
   return healthy;
 }
 

@@ -1030,10 +1030,11 @@ int OSD::init()
     derr << "unable to obtain rotating service keys; retrying" << dendl;
   }
 
+  osd_lock.Lock();
+
   state = STATE_BOOTING;
   start_boot();
 
-  osd_lock.Lock();
   return 0;
 }
 
@@ -2057,6 +2058,12 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	  break;
 	}
       }
+
+      if (!g_ceph_context->get_heartbeat_map()->is_healthy()) {
+	dout(10) << "internal heartbeat not healthy, dropping ping request" << dendl;
+	break;
+      }
+
       Message *r = new MOSDPing(monc->get_fsid(),
 				curmap->get_epoch(),
 				MOSDPing::PING_REPLY,
@@ -2269,6 +2276,14 @@ void OSD::tick()
   dout(5) << "tick" << dendl;
 
   logger->set(l_osd_buf, buffer::get_total_alloc());
+
+  if (is_waiting_for_healthy()) {
+    if (g_ceph_context->get_heartbeat_map()->is_healthy()) {
+      dout(1) << "healthy again, booting" << dendl;
+      state = STATE_BOOTING;
+      start_boot();
+    }
+  }
 
   if (is_active()) {
     // periodically kick recovery work queue
@@ -2684,6 +2699,13 @@ void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
 
   if (is_initializing()) {
     dout(10) << "still initializing" << dendl;
+    return;
+  }
+
+  // if we are not healthy, do not mark ourselves up (yet)
+  if (!g_ceph_context->get_heartbeat_map()->is_healthy()) {
+    dout(5) << "not healthy, deferring boot" << dendl;
+    state = STATE_WAITING_FOR_HEALTHY;
     return;
   }
 
