@@ -368,7 +368,10 @@ class CephManager:
             assert pool_name in self.pools
             self.log("creating pool_name %s"%(pool_name,))
             del self.pools[pool_name]
-            self.raw_cluster_cmd('osd', 'pool', 'delete', pool_name)
+            self.do_rados(
+                self.controller,
+                ['rmpool', pool_name, pool_name, "--yes-i-really-really-mean-it"]
+                )
 
     def get_pool(self):
         with self.lock:
