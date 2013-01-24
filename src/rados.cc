@@ -169,22 +169,41 @@ static void usage_exit()
   exit(1);
 }
 
-static int do_get(IoCtx& io_ctx, const char *objname, const char *outfile, bool check_stdio)
+static int do_get(IoCtx& io_ctx, const char *objname, const char *outfile, unsigned op_size)
 {
   string oid(objname);
-  bufferlist outdata;
-  int ret = io_ctx.read(oid, outdata, 0, 0);
-  if (ret < 0) {
-    return ret;
-  }
 
+  int fd;
   if (check_stdio && strcmp(outfile, "-") == 0) {
-    fwrite(outdata.c_str(), outdata.length(), 1, stdout);
+    fd = 1;
   } else {
-    outdata.write_file(outfile);
-    generic_dout(0) << "wrote " << outdata.length() << " byte payload to " << outfile << dendl;
+    fd = TEMP_FAILURE_RETRY(::open(outfile, O_WRONLY|O_CREAT|O_TRUNC, 0644));
+    if (fd < 0) {
+      int err = errno;
+      cerr << "failed to open file: " << cpp_strerror(err) << std::endl;
+      return -err;
+    }
   }
 
+  uint64_t offset = 0;
+  while (true) {
+    bufferlist outdata;
+    int ret = io_ctx.read(oid, outdata, op_size, offset);
+    if (ret <= 0) {
+      return ret;
+    }
+    ret = outdata.write_fd(fd);
+    if (ret < 0) {
+      cerr << "error writing to file: " << cpp_strerror(ret) << std::endl;
+      return ret;
+    }
+    if (outdata.length() < op_size)
+      break;
+    offset += outdata.length();
+  }
+
+  if (!check_stdio)
+    TEMP_FAILURE_RETRY(::close(fd));
   return 0;
 }
 
@@ -315,7 +334,7 @@ static int do_copy_pool(Rados& rados, const char *src_pool, const char *target_p
   return 0;
 }
 
-static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op_size, bool check_stdio)
+static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op_size)
 {
   string oid(objname);
   bufferlist indata;
@@ -1384,7 +1403,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   else if (strcmp(nargs[0], "get") == 0) {
     if (!pool_name || nargs.size() < 3)
       usage_exit();
-    ret = do_get(io_ctx, nargs[1], nargs[2], true);
+    ret = do_get(io_ctx, nargs[1], nargs[2], op_size);
     if (ret < 0) {
       cerr << "error getting " << pool_name << "/" << nargs[1] << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       return 1;
@@ -1393,7 +1412,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   else if (strcmp(nargs[0], "put") == 0) {
     if (!pool_name || nargs.size() < 3)
       usage_exit();
-    ret = do_put(io_ctx, nargs[1], nargs[2], op_size, true);
+    ret = do_put(io_ctx, nargs[1], nargs[2], op_size);
     if (ret < 0) {
       cerr << "error putting " << pool_name << "/" << nargs[1] << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       return 1;
