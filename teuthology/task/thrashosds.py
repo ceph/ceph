@@ -38,7 +38,7 @@ def task(ctx, config):
        to probabilistically choose when to wait, and the method used
        makes it closer to -- but not identical to -- the half-life.)
 
-    chance_down: (0) the probability that the thrasher will mark an
+    chance_down: (0.4) the probability that the thrasher will mark an
        OSD down rather than marking it out. (The thrasher will not
        consider that OSD out of the cluster, since presently an OSD
        wrongly marked down will mark itself back up again.) This value
@@ -61,6 +61,12 @@ def task(ctx, config):
     chance_pgpnum_fix: (0) chance to adjust pgpnum to pg for a pool
     pool_grow_by: (10) amount to increase pgnum by
     max_pgs_per_pool_osd: (1200) don't expand pools past this size per osd
+
+    pause_short: (3) duration of short pause
+    pause_long: (150) duration of long pause
+    pause_check_after: (120) assert osd down after this long
+    chance_inject_pause_short: (1) chance of injecting short stall
+    chance_inject_pause_long: (0.1) chance of injecting long stall
 
     example:
 

@@ -124,8 +124,31 @@ class Thrasher:
             timeout=self.config.get('timeout')
             )
 
+    def inject_pause(self, conf_key, duration, check_after, should_be_down):
+        the_one = random.choice(self.in_osds)
+        self.log("inject_pause on {osd}".format(osd = the_one))
+        self.log(
+            "Testing {key} pause injection for duration {duration}".format(
+                key = conf_key,
+                duration = duration
+                ))
+        self.log(
+            "Checking after {after}, should_be_down={shouldbedown}".format(
+                after = check_after,
+                shouldbedown = should_be_down
+                ))
+        self.ceph_manager.set_config(the_one, **{conf_key:duration})
+        if not should_be_down:
+            return
+        time.sleep(check_after)
+        status = self.ceph_manager.get_osd_status()
+        assert the_one in status['down']
+        time.sleep(duration - check_after + 20)
+        status = self.ceph_manager.get_osd_status()
+        assert not the_one in status['down']
+
     def choose_action(self):
-        chance_down = self.config.get('chance_down', 0)
+        chance_down = self.config.get('chance_down', 0.4)
         chance_test_min_size = self.config.get('chance_test_min_size', 0)
         if isinstance(chance_down, int):
             chance_down = float(chance_down) / 100
@@ -148,6 +171,19 @@ class Thrasher:
         actions.append((self.grow_pool, self.config.get('chance_pgnum_grow', 0),))
         actions.append((self.fix_pgp_num, self.config.get('chance_pgpnum_fix', 0),))
         actions.append((self.test_pool_min_size, chance_test_min_size,))
+        for key in ['heartbeat_inject_failure', 'filestore_inject_stall']:
+            for scenario in [
+                (lambda: self.inject_pause(key,
+                                           self.config.get('pause_short', 3),
+                                           0,
+                                           False),
+                 self.config.get('chance_inject_pause_short', 1),),
+                (lambda: self.inject_pause(key,
+                                           self.config.get('pause_long', 150),
+                                           self.config.get('pause_check_after', 120),
+                                           True),
+                 self.config.get('chance_inject_pause_long', 0.2),)]:
+                actions.append(scenario)
 
         total = sum([y for (x,y) in actions])
         val = random.uniform(0, total)
