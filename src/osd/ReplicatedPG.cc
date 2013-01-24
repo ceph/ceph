@@ -5383,6 +5383,7 @@ void ReplicatedPG::handle_pull_response(OpRequestRef op)
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   Context *onreadable = 0;
   Context *onreadable_sync = 0;
+  Context *oncomplete = 0;
   submit_push_data(pi.recovery_info, first,
 		   data_included, data,
 		   m->omap_header,
@@ -5411,21 +5412,25 @@ void ReplicatedPG::handle_pull_response(OpRequestRef op)
 
     onreadable = new C_OSD_AppliedRecoveredObject(this, t, obc);
     onreadable_sync = new C_OSD_OndiskWriteUnlock(obc);
+    oncomplete = new C_OSD_CompletedPull(this, hoid, get_osdmap()->get_epoch());
   } else {
     onreadable = new ObjectStore::C_DeleteTransaction(t);
   }
 
   int r = osd->store->
-    queue_transaction(osr.get(), t,
-		      onreadable,
-		      new C_OSD_CommittedPushedObject(this, op,
-						      info.history.same_interval_since,
-						      info.last_complete),
-		      onreadable_sync);
+    queue_transaction(
+      osr.get(), t,
+      onreadable,
+      new C_OSD_CommittedPushedObject(this, op,
+				      info.history.same_interval_since,
+				      info.last_complete),
+      onreadable_sync,
+      oncomplete,
+      TrackedOpRef()
+      );
   assert(r == 0);
 
   if (complete) {
-    finish_recovery_op(hoid);
     pulling.erase(hoid);
     pull_from_peer[m->get_source().num()].erase(hoid);
     update_stats();
@@ -5463,6 +5468,12 @@ void ReplicatedPG::handle_push(OpRequestRef op)
   // keep track of active pushes for scrub
   ++active_pushes;
 
+  MOSDSubOpReply *reply = new MOSDSubOpReply(
+    m, 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
+  assert(entity_name_t::TYPE_OSD == m->get_connection()->peer_type);
+
+  Context *oncomplete = new C_OSD_CompletedPushedObjectReplica(
+    osd, reply, m->get_connection());
   Context *onreadable = new C_OSD_AppliedRecoveredObjectReplica(this, t);
   Context *onreadable_sync = 0;
   submit_push_data(m->recovery_info,
@@ -5478,22 +5489,22 @@ void ReplicatedPG::handle_push(OpRequestRef op)
 			 t);
 
   int r = osd->store->
-    queue_transaction(osr.get(), t,
-		      onreadable,
-		      new C_OSD_CommittedPushedObject(
-			this, op,
-			info.history.same_interval_since,
-			info.last_complete),
-		      onreadable_sync);
+    queue_transaction(
+      osr.get(), t,
+      onreadable,
+      new C_OSD_CommittedPushedObject(
+	this, op,
+	info.history.same_interval_since,
+	info.last_complete),
+      onreadable_sync,
+      oncomplete,
+      OpRequestRef()
+      );
   assert(r == 0);
 
   osd->logger->inc(l_osd_push_in);
   osd->logger->inc(l_osd_push_inb, m->ops[0].indata.length());
 
-  MOSDSubOpReply *reply = new MOSDSubOpReply(
-    m, 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
-  assert(entity_name_t::TYPE_OSD == m->get_connection()->peer_type);
-  osd->send_message_osd_cluster(reply, m->get_connection());
 }
 
 int ReplicatedPG::send_push(int prio, int peer,
@@ -5547,13 +5558,18 @@ int ReplicatedPG::send_push(int prio, int peer,
     ObjectMap::ObjectMapIterator iter =
       osd->store->get_omap_iterator(coll,
 				    recovery_info.soid);
-    for (iter->upper_bound(progress.omap_recovered_to);
+    for (iter->lower_bound(progress.omap_recovered_to);
 	 iter->valid();
 	 iter->next()) {
-      if (available < (iter->key().size() + iter->value().length()))
+      if (!subop->omap_entries.empty() &&
+	  available <= (iter->key().size() + iter->value().length()))
 	break;
       subop->omap_entries.insert(make_pair(iter->key(), iter->value()));
-      available -= (iter->key().size() + iter->value().length());
+
+      if ((iter->key().size() + iter->value().length()) <= available)
+	available -= (iter->key().size() + iter->value().length());
+      else
+	available = 0;
     }
     if (!iter->valid())
       new_progress.omap_complete = true;
@@ -5561,9 +5577,13 @@ int ReplicatedPG::send_push(int prio, int peer,
       new_progress.omap_recovered_to = iter->key();
   }
 
-  subop->data_included.span_of(recovery_info.copy_subset,
-			       progress.data_recovered_to,
-			       available);
+  if (available > 0) {
+    subop->data_included.span_of(recovery_info.copy_subset,
+				 progress.data_recovered_to,
+				 available);
+  } else {
+    subop->data_included.clear();
+  }
 
   for (interval_set<uint64_t>::iterator p = subop->data_included.begin();
        p != subop->data_included.end();
