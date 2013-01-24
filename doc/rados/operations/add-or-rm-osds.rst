@@ -127,10 +127,16 @@ hard drive than older hosts in the cluster (i.e., they may have greater weight).
 #. Add the OSD to the CRUSH map so that it can begin receiving data. You may
    also decompile the CRUSH map, add the OSD to the device list, add the host as a
    bucket (if it's not already in the CRUSH map), add the device as an item in the
-   host, assign it a weight, recompile it and set it. See	`Add/Move an OSD`_ for
-   details. :: 
+   host, assign it a weight, recompile it and set it. See `Add/Move an OSD`_ for
+   details.
+   
+   For Argonaut (v 0.48), execute the following::
 
 	ceph osd crush set {id} {name} {weight} pool={pool-name}  [{bucket-type}={bucket-name} ...]
+	
+	For Bobtail (v 0.56), execute the following:: 
+
+	ceph osd crush set {id-or-name} {weight} pool={pool-name}  [{bucket-type}={bucket-name} ...]
 
 
 .. topic:: Argonaut (v0.48) Best Practices
