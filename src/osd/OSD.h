@@ -742,8 +742,10 @@ private:
       }
       in_use.insert(got.begin(), got.end());
     }
-    void _process(const list<PG *> &pgs) {
-      osd->process_peering_events(pgs);
+    void _process(
+      const list<PG *> &pgs,
+      ThreadPool::TPHandle &handle) {
+      osd->process_peering_events(pgs, handle);
       for (list<PG *>::const_iterator i = pgs.begin();
 	   i != pgs.end();
 	   ++i) {
@@ -762,7 +764,9 @@ private:
     }
   } peering_wq;
 
-  void process_peering_events(const list<PG*> &pg);
+  void process_peering_events(
+    const list<PG*> &pg,
+    ThreadPool::TPHandle &handle);
 
   friend class PG;
   friend class ReplicatedPG;
@@ -797,8 +801,11 @@ private:
   void note_up_osd(int osd);
   
   void advance_pg(
-    epoch_t advance_to, PG *pg, PG::RecoveryCtx *rctx,
-    set<boost::intrusive_ptr<PG> > *split_pgs);
+    epoch_t advance_to, PG *pg,
+    ThreadPool::TPHandle &handle,
+    PG::RecoveryCtx *rctx,
+    set<boost::intrusive_ptr<PG> > *split_pgs
+  );
   void advance_map(ObjectStore::Transaction& t, C_Contexts *tfin);
   void consume_map();
   void activate_map();
