@@ -16,7 +16,7 @@ struct Fh {
 
   bool is_lazy() { return mode & O_LAZY; }
 
-  bool append;
+  int flags;
   bool pos_locked;           // pos is currently in use
   list<Cond*> pos_waiters;   // waiters for pos
 
@@ -25,7 +25,7 @@ struct Fh {
   loff_t consec_read_bytes;
   int nr_consec_read;
 
-  Fh() : inode(0), pos(0), mds(0), mode(0), append(false), pos_locked(false),
+  Fh() : inode(0), pos(0), mds(0), mode(0), flags(0), pos_locked(false),
 	 last_pos(0), consec_read_bytes(0), nr_consec_read(0) {}
 };
 
