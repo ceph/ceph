@@ -133,8 +133,8 @@ hard drive than older hosts in the cluster (i.e., they may have greater weight).
    For Argonaut (v 0.48), execute the following::
 
 	ceph osd crush set {id} {name} {weight} pool={pool-name}  [{bucket-type}={bucket-name} ...]
-	
-	For Bobtail (v 0.56), execute the following:: 
+
+   For Bobtail (v 0.56), execute the following:: 
 
 	ceph osd crush set {id-or-name} {weight} pool={pool-name}  [{bucket-type}={bucket-name} ...]
 
