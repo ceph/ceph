@@ -38,7 +38,7 @@ def task(ctx, config):
        to probabilistically choose when to wait, and the method used
        makes it closer to -- but not identical to -- the half-life.)
 
-    chance_down: (0) the probability that the thrasher will mark an
+    chance_down: (0.4) the probability that the thrasher will mark an
        OSD down rather than marking it out. (The thrasher will not
        consider that OSD out of the cluster, since presently an OSD
        wrongly marked down will mark itself back up again.) This value

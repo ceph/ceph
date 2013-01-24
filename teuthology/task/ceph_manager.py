@@ -148,7 +148,7 @@ class Thrasher:
         assert not the_one in status['down']
 
     def choose_action(self):
-        chance_down = self.config.get('chance_down', 0)
+        chance_down = self.config.get('chance_down', 0.4)
         chance_test_min_size = self.config.get('chance_test_min_size', 0)
         if isinstance(chance_down, int):
             chance_down = float(chance_down) / 100
