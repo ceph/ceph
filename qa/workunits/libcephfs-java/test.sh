@@ -1,7 +1,7 @@
 #!/bin/sh -e
 
 BASE=/tmp/cephtest
-TLIB=binary/usr/local/lib
+TLIB=binary/usr/local/share/java
 
 echo "starting libcephfs-java tests"
 
