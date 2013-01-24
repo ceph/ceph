@@ -914,7 +914,7 @@ static guint32 dissect_ceph_auth_reply(tvbuff_t *tvb, proto_tree *tree, guint32 
 
     PROTO_ADD_SIMPLE_TEXT(ceph_auth_reply_tree,tvb_get_letohl,"protocol: %d",protocol);
     PROTO_ADD_SIMPLE_TEXT(ceph_auth_reply_tree,tvb_get_letohl,"result: %d",result);
-    PROTO_ADD_SIMPLE_TEXT(ceph_auth_reply_tree,tvb_get_letoh64,"global_id: %lu", global_id);
+    PROTO_ADD_SIMPLE_TEXT(ceph_auth_reply_tree,tvb_get_letoh64,"global_id: %" G_GUINT64_FORMAT, global_id);
     PROTO_ADD_SIMPLE_TEXT(ceph_auth_reply_tree,tvb_get_letohl,"payload_len: %d",payload_len);
 
     str_len = tvb_get_letohl(tvb,offset+payload_len);
@@ -950,7 +950,7 @@ static guint32 dissect_ceph_mdsmap_node(tvbuff_t *tvb, proto_tree *tree, guint32
 	ceph_sub_item = proto_tree_add_item(tree, hf_ceph_mdsnode, tvb, offset, -1, TRUE );
 	ceph_mdsnode_tree = proto_item_add_subtree(ceph_sub_item, ett_ceph);
 
-	PROTO_ADD_SIMPLE_TEXT(ceph_mdsnode_tree,tvb_get_letoh64,"Global ID: %ld",global_id);
+	PROTO_ADD_SIMPLE_TEXT(ceph_mdsnode_tree,tvb_get_letoh64,"Global ID: %" G_GUINT64_FORMAT, global_id);
 	infoversion = *tvb_get_ptr(tvb,offset,sizeof(infoversion));
 	offset++;
 	offset+=sizeof(guint64);
@@ -961,7 +961,7 @@ static guint32 dissect_ceph_mdsmap_node(tvbuff_t *tvb, proto_tree *tree, guint32
     PROTO_ADD_SIMPLE_TEXT(ceph_mdsnode_tree,tvb_get_letohl,"mds: %d",field);
     PROTO_ADD_SIMPLE_TEXT(ceph_mdsnode_tree,tvb_get_letohl,"inc: %d",field);
     PROTO_ADD_SIMPLE_TEXT(ceph_mdsnode_tree,tvb_get_letohl,"state: %d",field);
-    PROTO_ADD_SIMPLE_TEXT(ceph_mdsnode_tree,tvb_get_letoh64,"state seq: %ld",field64);
+    PROTO_ADD_SIMPLE_TEXT(ceph_mdsnode_tree,tvb_get_letoh64,"state seq: %" G_GUINT64_FORMAT, field64);
 	offset = dissect_ceph_entity_addr(tvb, ceph_mdsnode_tree, offset);
 	cephtime = (struct ceph_timespec *) tvb_get_ptr(tvb, offset, sizeof(struct ceph_timespec));
 	time = cephtime->tv_sec;
@@ -1031,7 +1031,7 @@ static guint32 dissect_ceph_mds_map(tvbuff_t *tvb, proto_tree *tree, guint32 off
 	PROTO_ADD_SIMPLE_TEXT(ceph_mdsmap_tree,tvb_get_letohl,"m_root: %i",plop);
 	PROTO_ADD_SIMPLE_TEXT(ceph_mdsmap_tree,tvb_get_letohl,"m_session_timeout: %i",plop);
 	PROTO_ADD_SIMPLE_TEXT(ceph_mdsmap_tree,tvb_get_letohl,"m_session_autoclose: %i",plop);
-	PROTO_ADD_SIMPLE_TEXT(ceph_mdsmap_tree,tvb_get_letoh64,"m_maxfile_size: %ld",max_filesize);
+	PROTO_ADD_SIMPLE_TEXT(ceph_mdsmap_tree,tvb_get_letoh64,"m_maxfile_size: %" G_GUINT64_FORMAT, max_filesize);
 	PROTO_ADD_SIMPLE_TEXT(ceph_mdsmap_tree,tvb_get_letohl,"m_max_mds: %i",plop);
 	PROTO_ADD_SIMPLE_TEXT(ceph_mdsmap_tree,tvb_get_letohl,"n: %i",len);
 
