@@ -1946,7 +1946,7 @@ void FileStore::op_queue_release_throttle(Op *o)
   logger->set(l_os_oq_bytes, op_queue_bytes);
 }
 
-void FileStore::_do_op(OpSequencer *osr)
+void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
 {
   // inject a stall?
   if (g_conf->filestore_inject_stall) {
@@ -1962,7 +1962,7 @@ void FileStore::_do_op(OpSequencer *osr)
   Op *o = osr->peek_queue();
   apply_manager.op_apply_start(o->op);
   dout(5) << "_do_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " start" << dendl;
-  int r = do_transactions(o->tls, o->op);
+  int r = _do_transactions(o->tls, o->op, &handle);
   apply_manager.op_apply_finish(o->op);
   dout(10) << "_do_op " << o << " seq " << o->op << " r = " << r
 	   << ", finisher " << o->onreadable << " " << o->onreadable_sync << dendl;
@@ -2113,7 +2113,10 @@ void FileStore::_journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk)
   }
 }
 
-int FileStore::do_transactions(list<Transaction*> &tls, uint64_t op_seq)
+int FileStore::_do_transactions(
+  list<Transaction*> &tls,
+  uint64_t op_seq,
+  ThreadPool::TPHandle *handle)
 {
   int r = 0;
 
@@ -2132,6 +2135,8 @@ int FileStore::do_transactions(list<Transaction*> &tls, uint64_t op_seq)
     r = _do_transaction(**p, op_seq, trans_num);
     if (r < 0)
       break;
+    if (handle)
+      handle->reset_tp_timeout();
   }
   
   return r;
