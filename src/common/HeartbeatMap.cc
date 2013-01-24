@@ -31,7 +31,8 @@ namespace ceph {
 
 HeartbeatMap::HeartbeatMap(CephContext *cct)
   : m_cct(cct),
-    m_rwlock("HeartbeatMap::m_rwlock")
+    m_rwlock("HeartbeatMap::m_rwlock"),
+    m_inject_unhealthy_until(0)
 {
 }
 
