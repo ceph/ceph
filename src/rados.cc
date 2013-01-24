@@ -174,7 +174,7 @@ static int do_get(IoCtx& io_ctx, const char *objname, const char *outfile, unsig
   string oid(objname);
 
   int fd;
-  if (check_stdio && strcmp(outfile, "-") == 0) {
+  if (strcmp(outfile, "-") == 0) {
     fd = 1;
   } else {
     fd = TEMP_FAILURE_RETRY(::open(outfile, O_WRONLY|O_CREAT|O_TRUNC, 0644));
@@ -202,7 +202,7 @@ static int do_get(IoCtx& io_ctx, const char *objname, const char *outfile, unsig
     offset += outdata.length();
   }
 
-  if (!check_stdio)
+  if (fd != 1)
     TEMP_FAILURE_RETRY(::close(fd));
   return 0;
 }
@@ -339,7 +339,7 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
   string oid(objname);
   bufferlist indata;
   bool stdio = false;
-  if (check_stdio && strcmp(infile, "-") == 0)
+  if (strcmp(infile, "-") == 0)
     stdio = true;
 
   int ret;
