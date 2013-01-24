@@ -49,6 +49,11 @@ ThreadPool::ThreadPool(CephContext *cct_, string nm, int n, const char *option)
   }
 }
 
+void ThreadPool::TPHandle::reset_tp_timeout() {
+  cct->get_heartbeat_map()->reset_timeout(
+    hb, grace, suicide_grace);
+}
+
 ThreadPool::~ThreadPool()
 {
   assert(_threads.empty());
@@ -108,9 +113,10 @@ void ThreadPool::worker(WorkThread *wt)
 	  processing++;
 	  ldout(cct,12) << "worker wq " << wq->name << " start processing " << item
 			<< " (" << processing << " active)" << dendl;
-	  cct->get_heartbeat_map()->reset_timeout(hb, wq->timeout_interval, wq->suicide_interval);
+	  TPHandle tp_handle(cct, hb, wq->timeout_interval, wq->suicide_interval);
+	  tp_handle.reset_tp_timeout();
 	  _lock.Unlock();
-	  wq->_void_process(item);
+	  wq->_void_process(item, tp_handle);
 	  _lock.Lock();
 	  wq->_void_process_finish(item);
 	  processing--;
