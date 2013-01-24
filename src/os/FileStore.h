@@ -228,8 +228,8 @@ private:
       store->op_queue.pop_front();
       return osr;
     }
-    void _process(OpSequencer *osr) {
-      store->_do_op(osr);
+    void _process(OpSequencer *osr, ThreadPool::TPHandle &handle) {
+      store->_do_op(osr, handle);
     }
     void _process_finish(OpSequencer *osr) {
       store->_finish_op(osr);
@@ -239,7 +239,7 @@ private:
     }
   } op_wq;
 
-  void _do_op(OpSequencer *o);
+  void _do_op(OpSequencer *o, ThreadPool::TPHandle &handle);
   void _finish_op(OpSequencer *o);
   Op *build_op(list<Transaction*>& tls,
 	       Context *onreadable, Context *onreadable_sync,
@@ -306,8 +306,12 @@ public:
 
   int statfs(struct statfs *buf);
 
-  int do_transactions(list<Transaction*> &tls, uint64_t op_seq);
-
+  int _do_transactions(
+    list<Transaction*> &tls, uint64_t op_seq,
+    ThreadPool::TPHandle *handle);
+  int do_transactions(list<Transaction*> &tls, uint64_t op_seq) {
+    return _do_transactions(tls, op_seq, 0);
+  }
   unsigned _do_transaction(Transaction& t, uint64_t op_seq, int trans_num);
 
   int queue_transaction(Sequencer *osr, Transaction* t);
