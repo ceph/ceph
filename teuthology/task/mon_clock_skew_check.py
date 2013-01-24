@@ -3,7 +3,6 @@ import contextlib
 import ceph_manager
 import time
 import gevent
-import json
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
@@ -73,8 +72,17 @@ class ClockSkewCheck:
   def warn(self, x):
     self.logger.warn(x)
 
+  def debug(self, x):
+    self.logger.debug(x)
+
   def finish(self):
     self.stopping = True
+
+  def sleep_interval(self):
+    if self.check_interval > 0.0:
+      self.debug('sleeping for {s} seconds'.format(
+        s=self.check_interval))
+      time.sleep(self.check_interval)
 
   def do_check(self):
     self.info('start checking for clock skews')
@@ -93,10 +101,36 @@ class ClockSkewCheck:
       self.manager.wait_for_mon_quorum_size(quorum_size)
 
       health = self.manager.get_mon_health(True)
-      for timecheck in health['timechecks']:
-        mon_skew = float(timecheck['skew'])
-        mon_health = timecheck['health']
-        mon_id = timecheck['name']
+      timechecks = health['timechecks']
+
+      clean_check = False
+
+      if timechecks['round_status'] == 'finished':
+        assert (timechecks['round'] % 2) == 0, \
+            'timecheck marked as finished but round ' \
+            'disagrees (r {r})'.format(
+                r=timechecks['round'])
+        clean_check = True
+      else:
+        assert timechecks['round_status'] == 'on-going', \
+            'timecheck status expected \'on-going\' ' \
+            'but found \'{s}\' instead'.format(
+                s=timechecks['round_status'])
+        if 'mons' in timechecks.keys() and len(timechecks['mons']) > 1:
+          self.info('round still on-going, but there are available reports')
+        else:
+          self.info('no timechecks available just yet')
+          self.sleep_interval()
+          continue
+
+      assert len(timechecks['mons']) > 1, \
+          'there are not enough reported timechecks; ' \
+          'expected > 1 found {n}'.format(n=len(timechecks['mons']))
+
+      for check in timechecks['mons']:
+        mon_skew = float(check['skew'])
+        mon_health = check['health']
+        mon_id = check['name']
         if mon_skew > self.max_skew:
           assert mon_health == 'HEALTH_WARN', \
               'mon.{id} health is \'{health}\' but skew {s} > max {ms}'.format(
@@ -106,7 +140,7 @@ class ClockSkewCheck:
             id=mon_id,s=mon_skew,ms=self.max_skew)
 
           """ add to skew list """
-          details = timecheck['details']
+          details = check['details']
           skews[mon_id] = {'skew': mon_skew, 'details': details}
 
           if self.expect_skew:
@@ -114,13 +148,9 @@ class ClockSkewCheck:
           else:
             self.warn('unexpected skew: {str}'.format(str=log_str))
 
-      if len(health['timechecks']) == 0:
-        self.info('no timechecks available just yet')
-      else:
+      if clean_check:
         ran_once = True
-
-      if (self.check_interval > 0.0):
-        time.sleep(self.check_interval)
+      self.sleep_interval()
 
     total = len(skews)
     if total > 0:
