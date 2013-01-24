@@ -9,3 +9,9 @@
   even if the system load remains high.  However, if either of these
   options have been changed in ceph.conf, those settings should be
   reviewed in light of their adjusted meanings.
+
+* The 'ceph osd pool delete <poolname>' and 'rados rmpool <poolname>'
+  now have safety interlocks with loud warnings that make you confirm
+  pool removal.  Any scripts curenty rely on these functions zapping
+  data without confirmation need to be adjusted accordingly.
+  
