@@ -63,8 +63,8 @@ def task(ctx, config):
     max_pgs_per_pool_osd: (1200) don't expand pools past this size per osd
 
     pause_short: (3) duration of short pause
-    pause_long: (150) duration of long pause
-    pause_check_after: (120) assert osd down after this long
+    pause_long: (80) duration of long pause
+    pause_check_after: (50) assert osd down after this long
     chance_inject_pause_short: (1) chance of injecting short stall
     chance_inject_pause_long: (0.1) chance of injecting long stall
 

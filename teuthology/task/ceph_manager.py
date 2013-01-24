@@ -179,8 +179,8 @@ class Thrasher:
                                            False),
                  self.config.get('chance_inject_pause_short', 1),),
                 (lambda: self.inject_pause(key,
-                                           self.config.get('pause_long', 150),
-                                           self.config.get('pause_check_after', 120),
+                                           self.config.get('pause_long', 80),
+                                           self.config.get('pause_check_after', 70),
                                            True),
                  self.config.get('chance_inject_pause_long', 0.2),)]:
                 actions.append(scenario)
