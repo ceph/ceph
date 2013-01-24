@@ -1907,7 +1907,7 @@ void FileStore::op_queue_reserve_throttle(Op *o)
   uint64_t max_ops = m_filestore_queue_max_ops;
   uint64_t max_bytes = m_filestore_queue_max_bytes;
 
-  if (is_committing()) {
+  if (btrfs_stable_commits && is_committing()) {
     max_ops += m_filestore_queue_committing_max_ops;
     max_bytes += m_filestore_queue_committing_max_bytes;
   }
