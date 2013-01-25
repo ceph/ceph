@@ -2267,6 +2267,7 @@ void Monitor::timecheck_report()
   }
 
   assert(timecheck_latencies.size() == timecheck_skews.size());
+  bool do_output = true; // only output report once
   for (set<int>::iterator q = quorum.begin(); q != quorum.end(); ++q) {
     if (monmap->get_name(*q) == name)
       continue;
@@ -2282,10 +2283,13 @@ void Monitor::timecheck_report()
       m->skews[it->first] = skew;
       m->latencies[it->first] = latency;
 
-      dout(10) << __func__ << " " << it->first
-               << " latency " << latency
-               << " skew " << skew << dendl;
+      if (do_output) {
+        dout(25) << __func__ << " " << it->first
+                 << " latency " << latency
+                 << " skew " << skew << dendl;
+      }
     }
+    do_output = false;
     entity_inst_t inst = monmap->get_inst(*q);
     dout(10) << __func__ << " send report to " << inst << dendl;
     messenger->send_message(m, inst);
