@@ -270,6 +270,7 @@ int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss,
     JSONFormatter jsf(true);
     jsf.open_object_section("pg");
     jsf.dump_string("state", pg_state_string(get_state()));
+    jsf.dump_unsigned("epoch", get_osdmap()->get_epoch());
     jsf.open_array_section("up");
     for (vector<int>::iterator p = up.begin(); p != up.end(); ++p)
       jsf.dump_unsigned("osd", *p);
