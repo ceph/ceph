@@ -1302,7 +1302,6 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1stat
 	return ret;
 }
 
-
 /*
  * Class:     com_ceph_fs_CephMount
  * Method:    native_ceph_setattr
