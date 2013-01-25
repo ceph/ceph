@@ -4470,17 +4470,6 @@ MOSDMap *OSD::build_incremental_map_msg(epoch_t since, epoch_t to)
   return m;
 }
 
-void OSD::send_map(MOSDMap *m, const entity_inst_t& inst, bool lazy)
-{
-  Messenger *msgr = client_messenger;
-  if (entity_name_t::TYPE_OSD == inst.name._type)
-    msgr = cluster_messenger;
-  if (lazy)
-    msgr->lazy_send_message(m, inst);  // only if we already have an open connection
-  else
-    msgr->send_message(m, inst);
-}
-
 void OSD::send_map(MOSDMap *m, Connection *con)
 {
   Messenger *msgr = client_messenger;
