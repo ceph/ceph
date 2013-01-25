@@ -507,7 +507,7 @@ class CephManager:
         pgs = self.get_pg_stats()
         num = 0
         for pg in pgs:
-            if pg['state'].count('active') and not pg['state'].count('recovering') and not pg['state'].count('stale'):
+            if pg['state'].count('active') and not pg['state'].count('recover') and not pg['state'].count('backfill') and not pg['state'].count('stale'):
                 num += 1
         return num
 
