@@ -77,8 +77,6 @@
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
     --conf/-c        Read configuration from the given configuration file
-    -d               Run in foreground, log to stderr.
-    -f               Run in foreground, log to usual location.
     --id/-i          set ID portion of my name
     --name/-n        set name (TYPE.ID)
     --version        show version and quit
