@@ -3224,6 +3224,14 @@ bool OSD::heartbeat_dispatch(Message *m)
     handle_osd_ping((MOSDPing*)m);
     break;
 
+  case CEPH_MSG_OSD_MAP:
+    {
+      Connection *self = cluster_messenger->get_loopback_connection();
+      cluster_messenger->send_message(m, self);
+      self->put();
+    }
+    break;
+
   default:
     return false;
   }
