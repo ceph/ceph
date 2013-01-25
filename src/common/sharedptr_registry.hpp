@@ -63,7 +63,6 @@ public:
 	break;
       }
       cond.Wait(lock);
-    Mutex::Locker l(lock);
     }
     return VPtr();
   }
