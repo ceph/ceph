@@ -4541,13 +4541,7 @@ bool OSD::require_same_or_newer_map(OpRequestRef op, epoch_t epoch)
     if (!osdmap->have_inst(from) ||
 	osdmap->get_cluster_addr(from) != m->get_source_inst().addr) {
       dout(0) << "from dead osd." << from << ", dropping, sharing map" << dendl;
-      send_incremental_map(epoch, m->get_source_inst(), true);
-
-      // close after we send the map; don't reconnect
-      Connection *con = m->get_connection();
-      cluster_messenger->mark_down_on_empty(con);
-      cluster_messenger->mark_disposable(con);
-
+      send_incremental_map(epoch, m->get_connection());
       return false;
     }
   }
