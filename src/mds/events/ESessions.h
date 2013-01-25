@@ -26,24 +26,42 @@ protected:
 
 public:
   map<client_t,entity_inst_t> client_map;
+  bool old_style_encode;
 
-  ESessions() : LogEvent(EVENT_SESSIONS) { }
+  ESessions() : LogEvent(EVENT_SESSIONS), old_style_encode(false) { }
   ESessions(version_t pv, map<client_t,entity_inst_t>& cm) :
     LogEvent(EVENT_SESSIONS),
-    cmapv(pv) {
+    cmapv(pv),
+    old_style_encode(false) {
     client_map.swap(cm);
   }
+
+  void mark_old_encoding() { old_style_encode = true; }
   
   void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
     ::encode(client_map, bl);
     ::encode(cmapv, bl);
     ::encode(stamp, bl);
+    ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode_old(bufferlist::iterator &bl) {
     ::decode(client_map, bl);
     ::decode(cmapv, bl);
     if (!bl.end())
       ::decode(stamp, bl);
+  }
+  void decode_new(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(client_map, bl);
+    ::decode(cmapv, bl);
+    if (!bl.end())
+      ::decode(stamp, bl);
+    DECODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    if (old_style_encode) decode_old(bl);
+    else decode_new(bl);
   }
 
 
