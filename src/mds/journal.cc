@@ -1414,7 +1414,7 @@ void ESession::generate_test_instances(list<ESession*>& ls)
 }
 
 // -----------------------
-// ESession
+// ESessions
 
 void ESessions::update_segment()
 {
