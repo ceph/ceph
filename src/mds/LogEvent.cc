@@ -42,8 +42,22 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   // parse type, length
   bufferlist::iterator p = bl.begin();
   __u32 type;
+  LogEvent *event = NULL;
   ::decode(type, p);
 
+  if (EVENT_NEW_ENCODING == type) {
+    DECODE_START(1, p);
+    ::decode(type, p);
+    event = decode_event(bl, p, type);
+    DECODE_FINISH(p);
+  } else { // we are using classic encoding
+    event = decode_event(bl, p, type);
+  }
+  return event;
+}
+
+LogEvent *LogEvent::decode_event(bufferlist& bl, bufferlist::iterator& p, __u32 type)
+{
   int length = bl.length() - p.get_off();
   generic_dout(15) << "decode_log_event type " << type << ", size " << length << dendl;
   
