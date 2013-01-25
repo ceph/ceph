@@ -182,7 +182,7 @@ class Thrasher:
                                            self.config.get('pause_long', 80),
                                            self.config.get('pause_check_after', 70),
                                            True),
-                 self.config.get('chance_inject_pause_long', 0.2),)]:
+                 self.config.get('chance_inject_pause_long', 0),)]:
                 actions.append(scenario)
 
         total = sum([y for (x,y) in actions])
