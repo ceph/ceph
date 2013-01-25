@@ -35,7 +35,7 @@ class ClockSkewCheck:
                           (default: True)
    at-least-once-timeout  If we were told to stop but we are attempting to
                           run at least once, timeout after this many seconds.
-                          (default: 300)
+                          (default: 600)
 
   Example:
     Expect a skew higher than 0.05 seconds, but only report it without failing
@@ -64,7 +64,7 @@ class ClockSkewCheck:
     self.expect_skew = self.config.get('expect-skew', False)
     self.never_fail = self.config.get('never-fail', False)
     self.at_least_once = self.config.get('at-least-once', True)
-    self.at_least_once_timeout = self.config.get('at-least-once-timeout', 300.0)
+    self.at_least_once_timeout = self.config.get('at-least-once-timeout', 600.0)
 
   def info(self, x):
     self.logger.info(x)
@@ -88,12 +88,15 @@ class ClockSkewCheck:
     self.info('start checking for clock skews')
     skews = dict()
     ran_once = False
-    started_on = time.time()
+    started_on = None
 
     while not self.stopping or (self.at_least_once and not ran_once):
 
       if self.at_least_once and not ran_once and self.stopping:
-        if self.at_least_once_timeout > 0.0:
+        if started_on is None:
+          self.info('kicking-off timeout (if any)')
+          started_on = time.time()
+        elif self.at_least_once_timeout > 0.0:
           assert time.time() - started_on < self.at_least_once_timeout, \
               'failed to obtain a timecheck before timeout expired'
 
