@@ -322,9 +322,11 @@ RGW's ``user:subuser`` tuple maps to the ``tenant:user`` tuple expected by Swift
 Integrating with OpenStack Keystone
 ===================================
 
-It is possible to integrate RGW with Keystone, the OpenStack identity service. This sets up RGW to accept Keystone
-as the users authority. A user that Keystone authorizes to access RGW will also be automatically created on RGW
-(if didn't exist beforehand). A token that Keystone validates will be considered as valid by RGW.
+It is possible to integrate RGW with Keystone, the OpenStack identity service.
+This sets up RGW to accept Keystone as the users authority. A user that Keystone
+authorizes to access RGW will also be automatically created on RGW (if didn't
+exist beforehand). A token that Keystone validates will be considered as valid
+by RGW.
 
 The following config options are available for Keystone integration::
 
@@ -336,24 +338,29 @@ The following config options are available for Keystone integration::
 		rgw keystone revocation interval = {number of seconds before checking revoked tickets}
 		nss db path = {path to nss db}
 
-An RGW user is mapped into a Keystone ``tenant``. A Keystone user has different roles assigned to it on possibly more
-than a single tenant. When RGW gets the ticket, it looks at the tenant, and the user roles that are assigned to
-that ticket, and accepts/rejects the request according to the ``rgw keystone accepted roles`` configurable.
+An RGW user is mapped into a Keystone ``tenant``. A Keystone user has different
+roles assigned to it on possibly more than a single tenant. When RGW gets the
+ticket, it looks at the tenant, and the user roles that are assigned to that
+ticket, and accepts/rejects the request according to the ``rgw keystone accepted
+roles`` configurable.
 
-Keystone itself needs to be configured to point to RGW as an object-storage endpoint::
+Keystone itself needs to be configured to point to RGW as an object-storage
+endpoint::
 
 	keystone service-create --name swift --type-object-store
 	keystone endpoint-create --service-id <id> --public-url http://radosgw.example.com/swift/v1
 
 
-The keystone url is the Keystone admin RESTful api url. The admin token is the token that is configured internally
-in Keystone for admin requests.
+The keystone url is the Keystone admin RESTful api url. The admin token is the
+token that is configured internally in Keystone for admin requests.
 
-RGW will query Keystone periodically for a list of revoked tokens. These requests are encoded and signed. Also, Keystone
-may be configured to provide self signed tokens, which are also encoded and signed. RGW needs to be able to decode
-and verify these signed messages, and it requires it to be set up appropriately. Currently, RGW will be able to do
-it only if it was compiled with ``--with-nss``. It also requires converting the OpenSSL certificates that Keystone uses
-for creating the requests to the nss db format, for example::
+RGW will query Keystone periodically for a list of revoked tokens. These
+requests are encoded and signed. Also, Keystone may be configured to provide
+self signed tokens, which are also encoded and signed. RGW needs to be able to
+decode and verify these signed messages, and it requires it to be set up
+appropriately. Currently, RGW will be able to do it only if it was compiled with
+``--with-nss``. It also requires converting the OpenSSL certificates that
+Keystone uses for creating the requests to the nss db format, for example::
 
 	mkdir /var/ceph/nss
 
@@ -361,3 +368,27 @@ for creating the requests to the nss db format, for example::
 		certutil -d /var/ceph/nss -A -n ca -t "TCu,Cu,Tuw"
 	openssl x509 -in /etc/keystone/ssl/certs/signing_cert.pem -pubkey | \
 		certutil -d /var/ceph/nss -A -n signing_cert -t "TCu,Cu,Tuw"
+
+
+Enabling Subdomain S3 Calls
+===========================
+
+To use RADOS Gateway with subdomain S3 calls (e.g.,
+``http://bucketname.hostname``), you must add the RADOS Gateway DNS name under
+the ``[client.radosgw.gateway]`` section of your Ceph configuration file::
+
+	[client.radosgw.gateway]
+		...
+		rgw dns name = {hostname}
+
+You should also consider installing `Dnsmasq`_ on your client machine(s) when
+using ``http://{bucketname}.{hostname}`` syntax. The  ``dnsmasq.conf`` file
+should include the following settings:: 
+
+	address=/{hostname}/{host-ip-address}
+	listen-address={client-loopback-ip}
+
+Then, add the ``{client-loopback-ip}`` IP address as the first DNS nameserver
+on client the machine(s).
+
+.. _Dnsmasq: https://help.ubuntu.com/community/Dnsmasq
