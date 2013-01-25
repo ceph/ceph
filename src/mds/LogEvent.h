@@ -26,7 +26,8 @@
 #define EVENT_RESETJOURNAL 9
 
 #define EVENT_SESSION      10
-#define EVENT_SESSIONS     11
+#define EVENT_SESSIONS_OLD 11
+#define EVENT_SESSIONS     12
 
 #define EVENT_UPDATE       20
 #define EVENT_SLAVEUPDATE  21
