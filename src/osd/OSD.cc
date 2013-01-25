@@ -3287,47 +3287,45 @@ void OSD::forget_peer_epoch(int peer, epoch_t as_of)
 }
 
 
-bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch,
-			      Session* session)
+bool OSD::_share_map_incoming(entity_name_t name, Connection *con, epoch_t epoch, Session* session)
 {
   bool shared = false;
-  dout(20) << "_share_map_incoming " << inst << " " << epoch << dendl;
+  dout(20) << "_share_map_incoming " << name << " " << con->get_peer_addr() << " " << epoch << dendl;
   //assert(osd_lock.is_locked());
 
   assert(is_active());
 
   // does client have old map?
-  if (inst.name.is_client()) {
+  if (name.is_client()) {
     bool sendmap = epoch < osdmap->get_epoch();
     if (sendmap && session) {
-      if ( session->last_sent_epoch < osdmap->get_epoch() ) {
+      if (session->last_sent_epoch < osdmap->get_epoch()) {
 	session->last_sent_epoch = osdmap->get_epoch();
-      }
-      else {
+      } else {
 	sendmap = false; //we don't need to send it out again
-	dout(15) << inst.name << " already sent incremental to update from epoch "<< epoch << dendl;
+	dout(15) << name << " already sent incremental to update from epoch "<< epoch << dendl;
       }
     }
     if (sendmap) {
-      dout(10) << inst.name << " has old map " << epoch << " < " << osdmap->get_epoch() << dendl;
-      send_incremental_map(epoch, inst);
+      dout(10) << name << " has old map " << epoch << " < " << osdmap->get_epoch() << dendl;
+      send_incremental_map(epoch, con);
       shared = true;
     }
   }
 
   // does peer have old map?
-  if (inst.name.is_osd() &&
-      osdmap->is_up(inst.name.num()) &&
-      (osdmap->get_cluster_inst(inst.name.num()) == inst ||
-       osdmap->get_hb_inst(inst.name.num()) == inst)) {
+  if (name.is_osd() &&
+      osdmap->is_up(name.num()) &&
+      (osdmap->get_cluster_addr(name.num()) == con->get_peer_addr() ||
+       osdmap->get_hb_addr(name.num()) == con->get_peer_addr())) {
     // remember
-    epoch_t has = note_peer_epoch(inst.name.num(), epoch);
+    epoch_t has = note_peer_epoch(name.num(), epoch);
 
     // share?
     if (has < osdmap->get_epoch()) {
-      dout(10) << inst.name << " has old map " << epoch << " < " << osdmap->get_epoch() << dendl;
-      note_peer_epoch(inst.name.num(), osdmap->get_epoch());
-      send_incremental_map(epoch, osdmap->get_cluster_inst(inst.name.num()));
+      dout(10) << name << " " << con->get_peer_addr() << " has old map " << epoch << " < " << osdmap->get_epoch() << dendl;
+      note_peer_epoch(name.num(), osdmap->get_epoch());
+      send_incremental_map(epoch, con);
       shared = true;
     }
   }
@@ -4489,32 +4487,6 @@ void OSD::send_map(MOSDMap *m, Connection *con)
   if (entity_name_t::TYPE_OSD == con->get_peer_type())
     msgr = cluster_messenger;
   msgr->send_message(m, con);
-}
-
-void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool lazy)
-{
-  dout(10) << "send_incremental_map " << since << " -> " << osdmap->get_epoch()
-           << " to " << inst << dendl;
-  
-  if (since < superblock.oldest_map) {
-    // just send latest full map
-    MOSDMap *m = new MOSDMap(monc->get_fsid());
-    m->oldest_map = superblock.oldest_map;
-    m->newest_map = superblock.newest_map;
-    epoch_t e = osdmap->get_epoch();
-    get_map_bl(e, m->maps[e]);
-    send_map(m, inst, lazy);
-    return;
-  }
-
-  while (since < osdmap->get_epoch()) {
-    epoch_t to = osdmap->get_epoch();
-    if (to - since > (epoch_t)g_conf->osd_map_message_max)
-      to = since + g_conf->osd_map_message_max;
-    MOSDMap *m = build_incremental_map_msg(since, to);
-    send_map(m, inst, lazy);
-    since = to;
-  }
 }
 
 void OSD::send_incremental_map(epoch_t since, Connection *con)
@@ -6031,7 +6003,7 @@ void OSD::handle_op(OpRequestRef op)
     return;
   }
   // share our map with sender, if they're old
-  _share_map_incoming(m->get_source_inst(), m->get_map_epoch(),
+  _share_map_incoming(m->get_source(), m->get_connection(), m->get_map_epoch(),
 		      (Session *)m->get_connection()->get_priv());
 
   if (op->rmw_flags == 0) {
@@ -6158,7 +6130,7 @@ void OSD::handle_sub_op(OpRequestRef op)
     return;
 
   // share our map with sender, if they're old
-  _share_map_incoming(m->get_source_inst(), m->map_epoch,
+  _share_map_incoming(m->get_source(), m->get_connection(), m->map_epoch,
 		      (Session*)m->get_connection()->get_priv());
 
   if (service.splitting(pgid)) {
@@ -6195,7 +6167,7 @@ void OSD::handle_sub_op_reply(OpRequestRef op)
   if (!require_same_or_newer_map(op, m->get_map_epoch())) return;
 
   // share our map with sender, if they're old
-  _share_map_incoming(m->get_source_inst(), m->get_map_epoch(),
+  _share_map_incoming(m->get_source(), m->get_connection(), m->get_map_epoch(),
 		      (Session*)m->get_connection()->get_priv());
 
   PG *pg = _have_pg(pgid) ? _lookup_pg(pgid) : NULL;
