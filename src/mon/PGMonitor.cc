@@ -258,6 +258,7 @@ void PGMonitor::encode_pending(bufferlist &bl)
 {
   dout(10) << "encode_pending v " << pending_inc.version << dendl;
   assert(paxos->get_version() + 1 == pending_inc.version);
+  pending_inc.stamp = ceph_clock_now(g_ceph_context);
   pending_inc.encode(bl, mon->get_quorum_features());
 }
 
