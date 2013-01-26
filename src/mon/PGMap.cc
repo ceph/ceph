@@ -677,6 +677,17 @@ void PGMap::print_summary(ostream& out) const
       << kb_t(osd_sum.kb_used) << " used, "
       << kb_t(osd_sum.kb_avail) << " / "
       << kb_t(osd_sum.kb) << " avail";
+
+  if (pg_sum_delta.stats.sum.num_rd ||
+      pg_sum_delta.stats.sum.num_wr) {
+    out << "; ";
+    if (pg_sum_delta.stats.sum.num_rd)
+      out << si_t((pg_sum_delta.stats.sum.num_rd_kb << 10) / (double)stamp_delta) << "B/s rd, ";
+    if (pg_sum_delta.stats.sum.num_wr)
+      out << si_t((pg_sum_delta.stats.sum.num_wr_kb << 10) / (double)stamp_delta) << "B/s wr, ";
+    out << si_t((pg_sum_delta.stats.sum.num_rd + pg_sum_delta.stats.sum.num_wr) / (double)stamp_delta) << "op/s";
+  }
+
   std::stringstream ssr;
   recovery_summary(ssr);
   if (ssr.str().length())
