@@ -21,7 +21,12 @@ This creates a connection so that you can interact with the server.
 	require_once 'AWSSDKforPHP/sdk.class.php';
 
 	// Instantiate the S3 class and point it at the desired host
-	$Connection = new AmazonS3();
+	$Connection = new AmazonS3(array(
+		'key' => AWS_KEY,
+		'secret' => AWS_SECRET_KEY,
+		'canonical_id' => AWS_CANONICAL_ID,
+		'canonical_name' => AWS_CANONICAL_NAME,
+	));
 	$Connection->set_hostname($HOST);
 	$Connection->allow_hostname_override(false);
 
