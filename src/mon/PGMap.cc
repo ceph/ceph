@@ -28,7 +28,7 @@ void PGMap::Incremental::encode(bufferlist &bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(5, 5, bl);
+  ENCODE_START(6, 5, bl);
   ::encode(version, bl);
   ::encode(pg_stat_updates, bl);
   ::encode(osd_stat_updates, bl);
@@ -38,12 +38,13 @@ void PGMap::Incremental::encode(bufferlist &bl, uint64_t features) const
   ::encode(full_ratio, bl);
   ::encode(nearfull_ratio, bl);
   ::encode(pg_remove, bl);
+  ::encode(stamp, bl);
   ENCODE_FINISH(bl);
 }
 
 void PGMap::Incremental::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
   ::decode(version, bl);
   if (struct_v < 3) {
     pg_stat_updates.clear();
@@ -84,12 +85,15 @@ void PGMap::Incremental::decode(bufferlist::iterator &bl)
   if (struct_v < 4 && nearfull_ratio == 0) {
     nearfull_ratio = -1;
   }
+  if (struct_v >= 6)
+    ::decode(stamp, bl);
   DECODE_FINISH(bl);
 }
 
 void PGMap::Incremental::dump(Formatter *f) const
 {
   f->dump_unsigned("version", version);
+  f->dump_stream("stamp") << stamp;
   f->dump_unsigned("osdmap_epoch", osdmap_epoch);
   f->dump_unsigned("pg_scan_epoch", pg_scan);
   f->dump_float("full_ratio", full_ratio);
@@ -129,6 +133,7 @@ void PGMap::Incremental::generate_test_instances(list<PGMap::Incremental*>& o)
   o.push_back(new Incremental);
   o.push_back(new Incremental);
   o.back()->version = 1;
+  o.back()->stamp = utime_t(123,345);
   o.push_back(new Incremental);
   o.back()->version = 2;
   o.back()->pg_stat_updates[pg_t(1,2,3)] = pg_stat_t();
@@ -357,7 +362,7 @@ void PGMap::encode(bufferlist &bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(4, 4, bl);
+  ENCODE_START(5, 4, bl);
   ::encode(version, bl);
   ::encode(pg_stat, bl);
   ::encode(osd_stat, bl);
@@ -365,12 +370,13 @@ void PGMap::encode(bufferlist &bl, uint64_t features) const
   ::encode(last_pg_scan, bl);
   ::encode(full_ratio, bl);
   ::encode(nearfull_ratio, bl);
+  ::encode(stamp, bl);
   ENCODE_FINISH(bl);
 }
 
 void PGMap::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, bl);
   ::decode(version, bl);
   if (struct_v < 3) {
     pg_stat.clear();
@@ -392,6 +398,8 @@ void PGMap::decode(bufferlist::iterator &bl)
     ::decode(full_ratio, bl);
     ::decode(nearfull_ratio, bl);
   }
+  if (struct_v >= 5)
+    ::decode(stamp, bl);
   DECODE_FINISH(bl);
 
   calc_stats();
@@ -408,6 +416,7 @@ void PGMap::dump(Formatter *f) const
 void PGMap::dump_basic(Formatter *f) const
 {
   f->dump_unsigned("version", version);
+  f->dump_stream("stamp") << stamp;
   f->dump_unsigned("last_osdmap_epoch", last_osdmap_epoch);
   f->dump_unsigned("last_pg_scan", last_pg_scan);
   f->dump_float("full_ratio", full_ratio);
@@ -495,6 +504,7 @@ void PGMap::dump_pg_stats_plain(ostream& ss,
 void PGMap::dump(ostream& ss) const
 {
   ss << "version " << version << std::endl;
+  ss << "stamp " << stamp << std::endl;
   ss << "last_osdmap_epoch " << last_osdmap_epoch << std::endl;
   ss << "last_pg_scan " << last_pg_scan << std::endl;
   ss << "full_ratio " << full_ratio << std::endl;

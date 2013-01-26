@@ -52,6 +52,7 @@ public:
     set<pg_t> pg_remove;
     float full_ratio;
     float nearfull_ratio;
+    utime_t stamp;
 
     void encode(bufferlist &bl, uint64_t features=-1) const;
     void decode(bufferlist::iterator &bl);
@@ -69,6 +70,8 @@ public:
   hash_map<int,pool_stat_t> pg_pool_sum;
   pool_stat_t pg_sum;
   osd_stat_t osd_sum;
+
+  utime_t stamp;
 
   set<pg_t> creating_pgs;   // lru: front = new additions, back = recently pinged
   map<int,set<pg_t> > creating_pgs_by_osd;
