@@ -157,6 +157,13 @@ void PGMap::apply_incremental(const Incremental& inc)
 {
   assert(inc.version == version+1);
   version++;
+
+  stamp_delta = inc.stamp;
+  stamp_delta -= stamp;
+  stamp = inc.stamp;
+
+  pool_stat_t pg_sum_old = pg_sum;
+
   bool ratios_changed = false;
   if (inc.full_ratio != full_ratio && inc.full_ratio != -1) {
     full_ratio = inc.full_ratio;
@@ -228,6 +235,9 @@ void PGMap::apply_incremental(const Incremental& inc)
     nearfull_osds.erase(*p);
     full_osds.erase(*p);
   }
+
+  pg_sum_delta = pg_sum;
+  pg_sum_delta.stats.sub(pg_sum_old.stats);
   
   if (inc.osdmap_epoch)
     last_osdmap_epoch = inc.osdmap_epoch;
@@ -424,6 +434,10 @@ void PGMap::dump_basic(Formatter *f) const
   
   f->open_object_section("pg_stats_sum");
   pg_sum.dump(f);
+  f->close_section();
+
+  f->open_object_section("pg_stats_delta");
+  pg_sum_delta.dump(f);
   f->close_section();
   
   f->open_object_section("osd_stats_sum");
@@ -635,6 +649,18 @@ void PGMap::recovery_summary(ostream& out) const
       out << "; ";
     out << pg_sum.stats.sum.num_objects_unfound
 	<< "/" << pg_sum.stats.sum.num_objects << " unfound (" << b << "%)";
+    first = false;
+  }
+  if (pg_sum_delta.stats.sum.num_objects_recovered ||
+      pg_sum_delta.stats.sum.num_bytes_recovered ||
+      pg_sum_delta.stats.sum.num_keys_recovered) {
+    if (!first)
+      out << "; ";
+    out << " recovering "
+	<< si_t(pg_sum_delta.stats.sum.num_objects_recovered / (double)stamp_delta) << " o/s, "
+	<< si_t(pg_sum_delta.stats.sum.num_bytes_recovered / (double)stamp_delta) << "B/s";
+    if (pg_sum_delta.stats.sum.num_keys_recovered)
+      out << ", " << si_t(pg_sum_delta.stats.sum.num_keys_recovered / (double)stamp_delta) << " key/s";
     first = false;
   }
 }
