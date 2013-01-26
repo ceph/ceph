@@ -89,28 +89,6 @@ of one monitor, one metadata server and  two OSDs may print the following::
 Checking OSD Status
 ===================
 
-An OSD's status is either in the cluster (``in``) or out of the
-cluster (``out``); and, it is either up and running (``up``), or it is down and
-not running (``down``). If an OSD is ``up``, it may be either ``in`` in the
-cluster (you can read and write data) or it is out of the cluster ``out``.  If
-it is ``down``, it should also be ``out``. If an OSD is ``down`` and ``in``,
-there is a problem.
-
-.. ditaa:: +----------------+        +----------------+
-           |                |        |                |
-           |   OSD #n In    |        |   OSD #n Up    |
-           |                |        |                |
-           +----------------+        +----------------+
-                   ^                         ^
-                   |                         |
-                   |                         |
-                   v                         v
-           +----------------+        +----------------+
-           |                |        |                |
-           |   OSD #n Out   |        |   OSD #n Down  |
-           |                |        |                |
-           +----------------+        +----------------+
-
 You can check OSDs to ensure they are ``up`` and ``in`` by executing:: 
 
 	ceph osd stat
@@ -134,6 +112,7 @@ and their weight. ::
 	1	1				osd.1	up	1	
 	2	1				osd.2	up	1
 
+For a detailed discussion, refer to `Monitoring OSDs and Placement Groups`_.
 
 Checking Monitor Status
 =======================
@@ -201,7 +180,7 @@ Checking Placement Group States
 ===============================
 
 Placement groups map objects to OSDs. When you monitor your
-placement groups,  you will want them to be ``active`` and ``clean``. For other
-PG states, see `Placement Group States`_.
+placement groups,  you will want them to be ``active`` and ``clean``. 
+For a detailed discussion, refer to `Monitoring OSDs and Placement Groups`_.
 
-.. _Placement Group States: ../pg-states
+.. _Monitoring OSDs and Placement Groups: ../monitoring-osd-pg
