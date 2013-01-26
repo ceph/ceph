@@ -125,7 +125,7 @@ class Thrasher:
             )
 
     def inject_pause(self, conf_key, duration, check_after, should_be_down):
-        the_one = random.choice(self.in_osds)
+        the_one = random.choice(self.live_osds)
         self.log("inject_pause on {osd}".format(osd = the_one))
         self.log(
             "Testing {key} pause injection for duration {duration}".format(
