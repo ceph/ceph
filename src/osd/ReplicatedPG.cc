@@ -5354,6 +5354,8 @@ void ReplicatedPG::handle_pull_response(OpRequestRef op)
   data_included = usable_intervals;
   data.claim(usable_data);
 
+  info.stats.stats.sum.num_bytes_recovered += data.length();
+
   bool first = pi.recovery_progress.first;
   pi.recovery_progress = m->recovery_progress;
 
@@ -5392,8 +5394,11 @@ void ReplicatedPG::handle_pull_response(OpRequestRef op)
 		   m->omap_entries,
 		   t);
 
+  info.stats.stats.sum.num_keys_recovered += m->omap_entries.size();
+
   if (complete) {
     submit_push_complete(pi.recovery_info, t);
+    info.stats.stats.sum.num_objects_recovered++;
 
     SnapSetContext *ssc;
     if (hoid.snap == CEPH_NOSNAP || hoid.snap == CEPH_SNAPDIR) {
@@ -5605,8 +5610,13 @@ int ReplicatedPG::send_push(int prio, int peer,
   if (!subop->data_included.empty())
     new_progress.data_recovered_to = subop->data_included.range_end();
 
-  if (new_progress.is_complete(recovery_info))
+  if (new_progress.is_complete(recovery_info)) {
     new_progress.data_complete = true;
+    info.stats.stats.sum.num_objects_recovered++;
+  }
+
+  info.stats.stats.sum.num_keys_recovered += subop->omap_entries.size();
+  info.stats.stats.sum.num_bytes_recovered += subop->ops[0].indata.length();
 
   osd->logger->inc(l_osd_push);
   osd->logger->inc(l_osd_push_outb, subop->ops[0].indata.length());
