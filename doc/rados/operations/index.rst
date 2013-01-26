@@ -14,6 +14,7 @@ and, monitoring an operating cluster.
 	
 	operating
 	monitoring
+	monitoring-osd-pg
 	cpu-profiling
 	memory-profiling
 	troubleshooting
