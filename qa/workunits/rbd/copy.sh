@@ -145,7 +145,7 @@ test_ls() {
     done
 
     for i in $(seq -w 00 99); do
-	rbd create image.$i --format 2 -s 1
+	rbd create image.$i --image-format 2 -s 1
     done
     rbd ls | wc -l | grep 100
     rbd ls -l | grep image |  wc -l | grep 100
@@ -322,7 +322,7 @@ test_remove
 RBD_CREATE_ARGS=""
 test_others
 test_locking
-RBD_CREATE_ARGS="--format 2"
+RBD_CREATE_ARGS="--image-format 2"
 test_others
 test_locking
 test_clone
