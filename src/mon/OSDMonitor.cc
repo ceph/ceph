@@ -2779,19 +2779,28 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	return true;
       } else if (m->cmd[2] == "delete" && m->cmd.size() >= 4) {
-	//hey, let's delete a pool!
+	// osd pool delete <poolname> <poolname again> --yes-i-really-really-mean-it
 	int64_t pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
 	if (pool < 0) {
 	  ss << "pool '" << m->cmd[3] << "' does not exist";
 	  err = 0;
-	} else {
-	  int ret = _prepare_remove_pool(pool);
-	  if (ret == 0)
-	    ss << "pool '" << m->cmd[3] << "' deleted";
-	  getline(ss, rs);
-	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, ret, rs, paxos->get_version()));
-	  return true;
+	  goto out;
 	}
+	if (m->cmd.size() != 6 ||
+	    m->cmd[3] != m->cmd[4] ||
+	    m->cmd[5] != "--yes-i-really-really-mean-it") {
+	  ss << "WARNING: this will *PERMANENTLY DESTROY* all data stored in pool " << m->cmd[3]
+	     << ".  If you are *ABSOLUTELY CERTAIN* that is what you want, pass the pool name *twice*, "
+	     << "followed by --yes-i-really-really-mean-it.";
+	  err = -EPERM;
+	  goto out;
+	}
+	int ret = _prepare_remove_pool(pool);
+	if (ret == 0)
+	  ss << "pool '" << m->cmd[3] << "' deleted";
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, ret, rs, paxos->get_version()));
+	return true;
       } else if (m->cmd[2] == "rename" && m->cmd.size() == 5) {
 	int64_t pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
 	if (pool < 0) {
