@@ -440,6 +440,10 @@ public:
    */
   virtual Connection *get_connection(const entity_inst_t& dest) = 0;
   /**
+   * Get the Connection object associated with ourselves.
+   */
+  virtual Connection *get_loopback_connection() = 0;
+  /**
    * Send a "keepalive" ping to the given dest, if it has a working Connection.
    * If the Messenger doesn't already have a Connection, or if the underlying
    * connection has broken, this function does nothing.
