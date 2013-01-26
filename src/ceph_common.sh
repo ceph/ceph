@@ -45,6 +45,13 @@ check_host() {
 
     #echo host for $name is $host, i am $hostname
 
+    # sysvinit managed instance in standird location?
+    if [ -e "/var/lib/ceph/$type/ceph-$id/sysvinit" ]; then
+	host="$hostname"
+	echo "=== $type.$id === "
+	return 0
+    fi
+
     # ignore all sections without 'host' defined
     if [ -z "$host" ]; then
 	return 1
