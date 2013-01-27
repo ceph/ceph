@@ -6322,11 +6322,22 @@ void Server::_logged_slave_rename(MDRequest *mdr,
 
   // export srci?
   if (srcdn->is_auth() && srcdnl->is_primary()) {
-    list<Context*> finished;
+    // set export bounds for CInode::encode_export()
+    list<CDir*> bounds;
+    if (srcdnl->get_inode()->is_dir()) {
+      srcdnl->get_inode()->get_dirfrags(bounds);
+      for (list<CDir*>::iterator p = bounds.begin(); p != bounds.end(); p++)
+	(*p)->state_set(CDir::STATE_EXPORTBOUND);
+    }
+
     map<client_t,entity_inst_t> exported_client_map;
     bufferlist inodebl;
     mdcache->migrator->encode_export_inode(srcdnl->get_inode(), inodebl, 
 					   exported_client_map);
+
+    for (list<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p)
+      (*p)->state_clear(CDir::STATE_EXPORTBOUND);
+
     ::encode(exported_client_map, reply->inode_export);
     reply->inode_export.claim_append(inodebl);
     reply->inode_export_v = srcdnl->get_inode()->inode.version;
