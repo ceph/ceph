@@ -1093,7 +1093,7 @@ EXTRA_DIST += \
 	$(srcdir)/upstart/ceph-osd.conf \
 	$(srcdir)/upstart/ceph-osd-all.conf \
 	$(srcdir)/upstart/ceph-osd-all-starter.conf \
-	$(srcdir)/upstart/ceph-hotplug.conf \
+	$(srcdir)/upstart/ceph-osd-activate.conf \
 	$(srcdir)/upstart/ceph-mds.conf \
 	$(srcdir)/upstart/ceph-mds-all.conf \
 	$(srcdir)/upstart/ceph-mds-all-starter.conf \
