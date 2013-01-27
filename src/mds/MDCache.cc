@@ -2333,7 +2333,11 @@ ESubtreeMap *MDCache::create_subtree_map()
 	  continue;
 	}
 
+	bool journal_dir = false;
 	if (dir->is_subtree_root()) {
+	  if (le->subtrees.count(newparent->dirfrag()) &&
+	      oldparent->get_dir_auth() != newparent->get_dir_auth())
+	    journal_dir = true;
 	  // children are fine.  change parent.
 	  _move_subtree_map_bound(dir->dirfrag(), oldparent->dirfrag(), newparent->dirfrag(),
 				  le->subtrees);
@@ -2343,13 +2347,17 @@ ESubtreeMap *MDCache::create_subtree_map()
 	  if (oldparent->get_dir_auth() != newparent->get_dir_auth()) {
 	    dout(10) << " creating subtree for " << dir->dirfrag() << dendl;
 	    // if oldparent is auth, subtree is mine; include it.
-	    if (oldparent->get_dir_auth().first == mds->whoami)
+	    if (le->subtrees.count(oldparent->dirfrag())) {
 	      le->subtrees[dir->dirfrag()].clear();
+	      journal_dir = true;
+	    }
 	    // if newparent is auth, subtree is a new bound
-	    if (le->subtrees.count(newparent->dirfrag()))
+	    if (le->subtrees.count(newparent->dirfrag())) {
 	      le->subtrees[newparent->dirfrag()].push_back(dir->dirfrag());  // newparent is auth; new bound
+	      journal_dir = true;
+	    }
 	    newparent = dir;
-	}
+	  }
 	  
 	  // see if any old bounds move to the new parent.
 	  for (set<CDir*>::iterator p = subtrees[oldparent].begin();
@@ -2360,6 +2368,10 @@ ESubtreeMap *MDCache::create_subtree_map()
 	      _move_subtree_map_bound(bound->dirfrag(), oldparent->dirfrag(), newparent->dirfrag(),
 				      le->subtrees);
 	  }
+	}
+	if (journal_dir) {
+	  le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
+	  le->metablob.add_dir(dir, false);
 	}
       }
     }
