@@ -509,6 +509,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("flags", get_flags());
   f->dump_int("type", get_type());
   f->dump_int("size", get_size());
+  f->dump_int("min_size", get_min_size());
   f->dump_int("crush_ruleset", get_crush_ruleset());
   f->dump_int("object_hash", get_object_hash());
   f->dump_int("pg_num", get_pg_num());
@@ -829,6 +830,7 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
 {
   out << p.get_type_name()
       << " size " << p.get_size()
+      << " min_size " << p.get_min_size()
       << " crush_ruleset " << p.get_crush_ruleset()
       << " object_hash " << p.get_object_hash_name()
       << " pg_num " << p.get_pg_num()
