@@ -10,6 +10,11 @@ import subprocess
 import sys
 import tempfile
 
+init_systems = [
+    'upstart',
+    'sysvinit',
+    'systemd',
+    ]
 
 log_name = __name__
 if log_name == '__main__':
@@ -274,28 +279,47 @@ def move_mount(
         )
 
 
-def upstart_start(
+def start_daemon(
     cluster,
     osd_id,
     ):
     log.debug('Starting %s osd.%s...', cluster, osd_id)
-    subprocess.check_call(
-        args=[
-            'initctl',
-            # use emit, not start, because start would fail if the
-            # instance was already running
-            'emit',
-            # since the daemon starting doesn't guarantee much about
-            # the service being operational anyway, don't bother
-            # waiting for it
-            '--no-wait',
-            '--',
-            'ceph-osd',
-            'cluster={cluster}'.format(cluster=cluster),
-            'id={osd_id}'.format(osd_id=osd_id),
-            ],
-        )
 
+    path = '/var/lib/ceph/osd/{cluster}-{osd_id}'.format(
+        cluster=cluster, osd_id=osd_id)
+
+    # upstart?
+    if os.path.exists(os.path.join(path,'upstart')):
+        subprocess.check_call(
+            args=[
+                'initctl',
+                # use emit, not start, because start would fail if the
+                # instance was already running
+                'emit',
+                # since the daemon starting doesn't guarantee much about
+                # the service being operational anyway, don't bother
+                # waiting for it
+                '--no-wait',
+                '--',
+                'ceph-osd',
+                'cluster={cluster}'.format(cluster=cluster),
+                'id={osd_id}'.format(osd_id=osd_id),
+                ],
+            )
+    elif os.path.exists(os.path.join(path, 'sysvinit')):
+        subprocess.check_call(
+            args=[
+                'service',
+                'ceph',
+                'start',
+                'osd.{osd_id}'.format(osd_id=osd_id),
+                ],
+            )
+    else:
+        raise ActivateError('{cluster} osd.{osd_id} is not tagged with an init system'.format(
+                cluster=cluster,
+                osd_id=osd_id,
+                ))
 
 def detect_fstype(
     dev,
@@ -408,6 +432,7 @@ def unmount(
 def mount_activate(
     dev,
     activate_key_template,
+    init,
     ):
 
     try:
@@ -434,7 +459,7 @@ def mount_activate(
     osd_id = None
     cluster = None
     try:
-        (osd_id, cluster) = activate(path, activate_key_template)
+        (osd_id, cluster) = activate(path, activate_key_template, init)
 
         # check if the disk is already active
         active = False
@@ -456,18 +481,14 @@ def mount_activate(
                 cluster=cluster,
                 osd_id=osd_id,
                 )
-
-        upstart_start(
-            cluster=cluster,
-            osd_id=osd_id,
-            )
+        return (cluster, osd_id)
 
     except:
         log.error('Failed to activate')
         unmount(path)
         raise
     finally:
-        # if we created a temp dir to mount it, remove it
+        # remove out temp dir
         os.rmdir(path)
 
             )
@@ -477,6 +498,7 @@ def mount_activate(
 def activate(
     path,
     activate_key_template,
+    init,
     ):
 
     try:
@@ -519,11 +541,18 @@ def activate(
                 keyring=keyring,
                 )
 
-        # indicate this daemon is managed by upstart
-        if not os.path.exists(os.path.join(path, 'upstart')):
-            log.debug('Marking osd as managed by upstart...')
-            with file(os.path.join(path, 'upstart'), 'w'):
+        if init is not None:
+            log.debug('Marking with init system %s', init)
+            with file(os.path.join(path, init), 'w'):
                 pass
+
+            # remove markers for others, just in case.
+            for other in init_systems:
+                if other != init:
+                    try:
+                        os.unlink(os.path.join(path, other))
+                    except:
+                        pass
 
         if not os.path.exists(os.path.join(path, 'active')):
             log.debug('Authorizing OSD key...')
@@ -564,6 +593,12 @@ def parse_args():
         metavar='PATH',
         help='path to block device when using --mount',
         )
+    parser.add_argument(
+        '--mark-init',
+        metavar='INITSYSTEM',
+        help='init system to manage this dir',
+        choices=init_systems,
+        )
     parser.set_defaults(
         activate_key_template='/var/lib/ceph/bootstrap-osd/{cluster}.keyring',
         # we want to hold on to this, for later
@@ -585,11 +620,20 @@ def main():
         )
 
     try:
+        cluster = None
+        osd_id = None
         if args.mount:
-            mount_activate(
+            (cluster, osd_id) = mount_activate(
                 dev=args.path,
                 activate_key_template=args.activate_key_template,
+                init=args.mark_init,
                 )
+
+        start_daemon(
+            cluster=cluster,
+            osd_id=osd_id,
+            )
+
     except ActivateError as e:
         print >>sys.stderr, '{prog}: {msg}'.format(
             prog=args.prog,
