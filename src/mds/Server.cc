@@ -101,6 +101,10 @@ void Server::dispatch(Message *m)
 		(m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
 		 ((MClientRequest*)m)->is_replay()))) {
       // replaying!
+    } else if (mds->is_clientreplay() && m->get_type() == MSG_MDS_SLAVE_REQUEST &&
+	       (((MMDSSlaveRequest*)m)->is_reply() ||
+		!mds->mdsmap->is_active(m->get_source().num()))) {
+      // slave reply or the master is also in the clientreplay stage
     } else {
       dout(3) << "not active yet, waiting" << dendl;
       mds->wait_for_active(new C_MDS_RetryMessage(mds, m));
