@@ -7,6 +7,7 @@ import os
 import os.path
 import re
 import subprocess
+import stat
 import sys
 import tempfile
 
@@ -69,6 +70,10 @@ class UnmountError(ActivateError):
 
 
 def maybe_mkdir(*a, **kw):
+    # remove any symlink, if it is there..
+    if os.path.exists(*a) and stat.S_ISLNK(os.lstat(*a).st_mode):
+        log.debug('Removing old symlink at %s', *a)
+        os.unlink(*a)
     try:
         os.mkdir(*a, **kw)
     except OSError, e:
@@ -491,9 +496,44 @@ def mount_activate(
         # remove out temp dir
         os.rmdir(path)
 
+
+def activate_dir(
+    path,
+    activate_key_template,
+    init,
+    ):
+
+    if not os.path.exists(path):
+        raise ActivateError(
+            'directory %s does not exist' % path
             )
 
-        path = mount(dev=path, fstype=fstype, options=mount_options)
+    (osd_id, cluster) = activate(path, activate_key_template, init)
+    canonical = '/var/lib/ceph/osd/{cluster}-{osd_id}'.format(
+        cluster=cluster,
+        osd_id=osd_id)
+    if path != canonical:
+        # symlink it from the proper location
+        create = True
+        if os.path.lexists(canonical):
+            old = os.readlink(canonical)
+            if old != path:
+                log.debug('Removing old symlink %s -> %s', canonical, old)
+                try:
+                    os.unlink(canonical)
+                except:
+                    raise ActivateError('unable to remove old symlink %s', canonical)
+            else:
+                create = False
+        if create:
+            log.debug('Creating symlink %s -> %s', canonical, path)
+            try:
+                os.symlink(path, canonical)
+            except:
+                raise ActivateError('unable to create symlink %s -> %s', canonical, path)
+
+    return (cluster, osd_id)
+
 
 def activate(
     path,
@@ -591,7 +631,8 @@ def parse_args():
     parser.add_argument(
         'path',
         metavar='PATH',
-        help='path to block device when using --mount',
+        nargs='?',
+        help='path to block device or directory',
         )
     parser.add_argument(
         '--mark-init',
@@ -622,12 +663,25 @@ def main():
     try:
         cluster = None
         osd_id = None
-        if args.mount:
+
+        if not os.path.exists(args.path):
+            raise ActivateError('%s does not exist', args.path)
+
+        mode = os.stat(args.path).st_mode
+        if stat.S_ISBLK(mode):
             (cluster, osd_id) = mount_activate(
                 dev=args.path,
                 activate_key_template=args.activate_key_template,
                 init=args.mark_init,
                 )
+        elif stat.S_ISDIR(mode):
+            (cluster, osd_id) = activate_dir(
+                path=args.path,
+                activate_key_template=args.activate_key_template,
+                init=args.mark_init,
+                )
+        else:
+            raise ActivateError('%s is not a directory or block device', args.path)
 
         start_daemon(
             cluster=cluster,
