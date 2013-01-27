@@ -1213,6 +1213,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features
 
 void Monitor::finish_election()
 {
+  timecheck_cleanup();
   exited_quorum = utime_t();
   finish_contexts(g_ceph_context, waitfor_quorum);
   finish_contexts(g_ceph_context, maybe_wait_for_quorum);
