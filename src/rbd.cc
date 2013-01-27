@@ -1428,8 +1428,16 @@ static int do_kernel_add(const char *poolname, const char *imgname,
 
   // modprobe the rbd module if /sys/bus/rbd doesn't exist
   struct stat sb;
-  if ((stat("/sys/bus/rbd", &sb) < 0) || (!S_ISDIR(sb.st_mode)))
-    system("/sbin/modprobe rbd");
+  if ((stat("/sys/bus/rbd", &sb) < 0) || (!S_ISDIR(sb.st_mode))) {
+    r = system("/sbin/modprobe rbd");
+    if (r) {
+      if (r < 0)
+        cerr << "rbd: error executing modprobe as shell command!" << std::endl;
+      else
+        cerr << "rbd: modprobe rbd failed! (" << r << ")" <<std::endl;
+      return r;
+    }
+  }
 
   // write to /sys/bus/rbd/add
   int fd = open("/sys/bus/rbd/add", O_WRONLY);
@@ -1448,8 +1456,16 @@ static int do_kernel_add(const char *poolname, const char *imgname,
   close(fd);
 
   // let udevadm do its job before we return
-  if (udevadm_settle)
-    system("/sbin/udevadm settle");
+  if (udevadm_settle) {
+    r = system("/sbin/udevadm settle");
+    if (r) {
+      if (r < 0)
+        cerr << "rbd: error executing udevadm as shell command!" << std::endl;
+      else
+        cerr << "rbd: '/sbin/udevadm settle' failed! (" << r << ")" <<std::endl;
+      return r;
+    }
+  }
 
   return r;
 }
@@ -1664,8 +1680,16 @@ static int do_kernel_rm(const char *dev)
   r = close(fd);
 
   // let udevadm finish, if present
-  if (udevadm_settle)
-    system("/sbin/udevadm settle");
+  if (udevadm_settle){
+    r = system("/sbin/udevadm settle");
+    if (r) {
+      if (r < 0)
+        cerr << "rbd: error executing udevadm as shell command!" << std::endl;
+      else
+        cerr << "rbd: '/sbin/udevadm settle' failed! (" << r << ")" <<std::endl;
+      return r;
+    }
+  }
 
   if (r < 0)
     r = -errno;
