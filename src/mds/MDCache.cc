@@ -8873,10 +8873,12 @@ void MDCache::handle_discover(MDiscover *dis)
 
   assert(from != whoami);
 
-  if (mds->get_state() < MDSMap::STATE_CLIENTREPLAY) {
+  if (mds->get_state() <= MDSMap::STATE_REJOIN) {
     int from = dis->get_source().num();
+    // proceed if requester is in the REJOIN stage, the request is from parallel_fetch().
+    // delay processing request from survivor because we may not yet choose lock states.
     if (mds->get_state() < MDSMap::STATE_REJOIN ||
-	rejoin_ack_gather.count(from)) {
+	!mds->mdsmap->is_rejoin(from)) {
       dout(0) << "discover_reply not yet active(|still rejoining), delaying" << dendl;
       mds->wait_for_active(new C_MDS_RetryMessage(mds, dis));
       return;
