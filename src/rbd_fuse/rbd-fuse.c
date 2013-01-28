@@ -461,8 +461,9 @@ rbdfs_init(struct fuse_conn_info *conn)
 	ret = rados_ioctx_create(cluster, pool_name, &ioctx);
 	if (ret < 0)
 		exit(91);
-
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
 	conn->want |= FUSE_CAP_BIG_WRITES;
+#endif
 	gotrados = 1;
 
 	// init's return value shows up in fuse_context.private_data,
