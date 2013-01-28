@@ -799,3 +799,48 @@ void dirfrag_load_vec_t::generate_test_instances(list<dirfrag_load_vec_t*>& ls)
   utime_t sample;
   ls.push_back(new dirfrag_load_vec_t(sample));
 }
+
+/*
+ * mds_load_t
+ */
+void mds_load_t::encode(bufferlist &bl) const {
+  ENCODE_START(2, 2, bl);
+  ::encode(auth, bl);
+  ::encode(all, bl);
+  ::encode(req_rate, bl);
+  ::encode(cache_hit_rate, bl);
+  ::encode(queue_len, bl);
+  ::encode(cpu_load_avg, bl);
+  ENCODE_FINISH(bl);
+}
+
+void mds_load_t::decode(const utime_t &t, bufferlist::iterator &bl) {
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  ::decode(auth, t, bl);
+  ::decode(all, t, bl);
+  ::decode(req_rate, bl);
+  ::decode(cache_hit_rate, bl);
+  ::decode(queue_len, bl);
+  ::decode(cpu_load_avg, bl);
+  DECODE_FINISH(bl);
+}
+
+void mds_load_t::dump(Formatter *f) const
+{
+  f->dump_float("request rate", req_rate);
+  f->dump_float("cache hit rate", cache_hit_rate);
+  f->dump_float("queue length", queue_len);
+  f->dump_float("cpu load", cpu_load_avg);
+  f->open_object_section("auth dirfrag");
+  auth.dump(f);
+  f->close_section();
+  f->open_object_section("all dirfrags");
+  all.dump(f);
+  f->close_section();
+}
+
+void mds_load_t::generate_test_instances(list<mds_load_t*>& ls)
+{
+  utime_t sample;
+  ls.push_back(new mds_load_t(sample));
+}
