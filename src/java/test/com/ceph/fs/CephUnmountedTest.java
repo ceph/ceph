@@ -78,6 +78,12 @@ public class CephUnmountedTest {
   }
 
   @Test(expected=CephNotMountedException.class)
+  public void test_stat() throws Exception {
+    CephStat stat = new CephStat();
+    mount.stat("/a/path", stat);
+  }
+
+  @Test(expected=CephNotMountedException.class)
   public void test_lstat() throws Exception {
     CephStat stat = new CephStat();
     mount.lstat("/a/path", stat);
@@ -144,5 +150,15 @@ public class CephUnmountedTest {
   @Test(expected=CephNotMountedException.class)
   public void test_get_pool_replication() throws Exception {
     mount.get_pool_replication(1);
+  }
+
+  @Test(expected=CephNotMountedException.class)
+  public void test_fchmod() throws Exception {
+    mount.fchmod(1, 0);
+  }
+
+  @Test(expected=CephNotMountedException.class)
+  public void test_chmod() throws Exception {
+    mount.chmod("/foo", 0);
   }
 }
