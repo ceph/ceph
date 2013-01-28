@@ -5900,7 +5900,7 @@ int Client::_fsync(Fh *f, bool syncdataonly)
     wait_on_list(in->waitfor_commit);
   }
 
-  if (!flushed_metadata) wait_sync_caps(wait_on_flush); //this could wait longer than strictly necessary,
+  if (flushed_metadata) wait_sync_caps(wait_on_flush); //this could wait longer than strictly necessary,
                                                     //but on a sync the user can put up with it
 
   ldout(cct, 10) << "ino " << in->ino << " has no uncommitted writes" << dendl;
