@@ -17,13 +17,13 @@ Before you can add a block device to a Ceph client, you must create an image for
 it in the OSD cluster first. To create a block device image, execute the 
 following::
 
-	rbd create {image-name} --size {megabytes} --dest-pool {pool-name}
+	rbd create {image-name} --size {megabytes} --pool {pool-name}
 	
 For example, to create a 1GB image named ``foo`` that stores information in a 
 pool named ``swimmingpool``, execute the following::
 
 	rbd create foo --size 1024
-	rbd create bar	--size 1024 --pool swimmingpool
+	rbd create bar --size 1024 --pool swimmingpool
 
 .. note:: You must create a pool first before you can specify it as a 
    source. See `Storage Pools`_ for details.
@@ -99,7 +99,6 @@ For example::
 
 	rbd rm bar -p swimmingpool
 
- 
 
 
 .. _Storage Pools: ../../rados/operations/pools
