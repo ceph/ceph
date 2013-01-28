@@ -172,6 +172,68 @@ int OSDMap::Incremental::identify_osd(uuid_d u) const
   return -1;
 }
 
+bool OSDMap::subtree_is_down(int id, set<int> *down_cache) const
+{
+  if (id >= 0)
+    return is_down(id);
+
+  if (down_cache &&
+      down_cache->count(id)) {
+    return true;
+  }
+
+  list<int> children;
+  crush->get_children(id, &children);
+  for (list<int>::iterator p = children.begin(); p != children.end(); ++p) {
+    if (!subtree_is_down(*p, down_cache)) {
+      return false;
+    }
+  }
+  if (down_cache) {
+    down_cache->insert(id);
+  }
+  return true;
+}
+
+bool OSDMap::containing_subtree_is_down(CephContext *cct, int id, int subtree_type, set<int> *down_cache) const
+{
+  // use a stack-local down_cache if we didn't get one from the
+  // caller.  then at least this particular call will avoid duplicated
+  // work.
+  set<int> local_down_cache;
+  if (!down_cache) {
+    down_cache = &local_down_cache;
+  }
+
+  if (!subtree_is_down(id, down_cache)) {
+    ldout(cct, 30) << "containing_subtree_is_down(" << id << ") = false" << dendl;
+    return false;
+  }
+
+  int current = id;
+  while (true) {
+    // invariant: current subtree is known to be down.
+    int type;
+    if (current >= 0) {
+      type = 0;
+    } else {
+      type = crush->get_bucket_type(current);
+    }
+    assert(type >= 0);
+
+    // is this a big enough subtree to be done?
+    if (type >= subtree_type) {
+      ldout(cct, 30) << "containing_subtree_is_down(" << id << ") = true ... " << type << " >= " << subtree_type << dendl;
+      return true;
+    }
+
+    int r = crush->get_immediate_parent_id(current, &current);
+    if (r < 0) {
+      return false;
+    }
+  }
+}
+
 void OSDMap::Incremental::encode_client_old(bufferlist& bl) const
 {
   __u16 v = 5;
