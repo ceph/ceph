@@ -955,31 +955,20 @@ struct mds_load_t {
   mds_load_t(const utime_t &t) : 
     auth(t), all(t), req_rate(0), cache_hit_rate(0),
     queue_len(0), cpu_load_avg(0)
-  {
-  }
+  {}
+  // mostly for the dencoder infrastructure
+  mds_load_t() :
+    auth(), all(),
+    req_rate(0), cache_hit_rate(0), queue_len(0), cpu_load_avg(0)
+  {}
   
   double mds_load();  // defiend in MDBalancer.cc
-
-  void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(auth, bl);
-    ::encode(all, bl);
-    ::encode(req_rate, bl);
-    ::encode(cache_hit_rate, bl);
-    ::encode(queue_len, bl);
-    ::encode(cpu_load_avg, bl);
-  }
-  void decode(const utime_t &t, bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    ::decode(auth, t, bl);
-    ::decode(all, t, bl);
-    ::decode(req_rate, bl);
-    ::decode(cache_hit_rate, bl);
-    ::decode(queue_len, bl);
-    ::decode(cpu_load_avg, bl);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(const utime_t& now, bufferlist::iterator& bl);
+  //this one is for dencoder infrastructure
+  void decode(bufferlist::iterator& bl) { utime_t sample; decode(sample, bl); }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<mds_load_t*>& ls);
 };
 inline void encode(const mds_load_t &c, bufferlist &bl) { c.encode(bl); }
 inline void decode(mds_load_t &c, const utime_t &t, bufferlist::iterator &p) {
