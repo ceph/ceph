@@ -451,7 +451,9 @@ public class CephMountTest {
   }
 
   /*
-   * test_stat covers lstat and fstat
+   * test_stat covers lstat and fstat and stat.
+   *
+   * TODO: create test that for lstat vs stat with symlink follow/nofollow.
    */
 
   @Test
@@ -469,6 +471,10 @@ public class CephMountTest {
     assertTrue(orig_st.blksize > 0);
     assertTrue(orig_st.blocks > 0);
 
+    /* now try stat */
+    CephStat stat_st = new CephStat();
+    mount.stat(path, stat_st);
+
     /* now try fstat */
     CephStat other_st = new CephStat();
     fd = mount.open(path, CephMount.O_RDWR, 0);
@@ -477,12 +483,40 @@ public class CephMountTest {
 
     mount.unlink(path);
 
+    /* compare to fstat results */
     assertTrue(orig_st.mode == other_st.mode);
     assertTrue(orig_st.uid == other_st.uid);
     assertTrue(orig_st.gid == other_st.gid);
     assertTrue(orig_st.size == other_st.size);
     assertTrue(orig_st.blksize == other_st.blksize);
     assertTrue(orig_st.blocks == other_st.blocks);
+
+    /* compare to stat results */
+    assertTrue(orig_st.mode == stat_st.mode);
+    assertTrue(orig_st.uid == stat_st.uid);
+    assertTrue(orig_st.gid == stat_st.gid);
+    assertTrue(orig_st.size == stat_st.size);
+    assertTrue(orig_st.blksize == stat_st.blksize);
+    assertTrue(orig_st.blocks == stat_st.blocks);
+  }
+
+  /*
+   * stat
+   */
+
+  @Test(expected=NullPointerException.class)
+  public void test_stat_null_path() throws Exception {
+    mount.stat(null, new CephStat());
+  }
+
+  @Test(expected=NullPointerException.class)
+  public void test_stat_null_stat() throws Exception {
+    mount.stat("/path", null);
+  }
+
+  @Test(expected=FileNotFoundException.class)
+  public void test_stat_null_dne() throws Exception {
+    mount.stat("/path/does/not/exist", new CephStat());
   }
 
   @Test(expected=CephNotDirectoryException.class)
@@ -574,6 +608,36 @@ public class CephMountTest {
       mode += 1;
 
     mount.chmod(path, mode);
+    CephStat st2 = new CephStat();
+    mount.lstat(path, st2);
+    assertTrue(st2.mode == mode);
+
+    mount.unlink(path);
+  }
+
+  /*
+   * fchmod
+   */
+
+  @Test
+  public void test_fchmod() throws Exception {
+    /* create a file */
+    String path = makePath();
+    int fd = createFile(path, 1);
+
+    CephStat st = new CephStat();
+    mount.lstat(path, st);
+
+    /* flip a bit */
+    int mode = st.mode;
+    if ((mode & 1) != 0)
+      mode -= 1;
+    else
+      mode += 1;
+
+    mount.fchmod(fd, mode);
+    mount.close(fd);
+
     CephStat st2 = new CephStat();
     mount.lstat(path, st2);
     assertTrue(st2.mode == mode);
@@ -866,5 +930,22 @@ public class CephMountTest {
     int poolid = mount.get_pool_id("data");
     assertTrue(poolid >= 0);
     assertTrue(mount.get_pool_replication(poolid) > 0);
+  }
+
+  @Test
+  public void test_get_file_pool_name() throws Exception {
+    String path = makePath();
+    int fd = createFile(path, 1);
+    String pool = mount.get_file_pool_name(fd);
+    mount.close(fd);
+    assertTrue(pool != null);
+    /* assumes using default data pool "data" */
+    assertTrue(pool.compareTo("data") == 0);
+    mount.unlink(path);
+  }
+
+  @Test(expected=IOException.class)
+  public void test_get_file_pool_name_ebadf() throws Exception {
+    String pool = mount.get_file_pool_name(-40);
   }
 }

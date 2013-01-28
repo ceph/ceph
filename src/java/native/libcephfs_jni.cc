@@ -173,7 +173,7 @@ static void cephThrowNullArg(JNIEnv *env, const char *msg)
 
 static void cephThrowOutOfMemory(JNIEnv *env, const char *msg)
 {
-	THROW(env, "java/lang/OutOfMemoryException", msg);
+	THROW(env, "java/lang/OutOfMemoryError", msg);
 }
 
 static void cephThrowInternal(JNIEnv *env, const char *msg)
@@ -1189,6 +1189,35 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1symlink
 	return ret;
 }
 
+static void fill_cephstat(JNIEnv *env, jobject j_cephstat, struct stat *st)
+{
+	env->SetIntField(j_cephstat, cephstat_mode_fid, st->st_mode);
+	env->SetIntField(j_cephstat, cephstat_uid_fid, st->st_uid);
+	env->SetIntField(j_cephstat, cephstat_gid_fid, st->st_gid);
+	env->SetLongField(j_cephstat, cephstat_size_fid, st->st_size);
+	env->SetLongField(j_cephstat, cephstat_blksize_fid, st->st_blksize);
+	env->SetLongField(j_cephstat, cephstat_blocks_fid, st->st_blocks);
+
+	long long time = st->st_mtim.tv_sec;
+	time *= 1000;
+	time += st->st_mtim.tv_nsec / 1000000;
+	env->SetLongField(j_cephstat, cephstat_m_time_fid, time);
+
+	time = st->st_atim.tv_sec;
+	time *= 1000;
+	time += st->st_atim.tv_nsec / 1000000;
+	env->SetLongField(j_cephstat, cephstat_a_time_fid, time);
+
+	env->SetBooleanField(j_cephstat, cephstat_is_file_fid,
+			S_ISREG(st->st_mode) ? JNI_TRUE : JNI_FALSE);
+
+	env->SetBooleanField(j_cephstat, cephstat_is_directory_fid,
+			S_ISDIR(st->st_mode) ? JNI_TRUE : JNI_FALSE);
+
+	env->SetBooleanField(j_cephstat, cephstat_is_symlink_fid,
+			S_ISLNK(st->st_mode) ? JNI_TRUE : JNI_FALSE);
+}
+
 /*
  * Class:     com_ceph_fs_CephMount
  * Method:    native_ceph_lstat
@@ -1200,7 +1229,6 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1lstat
 	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
 	CephContext *cct = ceph_get_mount_context(cmount);
 	const char *c_path;
-	long long time;
 	struct stat st;
 	int ret;
 
@@ -1227,31 +1255,49 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1lstat
     return ret;
   }
 
-	env->SetIntField(j_cephstat, cephstat_mode_fid, st.st_mode);
-	env->SetIntField(j_cephstat, cephstat_uid_fid, st.st_uid);
-	env->SetIntField(j_cephstat, cephstat_gid_fid, st.st_gid);
-	env->SetLongField(j_cephstat, cephstat_size_fid, st.st_size);
-	env->SetLongField(j_cephstat, cephstat_blksize_fid, st.st_blksize);
-  env->SetLongField(j_cephstat, cephstat_blocks_fid, st.st_blocks);
+	fill_cephstat(env, j_cephstat, &st);
 
-	time = st.st_mtim.tv_sec;
-	time *= 1000;
-	time += st.st_mtim.tv_nsec / 1000000;
-	env->SetLongField(j_cephstat, cephstat_m_time_fid, time);
+	return ret;
+}
 
-	time = st.st_atim.tv_sec;
-	time *= 1000;
-	time += st.st_atim.tv_nsec / 1000000;
-	env->SetLongField(j_cephstat, cephstat_a_time_fid, time);
+/*
+ * Class:     com_ceph_fs_CephMount
+ * Method:    native_ceph_stat
+ * Signature: (JLjava/lang/String;Lcom/ceph/fs/CephStat;)I
+ */
+JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1stat
+	(JNIEnv *env, jclass clz, jlong j_mntp, jstring j_path, jobject j_cephstat)
+{
+	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
+	CephContext *cct = ceph_get_mount_context(cmount);
+	const char *c_path;
+	struct stat st;
+	int ret;
 
-	env->SetBooleanField(j_cephstat, cephstat_is_file_fid,
-			S_ISREG(st.st_mode) ? JNI_TRUE : JNI_FALSE);
+	CHECK_ARG_NULL(j_path, "@path is null", -1);
+	CHECK_ARG_NULL(j_cephstat, "@stat is null", -1);
+	CHECK_MOUNTED(cmount, -1);
 
-	env->SetBooleanField(j_cephstat, cephstat_is_directory_fid,
-			S_ISDIR(st.st_mode) ? JNI_TRUE : JNI_FALSE);
+	c_path = env->GetStringUTFChars(j_path, NULL);
+	if (!c_path) {
+		cephThrowInternal(env, "Failed to pin memory");
+		return -1;
+	}
 
-	env->SetBooleanField(j_cephstat, cephstat_is_symlink_fid,
-			S_ISLNK(st.st_mode) ? JNI_TRUE : JNI_FALSE);
+	ldout(cct, 10) << "jni: lstat: path " << c_path << dendl;
+
+	ret = ceph_stat(cmount, c_path, &st);
+
+	ldout(cct, 10) << "jni: lstat exit ret " << ret << dendl;
+
+	env->ReleaseStringUTFChars(j_path, c_path);
+
+	if (ret) {
+		handle_error(env, ret);
+		return ret;
+	}
+
+	fill_cephstat(env, j_cephstat, &st);
 
 	return ret;
 }
@@ -1336,6 +1382,32 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1chmod
     handle_error(env, ret);
 
 	return ret;
+}
+
+/*
+ * Class:     com_ceph_fs_CephMount
+ * Method:    native_ceph_fchmod
+ * Signature: (JII)I
+ */
+JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1fchmod
+  (JNIEnv *env, jclass clz, jlong j_mntp, jint j_fd, jint j_mode)
+{
+  struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
+  CephContext *cct = ceph_get_mount_context(cmount);
+  int ret;
+
+  CHECK_MOUNTED(cmount, -1);
+
+  ldout(cct, 10) << "jni: fchmod: fd " << (int)j_fd << " mode " << (int)j_mode << dendl;
+
+  ret = ceph_fchmod(cmount, (int)j_fd, (int)j_mode);
+
+  ldout(cct, 10) << "jni: fchmod: exit ret " << ret << dendl;
+
+  if (ret)
+    handle_error(env, ret);
+
+  return ret;
 }
 
 /*
@@ -2381,6 +2453,67 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1get_1file_1repli
     handle_error(env, ret);
 
 	return ret;
+}
+
+/*
+ * Class:     com_ceph_fs_CephMount
+ * Method:    native_ceph_get_file_pool_name
+ * Signature: (JI)Ljava/lang/String;
+ */
+JNIEXPORT jstring JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1get_1file_1pool_1name
+  (JNIEnv *env, jclass clz, jlong j_mntp, jint j_fd)
+{
+  struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
+  CephContext *cct = ceph_get_mount_context(cmount);
+  jstring pool = NULL;
+  int ret, buflen = 0;
+  char *buf = NULL;
+
+  CHECK_MOUNTED(cmount, NULL);
+
+  ldout(cct, 10) << "jni: get_file_pool_name: fd " << (int)j_fd << dendl;
+
+  for (;;) {
+    /* get pool name length (len==0) */
+    ret = ceph_get_file_pool_name(cmount, (int)j_fd, NULL, 0);
+    if (ret < 0)
+      break;
+
+    /* allocate buffer */
+    if (buf)
+      delete [] buf;
+    buflen = ret;
+    buf = new (std::nothrow) char[buflen+1]; /* +1 for '\0' */
+    if (!buf) {
+        cephThrowOutOfMemory(env, "head allocation failed");
+        goto out;
+    }
+    memset(buf, 0, (buflen+1)*sizeof(*buf));
+
+    /* handle zero-length pool name!? */
+    if (buflen == 0)
+      break;
+
+    /* fill buffer */
+    ret = ceph_get_file_pool_name(cmount, (int)j_fd, buf, buflen);
+    if (ret == -ERANGE) /* size changed! */
+      continue;
+    else
+      break;
+  }
+
+  ldout(cct, 10) << "jni: get_file_pool_name: ret " << ret << dendl;
+
+  if (ret < 0)
+    handle_error(env, ret);
+  else
+    pool = env->NewStringUTF(buf);
+
+out:
+  if (buf)
+    delete [] buf;
+
+  return pool;
 }
 
 /*
