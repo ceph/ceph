@@ -736,7 +736,7 @@ void Monitor::reset()
 {
   dout(10) << "reset" << dendl;
 
-  timecheck_cleanup();
+  timecheck_finish();
 
   leader_since = utime_t();
   if (!quorum.empty()) {
@@ -1189,7 +1189,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features)
 
   finish_election();
   if (monmap->size() > 1)
-    timecheck();
+    timecheck_start();
 }
 
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features) 
@@ -1213,6 +1213,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features
 
 void Monitor::finish_election()
 {
+  timecheck_finish();
   exited_quorum = utime_t();
   finish_contexts(g_ceph_context, waitfor_quorum);
   finish_contexts(g_ceph_context, maybe_wait_for_quorum);
@@ -2240,18 +2241,98 @@ bool Monitor::_ms_dispatch(Message *m)
   return ret;
 }
 
+void Monitor::timecheck_start()
+{
+  dout(10) << __func__ << dendl;
+  timecheck_cleanup();
+  timecheck_start_round();
+}
+
+void Monitor::timecheck_finish()
+{
+  dout(10) << __func__ << dendl;
+  timecheck_cleanup();
+}
+
+void Monitor::timecheck_start_round()
+{
+  dout(10) << __func__ << " curr " << timecheck_round << dendl;
+  assert(is_leader());
+
+  if (monmap->size() == 1) {
+    assert(0 == "We are alone; this shouldn't have been scheduled!");
+    return;
+  }
+
+  if (timecheck_round % 2) {
+    dout(10) << __func__ << " there's a timecheck going on" << dendl;
+    utime_t curr_time = ceph_clock_now(g_ceph_context);
+    double max = g_conf->mon_timecheck_interval*3;
+    if (curr_time - timecheck_round_start > max) {
+      dout(10) << __func__ << " keep current round going" << dendl;
+      goto out;
+    } else {
+      dout(10) << __func__
+               << " finish current timecheck and start new" << dendl;
+      timecheck_cancel_round();
+    }
+  }
+
+  assert(timecheck_round % 2 == 0);
+  timecheck_acks = 0;
+  timecheck_round ++;
+  timecheck_round_start = ceph_clock_now(g_ceph_context);
+  dout(10) << __func__ << " new " << timecheck_round << dendl;
+
+  timecheck();
+out:
+  dout(10) << __func__ << " setting up next event" << dendl;
+  timecheck_event = new C_TimeCheck(this);
+  timer.add_event_after(g_conf->mon_timecheck_interval, timecheck_event);
+}
+
+void Monitor::timecheck_finish_round(bool success)
+{
+  dout(10) << __func__ << " curr " << timecheck_round << dendl;
+  assert(timecheck_round % 2);
+  timecheck_round ++;
+  timecheck_round_start = utime_t();
+
+  if (success) {
+    assert(timecheck_waiting.size() == 0);
+    assert(timecheck_acks == quorum.size());
+    timecheck_report();
+    return;
+  }
+
+  dout(10) << __func__ << " " << timecheck_waiting.size()
+           << " peers still waiting:";
+  for (map<entity_inst_t,utime_t>::iterator p = timecheck_waiting.begin();
+      p != timecheck_waiting.end(); ++p) {
+    *_dout << " " << p->first.name;
+  }
+  *_dout << dendl;
+  timecheck_waiting.clear();
+
+  dout(10) << __func__ << " finished to " << timecheck_round << dendl;
+}
+
+void Monitor::timecheck_cancel_round()
+{
+  timecheck_finish_round(false);
+}
+
 void Monitor::timecheck_cleanup()
 {
   timecheck_round = 0;
   timecheck_acks = 0;
+  timecheck_round_start = utime_t();
 
   if (timecheck_event) {
     timer.cancel_event(timecheck_event);
     timecheck_event = NULL;
   }
-
-  if (timecheck_waiting.size() > 0)
-    timecheck_waiting.clear();
+  timecheck_waiting.clear();
   timecheck_skews.clear();
   timecheck_latencies.clear();
 }
@@ -2300,20 +2381,12 @@ void Monitor::timecheck()
 {
   dout(10) << __func__ << dendl;
   assert(is_leader());
-
   if (monmap->size() == 1) {
-    assert(0 == "We are alone; this shouldn't have been scheduled!");
+    assert(0 == "We are alone; we shouldn't have gotten here!");
     return;
   }
+  assert(timecheck_round % 2 != 0);
 
-  if ((timecheck_round % 2) != 0) {
-    dout(15) << __func__
-             << " timecheck still in progress; laggy monitors maybe?"
-             << dendl;
-    goto out;
-  }
-
-  timecheck_round++;
   timecheck_acks = 1; // we ack ourselves
 
   dout(10) << __func__ << " start timecheck epoch " << get_epoch()
@@ -2336,12 +2409,6 @@ void Monitor::timecheck()
     dout(10) << __func__ << " send " << *m << " to " << inst << dendl;
     messenger->send_message(m, inst);
   }
-
-out:
-  dout(10) << __func__ << " setting up next event and timeout" << dendl;
-  timecheck_event = new C_TimeCheck(this);
-
-  timer.add_event_after(g_conf->mon_timecheck_interval, timecheck_event);
 }
 
 health_status_t Monitor::timecheck_status(ostringstream &ss,
@@ -2394,9 +2461,7 @@ void Monitor::handle_timecheck_leader(MTimeCheck *m)
     dout(1) << __func__ << " our clock was readjusted --"
             << " bump round and drop current check"
             << dendl;
-    timecheck_round++;
-    timecheck_acks = 0;
-    timecheck_waiting.clear();
+    timecheck_cancel_round();
     return;
   }
 
@@ -2481,8 +2546,7 @@ void Monitor::handle_timecheck_leader(MTimeCheck *m)
     assert(timecheck_skews.size() == timecheck_acks);
     assert(timecheck_waiting.size() == 0);
     // everyone has acked, so bump the round to finish it.
-    timecheck_round++;
-    timecheck_report();
+    timecheck_finish_round();
   }
 }
 
