@@ -707,7 +707,7 @@ int RGWPostObj_ObjStore_S3::get_params()
   string whitespaces (" \t\f\v\n\r");
 
   // get the part boundary
-  string req_content_type_str = s->env->get("CONTENT_TYPE");
+  string req_content_type_str = s->env->get("CONTENT_TYPE", "");
   string req_content_type;
   map<string, string> params;
 
