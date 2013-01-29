@@ -47,17 +47,19 @@ void Mutation::drop_pins()
   pins.clear();
 }
 
-void Mutation::start_locking(SimpleLock *lock)
+void Mutation::start_locking(SimpleLock *lock, int target)
 {
   assert(locking == NULL);
   pin(lock->get_parent());
   locking = lock;
+  locking_target_mds = target;
 }
 
 void Mutation::finish_locking(SimpleLock *lock)
 {
   assert(locking == lock);
   locking = NULL;
+  locking_target_mds = -1;
 }
 
 
@@ -82,55 +84,8 @@ void Mutation::auth_unpin(MDSCacheObject *object)
   auth_pins.erase(object);
 }
 
-bool Mutation::freeze_auth_pin(CInode *inode)
-{
-  assert(!auth_pin_freeze || auth_pin_freeze == inode);
-  auth_pin_freeze = inode;
-  auth_pin(inode);
-  if (!inode->freeze_inode(1))
-    return false;
-
-  inode->freeze_auth_pin();
-  inode->unfreeze_inode();
-  return true;
-}
-
-void Mutation::unfreeze_auth_pin(CInode *inode)
-{
-  assert(auth_pin_freeze == inode);
-  assert(is_auth_pinned(inode));
-  if (inode->is_frozen_auth_pin())
-    inode->unfreeze_auth_pin();
-  else
-    inode->unfreeze_inode();
-  auth_pin_freeze = NULL;
-}
-
-void Mutation::set_ambiguous_auth(CInode *inode)
-{
-  if (!ambiguous_auth_inode) {
-    inode->set_ambiguous_auth();
-    ambiguous_auth_inode = inode;
-  } else
-    assert(ambiguous_auth_inode == inode);
-}
-
-void Mutation::clear_ambiguous_auth(CInode *inode)
-{
-  assert(ambiguous_auth_inode == inode);
-  ambiguous_auth_inode->clear_ambiguous_auth();
-  ambiguous_auth_inode = NULL;
-}
-
-bool Mutation::can_auth_pin(MDSCacheObject *object)
-{
-  return object->can_auth_pin() || (is_auth_pinned(object) && object == auth_pin_freeze);
-}
-
 void Mutation::drop_local_auth_pins()
 {
-  if (auth_pin_freeze)
-    unfreeze_auth_pin(auth_pin_freeze);
   for (set<MDSCacheObject*>::iterator it = auth_pins.begin();
        it != auth_pins.end();
        it++) {
@@ -230,6 +185,11 @@ MDRequest::More* MDRequest::more()
   return _more;
 }
 
+bool MDRequest::has_more()
+{
+  return _more;
+}
+
 bool MDRequest::are_slaves()
 {
   return _more && !_more->slaves.empty();
@@ -244,6 +204,71 @@ bool MDRequest::did_ino_allocation()
 {
   return alloc_ino || used_prealloc_ino || prealloc_inos.size();
 }      
+
+bool MDRequest::freeze_auth_pin(CInode *inode)
+{
+  assert(!more()->rename_inode || more()->rename_inode == inode);
+  more()->rename_inode = inode;
+  more()->is_freeze_authpin = true;
+  auth_pin(inode);
+  if (!inode->freeze_inode(1)) {
+    return false;
+  }
+  inode->freeze_auth_pin();
+  inode->unfreeze_inode();
+  return true;
+}
+
+void MDRequest::unfreeze_auth_pin()
+{
+  assert(more()->is_freeze_authpin);
+  CInode *inode = more()->rename_inode;
+  if (inode->is_frozen_auth_pin())
+    inode->unfreeze_auth_pin();
+  else
+    inode->unfreeze_inode();
+  more()->is_freeze_authpin = false;
+}
+
+void MDRequest::set_remote_frozen_auth_pin(CInode *inode)
+{
+  assert(!more()->rename_inode || more()->rename_inode == inode);
+  more()->rename_inode = inode;
+  more()->is_remote_frozen_authpin = true;
+}
+
+void MDRequest::set_ambiguous_auth(CInode *inode)
+{
+  assert(!more()->rename_inode || more()->rename_inode == inode);
+  assert(!more()->is_ambiguous_auth);
+
+  inode->set_ambiguous_auth();
+  more()->rename_inode = inode;
+  more()->is_ambiguous_auth = true;
+}
+
+void MDRequest::clear_ambiguous_auth()
+{
+  CInode *inode = more()->rename_inode;
+  assert(inode && more()->is_ambiguous_auth);
+  inode->clear_ambiguous_auth();
+  more()->is_ambiguous_auth = false;
+}
+
+bool MDRequest::can_auth_pin(MDSCacheObject *object)
+{
+  return object->can_auth_pin() ||
+         (is_auth_pinned(object) && has_more() &&
+	  more()->is_freeze_authpin &&
+	  more()->rename_inode == object);
+}
+
+void MDRequest::drop_local_auth_pins()
+{
+  if (has_more() && more()->is_freeze_authpin)
+    unfreeze_auth_pin();
+  Mutation::drop_local_auth_pins();
+}
 
 void MDRequest::print(ostream &out)
 {

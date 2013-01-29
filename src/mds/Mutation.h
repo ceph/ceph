@@ -50,8 +50,6 @@ struct Mutation {
   // auth pins
   set< MDSCacheObject* > remote_auth_pins;
   set< MDSCacheObject* > auth_pins;
-  CInode *auth_pin_freeze;
-  CInode* ambiguous_auth_inode;
   
   // held locks
   set< SimpleLock* > rdlocks;  // always local.
@@ -63,6 +61,7 @@ struct Mutation {
   // lock we are currently trying to acquire.  if we give up for some reason,
   // be sure to eval() this.
   SimpleLock *locking;
+  int locking_target_mds;
 
   // if this flag is set, do not attempt to acquire further locks.
   //  (useful for wrlock, which may be a moving auth target)
@@ -83,17 +82,15 @@ struct Mutation {
     : attempt(0),
       ls(0),
       slave_to_mds(-1),
-      auth_pin_freeze(NULL),
-      ambiguous_auth_inode(NULL),
       locking(NULL),
+      locking_target_mds(-1),
       done_locking(false), committing(false), aborted(false), killed(false) { }
   Mutation(metareqid_t ri, __u32 att=0, int slave_to=-1)
     : reqid(ri), attempt(att),
       ls(0),
       slave_to_mds(slave_to), 
-      auth_pin_freeze(NULL),
-      ambiguous_auth_inode(NULL),
       locking(NULL),
+      locking_target_mds(-1),
       done_locking(false), committing(false), aborted(false), killed(false) { }
   virtual ~Mutation() {
     assert(locking == NULL);
@@ -119,19 +116,14 @@ struct Mutation {
   void set_stickydirs(CInode *in);
   void drop_pins();
 
-  void start_locking(SimpleLock *lock);
+  void start_locking(SimpleLock *lock, int target=-1);
   void finish_locking(SimpleLock *lock);
 
   // auth pins
   bool is_auth_pinned(MDSCacheObject *object);
   void auth_pin(MDSCacheObject *object);
   void auth_unpin(MDSCacheObject *object);
-  bool freeze_auth_pin(CInode *inode);
-  void unfreeze_auth_pin(CInode *inode);
-  bool can_auth_pin(MDSCacheObject *object);
   void drop_local_auth_pins();
-  void set_ambiguous_auth(CInode *inode);
-  void clear_ambiguous_auth(CInode *inode);
   void add_projected_inode(CInode *in);
   void pop_and_dirty_projected_inodes();
   void add_projected_fnode(CDir *dir);
@@ -212,9 +204,11 @@ struct MDRequest : public Mutation {
     version_t dst_reanchor_atid;  // dst->stray
     bufferlist inode_import;
     version_t inode_import_v;
-    CInode* destdn_was_remote_inode;
-    bool was_inode_exportor;
-    int prepared_inode_exporter; // has asked auth of srci to mark srci as ambiguous auth
+    CInode* rename_inode;
+    bool is_freeze_authpin;
+    bool is_ambiguous_auth;
+    bool is_remote_frozen_authpin;
+    bool is_inode_exporter;
 
     map<client_t,entity_inst_t> imported_client_map;
     map<client_t,uint64_t> sseq_map;
@@ -233,10 +227,9 @@ struct MDRequest : public Mutation {
 
     More() : 
       src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
-      destdn_was_remote_inode(0), was_inode_exportor(false),
-      prepared_inode_exporter(-1), flock_was_waiting(false),
-      stid(0),
-      slave_commit(0) { }
+      rename_inode(0), is_freeze_authpin(false), is_ambiguous_auth(false),
+      is_remote_frozen_authpin(false), is_inode_exporter(false),
+      flock_was_waiting(false), stid(0), slave_commit(0) { }
   } *_more;
 
 
@@ -285,9 +278,17 @@ struct MDRequest : public Mutation {
   }
   
   More* more();
+  bool has_more();
   bool are_slaves();
   bool slave_did_prepare();
   bool did_ino_allocation();
+  bool freeze_auth_pin(CInode *inode);
+  void unfreeze_auth_pin();
+  void set_remote_frozen_auth_pin(CInode *inode);
+  bool can_auth_pin(MDSCacheObject *object);
+  void drop_local_auth_pins();
+  void set_ambiguous_auth(CInode *inode);
+  void clear_ambiguous_auth();
 
   void print(ostream &out);
 };
@@ -298,10 +299,13 @@ struct MDSlaveUpdate {
   bufferlist rollback;
   elist<MDSlaveUpdate*>::item item;
   Context *waiter;
+  CDir* rename_olddir;
+  set<CInode*> unlinked;
   MDSlaveUpdate(int oo, bufferlist &rbl, elist<MDSlaveUpdate*> &list) :
     origop(oo),
     item(this),
-    waiter(0) {
+    waiter(0),
+    rename_olddir(0) {
     rollback.claim(rbl);
     list.push_back(&item);
   }
