@@ -269,7 +269,7 @@ tt {
     background-color: #ecf0f3;
     color: #222;
     /* padding: 1px 2px; */
-    font-size: 1.1em;
+    font-size: 15px;
     font-family: monospace;
 }
 
