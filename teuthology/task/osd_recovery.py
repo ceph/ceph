@@ -63,7 +63,8 @@ def task(ctx, config):
     manager.raw_cluster_cmd('osd', 'unset', 'nodown')
 
     # write some new data
-    p = rados_start(mon, ['-p', 'rbd', 'bench', '60', 'write', '-b', '4096'])
+    p = rados_start(mon, ['-p', 'rbd', 'bench', '60', 'write', '-b', '4096',
+                          '--no-cleanup'])
 
     time.sleep(15)
 
