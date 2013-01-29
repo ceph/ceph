@@ -65,7 +65,7 @@ Global commands
 :command:`mkpool` *foo*
   Create a pool with name foo.
 
-:command:`rmpool` *foo*
+:command:`rmpool` *foo* [ *foo* --yes-i-really-really-mean-it ]
   Delete the pool foo (and all its data)
 
 

@@ -6,8 +6,8 @@ create_pools() {
 }
 
 delete_pools() {
-    (ceph osd pool delete images || true) >/dev/null 2>&1
-    (ceph osd pool delete volumes || true) >/dev/null 2>&1
+    (ceph osd pool delete images images --yes-i-really-really-mean-it || true) >/dev/null 2>&1
+    (ceph osd pool delete volumes volumes --yes-i-really-really-mean-it || true) >/dev/null 2>&1
 
 }
 
