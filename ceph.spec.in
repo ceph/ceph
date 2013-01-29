@@ -284,6 +284,9 @@ mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph/
 mkdir -p $RPM_BUILD_ROOT/usr/lib/jni
 mv $RPM_BUILD_ROOT/usr/lib64/libcephfs_jni.so* $RPM_BUILD_ROOT/usr/lib/jni/.
 
+# udev rules
+install -D -m 644 udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
+
 %clean
 rm -rf $RPM_BUILD_ROOT
 
@@ -461,6 +464,7 @@ fi
 %files -n librbd1
 %defattr(-,root,root,-)
 %{_libdir}/librbd.so.*
+/lib/udev/rules.d/50-rbd.rules
 
 %post -n librbd1
 /sbin/ldconfig
