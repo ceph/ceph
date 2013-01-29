@@ -245,14 +245,6 @@ for name in $what; do
 	start)
             # Increase max_open_files, if the configuration calls for it.
             get_conf max_open_files "8192" "max open files"
-            if [ $max_open_files != "0" ]; then
-                # Note: Don't try to do math with these numbers, because POSIX shells
-                # can't do 64-bit math (natively). Just treat them as strings.
-                cur=`ulimit -n`
-                if [ "x$max_open_files" != "x$cur" ]; then
-                    ulimit -n $max_open_files
-                fi
-            fi
 
             # build final command
 	    wrap=""
@@ -266,8 +258,9 @@ for name in $what; do
 	    [ -n "$valgrind" ] && wrap="$wrap valgrind $valgrind"
 	    
 	    [ -n "$wrap" ] && runmode="-f &" && runarg="-f"
+	    [ -n "$max_open_files" ] && files="ulimit -n $max_open_files;"
 
-	    cmd="$wrap $cmd $runmode"
+	    cmd="$files $wrap $cmd $runmode"
 	    
 	    if [ $dofsmount -eq 1 ] && [ -n "$fs_devs" ]; then
 		get_conf pre_mount "true" "pre mount command"
