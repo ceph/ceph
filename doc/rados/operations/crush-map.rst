@@ -482,22 +482,32 @@ A rule takes the following form::
 :Example: ``step take data``
 
 
-``step choose [firstn|indep] [num] type {bucket-type}``
+``step choose firstn {num} type {bucket-type}``
 
-:Description: Selects the number of buckets of the given type, which is usually the number of replicas in the pool (i.e., pool size). If you choose ``indep``, do not specify ``[num]`` as it is not used. If you choose ``firstn``, you must specify a number for the ``[num]`` argument. If ``[num] > 0 && < pool-num-replicas``, choose that many buckets; if ``[num] < 0``, it means ``pool-num-replicas - [num]``; and, if ``[num] == 0``, choose ``pool-num-replicas`` buckets (all available).
+:Description: Selects the number of buckets of the given type. The number is usually the number of replicas in the pool (i.e., pool size). 
+
+              - If ``{num} == 0``, choose ``pool-num-replicas`` buckets (all available).
+              - If ``{num} > 0 && < pool-num-replicas``, choose that many buckets.
+              - If ``{num} < 0``, it means ``pool-num-replicas - {num}``.
+
 :Purpose: A component of the rule.
 :Prerequisite: Follows ``step take`` or ``step choose``.  
 :Example: ``step choose firstn 1 type row``
-:Note: The ``indep`` option isn't currently used, as Ceph doesn't support RAID at this time.  
 
 
-``step chooseleaf [firstn|indep] [num] type {bucket-type}``
+``step chooseleaf firstn {num} type {bucket-type}``
 
-:Description: Selects the number of devices aggregated by a bucket of the given type. If you choose ``indep``, do not specify ``[num]`` as it is not used. If you choose ``firstn``, you must specify a number for the ``[num]`` argument. The number of devices is usually the number of replicas in the pool (i.e., pool size). If ``[num] > 0 && < pool-num-replicas``, choose that many buckets; if ``[num] < 0``, it means ``pool-num-replicas - [num]``; and, if ``[num] == 0``, choose ``pool-num-replicas`` buckets (all available).
+:Description: Selects a set of buckets of ``{bucket-type}`` and chooses a leaf node from the subtree of each bucket in the set of buckets. The number of buckets in the set is usually the number of replicas in the pool (i.e., pool size).
+
+              - If ``{num} == 0``, choose ``pool-num-replicas`` buckets (all available).
+              - If ``{num} > 0 && < pool-num-replicas``, choose that many buckets.
+              - If ``{num} < 0``, it means ``pool-num-replicas - {num}``.
+
 :Purpose: A component of the rule. Usage removes the need to select a device using two steps.
 :Prerequisite: Follows ``step take`` or ``step choose``.  
 :Example: ``step chooseleaf firstn 0 type row``
-:Note: The ``indep`` option isn't currently used, as Ceph doesn't support RAID at this time.
+
+
 
 ``step emit`` 
 
