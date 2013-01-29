@@ -79,7 +79,7 @@ Monitor commands
 ================
 
 A more complete summary of commands understood by the monitor cluster can be found in the
-wiki, at
+online documentation, at
 
        http://ceph.com/docs/master/rados/operations/control
 
