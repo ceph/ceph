@@ -1534,7 +1534,6 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
   
   if (safe) {
     ldout(cct, 10) << "flush_set " << oset << " has no dirty|tx bhs" << dendl;
-    delete onfinish;
     return true;
   }
   return false;
