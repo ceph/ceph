@@ -61,7 +61,6 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, OSDMap& osdmap) {
 /************ MAPS ****************/
 OSDMonitor::OSDMonitor(Monitor *mn, Paxos *p)
   : PaxosService(mn, p),
-    delete_pool_nonce(0),
     thrash_map(0), thrash_last_up_osd(-1)
 {
   // we need to trim this too
@@ -1458,6 +1457,8 @@ void OSDMonitor::tick()
    * ratio set by g_conf->mon_osd_min_in_ratio. So it's not really up to us.
    */
   if (can_mark_out(-1)) {
+    set<int> down_cache;  // quick cache of down subtrees
+
     map<int,utime_t>::iterator i = down_pending_out.begin();
     while (i != down_pending_out.end()) {
       int o = i->first;
@@ -1482,6 +1483,20 @@ void OSDMonitor::tick()
 		   << " down for " << down << " decay " << decay << dendl;
 	  my_grace = decay * (double)xi.laggy_interval * xi.laggy_probability;
 	  grace += my_grace;
+	}
+
+	// is this an entire large subtree down?
+	if (g_conf->mon_osd_down_out_subtree_limit.length()) {
+	  int type = osdmap.crush->get_type_id(g_conf->mon_osd_down_out_subtree_limit.c_str());
+	  if (type > 0) {
+	    if (osdmap.containing_subtree_is_down(g_ceph_context, o, type, &down_cache)) {
+	      dout(10) << "tick entire containing " << g_conf->mon_osd_down_out_subtree_limit
+		       << " subtree for osd." << o << " is down; resetting timer" << dendl;
+	      // reset timer, too.
+	      down_pending_out[o] = now;
+	      continue;
+	    }
+	  }
 	}
 
 	if (g_conf->mon_osd_down_out_interval > 0 &&
@@ -2780,44 +2795,22 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	return true;
       } else if (m->cmd[2] == "delete" && m->cmd.size() >= 4) {
-	// osd pool delete <poolname> <poolname again> <nonce>
-	// hey, let's delete a pool!
+	// osd pool delete <poolname> <poolname again> --yes-i-really-really-mean-it
 	int64_t pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
 	if (pool < 0) {
 	  ss << "pool '" << m->cmd[3] << "' does not exist";
 	  err = 0;
 	  goto out;
 	}
-	if (m->cmd.size() < 6) {
-	  delete_pool_nonce = rand();
-	  delete_pool_nonce_timeout = ceph_clock_now(g_ceph_context);
-	  delete_pool_nonce_timeout += 30;
-	  ss << "WARNING: this will efficiently **DESTROY** an entire pool of data.  if you are ABSOLUTELY CERTAIN"
-	     << " that this is what you want to do, retry listing the pool name twice, followed by " << delete_pool_nonce
-	     << " within 30 seconds.";
+	if (m->cmd.size() != 6 ||
+	    m->cmd[3] != m->cmd[4] ||
+	    m->cmd[5] != "--yes-i-really-really-mean-it") {
+	  ss << "WARNING: this will *PERMANENTLY DESTROY* all data stored in pool " << m->cmd[3]
+	     << ".  If you are *ABSOLUTELY CERTAIN* that is what you want, pass the pool name *twice*, "
+	     << "followed by --yes-i-really-really-mean-it.";
 	  err = -EPERM;
 	  goto out;
 	}
-	assert(m->cmd.size() >= 6);
-	if (m->cmd[4] != m->cmd[3]) {
-	  ss << "ERROR: you must list the pool name you want to **DESTROY** twice";
-	  err = -EPERM;
-	  goto out;
-	}
-	unsigned safety = atol(m->cmd[5].c_str());
-	if (safety != delete_pool_nonce) {
-	  ss << "ERROR: did not confirm pool deletion with correct confirmation; " << safety << " != " << delete_pool_nonce << "; try again";
-	  err = -EPERM;
-	  goto out;
-	}
-	if (ceph_clock_now(g_ceph_context) > delete_pool_nonce_timeout) {
-	  ss << "ERROR: did not confirm pool deletion within 30 seconds; try again";
-	  err = -EPERM;
-	  goto out;
-	}
-	assert(safety == delete_pool_nonce);
-	delete_pool_nonce = 0;
-	delete_pool_nonce_timeout = utime_t();
 	int ret = _prepare_remove_pool(pool);
 	if (ret == 0)
 	  ss << "pool '" << m->cmd[3] << "' deleted";
