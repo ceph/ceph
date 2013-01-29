@@ -593,7 +593,7 @@ int
 rbdfs_listxattr(const char *path, char *list, size_t len)
 {
 	struct rbdfuse_attr *ap;
-	int required_len = 0;
+	size_t required_len = 0;
 
 	if (strcmp(path, "/") != 0)
 		return -EINVAL;
