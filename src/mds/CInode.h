@@ -524,8 +524,6 @@ private:
 
   bool is_head() { return last == CEPH_NOSNAP; }
 
-  bool is_in_stray();
-
   // note: this overloads MDSCacheObject
   bool is_ambiguous_auth() {
     return state_test(STATE_AMBIGUOUSAUTH) ||

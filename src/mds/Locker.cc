@@ -460,11 +460,14 @@ bool Locker::acquire_locks(MDRequest *mdr,
 }
 
 
-void Locker::set_xlocks_done(Mutation *mut)
+void Locker::set_xlocks_done(Mutation *mut, bool skip_dentry)
 {
   for (set<SimpleLock*>::iterator p = mut->xlocks.begin();
        p != mut->xlocks.end();
        p++) {
+    if (skip_dentry &&
+	((*p)->get_type() == CEPH_LOCK_DN || (*p)->get_type() == CEPH_LOCK_DVERSION))
+      continue;
     dout(10) << "set_xlocks_done on " << **p << " " << *(*p)->get_parent() << dendl;
     (*p)->set_xlock_done();
   }
@@ -744,6 +747,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
       case LOCK_EXCL_SYNC:
       case LOCK_LOCK_SYNC:
       case LOCK_MIX_SYNC:
+      case LOCK_XSYN_SYNC:
       case LOCK_XLOCK:
       case LOCK_XLOCKDONE:
 	if (lock->get_parent()->is_replicated()) {
@@ -1321,7 +1325,7 @@ void Locker::remote_wrlock_start(SimpleLock *lock, int target, MDRequest *mut)
 
   // send lock request
   if (!lock->is_waiter_for(SimpleLock::WAIT_REMOTEXLOCK)) {
-    mut->start_locking(lock);
+    mut->start_locking(lock, target);
     mut->more()->slaves.insert(target);
     MMDSSlaveRequest *r = new MMDSSlaveRequest(mut->reqid, mut->attempt,
 					       MMDSSlaveRequest::OP_WRLOCK);
@@ -1406,9 +1410,9 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
     
     // send lock request
     if (!lock->is_waiter_for(SimpleLock::WAIT_REMOTEXLOCK)) {
-      mut->start_locking(lock);
       int auth = lock->get_parent()->authority().first;
       mut->more()->slaves.insert(auth);
+      mut->start_locking(lock, auth);
       MMDSSlaveRequest *r = new MMDSSlaveRequest(mut->reqid, mut->attempt,
 						 MMDSSlaveRequest::OP_XLOCK);
       r->set_lock_type(lock->get_type());
@@ -2137,6 +2141,8 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
   }
 
   CInode *cur = cap->get_inode();
+  if (!cur->is_auth())
+    return;
   if (cap->wanted() == 0) {
     if (cur->item_open_file.is_on_list() &&
 	!cur->is_any_caps_wanted()) {
@@ -3333,11 +3339,7 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
     case LOCK_MIX: lock->set_state(LOCK_MIX_SYNC); break;
     case LOCK_SCAN:
     case LOCK_LOCK: lock->set_state(LOCK_LOCK_SYNC); break;
-    case LOCK_XSYN:
-      file_excl((ScatterLock*)lock, need_issue);
-      if (lock->get_state() != LOCK_EXCL)
-	return false;
-      // fall-thru
+    case LOCK_XSYN: lock->set_state(LOCK_XSYN_SYNC); break;
     case LOCK_EXCL: lock->set_state(LOCK_EXCL_SYNC); break;
     default: assert(0);
     }

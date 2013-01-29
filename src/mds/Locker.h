@@ -93,7 +93,7 @@ public:
 
   void cancel_locking(Mutation *mut, set<CInode*> *pneed_issue);
   void drop_locks(Mutation *mut, set<CInode*> *pneed_issue=0);
-  void set_xlocks_done(Mutation *mut);
+  void set_xlocks_done(Mutation *mut, bool skip_dentry=false);
   void drop_non_rdlocks(Mutation *mut, set<CInode*> *pneed_issue=0);
   void drop_rdlocks(Mutation *mut, set<CInode*> *pneed_issue=0);
 

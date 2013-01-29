@@ -312,6 +312,8 @@ protected:
   map<int, map<dirfrag_t, vector<dirfrag_t> > > other_ambiguous_imports;  
 
   map<int, map<metareqid_t, MDSlaveUpdate*> > uncommitted_slave_updates;  // slave: for replay.
+  map<CDir*, int> uncommitted_slave_rename_olddir;  // slave: preserve the non-auth dir until seeing commit.
+  map<CInode*, int> uncommitted_slave_unlink;  // slave: preserve the unlinked inode until seeing commit.
 
   // track master requests whose slaves haven't acknowledged commit
   struct umaster {
@@ -329,25 +331,27 @@ protected:
   set<int> wants_resolve;   // nodes i need to send my resolve to
   set<int> got_resolve;     // nodes i got resolves from
   set<int> need_resolve_ack;   // nodes i need a resolve_ack from
-  set<metareqid_t> need_resolve_rollback;  // rollbacks i'm writing to the journal
+  map<metareqid_t, int> need_resolve_rollback;  // rollbacks i'm writing to the journal
+  map<int, MMDSResolve*> delayed_resolve;
   
   void handle_resolve(MMDSResolve *m);
   void handle_resolve_ack(MMDSResolveAck *m);
+  void process_delayed_resolve();
+  void discard_delayed_resolve(int who);
   void maybe_resolve_finish();
   void disambiguate_imports();
   void recalc_auth_bits();
   void trim_unlinked_inodes();
+  void add_uncommitted_slave_update(metareqid_t reqid, int master, MDSlaveUpdate*);
+  void finish_uncommitted_slave_update(metareqid_t reqid, int master);
+  MDSlaveUpdate* get_uncommitted_slave_update(metareqid_t reqid, int master);
 public:
   void remove_inode_recursive(CInode *in);
 
-  void add_rollback(metareqid_t reqid) {
-    need_resolve_rollback.insert(reqid);
+  void add_rollback(metareqid_t reqid, int master) {
+    need_resolve_rollback[reqid] = master;
   }
-  void finish_rollback(metareqid_t reqid) {
-    need_resolve_rollback.erase(reqid);
-    if (need_resolve_rollback.empty())
-      maybe_resolve_finish();
-  }
+  void finish_rollback(metareqid_t reqid);
 
   // ambiguous imports
   void add_ambiguous_import(dirfrag_t base, const vector<dirfrag_t>& bounds);
@@ -363,6 +367,7 @@ public:
   void finish_ambiguous_import(dirfrag_t dirino);
   void resolve_start();
   void send_resolves();
+  void send_slave_resolve(int who);
   void send_resolve_now(int who);
   void send_resolve_later(int who);
   void maybe_send_pending_resolves();
@@ -399,6 +404,7 @@ protected:
   void handle_cache_rejoin_weak(MMDSCacheRejoin *m);
   CInode* rejoin_invent_inode(inodeno_t ino, snapid_t last);
   CDir* rejoin_invent_dirfrag(dirfrag_t df);
+  bool rejoin_fetch_dirfrags(MMDSCacheRejoin *m);
   void handle_cache_rejoin_strong(MMDSCacheRejoin *m);
   void rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack, set<vinodeno_t>& acked_inodes);
   void handle_cache_rejoin_ack(MMDSCacheRejoin *m);

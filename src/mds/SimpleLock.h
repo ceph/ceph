@@ -110,6 +110,7 @@ public:
     case LOCK_XSYN: return "xsyn";
     case LOCK_XSYN_EXCL: return "xsyn->excl";
     case LOCK_EXCL_XSYN: return "excl->xsyn";
+    case LOCK_XSYN_SYNC: return "xsyn->sync";
 
     case LOCK_SYNC_MIX: return "sync->mix";
     case LOCK_SYNC_MIX2: return "sync->mix(2)";

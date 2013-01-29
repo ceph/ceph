@@ -1093,6 +1093,8 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, list<Context*>& fini
   
   in->clear_dirty_rstat();
 
+  in->item_open_file.remove_myself();
+
   // waiters
   in->take_waiting(CInode::WAIT_ANY_MASK, finished);
   
@@ -2389,9 +2391,7 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
 
   // add to journal entry
   if (le) 
-    le->metablob.add_dir(dir, 
-			 true,                 // Hmm: dirty=false would be okay in some cases
-			 dir->is_complete());  
+    le->metablob.add_import_dir(dir);
 
   int num_imported = 0;
 
