@@ -186,7 +186,7 @@ void PGMonitor::update_from_paxos()
       return;
     }
 
-    pg_map.apply_incremental(inc);
+    pg_map.apply_incremental(g_ceph_context, inc);
     
     dout(10) << pg_map << dendl;
 

@@ -153,13 +153,14 @@ void PGMap::Incremental::generate_test_instances(list<PGMap::Incremental*>& o)
 
 // --
 
-void PGMap::apply_incremental(const Incremental& inc)
+void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
 {
   assert(inc.version == version+1);
   version++;
 
-  stamp_delta = inc.stamp;
-  stamp_delta -= stamp;
+  utime_t delta_t;
+  delta_t = inc.stamp;
+  delta_t -= stamp;
   stamp = inc.stamp;
 
   pool_stat_t pg_sum_old = pg_sum;
@@ -236,8 +237,18 @@ void PGMap::apply_incremental(const Incremental& inc)
     full_osds.erase(*p);
   }
 
-  pg_sum_delta = pg_sum;
-  pg_sum_delta.stats.sub(pg_sum_old.stats);
+  // calculate a delta, and average over the last 2 deltas.
+  pool_stat_t d = pg_sum;
+  d.stats.sub(pg_sum_old.stats);
+  pg_sum_deltas.push_back(make_pair(d, delta_t));
+  stamp_delta += delta_t;
+
+  pg_sum_delta.stats.add(d.stats);
+  if (pg_sum_deltas.size() > MIN(1, cct ? cct->_conf->mon_stat_smooth_intervals : 1)) {
+    pg_sum_delta.stats.sub(pg_sum_deltas.front().first.stats);
+    stamp_delta -= pg_sum_deltas.front().second;
+    pg_sum_deltas.pop_front();
+  }
   
   if (inc.osdmap_epoch)
     last_osdmap_epoch = inc.osdmap_epoch;
@@ -702,7 +713,7 @@ void PGMap::generate_test_instances(list<PGMap*>& o)
   Incremental::generate_test_instances(inc);
   inc.pop_front();
   while (!inc.empty()) {
-    o.back()->apply_incremental(*inc.front());
+    o.back()->apply_incremental(NULL, *inc.front());
     delete inc.front();
     inc.pop_front();
   }
