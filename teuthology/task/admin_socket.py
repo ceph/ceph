@@ -131,19 +131,18 @@ def _run_tests(ctx, client, tests):
                         test_path,
                         ],
                     )
-            else:
-                test_path = '/bin/true'
 
             args = config.get('args', [])
             assert isinstance(args, list), \
                 'admin socket command args must be a list'
             sock_out = _socket_command(remote, socket_path, command, args)
-            remote.run(
-                args=[
-                    test_path,
-                    ],
-                stdin=json.dumps(sock_out),
-                )
+            if test_path is not None:
+                remote.run(
+                    args=[
+                        test_path,
+                        ],
+                    stdin=json.dumps(sock_out),
+                    )
 
     finally:
         remote.run(
