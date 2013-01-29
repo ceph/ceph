@@ -135,6 +135,11 @@ def test_incomplete_pgs(ctx, config):
 
     log.info('Testing incomplete pgs...')
 
+    for i in range(4):
+        manager.set_config(
+            i,
+            osd_recovery_delay_start=1000)
+
     # move data off of osd.0, osd.1
     manager.raw_cluster_cmd('osd', 'out', '0', '1')
     manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
@@ -185,6 +190,9 @@ def test_incomplete_pgs(ctx, config):
         log.info('waiting a bit...')
         time.sleep(2)
     log.info('all are up!')
+
+    for i in range(4):
+        manager.kick_recovery_wq(i)
 
     # cluster must recover
     manager.wait_for_clean()

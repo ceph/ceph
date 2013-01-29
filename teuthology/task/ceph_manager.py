@@ -308,6 +308,13 @@ class CephManager:
                 return int(i['pool'])
         assert False
 
+    def kick_recovery_wq(self, osdnum):
+        return self.raw_cluster_cmd(
+            'tell', "osd.%d" % (int(osdnum),),
+            'debug',
+            'kick_recovery_wq',
+            '0')
+
     def set_config(self, osdnum, **argdict):
         return self.raw_cluster_cmd(
             'tell', "osd.%d" % (int(osdnum),),
