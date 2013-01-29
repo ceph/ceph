@@ -1,5 +1,8 @@
 #!/bin/sh -ex
 
+# make sure rbd pool is EMPTY.. this is a test script!!
+rbd ls | wc -l | grep -v '^0$' && echo "nonempty rbd pool, aborting!  run this script on an empty test cluster only." && exit 1
+
 IMGS="testimg1 testimg2 testimg3 foo foo2 bar bar2 test1 test2 test3"
 
 remove_images() {
@@ -90,7 +93,7 @@ test_rename() {
     ! rbd rename rbd2/bar --dest-pool rbd foo
     rbd rename --pool rbd2 bar --dest-pool rbd2 foo
     rbd -p rbd2 ls | grep foo
-    rados rmpool rbd2
+    rados rmpool rbd2 rbd2 --yes-i-really-really-mean-it
 
     remove_images
 }
@@ -142,7 +145,7 @@ test_ls() {
     done
 
     for i in $(seq -w 00 99); do
-	rbd create image.$i --format 2 -s 1
+	rbd create image.$i --image-format 2 -s 1
     done
     rbd ls | wc -l | grep 100
     rbd ls -l | grep image |  wc -l | grep 100
@@ -234,7 +237,7 @@ test_pool_image_args() {
     echo "testing pool and image args..."
     remove_images
 
-    ceph osd pool delete test || true
+    ceph osd pool delete test test --yes-i-really-really-mean-it || true
     ceph osd pool create test 100
     truncate -s 1 /tmp/empty
 
@@ -283,8 +286,8 @@ test_pool_image_args() {
     rbd ls test | grep -qv test12
 
     rm -f /tmp/empty
-    ceph osd pool delete test
-    ceph osd pool delete rbd
+    ceph osd pool delete test test --yes-i-really-really-mean-it
+    ceph osd pool delete rbd rbd --yes-i-really-really-mean-it
     ceph osd pool create rbd 100
 }
 
@@ -307,9 +310,9 @@ test_clone() {
     rbd ls -l | grep clone2 | grep rbd2/clone@s1
     rbd -p rbd2 ls | grep -v clone2
 
-    rados rmpool rbd2
-    rados rmpool rbd
-    rados mkpool rbd
+    rados rmpool rbd2 rbd2 --yes-i-really-really-mean-it
+    rados rmpool rbd rbd --yes-i-really-really-mean-it
+    rados mkpool rbd rbd --yes-i-really-really-mean-it
 }
 
 test_pool_image_args
@@ -319,7 +322,7 @@ test_remove
 RBD_CREATE_ARGS=""
 test_others
 test_locking
-RBD_CREATE_ARGS="--format 2"
+RBD_CREATE_ARGS="--image-format 2"
 test_others
 test_locking
 test_clone
