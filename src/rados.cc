@@ -58,7 +58,8 @@ void usage(ostream& out)
 "   mkpool <pool-name> [123[ 4]]     create pool <pool-name>'\n"
 "                                    [with auid 123[and using crush rule 4]]\n"
 "   cppool <pool-name> <dest-pool>   copy content of a pool\n"
-"   rmpool <pool-name>               remove pool <pool-name>'\n"
+"   rmpool <pool-name> [<pool-name> --yes-i-really-really-mean-it]\n"
+"                                    remove pool <pool-name>'\n"
 "   df                               show per-pool and total usage\n"
 "   ls                               list objects in pool\n\n"
 "   chown 123                        change the pool owner to auid 123\n"
@@ -1799,7 +1800,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	strcmp(nargs[1], nargs[2]) != 0 ||
 	strcmp(nargs[3], "--yes-i-really-really-mean-it") != 0) {
       cerr << "WARNING:\n"
-	   << "  This will PERMANENTLY DESTROY an entire pool of object with no way back.\n"
+	   << "  This will PERMANENTLY DESTROY an entire pool of objects with no way back.\n"
 	   << "  To confirm, pass the pool to remove twice, followed by\n"
 	   << "  --yes-i-really-really-mean-it" << std::endl;
       cout << nargs << std::endl;

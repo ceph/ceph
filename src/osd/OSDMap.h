@@ -316,6 +316,12 @@ private:
   bool is_in(int osd) const {
     return exists(osd) && !is_out(osd);
   }
+
+  /**
+   * check if an entire crush subtre is down
+   */
+  bool subtree_is_down(int id, set<int> *down_cache) const;
+  bool containing_subtree_is_down(CephContext *cct, int osd, int subtree_type, set<int> *down_cache) const;
   
   int identify_osd(const entity_addr_t& addr) const;
   int identify_osd(const uuid_d& u) const;

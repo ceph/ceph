@@ -202,6 +202,23 @@ map<int, string> CrushWrapper::get_parent_hierarchy(int id)
   return parent_hierarchy;
 }
 
+int CrushWrapper::get_children(int id, list<int> *children)
+{
+  // leaf?
+  if (id >= 0) {
+    return 0;
+  }
+
+  crush_bucket *b = get_bucket(id);
+  if (!b) {
+    return -ENOENT;
+  }
+
+  for (unsigned n=0; n<b->size; n++) {
+    children->push_back(b->items[n]);
+  }
+  return b->size;
+}
 
 
 int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string name,
@@ -426,24 +443,36 @@ pair<string,string> CrushWrapper::get_immediate_parent(int id)
 {
   pair <string, string> loc;
 
-
   for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
     crush_bucket *b = crush->buckets[bidx];
     if (b == 0)
       continue;
     for (unsigned i = 0; i < b->size; i++)
-      if (b->items[i] == id){
+      if (b->items[i] == id) {
         string parent_id = name_map[b->id];
         string parent_bucket_type = type_map[b->type];
         loc = make_pair(parent_bucket_type, parent_id);
       }
   }
 
-
   return loc;
 }
 
-
+int CrushWrapper::get_immediate_parent_id(int id, int *parent)
+{
+  for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
+    crush_bucket *b = crush->buckets[bidx];
+    if (b == 0)
+      continue;
+    for (unsigned i = 0; i < b->size; i++) {
+      if (b->items[i] == id) {
+	*parent = b->id;
+	return 0;
+      }
+    }
+  }
+  return -ENOENT;
+}
 
 void CrushWrapper::reweight(CephContext *cct)
 {
