@@ -1880,6 +1880,38 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	}
       }
     }
+    else if (m->cmd[1] == "find") {
+      if (m->cmd.size() < 3) {
+	ss << "usage: osd find <osd-id>";
+	r = -EINVAL;
+	goto out;
+      }
+      long osd = parse_osd_id(m->cmd[2].c_str(), &ss);
+      if (osd < 0) {
+	r = -EINVAL;
+	goto out;
+      }
+      if (!osdmap.exists(osd)) {
+	ss << "osd." << osd << " does not exist";
+	r = -ENOENT;
+	goto out;
+      }
+      JSONFormatter jf(true);
+      jf.open_object_section("osd_location");
+      jf.dump_int("osd", osd);
+      jf.dump_stream("ip") << osdmap.get_addr(osd);
+      jf.open_object_section("crush_location");
+      map<string,string> loc = osdmap.crush->get_full_location(osd);
+      for (map<string,string>::iterator p = loc.begin(); p != loc.end(); ++p)
+	jf.dump_string(p->first.c_str(), p->second);
+      jf.close_section();
+      jf.close_section();
+      ostringstream rs;
+      jf.flush(rs);
+      rs << "\n";
+      rdata.append(rs.str());
+      r = 0;
+    }
     else if (m->cmd[1] == "map" && m->cmd.size() == 4) {
       int64_t pool = osdmap.lookup_pg_pool_name(m->cmd[2].c_str());
       if (pool < 0) {
