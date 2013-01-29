@@ -106,7 +106,7 @@ Delete a Pool
 
 To delete a pool, execute::
 
-	ceph osd pool delete {pool-name}
+	ceph osd pool delete {pool-name} [{pool-name} --yes-i-really-really-mean-it]
 
 	
 If you created your own rulesets and rules for a pool you created,  you should
