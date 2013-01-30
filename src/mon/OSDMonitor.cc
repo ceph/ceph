@@ -2485,9 +2485,55 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	pending_inc.crush.clear();
 	newcrush.encode(pending_inc.crush);
       }
+      getline(ss, rs);
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      return true;
+    }
+    else if (m->cmd.size() == 5 &&
+	     m->cmd[1] == "crush" &&
+	     m->cmd[2] == "rule" &&
+	     m->cmd[3] == "rm") {
+      string name = m->cmd[4];
+
+      if (!osdmap.crush->rule_exists(name)) {
+	ss << "rule " << name << " does not exist";
+	err = 0;
 	goto out;
       }
 
+      bufferlist bl;
+      if (pending_inc.crush.length())
+	bl = pending_inc.crush;
+      else
+	osdmap.crush->encode(bl);
+      CrushWrapper newcrush;
+      bufferlist::iterator p = bl.begin();
+      newcrush.decode(p);
+
+      if (!newcrush.rule_exists(name)) {
+	ss << "rule " << name << " does not exist";
+      } else {
+	int ruleno = newcrush.get_rule_id(name);
+	assert(ruleno >= 0);
+
+	// make sure it is not in use.
+	// FIXME: this is ok in some situations, but let's not bother with that
+	// complexity now.
+	int ruleset = newcrush.get_rule_mask_ruleset(ruleno);
+	if (osdmap.crush_ruleset_in_use(ruleset)) {
+	  ss << "crush rule " << name << " ruleset " << ruleset << " is in use";
+	  err = -EBUSY;
+	  goto out;
+	}
+
+	err = newcrush.remove_rule(ruleno);
+	if (err < 0) {
+	  goto out;
+	}
+
+	pending_inc.crush.clear();
+	newcrush.encode(pending_inc.crush);
+      }
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
