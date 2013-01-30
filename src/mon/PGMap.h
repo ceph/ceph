@@ -52,6 +52,7 @@ public:
     set<pg_t> pg_remove;
     float full_ratio;
     float nearfull_ratio;
+    utime_t stamp;
 
     void encode(bufferlist &bl, uint64_t features=-1) const;
     void decode(bufferlist::iterator &bl);
@@ -69,6 +70,13 @@ public:
   hash_map<int,pool_stat_t> pg_pool_sum;
   pool_stat_t pg_sum;
   osd_stat_t osd_sum;
+
+  utime_t stamp;
+
+  // recent deltas, and summation
+  list< pair<pool_stat_t, utime_t> > pg_sum_deltas;
+  pool_stat_t pg_sum_delta;
+  utime_t stamp_delta;
 
   set<pg_t> creating_pgs;   // lru: front = new additions, back = recently pinged
   map<int,set<pg_t> > creating_pgs_by_osd;
@@ -88,7 +96,7 @@ public:
       num_osd(0)
   {}
 
-  void apply_incremental(const Incremental& inc);
+  void apply_incremental(CephContext *cct, const Incremental& inc);
   void redo_full_sets();
   void register_nearfull_status(int osd, const osd_stat_t& s);
   void calc_stats();
