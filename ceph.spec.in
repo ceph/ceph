@@ -413,6 +413,7 @@ fi
 %{_libdir}/libcephfs.so
 %{_libdir}/librbd.so
 %{_libdir}/librados.so
+/usr/lib/jni/libcephfs_jni.so
 
 #################################################################################
 %files radosgw
@@ -561,7 +562,7 @@ fi
 
 %files -n libcephfs_jni1
 %defattr(-,root,root,-)
-/usr/lib/jni/libcephfs_jni.so*
+/usr/lib/jni/libcephfs_jni.so.*
 
 %files -n cephfs-java
 %defattr(-,root,root,-)
