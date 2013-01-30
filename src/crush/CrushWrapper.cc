@@ -488,6 +488,48 @@ void CrushWrapper::reweight(CephContext *cct)
   }
 }
 
+int CrushWrapper::add_simple_rule(string name, string root_name, string failure_domain_name)
+{
+  if (rule_exists(name))
+    return -EEXIST;
+  if (!name_exists(root_name.c_str()))
+    return -ENOENT;
+  int root = get_item_id(root_name.c_str());
+  int type = 0;
+  if (failure_domain_name.length()) {
+    type = get_type_id(failure_domain_name.c_str());
+    if (type <= 0) // bah, returns 0 on error; but its ok, device isn't a domain really
+      return -EINVAL;
+  }
+
+  int ruleset = 0;
+  for (int i = 0; i < get_max_rules(); i++) {
+    if (rule_exists(i) &&
+	get_rule_mask_ruleset(i) >= ruleset) {
+      ruleset = get_rule_mask_ruleset(i) + 1;
+    }
+  }
+
+  crush_rule *rule = crush_make_rule(3, ruleset, 1 /* pg_pool_t::TYPE_REP */, 1, 10);
+  assert(rule);
+  crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, root, 0);
+  if (type)
+    crush_rule_set_step(rule, 1,
+			CRUSH_RULE_CHOOSE_LEAF_FIRSTN,
+			CRUSH_CHOOSE_N,
+			type);
+  else
+    crush_rule_set_step(rule, 1,
+			CRUSH_RULE_CHOOSE_FIRSTN,
+			CRUSH_CHOOSE_N,
+			0);
+  crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
+  int rno = crush_add_rule(crush, rule, -1);
+  set_rule_name(rno, name.c_str());
+  have_rmaps = false;
+  return rno;
+}
+
 void CrushWrapper::encode(bufferlist& bl, bool lean) const
 {
   assert(crush);
