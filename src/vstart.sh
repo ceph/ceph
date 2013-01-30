@@ -380,6 +380,9 @@ EOF
 		    cmd="rm -rf dev/mon.$f"
 		    echo $cmd
 		    $cmd
+                    cmd="mkdir dev/mon.$f"
+                    echo $cmd
+                    $cmd
 		    cmd="$CEPH_BIN/ceph-mon --mkfs -c $conf -i $f --monmap=$monmap_fn"
 		    cmd="$cmd --keyring=$keyring_fn"
 		    echo $cmd
