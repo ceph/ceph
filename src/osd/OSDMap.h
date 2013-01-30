@@ -450,7 +450,7 @@ public:
   void pg_to_raw_up(pg_t pg, vector<int>& up) const;
   void pg_to_up_acting_osds(pg_t pg, vector<int>& up, vector<int>& acting) const;
 
-  int64_t lookup_pg_pool_name(const char *name) {
+  int64_t lookup_pg_pool_name(const string& name) {
     if (name_pool.count(name))
       return name_pool[name];
     return -ENOENT;

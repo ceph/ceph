@@ -575,7 +575,7 @@ void MDCache::open_root()
 void MDCache::populate_mydir()
 {
   assert(myin);
-  CDir *mydir = myin->get_dirfrag(frag_t());
+  CDir *mydir = myin->get_or_open_dirfrag(this, frag_t());
   assert(mydir);
 
   dout(10) << "populate_mydir " << *mydir << dendl;

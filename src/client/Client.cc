@@ -6435,11 +6435,57 @@ int Client::lsetxattr(const char *path, const char *name, const void *value, siz
   return Client::_setxattr(ceph_inode, name, value, size, flags, getuid(), getgid());
 }
 
-
 int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
 		      int uid, int gid)
 {
-  int r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid);
+  int r;
+
+  if (strncmp(name, "ceph.", 5) == 0) {
+    string n(name);
+    char buf[256];
+
+    r = -ENODATA;
+    if ((in->is_file() && n.find("ceph.file.layout") == 0) ||
+	(in->is_dir() && in->has_dir_layout() && n.find("ceph.dir.layout") == 0)) {
+      string rest = n.substr(n.find("layout"));
+      if (rest == "layout") {
+	r = snprintf(buf, sizeof(buf),
+		     "stripe_unit=%lu stripe_count=%lu object_size=%lu pool=",
+		     (long unsigned)in->layout.fl_stripe_unit,
+		     (long unsigned)in->layout.fl_stripe_count,
+		     (long unsigned)in->layout.fl_object_size);
+	if (osdmap->have_pg_pool(in->layout.fl_pg_pool))
+	  r += snprintf(buf + r, sizeof(buf) - r, "%s",
+			osdmap->get_pool_name(in->layout.fl_pg_pool));
+	else
+	  r += snprintf(buf + r, sizeof(buf) - r, "%lu",
+			(long unsigned)in->layout.fl_pg_pool);
+      } else if (rest == "layout.stripe_unit") {
+	r = snprintf(buf, sizeof(buf), "%lu", (long unsigned)in->layout.fl_stripe_unit);
+      } else if (rest == "layout.stripe_count") {
+	r = snprintf(buf, sizeof(buf), "%lu", (long unsigned)in->layout.fl_stripe_count);
+      } else if (rest == "layout.object_size") {
+	r = snprintf(buf, sizeof(buf), "%lu", (long unsigned)in->layout.fl_object_size);
+      } else if (rest == "layout.pool") {
+	if (osdmap->have_pg_pool(in->layout.fl_pg_pool))
+	  r = snprintf(buf, sizeof(buf), "%s",
+		       osdmap->get_pool_name(in->layout.fl_pg_pool));
+	else
+	  r = snprintf(buf, sizeof(buf), "%lu",
+		       (long unsigned)in->layout.fl_pg_pool);
+      }
+    }
+    if (size != 0) {
+      if (r > (int)size) {
+	r = -ERANGE;
+      } else if (r > 0) {
+	memcpy(value, buf, r);
+      }
+    }
+    goto out;
+  }
+
+  r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid);
   if (r == 0) {
     string n(name);
     r = -ENODATA;
@@ -6453,6 +6499,7 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
       }
     }
   }
+ out:
   ldout(cct, 3) << "_getxattr(" << in->ino << ", \"" << name << "\", " << size << ") = " << r << dendl;
   return r;
 }
@@ -6471,13 +6518,19 @@ int Client::ll_getxattr(vinodeno_t vino, const char *name, void *value, size_t s
 
 int Client::_listxattr(Inode *in, char *name, size_t size, int uid, int gid)
 {
+  const char file_vxattrs[] = "ceph.file.layout";
+  const char dir_vxattrs[] = "ceph.dir.layout";
   int r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid);
   if (r == 0) {
     for (map<string,bufferptr>::iterator p = in->xattrs.begin();
 	 p != in->xattrs.end();
 	 p++)
       r += p->first.length() + 1;
-    
+    if (in->is_file())
+      r += sizeof(file_vxattrs);
+    else if (in->is_dir() && in->has_dir_layout())
+      r += sizeof(dir_vxattrs);
+
     if (size != 0) {
       if (size >= (unsigned)r) {
 	for (map<string,bufferptr>::iterator p = in->xattrs.begin();
@@ -6487,6 +6540,13 @@ int Client::_listxattr(Inode *in, char *name, size_t size, int uid, int gid)
 	  name += p->first.length();
 	  *name = '\0';
 	  name++;
+	}
+	if (in->is_file()) {
+	  memcpy(name, file_vxattrs, sizeof(file_vxattrs));
+	  name += sizeof(file_vxattrs);
+	} else if (in->is_dir() && in->has_dir_layout()) {
+	  memcpy(name, dir_vxattrs, sizeof(dir_vxattrs));
+	  name += sizeof(dir_vxattrs);
 	}
       } else
 	r = -ERANGE;
@@ -6514,6 +6574,13 @@ int Client::_setxattr(Inode *in, const char *name, const void *value, size_t siz
   if (in->snapid != CEPH_NOSNAP) {
     return -EROFS;
   }
+
+  // same xattrs supported by kernel client
+  if (strncmp(name, "user.", 5) &&
+      strncmp(name, "security.", 9) &&
+      strncmp(name, "trusted.", 8) &&
+      strncmp(name, "ceph.", 5))
+    return -EOPNOTSUPP;
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETXATTR);
   filepath path;
@@ -6543,10 +6610,6 @@ int Client::ll_setxattr(vinodeno_t vino, const char *name, const void *value, si
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
 
-  // same xattrs supported by kernel client
-  if (strncmp(name, "user.", 5) && strncmp(name, "security.", 9) && strncmp(name, "trusted.", 8))
-    return -EOPNOTSUPP;
-
   Inode *in = _ll_get_inode(vino);
   return _setxattr(in, name, value, size, flags, uid, gid);
 }
@@ -6556,6 +6619,13 @@ int Client::_removexattr(Inode *in, const char *name, int uid, int gid)
   if (in->snapid != CEPH_NOSNAP) {
     return -EROFS;
   }
+
+  // same xattrs supported by kernel client
+  if (strncmp(name, "user.", 5) &&
+      strncmp(name, "security.", 9) &&
+      strncmp(name, "trusted.", 8) &&
+      strncmp(name, "ceph.", 5))
+    return -EOPNOTSUPP;
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_RMXATTR);
   filepath path;
@@ -6579,10 +6649,6 @@ int Client::ll_removexattr(vinodeno_t vino, const char *name, int uid, int gid)
   tout(cct) << "ll_removexattr" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
-
-  // only user xattrs, for now
-  if (strncmp(name, "user.", 5) && strncmp(name, "security.", 9) && strncmp(name, "trusted.", 8))
-    return -EOPNOTSUPP;
 
   Inode *in = _ll_get_inode(vino);
   return _removexattr(in, name, uid, gid);
