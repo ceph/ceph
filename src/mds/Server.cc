@@ -2616,7 +2616,9 @@ public:
 
     mds->balancer->hit_inode(mdr->now, newi, META_POP_IWR);
 
-    mds->server->reply_request(mdr, 0);
+    MClientReply *reply = new MClientReply(mdr->client_request, 0);
+    reply->set_extra_bl(mdr->reply_extra_bl);
+    mds->server->reply_request(mdr, reply);
   }
 };
 
@@ -2767,6 +2769,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in, follows);
 
   if (mdr->client_request->get_connection()->has_feature(CEPH_FEATURE_REPLY_CREATE_INODE)) {
+    dout(10) << "adding ino to reply to indicate inode was created" << dendl;
     // add the file created flag onto the reply if create_flags features is supported
     ::encode(in->inode.ino, mdr->reply_extra_bl);
   }

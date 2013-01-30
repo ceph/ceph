@@ -7309,8 +7309,6 @@ int Client::ll_create(vinodeno_t parent, const char *name, mode_t mode, int flag
   _ll_get(in);
 
   if (!created) {
-    uid_t uid = geteuid();
-    gid_t gid = getegid();
     r = check_permissions(in, flags, uid, gid);
     if (r < 0)
       goto out;
