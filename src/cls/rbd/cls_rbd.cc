@@ -38,6 +38,7 @@
 #include "include/types.h"
 #include "objclass/objclass.h"
 #include "include/rbd_types.h"
+#include <inttypes.h>
 
 #include "cls/rbd/cls_rbd.h"
 
@@ -498,7 +499,7 @@ int get_protection_status(cls_method_context_t hctx, bufferlist *in,
   key_from_snap_id(snap_id.val, &snapshot_key);
   r = read_key(hctx, snapshot_key, &snap);
   if (r < 0) {
-    CLS_ERR("could not read key for snapshot id %llu", snap_id.val);
+    CLS_ERR("could not read key for snapshot id %"PRIu64, snap_id.val);
     return r;
   }
 
@@ -565,7 +566,7 @@ int set_protection_status(cls_method_context_t hctx, bufferlist *in,
   key_from_snap_id(snap_id.val, &snapshot_key);
   r = read_key(hctx, snapshot_key, &snap);
   if (r < 0) {
-    CLS_ERR("could not read key for snapshot id %d", snap_id.val);
+    CLS_ERR("could not read key for snapshot id %"PRIu64, snap_id.val);
     return r;
   }
 
@@ -946,7 +947,7 @@ int add_child(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   if (r < 0)
     return r;
 
-  CLS_LOG(20, "add_child %s to (%d, %s, %d)", c_image_id.c_str(),
+  CLS_LOG(20, "add_child %s to (%"PRIu64", %s, %"PRIu64")", c_image_id.c_str(),
 	  p_pool_id, p_image_id.c_str(), p_snap_id.val);
 
   string key = parent_key(p_pool_id, p_image_id, p_snap_id);
@@ -1000,8 +1001,9 @@ int remove_child(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   if (r < 0)
     return r;
 
-  CLS_LOG(20, "remove_child %s from (%d, %s, %d)", c_image_id.c_str(),
-	       p_pool_id, p_image_id.c_str(), p_snap_id.val);
+  CLS_LOG(20, "remove_child %s from (%"PRIu64", %s, %"PRIu64")",
+	       c_image_id.c_str(), p_pool_id, p_image_id.c_str(),
+	       p_snap_id.val);
 
   string key = parent_key(p_pool_id, p_image_id, p_snap_id);
 
@@ -1060,7 +1062,7 @@ int get_children(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   if (r < 0)
     return r;
 
-  CLS_LOG(20, "get_children of (%d, %s, %d)",
+  CLS_LOG(20, "get_children of (%"PRIu64", %s, %"PRIu64")",
 	  p_pool_id, p_image_id.c_str(), p_snap_id.val);
 
   string key = parent_key(p_pool_id, p_image_id, p_snap_id);
