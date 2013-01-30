@@ -445,6 +445,9 @@ fi
 %if %{with ocf}
 %files resource-agents
 %defattr(0755,root,root,-)
+%dir /usr/lib/ocf
+%dir /usr/lib/ocf/resource.d
+%dir /usr/lib/ocf/resource.d/ceph
 /usr/lib/ocf/resource.d/%{name}/*
 %endif
 
