@@ -859,6 +859,12 @@ void CrushWrapper::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("rules");
+  dump_rules(f);
+  f->close_section();
+}
+
+void CrushWrapper::dump_rules(Formatter *f) const
+{
   for (int i=0; i<get_max_rules(); i++) {
     if (!rule_exists(i))
       continue;
@@ -914,7 +920,6 @@ void CrushWrapper::dump(Formatter *f) const
     f->close_section();
     f->close_section();
   }
-  f->close_section();
 }
 
 void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)
