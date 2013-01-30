@@ -553,6 +553,7 @@ public:
   static void build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& crush,
 					       map<int, const char*>& rulesets);
 
+  bool crush_ruleset_in_use(int ruleset) const;
 
 private:
   void print_osd_line(int cur, ostream *out, Formatter *f) const;
