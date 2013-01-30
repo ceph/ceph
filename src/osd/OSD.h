@@ -461,7 +461,7 @@ public:
     return hobject_t(sobject_t(object_t(foo), 0)); 
   }
 
-  hobject_t make_pg_log_oid(pg_t pg) {
+  static hobject_t make_pg_log_oid(pg_t pg) {
     stringstream ss;
     ss << "pglog_" << pg;
     string s;
@@ -469,7 +469,7 @@ public:
     return hobject_t(sobject_t(object_t(s.c_str()), 0));
   }
   
-  hobject_t make_pg_biginfo_oid(pg_t pg) {
+  static hobject_t make_pg_biginfo_oid(pg_t pg) {
     stringstream ss;
     ss << "pginfo_" << pg;
     string s;

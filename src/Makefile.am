@@ -110,7 +110,14 @@ ceph_conf_SOURCES = ceph_conf.cc
 ceph_conf_LDADD = $(LIBGLOBAL_LDA)
 ceph_authtool_SOURCES = ceph_authtool.cc
 ceph_authtool_LDADD = $(LIBGLOBAL_LDA)
-bin_PROGRAMS += ceph ceph-conf ceph-authtool
+ceph_filestore_dump_SOURCES = tools/ceph-filestore-dump.cc objclass/class_debug.cc \
+	       objclass/class_api.cc
+ceph_filestore_dump_SOURCES += perfglue/disabled_heap_profiler.cc
+ceph_filestore_dump_LDADD = libosd.a $(LIBOS_LDA) $(LIBGLOBAL_LDA) -lboost_program_options
+if LINUX
+ceph_filestore_dump_LDADD += -ldl
+endif
+bin_PROGRAMS += ceph ceph-conf ceph-authtool ceph-filestore-dump
 
 monmaptool_SOURCES = monmaptool.cc
 monmaptool_LDADD = $(LIBGLOBAL_LDA)
