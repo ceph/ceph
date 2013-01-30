@@ -26,6 +26,8 @@ bin_PROGRAMS =
 # like bin_PROGRAMS, but these targets are only built for debug builds
 bin_DEBUGPROGRAMS =
 sbin_PROGRAMS =
+noinst_PROGRAMS =
+
 sbin_SCRIPTS = \
 	ceph-disk-prepare \
 	ceph-disk-activate \
@@ -164,7 +166,7 @@ bin_PROGRAMS += ceph-fuse
 rbd_fuse_SOURCES = rbd_fuse/rbd-fuse.c
 rbd_fuse_LDADD = -lfuse librados.la librbd.la $(LIBGLOBAL_LDA)
 rbd_fuse_CXXFLAGS = ${AM_CXXFLAGS}
-bin_PROGRAMS += rbd-fuse
+noinst_PROGRAMS += rbd-fuse
 
 endif
 
