@@ -610,7 +610,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     }
-    else if (m->cmd[1] == "add" && m->cmd.size() >= 2) {
+    else if (m->cmd[1] == "add" && m->cmd.size() >= 3) {
       KeyServerData::Incremental auth_inc;
       if (m->cmd.size() >= 3) {
         if (!auth_inc.name.from_str(m->cmd[2])) {
