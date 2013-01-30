@@ -1996,6 +1996,17 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       ss << "listed " << osdmap.blacklist.size() << " entries";
       r = 0;
     }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "crush" && m->cmd[2] == "dump") {
+      JSONFormatter jf(true);
+      jf.open_object_section("crush_map");
+      osdmap.crush->dump(&jf);
+      jf.close_section();
+      ostringstream rs;
+      jf.flush(rs);
+      rs << "\n";
+      rdata.append(rs.str());
+      r = 0;
+    }
   }
  out:
   if (r != -1) {
