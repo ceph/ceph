@@ -28,7 +28,7 @@ void PGMap::Incremental::encode(bufferlist &bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(5, 5, bl);
+  ENCODE_START(6, 5, bl);
   ::encode(version, bl);
   ::encode(pg_stat_updates, bl);
   ::encode(osd_stat_updates, bl);
@@ -38,12 +38,13 @@ void PGMap::Incremental::encode(bufferlist &bl, uint64_t features) const
   ::encode(full_ratio, bl);
   ::encode(nearfull_ratio, bl);
   ::encode(pg_remove, bl);
+  ::encode(stamp, bl);
   ENCODE_FINISH(bl);
 }
 
 void PGMap::Incremental::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
   ::decode(version, bl);
   if (struct_v < 3) {
     pg_stat_updates.clear();
@@ -84,12 +85,15 @@ void PGMap::Incremental::decode(bufferlist::iterator &bl)
   if (struct_v < 4 && nearfull_ratio == 0) {
     nearfull_ratio = -1;
   }
+  if (struct_v >= 6)
+    ::decode(stamp, bl);
   DECODE_FINISH(bl);
 }
 
 void PGMap::Incremental::dump(Formatter *f) const
 {
   f->dump_unsigned("version", version);
+  f->dump_stream("stamp") << stamp;
   f->dump_unsigned("osdmap_epoch", osdmap_epoch);
   f->dump_unsigned("pg_scan_epoch", pg_scan);
   f->dump_float("full_ratio", full_ratio);
@@ -129,6 +133,7 @@ void PGMap::Incremental::generate_test_instances(list<PGMap::Incremental*>& o)
   o.push_back(new Incremental);
   o.push_back(new Incremental);
   o.back()->version = 1;
+  o.back()->stamp = utime_t(123,345);
   o.push_back(new Incremental);
   o.back()->version = 2;
   o.back()->pg_stat_updates[pg_t(1,2,3)] = pg_stat_t();
@@ -148,10 +153,18 @@ void PGMap::Incremental::generate_test_instances(list<PGMap::Incremental*>& o)
 
 // --
 
-void PGMap::apply_incremental(const Incremental& inc)
+void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
 {
   assert(inc.version == version+1);
   version++;
+
+  utime_t delta_t;
+  delta_t = inc.stamp;
+  delta_t -= stamp;
+  stamp = inc.stamp;
+
+  pool_stat_t pg_sum_old = pg_sum;
+
   bool ratios_changed = false;
   if (inc.full_ratio != full_ratio && inc.full_ratio != -1) {
     full_ratio = inc.full_ratio;
@@ -222,6 +235,19 @@ void PGMap::apply_incremental(const Incremental& inc)
     // remove these old osds from full/nearfull set(s), too
     nearfull_osds.erase(*p);
     full_osds.erase(*p);
+  }
+
+  // calculate a delta, and average over the last 2 deltas.
+  pool_stat_t d = pg_sum;
+  d.stats.sub(pg_sum_old.stats);
+  pg_sum_deltas.push_back(make_pair(d, delta_t));
+  stamp_delta += delta_t;
+
+  pg_sum_delta.stats.add(d.stats);
+  if (pg_sum_deltas.size() > MIN(1, cct ? cct->_conf->mon_stat_smooth_intervals : 1)) {
+    pg_sum_delta.stats.sub(pg_sum_deltas.front().first.stats);
+    stamp_delta -= pg_sum_deltas.front().second;
+    pg_sum_deltas.pop_front();
   }
   
   if (inc.osdmap_epoch)
@@ -357,7 +383,7 @@ void PGMap::encode(bufferlist &bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(4, 4, bl);
+  ENCODE_START(5, 4, bl);
   ::encode(version, bl);
   ::encode(pg_stat, bl);
   ::encode(osd_stat, bl);
@@ -365,12 +391,13 @@ void PGMap::encode(bufferlist &bl, uint64_t features) const
   ::encode(last_pg_scan, bl);
   ::encode(full_ratio, bl);
   ::encode(nearfull_ratio, bl);
+  ::encode(stamp, bl);
   ENCODE_FINISH(bl);
 }
 
 void PGMap::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, bl);
   ::decode(version, bl);
   if (struct_v < 3) {
     pg_stat.clear();
@@ -392,6 +419,8 @@ void PGMap::decode(bufferlist::iterator &bl)
     ::decode(full_ratio, bl);
     ::decode(nearfull_ratio, bl);
   }
+  if (struct_v >= 5)
+    ::decode(stamp, bl);
   DECODE_FINISH(bl);
 
   calc_stats();
@@ -408,6 +437,7 @@ void PGMap::dump(Formatter *f) const
 void PGMap::dump_basic(Formatter *f) const
 {
   f->dump_unsigned("version", version);
+  f->dump_stream("stamp") << stamp;
   f->dump_unsigned("last_osdmap_epoch", last_osdmap_epoch);
   f->dump_unsigned("last_pg_scan", last_pg_scan);
   f->dump_float("full_ratio", full_ratio);
@@ -415,6 +445,10 @@ void PGMap::dump_basic(Formatter *f) const
   
   f->open_object_section("pg_stats_sum");
   pg_sum.dump(f);
+  f->close_section();
+
+  f->open_object_section("pg_stats_delta");
+  pg_sum_delta.dump(f);
   f->close_section();
   
   f->open_object_section("osd_stats_sum");
@@ -495,6 +529,7 @@ void PGMap::dump_pg_stats_plain(ostream& ss,
 void PGMap::dump(ostream& ss) const
 {
   ss << "version " << version << std::endl;
+  ss << "stamp " << stamp << std::endl;
   ss << "last_osdmap_epoch " << last_osdmap_epoch << std::endl;
   ss << "last_pg_scan " << last_pg_scan << std::endl;
   ss << "full_ratio " << full_ratio << std::endl;
@@ -627,6 +662,18 @@ void PGMap::recovery_summary(ostream& out) const
 	<< "/" << pg_sum.stats.sum.num_objects << " unfound (" << b << "%)";
     first = false;
   }
+  if (pg_sum_delta.stats.sum.num_objects_recovered ||
+      pg_sum_delta.stats.sum.num_bytes_recovered ||
+      pg_sum_delta.stats.sum.num_keys_recovered) {
+    if (!first)
+      out << "; ";
+    out << " recovering "
+	<< si_t(pg_sum_delta.stats.sum.num_objects_recovered / (double)stamp_delta) << " o/s, "
+	<< si_t(pg_sum_delta.stats.sum.num_bytes_recovered / (double)stamp_delta) << "B/s";
+    if (pg_sum_delta.stats.sum.num_keys_recovered)
+      out << ", " << si_t(pg_sum_delta.stats.sum.num_keys_recovered / (double)stamp_delta) << " key/s";
+    first = false;
+  }
 }
 
 void PGMap::print_summary(ostream& out) const
@@ -641,6 +688,17 @@ void PGMap::print_summary(ostream& out) const
       << kb_t(osd_sum.kb_used) << " used, "
       << kb_t(osd_sum.kb_avail) << " / "
       << kb_t(osd_sum.kb) << " avail";
+
+  if (pg_sum_delta.stats.sum.num_rd ||
+      pg_sum_delta.stats.sum.num_wr) {
+    out << "; ";
+    if (pg_sum_delta.stats.sum.num_rd)
+      out << si_t((pg_sum_delta.stats.sum.num_rd_kb << 10) / (double)stamp_delta) << "B/s rd, ";
+    if (pg_sum_delta.stats.sum.num_wr)
+      out << si_t((pg_sum_delta.stats.sum.num_wr_kb << 10) / (double)stamp_delta) << "B/s wr, ";
+    out << si_t((pg_sum_delta.stats.sum.num_rd + pg_sum_delta.stats.sum.num_wr) / (double)stamp_delta) << "op/s";
+  }
+
   std::stringstream ssr;
   recovery_summary(ssr);
   if (ssr.str().length())
@@ -655,7 +713,7 @@ void PGMap::generate_test_instances(list<PGMap*>& o)
   Incremental::generate_test_instances(inc);
   inc.pop_front();
   while (!inc.empty()) {
-    o.back()->apply_incremental(*inc.front());
+    o.back()->apply_incremental(NULL, *inc.front());
     delete inc.front();
     inc.pop_front();
   }
