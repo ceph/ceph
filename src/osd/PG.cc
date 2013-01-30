@@ -2511,203 +2511,6 @@ void PG::append_log(vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStor
   write_info(t);
 }
 
-void PG::read_log(ObjectStore *store)
-{
-  // load bounds
-  ondisklog.tail = ondisklog.head = 0;
-
-  bufferlist blb;
-  store->collection_getattr(coll, "ondisklog", blb);
-  bufferlist::iterator p = blb.begin();
-  ::decode(ondisklog, p);
-
-  dout(10) << "read_log " << ondisklog.tail << "~" << ondisklog.length() << dendl;
-
-  log.tail = info.log_tail;
-
-  // In case of sobject_t based encoding, may need to list objects in the store
-  // to find hashes
-  bool listed_collection = false;
-  vector<hobject_t> ls;
-  
-  if (ondisklog.head > 0) {
-    // read
-    bufferlist bl;
-    store->read(coll_t::META_COLL, log_oid, ondisklog.tail, ondisklog.length(), bl);
-    if (bl.length() < ondisklog.length()) {
-      std::ostringstream oss;
-      oss << "read_log got " << bl.length() << " bytes, expected "
-	  << ondisklog.head << "-" << ondisklog.tail << "="
-	  << ondisklog.length();
-      throw read_log_error(oss.str().c_str());
-    }
-    
-    pg_log_entry_t e;
-    bufferlist::iterator p = bl.begin();
-    assert(log.empty());
-    eversion_t last;
-    bool reorder = false;
-    while (!p.end()) {
-      uint64_t pos = ondisklog.tail + p.get_off();
-      if (ondisklog.has_checksums) {
-	bufferlist ebl;
-	::decode(ebl, p);
-	__u32 crc;
-	::decode(crc, p);
-	
-	__u32 got = ebl.crc32c(0);
-	if (crc == got) {
-	  bufferlist::iterator q = ebl.begin();
-	  ::decode(e, q);
-	} else {
-	  std::ostringstream oss;
-	  oss << "read_log " << pos << " bad crc got " << got << " expected" << crc;
-	  throw read_log_error(oss.str().c_str());
-	}
-      } else {
-	::decode(e, p);
-      }
-      dout(20) << "read_log " << pos << " " << e << dendl;
-
-      // [repair] in order?
-      if (e.version < last) {
-	dout(0) << "read_log " << pos << " out of order entry " << e << " follows " << last << dendl;
-	osd->clog.error() << info.pgid << " log has out of order entry "
-	      << e << " following " << last << "\n";
-	reorder = true;
-      }
-
-      if (e.version <= log.tail) {
-	dout(20) << "read_log  ignoring entry at " << pos << " below log.tail" << dendl;
-	continue;
-      }
-      if (last.version == e.version.version) {
-	dout(0) << "read_log  got dup " << e.version << " (last was " << last << ", dropping that one)" << dendl;
-	log.log.pop_back();
-	osd->clog.error() << info.pgid << " read_log got dup "
-	      << e.version << " after " << last << "\n";
-      }
-
-      if (e.invalid_hash) {
-	// We need to find the object in the store to get the hash
-	if (!listed_collection) {
-	  store->collection_list(coll, ls);
-	  listed_collection = true;
-	}
-	bool found = false;
-	for (vector<hobject_t>::iterator i = ls.begin();
-	     i != ls.end();
-	     ++i) {
-	  if (i->oid == e.soid.oid && i->snap == e.soid.snap) {
-	    e.soid = *i;
-	    found = true;
-	    break;
-	  }
-	}
-	if (!found) {
-	  // Didn't find the correct hash
-	  std::ostringstream oss;
-	  oss << "Could not find hash for hoid " << e.soid << std::endl;
-	  throw read_log_error(oss.str().c_str());
-	}
-      }
-
-      if (e.invalid_pool) {
-	e.soid.pool = info.pgid.pool();
-      }
-
-      e.offset = pos;
-      uint64_t endpos = ondisklog.tail + p.get_off();
-      log.log.push_back(e);
-      last = e.version;
-
-      // [repair] at end of log?
-      if (!p.end() && e.version == info.last_update) {
-	osd->clog.error() << info.pgid << " log has extra data at "
-	   << endpos << "~" << (ondisklog.head-endpos) << " after "
-	   << info.last_update << "\n";
-
-	dout(0) << "read_log " << endpos << " *** extra gunk at end of log, "
-	        << "adjusting ondisklog.head" << dendl;
-	ondisklog.head = endpos;
-	break;
-      }
-    }
-  
-    if (reorder) {
-      dout(0) << "read_log reordering log" << dendl;
-      map<eversion_t, pg_log_entry_t> m;
-      for (list<pg_log_entry_t>::iterator p = log.log.begin(); p != log.log.end(); p++)
-	m[p->version] = *p;
-      log.log.clear();
-      for (map<eversion_t, pg_log_entry_t>::iterator p = m.begin(); p != m.end(); p++)
-	log.log.push_back(p->second);
-    }
-  }
-
-  log.head = info.last_update;
-  log.index();
-
-  // build missing
-  if (info.last_complete < info.last_update) {
-    dout(10) << "read_log checking for missing items over interval (" << info.last_complete
-	     << "," << info.last_update << "]" << dendl;
-
-    set<hobject_t> did;
-    for (list<pg_log_entry_t>::reverse_iterator i = log.log.rbegin();
-	 i != log.log.rend();
-	 i++) {
-      if (i->version <= info.last_complete) break;
-      if (did.count(i->soid)) continue;
-      did.insert(i->soid);
-      
-      if (i->is_delete()) continue;
-      
-      bufferlist bv;
-      int r = osd->store->getattr(coll, i->soid, OI_ATTR, bv);
-      if (r >= 0) {
-	object_info_t oi(bv);
-	if (oi.version < i->version) {
-	  dout(15) << "read_log  missing " << *i << " (have " << oi.version << ")" << dendl;
-	  missing.add(i->soid, i->version, oi.version);
-	}
-      } else {
-	dout(15) << "read_log  missing " << *i << dendl;
-	missing.add(i->soid, i->version, eversion_t());
-      }
-    }
-    for (map<eversion_t, hobject_t>::reverse_iterator i =
-	   ondisklog.divergent_priors.rbegin();
-	 i != ondisklog.divergent_priors.rend();
-	 ++i) {
-      if (i->first <= info.last_complete) break;
-      if (did.count(i->second)) continue;
-      did.insert(i->second);
-      bufferlist bv;
-      int r = osd->store->getattr(coll, i->second, OI_ATTR, bv);
-      if (r >= 0) {
-	object_info_t oi(bv);
-	/**
-	 * 1) we see this entry in the divergent priors mapping
-	 * 2) we didn't see an entry for this object in the log
-	 *
-	 * From 1 & 2 we know that either the object does not exist
-	 * or it is at the version specified in the divergent_priors
-	 * map since the object would have been deleted atomically
-	 * with the addition of the divergent_priors entry, an older
-	 * version would not have been recovered, and a newer version
-	 * would show up in the log above.
-	 */
-	assert(oi.version == i->first);
-      } else {
-	dout(15) << "read_log  missing " << *i << dendl;
-	missing.add(i->second, i->first, eversion_t());
-      }
-    }
-  }
-  dout(10) << "read_log done" << dendl;
-}
-
 bool PG::check_log_for_corruption(ObjectStore *store)
 {
   OndiskLog bounds;
@@ -5219,6 +5022,203 @@ std::ostream& operator<<(std::ostream& oss,
       << "down=" << prior.down << " "
       << "blocked_by=" << prior.blocked_by << "]";
   return oss;
+}
+
+void PG::read_log(ObjectStore *store)
+{
+  // load bounds
+  ondisklog.tail = ondisklog.head = 0;
+
+  bufferlist blb;
+  store->collection_getattr(coll, "ondisklog", blb);
+  bufferlist::iterator p = blb.begin();
+  ::decode(ondisklog, p);
+
+  dout(10) << "read_log " << ondisklog.tail << "~" << ondisklog.length() << dendl;
+
+  log.tail = info.log_tail;
+
+  // In case of sobject_t based encoding, may need to list objects in the store
+  // to find hashes
+  bool listed_collection = false;
+  vector<hobject_t> ls;
+  
+  if (ondisklog.head > 0) {
+    // read
+    bufferlist bl;
+    store->read(coll_t::META_COLL, log_oid, ondisklog.tail, ondisklog.length(), bl);
+    if (bl.length() < ondisklog.length()) {
+      std::ostringstream oss;
+      oss << "read_log got " << bl.length() << " bytes, expected "
+	  << ondisklog.head << "-" << ondisklog.tail << "="
+	  << ondisklog.length();
+      throw read_log_error(oss.str().c_str());
+    }
+    
+    pg_log_entry_t e;
+    bufferlist::iterator p = bl.begin();
+    assert(log.empty());
+    eversion_t last;
+    bool reorder = false;
+    while (!p.end()) {
+      uint64_t pos = ondisklog.tail + p.get_off();
+      if (ondisklog.has_checksums) {
+	bufferlist ebl;
+	::decode(ebl, p);
+	__u32 crc;
+	::decode(crc, p);
+	
+	__u32 got = ebl.crc32c(0);
+	if (crc == got) {
+	  bufferlist::iterator q = ebl.begin();
+	  ::decode(e, q);
+	} else {
+	  std::ostringstream oss;
+	  oss << "read_log " << pos << " bad crc got " << got << " expected" << crc;
+	  throw read_log_error(oss.str().c_str());
+	}
+      } else {
+	::decode(e, p);
+      }
+      dout(20) << "read_log " << pos << " " << e << dendl;
+
+      // [repair] in order?
+      if (e.version < last) {
+	dout(0) << "read_log " << pos << " out of order entry " << e << " follows " << last << dendl;
+	osd->clog.error() << info.pgid << " log has out of order entry "
+	      << e << " following " << last << "\n";
+	reorder = true;
+      }
+
+      if (e.version <= log.tail) {
+	dout(20) << "read_log  ignoring entry at " << pos << " below log.tail" << dendl;
+	continue;
+      }
+      if (last.version == e.version.version) {
+	dout(0) << "read_log  got dup " << e.version << " (last was " << last << ", dropping that one)" << dendl;
+	log.log.pop_back();
+	osd->clog.error() << info.pgid << " read_log got dup "
+	      << e.version << " after " << last << "\n";
+      }
+
+      if (e.invalid_hash) {
+	// We need to find the object in the store to get the hash
+	if (!listed_collection) {
+	  store->collection_list(coll, ls);
+	  listed_collection = true;
+	}
+	bool found = false;
+	for (vector<hobject_t>::iterator i = ls.begin();
+	     i != ls.end();
+	     ++i) {
+	  if (i->oid == e.soid.oid && i->snap == e.soid.snap) {
+	    e.soid = *i;
+	    found = true;
+	    break;
+	  }
+	}
+	if (!found) {
+	  // Didn't find the correct hash
+	  std::ostringstream oss;
+	  oss << "Could not find hash for hoid " << e.soid << std::endl;
+	  throw read_log_error(oss.str().c_str());
+	}
+      }
+
+      if (e.invalid_pool) {
+	e.soid.pool = info.pgid.pool();
+      }
+
+      e.offset = pos;
+      uint64_t endpos = ondisklog.tail + p.get_off();
+      log.log.push_back(e);
+      last = e.version;
+
+      // [repair] at end of log?
+      if (!p.end() && e.version == info.last_update) {
+	osd->clog.error() << info.pgid << " log has extra data at "
+	   << endpos << "~" << (ondisklog.head-endpos) << " after "
+	   << info.last_update << "\n";
+
+	dout(0) << "read_log " << endpos << " *** extra gunk at end of log, "
+	        << "adjusting ondisklog.head" << dendl;
+	ondisklog.head = endpos;
+	break;
+      }
+    }
+  
+    if (reorder) {
+      dout(0) << "read_log reordering log" << dendl;
+      map<eversion_t, pg_log_entry_t> m;
+      for (list<pg_log_entry_t>::iterator p = log.log.begin(); p != log.log.end(); p++)
+	m[p->version] = *p;
+      log.log.clear();
+      for (map<eversion_t, pg_log_entry_t>::iterator p = m.begin(); p != m.end(); p++)
+	log.log.push_back(p->second);
+    }
+  }
+
+  log.head = info.last_update;
+  log.index();
+
+  // build missing
+  if (info.last_complete < info.last_update) {
+    dout(10) << "read_log checking for missing items over interval (" << info.last_complete
+	     << "," << info.last_update << "]" << dendl;
+
+    set<hobject_t> did;
+    for (list<pg_log_entry_t>::reverse_iterator i = log.log.rbegin();
+	 i != log.log.rend();
+	 i++) {
+      if (i->version <= info.last_complete) break;
+      if (did.count(i->soid)) continue;
+      did.insert(i->soid);
+      
+      if (i->is_delete()) continue;
+      
+      bufferlist bv;
+      int r = osd->store->getattr(coll, i->soid, OI_ATTR, bv);
+      if (r >= 0) {
+	object_info_t oi(bv);
+	if (oi.version < i->version) {
+	  dout(15) << "read_log  missing " << *i << " (have " << oi.version << ")" << dendl;
+	  missing.add(i->soid, i->version, oi.version);
+	}
+      } else {
+	dout(15) << "read_log  missing " << *i << dendl;
+	missing.add(i->soid, i->version, eversion_t());
+      }
+    }
+    for (map<eversion_t, hobject_t>::reverse_iterator i =
+	   ondisklog.divergent_priors.rbegin();
+	 i != ondisklog.divergent_priors.rend();
+	 ++i) {
+      if (i->first <= info.last_complete) break;
+      if (did.count(i->second)) continue;
+      did.insert(i->second);
+      bufferlist bv;
+      int r = osd->store->getattr(coll, i->second, OI_ATTR, bv);
+      if (r >= 0) {
+	object_info_t oi(bv);
+	/**
+	 * 1) we see this entry in the divergent priors mapping
+	 * 2) we didn't see an entry for this object in the log
+	 *
+	 * From 1 & 2 we know that either the object does not exist
+	 * or it is at the version specified in the divergent_priors
+	 * map since the object would have been deleted atomically
+	 * with the addition of the divergent_priors entry, an older
+	 * version would not have been recovered, and a newer version
+	 * would show up in the log above.
+	 */
+	assert(oi.version == i->first);
+      } else {
+	dout(15) << "read_log  missing " << *i << dendl;
+	missing.add(i->second, i->first, eversion_t());
+      }
+    }
+  }
+  dout(10) << "read_log done" << dendl;
 }
 
 /*------------ Recovery State Machine----------------*/
