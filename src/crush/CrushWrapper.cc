@@ -530,6 +530,19 @@ int CrushWrapper::add_simple_rule(string name, string root_name, string failure_
   return rno;
 }
 
+int CrushWrapper::remove_rule(int ruleno)
+{
+  if (ruleno >= (int)crush->max_rules)
+    return -ENOENT;
+  if (crush->rules[ruleno] == NULL)
+    return -ENOENT;
+  crush_destroy_rule(crush->rules[ruleno]);
+  crush->rules[ruleno] = NULL;
+  rule_name_map.erase(ruleno);
+  have_rmaps = false;
+  return 0;
+}
+
 void CrushWrapper::encode(bufferlist& bl, bool lean) const
 {
   assert(crush);
