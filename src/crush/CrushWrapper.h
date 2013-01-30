@@ -229,7 +229,7 @@ public:
     build_rmaps();
     if (rule_name_rmap.count(name))
       return rule_name_rmap[name];
-    return 0;  /* hrm */
+    return -ENOENT;
   }
   const char *get_rule_name(int t) const {
     std::map<int,string>::const_iterator p = rule_name_map.find(t);
