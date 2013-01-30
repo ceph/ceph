@@ -12,6 +12,9 @@
  * 
  */
 
+#include <boost/lexical_cast.hpp>
+#include "include/assert.h"  // lexical_cast includes system assert.h
+
 #include "MDS.h"
 #include "Server.h"
 #include "Locker.h"
@@ -52,8 +55,6 @@
 #include "include/compat.h"
 #include "osd/OSDMap.h"
 
-#include <boost/lexical_cast.hpp>
-
 #include <errno.h>
 #include <fcntl.h>
 
@@ -62,7 +63,6 @@
 using namespace std;
 
 #include "common/config.h"
-#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
