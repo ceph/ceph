@@ -1025,6 +1025,13 @@ test_keyvaluedb_iterators_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGL
 test_keyvaluedb_iterators_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE) ${CRYPTO_CXXFLAGS}
 bin_DEBUGPROGRAMS += test_keyvaluedb_iterators
 
+test_store_tool_SOURCES = test/ObjectMap/test_store_tool/test_store_tool.cc \
+			  os/LevelDBStore.cc
+test_store_tool_LDFLAGS = ${AM_LDFLAGS}
+test_store_tool_LDADD =  $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+test_store_tool_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE)
+bin_DEBUGPROGRAMS += test_store_tool
+
 test_cfuse_cache_invalidate_SOURCES = test/test_cfuse_cache_invalidate.cc
 test_cfuse_cache_invalidate_LDFLAGS = ${AM_LDFLAGS}
 test_cfuse_cache_invalidate_LDADD =
