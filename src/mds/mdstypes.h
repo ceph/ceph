@@ -980,26 +980,6 @@ inline ostream& operator<<( ostream& out, mds_load_t& load )
              << ">";
 }
 
-/*
-inline mds_load_t& operator+=( mds_load_t& l, mds_load_t& r ) 
-{
-  l.root_pop += r.root_pop;
-  l.req_rate += r.req_rate;
-  l.queue_len += r.queue_len;
-  return l;
-}
-
-inline mds_load_t operator/( mds_load_t& a, double d ) 
-{
-  mds_load_t r;
-  r.root_pop = a.root_pop / d;
-  r.req_rate = a.req_rate / d;
-  r.queue_len = a.queue_len / d;
-  return r;
-}
-*/
-
-
 class load_spread_t {
 public:
   static const int MAX = 4;
