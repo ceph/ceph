@@ -423,6 +423,14 @@ TEST(LibCephFS, Xattrs) {
   char *n;
   i = 'a';
   while(len > 0) {
+    // skip/ignore the dir layout
+    if (strcmp(p, "ceph.dir.layout") == 0 ||
+	strcmp(p, "ceph.file.layout") == 0) {
+      len -= strlen(p) + 1;
+      p += strlen(p) + 1;
+      continue;
+    }
+
     sprintf(xattrk, "user.test_xattr_%c", i);
     ASSERT_STREQ(p, xattrk);
 
