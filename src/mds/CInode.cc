@@ -2679,13 +2679,14 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   i = pfile ? pi:oi;
   if (is_file()) {
     e.layout = i->layout;
-  } else {
-    if (ppolicy && get_projected_dir_layout())
-      e.layout = *get_projected_dir_layout();
-    else if (default_layout)
-      e.layout = default_layout->layout;
+  } else if (is_dir()) {
+    ceph_file_layout *l = ppolicy ? get_projected_dir_layout() : ( default_layout ? &default_layout->layout : NULL );
+    if (l)
+      e.layout = *l;
     else
       memset(&e.layout, 0, sizeof(e.layout));
+  } else {
+    memset(&e.layout, 0, sizeof(e.layout));
   }
   e.size = i->size;
   e.truncate_seq = i->truncate_seq;

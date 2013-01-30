@@ -40,6 +40,9 @@ ostream& operator<<(ostream &out, Inode &in)
   if (!in.dn_set.empty())
     out << " parents=" << in.dn_set;
 
+  if (in.is_dir() && in.has_dir_layout())
+    out << " has_dir_layout";
+
   out << ' ' << &in << ")";
   return out;
 }

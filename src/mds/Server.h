@@ -152,6 +152,17 @@ public:
   void handle_client_setattr(MDRequest *mdr);
   void handle_client_setlayout(MDRequest *mdr);
   void handle_client_setdirlayout(MDRequest *mdr);
+
+  int parse_layout_vxattr(string name, string value, ceph_file_layout *layout);
+  void handle_set_vxattr(MDRequest *mdr, CInode *cur,
+			 ceph_file_layout *dir_layout,
+			 set<SimpleLock*> rdlocks,
+			 set<SimpleLock*> wrlocks,
+			 set<SimpleLock*> xlocks);
+  void handle_remove_vxattr(MDRequest *mdr, CInode *cur,
+			    set<SimpleLock*> rdlocks,
+			    set<SimpleLock*> wrlocks,
+			    set<SimpleLock*> xlocks);
   void handle_client_setxattr(MDRequest *mdr);
   void handle_client_removexattr(MDRequest *mdr);
 
