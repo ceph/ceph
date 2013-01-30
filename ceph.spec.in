@@ -280,10 +280,6 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph/
 
-#  Relocate java packages to expected locations in buildroot.
-mkdir -p $RPM_BUILD_ROOT/usr/lib/jni
-mv $RPM_BUILD_ROOT/usr/lib64/libcephfs_jni.so* $RPM_BUILD_ROOT/usr/lib/jni/.
-
 # udev rules
 install -D -m 644 udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
 
@@ -413,7 +409,7 @@ fi
 %{_libdir}/libcephfs.so
 %{_libdir}/librbd.so
 %{_libdir}/librados.so
-/usr/lib/jni/libcephfs_jni.so
+%{_libdir}/libcephfs_jni.so
 
 #################################################################################
 %files radosgw
@@ -562,7 +558,7 @@ fi
 
 %files -n libcephfs_jni1
 %defattr(-,root,root,-)
-/usr/lib/jni/libcephfs_jni.so.*
+%{_libdir}/libcephfs_jni.so.*
 
 %files -n cephfs-java
 %defattr(-,root,root,-)
