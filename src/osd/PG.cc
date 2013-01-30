@@ -2595,7 +2595,9 @@ std::string PG::get_corrupt_pg_log_name() const
   return buf;
 }
 
-void PG::read_state(ObjectStore *store, bufferlist &bl)
+int PG::read_info(ObjectStore *store, const coll_t coll, bufferlist &bl,
+  pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals,
+  hobject_t &biginfo_oid, interval_set<snapid_t>  &snap_collections)
 {
   bufferlist::iterator p = bl.begin();
   __u8 struct_v;
@@ -2614,7 +2616,9 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
     ::decode(struct_v, p);
   } else {
     bl.clear();
-    store->read(coll_t::META_COLL, biginfo_oid, 0, 0, bl);
+    int r = store->read(coll_t::META_COLL, biginfo_oid, 0, 0, bl);
+    if (r < 0)
+       return r;
     p = bl.begin();
     ::decode(past_intervals, p);
   }
@@ -2633,9 +2637,19 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
     if (struct_v >= 4)
       ::decode(info, p);
   }
+  return 0;
+}
+
+void PG::read_state(ObjectStore *store, bufferlist &bl)
+{
+  int r = read_info(store, coll, bl, info, past_intervals, biginfo_oid,
+    snap_collections);
+  assert(r >= 0);
 
   try {
-    read_log(store);
+    ostringstream oss;
+    read_log(store, coll, log_oid, info, ondisklog, log, missing, oss, this);
+    osd->clog.error() << oss;
   }
   catch (const buffer::error &e) {
     string cr_log_coll_name(get_corrupt_pg_log_name());
@@ -5024,7 +5038,14 @@ std::ostream& operator<<(std::ostream& oss,
   return oss;
 }
 
-void PG::read_log(ObjectStore *store)
+/*---------------------------------------------------*/
+// Handle staitc function so it can use dout()
+#undef dout_prefix
+#define dout_prefix if (passedpg) _prefix(_dout, passedpg)
+
+void PG::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
+  const pg_info_t &info, OndiskLog &ondisklog, IndexedLog &log,
+  pg_missing_t &missing, ostringstream &oss, const PG *passedpg)
 {
   // load bounds
   ondisklog.tail = ondisklog.head = 0;
@@ -5085,7 +5106,7 @@ void PG::read_log(ObjectStore *store)
       // [repair] in order?
       if (e.version < last) {
 	dout(0) << "read_log " << pos << " out of order entry " << e << " follows " << last << dendl;
-	osd->clog.error() << info.pgid << " log has out of order entry "
+	oss << info.pgid << " log has out of order entry "
 	      << e << " following " << last << "\n";
 	reorder = true;
       }
@@ -5097,7 +5118,7 @@ void PG::read_log(ObjectStore *store)
       if (last.version == e.version.version) {
 	dout(0) << "read_log  got dup " << e.version << " (last was " << last << ", dropping that one)" << dendl;
 	log.log.pop_back();
-	osd->clog.error() << info.pgid << " read_log got dup "
+	oss << info.pgid << " read_log got dup "
 	      << e.version << " after " << last << "\n";
       }
 
@@ -5136,7 +5157,7 @@ void PG::read_log(ObjectStore *store)
 
       // [repair] at end of log?
       if (!p.end() && e.version == info.last_update) {
-	osd->clog.error() << info.pgid << " log has extra data at "
+	oss << info.pgid << " log has extra data at "
 	   << endpos << "~" << (ondisklog.head-endpos) << " after "
 	   << info.last_update << "\n";
 
@@ -5177,7 +5198,7 @@ void PG::read_log(ObjectStore *store)
       if (i->is_delete()) continue;
       
       bufferlist bv;
-      int r = osd->store->getattr(coll, i->soid, OI_ATTR, bv);
+      int r = store->getattr(coll, i->soid, OI_ATTR, bv);
       if (r >= 0) {
 	object_info_t oi(bv);
 	if (oi.version < i->version) {
@@ -5197,7 +5218,7 @@ void PG::read_log(ObjectStore *store)
       if (did.count(i->second)) continue;
       did.insert(i->second);
       bufferlist bv;
-      int r = osd->store->getattr(coll, i->second, OI_ATTR, bv);
+      int r = store->getattr(coll, i->second, OI_ATTR, bv);
       if (r >= 0) {
 	object_info_t oi(bv);
 	/**

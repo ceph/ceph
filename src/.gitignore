@@ -112,3 +112,4 @@ Makefile
 /test_librbd_fsx
 /scratchtool
 /scratchtoolpp
+/ceph-filestore-dump
