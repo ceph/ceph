@@ -221,8 +221,11 @@ public:
   }
 
   // rule names
-  int get_rule_id(const char *n) {
-    string name(n);
+  bool rule_exists(string name) {
+    build_rmaps();
+    return rule_name_rmap.count(name);
+  }
+  int get_rule_id(string name) {
     build_rmaps();
     if (rule_name_rmap.count(name))
       return rule_name_rmap[name];
