@@ -532,6 +532,8 @@ public:
 
   int add_simple_rule(string name, string root_name, string failure_domain_type);
 
+  int remove_rule(int ruleno);
+
 
   /** buckets **/
 private:
