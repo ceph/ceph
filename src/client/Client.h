@@ -451,7 +451,19 @@ protected:
   void _invalidate_inode_cache(Inode *in, int64_t off, int64_t len, bool keep_caps);
   void _async_invalidate(Inode *in, int64_t off, int64_t len, bool keep_caps);
   void _release(Inode *in);
-  bool _flush(Inode *in);
+  
+  /**
+   * Initiate a flush of the data associated with the given inode.
+   * If you specify a Context, you are responsible for holding an inode
+   * reference for the duration of the flush. If not, _flush() will
+   * take the reference for you.
+   * @param in The Inode whose data you wish to flush.
+   * @param c The Context you wish us to complete once the data is
+   * flushed. If already flushed, this will be called in-line.
+   * 
+   * @returns true if the data was already flushed, false otherwise.
+   */
+  bool _flush(Inode *in, Context *c=NULL);
   void _flush_range(Inode *in, int64_t off, uint64_t size);
   void _flushed(Inode *in);
   void flush_set_callback(ObjectCacher::ObjectSet *oset);
