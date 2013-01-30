@@ -283,7 +283,8 @@ public:
   }
 
   ceph_file_layout *get_projected_dir_layout() {
-    if (!inode.is_dir()) return NULL;
+    if (!inode.is_dir())
+      return NULL;
     if (projected_nodes.empty()) {
       if (default_layout)
         return &default_layout->layout;
@@ -292,7 +293,8 @@ public:
     }
     else if (projected_nodes.back()->dir_layout)
       return &projected_nodes.back()->dir_layout->layout;
-    else return NULL;
+    else
+      return NULL;
   }
 
   version_t get_projected_version() {

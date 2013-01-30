@@ -52,6 +52,8 @@
 #include "include/compat.h"
 #include "osd/OSDMap.h"
 
+#include <boost/lexical_cast.hpp>
+
 #include <errno.h>
 #include <fcntl.h>
 
@@ -3498,6 +3500,179 @@ void Server::handle_client_setdirlayout(MDRequest *mdr)
 
 // XATTRS
 
+int Server::parse_layout_vxattr(string name, string value, ceph_file_layout *layout)
+{
+  dout(20) << "parse_layout_vxattr name " << name << " value '" << value << "'" << dendl;
+  try {
+    if (name == "layout") {
+      // XXX implement me
+    } else if (name == "layout.object_size") {
+      layout->fl_object_size = boost::lexical_cast<unsigned>(value);
+    } else if (name == "layout.stripe_unit") {
+      layout->fl_stripe_unit = boost::lexical_cast<unsigned>(value);
+    } else if (name == "layout.stripe_count") {
+      layout->fl_stripe_count = boost::lexical_cast<unsigned>(value);
+    } else if (name == "layout.pool") {
+      try {
+	layout->fl_pg_pool = boost::lexical_cast<unsigned>(value);
+      } catch (boost::bad_lexical_cast const&) {
+	int64_t pool = mds->osdmap->lookup_pg_pool_name(value);
+	if (pool < 0) {
+	  dout(10) << " unknown pool " << value << dendl;
+	  return -EINVAL;
+	}
+	layout->fl_pg_pool = pool;
+      }
+    } else {
+      dout(10) << " unknown layout vxattr " << name << dendl;
+      return -EINVAL;
+    }
+  } catch (boost::bad_lexical_cast const&) {
+    dout(10) << "bad vxattr value, unable to parse int for " << name << dendl;
+    return -EINVAL;
+  }
+
+  if (!ceph_file_layout_is_valid(layout)) {
+    dout(10) << "bad layout" << dendl;
+    return -EINVAL;
+  }
+  if (!mds->mdsmap->is_data_pool(layout->fl_pg_pool)) {
+    dout(10) << " invalid data pool " << layout->fl_pg_pool << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+void Server::handle_set_vxattr(MDRequest *mdr, CInode *cur,
+			       ceph_file_layout *dir_layout,
+			       set<SimpleLock*> rdlocks,
+			       set<SimpleLock*> wrlocks,
+			       set<SimpleLock*> xlocks)
+{
+  MClientRequest *req = mdr->client_request;
+  string name(req->get_path2());
+  bufferlist bl = req->get_data();
+  string value (bl.c_str(), bl.length());
+  dout(10) << "handle_set_vxattr " << name << " val " << value.length() << " bytes on " << *cur << dendl;
+
+  // layout?
+  if (name.find("ceph.file.layout") == 0 ||
+      name.find("ceph.dir.layout") == 0) {
+    inode_t *pi;
+    string rest;
+    if (name.find("ceph.dir.layout") == 0) {
+      if (!cur->is_dir()) {
+	reply_request(mdr, -EINVAL);
+	return;
+      }
+
+      default_file_layout *dlayout = new default_file_layout;
+      if (cur->get_projected_dir_layout())
+	dlayout->layout = *cur->get_projected_dir_layout();
+      else if (dir_layout)
+	dlayout->layout = *dir_layout;
+      else
+	dlayout->layout = mds->mdcache->default_file_layout;
+
+      rest = name.substr(name.find("layout"));
+      int r = parse_layout_vxattr(rest, value, &dlayout->layout);
+      if (r < 0) {
+	reply_request(mdr, r);
+	return;
+      }
+
+      xlocks.insert(&cur->policylock);
+      if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+	return;
+
+      pi = cur->project_inode();
+      cur->get_projected_node()->dir_layout = dlayout;
+    } else {
+      if (!cur->is_file()) {
+	reply_request(mdr, -EINVAL);
+	return;
+      }
+      ceph_file_layout layout = cur->get_projected_inode()->layout;
+      rest = name.substr(name.find("layout"));
+      int r = parse_layout_vxattr(rest, value, &layout);
+      if (r < 0) {
+	reply_request(mdr, r);
+	return;
+      }
+
+      xlocks.insert(&cur->filelock);
+      if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+	return;
+
+      pi = cur->project_inode();
+      pi->layout = layout;
+      pi->ctime = ceph_clock_now(g_ceph_context);
+    }
+
+    pi->version = cur->pre_dirty();
+
+    // log + wait
+    mdr->ls = mdlog->get_current_segment();
+    EUpdate *le = new EUpdate(mdlog, "set vxattr layout");
+    mdlog->start_entry(le);
+    le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+    mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
+    mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
+
+    journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
+    return;
+  }
+
+  dout(10) << " unknown vxattr " << name << dendl;
+  reply_request(mdr, -EINVAL);
+}
+
+void Server::handle_remove_vxattr(MDRequest *mdr, CInode *cur,
+				  set<SimpleLock*> rdlocks,
+				  set<SimpleLock*> wrlocks,
+				  set<SimpleLock*> xlocks)
+{
+  MClientRequest *req = mdr->client_request;
+  string name(req->get_path2());
+  if (name == "ceph.dir.layout") {
+    if (!cur->is_dir()) {
+      reply_request(mdr, -ENODATA);
+      return;
+    }
+    if (cur->is_root()) {
+      dout(10) << "can't remove layout policy on the root directory" << dendl;
+      reply_request(mdr, -EINVAL);
+      return;
+    }
+
+    if (!cur->get_projected_dir_layout()) {
+      reply_request(mdr, -ENODATA);
+      return;
+    }
+
+    xlocks.insert(&cur->policylock);
+    if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+      return;
+
+    cur->project_inode();
+    cur->get_projected_node()->dir_layout = NULL;
+    cur->get_projected_inode()->version = cur->pre_dirty();
+
+    // log + wait
+    mdr->ls = mdlog->get_current_segment();
+    EUpdate *le = new EUpdate(mdlog, "remove dir layout vxattr");
+    mdlog->start_entry(le);
+    le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+    mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
+    mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
+
+    journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
+    return;
+  }
+
+  reply_request(mdr, -ENODATA);
+}
+
 class C_MDS_inode_xattr_update_finish : public Context {
   MDS *mds;
   MDRequest *mdr;
@@ -3523,25 +3698,38 @@ public:
 void Server::handle_client_setxattr(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
+  string name(req->get_path2());
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
-  if (!cur) return;
+  CInode *cur;
+
+  ceph_file_layout *dir_layout = NULL;
+  if (name.find("ceph.dir.layout") == 0)
+    cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true, false, &dir_layout);
+  else
+    cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  if (!cur)
+    return;
 
   if (mdr->snapid != CEPH_NOSNAP) {
     reply_request(mdr, -EROFS);
     return;
   }
-    if (cur->is_base()) {
+  if (cur->is_base()) {
     reply_request(mdr, -EINVAL);   // for now
+    return;
+  }
+
+  int flags = req->head.args.setxattr.flags;
+
+  // magic ceph.* namespace?
+  if (name.find("ceph.") == 0) {
+    handle_set_vxattr(mdr, cur, dir_layout, rdlocks, wrlocks, xlocks);
     return;
   }
 
   xlocks.insert(&cur->xattrlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
-
-  string name(req->get_path2());
-  int flags = req->head.args.setxattr.flags;
 
   if ((flags & CEPH_XATTR_CREATE) && cur->xattrs.count(name)) {
     dout(10) << "setxattr '" << name << "' XATTR_CREATE and EEXIST on " << *cur << dendl;
@@ -3583,24 +3771,34 @@ void Server::handle_client_setxattr(MDRequest *mdr)
 void Server::handle_client_removexattr(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
+  string name(req->get_path2());
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
-  if (!cur) return;
+  ceph_file_layout *dir_layout = NULL;
+  CInode *cur;
+  if (name == "ceph.dir.layout")
+    cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true, false, &dir_layout);
+  else
+    cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  if (!cur)
+    return;
 
   if (mdr->snapid != CEPH_NOSNAP) {
     reply_request(mdr, -EROFS);
     return;
   }
-    if (cur->is_base()) {
+  if (cur->is_base()) {
     reply_request(mdr, -EINVAL);   // for now
+    return;
+  }
+
+  if (name.find("ceph.") == 0) {
+    handle_remove_vxattr(mdr, cur, rdlocks, wrlocks, xlocks);
     return;
   }
 
   xlocks.insert(&cur->xattrlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
-
-  string name(req->get_path2());
 
   map<string, bufferptr> *pxattrs = cur->get_projected_xattrs();
   if (pxattrs->count(name) == 0) {
