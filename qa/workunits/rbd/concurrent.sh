@@ -47,7 +47,17 @@
 
 ################################################################
 
-set -x
+# set -x
+#
+# Default flag values; RBD_CONCURRENT_ITER names are intended
+# to be used in yaml scripts to pass in alternate values, e.g.:
+#    env:
+#        RBD_CONCURRENT_ITER: 20
+#        RBD_CONCURRENT_COUNT: 5
+#        RBD_CONCURRENT_DELAY: 3
+ITER_DEFAULT=${RBD_CONCURRENT_ITER:-100}
+COUNT_DEFAULT=${RBD_CONCURRENT_COUNT:-5}
+DELAY_DEFAULT=${RBD_CONCURRENT_DELAY:-5}		# seconds
 
 CEPH_SECRET_FILE=${CEPH_SECRET_FILE:-}
 CEPH_ID=${CEPH_ID:-admin}
@@ -56,22 +66,22 @@ if [ "${CEPH_SECRET_FILE}" ]; then
 	SECRET_ARGS="--secret $CEPH_SECRET_FILE"
 fi
 
-# Default flag values; RBD_CONCURRENT_ITER names are intended
-# to be used in yaml scripts to pass in alternate values, e.g.:
-#    env:
-#        RBD_CONCURRENT_ITER: 20
-#        RBD_CONCURRENT_COUNT: 5
-#        RBD_CONCURRENT_DELAY: 3
-ITER_DEFAULT=${RBD_CONCURRENT_ITER:-10}
-COUNT_DEFAULT=${RBD_CONCURRENT_COUNT:-2}
-DELAY_DEFAULT=${RBD_CONCURRENT_DELAY:-5}		# seconds
-
 ################################################################
 
-# List of rbd id's *not* created by this script
-export INITIAL_RBD_IDS=$(ls /sys/bus/rbd/devices)
-
 function setup() {
+	ID_MAX_DIR=$(mktemp -d /tmp/image_max_id.XXXXX)
+	ID_COUNT_DIR=$(mktemp -d /tmp/image_ids.XXXXXX)
+	NAMES_DIR=$(mktemp -d /tmp/image_names.XXXXXX)
+	SOURCE_DATA=$(mktemp /tmp/source_data.XXXXXX)
+
+	# This assumes it's easier to read a file than generate
+	# random data.  Use busybox because it is a big executable.
+	dd if="/bin/busybox" of="{SOURCE_DATA}" bs=2048 count=66 \
+		>/dev/null 2>&1
+
+	# List of rbd id's *not* created by this script
+	export INITIAL_RBD_IDS=$(ls /sys/bus/rbd/devices)
+
 	sudo chown ubuntu /sys/bus/rbd/add /sys/bus/rbd/remove
 
 	# Set up some environment for normal teuthology test setup.
@@ -87,7 +97,7 @@ function setup() {
 }
 
 function cleanup() {
-	[ ! "${NAMESDIR}" ] && return
+	[ ! "${ID_MAX_DIR}" ] && return
 	local id
 	local image
 
@@ -103,12 +113,23 @@ function cleanup() {
 	done
 	wait
 	sync
-	rmdir "${NAMESDIR}"
+	rm -f "${SOURCE_DATA}"
+	[ -d "${NAMES_DIR}" ] && rmdir -f "${NAMES_DIR}"
 	sudo chown root /sys/bus/rbd/add /sys/bus/rbd/remove
+	echo "Max concurrent rbd image count was $(get_max "${ID_COUNT_DIR}")"
+	rm -rf "${ID_COUNT_DIR}"
+	echo "Max rbd image id was $(get_max "${ID_MAX_DIR}")"
+	rm -rf "${ID_MAX_DIR}"
 }
-trap cleanup HUP INT QUIT
 
-NAMESDIR=$(mktemp -d /tmp/image_names.XXXXXX)
+function get_max() {
+	[ $# -eq 1 ] || exit 99
+	local dir="$1"
+
+	ls -U "${dir}" | sort -n | tail -1
+}
+
+trap cleanup HUP INT QUIT
 
 # print a usage message and quit
 #
@@ -213,9 +234,21 @@ function rbd_ids() {
 	echo ${ids}
 }
 
+function update_maxes() {
+	local ids="$@"
+	local last_id
+	# These aren't 100% safe against concurrent updates but it
+	# should be pretty close
+	count=$(echo ${ids} | wc -w)
+	touch "${ID_COUNT_DIR}/${count}"
+	last_id=${ids% }
+	last_id=${last_id##* }
+	touch "${ID_MAX_DIR}/${last_id}"
+}
+
 function rbd_create_image() {
 	[ $# -eq 0 ] || exit 99
-	local image=$(basename $(mktemp "${NAMESDIR}/image.XXXXXX"))
+	local image=$(basename $(mktemp "${NAMES_DIR}/image.XXXXXX"))
 
 	rbd create "${image}" --size=1024
 	echo "${image}"
@@ -245,15 +278,50 @@ function rbd_write_image() {
 	[ $# -eq 1 ] || exit 99
 	local id="$1"
 
-	dd if="/bin/busybox" of="/dev/rbd${id}" bs=65536 count=16 seek=16 \
+	# Offset and size here are meant to ensure beginning and end
+	# cross both (4K or 64K) page and (4MB) rbd object boundaries.
+	# It assumes the SOURCE_DATA file has size 66 * 2048 bytes
+	dd "${SOURCE_DATA}" of="/dev/rbd${id}" bs=2048 seek=2015 \
 		> /dev/null 2>&1
 }
 
+# All starting and ending offsets here are selected so they are not
+# aligned on a (4 KB or 64 KB) page boundary
 function rbd_read_image() {
 	[ $# -eq 1 ] || exit 99
 	local id="$1"
 
-	dd if="/dev/rbd${id}" of=/dev/null bs=65536 count=1 > /dev/null 2>&1
+	# First read starting and ending at an offset before any
+	# written data.  The osd zero-fills data read from an
+	# existing rbd object, but before any previously-written
+	# data.
+	dd if="/dev/rbd${id}" of=/dev/null bs=2048 count=34 skip=3 \
+		> /dev/null 2>&1
+	# Next read starting at an offset before any written data,
+	# but ending at an offset that includes data that's been
+	# written.  The osd zero-fills unwritten data at the
+	# beginning of a read.
+	dd if="/dev/rbd${id}" of=/dev/null bs=2048 count=34 skip=1983 \
+		> /dev/null 2>&1
+	# Read the data at offset 2015 * 2048 bytes (where it was
+	# written) and make sure it matches the original data.
+	cmp --quiet "${SOURCE_DATA}" "/dev/rbd${id}" 0 4126720 ||
+		echo "MISMATCH!!!"
+	# Now read starting within the pre-written data, but ending
+	# beyond it.  The rbd client zero-fills the unwritten
+	# portion at the end of a read.
+	dd if="/dev/rbd${id}" of=/dev/null bs=2048 count=34 skip=2079 \
+		> /dev/null 2>&1
+	# Now read starting from an unwritten range within a written
+	# rbd object.  The rbd client zero-fills this.
+	dd if="/dev/rbd${id}" of=/dev/null bs=2048 count=34 skip=2115 \
+		> /dev/null 2>&1
+	# Finally read from an unwritten region which would reside
+	# in a different (non-existent) osd object.  The osd client
+	# zero-fills unwritten data when the target object doesn't
+	# exist.
+	dd if="/dev/rbd${id}" of=/dev/null bs=2048 count=34 skip=4098 \
+		/dev/null 2>&1
 }
 
 function rbd_unmap_image() {
@@ -270,18 +338,21 @@ function rbd_destroy_image() {
 
 	# Don't wait for it to complete, to increase concurrency
 	rbd rm "${image}" >/dev/null 2>&1 &
-	rm -f "${NAMESDIR}/${image}"
+	rm -f "${NAMES_DIR}/${image}"
 }
 
 function one_pass() {
 	[ $# -eq 0 ] || exit 99
 	local image
 	local id
+	local ids
 	local i
 
 	image=$(rbd_create_image)
 	id=$(rbd_map_image "${image}")
-	for i in $(rbd_ids); do
+	ids=$(rbd_ids)
+	update_maxes "${ids}"
+	for i in ${rbd_ids}; do
 		if [ "${i}" -eq "${id}" ]; then
 			rbd_write_image "${i}"
 		else
@@ -302,10 +373,14 @@ for iter in $(seq 1 "${ITER}"); do
 	for count in $(seq 1 "${COUNT}"); do
 		one_pass &
 	done
-	# Sleep longer at first, overlap iterations more later
-	sleep $(expr "${DELAY}" - "${DELAY}" \* "${iter}" / "${ITER}")
+	# Sleep longer at first, overlap iterations more later.
+	# Use awk to get sub-second granularity (see sleep(1)).
+	sleep $(echo "${DELAY}" "${iter}" "${ITER}" |
+		awk '{ printf("%.2f\n", $1 - $1 * $2 / $3);}')
+
 done
 wait
+
 cleanup
 
 exit 0
