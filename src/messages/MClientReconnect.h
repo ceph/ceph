@@ -22,7 +22,7 @@
 
 class MClientReconnect : public Message {
 
-  const static int HEAD_VERSION = 2;
+  const static int HEAD_VERSION = 3;
 
 public:
   map<inodeno_t, cap_reconnect_t>  caps;   // only head inodes
@@ -53,9 +53,17 @@ public:
   }
 
   void encode_payload(uint64_t features) {
-    if (features & CEPH_FEATURE_FLOCK) {
-      // new protocol
+    if (features & CEPH_FEATURE_MDSENC) {
       ::encode(caps, data);
+    } else if (features & CEPH_FEATURE_FLOCK) {
+      // encode with old cap_reconnect_t encoding
+      __u32 n = caps.size();
+      ::encode(n, data);
+      for (map<inodeno_t,cap_reconnect_t>::iterator p = caps.begin(); p != caps.end(); ++p) {
+	::encode(p->first, data);
+	p->second.encode_old(data);
+      }
+      header.version = 2;
     } else {
       // compat crap
       header.version = 1;
@@ -68,9 +76,17 @@ public:
   }
   void decode_payload() {
     bufferlist::iterator p = data.begin();
-    if (header.version >= 2) {
+    if (header.version >= 3) {
       // new protocol
       ::decode(caps, p);
+    } else if (header.version == 2) {
+      __u32 n;
+      ::decode(n, p);
+      inodeno_t ino;
+      while (n--) {
+	::decode(ino, p);
+	caps[ino].decode_old(p);
+      }
     } else {
       // compat crap
       map<inodeno_t, old_cap_reconnect_t> ocaps;
