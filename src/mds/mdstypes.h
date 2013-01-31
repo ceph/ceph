@@ -692,18 +692,13 @@ struct cap_reconnect_t {
     capinfo.pathbase = pino;
     capinfo.flock_len = 0;
   }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void encode_old(bufferlist& bl) const;
+  void decode_old(bufferlist::iterator& bl);
 
-  void encode(bufferlist& bl) const {
-    ::encode(path, bl);
-    capinfo.flock_len = flockbl.length();
-    ::encode(capinfo, bl);
-    ::encode_nohead(flockbl, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(path, bl);
-    ::decode(capinfo, bl);
-    ::decode_nohead(capinfo.flock_len, flockbl, bl);
-  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cap_reconnect_t*>& ls);
 };
 WRITE_CLASS_ENCODER(cap_reconnect_t)
 

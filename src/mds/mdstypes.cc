@@ -844,3 +844,49 @@ void mds_load_t::generate_test_instances(list<mds_load_t*>& ls)
   utime_t sample;
   ls.push_back(new mds_load_t(sample));
 }
+
+/*
+ * cap_reconnect_t
+ */
+void cap_reconnect_t::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  encode_old(bl); // extract out when something changes
+  ENCODE_FINISH(bl);
+}
+
+void cap_reconnect_t::encode_old(bufferlist& bl) const {
+  ::encode(path, bl);
+  capinfo.flock_len = flockbl.length();
+  ::encode(capinfo, bl);
+  ::encode_nohead(flockbl, bl);
+}
+
+void cap_reconnect_t::decode(bufferlist::iterator& bl) {
+  DECODE_START(1, bl);
+  decode_old(bl); // extract out when something changes
+  DECODE_FINISH(bl);
+}
+
+void cap_reconnect_t::decode_old(bufferlist::iterator& bl) {
+  ::decode(path, bl);
+  ::decode(capinfo, bl);
+  ::decode_nohead(capinfo.flock_len, flockbl, bl);
+}
+
+void cap_reconnect_t::dump(Formatter *f) const
+{
+  f->dump_string("path", path);
+  f->dump_int("cap_id", capinfo.cap_id);
+  f->dump_string("cap wanted", ccap_string(capinfo.wanted));
+  f->dump_string("cap issued", ccap_string(capinfo.issued));
+  f->dump_int("snaprealm", capinfo.snaprealm);
+  f->dump_int("path base ino", capinfo.pathbase);
+  f->dump_string("has file locks", capinfo.flock_len ? "true" : "false");
+}
+
+void cap_reconnect_t::generate_test_instances(list<cap_reconnect_t*>& ls)
+{
+  ls.push_back(new cap_reconnect_t);
+  ls.back()->path = "/test/path";
+  ls.back()->capinfo.cap_id = 1;
+}
