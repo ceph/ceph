@@ -14,7 +14,6 @@
 
 
 #include "MDSMap.h"
-#include "include/ceph_features.h"
 
 #include <sstream>
 using std::stringstream;
@@ -115,6 +114,22 @@ void MDSMap::dump(Formatter *f) const
     f->dump_int("pool", *p);
   f->close_section();
   f->dump_int("metadata_pool", metadata_pool);
+}
+
+void MDSMap::generate_test_instances(list<MDSMap*>& ls)
+{
+  MDSMap *m = new MDSMap();
+  m->max_mds = 1;
+  m->data_pools.insert(0);
+  m->metadata_pool = 1;
+  m->cas_pool = 2;
+  m->compat = get_mdsmap_compat_set();
+
+  // these aren't the defaults, just in case anybody gets confused
+  m->session_timeout = 61;
+  m->session_autoclose = 301;
+  m->max_file_size = 1<<24;
+  ls.push_back(m);
 }
 
 void MDSMap::print(ostream& out) 
@@ -314,42 +329,70 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     int32_t m = cas_pool;
     ::encode(m, bl);
     return;
+  } else if ((features & CEPH_FEATURE_MDSENC) == 0) {
+    __u16 v = 3;
+    ::encode(v, bl);
+    ::encode(epoch, bl);
+    ::encode(flags, bl);
+    ::encode(last_failure, bl);
+    ::encode(root, bl);
+    ::encode(session_timeout, bl);
+    ::encode(session_autoclose, bl);
+    ::encode(max_file_size, bl);
+    ::encode(max_mds, bl);
+    ::encode(mds_info, bl);
+    ::encode(data_pools, bl);
+    ::encode(cas_pool, bl);
+
+    // kclient ignores everything from here
+    __u16 ev = 5;
+    ::encode(ev, bl);
+    ::encode(compat, bl);
+    ::encode(metadata_pool, bl);
+    ::encode(created, bl);
+    ::encode(modified, bl);
+    ::encode(tableserver, bl);
+    ::encode(in, bl);
+    ::encode(inc, bl);
+    ::encode(up, bl);
+    ::encode(failed, bl);
+    ::encode(stopped, bl);
+    ::encode(last_failure_osd_epoch, bl);
+  } else {// have MDS encoding feature!
+    ENCODE_START(4, 4, bl);
+    ::encode(epoch, bl);
+    ::encode(flags, bl);
+    ::encode(last_failure, bl);
+    ::encode(root, bl);
+    ::encode(session_timeout, bl);
+    ::encode(session_autoclose, bl);
+    ::encode(max_file_size, bl);
+    ::encode(max_mds, bl);
+    ::encode(mds_info, bl);
+    ::encode(data_pools, bl);
+    ::encode(cas_pool, bl);
+
+    // kclient ignores everything from here
+    __u16 ev = 5;
+    ::encode(ev, bl);
+    ::encode(compat, bl);
+    ::encode(metadata_pool, bl);
+    ::encode(created, bl);
+    ::encode(modified, bl);
+    ::encode(tableserver, bl);
+    ::encode(in, bl);
+    ::encode(inc, bl);
+    ::encode(up, bl);
+    ::encode(failed, bl);
+    ::encode(stopped, bl);
+    ::encode(last_failure_osd_epoch, bl);
+    ENCODE_FINISH(bl);
   }
-
-  __u16 v = 3;
-  ::encode(v, bl);
-  ::encode(epoch, bl);
-  ::encode(flags, bl);
-  ::encode(last_failure, bl);
-  ::encode(root, bl);
-  ::encode(session_timeout, bl);
-  ::encode(session_autoclose, bl);
-  ::encode(max_file_size, bl);
-  ::encode(max_mds, bl);
-  ::encode(mds_info, bl);
-  ::encode(data_pools, bl);
-  ::encode(cas_pool, bl);
-
-  // kclient ignores everything from here
-  __u16 ev = 5;
-  ::encode(ev, bl);
-  ::encode(compat, bl);
-  ::encode(metadata_pool, bl);
-  ::encode(created, bl);
-  ::encode(modified, bl);
-  ::encode(tableserver, bl);
-  ::encode(in, bl);
-  ::encode(inc, bl);
-  ::encode(up, bl);
-  ::encode(failed, bl);
-  ::encode(stopped, bl);
-  ::encode(last_failure_osd_epoch, bl);
 }
 
 void MDSMap::decode(bufferlist::iterator& p)
 {
-  __u16 v;
-  ::decode(v, p);
+  DECODE_START_LEGACY_COMPAT_LEN_16(4, 4, 4, p);
   ::decode(epoch, p);
   ::decode(flags, p);
   ::decode(last_failure, p);
@@ -359,7 +402,7 @@ void MDSMap::decode(bufferlist::iterator& p)
   ::decode(max_file_size, p);
   ::decode(max_mds, p);
   ::decode(mds_info, p);
-  if (v < 3) {
+  if (struct_v < 3) {
     __u32 n;
     ::decode(n, p);
     while (n--) {
@@ -377,7 +420,7 @@ void MDSMap::decode(bufferlist::iterator& p)
 
   // kclient ignores everything from here
   __u16 ev = 1;
-  if (v >= 2)
+  if (struct_v >= 2)
     ::decode(ev, p);
   if (ev >= 3)
     ::decode(compat, p);
@@ -400,4 +443,5 @@ void MDSMap::decode(bufferlist::iterator& p)
   ::decode(stopped, p);
   if (ev >= 4)
     ::decode(last_failure_osd_epoch, p);
+  DECODE_FINISH(p);
 }
