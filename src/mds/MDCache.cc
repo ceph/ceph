@@ -3020,10 +3020,10 @@ void MDCache::add_uncommitted_slave_update(metareqid_t reqid, int master, MDSlav
 {
   assert(uncommitted_slave_updates[master].count(reqid) == 0);
   uncommitted_slave_updates[master][reqid] = su;
-  if (su->rename_olddir)
-    uncommitted_slave_rename_olddir[su->rename_olddir]++;
+  for(set<CDir*>::iterator p = su->olddirs.begin(); p != su->olddirs.end(); ++p)
+    uncommitted_slave_rename_olddir[*p]++;
   for(set<CInode*>::iterator p = su->unlinked.begin(); p != su->unlinked.end(); ++p)
-     uncommitted_slave_unlink[*p]++;
+    uncommitted_slave_unlink[*p]++;
 }
 
 void MDCache::finish_uncommitted_slave_update(metareqid_t reqid, int master)
@@ -3035,11 +3035,12 @@ void MDCache::finish_uncommitted_slave_update(metareqid_t reqid, int master)
   if (uncommitted_slave_updates[master].empty())
     uncommitted_slave_updates.erase(master);
   // discard the non-auth subtree we renamed out of
-  if (su->rename_olddir) {
-    uncommitted_slave_rename_olddir[su->rename_olddir]--;
-    if (uncommitted_slave_rename_olddir[su->rename_olddir] == 0) {
-      uncommitted_slave_rename_olddir.erase(su->rename_olddir);
-      CDir *root = get_subtree_root(su->rename_olddir);
+  for(set<CDir*>::iterator p = su->olddirs.begin(); p != su->olddirs.end(); ++p) {
+    CDir *dir = *p;
+    uncommitted_slave_rename_olddir[dir]--;
+    if (uncommitted_slave_rename_olddir[dir] == 0) {
+      uncommitted_slave_rename_olddir.erase(dir);
+      CDir *root = get_subtree_root(dir);
       if (root->get_dir_auth() == CDIR_AUTH_UNDEF)
 	try_trim_non_auth_subtree(root);
     }
@@ -6056,8 +6057,8 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
 {
   dout(10) << "trim_non_auth_subtree(" << dir << ") " << *dir << dendl;
 
-  // preserve the dir for rollback
-  if (uncommitted_slave_rename_olddir.count(dir))
+  if (uncommitted_slave_rename_olddir.count(dir) || // preserve the dir for rollback
+      my_ambiguous_imports.count(dir->dirfrag()))
     return true;
 
   bool keep_dir = false;
