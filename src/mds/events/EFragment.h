@@ -40,7 +40,7 @@ public:
     OP_ROLLBACK = 3,
     OP_ONESHOT = 4,  // (legacy) PREPARE+COMMIT
   };
-  const char *op_name(int o) {
+  const char *op_name(int o) const {
     switch (o) {
     case OP_PREPARE: return "prepare";
     case OP_COMMIT: return "commit";
@@ -49,31 +49,10 @@ public:
     }
   }
 
-  void encode(bufferlist &bl) const {
-    __u8 struct_v = 3;
-    ::encode(struct_v, bl);
-    ::encode(stamp, bl);
-    ::encode(op, bl);
-    ::encode(ino, bl);
-    ::encode(basefrag, bl);
-    ::encode(bits, bl);
-    ::encode(metablob, bl);
-  } 
-  void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    if (struct_v >= 2)
-      ::decode(stamp, bl);
-    if (struct_v >= 3)
-      ::decode(op, bl);
-    else
-      op = OP_ONESHOT;
-    ::decode(ino, bl);
-    ::decode(basefrag, bl);
-    ::decode(bits, bl);
-    ::decode(metablob, bl);
-  }
-
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<EFragment*>& ls);
   void replay(MDS *mds);
 };
 
