@@ -131,6 +131,8 @@ TYPE(EExport)
 TYPE(EFragment)
 #include "mds/events/EImportFinish.h"
 TYPE(EImportFinish)
+#include "mds/events/EImportStart.h"
+TYPE(EImportStart)
 
 #ifdef WITH_RADOSGW
 
