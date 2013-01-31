@@ -69,7 +69,8 @@ def task(ctx, config):
     chance_inject_pause_long: (0) chance of injecting long stall
 
     powercycle: (false) whether to power cycle the node instead
-        of just the osd process
+        of just the osd process. Note that this assumes that a single
+        osd is the only important process on the node.
 
     example:
 
