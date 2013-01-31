@@ -53,14 +53,14 @@ int main(int argc, char **argv)
   po::options_description desc("Allowed options");
   desc.add_options()
     ("help", "produce help message")
-    ("filestore-path", po::value<string>(&fspath)->required(),
+    ("filestore-path", po::value<string>(&fspath),
      "path to filestore directory, mandatory")
-    ("journal-path", po::value<string>(&jpath)->required(),
+    ("journal-path", po::value<string>(&jpath),
      "path to journal, mandatory")
-    ("pgid", po::value<string>(&pgid)->required(),
+    ("pgid", po::value<string>(&pgid),
      "PG id, mandatory")
-    ("type", po::value<string>(&type)->required(),
-     "Type which is 'info' or 'log'")
+    ("type", po::value<string>(&type),
+     "Type which is 'info' or 'log', mandatory")
     ("debug", "Enable diagnostic output to stderr")
     ;
 
@@ -72,13 +72,39 @@ int main(int argc, char **argv)
     po::notify(vm);
   }
   catch(...) {
-    cout << desc << "\n";
+    cout << desc << std::endl;
     exit(1);
   }
      
-  //Never get here with required() options
   if (vm.count("help")) {
-    cout << desc << "\n";
+    cout << desc << std::endl;
+    return 1;
+  }
+
+  if (!vm.count("filestore-path")) {
+    cout << "Must provide filestore-path" << std::endl
+	 << desc << std::endl;
+    return 1;
+  } 
+  if (!vm.count("journal-path")) {
+    cout << "Must provide journal-path" << std::endl
+	 << desc << std::endl;
+    return 1;
+  } 
+  if (!vm.count("pgid")) {
+    cout << "Must provide pgid" << std::endl
+	 << desc << std::endl;
+    return 1;
+  } 
+  if (!vm.count("type")) {
+    cout << "Must provide type ('info' or 'log')" << std::endl
+	 << desc << std::endl;
+    return 1;
+  } 
+  
+  if (fspath.length() == 0 || jpath.length() == 0 || pgid.length() == 0 ||
+    (type != "info" && type != "log")) {
+    cerr << "Invalid params" << std::endl;
     exit(1);
   }
 
@@ -105,23 +131,6 @@ int main(int argc, char **argv)
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
   g_conf = g_ceph_context->_conf;
-
-  if (!vm.count("filestore-path") || !vm.count("journal-path")) {
-    cout << "Must provide filestore-path and journal-path" << std::endl
-	 << desc << std::endl;
-    return 1;
-  }
-
-  if (vm.count("help")) {
-    cout << desc << std::endl;
-    return 1;
-  }
-
-  if (fspath.length() == 0 || jpath.length() == 0 || pgid.length() == 0 ||
-    (type != "info" && type != "log")) {
-    cerr << "Invalid params" << std::endl;
-    exit(1);
-  }
 
   //Verify that fspath really is an osd store
   struct stat st;
