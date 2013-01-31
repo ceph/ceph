@@ -218,19 +218,19 @@ static int read_many(cls_method_context_t hctx, const set<string> &keys,
     map<string, bufferlist> * out) {
   int r = 0;
   CLS_ERR("reading from a map of size %d, first key encoded is %s",
-      keys.size(), key_data(*keys.begin()).encoded().c_str());
+      (int)keys.size(), key_data(*keys.begin()).encoded().c_str());
   r = cls_cxx_map_get_vals(hctx, key_data(*keys.begin()).encoded().c_str(),
       "", LONG_MAX, out);
   if (r < 0) {
     CLS_ERR("getting omap vals failed with error %d", r);
   }
 
-  CLS_ERR("got map of size %d ", out->size());
+  CLS_ERR("got map of size %d ", (int)out->size());
   if (out->size() > 1) {
     out->erase(out->upper_bound(key_data(*keys.rbegin()).encoded().c_str()),
       out->end());
   }
-  CLS_ERR("returning map of size %d", out->size());
+  CLS_ERR("returning map of size %d", (int)out->size());
   return r;
 }
 
@@ -315,7 +315,8 @@ static int assert_size_in_bound(cls_method_context_t hctx, int bound,
     }
     break;
   default:
-    CLS_LOG(20, "invalid argument passed to assert_size_in_bound", r);
+    CLS_LOG(20, "invalid argument passed to assert_size_in_bound: %d",
+	    comparator);
     return -EINVAL;
   }
   return 0;
@@ -356,7 +357,7 @@ static int omap_insert(cls_method_context_t hctx,
   CLS_LOG(20, "inserting %s", omap.begin()->first.c_str());
   r = check_writable(hctx);
   if (r < 0) {
-    CLS_LOG(20, "omap_insert: this object is unwritable.", r);
+    CLS_LOG(20, "omap_insert: this object is unwritable: %d", r);
     return r;
   }
 
@@ -438,7 +439,7 @@ static int create_with_omap(cls_method_context_t hctx,
   //first make sure the object is writable
   int r = cls_cxx_create(hctx, true);
   if (r < 0) {
-    CLS_LOG(20, "omap create: creating failed: ", r);
+    CLS_LOG(20, "omap create: creating failed: %d", r);
     return r;
   }
 
@@ -621,8 +622,9 @@ static int maybe_read_for_balance(cls_method_context_t hctx,
     return r;
   }
 
-  CLS_LOG(20, "rebalance read: size xattr is %d, omap size is %d", odata.size,
-      odata.omap.size());
+  CLS_LOG(20, "rebalance read: size xattr is %llu, omap size is %llu",
+	  (unsigned long long)odata.size,
+	  (unsigned long long)odata.omap.size());
   return 0;
 }
 
