@@ -123,6 +123,7 @@ log files and to turn off server signatures. ::
 		ServerSignature Off
 	</VirtualHost>
 	
+.. important:: If you are using CentOS or similar, make sure that ``FastCgiWrapper`` is turned off in ``/etc/httpd/conf.d/fastcgi.conf``.
 
 Enable the RADOS Gateway Configuration
 ======================================
