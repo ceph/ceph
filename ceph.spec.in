@@ -512,6 +512,7 @@ fi
 %{_bindir}/smalliobench
 %{_bindir}/smalliobenchdumb
 %{_bindir}/smalliobenchfs
+%{_bindir}/ceph-filestore-dump
 %{_bindir}/streamtest
 %{_bindir}/test_cfuse_cache_invalidate
 %{_bindir}/test_cls_lock
