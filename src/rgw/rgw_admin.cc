@@ -58,7 +58,7 @@ void _usage()
   cerr << "  bucket check               check bucket index\n";
   cerr << "  object rm                  remove object\n";
   cerr << "  object unlink              unlink object from bucket index\n";
-  cerr << "  cluster info               show cluster params info\n";
+  cerr << "  zone info                  show zone params info\n";
   cerr << "  pool add                   add an existing pool for data placement\n";
   cerr << "  pool rm                    remove an existing pool from data placement set\n";
   cerr << "  pools list                 list placement active set\n";
@@ -162,7 +162,7 @@ enum {
   OPT_OBJECT_UNLINK,
   OPT_GC_LIST,
   OPT_GC_PROCESS,
-  OPT_CLUSTER_INFO,
+  OPT_ZONE_INFO,
   OPT_CAPS_ADD,
   OPT_CAPS_RM,
 };
@@ -188,7 +188,6 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   if (strcmp(cmd, "bucket") == 0 ||
       strcmp(cmd, "buckets") == 0 ||
       strcmp(cmd, "caps") == 0 ||
-      strcmp(cmd, "cluster") == 0 ||
       strcmp(cmd, "gc") == 0 || 
       strcmp(cmd, "key") == 0 ||
       strcmp(cmd, "log") == 0 ||
@@ -196,6 +195,10 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "pool") == 0 ||
       strcmp(cmd, "pools") == 0 ||
       strcmp(cmd, "subuser") == 0 ||
+      strcmp(cmd, "log") == 0 ||
+      strcmp(cmd, "usage") == 0 ||
+      strcmp(cmd, "object") == 0 ||
+      strcmp(cmd, "zone") == 0 ||
       strcmp(cmd, "temp") == 0 ||
       strcmp(cmd, "usage") == 0 ||
       strcmp(cmd, "user") == 0) {
@@ -285,9 +288,9 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_OBJECT_RM;
     if (strcmp(cmd, "unlink") == 0)
       return OPT_OBJECT_UNLINK;
-  } else if (strcmp(prev_cmd, "cluster") == 0) {
+  } else if (strcmp(prev_cmd, "zone") == 0) {
     if (strcmp(cmd, "info") == 0)
-      return OPT_CLUSTER_INFO;
+      return OPT_ZONE_INFO;
   } else if (strcmp(prev_cmd, "gc") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_GC_LIST;
@@ -1797,7 +1800,7 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_CLUSTER_INFO) {
+  if (opt_cmd == OPT_ZONE_INFO) {
     store->params.dump(formatter);
     formatter->flush(cout);
   }
