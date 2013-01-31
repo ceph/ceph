@@ -1343,6 +1343,51 @@ void EFragment::replay(MDS *mds)
     in->verify_dirfrags();
 }
 
+void EFragment::encode(bufferlist &bl) const {
+  ENCODE_START(4, 4, bl);
+  ::encode(stamp, bl);
+  ::encode(op, bl);
+  ::encode(ino, bl);
+  ::encode(basefrag, bl);
+  ::encode(bits, bl);
+  ::encode(metablob, bl);
+  ENCODE_FINISH(bl);
+}
+
+void EFragment::decode(bufferlist::iterator &bl) {
+  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
+  if (struct_v >= 2)
+    ::decode(stamp, bl);
+  if (struct_v >= 3)
+    ::decode(op, bl);
+  else
+    op = OP_ONESHOT;
+  ::decode(ino, bl);
+  ::decode(basefrag, bl);
+  ::decode(bits, bl);
+  ::decode(metablob, bl);
+  DECODE_FINISH(bl);
+}
+
+void EFragment::dump(Formatter *f) const
+{
+  /*f->open_object_section("Metablob");
+  metablob.dump(f); // sadly we don't have this; dunno if we'll get it
+  f->close_section();*/
+  f->dump_string("op", op_name(op));
+  f->dump_stream("ino") << ino;
+  f->dump_stream("base frag") << basefrag;
+  f->dump_int("bits", bits);
+}
+
+void EFragment::generate_test_instances(list<EFragment*>& ls)
+{
+  ls.push_back(new EFragment);
+  ls.push_back(new EFragment);
+  ls.back()->op = OP_PREPARE;
+  ls.back()->ino = 1;
+  ls.back()->bits = 5;
+}
 
 
 
