@@ -1276,10 +1276,15 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     if (olddir) {
       if (olddir->authority() != CDIR_AUTH_UNDEF &&
 	  renamed_diri->authority() == CDIR_AUTH_UNDEF) {
+	assert(slaveup); // auth to non-auth, must be slave prepare
 	list<frag_t> leaves;
 	renamed_diri->dirfragtree.get_leaves(leaves);
-	for (list<frag_t>::iterator p = leaves.begin(); p != leaves.end(); ++p)
-	  renamed_diri->get_or_open_dirfrag(mds->mdcache, *p);
+	for (list<frag_t>::iterator p = leaves.begin(); p != leaves.end(); ++p) {
+	  CDir *dir = renamed_diri->get_or_open_dirfrag(mds->mdcache, *p);
+	  // preserve subtree bound until slave commit
+	  if (dir->get_dir_auth() == CDIR_AUTH_UNDEF)
+	    slaveup->olddirs.insert(dir);
+	}
       }
 
       mds->mdcache->adjust_subtree_after_rename(renamed_diri, olddir, false);
@@ -1288,7 +1293,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       CDir *root = mds->mdcache->get_subtree_root(olddir);
       if (root->get_dir_auth() == CDIR_AUTH_UNDEF) {
 	if (slaveup) // preserve the old dir until slave commit
-	  slaveup->rename_olddir = olddir;
+	  slaveup->olddirs.insert(olddir);
 	else
 	  mds->mdcache->try_trim_non_auth_subtree(root);
       }
@@ -2269,10 +2274,10 @@ void ESlaveUpdate::replay(MDS *mds)
   case ESlaveUpdate::OP_ROLLBACK:
     dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds." << master
 	     << ": applying rollback commit blob" << dendl;
+    commit.replay(mds, _segment);
     su = mds->mdcache->get_uncommitted_slave_update(reqid, master);
     if (su)
       mds->mdcache->finish_uncommitted_slave_update(reqid, master);
-    commit.replay(mds, _segment);
     break;
 
   default:
