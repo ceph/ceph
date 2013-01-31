@@ -1387,6 +1387,47 @@ void EExport::replay(MDS *mds)
   mds->mdcache->try_trim_non_auth_subtree(dir);
 }
 
+void EExport::encode(bufferlist& bl) const
+{
+  ENCODE_START(3, 3, bl);
+  ::encode(stamp, bl);
+  ::encode(metablob, bl);
+  ::encode(base, bl);
+  ::encode(bounds, bl);
+  ENCODE_FINISH(bl);
+}
+
+void EExport::decode(bufferlist::iterator &bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  if (struct_v >= 2)
+    ::decode(stamp, bl);
+  ::decode(metablob, bl);
+  ::decode(base, bl);
+  ::decode(bounds, bl);
+  DECODE_FINISH(bl);
+}
+
+void EExport::dump(Formatter *f) const
+{
+  f->dump_float("stamp", (double)stamp);
+  /*f->open_object_section("Metablob");
+  metablob.dump(f); // sadly we don't have this; dunno if we'll get it
+  f->close_section();*/
+  f->dump_stream("base dirfrag") << base;
+  f->open_array_section("bounds dirfrags");
+  for (set<dirfrag_t>::const_iterator i = bounds.begin();
+      i != bounds.end(); ++i) {
+    f->dump_stream("dirfrag") << *i;
+  }
+  f->close_section(); // bounds dirfrags
+}
+
+void EExport::generate_test_instances(list<EExport*>& ls)
+{
+  EExport *sample = new EExport();
+  ls.push_back(sample);
+}
 
 
 // -----------------------

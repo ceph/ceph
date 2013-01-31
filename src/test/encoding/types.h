@@ -126,6 +126,9 @@ TYPE(AnchorServer)
 #include "mds/events/ECommitted.h"
 TYPE(ECommitted)
 
+#include "mds/events/EExport.h"
+TYPE(EExport)
+
 #ifdef WITH_RADOSGW
 
 #include "rgw/rgw_rados.h"
