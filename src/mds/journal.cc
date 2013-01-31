@@ -1529,6 +1529,36 @@ void EImportFinish::replay(MDS *mds)
   }
 }
 
+void EImportFinish::encode(bufferlist& bl) const
+{
+  ENCODE_START(3, 3, bl);
+  ::encode(stamp, bl);
+  ::encode(base, bl);
+  ::encode(success, bl);
+  ENCODE_FINISH(bl);
+}
+
+void EImportFinish::decode(bufferlist::iterator &bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  if (struct_v >= 2)
+    ::decode(stamp, bl);
+  ::decode(base, bl);
+  ::decode(success, bl);
+  DECODE_FINISH(bl);
+}
+
+void EImportFinish::dump(Formatter *f) const
+{
+  f->dump_stream("base dirfrag") << base;
+  f->dump_string("success", success ? "true" : "false");
+}
+void EImportFinish::generate_test_instances(list<EImportFinish*>& ls)
+{
+  ls.push_back(new EImportFinish);
+  ls.push_back(new EImportFinish);
+  ls.back()->success = true;
+}
 
 
 // ------------------------
