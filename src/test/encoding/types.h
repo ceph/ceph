@@ -101,6 +101,7 @@ TYPE(file_layout_policy_t)
 TYPE(frag_info_t)
 TYPE(nest_info_t)
 TYPE(client_writeable_range_t)
+TYPE(inode_t)
 
 #ifdef WITH_RADOSGW
 
