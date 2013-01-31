@@ -35,6 +35,11 @@ void dump(const ceph_file_layout& l, Formatter *f)
     f->dump_unsigned("pg_pool", l.fl_pg_pool);
 }
 
+void dump(const ceph_dir_layout& l, Formatter *f)
+{
+  f->dump_unsigned("dir_hash", l.dl_dir_hash);
+}
+
 void file_layout_policy_t::dump(Formatter *f) const
 {
   ::dump(layout, f);
@@ -226,4 +231,164 @@ void client_writeable_range_t::generate_test_instances(list<client_writeable_ran
 ostream& operator<<(ostream& out, const client_writeable_range_t& r)
 {
   return out << r.range.first << '-' << r.range.last << "@" << r.follows;
+}
+
+
+/*
+ * inode_t
+ */
+void inode_t::encode(bufferlist &bl) const
+{
+  ENCODE_START(6, 6, bl);
+
+  ::encode(ino, bl);
+  ::encode(rdev, bl);
+  ::encode(ctime, bl);
+
+  ::encode(mode, bl);
+  ::encode(uid, bl);
+  ::encode(gid, bl);
+
+  ::encode(nlink, bl);
+  ::encode(anchored, bl);
+
+  ::encode(dir_layout, bl);
+  ::encode(layout, bl);
+  ::encode(size, bl);
+  ::encode(truncate_seq, bl);
+  ::encode(truncate_size, bl);
+  ::encode(truncate_from, bl);
+  ::encode(truncate_pending, bl);
+  ::encode(mtime, bl);
+  ::encode(atime, bl);
+  ::encode(time_warp_seq, bl);
+  ::encode(client_ranges, bl);
+
+  ::encode(dirstat, bl);
+  ::encode(rstat, bl);
+  ::encode(accounted_rstat, bl);
+
+  ::encode(version, bl);
+  ::encode(file_data_version, bl);
+  ::encode(xattr_version, bl);
+  ::encode(last_renamed_version, bl);
+
+  ENCODE_FINISH(bl);
+}
+
+void inode_t::decode(bufferlist::iterator &p)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(6, 6, 6, p);
+
+  ::decode(ino, p);
+  ::decode(rdev, p);
+  ::decode(ctime, p);
+
+  ::decode(mode, p);
+  ::decode(uid, p);
+  ::decode(gid, p);
+
+  ::decode(nlink, p);
+  ::decode(anchored, p);
+
+  if (struct_v >= 4)
+    ::decode(dir_layout, p);
+  else
+    memset(&dir_layout, 0, sizeof(dir_layout));
+  ::decode(layout, p);
+  ::decode(size, p);
+  ::decode(truncate_seq, p);
+  ::decode(truncate_size, p);
+  ::decode(truncate_from, p);
+  if (struct_v >= 5)
+    ::decode(truncate_pending, p);
+  else
+    truncate_pending = 0;
+  ::decode(mtime, p);
+  ::decode(atime, p);
+  ::decode(time_warp_seq, p);
+  if (struct_v >= 3) {
+    ::decode(client_ranges, p);
+  } else {
+    map<client_t, client_writeable_range_t::byte_range_t> m;
+    ::decode(m, p);
+    for (map<client_t, client_writeable_range_t::byte_range_t>::iterator
+	q = m.begin(); q != m.end(); q++)
+      client_ranges[q->first].range = q->second;
+  }
+    
+  ::decode(dirstat, p);
+  ::decode(rstat, p);
+  ::decode(accounted_rstat, p);
+
+  ::decode(version, p);
+  ::decode(file_data_version, p);
+  ::decode(xattr_version, p);
+  if (struct_v >= 2)
+    ::decode(last_renamed_version, p);
+
+  DECODE_FINISH(p);
+}
+
+void inode_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("ino", ino);
+  f->dump_unsigned("rdev", rdev);
+  f->dump_stream("ctime") << ctime;
+  f->dump_unsigned("mode", mode);
+  f->dump_unsigned("uid", uid);
+  f->dump_unsigned("gid", gid);
+  f->dump_unsigned("nlink", nlink);
+  f->dump_unsigned("anchored", (int)anchored);
+
+  f->open_object_section("dir_layout");
+  ::dump(dir_layout, f);
+  f->close_section();
+
+  f->open_object_section("layout");
+  ::dump(layout, f);
+  f->close_section();
+
+  f->dump_unsigned("size", size);
+  f->dump_unsigned("truncate_seq", truncate_seq);
+  f->dump_unsigned("truncate_size", truncate_size);
+  f->dump_unsigned("truncate_from", truncate_from);
+  f->dump_unsigned("truncate_pending", truncate_pending);
+  f->dump_stream("mtime") << mtime;
+  f->dump_stream("atime") << atime;
+  f->dump_unsigned("time_warp_seq", time_warp_seq);
+
+  f->open_array_section("client_ranges");
+  for (map<client_t,client_writeable_range_t>::const_iterator p = client_ranges.begin(); p != client_ranges.end(); ++p) {
+    f->open_object_section("client");
+    f->dump_unsigned("client", p->first.v);
+    p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_object_section("dirstat");
+  dirstat.dump(f);
+  f->close_section();
+
+  f->open_object_section("rstat");
+  rstat.dump(f);
+  f->close_section();
+
+  f->open_object_section("accounted_rstat");
+  accounted_rstat.dump(f);
+  f->close_section();
+
+  f->dump_unsigned("version", version);
+  f->dump_unsigned("file_data_version", file_data_version);
+  f->dump_unsigned("xattr_version", xattr_version);
+  f->dump_unsigned("last_renamed_version", last_renamed_version);
+}
+
+void inode_t::generate_test_instances(list<inode_t*>& ls)
+{
+  ls.push_back(new inode_t);
+  ls.push_back(new inode_t);
+  ls.back()->ino = 1;
+  // i am lazy.
 }
