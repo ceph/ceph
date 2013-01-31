@@ -262,7 +262,7 @@ class CephManager:
             )
         return proc
 
-    def osd_admin_socket(self, osdnum, command):
+    def osd_admin_socket(self, osdnum, command, check_status=True):
         remote = None
         for _remote, roles_for_host in self.ctx.cluster.remotes.iteritems():
             for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
@@ -284,6 +284,7 @@ class CephManager:
             args=args,
             stdout=StringIO(),
             wait=True,
+            check_status=check_status
             )
 
     def get_pg_primary(self, pool, pgnum):
@@ -317,13 +318,25 @@ class CephManager:
             'kick_recovery_wq',
             '0')
 
+    def wait_run_admin_socket(self, osdnum, args=['version']):
+        while True:
+            proc = self.osd_admin_socket(
+                osdnum, args,
+                check_status=False)
+            if proc.exitstatus is 0:
+                break
+            else:
+                self.log(
+                    "waiting on admin_socket for {osdnum}, {command}".format(
+                        osdnum=osdnum,
+                        command=args))
+                time.sleep(5)
+
     def set_config(self, osdnum, **argdict):
-        return self.raw_cluster_cmd(
-            'tell', "osd.%d" % (int(osdnum),),
-            'injectargs',
-            " ".join(
-                [("--" + conf.replace("_", "-") + " " + str(val)) for (conf,val) in 
-                 argdict.iteritems()]))
+        for k,v in argdict.iteritems():
+            self.wait_run_admin_socket(
+                osdnum,
+                ['config', 'set', str(k), str(v)])
 
     def raw_cluster_status(self):
         return self.raw_cluster_cmd('-s')
@@ -671,6 +684,7 @@ class CephManager:
             ceph_task.mount_osd_data(self.ctx, remote, osd)
             self.ctx.daemons.get_daemon('osd', osd).reset()
         self.ctx.daemons.get_daemon('osd', osd).restart()
+        self.wait_run_admin_socket(osd)
 
     def mark_down_osd(self, osd):
         self.raw_cluster_cmd('osd', 'down', str(osd))
