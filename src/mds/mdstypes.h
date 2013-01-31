@@ -434,25 +434,18 @@ struct inode_t {
 WRITE_CLASS_ENCODER(inode_t)
 
 
+/*
+ * old_inode_t
+ */
 struct old_inode_t {
   snapid_t first;
   inode_t inode;
   map<string,bufferptr> xattrs;
 
-  void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(first, bl);
-    ::encode(inode, bl);
-    ::encode(xattrs, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    ::decode(first, bl);
-    ::decode(inode, bl);
-    ::decode(xattrs, bl);
-  }
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<old_inode_t*>& ls);
 };
 WRITE_CLASS_ENCODER(old_inode_t)
 
