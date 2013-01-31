@@ -392,3 +392,49 @@ void inode_t::generate_test_instances(list<inode_t*>& ls)
   ls.back()->ino = 1;
   // i am lazy.
 }
+
+
+/*
+ * old_inode_t
+ */
+void old_inode_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(2, 2, bl);
+  ::encode(first, bl);
+  ::encode(inode, bl);
+  ::encode(xattrs, bl);
+  ENCODE_FINISH(bl);
+}
+
+void old_inode_t::decode(bufferlist::iterator& bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  ::decode(first, bl);
+  ::decode(inode, bl);
+  ::decode(xattrs, bl);
+  DECODE_FINISH(bl);
+}
+
+void old_inode_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("first", first);
+  inode.dump(f);
+  f->open_object_section("xattrs");
+  for (map<string,bufferptr>::const_iterator p = xattrs.begin(); p != xattrs.end(); ++p) {
+    string v(p->second.c_str(), p->second.length());
+    f->dump_string(p->first.c_str(), v);
+  }
+  f->close_section();
+}
+
+void old_inode_t::generate_test_instances(list<old_inode_t*>& ls)
+{
+  ls.push_back(new old_inode_t);
+  ls.push_back(new old_inode_t);
+  ls.back()->first = 2;
+  list<inode_t*> ils;
+  inode_t::generate_test_instances(ils);
+  ls.back()->inode = *ils.back();
+  ls.back()->xattrs["user.foo"] = buffer::copy("asdf", 4);
+  ls.back()->xattrs["user.unprintable"] = buffer::copy("\000\001\002", 3);
+}
