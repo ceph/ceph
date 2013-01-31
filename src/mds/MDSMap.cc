@@ -64,6 +64,17 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
   f->close_section();
 }
 
+void MDSMap::mds_info_t::generate_test_instances(list<mds_info_t*>& ls)
+{
+  mds_info_t *sample = new mds_info_t();
+  ls.push_back(sample);
+  sample = new mds_info_t();
+  sample->global_id = 1;
+  sample->name = "test_instance";
+  sample->rank = 0;
+  ls.push_back(sample);
+}
+
 void MDSMap::dump(Formatter *f) const
 {
   f->dump_int("epoch", epoch);
@@ -268,10 +279,27 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
   }
 }
 
-void MDSMap::mds_info_t::encode(bufferlist& bl) const
+void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) const
 {
-  __u8 v = 3;
-  ::encode(v, bl);
+  ENCODE_START(4, 4, bl);
+  ::encode(global_id, bl);
+  ::encode(name, bl);
+  ::encode(rank, bl);
+  ::encode(inc, bl);
+  ::encode(state, bl);
+  ::encode(state_seq, bl);
+  ::encode(addr, bl);
+  ::encode(laggy_since, bl);
+  ::encode(standby_for_rank, bl);
+  ::encode(standby_for_name, bl);
+  ::encode(export_targets, bl);
+  ENCODE_FINISH(bl);
+}
+
+void MDSMap::mds_info_t::encode_unversioned(bufferlist& bl) const
+{
+  __u8 struct_v = 3;
+  ::encode(struct_v, bl);
   ::encode(global_id, bl);
   ::encode(name, bl);
   ::encode(rank, bl);
@@ -287,8 +315,7 @@ void MDSMap::mds_info_t::encode(bufferlist& bl) const
 
 void MDSMap::mds_info_t::decode(bufferlist::iterator& bl)
 {
-  __u8 v;
-  ::decode(v, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
   ::decode(global_id, bl);
   ::decode(name, bl);
   ::decode(rank, bl);
@@ -299,8 +326,9 @@ void MDSMap::mds_info_t::decode(bufferlist::iterator& bl)
   ::decode(laggy_since, bl);
   ::decode(standby_for_rank, bl);
   ::decode(standby_for_name, bl);
-  if (v >= 2)
+  if (struct_v >= 2)
     ::decode(export_targets, bl);
+  DECODE_FINISH(bl);
 }
 
 
@@ -318,8 +346,14 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(session_autoclose, bl);
     ::encode(max_file_size, bl);
     ::encode(max_mds, bl);
-    ::encode(mds_info, bl);
-    __u32 n = data_pools.size();
+    __u32 n = mds_info.size();
+    ::encode(n, bl);
+    for (map<uint64_t, mds_info_t>::const_iterator i = mds_info.begin();
+	i != mds_info.end(); ++i) {
+      ::encode(i->first, bl);
+      ::encode(i->second, bl, features);
+    }
+    n = data_pools.size();
     ::encode(n, bl);
     for (set<int64_t>::const_iterator p = data_pools.begin(); p != data_pools.end(); ++p) {
       n = *p;
@@ -340,7 +374,13 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(session_autoclose, bl);
     ::encode(max_file_size, bl);
     ::encode(max_mds, bl);
-    ::encode(mds_info, bl);
+    __u32 n = mds_info.size();
+    ::encode(n, bl);
+    for (map<uint64_t, mds_info_t>::const_iterator i = mds_info.begin();
+	i != mds_info.end(); ++i) {
+      ::encode(i->first, bl);
+      ::encode(i->second, bl, features);
+    }
     ::encode(data_pools, bl);
     ::encode(cas_pool, bl);
 
@@ -368,7 +408,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(session_autoclose, bl);
     ::encode(max_file_size, bl);
     ::encode(max_mds, bl);
-    ::encode(mds_info, bl);
+    ::encode(mds_info, bl, features);
     ::encode(data_pools, bl);
     ::encode(cas_pool, bl);
 
