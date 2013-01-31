@@ -282,35 +282,15 @@ inline ostream& operator<<(ostream &out, const vinodeno_t &vino) {
 }
 
 
-struct byte_range_t {
-  uint64_t first, last;    // interval client can write to
-
-  byte_range_t() : first(0), last(0) {}
-
-  void encode(bufferlist &bl) const {
-    ::encode(first, bl);
-    ::encode(last, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(first, bl);
-    ::decode(last, bl);
-  }    
-};
-WRITE_CLASS_ENCODER(byte_range_t)
-
-inline ostream& operator<<(ostream& out, const byte_range_t& r)
-{
-  return out << r.first << '-' << r.last;
-}
-inline bool operator==(const byte_range_t& l, const byte_range_t& r) {
-  return l.first == r.first && l.last == r.last;
-}
-
-
 /*
  * client_writeable_range_t
  */
 struct client_writeable_range_t {
+  struct byte_range_t {
+    uint64_t first, last;    // interval client can write to
+    byte_range_t() : first(0), last(0) {}
+  };
+
   byte_range_t range;
   snapid_t follows;     // aka "data+metadata flushed thru"
 
@@ -321,12 +301,20 @@ struct client_writeable_range_t {
   void dump(Formatter *f) const;
   static void generate_test_instances(list<client_writeable_range_t*>& ls);
 };
+
+inline void decode(client_writeable_range_t::byte_range_t& range, bufferlist::iterator& bl) {
+  ::decode(range.first, bl);
+  ::decode(range.last, bl);
+}
+
 WRITE_CLASS_ENCODER(client_writeable_range_t)
 
 ostream& operator<<(ostream& out, const client_writeable_range_t& r);
 
-inline bool operator==(const client_writeable_range_t& l, const client_writeable_range_t& r) {
-  return l.range == r.range && l.follows == r.follows;
+inline bool operator==(const client_writeable_range_t& l,
+		       const client_writeable_range_t& r) {
+  return l.range.first == r.range.first && l.range.last == r.range.last &&
+    l.follows == r.follows;
 }
 
 
@@ -505,9 +493,10 @@ struct inode_t {
     if (v >= 3) {
       ::decode(client_ranges, p);
     } else {
-      map<client_t, byte_range_t> m;
+      map<client_t, client_writeable_range_t::byte_range_t> m;
       ::decode(m, p);
-      for (map<client_t, byte_range_t>::iterator q = m.begin(); q != m.end(); q++)
+      for (map<client_t, client_writeable_range_t::byte_range_t>::iterator
+	  q = m.begin(); q != m.end(); q++)
 	client_ranges[q->first].range = q->second;
     }
     
