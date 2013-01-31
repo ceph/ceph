@@ -1503,6 +1503,45 @@ void EImportStart::replay(MDS *mds)
   update_segment();
 }
 
+void EImportStart::encode(bufferlist &bl) const {
+  ENCODE_START(3, 3, bl);
+  ::encode(stamp, bl);
+  ::encode(base, bl);
+  ::encode(metablob, bl);
+  ::encode(bounds, bl);
+  ::encode(cmapv, bl);
+  ::encode(client_map, bl);
+  ENCODE_FINISH(bl);
+}
+
+void EImportStart::decode(bufferlist::iterator &bl) {
+  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  if (struct_v >= 2)
+    ::decode(stamp, bl);
+  ::decode(base, bl);
+  ::decode(metablob, bl);
+  ::decode(bounds, bl);
+  ::decode(cmapv, bl);
+  ::decode(client_map, bl);
+  DECODE_FINISH(bl);
+}
+
+void EImportStart::dump(Formatter *f) const
+{
+  f->dump_stream("base dirfrag") << base;
+  f->open_array_section("boundary dirfrags");
+  for (vector<dirfrag_t>::const_iterator iter = bounds.begin();
+      iter != bounds.end(); ++iter) {
+    f->dump_stream("frag") << *iter;
+  }
+  f->close_section();
+}
+
+void EImportStart::generate_test_instances(list<EImportStart*>& ls)
+{
+  ls.push_back(new EImportStart);
+}
+
 // -----------------------
 // EImportFinish
 
