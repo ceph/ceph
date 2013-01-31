@@ -124,9 +124,16 @@ public:
 
     entity_inst_t get_inst() const { return entity_inst_t(entity_name_t::MDS(rank), addr); }
 
-    void encode(bufferlist& bl) const;
+    void encode(bufferlist& bl, uint64_t features) const {
+      if ((features & CEPH_FEATURE_MDSENC) == 0 ) encode_unversioned(bl);
+      else encode_versioned(bl, features);
+    }
     void decode(bufferlist::iterator& p);
     void dump(Formatter *f) const;
+    static void generate_test_instances(list<mds_info_t*>& ls);
+  private:
+    void encode_versioned(bufferlist& bl, uint64_t features) const;
+    void encode_unversioned(bufferlist& bl) const;
   };
 
 
@@ -490,7 +497,7 @@ public:
   void dump(Formatter *f) const;
   static void generate_test_instances(list<MDSMap*>& ls);
 };
-WRITE_CLASS_ENCODER(MDSMap::mds_info_t)
+WRITE_CLASS_ENCODER_FEATURES(MDSMap::mds_info_t)
 WRITE_CLASS_ENCODER_FEATURES(MDSMap)
 
 inline ostream& operator<<(ostream& out, MDSMap& m) {
