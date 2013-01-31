@@ -99,9 +99,9 @@ public:
 
   void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, list<Context*> *pfinishers=0);
   void eval(SimpleLock *lock, bool *need_issue);
-  void eval_any(SimpleLock *lock, bool *need_issue, bool first=false) {
+  void eval_any(SimpleLock *lock, bool *need_issue, list<Context*> *pfinishers=0, bool first=false) {
     if (!lock->is_stable())
-      eval_gather(lock, first, need_issue);
+      eval_gather(lock, first, need_issue, pfinishers);
     else if (lock->get_parent()->is_auth())
       eval(lock, need_issue);
   }
