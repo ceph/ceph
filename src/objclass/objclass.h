@@ -44,7 +44,8 @@ typedef struct {
 } cls_deps_t;
 
 /* class utils */
-extern int cls_log(int level, const char *format, ...);
+extern int cls_log(int level, const char *format, ...)
+  __attribute__((__format__(printf, 2, 3)));
 extern void *cls_alloc(size_t size);
 extern void cls_free(void *p);
 
