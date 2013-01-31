@@ -46,7 +46,7 @@ static string dir_oid_prefix = ".dir.";
 static string default_storage_pool = ".rgw.buckets";
 static string avail_pools = ".pools.avail";
 
-static string cluster_info_oid = "cluster_info";
+static string zone_info_oid = "zone_info";
 
 
 static RGWObjCategory shadow_category = RGW_OBJ_CATEGORY_SHADOW;
@@ -54,7 +54,7 @@ static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 
 #define RGW_USAGE_OBJ_PREFIX "usage."
 
-#define RGW_DEFAULT_CLUSTER_ROOT_POOL ".rgw.root"
+#define RGW_DEFAULT_zone_ROOT_POOL ".rgw.root"
 
 
 #define dout_subsys ceph_subsys_rgw
@@ -75,7 +75,7 @@ void RGWRadosParams::init_default()
 
 void RGWRadosParams::dump(Formatter *f) const
 {
-  f->open_object_section("cluster");
+  f->open_object_section("zone");
   f->dump_string("domain_root", domain_root.pool);
   f->dump_string("control_pool", control_pool.pool);
   f->dump_string("gc_pool", gc_pool.pool);
@@ -91,14 +91,14 @@ void RGWRadosParams::dump(Formatter *f) const
 
 int RGWRadosParams::init(CephContext *cct, RGWRados *store)
 {
-  string pool_name = cct->_conf->rgw_cluster_root_pool;
+  string pool_name = cct->_conf->rgw_zone_root_pool;
   if (pool_name.empty())
-    pool_name = RGW_DEFAULT_CLUSTER_ROOT_POOL;
+    pool_name = RGW_DEFAULT_zone_ROOT_POOL;
 
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
 
-  int ret = rgw_get_obj(store, NULL, pool, cluster_info_oid, bl);
+  int ret = rgw_get_obj(store, NULL, pool, zone_info_oid, bl);
   if (ret == -ENOENT) {
     init_default();
     return 0; // don't try to store obj, we're not fully initialized yet
@@ -110,7 +110,7 @@ int RGWRadosParams::init(CephContext *cct, RGWRados *store)
     bufferlist::iterator iter = bl.begin();
     ::decode(*this, iter);
   } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: failed to decode cluster info from " << pool << ":" << cluster_info_oid << dendl;
+    ldout(cct, 0) << "ERROR: failed to decode zone info from " << pool << ":" << zone_info_oid << dendl;
     return -EIO;
   }
 
@@ -554,7 +554,7 @@ int RGWRados::log_usage(map<rgw_user_bucket, RGWUsageBatch>& usage_info)
   string hash;
   string last_user;
 
-  /* restructure usage map, cluster by object hash */
+  /* restructure usage map, zone by object hash */
   map<rgw_user_bucket, RGWUsageBatch>::iterator iter;
   for (iter = usage_info.begin(); iter != usage_info.end(); ++iter) {
     const rgw_user_bucket& ub = iter->first;
