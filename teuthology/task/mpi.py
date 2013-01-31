@@ -1,7 +1,4 @@
-import contextlib
 import logging
-import os
-from datetime import datetime
 
 from teuthology import misc as teuthology
 
@@ -94,7 +91,6 @@ def task(ctx, config):
 
     # write out the mpi hosts file
     log.info('mpi nodes: [%s]' % (', '.join(hosts)))
-    hostfiledata = '\n'.join(hosts) + '\n'
     teuthology.write_file(remote=master_remote, path='/tmp/cephtest/mpi-hosts', data='\n'.join(hosts))
     log.info('mpiexec on {name}: {cmd}'.format(name=master_remote.name, cmd=mpiexec))
     args=['mpiexec', '-f', '/tmp/cephtest/mpi-hosts']

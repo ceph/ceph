@@ -119,7 +119,7 @@ class MDSThrasher:
 
       skip = random.randrange(0.0, 1.0)
       if self.weight < 1.0 and skip > self.weight:
-          self.log('skipping thrash iteration with skip ({skip}) > weight ({weight})'.format(skip=skip, weight=weight))
+          self.log('skipping thrash iteration with skip ({skip}) > weight ({weight})'.format(skip=skip, weight=self.weight))
           continue
 
       # find the active mds in the failure group
@@ -239,7 +239,6 @@ def task(ctx, config):
   random.seed(seed)
 
   max_thrashers = config.get('max_thrash', 1)
-  managers = {}
   thrashers = {}
 
   (first,) = ctx.cluster.only('mds.{_id}'.format(_id=mdslist[0])).remotes.iterkeys()

@@ -3,7 +3,6 @@ from cStringIO import StringIO
 import contextlib
 import logging
 import os
-import re
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -298,7 +297,6 @@ def _download_hadoop_binaries(remote, hadoop_url):
 @contextlib.contextmanager
 def binaries(ctx, config):
     path = config.get('path')
-    tmpdir = None
 
     if path is None:
         # fetch from gitbuilder gitbuilder

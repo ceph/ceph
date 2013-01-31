@@ -6,7 +6,6 @@ import gevent
 import json
 import threading
 from teuthology import misc as teuthology
-from ..orchestra import run
 
 class Thrasher:
     def __init__(self, manager, config, logger=None):

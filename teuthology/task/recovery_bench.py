@@ -170,7 +170,7 @@ class RecoveryBencher:
                 sample = json.loads(line)
                 samples = lat.setdefault(sample['type'], [])
                 samples.append(float(sample['latency']))
-            except Exception, e:
+            except Exception:
               pass
 
         for type in lat:

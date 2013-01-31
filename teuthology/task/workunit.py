@@ -144,7 +144,7 @@ def _make_scratch_dir(ctx, role, subdir):
     # if neither kclient nor ceph-fuse are required for a workunit,
     # mnt may not exist. Stat and create the directory if it doesn't.
     try:
-        proc = remote.run(
+        remote.run(
             args=[
                 'stat',
                 '--',
@@ -153,7 +153,7 @@ def _make_scratch_dir(ctx, role, subdir):
             )
         log.info('Did not need to create dir {dir}'.format(dir=mnt))
     except:
-        proc = remote.run(
+        remote.run(
             args=[
                 'mkdir',
                 '--',

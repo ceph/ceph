@@ -1,7 +1,4 @@
-import contextlib
 import logging
-import os
-from datetime import datetime
 
 from teuthology import misc as teuthology
 from teuthology.parallel import parallel

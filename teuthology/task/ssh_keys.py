@@ -1,8 +1,6 @@
 #!/usr/bin/python
 import contextlib
-import errno
 import logging
-import os
 import paramiko
 import re
 
@@ -62,7 +60,6 @@ def cleanup_keys(ctx, public_key):
         # fails 1/2 way through (don't want to break ssh on the vm)
         old_auth_keys_file = mySftp.open(auth_keys_file)
         new_auth_keys_file = mySftp.open(auth_keys_file + '.new', 'w')
-        out_keys = []
 
         for line in old_auth_keys_file.readlines():
             match = re.search(re.escape(public_key), line)

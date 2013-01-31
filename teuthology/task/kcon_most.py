@@ -1,6 +1,5 @@
 import contextlib
 import logging
-import os
 
 from teuthology import misc as teuthology
 

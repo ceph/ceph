@@ -1,18 +1,11 @@
 from cStringIO import StringIO
 from configobj import ConfigObj
-import base64
 import contextlib
 import logging
-import os
-import random
-import string
 import s3tests
-import socket
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
-from ..orchestra import run
-from ..orchestra.connection import split_user
 
 log = logging.getLogger(__name__)
 
@@ -60,7 +53,7 @@ def run_tests(ctx, config):
     netcat_out = StringIO()
 
     for client, client_config in config.iteritems():
-        proc = ctx.cluster.only(client).run(
+        ctx.cluster.only(client).run(
             args = [
                 'netcat',
                 '-w', '5',
