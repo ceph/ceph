@@ -318,6 +318,9 @@ inline bool operator==(const client_writeable_range_t& l,
 }
 
 
+/*
+ * inode_t
+ */
 struct inode_t {
   // base (immutable)
   inodeno_t ino;
@@ -423,93 +426,10 @@ struct inode_t {
     }
   }
 
-  void encode(bufferlist &bl) const {
-    __u8 v = 5;
-    ::encode(v, bl);
-
-    ::encode(ino, bl);
-    ::encode(rdev, bl);
-    ::encode(ctime, bl);
-
-    ::encode(mode, bl);
-    ::encode(uid, bl);
-    ::encode(gid, bl);
-
-    ::encode(nlink, bl);
-    ::encode(anchored, bl);
-
-    ::encode(dir_layout, bl);
-    ::encode(layout, bl);
-    ::encode(size, bl);
-    ::encode(truncate_seq, bl);
-    ::encode(truncate_size, bl);
-    ::encode(truncate_from, bl);
-    ::encode(truncate_pending, bl);
-    ::encode(mtime, bl);
-    ::encode(atime, bl);
-    ::encode(time_warp_seq, bl);
-    ::encode(client_ranges, bl);
-
-    ::encode(dirstat, bl);
-    ::encode(rstat, bl);
-    ::encode(accounted_rstat, bl);
-
-    ::encode(version, bl);
-    ::encode(file_data_version, bl);
-    ::encode(xattr_version, bl);
-    ::encode(last_renamed_version, bl);
-  }
-  void decode(bufferlist::iterator &p) {
-    __u8 v;
-    ::decode(v, p);
-
-    ::decode(ino, p);
-    ::decode(rdev, p);
-    ::decode(ctime, p);
-
-    ::decode(mode, p);
-    ::decode(uid, p);
-    ::decode(gid, p);
-
-    ::decode(nlink, p);
-    ::decode(anchored, p);
-
-    if (v >= 4)
-      ::decode(dir_layout, p);
-    else
-      memset(&dir_layout, 0, sizeof(dir_layout));
-    ::decode(layout, p);
-    ::decode(size, p);
-    ::decode(truncate_seq, p);
-    ::decode(truncate_size, p);
-    ::decode(truncate_from, p);
-    if (v >= 5)
-      ::decode(truncate_pending, p);
-    else
-      truncate_pending = 0;
-    ::decode(mtime, p);
-    ::decode(atime, p);
-    ::decode(time_warp_seq, p);
-    if (v >= 3) {
-      ::decode(client_ranges, p);
-    } else {
-      map<client_t, client_writeable_range_t::byte_range_t> m;
-      ::decode(m, p);
-      for (map<client_t, client_writeable_range_t::byte_range_t>::iterator
-	  q = m.begin(); q != m.end(); q++)
-	client_ranges[q->first].range = q->second;
-    }
-    
-    ::decode(dirstat, p);
-    ::decode(rstat, p);
-    ::decode(accounted_rstat, p);
-
-    ::decode(version, p);
-    ::decode(file_data_version, p);
-    ::decode(xattr_version, p);
-    if (v >= 2)
-      ::decode(last_renamed_version, p);
-  }
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<inode_t*>& ls);
 };
 WRITE_CLASS_ENCODER(inode_t)
 

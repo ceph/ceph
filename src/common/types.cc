@@ -3,8 +3,3 @@
 
 #include "include/types.h"
 #include "common/Formatter.h"
-
-void dump(const ceph_dir_layout& dl, Formatter *f)
-{
-  f->dump_unsigned("dir_hash", dl.dl_dir_hash);
-}
