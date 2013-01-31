@@ -190,7 +190,8 @@ ostream& operator<<(ostream &out, const nest_info_t &n)
 void client_writeable_range_t::encode(bufferlist &bl) const
 {
   ENCODE_START(2, 2, bl);
-  ::encode(range, bl);
+  ::encode(range.first, bl);
+  ::encode(range.last, bl);
   ::encode(follows, bl);
   ENCODE_FINISH(bl);
 }
@@ -198,15 +199,18 @@ void client_writeable_range_t::encode(bufferlist &bl) const
 void client_writeable_range_t::decode(bufferlist::iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-  ::decode(range, bl);
+  ::decode(range.first, bl);
+  ::decode(range.last, bl);
   ::decode(follows, bl);
   DECODE_FINISH(bl);
 }
 
 void client_writeable_range_t::dump(Formatter *f) const
 {
+  f->open_object_section("byte range");
   f->dump_unsigned("first", range.first);
   f->dump_unsigned("last", range.last);
+  f->close_section();
   f->dump_unsigned("follows", follows);
 }
 
@@ -221,6 +225,5 @@ void client_writeable_range_t::generate_test_instances(list<client_writeable_ran
 
 ostream& operator<<(ostream& out, const client_writeable_range_t& r)
 {
-  return out << r.range << "@" << r.follows;
+  return out << r.range.first << '-' << r.range.last << "@" << r.follows;
 }
-
