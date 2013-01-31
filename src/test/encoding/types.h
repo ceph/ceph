@@ -109,6 +109,9 @@ TYPE(string_snap_t)
 TYPE(MDSCacheObjectInfo)
 TYPE(mds_table_pending_t)
 
+#include "mds/MDSMap.h"
+TYPE_FEATUREFUL(MDSMap)
+
 #ifdef WITH_RADOSGW
 
 #include "rgw/rgw_rados.h"
