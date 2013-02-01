@@ -226,11 +226,11 @@ public:
   public:
     dirlump() : state(0), nfull(0), nremote(0), nnull(0), dn_decoded(true) { }
     
-    bool is_complete() { return state & STATE_COMPLETE; }
+    bool is_complete() const { return state & STATE_COMPLETE; }
     void mark_complete() { state |= STATE_COMPLETE; }
-    bool is_dirty() { return state & STATE_DIRTY; }
+    bool is_dirty() const { return state & STATE_DIRTY; }
     void mark_dirty() { state |= STATE_DIRTY; }
-    bool is_new() { return state & STATE_NEW; }
+    bool is_new() const { return state & STATE_NEW; }
     void mark_new() { state |= STATE_NEW; }
     bool is_importing() { return state & STATE_IMPORTING; }
     void mark_importing() { state |= STATE_IMPORTING; }
@@ -253,8 +253,26 @@ public:
 	p->print(out);
     }
 
+    string state_string() const {
+      string state_string;
+      bool marked_already = false;
+      if (is_complete()) {
+	state_string.append("complete");
+	marked_already = true;
+      }
+      if (is_dirty()) {
+	state_string.append(marked_already ? "+dirty" : "dirty");
+	marked_already = true;
+      }
+      if (is_new()) {
+	state_string.append(marked_already ? "+new" : "new");
+      }
+      return state_string;
+    }
+
     // if this changes, update the versioning in encode for it!
     void _encode_bits() const {
+      if (!dn_decoded) return;
       ::encode(dfull, dnbl);
       ::encode(dremote, dnbl);
       ::encode(dnull, dnbl);
@@ -268,28 +286,10 @@ public:
       dn_decoded = true;
     }
 
-    void encode(bufferlist& bl) const {
-      ENCODE_START(2, 2, bl);
-      ::encode(fnode, bl);
-      ::encode(state, bl);
-      ::encode(nfull, bl);
-      ::encode(nremote, bl);
-      ::encode(nnull, bl);
-      _encode_bits();
-      ::encode(dnbl, bl);
-      ENCODE_FINISH(bl);
-    }
-    void decode(bufferlist::iterator &bl) {
-      DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl)
-      ::decode(fnode, bl);
-      ::decode(state, bl);
-      ::decode(nfull, bl);
-      ::decode(nremote, bl);
-      ::decode(nnull, bl);
-      ::decode(dnbl, bl);
-      dn_decoded = false;      // don't decode bits unless we need them.
-      DECODE_FINISH(bl);
-    }
+    void encode(bufferlist& bl) const;
+    void decode(bufferlist::iterator &bl);
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<dirlump*>& ls);
   };
   WRITE_CLASS_ENCODER(dirlump)
 

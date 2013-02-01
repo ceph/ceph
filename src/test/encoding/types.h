@@ -137,7 +137,7 @@ TYPE(EImportStart)
 TYPE(EMetaBlob::fullbit)
 TYPE(EMetaBlob::remotebit)
 TYPE(EMetaBlob::nullbit)
-
+TYPE(EMetaBlob::dirlump)
 
 #ifdef WITH_RADOSGW
 

@@ -644,8 +644,81 @@ void EMetaBlob::nullbit::generate_test_instances(list<nullbit*>& ls)
   ls.push_back(sample2);
 }
 
+// EMetaBlob::dirlump
+
+void EMetaBlob::dirlump::encode(bufferlist& bl) const
+{
+  ENCODE_START(2, 2, bl);
+  ::encode(fnode, bl);
+  ::encode(state, bl);
+  ::encode(nfull, bl);
+  ::encode(nremote, bl);
+  ::encode(nnull, bl);
+  _encode_bits();
+  ::encode(dnbl, bl);
+  ENCODE_FINISH(bl);
+}
+
+void EMetaBlob::dirlump::decode(bufferlist::iterator &bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl)
+  ::decode(fnode, bl);
+  ::decode(state, bl);
+  ::decode(nfull, bl);
+  ::decode(nremote, bl);
+  ::decode(nnull, bl);
+  ::decode(dnbl, bl);
+  dn_decoded = false;      // don't decode bits unless we need them.
+  DECODE_FINISH(bl);
+}
+
+void EMetaBlob::dirlump::dump(Formatter *f) const
+{
+  if (!dn_decoded) {
+    dirlump *me = const_cast<dirlump*>(this);
+    me->_decode_bits();
+  }
+  f->open_object_section("fnode");
+  fnode.dump(f);
+  f->close_section(); // fnode
+  f->dump_string("state", state_string());
+  f->dump_int("nfull", nfull);
+  f->dump_int("nremote", nremote);
+  f->dump_int("nnull", nnull);
+
+  f->open_array_section("full bits");
+  for (list<std::tr1::shared_ptr<fullbit> >::const_iterator
+      iter = dfull.begin(); iter != dfull.end(); ++iter) {
+    f->open_object_section("fullbit");
+    (*iter)->dump(f);
+    f->close_section(); // fullbit
+  }
+  f->close_section(); // full bits
+  f->open_array_section("remote bits");
+  for (list<remotebit>::const_iterator
+      iter = dremote.begin(); iter != dremote.end(); ++iter) {
+    f->open_object_section("remotebit");
+    (*iter).dump(f);
+    f->close_section(); // remotebit
+  }
+  f->close_section(); // remote bits
+  f->open_array_section("null bits");
+  for (list<nullbit>::const_iterator
+      iter = dnull.begin(); iter != dnull.end(); ++iter) {
+    f->open_object_section("null bit");
+    (*iter).dump(f);
+    f->close_section(); // null bit
+  }
+  f->close_section(); // null bits
+}
+
+void EMetaBlob::dirlump::generate_test_instances(list<dirlump*>& ls)
+{
+  ls.push_back(new dirlump());
+}
+
 /**
- *
+ * EMetaBlob proper
  */
 
 void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
