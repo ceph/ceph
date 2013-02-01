@@ -362,7 +362,8 @@ def get_wwn_id_map(remote, devs):
             )
         stdout = r.stdout.getvalue()
     except:
-        return None
+        log.error('Failed to get wwn devices! Using /dev/sd* devices...')
+        return devs
 
     devmap = {}
 
