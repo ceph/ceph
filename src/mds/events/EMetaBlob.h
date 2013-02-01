@@ -78,10 +78,10 @@ public:
     const fullbit& operator=(const fullbit& o);
 
     fullbit(const string& d, snapid_t df, snapid_t dl, 
-	    version_t v, inode_t& i, fragtree_t &dft, 
-	    map<string,bufferptr> &xa, const string& sym,
-	    bufferlist &sbl, bool dr, file_layout_policy_t *defl = NULL,
-	    old_inodes_t *oi = NULL) :
+	    version_t v, const inode_t& i, const fragtree_t &dft, 
+	    const map<string,bufferptr> &xa, const string& sym,
+	    const bufferlist &sbl, bool dr, const file_layout_policy_t *defl = NULL,
+	    const old_inodes_t *oi = NULL) :
       //dn(d), dnfirst(df), dnlast(dl), dnv(v), 
       //inode(i), dirfragtree(dft), xattrs(xa), symlink(sym), snapbl(sbl), dirty(dr) 
       dir_layout(NULL), _enc(1024)
@@ -114,48 +114,13 @@ public:
       delete dir_layout;
     }
 
-    void encode(bufferlist& bl) const {
-      assert(_enc.length());
-      ENCODE_START(4, 4, bl);
-      bl.append(_enc); 
-      ENCODE_FINISH(bl);
-    }
-    void decode(bufferlist::iterator &bl) {
-      DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
-      ::decode(dn, bl);
-      ::decode(dnfirst, bl);
-      ::decode(dnlast, bl);
-      ::decode(dnv, bl);
-      ::decode(inode, bl);
-      ::decode(xattrs, bl);
-      if (inode.is_symlink())
-	::decode(symlink, bl);
-      if (inode.is_dir()) {
-	::decode(dirfragtree, bl);
-	::decode(snapbl, bl);
-	if (struct_v >= 2) {
-	  bool dir_layout_exists;
-	  ::decode(dir_layout_exists, bl);
-	  if (dir_layout_exists) {
-	    dir_layout = new file_layout_policy_t;
-	    ::decode(*dir_layout, bl);
-	  }
-	}
-      }
-      ::decode(dirty, bl);
-      if (struct_v >= 3) {
-	bool old_inodes_present;
-	::decode(old_inodes_present, bl);
-	if (old_inodes_present) {
-	  ::decode(old_inodes, bl);
-	}
-      }
-      DECODE_FINISH(bl);
-    }
-
+    void encode(bufferlist& bl) const;
+    void decode(bufferlist::iterator &bl);
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<EMetaBlob::fullbit*>& ls);
     void update_inode(MDS *mds, CInode *in);
 
-    void print(ostream& out) {
+    void print(ostream& out) const {
       out << " fullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " inode " << inode.ino
 	  << " dirty=" << dirty << std::endl;
