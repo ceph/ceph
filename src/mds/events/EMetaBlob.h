@@ -152,30 +152,18 @@ public:
       ::encode(dr, _enc);
     }
     remotebit(bufferlist::iterator &p) { decode(p); }
-    remotebit() {}
+    remotebit(): dnfirst(0), dnlast(0), dnv(0), ino(0),
+	d_type('\0'), dirty(false) {}
 
-    void encode(bufferlist& bl) const {
-      assert(_enc.length());
-      ENCODE_START(2, 2, bl);
-      bl.append(_enc);
-      ENCODE_FINISH(bl);
-    }
-    void decode(bufferlist::iterator &bl) {
-      DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-      ::decode(dn, bl);
-      ::decode(dnfirst, bl);
-      ::decode(dnlast, bl);
-      ::decode(dnv, bl);
-      ::decode(ino, bl);
-      ::decode(d_type, bl);
-      ::decode(dirty, bl);
-      DECODE_FINISH(bl);
-    }
-    void print(ostream& out) {
+    void encode(bufferlist& bl) const;
+    void decode(bufferlist::iterator &bl);
+    void print(ostream& out) const {
       out << " remotebit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " ino " << ino
 	  << " dirty=" << dirty << std::endl;
     }
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<remotebit*>& ls);
   };
   WRITE_CLASS_ENCODER(remotebit)
 

@@ -516,6 +516,74 @@ void EMetaBlob::fullbit::update_inode(MDS *mds, CInode *in)
   in->old_inodes = old_inodes;
 }
 
+void EMetaBlob::remotebit::encode(bufferlist& bl) const
+{
+  ENCODE_START(2, 2, bl);
+  if (!_enc.length()) {
+    remotebit copy(dn, dnfirst, dnlast, dnv, ino, d_type, dirty);
+    bl.append(copy._enc);
+  } else {
+    bl.append(_enc);
+  }
+  ENCODE_FINISH(bl);
+}
+
+void EMetaBlob::remotebit::decode(bufferlist::iterator &bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  ::decode(dn, bl);
+  ::decode(dnfirst, bl);
+  ::decode(dnlast, bl);
+  ::decode(dnv, bl);
+  ::decode(ino, bl);
+  ::decode(d_type, bl);
+  ::decode(dirty, bl);
+  DECODE_FINISH(bl);
+}
+
+void EMetaBlob::remotebit::dump(Formatter *f) const
+{
+  if (_enc.length() && !dn.length()) {
+    /* if our bufferlist has data but our name is empty, we
+     * haven't initialized ourselves; do so in order to print members!
+     * We use const_cast here because the whole point is we aren't
+     * fully set up and this isn't changing who we "are", just our
+     * representation.
+     */
+    EMetaBlob::remotebit *me = const_cast<EMetaBlob::remotebit*>(this);
+    bufferlist encoded;
+    encode(encoded);
+    bufferlist::iterator p = encoded.begin();
+    me->decode(p);
+  }
+  f->dump_string("dentry", dn);
+  f->dump_int("snapid.first", dnfirst);
+  f->dump_int("snapid.last", dnlast);
+  f->dump_int("dentry version", dnv);
+  f->dump_int("inodeno", ino);
+  uint32_t type = DTTOIF(d_type) & S_IFMT; // convert to type entries
+  string type_string;
+  switch(type) {
+  case S_IFREG:
+    type_string = "file"; break;
+  case S_IFLNK:
+    type_string = "symlink"; break;
+  case S_IFDIR:
+    type_string = "directory"; break;
+  default:
+    assert (0 == "unknown d_type!");
+  }
+  f->dump_string("d_type", type_string);
+  f->dump_string("dirty", dirty ? "true" : "false");
+}
+
+void EMetaBlob::remotebit::
+generate_test_instances(list<EMetaBlob::remotebit*>& ls)
+{
+  remotebit *remote = new remotebit("/test/dn", 0, 10, 15, 1, IFTODT(S_IFREG), false);
+  ls.push_back(remote);
+}
+
 void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 {
   dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps by " << client_name << dendl;
