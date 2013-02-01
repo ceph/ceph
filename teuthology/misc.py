@@ -396,7 +396,7 @@ def get_scratch_devices(remote):
         devs = file_data.split()
     except:
         r = remote.run(
-                args=['ls', run.Raw('/dev/[sv]d*')],
+                args=['ls', run.Raw('/dev/[sv]d?')],
                 stdout=StringIO()
                 )
         devs = r.stdout.getvalue().split('\n')
