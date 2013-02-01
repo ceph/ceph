@@ -222,7 +222,7 @@ def reset_syslog_dir(ctx, log):
         proc.exitstatus.get()
 
 def remove_testing_tree(ctx, log):
-    from teuthology.misc import get_testdir
+    from teuthology.misc import get_testdir_base
     nodes = {}
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
