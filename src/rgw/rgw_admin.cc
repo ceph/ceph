@@ -1082,7 +1082,7 @@ int main(int argc, char **argv)
 
       info.subusers[subuser] = u;
     }
-    if ((err = rgw_store_user_info(store, info, false)) < 0) {
+    if ((err = rgw_store_user_info(store, info, &old_info, false)) < 0) {
       cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
       break;
     }
@@ -1108,7 +1108,7 @@ int main(int argc, char **argv)
         keys_map->erase(kiter);
       }
     }
-    if ((err = rgw_store_user_info(store, info, false)) < 0) {
+    if ((err = rgw_store_user_info(store, info, &old_info, false)) < 0) {
       cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
       break;
     }
@@ -1134,7 +1134,7 @@ int main(int argc, char **argv)
       } else {
         rgw_remove_key_index(store, kiter->second);
         keys_map->erase(kiter);
-        if ((err = rgw_store_user_info(store, info, false)) < 0) {
+        if ((err = rgw_store_user_info(store, info, &old_info, false)) < 0) {
           cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
           break;
         }
@@ -1529,7 +1529,7 @@ next:
 
     int ret;
     info.suspended = disable;
-    ret = rgw_store_user_info(store, info, false);
+    ret = rgw_store_user_info(store, info, &old_info, false);
     if (ret < 0) {
       cerr << "ERROR: failed to store user info user=" << user_id << " ret=" << ret << std::endl;
       return 1;

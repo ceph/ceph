@@ -40,7 +40,7 @@ extern bool rgw_user_is_authenticated(RGWUserInfo& info);
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
  */
-extern int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, bool exclusive);
+extern int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_info, bool exclusive);
 /**
  * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)

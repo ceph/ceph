@@ -34,7 +34,7 @@ bool rgw_user_is_authenticated(RGWUserInfo& info)
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
  */
-int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, bool exclusive)
+int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_info, bool exclusive)
 {
   bufferlist bl;
   info.encode(bl);
@@ -44,6 +44,8 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, bool exclusive)
 
   map<string, RGWAccessKey>::iterator iter;
   for (iter = info.swift_keys.begin(); iter != info.swift_keys.end(); ++iter) {
+    if (old_info && old_info->swift_keys.count(iter->first) != 0)
+      continue;
     RGWAccessKey& k = iter->second;
     /* check if swift mapping exists */
     RGWUserInfo inf;
@@ -60,6 +62,8 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, bool exclusive)
     map<string, RGWAccessKey>::iterator iter = info.access_keys.begin();
     for (; iter != info.access_keys.end(); ++iter) {
       RGWAccessKey& k = iter->second;
+      if (old_info && old_info->access_keys.count(iter->first) != 0)
+        continue;
       int r = rgw_get_user_info_by_access_key(store, k.id, inf);
       if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
         ldout(store->ctx(), 0) << "WARNING: can't store user info, access key already mapped to another user" << dendl;
@@ -68,27 +72,37 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, bool exclusive)
     }
   }
 
-  bufferlist uid_bl;
   RGWUID ui;
   ui.user_id = info.user_id;
-  ::encode(ui, uid_bl);
-  ::encode(info, uid_bl);
 
-  ret = rgw_put_system_obj(store, store->params.user_uid_pool, info.user_id, uid_bl.c_str(), uid_bl.length(), exclusive);
+  bufferlist link_bl;
+  ::encode(ui, link_bl);
+
+  bufferlist data_bl;
+  ::encode(ui, data_bl);
+  ::encode(info, data_bl);
+
+  ret = rgw_put_system_obj(store, store->params.user_uid_pool, info.user_id, data_bl.c_str(), data_bl.length(), exclusive);
   if (ret < 0)
     return ret;
 
   if (info.user_email.size()) {
-    ret = rgw_put_system_obj(store, store->params.user_email_pool, info.user_email, uid_bl.c_str(), uid_bl.length(), exclusive);
-    if (ret < 0)
-      return ret;
+    if (!old_info ||
+        old_info->user_email.compare(info.user_email) != 0) { /* only if new index changed */
+      ret = rgw_put_system_obj(store, store->params.user_email_pool, info.user_email, link_bl.c_str(), link_bl.length(), exclusive);
+      if (ret < 0)
+        return ret;
+    }
   }
 
   if (info.access_keys.size()) {
     map<string, RGWAccessKey>::iterator iter = info.access_keys.begin();
     for (; iter != info.access_keys.end(); ++iter) {
       RGWAccessKey& k = iter->second;
-      ret = rgw_put_system_obj(store, store->params.user_keys_pool, k.id, uid_bl.c_str(), uid_bl.length(), exclusive);
+      if (old_info && old_info->access_keys.count(iter->first) != 0)
+	continue;
+
+      ret = rgw_put_system_obj(store, store->params.user_keys_pool, k.id, link_bl.c_str(), link_bl.length(), exclusive);
       if (ret < 0)
         return ret;
     }
@@ -97,7 +111,10 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, bool exclusive)
   map<string, RGWAccessKey>::iterator siter;
   for (siter = info.swift_keys.begin(); siter != info.swift_keys.end(); ++siter) {
     RGWAccessKey& k = siter->second;
-    ret = rgw_put_system_obj(store, store->params.user_swift_pool, k.id, uid_bl.c_str(), uid_bl.length(), exclusive);
+    if (old_info && old_info->swift_keys.count(siter->first) != 0)
+      continue;
+
+    ret = rgw_put_system_obj(store, store->params.user_swift_pool, k.id, link_bl.c_str(), link_bl.length(), exclusive);
     if (ret < 0)
       return ret;
   }
@@ -117,8 +134,7 @@ int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucke
   bufferlist::iterator iter = bl.begin();
   try {
     ::decode(uid, iter);
-    if (!iter.end())
-      info.decode(iter);
+    return rgw_get_user_info_by_uid(store, uid.user_id, info);
   } catch (buffer::error& err) {
     ldout(store->ctx(), 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
     return -EIO;
@@ -133,7 +149,29 @@ int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucke
  */
 int rgw_get_user_info_by_uid(RGWRados *store, string& uid, RGWUserInfo& info)
 {
-  return rgw_get_user_info_from_index(store, uid, store->params.user_uid_pool, info);
+  bufferlist bl;
+  RGWUID user_id;
+
+  int ret = rgw_get_obj(store, NULL, store->params.user_uid_pool, uid, bl);
+  if (ret < 0)
+    return ret;
+
+  bufferlist::iterator iter = bl.begin();
+  try {
+    ::decode(user_id, iter);
+    if (user_id.user_id.compare(uid) != 0) {
+      lderr(store->ctx())  << "ERROR: rgw_get_user_info_by_uid(): user id mismatch: " << user_id.user_id << " != " << uid << dendl;
+      return -EIO;
+    }
+    if (!iter.end()) {
+      ::decode(info, iter);
+    }
+  } catch (buffer::error& err) {
+    ldout(store->ctx(), 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
+    return -EIO;
+  }
+
+  return 0;
 }
 
 /**
