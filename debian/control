@@ -84,6 +84,29 @@ Description: debugging symbols for ceph-fuse
  .
  This package contains the debugging symbols for ceph-fuse.
 
+Package: rbd-fuse
+Architecture: linux-any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Recommends: fuse-utils
+Description: FUSE-based rbd client for the Ceph distributed file system
+ Ceph is a distributed network file system designed to provide
+ excellent performance, reliability, and scalability.  This is a
+ FUSE-based client that allows one to map Ceph rbd images as files.
+ .
+ FUSE base client that allows one to map Ceph rbd images as files.
+
+Package: rbd-fuse-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: rbd-fuse (= ${binary:Version}), ${misc:Depends}
+Description: debugging symbols for rbd-fuse
+ Ceph is a distributed network file system designed to provide
+ excellent performance, reliability, and scalability.  This is a
+ FUSE-based client that allows one to map Ceph rbd images as files.
+ .
+ This package contains the debugging symbols for rbd-fuse.
+
 Package: ceph-common
 Architecture: linux-any
 Depends: ${shlibs:Depends}, ${misc:Depends}, librbd1 (= ${binary:Version})
