@@ -136,6 +136,8 @@ TYPE(EImportStart)
 #include "mds/events/EMetaBlob.h"
 TYPE(EMetaBlob::fullbit)
 TYPE(EMetaBlob::remotebit)
+TYPE(EMetaBlob::nullbit)
+
 
 #ifdef WITH_RADOSGW
 
