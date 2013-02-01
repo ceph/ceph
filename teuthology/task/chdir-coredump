@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-testdir=$(realpath $(dirname $0))
+testdir=$(readlink -e $(dirname $0))
 # valgrind only dumps to cwd, so cwd there...
 cd ${testdir}/archive/coredump
 
