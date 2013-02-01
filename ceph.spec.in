@@ -91,7 +91,7 @@ Requires:	fuse-libs
 Requires:	libstdc++
 Requires:	libuuid
 BuildRequires:	fuse-devel
-%description fuse
+%description -n rbd-fuse
 FUSE based client to map Ceph rbd images to files
 
 %package devel
@@ -405,7 +405,7 @@ fi
 /sbin/mount.fuse.ceph
 
 #################################################################################
-%files rbd-fuse
+%files -n rbd-fuse
 %defattr(-,root,root,-)
 %{_bindir}/rbd-fuse
 %{_mandir}/man8/rbd-fuse.8*
