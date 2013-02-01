@@ -188,23 +188,12 @@ public:
       ::encode(dr, _enc);
     }
     nullbit(bufferlist::iterator &p) { decode(p); }
-    nullbit() {}
+    nullbit(): dnfirst(0), dnlast(0), dnv(0), dirty(false) {}
 
-    void encode(bufferlist& bl) const {
-      assert(_enc.length());
-      ENCODE_START(2, 2, bl);
-      bl.append(_enc);
-      ENCODE_FINISH(bl);
-    }
-    void decode(bufferlist::iterator &bl) {
-      DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-      ::decode(dn, bl);
-      ::decode(dnfirst, bl);
-      ::decode(dnlast, bl);
-      ::decode(dnv, bl);
-      ::decode(dirty, bl);
-      DECODE_FINISH(bl);
-    }
+    void encode(bufferlist& bl) const;
+    void decode(bufferlist::iterator &bl);
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<nullbit*>& ls);
     void print(ostream& out) {
       out << " nullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " dirty=" << dirty << std::endl;
