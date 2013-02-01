@@ -228,7 +228,7 @@ def remove_testing_tree(ctx, log):
         proc = remote.run(
             args=[
                 'sudo', 'rm', '-rf',
-                get_testdir(ctx),
+                get_testdir_base(ctx),
                 ],
             wait=False,
             )
@@ -373,6 +373,7 @@ def nuke_helper(ctx, log):
             # not powered on or can't get IPMI status.  Try to power on
             console.power_on()
             # try to get status again, waiting for login prompt this time
+            log.info('checking console status of %s' % cname)
             if not console.check_status(100):
                 log.error('Failed to get console status for %s, disabling console...' % cname)
             log.info('console ready on %s' % cname)
