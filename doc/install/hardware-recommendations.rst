@@ -112,9 +112,9 @@ Solid State Drives
 
 One opportunity for performance improvement is to use solid-state drives (SSDs)
 to reduce random access time and read latency while accelerating throughput.
-Solid state drives cost more than 10x as much per gigabyte when compared to a
-hard disk drive, but SSDs often exhibit access times that are at least 100x
-faster than a hard disk drive.
+SSDs often cost more than 10x as much per gigabyte when compared to a hard disk
+drive, but SSDs often exhibit access times that are at least 100x faster than a
+hard disk drive.
 
 SSDs do not have moving mechanical parts so they aren't necessarily subject to
 the same types of limitations as hard disk drives. SSDs do have significant
@@ -138,29 +138,31 @@ performance considerations for journals and SSDs:
   so you should ensure that the SSD you choose to deploy will perform equal to
   or better than a hard disk drive when writing data. Inexpensive SSDs may 
   introduce write latency even as they accelerate access time, because 
-  sometimes high performance hard drives can write as fast or faster than SSDs!
+  sometimes high performance hard drives can write as fast or faster than 
+  some of the more economical SSDs available on the market!
   
-- **Sequential Writes:** When you store multiple journals on an OSD you must 
+- **Sequential Writes:** When you store multiple journals on an SSD you must 
   consider the sequential write limitations of the SSD too, since they may be 
-  handling the requests of multiple OSD journals simultaneously.
+  handling requests to write to multiple OSD journals simultaneously.
 
 - **Partition Alignment:** A common problem with SSD performance is that 
-  people like to partition drives, but they often overlook proper partition 
-  alignment, which can cause SSDs to transfer data much more slowly. Ensure
-  that SSD partitions are properly aligned.
+  people like to partition drives as a best practice, but they often overlook
+  proper partition alignment with SSDs, which can cause SSDs to transfer data 
+  much more slowly. Ensure that SSD partitions are properly aligned.
 
 While SSDs are cost prohibitive for object storage, OSDs may see a significant
-performance improvement by storing an OSD's journal on a solid state drive and
-the OSD's object data on a separate hard disk drive. The ``osd journal``
-configuration setting defaults to ``/var/lib/ceph/osd/$cluster-$id/journal``.
-You can mount this path to an SSD or to an SSD partition so that it is not
-merely a file on the same disk as the object data.
+performance improvement by storing an OSD's journal on an SSD and the OSD's
+object data on a separate hard disk drive. The ``osd journal`` configuration
+setting defaults to ``/var/lib/ceph/osd/$cluster-$id/journal``. You can mount
+this path to an SSD or to an SSD partition so that it is not merely a file on
+the same disk as the object data.
 
-One way Ceph accelerates filesystem performance is to segregate the storage of
-metadata from the storage of the underlying object data. Ceph provides a default
-``metadata`` pool. You will never have to create a pool for metadata, but you
-can create a CRUSH map hierarchy for your metadata that points only to a host's
-SSD storage media. See `Mapping Pools to Different Types of OSDs`_ for details.
+One way Ceph accelerates CephFS filesystem performance is to segregate the
+storage of CephFS metadata from the storage of the CephFS file contents. Ceph
+provides a default ``metadata`` pool for CephFS metadata. You will never have to
+create a pool for CephFS metadata, but you can create a CRUSH map hierarchy for
+your CephFS metadata pool that points only to a host's SSD storage media. See
+`Mapping Pools to Different Types of OSDs`_ for details.
 
 
 Controllers
@@ -190,7 +192,6 @@ When you run multiple OSDs per host, you also need to ensure that the kernel
 is up to date. See `OS Recommendations`_ for notes on ``glibc`` and
 ``syncfs(2)`` to ensure that your hardware performs as expected when running
 multiple OSDs per host.
-
 
 
 Networks
