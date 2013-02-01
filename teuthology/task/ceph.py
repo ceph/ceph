@@ -679,6 +679,9 @@ def cluster(ctx, config):
         ctx.disk_config = argparse.Namespace()
         ctx.disk_config.remote_to_roles_to_dev = remote_to_roles_to_devs
         ctx.disk_config.remote_to_roles_to_journals = remote_to_roles_to_journals
+        ctx.disk_config.remote_to_roles_to_dev_mount_options = {}
+        ctx.disk_config.remote_to_roles_to_dev_fstyp = {}
+
 
         for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
             log.info(str(roles_to_journals))
