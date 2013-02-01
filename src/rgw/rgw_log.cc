@@ -340,11 +340,11 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
     string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
 				        s->bucket.bucket_id, entry.bucket);
 
-    rgw_obj obj(store->params.log_pool, oid);
+    rgw_obj obj(store->zone.log_pool, oid);
 
     ret = store->append_async(obj, bl.length(), bl);
     if (ret == -ENOENT) {
-      ret = store->create_pool(store->params.log_pool);
+      ret = store->create_pool(store->zone.log_pool);
       if (ret < 0)
         goto done;
       // retry
@@ -364,7 +364,7 @@ done:
 
 int rgw_log_intent(RGWRados *store, rgw_obj& obj, RGWIntentEvent intent, const utime_t& timestamp, bool utc)
 {
-  rgw_bucket intent_log_bucket(store->params.intent_log_pool);
+  rgw_bucket intent_log_bucket(store->zone.intent_log_pool);
 
   rgw_intent_log_entry entry;
   entry.obj = obj;

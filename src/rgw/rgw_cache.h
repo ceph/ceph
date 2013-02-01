@@ -211,7 +211,7 @@ void RGWCache<T>::normalize_bucket_and_obj(rgw_bucket& src_bucket, string& src_o
     dst_bucket = src_bucket;
     dst_obj = src_obj;
   } else {
-    dst_bucket = T::params.domain_root;
+    dst_bucket = T::zone.domain_root;
     dst_obj = src_bucket.name;
   }
 }
