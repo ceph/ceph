@@ -83,6 +83,17 @@ BuildRequires:	fuse-devel
 %description fuse
 FUSE based client for Ceph distributed network file system
 
+%package -n rbd-fuse
+Summary:	Ceph fuse-based client
+Group:		System Environment/Base
+Requires:	%{name}
+Requires:	fuse-libs
+Requires:	libstdc++
+Requires:	libuuid
+BuildRequires:	fuse-devel
+%description fuse
+FUSE based client to map Ceph rbd images to files
+
 %package devel
 Summary:	Ceph headers
 Group:		Development/Libraries
@@ -392,6 +403,12 @@ fi
 %{_bindir}/ceph-fuse
 %{_mandir}/man8/ceph-fuse.8*
 /sbin/mount.fuse.ceph
+
+#################################################################################
+%files rbd-fuse
+%defattr(-,root,root,-)
+%{_bindir}/rbd-fuse
+%{_mandir}/man8/rbd-fuse.8*
 
 #################################################################################
 %files devel
