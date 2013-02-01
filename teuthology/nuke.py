@@ -362,21 +362,22 @@ def nuke_helper(ctx, log):
     host = target.split('@')[-1]
     shortname = host.split('.')[0]
     log.debug('shortname: %s' % shortname)
-    console = remote.RemoteConsole(name=host,
-                                   ipmiuser=ctx.teuthology_config['ipmi_user'],
-                                   ipmipass=ctx.teuthology_config['ipmi_password'],
-                                   ipmidomain=ctx.teuthology_config['ipmi_domain'])
-    cname = '{host}.{domain}'.format(host=shortname, domain=ctx.teuthology_config['ipmi_domain'])
-    log.info('checking console status of %s' % cname)
-    if not console.check_status():
-        # not powered on or can't get IPMI status.  Try to power on
-        console.power_on()
-        # try to get status again, waiting for login prompt this time
-        if not console.check_status(100):
-            log.error('Failed to get console status for %s, disabling console...' % cname)
-        log.info('console ready on %s' % cname)
-    else:
-        log.info('console ready on %s' % cname)
+    if 'ipmi_user' in ctx.teuthology_config:
+        console = remote.RemoteConsole(name=host,
+                                       ipmiuser=ctx.teuthology_config['ipmi_user'],
+                                       ipmipass=ctx.teuthology_config['ipmi_password'],
+                                       ipmidomain=ctx.teuthology_config['ipmi_domain'])
+        cname = '{host}.{domain}'.format(host=shortname, domain=ctx.teuthology_config['ipmi_domain'])
+        log.info('checking console status of %s' % cname)
+        if not console.check_status():
+            # not powered on or can't get IPMI status.  Try to power on
+            console.power_on()
+            # try to get status again, waiting for login prompt this time
+            if not console.check_status(100):
+                log.error('Failed to get console status for %s, disabling console...' % cname)
+            log.info('console ready on %s' % cname)
+        else:
+            log.info('console ready on %s' % cname)
 
     from teuthology.task.internal import check_lock, connect
     if ctx.check_locks:
