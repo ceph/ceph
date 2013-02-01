@@ -378,6 +378,116 @@ void EMetaBlob::update_segment(LogSegment *ls)
   //if (!client_reqs.empty())
     //    ls->last_client_tid[client_reqs.rbegin()->client] = client_reqs.rbegin()->tid);
 }
+void EMetaBlob::fullbit::encode(bufferlist& bl) const {
+  ENCODE_START(4, 4, bl);
+  if (!_enc.length()) {
+    fullbit copy(dn, dnfirst, dnlast, dnv, inode, dirfragtree, xattrs, symlink,
+		 snapbl, dirty, dir_layout, &old_inodes);
+    bl.append(copy._enc);
+  } else {
+    bl.append(_enc);
+  }
+  ENCODE_FINISH(bl);
+}
+
+void EMetaBlob::fullbit::decode(bufferlist::iterator &bl) {
+  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
+  ::decode(dn, bl);
+  ::decode(dnfirst, bl);
+  ::decode(dnlast, bl);
+  ::decode(dnv, bl);
+  ::decode(inode, bl);
+  ::decode(xattrs, bl);
+  if (inode.is_symlink())
+    ::decode(symlink, bl);
+  if (inode.is_dir()) {
+    ::decode(dirfragtree, bl);
+    ::decode(snapbl, bl);
+    if (struct_v >= 2) {
+      bool dir_layout_exists;
+      ::decode(dir_layout_exists, bl);
+      if (dir_layout_exists) {
+	dir_layout = new file_layout_policy_t;
+	::decode(*dir_layout, bl);
+      }
+    }
+  }
+  ::decode(dirty, bl);
+  if (struct_v >= 3) {
+    bool old_inodes_present;
+    ::decode(old_inodes_present, bl);
+    if (old_inodes_present) {
+      ::decode(old_inodes, bl);
+    }
+  }
+  DECODE_FINISH(bl);
+}
+
+void EMetaBlob::fullbit::dump(Formatter *f) const
+{
+  if (_enc.length() && !dn.length()) {
+    /* if our bufferlist has data but our name is empty, we
+     * haven't initialized ourselves; do so in order to print members!
+     * We use const_cast here because the whole point is we aren't
+     * fully set up and this isn't changing who we "are", just our
+     * representation.
+     */
+    EMetaBlob::fullbit *me = const_cast<EMetaBlob::fullbit*>(this);
+    bufferlist encoded;
+    encode(encoded);
+    bufferlist::iterator p = encoded.begin();
+    me->decode(p);
+  }
+  f->dump_string("dentry", dn);
+  f->dump_stream("snapid.first") << dnfirst;
+  f->dump_stream("snapid.last") << dnlast;
+  f->dump_int("dentry version", dnv);
+  f->open_object_section("inode");
+  inode.dump(f);
+  f->close_section(); // inode
+  f->open_array_section("xattrs");
+  for (map<string, bufferptr>::const_iterator iter = xattrs.begin();
+      iter != xattrs.end(); ++iter) {
+    f->dump_string(iter->first.c_str(), iter->second.c_str());
+  }
+  f->close_section(); // xattrs
+  if (inode.is_symlink()) {
+    f->dump_string("symlink", symlink);
+  }
+  if (inode.is_dir()) {
+    f->dump_stream("frag tree") << dirfragtree;
+    f->dump_string("has_snapbl", snapbl.length() ? "true" : "false");
+    if (dir_layout) {
+      f->open_object_section("file layout policy");
+      dir_layout->dump(f);
+      f->close_section(); // file layout policy
+    }
+  }
+  f->dump_string("dirty", dirty ? "true" : "false");
+  if (old_inodes.size()) {
+    f->open_array_section("old inodes");
+    for (old_inodes_t::const_iterator iter = old_inodes.begin();
+	iter != old_inodes.end(); ++iter) {
+      f->open_object_section("inode");
+      f->dump_int("snapid", iter->first);
+      iter->second.dump(f);
+      f->close_section(); // inode
+    }
+    f->close_section(); // old inodes
+  }
+}
+
+void EMetaBlob::fullbit::generate_test_instances(list<EMetaBlob::fullbit*>& ls)
+{
+  inode_t inode;
+  fragtree_t fragtree;
+  map<string,bufferptr> empty_xattrs;
+  bufferlist empty_snapbl;
+  fullbit *sample = new fullbit("/testdn", 0, 0, 0,
+                                inode, fragtree, empty_xattrs, "", empty_snapbl,
+                                false, NULL, NULL);
+  ls.push_back(sample);
+}
 
 void EMetaBlob::fullbit::update_inode(MDS *mds, CInode *in)
 {
