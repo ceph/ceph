@@ -1,0 +1,8 @@
+tasks:
+- ceph:
+- ceph-fuse:
+- workunit:
+    clients:
+      all:
+        - suites/iogen.sh
+
