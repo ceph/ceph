@@ -378,6 +378,9 @@ void EMetaBlob::update_segment(LogSegment *ls)
   //if (!client_reqs.empty())
     //    ls->last_client_tid[client_reqs.rbegin()->client] = client_reqs.rbegin()->tid);
 }
+
+// EMetaBlob::fullbit
+
 void EMetaBlob::fullbit::encode(bufferlist& bl) const {
   ENCODE_START(4, 4, bl);
   if (!_enc.length()) {
@@ -516,6 +519,8 @@ void EMetaBlob::fullbit::update_inode(MDS *mds, CInode *in)
   in->old_inodes = old_inodes;
 }
 
+// EMetaBlob::remotebit
+
 void EMetaBlob::remotebit::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl);
@@ -583,6 +588,65 @@ generate_test_instances(list<EMetaBlob::remotebit*>& ls)
   remotebit *remote = new remotebit("/test/dn", 0, 10, 15, 1, IFTODT(S_IFREG), false);
   ls.push_back(remote);
 }
+
+// EMetaBlob::nullbit
+
+void EMetaBlob::nullbit::encode(bufferlist& bl) const
+{
+  ENCODE_START(2, 2, bl);
+  if (!_enc.length()) {
+    nullbit copy(dn, dnfirst, dnlast, dnv, dirty);
+    bl.append(copy._enc);
+  } else {
+    bl.append(_enc);
+  }
+  ENCODE_FINISH(bl);
+}
+
+void EMetaBlob::nullbit::decode(bufferlist::iterator &bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  ::decode(dn, bl);
+  ::decode(dnfirst, bl);
+  ::decode(dnlast, bl);
+  ::decode(dnv, bl);
+  ::decode(dirty, bl);
+  DECODE_FINISH(bl);
+}
+
+void EMetaBlob::nullbit::dump(Formatter *f) const
+{
+  if (_enc.length() && !dn.length()) {
+    /* if our bufferlist has data but our name is empty, we
+     * haven't initialized ourselves; do so in order to print members!
+     * We use const_cast here because the whole point is we aren't
+     * fully set up and this isn't changing who we "are", just our
+     * representation.
+     */
+    EMetaBlob::nullbit *me = const_cast<EMetaBlob::nullbit*>(this);
+    bufferlist encoded;
+    encode(encoded);
+    bufferlist::iterator p = encoded.begin();
+    me->decode(p);
+  }
+  f->dump_string("dentry", dn);
+  f->dump_int("snapid.first", dnfirst);
+  f->dump_int("snapid.last", dnlast);
+  f->dump_int("dentry version", dnv);
+  f->dump_string("dirty", dirty ? "true" : "false");
+}
+
+void EMetaBlob::nullbit::generate_test_instances(list<nullbit*>& ls)
+{
+  nullbit *sample = new nullbit("/test/dentry", 0, 10, 15, false);
+  nullbit *sample2 = new nullbit("/test/dirty", 10, 20, 25, true);
+  ls.push_back(sample);
+  ls.push_back(sample2);
+}
+
+/**
+ *
+ */
 
 void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 {
