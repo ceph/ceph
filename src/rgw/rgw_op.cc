@@ -804,7 +804,7 @@ void RGWCreateBucket::execute()
   bufferlist aclbl;
   bool existed;
   int r;
-  rgw_obj obj(store->params.domain_root, s->bucket_name_str);
+  rgw_obj obj(store->zone.domain_root, s->bucket_name_str);
 
   ret = get_params();
   if (ret < 0)

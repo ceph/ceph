@@ -6,6 +6,8 @@
 
 using namespace std;
 
+#include "common/ceph_json.h"
+
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "common/Formatter.h"
@@ -163,6 +165,7 @@ enum {
   OPT_GC_LIST,
   OPT_GC_PROCESS,
   OPT_ZONE_INFO,
+  OPT_ZONE_SET,
   OPT_CAPS_ADD,
   OPT_CAPS_RM,
 };
@@ -291,6 +294,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "zone") == 0) {
     if (strcmp(cmd, "info") == 0)
       return OPT_ZONE_INFO;
+    if (strcmp(cmd, "set") == 0)
+      return OPT_ZONE_SET;
   } else if (strcmp(prev_cmd, "gc") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_GC_LIST;
@@ -640,7 +645,7 @@ static int remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_childr
   obj.bucket = bucket;
   int max = 1000;
 
-  ret = rgw_get_obj(store, NULL, store->params.domain_root, bucket.name, bl, NULL);
+  ret = rgw_get_obj(store, NULL, store->zone.domain_root, bucket.name, bl, NULL);
 
   bufferlist::iterator iter = bl.begin();
   try {
@@ -694,6 +699,65 @@ static bool bucket_object_check_filter(const string& name)
   return rgw_obj::translate_raw_obj_to_obj_in_ns(obj, ns);
 }
 
+static int read_input(const string& infile, bufferlist& bl)
+{
+  int fd = 0;
+  if (infile.size()) {
+    fd = open(infile.c_str(), O_RDONLY);
+    if (fd < 0) {
+      int err = -errno;
+      cerr << "error reading input file " << infile << std::endl;
+      return err;
+    }
+  }
+
+#define READ_CHUNK 8196
+  int r;
+
+  do {
+    char buf[READ_CHUNK];
+
+    r = read(fd, buf, READ_CHUNK);
+    if (r < 0) {
+      int err = -errno;
+      cerr << "error while reading input" << std::endl;
+      return err;
+    }
+    bl.append(buf, r);
+  } while (r > 0);
+
+  if (infile.size()) {
+    close(fd);
+  }
+
+  return 0;
+}
+
+template <class T>
+static int read_decode_json(const string& infile, T& t)
+{
+  bufferlist bl;
+  int ret = read_input(infile, bl);
+  if (ret < 0) {
+    cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
+    return ret;
+  }
+  JSONParser p;
+  ret = p.parse(bl.c_str(), bl.length());
+  if (ret < 0) {
+    cout << "failed to parse JSON" << std::endl;
+    return ret;
+  }
+
+  try {
+    t.decode_json(&p);
+  } catch (JSONDecoder::err& e) {
+    cout << "failed to decode JSON input: " << e.message << std::endl;
+    return -EINVAL;
+  }
+  return 0;
+}
+    
 class StoreDestructor {
   RGWRados *store;
 public:
@@ -747,6 +811,7 @@ int main(int argc, char **argv)
   map<string, bool> categories;
   string caps;
   int check_objects = false;
+  string infile;
 
   std::string val;
   std::ostringstream errs;
@@ -846,6 +911,8 @@ int main(int argc, char **argv)
       // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
       caps = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-i", "--infile", (char*)NULL)) {
+      infile = val;
     } else {
       ++i;
     }
@@ -1801,7 +1868,25 @@ next:
   }
 
   if (opt_cmd == OPT_ZONE_INFO) {
-    store->params.dump(formatter);
+    store->zone.dump(formatter);
+    formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_ZONE_SET) {
+    RGWZoneParams zone;
+    zone.init_default();
+    int ret = read_decode_json(infile, zone);
+    if (ret < 0) {
+      return 1;
+    }
+
+    ret = zone.store_info(g_ceph_context, store);
+    if (ret < 0) {
+      cerr << "ERROR: couldn't store zone info: " << cpp_strerror(-ret) << std::endl;
+      return 1;
+    }
+
+    zone.dump(formatter);
     formatter->flush(cout);
   }
 
