@@ -17,6 +17,12 @@ data cluster (e.g., OpenStack, CloudStack, etc).
 .. _Inktank: http://www.inktank.com
 
 
+.. tip:: Check out the Ceph blog too. Articles like `Ceph Write Throughput 1`_,
+   `Ceph Write Throughput 2`_, `Argonaut v. Bobtail Performance Preview`_, 
+   `Bobtail Performance - I/O Scheduler Comparison`_ and others are an
+   excellent source of information. 
+
+
 CPU
 ===
 
@@ -25,7 +31,7 @@ intensive. So your metadata servers should have significant processing power
 (e.g., quad core or better CPUs). Ceph OSDs run the RADOS service, calculate
 data placement with CRUSH, replicate data, and maintain their own copy of the
 cluster map. Therefore, OSDs should have a reasonable amount of processing power
-(e.g., dual-core processors). Monitors simply maintain a master copy of the
+(e.g., dual core processors). Monitors simply maintain a master copy of the
 cluster map, so they are not CPU intensive. You must also consider whether the
 host machine will run CPU-intensive processes in addition to Ceph daemons. For
 example, if your hosts will run computing VMs (e.g., OpenStack Nova), you will
@@ -39,55 +45,151 @@ RAM
 
 Metadata servers and monitors must be capable of serving their data quickly, so
 they should have plenty of RAM (e.g., 1GB of RAM per daemon instance). OSDs do
-not require as much RAM (e.g., 500MB of RAM per daemon instance). Generally,
-more RAM is better.
+not require as much RAM for regular operations (e.g., 200MB of RAM per daemon
+instance); however, during recovery they need significantly more RAM (e.g.,
+500MB-1GB). Generally, more RAM is better.
 
 
 Data Storage
 ============
 
-Plan your data storage configuration carefully, because there are significant
-opportunities for performance improvement by incurring the added cost of using
-solid state drives (SSDs), and there are significant cost-per-gigabyte
-considerations with hard disk drives. Metadata servers and monitors don't use a
-lot of storage space. A metadata server requires approximately 1MB of storage
-space per daemon instance. A monitor requires approximately 10GB of storage
-space per daemon instance. One opportunity for performance improvement is to use
-solid-state drives to reduce random access time and read latency while
-accelerating throughput. Solid state drives cost more than 10x as much per
-gigabyte when compared to a hard disk, but they often exhibit access times that
-are at least 100x faster than a hard disk drive. Since the storage requirements
-for metadata servers and monitors are so low, solid state drives may provide an
-economical opportunity to improve performance. 
+Plan your data storage configuration carefully. There are significant cost and
+performance tradeoffs to consider when planning for data storage. Simultaneous
+OS operations, and simultaneous request for read and write operations from
+multiple daemons against a single drive can slow performance considerably. There
+are also file system limitations to consider: btrfs is not quite stable enough
+for production, but it has the ability to journal and write data simultaneously,
+whereas XFS and ext4 do not.
+
+.. important:: Since Ceph has to write all data to the journal before it can 
+   send an ACK (for XFS and EXT4 at least), having the journals and OSD 
+   performance in balance is really important!
+
+
+Hard Disk Drives
+----------------
+
+OSDs should have plenty of hard disk drive space for object data. We recommend a
+minimum hard disk drive size of 1 terabyte. Consider the cost-per-gigabyte
+advantage of larger disks. We recommend dividing the price of the hard disk
+drive by the number of gigabytes to arrive at a cost per gigabyte, because
+larger drives may have a significant impact on the cost-per-gigabyte. For
+example, a 1 terabyte hard disk priced at $75.00 has a cost of $0.07 per
+gigabyte (i.e., $75 / 1024 = 0.0732). By contrast, a 3 terabyte hard disk priced
+at $150.00 has a cost of $0.05 per gigabyte (i.e., $150 / 3072 = 0.0488). In the
+foregoing example, using the 1 terabyte disks would generally increase the cost
+per gigabyte by 40%--rendering your cluster substantially less cost efficient. 
+
+.. tip:: Running multiple OSDs on a single disk--irrespective of partitions--is 
+   **NOT** a good idea.
+
+.. tip:: Running an OSD and a monitor or a metadata server on a single 
+   disk--irrespective of partitions--is **NOT** a good idea either.
+
+Storage drives are subject to limitations on seek time, access time, read and
+write times, as well as total throughput. These physical limitations affect
+overall system performance--especially during recovery. We recommend using a
+dedicated drive for the operating system and software, and one drive for each
+OSD daemon you run on the host. Most "slow OSD" issues arise due to running an
+operating system, multiple OSDs, and/or multiple journals on the same drive.
+Since the cost of troubleshooting performance issues on a small cluster likely
+exceeds the cost of the extra disk drives, you can accelerate your cluster
+design planning by avoiding the temptation to overtax the OSD storage drives.
+
+You may run multiple OSDs per hard disk drive, but this will likely lead to
+resource contention and diminish the overall throughput. You may store a journal
+and object data on the same drive, but this may increase the time it takes to
+journal a write and ACK to the client. Ceph must write to the journal before it
+can ACK the write. The btrfs filesystem can write journal data and object data
+simultaneously, whereas XFS and ext4 cannot.
+
+Ceph best practices dictate that you should run operating systems, OSD data and
+OSD journals on separate drives.
+
+
+Solid State Drives
+------------------
+
+One opportunity for performance improvement is to use solid-state drives (SSDs)
+to reduce random access time and read latency while accelerating throughput.
+Solid state drives cost more than 10x as much per gigabyte when compared to a
+hard disk drive, but SSDs often exhibit access times that are at least 100x
+faster than a hard disk drive.
+
+SSDs do not have moving mechanical parts so they aren't necessarily subject to
+the same types of limitations as hard disk drives. SSDs do have significant
+limitations though. When evaluating SSDs, it is important to consider the
+performance of sequential reads and writes. An SSD that has 400MB/s sequential
+write throughput may have much better performance than an SSD with 120MB/s of
+sequential write throughput when storing multiple journals for multiple OSDs.
 
 .. important:: We recommend exploring the use of SSDs to improve performance. 
    However, before making a significant investment in SSDs, we **strongly
    recommend** both reviewing the performance metrics of an SSD and testing the
-   SSD in a test configuration to gauge performance. SSD write latency may 
-   **NOT** improve performance compared to a high performance hard disk. 
-   Inexpensive SSDs may introduce write latency even as they accelerate 
-   access time, because sometimes hard drives will write faster than SSDs!
+   SSD in a test configuration to gauge performance. 
 
-OSDs should have plenty of disk space. We recommend a minimum disk size of 1
-terabyte. We recommend dividing the price of the hard disk drive by the number
-of gigabytes to arrive at a cost per gigabyte, because larger drives may have a
-significant impact on the cost-per-gigabyte. For example, a 1 terabyte hard disk
-priced at $75.00 has a cost  of $0.07 per gigabyte (i.e., $75 / 1024 = 0.0732).
-By contrast, a 3 terabyte hard  disk priced at $150.00 has a cost of $0.05 per
-gigabyte (i.e., $150 / 3072 = 0.0488). In the foregoing example, using the 1
-terabyte disks would generally increase the cost per gigabyte by 40%--rendering
-your cluster substantially less cost efficient. For OSD hosts, we recommend
-using an OS disk for the operating system and software, and one disk for each
-OSD daemon you run on the host. While solid state drives are cost prohibitive
-for object storage, OSDs may see a performance improvement by storing an OSD's
-journal on a solid state drive and the OSD's object data on a hard disk drive.
+Since SSDs have no moving mechanical parts, it makes sense to use them in the
+areas of Ceph that do not use a lot of storage space. Relatively inexpensive
+SSDs may appeal to your sense of economy. Use caution. Acceptable IOPS are not
+enough when selecting an SSD for use with Ceph. There are a few important
+performance considerations for journals and SSDs:
+
+- **Write-intensive semantics:** Journaling involves write-intensive semantics, 
+  so you should ensure that the SSD you choose to deploy will perform equal to
+  or better than a hard disk drive when writing data. Inexpensive SSDs may 
+  introduce write latency even as they accelerate access time, because 
+  sometimes high performance hard drives can write as fast or faster than SSDs!
+  
+- **Sequential Writes:** When you store multiple journals on an OSD you must 
+  consider the sequential write limitations of the SSD too, since they may be 
+  handling the requests of multiple OSD journals simultaneously.
+
+- **Partition Alignment:** A common problem with SSD performance is that 
+  people like to partition drives, but they often overlook proper partition 
+  alignment, which can cause SSDs to transfer data much more slowly. Ensure
+  that SSD partitions are properly aligned.
+
+While SSDs are cost prohibitive for object storage, OSDs may see a significant
+performance improvement by storing an OSD's journal on a solid state drive and
+the OSD's object data on a separate hard disk drive. The ``osd journal``
+configuration setting defaults to ``/var/lib/ceph/osd/$cluster-$id/journal``.
+You can mount this path to an SSD or to an SSD partition so that it is not
+merely a file on the same disk as the object data.
+
+One way Ceph accelerates filesystem performance is to segregate the storage of
+metadata from the storage of the underlying object data. Ceph provides a default
+``metadata`` pool. You will never have to create a pool for metadata, but you
+can create a CRUSH map hierarchy for your metadata that points only to a host's
+SSD storage media. See `Mapping Pools to Different Types of OSDs`_ for details.
+
+
+Controllers
+-----------
+
+Disk controllers also have a significant impact on write throughput. Carefully,
+consider your selection of disk controllers to ensure that they do not create
+a performance bottleneck.
+
+.. tip:: The Ceph blog is often an excellent source of information on Ceph
+   performance issues. See `Ceph Write Throughput 1`_ and `Ceph Write 
+   Throughput 2`_ for additional details.
+
+
+Additional Considerations
+-------------------------
+
 You may run multiple OSDs per host, but you should ensure that the sum of the
 total throughput of your OSD hard disks doesn't exceed the network bandwidth
 required to service a client's need to read or write data. You should also
-consider what percentage of the cluster's data storage is on each host. If the
-percentage is large and the host fails, it can lead to problems such as
-exceeding the ``full ratio``,  which causes Ceph to halt operations as a safety
-precaution that prevents data loss.
+consider what percentage of the overall data the cluster stores on each host. If
+the percentage on a particular host is large and the host fails, it can lead to
+problems such as exceeding the ``full ratio``,  which causes Ceph to halt
+operations as a safety precaution that prevents data loss.
+
+When you run multiple OSDs per host, you also need to ensure that the kernel
+is up to date. See `OS Recommendations`_ for notes on ``glibc`` and
+``syncfs(2)`` to ensure that your hardware performs as expected when running
+multiple OSDs per host.
 
 
 
@@ -221,3 +323,11 @@ configurations for Ceph OSDs, and a lighter configuration for monitors.
 |                +----------------+------------------------------------+
 |                | Mgmt. Network  |  2x 1GB Ethernet NICs              |
 +----------------+----------------+------------------------------------+
+
+
+.. _Ceph Write Throughput 1: http://ceph.com/community/ceph-performance-part-1-disk-controller-write-throughput/
+.. _Ceph Write Throughput 2: http://ceph.com/community/ceph-performance-part-2-write-throughput-without-ssd-journals/
+.. _Argonaut v. Bobtail Performance Preview: http://ceph.com/uncategorized/argonaut-vs-bobtail-performance-preview/
+.. _Bobtail Performance - I/O Scheduler Comparison: http://ceph.com/community/ceph-bobtail-performance-io-scheduler-comparison/ 
+.. _Mapping Pools to Different Types of OSDs: http://ceph.com/docs/master/rados/operations/crush-map/#placing-different-pools-on-different-osds
+.. _OS Recommendations: ../os-recommendations
