@@ -63,8 +63,7 @@ def parse_args():
         )
     parser.add_argument(
         '--name',
-        action='store_true',
-        default=False,
+        metavar='NAME',
         help='name for this teuthology run',
         )
 
