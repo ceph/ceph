@@ -18,34 +18,6 @@
 
 using namespace ceph::crypto;
 
-void dump_common_s3_headers(struct req_state *s, const char *etag,
-                            size_t content_len, const char *conn_status)
-{
-  // how many elements do we expect to include in the response
-  unsigned int expected_var_len = 4;
-  map<string, string> head_var;
-
-  utime_t date = ceph_clock_now(s->cct);
-  if (!date.is_zero()) {
-    char buf[TIME_BUF_SIZE];
-    date.sprintf(buf, TIME_BUF_SIZE);
-    head_var["date"] = buf;
-  }
-
-  head_var["etag"] = etag;
-  head_var["conn_stat"] = conn_status;
-  head_var["server"] = s->env->get("HTTP_HOST");
-
-  // if we have all the variables we want go ahead and dump
-  if (head_var.size() == expected_var_len) {
-    dump_pair(s, "Date", head_var["date"].c_str());
-    dump_etag(s, head_var["etag"].c_str());
-    dump_content_length(s, content_len);
-    dump_pair(s, "Connection", head_var["conn_stat"].c_str());
-    dump_pair(s, "Server", head_var["server"].c_str());
-  }
-}
-
 void list_all_buckets_start(struct req_state *s)
 {
   s->formatter->open_array_section_in_ns("ListAllMyBucketsResult",
