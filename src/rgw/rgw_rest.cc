@@ -276,16 +276,15 @@ void dump_uri_from_state(struct req_state *s)
   if (strcmp(s->request_uri.c_str(), "/") == 0) {
 
     string location = "http://";
-    location += s->env->get("SERVER_NAME");
-    if (!location.empty()) {
+    string server = s->env->get("SERVER_NAME", "<SERVER_NAME>");
+    location.append(server);
+    location += "/";
+    if (!s->bucket_name_str.empty()) {
+      location += s->bucket_name_str;
       location += "/";
-      if (!s->bucket_name_str.empty()) {
-        location += s->bucket_name_str;
-        location += "/";
-        if (!s->object_str.empty()) {
-          location += s->object_str;
-          s->cio->print("Location: %s\n", location.c_str());
-        }
+      if (!s->object_str.empty()) {
+        location += s->object_str;
+        s->cio->print("Location: %s\n", location.c_str());
       }
     }
   }
