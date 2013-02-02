@@ -20,6 +20,8 @@
 #include "messages/MAuth.h"
 #include "messages/MLogAck.h"
 #include "messages/MAuthReply.h"
+#include "messages/MMonCommand.h"
+#include "messages/MMonCommandAck.h"
 
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
@@ -66,6 +68,7 @@ MonClient::MonClient(CephContext *cct_) :
   auth(NULL),
   keyring(NULL),
   rotating_secrets(NULL),
+  last_mon_command_tid(0),
   version_req_id(0)
 {
 }
@@ -175,6 +178,7 @@ bool MonClient::ms_dispatch(Message *m)
   case CEPH_MSG_AUTH_REPLY:
   case CEPH_MSG_MON_SUBSCRIBE_ACK:
   case CEPH_MSG_MON_GET_VERSION_REPLY:
+  case MSG_MON_COMMAND_ACK:
   case MSG_LOGACK:
     break;
   default:
@@ -202,6 +206,9 @@ bool MonClient::ms_dispatch(Message *m)
     break;
   case CEPH_MSG_MON_GET_VERSION_REPLY:
     handle_get_version_reply(static_cast<MMonGetVersionReply*>(m));
+    break;
+  case MSG_MON_COMMAND_ACK:
+    handle_mon_command_ack((MMonCommandAck*)m);
     break;
   case MSG_LOGACK:
     if (log_client) {
@@ -420,6 +427,8 @@ void MonClient::handle_auth(MAuthReply *m)
 	_send_mon_message(waiting_for_session.front());
 	waiting_for_session.pop_front();
       }
+
+      _resend_mon_commands();
 
       if (log_client) {
 	log_client->reset_session();
@@ -707,6 +716,76 @@ int MonClient::wait_auth_rotating(double timeout)
     auth_cond.WaitUntil(monc_lock, until);
   }
   ldout(cct, 10) << "wait_auth_rotating done" << dendl;
+  return 0;
+}
+
+// ---------
+
+void MonClient::_send_command(MonCommand *r)
+{
+  version_t last_seen_version = 0;
+  ldout(cct, 10) << "_send_command " << r->tid << " " << r->cmd << dendl;
+  MMonCommand *m = new MMonCommand(monmap.fsid, last_seen_version);
+  m->set_tid(r->tid);
+  m->cmd = r->cmd;
+  m->set_data(r->inbl);
+  _send_mon_message(m);
+  return;
+}
+
+void MonClient::_resend_mon_commands()
+{
+  // resend any requests
+  for (map<uint64_t,MonCommand*>::iterator p = mon_commands.begin();
+       p != mon_commands.end();
+       ++p) {
+    _send_command(p->second);
+  }
+}
+
+void MonClient::handle_mon_command_ack(MMonCommandAck *ack)
+{
+  map<uint64_t,MonCommand*>::iterator p = mon_commands.find(ack->get_tid());
+  if (p == mon_commands.end()) {
+    ldout(cct, 10) << "handle_mon_command_ack " << ack->get_tid() << " not found" << dendl;
+    ack->put();
+    return;
+  }
+
+  MonCommand *r = p->second;
+  ldout(cct, 10) << "handle_mon_command_ack " << r->tid << " " << r->cmd << dendl;
+  if (r->poutbl)
+    r->poutbl->claim(ack->get_data());
+  _finish_command(r, ack->r, ack->rs);
+  ack->put();
+}
+
+void MonClient::_finish_command(MonCommand *r, int ret, string rs)
+{
+  ldout(cct, 10) << "_finish_command " << r->tid << " = " << ret << " " << rs << dendl;
+  if (r->prval)
+    *(r->prval) = ret;
+  if (r->prs)
+    *(r->prs) = rs;
+  if (r->onfinish)
+    finisher.queue(r->onfinish, ret);
+  mon_commands.erase(r->tid);
+  delete r;
+}
+
+int MonClient::start_mon_command(const vector<string>& cmd, bufferlist& inbl,
+				 bufferlist *outbl, string *outs,
+				 Context *onfinish)
+{
+  Mutex::Locker l(monc_lock);
+  MonCommand *r = new MonCommand(++last_mon_command_tid);
+  r->cmd = cmd;
+  r->inbl = inbl;
+  r->poutbl = outbl;
+  r->prs = outs;
+  r->onfinish = onfinish;
+  mon_commands[r->tid] = r;
+  _send_command(r);
   return 0;
 }
 
