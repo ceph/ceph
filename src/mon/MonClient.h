@@ -29,6 +29,7 @@
 #include "messages/MMonSubscribe.h"
 
 #include "common/SimpleRNG.h"
+#include "osd/osd_types.h"
 
 #include <memory>
 
@@ -37,6 +38,8 @@ class MMonMap;
 class MMonGetVersion;
 class MMonGetVersionReply;
 class MMonSubscribeAck;
+class MMonCommandAck;
+class MCommandReply;
 class MAuthReply;
 class MAuthRotating;
 class LogClient;
@@ -255,6 +258,35 @@ public:
     if (auth)
       auth->add_want_keys(want);
   }
+
+  // admin commands
+private:
+  uint64_t last_mon_command_tid;
+  struct MonCommand {
+    uint64_t tid;
+    vector<string> cmd;
+    bufferlist inbl;
+    bufferlist *poutbl;
+    string *prs;
+    int *prval;
+    Context *onfinish;
+
+    MonCommand(uint64_t t)
+      : tid(t),
+	poutbl(NULL), prs(NULL), prval(NULL), onfinish(NULL)
+    {}
+  };
+  map<uint64_t,MonCommand*> mon_commands;
+
+  void _send_command(MonCommand *r);
+  void _resend_mon_commands();
+  void _finish_command(MonCommand *r, int ret, string rs);
+  void handle_mon_command_ack(MMonCommandAck *ack);
+
+public:
+  int start_mon_command(const vector<string>& cmd, bufferlist& inbl,
+			bufferlist *outbl, string *outs,
+			Context *onfinish);
 
   // version requests
 public:
