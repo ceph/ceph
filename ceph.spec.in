@@ -83,6 +83,17 @@ BuildRequires:	fuse-devel
 %description fuse
 FUSE based client for Ceph distributed network file system
 
+%package -n rbd-fuse
+Summary:	Ceph fuse-based client
+Group:		System Environment/Base
+Requires:	%{name}
+Requires:	fuse-libs
+Requires:	libstdc++
+Requires:	libuuid
+BuildRequires:	fuse-devel
+%description -n rbd-fuse
+FUSE based client to map Ceph rbd images to files
+
 %package devel
 Summary:	Ceph headers
 Group:		Development/Libraries
@@ -259,6 +270,8 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 sed -i -e "s/-lcurses/-lncurses/g" Makefile
 sed -i -e "s/-lcurses/-lncurses/g" src/Makefile
 sed -i -e "s/-lcurses/-lncurses/g" man/Makefile
+sed -i -e "s/-lcurses/-lncurses/g" src/ocf/Makefile
+sed -i -e "s/-lcurses/-lncurses/g" src/java/Makefile
 %endif
 
 make -j$(getconf _NPROCESSORS_ONLN)
@@ -279,10 +292,6 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph/
-
-#  Relocate java packages to expected locations in buildroot.
-mkdir -p $RPM_BUILD_ROOT/usr/lib/jni
-mv $RPM_BUILD_ROOT/usr/lib64/libcephfs_jni.so* $RPM_BUILD_ROOT/usr/lib/jni/.
 
 # udev rules
 install -D -m 644 udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
@@ -396,6 +405,12 @@ fi
 /sbin/mount.fuse.ceph
 
 #################################################################################
+%files -n rbd-fuse
+%defattr(-,root,root,-)
+%{_bindir}/rbd-fuse
+%{_mandir}/man8/rbd-fuse.8*
+
+#################################################################################
 %files devel
 %defattr(-,root,root,-)
 %dir %{_includedir}/cephfs
@@ -413,6 +428,7 @@ fi
 %{_libdir}/libcephfs.so
 %{_libdir}/librbd.so
 %{_libdir}/librados.so
+%{_libdir}/libcephfs_jni.so
 
 #################################################################################
 %files radosgw
@@ -446,6 +462,9 @@ fi
 %if %{with ocf}
 %files resource-agents
 %defattr(0755,root,root,-)
+%dir /usr/lib/ocf
+%dir /usr/lib/ocf/resource.d
+%dir /usr/lib/ocf/resource.d/ceph
 /usr/lib/ocf/resource.d/%{name}/*
 %endif
 
@@ -561,7 +580,7 @@ fi
 
 %files -n libcephfs_jni1
 %defattr(-,root,root,-)
-/usr/lib/jni/libcephfs_jni.so*
+%{_libdir}/libcephfs_jni.so.*
 
 %files -n cephfs-java
 %defattr(-,root,root,-)
