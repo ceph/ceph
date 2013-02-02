@@ -2806,6 +2806,7 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, version_t 
 void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version)
 {
   MMonCommandAck *reply = new MMonCommandAck(m->cmd, rc, rs, version);
+  reply->set_tid(m->get_tid());
   reply->set_data(rdata);
   send_reply(m, reply);
   m->put();
