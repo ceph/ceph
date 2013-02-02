@@ -745,14 +745,22 @@ void MonClient::_resend_mon_commands()
 
 void MonClient::handle_mon_command_ack(MMonCommandAck *ack)
 {
-  map<uint64_t,MonCommand*>::iterator p = mon_commands.find(ack->get_tid());
-  if (p == mon_commands.end()) {
-    ldout(cct, 10) << "handle_mon_command_ack " << ack->get_tid() << " not found" << dendl;
-    ack->put();
-    return;
+  MonCommand *r = NULL;
+  uint64_t tid = ack->get_tid();
+
+  if (tid == 0 && !mon_commands.empty()) {
+    r = mon_commands.begin()->second;
+    ldout(cct, 10) << "handle_mon_command_ack has tid 0, assuming it is " << r->tid << dendl;
+  } else {
+    map<uint64_t,MonCommand*>::iterator p = mon_commands.find(tid);
+    if (p == mon_commands.end()) {
+      ldout(cct, 10) << "handle_mon_command_ack " << ack->get_tid() << " not found" << dendl;
+      ack->put();
+      return;
+    }
+    r = p->second;
   }
 
-  MonCommand *r = p->second;
   ldout(cct, 10) << "handle_mon_command_ack " << r->tid << " " << r->cmd << dendl;
   if (r->poutbl)
     r->poutbl->claim(ack->get_data());
