@@ -24,17 +24,10 @@ class EResetJournal : public LogEvent {
   EResetJournal() : LogEvent(EVENT_RESETJOURNAL) { }
   ~EResetJournal() {}
 
-  void encode(bufferlist& bl) const {
-    ENCODE_START(2, 2, bl);
-    ::encode(stamp, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-    ::decode(stamp, bl);
-    DECODE_FINISH(bl);
-  }
-
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<EResetJournal*>& ls);
   void print(ostream& out) {
     out << "EResetJournal";
   }

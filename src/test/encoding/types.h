@@ -141,6 +141,8 @@ TYPE(EMetaBlob::dirlump)
 TYPE(EMetaBlob)
 #include "mds/events/EOpen.h"
 TYPE(EOpen)
+#include "mds/events/EResetJournal.h"
+TYPE(EResetJournal)
 
 #ifdef WITH_RADOSGW
 
