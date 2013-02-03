@@ -2113,6 +2113,30 @@ void EImportFinish::generate_test_instances(list<EImportFinish*>& ls)
 // ------------------------
 // EResetJournal
 
+void EResetJournal::encode(bufferlist& bl) const
+{
+  ENCODE_START(2, 2, bl);
+  ::encode(stamp, bl);
+  ENCODE_FINISH(bl);
+}
+ 
+void EResetJournal::decode(bufferlist::iterator &bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  ::decode(stamp, bl);
+  DECODE_FINISH(bl);
+}
+
+void EResetJournal::dump(Formatter *f) const
+{
+  f->dump_stream("timestamp") << stamp;
+}
+
+void EResetJournal::generate_test_instances(list<EResetJournal*>& ls)
+{
+  ls.push_back(new EResetJournal());
+}
+
 void EResetJournal::replay(MDS *mds)
 {
   dout(1) << "EResetJournal" << dendl;
