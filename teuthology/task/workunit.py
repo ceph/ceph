@@ -104,9 +104,10 @@ def task(ctx, config):
 
 def _delete_dir(ctx, role, subdir):
     PREFIX = 'client.'
+    testdir = teuthology.get_testdir(ctx)
     id_ = role[len(PREFIX):]
     (remote,) = ctx.cluster.only(role).remotes.iterkeys()
-    mnt = os.path.join('/tmp/cephtest', 'mnt.{id}'.format(id=id_))
+    mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
     client = os.path.join(mnt, 'client.{id}'.format(id=id_))
     try:
         remote.run(

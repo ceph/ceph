@@ -54,7 +54,8 @@ def execute(client, args):
     block until the exit status is available.
     """
     cmd = quote(args)
-    log.debug('Running: {cmd!r}'.format(cmd=cmd))
+    (host,port) = client.get_transport().getpeername()
+    log.debug('Running [{h}]: {cmd!r}'.format(h=host, cmd=cmd))
     (in_, out, err) = client.exec_command(cmd)
 
     def get_exitstatus():

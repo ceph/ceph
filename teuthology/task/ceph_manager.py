@@ -247,13 +247,14 @@ class CephManager:
         return proc.stdout.getvalue()
 
     def do_rados(self, remote, cmd):
+        testdir = teuthology.get_testdir(self.ctx)
         pre = [
-            'LD_LIBRARY_PATH=/tmp/cephtest/binary/usr/local/lib',
-            '/tmp/cephtest/enable-coredump',
-            '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-            '/tmp/cephtest/archive/coverage',
-            '/tmp/cephtest/binary/usr/local/bin/rados',
-            '-c', '/tmp/cephtest/ceph.conf',
+            'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+            '{tdir}/enable-coredump'.format(tdir=testdir),
+            '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+            '{tdir}/archive/coverage'.format(tdir=testdir),
+            '{tdir}/binary/usr/local/bin/rados'.format(tdir=testdir),
+            '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
             ];
         pre.extend(cmd)
         proc = remote.run(
@@ -263,6 +264,7 @@ class CephManager:
         return proc
 
     def osd_admin_socket(self, osdnum, command, check_status=True):
+        testdir = teuthology.get_testdir(self.ctx)
         remote = None
         for _remote, roles_for_host in self.ctx.cluster.remotes.iteritems():
             for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
@@ -270,15 +272,15 @@ class CephManager:
                     remote = _remote
         assert remote is not None
         args=[
-                'LD_LIBRARY_PRELOAD=/tmp/cephtest/binary/usr/local/lib',
-                '/tmp/cephtest/enable-coredump',
-                '/tmp/cephtest/binary/usr/local/bin/ceph-coverage',
-                '/tmp/cephtest/archive/coverage',
-                '/tmp/cephtest/binary/usr/local/bin/ceph',
-                '-k', '/tmp/cephtest/ceph.keyring',
-                '-c', '/tmp/cephtest/ceph.conf',
+                'LD_LIBRARY_PRELOAD={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                '{tdir}/archive/coverage'.format(tdir=testdir),
+                '{tdir}/binary/usr/local/bin/ceph'.format(tdir=testdir),
+                '-k', '{tdir}/ceph.keyring'.format(tdir=testdir),
+                '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
                 '--admin-daemon',
-                "/tmp/cephtest/asok.osd.%s"%(str(osdnum),)]
+                "%s/asok.osd.%s"%(testdir,str(osdnum),)]
         args.extend(command)
         return remote.run(
             args=args,
