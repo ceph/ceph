@@ -62,10 +62,6 @@ src/ocf/rbd
 src/omapbench
 src/kvstorebench
 ar-lib
-src/smalliobench
-src/smalliobenchdumb
-src/smalliobenchfs
-src/tpbench
 
 # temporary directory used by e.g. "make distcheck", e.g. ceph-0.42
 /ceph-[0-9]*/

@@ -108,7 +108,7 @@ public:
   UniformRandom(rngen_t rng, uint64_t min, uint64_t max) :
     rng(rng), min(min), max(max) {}
   virtual uint64_t operator()() {
-    return boost::uniform_int<>(min, max)(rng);
+    return boost::uniform_int<uint64_t>(min, max)(rng);
   }
 };
 
