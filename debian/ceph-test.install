@@ -12,6 +12,7 @@ usr/bin/scratchtoolpp
 usr/bin/smalliobench
 usr/bin/smalliobenchdumb
 usr/bin/smalliobenchfs
+usr/bin/smalliobenchrbd
 usr/bin/ceph-filestore-dump
 usr/bin/streamtest
 usr/bin/test_cfuse_cache_invalidate

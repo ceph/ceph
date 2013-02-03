@@ -248,6 +248,10 @@ smalliobenchdumb_LDADD = librados.la -lboost_program_options $(LIBOS_LDA) $(LIBG
 smalliobenchdumb_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += smalliobenchdumb
 
+smalliobenchrbd_SOURCES = test/bench/small_io_bench_rbd.cc test/bench/rbd_backend.cc test/bench/detailed_stat_collector.cc test/bench/bencher.cc
+smalliobenchrbd_LDADD = librados.la librbd.la -lboost_program_options $(LIBGLOBAL_LDA)
+bin_DEBUGPROGRAMS += smalliobenchrbd
+
 tpbench_SOURCES = test/bench/tp_bench.cc test/bench/detailed_stat_collector.cc
 tpbench_LDADD = librados.la -lboost_program_options $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += tpbench
@@ -1901,6 +1905,7 @@ noinst_HEADERS = \
 	common/sync_filesystem.h \
         test/bench/distribution.h \
         test/bench/rados_backend.h \
+        test/bench/rbd_backend.h \
         test/bench/bencher.h \
         test/bench/backend.h \
         test/bench/dumb_backend.h \

@@ -113,3 +113,8 @@ Makefile
 /scratchtool
 /scratchtoolpp
 /ceph-filestore-dump
+/smalliobench
+/smalliobenchdumb
+/smalliobenchfs
+/smalliobenchrbd
+/tpbench
