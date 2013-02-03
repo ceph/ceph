@@ -1374,6 +1374,48 @@ void ESession::replay(MDS *mds)
   update_segment();
 }
 
+void ESession::encode(bufferlist &bl) const
+{
+  ENCODE_START(3, 3, bl);
+  ::encode(stamp, bl);
+  ::encode(client_inst, bl);
+  ::encode(open, bl);
+  ::encode(cmapv, bl);
+  ::encode(inos, bl);
+  ::encode(inotablev, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ESession::decode(bufferlist::iterator &bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  if (struct_v >= 2)
+    ::decode(stamp, bl);
+  ::decode(client_inst, bl);
+  ::decode(open, bl);
+  ::decode(cmapv, bl);
+  ::decode(inos, bl);
+  ::decode(inotablev, bl);
+  DECODE_FINISH(bl);
+}
+
+void ESession::dump(Formatter *f) const
+{
+  f->dump_stream("client instance") << client_inst;
+  f->dump_string("open", open ? "true" : "false");
+  f->dump_int("client map version", cmapv);
+  f->dump_stream("inos") << inos;
+  f->dump_int("inotable version", inotablev);
+}
+
+void ESession::generate_test_instances(list<ESession*>& ls)
+{
+  ls.push_back(new ESession);
+}
+
+// -----------------------
+// ESession
+
 void ESessions::update_segment()
 {
   _segment->sessionmapv = cmapv;
