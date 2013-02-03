@@ -54,6 +54,11 @@ def parse_args():
         help='Unlock each successfully nuked machine, and output targets that'
         'could not be nuked.'
         )
+    parser.add_argument(
+        '-n', '--name',
+        metavar='NAME',
+        help='Name of run to cleanup'
+        )
     args = parser.parse_args()
     return args
 
@@ -341,6 +346,7 @@ def nuke_one(ctx, targets, log, should_unlock, synch_clocks, reboot_all, check_l
         synch_clocks=synch_clocks,
         reboot_all=reboot_all,
         teuthology_config=ctx.teuthology_config,
+        name=ctx.name,
         )
     try:
         nuke_helper(ctx, log)
