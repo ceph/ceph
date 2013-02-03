@@ -660,7 +660,7 @@ class CephManager:
         self.raw_cluster_cmd('osd', 'out', str(osd))
 
     def kill_osd(self, osd):
-        if 'powercycle' in self.config and self.config['powercycle']:
+        if self.config.get('powercycle'):
             (remote,) = self.ctx.cluster.only('osd.{o}'.format(o=osd)).remotes.iterkeys()
             self.log('kill_osd on osd.{o} doing powercycle of {s}'.format(o=osd, s=remote.name))
             remote.console.power_off()
@@ -674,7 +674,7 @@ class CephManager:
         self.ctx.daemons.get_daemon('osd', osd).stop()
 
     def revive_osd(self, osd):
-        if 'powercycle' in self.config and self.config['powercycle']:
+        if self.config.get('powercycle'):
             (remote,) = self.ctx.cluster.only('osd.{o}'.format(o=osd)).remotes.iterkeys()
             self.log('kill_osd on osd.{o} doing powercycle of {s}'.format(o=osd, s=remote.name))
             remote.console.power_on()
@@ -696,7 +696,7 @@ class CephManager:
     ## monitors
 
     def kill_mon(self, mon):
-        if 'powercycle' in self.config and self.config['powercycle']:
+        if self.config.get('powercycle'):
             (remote,) = self.ctx.cluster.only('mon.{m}'.format(m=mon)).remotes.iterkeys()
             self.log('kill_mon on mon.{m} doing powercycle of {s}'.format(m=mon, s=remote.name))
             remote.console.power_off()
@@ -704,7 +704,7 @@ class CephManager:
             self.ctx.daemons.get_daemon('mon', mon).stop()
 
     def revive_mon(self, mon):
-        if 'powercycle' in self.config and self.config['powercycle']:
+        if self.config.get('powercycle'):
             (remote,) = self.ctx.cluster.only('mon.{m}'.format(m=mon)).remotes.iterkeys()
             self.log('revive_mon on mon.{m} doing powercycle of {s}'.format(m=mon, s=remote.name))
             remote.console.power_on()
@@ -740,7 +740,7 @@ class CephManager:
     ## metadata servers
 
     def kill_mds(self, mds):
-        if 'powercycle' in self.config and self.config['powercycle']:
+        if self.config.get('powercycle'):
             (remote,) = self.ctx.cluster.only('mds.{m}'.format(m=mds)).remotes.iterkeys()
             self.log('kill_mds on mds.{m} doing powercycle of {s}'.format(m=mds, s=remote.name))
             remote.console.power_off()
@@ -752,7 +752,7 @@ class CephManager:
         self.kill_mds(status['name'])
 
     def revive_mds(self, mds, standby_for_rank=None):
-        if 'powercycle' in self.config and self.config['powercycle']:
+        if self.config.get('powercycle'):
             (remote,) = self.ctx.cluster.only('mds.{m}'.format(m=mds)).remotes.iterkeys()
             self.log('revive_mds on mds.{m} doing powercycle of {s}'.format(m=mds, s=remote.name))
             remote.console.power_on()
