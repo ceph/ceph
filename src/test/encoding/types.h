@@ -143,6 +143,8 @@ TYPE(EMetaBlob)
 TYPE(EOpen)
 #include "mds/events/EResetJournal.h"
 TYPE(EResetJournal)
+#include "mds/events/ESession.h"
+TYPE(ESession)
 
 #ifdef WITH_RADOSGW
 
