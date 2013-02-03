@@ -324,70 +324,10 @@ private:
   list<pair<metareqid_t,uint64_t> > client_reqs;
 
  public:
-  void encode(bufferlist& bl) const {
-    ENCODE_START(5, 5, bl);
-    ::encode(lump_order, bl);
-    ::encode(lump_map, bl);
-    ::encode(roots, bl);
-    ::encode(table_tids, bl);
-    ::encode(opened_ino, bl);
-    ::encode(allocated_ino, bl);
-    ::encode(used_preallocated_ino, bl);
-    ::encode(preallocated_inos, bl);
-    ::encode(client_name, bl);
-    ::encode(inotablev, bl);
-    ::encode(sessionmapv, bl);
-    ::encode(truncate_start, bl);
-    ::encode(truncate_finish, bl);
-    ::encode(destroyed_inodes, bl);
-    ::encode(client_reqs, bl);
-    ::encode(renamed_dirino, bl);
-    ::encode(renamed_dir_frags, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
-    ::decode(lump_order, bl);
-    ::decode(lump_map, bl);
-    if (struct_v >= 4) {
-      ::decode(roots, bl);
-    } else {
-      bufferlist rootbl;
-      ::decode(rootbl, bl);
-      if (rootbl.length()) {
-	bufferlist::iterator p = rootbl.begin();
-	roots.push_back(std::tr1::shared_ptr<fullbit>(new fullbit(p)));
-      }
-    }
-    ::decode(table_tids, bl);
-    ::decode(opened_ino, bl);
-    ::decode(allocated_ino, bl);
-    ::decode(used_preallocated_ino, bl);
-    ::decode(preallocated_inos, bl);
-    ::decode(client_name, bl);
-    ::decode(inotablev, bl);
-    ::decode(sessionmapv, bl);
-    ::decode(truncate_start, bl);
-    ::decode(truncate_finish, bl);
-    ::decode(destroyed_inodes, bl);
-    if (struct_v >= 2) {
-      ::decode(client_reqs, bl);
-    } else {
-      list<metareqid_t> r;
-      ::decode(r, bl);
-      while (!r.empty()) {
-	client_reqs.push_back(pair<metareqid_t,uint64_t>(r.front(), 0));
-	r.pop_front();
-      }
-    }
-    if (struct_v >= 3) {
-      ::decode(renamed_dirino, bl);
-      ::decode(renamed_dir_frags, bl);
-    }
-    DECODE_FINISH(bl);
-  }
-
-
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<EMetaBlob*>& ls);
   // soft stateadd
   uint64_t last_subtree_map;
   uint64_t my_offset;
