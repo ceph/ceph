@@ -171,7 +171,7 @@ def dev_create(ctx, config):
         remote.run(
             args=[
                 'echo',
-                'KERNEL=="rbd[0-9]*", PROGRAM="{tdir}/binary/usr/local/bin/ceph-rbdnamer %n", SYMLINK+="rbd/%c{1}/%c{2}"'.format(tdir=testdir),
+                'KERNEL=="rbd[0-9]*", PROGRAM="%s/binary/usr/local/bin/ceph-rbdnamer %%n", SYMLINK+="rbd/%%c{1}/%%c{2}"' % testdir,
                 run.Raw('>'),
                 '{tdir}/51-rbd.rules'.format(tdir=testdir),
                 ],
