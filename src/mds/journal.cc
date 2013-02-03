@@ -720,6 +720,164 @@ void EMetaBlob::dirlump::generate_test_instances(list<dirlump*>& ls)
 /**
  * EMetaBlob proper
  */
+void EMetaBlob::encode(bufferlist& bl) const
+{
+  ENCODE_START(5, 5, bl);
+  ::encode(lump_order, bl);
+  ::encode(lump_map, bl);
+  ::encode(roots, bl);
+  ::encode(table_tids, bl);
+  ::encode(opened_ino, bl);
+  ::encode(allocated_ino, bl);
+  ::encode(used_preallocated_ino, bl);
+  ::encode(preallocated_inos, bl);
+  ::encode(client_name, bl);
+  ::encode(inotablev, bl);
+  ::encode(sessionmapv, bl);
+  ::encode(truncate_start, bl);
+  ::encode(truncate_finish, bl);
+  ::encode(destroyed_inodes, bl);
+  ::encode(client_reqs, bl);
+  ::encode(renamed_dirino, bl);
+  ::encode(renamed_dir_frags, bl);
+  ENCODE_FINISH(bl);
+}
+void EMetaBlob::decode(bufferlist::iterator &bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
+  ::decode(lump_order, bl);
+  ::decode(lump_map, bl);
+  if (struct_v >= 4) {
+    ::decode(roots, bl);
+  } else {
+    bufferlist rootbl;
+    ::decode(rootbl, bl);
+    if (rootbl.length()) {
+      bufferlist::iterator p = rootbl.begin();
+      roots.push_back(std::tr1::shared_ptr<fullbit>(new fullbit(p)));
+    }
+  }
+  ::decode(table_tids, bl);
+  ::decode(opened_ino, bl);
+  ::decode(allocated_ino, bl);
+  ::decode(used_preallocated_ino, bl);
+  ::decode(preallocated_inos, bl);
+  ::decode(client_name, bl);
+  ::decode(inotablev, bl);
+  ::decode(sessionmapv, bl);
+  ::decode(truncate_start, bl);
+  ::decode(truncate_finish, bl);
+  ::decode(destroyed_inodes, bl);
+  if (struct_v >= 2) {
+    ::decode(client_reqs, bl);
+  } else {
+    list<metareqid_t> r;
+    ::decode(r, bl);
+    while (!r.empty()) {
+	client_reqs.push_back(pair<metareqid_t,uint64_t>(r.front(), 0));
+	r.pop_front();
+    }
+  }
+  if (struct_v >= 3) {
+    ::decode(renamed_dirino, bl);
+    ::decode(renamed_dir_frags, bl);
+  }
+  DECODE_FINISH(bl);
+}
+
+void EMetaBlob::dump(Formatter *f) const
+{
+  f->open_array_section("lumps");
+  for (list<dirfrag_t>::const_iterator i = lump_order.begin();
+       i != lump_order.end(); ++i) {
+    f->open_object_section("lump");
+    f->open_object_section("dirfrag");
+    f->dump_stream("dirfrag") << *i;
+    f->close_section(); // dirfrag
+    f->open_object_section("dirlump");
+    lump_map.at(*i).dump(f);
+    f->close_section(); // dirlump
+    f->close_section(); // lump
+  }
+  f->close_section(); // lumps
+  
+  f->open_array_section("roots");
+  for (list<std::tr1::shared_ptr<fullbit> >::const_iterator i = roots.begin();
+       i != roots.end(); ++i) {
+    f->open_object_section("root");
+    (*i)->dump(f);
+    f->close_section(); // root
+  }
+  f->close_section(); // roots
+
+  f->open_array_section("tableclient tranactions");
+  for (list<pair<__u8,version_t> >::const_iterator i = table_tids.begin();
+       i != table_tids.end(); ++i) {
+    f->open_object_section("transaction");
+    f->dump_int("tid", i->first);
+    f->dump_int("version", i->second);
+    f->close_section(); // transaction
+  }
+  f->close_section(); // tableclient transactions
+  
+  f->dump_int("renamed directory inodeno", renamed_dirino);
+  
+  f->open_array_section("renamed directory fragments");
+  for (list<frag_t>::const_iterator i = renamed_dir_frags.begin();
+       i != renamed_dir_frags.end(); ++i) {
+    f->dump_int("frag", *i);
+  }
+  f->close_section(); // renamed directory fragments
+
+  f->dump_int("inotable version", inotablev);
+  f->dump_int("SesionMap version", sessionmapv);
+  f->dump_int("allocated ino", allocated_ino);
+  
+  f->dump_stream("preallocated inos") << preallocated_inos;
+  f->dump_int("used preallocated ino", used_preallocated_ino);
+
+  f->open_object_section("client name");
+  client_name.dump(f);
+  f->close_section(); // client name
+
+  f->open_array_section("inodes starting a truncate");
+  for(list<inodeno_t>::const_iterator i = truncate_start.begin();
+      i != truncate_start.end(); ++i) {
+    f->dump_int("inodeno", *i);
+  }
+  f->close_section(); // truncate inodes
+  f->open_array_section("inodes finishing a truncated");
+  for(map<inodeno_t,uint64_t>::const_iterator i = truncate_finish.begin();
+      i != truncate_finish.end(); ++i) {
+    f->open_object_section("inode+segment");
+    f->dump_int("inodeno", i->first);
+    f->dump_int("truncate starting segment", i->second);
+    f->close_section(); // truncated inode
+  }
+  f->close_section(); // truncate finish inodes
+
+  f->open_array_section("destroyed inodes");
+  for(vector<inodeno_t>::const_iterator i = destroyed_inodes.begin();
+      i != destroyed_inodes.end(); ++i) {
+    f->dump_int("inodeno", *i);
+  }
+  f->close_section(); // destroyed inodes
+
+  f->open_array_section("client requests");
+  for(list<pair<metareqid_t,uint64_t> >::const_iterator i = client_reqs.begin();
+      i != client_reqs.end(); ++i) {
+    f->open_object_section("Client request");
+    f->dump_stream("request ID") << i->first;
+    f->dump_int("oldest request on client", i->second);
+    f->close_section(); // request
+  }
+  f->close_section(); // client requests
+}
+
+void EMetaBlob::generate_test_instances(list<EMetaBlob*>& ls)
+{
+  ls.push_back(new EMetaBlob());
+}
 
 void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 {
