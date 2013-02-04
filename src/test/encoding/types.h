@@ -95,9 +95,9 @@ TYPE(DBObjectMap::State)
 TYPE(Anchor)
 
 #include "mds/snap.h"
-/*TYPE(SnapInfo)
+TYPE(SnapInfo)
 TYPE(snaplink_t)
-TYPE(sr_t)*/
+TYPE(sr_t)
 
 #include "mds/mdstypes.h"
 TYPE(file_layout_policy_t)
