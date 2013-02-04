@@ -24,7 +24,6 @@
 #include "os/LevelDBStore.h"
 #include "os/KeyValueDB.h"
 #include "os/ObjectStore.h"
-#include "os/FileStore.h"
 
 void usage(const string &name) {
   std::cerr << "Usage: " << name << " [new|continue] store_path store_journal db_path"
