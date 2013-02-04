@@ -9,7 +9,6 @@ using namespace std;
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/file.h>
-#include <iostream>
 #include <errno.h>
 #include <dirent.h>
 #include <sys/xattr.h>
