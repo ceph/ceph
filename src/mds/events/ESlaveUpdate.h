@@ -70,30 +70,10 @@ struct rename_rollback {
     char remote_d_type;
     utime_t old_ctime;
     
-    void encode(bufferlist &bl) const {
-      ENCODE_START(2, 2, bl);
-      ::encode(dirfrag, bl);
-      ::encode(dirfrag_old_mtime, bl);
-      ::encode(dirfrag_old_rctime, bl);
-      ::encode(ino, bl);
-      ::encode(remote_ino, bl);
-      ::encode(dname, bl);
-      ::encode(remote_d_type, bl);
-      ::encode(old_ctime, bl);
-      ENCODE_FINISH(bl);
-    }
-    void decode(bufferlist::iterator &bl) {
-      DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-      ::decode(dirfrag, bl);
-      ::decode(dirfrag_old_mtime, bl);
-      ::decode(dirfrag_old_rctime, bl);
-      ::decode(ino, bl);
-      ::decode(remote_ino, bl);
-      ::decode(dname, bl);
-      ::decode(remote_d_type, bl);
-      ::decode(old_ctime, bl);
-      DECODE_FINISH(bl);
-    }
+    void encode(bufferlist& bl) const;
+    void decode(bufferlist::iterator& bl);
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<drec*>& ls);
   };
   WRITE_CLASS_MEMBER_ENCODER(drec)
 
@@ -102,24 +82,10 @@ struct rename_rollback {
   drec stray; // we know this is null, but we want dname, old mtime/rctime
   utime_t ctime;
 
-  void encode(bufferlist &bl) const {
-    ENCODE_START(2, 2, bl);
-    ::encode(reqid, bl);
-    encode(orig_src, bl);
-    encode(orig_dest, bl);
-    encode(stray, bl);
-    ::encode(ctime, bl);
-    ENCODE_FINISH(bl);
- }
-  void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-    ::decode(reqid, bl);
-    decode(orig_src, bl);
-    decode(orig_dest, bl);
-    decode(stray, bl);
-    ::decode(ctime, bl);
-    DECODE_FINISH(bl);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rename_rollback*>& ls);
 };
 WRITE_CLASS_ENCODER(rename_rollback)
 
