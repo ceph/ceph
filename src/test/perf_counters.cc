@@ -43,9 +43,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "global/global_init.h"
 #include "common/common_init.h"
-#include "common/ceph_context.h"
 
 int main(int argc, char **argv) {
   std::vector<const char *> preargs;
