@@ -1663,6 +1663,53 @@ void ESnap::replay(MDS *mds)
 // -----------------------
 // EUpdate
 
+void EUpdate::encode(bufferlist &bl) const
+{
+  ENCODE_START(4, 4, bl);
+  ::encode(stamp, bl);
+  ::encode(type, bl);
+  ::encode(metablob, bl);
+  ::encode(client_map, bl);
+  ::encode(cmapv, bl);
+  ::encode(reqid, bl);
+  ::encode(had_slaves, bl);
+  ENCODE_FINISH(bl);
+}
+ 
+void EUpdate::decode(bufferlist::iterator &bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
+  if (struct_v >= 2)
+    ::decode(stamp, bl);
+  ::decode(type, bl);
+  ::decode(metablob, bl);
+  ::decode(client_map, bl);
+  if (struct_v >= 3)
+    ::decode(cmapv, bl);
+  ::decode(reqid, bl);
+  ::decode(had_slaves, bl);
+  DECODE_FINISH(bl);
+}
+
+void EUpdate::dump(Formatter *f) const
+{
+  f->open_object_section("metablob");
+  metablob.dump(f);
+  f->close_section(); // metablob
+
+  f->dump_string("type", type);
+  f->dump_int("client map length", client_map.length());
+  f->dump_int("client map version", cmapv);
+  f->dump_stream("reqid") << reqid;
+  f->dump_string("had slaves", had_slaves ? "true" : "false");
+}
+
+void EUpdate::generate_test_instances(list<EUpdate*>& ls)
+{
+  ls.push_back(new EUpdate());
+}
+
+
 void EUpdate::update_segment()
 {
   metablob.update_segment(_segment);
