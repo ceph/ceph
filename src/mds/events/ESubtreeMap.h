@@ -33,27 +33,10 @@ public:
 	<< metablob;
   }
 
-  void encode(bufferlist& bl) const {
-    ENCODE_START(5, 5, bl);
-    ::encode(stamp, bl);
-    ::encode(metablob, bl);
-    ::encode(subtrees, bl);
-    ::encode(ambiguous_subtrees, bl);
-    ::encode(expire_pos, bl);
-    ENCODE_FINISH(bl);
-  } 
-  void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
-    if (struct_v >= 2)
-      ::decode(stamp, bl);
-    ::decode(metablob, bl);
-    ::decode(subtrees, bl);
-    if (struct_v >= 4)
-      ::decode(ambiguous_subtrees, bl);
-    if (struct_v >= 3)
-      ::decode(expire_pos, bl);
-    DECODE_FINISH(bl);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ESubtreeMap*>& ls);
 
   void replay(MDS *mds);
 };
