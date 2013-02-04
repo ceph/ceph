@@ -149,7 +149,7 @@ TYPE(ESession)
 TYPE(ESessions)
 #include "mds/events/ESlaveUpdate.h"
 TYPE(link_rollback)
-
+TYPE(rmdir_rollback)
 
 #ifdef WITH_RADOSGW
 

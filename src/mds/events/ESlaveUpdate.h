@@ -53,24 +53,10 @@ struct rmdir_rollback {
   dirfrag_t dest_dir;
   string dest_dname;
 
-  void encode(bufferlist& bl) const {
-    ENCODE_START(2, 2, bl);
-    ::encode(reqid, bl);
-    ::encode(src_dir, bl);
-    ::encode(src_dname, bl);
-    ::encode(dest_dir, bl);
-    ::encode(dest_dname, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-    ::decode(reqid, bl);
-    ::decode(src_dir, bl);
-    ::decode(src_dname, bl);
-    ::decode(dest_dir, bl);
-    ::decode(dest_dname, bl);
-    DECODE_FINISH(bl);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rmdir_rollback*>& ls);
 };
 WRITE_CLASS_ENCODER(rmdir_rollback)
 
