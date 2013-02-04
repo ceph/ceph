@@ -128,6 +128,7 @@ def start_rgw(ctx, config):
 
         run_cmd.extend(
             teuthology.get_valgrind_args(
+                testdir,
                 client,
                 client_config.get('valgrind')
                 )

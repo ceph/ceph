@@ -99,6 +99,7 @@ def task(ctx, config):
         if client_config.get('valgrind') is not None:
             run_cmd.extend(
                 teuthology.get_valgrind_args(
+                    testdir,
                     'client.{id}'.format(id=id_),
                     client_config.get('valgrind'),
                     )
