@@ -1911,6 +1911,55 @@ void rename_rollback::generate_test_instances(list<rename_rollback*>& ls)
   ls.back()->stray.remote_d_type = IFTODT(S_IFREG);
 }
 
+void ESlaveUpdate::encode(bufferlist &bl) const
+{
+  ENCODE_START(3, 3, bl);
+  ::encode(stamp, bl);
+  ::encode(type, bl);
+  ::encode(reqid, bl);
+  ::encode(master, bl);
+  ::encode(op, bl);
+  ::encode(origop, bl);
+  ::encode(commit, bl);
+  ::encode(rollback, bl);
+  ENCODE_FINISH(bl);
+} 
+
+void ESlaveUpdate::decode(bufferlist::iterator &bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  if (struct_v >= 2)
+    ::decode(stamp, bl);
+  ::decode(type, bl);
+  ::decode(reqid, bl);
+  ::decode(master, bl);
+  ::decode(op, bl);
+  ::decode(origop, bl);
+  ::decode(commit, bl);
+  ::decode(rollback, bl);
+  DECODE_FINISH(bl);
+}
+
+void ESlaveUpdate::dump(Formatter *f) const
+{
+  f->open_object_section("metablob");
+  commit.dump(f);
+  f->close_section(); // metablob
+
+  f->dump_int("rollback length", rollback.length());
+  f->dump_string("type", type);
+  f->dump_stream("metareqid") << reqid;
+  f->dump_int("master", master);
+  f->dump_int("op", op);
+  f->dump_int("original op", origop);
+}
+
+void ESlaveUpdate::generate_test_instances(list<ESlaveUpdate*>& ls)
+{
+  ls.push_back(new ESlaveUpdate());
+}
+
+
 void ESlaveUpdate::replay(MDS *mds)
 {
   MDSlaveUpdate *su;

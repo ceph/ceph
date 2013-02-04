@@ -115,7 +115,7 @@ public:
   __u8 op;  // prepare, commit, abort
   __u8 origop; // link | rename
 
-  ESlaveUpdate() : LogEvent(EVENT_SLAVEUPDATE) { }
+  ESlaveUpdate() : LogEvent(EVENT_SLAVEUPDATE), master(0), op(0), origop(0) { }
   ESlaveUpdate(MDLog *mdlog, const char *s, metareqid_t ri, int mastermds, int o, int oo) : 
     LogEvent(EVENT_SLAVEUPDATE), commit(mdlog), 
     type(s),
@@ -134,31 +134,10 @@ public:
     out << commit;
   }
 
-  void encode(bufferlist &bl) const {
-    ENCODE_START(3, 3, bl);
-    ::encode(stamp, bl);
-    ::encode(type, bl);
-    ::encode(reqid, bl);
-    ::encode(master, bl);
-    ::encode(op, bl);
-    ::encode(origop, bl);
-    ::encode(commit, bl);
-    ::encode(rollback, bl);
-    ENCODE_FINISH(bl);
-  } 
-  void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
-    if (struct_v >= 2)
-      ::decode(stamp, bl);
-    ::decode(type, bl);
-    ::decode(reqid, bl);
-    ::decode(master, bl);
-    ::decode(op, bl);
-    ::decode(origop, bl);
-    ::decode(commit, bl);
-    ::decode(rollback, bl);
-    DECODE_FINISH(bl);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ESlaveUpdate*>& ls);
 
   void replay(MDS *mds);
 };
