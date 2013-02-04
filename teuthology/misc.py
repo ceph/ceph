@@ -18,7 +18,7 @@ from .orchestra import run
 log = logging.getLogger(__name__)
 
 import datetime
-stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
 def get_testdir(ctx):
     if 'test_path' in ctx.teuthology_config:
