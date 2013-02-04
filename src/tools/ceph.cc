@@ -111,6 +111,7 @@ static void usage()
   cout << "  ceph pg dump\n";
   cout << "  ceph pg <pg-id> query\n";
   cout << "  ceph pg scrub <pg-id>\n";
+  cout << "  ceph pg deep-scrub <pg-id>\n";
   cout << "  ceph pg map <pg-id>\n";
   cout << "\n";
   cout << "OPTIONS\n";
