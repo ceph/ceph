@@ -73,7 +73,6 @@
 #include "auth/KeyRing.h"
 
 #include "common/config.h"
-#include "common/errno.h"
 
 #include "perfglue/cpu_profiler.h"
 #include "perfglue/heap_profiler.h"
