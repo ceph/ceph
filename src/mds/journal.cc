@@ -1772,6 +1772,42 @@ void link_rollback::generate_test_instances(list<link_rollback*>& ls)
   ls.push_back(new link_rollback());
 }
 
+void rmdir_rollback::encode(bufferlist& bl) const
+{
+  ENCODE_START(2, 2, bl);
+  ::encode(reqid, bl);
+  ::encode(src_dir, bl);
+  ::encode(src_dname, bl);
+  ::encode(dest_dir, bl);
+  ::encode(dest_dname, bl);
+  ENCODE_FINISH(bl);
+}
+
+void rmdir_rollback::decode(bufferlist::iterator& bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  ::decode(reqid, bl);
+  ::decode(src_dir, bl);
+  ::decode(src_dname, bl);
+  ::decode(dest_dir, bl);
+  ::decode(dest_dname, bl);
+  DECODE_FINISH(bl);
+}
+
+void rmdir_rollback::dump(Formatter *f) const
+{
+  f->dump_stream("metareqid") << reqid;
+  f->dump_stream("source directory") << src_dir;
+  f->dump_string("source dname", src_dname);
+  f->dump_stream("destination directory") << dest_dir;
+  f->dump_string("destination dname", dest_dname);
+}
+
+void rmdir_rollback::generate_test_instances(list<rmdir_rollback*>& ls)
+{
+  ls.push_back(new rmdir_rollback());
+}
+
 
 void ESlaveUpdate::replay(MDS *mds)
 {
