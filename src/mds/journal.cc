@@ -1532,6 +1532,42 @@ void ETableServer::replay(MDS *mds)
 }
 
 
+// ---------------------
+// ETableClient
+
+void ETableClient::encode(bufferlist& bl) const
+{
+  ENCODE_START(3, 3, bl);
+  ::encode(stamp, bl);
+  ::encode(table, bl);
+  ::encode(op, bl);
+  ::encode(tid, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ETableClient::decode(bufferlist::iterator &bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  if (struct_v >= 2)
+    ::decode(stamp, bl);
+  ::decode(table, bl);
+  ::decode(op, bl);
+  ::decode(tid, bl);
+  DECODE_FINISH(bl);
+}
+
+void ETableClient::dump(Formatter *f) const
+{
+  f->dump_int("table", table);
+  f->dump_int("op", op);
+  f->dump_int("tid", tid);
+}
+
+void ETableClient::generate_test_instances(list<ETableClient*>& ls)
+{
+  ls.push_back(new ETableClient());
+}
+
 void ETableClient::replay(MDS *mds)
 {
   dout(10) << " ETableClient.replay " << get_mdstable_name(table)

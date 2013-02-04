@@ -153,9 +153,10 @@ TYPE(rmdir_rollback)
 TYPE(rename_rollback::drec)
 TYPE(rename_rollback)
 TYPE(ESlaveUpdate)
-
 #include "mds/events/ESubtreeMap.h"
 TYPE(ESubtreeMap)
+#include "mds/events/ETableClient.h"
+TYPE(ETableClient)
 
 #ifdef WITH_RADOSGW
 
