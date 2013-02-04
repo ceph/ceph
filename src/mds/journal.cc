@@ -1484,6 +1484,52 @@ void ESessions::replay(MDS *mds)
 }
 
 
+// -----------------------
+// ETableServer
+
+void ETableServer::encode(bufferlist& bl) const
+{
+  ENCODE_START(3, 3, bl);
+  ::encode(stamp, bl);
+  ::encode(table, bl);
+  ::encode(op, bl);
+  ::encode(reqid, bl);
+  ::encode(bymds, bl);
+  ::encode(mutation, bl);
+  ::encode(tid, bl);
+  ::encode(version, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ETableServer::decode(bufferlist::iterator &bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  if (struct_v >= 2)
+    ::decode(stamp, bl);
+  ::decode(table, bl);
+  ::decode(op, bl);
+  ::decode(reqid, bl);
+  ::decode(bymds, bl);
+  ::decode(mutation, bl);
+  ::decode(tid, bl);
+  ::decode(version, bl);
+  DECODE_FINISH(bl);
+}
+
+void ETableServer::dump(Formatter *f) const
+{
+  f->dump_int("table id", table);
+  f->dump_int("op", op);
+  f->dump_int("request id", reqid);
+  f->dump_int("by mds", bymds);
+  f->dump_int("tid", tid);
+  f->dump_int("version", version);
+}
+
+void ETableServer::generate_test_instances(list<ETableServer*>& ls)
+{
+  ls.push_back(new ETableServer());
+}
 
 
 void ETableServer::update_segment()
