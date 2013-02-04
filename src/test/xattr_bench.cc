@@ -17,7 +17,6 @@
 #include <string.h>
 #include <iostream>
 #include <sstream>
-#include <time.h>
 #include "os/FileStore.h"
 #include "include/Context.h"
 #include "common/ceph_argparse.h"
