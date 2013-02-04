@@ -2511,6 +2511,11 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	err = -EINVAL;
       } else {
 	float w = strtof(m->cmd[3].c_str(), 0);
+	if (w > 1.0 || w < 0) {
+	  ss << "weight must be in the range [0..1]";
+	  err = -EINVAL;
+	  goto out;
+	}
 	long ww = (int)((float)CEPH_OSD_IN*w);
 	if (osdmap.exists(osd)) {
 	  pending_inc.new_weight[osd] = ww;
