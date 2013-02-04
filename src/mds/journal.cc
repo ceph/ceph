@@ -2001,6 +2001,65 @@ void ESlaveUpdate::replay(MDS *mds)
 // -----------------------
 // ESubtreeMap
 
+void ESubtreeMap::encode(bufferlist& bl) const
+{
+  ENCODE_START(5, 5, bl);
+  ::encode(stamp, bl);
+  ::encode(metablob, bl);
+  ::encode(subtrees, bl);
+  ::encode(ambiguous_subtrees, bl);
+  ::encode(expire_pos, bl);
+  ENCODE_FINISH(bl);
+}
+ 
+void ESubtreeMap::decode(bufferlist::iterator &bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
+  if (struct_v >= 2)
+    ::decode(stamp, bl);
+  ::decode(metablob, bl);
+  ::decode(subtrees, bl);
+  if (struct_v >= 4)
+    ::decode(ambiguous_subtrees, bl);
+  if (struct_v >= 3)
+    ::decode(expire_pos, bl);
+  DECODE_FINISH(bl);
+}
+
+void ESubtreeMap::dump(Formatter *f) const
+{
+  f->open_object_section("metablob");
+  metablob.dump(f);
+  f->close_section(); // metablob
+  
+  f->open_array_section("subtrees");
+  for(map<dirfrag_t,vector<dirfrag_t> >::const_iterator i = subtrees.begin();
+      i != subtrees.end(); ++i) {
+    f->open_object_section("tree");
+    f->dump_stream("root dirfrag") << i->first;
+    for (vector<dirfrag_t>::const_iterator j = i->second.begin();
+	 j != i->second.end(); ++j) {
+      f->dump_stream("bound dirfrag") << *j;
+    }
+    f->close_section(); // tree
+  }
+  f->close_section(); // subtrees
+
+  f->open_array_section("ambiguous subtrees");
+  for(set<dirfrag_t>::const_iterator i = ambiguous_subtrees.begin();
+      i != ambiguous_subtrees.end(); ++i) {
+    f->dump_stream("dirfrag") << *i;
+  }
+  f->close_section(); // ambiguous subtrees
+
+  f->dump_int("expire position", expire_pos);
+}
+
+void ESubtreeMap::generate_test_instances(list<ESubtreeMap*>& ls)
+{
+  ls.push_back(new ESubtreeMap());
+}
+
 void ESubtreeMap::replay(MDS *mds) 
 {
   if (expire_pos && expire_pos > mds->mdlog->journaler->get_expire_pos())
