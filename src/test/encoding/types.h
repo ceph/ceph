@@ -147,6 +147,9 @@ TYPE(EResetJournal)
 TYPE(ESession)
 #include "mds/events/ESessions.h"
 TYPE(ESessions)
+#include "mds/events/ESlaveUpdate.h"
+TYPE(link_rollback)
+
 
 #ifdef WITH_RADOSGW
 

@@ -31,26 +31,12 @@ struct link_rollback {
   utime_t old_dir_mtime;
   utime_t old_dir_rctime;
 
-  void encode(bufferlist &bl) const {
-    ENCODE_START(2, 2, bl);
-    ::encode(reqid, bl);
-    ::encode(ino, bl);
-    ::encode(was_inc, bl);
-    ::encode(old_ctime, bl);
-    ::encode(old_dir_mtime, bl);
-    ::encode(old_dir_rctime, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-    ::decode(reqid, bl);
-    ::decode(ino, bl);
-    ::decode(was_inc, bl);
-    ::decode(old_ctime, bl);
-    ::decode(old_dir_mtime, bl);
-    ::decode(old_dir_rctime, bl);
-    DECODE_FINISH(bl);
-  }
+  link_rollback() : ino(0), was_inc(false) {}
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<link_rollback*>& ls);
 };
 WRITE_CLASS_ENCODER(link_rollback)
 

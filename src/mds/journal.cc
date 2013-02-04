@@ -1733,6 +1733,46 @@ void ECommitted::generate_test_instances(list<ECommitted*>& ls)
 // -----------------------
 // ESlaveUpdate
 
+void link_rollback::encode(bufferlist &bl) const
+{
+  ENCODE_START(2, 2, bl);
+  ::encode(reqid, bl);
+  ::encode(ino, bl);
+  ::encode(was_inc, bl);
+  ::encode(old_ctime, bl);
+  ::encode(old_dir_mtime, bl);
+  ::encode(old_dir_rctime, bl);
+  ENCODE_FINISH(bl);
+}
+
+void link_rollback::decode(bufferlist::iterator &bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  ::decode(reqid, bl);
+  ::decode(ino, bl);
+  ::decode(was_inc, bl);
+  ::decode(old_ctime, bl);
+  ::decode(old_dir_mtime, bl);
+  ::decode(old_dir_rctime, bl);
+  DECODE_FINISH(bl);
+}
+
+void link_rollback::dump(Formatter *f) const
+{
+  f->dump_stream("metareqid") << reqid;
+  f->dump_int("ino", ino);
+  f->dump_string("was incremented", was_inc ? "true" : "false");
+  f->dump_stream("old_ctime") << old_ctime;
+  f->dump_stream("old_dir_mtime") << old_dir_mtime;
+  f->dump_stream("old_dir_rctime") << old_dir_rctime;
+}
+
+void link_rollback::generate_test_instances(list<link_rollback*>& ls)
+{
+  ls.push_back(new link_rollback());
+}
+
+
 void ESlaveUpdate::replay(MDS *mds)
 {
   MDSlaveUpdate *su;
