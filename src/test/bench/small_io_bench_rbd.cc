@@ -11,7 +11,6 @@
 #include <sstream>
 #include <stdlib.h>
 #include <fstream>
-#include <iostream>
 
 #include "common/Formatter.h"
 
