@@ -152,6 +152,7 @@ TYPE(link_rollback)
 TYPE(rmdir_rollback)
 TYPE(rename_rollback::drec)
 TYPE(rename_rollback)
+TYPE(ESlaveUpdate)
 
 #ifdef WITH_RADOSGW
 
