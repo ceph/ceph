@@ -68,6 +68,7 @@
     ceph pg dump
     ceph pg <pg-id> query
     ceph pg scrub <pg-id>
+    ceph pg deep-scrub <pg-id>
     ceph pg map <pg-id>
   
   OPTIONS
