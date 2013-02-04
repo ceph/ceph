@@ -145,6 +145,8 @@ TYPE(EOpen)
 TYPE(EResetJournal)
 #include "mds/events/ESession.h"
 TYPE(ESession)
+#include "mds/events/ESessions.h"
+TYPE(ESessions)
 
 #ifdef WITH_RADOSGW
 

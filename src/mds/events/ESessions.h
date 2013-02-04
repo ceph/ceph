@@ -37,33 +37,16 @@ public:
   }
 
   void mark_old_encoding() { old_style_encode = true; }
-  
-  void encode(bufferlist &bl) const {
-    ENCODE_START(1, 1, bl);
-    ::encode(client_map, bl);
-    ::encode(cmapv, bl);
-    ::encode(stamp, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode_old(bufferlist::iterator &bl) {
-    ::decode(client_map, bl);
-    ::decode(cmapv, bl);
-    if (!bl.end())
-      ::decode(stamp, bl);
-  }
-  void decode_new(bufferlist::iterator &bl) {
-    DECODE_START(1, bl);
-    ::decode(client_map, bl);
-    ::decode(cmapv, bl);
-    if (!bl.end())
-      ::decode(stamp, bl);
-    DECODE_FINISH(bl);
-  }
+
+  void encode(bufferlist &bl) const;
+  void decode_old(bufferlist::iterator &bl);
+  void decode_new(bufferlist::iterator &bl);
   void decode(bufferlist::iterator &bl) {
     if (old_style_encode) decode_old(bl);
     else decode_new(bl);
   }
-
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ESessions*>& ls);
 
   void print(ostream& out) {
     out << "ESessions " << client_map.size() << " opens cmapv " << cmapv;

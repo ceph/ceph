@@ -1416,6 +1416,53 @@ void ESession::generate_test_instances(list<ESession*>& ls)
 // -----------------------
 // ESessions
 
+void ESessions::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(client_map, bl);
+  ::encode(cmapv, bl);
+  ::encode(stamp, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ESessions::decode_old(bufferlist::iterator &bl)
+{
+  ::decode(client_map, bl);
+  ::decode(cmapv, bl);
+  if (!bl.end())
+    ::decode(stamp, bl);
+}
+
+void ESessions::decode_new(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  ::decode(client_map, bl);
+  ::decode(cmapv, bl);
+  if (!bl.end())
+    ::decode(stamp, bl);
+  DECODE_FINISH(bl);
+}
+
+void ESessions::dump(Formatter *f) const
+{
+  f->dump_int("client map version", cmapv);
+
+  f->open_array_section("client map");
+  for (map<client_t,entity_inst_t>::const_iterator i = client_map.begin();
+       i != client_map.end(); ++i) {
+    f->open_object_section("client");
+    f->dump_int("client id", i->first.v);
+    f->dump_stream("client entity") << i->second;
+    f->close_section(); // client
+  }
+  f->close_section(); // client map
+}
+
+void ESessions::generate_test_instances(list<ESessions*>& ls)
+{
+  ls.push_back(new ESessions());
+}
+
 void ESessions::update_segment()
 {
   _segment->sessionmapv = cmapv;
