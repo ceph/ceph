@@ -27,7 +27,7 @@ public:
   metareqid_t reqid;
   bool had_slaves;
 
-  EUpdate() : LogEvent(EVENT_UPDATE) { }
+  EUpdate() : LogEvent(EVENT_UPDATE), cmapv(0), had_slaves(false) { }
   EUpdate(MDLog *mdlog, const char *s) : 
     LogEvent(EVENT_UPDATE), metablob(mdlog),
     type(s), cmapv(0), had_slaves(false) { }
@@ -38,30 +38,10 @@ public:
     out << metablob;
   }
 
-  void encode(bufferlist &bl) const {
-    ENCODE_START(4, 4, bl);
-    ::encode(stamp, bl);
-    ::encode(type, bl);
-    ::encode(metablob, bl);
-    ::encode(client_map, bl);
-    ::encode(cmapv, bl);
-    ::encode(reqid, bl);
-    ::encode(had_slaves, bl);
-    ENCODE_FINISH(bl);
-  } 
-  void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
-    if (struct_v >= 2)
-      ::decode(stamp, bl);
-    ::decode(type, bl);
-    ::decode(metablob, bl);
-    ::decode(client_map, bl);
-    if (struct_v >= 3)
-      ::decode(cmapv, bl);
-    ::decode(reqid, bl);
-    ::decode(had_slaves, bl);
-    DECODE_FINISH(bl);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<EUpdate*>& ls);
 
   void update_segment();
   void replay(MDS *mds);
