@@ -349,7 +349,8 @@ Keystone itself needs to be configured to point to RGW as an object-storage
 endpoint::
 
 	keystone service-create --name swift --type-object-store
-	keystone endpoint-create --service-id <id> --public-url http://radosgw.example.com/swift/v1
+	keystone endpoint-create --service-id <id> --publicurl http://radosgw.example.com/swift/v1 \
+		--internalurl http://radosgw.example.com/swift/v1 --adminurl http://radosgw.example.com/swift/v1
 
 
 The keystone url is the Keystone admin RESTful api url. The admin token is the
