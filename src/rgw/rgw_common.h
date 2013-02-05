@@ -27,6 +27,7 @@
 #include <map>
 #include "include/types.h"
 #include "include/utime.h"
+#include "rgw_acl.h"
 
 using namespace std;
 
@@ -597,7 +598,8 @@ struct req_state {
    rgw_bucket bucket;
    string bucket_name_str;
    string object_str;
-   string bucket_owner;
+   ACLOwner bucket_owner;
+   ACLOwner owner;
 
    map<string, string> x_meta_map;
    bool has_bad_meta;

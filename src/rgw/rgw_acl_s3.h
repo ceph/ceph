@@ -66,7 +66,7 @@ public:
     out << "</AccessControlList>";
   }
 
-  bool create_canned(string id, string name, string canned_acl);
+  bool create_canned(ACLOwner& owner, ACLOwner& bucket_owner, const string& canned_acl);
 };
 
 class ACLOwner_S3 : public ACLOwner, public XMLObj
@@ -104,11 +104,11 @@ public:
   }
   int rebuild(RGWRados *store, ACLOwner *owner, RGWAccessControlPolicy& dest);
   bool compare_group_name(string& id, ACLGroupTypeEnum group);
-  virtual bool create_canned(string id, string name, string canned_acl) {
+
+  virtual bool create_canned(ACLOwner& _owner, ACLOwner& bucket_owner, string canned_acl) {
     RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
-    bool ret = _acl.create_canned(id, name, canned_acl);
-    owner.set_id(id);
-    owner.set_name(name);
+    bool ret = _acl.create_canned(_owner, bucket_owner, canned_acl);
+    owner = _owner;
     return ret;
   }
 };

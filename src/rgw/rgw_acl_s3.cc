@@ -264,20 +264,25 @@ bool RGWAccessControlList_S3::xml_end(const char *el) {
   return true;
 }
 
-bool RGWAccessControlList_S3::create_canned(string id, string name, string canned_acl)
+bool RGWAccessControlList_S3::create_canned(ACLOwner& owner, ACLOwner& bucket_owner, const string& canned_acl)
 {
   acl_user_map.clear();
   grant_map.clear();
 
+  ACLGrant owner_grant;
+
+  string bid = bucket_owner.get_id();
+  string bname = bucket_owner.get_display_name();
+
   /* owner gets full control */
-  ACLGrant grant;
-  grant.set_canon(id, name, RGW_PERM_FULL_CONTROL);
-  add_grant(&grant);
+  owner_grant.set_canon(owner.get_id(), owner.get_display_name(), RGW_PERM_FULL_CONTROL);
+  add_grant(&owner_grant);
 
   if (canned_acl.size() == 0 || canned_acl.compare("private") == 0) {
     return true;
   }
 
+  ACLGrant bucket_owner_grant;
   ACLGrant group_grant;
   if (canned_acl.compare("public-read") == 0) {
     group_grant.set_group(ACL_GROUP_ALL_USERS, RGW_PERM_READ);
@@ -290,6 +295,14 @@ bool RGWAccessControlList_S3::create_canned(string id, string name, string canne
   } else if (canned_acl.compare("authenticated-read") == 0) {
     group_grant.set_group(ACL_GROUP_AUTHENTICATED_USERS, RGW_PERM_READ);
     add_grant(&group_grant);
+  } else if (canned_acl.compare("bucket-owner-read") == 0) {
+    bucket_owner_grant.set_canon(bid, bname, RGW_PERM_READ);
+    if (bid.compare(owner.get_id()) != 0)
+      add_grant(&bucket_owner_grant);
+  } else if (canned_acl.compare("bucket-owner-full-control") == 0) {
+    bucket_owner_grant.set_canon(bid, bname, RGW_PERM_FULL_CONTROL);
+    if (bid.compare(owner.get_id()) != 0)
+      add_grant(&bucket_owner_grant);
   } else {
     return false;
   }
