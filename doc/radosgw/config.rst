@@ -315,10 +315,9 @@ packages.
 
 RGW's ``user:subuser`` tuple maps to the ``tenant:user`` tuple expected by Swift.
 
-.. important:: RGW's Swift authentication service only supports
-   built-in Swift authentication (``-V 1.0``) at this point. There is
-   currently no way to make RGW authenticate users via OpenStack
-   Identity Service (Keystone).
+.. note:: RGW's Swift authentication service only supports built-in Swift 
+   authentication (``-V 1.0``). To make RGW authenticate users via OpenStack
+   Identity Service (Keystone), see below.
 
 Integrating with OpenStack Keystone
 ===================================
