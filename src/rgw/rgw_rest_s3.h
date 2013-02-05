@@ -161,6 +161,7 @@ public:
   ~RGWPutACLs_ObjStore_S3() {}
 
   int get_canned_policy(ACLOwner& owner, stringstream& ss);
+
   void send_response();
 };
 
