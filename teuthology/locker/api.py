@@ -75,6 +75,7 @@ class Lock:
     def POST(self):
         user = web.input('user')['user']
         num = int(web.input('num')['num'])
+        machinetype = dict(machinetype=(web.input(machinetype='plana')['machinetype']))
 
         if num < 1:
             raise web.BadRequest()
@@ -84,8 +85,8 @@ class Lock:
             try:
                 # transaction will be rolled back if an exception is raised
                 with DB.transaction():
-                    results = list(DB.select('machine', what='name, sshpubkey',
-                                             where='locked = false AND up = true',
+                    results = list(DB.select('machine', machinetype, what='name, sshpubkey',
+                                             where='locked = false AND up = true AND type =$machinetype',
                                              limit=num))
                     if len(results) < num:
                         raise web.HTTPError(status='503 Service Unavailable')

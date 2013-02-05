@@ -24,11 +24,11 @@ def send_request(method, url, body=None, headers=None):
              method, url, body, resp.status)
     return (False, None, resp.status)
 
-def lock_many(ctx, num, user=None, description=None):
+def lock_many(ctx, num, machinetype, user=None, description=None):
     if user is None:
         user = teuthology.get_user()
     success, content, status = send_request('POST', _lock_url(ctx),
-                                    urllib.urlencode(dict(user=user, num=num)))
+                                    urllib.urlencode(dict(user=user, num=num, machinetype=machinetype)))
     if success:
         machines = json.loads(content)
         log.debug('locked {machines}'.format(machines=', '.join(machines.keys())))
@@ -181,6 +181,11 @@ Lock, unlock, or query lock status of machines.
         help='update description',
         )
     parser.add_argument(
+        '--machine-type',
+        default='plana',
+        help='Type of machine to lock',
+        )
+    parser.add_argument(
         '--status',
         default=None,
         choices=['up', 'down'],
@@ -322,7 +327,7 @@ Lock, unlock, or query lock status of machines.
             else:
                 machines_to_update.append(machine)
     elif ctx.num_to_lock:
-        result = lock_many(ctx, ctx.num_to_lock, user)
+        result = lock_many(ctx, ctx.num_to_lock, ctx.machine_type, user)
         if not result:
             ret = 1
         else:

@@ -5,6 +5,7 @@ The schema can be created with::
 
     CREATE TABLE machine (
         name varchar(255),
+        type enum('burnupi','plana','vps') NOT NULL DEFAULT 'plana',
         up boolean NOT NULL,
         locked boolean NOT NULL,
         locked_since timestamp NOT NULL DEFAULT '0000-00-00T00:00:00',

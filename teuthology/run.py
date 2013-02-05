@@ -56,6 +56,11 @@ def parse_args():
         help='lock machines for the duration of the run',
         )
     parser.add_argument(
+        '--machine-type',
+        default=None,
+        help='Type of machine to lock/run tests on.',
+        )
+    parser.add_argument(
         '--block',
         action='store_true',
         default=False,
@@ -93,7 +98,11 @@ def main():
         roles = len(ctx.config['roles'])
         assert targets >= roles, \
             '%d targets are needed for all roles but found %d listed.' % (roles, targets)
-       
+
+    machine_type = ctx.machine_type
+    if machine_type is None:
+        machine_type = ctx.config.get('machine_type', 'plana')
+
     if ctx.block:
         assert ctx.lock, \
             'the --block option is only supported with the --lock option'
@@ -143,7 +152,7 @@ def main():
     if ctx.lock:
         assert 'targets' not in ctx.config, \
             'You cannot specify targets in a config file when using the --lock option'
-        init_tasks.append({'internal.lock_machines': len(ctx.config['roles'])})
+        init_tasks.append({'internal.lock_machines': (len(ctx.config['roles']), machine_type)})
 
     init_tasks.extend([
             {'internal.save_config': None},

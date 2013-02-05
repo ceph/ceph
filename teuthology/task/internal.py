@@ -60,7 +60,9 @@ def base(ctx, config):
 @contextlib.contextmanager
 def lock_machines(ctx, config):
     log.info('Locking machines...')
-    assert isinstance(config, int), 'config must be an integer'
+    assert isinstance(config[0], int), 'config must be an integer'
+    machine_type = config[1]
+    config = config[0]
 
     while True:
         # make sure there are enough machines up
@@ -72,12 +74,13 @@ def lock_machines(ctx, config):
                 continue
             else:
                 assert 0, 'error listing machines'
-        num_up = len(filter(lambda machine: machine['up'], machines))
+        num_up = len(filter(lambda machine: machine['up'] and machine['type'] == machine_type, machines))
+        print num_up
         assert num_up >= config, 'not enough machines are up'
 
         # make sure there are machines for non-automated jobs to run
         num_free = len(filter(
-                lambda machine: machine['up'] and machine['locked'] == 0,
+                lambda machine: machine['up'] and machine['locked'] == 0 and machine['type'] == machine_type,
                 machines
                 ))
         if num_free < 6 and ctx.owner.startswith('scheduled'):
@@ -88,7 +91,7 @@ def lock_machines(ctx, config):
             else:
                 assert 0, 'not enough machines free'
 
-        newly_locked = lock.lock_many(ctx, config, ctx.owner, ctx.archive)
+        newly_locked = lock.lock_many(ctx, config, machine_type, ctx.owner, ctx.archive)
         if len(newly_locked) == config:
             ctx.config['targets'] = newly_locked
             log.info('\n  '.join(['Locked targets:', ] + yaml.safe_dump(ctx.config['targets'], default_flow_style=False).splitlines()))
