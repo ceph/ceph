@@ -22,6 +22,7 @@ For example::
 		rgw socket path = /tmp/radosgw.sock
 		log file = /var/log/ceph/radosgw.log
 
+.. note:: ``host`` must be your machine hostname, not FQDN.
 
 Deploy ``ceph.conf``
 ====================
