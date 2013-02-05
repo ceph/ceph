@@ -172,7 +172,7 @@ static void log_usage(struct req_state *s, const string& op_name)
   string user;
 
   if (s->bucket_name)
-    user = s->bucket_owner;
+    user = s->bucket_owner.get_id();
   else
     user = s->user.user_id;
 
@@ -304,7 +304,8 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
   entry.user = s->user.user_id;
   if (s->object_acl)
     entry.object_owner = s->object_acl->get_owner().get_id();
-  entry.bucket_owner = s->bucket_owner;
+  entry.bucket_owner = s->bucket_acl->get_owner().get_id();
+
 
   uint64_t bytes_sent = s->cio->get_bytes_sent();
   uint64_t bytes_received = s->cio->get_bytes_received();

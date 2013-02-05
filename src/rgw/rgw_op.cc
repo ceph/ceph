@@ -287,6 +287,7 @@ int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bucket, b
 {
   int ret = 0;
   string obj_str;
+  RGWUserInfo bucket_owner_info;
 
   s->bucket_acl = new RGWAccessControlPolicy(s->cct);
 
@@ -298,7 +299,19 @@ int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bucket, b
       return ret;
     }
     s->bucket = bucket_info.bucket;
-    s->bucket_owner = bucket_info.owner;
+
+    if (s->user.user_id.compare(bucket_info.owner) != 0) {
+      ret = rgw_get_user_info_by_uid(store, bucket_info.owner, bucket_owner_info);
+      if (ret < 0) {
+        ldout(s->cct, 0) << "NOTICE: couldn't get bucket owner info for (id=" << bucket_info.owner << ")" << dendl;
+        return ret;
+      }
+
+      s->bucket_owner.set_id(bucket_info.owner);
+      s->bucket_owner.set_name(bucket_owner_info.display_name);
+    } else {
+      s->bucket_owner = s->owner;
+    }
 
     string no_obj;
     RGWAccessControlPolicy bucket_acl(s->cct);
@@ -773,7 +786,7 @@ void RGWListBucket::execute()
 
 int RGWGetBucketLogging::verify_permission()
 {
-  if (s->user.user_id.compare(s->bucket_owner) != 0)
+  if (s->user.user_id.compare(s->bucket_owner.get_id()) != 0)
     return -EACCES;
 
   return 0;
@@ -811,7 +824,9 @@ void RGWCreateBucket::execute()
   if (ret < 0)
     return;
 
-  s->bucket_owner = s->user.user_id;
+  s->bucket_owner.set_id(s->user.user_id);
+  s->bucket_owner.set_name(s->user.display_name);
+
   r = get_policy_from_attr(s->cct, store, s->obj_ctx, &old_policy, obj);
   if (r >= 0)  {
     if (old_policy.get_owner().get_id().compare(s->user.user_id) != 0) {
