@@ -22,6 +22,7 @@ For example::
 		rgw socket path = /tmp/radosgw.sock
 		log file = /var/log/ceph/radosgw.log
 
+.. note:: ``host`` must be your machine hostname, not FQDN.
 
 Deploy ``ceph.conf``
 ====================
@@ -331,7 +332,7 @@ by RGW.
 The following config options are available for Keystone integration::
 
 	[client.radosgw.gateway]
-		rgw keystone url = {keystone server url}
+		rgw keystone url = {keystone server url:keystone server admin port}
 		rgw keystone admin token = {keystone admin token}
 		rgw keystone accepted roles = {accepted user roles}
 		rgw keystone token cache size = {number of tokens to cache}
@@ -348,7 +349,8 @@ Keystone itself needs to be configured to point to RGW as an object-storage
 endpoint::
 
 	keystone service-create --name swift --type-object-store
-	keystone endpoint-create --service-id <id> --public-url http://radosgw.example.com/swift/v1
+	keystone endpoint-create --service-id <id> --publicurl http://radosgw.example.com/swift/v1 \
+		--internalurl http://radosgw.example.com/swift/v1 --adminurl http://radosgw.example.com/swift/v1
 
 
 The keystone url is the Keystone admin RESTful api url. The admin token is the
