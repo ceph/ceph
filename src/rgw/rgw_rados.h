@@ -720,6 +720,8 @@ public:
                          map<RGWObjCategory, RGWBucketStats> *existing_stats,
                          map<RGWObjCategory, RGWBucketStats> *calculated_stats);
   int bucket_rebuild_index(rgw_bucket& bucket);
+  int remove_obj_from_index(rgw_bucket& bucket, const string& oid);
+
  private:
   int process_intent_log(rgw_bucket& bucket, string& oid,
 			 time_t epoch, int flags, bool purge);
