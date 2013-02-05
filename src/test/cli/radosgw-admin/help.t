@@ -21,6 +21,7 @@
     bucket rm                  remove bucket
     bucket check               check bucket index
     object rm                  remove object
+    object unlink              unlink object from bucket index
     cluster info               show cluster params info
     pool add                   add an existing pool for data placement
     pool rm                    remove an existing pool from data placement set
