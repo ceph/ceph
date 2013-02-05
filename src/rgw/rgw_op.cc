@@ -1515,6 +1515,8 @@ void RGWCompleteMultipart::execute()
   rgw_obj target_obj;
   RGWMPObj mp;
   RGWObjManifest manifest;
+  list<string> unlink_parts;
+  int r;
 
   ret = get_params();
   if (ret < 0)
@@ -1583,11 +1585,13 @@ void RGWCompleteMultipart::execute()
   attrs[RGW_ATTR_ETAG] = etag_bl;
 
   target_obj.init(s->bucket, s->object_str);
-  
+
   for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
     string oid = mp.get_part(obj_iter->second.num);
     rgw_obj src_obj;
     src_obj.init_ns(s->bucket, oid, mp_ns);
+
+    unlink_parts.push_back(src_obj.object);
 
     RGWObjManifestPart& part = manifest.objs[ofs];
 
@@ -1609,7 +1613,14 @@ void RGWCompleteMultipart::execute()
 
   // remove the upload obj
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
-  rgwstore->delete_obj(s->obj_ctx, meta_obj);
+  r = rgwstore->remove_objs_from_index(s->bucket, unlink_parts);
+  if (r < 0) {
+    ldout(s->cct, 0) << "WARNING: remove_objs_from_index() failed r=" << r << dendl;
+  }
+  r = rgwstore->delete_obj(s->obj_ctx, meta_obj);
+  if (r < 0) {
+    ldout(s->cct, 0) << "WARNING: failed to remove object r=" << r << dendl;
+  }
 
 done:
   send_response();
