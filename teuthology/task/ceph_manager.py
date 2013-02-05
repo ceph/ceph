@@ -224,6 +224,8 @@ class CephManager:
             def tmp(x):
                 print x
             self.log = tmp
+        if self.config is None:
+            self.config = dict()
         self.pools = {}
         self.pools['data'] = self.get_pool_property('data', 'pg_num')
 
