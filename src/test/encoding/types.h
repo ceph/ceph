@@ -126,6 +126,9 @@ TYPE(Capability)
 #include "mds/AnchorServer.h"
 TYPE(AnchorServer)
 
+#include "mds/SessionMap.h"
+TYPE(SessionMap)
+
 #include "mds/events/ECommitted.h"
 TYPE(ECommitted)
 #include "mds/events/EExport.h"
