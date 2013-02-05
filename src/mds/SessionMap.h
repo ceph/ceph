@@ -228,6 +228,10 @@ public:
   SessionMap(MDS *m) : mds(m), 
 		       version(0), projected(0), committing(0), committed(0) 
   { }
+  
+  //for the dencoder
+  SessionMap() : mds(NULL), version(0), projected(0),
+		 committing(0), committed(0) {}
     
   // sessions
   bool empty() { return session_map.empty(); }
@@ -367,8 +371,10 @@ public:
   inodeno_t ino;
   list<Context*> waiting_for_load;
 
-  void encode(bufferlist& bl);
+  void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& blp);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<SessionMap*>& ls);
 
   object_t get_object_name();
 
