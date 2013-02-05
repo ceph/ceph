@@ -515,6 +515,10 @@ def reconnect(ctx, timeout):
     """
     log.info('Re-opening connections...')
     starttime = time.time()
+
+    for r in ctx.cluster.remotes.iterkeys():
+        r.ssh.close()
+
     need_reconnect = ctx.cluster.remotes.keys()
     while need_reconnect:
         for remote in need_reconnect:
