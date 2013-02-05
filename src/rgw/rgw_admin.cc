@@ -55,6 +55,7 @@ void _usage()
   cerr << "  bucket rm                  remove bucket\n";
   cerr << "  bucket check               check bucket index\n";
   cerr << "  object rm                  remove object\n";
+  cerr << "  object unlink              unlink object from bucket index\n";
   cerr << "  cluster info               show cluster params info\n";
   cerr << "  pool add                   add an existing pool for data placement\n";
   cerr << "  pool rm                    remove an existing pool from data placement set\n";
@@ -155,6 +156,7 @@ enum {
   OPT_USAGE_TRIM,
   OPT_TEMP_REMOVE,
   OPT_OBJECT_RM,
+  OPT_OBJECT_UNLINK,
   OPT_GC_LIST,
   OPT_GC_PROCESS,
   OPT_CLUSTER_INFO,
@@ -227,6 +229,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "key") == 0 ||
       strcmp(cmd, "buckets") == 0 ||
       strcmp(cmd, "bucket") == 0 ||
+      strcmp(cmd, "object") == 0 ||
       strcmp(cmd, "pool") == 0 ||
       strcmp(cmd, "pools") == 0 ||
       strcmp(cmd, "log") == 0 ||
@@ -318,6 +321,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "object") == 0) {
     if (strcmp(cmd, "rm") == 0)
       return OPT_OBJECT_RM;
+    if (strcmp(cmd, "unlink") == 0)
+      return OPT_OBJECT_UNLINK;
   } else if (strcmp(prev_cmd, "cluster") == 0) {
     if (strcmp(cmd, "info") == 0)
       return OPT_CLUSTER_INFO;
@@ -1627,6 +1632,14 @@ next:
     }
   }
 
+  if (opt_cmd == OPT_OBJECT_UNLINK) {
+    int ret = store->remove_obj_from_index(bucket, object);
+    if (ret < 0) {
+      cerr << "ERROR: remove_obj_from_index() returned error: " << cpp_strerror(-ret) << std::endl;
+      return 1;
+    }
+  }
+
   if (opt_cmd == OPT_BUCKET_CHECK) {
     map<RGWObjCategory, RGWBucketStats> existing_stats;
     map<RGWObjCategory, RGWBucketStats> calculated_stats;
@@ -1757,5 +1770,6 @@ next:
     store->params.dump(formatter);
     formatter->flush(cout);
   }
+
   return 0;
 }
