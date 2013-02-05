@@ -65,7 +65,7 @@ Throttle::~Throttle()
 void Throttle::_reset_max(int64_t m)
 {
   assert(lock.is_locked());
-  if (m < ((int64_t)max.read()) && !cond.empty())
+  if (!cond.empty())
     cond.front()->SignalOne();
   logger->set(l_throttle_max, m);
   max.set((size_t)m);
