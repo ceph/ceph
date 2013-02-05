@@ -1112,7 +1112,35 @@ void ECommitted::replay(MDS *mds)
   }
 }
 
+void ECommitted::encode(bufferlist& bl) const
+{
+  ENCODE_START(3, 3, bl);
+  ::encode(stamp, bl);
+  ::encode(reqid, bl);
+  ENCODE_FINISH(bl);
+} 
 
+void ECommitted::decode(bufferlist::iterator& bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  if (struct_v >= 2)
+    ::decode(stamp, bl);
+  ::decode(reqid, bl);
+  DECODE_FINISH(bl);
+}
+
+void ECommitted::dump(Formatter *f) const {
+  f->dump_stream("stamp") << stamp;
+  f->dump_stream("reqid") << reqid;
+}
+
+void ECommitted::generate_test_instances(list<ECommitted*>& ls)
+{
+  ls.push_back(new ECommitted);
+  ls.push_back(new ECommitted);
+  ls.back()->stamp = utime_t(1, 2);
+  ls.back()->reqid = metareqid_t(entity_name_t::CLIENT(123), 456);
+}
 
 // -----------------------
 // ESlaveUpdate
