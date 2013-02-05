@@ -41,6 +41,30 @@ void AnchorServer::dump()
     dout(15) << "dump " << it->second << dendl;
 }
 
+void AnchorServer::dump(Formatter *f) const
+{
+  f->open_array_section("anchor map");
+  for (map<inodeno_t, Anchor>::const_iterator i = anchor_map.begin();
+       i != anchor_map.end(); ++i) {
+    f->open_object_section("entry");
+    f->dump_int("ino", i->first);
+    f->open_object_section("Anchor");
+    i->second.dump(f);
+    f->close_section(); // Anchor
+    f->close_section(); // entry
+  }
+  f->close_section(); // anchor map
+}
+
+void AnchorServer::generate_test_instances(list<AnchorServer*>& ls)
+{
+  AnchorServer *sample = new AnchorServer();
+  sample->pending_create[0] = 0;
+  sample->pending_destroy[0] = 1;
+  sample->anchor_map[0] = Anchor();
+  ls.push_back(sample);
+}
+
 
 
 /*

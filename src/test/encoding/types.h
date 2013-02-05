@@ -120,6 +120,9 @@ TYPE_FEATUREFUL(MDSMap::mds_info_t)
 #include "mds/Capability.h"
 TYPE(Capability)
 
+#include "mds/AnchorServer.h"
+TYPE(AnchorServer)
+
 #ifdef WITH_RADOSGW
 
 #include "rgw/rgw_rados.h"
