@@ -68,7 +68,7 @@ public:
     string symlink;
     bufferlist snapbl;
     bool dirty;
-    struct default_file_layout *dir_layout;
+    struct file_layout_policy_t *dir_layout;
     typedef map<snapid_t, old_inode_t> old_inodes_t;
     old_inodes_t old_inodes;
 
@@ -80,7 +80,7 @@ public:
     fullbit(const string& d, snapid_t df, snapid_t dl, 
 	    version_t v, inode_t& i, fragtree_t &dft, 
 	    map<string,bufferptr> &xa, const string& sym,
-	    bufferlist &sbl, bool dr, default_file_layout *defl = NULL,
+	    bufferlist &sbl, bool dr, file_layout_policy_t *defl = NULL,
 	    old_inodes_t *oi = NULL) :
       //dn(d), dnfirst(df), dnlast(dl), dnv(v), 
       //inode(i), dirfragtree(dft), xattrs(xa), symlink(sym), snapbl(sbl), dirty(dr) 
@@ -138,7 +138,7 @@ public:
 	  bool dir_layout_exists;
 	  ::decode(dir_layout_exists, bl);
 	  if (dir_layout_exists) {
-	    dir_layout = new default_file_layout;
+	    dir_layout = new file_layout_policy_t;
 	    ::decode(*dir_layout, bl);
 	  }
 	}
@@ -562,7 +562,7 @@ private:
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
     inode_t *pi = in->get_projected_inode();
-    default_file_layout *default_layout = NULL;
+    file_layout_policy_t *default_layout = NULL;
     if (in->is_dir())
       default_layout = (in->get_projected_node() ?
                            in->get_projected_node()->dir_layout :
@@ -611,7 +611,7 @@ private:
     if (!pdft) pdft = &in->dirfragtree;
     if (!px) px = &in->xattrs;
 
-    default_file_layout *default_layout = NULL;
+    file_layout_policy_t *default_layout = NULL;
     if (in->is_dir())
       default_layout = (in->get_projected_node() ?
                            in->get_projected_node()->dir_layout :

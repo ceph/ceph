@@ -5,17 +5,17 @@
 #include "common/Formatter.h"
 
 /*
- * default_file_layout
+ * file_layout_policy_t
  */
 
-void default_file_layout::encode(bufferlist &bl) const
+void file_layout_policy_t::encode(bufferlist &bl) const
 {
   ENCODE_START(2, 2, bl);
   ::encode(layout, bl);
   ENCODE_FINISH(bl);
 }
 
-void default_file_layout::decode(bufferlist::iterator& bl)
+void file_layout_policy_t::decode(bufferlist::iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   ::decode(layout, bl);
@@ -35,15 +35,15 @@ void dump(const ceph_file_layout& l, Formatter *f)
     f->dump_unsigned("pg_pool", l.fl_pg_pool);
 }
 
-void default_file_layout::dump(Formatter *f) const
+void file_layout_policy_t::dump(Formatter *f) const
 {
   ::dump(layout, f);
 }
 
-void default_file_layout::generate_test_instances(list<default_file_layout*>& ls)
+void file_layout_policy_t::generate_test_instances(list<file_layout_policy_t*>& ls)
 {
-  ls.push_back(new default_file_layout);
-  ls.push_back(new default_file_layout);
+  ls.push_back(new file_layout_policy_t);
+  ls.push_back(new file_layout_policy_t);
   ls.back()->layout.fl_stripe_unit = 1024;
   ls.back()->layout.fl_stripe_count = 2;
   ls.back()->layout.fl_object_size = 2048;

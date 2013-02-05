@@ -315,7 +315,7 @@ inode_t *CInode::project_inode(map<string,bufferptr> *px)
       *px = xattrs;
     projected_nodes.back()->dir_layout = default_layout;
   } else {
-    default_file_layout *last_dl = projected_nodes.back()->dir_layout;
+    file_layout_policy_t *last_dl = projected_nodes.back()->dir_layout;
     projected_nodes.push_back(new projected_inode_t(
         new inode_t(*projected_nodes.back()->inode)));
     if (px)
@@ -1445,7 +1445,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
       ::decode(default_layout_exists, p);
       if (default_layout_exists) {
         delete default_layout;
-        default_layout = new default_file_layout;
+        default_layout = new file_layout_policy_t;
         decode(*default_layout, p);
       }
     }
