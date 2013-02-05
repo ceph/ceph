@@ -143,8 +143,8 @@ enum {
   OPT_BUCKET_LINK,
   OPT_BUCKET_UNLINK,
   OPT_BUCKET_STATS,
-  OPT_BUCKET_RM,
   OPT_BUCKET_CHECK,
+  OPT_BUCKET_RM,
   OPT_POLICY,
   OPT_POOL_ADD,
   OPT_POOL_RM,
@@ -578,6 +578,88 @@ enum ObjectKeyType {
   KEY_TYPE_SWIFT,
   KEY_TYPE_S3,
 };
+
+static void check_bad_index_multipart(RGWRados *store, rgw_bucket& bucket, bool fix)
+{
+  int max = 1000;
+  string prefix;
+  string marker;
+  string delim;
+
+  map<string, bool> common_prefixes;
+  string ns = "multipart";
+
+  bool is_truncated;
+  list<string> objs_to_unlink;
+  map<string, bool> meta_objs;
+  map<string, string> all_objs;
+
+  do {
+    vector<RGWObjEnt> result;
+    int r = store->list_objects(bucket, max, prefix, delim, marker,
+				result, common_prefixes, false, ns,
+				&is_truncated, NULL);
+
+    if (r < 0) {
+      cerr << "failed to list objects in bucket=" << bucket << " err=" << cpp_strerror(-r) << std::endl;
+      return;
+    }
+
+    vector<RGWObjEnt>::iterator iter;
+    for (iter = result.begin(); iter != result.end(); ++iter) {
+      RGWObjEnt& ent = *iter;
+
+      rgw_obj obj(bucket, ent.name);
+      obj.set_ns(ns);
+
+      string& oid = obj.object;
+      marker = oid;
+
+      int pos = oid.find_last_of('.');
+      if (pos < 0)
+	continue;
+
+      string name = oid.substr(0, pos);
+      string suffix = oid.substr(pos + 1);
+
+      if (suffix.compare("meta") == 0) {
+	meta_objs[name] = true;
+      } else {
+	all_objs[oid] = name;
+      }
+    }
+
+  } while (is_truncated);
+
+  map<string, string>::iterator aiter;
+  for (aiter = all_objs.begin(); aiter != all_objs.end(); ++aiter) {
+    string& name = aiter->second;
+
+    if (meta_objs.find(name) == meta_objs.end()) {
+      objs_to_unlink.push_back(aiter->first);
+    }
+  }
+
+  if (objs_to_unlink.empty())
+    return;
+
+  if (!fix) {
+    cout << "Need to unlink the following objects from bucket=" << bucket << std::endl;
+  } else {
+    cout << "Unlinking the following objects from bucket=" << bucket << std::endl;
+  }
+  for (list<string>::iterator oiter = objs_to_unlink.begin(); oiter != objs_to_unlink.end(); ++oiter) {
+    cout << *oiter << std::endl;
+  }
+
+  if (fix) {
+    int r = store->remove_objs_from_index(bucket, objs_to_unlink);
+    if (r < 0) {
+      cerr << "ERROR: remove_obj_from_index() returned error: " << cpp_strerror(-r) << std::endl;
+    }
+  }
+
+}
 
 static int remove_object(RGWRados *store, rgw_bucket& bucket, std::string& object)
 {
@@ -1633,7 +1715,9 @@ next:
   }
 
   if (opt_cmd == OPT_OBJECT_UNLINK) {
-    int ret = store->remove_obj_from_index(bucket, object);
+    list<string> oid_list;
+    oid_list.push_back(object);
+    int ret = store->remove_objs_from_index(bucket, oid_list);
     if (ret < 0) {
       cerr << "ERROR: remove_obj_from_index() returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
@@ -1641,6 +1725,8 @@ next:
   }
 
   if (opt_cmd == OPT_BUCKET_CHECK) {
+    check_bad_index_multipart(store, bucket, fix);
+
     map<RGWObjCategory, RGWBucketStats> existing_stats;
     map<RGWObjCategory, RGWBucketStats> calculated_stats;
 
