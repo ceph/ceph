@@ -332,7 +332,7 @@ by RGW.
 The following config options are available for Keystone integration::
 
 	[client.radosgw.gateway]
-		rgw keystone url = {keystone server url}
+		rgw keystone url = {keystone server url:keystone server admin port}
 		rgw keystone admin token = {keystone admin token}
 		rgw keystone accepted roles = {accepted user roles}
 		rgw keystone token cache size = {number of tokens to cache}
