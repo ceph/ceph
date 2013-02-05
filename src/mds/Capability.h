@@ -89,6 +89,8 @@ public:
       wanted(w), issued(i), pending(p), client_follows(cf), mseq(s), last_issue_stamp(lis) {}
     void encode(bufferlist &bl) const;
     void decode(bufferlist::iterator &p);
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<Export*>& ls);
   };
 
 private:
@@ -113,6 +115,8 @@ public:
     revoke_info(__u32 b, ceph_seq_t s, ceph_seq_t li) : before(b), seq(s), last_issue(li) {}
     void encode(bufferlist& bl) const;
     void decode(bufferlist::iterator& bl);
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<revoke_info*>& ls);
   };
 private:
   __u32 _pending, _issued;
@@ -207,7 +211,7 @@ public:
   xlist<Capability*>::item item_session_caps;
   xlist<Capability*>::item item_snaprealm_caps;
 
-  Capability(CInode *i, uint64_t id, client_t c) : 
+  Capability(CInode *i = NULL, uint64_t id = 0, client_t c = 0) : 
     inode(i), client(c),
     cap_id(id),
     _wanted(0),
@@ -304,6 +308,8 @@ public:
   // serializers
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<Capability*>& ls);
   
 };
 
