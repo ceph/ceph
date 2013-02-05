@@ -46,6 +46,7 @@ void _usage()
   cerr << "  bucket unlink              unlink bucket from specified user\n";
   cerr << "  bucket stats               returns bucket statistics\n";
   cerr << "  bucket info                show bucket information\n";
+  cerr << "  object unlink              unlink object from bucket index\n";
   cerr << "  pool add                   add an existing pool for data placement\n";
   cerr << "  pool rm                    remove an existing pool from data placement set\n";
   cerr << "  pools list                 list placement active set\n";
@@ -124,6 +125,7 @@ enum {
   OPT_BUCKET_LINK,
   OPT_BUCKET_UNLINK,
   OPT_BUCKET_STATS,
+  OPT_OBJECT_UNLINK,
   OPT_POLICY,
   OPT_POOL_ADD,
   OPT_POOL_RM,
@@ -201,6 +203,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "key") == 0 ||
       strcmp(cmd, "buckets") == 0 ||
       strcmp(cmd, "bucket") == 0 ||
+      strcmp(cmd, "object") == 0 ||
       strcmp(cmd, "pool") == 0 ||
       strcmp(cmd, "pools") == 0 ||
       strcmp(cmd, "log") == 0 ||
@@ -253,6 +256,9 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_BUCKET_UNLINK;
     if (strcmp(cmd, "stats") == 0)
       return OPT_BUCKET_STATS;
+  } else if (strcmp(prev_cmd, "object") == 0) {
+    if (strcmp(cmd, "unlink") == 0)
+      return OPT_OBJECT_UNLINK;
   } else if (strcmp(prev_cmd, "log") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_LOG_LIST;
@@ -1494,6 +1500,14 @@ next:
       cerr << "ERROR: read_usage() returned ret=" << ret << std::endl;
       return 1;
     }   
+  }
+
+  if (opt_cmd == OPT_OBJECT_UNLINK) {
+    int ret = rgwstore->remove_obj_from_index(bucket, object);
+    if (ret < 0) {
+      cerr << "ERROR: remove_obj_from_index() returned error: " << cpp_strerror(-ret) << std::endl;
+      return 1;
+    }
   }
 
   return 0;

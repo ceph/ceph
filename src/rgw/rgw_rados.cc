@@ -2751,6 +2751,32 @@ int RGWRados::cls_obj_usage_log_trim(string& oid, string& user, uint64_t start_e
   return r;
 }
 
+int RGWRados::remove_obj_from_index(rgw_bucket& bucket, const string& oid)
+{
+  librados::IoCtx io_ctx;
+
+  int r = open_bucket_ctx(bucket, io_ctx);
+  if (r < 0)
+    return r;
+
+  string dir_oid = dir_oid_prefix;
+  dir_oid.append(bucket.marker);
+
+  rgw_bucket_dir_entry entry;
+  entry.epoch = (uint64_t)-1; // ULLONG_MAX, needed to that objclass doesn't skip out request
+  entry.name = oid;
+
+  bufferlist updates;
+  updates.append(CEPH_RGW_REMOVE);
+  ::encode(entry, updates);
+
+  bufferlist out;
+
+  r = io_ctx.exec(dir_oid, "rgw", "dir_suggest_changes", updates, out);
+
+  return r;
+}
+
 int RGWRados::check_disk_state(librados::IoCtx io_ctx,
                                rgw_bucket& bucket,
                                rgw_bucket_dir_entry& list_state,
