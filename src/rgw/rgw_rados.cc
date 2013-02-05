@@ -2751,7 +2751,7 @@ int RGWRados::cls_obj_usage_log_trim(string& oid, string& user, uint64_t start_e
   return r;
 }
 
-int RGWRados::remove_obj_from_index(rgw_bucket& bucket, const string& oid)
+int RGWRados::remove_objs_from_index(rgw_bucket& bucket, list<string>& oid_list)
 {
   librados::IoCtx io_ctx;
 
@@ -2762,13 +2762,19 @@ int RGWRados::remove_obj_from_index(rgw_bucket& bucket, const string& oid)
   string dir_oid = dir_oid_prefix;
   dir_oid.append(bucket.marker);
 
-  rgw_bucket_dir_entry entry;
-  entry.epoch = (uint64_t)-1; // ULLONG_MAX, needed to that objclass doesn't skip out request
-  entry.name = oid;
-
   bufferlist updates;
-  updates.append(CEPH_RGW_REMOVE);
-  ::encode(entry, updates);
+
+  list<string>::iterator iter;
+
+  for (iter = oid_list.begin(); iter != oid_list.end(); ++iter) {
+    string& oid = *iter;
+    dout(2) << "RGWRados::remove_objs_from_index bucket=" << bucket << " oid=" << oid << dendl;
+    rgw_bucket_dir_entry entry;
+    entry.epoch = (uint64_t)-1; // ULLONG_MAX, needed to that objclass doesn't skip out request
+    entry.name = oid;
+    updates.append(CEPH_RGW_REMOVE);
+    ::encode(entry, updates);
+  }
 
   bufferlist out;
 

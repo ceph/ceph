@@ -125,6 +125,7 @@ enum {
   OPT_BUCKET_LINK,
   OPT_BUCKET_UNLINK,
   OPT_BUCKET_STATS,
+  OPT_BUCKET_CHECK,
   OPT_OBJECT_UNLINK,
   OPT_POLICY,
   OPT_POOL_ADD,
@@ -256,6 +257,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_BUCKET_UNLINK;
     if (strcmp(cmd, "stats") == 0)
       return OPT_BUCKET_STATS;
+    if (strcmp(cmd, "check") == 0)
+      return OPT_BUCKET_CHECK;
   } else if (strcmp(prev_cmd, "object") == 0) {
     if (strcmp(cmd, "unlink") == 0)
       return OPT_OBJECT_UNLINK;
@@ -522,6 +525,88 @@ enum ObjectKeyType {
   KEY_TYPE_S3,
 };
 
+void check_bad_index_multipart(rgw_bucket& bucket, bool fix)
+{
+  int max = 1000;
+  string prefix;
+  string marker;
+  string delim;
+
+  map<string, bool> common_prefixes;
+  string ns = "multipart";
+
+  bool is_truncated;
+  list<string> objs_to_unlink;
+  map<string, bool> meta_objs;
+  map<string, string> all_objs;
+
+  do {
+    vector<RGWObjEnt> result;
+    int r = rgwstore->list_objects(bucket, max, prefix, delim, marker,
+				 result, common_prefixes, false, ns,
+				 &is_truncated, NULL);
+
+    if (r < 0) {
+      cerr << "failed to list objects in bucket=" << bucket << " err=" << cpp_strerror(-r) << std::endl;
+      return;
+    }
+
+    vector<RGWObjEnt>::iterator iter;
+    for (iter = result.begin(); iter != result.end(); ++iter) {
+      RGWObjEnt& ent = *iter;
+
+      rgw_obj obj(bucket, ent.name);
+      obj.set_ns(ns);
+
+      string& oid = obj.object;
+      marker = oid;
+
+      int pos = oid.find_last_of('.');
+      if (pos < 0)
+	continue;
+
+      string name = oid.substr(0, pos);
+      string suffix = oid.substr(pos + 1);
+
+      if (suffix.compare("meta") == 0) {
+	meta_objs[name] = true;
+      } else {
+	all_objs[oid] = name;
+      }
+    }
+
+  } while (is_truncated);
+
+  map<string, string>::iterator aiter;
+  for (aiter = all_objs.begin(); aiter != all_objs.end(); ++aiter) {
+    string& name = aiter->second;
+
+    if (meta_objs.find(name) == meta_objs.end()) {
+      objs_to_unlink.push_back(aiter->first);
+    }
+  }
+
+  if (objs_to_unlink.empty())
+    return;
+
+  if (!fix) {
+    cout << "Need to unlink the following objects from bucket=" << bucket << std::endl;
+  } else {
+    cout << "Unlinking the following objects from bucket=" << bucket << std::endl;
+  }
+  for (list<string>::iterator oiter = objs_to_unlink.begin(); oiter != objs_to_unlink.end(); ++oiter) {
+    cout << *oiter << std::endl;
+  }
+
+  if (fix) {
+    int r = rgwstore->remove_objs_from_index(bucket, objs_to_unlink);
+    if (r < 0) {
+      cerr << "ERROR: remove_obj_from_index() returned error: " << cpp_strerror(-r) << std::endl;
+    }
+  }
+
+}
+
 static void parse_date(string& date, uint64_t *epoch, string *out_date = NULL, string *out_time = NULL)
 {
   struct tm tm;
@@ -594,6 +679,7 @@ int main(int argc, char **argv)
   int purge_keys = false;
   int yes_i_really_mean_it = false;
   int max_buckets = -1;
+  int fix = false;
 
   std::string val;
   std::ostringstream errs;
@@ -677,6 +763,8 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &purge_keys, NULL, "--purge-keys", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &yes_i_really_mean_it, NULL, "--yes-i-really-mean-it", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &fix, NULL, "--fix", (char*)NULL)) {
       // do nothing
     } else {
       ++i;
@@ -1503,11 +1591,17 @@ next:
   }
 
   if (opt_cmd == OPT_OBJECT_UNLINK) {
-    int ret = rgwstore->remove_obj_from_index(bucket, object);
+    list<string> oid_list;
+    oid_list.push_back(object);
+    int ret = rgwstore->remove_objs_from_index(bucket, oid_list);
     if (ret < 0) {
       cerr << "ERROR: remove_obj_from_index() returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
     }
+  }
+
+  if (opt_cmd == OPT_BUCKET_CHECK) {
+    check_bad_index_multipart(bucket, fix);
   }
 
   return 0;

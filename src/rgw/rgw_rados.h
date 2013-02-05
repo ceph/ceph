@@ -583,7 +583,7 @@ public:
   /// clean up/process any temporary objects older than given date[/time]
   int remove_temp_objects(string date, string time);
 
-  int remove_obj_from_index(rgw_bucket& bucket, const string& oid);
+  int remove_objs_from_index(rgw_bucket& bucket, list<string>& oid_list);
 
  private:
   int process_intent_log(rgw_bucket& bucket, string& oid,
