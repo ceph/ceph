@@ -113,6 +113,9 @@ TYPE(mds_table_pending_t)
 TYPE_FEATUREFUL(MDSMap)
 TYPE_FEATUREFUL(MDSMap::mds_info_t)
 
+#include "mds/Capability.h"
+TYPE(Capability)
+
 #ifdef WITH_RADOSGW
 
 #include "rgw/rgw_rados.h"
