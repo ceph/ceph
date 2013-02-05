@@ -2566,7 +2566,7 @@ public:
   }
 };
 
-bool Client::_flush(Inode *in)
+bool Client::_flush(Inode *in, Context *onfinish)
 {
   ldout(cct, 10) << "_flush " << *in << dendl;
 
@@ -2575,7 +2575,9 @@ bool Client::_flush(Inode *in)
     return true;
   }
 
-  Context *onfinish = new C_Client_PutInode(this, in);
+  if (!onfinish) {
+    onfinish = new C_Client_PutInode(this, in);
+  }
   bool safe = objectcacher->flush_set(&in->oset, onfinish);
   if (safe) {
     onfinish->complete(0);
@@ -5877,11 +5879,19 @@ int Client::_fsync(Fh *f, bool syncdataonly)
   Inode *in = f->inode;
   tid_t wait_on_flush = 0;
   bool flushed_metadata = false;
+  Mutex lock("Client::_fsync::lock");
+  Cond cond;
+  bool done = false;
+  C_SafeCond *object_cacher_completion = NULL;
 
   ldout(cct, 3) << "_fsync(" << f << ", " << (syncdataonly ? "dataonly)":"data+metadata)") << dendl;
   
-  if (cct->_conf->client_oc)
-    _flush(in);
+  if (cct->_conf->client_oc) {
+    object_cacher_completion = new C_SafeCond(&lock, &cond, &done, &r);
+    in->get(); // take a reference; C_SafeCond doesn't and _flush won't either
+    _flush(in, object_cacher_completion);
+    ldout(cct, 15) << "using return-valued form of _fsync" << dendl;
+  }
   
   if (!syncdataonly && (in->dirty_caps & ~CEPH_CAP_ANY_FILE_WR)) {
     for (map<int, Cap*>::iterator iter = in->caps.begin(); iter != in->caps.end(); ++iter) {
@@ -5893,18 +5903,35 @@ int Client::_fsync(Fh *f, bool syncdataonly)
     flushed_metadata = true;
   } else ldout(cct, 10) << "no metadata needs to commit" << dendl;
 
-  // FIXME: this can starve
-  while (in->cap_refs[CEPH_CAP_FILE_BUFFER] > 0) {
-    ldout(cct, 10) << "ino " << in->ino << " has " << in->cap_refs[CEPH_CAP_FILE_BUFFER]
-	     << " uncommitted, waiting" << dendl;
-    wait_on_list(in->waitfor_commit);
+  if (object_cacher_completion) { // wait on a real reply instead of guessing
+    client_lock.Unlock();
+    lock.Lock();
+    ldout(cct, 15) << "waiting on data to flush" << dendl;
+    while (!done)
+      cond.Wait(lock);
+    lock.Unlock();
+    client_lock.Lock();
+    put_inode(in);
+    ldout(cct, 15) << "got " << r << " from flush writeback" << dendl;
+  } else {
+    // FIXME: this can starve
+    while (in->cap_refs[CEPH_CAP_FILE_BUFFER] > 0) {
+      ldout(cct, 10) << "ino " << in->ino << " has " << in->cap_refs[CEPH_CAP_FILE_BUFFER]
+		     << " uncommitted, waiting" << dendl;
+      wait_on_list(in->waitfor_commit);
+    }
   }
 
-  if (!flushed_metadata) wait_sync_caps(wait_on_flush); //this could wait longer than strictly necessary,
-                                                    //but on a sync the user can put up with it
+  if (!r) {
+    if (flushed_metadata) wait_sync_caps(wait_on_flush);
+    // this could wait longer than strictly necessary,
+    // but on a sync the user can put up with it
 
-  ldout(cct, 10) << "ino " << in->ino << " has no uncommitted writes" << dendl;
-
+    ldout(cct, 10) << "ino " << in->ino << " has no uncommitted writes" << dendl;
+  } else {
+    ldout(cct, 1) << "ino " << in->ino << " failed to commit to disk! "
+		  << cpp_strerror(-r) << dendl;
+  }
   return r;
 }
 
