@@ -111,19 +111,19 @@ inline string ccap_string(int cap)
  * Default file layout stuff. This lets us set a default file layout on
  * a directory inode that all files in its tree will use on creation.
  */
-struct default_file_layout {
+struct file_layout_policy_t {
   ceph_file_layout layout;
 
-  default_file_layout() {
+  file_layout_policy_t() {
     memset(&layout, 0, sizeof(layout));
   }
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<default_file_layout*>& ls);
+  static void generate_test_instances(list<file_layout_policy_t*>& ls);
 };
-WRITE_CLASS_ENCODER(default_file_layout);
+WRITE_CLASS_ENCODER(file_layout_policy_t);
 
 
 struct scatter_info_t {

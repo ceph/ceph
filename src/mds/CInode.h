@@ -211,7 +211,7 @@ public:
   //bool hack_accessed;
   //utime_t hack_load_stamp;
 
-  default_file_layout *default_layout;
+  file_layout_policy_t *default_layout;
 
   /**
    * Projection methods, used to store inode changes until they have been journaled,
@@ -230,13 +230,13 @@ public:
     inode_t *inode;
     map<string,bufferptr> *xattrs;
     sr_t *snapnode;
-    default_file_layout *dir_layout;
+    file_layout_policy_t *dir_layout;
 
     projected_inode_t() : inode(NULL), xattrs(NULL), snapnode(NULL), dir_layout(NULL) {}
     projected_inode_t(inode_t *in, sr_t *sn) : inode(in), xattrs(NULL), snapnode(sn),
         dir_layout(NULL) {}
     projected_inode_t(inode_t *in, map<string, bufferptr> *xp = NULL, sr_t *sn = NULL,
-                      default_file_layout *dl = NULL) :
+                      file_layout_policy_t *dl = NULL) :
       inode(in), xattrs(xp), snapnode(sn), dir_layout(dl) {}
   };
   list<projected_inode_t*> projected_nodes;   // projected values (only defined while dirty)
@@ -589,7 +589,7 @@ private:
       ::decode(default_layout_exists, bl);
       if (default_layout_exists) {
         delete default_layout;
-        default_layout = new default_file_layout;
+        default_layout = new file_layout_policy_t;
         ::decode(*default_layout, bl);
       }
     }
@@ -625,7 +625,7 @@ private:
       ::decode(default_layout_exists, p);
       if (default_layout_exists) {
         delete default_layout;
-        default_layout = new default_file_layout;
+        default_layout = new file_layout_policy_t;
         ::decode(*default_layout, p);
       }
     }

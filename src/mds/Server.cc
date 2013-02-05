@@ -3443,7 +3443,7 @@ void Server::handle_client_setdirlayout(MDRequest *mdr)
     return;
 
   // validate layout
-  default_file_layout *layout = new default_file_layout;
+  file_layout_policy_t *layout = new file_layout_policy_t;
   if (cur->get_projected_dir_layout())
     layout->layout = *cur->get_projected_dir_layout();
   else if (dir_layout)
@@ -3570,7 +3570,7 @@ void Server::handle_set_vxattr(MDRequest *mdr, CInode *cur,
 	return;
       }
 
-      default_file_layout *dlayout = new default_file_layout;
+      file_layout_policy_t *dlayout = new file_layout_policy_t;
       if (cur->get_projected_dir_layout())
 	dlayout->layout = *cur->get_projected_dir_layout();
       else if (dir_layout)

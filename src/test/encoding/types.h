@@ -97,7 +97,7 @@ TYPE(snaplink_t)
 TYPE(sr_t)*/
 
 #include "mds/mdstypes.h"
-TYPE(default_file_layout)
+TYPE(file_layout_policy_t)
 TYPE(frag_info_t)
 
 #ifdef WITH_RADOSGW
