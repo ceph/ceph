@@ -50,14 +50,17 @@ def ship_config(ctx, config):
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
     log.info('Shipping apache config and rgw.fcgi...')
-    src = os.path.join(os.path.dirname(__file__), 'apache.conf.template')
+    src = os.path.join(os.path.dirname(__file__)
+                       , 'apache.conf.template').format(
+        testdir=testdir
+        )
     for client in config.iterkeys():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         with file(src, 'rb') as f:
             teuthology.write_file(
                 remote=remote,
                 path='{tdir}/apache/apache.conf'.format(tdir=testdir),
-                data=f.format(testdir=testdir),
+                data=f,
                 )
         teuthology.write_file(
             remote=remote,
