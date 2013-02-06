@@ -193,10 +193,13 @@ TEST_F(ThrottleTest, wait) {
 
     t.join();
 
-    if (!(waited = t.waited))
+    if (!(waited = t.waited)) {
       delay *= 2;
+      // undo the changes we made
+      throttle.put(throttle_max / 2);
+      throttle.wait(throttle_max);
+    }
   } while(!waited);
-	  
 }
 
 TEST_F(ThrottleTest, destructor) {
