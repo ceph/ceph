@@ -2649,7 +2649,8 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
   try {
     ostringstream oss;
     read_log(store, coll, log_oid, info, ondisklog, log, missing, oss, this);
-    osd->clog.error() << oss;
+    if (oss.str().length())
+      osd->clog.error() << oss;
   }
   catch (const buffer::error &e) {
     string cr_log_coll_name(get_corrupt_pg_log_name());
