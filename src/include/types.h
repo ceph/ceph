@@ -120,7 +120,7 @@ namespace __gnu_cxx {
 // -- io helpers --
 
 template<class A, class B>
-inline ostream& operator<<(ostream& out, const pair<A,B> v) {
+inline ostream& operator<<(ostream& out, const pair<A,B>& v) {
   return out << v.first << "," << v.second;
 }
 
