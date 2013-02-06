@@ -57,12 +57,10 @@ def create_users(ctx, config):
             _config_user(testswift_conf, '{user}.{client}'.format(user=user, client=client), user, suffix)
             ctx.cluster.only(client).run(
                 args=[
-                    'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
                     '{tdir}/enable-coredump'.format(tdir=testdir),
-                    '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                    'ceph-coverage',
                     '{tdir}/archive/coverage'.format(tdir=testdir),
-                    '{tdir}/binary/usr/local/bin/radosgw-admin'.format(tdir=testdir),
-                    '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
+                    'radosgw-admin',
                     'user', 'create',
                     '--subuser', '{account}:{user}'.format(account=testswift_conf['func_test']['account{s}'.format(s=suffix)],user=user),
                     '--display-name', testswift_conf['func_test']['display_name{s}'.format(s=suffix)],
