@@ -780,10 +780,10 @@ void MDS::handle_command(MMonCommand *m)
 	  CDir *dir = in->get_dirfrag(frag_t());
 	  if (dir && dir->is_auth()) {
 	    mdcache->migrator->export_dir(dir, target);
-	  } else dout(0) << "bad migrate_dir path dirfrag frag_t() or dir not auth" << dendl;
-	} else dout(0) << "bad migrate_dir path" << dendl;
-      } else dout(0) << "bad migrate_dir target syntax" << dendl;
-    } else dout(0) << "bad migrate_dir syntax" << dendl;
+	  } else dout(0) << "bad export_dir path dirfrag frag_t() or dir not auth" << dendl;
+	} else dout(0) << "bad export_dir path" << dendl;
+      } else dout(0) << "bad export_dir target syntax" << dendl;
+    } else dout(0) << "bad export_dir syntax" << dendl;
   } 
   else if (m->cmd[0] == "cpu_profiler") {
     ostringstream ss;
