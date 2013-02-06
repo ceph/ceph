@@ -1,8 +1,8 @@
 #include <iostream>
 #include <include/types.h>
+#include <errno.h>
 
-#include "rgw_json.h"
-#include "rgw_common.h"
+#include "common/ceph_json.h"
 
 // for testing DELETE ME
 #include <fstream>
@@ -198,24 +198,24 @@ vector<string> JSONObj::get_array_elements()
   return elements;
 }
 
-RGWJSONParser::RGWJSONParser() : buf_len(0), success(true)
+JSONParser::JSONParser() : buf_len(0), success(true)
 {
 }
 
-RGWJSONParser::~RGWJSONParser()
+JSONParser::~JSONParser()
 {
 }
 
 
 
-void RGWJSONParser::handle_data(const char *s, int len)
+void JSONParser::handle_data(const char *s, int len)
 {
   json_buffer.append(s, len); // check for problems with null termination FIXME
   buf_len += len;
 }
 
 // parse a supplied JSON fragment
-bool RGWJSONParser::parse(const char *buf_, int len)
+bool JSONParser::parse(const char *buf_, int len)
 {
   string json_string = buf_;
   // make a substring to len
@@ -230,7 +230,7 @@ bool RGWJSONParser::parse(const char *buf_, int len)
 }
 
 // parse the internal json_buffer up to len
-bool RGWJSONParser::parse(int len)
+bool JSONParser::parse(int len)
 {
   string json_string = json_buffer.substr(0, len);
   success = read(json_string, data);
@@ -243,7 +243,7 @@ bool RGWJSONParser::parse(int len)
 }
 
 // parse the complete internal json_buffer
-bool RGWJSONParser::parse()
+bool JSONParser::parse()
 {
   success = read(json_buffer, data);
   if (success)
@@ -255,7 +255,7 @@ bool RGWJSONParser::parse()
 }
 
 // parse a supplied ifstream, for testing. DELETE ME
-bool RGWJSONParser::parse(const char *file_name)
+bool JSONParser::parse(const char *file_name)
 {
   ifstream is(file_name);
   success = read(is, data);

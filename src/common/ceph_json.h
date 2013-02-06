@@ -1,5 +1,5 @@
-#ifndef RGW_JSON_H
-#define RGW_JSON_H
+#ifndef CEPH_JSON_H
+#define CEPH_JSON_H
 
 #include <iostream>
 #include <include/types.h>
@@ -67,14 +67,14 @@ public:
   vector<string> get_array_elements();
 };
 
-class RGWJSONParser : public JSONObj
+class JSONParser : public JSONObj
 {
   int buf_len;
   string json_buffer;
   bool success;
 public:
-  RGWJSONParser();
-  virtual ~RGWJSONParser();
+  JSONParser();
+  virtual ~JSONParser();
   void handle_data(const char *s, int len);
 
   bool parse(const char *buf_, int len);
@@ -95,7 +95,7 @@ public:
     err(const string& m) : message(m) {}
   };
 
-  RGWJSONParser parser;
+  JSONParser parser;
 
   JSONDecoder(bufferlist& bl) {
     if (!parser.parse(bl.c_str(), bl.length())) {
