@@ -174,7 +174,7 @@ def remove_osd_tmpfs(ctx, log):
     from .orchestra import run
     ctx.cluster.run(
         args=[
-            'grep', '/mnt', '/etc/mtab', run.Raw('|'),
+            'egrep', 'tmpfs\s+/mnt', '/etc/mtab', run.Raw('|'),
             'awk', '{print $2}', run.Raw('|'),
             'xargs', '-r',
             'sudo', 'umount', run.Raw(';'),
