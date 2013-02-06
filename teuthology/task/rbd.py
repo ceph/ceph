@@ -318,12 +318,14 @@ def mount(ctx, config):
     testdir = teuthology.get_testdir(ctx)
 
     mnt_template = '{tdir}/mnt.{id}'
+    mounted = []
     for role, image in role_images:
         if image is None:
             image = default_image_name(role)
         (remote,) = ctx.cluster.only(role).remotes.keys()
         id_ = strip_client_prefix(role)
         mnt = mnt_template.format(tdir=testdir, id=id_)
+        mounted.append((remote, mnt))
         remote.run(
             args=[
                 'mkdir',
@@ -344,13 +346,8 @@ def mount(ctx, config):
     try:
         yield
     finally:
-        log.info("Unmounting rbd images...")
-        for role, image in role_images:
-            if image is None:
-                image = default_image_name(role)
-            (remote,) = ctx.cluster.only(role).remotes.keys()
-            id_ = strip_client_prefix(role)
-            mnt = mnt_template.format(id=id_)
+        log.info("Unmounting rbd images... %s", mounted)
+        for remote, mnt in mounted:
             remote.run(
                 args=[
                     'sudo',
@@ -358,7 +355,6 @@ def mount(ctx, config):
                     mnt,
                     ],
                 )
-
             remote.run(
                 args=[
                     'rmdir',
