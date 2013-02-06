@@ -71,7 +71,7 @@ def task(ctx, config):
                           '{tdir}/archive/coverage',
                           '{tdir}/binary/usr/local/bin/rados',
                           '-c', '{tdir}/ceph.conf',
-                          '-k', '{tdir}/data/{role}.keyring'.format(role=role),
+                          '-k', '{tdir}/data/%s.keyring' % role,
                           '--name', role,
                           '-p' , str(config.get('pool', 'data')),
                           'bench', str(config.get('time', 360)), 'write',
