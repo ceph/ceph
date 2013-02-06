@@ -1871,6 +1871,7 @@ noinst_HEADERS = \
 	osdc/WritebackHandler.h\
         perfglue/cpu_profiler.h\
         perfglue/heap_profiler.h\
+	rgw/logrotate.conf\
 	rgw/rgw_acl.h\
 	rgw/rgw_acl_s3.h\
 	rgw/rgw_acl_swift.h\
