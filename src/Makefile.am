@@ -133,7 +133,6 @@ bin_PROGRAMS += monmaptool crushtool osdmaptool
 rgw_dencoder_src = rgw/rgw_dencoder.cc \
                    rgw/rgw_acl.cc \
                    rgw/rgw_common.cc \
-                   rgw/rgw_json.cc \
                    rgw/rgw_json_enc.cc
 
 ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc ${rgw_dencoder_src} perfglue/disabled_heap_profiler.cc
@@ -358,7 +357,6 @@ librgw_a_SOURCES =  \
 	rgw/rgw_fcgi.cc \
 	rgw/rgw_xml.cc \
 	rgw/rgw_usage.cc \
-	rgw/rgw_json.cc \
 	rgw/rgw_json_enc.cc \
 	rgw/rgw_user.cc \
 	rgw/rgw_tools.cc \
@@ -1339,6 +1337,7 @@ libcommon_files = \
 	common/entity_name.cc \
 	common/ceph_crypto.cc \
 	common/ceph_crypto_cms.cc \
+	common/ceph_json.cc \
 	common/ipaddr.cc \
 	common/pick_address.cc \
 	include/addr_parsing.c \
@@ -1590,6 +1589,7 @@ noinst_HEADERS = \
 	common/config_opts.h\
 	common/ceph_crypto.h\
 	common/ceph_crypto_cms.h\
+	common/ceph_json.h\
 	common/utf8.h\
 	common/mime.h\
 	common/pick_address.h\
@@ -1932,7 +1932,6 @@ noinst_HEADERS = \
 	rgw/rgw_client_io.h\
 	rgw/rgw_fcgi.h\
 	rgw/rgw_xml.h\
-	rgw/rgw_json.h\
 	rgw/rgw_cache.h\
 	rgw/rgw_common.h\
 	rgw/rgw_string.h\

@@ -7,8 +7,8 @@
 #include "include/types.h"
 
 #include "common/Formatter.h"
+#include "common/ceph_json.h"
 
-#include "rgw_json.h"
 #include "rgw_common.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -55,7 +55,7 @@ struct UserInfo {
 
 
 int main(int argc, char **argv) {
-  RGWJSONParser parser;
+  JSONParser parser;
 
   char buf[1024];
   bufferlist bl;

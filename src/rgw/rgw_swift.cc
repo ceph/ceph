@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "rgw_json.h"
+#include "common/ceph_json.h"
 #include "rgw_common.h"
 #include "rgw_swift.h"
 #include "rgw_swift_auth.h"
@@ -102,7 +102,7 @@ int RGWSwift::validate_token(const char *token, struct rgw_swift_auth_info *info
 
 int KeystoneToken::parse(CephContext *cct, bufferlist& bl)
 {
-  RGWJSONParser parser;
+  JSONParser parser;
 
   if (!parser.parse(bl.c_str(), bl.length())) {
     ldout(cct, 0) << "malformed json" << dendl;
@@ -404,7 +404,7 @@ int RGWSwift::check_revoked()
 
   ldout(cct, 10) << "request returned " << bl.c_str() << dendl;
 
-  RGWJSONParser parser;
+  JSONParser parser;
 
   if (!parser.parse(bl.c_str(), bl.length())) {
     ldout(cct, 0) << "malformed json" << dendl;
@@ -438,7 +438,7 @@ int RGWSwift::check_revoked()
 
   ldout(cct, 10) << "ceph_decode_cms: decoded: " << json.c_str() << dendl;
 
-  RGWJSONParser list_parser;
+  JSONParser list_parser;
   if (!list_parser.parse(json.c_str(), json.length())) {
     ldout(cct, 0) << "malformed json" << dendl;
     return -EINVAL;
