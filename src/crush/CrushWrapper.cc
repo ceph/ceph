@@ -935,6 +935,15 @@ void CrushWrapper::dump_rules(Formatter *f) const
   }
 }
 
+void CrushWrapper::list_rules(Formatter *f) const
+{
+  for (int rule = 0; rule < get_max_rules(); rule++) {
+    if (!rule_exists(rule))
+      continue;
+    f->dump_string("name", get_rule_name(rule));
+  }
+}
+
 void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)
 {
   o.push_back(new CrushWrapper);
