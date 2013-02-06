@@ -1880,6 +1880,38 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	}
       }
     }
+    else if (m->cmd[1] == "find") {
+      if (m->cmd.size() < 3) {
+	ss << "usage: osd find <osd-id>";
+	r = -EINVAL;
+	goto out;
+      }
+      long osd = parse_osd_id(m->cmd[2].c_str(), &ss);
+      if (osd < 0) {
+	r = -EINVAL;
+	goto out;
+      }
+      if (!osdmap.exists(osd)) {
+	ss << "osd." << osd << " does not exist";
+	r = -ENOENT;
+	goto out;
+      }
+      JSONFormatter jf(true);
+      jf.open_object_section("osd_location");
+      jf.dump_int("osd", osd);
+      jf.dump_stream("ip") << osdmap.get_addr(osd);
+      jf.open_object_section("crush_location");
+      map<string,string> loc = osdmap.crush->get_full_location(osd);
+      for (map<string,string>::iterator p = loc.begin(); p != loc.end(); ++p)
+	jf.dump_string(p->first.c_str(), p->second);
+      jf.close_section();
+      jf.close_section();
+      ostringstream rs;
+      jf.flush(rs);
+      rs << "\n";
+      rdata.append(rs.str());
+      r = 0;
+    }
     else if (m->cmd[1] == "map" && m->cmd.size() == 4) {
       int64_t pool = osdmap.lookup_pg_pool_name(m->cmd[2].c_str());
       if (pool < 0) {
@@ -1962,6 +1994,40 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	rdata.append(s);
       }
       ss << "listed " << osdmap.blacklist.size() << " entries";
+      r = 0;
+    }
+    else if (m->cmd.size() >= 4 && m->cmd[1] == "crush" && m->cmd[2] == "rule" && (m->cmd[3] == "list" ||
+										   m->cmd[3] == "ls")) {
+      JSONFormatter jf(true);
+      jf.open_array_section("rules");
+      osdmap.crush->list_rules(&jf);
+      jf.close_section();
+      ostringstream rs;
+      jf.flush(rs);
+      rs << "\n";
+      rdata.append(rs.str());
+      r = 0;
+    }
+    else if (m->cmd.size() >= 4 && m->cmd[1] == "crush" && m->cmd[2] == "rule" && m->cmd[3] == "dump") {
+      JSONFormatter jf(true);
+      jf.open_array_section("rules");
+      osdmap.crush->dump_rules(&jf);
+      jf.close_section();
+      ostringstream rs;
+      jf.flush(rs);
+      rs << "\n";
+      rdata.append(rs.str());
+      r = 0;
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "crush" && m->cmd[2] == "dump") {
+      JSONFormatter jf(true);
+      jf.open_object_section("crush_map");
+      osdmap.crush->dump(&jf);
+      jf.close_section();
+      ostringstream rs;
+      jf.flush(rs);
+      rs << "\n";
+      rdata.append(rs.str());
       r = 0;
     }
   }
@@ -2379,6 +2445,94 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	return true;
       }
+    }
+    else if (m->cmd.size() == 7 &&
+	     m->cmd[1] == "crush" &&
+	     m->cmd[2] == "rule" &&
+	     m->cmd[3] == "create-simple") {
+      string name = m->cmd[4];
+      string root = m->cmd[5];
+      string type = m->cmd[6];
+
+      if (osdmap.crush->rule_exists(name)) {
+	ss << "rule " << name << " already exists";
+	err = 0;
+	goto out;
+      }
+
+      bufferlist bl;
+      if (pending_inc.crush.length())
+	bl = pending_inc.crush;
+      else
+	osdmap.crush->encode(bl);
+      CrushWrapper newcrush;
+      bufferlist::iterator p = bl.begin();
+      newcrush.decode(p);
+
+      if (newcrush.rule_exists(name)) {
+	ss << "rule " << name << " already exists";
+      } else {
+	int rule = newcrush.add_simple_rule(name, root, type);
+	if (rule < 0) {
+	  err = rule;
+	  goto out;
+	}
+
+	pending_inc.crush.clear();
+	newcrush.encode(pending_inc.crush);
+      }
+      getline(ss, rs);
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      return true;
+    }
+    else if (m->cmd.size() == 5 &&
+	     m->cmd[1] == "crush" &&
+	     m->cmd[2] == "rule" &&
+	     m->cmd[3] == "rm") {
+      string name = m->cmd[4];
+
+      if (!osdmap.crush->rule_exists(name)) {
+	ss << "rule " << name << " does not exist";
+	err = 0;
+	goto out;
+      }
+
+      bufferlist bl;
+      if (pending_inc.crush.length())
+	bl = pending_inc.crush;
+      else
+	osdmap.crush->encode(bl);
+      CrushWrapper newcrush;
+      bufferlist::iterator p = bl.begin();
+      newcrush.decode(p);
+
+      if (!newcrush.rule_exists(name)) {
+	ss << "rule " << name << " does not exist";
+      } else {
+	int ruleno = newcrush.get_rule_id(name);
+	assert(ruleno >= 0);
+
+	// make sure it is not in use.
+	// FIXME: this is ok in some situations, but let's not bother with that
+	// complexity now.
+	int ruleset = newcrush.get_rule_mask_ruleset(ruleno);
+	if (osdmap.crush_ruleset_in_use(ruleset)) {
+	  ss << "crush rule " << name << " ruleset " << ruleset << " is in use";
+	  err = -EBUSY;
+	  goto out;
+	}
+
+	err = newcrush.remove_rule(ruleno);
+	if (err < 0) {
+	  goto out;
+	}
+
+	pending_inc.crush.clear();
+	newcrush.encode(pending_inc.crush);
+      }
+      getline(ss, rs);
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      return true;
     }
     else if (m->cmd[1] == "setmaxosd" && m->cmd.size() > 2) {
       int newmax = parse_pos_long(m->cmd[2].c_str(), &ss);
