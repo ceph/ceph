@@ -132,8 +132,8 @@ public:
     assert((bool)_front == (bool)_size);
   }
 
-  T front() { return (T)_front->_item; }
-  T back() { return (T)_back->_item; }
+  T front() { return static_cast<T>(_front->_item); }
+  T back() { return static_cast<T>(_back->_item); }
 
   void pop_front() {
     assert(!empty());
@@ -149,7 +149,7 @@ public:
     item *cur;
   public:
     iterator(item *i = 0) : cur(i) {}
-    T operator*() { return (T)cur->_item; }
+    T operator*() { return static_cast<T>(cur->_item); }
     iterator& operator++() {
       assert(cur);
       assert(cur->_list);
