@@ -268,4 +268,101 @@ bool RGWJSONParser::parse(const char *file_name)
 }
 
 
+void decode_json_obj(long& val, JSONObj *obj)
+{
+  string s = obj->get_data();
+  const char *start = s.c_str();
+  char *p;
+
+  errno = 0;
+  val = strtol(start, &p, 10);
+
+  /* Check for various possible errors */
+
+ if ((errno == ERANGE && (val == LONG_MAX || val == LONG_MIN)) ||
+     (errno != 0 && val == 0)) {
+   throw JSONDecoder::err("failed to parse number");
+ }
+
+ if (p == start) {
+   throw JSONDecoder::err("failed to parse number");
+ }
+
+ while (*p != '\0') {
+   if (!isspace(*p)) {
+     throw JSONDecoder::err("failed to parse number");
+   }
+   p++;
+ }
+}
+
+void decode_json_obj(unsigned long& val, JSONObj *obj)
+{
+  string s = obj->get_data();
+  const char *start = s.c_str();
+  char *p;
+
+  errno = 0;
+  val = strtoul(start, &p, 10);
+
+  /* Check for various possible errors */
+
+ if ((errno == ERANGE && val == ULONG_MAX) ||
+     (errno != 0 && val == 0)) {
+   throw JSONDecoder::err("failed to number");
+ }
+
+ if (p == start) {
+   throw JSONDecoder::err("failed to parse number");
+ }
+
+ while (*p != '\0') {
+   if (!isspace(*p)) {
+     throw JSONDecoder::err("failed to parse number");
+   }
+   p++;
+ }
+}
+
+void decode_json_obj(int& val, JSONObj *obj)
+{
+  long l;
+  decode_json_obj(l, obj);
+#if LONG_MAX > INT_MAX
+  if (l > INT_MAX || l < INT_MIN) {
+    throw JSONDecoder::err("integer out of range");
+  }
+#endif
+
+  val = (int)l;
+}
+
+void decode_json_obj(unsigned& val, JSONObj *obj)
+{
+  unsigned long l;
+  decode_json_obj(l, obj);
+#if ULONG_MAX > UINT_MAX
+  if (l > UINT_MAX) {
+    throw JSONDecoder::err("unsigned integer out of range");
+  }
+#endif
+
+  val = (unsigned)l;
+}
+
+void decode_json_obj(bool& val, JSONObj *obj)
+{
+  string s = obj->get_data();
+  if (strcasecmp(s.c_str(), "true") == 0) {
+    val = true;
+    return;
+  }
+  if (strcasecmp(s.c_str(), "false") == 0) {
+    val = true;
+    return;
+  }
+  int i;
+  decode_json_obj(i, obj);
+  val = (bool)i;
+}
 
