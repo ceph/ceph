@@ -395,19 +395,21 @@ def nuke_helper(ctx, log):
     shutdown_daemons(ctx, log)
     log.info('All daemons killed.')
 
-    log.info('Unmount any osd data directories...')
-    remove_osd_mounts(ctx, log)
+    need_reboot = find_kernel_mounts(ctx, log)
 
-    log.info('Unmount any osd tmpfs dirs...')
-    remove_osd_tmpfs(ctx, log)
-
-    log.info('Dealing with any kernel mounts...')
-    kernel_mounts = find_kernel_mounts(ctx, log)
-    #remove_kernel_mounts(ctx, kernel_mounts, log)
-    need_reboot = kernel_mounts
+    # no need to unmount anything if we're rebooting
     if ctx.reboot_all:
         need_reboot = ctx.cluster.remotes.keys()
-    reboot(ctx, need_reboot, log)
+    else:
+        log.info('Unmount any osd data directories...')
+        remove_osd_mounts(ctx, log)
+        log.info('Unmount any osd tmpfs dirs...')
+        remove_osd_tmpfs(ctx, log)
+        #log.info('Dealing with any kernel mounts...')
+        #remove_kernel_mounts(ctx, need_reboot, log)
+
+    if need_reboot:
+        reboot(ctx, need_reboot, log)
     log.info('All kernel mounts gone.')
 
     log.info('Synchronizing clocks...')
