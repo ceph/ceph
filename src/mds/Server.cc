@@ -837,7 +837,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
       mdr->cap_releases.erase(tracedn->get_dir()->get_inode()->vino());
 
     set_trace_dist(mdr->session, reply, tracei, tracedn, mdr->snapid,
-		   mdr->client_request->get_dentry_wanted());
+		   mdr->client_request->get_dentry_wanted(), req->may_write());
   }
 
   reply->set_extra_bl(mdr->reply_extra_bl);
@@ -918,7 +918,8 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 	  mdcache->try_reconnect_cap(tracei, session);
       } else {
 	// include metadata in reply
-	set_trace_dist(session, reply, tracei, tracedn, snapid, dentry_wanted);
+	set_trace_dist(session, reply, tracei, tracedn,
+	               snapid, dentry_wanted, req->may_write());
       }
     }
 
@@ -975,8 +976,16 @@ void Server::encode_null_lease(bufferlist& bl)
 void Server::set_trace_dist(Session *session, MClientReply *reply,
 			    CInode *in, CDentry *dn,
 			    snapid_t snapid,
-			    int dentry_wanted)
+			    int dentry_wanted,
+			    bool modified)
 {
+  // skip doing this for debugging purposes?
+  if (modified && g_conf->mds_traceless_replies &&
+      (rand() % 10000 < g_conf->mds_traceless_replies * 10000.0)) {
+    dout(5) << "deliberately skipping trace for " << *reply << dendl;
+    return;
+  }
+
   // inode, dentry, dir, ..., inode
   bufferlist bl;
   int whoami = mds->get_nodeid();
