@@ -1654,6 +1654,15 @@ void OSDMap::print_summary(ostream& out) const
     out << " nearfull";
 }
 
+bool OSDMap::crush_ruleset_in_use(int ruleset) const
+{
+  for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
+    if (p->second.crush_ruleset == ruleset)
+      return true;
+  }
+  return false;
+}
+
 void OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
 			  int nosd, int pg_bits, int pgp_bits)
 {
