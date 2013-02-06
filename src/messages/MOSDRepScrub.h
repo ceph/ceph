@@ -36,7 +36,10 @@ struct MOSDRepScrub : public Message {
   hobject_t end;         // upper bound of scrub, exclusive
   bool deep;             // true if scrub should be deep
 
-  MOSDRepScrub() : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION) { }
+  MOSDRepScrub() : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+      chunky(false),
+      deep(false) { }
+
   MOSDRepScrub(pg_t pgid, eversion_t scrub_from, eversion_t scrub_to,
 	       epoch_t map_epoch)
     : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
