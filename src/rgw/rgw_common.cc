@@ -1,11 +1,11 @@
 #include <errno.h>
 
 #include "json_spirit/json_spirit.h"
+#include "common/ceph_json.h"
 
 #include "rgw_common.h"
 #include "rgw_acl.h"
 #include "rgw_string.h"
-#include "rgw_json.h"
 
 #include "common/ceph_crypto.h"
 #include "common/armor.h"
