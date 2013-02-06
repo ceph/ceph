@@ -20,7 +20,6 @@
 #include <pthread.h>
 #include <stdlib.h>
 
-void ceph::crypto::shutdown();
 
 #ifdef USE_CRYPTOPP
 void ceph::crypto::init(CephContext *cct)
