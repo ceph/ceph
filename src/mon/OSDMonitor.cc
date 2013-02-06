@@ -2000,11 +2000,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 										   m->cmd[3] == "ls")) {
       JSONFormatter jf(true);
       jf.open_array_section("rules");
-      for (int rule = 0; rule < osdmap.crush->get_max_rules(); rule++) {
-	if (!osdmap.crush->rule_exists(rule))
-	  continue;
-	jf.dump_string("name", osdmap.crush->get_rule_name(rule));
-      }
+      osdmap.crush->list_rules(&jf);
       jf.close_section();
       ostringstream rs;
       jf.flush(rs);
