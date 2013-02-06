@@ -4,13 +4,9 @@
 #include <iostream>
 #include <include/types.h>
 
-// for testing DELETE ME
-#include <fstream>
-
 #include "json_spirit/json_spirit.h"
 
 
-using namespace std;
 using namespace json_spirit;
 
 
@@ -90,5 +86,101 @@ public:
   void set_failure() { success = false; }
 };
 
+
+class JSONDecoder {
+public:
+  struct err {
+    string message;
+
+    err(const string& m) : message(m) {}
+  };
+
+  RGWJSONParser parser;
+
+  JSONDecoder(bufferlist& bl) {
+    if (!parser.parse(bl.c_str(), bl.length())) {
+      cout << "JSONDecoder::err()" << std::endl;
+      throw JSONDecoder::err("failed to parse JSON input");
+    }
+  }
+
+  template<class T>
+  static bool decode_json(const string& name, T& val, JSONObj *obj, bool mandatory = false);
+
+  template<class T>
+  static void decode_json(const string& name, T& val, T& default_val, JSONObj *obj);
+};
+
+template<class T>
+void decode_json_obj(T& val, JSONObj *obj)
+{
+  val.decode_json(obj);
+}
+
+static inline void decode_json_obj(string& val, JSONObj *obj)
+{
+  val = obj->get_data();
+}
+
+void decode_json_obj(unsigned long& val, JSONObj *obj);
+void decode_json_obj(long& val, JSONObj *obj);
+void decode_json_obj(unsigned& val, JSONObj *obj);
+void decode_json_obj(int& val, JSONObj *obj);
+void decode_json_obj(bool& val, JSONObj *obj);
+
+template<class T>
+void decode_json_obj(list<T>& l, JSONObj *obj)
+{
+  JSONObjIter iter = obj->find_first();
+
+  for (; !iter.end(); ++iter) {
+    T val;
+    JSONObj *o = *iter;
+    decode_json_obj(val, o);
+    l.push_back(val);
+  }
+}
+
+template<class T>
+bool JSONDecoder::decode_json(const string& name, T& val, JSONObj *obj, bool mandatory)
+{
+  JSONObjIter iter = obj->find_first(name);
+  if (iter.end()) {
+    if (mandatory) {
+      string s = "missing mandatory field " + name;
+      throw err(s);
+    }
+    return false;
+  }
+
+  try {
+    decode_json_obj(val, *iter);
+  } catch (err& e) {
+    string s = name + ": ";
+    s.append(e.message);
+    throw err(s);
+  }
+
+  return true;
+}
+
+template<class T>
+void JSONDecoder::decode_json(const string& name, T& val, T& default_val, JSONObj *obj)
+{
+  JSONObjIter iter = obj->find_first(name);
+  if (iter.end()) {
+    val = default_val;
+    return;
+  }
+
+  try {
+    decode_json_obj(val, *iter);
+  } catch (err& e) {
+    val = default_val;
+    string s = name + ": ";
+    s.append(e.message);
+    throw err(s);
+  }
+}
 
 #endif
