@@ -4,6 +4,7 @@ import os
 
 from teuthology import misc as teuthology
 from ..orchestra import run
+from teuthology.task import ceph as ceph_task
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +60,9 @@ def task(ctx, config):
     clients = list(teuthology.get_clients(ctx=ctx, roles=config.keys()))
 
     for id_, remote in clients:
+        # install ceph fuse package
+        ceph_task.install_debs(ctx, ['ceph-fuse'], config.get('branch', 'master'))
+
         mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
         log.info('Mounting ceph-fuse client.{id} at {remote} {mnt}...'.format(
                 id=id_, remote=remote,mnt=mnt))
@@ -82,16 +86,15 @@ def task(ctx, config):
 
         run_cmd=[
             '{tdir}/enable-coredump'.format(tdir=testdir),
-            '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+            'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
             '{tdir}/daemon-helper'.format(tdir=testdir),
             daemon_signal,
             ]
         run_cmd_tail=[
-            '{tdir}/binary/usr/local/bin/ceph-fuse'.format(tdir=testdir),
+            'ceph-fuse',
             '-f',
             '--name', 'client.{id}'.format(id=id_),
-            '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
             # TODO ceph-fuse doesn't understand dash dash '--',
             mnt,
             ]
@@ -171,3 +174,6 @@ def task(ctx, config):
                     mnt,
                     ],
                 )
+
+        # remove ceph-fuse package
+        ceph_task.remove_debs(ctx, ['ceph-fuse'])

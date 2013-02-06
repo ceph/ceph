@@ -225,14 +225,26 @@ def reset_syslog_dir(ctx, log):
         log.info('Waiting for %s to restart syslog...', name)
         proc.exitstatus.get()
 
+def remove_installed_packages(ctx, log):
+    from teuthology.task import ceph as ceph_task
+
+    debs = ['ceph', 'ceph-test', 'ceph-fuse', 'python-ceph']
+    ceph_task.remove_debs(ctx, debs)
+    ceph_task.remove_sources(ctx)
+
 def remove_testing_tree(ctx, log):
     from teuthology.misc import get_testdir_base
+    from .orchestra import run
     nodes = {}
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
             args=[
-                'sudo', 'rm', '-rf',
-                get_testdir_base(ctx),
+                'sudo', 'rm', '-rf', get_testdir_base(ctx),
+                # just for old time's sake
+                run.Raw('&&'),
+                'sudo', 'rm', '-rf', '/tmp/cephtest',
+                run.Raw('&&'),
+                'sudo', 'rm', '-rf', '/etc/ceph',
                 ],
             wait=False,
             )
@@ -421,3 +433,5 @@ def nuke_helper(ctx, log):
     log.info('Clearing filesystem of test data...')
     remove_testing_tree(ctx, log)
     log.info('Filesystem Cleared.')
+    remove_installed_packages(ctx, log)
+    log.info('Installed packages removed.')

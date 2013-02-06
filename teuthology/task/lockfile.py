@@ -193,7 +193,7 @@ def lock_one(op, ctx):
         proc = client_remote.run(
             args=[
                 '{tdir}/enable-coredump'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 '{tdir}/daemon-helper'.format(tdir=testdir),
                 'kill',

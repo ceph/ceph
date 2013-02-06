@@ -68,8 +68,7 @@ def ship_config(ctx, config):
             path='{tdir}/apache/htdocs/rgw.fcgi'.format(tdir=testdir),
             data="""#!/bin/sh
 ulimit -c unlimited
-export LD_LIBRARY_PATH={tdir}/binary/usr/local/lib
-exec {tdir}/binary/usr/local/bin/radosgw -f -c {tdir}/ceph.conf
+exec radosgw -f
 """.format(tdir=testdir)
             )
         remote.run(
@@ -111,16 +110,14 @@ def start_rgw(ctx, config):
         log.info("rgw %s config is %s", client, client_config)
  
         run_cmd=[
-                'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
                 '{tdir}/enable-coredump'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 '{tdir}/daemon-helper'.format(tdir=testdir),
                 'term',
             ]
         run_cmd_tail=[
-                '{tdir}/binary/usr/local/bin/radosgw'.format(tdir=testdir),
-                '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
+                'radosgw',
                 '--log-file', '{tdir}/archive/log/rgw.log'.format(tdir=testdir),
                 '--rgw_ops_log_socket_path', '{tdir}/rgw.opslog.sock'.format(tdir=testdir),
                 '{tdir}/apache/apache.conf'.format(tdir=testdir),

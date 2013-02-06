@@ -111,13 +111,10 @@ def _run_tests(ctx, role):
     remote.run(
         args=[
             run.Raw('CEPH_REF={ref}'.format(ref=ceph_ref)),
-            run.Raw('PATH="$PATH:{tdir}/binary/usr/local/bin"'.format(tdir=testdir)),
-            run.Raw('LD_LIBRARY_PATH="$LD_LIBRARY_PATH:{tdir}/binary/usr/local/lib"'.format(tdir=testdir)),
-            run.Raw('CEPH_CONF="{tdir}/ceph.conf"'.format(tdir=testdir)),
             run.Raw('CEPH_ID="{id}"'.format(id=id_)),
             run.Raw('PYTHONPATH="$PYTHONPATH:{tdir}/binary/usr/local/lib/python2.7/dist-packages:{tdir}/binary/usr/local/lib/python2.6/dist-packages"'.format(tdir=testdir)),
             '{tdir}/enable-coredump'.format(tdir=testdir),
-            '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+            'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
             '{tdir}/virtualenv/bin/cram'.format(tdir=testdir),
             '-v', '--',

@@ -53,17 +53,11 @@ def task(ctx, config):
             log.info('creating pool{num} on {role}'.format(num=poolnum, role=role_))
 	    proc = remote.run(
 	        args=[
-		    'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
-		    '{tdir}/binary/usr/local/bin/rados'.format(tdir=testdir),
-		    '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
-		    '-k', '{tdir}/data/{role}.keyring'.format(tdir=testdir, role=role_),
+		    'rados',
 		    '--name', role_,
 		    'mkpool', 'pool{num}'.format(num=poolnum), '-1',
 		    run.Raw('&&'),
-		    'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
-		    '{tdir}/binary/usr/local/bin/rados'.format(tdir=testdir),
-		    '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
-		    '-k', '{tdir}/data/{role}.keyring'.format(tdir=testdir, role=role_),
+		    'rados',
 		    '--name', role_,
 		    '--pool', 'pool{num}'.format(num=poolnum),
 		    'bench', '0', 'write', '-t', '16', '--block-size', '1'

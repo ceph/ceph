@@ -55,7 +55,6 @@ def task(ctx, config):
             args=[
                 'cd', dir,
                 run.Raw('&&'),
-                run.Raw('PATH="{tdir}/binary/usr/local/bin:$PATH"'.format(tdir=testdir)),
                 './run_seed_to_range.sh', seed, '50', '300',
                 ],
             wait=False,

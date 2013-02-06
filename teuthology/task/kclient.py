@@ -68,9 +68,9 @@ def task(ctx, config):
             args=[
                 'sudo',
                 '{tdir}/enable-coredump'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/sbin/mount.ceph'.format(tdir=testdir),
+                '/sbin/mount.ceph',
                 '{mons}:/'.format(mons=','.join(mons)),
                 mnt,
                 '-v',

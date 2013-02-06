@@ -45,13 +45,10 @@ def task(ctx, config):
             proc = remote.run(
                 args=[
                     "/bin/sh", "-c",
-                    " ".join(['LD_LIBRARY_PATH={tdir}/binary/usr/local/lib',
-                              '{tdir}/enable-coredump',
-                              '{tdir}/binary/usr/local/bin/ceph-coverage',
+                    " ".join(['{tdir}/enable-coredump',
+                              'ceph-coverage',
                               '{tdir}/archive/coverage',
-                              '{tdir}/binary/usr/local/bin/rados',
-                              '-c', '{tdir}/ceph.conf',
-                              '-k', '{tdir}/data/{role}.keyring'.format(role=role),
+                              'rados',
                               '--name', role,
                               'mkpool', str(config.get('pool', 'data'))
                               ]).format(tdir=testdir),
@@ -65,13 +62,10 @@ def task(ctx, config):
         proc = remote.run(
             args=[
                 "/bin/sh", "-c",
-                " ".join(['LD_LIBRARY_PATH={tdir}/binary/usr/local/lib',
-                          '{tdir}/enable-coredump',
-                          '{tdir}/binary/usr/local/bin/ceph-coverage',
+                " ".join(['{tdir}/enable-coredump',
+                          'ceph-coverage',
                           '{tdir}/archive/coverage',
-                          '{tdir}/binary/usr/local/bin/rados',
-                          '-c', '{tdir}/ceph.conf',
-                          '-k', '{tdir}/data/%s.keyring' % role,
+                          'rados',
                           '--name', role,
                           '-p' , str(config.get('pool', 'data')),
                           'bench', str(config.get('time', 360)), 'write',
@@ -93,13 +87,10 @@ def task(ctx, config):
             proc = remote.run(
                 args=[
                     "/bin/sh", "-c",
-                    " ".join(['LD_LIBRARY_PATH={tdir}/binary/usr/local/lib',
-                              '{tdir}/enable-coredump',
-                              '{tdir}/binary/usr/local/bin/ceph-coverage',
+                    " ".join(['{tdir}/enable-coredump',
+                              'ceph-coverage',
                               '{tdir}/archive/coverage',
-                              '{tdir}/binary/usr/local/bin/rados',
-                              '-c', '{tdir}/ceph.conf',
-                              '-k', '{tdir}/data/{role}.keyring'.format(role=role),
+                              'rados',
                               '--name', role,
                               'rmpool', str(config.get('pool', 'data'))
                               ]).format(tdir=testdir),

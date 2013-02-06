@@ -53,13 +53,10 @@ def task(ctx, config):
         proc = remote.run(
             args=[
                 "/bin/sh", "-c",
-                " ".join(['CEPH_CONF={tdir}/ceph.conf',
-                          'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib',
-                          '{tdir}/enable-coredump',
-                          '{tdir}/binary/usr/local/bin/ceph-coverage',
+                " ".join(['{tdir}/enable-coredump',
+                          'ceph-coverage',
                           '{tdir}/archive/coverage',
-                          '{tdir}/binary/usr/local/bin/omapbench',
-                          '-k', '{tdir}/data/{role}.keyring'.format(role=role),
+                          'omapbench',
                           '--name', role[len(PREFIX):],
                           '-t', str(config.get('threads', 30)),
                           '-o', str(config.get('objects', 1000)),

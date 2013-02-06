@@ -232,13 +232,10 @@ class CephManager:
     def raw_cluster_cmd(self, *args):
         testdir = teuthology.get_testdir(self.ctx)
         ceph_args = [
-                'LD_LIBRARY_PRELOAD={tdir}/binary/usr/local/lib'.format(tdir=testdir),
                 '{tdir}/enable-coredump'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/ceph'.format(tdir=testdir),
-                '-k', '{tdir}/ceph.keyring'.format(tdir=testdir),
-                '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
+                'ceph',
                 '--concise',
                 ]
         ceph_args.extend(args)
@@ -251,12 +248,10 @@ class CephManager:
     def do_rados(self, remote, cmd):
         testdir = teuthology.get_testdir(self.ctx)
         pre = [
-            'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
             '{tdir}/enable-coredump'.format(tdir=testdir),
-            '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+            'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
-            '{tdir}/binary/usr/local/bin/rados'.format(tdir=testdir),
-            '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
+            'rados',
             ];
         pre.extend(cmd)
         proc = remote.run(
@@ -274,13 +269,10 @@ class CephManager:
                     remote = _remote
         assert remote is not None
         args=[
-                'LD_LIBRARY_PRELOAD={tdir}/binary/usr/local/lib'.format(tdir=testdir),
                 '{tdir}/enable-coredump'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/ceph'.format(tdir=testdir),
-                '-k', '{tdir}/ceph.keyring'.format(tdir=testdir),
-                '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
+                'ceph',
                 '--admin-daemon',
                 "%s/asok.osd.%s"%(testdir,str(osdnum),)]
         args.extend(command)

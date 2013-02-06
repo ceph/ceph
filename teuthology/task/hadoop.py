@@ -46,7 +46,6 @@ def write_hadoop_env(ctx, config):
     for remote, roles_for_host in hadoopNodes.remotes.iteritems():
         teuthology.write_file(remote, hadoopEnvFile, 
 '''export JAVA_HOME=/usr/lib/jvm/default-java
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:{tdir}/binary/usr/local/lib:/usr/lib
 export HADOOP_CLASSPATH=$HADOOP_CLASSPATH:{tdir}/binary/usr/local/lib/libcephfs.jar:{tdir}/hadoop/build/hadoop-core*.jar
 export HADOOP_NAMENODE_OPTS="-Dcom.sun.management.jmxremote $HADOOP_NAMENODE_OPTS"
 export HADOOP_SECONDARYNAMENODE_OPTS="-Dcom.sun.management.jmxremote $HADOOP_SECONDARYNAMENODE_OPTS"
@@ -83,10 +82,6 @@ def write_core_site(ctx, config):
     <property>
         <name>fs.default.name</name>
         <value>{default_fs}</value>
-    </property>
-    <property>
-        <name>ceph.conf.file</name>
-        <value>{tdir}/ceph.conf</value>
     </property>
 </configuration>
 '''.format(tdir=teuthology.get_testdir(ctx), default_fs=default_fs_string))

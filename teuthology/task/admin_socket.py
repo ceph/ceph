@@ -70,13 +70,10 @@ def _socket_command(ctx, remote, socket_path, command, args):
     testdir = teuthology.get_testdir(ctx)
     remote.run(
         args=[
-            'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
             '{tdir}/enable-coredump'.format(tdir=testdir),
-            '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+            'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
-            '{tdir}/binary/usr/local/bin/ceph'.format(tdir=testdir),
-            '-k', '{tdir}/ceph.keyring'.format(tdir=testdir),
-            '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
+            'ceph',
             '--admin-daemon', socket_path,
             command,
             ] + args,

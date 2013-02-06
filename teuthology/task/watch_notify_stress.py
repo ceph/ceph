@@ -43,11 +43,9 @@ def task(ctx, config):
         remotes.append(remote)
 
         args =['CEPH_CLIENT_ID={id_}'.format(id_=id_),
-               'CEPH_CONF={tdir}/ceph.conf'.format(tdir=testdir),
                'CEPH_ARGS="{flags}"'.format(flags=config.get('flags', '')),
-               'LD_PRELOAD={tdir}/binary/usr/local/lib/librados.so.2'.format(tdir=testdir),
                '{tdir}/daemon-helper'.format(tdir=testdir), 'kill',
-               '{tdir}/binary/usr/local/bin/multi_stress_watch foo foo'.format(tdir=testdir)
+               'multi_stress_watch foo foo'
                ]
 
         log.info("args are %s" % (args,))

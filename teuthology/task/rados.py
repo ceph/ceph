@@ -53,12 +53,10 @@ def task(ctx, config):
     op_weights = config.get('op_weights', {})
     testdir = teuthology.get_testdir(ctx)
     args = [
-        'CEPH_CONF={tdir}/ceph.conf'.format(tdir=testdir),
-        'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
         '{tdir}/enable-coredump'.format(tdir=testdir),
-        '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+        'ceph-coverage',
         '{tdir}/archive/coverage'.format(tdir=testdir),
-        '{tdir}/binary/usr/local/bin/ceph_test_rados'.format(tdir=testdir),
+        'testrados',
         '--op', 'read', str(op_weights.get('read', 100)),
         '--op', 'write', str(op_weights.get('write', 100)),
         '--op', 'delete', str(op_weights.get('delete', 10)),

@@ -101,12 +101,14 @@ def copy_file_to(f, dst):
 
 
 class CommandFailedError(Exception):
-    def __init__(self, command, exitstatus):
+    def __init__(self, command, exitstatus, node=None):
         self.command = command
         self.exitstatus = exitstatus
+        self.node = node
 
     def __str__(self):
-        return "Command failed with status {status}: {command!r}".format(
+        return "Command failed on {node} with status {status}: {command!r}".format(
+            node=self.node,
             status=self.exitstatus,
             command=self.command,
             )
@@ -251,7 +253,8 @@ def run(
                 # signal; sadly SSH does not tell us which signal
                 raise CommandCrashedError(command=r.command)
             if status != 0:
-                raise CommandFailedError(command=r.command, exitstatus=status)
+                (host,port) = client.get_transport().getpeername()
+                raise CommandFailedError(command=r.command, exitstatus=status, node=host)
         return status
 
     if wait:
