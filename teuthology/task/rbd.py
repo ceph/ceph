@@ -190,8 +190,8 @@ def dev_create(ctx, config):
 
         remote.run(
             args=[
-                'sudo',
                 'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+                'sudo',
                 '{tdir}/enable-coredump'.format(tdir=testdir),
                 '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
                 '{tdir}/archive/coverage'.format(tdir=testdir),
@@ -219,8 +219,8 @@ def dev_create(ctx, config):
             (remote,) = ctx.cluster.only(role).remotes.keys()
             remote.run(
                 args=[
-                    'sudo',
                     'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+                    'sudo',
                     '{tdir}/enable-coredump'.format(tdir=testdir),
                     '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
                     '{tdir}/archive/coverage'.format(tdir=testdir),
