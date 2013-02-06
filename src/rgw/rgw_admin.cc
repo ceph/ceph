@@ -181,48 +181,6 @@ static uint32_t str_to_perm(const char *str)
   return 0; // unreachable
 }
 
-struct rgw_flags_desc {
-  uint32_t mask;
-  const char *str;
-};
-
-static struct rgw_flags_desc rgw_perms[] = {
- { RGW_PERM_FULL_CONTROL, "full-control" },
- { RGW_PERM_READ | RGW_PERM_WRITE, "read-write" },
- { RGW_PERM_READ, "read" },
- { RGW_PERM_WRITE, "write" },
- { RGW_PERM_READ_ACP, "read-acp" },
- { RGW_PERM_WRITE_ACP, "read-acp" },
- { 0, NULL }
-};
-
-static void perm_to_str(uint32_t mask, char *buf, int len)
-{
-  const char *sep = "";
-  int pos = 0;
-  if (!mask) {
-    snprintf(buf, len, "<none>");
-    return;
-  }
-  while (mask) {
-    uint32_t orig_mask = mask;
-    for (int i = 0; rgw_perms[i].mask; i++) {
-      struct rgw_flags_desc *desc = &rgw_perms[i];
-      if ((mask & desc->mask) == desc->mask) {
-        pos += snprintf(buf + pos, len - pos, "%s%s", sep, desc->str);
-        if (pos == len)
-          return;
-        sep = ", ";
-        mask &= ~desc->mask;
-        if (!mask)
-          return;
-      }
-    }
-    if (mask == orig_mask) // no change
-      break;
-  }
-}
-
 static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
 {
   *need_more = false;
@@ -362,63 +320,10 @@ string escape_str(string& src, char c)
 
 static void show_user_info(RGWUserInfo& info, Formatter *formatter)
 {
-  map<string, RGWAccessKey>::iterator kiter;
-  map<string, RGWSubUser>::iterator uiter;
-
-
-  formatter->open_object_section("user_info");
-
-  formatter->dump_string("user_id", info.user_id);
-  formatter->dump_string("display_name", info.display_name);
-  formatter->dump_string("email", info.user_email);
-  formatter->dump_int("suspended", (int)info.suspended);
-  formatter->dump_int("max_buckets", (int)info.max_buckets);
-
-  // subusers
-  formatter->open_array_section("subusers");
-  for (uiter = info.subusers.begin(); uiter != info.subusers.end(); ++uiter) {
-    RGWSubUser& u = uiter->second;
-    formatter->open_object_section("user");
-    formatter->dump_format("id", "%s:%s", info.user_id.c_str(), u.name.c_str());
-    char buf[256];
-    perm_to_str(u.perm_mask, buf, sizeof(buf));
-    formatter->dump_string("permissions", buf);
-    formatter->close_section();
-    formatter->flush(cout);
-  }
-  formatter->close_section();
-
-  // keys
-  formatter->open_array_section("keys");
-  for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
-    RGWAccessKey& k = kiter->second;
-    const char *sep = (k.subuser.empty() ? "" : ":");
-    const char *subuser = (k.subuser.empty() ? "" : k.subuser.c_str());
-    formatter->open_object_section("key");
-    formatter->dump_format("user", "%s%s%s", info.user_id.c_str(), sep, subuser);
-    formatter->dump_string("access_key", k.id);
-    formatter->dump_string("secret_key", k.key);
-    formatter->close_section();
-  }
-  formatter->close_section();
-
-  formatter->open_array_section("swift_keys");
-  for (kiter = info.swift_keys.begin(); kiter != info.swift_keys.end(); ++kiter) {
-    RGWAccessKey& k = kiter->second;
-    const char *sep = (k.subuser.empty() ? "" : ":");
-    const char *subuser = (k.subuser.empty() ? "" : k.subuser.c_str());
-    formatter->open_object_section("key");
-    formatter->dump_format("user", "%s%s%s", info.user_id.c_str(), sep, subuser);
-    formatter->dump_string("secret_key", k.key);
-    formatter->close_section();
-  }
-  formatter->close_section();
-
-  info.caps.dump(formatter);
-
-  formatter->close_section();
+  info.dump(formatter);
   formatter->flush(cout);
   cout << std::endl;
+
 }
 
 static int create_bucket(string bucket_str, string& user_id, string& display_name)

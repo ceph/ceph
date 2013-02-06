@@ -131,7 +131,10 @@ osdmaptool_LDADD = $(LIBGLOBAL_LDA)
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
 rgw_dencoder_src = rgw/rgw_dencoder.cc \
-                   rgw/rgw_acl.cc
+                   rgw/rgw_acl.cc \
+                   rgw/rgw_common.cc \
+                   rgw/rgw_json.cc \
+                   rgw/rgw_json_enc.cc
 
 ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc ${rgw_dencoder_src} perfglue/disabled_heap_profiler.cc
 ceph_dencoder_CXXFLAGS = ${AM_CXXFLAGS}
@@ -356,6 +359,7 @@ librgw_a_SOURCES =  \
 	rgw/rgw_xml.cc \
 	rgw/rgw_usage.cc \
 	rgw/rgw_json.cc \
+	rgw/rgw_json_enc.cc \
 	rgw/rgw_user.cc \
 	rgw/rgw_tools.cc \
 	rgw/rgw_rados.cc \
@@ -402,7 +406,7 @@ ceph_rgw_multiparser_CXXFLAGS = ${AM_CXXFLAGS}
 ceph_rgw_multiparser_LDADD = $(my_radosgw_ldadd)
 bin_DEBUGPROGRAMS += ceph_rgw_multiparser
 
-ceph_rgw_jsonparser_SOURCES = rgw/rgw_jsonparser.cc
+ceph_rgw_jsonparser_SOURCES = rgw/rgw_jsonparser.cc rgw/rgw_common.cc rgw/rgw_json_enc.cc
 ceph_rgw_jsonparser_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 ceph_rgw_jsonparser_LDADD = $(my_radosgw_ldadd)
 bin_DEBUGPROGRAMS += ceph_rgw_jsonparser
