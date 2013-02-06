@@ -64,6 +64,7 @@ build-stamp: configure-stamp
 	cp src/init-ceph debian/ceph.init
 	cp src/init-radosgw debian/radosgw.init
 	cp src/logrotate.conf debian/ceph.logrotate
+	cp src/rgw/logrotate.conf debian/radosgw.logrotate
 
 	touch $@
 
@@ -77,7 +78,7 @@ clean:
 	  ltmain.sh missing
 	rm -f configure Makefile.in man/Makefile.in src/Makefile.in
 	rm -f src/acconfig.h.in
-	rm -f debian/ceph.init debian/radosgw.init debian/ceph.logrotate
+	rm -f debian/ceph.init debian/radosgw.init debian/ceph.logrotate debian/radosgw.logrotate
 
 	dh_clean
 

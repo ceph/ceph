@@ -24,7 +24,6 @@ Source0:	http://ceph.com/download/%{name}-%{version}.tar.bz2
 Requires:	librbd1 = %{version}-%{release}
 Requires:	librados2 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
-Requires:	perl
 Requires:	python
 Requires(post):	binutils
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
@@ -286,6 +285,7 @@ mkdir -p $RPM_BUILD_ROOT/usr/sbin
 ln -sf ../../etc/init.d/ceph %{buildroot}/usr/sbin/rcceph
 ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/usr/sbin/rcceph-radosgw
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
+install -m 0644 -D src/rgw/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/radosgw
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
@@ -360,6 +360,7 @@ fi
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
 %config %{_sysconfdir}/bash_completion.d/rbd
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
+%config(noreplace) %{_sysconfdir}/logrotate.d/radosgw
 %{_mandir}/man8/ceph-mon.8*
 %{_mandir}/man8/ceph-mds.8*
 %{_mandir}/man8/ceph-osd.8*
