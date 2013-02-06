@@ -138,7 +138,7 @@ open_rbd_image(const char *image_name)
 		return -1;
 
 	// relies on caller to keep rbd_images up to date
-	for (im = rbd_images; im != NULL; i++, im = im->next) {
+	for (im = rbd_images; im != NULL; im = im->next) {
 		if (strcmp(im->image_name, image_name) == 0) {
 			break;
 		}
