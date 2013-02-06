@@ -221,12 +221,15 @@ public:
   }
 
   // rule names
-  int get_rule_id(const char *n) {
-    string name(n);
+  bool rule_exists(string name) {
+    build_rmaps();
+    return rule_name_rmap.count(name);
+  }
+  int get_rule_id(string name) {
     build_rmaps();
     if (rule_name_rmap.count(name))
       return rule_name_rmap[name];
-    return 0;  /* hrm */
+    return -ENOENT;
   }
   const char *get_rule_name(int t) const {
     std::map<int,string>::const_iterator p = rule_name_map.find(t);
@@ -527,6 +530,9 @@ public:
     return set_rule_step(ruleno, step, CRUSH_RULE_EMIT, 0, 0);
   }
 
+  int add_simple_rule(string name, string root_name, string failure_domain_type);
+
+  int remove_rule(int ruleno);
 
 
   /** buckets **/
@@ -735,6 +741,8 @@ public:
   void decode(bufferlist::iterator &blp);
   void decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator &blp);
   void dump(Formatter *f) const;
+  void dump_rules(Formatter *f) const;
+  void list_rules(Formatter *f) const;
   static void generate_test_instances(list<CrushWrapper*>& o);
 };
 WRITE_CLASS_ENCODER(CrushWrapper)
