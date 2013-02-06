@@ -742,6 +742,7 @@ public:
   void decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator &blp);
   void dump(Formatter *f) const;
   void dump_rules(Formatter *f) const;
+  void list_rules(Formatter *f) const;
   static void generate_test_instances(list<CrushWrapper*>& o);
 };
 WRITE_CLASS_ENCODER(CrushWrapper)
