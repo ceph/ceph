@@ -633,8 +633,10 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
     info.bucket = bucket;
     info.owner = owner;
     ret = store_bucket_info(info, &attrs, exclusive);
-    if (ret == -EEXIST)
+    if (ret == -EEXIST) {
+      io_ctx.remove(dir_oid);
       return ret;
+    }
   }
 
   return ret;
