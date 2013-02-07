@@ -1032,6 +1032,11 @@ int OSD::init()
 
   osd_lock.Lock();
 
+  dout(10) << "ensuring pgs have consumed prior maps" << dendl;
+  consume_map();
+  peering_wq.drain();
+
+  dout(10) << "done with init, starting boot process" << dendl;
   state = STATE_BOOTING;
   start_boot();
 
