@@ -66,7 +66,7 @@ static void usage()
   cout << "\n";
   cout << "MONITOR (MON) COMMANDS\n";
   cout << "  ceph mon add <name> <ip>[:<port>]\n";
-  cout << "  ceph mon delete <name>\n";
+  cout << "  ceph mon remove <name>\n";
   cout << "  ceph mon stat\n";
   cout << "  ceph mon tell <mon-id or *> injectargs '--<switch> <value> [--<switch> <value>...]'\n";
   cout << "\n";

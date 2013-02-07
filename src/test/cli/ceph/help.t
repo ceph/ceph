@@ -23,7 +23,7 @@
   
   MONITOR (MON) COMMANDS
     ceph mon add <name> <ip>[:<port>]
-    ceph mon delete <name>
+    ceph mon remove <name>
     ceph mon stat
     ceph mon tell <mon-id or *> injectargs '--<switch> <value> [--<switch> <value>...]'
   
