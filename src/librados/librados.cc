@@ -12,8 +12,6 @@
  *
  */
 
-using namespace std;
-
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
@@ -26,6 +24,20 @@ using namespace std;
 #include "librados/IoCtxImpl.h"
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "librados/RadosClient.h"
+
+#include <string>
+#include <map>
+#include <set>
+#include <vector>
+#include <list>
+#include <stdexcept>
+
+using std::string;
+using std::map;
+using std::set;
+using std::vector;
+using std::list;
+using std::runtime_error;
 
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix
