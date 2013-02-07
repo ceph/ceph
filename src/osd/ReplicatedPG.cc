@@ -3490,6 +3490,11 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
   }
 }
 
+bool ReplicatedPG::have_temp_coll()
+{
+  return temp_created || osd->store->collection_exists(temp_coll);
+}
+
 coll_t ReplicatedPG::get_temp_coll(ObjectStore::Transaction *t)
 {
   if (temp_created)
