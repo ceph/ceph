@@ -57,10 +57,11 @@ def ship_config(ctx, config):
     for client in config.iterkeys():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         with file(src, 'rb') as f:
+            conf = f.read().format(testdir=testdir)
             teuthology.write_file(
                 remote=remote,
                 path='{tdir}/apache/apache.conf'.format(tdir=testdir),
-                data=f,
+                data=conf,
                 )
         teuthology.write_file(
             remote=remote,
