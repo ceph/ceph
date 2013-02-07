@@ -300,22 +300,11 @@ int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bucket, b
     }
     s->bucket = bucket_info.bucket;
 
-    if (s->user.user_id.compare(bucket_info.owner) != 0) {
-      ret = rgw_get_user_info_by_uid(store, bucket_info.owner, bucket_owner_info);
-      if (ret < 0) {
-        ldout(s->cct, 0) << "NOTICE: couldn't get bucket owner info for (id=" << bucket_info.owner << ")" << dendl;
-        return ret;
-      }
-
-      s->bucket_owner.set_id(bucket_info.owner);
-      s->bucket_owner.set_name(bucket_owner_info.display_name);
-    } else {
-      s->bucket_owner = s->owner;
-    }
-
     string no_obj;
     RGWAccessControlPolicy bucket_acl(s->cct);
     ret = read_policy(store, s, bucket_info, s->bucket_acl, s->bucket, no_obj);
+
+    s->bucket_owner = s->bucket_acl->get_owner();
   }
 
   /* we're passed only_bucket = true when we specifically need the bucket's
