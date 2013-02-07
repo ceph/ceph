@@ -41,6 +41,7 @@ void _usage()
   cerr << "  user rm                    remove user\n";
   cerr << "  user suspend               suspend a user\n";
   cerr << "  user enable                reenable user after suspension\n";
+  cerr << "  user check                 check user info\n";
   cerr << "  caps add                   add user capabilities\n";
   cerr << "  caps rm                    remove user capabilities\n";
   cerr << "  subuser create             create a new subuser\n" ;
@@ -134,6 +135,7 @@ enum {
   OPT_USER_RM,
   OPT_USER_SUSPEND,
   OPT_USER_ENABLE,
+  OPT_USER_CHECK,
   OPT_SUBUSER_CREATE,
   OPT_SUBUSER_MODIFY,
   OPT_SUBUSER_RM,
@@ -262,6 +264,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_USER_SUSPEND;
     if (strcmp(cmd, "enable") == 0)
       return OPT_USER_ENABLE;
+    if (strcmp(cmd, "check") == 0)
+      return OPT_USER_CHECK;
   } else if (strcmp(prev_cmd, "subuser") == 0) {
     if (strcmp(cmd, "create") == 0)
       return OPT_SUBUSER_CREATE;
@@ -658,7 +662,47 @@ static void check_bad_index_multipart(RGWRados *store, rgw_bucket& bucket, bool 
       cerr << "ERROR: remove_obj_from_index() returned error: " << cpp_strerror(-r) << std::endl;
     }
   }
+}
 
+static void check_bad_user_bucket_mapping(RGWRados *store, const string& user_id, bool fix)
+{
+  RGWUserBuckets user_buckets;
+  int ret = rgw_read_user_buckets(store, user_id, user_buckets, false);
+  if (ret < 0) {
+    cerr << "failed to read user buckets: " << cpp_strerror(-ret) << std::endl;
+    return;
+  }
+
+  map<string, RGWBucketEnt>& buckets = user_buckets.get_buckets();
+  for (map<string, RGWBucketEnt>::iterator i = buckets.begin();
+       i != buckets.end();
+       ++i) {
+    RGWBucketEnt& bucket_ent = i->second;
+    rgw_bucket& bucket = bucket_ent.bucket;
+
+    RGWBucketInfo bucket_info;
+    int r = store->get_bucket_info(NULL, bucket.name, bucket_info);
+    if (r < 0) {
+      cerr << "could not get bucket info for bucket=" << bucket << std::endl;
+      continue;
+    }
+
+    rgw_bucket& actual_bucket = bucket_info.bucket;
+
+    if (actual_bucket.name.compare(bucket.name) != 0 ||
+        actual_bucket.pool.compare(bucket.pool) != 0 ||
+        actual_bucket.marker.compare(bucket.marker) != 0 ||
+        actual_bucket.bucket_id.compare(bucket.bucket_id) != 0) {
+      cout << "bucket info mismatch: expected " << actual_bucket << " got " << bucket << std::endl;
+      if (fix) {
+	cout << "fixing" << std::endl;
+	r = rgw_add_bucket(store, user_id, actual_bucket);
+	if (r < 0) {
+	  cerr << "failed to fix bucket: " << cpp_strerror(-r) << std::endl;
+	}
+      }
+    }
+  }
 }
 
 static int remove_object(RGWRados *store, rgw_bucket& bucket, std::string& object)
@@ -1855,6 +1899,10 @@ next:
   if (opt_cmd == OPT_CLUSTER_INFO) {
     store->params.dump(formatter);
     formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_USER_CHECK) {
+    check_bad_user_bucket_mapping(store, user_id, fix);
   }
 
   return 0;
