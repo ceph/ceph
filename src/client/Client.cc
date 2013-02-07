@@ -2572,6 +2572,8 @@ bool Client::_flush(Inode *in, Context *onfinish)
 
   if (!in->oset.dirty_or_tx) {
     ldout(cct, 10) << " nothing to flush" << dendl;
+    if (onfinish)
+      onfinish->complete(0);
     return true;
   }
 
