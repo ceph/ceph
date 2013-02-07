@@ -152,8 +152,9 @@ def test_incomplete_pgs(ctx, config):
     manager.wait_for_clean()
 
     # lots of objects in rbd (no pg log, will backfill)
-    p = rados_start(mon, ['-p', 'rbd', 'bench', '60', 'write', '-b', '1',
-                          '--no-cleanup'])
+    p = rados_start(testdir, mon,
+                    ['-p', 'rbd', 'bench', '60', 'write', '-b', '1',
+                     '--no-cleanup'])
     p.exitstatus.get()
 
     # few objects in metadata pool (with pg log, normal recovery)
