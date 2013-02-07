@@ -98,6 +98,6 @@ License:
 
 
 
-Files: test/common/Throttle.cc
+Files: src/test/common/Throttle.cc src/test/filestore/chain_xattr.cc
 Copyright: Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
 License: LGPL2 or later
