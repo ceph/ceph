@@ -980,8 +980,8 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
 			    bool modified)
 {
   // skip doing this for debugging purposes?
-  if (modified && g_conf->mds_traceless_replies &&
-      (rand() % 10000 < g_conf->mds_traceless_replies * 10000.0)) {
+  if (modified && g_conf->mds_inject_traceless_reply_probability &&
+      (rand() % 10000 < g_conf->mds_inject_traceless_reply_probability * 10000.0)) {
     dout(5) << "deliberately skipping trace for " << *reply << dendl;
     return;
   }

@@ -276,8 +276,9 @@ OPTION(mds_kill_export_at, OPT_INT, 0)
 OPTION(mds_kill_import_at, OPT_INT, 0)
 OPTION(mds_kill_link_at, OPT_INT, 0)
 OPTION(mds_kill_rename_at, OPT_INT, 0)
-OPTION(mds_traceless_replies, OPT_DOUBLE, 0) /* [0-1] amount of time MDS
-				should skip sending the client a trace */
+OPTION(mds_inject_traceless_reply_probability, OPT_DOUBLE, 0) /* percentage
+				of MDS modify replies to skip sending the
+				client a trace on [0-1]*/
 OPTION(mds_wipe_sessions, OPT_BOOL, 0)
 OPTION(mds_wipe_ino_prealloc, OPT_BOOL, 0)
 OPTION(mds_skip_ino, OPT_INT, 0)
