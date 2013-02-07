@@ -142,7 +142,7 @@ inline std::ostream& operator<<(std::ostream& out, const ceph_entity_name& addr)
 namespace __gnu_cxx {
   template<> struct hash< entity_name_t >
   {
-    size_t operator()( const entity_name_t m ) const
+    size_t operator()( const entity_name_t &m ) const
     {
       return rjhash32(m.type() ^ m.num());
     }
