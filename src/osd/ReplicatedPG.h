@@ -1011,9 +1011,7 @@ private:
   coll_t temp_coll;
   coll_t get_temp_coll(ObjectStore::Transaction *t);
 public:
-  bool have_temp_coll() {
-    return temp_created;
-  }
+  bool have_temp_coll();
   coll_t get_temp_coll() {
     return temp_coll;
   }
