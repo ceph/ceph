@@ -274,7 +274,7 @@ int do_command(CephToolCtx *ctx,
   }
   if (cmd.size() > 0 && cmd[0] == "pg") {
     if (cmd.size() == 1) {
-      cerr << "no pgid specified" << std::endl;
+      cerr << "pg requires at least one argument" << std::endl;
       return -EINVAL;
     }
     if (pending_target_pgid.parse(cmd[1].c_str())) {
