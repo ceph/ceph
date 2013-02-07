@@ -116,6 +116,7 @@ enum {
   OPT_USER_RM,
   OPT_USER_SUSPEND,
   OPT_USER_ENABLE,
+  OPT_USER_CHECK,
   OPT_SUBUSER_CREATE,
   OPT_SUBUSER_MODIFY,
   OPT_SUBUSER_RM,
@@ -233,6 +234,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_USER_SUSPEND;
     if (strcmp(cmd, "enable") == 0)
       return OPT_USER_ENABLE;
+    if (strcmp(cmd, "check") == 0)
+      return OPT_USER_CHECK;
   } else if (strcmp(prev_cmd, "subuser") == 0) {
     if (strcmp(cmd, "create") == 0)
       return OPT_SUBUSER_CREATE;
@@ -525,7 +528,7 @@ enum ObjectKeyType {
   KEY_TYPE_S3,
 };
 
-void check_bad_index_multipart(rgw_bucket& bucket, bool fix)
+static void check_bad_index_multipart(rgw_bucket& bucket, bool fix)
 {
   int max = 1000;
   string prefix;
@@ -604,7 +607,47 @@ void check_bad_index_multipart(rgw_bucket& bucket, bool fix)
       cerr << "ERROR: remove_obj_from_index() returned error: " << cpp_strerror(-r) << std::endl;
     }
   }
+}
 
+static void check_bad_user_bucket_mapping(const string& user_id, bool fix)
+{
+  RGWUserBuckets user_buckets;
+  int ret = rgw_read_user_buckets(user_id, user_buckets, false);
+  if (ret < 0) {
+    cerr << "failed to read user buckets: " << cpp_strerror(-ret) << std::endl;
+    return;
+  }
+
+  map<string, RGWBucketEnt>& buckets = user_buckets.get_buckets();
+  for (map<string, RGWBucketEnt>::iterator i = buckets.begin();
+       i != buckets.end();
+       ++i) {
+    RGWBucketEnt& bucket_ent = i->second;
+    rgw_bucket& bucket = bucket_ent.bucket;
+
+    RGWBucketInfo bucket_info;
+    int r = rgwstore->get_bucket_info(NULL, bucket.name, bucket_info);
+    if (r < 0) {
+      cerr << "could not get bucket info for bucket=" << bucket << std::endl;
+      continue;
+    }
+
+    rgw_bucket& actual_bucket = bucket_info.bucket;
+
+    if (actual_bucket.name.compare(bucket.name) != 0 ||
+        actual_bucket.pool.compare(bucket.pool) != 0 ||
+        actual_bucket.marker.compare(bucket.marker) != 0 ||
+        actual_bucket.bucket_id.compare(bucket.bucket_id) != 0) {
+      cout << "bucket info mismatch: expected " << actual_bucket << " got " << bucket << std::endl;
+      if (fix) {
+	cout << "fixing" << std::endl;
+	r = rgw_add_bucket(user_id, actual_bucket);
+	if (r < 0) {
+	  cerr << "failed to fix bucket: " << cpp_strerror(-r) << std::endl;
+	}
+      }
+    }
+  }
 }
 
 static void parse_date(string& date, uint64_t *epoch, string *out_date = NULL, string *out_time = NULL)
@@ -1602,6 +1645,10 @@ next:
 
   if (opt_cmd == OPT_BUCKET_CHECK) {
     check_bad_index_multipart(bucket, fix);
+  }
+
+  if (opt_cmd == OPT_USER_CHECK) {
+    check_bad_user_bucket_mapping(user_id, fix);
   }
 
   return 0;
