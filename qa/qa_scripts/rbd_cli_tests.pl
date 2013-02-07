@@ -69,7 +69,7 @@ our $snap_name3       = "snap3";
 our $snap_name4       = "snap4";
 our $new_rbd_img      = "new_rbd_img";
 our $non_existing_img = "rbdimage";
-our $cp_new           = "new";
+our $cp_new           = "newest";
 our $exp_file         = "rbd_test_file1";
 our $exp_file1        = "rbd_test_file2";
 our $exp_file2        = "rbd_test_file3";
@@ -80,7 +80,7 @@ our $rbd_snap_new     = "new";
 our $neg_img_name     = "neg_img";
 our $new_img_name     = "new_img";
 our $max_img_name     = "max_img";
-our $img_name1        = "test_img1";
+our $img_name1        = "testing_img1";
 our $rbd_imp_test     = "new_test_file";
 our $non_pool_name = "no_pool";
 our $no_snap       = "no_snap";
@@ -98,12 +98,12 @@ sub create_image {
     perform_action ( $RBD_CREATE, "$img_name,pool $pool_name,size 1024", 0 );
 
     perform_action( $RBD_CREATE, "$img_name_mv,pool $pool_name,size 1024", 0 );
-    perform_action( $RBD_CREATE, "$img_name1,pool $pool_name,size 0,order 22",
-        3 );
-    perform_action( $RBD_CREATE, "$img_name1,pool $pool_name,size 0",     3 );
-    perform_action( $RBD_CREATE, "$neg_img_name,pool $pool_name,size -1", 3 );
-    perform_action( $RBD_CREATE, "$img_name1 pool $pool_name",            3 );
-    perform_action( $RBD_CREATE, "--size 1024",                           3 );
+    perform_action( $RBD_CREATE, "$img_name_mv,pool $pool_name,size 0,order 22",
+        1 );
+    perform_action( $RBD_CREATE, "$img_name1,pool $pool_name,size 0",     0 );
+    perform_action( $RBD_CREATE, "$neg_img_name,pool $pool_name,size -1", 2 );
+    perform_action( $RBD_CREATE, "$img_name1 pool $pool_name",            2 );
+    perform_action( $RBD_CREATE, "--size 1024",                           2 );
     perform_action( $RBD_CREATE,
         "$max_img_name,pool $pool_name,size 1024000000000", 0 );
     perform_action( $RBD_CREATE, "$img_name1,pool $pool_name,size 2048,order",
@@ -208,7 +208,7 @@ sub remove_image {
 sub export_image {
     perform_action( $RBD_EXPORT, "$pool_name\/$img_name $exp_file", 0 );
     perform_action( $RBD_EXPORT, "$pool_name\/$img_name .",         2 );
-    perform_action( $RBD_EXPORT, "$pool_name\/$img_name",           2 );
+    perform_action( $RBD_EXPORT, "$pool_name\/$img_name",           0 );
     perform_action( $RBD_EXPORT,
         "--snap $snap_name $pool_name\/$img_name $exp_file1", 0 );
     perform_action( $RBD_EXPORT,

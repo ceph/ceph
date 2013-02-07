@@ -52,6 +52,9 @@ our $RBD_SHOWMAPPED = "rbd showmapped";
 our $RADOS_LS       = "rados ls";
 #====Error messages========================
 
+our $RBD_CREATE_ERR    = "size must be >= 0"; 
+our $RBD_EXTRA_ERR     = "extraneous parameter"; 
+our $RBD_REQ_ERR       = "expected integer";
 our $RBD_RM_ERROR      = "image name was not specified";
 our $SNAP_LS_ERROR     = "snap name was not specified";
 our $SNAP_RM_ERROR     = "remove failed";
@@ -69,6 +72,7 @@ our $RBD_IMP_ERR       = "import failed";
 our $RBD_MAP_ERR       = "add failed";
 our $RBD_UNMAP_ERR     = "remove failed";
 our $RBD_INFO_SNAP_ERR = "error setting snapshot context";
+our $RBD_SIZE_ERR       = "must specify size in MB";
 
 #=======Success messages=======================
 
@@ -402,6 +406,10 @@ sub validate_cmd_output {
             || ( $cmd_op =~ /$SNAP_ROLLBACK_ERR/ )
             || ( $cmd_op =~ /$RBD_MAP_ERR/ )
             || ( $cmd_op =~ /$RBD_UNMAP_ERR/ )
+            || ( $cmd_op =~ /$RBD_CREATE_ERR/ )
+            || ( $cmd_op =~ /$RBD_EXTRA_ERR/ )
+            || ( $cmd_op =~ /$RBD_REQ_ERR/ )
+            || ( $cmd_op =~ /$RBD_SIZE_ERR/ )
             || ( $cmd_op =~ /$RBD_INFO_SNAP_ERR/ ) )
       )
     {
