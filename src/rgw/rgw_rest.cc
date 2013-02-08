@@ -684,8 +684,10 @@ static int read_all_chunked_input(req_state *s, char **pdata, int *plen)
   int read_len = 0, len = 0;
   do {
     int r = s->cio->read(data + len, need_to_read, &read_len);
-    if (r < 0)
+    if (r < 0) {
+      free(data);
       return r;
+    }
 
     len += read_len;
 
