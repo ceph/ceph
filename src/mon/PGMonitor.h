@@ -76,9 +76,11 @@ private:
       } else if (r == -ECANCELED) {
 	req->put();
 	ack->put();
-      } else {
+      } else if (r == -EAGAIN) {
+	pgmon->dispatch(req);
 	ack->put();
-	dispatch(req);
+      } else {
+	assert(0 == "bad C_Stats return value");
       }
     }    
   };

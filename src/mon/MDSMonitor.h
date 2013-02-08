@@ -54,13 +54,10 @@ class MDSMonitor : public PaxosService {
     C_Updated(MDSMonitor *a, MMDSBeacon *c) :
       mm(a), m(c) {}
     void finish(int r) {
-      if (r == -ECANCELED) {
-	if (m)
-	  m->put();
-	return;
-      }
       if (r >= 0)
 	mm->_updated(m);   // success
+      else if (r == -ECANCELED)
+	m->put();
       else
 	mm->dispatch((PaxosServiceMessage*)m);        // try again
     }
