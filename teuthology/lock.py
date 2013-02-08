@@ -442,24 +442,24 @@ to run on, or use -a to check all of them automatically.
     return ret
 
 def do_summary(ctx):
-    lockd = collections.defaultdict(lambda: [0,0])
+    lockd = collections.defaultdict(lambda: [0,0,'unknown'])
     for l in list_locks(ctx):
-        who = l['locked_by'] if l['locked'] == 1 else '(free)'
+        who =  l['locked_by'] if l['locked'] == 1 else '(free)', l['type']
         lockd[who][0] += 1
         lockd[who][1] += l['up']         # up is 1 or 0
+        lockd[who][2] = l['type']
 
-    # locks = [('owner', (cnt, up)), ...]
-    def sortfn(x,y):
-        if x[0] == '(free)': return 1       # (free) sorts last
-        return cmp(x[1][0], y[1][0])        # otherwise order by cnt
-    locks = sorted([p for p in lockd.iteritems()], cmp=sortfn)
-
+    locks = sorted([p for p in lockd.iteritems()], key=lambda sort: (sort[1][2],sort[1][0]))
     total_count, total_up = 0, 0
-    print "COUNT  UP  OWNER"
-    for (owner, (count, upcount)) in locks:
-        print "{count:3d}  {up:3d}  {owner}".format(count = count,
-            up = upcount, owner = owner)
-        total_count += count
-        total_up += upcount
-    print "---  ---"
-    print "{cnt:3d}  {up:3d}".format(cnt = total_count, up = total_up)
+    print "TYPE     COUNT  UP  OWNER"
+
+    for (owner, (count, upcount, machinetype)) in locks:
+            #if machinetype == spectype:
+            print "{machinetype:8s} {count:3d}  {up:3d}  {owner}".format(count = count,
+                up = upcount, owner = owner[0], machinetype=machinetype)
+            total_count += count
+            total_up += upcount
+
+    print "         ---  ---"
+    print "{cnt:12d}  {up:3d}".format(cnt = total_count, up = total_up)
+
