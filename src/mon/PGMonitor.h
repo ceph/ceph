@@ -71,12 +71,15 @@ private:
     entity_inst_t who;
     C_Stats(PGMonitor *p, MPGStats *r, MPGStatsAck *a) : pgmon(p), req(r), ack(a) {}
     void finish(int r) {
-      if (r == -ECANCELED) {
+      if (r >= 0) {
+	pgmon->_updated_stats(req, ack);
+      } else if (r == -ECANCELED) {
 	req->put();
 	ack->put();
-	return;
+      } else {
+	ack->put();
+	dispatch(req);
       }
-      pgmon->_updated_stats(req, ack);
     }    
   };
 
