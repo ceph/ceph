@@ -10,7 +10,7 @@ following to ``/etc/fstab``::
 
 For example:: 
 
-	10.10.10.10:6789:/     /mnt/ceph    ceph    name=admin,secretfile=/etc/ceph/secret.key,noauto,rw,noexec,nodev,noatime,nodiratime    0       2
+	10.10.10.10:6789:/     /mnt/ceph    ceph    name=admin,secretfile=/etc/ceph/secret.key,noatime    0       2
 	
 .. important:: The ``name`` and ``secret`` or ``secretfile`` options are 
    mandatory when you have Ceph authentication running. See `Authentication`_
