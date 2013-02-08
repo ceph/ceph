@@ -1578,6 +1578,8 @@ void OSD::load_pgs()
     // read pg state, log
     pg->read_state(store, bl);
 
+    pg->check_ondisk_snap_colls(i->second);
+
     set<pg_t> split_pgs;
     if (osdmap->have_pg_pool(pg->info.pgid.pool()) &&
 	pg->info.pgid.is_split(pg->get_osdmap()->get_pg_num(pg->info.pgid.pool()),
