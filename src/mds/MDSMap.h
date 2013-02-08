@@ -244,6 +244,10 @@ public:
   int64_t get_cas_pg_pool() const { return cas_pg_pool; }
   int64_t get_metadata_pg_pool() const { return metadata_pg_pool; }
 
+  bool is_data_pool(int64_t poolid) const {
+    return std::find(data_pg_pools.begin(), data_pg_pools.end(), poolid) != data_pg_pools.end();
+  }
+
   const map<uint64_t,mds_info_t>& get_mds_info() { return mds_info; }
   const mds_info_t& get_mds_info_gid(uint64_t gid) {
     assert(mds_info.count(gid));
