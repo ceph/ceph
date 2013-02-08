@@ -167,14 +167,19 @@ int main(int argc, char **argv)
 
   ObjectStore *fs = new FileStore(fspath, jpath);
   
-  if (fs->mount() < 0) {
-    cout << "mount failed" << std::endl;
+  int r = fs->mount();
+  if (r < 0) {
+    if (r == -EBUSY) {
+      cout << "OSD has the store locked" << std::endl;
+    } else {
+      cout << "Mount failed with '" << cpp_strerror(-r) << "'" << std::endl;
+    }
     return 1;
   }
 
   bool found = false;
   vector<coll_t> ls;
-  int r = fs->list_collections(ls);
+  r = fs->list_collections(ls);
   if (r < 0) {
     cerr << "failed to list pgs: " << cpp_strerror(-r) << std::endl;
     exit(1);
