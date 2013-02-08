@@ -78,7 +78,7 @@ private:
 	ack->put();
       } else {
 	ack->put();
-	dispatch(req);
+	pgmon->dispatch(req);
       }
     }    
   };
