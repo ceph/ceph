@@ -209,14 +209,10 @@ private:
     C_Booted(OSDMonitor *cm, MOSDBoot *m_, bool l=true) : 
       cmon(cm), m(m_), logit(l) {}
     void finish(int r) {
-      if (r == -ECANCELED) {
-	if (m)
-	  m->put();
-	return;
-      }
-
       if (r >= 0)
 	cmon->_booted(m, logit);
+      else if (r == -ECANCELED)
+	m->put();
       else
 	cmon->dispatch((PaxosServiceMessage*)m);
     }
@@ -228,12 +224,13 @@ private:
     epoch_t e;
     C_ReplyMap(OSDMonitor *o, PaxosServiceMessage *mm, epoch_t ee) : osdmon(o), m(mm), e(ee) {}
     void finish(int r) {
-      if (r == -ECANCELED) {
-	if (m)
-	  m->put();
-	return;
+      if (r >= 0) {
+	osdmon->_reply_map(m, e);
+      } else if (r == -ECANCELED) {
+	m->put();
+      } else {
+	osdmon->dispatch(m);
       }
-      osdmon->_reply_map(m, e);
     }    
   };
   struct C_PoolOp : public Context {
@@ -248,12 +245,13 @@ private:
 	reply_data = *rd;
     }
     void finish(int r) {
-      if (r == -ECANCELED) {
-	if (m)
-	  m->put();
-	return;
+      if (r >= 0) {
+	osdmon->_pool_op_reply(m, replyCode, epoch, &reply_data);
+      } else if (r == -ECANCELED) {
+	m->put();
+      } else {
+	osdmon->dispatch(m);
       }
-      osdmon->_pool_op_reply(m, replyCode, epoch, &reply_data);
     }
   };
 
