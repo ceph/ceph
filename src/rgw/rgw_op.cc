@@ -836,6 +836,27 @@ void RGWCreateBucket::execute()
 
   existed = (ret == -EEXIST);
 
+  if (existed) {
+    /* bucket already existed, might have raced with another bucket creation, or
+     * might be partial bucket creation that never completed. Read existing bucket
+     * info, verify that the reported bucket owner is the current user.
+     * If all is ok then update the user's list of buckets
+     */
+    RGWBucketInfo info;
+    map<string, bufferlist> attrs;
+    int r = store->get_bucket_info(NULL, s->bucket.name, info, &attrs);
+    if (r < 0) {
+      ldout(s->cct, 0) << "ERROR: get_bucket_info on bucket=" << s->bucket.name << " returned err=" << r << " after create_bucket returned -EEXIST" << dendl;
+      ret = r;
+      return;
+    }
+    if (info.owner.compare(s->user.user_id) != 0) {
+      ret = -ERR_BUCKET_EXISTS;
+      return;
+    }
+    s->bucket = info.bucket;
+  }
+
   ret = rgw_add_bucket(store, s->user.user_id, s->bucket);
   if (ret && !existed && ret != -EEXIST)   /* if it exists (or previously existed), don't remove it! */
     rgw_remove_user_bucket_info(store, s->user.user_id, s->bucket);

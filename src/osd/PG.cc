@@ -5015,6 +5015,7 @@ void PG::handle_activate_map(RecoveryCtx *rctx)
   dout(10) << "handle_activate_map " << dendl;
   ActMap evt;
   recovery_state.handle_event(evt, rctx);
+  dirty_info = true;
 }
 
 void PG::handle_loaded(RecoveryCtx *rctx)

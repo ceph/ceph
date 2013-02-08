@@ -183,7 +183,7 @@ void CephContext::do_command(std::string command, std::string args, bufferlist *
       std::string var = args;
       size_t pos = var.find(' ');
       if (pos == string::npos) {
-	jf.dump_string("error", "set_config syntax is 'set_config <var> <value>'");
+	jf.dump_string("error", "syntax error: 'config set <var> <value>'");
       } else {
 	std::string val = var.substr(pos+1);
 	var.resize(pos);
@@ -253,7 +253,7 @@ CephContext::CephContext(uint32_t module_type_)
   _admin_socket->register_command("2", _admin_hook, "");
   _admin_socket->register_command("perf schema", _admin_hook, "dump perfcounters schema");
   _admin_socket->register_command("config show", _admin_hook, "dump current config settings");
-  _admin_socket->register_command("config set", _admin_hook, "set_config <field> <val>: set a config settings");
+  _admin_socket->register_command("config set", _admin_hook, "config set <field> <val>: set a config variable");
   _admin_socket->register_command("log flush", _admin_hook, "flush log entries to log file");
   _admin_socket->register_command("log dump", _admin_hook, "dump recent log entries to log file");
   _admin_socket->register_command("log reopen", _admin_hook, "reopen log file");
