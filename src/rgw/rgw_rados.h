@@ -744,6 +744,8 @@ public:
                          map<RGWObjCategory, RGWBucketStats> *existing_stats,
                          map<RGWObjCategory, RGWBucketStats> *calculated_stats);
   int bucket_rebuild_index(rgw_bucket& bucket);
+  int remove_objs_from_index(rgw_bucket& bucket, list<string>& oid_list);
+
  private:
   int process_intent_log(rgw_bucket& bucket, string& oid,
 			 time_t epoch, int flags, bool purge);

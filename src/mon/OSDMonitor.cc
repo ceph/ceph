@@ -3041,7 +3041,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	      return true;
 	    } else if (m->cmd[4] == "pg_num") {
-	      if (m->cmd.size() < 6 ||
+	      if (m->cmd.size() < 7 ||
 		  m->cmd[6] != "--allow-experimental-feature") {
 		ss << "increasing pg_num is currently experimental, add "
 		   << "--allow-experimental-feature as the last argument "

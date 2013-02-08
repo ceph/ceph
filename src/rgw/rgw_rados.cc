@@ -806,6 +806,9 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
   info.bucket = bucket;
   info.owner = owner;
   ret = store_bucket_info(info, &attrs, exclusive);
+  if (ret == -EEXIST) {
+    io_ctx.remove(dir_oid);
+  }
 
   return ret;
 }
@@ -3631,6 +3634,38 @@ int RGWRados::cls_obj_usage_log_trim(string& oid, string& user, uint64_t start_e
   cls_rgw_usage_log_trim(op, user, start_epoch, end_epoch);
 
   r = io_ctx.operate(oid, &op);
+  return r;
+}
+
+int RGWRados::remove_objs_from_index(rgw_bucket& bucket, list<string>& oid_list)
+{
+  librados::IoCtx io_ctx;
+
+  int r = open_bucket_ctx(bucket, io_ctx);
+  if (r < 0)
+    return r;
+
+  string dir_oid = dir_oid_prefix;
+  dir_oid.append(bucket.marker);
+
+  bufferlist updates;
+
+  list<string>::iterator iter;
+
+  for (iter = oid_list.begin(); iter != oid_list.end(); ++iter) {
+    string& oid = *iter;
+    dout(2) << "RGWRados::remove_objs_from_index bucket=" << bucket << " oid=" << oid << dendl;
+    rgw_bucket_dir_entry entry;
+    entry.epoch = (uint64_t)-1; // ULLONG_MAX, needed to that objclass doesn't skip out request
+    entry.name = oid;
+    updates.append(CEPH_RGW_REMOVE);
+    ::encode(entry, updates);
+  }
+
+  bufferlist out;
+
+  r = io_ctx.exec(dir_oid, "rgw", "dir_suggest_changes", updates, out);
+
   return r;
 }
 

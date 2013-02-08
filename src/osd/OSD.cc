@@ -1000,7 +1000,7 @@ int OSD::init()
   assert(r == 0);
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
   r = admin_socket->register_command("setomapval", test_ops_hook,
-                              "setomap <pool-id> <obj-name> <key> <val>");
+                              "setomapval <pool-id> <obj-name> <key> <val>");
   assert(r == 0);
   r = admin_socket->register_command("rmomapkey", test_ops_hook,
                                "rmomapkey <pool-id> <obj-name> <key>");
@@ -1032,6 +1032,11 @@ int OSD::init()
 
   osd_lock.Lock();
 
+  dout(10) << "ensuring pgs have consumed prior maps" << dendl;
+  consume_map();
+  peering_wq.drain();
+
+  dout(10) << "done with init, starting boot process" << dendl;
   state = STATE_BOOTING;
   start_boot();
 

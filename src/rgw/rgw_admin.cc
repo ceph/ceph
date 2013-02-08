@@ -41,6 +41,7 @@ void _usage()
   cerr << "  user rm                    remove user\n";
   cerr << "  user suspend               suspend a user\n";
   cerr << "  user enable                reenable user after suspension\n";
+  cerr << "  user check                 check user info\n";
   cerr << "  caps add                   add user capabilities\n";
   cerr << "  caps rm                    remove user capabilities\n";
   cerr << "  subuser create             create a new subuser\n" ;
@@ -55,6 +56,7 @@ void _usage()
   cerr << "  bucket rm                  remove bucket\n";
   cerr << "  bucket check               check bucket index\n";
   cerr << "  object rm                  remove object\n";
+  cerr << "  object unlink              unlink object from bucket index\n";
   cerr << "  cluster info               show cluster params info\n";
   cerr << "  pool add                   add an existing pool for data placement\n";
   cerr << "  pool rm                    remove an existing pool from data placement set\n";
@@ -133,6 +135,7 @@ enum {
   OPT_USER_RM,
   OPT_USER_SUSPEND,
   OPT_USER_ENABLE,
+  OPT_USER_CHECK,
   OPT_SUBUSER_CREATE,
   OPT_SUBUSER_MODIFY,
   OPT_SUBUSER_RM,
@@ -142,8 +145,8 @@ enum {
   OPT_BUCKET_LINK,
   OPT_BUCKET_UNLINK,
   OPT_BUCKET_STATS,
-  OPT_BUCKET_RM,
   OPT_BUCKET_CHECK,
+  OPT_BUCKET_RM,
   OPT_POLICY,
   OPT_POOL_ADD,
   OPT_POOL_RM,
@@ -155,6 +158,7 @@ enum {
   OPT_USAGE_TRIM,
   OPT_TEMP_REMOVE,
   OPT_OBJECT_RM,
+  OPT_OBJECT_UNLINK,
   OPT_GC_LIST,
   OPT_GC_PROCESS,
   OPT_CLUSTER_INFO,
@@ -227,6 +231,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "key") == 0 ||
       strcmp(cmd, "buckets") == 0 ||
       strcmp(cmd, "bucket") == 0 ||
+      strcmp(cmd, "object") == 0 ||
       strcmp(cmd, "pool") == 0 ||
       strcmp(cmd, "pools") == 0 ||
       strcmp(cmd, "log") == 0 ||
@@ -259,6 +264,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_USER_SUSPEND;
     if (strcmp(cmd, "enable") == 0)
       return OPT_USER_ENABLE;
+    if (strcmp(cmd, "check") == 0)
+      return OPT_USER_CHECK;
   } else if (strcmp(prev_cmd, "subuser") == 0) {
     if (strcmp(cmd, "create") == 0)
       return OPT_SUBUSER_CREATE;
@@ -318,6 +325,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "object") == 0) {
     if (strcmp(cmd, "rm") == 0)
       return OPT_OBJECT_RM;
+    if (strcmp(cmd, "unlink") == 0)
+      return OPT_OBJECT_UNLINK;
   } else if (strcmp(prev_cmd, "cluster") == 0) {
     if (strcmp(cmd, "info") == 0)
       return OPT_CLUSTER_INFO;
@@ -573,6 +582,128 @@ enum ObjectKeyType {
   KEY_TYPE_SWIFT,
   KEY_TYPE_S3,
 };
+
+static void check_bad_index_multipart(RGWRados *store, rgw_bucket& bucket, bool fix)
+{
+  int max = 1000;
+  string prefix;
+  string marker;
+  string delim;
+
+  map<string, bool> common_prefixes;
+  string ns = "multipart";
+
+  bool is_truncated;
+  list<string> objs_to_unlink;
+  map<string, bool> meta_objs;
+  map<string, string> all_objs;
+
+  do {
+    vector<RGWObjEnt> result;
+    int r = store->list_objects(bucket, max, prefix, delim, marker,
+				result, common_prefixes, false, ns,
+				&is_truncated, NULL);
+
+    if (r < 0) {
+      cerr << "failed to list objects in bucket=" << bucket << " err=" << cpp_strerror(-r) << std::endl;
+      return;
+    }
+
+    vector<RGWObjEnt>::iterator iter;
+    for (iter = result.begin(); iter != result.end(); ++iter) {
+      RGWObjEnt& ent = *iter;
+
+      rgw_obj obj(bucket, ent.name);
+      obj.set_ns(ns);
+
+      string& oid = obj.object;
+      marker = oid;
+
+      int pos = oid.find_last_of('.');
+      if (pos < 0)
+	continue;
+
+      string name = oid.substr(0, pos);
+      string suffix = oid.substr(pos + 1);
+
+      if (suffix.compare("meta") == 0) {
+	meta_objs[name] = true;
+      } else {
+	all_objs[oid] = name;
+      }
+    }
+
+  } while (is_truncated);
+
+  map<string, string>::iterator aiter;
+  for (aiter = all_objs.begin(); aiter != all_objs.end(); ++aiter) {
+    string& name = aiter->second;
+
+    if (meta_objs.find(name) == meta_objs.end()) {
+      objs_to_unlink.push_back(aiter->first);
+    }
+  }
+
+  if (objs_to_unlink.empty())
+    return;
+
+  if (!fix) {
+    cout << "Need to unlink the following objects from bucket=" << bucket << std::endl;
+  } else {
+    cout << "Unlinking the following objects from bucket=" << bucket << std::endl;
+  }
+  for (list<string>::iterator oiter = objs_to_unlink.begin(); oiter != objs_to_unlink.end(); ++oiter) {
+    cout << *oiter << std::endl;
+  }
+
+  if (fix) {
+    int r = store->remove_objs_from_index(bucket, objs_to_unlink);
+    if (r < 0) {
+      cerr << "ERROR: remove_obj_from_index() returned error: " << cpp_strerror(-r) << std::endl;
+    }
+  }
+}
+
+static void check_bad_user_bucket_mapping(RGWRados *store, const string& user_id, bool fix)
+{
+  RGWUserBuckets user_buckets;
+  int ret = rgw_read_user_buckets(store, user_id, user_buckets, false);
+  if (ret < 0) {
+    cerr << "failed to read user buckets: " << cpp_strerror(-ret) << std::endl;
+    return;
+  }
+
+  map<string, RGWBucketEnt>& buckets = user_buckets.get_buckets();
+  for (map<string, RGWBucketEnt>::iterator i = buckets.begin();
+       i != buckets.end();
+       ++i) {
+    RGWBucketEnt& bucket_ent = i->second;
+    rgw_bucket& bucket = bucket_ent.bucket;
+
+    RGWBucketInfo bucket_info;
+    int r = store->get_bucket_info(NULL, bucket.name, bucket_info);
+    if (r < 0) {
+      cerr << "could not get bucket info for bucket=" << bucket << std::endl;
+      continue;
+    }
+
+    rgw_bucket& actual_bucket = bucket_info.bucket;
+
+    if (actual_bucket.name.compare(bucket.name) != 0 ||
+        actual_bucket.pool.compare(bucket.pool) != 0 ||
+        actual_bucket.marker.compare(bucket.marker) != 0 ||
+        actual_bucket.bucket_id.compare(bucket.bucket_id) != 0) {
+      cout << "bucket info mismatch: expected " << actual_bucket << " got " << bucket << std::endl;
+      if (fix) {
+	cout << "fixing" << std::endl;
+	r = rgw_add_bucket(store, user_id, actual_bucket);
+	if (r < 0) {
+	  cerr << "failed to fix bucket: " << cpp_strerror(-r) << std::endl;
+	}
+      }
+    }
+  }
+}
 
 static int remove_object(RGWRados *store, rgw_bucket& bucket, std::string& object)
 {
@@ -1627,7 +1758,19 @@ next:
     }
   }
 
+  if (opt_cmd == OPT_OBJECT_UNLINK) {
+    list<string> oid_list;
+    oid_list.push_back(object);
+    int ret = store->remove_objs_from_index(bucket, oid_list);
+    if (ret < 0) {
+      cerr << "ERROR: remove_obj_from_index() returned error: " << cpp_strerror(-ret) << std::endl;
+      return 1;
+    }
+  }
+
   if (opt_cmd == OPT_BUCKET_CHECK) {
+    check_bad_index_multipart(store, bucket, fix);
+
     map<RGWObjCategory, RGWBucketStats> existing_stats;
     map<RGWObjCategory, RGWBucketStats> calculated_stats;
 
@@ -1757,5 +1900,10 @@ next:
     store->params.dump(formatter);
     formatter->flush(cout);
   }
+
+  if (opt_cmd == OPT_USER_CHECK) {
+    check_bad_user_bucket_mapping(store, user_id, fix);
+  }
+
   return 0;
 }
