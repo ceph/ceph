@@ -7,6 +7,7 @@
     user rm                    remove user
     user suspend               suspend a user
     user enable                reenable user after suspension
+    user check                 check user info
     caps add                   add user capabilities
     caps rm                    remove user capabilities
     subuser create             create a new subuser
