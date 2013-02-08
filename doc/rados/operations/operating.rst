@@ -101,7 +101,7 @@ newer Debian/Ubuntu distributions, you may use the following syntax::
 
 For example:: 
 
-	sudo service -a ceph stop	
+	sudo service ceph -a stop	
 
 For older distributions, you may wish to use the ``/etc/init.d/ceph`` path:: 
 
