@@ -3134,6 +3134,18 @@ void PG::sub_op_scrub_stop(OpRequestRef op)
   osd->send_message_osd_cluster(reply, m->get_connection());
 }
 
+
+void PG::check_ondisk_snap_colls(
+  const interval_set<snapid_t> &ondisk_snapcolls)
+{
+  if (!(ondisk_snapcolls == snap_collections)) {
+    derr << "ondisk_snapcolls: " << ondisk_snapcolls
+	 << " does not match snap_collections " << snap_collections
+	 << " repairing." << dendl;
+    snap_collections = ondisk_snapcolls;
+  }
+}
+
 void PG::clear_scrub_reserved()
 {
   osd->scrub_wq.dequeue(this);
