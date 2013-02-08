@@ -7,7 +7,7 @@ ServerName rgwtest.example.com
 
 ServerRoot {testdir}/apache
 ErrorLog {testdir}/archive/apache/error.log
-LogFormat "%h l %u %t \"%r\" %>s %b \"{Referer}i\" \"%{User-agent}i\"" combined
+LogFormat "%h l %u %t \"%r\" %>s %b \"{{Referer}}i\" \"%{{User-agent}}i\"" combined
 CustomLog {testdir}/archive/apache/access.log combined
 PidFile {testdir}/apache/tmp/apache.pid
 DocumentRoot {testdir}/apache/htdocs
@@ -15,7 +15,7 @@ FastCgiIPCDir {testdir}/apache/tmp/fastcgi_sock
 FastCgiExternalServer {testdir}/apache/htdocs/rgw.fcgi -socket rgw_sock
 RewriteEngine On
 
-RewriteRule ^/([a-zA-Z0-9-_.]*)([/]?.*) /rgw.fcgi?page=$1&params=$2&%{QUERY_STRING} [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+RewriteRule ^/([a-zA-Z0-9-_.]*)([/]?.*) /rgw.fcgi?page=$1&params=$2&%{{QUERY_STRING}} [E=HTTP_AUTHORIZATION:%{{HTTP:Authorization}},L]
 
 # Set fastcgi environment variables.
 # Note that this is separate from Unix environment variables!
