@@ -209,8 +209,8 @@ static gint ett_ceph_footer = -1;
 
 const char *ceph_cap_op_name(int op)
 {
-        char* plop = malloc(16*sizeof(char));
-        sprintf(plop,"%i",op);
+        char* plop;
+
         switch (op) {
         case CEPH_CAP_OP_GRANT: return "grant";
         case CEPH_CAP_OP_REVOKE: return "revoke";
@@ -226,13 +226,17 @@ const char *ceph_cap_op_name(int op)
         case CEPH_CAP_OP_RELEASE: return "release";
         case CEPH_CAP_OP_RENEW: return "renew";
         }
+
+        plop = malloc(16*sizeof(char));
+        sprintf(plop,"%i",op);
+
         return plop;
 }
 
 const char *ceph_mds_op_name(int op)
 {
-  char* plop = malloc(16*sizeof(char));
-         sprintf(plop,"%i",op);
+	char* plop;
+
         switch (op) {
         case CEPH_MDS_OP_LOOKUP:  return "lookup";
         case CEPH_MDS_OP_LOOKUPHASH:  return "lookuphash";
@@ -261,6 +265,10 @@ const char *ceph_mds_op_name(int op)
         case CEPH_MDS_OP_SETFILELOCK: return "setfilelock";
         case CEPH_MDS_OP_GETFILELOCK: return "getfilelock";
         }
+
+	plop = malloc(16*sizeof(char));
+        printf(plop,"%i",op);
+
         return plop;
 }
 
@@ -533,13 +541,14 @@ static guint32 dissect_ceph_fsid(tvbuff_t *tvb, proto_tree *tree, guint32 offset
 	fsid_dec = malloc(4*sizeof(guint32));
 	fsid = *(struct ceph_fsid *)tvb_get_ptr(tvb, offset, sizeof(struct ceph_fsid));
 	memcpy(fsid_dec,fsid.fsid,4*sizeof(guint32));
-	proto_tree_add_text(tree, tvb, offset,sizeof(struct ceph_fsid), "fsid: %x-%x-%x-%x",
+	proto_tree_add_text(tree, tvb, offset, sizeof(struct ceph_fsid), "fsid: %x-%x-%x-%x",
 			ntohl(fsid_dec[0]),
 			ntohl(fsid_dec[1]),
 			ntohl(fsid_dec[2]),
 			ntohl(fsid_dec[3])
 			);
 	offset += sizeof(struct ceph_fsid);
+	free (fsid_dec);
 	return offset;
 }
 
