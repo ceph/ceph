@@ -1002,6 +1002,8 @@ public:
     ino_t hino, const hobject_t &hoid,
     const map<string, bufferptr> &attrs,
     set<snapid_t> *snapcolls) {};
+  void check_ondisk_snap_colls(
+    const interval_set<snapid_t> &ondisk_snapcolls);
   void clear_scrub_reserved();
   void scrub_reserve_replicas();
   void scrub_unreserve_replicas();
