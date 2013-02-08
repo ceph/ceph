@@ -460,10 +460,12 @@ public:
     void finish(int r) {
       if (r >= 0)
 	mon->reply_command(m, rc, rs, rdata, version);
-      else if (r == -ECANCELED) {
+      else if (r == -ECANCELED)
 	m->put();
-      } else
+      else if (r == -EAGAIN)
 	mon->_ms_dispatch(m);
+      else
+	assert(0 == "bad C_Command return value");
     }
   };
 
@@ -474,10 +476,12 @@ public:
   public:
     C_RetryMessage(Monitor *m, Message *ms) : mon(m), msg(ms) {}
     void finish(int r) {
-      if (r == -ECANCELED) {
-	msg->put();
-      } else
+      if (r == -EAGAIN || r >= 0)
 	mon->_ms_dispatch(msg);
+      else if (r == -ECANCELED)
+	msg->put();
+      else
+	assert(0 == "bad C_RetryMessage return value");
     }
   };
 
