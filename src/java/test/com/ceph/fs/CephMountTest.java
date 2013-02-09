@@ -754,36 +754,41 @@ public class CephMountTest {
     String val2 = "This is a different xattr";
     byte[] buf1 = val1.getBytes();
     byte[] buf2 = val2.getBytes();
-    mount.setxattr(path, "attr1", buf1, buf1.length, mount.XATTR_CREATE);
-    mount.setxattr(path, "attr2", buf2, buf2.length, mount.XATTR_CREATE);
+    mount.setxattr(path, "user.attr1", buf1, buf1.length, mount.XATTR_CREATE);
+    mount.setxattr(path, "user.attr2", buf2, buf2.length, mount.XATTR_CREATE);
 
     /* list xattrs */
     String[] xattrs = mount.listxattr(path);
-    assertTrue(xattrs.length == 2);
+    /* the ceph.file.layout xattr exists for all files automatically */
+    assertTrue(xattrs.length == 3);
     int found = 0;
     for (String xattr : xattrs) {
-      if (xattr.compareTo("attr1") == 0) {
+      if (xattr.compareTo("user.attr1") == 0) {
         found++;
         continue;
       }
-      if (xattr.compareTo("attr2") == 0) {
+      if (xattr.compareTo("user.attr2") == 0) {
+        found++;
+        continue;
+      }
+      if (xattr.compareTo("ceph.file.layout") == 0) {
         found++;
         continue;
       }
       System.out.println("found unwanted xattr: " + xattr);
     }
-    assertTrue(found == 2);
+    assertTrue(found == 3);
 
     /* get first xattr by looking up length */
-    long attr1_len = mount.getxattr(path, "attr1", null);
+    long attr1_len = mount.getxattr(path, "user.attr1", null);
     byte[] out = new byte[(int)attr1_len];
-    mount.getxattr(path, "attr1", out);
+    mount.getxattr(path, "user.attr1", out);
     String outStr = new String(out);
     assertTrue(outStr.compareTo(val1) == 0);
 
     /* get second xattr assuming original length */
     out = new byte[buf2.length];
-    mount.getxattr(path, "attr2", out);
+    mount.getxattr(path, "user.attr2", out);
     outStr = new String(out);
     assertTrue(outStr.compareTo(val2) == 0);
 
