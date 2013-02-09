@@ -1483,6 +1483,7 @@ void OSD::load_pgs()
     derr << "failed to list pgs: " << cpp_strerror(-r) << dendl;
   }
 
+  set<pg_t> head_pgs;
   map<pg_t, interval_set<snapid_t> > pgs;
   for (vector<coll_t>::iterator it = ls.begin();
        it != ls.end();
@@ -1521,12 +1522,19 @@ void OSD::load_pgs()
       continue;
     }
     pgs[pgid];
+    head_pgs.insert(pgid);
   }
 
   for (map<pg_t, interval_set<snapid_t> >::iterator i = pgs.begin();
        i != pgs.end();
        ++i) {
     pg_t pgid(i->first);
+
+    if (!head_pgs.count(pgid)) {
+      dout(10) << __func__ << ": " << pgid << " has orphan snap collections " << i->second
+	       << " with no head" << dendl;
+      continue;
+    }
 
     if (!osdmap->have_pg_pool(pgid.pool())) {
       dout(10) << __func__ << ": skipping PG " << pgid << " because we don't have pool "
