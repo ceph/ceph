@@ -1490,39 +1490,41 @@ void OSD::load_pgs()
        it++) {
     pg_t pgid;
     snapid_t snap;
-    if (!it->is_pg(pgid, snap)) {
-      if (it->is_temp(pgid))
-	clear_temp(store, *it);
-      dout(10) << "load_pgs skipping non-pg " << *it << dendl;
-      if (it->is_temp(pgid)) {
-	clear_temp(store, *it);
-	continue;
-      }
-      uint64_t seq;
-      if (it->is_removal(&seq, &pgid)) {
-	if (seq >= next_removal_seq)
-	  next_removal_seq = seq + 1;
-	dout(10) << "queueing coll " << *it << " for removal, seq is "
-		 << seq << "pgid is " << pgid << dendl;
-	boost::tuple<coll_t, SequencerRef, DeletingStateRef> *to_queue =
-	  new boost::tuple<coll_t, SequencerRef, DeletingStateRef>;
-	to_queue->get<0>() = *it;
-	to_queue->get<1>() = service.osr_registry.lookup_or_create(
-	  pgid, stringify(pgid));
-	to_queue->get<2>() = service.deleting_pgs.lookup_or_create(pgid);
-	remove_wq.queue(to_queue);
-	continue;
+
+    if (it->is_temp(pgid)) {
+      dout(10) << "load_pgs " << *it << " clearing temp" << dendl;
+      clear_temp(store, *it);
+      continue;
+    }
+
+    if (it->is_pg(pgid, snap)) {
+      if (snap != CEPH_NOSNAP) {
+	dout(10) << "load_pgs skipping snapped dir " << *it
+		 << " (pg " << pgid << " snap " << snap << ")" << dendl;
+	pgs[pgid].insert(snap);
+      } else {
+	pgs[pgid];
+	head_pgs.insert(pgid);
       }
       continue;
     }
-    if (snap != CEPH_NOSNAP) {
-      dout(10) << "load_pgs skipping snapped dir " << *it
-	       << " (pg " << pgid << " snap " << snap << ")" << dendl;
-      pgs[pgid].insert(snap);
+
+    uint64_t seq;
+    if (it->is_removal(&seq, &pgid)) {
+      if (seq >= next_removal_seq)
+	next_removal_seq = seq + 1;
+      dout(10) << "load_pgs queueing " << *it << " for removal, seq is "
+	       << seq << " pgid is " << pgid << dendl;
+      boost::tuple<coll_t, SequencerRef, DeletingStateRef> *to_queue =
+	new boost::tuple<coll_t, SequencerRef, DeletingStateRef>;
+      to_queue->get<0>() = *it;
+      to_queue->get<1>() = service.osr_registry.lookup_or_create(pgid, stringify(pgid));
+      to_queue->get<2>() = service.deleting_pgs.lookup_or_create(pgid);
+      remove_wq.queue(to_queue);
       continue;
     }
-    pgs[pgid];
-    head_pgs.insert(pgid);
+
+    dout(10) << "load_pgs ignoring unrecognized " << *it << dendl;
   }
 
   for (map<pg_t, interval_set<snapid_t> >::iterator i = pgs.begin();
@@ -1548,6 +1550,7 @@ void OSD::load_pgs()
       continue;
     }
 
+    dout(10) << "pgid " << pgid << " coll " << coll_t(pgid) << dendl;
     bufferlist bl;
     epoch_t map_epoch = PG::peek_map_epoch(store, coll_t(pgid), &bl);
 
