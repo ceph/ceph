@@ -13,7 +13,8 @@ Install Release Key
 Packages are cryptographically signed with the ``release.asc`` key. Add our
 release key to your system's list of trusted keys to avoid a security warning::
 
-    sudo rpm --import https://raw.github.com/ceph/ceph/master/keys/release.asc
+    sudo rpm --import 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc'
+
 
 Add Release Packages
 ====================
@@ -54,7 +55,7 @@ prior to release.
 Packages are cryptographically signed with the ``release.asc`` key. Add our
 release key to your system's list of trusted keys to avoid a security warning::
 
-    sudo rpm --import https://raw.github.com/ceph/ceph/master/keys/release.asc
+    sudo rpm --import 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc'
 
 Packages are currently built for the CentOS-6 and Fedora 17 platforms. The
 repository package installs the repository details on your local system for use

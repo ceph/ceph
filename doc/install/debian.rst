@@ -14,7 +14,7 @@ Packages are cryptographically signed with the ``release.asc`` key.
 Add our release key to your system's list of trusted keys to avoid a
 security warning::
 
-	wget -q -O- https://raw.github.com/ceph/ceph/master/keys/release.asc | sudo apt-key add -
+	wget -q -O- 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc' | sudo apt-key add -
 
 Add Release Packages
 ====================
@@ -85,7 +85,7 @@ Packages are cryptographically signed with the ``autobuild.asc`` key.
 Add our autobuild key to your system's list of trusted keys to avoid a
 security warning::
 
-	wget -q -O- https://raw.github.com/ceph/ceph/master/keys/autobuild.asc | sudo apt-key add -
+	wget -q -O- 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc' | sudo apt-key add -
 
 Add our package repository to your system's list of APT sources, but
 replace ``{BRANCH}`` with the branch you'd like to use (e.g., chef-3,

@@ -41,7 +41,7 @@ To get the latest Ceph packages, add a release key to :abbr:`APT (Advanced
 Package Tool)`, add a source location to the ``/etc/apt/sources.list`` on your
 Ceph server and client machines, update your systems and install Ceph. :: 
 
-	wget -q -O- https://raw.github.com/ceph/ceph/master/keys/release.asc | sudo apt-key add -	
+	wget -q -O- 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc' | sudo apt-key add -	
 	echo deb http://ceph.com/debian/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 	sudo apt-get update && sudo apt-get install ceph
 	
