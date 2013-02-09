@@ -1,14 +1,141 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ *
+ * Author: Loic Dachary <loic@dachary.org>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Library Public License as published by
+ * the Free Software Foundation; either version 2, or (at your option)
+ * any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Library Public License for more details.
+ *
+ */
+
 #include <tr1/memory>
+#include <limits.h>
 
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "common/environment.h"
 
 #include "gtest/gtest.h"
 #include "stdlib.h"
 
-
 #define MAX_TEST 1000000
 
+TEST(BufferList, constructors) {
+  bool ceph_buffer_track = get_env_bool("CEPH_BUFFER_TRACK");
+  unsigned len = 17;
+  //
+  // buffer::create
+  //
+  if (ceph_buffer_track)
+    EXPECT_EQ(0, buffer::get_total_alloc());
+  {
+    bufferptr ptr(buffer::create(len));
+    EXPECT_EQ(len, ptr.length());
+    if (ceph_buffer_track)
+      EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
+  }
+  //
+  // buffer::claim_char
+  //
+  if (ceph_buffer_track)
+    EXPECT_EQ(0, buffer::get_total_alloc());
+  {
+    char* str = new char[len];
+    ::memset(str, 'X', len);
+    bufferptr ptr(buffer::claim_char(len, str));
+    if (ceph_buffer_track)
+      EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
+    EXPECT_EQ(len, ptr.length());
+    EXPECT_EQ(str, ptr.c_str());
+    bufferptr clone = ptr.clone();
+    EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
+  }
+  //
+  // buffer::create_static
+  //
+  if (ceph_buffer_track)
+    EXPECT_EQ(0, buffer::get_total_alloc());
+  {
+    char* str = new char[len];
+    bufferptr ptr(buffer::create_static(len, str));
+    if (ceph_buffer_track)
+      EXPECT_EQ(0, buffer::get_total_alloc());
+    EXPECT_EQ(len, ptr.length());
+    EXPECT_EQ(str, ptr.c_str());
+    delete [] str;
+  }
+  //
+  // buffer::create_malloc
+  //
+  if (ceph_buffer_track)
+    EXPECT_EQ(0, buffer::get_total_alloc());
+  {
+    bufferptr ptr(buffer::create_malloc(len));
+    if (ceph_buffer_track)
+      EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
+    EXPECT_EQ(len, ptr.length());
+    EXPECT_THROW(buffer::create_malloc((unsigned)ULLONG_MAX), buffer::bad_alloc);
+  }
+  //
+  // buffer::claim_malloc
+  //
+  if (ceph_buffer_track)
+    EXPECT_EQ(0, buffer::get_total_alloc());
+  {
+    char* str = (char*)malloc(len);
+    ::memset(str, 'X', len);
+    bufferptr ptr(buffer::claim_malloc(len, str));
+    if (ceph_buffer_track)
+      EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
+    EXPECT_EQ(len, ptr.length());
+    EXPECT_EQ(str, ptr.c_str());
+    bufferptr clone = ptr.clone();
+    EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
+  }
+  //
+  // buffer::copy
+  //
+  if (ceph_buffer_track)
+    EXPECT_EQ(0, buffer::get_total_alloc());
+  {
+    const std::string expected(len, 'X');
+    bufferptr ptr(buffer::copy(expected.c_str(), expected.size()));
+    if (ceph_buffer_track)
+      EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
+    EXPECT_NE(expected.c_str(), ptr.c_str());
+    EXPECT_EQ(0, ::memcmp(expected.c_str(), ptr.c_str(), len));
+  }
+  //
+  // buffer::create_page_aligned
+  //
+  if (ceph_buffer_track)
+    EXPECT_EQ(0, buffer::get_total_alloc());
+  {
+    bufferptr ptr(buffer::create_page_aligned(len));
+    ::memset(ptr.c_str(), 'X', len);
+    if (ceph_buffer_track)
+      EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
+    EXPECT_THROW(buffer::create_page_aligned((unsigned)ULLONG_MAX), buffer::bad_alloc);
+#ifndef DARWIN
+    ASSERT_TRUE(ptr.is_page_aligned());
+#endif // DARWIN 
+    bufferptr clone = ptr.clone();
+    EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
+  }
+  if (ceph_buffer_track)
+    EXPECT_EQ(0, buffer::get_total_alloc());
+}
 
 TEST(BufferList, EmptyAppend) {
   bufferlist bl;
@@ -123,3 +250,7 @@ TEST(BufferList, TestCopyAll) {
   bl2.copy(0, BIG_SZ, (char*)big2);
   ASSERT_EQ(memcmp(big.get(), big2, BIG_SZ), 0);
 }
+
+// Local Variables:
+// compile-command: "cd .. ; make unittest_bufferlist ; CEPH_BUFFER_TRACK=true valgrind --tool=memcheck ./unittest_bufferlist # --gtest_filter=BufferList.constructors"
+// End:
