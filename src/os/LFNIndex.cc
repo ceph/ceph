@@ -893,8 +893,7 @@ bool LFNIndex::lfn_parse_object_name_keyless(const string &long_name, hobject_t 
   bool r = parse_object(long_name.c_str(), *out);
   int64_t pool = -1;
   pg_t pg;
-  snapid_t snap;
-  if (coll().is_pg(pg, snap))
+  if (coll().is_pg_prefix(pg))
     pool = (int64_t)pg.pool();
   out->pool = pool;
   if (!r) return r;
@@ -985,8 +984,7 @@ bool LFNIndex::lfn_parse_object_name_poolless(const string &long_name,
 
   int64_t pool = -1;
   pg_t pg;
-  snapid_t pg_snap;
-  if (coll().is_pg(pg, pg_snap))
+  if (coll().is_pg_prefix(pg))
     pool = (int64_t)pg.pool();
   (*out) = hobject_t(name, key, snap, hash, pool);
   return true;

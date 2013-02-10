@@ -301,6 +301,18 @@ bool coll_t::is_pg(pg_t& pgid, snapid_t& snap) const
   return true;
 }
 
+bool coll_t::is_pg_prefix(pg_t& pgid) const
+{
+  const char *cstr(str.c_str());
+
+  if (!pgid.parse(cstr))
+    return false;
+  const char *snap_start = strchr(cstr, '_');
+  if (!snap_start)
+    return false;
+  return true;
+}
+
 bool coll_t::is_removal(uint64_t *seq, pg_t *pgid) const
 {
   if (str.substr(0, 11) != string("FORREMOVAL_"))
