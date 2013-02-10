@@ -40,6 +40,54 @@ TEST(BufferList, TestPtrAppend) {
   ASSERT_EQ(memcmp(bl.c_str(), correct, curpos), 0);
 }
 
+TEST(BufferList, ptr_assignment) {
+  unsigned len = 17;
+  //
+  // override a bufferptr set with the same raw
+  //
+  {
+    bufferptr original(len);
+    bufferptr same_raw(original.get_raw());
+    unsigned offset = 5;
+    unsigned length = len - offset;
+    original.set_offset(offset);
+    original.set_length(length);
+    same_raw = original;
+    ASSERT_EQ(2, original.raw_nref());
+    ASSERT_EQ(same_raw.get_raw(), original.get_raw());
+    ASSERT_EQ(same_raw.offset(), original.offset());
+    ASSERT_EQ(same_raw.length(), original.length());
+  }
+
+  //
+  // self assignment is a noop
+  //
+  {
+    bufferptr original(len);
+    original = original;
+    ASSERT_EQ(1, original.raw_nref());
+    ASSERT_EQ((unsigned)0, original.offset());
+    ASSERT_EQ(len, original.length());
+  }
+  
+  //
+  // a copy points to the same raw
+  //
+  {
+    bufferptr original(len);
+    unsigned offset = 5;
+    unsigned length = len - offset;
+    original.set_offset(offset);
+    original.set_length(length);
+    bufferptr ptr;
+    ptr = original;
+    ASSERT_EQ(2, original.raw_nref());
+    ASSERT_EQ(ptr.get_raw(), original.get_raw());
+    ASSERT_EQ(original.offset(), ptr.offset());
+    ASSERT_EQ(original.length(), ptr.length());
+  }
+}
+
 TEST(BufferList, TestDirectAppend) {
   bufferlist bl;
   char correct[MAX_TEST];

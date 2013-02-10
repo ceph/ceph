@@ -285,14 +285,14 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
   }
   buffer::ptr& buffer::ptr::operator= (const ptr& p)
   {
-    // be careful -- we need to properly handle self-assignment.
     if (p._raw) {
-      p._raw->nref.inc();                      // inc new
+      p._raw->nref.inc();
       bdout << "ptr " << this << " get " << _raw << bendl;
     }
-    release();                                 // dec (+ dealloc) old (if any)
-    if (p._raw) {
-      _raw = p._raw;
+    buffer::raw *raw = p._raw; 
+    release();
+    if (raw) {
+      _raw = raw;
       _off = p._off;
       _len = p._len;
     } else {
