@@ -1425,7 +1425,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid,
 
     dout(10) << "removing coid " << coid << " from snap collections "
 	     << to_remove << " and adding to snap collections "
-	     << to_create << dendl;
+	     << to_create << " for final snaps " << coi.snaps << dendl;
 
     ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, coid, coi.version, coi.prior_version,
 				  osd_reqid_t(), ctx->mtime));

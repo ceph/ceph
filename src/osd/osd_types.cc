@@ -1783,8 +1783,20 @@ void pg_log_entry_t::generate_test_instances(list<pg_log_entry_t*>& o)
 
 ostream& operator<<(ostream& out, const pg_log_entry_t& e)
 {
-  return out << e.version << " (" << e.prior_version << ") "
-             << e.get_op_name() << ' ' << e.soid << " by " << e.reqid << " " << e.mtime;
+  out << e.version << " (" << e.prior_version << ") "
+      << e.get_op_name() << ' ' << e.soid << " by " << e.reqid << " " << e.mtime;
+  if (e.snaps.length()) {
+    vector<snapid_t> snaps;
+    bufferlist c = e.snaps;
+    bufferlist::iterator p = c.begin();
+    try {
+      ::decode(snaps, p);
+    } catch (...) {
+      snaps.clear();
+    }
+    out << " snaps " << snaps;
+  }
+  return out;
 }
 
 
