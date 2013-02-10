@@ -48,7 +48,7 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   string val;
-  string oid("test_object");
+  string oid("ceph_test_object");
   string pool_name("test_pool");
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
