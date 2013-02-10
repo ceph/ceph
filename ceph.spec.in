@@ -517,7 +517,6 @@ fi
 #################################################################################
 %files -n ceph-test
 %defattr(-,root,root,-)
-%{_bindir}/rest-bench
 %{_bindir}/ceph_bench_log
 %{_bindir}/ceph_dupstore
 %{_bindir}/ceph_kvstorebench
