@@ -10,7 +10,7 @@ DUR="$3"
 
 for n in `seq 1 $NUM`; do
     echo "Starting $n of $NUM ..."
-    smalliobenchrbd --pool rbd --duration $DUR --disable-detailed-ops 1 &
+    ceph_smalliobenchrbd --pool rbd --duration $DUR --disable-detailed-ops 1 &
     sleep $GAP
 done
 echo "Waiting..."
