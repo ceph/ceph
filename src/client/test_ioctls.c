@@ -24,7 +24,7 @@ int main(int argc, char **argv)
 	struct ceph_ioctl_dataloc dl;
 
 	if (argc < 3) {
-		printf("usage: test_ioctls <filename> <offset>\n");
+		printf("usage: ceph_test_ioctls <filename> <offset>\n");
 		return 1;
 	}
 	fn = argv[1];

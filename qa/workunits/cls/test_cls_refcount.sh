@@ -1,5 +1,5 @@
 #!/bin/sh -e
 
-test_cls_refcount
+ceph_test_cls_refcount
 
 exit 0

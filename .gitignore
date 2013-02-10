@@ -59,9 +59,10 @@ core
 *.generated.dot
 src/ocf/ceph
 src/ocf/rbd
-src/omapbench
-src/kvstorebench
+src/ceph_omapbench
+src/ceph_kvstorebench
 ar-lib
+.dirstamp
 
 # temporary directory used by e.g. "make distcheck", e.g. ceph-0.42
 /ceph-[0-9]*/
