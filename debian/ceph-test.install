@@ -5,7 +5,6 @@ usr/bin/ceph_multi_stress_watch
 usr/bin/ceph_omapbench
 usr/bin/ceph_psim
 usr/bin/ceph_radosacl
-usr/bin/rest-bench
 usr/bin/ceph_rgw_multiparser
 usr/bin/ceph_scratchtool
 usr/bin/ceph_scratchtoolpp
