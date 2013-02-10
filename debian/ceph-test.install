@@ -6,6 +6,7 @@ usr/bin/ceph_omapbench
 usr/bin/ceph_psim
 usr/bin/ceph_radosacl
 usr/bin/ceph_rgw_multiparser
+usr/bin/ceph_rgw_jsonparser
 usr/bin/ceph_scratchtool
 usr/bin/ceph_scratchtoolpp
 usr/bin/ceph_smalliobench
@@ -30,8 +31,10 @@ usr/bin/ceph_test_keyvaluedb_iterators
 usr/bin/ceph_test_libcephfs
 usr/bin/ceph_test_librbd
 usr/bin/ceph_test_librbd_fsx
+usr/bin/ceph_test_mon_workloadgen
 usr/bin/ceph_test_mutate
 usr/bin/ceph_test_object_map
+usr/bin/ceph_test_objectcacher_stress
 usr/bin/ceph_test_rados_api_aio
 usr/bin/ceph_test_rados_api_cls
 usr/bin/ceph_test_rados_api_io
