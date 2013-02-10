@@ -37,6 +37,7 @@ public:
   ceph_mount_info(uint64_t msgr_nonce_, CephContext *cct_)
     : msgr_nonce(msgr_nonce_),
       mounted(false),
+      inited(false),
       client(NULL),
       monclient(NULL),
       messenger(NULL),
@@ -95,6 +96,8 @@ public:
     if (ret)
       goto fail;
 
+    inited = true;
+
     ret = client->mount(mount_root);
     if (ret)
       goto fail;
@@ -121,7 +124,7 @@ public:
       client->unmount();
       mounted = false;
     }
-    if (client) {
+    if (inited) {
       client->shutdown();
     }
     if (messenger) {
@@ -201,6 +204,7 @@ public:
 private:
   uint64_t msgr_nonce;
   bool mounted;
+  bool inited;
   Client *client;
   MonClient *monclient;
   Messenger *messenger;
