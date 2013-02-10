@@ -294,10 +294,14 @@ bool coll_t::is_pg(pg_t& pgid, snapid_t& snap) const
   const char *snap_start = strchr(cstr, '_');
   if (!snap_start)
     return false;
-  if (strncmp(snap_start, "_head", 5) == 0)
+  if (strncmp(snap_start, "_head", 5) == 0) {
     snap = CEPH_NOSNAP;
-  else
+  } else {
+    errno = 0;
     snap = strtoull(snap_start+1, 0, 16);
+    if (errno)
+      return false;
+  }
   return true;
 }
 
