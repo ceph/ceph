@@ -135,7 +135,10 @@ void RGWFormatter_Plain::dump_format(const char *name, const char *fmt, ...)
   va_start(ap, fmt);
   vsnprintf(buf, LARGE_SIZE, fmt, ap);
   va_end(ap);
-  format = "%s\n";
+  if (len)
+    format = "\n%s";
+  else
+    format = "%s";
 
   write_data(format, buf);
 }
@@ -230,5 +233,11 @@ void RGWFormatter_Plain::dump_value_int(const char *name, const char *fmt, ...)
   vsnprintf(buf, LARGE_SIZE, fmt, ap);
   va_end(ap);
 
-  write_data("%s\n", buf);
+  const char *eol;
+  if (len)
+    eol = "\n";
+  else
+    eol = "";
+
+  write_data("%s%s", eol, buf);
 }
