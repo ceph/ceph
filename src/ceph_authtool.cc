@@ -12,8 +12,6 @@
  * 
  */
 
-using namespace std;
-
 #include "common/config.h"
 #include "common/strtol.h"
 
