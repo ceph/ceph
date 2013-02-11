@@ -4588,6 +4588,8 @@ void OSD::split_pgs(
     dout(10) << "m_seed " << i->ps() << dendl;
     dout(10) << "split_bits is " << split_bits << dendl;
 
+    rctx->transaction->create_collection(
+      coll_t(*i));
     rctx->transaction->split_collection(
       coll_t(parent->info.pgid),
       split_bits,
@@ -4607,6 +4609,8 @@ void OSD::split_pgs(
 	 ++k) {
       for (snapid_t j = k.get_start(); j < k.get_start() + k.get_len();
 	   ++j) {
+	rctx->transaction->create_collection(
+	  coll_t(*i, j));
 	rctx->transaction->split_collection(
 	  coll_t(parent->info.pgid, j),
 	  split_bits,
