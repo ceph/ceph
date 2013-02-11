@@ -1771,6 +1771,20 @@ void pg_log_entry_t::dump(Formatter *f) const
   f->dump_stream("prior_version") << version;
   f->dump_stream("reqid") << reqid;
   f->dump_stream("mtime") << mtime;
+  if (snaps.length() > 0) {
+    vector<snapid_t> v;
+    bufferlist c = snaps;
+    bufferlist::iterator p = c.begin();
+    try {
+      ::decode(v, p);
+    } catch (...) {
+      v.clear();
+    }
+    f->open_object_section("snaps");
+    for (vector<snapid_t>::iterator p = v.begin(); p != v.end(); ++p)
+      f->dump_unsigned("snap", *p);
+    f->close_section();
+  }
 }
 
 void pg_log_entry_t::generate_test_instances(list<pg_log_entry_t*>& o)
