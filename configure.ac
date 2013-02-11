@@ -56,6 +56,10 @@ AM_CONDITIONAL(FREEBSD, test x"$freebsd" = x"yes")
 
 # Checks for programs.
 AC_PROG_CXX
+if test "$CXX" = no || test "$CXX:$GXX" = "g++:"; then
+  AC_MSG_ERROR([no C++ compiler found])
+fi
+
 #AC_PROG_CC
 AC_PROG_MAKE_SET
 AC_PROG_LIBTOOL
