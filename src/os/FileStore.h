@@ -475,6 +475,9 @@ private:
 		      const SequencerPosition &spos);
   int _split_collection(coll_t cid, uint32_t bits, uint32_t rem, coll_t dest,
                         const SequencerPosition &spos);
+  int _split_collection_create(coll_t cid, uint32_t bits, uint32_t rem,
+			       coll_t dest,
+			       const SequencerPosition &spos);
 
   virtual const char** get_tracked_conf_keys() const;
   virtual void handle_conf_change(const struct md_config_t *conf,

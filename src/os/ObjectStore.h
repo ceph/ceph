@@ -153,6 +153,8 @@ public:
       OP_OMAP_RMKEYS = 33,  // cid, keyset
       OP_OMAP_SETHEADER = 34, // cid, header
       OP_SPLIT_COLLECTION = 35, // cid, bits, destination
+      OP_SPLIT_COLLECTION2 = 36, /* cid, bits, destination
+				    doesn't create the destination */
     };
 
   private:
@@ -555,7 +557,7 @@ public:
       uint32_t bits,
       uint32_t rem,
       coll_t destination) {
-      __u32 op = OP_SPLIT_COLLECTION;
+      __u32 op = OP_SPLIT_COLLECTION2;
       ::encode(op, tbl);
       ::encode(cid, tbl);
       ::encode(bits, tbl);
