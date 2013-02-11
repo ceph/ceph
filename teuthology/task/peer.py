@@ -54,6 +54,11 @@ def task(ctx, config):
     manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
     manager.wait_for_clean()
 
+    for i in range(3):
+        manager.set_config(
+            i,
+            osd_recovery_delay_start=120)
+
     # take on osd down
     manager.kill_osd(2)
     manager.mark_down_osd(2)
