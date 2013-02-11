@@ -308,7 +308,7 @@ class OSDStub : public TestStub
   boost::uniform_int<> mon_osd_rng;
 
   utime_t last_boot_attempt;
-  static const double STUB_BOOT_INTERVAL = 10.0;
+  static const double STUB_BOOT_INTERVAL;
 
 
  public:
@@ -902,6 +902,7 @@ class OSDStub : public TestStub
   }
 };
 
+double const OSDStub::STUB_BOOT_INTERVAL = 10.0;
 
 #undef dout_prefix
 #define dout_prefix *_dout << "main "
