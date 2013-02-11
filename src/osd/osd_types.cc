@@ -1696,7 +1696,7 @@ void pg_query_t::generate_test_instances(list<pg_query_t*>& o)
 
 void pg_log_entry_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(6, 4, bl);
+  ENCODE_START(7, 4, bl);
   ::encode(op, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
@@ -1715,17 +1715,15 @@ void pg_log_entry_t::encode(bufferlist &bl) const
 
   ::encode(reqid, bl);
   ::encode(mtime, bl);
-  if (op == CLONE)
-    ::encode(snaps, bl);
-
   if (op == LOST_REVERT)
     ::encode(prior_version, bl);
+  ::encode(snaps, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_log_entry_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 4, 4, bl);
   ::decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -1747,8 +1745,6 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
 
   ::decode(reqid, bl);
   ::decode(mtime, bl);
-  if (op == CLONE)
-    ::decode(snaps, bl);
   if (struct_v < 5)
     invalid_pool = true;
 
@@ -1758,6 +1754,10 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
     } else {
       reverting_to = prior_version;
     }
+  }
+  if (struct_v >= 7 ||  // for v >= 7, this is for all ops.
+      op == CLONE) {    // for v < 7, it's only present for CLONE.
+    ::decode(snaps, bl);
   }
 
   DECODE_FINISH(bl);
