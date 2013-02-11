@@ -26,11 +26,11 @@ run_api_tests() {
     # skip many_snaps since it takes several minutes
     # skip remove_with_watcher until #2533 is fixed
     nosetests -v test_rbd -e '.*many_snaps' -e '.*remove_with_watcher'
-    # test_librbd creates its own pools
-    test_librbd
+    # ceph_test_librbd creates its own pools
+    ceph_test_librbd
 }
 
-test_cls_rbd
+ceph_test_cls_rbd
 run_api_tests
 run_cli_tests
 

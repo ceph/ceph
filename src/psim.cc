@@ -52,7 +52,7 @@ int main(int argc, char **argv)
 	int x = H(oid);
 	x = ceph_stable_mod(x, 1023, 1023);
 	int s = crush_hash32(x) % 15;
-	//cout << "psim: x = " << x << " s = " << s << std::endl;
+	//cout << "ceph_psim: x = " << x << " s = " << s << std::endl;
 	//osds[0] = s;
       }
 #endif

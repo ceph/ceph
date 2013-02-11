@@ -77,7 +77,7 @@ int dupstore(ObjectStore* src, ObjectStore* dst)
 
 void usage()
 {
-  cerr << "usage: dupstore filestore SRC filestore DST" << std::endl;
+  cerr << "usage: ceph_dupstore filestore SRC filestore DST" << std::endl;
   exit(0);
 }
 

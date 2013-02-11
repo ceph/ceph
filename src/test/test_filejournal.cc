@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
     strcpy(path, args[0]);
   } else {
     srand(getpid()+time(0));
-    snprintf(path, sizeof(path), "/tmp/test_filejournal.tmp.%d", rand());
+    snprintf(path, sizeof(path), "/tmp/ceph_test_filejournal.tmp.%d", rand());
   }
   cout << "path " << path << std::endl;
 
