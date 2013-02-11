@@ -2610,7 +2610,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 
       if (r == -ENOENT && !(op == Transaction::OP_CLONERANGE ||
 			    op == Transaction::OP_CLONE ||
-			    op == Transaction::OP_CLONERANGE2))
+			    op == Transaction::OP_CLONERANGE2 ||
+			    op == Transaction::OP_COLL_ADD))
 	// -ENOENT is normally okay
 	// ...including on a replayed OP_RMCOLL with !stable_commits
 	ok = true;
