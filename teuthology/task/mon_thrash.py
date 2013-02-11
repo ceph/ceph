@@ -4,6 +4,7 @@ import ceph_manager
 import random
 import time
 import gevent
+import json
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
@@ -26,10 +27,16 @@ class MonitorThrasher:
 
   Options::
 
+    seed                Seed to use on the RNG to reproduce a previous
+                        behaviour (default: None; i.e., not set)
     revive_delay        Number of seconds to wait before reviving
                         the monitor (default: 10)
     thrash_delay        Number of seconds to wait in-between
                         test iterations (default: 0)
+    store-thrash        Thrash monitor store before killing the monitor
+                        being thrashed (default: False)
+    store-thrash-probability  Probability of thrashing a monitor's store
+                              (default: 50)
 
   For example::
 
@@ -38,6 +45,9 @@ class MonitorThrasher:
     - mon_thrash:
         revive_delay: 20
         thrash_delay: 1
+        store-thrash: true
+        store-thrash-probability: 40
+        seed: 31337
     - ceph-fuse:
     - workunit:
         clients:
@@ -56,8 +66,26 @@ class MonitorThrasher:
     if self.config is None:
       self.config = dict()
 
+    """ Test reproducibility """
+    self.random_seed = self.config.get('seed', None)
+
+    if self.random_seed is None:
+      self.random_seed = int(time.time())
+
+    self.rng = random.Random()
+    self.rng.seed(int(self.random_seed))
+
+    """ Monitor thrashing """
     self.revive_delay = float(self.config.get('revive_delay', 10.0))
     self.thrash_delay = float(self.config.get('thrash_delay', 0.0))
+
+    """ Store thrashing """
+    self.store_thrash = self.config.get('store-thrash', False)
+    self.store_thrash_probability = int(
+        self.config.get('store-thrash-probability', 50))
+    if self.store_thrash:
+      assert self.store_thrash_probability > 0, \
+          'store-thrash is set, probability must be > 0'
 
     self.thread = gevent.spawn(self.do_thrash)
 
@@ -68,8 +96,36 @@ class MonitorThrasher:
     self.stopping = True
     self.thread.get()
 
+  def should_thrash_store(self):
+    if not self.store_thrash:
+      return False
+    return self.rng.randrange(0,101) >= self.store_thrash_probability
+
+  def thrash_store(self, mon):
+    addr = self.ctx.ceph.conf['mon.%s' % mon]['mon addr']
+    self.log('thrashing mon.{id}@{addr} store'.format(id=mon,addr=addr))
+    out = self.manager.raw_cluster_cmd('-m', addr, 'sync', 'force')
+    j = json.loads(out)
+    assert j['ret'] == 0, \
+        'error forcing store sync on mon.{id}:\n{ret}'.format(
+            id=mon,ret=out)
+
+  def kill_mon(self, mon):
+    self.log('killing mon.{id}'.format(id=mon))
+    self.manager.kill_mon(mon)
+
+  def revive_mon(self, mon):
+    self.log('reviving mon.{id}'.format(id=mon))
+    self.manager.revive_mon(mon)
+
+
   def do_thrash(self):
-    self.log('start do_thrash')
+    self.log('start thrashing')
+    self.log('seed: {s}, revive delay: {r}, thrash delay: {t} '\
+        'store thrash: {st}, probability: {stp}'.format(
+          s=self.random_seed,r=self.revive_delay,t=self.thrash_delay,
+          st=self.store_thrash,stp=self.store_thrash_probability))
+
     while not self.stopping:
       mons = _get_mons(self.ctx)
       self.manager.wait_for_mon_quorum_size(len(mons))
@@ -78,11 +134,15 @@ class MonitorThrasher:
         s = self.manager.get_mon_status(m)
         assert s['state'] == 'leader' or s['state'] == 'peon'
         assert len(s['quorum']) == len(mons)
-      self.log('pick a monitor to kill')
-      to_kill = random.choice(mons)
 
-      self.log('kill mon.{id}'.format(id=to_kill))
-      self.manager.kill_mon(to_kill)
+      self.log('pick a monitor to kill')
+      to_kill = self.rng.choice(mons)
+
+      if self.should_thrash_store():
+        self.thrash_store(to_kill)
+
+      self.kill_mon(to_kill)
+
       self.manager.wait_for_mon_quorum_size(len(mons)-1)
       for m in mons:
         if m == to_kill:
@@ -95,8 +155,7 @@ class MonitorThrasher:
         delay=self.revive_delay,id=to_kill))
       time.sleep(self.revive_delay)
 
-      self.log('revive mon.{id}'.format(id=to_kill))
-      self.manager.revive_mon(to_kill)
+      self.revive_mon(to_kill)
       self.manager.wait_for_mon_quorum_size(len(mons))
       for m in mons:
         s = self.manager.get_mon_status(m)
