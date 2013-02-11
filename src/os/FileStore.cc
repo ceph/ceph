@@ -2481,7 +2481,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
       {
 	coll_t cid = i.get_cid();
 	if (_check_replay_guard(cid, spos) > 0)
-	  r = _create_collection(cid);
+	  r = _create_collection(cid, spos);
       }
       break;
 
@@ -4470,6 +4470,30 @@ ObjectMap::ObjectMapIterator FileStore::get_omap_iterator(coll_t c,
   return object_map->get_iterator(hoid);
 }
 
+int FileStore::_create_collection(
+  coll_t c,
+  const SequencerPosition &spos)
+{
+  char fn[PATH_MAX];
+  get_cdir(c, fn, sizeof(fn));
+  dout(15) << "create_collection " << fn << dendl;
+  int r = ::mkdir(fn, 0755);
+  if (r < 0)
+    r = -errno;
+  if (r == -EEXIST && replaying)
+    r = 0;
+  dout(10) << "create_collection " << fn << " = " << r << dendl;
+
+  if (r < 0)
+    return r;
+  r = init_index(c);
+  if (r < 0)
+    return r;
+  _set_replay_guard(c, spos);
+  return 0;
+}
+
+// DEPRECATED -- remove with _split_collection_create
 int FileStore::_create_collection(coll_t c) 
 {
   char fn[PATH_MAX];
