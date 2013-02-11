@@ -33,7 +33,7 @@ extern struct ceph_file_layout g_default_file_layout;
 #define OSD_REP_SPLAY   1
 #define OSD_REP_CHAIN   2
 
-class config_option;
+struct config_option;
 class CephContext;
 
 extern const char *CEPH_CONF_FILE_DEFAULT;

@@ -37,7 +37,7 @@ class AsyncReserver {
 
   void do_queues() {
     while (in_progress.size() < max_allowed &&
-           queue.size()) {
+           !queue.empty()) {
       pair<T, Context*> p = queue.front();
       queue_pointers.erase(p.first);
       queue.pop_front();

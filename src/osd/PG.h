@@ -596,7 +596,7 @@ protected:
 
     /// Adjusts begin to the first object
     void trim() {
-      if (objects.size())
+      if (!objects.empty())
 	begin = objects.begin()->first;
       else
 	begin = end;
