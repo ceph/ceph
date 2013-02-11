@@ -184,7 +184,7 @@ public:
    *
    * @param m The name to set.
    */
-  void set_myname(const entity_name_t m) { my_inst.name = m; }
+  void set_myname(const entity_name_t& m) { my_inst.name = m; }
   /**
    * Set the unknown address components for this Messenger.
    * This is useful if the Messenger doesn't know its full address just by

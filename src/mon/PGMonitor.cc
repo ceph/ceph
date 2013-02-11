@@ -167,7 +167,6 @@ void PGMonitor::update_from_paxos()
   } 
 
   // walk through incrementals
-  utime_t now(ceph_clock_now(g_ceph_context));
   while (paxosv > pg_map.version) {
     bufferlist bl;
     bool success = paxos->read(pg_map.version+1, bl);
