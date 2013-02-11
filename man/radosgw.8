@@ -74,7 +74,12 @@ FastCgiExternalServer /var/www/s3gw.fcgi \-socket /tmp/radosgw.sock
   DocumentRoot /var/www
 
   RewriteEngine On
+  RewriteCond %{HTTP_HOST} =gateway.localdomain
   RewriteRule ^/([a\-zA\-Z0\-9\-_.]*)([/]?.*) /s3gw.fcgi?page=$1&params=$2&%{QUERY_STRING} [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+  
+  RewriteCond %{HTTP_HOST} ^([^\.]+).gateway.localdomain
+  RewriteRule ^/([a-zA-Z0-9-_.]*)([/]?.*) /s3gw.fcgi?page=%1&params=/$1$2&%{QUERY_STRING} [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+
 
   <IfModule mod_fastcgi.c>
     <Directory /var/www>
@@ -112,6 +117,9 @@ section in the ceph.conf The section name should start with
     host = gateway
     keyring = /etc/ceph/keyring.radosgw.gateway
     rgw socket path = /tmp/radosgw.sock
+    rgw dns name = gateway.localdomain
+    log file = /var/log/ceph/rgw.log
+
 .ft P
 .fi
 .sp
