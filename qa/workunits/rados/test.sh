@@ -1,17 +1,17 @@
 #!/bin/sh -e
 
-test_rados_api_aio
-test_rados_api_io
-test_rados_api_list
-test_rados_api_misc
-test_rados_api_pool
-test_rados_api_snapshots
-test_rados_api_stat
-test_rados_api_watch_notify
+ceph_test_rados_api_aio
+ceph_test_rados_api_io
+ceph_test_rados_api_list
+ceph_test_rados_api_misc
+ceph_test_rados_api_pool
+ceph_test_rados_api_snapshots
+ceph_test_rados_api_stat
+ceph_test_rados_api_watch_notify
 
-testrados_list_parallel
-testrados_open_pools_parallel
-testrados_delete_pools_parallel
-testrados_watch_notify
+ceph_test_rados_list_parallel
+ceph_test_rados_open_pools_parallel
+ceph_test_rados_delete_pools_parallel
+ceph_test_rados_watch_notify
 
 exit 0
