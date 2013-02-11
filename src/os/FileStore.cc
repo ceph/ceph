@@ -2596,6 +2596,15 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	uint32_t bits(i.get_u32());
 	uint32_t rem(i.get_u32());
 	coll_t dest(i.get_cid());
+	r = _split_collection_create(cid, bits, rem, dest, spos);
+      }
+      break;
+    case Transaction::OP_SPLIT_COLLECTION2:
+      {
+	coll_t cid(i.get_cid());
+	uint32_t bits(i.get_u32());
+	uint32_t rem(i.get_u32());
+	coll_t dest(i.get_cid());
 	r = _split_collection(cid, bits, rem, dest, spos);
       }
       break;
@@ -4611,6 +4620,43 @@ int FileStore::_split_collection(coll_t cid,
 				 uint32_t rem,
 				 coll_t dest,
 				 const SequencerPosition &spos)
+{
+  dout(15) << __func__ << " " << cid << " bits: " << bits << dendl;
+  int dstcmp = _check_replay_guard(dest, spos);
+  if (dstcmp < 0)
+    return 0;
+  if (dstcmp > 0 && !collection_empty(dest))
+    return -ENOTEMPTY;
+
+  int srccmp = _check_replay_guard(cid, spos);
+  if (srccmp < 0)
+    return 0;
+
+  _set_replay_guard(cid, spos, true);
+  _set_replay_guard(dest, spos, true);
+
+  Index from;
+  int r = get_index(cid, &from);
+
+  Index to;
+  if (!r)
+    r = get_index(dest, &to);
+
+  if (!r)
+    r = from->split(rem, bits, to);
+
+  _close_replay_guard(cid, spos);
+  _close_replay_guard(dest, spos);
+  return r;
+}
+
+// DEPRECATED: remove once we are sure there won't be any such transactions
+// replayed
+int FileStore::_split_collection_create(coll_t cid,
+					uint32_t bits,
+					uint32_t rem,
+					coll_t dest,
+					const SequencerPosition &spos)
 {
   dout(15) << __func__ << " " << cid << " bits: " << bits << dendl;
   int r = _create_collection(dest);
