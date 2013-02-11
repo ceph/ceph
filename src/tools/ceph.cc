@@ -63,6 +63,7 @@ static void usage()
   cout << "METADATA SERVER (MDS) COMMANDS\n";
   cout << "  ceph mds stat\n";
   cout << "  ceph mds tell <mds-id or *> injectargs '--<switch> <value> [--<switch> <value>...]'\n";
+  cout << "  ceph mds add_data_pool <pool-id>\n";
   cout << "\n";
   cout << "MONITOR (MON) COMMANDS\n";
   cout << "  ceph mon add <name> <ip>[:<port>]\n";

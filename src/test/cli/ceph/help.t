@@ -20,6 +20,7 @@
   METADATA SERVER (MDS) COMMANDS
     ceph mds stat
     ceph mds tell <mds-id or *> injectargs '--<switch> <value> [--<switch> <value>...]'
+    ceph mds add_data_pool <pool-id>
   
   MONITOR (MON) COMMANDS
     ceph mon add <name> <ip>[:<port>]
