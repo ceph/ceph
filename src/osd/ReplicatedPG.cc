@@ -4653,7 +4653,13 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
       }
       
       info.stats = m->pg_stats;
-      update_snap_collections(log, rm->localt);
+      if (!rm->opt.empty()) {
+	// If the opt is non-empty, we infer we are before
+	// last_backfill (according to the primary, not our
+	// not-quite-accurate value), and should update the
+	// collections now.  Otherwise, we do it later on push.
+	update_snap_collections(log, rm->localt);
+      }
       append_log(log, m->pg_trim_to, rm->localt);
 
       rm->tls.push_back(&rm->localt);
