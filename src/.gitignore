@@ -39,13 +39,16 @@ Makefile
 /ceph_smalliobenchfs
 /ceph_smalliobenchrbd
 /ceph_ver.h
+/dev
 /init-ceph
 /librados-config
 /massif.out.*
 /mkcephfs
+/mnt
 /monmaptool
 /mount.ceph
 /osdmaptool
+/out
 /rados
 /radosgw
 /radosgw-admin
@@ -53,7 +56,8 @@ Makefile
 /rbd-fuse
 /rest-bench
 /sample.fetch_config
+/TAGS
+/tags
 /testmsgr
-/test_*i
+/test_*
 /unittest_*
-
