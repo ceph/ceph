@@ -490,6 +490,7 @@ bool parse_attrname(char **name)
 static int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap)
 {
   struct fiemap *fiemap = NULL;
+  struct fiemap *_realloc_fiemap = NULL;
   int size;
   int ret;
 
@@ -509,11 +510,13 @@ static int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap)
 
   size = sizeof(struct fiemap_extent) * (fiemap->fm_mapped_extents);
 
-  fiemap = (struct fiemap *)realloc(fiemap, sizeof(struct fiemap) +
+  _realloc_fiemap = (struct fiemap *)realloc(fiemap, sizeof(struct fiemap) +
                                     size);
-  if (!fiemap) {
+  if (!_realloc_fiemap) {
     ret = -ENOMEM;
     goto done_err;
+  } else {
+    fiemap = _realloc_fiemap;
   }
 
   memset(fiemap->fm_extents, 0, size);

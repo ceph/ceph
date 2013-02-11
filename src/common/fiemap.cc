@@ -40,6 +40,7 @@
 struct fiemap *read_fiemap(int fd)
 {
   struct fiemap *fiemap;
+  struct fiemap *_realloc_fiemap = NULL;
   int extents_size;
   int r;
 
@@ -62,18 +63,20 @@ struct fiemap *read_fiemap(int fd)
   }
 
   if (!fiemap->fm_mapped_extents) {
-    free(fiemap);
-    return NULL;
+    goto done_err;
   }
 
   /* Read in the extents */
   extents_size = sizeof(struct fiemap_extent) * (fiemap->fm_mapped_extents);
 
   /* Resize fiemap to allow us to read in the extents */
-  if ((fiemap = (struct fiemap*)realloc(fiemap,sizeof(struct fiemap) +
+
+  if ((_realloc_fiemap = (struct fiemap*)realloc(fiemap,sizeof(struct fiemap) +
                                         extents_size)) == NULL) {
     fprintf(stderr, "Out of memory allocating fiemap\n");
     goto done_err;
+  } else {
+    fiemap = _realloc_fiemap;
   }
 
   memset(fiemap->fm_extents, 0, extents_size);

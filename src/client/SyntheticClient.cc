@@ -1977,7 +1977,10 @@ int SyntheticClient::write_file(string& fn, int size, loff_t wrsize)   // size i
 
   int fd = client->open(fn.c_str(), O_RDWR|O_CREAT);
   dout(5) << "writing to " << fn << " fd " << fd << dendl;
-  if (fd < 0) return fd;
+  if (fd < 0) {
+    delete[] buf;
+    return fd;
+  }
   
   utime_t from = ceph_clock_now(g_ceph_context);
   utime_t start = from;
@@ -2037,7 +2040,10 @@ int SyntheticClient::write_fd(int fd, int size, int wrsize)   // size is in MB, 
   uint64_t chunks = (uint64_t)size * (uint64_t)(1024*1024) / (uint64_t)wrsize;
 
   //dout(5) << "SyntheticClient::write_fd: writing to fd " << fd << dendl;
-  if (fd < 0) return fd;
+  if (fd < 0) {
+    delete[] buf;
+    return fd;
+  }
 
   for (unsigned i=0; i<chunks; i++) {
     if (time_to_stop()) {
@@ -2087,7 +2093,10 @@ int SyntheticClient::read_file(const std::string& fn, int size,
 
   int fd = client->open(fn.c_str(), O_RDONLY);
   dout(5) << "reading from " << fn << " fd " << fd << dendl;
-  if (fd < 0) return fd;
+  if (fd < 0) {
+    delete[] buf;
+    return fd;
+  }
 
   utime_t from = ceph_clock_now(g_ceph_context);
   utime_t start = from;
