@@ -63,7 +63,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
        const hobject_t& ioid) :
   osd(o), osdmap_ref(curmap), pool(_pool),
   _lock("PG::_lock"),
-  ref(0), deleting(false), dirty_info(false), dirty_log(false),
+  ref(0), deleting(false), dirty_info(false), dirty_big_info(false), dirty_log(false),
   info(p), coll(p), log_oid(loid), biginfo_oid(ioid),
   recovery_item(this), scrub_item(this), scrub_finalize_item(this), snap_trim_item(this), stat_queue_item(this),
   recovery_ops_active(0),
@@ -97,6 +97,7 @@ void PG::lock(bool no_lockdep)
   _lock.Lock(no_lockdep);
   // if we have unrecorded dirty state with the lock dropped, there is a bug
   assert(!dirty_info);
+  assert(!dirty_big_info);
   assert(!dirty_log);
 
   dout(30) << "lock" << dendl;
@@ -107,6 +108,7 @@ void PG::lock_with_map_lock_held(bool no_lockdep)
   _lock.Lock(no_lockdep);
   // if we have unrecorded dirty state with the lock dropped, there is a bug
   assert(!dirty_info);
+  assert(!dirty_big_info);
   assert(!dirty_log);
 
   dout(30) << "lock_with_map_lock_held" << dendl;
@@ -462,6 +464,7 @@ void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
     merge_old_entry(t, *d);
 
   dirty_info = true;
+  dirty_big_info = true;
   dirty_log = true;
 }
 
@@ -597,6 +600,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
 
   if (changed) {
     dirty_info = true;
+    dirty_big_info = true;
     dirty_log = true;
   }
 }
@@ -881,6 +885,7 @@ void PG::generate_past_intervals()
 
   // record our work.
   dirty_info = true;
+  dirty_big_info = true;
 }
 
 /*
@@ -897,6 +902,7 @@ void PG::trim_past_intervals()
       return;
     dout(10) << __func__ << ": trimming " << pif->second << dendl;
     past_intervals.erase(pif++);
+    dirty_big_info = true;
   }
 }
 
@@ -1409,6 +1415,7 @@ void PG::activate(ObjectStore::Transaction& t,
 
   // write pg info, log
   dirty_info = true;
+  dirty_big_info = true; // maybe
   dirty_log = true;
 
   // clean up stray objects
@@ -2061,8 +2068,10 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   _split_into(child_pgid, child, split_bits);
 
   child->dirty_info = true;
+  child->dirty_big_info = true;
   child->dirty_log = true;
   dirty_info = true;
+  dirty_big_info = true;
   dirty_log = true;
 }
 
@@ -2314,27 +2323,52 @@ void PG::init(int role, vector<int>& newup, vector<int>& newacting, pg_history_t
 void PG::write_info(ObjectStore::Transaction& t)
 {
   // pg state
-  bufferlist infobl;
-  __u8 struct_v = 5;
-  ::encode(struct_v, infobl);
-  ::encode(get_osdmap()->get_epoch(), infobl);
-  t.collection_setattr(coll, "info", infobl);
+  __u8 cur_struct_v = 6;
+
+  assert(info_struct_v <= cur_struct_v);
+
+  // Only need to write struct_v to attr when upgrading
+  if (info_struct_v < cur_struct_v) {
+    bufferlist attrbl;
+    info_struct_v = cur_struct_v;
+    ::encode(info_struct_v, attrbl);
+    t.collection_setattr(coll, "info", attrbl);
+  }
+
+  // info.  store purged_snaps separately.
+  interval_set<snapid_t> purged_snaps;
+  map<string,bufferlist> v;
+  string k = stringify(info.pgid) + string("_info");
+  string ek = stringify(info.pgid) + string("_epoch");
+  ::encode(get_osdmap()->get_epoch(), v[ek]);
+  purged_snaps.swap(info.purged_snaps);
+  ::encode(info, v[k]);
+  purged_snaps.swap(info.purged_snaps);
+
+  t.omap_setkeys(coll_t::META_COLL, osd->infos_oid, v);
  
-  // potentially big stuff
-  bufferlist bigbl;
-  ::encode(past_intervals, bigbl);
-  ::encode(snap_collections, bigbl);
-  ::encode(info, bigbl);
-  dout(20) << "write_info bigbl " << bigbl.length() << dendl;
-  t.truncate(coll_t::META_COLL, biginfo_oid, 0);
-  t.write(coll_t::META_COLL, biginfo_oid, 0, bigbl.length(), bigbl);
+  if (dirty_big_info) {
+    // potentially big stuff
+    v.clear();
+    bufferlist& bigbl = v[k];
+    ::encode(past_intervals, bigbl);
+    ::encode(snap_collections, bigbl);
+    ::encode(info.purged_snaps, bigbl);
+    dout(20) << "write_info bigbl " << bigbl.length() << dendl;
+    t.omap_setkeys(coll_t::META_COLL, osd->biginfos_oid, v);
+  }
 
   dirty_info = false;
+  dirty_big_info = false;
 }
 
-epoch_t PG::peek_map_epoch(ObjectStore *store, coll_t coll, bufferlist *bl)
+epoch_t PG::peek_map_epoch(ObjectStore *store, coll_t coll, hobject_t &infos_oid, bufferlist *bl)
 {
   assert(bl);
+  pg_t pgid;
+  snapid_t snap;
+  bool ok = coll.is_pg(pgid, snap);
+  assert(ok);
   store->collection_getattr(coll, "info", *bl);
   bufferlist::iterator bp = bl->begin();
   __u8 struct_v = 0;
@@ -2342,7 +2376,21 @@ epoch_t PG::peek_map_epoch(ObjectStore *store, coll_t coll, bufferlist *bl)
   if (struct_v < 5)
     return 0;
   epoch_t cur_epoch = 0;
-  ::decode(cur_epoch, bp);
+  if (struct_v < 6) {
+    ::decode(cur_epoch, bp);
+  } else {
+    // get epoch out of leveldb
+    bufferlist tmpbl;
+    string ek = stringify(pgid) + string("_epoch");
+    set<string> keys;
+    keys.insert(ek);
+    map<string,bufferlist> values;
+    store->omap_get_values(coll_t::META_COLL, infos_oid, keys, &values);
+    assert(values.size() == 1);
+    tmpbl = values[ek];
+    bufferlist::iterator p = tmpbl.begin();
+    ::decode(cur_epoch, p);
+  }
   return cur_epoch;
 }
 
@@ -2596,11 +2644,12 @@ std::string PG::get_corrupt_pg_log_name() const
 }
 
 int PG::read_info(ObjectStore *store, const coll_t coll, bufferlist &bl,
-  pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals,
-  hobject_t &biginfo_oid, interval_set<snapid_t>  &snap_collections)
+  pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals, hobject_t &biginfo_oid,
+  hobject_t &infos_oid, hobject_t &biginfos_oid, interval_set<snapid_t>  &snap_collections,
+  __u8 &struct_v)
 {
   bufferlist::iterator p = bl.begin();
-  __u8 struct_v;
+  bufferlist lbl;
 
   // info
   ::decode(struct_v, p);
@@ -2610,17 +2659,36 @@ int PG::read_info(ObjectStore *store, const coll_t coll, bufferlist &bl,
     ::decode(past_intervals, p);
   
     // snap_collections
-    bl.clear();
-    store->collection_getattr(coll, "snap_collections", bl);
-    p = bl.begin();
+    store->collection_getattr(coll, "snap_collections", lbl);
+    p = lbl.begin();
     ::decode(struct_v, p);
   } else {
-    bl.clear();
-    int r = store->read(coll_t::META_COLL, biginfo_oid, 0, 0, bl);
-    if (r < 0)
-       return r;
-    p = bl.begin();
-    ::decode(past_intervals, p);
+    if (struct_v < 6) {
+      int r = store->read(coll_t::META_COLL, biginfo_oid, 0, 0, lbl);
+      if (r < 0)
+        return r;
+      p = lbl.begin();
+      ::decode(past_intervals, p);
+    } else {
+      // get info out of leveldb
+      string k = stringify(info.pgid) + string("_info");
+      set<string> keys;
+      keys.insert(k);
+      map<string,bufferlist> values;
+      store->omap_get_values(coll_t::META_COLL, infos_oid, keys, &values);
+      assert(values.size() == 1);
+      lbl = values[k];
+      p = lbl.begin();
+      ::decode(info, p);
+
+      // biginfo
+      values.clear();
+      store->omap_get_values(coll_t::META_COLL, biginfos_oid, keys, &values);
+      assert(values.size() == 1);
+      lbl = values[k];
+      p = lbl.begin();
+      ::decode(past_intervals, p);
+    }
   }
 
   if (struct_v < 3) {
@@ -2634,8 +2702,10 @@ int PG::read_info(ObjectStore *store, const coll_t coll, bufferlist &bl,
     }
   } else {
     ::decode(snap_collections, p);
-    if (struct_v >= 4)
+    if (struct_v >= 4 && struct_v < 6)
       ::decode(info, p);
+    else if (struct_v >= 6)
+      ::decode(info.purged_snaps, p);
   }
   return 0;
 }
@@ -2643,7 +2713,7 @@ int PG::read_info(ObjectStore *store, const coll_t coll, bufferlist &bl,
 void PG::read_state(ObjectStore *store, bufferlist &bl)
 {
   int r = read_info(store, coll, bl, info, past_intervals, biginfo_oid,
-    snap_collections);
+    osd->infos_oid, osd->biginfos_oid, snap_collections, info_struct_v);
   assert(r >= 0);
 
   try {
@@ -4564,6 +4634,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
   if (!lastmap) {
     dout(10) << " no lastmap" << dendl;
     dirty_info = true;
+    dirty_big_info = true;
   } else {
     bool new_interval = pg_interval_t::check_new_interval(
       oldacting, newacting,
@@ -4575,6 +4646,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     if (new_interval) {
       dout(10) << " noting past " << past_intervals.rbegin()->second << dendl;
       dirty_info = true;
+      dirty_big_info = true;
     }
   }
 
@@ -4689,6 +4761,7 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
       adjust_local_snaps();
     }
     dirty_info = true;
+    dirty_big_info = true;
   }
 }
 
@@ -6054,6 +6127,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
     pg->snap_trimq.union_of(pg->pool.newly_removed_snaps);
     dout(10) << *pg << " snap_trimq now " << pg->snap_trimq << dendl;
     pg->dirty_info = true;
+    pg->dirty_big_info = true;
   }
   pg->check_recovery_sources(pg->get_osdmap());
 
@@ -6371,6 +6445,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
     pg->info = msg->info;
     pg->reg_next_scrub();
     pg->dirty_info = true;
+    pg->dirty_big_info = true;  // maybe.
     pg->dirty_log = true;
     pg->log.claim_log(msg->log);
     pg->missing.clear();

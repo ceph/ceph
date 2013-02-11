@@ -204,24 +204,30 @@ int main(int argc, char **argv)
       continue;
     }
 
+    //XXX: This needs OSD function to generate
+    hobject_t biginfos_oid(sobject_t("biginfos", CEPH_NOSNAP));
+    hobject_t infos_oid(sobject_t("infos", CEPH_NOSNAP));
     bufferlist bl;
-    epoch_t map_epoch = PG::peek_map_epoch(fs, coll, &bl);
+    epoch_t map_epoch = PG::peek_map_epoch(fs, coll, infos_oid, &bl);
     (void)map_epoch;
 
     found = true;
 
-    pg_info_t info;
+    pg_info_t info(pgid);
     map<epoch_t,pg_interval_t> past_intervals;
     hobject_t biginfo_oid = OSD::make_pg_biginfo_oid(pgid);
     interval_set<snapid_t> snap_collections;
 
+    __u8 struct_v;
     int r = PG::read_info(fs, coll, bl, info, past_intervals, biginfo_oid,
-      snap_collections);
+      infos_oid, biginfos_oid, snap_collections, struct_v);
     if (r < 0) {
       cerr << "read_info error " << cpp_strerror(-r) << std::endl;
       ret = 1;
       continue;
     }
+    if (vm.count("debug"))
+      cout << "struct_v " << (int)struct_v << std::endl;
 
     if (type == "info") {
       formatter->open_object_section("info");
