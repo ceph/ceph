@@ -336,12 +336,11 @@ static void ft_ll_forget(fuse_req_t req, fuse_ino_t ino, long unsigned nlookup)
 
 static void ft_ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
-    int res = 0;
     string path;
-    int fd = 0;
-
-    Inode *in = 0;
+    Inode *in;
     struct stat attr;
+    int res = 0;
+    int fd = 0;
 
     lock.Lock();
     in = inode_map[ino];
@@ -380,7 +379,7 @@ static void ft_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
 			  int to_set, struct fuse_file_info *fi)
 {
     string path;
-    Inode *in = 0;
+    Inode *in;
     int fd = 0;
     int res = 0;
 
@@ -556,8 +555,9 @@ static void ft_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
 			mode_t mode, dev_t rdev)
 {
     string path;
-    Inode *pin = 0;
+    Inode *pin;
     int res = 0;
+
     lock.Lock();
     pin = inode_map[parent];
     if (!make_inode_path(path, pin, name))
@@ -600,8 +600,9 @@ static void ft_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 			mode_t mode)
 {
     string path;
-    Inode *pin = 0;
+    Inode *pin;
     int res = 0;
+
     lock.Lock();
     pin = inode_map[parent];
     if (!make_inode_path(path, pin, name))
@@ -642,7 +643,7 @@ static void ft_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 static void ft_ll_symlink(fuse_req_t req, const char *value, fuse_ino_t parent, const char *name)
 {
     string path;
-    Inode *pin = 0;
+    Inode *pin;
     int res = 0;
 
     lock.Lock();
@@ -686,7 +687,7 @@ static void ft_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 			 mode_t mode, struct fuse_file_info *fi)
 {
     string path;
-    Inode *pin = 0;
+    Inode *pin;
     int res = 0;
 
     lock.Lock();
@@ -771,10 +772,11 @@ static void ft_ll_statfs(fuse_req_t req, fuse_ino_t ino)
 static void ft_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
     string path;
-    Inode *pin = 0;
-    Inode *in = 0;
-    string dname(name);
+    Inode *pin;
+    Inode *in;
     int res = 0;
+    string dname(name);
+
     lock.Lock();
     pin = inode_map[parent];
     in = pin->lookup(dname);
@@ -815,7 +817,7 @@ static void ft_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 static void ft_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
     string path;
-    Inode *pin = 0;
+    Inode *pin;
     int res = 0;
 
     lock.Lock();
@@ -852,9 +854,10 @@ static void ft_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
 {
     string path;
     string newpath;
-    Inode *pin = 0;
-    Inode *newpin = 0;
+    Inode *pin;
+    Inode *newpin;
     int res = 0;
+
     lock.Lock();
     pin = inode_map[parent];
     if (!make_inode_path(path, pin, name))
@@ -901,9 +904,10 @@ static void ft_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
 {
     string path;
     string newpath;
-    Inode *in = 0;
+    Inode *in;
     Inode *newpin = 0;
     int res = 0;
+
     lock.Lock();
     in = inode_map[ino];
     if (!make_inode_path(path, in))
@@ -950,7 +954,7 @@ static void ft_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
 static void ft_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
     string path;
-    Inode *in = 0;
+    Inode *in;
     int res = 0;
 
     lock.Lock();
