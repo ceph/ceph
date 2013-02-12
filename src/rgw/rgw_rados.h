@@ -289,6 +289,79 @@ struct RGWZoneParams {
   void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(RGWZoneParams);
+
+struct RGWZone {
+  string name;
+  list<string> endpoints;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(name, bl);
+    ::encode(endpoints, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(name, bl);
+    ::decode(endpoints, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWZone);
+
+struct RGWRegion {
+  string name;
+  list<string> endpoints;
+
+  string master_zone;
+  list<RGWZone> zones;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(endpoints, bl);
+    ::encode(master_zone, bl);
+    ::encode(zones, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(endpoints, bl);
+    ::decode(master_zone, bl);
+    ::decode(zones, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWRegion);
+
+struct RGWRegionMap {
+  map<string, RGWRegion> regions;
+
+  string master_region;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(regions, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(regions, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWRegionMap);
+
+
   
 class RGWRados
 {
