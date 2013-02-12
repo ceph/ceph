@@ -453,6 +453,7 @@ public:
   ObjectMap::ObjectMapIterator get_omap_iterator(coll_t c, const hobject_t &hoid);
 
   int _create_collection(coll_t c);
+  int _create_collection(coll_t c, const SequencerPosition &spos);
   int _destroy_collection(coll_t c);
   int _collection_add(coll_t c, coll_t ocid, const hobject_t& o,
 		      const SequencerPosition& spos);
@@ -475,6 +476,9 @@ private:
 		      const SequencerPosition &spos);
   int _split_collection(coll_t cid, uint32_t bits, uint32_t rem, coll_t dest,
                         const SequencerPosition &spos);
+  int _split_collection_create(coll_t cid, uint32_t bits, uint32_t rem,
+			       coll_t dest,
+			       const SequencerPosition &spos);
 
   virtual const char** get_tracked_conf_keys() const;
   virtual void handle_conf_change(const struct md_config_t *conf,
