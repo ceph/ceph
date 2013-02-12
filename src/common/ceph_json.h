@@ -109,6 +109,9 @@ public:
   template<class T>
   static bool decode_json(const char *name, T& val, JSONObj *obj, bool mandatory = false);
 
+  template<class C>
+  static bool decode_json(const char *name, C& container, void (*cb)(C&, JSONObj *obj), JSONObj *obj, bool mandatory = false);
+
   template<class T>
   static void decode_json(const char *name, T& val, T& default_val, JSONObj *obj);
 };
@@ -143,6 +146,17 @@ void decode_json_obj(list<T>& l, JSONObj *obj)
   }
 }
 
+template<class C>
+void decode_json_obj(C& container, void (*cb)(C&, JSONObj *obj), JSONObj *obj)
+{
+  JSONObjIter iter = obj->find_first();
+
+  for (; !iter.end(); ++iter) {
+    JSONObj *o = *iter;
+    cb(container, o);
+  }
+}
+
 template<class T>
 bool JSONDecoder::decode_json(const char *name, T& val, JSONObj *obj, bool mandatory)
 {
@@ -157,6 +171,29 @@ bool JSONDecoder::decode_json(const char *name, T& val, JSONObj *obj, bool manda
 
   try {
     decode_json_obj(val, *iter);
+  } catch (err& e) {
+    string s = string(name) + ": ";
+    s.append(e.message);
+    throw err(s);
+  }
+
+  return true;
+}
+
+template<class C>
+bool JSONDecoder::decode_json(const char *name, C& container, void (*cb)(C&, JSONObj *), JSONObj *obj, bool mandatory)
+{
+  JSONObjIter iter = obj->find_first(name);
+  if (iter.end()) {
+    if (mandatory) {
+      string s = "missing mandatory field " + string(name);
+      throw err(s);
+    }
+    return false;
+  }
+
+  try {
+    decode_json_obj(container, cb, *iter);
   } catch (err& e) {
     string s = string(name) + ": ";
     s.append(e.message);
