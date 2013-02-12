@@ -232,18 +232,6 @@ static void encode_json(const char *name, const T& val, Formatter *f)
   f->close_section();
 }
 
-template<class T>
-static void encode_json(const char *name, const std::list<T>& l, Formatter *f)
-{
-  f->open_array_section(name);
-  for (typename std::list<T>::const_iterator iter = l.begin(); iter != l.end(); ++iter) {
-    f->open_object_section("obj");
-    encode_json(name, *iter, f);
-    f->close_section();
-  }
-  f->close_section();
-}
-
 class utime_t;
 
 void encode_json(const char *name, const string& val, Formatter *f);
@@ -256,6 +244,27 @@ void encode_json(const char *name, const utime_t& val, Formatter *f);
 void encode_json(const char *name, const bufferlist& bl, Formatter *f);
 void encode_json(const char *name, long long val, Formatter *f);
 void encode_json(const char *name, long long unsigned val, Formatter *f);
+
+template<class T>
+static void encode_json(const char *name, const std::list<T>& l, Formatter *f)
+{
+  f->open_array_section(name);
+  for (typename std::list<T>::const_iterator iter = l.begin(); iter != l.end(); ++iter) {
+    encode_json("obj", *iter, f);
+  }
+  f->close_section();
+}
+
+template<class K, class V>
+void encode_json(const char *name, const map<K, V>& m, Formatter *f)
+{
+  f->open_array_section(name);
+  typename map<K,V>::const_iterator iter;
+  for (iter = m.begin(); iter != m.end(); ++iter) {
+    encode_json("obj", iter->second, f);
+  }
+  f->close_section(); 
+}
 
 template<class K, class V>
 void encode_json_map(const char *name, const char *index_name,
