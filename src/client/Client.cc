@@ -3896,11 +3896,10 @@ int Client::path_walk(const filepath& origpath, Inode **final, bool followsym)
 
   unsigned i=0;
   while (i < path.depth() && cur) {
-    const string &dname = path[i];
-    ldout(cct, 10) << " " << i << " " << *cur << " " << dname << dendl;
+    ldout(cct, 10) << " " << i << " " << *cur << " " << path[i] << dendl;
     ldout(cct, 20) << "  (path is " << path << ")" << dendl;
     Inode *next;
-    int r = _lookup(cur, dname.c_str(), &next);
+    int r = _lookup(cur, path[i].c_str(), &next);
     if (r < 0)
       return r;
     // only follow trailing symlink if followsym.  always follow
