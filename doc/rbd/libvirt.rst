@@ -182,8 +182,13 @@ To configure the VM for use with Ceph, perform the following steps:
 
    Replace ``{monitor-host}`` with the name of your host. You may add multiple
    ``<host>`` entries for your Ceph monitors. The ``dev`` attribute is the 
-   device name that will appear under the ``/dev`` directory of your VM. The 
-   ``bus`` attribute may be ``ide`` or ``virtio``.
+   logical device name that will appear under the ``/dev`` directory of your 
+   VM. The optional ``bus`` attribute indicates the type of disk device to 
+   emulate. The valid settings are driver specific (e.g., "ide", "scsi", 
+   "virtio", "xen", "usb" or "sata").
+   
+   See `Disks`_ for details of the ``<disk>`` element, and its child elements
+   and attributes.
 	
 #. Save the file.
 
@@ -213,7 +218,7 @@ To configure the VM for use with Ceph, perform the following steps:
 
    You must also set the secret manually by adding the following ``<auth>`` 
    entry to the ``<disk>`` element you entered earlier (replacing the
-   ``uuid`` value with the one output from the command line example above). ::
+   ``uuid`` value with the result from the command line example above). ::
 
 	sudo virsh edit libvirt-virtual-machine.xml
 
@@ -230,8 +235,8 @@ To configure the VM for use with Ceph, perform the following steps:
    **NOTE:** The username is ``libvirt``, not ``client.libvirt``.
 
 
-Once you have configured the VM, you can start it and begin using the Ceph
-block device.
+Once you have configured the VM for use with Ceph, you can start the VM and
+begin using the Ceph block device within your VM.
 
 
 .. _AutoGen: http://www.gnu.org/software/autogen/
@@ -248,3 +253,4 @@ block device.
 .. _Virsh Command Reference: http://www.libvirt.org/virshcmdref.html
 .. _KVM/VirtManager: https://help.ubuntu.com/community/KVM/VirtManager
 .. _Ceph Authentication: ../../rados/operations/auth-intro
+.. _Disks: http://www.libvirt.org/formatdomain.html#elementsDisks
