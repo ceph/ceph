@@ -585,12 +585,12 @@ namespace librbd {
     if (snap_id == CEPH_NOSNAP)
       return -ENOENT;
 
-    bool is_protected;
-    r = ictx->is_snap_protected(snap_name, &is_protected);
+    bool is_unprotected;
+    r = ictx->is_snap_unprotected(snap_name, &is_unprotected);
     if (r < 0)
       return r;
 
-    if (!is_protected)
+    if (is_unprotected)
       return -EINVAL;
 
     r = cls_client::set_protection_status(&ictx->md_ctx,
@@ -662,7 +662,12 @@ reprotect_and_return_err:
       return r;
 
     Mutex::Locker l(ictx->snap_lock);
-    return ictx->is_snap_protected(snap_name, is_protected);
+    bool is_unprotected;
+    r = ictx->is_snap_unprotected(snap_name, &is_unprotected);
+    // consider both PROTECTED or UNPROTECTING to be 'protected',
+    // since in either state they can't be deleted
+    *is_protected = !is_unprotected;
+    return r;
   }
 
   int create_v1(IoCtx& io_ctx, const char *imgname, uint64_t bid,
