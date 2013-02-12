@@ -3236,7 +3236,8 @@ bool OSD::heartbeat_dispatch(Message *m)
     break;
 
   default:
-    return false;
+    dout(0) << "dropping unexpected message " << *m << " from " << m->get_source_inst() << dendl;
+    m->put();
   }
 
   return true;
