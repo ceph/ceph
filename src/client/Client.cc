@@ -3646,7 +3646,7 @@ void Client::unmount()
   }
 
   // wait for sessions to close
-  while (mds_sessions.size()) {
+  while (!mds_sessions.empty()) {
     ldout(cct, 2) << "waiting for " << mds_sessions.size() << " mds sessions to close" << dendl;
     mount_cond.Wait(client_lock);
   }
@@ -7486,7 +7486,7 @@ int Client::get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>
   pg_t pg = osdmap->object_locator_to_pg(extents[0].oid, extents[0].oloc);
   vector<int> osds;
   osdmap->pg_to_acting_osds(pg, osds);
-  if (!osds.size())
+  if (osds.empty())
     return -EINVAL;
 
   for (unsigned i = 0; i < osds.size(); i++) {
