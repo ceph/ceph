@@ -14,6 +14,9 @@
 #ifndef CEPH_REPLICATEDPG_H
 #define CEPH_REPLICATEDPG_H
 
+#include <boost/optional.hpp>
+
+#include "include/assert.h" 
 
 #include "PG.h"
 #include "OSD.h"
@@ -260,7 +263,14 @@ public:
     bool watch_connect, watch_disconnect;
     watch_info_t watch_info;
     list<notify_info_t> notifies;
-    list<uint64_t> notify_acks;
+    struct NotifyAck {
+      boost::optional<uint64_t> watch_cookie;
+      uint64_t notify_id;
+      NotifyAck(uint64_t notify_id) : notify_id(notify_id) {}
+      NotifyAck(uint64_t notify_id, uint64_t cookie)
+	: watch_cookie(cookie), notify_id(notify_id) {}
+    };
+    list<NotifyAck> notify_acks;
     
     uint64_t bytes_written, bytes_read;
 
