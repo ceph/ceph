@@ -38,7 +38,7 @@ public:
   
   set<dirfrag_t> &get_bounds() { return bounds; }
   
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "EExport " << base << " " << metablob;
   }
 
