@@ -121,7 +121,11 @@ class MonitorDBStore
     }
 
     bool empty() {
-      return (ops.size() == 0);
+      return (size() == 0);
+    }
+
+    bool size() {
+      return ops.size();
     }
 
     void dump(ceph::Formatter *f) {

@@ -36,6 +36,7 @@
 #include "osd/OSDMap.h"
 
 #include "common/LogClient.h"
+#include "common/SimpleRNG.h"
 
 #include "auth/cephx/CephxKeyServer.h"
 #include "auth/AuthMethodList.h"
@@ -47,6 +48,7 @@
 #include "mon/MonitorDBStore.h"
 
 #include <memory>
+#include <tr1/memory>
 #include <errno.h>
 
 
@@ -87,6 +89,7 @@ class AdminSocketHook;
 
 class MMonGetMap;
 class MMonGetVersion;
+class MMonSync;
 class MMonProbe;
 class MMonSubscribe;
 class MAuthRotating;
@@ -142,7 +145,7 @@ public:
 private:
   enum {
     STATE_PROBING = 1,
-    STATE_SLURPING,
+    STATE_SYNCHRONIZING,
     STATE_ELECTING,
     STATE_LEADER,
     STATE_PEON,
@@ -154,7 +157,7 @@ public:
   static const char *get_state_name(int s) {
     switch (s) {
     case STATE_PROBING: return "probing";
-    case STATE_SLURPING: return "slurping";
+    case STATE_SYNCHRONIZING: return "synchronizing";
     case STATE_ELECTING: return "electing";
     case STATE_LEADER: return "leader";
     case STATE_PEON: return "peon";
@@ -162,11 +165,14 @@ public:
     }
   }
   const char *get_state_name() const {
-    return get_state_name(state);
+    string sn(get_state_name(state));
+    string sync_name(get_sync_state_name());
+    sn.append(sync_name);
+    return sn.c_str();
   }
 
   bool is_probing() const { return state == STATE_PROBING; }
-  bool is_slurping() const { return state == STATE_SLURPING; }
+  bool is_synchronizing() const { return state == STATE_SYNCHRONIZING; }
   bool is_electing() const { return state == STATE_ELECTING; }
   bool is_leader() const { return state == STATE_LEADER; }
   bool is_peon() const { return state == STATE_PEON; }
@@ -186,8 +192,882 @@ private:
   uint64_t quorum_features;  ///< intersection of quorum member feature bits
 
   set<string> outside_quorum;
-  entity_inst_t slurp_source;
-  map<string,version_t> slurp_versions;
+
+  /**
+   * @defgroup Synchronization
+   * @{
+   */
+  /**
+   * Obtain the synchronization target prefixes in set form.
+   *
+   * We consider a target prefix all those that are relevant when
+   * synchronizing two stores. That is, all those that hold paxos service's
+   * versions, as well as paxos versions, or any control keys such as the
+   * first or last committed version.
+   *
+   * Given the current design, this function should return the name of all and
+   * any available paxos service, plus the paxos name.
+   *
+   * @returns a set of strings referring to the prefixes being synchronized
+   */
+  set<string> get_sync_targets_names();
+  /**
+   * Handle a sync-related message
+   *
+   * This function will call the appropriate handling functions for each
+   * operation type.
+   *
+   * @param m A sync-related message (i.e., of type MMonSync)
+   */
+  void handle_sync(MMonSync *m);
+  /**
+   * Handle a sync-related message of operation type OP_ABORT.
+   *
+   * @param m A sync-related message of type OP_ABORT
+   */
+  void handle_sync_abort(MMonSync *m);
+  /**
+   * Reset the monitor's sync-related data structures and state.
+   */
+  void reset_sync(bool abort = false);
+
+  /**
+   * @defgroup Synchronization_Roles
+   * @{
+   */
+  /**
+   * The monitor has no role in any on-going synchronization.
+   */
+  static const uint8_t SYNC_ROLE_NONE	    = 0x0;
+  /**
+   * The monitor is the Leader in at least one synchronization.
+   */
+  static const uint8_t SYNC_ROLE_LEADER	    = 0x1;
+  /**
+   * The monitor is the Provider in at least one synchronization.
+   */
+  static const uint8_t SYNC_ROLE_PROVIDER   = 0x2;
+  /**
+   * The monitor is a requester in the on-going synchronization.
+   */
+  static const uint8_t SYNC_ROLE_REQUESTER  = 0x4;
+
+  /**
+   * The monitor's current role in on-going synchronizations, if any.
+   *
+   * A monitor can either be part of no synchronization at all, in which case
+   * @p sync_role shall hold the value @p SYNC_ROLE_NONE, or it can be part of
+   * an on-going synchronization, in which case it may be playing either one or
+   * two roles at the same time:
+   *
+   *  - If the monitor is the sync requester (i.e., be the one synchronizing
+   *    against some other monitor), the @p sync_role field will hold only the
+   *    @p SYNC_ROLE_REQUESTER value.
+   *  - Otherwise, the monitor can be either a sync leader, or a sync provider,
+   *    or both, in which case @p sync_role will hold a binary OR of both
+   *    @p SYNC_ROLE_LEADER and @p SYNC_ROLE_PROVIDER.
+   */
+  uint8_t sync_role;
+  /**
+   * @}
+   */
+  /**
+   * @defgroup Leader-specific
+   * @{
+   */
+  /**
+   * Guarantee mutual exclusion access to the @p trim_timeouts map.
+   *
+   * We need this mutex specially when we have a monitor starting a sync with
+   * the leader and another one finishing or aborting an on-going sync, that
+   * happens to be the last on-going trim on the map. Given that we will
+   * enable the Paxos trim once we deplete the @p trim_timeouts map, we must
+   * then ensure that we either add the new sync start to the map before
+   * removing the one just finishing, or that we remove the finishing one
+   * first and enable the trim before we add the new one. If we fail to do
+   * this, nasty repercussions could follow.
+   */
+  Mutex trim_lock;
+  /**
+   * Map holding all on-going syncs' timeouts.
+   *
+   * An on-going sync leads to the Paxos trim to be suspended, and this map
+   * will associate entities to the timeouts to be triggered if the monitor
+   * being synchronized fails to check-in with the leader, letting him know
+   * that the sync is still in effect and that in no circumstances should the
+   * Paxos trim be enabled.
+   */
+  map<entity_inst_t, Context*> trim_timeouts;
+  map<entity_inst_t, uint8_t> trim_entities_states;
+  /**
+   * Map associating monitors to a sync state.
+   *
+   * This map is used by both the Leader and the Sync Provider, and has the
+   * sole objective of keeping track of the state each monitor's sync process
+   * is in.
+   */
+  map<entity_inst_t, uint8_t> sync_entities_states;
+  /**
+   * Timer that will enable the Paxos trim.
+   *
+   * This timer is set after the @p trim_timeouts map is depleted, and once
+   * fired it will enable the Paxos trim (if still disabled). By setting
+   * this timer, we avoid a scenario in which a monitor has just finished
+   * synchronizing, but because the Paxos trim had been disabled for a long,
+   * long time and a lot of trims were proposed in the timespan of the monitor
+   * finishing its sync and actually joining the cluster, the monitor happens
+   * to be out-of-sync yet again. Backing off enabling the Paxos trim will
+   * allow the other monitor to join the cluster before actually trimming.
+   */
+  Context *trim_enable_timer;
+
+  /**
+   * Callback class responsible for finishing a monitor's sync session on the
+   * leader's side, because the said monitor failed to acknowledge its
+   * liveliness in a timely manner, thus being assumed as failed.
+   */
+  struct C_TrimTimeout : public Context {
+    Monitor *mon;
+    entity_inst_t entity;
+
+    C_TrimTimeout(Monitor *m, entity_inst_t& entity)
+      : mon(m), entity(entity) { }
+    void finish(int r) {
+      mon->sync_finish(entity);
+    }
+  };
+
+  /**
+   * Callback class responsible for enabling the Paxos trim if there are no
+   * more on-going syncs.
+   */
+  struct C_TrimEnable : public Context {
+    Monitor *mon;
+
+    C_TrimEnable(Monitor *m) : mon(m) { }
+    void finish(int r) {
+      Mutex::Locker(mon->trim_lock);
+      // even if we are no longer the leader, we should re-enable trim if
+      // we have disabled it in the past. It doesn't mean we are going to
+      // do anything about it, but if we happen to become the leader
+      // sometime down the future, we sure want to have the trim enabled.
+      if (!mon->trim_timeouts.size())
+	mon->paxos->trim_enable();
+      mon->trim_enable_timer = NULL;
+    }
+  };
+
+  /**
+   * Send a heartbeat message to another entity.
+   *
+   * The sent message may be a heartbeat reply if the @p reply parameter is
+   * set to true.
+   *
+   * This function is used both by the leader (always with @p reply = true),
+   * and by the sync requester (always with @p reply = false).
+   *
+   * @param other The target monitor's entity instance.
+   * @param reply Whether the message to be sent should be a heartbeat reply.
+   */
+  void sync_send_heartbeat(entity_inst_t &other, bool reply = false);
+  /**
+   * Handle a Sync Start request.
+   *
+   * Monitors wanting to synchronize with the cluster will have to first ask
+   * the leader to do so. The only objective with this is so that the we can
+   * gurantee that the leader won't trim the paxos state.
+   *
+   * The leader may not be the only one receiving this request. A sync provider
+   * may also receive it when it is taken as the point of entry onto the
+   * cluster. In this scenario, the provider must then forward this request to
+   * the leader, if he know of one, or assume himself as the leader for this
+   * sync purpose (this may happen if there is no formed quorum).
+   *
+   * @param m Sync message with operation type MMonSync::OP_START
+   */
+  void handle_sync_start(MMonSync *m);
+  /**
+   * Handle a Heartbeat sent by a sync requester.
+   *
+   * We use heartbeats as a way to guarantee that both the leader and the sync
+   * requester are still alive. Receiving this message means that the requester
+   * if still working on getting his store synchronized.
+   *
+   * @param m Sync message with operation type MMonSync::OP_HEARTBEAT
+   */
+  void handle_sync_heartbeat(MMonSync *m);
+  /**
+   * Handle a Sync Finish.
+   *
+   * A MMonSync::OP_FINISH is the way the sync requester has to inform the
+   * leader that he finished synchronizing his store.
+   *
+   * @param m Sync message with operation type MMonSync::OP_FINISH
+   */
+  void handle_sync_finish(MMonSync *m);
+  /**
+   * Finish a given monitor's sync process on the leader's side.
+   *
+   * This means cleaning up the state referring to the monitor whose sync has
+   * finished (may it have been finished successfully, by receiving a message
+   * with type MMonSync::OP_FINISH, or due to the assumption that the said
+   * monitor failed).
+   *
+   * If we happen to know of no other monitor synchronizing, we may then enable
+   * the paxos trim.
+   *
+   * @param entity Entity instance of the monitor whose sync we are considering
+   *		   as finished.
+   * @param abort If true, we consider this sync has finished due to an abort.
+   */
+  void sync_finish(entity_inst_t &entity, bool abort = false);
+  /**
+   * Abort a given monitor's sync process on the leader's side.
+   *
+   * This function is a wrapper for Monitor::sync_finish().
+   *
+   * @param entity Entity instance of the monitor whose sync we are aborting.
+   */
+  void sync_finish_abort(entity_inst_t &entity) {
+    sync_finish(entity, true);
+  }
+  /**
+   * @} // Leader-specific
+   */
+  /**
+   * @defgroup Synchronization Provider-specific
+   * @{
+   */
+  /**
+   * Represents a participant in a synchronization, along with its state.
+   *
+   * This class is used to track down all the sync requesters we are providing
+   * to. In such scenario, it won't be uncommon to have the @p synchronizer
+   * field set with a connection to the MonitorDBStore, the @p timeout field
+   * containing a timeout event and @p entity containing the entity instance
+   * of the monitor we are here representing.
+   *
+   * The sync requester will also use this class to represent both the sync
+   * leader and the sync provider.
+   */
+  struct SyncEntityImpl {
+
+    /**
+     * Store synchronization related Sync state.
+     */
+    enum {
+      /**
+       * No state whatsoever. We are not providing any sync suppport.
+       */
+      STATE_NONE   = 0,
+      /**
+       * This entity's sync effort is currently focused on reading and sharing
+       * our whole store state with @p entity. This means all the entries in
+       * the key/value space.
+       */
+      STATE_WHOLE  = 1,
+      /**
+       * This entity's sync effor is currently focused on reading and sharing
+       * our Paxos state with @p entity. This means all the Paxos-related
+       * key/value entries, such as the Paxos versions.
+       */
+      STATE_PAXOS  = 2
+    };
+
+    /**
+     * The entity instace of the monitor whose sync effort we are representing.
+     */
+    entity_inst_t entity;
+    /**
+     * Our Monitor.
+     */
+    Monitor *mon;
+    /**
+     * The Paxos version we are focusing on.
+     *
+     * @note This is not used at the moment. We are still assessing whether we
+     *	     need it.
+     */
+    version_t version;
+    /**
+     * Timeout event. Its type and purpose varies depending on the situation.
+     */
+    Context *timeout;
+    /**
+     * Last key received during a sync effort.
+     *
+     * This field is mainly used by the sync requester to track the last
+     * received key, in case he needs to switch providers due to failure. The
+     * sync provider will also use this field whenever the requester specifies
+     * a last received key when requesting the provider to start sending his
+     * store chunks.
+     */
+    pair<string,string> last_received_key;
+    /**
+     * Hold the Store Synchronization related Sync State.
+     */
+    int sync_state;
+    /**
+     * The MonitorDBStore's chunk iterator instance we are currently using
+     * to obtain the store's chunks and pack them to the sync requester.
+     */
+    MonitorDBStore::Synchronizer synchronizer;
+    MonitorDBStore::Synchronizer paxos_synchronizer;
+    /* Should only be used for debugging purposes */
+    /**
+     * crc of the contents read from the store.
+     *
+     * @note may not always be available, as it is used only on specific
+     *	     points in time during the sync process.
+     * @note depends on '--mon-sync-debug' being set.
+     */
+    __u32 crc;
+    /**
+     * Should be true if @p crc has been set.
+     */
+    bool crc_available;
+    /**
+     * Total synchronization attempts.
+     */
+    int attempts;
+
+    SyncEntityImpl(entity_inst_t &entity, Monitor *mon)
+      : entity(entity),
+	mon(mon),
+	version(0),
+	timeout(NULL),
+	sync_state(STATE_NONE),
+	crc_available(false),
+	attempts(0)
+    { }
+
+    /**
+     * Obtain current Sync State name.
+     *
+     * @returns Name of current sync state.
+     */
+    string get_state() {
+      switch (sync_state) {
+	case STATE_NONE: return "none";
+	case STATE_WHOLE: return "whole";
+	case STATE_PAXOS: return "paxos";
+	default: return "unknown";
+      }
+    }
+    /**
+     * Obtain the paxos version at which this sync started.
+     *
+     * @returns Paxos version at which this sync started
+     */
+    version_t get_version() {
+      return version;
+    }
+    /**
+     * Set a timeout event for this sync entity.
+     *
+     * @param event Timeout class to be called after @p fire_after seconds.
+     * @param fire_after Number of seconds until we fire the @p event event.
+     */
+    void set_timeout(Context *event, double fire_after) {
+      cancel_timeout();
+      timeout = event;
+      mon->timer.add_event_after(fire_after, timeout);
+    }
+    /**
+     * Cancel the currently set timeout, if any.
+     */
+    void cancel_timeout() {
+      if (timeout)
+	mon->timer.cancel_event(timeout);
+      timeout = NULL;
+    }
+    /**
+     * Initiate the required fields for obtaining chunks out of the
+     * MonitorDBStore.
+     *
+     * This function will initiate @p synchronizer with a chunk iterator whose
+     * scope is all the keys/values that belong to one of the sync targets
+     * (i.e., paxos services or paxos).
+     *
+     * Calling @p Monitor::sync_update() will be essential during the efforts
+     * of providing a correct store state to the requester, since we will need
+     * to eventually update the iterator in order to start packing the Paxos
+     * versions.
+     */
+    void sync_init() {
+      sync_state = STATE_WHOLE;
+      set<string> sync_targets = mon->get_sync_targets_names();
+
+      string prefix("paxos");
+      paxos_synchronizer = mon->store->get_synchronizer(prefix);
+      version = mon->paxos->get_version();
+      generic_dout(10) << __func__ << " version " << version << dendl;
+
+      synchronizer = mon->store->get_synchronizer(last_received_key,
+						  sync_targets);
+      sync_update();
+      assert(synchronizer->has_next_chunk());
+    }
+    /**
+     * Update the @p synchronizer chunk iterator, if needed.
+     *
+     * Whenever we reach the end of the iterator during @p STATE_WHOLE, we
+     * must update the @p synchronizer to an iterator focused on reading only
+     * Paxos versions. This is an essential part of the sync store approach,
+     * and it will guarantee that we end up with a consistent store.
+     */
+    void sync_update() {
+      assert(sync_state != STATE_NONE);
+      assert(synchronizer.use_count() != 0);
+
+      if (!synchronizer->has_next_chunk()) {
+	crc_set(synchronizer->crc());
+	if (sync_state == STATE_WHOLE) {
+          assert(paxos_synchronizer.use_count() != 0);
+	  sync_state = STATE_PAXOS;
+          synchronizer = paxos_synchronizer;
+	}
+      }
+    }
+
+    /* For debug purposes only */
+    /**
+     * Check if we have a CRC available.
+     *
+     * @returns true if crc is available; false otherwise.
+     */
+    bool has_crc() {
+      return (g_conf->mon_sync_debug && crc_available);
+    }
+    /**
+     * Set @p crc to @p to_set
+     *
+     * @param to_set a crc value to set.
+     */
+    void crc_set(__u32 to_set) {
+      crc = to_set;
+      crc_available = true;
+    }
+    /**
+     * Get the current CRC value from @p crc
+     *
+     * @returns the currenct CRC value from @p crc
+     */
+    __u32 crc_get() {
+      return crc;
+    }
+    /**
+     * Clear the current CRC.
+     */
+    void crc_clear() {
+      crc_available = false;
+    }
+  };
+  typedef std::tr1::shared_ptr< SyncEntityImpl > SyncEntity;
+  /**
+   * Get a Monitor::SyncEntity instance.
+   *
+   * @param entity The monitor's entity instance that we want to associate
+   *		   with this Monitor::SyncEntity.
+   * @param mon The Monitor.
+   *
+   * @returns A Monitor::SyncEntity
+   */
+  SyncEntity get_sync_entity(entity_inst_t &entity, Monitor *mon) {
+    return std::tr1::shared_ptr<SyncEntityImpl>(
+	new SyncEntityImpl(entity, mon));
+  }
+  /**
+   * Callback class responsible for dealing with the consequences of a sync
+   * process timing out.
+   */
+  struct C_SyncTimeout : public Context {
+    Monitor *mon;
+    entity_inst_t entity;
+
+    C_SyncTimeout(Monitor *mon, entity_inst_t &entity)
+      : mon(mon), entity(entity)
+    { }
+
+    void finish(int r) {
+      mon->sync_timeout(entity);
+    }
+  };
+  /**
+   * Map containing all the monitor entities to whom we are acting as sync
+   * providers.
+   */
+  map<entity_inst_t, SyncEntity> sync_entities;
+  /**
+   * RNG used for the sync (currently only used to pick random monitors)
+   */
+  SimpleRNG sync_rng;
+  /**
+   * Obtain random monitor from the monmap.
+   *
+   * @param other Any monitor other than the one with rank @p other
+   * @returns The picked monitor's name.
+   */
+  string _pick_random_mon(int other = -1);
+  int _pick_random_quorum_mon(int other = -1);
+  /**
+   * Deal with the consequences of @p entity's sync timing out.
+   *
+   * @note Both the sync provider and the sync requester make use of this
+   *	   function, since both use the @p Monitor::C_SyncTimeout callback.
+   *
+   * Being the sync provider, whenever a Monitor::C_SyncTimeout is triggered,
+   * we only have to clean up the sync requester's state we are maintaining.
+   *
+   * Being the sync requester, we will have to choose a new sync provider, and
+   * resume our sync from where it was left.
+   *
+   * @param entity Entity instance of the monitor whose sync has timed out.
+   */
+  void sync_timeout(entity_inst_t &entity);
+  /**
+   * Cleanup the state we, the provider, are keeping during @p entity's sync.
+   *
+   * @param entity Entity instance of the monitor whose sync state we are
+   *		   cleaning up.
+   */
+  void sync_provider_cleanup(entity_inst_t &entity);
+  /**
+   * Handle a Sync Start Chunks request from a sync requester.
+   *
+   * This request will create the necessary state our the provider's end, and
+   * the provider will then be able to send chunks of his own store to the
+   * requester.
+   *
+   * @param m Sync message with operation type MMonSync::OP_START_CHUNKS
+   */
+  void handle_sync_start_chunks(MMonSync *m);
+  /**
+   * Handle a requester's reply to the last chunk we sent him.
+   *
+   * We will only send a new chunk to the sync requester once he has acked the
+   * reception of the last chunk we sent them.
+   *
+   * That's also how we will make sure that, on their end, they became aware
+   * that there are no more chunks to send (since we shall tag a message with
+   * MMonSync::FLAG_LAST when we are sending them the last chunk of all),
+   * allowing us to clean up the requester's state.
+   *
+   * @param m Sync message with operation type MMonSync::OP_CHUNK_REPLY
+   */
+  void handle_sync_chunk_reply(MMonSync *m);
+  /**
+   * Send a chunk to the sync entity represented by @p sync.
+   *
+   * This function will send the next chunk available on the synchronizer. If
+   * it happens to be the last chunk, then the message shall be marked as
+   * such using MMonSync::FLAG_LAST.
+   *
+   * @param sync A Monitor::SyncEntity representing a sync requester monitor.
+   */
+  void sync_send_chunks(SyncEntity sync);
+  /**
+   * @} // Synchronization Provider-specific
+   */
+  /**
+   * @defgroup Synchronization Requester-specific
+   * @{
+   */
+  /**
+   * The state in which we (the sync leader, provider or requester) are in
+   * regard to our sync process (if we are the requester) or any entity that
+   * we may be leading or providing to.
+   */
+  enum {
+    /**
+     * We are not part of any synchronization effort, or it has not began yet.
+     */
+    SYNC_STATE_NONE   = 0,
+    /**
+     * We have started our role in the synchronization.
+     *
+     * This state may have multiple meanings, depending on which entity is
+     * employing it and within which context.
+     *
+     * For instance, the leader will consider a sync requester to enter
+     * SYNC_STATE_START whenever it receives a MMonSync::OP_START from the
+     * said requester. On the other hand, the provider will consider that the
+     * requester enters this state after receiving a MMonSync::OP_START_CHUNKS.
+     * The sync requester will enter this state as soon as it begins its sync
+     * efforts.
+     */
+    SYNC_STATE_START  = 1,
+    /**
+     * We are synchronizing chunks.
+     *
+     * This state is not used by the sync leader; only the sync requester and
+     * the sync provider will.
+     */
+    SYNC_STATE_CHUNKS = 2,
+    /**
+     * We are stopping the sync effort.
+     */
+    SYNC_STATE_STOP   = 3
+  };
+  /**
+   * The current sync state.
+   *
+   * This field is only used by the sync requester, being the only one that
+   * will take this state as part of its global state. The sync leader and the
+   * sync provider will only associate sync states to other entities (i.e., to
+   * sync requesters), and those shall be kept in the @p sync_entities_states
+   * map.
+   */
+  int sync_state;
+  /**
+   * Callback class responsible for dealing with the consequences of the sync
+   * requester not receiving a MMonSync::OP_START_REPLY in a timely manner.
+   */
+  struct C_SyncStartTimeout : public Context {
+    Monitor *mon;
+
+    C_SyncStartTimeout(Monitor *mon)
+      : mon(mon)
+    { }
+
+    void finish(int r) {
+      mon->sync_start_reply_timeout();
+    }
+  };
+  /**
+   * Callback class responsible for retrying a Sync Start after a given
+   * backoff period, whenever the Sync Leader flags a MMonSync::OP_START_REPLY
+   * with the MMonSync::FLAG_RETRY flag.
+   */
+  struct C_SyncStartRetry : public Context {
+    Monitor *mon;
+    entity_inst_t entity;
+
+    C_SyncStartRetry(Monitor *mon, entity_inst_t &entity)
+      : mon(mon), entity(entity)
+    { }
+
+    void finish(int r) {
+      mon->bootstrap();
+    }
+  };
+  /**
+   * We use heartbeats to check if both the Leader and the Synchronization
+   * Requester are both still alive, so we can determine if we should continue
+   * with the synchronization process, granted that trim is disabled.
+   */
+  struct C_HeartbeatTimeout : public Context {
+    Monitor *mon;
+
+    C_HeartbeatTimeout(Monitor *mon)
+      : mon(mon)
+    { }
+
+    void finish(int r) {
+      mon->sync_requester_abort();
+    }
+  };
+  /**
+   * Callback class responsible for sending a heartbeat message to the sync
+   * leader. We use this callback to keep an assynchronous heartbeat with
+   * the sync leader at predefined intervals.
+   */
+  struct C_HeartbeatInterval : public Context {
+    Monitor *mon;
+    entity_inst_t entity;
+
+    C_HeartbeatInterval(Monitor *mon, entity_inst_t &entity)
+      : mon(mon), entity(entity)
+    { }
+
+    void finish(int r) {
+      mon->sync_leader->set_timeout(new C_HeartbeatTimeout(mon),
+				    g_conf->mon_sync_heartbeat_timeout);
+      mon->sync_send_heartbeat(entity);
+    }
+  };
+  /**
+   * Callback class responsible for dealing with the consequences of never
+   * receiving a reply to a MMonSync::OP_FINISH sent to the sync leader.
+   */
+  struct C_SyncFinishReplyTimeout : public Context {
+    Monitor *mon;
+
+    C_SyncFinishReplyTimeout(Monitor *mon)
+      : mon(mon)
+    { }
+
+    void finish(int r) {
+      mon->sync_finish_reply_timeout();
+    }
+  };
+  /**
+   * The entity we, the sync requester, consider to be our sync leader. If
+   * there is a formed quorum, the @p sync_leader should represent the actual
+   * cluster Leader; otherwise, it can be any monitor and will likely be the
+   * same as @p sync_provider.
+   */
+  SyncEntity sync_leader;
+  /**
+   * The entity we, the sync requester, are synchronizing against. This entity
+   * will be our source of store chunks, and we will ultimately obtain a store
+   * state equal (or very similar, maybe off by a couple of versions) as their
+   * own.
+   */
+  SyncEntity sync_provider;
+  /**
+   * Clean up the Sync Requester's state (both in-memory and in-store).
+   */
+  void sync_requester_cleanup();
+  /**
+   * Abort the current sync effort.
+   *
+   * This will be translated into a MMonSync::OP_ABORT sent to the sync leader
+   * and to the sync provider, and ultimately it will also involve calling
+   * @p Monitor::sync_requester_cleanup() to clean up our current sync state.
+   */
+  void sync_requester_abort();
+  /**
+   * Deal with a timeout while waiting for a MMonSync::OP_FINISH_REPLY.
+   *
+   * This will be assumed as a leader failure, and having been exposed to the
+   * side-effects of a new Leader being elected, we have no other choice but
+   * to abort our sync process and start fresh.
+   */
+  void sync_finish_reply_timeout();
+  /**
+   * Deal with a timeout while waiting for a MMonSync::OP_START_REPLY.
+   *
+   * This will be assumed as a leader failure. Since we didn't get to do
+   * much work (as we haven't even started our sync), we will simply bootstrap
+   * and start off fresh with a new sync leader.
+   */
+  void sync_start_reply_timeout();
+  /**
+   * Start the synchronization efforts.
+   *
+   * This function should be called whenever we find the need to synchronize
+   * our store state with the remaining cluster.
+   *
+   * Starting the sync process means that we will have to request the cluster
+   * Leader (if there is a formed quorum) to stop trimming the Paxos state and
+   * allow us to start synchronizing with the sync provider we picked.
+   *
+   * @param entity An entity instance referring to the sync provider we picked.
+   */
+  void sync_start(entity_inst_t &entity);
+  /**
+   * Request the provider to start sending the chunks of his store, in order
+   * for us to obtain a consistent store state similar to the one shared by
+   * the cluster.
+   *
+   * @param provider The SyncEntity representing the Sync Provider.
+   */
+  void sync_start_chunks(SyncEntity provider);
+  /**
+   * Handle a MMonSync::OP_START_REPLY sent by the Sync Leader.
+   *
+   * Reception of this message may be twofold: if it was marked with the
+   * MMonSync::FLAG_RETRY flag, we must backoff for a while and retry starting
+   * the sync at a later time; otherwise, we have the green-light to request
+   * the Sync Provider to start sharing his chunks with us.
+   *
+   * @param m Sync message with operation type MMonSync::OP_START_REPLY
+   */
+  void handle_sync_start_reply(MMonSync *m);
+  /**
+   * Handle a Heartbeat reply sent by the Sync Leader.
+   *
+   * We use heartbeats to keep the Sync Leader aware that we are keeping our
+   * sync efforts alive. We also use them to make sure our Sync Leader is
+   * still alive. If the Sync Leader fails, we will have to abort our on-going
+   * sync, or we could incurr in an inconsistent store state due to a trim on
+   * the Paxos state of the monitor provinding us with his store chunks.
+   *
+   * @param m Sync message with operation type MMonSync::OP_HEARTBEAT_REPLY
+   */
+  void handle_sync_heartbeat_reply(MMonSync *m);
+  /**
+   * Handle a chunk sent by the Sync Provider.
+   *
+   * We will receive the Sync Provider's store in chunks. These are encoded
+   * in bufferlists containing a transaction that will be directly applied
+   * onto our MonitorDBStore.
+   *
+   * Whenever we receive such a message, we must reply to the Sync Provider,
+   * as a way of acknowledging the reception of its last chunk. If the message
+   * is tagged with a MMonSync::FLAG_LAST, we can then consider we have
+   * received all the chunks the Sync Provider had to offer, and finish our
+   * sync efforts with the Sync Leader.
+   *
+   * @param m Sync message with operation type MMonSync::OP_CHUNK
+   */
+  void handle_sync_chunk(MMonSync *m);
+  /**
+   * Handle a reply sent by the Sync Leader to a MMonSync::OP_FINISH.
+   *
+   * As soon as we receive this message, we know we finally have a store state
+   * consistent with the remaining cluster (give or take a couple of versions).
+   * We may then bootstrap and attempt to join the other monitors in the
+   * cluster.
+   *
+   * @param m Sync message with operation type MMonSync::OP_FINISH_REPLY
+   */
+  void handle_sync_finish_reply(MMonSync *m);
+  /**
+   * Stop our synchronization effort by sending a MMonSync::OP_FINISH to the
+   * Sync Leader.
+   *
+   * Once we receive the last chunk from the Sync Provider, we are in
+   * conditions of officially finishing our sync efforts. With that purpose in
+   * mind, we must then send a MMonSync::OP_FINISH to the Leader, letting him
+   * know that we no longer require the Paxos state to be preserved.
+   */
+  void sync_stop();
+  /**
+   * @} // Synchronization Requester-specific
+   */
+  const string get_sync_state_name(int s) const {
+    switch (s) {
+    case SYNC_STATE_NONE: return "none";
+    case SYNC_STATE_START: return "start";
+    case SYNC_STATE_CHUNKS: return "chunks";
+    case SYNC_STATE_STOP: return "stop";
+    }
+    return "???";
+  }
+  /**
+   * Obtain a string describing the current Sync State.
+   *
+   * @returns A string describing the current Sync State, if any, or an empty
+   *	      string if no sync (or sync effort we know of) is in progress.
+   */
+  const string get_sync_state_name() const {
+    string sn;
+
+    if (sync_role == SYNC_ROLE_NONE)
+      return "";
+
+    sn.append(" sync(");
+
+    if (sync_role & SYNC_ROLE_LEADER)
+      sn.append(" leader");
+    if (sync_role & SYNC_ROLE_PROVIDER)
+      sn.append(" provider");
+    if (sync_role & SYNC_ROLE_REQUESTER)
+      sn.append(" requester");
+
+    sn.append(" state ");
+    sn.append(get_sync_state_name(sync_state));
+
+    sn.append(" )");
+
+    return sn;
+  }
+
+  /**
+   * @} // Synchronization
+   */
 
   list<Context*> waitfor_quorum;
   list<Context*> maybe_wait_for_quorum;
@@ -256,7 +1136,7 @@ private:
    */
 
 
-  Context *probe_timeout_event;  // for probing and slurping states
+  Context *probe_timeout_event;  // for probing
 
   struct C_ProbeTimeout : public Context {
     Monitor *mon;
@@ -270,9 +1150,6 @@ private:
   void cancel_probe_timeout();
   void probe_timeout(int r);
 
-  void slurp();
-
- 
 public:
   epoch_t get_epoch();
   int get_leader() { return leader; }
@@ -354,6 +1231,8 @@ public:
   bool _allowed_command(MonSession *s, const vector<std::string>& cmd);
   void _mon_status(ostream& ss);
   void _quorum_status(ostream& ss);
+  void _sync_status(ostream& ss);
+  void _sync_force(ostream& ss);
   void _add_bootstrap_peer_hint(string cmd, string args, ostream& ss);
   void handle_command(class MMonCommand *m);
   void handle_route(MRoute *m);
@@ -370,6 +1249,9 @@ public:
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);
 
+  /**
+   * Handle Synchronization-related messages.
+   */
   void handle_probe(MMonProbe *m);
   /**
    * Handle a Probe Operation, replying with our name, quorum and known versions.
@@ -387,20 +1269,6 @@ public:
    */
   void handle_probe_probe(MMonProbe *m);
   void handle_probe_reply(MMonProbe *m);
-  void handle_probe_slurp(MMonProbe *m);
-  void handle_probe_slurp_latest(MMonProbe *m);
-  void handle_probe_data(MMonProbe *m);
-  /**
-   * Given an MMonProbe and associated Paxos machine, create a reply,
-   * fill it with the missing Paxos states and current commit pointers
-   *
-   * @param m The incoming MMonProbe. We use this to determine the range
-   * of paxos states to include in the reply.
-   * @param pax The Paxos state machine which m is associated with.
-   *
-   * @returns A new MMonProbe message, initialized as OP_DATA, and filled
-   * with the necessary Paxos states. */
-  MMonProbe *fill_probe_data(MMonProbe *m, Paxos *pax);
 
   // request routing
   struct RoutedRequest {
@@ -501,6 +1369,7 @@ public:
 
   int preinit();
   int init();
+  void init_paxos();
   void shutdown();
   void tick();
 
