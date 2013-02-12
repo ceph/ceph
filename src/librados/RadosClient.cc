@@ -478,14 +478,11 @@ int librados::RadosClient::pool_delete_async(const char *name, PoolAsyncCompleti
   return r;
 }
 
-void librados::RadosClient::register_watcher(WatchContext *wc,
-					     const object_t& oid,
-					     librados::WatchCtx *ctx,
-					     uint64_t *cookie)
+void librados::RadosClient::register_watcher(WatchContext *wc, uint64_t *cookie)
 {
   assert(lock.is_locked());
-  *cookie = ++max_watch_cookie;
-  watchers[*cookie] = wc;
+  wc->cookie = *cookie = ++max_watch_cookie;
+  watchers[wc->cookie] = wc;
 }
 
 void librados::RadosClient::unregister_watcher(uint64_t cookie)
