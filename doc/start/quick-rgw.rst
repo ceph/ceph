@@ -249,10 +249,9 @@ Gateway via the Swift-compatible API.
 
 RGW's ``user:subuser`` tuple maps to the ``tenant:user`` tuple expected by Swift.
 
-.. important:: RGW's Swift authentication service only supports
-   built-in Swift authentication (``-V 1.0``) at this point. There is
-   currently no way to make RGW authenticate users via OpenStack
-   Identity Service (Keystone).
+.. note:: RGW's Swift authentication service only supports
+   built-in Swift authentication (``-V 1.0``) at this point. See
+   `RGW Configuration`_ for Keystone integration details.
 
 
 Enable SSL
@@ -276,3 +275,4 @@ Then, restart Apache. ::
 .. _Create rgw.conf: ../../radosgw/config/index.html#create-rgw-conf
 .. _5-minute Quick Start: ../quick-start
 .. _RADOS Gateway Manual Install: ../../radosgw/manual-install
+.. _RGW Configuration: ../../radosgw/config
