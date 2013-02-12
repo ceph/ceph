@@ -30,36 +30,16 @@ struct ETableServer : public LogEvent {
   version_t tid;
   version_t version;
 
-  ETableServer() : LogEvent(EVENT_TABLESERVER) { }
+  ETableServer() : LogEvent(EVENT_TABLESERVER), table(0), op(0),
+		   reqid(0), bymds(0), tid(0), version(0) { }
   ETableServer(int t, int o, uint64_t ri, int m, version_t ti, version_t v) :
     LogEvent(EVENT_TABLESERVER),
     table(t), op(o), reqid(ri), bymds(m), tid(ti), version(v) { }
 
-  void encode(bufferlist& bl) const {
-    __u8 struct_v = 2;
-    ::encode(struct_v, bl);
-    ::encode(stamp, bl);
-    ::encode(table, bl);
-    ::encode(op, bl);
-    ::encode(reqid, bl);
-    ::encode(bymds, bl);
-    ::encode(mutation, bl);
-    ::encode(tid, bl);
-    ::encode(version, bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    if (struct_v >= 2)
-      ::decode(stamp, bl);
-    ::decode(table, bl);
-    ::decode(op, bl);
-    ::decode(reqid, bl);
-    ::decode(bymds, bl);
-    ::decode(mutation, bl);
-    ::decode(tid, bl);
-    ::decode(version, bl);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ETableServer*>& ls);
 
   void print(ostream& out) {
     out << "ETableServer " << get_mdstable_name(table) 

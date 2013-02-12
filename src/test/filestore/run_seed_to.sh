@@ -1,7 +1,7 @@
 #!/bin/bash
 # vim: ts=8 sw=2 smarttab
 #
-# run_seed_to.sh - Run test_filestore_idempotent_sequence up until an 
+# run_seed_to.sh - Run ceph_test_filestore_idempotent_sequence up until an 
 # injection point, generating a sequence of operations based on a
 # provided seed.
 #
@@ -244,13 +244,13 @@ do
   fi
 
   do_rm $tmp_name_a $tmp_name_a.fail $tmp_name_a.recover
-  $v test_filestore_idempotent_sequence run-sequence-to $to \
+  $v ceph_test_filestore_idempotent_sequence run-sequence-to $to \
     $tmp_name_a $tmp_name_a/journal \
     --filestore-xattr-use-omap --test-seed $seed --osd-journal-size 100 \
     --filestore-kill-at $killat $tmp_opts_a \
     --log-file $tmp_name_a.fail --debug-filestore 20 || true
 
-  stop_at=`test_filestore_idempotent_sequence get-last-op \
+  stop_at=`ceph_test_filestore_idempotent_sequence get-last-op \
     $tmp_name_a $tmp_name_a/journal \
     --filestore-xattr-use-omap --log-file $tmp_name_a.recover \
     --debug-filestore 20 --debug-journal 20`
@@ -263,12 +263,12 @@ do
   echo stopped at $stop_at
 
   do_rm $tmp_name_b $tmp_name_b.clean
-  $v test_filestore_idempotent_sequence run-sequence-to \
+  $v ceph_test_filestore_idempotent_sequence run-sequence-to \
     $stop_at $tmp_name_b $tmp_name_b/journal \
     --filestore-xattr-use-omap --test-seed $seed --osd-journal-size 100 \
     --log-file $tmp_name_b.clean --debug-filestore 20 $tmp_opts_b
 
-  if $v test_filestore_idempotent_sequence diff \
+  if $v ceph_test_filestore_idempotent_sequence diff \
     $tmp_name_a $tmp_name_a/journal $tmp_name_b $tmp_name_b/journal \
     --filestore-xattr-use-omap; then
       echo OK

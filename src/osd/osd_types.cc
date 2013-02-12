@@ -1696,7 +1696,7 @@ void pg_query_t::generate_test_instances(list<pg_query_t*>& o)
 
 void pg_log_entry_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(6, 4, bl);
+  ENCODE_START(7, 4, bl);
   ::encode(op, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
@@ -1715,17 +1715,15 @@ void pg_log_entry_t::encode(bufferlist &bl) const
 
   ::encode(reqid, bl);
   ::encode(mtime, bl);
-  if (op == CLONE)
-    ::encode(snaps, bl);
-
   if (op == LOST_REVERT)
     ::encode(prior_version, bl);
+  ::encode(snaps, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_log_entry_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 4, 4, bl);
   ::decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -1747,8 +1745,6 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
 
   ::decode(reqid, bl);
   ::decode(mtime, bl);
-  if (op == CLONE)
-    ::decode(snaps, bl);
   if (struct_v < 5)
     invalid_pool = true;
 
@@ -1758,6 +1754,10 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
     } else {
       reverting_to = prior_version;
     }
+  }
+  if (struct_v >= 7 ||  // for v >= 7, this is for all ops.
+      op == CLONE) {    // for v < 7, it's only present for CLONE.
+    ::decode(snaps, bl);
   }
 
   DECODE_FINISH(bl);
@@ -1771,6 +1771,20 @@ void pg_log_entry_t::dump(Formatter *f) const
   f->dump_stream("prior_version") << version;
   f->dump_stream("reqid") << reqid;
   f->dump_stream("mtime") << mtime;
+  if (snaps.length() > 0) {
+    vector<snapid_t> v;
+    bufferlist c = snaps;
+    bufferlist::iterator p = c.begin();
+    try {
+      ::decode(v, p);
+    } catch (...) {
+      v.clear();
+    }
+    f->open_object_section("snaps");
+    for (vector<snapid_t>::iterator p = v.begin(); p != v.end(); ++p)
+      f->dump_unsigned("snap", *p);
+    f->close_section();
+  }
 }
 
 void pg_log_entry_t::generate_test_instances(list<pg_log_entry_t*>& o)
@@ -1783,8 +1797,20 @@ void pg_log_entry_t::generate_test_instances(list<pg_log_entry_t*>& o)
 
 ostream& operator<<(ostream& out, const pg_log_entry_t& e)
 {
-  return out << e.version << " (" << e.prior_version << ") "
-             << e.get_op_name() << ' ' << e.soid << " by " << e.reqid << " " << e.mtime;
+  out << e.version << " (" << e.prior_version << ") "
+      << e.get_op_name() << ' ' << e.soid << " by " << e.reqid << " " << e.mtime;
+  if (e.snaps.length()) {
+    vector<snapid_t> snaps;
+    bufferlist c = e.snaps;
+    bufferlist::iterator p = c.begin();
+    try {
+      ::decode(snaps, p);
+    } catch (...) {
+      snaps.clear();
+    }
+    out << " snaps " << snaps;
+  }
+  return out;
 }
 
 

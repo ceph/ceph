@@ -11,7 +11,6 @@
  * Foundation.  See file COPYING.
  *
  */
-using namespace std;
 #include <string>
 
 #include "common/Mutex.h"

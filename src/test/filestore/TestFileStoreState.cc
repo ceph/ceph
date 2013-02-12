@@ -27,7 +27,7 @@
 
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
-#define dout_prefix *_dout << "test_filestore_state "
+#define dout_prefix *_dout << "ceph_test_filestore_state "
 
 const coll_t TestFileStoreState::META_COLL("meta");
 const coll_t TestFileStoreState::TEMP_COLL("temp");

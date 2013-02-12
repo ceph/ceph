@@ -94,7 +94,7 @@ public:
     void *_void_dequeue() {
       list<T*> *out(new list<T*>);
       _dequeue(out);
-      if (out->size()) {
+      if (!out->empty()) {
 	return (void *)out;
       } else {
 	delete out;

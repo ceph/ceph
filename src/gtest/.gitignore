@@ -1,0 +1,5 @@
+fused-src
+/scripts/gtest-config
+/build-aux/config.h.in
+/build-aux/config.h
+/lib/

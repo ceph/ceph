@@ -42,8 +42,6 @@
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDPGLog.h"
 
-#include "common/DecayCounter.h"
-
 #include <list>
 #include <memory>
 #include <string>
@@ -596,7 +594,7 @@ protected:
 
     /// Adjusts begin to the first object
     void trim() {
-      if (objects.size())
+      if (!objects.empty())
 	begin = objects.begin()->first;
       else
 	begin = end;

@@ -1,5 +1,5 @@
 #!/bin/sh -e
 
-test_stress_watch
+ceph_test_stress_watch
 
 exit 0

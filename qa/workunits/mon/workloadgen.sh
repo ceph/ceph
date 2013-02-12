@@ -9,7 +9,7 @@ d() {
 
 d "check for required binaries"
 
-required_bins="ceph crushtool test_mon_workloadgen"
+required_bins="ceph crushtool ceph_test_mon_workloadgen"
 for b in $required_bins; do
   which $b >& /dev/null
   if [[ $? -ne 0 ]]; then
@@ -28,7 +28,7 @@ do_run=0
 num_osds=0
 
 # Assume the test is in PATH
-bin_test=test_mon_workloadgen
+bin_test=ceph_test_mon_workloadgen
 
 num_osds=10
 if [[ "$LOADGEN_NUM_OSDS" != "" ]]; then

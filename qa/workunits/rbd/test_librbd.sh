@@ -1,5 +1,5 @@
 #!/bin/sh -e
 
-test_librbd
+ceph_test_librbd
 
 exit 0
