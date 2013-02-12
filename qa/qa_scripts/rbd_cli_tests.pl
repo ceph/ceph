@@ -42,7 +42,7 @@ For Example,for "nova" user, 'export CEPH_ARGS="--keyring /etc/ceph/ceph.keyring
 =cut
 
 use Cwd;
-use RbdLib qw(perform_action create_image resize_image rename_image copy_image list_image info_image export_image import_image remove_image create_snapshots rollback_snapshots purge_snapshots list_snapshots remove_snapshot rbd_map rbd_unmap rbd_showmapped display_result _pre_clean_up _post_clean_up _create_rados_pool display_ceph_os_info $RADOS_MKPOOL $RADOS_RMPOOL $RBD_CREATE $RBD_RESIZE $RBD_INFO $RBD_REMOVE $RBD_RENAME $RBD_MV $RBD_LS $RBD_LIST $RBD_CLONE $RBD_EXPORT $RBD_IMPORT $RBD_CP $RBD_COPY $SNAP_CREATE $SNAP_LS $SNAP_LIST $SNAP_ROLLBACK $SNAP_PURGE $SNAP_REMOVE $POOL_RM_SUCCESS $POOL_MK_SUCCESS $RBD_EXISTS_ERR $RBD_WATCH $RBD_MAP $RBD_UNMAP $RBD_SHOWMAPPED get_command_output debug_msg $CLI_FLAG);
+use RbdLib qw(perform_action create_image resize_image rename_image copy_image list_image info_image export_image import_image remove_image create_snapshots protect_snapshot unprotect_snapshot clone_image rollback_snapshots purge_snapshots list_snapshots remove_snapshot rbd_map rbd_unmap rbd_showmapped display_result _pre_clean_up _post_clean_up _create_rados_pool display_ceph_os_info $RADOS_MKPOOL $RADOS_RMPOOL $RBD_CREATE $RBD_RESIZE $RBD_INFO $RBD_REMOVE $RBD_RENAME $RBD_MV $RBD_LS $RBD_LIST $RBD_CLONE $RBD_EXPORT $RBD_IMPORT $RBD_CP $RBD_COPY $SNAP_CREATE $SNAP_PROTECT $SNAP_UNPROTECT $SNAP_LS $SNAP_LIST $SNAP_ROLLBACK $SNAP_PURGE $SNAP_REMOVE $POOL_RM_SUCCESS $POOL_MK_SUCCESS $RBD_EXISTS_ERR $RBD_WATCH $RBD_MAP $RBD_UNMAP $RBD_SHOWMAPPED $RBD_CHILDREN $RBD_FLATTEN get_command_output debug_msg $CLI_FLAG);
 
 use Pod::Usage();
 use Getopt::Long();
@@ -67,6 +67,12 @@ our $snap_name        = "snap1";
 our $snap_name2       = "snap2";
 our $snap_name3       = "snap3";
 our $snap_name4       = "snap4";
+our $snap_name5       = "snap5";
+our $snap_new         = "snap_new";
+our $clone_new        = "clone_new";
+our $clone_new1        = "clone_new1";
+our $clone_new2        = "clone_new2";
+our $snap_test        = "snap_test";
 our $new_rbd_img      = "new_rbd_img";
 our $non_existing_img = "rbdimage";
 our $cp_new           = "newest";
@@ -128,6 +134,58 @@ sub create_snapshots {
         0 );
     perform_action( $SNAP_CREATE, "--snap $snap_name4 $pool_name\/$img_name",
         0 );
+    perform_action( $SNAP_CREATE, "--snap $snap_new $pool_name\/$new_img_name",
+        0 );
+}
+
+# Tests to protect snapshot
+sub protect_snapshot {
+    perform_action( $SNAP_PROTECT, "--snap $snap_new $pool_name\/$new_img_name",
+        0 );
+    perform_action( $SNAP_PROTECT, "--snap $snap_new $pool_name\/$new_img_name",
+        2 );
+    perform_action( $SNAP_PROTECT, "--snap $snap_name4 $pool_name\/$img_name",
+        2 );
+    perform_action( $SNAP_PROTECT, "--snap $snap_test $pool_name\/$img_name",
+        2 );
+}
+
+# Tests to unprotect snapshot
+sub unprotect_snapshot {
+    perform_action( $SNAP_UNPROTECT, "--snap $snap_new $pool_name\/$new_img_name",
+        0 );
+    perform_action( $SNAP_UNPROTECT, "--snap $snap_new $pool_name\/$new_img_name",
+        2 );
+    perform_action( $SNAP_UNPROTECT, "--snap $snap_name4 $pool_name\/$img_name",
+        2 );
+    perform_action( $SNAP_UNPROTECT, "--snap $snap_test $pool_name\/$img_name",
+        2 );
+}
+
+# clone protected snapshot
+sub clone_image {
+    perform_action( $RBD_CLONE, "$pool_name\/$new_img_name\@$snap_new $pool_name\/$clone_new",
+        0 );
+    perform_action( $RBD_CLONE, "$pool_name\/$new_img_name\@$snap_new $pool_name\/$clone_new",
+        1 );
+    perform_action( $RBD_CLONE, "$pool_name\/$new_img_name\@$snap_name5 $pool_name\/$clone_new1",
+        2 );
+    perform_action( $RBD_CLONE, "$pool_name\/$img_name\@$snap_test $pool_name\/$clone_new1",
+        2 );
+    perform_action( $RBD_CLONE, "$pool_name\/$img_name\@$snap_name5 $pool_name\/$clone_new2",
+        2 );
+    perform_action( $RBD_CLONE, "$pool_name\/$img_name\@$snap_new",
+        2 );
+    perform_action( $RBD_CLONE, "$pool_name\/$img_name",
+        2 );
+}
+
+#flatten image
+sub rbd_flatten {
+    perform_action( $RBD_FLATTEN, "$pool_name\/$clone_new", 0);
+    perform_action( $RBD_FLATTEN, "$pool_name\/$clone_new", 2);
+    perform_action( $RBD_FLATTEN, "$pool_name\/$clone_new2", 2);
+    perform_action( $RBD_FLATTEN, "$pool_name\/$new_img_name", 2);
 }
 
 # Tests to rollback snapshot
@@ -144,6 +202,7 @@ sub rollback_snapshot {
 sub purge_snapshots {
     perform_action( $SNAP_PURGE, "$pool_name\/$img_name",    0 );
     perform_action( $SNAP_PURGE, "$pool_name\/$new_rbd_img", 2 );
+    perform_action( $SNAP_PURGE, "$pool_name\/$new_img_name", 2 );
 }
 
 # Tests to list snapshots for an image
@@ -154,6 +213,7 @@ sub list_snapshots {
 # Tests for remove snapshots
 sub remove_snapshot {
     perform_action( $SNAP_REMOVE, "$pool_name\/$img_name\@$snap_name",      0 );
+    perform_action( $SNAP_REMOVE, "$pool_name\/$new_img_name\@$snap_new",      2 );
     perform_action( $SNAP_REMOVE, "$non_pool_name\/$img_name\@$snap_name3", 2 );
     perform_action( $SNAP_REMOVE, "$pool_name\/$img_name\@$snap_name2",     0 );
     perform_action( $SNAP_REMOVE, "$pool_name\/$non_existing_img",          2 );
@@ -309,12 +369,16 @@ rename_image();
 resize_image();
 info_image();
 create_snapshots();
+protect_snapshot();
 export_image();
 import_image();
 list_snapshots();
 rollback_snapshot();
 remove_snapshot();
 purge_snapshots();
+clone_image();
+rbd_flatten();
+unprotect_snapshot();
 copy_image();
 remove_image();
 display_result();
