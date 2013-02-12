@@ -150,6 +150,11 @@ public:
   * Obtain this message type's name */
   const char *get_type_name() const { return "mon_sync"; }
 
+  void set_reply_to(entity_inst_t other) {
+    reply_to = other;
+    flags |= FLAG_REPLY_TO;
+  }
+
   /**
   * Print this message in a pretty format to @p out
   *
