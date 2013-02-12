@@ -690,6 +690,10 @@ void MDS::handle_mds_beacon(MMDSBeacon *m)
   m->put();
 }
 
+void MDS::request_osdmap(Context *c) {
+  objecter->wait_for_new_map(c, osdmap->get_epoch());
+}
+
 /* This function DOES put the passed message before returning*/
 void MDS::handle_command(MMonCommand *m)
 {
