@@ -9,6 +9,7 @@ using namespace std;
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "common/Formatter.h"
+#include "common/ceph_json.h"
 #include "global/global_init.h"
 #include "common/errno.h"
 #include "include/utime.h"
@@ -320,7 +321,7 @@ string escape_str(string& src, char c)
 
 static void show_user_info(RGWUserInfo& info, Formatter *formatter)
 {
-  info.dump(formatter);
+  encode_json("user_info", info, formatter);
   formatter->flush(cout);
   cout << std::endl;
 
