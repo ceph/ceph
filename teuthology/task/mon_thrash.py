@@ -5,6 +5,7 @@ import random
 import time
 import gevent
 import json
+import math
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
@@ -37,6 +38,21 @@ class MonitorThrasher:
                         being thrashed (default: False)
     store-thrash-probability  Probability of thrashing a monitor's store
                               (default: 50)
+    thrash-many         Thrash multiple monitors instead of just one. If
+                        'maintain-quorum' is set to False, then we will
+                        thrash up to as many monitors as there are
+                        available. (default: False)
+    maintain-quorum     Always maintain quorum, taking care on how many
+                        monitors we kill during the thrashing. If we
+                        happen to only have one or two monitors configured,
+                        if this option is set to True, then we won't run
+                        this task as we cannot guarantee maintenance of
+                        quorum. Setting it to false however would allow the
+                        task to run with as many as just one single monitor.
+                        (default: True)
+
+    Note: if 'store-thrash' is set to True, then 'maintain-quorum' must also
+          be set to True.
 
   For example::
 
@@ -48,6 +64,8 @@ class MonitorThrasher:
         store-thrash: true
         store-thrash-probability: 40
         seed: 31337
+        maintain-quorum: true
+        thrash-many: true
     - ceph-fuse:
     - workunit:
         clients:
@@ -79,6 +97,12 @@ class MonitorThrasher:
     self.revive_delay = float(self.config.get('revive_delay', 10.0))
     self.thrash_delay = float(self.config.get('thrash_delay', 0.0))
 
+    self.thrash_many = self.config.get('thrash-many', False)
+    self.maintain_quorum = self.config.get('maintain-quorum', True)
+
+    assert self.max_killable() > 0, \
+        'Unable to kill at least one monitor with the current config.'
+
     """ Store thrashing """
     self.store_thrash = self.config.get('store-thrash', False)
     self.store_thrash_probability = int(
@@ -86,6 +110,8 @@ class MonitorThrasher:
     if self.store_thrash:
       assert self.store_thrash_probability > 0, \
           'store-thrash is set, probability must be > 0'
+      assert self.maintain_quorum, \
+          'store-thrash = true must imply maintain-quorum = true'
 
     self.thread = gevent.spawn(self.do_thrash)
 
@@ -118,12 +144,20 @@ class MonitorThrasher:
     self.log('reviving mon.{id}'.format(id=mon))
     self.manager.revive_mon(mon)
 
+  def max_killable(self):
+    m = len(_get_mons(self.ctx))
+    if self.maintain_quorum:
+      return max(math.ceil(m/2.0)-1,0)
+    else:
+      return m
 
   def do_thrash(self):
     self.log('start thrashing')
     self.log('seed: {s}, revive delay: {r}, thrash delay: {t} '\
+        'thrash many: {tm}, maintain quorum: {mq} '\
         'store thrash: {st}, probability: {stp}'.format(
           s=self.random_seed,r=self.revive_delay,t=self.thrash_delay,
+          tm=self.thrash_many, mq=self.maintain_quorum,
           st=self.store_thrash,stp=self.store_thrash_probability))
 
     while not self.stopping:
@@ -135,27 +169,35 @@ class MonitorThrasher:
         assert s['state'] == 'leader' or s['state'] == 'peon'
         assert len(s['quorum']) == len(mons)
 
-      self.log('pick a monitor to kill')
-      to_kill = self.rng.choice(mons)
+      kill_up_to = self.rng.randrange(1, self.max_killable()+1)
+      mons_to_kill = self.rng.sample(mons, kill_up_to)
+      self.log('monitors to thrash: {m}'.format(m=mons_to_kill))
 
-      if self.should_thrash_store():
-        self.thrash_store(to_kill)
+      for mon in mons_to_kill:
+        self.log('thrashing mon.{m}'.format(m=mon))
 
-      self.kill_mon(to_kill)
+        """ we only thrash stores if we are maintaining quorum """
+        if self.should_thrash_store() and self.maintain_quorum:
+          self.thrash_store(mon)
 
-      self.manager.wait_for_mon_quorum_size(len(mons)-1)
-      for m in mons:
-        if m == to_kill:
-          continue
-        s = self.manager.get_mon_status(m)
-        assert s['state'] == 'leader' or s['state'] == 'peon'
-        assert len(s['quorum']) == len(mons)-1
+        self.kill_mon(mon)
 
-      self.log('waiting for {delay} secs before reviving mon.{id}'.format(
-        delay=self.revive_delay,id=to_kill))
+      if self.maintain_quorum:
+        self.manager.wait_for_mon_quorum_size(len(mons)-len(mons_to_kill))
+        for m in mons:
+          if m in mons_to_kill:
+            continue
+          s = self.manager.get_mon_status(m)
+          assert s['state'] == 'leader' or s['state'] == 'peon'
+          assert len(s['quorum']) == len(mons)-len(mons_to_kill)
+
+      self.log('waiting for {delay} secs before reviving monitors'.format(
+        delay=self.revive_delay))
       time.sleep(self.revive_delay)
 
-      self.revive_mon(to_kill)
+      for mon in mons_to_kill:
+        self.revive_mon(mon)
+
       self.manager.wait_for_mon_quorum_size(len(mons))
       for m in mons:
         s = self.manager.get_mon_status(m)
