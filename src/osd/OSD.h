@@ -786,7 +786,7 @@ private:
   epoch_t note_peer_epoch(int p, epoch_t e);
   void forget_peer_epoch(int p, epoch_t e);
 
-  bool _share_map_incoming(const entity_inst_t& inst, epoch_t epoch,
+  bool _share_map_incoming(entity_name_t name, Connection *con, epoch_t epoch,
 			   Session *session = 0);
   void _share_map_outgoing(int peer, Connection *con,
 			   OSDMapRef map = OSDMapRef());
@@ -833,9 +833,7 @@ private:
   }
 
   MOSDMap *build_incremental_map_msg(epoch_t from, epoch_t to);
-  void send_incremental_map(epoch_t since, const entity_inst_t& inst, bool lazy=false);
   void send_incremental_map(epoch_t since, Connection *con);
-  void send_map(MOSDMap *m, const entity_inst_t& inst, bool lazy);
   void send_map(MOSDMap *m, Connection *con);
 
 protected:
