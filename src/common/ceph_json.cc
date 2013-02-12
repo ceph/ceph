@@ -3,6 +3,7 @@
 #include <errno.h>
 
 #include "common/ceph_json.h"
+#include "include/utime.h"
 
 // for testing DELETE ME
 #include <fstream>
@@ -364,5 +365,45 @@ void decode_json_obj(bool& val, JSONObj *obj)
   int i;
   decode_json_obj(i, obj);
   val = (bool)i;
+}
+
+void encode_json(const char *name, const string& val, Formatter *f)
+{
+  f->dump_string(name, val);
+}
+
+void encode_json(const char *name, const char *val, Formatter *f)
+{
+  f->dump_string(name, val);
+}
+
+void encode_json(const char *name, int val, Formatter *f)
+{
+  f->dump_int(name, val);
+}
+
+void encode_json(const char *name, long val, Formatter *f)
+{
+  f->dump_int(name, val);
+}
+
+void encode_json(const char *name, unsigned val, Formatter *f)
+{
+  f->dump_int(name, val);
+}
+
+void encode_json(const char *name, unsigned long val, Formatter *f)
+{
+  f->dump_int(name, val);
+}
+
+void encode_json(const char *name, const utime_t& val, Formatter *f)
+{
+  f->dump_stream(name) << val;
+}
+
+void encode_json(const char *name, const bufferlist& bl, Formatter *f)
+{
+  encode_json(name, bl.length(), f);
 }
 
