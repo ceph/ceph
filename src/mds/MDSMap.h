@@ -30,6 +30,7 @@ using namespace std;
 #include "common/config.h"
 
 #include "include/CompatSet.h"
+#include "include/ceph_features.h"
 #include "common/Formatter.h"
 
 /*
@@ -65,6 +66,7 @@ extern CompatSet get_mdsmap_compat_set_base(); // pre v0.20
 #define MDS_FEATURE_INCOMPAT_CLIENTRANGES CompatSet::Feature(2, "client writeable ranges")
 #define MDS_FEATURE_INCOMPAT_FILELAYOUT CompatSet::Feature(3, "default file layouts on dirs")
 #define MDS_FEATURE_INCOMPAT_DIRINODE CompatSet::Feature(4, "dir inode in separate object")
+#define MDS_FEATURE_INCOMPAT_ENCODING CompatSet::Feature(5, "mds uses versioned encoding")
 
 class MDSMap {
 public:
@@ -123,38 +125,16 @@ public:
 
     entity_inst_t get_inst() const { return entity_inst_t(entity_name_t::MDS(rank), addr); }
 
-    void encode(bufferlist& bl) const {
-      __u8 v = 3;
-      ::encode(v, bl);
-      ::encode(global_id, bl);
-      ::encode(name, bl);
-      ::encode(rank, bl);
-      ::encode(inc, bl);
-      ::encode(state, bl);
-      ::encode(state_seq, bl);
-      ::encode(addr, bl);
-      ::encode(laggy_since, bl);
-      ::encode(standby_for_rank, bl);
-      ::encode(standby_for_name, bl);
-      ::encode(export_targets, bl);
+    void encode(bufferlist& bl, uint64_t features) const {
+      if ((features & CEPH_FEATURE_MDSENC) == 0 ) encode_unversioned(bl);
+      else encode_versioned(bl, features);
     }
-    void decode(bufferlist::iterator& bl) {
-      __u8 v;
-      ::decode(v, bl);
-      ::decode(global_id, bl);
-      ::decode(name, bl);
-      ::decode(rank, bl);
-      ::decode(inc, bl);
-      ::decode(state, bl);
-      ::decode(state_seq, bl);
-      ::decode(addr, bl);
-      ::decode(laggy_since, bl);
-      ::decode(standby_for_rank, bl);
-      ::decode(standby_for_name, bl);
-      if (v >= 2)
-	::decode(export_targets, bl);
-    }
+    void decode(bufferlist::iterator& p);
     void dump(Formatter *f) const;
+    static void generate_test_instances(list<mds_info_t*>& ls);
+  private:
+    void encode_versioned(bufferlist& bl, uint64_t features) const;
+    void encode_unversioned(bufferlist& bl) const;
   };
 
 
@@ -504,112 +484,8 @@ public:
       return mds_info[gid].inc;
     return -1;
   }
-
-  void encode_client_old(bufferlist& bl) const {
-    __u16 v = 2;
-    ::encode(v, bl);
-    ::encode(epoch, bl);
-    ::encode(flags, bl);
-    ::encode(last_failure, bl);
-    ::encode(root, bl);
-    ::encode(session_timeout, bl);
-    ::encode(session_autoclose, bl);
-    ::encode(max_file_size, bl);
-    ::encode(max_mds, bl);
-    ::encode(mds_info, bl);
-    __u32 n = data_pools.size();
-    ::encode(n, bl);
-    for (set<int64_t>::const_iterator p = data_pools.begin(); p != data_pools.end(); ++p) {
-      n = *p;
-      ::encode(n, bl);
-    }
-    int32_t m = cas_pool;
-    ::encode(m, bl);
-  }
-  void encode(bufferlist& bl) const {
-    __u16 v = 3;
-    ::encode(v, bl);
-    ::encode(epoch, bl);
-    ::encode(flags, bl);
-    ::encode(last_failure, bl);
-    ::encode(root, bl);
-    ::encode(session_timeout, bl);
-    ::encode(session_autoclose, bl);
-    ::encode(max_file_size, bl);
-    ::encode(max_mds, bl);
-    ::encode(mds_info, bl);
-    ::encode(data_pools, bl);
-    ::encode(cas_pool, bl);
-
-    // kclient ignores everything from here
-    __u16 ev = 5;
-    ::encode(ev, bl);
-    ::encode(compat, bl);
-    ::encode(metadata_pool, bl);
-    ::encode(created, bl);
-    ::encode(modified, bl);
-    ::encode(tableserver, bl);
-    ::encode(in, bl);
-    ::encode(inc, bl);
-    ::encode(up, bl);
-    ::encode(failed, bl);
-    ::encode(stopped, bl);
-    ::encode(last_failure_osd_epoch, bl);
-  }
-  void decode(bufferlist::iterator& p) {
-    __u16 v;
-    ::decode(v, p);
-    ::decode(epoch, p);
-    ::decode(flags, p);
-    ::decode(last_failure, p);
-    ::decode(root, p);
-    ::decode(session_timeout, p);
-    ::decode(session_autoclose, p);
-    ::decode(max_file_size, p);
-    ::decode(max_mds, p);
-    ::decode(mds_info, p);
-    if (v < 3) {
-      __u32 n;
-      ::decode(n, p);
-      while (n--) {
-	__u32 m;
-	::decode(m, p);
-	data_pools.insert(m);
-      }
-      __s32 s;
-      ::decode(s, p);
-      cas_pool = s;
-    } else {
-      ::decode(data_pools, p);
-      ::decode(cas_pool, p);
-    }
-
-    // kclient ignores everything from here
-    __u16 ev = 1;
-    if (v >= 2)
-      ::decode(ev, p);
-    if (ev >= 3)
-      ::decode(compat, p);
-    else
-      compat = get_mdsmap_compat_set_base();
-    if (ev < 5) {
-      __u32 n;
-      ::decode(n, p);
-      metadata_pool = n;
-    } else {
-      ::decode(metadata_pool, p);
-    }
-    ::decode(created, p);
-    ::decode(modified, p);
-    ::decode(tableserver, p);
-    ::decode(in, p);
-    ::decode(inc, p);
-    ::decode(up, p);
-    ::decode(failed, p);
-    ::decode(stopped, p);
-    if (ev >= 4)
-      ::decode(last_failure_osd_epoch, p);
-  }
+  void encode(bufferlist& bl, uint64_t features) const;
+  void decode(bufferlist::iterator& p);
   void decode(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();
     decode(p);
@@ -620,9 +496,10 @@ public:
   void print_summary(ostream& out);
 
   void dump(Formatter *f) const;
+  static void generate_test_instances(list<MDSMap*>& ls);
 };
-WRITE_CLASS_ENCODER(MDSMap::mds_info_t)
-WRITE_CLASS_ENCODER(MDSMap)
+WRITE_CLASS_ENCODER_FEATURES(MDSMap::mds_info_t)
+WRITE_CLASS_ENCODER_FEATURES(MDSMap)
 
 inline ostream& operator<<(ostream& out, MDSMap& m) {
   m.print_summary(out);

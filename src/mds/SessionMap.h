@@ -82,7 +82,8 @@ private:
   int importing_count;
   friend class SessionMap;
 public:
-  entity_inst_t inst;
+  session_info_t info;                         ///< durable bits
+
   Connection *connection;
   xlist<Session*>::item item_session_list;
 
@@ -91,35 +92,35 @@ public:
   elist<MDRequest*> requests;
 
   interval_set<inodeno_t> pending_prealloc_inos; // journaling prealloc, will be added to prealloc_inos
-  interval_set<inodeno_t> prealloc_inos;   // preallocated, ready to use.
-  interval_set<inodeno_t> used_inos;       // journaling use
 
   inodeno_t next_ino() {
-    if (prealloc_inos.empty())
+    if (info.prealloc_inos.empty())
       return 0;
-    return prealloc_inos.range_start();
+    return info.prealloc_inos.range_start();
   }
   inodeno_t take_ino(inodeno_t ino = 0) {
-    assert(!prealloc_inos.empty());
+    assert(!info.prealloc_inos.empty());
 
     if (ino) {
-      if (prealloc_inos.contains(ino))
-	prealloc_inos.erase(ino);
+      if (info.prealloc_inos.contains(ino))
+	info.prealloc_inos.erase(ino);
       else
 	ino = 0;
     }
     if (!ino) {
-      ino = prealloc_inos.range_start();
-      prealloc_inos.erase(ino);
+      ino = info.prealloc_inos.range_start();
+      info.prealloc_inos.erase(ino);
     }
-    used_inos.insert(ino, 1);
+    info.used_inos.insert(ino, 1);
     return ino;
   }
   int get_num_projected_prealloc_inos() {
-    return prealloc_inos.size() + pending_prealloc_inos.size();
+    return info.prealloc_inos.size() + pending_prealloc_inos.size();
   }
 
-  client_t get_client() { return client_t(inst.name.num()); }
+  client_t get_client() {
+    return info.get_client();
+  }
 
   int get_state() { return state; }
   const char *get_state_name() { return get_state_name(state); }
@@ -164,20 +165,20 @@ public:
 
   // -- completed requests --
 private:
-  set<tid_t> completed_requests;
+
 
 public:
   void add_completed_request(tid_t t) {
-    completed_requests.insert(t);
+    info.completed_requests.insert(t);
   }
   void trim_completed_requests(tid_t mintid) {
     // trim
-    while (!completed_requests.empty() && 
-	   (mintid == 0 || *completed_requests.begin() < mintid))
-      completed_requests.erase(completed_requests.begin());
+    while (!info.completed_requests.empty() && 
+	   (mintid == 0 || *info.completed_requests.begin() < mintid))
+      info.completed_requests.erase(info.completed_requests.begin());
   }
   bool have_completed_request(tid_t tid) const {
-    return completed_requests.count(tid);
+    return info.completed_requests.count(tid);
   }
 
 
@@ -197,35 +198,14 @@ public:
 
   void clear() {
     pending_prealloc_inos.clear();
-    prealloc_inos.clear();
-    used_inos.clear();
+    info.clear_meta();
 
     cap_push_seq = 0;
     last_cap_renew = utime_t();
 
-    completed_requests.clear();
   }
 
-  void encode(bufferlist& bl) const {
-    __u8 v = 1;
-    ::encode(v, bl);
-    ::encode(inst, bl);
-    ::encode(completed_requests, bl);
-    ::encode(prealloc_inos, bl);   // hacky, see below.
-    ::encode(used_inos, bl);
-  }
-  void decode(bufferlist::iterator& p) {
-    __u8 v;
-    ::decode(v, p);
-    ::decode(inst, p);
-    ::decode(completed_requests, p);
-    ::decode(prealloc_inos, p);
-    ::decode(used_inos, p);
-    prealloc_inos.insert(used_inos);
-    used_inos.clear();
-  }
 };
-WRITE_CLASS_ENCODER(Session)
 
 /*
  * session map
@@ -248,6 +228,10 @@ public:
   SessionMap(MDS *m) : mds(m), 
 		       version(0), projected(0), committing(0), committed(0) 
   { }
+  
+  //for the dencoder
+  SessionMap() : mds(NULL), version(0), projected(0),
+		 committing(0), committed(0) {}
     
   // sessions
   bool empty() { return session_map.empty(); }
@@ -282,13 +266,13 @@ public:
       s = session_map[i.name];
     else
       s = session_map[i.name] = new Session;
-    s->inst = i;
+    s->info.inst = i;
     s->last_cap_renew = ceph_clock_now(g_ceph_context);
     return s;
   }
   void add_session(Session *s) {
-    assert(session_map.count(s->inst.name) == 0);
-    session_map[s->inst.name] = s;
+    assert(session_map.count(s->info.inst.name) == 0);
+    session_map[s->info.inst.name] = s;
     if (by_state.count(s->state) == 0)
       by_state[s->state] = new xlist<Session*>;
     by_state[s->state]->push_back(&s->item_session_list);
@@ -297,7 +281,7 @@ public:
   void remove_session(Session *s) {
     s->trim_completed_requests(0);
     s->item_session_list.remove_myself();
-    session_map.erase(s->inst.name);
+    session_map.erase(s->info.inst.name);
     s->put();
   }
   void touch_session(Session *session) {
@@ -331,14 +315,14 @@ public:
     for (hash_map<entity_name_t,Session*>::iterator p = session_map.begin();
 	 p != session_map.end();
 	 p++)
-      if (p->second->inst.name.is_client())
-	s.insert(p->second->inst.name.num());
+      if (p->second->info.inst.name.is_client())
+	s.insert(p->second->info.inst.name.num());
   }
   void get_client_session_set(set<Session*>& s) {
     for (hash_map<entity_name_t,Session*>::iterator p = session_map.begin();
 	 p != session_map.end();
 	 p++)
-      if (p->second->inst.name.is_client())
+      if (p->second->info.inst.name.is_client())
 	s.insert(p->second);
   }
 
@@ -355,7 +339,7 @@ public:
   // helpers
   entity_inst_t& get_inst(entity_name_t w) {
     assert(session_map.count(w));
-    return session_map[w]->inst;
+    return session_map[w]->info.inst;
   }
   version_t inc_push_seq(client_t client) {
     return get_session(entity_name_t::CLIENT(client.v))->inc_push_seq();
@@ -387,8 +371,10 @@ public:
   inodeno_t ino;
   list<Context*> waiting_for_load;
 
-  void encode(bufferlist& bl);
+  void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& blp);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<SessionMap*>& ls);
 
   object_t get_object_name();
 

@@ -126,7 +126,7 @@ void MDSMonitor::encode_pending(bufferlist &bl)
 
   // apply to paxos
   assert(paxos->get_version() + 1 == pending_mdsmap.epoch);
-  pending_mdsmap.encode(bl);
+  pending_mdsmap.encode(bl, mon->get_quorum_features());
 }
 
 void MDSMonitor::update_logger()
@@ -603,11 +603,11 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	} else {
 	  MDSMap mm;
 	  mm.decode(b);
-	  mm.encode(rdata);
+	  mm.encode(rdata, m->get_connection()->get_features());
 	  ss << "got mdsmap epoch " << mm.get_epoch();
 	}
       } else {
-	mdsmap.encode(rdata);
+	mdsmap.encode(rdata, m->get_connection()->get_features());
 	ss << "got mdsmap epoch " << mdsmap.get_epoch();
       }
       r = 0;
