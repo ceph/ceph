@@ -188,6 +188,9 @@ struct MDRequest : public Mutation {
   // -- i am an internal op
   int internal_op;
 
+  // indicates how may retries of request have been made
+  int retry;
+
   // break rarely-used fields into a separately allocated structure 
   // to save memory for most ops
   struct More {
@@ -241,6 +244,7 @@ struct MDRequest : public Mutation {
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
     slave_request(0),
     internal_op(-1),
+    retry(0),
     _more(0) {
     in[0] = in[1] = 0; 
   }
@@ -252,6 +256,7 @@ struct MDRequest : public Mutation {
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
     slave_request(0),
     internal_op(-1),
+    retry(0),
     _more(0) {
     in[0] = in[1] = 0; 
   }
@@ -263,6 +268,7 @@ struct MDRequest : public Mutation {
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
     slave_request(0),
     internal_op(-1),
+    retry(0),
     _more(0) {
     in[0] = in[1] = 0; 
   }
