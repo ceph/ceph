@@ -158,6 +158,74 @@ int RGWZoneParams::store_info(CephContext *cct, RGWRados *store)
   return ret;
 }
 
+void RGWZone::dump(Formatter *f) const
+{
+  f->dump_string("name", name);
+  f->open_array_section("endpoints");
+  for (list<string>::const_iterator iter = endpoints.begin(); iter != endpoints.end(); ++iter) {
+    f->dump_string("endpoint", *iter);
+  }
+  f->close_section();
+}
+
+void RGWZone::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("endpoints", endpoints, obj);
+}
+
+void RGWRegion::dump(Formatter *f) const
+{
+  f->dump_string("name", name);
+  f->open_array_section("endpoints");
+  for (list<string>::const_iterator iter = endpoints.begin(); iter != endpoints.end(); ++iter) {
+    f->dump_string("endpoint", *iter);
+  }
+  f->close_section();
+  f->dump_string("master_zone", master_zone);
+  f->open_array_section("zones");
+  for (list<RGWZone>::const_iterator iter = zones.begin(); iter != zones.end(); ++iter) {
+    const RGWZone& zone = *iter;
+    f->open_object_section("zone");
+    zone.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void RGWRegion::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("endpoints", endpoints, obj);
+  JSONDecoder::decode_json("master_zone", master_zone, obj);
+  JSONDecoder::decode_json("zones", zones, obj);
+}
+
+
+void RGWRegionMap::dump(Formatter *f) const
+{
+  f->open_array_section("regions");
+  for (map<string, RGWRegion>::const_iterator iter = regions.begin(); iter != regions.end(); ++iter) {
+    const RGWRegion& region = iter->second;
+    f->open_object_section("region");
+    region.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->dump_string("master_region", master_region);
+}
+
+void RGWRegionMap::decode_json(JSONObj *obj)
+{
+  list<RGWRegion> regions_list;
+  JSONDecoder::decode_json("regions", regions_list, obj);
+
+  for (list<RGWRegion>::iterator iter = regions_list.begin(); iter != regions_list.end(); ++iter) {
+    RGWRegion& region = *iter;
+    regions[region.name] = region;
+  }
+}
+
 void RGWObjManifest::append(RGWObjManifest& m)
 {
   map<uint64_t, RGWObjManifestPart>::iterator iter;
