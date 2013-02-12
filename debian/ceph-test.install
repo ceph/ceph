@@ -55,3 +55,4 @@ usr/bin/testsignal_handlers
 usr/bin/testtimers
 usr/bin/tpbench
 usr/bin/xattr_bench
+usr/bin/ceph-coverage
