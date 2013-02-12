@@ -9,6 +9,11 @@
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
 
+void encode_json(const char *name, const RGWUserCaps& val, Formatter *f)
+{
+  val.dump(f, name);
+}
+
 void RGWObjManifestPart::dump(Formatter *f) const
 {
   f->open_object_section("loc");
@@ -128,94 +133,61 @@ void RGWAccessControlList::dump(Formatter *f) const
 
 void ACLOwner::dump(Formatter *f) const
 {
-  f->dump_string("id", id);
-  f->dump_string("display_name", display_name);
+  encode_json("id", id, f);
+  encode_json("display_name", display_name, f);
 }
 
 void RGWAccessControlPolicy::dump(Formatter *f) const
 {
-  f->open_object_section("acl");
-  acl.dump(f);
-  f->close_section();
-  f->open_object_section("owner");
-  owner.dump(f);
-  f->close_section();
+  encode_json("acl", acl, f);
+  encode_json("owner", owner, f);
 }
 
 void ObjectMetaInfo::dump(Formatter *f) const
 {
-  f->dump_unsigned("size", size);
-  f->dump_stream("mtime") << mtime;
+  encode_json("size", size, f);
+  encode_json("mtime", mtime, f);
 }
 
 void ObjectCacheInfo::dump(Formatter *f) const
 {
-  f->dump_int("status", status);
-  f->dump_unsigned("flags", flags);
-  f->open_object_section("data");
-  f->dump_unsigned("length", data.length());
-  f->close_section();
-
-  map<string, bufferlist>::const_iterator iter = xattrs.begin();
-  f->open_array_section("xattrs");
-  for (; iter != xattrs.end(); ++iter) {
-    f->dump_string("name", iter->first);
-    f->open_object_section("value");
-    f->dump_unsigned("length", iter->second.length());
-    f->close_section();
-  }
-  f->close_section();
-
-  f->open_array_section("rm_xattrs");
-  for (iter = rm_xattrs.begin(); iter != rm_xattrs.end(); ++iter) {
-    f->dump_string("name", iter->first);
-    f->open_object_section("value");
-    f->dump_unsigned("length", iter->second.length());
-    f->close_section();
-  }
-  f->close_section();
-  f->open_object_section("meta");
-  meta.dump(f);
-  f->close_section();
+  encode_json("status", status, f);
+  encode_json("flags", flags, f);
+  encode_json("data", data, f);
+  encode_json_map("xattrs", "name", "value", "length", xattrs, f);
+  encode_json_map("rm_xattrs", "name", "value", "length", rm_xattrs, f);
+  encode_json("meta", meta, f);
 
 }
 
 void RGWCacheNotifyInfo::dump(Formatter *f) const
 {
-  f->dump_unsigned("op", op);
-  f->open_object_section("obj");
-  obj.dump(f);
-  f->close_section();
-  f->open_object_section("obj_info");
-  obj_info.dump(f);
-  f->close_section();
-  f->dump_unsigned("ofs", ofs);
-  f->dump_string("ns", ns);
+  encode_json("op", op, f);
+  encode_json("obj", obj, f);
+  encode_json("obj_info", obj_info, f);
+  encode_json("ofs", ofs, f);
+  encode_json("ns", ns, f);
 }
 
 void RGWAccessKey::dump(Formatter *f) const
 {
-  f->open_object_section("key");
-  f->dump_string("access_key", id);
-  f->dump_string("secret_key", key);
-  f->dump_string("subuser", subuser);
-  f->close_section();
+  encode_json("access_key", id, f);
+  encode_json("secret_key", key, f);
+  encode_json("subuser", subuser, f);
 }
 
 void RGWAccessKey::dump(Formatter *f, const string& user, bool swift) const
 {
-  f->open_object_section("key");
   string u = user;
   if (!subuser.empty()) {
     u.append(":");
     u.append(subuser);
   }
-  f->dump_string("user", u);
+  encode_json("user", u, f);
   if (!swift) {
-    f->dump_string("access_key", id);
+    encode_json("access_key", id, f);
   }
-  f->dump_string("secret_key", key);
-  f->close_section();
+  encode_json("secret_key", key, f);
 }
 
 void RGWAccessKey::decode_json(JSONObj *obj) {
@@ -292,25 +264,21 @@ static void perm_to_str(uint32_t mask, char *buf, int len)
 
 void RGWSubUser::dump(Formatter *f) const
 {
-  f->open_object_section("subuser");
-  f->dump_string("id", name);
+  encode_json("id", name, f);
   char buf[256];
   perm_to_str(perm_mask, buf, sizeof(buf));
-  f->dump_string("permissions", buf);
-  f->close_section();
+  encode_json("permissions", (const char *)buf, f);
 }
 
 void RGWSubUser::dump(Formatter *f, const string& user) const
 {
-  f->open_object_section("subuser");
   string s = user;
   s.append(":");
   s.append(name);
-  f->dump_string("id", s);
+  encode_json("id", s, f);
   char buf[256];
   perm_to_str(perm_mask, buf, sizeof(buf));
-  f->dump_string("permissions", buf);
-  f->close_section();
+  encode_json("permissions", (const char *)buf, f);
 }
 
 static uint32_t str_to_perm(const string& s)
@@ -338,42 +306,40 @@ void RGWSubUser::decode_json(JSONObj *obj)
   perm_mask = str_to_perm(perm_str);
 }
 
+static void user_info_dump_subuser(const char *name, const RGWSubUser& subuser, Formatter *f, void *parent)
+{
+  RGWUserInfo *info = (RGWUserInfo *)parent;
+  subuser.dump(f, info->user_id);
+}
+
+static void user_info_dump_key(const char *name, const RGWAccessKey& key, Formatter *f, void *parent)
+{
+  RGWUserInfo *info = (RGWUserInfo *)parent;
+  key.dump(f, info->user_id, false);
+}
+
+static void user_info_dump_swift_key(const char *name, const RGWAccessKey& key, Formatter *f, void *parent)
+{
+  RGWUserInfo *info = (RGWUserInfo *)parent;
+  key.dump(f, info->user_id, true);
+}
+
 void RGWUserInfo::dump(Formatter *f) const
 {
-  f->open_object_section("user_info");
 
-  f->dump_string("user_id", user_id);
-  f->dump_string("display_name", display_name);
-  f->dump_string("email", user_email);
-  f->dump_int("suspended", (int)suspended);
-  f->dump_int("max_buckets", (int)max_buckets);
+  encode_json("user_id", user_id, f);
+  encode_json("display_name", display_name, f);
+  encode_json("email", user_email, f);
+  encode_json("suspended", (int)suspended, f);
+  encode_json("max_buckets", (int)max_buckets, f);
 
-  f->dump_unsigned("auid", auid);
+  encode_json("auid", auid, f);
 
-  map<string, RGWSubUser>::const_iterator siter = subusers.begin();
-  f->open_array_section("subusers");
-  for (; siter != subusers.end(); ++siter) {
-    siter->second.dump(f, user_id);
-  }
-  f->close_section();
+  encode_json_map("subusers", NULL, "subuser", NULL, user_info_dump_subuser,(void *)this, subusers, f);
+  encode_json_map("keys", NULL, "key", NULL, user_info_dump_key,(void *)this, access_keys, f);
+  encode_json_map("swift_keys", NULL, "key", NULL, user_info_dump_swift_key,(void *)this, swift_keys, f);
 
-  map<string, RGWAccessKey>::const_iterator aiter = access_keys.begin();
-  f->open_array_section("keys");
-  for (; aiter != access_keys.end(); ++aiter) {
-    aiter->second.dump(f, user_id, false);
-  }
-  f->close_section();
-
-  aiter = swift_keys.begin();
-  f->open_array_section("swift_keys");
-  for (; aiter != swift_keys.end(); ++aiter) {
-    aiter->second.dump(f, user_id, true);
-  }
-  f->close_section();
-
-  caps.dump(f);
-
-  f->close_section();
+  encode_json("caps", caps, f);
 }
 
 
@@ -428,48 +394,42 @@ void RGWUserInfo::decode_json(JSONObj *obj)
 
 void rgw_bucket::dump(Formatter *f) const
 {
-  f->dump_string("name", name);
-  f->dump_string("pool", pool);
-  f->dump_string("marker", marker);
-  f->dump_string("bucket_id", bucket_id);
+  encode_json("name", name, f);
+  encode_json("pool", pool, f);
+  encode_json("marker", marker, f);
+  encode_json("bucket_id", bucket_id, f);
 }
 
 void RGWBucketInfo::dump(Formatter *f) const
 {
-  f->open_object_section("bucket");
-  bucket.dump(f);
-  f->close_section();
-  f->dump_string("owner", owner);
-  f->dump_unsigned("flags", flags);
+  encode_json("bucket", bucket, f);
+  encode_json("owner", owner, f);
+  encode_json("flags", flags, f);
 }
 
 void RGWBucketEnt::dump(Formatter *f) const
 {
-  f->open_object_section("bucket");
-  bucket.dump(f);
-  f->close_section();
-  f->dump_unsigned("size", size);
-  f->dump_unsigned("size_rounded", size_rounded);
-  f->dump_stream("mtime") << mtime;
-  f->dump_unsigned("count", count);
+  encode_json("bucket", bucket, f);
+  encode_json("size", size, f);
+  encode_json("size_rounded", size_rounded, f);
+  encode_json("mtime", mtime, f);
+  encode_json("count", count, f);
 }
 
 void RGWUploadPartInfo::dump(Formatter *f) const
 {
-  f->dump_unsigned("num", num);
-  f->dump_unsigned("size", size);
-  f->dump_string("etag", etag);
-  f->dump_stream("modified") << modified;
+  encode_json("num", num, f);
+  encode_json("size", size, f);
+  encode_json("etag", etag, f);
+  encode_json("modified", modified, f);
 }
 
 void rgw_obj::dump(Formatter *f) const
 {
-  f->open_object_section("bucket");
-  bucket.dump(f);
-  f->close_section();
-  f->dump_string("key", key);
-  f->dump_string("ns", ns);
-  f->dump_string("object", object);
+  encode_json("bucket", bucket, f);
+  encode_json("key", key, f);
+  encode_json("ns", ns, f);
+  encode_json("object", object, f);
 }
 
 

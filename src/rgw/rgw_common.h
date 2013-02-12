@@ -355,11 +355,13 @@ public:
   }
   int check_cap(const string& cap, uint32_t perm);
   void dump(Formatter *f) const;
+  void dump(Formatter *f, const char *name) const;
 
   void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(RGWUserCaps);
 
+void encode_json(const char *name, const RGWUserCaps& val, Formatter *f);
 
 struct RGWUserInfo
 {
