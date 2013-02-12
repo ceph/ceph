@@ -191,6 +191,9 @@ struct MDRequest : public Mutation {
   // indicates how may retries of request have been made
   int retry;
 
+  // indicator for vxattr osdmap update
+  bool waited_for_osdmap;
+
   // break rarely-used fields into a separately allocated structure 
   // to save memory for most ops
   struct More {
@@ -245,6 +248,7 @@ struct MDRequest : public Mutation {
     slave_request(0),
     internal_op(-1),
     retry(0),
+    waited_for_osdmap(false),
     _more(0) {
     in[0] = in[1] = 0; 
   }
@@ -257,6 +261,7 @@ struct MDRequest : public Mutation {
     slave_request(0),
     internal_op(-1),
     retry(0),
+    waited_for_osdmap(false),
     _more(0) {
     in[0] = in[1] = 0; 
   }
@@ -269,6 +274,7 @@ struct MDRequest : public Mutation {
     slave_request(0),
     internal_op(-1),
     retry(0),
+    waited_for_osdmap(false),
     _more(0) {
     in[0] = in[1] = 0; 
   }
