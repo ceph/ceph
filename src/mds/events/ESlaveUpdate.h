@@ -31,26 +31,12 @@ struct link_rollback {
   utime_t old_dir_mtime;
   utime_t old_dir_rctime;
 
-  void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(reqid, bl);
-    ::encode(ino, bl);
-    ::encode(was_inc, bl);
-    ::encode(old_ctime, bl);
-    ::encode(old_dir_mtime, bl);
-    ::encode(old_dir_rctime, bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    ::decode(reqid, bl);
-    ::decode(ino, bl);
-    ::decode(was_inc, bl);
-    ::decode(old_ctime, bl);
-    ::decode(old_dir_mtime, bl);
-    ::decode(old_dir_rctime, bl);
-  }
+  link_rollback() : ino(0), was_inc(false) {}
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<link_rollback*>& ls);
 };
 WRITE_CLASS_ENCODER(link_rollback)
 
@@ -67,24 +53,10 @@ struct rmdir_rollback {
   dirfrag_t dest_dir;
   string dest_dname;
 
-  void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(reqid, bl);
-    ::encode(src_dir, bl);
-    ::encode(src_dname, bl);
-    ::encode(dest_dir, bl);
-    ::encode(dest_dname, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    ::decode(reqid, bl);
-    ::decode(src_dir, bl);
-    ::decode(src_dname, bl);
-    ::decode(dest_dir, bl);
-    ::decode(dest_dname, bl);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rmdir_rollback*>& ls);
 };
 WRITE_CLASS_ENCODER(rmdir_rollback)
 
@@ -98,30 +70,10 @@ struct rename_rollback {
     char remote_d_type;
     utime_t old_ctime;
     
-    void encode(bufferlist &bl) const {
-      __u8 struct_v = 1;
-      ::encode(struct_v, bl);
-      ::encode(dirfrag, bl);
-      ::encode(dirfrag_old_mtime, bl);
-      ::encode(dirfrag_old_rctime, bl);
-      ::encode(ino, bl);
-      ::encode(remote_ino, bl);
-      ::encode(dname, bl);
-      ::encode(remote_d_type, bl);
-      ::encode(old_ctime, bl);
-    }
-    void decode(bufferlist::iterator &bl) {
-      __u8 struct_v;
-      ::decode(struct_v, bl);
-      ::decode(dirfrag, bl);
-      ::decode(dirfrag_old_mtime, bl);
-      ::decode(dirfrag_old_rctime, bl);
-      ::decode(ino, bl);
-      ::decode(remote_ino, bl);
-      ::decode(dname, bl);
-      ::decode(remote_d_type, bl);
-      ::decode(old_ctime, bl);
-    }
+    void encode(bufferlist& bl) const;
+    void decode(bufferlist::iterator& bl);
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<drec*>& ls);
   };
   WRITE_CLASS_MEMBER_ENCODER(drec)
 
@@ -130,24 +82,10 @@ struct rename_rollback {
   drec stray; // we know this is null, but we want dname, old mtime/rctime
   utime_t ctime;
 
-  void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(reqid, bl);
-    encode(orig_src, bl);
-    encode(orig_dest, bl);
-    encode(stray, bl);
-    ::encode(ctime, bl);
- }
-  void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    ::decode(reqid, bl);
-    decode(orig_src, bl);
-    decode(orig_dest, bl);
-    decode(stray, bl);
-    ::decode(ctime, bl);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rename_rollback*>& ls);
 };
 WRITE_CLASS_ENCODER(rename_rollback)
 
@@ -177,7 +115,7 @@ public:
   __u8 op;  // prepare, commit, abort
   __u8 origop; // link | rename
 
-  ESlaveUpdate() : LogEvent(EVENT_SLAVEUPDATE) { }
+  ESlaveUpdate() : LogEvent(EVENT_SLAVEUPDATE), master(0), op(0), origop(0) { }
   ESlaveUpdate(MDLog *mdlog, const char *s, metareqid_t ri, int mastermds, int o, int oo) : 
     LogEvent(EVENT_SLAVEUPDATE), commit(mdlog), 
     type(s),
@@ -196,31 +134,10 @@ public:
     out << commit;
   }
 
-  void encode(bufferlist &bl) const {
-    __u8 struct_v = 2;
-    ::encode(struct_v, bl);
-    ::encode(stamp, bl);
-    ::encode(type, bl);
-    ::encode(reqid, bl);
-    ::encode(master, bl);
-    ::encode(op, bl);
-    ::encode(origop, bl);
-    ::encode(commit, bl);
-    ::encode(rollback, bl);
-  } 
-  void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    if (struct_v >= 2)
-      ::decode(stamp, bl);
-    ::decode(type, bl);
-    ::decode(reqid, bl);
-    ::decode(master, bl);
-    ::decode(op, bl);
-    ::decode(origop, bl);
-    ::decode(commit, bl);
-    ::decode(rollback, bl);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ESlaveUpdate*>& ls);
 
   void replay(MDS *mds);
 };

@@ -8,6 +8,9 @@ TYPE(filepath)
 TYPE(SnapContext)
 TYPE(SnapRealmInfo)
 
+#include "common/DecayCounter.h"
+TYPE(DecayCounter)
+
 #include "common/LogEntry.h"
 TYPE(LogEntryKey)
 TYPE(LogEntry)
@@ -87,6 +90,84 @@ TYPE(MonCaps)
 #include "os/DBObjectMap.h"
 TYPE(DBObjectMap::_Header)
 TYPE(DBObjectMap::State)
+
+#include "mds/Anchor.h"
+TYPE(Anchor)
+
+#include "mds/snap.h"
+TYPE(SnapInfo)
+TYPE(snaplink_t)
+TYPE(sr_t)
+
+#include "mds/mdstypes.h"
+TYPE(file_layout_policy_t)
+TYPE(frag_info_t)
+TYPE(nest_info_t)
+TYPE(client_writeable_range_t)
+TYPE(inode_t)
+TYPE(old_inode_t)
+TYPE(fnode_t)
+TYPE(old_rstat_t)
+TYPE(session_info_t)
+TYPE(string_snap_t)
+TYPE(MDSCacheObjectInfo)
+TYPE(mds_table_pending_t)
+TYPE(inode_load_vec_t)
+TYPE(dirfrag_load_vec_t)
+TYPE(mds_load_t)
+TYPE(cap_reconnect_t)
+
+#include "mds/MDSMap.h"
+TYPE_FEATUREFUL(MDSMap)
+TYPE_FEATUREFUL(MDSMap::mds_info_t)
+
+#include "mds/Capability.h"
+TYPE(Capability)
+
+#include "mds/AnchorServer.h"
+TYPE(AnchorServer)
+
+#include "mds/SessionMap.h"
+TYPE(SessionMap)
+
+#include "mds/events/ECommitted.h"
+TYPE(ECommitted)
+#include "mds/events/EExport.h"
+TYPE(EExport)
+#include "mds/events/EFragment.h"
+TYPE(EFragment)
+#include "mds/events/EImportFinish.h"
+TYPE(EImportFinish)
+#include "mds/events/EImportStart.h"
+TYPE(EImportStart)
+#include "mds/events/EMetaBlob.h"
+TYPE(EMetaBlob::fullbit)
+TYPE(EMetaBlob::remotebit)
+TYPE(EMetaBlob::nullbit)
+TYPE(EMetaBlob::dirlump)
+TYPE(EMetaBlob)
+#include "mds/events/EOpen.h"
+TYPE(EOpen)
+#include "mds/events/EResetJournal.h"
+TYPE(EResetJournal)
+#include "mds/events/ESession.h"
+TYPE(ESession)
+#include "mds/events/ESessions.h"
+TYPE(ESessions)
+#include "mds/events/ESlaveUpdate.h"
+TYPE(link_rollback)
+TYPE(rmdir_rollback)
+TYPE(rename_rollback::drec)
+TYPE(rename_rollback)
+TYPE(ESlaveUpdate)
+#include "mds/events/ESubtreeMap.h"
+TYPE(ESubtreeMap)
+#include "mds/events/ETableClient.h"
+TYPE(ETableClient)
+#include "mds/events/ETableServer.h"
+TYPE(ETableServer)
+#include "mds/events/EUpdate.h"
+TYPE(EUpdate)
 
 #ifdef WITH_RADOSGW
 
