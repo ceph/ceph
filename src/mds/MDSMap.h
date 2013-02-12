@@ -445,7 +445,7 @@ public:
       failed.empty();
   }
   bool is_stopped() {
-    return up.size() == 0;
+    return up.empty();
   }
 
   // inst
