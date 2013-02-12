@@ -9,7 +9,7 @@ package RbdLib;
 use Cwd;
 use Exporter;
 @ISA = 'Exporter';
-@EXPORT_OK = qw(perform_action create_image resize_image rename_image copy_image list_image info_image export_image import_image remove_image create_snapshots rollback_snapshots purge_snapshots list_snapshots remove_snapshot rbd_map rbd_unmap rbd_showmapped display_result _pre_clean_up _post_clean_up _create_rados_pool display_ceph_os_info $RADOS_LS $RADOS_MKPOOL $RADOS_RMPOOL $RBD_CREATE $RBD_RESIZE $RBD_INFO $RBD_REMOVE $RBD_RENAME $RBD_MV $RBD_LS $RBD_LIST $RBD_CLONE $RBD_EXPORT $RBD_IMPORT $RBD_CP $RBD_COPY $SNAP_CREATE $SNAP_LS $SNAP_LIST $SNAP_ROLLBACK $SNAP_PURGE $SNAP_REMOVE $POOL_RM_SUCCESS $POOL_MK_SUCCESS $RBD_EXISTS_ERR $RBD_WATCH $RBD_MAP $RBD_UNMAP $RBD_SHOWMAPPED get_command_output verify_action debug_msg tpass tfail log_results display_func_result $CLI_FLAG);
+@EXPORT_OK = qw(perform_action create_image resize_image rename_image copy_image list_image info_image export_image import_image remove_image create_snapshots protect_snapshot clone_image unprotect_snapshot rollback_snapshots purge_snapshots list_snapshots remove_snapshot rbd_map rbd_unmap rbd_showmapped display_result _pre_clean_up _post_clean_up _create_rados_pool display_ceph_os_info $RADOS_LS $RADOS_MKPOOL $RADOS_RMPOOL $RBD_CREATE $RBD_RESIZE $RBD_INFO $RBD_REMOVE $RBD_RENAME $RBD_MV $RBD_LS $RBD_LIST $RBD_CLONE $RBD_EXPORT $RBD_IMPORT $RBD_CP $RBD_COPY $SNAP_CREATE $SNAP_LS $SNAP_LIST $SNAP_ROLLBACK $SNAP_PURGE $SNAP_REMOVE $RBD_CHILDREN $RBD_FLATTEN $POOL_RM_SUCCESS $POOL_MK_SUCCESS $RBD_EXISTS_ERR $RBD_WATCH $RBD_MAP $RBD_UNMAP $RBD_SHOWMAPPED $RBD_FLATTEN $SNAP_PROTECT $SNAP_UNPROTECT get_command_output verify_action debug_msg tpass tfail log_results display_func_result $CLI_FLAG );
 use Pod::Usage();
 use Getopt::Long();
 
@@ -50,6 +50,11 @@ our $RBD_MAP        = "sudo rbd map";
 our $RBD_UNMAP      = "sudo rbd unmap";
 our $RBD_SHOWMAPPED = "rbd showmapped";
 our $RADOS_LS       = "rados ls";
+our $SNAP_PROTECT   = "rbd snap protect";
+our $SNAP_UNPROTECT = "rbd snap unprotect";
+our $RBD_CHILDREN   = "rbd children"; 
+our $RBD_FLATTEN    = "rbd flatten"; 
+
 #====Error messages========================
 
 our $RBD_CREATE_ERR    = "size must be >= 0"; 
@@ -72,8 +77,20 @@ our $RBD_IMP_ERR       = "import failed";
 our $RBD_MAP_ERR       = "add failed";
 our $RBD_UNMAP_ERR     = "remove failed";
 our $RBD_INFO_SNAP_ERR = "error setting snapshot context";
-our $RBD_SIZE_ERR       = "must specify size in MB";
-
+our $SNAP_PROTECT_ERR = "Device or resource busy";
+our $SNAP_PROTECT_RM_ERR = "protected from removal";
+our $SNAP_PROTECT_ERR1 = "No such file or directory";
+our $SNAP_UNPROT_ERR   = "snap_unprotect: image must support layering";
+our $SNAP_UNPROT_ERR1   = "snap_unprotect: can't unprotect";
+#our $SNAP_UNPROTECT_ERR - bug # 4045  
+our $SNAP_PROT_ERR     = "snap_protect: image must support layering";
+our $CLONE_UNPROTECT_ERR = "parent snapshot must be protected";
+our $CLONE_ARG_ERR     = "destination image name was not specified";
+our $CLONE_PARENT_ERR  = "error opening parent image";
+our $CLONE_PF_ERR      = "parent image must be in new format";
+our $FLATTEN_ERR       = "librbd: parent snapshot must be protected";
+our $FLATTEN_IMG_ERR   = "librbd: image has no parent"; 
+ 
 #=======Success messages=======================
 
 our $POOL_MK_SUCCESS       = "successfully created pool";
@@ -85,6 +102,7 @@ our $RBD_EXP_SUCCESS       = "Exporting image: 100%";
 our $RBD_IMP_SUCCESS       = "Importing image: 100%";
 our $SNAP_ROLLBACK_SUCCESS = "Rolling back to snapshot: 100%";
 our $SNAP_PURGE_SUCCESS    = "Removing all snapshots: 100%";
+our $RBD_FLATTEN_SUCCESS     = "Image flatten: 100% complete";
 
 #===========Variables used in the script========
 
@@ -371,6 +389,18 @@ sub validate_cmd_output {
         elsif ( ( $act =~ /$RBD_MAP/ ) && ( $cmd_op !~ /./ ) ) {
             pass("$act $args passed");
         }
+        elsif ( ( $act =~ /$SNAP_PROTECT/ ) && ( $cmd_op !~ /./ ) ) {
+            pass("$act $args passed");
+        }
+        elsif ( ( $act =~ /$SNAP_UNPROTECT/ ) && ( $cmd_op !~ /./ ) ) {
+            pass("$act $args passed");
+        }
+        elsif ( ( $act =~ /$RBD_CLONE/ ) && ( $cmd_op !~ /./ ) ) {
+            pass("$act $args passed");
+        }
+        elsif ( ( $act =~ /$RBD_FLATTEN/ ) && ( $cmd_op =~ /$RBD_FLATTEN_SUCCESS/ ) ) {
+            pass("$act $args passed");
+        }
         elsif ( ( $act =~ /$RBD_UNMAP/ ) && ( $cmd_op !~ /$RBD_UNMAP_ERR/ ) ) {
             pass("$act $args passed");
         }
@@ -409,7 +439,18 @@ sub validate_cmd_output {
             || ( $cmd_op =~ /$RBD_CREATE_ERR/ )
             || ( $cmd_op =~ /$RBD_EXTRA_ERR/ )
             || ( $cmd_op =~ /$RBD_REQ_ERR/ )
-            || ( $cmd_op =~ /$RBD_SIZE_ERR/ )
+            || ( $cmd_op =~ /$SNAP_PROTECT_ERR/ )
+            || ( $cmd_op =~ /$SNAP_PROTECT_ERR1/ )
+            || ( $cmd_op =~ /$SNAP_PROTECT_RM_ERR/ )
+            || ( $cmd_op =~ /$SNAP_PROT_ERR/ )
+            || ( $cmd_op =~ /$SNAP_UNPROT_ERR/ )
+            || ( $cmd_op =~ /$SNAP_UNPROT_ERR1/ )
+            || ( $cmd_op =~ /$CLONE_UNPROTECT_ERR/ )
+            || ( $cmd_op =~ /$CLONE_ARG_ERR/ )
+            || ( $cmd_op =~ /$CLONE_PARENT_ERR/ )
+            || ( $cmd_op =~ /$CLONE_PF_ERR/ )
+            || ( $cmd_op =~ /$FLATTEN_ERR/ )
+            || ( $cmd_op =~ /$FLATTEN_IMG_ERR/ )
             || ( $cmd_op =~ /$RBD_INFO_SNAP_ERR/ ) )
       )
     {
@@ -480,8 +521,9 @@ sub ceph_os_info
 sub display_ceph_os_info
 {
 	my ($vceph, $vos) = ceph_os_info();
-        my $msg = "The Tests are running on";
-        debug_msg ( "$msg\n$vos$vceph",1 );
+        my $dat = get_command_output ( "date" );
+        my $msg = "The Tests were executed on $dat";
+        debug_msg ( "$msg\n$vos$vceph\n",1 );
 	open( TC, '>>log.txt' );
         print TC "[Log] $vceph\n";
 	close (TC);
