@@ -2241,7 +2241,20 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_NOTIFY_ACK:
       {
-	ctx->notify_acks.push_back(op.watch.cookie);
+	try {
+	  uint64_t notify_id = 0;
+	  uint64_t watch_cookie = 0;
+	  ::decode(notify_id, bp);
+	  ::decode(watch_cookie, bp);
+	  OpContext::NotifyAck ack(notify_id, watch_cookie);
+	  ctx->notify_acks.push_back(ack);
+	} catch (const buffer::error &e) {
+	  OpContext::NotifyAck ack(
+	    // op.watch.cookie is actually the notify_id for historical reasons
+	    op.watch.cookie
+	    );
+	  ctx->notify_acks.push_back(ack);
+	}
       }
       break;
 
@@ -3309,17 +3322,19 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
     notif->init();
   }
 
-  for (list<uint64_t>::iterator p = ctx->notify_acks.begin();
+  for (list<OpContext::NotifyAck>::iterator p = ctx->notify_acks.begin();
        p != ctx->notify_acks.end();
        ++p) {
-    dout(10) << "notify_ack " << *p << dendl;
+    dout(10) << "notify_ack " << make_pair(p->watch_cookie, p->notify_id) << dendl;
     for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator i =
 	   ctx->obc->watchers.begin();
 	 i != ctx->obc->watchers.end();
 	 ++i) {
       if (i->first.second != entity) continue;
+      if (p->watch_cookie &&
+	  p->watch_cookie.get() != i->first.first) continue;
       dout(10) << "acking notify on watch " << i->first << dendl;
-      i->second->notify_ack(*p);
+      i->second->notify_ack(p->notify_id);
     }
   }
 }
