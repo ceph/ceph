@@ -158,9 +158,17 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
       if (name.compare(delimiter) == 0)
         goto next;
 
-      s->formatter->open_object_section("object");
-      s->formatter->dump_string("name", pref_iter->first);
-      s->formatter->close_section();
+        s->formatter->open_object_section("subdir");
+
+        /* swift is a bit inconsistent here */
+        switch (s->format) {
+          case RGW_FORMAT_XML:
+            s->formatter->dump_string("name", pref_iter->first);
+            break;
+          default:
+            s->formatter->dump_string("subdir", pref_iter->first);
+        }
+        s->formatter->close_section();
     }
 next:
     if (do_objs)
