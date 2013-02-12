@@ -355,6 +355,7 @@ public:
     return str < rhs.str;
   }
 
+  bool is_pg_prefix(pg_t& pgid) const;
   bool is_pg(pg_t& pgid, snapid_t& snap) const;
   bool is_temp(pg_t& pgid) const;
   bool is_removal(uint64_t *seq, pg_t *pgid) const;
