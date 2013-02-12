@@ -231,7 +231,7 @@ public:
   bool is_projected() { return projected.size(); }
 
   linkage_t *get_projected_linkage() {
-    if (projected.size())
+    if (!projected.empty())
       return &projected.back();
     return &linkage;
   }
