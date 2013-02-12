@@ -343,13 +343,26 @@ void RGWUserInfo::dump(Formatter *f) const
 }
 
 
-struct SwiftKeyEntry {
-  RGWAccessKey key;
+static void decode_access_keys(map<string, RGWAccessKey>& m, JSONObj *o)
+{
+  RGWAccessKey k;
+  k.decode_json(o);
+  m[k.id] = k;
+}
 
-  void decode_json(JSONObj *obj) {
-    key.decode_json(obj, true);
-  }
-};
+static void decode_swift_keys(map<string, RGWAccessKey>& m, JSONObj *o)
+{
+  RGWAccessKey k;
+  k.decode_json(o, true);
+  m[k.subuser] = k;
+}
+
+static void decode_subusers(map<string, RGWSubUser>& m, JSONObj *o)
+{
+  RGWSubUser u;
+  u.decode_json(o);
+  m[u.name] = u;
+}
 
 void RGWUserInfo::decode_json(JSONObj *obj)
 {
@@ -362,32 +375,9 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("max_buckets", max_buckets, obj);
   JSONDecoder::decode_json("auid", auid, obj);
 
-  list<RGWAccessKey> akeys_list;
-  JSONDecoder::decode_json("keys", akeys_list, obj);
-
-  list<RGWAccessKey>::iterator iter;
-  for (iter = akeys_list.begin(); iter != akeys_list.end(); ++iter) {
-    RGWAccessKey& e = *iter;
-    access_keys[e.id] = e;
-  }
-
-  list<SwiftKeyEntry> skeys_list;
-  list<SwiftKeyEntry>::iterator skiter;
-  JSONDecoder::decode_json("swift_keys", skeys_list, obj);
-
-  for (skiter = skeys_list.begin(); skiter != skeys_list.end(); ++skiter) {
-    SwiftKeyEntry& e = *skiter;
-    swift_keys[e.key.subuser] = e.key;
-  }
-
-  list<RGWSubUser> susers_list;
-  list<RGWSubUser>::iterator siter;
-  JSONDecoder::decode_json("subusers", susers_list, obj);
-
-  for (siter = susers_list.begin(); siter != susers_list.end(); ++siter) {
-    RGWSubUser& e = *siter;
-    subusers[e.name] = e;
-  }
+  JSONDecoder::decode_json("keys", access_keys, decode_access_keys, obj);
+  JSONDecoder::decode_json("swift_keys", swift_keys, decode_swift_keys, obj);
+  JSONDecoder::decode_json("subusers", subusers, decode_subusers, obj);
 
   JSONDecoder::decode_json("caps", caps, obj);
 }
