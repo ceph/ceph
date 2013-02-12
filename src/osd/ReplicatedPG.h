@@ -1108,6 +1108,7 @@ public:
   void on_role_change();
   void on_change();
   void on_activate();
+  void on_flushed();
   void on_removal();
   void on_shutdown();
 };
