@@ -1425,7 +1425,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid,
 
     dout(10) << "removing coid " << coid << " from snap collections "
 	     << to_remove << " and adding to snap collections "
-	     << to_create << dendl;
+	     << to_create << " for final snaps " << coi.snaps << dendl;
 
     ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, coid, coi.version, coi.prior_version,
 				  osd_reqid_t(), ctx->mtime));
@@ -4653,7 +4653,13 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
       }
       
       info.stats = m->pg_stats;
-      update_snap_collections(log, rm->localt);
+      if (!rm->opt.empty()) {
+	// If the opt is non-empty, we infer we are before
+	// last_backfill (according to the primary, not our
+	// not-quite-accurate value), and should update the
+	// collections now.  Otherwise, we do it later on push.
+	update_snap_collections(log, rm->localt);
+      }
       append_log(log, m->pg_trim_to, rm->localt);
 
       rm->tls.push_back(&rm->localt);

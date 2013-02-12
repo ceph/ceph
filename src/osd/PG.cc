@@ -2736,9 +2736,6 @@ void PG::update_snap_collections(vector<pg_log_entry_t> &log_entries,
   for (vector<pg_log_entry_t>::iterator i = log_entries.begin();
        i != log_entries.end();
        ++i) {
-    // If past backfill line, snap_collections will be updated during push
-    if (i->soid > info.last_backfill)
-      continue;
     if (i->snaps.length() > 0) {
       vector<snapid_t> snaps;
       bufferlist::iterator p = i->snaps.begin();
