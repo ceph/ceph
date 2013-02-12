@@ -123,7 +123,7 @@ public:
     master(mastermds),
     op(o), origop(oo) { }
   
-  void print(ostream& out) {
+  void print(ostream& out) const {
     if (type.length())
       out << type << " ";
     out << " " << (int)op;

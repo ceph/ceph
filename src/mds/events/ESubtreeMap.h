@@ -27,7 +27,7 @@ public:
 
   ESubtreeMap() : LogEvent(EVENT_SUBTREEMAP), expire_pos(0) { }
   
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "ESubtreeMap " << subtrees.size() << " subtrees " 
 	<< ", " << ambiguous_subtrees.size() << " ambiguous "
 	<< metablob;
