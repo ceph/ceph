@@ -32,7 +32,7 @@ public:
     LogEvent(EVENT_UPDATE), metablob(mdlog),
     type(s), cmapv(0), had_slaves(false) { }
   
-  void print(ostream& out) {
+  void print(ostream& out) const {
     if (type.length())
       out << "EUpdate " << type << " ";
     out << metablob;

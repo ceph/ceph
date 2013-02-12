@@ -48,7 +48,7 @@ public:
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ESessions*>& ls);
 
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "ESessions " << client_map.size() << " opens cmapv " << cmapv;
   }
   

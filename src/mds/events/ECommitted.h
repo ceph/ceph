@@ -26,7 +26,7 @@ public:
   ECommitted(metareqid_t r) : 
     LogEvent(EVENT_COMMITTED), reqid(r) { }
 
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "ECommitted " << reqid;
   }
 

@@ -41,7 +41,7 @@ struct ETableServer : public LogEvent {
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ETableServer*>& ls);
 
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "ETableServer " << get_mdstable_name(table) 
 	<< " " << get_mdstableserver_opname(op);
     if (reqid) out << " reqid " << reqid;

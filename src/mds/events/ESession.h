@@ -51,7 +51,7 @@ class ESession : public LogEvent {
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ESession*>& ls);
 
-  void print(ostream& out) {
+  void print(ostream& out) const {
     if (open)
       out << "ESession " << client_inst << " open cmapv " << cmapv;
     else

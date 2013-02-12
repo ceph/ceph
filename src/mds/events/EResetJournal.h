@@ -28,7 +28,7 @@ class EResetJournal : public LogEvent {
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<EResetJournal*>& ls);
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "EResetJournal";
   }
 

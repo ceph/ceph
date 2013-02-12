@@ -36,7 +36,7 @@ struct ETableClient : public LogEvent {
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ETableClient*>& ls);
 
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "ETableClient " << get_mdstable_name(table) << " " << get_mdstableserver_opname(op);
     if (tid) out << " tid " << tid;
   }  

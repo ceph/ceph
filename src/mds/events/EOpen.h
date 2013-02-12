@@ -27,7 +27,7 @@ public:
   EOpen(MDLog *mdlog) : 
     LogEvent(EVENT_OPEN), metablob(mdlog) { }
 
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "EOpen " << metablob << ", " << inos.size() << " open files";
   }
 
