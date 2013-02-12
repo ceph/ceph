@@ -206,7 +206,7 @@ static int lock_obj(cls_method_context_t hctx,
     }
   }
 
-  if (lockers.size()) {
+  if (!lockers.empty()) {
     if (exclusive) {
       CLS_LOG(20, "could not exclusive-lock object, already locked");
       return -EBUSY;
