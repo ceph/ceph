@@ -242,8 +242,7 @@ bool DBObjectMap::parse_hobject_key_v0(const string &in, coll_t *c,
   *c = coll_t(coll);
   int64_t pool = -1;
   pg_t pg;
-  snapid_t pg_snap;
-  if (c->is_pg(pg, pg_snap))
+  if (c->is_pg_prefix(pg))
     pool = (int64_t)pg.pool();
   (*hoid) = hobject_t(name, key, snap, hash, pool);
   return true;
