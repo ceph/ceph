@@ -31,7 +31,7 @@
 #include "ScatterLock.h"
 #include "LocalLock.h"
 #include "Capability.h"
-#include "snap.h"
+#include "SnapRealm.h"
 
 #include <list>
 #include <vector>
@@ -62,37 +62,6 @@ struct cinode_lock_info_t {
 
 extern cinode_lock_info_t cinode_lock_info[];
 extern int num_cinode_locks;
-
-/**
- * Default file layout stuff. This lets us set a default file layout on
- * a directory inode that all files in its tree will use on creation.
- */
-struct default_file_layout {
-
-  ceph_file_layout layout;
-
-  default_file_layout() {
-    memset(&layout, 0, sizeof(layout));
-  }
-
-  void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(layout, bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    if (struct_v != 1) { //uh-oh
-      derr << "got default layout I don't understand!" << dendl;
-      assert(0);
-    }
-    ::decode(layout, bl);
-  }
-};
-WRITE_CLASS_ENCODER(default_file_layout);
-
 
 // cached inode wrapper
 class CInode : public MDSCacheObject {
@@ -242,7 +211,7 @@ public:
   //bool hack_accessed;
   //utime_t hack_load_stamp;
 
-  default_file_layout *default_layout;
+  file_layout_policy_t *default_layout;
 
   /**
    * Projection methods, used to store inode changes until they have been journaled,
@@ -261,13 +230,13 @@ public:
     inode_t *inode;
     map<string,bufferptr> *xattrs;
     sr_t *snapnode;
-    default_file_layout *dir_layout;
+    file_layout_policy_t *dir_layout;
 
     projected_inode_t() : inode(NULL), xattrs(NULL), snapnode(NULL), dir_layout(NULL) {}
     projected_inode_t(inode_t *in, sr_t *sn) : inode(in), xattrs(NULL), snapnode(sn),
         dir_layout(NULL) {}
     projected_inode_t(inode_t *in, map<string, bufferptr> *xp = NULL, sr_t *sn = NULL,
-                      default_file_layout *dl = NULL) :
+                      file_layout_policy_t *dl = NULL) :
       inode(in), xattrs(xp), snapnode(sn), dir_layout(dl) {}
   };
   list<projected_inode_t*> projected_nodes;   // projected values (only defined while dirty)
@@ -585,46 +554,8 @@ private:
   void build_backtrace(inode_backtrace_t& bt);
   unsigned encode_parent_mutation(ObjectOperation& m);
 
-  void encode_store(bufferlist& bl) {
-    __u8 struct_v = 2;
-    ::encode(struct_v, bl);
-    ::encode(inode, bl);
-    if (is_symlink())
-      ::encode(symlink, bl);
-    ::encode(dirfragtree, bl);
-    ::encode(xattrs, bl);
-    bufferlist snapbl;
-    encode_snap_blob(snapbl);
-    ::encode(snapbl, bl);
-    ::encode(old_inodes, bl);
-    if (inode.is_dir()) {
-      ::encode((default_layout ? true : false), bl);
-      if (default_layout)
-        ::encode(*default_layout, bl);
-    }
-  }
-  void decode_store(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    ::decode(inode, bl);
-    if (is_symlink())
-      ::decode(symlink, bl);
-    ::decode(dirfragtree, bl);
-    ::decode(xattrs, bl);
-    bufferlist snapbl;
-    ::decode(snapbl, bl);
-    decode_snap_blob(snapbl);
-    ::decode(old_inodes, bl);
-    if (struct_v >= 2 && inode.is_dir()) {
-      bool default_layout_exists;
-      ::decode(default_layout_exists, bl);
-      if (default_layout_exists) {
-        delete default_layout;
-        default_layout = new default_file_layout;
-        ::decode(*default_layout, bl);
-      }
-    }
-  }
+  void encode_store(bufferlist& bl);
+  void decode_store(bufferlist::iterator& bl);
 
   void encode_replica(int rep, bufferlist& bl) {
     assert(is_auth());
@@ -656,7 +587,7 @@ private:
       ::decode(default_layout_exists, p);
       if (default_layout_exists) {
         delete default_layout;
-        default_layout = new default_file_layout;
+        default_layout = new file_layout_policy_t;
         ::decode(*default_layout, p);
       }
     }

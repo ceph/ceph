@@ -61,7 +61,7 @@ class MMDSMap : public Message {
     Message(CEPH_MSG_MDS_MAP),
     fsid(f) {
     epoch = mm->get_epoch();
-    mm->encode(encoded);
+    mm->encode(encoded, -1);  // we will reencode with fewer features as necessary
   }
 private:
   ~MMDSMap() {}
@@ -87,7 +87,7 @@ public:
       MDSMap m;
       m.decode(encoded);
       encoded.clear();
-      m.encode_client_old(encoded);
+      m.encode(encoded, features);
     }
     ::encode(encoded, payload);
   }

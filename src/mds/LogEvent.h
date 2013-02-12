@@ -15,7 +15,8 @@
 #ifndef CEPH_LOGEVENT_H
 #define CEPH_LOGEVENT_H
 
-#define EVENT_STRING       1
+#define EVENT_NEW_ENCODING 0 // indicates that the encoding is versioned
+#define EVENT_UNUSED       1 // was previously EVENT_STRING
 
 #define EVENT_SUBTREEMAP   2
 #define EVENT_EXPORT       3
@@ -26,7 +27,8 @@
 #define EVENT_RESETJOURNAL 9
 
 #define EVENT_SESSION      10
-#define EVENT_SESSIONS     11
+#define EVENT_SESSIONS_OLD 11
+#define EVENT_SESSIONS     12
 
 #define EVENT_UPDATE       20
 #define EVENT_SLAVEUPDATE  21
@@ -54,6 +56,7 @@ class LogEvent {
  private:
   __u32 _type;
   uint64_t _start_off;
+  static LogEvent *decode_event(bufferlist& bl, bufferlist::iterator& p, __u32 type);
 
 protected:
   utime_t stamp;
@@ -82,8 +85,11 @@ protected:
   static LogEvent *decode(bufferlist &bl);
 
   void encode_with_header(bufferlist& bl) {
+    ::encode(EVENT_NEW_ENCODING, bl);
+    ENCODE_START(1, 1, bl)
     ::encode(_type, bl);
     encode(bl);
+    ENCODE_FINISH(bl);
   }
 
   virtual void print(ostream& out) { 

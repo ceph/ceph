@@ -21,6 +21,7 @@
 #include "../MDS.h"
 
 #include "EMetaBlob.h"
+#include "../LogEvent.h"
 
 class EImportStart : public LogEvent {
 protected:
@@ -39,31 +40,14 @@ protected:
 				       metablob(log) { }
   EImportStart() : LogEvent(EVENT_IMPORTSTART) { }
   
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "EImportStart " << base << " " << metablob;
   }
   
-  void encode(bufferlist &bl) const {
-    __u8 struct_v = 2;
-    ::encode(struct_v, bl);
-    ::encode(stamp, bl);
-    ::encode(base, bl);
-    ::encode(metablob, bl);
-    ::encode(bounds, bl);
-    ::encode(cmapv, bl);
-    ::encode(client_map, bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    if (struct_v >= 2)
-      ::decode(stamp, bl);
-    ::decode(base, bl);
-    ::decode(metablob, bl);
-    ::decode(bounds, bl);
-    ::decode(cmapv, bl);
-    ::decode(client_map, bl);
-  }
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<EImportStart*>& ls);
   
   void update_segment();
   void replay(MDS *mds);

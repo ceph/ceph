@@ -25,7 +25,9 @@ using std::string;
 
 // identifies a anchor table mutation
 
-
+namespace ceph {
+  class Formatter;
+}
 
 // anchor type
 
@@ -41,30 +43,13 @@ public:
   Anchor(inodeno_t i, inodeno_t di, __u32 hash, int nr, version_t u) :
     ino(i), dirino(di), dn_hash(hash), nref(nr), updated(u) { }
   
-  void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(ino, bl);
-    ::encode(dirino, bl);
-    ::encode(dn_hash, bl);
-    ::encode(nref, bl);
-    ::encode(updated, bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    ::decode(ino, bl);
-    ::decode(dirino, bl);
-    ::decode(dn_hash, bl);
-    ::decode(nref, bl);
-    ::decode(updated, bl);
-  }
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<Anchor*>& ls);
 };
 WRITE_CLASS_ENCODER(Anchor)
 
-inline ostream& operator<<(ostream& out, const Anchor &a)
-{
-  return out << "a(" << a.ino << " " << a.dirino << "/" << a.dn_hash << " " << a.nref << " v" << a.updated << ")";
-}
+ostream& operator<<(ostream& out, const Anchor &a);
 
 #endif

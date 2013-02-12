@@ -18,8 +18,6 @@
 #include "MDS.h"
 
 // events i know of
-#include "events/EString.h"
-
 #include "events/ESubtreeMap.h"
 #include "events/EExport.h"
 #include "events/EImportStart.h"
@@ -44,16 +42,28 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   // parse type, length
   bufferlist::iterator p = bl.begin();
   __u32 type;
+  LogEvent *event = NULL;
   ::decode(type, p);
 
+  if (EVENT_NEW_ENCODING == type) {
+    DECODE_START(1, p);
+    ::decode(type, p);
+    event = decode_event(bl, p, type);
+    DECODE_FINISH(p);
+  } else { // we are using classic encoding
+    event = decode_event(bl, p, type);
+  }
+  return event;
+}
+
+LogEvent *LogEvent::decode_event(bufferlist& bl, bufferlist::iterator& p, __u32 type)
+{
   int length = bl.length() - p.get_off();
   generic_dout(15) << "decode_log_event type " << type << ", size " << length << dendl;
   
   // create event
   LogEvent *le;
   switch (type) {
-  case EVENT_STRING: le = new EString; break;
-
   case EVENT_SUBTREEMAP: le = new ESubtreeMap; break;
   case EVENT_SUBTREEMAP_TEST: 
     le = new ESubtreeMap;
@@ -67,6 +77,7 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   case EVENT_RESETJOURNAL: le = new EResetJournal; break;
 
   case EVENT_SESSION: le = new ESession; break;
+  case EVENT_SESSIONS_OLD: le = new ESessions; ((ESessions *)le)->mark_old_encoding(); break;
   case EVENT_SESSIONS: le = new ESessions; break;
 
   case EVENT_UPDATE: le = new EUpdate; break;

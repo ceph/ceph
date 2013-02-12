@@ -128,9 +128,9 @@ bin_PROGRAMS += monmaptool crushtool osdmaptool
 rgw_dencoder_src = rgw/rgw_dencoder.cc \
                    rgw/rgw_acl.cc
 
-ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc ${rgw_dencoder_src}
+ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc ${rgw_dencoder_src} perfglue/disabled_heap_profiler.cc
 ceph_dencoder_CXXFLAGS = ${AM_CXXFLAGS}
-ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libcls_lock_client.a libcls_rgw_client.a libosd.a libmds.a $(LIBOS_LDA) libmon.a
+ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libcls_lock_client.a libcls_rgw_client.a libosd.a libmds.a libosdc.la $(LIBOS_LDA) libmon.a
 bin_PROGRAMS += ceph-dencoder
 
 mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c include/addr_parsing.c
@@ -1229,6 +1229,7 @@ libcommon_files = \
 	auth/Crypto.cc \
 	auth/KeyRing.cc \
 	auth/RotatingKeyRing.cc \
+	common/DecayCounter.cc \
 	common/LogClient.cc \
 	common/LogEntry.cc \
 	common/PrebufferedStreambuf.cc \
@@ -1239,7 +1240,6 @@ libcommon_files = \
 	common/admin_socket.cc \
 	common/admin_socket_client.cc \
 	common/escape.c \
-	common/types.cc \
 	common/Clock.cc \
 	common/Throttle.cc \
 	common/Timer.cc \
@@ -1278,6 +1278,8 @@ libcommon_files = \
 	osd/OSDMap.cc \
 	osd/osd_types.cc \
 	mds/MDSMap.cc \
+	mds/inode_backtrace.cc \
+	mds/mdstypes.cc \
 	common/blkdev.cc \
 	common/common_init.cc \
 	common/pipe.c \
@@ -1341,6 +1343,8 @@ libmon_a_CXXFLAGS= ${AM_CXXFLAGS}
 noinst_LIBRARIES += libmon.a
 
 libmds_a_SOURCES = \
+	mds/Anchor.cc \
+	mds/Capability.cc \
 	mds/Dumper.cc \
 	mds/Resetter.cc \
 	mds/MDS.cc \
@@ -1363,6 +1367,7 @@ libmds_a_SOURCES = \
 	mds/MDSTableServer.cc \
 	mds/AnchorServer.cc \
 	mds/AnchorClient.cc \
+	mds/SnapRealm.cc \
 	mds/SnapServer.cc \
 	mds/snap.cc \
 	mds/SessionMap.cc \
@@ -1411,7 +1416,7 @@ libclient_la_SOURCES = \
 	client/Inode.cc \
 	client/Dentry.cc \
 	client/MetaRequest.cc \
-	client/SnapRealm.cc \
+	client/ClientSnapRealm.cc \
 	client/MetaSession.cc \
 	client/Trace.cc
 libclient_la_LIBADD = libosdc.la $(LIBEDIT_LIBS)
@@ -1463,7 +1468,7 @@ noinst_HEADERS = \
 	client/Inode.h\
 	client/MetaRequest.h\
 	client/MetaSession.h\
-	client/SnapRealm.h\
+	client/ClientSnapRealm.h\
         client/SyntheticClient.h\
         client/Trace.h\
         client/fuse_ll.h\
@@ -1689,6 +1694,7 @@ noinst_HEADERS = \
         mds/SessionMap.h\
         mds/SimpleLock.h\
         mds/SnapClient.h\
+	mds/SnapRealm.h\
         mds/SnapServer.h\
         mds/events/ECommitted.h\
         mds/events/EExport.h\
@@ -1701,7 +1707,6 @@ noinst_HEADERS = \
         mds/events/ESession.h\
         mds/events/ESessions.h\
         mds/events/ESlaveUpdate.h\
-        mds/events/EString.h\
         mds/events/ESubtreeMap.h\
 	mds/events/ETableClient.h\
 	mds/events/ETableServer.h\

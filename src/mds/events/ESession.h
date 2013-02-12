@@ -46,28 +46,10 @@ class ESession : public LogEvent {
     cmapv(v),
     inos(i), inotablev(iv) { }
 
-  void encode(bufferlist &bl) const {
-    __u8 struct_v = 2;
-    ::encode(struct_v, bl);
-    ::encode(stamp, bl);
-    ::encode(client_inst, bl);
-    ::encode(open, bl);
-    ::encode(cmapv, bl);
-    ::encode(inos, bl);
-    ::encode(inotablev, bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    if (struct_v >= 2)
-      ::decode(stamp, bl);
-    ::decode(client_inst, bl);
-    ::decode(open, bl);
-    ::decode(cmapv, bl);
-    ::decode(inos, bl);
-    ::decode(inotablev, bl);
-  }
-
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ESession*>& ls);
 
   void print(ostream& out) {
     if (open)

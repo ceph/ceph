@@ -33,9 +33,9 @@ void SessionMap::dump()
        ++p) 
     dout(10) << p->first << " " << p->second
 	     << " state " << p->second->get_state_name()
-	     << " completed " << p->second->completed_requests
-	     << " prealloc_inos " << p->second->prealloc_inos
-	     << " used_ions " << p->second->used_inos
+	     << " completed " << p->second->info.completed_requests
+	     << " prealloc_inos " << p->second->info.prealloc_inos
+	     << " used_ions " << p->second->info.used_inos
 	     << dendl;
 }
 
@@ -140,26 +140,26 @@ void SessionMap::_save_finish(version_t v)
 
 // -------------------
 
-void SessionMap::encode(bufferlist& bl)
+void SessionMap::encode(bufferlist& bl) const
 {
   uint64_t pre = -1;     // for 0.19 compatibility; we forgot an encoding prefix.
   ::encode(pre, bl);
 
-  __u8 struct_v = 2;
-  ::encode(struct_v, bl);
-
+  ENCODE_START(3, 3, bl);
   ::encode(version, bl);
 
-  for (hash_map<entity_name_t,Session*>::iterator p = session_map.begin(); 
+  for (hash_map<entity_name_t,Session*>::const_iterator p = session_map.begin(); 
        p != session_map.end(); 
-       ++p) 
+       ++p) {
     if (p->second->is_open() ||
 	p->second->is_closing() ||
 	p->second->is_stale() ||
 	p->second->is_killing()) {
       ::encode(p->first, bl);
-      p->second->encode(bl);
+      p->second->info.encode(bl);
     }
+  }
+  ENCODE_FINISH(bl);
 }
 
 void SessionMap::decode(bufferlist::iterator& p)
@@ -168,21 +168,21 @@ void SessionMap::decode(bufferlist::iterator& p)
   uint64_t pre;
   ::decode(pre, p);
   if (pre == (uint64_t)-1) {
-    __u8 struct_v;
-    ::decode(struct_v, p);
-    assert(struct_v == 2);
-
+    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, p);
+    assert(struct_v >= 2);
+    
     ::decode(version, p);
-
+    
     while (!p.end()) {
       entity_inst_t inst;
       ::decode(inst.name, p);
       Session *s = get_or_add_session(inst);
       if (s->is_closed())
 	set_state(s, Session::STATE_OPEN);
-      s->decode(p);
+      s->info.decode(p);
     }
 
+    DECODE_FINISH(p);
   } else {
     // --- old format ----
     version = pre;
@@ -194,17 +194,17 @@ void SessionMap::decode(bufferlist::iterator& p)
     while (n-- && !p.end()) {
       bufferlist::iterator p2 = p;
       Session *s = new Session;
-      s->decode(p);
-      if (session_map.count(s->inst.name)) {
+      s->info.decode(p);
+      if (session_map.count(s->info.inst.name)) {
 	// eager client connected too fast!  aie.
-	dout(10) << " already had session for " << s->inst.name << ", recovering" << dendl;
-	entity_name_t n = s->inst.name;
+	dout(10) << " already had session for " << s->info.inst.name << ", recovering" << dendl;
+	entity_name_t n = s->info.inst.name;
 	delete s;
 	s = session_map[n];
 	p = p2;
-	s->decode(p);
+	s->info.decode(p);
       } else {
-	session_map[s->inst.name] = s;
+	session_map[s->info.inst.name] = s;
       }
       set_state(s, Session::STATE_OPEN);
       s->last_cap_renew = now;
@@ -212,7 +212,29 @@ void SessionMap::decode(bufferlist::iterator& p)
   }
 }
 
+void SessionMap::dump(Formatter *f) const
+{
+  f->open_array_section("Sessions");
+  for (hash_map<entity_name_t,Session*>::const_iterator p = session_map.begin();
+       p != session_map.end();
+       ++p)  {
+    f->open_object_section("Session");
+    f->open_object_section("entity name");
+    p->first.dump(f);
+    f->close_section(); // entity name
+    f->open_object_section("Session info");
+    p->second->info.dump(f);
+    f->close_section(); // Session info
+    f->close_section(); // Session
+  }
+  f->close_section(); // Sessions
+}
 
+void SessionMap::generate_test_instances(list<SessionMap*>& ls)
+{
+  // pretty boring for now
+  ls.push_back(new SessionMap(NULL));
+}
 
 void SessionMap::wipe()
 {
@@ -234,8 +256,8 @@ void SessionMap::wipe_ino_prealloc()
        p != session_map.end(); 
        ++p) {
     p->second->pending_prealloc_inos.clear();
-    p->second->prealloc_inos.clear();
-    p->second->used_inos.clear();
+    p->second->info.prealloc_inos.clear();
+    p->second->info.used_inos.clear();
   }
   projected = ++version;
 }

@@ -21,6 +21,8 @@
 
 #include "common/config.h"
 
+#include "mdstypes.h"
+
 /*
 
   Capability protocol notes.
@@ -57,6 +59,10 @@
 
 class CInode;
 
+namespace ceph {
+  class Formatter;
+}
+
 class Capability {
 private:
   static boost::pool<> pool;
@@ -81,26 +87,10 @@ public:
     Export() {}
     Export(int w, int i, int p, snapid_t cf, ceph_seq_t s, utime_t lis) : 
       wanted(w), issued(i), pending(p), client_follows(cf), mseq(s), last_issue_stamp(lis) {}
-    void encode(bufferlist &bl) const {
-      __u8 struct_v = 1;
-      ::encode(struct_v, bl);
-      ::encode(wanted, bl);
-      ::encode(issued, bl);
-      ::encode(pending, bl);
-      ::encode(client_follows, bl);
-      ::encode(mseq, bl);
-      ::encode(last_issue_stamp, bl);
-    }
-    void decode(bufferlist::iterator &p) {
-      __u8 struct_v;
-      ::decode(struct_v, p);
-      ::decode(wanted, p);
-      ::decode(issued, p);
-      ::decode(pending, p);
-      ::decode(client_follows, p);
-      ::decode(mseq, p);
-      ::decode(last_issue_stamp, p);
-    }
+    void encode(bufferlist &bl) const;
+    void decode(bufferlist::iterator &p);
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<Export*>& ls);
   };
 
 private:
@@ -123,20 +113,10 @@ public:
     ceph_seq_t seq, last_issue;
     revoke_info() {}
     revoke_info(__u32 b, ceph_seq_t s, ceph_seq_t li) : before(b), seq(s), last_issue(li) {}
-    void encode(bufferlist& bl) const {
-      __u8 struct_v = 1;
-      ::encode(struct_v, bl);
-      ::encode(before, bl);
-      ::encode(seq, bl);
-      ::encode(last_issue, bl);
-    }
-    void decode(bufferlist::iterator& bl) {
-      __u8 struct_v;
-      ::decode(struct_v, bl);
-      ::decode(before, bl);
-      ::decode(seq, bl);
-      ::decode(last_issue, bl);
-    }
+    void encode(bufferlist& bl) const;
+    void decode(bufferlist::iterator& bl);
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<revoke_info*>& ls);
   };
 private:
   __u32 _pending, _issued;
@@ -231,7 +211,7 @@ public:
   xlist<Capability*>::item item_session_caps;
   xlist<Capability*>::item item_snaprealm_caps;
 
-  Capability(CInode *i, uint64_t id, client_t c) : 
+  Capability(CInode *i = NULL, uint64_t id = 0, client_t c = 0) : 
     inode(i), client(c),
     cap_id(id),
     _wanted(0),
@@ -326,28 +306,10 @@ public:
   }
 
   // serializers
-  void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(last_sent, bl);
-    ::encode(last_issue_stamp, bl);
-
-    ::encode(_wanted, bl);
-    ::encode(_pending, bl);
-    ::encode(_revokes, bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    ::decode(last_sent, bl);
-    ::decode(last_issue_stamp, bl);
-
-    ::decode(_wanted, bl);
-    ::decode(_pending, bl);
-    ::decode(_revokes, bl);
-
-    _calc_issued();
-  }
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<Capability*>& ls);
   
 };
 

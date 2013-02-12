@@ -42,8 +42,6 @@
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDPGLog.h"
 
-#include "common/DecayCounter.h"
-
 #include <list>
 #include <memory>
 #include <string>

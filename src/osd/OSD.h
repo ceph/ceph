@@ -31,7 +31,6 @@
 #include "os/ObjectStore.h"
 #include "OSDCap.h"
 
-#include "common/DecayCounter.h"
 #include "osd/ClassHandler.h"
 
 #include "include/CompatSet.h"

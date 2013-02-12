@@ -40,23 +40,22 @@ public:
     
   void reset_state();
   void encode_server_state(bufferlist& bl) {
-    __u8 v = 2;
-    ::encode(v, bl);
+    ENCODE_START(3, 3, bl);
     ::encode(last_snap, bl);
     ::encode(snaps, bl);
     ::encode(need_to_purge, bl);
     ::encode(pending_create, bl);
     ::encode(pending_destroy, bl);
     ::encode(pending_noop, bl);
+    ENCODE_FINISH(bl);
   }
   void decode_server_state(bufferlist::iterator& bl) {
-    __u8 v;
-    ::decode(v, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
     ::decode(last_snap, bl);
     ::decode(snaps, bl);
     ::decode(need_to_purge, bl);
     ::decode(pending_create, bl);
-    if (v >= 2)
+    if (struct_v >= 2)
       ::decode(pending_destroy, bl);
     else {
       map<version_t, snapid_t> t;
@@ -65,6 +64,7 @@ public:
 	pending_destroy[p->first].first = p->second; 
     } 
     ::decode(pending_noop, bl);
+    DECODE_FINISH(bl);
   }
 
   // server bits

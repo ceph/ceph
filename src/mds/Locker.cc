@@ -26,7 +26,6 @@
 
 #include "include/filepath.h"
 
-#include "events/EString.h"
 #include "events/EUpdate.h"
 #include "events/EOpen.h"
 
@@ -1628,8 +1627,8 @@ Capability* Locker::issue_new_caps(CInode *in,
   }
 
   // my needs
-  assert(session->inst.name.is_client());
-  int my_client = session->inst.name.num();
+  assert(session->info.inst.name.is_client());
+  int my_client = session->info.inst.name.num();
   int my_want = ceph_caps_for_mode(mode);
 
   // register a capability
@@ -1811,7 +1810,7 @@ void Locker::issue_truncate(CInode *in)
 
 void Locker::revoke_stale_caps(Session *session)
 {
-  dout(10) << "revoke_stale_caps for " << session->inst.name << dendl;
+  dout(10) << "revoke_stale_caps for " << session->info.inst.name << dendl;
   client_t client = session->get_client();
 
   for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ++p) {
@@ -1845,7 +1844,7 @@ void Locker::revoke_stale_caps(Session *session)
 
 void Locker::resume_stale_caps(Session *session)
 {
-  dout(10) << "resume_stale_caps for " << session->inst.name << dendl;
+  dout(10) << "resume_stale_caps for " << session->info.inst.name << dendl;
 
   for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ++p) {
     Capability *cap = *p;
@@ -1862,7 +1861,7 @@ void Locker::resume_stale_caps(Session *session)
 
 void Locker::remove_stale_leases(Session *session)
 {
-  dout(10) << "remove_stale_leases for " << session->inst.name << dendl;
+  dout(10) << "remove_stale_leases for " << session->info.inst.name << dendl;
   xlist<ClientLease*>::iterator p = session->leases.begin();
   while (!p.end()) {
     ClientLease *l = *p;

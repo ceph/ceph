@@ -315,7 +315,7 @@ inode_t *CInode::project_inode(map<string,bufferptr> *px)
       *px = xattrs;
     projected_nodes.back()->dir_layout = default_layout;
   } else {
-    default_file_layout *last_dl = projected_nodes.back()->dir_layout;
+    file_layout_policy_t *last_dl = projected_nodes.back()->dir_layout;
     projected_nodes.push_back(new projected_inode_t(
         new inode_t(*projected_nodes.back()->inode)));
     if (px)
@@ -1059,6 +1059,48 @@ void CInode::_stored_parent(version_t v, Context *fin)
   }
 }
 
+void CInode::encode_store(bufferlist& bl)
+{
+  ENCODE_START(3, 3, bl);
+  ::encode(inode, bl);
+  if (is_symlink())
+    ::encode(symlink, bl);
+  ::encode(dirfragtree, bl);
+  ::encode(xattrs, bl);
+  bufferlist snapbl;
+  encode_snap_blob(snapbl);
+  ::encode(snapbl, bl);
+  ::encode(old_inodes, bl);
+  if (inode.is_dir()) {
+    ::encode((default_layout ? true : false), bl);
+    if (default_layout)
+      ::encode(*default_layout, bl);
+  }
+  ENCODE_FINISH(bl);
+}
+
+void CInode::decode_store(bufferlist::iterator& bl) {
+  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  ::decode(inode, bl);
+  if (is_symlink())
+    ::decode(symlink, bl);
+  ::decode(dirfragtree, bl);
+  ::decode(xattrs, bl);
+  bufferlist snapbl;
+  ::decode(snapbl, bl);
+  decode_snap_blob(snapbl);
+  ::decode(old_inodes, bl);
+  if (struct_v >= 2 && inode.is_dir()) {
+    bool default_layout_exists;
+    ::decode(default_layout_exists, bl);
+    if (default_layout_exists) {
+      delete default_layout;
+      default_layout = new file_layout_policy_t;
+      ::decode(*default_layout, bl);
+    }
+  }
+  DECODE_FINISH(bl);
+}
 
 // ------------------
 // locking
@@ -1445,7 +1487,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
       ::decode(default_layout_exists, p);
       if (default_layout_exists) {
         delete default_layout;
-        default_layout = new default_file_layout;
+        default_layout = new file_layout_policy_t;
         decode(*default_layout, p);
       }
     }
@@ -2599,7 +2641,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 			      SnapRealm *dir_realm,
 			      snapid_t snapid, unsigned max_bytes)
 {
-  int client = session->inst.name.num();
+  int client = session->info.inst.name.num();
   assert(snapid);
   assert(session->connection);
   
@@ -2991,8 +3033,7 @@ void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waite
 
 void CInode::encode_export(bufferlist& bl)
 {
-  __u8 struct_v = 2;
-  ::encode(struct_v, bl);
+  ENCODE_START(3, 3, bl)
   _encode_base(bl);
 
   bool dirty = is_dirty();
@@ -3022,6 +3063,7 @@ void CInode::encode_export(bufferlist& bl)
 
   _encode_locks_full(bl);
   get(PIN_TEMPEXPORTING);
+  ENCODE_FINISH(bl);
 }
 
 void CInode::finish_export(utime_t now)
@@ -3039,8 +3081,7 @@ void CInode::finish_export(utime_t now)
 void CInode::decode_import(bufferlist::iterator& p,
 			   LogSegment *ls)
 {
-  __u8 struct_v;
-  ::decode(struct_v, p);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, p);
 
   _decode_base(p);
 
@@ -3102,4 +3143,5 @@ void CInode::decode_import(bufferlist::iterator& p,
   }
 
   _decode_locks_full(p);
+  DECODE_FINISH(p);
 }

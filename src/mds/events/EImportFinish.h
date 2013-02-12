@@ -19,6 +19,7 @@
 #include "include/types.h"
 
 #include "../MDS.h"
+#include "../LogEvent.h"
 
 class EImportFinish : public LogEvent {
  protected:
@@ -29,9 +30,9 @@ class EImportFinish : public LogEvent {
   EImportFinish(CDir *dir, bool s) : LogEvent(EVENT_IMPORTFINISH), 
 				     base(dir->dirfrag()),
 				     success(s) { }
-  EImportFinish() : LogEvent(EVENT_IMPORTFINISH) { }
+  EImportFinish() : LogEvent(EVENT_IMPORTFINISH), base(), success(false) { }
   
-  void print(ostream& out) {
+  void print(ostream& out) const {
     out << "EImportFinish " << base;
     if (success)
       out << " success";
@@ -39,21 +40,10 @@ class EImportFinish : public LogEvent {
       out << " failed";
   }
 
-  void encode(bufferlist& bl) const {
-    __u8 struct_v = 2;
-    ::encode(struct_v, bl);
-    ::encode(stamp, bl);
-    ::encode(base, bl);
-    ::encode(success, bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    if (struct_v >= 2)
-      ::decode(stamp, bl);
-    ::decode(base, bl);
-    ::decode(success, bl);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<EImportFinish*>& ls);
   
   void replay(MDS *mds);
 

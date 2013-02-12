@@ -5,7 +5,7 @@
 #include "Inode.h"
 #include "Dentry.h"
 #include "Dir.h"
-#include "SnapRealm.h"
+#include "ClientSnapRealm.h"
 
 ostream& operator<<(ostream &out, Inode &in)
 {

@@ -68,7 +68,7 @@ public:
     string symlink;
     bufferlist snapbl;
     bool dirty;
-    struct default_file_layout *dir_layout;
+    struct file_layout_policy_t *dir_layout;
     typedef map<snapid_t, old_inode_t> old_inodes_t;
     old_inodes_t old_inodes;
 
@@ -78,10 +78,10 @@ public:
     const fullbit& operator=(const fullbit& o);
 
     fullbit(const string& d, snapid_t df, snapid_t dl, 
-	    version_t v, inode_t& i, fragtree_t &dft, 
-	    map<string,bufferptr> &xa, const string& sym,
-	    bufferlist &sbl, bool dr, default_file_layout *defl = NULL,
-	    old_inodes_t *oi = NULL) :
+	    version_t v, const inode_t& i, const fragtree_t &dft, 
+	    const map<string,bufferptr> &xa, const string& sym,
+	    const bufferlist &sbl, bool dr, const file_layout_policy_t *defl = NULL,
+	    const old_inodes_t *oi = NULL) :
       //dn(d), dnfirst(df), dnlast(dl), dnv(v), 
       //inode(i), dirfragtree(dft), xattrs(xa), symlink(sym), snapbl(sbl), dirty(dr) 
       dir_layout(NULL), _enc(1024)
@@ -114,48 +114,13 @@ public:
       delete dir_layout;
     }
 
-    void encode(bufferlist& bl) const {
-      __u8 struct_v = 3;
-      ::encode(struct_v, bl);
-      assert(_enc.length());
-      bl.append(_enc); 
-    }
-    void decode(bufferlist::iterator &bl) {
-      __u8 struct_v;
-      ::decode(struct_v, bl);
-      ::decode(dn, bl);
-      ::decode(dnfirst, bl);
-      ::decode(dnlast, bl);
-      ::decode(dnv, bl);
-      ::decode(inode, bl);
-      ::decode(xattrs, bl);
-      if (inode.is_symlink())
-	::decode(symlink, bl);
-      if (inode.is_dir()) {
-	::decode(dirfragtree, bl);
-	::decode(snapbl, bl);
-	if (struct_v >= 2) {
-	  bool dir_layout_exists;
-	  ::decode(dir_layout_exists, bl);
-	  if (dir_layout_exists) {
-	    dir_layout = new default_file_layout;
-	    ::decode(*dir_layout, bl);
-	  }
-	}
-      }
-      ::decode(dirty, bl);
-      if (struct_v >= 3) {
-	bool old_inodes_present;
-	::decode(old_inodes_present, bl);
-	if (old_inodes_present) {
-	  ::decode(old_inodes, bl);
-	}
-      }
-    }
-
+    void encode(bufferlist& bl) const;
+    void decode(bufferlist::iterator &bl);
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<EMetaBlob::fullbit*>& ls);
     void update_inode(MDS *mds, CInode *in);
 
-    void print(ostream& out) {
+    void print(ostream& out) const {
       out << " fullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " inode " << inode.ino
 	  << " dirty=" << dirty << std::endl;
@@ -187,39 +152,18 @@ public:
       ::encode(dr, _enc);
     }
     remotebit(bufferlist::iterator &p) { decode(p); }
-    remotebit() {}
+    remotebit(): dnfirst(0), dnlast(0), dnv(0), ino(0),
+	d_type('\0'), dirty(false) {}
 
-    void encode(bufferlist& bl) const {
-      __u8 struct_v = 1;
-      ::encode(struct_v, bl);
-      assert(_enc.length());
-      bl.append(_enc);
-      /*
-      ::encode(dn, bl);
-      ::encode(dnfirst, bl);
-      ::encode(dnlast, bl);
-      ::encode(dnv, bl);
-      ::encode(ino, bl);
-      ::encode(d_type, bl);
-      ::encode(dirty, bl);
-      */
-    }
-    void decode(bufferlist::iterator &bl) {
-      __u8 struct_v;
-      ::decode(struct_v, bl);
-      ::decode(dn, bl);
-      ::decode(dnfirst, bl);
-      ::decode(dnlast, bl);
-      ::decode(dnv, bl);
-      ::decode(ino, bl);
-      ::decode(d_type, bl);
-      ::decode(dirty, bl);
-    }
-    void print(ostream& out) {
+    void encode(bufferlist& bl) const;
+    void decode(bufferlist::iterator &bl);
+    void print(ostream& out) const {
       out << " remotebit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " ino " << ino
 	  << " dirty=" << dirty << std::endl;
     }
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<remotebit*>& ls);
   };
   WRITE_CLASS_ENCODER(remotebit)
 
@@ -244,30 +188,12 @@ public:
       ::encode(dr, _enc);
     }
     nullbit(bufferlist::iterator &p) { decode(p); }
-    nullbit() {}
+    nullbit(): dnfirst(0), dnlast(0), dnv(0), dirty(false) {}
 
-    void encode(bufferlist& bl) const {
-      __u8 struct_v = 1;
-      ::encode(struct_v, bl);
-      assert(_enc.length());
-      bl.append(_enc);
-      /*
-      ::encode(dn, bl);
-      ::encode(dnfirst, bl);
-      ::encode(dnlast, bl);
-      ::encode(dnv, bl);
-      ::encode(dirty, bl);
-      */
-    }
-    void decode(bufferlist::iterator &bl) {
-      __u8 struct_v;
-      ::decode(struct_v, bl);
-      ::decode(dn, bl);
-      ::decode(dnfirst, bl);
-      ::decode(dnlast, bl);
-      ::decode(dnv, bl);
-      ::decode(dirty, bl);
-    }
+    void encode(bufferlist& bl) const;
+    void decode(bufferlist::iterator &bl);
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<nullbit*>& ls);
     void print(ostream& out) {
       out << " nullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " dirty=" << dirty << std::endl;
@@ -300,11 +226,11 @@ public:
   public:
     dirlump() : state(0), nfull(0), nremote(0), nnull(0), dn_decoded(true) { }
     
-    bool is_complete() { return state & STATE_COMPLETE; }
+    bool is_complete() const { return state & STATE_COMPLETE; }
     void mark_complete() { state |= STATE_COMPLETE; }
-    bool is_dirty() { return state & STATE_DIRTY; }
+    bool is_dirty() const { return state & STATE_DIRTY; }
     void mark_dirty() { state |= STATE_DIRTY; }
-    bool is_new() { return state & STATE_NEW; }
+    bool is_new() const { return state & STATE_NEW; }
     void mark_new() { state |= STATE_NEW; }
     bool is_importing() { return state & STATE_IMPORTING; }
     void mark_importing() { state |= STATE_IMPORTING; }
@@ -327,7 +253,26 @@ public:
 	p->print(out);
     }
 
+    string state_string() const {
+      string state_string;
+      bool marked_already = false;
+      if (is_complete()) {
+	state_string.append("complete");
+	marked_already = true;
+      }
+      if (is_dirty()) {
+	state_string.append(marked_already ? "+dirty" : "dirty");
+	marked_already = true;
+      }
+      if (is_new()) {
+	state_string.append(marked_already ? "+new" : "new");
+      }
+      return state_string;
+    }
+
+    // if this changes, update the versioning in encode for it!
     void _encode_bits() const {
+      if (!dn_decoded) return;
       ::encode(dfull, dnbl);
       ::encode(dremote, dnbl);
       ::encode(dnull, dnbl);
@@ -341,28 +286,10 @@ public:
       dn_decoded = true;
     }
 
-    void encode(bufferlist& bl) const {
-      __u8 struct_v = 1;
-      ::encode(struct_v, bl);
-      ::encode(fnode, bl);
-      ::encode(state, bl);
-      ::encode(nfull, bl);
-      ::encode(nremote, bl);
-      ::encode(nnull, bl);
-      _encode_bits();
-      ::encode(dnbl, bl);
-    }
-    void decode(bufferlist::iterator &bl) {
-      __u8 struct_v;
-      ::decode(struct_v, bl);
-      ::decode(fnode, bl);
-      ::decode(state, bl);
-      ::decode(nfull, bl);
-      ::decode(nremote, bl);
-      ::decode(nnull, bl);
-      ::decode(dnbl, bl);
-      dn_decoded = false;      // don't decode bits unless we need them.
-    }
+    void encode(bufferlist& bl) const;
+    void decode(bufferlist::iterator &bl);
+    void dump(Formatter *f) const;
+    static void generate_test_instances(list<dirlump*>& ls);
   };
   WRITE_CLASS_ENCODER(dirlump)
 
@@ -397,70 +324,10 @@ private:
   list<pair<metareqid_t,uint64_t> > client_reqs;
 
  public:
-  void encode(bufferlist& bl) const {
-    __u8 struct_v = 4;
-    ::encode(struct_v, bl);
-    ::encode(lump_order, bl);
-    ::encode(lump_map, bl);
-    ::encode(roots, bl);
-    ::encode(table_tids, bl);
-    ::encode(opened_ino, bl);
-    ::encode(allocated_ino, bl);
-    ::encode(used_preallocated_ino, bl);
-    ::encode(preallocated_inos, bl);
-    ::encode(client_name, bl);
-    ::encode(inotablev, bl);
-    ::encode(sessionmapv, bl);
-    ::encode(truncate_start, bl);
-    ::encode(truncate_finish, bl);
-    ::encode(destroyed_inodes, bl);
-    ::encode(client_reqs, bl);
-    ::encode(renamed_dirino, bl);
-    ::encode(renamed_dir_frags, bl);
-  } 
-  void decode(bufferlist::iterator &bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    ::decode(lump_order, bl);
-    ::decode(lump_map, bl);
-    if (struct_v >= 4) {
-      ::decode(roots, bl);
-    } else {
-      bufferlist rootbl;
-      ::decode(rootbl, bl);
-      if (rootbl.length()) {
-	bufferlist::iterator p = rootbl.begin();
-	roots.push_back(std::tr1::shared_ptr<fullbit>(new fullbit(p)));
-      }
-    }
-    ::decode(table_tids, bl);
-    ::decode(opened_ino, bl);
-    ::decode(allocated_ino, bl);
-    ::decode(used_preallocated_ino, bl);
-    ::decode(preallocated_inos, bl);
-    ::decode(client_name, bl);
-    ::decode(inotablev, bl);
-    ::decode(sessionmapv, bl);
-    ::decode(truncate_start, bl);
-    ::decode(truncate_finish, bl);
-    ::decode(destroyed_inodes, bl);
-    if (struct_v >= 2) {
-      ::decode(client_reqs, bl);
-    } else {
-      list<metareqid_t> r;
-      ::decode(r, bl);
-      while (!r.empty()) {
-	client_reqs.push_back(pair<metareqid_t,uint64_t>(r.front(), 0));
-	r.pop_front();
-      }
-    }
-    if (struct_v >= 3) {
-      ::decode(renamed_dirino, bl);
-      ::decode(renamed_dir_frags, bl);
-    }
-  }
-
-
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<EMetaBlob*>& ls);
   // soft stateadd
   uint64_t last_subtree_map;
   uint64_t my_offset;
@@ -562,7 +429,7 @@ private:
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
     inode_t *pi = in->get_projected_inode();
-    default_file_layout *default_layout = NULL;
+    file_layout_policy_t *default_layout = NULL;
     if (in->is_dir())
       default_layout = (in->get_projected_node() ?
                            in->get_projected_node()->dir_layout :
@@ -611,7 +478,7 @@ private:
     if (!pdft) pdft = &in->dirfragtree;
     if (!px) px = &in->xattrs;
 
-    default_file_layout *default_layout = NULL;
+    file_layout_policy_t *default_layout = NULL;
     if (in->is_dir())
       default_layout = (in->get_projected_node() ?
                            in->get_projected_node()->dir_layout :

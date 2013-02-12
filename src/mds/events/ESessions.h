@@ -26,26 +26,27 @@ protected:
 
 public:
   map<client_t,entity_inst_t> client_map;
+  bool old_style_encode;
 
-  ESessions() : LogEvent(EVENT_SESSIONS) { }
+  ESessions() : LogEvent(EVENT_SESSIONS), old_style_encode(false) { }
   ESessions(version_t pv, map<client_t,entity_inst_t>& cm) :
     LogEvent(EVENT_SESSIONS),
-    cmapv(pv) {
+    cmapv(pv),
+    old_style_encode(false) {
     client_map.swap(cm);
   }
-  
-  void encode(bufferlist &bl) const {
-    ::encode(client_map, bl);
-    ::encode(cmapv, bl);
-    ::encode(stamp, bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    ::decode(client_map, bl);
-    ::decode(cmapv, bl);
-    if (!bl.end())
-      ::decode(stamp, bl);
-  }
 
+  void mark_old_encoding() { old_style_encode = true; }
+
+  void encode(bufferlist &bl) const;
+  void decode_old(bufferlist::iterator &bl);
+  void decode_new(bufferlist::iterator &bl);
+  void decode(bufferlist::iterator &bl) {
+    if (old_style_encode) decode_old(bl);
+    else decode_new(bl);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ESessions*>& ls);
 
   void print(ostream& out) {
     out << "ESessions " << client_map.size() << " opens cmapv " << cmapv;
