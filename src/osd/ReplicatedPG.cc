@@ -6256,6 +6256,11 @@ void ReplicatedPG::on_shutdown()
   remove_watchers_and_notifies();
 }
 
+void ReplicatedPG::on_flushed()
+{
+  assert(object_contexts.empty());
+}
+
 void ReplicatedPG::on_activate()
 {
   for (unsigned i = 1; i<acting.size(); i++) {

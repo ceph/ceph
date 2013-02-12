@@ -1916,6 +1916,7 @@ public:
   virtual void on_role_change() = 0;
   virtual void on_change() = 0;
   virtual void on_activate() = 0;
+  virtual void on_flushed() = 0;
   virtual void on_shutdown() = 0;
   virtual void remove_watchers_and_notifies() = 0;
 
