@@ -13,14 +13,15 @@ Makefile
 /ceph-coverage
 /ceph-debugpack
 /ceph-dencoder
+/ceph-filestore-dump
 /ceph-fuse
 /ceph-mds
 /ceph-mon
 /ceph-osd
 /ceph-syn
+/ceph.conf
 /ceph_bench_log
 /ceph_dupstore
-/ceph_filestore_dump
 /ceph_multi_stress_watch
 /ceph_psim
 /ceph_radosacl
@@ -41,6 +42,7 @@ Makefile
 /ceph_ver.h
 /dev
 /init-ceph
+/keyring
 /librados-config
 /massif.out.*
 /mkcephfs
