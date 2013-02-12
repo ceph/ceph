@@ -554,7 +554,7 @@ public:
 	return;
     lsubdout(cct, ms, 0) << "ms_deliver_dispatch: unhandled message " << m << " " << *m << " from "
 			 << m->get_source_inst() << dendl;
-    assert(!cct->_conf->ms_die_on_unexpected_msg);
+    assert(!cct->_conf->ms_die_on_unhandled_msg);
     m->put();
   }
   /**
