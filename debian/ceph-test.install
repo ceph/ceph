@@ -41,3 +41,4 @@ usr/bin/testrados_watch_notify
 usr/bin/testsignal_handlers
 usr/bin/testtimers
 usr/bin/xattr_bench
+usr/bin/ceph-coverage
