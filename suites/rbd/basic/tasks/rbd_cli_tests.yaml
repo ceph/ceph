@@ -1,0 +1,8 @@
+tasks:
+- ceph:
+- ceph-fuse:
+- workunit:
+    clients:
+      client.0:
+        - rbd/run_cli_tests.sh
+
