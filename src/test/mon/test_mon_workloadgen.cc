@@ -477,7 +477,7 @@ class OSDStub : public TestStub
   }
 
   void auto_create_pgs() {
-    bool has_pgs = (pgs.size() > 0);
+    bool has_pgs = !pgs.empty();
     dout(10) << __func__
 	     << ": " << (has_pgs ? "has pgs; ignore" : "create pgs") << dendl;
     if (has_pgs)
@@ -585,7 +585,7 @@ class OSDStub : public TestStub
   void modify_pgs() {
     dout(10) << __func__ << dendl;
 
-    if (pgs.size() == 0) {
+    if (pgs.empty()) {
       dout(1) << __func__
 	      << " no pgs available! don't attempt to modify." << dendl;
       return;
@@ -654,7 +654,7 @@ class OSDStub : public TestStub
     dout(10) << __func__ << dendl;
 
     modify_pgs();
-    if (pgs_changes.size() > 0)
+    if (!pgs_changes.empty())
       send_pg_stats();
     monc.sub_want("osd_pg_creates", 0, CEPH_SUBSCRIBE_ONETIME);
     monc.renew_subs();
@@ -1033,7 +1033,7 @@ int main(int argc, const char *argv[])
     }
   }
 
-  if (stub_ids.size() == 0) {
+  if (stub_ids.empty()) {
     std::cerr << "** error: must specify at least one '--stub-id <ID>'"
          << std::endl;
     usage();
