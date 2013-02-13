@@ -217,7 +217,7 @@ int RGWGC::process(int index, int max_secs)
   } while (truncated);
 
 done:
-  if (remove_tags.size())
+  if (!remove_tags.empty())
     remove(index, remove_tags);
   l.unlock(&store->gc_pool_ctx, obj_names[index]);
   delete ctx;
