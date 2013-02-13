@@ -28,13 +28,26 @@ CEPH_SHA1=`wget http://gitbuilder.ceph.com/ceph-tarball-precise-x86_64-$flavor/r
 [ -z "$KERNEL_SHA1" ] && echo "kernel branch $kernel dne" && exit 1
 [ -z "$CEPH_SHA1" ] && echo "ceph branch $ceph dne" && exit 1
 
-if wget http://github.com/ceph/s3-tests/tree/$ceph -O- 2>/dev/null >/dev/null ; then
+
+if wget http://github.com/ceph/s3-tests/tree/$teuthology_branch -O- 2>/dev/null >/dev/null ; then
+    s3branch=$teuthology_branch
+elif wget http://github.com/ceph/s3-tests/tree/$ceph -O- 2>/dev/null >/dev/null ; then
     s3branch=$ceph
 else
     echo "branch $ceph not in s3-tests.git; will use master for s3tests"
     s3branch='master'
 fi
+echo "s3branch $s3branch"
 
+if [ -z "$teuthology_branch" ]; then
+    if wget http://github.com/ceph/teuthology/tree/$ceph -O- 2>/dev/null >/dev/null ; then
+        teuthology_branch=$ceph
+    else
+        echo "branch $ceph not in teuthology.git; will use master for teuthology"
+        teuthology_branch='master'
+    fi
+fi
+echo "teuthology branch $teuthology_branch"
 
 ## always include this
 fn="/tmp/schedule.suite.$$"
@@ -73,14 +86,7 @@ fi
 stamp=`date +%Y-%m-%d_%H:%M:%S`
 name=`whoami`"-$stamp-$suite-$ceph-$kernel-$flavor"
 
-if [ -z "$teuthology_branch" ]; then
-    if wget http://github.com/ceph/teuthology/tree/$ceph -O- 2>/dev/null >/dev/null ; then
-        teuthology_branch=$ceph
-    else
-        echo "branch $ceph not in teuthology.git; will use master for teuthology"
-        teuthology_branch='master'
-    fi
-fi
+echo "name $name"
 
 ~/src/teuthology/virtualenv/bin/teuthology-suite -v $fn \
     --collections ~/src/ceph-qa-suite/suites/$suite/* \
