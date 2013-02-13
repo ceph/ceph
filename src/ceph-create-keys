@@ -190,6 +190,7 @@ def main():
 
     wait_for_quorum(cluster=args.cluster, mon_id=args.id)
     get_key(cluster=args.cluster, mon_id=args.id)
+
     bootstrap_key(
         cluster=args.cluster,
         type_='osd',
@@ -198,6 +199,17 @@ def main():
                 'allow command osd create ...',
                 'allow command osd crush set ...',
                 r'allow command auth add * osd allow\ * mon allow\ rwx',
+                'allow command mon getmap',
+                ],
+            ),
+        )
+
+    bootstrap_key(
+        cluster=args.cluster,
+        type_='mds',
+        caps=dict(
+            mon=[
+                r'allow command auth get-or-create * osd allow\ * mds allow mon allow\ rwx',
                 'allow command mon getmap',
                 ],
             ),

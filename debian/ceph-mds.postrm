@@ -1,5 +1,5 @@
 #!/bin/sh
-# postrm script for ceph
+# postrm script for ceph-mds
 #
 # see: dh_installdeb(1)
 
@@ -24,15 +24,11 @@ case "$1" in
     ;;
 
     purge)
-	rm -rf /var/log/ceph 
-	rm -rf /etc/ceph
-
-	# be a little careful, here: unmount anything beneath here before removing it.
-	rm -rf --one-file-system -- /var/lib/ceph || true
-	if [ -d /var/lib/ceph ]; then
-	    find /var/lib/ceph -mindepth 1 -maxdepth 2 -type d -exec umount \{\} \;
+	rm -rf --one-file-system -- /var/lib/ceph/mds || true
+	if [ -d /var/lib/ceph/mds ]; then
+	    find /var/lib/ceph/mds -mindepth 1 -maxdepth 1 -type d -exec umount \{\} \;
 	fi
-	rm -rf --one-file-system -- /var/lib/ceph
+	rm -rf --one-file-system -- /var/lib/ceph/mds
     ;;
 
     upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
@@ -50,5 +46,3 @@ esac
 #DEBHELPER#
 
 exit 0
-
-
