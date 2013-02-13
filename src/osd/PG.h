@@ -427,6 +427,9 @@ public:
   static string get_info_key(pg_t pgid) {
     return stringify(pgid) + "_info";
   }
+  static string get_biginfo_key(pg_t pgid) {
+    return stringify(pgid) + "_biginfo";
+  }
   static string get_epoch_key(pg_t pgid) {
     return stringify(pgid) + "_epoch";
   }
@@ -1795,7 +1798,7 @@ public:
   static int read_info(
     ObjectStore *store, const coll_t coll,
     bufferlist &bl, pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals,
-    hobject_t &biginfo_oid, hobject_t &infos_oid, hobject_t &biginfos_oid,
+    hobject_t &biginfo_oid, hobject_t &infos_oid,
     interval_set<snapid_t>  &snap_collections, __u8 &);
   void read_state(ObjectStore *store, bufferlist &bl);
   static epoch_t peek_map_epoch(ObjectStore *store, coll_t coll,
