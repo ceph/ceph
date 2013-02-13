@@ -2345,18 +2345,16 @@ void PG::write_info(ObjectStore::Transaction& t)
   ::encode(info, v[get_info_key(info.pgid)]);
   purged_snaps.swap(info.purged_snaps);
 
-  t.omap_setkeys(coll_t::META_COLL, osd->infos_oid, v);
- 
   if (dirty_big_info) {
     // potentially big stuff
-    v.clear();
-    bufferlist& bigbl = v[get_info_key(info.pgid)];
+    bufferlist& bigbl = v[get_biginfo_key(info.pgid)];
     ::encode(past_intervals, bigbl);
     ::encode(snap_collections, bigbl);
     ::encode(info.purged_snaps, bigbl);
     dout(20) << "write_info bigbl " << bigbl.length() << dendl;
-    t.omap_setkeys(coll_t::META_COLL, osd->biginfos_oid, v);
   }
+
+  t.omap_setkeys(coll_t::META_COLL, osd->infos_oid, v);
 
   dirty_info = false;
   dirty_big_info = false;
@@ -2647,7 +2645,7 @@ std::string PG::get_corrupt_pg_log_name() const
 int PG::read_info(
   ObjectStore *store, const coll_t coll, bufferlist &bl,
   pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals,
-  hobject_t &biginfo_oid, hobject_t &infos_oid, hobject_t &biginfos_oid,
+  hobject_t &biginfo_oid, hobject_t &infos_oid,
   interval_set<snapid_t>  &snap_collections, __u8 &struct_v)
 {
   bufferlist::iterator p = bl.begin();
@@ -2674,20 +2672,18 @@ int PG::read_info(
     } else {
       // get info out of leveldb
       string k = get_info_key(info.pgid);
+      string bk = get_biginfo_key(info.pgid);
       set<string> keys;
       keys.insert(k);
+      keys.insert(bk);
       map<string,bufferlist> values;
       store->omap_get_values(coll_t::META_COLL, infos_oid, keys, &values);
-      assert(values.size() == 1);
+      assert(values.size() == 2);
       lbl = values[k];
       p = lbl.begin();
       ::decode(info, p);
 
-      // biginfo
-      values.clear();
-      store->omap_get_values(coll_t::META_COLL, biginfos_oid, keys, &values);
-      assert(values.size() == 1);
-      lbl = values[k];
+      lbl = values[bk];
       p = lbl.begin();
       ::decode(past_intervals, p);
     }
@@ -2715,7 +2711,7 @@ int PG::read_info(
 void PG::read_state(ObjectStore *store, bufferlist &bl)
 {
   int r = read_info(store, coll, bl, info, past_intervals, biginfo_oid,
-    osd->infos_oid, osd->biginfos_oid, snap_collections, info_struct_v);
+    osd->infos_oid, snap_collections, info_struct_v);
   assert(r >= 0);
 
   try {

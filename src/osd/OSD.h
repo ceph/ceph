@@ -169,7 +169,7 @@ public:
   ObjectStore *&store;
   LogClient &clog;
   PGRecoveryStats &pg_recovery_stats;
-  hobject_t infos_oid, biginfos_oid;
+  hobject_t infos_oid;
 private:
   Messenger *&cluster_messenger;
   Messenger *&client_messenger;
