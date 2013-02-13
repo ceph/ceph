@@ -249,7 +249,7 @@ static int do_copy(IoCtx& io_ctx, const char *objname, IoCtx& target_ctx, const 
   for (iter = attrset.begin(); iter != attrset.end(); ++iter) {
     write_op.setxattr(iter->first.c_str(), iter->second);
   }
-  if (omap.size()) {
+  if (!omap.empty()) {
     write_op.omap_set(omap);
   }
   ret = target_ctx.operate(target_oid, &write_op);
@@ -283,7 +283,7 @@ static int do_copy(IoCtx& io_ctx, const char *objname, IoCtx& target_ctx, const 
     if (ret < 0)
       goto err;
 
-    if (!omap.size())
+    if (omap.empty())
       break;
 
     ret = target_ctx.omap_set(target_oid, omap);
