@@ -1780,7 +1780,8 @@ public:
   void write_if_dirty(ObjectStore::Transaction& t);
 
   void add_log_entry(pg_log_entry_t& e, bufferlist& log_bl);
-  void append_log(vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t);
+  void append_log(
+    vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t);
 
   static void read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
     const pg_info_t &info, OndiskLog &ondisklog, IndexedLog &log,
@@ -1791,9 +1792,11 @@ public:
   void trim_peers();
 
   std::string get_corrupt_pg_log_name() const;
-  static int read_info(ObjectStore *store, const coll_t coll,
-    bufferlist &bl, pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals, hobject_t &biginfo_oid,
-    hobject_t &infos_oid, hobject_t &biginfos_oid, interval_set<snapid_t>  &snap_collections, __u8 &);
+  static int read_info(
+    ObjectStore *store, const coll_t coll,
+    bufferlist &bl, pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals,
+    hobject_t &biginfo_oid, hobject_t &infos_oid, hobject_t &biginfos_oid,
+    interval_set<snapid_t>  &snap_collections, __u8 &);
   void read_state(ObjectStore *store, bufferlist &bl);
   static epoch_t peek_map_epoch(ObjectStore *store, coll_t coll,
                                hobject_t &infos_oid, bufferlist *bl);

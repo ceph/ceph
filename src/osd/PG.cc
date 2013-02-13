@@ -2530,7 +2530,8 @@ void PG::add_log_entry(pg_log_entry_t& e, bufferlist& log_bl)
 }
 
 
-void PG::append_log(vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t)
+void PG::append_log(
+  vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t)
 {
   dout(10) << "append_log " << log << " " << logv << dendl;
 
@@ -2643,10 +2644,11 @@ std::string PG::get_corrupt_pg_log_name() const
   return buf;
 }
 
-int PG::read_info(ObjectStore *store, const coll_t coll, bufferlist &bl,
-  pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals, hobject_t &biginfo_oid,
-  hobject_t &infos_oid, hobject_t &biginfos_oid, interval_set<snapid_t>  &snap_collections,
-  __u8 &struct_v)
+int PG::read_info(
+  ObjectStore *store, const coll_t coll, bufferlist &bl,
+  pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals,
+  hobject_t &biginfo_oid, hobject_t &infos_oid, hobject_t &biginfos_oid,
+  interval_set<snapid_t>  &snap_collections, __u8 &struct_v)
 {
   bufferlist::iterator p = bl.begin();
   bufferlist lbl;
