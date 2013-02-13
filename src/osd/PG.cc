@@ -2340,11 +2340,9 @@ void PG::write_info(ObjectStore::Transaction& t)
   // info.  store purged_snaps separately.
   interval_set<snapid_t> purged_snaps;
   map<string,bufferlist> v;
-  string k = stringify(info.pgid) + string("_info");
-  string ek = stringify(info.pgid) + string("_epoch");
-  ::encode(get_osdmap()->get_epoch(), v[ek]);
+  ::encode(get_osdmap()->get_epoch(), v[get_epoch_key(info.pgid)]);
   purged_snaps.swap(info.purged_snaps);
-  ::encode(info, v[k]);
+  ::encode(info, v[get_info_key(info.pgid)]);
   purged_snaps.swap(info.purged_snaps);
 
   t.omap_setkeys(coll_t::META_COLL, osd->infos_oid, v);
@@ -2352,7 +2350,7 @@ void PG::write_info(ObjectStore::Transaction& t)
   if (dirty_big_info) {
     // potentially big stuff
     v.clear();
-    bufferlist& bigbl = v[k];
+    bufferlist& bigbl = v[get_info_key(info.pgid)];
     ::encode(past_intervals, bigbl);
     ::encode(snap_collections, bigbl);
     ::encode(info.purged_snaps, bigbl);
@@ -2383,9 +2381,9 @@ epoch_t PG::peek_map_epoch(ObjectStore *store, coll_t coll, hobject_t &infos_oid
   } else {
     // get epoch out of leveldb
     bufferlist tmpbl;
-    string ek = stringify(pgid) + string("_epoch");
+    string ek = get_epoch_key(pgid);
     set<string> keys;
-    keys.insert(ek);
+    keys.insert(get_epoch_key(pgid));
     map<string,bufferlist> values;
     store->omap_get_values(coll_t::META_COLL, infos_oid, keys, &values);
     assert(values.size() == 1);
@@ -2673,7 +2671,7 @@ int PG::read_info(ObjectStore *store, const coll_t coll, bufferlist &bl,
       ::decode(past_intervals, p);
     } else {
       // get info out of leveldb
-      string k = stringify(info.pgid) + string("_info");
+      string k = get_info_key(info.pgid);
       set<string> keys;
       keys.insert(k);
       map<string,bufferlist> values;
