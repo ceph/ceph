@@ -1175,7 +1175,7 @@ void CDir::add_waiter(uint64_t tag, Context *c)
 /* NOTE: this checks dentry waiters too */
 void CDir::take_waiting(uint64_t mask, list<Context*>& ls)
 {
-  if ((mask & WAIT_DENTRY) && waiting_on_dentry.size()) {
+  if ((mask & WAIT_DENTRY) && !waiting_on_dentry.empty()) {
     // take all dentry waiters
     while (!waiting_on_dentry.empty()) {
       map<string_snap_t, list<Context*> >::iterator p = waiting_on_dentry.begin(); 
