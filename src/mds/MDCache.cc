@@ -10581,6 +10581,7 @@ C_MDS_RetryRequest::C_MDS_RetryRequest(MDCache *c, MDRequest *r)
 
 void C_MDS_RetryRequest::finish(int r)
 {
+  mdr->retry++;
   cache->dispatch_request(mdr);
   mdr->put();
 }
