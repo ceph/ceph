@@ -760,7 +760,7 @@ void CInode::make_path_string_projected(string& s)
 {
   make_path_string(s);
   
-  if (projected_parent.size()) {
+  if (!projected_parent.empty()) {
     string q;
     q.swap(s);
     s = "{" + q;
@@ -805,7 +805,7 @@ void CInode::name_stray_dentry(string& dname)
 version_t CInode::pre_dirty()
 {
   version_t pv; 
-  if (parent || projected_parent.size()) {
+  if (parent || !projected_parent.empty()) {
     pv = get_projected_parent_dn()->pre_dirty(get_projected_version());
     dout(10) << "pre_dirty " << pv << " (current v " << inode.version << ")" << dendl;
   } else {
@@ -1443,7 +1443,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	  dir->fnode.rstat = rstat;
 	  dir->fnode.accounted_rstat = accounted_rstat;
 	  dir->dirty_old_rstat.swap(dirty_old_rstat);
-	  if (!(rstat == accounted_rstat) || dir->dirty_old_rstat.size()) {
+	  if (!(rstat == accounted_rstat) || !dir->dirty_old_rstat.empty()) {
 	    dout(10) << fg << " setting nestlock updated flag" << dendl;
 	    nestlock.mark_dirty();  // ok bc we're auth and caller will handle
 	  }
