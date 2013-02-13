@@ -126,6 +126,7 @@ public:
     }
     if (inited) {
       client->shutdown();
+      inited = false;
     }
     if (messenger) {
       messenger->shutdown();
