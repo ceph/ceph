@@ -109,7 +109,7 @@ int main(int argc, const char **argv)
   uint64_t stat_size;
   time_t stat_mtime;
   r = io_ctx.stat(oid, &stat_size, &stat_mtime);
-  cout << "io_ctx.stat size = " << stat_size << " mtime = " << stat_mtime << std::endl;
+  cout << "io_ctx.stat returned " << r << " size = " << stat_size << " mtime = " << stat_mtime << std::endl;
 
   r = io_ctx.stat(oid, NULL, NULL);
   cout << "io_ctx.stat(does_not_exist) = " << r;
@@ -205,8 +205,9 @@ int main(int argc, const char **argv)
   cout << "sha1 result=" << sha1_str << std::endl;
 
   r = io_ctx.exec(oid, "acl", "set", bl, bl2);
+  cout << "exec (set) returned " << r << std::endl;
   r = io_ctx.exec(oid, "acl", "get", bl, bl2);
-  cout << "exec returned " << r << std::endl;
+  cout << "exec (get) returned " << r << std::endl;
   if (bl2.length() > 0) {
     cout << "attr=" << bl2.c_str() << std::endl;
   }
