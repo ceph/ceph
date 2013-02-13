@@ -15,15 +15,15 @@ Ceph's object store is production ready. Large-scale storage systems (i.e.,
 petabytes of data) use Ceph's RESTful object store, which provides APIs
 compatible with Amazon's S3 and OpenStack's Swift.  Many deployments also use
 the Ceph block device, including deployments of  OpenStack and CloudStack.
-`Inktank`_ provides commercial support for the Ceph object store,  RESTful
-interfaces and block devices.
+`Inktank`_ provides commercial support for the Ceph object store, RESTful
+interfaces, block devices and CephFS with running a single metadata server.
 
 The CephFS POSIX-compliant filesystem is functionally complete and has been
 evaluated by a large community of users. There are production systems using
 CephFS with a single metadata server. The Ceph community is actively testing
-clusters with multiple metadata servers for quality assurance. Once Ceph's
-filesystem running multiple metadata servres passes QA muster, `Inktank`_  will
-provide commercial support for CephFS with multiple metadata servers.
+clusters with multiple metadata servers for quality assurance. Once CephFS
+passes QA muster when running with multiple metadata servers, `Inktank`_ will
+provide commercial support for CephFS with multiple metadata servers, too.
 
 .. _Inktank: http://inktank.com
 
