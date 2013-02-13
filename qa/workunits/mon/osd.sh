@@ -16,7 +16,7 @@ test $nb -ne $na
 ceph osd rm $na
 ceph osd rm $na
 ceph osd rm $nb
-ceph osd rm 123123
+ceph osd rm 1000
 
 na2=`ceph osd create $ua`
 
