@@ -1777,8 +1777,10 @@ public:
   // pg on-disk state
   void do_pending_flush();
 
+private:
   void write_info(ObjectStore::Transaction& t);
   void write_log(ObjectStore::Transaction& t);
+public:
 
   void write_if_dirty(ObjectStore::Transaction& t);
 

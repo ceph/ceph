@@ -1769,7 +1769,8 @@ void PG::_activate_committed(epoch_t e)
 
   if (dirty_info) {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    write_info(*t);
+    dirty_info = true;
+    write_if_dirty(*t);
     int tr = osd->store->queue_transaction(osr.get(), t);
     assert(tr == 0);
   }
@@ -2318,8 +2319,10 @@ void PG::init(int role, vector<int>& newup, vector<int>& newacting, pg_history_t
 
   reg_next_scrub();
 
-  write_info(*t);
-  write_log(*t);
+  dirty_info = true;
+  dirty_big_info = true;
+  dirty_log = true;
+  write_if_dirty(*t);
 }
 
 void PG::write_info(ObjectStore::Transaction& t)
@@ -2431,7 +2434,7 @@ void PG::write_log(ObjectStore::Transaction& t)
 
 void PG::write_if_dirty(ObjectStore::Transaction& t)
 {
-  if (dirty_info)
+  if (dirty_big_info || dirty_info)
     write_info(t);
   if (dirty_log)
     write_log(t);
@@ -2555,7 +2558,8 @@ void PG::append_log(
   trim(t, trim_to);
 
   // update the local pg, pg log
-  write_info(t);
+  dirty_info = true;
+  write_if_dirty(t);
 }
 
 bool PG::check_log_for_corruption(ObjectStore *store)
@@ -2740,7 +2744,8 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
     t.create_collection(cr_log_coll);
     t.collection_move(cr_log_coll, coll_t::META_COLL, log_oid);
     t.touch(coll_t::META_COLL, log_oid);
-    write_info(t);
+    dirty_info = true;
+    write_if_dirty(t);
     store->apply_transaction(t);
 
     info.last_backfill = hobject_t();
@@ -2791,8 +2796,10 @@ coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
   coll_t c(info.pgid, s);
   if (!snap_collections.contains(s)) {
     snap_collections.insert(s);
-    write_info(t);
-    dout(10) << "create_snap_collection " << c << ", set now " << snap_collections << dendl;
+    dirty_big_info = true;
+    write_if_dirty(t);
+    dout(10) << "create_snap_collection " << c << ", set now "
+	     << snap_collections << dendl;
     t.create_collection(c);
   }
   return c;
@@ -4311,7 +4318,8 @@ void PG::scrub_finish() {
 
   {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    write_info(*t);
+    dirty_info = true;
+    write_if_dirty(*t);
     int tr = osd->store->queue_transaction(osr.get(), t);
     assert(tr == 0);
   }
