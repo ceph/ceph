@@ -1495,7 +1495,7 @@ int FileStore::mount()
     }
 
     dout(0) << "mount found snaps " << snaps << dendl;
-    if (cluster_snaps.size())
+    if (!cluster_snaps.empty())
       dout(0) << "mount found cluster snaps " << cluster_snaps << dendl;
   }
 
@@ -3751,7 +3751,7 @@ int FileStore::getattr(coll_t cid, const hobject_t& oid, const char *name, buffe
       dout(10) << __func__ << " get_xattrs err r =" << r << dendl;
       goto out;
     }
-    if (!got.size()) {
+    if (got.empty()) {
       dout(10) << __func__ << " got.size() is 0" << dendl;
       return -ENODATA;
     }
@@ -4307,7 +4307,7 @@ bool FileStore::collection_empty(coll_t c)
     assert(!m_filestore_fail_eio || r != -EIO);
     return false;
   }
-  return ls.size() > 0;
+  return !ls.empty();
 }
 
 int FileStore::collection_list_range(coll_t c, hobject_t start, hobject_t end,
@@ -4328,11 +4328,11 @@ int FileStore::collection_list_range(coll_t c, hobject_t start, hobject_t end,
     ls->insert(ls->end(), next_objects.begin(), next_objects.end());
 
     // special case for empty collection
-    if (ls->size() == 0) {
+    if (ls->empty()) {
       break;
     }
 
-    while (ls->size() > 0 && ls->back() >= end) {
+    while (!ls->empty() && ls->back() >= end) {
       ls->pop_back();
       done = true;
     }
