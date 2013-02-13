@@ -134,7 +134,7 @@ static int cls_rc_refcount_put(cls_method_context_t hctx, bufferlist *in, buffer
   if (ret < 0)
     return ret;
 
-  if (!objr.refs.size()) {// shouldn't happen!
+  if (objr.refs.empty()) {// shouldn't happen!
     CLS_LOG(0, "ERROR: cls_rc_refcount_put() was called without any references!\n");
     return -EINVAL;
   }
@@ -157,7 +157,7 @@ static int cls_rc_refcount_put(cls_method_context_t hctx, bufferlist *in, buffer
 
   objr.refs.erase(iter);
 
-  if (!objr.refs.size()) {
+  if (objr.refs.empty()) {
     return cls_cxx_remove(hctx);
   }
 
