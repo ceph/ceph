@@ -100,18 +100,19 @@ To configure Ceph for use with ``libvirt``, perform the following steps:
 
 	ceph osd lspools
 
-#. `Create a user`_ (or use ``client.admin`` for version 0.9.7 and earlier).
-   The following example uses the user name ``client.libvirt`` and references
+#. `Create a Ceph Name`_ (or use ``client.admin`` for version 0.9.7 and earlier).
+   The following example uses the Ceph name ``client.libvirt`` and references
    ``libvirt-pool``. ::
 
 	ceph auth get-or-create client.libvirt mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=libvirt-pool'
 	
-   Verify the user exists. :: 
+   Verify the name exists. :: 
    
 	ceph auth list
 
    **NOTE**: ``libvirt`` will access Ceph using the ID ``libvirt``, 
-   not username ``client.libvirt``.	
+   not the Ceph name ``client.libvirt``. See `Cephx Commandline`_ for detailed
+   explanation of the difference between ID and name.	
 
 #. Use QEMU to `create an image`_ in your RBD pool. 
    The following example uses the image name ``new-libvirt-image``
@@ -156,7 +157,7 @@ To create a VM with ``virt-manager``, perform the following steps:
 #. Name the new virtual machine domain. In the exemplary embodiment, we
    use the name ``libvirt-virtual-machine``. You may use any name you wish,
    but ensure you replace ``libvirt-virtual-machine`` with the name you 
-   choose in subsequent examples. :: 
+   choose in subsequent commandline and configuration examples. :: 
 
 	libvirt-virtual-machine
 
@@ -171,7 +172,7 @@ To create a VM with ``virt-manager``, perform the following steps:
 
 #. You may use ``virsh list`` to verify the VM domain exists. ::
 
-	sudo virst list
+	sudo virsh list
 
 #. Login to the VM (root/root)
 
@@ -184,13 +185,13 @@ Configuring the VM
 When configuring the VM for use with Ceph, it is important  to use ``virsh``
 where appropriate. Additionally, ``virsh`` commands often require root
 privileges  (i.e., ``sudo``) and will not return appropriate results or notify
-you that that ``sudo`` is required. For a reference of ``virsh`` commands, refer
-to `Virsh Command Reference`_.
+you that that root privileges are required. For a reference of ``virsh``
+commands, refer to `Virsh Command Reference`_.
 
 
 #. Open the configuration file with ``virsh edit``. :: 
 
-	sudo virsh edit libvirt-virtual-machine
+	sudo virsh edit {vm-domain-name}
 
    Under ``<devices>`` there should be a ``<disk>`` entry. :: 
 
@@ -207,9 +208,9 @@ to `Virsh Command Reference`_.
    Replace ``/path/to/image/recent-linux.img`` with the path to the OS image.
 
    **IMPORTANT:** Use ``sudo virsh edit`` instead of a text editor. If you edit 
-   the file using ``vi`` under ``/etc/libvirt/qemu``, ``libvirt`` may not recognize
-   the change. If there is a discrepancy between the contents of the XML file under
-   ``/etc/libvirt/qemu`` and the result of 
+   the configuration file under ``/etc/libvirt/qemu`` with a text editor, 
+   ``libvirt`` may not recognize the change. If there is a discrepancy between 
+   the contents of the XML file under ``/etc/libvirt/qemu`` and the result of 
    ``sudo virsh dumpxml {vm-domain-name}``, then your VM may not work 
    properly.
    
@@ -264,7 +265,7 @@ to `Virsh Command Reference`_.
    entry to the ``<disk>`` element you entered earlier (replacing the
    ``uuid`` value with the result from the command line example above). ::
 
-	sudo virsh edit libvirt-virtual-machine
+	sudo virsh edit {vm-domain-name}
 
    Then, add ``<auth></auth>`` element to the domain configuration file::
 
@@ -276,10 +277,11 @@ to `Virsh Command Reference`_.
 	<target ... 
 
 
-   **NOTE:** The exemplary username is ``libvirt``, not ``client.libvirt`` as 
-   generated at step 2 of `Configuring Ceph`_. Ensure you use the username 
-   you generated. If for some reason you need to regenerate the secret, you 
-   will have to execute ``sudo virsh secret-undefine {uuid}`` before executing 
+   **NOTE:** The exemplary ID is ``libvirt``, not the Ceph name 
+   ``client.libvirt`` as generated at step 2 of `Configuring Ceph`_. Ensure 
+   you use the ID component of the Ceph name you generated. If for some reason 
+   you need to regenerate the secret, you will have to execute 
+   ``sudo virsh secret-undefine {uuid}`` before executing 
    ``sudo virsh secret-set-value`` again.
 
 
@@ -300,9 +302,9 @@ following procedures.
 	sudo virsh list
 
 #. Check to see if the VM is communicating with Ceph. Replace 
-   ``libvirt-virtual-machine`` with the name of your VM domain:: 
+   ``{vm-domain-name}`` with the name of your VM domain:: 
 
-	sudo virsh qemu-monitor-command --hmp libvirt-virtual-machine 'info block'
+	sudo virsh qemu-monitor-command --hmp {vm-domain-name} 'info block'
 
 #. Check to see if the device from ``<target dev='hdb' bus='ide'/>`` appears
    under ``/dev`` or under ``proc/partitions``. :: 
@@ -324,10 +326,11 @@ within your VM.
 .. _Block Devices and OpenStack: ../rbd-openstack
 .. _Block Devices and CloudStack: ../rbd-cloudstack
 .. _Create a pool: ../../rados/operations/pools#create-a-pool
-.. _Create a user: ../../rados/operations/authentication#add-a-key
+.. _Create a Ceph Name: ../../rados/operations/authentication#add-a-key
 .. _create an image: ../qemu-rbd#creating-images-with-qemu
 .. _Virsh Command Reference: http://www.libvirt.org/virshcmdref.html
 .. _KVM/VirtManager: https://help.ubuntu.com/community/KVM/VirtManager
 .. _Ceph Authentication: ../../rados/operations/auth-intro
 .. _Disks: http://www.libvirt.org/formatdomain.html#elementsDisks
 .. _rbd create: ../rados-rbd-cmds#creating-a-block-device-image
+.. _Cephx Commandline: ../../rados/operations/authentication#cephx-commandline-options
