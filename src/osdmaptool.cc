@@ -120,7 +120,7 @@ int main(int argc, const char **argv)
       ++i;
     }
   }
-  if (args.size() < 1) {
+  if (args.empty()) {
     cerr << me << ": must specify osdmap filename" << std::endl;
     usage();
   }
