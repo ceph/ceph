@@ -707,18 +707,16 @@ static void check_bad_user_bucket_mapping(RGWRados *store, const string& user_id
 
 static int remove_object(RGWRados *store, rgw_bucket& bucket, std::string& object)
 {
-  int ret = -EINVAL;
   RGWRadosCtx *rctx = new RGWRadosCtx(store);
   rgw_obj obj(bucket,object);
 
-  ret = store->delete_obj(rctx, obj);
+  int ret = store->delete_obj(rctx, obj);
 
   return ret;
 }
 
 static int remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
 {
-  int ret;
   map<RGWObjCategory, RGWBucketStats> stats;
   std::vector<RGWObjEnt> objs;
   std::string prefix, delim, marker, ns;
@@ -727,7 +725,8 @@ static int remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_childr
   RGWBucketInfo info;
   bufferlist bl;
 
-  ret = store->get_bucket_stats(bucket, stats);
+  int ret = store->get_bucket_stats(bucket, stats);
+
   if (ret < 0)
     return ret;
 
