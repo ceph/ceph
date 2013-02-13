@@ -578,6 +578,7 @@ fi
 %{_bindir}/ceph_test_timers
 %{_bindir}/ceph_tpbench
 %{_bindir}/ceph_xattr_bench
+%{_bindir}/ceph-coverage
 
 %files -n libcephfs_jni1
 %defattr(-,root,root,-)
