@@ -427,7 +427,7 @@ int main(int argc, const char **argv)
     cout << "no action specified; -h for help" << std::endl;
     exit(EXIT_FAILURE);
   }
-  if ((!build) && (args.size() > 0)) {
+  if ((!build) && (!args.empty())) {
     cerr << "unrecognized arguments: " << args << std::endl;
     exit(EXIT_FAILURE);
   }
