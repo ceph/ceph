@@ -125,7 +125,7 @@ public:
     to_get.insert(key);
     map<string, bufferlist> got;
     db->get_xattrs(hoid, to_get, &got);
-    if (got.size()) {
+    if (!got.empty()) {
       *value = string(got.begin()->second.c_str(),
 		      got.begin()->second.length());
       return 1;
@@ -145,7 +145,7 @@ public:
     to_get.insert(key);
     map<string, bufferlist> got;
     db->get_values(hoid, to_get, &got);
-    if (got.size()) {
+    if (!got.empty()) {
       *value = string(got.begin()->second.c_str(),
 		      got.begin()->second.length());
       return 1;
