@@ -165,6 +165,7 @@ verify_conf
 command=$1
 [ -n "$*" ] && shift
 
+get_local_name_list "$@"
 get_name_list "$@"
 
 for name in $what; do
