@@ -749,7 +749,7 @@ static int remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_childr
     if (ret < 0)
       return ret;
 
-    while (objs.size() > 0) {
+    while (!objs.empty()) {
       std::vector<RGWObjEnt>::iterator it = objs.begin();
       for (it = objs.begin(); it != objs.end(); it++) {
         ret = remove_object(store, bucket, (*it).name);
@@ -944,7 +944,7 @@ int main(int argc, char **argv)
     }
   }
 
-  if (args.size() == 0) {
+  if (args.empty()) {
     return usage();
   }
   else {
@@ -1557,7 +1557,7 @@ next:
     if (rgw_read_user_buckets(store, user_id, buckets, false) >= 0) {
       map<string, RGWBucketEnt>& m = buckets.get_buckets();
 
-      if (m.size() > 0 && purge_data) {
+      if (!m.empty() && purge_data) {
         for (std::map<string, RGWBucketEnt>::iterator it = m.begin(); it != m.end(); it++) {
           ret = remove_bucket(store, ((*it).second).bucket, true);
 
@@ -1566,7 +1566,7 @@ next:
         }
       }
 
-      if (m.size() > 0 && !purge_data) {
+      if (!m.empty() && !purge_data) {
         cerr << "ERROR: specify --purge-data to remove a user with a non-empty bucket list" << std::endl;
         return 1;
       }
