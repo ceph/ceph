@@ -297,7 +297,7 @@ def start_daemon(
     if os.path.exists(os.path.join(path,'upstart')):
         subprocess.check_call(
             args=[
-                'initctl',
+                '/sbin/initctl',
                 # use emit, not start, because start would fail if the
                 # instance was already running
                 'emit',
@@ -314,7 +314,7 @@ def start_daemon(
     elif os.path.exists(os.path.join(path, 'sysvinit')):
         subprocess.check_call(
             args=[
-                'service',
+                '/usr/sbin/service',
                 'ceph',
                 'start',
                 'osd.{osd_id}'.format(osd_id=osd_id),
@@ -331,7 +331,7 @@ def detect_fstype(
     ):
     fstype = _check_output(
         args=[
-            'blkid',
+            '/sbin/blkid',
             # we don't want stale cached results
             '-p',
             '-s', 'TYPE',
