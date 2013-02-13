@@ -162,7 +162,7 @@ class RGWProcess {
     }
     void _dump_queue() {
       deque<RGWRequest *>::iterator iter;
-      if (process->m_req_queue.size() == 0) {
+      if (process->m_req_queue.empty()) {
         dout(20) << "RGWWQ: empty" << dendl;
         return;
       }
