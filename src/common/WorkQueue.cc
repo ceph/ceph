@@ -99,7 +99,7 @@ void ThreadPool::worker(WorkThread *wt)
       break;
     }
 
-    if (!_pause && work_queues.size()) {
+    if (!_pause && !work_queues.empty()) {
       WorkQueue_* wq;
       int tries = work_queues.size();
       bool did = false;
