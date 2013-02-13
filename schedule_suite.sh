@@ -5,10 +5,11 @@ ceph=$2
 kernel=$3
 email=$4
 flavor=$5
-template=$6
+teuthology_branch=$6
+template=$7
 
 if [ -z "$email" ]; then
-    echo "usage: $0 <suite> <ceph branch> <kernel branch> <email> [flavor] [template]"
+    echo "usage: $0 <suite> <ceph branch> <kernel branch> <email> [flavor] [teuthology-branch] [template]"
     echo "  flavor can be 'basic', 'gcov', 'notcmalloc'."
     exit 1
 fi
@@ -72,11 +73,13 @@ fi
 stamp=`date +%Y-%m-%d_%H:%M:%S`
 name=`whoami`"-$stamp-$suite-$ceph-$kernel-$flavor"
 
-if wget http://github.com/ceph/teuthology/tree/$ceph -O- 2>/dev/null >/dev/null ; then
-    teuthology_branch=$ceph
-else
-    echo "branch $ceph not in teuthology.git; will use master for teuthology"
-    teuthology_branch='master'
+if [ -z "$teuthology_branch" ]; then
+    if wget http://github.com/ceph/teuthology/tree/$ceph -O- 2>/dev/null >/dev/null ; then
+        teuthology_branch=$ceph
+    else
+        echo "branch $ceph not in teuthology.git; will use master for teuthology"
+        teuthology_branch='master'
+    fi
 fi
 
 ~/src/teuthology/virtualenv/bin/teuthology-suite -v $fn \
