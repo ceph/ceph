@@ -424,6 +424,12 @@ public:
   __u8 info_struct_v;
   const coll_t coll;
   IndexedLog  log;
+  static string get_info_key(pg_t pgid) {
+    return stringify(pgid) + "_info";
+  }
+  static string get_epoch_key(pg_t pgid) {
+    return stringify(pgid) + "_epoch";
+  }
   hobject_t    log_oid;
   hobject_t    biginfo_oid;
   OndiskLog   ondisklog;
