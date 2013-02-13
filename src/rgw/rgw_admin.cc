@@ -707,7 +707,7 @@ static void check_bad_user_bucket_mapping(RGWRados *store, const string& user_id
 
 static int remove_object(RGWRados *store, rgw_bucket& bucket, std::string& object)
 {
-  int ret = -EINVAL;
+  int ret;
   RGWRadosCtx *rctx = new RGWRadosCtx(store);
   rgw_obj obj(bucket,object);
 
