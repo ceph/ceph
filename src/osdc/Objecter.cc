@@ -986,7 +986,7 @@ tid_t Objecter::_op_submit(Op *op)
   assert(client_inc >= 0);
 
   // pick target
-  bool check_for_latest_map = false;
+  bool check_for_latest_map;
   num_homeless_ops++;  // initially; recalc_op_target() will decrement if it finds a target
   int r = recalc_op_target(op);
   check_for_latest_map = (r == RECALC_OP_TARGET_POOL_DNE);
