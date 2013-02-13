@@ -56,7 +56,7 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_inf
     }
   }
 
-  if (info.access_keys.size()) {
+  if (!info.access_keys.empty()) {
     /* check if access keys already exist */
     RGWUserInfo inf;
     map<string, RGWAccessKey>::iterator iter = info.access_keys.begin();
@@ -95,7 +95,7 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_inf
     }
   }
 
-  if (info.access_keys.size()) {
+  if (!info.access_keys.empty()) {
     map<string, RGWAccessKey>::iterator iter = info.access_keys.begin();
     for (; iter != info.access_keys.end(); ++iter) {
       RGWAccessKey& k = iter->second;
