@@ -1742,6 +1742,7 @@ void OSD::build_past_intervals_parallel()
   int num = 0;
   for (map<PG*,pistate>::iterator i = pis.begin(); i != pis.end(); ++i) {
     PG *pg = i->first;
+    pg->dirty_big_info = true;
     pg->write_info(t);
 
     // don't let the transaction get too big
