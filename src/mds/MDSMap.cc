@@ -194,7 +194,7 @@ void MDSMap::print(ostream& out)
 	out << " '" << info.standby_for_name << "'";
       out << ")";
     }
-    if (info.export_targets.size())
+    if (!info.export_targets.empty())
       out << " export_targets=" << info.export_targets;
     out << "\n";    
   }
@@ -222,13 +222,13 @@ void MDSMap::print_summary(ostream& out)
 
   out << "e" << get_epoch() << ": " << up.size() << "/" << in.size() << "/" << max_mds << " up";
 
-  if (by_rank.size())
+  if (!by_rank.empty())
     out << " " << by_rank;
 
   for (map<string,int>::reverse_iterator p = by_state.rbegin(); p != by_state.rend(); p++)
     out << ", " << p->second << " " << p->first;
   
-  if (failed.size())
+  if (!failed.empty())
     out << ", " << failed.size() << " failed";
   //if (stopped.size())
   //out << ", " << stopped.size() << " stopped";
@@ -271,7 +271,7 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
       }
     }
   }
-  if (laggy.size()) {
+  if (!laggy.empty()) {
     std::ostringstream oss;
     oss << "mds " << laggy
 	<< ((laggy.size() > 1) ? " are":" is")
