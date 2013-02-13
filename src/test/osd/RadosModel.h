@@ -215,7 +215,7 @@ public:
     state_lock.Lock();
 
     TestOp *next = gen->next(*this);
-    while (next || inflight.size()) {
+    while (next || !inflight.empty()) {
       if (next) {
 	inflight.push_back(next);
       }
@@ -235,7 +235,7 @@ public:
 	  }
 	}
 	
-	if (inflight.size() >= (unsigned) max_in_flight || (!next && inflight.size())) {
+	if (inflight.size() >= (unsigned) max_in_flight || (!next && !inflight.empty())) {
 	  cout << "Waiting on " << inflight.size() << std::endl;
 	  wait();
 	} else {
@@ -499,7 +499,7 @@ public:
 	    op.rmxattr(i->first.c_str());
 	  }
 	}
-	if (!to_remove.size()) {
+	if (to_remove.empty()) {
 	  context->kick();
 	  context->oid_in_use.erase(oid);
 	  context->oid_not_in_use.insert(oid);
