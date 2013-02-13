@@ -1124,7 +1124,7 @@ int Objecter::recalc_op_target(Op *op)
 
     OSDSession *s = NULL;
     op->used_replica = false;
-    if (acting.size()) {
+    if (!acting.empty()) {
       int osd;
       bool read = (op->flags & CEPH_OSD_FLAG_READ) && (op->flags & CEPH_OSD_FLAG_WRITE) == 0;
       if (read && (op->flags & CEPH_OSD_FLAG_BALANCE_READS)) {
