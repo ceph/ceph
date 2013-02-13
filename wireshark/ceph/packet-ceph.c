@@ -486,7 +486,7 @@ void proto_register_ceph (void)
 	
 static guint32 dissect_sockaddr_in(tvbuff_t *tvb, proto_tree *tree, guint32 offset)
 {
-	proto_tree *ceph_sockaddr_tree = NULL;
+	proto_tree *ceph_sockaddr_tree;
 	proto_item *ceph_sub_item = NULL;
 	proto_item *ceph_item = proto_tree_get_parent(tree);
 
@@ -581,11 +581,11 @@ static guint32 dissect_ceph_footer(tvbuff_t *tvb, proto_tree *tree, guint32 offs
 
 static guint32 dissect_ceph_client_connect(tvbuff_t *tvb, proto_tree *tree, guint32 offset)
 {
-	proto_tree *ceph_header_tree = NULL;
+	proto_tree *ceph_header_tree;
 	proto_item *ceph_sub_item = NULL;
 	proto_item *ceph_item = proto_tree_get_parent(tree);
 	struct ceph_msg_connect *msg;
-	guint32 auth_len = 0;
+	guint32 auth_len;
 
 	offset = dissect_ceph_banner(tvb, tree, offset);
 
@@ -623,7 +623,7 @@ static guint32 dissect_ceph_client_connect(tvbuff_t *tvb, proto_tree *tree, guin
 
 static guint32 dissect_ceph_server_connect(tvbuff_t *tvb, proto_tree *tree, guint32 offset)
 {
-	proto_tree *ceph_header_tree = NULL;
+	proto_tree *ceph_header_tree;
 	proto_item *ceph_sub_item = NULL;
 	proto_item *ceph_item = proto_tree_get_parent(tree);
 	struct ceph_msg_connect_reply *msg;
@@ -1093,7 +1093,7 @@ static guint32 dissect_ceph_front(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 
 static guint32 dissect_ceph_generic(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 offset)
 {
-	proto_tree *ceph_header_tree = NULL;
+	proto_tree *ceph_header_tree;
 	proto_item *ceph_sub_item = NULL;
 	proto_item *ceph_item = proto_tree_get_parent(tree);
 	guint32 front_len, middle_len, data_len;
@@ -1103,12 +1103,12 @@ static guint32 dissect_ceph_generic(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 	guint16 type;
 	guint64 seq;
 	struct ceph_msg_header *header;
-    unsigned int data_crc = 0;
+	unsigned int data_crc = 0;
 
-    tag = tvb_get_guint8(tvb, offset);
-    hlen = ( tag == CEPH_MSGR_TAG_ACK ) ? ACK_MSG_SIZE:0;
-    hlen += sizeof(struct ceph_msg_header);
-    hlen++;
+	tag = tvb_get_guint8(tvb, offset);
+	hlen = ( tag == CEPH_MSGR_TAG_ACK ) ? ACK_MSG_SIZE:0;
+	hlen += sizeof(struct ceph_msg_header);
+	hlen++;
 
 	ceph_header_tree = proto_item_add_subtree(ceph_item, ett_ceph);
 
