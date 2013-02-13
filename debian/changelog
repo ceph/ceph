@@ -1,3 +1,9 @@
+ceph (0.56.3-1) quantal; urgency=low
+
+  * New upstream release 
+
+ -- Gary Lowell <gary.lowell@inktank.com>  Wed, 13 Feb 2013 10:09:59 -0800
+
 ceph (0.56.2-1) quantal; urgency=low
 
   * New upstream release 
