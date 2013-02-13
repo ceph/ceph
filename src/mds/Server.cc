@@ -3531,7 +3531,7 @@ int Server::parse_layout_vxattr(string name, string value, ceph_file_layout *lay
 	int64_t pool = mds->osdmap->lookup_pg_pool_name(value);
 	if (pool < 0) {
 	  dout(10) << " unknown pool " << value << dendl;
-	  return -EINVAL;
+	  return -ENOENT;
 	}
 	layout->fl_pg_pool = pool;
       }
@@ -3589,6 +3589,17 @@ void Server::handle_set_vxattr(MDRequest *mdr, CInode *cur,
       rest = name.substr(name.find("layout"));
       int r = parse_layout_vxattr(rest, value, &dlayout->layout);
       if (r < 0) {
+	if (r == -ENOENT) {
+	  if (!mdr->waited_for_osdmap) {
+	    // send request to get latest map, but don't wait if
+	    // we don't get anything newer than what we have
+	    mdr->waited_for_osdmap = true;
+	    mds->request_osdmap(
+		  new C_MDS_RetryRequest(mdcache, mdr));
+	    return;
+	  }
+	  r = -EINVAL;
+	}
 	reply_request(mdr, r);
 	return;
       }
@@ -3608,6 +3619,17 @@ void Server::handle_set_vxattr(MDRequest *mdr, CInode *cur,
       rest = name.substr(name.find("layout"));
       int r = parse_layout_vxattr(rest, value, &layout);
       if (r < 0) {
+	if (r == -ENOENT) {
+	  if (!mdr->waited_for_osdmap) {
+	    // send request to get latest map, but don't wait if
+	    // we don't get anything newer than what we have
+	    mdr->waited_for_osdmap = true;
+	    mds->request_osdmap(
+		  new C_MDS_RetryRequest(mdcache, mdr));
+	    return;
+	  }
+	  r = -EINVAL;
+	}
 	reply_request(mdr, r);
 	return;
       }

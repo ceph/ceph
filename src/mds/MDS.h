@@ -394,6 +394,8 @@ class MDS : public Dispatcher {
   void beacon_send();
   void handle_mds_beacon(MMDSBeacon *m);
 
+  void request_osdmap(Context *c);
+
   // messages
   bool _dispatch(Message *m);
 
