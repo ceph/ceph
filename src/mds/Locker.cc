@@ -1575,7 +1575,7 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, client_t 
   mut->cleanup();
   delete mut;
 
-  if (!in->is_head() && in->client_snap_caps.size()) {
+  if (!in->is_head() && !in->client_snap_caps.empty()) {
     dout(10) << " client_snap_caps " << in->client_snap_caps << dendl;
     // check for snap writeback completion
     bool gather = false;
@@ -2357,7 +2357,7 @@ void Locker::handle_client_caps(MClientCaps *m)
     //  We can infer that the client WONT send a FLUSHSNAP once they have
     //  released all WR/EXCL caps (the FLUSHSNAP always comes before the cap
     //  update/release).
-    if (head_in->client_need_snapflush.size()) {
+    if (!head_in->client_need_snapflush.empty()) {
       if ((cap->issued() & CEPH_CAP_ANY_FILE_WR) == 0) {
 	_do_null_snapflush(head_in, client, follows);
       } else {
