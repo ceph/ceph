@@ -23,7 +23,7 @@ evaluated by a large community of users. There are production systems using
 CephFS with a single metadata server. The Ceph community is actively testing
 clusters with multiple metadata servers for quality assurance. Once Ceph's
 filesystem running multiple metadata servres passes QA muster, `Inktank`_  will
-provide commercial support for CephFS large scale production systems.
+provide commercial support for CephFS with multiple metadata servers.
 
 .. _Inktank: http://inktank.com
 
@@ -100,13 +100,13 @@ works does NOT mean that it will provide acceptable performance in an
 operational cluster.
 
 
-What Filesystem Do You Recommend for OSD Drives?
-================================================
+What Underlying Filesystem Do You Recommend?
+============================================
 
-Currently, we recommend using XFS in deployment. We think ``btrfs`` will become
-the optimal filesystem. However, we still encounter enough issues that we do
-not recommend it for production systems yet. See `Filesystem Recommendations`_
-for details.
+Currently, we recommend using XFS as the underlying filesystem for OSD drives.
+We think ``btrfs`` will become the optimal filesystem. However, we still
+encounter enough issues that we do not recommend it for production systems yet.
+See `Filesystem Recommendations`_ for details.
 
 
 How Does Ceph Ensure Data Integrity Across Replicas?
@@ -154,22 +154,26 @@ remain idle or unused during low load times.
 Can Ceph Support Multiple Data Centers?
 =======================================
 
-Yes, but with significant limitations that ensure data safety. When a client
-writes data to Ceph the primary OSD will not acknowledge the write to the client
-until the secondary OSDs have written the replicas synchronously. See `How Ceph
-Scales`_ for details. Additionally, OSD and monitor heartbeats and peering
-processes do not tolerate additional latency that may occur when deploying
-hardware in different geographic locations. See `Monitor/OSD Interaction`_ for
-details.
+Yes, but with safeguards to ensure data safety. When a client writes data to
+Ceph the primary OSD will not acknowledge the write to the client until the
+secondary OSDs have written the replicas synchronously. See `How Ceph Scales`_
+for details.
+
+The Ceph community is working to ensure that OSD/monitor heartbeats and peering
+processes operate effectively with the additional latency that may occur when
+deploying hardware in different geographic locations. See `Monitor/OSD
+Interaction`_ for details.
 
 If your data centers have dedicated bandwidth and low latency, you can
-distribute your cluster across data centers. If you use a WAN over the Internet,
-you may experience significant peering, heartbeat acknowledgement and write
-latency, which makes performance suffer considerably. Dedicated connections are
-expensive, so people tend to avoid them. The Ceph community is exploring
-asynchronous writes to make distributing a cluster across data centers more
-feasible. While it is on the Ceph development roadmap, work has not begun on
-asynchronous write capability yet.
+distribute your cluster across data centers easily. If you use a WAN over the
+Internet, you may need to configure Ceph to ensure effective peering, heartbeat
+acknowledgement and writes to ensure the cluster performs well with additional
+WAN latency.
+
+Dedicated connections are expensive, so people tend to avoid them. The Ceph
+community is exploring asynchronous writes to make distributing a cluster across
+data centers without significant changes to the default settings (e.g.,
+timeouts). 
 
 
 How Does Ceph Authenticate Users?
