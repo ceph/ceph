@@ -246,7 +246,7 @@ class RESTDispatcher {
     }
     void _dump_queue() {
       deque<req_context *>::iterator iter;
-      if (dispatcher->m_req_queue.size() == 0) {
+      if (dispatcher->m_req_queue.empty()) {
         generic_dout(20) << "DispatcherWQ: empty" << dendl;
         return;
       }
@@ -735,7 +735,7 @@ int main(int argc, const char **argv)
     cerr << "rest-bench: bucket not specified" << std::endl;
     usage_exit();
   }
-  if (args.size() < 1)
+  if (args.empty())
     usage_exit();
   int operation = 0;
   const char *prefix = NULL;
