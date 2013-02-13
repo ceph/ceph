@@ -1116,7 +1116,7 @@ int get_snapcontext(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
       snapid_t snap_id = snap_id_from_key(*it);
       snap_ids.push_back(snap_id);
     }
-    if (keys.size() > 0)
+    if (!keys.empty())
       last_read = *(keys.rbegin());
   } while (r == max_read);
 
@@ -1269,7 +1269,7 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
       }
     }
 
-    if (vals.size() > 0)
+    if (!vals.empty())
       last_read = vals.rbegin()->first;
   } while (r == RBD_MAX_KEYS_READ);
 
@@ -1717,7 +1717,7 @@ int dir_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
       if (images.size() >= max_return)
 	break;
     }
-    if (vals.size() > 0) {
+    if (!vals.empty()) {
       last_read = dir_key_for_name(images.rbegin()->first);
     }
   }
