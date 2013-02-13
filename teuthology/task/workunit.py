@@ -280,6 +280,7 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None):
                     run.Raw('LD_LIBRARY_PATH="$LD_LIBRARY_PATH:{tdir}/binary/usr/local/lib"'.format(tdir=testdir)),
                     run.Raw('CEPH_JAVA_PATH="{tdir}/binary/usr/local/share/java"'.format(tdir=testdir)),
                     run.Raw('CEPH_CONF="{tdir}/ceph.conf"'.format(tdir=testdir)),
+                    run.Raw('TESTDIR="{tdir}"'.format(tdir=testdir)),
                     run.Raw('CEPH_SECRET_FILE="{file}"'.format(file=secretfile)),
                     run.Raw('CEPH_ID="{id}"'.format(id=id_)),
                     run.Raw('PYTHONPATH="$PYTHONPATH:{tdir}/binary/usr/local/lib/python2.7/dist-packages:{tdir}/binary/usr/local/lib/python2.6/dist-packages"'.format(tdir=testdir)),
