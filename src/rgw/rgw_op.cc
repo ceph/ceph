@@ -1027,7 +1027,7 @@ int RGWPutObjProcessor_Aio::wait_pending_front()
 
 bool RGWPutObjProcessor_Aio::pending_has_completed()
 {
-  if (pending.size() == 0)
+  if (pending.empty())
     return false;
 
   struct put_obj_aio_info& info = pending.front();
@@ -2195,7 +2195,7 @@ void RGWListBucketMultiparts::execute()
   marker_meta = marker.get_meta();
   ret = store->list_objects(s->bucket, max_uploads, prefix, delimiter, marker_meta, objs, common_prefixes,
                                !!(s->prot_flags & RGW_REST_SWIFT), mp_ns, &is_truncated, &mp_filter);
-  if (objs.size()) {
+  if (!objs.empty()) {
     vector<RGWObjEnt>::iterator iter;
     RGWMultipartUploadEntry entry;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
@@ -2255,7 +2255,7 @@ void RGWDeleteMultiObj::execute()
     quiet = true;
 
   begin_response();
-  if (multi_delete->objects.size() == 0) {
+  if (multi_delete->objects.empty()) {
     goto done;
   }
 
