@@ -3422,7 +3422,8 @@ bool OSD::heartbeat_dispatch(Message *m)
     break;
 
   default:
-    return false;
+    dout(0) << "dropping unexpected message " << *m << " from " << m->get_source_inst() << dendl;
+    m->put();
   }
 
   return true;
@@ -4683,8 +4684,12 @@ bool OSD::require_same_or_newer_map(OpRequestRef op, epoch_t epoch)
     int from = m->get_source().num();
     if (!osdmap->have_inst(from) ||
 	osdmap->get_cluster_addr(from) != m->get_source_inst().addr) {
-      dout(0) << "from dead osd." << from << ", dropping, sharing map" << dendl;
-      send_incremental_map(epoch, m->get_connection());
+      if (m->get_connection()->has_feature(CEPH_FEATURE_OSD_HBMSGS)) {
+	dout(10) << "from dead osd." << from << ", dropping, sharing map" << dendl;
+	send_incremental_map(epoch, m->get_connection());
+      } else {
+	dout(10) << "from dead osd." << from << ", but it lacks OSD_HBMSGS feature, not sharing map" << dendl;
+      }
       return false;
     }
   }
