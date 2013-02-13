@@ -5,3 +5,4 @@ var/lib/ceph/mon
 var/lib/ceph/osd
 var/lib/ceph/mds
 var/lib/ceph/bootstrap-osd
+var/lib/ceph/bootstrap-mds
