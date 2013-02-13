@@ -767,7 +767,7 @@ int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWCli
   int ret = validate_bucket_name(s->bucket_name_str.c_str());
   if (ret)
     return ret;
-  ret = validate_object_name(s->object_str.c_str());
+  ret = validate_object_name(s->object_str);
   if (ret)
     return ret;
 
