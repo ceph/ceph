@@ -1743,7 +1743,8 @@ void OSD::build_past_intervals_parallel()
   for (map<PG*,pistate>::iterator i = pis.begin(); i != pis.end(); ++i) {
     PG *pg = i->first;
     pg->dirty_big_info = true;
-    pg->write_info(t);
+    pg->dirty_info = true;
+    pg->write_if_dirty(t);
 
     // don't let the transaction get too big
     if (++num >= g_conf->osd_target_transaction_size) {
@@ -5431,7 +5432,8 @@ void OSD::handle_pg_trim(OpRequestRef op)
       // primary is instructing us to trim
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       pg->trim(*t, m->trim_to);
-      pg->write_info(*t);
+      pg->dirty_info = true;
+      pg->write_if_dirty(*t);
       int tr = store->queue_transaction(pg->osr.get(), t,
 					new ObjectStore::C_DeleteTransaction(t));
       assert(tr == 0);
