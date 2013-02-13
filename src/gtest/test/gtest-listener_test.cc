@@ -212,7 +212,7 @@ int main(int argc, char **argv) {
 
   AddGlobalTestEnvironment(new EnvironmentInvocationCatcher);
 
-  GTEST_CHECK_(events.size() == 0)
+  GTEST_CHECK_(events.empty())
       << "AddGlobalTestEnvironment should not generate any events itself.";
 
   ::testing::GTEST_FLAG(repeat) = 2;
