@@ -207,7 +207,7 @@ void AuthMonitor::increase_max_global_id()
 
 bool AuthMonitor::should_propose(double& delay)
 {
-  return (pending_auth.size() > 0);
+  return (!pending_auth.empty());
 }
 
 void AuthMonitor::create_pending()
