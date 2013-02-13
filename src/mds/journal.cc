@@ -467,7 +467,7 @@ void EMetaBlob::fullbit::dump(Formatter *f) const
     }
   }
   f->dump_string("dirty", dirty ? "true" : "false");
-  if (old_inodes.size()) {
+  if (!old_inodes.empty()) {
     f->open_array_section("old inodes");
     for (old_inodes_t::const_iterator iter = old_inodes.begin();
 	iter != old_inodes.end(); ++iter) {
