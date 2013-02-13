@@ -242,7 +242,7 @@ void SnapServer::check_osd_map(bool force)
     }
   }
 
-  if (all_purged.size()) {
+  if (!all_purged.empty()) {
     // prepare to remove from need_to_purge list
     bufferlist bl;
     ::encode(all_purged, bl);
