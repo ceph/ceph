@@ -514,7 +514,7 @@ ObjectCacher::~ObjectCacher()
   for (vector<hash_map<sobject_t, Object *> >::iterator i = objects.begin();
       i != objects.end();
       ++i)
-    assert(!i->size());
+    assert(i->empty());
   assert(bh_lru_rest.lru_get_size() == 0);
   assert(bh_lru_dirty.lru_get_size() == 0);
   assert(ob_lru.lru_get_size() == 0);
