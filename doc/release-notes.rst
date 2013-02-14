@@ -2,6 +2,31 @@
  Release Notes
 ===============
 
+v0.56.3 "bobtail"
+-----------------
+
+This release has several bug fixes surrounding OSD stability.  Most
+significantly, an issue with OSDs being unresponsive shortly after
+startup (and occasionally crashing due to an internal heartbeat check)
+is resolved.  Please upgrade.
+
+Notable changes
+~~~~~~~~~~~~~~~
+
+* osd: flush peering work queue prior to start
+* osd: persist osdmap epoch for idle PGs
+* osd: fix and simplify connection handling for heartbeats
+* osd: avoid crash on invalid admin command
+* mon: fix rare races with monitor elections and commands
+* mon: enforce that OSD reweights be between 0 and 1 (NOTE: not CRUSH weights)
+* mon: approximate client, recovery bandwidth logging
+* radosgw: fixed some XML formatting to conform to Swift API inconsistency
+* radosgw: fix usage accounting bug; add repair tool
+* radosgw: make fallback URI configurable (necessary on some web servers)
+* librbd: fix handling for interrupted 'unprotect' operations
+* mds, ceph-fuse: allow file and directory layouts to be modified via virtual xattrs
+
+
 v0.56.2 "bobtail"
 -----------------
 
