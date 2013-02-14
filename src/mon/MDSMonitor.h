@@ -93,6 +93,8 @@ class MDSMonitor : public PaxosService {
   void get_health(list<pair<health_status_t,string> >& summary,
 		  list<pair<health_status_t,string> > *detail) const;
   int fail_mds(std::ostream &ss, const std::string &arg);
+  void fail_mds_gid(uint64_t gid);
+
   int cluster_fail(std::ostream &ss);
 
   bool preprocess_command(MMonCommand *m);

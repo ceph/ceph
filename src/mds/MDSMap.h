@@ -236,6 +236,16 @@ public:
     assert(up.count(m) && mds_info.count(up[m]));
     return mds_info[up[m]];
   }
+  uint64_t find_mds_gid_by_name(const string& s) {
+    for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
+	 p != mds_info.end();
+	 ++p) {
+      if (p->second.name == s) {
+	return p->first;
+      }
+    }
+    return 0;
+  }
 
   // counts
   unsigned get_num_in_mds() {
