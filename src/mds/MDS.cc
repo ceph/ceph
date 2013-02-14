@@ -906,6 +906,20 @@ void MDS::handle_mds_map(MMDSMap *m)
       if (want_state == MDSMap::STATE_BOOT) {
         dout(10) << "not in map yet" << dendl;
       } else {
+	// did i get kicked by someone else?
+	if (g_conf->mds_enforce_unique_name) {
+	  if (uint64_t existing = mdsmap->find_mds_gid_by_name(name)) {
+	    MDSMap::mds_info_t& i = mdsmap->get_info_gid(existing);
+	    if (i.global_id > monc->get_global_id()) {
+	      dout(1) << "handle_mds_map i (" << addr
+		      << ") dne in the mdsmap, new instance has larger gid " << i.global_id
+		      << ", suicide" << dendl;
+	      suicide();
+	      goto out;
+	    }
+	  }
+	}
+
         dout(1) << "handle_mds_map i (" << addr
             << ") dne in the mdsmap, respawning myself" << dendl;
         respawn();
