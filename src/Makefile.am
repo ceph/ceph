@@ -767,6 +767,12 @@ unittest_escape_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
 unittest_escape_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_escape
 
+unittest_chain_xattr_SOURCES = test/filestore/chain_xattr.cc
+unittest_chain_xattr_LDFLAGS = ${AM_LDFLAGS}
+unittest_chain_xattr_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+unittest_chain_xattr_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE) ${CRYPTO_CXXFLAGS}
+check_PROGRAMS += unittest_chain_xattr
+
 unittest_strtol_SOURCES = test/strtol.cc
 unittest_strtol_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_strtol_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
