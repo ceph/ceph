@@ -1,0 +1,5 @@
+#!/bin/sh
+
+stop ceph-all || :
+
+exit 0
