@@ -3214,6 +3214,8 @@ void PG::check_ondisk_snap_colls(
     derr << "ondisk_snapcolls: " << ondisk_snapcolls
 	 << " does not match snap_collections " << snap_collections
 	 << " repairing." << dendl;
+    osd->clog.error() << info.pgid << " ondisk snapcolls " << ondisk_snapcolls << " != snap_collections "
+		      << snap_collections << ", repairing.";
     snap_collections = ondisk_snapcolls;
   }
 }
