@@ -233,7 +233,7 @@ in ``{type}`` and ``{capability}`` pairs on the command line::
 For example, to create a user ``client.foo`` with access 'rw' for
 daemon type 'osd' and 'r' for daemon type 'mon'::
 
-   sudo ceph auth get-or-create-key client.foo osd rw mon r > keyring.foo
+   sudo ceph auth get-or-create-key client.foo osd 'allow rw' mon 'allow r' > keyring.foo
 
 .. note: User names are associated to user types, which include ``client``
    ``osd``, ``mon``, and ``mds``. In most cases, you will be
