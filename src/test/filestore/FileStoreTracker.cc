@@ -52,7 +52,7 @@ int FileStoreTracker::init()
   map<string, bufferlist> got;
   db->get("STATUS", to_get, &got);
   restart_seq = 0;
-  if (got.size()) {
+  if (!got.empty()) {
     bufferlist::iterator bp = got.begin()->second.begin();
     ::decode(restart_seq, bp);
   }
@@ -240,7 +240,7 @@ ObjStatus get_obj_status(const pair<string, string> &obj,
   map<string, bufferlist> got;
   db->get(obj_to_meta_prefix(obj), to_get, &got);
   ObjStatus retval;
-  if (got.size()) {
+  if (!got.empty()) {
     bufferlist::iterator bp = got.begin()->second.begin();
     ::decode(retval, bp);
   }
@@ -357,7 +357,7 @@ ObjectContents FileStoreTracker::get_content(
   map<string, bufferlist> got;
   to_get.insert(seq_to_key(version));
   db->get(obj_to_prefix(obj), to_get, &got);
-  if (!got.size())
+  if (got.empty())
     return ObjectContents();
   pair<uint64_t, bufferlist> val;
   bufferlist::iterator bp = got.begin()->second.begin();

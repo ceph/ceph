@@ -260,7 +260,7 @@ int do_command(CephToolCtx *ctx,
   pending_tell_pgid = false;
   reply = false;
   
-  if (cmd.size() > 0 && cmd[0] == "tell") {
+  if (!cmd.empty() && cmd[0] == "tell") {
     if (cmd.size() == 1) {
       cerr << "no tell target specified" << std::endl;
       return -EINVAL;
@@ -272,7 +272,7 @@ int do_command(CephToolCtx *ctx,
     pending_cmd.erase(pending_cmd.begin(), pending_cmd.begin() + 2);
     pending_tell = true;
   }
-  if (cmd.size() > 0 && cmd[0] == "pg") {
+  if (!cmd.empty() && cmd[0] == "pg") {
     if (cmd.size() == 1) {
       cerr << "pg requires at least one argument" << std::endl;
       return -EINVAL;
@@ -580,7 +580,7 @@ bool Admin::ms_dispatch(Message *m) {
 void Admin::ms_handle_connect(Connection *con) {
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
     ctx->lock.Lock();
-    if (pending_cmd.size())
+    if (!pending_cmd.empty())
       send_command(ctx);
     ctx->lock.Unlock();
   }
@@ -592,7 +592,7 @@ bool Admin::ms_handle_reset(Connection *con)
   if (con == command_con) {
     command_con->put();
     command_con = NULL;
-    if (pending_cmd.size())
+    if (!pending_cmd.empty())
       send_command(ctx);
     return true;
   }
