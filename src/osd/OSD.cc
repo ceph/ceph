@@ -4282,8 +4282,7 @@ void OSD::advance_pg(
     lastmap = nextmap;
     handle.reset_tp_timeout();
   }
-  if (!is_booting())
-    pg->handle_activate_map(rctx);
+  pg->handle_activate_map(rctx);
 }
 
 /** 
@@ -5098,11 +5097,13 @@ bool OSD::compat_must_dispatch_immediately(PG *pg)
 
 void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap)
 {
-  do_notifies(*ctx.notify_list, curmap);
+  if (service.get_osdmap()->is_up(whoami)) {
+    do_notifies(*ctx.notify_list, curmap);
+    do_queries(*ctx.query_map, curmap);
+    do_infos(*ctx.info_map, curmap);
+  }
   delete ctx.notify_list;
-  do_queries(*ctx.query_map, curmap);
   delete ctx.query_map;
-  do_infos(*ctx.info_map, curmap);
   delete ctx.info_map;
   if ((ctx.on_applied->empty() &&
        ctx.on_safe->empty() &&
