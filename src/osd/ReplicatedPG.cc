@@ -1246,7 +1246,8 @@ void ReplicatedPG::do_backfill(OpRequestRef op)
       info.stats.stats = m->stats;
 
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      write_info(*t);
+      dirty_info = true;
+      write_if_dirty(*t);
       int tr = osd->store->queue_transaction(osr.get(), t);
       assert(tr == 0);
     }
@@ -5298,7 +5299,8 @@ void ReplicatedPG::submit_push_complete(ObjectRecoveryInfo &recovery_info,
   recover_got(recovery_info.soid, recovery_info.version);
 
   // update pg
-  write_info(*t);
+  dirty_info = true;
+  write_if_dirty(*t);
 }
 
 ObjectRecoveryInfo ReplicatedPG::recalc_subsets(const ObjectRecoveryInfo& recovery_info)
@@ -6160,7 +6162,8 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   if (missing.num_missing() == 0) {
     // advance last_complete since nothing else is missing!
     info.last_complete = info.last_update;
-    write_info(*t);
+    dirty_info = true;
+    write_if_dirty(*t);
   }
 
   osd->store->queue_transaction(osr.get(), t, c, NULL, new C_OSD_OndiskWriteUnlockList(&c->obcs));
@@ -7397,7 +7400,8 @@ boost::statechart::result ReplicatedPG::NotTrimming::react(const SnapTrim&)
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       pg->snap_collections.erase(snap_to_trim);
       t->remove_collection(col_to_trim);
-      pg->write_info(*t);
+      pg->dirty_big_info = true;
+      pg->write_if_dirty(*t);
       int r = pg->osd->store->queue_transaction(
 	NULL, t, new ObjectStore::C_DeleteTransaction(t));
       assert(r == 0);
@@ -7453,7 +7457,8 @@ boost::statechart::result ReplicatedPG::RepColTrim::react(const SnapTrim&)
   }
   t->remove_collection(col_to_trim);
   pg->snap_collections.erase(snap_to_trim);
-  pg->write_info(*t);
+  pg->dirty_big_info = true;
+  pg->write_if_dirty(*t);
   int r = pg->osd->store->queue_transaction(NULL, t, new ObjectStore::C_DeleteTransaction(t));
   assert(r == 0);
   return discard_event();
@@ -7563,7 +7568,8 @@ boost::statechart::result ReplicatedPG::WaitingOnReplicas::react(const SnapTrim&
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   dout(10) << "removing snap " << sn << " collection " << c << dendl;
   pg->snap_collections.erase(sn);
-  pg->write_info(*t);
+  pg->dirty_big_info = true;
+  pg->write_if_dirty(*t);
   t->remove_collection(c);
   int tr = pg->osd->store->queue_transaction(pg->osr.get(), t);
   assert(tr == 0);
