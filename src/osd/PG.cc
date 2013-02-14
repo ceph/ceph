@@ -2722,7 +2722,7 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
     ostringstream oss;
     read_log(store, coll, log_oid, info, ondisklog, log, missing, oss, this);
     if (oss.str().length())
-      osd->clog.error() << oss;
+      osd->clog.error() << oss.str();
   }
   catch (const buffer::error &e) {
     string cr_log_coll_name(get_corrupt_pg_log_name());
@@ -5248,8 +5248,8 @@ void PG::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
       // [repair] at end of log?
       if (!p.end() && e.version == info.last_update) {
 	oss << info.pgid << " log has extra data at "
-	   << endpos << "~" << (ondisklog.head-endpos) << " after "
-	   << info.last_update << "\n";
+	    << endpos << "~" << (ondisklog.head-endpos) << " after "
+	    << info.last_update << "\n";
 
 	dout(0) << "read_log " << endpos << " *** extra gunk at end of log, "
 	        << "adjusting ondisklog.head" << dendl;
