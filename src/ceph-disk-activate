@@ -296,37 +296,40 @@ def start_daemon(
         cluster=cluster, osd_id=osd_id)
 
     # upstart?
-    if os.path.exists(os.path.join(path,'upstart')):
-        subprocess.check_call(
-            args=[
-                '/sbin/initctl',
-                # use emit, not start, because start would fail if the
-                # instance was already running
-                'emit',
-                # since the daemon starting doesn't guarantee much about
-                # the service being operational anyway, don't bother
-                # waiting for it
-                '--no-wait',
-                '--',
-                'ceph-osd',
-                'cluster={cluster}'.format(cluster=cluster),
-                'id={osd_id}'.format(osd_id=osd_id),
-                ],
-            )
-    elif os.path.exists(os.path.join(path, 'sysvinit')):
-        subprocess.check_call(
-            args=[
-                '/usr/sbin/service',
-                'ceph',
-                'start',
-                'osd.{osd_id}'.format(osd_id=osd_id),
-                ],
-            )
-    else:
-        raise ActivateError('{cluster} osd.{osd_id} is not tagged with an init system'.format(
-                cluster=cluster,
-                osd_id=osd_id,
-                ))
+    try:
+        if os.path.exists(os.path.join(path,'upstart')):
+            subprocess.check_call(
+                args=[
+                    '/sbin/initctl',
+                    # use emit, not start, because start would fail if the
+                    # instance was already running
+                    'emit',
+                    # since the daemon starting doesn't guarantee much about
+                    # the service being operational anyway, don't bother
+                    # waiting for it
+                    '--no-wait',
+                    '--',
+                    'ceph-osd',
+                    'cluster={cluster}'.format(cluster=cluster),
+                    'id={osd_id}'.format(osd_id=osd_id),
+                    ],
+                )
+        elif os.path.exists(os.path.join(path, 'sysvinit')):
+            subprocess.check_call(
+                args=[
+                    '/usr/sbin/service',
+                    'ceph',
+                    'start',
+                    'osd.{osd_id}'.format(osd_id=osd_id),
+                    ],
+                )
+        else:
+            raise ActivateError('{cluster} osd.{osd_id} is not tagged with an init system'.format(
+                    cluster=cluster,
+                    osd_id=osd_id,
+                    ))
+    except subprocess.CalledProcessError as e:
+        raise ActivateError('ceph osd start failed', e)
 
 def detect_fstype(
     dev,
