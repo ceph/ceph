@@ -90,6 +90,7 @@ install: build
 	$(MAKE) DESTDIR=$(DESTDIR) install
 	sed -i "/dependency_libs/ s/'.*'/''/" `find . -name '*.la'`
 	install -D -m 644 udev/50-rbd.rules $(DESTDIR)/lib/udev/rules.d/50-rbd.rules
+	install -D -m 644 udev/95-ceph-osd.rules $(DESTDIR)/lib/udev/rules.d/95-ceph-osd.rules
 
 # Add here commands to install the package into debian/testpack.
 # Build architecture-independent files here.
