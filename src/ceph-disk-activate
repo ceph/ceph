@@ -5,6 +5,7 @@ import errno
 import logging
 import os
 import os.path
+import platform
 import re
 import subprocess
 import stat
@@ -15,6 +16,7 @@ init_systems = [
     'upstart',
     'sysvinit',
     'systemd',
+    'auto',
     ]
 
 log_name = __name__
@@ -582,6 +584,20 @@ def activate(
                 )
 
         if init is not None:
+            if init == 'auto':
+                c = get_conf(
+                    cluster=cluster,
+                    variable='init'
+                    )
+                if c is not None:
+                    init = c
+                else:
+                    (distro, release, codename) = platform.dist()
+                    if distro == 'Ubuntu':
+                        init = 'upstart'
+                    else:
+                        init = 'sysvinit'
+
             log.debug('Marking with init system %s', init)
             with file(os.path.join(path, init), 'w'):
                 pass
@@ -638,6 +654,7 @@ def parse_args():
         '--mark-init',
         metavar='INITSYSTEM',
         help='init system to manage this dir',
+        default='auto',
         choices=init_systems,
         )
     parser.set_defaults(
