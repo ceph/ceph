@@ -60,6 +60,8 @@ const char *parse_good[] = {
   "  allow     pool foo rwx; allow pool bar r  ",
   " allow wx pool taco",
   "allow r   pool    foo    object_prefix   blah   ;   allow   w   auid  5",
+  "allow class-read object_prefix rbd_children, allow pool libvirt-pool-test rwx",
+  "allow class-read object_prefix rbd-children, allow pool libvirt_pool_test rwx",
   0
 };
 
@@ -420,7 +422,9 @@ TEST(OSDCap, OutputParsed)
     {"allow pool images r; allow pool rbd rwx",
      "osdcap[grant(pool images r),grant(pool rbd rwx)]"},
     {"allow pool images r, allow pool rbd rwx",
-     "osdcap[grant(pool images r),grant(pool rbd rwx)]"}
+     "osdcap[grant(pool images r),grant(pool rbd rwx)]"},
+    {"allow class-read object_prefix rbd_children, allow pool libvirt-pool-test rwx",
+     "osdcap[grant(object_prefix rbd_children  class-read),grant(pool libvirt-pool-test rwx)]"}
   };
 
   size_t num_tests = sizeof(test_values) / sizeof(*test_values);
