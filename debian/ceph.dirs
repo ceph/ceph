@@ -6,3 +6,4 @@ var/lib/ceph/osd
 var/lib/ceph/mds
 var/lib/ceph/bootstrap-osd
 var/lib/ceph/bootstrap-mds
+var/run/ceph
