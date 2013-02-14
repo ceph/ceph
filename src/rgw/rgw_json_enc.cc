@@ -480,12 +480,20 @@ void RGWRegion::dump(Formatter *f) const
   encode_json("zones", zones, f);
 }
 
+static void decode_zones(map<string, RGWZone>& zones, JSONObj *o)
+{
+  RGWZone z;
+  z.decode_json(o);
+  zones[z.name] = z;
+}
+
+
 void RGWRegion::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("endpoints", endpoints, obj);
   JSONDecoder::decode_json("master_zone", master_zone, obj);
-  JSONDecoder::decode_json("zones", zones, obj);
+  JSONDecoder::decode_json("zones", zones, decode_zones, obj);
 }
 
 

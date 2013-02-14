@@ -252,12 +252,15 @@ struct RGWZoneParams {
   rgw_bucket user_swift_pool;
   rgw_bucket user_uid_pool;
 
-  int init(CephContext *cct, RGWRados *store);
+  string name;
+
+  string get_pool_name(CephContext *cct, const string& zone_name);
+  int init(CephContext *cct, RGWRados *store, bool create_zone);
   void init_default();
   int store_info(CephContext *cct, RGWRados *store);
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(domain_root, bl);
     ::encode(control_pool, bl);
     ::encode(gc_pool, bl);
@@ -268,11 +271,12 @@ struct RGWZoneParams {
     ::encode(user_email_pool, bl);
     ::encode(user_swift_pool, bl);
     ::encode(user_uid_pool, bl);
+    ::encode(name, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-     DECODE_START(1, bl);
+     DECODE_START(2, bl);
     ::decode(domain_root, bl);
     ::decode(control_pool, bl);
     ::decode(gc_pool, bl);
@@ -283,6 +287,8 @@ struct RGWZoneParams {
     ::decode(user_email_pool, bl);
     ::decode(user_swift_pool, bl);
     ::decode(user_uid_pool, bl);
+    if (struct_v >= 2)
+      ::decode(name, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -317,7 +323,10 @@ struct RGWRegion {
   list<string> endpoints;
 
   string master_zone;
-  list<RGWZone> zones;
+  map<string, RGWZone> zones;
+
+  CephContext *cct;
+  RGWRados *store;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -334,6 +343,14 @@ struct RGWRegion {
     ::decode(zones, bl);
     DECODE_FINISH(bl);
   }
+
+  string get_pool_name(CephContext *cct);
+  int init(CephContext *_cct, RGWRados *_store);
+  int create_default();
+  int store_info(bool exclusive);
+  int read_default();
+  int set_as_default();
+
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
@@ -458,14 +475,34 @@ protected:
 
   bool pools_initialized;
 
+  string region_name;
+  string zone_name;
+
+  bool create_zone;
+
 public:
   RGWRados() : lock("rados_timer_lock"), timer(NULL),
                gc(NULL), use_gc_thread(false),
                num_watchers(0), watchers(NULL), watch_handles(NULL),
                bucket_id_lock("rados_bucket_id"), max_bucket_id(0),
                cct(NULL), rados(NULL),
-               pools_initialized(false) {}
+               pools_initialized(false),
+	       create_zone(false) {}
 
+  void set_context(CephContext *_cct) {
+    cct = _cct;
+  }
+
+  void set_region(const string& name, bool create) {
+    region_name = name;
+  }
+
+  void set_zone(const string& name, bool create) {
+    zone_name = name;
+    create_zone = create;
+  }
+
+  RGWRegion region;
   RGWZoneParams zone;
 
   virtual ~RGWRados() {
@@ -480,11 +517,13 @@ public:
   CephContext *ctx() { return cct; }
   /** do all necessary setup of the storage device */
   int initialize(CephContext *_cct, bool _use_gc_thread) {
-    cct = _cct;
+    set_context(_cct);
     use_gc_thread = _use_gc_thread;
     return initialize();
   }
   /** Initialize the RADOS instance and prepare to do other ops */
+  virtual int init_rados();
+  int init_complete();
   virtual int initialize();
   virtual void finalize();
 
