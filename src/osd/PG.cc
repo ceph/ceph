@@ -1769,7 +1769,8 @@ void PG::_activate_committed(epoch_t e)
 
   if (dirty_info) {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    write_info(*t);
+    dirty_info = true;
+    write_if_dirty(*t);
     int tr = osd->store->queue_transaction(osr.get(), t);
     assert(tr == 0);
   }
@@ -2318,8 +2319,10 @@ void PG::init(int role, vector<int>& newup, vector<int>& newacting, pg_history_t
 
   reg_next_scrub();
 
-  write_info(*t);
-  write_log(*t);
+  dirty_info = true;
+  dirty_big_info = true;
+  dirty_log = true;
+  write_if_dirty(*t);
 }
 
 void PG::write_info(ObjectStore::Transaction& t)
@@ -2340,25 +2343,21 @@ void PG::write_info(ObjectStore::Transaction& t)
   // info.  store purged_snaps separately.
   interval_set<snapid_t> purged_snaps;
   map<string,bufferlist> v;
-  string k = stringify(info.pgid) + string("_info");
-  string ek = stringify(info.pgid) + string("_epoch");
-  ::encode(get_osdmap()->get_epoch(), v[ek]);
+  ::encode(get_osdmap()->get_epoch(), v[get_epoch_key(info.pgid)]);
   purged_snaps.swap(info.purged_snaps);
-  ::encode(info, v[k]);
+  ::encode(info, v[get_info_key(info.pgid)]);
   purged_snaps.swap(info.purged_snaps);
 
-  t.omap_setkeys(coll_t::META_COLL, osd->infos_oid, v);
- 
   if (dirty_big_info) {
     // potentially big stuff
-    v.clear();
-    bufferlist& bigbl = v[k];
+    bufferlist& bigbl = v[get_biginfo_key(info.pgid)];
     ::encode(past_intervals, bigbl);
     ::encode(snap_collections, bigbl);
     ::encode(info.purged_snaps, bigbl);
     dout(20) << "write_info bigbl " << bigbl.length() << dendl;
-    t.omap_setkeys(coll_t::META_COLL, osd->biginfos_oid, v);
   }
+
+  t.omap_setkeys(coll_t::META_COLL, osd->infos_oid, v);
 
   dirty_info = false;
   dirty_big_info = false;
@@ -2383,9 +2382,9 @@ epoch_t PG::peek_map_epoch(ObjectStore *store, coll_t coll, hobject_t &infos_oid
   } else {
     // get epoch out of leveldb
     bufferlist tmpbl;
-    string ek = stringify(pgid) + string("_epoch");
+    string ek = get_epoch_key(pgid);
     set<string> keys;
-    keys.insert(ek);
+    keys.insert(get_epoch_key(pgid));
     map<string,bufferlist> values;
     store->omap_get_values(coll_t::META_COLL, infos_oid, keys, &values);
     assert(values.size() == 1);
@@ -2435,7 +2434,7 @@ void PG::write_log(ObjectStore::Transaction& t)
 
 void PG::write_if_dirty(ObjectStore::Transaction& t)
 {
-  if (dirty_info)
+  if (dirty_big_info || dirty_info)
     write_info(t);
   if (dirty_log)
     write_log(t);
@@ -2532,7 +2531,8 @@ void PG::add_log_entry(pg_log_entry_t& e, bufferlist& log_bl)
 }
 
 
-void PG::append_log(vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t)
+void PG::append_log(
+  vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t)
 {
   dout(10) << "append_log " << log << " " << logv << dendl;
 
@@ -2558,7 +2558,8 @@ void PG::append_log(vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStor
   trim(t, trim_to);
 
   // update the local pg, pg log
-  write_info(t);
+  dirty_info = true;
+  write_if_dirty(t);
 }
 
 bool PG::check_log_for_corruption(ObjectStore *store)
@@ -2645,10 +2646,11 @@ std::string PG::get_corrupt_pg_log_name() const
   return buf;
 }
 
-int PG::read_info(ObjectStore *store, const coll_t coll, bufferlist &bl,
-  pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals, hobject_t &biginfo_oid,
-  hobject_t &infos_oid, hobject_t &biginfos_oid, interval_set<snapid_t>  &snap_collections,
-  __u8 &struct_v)
+int PG::read_info(
+  ObjectStore *store, const coll_t coll, bufferlist &bl,
+  pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals,
+  hobject_t &biginfo_oid, hobject_t &infos_oid,
+  interval_set<snapid_t>  &snap_collections, __u8 &struct_v)
 {
   bufferlist::iterator p = bl.begin();
   bufferlist lbl;
@@ -2673,21 +2675,19 @@ int PG::read_info(ObjectStore *store, const coll_t coll, bufferlist &bl,
       ::decode(past_intervals, p);
     } else {
       // get info out of leveldb
-      string k = stringify(info.pgid) + string("_info");
+      string k = get_info_key(info.pgid);
+      string bk = get_biginfo_key(info.pgid);
       set<string> keys;
       keys.insert(k);
+      keys.insert(bk);
       map<string,bufferlist> values;
       store->omap_get_values(coll_t::META_COLL, infos_oid, keys, &values);
-      assert(values.size() == 1);
+      assert(values.size() == 2);
       lbl = values[k];
       p = lbl.begin();
       ::decode(info, p);
 
-      // biginfo
-      values.clear();
-      store->omap_get_values(coll_t::META_COLL, biginfos_oid, keys, &values);
-      assert(values.size() == 1);
-      lbl = values[k];
+      lbl = values[bk];
       p = lbl.begin();
       ::decode(past_intervals, p);
     }
@@ -2715,7 +2715,7 @@ int PG::read_info(ObjectStore *store, const coll_t coll, bufferlist &bl,
 void PG::read_state(ObjectStore *store, bufferlist &bl)
 {
   int r = read_info(store, coll, bl, info, past_intervals, biginfo_oid,
-    osd->infos_oid, osd->biginfos_oid, snap_collections, info_struct_v);
+    osd->infos_oid, snap_collections, info_struct_v);
   assert(r >= 0);
 
   try {
@@ -2744,7 +2744,8 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
     t.create_collection(cr_log_coll);
     t.collection_move(cr_log_coll, coll_t::META_COLL, log_oid);
     t.touch(coll_t::META_COLL, log_oid);
-    write_info(t);
+    dirty_info = true;
+    write_if_dirty(t);
     store->apply_transaction(t);
 
     info.last_backfill = hobject_t();
@@ -2795,8 +2796,10 @@ coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
   coll_t c(info.pgid, s);
   if (!snap_collections.contains(s)) {
     snap_collections.insert(s);
-    write_info(t);
-    dout(10) << "create_snap_collection " << c << ", set now " << snap_collections << dendl;
+    dirty_big_info = true;
+    write_if_dirty(t);
+    dout(10) << "create_snap_collection " << c << ", set now "
+	     << snap_collections << dendl;
     t.create_collection(c);
   }
   return c;
@@ -4315,7 +4318,8 @@ void PG::scrub_finish() {
 
   {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    write_info(*t);
+    dirty_info = true;
+    write_if_dirty(*t);
     int tr = osd->store->queue_transaction(osr.get(), t);
     assert(tr == 0);
   }

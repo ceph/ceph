@@ -149,7 +149,6 @@ OSDService::OSDService(OSD *osd) :
   whoami(osd->whoami), store(osd->store), clog(osd->clog),
   pg_recovery_stats(osd->pg_recovery_stats),
   infos_oid(sobject_t("infos", CEPH_NOSNAP)),
-  biginfos_oid(sobject_t("biginfos", CEPH_NOSNAP)),
   cluster_messenger(osd->cluster_messenger),
   client_messenger(osd->client_messenger),
   logger(osd->logger),
@@ -925,6 +924,17 @@ int OSD::init()
     delete store;
     return -EINVAL;
   }
+
+  // make sure info object exists
+  if (!store->exists(coll_t::META_COLL, service.infos_oid)) {
+    dout(10) << "init creating/touching infos object" << dendl;
+    ObjectStore::Transaction t;
+    t.touch(coll_t::META_COLL, service.infos_oid);
+    r = store->apply_transaction(t);
+    if (r < 0)
+      return r;
+  }
+
   if (osd_compat.compare(superblock.compat_features) != 0) {
     // We need to persist the new compat_set before we
     // do anything else
@@ -1621,16 +1631,6 @@ void OSD::load_pgs()
     pg->unlock();
   }
   dout(10) << "load_pgs done" << dendl;
-
-  // make sure info objects exist
-  if (!store->exists(coll_t::META_COLL, service.infos_oid) ||
-      !store->exists(coll_t::META_COLL, service.biginfos_oid)) {
-    dout(10) << "load_pgs creating/touching infos, biginfos objects" << dendl;
-    ObjectStore::Transaction t;
-    t.touch(coll_t::META_COLL, service.infos_oid);
-    t.touch(coll_t::META_COLL, service.biginfos_oid);
-    store->apply_transaction(t);
-  }
   
   build_past_intervals_parallel();
 }
@@ -1742,7 +1742,9 @@ void OSD::build_past_intervals_parallel()
   int num = 0;
   for (map<PG*,pistate>::iterator i = pis.begin(); i != pis.end(); ++i) {
     PG *pg = i->first;
-    pg->write_info(t);
+    pg->dirty_big_info = true;
+    pg->dirty_info = true;
+    pg->write_if_dirty(t);
 
     // don't let the transaction get too big
     if (++num >= g_conf->osd_target_transaction_size) {
@@ -5430,7 +5432,8 @@ void OSD::handle_pg_trim(OpRequestRef op)
       // primary is instructing us to trim
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       pg->trim(*t, m->trim_to);
-      pg->write_info(*t);
+      pg->dirty_info = true;
+      pg->write_if_dirty(*t);
       int tr = store->queue_transaction(pg->osr.get(), t,
 					new ObjectStore::C_DeleteTransaction(t));
       assert(tr == 0);
