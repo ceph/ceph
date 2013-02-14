@@ -736,7 +736,7 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
 	 it != _buffers.end();
 	 it++) {
       if (p + it->length() > o) {
-	if (p >= o && p+it->length() >= o+l)
+	if (p >= o && p+it->length() <= o+l)
 	  it->zero();                         // all
 	else if (p >= o) 
 	  it->zero(0, o+l-p);                 // head
@@ -744,7 +744,7 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
 	  it->zero(o-p, it->length()-(o-p));  // tail
       }
       p += it->length();
-      if (o+l >= p)
+      if (o+l <= p)
 	break;  // done
     }
   }
