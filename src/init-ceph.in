@@ -334,7 +334,7 @@ for name in $what; do
 
 	status)
 	    if daemon_is_running $name ceph-$type $id $pid_file; then
-		get_conf asok "/var/run/ceph/ceph-$type.$id.asok" "admin socket"
+		get_conf asok "$RUN_DIR/ceph/ceph-$type.$id.asok" "admin socket"
 		echo -n "$name: running "
 		do_cmd "$BINDIR/ceph --admin-daemon $asok version 2>/dev/null" || echo unknown
             elif [ -e "$pid_file" ]; then
