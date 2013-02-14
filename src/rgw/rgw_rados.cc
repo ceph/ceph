@@ -849,14 +849,14 @@ int RGWRados::select_bucket_placement(string& bucket_name, rgw_bucket& bucket)
   }
 
 read_omap:
-  if (!m.size()) {
+  if (m.empty()) {
     bufferlist header;
     ret = omap_get_all(obj, header, m);
 
     write_map = true;
   }
 
-  if (ret < 0 || !m.size()) {
+  if (ret < 0 || m.empty()) {
     vector<string> names;
     names.push_back(default_storage_pool);
     vector<int> retcodes;

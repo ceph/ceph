@@ -213,8 +213,7 @@ do { \
 
         if (token.compare(";") == 0 || pos >= s.size()) {
 	  if (got_eq) {
-            ASSERT_STATE((services_list.size() > 0) ||
-			 (uid_list.size() > 0));
+            ASSERT_STATE(!services_list.empty() || !uid_list.empty());
             
             for (list<int>::iterator i = services_list.begin(); i != services_list.end(); ++i) {
               MonCap& cap = services_map[*i];

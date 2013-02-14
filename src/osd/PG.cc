@@ -2819,7 +2819,7 @@ void PG::update_snap_collections(vector<pg_log_entry_t> &log_entries,
       } catch (...) {
 	snaps.clear();
       }
-      if (snaps.size()) {
+      if (!snaps.empty()) {
 	make_snap_collection(t, snaps[0]);
 	if (snaps.size() > 1)
 	  make_snap_collection(t, *(snaps.rbegin()));
@@ -3806,7 +3806,7 @@ void PG::chunky_scrub() {
             start = scrubber.end;
 
             // special case: reached end of file store, implicitly a boundary
-            if (objects.size() == 0) {
+            if (objects.empty()) {
               break;
             }
 
@@ -4124,13 +4124,13 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
       }
     }
     assert(auth != maps.end());
-    if (cur_missing.size()) {
+    if (!cur_missing.empty()) {
       missing[*k] = cur_missing;
     }
-    if (cur_inconsistent.size()) {
+    if (!cur_inconsistent.empty()) {
       inconsistent[*k] = cur_inconsistent;
     }
-    if (cur_inconsistent.size() || cur_missing.size()) {
+    if (!cur_inconsistent.empty() || !cur_missing.empty()) {
       authoritative[*k] = auth->first;
     }
   }
@@ -4165,7 +4165,7 @@ void PG::scrub_compare_maps() {
       ss);
     dout(2) << ss.str() << dendl;
 
-    if (authoritative.size() || scrubber.inconsistent_snapcolls.size()) {
+    if (!authoritative.empty() || !scrubber.inconsistent_snapcolls.empty()) {
       osd->clog.error(ss);
     }
 
@@ -4189,7 +4189,7 @@ void PG::scrub_process_inconsistent() {
   bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
   const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
 
-  if (scrubber.authoritative.size() || scrubber.inconsistent.size()) {
+  if (!scrubber.authoritative.empty() || !scrubber.inconsistent.empty()) {
     stringstream ss;
     for (map<hobject_t, set<int> >::iterator obj =
 	   scrubber.inconsistent_snapcolls.begin();
@@ -4739,7 +4739,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
   osd->remove_want_pg_temp(info.pgid);
   cancel_recovery();
 
-  if (acting.empty() && up.size() && up[0] == osd->whoami) {
+  if (acting.empty() && !up.empty() && up[0] == osd->whoami) {
     dout(10) << " acting empty, but i am up[0], clearing pg_temp" << dendl;
     osd->queue_want_pg_temp(info.pgid, acting);
   }
@@ -4780,7 +4780,7 @@ ostream& operator<<(ostream& out, const PG& pg)
   out << " r=" << pg.get_role();
   out << " lpr=" << pg.get_last_peering_reset();
 
-  if (pg.past_intervals.size()) {
+  if (!pg.past_intervals.empty()) {
     out << " pi=" << pg.past_intervals.begin()->first << "-" << pg.past_intervals.rbegin()->second.last
 	<< "/" << pg.past_intervals.size();
   }
@@ -6705,7 +6705,7 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx) :
 
   // adjust acting?
   if (!pg->choose_acting(newest_update_osd)) {
-    if (pg->want_acting.size()) {
+    if (!pg->want_acting.empty()) {
       post_event(NeedActingChange());
     } else {
       post_event(IsIncomplete());

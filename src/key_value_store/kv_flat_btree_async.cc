@@ -189,7 +189,7 @@ int KvFlatBtreeAsync::next(const index_data &idata, index_data * out_data)
 	<< err << std::endl;
     return err;
   }
-  if (kvs.size() > 0) {
+  if (!kvs.empty()) {
     out_data->kdata.parse(kvs.begin()->first);
     bufferlist::iterator b = kvs.begin()->second.begin();
     out_data->decode(b);
@@ -1959,7 +1959,7 @@ int KvFlatBtreeAsync::remove_all() {
     return err;
   }
 
-  if (index_set.size() != 0) {
+  if (!index_set.empty()) {
     for (std::map<std::string,bufferlist>::iterator it = index_set.begin();
 	it != index_set.end(); ++it){
       librados::ObjectWriteOperation sub;
@@ -2179,7 +2179,7 @@ string KvFlatBtreeAsync::str() {
     if (verbose) cout << "getting keys failed with error " << err << std::endl;
     return ret.str();
   }
-  if(index.size() == 0) {
+  if(index.empty()) {
     ret << "There are no objects!" << std::endl;
     return ret.str();
   }

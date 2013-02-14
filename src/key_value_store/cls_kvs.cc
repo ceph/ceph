@@ -56,7 +56,7 @@ static int get_idata_from_key(cls_method_context_t hctx, const string &key,
     CLS_LOG(20, "%s is already in the index: %d", key.c_str(), r);
     bufferlist::iterator b = raw_val.begin();
     idata.decode(b);
-    if (kvmap.size() != 0) {
+    if (!kvmap.empty()) {
       bufferlist::iterator b = kvmap.begin()->second.begin();
       next_idata.decode(b);
     }
@@ -120,7 +120,7 @@ static int get_next_idata(cls_method_context_t hctx, const index_data &idata,
     return r;
   }
 
-  if (kvs.size() > 0) {
+  if (!kvs.empty()) {
     out_data.kdata.parse(kvs.begin()->first);
     bufferlist::iterator b = kvs.begin()->second.begin();
     out_data.decode(b);

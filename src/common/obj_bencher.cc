@@ -846,7 +846,7 @@ bool ObjBencher::more_objects_matching_prefix(const std::string& prefix, std::li
 
   objects->clear();
 
-  while (objects->size() == 0) {
+  while (objects->empty()) {
     bool objects_remain = get_objects(&unfiltered_objects, 20);
     if (!objects_remain)
       return false;
@@ -889,7 +889,7 @@ int ObjBencher::clean_up_slow(const std::string& prefix, int concurrentios) {
 
   //set up initial removes
   for (int i = 0; i < concurrentios; ++i) {
-    if (objects.size() == 0) {
+    if (objects.empty()) {
       // if there are fewer objects than concurrent ios, don't generate extras
       bool objects_found = more_objects_matching_prefix(prefix, &objects);
       if (!objects_found) {
@@ -941,7 +941,7 @@ int ObjBencher::clean_up_slow(const std::string& prefix, int concurrentios) {
     lock.Unlock();
 
     // get more objects if necessary
-    if (objects.size() == 0) {
+    if (objects.empty()) {
       objects_remain = more_objects_matching_prefix(prefix, &objects);
       // quit if there are no more
       if (!objects_remain) {

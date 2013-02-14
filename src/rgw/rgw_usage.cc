@@ -14,7 +14,7 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
   formatter->open_array_section("categories");
   map<string, rgw_usage_data>::const_iterator uiter;
   for (uiter = entry.usage_map.begin(); uiter != entry.usage_map.end(); ++uiter) {
-    if (categories && categories->size() && !categories->count(uiter->first))
+    if (categories && !categories->empty() && !categories->count(uiter->first))
       continue;
     const rgw_usage_data& usage = uiter->second;
     formatter->open_object_section("entry");

@@ -56,7 +56,7 @@ struct failure_info_t {
   failure_info_t() : num_reports(0) {}
 
   utime_t get_failed_since() {
-    if (max_failed_since == utime_t() && reporters.size()) {
+    if (max_failed_since == utime_t() && !reporters.empty()) {
       // the old max must have canceled; recalculate.
       for (map<int, failure_reporter_t>::iterator p = reporters.begin();
 	   p != reporters.end();

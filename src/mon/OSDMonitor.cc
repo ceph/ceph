@@ -248,7 +248,7 @@ bool OSDMonitor::thrash()
 	if (std::find(v.begin(), v.end(), *q) == v.end())
 	  v.push_back(*q);
     }
-    if (v.size())
+    if (!v.empty())
       pending_inc.new_pg_temp[p->first] = v;
     dout(5) << "thrash_map pg " << p->first << " pg_temp remapped to " << v << dendl;
 
