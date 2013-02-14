@@ -180,15 +180,16 @@ for name in $what; do
     cmd="$binary -i $id"
 
     get_conf pid_file "$RUN_DIR/$type.$id.pid" "pid file"
-    if [ -n "$pid_file" ]; then
-	do_cmd "mkdir -p "`dirname $pid_file`
-	cmd="$cmd --pid-file $pid_file"
-    fi
-
-    get_conf log_dir "" "log dir"
-    [ -n "$log_dir" ] && do_cmd "mkdir -p $log_dir"
 
     if [ "$command" = "start" ]; then
+	if [ -n "$pid_file" ]; then
+	    do_cmd "mkdir -p "`dirname $pid_file`
+	    cmd="$cmd --pid-file $pid_file"
+	fi
+
+	get_conf log_dir "" "log dir"
+	[ -n "$log_dir" ] && do_cmd "mkdir -p $log_dir"
+
         get_conf auto_start "" "auto start"
         if [ "$auto_start" = "no" ] || [ "$auto_start" = "false" ] || [ "$auto_start" = "0" ]; then
             if [ -z "$@" ]; then
