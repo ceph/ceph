@@ -9,7 +9,8 @@ EXTRA_DIST += \
 	src/test/run-cli-tests-maybe-unset-ccache \
 	src/test/cli \
 	src/test/downloads \
-	udev/50-rbd.rules
+	udev/50-rbd.rules \
+	udev/95-ceph-osd.rules
 
 
 all-local:
