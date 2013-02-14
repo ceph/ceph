@@ -249,7 +249,7 @@ capabilities to a particular pool. This means you can have full access to some
 pools, and restricted (or no) access to other pools for the same user.
 For example:: 
 
-	ceph-authtool -n client.foo --cap osd 'allow rwx' pool=customer-pool
+	ceph-authtool -n client.foo --cap osd 'allow rwx pool=customer-pool'
 
 
 
