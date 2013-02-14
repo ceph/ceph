@@ -295,6 +295,7 @@ mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph/
 
 # udev rules
 install -D -m 644 udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
+install -D -m 644 udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -397,6 +398,7 @@ fi
 /sbin/ceph-disk-activate
 /sbin/ceph-disk-prepare
 /sbin/ceph-create-keys
+/lib/udev/rules.d/95-ceph-osd.rules
 
 #################################################################################
 %files fuse

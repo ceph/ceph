@@ -24,3 +24,4 @@ usr/share/man/man8/monmaptool.8
 usr/share/man/man8/ceph-clsinfo.8
 usr/share/man/man8/ceph-debugpack.8
 etc/bash_completion.d/ceph
+lib/udev/rules.d/95-ceph-osd.rules

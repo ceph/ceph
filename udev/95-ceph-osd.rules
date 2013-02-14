@@ -1,0 +1,5 @@
+# activate ceph-tagged partitions
+ACTION=="add", SUBSYSTEM=="block", \
+  ENV{DEVTYPE}=="partition", \
+  ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-062c0ceff05d", \
+  RUN+="/usr/sbin/ceph-disk-activate --mount /dev/$name"
