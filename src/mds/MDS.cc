@@ -1848,7 +1848,7 @@ bool MDS::_dispatch(Message *m)
   }
 
   // finish any triggered contexts
-  while (finished_queue.size()) {
+  while (!finished_queue.empty()) {
     dout(7) << "mds has " << finished_queue.size() << " queued contexts" << dendl;
     dout(10) << finished_queue << dendl;
     list<Context*> ls;

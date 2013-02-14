@@ -346,7 +346,7 @@ int HashIndex::recursive_remove(const vector<string> &path) {
   r = list_objects(path, 0, 0, &objects);
   if (r < 0)
     return r;
-  if (objects.size())
+  if (!objects.empty())
     return -ENOTEMPTY;
   vector<string> subdir(path);
   for (set<string>::iterator i = subdirs.begin();

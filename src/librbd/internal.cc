@@ -360,7 +360,7 @@ namespace librbd {
 	   it != images.end(); ++it) {
 	names.push_back(it->first);
       }
-      if (images.size()) {
+      if (!images.empty()) {
 	last_read = images.rbegin()->first;
       }
       r = images.size();
@@ -1056,7 +1056,7 @@ reprotect_and_return_err:
 	return r;
       }
       omap_values.insert(outbl.begin(), outbl.end());
-      if (outbl.size() > 0)
+      if (!outbl.empty())
 	last_read = outbl.rbegin()->first;
     } while (r == MAX_READ);
 
@@ -1074,7 +1074,7 @@ reprotect_and_return_err:
     librados::ObjectWriteOperation op;
     op.create(true);
     op.write_full(databl);
-    if (omap_values.size())
+    if (!omap_values.empty())
       op.omap_set(omap_values);
     r = io_ctx.operate(dst_oid, &op);
     if (r < 0) {
