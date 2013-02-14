@@ -181,6 +181,8 @@ TEST(chain_xattr, listxattr) {
 
   ASSERT_EQ(0, chain_removexattr(file, name1.c_str()));
   ASSERT_EQ(0, chain_removexattr(file, name2.c_str()));
+
+  ::unlink(file);
 }
 
 int main(int argc, char **argv) {
@@ -189,7 +191,6 @@ int main(int argc, char **argv) {
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->set_val("log_file", "LOGFILE");
   g_ceph_context->_conf->set_val("err_to_stderr", "false");
   g_ceph_context->_conf->set_val("log_to_stderr", "false");
   g_ceph_context->_conf->apply_changes(NULL);
