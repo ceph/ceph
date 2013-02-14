@@ -9,6 +9,53 @@
 
 #define MAX_TEST 1000000
 
+TEST(BufferList, zero) {
+  //
+  // void zero()
+  //
+  {
+    bufferlist bl;
+    bl.append('A');
+    EXPECT_EQ('A', bl[0]);
+    bl.zero();
+    EXPECT_EQ('\0', bl[0]);
+  }
+  //
+  // void zero(unsigned o, unsigned l)
+  //
+  const char *s[] = {
+    "ABC",
+    "DEF",
+    "GHI",
+    "KLM"
+  };
+  {
+    bufferlist bl;
+    bufferptr ptr(s[0], strlen(s[0]));
+    bl.push_back(ptr);
+    bl.zero((unsigned)0, (unsigned)1);
+    EXPECT_EQ(0, ::memcmp("\0BC", bl.c_str(), 3));
+  }
+  {
+    bufferlist bl;
+    for (unsigned i = 0; i < 4; i++) {
+      bufferptr ptr(s[i], strlen(s[i]));
+      bl.push_back(ptr);
+    }
+    EXPECT_THROW(bl.zero((unsigned)0, (unsigned)2000), FailedAssertion);
+    bl.zero((unsigned)2, (unsigned)5);
+    EXPECT_EQ(0, ::memcmp("AB\0\0\0\0\0HIKLM", bl.c_str(), 9));
+  }
+  {
+    bufferlist bl;
+    for (unsigned i = 0; i < 4; i++) {
+      bufferptr ptr(s[i], strlen(s[i]));
+      bl.push_back(ptr);
+    }
+    bl.zero((unsigned)3, (unsigned)3);
+    EXPECT_EQ(0, ::memcmp("ABC\0\0\0GHIKLM", bl.c_str(), 9));
+  }
+}
 
 TEST(BufferList, EmptyAppend) {
   bufferlist bl;
