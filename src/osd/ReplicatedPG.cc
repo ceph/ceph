@@ -330,7 +330,7 @@ int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss,
     mark_all_unfound_lost(mode);
     return 0;
   }
-  else if (cmd.size() >= 1 && cmd[0] == "list_missing") {
+  else if (!cmd.empty() && cmd[0] == "list_missing") {
     JSONFormatter jf(true);
     hobject_t offset;
     if (cmd.size() > 1) {
@@ -7269,7 +7269,7 @@ static set<snapid_t> get_expected_snap_colls(
   bufferlist oiattr;
   oiattr.push_back(oiiter->second);
   *oi = object_info_t(oiattr);
-  if (oi->snaps.size() > 0)
+  if (!oi->snaps.empty())
     to_check.insert(*(oi->snaps.begin()));
   if (oi->snaps.size() > 1)
     to_check.insert(*(oi->snaps.rbegin()));

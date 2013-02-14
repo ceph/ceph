@@ -338,7 +338,7 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
 
   if (s->cct->_conf->rgw_ops_log_rados) {
     string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
-				        s->bucket.bucket_id, entry.bucket.c_str());
+				        s->bucket.bucket_id, entry.bucket);
 
     rgw_obj obj(store->params.log_pool, oid);
 

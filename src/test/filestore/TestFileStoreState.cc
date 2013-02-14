@@ -229,7 +229,7 @@ hobject_t *TestFileStoreState::coll_entry_t::remove_obj_at(int pos, int *key)
 hobject_t *TestFileStoreState::coll_entry_t::get_obj_at(int pos,
     bool remove, int *key)
 {
-  if (!m_objects.size()) {
+  if (m_objects.empty()) {
     dout(5) << "get_obj_at coll " << m_coll.to_str() << " pos " << pos
         << " in an empty collection" << dendl;
     return NULL;

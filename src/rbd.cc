@@ -301,7 +301,7 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
     if (r < 0)
       return r;
     string lockstr;
-    if (lockers.size()) {
+    if (!lockers.empty()) {
       lockstr = (exclusive) ? "excl" : "shr";
     }
 
@@ -317,7 +317,7 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
 	f->close_section();
       }
       f->dump_int("format", old_format ? 1 : 2);
-      if (lockers.size())
+      if (!lockers.empty())
 	f->dump_string("lock_type", exclusive ? "exclusive" : "shared");
       f->close_section();
     } else {
@@ -375,7 +375,7 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
   if (f) {
     f->close_section();
     f->flush(cout);
-  } else if (names.size()) {
+  } else if (!names.empty()) {
     cout << tbl;
   }
 

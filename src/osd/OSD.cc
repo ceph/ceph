@@ -1865,7 +1865,7 @@ void OSD::calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& ps
 	  pset.insert(acting[i]);
 	up++;
       }
-    if (!up && acting.size()) {
+    if (!up && !acting.empty()) {
       // sucky.  add down osds, even tho we can't reach them right now.
       for (unsigned i=0; i<acting.size(); i++)
 	if (acting[i] != whoami)
@@ -3091,7 +3091,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
 
   dout(20) << "do_command tid " << tid << " " << cmd << dendl;
 
-  if (cmd.size() == 0) {
+  if (cmd.empty()) {
     ss << "no command given";
     goto out;
   }
@@ -3171,7 +3171,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
        << (end-start) << " sec at " << prettybyte_t(rate) << "/sec";
   }
 
-  else if (cmd.size() >= 1 && cmd[0] == "flush_pg_stats") {
+  else if (!cmd.empty() && cmd[0] == "flush_pg_stats") {
     flush_pg_stats();
   }
   
@@ -4866,7 +4866,7 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
       object_info_t oi(bv);
 
       t.collection_move(coll_t(pgid), coll_t(parentid), poid);
-      if (oi.snaps.size()) {
+      if (!oi.snaps.empty()) {
 	snapid_t first = oi.snaps[0];
 	t.collection_move(coll_t(pgid, first), coll_t(parentid), poid);
 	if (oi.snaps.size() > 1) {
@@ -5902,7 +5902,7 @@ void OSD::do_recovery(PG *pg)
      */
     if (!started && pg->have_unfound()) {
       pg->discover_all_missing(*rctx.query_map);
-      if (!rctx.query_map->size()) {
+      if (rctx.query_map->empty()) {
 	dout(10) << "do_recovery  no luck, giving up on this pg for now" << dendl;
 	recovery_wq.lock();
 	recovery_wq._dequeue(pg);
@@ -6401,7 +6401,7 @@ void OSD::process_peering_events(
     same_interval_since = MAX(pg->info.history.same_interval_since,
 			      same_interval_since);
     pg->write_if_dirty(*rctx.transaction);
-    if (split_pgs.size()) {
+    if (!split_pgs.empty()) {
       rctx.on_applied->add(new C_CompleteSplits(this, split_pgs));
       split_pgs.clear();
     }

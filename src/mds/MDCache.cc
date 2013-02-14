@@ -5300,7 +5300,7 @@ void MDCache::queue_file_recover(CInode *in)
     predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
 
     s.erase(*s.begin());
-    while (s.size()) {
+    while (!s.empty()) {
       snapid_t snapid = *s.begin();
       CInode *cow_inode = 0;
       journal_cow_inode(mut, &le->metablob, in, snapid-1, &cow_inode);
@@ -7997,7 +7997,7 @@ void MDCache::anchor_create(MDRequest *mdr, CInode *in, Context *onfinish)
   // make trace
   vector<Anchor> trace;
   in->make_anchor_trace(trace);
-  if (!trace.size()) {
+  if (trace.empty()) {
     assert(MDS_INO_IS_BASE(in->ino()));
     trace.push_back(Anchor(in->ino(), in->ino(), 0, 0, 0));
   }

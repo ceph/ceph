@@ -91,7 +91,7 @@ int main(int argc, const char **argv)
       ++i;
     }
   }
-  if (args.size() < 1) {
+  if (args.empty()) {
     cerr << me << ": must specify monmap filename" << std::endl;
     usage();
   }
@@ -147,7 +147,7 @@ int main(int argc, const char **argv)
     // apply initial members
     list<string> initial_members;
     get_str_list(g_conf->mon_initial_members, initial_members);
-    if (initial_members.size()) {
+    if (!initial_members.empty()) {
       cout << "initial_members " << initial_members << ", filtering seed monmap" << std::endl;
       set<entity_addr_t> removed;
       monmap.set_initial_members(g_ceph_context, initial_members,

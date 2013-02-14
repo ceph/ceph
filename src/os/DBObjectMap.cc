@@ -104,7 +104,7 @@ bool DBObjectMap::check(std::ostream &out)
       map<string, bufferlist> got;
       to_get.insert(HEADER_KEY);
       db->get(sys_parent_prefix(header), to_get, &got);
-      if (!got.size()) {
+      if (got.empty()) {
 	out << "Missing: seq " << header.parent << std::endl;
 	retval = false;
 	break;
@@ -553,7 +553,7 @@ int DBObjectMap::_get_header(Header header,
     set<string> to_get;
     to_get.insert(USER_HEADER_KEY);
     int r = db->get(sys_prefix(header), to_get, &out);
-    if (r == 0 && out.size())
+    if (r == 0 && !out.empty())
       break;
     if (r < 0)
       return r;
@@ -563,7 +563,7 @@ int DBObjectMap::_get_header(Header header,
     header = lookup_parent(current);
   }
 
-  if (out.size())
+  if (!out.empty())
     bl->swap(out.begin()->second);
   return 0;
 }
@@ -968,7 +968,7 @@ int DBObjectMap::upgrade()
 		      &got);
       if (r < 0)
 	return r;
-      if (!got.size())
+      if (got.empty())
 	continue; // Moved in a previous transaction
 
       t->rmkeys(USER_PREFIX + header_key(hdr.parent) + SYS_PREFIX,
@@ -1016,7 +1016,7 @@ int DBObjectMap::init(bool do_upgrade)
   int r = db->get(SYS_PREFIX, to_get, &result);
   if (r < 0)
     return r;
-  if (result.size()) {
+  if (!result.empty()) {
     bufferlist::iterator bliter = result.begin()->second.begin();
     state.decode(bliter);
     if (state.v < 1) { // Needs upgrade
@@ -1080,7 +1080,7 @@ DBObjectMap::Header DBObjectMap::_lookup_map_header(const hobject_t &hoid)
   int r = db->get(HOBJECT_TO_SEQ, to_get, &out);
   if (r < 0)
     return Header();
-  if (!out.size())
+  if (out.empty())
     return Header();
   
   Header ret(new _Header(), RemoveMapHeaderOnDelete(this, hoid));
@@ -1123,7 +1123,7 @@ DBObjectMap::Header DBObjectMap::lookup_parent(Header input)
     assert(0);
     return Header();
   }
-  if (out.size() < 1) {
+  if (out.empty()) {
     assert(0);
     return Header();
   }

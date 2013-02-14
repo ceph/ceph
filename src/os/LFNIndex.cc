@@ -235,7 +235,7 @@ int LFNIndex::remove_objects(const vector<string> &dir,
 					     candidate->second.second));
       candidate++;
     }
-    if (holes.size() > 0)
+    if (!holes.empty())
       clean_chains.insert(lfn_get_short_name(to_clean->second, 0));
   }
   return 0;

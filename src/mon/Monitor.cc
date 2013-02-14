@@ -484,7 +484,7 @@ int Monitor::preinit()
     list<string> initial_members;
     get_str_list(g_conf->mon_initial_members, initial_members);
 
-    if (initial_members.size()) {
+    if (!initial_members.empty()) {
       dout(1) << " initial_members " << initial_members << ", filtering seed monmap" << dendl;
 
       monmap->set_initial_members(g_ceph_context, initial_members, name, messenger->get_myaddr(),
@@ -1358,7 +1358,7 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
       << (timecheck_round%2 ? "on-going" : "finished");
   }
 
-  if (timecheck_skews.size() != 0) {
+  if (!timecheck_skews.empty()) {
     list<string> warns;
     if (f)
       f->open_array_section("mons");
@@ -2299,7 +2299,7 @@ void Monitor::timecheck_finish_round(bool success)
   timecheck_round_start = utime_t();
 
   if (success) {
-    assert(timecheck_waiting.size() == 0);
+    assert(timecheck_waiting.empty());
     assert(timecheck_acks == quorum.size());
     timecheck_report();
     return;
@@ -2544,7 +2544,7 @@ void Monitor::handle_timecheck_leader(MTimeCheck *m)
     dout(10) << __func__ << " got pongs from everybody ("
              << timecheck_acks << " total)" << dendl;
     assert(timecheck_skews.size() == timecheck_acks);
-    assert(timecheck_waiting.size() == 0);
+    assert(timecheck_waiting.empty());
     // everyone has acked, so bump the round to finish it.
     timecheck_finish_round();
   }

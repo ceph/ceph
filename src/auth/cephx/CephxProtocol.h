@@ -466,7 +466,7 @@ void encode_encrypt_enc_bl(CephContext *cct, const T& t, const CryptoKey& key,
 }
 
 template <typename T>
-int decode_decrypt(CephContext *cct, T& t, const CryptoKey key,
+int decode_decrypt(CephContext *cct, T& t, const CryptoKey& key,
 		    bufferlist::iterator& iter, std::string &error)
 {
   bufferlist bl_enc;

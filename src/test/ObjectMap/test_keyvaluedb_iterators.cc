@@ -147,7 +147,7 @@ public:
   void validate_prefix(KeyValueDB::WholeSpaceIterator iter,
       string &prefix, deque<string> &keys) {
 
-    while (keys.size() > 0) {
+    while (!keys.empty()) {
       ASSERT_TRUE(iter->valid());
       string expected_key = keys.front();
       keys.pop_front();
@@ -170,7 +170,7 @@ public:
   void validate_prefix_backwards(KeyValueDB::WholeSpaceIterator iter,
       string &prefix, deque<string> &keys) {
 
-    while (keys.size() > 0) {
+    while (!keys.empty()) {
       ASSERT_TRUE(iter->valid());
       string expected_key = keys.front();
       keys.pop_front();
