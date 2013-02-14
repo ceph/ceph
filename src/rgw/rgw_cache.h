@@ -165,10 +165,10 @@ class RGWCache  : public T
     return normal_name(obj.bucket, obj.object);
   }
 
-  int initialize() {
+  int init_rados() {
     int ret;
     cache.set_ctx(T::cct);
-    ret = T::initialize();
+    ret = T::init_rados();
     if (ret < 0)
       return ret;
 

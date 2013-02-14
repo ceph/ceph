@@ -61,6 +61,7 @@ void _usage()
   cerr << "  bucket check               check bucket index\n";
   cerr << "  object rm                  remove object\n";
   cerr << "  object unlink              unlink object from bucket index\n";
+  cerr << "  region info                show region info\n";
   cerr << "  zone info                  show zone params info\n";
   cerr << "  pool add                   add an existing pool for data placement\n";
   cerr << "  pool rm                    remove an existing pool from data placement set\n";
@@ -165,6 +166,7 @@ enum {
   OPT_OBJECT_UNLINK,
   OPT_GC_LIST,
   OPT_GC_PROCESS,
+  OPT_REGION_INFO,
   OPT_ZONE_INFO,
   OPT_ZONE_SET,
   OPT_CAPS_ADD,
@@ -187,6 +189,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "temp") == 0 ||
       strcmp(cmd, "usage") == 0 ||
       strcmp(cmd, "user") == 0 ||
+      strcmp(cmd, "region") == 0 ||
       strcmp(cmd, "zone") == 0) {
     *need_more = true;
     return 0;
@@ -274,6 +277,9 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_OBJECT_RM;
     if (strcmp(cmd, "unlink") == 0)
       return OPT_OBJECT_UNLINK;
+  } else if (strcmp(prev_cmd, "region") == 0) {
+    if (strcmp(cmd, "info") == 0)
+      return OPT_REGION_INFO;
   } else if (strcmp(prev_cmd, "zone") == 0) {
     if (strcmp(cmd, "info") == 0)
       return OPT_ZONE_INFO;
