@@ -1,13 +1,12 @@
 #!/bin/sh -e
 
-BASE=/tmp/cephtest
-TLIB=binary/usr/local/lib
-
 echo "starting hadoop-internal-tests tests"
 
-export LD_LIBRARY_PATH=$BASE/$TLIB 
-command1="cd $BASE/hadoop"
-command2="ant -Dextra.library.path=$BASE/$TLIB -Dceph.conf.file=$BASE/ceph.conf test -Dtestcase=TestCephFileSystem"
+# bail if $TESTDIR is not set as this test will fail in that scenario
+[ -z $TESTDIR] && { echo "\$TESTDIR needs to be set, but is not. Exiting."; exit 1; }
+
+command1="cd $TESTDIR/hadoop"
+command2="ant -Dextra.library.path=$LD_LIBRARY_PATH -Dceph.conf.file=$CEPH_CONF -Dtestcase=TestCephFileSystem"
 
 #print out the command
 echo "----------------------"
