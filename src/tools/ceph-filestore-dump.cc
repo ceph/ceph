@@ -205,7 +205,6 @@ int main(int argc, char **argv)
     }
 
     //XXX: This needs OSD function to generate
-    hobject_t biginfos_oid(sobject_t("biginfos", CEPH_NOSNAP));
     hobject_t infos_oid(sobject_t("infos", CEPH_NOSNAP));
     bufferlist bl;
     epoch_t map_epoch = PG::peek_map_epoch(fs, coll, infos_oid, &bl);
@@ -220,7 +219,7 @@ int main(int argc, char **argv)
 
     __u8 struct_v;
     int r = PG::read_info(fs, coll, bl, info, past_intervals, biginfo_oid,
-      infos_oid, biginfos_oid, snap_collections, struct_v);
+      infos_oid, snap_collections, struct_v);
     if (r < 0) {
       cerr << "read_info error " << cpp_strerror(-r) << std::endl;
       ret = 1;
