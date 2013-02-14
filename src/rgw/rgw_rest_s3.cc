@@ -117,8 +117,9 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
 	if (response_attrs.count(aiter->second) > 0) // was already overridden by a response param
 	  continue;
 
-	if ((!content_type) && aiter->first.compare(RGW_ATTR_CONTENT_TYPE) == 0) { // special handling for content_type
-	  content_type = iter->second.c_str();
+	if (aiter->first.compare(RGW_ATTR_CONTENT_TYPE) == 0) { // special handling for content_type
+	  if (!content_type)
+	    content_type = iter->second.c_str();
 	  continue;
         }
 	response_attrs[aiter->second] = iter->second.c_str();
