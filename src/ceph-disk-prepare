@@ -566,6 +566,13 @@ def prepare_dev(
                     data,
                     ],
                 )
+            subprocess.check_call(
+                args=[
+                    # also make sure the kernel refreshes the new table
+                    'partprobe',
+                    data,
+                    ],
+                )
         except subprocess.CalledProcessError as e:
             raise PrepareError(e)
 
