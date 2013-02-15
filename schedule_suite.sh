@@ -29,7 +29,7 @@ CEPH_SHA1=`wget http://gitbuilder.ceph.com/ceph-tarball-precise-x86_64-$flavor/r
 [ -z "$CEPH_SHA1" ] && echo "ceph branch $ceph dne" && exit 1
 
 
-if wget http://github.com/ceph/s3-tests/tree/$teuthology_branch -O- 2>/dev/null >/dev/null ; then
+if [ -n "$teuthology_branch" ] && wget http://github.com/ceph/s3-tests/tree/$teuthology_branch -O- 2>/dev/null >/dev/null ; then
     s3branch=$teuthology_branch
 elif wget http://github.com/ceph/s3-tests/tree/$ceph -O- 2>/dev/null >/dev/null ; then
     s3branch=$ceph
