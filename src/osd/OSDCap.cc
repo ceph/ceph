@@ -150,8 +150,8 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
     quoted_string %=
       lexeme['"' >> +(char_ - '"') >> '"'] | 
       lexeme['\'' >> +(char_ - '\'') >> '\''];
-    unquoted_word %= +(alnum | '_' | '-');
-    str %= quoted_string | unquoted_word;
+    unquoted_word %= +(qi::alnum | char_('_') | char_('-'));
+    str %= (quoted_string | unquoted_word);
 
     spaces = +lit(' ');
 
