@@ -640,6 +640,8 @@ def prepare_dev(
             ]
         if mkfs_args is not None:
             args.extend(mkfs_args.split())
+            #always force
+            args.extend(['-f'])
         else:
             args.extend(MKFS_ARGS.get(fstype, []))
         args.extend([
@@ -651,6 +653,10 @@ def prepare_dev(
             subprocess.check_call(args=args)
         except subprocess.CalledProcessError as e:
             raise PrepareError(e)
+
+        #remove whitespaces from mount_options
+        if mount_options is not None:
+            mount_options = "".join(mount_options.split())
 
         path = mount(dev=dev, fstype=fstype, options=mount_options)
 
