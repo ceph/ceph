@@ -5058,6 +5058,7 @@ bool PG::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
   pg_missing_t &missing, ostringstream &oss, const PG *passedpg)
 {
   dout(10) << "read_log" << dendl;
+  bool rewrite_log = false;
 
   // legacy?
   struct stat st;
@@ -5065,28 +5066,28 @@ bool PG::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
   assert(r == 0);
   if (st.st_size > 0) {
     read_log_old(store, coll, log_oid, info, ondisklog, log, missing, oss, passedpg);
-    return true;
-  }
-
-  log.tail = info.log_tail;
-  ObjectMap::ObjectMapIterator p = store->get_omap_iterator(coll_t::META_COLL, log_oid);
-  if (p) for (p->seek_to_first(); p->valid() ; p->next()) {
-    bufferlist bl = p->value();//Copy bufferlist before creating iterator
-    bufferlist::iterator bp = bl.begin();
-    if (p->key() == "divergent_priors") {
-      ::decode(ondisklog.divergent_priors, bp);
-      dout(20) << "read_log " << ondisklog.divergent_priors.size() << " divergent_priors" << dendl;
-    } else {
-      pg_log_entry_t e;
-      e.decode_with_checksum(bp);
-      dout(20) << "read_log " << e << dendl;
-      if (!log.log.empty()) {
-	pg_log_entry_t last_e(log.log.back());
-	assert(last_e.version.version == e.version.version - 1);
-	assert(last_e.version.epoch <= e.version.epoch);
+    rewrite_log = true;
+  } else {
+    log.tail = info.log_tail;
+    ObjectMap::ObjectMapIterator p = store->get_omap_iterator(coll_t::META_COLL, log_oid);
+    if (p) for (p->seek_to_first(); p->valid() ; p->next()) {
+      bufferlist bl = p->value();//Copy bufferlist before creating iterator
+      bufferlist::iterator bp = bl.begin();
+      if (p->key() == "divergent_priors") {
+	::decode(ondisklog.divergent_priors, bp);
+	dout(20) << "read_log " << ondisklog.divergent_priors.size() << " divergent_priors" << dendl;
+      } else {
+	pg_log_entry_t e;
+	e.decode_with_checksum(bp);
+	dout(20) << "read_log " << e << dendl;
+	if (!log.log.empty()) {
+	  pg_log_entry_t last_e(log.log.back());
+	  assert(last_e.version.version == e.version.version - 1);
+	  assert(last_e.version.epoch <= e.version.epoch);
+	}
+	log.log.push_back(e);
+	log.head = e.version;
       }
-      log.log.push_back(e);
-      log.head = e.version;
     }
   }
   log.head = info.last_update;
@@ -5150,7 +5151,7 @@ bool PG::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
     }
   }
   dout(10) << "read_log done" << dendl;
-  return false;
+  return rewrite_log;
 }
 
 void PG::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
