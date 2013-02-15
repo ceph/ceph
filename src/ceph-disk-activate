@@ -455,14 +455,26 @@ def mount_activate(
             e,
             )
 
+    # TODO always using mount options from cluster=ceph for
+    # now; see http://tracker.newdream.net/issues/3253
     mount_options = get_conf(
-        # TODO always using mount options from cluster=ceph for
-        # now; see http://tracker.newdream.net/issues/3253
         cluster='ceph',
-        variable='osd_fs_mount_options_{fstype}'.format(
+        variable='osd_mount_options_{fstype}'.format(
             fstype=fstype,
             ),
         )
+
+    if mount_options is None:
+        mount_options = get_conf(
+            cluster='ceph',
+            variable='osd_fs_mount_options_{fstype}'.format(
+                fstype=fstype,
+                ),
+            )
+
+    #remove whitespaces from mount_options
+    if mount_options is not None:
+        mount_options = "".join(mount_options.split())
 
     path = mount(dev=dev, fstype=fstype, options=mount_options)
 
