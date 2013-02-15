@@ -4,9 +4,15 @@
 
 .. note: If you deploy Ceph with Chef cookbooks, you may skip this section. 
 
+Install Packages
+----------------
+
 To install RADOS Gateway, you must install Apache and FastCGI first. :: 
 
 	sudo apt-get update && sudo apt-get install apache2 libapache2-mod-fastcgi
+
+100-Continue Support
+--------------------
 	
 The Ceph community provides a slightly optimized version of the  ``apache2``
 and ``fastcgi`` packages. The material difference is that  the Ceph packages are
@@ -30,7 +36,16 @@ You may also clone Ceph's Apache and FastCGI git repositories::
 .. _FastCGI Oneric: http://gitbuilder.ceph.com/libapache-mod-fastcgi-deb-oneiric-x86_64-basic/ 
 .. _FastCGI Precise: http://gitbuilder.ceph.com/libapache-mod-fastcgi-deb-precise-x86_64-basic/
 .. _RFC 2616, Section 8: http://www.w3.org/Protocols/rfc2616/rfc2616-sec8.html	
-	
+
+.. important: If you do NOT use a modified fastcgi as described above,
+   you should disable 100-Continue support by adding the following to
+   your ``ceph.conf``::
+
+       rgw print continue = false
+
+Apache Configuration
+--------------------
+
 Enable the URL rewrite modules for Apache and FastCGI. For example:: 
 
 	sudo a2enmod rewrite
@@ -52,7 +67,7 @@ Then, install RADOS Gateway. For example::
 
 
 Enable SSL
-==========
+----------
 
 Some REST clients use HTTPS by default. So you should consider enabling SSL
 for Apache on the server machine. ::
