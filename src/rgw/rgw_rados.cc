@@ -169,7 +169,7 @@ int RGWRegion::init(CephContext *_cct, RGWRados *_store, bool create_region)
       if (r < 0)
 	return r;
     } else if (r < 0) {
-      derr << "failed reading default region info: " << cpp_strerror(-r) << dendl;
+      lderr(cct) << "failed reading default region info: " << cpp_strerror(-r) << dendl;
       return r;
     }
   }
@@ -183,8 +183,10 @@ int RGWRegion::init(CephContext *_cct, RGWRados *_store, bool create_region)
   if (ret == -ENOENT && create_region) {
     return init_default();
   }
-  if (ret < 0)
+  if (ret < 0) {
+    lderr(cct) << "failed reading region info from " << pool << ":" << oid << ": " << cpp_strerror(-ret) << dendl;
     return ret;
+  }
 
   try {
     bufferlist::iterator iter = bl.begin();
