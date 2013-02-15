@@ -1316,22 +1316,34 @@ int RGWRados::copy_obj(void *ctx,
   bufferlist first_chunk;
 
   string tag;
-  append_rand_alpha(cct, tag, tag, 32);
+  bool copy_itself = (dest_obj == src_obj);
+  RGWObjManifest *pmanifest; 
+  ldout(cct, 0) << "dest_obj=" << dest_obj << " src_obj=" << src_obj << " copy_itself=" << (int)copy_itself << dendl;
 
-  for (; miter != astate->manifest.objs.end(); ++miter) {
-    RGWObjManifestPart& part = miter->second;
-    ObjectWriteOperation op;
-    manifest.objs[miter->first] = part;
-    cls_refcount_get(op, tag, true);
+  if (!copy_itself) {
+    append_rand_alpha(cct, tag, tag, 32);
 
-    get_obj_bucket_and_oid_key(part.loc, bucket, oid, key);
-    io_ctx.locator_set_key(key);
+    for (; miter != astate->manifest.objs.end(); ++miter) {
+      RGWObjManifestPart& part = miter->second;
+      ObjectWriteOperation op;
+      manifest.objs[miter->first] = part;
+      cls_refcount_get(op, tag, true);
 
-    ret = io_ctx.operate(oid, &op);
-    if (ret < 0)
-      goto done_ret;
+      get_obj_bucket_and_oid_key(part.loc, bucket, oid, key);
+      io_ctx.locator_set_key(key);
 
-    ref_objs.push_back(part.loc);
+      ret = io_ctx.operate(oid, &op);
+      if (ret < 0)
+        goto done_ret;
+
+      ref_objs.push_back(part.loc);
+    }
+    manifest.obj_size = total_len;
+
+    pmanifest = &manifest;
+  } else {
+    pmanifest = &astate->manifest;
+    tag = astate->obj_tag.c_str();
   }
 
   if (copy_first) {
@@ -1339,34 +1351,35 @@ int RGWRados::copy_obj(void *ctx,
     if (ret < 0)
       goto done_ret;
 
-    first_part = &manifest.objs[0];
+    first_part = &pmanifest->objs[0];
     first_part->loc = dest_obj;
     first_part->loc_ofs = 0;
     first_part->size = first_chunk.length();
   }
 
-  manifest.obj_size = total_len;
+  ret = put_obj_meta(ctx, dest_obj, end + 1, NULL, attrset, category, PUT_OBJ_CREATE, NULL, &first_chunk, pmanifest, &tag, NULL);
 
-  ret = put_obj_meta(ctx, dest_obj, end + 1, NULL, attrset, category, PUT_OBJ_CREATE, NULL, &first_chunk, &manifest, &tag, NULL);
   if (mtime)
     obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL, NULL);
 
   return 0;
 
 done_ret:
-  vector<rgw_obj>::iterator riter;
+  if (!copy_itself) {
+    vector<rgw_obj>::iterator riter;
 
-  /* rollback reference */
-  for (riter = ref_objs.begin(); riter != ref_objs.end(); ++riter) {
-    ObjectWriteOperation op;
-    cls_refcount_put(op, tag, true);
+    /* rollback reference */
+    for (riter = ref_objs.begin(); riter != ref_objs.end(); ++riter) {
+      ObjectWriteOperation op;
+      cls_refcount_put(op, tag, true);
 
-    get_obj_bucket_and_oid_key(*riter, bucket, oid, key);
-    io_ctx.locator_set_key(key);
+      get_obj_bucket_and_oid_key(*riter, bucket, oid, key);
+      io_ctx.locator_set_key(key);
 
-    int r = io_ctx.operate(oid, &op);
-    if (r < 0) {
-      ldout(cct, 0) << "ERROR: cleanup after error failed to drop reference on obj=" << *riter << dendl;
+      int r = io_ctx.operate(oid, &op);
+      if (r < 0) {
+        ldout(cct, 0) << "ERROR: cleanup after error failed to drop reference on obj=" << *riter << dendl;
+      }
     }
   }
   return ret;
