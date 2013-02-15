@@ -3,6 +3,10 @@ set -e
 
 # http://tracker.ceph.com/issues/3964
 
+[ -d /sys/bus/rbd ] || sudo modprobe rbd
+sudo chown ubuntu /sys/bus/rbd/add
+sudo chown ubuntu /sys/bus/rbd/remove
+
 rbd create image -s 100
 rbd map image
 udevadm settle  # note: newer versions of rbd do this for you.
