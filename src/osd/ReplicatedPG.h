@@ -60,6 +60,7 @@ public:
 
 class ReplicatedPG : public PG {
   friend class OSD;
+  friend class Watch;
 public:  
 
   /*
@@ -424,14 +425,9 @@ protected:
   map<object_t, SnapSetContext*> snapset_contexts;
 
   void populate_obc_watchers(ObjectContext *obc);
-  void register_unconnected_watcher(void *obc,
-				    entity_name_t entity,
-				    utime_t expire);
-  void unregister_unconnected_watcher(void *obc,
-				      entity_name_t entity);
-  void handle_watch_timeout(void *obc,
-			    entity_name_t entity,
-			    utime_t expire);
+public:
+  void handle_watch_timeout(WatchRef watch);
+protected:
 
   ObjectContext *lookup_object_context(const hobject_t& soid) {
     if (object_contexts.count(soid)) {
@@ -725,11 +721,6 @@ protected:
   void send_remove_op(const hobject_t& oid, eversion_t v, int peer);
 
 
-  void dump_watchers(ObjectContext *obc);
-  void remove_watcher(ObjectContext *obc, entity_name_t entity);
-  void remove_notify(ObjectContext *obc, Watch::Notification *notif);
-  void remove_watchers_and_notifies();
-
   struct RepModify {
     ReplicatedPG *pg;
     OpRequestRef op;
@@ -1019,20 +1010,6 @@ public:
   void on_removal();
   void on_shutdown();
 };
-
-
-inline ostream& operator<<(ostream& out, ReplicatedPG::ObjectState& obs)
-{
-  out << obs.oi.soid;
-  if (!obs.exists)
-    out << "(dne)";
-  return out;
-}
-
-inline ostream& operator<<(ostream& out, ReplicatedPG::ObjectContext& obc)
-{
-  return out << "obc(" << obc.obs << ")";
-}
 
 inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
 {

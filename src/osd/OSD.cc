@@ -168,7 +168,6 @@ OSDService::OSDService(OSD *osd) :
   scrubs_active(0),
   watch_lock("OSD::watch_lock"),
   watch_timer(osd->client_messenger->cct, watch_lock),
-  watch(NULL),
   backfill_request_lock("OSD::backfill_request_lock"),
   backfill_request_timer(g_ceph_context, backfill_request_lock, false),
   last_tid(0),
@@ -252,15 +251,12 @@ void OSDService::shutdown()
   watch_lock.Lock();
   watch_timer.shutdown();
   watch_lock.Unlock();
-
-  delete watch;
 }
 
 void OSDService::init()
 {
   reserver_finisher.start();
   watch_timer.init();
-  watch = new Watch();
 }
 
 ObjectStore *OSD::create_object_store(const std::string &dev, const std::string &jdev)
@@ -2571,150 +2567,15 @@ void OSD::ms_handle_connect(Connection *con)
   }
 }
 
-void OSD::put_object_context(void *_obc, pg_t pgid)
-{
-  ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)_obc;
-  ReplicatedPG *pg = (ReplicatedPG *)lookup_lock_raw_pg(pgid);
-  // If pg is being deleted, (which is the only case in which
-  // it will be NULL) it will clean up its object contexts itself
-  if (pg) {
-    pg->put_object_context(obc);
-    pg->unlock();
-  }
-}
-
-void OSD::complete_notify(void *_notif, void *_obc)
-{
-  ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)_obc;
-  Watch::Notification *notif = (Watch::Notification *)_notif;
-  dout(10) << "complete_notify " << notif << " got the last reply from pending watchers, can send response now" << dendl;
-  MWatchNotify *reply = notif->reply;
-  client_messenger->send_message(reply, notif->session->con);
-  notif->session->put();
-  notif->session->con->put();
-  service.watch->remove_notification(notif);
-  if (notif->timeout)
-    service.watch_timer.cancel_event(notif->timeout);
-  map<Watch::Notification *, bool>::iterator iter = obc->notifs.find(notif);
-  if (iter != obc->notifs.end())
-    obc->notifs.erase(iter);
-  delete notif;
-}
-
-void OSD::ack_notification(entity_name_t& name, void *_notif, void *_obc, ReplicatedPG *pg)
-{
-  assert(service.watch_lock.is_locked());
-  pg->assert_locked();
-  Watch::Notification *notif = (Watch::Notification *)_notif;
-  dout(10) << "ack_notification " << name << " notif " << notif << " id " << notif->id << dendl;
-  if (service.watch->ack_notification(name, notif)) {
-    complete_notify(notif, _obc);
-    pg->put_object_context(static_cast<ReplicatedPG::ObjectContext *>(_obc));
-  }
-}
-
-void OSD::handle_watch_timeout(void *obc,
-			       ReplicatedPG *pg,
-			       entity_name_t entity,
-			       utime_t expire)
-{
-  // watch_lock is inside pg->lock; handle_watch_timeout checks for the race.
-  service.watch_lock.Unlock();
-  pg->lock();
-  service.watch_lock.Lock();
-
-  pg->handle_watch_timeout(obc, entity, expire);
-  pg->unlock();
-  pg->put();
-}
-
-void OSD::disconnect_session_watches(Session *session)
-{
-  // get any watched obc's
-  map<ReplicatedPG::ObjectContext *, pg_t> obcs;
-  service.watch_lock.Lock();
-  for (map<void *, pg_t>::iterator iter = session->watches.begin(); iter != session->watches.end(); ++iter) {
-    ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)iter->first;
-    obcs[obc] = iter->second;
-  }
-  service.watch_lock.Unlock();
-
-  for (map<ReplicatedPG::ObjectContext *, pg_t>::iterator oiter = obcs.begin(); oiter != obcs.end(); ++oiter) {
-    ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)oiter->first;
-    dout(10) << "obc=" << (void *)obc << dendl;
-
-    ReplicatedPG *pg = static_cast<ReplicatedPG *>(lookup_lock_raw_pg(oiter->second));
-    if (!pg) {
-      /* pg removed between watch_unlock.Unlock() and now, all related
-       * watch structures would have been cleaned up in remove_watchers_and_notifies
-       */
-      continue; 
-    }
-    service.watch_lock.Lock();
-
-    if (!session->watches.count((void*)obc)) {
-      // Raced with watch removal, obc is invalid
-      service.watch_lock.Unlock();
-      pg->unlock();
-      continue;
-    }
-
-    /* NOTE! fix this one, should be able to just lookup entity name,
-       however, we currently only keep EntityName on the session and not
-       entity_name_t. */
-    map<entity_name_t, Session *>::iterator witer = obc->watchers.begin();
-    while (1) {
-      while (witer != obc->watchers.end() && witer->second == session) {
-        dout(10) << "removing watching session entity_name=" << session->entity_name
-		<< " from " << obc->obs.oi << dendl;
-	entity_name_t entity = witer->first;
-	watch_info_t& w = obc->obs.oi.watchers[entity];
-	utime_t expire = ceph_clock_now(g_ceph_context);
-	expire += w.timeout_seconds;
-	pg->register_unconnected_watcher(obc, entity, expire);
-	dout(10) << " disconnected watch " << w << " by " << entity << " session " << session
-		 << ", expires " << expire << dendl;
-        obc->watchers.erase(witer++);
-	pg->put_object_context(obc);
-	session->con->put();
-	session->put();
-      }
-      if (witer == obc->watchers.end())
-        break;
-      ++witer;
-    }
-    service.watch_lock.Unlock();
-    pg->unlock();
-  }
-}
-
 bool OSD::ms_handle_reset(Connection *con)
 {
   dout(1) << "OSD::ms_handle_reset()" << dendl;
   OSD::Session *session = (OSD::Session *)con->get_priv();
   if (!session)
     return false;
-  disconnect_session_watches(session);
+  session->wstate.reset();
   session->put();
   return true;
-}
-
-void OSD::handle_notify_timeout(void *_notif)
-{
-  assert(service.watch_lock.is_locked());
-  Watch::Notification *notif = (Watch::Notification *)_notif;
-  dout(10) << "OSD::handle_notify_timeout notif " << notif << " id " << notif->id << dendl;
-
-  ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)notif->obc;
-
-  pg_t pgid = notif->pgid;
-
-  complete_notify(_notif, obc);
-  service.watch_lock.Unlock(); /* drop lock to change locking order */
-
-  put_object_context(obc, pgid);
-  service.watch_lock.Lock();
-  /* exiting with watch_lock held */
 }
 
 struct C_OSD_GetVersion : public Context {

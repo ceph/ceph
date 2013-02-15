@@ -27,7 +27,7 @@
 #include "common/snap_types.h"
 #include "common/Formatter.h"
 #include "os/hobject.h"
-
+#include "Watch.h"
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
@@ -1728,7 +1728,6 @@ static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
 }
 
 
-
 struct object_info_t {
   hobject_t soid;
   object_locator_t oloc;
@@ -1748,7 +1747,7 @@ struct object_info_t {
   uint64_t truncate_seq, truncate_size;
 
 
-  map<entity_name_t, watch_info_t> watchers;
+  map<pair<uint64_t, entity_name_t>, watch_info_t> watchers;
   bool uses_tmap;
 
   void copy_user_bits(const object_info_t& other);
@@ -1823,9 +1822,7 @@ public:
   set<ObjectContext*> blocking;   // objects whose writes we block
 
   // any entity in obs.oi.watchers MUST be in either watchers or unconnected_watchers.
-  map<entity_name_t, OSD::Session *> watchers;
-  map<entity_name_t, Watch::C_WatchTimeout *> unconnected_watchers;
-  map<Watch::Notification *, bool> notifs;
+  map<pair<uint64_t, entity_name_t>, WatchRef> watchers;
 
   ObjectContext(const object_info_t &oi_, bool exists_, SnapSetContext *ssc_)
     : ref(0), registered(false), obs(oi_, exists_), ssc(ssc_),
