@@ -228,7 +228,10 @@ def reset_syslog_dir(ctx, log):
 def remove_installed_packages(ctx, log):
     from teuthology.task import ceph as ceph_task
 
-    debs = ['ceph', 'ceph-test', 'ceph-fuse', 'python-ceph']
+    debs = ['ceph', 'ceph-test', 'ceph-fuse', 'python-ceph',
+            'librados2',
+            'librbd1',
+            ]
     ceph_task.remove_debs(ctx, debs)
     ceph_task.remove_sources(ctx)
 
