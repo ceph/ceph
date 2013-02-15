@@ -47,7 +47,7 @@ def _run_one_client(ctx, config, role):
             '{tdir}/enable-coredump'.format(tdir=testdir),
             '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
             '{tdir}/archive/coverage'.format(tdir=testdir),
-            '{tdir}/binary/usr/local/bin/test_librbd_fsx'.format(tdir=testdir),
+            '{tdir}/binary/usr/local/bin/ceph_test_librbd_fsx'.format(tdir=testdir),
             '-d',
             '-W', '-R', # mmap doesn't work with rbd
             '-p', str(config.get('progress_interval', 100)),  # show progress
