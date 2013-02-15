@@ -2656,7 +2656,17 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
   assert(r >= 0);
 
   ostringstream oss;
-  read_log(store, coll, log_oid, info, ondisklog, log, missing, oss, this);
+  if (read_log(
+      store, coll, log_oid, info,
+      ondisklog, log, missing, oss, this)) {
+    /* We don't want to leave the old format around in case the next log
+     * write happens to be an append_log()
+     */
+    ObjectStore::Transaction t;
+    write_log(t);
+    int r = osd->store->apply_transaction(t);
+    assert(!r);
+  }
   if (oss.str().length())
     osd->clog.error() << oss;
 
@@ -5043,7 +5053,7 @@ std::ostream& operator<<(std::ostream& oss,
 #undef dout_prefix
 #define dout_prefix if (passedpg) _prefix(_dout, passedpg)
 
-void PG::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
+bool PG::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
   const pg_info_t &info, OndiskLog &ondisklog, IndexedLog &log,
   pg_missing_t &missing, ostringstream &oss, const PG *passedpg)
 {
@@ -5055,7 +5065,7 @@ void PG::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
   assert(r == 0);
   if (st.st_size > 0) {
     read_log_old(store, coll, log_oid, info, ondisklog, log, missing, oss, passedpg);
-    return;
+    return true;
   }
 
   log.tail = info.log_tail;
@@ -5135,6 +5145,7 @@ void PG::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
     }
   }
   dout(10) << "read_log done" << dendl;
+  return false;
 }
 
 void PG::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,

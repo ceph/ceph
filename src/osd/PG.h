@@ -1798,7 +1798,8 @@ public:
   void append_log(
     vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t);
 
-  static void read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
+  /// return true if the log should be rewritten
+  static bool read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
     const pg_info_t &info, OndiskLog &ondisklog, IndexedLog &log,
     pg_missing_t &missing, ostringstream &oss, const PG *passedpg = NULL);
   static void read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
