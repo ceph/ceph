@@ -20,6 +20,11 @@ FastCGI packages modified for Ceph here:
 - `FastCGI Oneric`_
 - `FastCGI Precise`_
 
+--
+
+.. important:: CentOS users. You may have to add "rgw print continue = false"
+   to your client.radosgw.gateway config to make fastcgi work with radosgw
+
 You may also clone Ceph's Apache and FastCGI git repositories:: 
 
    git clone --recursive https://github.com/ceph/mod_fastcgi.git
