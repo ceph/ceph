@@ -237,30 +237,22 @@ def install_debs(ctx, debs, branch):
             p.spawn(_update_deb_package_list_and_install, remote, debs, branch)
 
 def _remove_deb(remote, debs):
-    for d in debs:
-        r = remote.run(
-                args=[
-                    'sudo', 'dpkg', '-l', d,
-                    ],
-                stdout=StringIO(),
-                wait=False,
-                )
-        if r.exitstatus.get() == 0:
-            remote.run(
-                    args=[
-                        'sudo', 'apt-get', '-y', '--force-yes',
-                        'purge',
-                        d,
-                        ],
-                    stdout=StringIO(),
-                )
+    args=[
+        'sudo', 'apt-get', '-y', '--force-yes', 'purge',
+        ]
+    args.extend(debs)
+    args.extend([
+            run.Raw('||'),
+            'true'
+            ])
+    remote.run(args=args)
     remote.run(
-            args=[
-                'sudo', 'apt-get', '-y', '--force-yes',
-                'autoremove',
-                ],
-            stdout=StringIO(),
-            )
+        args=[
+            'sudo', 'apt-get', '-y', '--force-yes',
+            'autoremove',
+            ],
+        stdout=StringIO(),
+        )
 
 def remove_debs(ctx, debs):
     log.info("Removing/purging debian packages {debs}".format(debs=', '.join(debs)))
@@ -287,7 +279,14 @@ def remove_sources(ctx):
 @contextlib.contextmanager
 def binaries(ctx, config):
 
-    debs = ['ceph', 'ceph-mds', 'ceph-common', 'python-ceph', 'ceph-test']
+    debs = ['ceph',
+            'ceph-mds',
+            'ceph-common',
+            'python-ceph',
+            'ceph-test',
+            'librados2',
+            'librbd1',
+            ]
     branch = config.get('branch', 'master')
     log.info('branch: {b}'.format(b=branch))
     install_debs(ctx, debs, branch)
