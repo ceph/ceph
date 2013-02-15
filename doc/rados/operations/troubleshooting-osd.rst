@@ -298,7 +298,7 @@ long.  The warning threshold defaults to 30 seconds, and is configurable
 via the ``osd op complaint time`` option.  When this happens, the cluster
 log will receive messages like::
 
-	osd.0 192.168.106.220:6800/18813 312 : [WRN] old request osd_op(client.5099.0:790 fatty_26485_object789 [write 0~4096] 2.5e54f643) v4 received at 2012-03-06 15:42:56.054801 currently waiting for sub ops
+    slow request 30.383883 seconds old, received at 2013-02-12 16:27:15.508374: osd_op(client.9821.0:122242 rb.0.209f.74b0dc51.000000000120 [write 921600~4096] 2.981cf6bc) v4 currently no flag points reached
 
 Possible causes include:
 
@@ -306,6 +306,16 @@ Possible causes include:
  * kernel file system bug (check ``dmesg`` output)
  * overloaded cluster (check system load, iostat, etc.)
  * ceph-osd bug
+
+Pay particular attention to the ``currently`` part, as that will give
+some clue as to what the request is waiting for.  You can further look
+at exactly what requests the slow OSD is working on are, and what
+state(s) they are in with::
+
+ ceph --admin-daemon /var/run/ceph/ceph-osd.{ID}.asok dump_ops_in_flight
+
+These are sorted oldest to newest, and the dump includes an ``age``
+indicating how long the request has been in the queue.
 
 
 Flapping OSDs
