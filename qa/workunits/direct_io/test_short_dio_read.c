@@ -3,12 +3,22 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 
 int main()
 {
         char buf[409600];
-        int fd = open("shortfile", O_WRONLY|O_CREAT, 0644);
         ssize_t r;
+	int err;
+	int fd = open("shortfile", O_WRONLY|O_CREAT, 0644);
+
+	if (fd < 0) {
+		err = errno;
+		printf("error: open() failed with: %d (%s)\n", err, strerror(err));
+		exit(err);
+	}
 
 	printf("writing first 3 bytes of 10k file\n");
         r = write(fd, "foo", 3);
@@ -18,6 +28,12 @@ int main()
 
 	printf("reading O_DIRECT\n");
         fd = open("shortfile", O_RDONLY|O_DIRECT);
+	if (fd < 0) {
+		err = errno;
+		printf("error: open() failed with: %d (%s)\n", err, strerror(err));
+		exit(err);
+	}
+
         r = read(fd, buf, sizeof(buf));
         close(fd);
 
