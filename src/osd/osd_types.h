@@ -1780,6 +1780,111 @@ struct object_info_t {
 };
 WRITE_CLASS_ENCODER(object_info_t)
 
+struct ObjectState {
+  object_info_t oi;
+  bool exists;
+
+  ObjectState(const object_info_t &oi_, bool exists_)
+    : oi(oi_), exists(exists_) {}
+};
+
+
+struct SnapSetContext {
+  object_t oid;
+  int ref;
+  bool registered;
+  SnapSet snapset;
+
+  SnapSetContext(const object_t& o) : oid(o), ref(0), registered(false) { }
+};
+
+
+/*
+  * keep tabs on object modifications that are in flight.
+  * we need to know the projected existence, size, snapset,
+  * etc., because we don't send writes down to disk until after
+  * replicas ack.
+  */
+struct ObjectContext {
+  int ref;
+  bool registered;
+  ObjectState obs;
+
+  SnapSetContext *ssc;  // may be null
+
+private:
+  Mutex lock;
+public:
+  Cond cond;
+  int unstable_writes, readers, writers_waiting, readers_waiting;
+
+  // set if writes for this object are blocked on another objects recovery
+  ObjectContext *blocked_by;      // object blocking our writes
+  set<ObjectContext*> blocking;   // objects whose writes we block
+
+  // any entity in obs.oi.watchers MUST be in either watchers or unconnected_watchers.
+  map<entity_name_t, OSD::Session *> watchers;
+  map<entity_name_t, Watch::C_WatchTimeout *> unconnected_watchers;
+  map<Watch::Notification *, bool> notifs;
+
+  ObjectContext(const object_info_t &oi_, bool exists_, SnapSetContext *ssc_)
+    : ref(0), registered(false), obs(oi_, exists_), ssc(ssc_),
+      lock("ReplicatedPG::ObjectContext::lock"),
+      unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0),
+      blocked_by(0) {}
+
+  void get() { ++ref; }
+
+  // do simple synchronous mutual exclusion, for now.  now waitqueues or anything fancy.
+  void ondisk_write_lock() {
+    lock.Lock();
+    writers_waiting++;
+    while (readers_waiting || readers)
+      cond.Wait(lock);
+    writers_waiting--;
+    unstable_writes++;
+    lock.Unlock();
+  }
+  void ondisk_write_unlock() {
+    lock.Lock();
+    assert(unstable_writes > 0);
+    unstable_writes--;
+    if (!unstable_writes && readers_waiting)
+      cond.Signal();
+    lock.Unlock();
+  }
+  void ondisk_read_lock() {
+    lock.Lock();
+    readers_waiting++;
+    while (unstable_writes)
+      cond.Wait(lock);
+    readers_waiting--;
+    readers++;
+    lock.Unlock();
+  }
+  void ondisk_read_unlock() {
+    lock.Lock();
+    assert(readers > 0);
+    readers--;
+    if (!readers && writers_waiting)
+      cond.Signal();
+    lock.Unlock();
+  }
+};
+
+inline ostream& operator<<(ostream& out, ObjectState& obs)
+{
+  out << obs.oi.soid;
+  if (!obs.exists)
+    out << "(dne)";
+  return out;
+}
+
+inline ostream& operator<<(ostream& out, ObjectContext& obc)
+{
+  return out << "obc(" << obc.obs << ")";
+}
+
 
 ostream& operator<<(ostream& out, const object_info_t& oi);
 
