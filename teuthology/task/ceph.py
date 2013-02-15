@@ -230,13 +230,6 @@ def _update_deb_package_list_and_install(remote, debs, branch):
 def install_debs(ctx, debs, branch):
     """
     installs Debian packages.
-    The following items were added to the config yaml file:
-
-    install-deb: true
-    deb-branch: argonaut
-
-    It is probably possible to get the deb-branch value from somewhere else,
-    it was added for expediency.
     """
     log.info("Installing ceph debian packages: {debs}".format(debs=', '.join(debs)))
     with parallel() as p:
@@ -257,6 +250,7 @@ def _remove_deb(remote, debs):
                     args=[
                         'sudo', 'apt-get', '-y', '--force-yes',
                         'purge',
+                        d,
                         ],
                     stdout=StringIO(),
                 )
