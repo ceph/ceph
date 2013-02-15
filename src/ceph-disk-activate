@@ -192,7 +192,7 @@ def allocate_osd_id(
     try:
         osd_id = _check_output(
             args=[
-                'ceph',
+                '/usr/bin/ceph',
                 '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
                 '--keyring', keyring,
@@ -217,7 +217,7 @@ def mkfs(
     monmap = os.path.join(path, 'activate.monmap')
     subprocess.check_call(
         args=[
-            'ceph',
+            '/usr/bin/ceph',
             '--cluster', cluster,
             '--name', 'client.bootstrap-osd',
             '--keyring', keyring,
@@ -227,7 +227,7 @@ def mkfs(
 
     subprocess.check_call(
         args=[
-            'ceph-osd',
+            '/usr/bin/ceph-osd',
             '--cluster', cluster,
             '--mkfs',
             '--mkkey',
@@ -251,7 +251,7 @@ def auth_key(
     ):
     subprocess.check_call(
         args=[
-            'ceph',
+            '/usr/bin/ceph',
             '--cluster', cluster,
             '--name', 'client.bootstrap-osd',
             '--keyring', keyring,
@@ -277,7 +277,7 @@ def move_mount(
     maybe_mkdir(osd_data)
     subprocess.check_call(
         args=[
-            'mount',
+            '/bin/mount',
             '--move',
             '--',
             path,
@@ -353,7 +353,7 @@ def get_conf(cluster, variable):
     try:
         p = subprocess.Popen(
             args=[
-                'ceph-conf',
+                '/usr/bin/ceph-conf',
                 '--cluster={cluster}'.format(
                     cluster=cluster,
                     ),
@@ -408,7 +408,7 @@ def mount(
     try:
         subprocess.check_call(
             args=[
-                'mount',
+                '/bin/mount',
                 '-o', options,
                 '--',
                 dev,
@@ -431,7 +431,7 @@ def unmount(
     try:
         subprocess.check_call(
             args=[
-                'umount',
+                '/bin/umount',
                 '--',
                 path,
                 ],
