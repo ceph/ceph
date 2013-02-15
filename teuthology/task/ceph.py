@@ -287,7 +287,7 @@ def remove_sources(ctx):
 @contextlib.contextmanager
 def binaries(ctx, config):
 
-    debs = ['ceph', 'python-ceph', 'ceph-test']
+    debs = ['ceph', 'ceph-mds', 'ceph-common', 'python-ceph', 'ceph-test']
     branch = config.get('branch', 'master')
     log.info('branch: {b}'.format(b=branch))
     install_debs(ctx, debs, branch)
