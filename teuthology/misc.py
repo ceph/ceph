@@ -543,6 +543,9 @@ def reconnect(ctx, timeout):
 
 def write_secret_file(ctx, remote, role, filename):
     testdir = get_testdir(ctx)
+    keyring = '{tdir}/data/{role}.keyring'.format(tdir=testdir, role=role)
+    if role.startswith('client.'):
+        keyring = '/etc/ceph/ceph.{role}.keyring'.format(role=role)
     remote.run(
         args=[
             '{tdir}/enable-coredump'.format(tdir=testdir),
@@ -551,7 +554,7 @@ def write_secret_file(ctx, remote, role, filename):
             'ceph-authtool',
             '--name={role}'.format(role=role),
             '--print-key',
-            '{tdir}/data/{role}.keyring'.format(tdir=testdir, role=role),
+            keyring,
             run.Raw('>'),
             filename,
             ],

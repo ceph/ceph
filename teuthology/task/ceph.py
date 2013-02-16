@@ -622,17 +622,24 @@ def cluster(ctx, config):
     clients = ctx.cluster.only(teuthology.is_type('client'))
     for remote, roles_for_host in clients.remotes.iteritems():
         for id_ in teuthology.roles_of_type(roles_for_host, 'client'):
+            client_keyring = '/etc/ceph/ceph.client.{id}.keyring'.format(id=id_)
             remote.run(
                 args=[
                     '{tdir}/enable-coredump'.format(tdir=testdir),
                     'ceph-coverage',
                     coverage_dir,
+                    'sudo',
                     'ceph-authtool',
                     '--create-keyring',
                     '--gen-key',
                     # TODO this --name= is not really obeyed, all unknown "types" are munged to "client"
                     '--name=client.{id}'.format(id=id_),
-                    '{tdir}/data/client.{id}.keyring'.format(tdir=testdir, id=id_),
+                    client_keyring,
+                    run.Raw('&&'),
+                    'sudo',
+                    'chmod',
+                    '0644',
+                    client_keyring,
                     ],
                 )
 
@@ -640,7 +647,7 @@ def cluster(ctx, config):
     keys_fp = StringIO()
     keys = []
     for remote, roles_for_host in ctx.cluster.remotes.iteritems():
-        for type_ in ['osd', 'mds', 'client']:
+        for type_ in ['osd', 'mds']:
             for id_ in teuthology.roles_of_type(roles_for_host, type_):
                 data = teuthology.get_file(
                     remote=remote,
@@ -649,6 +656,15 @@ def cluster(ctx, config):
                         type=type_,
                         id=id_,
                         ),
+                    )
+                keys.append((type_, id_, data))
+                keys_fp.write(data)
+    for remote, roles_for_host in ctx.cluster.remotes.iteritems():
+        for type_ in ['client']:
+            for id_ in teuthology.roles_of_type(roles_for_host, type_):
+                data = teuthology.get_file(
+                    remote=remote,
+                    path='/etc/ceph/ceph.client.{id}.keyring'.format(id=id_)
                     )
                 keys.append((type_, id_, data))
                 keys_fp.write(data)
