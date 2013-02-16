@@ -24,7 +24,6 @@ AC_MSG_NOTICE([RPM_RELEASE='$RPM_RELEASE'])
 AC_CONFIG_MACRO_DIR([m4])
 
 AC_CONFIG_SUBDIRS([src/gtest])
-AC_CONFIG_SUBDIRS([src/leveldb])
 
 # Environment
 AC_CANONICAL_HOST
@@ -413,16 +412,8 @@ AC_ARG_WITH([ocf],
             [with_ocf=no])
 AM_CONDITIONAL(WITH_OCF, [ test "$with_ocf" = "yes" ])
 
-# use system leveldb?
-AC_ARG_WITH([system-leveldb],
-	[AS_HELP_STRING([--with-system-leveldb], [use system leveldb])],
-	,
-	[with_system_leveldb=no])
-AS_IF([test "x$with_system_leveldb" = xyes],
-	    [AC_CHECK_LIB([leveldb], [leveldb_open], [], [AC_MSG_FAILURE([libleveldb not found])], [-lsnappy -lpthread])])
-AS_IF([test "x$with_system_leveldb" = xcheck],
-	    [AC_CHECK_LIB([leveldb], [leveldb_open], [with_system_leveldb=yes], [], [-lsnappy -lpthread])])
-AM_CONDITIONAL(WITH_SYSTEM_LEVELDB, [ test "$with_system_leveldb" = "yes" ])
+# use system leveldb
+AC_CHECK_LIB([leveldb], [leveldb_open], [], [AC_MSG_FAILURE([libleveldb not found])], [-lsnappy -lpthread])
 
 # use system libs3?
 AC_ARG_WITH([system-libs3],

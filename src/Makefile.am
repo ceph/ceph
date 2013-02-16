@@ -1,6 +1,6 @@
 AUTOMAKE_OPTIONS = gnu
 SUBDIRS = ocf java
-DIST_SUBDIRS = gtest ocf leveldb libs3 java
+DIST_SUBDIRS = gtest ocf libs3 java
 
 EXTRA_DIST = \
 	libs3/COPYING \
@@ -64,14 +64,9 @@ if WITH_LIBAIO
 LIBOS_LDA += -laio
 endif
 
-if WITH_SYSTEM_LEVELDB
+# use system leveldb
 LIBOS_LDA += -lleveldb -lsnappy
 LEVELDB_INCLUDE =
-else
-LIBOS_LDA += leveldb/libleveldb.a
-SUBDIRS += leveldb
-LEVELDB_INCLUDE = -I$(top_srcdir)/src/leveldb/include
-endif
 
 # monitor
 ceph_mon_SOURCES = ceph_mon.cc
