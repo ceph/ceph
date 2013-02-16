@@ -57,6 +57,53 @@ TEST(BufferList, zero) {
   }
 }
 
+TEST(BufferList, compare) {
+  bufferlist a;
+  a.append("A");
+  bufferlist ab;
+  ab.append("AB");
+  bufferlist ac;
+  ac.append("AC");
+  //
+  // bool operator>(bufferlist& l, bufferlist& r)
+  //
+  ASSERT_FALSE(a > ab);
+  ASSERT_TRUE(ab > a);
+  ASSERT_TRUE(ac > ab);
+  ASSERT_FALSE(ab > ac);
+  ASSERT_FALSE(ab > ab);
+  //
+  // bool operator>=(bufferlist& l, bufferlist& r)
+  //
+  ASSERT_FALSE(a >= ab);
+  ASSERT_TRUE(ab >= a);
+  ASSERT_TRUE(ac >= ab);
+  ASSERT_FALSE(ab >= ac);
+  ASSERT_TRUE(ab >= ab);
+  //
+  // bool operator<(bufferlist& l, bufferlist& r)
+  //
+  ASSERT_TRUE(a < ab);
+  ASSERT_FALSE(ab < a);
+  ASSERT_FALSE(ac < ab);
+  ASSERT_TRUE(ab < ac);
+  ASSERT_FALSE(ab < ab);
+  //
+  // bool operator<=(bufferlist& l, bufferlist& r)
+  //
+  ASSERT_TRUE(a <= ab);
+  ASSERT_FALSE(ab <= a);
+  ASSERT_FALSE(ac <= ab);
+  ASSERT_TRUE(ab <= ac);
+  ASSERT_TRUE(ab <= ab);
+  //
+  // bool operator==(bufferlist &l, bufferlist &r)
+  //
+  ASSERT_FALSE(a == ab);
+  ASSERT_FALSE(ac == ab);
+  ASSERT_TRUE(ab == ab);
+}
+
 TEST(BufferList, EmptyAppend) {
   bufferlist bl;
   bufferptr ptr;
