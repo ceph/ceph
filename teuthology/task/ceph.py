@@ -174,21 +174,14 @@ def _update_deb_package_list_and_install(remote, debs, branch):
     download the appropriate packages
     """
 
-    # run gpg just to initialize
-    r = remote.run(
-            args=[
-                'gpg', '-K',
-                ],
-                )
-
     # check for ceph release key
     r = remote.run(
-            args=[
-                'apt-key', 'list', run.Raw('|'), 'grep', 'Ceph',
-                ],
-            stdout=StringIO(),
+        args=[
+            'sudo', 'apt-key', 'list', run.Raw('|'), 'grep', 'Ceph',
+            ],
+        stdout=StringIO(),
         )
-    if r.stdout.getvalue().find('Ceph Release Key') == -1:
+    if r.stdout.getvalue().find('Ceph automated package') == -1:
         # if it doesn't exist, add it
         remote.run(
                 args=[
@@ -210,22 +203,22 @@ def _update_deb_package_list_and_install(remote, debs, branch):
     log.info("release type:" + out)
 
     remote.run(
-            args=[
-                'echo', 'deb',
-                'http://gitbuilder.ceph.com/ceph-deb-' + out + '-x86_64-basic/ref/' + branch,
-                out, 'main', run.Raw('|'),
-                'sudo', 'tee', '/etc/apt/sources.list.d/ceph.list'
-                ],
-            stdout=StringIO(),
-            )
+        args=[
+            'echo', 'deb',
+            'http://gitbuilder.ceph.com/ceph-deb-' + out + '-x86_64-basic/ref/' + branch,
+            out, 'main', run.Raw('|'),
+            'sudo', 'tee', '/etc/apt/sources.list.d/ceph.list'
+            ],
+        stdout=StringIO(),
+        )
     remote.run(
-            args=[
-                'sudo', 'apt-get', 'update', run.Raw('&&'),
-                'sudo', 'apt-get', '-y', '--force-yes',
-                'install',
-                ] + debs,
-            stdout=StringIO(),
-            )
+        args=[
+            'sudo', 'apt-get', 'update', run.Raw('&&'),
+            'sudo', 'apt-get', '-y', '--force-yes',
+            'install',
+            ] + debs,
+        stdout=StringIO(),
+        )
 
 def install_debs(ctx, debs, branch):
     """
