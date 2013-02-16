@@ -1710,6 +1710,34 @@ void pg_query_t::generate_test_instances(list<pg_query_t*>& o)
 
 // -- pg_log_entry_t --
 
+string pg_log_entry_t::get_key_name() const
+{
+  char key[40];
+  snprintf(key, sizeof(key), "%010u.%020lu", version.epoch, version.version);
+  return string(key);
+}
+
+void pg_log_entry_t::encode_with_checksum(bufferlist& bl) const
+{
+  bufferlist ebl(sizeof(*this)*2);
+  encode(ebl);
+  __u32 crc = ebl.crc32c(0);
+  ::encode(ebl, bl);
+  ::encode(crc, bl);
+}
+
+void pg_log_entry_t::decode_with_checksum(bufferlist::iterator& p)
+{
+  bufferlist bl;
+  ::decode(bl, p);
+  __u32 crc;
+  ::decode(crc, p);
+  if (crc != bl.crc32c(0))
+    throw buffer::malformed_input("bad checksum on pg_log_entry_t");
+  bufferlist::iterator q = bl.begin();
+  decode(q);
+}
+
 void pg_log_entry_t::encode(bufferlist &bl) const
 {
   ENCODE_START(7, 4, bl);

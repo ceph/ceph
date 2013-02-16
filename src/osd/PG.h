@@ -267,7 +267,7 @@ public:
       caller_ops[e.reqid] = &(log.back());
     }
 
-    void trim(ObjectStore::Transaction &t, eversion_t s);
+    void trim(ObjectStore::Transaction &t, hobject_t& oid, eversion_t s);
 
     ostream& print(ostream& out) const;
   };
@@ -334,6 +334,16 @@ public:
       f->dump_unsigned("head", head);
       f->dump_unsigned("tail", tail);
       f->dump_unsigned("zero_to", zero_to);
+      f->open_array_section("divergent_priors");
+      for (map<eversion_t, hobject_t>::const_iterator p = divergent_priors.begin();
+	   p != divergent_priors.end();
+	   ++p) {
+	f->open_object_section("prior");
+	f->dump_stream("version") << p->first;
+	f->dump_stream("object") << p->second;
+	f->close_section();
+      }
+      f->close_section();
     }
     static void generate_test_instances(list<OndiskLog*>& o) {
       o.push_back(new OndiskLog);
@@ -1788,12 +1798,15 @@ public:
   void append_log(
     vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t);
 
-  static void read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
+  /// return true if the log should be rewritten
+  static bool read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
+    const pg_info_t &info, OndiskLog &ondisklog, IndexedLog &log,
+    pg_missing_t &missing, ostringstream &oss, const PG *passedpg = NULL);
+  static void read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
     const pg_info_t &info, OndiskLog &ondisklog, IndexedLog &log,
     pg_missing_t &missing, ostringstream &oss, const PG *passedpg = NULL);
   bool check_log_for_corruption(ObjectStore *store);
   void trim(ObjectStore::Transaction& t, eversion_t v);
-  void trim_ondisklog(ObjectStore::Transaction& t);
   void trim_peers();
 
   std::string get_corrupt_pg_log_name() const;

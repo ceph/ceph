@@ -39,6 +39,7 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_HOBJECTPOOL  CompatSet::Feature(6, "hobjectpool")
 #define CEPH_OSD_FEATURE_INCOMPAT_BIGINFO CompatSet::Feature(7, "biginfo")
 #define CEPH_OSD_FEATURE_INCOMPAT_LEVELDBINFO CompatSet::Feature(8, "leveldbinfo")
+#define CEPH_OSD_FEATURE_INCOMPAT_LEVELDBLOG CompatSet::Feature(9, "leveldblog")
 
 
 typedef hobject_t collection_list_handle_t;
@@ -1317,6 +1318,10 @@ struct pg_log_entry_t {
   bool reqid_is_indexed() const {
     return reqid != osd_reqid_t() && (op == MODIFY || op == DELETE);
   }
+
+  string get_key_name() const;
+  void encode_with_checksum(bufferlist& bl) const;
+  void decode_with_checksum(bufferlist::iterator& p);
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
