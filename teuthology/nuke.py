@@ -225,9 +225,28 @@ def reset_syslog_dir(ctx, log):
         log.info('Waiting for %s to restart syslog...', name)
         proc.exitstatus.get()
 
+def dpkg_configure(ctx, log):
+    from .orchestra import run
+    nodes = {}
+    for remote in ctx.cluster.remotes.iterkeys():
+        proc = remote.run(
+            args=[
+                'sudo', 'dpkg', '--configure', '-a',
+                run.Raw('&&'),
+                'sudo', 'apt-get', '-f', 'install',
+                ],
+            wait=False,
+            )
+        nodes[remote.name] = proc
+
+    for name, proc in nodes.iteritems():
+        log.info('Waiting for %s to dpkg --configure -a and apt-get -f install...', name)
+        proc.exitstatus.get()
+
 def remove_installed_packages(ctx, log):
     from teuthology.task import ceph as ceph_task
 
+    dpkg_configure(ctx, log)
     debs = ['ceph',
             'ceph-test',
             'ceph-fuse',
