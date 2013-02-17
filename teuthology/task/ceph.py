@@ -277,6 +277,7 @@ def binaries(ctx, config):
             'ceph-common',
             'python-ceph',
             'ceph-test',
+            'radosgw',
             'librados2',
             'librbd1',
             ]
