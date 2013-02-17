@@ -640,8 +640,8 @@ def prepare_dev(
             ]
         if mkfs_args is not None:
             args.extend(mkfs_args.split())
-            #always force
-            args.extend(['-f'])
+            if fstype == 'xfs':
+                args.extend(['-f'])  # always force
         else:
             args.extend(MKFS_ARGS.get(fstype, []))
         args.extend([
