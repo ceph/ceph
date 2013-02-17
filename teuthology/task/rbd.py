@@ -181,9 +181,6 @@ def dev_create(ctx, config):
                 ],
             )
 
-        secretfile = '{tdir}/data/{role}.secret'.format(tdir=testdir, role=role)
-        teuthology.write_secret_file(ctx, remote, role, secretfile)
-
         remote.run(
             args=[
                 'sudo',
@@ -192,7 +189,6 @@ def dev_create(ctx, config):
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'rbd',
                 '--user', role.rsplit('.')[-1],
-                '--secret', secretfile,
                 '-p', 'rbd',
                 'map',
                 image,
