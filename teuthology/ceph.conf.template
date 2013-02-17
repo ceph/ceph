@@ -1,5 +1,4 @@
 [global]
-	log file = {testdir}/archive/log/$name.log
 	chdir = ""
 	pid file = $name.pid
         auth supported = cephx
@@ -11,12 +10,8 @@
 
 	osd crush chooseleaf type = 0
 
-[mon]
-	mon cluster log file = {testdir}/archive/log/cluster.mon.$id.log
-
 [osd]
         osd journal size = 100
-        osd class dir = /usr/lib/rados-classes
 
         osd scrub load threshold = 5.0
 	osd scrub max interval = 600

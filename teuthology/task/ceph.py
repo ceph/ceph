@@ -77,17 +77,17 @@ class CephState(object):
     def iter_daemons_of_role(self, role):
         return self.daemons.get(role, {}).values()
 
+
 @contextlib.contextmanager
 def ceph_log(ctx, config):
-    log.info('Creating log directories...')
-    archive_dir = '{tdir}/archive'.format(tdir=teuthology.get_testdir(ctx))
+    log.info('Creating extra log directories...')
     run.wait(
         ctx.cluster.run(
             args=[
+                'sudo',
                 'install', '-d', '-m0755', '--',
-                '{adir}/log'.format(adir=archive_dir),
-                '{adir}/log/valgrind'.format(adir=archive_dir),
-                '{adir}/profiling-logger'.format(adir=archive_dir),
+                '/var/log/ceph/valgrind',
+                '/var/log/ceph/profiling-logger',
                 ],
             wait=False,
             )
@@ -95,32 +95,9 @@ def ceph_log(ctx, config):
 
     try:
         yield
+
     finally:
-
-        if ctx.archive is not None:
-            log.info('Compressing logs...')
-            run.wait(
-                ctx.cluster.run(
-                    args=[
-                        'find',
-                        '{adir}/log'.format(adir=archive_dir),
-                        '-name',
-                        '*.log',
-                        '-print0',
-                        run.Raw('|'),
-                        'xargs',
-                        '-0',
-                        '--no-run-if-empty',
-                        '--',
-                        'gzip',
-                        '--',
-                        ],
-                    wait=False,
-                    ),
-                )
-
-            # log file transfer is done by the generic archive data
-            # handling
+        pass
 
 @contextlib.contextmanager
 def ship_utilities(ctx, config):
@@ -907,6 +884,40 @@ def cluster(ctx, config):
                             remote,
                             '/var/lib/ceph/mon',
                             path + '/' + role + '.tgz')
+
+            # and logs
+            log.info('Compressing logs...')
+            run.wait(
+                ctx.cluster.run(
+                    args=[
+                        'sudo',
+                        'find',
+                        '/var/log/ceph',
+                        '-name',
+                        '*.log',
+                        '-print0',
+                        run.Raw('|'),
+                        'sudo',
+                        'xargs',
+                        '-0',
+                        '--no-run-if-empty',
+                        '--',
+                        'gzip',
+                        '--',
+                        ],
+                    wait=False,
+                    ),
+                )
+
+            log.info('Archiving logs...')
+            path = os.path.join(ctx.archive, 'remote')
+            os.makedirs(path)
+            for remote in ctx.cluster.remotes.iterkeys():
+                sub = os.path.join(path, remote.shortname)
+                os.makedirs(sub)
+                teuthology.pull_directory(remote, '/var/log/ceph',
+                                          os.path.join(sub, 'log'))
+
 
         log.info('Cleaning ceph cluster...')
         run.wait(

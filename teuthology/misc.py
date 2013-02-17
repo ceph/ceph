@@ -293,11 +293,13 @@ def pull_directory(remote, remotedir, localdir):
     """
     Copy a remote directory to a local directory.
     """
-    os.mkdir(localdir)
     log.debug('Transferring archived files from %s:%s to %s',
               remote.shortname, remotedir, localdir)
+    if not os.path.exists(localdir):
+        os.mkdir(localdir)
     proc = remote.run(
         args=[
+            'sudo',
             'tar',
             'c',
             '-f', '-',
@@ -636,7 +638,7 @@ def get_valgrind_args(testdir, name, v):
         return []
     if not isinstance(v, list):
         v = [v]
-    val_path = '{tdir}/archive/log/valgrind'.format(tdir=testdir)
+    val_path = '/var/log/ceph/valgrind'.format(tdir=testdir)
     if '--tool=memcheck' in v or '--tool=helgrind' in v:
         extra_args = [
             '{tdir}/chdir-coredump'.format(tdir=testdir),

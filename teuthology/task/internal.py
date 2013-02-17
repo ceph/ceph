@@ -252,7 +252,6 @@ def archive(ctx, config):
         if ctx.archive is not None:
             log.info('Transferring archived files...')
             logdir = os.path.join(ctx.archive, 'remote')
-            os.mkdir(logdir)
             for remote in ctx.cluster.remotes.iterkeys():
                 path = os.path.join(logdir, remote.shortname)
                 teuthology.pull_directory(remote, archive_dir, path)
