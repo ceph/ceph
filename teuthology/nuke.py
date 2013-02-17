@@ -234,6 +234,8 @@ def dpkg_configure(ctx, log):
                 'sudo', 'dpkg', '--configure', '-a',
                 run.Raw('&&'),
                 'sudo', 'apt-get', '-f', 'install',
+                run.Raw('||'),
+                ':',
                 ],
             wait=False,
             )
