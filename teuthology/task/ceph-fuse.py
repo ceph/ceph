@@ -85,6 +85,7 @@ def task(ctx, config):
             )
 
         run_cmd=[
+            'sudo',
             '{tdir}/enable-coredump'.format(tdir=testdir),
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
@@ -136,6 +137,7 @@ def task(ctx, config):
             try:
               remote.run(
                   args=[
+                      'sudo',
                       'fusermount',
                       '-u',
                       mnt,
