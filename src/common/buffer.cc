@@ -371,7 +371,7 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
     int l = _len < o._len ? _len : o._len;
     if (l) {
       int r = memcmp(c_str(), o.c_str(), l);
-      if (!r)
+      if (r)
 	return r;
     }
     if (_len < o._len)

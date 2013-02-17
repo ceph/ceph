@@ -9,6 +9,23 @@
 
 #define MAX_TEST 1000000
 
+TEST(BufferPtr, cmp) {
+  bufferptr empty;
+  bufferptr a("A", 1);
+  bufferptr ab("AB", 2);
+  bufferptr af("AF", 2);
+  bufferptr acc("ACC", 3);
+  EXPECT_GE(-1, empty.cmp(a));
+  EXPECT_LE(1, a.cmp(empty));
+  EXPECT_GE(-1, a.cmp(ab));
+  EXPECT_LE(1, ab.cmp(a));
+  EXPECT_EQ(0, ab.cmp(ab));
+  EXPECT_GE(-1, ab.cmp(af));
+  EXPECT_LE(1, af.cmp(ab));
+  EXPECT_GE(-1, acc.cmp(af));
+  EXPECT_LE(1, af.cmp(acc));
+}
+
 TEST(BufferList, zero) {
   //
   // void zero()
