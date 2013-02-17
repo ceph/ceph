@@ -156,7 +156,7 @@ def remove_osd_mounts(ctx, log):
     ctx.cluster.run(
         args=[
             'grep',
-            '{tdir}/data/'.format(tdir=get_testdir(ctx)),
+            '/var/lib/ceph/osd/',
             '/etc/mtab',
             run.Raw('|'),
             'awk', '{print $2}', run.Raw('|'),

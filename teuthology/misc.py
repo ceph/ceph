@@ -274,12 +274,16 @@ def get_file(remote, path, sudo=False):
     """
     Read a file from remote host into memory.
     """
-    proc = remote.run(
-        args=[
+    args = []
+    if sudo:
+        args.append('sudo')
+    args.extend([
             'cat',
             '--',
             path,
-            ],
+            ])
+    proc = remote.run(
+        args=args,
         stdout=StringIO(),
         )
     data = proc.stdout.getvalue()
@@ -339,6 +343,7 @@ def pull_directory_tarball(remote, remotedir, localfile):
     out = open(localfile, 'w')
     proc = remote.run(
         args=[
+            'sudo',
             'tar',
             'cz',
             '-f', '-',

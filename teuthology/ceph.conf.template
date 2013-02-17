@@ -12,14 +12,10 @@
 	osd crush chooseleaf type = 0
 
 [mon]
-        mon data = {testdir}/data/mon.$id
 	mon cluster log file = {testdir}/archive/log/cluster.mon.$id.log
 
 [osd]
-        osd data = {testdir}/data/osd.$id.data
-        osd journal = {testdir}/data/osd.$id.journal
         osd journal size = 100
-        keyring = {testdir}/data/osd.$id.keyring
         osd class dir = /usr/lib/rados-classes
 
         osd scrub load threshold = 5.0
@@ -29,7 +25,6 @@
 	osd recovery max chunk = 1048576
 
 [mds]
-        keyring = {testdir}/data/mds.$id.keyring
         lockdep = 1
         mds debug scatterstat = true
         mds verify scatter = true
