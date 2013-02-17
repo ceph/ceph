@@ -283,18 +283,23 @@ def remove_sources(ctx):
 @contextlib.contextmanager
 def binaries(ctx, config):
 
-    debs = ['ceph',
-            'ceph-mds',
-            'ceph-common',
-            'python-ceph',
-            'ceph-test',
-            'radosgw',
-            'librados2',
-            'librbd1',
-            ]
+    debs = [
+        'ceph',
+        'ceph-mds',
+        'ceph-common',
+        'python-ceph',
+        'ceph-test',
+        'radosgw',
+        ]
+    # install lib deps (so we explicitly specify version), but do not
+    # uninstall them, as 
+    debs_install = debs + [
+        'librados2',
+        'librbd1'
+        ]
     branch = config.get('branch', 'master')
     log.info('branch: {b}'.format(b=branch))
-    install_debs(ctx, debs, branch)
+    install_debs(ctx, debs_install, branch)
     try:
         yield
     finally:
