@@ -165,8 +165,8 @@ get_name_list() {
 		what=`echo $allconf $local | grep ^$type || true`
 		;;
 	    *)
-		if echo " " "$allconf" "$local" " " | egrep -v -q "( $type$id | $type.$id )"; then
-		    echo "$0: $type.$id not found ($conf defines \"$all\", /var/lib/ceph defines \"$local\")"
+		if ! echo " " $allconf $local " " | egrep -q "( $type$id | $type.$id )"; then
+		    echo "$0: $type.$id not found ($conf defines" $allconf", /var/lib/ceph defines" $local")"
 		    exit 1
 		fi
 		what="$f"
