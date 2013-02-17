@@ -213,10 +213,7 @@ def dev_create(ctx, config):
             (remote,) = ctx.cluster.only(role).remotes.keys()
             remote.run(
                 args=[
-<<<<<<< HEAD
                     'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
-=======
->>>>>>> Install ceph debs and use installed debs
                     'sudo',
                     '{tdir}/enable-coredump'.format(tdir=testdir),
                     'ceph-coverage',
