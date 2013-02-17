@@ -1,13 +1,423 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ *
+ * Author: Loic Dachary <loic@dachary.org>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Library Public License as published by
+ * the Free Software Foundation; either version 2, or (at your option)
+ * any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Library Public License for more details.
+ *
+ */
+
 #include <tr1/memory>
+#include <limits.h>
+#include <errno.h>
+#include <sys/uio.h>
 
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "common/environment.h"
 
 #include "gtest/gtest.h"
 #include "stdlib.h"
-
+#include "fcntl.h"
+#include "sys/stat.h"
 
 #define MAX_TEST 1000000
+
+TEST(Buffer, constructors) {
+  bool ceph_buffer_track = get_env_bool("CEPH_BUFFER_TRACK");
+  unsigned len = 17;
+  //
+  // buffer::create
+  //
+  if (ceph_buffer_track)
+    EXPECT_EQ(0, buffer::get_total_alloc());
+  {
+    bufferptr ptr(buffer::create(len));
+    EXPECT_EQ(len, ptr.length());
+    if (ceph_buffer_track)
+      EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
+  }
+  //
+  // buffer::claim_char
+  //
+  if (ceph_buffer_track)
+    EXPECT_EQ(0, buffer::get_total_alloc());
+  {
+    char* str = new char[len];
+    ::memset(str, 'X', len);
+    bufferptr ptr(buffer::claim_char(len, str));
+    if (ceph_buffer_track)
+      EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
+    EXPECT_EQ(len, ptr.length());
+    EXPECT_EQ(str, ptr.c_str());
+    bufferptr clone = ptr.clone();
+    EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
+  }
+  //
+  // buffer::create_static
+  //
+  if (ceph_buffer_track)
+    EXPECT_EQ(0, buffer::get_total_alloc());
+  {
+    char* str = new char[len];
+    bufferptr ptr(buffer::create_static(len, str));
+    if (ceph_buffer_track)
+      EXPECT_EQ(0, buffer::get_total_alloc());
+    EXPECT_EQ(len, ptr.length());
+    EXPECT_EQ(str, ptr.c_str());
+    delete [] str;
+  }
+  //
+  // buffer::create_malloc
+  //
+  if (ceph_buffer_track)
+    EXPECT_EQ(0, buffer::get_total_alloc());
+  {
+    bufferptr ptr(buffer::create_malloc(len));
+    if (ceph_buffer_track)
+      EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
+    EXPECT_EQ(len, ptr.length());
+    EXPECT_THROW(buffer::create_malloc((unsigned)ULLONG_MAX), buffer::bad_alloc);
+  }
+  //
+  // buffer::claim_malloc
+  //
+  if (ceph_buffer_track)
+    EXPECT_EQ(0, buffer::get_total_alloc());
+  {
+    char* str = (char*)malloc(len);
+    ::memset(str, 'X', len);
+    bufferptr ptr(buffer::claim_malloc(len, str));
+    if (ceph_buffer_track)
+      EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
+    EXPECT_EQ(len, ptr.length());
+    EXPECT_EQ(str, ptr.c_str());
+    bufferptr clone = ptr.clone();
+    EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
+  }
+  //
+  // buffer::copy
+  //
+  if (ceph_buffer_track)
+    EXPECT_EQ(0, buffer::get_total_alloc());
+  {
+    const std::string expected(len, 'X');
+    bufferptr ptr(buffer::copy(expected.c_str(), expected.size()));
+    if (ceph_buffer_track)
+      EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
+    EXPECT_NE(expected.c_str(), ptr.c_str());
+    EXPECT_EQ(0, ::memcmp(expected.c_str(), ptr.c_str(), len));
+  }
+  //
+  // buffer::create_page_aligned
+  //
+  if (ceph_buffer_track)
+    EXPECT_EQ(0, buffer::get_total_alloc());
+  {
+    bufferptr ptr(buffer::create_page_aligned(len));
+    ::memset(ptr.c_str(), 'X', len);
+    if (ceph_buffer_track)
+      EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
+    EXPECT_THROW(buffer::create_page_aligned((unsigned)ULLONG_MAX), buffer::bad_alloc);
+#ifndef DARWIN
+    ASSERT_TRUE(ptr.is_page_aligned());
+#endif // DARWIN 
+    bufferptr clone = ptr.clone();
+    EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
+  }
+  if (ceph_buffer_track)
+    EXPECT_EQ(0, buffer::get_total_alloc());
+}
+
+TEST(BufferRaw, ostream) {
+  bufferptr ptr(1);
+  std::ostringstream stream;
+  stream << *ptr.get_raw();
+  EXPECT_GT(stream.str().size(), stream.str().find("buffer::raw("));
+  EXPECT_GT(stream.str().size(), stream.str().find("len 1 nref 1)"));
+}
+
+//                                     
+// +-----------+                +-----+
+// |           |                |     |
+// |  offset   +----------------+     |
+// |           |                |     |
+// |  length   +----            |     |
+// |           |    \-------    |     |
+// +-----------+            \---+     |
+// |   ptr     |                +-----+
+// +-----------+                | raw |
+//                              +-----+
+//
+TEST(BufferPtr, constructors) {
+  unsigned len = 17;
+  //
+  // ptr::ptr()
+  //
+  {
+    buffer::ptr ptr;
+    EXPECT_FALSE(ptr.have_raw());
+    EXPECT_EQ((unsigned)0, ptr.offset());
+    EXPECT_EQ((unsigned)0, ptr.length());
+  }
+  //
+  // ptr::ptr(raw *r)
+  //
+  {
+    bufferptr ptr(buffer::create(len));
+    EXPECT_TRUE(ptr.have_raw());
+    EXPECT_EQ((unsigned)0, ptr.offset());
+    EXPECT_EQ(len, ptr.length());
+    EXPECT_EQ(ptr.raw_length(), ptr.length());
+    EXPECT_EQ(1, ptr.raw_nref());
+  }
+  //
+  // ptr::ptr(unsigned l)
+  //
+  {
+    bufferptr ptr(len);
+    EXPECT_TRUE(ptr.have_raw());
+    EXPECT_EQ((unsigned)0, ptr.offset());
+    EXPECT_EQ(len, ptr.length());
+    EXPECT_EQ(1, ptr.raw_nref());
+  }
+  //
+  // ptr(const char *d, unsigned l)
+  //
+  {
+    const std::string str(len, 'X');
+    bufferptr ptr(str.c_str(), len);
+    EXPECT_TRUE(ptr.have_raw());
+    EXPECT_EQ((unsigned)0, ptr.offset());
+    EXPECT_EQ(len, ptr.length());
+    EXPECT_EQ(1, ptr.raw_nref());
+    EXPECT_EQ(0, ::memcmp(str.c_str(), ptr.c_str(), len));
+  }
+  //
+  // ptr(const ptr& p)
+  //
+  {
+    const std::string str(len, 'X');
+    bufferptr original(str.c_str(), len);
+    bufferptr ptr(original);
+    EXPECT_TRUE(ptr.have_raw());
+    EXPECT_EQ(original.get_raw(), ptr.get_raw());
+    EXPECT_EQ(2, ptr.raw_nref());
+    EXPECT_EQ(0, ::memcmp(original.c_str(), ptr.c_str(), len));
+  }
+  //
+  // ptr(const ptr& p, unsigned o, unsigned l)
+  //
+  {
+    const std::string str(len, 'X');
+    bufferptr original(str.c_str(), len);
+    bufferptr ptr(original, 0, 0);
+    EXPECT_TRUE(ptr.have_raw());
+    EXPECT_EQ(original.get_raw(), ptr.get_raw());
+    EXPECT_EQ(2, ptr.raw_nref());
+    EXPECT_EQ(0, ::memcmp(original.c_str(), ptr.c_str(), len));
+    EXPECT_THROW(bufferptr(original, 0, original.length() + 1), FailedAssertion);
+    EXPECT_THROW(bufferptr(bufferptr(), 0, 0), FailedAssertion);
+  }
+}
+
+TEST(BufferPtr, assignment) {
+  unsigned len = 17;
+  //
+  // override a bufferptr set with the same raw
+  //
+  {
+    bufferptr original(len);
+    bufferptr same_raw(original.get_raw());
+    unsigned offset = 5;
+    unsigned length = len - offset;
+    original.set_offset(offset);
+    original.set_length(length);
+    same_raw = original;
+    ASSERT_EQ(2, original.raw_nref());
+    ASSERT_EQ(same_raw.get_raw(), original.get_raw());
+    ASSERT_EQ(same_raw.offset(), original.offset());
+    ASSERT_EQ(same_raw.length(), original.length());
+  }
+
+  //
+  // self assignment is a noop
+  //
+  {
+    bufferptr original(len);
+    original = original;
+    ASSERT_EQ(1, original.raw_nref());
+    ASSERT_EQ((unsigned)0, original.offset());
+    ASSERT_EQ(len, original.length());
+  }
+  
+  //
+  // a copy points to the same raw
+  //
+  {
+    bufferptr original(len);
+    unsigned offset = 5;
+    unsigned length = len - offset;
+    original.set_offset(offset);
+    original.set_length(length);
+    bufferptr ptr;
+    ptr = original;
+    ASSERT_EQ(2, original.raw_nref());
+    ASSERT_EQ(ptr.get_raw(), original.get_raw());
+    ASSERT_EQ(original.offset(), ptr.offset());
+    ASSERT_EQ(original.length(), ptr.length());
+  }
+}
+
+TEST(BufferPtr, clone) {
+  unsigned len = 17;
+  bufferptr ptr(len);
+  ::memset(ptr.c_str(), 'X', len);
+  bufferptr clone = ptr.clone();
+  EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
+}
+
+TEST(BufferPtr, swap) {
+  unsigned len = 17;
+
+  bufferptr ptr1(len);
+  ::memset(ptr1.c_str(), 'X', len);
+  unsigned ptr1_offset = 4;
+  ptr1.set_offset(ptr1_offset);
+  unsigned ptr1_length = 3;
+  ptr1.set_length(ptr1_length);
+
+  bufferptr ptr2(len);
+  ::memset(ptr2.c_str(), 'Y', len);
+  unsigned ptr2_offset = 5;
+  ptr2.set_offset(ptr2_offset);
+  unsigned ptr2_length = 7;
+  ptr2.set_length(ptr2_length);
+
+  ptr1.swap(ptr2);
+
+  EXPECT_EQ(ptr2_length, ptr1.length());
+  EXPECT_EQ(ptr2_offset, ptr1.offset());
+  EXPECT_EQ('Y', ptr1[0]);
+
+  EXPECT_EQ(ptr1_length, ptr2.length());
+  EXPECT_EQ(ptr1_offset, ptr2.offset());
+  EXPECT_EQ('X', ptr2[0]);
+}
+
+TEST(BufferPtr, release) {
+  unsigned len = 17;
+
+  bufferptr ptr1(len);
+  {
+    bufferptr ptr2(ptr1);
+    EXPECT_EQ(2, ptr1.raw_nref());
+  }
+  EXPECT_EQ(1, ptr1.raw_nref());
+}
+
+TEST(BufferPtr, have_raw) {
+  {
+    bufferptr ptr;
+    EXPECT_FALSE(ptr.have_raw());
+  }
+  {
+    bufferptr ptr(1);
+    EXPECT_TRUE(ptr.have_raw());
+  }
+}
+
+TEST(BufferPtr, at_buffer_head) {
+  bufferptr ptr(2);
+  EXPECT_TRUE(ptr.at_buffer_head());
+  ptr.set_offset(1);
+  EXPECT_FALSE(ptr.at_buffer_head());
+}
+
+TEST(BufferPtr, at_buffer_tail) {
+  bufferptr ptr(2);
+  EXPECT_TRUE(ptr.at_buffer_tail());
+  ptr.set_length(1);
+  EXPECT_FALSE(ptr.at_buffer_tail());
+}
+
+TEST(BufferPtr, is_n_page_sized) {
+  {
+    bufferptr ptr(CEPH_PAGE_SIZE);
+    EXPECT_TRUE(ptr.is_n_page_sized());
+  }
+  {
+    bufferptr ptr(1);
+    EXPECT_FALSE(ptr.is_n_page_sized());
+  }
+}
+
+TEST(BufferPtr, accessors) {
+  unsigned len = 17;
+  bufferptr ptr(len);
+  ptr.c_str()[0] = 'X';
+  ptr[1] = 'Y';
+  const bufferptr const_ptr(ptr);
+
+  EXPECT_NE((void*)NULL, (void*)ptr.get_raw());
+  EXPECT_EQ('X', ptr.c_str()[0]);
+  {
+    bufferptr ptr;
+    EXPECT_THROW(ptr.c_str(), FailedAssertion);
+    EXPECT_THROW(ptr[0], FailedAssertion);
+  }
+  EXPECT_EQ('X', const_ptr.c_str()[0]);
+  {
+    const bufferptr const_ptr;
+    EXPECT_THROW(const_ptr.c_str(), FailedAssertion);
+    EXPECT_THROW(const_ptr[0], FailedAssertion);
+  }
+  EXPECT_EQ(len, const_ptr.length());
+  EXPECT_EQ((unsigned)0, const_ptr.offset());
+  EXPECT_EQ((unsigned)0, const_ptr.start());
+  EXPECT_EQ(len, const_ptr.end());
+  EXPECT_EQ(len, const_ptr.end());
+  {
+    bufferptr ptr(len);
+    unsigned unused = 1;
+    ptr.set_length(ptr.length() - unused);
+    EXPECT_EQ(unused, ptr.unused_tail_length());
+  }
+  {
+    bufferptr ptr;
+    EXPECT_EQ((unsigned)0, ptr.unused_tail_length());
+  }
+  EXPECT_THROW(ptr[len], FailedAssertion);
+  EXPECT_THROW(const_ptr[len], FailedAssertion);
+  {
+    const bufferptr const_ptr;
+    EXPECT_THROW(const_ptr.raw_c_str(), FailedAssertion);
+    EXPECT_THROW(const_ptr.raw_length(), FailedAssertion);
+    EXPECT_THROW(const_ptr.raw_nref(), FailedAssertion);
+  }
+  EXPECT_NE((const char *)NULL, const_ptr.raw_c_str());
+  EXPECT_EQ(len, const_ptr.raw_length());
+  EXPECT_EQ(2, const_ptr.raw_nref());
+  {
+    bufferptr ptr(len);
+    unsigned wasted = 1;
+    ptr.set_length(ptr.length() - wasted * 2);
+    ptr.set_offset(wasted);
+    EXPECT_EQ(wasted * 2, ptr.wasted());
+  }
+}
 
 TEST(BufferPtr, cmp) {
   bufferptr empty;
@@ -24,6 +434,1282 @@ TEST(BufferPtr, cmp) {
   EXPECT_LE(1, af.cmp(ab));
   EXPECT_GE(-1, acc.cmp(af));
   EXPECT_LE(1, af.cmp(acc));
+}
+
+TEST(BufferPtr, is_zero) {
+  char str[2] = { '\0', 'X' };
+  {
+    const bufferptr ptr(buffer::create_static(2, str));
+    EXPECT_FALSE(ptr.is_zero());
+  }
+  {
+    const bufferptr ptr(buffer::create_static(1, str));
+    EXPECT_TRUE(ptr.is_zero());
+  }
+}
+
+TEST(BufferPtr, copy_out) {
+  {
+    const bufferptr ptr;
+    EXPECT_THROW(ptr.copy_out((unsigned)0, (unsigned)0, NULL), FailedAssertion);
+  }
+  {
+    char in[] = "ABC";
+    const bufferptr ptr(buffer::create_static(strlen(in), in));
+    EXPECT_THROW(ptr.copy_out((unsigned)0, strlen(in) + 1, NULL), buffer::end_of_buffer);
+    EXPECT_THROW(ptr.copy_out(strlen(in) + 1, (unsigned)0, NULL), buffer::end_of_buffer);
+    char out[1] = { 'X' };
+    ptr.copy_out((unsigned)1, (unsigned)1, out);
+    EXPECT_EQ('B', out[0]);
+  }
+}
+
+TEST(BufferPtr, copy_in) {
+  {
+    bufferptr ptr;
+    EXPECT_THROW(ptr.copy_in((unsigned)0, (unsigned)0, NULL), FailedAssertion);
+  }
+  {
+    char in[] = "ABCD";
+    bufferptr ptr(2);
+    EXPECT_THROW(ptr.copy_in((unsigned)0, strlen(in) + 1, NULL), FailedAssertion);
+    EXPECT_THROW(ptr.copy_in(strlen(in) + 1, (unsigned)0, NULL), FailedAssertion);
+    ptr.copy_in((unsigned)0, (unsigned)2, in);
+    EXPECT_EQ(in[0], ptr[0]);
+    EXPECT_EQ(in[1], ptr[1]);
+  }
+}
+
+TEST(BufferPtr, append) {
+  {
+    bufferptr ptr;
+    EXPECT_THROW(ptr.append('A'), FailedAssertion);
+    EXPECT_THROW(ptr.append("B", (unsigned)1), FailedAssertion);
+  }
+  {
+    bufferptr ptr(2);
+    EXPECT_THROW(ptr.append('A'), FailedAssertion);
+    EXPECT_THROW(ptr.append("B", (unsigned)1), FailedAssertion);
+    ptr.set_length(0);
+    ptr.append('A');
+    EXPECT_EQ((unsigned)1, ptr.length());
+    EXPECT_EQ('A', ptr[0]);
+    ptr.append("B", (unsigned)1);
+    EXPECT_EQ((unsigned)2, ptr.length());
+    EXPECT_EQ('B', ptr[1]);
+  }
+}
+
+TEST(BufferPtr, zero) {
+  char str[] = "XXXX";
+  bufferptr ptr(buffer::create_static(strlen(str), str));
+  EXPECT_THROW(ptr.zero(ptr.length() + 1, 0), FailedAssertion);
+  ptr.zero(1, 1);
+  EXPECT_EQ('X', ptr[0]);
+  EXPECT_EQ('\0', ptr[1]);
+  EXPECT_EQ('X', ptr[2]);
+  ptr.zero();
+  EXPECT_EQ('\0', ptr[0]);
+}
+
+TEST(BufferPtr, ostream) {
+  {
+    bufferptr ptr;
+    std::ostringstream stream;
+    stream << ptr;
+    EXPECT_GT(stream.str().size(), stream.str().find("buffer:ptr(0~0 no raw"));
+  }
+  {
+    char str[] = "XXXX";
+    bufferptr ptr(buffer::create_static(strlen(str), str));
+    std::ostringstream stream;
+    stream << ptr;
+    EXPECT_GT(stream.str().size(), stream.str().find("len 4 nref 1)"));
+  }  
+}
+
+//
+//                                             +---------+
+//                                             | +-----+ |
+//    list              ptr                    | |     | |
+// +----------+       +-----+                  | |     | |
+// | append_  >------->     >-------------------->     | |
+// |  buffer  |       +-----+                  | |     | |
+// +----------+                        ptr     | |     | |
+// |   _len   |      list            +-----+   | |     | |
+// +----------+    +------+     ,--->+     >----->     | |
+// | _buffers >---->      >-----     +-----+   | +-----+ |
+// +----------+    +----^-+     \      ptr     |   raw   |
+// |  last_p  |        /         `-->+-----+   | +-----+ |
+// +--------+-+       /              +     >----->     | |
+//          |       ,-          ,--->+-----+   | |     | |
+//          |      /        ,---               | |     | |
+//          |     /     ,---                   | |     | |
+//        +-v--+-^--+--^+-------+              | |     | |
+//        | bl | ls | p | p_off >--------------->|     | |
+//        +----+----+-----+-----+              | +-----+ |
+//        |               | off >------------->|   raw   |
+//        +---------------+-----+              |         |
+//              iterator                       +---------+
+//
+TEST(BufferListIterator, constructors) {
+  //
+  // iterator()
+  //
+  {
+    buffer::list::iterator i;
+    EXPECT_EQ((unsigned)0, i.get_off());
+  }
+
+  //
+  // iterator(list *l, unsigned o=0)
+  //
+  {
+    bufferlist bl;
+    bl.append("ABC", 3);
+
+    {
+      bufferlist::iterator i(&bl);
+      EXPECT_EQ((unsigned)0, i.get_off());
+      EXPECT_EQ('A', *i);
+    }
+    {
+      bufferlist::iterator i(&bl, 1);
+      EXPECT_EQ('B', *i);
+      EXPECT_EQ((unsigned)2, i.get_remaining());
+    }
+  }
+
+  //
+  // iterator(list *l, unsigned o, std::list<ptr>::iterator ip, unsigned po)
+  // not tested because of http://tracker.ceph.com/issues/4101
+
+  //
+  // iterator(const iterator& other)
+  //
+  {
+    bufferlist bl;
+    bl.append("ABC", 3);
+    bufferlist::iterator i(&bl, 1);
+    bufferlist::iterator j(i);
+    EXPECT_EQ(*i, *j);
+    ++j;
+    EXPECT_NE(*i, *j);
+    EXPECT_EQ('B', *i);
+    EXPECT_EQ('C', *j);
+    bl.c_str()[1] = 'X';
+    j.advance(-1);
+    EXPECT_EQ('X', *j);
+  }
+}
+
+TEST(BufferListIterator, operator_equal) {
+  bufferlist bl;
+  bl.append("ABC", 3);
+  bufferlist::iterator i(&bl, 1);
+
+  i = i;
+  EXPECT_EQ('B', *i);
+  bufferlist::iterator j;
+  j = i;
+  EXPECT_EQ('B', *j);
+}
+
+TEST(BufferListIterator, get_off) {
+  bufferlist bl;
+  bl.append("ABC", 3);
+  bufferlist::iterator i(&bl, 1);
+  EXPECT_EQ((unsigned)1, i.get_off());
+}
+
+TEST(BufferListIterator, get_remaining) {
+  bufferlist bl;
+  bl.append("ABC", 3);
+  bufferlist::iterator i(&bl, 1);
+  EXPECT_EQ((unsigned)2, i.get_remaining());
+}
+
+TEST(BufferListIterator, end) {
+  bufferlist bl;
+  {
+    bufferlist::iterator i(&bl);
+    EXPECT_TRUE(i.end());
+  }
+  bl.append("ABC", 3);
+  {
+    bufferlist::iterator i(&bl);
+    EXPECT_FALSE(i.end());
+  }
+}
+
+TEST(BufferListIterator, advance) {
+  bufferlist bl;
+  const std::string one("ABC");
+  bl.append(bufferptr(one.c_str(), one.size()));
+  const std::string two("DEF");
+  bl.append(bufferptr(two.c_str(), two.size()));
+
+  {
+    bufferlist::iterator i(&bl);
+    EXPECT_THROW(i.advance(200), buffer::end_of_buffer);
+  }
+  {
+    bufferlist::iterator i(&bl);
+    EXPECT_THROW(i.advance(-1), buffer::end_of_buffer);
+  }
+  {
+    bufferlist::iterator i(&bl);
+    EXPECT_EQ('A', *i);
+    i.advance(1);
+    EXPECT_EQ('B', *i);
+    i.advance(3);
+    EXPECT_EQ('E', *i);
+    i.advance(-3);
+    EXPECT_EQ('B', *i);
+    i.advance(-1);
+    EXPECT_EQ('A', *i);
+  }
+}
+
+TEST(BufferListIterator, seek) {
+  bufferlist bl;
+  bl.append("ABC", 3);
+  bufferlist::iterator i(&bl, 1);
+  EXPECT_EQ('B', *i);
+  i.seek(2);
+  EXPECT_EQ('C', *i);
+}
+
+TEST(BufferListIterator, operator_star) {
+  bufferlist bl;
+  {
+    bufferlist::iterator i(&bl);
+    EXPECT_THROW(*i, buffer::end_of_buffer);
+  }
+  bl.append("ABC", 3);
+  {
+    bufferlist::iterator i(&bl);
+    EXPECT_EQ('A', *i);
+    EXPECT_THROW(i.advance(200), buffer::end_of_buffer);
+    EXPECT_THROW(*i, buffer::end_of_buffer);
+  }
+}
+
+TEST(BufferListIterator, operator_plus_plus) {
+  bufferlist bl;
+  {
+    bufferlist::iterator i(&bl);
+    EXPECT_THROW(++i, buffer::end_of_buffer);
+  }
+  bl.append("ABC", 3);
+  {
+    bufferlist::iterator i(&bl);
+    ++i;
+    EXPECT_EQ('B', *i);
+  }  
+}
+
+TEST(BufferListIterator, get_current_ptr) {
+  bufferlist bl;
+  {
+    bufferlist::iterator i(&bl);
+    EXPECT_THROW(++i, buffer::end_of_buffer);
+  }
+  bl.append("ABC", 3);
+  {
+    bufferlist::iterator i(&bl, 1);
+    const buffer::ptr ptr = i.get_current_ptr();
+    EXPECT_EQ('B', ptr[0]);
+    EXPECT_EQ((unsigned)1, ptr.offset());
+    EXPECT_EQ((unsigned)2, ptr.length());
+  }  
+}
+
+TEST(BufferListIterator, copy) {
+  bufferlist bl;
+  const char *expected = "ABC";
+  bl.append(expected, 3);
+  //
+  // void copy(unsigned len, char *dest);
+  //
+  {
+    char* copy = (char*)malloc(3);
+    ::memset(copy, 'X', 3);
+    bufferlist::iterator i(&bl);
+    //
+    // demonstrates that it seeks back to offset if p == ls->end()
+    //
+    EXPECT_THROW(i.advance(200), buffer::end_of_buffer); 
+    i.copy(2, copy);
+    EXPECT_EQ(0, ::memcmp(copy, expected, 2));
+    EXPECT_EQ('X', copy[2]);
+    i.seek(0);
+    i.copy(3, copy);
+    EXPECT_EQ(0, ::memcmp(copy, expected, 3));
+  }
+  //
+  // void buffer::list::iterator::copy(unsigned len, ptr &dest)
+  //
+  {
+    bufferptr ptr;
+    bufferlist::iterator i(&bl);
+    i.copy(2, ptr);
+    EXPECT_EQ((unsigned)2, ptr.length());
+    EXPECT_EQ('A', ptr[0]);
+    EXPECT_EQ('B', ptr[1]);
+  }
+  //
+  // void buffer::list::iterator::copy(unsigned len, list &dest)
+  //
+  {
+    bufferlist copy;
+    bufferlist::iterator i(&bl);
+    //
+    // demonstrates that it seeks back to offset if p == ls->end()
+    //
+    EXPECT_THROW(i.advance(200), buffer::end_of_buffer); 
+    i.copy(2, copy);
+    EXPECT_EQ(0, ::memcmp(copy.c_str(), expected, 2));
+    i.seek(0);
+    i.copy(3, copy);
+    EXPECT_EQ('A', copy[0]);
+    EXPECT_EQ('B', copy[1]);
+    EXPECT_EQ('A', copy[2]);
+    EXPECT_EQ('B', copy[3]);
+    EXPECT_EQ('C', copy[4]);
+    EXPECT_EQ((unsigned)(2 + 3), copy.length());
+  }
+  //
+  // void buffer::list::iterator::copy_all(list &dest)
+  //
+  {
+    bufferlist copy;
+    bufferlist::iterator i(&bl);
+    //
+    // demonstrates that it seeks back to offset if p == ls->end()
+    //
+    EXPECT_THROW(i.advance(200), buffer::end_of_buffer); 
+    i.copy_all(copy);
+    EXPECT_EQ('A', copy[0]);
+    EXPECT_EQ('B', copy[1]);
+    EXPECT_EQ('C', copy[2]);
+    EXPECT_EQ((unsigned)3, copy.length());
+  }
+  //
+  // void copy(unsigned len, std::string &dest)
+  //
+  {
+    std::string copy;
+    bufferlist::iterator i(&bl);
+    //
+    // demonstrates that it seeks back to offset if p == ls->end()
+    //
+    EXPECT_THROW(i.advance(200), buffer::end_of_buffer); 
+    i.copy(2, copy);
+    EXPECT_EQ(0, ::memcmp(copy.c_str(), expected, 2));
+    i.seek(0);
+    i.copy(3, copy);
+    EXPECT_EQ('A', copy[0]);
+    EXPECT_EQ('B', copy[1]);
+    EXPECT_EQ('A', copy[2]);
+    EXPECT_EQ('B', copy[3]);
+    EXPECT_EQ('C', copy[4]);
+    EXPECT_EQ((unsigned)(2 + 3), copy.length());
+  }
+}
+
+TEST(BufferListIterator, copy_in) {
+  bufferlist bl;
+  const char *existing = "XXX";
+  bl.append(existing, 3);
+  //
+  // void buffer::list::iterator::copy_in(unsigned len, const char *src)
+  //
+  {
+    bufferlist::iterator i(&bl);
+    //
+    // demonstrates that it seeks back to offset if p == ls->end()
+    //
+    EXPECT_THROW(i.advance(200), buffer::end_of_buffer); 
+    const char *expected = "ABC";
+    i.copy_in(3, expected);
+    EXPECT_EQ(0, ::memcmp(bl.c_str(), expected, 3));
+    EXPECT_EQ('A', bl[0]);
+    EXPECT_EQ('B', bl[1]);
+    EXPECT_EQ('C', bl[2]);
+    EXPECT_EQ((unsigned)3, bl.length());
+  }
+  //
+  // void buffer::list::iterator::copy_in(unsigned len, const list& otherl)
+  //
+  {
+    bufferlist::iterator i(&bl);
+    //
+    // demonstrates that it seeks back to offset if p == ls->end()
+    //
+    EXPECT_THROW(i.advance(200), buffer::end_of_buffer); 
+    bufferlist expected;
+    expected.append("ABC", 3);
+    i.copy_in(3, expected);
+    EXPECT_EQ(0, ::memcmp(bl.c_str(), expected.c_str(), 3));
+    EXPECT_EQ('A', bl[0]);
+    EXPECT_EQ('B', bl[1]);
+    EXPECT_EQ('C', bl[2]);
+    EXPECT_EQ((unsigned)3, bl.length());
+  }
+}
+
+TEST(BufferList, constructors) {
+  //
+  // list()
+  //
+  {
+    bufferlist bl;
+    ASSERT_EQ((unsigned)0, bl.length());
+  }
+  //
+  // list(unsigned prealloc)
+  //
+  {
+    bufferlist bl(1);
+    ASSERT_EQ((unsigned)0, bl.length());
+    bl.append('A');
+    ASSERT_EQ('A', bl[0]);
+  }
+  //
+  // list(const list& other)
+  //
+  {
+    bufferlist bl(1);
+    bl.append('A');
+    ASSERT_EQ('A', bl[0]);
+    bufferlist copy(bl);
+    ASSERT_EQ('A', copy[0]);
+  }
+}
+
+TEST(BufferList, operator_equal) {
+  bufferlist bl;
+  bl.append("ABC", 3);
+  {
+    std::string dest;
+    bl.copy(1, 1, dest);
+    ASSERT_EQ('B', dest[0]);
+  }
+  bufferlist copy;
+  copy = bl;
+  {
+    std::string dest;
+    copy.copy(1, 1, dest);
+    ASSERT_EQ('B', dest[0]);
+  }
+}
+
+TEST(BufferList, buffers) {
+  bufferlist bl;
+  ASSERT_EQ((unsigned)0, bl.buffers().size());
+  bl.append('A');
+  ASSERT_EQ((unsigned)1, bl.buffers().size());
+}
+
+TEST(BufferList, swap) {
+  bufferlist b1;
+  b1.append('A');
+
+  bufferlist b2;
+  b2.append('B');
+
+  b1.swap(b2);
+
+  std::string s1;
+  b1.copy(0, 1, s1);
+  ASSERT_EQ('B', s1[0]);
+
+  std::string s2;
+  b2.copy(0, 1, s2);
+  ASSERT_EQ('A', s2[0]);
+}
+
+TEST(BufferList, length) {
+  bufferlist bl;
+  ASSERT_EQ((unsigned)0, bl.length());
+  bl.append('A');
+  ASSERT_EQ((unsigned)1, bl.length());
+}
+
+TEST(BufferList, contents_equal) {
+  //
+  // A BB
+  // AB B
+  //
+  bufferlist bl1;
+  bl1.append("A");
+  bl1.append("BB");
+  bufferlist bl2;
+  ASSERT_FALSE(bl1.contents_equal(bl2)); // different length
+  bl2.append("AB");
+  bl2.append("B");
+  ASSERT_TRUE(bl1.contents_equal(bl2)); // same length same content
+  //
+  // ABC
+  //
+  bufferlist bl3;
+  bl3.append("ABC");
+  ASSERT_FALSE(bl1.contents_equal(bl3)); // same length different content
+}
+
+TEST(BufferList, is_page_aligned) {
+  {
+    bufferlist bl;
+    EXPECT_TRUE(bl.is_page_aligned());
+  }
+  {
+    bufferlist bl;
+    bufferptr ptr(2);
+    ptr.set_offset(1);
+    ptr.set_length(1);
+    bl.append(ptr);
+    EXPECT_FALSE(bl.is_page_aligned());
+    bl.rebuild_page_aligned();
+    EXPECT_FALSE(bl.is_page_aligned());
+  }
+  {
+    bufferlist bl;
+    bufferptr ptr(CEPH_PAGE_SIZE + 1);
+    ptr.set_offset(1);
+    ptr.set_length(CEPH_PAGE_SIZE);
+    bl.append(ptr);
+    EXPECT_FALSE(bl.is_page_aligned());
+    bl.rebuild_page_aligned();
+    EXPECT_TRUE(bl.is_page_aligned());
+  }
+}
+
+TEST(BufferList, is_n_page_sized) {
+  {
+    bufferlist bl;
+    EXPECT_TRUE(bl.is_n_page_sized());
+  }
+  {
+    bufferlist bl;
+    bl.append_zero(1);
+    EXPECT_FALSE(bl.is_n_page_sized());
+  }
+  {
+    bufferlist bl;
+    bl.append_zero(CEPH_PAGE_SIZE);
+    EXPECT_TRUE(bl.is_n_page_sized());
+  }
+}
+
+TEST(BufferList, is_zero) {
+  {
+    bufferlist bl;
+    EXPECT_TRUE(bl.is_zero());
+  }
+  {
+    bufferlist bl;
+    bl.append('A');
+    EXPECT_FALSE(bl.is_zero());
+  }
+  {
+    bufferlist bl;
+    bl.append_zero(1);
+    EXPECT_TRUE(bl.is_zero());
+  }
+}
+
+TEST(BufferList, clear) {
+  bufferlist bl;
+  unsigned len = 17;
+  bl.append_zero(len);
+  bl.clear();
+  EXPECT_EQ((unsigned)0, bl.length());
+  EXPECT_EQ((unsigned)0, bl.buffers().size());
+}
+
+TEST(BufferList, push_front) {
+  //
+  // void push_front(ptr& bp)
+  //
+  {
+    bufferlist bl;
+    bufferptr ptr;
+    bl.push_front(ptr);
+    EXPECT_EQ((unsigned)0, bl.length());
+    EXPECT_EQ((unsigned)0, bl.buffers().size());
+  }
+  unsigned len = 17;
+  {
+    bufferlist bl;
+    bl.append('A');
+    bufferptr ptr(len);
+    ptr.c_str()[0] = 'B';
+    bl.push_front(ptr);
+    EXPECT_EQ((unsigned)(1 + len), bl.length());
+    EXPECT_EQ((unsigned)2, bl.buffers().size());
+    EXPECT_EQ('B', bl.buffers().front()[0]);
+    EXPECT_EQ(ptr.get_raw(), bl.buffers().front().get_raw());
+  }
+  //
+  // void push_front(raw *r)
+  //
+  {
+    bufferlist bl;
+    bl.append('A');
+    bufferptr ptr(len);
+    ptr.c_str()[0] = 'B';
+    bl.push_front(ptr.get_raw());
+    EXPECT_EQ((unsigned)(1 + len), bl.length());
+    EXPECT_EQ((unsigned)2, bl.buffers().size());
+    EXPECT_EQ('B', bl.buffers().front()[0]);
+    EXPECT_EQ(ptr.get_raw(), bl.buffers().front().get_raw());
+  }
+}
+
+TEST(BufferList, push_back) {
+  //
+  // void push_back(ptr& bp)
+  //
+  {
+    bufferlist bl;
+    bufferptr ptr;
+    bl.push_back(ptr);
+    EXPECT_EQ((unsigned)0, bl.length());
+    EXPECT_EQ((unsigned)0, bl.buffers().size());
+  }
+  unsigned len = 17;
+  {
+    bufferlist bl;
+    bl.append('A');
+    bufferptr ptr(len);
+    ptr.c_str()[0] = 'B';
+    bl.push_back(ptr);
+    EXPECT_EQ((unsigned)(1 + len), bl.length());
+    EXPECT_EQ((unsigned)2, bl.buffers().size());
+    EXPECT_EQ('B', bl.buffers().back()[0]);
+    EXPECT_EQ(ptr.get_raw(), bl.buffers().back().get_raw());
+  }
+  //
+  // void push_back(raw *r)
+  //
+  {
+    bufferlist bl;
+    bl.append('A');
+    bufferptr ptr(len);
+    ptr.c_str()[0] = 'B';
+    bl.push_back(ptr.get_raw());
+    EXPECT_EQ((unsigned)(1 + len), bl.length());
+    EXPECT_EQ((unsigned)2, bl.buffers().size());
+    EXPECT_EQ('B', bl.buffers().back()[0]);
+    EXPECT_EQ(ptr.get_raw(), bl.buffers().back().get_raw());
+  }
+}
+
+TEST(BufferList, is_contiguous) {
+  bufferlist bl;
+  EXPECT_TRUE(bl.is_contiguous());
+  EXPECT_EQ((unsigned)0, bl.buffers().size());
+  bl.append('A');  
+  EXPECT_TRUE(bl.is_contiguous());
+  EXPECT_EQ((unsigned)1, bl.buffers().size());
+  bufferptr ptr(1);
+  bl.push_back(ptr);
+  EXPECT_FALSE(bl.is_contiguous());
+  EXPECT_EQ((unsigned)2, bl.buffers().size());
+}
+
+TEST(BufferList, rebuild) {
+  {
+    bufferlist bl;
+    bufferptr ptr(2);
+    ptr.set_offset(1);
+    ptr.set_length(1);
+    bl.append(ptr);
+    EXPECT_FALSE(bl.is_page_aligned());
+    bl.rebuild();
+    EXPECT_FALSE(bl.is_page_aligned());
+  }
+  {
+    bufferlist bl;
+    const std::string str(CEPH_PAGE_SIZE, 'X');
+    bl.append(str.c_str(), str.size());
+    bl.append(str.c_str(), str.size());
+    EXPECT_EQ((unsigned)2, bl.buffers().size());
+    EXPECT_TRUE(bl.is_page_aligned());
+    bl.rebuild();
+    EXPECT_TRUE(bl.is_page_aligned());
+    EXPECT_EQ((unsigned)1, bl.buffers().size());
+  }
+}
+
+TEST(BufferList, rebuild_page_aligned) {
+  {
+    bufferlist bl;
+    {
+      bufferptr ptr(CEPH_PAGE_SIZE + 1);
+      ptr.set_offset(1);
+      ptr.set_length(CEPH_PAGE_SIZE);
+      bl.append(ptr);
+    }
+    EXPECT_EQ((unsigned)1, bl.buffers().size());
+    EXPECT_FALSE(bl.is_page_aligned());
+    bl.rebuild_page_aligned();
+    EXPECT_TRUE(bl.is_page_aligned());
+    EXPECT_EQ((unsigned)1, bl.buffers().size());
+  }
+  {
+    bufferlist bl;
+    {
+      bufferptr ptr(buffer::create_page_aligned(CEPH_PAGE_SIZE));
+      bl.append(ptr);
+    }
+    {
+      bufferptr ptr(CEPH_PAGE_SIZE + 1);
+      bl.append(ptr);
+    }
+    {
+      bufferptr ptr(2);
+      ptr.set_offset(1);
+      ptr.set_length(1);
+      bl.append(ptr);
+    }
+    {
+      bufferptr ptr(CEPH_PAGE_SIZE - 2);
+      bl.append(ptr);
+    }
+    {
+      bufferptr ptr(buffer::create_page_aligned(CEPH_PAGE_SIZE));
+      bl.append(ptr);
+    }
+    {
+      bufferptr ptr(CEPH_PAGE_SIZE + 1);
+      ptr.set_offset(1);
+      ptr.set_length(CEPH_PAGE_SIZE);
+      bl.append(ptr);
+    }
+    EXPECT_EQ((unsigned)6, bl.buffers().size());
+    EXPECT_TRUE((bl.length() & ~CEPH_PAGE_MASK) == 0);
+    EXPECT_FALSE(bl.is_page_aligned());
+    bl.rebuild_page_aligned();
+    EXPECT_TRUE(bl.is_page_aligned());
+    EXPECT_EQ((unsigned)4, bl.buffers().size());
+  }
+}
+
+TEST(BufferList, claim) {
+  bufferlist from;
+  {
+    bufferptr ptr(2);
+    from.append(ptr);
+  }
+  bufferlist to;
+  {
+    bufferptr ptr(4);
+    to.append(ptr);
+  }
+  EXPECT_EQ((unsigned)4, to.length());
+  EXPECT_EQ((unsigned)1, to.buffers().size());
+  to.claim(from);
+  EXPECT_EQ((unsigned)2, to.length());
+  EXPECT_EQ((unsigned)1, to.buffers().size());
+  EXPECT_EQ((unsigned)0, from.buffers().size());
+  EXPECT_EQ((unsigned)0, from.length());
+}
+
+TEST(BufferList, claim_append) {
+  bufferlist from;
+  {
+    bufferptr ptr(2);
+    from.append(ptr);
+  }
+  bufferlist to;
+  {
+    bufferptr ptr(4);
+    to.append(ptr);
+  }
+  EXPECT_EQ((unsigned)4, to.length());
+  EXPECT_EQ((unsigned)1, to.buffers().size());
+  to.claim_append(from);
+  EXPECT_EQ((unsigned)(4 + 2), to.length());
+  EXPECT_EQ((unsigned)4, to.buffers().front().length());
+  EXPECT_EQ((unsigned)2, to.buffers().back().length());
+  EXPECT_EQ((unsigned)2, to.buffers().size());
+  EXPECT_EQ((unsigned)0, from.buffers().size());
+  EXPECT_EQ((unsigned)0, from.length());
+}
+
+TEST(BufferList, claim_prepend) {
+  bufferlist from;
+  {
+    bufferptr ptr(2);
+    from.append(ptr);
+  }
+  bufferlist to;
+  {
+    bufferptr ptr(4);
+    to.append(ptr);
+  }
+  EXPECT_EQ((unsigned)4, to.length());
+  EXPECT_EQ((unsigned)1, to.buffers().size());
+  to.claim_prepend(from);
+  EXPECT_EQ((unsigned)(2 + 4), to.length());
+  EXPECT_EQ((unsigned)2, to.buffers().front().length());
+  EXPECT_EQ((unsigned)4, to.buffers().back().length());
+  EXPECT_EQ((unsigned)2, to.buffers().size());
+  EXPECT_EQ((unsigned)0, from.buffers().size());
+  EXPECT_EQ((unsigned)0, from.length());
+}
+
+TEST(BufferList, begin) {
+  bufferlist bl;
+  bl.append("ABC");
+  bufferlist::iterator i = bl.begin();
+  EXPECT_EQ('A', *i);
+}
+
+TEST(BufferList, end) {
+  bufferlist bl;
+  bl.append("ABC");
+  bufferlist::iterator i = bl.end();
+  i.advance(-1);
+  EXPECT_EQ('C', *i);
+}
+
+TEST(BufferList, copy) {
+  //
+  // void copy(unsigned off, unsigned len, char *dest) const;
+  //
+  {
+    bufferlist bl;
+    EXPECT_THROW(bl.copy((unsigned)100, (unsigned)100, (char*)0), buffer::end_of_buffer);
+    const char *expected = "ABC";
+    bl.append(expected);
+    char *dest = new char[2];
+    bl.copy(1, 2, dest);
+    EXPECT_EQ(0, ::memcmp(expected + 1, dest, 2));
+    delete [] dest;
+  }
+  //
+  // void copy(unsigned off, unsigned len, list &dest) const;
+  //
+  {
+    bufferlist bl;
+    bufferlist dest;
+    EXPECT_THROW(bl.copy((unsigned)100, (unsigned)100, dest), buffer::end_of_buffer);
+    const char *expected = "ABC";
+    bl.append(expected);
+    bl.copy(1, 2, dest);
+    EXPECT_EQ(0, ::memcmp(expected + 1, dest.c_str(), 2));
+  }
+  //
+  // void copy(unsigned off, unsigned len, std::string &dest) const;
+  //
+  {
+    bufferlist bl;
+    std::string dest;
+    EXPECT_THROW(bl.copy((unsigned)100, (unsigned)100, dest), buffer::end_of_buffer);
+    const char *expected = "ABC";
+    bl.append(expected);
+    bl.copy(1, 2, dest);
+    EXPECT_EQ(0, ::memcmp(expected + 1, dest.c_str(), 2));
+  }
+}
+
+TEST(BufferList, copy_in) {
+  //
+  // void copy_in(unsigned off, unsigned len, const char *src);
+  //
+  {
+    bufferlist bl;
+    bl.append("XXX");
+    EXPECT_THROW(bl.copy_in((unsigned)100, (unsigned)100, (char*)0), buffer::end_of_buffer);
+    bl.copy_in(1, 2, "AB");
+    EXPECT_EQ(0, ::memcmp("XAB", bl.c_str(), 3));
+  }
+  //
+  // void copy_in(unsigned off, unsigned len, const list& src);
+  //
+  {
+    bufferlist bl;
+    bl.append("XXX");
+    bufferlist src;
+    src.append("ABC");
+    EXPECT_THROW(bl.copy_in((unsigned)100, (unsigned)100, src), buffer::end_of_buffer);
+    bl.copy_in(1, 2, src);
+    EXPECT_EQ(0, ::memcmp("XAB", bl.c_str(), 3));    
+  }
+}
+
+TEST(BufferList, append) {
+  //
+  // void append(char c);
+  //
+  {
+    bufferlist bl;
+    EXPECT_EQ((unsigned)0, bl.buffers().size());
+    bl.append('A');
+    EXPECT_EQ((unsigned)1, bl.buffers().size());
+    EXPECT_TRUE(bl.is_page_aligned());
+  }
+  //
+  // void append(const char *data, unsigned len);
+  //
+  {
+    bufferlist bl(CEPH_PAGE_SIZE);
+    std::string str(CEPH_PAGE_SIZE * 2, 'X');
+    bl.append(str.c_str(), str.size());
+    EXPECT_EQ((unsigned)2, bl.buffers().size());
+    EXPECT_EQ(CEPH_PAGE_SIZE, bl.buffers().front().length());
+    EXPECT_EQ(CEPH_PAGE_SIZE, bl.buffers().back().length());
+  }
+  //
+  // void append(const std::string& s);
+  //
+  {
+    bufferlist bl(CEPH_PAGE_SIZE);
+    std::string str(CEPH_PAGE_SIZE * 2, 'X');
+    bl.append(str);
+    EXPECT_EQ((unsigned)2, bl.buffers().size());
+    EXPECT_EQ(CEPH_PAGE_SIZE, bl.buffers().front().length());
+    EXPECT_EQ(CEPH_PAGE_SIZE, bl.buffers().back().length());
+  }
+  //
+  // void append(const ptr& bp);
+  //
+  {
+    bufferlist bl;
+    EXPECT_EQ((unsigned)0, bl.buffers().size());
+    EXPECT_EQ((unsigned)0, bl.length());
+    {
+      bufferptr ptr;
+      bl.append(ptr);
+      EXPECT_EQ((unsigned)0, bl.buffers().size());
+      EXPECT_EQ((unsigned)0, bl.length());
+    }
+    {
+      bufferptr ptr(3);
+      bl.append(ptr);
+      EXPECT_EQ((unsigned)1, bl.buffers().size());
+      EXPECT_EQ((unsigned)3, bl.length());
+    }
+  }
+  //
+  // void append(const ptr& bp, unsigned off, unsigned len);
+  //
+  {
+    bufferlist bl;
+    bl.append('A');
+    bufferptr back(bl.buffers().back());
+    bufferptr in(back);
+    EXPECT_EQ((unsigned)1, bl.buffers().size());
+    EXPECT_EQ((unsigned)1, bl.length());
+    EXPECT_THROW(bl.append(in, (unsigned)100, (unsigned)100), FailedAssertion);
+    EXPECT_LT((unsigned)0, in.unused_tail_length());
+    in.append('B');
+    bl.append(in, back.end(), 1);
+    EXPECT_EQ((unsigned)1, bl.buffers().size());
+    EXPECT_EQ((unsigned)2, bl.length());
+    EXPECT_EQ('B', bl[1]);
+  }
+  {
+    bufferlist bl;
+    EXPECT_EQ((unsigned)0, bl.buffers().size());
+    EXPECT_EQ((unsigned)0, bl.length());
+    bufferptr ptr(2);
+    ptr.set_length(0);
+    ptr.append("AB", 2);
+    bl.append(ptr, 1, 1);
+    EXPECT_EQ((unsigned)1, bl.buffers().size());
+    EXPECT_EQ((unsigned)1, bl.length());
+  }
+  //
+  // void append(const list& bl);
+  //
+  {
+    bufferlist bl;
+    bl.append('A');
+    bufferlist other;
+    other.append('B');
+    bl.append(other);
+    EXPECT_EQ((unsigned)2, bl.buffers().size());
+    EXPECT_EQ('B', bl[1]);
+  }
+  //
+  // void append(std::istream& in);
+  //
+  {
+    bufferlist bl;
+    std::string expected("ABC\n\nDEF\n");
+    std::istringstream is("ABC\n\nDEF");
+    bl.append(is);
+    EXPECT_EQ(0, ::memcmp(expected.c_str(), bl.c_str(), expected.size()));
+    EXPECT_EQ(expected.size(), bl.length());
+  }
+}
+
+TEST(BufferList, append_zero) {
+  bufferlist bl;
+  bl.append('A');
+  EXPECT_EQ((unsigned)1, bl.buffers().size());
+  EXPECT_EQ((unsigned)1, bl.length());
+  bl.append_zero(1);
+  EXPECT_EQ((unsigned)2, bl.buffers().size());
+  EXPECT_EQ((unsigned)2, bl.length());
+  EXPECT_EQ('\0', bl[1]);
+}
+
+TEST(BufferList, operator_brackets) {
+  bufferlist bl;
+  EXPECT_THROW(bl[1], buffer::end_of_buffer);
+  bl.append('A');
+  bufferlist other;
+  other.append('B');
+  bl.append(other);
+  EXPECT_EQ((unsigned)2, bl.buffers().size());
+  EXPECT_EQ('B', bl[1]);
+}
+
+TEST(BufferList, c_str) {
+  bufferlist bl;
+  EXPECT_EQ((const char*)NULL, bl.c_str());
+  bl.append('A');
+  bufferlist other;
+  other.append('B');
+  bl.append(other);
+  EXPECT_EQ((unsigned)2, bl.buffers().size());
+  EXPECT_EQ(0, ::memcmp("AB", bl.c_str(), 2));
+}
+
+TEST(BufferList, substr_of) {
+  bufferlist bl;
+  EXPECT_THROW(bl.substr_of(bl, 1, 1), buffer::end_of_buffer);
+  const char *s[] = {
+    "ABC",
+    "DEF",
+    "GHI",
+    "JKL"
+  };
+  for (unsigned i = 0; i < 4; i++) {
+    bufferptr ptr(s[i], strlen(s[i]));
+    bl.push_back(ptr);
+  }
+  EXPECT_EQ((unsigned)4, bl.buffers().size());
+
+  bufferlist other;
+  other.append("TO BE CLEARED");
+  other.substr_of(bl, 4, 4);
+  EXPECT_EQ((unsigned)2, other.buffers().size());
+  EXPECT_EQ((unsigned)4, other.length());
+  EXPECT_EQ(0, ::memcmp("EFGH", other.c_str(), 4));
+}
+
+TEST(BufferList, splice) {
+  bufferlist bl;
+  EXPECT_THROW(bl.splice(1, 1), buffer::end_of_buffer);
+  const char *s[] = {
+    "ABC",
+    "DEF",
+    "GHI",
+    "JKL"
+  };
+  for (unsigned i = 0; i < 4; i++) {
+    bufferptr ptr(s[i], strlen(s[i]));
+    bl.push_back(ptr);
+  }
+  EXPECT_EQ((unsigned)4, bl.buffers().size());
+  EXPECT_THROW(bl.splice(0, 0), FailedAssertion);
+
+  bufferlist other;
+  other.append('X');
+  bl.splice(4, 4, &other);
+  EXPECT_EQ((unsigned)3, other.buffers().size());
+  EXPECT_EQ((unsigned)5, other.length());
+  EXPECT_EQ(0, ::memcmp("XEFGH", other.c_str(), other.length()));
+  EXPECT_EQ((unsigned)8, bl.length());
+  {
+    bufferlist tmp(bl);
+    EXPECT_EQ(0, ::memcmp("ABCDIJKL", tmp.c_str(), tmp.length()));
+  }
+
+  bl.splice(4, 4);
+  EXPECT_EQ((unsigned)4, bl.length());
+  EXPECT_EQ(0, ::memcmp("ABCD", bl.c_str(), bl.length()));
+}
+
+TEST(BufferList, write) {
+  std::ostringstream stream;
+  bufferlist bl;
+  bl.append("ABC");
+  bl.write(1, 2, stream);
+  EXPECT_EQ("BC", stream.str());
+}
+
+TEST(BufferList, encode_base64) {
+  bufferlist bl;
+  bl.append("ABCD");
+  bufferlist other;
+  bl.encode_base64(other);
+  const char *expected = "QUJDRA==";
+  EXPECT_EQ(0, ::memcmp(expected, other.c_str(), strlen(expected)));
+}
+
+TEST(BufferList, decode_base64) {
+  bufferlist bl;
+  bl.append("QUJDRA==");
+  bufferlist other;
+  other.decode_base64(bl);
+  const char *expected = "ABCD";
+  EXPECT_EQ(0, ::memcmp(expected, other.c_str(), strlen(expected)));
+  bufferlist malformed;
+  malformed.append("QUJDRA");
+  EXPECT_THROW(other.decode_base64(malformed), buffer::malformed_input);
+}
+
+TEST(BufferList, hexdump) {
+  bufferlist bl;
+  std::ostringstream stream;
+  bl.append("013245678901234\0006789012345678901234", 32);
+  bl.hexdump(stream);
+  EXPECT_EQ("0000 : 30 31 33 32 34 35 36 37 38 39 30 31 32 33 34 00 : 013245678901234.\n"
+	    "0010 : 36 37 38 39 30 31 32 33 34 35 36 37 38 39 30 31 : 6789012345678901\n",
+	    stream.str());
+}
+
+TEST(BufferList, read_file) {
+  std::string error;
+  bufferlist bl;
+  ::unlink("testfile");
+  EXPECT_EQ(-ENOENT, bl.read_file("UNLIKELY", &error));
+  ::system("echo ABC > testfile ; chmod 0 testfile");
+  EXPECT_EQ(-EACCES, bl.read_file("testfile", &error));
+  ::system("chmod +r testfile");
+  EXPECT_EQ(0, bl.read_file("testfile", &error));
+  ::unlink("testfile");
+  EXPECT_EQ((unsigned)4, bl.length());
+  std::string actual(bl.c_str(), bl.length());
+  EXPECT_EQ("ABC\n", actual);
+}
+
+TEST(BufferList, read_fd) {
+  unsigned len = 4;
+  ::unlink("testfile");
+  ::system("echo ABC > testfile");
+  int fd = -1;
+  bufferlist bl;
+  EXPECT_EQ(-EBADF, bl.read_fd(fd, len));
+  fd = ::open("testfile", O_RDONLY);
+  EXPECT_EQ(len, bl.read_fd(fd, len));
+  EXPECT_EQ(len, bl.length());
+  EXPECT_EQ(CEPH_PAGE_SIZE - len, bl.buffers().front().unused_tail_length());
+  ::close(fd);
+  ::unlink("testfile");
+}
+
+TEST(BufferList, write_file) {
+  ::unlink("testfile");
+  int mode = 0600;
+  bufferlist bl;
+  EXPECT_EQ(-ENOENT, bl.write_file("un/like/ly", mode));
+  bl.append("ABC");
+  EXPECT_EQ(0, bl.write_file("testfile", mode));
+  struct stat st;
+  memset(&st, 0, sizeof(st));
+  ::stat("testfile", &st);
+  EXPECT_EQ((unsigned)(mode | S_IFREG), st.st_mode);
+  ::unlink("testfile");
+}
+
+TEST(BufferList, write_fd) {
+  ::unlink("testfile");
+  int fd = ::open("testfile", O_WRONLY|O_CREAT|O_TRUNC, 0600);
+  bufferlist bl;
+  for (unsigned i = 0; i < IOV_MAX * 2; i++) {
+    bufferptr ptr("A", 1);
+    bl.push_back(ptr);
+  }
+  EXPECT_EQ(0, bl.write_fd(fd));
+  ::close(fd);
+  struct stat st;
+  memset(&st, 0, sizeof(st));
+  ::stat("testfile", &st);
+  EXPECT_EQ(IOV_MAX * 2, st.st_size);
+  ::unlink("testfile");
+}
+
+TEST(BufferList, crc32c) {
+  bufferlist bl;
+  __u32 crc = 0;
+  bl.append("A");
+  crc = bl.crc32c(crc);
+  EXPECT_EQ((unsigned)0xB3109EBF, crc);
+  crc = bl.crc32c(crc);
+  EXPECT_EQ((unsigned)0x5FA5C0CC, crc);
+}
+
+TEST(BufferList, compare) {
+  bufferlist a;
+  a.append("A");
+  bufferlist ab;
+  ab.append("AB");
+  bufferlist ac;
+  ac.append("AC");
+  //
+  // bool operator>(bufferlist& l, bufferlist& r)
+  //
+  ASSERT_FALSE(a > ab);
+  ASSERT_TRUE(ab > a);
+  ASSERT_TRUE(ac > ab);
+  ASSERT_FALSE(ab > ac);
+  ASSERT_FALSE(ab > ab);
+  //
+  // bool operator>=(bufferlist& l, bufferlist& r)
+  //
+  ASSERT_FALSE(a >= ab);
+  ASSERT_TRUE(ab >= a);
+  ASSERT_TRUE(ac >= ab);
+  ASSERT_FALSE(ab >= ac);
+  ASSERT_TRUE(ab >= ab);
+  //
+  // bool operator<(bufferlist& l, bufferlist& r)
+  //
+  ASSERT_TRUE(a < ab);
+  ASSERT_FALSE(ab < a);
+  ASSERT_FALSE(ac < ab);
+  ASSERT_TRUE(ab < ac);
+  ASSERT_FALSE(ab < ab);
+  //
+  // bool operator<=(bufferlist& l, bufferlist& r)
+  //
+  ASSERT_TRUE(a <= ab);
+  ASSERT_FALSE(ab <= a);
+  ASSERT_FALSE(ac <= ab);
+  ASSERT_TRUE(ab <= ac);
+  ASSERT_TRUE(ab <= ab);
+  //
+  // bool operator==(bufferlist &l, bufferlist &r)
+  //
+  ASSERT_FALSE(a == ab);
+  ASSERT_FALSE(ac == ab);
+  ASSERT_TRUE(ab == ab);
+}
+
+TEST(BufferList, ostream) {
+  std::ostringstream stream;
+  bufferlist bl;
+  const char *s[] = {
+    "ABC",
+    "DEF"
+  };
+  for (unsigned i = 0; i < 2; i++) {
+    bufferptr ptr(s[i], strlen(s[i]));
+    bl.push_back(ptr);
+  }
+  stream << bl;
+  std::cerr << stream.str() << std::endl;
+  EXPECT_GT(stream.str().size(), stream.str().find("list(len=6,"));
+  EXPECT_GT(stream.str().size(), stream.str().find("len 3 nref 1),\n"));
+  EXPECT_GT(stream.str().size(), stream.str().find("len 3 nref 1)\n"));
 }
 
 TEST(BufferList, zero) {
@@ -74,53 +1760,6 @@ TEST(BufferList, zero) {
   }
 }
 
-TEST(BufferList, compare) {
-  bufferlist a;
-  a.append("A");
-  bufferlist ab;
-  ab.append("AB");
-  bufferlist ac;
-  ac.append("AC");
-  //
-  // bool operator>(bufferlist& l, bufferlist& r)
-  //
-  ASSERT_FALSE(a > ab);
-  ASSERT_TRUE(ab > a);
-  ASSERT_TRUE(ac > ab);
-  ASSERT_FALSE(ab > ac);
-  ASSERT_FALSE(ab > ab);
-  //
-  // bool operator>=(bufferlist& l, bufferlist& r)
-  //
-  ASSERT_FALSE(a >= ab);
-  ASSERT_TRUE(ab >= a);
-  ASSERT_TRUE(ac >= ab);
-  ASSERT_FALSE(ab >= ac);
-  ASSERT_TRUE(ab >= ab);
-  //
-  // bool operator<(bufferlist& l, bufferlist& r)
-  //
-  ASSERT_TRUE(a < ab);
-  ASSERT_FALSE(ab < a);
-  ASSERT_FALSE(ac < ab);
-  ASSERT_TRUE(ab < ac);
-  ASSERT_FALSE(ab < ab);
-  //
-  // bool operator<=(bufferlist& l, bufferlist& r)
-  //
-  ASSERT_TRUE(a <= ab);
-  ASSERT_FALSE(ab <= a);
-  ASSERT_FALSE(ac <= ab);
-  ASSERT_TRUE(ab <= ac);
-  ASSERT_TRUE(ab <= ab);
-  //
-  // bool operator==(bufferlist &l, bufferlist &r)
-  //
-  ASSERT_FALSE(a == ab);
-  ASSERT_FALSE(ac == ab);
-  ASSERT_TRUE(ab == ab);
-}
-
 TEST(BufferList, EmptyAppend) {
   bufferlist bl;
   bufferptr ptr;
@@ -149,54 +1788,6 @@ TEST(BufferList, TestPtrAppend) {
     length = random() % 5 > 0 ? random() % 1000 : 0;
   }
   ASSERT_EQ(memcmp(bl.c_str(), correct, curpos), 0);
-}
-
-TEST(BufferList, ptr_assignment) {
-  unsigned len = 17;
-  //
-  // override a bufferptr set with the same raw
-  //
-  {
-    bufferptr original(len);
-    bufferptr same_raw(original.get_raw());
-    unsigned offset = 5;
-    unsigned length = len - offset;
-    original.set_offset(offset);
-    original.set_length(length);
-    same_raw = original;
-    ASSERT_EQ(2, original.raw_nref());
-    ASSERT_EQ(same_raw.get_raw(), original.get_raw());
-    ASSERT_EQ(same_raw.offset(), original.offset());
-    ASSERT_EQ(same_raw.length(), original.length());
-  }
-
-  //
-  // self assignment is a noop
-  //
-  {
-    bufferptr original(len);
-    original = original;
-    ASSERT_EQ(1, original.raw_nref());
-    ASSERT_EQ((unsigned)0, original.offset());
-    ASSERT_EQ(len, original.length());
-  }
-  
-  //
-  // a copy points to the same raw
-  //
-  {
-    bufferptr original(len);
-    unsigned offset = 5;
-    unsigned length = len - offset;
-    original.set_offset(offset);
-    original.set_length(length);
-    bufferptr ptr;
-    ptr = original;
-    ASSERT_EQ(2, original.raw_nref());
-    ASSERT_EQ(ptr.get_raw(), original.get_raw());
-    ASSERT_EQ(original.offset(), ptr.offset());
-    ASSERT_EQ(original.length(), ptr.length());
-  }
 }
 
 TEST(BufferList, TestDirectAppend) {
@@ -234,3 +1825,29 @@ TEST(BufferList, TestCopyAll) {
   bl2.copy(0, BIG_SZ, (char*)big2);
   ASSERT_EQ(memcmp(big.get(), big2, BIG_SZ), 0);
 }
+
+TEST(BufferHash, all) {
+  {
+    bufferlist bl;
+    bl.append("A");
+    bufferhash hash;
+    EXPECT_EQ((unsigned)0, hash.digest());
+    hash.update(bl);
+    EXPECT_EQ((unsigned)0xB3109EBF, hash.digest());
+    hash.update(bl);
+    EXPECT_EQ((unsigned)0x5FA5C0CC, hash.digest());
+  }
+  {
+    bufferlist bl;
+    bl.append("A");
+    bufferhash hash;
+    EXPECT_EQ((unsigned)0, hash.digest());
+    bufferhash& returned_hash =  hash << bl;
+    EXPECT_EQ(&returned_hash, &hash);
+    EXPECT_EQ((unsigned)0xB3109EBF, hash.digest());
+  }
+}
+
+// Local Variables:
+// compile-command: "cd .. ; make unittest_bufferlist ; ulimit -s unlimited ; CEPH_BUFFER_TRACK=true valgrind --max-stackframe=20000000 --tool=memcheck ./unittest_bufferlist # --gtest_filter=BufferList.constructors"
+// End:

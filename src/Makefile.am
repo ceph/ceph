@@ -19,7 +19,8 @@ EXTRA_DIST = \
 	libs3/libs3.spec \
 	libs3/mswin \
 	libs3/src \
-	libs3/test
+	libs3/test \
+	unittest_bufferlist.sh
 
 CLEANFILES =
 bin_PROGRAMS =
@@ -38,7 +39,7 @@ check_PROGRAMS =
 # tests to actually run on "make check"; if you need extra, non-test,
 # executables built, you need to replace this with manual assignments
 # target by target
-TESTS = $(check_PROGRAMS)
+TESTS = $(check_PROGRAMS) unittest_bufferlist.sh
 
 check-local:
 	$(srcdir)/test/encoding/check-generated.sh
