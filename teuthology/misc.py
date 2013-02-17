@@ -500,13 +500,13 @@ def wait_until_fuse_mounted(remote, fuse, mountpoint):
         fstype = proc.stdout.getvalue().rstrip('\n')
         if fstype == 'fuseblk':
             break
-        log.debug('cfuse not yet mounted, got fs type {fstype!r}'.format(fstype=fstype))
+        log.debug('ceph-fuse not yet mounted, got fs type {fstype!r}'.format(fstype=fstype))
 
         # it shouldn't have exited yet; exposes some trivial problems
         assert not fuse.exitstatus.ready()
 
         time.sleep(5)
-    log.info('cfuse is mounted on %s', mountpoint)
+    log.info('ceph-fuse is mounted on %s', mountpoint)
 
 def reconnect(ctx, timeout):
     """

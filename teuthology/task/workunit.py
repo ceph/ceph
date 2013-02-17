@@ -16,7 +16,7 @@ def task(ctx, config):
 
         tasks:
         - ceph:
-        - cfuse: [client.0]
+        - ceph-fuse: [client.0]
         - workunit:
             clients:
               client.0: [direct_io, xattrs.sh]
@@ -26,7 +26,7 @@ def task(ctx, config):
     You can also run a list of workunits on all clients:
         tasks:
         - ceph:
-        - cfuse:
+        - ceph-fuse:
         - workunit:
             tag: v0.47
             clients:
@@ -40,7 +40,7 @@ def task(ctx, config):
 
         tasks:
         - ceph:
-        - cfuse:
+        - ceph-fuse:
         - workunit:
             sha1: 9b28948635b17165d17c1cf83d4a870bd138ddf6
             clients:
