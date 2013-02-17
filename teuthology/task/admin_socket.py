@@ -70,6 +70,7 @@ def _socket_command(ctx, remote, socket_path, command, args):
     testdir = teuthology.get_testdir(ctx)
     remote.run(
         args=[
+            'sudo',
             '{tdir}/enable-coredump'.format(tdir=testdir),
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),

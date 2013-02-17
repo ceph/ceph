@@ -269,12 +269,13 @@ class CephManager:
                     remote = _remote
         assert remote is not None
         args=[
-                '{tdir}/enable-coredump'.format(tdir=testdir),
-                'ceph-coverage',
-                '{tdir}/archive/coverage'.format(tdir=testdir),
-                'ceph',
-                '--admin-daemon',
-                "%s/asok.osd.%s"%(testdir,str(osdnum),)]
+            'sudo',
+            '{tdir}/enable-coredump'.format(tdir=testdir),
+            'ceph-coverage',
+            '{tdir}/archive/coverage'.format(tdir=testdir),
+            'ceph',
+            '--admin-daemon',
+            "%s/asok.osd.%s"%(testdir,str(osdnum),)]
         args.extend(command)
         return remote.run(
             args=args,
