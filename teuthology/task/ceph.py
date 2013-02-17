@@ -202,6 +202,17 @@ def _update_deb_package_list_and_install(remote, debs, branch):
     out = r.stdout.getvalue().strip()
     log.info("release type:" + out)
 
+    # get package version string
+    r = remote.run(
+        args=[
+            'wget', '-q', '-O-',
+            'http://gitbuilder.ceph.com/ceph-deb-' + out + '-x86_64-basic/ref/' + branch + '/version',
+            ],
+        stdout=StringIO(),
+        )
+    version = r.stdout.getvalue().strip()
+    log.info('package version is %s', version)
+
     remote.run(
         args=[
             'echo', 'deb',
@@ -216,7 +227,7 @@ def _update_deb_package_list_and_install(remote, debs, branch):
             'sudo', 'apt-get', 'update', run.Raw('&&'),
             'sudo', 'apt-get', '-y', '--force-yes',
             'install',
-            ] + debs,
+            ] + ['%s=%s' % (d, version) for d in debs],
         stdout=StringIO(),
         )
 
