@@ -246,7 +246,7 @@ def dpkg_configure(ctx, log):
         proc.exitstatus.get()
 
 def remove_installed_packages(ctx, log):
-    from teuthology.task import ceph as ceph_task
+    from teuthology.task import install as install_task
 
     dpkg_configure(ctx, log)
     debs = ['ceph',
@@ -256,8 +256,8 @@ def remove_installed_packages(ctx, log):
             'librados2',
             'librbd1',
             ]
-    ceph_task.remove_debs(ctx, debs)
-    ceph_task.remove_sources(ctx)
+    install_task.remove_debs(ctx, debs)
+    install_task.remove_sources(ctx)
 
 def remove_testing_tree(ctx, log):
     from teuthology.misc import get_testdir_base

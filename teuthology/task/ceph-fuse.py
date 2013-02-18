@@ -4,7 +4,7 @@ import os
 
 from teuthology import misc as teuthology
 from ..orchestra import run
-from teuthology.task import ceph as ceph_task
+from teuthology.task import install as install_task
 
 log = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ def task(ctx, config):
 
     for id_, remote in clients:
         # install ceph fuse package
-        ceph_task.install_debs(ctx, ['ceph-fuse'], config.get('branch', 'master'))
+        install_task.install_debs(ctx, ['ceph-fuse'], config.get('branch', 'master'))
 
         mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
         log.info('Mounting ceph-fuse client.{id} at {remote} {mnt}...'.format(
@@ -178,4 +178,4 @@ def task(ctx, config):
                 )
 
         # remove ceph-fuse package
-        ceph_task.remove_debs(ctx, ['ceph-fuse'])
+        install_task.remove_debs(ctx, ['ceph-fuse'])
