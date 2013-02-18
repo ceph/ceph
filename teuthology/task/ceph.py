@@ -262,17 +262,24 @@ def binaries(ctx, config):
 
     debs = [
         'ceph',
+        'ceph-dbg',
         'ceph-mds',
+        'ceph-mds-dbg',
         'ceph-common',
-        'python-ceph',
+        'ceph-common-dbg',
         'ceph-test',
+        'ceph-test-dbg',
         'radosgw',
+        'radosgw-dbg',
+        'python-ceph',
         ]
     # install lib deps (so we explicitly specify version), but do not
     # uninstall them, as 
     debs_install = debs + [
         'librados2',
-        'librbd1'
+        'librados2-dbg',
+        'librbd1',
+        'librbd1-dbg',
         ]
     branch = config.get('branch', 'master')
     log.info('branch: {b}'.format(b=branch))
