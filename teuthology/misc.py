@@ -30,7 +30,8 @@ def get_testdir(ctx):
         log.debug('with name basedir: {b}'.format(b=basedir))
         return '{basedir}/{rundir}'.format(
                     basedir=basedir,
-                    rundir=ctx.name)
+                    rundir=ctx.name.replace(':','-'),  # : breaks the $PATH list
+                    )
     else:
         log.debug('basedir: {b}'.format(b=basedir))
         return '{basedir}/{user}-{stamp}'.format(
