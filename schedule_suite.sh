@@ -60,6 +60,7 @@ nuke-on-error: true
 tasks:
 - chef:
 - clock:
+- install:
 overrides:
   workunit:
     sha1: $CEPH_SHA1
