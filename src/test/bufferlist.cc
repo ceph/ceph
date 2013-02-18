@@ -1821,9 +1821,10 @@ TEST(BufferList, TestCopyAll) {
   bufferlist bl2;
   i.copy_all(bl2);
   ASSERT_EQ(bl2.length(), BIG_SZ);
-  unsigned char big2[BIG_SZ];
-  bl2.copy(0, BIG_SZ, (char*)big2);
-  ASSERT_EQ(memcmp(big.get(), big2, BIG_SZ), 0);
+  std::tr1::shared_ptr <unsigned char> big2(
+      (unsigned char*)malloc(BIG_SZ), free);
+  bl2.copy(0, BIG_SZ, (char*)big2.get());
+  ASSERT_EQ(memcmp(big.get(), big2.get(), BIG_SZ), 0);
 }
 
 TEST(BufferHash, all) {
