@@ -244,7 +244,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
   stamp_delta += delta_t;
 
   pg_sum_delta.stats.add(d.stats);
-  if (pg_sum_deltas.size() > (std::list< pair<pool_stat_t, utime_t> >::size_type)MIN(1, cct ? cct->_conf->mon_stat_smooth_intervals : 1)) {
+  if (pg_sum_deltas.size() > (std::list< pair<pool_stat_t, utime_t> >::size_type)MAX(1, cct ? cct->_conf->mon_stat_smooth_intervals : 1)) {
     pg_sum_delta.stats.sub(pg_sum_deltas.front().first.stats);
     stamp_delta -= pg_sum_deltas.front().second;
     pg_sum_deltas.pop_front();
