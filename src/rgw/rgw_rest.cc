@@ -1164,8 +1164,9 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
   s->length = s->env->get("CONTENT_LENGTH");
   if (s->length) {
     if (*s->length == '\0')
-      return -EINVAL;
-    s->content_length = atoll(s->length);
+      s->content_length = 0;
+    else
+      s->content_length = atoll(s->length);
   }
 
   map<string, string>::iterator giter;
