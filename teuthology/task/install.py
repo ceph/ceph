@@ -14,7 +14,7 @@ from ..orchestra import run
 log = logging.getLogger(__name__)
 
 
-def _update_deb_package_list_and_install(ctx, remote, debs, branch):
+def _update_deb_package_list_and_install(ctx, remote, debs, branch, flavor):
     """
     updates the package list so that apt-get can
     download the appropriate packages
@@ -39,24 +39,32 @@ def _update_deb_package_list_and_install(ctx, remote, debs, branch):
                 stdout=StringIO(),
                 )
 
-    # get ubuntu release (precise, quantal, etc.)
+    # get distro name and arch
     r = remote.run(
             args=['lsb_release', '-sc'],
             stdout=StringIO(),
             )
+    dist = r.stdout.getvalue().strip()
+    r = remote.run(
+            args=['arch'],
+            stdout=StringIO(),
+            )
+    arch = r.stdout.getvalue().strip()
+    log.info("dist %s arch %s", dist, arch)
 
-    out = r.stdout.getvalue().strip()
-    log.info("release type:" + out)
-
-    gitbuilder_host = ctx.teuthology_config.get('gitbuilder_host',
-                                                'gitbuilder.ceph.com')
+    base_url = 'http://{host}/ceph-deb-{dist}-{arch}-{flavor}/ref/{branch}'.format(
+        host=ctx.teuthology_config.get('gitbuilder_host',
+                                       'gitbuilder.ceph.com'),
+        dist=dist,
+        arch=arch,
+        flavor=flavor,
+        branch=branch,
+        )
 
     # get package version string
     r = remote.run(
         args=[
-            'wget', '-q', '-O-',
-            'http://{host}/ceph-deb-'.format(host=gitbuilder_host) +
-               out + '-x86_64-basic/ref/' + branch + '/version',
+            'wget', '-q', '-O-', base_url + '/version',
             ],
         stdout=StringIO(),
         )
@@ -65,10 +73,8 @@ def _update_deb_package_list_and_install(ctx, remote, debs, branch):
 
     remote.run(
         args=[
-            'echo', 'deb',
-            'http://{host}/ceph-deb-'.format(host=gitbuilder_host) +
-               out + '-x86_64-basic/ref/' + branch,
-            out, 'main', run.Raw('|'),
+            'echo', 'deb', base_url, dist, 'main',
+            run.Raw('|'),
             'sudo', 'tee', '/etc/apt/sources.list.d/ceph.list'
             ],
         stdout=StringIO(),
@@ -82,7 +88,8 @@ def _update_deb_package_list_and_install(ctx, remote, debs, branch):
         stdout=StringIO(),
         )
 
-def install_debs(ctx, debs, branch):
+
+def install_debs(ctx, debs, branch, flavor):
     """
     installs Debian packages.
     """
@@ -91,7 +98,8 @@ def install_debs(ctx, debs, branch):
     with parallel() as p:
         for remote in ctx.cluster.remotes.iterkeys():
             p.spawn(
-                _update_deb_package_list_and_install, ctx, remote, debs, branch)
+                _update_deb_package_list_and_install,
+                ctx, remote, debs, branch, flavor)
 
 def _remove_deb(remote, debs):
     args=[
@@ -159,8 +167,9 @@ def install(ctx, config):
         'librbd1-dbg',
         ]
     branch = config.get('branch', 'master')
+    flavor = config.get('flavor')
     log.info('branch: {b}'.format(b=branch))
-    install_debs(ctx, debs_install, branch)
+    install_debs(ctx, debs_install, branch, flavor)
     try:
         yield
     finally:
@@ -187,12 +196,6 @@ def task(ctx, config):
     # match is not found, the teuthology run fails. This is ugly,
     # and should be cleaned up at some point.
 
-    dist = 'precise'
-    arch = 'x86_64'
-    flavor = 'basic'
-
-    # First element: controlled by user (or not there, by default):
-    # used to choose the right distribution, e.g. "oneiric".
     flavor = config.get('flavor', 'basic')
 
     if config.get('path'):
@@ -215,8 +218,6 @@ def task(ctx, config):
                 tag=config.get('tag'),
                 sha1=config.get('sha1'),
                 flavor=flavor,
-                dist=config.get('dist', dist),
-                arch=arch
                 )),
         ):
         yield

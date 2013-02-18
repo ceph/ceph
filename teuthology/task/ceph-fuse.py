@@ -60,21 +60,25 @@ def task(ctx, config):
     clients = list(teuthology.get_clients(ctx=ctx, roles=config.keys()))
 
     for id_, remote in clients:
-        # install ceph fuse package
-        install_task.install_debs(ctx, ['ceph-fuse'], config.get('branch', 'master'))
-
-        mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
-        log.info('Mounting ceph-fuse client.{id} at {remote} {mnt}...'.format(
-                id=id_, remote=remote,mnt=mnt))
-
         client_config = config.get("client.%s" % id_)
         if client_config is None:
             client_config = {}
         log.info("Client client.%s config is %s" % (id_, client_config))
 
         daemon_signal = 'kill'
+        flavor = 'basic'
         if client_config.get('coverage') or client_config.get('valgrind') is not None:
             daemon_signal = 'term'
+            flavor='notcmalloc'
+
+        # install ceph fuse package
+        install_task.install_debs(ctx, ['ceph-fuse'],
+                                  config.get('branch', 'master'),
+                                  flavor)
+
+        mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
+        log.info('Mounting ceph-fuse client.{id} at {remote} {mnt}...'.format(
+                id=id_, remote=remote,mnt=mnt))
 
         remote.run(
             args=[
