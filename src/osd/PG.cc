@@ -2707,6 +2707,13 @@ void PG::log_weirdness()
 		      << " last_complete " << info.last_complete
 		      << " < log.tail " << log.tail
 		      << "\n";
+
+  if (log.caller_ops.size() > log.log.size()) {
+    osd->clog.error() << info.pgid
+		      << " caller_ops.size " << log.caller_ops.size()
+		      << " > log size " << log.log.size()
+		      << "\n";
+  }
 }
 
 coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
