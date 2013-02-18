@@ -120,12 +120,14 @@ def start_rgw(ctx, config):
                 'radosgw',
                 # authenticate as client.admin and use system keyring
                 '-k', '/etc/ceph/ceph.keyring',
-                '--log-file', '{tdir}/archive/log/rgw.log'.format(tdir=testdir),
+                '--log-file', '/var/log/ceph/rgw.log',
                 '--rgw_ops_log_socket_path', '{tdir}/rgw.opslog.sock'.format(tdir=testdir),
                 '{tdir}/apache/apache.conf'.format(tdir=testdir),
                 '--foreground',
-                run.Raw('>'),
-                '{tdir}/archive/log/rgw.stdout'.format(tdir=testdir),
+                run.Raw('|'),
+                'sudo',
+                'tee',
+                '/var/log/ceph/rgw.stdout'.format(tdir=testdir),
                 run.Raw('2>&1'),
             ]
 

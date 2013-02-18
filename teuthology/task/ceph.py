@@ -302,7 +302,7 @@ def valgrind_post(ctx, config):
         yield
     finally:
         lookup_procs = list()
-        val_path = '{tdir}/archive/log/valgrind'.format(tdir=testdir)
+        val_path = '/var/log/ceph/valgrind'.format(tdir=testdir)
         log.info('Checking for errors in any valgrind logs...');
         for remote in ctx.cluster.remotes.iterkeys():
             #look at valgrind logs for each node
@@ -838,7 +838,7 @@ def cluster(ctx, config):
         def first_in_ceph_log(pattern, excludes):
             args = [
                 'egrep', pattern,
-                '%s/archive/log/cluster.%s.log' % (testdir, firstmon),
+                '/var/log/ceph/ceph.log',
                 ]
             for exclude in excludes:
                 args.extend([run.Raw('|'), 'egrep', '-v', exclude])
@@ -998,7 +998,7 @@ def run_daemon(ctx, config, type_):
                 run_cmd.extend(teuthology.get_valgrind_args(testdir, name, valgrind_args))
 
             if type_ in config.get('cpu_profile', []):
-                profile_path = '%s/archive/log/%s.%s.prof' % (testdir, type_, id_)
+                profile_path = '/var/log/ceph/profiling-logger/%s.%s.prof' % (type_, id_)
                 run_cmd.extend([ 'env', 'CPUPROFILE=%s' % profile_path ])
 
             run_cmd.extend(run_cmd_tail)

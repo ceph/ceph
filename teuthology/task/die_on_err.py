@@ -32,7 +32,6 @@ def task(ctx, config):
         time.sleep(10)
 
     testdir = teuthology.get_testdir(ctx)
-    log_path = '{tdir}/archive/log'.format(tdir=testdir)
 
     while True:
         for i in range(num_osds):
@@ -48,7 +47,7 @@ def task(ctx, config):
                 log.info("osd %d has an error" % i)
                 raise Exception("osd %d error" % i)
 
-            log_path = '%s/archive/log/osd.%d.log' % (testdir, i)
+            log_path = '/var/log/ceph/osd.%d.log' % (i)
 
             p = osd_remote.run(
                 args = [
