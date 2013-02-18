@@ -2,7 +2,7 @@
 
 mkdir /tmp/cephtest
 #wget https://raw.github.com/ceph/ceph/master/qa/run_xfstests.sh
-wget https://ceph.com/git/?p=ceph.git;a=blob_plain;f=qa/run_xfstests.sh
+wget -O run_xfstests.sh 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=qa/run_xfstests.sh'
 chmod +x run_xfstests.sh
 # tests excluded fail in the current testing vm regardless of whether
 # rbd is used
