@@ -16,6 +16,7 @@ dd if=/dev/zero of=/dev/rbd/rbd/image oflag=direct count=10   # used to fail
 rbd snap rm image@s1
 dd if=/dev/zero of=/dev/rbd/rbd/image oflag=direct count=10
 rbd unmap /dev/rbd/rbd/image
+rbd rm image
 
 echo OK
 
