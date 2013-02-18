@@ -14,6 +14,9 @@
 
 #include "osd_types.h"
 #include "include/ceph_features.h"
+extern "C" {
+#include "crush/hash.h"
+}
 #include "PG.h"
 #include "OSDMap.h"
 
@@ -678,7 +681,20 @@ pg_t pg_pool_t::raw_pg_to_pg(pg_t pg) const
  */
 ps_t pg_pool_t::raw_pg_to_pps(pg_t pg) const
 {
-  return ceph_stable_mod(pg.ps(), pgp_num, pgp_num_mask) + pg.pool();
+  if (true) {//flags & FLAG_HASHPSPOOL) {
+    // Hash the pool id so that pool PGs do not overlap.
+    return
+      crush_hash32_2(CRUSH_HASH_RJENKINS1,
+		     ceph_stable_mod(pg.ps(), pgp_num, pgp_num_mask),
+		     pg.pool());
+  } else {
+    // Legacy behavior; add ps and pool together.  This is not a great
+    // idea because the PGs from each pool will essentially overlap on
+    // top of each other: 0.5 == 1.4 == 2.3 == ...
+    return
+      ceph_stable_mod(pg.ps(), pgp_num, pgp_num_mask) +
+      pg.pool();
+  }
 }
 
 void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
