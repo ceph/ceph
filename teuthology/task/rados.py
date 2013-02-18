@@ -56,7 +56,7 @@ def task(ctx, config):
         '{tdir}/enable-coredump'.format(tdir=testdir),
         'ceph-coverage',
         '{tdir}/archive/coverage'.format(tdir=testdir),
-        'testrados',
+        'ceph_test_rados',
         '--op', 'read', str(op_weights.get('read', 100)),
         '--op', 'write', str(op_weights.get('write', 100)),
         '--op', 'delete', str(op_weights.get('delete', 10)),
