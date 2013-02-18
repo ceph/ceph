@@ -617,6 +617,11 @@ private:
     finished.splice(finished.end(), ls);
     finished_lock.Unlock();
   }
+  void take_waiters_front(list<OpRequestRef>& ls) {
+    finished_lock.Lock();
+    finished.splice(finished.begin(), ls);
+    finished_lock.Unlock();
+  }
   void take_waiter(OpRequestRef op) {
     finished_lock.Lock();
     finished.push_back(op);
@@ -880,7 +885,7 @@ protected:
 
   void wake_pg_waiters(pg_t pgid) {
     if (waiting_for_pg.count(pgid)) {
-      take_waiters(waiting_for_pg[pgid]);
+      take_waiters_front(waiting_for_pg[pgid]);
       waiting_for_pg.erase(pgid);
     }
   }
@@ -888,7 +893,7 @@ protected:
     for (map<pg_t, list<OpRequestRef> >::iterator p = waiting_for_pg.begin();
 	 p != waiting_for_pg.end();
 	 p++)
-      take_waiters(p->second);
+      take_waiters_front(p->second);
     waiting_for_pg.clear();
   }
 
