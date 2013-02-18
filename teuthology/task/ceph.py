@@ -373,6 +373,16 @@ def cluster(ctx, config):
             )
         )
 
+    run.wait(
+        ctx.cluster.run(
+            args=[
+                'sudo',
+                'install', '-d', '-m0755', '--', '/var/run/ceph',
+                ],
+            wait=False,
+            )
+        )
+
 
     devs_to_clean = {}
     remote_to_roles_to_devs = {}
