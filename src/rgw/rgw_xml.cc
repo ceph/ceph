@@ -209,9 +209,16 @@ bool RGWXMLParser::init()
 bool RGWXMLParser::parse(const char *_buf, int len, int done)
 {
   int pos = buf_len;
-  buf = (char *)realloc(buf, buf_len + len);
-  if (!buf)
+  char *tmp_buf;
+  tmp_buf = (char *)realloc(buf, buf_len + len);
+  if (tmp_buf == NULL){
+    free(buf);
+    buf = NULL;
     return false;
+  } else {
+    buf = tmp_buf;
+  }
+
   memcpy(&buf[buf_len], _buf, len);
   buf_len += len;
 
