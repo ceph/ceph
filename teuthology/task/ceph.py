@@ -145,7 +145,7 @@ def ship_utilities(ctx, config):
                 ),
             )
 
-def _update_deb_package_list_and_install(remote, debs, branch):
+def _update_deb_package_list_and_install(ctx, remote, debs, branch):
     """
     updates the package list so that apt-get can
     download the appropriate packages
@@ -179,11 +179,13 @@ def _update_deb_package_list_and_install(remote, debs, branch):
     out = r.stdout.getvalue().strip()
     log.info("release type:" + out)
 
+    gitbuilder_host = ctx.teuthology_config.get('gitbuilder_host', 'gitbuilder.ceph.com')
+
     # get package version string
     r = remote.run(
         args=[
             'wget', '-q', '-O-',
-            'http://gitbuilder.ceph.com/ceph-deb-' + out + '-x86_64-basic/ref/' + branch + '/version',
+            'http://{host}/ceph-deb-'.format(host=gitbuilder_host) + out + '-x86_64-basic/ref/' + branch + '/version',
             ],
         stdout=StringIO(),
         )
@@ -193,7 +195,7 @@ def _update_deb_package_list_and_install(remote, debs, branch):
     remote.run(
         args=[
             'echo', 'deb',
-            'http://gitbuilder.ceph.com/ceph-deb-' + out + '-x86_64-basic/ref/' + branch,
+            'http://{host}/ceph-deb-'.format(host=gitbuilder_host) + out + '-x86_64-basic/ref/' + branch,
             out, 'main', run.Raw('|'),
             'sudo', 'tee', '/etc/apt/sources.list.d/ceph.list'
             ],
@@ -215,7 +217,7 @@ def install_debs(ctx, debs, branch):
     log.info("Installing ceph debian packages: {debs}".format(debs=', '.join(debs)))
     with parallel() as p:
         for remote in ctx.cluster.remotes.iterkeys():
-            p.spawn(_update_deb_package_list_and_install, remote, debs, branch)
+            p.spawn(_update_deb_package_list_and_install, ctx, remote, debs, branch)
 
 def _remove_deb(remote, debs):
     args=[
