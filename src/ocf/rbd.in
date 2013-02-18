@@ -134,7 +134,7 @@ find_rbd_dev() {
 
     # Build the sed pattern, substituting "-" for the snapshot name if
     # it's unset
-    sedpat="[0-9]\+[ \t]\+${OCF_RESKEY_pool}[ \t]\+${OCF_RESKEY_name}[ \t]\+${OCF_RESKEY_snap:--}[ \t]\+\(/dev/rbd[0-9]\+\)"
+    sedpat="[0-9]\+[ \t]\+${OCF_RESKEY_pool}[ \t]\+${OCF_RESKEY_name}[ \t]\+${OCF_RESKEY_snap:--}[ \t]\+\(/dev/rbd[0-9]\+\).*"
 
     # Run rbd showmapped, filter out the header line, then try to
     # extract the device name
