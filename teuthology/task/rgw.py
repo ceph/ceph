@@ -110,6 +110,7 @@ def start_rgw(ctx, config):
         log.info("rgw %s config is %s", client, client_config)
  
         run_cmd=[
+            'sudo',
                 '{tdir}/enable-coredump'.format(tdir=testdir),
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
