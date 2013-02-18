@@ -1483,8 +1483,8 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_get()
     return new RGWGetBucketLogging_ObjStore_S3;
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
-  } else if (s->args.exists("uploadId")) {
-    return new RGWListMultipart_ObjStore_S3;
+  } else if (s->args.exists("uploads")) {
+    return new RGWListBucketMultiparts_ObjStore_S3;
   }
   return get_obj_op(true);
 }
@@ -1493,8 +1493,8 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_head()
 {
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
-  } else if (s->args.exists("uploadId")) {
-    return new RGWListMultipart_ObjStore_S3;
+  } else if (s->args.exists("uploads")) {
+    return new RGWListBucketMultiparts_ObjStore_S3;
   }
   return get_obj_op(false);
 }
