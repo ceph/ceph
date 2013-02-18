@@ -3356,22 +3356,17 @@ void OSD::do_waiters()
 {
   assert(osd_lock.is_locked());
   
+  dout(10) << "do_waiters -- start" << dendl;
   finished_lock.Lock();
-  if (finished.empty()) {
+  while (!finished.empty()) {
+    OpRequestRef next = finished.front();
+    finished.pop_front();
     finished_lock.Unlock();
-  } else {
-    list<OpRequestRef> waiting;
-    waiting.splice(waiting.begin(), finished);
-
-    finished_lock.Unlock();
-    
-    dout(10) << "do_waiters -- start" << dendl;
-    for (list<OpRequestRef>::iterator it = waiting.begin();
-         it != waiting.end();
-         it++)
-      dispatch_op(*it);
-    dout(10) << "do_waiters -- finish" << dendl;
+    dispatch_op(next);
+    finished_lock.Lock();
   }
+  finished_lock.Unlock();
+  dout(10) << "do_waiters -- finish" << dendl;
 }
 
 void OSD::dispatch_op(OpRequestRef op)
