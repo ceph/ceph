@@ -20,4 +20,3 @@ tasks:
       LOADGEN_NUM_OSDS: "5"
       VERBOSE: "1"
       DURATION: "600"
-      TEST_CEPH_CONF: /tmp/cephtest/ceph.conf
