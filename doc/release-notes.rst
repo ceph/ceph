@@ -10,6 +10,25 @@ significantly, an issue with OSDs being unresponsive shortly after
 startup (and occasionally crashing due to an internal heartbeat check)
 is resolved.  Please upgrade.
 
+Upgrading
+~~~~~~~~~
+
+* A bug was fixed in which the OSDMap epoch for PGs without any IO
+  requests was not recorded.  If there are pools in the cluster that
+  are completely idle (for example, the ``data`` and ``metadata``
+  pools normally used by CephFS), and a large number of OSDMap epochs
+  have elapsed since the ``ceph-osd`` daemon was last restarted, those
+  maps will get reprocessed when the daemon restarts.  This process
+  can take a while if there are a lot of maps.  A workaround is to
+  'touch' any idle pools with IO prior to restarting the daemons after
+  packages are upgraded::
+
+   rados bench 10 write -t 1 -b 4096 -p {POOLNAME}
+
+  This will typically generate enough IO to touch every PG in the pool
+  without generating significant cluster load, and also cleans up any
+  temporary objects it creates.
+
 Notable changes
 ~~~~~~~~~~~~~~~
 
