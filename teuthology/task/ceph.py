@@ -161,6 +161,7 @@ def valgrind_post(ctx, config):
             #look at valgrind logs for each node
             proc = remote.run(
                 args=[
+                    'sudo',
                     'grep', '-r', '<kind>',
                     run.Raw(val_path),
                     run.Raw('|'),
