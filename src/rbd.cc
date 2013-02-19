@@ -1664,6 +1664,18 @@ static int do_kernel_rm(const char *dev)
   if (r < 0)
     return r;
 
+  // let udevadm do its job *before* we try to unmap
+  if (udevadm_settle) {
+    r = system("/sbin/udevadm settle");
+    if (r) {
+      if (r < 0)
+        cerr << "rbd: error executing udevadm as shell command!" << std::endl;
+      else
+        cerr << "rbd: '/sbin/udevadm settle' failed! (" << r << ")" <<std::endl;
+      // ignore the error, though.
+    }
+  }
+
   int fd = open("/sys/bus/rbd/remove", O_WRONLY);
   if (fd < 0) {
     return -errno;
