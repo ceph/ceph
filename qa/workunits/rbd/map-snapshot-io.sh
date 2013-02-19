@@ -15,8 +15,15 @@ rbd snap create image@s1
 dd if=/dev/zero of=/dev/rbd/rbd/image oflag=direct count=10   # used to fail
 rbd snap rm image@s1
 dd if=/dev/zero of=/dev/rbd/rbd/image oflag=direct count=10
+
+udevadm settle  # udev is does blkid on device close; yeesh!  see #4183
+
 rbd unmap /dev/rbd/rbd/image
 rbd rm image
+
+# wait a few seconds for the async kernel bits to clean themselves up
+sleep 4
+rbd rm image || :
 
 echo OK
 
