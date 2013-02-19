@@ -2830,6 +2830,11 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  unsigned n = strtol(start, &end, 10);
 	  if (*end == '\0') {
 	    if (m->cmd[4] == "size") {
+	      if (n == 0 || n > 10) {
+		ss << "pool size must be between 1 and 10";
+		err = -EINVAL;
+		goto out;
+	      }
 	      if (pending_inc.new_pools.count(pool) == 0)
 		pending_inc.new_pools[pool] = *p;
 	      pending_inc.new_pools[pool].size = n;
