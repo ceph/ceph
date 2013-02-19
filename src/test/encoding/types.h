@@ -117,6 +117,7 @@ TYPE(inode_load_vec_t)
 TYPE(dirfrag_load_vec_t)
 TYPE(mds_load_t)
 TYPE(cap_reconnect_t)
+TYPE(inode_backtrace_t)
 
 #include "mds/MDSMap.h"
 TYPE_FEATUREFUL(MDSMap)
