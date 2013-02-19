@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 # vim: ts=8 sw=2 smarttab
 #
 # $0.sh - run mon workload generator
@@ -38,12 +38,9 @@ fi
 duration=300
 [ ! -z $DURATION ] && duration=$DURATION
 
-extra=
-[ ! -z $TEST_CEPH_CONF ] && extra="$extra -c $TEST_CEPH_CONF"
-
 d "checking osd tree"
 
-crush_testing_root="`ceph $extra osd tree | grep 'root[ \t]\+testing'`"
+crush_testing_root="`ceph osd tree | grep 'root[ \t]\+testing'`"
 
 d "$crush_testing_root"
 
@@ -60,7 +57,7 @@ d "run_id = $run_id ; create_crush = $create_crush"
 
 if [[ $create_crush -eq 1 ]]; then
   tmp_crush_fn="/tmp/ceph.$run_id.crush"
-  ceph $extra osd getcrushmap -o $tmp_crush_fn
+  ceph osd getcrushmap -o $tmp_crush_fn
   crushtool -d $tmp_crush_fn -o $tmp_crush_fn.plain
 
   highest_root_id=0
@@ -125,21 +122,21 @@ EOF
 
   d "created crush"
 
-  ceph $extra osd setcrushmap -i $tmp_crush_fn
+  ceph osd setcrushmap -i $tmp_crush_fn
 fi
 
 keyring="/tmp/ceph.$run_id.keyring"
 
-ceph $extra auth get-or-create-key osd.admin mon 'allow rwx' osd 'allow *'
-ceph $extra auth export | grep -v "export" > $keyring
+ceph auth get-or-create-key osd.admin mon 'allow rwx' osd 'allow *'
+ceph auth export | grep -v "export" > $keyring
 
 osd_ids=""
 
 for osd in `seq 1 $num_osds`; do
-  id=`ceph $extra osd create`
+  id=`ceph osd create`
   osd_ids="$osd_ids $id"
   d "osd.$id"
-  ceph $extra osd crush set $id osd.$id 1.0 host=testhost rack=testrack root=testing
+  ceph osd crush set $id osd.$id 1.0 host=testhost rack=testrack root=testing
 done
 
 d "osds: $osd_ids"
@@ -169,4 +166,4 @@ args="$EXTRA_ARGS --duration $duration $stub_id_args"
   
 d "running: $args"
 
-$bin_test $extra --keyring $keyring $args
+$bin_test --keyring $keyring $args
