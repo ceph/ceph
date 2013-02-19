@@ -1,6 +1,7 @@
 #!/bin/sh -ex
 
-teuthology-lock --list-targets --owner $1 --desc-pattern /$2/ --status up > /tmp/$$
-teuthology-nuke --unlock -t /tmp/$$ -r --owner $1
+owner=`teuthology-lock -a --list --desc-pattern /$1/ --status up | grep locked_by | head -1 | awk '{print $2}' | sed 's/"//g' | sed 's/,//'`
+teuthology-lock --list-targets --desc-pattern /$1/ --status up --owner $owner > /tmp/$$
+teuthology-nuke --unlock -t /tmp/$$ -r --owner $owner
 rm /tmp/$$
 
