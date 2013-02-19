@@ -7,6 +7,12 @@ ceph osd pool create fooo 123
 
 ceph osd pool create foo 123 # idempotent
 
+ceph osd pool set foo size 1
+ceph osd pool set foo size 4
+ceph osd pool set foo size 10
+ceph osd pool set foo size 0                           && exit 1 || true
+ceph osd pool set foo size 20                          && exit 1 || true
+
 # should fail due to safety interlock
 ceph osd pool delete foo                               && exit 1 || true
 ceph osd pool delete foo foo                           && exit 1 || true
