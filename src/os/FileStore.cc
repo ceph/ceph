@@ -4169,6 +4169,10 @@ int FileStore::_collection_rename(const coll_t &cid, const coll_t &ncid,
   get_cdir(cid, old_coll, sizeof(old_coll));
   get_cdir(ncid, new_coll, sizeof(new_coll));
 
+  if (_check_replay_guard(cid, spos) < 0) {
+    return 0;
+  }
+
   if (_check_replay_guard(ncid, spos) < 0) {
     return _collection_remove_recursive(cid, spos);
   }
