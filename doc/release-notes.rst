@@ -2,6 +2,46 @@
  Release Notes
 ===============
 
+v0.57
+-----
+
+This development release has a lot of additional functionality
+accumulated over the last couple months.  Most of the bug fixes (with
+the notable exception of the MDS related work) has already been
+backported to v0.56.x, and is not mentioned here.
+
+Upgrading
+~~~~~~~~~
+
+* The 'ceph osd pool delete <poolname>' and 'rados rmpool <poolname>'
+  now have safety interlocks with loud warnings that make you confirm
+  pool removal.  Any scripts curenty rely on these functions zapping
+  data without confirmation need to be adjusted accordingly.
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* osd: default to libaio for the journal (some performance boost)
+* osd: validate snap collections on startup
+* osd: ceph-filestore-dump tool for debugging
+* osd: deep-scrub omap keys/values
+* ceph tool: some CLI interface cleanups
+* mon: easy adjustment of crush tunables via 'ceph osd crush tunables ...'
+* mon: easy creation of crush rules vai 'ceph osd rule ...'
+* mon: approximate recovery, IO workload stats
+* mon: avoid marking entire CRUSH subtrees out (e.g., if an entire rack goes offline)
+* mon: safety check for pool deletion
+* mon: new checks for identifying and reporting clock drift
+* radosgw: misc fixes
+* rbd: wait for udev to settle in strategic places (avoid spurious errors, failures)
+* rbd-fuse: new tool, package
+* mds, ceph-fuse: manage layouts via xattrs
+* mds: misc bug fixes with clustered MDSs and failure recovery
+* mds: misc bug fixes with readdir
+* libcephfs: many fixes, cleanups with the Java bindings
+* auth: ability to require new cephx signatures on messages (still off by default)
+
+
 v0.56.3 "bobtail"
 -----------------
 
