@@ -1601,7 +1601,7 @@ TEST(BufferList, read_fd) {
   bufferlist bl;
   EXPECT_EQ(-EBADF, bl.read_fd(fd, len));
   fd = ::open("testfile", O_RDONLY);
-  EXPECT_EQ(len, bl.read_fd(fd, len));
+  EXPECT_EQ(len, (unsigned)bl.read_fd(fd, len));
   EXPECT_EQ(len, bl.length());
   EXPECT_EQ(CEPH_PAGE_SIZE - len, bl.buffers().front().unused_tail_length());
   ::close(fd);
