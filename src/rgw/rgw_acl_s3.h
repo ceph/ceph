@@ -8,6 +8,7 @@
 
 #include <expat.h>
 
+#include "include/str_list.h"
 #include "rgw_xml.h"
 #include "rgw_acl.h"
 
@@ -66,7 +67,8 @@ public:
     out << "</AccessControlList>";
   }
 
-  bool create_canned(ACLOwner& owner, ACLOwner& bucket_owner, const string& canned_acl);
+  int create_canned(ACLOwner& owner, ACLOwner& bucket_owner, const string& canned_acl);
+  int create_from_grants(std::list<ACLGrant>& grants);
 };
 
 class ACLOwner_S3 : public ACLOwner, public XMLObj
@@ -85,6 +87,8 @@ public:
     out << "</Owner>";
   }
 };
+
+class RGWEnv;
 
 class RGWAccessControlPolicy_S3 : public RGWAccessControlPolicy, public XMLObj
 {
@@ -105,12 +109,13 @@ public:
   int rebuild(RGWRados *store, ACLOwner *owner, RGWAccessControlPolicy& dest);
   bool compare_group_name(string& id, ACLGroupTypeEnum group);
 
-  virtual bool create_canned(ACLOwner& _owner, ACLOwner& bucket_owner, string canned_acl) {
+  virtual int create_canned(ACLOwner& _owner, ACLOwner& bucket_owner, string canned_acl) {
     RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
-    bool ret = _acl.create_canned(_owner, bucket_owner, canned_acl);
+    int ret = _acl.create_canned(_owner, bucket_owner, canned_acl);
     owner = _owner;
     return ret;
   }
+  int create_from_headers(RGWRados *store, RGWEnv *env, ACLOwner& _owner);
 };
 
 /**
