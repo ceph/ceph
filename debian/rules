@@ -49,7 +49,8 @@ configure-stamp:
 	dh_testdir
 	./autogen.sh
 	./configure --prefix=/usr --sbindir=/sbin --localstatedir=/var \
-	  --sysconfdir=/etc $(extraopts) $(confflags)
+	  --sysconfdir=/etc $(extraopts) $(confflags) \
+	  $(CEPH_EXTRA_CONFIGURE_ARGS)
 	touch $@
 
 build-arch: build
