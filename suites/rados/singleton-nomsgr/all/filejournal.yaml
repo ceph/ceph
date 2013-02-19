@@ -4,4 +4,4 @@ tasks:
 - ceph:
 - exec:
     client.0:
-      - /tmp/cephtest/binary/usr/local/bin/test_filejournal
+      - ceph_test_filejournal
