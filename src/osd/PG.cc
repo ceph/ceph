@@ -2892,12 +2892,6 @@ void PG::log_weirdness()
 			<< log.log.begin()->version << "," << log.log.rbegin()->version << "]"
 			<< "\n";
   }
-  
-  if (info.last_complete < log.tail)
-    osd->clog.error() << info.pgid
-		      << " last_complete " << info.last_complete
-		      << " < log.tail " << log.tail
-		      << "\n";
 }
 
 coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
