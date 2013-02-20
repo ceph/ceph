@@ -1140,6 +1140,15 @@ public:
    */
   void trim_to(MonitorDBStore::Transaction *t, version_t first);
   /**
+   * Auxiliary function to erase states in the interval [from, to[ from stable
+   * storage.
+   *
+   * @param t A transaction
+   * @param from Bottom limit of the interval of versions to erase
+   * @param to Upper limit, not including, of the interval of versions to erase
+   */
+  void trim_to(MonitorDBStore::Transaction *t, version_t from, version_t to);
+  /**
    * Trim the Paxos state as much as we can.
    */
   void trim() {
