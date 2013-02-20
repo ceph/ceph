@@ -201,7 +201,7 @@ int RGWRegion::create_default()
   name = "default";
   string zone_name = "default";
 
-  RGWZone default_zone;
+  RGWZone& default_zone = zones[zone_name];
   default_zone.name = zone_name;
 
   RGWZoneParams zone_params;
@@ -216,6 +216,7 @@ int RGWRegion::create_default()
   r = store_info(true);
   if (r < 0) {
     derr << "error storing region info: " << cpp_strerror(-r) << dendl;
+    return r;
   }
 
   return 0;

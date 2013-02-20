@@ -633,10 +633,10 @@ int main(int argc, char **argv)
 
   RGWStreamFlusher f(formatter, cout);
 
-  bool region_op = (opt_cmd == OPT_REGION_INFO);
+  bool raw_storage_op = (opt_cmd == OPT_REGION_INFO);
 
 
-  if (region_op) {
+  if (raw_storage_op) {
     store = RGWStoreManager::get_raw_storage(g_ceph_context);
   } else {
     store = RGWStoreManager::get_storage(g_ceph_context, false);
@@ -648,7 +648,7 @@ int main(int argc, char **argv)
 
   StoreDestructor store_destructor(store);
 
-  if (region_op) {
+  if (raw_storage_op) {
     if (opt_cmd == OPT_REGION_INFO) {
       RGWRegion region;
       int ret = region.init(g_ceph_context, store);
@@ -1205,7 +1205,7 @@ next:
   }
 
   if (opt_cmd == OPT_ZONE_INFO) {
-    store->zone.dump(formatter);
+    encode_json("zone", store->zone, formatter);
     formatter->flush(cout);
   }
 
@@ -1223,7 +1223,7 @@ next:
       return 1;
     }
 
-    zone.dump(formatter);
+    encode_json("zone", store->zone, formatter);
     formatter->flush(cout);
   }
 
