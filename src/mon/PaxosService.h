@@ -239,6 +239,11 @@ private:
    *	   active
    */
   void _active();
+  /**
+   * Scrub our versions after we convert the store from the old layout to
+   * the new k/v store.
+   */
+  void scrub();
 
 public:
   /**
@@ -564,6 +569,15 @@ public:
    * @defgroup PaxosService_h_Trim
    * @{
    */
+  /**
+   * Auxiliary function to trim our state from version @from to version @to,
+   * not including; i.e., the interval [from, to[
+   *
+   * @param t The transaction to which we will add the trim operations.
+   * @param from the lower limit of the interval to be trimmed
+   * @param to the upper limit of the interval to be trimmed (not including)
+   */
+  void trim(MonitorDBStore::Transaction *t, version_t from, version_t to);
   /**
    * Trim our log. This implies getting rid of versions on the k/v store.
    * Services implementing us don't have to implement this function if they

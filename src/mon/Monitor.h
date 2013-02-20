@@ -45,6 +45,7 @@
 #include "perfglue/heap_profiler.h"
 
 #include "messages/MMonCommand.h"
+#include "mon/MonitorStore.h"
 #include "mon/MonitorDBStore.h"
 
 #include <memory>
@@ -1400,10 +1401,79 @@ private:
   // don't allow copying
   Monitor(const Monitor& rhs);
   Monitor& operator=(const Monitor &rhs);
+
+public:
+  class StoreConverter {
+    const string path;
+    boost::scoped_ptr<MonitorDBStore> db;
+    boost::scoped_ptr<MonitorStore> store;
+
+    set<version_t> gvs;
+    version_t highest_last_pn;
+    version_t highest_accepted_pn;
+
+   public:
+    StoreConverter(const string &path)
+      : path(path), db(NULL), store(NULL),
+	highest_last_pn(0), highest_accepted_pn(0)
+    { }
+
+    bool needs_conversion();
+    int convert();
+
+   private:
+
+    bool _check_gv_store();
+
+    void _init() {
+      MonitorDBStore *db_ptr = new MonitorDBStore(path);
+      db.reset(db_ptr);
+
+      MonitorStore *store_ptr = new MonitorStore(path);
+      store.reset(store_ptr);
+    }
+
+    void _deinit() {
+      db.reset(NULL);
+      store.reset(NULL);
+    }
+
+    set<string> _get_machines_names() {
+      set<string> names;
+      names.insert("auth");
+      names.insert("logm");
+      names.insert("mdsmap");
+      names.insert("monmap");
+      names.insert("osdmap");
+      names.insert("pgmap");
+
+      return names;
+    }
+
+    void _mark_convert_start() {
+      MonitorDBStore::Transaction tx;
+      tx.put("mon_convert", "on_going", 1);
+      db->apply_transaction(tx);
+    }
+
+    void _convert_finish_features(MonitorDBStore::Transaction &t);
+    void _mark_convert_finish() {
+      MonitorDBStore::Transaction tx;
+      tx.erase("mon_convert", "on_going");
+      _convert_finish_features(tx);
+      db->apply_transaction(tx);
+    }
+
+    void _convert_monitor();
+    void _convert_machines(string machine);
+    void _convert_machines();
+    void _convert_paxos();
+  };
 };
 
 #define CEPH_MON_FEATURE_INCOMPAT_BASE CompatSet::Feature (1, "initial feature set (~v.18)")
 #define CEPH_MON_FEATURE_INCOMPAT_GV CompatSet::Feature (2, "global version sequencing (v0.52)")
+#define CEPH_MON_FEATURE_INCOMPAT_SINGLE_PAXOS CompatSet::Feature (3, "single paxos with k/v store (v0.\?)")
 
 long parse_pos_long(const char *s, ostream *pss = NULL);
 
