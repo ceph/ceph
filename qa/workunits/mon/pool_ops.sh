@@ -29,7 +29,7 @@ ceph osd pool delete fooo fooo --yes-i-really-really-mean-it
 ceph osd pool delete fooo fooo --yes-i-really-really-mean-it
 
 # non-existent pool
-ceph osd pool delete fuggg fuggg --yes-i-really-really-mean-it     && exit 1 || true
+ceph osd pool delete fuggg fuggg --yes-i-really-really-mean-it
 
 echo OK
 
