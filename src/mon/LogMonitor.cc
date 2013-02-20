@@ -128,7 +128,8 @@ void LogMonitor::update_from_paxos()
       string s = ss.str();
 
       if (g_conf->mon_cluster_log_to_syslog) {
-	syslog(clog_type_to_syslog_prio(le.type) | LOG_USER, "%s", s.c_str());
+	le.log_to_syslog(g_conf->mon_cluster_log_to_syslog_level,
+			 g_conf->mon_cluster_log_to_syslog_facility);
       }
       if (g_conf->mon_cluster_log_file.length()) {
 	blog.append(s + "\n");

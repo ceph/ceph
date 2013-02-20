@@ -35,7 +35,10 @@ typedef enum {
 /*
  * Given a clog log_type, return the equivalent syslog priority
  */
-int clog_type_to_syslog_prio(clog_type t);
+int clog_type_to_syslog_level(clog_type t);
+
+int string_to_syslog_level(string s);
+int string_to_syslog_facility(string s);
 
 
 struct LogEntryKey {
@@ -65,6 +68,8 @@ struct LogEntry {
   string msg;
 
   LogEntryKey key() const { return LogEntryKey(who, stamp, seq); }
+
+  void log_to_syslog(string level, string facility);
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
