@@ -86,10 +86,8 @@ void LogClient::do_log(clog_type type, const std::string& s)
 
   // log to syslog?
   if (cct->_conf->clog_to_syslog) {
-    ostringstream oss;
-    oss << e;
-    string str(oss.str());
-    syslog(clog_type_to_syslog_prio(e.type) | LOG_USER, "%s", str.c_str());
+    e.log_to_syslog(cct->_conf->clog_to_syslog_level,
+		    cct->_conf->clog_to_syslog_facility);
   }
 
   // log to monitor?

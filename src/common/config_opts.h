@@ -42,8 +42,12 @@ OPTION(log_flush_on_exit, OPT_BOOL, true)
 
 OPTION(clog_to_monitors, OPT_BOOL, true)
 OPTION(clog_to_syslog, OPT_BOOL, false)
+OPTION(clog_to_syslog_level, OPT_STR, "info")         // this level and above
+OPTION(clog_to_syslog_facility, OPT_STR, "daemon")
 
 OPTION(mon_cluster_log_to_syslog, OPT_BOOL, false)
+OPTION(mon_cluster_log_to_syslog_level, OPT_STR, "info")   // this level and above
+OPTION(mon_cluster_log_to_syslog_facility, OPT_STR, "daemon")
 OPTION(mon_cluster_log_file, OPT_STR, "/var/log/ceph/$cluster.log")
 
 DEFAULT_SUBSYS(0, 5)
