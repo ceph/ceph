@@ -517,7 +517,7 @@ public:
   CephContext *ctx() { return cct; }
   /** do all necessary setup of the storage device */
   int initialize(CephContext *_cct, bool _use_gc_thread) {
-    set_context(cct);
+    set_context(_cct);
     use_gc_thread = _use_gc_thread;
     return initialize();
   }
