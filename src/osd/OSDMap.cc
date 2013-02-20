@@ -714,6 +714,30 @@ bool OSDMap::find_osd_on_ip(const entity_addr_t& ip) const
   return -1;
 }
 
+
+uint64_t OSDMap::get_features(uint64_t *pmask) const
+{
+  uint64_t features = 0;
+  uint64_t mask = 0;
+
+  if (crush->has_nondefault_tunables())
+    features |= CEPH_FEATURE_CRUSH_TUNABLES;
+  if (crush->has_nondefault_tunables2())
+    features |= CEPH_FEATURE_CRUSH_TUNABLES2;
+  mask |= CEPH_FEATURES_CRUSH;
+
+  for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
+    if (p->second.flags & pg_pool_t::FLAG_HASHPSPOOL) {
+      features |= CEPH_FEATURE_OSDHASHPSPOOL;
+    }
+  }
+  mask |= CEPH_FEATURE_OSDHASHPSPOOL;
+
+  if (pmask)
+    *pmask = mask;
+  return features;
+}
+
 void OSDMap::dedup(const OSDMap *o, OSDMap *n)
 {
   if (o->epoch == n->epoch)
@@ -1690,6 +1714,7 @@ void OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
   for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
     int64_t pool = ++pool_max;
     pools[pool].type = pg_pool_t::TYPE_REP;
+    pools[pool].flags = cct->_conf->osd_pool_default_flags;
     pools[pool].size = cct->_conf->osd_pool_default_size;
     pools[pool].min_size = cct->_conf->get_osd_pool_default_min_size();
     pools[pool].crush_ruleset = p->first;
@@ -1814,6 +1839,7 @@ int OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
   for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
     int64_t pool = ++pool_max;
     pools[pool].type = pg_pool_t::TYPE_REP;
+    pools[pool].flags = cct->_conf->osd_pool_default_flags;
     pools[pool].size = cct->_conf->osd_pool_default_size;
     pools[pool].min_size = cct->_conf->get_osd_pool_default_min_size();
     pools[pool].crush_ruleset = p->first;

@@ -620,6 +620,9 @@ struct pg_pool_t {
     TYPE_REP = 1,     // replication
     TYPE_RAID4 = 2,   // raid4 (never implemented)
   };
+  enum {
+    FLAG_HASHPSPOOL = 1, // hash pg seed and pool together (instead of adding)
+  };
 
   static const char *get_type_name(int t) {
     switch (t) {
