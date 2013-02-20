@@ -316,6 +316,7 @@ class CephManager:
             '0')
 
     def wait_run_admin_socket(self, osdnum, args=['version']):
+        tries = 0
         while True:
             proc = self.osd_admin_socket(
                 osdnum, args,
@@ -323,11 +324,15 @@ class CephManager:
             if proc.exitstatus is 0:
                 break
             else:
+                tries += 1
+                if tries > 15:
+                    raise 'timed out waiting for admin_socket to appear after osd.{o} restart'.format(o=osdnum)
                 self.log(
                     "waiting on admin_socket for {osdnum}, {command}".format(
                         osdnum=osdnum,
                         command=args))
                 time.sleep(5)
+                max += 1
 
     def set_config(self, osdnum, **argdict):
         for k,v in argdict.iteritems():
