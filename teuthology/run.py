@@ -184,9 +184,13 @@ def main():
             with file(os.path.join(ctx.archive, 'summary.yaml'), 'w') as f:
                 yaml.safe_dump(ctx.summary, f, default_flow_style=False)
 
-    if not ctx.summary.get('success', True):
+    if ctx.summary.get('success', True):
+        log.info('pass')
+    else:
+        log.info('FAIL')
         import sys
         sys.exit(1)
+
 
 def schedule():
     parser = argparse.ArgumentParser(description='Schedule ceph integration tests')
