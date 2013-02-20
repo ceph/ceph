@@ -67,7 +67,7 @@ Set the size of each stripe
 .INDENT 0.0
 .TP
 .B \-c \-\-stripe_count
-Set the number of stripes per object
+Set the number of objects to stripe across
 .UNINDENT
 .INDENT 0.0
 .TP
@@ -86,8 +86,8 @@ Set the preferred OSD to use as the primary
 .UNINDENT
 .SH LIMITATIONS
 .sp
-When setting layout data, the specified stripe unit and stripe count
-must multiply to the size of an object. Any parameters you don\(aqt set
+When setting layout data, the specified object size must evenly divide
+by the specified stripe unit. Any parameters you don\(aqt set
 explicitly are left at the system defaults.
 .sp
 Obviously setting the layout of a file and a directory means different
@@ -101,9 +101,9 @@ directory (or any subdirectory).  Pre\-existing files do not have their
 layouts changed.
 .sp
 You\(aqll notice that the layout information allows you to specify a
-preferred OSD for placement. This is allowed but is not recommended
-since it can dramatically unbalance your storage cluster\(aqs space
-utilization.
+preferred OSD for placement. This feature is unsupported and ignored
+in modern versions of the Ceph servers; do not use it.
+
 .SH AVAILABILITY
 .sp
 \fBcephfs\fP is part of the Ceph distributed file system. Please refer
