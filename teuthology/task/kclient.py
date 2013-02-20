@@ -53,8 +53,10 @@ def task(ctx, config):
         ips = [host for (host, port) in (remote_.ssh.get_transport().getpeername() for (remote_, roles) in remotes_and_roles)]
         mons = teuthology.get_mons(roles, ips).values()
 
+        keyring = '/etc/ceph/ceph.client.{id}.keyring'.format(id=id_)
         secret = '{tdir}/data/client.{id}.secret'.format(tdir=testdir, id=id_)
-        teuthology.write_secret_file(ctx, remote, 'client.{id}'.format(id=id_), secret)
+        teuthology.write_secret_file(ctx, remote, 'client.{id}'.format(id=id_),
+                                     keyring, secret)
 
         remote.run(
             args=[
@@ -68,9 +70,9 @@ def task(ctx, config):
             args=[
                 'sudo',
                 '{tdir}/enable-coredump'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/sbin/mount.ceph'.format(tdir=testdir),
+                '/sbin/mount.ceph',
                 '{mons}:/'.format(mons=','.join(mons)),
                 mnt,
                 '-v',

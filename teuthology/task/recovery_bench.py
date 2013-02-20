@@ -104,12 +104,10 @@ class RecoveryBencher:
         # create the objects
         osd_remote.run(
             args=[
-                'env', 'CEPH_CONF={tdir}/ceph.conf'.format(tdir=testdir),
-                'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
                 '{tdir}/enable-coredump'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/smalliobench'.format(tdir=testdir),
+                'smalliobench'.format(tdir=testdir),
                 '--use-prefix', 'recovery_bench',
                 '--init-only', '1',
                 '--num-objects', str(num_objects),
@@ -122,12 +120,10 @@ class RecoveryBencher:
         log.info('non-recovery (baseline)')
         p = osd_remote.run(
             args=[
-                'env', 'CEPH_CONF={tdir}/ceph.conf'.format(tdir=testdir),
-                'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
                 '{tdir}/enable-coredump'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/smalliobench'.format(tdir=testdir),
+                'smalliobench',
                 '--use-prefix', 'recovery_bench',
                 '--do-not-init', '1',
                 '--duration', str(duration),
@@ -146,12 +142,10 @@ class RecoveryBencher:
         log.info('recovery active')
         p = osd_remote.run(
             args=[
-                'env', 'CEPH_CONF={tdir}/ceph.conf'.format(tdir=testdir),
-                'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
                 '{tdir}/enable-coredump'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/smalliobench'.format(tdir=testdir),
+                'smalliobench',
                 '--use-prefix', 'recovery_bench',
                 '--do-not-init', '1',
                 '--duration', str(duration),

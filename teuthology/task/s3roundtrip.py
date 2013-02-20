@@ -70,12 +70,10 @@ def create_users(ctx, config):
             _config_user(s3tests_conf, section, '{user}.{client}'.format(user=user, client=client))
             ctx.cluster.only(client).run(
                 args=[
-                    'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
                     '{tdir}/enable-coredump'.format(tdir=testdir),
-                    '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                    'ceph-coverage',
                     '{tdir}/archive/coverage'.format(tdir=testdir),
-                    '{tdir}/binary/usr/local/bin/radosgw-admin'.format(tdir=testdir),
-                    '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
+                    'radosgw-admin',
                     'user', 'create',
                     '--uid', s3tests_conf[section]['user_id'],
                     '--display-name', s3tests_conf[section]['display_name'],

@@ -16,7 +16,7 @@ def task(ctx, config):
 
         tasks:
         - ceph:
-        - cfuse: [client.0]
+        - ceph-fuse: [client.0]
         - workunit:
             clients:
               client.0: [direct_io, xattrs.sh]
@@ -26,7 +26,7 @@ def task(ctx, config):
     You can also run a list of workunits on all clients:
         tasks:
         - ceph:
-        - cfuse:
+        - ceph-fuse:
         - workunit:
             tag: v0.47
             clients:
@@ -40,7 +40,7 @@ def task(ctx, config):
 
         tasks:
         - ceph:
-        - cfuse:
+        - ceph-fuse:
         - workunit:
             sha1: 9b28948635b17165d17c1cf83d4a870bd138ddf6
             clients:
@@ -226,8 +226,6 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None):
     else:
         scratch_tmp = os.path.join(mnt, subdir)
     srcdir = '{tdir}/workunit.{role}'.format(tdir=testdir, role=role)
-    secretfile = '{tdir}/data/{role}.secret'.format(tdir=testdir, role=role)
-    teuthology.write_secret_file(ctx, remote, role, secretfile)
 
     ceph_ref = ctx.summary.get('ceph-sha1', 'master')
 
@@ -276,12 +274,8 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None):
                     'cd', '--', scratch_tmp,
                     run.Raw('&&'),
                     run.Raw('CEPH_REF={ref}'.format(ref=ceph_ref)),
-                    run.Raw('PATH="$PATH:{tdir}/binary/usr/local/bin"'.format(tdir=testdir)),
-                    run.Raw('LD_LIBRARY_PATH="$LD_LIBRARY_PATH:{tdir}/binary/usr/local/lib"'.format(tdir=testdir)),
                     run.Raw('CEPH_JAVA_PATH="{tdir}/binary/usr/local/share/java"'.format(tdir=testdir)),
-                    run.Raw('CEPH_CONF="{tdir}/ceph.conf"'.format(tdir=testdir)),
                     run.Raw('TESTDIR="{tdir}"'.format(tdir=testdir)),
-                    run.Raw('CEPH_SECRET_FILE="{file}"'.format(file=secretfile)),
                     run.Raw('CEPH_ID="{id}"'.format(id=id_)),
                     run.Raw('PYTHONPATH="$PYTHONPATH:{tdir}/binary/usr/local/lib/python2.7/dist-packages:{tdir}/binary/usr/local/lib/python2.6/dist-packages"'.format(tdir=testdir)),
                     ]
@@ -292,7 +286,7 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None):
                         args.append(run.Raw(env_arg))
                 args.extend([
                         '{tdir}/enable-coredump'.format(tdir=testdir),
-                        '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                        'ceph-coverage',
                         '{tdir}/archive/coverage'.format(tdir=testdir),
                         '{srcdir}/{workunit}'.format(
                             srcdir=srcdir,

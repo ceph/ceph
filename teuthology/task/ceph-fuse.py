@@ -4,6 +4,7 @@ import os
 
 from teuthology import misc as teuthology
 from ..orchestra import run
+from teuthology.task import install as install_task
 
 log = logging.getLogger(__name__)
 
@@ -59,18 +60,25 @@ def task(ctx, config):
     clients = list(teuthology.get_clients(ctx=ctx, roles=config.keys()))
 
     for id_, remote in clients:
-        mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
-        log.info('Mounting ceph-fuse client.{id} at {remote} {mnt}...'.format(
-                id=id_, remote=remote,mnt=mnt))
-
         client_config = config.get("client.%s" % id_)
         if client_config is None:
             client_config = {}
         log.info("Client client.%s config is %s" % (id_, client_config))
 
         daemon_signal = 'kill'
+        flavor = 'basic'
         if client_config.get('coverage') or client_config.get('valgrind') is not None:
             daemon_signal = 'term'
+            flavor='notcmalloc'
+
+        # install ceph fuse package
+        install_task.install_debs(ctx, ['ceph-fuse'],
+                                  config.get('branch', 'master'),
+                                  flavor)
+
+        mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
+        log.info('Mounting ceph-fuse client.{id} at {remote} {mnt}...'.format(
+                id=id_, remote=remote,mnt=mnt))
 
         remote.run(
             args=[
@@ -81,17 +89,17 @@ def task(ctx, config):
             )
 
         run_cmd=[
+            'sudo',
             '{tdir}/enable-coredump'.format(tdir=testdir),
-            '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+            'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
             '{tdir}/daemon-helper'.format(tdir=testdir),
             daemon_signal,
             ]
         run_cmd_tail=[
-            '{tdir}/binary/usr/local/bin/ceph-fuse'.format(tdir=testdir),
+            'ceph-fuse',
             '-f',
             '--name', 'client.{id}'.format(id=id_),
-            '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
             # TODO ceph-fuse doesn't understand dash dash '--',
             mnt,
             ]
@@ -133,6 +141,7 @@ def task(ctx, config):
             try:
               remote.run(
                   args=[
+                      'sudo',
                       'fusermount',
                       '-u',
                       mnt,
@@ -171,3 +180,6 @@ def task(ctx, config):
                     mnt,
                     ],
                 )
+
+        # remove ceph-fuse package
+        install_task.remove_debs(ctx, ['ceph-fuse'])

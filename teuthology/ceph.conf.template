@@ -1,6 +1,4 @@
 [global]
-        keyring = {testdir}/ceph.keyring
-	log file = {testdir}/archive/log/$name.log
 	chdir = ""
 	pid file = $name.pid
         auth supported = cephx
@@ -12,16 +10,8 @@
 
 	osd crush chooseleaf type = 0
 
-[mon]
-        mon data = {testdir}/data/mon.$id
-	mon cluster log file = {testdir}/archive/log/cluster.mon.$id.log
-
 [osd]
-        osd data = {testdir}/data/osd.$id.data
-        osd journal = {testdir}/data/osd.$id.journal
         osd journal size = 100
-        keyring = {testdir}/data/osd.$id.keyring
-        osd class dir = {testdir}/binary/usr/local/lib/rados-classes
 
         osd scrub load threshold = 5.0
 	osd scrub max interval = 600
@@ -30,18 +20,13 @@
 	osd recovery max chunk = 1048576
 
 [mds]
-        keyring = {testdir}/data/mds.$id.keyring
         lockdep = 1
         mds debug scatterstat = true
         mds verify scatter = true
         mds debug frag = true
 
 [client]
-        keyring = {testdir}/data/client.$id.keyring
         rgw socket path = {testdir}/apache/tmp/fastcgi_sock/rgw_sock
         rgw cache enabled = true
 	rgw enable ops log = true
 	rgw enable usage log = true
-
-[client.admin]
-        keyring = {testdir}/ceph.keyring

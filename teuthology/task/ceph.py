@@ -2,13 +2,9 @@ from cStringIO import StringIO
 
 import argparse
 import contextlib
-import errno
 import logging
 import os
-import shutil
-import subprocess
 import sys
-import tempfile
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -81,17 +77,17 @@ class CephState(object):
     def iter_daemons_of_role(self, role):
         return self.daemons.get(role, {}).values()
 
+
 @contextlib.contextmanager
 def ceph_log(ctx, config):
-    log.info('Creating log directories...')
-    archive_dir = '{tdir}/archive'.format(tdir=teuthology.get_testdir(ctx))
+    log.info('Creating extra log directories...')
     run.wait(
         ctx.cluster.run(
             args=[
+                'sudo',
                 'install', '-d', '-m0755', '--',
-                '{adir}/log'.format(adir=archive_dir),
-                '{adir}/log/valgrind'.format(adir=archive_dir),
-                '{adir}/profiling-logger'.format(adir=archive_dir),
+                '/var/log/ceph/valgrind',
+                '/var/log/ceph/profiling-logger',
                 ],
             wait=False,
             )
@@ -99,32 +95,9 @@ def ceph_log(ctx, config):
 
     try:
         yield
+
     finally:
-
-        if ctx.archive is not None:
-            log.info('Compressing logs...')
-            run.wait(
-                ctx.cluster.run(
-                    args=[
-                        'find',
-                        '{adir}/log'.format(adir=archive_dir),
-                        '-name',
-                        '*.log',
-                        '-print0',
-                        run.Raw('|'),
-                        'xargs',
-                        '-0',
-                        '--no-run-if-empty',
-                        '--',
-                        'gzip',
-                        '--',
-                        ],
-                    wait=False,
-                    ),
-                )
-
-            # log file transfer is done by the generic archive data
-            # handling
+        pass
 
 @contextlib.contextmanager
 def ship_utilities(ctx, config):
@@ -172,118 +145,6 @@ def ship_utilities(ctx, config):
                 ),
             )
 
-def _download_binaries(ctx, remote, ceph_bindir_url):
-    testdir = teuthology.get_testdir(ctx)
-    remote.run(
-        args=[
-            'install', '-d', '-m0755', '--', '{tdir}/binary'.format(tdir=testdir),
-            run.Raw('&&'),
-            'uname', '-m',
-            run.Raw('|'),
-            'sed', '-e', 's/^/ceph./; s/$/.tgz/',
-            run.Raw('|'),
-            'wget',
-            '-nv',
-            '-O-',
-            '--base={url}'.format(url=ceph_bindir_url),
-            # need to use --input-file to make wget respect --base
-            '--input-file=-',
-            run.Raw('|'),
-            'tar', '-xzf', '-', '-C', '{tdir}/binary'.format(tdir=testdir),
-            ],
-        )
-
-@contextlib.contextmanager
-def binaries(ctx, config):
-    path = config.get('path')
-    tmpdir = None
-
-    testdir = teuthology.get_testdir(ctx)
-
-    if path is None:
-        # fetch from gitbuilder gitbuilder
-        log.info('Fetching and unpacking ceph binaries from gitbuilder...')
-        sha1, ceph_bindir_url = teuthology.get_ceph_binary_url(
-            package='ceph',
-            branch=config.get('branch'),
-            tag=config.get('tag'),
-            sha1=config.get('sha1'),
-            flavor=config.get('flavor'),
-            format=config.get('format'),
-            dist=config.get('dist'),
-            arch=config.get('arch'),
-            )
-        ctx.summary['ceph-sha1'] = sha1
-        if ctx.archive is not None:
-            with file(os.path.join(ctx.archive, 'ceph-sha1'), 'w') as f:
-                f.write(sha1 + '\n')
-
-        with parallel() as p:
-            for remote in ctx.cluster.remotes.iterkeys():
-                p.spawn(_download_binaries, ctx, remote, ceph_bindir_url)
-    else:
-        with tempfile.TemporaryFile(prefix='teuthology-tarball-', suffix='.tgz') as tar_fp:
-            tmpdir = tempfile.mkdtemp(prefix='teuthology-tarball-')
-            try:
-                log.info('Installing %s to %s...' % (path, tmpdir))
-                subprocess.check_call(
-                    args=[
-                        'make',
-                        'install',
-                        'DESTDIR={tmpdir}'.format(tmpdir=tmpdir),
-                        ],
-                    cwd=path,
-                    )
-                try:
-                    os.symlink('.', os.path.join(tmpdir, 'usr', 'local'))
-                except OSError as e:
-                    if e.errno == errno.EEXIST:
-                        pass
-                    else:
-                        raise
-                log.info('Building ceph binary tarball from %s...', tmpdir)
-                subprocess.check_call(
-                    args=[
-                        'tar',
-                        'cz',
-                        '.',
-                        ],
-                    cwd=tmpdir,
-                    stdout=tar_fp,
-                    )
-            finally:
-                shutil.rmtree(tmpdir, ignore_errors=True)
-            log.info('Pushing tarball...')
-            tar_fp.seek(0)
-            writes = ctx.cluster.run(
-                args=[
-                    'install', '-d', '-m0755', '--', '{tdir}/binary'.format(tdir=testdir),
-                    run.Raw('&&'),
-                    'tar', '-xzf', '-', '-C', '{tdir}/binary'.format(tdir=testdir)
-                    ],
-                stdin=run.PIPE,
-                wait=False,
-                )
-            teuthology.feed_many_stdins_and_close(tar_fp, writes)
-            run.wait(writes)
-
-    try:
-        yield
-    finally:
-        log.info('Removing ceph binaries...')
-        run.wait(
-            ctx.cluster.run(
-                args=[
-                    'rm',
-                    '-rf',
-                    '--',
-                    '{tdir}/binary'.format(tdir=testdir),
-                    ],
-                wait=False,
-                ),
-            )
-
-
 def assign_devs(roles, devs):
     return dict(zip(roles, devs))
 
@@ -294,12 +155,13 @@ def valgrind_post(ctx, config):
         yield
     finally:
         lookup_procs = list()
-        val_path = '{tdir}/archive/log/valgrind'.format(tdir=testdir)
+        val_path = '/var/log/ceph/valgrind'.format(tdir=testdir)
         log.info('Checking for errors in any valgrind logs...');
         for remote in ctx.cluster.remotes.iterkeys():
             #look at valgrind logs for each node
             proc = remote.run(
                 args=[
+                    'sudo',
                     'grep', '-r', '<kind>',
                     run.Raw(val_path),
                     run.Raw('|'),
@@ -338,7 +200,7 @@ def mount_osd_data(ctx, remote, osd):
         journal = ctx.disk_config.remote_to_roles_to_journals[remote][osd]
         mount_options = ctx.disk_config.remote_to_roles_to_dev_mount_options[remote][osd]
         fstype = ctx.disk_config.remote_to_roles_to_dev_fstype[remote][osd]
-        mnt = os.path.join('{tdir}/data'.format(tdir=testdir), 'osd.{id}.data'.format(id=osd))
+        mnt = os.path.join('/var/lib/ceph/osd', 'ceph-{id}'.format(id=osd))
 
         log.info('Mounting osd.{o}: dev: {n}, mountpoint: {p}, type: {t}, options: {v}'.format(
                  o=osd, n=remote.name, p=mnt, t=fstype, v=mount_options))
@@ -369,6 +231,16 @@ def cluster(ctx, config):
             args=[
                 'install', '-d', '-m0755', '--',
                 '{tdir}/data'.format(tdir=testdir),
+                ],
+            wait=False,
+            )
+        )
+
+    run.wait(
+        ctx.cluster.run(
+            args=[
+                'sudo',
+                'install', '-d', '-m0755', '--', '/var/run/ceph',
                 ],
             wait=False,
             )
@@ -441,16 +313,23 @@ def cluster(ctx, config):
     ctx.ceph = argparse.Namespace()
     ctx.ceph.conf = conf
 
+    conf_path = config.get('conf_path', '/etc/ceph/ceph.conf')
+    keyring_path = config.get('keyring_path', '/etc/ceph/ceph.keyring')
+
     log.info('Writing configs...')
     conf_fp = StringIO()
     conf.write(conf_fp)
     conf_fp.seek(0)
     writes = ctx.cluster.run(
         args=[
-            'python',
+            'sudo', 'mkdir', '-p', '/etc/ceph', run.Raw('&&'),
+            'sudo', 'chmod', '0755', '/etc/ceph', run.Raw('&&'),
+            'sudo', 'python',
             '-c',
             'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
-            '{tdir}/ceph.conf'.format(tdir=testdir),
+            conf_path,
+            run.Raw('&&'),
+            'sudo', 'chmod', '0644', conf_path,
             ],
         stdin=run.PIPE,
         wait=False,
@@ -465,23 +344,33 @@ def cluster(ctx, config):
     log.info('Setting up %s...' % firstmon)
     ctx.cluster.only(firstmon).run(
         args=[
+            'sudo',
             '{tdir}/enable-coredump'.format(tdir=testdir),
-            '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+            'ceph-coverage',
             coverage_dir,
-            '{tdir}/binary/usr/local/bin/ceph-authtool'.format(tdir=testdir),
+            'ceph-authtool',
             '--create-keyring',
-            '{tdir}/ceph.keyring'.format(tdir=testdir),
+            keyring_path,
             ],
         )
     ctx.cluster.only(firstmon).run(
         args=[
+            'sudo',
             '{tdir}/enable-coredump'.format(tdir=testdir),
-            '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+            'ceph-coverage',
             coverage_dir,
-            '{tdir}/binary/usr/local/bin/ceph-authtool'.format(tdir=testdir),
+            'ceph-authtool',
             '--gen-key',
             '--name=mon.',
-            '{tdir}/ceph.keyring'.format(tdir=testdir),
+            keyring_path,
+            ],
+        )
+    ctx.cluster.only(firstmon).run(
+        args=[
+            'sudo',
+            'chmod',
+            '0644',
+            keyring_path,
             ],
         )
     (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
@@ -494,24 +383,25 @@ def cluster(ctx, config):
     log.info('Creating admin key on %s...' % firstmon)
     ctx.cluster.only(firstmon).run(
         args=[
+            'sudo',
             '{tdir}/enable-coredump'.format(tdir=testdir),
-            '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+            'ceph-coverage',
             coverage_dir,
-            '{tdir}/binary/usr/local/bin/ceph-authtool'.format(tdir=testdir),
+            'ceph-authtool',
             '--gen-key',
             '--name=client.admin',
             '--set-uid=0',
             '--cap', 'mon', 'allow *',
             '--cap', 'osd', 'allow *',
             '--cap', 'mds', 'allow',
-            '{tdir}/ceph.keyring'.format(tdir=testdir),
+            keyring_path,
             ],
         )
 
     log.info('Copying monmap to all nodes...')
     keyring = teuthology.get_file(
         remote=mon0_remote,
-        path='{tdir}/ceph.keyring'.format(tdir=testdir),
+        path=keyring_path,
         )
     monmap = teuthology.get_file(
         remote=mon0_remote,
@@ -521,10 +411,11 @@ def cluster(ctx, config):
     for rem in ctx.cluster.remotes.iterkeys():
         # copy mon key and initial monmap
         log.info('Sending monmap to node {remote}'.format(remote=rem))
-        teuthology.write_file(
+        teuthology.sudo_write_file(
             remote=rem,
-            path='{tdir}/ceph.keyring'.format(tdir=testdir),
+            path=keyring_path,
             data=keyring,
+            perms='0644'
             )
         teuthology.write_file(
             remote=rem,
@@ -538,11 +429,10 @@ def cluster(ctx, config):
         mons.run(
             args=[
                 '{tdir}/enable-coredump'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                'ceph-coverage',
                 coverage_dir,
-                '{tdir}/binary/usr/local/bin/osdmaptool'.format(tdir=testdir),
-                '-c',
-                '{tdir}/ceph.conf'.format(tdir=testdir),
+                'osdmaptool',
+                '-c', conf_path,
                 '--clobber',
                 '--createsimple', '{num:d}'.format(
                     num=teuthology.num_instances_of_type(ctx.cluster, 'osd'),
@@ -555,36 +445,26 @@ def cluster(ctx, config):
             ),
         )
 
-    log.info('Setting up osd nodes...')
-    for remote, roles_for_host in osds.remotes.iteritems():
-        for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
-            remote.run(
-                args=[
-                    '{tdir}/enable-coredump'.format(tdir=testdir),
-                    '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
-                    coverage_dir,
-                    '{tdir}/binary/usr/local/bin/ceph-authtool'.format(tdir=testdir),
-                    '--create-keyring',
-                    '--gen-key',
-                    '--name=osd.{id}'.format(id=id_),
-                    '{tdir}/data/osd.{id}.keyring'.format(tdir=testdir, id=id_),
-                    ],
-                )
-
     log.info('Setting up mds nodes...')
     mdss = ctx.cluster.only(teuthology.is_type('mds'))
     for remote, roles_for_host in mdss.remotes.iteritems():
         for id_ in teuthology.roles_of_type(roles_for_host, 'mds'):
             remote.run(
                 args=[
+                    'sudo',
+                    'mkdir',
+                    '-p',
+                    '/var/lib/ceph/mds/ceph-{id}'.format(id=id_),
+                    run.Raw('&&'),
                     '{tdir}/enable-coredump'.format(tdir=testdir),
-                    '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                    'ceph-coverage',
                     coverage_dir,
-                    '{tdir}/binary/usr/local/bin/ceph-authtool'.format(tdir=testdir),
+                    'sudo',
+                    'ceph-authtool',
                     '--create-keyring',
                     '--gen-key',
                     '--name=mds.{id}'.format(id=id_),
-                    '{tdir}/data/mds.{id}.keyring'.format(tdir=testdir, id=id_),
+                    '/var/lib/ceph/mds/ceph-{id}/keyring'.format(id=id_),
                     ],
                 )
 
@@ -592,83 +472,24 @@ def cluster(ctx, config):
     clients = ctx.cluster.only(teuthology.is_type('client'))
     for remote, roles_for_host in clients.remotes.iteritems():
         for id_ in teuthology.roles_of_type(roles_for_host, 'client'):
+            client_keyring = '/etc/ceph/ceph.client.{id}.keyring'.format(id=id_)
             remote.run(
                 args=[
                     '{tdir}/enable-coredump'.format(tdir=testdir),
-                    '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                    'ceph-coverage',
                     coverage_dir,
-                    '{tdir}/binary/usr/local/bin/ceph-authtool'.format(tdir=testdir),
+                    'sudo',
+                    'ceph-authtool',
                     '--create-keyring',
                     '--gen-key',
                     # TODO this --name= is not really obeyed, all unknown "types" are munged to "client"
                     '--name=client.{id}'.format(id=id_),
-                    '{tdir}/data/client.{id}.keyring'.format(tdir=testdir, id=id_),
-                    ],
-                )
-
-    log.info('Reading keys from all nodes...')
-    keys_fp = StringIO()
-    keys = []
-    for remote, roles_for_host in ctx.cluster.remotes.iteritems():
-        for type_ in ['osd', 'mds', 'client']:
-            for id_ in teuthology.roles_of_type(roles_for_host, type_):
-                data = teuthology.get_file(
-                    remote=remote,
-                    path='{tdir}/data/{type}.{id}.keyring'.format(
-                        tdir=testdir,
-                        type=type_,
-                        id=id_,
-                        ),
-                    )
-                keys.append((type_, id_, data))
-                keys_fp.write(data)
-
-    log.info('Adding keys to all mons...')
-    writes = mons.run(
-        args=[
-            'cat',
-            run.Raw('>>'),
-            '{tdir}/ceph.keyring'.format(tdir=testdir),
-            ],
-        stdin=run.PIPE,
-        wait=False,
-        )
-    keys_fp.seek(0)
-    teuthology.feed_many_stdins_and_close(keys_fp, writes)
-    run.wait(writes)
-    for type_, id_, data in keys:
-        run.wait(
-            mons.run(
-                args=[
-                    '{tdir}/enable-coredump'.format(tdir=testdir),
-                    '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
-                    coverage_dir,
-                    '{tdir}/binary/usr/local/bin/ceph-authtool'.format(tdir=testdir),
-                    '{tdir}/ceph.keyring'.format(tdir=testdir),
-                    '--name={type}.{id}'.format(
-                        type=type_,
-                        id=id_,
-                        ),
-                    ] + list(teuthology.generate_caps(type_)),
-                wait=False,
-                ),
-            )
-
-    log.info('Running mkfs on mon nodes...')
-    for remote, roles_for_host in mons.remotes.iteritems():
-        for id_ in teuthology.roles_of_type(roles_for_host, 'mon'):
-            remote.run(
-                args=[
-                    '{tdir}/enable-coredump'.format(tdir=testdir),
-                    '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
-                    coverage_dir,
-                    '{tdir}/binary/usr/local/bin/ceph-mon'.format(tdir=testdir),
-                    '--mkfs',
-                    '-i', id_,
-                    '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
-                    '--monmap={tdir}/monmap'.format(tdir=testdir),
-                    '--osdmap={tdir}/osdmap'.format(tdir=testdir),
-                    '--keyring={tdir}/ceph.keyring'.format(tdir=testdir),
+                    client_keyring,
+                    run.Raw('&&'),
+                    'sudo',
+                    'chmod',
+                    '0644',
+                    client_keyring,
                     ],
                 )
 
@@ -684,14 +505,15 @@ def cluster(ctx, config):
 
 
         for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
-            log.info(str(roles_to_journals))
-            log.info(id_)
             remote.run(
                 args=[
+                    'sudo',
                     'mkdir',
-                    os.path.join('{tdir}/data'.format(tdir=testdir), 'osd.{id}.data'.format(id=id_)),
-                    ],
-                )
+                    '-p',
+                    '/var/lib/ceph/osd/ceph-{id}'.format(id=id_),
+                    ])
+            log.info(str(roles_to_journals))
+            log.info(id_)
             if roles_to_devs.get(id_):
                 dev = roles_to_devs[id_]
                 fs = config.get('fs')
@@ -727,7 +549,8 @@ def cluster(ctx, config):
                         args=[
                             'sudo',
                             'apt-get', 'install', '-y', package
-                            ]
+                            ],
+                        stdout=StringIO(),
                         )
                 remote.run(args= ['yes', run.Raw('|')] + ['sudo'] + mkfs + [dev])
                 log.info('mount %s on %s -o %s' % (dev, remote,
@@ -739,7 +562,7 @@ def cluster(ctx, config):
                         '-t', fs,
                         '-o', ','.join(mount_options),
                         dev,
-                        os.path.join('{tdir}/data'.format(tdir=testdir), 'osd.{id}.data'.format(id=id_)),
+                        os.path.join('/var/lib/ceph/osd', 'ceph-{id}'.format(id=id_)),
                         ]
                     )
                 if not remote in ctx.disk_config.remote_to_roles_to_dev_mount_options:
@@ -748,21 +571,9 @@ def cluster(ctx, config):
                 if not remote in ctx.disk_config.remote_to_roles_to_dev_fstype:
                     ctx.disk_config.remote_to_roles_to_dev_fstype[remote] = {}
                 ctx.disk_config.remote_to_roles_to_dev_fstype[remote][id_] = fs
-                remote.run(
-                    args=[
-                        'sudo', 'chown', '-R', 'ubuntu.ubuntu',
-                        os.path.join('{tdir}/data'.format(tdir=testdir), 'osd.{id}.data'.format(id=id_))
-                        ]
-                    )
-                remote.run(
-                    args=[
-                        'sudo', 'chmod', '-R', '755',
-                        os.path.join('{tdir}/data'.format(tdir=testdir), 'osd.{id}.data'.format(id=id_))
-                        ]
-                    )
                 devs_to_clean[remote].append(
                     os.path.join(
-                        '{tdir}/data'.format(tdir=testdir), 'osd.{id}.data'.format(id=id_)
+                        os.path.join('/var/lib/ceph/osd', 'ceph-{id}'.format(id=id_)),
                         )
                     )
 
@@ -771,15 +582,95 @@ def cluster(ctx, config):
                 args=[
                     'MALLOC_CHECK_=3',
                     '{tdir}/enable-coredump'.format(tdir=testdir),
-                    '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                    'ceph-coverage',
                     coverage_dir,
-                    '{tdir}/binary/usr/local/bin/ceph-osd'.format(tdir=testdir),
+                    'sudo',
+                    'ceph-osd',
                     '--mkfs',
+                    '--mkkey',
                     '-i', id_,
-                    '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
                     '--monmap', '{tdir}/monmap'.format(tdir=testdir),
                     ],
                 )
+
+
+    log.info('Reading keys from all nodes...')
+    keys_fp = StringIO()
+    keys = []
+    for remote, roles_for_host in ctx.cluster.remotes.iteritems():
+        for type_ in ['mds','osd']:
+            for id_ in teuthology.roles_of_type(roles_for_host, type_):
+                data = teuthology.get_file(
+                    remote=remote,
+                    path='/var/lib/ceph/{type}/ceph-{id}/keyring'.format(
+                        type=type_,
+                        id=id_,
+                        ),
+                    sudo=True,
+                    )
+                keys.append((type_, id_, data))
+                keys_fp.write(data)
+    for remote, roles_for_host in ctx.cluster.remotes.iteritems():
+        for type_ in ['client']:
+            for id_ in teuthology.roles_of_type(roles_for_host, type_):
+                data = teuthology.get_file(
+                    remote=remote,
+                    path='/etc/ceph/ceph.client.{id}.keyring'.format(id=id_)
+                    )
+                keys.append((type_, id_, data))
+                keys_fp.write(data)
+
+    log.info('Adding keys to all mons...')
+    writes = mons.run(
+        args=[
+            'sudo', 'tee', '-a',
+            keyring_path,
+            ],
+        stdin=run.PIPE,
+        wait=False,
+        stdout=StringIO(),
+        )
+    keys_fp.seek(0)
+    teuthology.feed_many_stdins_and_close(keys_fp, writes)
+    run.wait(writes)
+    for type_, id_, data in keys:
+        run.wait(
+            mons.run(
+                args=[
+                    'sudo',
+                    '{tdir}/enable-coredump'.format(tdir=testdir),
+                    'ceph-coverage',
+                    coverage_dir,
+                    'ceph-authtool',
+                    keyring_path,
+                    '--name={type}.{id}'.format(
+                        type=type_,
+                        id=id_,
+                        ),
+                    ] + list(teuthology.generate_caps(type_)),
+                wait=False,
+                ),
+            )
+
+    log.info('Running mkfs on mon nodes...')
+    for remote, roles_for_host in mons.remotes.iteritems():
+        for id_ in teuthology.roles_of_type(roles_for_host, 'mon'):
+            remote.run(
+                args=[
+                    '{tdir}/enable-coredump'.format(tdir=testdir),
+                    'ceph-coverage',
+                    coverage_dir,
+                    'sudo',
+                    'ceph-mon',
+                    '--mkfs',
+                    '-i', id_,
+                    '--monmap={tdir}/monmap'.format(tdir=testdir),
+                    '--osdmap={tdir}/osdmap'.format(tdir=testdir),
+                    '--keyring={kpath}'.format(kpath=keyring_path),
+                    ],
+                )
+
+
     run.wait(
         mons.run(
             args=[
@@ -801,7 +692,7 @@ def cluster(ctx, config):
         def first_in_ceph_log(pattern, excludes):
             args = [
                 'egrep', pattern,
-                '%s/archive/log/cluster.%s.log' % (testdir, firstmon),
+                '/var/log/ceph/ceph.log',
                 ]
             for exclude in excludes:
                 args.extend([run.Raw('|'), 'egrep', '-v', exclude])
@@ -862,19 +753,55 @@ def cluster(ctx, config):
             for remote, roles in mons.remotes.iteritems():
                 for role in roles:
                     if role.startswith('mon.'):
-                        teuthology.pull_directory_tarball(remote,
-                                       '%s/data/%s' % (testdir, role),
-                                       path + '/' + role + '.tgz')
+                        teuthology.pull_directory_tarball(
+                            remote,
+                            '/var/lib/ceph/mon',
+                            path + '/' + role + '.tgz')
+
+            # and logs
+            log.info('Compressing logs...')
+            run.wait(
+                ctx.cluster.run(
+                    args=[
+                        'sudo',
+                        'find',
+                        '/var/log/ceph',
+                        '-name',
+                        '*.log',
+                        '-print0',
+                        run.Raw('|'),
+                        'sudo',
+                        'xargs',
+                        '-0',
+                        '--no-run-if-empty',
+                        '--',
+                        'gzip',
+                        '--',
+                        ],
+                    wait=False,
+                    ),
+                )
+
+            log.info('Archiving logs...')
+            path = os.path.join(ctx.archive, 'remote')
+            os.makedirs(path)
+            for remote in ctx.cluster.remotes.iterkeys():
+                sub = os.path.join(path, remote.shortname)
+                os.makedirs(sub)
+                teuthology.pull_directory(remote, '/var/log/ceph',
+                                          os.path.join(sub, 'log'))
+
 
         log.info('Cleaning ceph cluster...')
         run.wait(
             ctx.cluster.run(
                 args=[
+                    'sudo',
                     'rm',
                     '-rf',
                     '--',
-                    '{tdir}/ceph.conf'.format(tdir=testdir),
-                    '{tdir}/ceph.keyring'.format(tdir=testdir),
+                    conf_path,
+                    keyring_path,
                     '{tdir}/data'.format(tdir=testdir),
                     '{tdir}/monmap'.format(tdir=testdir),
                     run.Raw('{tdir}/asok.*'.format(tdir=testdir))
@@ -905,16 +832,16 @@ def run_daemon(ctx, config, type_):
 
             run_cmd = [
                 '{tdir}/enable-coredump'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                'ceph-coverage',
                 coverage_dir,
+                'sudo',
                 '{tdir}/daemon-helper'.format(tdir=testdir),
                 daemon_signal,
                 ]
             run_cmd_tail = [
-                '%s/binary/usr/local/bin/ceph-%s' % (testdir, type_),
+                'ceph-%s' % (type_),
                 '-f',
-                '-i', id_,
-                '-c', '{tdir}/ceph.conf'.format(tdir=testdir)]
+                '-i', id_]
 
             if config.get('valgrind') is not None:
                 valgrind_args = None
@@ -925,7 +852,7 @@ def run_daemon(ctx, config, type_):
                 run_cmd.extend(teuthology.get_valgrind_args(testdir, name, valgrind_args))
 
             if type_ in config.get('cpu_profile', []):
-                profile_path = '%s/archive/log/%s.%s.prof' % (testdir, type_, id_)
+                profile_path = '/var/log/ceph/profiling-logger/%s.%s.prof' % (type_, id_)
                 run_cmd.extend([ 'env', 'CPUPROFILE=%s' % profile_path ])
 
             run_cmd.extend(run_cmd_tail)
@@ -940,12 +867,12 @@ def run_daemon(ctx, config, type_):
     if type_ == 'mds':
         firstmon = teuthology.get_first_mon(ctx, config)
         (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
+
         mon0_remote.run(args=[
             '{tdir}/enable-coredump'.format(tdir=testdir),
-            '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+            'ceph-coverage',
             coverage_dir,
-            '{tdir}/binary/usr/local/bin/ceph'.format(tdir=testdir),
-            '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
+            'ceph',
             'mds', 'set_max_mds', str(num_active)])
 
     try:
@@ -1082,35 +1009,6 @@ def task(ctx, config):
 
     ctx.daemons = CephState()
 
-    # Flavor tells us what gitbuilder to fetch the prebuilt software
-    # from. It's a combination of possible keywords, in a specific
-    # order, joined by dashes. It is used as a URL path name. If a
-    # match is not found, the teuthology run fails. This is ugly,
-    # and should be cleaned up at some point.
-
-    dist = 'precise'
-    format = 'tarball'
-    arch = 'x86_64'
-    flavor = 'basic'
-
-    # First element: controlled by user (or not there, by default):
-    # used to choose the right distribution, e.g. "oneiric".
-    flavor = config.get('flavor', 'basic')
-
-    if config.get('path'):
-        # local dir precludes any other flavors
-        flavor = 'local'
-    else:
-        if config.get('valgrind'):
-            log.info('Using notcmalloc flavor and running some daemons under valgrind')
-            flavor = 'notcmalloc'
-        else:
-            if config.get('coverage'):
-                log.info('Recording coverage for this run.')
-                flavor = 'gcov'
-
-    ctx.summary['flavor'] = flavor
-
     testdir = teuthology.get_testdir(ctx)
     if config.get('coverage'):
         coverage_dir = '{tdir}/archive/coverage'.format(tdir=testdir)
@@ -1128,16 +1026,6 @@ def task(ctx, config):
     with contextutil.nested(
         lambda: ceph_log(ctx=ctx, config=None),
         lambda: ship_utilities(ctx=ctx, config=None),
-        lambda: binaries(ctx=ctx, config=dict(
-                branch=config.get('branch'),
-                tag=config.get('tag'),
-                sha1=config.get('sha1'),
-                path=config.get('path'),
-                flavor=flavor,
-                dist=config.get('dist', dist),
-                format=format,
-                arch=arch
-                )),
         lambda: valgrind_post(ctx=ctx, config=config),
         lambda: cluster(ctx=ctx, config=dict(
                 conf=config.get('conf', {}),

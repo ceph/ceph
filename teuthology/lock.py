@@ -178,7 +178,12 @@ Lock, unlock, or query lock status of machines.
     parser.add_argument(
         '--desc',
         default=None,
-        help='update description',
+        help='lock description',
+        )
+    parser.add_argument(
+        '--desc-pattern',
+        default=None,
+        help='lock description',
         )
     parser.add_argument(
         '--machine-type',
@@ -286,6 +291,12 @@ Lock, unlock, or query lock status of machines.
             if ctx.locked is not None:
                 statuses = [status for status in statuses \
                                 if status['locked'] == (ctx.locked == 'true')]
+            if ctx.desc is not None:
+                statuses = [status for status in statuses \
+                                if status['description'] == ctx.desc]
+            if ctx.desc_pattern is not None:
+                statuses = [status for status in statuses \
+                                if status['description'].find(ctx.desc_pattern) >= 0]
             if ctx.list:
                 if ctx.brief:
                     for s in statuses:

@@ -25,7 +25,7 @@ def task(ctx, config):
     An example:
     tasks:
     - ceph:
-    - cfuse: [client.0, client.1]
+    - ceph-fuse: [client.0, client.1]
     - lockfile:
       [{client:client.0, file:testfile, holdtime:10},
       {client:client.1, file:testfile, holdtime:0, maxwait:0, expectfail:true},
@@ -193,7 +193,7 @@ def lock_one(op, ctx):
         proc = client_remote.run(
             args=[
                 '{tdir}/enable-coredump'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 '{tdir}/daemon-helper'.format(tdir=testdir),
                 'kill',

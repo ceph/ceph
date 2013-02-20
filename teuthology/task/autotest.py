@@ -21,7 +21,7 @@ def task(ctx, config):
 
         tasks:
         - ceph:
-        - cfuse: [client.0, client.1]
+        - ceph-fuse: [client.0, client.1]
         - autotest:
             client.0: [dbench]
             client.1: [bonnie]
@@ -30,7 +30,7 @@ def task(ctx, config):
 
         tasks:
         - ceph:
-        - cfuse:
+        - ceph-fuse:
         - autotest:
             all: [dbench]
     """

@@ -8,7 +8,7 @@ log = logging.getLogger(__name__)
 def task(ctx, config):
     """
     Run locktests, from the xfstests suite, on the given
-    clients. Whether the clients are cfuse or kernel does not
+    clients. Whether the clients are ceph-fuse or kernel does not
     matter, and the two clients can refer to the same mount.
 
     The config is a list of two clients to run the locktest on. The
@@ -17,7 +17,7 @@ def task(ctx, config):
     For example:
        tasks:
        - ceph:
-       - cfuse: [client.0, client.1]
+       - ceph-fuse: [client.0, client.1]
        - locktest:
            [client.0, client.1]
 

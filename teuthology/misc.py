@@ -228,9 +228,9 @@ def create_simple_monmap(ctx, remote, conf):
     testdir = get_testdir(ctx)
     args = [
         '{tdir}/enable-coredump'.format(tdir=testdir),
-        '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+        'ceph-coverage',
         '{tdir}/archive/coverage'.format(tdir=testdir),
-        '{tdir}/binary/usr/local/bin/monmaptool'.format(tdir=testdir),
+        'monmaptool',
         '--create',
         '--clobber',
         ]
@@ -255,7 +255,10 @@ def write_file(remote, path, data):
         stdin=data,
         )
 
-def sudo_write_file(remote, path, data):
+def sudo_write_file(remote, path, data, perms=None):
+    permargs = []
+    if perms:
+        permargs=[run.Raw('&&'), 'sudo', 'chmod', perms, path]
     remote.run(
         args=[
             'sudo',
@@ -263,20 +266,24 @@ def sudo_write_file(remote, path, data):
             '-c',
             'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
             path,
-            ],
+            ] + permargs,
         stdin=data,
         )
 
-def get_file(remote, path):
+def get_file(remote, path, sudo=False):
     """
     Read a file from remote host into memory.
     """
-    proc = remote.run(
-        args=[
+    args = []
+    if sudo:
+        args.append('sudo')
+    args.extend([
             'cat',
             '--',
             path,
-            ],
+            ])
+    proc = remote.run(
+        args=args,
         stdout=StringIO(),
         )
     data = proc.stdout.getvalue()
@@ -286,11 +293,13 @@ def pull_directory(remote, remotedir, localdir):
     """
     Copy a remote directory to a local directory.
     """
-    os.mkdir(localdir)
     log.debug('Transferring archived files from %s:%s to %s',
               remote.shortname, remotedir, localdir)
+    if not os.path.exists(localdir):
+        os.mkdir(localdir)
     proc = remote.run(
         args=[
+            'sudo',
             'tar',
             'c',
             '-f', '-',
@@ -336,6 +345,7 @@ def pull_directory_tarball(remote, remotedir, localfile):
     out = open(localfile, 'w')
     proc = remote.run(
         args=[
+            'sudo',
             'tar',
             'cz',
             '-f', '-',
@@ -435,10 +445,9 @@ def wait_until_healthy(ctx, remote):
         r = remote.run(
             args=[
                 '{tdir}/enable-coredump'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/ceph'.format(tdir=testdir),
-                '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
+                'ceph',
                 'health',
                 '--concise',
                 ],
@@ -459,10 +468,9 @@ def wait_until_osds_up(ctx, cluster, remote):
         r = remote.run(
             args=[
                 '{tdir}/enable-coredump'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/ceph'.format(tdir=testdir),
-                '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
+                'ceph',
                 '--concise',
                 'osd', 'dump', '--format=json'
                 ],
@@ -492,13 +500,13 @@ def wait_until_fuse_mounted(remote, fuse, mountpoint):
         fstype = proc.stdout.getvalue().rstrip('\n')
         if fstype == 'fuseblk':
             break
-        log.debug('cfuse not yet mounted, got fs type {fstype!r}'.format(fstype=fstype))
+        log.debug('ceph-fuse not yet mounted, got fs type {fstype!r}'.format(fstype=fstype))
 
         # it shouldn't have exited yet; exposes some trivial problems
         assert not fuse.exitstatus.ready()
 
         time.sleep(5)
-    log.info('cfuse is mounted on %s', mountpoint)
+    log.info('ceph-fuse is mounted on %s', mountpoint)
 
 def reconnect(ctx, timeout):
     """
@@ -540,17 +548,17 @@ def reconnect(ctx, timeout):
         log.debug('waited {elapsed}'.format(elapsed=str(time.time() - starttime)))
         time.sleep(1)
 
-def write_secret_file(ctx, remote, role, filename):
+def write_secret_file(ctx, remote, role, keyring, filename):
     testdir = get_testdir(ctx)
     remote.run(
         args=[
             '{tdir}/enable-coredump'.format(tdir=testdir),
-            '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+            'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
-            '{tdir}/binary/usr/local/bin/ceph-authtool'.format(tdir=testdir),
+            'ceph-authtool',
             '--name={role}'.format(role=role),
             '--print-key',
-            '{tdir}/data/{role}.keyring'.format(tdir=testdir, role=role),
+            keyring,
             run.Raw('>'),
             filename,
             ],
@@ -630,7 +638,7 @@ def get_valgrind_args(testdir, name, v):
         return []
     if not isinstance(v, list):
         v = [v]
-    val_path = '{tdir}/archive/log/valgrind'.format(tdir=testdir)
+    val_path = '/var/log/ceph/valgrind'.format(tdir=testdir)
     if '--tool=memcheck' in v or '--tool=helgrind' in v:
         extra_args = [
             '{tdir}/chdir-coredump'.format(tdir=testdir),

@@ -89,7 +89,7 @@ def task(ctx, config):
         tasks:
         - pexec:
             all:
-              - grep FAIL {testdir}/archive/log/*
+              - grep FAIL /var/log/ceph/*
 
     Or if you want to run in parallel on all clients:
 

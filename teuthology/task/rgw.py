@@ -68,8 +68,7 @@ def ship_config(ctx, config):
             path='{tdir}/apache/htdocs/rgw.fcgi'.format(tdir=testdir),
             data="""#!/bin/sh
 ulimit -c unlimited
-export LD_LIBRARY_PATH={tdir}/binary/usr/local/lib
-exec {tdir}/binary/usr/local/bin/radosgw -f -c {tdir}/ceph.conf
+exec radosgw -f
 """.format(tdir=testdir)
             )
         remote.run(
@@ -111,22 +110,25 @@ def start_rgw(ctx, config):
         log.info("rgw %s config is %s", client, client_config)
  
         run_cmd=[
-                'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
+            'sudo',
                 '{tdir}/enable-coredump'.format(tdir=testdir),
-                '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+                'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 '{tdir}/daemon-helper'.format(tdir=testdir),
                 'term',
             ]
         run_cmd_tail=[
-                '{tdir}/binary/usr/local/bin/radosgw'.format(tdir=testdir),
-                '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
-                '--log-file', '{tdir}/archive/log/rgw.log'.format(tdir=testdir),
+                'radosgw',
+                # authenticate as client.admin and use system keyring
+                '-k', '/etc/ceph/ceph.keyring',
+                '--log-file', '/var/log/ceph/rgw.log',
                 '--rgw_ops_log_socket_path', '{tdir}/rgw.opslog.sock'.format(tdir=testdir),
                 '{tdir}/apache/apache.conf'.format(tdir=testdir),
                 '--foreground',
-                run.Raw('>'),
-                '{tdir}/archive/log/rgw.stdout'.format(tdir=testdir),
+                run.Raw('|'),
+                'sudo',
+                'tee',
+                '/var/log/ceph/rgw.stdout'.format(tdir=testdir),
                 run.Raw('2>&1'),
             ]
 

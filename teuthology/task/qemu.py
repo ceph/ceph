@@ -161,9 +161,8 @@ def run_qemu(ctx, config):
 
         base_file = '{tdir}/qemu/base.{client}.qcow2'.format(tdir=testdir, client=client)
         args=[
-            run.Raw('LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir)),
             '{tdir}/enable-coredump'.format(tdir=testdir),
-            '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+            'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
             '{tdir}/daemon-helper'.format(tdir=testdir),
             'term',
@@ -194,8 +193,7 @@ def run_qemu(ctx, config):
         for i in xrange(client_config.get('num_rbd', DEFAULT_NUM_RBD)):
             args.extend([
                 '-drive',
-                'file=rbd:rbd/{img}:conf={conf}:id={id},format=rbd,if=virtio,cache={cachemode}'.format(
-                    conf='{tdir}/ceph.conf'.format(tdir=testdir),
+                'file=rbd:rbd/{img}:id={id},format=rbd,if=virtio,cache={cachemode}'.format(
                     img='{client}.{num}'.format(client=client, num=i),
                     id=client[len('client.'):],
                     cachemode=cachemode,

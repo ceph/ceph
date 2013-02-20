@@ -9,12 +9,10 @@ log = logging.getLogger(__name__)
 def rados(testdir, remote, cmd):
     log.info("rados %s" % ' '.join(cmd))
     pre = [
-        'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
         '{tdir}/enable-coredump'.format(tdir=testdir),
-        '{tdir}/binary/usr/local/bin/ceph-coverage'.format(tdir=testdir),
+        'ceph-coverage',
         '{tdir}/archive/coverage'.format(tdir=testdir),
-        '{tdir}/binary/usr/local/bin/rados'.format(tdir=testdir),
-        '-c', '{tdir}/ceph.conf'.format(tdir=testdir),
+        'rados',
         ];
     pre.extend(cmd)
     proc = remote.run(
