@@ -46,7 +46,7 @@ Setting options:
 
 .. option:: -c --stripe_count
 
-   Set the number of stripes per object
+   Set the number of objects to stripe across
 
 .. option:: -s --object_size
 
@@ -64,8 +64,8 @@ Setting options:
 Limitations
 ===========
 
-When setting layout data, the specified stripe unit and stripe count
-must multiply to the size of an object. Any parameters you don't set
+When setting layout data, the specified object size must evenly divide
+by the specified stripe unit. Any parameters you don't set
 explicitly are left at the system defaults.
 
 Obviously setting the layout of a file and a directory means different
@@ -79,9 +79,8 @@ directory (or any subdirectory).  Pre-existing files do not have their
 layouts changed.
 
 You'll notice that the layout information allows you to specify a
-preferred OSD for placement. This is allowed but is not recommended
-since it can dramatically unbalance your storage cluster's space
-utilization.
+preferred OSD for placement. This feature is unsupported and ignored
+in modern versions of the Ceph servers; do not use it.
 
 
 Availability
