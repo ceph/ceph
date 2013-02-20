@@ -3,6 +3,7 @@ roles:
 - [mon.b, mds.a, osd.3, osd.4, osd.5]
 - [client.0]
 tasks:
+- install:
 - ceph:
 - ceph-fuse:
 - workunit:

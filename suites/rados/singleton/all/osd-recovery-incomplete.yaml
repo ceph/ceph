@@ -8,6 +8,7 @@ roles:
   - osd.2
   - osd.3
 tasks:
+- install:
 - ceph:
     log-whitelist:
     - wrongly marked me down

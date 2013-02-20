@@ -9,6 +9,7 @@ roles:
   - osd.5
   - client.0
 tasks:
+- install:
 - ceph:
     log-whitelist:
     - wrongly marked me down

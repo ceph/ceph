@@ -5,6 +5,7 @@ roles:
 - [client.1]
 - [client.2]
 tasks:
+- install:
 - ceph:
 - rbd.xfstests:
     client.0:

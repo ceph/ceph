@@ -7,6 +7,7 @@ roles:
   - osd.1
   - osd.2
 tasks:
+- install:
 - ceph:
     log-whitelist:
     - objects unfound and apparently lost

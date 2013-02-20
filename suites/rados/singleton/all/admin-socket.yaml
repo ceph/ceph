@@ -5,6 +5,7 @@ roles:
   - osd.1
   - client.a
 tasks:
+- install:
 - ceph: null
 - admin_socket:
     osd.0:
