@@ -5,9 +5,6 @@ echo "starting hadoop-wordcount test"
 # bail if $TESTDIR is not set as this test will fail in that scenario
 [ -z $TESTDIR] && { echo "\$TESTDIR needs to be set, but is not. Exiting."; exit 1; }
 
-#command1="cd $TESTDIR/hadoop"
-#command2="ant -Dextra.library.path=$LD_LIBRARY_PATH -Dceph.conf.file=$CEPH_CONF -Dtestcase=TestCephFileSystem"
-
 command0="export JAVA_HOME=/usr/lib/jvm/default-java"
 command1="mkdir -p $TESTDIR/hadoop_input"
 command2="wget http://ceph.com/qa/hadoop_input_files.tar -O $TESTDIR/hadoop_input/files.tar"
