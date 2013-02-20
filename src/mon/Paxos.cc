@@ -324,6 +324,18 @@ void Paxos::store_state(MMonPaxos *m)
     first_committed = get_store()->get(get_name(), "first_committed");
     last_committed = get_store()->get(get_name(), "last_committed");
   }
+
+  if (get_store()->exists(get_name(), "conversion_first")) {
+    MonitorDBStore::Transaction scrub_tx;
+    version_t cf = get_store()->get(get_name(), "conversion_first");
+    dout(10) << __func__ << " scrub paxos from " << cf
+	     << " to " << first_committed << dendl;
+    if (cf < first_committed)
+      trim_to(&scrub_tx, cf, first_committed);
+    scrub_tx.erase(get_name(), "conversion_first");
+    get_store()->apply_transaction(scrub_tx);
+  }
+
 }
 
 // leader
@@ -923,6 +935,17 @@ void Paxos::lease_renew_timeout()
 /*
  * trim old states
  */
+void Paxos::trim_to(MonitorDBStore::Transaction *t,
+		    version_t from, version_t to) {
+  dout(10) << __func__ << " from " << from << " to " << to << dendl;
+  assert(from < to);
+
+  while (from < to) {
+    dout(10) << "trim " << from << dendl;
+    t->erase(get_name(), from);
+    from++;
+  }
+}
 
 void Paxos::trim_to(MonitorDBStore::Transaction *t, version_t first)
 {
@@ -931,13 +954,8 @@ void Paxos::trim_to(MonitorDBStore::Transaction *t, version_t first)
 
   if (first_committed >= first)
     return;
-
-  while (first_committed < first) {
-    dout(10) << "trim " << first_committed << dendl;
-    t->erase(get_name(), first_committed);
-    first_committed++;
-  }
-  t->put(get_name(), "first_committed", first_committed);
+  trim_to(t, first_committed, first);
+  t->put(get_name(), "first_committed", first);
 }
 
 void Paxos::trim_to(version_t first)
