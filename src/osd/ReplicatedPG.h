@@ -260,8 +260,8 @@ public:
     bool user_modify;     // user-visible modification
 
     // side effects
-    bool watch_connect, watch_disconnect;
-    watch_info_t watch_info;
+    list<watch_info_t> watch_connects;
+    list<watch_info_t> watch_disconnects;
     list<notify_info_t> notifies;
     struct NotifyAck {
       boost::optional<uint64_t> watch_cookie;
@@ -304,7 +304,6 @@ public:
       op(_op), reqid(_reqid), ops(_ops), obs(_obs), snapset(0),
       new_obs(_obs->oi, _obs->exists),
       modify(false), user_modify(false),
-      watch_connect(false), watch_disconnect(false),
       bytes_written(0), bytes_read(0),
       obc(0), clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) { 
       if (_ssc) {
