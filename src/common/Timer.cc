@@ -102,8 +102,7 @@ void SafeTimer::timer_thread()
       
       if (!safe_callbacks)
 	lock.Unlock();
-      callback->finish(0);
-      delete callback;
+      callback->complete(0);
       if (!safe_callbacks)
 	lock.Lock();
     }
