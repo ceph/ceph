@@ -267,11 +267,6 @@ bool RGWAccessControlList_S3::xml_end(const char *el) {
 struct s3_acl_header {
   int rgw_perm;
   const char *http_header;
-
-  s3_acl_header(int perm, const char *head) {
-    rgw_perm = perm;
-    http_header = head;
-  }
 };
 
 static const char *get_acl_header(RGWEnv *env,
@@ -424,28 +419,22 @@ bool RGWAccessControlPolicy_S3::xml_end(const char *el) {
   return true;
 }
 
+static const s3_acl_header acl_header_perms[] = {
+  {RGW_PERM_READ, "HTTP_X_AMZ_GRANT_READ"},
+  {RGW_PERM_WRITE, "HTTP_X_AMZ_GRANT_WRITE"},
+  {RGW_PERM_READ_ACP,"HTTP_X_AMZ_GRANT_READ_ACP"},
+  {RGW_PERM_WRITE_ACP, "HTTP_X_AMZ_GRANT_WRITE_ACP"},
+  {RGW_PERM_FULL_CONTROL, "HTTP_X_AMZ_GRANT_FULL_CONTROL"},
+  {0, NULL}
+};
+
 int RGWAccessControlPolicy_S3::create_from_headers(RGWRados *store, RGWEnv *env, ACLOwner& _owner)
 {
   std::list<ACLGrant> grants;
   int ret;
 
-  const s3_acl_header grant_read(RGW_PERM_READ,"HTTP_X_AMZ_GRANT_READ");
-  const s3_acl_header grant_write(RGW_PERM_WRITE, "HTTP_X_AMZ_GRANT_WRITE");
-  const s3_acl_header grant_read_acp(RGW_PERM_READ_ACP,"HTTP_X_AMZ_GRANT_READ_ACP");
-  const s3_acl_header grant_write_acp(RGW_PERM_WRITE_ACP, "HTTP_X_AMZ_GRANT_WRITE_ACP");
-  const s3_acl_header grant_full_control(RGW_PERM_FULL_CONTROL, "HTTP_X_AMZ_GRANT_FULL_CONTROL");
-
-  const s3_acl_header *perms[] = {
-                                   &grant_read,
-                                   &grant_write,
-                                   &grant_read_acp,
-                                   &grant_write_acp,
-                                   &grant_full_control,
-                                   NULL
-                                 };
-
-  for (const struct s3_acl_header **p = perms; *p; p++) {
-    ret = parse_acl_header(store, env, *p, grants);
+  for (const struct s3_acl_header *p = acl_header_perms; p->rgw_perm; p++) {
+    ret = parse_acl_header(store, env, p, grants);
     if (ret < 0)
       return false;
   }
