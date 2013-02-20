@@ -394,6 +394,14 @@ private:
     return -1;
   }
 
+  /**
+   * get feature bits required by the current structure
+   *
+   * @param mask [out] set of all possible map-related features we could set
+   * @return feature bits used by this map
+   */
+  uint64_t get_features(uint64_t *mask) const;
+
   int apply_incremental(const Incremental &inc);
 
   /// try to re-use/reference addrs in oldmap from newmap
