@@ -345,8 +345,8 @@ struct RGWRegion {
   }
 
   string get_pool_name(CephContext *cct);
-  int init(CephContext *_cct, RGWRados *_store, bool create_zone);
-  int init_default();
+  int init(CephContext *_cct, RGWRados *_store);
+  int create_default();
   int store_info(bool exclusive);
   int read_default();
   int set_as_default();
@@ -478,7 +478,6 @@ protected:
   string region_name;
   string zone_name;
 
-  bool create_region;
   bool create_zone;
 
 public:
@@ -488,11 +487,14 @@ public:
                bucket_id_lock("rados_bucket_id"), max_bucket_id(0),
                cct(NULL), rados(NULL),
                pools_initialized(false),
-	       create_region(false), create_zone(false) {}
+	       create_zone(false) {}
+
+  void set_context(CephContext *_cct) {
+    cct = _cct;
+  }
 
   void set_region(const string& name, bool create) {
     region_name = name;
-    create_region = create;
   }
 
   void set_zone(const string& name, bool create) {
@@ -515,7 +517,7 @@ public:
   CephContext *ctx() { return cct; }
   /** do all necessary setup of the storage device */
   int initialize(CephContext *_cct, bool _use_gc_thread) {
-    cct = _cct;
+    set_context(cct);
     use_gc_thread = _use_gc_thread;
     return initialize();
   }
@@ -925,7 +927,12 @@ public:
     RGWRados *store = init_storage_provider(cct, use_gc_thread);
     return store;
   }
+  static RGWRados *get_raw_storage(CephContext *cct) {
+    RGWRados *store = init_raw_storage_provider(cct);
+    return store;
+  }
   static RGWRados *init_storage_provider(CephContext *cct, bool use_gc_thread);
+  static RGWRados *init_raw_storage_provider(CephContext *cct);
   static void close_storage(RGWRados *store);
 
 };
