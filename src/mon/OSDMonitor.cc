@@ -159,19 +159,14 @@ void OSDMonitor::update_from_paxos()
 
 void OSDMonitor::update_msgr_features()
 {
+  uint64_t mask;
+  uint64_t features = osdmap.get_features(&mask);
+
   set<int> types;
   types.insert((int)entity_name_t::TYPE_OSD);
   types.insert((int)entity_name_t::TYPE_CLIENT);
   types.insert((int)entity_name_t::TYPE_MDS);
   types.insert((int)entity_name_t::TYPE_MON);
-
-  uint64_t mask = CEPH_FEATURES_CRUSH;
-  uint64_t features = 0;
-  if (osdmap.crush->has_nondefault_tunables())
-    features |= CEPH_FEATURE_CRUSH_TUNABLES;
-  if (osdmap.crush->has_nondefault_tunables2())
-    features |= CEPH_FEATURE_CRUSH_TUNABLES2;
-
   for (set<int>::iterator q = types.begin(); q != types.end(); ++q) {
     if ((mon->messenger->get_policy(*q).features_required & mask) != features) {
       dout(0) << "crush map has features " << features << ", adjusting msgr requires" << dendl;

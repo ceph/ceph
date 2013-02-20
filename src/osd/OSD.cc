@@ -4231,12 +4231,8 @@ void OSD::check_osdmap_features()
   // current memory location, and setting or clearing bits in integer
   // fields, and we are the only writer, this is not a problem.
 
-  uint64_t mask = CEPH_FEATURES_CRUSH;
-  uint64_t features = 0;
-  if (osdmap->crush->has_nondefault_tunables())
-    features |= CEPH_FEATURE_CRUSH_TUNABLES;
-  if (osdmap->crush->has_nondefault_tunables2())
-    features |= CEPH_FEATURE_CRUSH_TUNABLES2;
+  uint64_t mask;
+  uint64_t features = osdmap->get_features(&mask);
 
   {
     Messenger::Policy p = client_messenger->get_default_policy();
