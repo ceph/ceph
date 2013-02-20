@@ -714,6 +714,23 @@ bool OSDMap::find_osd_on_ip(const entity_addr_t& ip) const
   return -1;
 }
 
+
+uint64_t OSDMap::get_features(uint64_t *pmask) const
+{
+  uint64_t features = 0;
+  uint64_t mask = 0;
+
+  if (crush->has_nondefault_tunables())
+    features |= CEPH_FEATURE_CRUSH_TUNABLES;
+  if (crush->has_nondefault_tunables2())
+    features |= CEPH_FEATURE_CRUSH_TUNABLES2;
+  mask |= CEPH_FEATURES_CRUSH;
+
+  if (pmask)
+    *pmask = mask;
+  return features;
+}
+
 void OSDMap::dedup(const OSDMap *o, OSDMap *n)
 {
   if (o->epoch == n->epoch)
