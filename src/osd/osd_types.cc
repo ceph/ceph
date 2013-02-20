@@ -681,7 +681,7 @@ pg_t pg_pool_t::raw_pg_to_pg(pg_t pg) const
  */
 ps_t pg_pool_t::raw_pg_to_pps(pg_t pg) const
 {
-  if (true) {//flags & FLAG_HASHPSPOOL) {
+  if (flags & FLAG_HASHPSPOOL) {
     // Hash the pool id so that pool PGs do not overlap.
     return
       crush_hash32_2(CRUSH_HASH_RJENKINS1,
