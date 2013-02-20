@@ -4,6 +4,7 @@ overrides:
       mon.b:
         clock offset: 10
 tasks:
+- install:
 - ceph:
     wait-for-healthy: false
     log-whitelist:

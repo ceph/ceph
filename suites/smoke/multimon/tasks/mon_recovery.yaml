@@ -1,3 +1,4 @@
 tasks:
+- install:
 - ceph:
 - mon_recovery:

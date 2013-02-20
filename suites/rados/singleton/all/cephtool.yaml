@@ -8,6 +8,7 @@ roles:
   - osd.2
   - client.0
 tasks:
+- install:
 - ceph:
 - ceph-fuse:
 - workunit:

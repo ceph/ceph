@@ -1,4 +1,5 @@
 tasks:
+- install:
 - ceph:
 - kclient:
 - locktest: [client.0, client.1]

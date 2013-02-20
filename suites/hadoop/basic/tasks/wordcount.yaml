@@ -1,5 +1,6 @@
 tasks:
 - ssh_keys:
+- install:
 - ceph:
 - hadoop:
 - pexec: 
