@@ -274,7 +274,6 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None):
                     'cd', '--', scratch_tmp,
                     run.Raw('&&'),
                     run.Raw('CEPH_REF={ref}'.format(ref=ceph_ref)),
-                    run.Raw('CEPH_JAVA_PATH="{tdir}/binary/usr/local/share/java"'.format(tdir=testdir)),
                     run.Raw('TESTDIR="{tdir}"'.format(tdir=testdir)),
                     run.Raw('CEPH_ID="{id}"'.format(id=id_)),
                     run.Raw('PYTHONPATH="$PYTHONPATH:{tdir}/binary/usr/local/lib/python2.7/dist-packages:{tdir}/binary/usr/local/lib/python2.6/dist-packages"'.format(tdir=testdir)),
