@@ -97,8 +97,7 @@ public:
   uint64_t max_watch_cookie;
   map<uint64_t, librados::WatchContext *> watchers;
 
-  void register_watcher(librados::WatchContext *wc, const object_t& oid,
-			librados::WatchCtx *ctx, uint64_t *cookie);
+  void register_watcher(librados::WatchContext *wc, uint64_t *cookie);
   void unregister_watcher(uint64_t cookie);
   void watch_notify(MWatchNotify *m);
   void get();

@@ -48,6 +48,7 @@ using namespace std;
 #include <ext/hash_set>
 using namespace __gnu_cxx;
 
+#include "Watch.h"
 #include "common/shared_cache.hpp"
 #include "common/simple_cache.hpp"
 #include "common/sharedptr_registry.hpp"
@@ -295,7 +296,11 @@ public:
   // -- Watch --
   Mutex watch_lock;
   SafeTimer watch_timer;
-  Watch *watch;
+  uint64_t next_notif_id;
+  uint64_t get_next_id(epoch_t cur_epoch) {
+    Mutex::Locker l(watch_lock);
+    return (((uint64_t)cur_epoch) << 32) | ((uint64_t)(next_notif_id++));
+  }
 
   // -- Backfill Request Scheduling --
   Mutex backfill_request_lock;
@@ -526,7 +531,7 @@ public:
     int64_t auid;
     epoch_t last_sent_epoch;
     Connection *con;
-    std::map<void *, pg_t> watches;
+    WatchConState wstate;
 
     Session() : auid(-1), last_sent_epoch(0), con(0) {}
   };
@@ -1468,17 +1473,6 @@ public:
 
   int init_op_flags(OpRequestRef op);
 
-
-  void put_object_context(void *_obc, pg_t pgid);
-  void complete_notify(void *notif, void *obc);
-  void ack_notification(entity_name_t& peer_addr, void *notif, void *obc,
-			ReplicatedPG *pg);
-  void handle_notify_timeout(void *notif);
-  void disconnect_session_watches(Session *session);
-  void handle_watch_timeout(void *obc,
-			    ReplicatedPG *pg,
-			    entity_name_t entity,
-			    utime_t expire);
   OSDService service;
   friend class OSDService;
 };

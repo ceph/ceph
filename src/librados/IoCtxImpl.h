@@ -194,7 +194,9 @@ struct librados::IoCtxImpl {
   int watch(const object_t& oid, uint64_t ver, uint64_t *cookie, librados::WatchCtx *ctx);
   int unwatch(const object_t& oid, uint64_t cookie);
   int notify(const object_t& oid, uint64_t ver, bufferlist& bl);
-  int _notify_ack(const object_t& oid, uint64_t notify_id, uint64_t ver);
+  int _notify_ack(
+    const object_t& oid, uint64_t notify_id, uint64_t ver,
+    uint64_t cookie);
 
   eversion_t last_version();
   void set_assert_version(uint64_t ver);
@@ -217,6 +219,7 @@ struct WatchContext : public RefCountedWaitObject {
   const object_t oid;
   librados::WatchCtx *ctx;
   uint64_t linger_id;
+  uint64_t cookie;
 
   WatchContext(IoCtxImpl *io_ctx_impl_,
 	       const object_t& _oc,

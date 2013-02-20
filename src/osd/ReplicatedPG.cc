@@ -1567,94 +1567,6 @@ int ReplicatedPG::do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr)
   }
 }
 
-void ReplicatedPG::dump_watchers(ObjectContext *obc)
-{
-  assert(osd->watch_lock.is_locked());
-  
-  dout(10) << "dump_watchers " << obc->obs.oi.soid << " " << obc->obs.oi << dendl;
-  for (map<entity_name_t, OSD::Session *>::iterator iter = obc->watchers.begin(); 
-       iter != obc->watchers.end();
-       ++iter)
-    dout(10) << " * obc->watcher: " << iter->first << " session=" << iter->second << dendl;
-  
-  for (map<entity_name_t, watch_info_t>::iterator oi_iter = obc->obs.oi.watchers.begin();
-       oi_iter != obc->obs.oi.watchers.end();
-       oi_iter++) {
-    watch_info_t& w = oi_iter->second;
-    dout(10) << " * oi->watcher: " << oi_iter->first << " cookie=" << w.cookie << dendl;
-  }
-}
-
-void ReplicatedPG::remove_watcher(ObjectContext *obc, entity_name_t entity)
-{
-  assert_locked();
-  assert(osd->watch_lock.is_locked());
-  dout(10) << "remove_watcher " << *obc << " " << entity << dendl;
-  map<entity_name_t, OSD::Session *>::iterator iter = obc->watchers.find(entity);
-  assert(iter != obc->watchers.end());
-  OSD::Session *session = iter->second;
-  dout(10) << "remove_watcher removing session " << session << dendl;
-
-  obc->watchers.erase(iter);
-  assert(session->watches.count(obc));
-  session->watches.erase(obc);
-
-  put_object_context(obc);
-  session->con->put();
-  session->put();
-}
-
-void ReplicatedPG::remove_notify(ObjectContext *obc, Watch::Notification *notif)
-{
-  assert_locked();
-  assert(osd->watch_lock.is_locked());
-  map<Watch::Notification *, bool>::iterator niter = obc->notifs.find(notif);
-
-  // Cancel notification
-  if (notif->timeout)
-    osd->watch_timer.cancel_event(notif->timeout);
-  osd->watch->remove_notification(notif);
-
-  assert(niter != obc->notifs.end());
-
-  niter->first->session->con->put();
-  niter->first->session->put();
-  obc->notifs.erase(niter);
-
-  put_object_context(obc);
-  delete notif;
-}
-
-void ReplicatedPG::remove_watchers_and_notifies()
-{
-  assert_locked();
-
-  dout(10) << "remove_watchers" << dendl;
-
-  osd->watch_lock.Lock();
-  for (map<hobject_t, ObjectContext*>::iterator oiter = object_contexts.begin();
-       oiter != object_contexts.end();
-       ) {
-    map<hobject_t, ObjectContext *>::iterator iter = oiter++;
-    ObjectContext *obc = iter->second;
-    obc->ref++;
-    for (map<entity_name_t, OSD::Session *>::iterator witer = obc->watchers.begin();
-	 witer != obc->watchers.end();
-	 remove_watcher(obc, (witer++)->first)) ;
-    for (map<entity_name_t,Watch::C_WatchTimeout*>::iterator iter = obc->unconnected_watchers.begin();
-	 iter != obc->unconnected_watchers.end();
-	 ) {
-      map<entity_name_t,Watch::C_WatchTimeout*>::iterator i = iter++;
-      unregister_unconnected_watcher(obc, i->first);
-    }
-    for (map<Watch::Notification *, bool>::iterator niter = obc->notifs.begin();
-	 niter != obc->notifs.end();
-	 remove_notify(obc, (niter++)->first)) ;
-    put_object_context(obc);
-  }
-  osd->watch_lock.Unlock();
-}
-
 // ========================================================================
 // low level osd ops
 
@@ -2329,20 +2241,20 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_NOTIFY_ACK:
       {
-	osd->watch_lock.Lock();
-	entity_name_t source = ctx->op->request->get_source();
-	map<entity_name_t, watch_info_t>::iterator oi_iter = oi.watchers.find(source);
-	Watch::Notification *notif = osd->watch->get_notif(op.watch.cookie);
-	if (oi_iter != oi.watchers.end() && notif) {
-	  ctx->notify_acks.push_back(op.watch.cookie);
-	} else {
-	  if (!notif)
-	    dout(10) << " no pending notify for cookie " << op.watch.cookie << dendl;
-	  else
-	    dout(10) << " not registered as a watcher" << dendl;
-	  result = -EINVAL;
+	try {
+	  uint64_t notify_id = 0;
+	  uint64_t watch_cookie = 0;
+	  ::decode(notify_id, bp);
+	  ::decode(watch_cookie, bp);
+	  OpContext::NotifyAck ack(notify_id, watch_cookie);
+	  ctx->notify_acks.push_back(ack);
+	} catch (const buffer::error &e) {
+	  OpContext::NotifyAck ack(
+	    // op.watch.cookie is actually the notify_id for historical reasons
+	    op.watch.cookie
+	    );
+	  ctx->notify_acks.push_back(ack);
 	}
-	osd->watch_lock.Unlock();
       }
       break;
 
@@ -2557,27 +2469,24 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	watch_info_t w(cookie, 30);  // FIXME: where does the timeout come from?
 	if (do_watch) {
-	  if (oi.watchers.count(entity) && oi.watchers[entity] == w) {
+	  if (oi.watchers.count(make_pair(cookie, entity))) {
 	    dout(10) << " found existing watch " << w << " by " << entity << dendl;
 	  } else {
 	    dout(10) << " registered new watch " << w << " by " << entity << dendl;
-	    oi.watchers[entity] = w;
+	    oi.watchers[make_pair(cookie, entity)] = w;
 	    t.nop();  // make sure update the object_info on disk!
 	  }
-	  ctx->watch_connect = true;
-	  ctx->watch_info = w;
+	  ctx->watch_connects.push_back(w);
 	  assert(obc->registered);
         } else {
-	  map<entity_name_t, watch_info_t>::iterator oi_iter = oi.watchers.find(entity);
+	  map<pair<uint64_t, entity_name_t>, watch_info_t>::iterator oi_iter =
+	    oi.watchers.find(make_pair(cookie, entity));
 	  if (oi_iter != oi.watchers.end()) {
-	    dout(10) << " removed watch " << oi_iter->second << " by " << entity << dendl;
-            oi.watchers.erase(entity);
+	    dout(10) << " removed watch " << oi_iter->second << " by "
+		     << entity << dendl;
+            oi.watchers.erase(oi_iter);
 	    t.nop();  // update oi on disk
-
-	    ctx->watch_disconnect = true;
-
-	    // FIXME: trigger notifies?
-
+	    ctx->watch_disconnects.push_back(w);
 	  } else {
 	    dout(10) << " can't remove: no watch by " << entity << dendl;
 	  }
@@ -3340,154 +3249,94 @@ void ReplicatedPG::add_interval_usage(interval_set<uint64_t>& s, object_stat_sum
 
 void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
 {
-  if (ctx->watch_connect || ctx->watch_disconnect ||
-      !ctx->notifies.empty() || !ctx->notify_acks.empty()) {
-    OSD::Session *session = (OSD::Session *)ctx->op->request->get_connection()->get_priv();
-    assert(session);
-    ObjectContext *obc = ctx->obc;
-    object_info_t& oi = ctx->new_obs.oi;
-    hobject_t& soid = oi.soid;
-    entity_name_t entity = ctx->reqid.name;
+  ConnectionRef conn(ctx->op->request->get_connection());
+  boost::intrusive_ptr<OSD::Session> session(
+    (OSD::Session *)conn->get_priv());
+  entity_name_t entity = ctx->reqid.name;
 
-    dout(10) << "do_osd_op_effects applying watch/notify effects on session " << session << dendl;
+  dout(15) << "do_osd_op_effects on session " << session.get() << dendl;
 
-    osd->watch_lock.Lock();
-    dump_watchers(obc);
-    
-    map<entity_name_t, OSD::Session *>::iterator iter = obc->watchers.find(entity);
-    if (ctx->watch_connect) {
-      watch_info_t w = ctx->watch_info;
-
-      if (iter == obc->watchers.end()) {
-	dout(10) << " connected to " << w << " by " << entity << " session " << session << dendl;
-	obc->watchers[entity] = session;
-	session->con->get();
-	session->get();
-	session->watches[obc] = get_osdmap()->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
-	obc->ref++;
-      } else if (iter->second == session) {
-	// already there
-	dout(10) << " already connected to " << w << " by " << entity
-		 << " session " << session << dendl;
-      } else {
-	// weird: same entity, different session.
-	dout(10) << " reconnected (with different session!) watch " << w << " by " << entity
-		 << " session " << session << " (was " << iter->second << ")" << dendl;
-	session->con->get();
-	session->get();
-
-	iter->second->watches.erase(obc);
-	iter->second->con->put();
-	iter->second->put();
-
-	iter->second = session;
-	session->watches[obc] = get_osdmap()->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
-      }
-      map<entity_name_t,Watch::C_WatchTimeout*>::iterator un_iter =
-	obc->unconnected_watchers.find(entity);
-      if (un_iter != obc->unconnected_watchers.end()) {
-	unregister_unconnected_watcher(obc, un_iter->first);
-      }
-
-      map<Watch::Notification *, bool>::iterator niter;
-      for (niter = obc->notifs.begin(); niter != obc->notifs.end(); ++niter) {
-	Watch::Notification *notif = niter->first;
-	map<entity_name_t, Watch::WatcherState>::iterator iter = notif->watchers.find(entity);
-	if (iter != notif->watchers.end()) {
-	  /* there is a pending notification for this watcher, we should resend it anyway
-	     even if we already sent it as it might not have received it */
-	  MWatchNotify *notify_msg = new MWatchNotify(w.cookie, oi.user_version.version, notif->id, WATCH_NOTIFY, notif->bl);
-	  osd->send_message_osd_client(notify_msg, session->con);
-	}
-      }
+  for (list<watch_info_t>::iterator i = ctx->watch_connects.begin();
+       i != ctx->watch_connects.end();
+       ++i) {
+    pair<uint64_t, entity_name_t> watcher(i->cookie, entity);
+    dout(15) << "do_osd_op_effects applying watch connect on session "
+	     << session.get() << " watcher " << watcher << dendl;
+    WatchRef watch;
+    if (ctx->obc->watchers.count(watcher)) {
+      dout(15) << "do_osd_op_effects found existing watch watcher " << watcher
+	       << dendl;
+      watch = ctx->obc->watchers[watcher];
+    } else {
+      dout(15) << "do_osd_op_effects new watcher " << watcher
+	       << dendl;
+      watch = Watch::makeWatchRef(
+	this, osd, ctx->obc, i->timeout_seconds,
+	i->cookie, entity);
+      ctx->obc->watchers.insert(
+	make_pair(
+	  watcher,
+	  watch));
     }
-    
-    if (ctx->watch_disconnect) {
-      if (iter != obc->watchers.end()) {
-	remove_watcher(obc, entity);
-      } else {
-	assert(obc->unconnected_watchers.count(entity));
-	unregister_unconnected_watcher(obc, entity);
-      }
+    watch->connect(conn);
+  }
 
-      // ack any pending notifies
-      map<Watch::Notification *, bool>::iterator p = obc->notifs.begin();
-      while (p != obc->notifs.end()) {
-	Watch::Notification *notif = p->first;
-	entity_name_t by = entity;
-	p++;
-	assert(notif->obc == obc);
-	dout(10) << " acking pending notif " << notif->id << " by " << by << dendl;
-	// TODOSAM: osd->osd-> not good
-	osd->osd->ack_notification(entity, notif, obc, this);
-      }
+  for (list<watch_info_t>::iterator i = ctx->watch_disconnects.begin();
+       i != ctx->watch_disconnects.end();
+       ++i) {
+    pair<uint64_t, entity_name_t> watcher(i->cookie, entity);
+    dout(15) << "do_osd_op_effects applying watch disconnect on session "
+	     << session.get() << " and watcher " << watcher << dendl;
+    if (ctx->obc->watchers.count(watcher)) {
+      WatchRef watch = ctx->obc->watchers[watcher];
+      dout(10) << "do_osd_op_effects applying disconnect found watcher "
+	       << watcher << dendl;
+      ctx->obc->watchers.erase(watcher);
+      watch->remove();
+    } else {
+      dout(10) << "do_osd_op_effects failed to find watcher "
+	       << watcher << dendl;
     }
+  }
 
-    for (list<notify_info_t>::iterator p = ctx->notifies.begin();
-	 p != ctx->notifies.end();
-	 ++p) {
-
-      dout(10) << " " << *p << dendl;
-
-      Watch::Notification *notif = new Watch::Notification(ctx->reqid.name, session, p->cookie, p->bl);
-      session->get();  // notif got a reference
-      session->con->get();
-      notif->pgid = get_osdmap()->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
-
-      osd->watch->add_notification(notif);
-      dout(20) << " notify id " << notif->id << dendl;
-
-      // connected
-      for (map<entity_name_t, watch_info_t>::iterator i = obc->obs.oi.watchers.begin();
-	   i != obc->obs.oi.watchers.end();
-	   ++i) {
-	map<entity_name_t, OSD::Session*>::iterator q = obc->watchers.find(i->first);
-	if (q != obc->watchers.end()) {
-	  entity_name_t name = q->first;
-	  OSD::Session *s = q->second;
-	  watch_info_t& w = obc->obs.oi.watchers[q->first];
-
-	  notif->add_watcher(name, Watch::WATCHER_NOTIFIED); // adding before send_message to avoid race
-
-	  MWatchNotify *notify_msg = new MWatchNotify(w.cookie, oi.user_version.version, notif->id, WATCH_NOTIFY, notif->bl);
-	  osd->send_message_osd_client(notify_msg, s->con);
-	} else {
-	  // unconnected
-	  entity_name_t name = i->first;
-	  notif->add_watcher(name, Watch::WATCHER_PENDING);
-	}
-      }
-
-      notif->reply = new MWatchNotify(p->cookie, oi.user_version.version, notif->id, WATCH_NOTIFY_COMPLETE, notif->bl);
-      if (notif->watchers.empty()) {
-	// TODOSAM: osd->osd-> not good
-	osd->osd->complete_notify(notif, obc);
-      } else {
-	obc->notifs[notif] = true;
-	obc->ref++;
-	notif->obc = obc;
-	// TODOSAM: osd->osd not good
-	notif->timeout = new Watch::C_NotifyTimeout(osd->osd, notif);
-	osd->watch_timer.add_event_after(p->timeout, notif->timeout);
-      }
+  for (list<notify_info_t>::iterator p = ctx->notifies.begin();
+       p != ctx->notifies.end();
+       ++p) {
+    dout(10) << "do_osd_op_effects, notify " << *p << dendl;
+    NotifyRef notif(
+      Notify::makeNotifyRef(
+	conn,
+	ctx->obc->watchers.size(),
+	p->bl,
+	p->timeout,
+	p->cookie,
+	osd->get_next_id(get_osdmap()->get_epoch()),
+	ctx->obc->obs.oi.user_version.version,
+	osd));
+    for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator i =
+	   ctx->obc->watchers.begin();
+	 i != ctx->obc->watchers.end();
+	 ++i) {
+      dout(10) << "starting notify on watch " << i->first << dendl;
+      i->second->start_notify(notif);
     }
+    notif->init();
+  }
 
-    for (list<uint64_t>::iterator p = ctx->notify_acks.begin(); p != ctx->notify_acks.end(); ++p) {
-      uint64_t cookie = *p;
-      
-      dout(10) << " notify_ack " << cookie << dendl;
-      map<entity_name_t, watch_info_t>::iterator oi_iter = oi.watchers.find(entity);
-      assert(oi_iter != oi.watchers.end());
-
-      Watch::Notification *notif = osd->watch->get_notif(cookie);
-      assert(notif);
-
-      // TODOSAM: osd->osd-> not good
-      osd->osd->ack_notification(entity, notif, obc, this);
+  for (list<OpContext::NotifyAck>::iterator p = ctx->notify_acks.begin();
+       p != ctx->notify_acks.end();
+       ++p) {
+    dout(10) << "notify_ack " << make_pair(p->watch_cookie, p->notify_id) << dendl;
+    for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator i =
+	   ctx->obc->watchers.begin();
+	 i != ctx->obc->watchers.end();
+	 ++i) {
+      if (i->first.second != entity) continue;
+      if (p->watch_cookie &&
+	  p->watch_cookie.get() != i->first.first) continue;
+      dout(10) << "acking notify on watch " << i->first << dendl;
+      i->second->notify_ack(p->notify_id);
     }
-
-    osd->watch_lock.Unlock();
-    session->put();
   }
 }
 
@@ -4115,113 +3964,39 @@ void ReplicatedPG::populate_obc_watchers(ObjectContext *obc)
 	  log.objects[obc->obs.oi.soid]->reverting_to == obc->obs.oi.version));
 
   dout(10) << "populate_obc_watchers " << obc->obs.oi.soid << dendl;
-  if (!obc->obs.oi.watchers.empty()) {
-    Mutex::Locker l(osd->watch_lock);
-    assert(obc->unconnected_watchers.size() == 0);
-    assert(obc->watchers.size() == 0);
-    // populate unconnected_watchers
-    utime_t now = ceph_clock_now(g_ceph_context);
-    for (map<entity_name_t, watch_info_t>::iterator p = obc->obs.oi.watchers.begin();
-	 p != obc->obs.oi.watchers.end();
-	 p++) {
-      utime_t expire = now;
-      expire += p->second.timeout_seconds;
-      dout(10) << "  unconnected watcher " << p->first << " will expire " << expire << dendl;
-      register_unconnected_watcher(obc, p->first, expire);
-    }
+  assert(obc->watchers.size() == 0);
+  // populate unconnected_watchers
+  utime_t now = ceph_clock_now(g_ceph_context);
+  for (map<pair<uint64_t, entity_name_t>, watch_info_t>::iterator p =
+	obc->obs.oi.watchers.begin();
+       p != obc->obs.oi.watchers.end();
+       p++) {
+    utime_t expire = now;
+    expire += p->second.timeout_seconds;
+    dout(10) << "  unconnected watcher " << p->first << " will expire " << expire << dendl;
+    WatchRef watch(
+      Watch::makeWatchRef(
+	this, osd, obc, p->second.timeout_seconds, p->first.first, p->first.second));
+    watch->disconnect();
+    obc->watchers.insert(
+      make_pair(
+	make_pair(p->first.first, p->first.second),
+	watch));
   }
 }
 
-void ReplicatedPG::unregister_unconnected_watcher(void *_obc,
-						  entity_name_t entity)
+void ReplicatedPG::handle_watch_timeout(WatchRef watch)
 {
-  ObjectContext *obc = static_cast<ObjectContext *>(_obc);
-
-  /* If we failed to cancel the event, the event will fire and the obc
-   * ref and the pg ref will be taken care of */
-  if (osd->watch_timer.cancel_event(obc->unconnected_watchers[entity])) {
-    put_object_context(obc);
-    put();
-  }
-  obc->unconnected_watchers.erase(entity);
-}
-
-void ReplicatedPG::register_unconnected_watcher(void *_obc,
-						entity_name_t entity,
-						utime_t expire)
-{
-  ObjectContext *obc = static_cast<ObjectContext *>(_obc);
-  pg_t pgid = info.pgid;
-  pgid.set_ps(obc->obs.oi.soid.hash);
-  get();
-  obc->ref++;
-  Watch::C_WatchTimeout *cb = new Watch::C_WatchTimeout(osd->osd,
-							static_cast<void *>(obc),
-							this,
-							entity, expire);
-  osd->watch_timer.add_event_at(expire, cb);
-  obc->unconnected_watchers[entity] = cb;
-}
-
-void ReplicatedPG::handle_watch_timeout(void *_obc,
-					entity_name_t entity,
-					utime_t expire)
-{
-  dout(10) << "handle_watch_timeout obc " << _obc << dendl;
-  struct HandleWatchTimeout : public Context {
-    epoch_t cur_epoch;
-    boost::intrusive_ptr<ReplicatedPG> pg;
-    void *obc;
-    entity_name_t entity;
-    utime_t expire;
-    HandleWatchTimeout(
-      epoch_t cur_epoch,
-      ReplicatedPG *pg,
-      void *obc,
-      entity_name_t entity,
-      utime_t expire) : cur_epoch(cur_epoch),
-			pg(pg), obc(obc), entity(entity), expire(expire) {
-      assert(pg->is_locked());
-      static_cast<ReplicatedPG::ObjectContext*>(obc)->get();
-    }
-    void finish(int) {
-      assert(pg->is_locked());
-      if (cur_epoch < pg->last_peering_reset)
-	return;
-      // handle_watch_timeout gets its own ref
-      static_cast<ReplicatedPG::ObjectContext*>(obc)->get();
-      pg->handle_watch_timeout(obc, entity, expire);
-    }
-    ~HandleWatchTimeout() {
-      assert(pg->is_locked());
-      pg->put_object_context(static_cast<ReplicatedPG::ObjectContext*>(obc));
-    }
-  };
-
-  ObjectContext *obc = static_cast<ObjectContext *>(_obc);
-
-  if (obc->unconnected_watchers.count(entity) == 0 ||
-      (obc->unconnected_watchers[entity] &&
-       obc->unconnected_watchers[entity]->expire != expire)) {
-     /* If obc->unconnected_watchers[entity] == NULL we know at least that
-      * the watcher for obc,entity should expire.  We might not have been
-      * the intended Context*, but that's ok since the intended one will
-      * take this branch and assume it raced. */
-    dout(10) << "handle_watch_timeout must have raced, no/wrong unconnected_watcher "
-	     << entity << dendl;
-    put_object_context(obc);
-    return;
-  }
+  ObjectContext *obc = watch->get_obc(); // handle_watch_timeout owns this ref
+  dout(10) << "handle_watch_timeout obc " << obc << dendl;
 
   if (is_degraded_object(obc->obs.oi.soid)) {
     callbacks_for_degraded_object[obc->obs.oi.soid].push_back(
-      new HandleWatchTimeout(get_osdmap()->get_epoch(),
-			     this, _obc, entity, expire)
+      watch->get_delayed_cb()
       );
     dout(10) << "handle_watch_timeout waiting for degraded on obj "
 	     << obc->obs.oi.soid
 	     << dendl;
-    obc->unconnected_watchers[entity] = 0; // Callback in progress, but not this one!
     put_object_context(obc); // callback got its own ref
     return;
   }
@@ -4230,15 +4005,16 @@ void ReplicatedPG::handle_watch_timeout(void *_obc,
     dout(10) << "handle_watch_timeout waiting for scrub on obj "
 	     << obc->obs.oi.soid
 	     << dendl;
-    scrubber.add_callback(new HandleWatchTimeout(get_osdmap()->get_epoch(),
-						 this, _obc, entity, expire));
-    obc->unconnected_watchers[entity] = 0; // Callback in progress, but not this one!
-    put_object_context(obc); // callback got its own ref
+    scrubber.add_callback(
+      watch->get_delayed_cb() // This callback!
+      );
+    put_object_context(obc);
     return;
   }
 
-  obc->unconnected_watchers.erase(entity);
-  obc->obs.oi.watchers.erase(entity);
+  obc->watchers.erase(make_pair(watch->get_cookie(), watch->get_entity()));
+  obc->obs.oi.watchers.erase(make_pair(watch->get_cookie(), watch->get_entity()));
+  watch->remove();
 
   vector<OSDOp> ops;
   tid_t rep_tid = osd->get_tid();
@@ -4283,7 +4059,7 @@ void ReplicatedPG::handle_watch_timeout(void *_obc,
   eval_repop(repop);
 }
 
-ReplicatedPG::ObjectContext *ReplicatedPG::_lookup_object_context(const hobject_t& oid)
+ObjectContext *ReplicatedPG::_lookup_object_context(const hobject_t& oid)
 {
   map<hobject_t, ObjectContext*>::iterator p = object_contexts.find(oid);
   if (p != object_contexts.end())
@@ -4291,7 +4067,7 @@ ReplicatedPG::ObjectContext *ReplicatedPG::_lookup_object_context(const hobject_
   return NULL;
 }
 
-ReplicatedPG::ObjectContext *ReplicatedPG::create_object_context(const object_info_t& oi,
+ObjectContext *ReplicatedPG::create_object_context(const object_info_t& oi,
 								 SnapSetContext *ssc)
 {
   ObjectContext *obc = new ObjectContext(oi, false, ssc);
@@ -4302,7 +4078,7 @@ ReplicatedPG::ObjectContext *ReplicatedPG::create_object_context(const object_in
   return obc;
 }
 
-ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const hobject_t& soid,
+ObjectContext *ReplicatedPG::get_object_context(const hobject_t& soid,
 							      const object_locator_t& oloc,
 							      bool can_create)
 {
@@ -4354,7 +4130,24 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const hobject_t& s
 
 void ReplicatedPG::context_registry_on_change()
 {
-  remove_watchers_and_notifies();
+  list<ObjectContext *> contexts;
+  for (map<hobject_t, ObjectContext*>::iterator i = object_contexts.begin();
+       i != object_contexts.end();
+       ++i) {
+    i->second->get();
+    contexts.push_back(i->second);
+    for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator j =
+	   i->second->watchers.begin();
+	 j != i->second->watchers.end();
+	 i->second->watchers.erase(j++)) {
+      j->second->discard();
+    }
+  }
+  for (list<ObjectContext *>::iterator i = contexts.begin();
+       i != contexts.end();
+       contexts.erase(i++)) {
+    put_object_context(*i);
+  }
 }
 
 
@@ -4529,7 +4322,7 @@ void ReplicatedPG::add_object_context_to_pg_stat(ObjectContext *obc, pg_stat_t *
     pgstat->stats.cat_sum[oi.category].add(stat);
 }
 
-ReplicatedPG::SnapSetContext *ReplicatedPG::create_snapset_context(const object_t& oid)
+SnapSetContext *ReplicatedPG::create_snapset_context(const object_t& oid)
 {
   SnapSetContext *ssc = new SnapSetContext(oid);
   dout(10) << "create_snapset_context " << ssc << " " << ssc->oid << dendl;
@@ -4538,10 +4331,10 @@ ReplicatedPG::SnapSetContext *ReplicatedPG::create_snapset_context(const object_
   return ssc;
 }
 
-ReplicatedPG::SnapSetContext *ReplicatedPG::get_snapset_context(const object_t& oid,
-								const string& key,
-								ps_t seed,
-								bool can_create)
+SnapSetContext *ReplicatedPG::get_snapset_context(const object_t& oid,
+						  const string& key,
+						  ps_t seed,
+						  bool can_create)
 {
   SnapSetContext *ssc;
   map<object_t, SnapSetContext*>::iterator p = snapset_contexts.find(oid);
@@ -6028,7 +5821,7 @@ eversion_t ReplicatedPG::pick_newest_available(const hobject_t& oid)
 
 /* Mark an object as lost
  */
-ReplicatedPG::ObjectContext *ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
+ObjectContext *ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
 							    const hobject_t &oid, eversion_t version,
 							    utime_t mtime, int what)
 {
@@ -6065,7 +5858,7 @@ ReplicatedPG::ObjectContext *ReplicatedPG::mark_object_lost(ObjectStore::Transac
 
 struct C_PG_MarkUnfoundLost : public Context {
   ReplicatedPG *pg;
-  list<ReplicatedPG::ObjectContext*> obcs;
+  list<ObjectContext*> obcs;
   C_PG_MarkUnfoundLost(ReplicatedPG *p) : pg(p) {
     pg->get();
   }
@@ -6246,14 +6039,19 @@ void ReplicatedPG::on_removal()
 {
   dout(10) << "on_removal" << dendl;
   apply_and_flush_repops(false);
-  remove_watchers_and_notifies();
+  context_registry_on_change();
 }
 
 void ReplicatedPG::on_shutdown()
 {
   dout(10) << "on_shutdown" << dendl;
   apply_and_flush_repops(false);
-  remove_watchers_and_notifies();
+  context_registry_on_change();
+}
+
+void ReplicatedPG::on_flushed()
+{
+  assert(object_contexts.empty());
 }
 
 void ReplicatedPG::on_activate()
@@ -7581,4 +7379,5 @@ boost::statechart::result ReplicatedPG::WaitingOnReplicas::react(const SnapTrim&
   return transit< NotTrimming >();
 }
 
-
+void intrusive_ptr_add_ref(ReplicatedPG *pg) { pg->get(); }
+void intrusive_ptr_release(ReplicatedPG *pg) { pg->put(); }

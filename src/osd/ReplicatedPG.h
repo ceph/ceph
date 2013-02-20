@@ -14,6 +14,9 @@
 #ifndef CEPH_REPLICATEDPG_H
 #define CEPH_REPLICATEDPG_H
 
+#include <boost/optional.hpp>
+
+#include "include/assert.h" 
 
 #include "PG.h"
 #include "OSD.h"
@@ -60,6 +63,7 @@ public:
 
 class ReplicatedPG : public PG {
   friend class OSD;
+  friend class Watch;
 public:  
 
   /*
@@ -94,24 +98,6 @@ public:
       - read, write, rmw: wait
     
    */
-
-  struct SnapSetContext {
-    object_t oid;
-    int ref;
-    bool registered; 
-    SnapSet snapset;
-
-    SnapSetContext(const object_t& o) : oid(o), ref(0), registered(false) { }
-  };
-
-  struct ObjectState {
-    object_info_t oi;
-    bool exists;
-
-    ObjectState(const object_info_t &oi_, bool exists_)
-      : oi(oi_), exists(exists_) {}
-  };
-
 
   struct AccessMode {
     typedef enum {
@@ -254,81 +240,6 @@ public:
     }
   };
 
-
-  /*
-   * keep tabs on object modifications that are in flight.
-   * we need to know the projected existence, size, snapset,
-   * etc., because we don't send writes down to disk until after
-   * replicas ack.
-   */
-  struct ObjectContext {
-    int ref;
-    bool registered; 
-    ObjectState obs;
-
-    SnapSetContext *ssc;  // may be null
-
-  private:
-    Mutex lock;
-  public:
-    Cond cond;
-    int unstable_writes, readers, writers_waiting, readers_waiting;
-
-    // set if writes for this object are blocked on another objects recovery
-    ObjectContext *blocked_by;      // object blocking our writes
-    set<ObjectContext*> blocking;   // objects whose writes we block
-
-    // any entity in obs.oi.watchers MUST be in either watchers or unconnected_watchers.
-    map<entity_name_t, OSD::Session *> watchers;
-    map<entity_name_t, Watch::C_WatchTimeout *> unconnected_watchers;
-    map<Watch::Notification *, bool> notifs;
-
-    ObjectContext(const object_info_t &oi_, bool exists_, SnapSetContext *ssc_)
-      : ref(0), registered(false), obs(oi_, exists_), ssc(ssc_),
-	lock("ReplicatedPG::ObjectContext::lock"),
-	unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0),
-	blocked_by(0) {}
-    
-    void get() { ++ref; }
-
-    // do simple synchronous mutual exclusion, for now.  now waitqueues or anything fancy.
-    void ondisk_write_lock() {
-      lock.Lock();
-      writers_waiting++;
-      while (readers_waiting || readers)
-	cond.Wait(lock);
-      writers_waiting--;
-      unstable_writes++;
-      lock.Unlock();
-    }
-    void ondisk_write_unlock() {
-      lock.Lock();
-      assert(unstable_writes > 0);
-      unstable_writes--;
-      if (!unstable_writes && readers_waiting)
-	cond.Signal();
-      lock.Unlock();
-    }
-    void ondisk_read_lock() {
-      lock.Lock();
-      readers_waiting++;
-      while (unstable_writes)
-	cond.Wait(lock);
-      readers_waiting--;
-      readers++;
-      lock.Unlock();
-    }
-    void ondisk_read_unlock() {
-      lock.Lock();
-      assert(readers > 0);
-      readers--;
-      if (!readers && writers_waiting)
-	cond.Signal();
-      lock.Unlock();
-    }
-  };
-
-
   /*
    * Capture all object state associated with an in-progress read or write.
    */
@@ -349,10 +260,17 @@ public:
     bool user_modify;     // user-visible modification
 
     // side effects
-    bool watch_connect, watch_disconnect;
-    watch_info_t watch_info;
+    list<watch_info_t> watch_connects;
+    list<watch_info_t> watch_disconnects;
     list<notify_info_t> notifies;
-    list<uint64_t> notify_acks;
+    struct NotifyAck {
+      boost::optional<uint64_t> watch_cookie;
+      uint64_t notify_id;
+      NotifyAck(uint64_t notify_id) : notify_id(notify_id) {}
+      NotifyAck(uint64_t notify_id, uint64_t cookie)
+	: watch_cookie(cookie), notify_id(notify_id) {}
+    };
+    list<NotifyAck> notify_acks;
     
     uint64_t bytes_written, bytes_read;
 
@@ -386,7 +304,6 @@ public:
       op(_op), reqid(_reqid), ops(_ops), obs(_obs), snapset(0),
       new_obs(_obs->oi, _obs->exists),
       modify(false), user_modify(false),
-      watch_connect(false), watch_disconnect(false),
       bytes_written(0), bytes_read(0),
       obc(0), clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) { 
       if (_ssc) {
@@ -517,14 +434,9 @@ protected:
   map<object_t, SnapSetContext*> snapset_contexts;
 
   void populate_obc_watchers(ObjectContext *obc);
-  void register_unconnected_watcher(void *obc,
-				    entity_name_t entity,
-				    utime_t expire);
-  void unregister_unconnected_watcher(void *obc,
-				      entity_name_t entity);
-  void handle_watch_timeout(void *obc,
-			    entity_name_t entity,
-			    utime_t expire);
+public:
+  void handle_watch_timeout(WatchRef watch);
+protected:
 
   ObjectContext *lookup_object_context(const hobject_t& soid) {
     if (object_contexts.count(soid)) {
@@ -818,11 +730,6 @@ protected:
   void send_remove_op(const hobject_t& oid, eversion_t v, int peer);
 
 
-  void dump_watchers(ObjectContext *obc);
-  void remove_watcher(ObjectContext *obc, entity_name_t entity);
-  void remove_notify(ObjectContext *obc, Watch::Notification *notif);
-  void remove_watchers_and_notifies();
-
   struct RepModify {
     ReplicatedPG *pg;
     OpRequestRef op;
@@ -1108,23 +1015,10 @@ public:
   void on_role_change();
   void on_change();
   void on_activate();
+  void on_flushed();
   void on_removal();
   void on_shutdown();
 };
-
-
-inline ostream& operator<<(ostream& out, ReplicatedPG::ObjectState& obs)
-{
-  out << obs.oi.soid;
-  if (!obs.exists)
-    out << "(dne)";
-  return out;
-}
-
-inline ostream& operator<<(ostream& out, ReplicatedPG::ObjectContext& obc)
-{
-  return out << "obc(" << obc.obs << ")";
-}
 
 inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
 {
@@ -1150,5 +1044,8 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::AccessMode& mode)
   out << ")";
   return out;
 }
+
+void intrusive_ptr_add_ref(ReplicatedPG *pg);
+void intrusive_ptr_release(ReplicatedPG *pg);
 
 #endif
