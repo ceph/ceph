@@ -726,6 +726,13 @@ uint64_t OSDMap::get_features(uint64_t *pmask) const
     features |= CEPH_FEATURE_CRUSH_TUNABLES2;
   mask |= CEPH_FEATURES_CRUSH;
 
+  for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
+    if (p->second.flags & pg_pool_t::FLAG_HASHPSPOOL) {
+      features |= CEPH_FEATURE_OSDHASHPSPOOL;
+    }
+  }
+  mask |= CEPH_FEATURE_OSDHASHPSPOOL;
+
   if (pmask)
     *pmask = mask;
   return features;
