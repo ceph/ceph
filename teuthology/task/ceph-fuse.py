@@ -72,7 +72,8 @@ def task(ctx, config):
             flavor='notcmalloc'
 
         # install ceph fuse package
-        install_task.install_debs(ctx, ['ceph-fuse'],
+        install_task.install_debs(ctx,
+                                  ['ceph-fuse', 'ceph-fuse-dbg'],
                                   config.get('branch', 'master'),
                                   flavor)
 
