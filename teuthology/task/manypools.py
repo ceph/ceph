@@ -28,8 +28,6 @@ def task(ctx, config):
         time: 360
     """
     
-    testdir = teuthology.get_testdir(ctx)
-
     log.info('creating {n} pools'.format(n=config))
     
     poolnum = int(config)

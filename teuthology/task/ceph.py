@@ -8,7 +8,6 @@ import sys
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
-from teuthology.parallel import parallel
 from ..orchestra import run
 
 log = logging.getLogger(__name__)
@@ -210,7 +209,6 @@ def valgrind_post(ctx, config):
 
 
 def mount_osd_data(ctx, remote, osd):
-    testdir = teuthology.get_testdir(ctx)
     log.debug('Mounting data for osd.{o} on {r}'.format(o=osd, r=remote))
     if remote in ctx.disk_config.remote_to_roles_to_dev and osd in ctx.disk_config.remote_to_roles_to_dev[remote]:
         dev = ctx.disk_config.remote_to_roles_to_dev[remote][osd]
@@ -308,8 +306,8 @@ def cluster(ctx, config):
 
     log.info('Generating config...')
     remotes_and_roles = ctx.cluster.remotes.items()
-    roles = [roles for (remote, roles) in remotes_and_roles]
-    ips = [host for (host, port) in (remote.ssh.get_transport().getpeername() for (remote, roles) in remotes_and_roles)]
+    roles = [role_list for (remote, role_list) in remotes_and_roles]
+    ips = [host for (host, port) in (remote.ssh.get_transport().getpeername() for (remote, role_list) in remotes_and_roles)]
     conf = teuthology.skeleton_config(ctx, roles=roles, ips=ips)
     for remote, roles_to_journals in remote_to_roles_to_journals.iteritems():
         for role, journal in roles_to_journals.iteritems():

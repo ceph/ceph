@@ -152,7 +152,6 @@ def remove_osd_mounts(ctx, log):
     unmount any osd data mounts (scratch disks)
     """
     from .orchestra import run
-    from teuthology.misc import get_testdir
     ctx.cluster.run(
         args=[
             'grep',
