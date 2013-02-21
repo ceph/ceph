@@ -71,7 +71,12 @@ class MDSMonitor : public PaxosService {
   void create_initial();
   void update_from_paxos();
   void create_pending(); 
-  void encode_pending(bufferlist &bl);
+  void encode_pending(MonitorDBStore::Transaction *t);
+  // we don't require full versions; don't encode any.
+  virtual void encode_full(MonitorDBStore::Transaction *t) { }
+
+  bool should_trim() { return false; }
+  void encode_trim(MonitorDBStore::Transaction *t) { }
 
   void update_logger();
 
@@ -110,8 +115,8 @@ class MDSMonitor : public PaxosService {
   bool try_standby_replay(MDSMap::mds_info_t& finfo, MDSMap::mds_info_t& ainfo);
 
 public:
-  MDSMonitor(Monitor *mn, Paxos *p)
-    : PaxosService(mn, p)
+  MDSMonitor(Monitor *mn, Paxos *p, string service_name)
+    : PaxosService(mn, p, service_name)
   {
   }
 

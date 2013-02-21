@@ -22,8 +22,8 @@
 
 class MMonPaxos : public Message {
 
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+  static const int HEAD_VERSION = 3;
+  static const int COMPAT_VERSION = 3;
 
  public:
   // op types
@@ -49,7 +49,6 @@ class MMonPaxos : public Message {
 
   epoch_t epoch;   // monitor epoch
   __s32 op;          // paxos op
-  __s32 machine_id;  // which state machine?
 
   version_t first_committed;  // i've committed to
   version_t last_committed;  // i've committed to
@@ -64,13 +63,11 @@ class MMonPaxos : public Message {
 
   map<version_t,bufferlist> values;
 
-  map<version_t,version_t> gv;  // global version map; stepping stone for bobtail -> cuttlefish transition.
-
   MMonPaxos() : Message(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION) { }
-  MMonPaxos(epoch_t e, int o, int mid, utime_t now) : 
+  MMonPaxos(epoch_t e, int o, utime_t now) : 
     Message(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION),
     epoch(e),
-    op(o), machine_id(mid),
+    op(o),
     first_committed(0), last_committed(0), pn_from(0), pn(0), uncommitted_pn(0),
     sent_timestamp(now),
     latest_version(0) {
@@ -83,12 +80,10 @@ public:
   const char *get_type_name() const { return "paxos"; }
   
   void print(ostream& out) const {
-    out << "paxos(" << get_paxos_name(machine_id)
-	<< " " << get_opname(op) 
+    out << "paxos(" << get_opname(op) 
 	<< " lc " << last_committed
 	<< " fc " << first_committed
 	<< " pn " << pn << " opn " << uncommitted_pn;
-    out << " gv " << gv;
     if (latest_version)
       out << " latest " << latest_version << " (" << latest_value.length() << " bytes)";
     out <<  ")";
@@ -99,7 +94,6 @@ public:
       header.version = 0;
     ::encode(epoch, payload);
     ::encode(op, payload);
-    ::encode(machine_id, payload);
     ::encode(first_committed, payload);
     ::encode(last_committed, payload);
     ::encode(pn_from, payload);
@@ -111,13 +105,11 @@ public:
     ::encode(latest_version, payload);
     ::encode(latest_value, payload);
     ::encode(values, payload);
-    ::encode(gv, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(op, p);
-    ::decode(machine_id, p);
     ::decode(first_committed, p);
     ::decode(last_committed, p);
     ::decode(pn_from, p);   
@@ -129,8 +121,6 @@ public:
     ::decode(latest_version, p);
     ::decode(latest_value, p);
     ::decode(values, p);
-    if (header.version >= 2)
-      ::decode(gv, p);
   }
 };
 
