@@ -65,28 +65,13 @@ static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 
 #define dout_subsys ceph_subsys_rgw
 
-struct RGWDefaultRegionInfo {
-  string default_region;
+void RGWDefaultRegionInfo::dump(Formatter *f) const {
+  encode_json("default_region", default_region, f);
+}
 
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    ::encode(default_region, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
-    ::decode(default_region, bl);
-    DECODE_FINISH(bl);
-  }
-  void dump(Formatter *f) const {
-    encode_json("default_region", default_region, f);
-  }
-  void decode_json(JSONObj *obj) {
-    JSONDecoder::decode_json("default_region", default_region, obj);
-  }
-};
-WRITE_CLASS_ENCODER(RGWDefaultRegionInfo);
+void RGWDefaultRegionInfo::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("default_region", default_region, obj);
+}
 
 string RGWRegion::get_pool_name(CephContext *cct)
 {
@@ -97,7 +82,7 @@ string RGWRegion::get_pool_name(CephContext *cct)
   return pool_name;
 }
 
-int RGWRegion::read_default()
+int RGWRegion::read_default(RGWDefaultRegionInfo& default_info)
 {
   string pool_name = get_pool_name(cct);
 
@@ -112,7 +97,6 @@ int RGWRegion::read_default()
   if (ret < 0)
     return ret;
 
-  RGWDefaultRegionInfo default_info;
   try {
     bufferlist::iterator iter = bl.begin();
     ::decode(default_info, iter);
@@ -150,17 +134,21 @@ int RGWRegion::set_as_default()
   return 0;
 }
 
-int RGWRegion::init(CephContext *_cct, RGWRados *_store)
+int RGWRegion::init(CephContext *_cct, RGWRados *_store, bool setup_region)
 {
   cct = _cct;
   store = _store;
+
+  if (!setup_region)
+    return 0;
 
   string pool_name = get_pool_name(cct);
 
   name = cct->_conf->rgw_region;
 
   if (name.empty()) {
-    int r = read_default();
+    RGWDefaultRegionInfo default_info;
+    int r = read_default(default_info);
     if (r == -ENOENT) {
       r = create_default();
       if (r < 0)
@@ -172,6 +160,7 @@ int RGWRegion::init(CephContext *_cct, RGWRados *_store)
       lderr(cct) << "failed reading default region info: " << cpp_strerror(-r) << dendl;
       return r;
     }
+    name = default_info.default_region;
   }
 
   rgw_bucket pool(pool_name.c_str());
@@ -236,6 +225,8 @@ int RGWRegion::store_info(bool exclusive)
 
   return ret;
 }
+
+
 
 void RGWZoneParams::init_default()
 {
@@ -451,6 +442,29 @@ void RGWRados::finalize_watch()
   delete[] notify_oids;
   delete[] watch_handles;
   delete[] watchers;
+}
+
+int RGWRados::list_regions(list<string>& regions)
+{
+  string pool_name = RGWRegion::get_pool_name(cct);
+
+  rgw_bucket pool(pool_name.c_str());
+  bool is_truncated;
+  RGWListRawObjsCtx ctx;
+  do {
+    vector<string> oids;
+    int r = list_raw_objects(pool, region_info_oid_prefix, 1000,
+			     ctx, oids, &is_truncated);
+    if (r < 0) {
+      return r;
+    }
+    vector<string>::iterator iter;
+    for (iter = oids.begin(); iter != oids.end(); ++iter) {
+      regions.push_back(iter->substr(region_info_oid_prefix.size() + 1));
+    }
+  } while (is_truncated);
+
+  return 0;
 }
 
 /**
@@ -3663,6 +3677,44 @@ int RGWRados::pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<RGWObjEnt>&
     *is_truncated = (iter != io_ctx.objects_end());
 
   return objs.size();
+}
+struct RGWAccessListFilterPrefix : public RGWAccessListFilter {
+  string prefix;
+
+  RGWAccessListFilterPrefix(const string& _prefix) : prefix(_prefix) {}
+  virtual bool filter(string& name, string& key) {
+    return (prefix.compare(key.substr(0, prefix.size())) == 0);
+  }
+};
+
+int RGWRados::list_raw_objects(rgw_bucket& pool, const string& prefix_filter,
+			       int max, RGWListRawObjsCtx& ctx, vector<string>& oids,
+			       bool *is_truncated)
+{
+  RGWAccessListFilterPrefix filter(prefix_filter);
+
+  if (!ctx.initialized) {
+    int r = pool_iterate_begin(pool, ctx.iter_ctx);
+    if (r < 0) {
+      lderr(cct) << "failed to list objects pool_iterate_begin() returned r=" << r << dendl;
+      return r;
+    }
+    ctx.initialized = true;
+  }
+
+  vector<RGWObjEnt> objs;
+  int r = pool_iterate(ctx.iter_ctx, max, objs, is_truncated, &filter);
+  if (r < 0) {
+    lderr(cct) << "failed to list objects pool_iterate returned r=" << r << dendl;
+    return r;
+  }
+
+  vector<RGWObjEnt>::iterator iter;
+  for (iter = objs.begin(); iter != objs.end(); ++iter) {
+    oids.push_back(iter->name);
+  }
+
+  return oids.size();
 }
 
 int RGWRados::gc_operate(string& oid, librados::ObjectWriteOperation *op)
