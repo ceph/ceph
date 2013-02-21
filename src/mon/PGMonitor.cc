@@ -17,7 +17,7 @@
 #include "Monitor.h"
 #include "MDSMonitor.h"
 #include "OSDMonitor.h"
-#include "MonitorStore.h"
+#include "MonitorDBStore.h"
 
 #include "messages/MPGStats.h"
 #include "messages/MPGStatsAck.h"
@@ -49,13 +49,6 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon, const PGMap& pg
 		<< "(" << mon->get_state_name()
 		<< ").pg v" << pg_map.version << " ";
 }
-
-PGMonitor::PGMonitor(Monitor *mn, Paxos *p)
-  : PaxosService(mn, p),
-    need_check_down_pgs(false)
-{ }
-
-PGMonitor::~PGMonitor() {}
 
 /*
  Tick function to update the map based on performance every N seconds
@@ -116,8 +109,7 @@ void PGMonitor::update_logger()
 
 void PGMonitor::tick() 
 {
-  if (!paxos->is_active() ||
-      !mon->is_all_paxos_recovered()) return;
+  if (!is_active()) return;
 
   update_from_paxos();
   handle_osd_timeouts();
@@ -143,34 +135,40 @@ void PGMonitor::create_initial()
 
 void PGMonitor::update_from_paxos()
 {
-  version_t paxosv = paxos->get_version();
-  if (paxosv == pg_map.version)
+  version_t version = get_version();
+  if (version == pg_map.version)
     return;
-  assert(paxosv >= pg_map.version);
+  assert(version >= pg_map.version);
 
-  if (pg_map.version != paxos->get_stashed_version()) {
-    bufferlist latest;
-    version_t v = paxos->get_stashed(latest);
-    dout(7) << "update_from_paxos loading latest full pgmap v" << v << dendl;
+  /* Obtain latest full pgmap version, if available and whose version is
+   * greater than the current pgmap's version.
+   */
+  version_t latest_full = get_version_latest_full();
+  if ((latest_full > 0) && (latest_full > pg_map.version)) {
+    bufferlist latest_bl;
+    int err = get_version_full(latest_full, latest_bl);
+    assert(err == 0);
+    dout(7) << __func__ << " loading latest full pgmap v"
+	    << latest_full << dendl;
     try {
       PGMap tmp_pg_map;
-      bufferlist::iterator p = latest.begin();
+      bufferlist::iterator p = latest_bl.begin();
       tmp_pg_map.decode(p);
       pg_map = tmp_pg_map;
-    }
-    catch (const std::exception &e) {
-      dout(0) << "update_from_paxos: error parsing update: "
+    } catch (const std::exception& e) {
+      dout(0) << __func__ << ": error parsing update: "
 	      << e.what() << dendl;
       assert(0 == "update_from_paxos: error parsing update");
       return;
     }
-  } 
+  }
 
   // walk through incrementals
-  while (paxosv > pg_map.version) {
+  while (version > pg_map.version) {
     bufferlist bl;
-    bool success = paxos->read(pg_map.version+1, bl);
-    assert(success);
+    int err = get_version(pg_map.version+1, bl);
+    assert(err == 0);
+    assert(bl.length());
 
     dout(7) << "update_from_paxos  applying incremental " << pg_map.version+1 << dendl;
     PGMap::Incremental inc;
@@ -193,26 +191,23 @@ void PGMonitor::update_from_paxos()
       last_sent_pg_create.clear();  // reset pg_create throttle timer
   }
 
-  assert(paxosv == pg_map.version);
+  assert(version == pg_map.version);
 
-  // save latest
-  bufferlist bl;
-  pg_map.encode(bl, mon->get_quorum_features());
-  paxos->stash_latest(paxosv, bl);
-
+  /* If we dump the summaries onto the k/v store, they hardly would be useful
+   * without a tool created with reading them in mind.
+   * Comment this out until we decide what is the best course of action.
+   *
   // dump pgmap summaries?  (useful for debugging)
   if (0) {
     stringstream ds;
     pg_map.dump(ds);
     bufferlist d;
     d.append(ds);
-    mon->store->put_bl_sn(d, "pgmap_dump", paxosv);
+    mon->store->put_bl_sn(d, "pgmap_dump", version);
   }
+  */
 
-  unsigned max = g_conf->mon_max_pgmap_epochs;
-  if (mon->is_leader() &&
-      paxosv > max)
-    paxos->trim_to(paxosv - max);
+  update_trim();
 
   send_pg_creates();
 
@@ -230,7 +225,7 @@ void PGMonitor::handle_osd_timeouts()
     return;
   }
 
-  if (mon->osdmon()->paxos->is_writeable())
+  if (mon->osdmon()->is_writeable())
     mon->osdmon()->handle_osd_timeouts(now, last_osd_report);
 }
 
@@ -253,13 +248,40 @@ void PGMonitor::create_pending()
   dout(10) << "create_pending v " << pending_inc.version << dendl;
 }
 
-void PGMonitor::encode_pending(bufferlist &bl)
+void PGMonitor::encode_pending(MonitorDBStore::Transaction *t)
 {
-  dout(10) << "encode_pending v " << pending_inc.version << dendl;
-  assert(paxos->get_version() + 1 == pending_inc.version);
+  version_t version = pending_inc.version;
+  dout(10) << __func__ << " v " << version << dendl;
+  assert(get_version() + 1 == version);
   pending_inc.stamp = ceph_clock_now(g_ceph_context);
+
+  bufferlist bl;
   pending_inc.encode(bl, mon->get_quorum_features());
+
+  put_version(t, version, bl);
+  put_last_committed(t, version);
 }
+
+void PGMonitor::encode_full(MonitorDBStore::Transaction *t)
+{
+  dout(10) << __func__ << " pgmap v " << pg_map.version << dendl;
+  assert(get_version() == pg_map.version);
+
+  bufferlist full_bl;
+  pg_map.encode(full_bl, mon->get_quorum_features());
+
+  put_version_full(t, pg_map.version, full_bl);
+  put_version_latest_full(t, pg_map.version);
+}
+
+void PGMonitor::update_trim()
+{
+  unsigned max = g_conf->mon_max_pgmap_epochs;
+  version_t version = get_version();
+  if (mon->is_leader() && (version > max))
+    set_trim_to(version - max);
+}
+
 
 bool PGMonitor::preprocess_query(PaxosServiceMessage *m)
 {
@@ -323,7 +345,7 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   }
 
   // fill out stfs
-  reply = new MStatfsReply(mon->monmap->fsid, statfs->get_tid(), paxos->get_version());
+  reply = new MStatfsReply(mon->monmap->fsid, statfs->get_tid(), get_version());
 
   // these are in KB.
   reply->h.st.kb = pg_map.osd_sum.kb;
@@ -355,7 +377,7 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
     goto out;
   }
   
-  reply = new MGetPoolStatsReply(m->fsid, m->get_tid(), paxos->get_version());
+  reply = new MGetPoolStatsReply(m->fsid, m->get_tid(), get_version());
 
   for (list<string>::iterator p = m->pools.begin();
        p != m->pools.end();
@@ -395,7 +417,7 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
   // First, just see if they need a new osdmap. But
   // only if they've had the map for a while.
   if (stats->had_map_for > 30.0 && 
-      mon->osdmon()->paxos->is_readable() &&
+      mon->osdmon()->is_readable() &&
       stats->epoch < mon->osdmon()->osdmap.get_epoch())
     mon->osdmon()->send_latest_now_nodelete(stats, stats->epoch+1);
 
@@ -561,15 +583,15 @@ void PGMonitor::check_osd_map(epoch_t epoch)
     return;
   }
 
-  if (!mon->osdmon()->paxos->is_readable()) {
+  if (!mon->osdmon()->is_readable()) {
     dout(10) << "check_osd_map -- osdmap not readable, waiting" << dendl;
-    mon->osdmon()->paxos->wait_for_readable(new RetryCheckOSDMap(this, epoch));
+    mon->osdmon()->wait_for_readable(new RetryCheckOSDMap(this, epoch));
     return;
   }
 
-  if (!paxos->is_writeable()) {
+  if (!is_writeable()) {
     dout(10) << "check_osd_map -- pgmap not writeable, waiting" << dendl;
-    paxos->wait_for_writeable(new RetryCheckOSDMap(this, epoch));
+    wait_for_writeable(new RetryCheckOSDMap(this, epoch));
     return;
   }
 
@@ -579,7 +601,8 @@ void PGMonitor::check_osd_map(epoch_t epoch)
        e++) {
     dout(10) << "check_osd_map applying osdmap e" << e << " to pg_map" << dendl;
     bufferlist bl;
-    mon->store->get_bl_sn_safe(bl, "osdmap", e);
+    mon->osdmon()->get_version(e, bl);
+
     assert(bl.length());
     OSDMap::Incremental inc(bl);
     for (map<int32_t,uint32_t>::iterator p = inc.new_weight.begin();
@@ -888,7 +911,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       (!session->caps.get_allow_all() &&
        !session->caps.check_privileges(PAXOS_PGMAP, MON_CAP_R) &&
        !mon->_allowed_command(session, m->cmd))) {
-    mon->reply_command(m, -EACCES, "access denied", rdata, paxos->get_version());
+    mon->reply_command(m, -EACCES, "access denied", rdata, get_version());
     return true;
   }
 
@@ -1083,7 +1106,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
   if (r != -1) {
     string rs;
     getline(ss, rs);
-    mon->reply_command(m, r, rs, rdata, paxos->get_version());
+    mon->reply_command(m, r, rs, rdata, get_version());
     return true;
   } else
     return false;
@@ -1103,7 +1126,7 @@ bool PGMonitor::prepare_command(MMonCommand *m)
       (!session->caps.get_allow_all() &&
        !session->caps.check_privileges(PAXOS_PGMAP, MON_CAP_W) &&
        !mon->_allowed_command(session, m->cmd))) {
-    mon->reply_command(m, -EACCES, "access denied", paxos->get_version());
+    mon->reply_command(m, -EACCES, "access denied", get_version());
     return true;
   }
 
@@ -1132,7 +1155,7 @@ bool PGMonitor::prepare_command(MMonCommand *m)
     }
     ss << "pg " << m->cmd[2] << " now creating, ok";
     getline(ss, rs);
-    paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+    paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
     return true;
   }
   else if (m->cmd.size() > 1 && m->cmd[1] == "set_full_ratio") {
@@ -1148,7 +1171,7 @@ bool PGMonitor::prepare_command(MMonCommand *m)
       goto out;
     }
     pending_inc.full_ratio = n;
-    paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+    paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
     return true;
   }
   else if (m->cmd.size() > 1 && m->cmd[1] == "set_nearfull_ratio") {
@@ -1164,7 +1187,7 @@ bool PGMonitor::prepare_command(MMonCommand *m)
       goto out;
     }
     pending_inc.nearfull_ratio = n;
-    paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+    paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
     return true;
   }
 
@@ -1172,7 +1195,7 @@ bool PGMonitor::prepare_command(MMonCommand *m)
   getline(ss, rs);
   if (r < 0 && rs.length() == 0)
     rs = cpp_strerror(r);
-  mon->reply_command(m, r, rs, paxos->get_version());
+  mon->reply_command(m, r, rs, get_version());
   return false;
 }
 
