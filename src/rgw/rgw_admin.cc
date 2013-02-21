@@ -63,6 +63,8 @@ void _usage()
   cerr << "  object unlink              unlink object from bucket index\n";
   cerr << "  region info                show region info\n";
   cerr << "  region list                list all regions\n";
+  cerr << "  region set                 set region info\n";
+  cerr << "  region default             set default region\n";
   cerr << "  zone info                  show zone params info\n";
   cerr << "  pool add                   add an existing pool for data placement\n";
   cerr << "  pool rm                    remove an existing pool from data placement set\n";
@@ -169,6 +171,8 @@ enum {
   OPT_GC_PROCESS,
   OPT_REGION_INFO,
   OPT_REGION_LIST,
+  OPT_REGION_SET,
+  OPT_REGION_DEFAULT,
   OPT_ZONE_INFO,
   OPT_ZONE_SET,
   OPT_CAPS_ADD,
@@ -284,6 +288,10 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_REGION_INFO;
     if (strcmp(cmd, "list") == 0)
       return OPT_REGION_LIST;
+    if (strcmp(cmd, "set") == 0)
+      return OPT_REGION_SET;
+    if (strcmp(cmd, "default") == 0)
+      return OPT_REGION_DEFAULT;
   } else if (strcmp(prev_cmd, "zone") == 0) {
     if (strcmp(cmd, "info") == 0)
       return OPT_ZONE_INFO;
@@ -637,7 +645,8 @@ int main(int argc, char **argv)
 
   RGWStreamFlusher f(formatter, cout);
 
-  bool raw_storage_op = (opt_cmd == OPT_REGION_INFO || opt_cmd == OPT_REGION_LIST);
+  bool raw_storage_op = (opt_cmd == OPT_REGION_INFO || opt_cmd == OPT_REGION_LIST ||
+                         opt_cmd == OPT_REGION_SET || opt_cmd == OPT_REGION_DEFAULT);
 
 
   if (raw_storage_op) {
@@ -668,6 +677,10 @@ int main(int argc, char **argv)
     if (opt_cmd == OPT_REGION_LIST) {
       RGWRegion region;
       int ret = region.init(g_ceph_context, store, false);
+      if (ret < 0) {
+	cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
+	return -ret;
+      }
 
       list<string> regions;
       ret = store->list_regions(regions);
@@ -686,6 +699,41 @@ int main(int argc, char **argv)
       formatter->close_section();
       formatter->flush(cout);
       cout << std::endl;
+    }
+    if (opt_cmd == OPT_REGION_SET) {
+      RGWRegion region;
+      int ret = region.init(g_ceph_context, store, false);
+      if (ret < 0) {
+	cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
+	return -ret;
+      }
+      ret = read_decode_json(infile, region);
+      if (ret < 0) {
+        return 1;
+      }
+
+      ret = region.store_info(false);
+      if (ret < 0) {
+        cerr << "ERROR: couldn't store zone info: " << cpp_strerror(-ret) << std::endl;
+        return 1;
+      }
+
+      encode_json("region", region, formatter);
+      formatter->flush(cout);
+    }
+    if (opt_cmd == OPT_REGION_DEFAULT) {
+      RGWRegion region;
+      int ret = region.init(g_ceph_context, store);
+      if (ret < 0) {
+	cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
+	return -ret;
+      }
+
+      ret = region.set_as_default();
+      if (ret < 0) {
+	cerr << "failed to set region as default: " << cpp_strerror(-ret) << std::endl;
+	return -ret;
+      }
     }
 
     return 0;
