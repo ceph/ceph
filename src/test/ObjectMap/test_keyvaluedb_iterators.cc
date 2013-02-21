@@ -38,7 +38,7 @@ public:
     assert(!store_path.empty());
 
     LevelDBStore *db_ptr = new LevelDBStore(store_path);
-    assert(!db_ptr->init(std::cerr));
+    assert(!db_ptr->create_and_open(std::cerr));
     db.reset(db_ptr);
     mock.reset(new KeyValueDBMemory());
   }

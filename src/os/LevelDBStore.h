@@ -21,11 +21,20 @@
 class LevelDBStore : public KeyValueDB {
   string path;
   boost::scoped_ptr<leveldb::DB> db;
+
+  int init(ostream &out, bool create_if_missing);
+
 public:
   LevelDBStore(const string &path) : path(path) {}
 
   /// Opens underlying db
-  int init(ostream &out);
+  int open(ostream &out) {
+    return init(out, false);
+  }
+  /// Creates underlying db if missing and opens it
+  int create_and_open(ostream &out) {
+    return init(out, true);
+  }
 
   class LevelDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:

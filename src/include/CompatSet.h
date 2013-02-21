@@ -52,7 +52,10 @@ struct CompatSet {
 	names.erase(f);
 	mask &= ~(1<<f);
       }
-    }      
+    }
+    void remove(Feature f) {
+      remove(f.id);
+    }
 
     void encode(bufferlist& bl) const {
       /* See below, mask always has the lowest bit set in memory, but
