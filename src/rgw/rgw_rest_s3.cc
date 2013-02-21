@@ -71,7 +71,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
 {
   const char *content_type = NULL;
   string content_type_str;
-  int orig_ret = ret;
+  int req_state = ret;
   map<string, string> response_attrs;
   map<string, string>::iterator riter;
 
@@ -132,9 +132,9 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
   }
 
   if (partial_content && !ret)
-    ret = STATUS_PARTIAL_CONTENT;
+    req_state = STATUS_PARTIAL_CONTENT;
 done:
-  set_req_state_err(s, ret);
+  set_req_state_err(s, req_state);
 
   dump_errno(s);
 
@@ -148,7 +148,7 @@ done:
   sent_header = true;
 
 send_data:
-  if (get_data && !orig_ret) {
+  if (get_data && !ret) {
     int r = s->cio->write(bl.c_str() + bl_ofs, bl_len);
     if (r < 0)
       return r;
