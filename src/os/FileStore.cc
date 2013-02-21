@@ -3013,7 +3013,7 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
     if (r < 0)
       goto out3;
 
-    r = _setattrs(cid, newoid, aset, spos);
+    r = _fsetattrs(n, aset);
     if (r < 0)
       goto out3;
   }
