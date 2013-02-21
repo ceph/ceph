@@ -102,15 +102,28 @@ def install_debs(ctx, debs, branch, flavor):
                 ctx, remote, debs, branch, flavor)
 
 def _remove_deb(remote, debs):
-    args=[
-        'sudo', 'apt-get', '-y', '--force-yes', 'purge',
-        ]
-    args.extend(debs)
-    args.extend([
-            run.Raw('||'),
-            'true'
+    # first ask nicely
+    for d in debs:
+        remote.run(
+            args=[
+                'sudo', 'apt-get', '-y', '--force-yes', 'purge', d,
+                run.Raw('||'),
+                'true',
+                ])
+    # mop up anything that is broken
+    remote.run(
+        args=[
+            'dpkg', '-l',
+            run.Raw('|'),
+            'grep', '^.HR',
+            run.Raw('|'),
+            'awk', '{print $2}',
+            run.Raw('|'),
+            'sudo',
+            'xargs', '--no-run-if-empty',
+            'dpkg', '-P', '--force-remove-reinstreq',
             ])
-    remote.run(args=args)
+    # then let apt clean up
     remote.run(
         args=[
             'sudo', 'apt-get', '-y', '--force-yes',
