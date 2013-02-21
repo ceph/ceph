@@ -24,6 +24,7 @@
     object rm                  remove object
     object unlink              unlink object from bucket index
     region info                show region info
+    region list                list all regions
     zone info                  show zone params info
     pool add                   add an existing pool for data placement
     pool rm                    remove an existing pool from data placement set

@@ -62,6 +62,7 @@ void _usage()
   cerr << "  object rm                  remove object\n";
   cerr << "  object unlink              unlink object from bucket index\n";
   cerr << "  region info                show region info\n";
+  cerr << "  region list                list all regions\n";
   cerr << "  zone info                  show zone params info\n";
   cerr << "  pool add                   add an existing pool for data placement\n";
   cerr << "  pool rm                    remove an existing pool from data placement set\n";
@@ -167,6 +168,7 @@ enum {
   OPT_GC_LIST,
   OPT_GC_PROCESS,
   OPT_REGION_INFO,
+  OPT_REGION_LIST,
   OPT_ZONE_INFO,
   OPT_ZONE_SET,
   OPT_CAPS_ADD,
@@ -280,6 +282,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "region") == 0) {
     if (strcmp(cmd, "info") == 0)
       return OPT_REGION_INFO;
+    if (strcmp(cmd, "list") == 0)
+      return OPT_REGION_LIST;
   } else if (strcmp(prev_cmd, "zone") == 0) {
     if (strcmp(cmd, "info") == 0)
       return OPT_ZONE_INFO;
@@ -633,7 +637,7 @@ int main(int argc, char **argv)
 
   RGWStreamFlusher f(formatter, cout);
 
-  bool raw_storage_op = (opt_cmd == OPT_REGION_INFO);
+  bool raw_storage_op = (opt_cmd == OPT_REGION_INFO || opt_cmd == OPT_REGION_LIST);
 
 
   if (raw_storage_op) {
@@ -654,9 +658,32 @@ int main(int argc, char **argv)
       int ret = region.init(g_ceph_context, store);
       if (ret < 0) {
         cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
+	return -ret;
       }
 
       encode_json("region", region, formatter);
+      formatter->flush(cout);
+      cout << std::endl;
+    }
+    if (opt_cmd == OPT_REGION_LIST) {
+      RGWRegion region;
+      int ret = region.init(g_ceph_context, store, false);
+
+      list<string> regions;
+      ret = store->list_regions(regions);
+      if (ret < 0) {
+        cerr << "failed to list regions: " << cpp_strerror(-ret) << std::endl;
+	return -ret;
+      }
+      RGWDefaultRegionInfo default_region;
+      ret = region.read_default(default_region);
+      if (ret < 0 && ret != -ENOENT) {
+	cerr << "could not determine default region: " << cpp_strerror(-ret) << std::endl;
+      }
+      formatter->open_object_section("regions_list");
+      encode_json("default_info", default_region, formatter);
+      encode_json("regions", regions, formatter);
+      formatter->close_section();
       formatter->flush(cout);
       cout << std::endl;
     }
