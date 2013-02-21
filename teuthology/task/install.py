@@ -157,9 +157,11 @@ def install(ctx, config):
         'radosgw',
         'radosgw-dbg',
         'python-ceph',
+        'libcephfs1',
+        'libcephfs1-dbg',
         ]
     # install lib deps (so we explicitly specify version), but do not
-    # uninstall them, as 
+    # uninstall them, as other packages depend on them (e.g., kvm)
     debs_install = debs + [
         'librados2',
         'librados2-dbg',
