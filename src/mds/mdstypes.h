@@ -421,7 +421,7 @@ struct inode_t {
 	      truncate_pending(0),
 	      time_warp_seq(0),
 	      version(0), file_data_version(0), xattr_version(0), last_renamed_version(0) { 
-    memset(&layout, 0, sizeof(layout));
+    clear_layout();
     memset(&dir_layout, 0, sizeof(dir_layout));
   }
 
@@ -439,6 +439,19 @@ struct inode_t {
     truncate_size = size;
     truncate_seq++;
     truncate_pending++;
+  }
+
+  bool has_layout() const {
+    // why on earth is there no converse of memchr() in string.h?
+    const char *p = (const char *)&layout;
+    for (size_t i = 0; i < sizeof(layout); i++)
+      if (p[i] != '\0')
+	return true;
+    return false;
+  }
+
+  void clear_layout() {
+    memset(&layout, 0, sizeof(layout));
   }
 
   uint64_t get_layout_size_increment() {

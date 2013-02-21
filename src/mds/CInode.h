@@ -63,33 +63,6 @@ struct cinode_lock_info_t {
 extern cinode_lock_info_t cinode_lock_info[];
 extern int num_cinode_locks;
 
-/**
- * Default file layout stuff. This lets us set a default file layout on
- * a directory inode that all files in its tree will use on creation.
- */
-struct default_file_layout {
-
-  ceph_file_layout layout;
-
-  void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(layout, bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    if (struct_v != 1) { //uh-oh
-      derr << "got default layout I don't understand!" << dendl;
-      assert(0);
-    }
-    ::decode(layout, bl);
-  }
-};
-WRITE_CLASS_ENCODER(default_file_layout);
-
-
 // cached inode wrapper
 class CInode : public MDSCacheObject {
   /*
@@ -238,8 +211,6 @@ public:
   //bool hack_accessed;
   //utime_t hack_load_stamp;
 
-  default_file_layout *default_layout;
-
   /**
    * Projection methods, used to store inode changes until they have been journaled,
    * at which point they are popped.
@@ -257,14 +228,13 @@ public:
     inode_t *inode;
     map<string,bufferptr> *xattrs;
     sr_t *snapnode;
-    default_file_layout *dir_layout;
 
-    projected_inode_t() : inode(NULL), xattrs(NULL), snapnode(NULL), dir_layout(NULL) {}
-    projected_inode_t(inode_t *in, sr_t *sn) : inode(in), xattrs(NULL), snapnode(sn),
-        dir_layout(NULL) {}
-    projected_inode_t(inode_t *in, map<string, bufferptr> *xp = NULL, sr_t *sn = NULL,
-                      default_file_layout *dl = NULL) :
-      inode(in), xattrs(xp), snapnode(sn), dir_layout(dl) {}
+    projected_inode_t()
+      : inode(NULL), xattrs(NULL), snapnode(NULL) {}
+    projected_inode_t(inode_t *in, sr_t *sn)
+      : inode(in), xattrs(NULL), snapnode(sn) {}
+    projected_inode_t(inode_t *in, map<string, bufferptr> *xp = NULL, sr_t *sn = NULL)
+      : inode(in), xattrs(xp), snapnode(sn) {}
   };
   list<projected_inode_t*> projected_nodes;   // projected values (only defined while dirty)
   
@@ -276,21 +246,6 @@ public:
       return NULL;
     else
       return projected_nodes.back();
-  }
-
-  ceph_file_layout *get_projected_dir_layout() {
-    if (!inode.is_dir())
-      return NULL;
-    if (projected_nodes.empty()) {
-      if (default_layout)
-        return &default_layout->layout;
-      else
-        return NULL;
-    }
-    else if (projected_nodes.back()->dir_layout)
-      return &projected_nodes.back()->dir_layout->layout;
-    else
-      return NULL;
   }
 
   version_t get_projected_version() {
@@ -466,7 +421,6 @@ private:
     snaprealm(0), containing_realm(0),
     first(f), last(l),
     last_journaled(0), //last_open_journaled(0), 
-    default_layout(NULL),
     //hack_accessed(true),
     stickydir_ref(0),
     parent(0),
@@ -578,7 +532,7 @@ private:
   unsigned encode_parent_mutation(ObjectOperation& m);
 
   void encode_store(bufferlist& bl) {
-    __u8 struct_v = 2;
+    __u8 struct_v = 3;
     ::encode(struct_v, bl);
     ::encode(inode, bl);
     if (is_symlink())
@@ -589,11 +543,6 @@ private:
     encode_snap_blob(snapbl);
     ::encode(snapbl, bl);
     ::encode(old_inodes, bl);
-    if (inode.is_dir()) {
-      ::encode((default_layout ? true : false), bl);
-      if (default_layout)
-        ::encode(*default_layout, bl);
-    }
   }
   void decode_store(bufferlist::iterator& bl) {
     __u8 struct_v;
@@ -607,13 +556,12 @@ private:
     ::decode(snapbl, bl);
     decode_snap_blob(snapbl);
     ::decode(old_inodes, bl);
-    if (struct_v >= 2 && inode.is_dir()) {
+    if (struct_v == 2 && inode.is_dir()) {
       bool default_layout_exists;
       ::decode(default_layout_exists, bl);
       if (default_layout_exists) {
-        delete default_layout;
-        default_layout = new default_file_layout;
-        ::decode(*default_layout, bl);
+	::decode(struct_v, bl);
+	::decode(inode.layout, bl);
       }
     }
   }
@@ -630,11 +578,6 @@ private:
     
     _encode_base(bl);
     _encode_locks_state_for_replica(bl);
-    if (inode.is_dir()) {
-      ::encode((default_layout ? true : false), bl);
-      if (default_layout)
-        ::encode(*default_layout, bl);
-    }
   }
   void decode_replica(bufferlist::iterator& p, bool is_new) {
     __u32 nonce;
@@ -643,15 +586,6 @@ private:
     
     _decode_base(p);
     _decode_locks_state(p, is_new);
-    if (inode.is_dir()) {
-      bool default_layout_exists;
-      ::decode(default_layout_exists, p);
-      if (default_layout_exists) {
-        delete default_layout;
-        default_layout = new default_file_layout;
-        ::decode(*default_layout, p);
-      }
-    }
   }
 
 

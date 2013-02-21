@@ -155,8 +155,8 @@ void Locker::include_snap_rdlocks_wlayout(set<SimpleLock*>& rdlocks, CInode *in,
     rdlocks.insert(&t->snaplock);
     if (!found_layout) {
       rdlocks.insert(&t->policylock);
-      if (t->get_projected_dir_layout()) {
-        *layout = t->get_projected_dir_layout();
+      if (t->get_projected_inode()->has_layout()) {
+        *layout = &t->get_projected_inode()->layout;
         found_layout = true;
       }
     }

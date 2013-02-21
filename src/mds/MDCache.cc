@@ -312,9 +312,8 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
 CInode *MDCache::create_root_inode()
 {
   CInode *i = create_system_inode(MDS_INO_ROOT, S_IFDIR|0755);
-  i->default_layout = new struct default_file_layout;
-  i->default_layout->layout = default_file_layout;
-  i->default_layout->layout.fl_pg_pool = mds->mdsmap->get_data_pg_pool();
+  i->inode.layout = default_file_layout;
+  i->inode.layout.fl_pg_pool = mds->mdsmap->get_data_pg_pool();
   return i;
 }
 

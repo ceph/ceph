@@ -313,14 +313,11 @@ inode_t *CInode::project_inode(map<string,bufferptr> *px)
     projected_nodes.push_back(new projected_inode_t(new inode_t(inode)));
     if (px)
       *px = xattrs;
-    projected_nodes.back()->dir_layout = default_layout;
   } else {
-    default_file_layout *last_dl = projected_nodes.back()->dir_layout;
     projected_nodes.push_back(new projected_inode_t(
         new inode_t(*projected_nodes.back()->inode)));
     if (px)
       *px = *get_projected_xattrs();
-    projected_nodes.back()->dir_layout = last_dl;
   }
   projected_nodes.back()->xattrs = px;
   dout(15) << "project_inode " << projected_nodes.back()->inode << dendl;
@@ -339,11 +336,6 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
   if (px) {
     xattrs = *px;
     delete px;
-  }
-
-  if (projected_nodes.front()->dir_layout != default_layout) {
-    delete default_layout;
-    default_layout = projected_nodes.front()->dir_layout;
   }
 
   if (projected_nodes.front()->snapnode)
@@ -1111,12 +1103,14 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     
   case CEPH_LOCK_IFILE:
     if (is_auth()) {
-      ::encode(inode.layout, bl);
-      ::encode(inode.size, bl);
       ::encode(inode.mtime, bl);
       ::encode(inode.atime, bl);
       ::encode(inode.time_warp_seq, bl);
-      ::encode(inode.client_ranges, bl);
+      if (!is_dir()) {
+	::encode(inode.layout, bl);
+	::encode(inode.size, bl);
+	::encode(inode.client_ranges, bl);
+      }
     } else {
       bool dirty = filelock.is_dirty();
       ::encode(dirty, bl);
@@ -1198,9 +1192,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 
   case CEPH_LOCK_IPOLICY:
     if (inode.is_dir()) {
-      ::encode((default_layout ? true : false), bl);
-      if (default_layout)
-        encode(*default_layout, bl);
+      ::encode(inode.layout, bl);
     }
     break;
   
@@ -1294,12 +1286,14 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   case CEPH_LOCK_IFILE:
     if (!is_auth()) {
-      ::decode(inode.layout, p);
-      ::decode(inode.size, p);
       ::decode(inode.mtime, p);
       ::decode(inode.atime, p);
       ::decode(inode.time_warp_seq, p);
-      ::decode(inode.client_ranges, p);
+      if (!is_dir()) {
+	::decode(inode.layout, p);
+	::decode(inode.size, p);
+	::decode(inode.client_ranges, p);
+      }
     } else {
       bool replica_dirty;
       ::decode(replica_dirty, p);
@@ -1441,13 +1435,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   case CEPH_LOCK_IPOLICY:
     if (inode.is_dir()) {
-      bool default_layout_exists;
-      ::decode(default_layout_exists, p);
-      if (default_layout_exists) {
-        delete default_layout;
-        default_layout = new default_file_layout;
-        decode(*default_layout, p);
-      }
+      ::decode(inode.layout, p);
     }
     break;
 
@@ -2661,16 +2649,10 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
   // file
   i = pfile ? pi:oi;
-  if (is_file()) {
-    e.layout = i->layout;
-  } else if (is_dir()) {
-    ceph_file_layout *l = ppolicy ? get_projected_dir_layout() : ( default_layout ? &default_layout->layout : NULL );
-    if (l)
-      e.layout = *l;
-    else
-      memset(&e.layout, 0, sizeof(e.layout));
+  if (is_dir()) {
+    e.layout = (ppolicy ? pi : oi)->layout;
   } else {
-    memset(&e.layout, 0, sizeof(e.layout));
+    e.layout = i->layout;
   }
   e.size = i->size;
   e.truncate_seq = i->truncate_seq;
