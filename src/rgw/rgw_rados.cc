@@ -48,8 +48,8 @@ static string dir_oid_prefix = ".dir.";
 static string default_storage_pool = ".rgw.buckets";
 static string avail_pools = ".pools.avail";
 
-static string zone_info_oid = "zone_info";
-static string region_info_oid_prefix = "region_info";
+static string zone_info_oid_prefix = "zone_info.";
+static string region_info_oid_prefix = "region_info.";
 
 static string default_region_info_oid = "default.region";
 
@@ -166,7 +166,7 @@ int RGWRegion::init(CephContext *_cct, RGWRados *_store, bool setup_region)
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
 
-  string oid = region_info_oid_prefix + "." + name;
+  string oid = region_info_oid_prefix + name;
 
   int ret = rgw_get_obj(store, NULL, pool, oid, bl);
   if (ret < 0) {
@@ -196,7 +196,7 @@ int RGWRegion::create_default()
   RGWZoneParams zone_params;
   zone_params.name = zone_name;
   zone_params.init_default();
-  int r = zone_params.store_info(cct, store);
+  int r = zone_params.store_info(cct, store, *this);
   if (r < 0) {
     derr << "error storing zone params: " << cpp_strerror(-r) << dendl;
     return r;
@@ -217,7 +217,7 @@ int RGWRegion::store_info(bool exclusive)
 
   rgw_bucket pool(pool_name.c_str());
 
-  string oid = region_info_oid_prefix + "." + name;
+  string oid = region_info_oid_prefix + name;
 
   bufferlist bl;
   ::encode(*this, bl);
@@ -242,31 +242,39 @@ void RGWZoneParams::init_default()
   user_uid_pool = ".users.uid";
 }
 
-string RGWZoneParams::get_pool_name(CephContext *cct, const string& zone_name)
+string RGWZoneParams::get_pool_name(CephContext *cct)
 {
   string pool_name = cct->_conf->rgw_zone_root_pool;
   if (pool_name.empty()) {
     pool_name = RGW_DEFAULT_ZONE_ROOT_POOL;
-    if (!zone_name.empty()) {
-      pool_name.append("." + zone_name);
-    }
   }
   return pool_name;
 }
 
-int RGWZoneParams::init(CephContext *cct, RGWRados *store, bool create_zone)
+void RGWZoneParams::init_name(CephContext *cct, RGWRegion& region)
 {
   name = cct->_conf->rgw_zone;
-  string pool_name = get_pool_name(cct, name);
+
+  if (name.empty()) {
+    name = region.master_zone;
+
+    if (name.empty()) {
+      name = "default";
+    }
+  }
+}
+
+int RGWZoneParams::init(CephContext *cct, RGWRados *store, RGWRegion& region)
+{
+  init_name(cct, region);
+
+  string pool_name = get_pool_name(cct);
 
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
 
-  int ret = rgw_get_obj(store, NULL, pool, zone_info_oid, bl);
-  if (ret == -ENOENT && create_zone) {
-    init_default();
-    return 0; // don't try to store obj, we're not fully initialized yet
-  }
+  string oid = zone_info_oid_prefix + name;
+  int ret = rgw_get_obj(store, NULL, pool, oid, bl);
   if (ret < 0)
     return ret;
 
@@ -274,22 +282,25 @@ int RGWZoneParams::init(CephContext *cct, RGWRados *store, bool create_zone)
     bufferlist::iterator iter = bl.begin();
     ::decode(*this, iter);
   } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: failed to decode zone info from " << pool << ":" << zone_info_oid << dendl;
+    ldout(cct, 0) << "ERROR: failed to decode zone info from " << pool << ":" << oid << dendl;
     return -EIO;
   }
 
   return 0;
 }
 
-int RGWZoneParams::store_info(CephContext *cct, RGWRados *store)
+int RGWZoneParams::store_info(CephContext *cct, RGWRados *store, RGWRegion& region)
 {
-  string pool_name = get_pool_name(cct, name);
+  init_name(cct, region);
+
+  string pool_name = get_pool_name(cct);
 
   rgw_bucket pool(pool_name.c_str());
+  string oid = zone_info_oid_prefix + name;
 
   bufferlist bl;
   ::encode(*this, bl);
-  int ret = rgw_put_system_obj(store, pool, zone_info_oid, bl.c_str(), bl.length(), false, NULL);
+  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL);
 
   return ret;
 }
@@ -386,7 +397,7 @@ int RGWRados::init_complete()
   if (ret < 0)
     return ret;
 
-  ret = zone.init(cct, this, create_zone);
+  ret = zone.init(cct, this, region);
   if (ret < 0)
     return ret;
 
@@ -444,27 +455,41 @@ void RGWRados::finalize_watch()
   delete[] watchers;
 }
 
-int RGWRados::list_regions(list<string>& regions)
+int RGWRados::list_raw_prefixed_objs(string pool_name, const string& prefix, list<string>& result)
 {
-  string pool_name = RGWRegion::get_pool_name(cct);
-
   rgw_bucket pool(pool_name.c_str());
   bool is_truncated;
   RGWListRawObjsCtx ctx;
   do {
     vector<string> oids;
-    int r = list_raw_objects(pool, region_info_oid_prefix, 1000,
+    int r = list_raw_objects(pool, prefix, 1000,
 			     ctx, oids, &is_truncated);
     if (r < 0) {
       return r;
     }
     vector<string>::iterator iter;
     for (iter = oids.begin(); iter != oids.end(); ++iter) {
-      regions.push_back(iter->substr(region_info_oid_prefix.size() + 1));
+      string& val = *iter;
+      if (val.size() > prefix.size())
+        result.push_back(val.substr(prefix.size()));
     }
   } while (is_truncated);
 
   return 0;
+}
+
+int RGWRados::list_regions(list<string>& regions)
+{
+  string pool_name = RGWRegion::get_pool_name(cct);
+
+  return list_raw_prefixed_objs(pool_name, region_info_oid_prefix, regions);
+}
+
+int RGWRados::list_zones(list<string>& zones)
+{
+  string pool_name = RGWZoneParams::get_pool_name(cct);
+
+  return list_raw_prefixed_objs(pool_name, zone_info_oid_prefix, zones);
 }
 
 /**

@@ -24,10 +24,12 @@
     object rm                  remove object
     object unlink              unlink object from bucket index
     region info                show region info
-    region list                list all regions
+    regions list               list all regions set on this cluster
     region set                 set region info
     region default             set default region
-    zone info                  show zone params info
+    zone info                  show zone cluster params
+    zone set                   set zone cluster params
+    zone list                  list all zones set on this cluster
     pool add                   add an existing pool for data placement
     pool rm                    remove an existing pool from data placement set
     pools list                 list placement active set
