@@ -211,6 +211,14 @@ void librados::ObjectOperation::omap_cmp(
   o->omap_cmp(assertions, prval);
 }
 
+void librados::ObjectReadOperation::list_watchers(
+  list<obj_watch_t> *out_watchers,
+  int *prval)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->list_watchers(out_watchers, prval);
+}
+
 int librados::IoCtx::omap_get_vals(const std::string& oid,
                                    const std::string& start_after,
                                    const std::string& filter_prefix,
@@ -1016,6 +1024,20 @@ int librados::IoCtx::notify(const string& oid, uint64_t ver, bufferlist& bl)
 {
   object_t obj(oid);
   return io_ctx_impl->notify(obj, ver, bl);
+}
+
+int librados::IoCtx::list_watchers(const std::string& oid,
+                                   std::list<obj_watch_t> *out_watchers)
+{
+  ObjectReadOperation op;
+  int r;
+  op.list_watchers(out_watchers, &r);
+  bufferlist bl;
+  int ret = operate(oid, &op, &bl);
+  if (ret < 0)
+    return ret;
+
+  return r;
 }
 
 void librados::IoCtx::set_notify_timeout(uint32_t timeout)
