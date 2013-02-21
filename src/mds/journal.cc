@@ -67,6 +67,8 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
 
   dout(6) << "LogSegment(" << offset << ").try_to_expire" << dendl;
 
+  assert(g_conf->mds_kill_journal_expire_at != 1);
+
   // commit dirs
   for (elist<CDir*>::iterator p = new_dirfrags.begin(); !p.end(); ++p) {
     dout(20) << " new_dirfrag " << **p << dendl;
@@ -133,6 +135,8 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
     mds->locker->scatter_nudge(&in->nestlock, gather_bld.new_sub());
   }
 
+  assert(g_conf->mds_kill_journal_expire_at != 2);
+
   // open files
   if (!open_files.empty()) {
     assert(!mds->mdlog->is_capped()); // hmm FIXME
@@ -178,11 +182,15 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
     }
   }
 
+  assert(g_conf->mds_kill_journal_expire_at != 3);
+
   // backtraces to be stored/updated
   for (elist<BacktraceInfo*>::iterator p = update_backtraces.begin(); !p.end(); ++p) {
     BacktraceInfo *btinfo = *p;
     store_backtrace_update(mds, btinfo, gather_bld.new_sub());
   }
+
+  assert(g_conf->mds_kill_journal_expire_at != 4);
 
   // slave updates
   for (elist<MDSlaveUpdate*>::iterator p = slave_updates.begin(member_offset(MDSlaveUpdate,
@@ -254,6 +262,7 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
     dout(6) << "LogSegment(" << offset << ").try_to_expire waiting" << dendl;
     mds->mdlog->flush();
   } else {
+    assert(g_conf->mds_kill_journal_expire_at != 5);
     dout(6) << "LogSegment(" << offset << ").try_to_expire success" << dendl;
   }
 }
@@ -984,6 +993,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 
   assert(logseg);
 
+  assert(g_conf->mds_kill_journal_replay_at != 1);
+
   for (list<std::tr1::shared_ptr<fullbit> >::iterator p = roots.begin(); p != roots.end(); p++) {
     CInode *in = mds->mdcache->get_inode((*p)->inode.ino);
     bool isnew = in ? false:true;
@@ -1159,6 +1170,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	       (in->is_multiversion() && in->first > p->dnfirst));
       }
 
+      assert(g_conf->mds_kill_journal_replay_at != 2);
+
       // store backtrace for allocated inos (create, mkdir, symlink, mknod)
       if (allocated_ino || used_preallocated_ino) {
 	if (in->inode.is_dir()) {
@@ -1246,6 +1259,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       olddir = dir;
     }
   }
+
+  assert(g_conf->mds_kill_journal_replay_at != 3);
 
   if (renamed_dirino) {
     if (renamed_diri) {
@@ -1451,6 +1466,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 
   // update segment
   update_segment(logseg);
+
+  assert(g_conf->mds_kill_journal_replay_at != 4);
 }
 
 // -----------------------
