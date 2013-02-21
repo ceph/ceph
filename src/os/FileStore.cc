@@ -3013,7 +3013,7 @@ int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newo
     if (r < 0)
       goto out3;
 
-    r = _setattrs(cid, newoid, aset, spos);
+    r = _fsetattrs(n, aset);
     if (r < 0)
       goto out3;
   }
@@ -3720,6 +3720,27 @@ int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset, bool user_only)
   return 0;
 }
 
+int FileStore::_fsetattrs(int fd, map<string, bufferptr> &aset)
+{
+  for (map<string, bufferptr>::iterator p = aset.begin();
+       p != aset.end();
+       ++p) {
+    char n[CHAIN_XATTR_MAX_NAME_LEN];
+    get_attrname(p->first.c_str(), n, CHAIN_XATTR_MAX_NAME_LEN);
+    const char *val;
+    if (p->second.length())
+      val = p->second.c_str();
+    else
+      val = "";
+    // ??? Why do we skip setting all the other attrs if one fails?
+    int r = chain_fsetxattr(fd, n, val, p->second.length());
+    if (r < 0) {
+      derr << "FileStore::_setattrs: chain_setxattr returned " << r << dendl;
+      return r;
+    }
+  }
+  return 0;
+}
 
 // objects
 
@@ -3825,6 +3846,7 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
   map<string, bufferlist> omap_set;
   set<string> omap_remove;
   map<string, bufferptr> inline_set;
+  map<string, bufferptr> inline_to_set;
   int r = 0;
   int fd = lfn_open(cid, oid, 0);
   if (fd < 0) {
@@ -3869,32 +3891,26 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
       inline_set.insert(*p);
     }
 
-    const char *val;
-    if (p->second.length())
-      val = p->second.c_str();
-    else
-      val = "";
-    // ??? Why do we skip setting all the other attrs if one fails?
-    r = chain_fsetxattr(fd, n, val, p->second.length());
-    if (r < 0) {
-      derr << "FileStore::_setattrs: chain_setxattr returned " << r << dendl;
-      break;
-    }
+    inline_to_set.insert(*p);
+
   }
 
-  if (g_conf->filestore_xattr_use_omap) {
-    Index index;
-    int r = get_index(cid, &index);
-    if (r < 0) {
-      dout(10) << __func__ << " could not get index r = " << r << dendl;
-      goto out_close;
-    }
+  r = _fsetattrs(fd, inline_to_set);
+  if (r < 0)
+    return r;
+
+  if (omap_remove.size()) {
+    assert(g_conf->filestore_xattr_use_omap);
     r = object_map->remove_xattrs(oid, omap_remove, &spos);
     if (r < 0 && r != -ENOENT) {
       dout(10) << __func__ << " could not remove_xattrs r = " << r << dendl;
       assert(!m_filestore_fail_eio || r != -EIO);
       goto out_close;
     }
+  }
+  
+  if (omap_set.size()) {
+    assert(g_conf->filestore_xattr_use_omap);
     r = object_map->set_xattrs(oid, omap_set, &spos);
     if (r < 0) {
       dout(10) << __func__ << " could not set_xattrs r = " << r << dendl;
