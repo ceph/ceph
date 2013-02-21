@@ -463,7 +463,7 @@ def task(ctx, config):
     key.delete()
 
     # wait a bit to give the garbage collector time to cycle
-    sleep 15
+    time.sleep(15)
 
     (err, out) = rgwadmin(ctx, client, ['gc', 'list'])
 
