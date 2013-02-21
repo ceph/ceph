@@ -326,8 +326,15 @@ namespace librados
 			       std::map<std::string, bufferlist> *map,
 			       int *prval);
 
-  };
+    /**
+     * list_watchers: Get list watchers of object
+     *
+     * @param out_watchers [out] place returned values in out_watchers on completion
+     * @param prval [out] place error code in prval upon completion
+     */
+    void list_watchers(std::list<obj_watch_t> *out_watchers, int *prval);
 
+  };
 
   /* IoCtx : This is a context in which we can perform I/O.
    * It includes a Pool,
@@ -498,6 +505,7 @@ namespace librados
 	      librados::WatchCtx *ctx);
     int unwatch(const std::string& o, uint64_t handle);
     int notify(const std::string& o, uint64_t ver, bufferlist& bl);
+    int list_watchers(const std::string& o, std::list<obj_watch_t> *out_watchers);
     void set_notify_timeout(uint32_t timeout);
 
     // assert version for next sync operations
