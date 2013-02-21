@@ -19,6 +19,7 @@ This creates a connection so that you can interact with the server.
 		aws_access_key_id = access_key,
 		aws_secret_access_key = secret_key,
 		host = 'objects.dreamhost.com',
+                #is_secure=False,               # uncommmnt if you are not using ssl
 		calling_format = boto.s3.connection.OrdinaryCallingFormat(),
 		)
 
