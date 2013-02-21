@@ -3363,10 +3363,6 @@ void Server::handle_client_setlayout(MDRequest *mdr)
     reply_request(mdr, -EROFS);
     return;
   }
-  if(cur->is_base()) {
-    reply_request(mdr, -EINVAL);   // for now
-    return;
-  }
   if (cur->is_dir()) {
     reply_request(mdr, -EISDIR);
     return;
@@ -3853,10 +3849,6 @@ void Server::handle_client_removexattr(MDRequest *mdr)
 
   if (mdr->snapid != CEPH_NOSNAP) {
     reply_request(mdr, -EROFS);
-    return;
-  }
-  if (cur->is_base()) {
-    reply_request(mdr, -EINVAL);   // for now
     return;
   }
 
