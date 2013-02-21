@@ -3455,50 +3455,47 @@ void Server::handle_client_setdirlayout(MDRequest *mdr)
     return;
 
   // validate layout
-  file_layout_policy_t *layout = new file_layout_policy_t;
-  if (cur->get_projected_dir_layout())
-    layout->layout = *cur->get_projected_dir_layout();
+  inode_t *pi = cur->get_projected_inode();
+  ceph_file_layout layout;
+  if (pi->has_layout())
+    layout = pi->layout;
   else if (dir_layout)
-    layout->layout = *dir_layout;
+    layout = *dir_layout;
   else
-    layout->layout = mds->mdcache->default_file_layout;
+    layout = mds->mdcache->default_file_layout;
 
   if (req->head.args.setlayout.layout.fl_object_size > 0)
-    layout->layout.fl_object_size = req->head.args.setlayout.layout.fl_object_size;
+    layout.fl_object_size = req->head.args.setlayout.layout.fl_object_size;
   if (req->head.args.setlayout.layout.fl_stripe_unit > 0)
-    layout->layout.fl_stripe_unit = req->head.args.setlayout.layout.fl_stripe_unit;
+    layout.fl_stripe_unit = req->head.args.setlayout.layout.fl_stripe_unit;
   if (req->head.args.setlayout.layout.fl_stripe_count > 0)
-    layout->layout.fl_stripe_count=req->head.args.setlayout.layout.fl_stripe_count;
+    layout.fl_stripe_count=req->head.args.setlayout.layout.fl_stripe_count;
   if (req->head.args.setlayout.layout.fl_cas_hash > 0)
-    layout->layout.fl_cas_hash = req->head.args.setlayout.layout.fl_cas_hash;
+    layout.fl_cas_hash = req->head.args.setlayout.layout.fl_cas_hash;
   if (req->head.args.setlayout.layout.fl_object_stripe_unit > 0)
-    layout->layout.fl_object_stripe_unit = req->head.args.setlayout.layout.fl_object_stripe_unit;
+    layout.fl_object_stripe_unit = req->head.args.setlayout.layout.fl_object_stripe_unit;
   if (req->head.args.setlayout.layout.fl_pg_pool > 0) {
-    layout->layout.fl_pg_pool = req->head.args.setlayout.layout.fl_pg_pool;
-
+    layout.fl_pg_pool = req->head.args.setlayout.layout.fl_pg_pool;
     // make sure we have as new a map as the client
     if (req->get_mdsmap_epoch() > mds->mdsmap->get_epoch()) {
-      delete layout;
       mds->wait_for_mdsmap(req->get_mdsmap_epoch(), new C_MDS_RetryRequest(mdcache, mdr));
       return;
-    }
+    }  
   }
-  if (!ceph_file_layout_is_valid(&layout->layout)) {
+  if (!ceph_file_layout_is_valid(&layout)) {
     dout(10) << "bad layout" << dendl;
     reply_request(mdr, -EINVAL);
-    delete layout;
     return;
   }
-  if (!mds->mdsmap->is_data_pool(layout->layout.fl_pg_pool)) {
-    dout(10) << " invalid data pool " << layout->layout.fl_pg_pool << dendl;
+  if (!mds->mdsmap->is_data_pool(layout.fl_pg_pool)) {
+    dout(10) << " invalid data pool " << layout.fl_pg_pool << dendl;
     reply_request(mdr, -EINVAL);
-    delete layout;
     return;
   }
 
-  cur->project_inode();
-  cur->get_projected_node()->dir_layout = layout;
-  cur->get_projected_inode()->version = cur->pre_dirty();
+  pi = cur->project_inode();
+  pi->layout = layout;
+  pi->version = cur->pre_dirty();
 
   // log + wait
   mdr->ls = mdlog->get_current_segment();
@@ -3617,16 +3614,16 @@ void Server::handle_set_vxattr(MDRequest *mdr, CInode *cur,
 	return;
       }
 
-      file_layout_policy_t *dlayout = new file_layout_policy_t;
-      if (cur->get_projected_dir_layout())
-	dlayout->layout = *cur->get_projected_dir_layout();
+      ceph_file_layout layout;
+      if (cur->get_projected_inode()->has_layout())
+	layout = cur->get_projected_inode()->layout;
       else if (dir_layout)
-	dlayout->layout = *dir_layout;
+	layout = *dir_layout;
       else
-	dlayout->layout = mds->mdcache->default_file_layout;
+	layout = mds->mdcache->default_file_layout;
 
       rest = name.substr(name.find("layout"));
-      int r = parse_layout_vxattr(rest, value, &dlayout->layout);
+      int r = parse_layout_vxattr(rest, value, &layout);
       if (r < 0) {
 	if (r == -ENOENT) {
 	  if (!mdr->waited_for_osdmap) {
@@ -3648,7 +3645,7 @@ void Server::handle_set_vxattr(MDRequest *mdr, CInode *cur,
 	return;
 
       pi = cur->project_inode();
-      cur->get_projected_node()->dir_layout = dlayout;
+      cur->get_projected_inode()->layout = layout;
     } else {
       if (!cur->is_file()) {
 	reply_request(mdr, -EINVAL);
@@ -3718,7 +3715,7 @@ void Server::handle_remove_vxattr(MDRequest *mdr, CInode *cur,
       return;
     }
 
-    if (!cur->get_projected_dir_layout()) {
+    if (!cur->get_projected_inode()->has_layout()) {
       reply_request(mdr, -ENODATA);
       return;
     }
@@ -3728,7 +3725,7 @@ void Server::handle_remove_vxattr(MDRequest *mdr, CInode *cur,
       return;
 
     cur->project_inode();
-    cur->get_projected_node()->dir_layout = NULL;
+    cur->get_projected_inode()->clear_layout();
     cur->get_projected_inode()->version = cur->pre_dirty();
 
     // log + wait
