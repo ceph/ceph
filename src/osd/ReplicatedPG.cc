@@ -6040,6 +6040,10 @@ void ReplicatedPG::on_removal()
   dout(10) << "on_removal" << dendl;
   apply_and_flush_repops(false);
   context_registry_on_change();
+
+  clear_primary_state();
+  osd->remove_want_pg_temp(info.pgid);
+  cancel_recovery();
 }
 
 void ReplicatedPG::on_shutdown()
