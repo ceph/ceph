@@ -1392,10 +1392,10 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t ver,
   prepare_assert_ops(&wr);
   wr.watch(*cookie, ver, 1);
   bufferlist bl;
-  wc->linger_id = objecter->linger(
-    oid, oloc, wr, snap_seq, bl, NULL,
-    CEPH_OSD_FLAG_WRITE,
-    NULL, onfinish, &objver);
+  wc->linger_id = objecter->linger_mutate(oid, oloc, wr,
+					  snapc, ceph_clock_now(NULL), bl,
+					  0,
+					  NULL, onfinish, &objver);
   lock->Unlock();
 
   mylock.Lock();
@@ -1483,8 +1483,8 @@ int librados::IoCtxImpl::notify(const object_t& oid, uint64_t ver, bufferlist& b
   ::encode(timeout, inbl);
   ::encode(bl, inbl);
   rd.notify(cookie, ver, inbl);
-  wc->linger_id = objecter->linger(oid, oloc, rd, snap_seq, inbl, NULL,
-				   0, onack, NULL, &objver);
+  wc->linger_id = objecter->linger_read(oid, oloc, rd, snap_seq, inbl, NULL, 0,
+					onack, &objver);
   lock->Unlock();
 
   mylock.Lock();
