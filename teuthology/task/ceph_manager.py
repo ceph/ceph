@@ -332,7 +332,6 @@ class CephManager:
                         osdnum=osdnum,
                         command=args))
                 time.sleep(5)
-                max += 1
 
     def set_config(self, osdnum, **argdict):
         for k,v in argdict.iteritems():
