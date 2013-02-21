@@ -31,9 +31,80 @@ b 12v
 c 14v
 d
 e 12v
-
-
 */
+
+/**
+ * Paxos storage layout and behavior
+ *
+ * Currently, we use a key/value store to hold all the Paxos-related data, but
+ * it can logically be depicted as this:
+ *
+ *  paxos:
+ *    first_committed -> 1
+ *     last_committed -> 4
+ *		    1 -> value_1
+ *		    2 -> value_2
+ *		    3 -> value_3
+ *		    4 -> value_4
+ *
+ * Since we are relying on a k/v store supporting atomic transactions, we can
+ * guarantee that if 'last_committed' has a value of '4', then we have up to
+ * version 4 on the store, and no more than that; the same applies to
+ * 'first_committed', which holding '1' will strictly meaning that our lowest
+ * version is 1.
+ *
+ * Each version's value (value_1, value_2, ..., value_n) is a blob of data,
+ * incomprehensible to the Paxos. These values are proposed to the Paxos on
+ * propose_new_value() and each one is a transaction encoded in a bufferlist.
+ *
+ * The Paxos will write the value to disk, associating it with its version,
+ * but will take a step further: the value shall be decoded, and the operations
+ * on that transaction shall be applied during the same transaction that will
+ * write the value's encoded bufferlist to disk. This behavior ensures that
+ * whatever is being proposed will only be available on the store when it is
+ * applied by Paxos, which will then be aware of such new values, guaranteeing
+ * the store state is always consistent without requiring shady workarounds.
+ *
+ * So, let's say that FooMonitor proposes the following transaction, neatly
+ * encoded on a bufferlist of course:
+ *
+ *  Tx_Foo
+ *    put(foo, last_committed, 3)
+ *    put(foo, 3, foo_value_3)
+ *    erase(foo, 2)
+ *    erase(foo, 1)
+ *    put(foo, first_committed, 3)
+ *
+ * And knowing that the Paxos is proposed Tx_Foo as a bufferlist, once it is
+ * ready to commit, and assuming we are now committing version 5 of the Paxos,
+ * we will do something along the lines of:
+ *
+ *  Tx proposed_tx;
+ *  proposed_tx.decode(Tx_foo_bufferlist);
+ *
+ *  Tx our_tx;
+ *  our_tx.put(paxos, last_committed, 5);
+ *  our_tx.put(paxos, 5, Tx_foo_bufferlist);
+ *  our_tx.append(proposed_tx);
+ *
+ *  store_apply(our_tx);
+ *
+ * And the store should look like this after we apply 'our_tx':
+ *
+ *  paxos:
+ *    first_committed -> 1
+ *     last_committed -> 5
+ *		    1 -> value_1
+ *		    2 -> value_2
+ *		    3 -> value_3
+ *		    4 -> value_4
+ *		    5 -> Tx_foo_bufferlist
+ *  foo:
+ *    first_committed -> 3
+ *     last_committed -> 3
+ *		    3 -> foo_value_3
+ *
+ */
 
 #ifndef CEPH_MON_PAXOS_H
 #define CEPH_MON_PAXOS_H
@@ -49,10 +120,11 @@ e 12v
 #include "common/Timer.h"
 #include <errno.h>
 
+#include "MonitorDBStore.h"
+
 class Monitor;
 class MMonPaxos;
 class Paxos;
-
 
 // i am one state machine.
 /**
@@ -76,8 +148,7 @@ class Paxos {
   Monitor *mon;
 
   // my state machine info
-  int machine_id;
-  const char *machine_name;
+  const string paxos_name;
 
   friend class Monitor;
   friend class PaxosService;
@@ -95,16 +166,22 @@ public:
   /**
    * Leader/Peon is in Paxos' Recovery state
    */
-  const static int STATE_RECOVERING = 1;
+  const static int STATE_RECOVERING = 0x01;
   /**
    * Leader/Peon is idle, and the Peon may or may not have a valid lease.
    */
-  const static int STATE_ACTIVE     = 2;
+  const static int STATE_ACTIVE     = 0x02;
   /**
    * Leader/Peon is updating to a new value.
    */
-  const static int STATE_UPDATING   = 3;
- 
+  const static int STATE_UPDATING   = 0x04;
+  /**
+   * Leader is about to propose a new value, but hasn't gotten to do it yet.
+   */
+  const static int STATE_PREPARING  = 0x08;
+
+  const static int STATE_LOCKED     = 0x10;
+
   /**
    * Obtain state name from constant value.
    *
@@ -115,12 +192,26 @@ public:
    * @return The state's name.
    */
   static const char *get_statename(int s) {
-    switch (s) {
-    case STATE_RECOVERING: return "recovering";
-    case STATE_ACTIVE: return "active";
-    case STATE_UPDATING: return "updating";
-    default: assert(0); return 0;
+    stringstream ss;
+    if (s & STATE_RECOVERING) {
+      ss << "recovering";
+      assert(!(s & ~(STATE_RECOVERING|STATE_LOCKED)));
+    } else if (s & STATE_ACTIVE) {
+      ss << "active";
+      assert(s == STATE_ACTIVE);
+    } else if (s & STATE_UPDATING) {
+      ss << "updating";
+      assert(!(s & ~(STATE_UPDATING|STATE_LOCKED)));
+    } else if (s & STATE_PREPARING) {
+      ss << "preparing update";
+      assert(!(s & ~(STATE_PREPARING|STATE_LOCKED)));
+    } else {
+      assert(0 == "We shouldn't have gotten here!");
     }
+
+    if (s & STATE_LOCKED)
+      ss << " (locked)";
+    return ss.str().c_str();
   }
 
 private:
@@ -138,7 +229,7 @@ public:
    *
    * @return 'true' if we are on the Recovering state; 'false' otherwise.
    */
-  bool is_recovering() const { return state == STATE_RECOVERING; }
+  bool is_recovering() const { return (state & STATE_RECOVERING); }
   /**
    * Check if we are active.
    *
@@ -150,7 +241,10 @@ public:
    *
    * @return 'true' if we are on the Updating state; 'false' otherwise.
    */
-  bool is_updating() const { return state == STATE_UPDATING; }
+  bool is_updating() const { return (state & STATE_UPDATING); }
+
+  bool is_preparing() const { return (state & STATE_PREPARING); }
+  bool is_locked() const { return (state & STATE_LOCKED); }
 
 private:
   /**
@@ -219,10 +313,6 @@ private:
    */
   map<int,version_t> peer_last_committed;
   /**
-   * @todo Check out what 'slurping' is.
-   */
-  int slurping;
-  /**
    * @}
    */
 
@@ -260,11 +350,6 @@ private:
    * uncommitted values --, or if we're on a quorum of one.
    */
   list<Context*> waiting_for_readable;
-
-  /**
-   * Latest version written to the store after the latest commit.
-   */
-  version_t latest_stashed;
   /**
    * @}
    */
@@ -424,6 +509,10 @@ private:
    */
   list<Context*> waiting_for_commit;
   /**
+   *
+   */
+  list<Context*> proposals;
+  /**
    * @}
    */
 
@@ -438,6 +527,18 @@ private:
    * @}
    */
 
+  bool going_to_bootstrap;
+  /**
+   * Should be true if we have proposed to trim, or are in the middle of
+   * trimming; false otherwise.
+   */
+  bool going_to_trim;
+  /**
+   * If we have disabled trimming our state, this variable should have a
+   * value greater than zero, corresponding to the version we had at the time
+   * we disabled the trim.
+   */
+  version_t trim_disabled_version;
 
   /**
    * @defgroup Paxos_h_callbacks Callback classes.
@@ -512,10 +613,43 @@ private:
       paxos->lease_renew_timeout();
     }
   };
+
+  class C_Trimmed : public Context {
+    Paxos *paxos;
+  public:
+    C_Trimmed(Paxos *p) : paxos(p) { }
+    void finish(int r) {
+      paxos->going_to_trim = false;
+    }
+  };
+  /**
+   *
+   */
+public:
+  class C_Proposal : public Context {
+    Context *proposer_context;
+  public:
+    bufferlist bl;
+    // for debug purposes. Will go away. Soon.
+    bool proposed;
+    utime_t proposal_time;
+
+    C_Proposal(Context *c, bufferlist& proposal_bl) :
+	proposer_context(c),
+	bl(proposal_bl),
+        proposed(false),
+	proposal_time(ceph_clock_now(NULL))
+      { }
+
+    void finish(int r) {
+      if (proposer_context)
+        proposer_context->finish(r);
+    }
+  };
   /**
    * @}
    */
-
+private:
   /**
    * @defgroup Paxos_h_election_triggered Steps triggered by an election.
    *
@@ -634,7 +768,7 @@ private:
    *
    * @param value The value being proposed to the quorum
    */
-  void begin(bufferlist& value, version_t global_version);
+  void begin(bufferlist& value);
   /**
    * Accept or decline (by ignoring) a proposal from the Leader.
    *
@@ -841,23 +975,34 @@ private:
    */
   void warn_on_future_time(utime_t t, entity_name_t from);
 
+  /**
+   * Queue a new proposal by pushing it at the back of the queue; do not
+   * propose it.
+   *
+   * @param bl The bufferlist to be proposed
+   * @param onfinished The callback to be called once the proposal finishes
+   */
+  void queue_proposal(bufferlist& bl, Context *onfinished);
+  /**
+   * Begin proposing the Proposal at the front of the proposals queue.
+   */
+  void propose_queued();
+  void finish_proposal();
+
 public:
   /**
    * @param m A monitor
    * @param mid A machine id
    */
-  Paxos(Monitor *m,
-	int mid) : mon(m),
-		   machine_id(mid), 
-		   machine_name(get_paxos_name(mid)),
+  Paxos(Monitor *m, const string name) 
+		 : mon(m),
+		   paxos_name(name),
 		   state(STATE_RECOVERING),
 		   first_committed(0),
 		   last_pn(0),
 		   last_committed(0),
 		   accepted_pn(0),
 		   accepted_pn_from(0),
-		   slurping(0),
-		   latest_stashed(0),
 		   num_last(0),
 		   uncommitted_v(0), uncommitted_pn(0),
 		   collect_timeout_event(0),
@@ -865,13 +1010,22 @@ public:
 		   lease_ack_timeout_event(0),
 		   lease_timeout_event(0),
 		   accept_timeout_event(0),
-		   clock_drift_warned(0) { }
+		   clock_drift_warned(0),
+		   going_to_bootstrap(false),
+		   going_to_trim(false),
+		   trim_disabled_version(0) { }
 
-  const char *get_machine_name() const {
-    return machine_name;
+  const string get_name() const {
+    return paxos_name;
   }
 
+  bool is_bootstrapping() { return going_to_bootstrap; }
+  void prepare_bootstrap();
+
   void dispatch(PaxosServiceMessage *m);
+
+  void reapply_all_versions();
+  void apply_version(MonitorDBStore::Transaction &tx, version_t v);
 
   void init();
   /**
@@ -920,11 +1074,38 @@ public:
   void share_state(MMonPaxos *m, version_t peer_first_committed,
 		   version_t peer_last_committed);
   /**
-   * Store the state held on the message m into local, stable storage.
+   * Store on disk a state that was shared with us
+   *
+   * Basically, we received a set of version. Or just one. It doesn't matter.
+   * What matters is that we have to stash it in the store. So, we will simply
+   * write every single bufferlist into their own versions on our side (i.e.,
+   * onto paxos-related keys), and then we will decode those same bufferlists
+   * we just wrote and apply the transactions they hold. We will also update
+   * our first and last committed values to point to the new values, if need
+   * be. All all this is done tightly wrapped in a transaction to ensure we
+   * enjoy the atomicity guarantees given by our awesome k/v store.
    *
    * @param m A message
    */
   void store_state(MMonPaxos *m);
+  /**
+   * Helper function to decode a bufferlist into a transaction and append it
+   * to another transaction.
+   *
+   * This function is used during the Leader's commit and during the
+   * Paxos::store_state in order to apply the bufferlist's transaction onto
+   * the store.
+   *
+   * @param t The transaction to which we will append the operations
+   * @param bl A bufferlist containing an encoded transaction
+   */
+  void decode_append_transaction(MonitorDBStore::Transaction& t,
+				 bufferlist& bl) {
+    MonitorDBStore::Transaction vt;
+    bufferlist::iterator it = bl.begin();
+    vt.decode(it);
+    t.append(vt);
+  }
 
   /**
    * @todo This appears to be used only by the OSDMonitor, and I would say
@@ -949,23 +1130,76 @@ public:
    * Erase old states from stable storage.
    *
    * @param first The version we are trimming to
-   * @param force If specified, we may even erase the latest stashed version
-   *		  iif @p first is higher than that version.
    */
-  void trim_to(version_t first, bool force=false);
- 
+  void trim_to(version_t first);
   /**
-   * @defgroup Paxos_h_slurping_funcs Slurping-related functions
-   * @todo Discover what slurping is
-   * @{
+   * Erase old states from stable storage.
+   *
+   * @param t A transaction
+   * @param first The version we are trimming to
    */
-  void start_slurping();
-  void end_slurping();
-  bool is_slurping() { return slurping == 1; }
+  void trim_to(MonitorDBStore::Transaction *t, version_t first);
   /**
-   * @}
+   * Auxiliary function to erase states in the interval [from, to[ from stable
+   * storage.
+   *
+   * @param t A transaction
+   * @param from Bottom limit of the interval of versions to erase
+   * @param to Upper limit, not including, of the interval of versions to erase
    */
+  void trim_to(MonitorDBStore::Transaction *t, version_t from, version_t to);
+  /**
+   * Trim the Paxos state as much as we can.
+   */
+  void trim() {
+    assert(should_trim());
+    version_t trim_to_version = get_version() - g_conf->paxos_max_join_drift;
+    trim_to(trim_to_version);
+  }
+  /**
+   * Disable trimming
+   *
+   * This is required by the Monitor's store synchronization mechanisms
+   * to guarantee a consistent store state.
+   */
+  void trim_disable() {
+    if (!trim_disabled_version)
+      trim_disabled_version = get_version();
+  }
+  /**
+   * Enable trimming
+   */
+  void trim_enable();
+  /**
+   * Check if trimming has been disabled
+   *
+   * @returns true if trim has been disabled; false otherwise.
+   */
+  bool is_trim_disabled() { return (trim_disabled_version > 0); }
+  /**
+   * Check if we should trim.
+   *
+   * If trimming is disabled, we must take that into consideration and only
+   * return true if we are positively sure that we should trim soon.
+   *
+   * @returns true if we should trim; false otherwise.
+   */
+  bool should_trim() {
+    int available_versions = (get_version() - get_first_committed());
+    int maximum_versions =
+      (g_conf->paxos_max_join_drift + g_conf->paxos_trim_tolerance);
 
+    if (going_to_trim || (available_versions <= maximum_versions))
+      return false;
+
+    if (trim_disabled_version > 0) {
+      int disabled_versions = (get_version() - trim_disabled_version);
+      if (disabled_versions < g_conf->paxos_trim_disabled_max_versions)
+	return false;
+    }
+    return true;
+  }
+ 
   // read
   /**
    * @defgroup Paxos_h_read_funcs Read-related functions
@@ -1018,7 +1252,7 @@ public:
    * @param onreadable A callback
    */
   void wait_for_readable(Context *onreadable) {
-    //assert(!is_readable());
+    assert(!is_readable());
     waiting_for_readable.push_back(onreadable);
   }
   /**
@@ -1026,10 +1260,11 @@ public:
    */
 
   /**
-   * @warning This declaration is not implemented anywhere and appears to be
-   *	      just some lingering code.
+   * Check if we have a valid lease.
+   *
+   * @returns true if the lease is still valid; false otherwise.
    */
-  bool is_leader();
+  bool is_lease_valid();
   // write
   /**
    * @defgroup Paxos_h_write_funcs Write-related functions
@@ -1058,15 +1293,22 @@ public:
   }
 
   /**
+   * List all queued proposals
+   *
+   * @param out[out] Output Stream onto which we will output the list
+   *		     of queued proposals.
+   */
+  void list_proposals(ostream& out);
+  /**
    * Propose a new value to the Leader.
    *
    * This function enables the submission of a new value to the Leader, which
    * will trigger a new proposal.
    *
    * @param bl A bufferlist holding the value to be proposed
-   * @param oncommit A callback to be fired up once we finish committing bl
+   * @param onfinish A callback to be fired up once we finish the proposal
    */
-  bool propose_new_value(bufferlist& bl, Context *oncommit=0);
+  bool propose_new_value(bufferlist& bl, Context *onfinished=0);
   /**
    * Add oncommit to the back of the list of callbacks waiting for us to
    * finish committing.
@@ -1090,46 +1332,26 @@ public:
    */
 
   /**
-   * @defgroup Paxos_h_stash_funcs State values stashing-related functions
-   *
-   * If the state values are incrementals, it is useful to keep the latest
-   * copy of the complete structure.
-   *
-   * @{
-   */
-  /**
-   * Get the latest version onto stable storage.
-   *
-   * Keeping the latest version on a predefined location makes it easier to
-   * access, since we know we always have the latest version on the same
-   * place.
-   *
-   * @param v the latest version
-   * @param bl the latest version's value
-   */
-  void stash_latest(version_t v, bufferlist& bl);
-  /**
-   * Get the latest stashed version's value
-   *
-   * @param[out] bl the latest stashed version's value
-   * @return the latest stashed version
-   */
-  version_t get_stashed(bufferlist& bl);
-  /**
-   * Get the latest stashed version
-   *
-   * @return the latest stashed version
-   */
-  version_t get_stashed_version() { return latest_stashed; }
-  /**
    * @}
    */
-
-  /**
-   * @}
-   */
+ protected:
+  MonitorDBStore *get_store();
 };
 
+inline ostream& operator<<(ostream& out, Paxos::C_Proposal& p)
+{
+  string proposed = (p.proposed ? "proposed" : "unproposed");
+  out << " " << proposed
+      << " queued " << (ceph_clock_now(NULL) - p.proposal_time)
+      << " tx dump:\n";
+  MonitorDBStore::Transaction t;
+  bufferlist::iterator p_it = p.bl.begin();
+  t.decode(p_it);
+  JSONFormatter f(true);
+  t.dump(&f);
+  f.flush(out);
+  return out;
+}
 
 #endif
 

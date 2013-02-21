@@ -85,7 +85,7 @@ int main() {
   string strpath(path);
   std::cerr << "Using path: " << strpath << std::endl;
   LevelDBStore *store = new LevelDBStore(strpath);
-  assert(!store->init(std::cerr));
+  assert(!store->create_and_open(std::cerr));
   db.reset(store);
 
   verify(db.get());

@@ -24,6 +24,7 @@
 #include "osd/OSDMap.h"
 
 #include "MonitorStore.h"
+#include "MonitorDBStore.h"
 
 #include "msg/Messenger.h"
 
@@ -35,6 +36,7 @@
 #include "messages/MGenericMessage.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
+#include "messages/MMonSync.h"
 #include "messages/MMonProbe.h"
 #include "messages/MMonJoin.h"
 #include "messages/MMonPaxos.h"
@@ -81,6 +83,8 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon) {
 		<< "(" << mon->get_state_name() << ") e" << mon->monmap->get_epoch() << " ";
 }
 
+const string Monitor::MONITOR_NAME = "monitor";
+
 long parse_pos_long(const char *s, ostream *pss)
 {
   if (*s == '-' || *s == '+') {
@@ -103,8 +107,8 @@ long parse_pos_long(const char *s, ostream *pss)
   return r;
 }
 
-
-Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, MonMap *map) :
+Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
+		 Messenger *m, MonMap *map) :
   Dispatcher(cct_),
   name(nm),
   rank(-1), 
@@ -130,6 +134,15 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
   leader(0),
   quorum_features(0),
 
+  // trim & store sync
+  sync_role(SYNC_ROLE_NONE),
+  trim_lock("Monitor::trim_lock"),
+  trim_enable_timer(NULL),
+  sync_rng(getpid()),
+  sync_state(SYNC_STATE_NONE),
+  sync_leader(),
+  sync_provider(),
+
   timecheck_round(0),
   timecheck_event(NULL),
 
@@ -141,37 +154,20 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorStore *s, Messenger *m, Mo
 {
   rank = -1;
 
-  paxos_service[PAXOS_PGMAP] = new PGMonitor(this, add_paxos(PAXOS_PGMAP));
-  paxos_service[PAXOS_OSDMAP] = new OSDMonitor(this, add_paxos(PAXOS_OSDMAP));
-  // mdsmap should be added to the paxos vector after the osdmap
-  paxos_service[PAXOS_MDSMAP] = new MDSMonitor(this, add_paxos(PAXOS_MDSMAP));
-  paxos_service[PAXOS_LOG] = new LogMonitor(this, add_paxos(PAXOS_LOG));
-  paxos_service[PAXOS_MONMAP] = new MonmapMonitor(this, add_paxos(PAXOS_MONMAP));
-  paxos_service[PAXOS_AUTH] = new AuthMonitor(this, add_paxos(PAXOS_AUTH));
+  paxos = new Paxos(this, "paxos");
+
+  paxos_service[PAXOS_MDSMAP] = new MDSMonitor(this, paxos, "mdsmap");
+  paxos_service[PAXOS_MONMAP] = new MonmapMonitor(this, paxos, "monmap");
+  paxos_service[PAXOS_OSDMAP] = new OSDMonitor(this, paxos, "osdmap");
+  paxos_service[PAXOS_PGMAP] = new PGMonitor(this, paxos, "pgmap");
+  paxos_service[PAXOS_LOG] = new LogMonitor(this, paxos, "logm");
+  paxos_service[PAXOS_AUTH] = new AuthMonitor(this, paxos, "auth");
 
   mon_caps = new MonCaps();
   mon_caps->set_allow_all(true);
   mon_caps->text = "allow *";
 
   exited_quorum = ceph_clock_now(g_ceph_context);
-}
-
-Paxos *Monitor::add_paxos(int type)
-{
-  Paxos *p = new Paxos(this, type);
-  paxos.push_back(p);
-  return p;
-}
-
-Paxos *Monitor::get_paxos_by_name(const string& name)
-{
-  for (list<Paxos*>::iterator p = paxos.begin();
-       p != paxos.end();
-       ++p) {
-    if ((*p)->machine_name == name)
-      return *p;
-  }
-  return NULL;
 }
 
 PaxosService *Monitor::get_paxos_service_by_name(const string& name)
@@ -197,115 +193,11 @@ Monitor::~Monitor()
 {
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     delete *p;
-  for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
-    delete *p;
+  delete paxos;
   assert(session_map.sessions.empty());
   delete mon_caps;
 }
 
-void Monitor::recovered_leader(int id)
-{
-  dout(10) << "recovered_leader " << id << " " << get_paxos_name(id) << " (" << paxos_recovered << ")" << dendl;
-  assert(paxos_recovered.count(id) == 0);
-  paxos_recovered.insert(id);
-  if (paxos_recovered.size() == paxos.size()) {
-    dout(10) << "all paxos instances recovered, going writeable" << dendl;
-
-    if (!features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV) &&
-	(quorum_features & CEPH_FEATURE_MON_GV)) {
-      require_gv_ondisk();
-      require_gv_onwire();
-    }
-
-    for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++) {
-      if (!(*p)->is_active())
-	continue;
-      finish_contexts(g_ceph_context, (*p)->waiting_for_active);
-    }
-    for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++) {
-      if (!(*p)->is_active())
-	continue;
-      finish_contexts(g_ceph_context, (*p)->waiting_for_commit);
-    }
-    for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++) {
-      if (!(*p)->is_readable())
-	continue;
-      finish_contexts(g_ceph_context, (*p)->waiting_for_readable);
-    }
-    for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++) {
-      if (!(*p)->is_writeable())
-	continue;
-      finish_contexts(g_ceph_context, (*p)->waiting_for_writeable);
-    }
-  }
-}
-
-void Monitor::recovered_peon(int id)
-{
-  // unlike recovered_leader(), recovered_peon() can get called
-  // multiple times, because it is triggered by a paxos lease message,
-  // and the leader may send multiples of those out for a given paxos
-  // machine while it is waiting for another instance to recover.
-  if (paxos_recovered.count(id))
-    return;
-  dout(10) << "recovered_peon " << id << " " << get_paxos_name(id) << " (" << paxos_recovered << ")" << dendl;
-  paxos_recovered.insert(id);
-  if (paxos_recovered.size() == paxos.size()) {
-    dout(10) << "all paxos instances recovered/leased" << dendl;
-
-    if (!features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV) &&
-	(quorum_features & CEPH_FEATURE_MON_GV)) {
-      require_gv_ondisk();
-      require_gv_onwire();
-    }
-  }
-}
-
-void Monitor::require_gv_ondisk()
-{
-  dout(0) << "setting CEPH_MON_FEATURE_INCOMPAT_GV" << dendl;
-  features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_GV);
-  write_features();
-}
-
-void Monitor::require_gv_onwire()
-{
-  dout(10) << "require_gv_onwire" << dendl;
-  // require protocol feature bit of my peers
-  Messenger::Policy p = messenger->get_policy(entity_name_t::TYPE_MON);
-  p.features_required |= CEPH_FEATURE_MON_GV;
-  messenger->set_policy(entity_name_t::TYPE_MON, p);
-}
-
-version_t Monitor::get_global_paxos_version()
-{
-  // this should only be called when paxos becomes writeable, which is
-  // *after* everything settles after an election.
-  assert(is_all_paxos_recovered());
-
-  if ((quorum_features & CEPH_FEATURE_MON_GV) == 0) {
-    // do not sure issuing gv's until the entire quorum supports them.
-    // this way we synchronize the setting of the incompat GV ondisk
-    // feature with actually writing the values to the data store, and
-    // avoid having to worry about hybrid cases.
-    dout(10) << "get_global_paxos_version no-op; quorum does not support the feature" << dendl;
-    return 0;
-  }
-
-  if (global_version == 0) {
-    global_version =
-      osdmon()->paxos->get_version() +
-      mdsmon()->paxos->get_version() +
-      monmon()->paxos->get_version() +
-      pgmon()->paxos->get_version() +
-      authmon()->paxos->get_version() +
-      logmon()->paxos->get_version();
-    dout(10) << "get_global_paxos_version first call this election epoch, starting from " << global_version << dendl;
-  }
-  ++global_version;
-  dout(20) << "get_global_paxos_version " << global_version << dendl;
-  return global_version;
-}
 
 enum {
   l_mon_first = 456000,
@@ -332,7 +224,17 @@ void Monitor::do_admin_command(string command, string args, ostream& ss)
     _mon_status(ss);
   else if (command == "quorum_status")
     _quorum_status(ss);
-  else if (command.find("add_bootstrap_peer_hint") == 0)
+  else if (command == "sync_status")
+    _sync_status(ss);
+  else if (command == "sync_force") {
+    if (args != "--yes-i-really-mean-it") {
+      ss << "are you SURE? this will mean the monitor store will be erased "
+            "the next time the monitor is restarted.  pass "
+            "'--yes-i-really-mean-it' if you really do.";
+      return;
+    }
+    _sync_force(ss);
+  } else if (command.find("add_bootstrap_peer_hint") == 0)
     _add_bootstrap_peer_hint(command, args, ss);
   else
     assert(0 == "bad AdminSocket command binding");
@@ -351,7 +253,7 @@ CompatSet Monitor::get_supported_features()
   CompatSet::FeatureSet ceph_mon_feature_ro_compat;
   CompatSet::FeatureSet ceph_mon_feature_incompat;
   ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_BASE);
-  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_GV);
+  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_SINGLE_PAXOS);
   return CompatSet(ceph_mon_feature_compat, ceph_mon_feature_ro_compat,
 		   ceph_mon_feature_incompat);
 }
@@ -366,13 +268,13 @@ CompatSet Monitor::get_legacy_features()
 		   ceph_mon_feature_incompat);
 }
 
-int Monitor::check_features(MonitorStore *store)
+int Monitor::check_features(MonitorDBStore *store)
 {
   CompatSet required = get_supported_features();
   CompatSet ondisk;
 
   bufferlist features;
-  store->get_bl_ss_safe(features, COMPAT_SET_LOC, 0);
+  store->get(MONITOR_NAME, COMPAT_SET_LOC, features);
   if (features.length() == 0) {
     generic_dout(0) << "WARNING: mon fs missing feature list.\n"
 	    << "Assuming it is old-style and introducing one." << dendl;
@@ -383,7 +285,9 @@ int Monitor::check_features(MonitorStore *store)
 
     bufferlist bl;
     ondisk.encode(bl);
-    store->put_bl_ss(bl, COMPAT_SET_LOC, 0);
+    MonitorDBStore::Transaction t;
+    t.put(MONITOR_NAME, COMPAT_SET_LOC, bl);
+    store->apply_transaction(t);
   } else {
     bufferlist::iterator it = features.begin();
     ondisk.decode(it);
@@ -401,22 +305,19 @@ int Monitor::check_features(MonitorStore *store)
 void Monitor::read_features()
 {
   bufferlist bl;
-  store->get_bl_ss_safe(bl, COMPAT_SET_LOC, 0);
+  store->get(MONITOR_NAME, COMPAT_SET_LOC, bl);
   assert(bl.length());
 
   bufferlist::iterator p = bl.begin();
   ::decode(features, p);
   dout(10) << "features " << features << dendl;
-
-  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV))
-    require_gv_onwire();
 }
 
-void Monitor::write_features()
+void Monitor::write_features(MonitorDBStore::Transaction &t)
 {
   bufferlist bl;
   features.encode(bl);
-  store->put_bl_ss(bl, COMPAT_SET_LOC, 0);
+  t.put(MONITOR_NAME, COMPAT_SET_LOC, bl);
 }
 
 int Monitor::preinit()
@@ -476,7 +377,7 @@ int Monitor::preinit()
   read_features();
 
   // have we ever joined a quorum?
-  has_ever_joined = store->exists_bl_ss("joined");
+  has_ever_joined = (store->get(MONITOR_NAME, "joined") != 0);
   dout(10) << "has_ever_joined = " << (int)has_ever_joined << dendl;
 
   if (!has_ever_joined) {
@@ -494,30 +395,45 @@ int Monitor::preinit()
     }
   }
 
-  // init paxos
-  for (list<Paxos*>::iterator it = paxos.begin(); it != paxos.end(); ++it) {
-    (*it)->init();
-    if ((*it)->is_consistent()) {
-      int i = (*it)->machine_id;
-      paxos_service[i]->update_from_paxos();
-    } // else we don't do anything; handle_probe_reply will detect it's slurping
+  {
+    // We have a potentially inconsistent store state in hands. Get rid of it
+    // and start fresh.
+    bool clear_store = false;
+    if (store->get("mon_sync", "in_sync") > 0) {
+      dout(1) << __func__ << " clean up potentially inconsistent store state"
+	      << dendl;
+      clear_store = true;
+    }
+
+    if (store->get("mon_sync", "force_sync") > 0) {
+      dout(1) << __func__ << " force sync by clearing store state" << dendl;
+      clear_store = true;
+    }
+
+    if (clear_store) {
+      set<string> sync_prefixes = get_sync_targets_names();
+      sync_prefixes.insert("mon_sync");
+      store->clear(sync_prefixes);
+    }
   }
+
+  init_paxos();
 
   // we need to bootstrap authentication keys so we can form an
   // initial quorum.
-  if (authmon()->paxos->get_version() == 0) {
+  if (authmon()->get_version() == 0) {
     dout(10) << "loading initial keyring to bootstrap authentication for mkfs" << dendl;
     bufferlist bl;
-    store->get_bl_ss_safe(bl, "mkfs", "keyring");
+    store->get("mkfs", "keyring", bl);
     KeyRing keyring;
     bufferlist::iterator p = bl.begin();
     ::decode(keyring, p);
     extract_save_mon_key(keyring);
   }
 
-  ostringstream os;
-  os << g_conf->mon_data << "/keyring";
-  int r = keyring.load(cct, os.str());
+  string keyring_loc = g_conf->mon_data + "/keyring";
+
+  int r = keyring.load(cct, keyring_loc);
   if (r < 0) {
     EntityName mon_name;
     mon_name.set_type(CEPH_ENTITY_TYPE_MON);
@@ -527,7 +443,7 @@ int Monitor::preinit()
       keyring.add(mon_name, mon_key);
       bufferlist bl;
       keyring.encode_plaintext(bl);
-      store->put_bl_ss(bl, "keyring", NULL);
+      write_default_keyring(bl);
     } else {
       derr << "unable to load initial keyring " << g_conf->keyring << dendl;
       lock.Unlock();
@@ -545,6 +461,9 @@ int Monitor::preinit()
   assert(r == 0);
   r = admin_socket->register_command("quorum_status", admin_hook,
 					 "show current quorum status");
+  assert(r == 0);
+  r = admin_socket->register_command("sync_status", admin_hook,
+				     "show current synchronization status");
   assert(r == 0);
   r = admin_socket->register_command("add_bootstrap_peer_hint", admin_hook,
 				     "add peer address as potential bootstrap peer for cluster bringup");
@@ -571,6 +490,18 @@ int Monitor::init()
 
   lock.Unlock();
   return 0;
+}
+
+void Monitor::init_paxos()
+{
+  dout(10) << __func__ << dendl;
+  paxos->init();
+  // init paxos
+  for (int i = 0; i < PAXOS_NUM; ++i) {
+    if (paxos->is_consistent()) {
+      paxos_service[i]->update_from_paxos();
+    }
+  }
 }
 
 void Monitor::register_cluster_logger()
@@ -612,6 +543,7 @@ void Monitor::shutdown()
     AdminSocket* admin_socket = cct->get_admin_socket();
     admin_socket->unregister_command("mon_status");
     admin_socket->unregister_command("quorum_status");
+    admin_socket->unregister_command("sync_status");
     delete admin_hook;
     admin_hook = NULL;
   }
@@ -671,6 +603,8 @@ void Monitor::bootstrap()
     // reset all connections, or else our peers will think we are someone else.
     messenger->mark_down_all();
   }
+
+  reset_sync();
 
   // reset
   state = STATE_PROBING;
@@ -745,13 +679,1017 @@ void Monitor::reset()
   quorum.clear();
   outside_quorum.clear();
 
-  paxos_recovered.clear();
-  global_version = 0;
+  paxos->restart();
 
-  for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
-    (*p)->restart();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->restart();
+}
+
+set<string> Monitor::get_sync_targets_names() {
+  set<string> targets;
+  targets.insert(paxos->get_name());
+  for (int i = 0; i < PAXOS_NUM; ++i)
+    targets.insert(paxos_service[i]->get_service_name());
+
+  return targets;
+}
+
+/**
+ * Reset any lingering sync/trim informations we might have.
+ */
+void Monitor::reset_sync(bool abort)
+{
+  dout(10) << __func__ << dendl;
+  // clear everything trim/sync related
+  {
+    map<entity_inst_t,Context*>::iterator iter = trim_timeouts.begin();
+    for (; iter != trim_timeouts.end(); ++iter) {
+      if (!iter->second)
+        continue;
+
+      timer.cancel_event(iter->second);
+      if (abort) {
+        MMonSync *msg = new MMonSync(MMonSync::OP_ABORT);
+        entity_inst_t other = iter->first;
+        messenger->send_message(msg, other);
+      }
+    }
+    trim_timeouts.clear();
+  }
+  {
+    map<entity_inst_t,SyncEntity>::iterator iter = sync_entities.begin();
+    for (; iter != sync_entities.end(); ++iter) {
+      (*iter).second->cancel_timeout();
+    }
+    sync_entities.clear();
+  }
+
+  sync_entities_states.clear();
+  trim_entities_states.clear();
+
+  sync_leader.reset();
+  sync_provider.reset();
+
+  sync_state = SYNC_STATE_NONE;
+  sync_role = SYNC_ROLE_NONE;
+}
+
+// leader
+
+void Monitor::sync_send_heartbeat(entity_inst_t &other, bool reply)
+{
+  dout(10) << __func__ << " " << other << " reply(" << reply << ")" << dendl;
+  uint32_t op = (reply ? MMonSync::OP_HEARTBEAT_REPLY : MMonSync::OP_HEARTBEAT);
+  MMonSync *msg = new MMonSync(op);
+  messenger->send_message(msg, other);
+}
+
+void Monitor::handle_sync_start(MMonSync *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+
+  /* If we are not the leader, then some monitor picked us as the point of
+   * entry to the quorum during its synchronization process. Therefore, we
+   * have an obligation of forwarding this message to leader, so the sender
+   * can start synchronizing.
+   */
+  if (!is_leader() && quorum.size() > 0) {
+    assert(!(sync_role & SYNC_ROLE_REQUESTER));
+    assert(!(sync_role & SYNC_ROLE_LEADER));
+    assert(!is_synchronizing());
+
+    entity_inst_t leader = monmap->get_inst(get_leader());
+    MMonSync *msg = new MMonSync(m);
+    // keep forwarding the message up the chain if it has already been
+    // forwarded.
+    if (!(m->flags & MMonSync::FLAG_REPLY_TO)) {
+      msg->set_reply_to(m->get_source_inst());
+    }
+    dout(10) << __func__ << " forward " << *m
+	     << " to leader at " << leader << dendl;
+    assert(g_conf->mon_sync_provider_kill_at != 1);
+    messenger->send_message(msg, leader);
+    assert(g_conf->mon_sync_provider_kill_at != 2);
+    m->put();
+    return;
+  }
+
+  // If we are synchronizing, then it means that we know someone who has a
+  // higher version than the one we have; and if someone attempted to sync
+  // from us, then that must mean they have a lower version than us.
+  // Therefore, they must be much more interested in synchronizing from the
+  // one we are trying to synchronize from than they are from us.
+  // Moreover, if we are already synchronizing under the REQUESTER role, then
+  // we must know someone who is in the quorum, either because we were lucky
+  // enough to contact them in the first place or we managed to contact
+  // someone who knew who they were. Therefore, just forward this request to
+  // our sync leader.
+  if (is_synchronizing()) {
+    assert(!(sync_role & SYNC_ROLE_LEADER));
+    assert(!(sync_role & SYNC_ROLE_PROVIDER));
+    assert(quorum.size() == 0);
+    assert(sync_leader.get() != NULL);
+
+    dout(10) << __func__ << " forward " << *m
+             << " to our sync leader at "
+             << sync_leader->entity << dendl;
+
+    MMonSync *msg = new MMonSync(m);
+    // keep forwarding the message up the chain if it has already been
+    // forwarded.
+    if (!(m->flags & MMonSync::FLAG_REPLY_TO)) {
+      msg->set_reply_to(m->get_source_inst());
+    }
+    messenger->send_message(msg, sync_leader->entity);
+    m->put();
+    return;
+  }
+
+  // At this point we may or may not be the leader.  If we are not the leader,
+  // it means that we are not in the quorum, but someone would still very much
+  // like to synchronize with us.  In certain circumstances, letting them
+  // synchronize with us is by far our only option -- for instance, when we
+  // need them to form a quorum and they have started fresh or are severely
+  // out of date --, but it won't hurt to let them sync from us anyway: if
+  // they chose us, then they must have noticed that we had a higher version
+  // than they do, so it makes sense to let them try their luck and join the
+  // party.
+
+  Mutex::Locker l(trim_lock);
+  entity_inst_t other =
+    (m->flags & MMonSync::FLAG_REPLY_TO ? m->reply_to : m->get_source_inst());
+
+  assert(g_conf->mon_sync_leader_kill_at != 1);
+
+  if (trim_timeouts.count(other) > 0) {
+    dout(1) << __func__ << " sync session already in progress for " << other
+	    << dendl;
+
+    if (trim_entities_states[other] != SYNC_STATE_NONE) {
+      dout(1) << __func__ << "    ignore stray message" << dendl;
+      m->put();
+      return;
+    }
+
+    dout(1) << __func__<< "    destroying current state and creating new"
+	    << dendl;
+
+    if (trim_timeouts[other])
+      timer.cancel_event(trim_timeouts[other]);
+    trim_timeouts.erase(other);
+    trim_entities_states.erase(other);
+  }
+
+  MMonSync *msg = new MMonSync(MMonSync::OP_START_REPLY);
+
+  if (((quorum.size() > 0) && paxos->should_trim())
+      || (trim_enable_timer != NULL)) {
+    msg->flags |= MMonSync::FLAG_RETRY;
+  } else {
+    trim_timeouts.insert(make_pair(other, new C_TrimTimeout(this, other)));
+    timer.add_event_after(g_conf->mon_sync_trim_timeout, trim_timeouts[other]);
+
+    trim_entities_states[other] = SYNC_STATE_START;
+    sync_role |= SYNC_ROLE_LEADER;
+
+    paxos->trim_disable();
+
+    // Is the one that contacted us in the quorum?
+    if (quorum.count(m->get_source().num())) {
+      // Then it must have been a forwarded message from someone else
+      assert(m->flags & MMonSync::FLAG_REPLY_TO);
+      // And must not be synchronizing. What sense would that make, eh?
+      assert(trim_timeouts.count(m->get_source_inst()) == 0);
+      // Set the provider as the one that contacted us. He's in the
+      // quorum, so he's up to the job (i.e., he's not synchronizing)
+      msg->set_reply_to(m->get_source_inst());
+      dout(10) << __func__ << " set provider to " << msg->reply_to << dendl;
+    } else if (quorum.size() > 0) {
+      // grab someone from the quorum and assign them as the sync provider
+      int n = _pick_random_quorum_mon(rank);
+      if (n >= 0) {
+        msg->set_reply_to(monmap->get_inst(n));
+        dout(10) << __func__ << " set quorum-based provider to "
+                 << msg->reply_to << dendl;
+      } else {
+        assert(0 == "We shouldn't get here!");
+      }
+    } else {
+      // There is no quorum, so we must either be in a quorum-less cluster,
+      // or we must be mid-election.  Either way, tell them it is okay to
+      // sync from us by not setting the reply-to field.
+      assert(!(msg->flags & MMonSync::FLAG_REPLY_TO));
+    }
+  }
+  messenger->send_message(msg, other);
+  m->put();
+
+  assert(g_conf->mon_sync_leader_kill_at != 2);
+}
+
+void Monitor::handle_sync_heartbeat(MMonSync *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+
+  entity_inst_t other = m->get_source_inst();
+  if (!(sync_role & SYNC_ROLE_LEADER)
+      || !trim_entities_states.count(other)
+      || (trim_entities_states[other] != SYNC_STATE_START)) {
+    // stray message; ignore.
+    dout(1) << __func__ << " ignored stray message " << *m << dendl;
+    m->put();
+    return;
+  }
+
+  if (!is_leader() && (quorum.size() > 0)
+      && (trim_timeouts.count(other) > 0)) {
+    // we must have been the leader before, but we lost leadership to
+    // someone else.
+    sync_finish_abort(other);
+    m->put();
+    return;
+  }
+
+  assert(trim_timeouts.count(other) > 0);
+
+  if (trim_timeouts[other])
+    timer.cancel_event(trim_timeouts[other]);
+  trim_timeouts[other] = new C_TrimTimeout(this, other);
+  timer.add_event_after(g_conf->mon_sync_trim_timeout, trim_timeouts[other]);
+
+  assert(g_conf->mon_sync_leader_kill_at != 3);
+  sync_send_heartbeat(other, true);
+  assert(g_conf->mon_sync_leader_kill_at != 4);
+
+  m->put();
+}
+
+void Monitor::sync_finish(entity_inst_t &entity, bool abort)
+{
+  dout(10) << __func__ << " entity(" << entity << ")" << dendl;
+
+  Mutex::Locker l(trim_lock);
+
+  if (!trim_timeouts.count(entity)) {
+    dout(1) << __func__ << " we know of no sync effort from "
+	    << entity << " -- ignore it." << dendl;
+    return;
+  }
+
+  if (trim_timeouts[entity] != NULL)
+    timer.cancel_event(trim_timeouts[entity]);
+
+  trim_timeouts.erase(entity);
+  trim_entities_states.erase(entity);
+
+  if (abort) {
+    MMonSync *m = new MMonSync(MMonSync::OP_ABORT);
+    assert(g_conf->mon_sync_leader_kill_at != 5);
+    messenger->send_message(m, entity);
+    assert(g_conf->mon_sync_leader_kill_at != 6);
+  }
+
+  if (trim_timeouts.size() > 0)
+    return;
+
+  dout(10) << __func__ << " no longer a sync leader" << dendl;
+  sync_role &= ~SYNC_ROLE_LEADER;
+
+  // we may have been the leader, but by now we may no longer be.
+  // this can happen when the we sync'ed a monitor that became the
+  // leader, or that same monitor simply came back to life and got
+  // elected as the new leader.
+  if (is_leader() && paxos->is_trim_disabled()) {
+    trim_enable_timer = new C_TrimEnable(this);
+    timer.add_event_after(30.0, trim_enable_timer);
+  }
+}
+
+void Monitor::handle_sync_finish(MMonSync *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+
+  entity_inst_t other = m->get_source_inst();
+
+  if (!trim_timeouts.count(other) || !trim_entities_states.count(other)
+      || (trim_entities_states[other] != SYNC_STATE_START)) {
+    dout(1) << __func__ << " ignored stray message from " << other << dendl;
+    if (!trim_timeouts.count(other))
+      dout(1) << __func__ << "  not on trim_timeouts" << dendl;
+    if (!trim_entities_states.count(other))
+      dout(1) << __func__ << "  not on trim_entities_states" << dendl;
+    else if (trim_entities_states[other] != SYNC_STATE_START)
+      dout(1) << __func__ << "  state " << trim_entities_states[other] << dendl;
+    m->put();
+    return;
+  }
+
+  // We may no longer the leader. In such case, we should just inform the
+  // other monitor that he should abort his sync. However, it appears that
+  // his sync has finished, so there is no use in scraping the whole thing
+  // now. Therefore, just go along and acknowledge.
+  if (!is_leader()) {
+    dout(10) << __func__ << " We are no longer the leader; reply nonetheless"
+	     << dendl;
+  }
+
+  MMonSync *msg = new MMonSync(MMonSync::OP_FINISH_REPLY);
+  assert(g_conf->mon_sync_leader_kill_at != 7);
+  messenger->send_message(msg, other);
+  assert(g_conf->mon_sync_leader_kill_at != 8);
+
+  sync_finish(other);
+  m->put();
+}
+
+// end of leader
+
+// synchronization provider
+
+string Monitor::_pick_random_mon(int other)
+{
+  assert(monmap->size() > 0);
+  if (monmap->size() == 1)
+    return monmap->get_name(0);
+
+  int max = monmap->size();
+  int n = sync_rng() % max;
+  if (other >= 0 && n >= other)
+    n++;
+  return monmap->get_name(n);
+}
+
+int Monitor::_pick_random_quorum_mon(int other)
+{
+  assert(monmap->size() > 0);
+  if (quorum.size() == 0)
+    return -1;
+  set<int>::iterator p = quorum.begin();
+  for (int n = sync_rng() % quorum.size(); p != quorum.end() && n; ++p, --n);
+  if (other >= 0 && p != quorum.end() && *p == other)
+    ++p;
+
+  return (p == quorum.end() ? *(quorum.rbegin()) : *p);
+}
+
+void Monitor::sync_timeout(entity_inst_t &entity)
+{
+  if (state == STATE_SYNCHRONIZING) {
+    assert(sync_role == SYNC_ROLE_REQUESTER);
+    assert(sync_state == SYNC_STATE_CHUNKS);
+
+    // we are a sync requester; our provider just timed out, so find another
+    // monitor to synchronize with.
+    dout(1) << __func__ << " " << sync_provider->entity << dendl;
+
+    sync_provider->attempts++;
+    if ((sync_provider->attempts > g_conf->mon_sync_max_retries)
+	|| (monmap->size() == 2)) {
+      // We either tried too many times to sync, or there's just us and the
+      // monitor we were attempting to sync with.
+      // Therefore, just abort the whole sync and start off fresh whenever he
+      // (or somebody else) comes back.
+      sync_requester_abort();
+      return;
+    }
+
+    int i = 0;
+    string entity_name = monmap->get_name(entity.addr);
+    string debug_mon = g_conf->mon_sync_debug_provider;
+    string debug_fallback = g_conf->mon_sync_debug_provider_fallback;
+    while ((i++) < 2*monmap->size()) {
+      // we are trying to pick a random monitor, but we cannot do this forever.
+      // in case something goes awfully wrong, just stop doing it after a
+      // couple of attempts and try again later.
+      string new_mon = _pick_random_mon();
+
+      if (!debug_fallback.empty()) {
+	if (entity_name != debug_fallback)
+	  new_mon = debug_fallback;
+	else if (!debug_mon.empty() && (entity_name != debug_mon))
+	  new_mon = debug_mon;
+      }
+
+      if ((new_mon != name) && (new_mon != entity_name)) {
+	sync_provider->entity = monmap->get_inst(new_mon);
+	sync_state = SYNC_STATE_START;
+	sync_start_chunks(sync_provider);
+	return;
+      }
+    }
+
+    assert(0 == "Unable to find a new monitor to connect to. Not cool.");
+  } else if (sync_role & SYNC_ROLE_PROVIDER) {
+    dout(10) << __func__ << " cleanup " << entity << dendl;
+    sync_provider_cleanup(entity);
+    return;
+  } else
+    assert(0 == "We should never reach this");
+}
+
+void Monitor::sync_provider_cleanup(entity_inst_t &entity)
+{
+  dout(10) << __func__ << " " << entity << dendl;
+  if (sync_entities.count(entity) > 0) {
+    sync_entities[entity]->cancel_timeout();
+    sync_entities.erase(entity);
+    sync_entities_states.erase(entity);
+  }
+
+  if (sync_entities.size() == 0) {
+    dout(1) << __func__ << " no longer a sync provider" << dendl;
+    sync_role &= ~SYNC_ROLE_PROVIDER;
+  }
+}
+
+void Monitor::handle_sync_start_chunks(MMonSync *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+  assert(!(sync_role & SYNC_ROLE_REQUESTER));
+
+  entity_inst_t other = m->get_source_inst();
+
+  // if we have a sync going on for this entity, just drop the message. If it
+  // was a stray message, we did the right thing. If it wasn't, then it means
+  // that we still have an old state of this entity, and that the said entity
+  // failed in the meantime and is now up again; therefore, just let the
+  // timeout timers fulfill their purpose and deal with state cleanup when
+  // they are triggered. Until then, no Sir, we won't accept your messages.
+  if (sync_entities.count(other) > 0) {
+    dout(1) << __func__ << " sync session already in progress for " << other
+	    << " -- assumed as stray message." << dendl;
+    m->put();
+    return;
+  }
+
+  SyncEntity sync = get_sync_entity(other, this);
+  sync->version = paxos->get_version();
+
+  if (!m->last_key.first.empty() && !m->last_key.second.empty()) {
+    sync->last_received_key = m->last_key;
+    dout(10) << __func__ << " set last received key to ("
+	     << sync->last_received_key.first << ","
+	     << sync->last_received_key.second << ")" << dendl;
+  }
+
+  sync->sync_init();
+
+  sync_entities.insert(make_pair(other, sync));
+  sync_entities_states[other] = SYNC_STATE_START;
+  sync_role |= SYNC_ROLE_PROVIDER;
+
+  sync_send_chunks(sync);
+  m->put();
+}
+
+void Monitor::handle_sync_chunk_reply(MMonSync *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+
+  entity_inst_t other = m->get_source_inst();
+
+  if (!(sync_role & SYNC_ROLE_PROVIDER)
+      || !sync_entities.count(other)
+      || (sync_entities_states[other] != SYNC_STATE_START)) {
+    dout(1) << __func__ << " ignored stray message from " << other << dendl;
+    m->put();
+    return;
+  }
+
+  if (m->flags & MMonSync::FLAG_LAST) {
+    // they acked the last chunk. Clean up.
+    sync_provider_cleanup(other);
+    m->put();
+    return;
+  }
+
+  sync_send_chunks(sync_entities[other]);
+  m->put();
+}
+
+void Monitor::sync_send_chunks(SyncEntity sync)
+{
+  dout(10) << __func__ << " entity(" << sync->entity << ")" << dendl;
+
+  sync->cancel_timeout();
+
+  assert(sync->synchronizer.use_count() > 0);
+  assert(sync->synchronizer->has_next_chunk());
+
+  MMonSync *msg = new MMonSync(MMonSync::OP_CHUNK);
+
+  sync->synchronizer->get_chunk(msg->chunk_bl);
+  msg->last_key = sync->synchronizer->get_last_key();
+  dout(10) << __func__ << " last key ("
+	   << msg->last_key.first << ","
+	   << msg->last_key.second << ")" << dendl;
+
+  sync->sync_update();
+
+  if (sync->has_crc()) {
+    msg->flags |= MMonSync::FLAG_CRC;
+    msg->crc = sync->crc_get();
+    sync->crc_clear();
+  }
+
+  if (!sync->synchronizer->has_next_chunk()) {
+    msg->flags |= MMonSync::FLAG_LAST;
+    msg->version = sync->get_version();
+    sync->synchronizer.reset();
+  }
+
+  sync->set_timeout(new C_SyncTimeout(this, sync->entity),
+		    g_conf->mon_sync_timeout);
+  assert(g_conf->mon_sync_provider_kill_at != 3);
+  messenger->send_message(msg, sync->entity);
+  assert(g_conf->mon_sync_provider_kill_at != 4);
+
+  // kill the monitor as soon as we move into synchronizing the paxos versions.
+  // This is intended as debug.
+  if (sync->sync_state == SyncEntityImpl::STATE_PAXOS)
+    assert(g_conf->mon_sync_provider_kill_at != 5);
+
+
+}
+// end of synchronization provider
+
+// start of synchronization requester
+
+void Monitor::sync_requester_abort()
+{
+  dout(10) << __func__;
+  assert(state == STATE_SYNCHRONIZING);
+  assert(sync_role == SYNC_ROLE_REQUESTER);
+
+  if (sync_leader.get() != NULL) {
+    *_dout << " " << sync_leader->entity;
+    sync_leader->cancel_timeout();
+    sync_leader.reset();
+  }
+
+  if (sync_provider.get() != NULL) {
+    *_dout << " " << sync_provider->entity;
+    sync_provider->cancel_timeout();
+
+    MMonSync *msg = new MMonSync(MMonSync::OP_ABORT);
+    messenger->send_message(msg, sync_provider->entity);
+
+    sync_provider.reset();
+  }
+  *_dout << " clearing potentially inconsistent store" << dendl;
+
+  // Given that we are explicitely aborting the whole sync process, we should
+  // play it safe and clear the store.
+  set<string> targets = get_sync_targets_names();
+  targets.insert("mon_sync");
+  store->clear(targets);
+
+  dout(1) << __func__ << " no longer a sync requester" << dendl;
+  sync_role = SYNC_ROLE_NONE;
+  sync_state = SYNC_STATE_NONE;
+
+  state = 0;
+
+  bootstrap();
+}
+
+/**
+ * Start Sync process
+ *
+ * Create SyncEntity instances for the leader and the provider;
+ * Send OP_START message to the leader;
+ * Set trim timeout on the leader
+ *
+ * @param other Synchronization provider to-be.
+ */
+void Monitor::sync_start(entity_inst_t &other)
+{
+  cancel_probe_timeout();
+
+  dout(10) << __func__ << " entity( " << other << " )" << dendl;
+  if ((state == STATE_SYNCHRONIZING) && (sync_role == SYNC_ROLE_REQUESTER)) {
+    dout(1) << __func__ << " already synchronizing; drop it" << dendl;
+    return;
+  }
+
+  // Looks like we are the acting leader for someone.  Better force them to
+  // abort their endeavours.  After all, if they are trying to sync from us,
+  // it means that we must have a higher paxos version than the one they
+  // have; however, if we are trying to sync as well, it must mean that
+  // someone has a higher version than the one we have.  Everybody wins if
+  // we force them to cancel their sync and try again.
+  if (sync_role & SYNC_ROLE_LEADER) {
+    dout(10) << __func__ << " we are acting as a leader to someone; "
+             << "destroy their dreams" << dendl;
+
+    assert(trim_timeouts.size() > 0);
+    reset_sync();
+  }
+
+  assert(sync_role == SYNC_ROLE_NONE);
+  assert(sync_state == SYNC_STATE_NONE);
+
+  state = STATE_SYNCHRONIZING;
+  sync_role = SYNC_ROLE_REQUESTER;
+  sync_state = SYNC_STATE_START;
+
+  // clear the underlying store, since we are starting a whole
+  // sync process from the bare beginning.
+  set<string> targets = get_sync_targets_names();
+  targets.insert("mon_sync");
+  store->clear(targets);
+
+  MonitorDBStore::Transaction t;
+  t.put("mon_sync", "in_sync", 1);
+  store->apply_transaction(t);
+
+  // assume 'other' as the leader. We will update the leader once we receive
+  // a reply to the sync start.
+  entity_inst_t leader = other;
+  entity_inst_t provider = other;
+
+  if (!g_conf->mon_sync_debug_leader.empty()) {
+    leader = monmap->get_inst(g_conf->mon_sync_debug_leader);
+    dout(10) << __func__ << " assuming " << leader
+	     << " as the leader for debug" << dendl;
+  }
+
+  if (!g_conf->mon_sync_debug_provider.empty()) {
+    provider = monmap->get_inst(g_conf->mon_sync_debug_provider);
+    dout(10) << __func__ << " assuming " << provider
+	     << " as the provider for debug" << dendl;
+  }
+
+  sync_leader = get_sync_entity(leader, this);
+  sync_provider = get_sync_entity(provider, this);
+
+  // this message may bounce through 'other' (if 'other' is not the leader)
+  // in order to reach the leader. Therefore, set a higher timeout to allow
+  // breathing room for the reply message to reach us.
+  sync_leader->set_timeout(new C_SyncStartTimeout(this),
+			   g_conf->mon_sync_trim_timeout*2);
+
+  MMonSync *m = new MMonSync(MMonSync::OP_START);
+  messenger->send_message(m, other);
+  assert(g_conf->mon_sync_requester_kill_at != 1);
+}
+
+void Monitor::sync_start_chunks(SyncEntity provider)
+{
+  dout(10) << __func__ << " provider(" << provider->entity << ")" << dendl;
+
+  assert(sync_role == SYNC_ROLE_REQUESTER);
+  assert(sync_state == SYNC_STATE_START);
+
+  sync_state = SYNC_STATE_CHUNKS;
+
+  provider->set_timeout(new C_SyncTimeout(this, provider->entity),
+			g_conf->mon_sync_timeout);
+  MMonSync *msg = new MMonSync(MMonSync::OP_START_CHUNKS);
+  pair<string,string> last_key = provider->last_received_key;
+  if (!last_key.first.empty() && !last_key.second.empty())
+    msg->last_key = last_key;
+
+  assert(g_conf->mon_sync_requester_kill_at != 4);
+  messenger->send_message(msg, provider->entity);
+  assert(g_conf->mon_sync_requester_kill_at != 5);
+}
+
+void Monitor::sync_start_reply_timeout()
+{
+  dout(10) << __func__ << dendl;
+
+  assert(state == STATE_SYNCHRONIZING);
+  assert(sync_role == SYNC_ROLE_REQUESTER);
+  assert(sync_state == SYNC_STATE_START);
+
+  // Restart the sync attempt. It's not as if we were going to lose a vast
+  // amount of work, and if we take into account that we are timing out while
+  // waiting for a reply from the Leader, it sure seems like the right path
+  // to take.
+  sync_requester_abort();
+}
+
+void Monitor::handle_sync_start_reply(MMonSync *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+
+  entity_inst_t other = m->get_source_inst();
+
+  if ((sync_role != SYNC_ROLE_REQUESTER)
+      || (sync_state != SYNC_STATE_START)) {
+    // If the leader has sent this message before we failed, there is no point
+    // in replying to it, as he has no idea that we actually received it. On
+    // the other hand, if he received one of our stray messages (because it was
+    // delivered once he got back up after failing) and replied accordingly,
+    // there is a chance that he did stopped trimming on our behalf. However,
+    // we have no way to know it, and we really don't want to mess with his
+    // state if that is not the case. Therefore, just drop it and let the
+    // timeouts figure it out. Eventually.
+    dout(1) << __func__ << " stray message -- drop it." << dendl;
+    goto out;
+  }
+
+  assert(state == STATE_SYNCHRONIZING);
+  assert(sync_leader.get() != NULL);
+  assert(sync_provider.get() != NULL);
+
+  // We now know for sure who the leader is.
+  sync_leader->entity = other;
+  sync_leader->cancel_timeout();
+
+  if (m->flags & MMonSync::FLAG_RETRY) {
+    dout(10) << __func__ << " retrying sync at a later time" << dendl;
+    sync_role = SYNC_ROLE_NONE;
+    sync_state = SYNC_STATE_NONE;
+    sync_leader->set_timeout(new C_SyncStartRetry(this, sync_leader->entity),
+			     g_conf->mon_sync_backoff_timeout);
+    goto out;
+  }
+
+  if (m->flags & MMonSync::FLAG_REPLY_TO) {
+    dout(10) << __func__ << " leader told us to use " << m->reply_to
+             << " as sync provider" << dendl;
+    sync_provider->entity = m->reply_to;
+  } else {
+    dout(10) << __func__ << " synchronizing from leader at " << other << dendl;
+    sync_provider->entity = other;
+  }
+
+  sync_leader->set_timeout(new C_HeartbeatTimeout(this),
+			   g_conf->mon_sync_heartbeat_timeout);
+
+  assert(g_conf->mon_sync_requester_kill_at != 2);
+  sync_send_heartbeat(sync_leader->entity);
+  assert(g_conf->mon_sync_requester_kill_at != 3);
+
+  sync_start_chunks(sync_provider);
+out:
+  m->put();
+}
+
+void Monitor::handle_sync_heartbeat_reply(MMonSync *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+
+  entity_inst_t other = m->get_source_inst();
+  if ((sync_role != SYNC_ROLE_REQUESTER)
+      || (sync_state == SYNC_STATE_NONE)
+      || (sync_leader.get() == NULL)
+      || (other != sync_leader->entity)) {
+    dout(1) << __func__ << " stray message -- drop it." << dendl;
+    m->put();
+    return;
+  }
+
+  assert(state == STATE_SYNCHRONIZING);
+  assert(sync_role == SYNC_ROLE_REQUESTER);
+  assert(sync_state != SYNC_STATE_NONE);
+
+  assert(sync_leader.get() != NULL);
+  assert(sync_leader->entity == other);
+
+  sync_leader->cancel_timeout();
+  sync_leader->set_timeout(new C_HeartbeatInterval(this, sync_leader->entity),
+			   g_conf->mon_sync_heartbeat_interval);
+  m->put();
+}
+
+void Monitor::handle_sync_chunk(MMonSync *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+
+  entity_inst_t other = m->get_source_inst();
+
+  if ((sync_role != SYNC_ROLE_REQUESTER)
+      || (sync_state != SYNC_STATE_CHUNKS)
+      || (sync_provider.get() == NULL)
+      || (other != sync_provider->entity)) {
+    dout(1) << __func__ << " stray message -- drop it." << dendl;
+    m->put();
+    return;
+  }
+
+  assert(state == STATE_SYNCHRONIZING);
+  assert(sync_role == SYNC_ROLE_REQUESTER);
+  assert(sync_state == SYNC_STATE_CHUNKS);
+
+  assert(sync_leader.get() != NULL);
+
+  assert(sync_provider.get() != NULL);
+  assert(other == sync_provider->entity);
+
+  sync_provider->cancel_timeout();
+
+  MonitorDBStore::Transaction tx;
+  tx.append_from_encoded(m->chunk_bl);
+
+  sync_provider->set_timeout(new C_SyncTimeout(this, sync_provider->entity),
+			     g_conf->mon_sync_timeout);
+  sync_provider->last_received_key = m->last_key;
+
+  MMonSync *msg = new MMonSync(MMonSync::OP_CHUNK_REPLY);
+
+  bool stop = false;
+  if (m->flags & MMonSync::FLAG_LAST) {
+    msg->flags |= MMonSync::FLAG_LAST;
+    assert(m->version > 0);
+    tx.put(paxos->get_name(), "last_committed", m->version);
+    stop = true;
+  }
+  assert(g_conf->mon_sync_requester_kill_at != 8);
+  messenger->send_message(msg, sync_provider->entity);
+
+  store->apply_transaction(tx);
+
+  if (g_conf->mon_sync_debug && (m->flags & MMonSync::FLAG_CRC)) {
+    dout(10) << __func__ << " checking CRC" << dendl;
+    MonitorDBStore::Synchronizer sync;
+    if (m->flags & MMonSync::FLAG_LAST) {
+      dout(10) << __func__ << " checking CRC only for Paxos" << dendl;
+      string paxos_name("paxos");
+      sync = store->get_synchronizer(paxos_name);
+    } else {
+      dout(10) << __func__ << " checking CRC for all prefixes" << dendl;
+      set<string> prefixes = get_sync_targets_names();
+      pair<string,string> empty_key;
+      sync = store->get_synchronizer(empty_key, prefixes);
+    }
+
+    while (sync->has_next_chunk()) {
+      bufferlist bl;
+      sync->get_chunk(bl);
+    }
+    __u32 got_crc = sync->crc();
+    dout(10) << __func__ << " expected crc " << m->crc
+	     << " got " << got_crc << dendl;
+
+    assert(m->crc == got_crc);
+    dout(10) << __func__ << " CRC matches" << dendl;
+  }
+
+  m->put();
+  if (stop)
+    sync_stop();
+}
+
+void Monitor::sync_stop()
+{
+  dout(10) << __func__ << dendl;
+
+  assert(sync_role == SYNC_ROLE_REQUESTER);
+  assert(sync_state == SYNC_STATE_CHUNKS);
+
+  sync_state = SYNC_STATE_STOP;
+
+  sync_leader->cancel_timeout();
+  sync_provider->cancel_timeout();
+  sync_provider.reset();
+
+  entity_inst_t leader = sync_leader->entity;
+
+  sync_leader->set_timeout(new C_SyncFinishReplyTimeout(this),
+			   g_conf->mon_sync_timeout);
+
+  MMonSync *msg = new MMonSync(MMonSync::OP_FINISH);
+  assert(g_conf->mon_sync_requester_kill_at != 9);
+  messenger->send_message(msg, leader);
+  assert(g_conf->mon_sync_requester_kill_at != 10);
+}
+
+void Monitor::sync_finish_reply_timeout()
+{
+  dout(10) << __func__ << dendl;
+  assert(state == STATE_SYNCHRONIZING);
+  assert(sync_leader.get() != NULL);
+  assert(sync_role == SYNC_ROLE_REQUESTER);
+  assert(sync_state == SYNC_STATE_STOP);
+
+  sync_requester_abort();
+}
+
+void Monitor::handle_sync_finish_reply(MMonSync *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+  entity_inst_t other = m->get_source_inst();
+
+  if ((sync_role != SYNC_ROLE_REQUESTER)
+      || (sync_state != SYNC_STATE_STOP)
+      || (sync_leader.get() == NULL)
+      || (sync_leader->entity != other)) {
+    dout(1) << __func__ << " stray message -- drop it." << dendl;
+    m->put();
+    return;
+  }
+
+  assert(sync_role == SYNC_ROLE_REQUESTER);
+  assert(sync_state == SYNC_STATE_STOP);
+
+  assert(sync_leader.get() != NULL);
+  assert(sync_leader->entity == other);
+
+  sync_role = SYNC_ROLE_NONE;
+  sync_state = SYNC_STATE_NONE;
+
+  sync_leader->cancel_timeout();
+  sync_leader.reset();
+
+  paxos->reapply_all_versions();
+
+  MonitorDBStore::Transaction t;
+  t.erase("mon_sync", "in_sync");
+  store->apply_transaction(t);
+
+  init_paxos();
+
+  assert(g_conf->mon_sync_requester_kill_at != 11);
+
+  m->put();
+
+  bootstrap();
+}
+
+void Monitor::handle_sync_abort(MMonSync *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+  /* This function's responsabilities are manifold, and they depend on
+   * who we (the monitor) are and what is our role in the sync.
+   *
+   * If we are the sync requester (i.e., if we are synchronizing), it
+   * means that we *must* abort the current sync and bootstrap. This may
+   * be required if there was a leader change and we are talking to the
+   * wrong leader, which makes continuing with the current sync way too
+   * risky, given that a Paxos trim may be underway and we certainly incur
+   * in the chance of ending up with an inconsistent store state.
+   *
+   * If we are the sync provider, it means that the requester wants to
+   * abort his sync, either because he lost connectivity to the leader
+   * (i.e., his heartbeat timeout was triggered) or he became aware of a
+   * leader change.
+   *
+   * As a leader, we should never receive such a message though, unless we
+   * have just won an election, in which case we should have been a sync
+   * provider before. In such a case, we should behave as if we were a sync
+   * provider and clean up the requester's state.
+   */
+  entity_inst_t other = m->get_source_inst();
+
+  if ((sync_role == SYNC_ROLE_REQUESTER)
+      && (sync_leader.get() != NULL)
+      && (sync_leader->entity == other)) {
+
+    sync_requester_abort();
+  } else if ((sync_role & SYNC_ROLE_PROVIDER)
+	     && (sync_entities.count(other) > 0)
+	     && (sync_entities_states[other] == SYNC_STATE_START)) {
+
+    sync_provider_cleanup(other);
+  } else {
+    dout(1) << __func__ << " stray message -- drop it." << dendl;
+  }
+  m->put();
+}
+
+void Monitor::handle_sync(MMonSync *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+  switch (m->op) {
+  case MMonSync::OP_START:
+    handle_sync_start(m);
+    break;
+  case MMonSync::OP_START_REPLY:
+    handle_sync_start_reply(m);
+    break;
+  case MMonSync::OP_HEARTBEAT:
+    handle_sync_heartbeat(m);
+    break;
+  case MMonSync::OP_HEARTBEAT_REPLY:
+    handle_sync_heartbeat_reply(m);
+    break;
+  case MMonSync::OP_FINISH:
+    handle_sync_finish(m);
+    break;
+  case MMonSync::OP_START_CHUNKS:
+    handle_sync_start_chunks(m);
+    break;
+  case MMonSync::OP_CHUNK:
+    handle_sync_chunk(m);
+    break;
+  case MMonSync::OP_CHUNK_REPLY:
+    handle_sync_chunk_reply(m);
+    break;
+  case MMonSync::OP_FINISH_REPLY:
+    handle_sync_finish_reply(m);
+    break;
+  case MMonSync::OP_ABORT:
+    handle_sync_abort(m);
+    break;
+  default:
+    dout(0) << __func__ << " unknown op " << m->op << dendl;
+    m->put();
+    assert(0 == "unknown op");
+    break;
+  }
 }
 
 void Monitor::cancel_probe_timeout()
@@ -769,7 +1707,7 @@ void Monitor::reset_probe_timeout()
 {
   cancel_probe_timeout();
   probe_timeout_event = new C_ProbeTimeout(this);
-  double t = is_probing() ? g_conf->mon_probe_timeout : g_conf->mon_slurp_timeout;
+  double t = g_conf->mon_probe_timeout;
   timer.add_event_after(t, probe_timeout_event);
   dout(10) << "reset_probe_timeout " << probe_timeout_event << " after " << t << " seconds" << dendl;
 }
@@ -777,7 +1715,7 @@ void Monitor::reset_probe_timeout()
 void Monitor::probe_timeout(int r)
 {
   dout(4) << "probe_timeout " << probe_timeout_event << dendl;
-  assert(is_probing() || is_slurping());
+  assert(is_probing() || is_synchronizing());
   assert(probe_timeout_event);
   probe_timeout_event = NULL;
   bootstrap();
@@ -802,23 +1740,14 @@ void Monitor::handle_probe(MMonProbe *m)
     handle_probe_reply(m);
     break;
 
-  case MMonProbe::OP_SLURP:
-    handle_probe_slurp(m);
-    break;
-
-  case MMonProbe::OP_SLURP_LATEST:
-    handle_probe_slurp_latest(m);
-    break;
-
-  case MMonProbe::OP_DATA:
-    handle_probe_data(m);
-    break;
-
   default:
     m->put();
   }
 }
 
+/**
+ * @todo fix this. This is going to cause trouble.
+ */
 void Monitor::handle_probe_probe(MMonProbe *m)
 {
   dout(10) << "handle_probe_probe " << m->get_source_inst() << *m << dendl;
@@ -826,8 +1755,8 @@ void Monitor::handle_probe_probe(MMonProbe *m)
   r->name = name;
   r->quorum = quorum;
   monmap->encode(r->monmap_bl, m->get_connection()->get_features());
-  for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); ++p)
-    r->paxos_versions[(*p)->get_machine_name()] = (*p)->get_version();
+  r->paxos_first_version = paxos->get_first_committed();
+  r->paxos_last_version = paxos->get_version();
   messenger->send_message(r, m->get_connection());
 
   // did we discover a peer here?
@@ -835,7 +1764,6 @@ void Monitor::handle_probe_probe(MMonProbe *m)
     dout(1) << " adding peer " << m->get_source_addr() << " to list of hints" << dendl;
     extra_probe_peers.insert(m->get_source_addr());
   }
-
   m->put();
 }
 
@@ -894,236 +1822,77 @@ void Monitor::handle_probe_reply(MMonProbe *m)
     }
   }
 
+  assert(paxos != NULL);
+
+  if (is_synchronizing()) {
+    dout(10) << " we are currently synchronizing, so that will continue."
+             << dendl;
+    m->put();
+    return;
+  }
+
+  entity_inst_t other = m->get_source_inst();
   // is there an existing quorum?
   if (m->quorum.size()) {
     dout(10) << " existing quorum " << m->quorum << dendl;
 
-    // do i need to catch up?
-    bool ok = true;
-    for (map<string,version_t>::iterator p = m->paxos_versions.begin();
-	 p != m->paxos_versions.end();
-	 ++p) {
-      Paxos *pax = get_paxos_by_name(p->first);
-      if (!pax) {
-	dout(0) << " peer has paxos machine " << p->first << " but i don't... weird" << dendl;
-	continue;  // weird!
-      }
-      if (pax->is_slurping()) {
-        dout(10) << " My paxos machine " << p->first
-                 << " is currently slurping, so that will continue. Peer has v "
-                 << p->second << dendl;
-        ok = false;
-      } else if (pax->get_version() + g_conf->paxos_max_join_drift < p->second) {
-	dout(10) << " peer paxos machine " << p->first << " v " << p->second
-		 << " vs my v " << pax->get_version()
-		 << " (too far ahead)"
-		 << dendl;
-	ok = false;
-      } else {
-	dout(10) << " peer paxos machine " << p->first << " v " << p->second
-		 << " vs my v " << pax->get_version()
-		 << " (ok)"
-		 << dendl;
-      }
+    if (paxos->get_version() + g_conf->paxos_max_join_drift < m->paxos_last_version) {
+      dout(10) << " peer paxos version " << m->paxos_last_version
+	       << " vs my version " << paxos->get_version()
+	       << " (too far ahead)"
+	       << dendl;
+      sync_start(other);
+      m->put();
+      return;
     }
-    if (ok) {
-      if (monmap->contains(name) &&
-	  !monmap->get_addr(name).is_blank_ip()) {
-	// i'm part of the cluster; just initiate a new election
-	start_election();
-      } else {
-	dout(10) << " ready to join, but i'm not in the monmap or my addr is blank, trying to join" << dendl;
-	messenger->send_message(new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
-				monmap->get_inst(*m->quorum.begin()));
-      }
+    dout(10) << " peer paxos version " << m->paxos_last_version
+             << " vs my version " << paxos->get_version()
+             << " (ok)"
+             << dendl;
+
+    if (monmap->contains(name) &&
+        !monmap->get_addr(name).is_blank_ip()) {
+      // i'm part of the cluster; just initiate a new election
+      start_election();
     } else {
-      slurp_source = m->get_source_inst();
-      slurp_versions = m->paxos_versions;
-      slurp();
+      dout(10) << " ready to join, but i'm not in the monmap or my addr is blank, trying to join" << dendl;
+      messenger->send_message(new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
+                              monmap->get_inst(*m->quorum.begin()));
     }
   } else {
-    // not part of a quorum
-    if (monmap->contains(m->name))
+    if (monmap->contains(m->name)) {
+      dout(10) << " mon." << m->name << " is outside the quorum" << dendl;
       outside_quorum.insert(m->name);
-    else
+    } else {
       dout(10) << " mostly ignoring mon." << m->name << ", not part of monmap" << dendl;
+      m->put();
+      return;
+    }
+
+    if (paxos->get_version() + g_conf->paxos_max_join_drift < m->paxos_last_version) {
+      dout(10) << " peer paxos version " << m->paxos_last_version
+	       << " vs my version " << paxos->get_version()
+	       << " (too far ahead)"
+	       << dendl;
+      sync_start(other);
+      m->put();
+      return;
+    }
 
     unsigned need = monmap->size() / 2 + 1;
     dout(10) << " outside_quorum now " << outside_quorum << ", need " << need << dendl;
-
     if (outside_quorum.size() >= need) {
       if (outside_quorum.count(name)) {
-	dout(10) << " that's enough to form a new quorum, calling election" << dendl;
-	start_election();
+        dout(10) << " that's enough to form a new quorum, calling election" << dendl;
+        start_election();
       } else {
-	dout(10) << " that's enough to form a new quorum, but it does not include me; waiting" << dendl;
+        dout(10) << " that's enough to form a new quorum, but it does not include me; waiting" << dendl;
       }
     } else {
-      dout(10) << " that's not yet enough for a new quorum, waiting" << dendl;
+	dout(10) << " that's not yet enough for a new quorum, waiting" << dendl;
     }
   }
-
   m->put();
-}
-
-/*
- * The whole slurp process is currently a bit of a hack.  Given the
- * current storage model, we should be sharing code with Paxos to make
- * sure we copy the right content.  But that model sucks and will
- * hopefully soon change, and it's less work to kludge around it here
- * than it is to make the current model clean.
- *
- * So: more or less duplicate the work of resyncing each paxos state
- * machine here.  And move the monitor storage refactor stuff up the
- * todo list.
- *
- */
-
-void Monitor::slurp()
-{
-  dout(10) << "slurp " << slurp_source << " " << slurp_versions << dendl;
-
-  reset_probe_timeout();
-
-  state = STATE_SLURPING;
-
-  map<string,version_t>::iterator p = slurp_versions.begin();
-  while (p != slurp_versions.end()) {
-    Paxos *pax = get_paxos_by_name(p->first);
-    if (!pax) {
-      p++;
-      continue;
-    }
-
-    dout(10) << " " << p->first << " v " << p->second << " vs my " << pax->get_version() << dendl;
-    if (p->second > pax->get_version() ||
-	pax->get_stashed_version() > pax->get_version()) {
-      if (!pax->is_slurping()) {
-        pax->start_slurping();
-      }
-      MMonProbe *m = new MMonProbe(monmap->fsid, MMonProbe::OP_SLURP, name, has_ever_joined);
-      m->machine_name = p->first;
-      m->oldest_version = pax->get_first_committed();
-      m->newest_version = pax->get_version();
-      messenger->send_message(m, slurp_source);
-      return;
-    }
-
-    // latest?
-    if (pax->get_first_committed() > 1 &&   // don't need it!
-	pax->get_stashed_version() < pax->get_first_committed()) {
-      if (!pax->is_slurping()) {
-        pax->start_slurping();
-      }
-      MMonProbe *m = new MMonProbe(monmap->fsid, MMonProbe::OP_SLURP_LATEST, name, has_ever_joined);
-      m->machine_name = p->first;
-      m->oldest_version = pax->get_first_committed();
-      m->newest_version = pax->get_version();
-      messenger->send_message(m, slurp_source);
-      return;
-    }
-
-    PaxosService *paxs = get_paxos_service_by_name(p->first);
-    assert(paxs);
-    paxs->update_from_paxos();
-
-    pax->end_slurping();
-
-    slurp_versions.erase(p++);
-  }
-
-  dout(10) << "done slurping" << dendl;
-  bootstrap();
-}
-
-MMonProbe *Monitor::fill_probe_data(MMonProbe *m, Paxos *pax)
-{
-  MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_DATA, name, has_ever_joined);
-  r->machine_name = m->machine_name;
-  r->oldest_version = pax->get_first_committed();
-  r->newest_version = pax->get_version();
-
-  version_t v = MAX(pax->get_first_committed(), m->newest_version + 1);
-  int len = 0;
-  for (; v <= pax->get_version(); v++) {
-    store->get_bl_sn_safe(r->paxos_values[m->machine_name][v], m->machine_name.c_str(), v);
-    len += r->paxos_values[m->machine_name][v].length();
-    r->gv[m->machine_name][v] = store->get_global_version(m->machine_name.c_str(), v);
-    for (list<string>::iterator p = pax->extra_state_dirs.begin();
-         p != pax->extra_state_dirs.end();
-         ++p) {
-      store->get_bl_sn_safe(r->paxos_values[*p][v], p->c_str(), v);
-      len += r->paxos_values[*p][v].length();
-    }
-    if (len >= g_conf->mon_slurp_bytes)
-      break;
-  }
-
-  return r;
-}
-
-void Monitor::handle_probe_slurp(MMonProbe *m)
-{
-  dout(10) << "handle_probe_slurp " << *m << dendl;
-
-  Paxos *pax = get_paxos_by_name(m->machine_name);
-  assert(pax);
-
-  MMonProbe *r = fill_probe_data(m, pax);
-  messenger->send_message(r, m->get_connection());
-  m->put();
-}
-
-void Monitor::handle_probe_slurp_latest(MMonProbe *m)
-{
-  dout(10) << "handle_probe_slurp_latest " << *m << dendl;
-
-  Paxos *pax = get_paxos_by_name(m->machine_name);
-  assert(pax);
-
-  MMonProbe *r = fill_probe_data(m, pax);
-  r->latest_version = pax->get_stashed(r->latest_value);
-
-  messenger->send_message(r, m->get_connection());
-  m->put();
-}
-
-void Monitor::handle_probe_data(MMonProbe *m)
-{
-  dout(10) << "handle_probe_data " << *m << dendl;
-
-  Paxos *pax = get_paxos_by_name(m->machine_name);
-  assert(pax);
-
-  // trim old cruft?
-  if (m->oldest_version > pax->get_first_committed())
-    pax->trim_to(m->oldest_version, true);
-
-  // note new latest version?
-  if (slurp_versions.count(m->machine_name))
-    slurp_versions[m->machine_name] = m->newest_version;
-
-  // store any new stuff
-  if (m->paxos_values.size()) {
-    for (map<string, map<version_t, bufferlist> >::iterator p = m->paxos_values.begin();
-	 p != m->paxos_values.end();
-	 ++p) {
-      store->put_bl_sn_map(p->first.c_str(), p->second.begin(), p->second.end(), &m->gv[p->first]);
-    }
-
-    pax->last_committed = m->paxos_values.begin()->second.rbegin()->first;
-    store->put_int(pax->last_committed, m->machine_name.c_str(),
-		   "last_committed");
-  }
-
-  // latest?
-  if (m->latest_version) {
-    pax->stash_latest(m->latest_version, m->latest_value);
-  }
-
-  m->put();
-
-  slurp();
 }
 
 void Monitor::start_election()
@@ -1182,8 +1951,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features)
   clog.info() << "mon." << name << "@" << rank
 		<< " won leader election with quorum " << quorum << "\n";
 
-  for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
-    (*p)->leader_init();
+  paxos->leader_init();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->election_finished();
 
@@ -1203,8 +1971,20 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features
   dout(10) << "lose_election, epoch " << epoch << " leader is mon" << leader
 	   << " quorum is " << quorum << " features are " << quorum_features << dendl;
 
-  for (list<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
-    (*p)->peon_init();
+  // let everyone currently syncing know that we are no longer the leader and
+  // that they should all abort their on-going syncs
+  for (map<entity_inst_t,Context*>::iterator iter = trim_timeouts.begin();
+       iter != trim_timeouts.end();
+       ++iter) {
+    timer.cancel_event((*iter).second);
+    entity_inst_t entity = (*iter).first;
+    MMonSync *msg = new MMonSync(MMonSync::OP_ABORT);
+    messenger->send_message(msg, entity);
+  }
+  trim_timeouts.clear();
+  sync_role &= ~SYNC_ROLE_LEADER;
+  
+  paxos->peon_init();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->election_finished();
 
@@ -1256,6 +2036,92 @@ bool Monitor::_allowed_command(MonSession *s, const vector<string>& cmd)
   return false;
 }
 
+void Monitor::_sync_status(ostream& ss)
+{
+  JSONFormatter jf(true);
+  jf.open_object_section("sync_status");
+  jf.dump_string("state", get_state_name());
+  jf.dump_unsigned("paxos_version", paxos->get_version());
+
+  if (is_leader() || (sync_role == SYNC_ROLE_LEADER)) {
+    Mutex::Locker l(trim_lock);
+    jf.open_object_section("trim");
+    jf.dump_int("disabled", paxos->is_trim_disabled());
+    jf.dump_int("should_trim", paxos->should_trim());
+    if (trim_timeouts.size() > 0) {
+      jf.open_array_section("mons");
+      for (map<entity_inst_t,Context*>::iterator it = trim_timeouts.begin();
+	   it != trim_timeouts.end();
+	   ++it) {
+	entity_inst_t e = (*it).first;
+	jf.dump_stream("mon") << e;
+	int s = -1;
+	if (trim_entities_states.count(e))
+	  s = trim_entities_states[e];
+	jf.dump_stream("sync_state") << get_sync_state_name(s);
+      }
+    }
+    jf.close_section();
+  }
+
+  if ((sync_entities.size() > 0) || (sync_role == SYNC_ROLE_PROVIDER)) {
+    jf.open_array_section("on_going");
+    for (map<entity_inst_t,SyncEntity>::iterator it = sync_entities.begin();
+	 it != sync_entities.end();
+	 ++it) {
+      entity_inst_t e = (*it).first;
+      jf.open_object_section("mon");
+      jf.dump_stream("addr") << e;
+      jf.dump_string("state", (*it).second->get_state());
+      int s = -1;
+      if (sync_entities_states.count(e))
+	  s = sync_entities_states[e];
+      jf.dump_stream("sync_state") << get_sync_state_name(s);
+
+      jf.close_section();
+    }
+    jf.close_section();
+  }
+
+  if (is_synchronizing() || (sync_role == SYNC_ROLE_REQUESTER)) {
+    jf.open_object_section("leader");
+    SyncEntity sync_entity = sync_leader;
+    if (sync_entity.get() != NULL)
+      jf.dump_stream("addr") << sync_entity->entity;
+    jf.close_section();
+
+    jf.open_object_section("provider");
+    sync_entity = sync_provider;
+    if (sync_entity.get() != NULL)
+      jf.dump_stream("addr") << sync_entity->entity;
+    jf.close_section();
+  }
+
+  if (g_conf->mon_sync_leader_kill_at > 0)
+    jf.dump_int("leader_kill_at", g_conf->mon_sync_leader_kill_at);
+  if (g_conf->mon_sync_provider_kill_at > 0)
+    jf.dump_int("provider_kill_at", g_conf->mon_sync_provider_kill_at);
+  if (g_conf->mon_sync_requester_kill_at > 0)
+    jf.dump_int("requester_kill_at", g_conf->mon_sync_requester_kill_at);
+
+  jf.close_section();
+  jf.flush(ss);
+}
+
+void Monitor::_sync_force(ostream& ss)
+{
+  MonitorDBStore::Transaction tx;
+  tx.put("mon_sync", "force_sync", 1);
+  store->apply_transaction(tx);
+
+  JSONFormatter jf(true);
+  jf.open_object_section("sync_force");
+  jf.dump_int("ret", 0);
+  jf.dump_stream("msg") << "forcing store sync the next time the monitor starts";
+  jf.close_section();
+  jf.flush(ss);
+}
+
 void Monitor::_quorum_status(ostream& ss)
 {
   JSONFormatter jf(true);
@@ -1294,12 +2160,9 @@ void Monitor::_mon_status(ostream& ss)
     jf.dump_string("mon", *p);
   jf.close_section();
 
-  if (is_slurping()) {
-    jf.dump_stream("slurp_source") << slurp_source;
-    jf.open_object_section("slurp_version");
-    for (map<string,version_t>::iterator p = slurp_versions.begin(); p != slurp_versions.end(); ++p)
-      jf.dump_int(p->first.c_str(), p->second);	  
-    jf.close_section();
+  if (is_synchronizing()) {
+    jf.dump_stream("sync_leader") << sync_leader->entity;
+    jf.dump_stream("sync_provider") << sync_provider->entity;
   }
 
   jf.open_object_section("monmap");
@@ -1695,6 +2558,35 @@ void Monitor::handle_command(MMonCommand *m)
     _mon_status(ss);
     rs = ss.str();
     r = 0;
+  } else if (m->cmd[0] == "sync") {
+      if (!access_r) {
+	r = -EACCES;
+	rs = "access denied";
+	goto out;
+      }
+      if (m->cmd[1] == "status") {
+	stringstream ss;
+	_sync_status(ss);
+	rs = ss.str();
+	r = 0;
+      } else if (m->cmd[1] == "force") {
+        if (m->cmd.size() < 4 || m->cmd[2] != "--yes-i-really-mean-it"
+            || m->cmd[3] != "--i-know-what-i-am-doing") {
+          r = -EINVAL;
+          rs = "are you SURE? this will mean the monitor store will be "
+               "erased.  pass '--yes-i-really-mean-it "
+               "--i-know-what-i-am-doing' if you really do.";
+          goto out;
+        }
+	stringstream ss;
+	_sync_force(ss);
+	rs = ss.str();
+	r = 0;
+      } else {
+	rs = "unknown command";
+	r = -EINVAL;
+	goto out;
+      }
   } else if (m->cmd[0] == "heap") {
     if (!access_all) {
       r = -EACCES;
@@ -2122,6 +3014,11 @@ bool Monitor::_ms_dispatch(Message *m)
       handle_probe((MMonProbe*)m);
       break;
 
+    // Sync (i.e., the new slurp, but on steroids)
+    case MSG_MON_SYNC:
+      handle_sync((MMonSync*)m);
+      break;
+
       // OSDs
     case MSG_OSD_FAILURE:
     case MSG_OSD_BOOT:
@@ -2183,6 +3080,15 @@ bool Monitor::_ms_dispatch(Message *m)
 	  break;
 	}
 
+	if (state == STATE_SYNCHRONIZING) {
+	  // we are synchronizing. These messages would do us no
+	  // good, thus just drop them and ignore them.
+	  dout(10) << __func__ << " ignore paxos msg from "
+		   << pm->get_source_inst() << dendl;
+	  pm->put();
+	  break;
+	}
+
 	// sanitize
 	if (pm->epoch > get_epoch()) {
 	  bootstrap();
@@ -2194,14 +3100,14 @@ bool Monitor::_ms_dispatch(Message *m)
 	  break;
 	}
 
-	// send it to the right paxos instance
-	assert(pm->machine_id < PAXOS_NUM);
-	Paxos *p = get_paxos_by_name(get_paxos_name(pm->machine_id));
-	p->dispatch((PaxosServiceMessage*)m);
+	paxos->dispatch((PaxosServiceMessage*)m);
 
 	// make sure service finds out about any state changes
-	if (p->is_active())
-	  paxos_service[p->machine_id]->update_from_paxos();
+	if (paxos->is_active()) {
+	  vector<PaxosService*>::iterator service_it = paxos_service.begin();
+	  for ( ; service_it != paxos_service.end(); ++service_it)
+	    (*service_it)->update_from_paxos();
+	}
       }
       break;
 
@@ -2215,7 +3121,7 @@ bool Monitor::_ms_dispatch(Message *m)
 	m->put();
 	break;
       }
-      if (!is_probing() && !is_slurping()) {
+      if (!is_probing() && !is_synchronizing()) {
 	elector.dispatch(m);
       } else {
 	m->put();
@@ -2683,13 +3589,13 @@ void Monitor::handle_get_version(MMonGetVersion *m)
   reply->handle = m->handle;
   if (m->what == "mdsmap") {
     reply->version = mdsmon()->mdsmap.get_epoch();
-    reply->oldest_version = mdsmon()->paxos->get_first_committed();
+    reply->oldest_version = mdsmon()->get_first_committed();
   } else if (m->what == "osdmap") {
     reply->version = osdmon()->osdmap.get_epoch();
-    reply->oldest_version = osdmon()->paxos->get_first_committed();
+    reply->oldest_version = osdmon()->get_first_committed();
   } else if (m->what == "monmap") {
     reply->version = monmap->get_epoch();
-    reply->oldest_version = monmon()->paxos->get_first_committed();
+    reply->oldest_version = monmon()->get_first_committed();
   } else {
     derr << "invalid map type " << m->what << dendl;
   }
@@ -2794,10 +3700,8 @@ void Monitor::tick()
   // ok go.
   dout(11) << "tick" << dendl;
   
-  if (!is_slurping()) {
-    for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++) {
-      (*p)->tick();
-    }
+  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++) {
+    (*p)->tick();
   }
   
   // trim sessions
@@ -2840,9 +3744,12 @@ int Monitor::check_fsid()
   ss << monmap->get_fsid();
   string us = ss.str();
   bufferlist ebl;
-  int r = store->get_bl_ss(ebl, "cluster_uuid", 0);
-  if (r < 0)
-    return r;
+
+  if (!store->exists(MONITOR_NAME, "cluster_uuid"))
+    return -ENOENT;
+
+  int r = store->get(MONITOR_NAME, "cluster_uuid", ebl);
+  assert(r == 0);
 
   string es(ebl.c_str(), ebl.length());
 
@@ -2864,13 +3771,22 @@ int Monitor::check_fsid()
 
 int Monitor::write_fsid()
 {
+  MonitorDBStore::Transaction t;
+  int r = write_fsid(t);
+  store->apply_transaction(t);
+  return r;
+}
+
+int Monitor::write_fsid(MonitorDBStore::Transaction &t)
+{
   ostringstream ss;
   ss << monmap->get_fsid() << "\n";
   string us = ss.str();
 
   bufferlist b;
   b.append(us);
-  store->put_bl_ss(b, "cluster_uuid", 0);
+
+  t.put(MONITOR_NAME, "cluster_uuid", b);
   return 0;
 }
 
@@ -2880,12 +3796,7 @@ int Monitor::write_fsid()
  */
 int Monitor::mkfs(bufferlist& osdmapbl)
 {
-  // create it
-  int err = store->mkfs();
-  if (err) {
-    derr << "store->mkfs failed with: " << cpp_strerror(err) << dendl;
-    return err;
-  }
+  MonitorDBStore::Transaction t;
 
   // verify cluster fsid
   int r = check_fsid();
@@ -2895,17 +3806,17 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   bufferlist magicbl;
   magicbl.append(CEPH_MON_ONDISK_MAGIC);
   magicbl.append("\n");
-  store->put_bl_ss(magicbl, "magic", 0);
+  t.put(MONITOR_NAME, "magic", magicbl);
 
 
   features = get_supported_features();
-  write_features();
+  write_features(t);
 
   // save monmap, osdmap, keyring.
   bufferlist monmapbl;
   monmap->encode(monmapbl, CEPH_FEATURES_ALL);
   monmap->set_epoch(0);     // must be 0 to avoid confusing first MonmapMonitor::update_from_paxos()
-  store->put_bl_ss(monmapbl, "mkfs", "monmap");
+  t.put("mkfs", "monmap", monmapbl);
 
   if (osdmapbl.length()) {
     // make sure it's a valid osdmap
@@ -2917,7 +3828,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
       derr << "error decoding provided osdmap: " << e.what() << dendl;
       return -EINVAL;
     }
-    store->put_bl_ss(osdmapbl, "mkfs", "osdmap");
+    t.put("mkfs", "osdmap", osdmapbl);
   }
 
   KeyRing keyring;
@@ -2938,15 +3849,33 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 
   bufferlist keyringbl;
   keyring.encode_plaintext(keyringbl);
-  store->put_bl_ss(keyringbl, "mkfs", "keyring");
-
-  // sync and write out fsid to indicate completion.
-  store->sync();
-  r = write_fsid();
-  if (r < 0)
-    return r;
+  t.put("mkfs", "keyring", keyringbl);
+  write_fsid(t);
+  store->apply_transaction(t);
 
   return 0;
+}
+
+int Monitor::write_default_keyring(bufferlist& bl)
+{
+  ostringstream os;
+  os << g_conf->mon_data << "/keyring";
+
+  int err = 0;
+  int fd = ::open(os.str().c_str(), O_WRONLY|O_CREAT, 0644);
+  if (fd < 0) {
+    err = -errno;
+    dout(0) << __func__ << " failed to open " << os.str() 
+	    << ": " << cpp_strerror(err) << dendl;
+    return err;
+  }
+
+  err = bl.write_fd(fd);
+  if (!err)
+    ::fsync(fd);
+  ::close(fd);
+
+  return err;
 }
 
 void Monitor::extract_save_mon_key(KeyRing& keyring)
@@ -2960,7 +3889,7 @@ void Monitor::extract_save_mon_key(KeyRing& keyring)
     pkey.add(mon_name, mon_key);
     bufferlist bl;
     pkey.encode_plaintext(bl);
-    store->put_bl_ss(bl, "keyring", NULL);
+    write_default_keyring(bl);
     keyring.remove(mon_name);
   }
 }
@@ -3063,3 +3992,308 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
   }
   return true;
 };
+
+#undef dout_prefix
+#define dout_prefix *_dout
+
+void Monitor::StoreConverter::_convert_finish_features(
+    MonitorDBStore::Transaction &t)
+{
+  dout(20) << __func__ << dendl;
+
+  assert(db->exists(MONITOR_NAME, COMPAT_SET_LOC));
+  bufferlist features_bl;
+  db->get(MONITOR_NAME, COMPAT_SET_LOC, features_bl);
+  assert(features_bl.length());
+
+  CompatSet features;
+  bufferlist::iterator p = features_bl.begin();
+  features.decode(p);
+
+  assert(features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV));
+  features.incompat.remove(CEPH_MON_FEATURE_INCOMPAT_GV);
+  assert(!features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV));
+
+  features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_SINGLE_PAXOS);
+  assert(features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_SINGLE_PAXOS));
+
+  features_bl.clear();
+  features.encode(features_bl);
+
+  dout(20) << __func__ << " new features " << features << dendl;
+  t.put(MONITOR_NAME, COMPAT_SET_LOC, features_bl);
+}
+
+
+bool Monitor::StoreConverter::_check_gv_store()
+{
+  dout(20) << __func__ << dendl;
+  if (!store->exists_bl_ss(COMPAT_SET_LOC, 0))
+    return false;
+
+  bufferlist features_bl;
+  store->get_bl_ss_safe(features_bl, COMPAT_SET_LOC, 0);
+  if (!features_bl.length()) {
+    dout(20) << __func__ << " on-disk features length is zero" << dendl;
+    return false;
+  }
+  CompatSet features;
+  bufferlist::iterator p = features_bl.begin();
+  features.decode(p);
+  return (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV));
+}
+
+bool Monitor::StoreConverter::needs_conversion()
+{
+  bool ret = false;
+
+  dout(10) << __func__ << dendl;
+  _init();
+  if (db->open(std::cerr) < 0) {
+    dout(1) << "unable to open monitor store at " << g_conf->mon_data << dendl;
+    dout(1) << "check for old monitor store format" << dendl;
+    assert(!store->mount());
+    bufferlist magicbl;
+    if (store->exists_bl_ss("magic", 0)) {
+      if (_check_gv_store()) {
+	dout(1) << "found old GV monitor store format "
+		<< "-- should convert!" << dendl;
+	ret = true;
+      } else {
+	dout(0) << "Existing monitor store has not been converted "
+		<< "to 0.52 (bobtail) format" << dendl;
+	assert(0 == "Existing store has not been converted to 0.52 format");
+      }
+    }
+    assert(!store->umount());
+  }
+  _deinit();
+  return ret;
+}
+
+int Monitor::StoreConverter::convert()
+{
+  _init();
+  assert(!db->create_and_open(std::cerr));
+  assert(!store->mount());
+  if (db->exists("mon_convert", "on_going")) {
+    dout(0) << __func__ << " found a mon store in mid-convertion; abort!"
+      << dendl;
+    return -EEXIST;
+  }
+
+  _mark_convert_start();
+  _convert_monitor();
+  _convert_machines();
+  _convert_paxos();
+  _mark_convert_finish();
+
+  store->umount();
+  _deinit();
+
+  dout(0) << __func__ << " finished conversion" << dendl;
+
+  return 0;
+}
+
+void Monitor::StoreConverter::_convert_monitor()
+{
+  dout(10) << __func__ << dendl;
+
+  assert(store->exists_bl_ss("magic"));
+  assert(store->exists_bl_ss("keyring"));
+  assert(store->exists_bl_ss("feature_set"));
+  assert(store->exists_bl_ss("election_epoch"));
+
+  MonitorDBStore::Transaction tx;
+
+  if (store->exists_bl_ss("joined")) {
+    version_t joined = store->get_int("joined");
+    tx.put(MONITOR_NAME, "joined", joined);
+  }
+
+  vector<string> keys;
+  keys.push_back("magic");
+  keys.push_back("feature_set");
+  keys.push_back("cluster_uuid");
+
+  vector<string>::iterator it;
+  for (it = keys.begin(); it != keys.end(); ++it) {
+    if (!store->exists_bl_ss((*it).c_str()))
+      continue;
+
+    bufferlist bl;
+    int r = store->get_bl_ss(bl, (*it).c_str(), 0);
+    assert(r > 0);
+    tx.put(MONITOR_NAME, *it, bl);
+  }
+  version_t election_epoch = store->get_int("election_epoch");
+  tx.put(MONITOR_NAME, "election_epoch", election_epoch);
+
+  assert(!tx.empty());
+  db->apply_transaction(tx);
+  dout(10) << __func__ << " finished" << dendl;
+}
+
+void Monitor::StoreConverter::_convert_machines(string machine)
+{
+  dout(10) << __func__ << " " << machine << dendl;
+
+  version_t first_committed =
+    store->get_int(machine.c_str(), "first_committed");
+  version_t last_committed =
+    store->get_int(machine.c_str(), "last_committed");
+
+  version_t accepted_pn = store->get_int(machine.c_str(), "accepted_pn");
+  version_t last_pn = store->get_int(machine.c_str(), "last_pn");
+
+  if (accepted_pn > highest_accepted_pn)
+    highest_accepted_pn = accepted_pn;
+  if (last_pn > highest_last_pn)
+    highest_last_pn = last_pn;
+
+  string machine_gv(machine);
+  machine_gv.append("_gv");
+  bool has_gv = true;
+
+  if (!store->exists_bl_ss(machine_gv.c_str())) {
+    dout(1) << __func__ << " " << machine
+      << " no gv dir '" << machine_gv << "'" << dendl;
+    has_gv = false;
+  }
+
+  for (version_t ver = first_committed; ver <= last_committed; ver++) {
+    if (!store->exists_bl_sn(machine.c_str(), ver)) {
+      dout(20) << __func__ << " " << machine
+	       << " ver " << ver << " dne" << dendl;
+      continue;
+    }
+
+    bufferlist bl;
+    int r = store->get_bl_sn(bl, machine.c_str(), ver);
+    assert(r >= 0);
+    dout(20) << __func__ << " " << machine
+	     << " ver " << ver << " bl " << bl.length() << dendl;
+
+    MonitorDBStore::Transaction tx;
+    tx.put(machine, ver, bl);
+    tx.put(machine, "last_committed", ver);
+
+    if (has_gv && store->exists_bl_sn(machine_gv.c_str(), ver)) {
+      stringstream s;
+      s << ver;
+      string ver_str = s.str();
+
+      version_t gv = store->get_int(machine_gv.c_str(), ver_str.c_str());
+      dout(20) << __func__ << " " << machine
+	       << " ver " << ver << " -> " << gv << dendl;
+
+      if (gvs.count(gv) == 0) {
+	gvs.insert(gv);
+      } else {
+	dout(0) << __func__ << " " << machine
+		<< " gv " << gv << " already exists"
+		<< dendl;
+	assert(0 == "Duplicate GV -- something is wrong!");
+      }
+
+      bufferlist tx_bl;
+      tx.encode(tx_bl);
+      tx.put("paxos", gv, tx_bl);
+    }
+    db->apply_transaction(tx);
+  }
+
+  version_t lc = db->get(machine, "last_committed");
+  assert(lc == last_committed);
+
+  MonitorDBStore::Transaction tx;
+  tx.put(machine, "first_committed", first_committed);
+  tx.put(machine, "last_committed", last_committed);
+  tx.put(machine, "conversion_first", first_committed);
+
+  if (store->exists_bl_ss(machine.c_str(), "latest")) {
+    bufferlist latest_bl_raw;
+    int r = store->get_bl_ss(latest_bl_raw, machine.c_str(), "latest");
+    assert(r >= 0);
+    if (!latest_bl_raw.length()) {
+      dout(20) << __func__ << " machine " << machine
+	       << " skip latest with size 0" << dendl;
+      goto out;
+    }
+
+    tx.put(machine, "latest", latest_bl_raw);
+
+    bufferlist::iterator lbl_it = latest_bl_raw.begin();
+    bufferlist latest_bl;
+    version_t latest_ver;
+    ::decode(latest_ver, lbl_it);
+    ::decode(latest_bl, lbl_it);
+
+    dout(20) << __func__ << " machine " << machine
+	     << " latest ver " << latest_ver << dendl;
+
+    tx.put(machine, "full_latest", latest_ver);
+    stringstream os;
+    os << "full_" << latest_ver;
+    tx.put(machine, os.str(), latest_bl);
+  }
+out:
+  db->apply_transaction(tx);
+  dout(10) << __func__ << " machine " << machine << " finished" << dendl;
+}
+
+void Monitor::StoreConverter::_convert_paxos()
+{
+  dout(10) << __func__ << dendl;
+  assert(gvs.size() > 0);
+
+  set<version_t>::reverse_iterator rit = gvs.rbegin();
+  version_t highest_gv = *rit;
+  version_t last_gv = highest_gv;
+
+  int n = 0;
+  int max_versions = (g_conf->paxos_max_join_drift*2);
+  for (; (rit != gvs.rend()) && (n < max_versions); ++rit, ++n) {
+    version_t gv = *rit;
+
+    if (last_gv == gv)
+      continue;
+    if ((last_gv - gv) > 1) {
+      // we are done; we found a gap and we are only interested in keeping
+      // contiguous paxos versions.
+      break;
+    }
+    last_gv = gv;
+  }
+
+  // erase all paxos versions between [first, last_gv[, with first being the
+  // first gv in the map.
+  MonitorDBStore::Transaction tx;
+  set<version_t>::iterator it = gvs.begin();
+  dout(1) << __func__ << " first gv " << (*it)
+	  << " last gv " << last_gv << dendl;
+  for (; it != gvs.end() && (*it < last_gv); ++it) {
+    tx.erase("paxos", *it);
+  }
+  tx.put("paxos", "first_committed", last_gv);
+  tx.put("paxos", "last_committed", highest_gv);
+  tx.put("paxos", "accepted_pn", highest_accepted_pn);
+  tx.put("paxos", "last_pn", highest_last_pn);
+  tx.put("paxos", "conversion_first", last_gv);
+  db->apply_transaction(tx);
+
+  dout(10) << __func__ << " finished" << dendl;
+}
+
+void Monitor::StoreConverter::_convert_machines()
+{
+  dout(10) << __func__ << dendl;
+  set<string> machine_names = _get_machines_names();
+  set<string>::iterator it = machine_names.begin();
+
+  for (; it != machine_names.end(); ++it) {
+    _convert_machines(*it);
+  }
+  dout(10) << __func__ << " finished" << dendl;
+}

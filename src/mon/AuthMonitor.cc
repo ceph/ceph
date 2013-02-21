@@ -14,9 +14,9 @@
 
 #include <sstream>
 
-#include "AuthMonitor.h"
-#include "Monitor.h"
-#include "MonitorStore.h"
+#include "mon/AuthMonitor.h"
+#include "mon/Monitor.h"
+#include "mon/MonitorDBStore.h"
 
 #include "messages/MMonCommand.h"
 #include "messages/MAuth.h"
@@ -33,10 +33,11 @@
 
 #include "common/config.h"
 #include "include/assert.h"
+#include <sstream>
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
-#define dout_prefix _prefix(_dout, mon, paxos->get_version())
+#define dout_prefix _prefix(_dout, mon, get_version())
 static ostream& _prefix(std::ostream *_dout, Monitor *mon, version_t v) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name()
@@ -67,8 +68,7 @@ void AuthMonitor::check_rotate()
 
 void AuthMonitor::tick() 
 {
-  if (!paxos->is_active() ||
-      !mon->is_all_paxos_recovered()) return;
+  if (!is_active()) return;
 
   update_from_paxos();
   dout(10) << *this << dendl;
@@ -96,7 +96,8 @@ void AuthMonitor::create_initial()
 
   KeyRing keyring;
   bufferlist bl;
-  mon->store->get_bl_ss_safe(bl, "mkfs", "keyring");
+  int ret = mon->store->get("mkfs", "keyring", bl);
+  assert(ret == 0);
   bufferlist::iterator p = bl.begin();
   ::decode(keyring, p);
 
@@ -112,36 +113,50 @@ void AuthMonitor::create_initial()
 
 void AuthMonitor::update_from_paxos()
 {
-  dout(10) << "update_from_paxos()" << dendl;
-  version_t paxosv = paxos->get_version();
+  dout(10) << __func__ << dendl;
+  version_t version = get_version();
   version_t keys_ver = mon->key_server.get_ver();
-  if (paxosv == keys_ver)
+  if (version == keys_ver)
     return;
-  assert(paxosv >= keys_ver);
+  assert(version >= keys_ver);
 
-  if (keys_ver != paxos->get_stashed_version()) {
-    bufferlist latest;
-    keys_ver = paxos->get_stashed(latest);
-    dout(7) << "update_from_paxos loading summary e" << keys_ver << dendl;
-    bufferlist::iterator p = latest.begin();
+  version_t latest_full = get_version_latest_full();
+
+  dout(10) << __func__ << " version " << version << " keys ver " << keys_ver
+           << " latest " << latest_full << dendl;
+
+  if ((latest_full > 0) && (latest_full > keys_ver)) {
+    bufferlist latest_bl;
+    int err = get_version_full(latest_full, latest_bl);
+    assert(err == 0);
+    assert(latest_bl.length() != 0);
+    dout(7) << __func__ << " loading summary e " << latest_full << dendl;
+    dout(7) << __func__ << " latest length " << latest_bl.length() << dendl;
+    bufferlist::iterator p = latest_bl.begin();
     __u8 struct_v;
     ::decode(struct_v, p);
     ::decode(max_global_id, p);
     ::decode(mon->key_server, p);
-    mon->key_server.set_ver(keys_ver);
-  } 
+    mon->key_server.set_ver(latest_full);
+    keys_ver = latest_full;
+  }
+
+  dout(10) << __func__ << " key server version " << mon->key_server.get_ver() << dendl;
 
   // walk through incrementals
-  while (paxosv > keys_ver) {
+  while (version > keys_ver) {
     bufferlist bl;
-    bool success = paxos->read(keys_ver+1, bl);
-    assert(success);
+    int ret = get_version(keys_ver+1, bl);
+    assert(ret == 0);
 
     // reset if we are moving to initial state.  we will normally have
     // keys in here temporarily for bootstrapping that we need to
     // clear out.
     if (keys_ver == 0) 
       mon->key_server.clear_secrets();
+
+    dout(20) << __func__ << " walking through version " << (keys_ver+1)
+             << " len " << bl.length() << dendl;
 
     bufferlist::iterator p = bl.begin();
     __u8 v;
@@ -169,7 +184,9 @@ void AuthMonitor::update_from_paxos()
     mon->key_server.set_ver(keys_ver);
 
     if (keys_ver == 1) {
-      mon->store->erase_ss("mkfs", "keyring");
+      MonitorDBStore::Transaction t;
+      t.erase("mkfs", "keyring");
+      mon->store->apply_transaction(t);
     }
   }
 
@@ -178,19 +195,16 @@ void AuthMonitor::update_from_paxos()
 
   dout(10) << "update_from_paxos() last_allocated_id=" << last_allocated_id
 	   << " max_global_id=" << max_global_id << dendl;
-
+ 
+  /*
   bufferlist bl;
   __u8 v = 1;
   ::encode(v, bl);
   ::encode(max_global_id, bl);
   Mutex::Locker l(mon->key_server.get_lock());
   ::encode(mon->key_server, bl);
-  paxos->stash_latest(paxosv, bl);
-
-  unsigned max = g_conf->paxos_max_join_drift * 2;
-  if (mon->is_leader() &&
-      paxosv > max)
-    paxos->trim_to(paxosv - max);
+  paxos->stash_latest(version, bl);
+  */
 }
 
 void AuthMonitor::increase_max_global_id()
@@ -213,18 +227,55 @@ bool AuthMonitor::should_propose(double& delay)
 void AuthMonitor::create_pending()
 {
   pending_auth.clear();
-  dout(10) << "create_pending v " << (paxos->get_version() + 1) << dendl;
+  dout(10) << "create_pending v " << (get_version() + 1) << dendl;
 }
 
-void AuthMonitor::encode_pending(bufferlist &bl)
+void AuthMonitor::encode_pending(MonitorDBStore::Transaction *t)
 {
-  dout(10) << "encode_pending v " << (paxos->get_version() + 1) << dendl;
+  dout(10) << __func__ << " v " << (get_version() + 1) << dendl;
+
+  bufferlist bl;
+
   __u8 v = 1;
   ::encode(v, bl);
-  for (vector<Incremental>::iterator p = pending_auth.begin();
-       p != pending_auth.end();
-       p++)
+  vector<Incremental>::iterator p;
+  for (p = pending_auth.begin(); p != pending_auth.end(); p++)
     p->encode(bl, mon->get_quorum_features());
+
+  version_t version = get_version() + 1;
+  put_version(t, version, bl);
+  put_last_committed(t, version);
+}
+
+void AuthMonitor::encode_full(MonitorDBStore::Transaction *t)
+{
+  version_t version = mon->key_server.get_ver();
+  dout(10) << __func__ << " auth v " << version << dendl;
+  assert(get_version() == version);
+
+  bufferlist full_bl;
+  Mutex::Locker l(mon->key_server.get_lock());
+  if (mon->key_server.has_secrets()) {
+    dout(20) << __func__ << " key server has secrets!" << dendl;
+    __u8 v = 1;
+    ::encode(v, full_bl);
+    ::encode(max_global_id, full_bl);
+    ::encode(mon->key_server, full_bl);
+
+    put_version_full(t, version, full_bl);
+    put_version_latest_full(t, version);
+  } else {
+    dout(20) << __func__
+	     << " key server has no secrets; do not put them in tx" << dendl;
+  }
+}
+
+void AuthMonitor::update_trim()
+{
+  unsigned max = g_conf->paxos_max_join_drift * 2;
+  version_t version = get_version();
+  if (mon->is_leader() && (version > max))
+    set_trim_to(version - max);
 }
 
 bool AuthMonitor::preprocess_query(PaxosServiceMessage *m)
@@ -393,7 +444,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
 	MMonGlobalID *req = new MMonGlobalID();
 	req->old_max_id = max_global_id;
 	mon->messenger->send_message(req, mon->monmap->get_inst(leader));
-	paxos->wait_for_commit(new C_RetryMessage(this, m));
+	wait_for_finished_proposal(new C_RetryMessage(this, m));
 	return true;
       }
 
@@ -419,7 +470,8 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
       ret = s->auth_handler->handle_request(indata, response_bl, s->global_id, caps_info, &auid);
     }
     if (ret == -EIO) {
-      paxos->wait_for_active(new C_RetryMessage(this, m));
+      wait_for_active(new C_RetryMessage(this,m));
+      //paxos->wait_for_active(new C_RetryMessage(this, m));
       goto done;
     }
     if (caps_info.caps.length()) {
@@ -468,7 +520,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
     if (!session ||
 	(!session->caps.get_allow_all() &&
 	 !mon->_allowed_command(session, m->cmd))) {
-      mon->reply_command(m, -EACCES, "access denied", rdata, paxos->get_version());
+      mon->reply_command(m, -EACCES, "access denied", rdata, get_version());
       return true;
     }
 
@@ -552,7 +604,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
  done:
   string rs;
   getline(ss, rs, '\0');
-  mon->reply_command(m, r, rs, rdata, paxos->get_version());
+  mon->reply_command(m, r, rs, rdata, get_version());
   return true;
 }
 
@@ -587,7 +639,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
   if (!session ||
       (!session->caps.get_allow_all() &&
        !mon->_allowed_command(session, m->cmd))) {
-    mon->reply_command(m, -EACCES, "access denied", rdata, paxos->get_version());
+    mon->reply_command(m, -EACCES, "access denied", rdata, get_version());
     return true;
   }
 
@@ -607,7 +659,8 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       import_keyring(keyring);
       ss << "imported keyring";
       getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+      //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
       return true;
     }
     else if (m->cmd[1] == "add" && m->cmd.size() >= 3) {
@@ -655,7 +708,8 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
       ss << "added key for " << auth_inc.name;
       getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+      //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
       return true;
     }
     else if ((m->cmd[1] == "get-or-create-key" ||
@@ -705,7 +759,8 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 	  ::decode(auth_inc, q);
 	  if (auth_inc.op == KeyServerData::AUTH_INC_ADD &&
 	      auth_inc.name == entity) {
-	    paxos->wait_for_commit(new C_RetryMessage(this, m));
+	    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+	    //paxos->wait_for_commit(new C_RetryMessage(this, m));
 	    return true;
 	  }
 	}
@@ -730,7 +785,8 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       }
 
       getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, rdata, paxos->get_version()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, rdata, get_version()));
+      //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
       return true;
     }
     else if (m->cmd[1] == "caps" && m->cmd.size() >= 3) {
@@ -756,7 +812,8 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
       ss << "updated caps for " << auth_inc.name;
       getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+      //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
       return true;     
     }
     else if (m->cmd[1] == "del" && m->cmd.size() >= 3) {
@@ -778,7 +835,8 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
       ss << "updated";
       getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+      //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
       return true;
     }
     else {
@@ -790,7 +848,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
 done:
   getline(ss, rs, '\0');
-  mon->reply_command(m, err, rs, rdata, paxos->get_version());
+  mon->reply_command(m, err, rs, rdata, get_version());
   return false;
 }
 

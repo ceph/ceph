@@ -22,8 +22,8 @@
 
 class MMonProbe : public Message {
 public:
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 1;
+  static const int HEAD_VERSION = 4;
+  static const int COMPAT_VERSION = 4;
 
   enum {
     OP_PROBE = 1,
@@ -49,15 +49,14 @@ public:
   string name;
   set<int32_t> quorum;
   bufferlist monmap_bl;
-  map<string, version_t> paxos_versions;
+  version_t paxos_first_version;
+  version_t paxos_last_version;
   bool has_ever_joined;
 
   string machine_name;
   map<string, map<version_t,bufferlist> > paxos_values;
   bufferlist latest_value;
   version_t latest_version, newest_version, oldest_version;
-
-  map<string, map<version_t,version_t> > gv;
 
   MMonProbe()
     : Message(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION) {}
@@ -74,8 +73,12 @@ public:
     out << "mon_probe(" << get_opname(op) << " " << fsid << " name " << name;
     if (quorum.size())
       out << " quorum " << quorum;
-    if (paxos_versions.size())
-      out << " versions " << paxos_versions;
+    if (op == OP_REPLY) {
+      out << " paxos("
+	<< " fc " << paxos_first_version
+	<< " lc " << paxos_last_version
+	<< " )";
+    }
     if (machine_name.length())
       out << " machine_name " << machine_name << " " << oldest_version << "-" << newest_version;
     if (!has_ever_joined)
@@ -97,7 +100,6 @@ public:
     ::encode(name, payload);
     ::encode(quorum, payload);
     ::encode(monmap_bl, payload);
-    ::encode(paxos_versions, payload);
     ::encode(machine_name, payload);
     ::encode(oldest_version, payload);
     ::encode(newest_version, payload);
@@ -105,7 +107,8 @@ public:
     ::encode(latest_value, payload);
     ::encode(latest_version, payload);
     ::encode(has_ever_joined, payload);
-    ::encode(gv, payload);
+    ::encode(paxos_first_version, payload);
+    ::encode(paxos_last_version, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -114,7 +117,6 @@ public:
     ::decode(name, p);
     ::decode(quorum, p);
     ::decode(monmap_bl, p);
-    ::decode(paxos_versions, p);
     ::decode(machine_name, p);
     ::decode(oldest_version, p);
     ::decode(newest_version, p);
@@ -125,8 +127,8 @@ public:
       ::decode(has_ever_joined, p);
     else
       has_ever_joined = false;
-    if (header.version >= 3)
-      ::decode(gv, p);
+    ::decode(paxos_first_version, p);
+    ::decode(paxos_last_version, p);
   }
 };
 
