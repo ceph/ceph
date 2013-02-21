@@ -265,6 +265,8 @@ void Objecter::send_linger(LingerOp *info)
 		 onack, oncommit,
 		 info->pobjver);
   o->snapid = info->snap;
+  o->snapc = info->snapc;
+  o->mtime = info->mtime;
 
   // do not resend this; we will send a new op to reregister
   o->should_resend = false;
@@ -335,11 +337,43 @@ void Objecter::unregister_linger(uint64_t linger_id)
   }
 }
 
-tid_t Objecter::linger(const object_t& oid, const object_locator_t& oloc, 
-		       ObjectOperation& op,
-		       snapid_t snap, bufferlist& inbl, bufferlist *poutbl, int flags,
-		       Context *onack, Context *onfinish,
-		       eversion_t *objver)
+tid_t Objecter::linger_mutate(const object_t& oid, const object_locator_t& oloc,
+			      ObjectOperation& op,
+			      const SnapContext& snapc, utime_t mtime,
+			      bufferlist& inbl, int flags,
+			      Context *onack, Context *oncommit,
+			      eversion_t *objver)
+{
+  LingerOp *info = new LingerOp;
+  info->oid = oid;
+  info->oloc = oloc;
+  if (info->oloc.key == oid)
+    info->oloc.key.clear();
+  info->snapc = snapc;
+  info->mtime = mtime;
+  info->flags = flags | CEPH_OSD_FLAG_WRITE;
+  info->ops = op.ops;
+  info->inbl = inbl;
+  info->poutbl = NULL;
+  info->pobjver = objver;
+  info->on_reg_ack = onack;
+  info->on_reg_commit = oncommit;
+
+  info->linger_id = ++max_linger_id;
+  linger_ops[info->linger_id] = info;
+
+  logger->set(l_osdc_linger_active, linger_ops.size());
+
+  send_linger(info);
+
+  return info->linger_id;
+}
+
+tid_t Objecter::linger_read(const object_t& oid, const object_locator_t& oloc,
+			    ObjectOperation& op,
+			    snapid_t snap, bufferlist& inbl, bufferlist *poutbl, int flags,
+			    Context *onfinish,
+			    eversion_t *objver)
 {
   LingerOp *info = new LingerOp;
   info->oid = oid;
@@ -352,7 +386,6 @@ tid_t Objecter::linger(const object_t& oid, const object_locator_t& oloc,
   info->inbl = inbl;
   info->poutbl = poutbl;
   info->pobjver = objver;
-  info->on_reg_ack = onack;
   info->on_reg_commit = onfinish;
 
   info->linger_id = ++max_linger_id;
