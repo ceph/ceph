@@ -1579,7 +1579,8 @@ bool pg_interval_t::check_new_interval(
     i.acting = old_acting;
     i.up = old_up;
 
-    if (i.acting.size() >=
+    if (!i.acting.empty() &&
+	i.acting.size() >=
 	osdmap->get_pools().find(pool_id)->second.min_size) {
       if (out)
 	*out << "generate_past_intervals " << i
