@@ -148,6 +148,9 @@ def _remove_sources_list(remote):
             'sudo', 'rm', '-f', '/etc/apt/sources.list.d/ceph.list',
             run.Raw('&&'),
             'sudo', 'apt-get', 'update',
+            # ignore failure
+            run.Raw('||'),
+            'true',
             ],
         stdout=StringIO(),
        )
