@@ -2616,6 +2616,11 @@ void Monitor::handle_command(MMonCommand *m)
       rs = "access denied";
       goto out;
     }
+    if (m->cmd.size() < 2) {
+      r = -EINVAL;
+      rs = "'quorum' requires an argument: 'exit' or 'enter'";
+      goto out;
+    }
     if (m->cmd[1] == "exit") {
       reset();
       start_election();
