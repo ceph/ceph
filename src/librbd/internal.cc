@@ -2017,6 +2017,12 @@ reprotect_and_return_err:
       assert(object_overlap <= object_size);
 
       RWLock::RLocker l(ictx->parent_lock);
+      // stop early if the parent went away - it just means
+      // another flatten finished first, so this one is useless.
+      if (!ictx->parent) {
+	r = 0;
+	goto err;
+      }
       if ((r = read(ictx->parent, objectx, buf, NULL)) < 0) {
 	lderr(ictx->cct) << "reading from parent failed" << dendl;
 	goto err;
