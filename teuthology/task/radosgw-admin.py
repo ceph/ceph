@@ -305,13 +305,13 @@ def task(ctx, config):
     assert not err
 
     # try creating an object with the first user before the bucket is relinked
-    denied = false
+    denied = False
     key = boto.s3.key.Key(bucket)
 
     try:
         key.set_contents_from_string('two')
     except boto.exception.S3ResponseError:
-        denied = true
+        denied = True
 
     assert not denied
 
@@ -328,7 +328,7 @@ def task(ctx, config):
     try:
         key.set_contents_from_string('three')
     except boto.exception.S3ResponseError:
-        denied = true
+        denied = True
 
     assert denied
 
@@ -573,7 +573,7 @@ def task(ctx, config):
     # TESTCASE 'pool-add', 'pool', 'add', 'make default pool available', 'succeeds'
     (err, out) = rgwadmin(ctx, client, ['pool', 'add', '--pool', default_pool])
 
-    assert out['name'] == default_pool_name
+    assert out['name'] == default_pool
 
     # TESTCASE 'cluster-info', 'cluster', 'info', 'get cluser info', 'succeeds'
     (err, out) = rgwadmin(ctx, client, ['cluster', 'info'])
