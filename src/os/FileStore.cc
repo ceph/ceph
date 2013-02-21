@@ -3720,6 +3720,27 @@ int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset, bool user_only)
   return 0;
 }
 
+int FileStore::_fsetattrs(int fd, map<string, bufferptr> &aset)
+{
+  for (map<string, bufferptr>::iterator p = aset.begin();
+       p != aset.end();
+       ++p) {
+    char n[CHAIN_XATTR_MAX_NAME_LEN];
+    get_attrname(p->first.c_str(), n, CHAIN_XATTR_MAX_NAME_LEN);
+    const char *val;
+    if (p->second.length())
+      val = p->second.c_str();
+    else
+      val = "";
+    // ??? Why do we skip setting all the other attrs if one fails?
+    int r = chain_fsetxattr(fd, n, val, p->second.length());
+    if (r < 0) {
+      derr << "FileStore::_setattrs: chain_setxattr returned " << r << dendl;
+      return r;
+    }
+  }
+  return 0;
+}
 
 // objects
 
