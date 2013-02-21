@@ -3846,6 +3846,7 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
   map<string, bufferlist> omap_set;
   set<string> omap_remove;
   map<string, bufferptr> inline_set;
+  map<string, bufferptr> inline_to_set;
   int r = 0;
   int fd = lfn_open(cid, oid, 0);
   if (fd < 0) {
@@ -3890,18 +3891,13 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
       inline_set.insert(*p);
     }
 
-    const char *val;
-    if (p->second.length())
-      val = p->second.c_str();
-    else
-      val = "";
-    // ??? Why do we skip setting all the other attrs if one fails?
-    r = chain_fsetxattr(fd, n, val, p->second.length());
-    if (r < 0) {
-      derr << "FileStore::_setattrs: chain_setxattr returned " << r << dendl;
-      break;
-    }
+    inline_to_set.insert(*p);
+
   }
+
+  r = _fsetattrs(fd, inline_to_set);
+  if (r < 0)
+    return r;
 
   if (omap_remove.size()) {
     assert(g_conf->filestore_xattr_use_omap);
