@@ -1,4 +1,4 @@
-task:
+tasks:
 - install:
 - ceph:
     conf:
