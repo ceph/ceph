@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
   if (string(args[0]) == string("new")) start_new = true;
 
   LevelDBStore *_db = new LevelDBStore(db_path);
-  assert(!_db->init(std::cerr));
+  assert(!_db->create_and_open(std::cerr));
   boost::scoped_ptr<KeyValueDB> db(_db);
   boost::scoped_ptr<ObjectStore> store(new FileStore(store_path, store_dev));
 
