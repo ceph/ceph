@@ -386,6 +386,7 @@ public:
 
   int _fgetattr(int fd, const char *name, bufferptr& bp);
   int _fgetattrs(int fd, map<string,bufferptr>& aset, bool user_only);
+  int _fsetattrs(int fd, map<string, bufferptr> &aset);
 
   void _start_sync();
 
