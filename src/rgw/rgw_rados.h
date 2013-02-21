@@ -246,6 +246,8 @@ struct RGWListRawObjsCtx {
   RGWListRawObjsCtx() : initialized(false) {}
 };
 
+struct RGWRegion;
+
 struct RGWZoneParams {
   rgw_bucket domain_root;
   rgw_bucket control_pool;
@@ -261,10 +263,11 @@ struct RGWZoneParams {
 
   string name;
 
-  string get_pool_name(CephContext *cct, const string& zone_name);
-  int init(CephContext *cct, RGWRados *store, bool create_zone);
+  static string get_pool_name(CephContext *cct);
+  void init_name(CephContext *cct, RGWRegion& region);
+  int init(CephContext *cct, RGWRados *store, RGWRegion& region);
   void init_default();
-  int store_info(CephContext *cct, RGWRados *store);
+  int store_info(CephContext *cct, RGWRados *store, RGWRegion& region);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
@@ -505,28 +508,24 @@ protected:
   string region_name;
   string zone_name;
 
-  bool create_zone;
-
 public:
   RGWRados() : lock("rados_timer_lock"), timer(NULL),
                gc(NULL), use_gc_thread(false),
                num_watchers(0), watchers(NULL), watch_handles(NULL),
                bucket_id_lock("rados_bucket_id"), max_bucket_id(0),
                cct(NULL), rados(NULL),
-               pools_initialized(false),
-	       create_zone(false) {}
+               pools_initialized(false) {}
 
   void set_context(CephContext *_cct) {
     cct = _cct;
   }
 
-  void set_region(const string& name, bool create) {
+  void set_region(const string& name) {
     region_name = name;
   }
 
-  void set_zone(const string& name, bool create) {
+  void set_zone(const string& name) {
     zone_name = name;
-    create_zone = create;
   }
 
   RGWRegion region;
@@ -539,7 +538,9 @@ public:
     }
   }
 
+  int list_raw_prefixed_objs(string pool_name, const string& prefix, list<string>& result);
   int list_regions(list<string>& regions);
+  int list_zones(list<string>& zones);
 
   void tick();
 
