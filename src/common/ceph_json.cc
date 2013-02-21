@@ -57,7 +57,6 @@ JSONObj::~JSONObj()
 
 void JSONObj::add_child(string el, JSONObj *obj)
 {
-  cout << "add_child: " << name << " <- " << el << std::endl;
   children.insert(pair<string, JSONObj *>(el, obj));
 }
 
@@ -171,7 +170,6 @@ JSONObj *JSONObj::get_parent()
 
 bool JSONObj::is_object()
 {
-  cout << data.type() << std::endl;
   return (data.type() == obj_type);
 }
 
