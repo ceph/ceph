@@ -29,6 +29,7 @@ using namespace std;
 
 #include "PaxosService.h"
 #include "MonMap.h"
+#include "MonitorDBStore.h"
 
 class MMonGetMap;
 class MMonMap;
@@ -37,8 +38,8 @@ class MMonJoin;
 
 class MonmapMonitor : public PaxosService {
  public:
-  MonmapMonitor(Monitor *mn, Paxos *p) 
-    : PaxosService(mn, p)
+  MonmapMonitor(Monitor *mn, Paxos *p, const string& service_name)
+    : PaxosService(mn, p, service_name)
   {
   }
   MonMap pending_map; //the pending map awaiting passage
@@ -49,7 +50,9 @@ class MonmapMonitor : public PaxosService {
 
   void create_pending();
 
-  void encode_pending(bufferlist& bl);
+  void encode_pending(MonitorDBStore::Transaction *t);
+  // we always encode the full map; we have no use for full versions
+  virtual void encode_full(MonitorDBStore::Transaction *t) { }
 
   void on_active();
 

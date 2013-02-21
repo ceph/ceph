@@ -25,7 +25,7 @@ using namespace std;
 
 #include "mon/MonMap.h"
 #include "mon/Monitor.h"
-#include "mon/MonitorStore.h"
+#include "mon/MonitorDBStore.h"
 #include "mon/MonClient.h"
 
 #include "msg/Messenger.h"
@@ -202,7 +202,9 @@ int main(int argc, const char **argv)
     }
 
     // go
-    MonitorStore store(g_conf->mon_data);
+    MonitorDBStore store(g_conf->mon_data);
+    assert(!store.create_and_open(cerr));
+
     Monitor mon(g_ceph_context, g_conf->name.get_id(), &store, 0, &monmap);
     int r = mon.mkfs(osdmapbl);
     if (r < 0) {
@@ -214,16 +216,18 @@ int main(int argc, const char **argv)
     return 0;
   }
 
-  MonitorStore store(g_conf->mon_data);
-  err = store.mount();
-  if (err < 0) {
-    cerr << "problem opening monitor store in " << g_conf->mon_data << ": " << cpp_strerror(err) << std::endl;
-    exit(1);
+  {
+    Monitor::StoreConverter converter(g_conf->mon_data);
+    if (converter.needs_conversion())
+      assert(!converter.convert());
   }
 
+  MonitorDBStore store(g_conf->mon_data);
+  assert(!store.open(std::cerr));
+
   bufferlist magicbl;
-  err = store.get_bl_ss(magicbl, "magic", 0);
-  if (err < 0) {
+  err = store.get(Monitor::MONITOR_NAME, "magic", magicbl);
+  if (!magicbl.length()) {
     cerr << "unable to read magic from mon data.. did you run mkcephfs?" << std::endl;
     exit(1);
   }
@@ -251,7 +255,7 @@ int main(int argc, const char **argv)
     }
 
     // get next version
-    version_t v = store.get_int("monmap", "last_committed");
+    version_t v = store.get("monmap", "last_committed");
     cout << "last committed monmap epoch is " << v << ", injected map will be " << (v+1) << std::endl;
     v++;
 
@@ -268,10 +272,12 @@ int main(int argc, const char **argv)
     ::encode(v, final);
     ::encode(mapbl, final);
 
+    MonitorDBStore::Transaction t;
     // save it
-    store.put_bl_sn(mapbl, "monmap", v);
-    store.put_bl_ss(final, "monmap", "latest");
-    store.put_int(v, "monmap", "last_committed");
+    t.put("monmap", v, mapbl);
+    t.put("monmap", "latest", final);
+    t.put("monmap", "last_committed", v);
+    store.apply_transaction(t);
 
     cout << "done." << std::endl;
     exit(0);
@@ -283,14 +289,14 @@ int main(int argc, const char **argv)
   {
     bufferlist mapbl;
     bufferlist latest;
-    store.get_bl_ss_safe(latest, "monmap", "latest");
+    store.get("monmap", "latest", latest);
     if (latest.length() > 0) {
       bufferlist::iterator p = latest.begin();
       version_t v;
       ::decode(v, p);
       ::decode(mapbl, p);
     } else {
-      store.get_bl_ss_safe(mapbl, "mkfs", "monmap");
+      store.get("mkfs", "monmap", mapbl);
       if (mapbl.length() == 0) {
 	cerr << "mon fs missing 'monmap/latest' and 'mkfs/monmap'" << std::endl;
 	exit(1);
@@ -368,7 +374,8 @@ int main(int argc, const char **argv)
   messenger->set_policy(entity_name_t::TYPE_MON,
                         Messenger::Policy::lossless_peer_reuse(supported,
 							       CEPH_FEATURE_UID |
-							       CEPH_FEATURE_PGID64));
+							       CEPH_FEATURE_PGID64 |
+							       CEPH_FEATURE_MON_SINGLE_PAXOS));
   messenger->set_policy(entity_name_t::TYPE_OSD,
                         Messenger::Policy::stateless_server(supported,
                                                             CEPH_FEATURE_PGID64 |
@@ -403,7 +410,8 @@ int main(int argc, const char **argv)
     return 1;
 
   // start monitor
-  mon = new Monitor(g_ceph_context, g_conf->name.get_id(), &store, messenger, &monmap);
+  mon = new Monitor(g_ceph_context, g_conf->name.get_id(), &store, 
+		    messenger, &monmap);
 
   err = mon->preinit();
   if (err < 0)
@@ -431,7 +439,6 @@ int main(int argc, const char **argv)
 
   shutdown_async_signal_handler();
 
-  store.umount();
   delete mon;
   delete messenger;
   delete client_throttler;

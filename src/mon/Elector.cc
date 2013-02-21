@@ -16,7 +16,7 @@
 #include "Monitor.h"
 
 #include "common/Timer.h"
-#include "MonitorStore.h"
+#include "MonitorDBStore.h"
 #include "MonmapMonitor.h"
 #include "messages/MMonElection.h"
 
@@ -35,7 +35,7 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, epoch_t epoch) {
 
 void Elector::init()
 {
-  epoch = mon->store->get_int("election_epoch");
+  epoch = mon->store->get(Monitor::MONITOR_NAME, "election_epoch");
   if (!epoch)
     epoch = 1;
   dout(1) << "init, last seen epoch " << epoch << dendl;
@@ -52,7 +52,9 @@ void Elector::bump_epoch(epoch_t e)
   dout(10) << "bump_epoch " << epoch << " to " << e << dendl;
   assert(epoch <= e);
   epoch = e;
-  mon->store->put_int(epoch, "election_epoch");
+  MonitorDBStore::Transaction t;
+  t.put(Monitor::MONITOR_NAME, "election_epoch", epoch);
+  mon->store->apply_transaction(t);
 
   // clear up some state
   electing_me = false;
@@ -337,8 +339,11 @@ void Elector::dispatch(Message *m)
 		<< ", taking it"
 		<< dendl;
 	mon->monmap->decode(em->monmap_bl);
-	mon->store->put_bl_sn(em->monmap_bl, "monmap", mon->monmap->epoch);
-	mon->monmon()->paxos->stash_latest(mon->monmap->epoch, em->monmap_bl);
+        MonitorDBStore::Transaction t;
+        t.put("monmap", mon->monmap->epoch, em->monmap_bl);
+        t.put("monmap", "last_committed", mon->monmap->epoch);
+        mon->store->apply_transaction(t);
+	//mon->monmon()->paxos->stash_latest(mon->monmap->epoch, em->monmap_bl);
 	mon->bootstrap();
 	m->put();
 	delete peermap;

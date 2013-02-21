@@ -37,6 +37,7 @@
 #define MSG_MON_PAXOS              66
 #define MSG_MON_PROBE              67
 #define MSG_MON_JOIN               68
+#define MSG_MON_SYNC		   69
 
 /* monitor <-> mon admin tool */
 #define MSG_MON_COMMAND            50

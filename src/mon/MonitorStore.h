@@ -44,7 +44,6 @@ public:
   void put_int(version_t v, const char *a, const char *b=0);
 
   version_t get_global_version(const char *a, version_t b) WARN_UNUSED_RESULT;
-  void put_global_version(const char *a, version_t b, version_t gv);
 
   // buffers
   // ss and sn varieties.
@@ -88,8 +87,7 @@ public:
    */
   void put_bl_sn_map(const char *a,
 		    map<version_t,bufferlist>::iterator start,
-		    map<version_t,bufferlist>::iterator end,
-		    map<version_t,version_t> *gvmap);
+		    map<version_t,bufferlist>::iterator end);
 
   void erase_ss(const char *a, const char *b);
   void erase_sn(const char *a, version_t b) {

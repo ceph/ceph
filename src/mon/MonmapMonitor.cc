@@ -14,7 +14,7 @@
 
 #include "MonmapMonitor.h"
 #include "Monitor.h"
-#include "MonitorStore.h"
+#include "MonitorDBStore.h"
 
 #include "messages/MMonCommand.h"
 #include "messages/MMonJoin.h"
@@ -47,43 +47,71 @@ void MonmapMonitor::create_initial()
 
 void MonmapMonitor::update_from_paxos()
 {
-  version_t paxosv = paxos->get_version();
-  if (paxosv <= paxos->get_stashed_version() &&
-      paxosv <= mon->monmap->get_epoch())
+  version_t version = get_version();
+  if (version <= mon->monmap->get_epoch())
     return;
 
-  dout(10) << "update_from_paxos paxosv " << paxosv
+  dout(10) << __func__ << " version " << version
 	   << ", my v " << mon->monmap->epoch << dendl;
   
-  version_t orig_latest = paxos->get_stashed_version();
-  bool need_restart = paxosv != mon->monmap->get_epoch();  
-  
-  if (paxosv > 0 && (mon->monmap->get_epoch() == 0 ||
-		     paxos->get_stashed_version() != paxosv)) {
-    bufferlist latest;
-    version_t v = paxos->get_stashed(latest);
-    if (v) {
-      mon->monmap->decode(latest);
-    }
+  /* It becomes clear here that we used the stashed version as a consistency
+   * mechanism. Take the 'if' we use: if our latest committed version is
+   * greater than 0 (i.e., exists one), and this version is different from
+   * our stashed version, then we will take the stashed monmap as our owm.
+   * 
+   * This is cleary to address the case in which we have a failure during
+   * the old MonitorStore updates. If a stashed version exists and it has
+   * a grater value than the last committed version, it means something
+   * went awry, and we did stashed a version (either after updating paxos
+   * and before proposing a new value, or during paxos itself) but it
+   * never became the last committed (for instance, because the system failed
+   * in the mean time).
+   *
+   * We no longer need to address these concerns. We are using transactions
+   * now and it should be the Paxos applying them. If the Paxos applies a
+   * transaction with the value we proposed, then it will be consistent
+   * with the Paxos values themselves. No need to hack our way in the
+   * store and create stashed versions to handle inconsistencies that are
+   * addressed by our MonitorDBStore.
+   *
+   * NOTE: this is not entirely true for the remaining services. In this one,
+   * the MonmapMonitor, we don't keep incrementals and each version is a full
+   * monmap. In the remaining services however, we keep mostly incrementals and
+   * we used to stash full versions of each map/summary. We still do it. We
+   * just don't need to do it here. Just check the code below and compare it
+   * with the code further down the line where we 'get' the latest committed
+   * version: it's the same code.
+   *
+  version_t latest_full = get_version_latest_full();
+  if ((latest_full > 0) && (latest_full > mon->monmap->get_epoch())) {
+    bufferlist latest_bl;
+    int err = get_version_full(latest_full, latest_bl);
+    assert(err == 0);
+    dout(7) << __func__ << " loading latest full monmap v"
+	    << latest_full << dendl;
+    if (latest_bl.length() > 0)
+      mon->monmap->decode(latest_bl);
+  }
+   */
+  bool need_restart = version != mon->monmap->get_epoch();  
+
+  // read and decode
+  monmap_bl.clear();
+  int ret = get_version(version, monmap_bl);
+  assert(ret == 0);
+
+  dout(10) << "update_from_paxos got " << version << dendl;
+  mon->monmap->decode(monmap_bl);
+
+  if (exists_key("mfks", get_service_name())) {
+    MonitorDBStore::Transaction t;
+    erase_mkfs(&t);
+    mon->store->apply_transaction(t);
   }
 
-  if (paxosv > mon->monmap->get_epoch()) {
-    // read and decode
-    monmap_bl.clear();
-    bool success = paxos->read(paxosv, monmap_bl);
-    assert(success);
-    dout(10) << "update_from_paxos got " << paxosv << dendl;
-    mon->monmap->decode(monmap_bl);
-
-    // save the bufferlist version in the paxos instance as well
-    paxos->stash_latest(paxosv, monmap_bl);
-
-    if (orig_latest == 0)
-      mon->store->erase_ss("mkfs", "monmap");
+  if (need_restart) {
+    paxos->prepare_bootstrap();
   }
-
-  if (need_restart)
-    mon->bootstrap();
 }
 
 void MonmapMonitor::create_pending()
@@ -94,21 +122,34 @@ void MonmapMonitor::create_pending()
   dout(10) << "create_pending monmap epoch " << pending_map.epoch << dendl;
 }
 
-void MonmapMonitor::encode_pending(bufferlist& bl)
+void MonmapMonitor::encode_pending(MonitorDBStore::Transaction *t)
 {
   dout(10) << "encode_pending epoch " << pending_map.epoch << dendl;
 
   assert(mon->monmap->epoch + 1 == pending_map.epoch ||
 	 pending_map.epoch == 1);  // special case mkfs!
+  bufferlist bl;
   pending_map.encode(bl, mon->get_quorum_features());
+
+  put_version(t, pending_map.epoch, bl);
+  put_last_committed(t, pending_map.epoch);
 }
 
 void MonmapMonitor::on_active()
 {
-  if (paxos->get_version() >= 1 && !mon->has_ever_joined) {
+  if (get_version() >= 1 && !mon->has_ever_joined) {
     // make note of the fact that i was, once, part of the quorum.
     dout(10) << "noting that i was, once, part of an active quorum." << dendl;
-    mon->store->put_int(1, "joined");
+
+    /* This is some form of nasty in-breeding we have between the MonmapMonitor
+       and the Monitor itself. We should find a way to get rid of it given our
+       new architecture. Until then, stick with it since we are a
+       single-threaded process and, truth be told, no one else relies on this
+       thing besides us.
+     */
+    MonitorDBStore::Transaction t;
+    t.put(Monitor::MONITOR_NAME, "joined", 1);
+    mon->store->apply_transaction(t);
     mon->has_ever_joined = true;
   }
 
@@ -153,7 +194,7 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
       (!session->caps.get_allow_all() &&
        !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
        !mon->_allowed_command(session, m->cmd))) {
-    mon->reply_command(m, -EACCES, "access denied", paxos->get_version());
+    mon->reply_command(m, -EACCES, "access denied", get_version());
     return true;
   }
 
@@ -283,7 +324,7 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
     string rs;
     getline(ss, rs);
 
-    mon->reply_command(m, r, rs, rdata, paxos->get_version());
+    mon->reply_command(m, r, rs, rdata, get_version());
     return true;
   } else
     return false;
@@ -318,7 +359,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
       (!session->caps.get_allow_all() &&
        !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
        !mon->_allowed_command(session, m->cmd))) {
-    mon->reply_command(m, -EACCES, "access denied", paxos->get_version());
+    mon->reply_command(m, -EACCES, "access denied", get_version());
     return true;
   }
 
@@ -352,7 +393,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
       pending_map.last_changed = ceph_clock_now(g_ceph_context);
       ss << "added mon." << name << " at " << addr;
       getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
       return true;
     }
     else if (m->cmd.size() == 3 && m->cmd[1] == "remove") {
@@ -369,7 +410,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
       ss << "removed mon." << name << " at " << addr << ", there are now " << pending_map.size() << " monitors" ;
       getline(ss, rs);
       // send reply immediately in case we get removed
-      mon->reply_command(m, 0, rs, paxos->get_version());
+      mon->reply_command(m, 0, rs, get_version());
       return true;
     }
     else
@@ -379,7 +420,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
   
 out:
   getline(ss, rs);
-  mon->reply_command(m, err, rs, paxos->get_version());
+  mon->reply_command(m, err, rs, get_version());
   return false;
 }
 
