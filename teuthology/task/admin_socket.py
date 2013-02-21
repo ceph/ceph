@@ -89,7 +89,7 @@ def _run_tests(ctx, client, tests):
     testdir = teuthology.get_testdir(ctx)
     log.debug('Running admin socket tests on %s', client)
     (remote,) = ctx.cluster.only(client).remotes.iterkeys()
-    socket_path = '{tdir}/asok.{name}'.format(tdir=testdir, name=client)
+    socket_path = '/var/run/ceph/ceph-{name}.asok'.format(name=client)
 
     try:
         tmp_dir = os.path.join(

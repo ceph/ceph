@@ -2,7 +2,6 @@
 	chdir = ""
 	pid file = $name.pid
         auth supported = cephx
-	admin socket = {testdir}/asok.$name
 
 	filestore xattr use omap = true
 
@@ -30,4 +29,5 @@
         rgw cache enabled = true
 	rgw enable ops log = true
 	rgw enable usage log = true
-	log dir = /var/log/ceph/ceph.$name.$pid.log
+	log dir = /var/log/ceph/ceph-$name.$pid.log
+	admin socket = /var/run/ceph/ceph-$name.$pid.asok

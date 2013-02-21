@@ -275,7 +275,7 @@ class CephManager:
             '{tdir}/archive/coverage'.format(tdir=testdir),
             'ceph',
             '--admin-daemon',
-            "%s/asok.osd.%s"%(testdir,str(osdnum),)]
+            "/var/run/ceph/ceph-osd.%s.asok"%(testdir,str(osdnum),)]
         args.extend(command)
         return remote.run(
             args=args,
