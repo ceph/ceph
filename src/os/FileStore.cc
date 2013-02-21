@@ -3883,12 +3883,6 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
   }
 
   if (g_conf->filestore_xattr_use_omap) {
-    Index index;
-    int r = get_index(cid, &index);
-    if (r < 0) {
-      dout(10) << __func__ << " could not get index r = " << r << dendl;
-      goto out_close;
-    }
     r = object_map->remove_xattrs(oid, omap_remove, &spos);
     if (r < 0 && r != -ENOENT) {
       dout(10) << __func__ << " could not remove_xattrs r = " << r << dendl;
