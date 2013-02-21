@@ -80,14 +80,19 @@ class CephState(object):
 
 @contextlib.contextmanager
 def ceph_log(ctx, config):
-    log.info('Making ceph log dir writeable by non-root...')
+    log.info('Making ceph log and run dirs writeable by non-root...')
     run.wait(
         ctx.cluster.run(
             args=[
                 'sudo',
+                'install', '-d', '-m0755', '--',
+                '/var/run/ceph',
+                run.Raw(';'),
+                'sudo',
                 'chmod',
                 '777',
                 '/var/log/ceph',
+                '/var/run/ceph',
                 ],
             wait=False,
             )
