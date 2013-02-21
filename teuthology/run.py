@@ -1,6 +1,8 @@
 import argparse
 import os
 import yaml
+import StringIO
+import contextlib
 
 def config_file(string):
     config = {}
@@ -183,7 +185,10 @@ def main():
         if ctx.archive is not None:
             with file(os.path.join(ctx.archive, 'summary.yaml'), 'w') as f:
                 yaml.safe_dump(ctx.summary, f, default_flow_style=False)
-
+        with contextlib.closing(StringIO.StringIO()) as f:
+            yaml.safe_dump(ctx.summary, f)
+            log.info('Summary data:\n%s' % f.getvalue())
+            
     if ctx.summary.get('success', True):
         log.info('pass')
     else:
