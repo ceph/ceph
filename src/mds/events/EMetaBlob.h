@@ -68,7 +68,6 @@ public:
     string symlink;
     bufferlist snapbl;
     bool dirty;
-    struct file_layout_policy_t *dir_layout;
     typedef map<snapid_t, old_inode_t> old_inodes_t;
     old_inodes_t old_inodes;
 
@@ -80,11 +79,11 @@ public:
     fullbit(const string& d, snapid_t df, snapid_t dl, 
 	    version_t v, const inode_t& i, const fragtree_t &dft, 
 	    const map<string,bufferptr> &xa, const string& sym,
-	    const bufferlist &sbl, bool dr, const file_layout_policy_t *defl = NULL,
+	    const bufferlist &sbl, bool dr,
 	    const old_inodes_t *oi = NULL) :
       //dn(d), dnfirst(df), dnlast(dl), dnv(v), 
       //inode(i), dirfragtree(dft), xattrs(xa), symlink(sym), snapbl(sbl), dirty(dr) 
-      dir_layout(NULL), _enc(1024)
+      _enc(1024)
     {
       ::encode(d, _enc);
       ::encode(df, _enc);
@@ -97,27 +96,23 @@ public:
       if (i.is_dir()) {
 	::encode(dft, _enc);
 	::encode(sbl, _enc);
-	::encode((defl ? true : false), _enc);
-	if (defl)
-	  ::encode(*defl, _enc);
       }
       ::encode(dr, _enc);      
       ::encode(oi ? true : false, _enc);
       if (oi)
 	::encode(*oi, _enc);
     }
-    fullbit(bufferlist::iterator &p) : dir_layout(NULL) {
+    fullbit(bufferlist::iterator &p) {
       decode(p);
     }
-    fullbit() : dir_layout(NULL) {}
-    ~fullbit() {
-      delete dir_layout;
-    }
+    fullbit() {}
+    ~fullbit() {}
 
     void encode(bufferlist& bl) const;
     void decode(bufferlist::iterator &bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<EMetaBlob::fullbit*>& ls);
+
     void update_inode(MDS *mds, CInode *in);
 
     void print(ostream& out) const {
@@ -429,12 +424,6 @@ private:
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
     inode_t *pi = in->get_projected_inode();
-    file_layout_policy_t *default_layout = NULL;
-    if (in->is_dir())
-      default_layout = (in->get_projected_node() ?
-                           in->get_projected_node()->dir_layout :
-                           in->default_layout);
-
     bufferlist snapbl;
     sr_t *sr = in->get_projected_srnode();
     if (sr)
@@ -447,7 +436,7 @@ private:
 									 *pi, in->dirfragtree,
 									 *in->get_projected_xattrs(),
 									 in->symlink, snapbl,
-									 dirty, default_layout,
+									 dirty,
 									 &in->old_inodes)));
   }
 
@@ -478,12 +467,6 @@ private:
     if (!pdft) pdft = &in->dirfragtree;
     if (!px) px = &in->xattrs;
 
-    file_layout_policy_t *default_layout = NULL;
-    if (in->is_dir())
-      default_layout = (in->get_projected_node() ?
-                           in->get_projected_node()->dir_layout :
-                           in->default_layout);
-
     bufferlist snapbl;
     if (psnapbl)
       snapbl = *psnapbl;
@@ -500,7 +483,7 @@ private:
     string empty;
     roots.push_back(std::tr1::shared_ptr<fullbit>(new fullbit(empty, in->first, in->last,
 							      0, *pi, *pdft, *px, in->symlink,
-							      snapbl, dirty, default_layout,
+							      snapbl, dirty,
 							      &in->old_inodes)));
   }
   
