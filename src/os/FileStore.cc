@@ -3882,13 +3882,18 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
     }
   }
 
-  if (g_conf->filestore_xattr_use_omap) {
+  if (omap_remove.size()) {
+    assert(g_conf->filestore_xattr_use_omap);
     r = object_map->remove_xattrs(oid, omap_remove, &spos);
     if (r < 0 && r != -ENOENT) {
       dout(10) << __func__ << " could not remove_xattrs r = " << r << dendl;
       assert(!m_filestore_fail_eio || r != -EIO);
       goto out_close;
     }
+  }
+  
+  if (omap_set.size()) {
+    assert(g_conf->filestore_xattr_use_omap);
     r = object_map->set_xattrs(oid, omap_set, &spos);
     if (r < 0) {
       dout(10) << __func__ << " could not set_xattrs r = " << r << dendl;
