@@ -219,9 +219,8 @@ void MDLog::submit_entry(LogEvent *le, Context *c)
   //  FIXME: should this go elsewhere?
   uint64_t last_seg = get_last_segment_offset();
   uint64_t period = journaler->get_layout_period();
-  if (!segments.empty() && 
-      (journaler->get_write_pos()/period != last_seg/period &&
-       journaler->get_write_pos() - last_seg > period/2)) {
+  // start a new segment if there are none or if we reach end of last segment
+  if (journaler->get_write_pos()/period != last_seg/period) {
     dout(10) << "submit_entry also starting new segment: last = " << last_seg
 	     << ", cur pos = " << journaler->get_write_pos() << dendl;
     start_new_segment();
