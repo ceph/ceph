@@ -264,7 +264,84 @@ bool RGWAccessControlList_S3::xml_end(const char *el) {
   return true;
 }
 
-bool RGWAccessControlList_S3::create_canned(ACLOwner& owner, ACLOwner& bucket_owner, const string& canned_acl)
+struct s3_acl_header {
+  int rgw_perm;
+  const char *http_header;
+};
+
+static const char *get_acl_header(RGWEnv *env,
+        const struct s3_acl_header *perm)
+{
+  const char *header = perm->http_header;
+
+  return env->get(header, NULL);
+}
+
+static int parse_grantee_str(RGWRados *store, string& grantee_str,
+        const struct s3_acl_header *perm, ACLGrant& grant)
+{
+  string id_type, id_val;
+  int rgw_perm = perm->rgw_perm;
+  int ret;
+
+  RGWUserInfo info;
+
+  ret = parse_key_value(grantee_str, id_type, id_val);
+  if (ret < 0)
+    return ret;
+
+  if (strcasecmp(id_type.c_str(), "emailAddress") == 0) {
+    ret = rgw_get_user_info_by_email(store, id_val, info);
+    if (ret < 0)
+      return ret;
+
+    grant.set_canon(info.user_id, info.display_name, rgw_perm);
+  } else if (strcasecmp(id_type.c_str(), "id") == 0) {
+    ret = rgw_get_user_info_by_uid(store, id_val, info);
+    if (ret < 0)
+      return ret;
+
+    grant.set_canon(info.user_id, info.display_name, rgw_perm);
+  } else if (strcasecmp(id_type.c_str(), "uri") == 0) {
+    ACLGroupTypeEnum gid = grant.uri_to_group(id_val);
+    if (gid == ACL_GROUP_NONE)
+      return -EINVAL;
+
+    grant.set_group(gid, rgw_perm);
+  } else {
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+static int parse_acl_header(RGWRados *store, RGWEnv *env,
+         const struct s3_acl_header *perm, std::list<ACLGrant>& _grants)
+{
+  std::list<string> grantees;
+  std::string hacl_str;
+
+  const char *hacl = get_acl_header(env, perm);
+  if (hacl == NULL)
+    return 0;
+
+  hacl_str = hacl;
+  get_str_list(hacl_str, ",", grantees);
+
+  list<string>::iterator it = grantees.begin();
+  for (; it != grantees.end(); it++) {
+    ACLGrant grant;
+    int ret = parse_grantee_str(store, *it, perm, grant);
+    if (ret < 0)
+      return ret;
+
+    _grants.push_back(grant);
+  }
+
+  return 0;
+}
+
+int RGWAccessControlList_S3::create_canned(ACLOwner& owner, ACLOwner& bucket_owner, const string& canned_acl)
 {
   acl_user_map.clear();
   grant_map.clear();
@@ -279,7 +356,7 @@ bool RGWAccessControlList_S3::create_canned(ACLOwner& owner, ACLOwner& bucket_ow
   add_grant(&owner_grant);
 
   if (canned_acl.size() == 0 || canned_acl.compare("private") == 0) {
-    return true;
+    return 0;
   }
 
   ACLGrant bucket_owner_grant;
@@ -304,10 +381,27 @@ bool RGWAccessControlList_S3::create_canned(ACLOwner& owner, ACLOwner& bucket_ow
     if (bid.compare(owner.get_id()) != 0)
       add_grant(&bucket_owner_grant);
   } else {
-    return false;
+    return -EINVAL;
   }
 
-  return true;
+  return 0;
+}
+
+int RGWAccessControlList_S3::create_from_grants(std::list<ACLGrant>& grants)
+{
+  if (grants.empty())
+    return -EINVAL;
+
+  acl_user_map.clear();
+  grant_map.clear();
+
+  std::list<ACLGrant>::iterator it = grants.begin();
+  for (; it != grants.end(); it++) {
+    ACLGrant g = *it;
+    add_grant(&g);
+  }
+
+  return 0;
 }
 
 bool RGWAccessControlPolicy_S3::xml_end(const char *el) {
@@ -323,6 +417,34 @@ bool RGWAccessControlPolicy_S3::xml_end(const char *el) {
     return false;
   owner = *owner_p;
   return true;
+}
+
+static const s3_acl_header acl_header_perms[] = {
+  {RGW_PERM_READ, "HTTP_X_AMZ_GRANT_READ"},
+  {RGW_PERM_WRITE, "HTTP_X_AMZ_GRANT_WRITE"},
+  {RGW_PERM_READ_ACP,"HTTP_X_AMZ_GRANT_READ_ACP"},
+  {RGW_PERM_WRITE_ACP, "HTTP_X_AMZ_GRANT_WRITE_ACP"},
+  {RGW_PERM_FULL_CONTROL, "HTTP_X_AMZ_GRANT_FULL_CONTROL"},
+  {0, NULL}
+};
+
+int RGWAccessControlPolicy_S3::create_from_headers(RGWRados *store, RGWEnv *env, ACLOwner& _owner)
+{
+  std::list<ACLGrant> grants;
+  int ret;
+
+  for (const struct s3_acl_header *p = acl_header_perms; p->rgw_perm; p++) {
+    ret = parse_acl_header(store, env, p, grants);
+    if (ret < 0)
+      return false;
+  }
+
+  RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
+  int r = _acl.create_from_grants(grants);
+
+  owner = _owner;
+
+  return r;
 }
 
 /*

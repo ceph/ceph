@@ -493,7 +493,7 @@ public:
   int verify_permission();
   void execute();
 
-  virtual int get_canned_policy(ACLOwner& owner, stringstream& ss) { return 0; }
+  virtual int get_policy_from_state(RGWRados *store, struct req_state *s, stringstream& ss) { return 0; }
   virtual int get_params() = 0;
   virtual void send_response() = 0;
   virtual const char *name() { return "put_acls"; }

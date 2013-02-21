@@ -160,8 +160,7 @@ public:
   RGWPutACLs_ObjStore_S3() {}
   ~RGWPutACLs_ObjStore_S3() {}
 
-  int get_canned_policy(ACLOwner& owner, stringstream& ss);
-
+  int get_policy_from_state(RGWRados *store, struct req_state *s, stringstream& ss);
   void send_response();
 };
 

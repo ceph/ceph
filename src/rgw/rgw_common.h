@@ -246,6 +246,8 @@ public:
   int get_int(const char *name, int def_val = 0);
   bool get_bool(const char *name, bool def_val = 0);
   size_t get_size(const char *name, size_t def_val = 0);
+  bool exists(const char *name);
+  bool exists_prefix(const char *prefix);
 };
 
 class RGWConf {
@@ -609,6 +611,7 @@ struct req_state {
    RGWAccessControlPolicy *object_acl;
 
    string canned_acl;
+   bool has_acl_header;
    const char *copy_source;
    const char *http_auth;
 
@@ -999,6 +1002,9 @@ static inline const char *rgw_obj_category_name(RGWObjCategory category)
 }
 
 extern string rgw_string_unquote(const string& s);
+extern void parse_csv_string(const string& ival, vector<string>& ovals);
+extern int parse_key_value(string& in_str, string& key, string& val);
+extern int parse_key_value(string& in_str, const char *delim, string& key, string& val);
 /** time parsing */
 extern int parse_time(const char *time_str, time_t *time);
 extern bool parse_rfc2616(const char *s, struct tm *t);

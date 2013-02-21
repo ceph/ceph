@@ -18,7 +18,7 @@
 
 using std::string;
 
-static bool get_next_token(const std::string &s, size_t& pos, string& token)
+static bool get_next_token(const std::string &s, size_t& pos, const char *delims, string& token)
 {
   int start = s.find_first_not_of(" \t", pos);
   int end;
@@ -30,7 +30,7 @@ static bool get_next_token(const std::string &s, size_t& pos, string& token)
     end = start + 1;
     pos = end;
   } else {
-    end = s.find_first_of(";,= \t", start+1);
+    end = s.find_first_of(delims, start+1);
     if (end >= 0)
       pos = end + 1;
   }
@@ -44,7 +44,13 @@ static bool get_next_token(const std::string &s, size_t& pos, string& token)
   return true;
 }
 
-void get_str_list(const std::string& str, std::list<string>& str_list)
+static bool get_next_token(const std::string &s, size_t& pos, string& token)
+{
+  const char *delims = ";,= \t";
+  return get_next_token(s, pos, delims, token);
+}
+
+void get_str_list(const std::string& str, const char *delims, std::list<string>& str_list)
 {
   size_t pos = 0;
   string token;
@@ -52,12 +58,18 @@ void get_str_list(const std::string& str, std::list<string>& str_list)
   str_list.clear();
 
   while (pos < str.size()) {
-    if (get_next_token(str, pos, token)) {
+    if (get_next_token(str, pos, delims, token)) {
       if (token.size() > 0) {
         str_list.push_back(token);
       }
     }
   }
+}
+
+void get_str_list(const std::string& str, std::list<string>& str_list)
+{
+  const char *delims = ";,= \t";
+  return get_str_list(str, delims, str_list);
 }
 
 void get_str_set(const std::string& str, std::set<std::string>& str_set)
