@@ -475,6 +475,8 @@ void RGWZone::decode_json(JSONObj *obj)
 void RGWRegion::dump(Formatter *f) const
 {
   encode_json("name", name, f);
+  encode_json("api_name", api_name, f);
+  encode_json("is_master", is_master, f);
   encode_json("endpoints", endpoints, f);
   encode_json("master_zone", master_zone, f);
   encode_json("zones", zones, f);
@@ -491,6 +493,8 @@ static void decode_zones(map<string, RGWZone>& zones, JSONObj *o)
 void RGWRegion::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("api_name", api_name, obj);
+  JSONDecoder::decode_json("is_master", is_master, obj);
   JSONDecoder::decode_json("endpoints", endpoints, obj);
   JSONDecoder::decode_json("master_zone", master_zone, obj);
   JSONDecoder::decode_json("zones", zones, decode_zones, obj);
