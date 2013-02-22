@@ -6031,17 +6031,20 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
 
   memset(stbuf, 0, sizeof(*stbuf));
 
-  /* we're going to set a block size of 1MB so we can represent larger
-   * FSes without overflowing. Additionally convert the space measurements
-   * from KB to bytes while making them in terms of blocks.
+  /*
+   * we're going to set a block size of 4MB so we can represent larger
+   * FSes without overflowing. Additionally convert the space
+   * measurements from KB to bytes while making them in terms of
+   * blocks.  We use 4MB only because it is big enough, and because it
+   * actually *is* the (ceph) default block size.
    */
-  const int CEPH_BLOCK_SHIFT = 20;
+  const int CEPH_BLOCK_SHIFT = 22;
+  stbuf->f_frsize = 1 << CEPH_BLOCK_SHIFT;
   stbuf->f_bsize = 1 << CEPH_BLOCK_SHIFT;
   stbuf->f_blocks = stats.kb >> (CEPH_BLOCK_SHIFT - 10);
   stbuf->f_bfree = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
   stbuf->f_bavail = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
   stbuf->f_files = stats.num_objects;
-  stbuf->f_frsize = CEPH_PAGE_SIZE;
   stbuf->f_ffree = -1;
   stbuf->f_favail = -1;
   stbuf->f_fsid = -1;       // ??
