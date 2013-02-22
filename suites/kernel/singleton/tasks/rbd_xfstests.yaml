@@ -9,7 +9,7 @@ tasks:
 - ceph:
 - rbd.xfstests:
     client.0:
-        tests: 1-9 11-15 17 19-21 26-29 31-34 41 46-48 50-54 56 61 63-67 69-70 74-76 78-79 84-89 91
+        tests: 1-9 11-15 17 19-21 26-29 31-34 41 46-54 56 61 63-67 69-70 74-76 78-79 84-89 91
         test_image: 'test_image-0'
         scratch_image: 'scratch_image-0'
     client.1:
