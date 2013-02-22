@@ -64,7 +64,7 @@ TEST(LibRadosWatchNotify, WatchNotifyTestPP) {
   ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
   std::list<obj_watch_t> watches;
   ASSERT_EQ(0, ioctx.list_watchers("foo", &watches));
-  ASSERT_EQ(watches.size(), 1);
+  ASSERT_EQ(watches.size(), 1u);
   bufferlist bl2;
   ASSERT_EQ(0, ioctx.notify("foo", 0, bl2));
   TestAlarm alarm;
