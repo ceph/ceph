@@ -15,6 +15,7 @@
 #include "include/types.h"
 
 #include "include/rados/librados.hpp"
+#include "include/rados/rados_types.h"
 #include "rados_sync.h"
 using namespace librados;
 
@@ -95,6 +96,7 @@ void usage(ostream& out)
 "   rmomapkey <obj-name> <key>\n"
 "   getomapheader <obj-name>\n"
 "   setomapheader <obj-name> <val>\n"
+"   listwatchers <obj-name>          list the watchers of this object\n"
 "\n"
 "IMPORT AND EXPORT\n"
 "   import [options] <local-directory> <rados-pool>\n"
@@ -2001,6 +2003,25 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       formatter = new JSONFormatter(pretty_format);
     }
     ret = do_lock_cmd(nargs, opts, &io_ctx, formatter);
+  } else if (strcmp(nargs[0], "listwatchers") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage_exit();
+
+    string oid(nargs[1]);
+    std::list<obj_watch_t> lw;
+
+    ret = io_ctx.list_watchers(oid, &lw);
+    if (ret < 0) {
+      cerr << "error listing watchers " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
+    }
+    else
+      ret = 0;
+    
+    std::list<obj_watch_t>::iterator i;
+    for (i = lw.begin(); i != lw.end(); i++) {
+      cout << "watcher=client." << i->watcher_id << " cookie=" << i->cookie << std::endl;
+    }
   } else {
     cerr << "unrecognized command " << nargs[0] << std::endl;
     usage_exit();

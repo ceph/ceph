@@ -25,6 +25,7 @@ const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_NOTIFY: return "notify";
 	case CEPH_OSD_OP_NOTIFY_ACK: return "notify-ack";
 	case CEPH_OSD_OP_ASSERT_VER: return "assert-version";
+	case CEPH_OSD_OP_LIST_WATCHERS: return "list-watchers";
 
 	case CEPH_OSD_OP_MASKTRUNC: return "masktrunc";
 

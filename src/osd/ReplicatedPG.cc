@@ -2203,6 +2203,31 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	break;
       }
 
+    case CEPH_OSD_OP_LIST_WATCHERS:
+      {
+        obj_list_watch_response_t resp;
+
+        map<pair<uint64_t, entity_name_t>, watch_info_t>::const_iterator oi_iter;
+        for (oi_iter = oi.watchers.begin(); oi_iter != oi.watchers.end();
+                                       oi_iter++) {
+          dout(20) << "key cookie=" << oi_iter->first.first
+               << " entity=" << oi_iter->first.second << " "
+               << oi_iter->second << dendl;
+          assert(oi_iter->first.first == oi_iter->second.cookie);
+          assert(oi_iter->first.second.is_client());
+
+          watch_item_t wi(oi_iter->first.second, oi_iter->second.cookie,
+                 oi_iter->second.timeout_seconds);
+          resp.entries.push_back(wi);
+        }
+
+        resp.encode(osd_op.outdata);
+        result = 0;
+
+        ctx->delta_stats.num_rd++;
+        break;
+      }
+
     case CEPH_OSD_OP_ASSERT_SRC_VERSION:
       {
 	uint64_t ver = op.watch.ver;
