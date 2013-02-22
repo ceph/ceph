@@ -10,7 +10,8 @@ High-level cluster operations consist primarily of starting, stopping, and
 restarting a cluster with the ``ceph`` service;  checking the cluster's health;
 and, monitoring an operating cluster.
 
-.. toctree:: 
+.. toctree::
+	:maxdepth: 2 
 	
 	operating
 	monitoring
