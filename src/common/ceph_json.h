@@ -236,6 +236,7 @@ class utime_t;
 
 void encode_json(const char *name, const string& val, Formatter *f);
 void encode_json(const char *name, const char *val, Formatter *f);
+void encode_json(const char *name, bool val, Formatter *f);
 void encode_json(const char *name, int val, Formatter *f);
 void encode_json(const char *name, unsigned val, Formatter *f);
 void encode_json(const char *name, long val, Formatter *f);

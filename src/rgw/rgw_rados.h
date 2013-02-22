@@ -349,7 +349,9 @@ WRITE_CLASS_ENCODER(RGWDefaultRegionInfo);
 
 struct RGWRegion {
   string name;
+  string api_name;
   list<string> endpoints;
+  bool is_master;
 
   string master_zone;
   map<string, RGWZone> zones;
@@ -357,8 +359,13 @@ struct RGWRegion {
   CephContext *cct;
   RGWRados *store;
 
+  RGWRegion() : is_master(false) {}
+
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
+    ::encode(name, bl);
+    ::encode(api_name, bl);
+    ::encode(is_master, bl);
     ::encode(endpoints, bl);
     ::encode(master_zone, bl);
     ::encode(zones, bl);
@@ -367,6 +374,9 @@ struct RGWRegion {
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
+    ::decode(name, bl);
+    ::decode(api_name, bl);
+    ::decode(is_master, bl);
     ::decode(endpoints, bl);
     ::decode(master_zone, bl);
     ::decode(zones, bl);
@@ -376,6 +386,7 @@ struct RGWRegion {
   int init(CephContext *_cct, RGWRados *_store, bool setup_region = true);
   int create_default();
   int store_info(bool exclusive);
+  int read_info(const string& region_name);
   int read_default(RGWDefaultRegionInfo& default_region);
   int set_as_default();
 
@@ -387,25 +398,22 @@ struct RGWRegion {
 WRITE_CLASS_ENCODER(RGWRegion);
 
 struct RGWRegionMap {
+  Mutex lock;
   map<string, RGWRegion> regions;
+  map<string, RGWRegion> regions_by_api;
 
   string master_region;
 
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    ::encode(regions, bl);
-    ENCODE_FINISH(bl);
-  }
+  RGWRegionMap() : lock("RGWRegionMap") {}
 
-  void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
-    ::decode(regions, bl);
-    DECODE_FINISH(bl);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
 
   void get_params(CephContext *cct, string& pool_name, string& oid);
   int read(CephContext *cct, RGWRados *store);
   int store(CephContext *cct, RGWRados *store);
+
+  int update(RGWRegion& region);
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);

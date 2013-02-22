@@ -432,6 +432,17 @@ void encode_json(const char *name, const char *val, Formatter *f)
   f->dump_string(name, val);
 }
 
+void encode_json(const char *name, bool val, Formatter *f)
+{
+  string s;
+  if (val)
+    s = "true";
+  else
+    s = "false";
+
+  f->dump_string(name, s);
+}
+
 void encode_json(const char *name, int val, Formatter *f)
 {
   f->dump_int(name, val);

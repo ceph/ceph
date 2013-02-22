@@ -179,6 +179,7 @@ enum {
   OPT_REGION_DEFAULT,
   OPT_REGIONMAP_SHOW,
   OPT_REGIONMAP_SET,
+  OPT_REGIONMAP_UPDATE,
   OPT_ZONE_INFO,
   OPT_ZONE_SET,
   OPT_ZONE_LIST,
@@ -313,6 +314,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_REGIONMAP_SHOW;
     if (strcmp(cmd, "set") == 0)
       return OPT_REGIONMAP_SET;
+    if (strcmp(cmd, "update") == 0)
+      return OPT_REGIONMAP_UPDATE;
   } else if (strcmp(prev_cmd, "zone") == 0) {
     if (strcmp(cmd, "info") == 0)
       return OPT_ZONE_INFO;
@@ -674,6 +677,7 @@ int main(int argc, char **argv)
   bool raw_storage_op = (opt_cmd == OPT_REGION_INFO || opt_cmd == OPT_REGION_LIST ||
                          opt_cmd == OPT_REGION_SET || opt_cmd == OPT_REGION_DEFAULT ||
                          opt_cmd == OPT_REGIONMAP_SHOW || opt_cmd == OPT_REGIONMAP_SET ||
+                         opt_cmd == OPT_REGIONMAP_UPDATE ||
                          opt_cmd == OPT_ZONE_INFO || opt_cmd == OPT_ZONE_SET ||
                          opt_cmd == OPT_ZONE_LIST);
 
@@ -781,6 +785,47 @@ int main(int argc, char **argv)
       int ret = read_decode_json(infile, regionmap);
       if (ret < 0) {
         return 1;
+      }
+
+      ret = regionmap.store(g_ceph_context, store);
+      if (ret < 0) {
+        cerr << "ERROR: couldn't store region map info: " << cpp_strerror(-ret) << std::endl;
+        return 1;
+      }
+
+      encode_json("region-map", regionmap, formatter);
+      formatter->flush(cout);
+    }
+
+    if (opt_cmd == OPT_REGIONMAP_UPDATE) {
+      RGWRegionMap regionmap;
+      int ret = regionmap.read(g_ceph_context, store);
+      if (ret < 0 && ret != -ENOENT) {
+	cerr << "failed to read region map: " << cpp_strerror(-ret) << std::endl;
+	return -ret;
+      }
+
+      RGWRegion region;
+      ret = region.init(g_ceph_context, store, false);
+      if (ret < 0) {
+	cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
+	return -ret;
+      }
+
+      list<string> regions;
+      ret = store->list_regions(regions);
+      if (ret < 0) {
+        cerr << "failed to list regions: " << cpp_strerror(-ret) << std::endl;
+	return -ret;
+      }
+
+      for (list<string>::iterator iter = regions.begin(); iter != regions.end(); ++iter) {
+        ret = region.read_info(*iter);
+        if (ret < 0) {
+        cerr << "failed to read region info (name=" << *iter << "): " << cpp_strerror(-ret) << std::endl;
+	return -ret;
+        }
+        regionmap.update(region);
       }
 
       ret = regionmap.store(g_ceph_context, store);
