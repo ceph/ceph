@@ -287,6 +287,9 @@ void Objecter::send_linger(LingerOp *info)
     info->register_tid = _op_submit(o);
   } else {
     // first send
+    // populate info->pgid and info->acting so we
+    // don't resend the linger op on the next osdmap update
+    recalc_linger_op_target(info);
     info->register_tid = op_submit(o);
   }
 
