@@ -24,6 +24,7 @@
 
 #include "common/admin_socket.h"
 #include "common/Timer.h"
+#include "include/rados/rados_types.h"
 
 #include <list>
 #include <map>
