@@ -20,6 +20,8 @@ extern "C" {
 #include "PG.h"
 #include "OSDMap.h"
 
+const snapid_t clone_info::HEAD((uint64_t)-1);
+
 // -- osd_reqid_t --
 void osd_reqid_t::encode(bufferlist &bl) const
 {
