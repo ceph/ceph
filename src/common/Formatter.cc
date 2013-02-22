@@ -29,6 +29,30 @@
 // -----------------------
 namespace ceph {
 
+/*
+ * FormatterAttrs(const char *attr, ...)
+ *
+ * Requires a list of of attrs followed by NULL. The attrs should be char *
+ * pairs, first one is the name, second one is the value. E.g.,
+ *
+ * FormatterAttrs("name1", "value1", "name2", "value2", NULL);
+ */
+FormatterAttrs::FormatterAttrs(const char *attr, ...)
+{
+  const char *s = attr;
+  va_list ap;
+  va_start(ap, attr);
+  do {
+    const char *val = va_arg(ap, char *);
+    if (!val)
+      break;
+
+    attrs.push_back(make_pair(std::string(s), std::string(val)));
+    s = va_arg(ap, char *);
+  } while (s);
+  va_end(ap);
+}
+
 Formatter::Formatter()
 {
 }
@@ -251,22 +275,32 @@ void XMLFormatter::reset()
 
 void XMLFormatter::open_object_section(const char *name)
 {
-  open_section_in_ns(name, NULL);
+  open_section_in_ns(name, NULL, NULL);
+}
+
+void XMLFormatter::open_object_section_with_attrs(const char *name, const FormatterAttrs& attrs)
+{
+  open_section_in_ns(name, NULL, &attrs);
 }
 
 void XMLFormatter::open_object_section_in_ns(const char *name, const char *ns)
 {
-  open_section_in_ns(name, ns);
+  open_section_in_ns(name, ns, NULL);
 }
 
 void XMLFormatter::open_array_section(const char *name)
 {
-  open_section_in_ns(name, NULL);
+  open_section_in_ns(name, NULL, NULL);
+}
+
+void XMLFormatter::open_array_section_with_attrs(const char *name, const FormatterAttrs& attrs)
+{
+  open_section_in_ns(name, NULL, &attrs);
 }
 
 void XMLFormatter::open_array_section_in_ns(const char *name, const char *ns)
 {
-  open_section_in_ns(name, ns);
+  open_section_in_ns(name, ns, NULL);
 }
 
 void XMLFormatter::close_section()
@@ -318,6 +352,17 @@ void XMLFormatter::dump_string(const char *name, std::string s)
     m_ss << "\n";
 }
 
+void XMLFormatter::dump_string_with_attrs(const char *name, std::string s, const FormatterAttrs& attrs)
+{
+  std::string e(name);
+  std::string attrs_str;
+  get_attrs_str(&attrs, attrs_str);
+  print_spaces();
+  m_ss << "<" << e << attrs_str << ">" << escape_xml_str(s.c_str()) << "</" << e << ">";
+  if (m_pretty)
+    m_ss << "\n";
+}
+
 std::ostream& XMLFormatter::dump_stream(const char *name)
 {
   assert(m_pending_string_name.empty());
@@ -352,14 +397,33 @@ void XMLFormatter::write_raw_data(const char *data)
   m_ss << data;
 }
 
-void XMLFormatter::open_section_in_ns(const char *name, const char *ns)
+void XMLFormatter::get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str)
+{
+  std::stringstream attrs_ss;
+
+  for (std::list<std::pair<std::string, std::string> >::const_iterator iter = attrs->attrs.begin();
+       iter != attrs->attrs.end(); ++iter) {
+    std::pair<std::string, std::string> p = *iter;
+    attrs_ss << " " << p.first << "=" << "\"" << p.second << "\"";
+  }
+
+  attrs_str = attrs_ss.str();
+}
+
+void XMLFormatter::open_section_in_ns(const char *name, const char *ns, const FormatterAttrs *attrs)
 {
   print_spaces();
+  std::string attrs_str;
+
+  if (attrs) {
+    get_attrs_str(attrs, attrs_str);
+  }
+
   if (ns) {
-    m_ss << "<" << name << " xmlns=\"" << ns << "\">";
+    m_ss << "<" << name << attrs_str << " xmlns=\"" << ns << "\">";
   }
   else {
-    m_ss << "<" << name << ">";
+    m_ss << "<" << name << attrs_str << ">";
   }
   if (m_pretty)
     m_ss << "\n";
