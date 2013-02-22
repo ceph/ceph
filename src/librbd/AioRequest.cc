@@ -4,6 +4,7 @@
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/Mutex.h"
+#include "common/RWLock.h"
 
 #include "librbd/AioCompletion.h"
 #include "librbd/ImageCtx.h"
@@ -50,7 +51,6 @@ namespace librbd {
   void AioRequest::read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents)
   {
     assert(!m_parent_completion);
-    assert(m_ictx->parent_lock.is_locked());
     m_parent_completion = aio_create_completion_internal(this, rbd_req_cb);
     ldout(m_ictx->cct, 20) << "read_from_parent this = " << this
 			   << " parent completion " << m_parent_completion
@@ -68,8 +68,8 @@ namespace librbd {
 			   << " r = " << r << dendl;
 
     if (!m_tried_parent && r == -ENOENT) {
-      Mutex::Locker l(m_ictx->snap_lock);
-      Mutex::Locker l2(m_ictx->parent_lock);
+      RWLock::RLocker l(m_ictx->snap_lock);
+      RWLock::RLocker l2(m_ictx->parent_lock);
 
       // calculate reverse mapping onto the image
       vector<pair<uint64_t,uint64_t> > image_extents;
@@ -158,8 +158,8 @@ namespace librbd {
 
       if (r == -ENOENT) {
 
-	Mutex::Locker l(m_ictx->snap_lock);
-	Mutex::Locker l2(m_ictx->parent_lock);
+	RWLock::RLocker l(m_ictx->snap_lock);
+	RWLock::RLocker l2(m_ictx->parent_lock);
 
 	/*
 	 * Parent may have disappeared; if so, recover by using

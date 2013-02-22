@@ -10,7 +10,7 @@ PATH="$CEPH_SRC:$PATH"
 recreate_pool() {
     POOL_NAME=$1
     PG_NUM=100
-    ceph osd pool delete $POOL_NAME
+    ceph osd pool delete $POOL_NAME $POOL_NAME --yes-i-really-really-mean-it
     ceph osd pool create $POOL_NAME $PG_NUM
 }
 
