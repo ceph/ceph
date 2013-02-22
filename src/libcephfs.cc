@@ -790,6 +790,32 @@ extern "C" int ceph_set_default_preferred_pg(struct ceph_mount_info *cmount, int
   return -EOPNOTSUPP;
 }
 
+extern "C" int ceph_get_file_extent_osds(struct ceph_mount_info *cmount, int fh,
+    loff_t offset, loff_t *length, int *osds, int nosds)
+{
+  if (nosds < 0)
+    return -EINVAL;
+
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+
+  vector<int> vosds;
+  int ret = cmount->get_client()->get_file_extent_osds(fh, offset, length, vosds);
+  if (ret < 0)
+    return ret;
+
+  if (!nosds)
+    return vosds.size();
+
+  if ((int)vosds.size() > nosds)
+    return -ERANGE;
+
+  for (int i = 0; i < (int)vosds.size(); i++)
+    osds[i] = vosds[i];
+
+  return vosds.size();
+}
+
 extern "C" int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int fh,
 					    loff_t offset, struct sockaddr_storage *addr, int naddr)
 {

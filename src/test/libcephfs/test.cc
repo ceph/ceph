@@ -930,3 +930,53 @@ TEST(LibCephFS, GetPoolReplication) {
 
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, GetExtentOsds) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+
+  EXPECT_EQ(-ENOTCONN, ceph_get_file_extent_osds(cmount, 0, 0, NULL, NULL, 0));
+
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  int stripe_unit = (1<<18);
+
+  /* make a file! */
+  char test_file[256];
+  sprintf(test_file, "test_extent_osds_%d", getpid());
+  int fd = ceph_open_layout(cmount, test_file, O_CREAT|O_RDWR, 0666,
+      stripe_unit, 2, stripe_unit*2, NULL);
+  ASSERT_GT(fd, 0);
+
+  /* get back how many osds > 0 */
+  int ret = ceph_get_file_extent_osds(cmount, fd, 0, NULL, NULL, 0);
+  EXPECT_GT(ret, 0);
+
+  loff_t len;
+  int osds[ret];
+
+  /* full stripe extent */
+  EXPECT_EQ(ret, ceph_get_file_extent_osds(cmount, fd, 0, &len, osds, ret));
+  EXPECT_EQ(len, (loff_t)stripe_unit);
+
+  /* half stripe extent */
+  EXPECT_EQ(ret, ceph_get_file_extent_osds(cmount, fd, stripe_unit/2, &len, osds, ret));
+  EXPECT_EQ(len, (loff_t)stripe_unit/2);
+
+  /* 1.5 stripe unit offset -1 byte */
+  EXPECT_EQ(ret, ceph_get_file_extent_osds(cmount, fd, 3*stripe_unit/2-1, &len, osds, ret));
+  EXPECT_EQ(len, (loff_t)stripe_unit/2+1);
+
+  /* 1.5 stripe unit offset +1 byte */
+  EXPECT_EQ(ret, ceph_get_file_extent_osds(cmount, fd, 3*stripe_unit/2+1, &len, osds, ret));
+  EXPECT_EQ(len, (loff_t)stripe_unit/2-1);
+
+  /* only when more than 1 osd */
+  if (ret > 1)
+    EXPECT_EQ(-ERANGE, ceph_get_file_extent_osds(cmount, fd, 0, NULL, osds, 1));
+
+  ceph_close(cmount, fd);
+
+  ceph_shutdown(cmount);
+}
