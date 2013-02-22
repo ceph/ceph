@@ -87,13 +87,13 @@ namespace librbd {
 
   bool LibrbdWriteback::may_copy_on_write(const object_t& oid, uint64_t read_off, uint64_t read_len, snapid_t snapid)
   {
-    m_ictx->snap_lock.Lock();
+    m_ictx->snap_lock.get_read();
     librados::snap_t snap_id = m_ictx->snap_id;
-    m_ictx->parent_lock.Lock();
+    m_ictx->parent_lock.get_read();
     uint64_t overlap = 0;
     m_ictx->get_parent_overlap(snap_id, &overlap);
-    m_ictx->parent_lock.Unlock();
-    m_ictx->snap_lock.Unlock();
+    m_ictx->parent_lock.put_read();
+    m_ictx->snap_lock.put_read();
 
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
 
@@ -116,13 +116,13 @@ namespace librbd {
 			       uint64_t trunc_size, __u32 trunc_seq,
 			       Context *oncommit)
   {
-    m_ictx->snap_lock.Lock();
+    m_ictx->snap_lock.get_read();
     librados::snap_t snap_id = m_ictx->snap_id;
-    m_ictx->parent_lock.Lock();
+    m_ictx->parent_lock.get_read();
     uint64_t overlap = 0;
     m_ictx->get_parent_overlap(snap_id, &overlap);
-    m_ictx->parent_lock.Unlock();
-    m_ictx->snap_lock.Unlock();
+    m_ictx->parent_lock.put_read();
+    m_ictx->snap_lock.put_read();
 
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
     

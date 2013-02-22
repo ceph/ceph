@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "common/Mutex.h"
+#include "common/RWLock.h"
 #include "common/snap_types.h"
 #include "include/buffer.h"
 #include "include/rbd/librbd.hpp"
@@ -59,12 +60,12 @@ namespace librbd {
      * Lock ordering:
      * md_lock, cache_lock, snap_lock, parent_lock, refresh_lock
      */
-    Mutex md_lock; // protects access to the mutable image metadata that
+    RWLock md_lock; // protects access to the mutable image metadata that
                    // isn't guarded by other locks below
                    // (size, features, image locks, etc)
     Mutex cache_lock; // used as client_lock for the ObjectCacher
-    Mutex snap_lock; // protects snapshot-related member variables:
-    Mutex parent_lock; // protects parent_md and parent
+    RWLock snap_lock; // protects snapshot-related member variables:
+    RWLock parent_lock; // protects parent_md and parent
     Mutex refresh_lock; // protects refresh_seq and last_refresh
 
     bool old_format;
