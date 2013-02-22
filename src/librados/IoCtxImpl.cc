@@ -1392,7 +1392,7 @@ void librados::IoCtxImpl::set_sync_op_version(eversion_t& ver)
 int librados::IoCtxImpl::watch(const object_t& oid, uint64_t ver,
 			       uint64_t *cookie, librados::WatchCtx *ctx)
 {
-  ::ObjectOperation rd;
+  ::ObjectOperation wr;
   Mutex mylock("IoCtxImpl::watch::mylock");
   Cond cond;
   bool done;
@@ -1404,13 +1404,13 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t ver,
 
   WatchContext *wc = new WatchContext(this, oid, ctx);
   client->register_watcher(wc, cookie);
-  prepare_assert_ops(&rd);
-  rd.watch(*cookie, ver, 1);
+  prepare_assert_ops(&wr);
+  wr.watch(*cookie, ver, 1);
   bufferlist bl;
-  wc->linger_id = objecter->linger(
-    oid, oloc, rd, snap_seq, bl, NULL,
-    CEPH_OSD_FLAG_WRITE,
-    NULL, onfinish, &objver);
+  wc->linger_id = objecter->linger_mutate(oid, oloc, wr,
+					  snapc, ceph_clock_now(NULL), bl,
+					  0,
+					  NULL, onfinish, &objver);
   lock->Unlock();
 
   mylock.Lock();
@@ -1452,16 +1452,16 @@ int librados::IoCtxImpl::unwatch(const object_t& oid, uint64_t cookie)
   Cond cond;
   bool done;
   int r;
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  Context *oncommit = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
   lock->Lock();
 
   client->unregister_watcher(cookie);
 
-  ::ObjectOperation rd;
-  prepare_assert_ops(&rd);
-  rd.watch(cookie, 0, 0);
-  objecter->read(oid, oloc, rd, snap_seq, &outbl, 0, onack, &ver);
+  ::ObjectOperation wr;
+  prepare_assert_ops(&wr);
+  wr.watch(cookie, 0, 0);
+  objecter->mutate(oid, oloc, wr, snapc, ceph_clock_now(client->cct), 0, NULL, oncommit, &ver);
   lock->Unlock();
 
   mylock.Lock();
@@ -1500,8 +1500,8 @@ int librados::IoCtxImpl::notify(const object_t& oid, uint64_t ver, bufferlist& b
   ::encode(timeout, inbl);
   ::encode(bl, inbl);
   rd.notify(cookie, ver, inbl);
-  wc->linger_id = objecter->linger(oid, oloc, rd, snap_seq, inbl, NULL,
-				   0, onack, NULL, &objver);
+  wc->linger_id = objecter->linger_read(oid, oloc, rd, snap_seq, inbl, NULL, 0,
+					onack, &objver);
   lock->Unlock();
 
   mylock.Lock();

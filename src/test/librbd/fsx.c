@@ -845,7 +845,12 @@ do_clone()
 		simple_err("do_clone: rbd clone", ret);
 		exit(165);
 	}
-	rbd_close(image);
+
+	if ((ret = rbd_close(image)) < 0) {
+		simple_err("do_clone: rbd close", ret);
+		exit(174);
+	}
+
 	if ((ret = rbd_open(ioctx, imagename, &image, NULL)) < 0) {
 		simple_err("do_clone: rbd open", ret);
 		exit(166);
@@ -896,6 +901,10 @@ check_clone(int clonenum)
 		exit(171);
 	}
 	close(fd);
+	if ((ret = rbd_close(cur_image)) < 0) {
+		simple_err("check_clone: rbd close", ret);
+		exit(174);
+	}
 	check_buffers(good_buf, temp_buf, 0, file_info.st_size);
 
 	unlink(filename);
