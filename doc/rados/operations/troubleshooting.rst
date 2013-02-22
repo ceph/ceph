@@ -8,5 +8,5 @@ sections will help you identify and resolve daemon operations issues.
 
 .. toctree:: 
 
-	OSD Failures <troubleshooting-osd>
+	OSD and PG Failures <troubleshooting-osd>
 	MON Failures <troubleshooting-mon>
