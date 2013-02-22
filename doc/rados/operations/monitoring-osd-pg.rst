@@ -93,6 +93,10 @@ daemons that aren't running::
 If an OSD is ``down``, start it:: 
 
 	sudo /etc/init.d/ceph -a start osd.1
+
+See `OSD Not Running`_ for problems associated with OSDs that stopped, or won't
+restart.
+
 	
 
 PG Sets
@@ -173,10 +177,8 @@ OSDs to establish agreement on the current state of the placement group
                 |          Peering             |
 
 The OSDs also report their status to the monitor. See `Configuring Monitor/OSD
-Interaction`_ for details.
-
-.. _CRUSH map: ../crush-map
-.. _Configuring Monitor/OSD Interaction: ../../configuration/mon-osd-interaction/
+Interaction`_ for details. To troubleshoot peering issues, see `Peering
+Failure`_.
 
 
 Monitoring Placement Group States
@@ -550,9 +552,8 @@ To identify stuck placement groups, execute the following::
 
 	ceph pg dump_stuck [unclean|inactive|stale]
 
-See `Placement Group Subsystem`_ for additional details. 
-
-.. _Placement Group Subsystem: ../control#placement-group-subsystem
+See `Placement Group Subsystem`_ for additional details. To troubleshoot
+stuck placement groups, see `Troubleshooting PG Errors`_.
 
 
 Finding an Object Location
@@ -605,3 +606,9 @@ the migration manually. See the  `Architecture`_ section for details.
 .. _pool: ../pools
 .. _placement group: ../placement-groups
 .. _Architecture: ../../../architecture
+.. _OSD Not Running: ../troubleshooting-osd#osd-not-running
+.. _Troubleshooting PG Errors: ../troubleshooting-osd#troubleshooting-pg-errors
+.. _Peering Failure: ../troubleshooting-osd#failures-osd-peering
+.. _CRUSH map: ../crush-map
+.. _Configuring Monitor/OSD Interaction: ../../configuration/mon-osd-interaction/
+.. _Placement Group Subsystem: ../control#placement-group-subsystem
