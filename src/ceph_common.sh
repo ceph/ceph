@@ -144,7 +144,7 @@ get_local_name_list() {
 }
 
 get_name_list() {
-    orig=$1
+    orig="$*"
 
     # extract list of monitors, mdss, osds defined in startup.conf
     allconf=`$CCONF -c $conf -l mon | egrep -v '^mon$' ; \
@@ -162,14 +162,14 @@ get_name_list() {
 	id=`echo $f | cut -c 4- | sed 's/\\.//'`
 	case $f in
 	    mon | osd | mds)
-		what=`echo $allconf $local | grep ^$type || true`
+		what="$what "`echo "$allconf" "$local" | grep ^$type || true`
 		;;
 	    *)
 		if ! echo " " $allconf $local " " | egrep -q "( $type$id | $type.$id )"; then
 		    echo "$0: $type.$id not found ($conf defines" $allconf", /var/lib/ceph defines" $local")"
 		    exit 1
 		fi
-		what="$f"
+		what="$what $f"
 		;;
 	esac
     done
