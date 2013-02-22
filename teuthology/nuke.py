@@ -76,6 +76,7 @@ def shutdown_daemons(ctx, log):
                 'xargs', 'sudo', 'fusermount', '-u', run.Raw(';'),
                 'fi',
                 run.Raw(';'),
+                'sudo',
                 'killall',
                 '--quiet',
                 'ceph-mon',
