@@ -112,7 +112,7 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
 
   dump_start(s);
 
-  s->formatter->open_array_section("container");
+  s->formatter->open_array_section_with_attrs("container", FormatterAttrs("name", s->bucket.name.c_str(), NULL));
 
   while (iter != objs.end() || pref_iter != common_prefixes.end()) {
     bool do_pref = false;
@@ -158,15 +158,15 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
       if (name.compare(delimiter) == 0)
         goto next;
 
-        s->formatter->open_object_section("subdir");
+        s->formatter->open_object_section_with_attrs("subdir", FormatterAttrs("name", name.c_str(), NULL));
 
         /* swift is a bit inconsistent here */
         switch (s->format) {
           case RGW_FORMAT_XML:
-            s->formatter->dump_string("name", pref_iter->first);
+            s->formatter->dump_string("name", name);
             break;
           default:
-            s->formatter->dump_string("subdir", pref_iter->first);
+            s->formatter->dump_string("subdir", name);
         }
         s->formatter->close_section();
     }
