@@ -2974,6 +2974,10 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_ROLLBACK:
       out << " " << snapid_t(op.op.snap.snapid);
       break;
+    case CEPH_OSD_OP_WATCH:
+      out << (op.op.watch.flag ? " add":" remove")
+	  << " cookie " << op.op.watch.cookie << " ver " << op.op.watch.ver;
+      break;
     default:
       out << " " << op.op.extent.offset << "~" << op.op.extent.length;
       if (op.op.extent.truncate_seq)
