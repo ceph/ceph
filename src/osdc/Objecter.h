@@ -25,6 +25,7 @@
 #include "common/admin_socket.h"
 #include "common/Timer.h"
 #include "include/rados/rados_types.h"
+#include "include/rados/rados_types.hpp"
 
 #include <list>
 #include <map>
@@ -344,6 +345,43 @@ struct ObjectOperation {
       }	
     }
   };
+  struct C_ObjectOperation_decodesnaps : public Context {
+    bufferlist bl;
+    librados::snap_set_t *psnaps;
+    int *prval;
+    C_ObjectOperation_decodesnaps(librados::snap_set_t *ps, int *pr)
+      : psnaps(ps), prval(pr) {}
+    void finish(int r) {
+      if (r >= 0) {
+	bufferlist::iterator p = bl.begin();
+	try {
+          obj_list_snap_response_t resp;
+	  ::decode(resp, p);
+	  if (psnaps) {
+
+            psnaps->clones.clear();
+            vector<clone_info>::iterator ci;
+            for (ci = resp.clones.begin(); ci != resp.clones.end(); ci++) {
+              librados::clone_info_t clone;
+
+              clone.cloneid = ci->cloneid;
+              clone.snaps.reserve(ci->snaps.size());
+              clone.snaps.insert(clone.snaps.end(), ci->snaps.begin(), ci->snaps.end());
+              clone.overlap = ci->overlap;
+              clone.size = ci->size;
+
+              psnaps->clones.push_back(clone);
+            }
+          }
+          *prval = 0;
+	}
+	catch (buffer::error& e) {
+	  if (prval)
+	    *prval = -EIO;
+	}
+      }
+    }
+  };
   void getxattrs(std::map<std::string,bufferlist> *pattrs, int *prval) {
     add_op(CEPH_OSD_OP_GETXATTRS);
     if (pattrs || prval) {
@@ -533,6 +571,18 @@ struct ObjectOperation {
       unsigned p = ops.size() - 1;
       C_ObjectOperation_decodewatchers *h =
 	new C_ObjectOperation_decodewatchers(out, prval);
+      out_handler[p] = h;
+      out_bl[p] = &h->bl;
+      out_rval[p] = prval;
+    }
+  }
+
+  void list_snaps(librados::snap_set_t *out, int *prval) {
+    (void)add_op(CEPH_OSD_OP_LIST_SNAPS);
+    if (prval || out) {
+      unsigned p = ops.size() - 1;
+      C_ObjectOperation_decodesnaps *h =
+	new C_ObjectOperation_decodesnaps(out, prval);
       out_handler[p] = h;
       out_bl[p] = &h->bl;
       out_rval[p] = prval;

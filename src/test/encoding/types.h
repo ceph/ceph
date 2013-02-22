@@ -63,6 +63,8 @@ TYPE(ObjectRecoveryProgress)
 TYPE(ScrubMap::object)
 TYPE(ScrubMap)
 TYPE(osd_peer_stat_t)
+TYPE(clone_info)
+TYPE(obj_list_snap_response_t)
 
 #include "os/ObjectStore.h"
 TYPE(ObjectStore::Transaction)

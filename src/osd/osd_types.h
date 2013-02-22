@@ -2093,4 +2093,113 @@ struct obj_list_watch_response_t {
 
 WRITE_CLASS_ENCODER(obj_list_watch_response_t)
 
+struct clone_info {
+  static const snapid_t HEAD;
+
+  snapid_t cloneid;
+  vector<snapid_t> snaps;  // ascending
+  vector< pair<uint64_t,uint64_t> > overlap;
+  uint64_t size;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(cloneid, bl);
+    ::encode(snaps, bl);
+    ::encode(overlap, bl);
+    ::encode(size, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(cloneid, bl);
+    ::decode(snaps, bl);
+    ::decode(overlap, bl);
+    ::decode(size, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const {
+    if (cloneid == HEAD)
+      f->dump_string("cloneid", "HEAD");
+    else
+      f->dump_unsigned("cloneid", cloneid.val);
+    f->open_array_section("snapshots");
+    for (vector<snapid_t>::const_iterator p = snaps.begin(); p != snaps.end(); ++p) {
+      f->open_object_section("snap");
+      f->dump_unsigned("id", p->val);
+      f->close_section();
+    }
+    f->close_section();
+    f->open_array_section("overlaps");
+    for (vector< pair<uint64_t,uint64_t> >::const_iterator q = overlap.begin();
+          q != overlap.end(); ++q) {
+      f->open_object_section("overlap");
+      f->dump_unsigned("offset", q->first);
+      f->dump_unsigned("length", q->second);
+      f->close_section();
+    }
+    f->close_section();
+    f->dump_unsigned("size", size);
+  }
+  static void generate_test_instances(list<clone_info*>& o) {
+    o.push_back(new clone_info);
+    o.push_back(new clone_info);
+    o.back()->cloneid = 1;
+    o.back()->snaps.push_back(1);
+    o.back()->overlap.push_back(pair<uint64_t,uint64_t>(0,4096));
+    o.back()->overlap.push_back(pair<uint64_t,uint64_t>(8192,4096));
+    o.back()->size = 16384;
+    o.push_back(new clone_info);
+    o.back()->cloneid = HEAD;
+    o.back()->size = 32768;
+  }
+};
+
+WRITE_CLASS_ENCODER(clone_info)
+
+/**
+ * obj list snaps response format
+ *
+ */
+struct obj_list_snap_response_t {
+  vector<clone_info> clones;   // ascending
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(clones, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(clones, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const {
+    f->open_array_section("clones");
+    for (vector<clone_info>::const_iterator p = clones.begin(); p != clones.end(); ++p) {
+      f->open_object_section("clone");
+      p->dump(f);
+      f->close_section();
+    }
+    f->close_section();
+  }
+  static void generate_test_instances(list<obj_list_snap_response_t*>& o) {
+    o.push_back(new obj_list_snap_response_t);
+    o.push_back(new obj_list_snap_response_t);
+    clone_info cl;
+    cl.cloneid = 1;
+    cl.snaps.push_back(1);
+    cl.overlap.push_back(pair<uint64_t,uint64_t>(0,4096));
+    cl.overlap.push_back(pair<uint64_t,uint64_t>(8192,4096));
+    cl.size = 16384;
+    o.back()->clones.push_back(cl);
+    cl.cloneid = clone_info::HEAD;
+    cl.snaps.clear();
+    cl.overlap.clear();
+    cl.size = 32768;
+    o.back()->clones.push_back(cl);
+  }
+};
+
+WRITE_CLASS_ENCODER(obj_list_snap_response_t)
+
 #endif

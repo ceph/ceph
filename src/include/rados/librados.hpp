@@ -12,6 +12,7 @@
 #include "buffer.h"
 
 #include "librados.h"
+#include "include/rados/rados_types.hpp"
 
 namespace librados
 {
@@ -26,7 +27,6 @@ namespace librados
   class RadosClient;
 
   typedef void *list_ctx_t;
-  typedef uint64_t snap_t;
   typedef uint64_t auid_t;
   typedef void *config_t;
 
@@ -328,6 +328,7 @@ namespace librados
      * @param prval [out] place error code in prval upon completion
      */
     void list_watchers(std::list<obj_watch_t> *out_watchers, int *prval);
+    void list_snaps(snap_set_t *out_snaps, int *prval);
 
   };
 
@@ -501,6 +502,7 @@ namespace librados
     int unwatch(const std::string& o, uint64_t handle);
     int notify(const std::string& o, uint64_t ver, bufferlist& bl);
     int list_watchers(const std::string& o, std::list<obj_watch_t> *out_watchers);
+    int list_snaps(const std::string& o, snap_set_t *out_snaps);
     void set_notify_timeout(uint32_t timeout);
 
     // assert version for next sync operations
