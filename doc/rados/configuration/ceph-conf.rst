@@ -259,8 +259,8 @@ of your Ceph configuration file.
 .. code-block:: ini
 
 	[global]
-		public network {public-network-ip-address/netmask}
-		cluster network {enter cluster-network-ip-address/netmask}
+		public network = {public-network-ip-address/netmask}
+		cluster network = {enter cluster-network-ip-address/netmask}
 	
 To configure Ceph hosts to use the networks, you should set the following options
 in the daemon instance sections of your ``ceph.conf`` file. 
@@ -268,8 +268,8 @@ in the daemon instance sections of your ``ceph.conf`` file.
 .. code-block:: ini
 
 	[osd.0]
-		public addr {host-public-ip-address}
-		cluster addr {host-cluster-ip-address}
+		public addr = {host-public-ip-address}
+		cluster addr = {host-cluster-ip-address}
 
 .. _hardware recommendations: ../../../install/hardware-recommendations
 
