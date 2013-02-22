@@ -821,7 +821,8 @@ public:
     tid_t register_tid;
     epoch_t map_dne_bound;
 
-    LingerOp() : linger_id(0), flags(0), poutbl(NULL), pobjver(NULL),
+    LingerOp() : linger_id(0), snap(CEPH_NOSNAP), flags(0),
+		 poutbl(NULL), pobjver(NULL),
 		 registered(false),
 		 on_reg_ack(NULL), on_reg_commit(NULL),
 		 session(NULL), session_item(this),
