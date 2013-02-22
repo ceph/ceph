@@ -403,6 +403,10 @@ struct RGWRegionMap {
     DECODE_FINISH(bl);
   }
 
+  void get_params(CephContext *cct, string& pool_name, string& oid);
+  int read(CephContext *cct, RGWRados *store);
+  int store(CephContext *cct, RGWRados *store);
+
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
