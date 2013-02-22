@@ -1,5 +1,6 @@
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
+#include "include/rados/rados_types.h"
 #include "test/librados/test.h"
 
 #include <errno.h>
@@ -61,6 +62,9 @@ TEST(LibRadosWatchNotify, WatchNotifyTestPP) {
   uint64_t handle;
   WatchNotifyTestCtx ctx;
   ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
+  std::list<obj_watch_t> watches;
+  ASSERT_EQ(0, ioctx.list_watchers("foo", &watches));
+  ASSERT_EQ(watches.size(), 1);
   bufferlist bl2;
   ASSERT_EQ(0, ioctx.notify("foo", 0, bl2));
   TestAlarm alarm;
