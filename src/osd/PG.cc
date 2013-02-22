@@ -268,10 +268,23 @@ void PG::proc_replica_log(ObjectStore::Transaction& t,
   if (lu < oinfo.last_update) {
     dout(10) << " peer osd." << from << " last_update now " << lu << dendl;
     oinfo.last_update = lu;
-    if (lu < oinfo.last_complete)
-      oinfo.last_complete = lu;
-    if (omissing.have_missing())
-      oinfo.last_complete = omissing.missing[omissing.rmissing.begin()->second].need;
+  }
+
+  if (omissing.have_missing()) {
+    eversion_t first_missing =
+      omissing.missing[omissing.rmissing.begin()->second].need;
+    oinfo.last_complete = eversion_t();
+    list<pg_log_entry_t>::const_iterator i = olog.log.begin();
+    for (;
+	 i != olog.log.end();
+	 ++i) {
+      if (i->version < first_missing)
+	oinfo.last_complete = i->version;
+      else
+	break;
+    }
+  } else {
+    oinfo.last_complete = oinfo.last_update;
   }
 
   peer_info[from] = oinfo;
