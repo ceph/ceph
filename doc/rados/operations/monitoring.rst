@@ -184,3 +184,23 @@ placement groups,  you will want them to be ``active`` and ``clean``.
 For a detailed discussion, refer to `Monitoring OSDs and Placement Groups`_.
 
 .. _Monitoring OSDs and Placement Groups: ../monitoring-osd-pg
+
+
+Using the Admin Socket
+======================
+
+The Ceph admin socket allows you to query a daemon via a socket interface. 
+By default, Ceph sockets reside under ``/var/run/ceph``. To access a socket, 
+use the following command:: 
+
+	ceph --admin-daemon /var/run/ceph/{socket-name}
+
+To view the available admin socket commands, execute the following command:: 
+
+	ceph --admin-daemon /var/run/ceph/{socket-name} help
+
+The admin socket command enables you to show and set your configuration at
+runtime. See `Viewing a Configuration at Runtime`_ for details.
+
+.. _Viewing a Configuration at Runtime: ../../configuration/ceph-conf#ceph-runtime-config
+
