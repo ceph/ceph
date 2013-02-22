@@ -143,11 +143,9 @@ int RGWRegion::init(CephContext *_cct, RGWRados *_store, bool setup_region)
   if (!setup_region)
     return 0;
 
-  string pool_name = get_pool_name(cct);
+  string region_name = cct->_conf->rgw_region;
 
-  name = cct->_conf->rgw_region;
-
-  if (name.empty()) {
+  if (region_name.empty()) {
     RGWDefaultRegionInfo default_info;
     int r = read_default(default_info);
     if (r == -ENOENT) {
@@ -161,11 +159,19 @@ int RGWRegion::init(CephContext *_cct, RGWRados *_store, bool setup_region)
       lderr(cct) << "failed reading default region info: " << cpp_strerror(-r) << dendl;
       return r;
     }
-    name = default_info.default_region;
+    region_name = default_info.default_region;
   }
 
+  return read_info(region_name);
+}
+
+int RGWRegion::read_info(const string& region_name)
+{
+  string pool_name = get_pool_name(cct);
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
+
+  name = region_name;
 
   string oid = region_info_oid_prefix + name;
 
@@ -306,6 +312,30 @@ int RGWZoneParams::store_info(CephContext *cct, RGWRados *store, RGWRegion& regi
   return ret;
 }
 
+void RGWRegionMap::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  ::encode(regions, bl);
+  ::encode(master_region, bl);
+  ENCODE_FINISH(bl);
+}
+
+void RGWRegionMap::decode(bufferlist::iterator& bl) {
+  DECODE_START(1, bl);
+  ::decode(regions, bl);
+  ::decode(master_region, bl);
+  DECODE_FINISH(bl);
+
+  regions_by_api.clear();
+  for (map<string, RGWRegion>::iterator iter = regions.begin();
+       iter != regions.end(); ++iter) {
+    RGWRegion& region = iter->second;
+    regions_by_api[region.api_name] = region;
+    if (region.is_master) {
+      master_region = region.name;
+    }
+  }
+}
+
 void RGWRegionMap::get_params(CephContext *cct, string& pool_name, string& oid)
 {
   pool_name = cct->_conf->rgw_zone_root_pool;
@@ -328,6 +358,8 @@ int RGWRegionMap::read(CephContext *cct, RGWRados *store)
   if (ret < 0)
     return ret;
 
+
+  Mutex::Locker l(lock);
   try {
     bufferlist::iterator iter = bl.begin();
     ::decode(*this, iter);
@@ -347,11 +379,41 @@ int RGWRegionMap::store(CephContext *cct, RGWRados *store)
 
   rgw_bucket pool(pool_name.c_str());
 
+  Mutex::Locker l(lock);
+
   bufferlist bl;
   ::encode(*this, bl);
   int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL);
 
   return ret;
+}
+
+int RGWRegionMap::update(RGWRegion& region)
+{
+  Mutex::Locker l(lock);
+
+  if (region.is_master && !master_region.empty() &&
+      master_region.compare(region.name) != 0) {
+    derr << "cannot update region map, master_region conflict" << dendl;
+    return -EINVAL;
+  }
+  map<string, RGWRegion>::iterator iter = regions.find(region.name);
+  if (iter != regions.end()) {
+    RGWRegion& old_region = iter->second;
+    if (!old_region.api_name.empty()) {
+      regions_by_api.erase(old_region.api_name);
+    }
+  }
+  regions[region.name] = region;
+
+  if (!region.api_name.empty()) {
+    regions_by_api[region.api_name] = region;
+  }
+
+  if (region.is_master) {
+    master_region = region.name;
+  }
+  return 0;
 }
 
 void RGWObjManifest::append(RGWObjManifest& m)
@@ -1086,7 +1148,6 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
 			    bool exclusive)
 {
   int ret = 0;
-
   ret = select_bucket_placement(bucket.name, bucket);
   if (ret < 0)
     return ret;
