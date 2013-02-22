@@ -4,24 +4,6 @@
 #include "mdstypes.h"
 #include "common/Formatter.h"
 
-/*
- * file_layout_policy_t
- */
-
-void file_layout_policy_t::encode(bufferlist &bl) const
-{
-  ENCODE_START(2, 2, bl);
-  ::encode(layout, bl);
-  ENCODE_FINISH(bl);
-}
-
-void file_layout_policy_t::decode(bufferlist::iterator& bl)
-{
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-  ::decode(layout, bl);
-  DECODE_FINISH(bl);
-}
-
 void dump(const ceph_file_layout& l, Formatter *f)
 {
   f->dump_unsigned("stripe_unit", l.fl_stripe_unit);
@@ -38,23 +20,6 @@ void dump(const ceph_file_layout& l, Formatter *f)
 void dump(const ceph_dir_layout& l, Formatter *f)
 {
   f->dump_unsigned("dir_hash", l.dl_dir_hash);
-}
-
-void file_layout_policy_t::dump(Formatter *f) const
-{
-  ::dump(layout, f);
-}
-
-void file_layout_policy_t::generate_test_instances(list<file_layout_policy_t*>& ls)
-{
-  ls.push_back(new file_layout_policy_t);
-  ls.push_back(new file_layout_policy_t);
-  ls.back()->layout.fl_stripe_unit = 1024;
-  ls.back()->layout.fl_stripe_count = 2;
-  ls.back()->layout.fl_object_size = 2048;
-  ls.back()->layout.fl_cas_hash = 3;
-  ls.back()->layout.fl_object_stripe_unit = 8;
-  ls.back()->layout.fl_pg_pool = 9;
 }
 
 

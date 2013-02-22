@@ -382,10 +382,10 @@ void EMetaBlob::update_segment(LogSegment *ls)
 // EMetaBlob::fullbit
 
 void EMetaBlob::fullbit::encode(bufferlist& bl) const {
-  ENCODE_START(4, 4, bl);
+  ENCODE_START(5, 5, bl);
   if (!_enc.length()) {
     fullbit copy(dn, dnfirst, dnlast, dnv, inode, dirfragtree, xattrs, symlink,
-		 snapbl, dirty, dir_layout, &old_inodes);
+		 snapbl, dirty, &old_inodes);
     bl.append(copy._enc);
   } else {
     bl.append(_enc);
@@ -394,7 +394,7 @@ void EMetaBlob::fullbit::encode(bufferlist& bl) const {
 }
 
 void EMetaBlob::fullbit::decode(bufferlist::iterator &bl) {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
   ::decode(dn, bl);
   ::decode(dnfirst, bl);
   ::decode(dnlast, bl);
@@ -406,12 +406,13 @@ void EMetaBlob::fullbit::decode(bufferlist::iterator &bl) {
   if (inode.is_dir()) {
     ::decode(dirfragtree, bl);
     ::decode(snapbl, bl);
-    if (struct_v >= 2) {
+    if ((struct_v == 2) || (struct_v == 3)) {
       bool dir_layout_exists;
       ::decode(dir_layout_exists, bl);
       if (dir_layout_exists) {
-	dir_layout = new file_layout_policy_t;
-	::decode(*dir_layout, bl);
+	__u8 dir_struct_v;
+	::decode(dir_struct_v, bl); // default_file_layout version
+	::decode(inode.layout, bl); // and actual layout, that we care about
       }
     }
   }
@@ -460,9 +461,10 @@ void EMetaBlob::fullbit::dump(Formatter *f) const
   if (inode.is_dir()) {
     f->dump_stream("frag tree") << dirfragtree;
     f->dump_string("has_snapbl", snapbl.length() ? "true" : "false");
-    if (dir_layout) {
+    if (inode.has_layout()) {
       f->open_object_section("file layout policy");
-      dir_layout->dump(f);
+      // FIXME
+      f->dump_string("layout", "the layout exists");
       f->close_section(); // file layout policy
     }
   }
@@ -488,7 +490,7 @@ void EMetaBlob::fullbit::generate_test_instances(list<EMetaBlob::fullbit*>& ls)
   bufferlist empty_snapbl;
   fullbit *sample = new fullbit("/testdn", 0, 0, 0,
                                 inode, fragtree, empty_xattrs, "", empty_snapbl,
-                                false, NULL, NULL);
+                                false, NULL);
   ls.push_back(sample);
 }
 
@@ -504,9 +506,6 @@ void EMetaBlob::fullbit::update_inode(MDS *mds, CInode *in)
       in->force_dirfrags();
     }
 
-    delete in->default_layout;
-    in->default_layout = dir_layout;
-    dir_layout = NULL;
     /*
      * we can do this before linking hte inode bc the split_at would
      * be a no-op.. we have no children (namely open snaprealms) to
