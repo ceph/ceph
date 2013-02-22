@@ -2029,4 +2029,68 @@ struct OSDOp {
 
 ostream& operator<<(ostream& out, const OSDOp& op);
 
+struct watch_item_t {
+  entity_name_t name;
+  uint64_t cookie;
+  uint32_t timeout_seconds;
+
+  watch_item_t() : cookie(0), timeout_seconds(0) { }
+  watch_item_t(entity_name_t name, uint64_t cookie, uint32_t timeout)
+    : name(name), cookie(cookie), timeout_seconds(timeout) { }
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(name, bl);
+    ::encode(cookie, bl);
+    ::encode(timeout_seconds, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(name, bl);
+    ::decode(cookie, bl);
+    ::decode(timeout_seconds, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(watch_item_t)
+
+/**
+ * obj list watch response format
+ *
+ */
+struct obj_list_watch_response_t {
+  list<watch_item_t> entries;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(entries, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(entries, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const {
+    f->open_array_section("entries");
+    for (list<watch_item_t>::const_iterator p = entries.begin(); p != entries.end(); ++p) {
+      f->open_object_section("watch");
+      f->dump_stream("watcher") << p->name;
+      f->dump_int("cookie", p->cookie);
+      f->dump_int("timeout", p->timeout_seconds);
+      f->close_section();
+    }
+    f->close_section();
+  }
+  static void generate_test_instances(list<obj_list_watch_response_t*>& o) {
+    o.push_back(new obj_list_watch_response_t);
+    o.push_back(new obj_list_watch_response_t);
+    o.back()->entries.push_back(watch_item_t(entity_name_t(entity_name_t::TYPE_CLIENT, 1), 10, 30));
+    o.back()->entries.push_back(watch_item_t(entity_name_t(entity_name_t::TYPE_CLIENT, 2), 20, 60));
+  }
+};
+
+WRITE_CLASS_ENCODER(obj_list_watch_response_t)
+
 #endif
