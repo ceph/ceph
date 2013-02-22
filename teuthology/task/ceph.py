@@ -667,6 +667,14 @@ def cluster(ctx, config):
         for id_ in teuthology.roles_of_type(roles_for_host, 'mon'):
             remote.run(
                 args=[
+                  'sudo',
+                  'mkdir',
+                  '-p',
+                  '/var/lib/ceph/mon/ceph-{id}'.format(id=id_),
+                  ],
+                )
+            remote.run(
+                args=[
                     '{tdir}/enable-coredump'.format(tdir=testdir),
                     'ceph-coverage',
                     coverage_dir,
