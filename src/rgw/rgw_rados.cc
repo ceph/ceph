@@ -52,6 +52,7 @@ static string zone_info_oid_prefix = "zone_info.";
 static string region_info_oid_prefix = "region_info.";
 
 static string default_region_info_oid = "default.region";
+static string region_map_oid = "region_map";
 
 
 static RGWObjCategory shadow_category = RGW_OBJ_CATEGORY_SHADOW;
@@ -297,6 +298,54 @@ int RGWZoneParams::store_info(CephContext *cct, RGWRados *store, RGWRegion& regi
 
   rgw_bucket pool(pool_name.c_str());
   string oid = zone_info_oid_prefix + name;
+
+  bufferlist bl;
+  ::encode(*this, bl);
+  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL);
+
+  return ret;
+}
+
+void RGWRegionMap::get_params(CephContext *cct, string& pool_name, string& oid)
+{
+  pool_name = cct->_conf->rgw_zone_root_pool;
+  if (pool_name.empty()) {
+    pool_name = RGW_DEFAULT_ZONE_ROOT_POOL;
+  }
+  oid = region_map_oid;
+}
+
+int RGWRegionMap::read(CephContext *cct, RGWRados *store)
+{
+  string pool_name, oid;
+
+  get_params(cct, pool_name, oid);
+
+  rgw_bucket pool(pool_name.c_str());
+
+  bufferlist bl;
+  int ret = rgw_get_obj(store, NULL, pool, oid, bl);
+  if (ret < 0)
+    return ret;
+
+  try {
+    bufferlist::iterator iter = bl.begin();
+    ::decode(*this, iter);
+  } catch (buffer::error& err) {
+    ldout(cct, 0) << "ERROR: failed to decode region map info from " << pool << ":" << oid << dendl;
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int RGWRegionMap::store(CephContext *cct, RGWRados *store)
+{
+  string pool_name, oid;
+
+  get_params(cct, pool_name, oid);
+
+  rgw_bucket pool(pool_name.c_str());
 
   bufferlist bl;
   ::encode(*this, bl);
