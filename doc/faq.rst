@@ -11,12 +11,12 @@ mailing lists, the IRC channel, and on the `Ceph.com`_ blog.
 Is Ceph Production-Quality?
 ===========================
 
-Ceph's object store is production ready. Large-scale storage systems (i.e.,
-petabytes of data) use Ceph's RESTful object store, which provides APIs
+Ceph's object store (RADOS) is production ready. Large-scale storage systems (i.e.,
+petabytes of data) use Ceph's RESTful Object Gateway (RGW), which provides APIs
 compatible with Amazon's S3 and OpenStack's Swift.  Many deployments also use
-the Ceph block device, including deployments of  OpenStack and CloudStack.
-`Inktank`_ provides commercial support for the Ceph object store, RESTful
-interfaces, block devices and CephFS with running a single metadata server.
+the Ceph Block Device (RBD), including deployments of  OpenStack and CloudStack.
+`Inktank`_ provides commercial support for the Ceph object store, Object
+Gateway, block devices and CephFS with running a single metadata server.
 
 The CephFS POSIX-compliant filesystem is functionally complete and has been
 evaluated by a large community of users. There are production systems using
@@ -40,9 +40,15 @@ proprietary hardware. For details, see `Ceph Hardware Recommendations`_.
 What Kind of OS Does Ceph Require?
 ==================================
 
-Ceph runs on Linux. Most Ceph users run a Debian/Ubuntu distribution, which you
-can install from `APT packages`_. Ceph builds `RPM packages`_ for Federa/RHEL
-too. You can also download Ceph source `tarballs`_ and build Ceph for your
+Ceph runs on Linux for both the client and server side. 
+
+Ceph runs on Debian/Ubuntu distributions, which you can install from `APT
+packages`_. 
+
+Ceph also runs on Fedora and Enterprise Linux derivates (RHEL, CentOS) using
+`RPM packages`_ .  
+
+You can also download Ceph source `tarballs`_ and build Ceph for your
 distribution. See `Installation`_ for details.
 
 
@@ -170,10 +176,11 @@ Internet, you may need to configure Ceph to ensure effective peering, heartbeat
 acknowledgement and writes to ensure the cluster performs well with additional
 WAN latency.
 
-Dedicated connections are expensive, so people tend to avoid them. The Ceph
-community is exploring asynchronous writes to make distributing a cluster across
-data centers without significant changes to the default settings (e.g.,
-timeouts). 
+The Ceph community is working on an asynchronous write capability via the Ceph
+Object Gateway (RGW) which will provide an eventually-consistent copy of data
+for disaster recovery purposes. This will work with data read and written via
+the Object Gateway only. Work is also starting on a similar capability for Ceph
+Block devices which are managed via the various cloudstacks.
 
 
 How Does Ceph Authenticate Users?
@@ -193,11 +200,10 @@ for multi-tenancy in limited cases. Ceph plans on developing authentication
 namespaces within pools in future releases, so that Ceph is well-suited for
 multi-tenancy within pools.
 
-
 Can Ceph use other Multi-tenancy Modules?
 =========================================
 
-The Bobtail release of Ceph integrates RADOS Gateway with OpenStack's Keystone.
+The Bobtail release of Ceph integrates the Object Gateway with OpenStack's Keystone.
 See `Keystone Integration`_ for details.
 
 .. _Keystone Integration: ../radosgw/config#integrating-with-openstack-keystone
@@ -222,10 +228,9 @@ store provides storage capacity utilization statistics.
 Does Ceph Provide Billing?
 ==========================
 
-Ceph does not provide billing functionality at this time. Improvements to
-pool-based namespaces and pool-based usage tracking may make it feasible to use
-Ceph usage statistics with usage tracking and billing systems in the future.
-
+Usage information is available via a RESTful API for the Ceph Object Gateway
+which can be integrated into billing systems. Usage data at the RADOS pool
+level is not currently possible but is on the roadmap.
 
 Can Ceph Export a Filesystem via NFS or Samba/CIFS?
 ===================================================
@@ -243,11 +248,11 @@ allow you to use QEMU with Ceph. Most Ceph deployments use the `librbd` library.
 Cloud solutions like `OpenStack`_ and `CloudStack`_ interact `libvirt`_ and QEMU
 to as a means of integrating with Ceph.
 
-Ceph integrates cloud solutions via ``libvirt`` and QEMU, but the Ceph community
-is also talking about supporting the Xen hypervisor. Ceph and Citrix engineers
-have built a prototype, but they have not released a stable means of integrating
-Xen with Ceph for general use yet. Similarly, there is interest in support for
-VMWare, but there is no deep-level integration between VMWare and Ceph as yet.
+Ceph integrates cloud solutions via ``libvirt`` and QEMU. The Ceph community
+is also looking to supporting the Xen hypervisor in future releases.
+
+There is interest in support for VMWare, but there is no deep-level integration
+between VMWare and Ceph as yet.
 
 
 Can Block, CephFS, and Gateway Clients Share Data?
