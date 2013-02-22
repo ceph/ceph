@@ -219,6 +219,14 @@ void librados::ObjectReadOperation::list_watchers(
   o->list_watchers(out_watchers, prval);
 }
 
+void librados::ObjectReadOperation::list_snaps(
+  snap_set_t *out_snaps,
+  int *prval)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->list_snaps(out_snaps, prval);
+}
+
 int librados::IoCtx::omap_get_vals(const std::string& oid,
                                    const std::string& start_after,
                                    const std::string& filter_prefix,
@@ -1032,6 +1040,20 @@ int librados::IoCtx::list_watchers(const std::string& oid,
   ObjectReadOperation op;
   int r;
   op.list_watchers(out_watchers, &r);
+  bufferlist bl;
+  int ret = operate(oid, &op, &bl);
+  if (ret < 0)
+    return ret;
+
+  return r;
+}
+
+int librados::IoCtx::list_snaps(const std::string& oid,
+                                   snap_set_t *out_snaps)
+{
+  ObjectReadOperation op;
+  int r;
+  op.list_snaps(out_snaps, &r);
   bufferlist bl;
   int ret = operate(oid, &op, &bl);
   if (ret < 0)
