@@ -271,7 +271,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t,
     if (lu < oinfo.last_complete)
       oinfo.last_complete = lu;
     if (omissing.have_missing())
-      oinfo.last_complete = missing.missing[missing.rmissing.begin()->second].need;
+      oinfo.last_complete = omissing.missing[omissing.rmissing.begin()->second].need;
   }
 
   peer_info[from] = oinfo;
