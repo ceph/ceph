@@ -65,6 +65,8 @@ void _usage()
   cerr << "  regions list               list all regions set on this cluster\n";
   cerr << "  region set                 set region info\n";
   cerr << "  region default             set default region\n";
+  cerr << "  region-map show            show region-map\n";            
+  cerr << "  region-map set             set region-map\n";            
   cerr << "  zone info                  show zone cluster params\n";
   cerr << "  zone set                   set zone cluster params\n";
   cerr << "  zone list                  list all zones set on this cluster\n";
@@ -175,6 +177,8 @@ enum {
   OPT_REGION_LIST,
   OPT_REGION_SET,
   OPT_REGION_DEFAULT,
+  OPT_REGIONMAP_SHOW,
+  OPT_REGIONMAP_SET,
   OPT_ZONE_INFO,
   OPT_ZONE_SET,
   OPT_ZONE_LIST,
@@ -200,6 +204,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "user") == 0 ||
       strcmp(cmd, "region") == 0 ||
       strcmp(cmd, "regions") == 0 ||
+      strcmp(cmd, "region-map") == 0 ||
+      strcmp(cmd, "regionmap") == 0 ||
       strcmp(cmd, "zone") == 0) {
     *need_more = true;
     return 0;
@@ -301,6 +307,12 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "regions") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_REGION_LIST;
+  } else if (strcmp(prev_cmd, "region-map") == 0 ||
+             strcmp(prev_cmd, "regionmap") == 0) {
+    if (strcmp(cmd, "show") == 0)
+      return OPT_REGIONMAP_SHOW;
+    if (strcmp(cmd, "set") == 0)
+      return OPT_REGIONMAP_SET;
   } else if (strcmp(prev_cmd, "zone") == 0) {
     if (strcmp(cmd, "info") == 0)
       return OPT_ZONE_INFO;
@@ -661,6 +673,7 @@ int main(int argc, char **argv)
 
   bool raw_storage_op = (opt_cmd == OPT_REGION_INFO || opt_cmd == OPT_REGION_LIST ||
                          opt_cmd == OPT_REGION_SET || opt_cmd == OPT_REGION_DEFAULT ||
+                         opt_cmd == OPT_REGIONMAP_SHOW || opt_cmd == OPT_REGIONMAP_SET ||
                          opt_cmd == OPT_ZONE_INFO || opt_cmd == OPT_ZONE_SET ||
                          opt_cmd == OPT_ZONE_LIST);
 
@@ -750,6 +763,34 @@ int main(int argc, char **argv)
 	cerr << "failed to set region as default: " << cpp_strerror(-ret) << std::endl;
 	return -ret;
       }
+    }
+
+    if (opt_cmd == OPT_REGIONMAP_SHOW) {
+      RGWRegionMap regionmap;
+      int ret = regionmap.read(g_ceph_context, store);
+      if (ret < 0) {
+	cerr << "failed to read region map: " << cpp_strerror(-ret) << std::endl;
+	return -ret;
+      }
+      encode_json("region-map", regionmap, formatter);
+      formatter->flush(cout);
+    }
+
+    if (opt_cmd == OPT_REGIONMAP_SET) {
+      RGWRegionMap regionmap;
+      int ret = read_decode_json(infile, regionmap);
+      if (ret < 0) {
+        return 1;
+      }
+
+      ret = regionmap.store(g_ceph_context, store);
+      if (ret < 0) {
+        cerr << "ERROR: couldn't store region map info: " << cpp_strerror(-ret) << std::endl;
+        return 1;
+      }
+
+      encode_json("region-map", regionmap, formatter);
+      formatter->flush(cout);
     }
 
     if (opt_cmd == OPT_ZONE_INFO) {

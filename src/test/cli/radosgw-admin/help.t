@@ -27,6 +27,8 @@
     regions list               list all regions set on this cluster
     region set                 set region info
     region default             set default region
+    region-map show            show region-map
+    region-map set             set region-map
     zone info                  show zone cluster params
     zone set                   set zone cluster params
     zone list                  list all zones set on this cluster
