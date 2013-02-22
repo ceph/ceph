@@ -471,8 +471,13 @@ process_line(int line_no, const char *line, std::deque<std::string> *errors)
       case ACCEPT_KEY:
 	if ((((c == '#') || (c == ';')) && (!escaping)) || (c == '\0')) {
 	  ostringstream oss;
-	  oss << "unexpected character while parsing putative key value, "
-	      << "at char " << (l - line) << ", line " << line_no;
+	  if (c == '\0') {
+	    oss << "end of key=val line " << line_no
+	        << " reached, no \"=val\" found...missing =?";
+	  } else {
+	    oss << "unexpected character while parsing putative key value, "
+		<< "at char " << (l - line) << ", line " << line_no;
+	  }
 	  errors->push_back(oss.str());
 	  return NULL;
 	}
