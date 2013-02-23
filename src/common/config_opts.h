@@ -361,7 +361,8 @@ OPTION(osd_use_stale_snap, OPT_BOOL, false)
 OPTION(osd_rollback_to_cluster_snap, OPT_STR, "")
 OPTION(osd_default_notify_timeout, OPT_U32, 30) // default notify timeout in seconds
 OPTION(osd_kill_backfill_at, OPT_INT, 0)
-OPTION(osd_min_pg_log_entries, OPT_U32, 1000) // number of entries to keep in the pg log when trimming it
+OPTION(osd_min_pg_log_entries, OPT_U32, 1000)  // number of entries to keep in the pg log when trimming it
+OPTION(osd_max_pg_log_entries, OPT_U32, 10000) // max entries, say when degraded, before we trim
 OPTION(osd_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op complaint-worthy
 OPTION(osd_command_max_records, OPT_INT, 256)
 OPTION(osd_op_log_threshold, OPT_INT, 5) // how many op log messages to show in one go
