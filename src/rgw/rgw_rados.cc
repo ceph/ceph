@@ -145,7 +145,7 @@ int RGWRegion::init(CephContext *_cct, RGWRados *_store, bool setup_region)
 
   string region_name = cct->_conf->rgw_region;
 
-  if (name.empty()) {
+  if (region_name.empty()) {
     RGWDefaultRegionInfo default_info;
     int r = read_default(default_info);
     if (r == -ENOENT) {
@@ -159,10 +159,10 @@ int RGWRegion::init(CephContext *_cct, RGWRados *_store, bool setup_region)
       lderr(cct) << "failed reading default region info: " << cpp_strerror(-r) << dendl;
       return r;
     }
-    string region_name = default_info.default_region;
+    region_name = default_info.default_region;
   }
 
-  return read_info(name);
+  return read_info(region_name);
 }
 
 int RGWRegion::read_info(const string& region_name)
@@ -1148,7 +1148,6 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
 			    bool exclusive)
 {
   int ret = 0;
-
   ret = select_bucket_placement(bucket.name, bucket);
   if (ret < 0)
     return ret;
