@@ -560,16 +560,6 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 
 void ReplicatedPG::calc_trim_to()
 {
-  if (state_test(PG_STATE_RECOVERING |
-		 PG_STATE_RECOVERY_WAIT |
-		 PG_STATE_BACKFILL |
-		 PG_STATE_BACKFILL_WAIT |
-		 PG_STATE_BACKFILL_TOOFULL)) {
-    dout(10) << "calc_trim_to no trim during recovery" << dendl;
-    pg_trim_to = eversion_t();
-    return;
-  }
-
   if (is_scrubbing() && scrubber.classic) {
     dout(10) << "calc_trim_to no trim during classic scrub" << dendl;
     pg_trim_to = eversion_t();
@@ -577,8 +567,14 @@ void ReplicatedPG::calc_trim_to()
   }
 
   size_t target = g_conf->osd_min_pg_log_entries;
-  if (is_degraded())
+  if (is_degraded() ||
+      state_test(PG_STATE_RECOVERING |
+		 PG_STATE_RECOVERY_WAIT |
+		 PG_STATE_BACKFILL |
+		 PG_STATE_BACKFILL_WAIT |
+		 PG_STATE_BACKFILL_TOOFULL)) {
     target = g_conf->osd_max_pg_log_entries;
+  }
 
   if (min_last_complete_ondisk != eversion_t() &&
       min_last_complete_ondisk != pg_trim_to &&
