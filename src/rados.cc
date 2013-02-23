@@ -15,7 +15,7 @@
 #include "include/types.h"
 
 #include "include/rados/librados.hpp"
-#include "include/rados/rados_types.h"
+#include "include/rados/rados_types.hpp"
 #include "rados_sync.h"
 using namespace librados;
 
@@ -83,6 +83,7 @@ void usage(ostream& out)
 "   rmsnap <snap-name>               remove snap <snap-name>\n"
 "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n"
 "\n"
+"   listsnaps <obj-name>             list the snapshots of this object\n"
 "   bench <seconds> write|seq|rand [-t concurrent_operations] [--no-cleanup]\n"
 "                                    default is 16 concurrent IOs and 4 MB ops\n"
 "                                    default is to clean up after write benchmark\n"
@@ -2022,6 +2023,130 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     for (i = lw.begin(); i != lw.end(); i++) {
       cout << "watcher=client." << i->watcher_id << " cookie=" << i->cookie << std::endl;
     }
+  } else if (strcmp(nargs[0], "listsnaps") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage_exit();
+
+    string oid(nargs[1]);
+    snap_set_t ls;
+
+    ret = io_ctx.list_snaps(oid, &ls);
+    if (ret < 0) {
+      cerr << "error listing snap shots " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
+    }
+    else
+      ret = 0;
+
+    map<snap_t,string> snamemap;
+    if (formatter || pretty_format) {
+      vector<snap_t> snaps;
+      io_ctx.snap_list(&snaps);
+      for (vector<snap_t>::iterator i = snaps.begin();
+          i != snaps.end(); i++) {
+        string s;
+        if (io_ctx.snap_get_name(*i, &s) < 0)
+          continue;
+        snamemap.insert(pair<snap_t,string>(*i, s));
+      }
+    }
+
+    if (formatter) {
+      formatter->open_object_section("object");
+      formatter->dump_string("name", oid);
+      formatter->open_array_section("clones");
+    } else {
+      cout << oid << ":" << std::endl;
+      cout << "cloneid	snaps	size	overlap" << std::endl;
+    }
+
+    for (std::vector<clone_info_t>::iterator ci = ls.clones.begin();
+          ci != ls.clones.end(); ci++) {
+
+      if (formatter) formatter->open_object_section("clone");
+
+      if (ci->cloneid == clone_info_t::HEAD) {
+        if (formatter)
+          formatter->dump_string("id", "head");
+        else
+          cout << "head";
+      } else {
+        if (formatter)
+          formatter->dump_unsigned("id", ci->cloneid);
+        else
+          cout << ci->cloneid;
+      }
+
+      if (formatter)
+        formatter->open_array_section("snapshots");
+      else
+        cout << "\t";
+
+      if (!formatter && ci->snaps.empty()) {
+        cout << "-";
+      }
+      for (std::vector<snap_t>::const_iterator snapindex = ci->snaps.begin();
+          snapindex != ci->snaps.end(); ++snapindex) {
+
+        map<snap_t,string>::iterator si;
+
+        if (formatter || pretty_format) si = snamemap.find(*snapindex);
+
+        if (formatter) {
+          formatter->open_object_section("snapshot");
+          formatter->dump_unsigned("id", *snapindex);
+          if (si != snamemap.end())
+            formatter->dump_string("name", si->second);
+          formatter->close_section(); //snapshot
+        } else {
+          if (snapindex != ci->snaps.begin()) cout << ",";
+          if (!pretty_format || (si == snamemap.end()))
+            cout << *snapindex;
+          else
+            cout << si->second << "(" << *snapindex << ")";
+        }
+      }
+
+      if (formatter) {
+        formatter->close_section();	//Snapshots
+        formatter->dump_unsigned("size", ci->size);
+      } else {
+        cout << "\t" << ci->size;
+      }
+
+      if (ci->cloneid != clone_info_t::HEAD) {
+        if (formatter)
+          formatter->open_array_section("overlaps");
+        else
+          cout << "\t[";
+
+        for (std::vector< std::pair<uint64_t,uint64_t> >::iterator ovi = ci->overlap.begin();
+            ovi != ci->overlap.end(); ovi++) {
+          if (formatter) {
+            formatter->open_object_section("section");
+            formatter->dump_unsigned("start", ovi->first);
+            formatter->dump_unsigned("length", ovi->second);
+            formatter->close_section(); //section
+          } else {
+            if (ovi != ci->overlap.begin()) cout << ",";
+            cout << ovi->first << "~" << ovi->second;
+          }
+        }
+        if (formatter)
+          formatter->close_section(); //overlaps
+        else
+          cout << "]" << std::endl;
+      }
+      if (formatter) formatter->close_section(); //clone
+    }
+    if (formatter) {
+      formatter->close_section(); //clones
+      formatter->close_section(); //object
+      formatter->flush(cout);
+    } else {
+      cout << std::endl;
+    }
+
   } else {
     cerr << "unrecognized command " << nargs[0] << std::endl;
     usage_exit();
