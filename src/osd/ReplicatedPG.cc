@@ -563,7 +563,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 
 void ReplicatedPG::calc_trim_to()
 {
-  if (!is_degraded() && !is_scrubbing() && is_clean()) {
+  if (!is_degraded() && is_clean() && !(is_scrubbing() && scrubber.classic)) {
     if (min_last_complete_ondisk != eversion_t() &&
 	min_last_complete_ondisk != pg_trim_to &&
 	log.approx_size() > g_conf->osd_min_pg_log_entries) {

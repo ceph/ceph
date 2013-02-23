@@ -815,6 +815,7 @@ public:
       block_writes(false), active(false), queue_snap_trim(false),
       waiting_on(0), errors(0), fixed(0), active_rep_scrub(0),
       must_scrub(false), must_deep_scrub(false), must_repair(false),
+      classic(false),
       finalizing(false), is_chunky(false), state(INACTIVE),
       deep(false)
     {
@@ -850,6 +851,7 @@ public:
     map<hobject_t, pair<ScrubMap::object, int> > authoritative;
 
     // classic scrub
+    bool classic;
     bool finalizing;
 
     // chunky scrub
@@ -921,6 +923,7 @@ public:
 
     // clear all state
     void reset() {
+      classic = false;
       finalizing = false;
       block_writes = false;
       active = false;
