@@ -851,7 +851,6 @@ void RGWCreateBucket::execute()
 
   s->bucket_owner.set_id(s->user.user_id);
   s->bucket_owner.set_name(s->user.display_name);
-
   r = get_policy_from_attr(s->cct, store, s->obj_ctx, &old_policy, obj);
   if (r >= 0)  {
     if (old_policy.get_owner().get_id().compare(s->user.user_id) != 0) {
