@@ -2534,7 +2534,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	newcrush.encode(pending_inc.crush);
       }
       getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
       return true;
     }
     else if (m->cmd.size() == 5 &&
@@ -2583,7 +2583,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	newcrush.encode(pending_inc.crush);
       }
       getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
       return true;
     }
     else if (m->cmd[1] == "setmaxosd" && m->cmd.size() > 2) {
