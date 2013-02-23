@@ -249,7 +249,7 @@ Cloud solutions like `OpenStack`_ and `CloudStack`_ interact `libvirt`_ and QEMU
 to as a means of integrating with Ceph.
 
 Ceph integrates cloud solutions via ``libvirt`` and QEMU. The Ceph community
-is also looking to support the Xen hypervisor in future releases.
+is also looking to support the Xen hypervisor in a future release.
 
 There is interest in support for VMWare, but there is no deep-level integration
 between VMWare and Ceph as yet.
