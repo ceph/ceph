@@ -393,7 +393,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
       pending_map.last_changed = ceph_clock_now(g_ceph_context);
       ss << "added mon." << name << " at " << addr;
       getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
       return true;
     }
     else if (m->cmd.size() == 3 && m->cmd[1] == "remove") {

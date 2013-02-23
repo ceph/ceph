@@ -458,7 +458,7 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
   dout(7) << "prepare_beacon pending map now:" << dendl;
   print_map(pending_mdsmap);
   
-  paxos->wait_for_commit(new C_Updated(this, m));
+  wait_for_finished_proposal(new C_Updated(this, m));
 
   return true;
 }
@@ -826,7 +826,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	map.epoch = pending_mdsmap.epoch;  // make sure epoch is correct
 	pending_mdsmap = map;
 	string rs = "set mds map";
-	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
 	return true;
       } else
 	ss << "next mdsmap epoch " << pending_mdsmap.epoch << " != " << e;
@@ -848,7 +848,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	ss << "set mds gid " << gid << " to state " << state << " " << ceph_mds_state_name(state);
 	string rs;
 	getline(ss, rs);
-	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
 	return true;
       }
     }
@@ -873,7 +873,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	ss << "removed mds gid " << gid;
 	string rs;
 	getline(ss, rs);
-	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
 	return true;
       }
     }
@@ -886,7 +886,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       ss << "removed failed mds." << w;
       string rs;
       getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
       return true;
     }
     else if (m->cmd[1] == "cluster_fail") {
@@ -967,7 +967,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	ss << "new fs with metadata pool " << metadata << " and data pool " << data;
 	string rs;
 	getline(ss, rs);
-	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
 	return true;
       }
     }    
@@ -980,7 +980,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 
   if (r >= 0) {
     // success.. delay reply
-    paxos->wait_for_commit(new Monitor::C_Command(mon, m, r, rs, get_version()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, r, rs, get_version()));
     return true;
   } else {
     // reply immediately

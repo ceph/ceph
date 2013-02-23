@@ -306,7 +306,7 @@ bool LogMonitor::prepare_log(MLog *m)
 
     }
   }
-  paxos->wait_for_commit(new C_Log(this, m));
+  wait_for_finished_proposal(new C_Log(this, m));
   return true;
 }
 
@@ -491,7 +491,7 @@ void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
   version_t summary_ver = summary.version;
   while (sv <= summary_ver) {
     bufferlist bl;
-    bool success = paxos->read(sv, bl);
+    bool success = get_version(sv, bl);
     assert(success);
     bufferlist::iterator p = bl.begin();
     __u8 v;
