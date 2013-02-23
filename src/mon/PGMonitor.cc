@@ -547,7 +547,7 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
     */
   }
   
-  paxos->wait_for_commit(new C_Stats(this, stats, ack));
+  wait_for_finished_proposal(new C_Stats(this, stats, ack));
   return true;
 }
 
@@ -1155,7 +1155,7 @@ bool PGMonitor::prepare_command(MMonCommand *m)
     }
     ss << "pg " << m->cmd[2] << " now creating, ok";
     getline(ss, rs);
-    paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
     return true;
   }
   else if (m->cmd.size() > 1 && m->cmd[1] == "set_full_ratio") {
@@ -1171,7 +1171,7 @@ bool PGMonitor::prepare_command(MMonCommand *m)
       goto out;
     }
     pending_inc.full_ratio = n;
-    paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
     return true;
   }
   else if (m->cmd.size() > 1 && m->cmd[1] == "set_nearfull_ratio") {
@@ -1187,7 +1187,7 @@ bool PGMonitor::prepare_command(MMonCommand *m)
       goto out;
     }
     pending_inc.nearfull_ratio = n;
-    paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
     return true;
   }
 
