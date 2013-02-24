@@ -242,15 +242,17 @@ function parseargs() {
 
 ################################################################
 
+[ -z "$TESTDIR" ] && export TESTDIR="/tmp/cephtest"
+
 # Set up some environment for normal teuthology test setup.
 # This really should not be necessary but I found it was.
-export CEPH_ARGS="--conf /tmp/cephtest/ceph.conf"
-export CEPH_ARGS="${CEPH_ARGS} --keyring /tmp/cephtest/data/client.0.keyring"
+export CEPH_ARGS="--conf ${TESTDIR}/ceph.conf"
+export CEPH_ARGS="${CEPH_ARGS} --keyring ${TESTDIR}/data/client.0.keyring"
 export CEPH_ARGS="${CEPH_ARGS} --name client.0"
 
-export LD_LIBRARY_PATH="/tmp/cephtest/binary/usr/local/lib:${LD_LIBRARY_PATH}"
-export PATH="/tmp/cephtest/binary/usr/local/bin:${PATH}"
-export PATH="/tmp/cephtest/binary/usr/local/sbin:${PATH}"
+export LD_LIBRARY_PATH="${TESTDIR}/binary/usr/local/lib:${LD_LIBRARY_PATH}"
+export PATH="${TESTDIR}/binary/usr/local/bin:${PATH}"
+export PATH="${TESTDIR}/binary/usr/local/sbin:${PATH}"
 
 ################################################################
 
@@ -260,7 +262,6 @@ export EXT4_MKFS_OPTIONS="${EXT4_MKFS_OPTIONS:--F}"
 export BTRFS_MKFS_OPTION	# No defaults
 
 XFSTESTS_DIR="/var/lib/xfstests"	# Where the tests live
-TEST_ROOT="/tmp/cephtest"		# Files, etc. will be created here
 
 # download, build, and install xfstests
 function install_xfstests() {
@@ -269,7 +270,7 @@ function install_xfstests() {
 	local multiple=""
 	local ncpu
 
-	pushd "${TEST_ROOT}"
+	pushd "${TESTDIR}"
 
 	git clone "${XFSTESTS_REPO}"
 
@@ -289,7 +290,7 @@ function install_xfstests() {
 function remove_xfstests() {
 	arg_count 0 $#
 
-	rm -rf "${TEST_ROOT}/xfstests"
+	rm -rf "${TESTDIR}/xfstests"
 	rm -rf "${XFSTESTS_DIR}"
 }
 
@@ -298,14 +299,14 @@ function setup_host_options() {
 	arg_count 0 $#
 
 	# Create mount points for the test and scratch filesystems
-	local test_dir="$(mktemp -d ${TEST_ROOT}/test_dir.XXXXXXXXXX)"
-	local scratch_dir="$(mktemp -d ${TEST_ROOT}/scratch_mnt.XXXXXXXXXX)"
+	local test_dir="$(mktemp -d ${TESTDIR}/test_dir.XXXXXXXXXX)"
+	local scratch_dir="$(mktemp -d ${TESTDIR}/scratch_mnt.XXXXXXXXXX)"
 
 	# Write a host options file that uses these devices.
 	# xfstests uses the file defined by HOST_OPTIONS as the
 	# place to get configuration variables for its run, and
 	# all (or most) of the variables set here are required.
-	export HOST_OPTIONS="$(mktemp ${TEST_ROOT}/host_options.XXXXXXXXXX)"
+	export HOST_OPTIONS="$(mktemp ${TESTDIR}/host_options.XXXXXXXXXX)"
 	cat > "${HOST_OPTIONS}" <<-!
 		# Created by ${PROGNAME} on $(date)
 		# HOST_OPTIONS="${HOST_OPTIONS}"
