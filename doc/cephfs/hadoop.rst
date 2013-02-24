@@ -2,6 +2,50 @@
 Using Hadoop with CephFS
 ========================
 
+The Ceph file system can be used in place of HDFS in a Hadoop installation
+by using the Ceph file system client Java package, and requires no changes to
+the Hadoop code base.
+
+The Apache Hadoop project is a framework for building data-intensive
+applications. Applications built for the Hadoop framework include MapReduce,
+HBase, Hive, Mahout, and many others. Data management in Hadoop is handled by
+a distributed file system, and the default file system supported by Hadoop is
+the Hadoop Distributed File System (HDFS). However, Hadoop is not restricted
+to using HDFS, and any alternative file system can be used with Hadoop by
+plugging in a different implementation of the Hadoop virtual file system
+layer.
+
+Installation
+============
+
+There are three requirements for using CephFS with Hadoop. First, a running
+Ceph installation is required. The details of setting up a Ceph cluster and
+the file system are beyond the scope of this document. Please refer to the
+Ceph documentation for installing Ceph.
+
+.. important:: The master branch is currently required for compatibility.
+
+The remaining two requirements are a Hadoop installation, and the Ceph file
+system Java packages, including the Java CephFS Hadoop plugin. The high-level
+steps are two add the dependencies to the Hadoop installation ``CLASSPATH``,
+and configure Hadoop to use the Ceph file system.
+
+CephFS Java Packages
+--------------------
+
+* CephFS Java package is located
+* CephFS Hadoop plugin is located
+
+Adding these dependencies to a Hadoop installation will depend on your
+particular deployment. In general the dependencies must be present on each
+node in the system that will be part of the Hadoop cluster, and must be in the
+``CLASSPATH`` searched for by Hadoop. Typically approaches are to place the
+additional ``jar`` files into the ``hadoop/lib`` directory, or to edit the
+``HADOOP_CLASSPATH`` variable in ``hadoop-env.sh``.
+
+The native Ceph file system client must be installed on each participating
+node in the Hadoop cluster.
+
 Hadoop Configuration
 ====================
 
