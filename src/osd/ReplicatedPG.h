@@ -790,18 +790,16 @@ protected:
     }
   };
   struct C_OSD_CommittedPushedObject : public Context {
-    ReplicatedPG *pg;
+    boost::intrusive_ptr<ReplicatedPG> pg;
     OpRequestRef op;
     epoch_t epoch;
     eversion_t last_complete;
     C_OSD_CommittedPushedObject(
       ReplicatedPG *p, OpRequestRef o, epoch_t epoch, eversion_t lc) :
       pg(p), op(o), epoch(epoch), last_complete(lc) {
-      pg->get();
     }
     void finish(int r) {
       pg->_committed_pushed_object(op, epoch, last_complete);
-      pg->put();
     }
   };
   struct C_OSD_CompletedPushedObjectReplica : public Context {
