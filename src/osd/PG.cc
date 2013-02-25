@@ -1765,7 +1765,7 @@ void PG::replay_queued_ops()
 void PG::_activate_committed(epoch_t e)
 {
   lock();
-  if (e < last_peering_reset) {
+  if (pg_has_reset_since(e)) {
     dout(10) << "_activate_committed " << e << ", that was an old interval" << dendl;
   } else if (is_primary()) {
     peer_activated.insert(osd->whoami);
@@ -3254,7 +3254,7 @@ void PG::build_scrub_map(ScrubMap &map)
   _scan_list(map, ls, false);
   lock();
 
-  if (epoch < last_peering_reset) {
+  if (pg_has_reset_since(epoch)) {
     dout(10) << "scrub  pg changed, aborting" << dendl;
     return;
   }
