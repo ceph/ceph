@@ -37,7 +37,8 @@ public:
 		     bool accept_list_errors,
 		     int midway_cnt,
 		     CrossProcessSem *pool_setup_sem,
-		     CrossProcessSem *midway_sem);
+		     CrossProcessSem *midway_sem_wait,
+		     CrossProcessSem *midway_sem_post);
   ~StRadosListObjects();
   virtual int run();
 private:
@@ -45,7 +46,8 @@ private:
   bool m_accept_list_errors;
   int m_midway_cnt;
   CrossProcessSem *m_pool_setup_sem;
-  CrossProcessSem *m_midway_sem;
+  CrossProcessSem *m_midway_sem_wait;
+  CrossProcessSem *m_midway_sem_post;
 };
 
 #endif
