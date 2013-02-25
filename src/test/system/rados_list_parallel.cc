@@ -230,7 +230,7 @@ int main(int argc, const char **argv)
     StRadosCreatePool r1(argc, argv, NULL, pool_setup_sem, NULL,
 			 pool, g_num_objects, ".obj");
     StRadosListObjects r2(argc, argv, pool, false, g_num_objects,
-			  pool_setup_sem, modify_sem);
+			  pool_setup_sem, modify_sem, NULL);
     vector < SysTestRunnable* > vec;
     vec.push_back(&r1);
     vec.push_back(&r2);
@@ -248,7 +248,7 @@ int main(int argc, const char **argv)
     StRadosCreatePool r1(argc, argv, NULL, pool_setup_sem, NULL,
 			 pool, g_num_objects, ".obj");
     StRadosListObjects r2(argc, argv, pool, false, g_num_objects / 2,
-			  pool_setup_sem, modify_sem);
+			  pool_setup_sem, modify_sem, NULL);
     RadosDeleteObjectsR r3(argc, argv, pool);
     vector < SysTestRunnable* > vec;
     vec.push_back(&r1);
@@ -268,7 +268,7 @@ int main(int argc, const char **argv)
     StRadosCreatePool r1(argc, argv, NULL, pool_setup_sem, NULL,
 			 pool, g_num_objects, ".obj");
     StRadosListObjects r2(argc, argv, pool, false, g_num_objects / 2,
-			  pool_setup_sem, modify_sem);
+			  pool_setup_sem, modify_sem, NULL);
     RadosAddObjectsR r3(argc, argv, pool, ".obj2");
     vector < SysTestRunnable* > vec;
     vec.push_back(&r1);
@@ -288,7 +288,7 @@ int main(int argc, const char **argv)
     StRadosCreatePool r1(argc, argv, NULL, pool_setup_sem, NULL,
 			 pool, g_num_objects, ".obj");
     StRadosListObjects r2(argc, argv, pool, false, g_num_objects / 2,
-			  pool_setup_sem, modify_sem);
+			  pool_setup_sem, modify_sem, NULL);
     RadosAddObjectsR r3(argc, argv, pool, ".obj2");
     RadosAddObjectsR r4(argc, argv, pool, ".obj3");
     RadosDeleteObjectsR r5(argc, argv, pool);
@@ -312,7 +312,7 @@ int main(int argc, const char **argv)
     StRadosCreatePool r1(argc, argv, NULL, pool_setup_sem, NULL,
 			 pool, g_num_objects, ".obj");
     StRadosListObjects r2(argc, argv, pool, false, g_num_objects / 2,
-			  pool_setup_sem, modify_sem);
+			  pool_setup_sem, modify_sem, NULL);
     // AddObjects with the same 'suffix' as used in StRadosCreatePool
     RadosAddObjectsR r3(argc, argv, pool, ".obj");
     vector < SysTestRunnable* > vec;
