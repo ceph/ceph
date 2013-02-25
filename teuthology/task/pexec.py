@@ -28,11 +28,16 @@ def _do_barrier(barrier, barrier_queue, remote):
     else:
         barrier.wait()
 
-def _exec_host(barrier, barrier_queue, remote, sudo, ls):
+def _exec_host(barrier, barrier_queue, remote, sudo, testdir, ls):
     log.info('Running commands on host %s', remote.name)
-    args = ['bash', '-s']
+    args = [
+        'TESTDIR={tdir}'.format(tdir=testdir),
+        'bash',
+        '-s'
+        ]
     if sudo:
         args.insert(0, 'sudo')
+    
     r = remote.run( args=args, stdin=tor.PIPE, wait=False)
     r.stdin.writelines(['set -e\n'])
     r.stdin.flush()
@@ -123,6 +128,7 @@ def task(ctx, config):
         sudo = config['sudo']
         del config['sudo']
 
+    testdir = teuthology.get_testdir(ctx)
 
     remotes = list(_generate_remotes(ctx, config))
     count = len(remotes)
@@ -133,4 +139,4 @@ def task(ctx, config):
         _init_barrier(barrier_queue, remote[0])
     with parallel() as p:
         for remote in remotes:
-            p.spawn(_exec_host, barrier, barrier_queue, remote[0], sudo, remote[1])
+            p.spawn(_exec_host, barrier, barrier_queue, remote[0], sudo, testdir, remote[1])

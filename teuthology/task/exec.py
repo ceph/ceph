@@ -21,6 +21,8 @@ def task(ctx, config):
     log.info('Executing custom commands...')
     assert isinstance(config, dict), "task exec got invalid config"
 
+    testdir = teuthology.get_testdir(ctx)
+
     if 'all' in config and len(config) == 1:
         a = config['all']
         roles = teuthology.all_roles(ctx.cluster)
@@ -33,6 +35,7 @@ def task(ctx, config):
             remote.run(
                 args=[
                     'sudo',
+                    'TESTDIR={tdir}'.format(tdir=testdir),
                     'bash',
                     '-c',
                     c],
