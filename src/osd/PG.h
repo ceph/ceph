@@ -1841,6 +1841,10 @@ public:
 		   list<Context *> *on_applied,
 		   list<Context *> *on_safe);
   void set_last_peering_reset();
+  bool pg_has_reset_since(epoch_t e) {
+    assert(is_locked());
+    return deleting || e < get_last_peering_reset();
+  }
 
   void update_history_from_master(pg_history_t new_history);
   void fulfill_info(int from, const pg_query_t &query, 
