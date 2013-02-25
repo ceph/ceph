@@ -75,7 +75,7 @@ run()
       break;
     }
     else if (ret != 0) {
-      if (m_accept_list_errors)
+      if (m_accept_list_errors && (!m_midway_sem_post || saw > m_midway_cnt))
 	break;
       printf("%s: rados_objects_list_next error: %d\n", get_id_str(), ret);
       return ret;
