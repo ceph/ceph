@@ -1,3 +1,10 @@
+overrides:
+  ceph:
+    conf:
+      mon:
+        debug mon: 20
+        debug paxos: 20
+        debug ms: 1
 tasks:
 - install:
 - ceph:
