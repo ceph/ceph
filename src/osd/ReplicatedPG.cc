@@ -4724,7 +4724,7 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
   rm->op->mark_event("sub_op_applied");
   rm->applied = true;
 
-  if (rm->epoch_started >= last_peering_reset) {
+  if (!pg_has_reset_since(rm->epoch_started)) {
     dout(10) << "sub_op_modify_applied on " << rm << " op " << *rm->op->request << dendl;
     MOSDSubOp *m = (MOSDSubOp*)rm->op->request;
     assert(m->get_header().type == MSG_OSD_SUBOP);
@@ -4766,7 +4766,7 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
   rm->op->mark_commit_sent();
   rm->committed = true;
 
-  if (rm->epoch_started >= last_peering_reset) {
+  if (!pg_has_reset_since(rm->epoch_started)) {
     // send commit.
     dout(10) << "sub_op_modify_commit on op " << *rm->op->request
 	     << ", sending commit to osd." << rm->ackerosd
@@ -5799,7 +5799,7 @@ void ReplicatedPG::_committed_pushed_object(
   OpRequestRef op, epoch_t epoch, eversion_t last_complete)
 {
   lock();
-  if (epoch >= last_peering_reset) {
+  if (!pg_has_reset_since(epoch)) {
     dout(10) << "_committed_pushed_object last_complete " << last_complete << " now ondisk" << dendl;
     last_complete_ondisk = last_complete;
 
