@@ -18,6 +18,9 @@
 	osd recover clone overlap = true
 	osd recovery max chunk = 1048576
 
+[mon]
+	debug ms = 1
+
 [mds]
         lockdep = 1
         mds debug scatterstat = true
