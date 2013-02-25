@@ -824,7 +824,7 @@ protected:
       epoch_t epoch) : pg(pg), hoid(hoid), epoch(epoch) {}
     void finish(int) {
       pg->lock();
-      if (epoch >= pg->last_peering_reset) {
+      if (!pg->pg_has_reset_since(epoch)) {
 	pg->finish_recovery_op(hoid);
       }
       pg->unlock();
