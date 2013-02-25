@@ -4067,6 +4067,12 @@ bool Monitor::StoreConverter::needs_conversion()
   if (db->open(std::cerr) < 0) {
     dout(1) << "unable to open monitor store at " << g_conf->mon_data << dendl;
     dout(1) << "check for old monitor store format" << dendl;
+    int err = store->mount();
+    if (err < 0) {
+      dout(0) << "unable to mount monitor store; are you sure it exists?" << dendl;
+      dout(0) << "error: " << cpp_strerror(err) << dendl;
+      assert(0 == "non-existent store in mon data directory");
+    }
     assert(!store->mount());
     bufferlist magicbl;
     if (store->exists_bl_ss("magic", 0)) {
