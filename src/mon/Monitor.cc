@@ -1053,7 +1053,7 @@ void Monitor::sync_timeout(entity_inst_t &entity)
       return;
     }
 
-    int i = 0;
+    unsigned int i = 0;
     string entity_name = monmap->get_name(entity.addr);
     string debug_mon = g_conf->mon_sync_debug_provider;
     string debug_fallback = g_conf->mon_sync_debug_provider_fallback;
