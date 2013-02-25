@@ -587,6 +587,7 @@ class TestClone(object):
         global features
         self.image.set_snap('snap1')
         eq(self.image.list_children(), [('rbd', 'clone')])
+        self.clone.close()
         self.rbd.remove(ioctx, 'clone')
         eq(self.image.list_children(), [])
 
@@ -604,6 +605,7 @@ class TestClone(object):
         eq(self.image.list_children(), [])
         self.rbd.clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone', features)
         eq(self.image.list_children(), [('rbd', 'clone')])
+        self.clone = Image(ioctx, 'clone')
 
 class TestFlatten(TestClone):
 
