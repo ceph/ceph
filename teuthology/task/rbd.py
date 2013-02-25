@@ -163,24 +163,6 @@ def dev_create(ctx, config):
             image = default_image_name(role)
         (remote,) = ctx.cluster.only(role).remotes.keys()
 
-        # add udev rule for creating /dev/rbd/pool/image
-        remote.run(
-            args=[
-                'echo',
-                'KERNEL=="rbd[0-9]*", PROGRAM="ceph-rbdnamer %%n", SYMLINK+="rbd/%%c{1}/%%c{2}"',
-                run.Raw('>'),
-                '{tdir}/51-rbd.rules'.format(tdir=testdir),
-                ],
-            )
-        remote.run(
-            args=[
-                'sudo',
-                'mv',
-                '{tdir}/51-rbd.rules'.format(tdir=testdir),
-                '/etc/udev/rules.d/',
-                ],
-            )
-
         remote.run(
             args=[
                 'sudo',
@@ -226,15 +208,6 @@ def dev_create(ctx, config):
                     'sleep', '1', run.Raw(';'),
                     'done',
                     ],
-                )
-            remote.run(
-                args=[
-                    'sudo',
-                    'rm',
-                    '-f',
-                    '/etc/udev/rules.d/51-rbd.rules',
-                    ],
-                wait=False,
                 )
 
 @contextlib.contextmanager
