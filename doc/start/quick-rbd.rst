@@ -5,9 +5,6 @@
 To use this guide, you must have executed the procedures in the `5-minute
 Quick Start`_ guide first. Execute this quick start on the client machine.
 
-.. important:: Mount the block device on the client machine, 
-   not the server machine.
-
 #. Create a block device image. :: 
 
 	rbd create foo --size 4096	
@@ -29,7 +26,11 @@ Quick Start`_ guide first. Execute this quick start on the client machine.
 	sudo mkdir /mnt/myrbd
 	sudo mount /dev/rbd/rbd/foo /mnt/myrbd
 
+.. note:: Mount the block device on the client machine, 
+   not the server machine. See `FAQ`_ for details.
+
 See `block devices`_ for additional details.
 
 .. _5-minute Quick Start: ../quick-start
 .. _block devices: ../../rbd/rbd
+.. _FAQ: ../../faq#try-ceph
