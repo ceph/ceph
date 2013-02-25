@@ -3224,7 +3224,7 @@ void PG::build_scrub_map(ScrubMap &map)
   dout(10) << "build_scrub_map" << dendl;
 
   map.valid_through = info.last_update;
-  epoch_t epoch = info.history.same_interval_since;
+  epoch_t epoch = get_osdmap()->get_epoch();
 
   unlock();
 
@@ -3239,7 +3239,7 @@ void PG::build_scrub_map(ScrubMap &map)
   _scan_list(map, ls, false);
   lock();
 
-  if (epoch != info.history.same_interval_since) {
+  if (epoch < last_peering_reset) {
     dout(10) << "scrub  pg changed, aborting" << dendl;
     return;
   }
