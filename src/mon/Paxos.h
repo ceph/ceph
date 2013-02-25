@@ -191,7 +191,7 @@ public:
    * @param s State value.
    * @return The state's name.
    */
-  static const char *get_statename(int s) {
+  static const string get_statename(int s) {
     stringstream ss;
     if (s & STATE_RECOVERING) {
       ss << "recovering";
@@ -211,7 +211,7 @@ public:
 
     if (s & STATE_LOCKED)
       ss << " (locked)";
-    return ss.str().c_str();
+    return ss.str();
   }
 
 private:
