@@ -91,9 +91,9 @@ int main(int argc, const char **argv)
   {
     StRadosCreatePool r1(argc, argv, NULL, pool_setup_sem, NULL,
 			 pool, g_num_objects, ".obj");
-    StRadosDeletePool r2(argc, argv, pool_setup_sem, delete_pool_sem, pool);
+    StRadosDeletePool r2(argc, argv, delete_pool_sem, NULL, pool);
     StRadosListObjects r3(argc, argv, pool, true, g_num_objects / 2,
-			  pool_setup_sem, delete_pool_sem);
+			  pool_setup_sem, NULL, delete_pool_sem);
     vector < SysTestRunnable* > vec;
     vec.push_back(&r1);
     vec.push_back(&r2);
