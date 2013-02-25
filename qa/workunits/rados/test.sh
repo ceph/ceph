@@ -1,4 +1,4 @@
-#!/bin/sh -e
+#!/bin/sh -ex
 
 ceph_test_rados_api_aio
 ceph_test_rados_api_io
