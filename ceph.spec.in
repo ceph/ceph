@@ -345,6 +345,7 @@ fi
 %{_bindir}/rbd
 %{_bindir}/ceph-debugpack
 %{_bindir}/ceph-coverage
+%{_bindir}/ceph_mon_store_converter
 %{_initrddir}/ceph
 /sbin/mkcephfs
 /sbin/mount.ceph
@@ -417,6 +418,7 @@ fi
 %{_includedir}/rados/buffer.h
 %{_includedir}/rados/page.h
 %{_includedir}/rados/crc32c.h
+%{_includedir}/rados/rados_types.h
 %dir %{_includedir}/rbd
 %{_includedir}/rbd/librbd.h
 %{_includedir}/rbd/librbd.hpp
@@ -570,6 +572,7 @@ fi
 %{_bindir}/ceph_test_rados_open_pools_parallel
 %{_bindir}/ceph_test_rados_watch_notify
 %{_bindir}/ceph_test_signal_handlers
+%{_bindir}/ceph_test_store_tool
 %{_bindir}/ceph_test_timers
 %{_bindir}/ceph_tpbench
 %{_bindir}/ceph_xattr_bench
