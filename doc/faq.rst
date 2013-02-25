@@ -51,6 +51,40 @@ Ceph also runs on Fedora and Enterprise Linux derivates (RHEL, CentOS) using
 You can also download Ceph source `tarballs`_ and build Ceph for your
 distribution. See `Installation`_ for details.
 
+.. _try-ceph:
+
+How Can I Give Ceph a Try?
+==========================
+
+Follow our `Quick Start`_ guides. They will get you up an running quickly
+without requiring deeper knowledge of Ceph. Our `Quick Start`_ guides will also
+help you avoid a few issues related to limited deployments. If you choose to
+stray from the Quick Starts, there are a few things you need to know. 
+
+We recommend using at least two hosts, and a recent Linux kernel. In older
+kernels, Ceph can deadlock if you try to mount CephFS or RBD client services on
+the same host that runs your test Ceph cluster. This is not a Ceph-related
+issue. It's related to memory pressure and needing to relieve free memory.
+Recent kernels with up-to-date ``glibc`` and ``syncfs(2)`` reduce this issue
+considerably. However, a memory pool large enough to handle incoming requests is
+the only thing that guarantees against the deadlock occuring. When you run Ceph
+clients on a Ceph cluster machine, loopback NFS can experience a similar problem
+related to buffer cache management in the kernel. You can avoid these scenarios
+entirely by using a separate client host, which is more realistic for deployment
+scenarios anyway.
+
+We recommend using at least two OSDs with at least two replicas of the data.
+OSDs report other OSDs to the monitor, and also interact with other OSDs when
+replicating data. If you have only one OSD, a second OSD cannot check its
+heartbeat. Also, if an OSD expects another OSD to tell it which placement groups
+it should have, the lack of another OSD prevents this from occurring. So a
+placement group can remain stuck "stale" forever. These are not likely
+production issues.
+
+Finally, `Quick Start`_ guides are a way to get you up and running quickly. To
+build performant systems, you'll need a drive for each OSD, and you will likely
+benefit by writing the OSD journal to a separate drive from the OSD data.
+
 
 How Many OSDs Can I Run per Host?
 =================================
@@ -346,3 +380,4 @@ Documentation for the build procedure.
 .. _Striping: ../architecture##how-ceph-clients-stripe-data
 .. _https://github.com/ceph/ceph/blob/master/doc/faq.rst: https://github.com/ceph/ceph/blob/master/doc/faq.rst
 .. _Filesystem Recommendations: ../rados/configuration/filesystem-recommendations
+.. _Quick Start: ../start
