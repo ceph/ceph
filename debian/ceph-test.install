@@ -56,6 +56,7 @@ usr/bin/ceph_test_rados_list_parallel
 usr/bin/ceph_test_rados_open_pools_parallel
 usr/bin/ceph_test_rados_watch_notify
 usr/bin/ceph_test_signal_handlers
+usr/bin/ceph_test_store_tool
 usr/bin/ceph_test_timers
 usr/bin/ceph_tpbench
 usr/bin/ceph_xattr_bench
