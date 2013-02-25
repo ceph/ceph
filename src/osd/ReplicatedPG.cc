@@ -5440,9 +5440,10 @@ void ReplicatedPG::handle_pull_response(OpRequestRef op)
     queue_transaction(
       osr.get(), t,
       onreadable,
-      new C_OSD_CommittedPushedObject(this, op,
-				      info.history.same_interval_since,
-				      info.last_complete),
+      new C_OSD_CommittedPushedObject(
+	this, op,
+	get_osdmap()->get_epoch(),
+	info.last_complete),
       onreadable_sync,
       oncomplete,
       TrackedOpRef()
@@ -5513,7 +5514,7 @@ void ReplicatedPG::handle_push(OpRequestRef op)
       onreadable,
       new C_OSD_CommittedPushedObject(
 	this, op,
-	info.history.same_interval_since,
+	get_osdmap()->get_epoch(),
 	info.last_complete),
       onreadable_sync,
       oncomplete,
@@ -5794,10 +5795,11 @@ void ReplicatedPG::sub_op_pull(OpRequestRef op)
 }
 
 
-void ReplicatedPG::_committed_pushed_object(OpRequestRef op, epoch_t same_since, eversion_t last_complete)
+void ReplicatedPG::_committed_pushed_object(
+  OpRequestRef op, epoch_t epoch, eversion_t last_complete)
 {
   lock();
-  if (same_since == info.history.same_interval_since) {
+  if (epoch >= last_peering_reset) {
     dout(10) << "_committed_pushed_object last_complete " << last_complete << " now ondisk" << dendl;
     last_complete_ondisk = last_complete;
 
@@ -6617,9 +6619,10 @@ int ReplicatedPG::recover_primary(int max)
 
 	      osd->store->queue_transaction(osr.get(), t,
 					    new C_OSD_AppliedRecoveredObject(this, t, obc),
-					    new C_OSD_CommittedPushedObject(this, OpRequestRef(),
-									    info.history.same_interval_since,
-									    info.last_complete),
+					    new C_OSD_CommittedPushedObject(
+					      this, OpRequestRef(),
+					      get_osdmap()->get_epoch(),
+					      info.last_complete),
 					    new C_OSD_OndiskWriteUnlock(obc));
 	      continue;
 	    }
