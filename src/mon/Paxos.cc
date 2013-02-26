@@ -161,6 +161,16 @@ void Paxos::handle_collect(MMonPaxos *collect)
   // we're recoverying, it seems!
   state = STATE_RECOVERING;
 
+  if (collect->first_committed > last_committed+1) {
+    dout(5) << __func__
+            << " leader's lowest version is too high for our last committed"
+            << "(theirs: " << collect->first_committed
+            << "; ours: " << last_committed << ") -- bootstrap!" << dendl;
+    collect->put();
+    mon->bootstrap();
+    return;
+  }
+
   // reply
   MMonPaxos *last = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LAST,
 				  ceph_clock_now(g_ceph_context));

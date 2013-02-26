@@ -203,10 +203,16 @@ int main(int argc, const char **argv)
 
     // go
     MonitorDBStore store(g_conf->mon_data);
-    assert(!store.create_and_open(cerr));
+    int r = store.create_and_open(cerr);
+    if (r < 0) {
+      cerr << argv[0] << ": error opening mon data directory at '"
+           << g_conf->mon_data << "': " << cpp_strerror(r) << std::endl;
+      exit(1);
+    }
+    assert(r == 0);
 
     Monitor mon(g_ceph_context, g_conf->name.get_id(), &store, 0, &monmap);
-    int r = mon.mkfs(osdmapbl);
+    r = mon.mkfs(osdmapbl);
     if (r < 0) {
       cerr << argv[0] << ": error creating monfs: " << cpp_strerror(r) << std::endl;
       exit(1);
@@ -223,7 +229,14 @@ int main(int argc, const char **argv)
   }
 
   MonitorDBStore store(g_conf->mon_data);
-  assert(!store.open(std::cerr));
+  err = store.open(std::cerr);
+  if (err < 0) {
+    cerr << argv[0] << ": error opening mon data store at '"
+         << g_conf->mon_data << "': " << cpp_strerror(err) << std::endl;
+    cerr << "Have you run '--mkfs'?" << std::endl;
+    exit(1);
+  }
+  assert(err == 0);
 
   bufferlist magicbl;
   err = store.get(Monitor::MONITOR_NAME, "magic", magicbl);
