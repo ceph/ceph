@@ -133,6 +133,10 @@ extern int cls_cxx_map_write_header(cls_method_context_t hctx, bufferlist *inbl)
 extern int cls_cxx_map_remove_key(cls_method_context_t hctx, const string &key);
 extern int cls_cxx_map_update(cls_method_context_t hctx, bufferlist *inbl);
 
+/* utility functions */
+extern int cls_gen_random_bytes(char *buf, int size);
+extern int cls_gen_rand_base64(char *dest, int size); /* size should be the required string size + 1 */
+
 /* These are also defined in rados.h and librados.h. Keep them in sync! */
 #define CEPH_OSD_TMAP_HDR 'h'
 #define CEPH_OSD_TMAP_SET 's'
