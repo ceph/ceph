@@ -698,6 +698,10 @@ int FileJournal::read_header()
 bufferptr FileJournal::prepare_header()
 {
   bufferlist bl;
+  {
+    Mutex::Locker l(finisher_lock);
+    header.committed_up_to = journaled_seq;
+  }
   ::encode(header, bl);
   bufferptr bp = buffer::create_page_aligned(get_top());
   bp.zero();
@@ -961,6 +965,12 @@ void FileJournal::do_write(bufferlist& bl)
     return;
 
   buffer::ptr hbp;
+  if (g_conf->journal_write_header_frequency &&
+      (((++journaled_since_start) %
+	g_conf->journal_write_header_frequency) == 0)) {
+    must_write_header = true;
+  }
+
   if (must_write_header) {
     must_write_header = false;
     hbp = prepare_header();
@@ -1170,6 +1180,13 @@ void FileJournal::write_thread_entry()
 #ifdef HAVE_LIBAIO
 void FileJournal::do_aio_write(bufferlist& bl)
 {
+
+  if (g_conf->journal_write_header_frequency &&
+      (((++journaled_since_start) %
+	g_conf->journal_write_header_frequency) == 0)) {
+    must_write_header = true;
+  }
+
   // nothing to do?
   if (bl.length() == 0 && !must_write_header) 
     return;
@@ -1611,6 +1628,13 @@ bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
   h = (entry_header_t *)hbl.c_str();
 
   if (!h->check_magic(read_pos, header.get_fsid64())) {
+    if (header.committed_up_to && seq <= header.committed_up_to) {
+      derr << "ERROR: header claims we are committed up through "
+	   << header.committed_up_to << " however, we have failed to read "
+	   << "entry " << seq
+	   << " journal is likely corrupt" << dendl;
+      assert(0 == "FileJournal::read_entry(): corrupt journal");
+    }
     dout(2) << "read_entry " << read_pos << " : bad header magic, end of journal" << dendl;
     return false;
   }
