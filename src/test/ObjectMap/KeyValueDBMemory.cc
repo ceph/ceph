@@ -30,7 +30,7 @@ public:
   virtual ~WholeSpaceMemIterator() { }
 
   int seek_to_first() {
-    if (db->db.size() == 0) {
+    if (db->db.empty()) {
       it = db->db.end();
       ready = false;
       return 0;
@@ -42,7 +42,7 @@ public:
 
   int seek_to_first(const string &prefix) {
     it = db->db.lower_bound(make_pair(prefix, ""));
-    if ((db->db.size() == 0) || (it == db->db.end())) {
+    if (db->db.empty() || (it == db->db.end())) {
       it = db->db.end();
       ready = false;
       return 0;
@@ -53,7 +53,7 @@ public:
 
   int seek_to_last() {
     it = db->db.end();
-    if (db->db.size() == 0) {
+    if (db->db.empty()) {
       ready = false;
       return 0;
     }
@@ -68,7 +68,7 @@ public:
     tmp.append(1, (char) 0);
     it = db->db.upper_bound(make_pair(tmp,""));
 
-    if ((db->db.size() == 0) || (it == db->db.end())) {
+    if (db->db.empty() || (it == db->db.end())) {
       seek_to_last();
     }
     else {
