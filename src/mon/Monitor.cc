@@ -856,14 +856,24 @@ void Monitor::handle_sync_start(MMonSync *m)
 
     // Is the one that contacted us in the quorum?
     if (quorum.count(m->get_source().num())) {
-      // Then it must have been a forwarded message from someone else
-      assert(m->flags & MMonSync::FLAG_REPLY_TO);
-      // And must not be synchronizing. What sense would that make, eh?
-      assert(trim_timeouts.count(m->get_source_inst()) == 0);
-      // Set the provider as the one that contacted us. He's in the
-      // quorum, so he's up to the job (i.e., he's not synchronizing)
-      msg->set_reply_to(m->get_source_inst());
-      dout(10) << __func__ << " set provider to " << msg->reply_to << dendl;
+      // Was it forwarded by someone?
+      if (m->flags & MMonSync::FLAG_REPLY_TO) {
+        // Then they must not be synchronizing. What sense would that make, eh?
+        assert(trim_timeouts.count(m->get_source_inst()) == 0);
+        // Set the provider as the one that contacted us. He's in the
+        // quorum, so he's up to the job (i.e., he's not synchronizing)
+        msg->set_reply_to(m->get_source_inst());
+        dout(10) << __func__ << " set provider to " << msg->reply_to << dendl;
+      } else {
+        // Then they must have gotten into the quorum, and boostrapped.
+        // We should tell them to abort and bootstrap ourselves.
+        msg->put();
+        msg = new MMonSync(MMonSync::OP_ABORT);
+        messenger->send_message(msg, other);
+        m->put();
+        bootstrap();
+        return;
+      }
     } else if (!quorum.empty()) {
       // grab someone from the quorum and assign them as the sync provider
       int n = _pick_random_quorum_mon(rank);
