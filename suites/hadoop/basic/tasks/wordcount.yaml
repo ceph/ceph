@@ -1,14 +1,12 @@
+overrides:
+  ceph:
+    extra_packages: [libcephfs1, libcephfs-java, libcephfs-jni]
+
 tasks:
 - ssh_keys:
 - install:
 - ceph:
 - hadoop:
-- pexec: 
-    hadoop.slave.0:
-      - mkdir -p /tmp/hadoop_input
-      - wget http://ceph.com/qa/hadoop_input_files.tar -O /tmp/hadoop_input/files.tar
-      - cd /tmp/hadoop_input/; tar -xf /tmp/hadoop_input/files.tar
-      - /tmp/cephtest/hadoop/bin/hadoop fs -mkdir wordcount_input
-      - /tmp/cephtest/hadoop/bin/hadoop fs -put /tmp/hadoop_input/*txt wordcount_input/
-      - /tmp/cephtest/hadoop/bin/hadoop jar /tmp/cephtest/hadoop/build/hadoop-example*jar wordcount wordcount_input wordcount_output
-      - rm -rf /tmp/hadoop_input
+- workunit: 
+    clients:
+      client.0: [hadoop-wordcount] 
