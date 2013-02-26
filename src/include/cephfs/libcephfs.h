@@ -530,7 +530,7 @@ int ceph_fchmod(struct ceph_mount_info *cmount, int fd, mode_t mode);
  * @param gid the group id to set on the file/directory.
  * @returns 0 on success or negative error code on failure.
  */
-int ceph_chown(struct ceph_mount_info *cmount, const char *path, uid_t uid, gid_t gid);
+int ceph_chown(struct ceph_mount_info *cmount, const char *path, int uid, int gid);
 
 /**
  * Change the ownership of a file from an open file descriptor.
@@ -541,7 +541,7 @@ int ceph_chown(struct ceph_mount_info *cmount, const char *path, uid_t uid, gid_
  * @param gid the group id to set on the file/directory.
  * @returns 0 on success or negative error code on failure.
  */
-int ceph_fchown(struct ceph_mount_info *cmount, int fd, uid_t uid, gid_t gid);
+int ceph_fchown(struct ceph_mount_info *cmount, int fd, int uid, int gid);
 
 /**
  * Change the ownership of a file/directory, don't follow symlinks.
@@ -552,7 +552,7 @@ int ceph_fchown(struct ceph_mount_info *cmount, int fd, uid_t uid, gid_t gid);
  * @param gid the group id to set on the file/directory.
  * @returns 0 on success or negative error code on failure.
  */
-int ceph_lchown(struct ceph_mount_info *cmount, const char *path, uid_t uid, gid_t gid);
+int ceph_lchown(struct ceph_mount_info *cmount, const char *path, int uid, int gid);
 
 /**
  * Change file/directory last access and modification times.
