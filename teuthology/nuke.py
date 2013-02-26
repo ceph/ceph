@@ -271,6 +271,8 @@ def remove_testing_tree(ctx, log):
                 run.Raw('&&'),
                 'sudo', 'rm', '-rf', '/tmp/cephtest',
                 run.Raw('&&'),
+                'sudo', 'rm', '-rf', '/home/ubuntu/cephtest',
+                run.Raw('&&'),
                 'sudo', 'rm', '-rf', '/etc/ceph',
                 ],
             wait=False,
