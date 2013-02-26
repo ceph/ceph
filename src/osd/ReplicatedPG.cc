@@ -59,10 +59,6 @@ static ostream& _prefix(std::ostream *_dout, PG *pg, int whoami, OSDMapRef osdma
 
 #include <errno.h>
 
-static const int LOAD_LATENCY    = 1;
-static const int LOAD_QUEUE_SIZE = 2;
-static const int LOAD_HYBRID     = 3;
-
 // Blank object locator
 static const object_locator_t OLOC_BLANK;
 
