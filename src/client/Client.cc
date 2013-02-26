@@ -90,7 +90,7 @@ using namespace std;
 
 void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 {
-  Client *client = (Client*)p;
+  Client *client = static_cast<Client*>(p);
   client->flush_set_callback(oset);
 }
 
@@ -438,7 +438,7 @@ void Client::trim_cache()
     if (lru.lru_get_size() <= lru.lru_get_max())  break;
 
     // trim!
-    Dentry *dn = (Dentry*)lru.lru_expire();
+    Dentry *dn = static_cast<Dentry*>(lru.lru_expire());
     if (!dn)
       break;  // done
     
@@ -1656,28 +1656,28 @@ bool Client::ms_dispatch(Message *m)
     
     // mounting and mds sessions
   case CEPH_MSG_MDS_MAP:
-    handle_mds_map((MMDSMap*)m);
+    handle_mds_map(static_cast<MMDSMap*>(m));
     break;
   case CEPH_MSG_CLIENT_SESSION:
-    handle_client_session((MClientSession*)m);
+    handle_client_session(static_cast<MClientSession*>(m));
     break;
 
     // requests
   case CEPH_MSG_CLIENT_REQUEST_FORWARD:
-    handle_client_request_forward((MClientRequestForward*)m);
+    handle_client_request_forward(static_cast<MClientRequestForward*>(m));
     break;
   case CEPH_MSG_CLIENT_REPLY:
-    handle_client_reply((MClientReply*)m);
+    handle_client_reply(static_cast<MClientReply*>(m));
     break;
 
   case CEPH_MSG_CLIENT_SNAP:
-    handle_snap((MClientSnap*)m);
+    handle_snap(static_cast<MClientSnap*>(m));
     break;
   case CEPH_MSG_CLIENT_CAPS:
-    handle_caps((MClientCaps*)m);
+    handle_caps(static_cast<MClientCaps*>(m));
     break;
   case CEPH_MSG_CLIENT_LEASE:
-    handle_lease((MClientLease*)m);
+    handle_lease(static_cast<MClientLease*>(m));
     break;
 
   default:
@@ -2617,7 +2617,7 @@ void Client::flush_set_callback(ObjectCacher::ObjectSet *oset)
 {
   //  Mutex::Locker l(client_lock);
   assert(client_lock.is_locked());   // will be called via dispatch() -> objecter -> ...
-  Inode *in = (Inode *)oset->parent;
+  Inode *in = static_cast<Inode *>(oset->parent);
   assert(in);
   _flushed(in);
 }
@@ -4565,14 +4565,14 @@ void Client::rewinddir(dir_result_t *dirp)
   Mutex::Locker lock(client_lock);
 
   ldout(cct, 3) << "rewinddir(" << dirp << ")" << dendl;
-  dir_result_t *d = (dir_result_t*)dirp;
+  dir_result_t *d = static_cast<dir_result_t*>(dirp);
   _readdir_drop_dirp_buffer(d);
   d->reset();
 }
  
 loff_t Client::telldir(dir_result_t *dirp)
 {
-  dir_result_t *d = (dir_result_t*)dirp;
+  dir_result_t *d = static_cast<dir_result_t*>(dirp);
   ldout(cct, 3) << "telldir(" << dirp << ") = " << d->offset << dendl;
   return d->offset;
 }
@@ -4582,7 +4582,7 @@ void Client::seekdir(dir_result_t *dirp, loff_t offset)
   Mutex::Locker lock(client_lock);
 
   ldout(cct, 3) << "seekdir(" << dirp << ", " << offset << ")" << dendl;
-  dir_result_t *d = (dir_result_t*)dirp;
+  dir_result_t *d = static_cast<dir_result_t*>(dirp);
 
   if (offset == 0 ||
       dir_result_t::fpos_frag(offset) != d->frag() ||
@@ -4804,7 +4804,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
 {
   Mutex::Locker lock(client_lock);
 
-  dir_result_t *dirp = (dir_result_t*)d;
+  dir_result_t *dirp = static_cast<dir_result_t*>(d);
 
   ldout(cct, 10) << "readdir_r_cb " << *dirp->inode << " offset " << hex << dirp->offset << dec
 	   << " frag " << dirp->frag() << " fragpos " << hex << dirp->fragpos() << dec
@@ -4973,7 +4973,7 @@ struct single_readdir {
 static int _readdir_single_dirent_cb(void *p, struct dirent *de, struct stat *st,
 				     int stmask, off_t off)
 {
-  single_readdir *c = (single_readdir *)p;
+  single_readdir *c = static_cast<single_readdir *>(p);
 
   if (c->full)
     return -1;  // already filled this dirent
@@ -5041,7 +5041,7 @@ struct getdents_result {
 
 static int _readdir_getdent_cb(void *p, struct dirent *de, struct stat *st, int stmask, off_t off)
 {
-  struct getdents_result *c = (getdents_result *)p;
+  struct getdents_result *c = static_cast<getdents_result *>(p);
 
   int dlen;
   if (c->fullent)
@@ -5093,7 +5093,7 @@ struct getdir_result {
 
 static int _getdir_cb(void *p, struct dirent *de, struct stat *st, int stmask, off_t off)
 {
-  getdir_result *r = (getdir_result *)p;
+  getdir_result *r = static_cast<getdir_result *>(p);
 
   r->contents->push_back(de->d_name);
   r->num++;
@@ -7272,7 +7272,7 @@ void Client::ll_releasedir(void *dirp)
   ldout(cct, 3) << "ll_releasedir " << dirp << dendl;
   tout(cct) << "ll_releasedir" << std::endl;
   tout(cct) << (unsigned long)dirp << std::endl;
-  _closedir((dir_result_t*)dirp);
+  _closedir(static_cast<dir_result_t*>(dirp));
 }
 
 int Client::ll_open(vinodeno_t vino, int flags, Fh **fhp, int uid, int gid)
