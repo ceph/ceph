@@ -158,14 +158,11 @@ void PaxosService::propose_pending()
   encode_pending(&t);
   have_pending = false;
 
-  if (g_conf->subsys.should_gather(dout_subsys, 30)) {
-    JSONFormatter f(true);
-    t.dump(&f);
-    dout(30) << __func__ << " transaction dump:\n";
-    f.flush(*_dout);
-    *_dout << dendl;
-  }
-  
+  dout(30) << __func__ << " transaction dump:\n";
+  JSONFormatter f(true);
+  t.dump(&f);
+  f.flush(*_dout);
+  *_dout << dendl;
 
   t.encode(bl);
 
