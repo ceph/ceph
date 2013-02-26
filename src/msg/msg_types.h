@@ -303,7 +303,7 @@ struct entity_addr_t {
     if (addr.ss_family == AF_INET6)
       return memcmp(addr6.sin6_addr.s6_addr,
 		    o.addr6.sin6_addr.s6_addr,
-		    sizeof(addr6.sin6_addr.s6_addr));
+		    sizeof(addr6.sin6_addr.s6_addr)) == 0;
     return false;
   }
 
