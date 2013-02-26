@@ -338,16 +338,6 @@ namespace librbd {
     return -ENOENT;
   }
 
-  int ImageCtx::get_snap_size(string in_snap_name, uint64_t *out_size) const
-  {
-    map<string, SnapInfo>::const_iterator it = snaps_by_name.find(in_snap_name);
-    if (it != snaps_by_name.end()) {
-      *out_size = it->second.size;
-      return 0;
-    }
-    return -ENOENT;
-  }
-
   void ImageCtx::add_snap(string in_snap_name, snap_t id, uint64_t in_size,
 			  uint64_t features,
 			  parent_info parent,
