@@ -1765,7 +1765,7 @@ reprotect_and_return_err:
 	lderr(cct) << "No such snapshot found." << dendl;
 	return -ENOENT;
       }
-      new_size = ictx->get_image_size(ictx->snap_id);
+      new_size = ictx->get_image_size(snap_id);
     }
 
     // need to flush any pending writes before resizing and rolling back -
