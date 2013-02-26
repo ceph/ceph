@@ -29,3 +29,24 @@ If there are not enough monitors to form a quorum, the ``ceph``
 command will block trying to reach the cluster.  In this situation,
 you need to get enough ``ceph-mon`` daemons running to form a quorum
 before doing anything else with the cluster.
+
+
+Client Can't Connect/Mount
+==========================
+
+Check your IP tables. Some OS install utilities add a ``REJECT`` rule to
+``iptables``. The rule rejects all clients trying to connect to the host except
+for ``ssh``. If your monitor host's IP tables have such a ``REJECT`` rule in
+place, clients connecting from a separate node will fail to mount with a timeout
+error. You need to address ``iptables`` rules that reject clients trying to
+connect to Ceph daemons.  For example, you would need to address rules that look
+like this appropriately::
+
+	REJECT all -- anywhere anywhere reject-with icmp-host-prohibited
+
+You may also need to add rules to IP tables on your Ceph hosts to ensure
+that clients can access the ports associated with your Ceph monitors (i.e., port
+6789 by default) and Ceph OSDs (i.e., 6800 et. seq. by default). For example::
+
+	iptables -A INPUT -m multiport -p tcp -s {ip-address}/{netmask} --dports 6789,6800:6810 -j ACCEPT
+ 
