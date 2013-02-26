@@ -620,12 +620,15 @@ public:
   int lstatlite(const char *path, struct statlite *buf);
 
   int setattr(const char *relpath, struct stat *attr, int mask);
+  int fsetattr(int fd, struct stat *attr, int mask);
   int chmod(const char *path, mode_t mode);
   int fchmod(int fd, mode_t mode);
+  int lchmod(const char *path, mode_t mode);
   int chown(const char *path, int uid, int gid);
   int fchown(int fd, int uid, int gid);
   int lchown(const char *path, int uid, int gid);
   int utime(const char *path, struct utimbuf *buf);
+  int lutime(const char *path, struct utimbuf *buf);
   int truncate(const char *path, loff_t size);
 
   // file ops
