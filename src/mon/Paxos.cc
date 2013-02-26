@@ -72,9 +72,9 @@ void Paxos::reapply_all_versions()
   }
   dout(15) << __func__ << " total versions " << (last-first) << dendl;
 
+  dout(30) << __func__ << " tx dump:\n";
   JSONFormatter f(true);
   tx.dump(&f);
-  dout(30) << __func__ << " tx dump:\n";
   f.flush(*_dout);
   *_dout << dendl;
 
@@ -177,11 +177,13 @@ void Paxos::handle_collect(MMonPaxos *collect)
   
     MonitorDBStore::Transaction t;
     t.put(get_name(), "accepted_pn", accepted_pn);
+
+    dout(30) << __func__ << " transaction dump:\n";
     JSONFormatter f(true);
     t.dump(&f);
-    dout(30) << __func__ << " transaction dump:\n";
     f.flush(*_dout);
     *_dout << dendl;
+
     get_store()->apply_transaction(t);
   } else {
     // don't accept!
@@ -313,11 +315,12 @@ void Paxos::store_state(MMonPaxos *m)
     }
   }
   if (!t.empty()) {
+    dout(30) << __func__ << " transaction dump:\n";
     JSONFormatter f(true);
     t.dump(&f);
-    dout(30) << __func__ << " transaction dump:\n";
     f.flush(*_dout);
     *_dout << dendl;
+
     get_store()->apply_transaction(t);
 
     // update the first and last committed in-memory values.
@@ -471,9 +474,9 @@ void Paxos::begin(bufferlist& v)
   MonitorDBStore::Transaction t;
   t.put(get_name(), last_committed+1, new_value);
 
+  dout(30) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
   t.dump(&f);
-  dout(30) << __func__ << " transaction dump:\n";
   f.flush(*_dout);
   MonitorDBStore::Transaction debug_tx;
   bufferlist::iterator new_value_it = new_value.begin();
@@ -545,9 +548,9 @@ void Paxos::handle_begin(MMonPaxos *begin)
   MonitorDBStore::Transaction t;
   t.put(get_name(), v, begin->values[v]);
 
+  dout(30) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
   t.dump(&f);
-  dout(30) << __func__ << " transaction dump:\n";
   f.flush(*_dout);
   *_dout << dendl;
 
@@ -652,9 +655,9 @@ void Paxos::commit()
   // this value can now be read from last_committed.
   decode_append_transaction(t, new_value);
 
+  dout(30) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
   t.dump(&f);
-  dout(30) << __func__ << " transaction dump:\n";
   f.flush(*_dout);
   *_dout << dendl;
 
@@ -965,9 +968,9 @@ void Paxos::trim_to(version_t first)
   trim_to(&t, first);
 
   if (!t.empty()) {
+    dout(30) << __func__ << " transaction dump:\n";
     JSONFormatter f(true);
     t.dump(&f);
-    dout(30) << __func__ << " transaction dump:\n";
     f.flush(*_dout);
     *_dout << dendl;
 
@@ -1006,11 +1009,13 @@ version_t Paxos::get_new_proposal_number(version_t gt)
   // write
   MonitorDBStore::Transaction t;
   t.put(get_name(), "last_pn", last_pn);
+
+  dout(30) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
   t.dump(&f);
-  dout(30) << __func__ << " transaction dump:\n";
   f.flush(*_dout);
   *_dout << dendl;
+
   get_store()->apply_transaction(t);
 
   dout(10) << "get_new_proposal_number = " << last_pn << dendl;
