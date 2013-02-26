@@ -1743,7 +1743,7 @@ void EUpdate::replay(MDS *mds)
       mds->server->prepare_force_open_sessions(cm, seqm);
       mds->server->finish_force_open_sessions(cm, seqm);
 
-      assert(mds->sessionmap.version = cmapv);
+      assert(mds->sessionmap.version == cmapv);
       mds->sessionmap.projected = mds->sessionmap.version;
     }
   }
