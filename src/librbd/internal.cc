@@ -1736,26 +1736,29 @@ reprotect_and_return_err:
       return r;
 
     RWLock::WLocker l(ictx->md_lock);
-    RWLock::WLocker l2(ictx->snap_lock);
-    if (!ictx->snap_exists)
-      return -ENOENT;
+    snap_t snap_id;
+    uint64_t new_size;
+    {
+      // need to drop snap_lock before invalidating cache
+      RWLock::RLocker l2(ictx->snap_lock);
+      if (!ictx->snap_exists)
+	return -ENOENT;
 
-    if (ictx->snap_id != CEPH_NOSNAP || ictx->read_only)
-      return -EROFS;
+      if (ictx->snap_id != CEPH_NOSNAP || ictx->read_only)
+	return -EROFS;
 
-    snap_t snap_id = ictx->get_snap_id(snap_name);
-    if (snap_id == CEPH_NOSNAP) {
-      lderr(cct) << "No such snapshot found." << dendl;
-      return -ENOENT;
+      snap_id = ictx->get_snap_id(snap_name);
+      if (snap_id == CEPH_NOSNAP) {
+	lderr(cct) << "No such snapshot found." << dendl;
+	return -ENOENT;
+      }
+      new_size = ictx->get_image_size(ictx->snap_id);
     }
 
     // need to flush any pending writes before resizing and rolling back -
     // writes might create new snapshots. Rolling back will replace
     // the current version, so we have to invalidate that too.
     ictx->invalidate_cache();
-
-    uint64_t new_size = ictx->get_image_size(ictx->snap_id);
-    ictx->get_snap_size(snap_name, &new_size);
 
     ldout(cct, 2) << "resizing to snapshot size..." << dendl;
     NoOpProgressContext no_op;
@@ -1771,10 +1774,6 @@ reprotect_and_return_err:
       lderr(cct) << "Error rolling back image: " << cpp_strerror(-r) << dendl;
       return r;
     }
-
-    snap_t new_snap_id = ictx->get_snap_id(snap_name);
-    ldout(cct, 20) << "snap_id is " << ictx->snap_id << " new snap_id is "
-		   << new_snap_id << dendl;
 
     notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
 
