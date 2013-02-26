@@ -1,0 +1,12 @@
+overrides:
+  ceph:
+    extra_packages: [libcephfs1, libcephfs-java, libcephfs-jni]
+
+tasks:
+- ssh_keys:
+- install:
+- ceph:
+- hadoop:
+- workunit: 
+    clients:
+      client.0: [hadoop-internal-tests] 
