@@ -610,9 +610,9 @@ int ceph_open(struct ceph_mount_info *cmount, const char *path, int flags, mode_
  * @param flags a set of option masks that control how the file is created/opened.
  * @param mode the permissions to place on the file if the file does not exist and O_CREAT
  *        is specified in the flags.
- * @param stripe_unit the stripe unit size (option, -1 for default)
- * @param stripe_count the stripe count (optional, -1 for default)
- * @param object_size the object size (optional, -1 for default)
+ * @param stripe_unit the stripe unit size (option, 0 for default)
+ * @param stripe_count the stripe count (optional, 0 for default)
+ * @param object_size the object size (optional, 0 for default)
  * @param data_pool name of target data pool name (optional, NULL or empty string for default)
  * @returns a non-negative file descriptor number on success or a negative error code on failure.
  */
