@@ -949,9 +949,8 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
                           ((request->head.op == CEPH_MDS_OP_RENAME) ?
                                         request->old_dentry : NULL));
     } else {
-      Dentry *dn = NULL;
       if (diri->dir && diri->dir->dentries.count(dname)) {
-	dn = diri->dir->dentries[dname];
+	Dentry *dn = diri->dir->dentries[dname];
 	if (dn->inode)
 	  unlink(dn, false);
       }
@@ -974,9 +973,8 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
       Dir *dir = diri->open_dir();
       insert_dentry_inode(dir, dname, &dlease, in, request->sent_stamp, mds, true);
     } else {
-      Dentry *dn = NULL;
       if (diri->dir && diri->dir->dentries.count(dname)) {
-	dn = diri->dir->dentries[dname];
+	Dentry *dn = diri->dir->dentries[dname];
 	if (dn->inode)
 	  unlink(dn, false);
       }
@@ -6550,10 +6548,10 @@ int Client::ll_getxattr(vinodeno_t vino, const char *name, void *value, size_t s
 
 int Client::_listxattr(Inode *in, char *name, size_t size, int uid, int gid)
 {
-  const char file_vxattrs[] = "ceph.file.layout";
-  const char dir_vxattrs[] = "ceph.dir.layout";
   int r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid);
   if (r == 0) {
+    const char file_vxattrs[] = "ceph.file.layout";
+    const char dir_vxattrs[] = "ceph.dir.layout";
     for (map<string,bufferptr>::iterator p = in->xattrs.begin();
 	 p != in->xattrs.end();
 	 p++)
