@@ -650,8 +650,8 @@ int OSDMap::get_num_up_osds() const
 {
   int n = 0;
   for (int i=0; i<max_osd; i++)
-    if (osd_state[i] & CEPH_OSD_EXISTS &&
-	osd_state[i] & CEPH_OSD_UP) n++;
+    if ((osd_state[i] & CEPH_OSD_EXISTS) &&
+	(osd_state[i] & CEPH_OSD_UP)) n++;
   return n;
 }
 
@@ -659,7 +659,7 @@ int OSDMap::get_num_in_osds() const
 {
   int n = 0;
   for (int i=0; i<max_osd; i++)
-    if (osd_state[i] & CEPH_OSD_EXISTS &&
+    if ((osd_state[i] & CEPH_OSD_EXISTS) &&
 	get_weight(i) != CEPH_OSD_OUT) n++;
   return n;
 }
