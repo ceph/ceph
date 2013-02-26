@@ -147,9 +147,9 @@ get_name_list() {
     orig="$*"
 
     # extract list of monitors, mdss, osds defined in startup.conf
-    allconf=`$CCONF -c $conf -l mon | egrep -v '^mon$' ; \
-	$CCONF -c $conf -l mds | egrep -v '^mds$' ; \
-	$CCONF -c $conf -l osd | egrep -v '^osd$'`
+    allconf=`$CCONF -c $conf -l mon | egrep -v '^mon$' || true ; \
+	$CCONF -c $conf -l mds | egrep -v '^mds$' || true ; \
+	$CCONF -c $conf -l osd | egrep -v '^osd$' || true`
 
     if [ -z "$orig" ]; then
 	what="$allconf $local"
