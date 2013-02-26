@@ -5449,7 +5449,7 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
     movepos = true;
   }
 
-  if (!conf->client_debug_force_sync_read && have & CEPH_CAP_FILE_CACHE) {
+  if (!conf->client_debug_force_sync_read && (have & CEPH_CAP_FILE_CACHE)) {
 
     if (f->flags & O_RSYNC) {
       _flush_range(in, offset, size);
@@ -5769,7 +5769,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
     // flush cached write if O_SYNC is set on file fh
     // O_DSYNC == O_SYNC on linux < 2.6.33
     // O_SYNC = __O_SYNC | O_DSYNC on linux >= 2.6.33
-    if (f->flags & O_SYNC || f->flags & O_DSYNC) {
+    if ((f->flags & O_SYNC) || (f->flags & O_DSYNC)) {
       _flush_range(in, offset, size);
     }
   } else {
