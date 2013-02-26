@@ -856,14 +856,24 @@ void Monitor::handle_sync_start(MMonSync *m)
 
     // Is the one that contacted us in the quorum?
     if (quorum.count(m->get_source().num())) {
-      // Then it must have been a forwarded message from someone else
-      assert(m->flags & MMonSync::FLAG_REPLY_TO);
-      // And must not be synchronizing. What sense would that make, eh?
-      assert(trim_timeouts.count(m->get_source_inst()) == 0);
-      // Set the provider as the one that contacted us. He's in the
-      // quorum, so he's up to the job (i.e., he's not synchronizing)
-      msg->set_reply_to(m->get_source_inst());
-      dout(10) << __func__ << " set provider to " << msg->reply_to << dendl;
+      // Was it forwarded by someone?
+      if (m->flags & MMonSync::FLAG_REPLY_TO) {
+        // Then they must not be synchronizing. What sense would that make, eh?
+        assert(trim_timeouts.count(m->get_source_inst()) == 0);
+        // Set the provider as the one that contacted us. He's in the
+        // quorum, so he's up to the job (i.e., he's not synchronizing)
+        msg->set_reply_to(m->get_source_inst());
+        dout(10) << __func__ << " set provider to " << msg->reply_to << dendl;
+      } else {
+        // Then they must have gotten into the quorum, and boostrapped.
+        // We should tell them to abort and bootstrap ourselves.
+        msg->put();
+        msg = new MMonSync(MMonSync::OP_ABORT);
+        messenger->send_message(msg, other);
+        m->put();
+        bootstrap();
+        return;
+      }
     } else if (!quorum.empty()) {
       // grab someone from the quorum and assign them as the sync provider
       int n = _pick_random_quorum_mon(rank);
@@ -2606,6 +2616,11 @@ void Monitor::handle_command(MMonCommand *m)
       rs = "access denied";
       goto out;
     }
+    if (m->cmd.size() < 2) {
+      r = -EINVAL;
+      rs = "'quorum' requires an argument: 'exit' or 'enter'";
+      goto out;
+    }
     if (m->cmd[1] == "exit") {
       reset();
       start_election();
@@ -4052,6 +4067,12 @@ bool Monitor::StoreConverter::needs_conversion()
   if (db->open(std::cerr) < 0) {
     dout(1) << "unable to open monitor store at " << g_conf->mon_data << dendl;
     dout(1) << "check for old monitor store format" << dendl;
+    int err = store->mount();
+    if (err < 0) {
+      dout(0) << "unable to mount monitor store; are you sure it exists?" << dendl;
+      dout(0) << "error: " << cpp_strerror(err) << dendl;
+      assert(0 == "non-existent store in mon data directory");
+    }
     assert(!store->mount());
     bufferlist magicbl;
     if (store->exists_bl_ss("magic", 0)) {
