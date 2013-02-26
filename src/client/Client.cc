@@ -4460,8 +4460,9 @@ int Client::fchown(int fd, uid_t uid, gid_t gid)
   tout(cct) << fd << std::endl;
   tout(cct) << uid << std::endl;
   tout(cct) << gid << std::endl;
-  assert(fd_map.count(fd));
-  Fh *f = fd_map[fd];
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
   struct stat attr;
   attr.st_uid = uid;
   attr.st_gid = gid;
