@@ -994,7 +994,7 @@ public:
    * @param m A monitor
    * @param mid A machine id
    */
-  Paxos(Monitor *m, const string name) 
+  Paxos(Monitor *m, const string &name) 
 		 : mon(m),
 		   paxos_name(name),
 		   state(STATE_RECOVERING),
