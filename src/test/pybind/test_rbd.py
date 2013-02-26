@@ -607,9 +607,7 @@ class TestClone(object):
         eq(self.image.list_children(), [('rbd', 'clone')])
         self.clone = Image(ioctx, 'clone')
 
-class TestFlatten(TestClone):
-
-    def test_errors(self):
+    def test_flatten_errors(self):
         # test that we can't flatten a non-clone
         assert_raises(InvalidArgument, self.image.flatten)
 
@@ -649,11 +647,11 @@ class TestFlatten(TestClone):
             eq(clone.overlap(), 0)
         self.rbd.remove(ioctx, 'clone2')
 
-    def test_basic(self):
+    def test_flatten_basic(self):
         self.check_flatten_with_order(IMG_ORDER)
 
-    def test_smaller_order(self):
+    def test_flatten_smaller_order(self):
         self.check_flatten_with_order(IMG_ORDER - 2)
 
-    def test_larger_order(self):
+    def test_flatten_larger_order(self):
         self.check_flatten_with_order(IMG_ORDER + 2)
