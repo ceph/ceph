@@ -20,6 +20,12 @@ class Inode;
 class Dentry;
 
 struct MetaRequest {
+private:
+  Inode *_inode;
+  Inode *_old_inode, *_other_inode;
+  Dentry *_dentry; //associated with path
+  Dentry *_old_dentry; //associated with path2
+public:
   uint64_t tid;
   ceph_mds_request_head head;
   filepath path, path2;
@@ -31,10 +37,6 @@ struct MetaRequest {
   int old_dentry_drop, old_dentry_unless;
   int other_inode_drop, other_inode_unless;
   vector<MClientRequest::Release> cap_releases;
-  Inode *inode;
-  Inode *old_inode, *other_inode;
-  Dentry *dentry; //associated with path
-  Dentry *old_dentry; //associated with path2
 
   int regetattr_mask;          // getattr mask if i need to re-stat after a traceless reply
  
@@ -74,14 +76,14 @@ struct MetaRequest {
   Inode *target;
 
   MetaRequest(int op) : 
+    _inode(NULL), _old_inode(NULL), _other_inode(NULL),
+    _dentry(NULL), _old_dentry(NULL),
     tid(0),
     inode_drop(0), inode_unless(0),
     old_inode_drop(0), old_inode_unless(0),
     dentry_drop(0), dentry_unless(0),
     old_dentry_drop(0), old_dentry_unless(0),
     other_inode_drop(0), other_inode_unless(0),
-    inode(NULL), old_inode(NULL), other_inode(NULL),
-    dentry(NULL), old_dentry(NULL),
     regetattr_mask(0),
     mds(-1), resend_mds(-1), send_to_auth(false), sent_on_mseq(0),
     num_fwd(0), retry_attempt(0),
@@ -96,6 +98,17 @@ struct MetaRequest {
     head.op = op;
   }
   ~MetaRequest();
+
+  void set_inode(Inode *in);
+  Inode *inode();
+  void set_old_inode(Inode *in);
+  Inode *old_inode();
+  void set_other_inode(Inode *in);
+  Inode *other_inode();
+  void set_dentry(Dentry *d);
+  Dentry *dentry();
+  void set_old_dentry(Dentry *d);
+  Dentry *old_dentry();
 
   MetaRequest* get() {
     ++ref;
@@ -150,6 +163,7 @@ struct MetaRequest {
   }
 
   void dump(Formatter *f) const;
+
 };
 
 #endif
