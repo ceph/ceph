@@ -35,10 +35,6 @@
 
 using namespace std;
 
-void usage();
-void data_analysis();
-
-
 const char *infn = "stdin";
 
 
