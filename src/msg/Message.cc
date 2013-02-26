@@ -660,6 +660,9 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
 		 << ": " << e.what() << dendl;
       if (cct->_conf->ms_die_on_bad_msg)
 	assert(0);
+      ldout(cct, 30) << "dump: \n";
+      m->get_payload().hexdump(*_dout);
+      *_dout << dendl;
     }
     m->put();
     return 0;
