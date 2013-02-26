@@ -33,12 +33,14 @@ StRadosListObjects(int argc, const char **argv,
 		   bool accept_list_errors,
 		   int midway_cnt,
 		   CrossProcessSem *pool_setup_sem,
-		   CrossProcessSem *midway_sem)
+		   CrossProcessSem *midway_sem_wait,
+		   CrossProcessSem *midway_sem_post)
   : SysTestRunnable(argc, argv),
     m_accept_list_errors(accept_list_errors),
     m_midway_cnt(midway_cnt),
     m_pool_setup_sem(pool_setup_sem),
-    m_midway_sem(midway_sem)
+    m_midway_sem_wait(midway_sem_wait),
+    m_midway_sem_post(midway_sem_post)
 {
 }
 
@@ -73,7 +75,7 @@ run()
       break;
     }
     else if (ret != 0) {
-      if (m_accept_list_errors)
+      if (m_accept_list_errors && (!m_midway_sem_post || saw > m_midway_cnt))
 	break;
       printf("%s: rados_objects_list_next error: %d\n", get_id_str(), ret);
       return ret;
@@ -85,8 +87,10 @@ run()
     }
     ++saw;
     if (saw == m_midway_cnt) {
-      if (m_midway_sem)
-	m_midway_sem->wait();
+      if (m_midway_sem_wait)
+	m_midway_sem_wait->wait();
+      if (m_midway_sem_post)
+	m_midway_sem_post->post();
     }
   }
   rados_objects_list_close(h);
