@@ -3989,7 +3989,7 @@ void ReplicatedPG::populate_obc_watchers(ObjectContext *obc)
 	  log.objects[obc->obs.oi.soid]->reverting_to == obc->obs.oi.version));
 
   dout(10) << "populate_obc_watchers " << obc->obs.oi.soid << dendl;
-  assert(obc->watchers.size() == 0);
+  assert(obc->watchers.empty());
   // populate unconnected_watchers
   utime_t now = ceph_clock_now(g_ceph_context);
   for (map<pair<uint64_t, entity_name_t>, watch_info_t>::iterator p =
