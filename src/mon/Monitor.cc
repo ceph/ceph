@@ -753,7 +753,7 @@ void Monitor::handle_sync_start(MMonSync *m)
    * have an obligation of forwarding this message to leader, so the sender
    * can start synchronizing.
    */
-  if (!is_leader() && quorum.size() > 0) {
+  if (!is_leader() && !quorum.empty()) {
     assert(!(sync_role & SYNC_ROLE_REQUESTER));
     assert(!(sync_role & SYNC_ROLE_LEADER));
     assert(!is_synchronizing());
@@ -787,7 +787,7 @@ void Monitor::handle_sync_start(MMonSync *m)
   if (is_synchronizing()) {
     assert(!(sync_role & SYNC_ROLE_LEADER));
     assert(!(sync_role & SYNC_ROLE_PROVIDER));
-    assert(quorum.size() == 0);
+    assert(quorum.empty());
     assert(sync_leader.get() != NULL);
 
     dout(10) << __func__ << " forward " << *m
@@ -842,7 +842,7 @@ void Monitor::handle_sync_start(MMonSync *m)
 
   MMonSync *msg = new MMonSync(MMonSync::OP_START_REPLY);
 
-  if (((quorum.size() > 0) && paxos->should_trim())
+  if ((!quorum.empty() && paxos->should_trim())
       || (trim_enable_timer != NULL)) {
     msg->flags |= MMonSync::FLAG_RETRY;
   } else {
@@ -864,7 +864,7 @@ void Monitor::handle_sync_start(MMonSync *m)
       // quorum, so he's up to the job (i.e., he's not synchronizing)
       msg->set_reply_to(m->get_source_inst());
       dout(10) << __func__ << " set provider to " << msg->reply_to << dendl;
-    } else if (quorum.size() > 0) {
+    } else if (!quorum.empty()) {
       // grab someone from the quorum and assign them as the sync provider
       int n = _pick_random_quorum_mon(rank);
       if (n >= 0) {
@@ -901,7 +901,7 @@ void Monitor::handle_sync_heartbeat(MMonSync *m)
     return;
   }
 
-  if (!is_leader() && (quorum.size() > 0)
+  if (!is_leader() && !quorum.empty()
       && (trim_timeouts.count(other) > 0)) {
     // we must have been the leader before, but we lost leadership to
     // someone else.
@@ -949,7 +949,7 @@ void Monitor::sync_finish(entity_inst_t &entity, bool abort)
     assert(g_conf->mon_sync_leader_kill_at != 6);
   }
 
-  if (trim_timeouts.size() > 0)
+  if (!trim_timeouts.empty())
     return;
 
   dout(10) << __func__ << " no longer a sync leader" << dendl;
@@ -1022,7 +1022,7 @@ string Monitor::_pick_random_mon(int other)
 int Monitor::_pick_random_quorum_mon(int other)
 {
   assert(monmap->size() > 0);
-  if (quorum.size() == 0)
+  if (quorum.empty())
     return -1;
   set<int>::iterator p = quorum.begin();
   for (int n = sync_rng() % quorum.size(); p != quorum.end() && n; ++p, --n);
@@ -1096,7 +1096,7 @@ void Monitor::sync_provider_cleanup(entity_inst_t &entity)
     sync_entities_states.erase(entity);
   }
 
-  if (sync_entities.size() == 0) {
+  if (sync_entities.empty()) {
     dout(1) << __func__ << " no longer a sync provider" << dendl;
     sync_role &= ~SYNC_ROLE_PROVIDER;
   }
@@ -1282,7 +1282,7 @@ void Monitor::sync_start(entity_inst_t &other)
     dout(10) << __func__ << " we are acting as a leader to someone; "
              << "destroy their dreams" << dendl;
 
-    assert(trim_timeouts.size() > 0);
+    assert(!trim_timeouts.empty());
     reset_sync();
   }
 
@@ -2048,7 +2048,7 @@ void Monitor::_sync_status(ostream& ss)
     jf.open_object_section("trim");
     jf.dump_int("disabled", paxos->is_trim_disabled());
     jf.dump_int("should_trim", paxos->should_trim());
-    if (trim_timeouts.size() > 0) {
+    if (!trim_timeouts.empty()) {
       jf.open_array_section("mons");
       for (map<entity_inst_t,Context*>::iterator it = trim_timeouts.begin();
 	   it != trim_timeouts.end();
@@ -2064,7 +2064,7 @@ void Monitor::_sync_status(ostream& ss)
     jf.close_section();
   }
 
-  if ((sync_entities.size() > 0) || (sync_role == SYNC_ROLE_PROVIDER)) {
+  if (!sync_entities.empty() || (sync_role == SYNC_ROLE_PROVIDER)) {
     jf.open_array_section("on_going");
     for (map<entity_inst_t,SyncEntity>::iterator it = sync_entities.begin();
 	 it != sync_entities.end();
@@ -4246,7 +4246,7 @@ out:
 void Monitor::StoreConverter::_convert_paxos()
 {
   dout(10) << __func__ << dendl;
-  assert(gvs.size() > 0);
+  assert(!gvs.empty());
 
   set<version_t>::reverse_iterator rit = gvs.rbegin();
   version_t highest_gv = *rit;
