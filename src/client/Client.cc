@@ -4435,7 +4435,7 @@ int Client::fchmod(int fd, mode_t mode)
   return _setattr(f->inode, &attr, CEPH_SETATTR_MODE);
 }
 
-int Client::chown(const char *relpath, uid_t uid, gid_t gid)
+int Client::chown(const char *relpath, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "chown" << std::endl;
@@ -4450,10 +4450,13 @@ int Client::chown(const char *relpath, uid_t uid, gid_t gid)
   struct stat attr;
   attr.st_uid = uid;
   attr.st_gid = gid;
-  return _setattr(in, &attr, CEPH_SETATTR_UID|CEPH_SETATTR_GID);
+  int mask = 0;
+  if (uid != -1) mask |= CEPH_SETATTR_UID;
+  if (gid != -1) mask |= CEPH_SETATTR_GID;
+  return _setattr(in, &attr, mask);
 }
 
-int Client::fchown(int fd, uid_t uid, gid_t gid)
+int Client::fchown(int fd, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "fchown" << std::endl;
@@ -4466,10 +4469,13 @@ int Client::fchown(int fd, uid_t uid, gid_t gid)
   struct stat attr;
   attr.st_uid = uid;
   attr.st_gid = gid;
-  return _setattr(f->inode, &attr, CEPH_SETATTR_UID|CEPH_SETATTR_GID);
+  int mask = 0;
+  if (uid != -1) mask |= CEPH_SETATTR_UID;
+  if (gid != -1) mask |= CEPH_SETATTR_GID;
+  return _setattr(f->inode, &attr, mask);
 }
 
-int Client::lchown(const char *relpath, uid_t uid, gid_t gid)
+int Client::lchown(const char *relpath, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "lchown" << std::endl;
@@ -4485,7 +4491,10 @@ int Client::lchown(const char *relpath, uid_t uid, gid_t gid)
   struct stat attr;
   attr.st_uid = uid;
   attr.st_gid = gid;
-  return _setattr(in, &attr, CEPH_SETATTR_UID|CEPH_SETATTR_GID);
+  int mask = 0;
+  if (uid != -1) mask |= CEPH_SETATTR_UID;
+  if (gid != -1) mask |= CEPH_SETATTR_GID;
+  return _setattr(in, &attr, mask);
 }
 
 int Client::utime(const char *relpath, struct utimbuf *buf)

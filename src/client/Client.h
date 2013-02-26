@@ -622,9 +622,9 @@ public:
   int setattr(const char *relpath, struct stat *attr, int mask);
   int chmod(const char *path, mode_t mode);
   int fchmod(int fd, mode_t mode);
-  int chown(const char *path, uid_t uid, gid_t gid);
-  int fchown(int fd, uid_t uid, gid_t gid);
-  int lchown(const char *path, uid_t uid, gid_t gid);
+  int chown(const char *path, int uid, int gid);
+  int fchown(int fd, int uid, int gid);
+  int lchown(const char *path, int uid, int gid);
   int utime(const char *path, struct utimbuf *buf);
   int truncate(const char *path, loff_t size);
 
