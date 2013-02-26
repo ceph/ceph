@@ -4302,6 +4302,7 @@ int Client::setattr(const char *relpath, struct stat *attr, int mask)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "setattr" << std::endl;
+  tout(cct) << relpath << std::endl;
   tout(cct) << mask  << std::endl;
 
   filepath path(relpath);
@@ -4470,7 +4471,7 @@ int Client::fchown(int fd, uid_t uid, gid_t gid)
 int Client::lchown(const char *relpath, uid_t uid, gid_t gid)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "chown" << std::endl;
+  tout(cct) << "lchown" << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << uid << std::endl;
   tout(cct) << gid << std::endl;
