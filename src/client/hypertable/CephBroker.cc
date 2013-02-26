@@ -386,7 +386,7 @@ int CephBroker::rmdir_recursive(const char *directory) {
   struct dirent de;
   struct stat st;
   int r;
-  if ((r = ceph_opendir(cmount, directory, &dirp) < 0))
+  if ((r = ceph_opendir(cmount, directory, &dirp)) < 0)
     return r; //failed to open
   while ((r = ceph_readdirplus_r(cmount, dirp, &de, &st, 0)) > 0) {
     String new_dir = de.d_name;
