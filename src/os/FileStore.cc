@@ -3899,7 +3899,7 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
   if (r < 0)
     return r;
 
-  if (omap_remove.size()) {
+  if (!omap_remove.empty()) {
     assert(g_conf->filestore_xattr_use_omap);
     r = object_map->remove_xattrs(oid, omap_remove, &spos);
     if (r < 0 && r != -ENOENT) {
@@ -3909,7 +3909,7 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
     }
   }
   
-  if (omap_set.size()) {
+  if (!omap_set.empty()) {
     assert(g_conf->filestore_xattr_use_omap);
     r = object_map->set_xattrs(oid, omap_set, &spos);
     if (r < 0) {
