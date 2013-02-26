@@ -14,4 +14,8 @@
   now have safety interlocks with loud warnings that make you confirm
   pool removal.  Any scripts curenty rely on these functions zapping
   data without confirmation need to be adjusted accordingly.
-  
+
+* ceph-mon now requires the creation of its data directory prior to
+  --mkfs, similarly to what happens on ceph-osd.  This directory is
+  no longer automatically created, and custom scripts should be
+  adjusted to reflect just that.
