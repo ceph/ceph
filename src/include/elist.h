@@ -98,7 +98,7 @@ public:
 
   void clear() {
     while (!_head.empty())
-      remove(front());
+      pop_front();
   }
 
   void push_front(item *i) {
