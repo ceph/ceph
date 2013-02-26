@@ -247,7 +247,7 @@ class MonitorStoreConverter {
   }
 
   void _convert_paxos() {
-    assert(gvs.size() > 0);
+    assert(!gvs.empty());
 
     set<version_t>::reverse_iterator rit = gvs.rbegin();
     version_t highest_gv = *rit;
@@ -320,7 +320,7 @@ int main(int argc, const char *argv[])
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
 
-  if (args.size() < 1) {
+  if (args.empty()) {
     usage(our_name);
     return 1;
   }

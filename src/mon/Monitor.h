@@ -352,7 +352,7 @@ private:
       // we have disabled it in the past. It doesn't mean we are going to
       // do anything about it, but if we happen to become the leader
       // sometime down the future, we sure want to have the trim enabled.
-      if (!mon->trim_timeouts.size())
+      if (mon->trim_timeouts.empty())
 	mon->paxos->trim_enable();
       mon->trim_enable_timer = NULL;
     }

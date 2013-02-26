@@ -803,7 +803,7 @@ void Paxos::finish_proposal()
   first_committed = get_store()->get(get_name(), "first_committed");
   last_committed = get_store()->get(get_name(), "last_committed");
 
-  if ((proposals.size() == 0) && going_to_bootstrap) {
+  if (proposals.empty() && going_to_bootstrap) {
     dout(0) << __func__ << " no more proposals; bootstraping." << dendl;
     mon->bootstrap();
     return;
@@ -813,7 +813,7 @@ void Paxos::finish_proposal()
     trim();
   }
 
-  if (is_active() && (proposals.size() > 0)) {
+  if (is_active() && !proposals.empty()) {
     propose_queued();
   }
 }
@@ -1054,7 +1054,7 @@ void Paxos::leader_init()
 {
   cancel_events();
   new_value.clear();
-  if (proposals.size() > 0)
+  if (!proposals.empty())
     proposals.clear();
 
   going_to_bootstrap = false;
@@ -1090,7 +1090,7 @@ void Paxos::restart()
   cancel_events();
   new_value.clear();
   dout(10) << __func__ << " -- clearing queued proposals" << dendl;
-  if (proposals.size() > 0)
+  if (!proposals.empty())
     proposals.clear();
 
   going_to_bootstrap = false;
@@ -1219,7 +1219,7 @@ void Paxos::list_proposals(ostream& out)
 void Paxos::propose_queued()
 {
   assert(is_active());
-  assert(proposals.size() > 0);
+  assert(!proposals.empty());
 
   state = STATE_PREPARING;
 
