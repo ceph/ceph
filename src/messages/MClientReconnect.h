@@ -94,7 +94,7 @@ public:
       for (map<inodeno_t,old_cap_reconnect_t>::iterator q = ocaps.begin(); q != ocaps.end(); q++)
 	caps[q->first] = q->second;
     }
-    while (p.end()) {
+    while (!p.end()) {
       realms.push_back(ceph_mds_snaprealm_reconnect());
       ::decode(realms.back(), p);
     }
