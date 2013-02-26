@@ -1,5 +1,7 @@
 overrides:
   ceph:
     conf:
-      global:
+      osd:
+        lockdep: true
+      mon:
         lockdep: true
