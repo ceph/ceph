@@ -1,0 +1,8 @@
+tasks:
+- install:
+- ceph:
+- ceph-fuse:
+- workunit:
+    clients:
+      client.0:
+        - rbd/test_lock_fence.sh
