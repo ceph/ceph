@@ -72,17 +72,19 @@ public:
 
    bloom_filter& operator = (const bloom_filter& filter)
    {
-      salt_count_ = filter.salt_count_;
-      table_size_ = filter.table_size_;
-      raw_table_size_ = filter.raw_table_size_;
-      predicted_inserted_element_count_ = filter.predicted_inserted_element_count_;
-      inserted_element_count_ = filter.inserted_element_count_;
-      random_seed_ = filter.random_seed_;
-      desired_false_positive_probability_ = filter.desired_false_positive_probability_;
-      delete[] bit_table_;
-      bit_table_ = new cell_type[raw_table_size_];
-      std::copy(filter.bit_table_,filter.bit_table_ + raw_table_size_,bit_table_);
-      salt_ = filter.salt_;
+      if (this != &filter) {
+        salt_count_ = filter.salt_count_;
+        table_size_ = filter.table_size_;
+        raw_table_size_ = filter.raw_table_size_;
+        predicted_inserted_element_count_ = filter.predicted_inserted_element_count_;
+        inserted_element_count_ = filter.inserted_element_count_;
+        random_seed_ = filter.random_seed_;
+        desired_false_positive_probability_ = filter.desired_false_positive_probability_;
+        delete[] bit_table_;
+        bit_table_ = new cell_type[raw_table_size_];
+        std::copy(filter.bit_table_,filter.bit_table_ + raw_table_size_,bit_table_);
+        salt_ = filter.salt_;
+      }
       return *this;
    }
 
