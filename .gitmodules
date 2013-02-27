@@ -1,9 +1,6 @@
 [submodule "ceph-object-corpus"]
 	path = ceph-object-corpus
 	url = git://ceph.com/git/ceph-object-corpus.git
-[submodule "src/leveldb"]
-	path = src/leveldb
-	url = git://github.com/ceph/leveldb.git
 [submodule "src/libs3"]
 	path = src/libs3
 	url = git://github.com/ceph/libs3.git
