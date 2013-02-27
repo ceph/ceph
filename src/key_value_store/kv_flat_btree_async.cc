@@ -49,7 +49,6 @@ void IndexCache::push(const string &key, const index_data &idata) {
   if (cache_size == 0) {
     return;
   }
-  stringstream rs;
   index_data old_idata;
   map<key_data, pair<index_data, utime_t> >::iterator old_it =
       k2itmap.lower_bound(key_data(key));
@@ -76,7 +75,6 @@ void IndexCache::push(const index_data &idata) {
   if (cache_size == 0) {
     return;
   }
-  stringstream rs;
   if (k2itmap.count(idata.kdata) > 0) {
     utime_t old_time = k2itmap[idata.kdata].second;
     t2kmap.erase(old_time);
@@ -1380,7 +1378,6 @@ int KvFlatBtreeAsync::set(const string &key, const bufferlist &val,
       << (update_on_existing? "updating " : "setting ")
       << key << std::endl;
   int err = 0;
-  string obj;
   utime_t mytime;
   index_data idata(key);
 
@@ -1497,7 +1494,6 @@ int KvFlatBtreeAsync::remove(const string &key) {
   if (verbose) cout << client_name << ": removing " << key << std::endl;
   int err = 0;
   string obj;
-  string hk;
   utime_t mytime;
   index_data idata;
   index_data next_idata;
@@ -1662,8 +1658,6 @@ int KvFlatBtreeAsync::get(const string &key, bufferlist *val) {
   if (verbose) cout << client_name << ": getting " << key << std::endl;
   int err = 0;
   index_data idata;
-  string obj;
-  string hk;
   utime_t mytime;
 
   if ((((KeyValueStructure *)this)->*KvFlatBtreeAsync::interrupt)() == 1 ) {
