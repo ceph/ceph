@@ -1424,7 +1424,8 @@ libosd_a_SOURCES = \
 	osd/OSDCap.cc \
 	osd/Watch.cc \
 	osd/ClassHandler.cc \
-	osd/OpRequest.cc
+	osd/OpRequest.cc \
+	osd/SnapMapper.cc
 libosd_a_CXXFLAGS= ${AM_CXXFLAGS}
 noinst_LIBRARIES += libosd.a
 
