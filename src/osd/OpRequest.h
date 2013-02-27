@@ -89,7 +89,6 @@ struct OpRequest : public TrackedOp {
   int rmw_flags;
 
   bool check_rmw(int flag) {
-    assert(rmw_flags);
     return rmw_flags & flag;
   }
   bool may_read() { return need_read_cap() || need_class_read_cap(); }
