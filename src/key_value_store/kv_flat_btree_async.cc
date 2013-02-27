@@ -1430,7 +1430,6 @@ int KvFlatBtreeAsync::set_op(const string &key, const bufferlist &val,
       cerr << "\t" << client_name << ": writing key failed with "
   	<< err << std::endl;
       return err;
-      break;
     }
     case -EKEYREJECTED: {
       //the object needs to be split.
@@ -1547,7 +1546,6 @@ int KvFlatBtreeAsync::remove_op(const string &key, index_data &idata,
     case -ENODATA: {
       //the key does not exist in the object
       return err;
-      break;
     }
     case -EKEYREJECTED: {
       //the object needs to be split.
@@ -1606,7 +1604,6 @@ int KvFlatBtreeAsync::remove_op(const string &key, index_data &idata,
 	return err;
       }
       return remove(key);
-      break;
     }
     default:
       if (err == -ENOENT || err == -EACCES) {
