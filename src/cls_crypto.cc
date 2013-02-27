@@ -1,6 +1,3 @@
-
-
-
 #include <iostream>
 #include <string.h>
 #include <stdlib.h>
@@ -24,7 +21,6 @@ cls_method_handle_t h_sha1;
 int md5_method(cls_method_context_t ctx, char *indata, int datalen,
 				 char **outdata, int *outdatalen)
 {
-   int i;
    MD5_CTX c;
    unsigned char *md;
 
@@ -48,7 +44,6 @@ int md5_method(cls_method_context_t ctx, char *indata, int datalen,
 int sha1_method(cls_method_context_t ctx, char *indata, int datalen,
 				 char **outdata, int *outdatalen)
 {
-   int i;
    SHA_CTX c;
    unsigned char *md;
 
