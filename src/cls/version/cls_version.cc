@@ -167,7 +167,7 @@ static int cls_version_inc(cls_method_context_t hctx, bufferlist *in, bufferlist
     return ret;
   
   if (!check_conds(op.conds, objv)) {
-    return -EAGAIN;
+    return -ECANCELED;
   }
   objv.inc();
 
@@ -196,7 +196,7 @@ static int cls_version_check(cls_method_context_t hctx, bufferlist *in, bufferli
     return ret;
   
   if (!check_conds(op.conds, objv)) {
-    return -EAGAIN;
+    return -ECANCELED;
   }
 
   return 0;
