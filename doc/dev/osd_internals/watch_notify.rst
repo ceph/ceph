@@ -28,8 +28,10 @@ Watches in order to be able to notify them upon ms_handle_reset()
 Each Watch object tracks the set of currently un-acked notifies.
 start_notify() on a Watch object adds a reference to a new in-progress
 Notify to the Watch and either:
-  * if the Watch is *connected*, sends a Notify message to the client
-  * if the Watch is *unconnected*, does nothing.
+
+* if the Watch is *connected*, sends a Notify message to the client
+* if the Watch is *unconnected*, does nothing.
+
 When the Watch becomes connected (in ReplicatedPG::do_osd_op_effects),
 Notifies are resent to all remaining tracked Notify objects.
 
@@ -41,11 +43,12 @@ is sent to the client.
 Watch Lifecycle
 ---------------
 A watch may be in one of 5 states:
-    1. Non existent.
-    2. On disk, but not registered with an object context.
-    3. Connected
-    4. Disconnected, callback registered with timer
-    5. Disconnected, callback in queue for scrub or is_degraded
+
+1. Non existent.
+2. On disk, but not registered with an object context.
+3. Connected
+4. Disconnected, callback registered with timer
+5. Disconnected, callback in queue for scrub or is_degraded
 
 Case 2 occurs between when an OSD goes active and the ObjectContext
 for an object with watchers is loaded into memory due to an access.
