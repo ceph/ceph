@@ -64,3 +64,6 @@ Makefile
 /testmsgr
 /test_*
 /unittest_*
+
+# old dir, may in use by older branches
+/leveldb
