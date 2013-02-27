@@ -99,6 +99,7 @@ void MonmapMonitor::update_from_paxos()
   monmap_bl.clear();
   int ret = get_version(version, monmap_bl);
   assert(ret == 0);
+  assert(monmap_bl.length());
 
   dout(10) << "update_from_paxos got " << version << dendl;
   mon->monmap->decode(monmap_bl);
