@@ -63,6 +63,17 @@ your host. ::
 
 	sudo apt-get install uuid-dev libkeyutils-dev libgoogle-perftools-dev libatomic-ops-dev libaio-dev libgdata-common libgdata13
 
+Ubuntu 12.10
+------------
+
+- ``libsnappy-dev`` 
+- ``libleveldb-dev``
+
+Execute ``sudo apt-get install`` for each dependency that isn't installed on 
+your host. ::
+
+	sudo apt-get install libsnappy-dev libleveldb-dev
+
 Debian
 ======
 
