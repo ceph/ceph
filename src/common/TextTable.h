@@ -68,7 +68,7 @@ public:
    * TextTable::LEFT, TextTable::CENTER, or TextTable::RIGHT
    *
    */
-  void define_column(const std::string heading, Align hd_align,
+  void define_column(const std::string& heading, Align hd_align,
 		     Align col_align);
 
   /**

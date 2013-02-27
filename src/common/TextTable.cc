@@ -15,7 +15,7 @@
 
 using namespace std;
 
-void TextTable::define_column(const string heading,
+void TextTable::define_column(const string &heading,
 			      enum TextTable::Align hd_align,
 			      enum TextTable::Align col_align)
 {
