@@ -58,7 +58,7 @@ namespace Hypertable {
   public:
     OpenFileDataCephPtr() : OpenFileDataPtr() { }
     OpenFileDataCephPtr(OpenFileDataCeph *ofdl) : OpenFileDataPtr(ofdl, true) { }
-    OpenFileDataCeph *operator->() const { return (OpenFileDataCeph *)get(); }
+    OpenFileDataCeph *operator->() const { return static_cast<OpenFileDataCeph *>(get()); }
   };
 
   /**
