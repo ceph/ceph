@@ -70,7 +70,7 @@ following directory::
 
 See `Enabling Cephx`_ step 2 and 3 for stepwise details to enable ``cephx``.
 
-.. _ceph-authtool: ../../man/ceph-authtool/
+.. _ceph-authtool: ../../../man/8/ceph-authtool
 
 
 .. _enable-cephx:
@@ -376,7 +376,7 @@ include the following in the ``[global]`` section of your `Ceph
 configuration`_ file directly below the line that specifies the use of Cephx
 for authentication::
 
-        cephx require signatures = true    ; everywhere possible
+	cephx require signatures = true    ; everywhere possible
 
 You can also selectively require signatures for cluster internal
 communications only, separate from client-facing service::
