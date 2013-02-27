@@ -1012,6 +1012,12 @@ ceph_test_objectcacher_stress_LDADD = $(LIBGLOBAL_LDA)
 ceph_test_objectcacher_stress_CXXFLAGS = ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_objectcacher_stress
 
+ceph_test_snap_mapper_SOURCES = test/test_snap_mapper.cc osd/SnapMapper.cc
+ceph_test_snap_mapper_LDFLAGS = ${AM_LDFLAGS}
+ceph_test_snap_mapper_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+ceph_test_snap_mapper_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE) ${CRYPTO_CXXFLAGS}
+bin_DEBUGPROGRAMS += ceph_test_snap_mapper
+
 ceph_test_object_map_SOURCES = test/ObjectMap/test_object_map.cc test/ObjectMap/KeyValueDBMemory.cc os/DBObjectMap.cc os/LevelDBStore.cc
 ceph_test_object_map_LDFLAGS = ${AM_LDFLAGS}
 ceph_test_object_map_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
