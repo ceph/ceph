@@ -215,11 +215,11 @@ static bool va_ceph_argparse_binary_flag(std::vector<const char*> &args,
       if (first[strlen_a] == '=') {
 	i = args.erase(i);
 	const char *val = first + strlen_a + 1;
-	if (strcmp(val, "true") == 0) {
+	if ((strcmp(val, "true") == 0) || (strcmp(val, "1") == 0)) {
 	  *ret = 1;
 	  return true;
 	}
-	else if (strcmp(val, "false") == 0) {
+	else if ((strcmp(val, "false") == 0) || (strcmp(val, "0") == 0)) {
 	  *ret = 0;
 	  return true;
 	}
