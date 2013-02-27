@@ -188,14 +188,20 @@ def main():
         with contextlib.closing(StringIO.StringIO()) as f:
             yaml.safe_dump(ctx.summary, f)
             log.info('Summary data:\n%s' % f.getvalue())
-            
+        with contextlib.closing(StringIO.StringIO()) as f:
+            if 'email-on-error' in ctx.config and not ctx.summary.get('success', False):
+                yaml.safe_dump(ctx.summary, f)
+                yaml.safe_dump(ctx.config, f)
+                emsg = f.getvalue()
+                subject = "Teuthology error -- %s" % ctx.summary['failure_reason']
+                from teuthology.suite import email_results
+                email_results(subject,"Teuthology",ctx.config['email-on-error'],emsg)
         if ctx.summary.get('success', True):
             log.info('pass')
         else:
             log.info('FAIL')
             import sys
             sys.exit(1)
-
 
 def schedule():
     parser = argparse.ArgumentParser(description='Schedule ceph integration tests')
