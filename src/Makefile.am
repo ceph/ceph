@@ -947,6 +947,12 @@ ceph_test_cls_refcount_LDADD = librados.la libcls_refcount_client.a ${UNITTEST_S
 ceph_test_cls_refcount_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_cls_refcount
 
+ceph_test_cls_version_SOURCES = test/cls_version/test_cls_version.cc \
+	test/librados/test.cc
+ceph_test_cls_version_LDADD = librados.la libcls_version_client.a ${UNITTEST_STATIC_LDADD}
+ceph_test_cls_version_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += ceph_test_cls_version
+
 ceph_test_cls_lock_SOURCES = test/cls_lock/test_cls_lock.cc test/librados/test.cc
 ceph_test_cls_lock_LDFLAGS = ${AM_LDFLAGS}
 ceph_test_cls_lock_LDADD =  libcls_lock_client.a librados.la ${UNITTEST_STATIC_LDADD}
