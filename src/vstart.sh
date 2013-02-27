@@ -348,7 +348,7 @@ EOF
 			echo
 		fi
 
-	        $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mon. $keyring_fn
+	        $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mon. $keyring_fn --cap mon 'allow *'
 	        $SUDO $CEPH_BIN/ceph-authtool --gen-key --name=client.admin --set-uid=0 \
 		    --cap mon 'allow *' \
 		    --cap osd 'allow *' \
