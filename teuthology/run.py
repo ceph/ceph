@@ -189,12 +189,12 @@ def main():
             yaml.safe_dump(ctx.summary, f)
             log.info('Summary data:\n%s' % f.getvalue())
             
-    if ctx.summary.get('success', True):
-        log.info('pass')
-    else:
-        log.info('FAIL')
-        import sys
-        sys.exit(1)
+        if ctx.summary.get('success', True):
+            log.info('pass')
+        else:
+            log.info('FAIL')
+            import sys
+            sys.exit(1)
 
 
 def schedule():
