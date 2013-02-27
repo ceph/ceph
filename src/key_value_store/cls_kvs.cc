@@ -43,7 +43,6 @@ static int get_idata_from_key(cls_method_context_t hctx, const string &key,
   bufferlist raw_val;
   int r = 0;
   std::map<std::string, bufferlist> kvmap;
-  std::map<std::string, bufferlist> dupmap;
 
   r = cls_cxx_map_get_vals(hctx, key_data(key).encoded(), "", 2, &kvmap);
   if (r < 0) {

@@ -505,7 +505,6 @@ int md_config_t::parse_injectargs(std::vector<const char*>& args,
 				  std::ostream *oss)
 {
   assert(lock.is_locked());
-  std::string val;
   int ret = 0;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     int r = parse_option(args, i, oss);

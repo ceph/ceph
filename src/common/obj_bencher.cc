@@ -84,7 +84,7 @@ ostream& ObjBencher::out(ostream& os)
 }
 
 void *ObjBencher::status_printer(void *_bencher) {
-  ObjBencher *bencher = (ObjBencher *)_bencher;
+  ObjBencher *bencher = static_cast<ObjBencher *>(_bencher);
   bench_data& data = bencher->data;
   Cond cond;
   int i = 0;

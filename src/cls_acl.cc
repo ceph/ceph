@@ -23,9 +23,7 @@ cls_method_handle_t h_set;
 int get_method(cls_method_context_t ctx, char *indata, int datalen,
 				 char **outdata, int *outdatalen)
 {
-   int i;
    MD5_CTX c;
-   unsigned char *md;
 
    cls_log("acl test method");
    cls_log("indata=%.*s data_len=%d", datalen, indata, datalen);
@@ -38,9 +36,7 @@ int get_method(cls_method_context_t ctx, char *indata, int datalen,
 int set_method(cls_method_context_t ctx, char *indata, int datalen,
 				 char **outdata, int *outdatalen)
 {
-   int i;
    MD5_CTX c;
-   unsigned char *md;
 
    cls_log("acl test method");
    cls_log("indata=%.*s data_len=%d", datalen, indata, datalen);
