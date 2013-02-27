@@ -2,61 +2,6 @@
  General Config Reference
 ==========================
 
-``auth supported``
-
-.. deprecated:: 0.51
-
-:Description: Indicates the type of authentication used. Currently ``cephx`` 
-              only. If not specified, it defaults to ``none``.
-
-:Type: String
-:Required: No
-:Default: ``none``
-
-    
-``auth cluster required``
-
-.. versionadded:: 0.51
-
-:Description: Enables authentication for the cluster. 
-              Valid setting is ``cephx``.
-
-:Type: String
-:Required: No
-:Default: ``none``
-
-    
-``auth service required``
-
-.. versionadded:: 0.51
-
-:Description: Enables authentication for the service. 
-              Valid setting is ``cephx``.
-
-:Type: String
-:Required: No
-:Default: ``none``
-
-
-
-``auth client required``
-
-.. versionadded:: 0.51
-
-:Description: Enables authentication for the client. 
-              Valid setting is ``cephx``.
-
-:Type: String
-:Required: No
-:Default: ``none``
-
-
-``keyring``
-
-:Description: The path to the cluster's keyring file. 
-:Type: String
-:Required: No
-:Default: ``/etc/ceph/$cluster.$name.keyring,/etc/ceph/$cluster.keyring,/etc/ceph/keyring,/etc/ceph/keyring.bin``
 
 
 ``fsid``
