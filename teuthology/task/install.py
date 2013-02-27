@@ -2,6 +2,7 @@ from cStringIO import StringIO
 
 import contextlib
 import logging
+import time
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -11,7 +12,7 @@ from ..orchestra import run
 log = logging.getLogger(__name__)
 
 
-def _update_deb_package_list_and_install(ctx, remote, debs, branch, flavor):
+def _update_deb_package_list_and_install(ctx, remote, debs, config):
     """
     updates the package list so that apt-get can
     download the appropriate packages
@@ -49,24 +50,41 @@ def _update_deb_package_list_and_install(ctx, remote, debs, branch, flavor):
     arch = r.stdout.getvalue().strip()
     log.info("dist %s arch %s", dist, arch)
 
-    base_url = 'http://{host}/ceph-deb-{dist}-{arch}-{flavor}/ref/{branch}'.format(
+    # branch/tag/sha1 flavor
+    flavor = config.get('flavor', 'basic')
+
+    uri = None
+    log.info('config is %s', config)
+    if config.get('sha1') is not None:
+        uri = 'sha1/' + config.get('sha1')
+    elif config.get('tag') is not None:
+        uri = 'ref/' + config.get('tag')
+    elif config.get('branch') is not None:
+        uri = 'ref/' + config.get('branch')
+    else:
+        uri = 'ref/master'
+
+    base_url = 'http://{host}/ceph-deb-{dist}-{arch}-{flavor}/{uri}'.format(
         host=ctx.teuthology_config.get('gitbuilder_host',
                                        'gitbuilder.ceph.com'),
         dist=dist,
         arch=arch,
         flavor=flavor,
-        branch=branch,
+        uri=uri,
         )
+    log.info('Pulling from %s', base_url)
 
     # get package version string
-    r = remote.run(
-        args=[
-            'wget', '-q', '-O-', base_url + '/version',
-            ],
-        stdout=StringIO(),
-        )
-    version = r.stdout.getvalue().strip()
-    log.info('package version is %s', version)
+    while True:
+        r = remote.run(
+            args=[
+                'wget', '-q', '-O-', base_url + '/version',
+                ],
+            stdout=StringIO(),
+            )
+        version = r.stdout.getvalue().strip()
+        log.info('Package version is %s', version)
+        break
 
     remote.run(
         args=[
@@ -86,7 +104,7 @@ def _update_deb_package_list_and_install(ctx, remote, debs, branch, flavor):
         )
 
 
-def install_debs(ctx, debs, branch, flavor):
+def install_debs(ctx, debs, config):
     """
     installs Debian packages.
     """
@@ -96,7 +114,7 @@ def install_debs(ctx, debs, branch, flavor):
         for remote in ctx.cluster.remotes.iterkeys():
             p.spawn(
                 _update_deb_package_list_and_install,
-                ctx, remote, debs, branch, flavor)
+                ctx, remote, debs, config)
 
 def _remove_deb(remote, debs):
     # first ask nicely
@@ -193,10 +211,7 @@ def install(ctx, config):
         'librbd1',
         'librbd1-dbg',
         ]
-    branch = config.get('branch', 'master')
-    flavor = config.get('flavor')
-    log.info('branch: {b}'.format(b=branch))
-    install_debs(ctx, debs_install, branch, flavor)
+    install_debs(ctx, debs_install, config)
     try:
         yield
     finally:
@@ -241,11 +256,12 @@ def task(ctx, config):
     
     with contextutil.nested(
         lambda: install(ctx=ctx, config=dict(
-                branch=config.get('branch', 'master'),
+                branch=config.get('branch'),
                 tag=config.get('tag'),
                 sha1=config.get('sha1'),
                 flavor=flavor,
-                extra_packages=config.get('extra_packages'),
+                extra_packages=config.get('extra_packages', []),
+                wait_for_package=ctx.config.get('wait-for-package', False),
                 )),
         ):
         yield
