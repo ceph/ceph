@@ -74,8 +74,8 @@ def task(ctx, config):
         # install ceph fuse package
         install_task.install_debs(ctx,
                                   ['ceph-fuse', 'ceph-fuse-dbg'],
-                                  config.get('branch', 'master'),
-                                  flavor)
+                                  {'branch': config.get('branch', 'master'),
+                                   'flavor': flavor})
 
         mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
         log.info('Mounting ceph-fuse client.{id} at {remote} {mnt}...'.format(
