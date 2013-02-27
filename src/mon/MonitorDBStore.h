@@ -25,6 +25,7 @@
 
 #include "include/assert.h"
 #include "common/Formatter.h"
+#include "common/errno.h"
 
 class MonitorDBStore
 {
@@ -368,8 +369,9 @@ class MonitorDBStore
     map<string,bufferlist> out;
 
     db->get(prefix, k, &out);
-    if (!out.empty())
-      bl.append(out[key]);
+    if (out.empty())
+      return -ENOENT;
+    bl.append(out[key]);
 
     return 0;
   }
@@ -382,10 +384,19 @@ class MonitorDBStore
 
   version_t get(const string& prefix, const string& key) {
     bufferlist bl;
-    get(prefix, key, bl);
-    if (!bl.length()) // if key does not exist, assume its value is 0
-      return 0;
+    int err = get(prefix, key, bl);
+    if (err < 0) {
+      if (err == -ENOENT) // if key doesn't exist, assume its value is 0
+        return 0;
+      // we're not expecting any other negative return value, and we can't
+      // just return a negative value if we're returning a version_t
+      generic_dout(0) << "MonitorDBStore::get() error obtaining"
+                      << " (" << prefix << ":" << key << "): "
+                      << cpp_strerror(err) << dendl;
+      assert(0 == "error obtaining key");
+    }
 
+    assert(bl.length());
     version_t ver;
     bufferlist::iterator p = bl.begin();
     ::decode(ver, p);
