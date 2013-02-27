@@ -26,7 +26,7 @@
 
 static const struct sockaddr *find_ip_in_subnet_list(CephContext *cct,
 						     const struct ifaddrs *ifa,
-						     const std::string networks)
+						     const std::string &networks)
 {
   std::list<string> nets;
   get_str_list(networks, nets);
