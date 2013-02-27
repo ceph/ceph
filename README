@@ -122,7 +122,7 @@ To build the source code, you must install the following:
 - libboost-program-options-dev
 - libboost-thread-dev
 - libexpat1-dev
-
+- libleveldb-dev
 
 For example:
 
