@@ -55,7 +55,6 @@ void crush_finalize(struct crush_map *map)
 int crush_add_rule(struct crush_map *map, struct crush_rule *rule, int ruleno)
 {
 	__u32 r;
-	int oldsize;
 
 	if (ruleno < 0) {
 		for (r=0; r < map->max_rules; r++)
@@ -68,6 +67,7 @@ int crush_add_rule(struct crush_map *map, struct crush_rule *rule, int ruleno)
 
 	if (r >= map->max_rules) {
 		/* expand array */
+		int oldsize;
 		oldsize = map->max_rules;
 		map->max_rules = r+1;
 		map->rules = realloc(map->rules, map->max_rules * sizeof(map->rules[0]));

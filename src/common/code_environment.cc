@@ -47,7 +47,6 @@ std::ostream &operator<<(std::ostream &oss, enum code_environment_t e)
 
 int get_process_name(char *buf, int len)
 {
-  int ret;
   if (len <= 16) {
     /* The man page discourages using this prctl with a buffer shorter
      * than 16 bytes. With a 16-byte buffer, it might not be
@@ -59,6 +58,7 @@ int get_process_name(char *buf, int len)
     return -ENAMETOOLONG;
 #else
   memset(buf, 0, len);
+  int ret;
   ret = prctl(PR_GET_NAME, buf);
   return ret;
 #endif

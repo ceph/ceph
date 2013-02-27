@@ -187,7 +187,6 @@ void CephContext::do_command(std::string command, std::string args, bufferlist *
       } else {
 	std::string val = var.substr(pos+1);
 	var.resize(pos);
-	std::vector<const char*> args;
 	int r = _conf->set_val(var.c_str(), val.c_str());
 	if (r < 0) {
 	  jf.dump_stream("error") << "error setting '" << var << "' to '" << val << "': " << cpp_strerror(r);
