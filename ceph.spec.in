@@ -25,7 +25,6 @@ Requires:	librbd1 = %{version}-%{release}
 Requires:	librados2 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
 Requires:	python
-Requires:	leveldb > 1.2
 Requires(post):	binutils
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 BuildRequires:	gcc-c++
@@ -40,6 +39,7 @@ BuildRequires:  libaio-devel
 BuildRequires:  libcurl-devel
 BuildRequires:  libxml2-devel
 BuildRequires:  libuuid-devel
+BuildRequires:  leveldb-devel > 1.2
 
 #################################################################################
 # specific
