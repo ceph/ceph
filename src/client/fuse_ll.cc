@@ -610,19 +610,22 @@ int CephFuse::Handle::init(int argc, const char *argv[])
   newargv[newargc++] = argv[0];
   newargv[newargc++] = "-f";  // stay in foreground
 
-  newargv[newargc++] = "-o";
-  newargv[newargc++] = "allow_other";
-
-  newargv[newargc++] = "-o";
-  newargv[newargc++] = "default_permissions";
-
+  if (g_conf->fuse_allow_other) {
+    newargv[newargc++] = "-o";
+    newargv[newargc++] = "allow_other";
+  }
+  if (g_conf->fuse_default_permissions) {
+    newargv[newargc++] = "-o";
+    newargv[newargc++] = "default_permissions";
+  }
   if (g_conf->fuse_big_writes) {
     newargv[newargc++] = "-o";
     newargv[newargc++] = "big_writes";
   }
-
-  newargv[newargc++] = "-o";
-  newargv[newargc++] = "atomic_o_trunc";
+  if (g_conf->fuse_atomic_o_trunc) {
+    newargv[newargc++] = "-o";
+    newargv[newargc++] = "atomic_o_trunc";
+  }
 
   if (g_conf->fuse_debug)
     newargv[newargc++] = "-d";
