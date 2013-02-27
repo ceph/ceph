@@ -347,6 +347,7 @@ Package: python-ceph
 Architecture: linux-any
 Section: python
 Depends: ${misc:Depends}, ${python:Depends}, librados2, librbd1
+X-Python-Version: >= 2.6
 Description: Python libraries for the Ceph distributed filesystem
  Ceph is a distributed storage and network file system designed to provide
  excellent performance, reliability, and scalability.
