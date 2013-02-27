@@ -1671,7 +1671,7 @@ WRITE_CLASS_ENCODER(interval_set<uint64_t>)
 struct SnapSet {
   snapid_t seq;
   bool head_exists;
-  vector<snapid_t> snaps;    // ascending
+  vector<snapid_t> snaps;    // descending
   vector<snapid_t> clones;   // ascending
   map<snapid_t, interval_set<uint64_t> > clone_overlap;  // overlap w/ next newest
   map<snapid_t, uint64_t> clone_size;
