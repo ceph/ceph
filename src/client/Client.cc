@@ -4300,6 +4300,7 @@ int Client::setattr(const char *relpath, struct stat *attr, int mask)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "setattr" << std::endl;
+  tout(cct) << relpath << std::endl;
   tout(cct) << mask  << std::endl;
 
   filepath path(relpath);
@@ -4308,6 +4309,19 @@ int Client::setattr(const char *relpath, struct stat *attr, int mask)
   if (r < 0)
     return r;
   return _setattr(in, attr, mask); 
+}
+
+int Client::fsetattr(int fd, struct stat *attr, int mask)
+{
+  Mutex::Locker lock(client_lock);
+  tout(cct) << "fsetattr" << std::endl;
+  tout(cct) << fd << std::endl;
+  tout(cct) << mask  << std::endl;
+
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
+  return _setattr(f->inode, attr, mask); 
 }
 
 int Client::stat(const char *relpath, struct stat *stbuf,
@@ -4432,7 +4446,24 @@ int Client::fchmod(int fd, mode_t mode)
   return _setattr(f->inode, &attr, CEPH_SETATTR_MODE);
 }
 
-int Client::chown(const char *relpath, uid_t uid, gid_t gid)
+int Client::lchmod(const char *relpath, mode_t mode)
+{
+  Mutex::Locker lock(client_lock);
+  tout(cct) << "lchmod" << std::endl;
+  tout(cct) << relpath << std::endl;
+  tout(cct) << mode << std::endl;
+  filepath path(relpath);
+  Inode *in;
+  // don't follow symlinks
+  int r = path_walk(path, &in, false);
+  if (r < 0)
+    return r;
+  struct stat attr;
+  attr.st_mode = mode;
+  return _setattr(in, &attr, CEPH_SETATTR_MODE);
+}
+
+int Client::chown(const char *relpath, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "chown" << std::endl;
@@ -4447,28 +4478,35 @@ int Client::chown(const char *relpath, uid_t uid, gid_t gid)
   struct stat attr;
   attr.st_uid = uid;
   attr.st_gid = gid;
-  return _setattr(in, &attr, CEPH_SETATTR_UID|CEPH_SETATTR_GID);
+  int mask = 0;
+  if (uid != -1) mask |= CEPH_SETATTR_UID;
+  if (gid != -1) mask |= CEPH_SETATTR_GID;
+  return _setattr(in, &attr, mask);
 }
 
-int Client::fchown(int fd, uid_t uid, gid_t gid)
+int Client::fchown(int fd, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "fchown" << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << uid << std::endl;
   tout(cct) << gid << std::endl;
-  assert(fd_map.count(fd));
-  Fh *f = fd_map[fd];
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
   struct stat attr;
   attr.st_uid = uid;
   attr.st_gid = gid;
-  return _setattr(f->inode, &attr, CEPH_SETATTR_UID|CEPH_SETATTR_GID);
+  int mask = 0;
+  if (uid != -1) mask |= CEPH_SETATTR_UID;
+  if (gid != -1) mask |= CEPH_SETATTR_GID;
+  return _setattr(f->inode, &attr, mask);
 }
 
-int Client::lchown(const char *relpath, uid_t uid, gid_t gid)
+int Client::lchown(const char *relpath, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "chown" << std::endl;
+  tout(cct) << "lchown" << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << uid << std::endl;
   tout(cct) << gid << std::endl;
@@ -4481,7 +4519,10 @@ int Client::lchown(const char *relpath, uid_t uid, gid_t gid)
   struct stat attr;
   attr.st_uid = uid;
   attr.st_gid = gid;
-  return _setattr(in, &attr, CEPH_SETATTR_UID|CEPH_SETATTR_GID);
+  int mask = 0;
+  if (uid != -1) mask |= CEPH_SETATTR_UID;
+  if (gid != -1) mask |= CEPH_SETATTR_GID;
+  return _setattr(in, &attr, mask);
 }
 
 int Client::utime(const char *relpath, struct utimbuf *buf)
@@ -4504,6 +4545,26 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
   return _setattr(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME);
 }
 
+int Client::lutime(const char *relpath, struct utimbuf *buf)
+{
+  Mutex::Locker lock(client_lock);
+  tout(cct) << "lutime" << std::endl;
+  tout(cct) << relpath << std::endl;
+  tout(cct) << buf->modtime << std::endl;
+  tout(cct) << buf->actime << std::endl;
+  filepath path(relpath);
+  Inode *in;
+  // don't follow symlinks
+  int r = path_walk(path, &in, false);
+  if (r < 0)
+    return r;
+  struct stat attr;
+  attr.st_mtim.tv_sec = buf->modtime;
+  attr.st_mtim.tv_nsec = 0;
+  attr.st_atim.tv_sec = buf->actime;
+  attr.st_atim.tv_nsec = 0;
+  return _setattr(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME);
+}
 
 int Client::opendir(const char *relpath, dir_result_t **dirpp) 
 {
