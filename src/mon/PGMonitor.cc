@@ -1310,7 +1310,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
       for (hash_map<pg_t,pg_stat_t>::const_iterator p = pg_map.pg_stat.begin();
 	   p != pg_map.pg_stat.end();
 	   ++p) {
-	if (p->second.state & (PG_STATE_STALE |
+	if ((p->second.state & (PG_STATE_STALE |
 			       PG_STATE_DOWN |
 			       PG_STATE_DEGRADED |
 			       PG_STATE_INCONSISTENT |
@@ -1322,7 +1322,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 			       PG_STATE_INCOMPLETE |
 			       PG_STATE_BACKFILL_WAIT |
 			       PG_STATE_BACKFILL |
-			       PG_STATE_BACKFILL_TOOFULL) &&
+			       PG_STATE_BACKFILL_TOOFULL)) &&
 	    stuck_pgs.count(p->first) == 0) {
 	  ostringstream ss;
 	  ss << "pg " << p->first << " is " << pg_state_string(p->second.state);
