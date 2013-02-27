@@ -37,7 +37,7 @@ void cls_version_inc(librados::ObjectWriteOperation& op, obj_version& objv, Vers
   call.conds.push_back(c);
 
   ::encode(call, in);
-  op.exec("version", "inc_cond", in);
+  op.exec("version", "inc_conds", in);
 }
 
 void cls_version_check(librados::ObjectOperation& op, obj_version& objv, VersionCond cond)
