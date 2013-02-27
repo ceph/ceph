@@ -81,7 +81,15 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
                 'wget', '-q', '-O-', base_url + '/version',
                 ],
             stdout=StringIO(),
+            check_status=False,
             )
+        if r.exitstatus != 0:
+            if config.get('wait_for_package'):
+                log.info('Package not there yet, waiting...')
+                time.sleep(15)
+                continue
+            raise Exception('failed to fetch package version from %s' %
+                            base_url + '/version')
         version = r.stdout.getvalue().strip()
         log.info('Package version is %s', version)
         break
