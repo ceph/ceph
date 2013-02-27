@@ -100,12 +100,9 @@ int CrushCompiler::decompile_bucket_impl(int i, ostream &out)
     print_item_name(out, item, crush);
     out << " weight ";
     print_fixedpoint(out, w);
-    if (dopos) {
-      if (alg == CRUSH_BUCKET_TREE)
-	out << " pos " << j;
-      else
-	out << " pos " << j;
-    }
+    if (dopos) 
+      out << " pos " << j;
+    
     out << "\n";
   }
   out << "}\n";

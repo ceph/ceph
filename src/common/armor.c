@@ -57,14 +57,16 @@ int ceph_armor(char *dst, const char *dst_end, const char *src, const char *end)
 } while (0);
 
 	while (src < end) {
-		unsigned char a, b, c;
+		unsigned char a;
 
 		a = *src++;
 		SET_DST(encode_bits(a >> 2));
 		if (src < end) {
+			unsigned char b;
 			b = *src++;
 			SET_DST(encode_bits(((a & 3) << 4) | (b >> 4)));
 			if (src < end) {
+				unsigned char c;
 				c = *src++;
 				SET_DST(encode_bits(((b & 15) << 2) |
 								(c >> 6)));
