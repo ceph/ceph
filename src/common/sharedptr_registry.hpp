@@ -26,10 +26,12 @@
  */
 template <class K, class V>
 class SharedPtrRegistry {
-  Mutex lock;
-  Cond cond;
+public:
   typedef std::tr1::shared_ptr<V> VPtr;
   typedef std::tr1::weak_ptr<V> WeakVPtr;
+private:
+  Mutex lock;
+  Cond cond;
   map<K, WeakVPtr> contents;
 
   class OnRemoval {
@@ -51,6 +53,20 @@ class SharedPtrRegistry {
 
 public:
   SharedPtrRegistry() : lock("SharedPtrRegistry::lock") {}
+
+  bool get_next(const K &key, pair<K, V> *next) {
+    VPtr next_val;
+    Mutex::Locker l(lock);
+    typename map<K, WeakVPtr>::iterator i = contents.upper_bound(key);
+    while (i != contents.end() &&
+	   !(next_val = i->second.lock()))
+      ++i;
+    if (i == contents.end())
+      return false;
+    if (next)
+      *next = make_pair(i->first, *next_val);
+    return true;
+  }
 
   VPtr lookup(const K &key) {
     Mutex::Locker l(lock);
