@@ -45,6 +45,7 @@ To optimize the performance of your cluster, refer to the following:
 
 	General Settings <general-config-ref>
 	Monitor Settings <mon-config-ref>
+	Auth Settings <auth-config-ref>
 	OSD Settings <osd-config-ref>
 	Filestore Settings <filestore-config-ref>
 	Journal Settings <journal-ref>
