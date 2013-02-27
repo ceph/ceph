@@ -327,7 +327,7 @@ class CephManager:
             else:
                 tries += 1
                 if tries > 15:
-                    raise 'timed out waiting for admin_socket to appear after osd.{o} restart'.format(o=osdnum)
+                    raise Exception('timed out waiting for admin_socket to appear after osd.{o} restart'.format(o=osdnum))
                 self.log(
                     "waiting on admin_socket for {osdnum}, {command}".format(
                         osdnum=osdnum,
@@ -681,7 +681,7 @@ class CephManager:
             self.log('kill_osd on osd.{o} doing powercycle of {s}'.format(o=osd, s=remote.name))
             remote.console.power_on()
             if not remote.console.check_status(300):
-                raise 'Failed to revive osd.{o} via ipmi'.format(o=osd)
+                raise Exception('Failed to revive osd.{o} via ipmi'.format(o=osd))
             teuthology.reconnect(self.ctx, 60)
             ceph_task.mount_osd_data(self.ctx, remote, osd)
             self.ctx.daemons.get_daemon('osd', osd).reset()

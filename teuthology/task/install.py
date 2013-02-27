@@ -179,6 +179,12 @@ def install(ctx, config):
         'libcephfs1',
         'libcephfs1-dbg',
         ]
+
+    # pull any additional packages out of config
+    extra_debs = config.get('extra_packages')
+    log.info('extra packages: {packages}'.format(packages=extra_debs))
+    debs = debs + extra_debs
+
     # install lib deps (so we explicitly specify version), but do not
     # uninstall them, as other packages depend on them (e.g., kvm)
     debs_install = debs + [
@@ -239,6 +245,7 @@ def task(ctx, config):
                 tag=config.get('tag'),
                 sha1=config.get('sha1'),
                 flavor=flavor,
+                extra_packages=config.get('extra_packages'),
                 )),
         ):
         yield
