@@ -276,7 +276,7 @@ in the daemon instance sections of your ``ceph.conf`` file.
 Authentication
 ==============
 
-.. versionadded:: 0.55
+.. versionadded:: Bobtail 0.56
 
 For Bobtail (v 0.56) and beyond, you should expressly enable or disable authentication
 in the ``[global]`` section of your Ceph configuration file. :: 
@@ -285,12 +285,15 @@ in the ``[global]`` section of your Ceph configuration file. ::
 		auth service required = cephx
 		auth client required = cephx
 
-See `Cephx Authentication`_ for additional details.
+Additionally, you should enable message signing. See `Cephx Config Reference`_
+and  `Cephx Authentication`_ for details. 
 
 .. important:: When upgrading, we recommend expressly disabling authentication first, 
    then perform the upgrade. Once the upgrade is complete, re-enable authentication.
 
 .. _Cephx Authentication: ../../operations/authentication
+.. _Cephx Config Reference: ../auth-config-ref
+
 
 .. _ceph-monitor-config:
 
