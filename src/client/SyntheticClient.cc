@@ -292,7 +292,7 @@ SyntheticClient::SyntheticClient(Client *client, int w)
 
 void *synthetic_client_thread_entry(void *ptr)
 {
-  SyntheticClient *sc = (SyntheticClient*)ptr;
+  SyntheticClient *sc = static_cast<SyntheticClient*>(ptr);
   //int r = 
   sc->run();
   return 0;//(void*)r;
