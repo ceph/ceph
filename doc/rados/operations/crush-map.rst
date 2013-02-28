@@ -593,7 +593,7 @@ below::
 		min_size 2
 		max_size 2
 		step take platter
-		step chooseleaf 0 type host
+		step chooseleaf firstn 0 type host
 		step emit
 	}
 
@@ -603,7 +603,7 @@ below::
 		min_size 0
 		max_size 10
 		step take platter
-		step chooseleaf 0 type host
+		step chooseleaf firstn 0 type host
 		step emit
 	}
 
@@ -613,7 +613,7 @@ below::
 		min_size 0
 		max_size 10
 		step take platter
-		step chooseleaf 0 type host
+		step chooseleaf firstn 0 type host
 		step emit
 	}
 
@@ -623,7 +623,7 @@ below::
 		min_size 0
 		max_size 10
 		step take platter
-		step chooseleaf 0 type host
+		step chooseleaf firstn 0 type host
 		step emit
 	}
 
@@ -633,7 +633,7 @@ below::
 		min_size 0
 		max_size 10
 		step take ssd
-		step chooseleaf 0 type host
+		step chooseleaf firstn 0 type host
 		step emit
 	}
 
@@ -643,10 +643,10 @@ below::
 		min_size 0
 		max_size 10
 		step take ssd
-		step chooseleaf 1 type host
+		step chooseleaf firstn 1 type host
 		step emit
 		step take platter
-		step chooseleaf -1 type host
+		step chooseleaf firstn -1 type host
 		step emit
 	}
 
