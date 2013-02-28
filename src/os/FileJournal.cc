@@ -1586,6 +1586,8 @@ void FileJournal::wrap_read_bl(off64_t& pos, int64_t olen, bufferlist& bl)
     pos += len;
     olen -= len;
   }
+  if (pos >= header.max_size)
+    pos = pos + get_top() - header.max_size;
 }
 
 bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
