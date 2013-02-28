@@ -2529,8 +2529,6 @@ reprotect_and_return_err:
     vector<ObjectExtent> extents;
     Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, off, mylen, extents);
 
-    size_t total_write = 0;
-
     c->get();
     c->init_time(ictx, AIO_TYPE_WRITE);
     for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
@@ -2565,7 +2563,6 @@ reprotect_and_return_err:
 	if (r < 0)
 	  goto done;
       }
-      total_write += bl.length();
     }
   done:
     c->finish_adding_requests(ictx->cct);
