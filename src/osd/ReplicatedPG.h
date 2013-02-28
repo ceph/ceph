@@ -433,6 +433,9 @@ protected:
   map<hobject_t, ObjectContext*> object_contexts;
   map<object_t, SnapSetContext*> snapset_contexts;
 
+  // debug order that client ops are applied
+  map<hobject_t, map<client_t, tid_t> > debug_op_order;
+
   void populate_obc_watchers(ObjectContext *obc);
 public:
   void handle_watch_timeout(WatchRef watch);
