@@ -68,9 +68,14 @@ int crush_add_rule(struct crush_map *map, struct crush_rule *rule, int ruleno)
 	if (r >= map->max_rules) {
 		/* expand array */
 		int oldsize;
+		void *_realloc = NULL;
 		oldsize = map->max_rules;
 		map->max_rules = r+1;
-		map->rules = realloc(map->rules, map->max_rules * sizeof(map->rules[0]));
+		if ((_realloc = realloc(map->rules, map->max_rules * sizeof(map->rules[0]))) == NULL) {
+			return -ENOMEM; 
+		} else {
+			map->rules = _realloc;
+		} 
 		memset(map->rules + oldsize, 0, (map->max_rules-oldsize) * sizeof(map->rules[0]));
 	}
 
@@ -135,7 +140,12 @@ int crush_add_bucket(struct crush_map *map,
 			map->max_buckets *= 2;
 		else
 			map->max_buckets = 8;
-		map->buckets = realloc(map->buckets, map->max_buckets * sizeof(map->buckets[0]));
+		void *_realloc = NULL;
+		if ((_realloc = realloc(map->buckets, map->max_buckets * sizeof(map->buckets[0]))) == NULL) {
+			return -ENOMEM; 
+		} else {
+			map->buckets = _realloc;
+		}
 		memset(map->buckets + oldsize, 0, (map->max_buckets-oldsize) * sizeof(map->buckets[0]));
 	}
 
@@ -534,9 +544,18 @@ crush_make_bucket(int alg, int hash, int type, int size,
 int crush_add_uniform_bucket_item(struct crush_bucket_uniform *bucket, int item, int weight)
 {
         int newsize = bucket->h.size + 1;
-
-	bucket->h.items = realloc(bucket->h.items, sizeof(__s32)*newsize);
-	bucket->h.perm = realloc(bucket->h.perm, sizeof(__u32)*newsize);
+	void *_realloc = NULL;
+	
+	if ((_realloc = realloc(bucket->h.items, sizeof(__s32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->h.items = _realloc;
+	}
+	if ((_realloc = realloc(bucket->h.perm, sizeof(__u32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->h.perm = _realloc;
+	}
 
 	bucket->h.items[newsize-1] = item;
 
@@ -552,12 +571,29 @@ int crush_add_uniform_bucket_item(struct crush_bucket_uniform *bucket, int item,
 int crush_add_list_bucket_item(struct crush_bucket_list *bucket, int item, int weight)
 {
         int newsize = bucket->h.size + 1;
+	void *_realloc = NULL;
 
-	bucket->h.items = realloc(bucket->h.items, sizeof(__s32)*newsize);
-	bucket->h.perm = realloc(bucket->h.perm, sizeof(__u32)*newsize);
-	bucket->item_weights = realloc(bucket->item_weights, sizeof(__u32)*newsize);
-	bucket->sum_weights = realloc(bucket->sum_weights, sizeof(__u32)*newsize);
-
+	if ((_realloc = realloc(bucket->h.items, sizeof(__s32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->h.items = _realloc;
+	}
+	if ((_realloc = realloc(bucket->h.perm, sizeof(__u32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->h.perm = _realloc;
+	}
+	if ((_realloc = realloc(bucket->item_weights, sizeof(__u32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->item_weights = _realloc;
+	}
+	if ((_realloc = realloc(bucket->sum_weights, sizeof(__u32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->sum_weights = _realloc;
+	}
+	
 	bucket->h.items[newsize-1] = item;
 	bucket->item_weights[newsize-1] = weight;
 	if (newsize > 1) {
@@ -583,11 +619,25 @@ int crush_add_tree_bucket_item(struct crush_bucket_tree *bucket, int item, int w
 	int depth = calc_depth(newsize);;
 	int node;
 	int j;
+	void *_realloc = NULL;
 
 	bucket->num_nodes = 1 << depth;
-	bucket->h.items = realloc(bucket->h.items, sizeof(__s32)*newsize);
-	bucket->h.perm = realloc(bucket->h.perm, sizeof(__u32)*newsize);
-	bucket->node_weights = realloc(bucket->node_weights, sizeof(__u32)*bucket->num_nodes);
+
+	if ((_realloc = realloc(bucket->h.items, sizeof(__s32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->h.items = _realloc;
+	}
+	if ((_realloc = realloc(bucket->h.perm, sizeof(__u32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->h.perm = _realloc;
+	}
+	if ((_realloc = realloc(bucket->node_weights, sizeof(__u32)*bucket->num_nodes)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->node_weights = _realloc;
+	}
 	
 	node = crush_calc_tree_node(newsize-1);
 	bucket->node_weights[node] = weight;
@@ -616,10 +666,28 @@ int crush_add_straw_bucket_item(struct crush_bucket_straw *bucket, int item, int
 {
 	int newsize = bucket->h.size + 1;
 	
-	bucket->h.items = realloc(bucket->h.items, sizeof(__s32)*newsize);
-	bucket->h.perm = realloc(bucket->h.perm, sizeof(__u32)*newsize);
-	bucket->item_weights = realloc(bucket->item_weights, sizeof(__u32)*newsize);
-	bucket->straws = realloc(bucket->straws, sizeof(__u32)*newsize);
+	void *_realloc = NULL;
+
+	if ((_realloc = realloc(bucket->h.items, sizeof(__s32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->h.items = _realloc;
+	}
+	if ((_realloc = realloc(bucket->h.perm, sizeof(__u32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->h.perm = _realloc;
+	}
+	if ((_realloc = realloc(bucket->item_weights, sizeof(__u32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->item_weights = _realloc;
+	}
+	if ((_realloc = realloc(bucket->straws, sizeof(__u32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->straws = _realloc;
+	}
 
 	bucket->h.items[newsize-1] = item;
 	bucket->item_weights[newsize-1] = weight;
@@ -659,6 +727,7 @@ int crush_remove_uniform_bucket_item(struct crush_bucket_uniform *bucket, int it
 {
 	unsigned i, j;
 	int newsize;
+	void *_realloc = NULL;
 	
 	for (i = 0; i < bucket->h.size; i++)
 		if (bucket->h.items[i] == item)
@@ -671,8 +740,16 @@ int crush_remove_uniform_bucket_item(struct crush_bucket_uniform *bucket, int it
 	newsize = --bucket->h.size;
 	bucket->h.weight -= bucket->item_weight;
 
-	bucket->h.items = realloc(bucket->h.items, sizeof(__s32)*newsize);
-	bucket->h.perm = realloc(bucket->h.perm, sizeof(__u32)*newsize);
+	if ((_realloc = realloc(bucket->h.items, sizeof(__s32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->h.items = _realloc;
+	}
+	if ((_realloc = realloc(bucket->h.perm, sizeof(__u32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->h.perm = _realloc;
+	}
 	return 0;
 }
 
@@ -697,10 +774,28 @@ int crush_remove_list_bucket_item(struct crush_bucket_list *bucket, int item)
 	bucket->h.weight -= weight;
 	newsize = --bucket->h.size;
 	
-	bucket->h.items = realloc(bucket->h.items, sizeof(__s32)*newsize);
-	bucket->h.perm = realloc(bucket->h.perm, sizeof(__u32)*newsize);
-	bucket->item_weights = realloc(bucket->item_weights, sizeof(__u32)*newsize);
-	bucket->sum_weights = realloc(bucket->sum_weights, sizeof(__u32)*newsize);
+	void *_realloc = NULL;
+
+	if ((_realloc = realloc(bucket->h.items, sizeof(__s32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->h.items = _realloc;
+	}
+	if ((_realloc = realloc(bucket->h.perm, sizeof(__u32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->h.perm = _realloc;
+	}
+	if ((_realloc = realloc(bucket->item_weights, sizeof(__u32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->item_weights = _realloc;
+	}
+	if ((_realloc = realloc(bucket->sum_weights, sizeof(__u32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->sum_weights = _realloc;
+	}
 	return 0;
 }
 
@@ -744,15 +839,29 @@ int crush_remove_tree_bucket_item(struct crush_bucket_tree *bucket, int item)
 	if (newsize != bucket->h.size) {
 		int olddepth, newdepth;
 
-		bucket->h.items = realloc(bucket->h.items, sizeof(__s32)*newsize);
-		bucket->h.perm = realloc(bucket->h.perm, sizeof(__u32)*newsize);
+		void *_realloc = NULL;
+
+		if ((_realloc = realloc(bucket->h.items, sizeof(__s32)*newsize)) == NULL) {
+			return -ENOMEM;
+		} else {
+			bucket->h.items = _realloc;
+		}
+		if ((_realloc = realloc(bucket->h.perm, sizeof(__u32)*newsize)) == NULL) {
+			return -ENOMEM;
+		} else {
+			bucket->h.perm = _realloc;
+		}
 
 		olddepth = calc_depth(bucket->h.size);
 		newdepth = calc_depth(newsize);
 		if (olddepth != newdepth) {
 			bucket->num_nodes = 1 << newdepth;
-			bucket->node_weights = realloc(bucket->node_weights,
-						       sizeof(__u32)*bucket->num_nodes);
+			if ((_realloc = realloc(bucket->node_weights, 
+						sizeof(__u32)*bucket->num_nodes)) == NULL) {
+				return -ENOMEM;
+			} else {
+				bucket->node_weights = _realloc;
+			}
 		}
 
 		bucket->h.size = newsize;
@@ -779,10 +888,28 @@ int crush_remove_straw_bucket_item(struct crush_bucket_straw *bucket, int item)
 	if (i == bucket->h.size)
 		return -ENOENT;
 	
-	bucket->h.items = realloc(bucket->h.items, sizeof(__s32)*newsize);
-	bucket->h.perm = realloc(bucket->h.perm, sizeof(__u32)*newsize);
-	bucket->item_weights = realloc(bucket->item_weights, sizeof(__u32)*newsize);
-	bucket->straws = realloc(bucket->straws, sizeof(__u32)*newsize);
+	void *_realloc = NULL;
+
+	if ((_realloc = realloc(bucket->h.items, sizeof(__s32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->h.items = _realloc;
+	}
+	if ((_realloc = realloc(bucket->h.perm, sizeof(__u32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->h.perm = _realloc;
+	}
+	if ((_realloc = realloc(bucket->item_weights, sizeof(__u32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->item_weights = _realloc;
+	}
+	if ((_realloc = realloc(bucket->straws, sizeof(__u32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->straws = _realloc;
+	}
 
 	return crush_calc_straw(bucket);
 }
