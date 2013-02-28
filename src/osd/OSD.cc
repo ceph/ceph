@@ -5875,6 +5875,7 @@ void OSD::handle_op(OpRequestRef op)
   MOSDOp *m = (MOSDOp*)op->request;
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
   if (op_is_discardable(m)) {
+    dout(10) << " discardable " << *m << dendl;
     return;
   }
 
