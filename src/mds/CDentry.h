@@ -98,7 +98,7 @@ public:
   static const int EXPORT_NONCE = 1;
 
   bool is_lt(const MDSCacheObject *r) const {
-    return *this < *(CDentry*)r;
+    return *this < *static_cast<const CDentry*>(r);
   }
 
 public:
