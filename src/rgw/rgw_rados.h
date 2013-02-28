@@ -6,6 +6,7 @@
 #include "common/RefCountedObj.h"
 #include "rgw_common.h"
 #include "cls/rgw/cls_rgw_types.h"
+#include "cls/version/cls_version_types.h"
 #include "rgw_log.h"
 
 class RGWWatcher;
@@ -625,24 +626,63 @@ public:
   virtual int list_placement_set(set<string>& names);
   virtual int create_pools(vector<string>& names, vector<int>& retcodes);
 
+  struct PutObjMetaExtraParams {
+    time_t *mtime;
+    map<std::string, bufferlist>* rmattrs;
+    const bufferlist *data;
+    RGWObjManifest *manifest;
+    const string *ptag;
+    list<string> *remove_objs;
+    bool modify_version;
+    obj_version *objv;
+
+    PutObjMetaExtraParams() : mtime(NULL), rmattrs(NULL),
+                     data(NULL), manifest(NULL), ptag(NULL),
+                     remove_objs(NULL), modify_version(false), objv(NULL) {}
+  };
+
   /** Write/overwrite an object to the bucket storage. */
-  virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
+  virtual int put_obj_meta_impl(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
               map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
               map<std::string, bufferlist>* rmattrs, const bufferlist *data,
-              RGWObjManifest *manifest, const string *ptag, list<string> *remove_objs);
+              RGWObjManifest *manifest, const string *ptag, list<string> *remove_objs,
+              bool modify_version, obj_version *objv);
+
+  virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size,
+              map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
+              const bufferlist *data = NULL) {
+    return put_obj_meta_impl(ctx, obj, size, NULL, attrs, category, flags,
+                        NULL, data, NULL, NULL, NULL,
+                        false, NULL);
+  }
+
+  virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size,  map<std::string, bufferlist>& attrs,
+                           RGWObjCategory category, int flags, PutObjMetaExtraParams& params) {
+    return put_obj_meta_impl(ctx, obj, size, params.mtime, attrs, category, flags,
+                        params.rmattrs, params.data, params.manifest, params.ptag, params.remove_objs,
+                        params.modify_version, params.objv);
+  }
+
   virtual int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len, bool exclusive);
   virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
                                off_t ofs, bool exclusive, void **handle);
   /* note that put_obj doesn't set category on an object, only use it for none user objects */
-  int put_obj(void *ctx, rgw_obj& obj, const char *data, size_t len, bool exclusive,
-              time_t *mtime, map<std::string, bufferlist>& attrs) {
+  int put_system_obj(void *ctx, rgw_obj& obj, const char *data, size_t len, bool exclusive,
+              time_t *mtime, map<std::string, bufferlist>& attrs, obj_version *objv) {
     bufferlist bl;
     bl.append(data, len);
     int flags = PUT_OBJ_CREATE;
     if (exclusive)
       flags |= PUT_OBJ_EXCL;
-    int ret = put_obj_meta(ctx, obj, len, mtime, attrs, RGW_OBJ_CATEGORY_NONE, flags, NULL, &bl, NULL, NULL, NULL);
+
+    PutObjMetaExtraParams ep;
+    ep.mtime = mtime;
+    ep.data = &bl;
+    ep.modify_version = true;
+    ep.objv = objv;
+
+    int ret = put_obj_meta(ctx, obj, len, attrs, RGW_OBJ_CATEGORY_NONE, flags, ep);
     return ret;
   }
   virtual int aio_wait(void *handle);
@@ -813,7 +853,8 @@ public:
   virtual int read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl);
 
   virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
-                       uint64_t *epoch, map<string, bufferlist> *attrs, bufferlist *first_chunk);
+                       uint64_t *epoch, map<string, bufferlist> *attrs, bufferlist *first_chunk,
+                       obj_version *objv);
 
   virtual bool supports_omap() { return true; }
   int omap_get_vals(rgw_obj& obj, bufferlist& header, const std::string& marker, uint64_t count, std::map<string, bufferlist>& m);

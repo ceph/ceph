@@ -15,6 +15,7 @@
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/refcount/cls_refcount_client.h"
+#include "cls/version/cls_version_client.h"
 
 #include "rgw_tools.h"
 
@@ -1396,14 +1397,16 @@ int RGWRados::create_pools(vector<string>& names, vector<int>& retcodes)
  * exclusive: create object exclusively
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
+int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
                   time_t *mtime, map<string, bufferlist>& attrs,
                   RGWObjCategory category, int flags,
                   map<string, bufferlist>* rmattrs,
                   const bufferlist *data,
                   RGWObjManifest *manifest,
 		  const string *ptag,
-                  list<string> *remove_objs)
+                  list<string> *remove_objs,
+                  bool modify_version,
+                  obj_version *objv)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -1430,6 +1433,14 @@ int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
     r = prepare_atomic_for_write(rctx, obj, op, &state, reset_obj, ptag);
     if (r < 0)
       return r;
+  }
+
+  if (modify_version) {
+    if (objv) {
+      cls_version_set(op, *objv);
+    } else {
+      cls_version_inc(op);
+    }
   }
 
   if (data) {
@@ -1688,6 +1699,7 @@ int RGWRados::copy_obj(void *ctx,
   rgw_bucket bucket;
   get_obj_bucket_and_oid_key(first_part->loc, bucket, oid, key);
   librados::IoCtx io_ctx;
+  PutObjMetaExtraParams ep;
 
   ret = open_bucket_ctx(bucket, io_ctx);
   if (ret < 0)
@@ -1740,10 +1752,14 @@ int RGWRados::copy_obj(void *ctx,
     first_part->size = first_chunk.length();
   }
 
-  ret = put_obj_meta(ctx, dest_obj, end + 1, NULL, attrset, category, PUT_OBJ_CREATE, NULL, &first_chunk, pmanifest, &tag, NULL);
+  ep.data = &first_chunk;
+  ep.manifest = pmanifest;
+  ep.ptag = &tag;
+
+  ret = put_obj_meta(ctx, dest_obj, end + 1, attrset, category, PUT_OBJ_CREATE, ep);
 
   if (mtime)
-    obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL, NULL);
+    obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL, NULL, NULL);
 
   return 0;
 
@@ -1790,6 +1806,7 @@ int RGWRados::copy_obj_data(void *ctx,
 
   int ret, r;
   off_t ofs = 0;
+  PutObjMetaExtraParams ep;
 
   do {
     bufferlist bl;
@@ -1832,9 +1849,12 @@ int RGWRados::copy_obj_data(void *ctx,
   }
   manifest.obj_size = ofs;
 
-  ret = put_obj_meta(ctx, dest_obj, end + 1, NULL, attrs, category, PUT_OBJ_CREATE, NULL, &first_chunk, &manifest, NULL, NULL);
+  ep.data = &first_chunk;
+  ep.manifest = &manifest;
+
+  ret = put_obj_meta(ctx, dest_obj, end + 1, attrs, category, PUT_OBJ_CREATE, ep);
   if (mtime)
-    obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL, NULL);
+    obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL, NULL, NULL);
 
   finish_get_obj(&handle);
 
@@ -2223,7 +2243,14 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state
   if (s->has_attrs)
     return 0;
 
-  int r = obj_stat(rctx, obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL));
+  obj_version *objv = NULL;
+
+  if (bucket_is_system(obj.bucket)) {
+//    objv = &s->objv;
+#warning FIXME
+  }
+
+  int r = obj_stat(rctx, obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), objv);
   if (r == -ENOENT) {
     s->exists = false;
     s->has_attrs = true;
@@ -3531,7 +3558,8 @@ int RGWRados::read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& 
   return r;
 }
 
-int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch, map<string, bufferlist> *attrs, bufferlist *first_chunk)
+int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch, map<string, bufferlist> *attrs, bufferlist *first_chunk,
+                       obj_version *objv)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -3548,6 +3576,9 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
   time_t mtime = 0;
 
   ObjectReadOperation op;
+  if (objv) {
+#warning FIXME
+  }
   op.getxattrs(&attrset, NULL);
   op.stat(&size, &mtime, NULL);
   if (first_chunk) {
