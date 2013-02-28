@@ -1903,7 +1903,6 @@ int old_snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   struct rbd_obj_header_ondisk *header;
   bufferlist newbl;
   bufferptr header_bp(sizeof(*header));
-  struct rbd_obj_snap_ondisk *new_snaps;
 
   int rc = snap_read_header(hctx, bl);
   if (rc < 0)
@@ -1912,7 +1911,7 @@ int old_snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   header = (struct rbd_obj_header_ondisk *)bl.c_str();
 
   int snaps_id_ofs = sizeof(*header);
-  int names_ofs = snaps_id_ofs + sizeof(*new_snaps) * header->snap_count;
+  int names_ofs = snaps_id_ofs + sizeof(struct rbd_obj_snap_ondisk) * header->snap_count;
   const char *snap_name;
   const char *snap_names = ((char *)header) + names_ofs;
   const char *orig_names = snap_names;
@@ -1979,7 +1978,6 @@ int old_snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *o
     return rc;
 
   return 0;
-
 }
 
 
