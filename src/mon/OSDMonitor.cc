@@ -1361,13 +1361,16 @@ MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to)
 
   for (epoch_t e = to; e >= from && e > 0; e--) {
     bufferlist bl;
-    get_version(e, bl);
-    if (bl.length() > 0) {
+    int err = get_version(e, bl);
+    if (err == 0) {
+      assert(bl.length());
       // if (get_version(e, bl) > 0) {
       dout(20) << "build_incremental    inc " << e << " "
 	       << bl.length() << " bytes" << dendl;
       m->incremental_maps[e] = bl;
     } else {
+      assert(err == -ENOENT);
+      assert(!bl.length());
       get_version("full", e, bl);
       if (bl.length() > 0) {
       //else if (get_version("full", e, bl) > 0) {
@@ -1402,7 +1405,8 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
   if (first < get_first_committed()) {
     first = get_first_committed();
     bufferlist bl;
-    get_version("full", first, bl);
+    int err = get_version("full", first, bl);
+    assert(err == 0);
     assert(bl.length());
 
     dout(20) << "send_incremental starting with base full "
@@ -1433,9 +1437,10 @@ void OSDMonitor::send_incremental(epoch_t first, entity_inst_t& dest, bool oneti
   if (first < get_first_committed()) {
     first = get_first_committed();
     bufferlist bl;
-    get_version("full", first, bl);
+    int err = get_version("full", first, bl);
+    assert(err == 0);
     assert(bl.length());
-    
+
     dout(20) << "send_incremental starting with base full "
 	     << first << " " << bl.length() << " bytes" << dendl;
 
@@ -1804,11 +1809,13 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       OSDMap *p = &osdmap;
       if (epoch) {
 	bufferlist b;
-	get_version("full", epoch, b);
-	if (!b.length()) {
+	int err = get_version("full", epoch, b);
+	if (err == -ENOENT) {
 	  p = 0;
 	  r = -ENOENT;
 	} else {
+          assert(err == 0);
+          assert(b.length());
 	  p = new OSDMap;
 	  p->decode(b);
 	}

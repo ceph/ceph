@@ -148,6 +148,7 @@ void AuthMonitor::update_from_paxos()
     bufferlist bl;
     int ret = get_version(keys_ver+1, bl);
     assert(ret == 0);
+    assert(bl.length());
 
     // reset if we are moving to initial state.  we will normally have
     // keys in here temporarily for bootstrapping that we need to

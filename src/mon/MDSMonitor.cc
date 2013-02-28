@@ -95,7 +95,9 @@ void MDSMonitor::update_from_paxos()
 
   // read and decode
   mdsmap_bl.clear();
-  get_version(version, mdsmap_bl);
+  int err = get_version(version, mdsmap_bl);
+  assert(err == 0);
+
   assert(mdsmap_bl.length() > 0);
   dout(10) << __func__ << " got " << version << dendl;
   mdsmap.decode(mdsmap_bl);
@@ -565,11 +567,13 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       MDSMap *p = &mdsmap;
       if (epoch) {
 	bufferlist b;
-	get_version(epoch, b);
-	if (!b.length()) {
+	int err = get_version(epoch, b);
+	if (err == -ENOENT) {
 	  p = 0;
 	  r = -ENOENT;
 	} else {
+          assert(err == 0);
+          assert(b.length());
 	  p = new MDSMap;
 	  p->decode(b);
 	}
@@ -607,10 +611,12 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	}
 	epoch_t e = l;
 	bufferlist b;
-	get_version(e, b);
-	if (!b.length()) {
+	int err = get_version(e, b);
+	if (err == -ENOENT) {
 	  r = -ENOENT;
 	} else {
+          assert(r == 0);
+          assert(b.length());
 	  MDSMap mm;
 	  mm.decode(b);
 	  mm.encode(rdata, m->get_connection()->get_features());
