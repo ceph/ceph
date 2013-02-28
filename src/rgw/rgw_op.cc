@@ -1004,8 +1004,9 @@ int RGWPutObjProcessor_Plain::handle_data(bufferlist& bl, off_t _ofs, void **pha
 
 int RGWPutObjProcessor_Plain::do_complete(string& etag, map<string, bufferlist>& attrs)
 {
-  int r = store->put_obj_meta(s->obj_ctx, obj, data.length(), NULL, attrs,
-                              RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE, NULL, &data, NULL, NULL, NULL);
+  int r = store->put_obj_meta(s->obj_ctx, obj, data.length(), attrs,
+                              RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
+                              &data);
   return r;
 }
 
@@ -1212,9 +1213,14 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, map<string, bufferlist>
 
   store->set_atomic(s->obj_ctx, head_obj);
 
-  int r = store->put_obj_meta(s->obj_ctx, head_obj, obj_len, NULL, attrs,
-                              RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE, NULL, &first_chunk, &manifest, NULL, NULL);
+  RGWRados::PutObjMetaExtraParams extra_params;
 
+  extra_params.data = &first_chunk;
+  extra_params.manifest = &manifest;
+
+  int r = store->put_obj_meta(s->obj_ctx, head_obj, obj_len, attrs,
+                              RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
+			      extra_params);
   return r;
 }
 
@@ -1260,7 +1266,7 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, map<string, bufferli
 {
   complete_parts();
 
-  int r = store->put_obj_meta(s->obj_ctx, head_obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, 0, NULL, NULL, NULL, NULL, NULL);
+  int r = store->put_obj_meta(s->obj_ctx, head_obj, s->obj_size, attrs, RGW_OBJ_CATEGORY_MAIN, 0);
   if (r < 0)
     return r;
 
@@ -2109,7 +2115,7 @@ void RGWInitMultipart::execute()
 
     obj.init_ns(s->bucket, tmp_obj_name, mp_ns);
     // the meta object will be indexed with 0 size, we c
-    ret = store->put_obj_meta(s->obj_ctx, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, PUT_OBJ_CREATE_EXCL, NULL, NULL, NULL, NULL, NULL);
+    ret = store->put_obj_meta(s->obj_ctx, obj, 0, attrs, RGW_OBJ_CATEGORY_MULTIMETA, PUT_OBJ_CREATE_EXCL);
   } while (ret == -EEXIST);
 }
 
@@ -2293,8 +2299,14 @@ void RGWCompleteMultipart::execute()
 
   store->set_atomic(s->obj_ctx, target_obj);
 
-  ret = store->put_obj_meta(s->obj_ctx, target_obj, ofs, NULL, attrs,
-                            RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE, NULL, NULL, &manifest, NULL, &remove_objs);
+  RGWRados::PutObjMetaExtraParams extra_params;
+
+  extra_params.manifest = &manifest;
+  extra_params.remove_objs = &remove_objs;
+
+  ret = store->put_obj_meta(s->obj_ctx, target_obj, ofs, attrs,
+                            RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
+			    extra_params);
   if (ret < 0)
     return;
 

@@ -22,12 +22,12 @@ int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, string& oid, cons
 
   rgw_obj obj(bucket, oid);
 
-  int ret = rgwstore->put_obj(NULL, obj, data, size, exclusive, NULL, *pattrs);
+  int ret = rgwstore->put_system_obj(NULL, obj, data, size, exclusive, NULL, *pattrs, NULL);
 
   if (ret == -ENOENT) {
     ret = rgwstore->create_pool(bucket);
     if (ret >= 0)
-      ret = rgwstore->put_obj(NULL, obj, data, size, exclusive, NULL, *pattrs);
+      ret = rgwstore->put_system_obj(NULL, obj, data, size, exclusive, NULL, *pattrs, NULL);
   }
 
   return ret;
