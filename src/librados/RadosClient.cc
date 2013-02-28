@@ -30,6 +30,14 @@
 #include "messages/MWatchNotify.h"
 #include "msg/SimpleMessenger.h"
 
+// needed for static_cast
+#include "messages/PaxosServiceMessage.h"
+#include "messages/MPoolOpReply.h"
+#include "messages/MStatfsReply.h"
+#include "messages/MGetPoolStatsReply.h"
+#include "messages/MOSDOpReply.h"
+#include "messages/MOSDMap.h"
+
 #include "AioCompletionImpl.h"
 #include "IoCtxImpl.h"
 #include "PoolAsyncCompletionImpl.h"
@@ -307,29 +315,29 @@ bool librados::RadosClient::_dispatch(Message *m)
   switch (m->get_type()) {
   // OSD
   case CEPH_MSG_OSD_OPREPLY:
-    objecter->handle_osd_op_reply((class MOSDOpReply*)m);
+    objecter->handle_osd_op_reply(static_cast<MOSDOpReply*>(m));
     break;
   case CEPH_MSG_OSD_MAP:
-    objecter->handle_osd_map((MOSDMap*)m);
+    objecter->handle_osd_map(static_cast<MOSDMap*>(m));
     cond.Signal();
     break;
   case MSG_GETPOOLSTATSREPLY:
-    objecter->handle_get_pool_stats_reply((MGetPoolStatsReply*)m);
+    objecter->handle_get_pool_stats_reply(static_cast<MGetPoolStatsReply*>(m));
     break;
 
   case CEPH_MSG_MDS_MAP:
     break;
 
   case CEPH_MSG_STATFS_REPLY:
-    objecter->handle_fs_stats_reply((MStatfsReply*)m);
+    objecter->handle_fs_stats_reply(static_cast<MStatfsReply*>(m));
     break;
 
   case CEPH_MSG_POOLOP_REPLY:
-    objecter->handle_pool_op_reply((MPoolOpReply*)m);
+    objecter->handle_pool_op_reply(static_cast<MPoolOpReply*>(m));
     break;
 
   case CEPH_MSG_WATCH_NOTIFY:
-    watch_notify((MWatchNotify *)m);
+    watch_notify(static_cast<MWatchNotify *>(m));
     break;
   default:
     return false;
