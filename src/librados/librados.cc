@@ -1543,7 +1543,7 @@ extern "C" int rados_pool_list(rados_t cluster, char *buf, size_t len)
   std::list<std::string>::const_iterator i = pools.begin();
   std::list<std::string>::const_iterator p_end = pools.end();
   for (; i != p_end; ++i) {
-    if (len <= 0)
+    if (len == 0)
       break;
     int rl = i->length() + 1;
     strncat(b, i->c_str(), len - 2); // leave space for two NULLs
@@ -1930,7 +1930,7 @@ extern "C" int rados_getxattrs(rados_ioctx_t io, const char *oid,
 extern "C" int rados_getxattrs_next(rados_xattrs_iter_t iter,
 				    const char **name, const char **val, size_t *len)
 {
-  RadosXattrsIter *it = (RadosXattrsIter*)iter;
+  RadosXattrsIter *it = static_cast<RadosXattrsIter*>(iter);
   if (it->i == it->attrset.end()) {
     *name = NULL;
     *val = NULL;
@@ -1954,7 +1954,7 @@ extern "C" int rados_getxattrs_next(rados_xattrs_iter_t iter,
 
 extern "C" void rados_getxattrs_end(rados_xattrs_iter_t iter)
 {
-  RadosXattrsIter *it = (RadosXattrsIter*)iter;
+  RadosXattrsIter *it = static_cast<RadosXattrsIter*>(iter);
   delete it;
 }
 
@@ -2055,7 +2055,6 @@ extern "C" int rados_objects_list_next(rados_list_ctx_t listctx, const char **en
 {
   librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
   Objecter::ListContext *h = lh->lc;
-  int ret;
 
   // if the list is non-empty, this method has been called before
   if (!h->list.empty())
@@ -2063,7 +2062,7 @@ extern "C" int rados_objects_list_next(rados_list_ctx_t listctx, const char **en
     h->list.pop_front();
 
   if (h->list.empty()) {
-    ret = lh->ctx->list(lh->lc, RADOS_LIST_MAX_ENTRIES);
+    int ret = lh->ctx->list(lh->lc, RADOS_LIST_MAX_ENTRIES);
     if (ret < 0)
       return ret;
     if (h->list.empty())
