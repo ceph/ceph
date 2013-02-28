@@ -169,6 +169,8 @@ class DispatchQueue;
     uint64_t out_seq;
     uint64_t in_seq, in_seq_acked;
     
+    void set_socket_options();
+
     int accept();   // server handshake
     int connect();  // client handshake
     void reader();
