@@ -499,7 +499,7 @@ private:
   CInode *get_parent_inode();
   
   bool is_lt(const MDSCacheObject *r) const {
-    CInode *o = (CInode*)r;
+    const CInode *o = static_cast<const CInode*>(r);
     return ino() < o->ino() ||
       (ino() == o->ino() && last < o->last);
   }
