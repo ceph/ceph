@@ -411,6 +411,8 @@ void SimpleMessenger::submit_message(Message *m, Connection *con,
       pipe->put();
       ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr
 		    << ", had pipe " << pipe << ", but it closed." << dendl;
+      m->put();
+      return;
     }
   }
 
