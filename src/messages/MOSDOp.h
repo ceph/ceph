@@ -358,7 +358,8 @@ struct ceph_osd_request_head {
 
     out << " " << ops;
     out << " " << pgid;
-    if (is_retry_attempt()) out << " RETRY";
+    if (is_retry_attempt())
+      out << " RETRY=" << get_retry_attempt();
     if (get_snap_seq())
       out << " snapc " << get_snap_seq() << "=" << snaps;
     if (get_flags() & CEPH_OSD_FLAG_ORDERSNAP)
