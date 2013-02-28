@@ -372,6 +372,7 @@ struct ceph_osd_request_head {
       out << " localize_reads";
     if (get_flags() & CEPH_OSD_FLAG_RWORDERED)
       out << " rwordered";
+    out << " e" << osdmap_epoch;
     out << ")";
   }
 };
