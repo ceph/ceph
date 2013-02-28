@@ -491,8 +491,9 @@ void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
   version_t summary_ver = summary.version;
   while (sv <= summary_ver) {
     bufferlist bl;
-    bool success = get_version(sv, bl);
-    assert(success);
+    int err = get_version(sv, bl);
+    assert(err == 0);
+    assert(bl.length());
     bufferlist::iterator p = bl.begin();
     __u8 v;
     ::decode(v,p);
