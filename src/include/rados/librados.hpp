@@ -110,6 +110,13 @@ namespace librados
     OP_FAILOK = 2,
   };
 
+
+  class ObjectOperationCompletion {
+  public:
+    virtual ~ObjectOperationCompletion() {}
+    virtual void handle_completion(int r, bufferlist& outbl) = 0;
+  };
+
   /*
    * ObjectOperation : compound object operation
    * Batch multiple object operations into a single request, to be applied
@@ -131,6 +138,8 @@ namespace librados
     void src_cmpxattr(const std::string& src_oid,
 		      const char *name, int op, uint64_t v);
     void exec(const char *cls, const char *method, bufferlist& inbl);
+    void exec(const char *cls, const char *method, bufferlist& inbl, bufferlist *obl, int *prval);
+    void exec(const char *cls, const char *method, bufferlist& inbl, ObjectOperationCompletion *completion);
     /**
      * Guard operation with a check that object version == ver
      *

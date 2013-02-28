@@ -121,8 +121,15 @@ struct ObjectOperation {
       osd_op.indata.append(name);
     osd_op.indata.append(data);
   }
-  void add_call(int op, const char *cname, const char *method, bufferlist &indata) {
+  void add_call(int op, const char *cname, const char *method, bufferlist &indata,
+                bufferlist *outbl, Context *ctx, int *prval) {
     OSDOp& osd_op = add_op(op);
+
+    unsigned p = ops.size() - 1;
+    out_handler[p] = ctx;
+    out_bl[p] = outbl;
+    out_rval[p] = prval;
+
     osd_op.op.op = op;
     osd_op.op.cls.class_len = strlen(cname);
     osd_op.op.cls.method_len = strlen(method);
@@ -546,7 +553,12 @@ struct ObjectOperation {
 
   // object classes
   void call(const char *cname, const char *method, bufferlist &indata) {
-    add_call(CEPH_OSD_OP_CALL, cname, method, indata);
+    add_call(CEPH_OSD_OP_CALL, cname, method, indata, NULL, NULL, NULL);
+  }
+
+  void call(const char *cname, const char *method, bufferlist &indata, bufferlist *outdata,
+	    Context *ctx, int *prval) {
+    add_call(CEPH_OSD_OP_CALL, cname, method, indata, outdata, ctx, prval);
   }
 
   // watch/notify
