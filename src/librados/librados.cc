@@ -1930,7 +1930,7 @@ extern "C" int rados_getxattrs(rados_ioctx_t io, const char *oid,
 extern "C" int rados_getxattrs_next(rados_xattrs_iter_t iter,
 				    const char **name, const char **val, size_t *len)
 {
-  RadosXattrsIter *it = (RadosXattrsIter*)iter;
+  RadosXattrsIter *it = static_cast<RadosXattrsIter*>(iter);
   if (it->i == it->attrset.end()) {
     *name = NULL;
     *val = NULL;
@@ -1954,7 +1954,7 @@ extern "C" int rados_getxattrs_next(rados_xattrs_iter_t iter,
 
 extern "C" void rados_getxattrs_end(rados_xattrs_iter_t iter)
 {
-  RadosXattrsIter *it = (RadosXattrsIter*)iter;
+  RadosXattrsIter *it = static_cast<RadosXattrsIter*>(iter);
   delete it;
 }
 
