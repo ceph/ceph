@@ -1836,7 +1836,6 @@ int old_snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   header = (struct rbd_obj_header_ondisk *)bl.c_str();
 
   int snaps_id_ofs = sizeof(*header);
-  int len = snaps_id_ofs;
   int names_ofs = snaps_id_ofs + sizeof(*new_snaps) * header->snap_count;
   const char *snap_name;
   const char *snap_names = ((char *)header) + names_ofs;
@@ -1884,8 +1883,6 @@ int old_snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   new_snaps[0].id = snap_id;
   new_snaps[0].image_size = header->image_size;
-
-  len += sizeof(*new_snaps) * header->snap_count + header->snap_names_len;
 
   memcpy(header_bp.c_str(), header, sizeof(*header));
 
