@@ -61,3 +61,4 @@ usr/bin/ceph_test_timers
 usr/bin/ceph_tpbench
 usr/bin/ceph_xattr_bench
 usr/bin/ceph-coverage
+usr/share/java/libcephfs-test.jar
