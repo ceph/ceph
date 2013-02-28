@@ -1002,6 +1002,25 @@ void ReplicatedPG::do_op(OpRequestRef op)
   // continuing on to write path, make sure object context is registered
   assert(obc->registered);
 
+  // verify that we are doing this in order?
+  if (g_conf->osd_debug_op_order && m->get_source().is_client()) {
+    map<client_t,tid_t>& cm = debug_op_order[obc->obs.oi.soid];
+    tid_t t = m->get_tid();
+    client_t n = m->get_source().num();
+    map<client_t,tid_t>::iterator p = cm.find(n);
+    if (p == cm.end()) {
+      dout(20) << " op order client." << n << " tid " << t << " (first)" << dendl;
+      cm[n] = t;
+    } else {
+      dout(20) << " op order client." << n << " tid " << t << " last was " << p->second << dendl;
+      if (p->second > t) {
+	derr << "bad op order, already applied " << p->second << " > this " << t << dendl;;
+	assert(0 == "out of order op");
+      }
+      p->second = t;
+    }
+  }
+
   // issue replica writes
   tid_t rep_tid = osd->get_tid();
   RepGather *repop = new_repop(ctx, obc, rep_tid);  // new repop claims our obc, src_obc refs
@@ -6142,6 +6161,8 @@ void ReplicatedPG::on_change()
 
   // clear snap_trimmer state
   snap_trimmer_machine.process_event(Reset());
+
+  debug_op_order.clear();
 }
 
 void ReplicatedPG::on_role_change()
