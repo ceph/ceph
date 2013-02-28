@@ -7,13 +7,14 @@ You can use RBD to run instances on in Apache CloudStack.
 This can be done by adding a RBD pool as Primary Storage.
 
 There are a couple of prerequisites:
-* You need to CloudStack 4.0 or higher
+
+* You need to use CloudStack 4.0 or higher
 * Qemu on the Hypervisor has to be compiled with RBD enabled
 * The libvirt version on the Hypervisor has to be at least 0.10 with RBD enabled
 
-Make sure you meet this requirements before installing the CloudStack Agent on the Hypervisor(s)!
+Make sure you meet these requirements before installing the CloudStack Agent on the Hypervisor(s).
 
-.. important:: To use RBD with CloudStack, you must have a running Ceph cluster!
+.. important:: To use RBD with CloudStack, you must have a running Ceph cluster.
 
 Limitations
 ===========
