@@ -52,11 +52,6 @@ namespace librados
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
 
-  struct SnapContext {
-    snap_t seq;
-    std::vector<snap_t> snaps;
-  };
-
   class ObjectIterator : public std::iterator <std::forward_iterator_tag, std::string> {
   public:
     static const ObjectIterator __EndObjectIterator;
