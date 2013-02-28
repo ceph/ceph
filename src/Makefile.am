@@ -1049,6 +1049,7 @@ bin_DEBUGPROGRAMS += ceph_test_cfuse_cache_invalidate
 # shell scripts
 editpaths = sed \
 	-e 's|@bindir[@]|$(bindir)|g' \
+	-e 's|@sbindir[@]|$(sbindir)|g' \
 	-e 's|@libdir[@]|$(libdir)|g' \
 	-e 's|@sysconfdir[@]|$(sysconfdir)|g' \
 	-e 's|@datadir[@]|$(pkgdatadir)|g' \
