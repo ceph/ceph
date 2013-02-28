@@ -1574,7 +1574,6 @@ reprotect_and_return_err:
     int refresh_seq = ictx->refresh_seq;
     ictx->refresh_lock.Unlock();
 
-    int r;
     ::SnapContext new_snapc;
     bool new_snap = false;
     vector<string> snap_names;
@@ -1585,6 +1584,7 @@ reprotect_and_return_err:
     {
       RWLock::WLocker l(ictx->snap_lock);
       {
+        int r;
 	RWLock::WLocker l2(ictx->parent_lock);
 	ictx->lockers.clear();
 	if (ictx->old_format) {
