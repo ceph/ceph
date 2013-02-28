@@ -183,7 +183,6 @@ int Accepter::start()
 
 void *Accepter::entry()
 {
-  const md_config_t *conf = msgr->cct->_conf;
   ldout(msgr->cct,10) << "accepter starting" << dendl;
   
   int errors = 0;
@@ -213,14 +212,6 @@ void *Accepter::entry()
     if (sd >= 0) {
       errors = 0;
       ldout(msgr->cct,10) << "accepted incoming on sd " << sd << dendl;
-      
-      // disable Nagle algorithm?
-      if (conf->ms_tcp_nodelay) {
-	int flag = 1;
-	int r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
-	if (r < 0)
-	  ldout(msgr->cct,0) << "accepter could't set TCP_NODELAY: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-      }
       
       msgr->add_accept_pipe(sd);
     } else {

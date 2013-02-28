@@ -212,6 +212,8 @@ int Pipe::accept()
 {
   ldout(msgr->cct,10) << "accept" << dendl;
 
+  set_socket_options();
+
   // my creater gave me sd via accept()
   assert(state == STATE_ACCEPTING);
   
@@ -709,6 +711,19 @@ int Pipe::accept()
   return -1;
 }
 
+void Pipe::set_socket_options()
+{
+  // disable Nagle algorithm?
+  if (msgr->cct->_conf->ms_tcp_nodelay) {
+    int flag = 1;
+    int r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
+    if (r < 0) {
+      r = -errno;
+      ldout(msgr->cct,0) << "couldn't set TCP_NODELAY: " << cpp_strerror(r) << dendl;
+    }
+  }
+}
+
 int Pipe::connect()
 {
   bool got_bad_auth = false;
@@ -758,13 +773,7 @@ int Pipe::connect()
     goto fail;
   }
 
-  // disable Nagle algorithm?
-  if (conf->ms_tcp_nodelay) {
-    int flag = 1;
-    int r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
-    if (r < 0) 
-      ldout(msgr->cct,0) << "connect couldn't set TCP_NODELAY: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-  }
+  set_socket_options();
 
   // verify banner
   // FIXME: this should be non-blocking, or in some other way verify the banner as we get it.
