@@ -2055,7 +2055,6 @@ extern "C" int rados_objects_list_next(rados_list_ctx_t listctx, const char **en
 {
   librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
   Objecter::ListContext *h = lh->lc;
-  int ret;
 
   // if the list is non-empty, this method has been called before
   if (!h->list.empty())
@@ -2063,7 +2062,7 @@ extern "C" int rados_objects_list_next(rados_list_ctx_t listctx, const char **en
     h->list.pop_front();
 
   if (h->list.empty()) {
-    ret = lh->ctx->list(lh->lc, RADOS_LIST_MAX_ENTRIES);
+    int ret = lh->ctx->list(lh->lc, RADOS_LIST_MAX_ENTRIES);
     if (ret < 0)
       return ret;
     if (h->list.empty())
