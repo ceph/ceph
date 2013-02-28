@@ -2007,13 +2007,6 @@ struct C_JournaledAhead : public Context {
   }
 };
 
-int FileStore::queue_transaction(Sequencer *osr, Transaction *t)
-{
-  list<Transaction*> tls;
-  tls.push_back(t);
-  return queue_transactions(osr, tls, new C_DeleteTransaction(t));
-}
-
 int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 				  Context *onreadable, Context *ondisk,
 				  Context *onreadable_sync,

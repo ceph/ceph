@@ -659,8 +659,12 @@ public:
   }
   unsigned apply_transactions(Sequencer *osr, list<Transaction*>& tls, Context *ondisk=0);
 
-  virtual int queue_transaction(Sequencer *osr, Transaction* t) = 0;
-  virtual int queue_transaction(Sequencer *osr, Transaction *t, Context *onreadable, Context *ondisk=0,
+  int queue_transaction(Sequencer *osr, Transaction* t) {
+    list<Transaction *> tls;
+    tls.push_back(t);
+    return queue_transactions(osr, tls, new C_DeleteTransaction(t));
+  }
+  int queue_transaction(Sequencer *osr, Transaction *t, Context *onreadable, Context *ondisk=0,
 				Context *onreadable_sync=0,
 				TrackedOpRef op = TrackedOpRef()) {
     list<Transaction*> tls;
