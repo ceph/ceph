@@ -189,11 +189,11 @@ public:
   int set_attrs(void *ctx, rgw_obj& obj, 
                 map<string, bufferlist>& attrs,
                 map<string, bufferlist>* rmattrs);
-  int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
+  int put_obj_meta_impl(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
                    map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
                    map<std::string, bufferlist>* rmattrs, const bufferlist *data,
-                   RGWObjManifest *manifest, const string *ptag, list<string> *remove_objs);
-
+                   RGWObjManifest *manifest, const string *ptag, list<string> *remove_objs,
+                   bool modify_version, obj_version *objv);
   int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len, bool exclusive);
 
@@ -349,10 +349,11 @@ int RGWCache<T>::set_attrs(void *ctx, rgw_obj& obj,
 }
 
 template <class T>
-int RGWCache<T>::put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
+int RGWCache<T>::put_obj_meta_impl(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
                               map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
                               map<std::string, bufferlist>* rmattrs, const bufferlist *data,
-                              RGWObjManifest *manifest, const string *ptag, list<string> *remove_objs)
+                              RGWObjManifest *manifest, const string *ptag, list<string> *remove_objs,
+                              bool modify_version, obj_version *objv)
 {
   rgw_bucket bucket;
   string oid;
@@ -369,7 +370,8 @@ int RGWCache<T>::put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mt
       info.flags |= CACHE_FLAG_DATA;
     }
   }
-  int ret = T::put_obj_meta(ctx, obj, size, mtime, attrs, category, flags, rmattrs, data, manifest, ptag, remove_objs);
+  int ret = T::put_obj_meta_impl(ctx, obj, size, mtime, attrs, category, flags, rmattrs, data, manifest, ptag, remove_objs,
+                                 modify_version, objv);
   if (cacheable) {
     string name = normal_name(bucket, oid);
     if (ret >= 0) {
