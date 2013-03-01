@@ -248,7 +248,7 @@ public:
 
   int make_request(MetaRequest *req, int uid, int gid,
 		   //MClientRequest *req, int uid, int gid,
-		   Inode **ptarget = 0,
+		   Inode **ptarget = 0, bool *pcreated = 0,
 		   int use_mds=-1, bufferlist *pdirbl=0);
   void encode_cap_releases(MetaRequest *request, int mds);
   int encode_inode_release(Inode *in, MetaRequest *req,
@@ -532,7 +532,7 @@ private:
   int _symlink(Inode *dir, const char *name, const char *target, int uid=-1, int gid=-1);
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int uid=-1, int gid=-1);
   int _setattr(Inode *in, struct stat *attr, int mask, int uid=-1, int gid=-1);
-  int _getattr(Inode *in, int mask, int uid=-1, int gid=-1);
+  int _getattr(Inode *in, int mask, int uid=-1, int gid=-1, bool force=false);
   int _getxattr(Inode *in, const char *name, void *value, size_t len, int uid=-1, int gid=-1);
   int _listxattr(Inode *in, char *names, size_t len, int uid=-1, int gid=-1);
   int _setxattr(Inode *in, const char *name, const void *value, size_t len, int flags, int uid=-1, int gid=-1);
