@@ -417,16 +417,8 @@ AC_CHECK_LIB([snappy], [snappy_compress], [], [AC_MSG_FAILURE([libsnappy not fou
 # use system leveldb
 AC_CHECK_LIB([leveldb], [leveldb_open], [], [AC_MSG_FAILURE([libleveldb not found])], [-lsnappy -lpthread])
 
-# use system libs3?
-AC_ARG_WITH([system-libs3],
-	[AS_HELP_STRING([--with-system-libs3], [use system libs3])],
-	,
-	[with_system_libs3=no])
-AS_IF([test "x$with_system_libs3" = xyes],
-            [AC_CHECK_LIB([s3], [S3_initialize], [true], [AC_MSG_FAILURE([libs3 not found])], [-lpthread])])
-AS_IF([test "x$with_system_libs3" = xcheck],
-            [AC_SEARCH_LIBS([S3_initialize], [s3], [with_system_libs3=yes], [true], [-lpthread])])
-AM_CONDITIONAL(WITH_SYSTEM_LIBS3, [ test "$with_system_libs3" = "yes" ])
+# use system libs3
+AC_CHECK_LIB([s3], [S3_initialize], [], [AC_MSG_FAILURE([libs3 not found])], [-lpthread])
 
 # rest-bench?
 AC_ARG_WITH([rest-bench],
