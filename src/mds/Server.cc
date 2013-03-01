@@ -6632,12 +6632,12 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
 
   CDentry::linkage_t *destdnl = destdn->get_linkage();
 
-  ESlaveUpdate *le;
   list<Context*> finished;
   if (r == 0) {
     // write a commit to the journal
-    le = new ESlaveUpdate(mdlog, "slave_rename_commit", mdr->reqid, mdr->slave_to_mds,
-			  ESlaveUpdate::OP_COMMIT, ESlaveUpdate::RENAME);
+    ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_commit", mdr->reqid, 
+					mdr->slave_to_mds, ESlaveUpdate::OP_COMMIT, 
+					ESlaveUpdate::RENAME);
     mdlog->start_entry(le);
 
     // unfreeze+singleauth inode
@@ -6887,8 +6887,8 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   if (straydn)
     destdn->push_projected_linkage();
 
-  inode_t *ti = NULL;
   if (target) {
+    inode_t *ti = NULL;
     if (target->authority().first == whoami) {
       ti = target->project_inode();
       mut->add_projected_inode(target);
