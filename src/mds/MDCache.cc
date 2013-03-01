@@ -516,8 +516,8 @@ struct C_MDS_RetryOpenRoot : public Context {
 
 void MDCache::open_root_inode(Context *c)
 {
-  CInode *in;
   if (mds->whoami == mds->mdsmap->get_root()) {
+    CInode *in;
     in = create_system_inode(MDS_INO_ROOT, S_IFDIR|0755);  // initially inaccurate!
     in->fetch(c);
   } else {
