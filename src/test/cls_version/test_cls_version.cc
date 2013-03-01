@@ -66,6 +66,17 @@ TEST(cls_rgw, test_version_inc_read)
   ASSERT_EQ(0, (int)ver2.tag.compare(ver.tag));
 
   delete op;
+
+  obj_version ver3;
+
+  librados::ObjectReadOperation *rop = new_rop();
+  cls_version_read(*rop, &ver3);
+  bufferlist outbl;
+  ASSERT_EQ(0, ioctx.operate(oid, rop, &outbl));
+  ASSERT_EQ(ver2.ver, ver3.ver);
+  ASSERT_EQ(1, (long long)ver2.compare(&ver3));
+
+  delete op;
 }
 
 
