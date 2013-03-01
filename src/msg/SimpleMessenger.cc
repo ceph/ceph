@@ -361,7 +361,7 @@ Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
   Mutex::Locker l(lock);
   if (my_inst.addr == dest.addr) {
     // local
-    return (Connection *)local_connection->get();
+    return static_cast<Connection *>(local_connection->get());
   }
 
   // remote
@@ -382,7 +382,7 @@ Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
 
 Connection *SimpleMessenger::get_loopback_connection()
 {
-  return (Connection*)local_connection->get();
+  return static_cast<Connection*>(local_connection->get());
 }
 
 void SimpleMessenger::submit_message(Message *m, Connection *con,
@@ -472,7 +472,7 @@ int SimpleMessenger::send_keepalive(const entity_inst_t& dest)
 int SimpleMessenger::send_keepalive(Connection *con)
 {
   int ret = 0;
-  Pipe *pipe = (Pipe *)con->get_pipe();
+  Pipe *pipe = static_cast<Pipe *>(con->get_pipe());
   if (pipe) {
     ldout(cct,20) << "send_keepalive con " << con << ", have pipe." << dendl;
     assert(pipe->msgr == this);
@@ -586,7 +586,7 @@ void SimpleMessenger::mark_down(const entity_addr_t& addr)
 void SimpleMessenger::mark_down(Connection *con)
 {
   lock.Lock();
-  Pipe *p = (Pipe *)con->get_pipe();
+  Pipe *p = static_cast<Pipe *>(con->get_pipe());
   if (p) {
     ldout(cct,1) << "mark_down " << con << " -- " << p << dendl;
     assert(p->msgr == this);
@@ -604,7 +604,7 @@ void SimpleMessenger::mark_down(Connection *con)
 void SimpleMessenger::mark_down_on_empty(Connection *con)
 {
   lock.Lock();
-  Pipe *p = (Pipe *)con->get_pipe();
+  Pipe *p = static_cast<Pipe *>(con->get_pipe());
   if (p) {
     assert(p->msgr == this);
     p->pipe_lock.Lock();
@@ -627,7 +627,7 @@ void SimpleMessenger::mark_down_on_empty(Connection *con)
 void SimpleMessenger::mark_disposable(Connection *con)
 {
   lock.Lock();
-  Pipe *p = (Pipe *)con->get_pipe();
+  Pipe *p = static_cast<Pipe *>(con->get_pipe());
   if (p) {
     ldout(cct,1) << "mark_disposable " << con << " -- " << p << dendl;
     assert(p->msgr == this);
