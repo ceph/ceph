@@ -33,7 +33,7 @@ int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, string& oid, cons
   return ret;
 }
 
-int rgw_get_obj(RGWRados *rgwstore, void *ctx, rgw_bucket& bucket, string& key, bufferlist& bl, map<string, bufferlist> *pattrs)
+int rgw_get_system_obj(RGWRados *rgwstore, void *ctx, rgw_bucket& bucket, string& key, bufferlist& bl, obj_version *objv, map<string, bufferlist> *pattrs)
 {
   int ret;
   struct rgw_err err;
@@ -43,11 +43,11 @@ int rgw_get_obj(RGWRados *rgwstore, void *ctx, rgw_bucket& bucket, string& key, 
   rgw_obj obj(bucket, key);
   do {
     ret = rgwstore->prepare_get_obj(ctx, obj, NULL, NULL, pattrs, NULL,
-                                  NULL, NULL, NULL, NULL, NULL, NULL, &handle, &err);
+                                  NULL, NULL, NULL, NULL, NULL, NULL, objv, &handle, &err);
     if (ret < 0)
       return ret;
 
-    ret = rgwstore->get_obj(ctx, &handle, obj, bl, 0, request_len - 1);
+    ret = rgwstore->get_obj(ctx, objv, &handle, obj, bl, 0, request_len - 1);
     rgwstore->finish_get_obj(&handle);
     if (ret < 0)
       return ret;

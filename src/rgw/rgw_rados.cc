@@ -95,7 +95,7 @@ int RGWRegion::read_default(RGWDefaultRegionInfo& default_info)
 
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
-  int ret = rgw_get_obj(store, NULL, pool, oid, bl);
+  int ret = rgw_get_system_obj(store, NULL, pool, oid, bl, NULL);
   if (ret < 0)
     return ret;
 
@@ -176,7 +176,7 @@ int RGWRegion::read_info(const string& region_name)
 
   string oid = region_info_oid_prefix + name;
 
-  int ret = rgw_get_obj(store, NULL, pool, oid, bl);
+  int ret = rgw_get_system_obj(store, NULL, pool, oid, bl, NULL);
   if (ret < 0) {
     lderr(cct) << "failed reading region info from " << pool << ":" << oid << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -282,7 +282,7 @@ int RGWZoneParams::init(CephContext *cct, RGWRados *store, RGWRegion& region)
   bufferlist bl;
 
   string oid = zone_info_oid_prefix + name;
-  int ret = rgw_get_obj(store, NULL, pool, oid, bl);
+  int ret = rgw_get_system_obj(store, NULL, pool, oid, bl, NULL);
   if (ret < 0)
     return ret;
 
@@ -355,7 +355,7 @@ int RGWRegionMap::read(CephContext *cct, RGWRados *store)
   rgw_bucket pool(pool_name.c_str());
 
   bufferlist bl;
-  int ret = rgw_get_obj(store, NULL, pool, oid, bl);
+  int ret = rgw_get_system_obj(store, NULL, pool, oid, bl, NULL);
   if (ret < 0)
     return ret;
 
@@ -1219,7 +1219,7 @@ int RGWRados::select_bucket_placement(string& bucket_name, rgw_bucket& bucket)
 
   rgw_obj obj(zone.domain_root, avail_pools);
 
-  int ret = rgw_get_obj(this, NULL, zone.domain_root, avail_pools, map_bl);
+  int ret = rgw_get_system_obj(this, NULL, zone.domain_root, avail_pools, map_bl, NULL);
   if (ret < 0) {
     goto read_omap;
   }
@@ -1644,7 +1644,7 @@ int RGWRados::copy_obj(void *ctx,
   off_t ofs = 0;
   off_t end = -1;
   ret = prepare_get_obj(ctx, src_obj, &ofs, &end, &attrset,
-                mod_ptr, unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &obj_size, &handle, err);
+                mod_ptr, unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &obj_size, NULL, &handle, err);
 
   if (ret < 0)
     return ret;
@@ -1662,7 +1662,7 @@ int RGWRados::copy_obj(void *ctx,
   RGWObjManifest manifest;
   RGWObjState *astate = NULL;
   RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
-  ret = get_obj_state(rctx, src_obj, &astate);
+  ret = get_obj_state(rctx, src_obj, &astate, NULL);
   if (ret < 0)
     return ret;
 
@@ -1742,7 +1742,7 @@ int RGWRados::copy_obj(void *ctx,
   }
 
   if (copy_first) {
-    ret = get_obj(ctx, &handle, src_obj, first_chunk, 0, RGW_MAX_CHUNK_SIZE);
+    ret = get_obj(ctx, NULL, &handle, src_obj, first_chunk, 0, RGW_MAX_CHUNK_SIZE);
     if (ret < 0)
       goto done_ret;
 
@@ -1810,7 +1810,7 @@ int RGWRados::copy_obj_data(void *ctx,
 
   do {
     bufferlist bl;
-    ret = get_obj(ctx, &handle, src_obj, bl, ofs, end);
+    ret = get_obj(ctx, NULL, &handle, src_obj, bl, ofs, end);
     if (ret < 0)
       return ret;
 
@@ -2094,7 +2094,7 @@ int RGWRados::defer_gc(void *ctx, rgw_obj& obj)
 
   RGWObjState *state = NULL;
 
-  int r = get_obj_state(rctx, obj, &state);
+  int r = get_obj_state(rctx, obj, &state, NULL);
   if (r < 0)
     return r;
 
@@ -2235,20 +2235,13 @@ static void generate_fake_tag(CephContext *cct, map<string, bufferlist>& attrset
   tag_bl.append(tag.c_str(), tag.size() + 1);
 }
 
-int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state)
+int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, obj_version *objv)
 {
   RGWObjState *s = rctx->get_state(obj);
   ldout(cct, 20) << "get_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << " s->prefetch_data=" << s->prefetch_data << dendl;
   *state = s;
   if (s->has_attrs)
     return 0;
-
-  obj_version *objv = NULL;
-
-  if (bucket_is_system(obj.bucket)) {
-//    objv = &s->objv;
-#warning FIXME
-  }
 
   int r = obj_stat(rctx, obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), objv);
   if (r == -ENOENT) {
@@ -2334,7 +2327,7 @@ int RGWRados::get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& de
 
   if (rctx) {
     RGWObjState *state;
-    r = get_obj_state(rctx, obj, &state);
+    r = get_obj_state(rctx, obj, &state, NULL);
     if (r < 0)
       return r;
     if (!state->exists)
@@ -2357,7 +2350,7 @@ int RGWRados::append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj,
   if (!rctx)
     return 0;
 
-  int r = get_obj_state(rctx, obj, pstate);
+  int r = get_obj_state(rctx, obj, pstate, NULL);
   if (r < 0)
     return r;
 
@@ -2380,7 +2373,7 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
                             ObjectWriteOperation& op, RGWObjState **pstate,
 			    bool reset_obj, const string *ptag)
 {
-  int r = get_obj_state(rctx, obj, pstate);
+  int r = get_obj_state(rctx, obj, pstate, NULL);
   if (r < 0)
     return r;
 
@@ -2645,6 +2638,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
             const char *if_nomatch,
             uint64_t *total_size,
             uint64_t *obj_size,
+            obj_version *objv,
             void **handle,
             struct rgw_err *err)
 {
@@ -2681,7 +2675,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
     rctx = new_ctx;
   }
 
-  r = get_obj_state(rctx, obj, &astate);
+  r = get_obj_state(rctx, obj, &astate, objv);
   if (r < 0)
     goto done_err;
 
@@ -2985,7 +2979,7 @@ int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
 }
 
 
-int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
+int RGWRados::get_obj(void *ctx, obj_version *objv, void **handle, rgw_obj& obj,
                       bufferlist& bl, off_t ofs, off_t end)
 {
   rgw_bucket bucket;
@@ -3012,7 +3006,7 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
     rctx = new_ctx;
   }
 
-  int r = get_obj_state(rctx, obj, &astate);
+  int r = get_obj_state(rctx, obj, &astate, NULL);
   if (r < 0)
     goto done_ret;
 
@@ -3055,6 +3049,10 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
       goto done_ret;
   }
 
+  if (objv) {
+    cls_version_check(op, *objv, VER_COND_EQ);
+  }
+
   read_len = len;
 
   if (astate) {
@@ -3087,7 +3085,7 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
     ldout(cct, 0) << "NOTICE: RGWRados::get_obj: raced with another process, going to the shadow obj instead" << dendl;
     string loc = obj.loc();
     rgw_obj shadow(bucket, astate->shadow_obj, loc, shadow_ns);
-    r = get_obj(NULL, handle, shadow, bl, ofs, end);
+    r = get_obj(NULL, NULL, handle, shadow, bl, ofs, end);
     goto done_ret;
   }
 
@@ -3463,7 +3461,7 @@ int RGWRados::iterate_obj(void *ctx, rgw_obj& obj,
     rctx = new_ctx;
   }
 
-  int r = get_obj_state(rctx, obj, &astate);
+  int r = get_obj_state(rctx, obj, &astate, NULL);
   if (r < 0)
     goto done_err;
 
@@ -3577,7 +3575,7 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
 
   ObjectReadOperation op;
   if (objv) {
-#warning FIXME
+    cls_version_read(op, objv);
   }
   op.getxattrs(&attrset, NULL);
   op.stat(&size, &mtime, NULL);
@@ -3621,7 +3619,7 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
 {
   bufferlist bl;
 
-  int ret = rgw_get_obj(this, ctx, zone.domain_root, bucket_name, bl, pattrs);
+  int ret = rgw_get_system_obj(this, ctx, zone.domain_root, bucket_name, bl, NULL, pattrs);
   if (ret < 0) {
     if (ret != -ENOENT)
       return ret;
@@ -4181,7 +4179,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
 
   RGWObjState *astate = NULL;
   RGWRadosCtx rctx(this);
-  int r = get_obj_state(&rctx, obj, &astate);
+  int r = get_obj_state(&rctx, obj, &astate, NULL);
   if (r < 0)
     return r;
 
