@@ -1235,7 +1235,7 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
   dout(10) << "wrlock_start " << *lock << " on " << *lock->get_parent() << dendl;
 
   bool want_scatter = lock->get_parent()->is_auth() &&
-    ((CInode*)lock->get_parent())->has_subtree_root_dirfrag();
+    (static_cast<CInode*>(lock->get_parent()))->has_subtree_root_dirfrag();
     
   CInode *in = static_cast<CInode *>(lock->get_parent());
   client_t client = mut->get_client();
