@@ -185,7 +185,7 @@ public:
     return (key.compare(leveldb::Slice(past_prefix(prefix))) < 0) &&
       (key.compare(leveldb::Slice(prefix)) > 0);
   }
-  static string past_prefix(const string prefix) {
+  static string past_prefix(const string &prefix) {
     string limit = prefix;
     limit.push_back(1);
     return limit;
