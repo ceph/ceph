@@ -781,7 +781,7 @@ void Paxos::finish_proposal()
   assert(mon->is_leader());
 
   dout(10) << __func__ << " finishing proposal" << dendl;
-  C_Proposal *proposal = (C_Proposal*) proposals.front();
+  C_Proposal *proposal = static_cast<C_Proposal*>(proposals.front());
   dout(10) << __func__ << " finish it (proposal = "
 	   << proposal << ")" << dendl;;
 
@@ -1238,7 +1238,7 @@ void Paxos::propose_queued()
 
   state = STATE_PREPARING;
 
-  C_Proposal *proposal = (C_Proposal*) proposals.front();
+  C_Proposal *proposal = static_cast<C_Proposal*>(proposals.front());
   assert(!proposal->proposed);
 
   cancel_events();
