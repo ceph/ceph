@@ -165,7 +165,7 @@ public:
   frag_t           frag;   // my frag
 
   bool is_lt(const MDSCacheObject *r) const {
-    return dirfrag() < ((const CDir*)r)->dirfrag();
+    return dirfrag() < (static_cast<const CDir*>(r))->dirfrag();
   }
 
   fnode_t fnode;

@@ -2282,7 +2282,7 @@ void OSD::heartbeat()
 
 bool OSD::heartbeat_reset(Connection *con)
 {
-  HeartbeatSession *s = (HeartbeatSession*)con->get_priv();
+  HeartbeatSession *s = static_cast<HeartbeatSession*>(con->get_priv());
   if (s) {
     heartbeat_lock.Lock();
     map<int,HeartbeatInfo>::iterator p = heartbeat_peers.find(s->peer);
@@ -2925,7 +2925,7 @@ void OSD::handle_command(MMonCommand *m)
 void OSD::handle_command(MCommand *m)
 {
   Connection *con = m->get_connection();
-  Session *session = (Session *)con->get_priv();
+  Session *session = static_cast<Session *>(con->get_priv());
   if (!session) {
     client_messenger->send_message(new MCommandReply(m, -EPERM), con);
     m->put();
@@ -3276,7 +3276,7 @@ bool OSD::heartbeat_dispatch(Message *m)
     break;
 
   case MSG_OSD_PING:
-    handle_osd_ping((MOSDPing*)m);
+    handle_osd_ping(static_cast<MOSDPing*>(m));
     break;
 
   case CEPH_MSG_OSD_MAP:
@@ -3370,7 +3370,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
 						 authorizer_data, authorizer_reply, name, global_id, caps_info, session_key, &auid);
 
   if (isvalid) {
-    Session *s = (Session *)con->get_priv();
+    Session *s = static_cast<Session *>(con->get_priv());
     if (!s) {
       s = new Session;
       con->set_priv(s->get());
@@ -3500,12 +3500,12 @@ void OSD::_dispatch(Message *m)
 
     // map and replication
   case CEPH_MSG_OSD_MAP:
-    handle_osd_map((MOSDMap*)m);
+    handle_osd_map(static_cast<MOSDMap*>(m));
     break;
 
     // osd
   case CEPH_MSG_SHUTDOWN:
-    session = (Session *)m->get_connection()->get_priv();
+    session = static_cast<Session *>(m->get_connection()->get_priv());
     if (!session ||
 	session->entity_name.is_mon() ||
 	session->entity_name.is_osd())
@@ -3518,22 +3518,22 @@ void OSD::_dispatch(Message *m)
     break;
 
   case MSG_PGSTATSACK:
-    handle_pg_stats_ack((MPGStatsAck*)m);
+    handle_pg_stats_ack(static_cast<MPGStatsAck*>(m));
     break;
 
   case MSG_MON_COMMAND:
-    handle_command((MMonCommand*) m);
+    handle_command(static_cast<MMonCommand*>(m));
     break;
   case MSG_COMMAND:
-    handle_command((MCommand*) m);
+    handle_command(static_cast<MCommand*>(m));
     break;
 
   case MSG_OSD_SCRUB:
-    handle_scrub((MOSDScrub*)m);
+    handle_scrub(static_cast<MOSDScrub*>(m));
     break;    
 
   case MSG_OSD_REP_SCRUB:
-    handle_rep_scrub((MOSDRepScrub*)m);
+    handle_rep_scrub(static_cast<MOSDRepScrub*>(m));
     break;    
 
     // -- need OSDMap --
@@ -3819,7 +3819,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     return;
   }
 
-  Session *session = (Session *)m->get_connection()->get_priv();
+  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
   if (session && !(session->entity_name.is_mon() || session->entity_name.is_osd())) {
     //not enough perms!
     m->put();
@@ -4179,8 +4179,6 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
       dout(10) << "boot_epoch is " << boot_epoch << dendl;
     }
   }
-
-  map<int64_t, int> pool_resize;  // poolid -> old size
 
   // scan pg creations
   hash_map<pg_t, create_pg_info>::iterator n = creating_pgs.begin();
@@ -5205,7 +5203,7 @@ void OSD::handle_pg_log(OpRequestRef op)
 
 void OSD::handle_pg_info(OpRequestRef op)
 {
-  MOSDPGInfo *m = (MOSDPGInfo *)op->request;
+  MOSDPGInfo *m = static_cast<MOSDPGInfo *>(op->request);
   assert(m->get_header().type == MSG_OSD_PG_INFO);
   dout(7) << "handle_pg_info " << *m << " from " << m->get_source() << dendl;
 
@@ -5300,7 +5298,7 @@ void OSD::handle_pg_trim(OpRequestRef op)
 
 void OSD::handle_pg_scan(OpRequestRef op)
 {
-  MOSDPGScan *m = (MOSDPGScan*)op->request;
+  MOSDPGScan *m = static_cast<MOSDPGScan*>(op->request);
   assert(m->get_header().type == MSG_OSD_PG_SCAN);
   dout(10) << "handle_pg_scan " << *m << " from " << m->get_source() << dendl;
   
@@ -5328,7 +5326,7 @@ void OSD::handle_pg_scan(OpRequestRef op)
 
 void OSD::handle_pg_backfill(OpRequestRef op)
 {
-  MOSDPGBackfill *m = (MOSDPGBackfill*)op->request;
+  MOSDPGBackfill *m = static_cast<MOSDPGBackfill*>(op->request);
   assert(m->get_header().type == MSG_OSD_PG_BACKFILL);
   dout(10) << "handle_pg_backfill " << *m << " from " << m->get_source() << dendl;
   
@@ -5486,9 +5484,8 @@ void OSD::handle_pg_query(OpRequestRef op)
       continue;
     }
 
-    PG *pg = 0;
-
     if (pg_map.count(pgid)) {
+      PG *pg = 0;
       pg = _lookup_lock_pg(pgid);
       pg->queue_query(it->second.epoch_sent, it->second.epoch_sent,
 		      from, it->second);
@@ -5838,7 +5835,7 @@ void OSDService::reply_op_error(OpRequestRef op, int err)
 
 void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v)
 {
-  MOSDOp *m = (MOSDOp*)op->request;
+  MOSDOp *m = static_cast<MOSDOp*>(op->request);
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
   int flags;
   flags = m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK);
@@ -5853,7 +5850,7 @@ void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v)
 
 void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 {
-  MOSDOp *m = (MOSDOp*)op->request;
+  MOSDOp *m = static_cast<MOSDOp*>(op->request);
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
 
   if (m->get_map_epoch() < pg->info.history.same_primary_since) {
@@ -5872,7 +5869,7 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 
 void OSD::handle_op(OpRequestRef op)
 {
-  MOSDOp *m = (MOSDOp*)op->request;
+  MOSDOp *m = static_cast<MOSDOp*>(op->request);
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
   if (op_is_discardable(m)) {
     dout(10) << " discardable " << *m << dendl;
@@ -5902,7 +5899,7 @@ void OSD::handle_op(OpRequestRef op)
   }
   // share our map with sender, if they're old
   _share_map_incoming(m->get_source(), m->get_connection(), m->get_map_epoch(),
-		      (Session *)m->get_connection()->get_priv());
+		      static_cast<Session *>(m->get_connection()->get_priv()));
 
   if (op->rmw_flags == 0) {
     int r = init_op_flags(op);
@@ -6005,7 +6002,7 @@ void OSD::handle_op(OpRequestRef op)
 
 void OSD::handle_sub_op(OpRequestRef op)
 {
-  MOSDSubOp *m = (MOSDSubOp*)op->request;
+  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->request);
   assert(m->get_header().type == MSG_OSD_SUBOP);
 
   dout(10) << "handle_sub_op " << *m << " epoch " << m->map_epoch << dendl;
@@ -6029,7 +6026,7 @@ void OSD::handle_sub_op(OpRequestRef op)
 
   // share our map with sender, if they're old
   _share_map_incoming(m->get_source(), m->get_connection(), m->map_epoch,
-		      (Session*)m->get_connection()->get_priv());
+		      static_cast<Session*>(m->get_connection()->get_priv()));
 
   if (service.splitting(pgid)) {
     waiting_for_pg[pgid].push_back(op);
@@ -6045,7 +6042,7 @@ void OSD::handle_sub_op(OpRequestRef op)
 
 void OSD::handle_sub_op_reply(OpRequestRef op)
 {
-  MOSDSubOpReply *m = (MOSDSubOpReply*)op->request;
+  MOSDSubOpReply *m = static_cast<MOSDSubOpReply*>(op->request);
   assert(m->get_header().type == MSG_OSD_SUBOPREPLY);
   if (m->get_map_epoch() < up_epoch) {
     dout(3) << "replica op reply from before up" << dendl;
@@ -6066,7 +6063,7 @@ void OSD::handle_sub_op_reply(OpRequestRef op)
 
   // share our map with sender, if they're old
   _share_map_incoming(m->get_source(), m->get_connection(), m->get_map_epoch(),
-		      (Session*)m->get_connection()->get_priv());
+		      static_cast<Session*>(m->get_connection()->get_priv()));
 
   PG *pg = _have_pg(pgid) ? _lookup_pg(pgid) : NULL;
   if (!pg) {
@@ -6302,7 +6299,7 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
 
 int OSD::init_op_flags(OpRequestRef op)
 {
-  MOSDOp *m = (MOSDOp*)op->request;
+  MOSDOp *m = static_cast<MOSDOp*>(op->request);
   vector<OSDOp>::iterator iter;
 
   // client flags have no bearing on whether an op is a read, write, etc.

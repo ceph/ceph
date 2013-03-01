@@ -2674,7 +2674,7 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
   int mon = get_leader();
   MonSession *session = 0;
   if (req->get_connection())
-    session = (MonSession *)req->get_connection()->get_priv();
+    session = static_cast<MonSession *>(req->get_connection()->get_priv());
   if (req->session_mon >= 0) {
     dout(10) << "forward_request won't double fwd request " << *req << dendl;
     req->put();
@@ -2683,7 +2683,7 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     rr->tid = ++routed_request_tid;
     rr->client = req->get_source_inst();
     encode_message(req, CEPH_FEATURES_ALL, rr->request_bl);   // for my use only; use all features
-    rr->session = (MonSession *)session->get();
+    rr->session = static_cast<MonSession *>(session->get());
     routed_requests[rr->tid] = rr;
     session->routed_request_tids.insert(rr->tid);
     
@@ -2705,7 +2705,7 @@ void Monitor::handle_forward(MForward *m)
 {
   dout(10) << "received forwarded message from " << m->client
 	   << " via " << m->get_source_inst() << dendl;
-  MonSession *session = (MonSession *)m->get_connection()->get_priv();
+  MonSession *session = static_cast<MonSession *>(m->get_connection()->get_priv());
   assert(session);
 
   if (!session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
@@ -2760,7 +2760,7 @@ void Monitor::try_send_message(Message *m, const entity_inst_t& to)
 
 void Monitor::send_reply(PaxosServiceMessage *req, Message *reply)
 {
-  MonSession *session = (MonSession*)req->get_connection()->get_priv();
+  MonSession *session = static_cast<MonSession*>(req->get_connection()->get_priv());
   if (!session) {
     dout(2) << "send_reply no session, dropping reply " << *reply
 	    << " to " << req << " " << *req << dendl;
@@ -2781,7 +2781,7 @@ void Monitor::send_reply(PaxosServiceMessage *req, Message *reply)
 
 void Monitor::no_reply(PaxosServiceMessage *req)
 {
-  MonSession *session = (MonSession*)req->get_connection()->get_priv();
+  MonSession *session = static_cast<MonSession*>(req->get_connection()->get_priv());
   if (!session) {
     dout(2) << "no_reply no session, dropping non-reply to " << req << " " << *req << dendl;
     return;
@@ -2804,7 +2804,7 @@ void Monitor::no_reply(PaxosServiceMessage *req)
 
 void Monitor::handle_route(MRoute *m)
 {
-  MonSession *session = (MonSession *)m->get_connection()->get_priv();
+  MonSession *session = static_cast<MonSession *>(m->get_connection()->get_priv());
   //check privileges
   if (session && !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
     dout(0) << "MRoute received from entity without appropriate perms! "
@@ -2921,7 +2921,6 @@ bool Monitor::_ms_dispatch(Message *m)
 
   Connection *connection = m->get_connection();
   MonSession *s = NULL;
-  bool reuse_caps = false;
   MonCaps caps;
   EntityName entity_name;
   bool src_is_mon;
@@ -2929,8 +2928,9 @@ bool Monitor::_ms_dispatch(Message *m)
   src_is_mon = !connection || (connection->get_peer_type() & CEPH_ENTITY_TYPE_MON);
 
   if (connection) {
+    bool reuse_caps = false;
     dout(20) << "have connection" << dendl;
-    s = (MonSession *)connection->get_priv();
+    s = static_cast<MonSession *>(connection->get_priv());
     if (s && s->closed) {
       caps = s->caps;
       reuse_caps = true;
@@ -3004,34 +3004,34 @@ bool Monitor::_ms_dispatch(Message *m)
     switch (m->get_type()) {
       
     case MSG_ROUTE:
-      handle_route((MRoute*)m);
+      handle_route(static_cast<MRoute*>(m));
       break;
 
       // misc
     case CEPH_MSG_MON_GET_MAP:
-      handle_mon_get_map((MMonGetMap*)m);
+      handle_mon_get_map(static_cast<MMonGetMap*>(m));
       break;
 
     case CEPH_MSG_MON_GET_VERSION:
-      handle_get_version((MMonGetVersion*)m);
+      handle_get_version(static_cast<MMonGetVersion*>(m));
       break;
 
     case MSG_MON_COMMAND:
-      handle_command((MMonCommand*)m);
+      handle_command(static_cast<MMonCommand*>(m));
       break;
 
     case CEPH_MSG_MON_SUBSCRIBE:
       /* FIXME: check what's being subscribed, filter accordingly */
-      handle_subscribe((MMonSubscribe*)m);
+      handle_subscribe(static_cast<MMonSubscribe*>(m));
       break;
 
     case MSG_MON_PROBE:
-      handle_probe((MMonProbe*)m);
+      handle_probe(static_cast<MMonProbe*>(m));
       break;
 
     // Sync (i.e., the new slurp, but on steroids)
     case MSG_MON_SYNC:
-      handle_sync((MMonSync*)m);
+      handle_sync(static_cast<MMonSync*>(m));
       break;
 
       // OSDs
@@ -3087,7 +3087,7 @@ bool Monitor::_ms_dispatch(Message *m)
       // paxos
     case MSG_MON_PAXOS:
       {
-	MMonPaxos *pm = (MMonPaxos*)m;
+	MMonPaxos *pm = static_cast<MMonPaxos*>(m);
 	if (!src_is_mon && 
 	    !s->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
 	  //can't send these!
@@ -3144,11 +3144,11 @@ bool Monitor::_ms_dispatch(Message *m)
       break;
 
     case MSG_FORWARD:
-      handle_forward((MForward *)m);
+      handle_forward(static_cast<MForward *>(m));
       break;
 
     case MSG_TIMECHECK:
-      handle_timecheck((MTimeCheck *)m);
+      handle_timecheck(static_cast<MTimeCheck *>(m));
       break;
 
     default:
@@ -3540,7 +3540,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   
   bool reply = false;
 
-  MonSession *s = (MonSession *)m->get_connection()->get_priv();
+  MonSession *s = static_cast<MonSession *>(m->get_connection()->get_priv());
   if (!s) {
     dout(10) << " no session, dropping" << dendl;
     m->put();
@@ -3593,7 +3593,7 @@ void Monitor::handle_get_version(MMonGetVersion *m)
 {
   dout(10) << "handle_get_version " << *m << dendl;
 
-  MonSession *s = (MonSession *)m->get_connection()->get_priv();
+  MonSession *s = static_cast<MonSession *>(m->get_connection()->get_priv());
   if (!s) {
     dout(10) << " no session, dropping" << dendl;
     m->put();
@@ -3632,7 +3632,7 @@ bool Monitor::ms_handle_reset(Connection *con)
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
     return false;
 
-  MonSession *s = (MonSession *)con->get_priv();
+  MonSession *s = static_cast<MonSession *>(con->get_priv());
   if (!s)
     return false;
 

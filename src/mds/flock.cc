@@ -124,7 +124,7 @@ void ceph_lock_state_t::remove_lock(ceph_filelock removal_lock,
                  list<ceph_filelock>& activated_locks)
 {
   list<multimap<uint64_t, ceph_filelock>::iterator> overlapping_locks,
-    self_overlapping_locks, crossed_waiting_locks;
+    self_overlapping_locks;
   if (get_overlapping_locks(removal_lock, overlapping_locks)) {
     dout(15) << "splitting by owner" << dendl;
     split_by_owner(removal_lock, overlapping_locks, self_overlapping_locks);
