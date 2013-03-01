@@ -89,7 +89,7 @@ void Server::dispatch(Message *m)
 {
   switch (m->get_type()) {
   case CEPH_MSG_CLIENT_RECONNECT:
-    handle_client_reconnect((MClientReconnect*)m);
+    handle_client_reconnect(static_cast<MClientReconnect*>(m));
     return;
   }
 
@@ -98,17 +98,17 @@ void Server::dispatch(Message *m)
       !(mds->is_stopping() && m->get_source().is_mds())) {
     if ((mds->is_reconnect() || mds->get_want_state() == CEPH_MDS_STATE_RECONNECT) &&
 	m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
-	((MClientRequest*)m)->is_replay()) {
+	(static_cast<MClientRequest*>(m))->is_replay()) {
       dout(3) << "queuing replayed op" << dendl;
       mds->enqueue_replay(new C_MDS_RetryMessage(mds, m));
       return;
     } else if (mds->is_clientreplay() &&
 	       (m->get_type() == CEPH_MSG_CLIENT_SESSION ||
 		(m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
-		 ((MClientRequest*)m)->is_replay()))) {
+		 (static_cast<MClientRequest*>(m))->is_replay()))) {
       // replaying!
     } else if (mds->is_clientreplay() && m->get_type() == MSG_MDS_SLAVE_REQUEST &&
-	       (((MMDSSlaveRequest*)m)->is_reply() ||
+	       ((static_cast<MMDSSlaveRequest*>(m))->is_reply() ||
 		!mds->mdsmap->is_active(m->get_source().num()))) {
       // slave reply or the master is also in the clientreplay stage
     } else {
@@ -120,13 +120,13 @@ void Server::dispatch(Message *m)
 
   switch (m->get_type()) {
   case CEPH_MSG_CLIENT_SESSION:
-    handle_client_session((MClientSession*)m);
+    handle_client_session(static_cast<MClientSession*>(m));
     return;
   case CEPH_MSG_CLIENT_REQUEST:
-    handle_client_request((MClientRequest*)m);
+    handle_client_request(static_cast<MClientRequest*>(m));
     return;
   case MSG_MDS_SLAVE_REQUEST:
-    handle_slave_request((MMDSSlaveRequest*)m);
+    handle_slave_request(static_cast<MMDSSlaveRequest*>(m));
     return;
   }
 
@@ -160,7 +160,7 @@ public:
 
 Session *Server::get_session(Message *m)
 {
-  Session *session = (Session *)m->get_connection()->get_priv();
+  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
   if (session) {
     dout(20) << "get_session have " << session << " " << session->info.inst
 	     << " state " << session->get_state_name() << dendl;
@@ -293,7 +293,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
     }
     while (!session->leases.empty()) {
       ClientLease *r = session->leases.front();
-      CDentry *dn = (CDentry*)r->parent;
+      CDentry *dn = static_cast<CDentry*>(r->parent);
       dout(20) << " killing client lease of " << *dn << dendl;
       dn->remove_client_lease(r, mds->locker);
     }
@@ -1476,7 +1476,7 @@ void Server::dispatch_slave_request(MDRequest *mdr)
 	break;
       }
       if (need_issue)
-	mds->locker->issue_caps((CInode*)lock->get_parent());
+	mds->locker->issue_caps(static_cast<CInode*>(lock->get_parent()));
 
       // done.  no ack necessary.
       mdr->slave_request->put();
@@ -1539,7 +1539,7 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
 
     objects.push_back(object);
     if (*p == mdr->slave_request->get_authpin_freeze())
-      auth_pin_freeze = (CInode*)object;
+      auth_pin_freeze = static_cast<CInode*>(object);
   }
   
   // can we auth pin them?
@@ -1630,7 +1630,7 @@ void Server::handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
     if (!mdr->is_auth_pinned(object))
       mdr->remote_auth_pins.insert(object);
     if (*p == ack->get_authpin_freeze())
-      mdr->set_remote_frozen_auth_pin((CInode *)object);
+      mdr->set_remote_frozen_auth_pin(static_cast<CInode *>(object));
     pinned.insert(object);
   }
 
@@ -6632,12 +6632,12 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
 
   CDentry::linkage_t *destdnl = destdn->get_linkage();
 
-  ESlaveUpdate *le;
   list<Context*> finished;
   if (r == 0) {
     // write a commit to the journal
-    le = new ESlaveUpdate(mdlog, "slave_rename_commit", mdr->reqid, mdr->slave_to_mds,
-			  ESlaveUpdate::OP_COMMIT, ESlaveUpdate::RENAME);
+    ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_commit", mdr->reqid, 
+					mdr->slave_to_mds, ESlaveUpdate::OP_COMMIT, 
+					ESlaveUpdate::RENAME);
     mdlog->start_entry(le);
 
     // unfreeze+singleauth inode
@@ -6887,8 +6887,8 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   if (straydn)
     destdn->push_projected_linkage();
 
-  inode_t *ti = NULL;
   if (target) {
+    inode_t *ti = NULL;
     if (target->authority().first == whoami) {
       ti = target->project_inode();
       mut->add_projected_inode(target);

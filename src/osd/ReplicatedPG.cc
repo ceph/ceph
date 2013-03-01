@@ -352,7 +352,6 @@ int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss,
     {
       jf.open_array_section("objects");
       int32_t num = 0;
-      set<int> empty;
       bufferlist bl;
       while (p != missing.missing.end() && num < g_conf->osd_command_max_records) {
 	jf.open_object_section("object");
@@ -406,7 +405,7 @@ bool ReplicatedPG::pg_op_must_wait(MOSDOp *op)
 
 void ReplicatedPG::do_pg_op(OpRequestRef op)
 {
-  MOSDOp *m = (MOSDOp *)op->request;
+  MOSDOp *m = static_cast<MOSDOp *>(op->request);
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
   dout(10) << "do_pg_op " << *m << dendl;
 
@@ -620,7 +619,7 @@ void ReplicatedPG::get_src_oloc(const object_t& oid, const object_locator_t& olo
  */
 void ReplicatedPG::do_op(OpRequestRef op)
 {
-  MOSDOp *m = (MOSDOp*)op->request;
+  MOSDOp *m = static_cast<MOSDOp*>(op->request);
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
   if (op->includes_pg_op()) {
     if (pg_op_must_wait(m)) {
@@ -1038,7 +1037,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
 void ReplicatedPG::log_op_stats(OpContext *ctx)
 {
   OpRequestRef op = ctx->op;
-  MOSDOp *m = (MOSDOp*)op->request;
+  MOSDOp *m = static_cast<MOSDOp*>(op->request);
 
   utime_t now = ceph_clock_now(g_ceph_context);
   utime_t latency = now;
@@ -1108,7 +1107,7 @@ void ReplicatedPG::log_subop_stats(OpRequestRef op, int tag_inb, int tag_lat)
 
 void ReplicatedPG::do_sub_op(OpRequestRef op)
 {
-  MOSDSubOp *m = (MOSDSubOp*)op->request;
+  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->request);
   assert(require_same_or_newer_map(m->map_epoch));
   assert(m->get_header().type == MSG_OSD_SUBOP);
   dout(15) << "do_sub_op " << *op->request << dendl;
@@ -1157,7 +1156,7 @@ void ReplicatedPG::do_sub_op(OpRequestRef op)
 
 void ReplicatedPG::do_sub_op_reply(OpRequestRef op)
 {
-  MOSDSubOpReply *r = (MOSDSubOpReply *)op->request;
+  MOSDSubOpReply *r = static_cast<MOSDSubOpReply *>(op->request);
   assert(r->get_header().type == MSG_OSD_SUBOPREPLY);
   if (r->ops.size() >= 1) {
     OSDOp& first = r->ops[0];
@@ -1178,7 +1177,7 @@ void ReplicatedPG::do_sub_op_reply(OpRequestRef op)
 
 void ReplicatedPG::do_scan(OpRequestRef op)
 {
-  MOSDPGScan *m = (MOSDPGScan*)op->request;
+  MOSDPGScan *m = static_cast<MOSDPGScan*>(op->request);
   assert(m->get_header().type == MSG_OSD_PG_SCAN);
   dout(10) << "do_scan " << *m << dendl;
 
@@ -1237,7 +1236,7 @@ void ReplicatedPG::do_scan(OpRequestRef op)
 
 void ReplicatedPG::do_backfill(OpRequestRef op)
 {
-  MOSDPGBackfill *m = (MOSDPGBackfill*)op->request;
+  MOSDPGBackfill *m = static_cast<MOSDPGBackfill*>(op->request);
   assert(m->get_header().type == MSG_OSD_PG_BACKFILL);
   dout(10) << "do_backfill " << *m << dendl;
 
@@ -1788,7 +1787,6 @@ int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
       } else if (op == CEPH_OSD_TMAP_CREATE) {
 	if (key_exists) {
 	  return -EEXIST;
-	  break;
 	}
 	bufferlist val;
 	try {
@@ -1897,7 +1895,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     ObjectContext *src_obc = 0;
     if (ceph_osd_op_type_multi(op.op)) {
       object_locator_t src_oloc;
-      get_src_oloc(soid.oid, ((MOSDOp *)ctx->op->request)->get_object_locator(), src_oloc);
+      get_src_oloc(soid.oid, (static_cast<MOSDOp *>(ctx->op->request))->get_object_locator(), src_oloc);
       hobject_t src_oid(osd_op.soid, src_oloc.key, soid.hash,
 			info.pgid.pool());
       src_obc = ctx->src_obc[src_oid];
@@ -3121,7 +3119,6 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       if (obs.exists)
 	t.remove(coll, soid);
       
-      map<string, bufferptr> attrs;
       t.clone(coll,
 	      rollback_to_sobject, soid);
       snapset.head_exists = true;
@@ -3712,7 +3709,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 {
   MOSDOp *m = NULL;
   if (repop->ctx->op)
-    m = (MOSDOp *)repop->ctx->op->request;
+    m = static_cast<MOSDOp *>(repop->ctx->op->request);
 
   if (m)
     dout(10) << "eval_repop " << *repop
@@ -3879,7 +3876,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
 				  get_osdmap()->get_epoch(),
 				  repop->rep_tid, repop->ctx->at_version);
     if (ctx->op &&
-	(((MOSDOp *)ctx->op->request)->get_flags() & CEPH_OSD_FLAG_PARALLELEXEC)) {
+	((static_cast<MOSDOp *>(ctx->op->request))->get_flags() & CEPH_OSD_FLAG_PARALLELEXEC)) {
       // replicate original op for parallel execution on replica
       assert(0 == "broken implementation, do not use");
       wr->oloc = repop->ctx->obs->oi.oloc;
@@ -3958,7 +3955,7 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
   MOSDOp *m = NULL;
 
   if (repop->ctx->op)
-    m = (MOSDOp *)repop->ctx->op->request;
+    m = static_cast<MOSDOp *>(repop->ctx->op->request);
 
   if (m)
     dout(7) << "repop_ack rep_tid " << repop->rep_tid << " op " << *m
@@ -4435,7 +4432,7 @@ void ReplicatedPG::put_snapset_context(SnapSetContext *ssc)
 
 void ReplicatedPG::sub_op_modify(OpRequestRef op)
 {
-  MOSDSubOp *m = (MOSDSubOp*)op->request;
+  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->request);
   assert(m->get_header().type == MSG_OSD_SUBOP);
 
   const hobject_t& soid = m->poid;
@@ -4570,7 +4567,7 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
 
   if (!pg_has_reset_since(rm->epoch_started)) {
     dout(10) << "sub_op_modify_applied on " << rm << " op " << *rm->op->request << dendl;
-    MOSDSubOp *m = (MOSDSubOp*)rm->op->request;
+    MOSDSubOp *m = static_cast<MOSDSubOp*>(rm->op->request);
     assert(m->get_header().type == MSG_OSD_SUBOP);
     
     if (!rm->committed) {
@@ -4618,7 +4615,7 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
     
     if (get_osdmap()->is_up(rm->ackerosd)) {
       last_complete_ondisk = rm->last_complete;
-      MOSDSubOpReply *commit = new MOSDSubOpReply((MOSDSubOp*)rm->op->request, 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ONDISK);
+      MOSDSubOpReply *commit = new MOSDSubOpReply(static_cast<MOSDSubOp*>(rm->op->request), 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ONDISK);
       commit->set_last_complete_ondisk(rm->last_complete);
       commit->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
       osd->send_message_osd_cluster(rm->ackerosd, commit, get_osdmap()->get_epoch());
@@ -4641,7 +4638,7 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
 
 void ReplicatedPG::sub_op_modify_reply(OpRequestRef op)
 {
-  MOSDSubOpReply *r = (MOSDSubOpReply*)op->request;
+  MOSDSubOpReply *r = static_cast<MOSDSubOpReply*>(op->request);
   assert(r->get_header().type == MSG_OSD_SUBOPREPLY);
 
   op->mark_started();
@@ -5168,7 +5165,7 @@ ObjectRecoveryInfo ReplicatedPG::recalc_subsets(const ObjectRecoveryInfo& recove
 
 void ReplicatedPG::handle_pull_response(OpRequestRef op)
 {
-  MOSDSubOp *m = (MOSDSubOp *)op->request;
+  MOSDSubOp *m = static_cast<MOSDSubOp *>(op->request);
   bufferlist data;
   m->claim_data(data);
   interval_set<uint64_t> data_included = m->data_included;
@@ -5317,7 +5314,7 @@ void ReplicatedPG::handle_pull_response(OpRequestRef op)
 
 void ReplicatedPG::handle_push(OpRequestRef op)
 {
-  MOSDSubOp *m = (MOSDSubOp *)op->request;
+  MOSDSubOp *m = static_cast<MOSDSubOp *>(op->request);
   dout(10) << "handle_push "
 	   << m->recovery_info
 	   << m->recovery_progress
@@ -5505,7 +5502,7 @@ void ReplicatedPG::send_push_op_blank(const hobject_t& soid, int peer)
 
 void ReplicatedPG::sub_op_push_reply(OpRequestRef op)
 {
-  MOSDSubOpReply *reply = (MOSDSubOpReply*)op->request;
+  MOSDSubOpReply *reply = static_cast<MOSDSubOpReply*>(op->request);
   assert(reply->get_header().type == MSG_OSD_SUBOPREPLY);
   dout(10) << "sub_op_push_reply from " << reply->get_source() << " " << *reply << dendl;
 
@@ -5597,7 +5594,7 @@ void ReplicatedPG::finish_degraded_object(const hobject_t& oid)
  */
 void ReplicatedPG::sub_op_pull(OpRequestRef op)
 {
-  MOSDSubOp *m = (MOSDSubOp*)op->request;
+  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->request);
   assert(m->get_header().type == MSG_OSD_SUBOP);
 
   op->mark_started();
@@ -5810,7 +5807,7 @@ void ReplicatedPG::sub_op_push(OpRequestRef op)
 
 void ReplicatedPG::_failed_push(OpRequestRef op)
 {
-  MOSDSubOp *m = (MOSDSubOp*)op->request;
+  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->request);
   assert(m->get_header().type == MSG_OSD_SUBOP);
   const hobject_t& soid = m->poid;
   int from = m->get_source().num();
@@ -5834,7 +5831,7 @@ void ReplicatedPG::_failed_push(OpRequestRef op)
 
 void ReplicatedPG::sub_op_remove(OpRequestRef op)
 {
-  MOSDSubOp *m = (MOSDSubOp*)op->request;
+  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->request);
   assert(m->get_header().type == MSG_OSD_SUBOP);
   dout(7) << "sub_op_remove " << m->poid << dendl;
 

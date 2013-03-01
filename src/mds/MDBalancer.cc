@@ -54,7 +54,7 @@ int MDBalancer::proc_message(Message *m)
   switch (m->get_type()) {
 
   case MSG_MDS_HEARTBEAT:
-    handle_heartbeat((MHeartbeat*)m);
+    handle_heartbeat(static_cast<MHeartbeat*>(m));
     break;
 
   default:

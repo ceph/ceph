@@ -2910,7 +2910,7 @@ void PG::unreg_next_scrub()
 
 void PG::sub_op_scrub_map(OpRequestRef op)
 {
-  MOSDSubOp *m = (MOSDSubOp *)op->request;
+  MOSDSubOp *m = static_cast<MOSDSubOp *>(op->request);
   assert(m->get_header().type == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_map" << dendl;
 
@@ -3067,7 +3067,7 @@ void PG::_request_scrub_map(int replica, eversion_t version,
 
 void PG::sub_op_scrub_reserve(OpRequestRef op)
 {
-  MOSDSubOp *m = (MOSDSubOp*)op->request;
+  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->request);
   assert(m->get_header().type == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_reserve" << dendl;
 
@@ -3087,7 +3087,7 @@ void PG::sub_op_scrub_reserve(OpRequestRef op)
 
 void PG::sub_op_scrub_reserve_reply(OpRequestRef op)
 {
-  MOSDSubOpReply *reply = (MOSDSubOpReply*)op->request;
+  MOSDSubOpReply *reply = static_cast<MOSDSubOpReply*>(op->request);
   assert(reply->get_header().type == MSG_OSD_SUBOPREPLY);
   dout(7) << "sub_op_scrub_reserve_reply" << dendl;
 
@@ -3132,7 +3132,7 @@ void PG::sub_op_scrub_stop(OpRequestRef op)
 {
   op->mark_started();
 
-  MOSDSubOp *m = (MOSDSubOp*)op->request;
+  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->request);
   assert(m->get_header().type == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_stop" << dendl;
 
@@ -4793,7 +4793,7 @@ ostream& operator<<(ostream& out, const PG& pg)
 
 bool PG::can_discard_op(OpRequestRef op)
 {
-  MOSDOp *m = (MOSDOp*)op->request;
+  MOSDOp *m = static_cast<MOSDOp*>(op->request);
   if (OSD::op_is_discardable(m)) {
     dout(20) << " discard " << *m << dendl;
     return true;
@@ -4820,7 +4820,7 @@ bool PG::can_discard_op(OpRequestRef op)
 
 bool PG::can_discard_subop(OpRequestRef op)
 {
-  MOSDSubOp *m = (MOSDSubOp *)op->request;
+  MOSDSubOp *m = static_cast<MOSDSubOp *>(op->request);
   assert(m->get_header().type == MSG_OSD_SUBOP);
 
   // same pg?
@@ -4836,7 +4836,7 @@ bool PG::can_discard_subop(OpRequestRef op)
 
 bool PG::can_discard_scan(OpRequestRef op)
 {
-  MOSDPGScan *m = (MOSDPGScan *)op->request;
+  MOSDPGScan *m = static_cast<MOSDPGScan *>(op->request);
   assert(m->get_header().type == MSG_OSD_PG_SCAN);
 
   if (old_peering_msg(m->map_epoch, m->query_epoch)) {
@@ -4848,7 +4848,7 @@ bool PG::can_discard_scan(OpRequestRef op)
 
 bool PG::can_discard_backfill(OpRequestRef op)
 {
-  MOSDPGBackfill *m = (MOSDPGBackfill *)op->request;
+  MOSDPGBackfill *m = static_cast<MOSDPGBackfill *>(op->request);
   assert(m->get_header().type == MSG_OSD_PG_BACKFILL);
 
   if (old_peering_msg(m->map_epoch, m->query_epoch)) {
@@ -5208,7 +5208,6 @@ void PG::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
 
   // In case of sobject_t based encoding, may need to list objects in the store
   // to find hashes
-  bool listed_collection = false;
   vector<hobject_t> ls;
   
   if (ondisklog_head > 0) {
@@ -5228,6 +5227,8 @@ void PG::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
     assert(log.empty());
     eversion_t last;
     bool reorder = false;
+    bool listed_collection = false;
+
     while (!p.end()) {
       uint64_t pos = ondisklog_tail + p.get_off();
       if (ondisklog_has_checksums) {

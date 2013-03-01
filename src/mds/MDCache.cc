@@ -516,8 +516,8 @@ struct C_MDS_RetryOpenRoot : public Context {
 
 void MDCache::open_root_inode(Context *c)
 {
-  CInode *in;
   if (mds->whoami == mds->mdsmap->get_root()) {
+    CInode *in;
     in = create_system_inode(MDS_INO_ROOT, S_IFDIR|0755);  // initially inaccurate!
     in->fetch(c);
   } else {
@@ -1982,7 +1982,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	(!pin->can_auth_pin() ||
 	 !pin->versionlock.can_wrlock() ||                   // make sure we can take versionlock, too
 	 //true
-	 !mds->locker->wrlock_start(&pin->nestlock, (MDRequest*)mut, true) // can cast only because i'm passing nowait=true
+	 !mds->locker->wrlock_start(&pin->nestlock, static_cast<MDRequest*>(mut), true) // can cast only because i'm passing nowait=true
 	 )) {  // ** do not initiate.. see above comment **
       dout(10) << "predirty_journal_parents can't wrlock one of " << pin->versionlock << " or " << pin->nestlock
 	       << " on " << *pin << dendl;
@@ -4739,7 +4739,6 @@ void MDCache::rejoin_gather_finish()
   process_imported_caps();
   choose_lock_states_and_reconnect_caps();
 
-  vector<CInode*> recover_q, check_q;
   identify_files_to_recover(rejoin_recover_q, rejoin_check_q);
   rejoin_send_acks();
   
@@ -5674,7 +5673,7 @@ bool MDCache::trim(int max)
   list<CDentry*> unexpirables;
   // trim dentries from the LRU
   while (lru.lru_get_size() + unexpirable > (unsigned)max) {
-    CDentry *dn = (CDentry*)lru.lru_expire();
+    CDentry *dn = static_cast<CDentry*>(lru.lru_expire());
     if (!dn) break;
     if (is_standby_replay && dn->get_linkage() &&
         dn->get_linkage()->inode->item_open_file.is_on_list()) {
@@ -5942,7 +5941,7 @@ void MDCache::trim_non_auth()
   
   // trim non-auth items from the lru
   while (lru.lru_get_size() > 0) {
-    CDentry *dn = (CDentry*)lru.lru_expire();
+    CDentry *dn = static_cast<CDentry*>(lru.lru_expire());
     if (!dn) break;
     CDentry::linkage_t *dnl = dn->get_linkage();
 
@@ -6411,7 +6410,7 @@ void MDCache::trim_client_leases()
     while (!client_leases[pool].empty()) {
       ClientLease *r = client_leases[pool].front();
       if (r->ttl > now) break;
-      CDentry *dn = (CDentry*)r->parent;
+      CDentry *dn = static_cast<CDentry*>(r->parent);
       dout(10) << " expiring client." << r->client << " lease of " << *dn << dendl;
       dn->remove_client_lease(r, mds->locker);
     }
@@ -6773,54 +6772,49 @@ void MDCache::dispatch(Message *m)
 
     // RESOLVE
   case MSG_MDS_RESOLVE:
-    handle_resolve((MMDSResolve*)m);
+    handle_resolve(static_cast<MMDSResolve*>(m));
     break;
   case MSG_MDS_RESOLVEACK:
-    handle_resolve_ack((MMDSResolveAck*)m);
+    handle_resolve_ack(static_cast<MMDSResolveAck*>(m));
     break;
 
     // REJOIN
   case MSG_MDS_CACHEREJOIN:
-    handle_cache_rejoin((MMDSCacheRejoin*)m);
+    handle_cache_rejoin(static_cast<MMDSCacheRejoin*>(m));
     break;
 
   case MSG_MDS_DISCOVER:
-    handle_discover((MDiscover*)m);
+    handle_discover(static_cast<MDiscover*>(m));
     break;
   case MSG_MDS_DISCOVERREPLY:
-    handle_discover_reply((MDiscoverReply*)m);
+    handle_discover_reply(static_cast<MDiscoverReply*>(m));
     break;
 
   case MSG_MDS_DIRUPDATE:
-    handle_dir_update((MDirUpdate*)m);
+    handle_dir_update(static_cast<MDirUpdate*>(m));
     break;
 
   case MSG_MDS_CACHEEXPIRE:
-    handle_cache_expire((MCacheExpire*)m);
+    handle_cache_expire(static_cast<MCacheExpire*>(m));
     break;
-
-
 
   case MSG_MDS_DENTRYLINK:
-    handle_dentry_link((MDentryLink*)m);
+    handle_dentry_link(static_cast<MDentryLink*>(m));
     break;
   case MSG_MDS_DENTRYUNLINK:
-    handle_dentry_unlink((MDentryUnlink*)m);
+    handle_dentry_unlink(static_cast<MDentryUnlink*>(m));
     break;
-
 
   case MSG_MDS_FRAGMENTNOTIFY:
-    handle_fragment_notify((MMDSFragmentNotify*)m);
+    handle_fragment_notify(static_cast<MMDSFragmentNotify*>(m));
     break;
-    
 
   case MSG_MDS_FINDINO:
-    handle_find_ino((MMDSFindIno *)m);
+    handle_find_ino(static_cast<MMDSFindIno *>(m));
     break;
   case MSG_MDS_FINDINOREPLY:
-    handle_find_ino_reply((MMDSFindInoReply *)m);
+    handle_find_ino_reply(static_cast<MMDSFindInoReply *>(m));
     break;
-
     
   default:
     dout(7) << "cache unknown message " << m->get_type() << dendl;

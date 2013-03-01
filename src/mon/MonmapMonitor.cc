@@ -163,9 +163,9 @@ bool MonmapMonitor::preprocess_query(PaxosServiceMessage *m)
   switch (m->get_type()) {
     // READs
   case MSG_MON_COMMAND:
-    return preprocess_command((MMonCommand*)m);
+    return preprocess_command(static_cast<MMonCommand*>(m));
   case MSG_MON_JOIN:
-    return preprocess_join((MMonJoin*)m);
+    return preprocess_join(static_cast<MMonJoin*>(m));
   default:
     assert(0);
     m->put();
@@ -219,7 +219,6 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
       string format = "plain";
       string val;
       epoch_t epoch = 0;
-      string cmd = args[0];
       for (std::vector<const char*>::iterator i = args.begin()+1; i != args.end(); ) {
 	if (ceph_argparse_double_dash(args, i))
 	  break;
@@ -338,9 +337,9 @@ bool MonmapMonitor::prepare_update(PaxosServiceMessage *m)
   
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
-    return prepare_command((MMonCommand*)m);
+    return prepare_command(static_cast<MMonCommand*>(m));
   case MSG_MON_JOIN:
-    return prepare_join((MMonJoin*)m);
+    return prepare_join(static_cast<MMonJoin*>(m));
   default:
     assert(0);
     m->put();

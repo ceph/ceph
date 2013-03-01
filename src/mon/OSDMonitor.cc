@@ -537,23 +537,23 @@ bool OSDMonitor::preprocess_query(PaxosServiceMessage *m)
   switch (m->get_type()) {
     // READs
   case MSG_MON_COMMAND:
-    return preprocess_command((MMonCommand*)m);
+    return preprocess_command(static_cast<MMonCommand*>(m));
 
     // damp updates
   case MSG_OSD_FAILURE:
-    return preprocess_failure((MOSDFailure*)m);
+    return preprocess_failure(static_cast<MOSDFailure*>(m));
   case MSG_OSD_BOOT:
-    return preprocess_boot((MOSDBoot*)m);
+    return preprocess_boot(static_cast<MOSDBoot*>(m));
   case MSG_OSD_ALIVE:
-    return preprocess_alive((MOSDAlive*)m);
+    return preprocess_alive(static_cast<MOSDAlive*>(m));
   case MSG_OSD_PGTEMP:
-    return preprocess_pgtemp((MOSDPGTemp*)m);
+    return preprocess_pgtemp(static_cast<MOSDPGTemp*>(m));
 
   case CEPH_MSG_POOLOP:
-    return preprocess_pool_op((MPoolOp*)m);
+    return preprocess_pool_op(static_cast<MPoolOp*>(m));
 
   case MSG_REMOVE_SNAPS:
-    return preprocess_remove_snaps((MRemoveSnaps*)m);
+    return preprocess_remove_snaps(static_cast<MRemoveSnaps*>(m));
     
   default:
     assert(0);
@@ -569,22 +569,22 @@ bool OSDMonitor::prepare_update(PaxosServiceMessage *m)
   switch (m->get_type()) {
     // damp updates
   case MSG_OSD_FAILURE:
-    return prepare_failure((MOSDFailure*)m);
+    return prepare_failure(static_cast<MOSDFailure*>(m));
   case MSG_OSD_BOOT:
-    return prepare_boot((MOSDBoot*)m);
+    return prepare_boot(static_cast<MOSDBoot*>(m));
   case MSG_OSD_ALIVE:
-    return prepare_alive((MOSDAlive*)m);
+    return prepare_alive(static_cast<MOSDAlive*>(m));
   case MSG_OSD_PGTEMP:
-    return prepare_pgtemp((MOSDPGTemp*)m);
+    return prepare_pgtemp(static_cast<MOSDPGTemp*>(m));
 
   case MSG_MON_COMMAND:
-    return prepare_command((MMonCommand*)m);
+    return prepare_command(static_cast<MMonCommand*>(m));
     
   case CEPH_MSG_POOLOP:
-    return prepare_pool_op((MPoolOp*)m);
+    return prepare_pool_op(static_cast<MPoolOp*>(m));
 
   case MSG_REMOVE_SNAPS:
-    return prepare_remove_snaps((MRemoveSnaps*)m);
+    return prepare_remove_snaps(static_cast<MRemoveSnaps*>(m));
 
   default:
     assert(0);

@@ -71,7 +71,7 @@ class NotifyTimeoutCB : public CancelableContext {
   NotifyRef notif;
   bool canceled; // protected by notif lock
 public:
-  NotifyTimeoutCB(NotifyRef notif) : notif(notif) {}
+  NotifyTimeoutCB(NotifyRef notif) : notif(notif), canceled(false) {}
   void finish(int) {
     notif->osd->watch_lock.Unlock();
     notif->lock.Lock();
