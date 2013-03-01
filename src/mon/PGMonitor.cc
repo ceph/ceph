@@ -34,6 +34,9 @@
 #include "common/Formatter.h"
 #include "common/ceph_argparse.h"
 #include "common/perf_counters.h"
+#include "common/TextTable.h"
+
+#include "include/stringify.h"
 
 #include "osd/osd_types.h"
 
@@ -893,6 +896,157 @@ bool PGMonitor::check_down_pgs()
   need_check_down_pgs = false;
   return ret;
 }
+
+inline string percentify(const float& a) {
+  stringstream ss;
+  if (a < 0.01)
+    ss << "0";
+  else
+    ss << std::fixed << std::setprecision(2) << a;
+  return ss.str();
+}
+
+//void PGMonitor::dump_object_stat_sum(stringstream& ss, Formatter *f,
+void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
+    object_stat_sum_t &sum, bool verbose)
+{
+  if (f) {
+    f->dump_int("kb_used", SHIFT_ROUND_UP(sum.num_bytes, 10));
+    f->dump_int("bytes_used", sum.num_bytes);
+    f->dump_int("objects", sum.num_objects);
+    if (verbose) {
+      f->dump_int("rd", sum.num_rd);
+      f->dump_int("rd_kb", sum.num_rd_kb);
+      f->dump_int("wr", sum.num_wr);
+      f->dump_int("wr_kb", sum.num_wr_kb);
+    }
+  } else {
+    tbl << stringify(si_t(sum.num_bytes));
+    int64_t kb_used = SHIFT_ROUND_UP(sum.num_bytes, 10);
+    tbl << percentify(((float)kb_used / pg_map.osd_sum.kb)*100);
+    tbl << sum.num_objects;
+    if (verbose) {
+      tbl << stringify(si_t(sum.num_rd))
+          << stringify(si_t(sum.num_wr));
+    }
+  }
+}
+
+void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
+{
+  TextTable tbl;
+
+  if (f) {
+    f->open_array_section("pools");
+  } else {
+    tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("ID", TextTable::LEFT, TextTable::LEFT);
+    if (verbose)
+      tbl.define_column("CATEGORY", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("USED", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("\%USED", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::LEFT);
+    if (verbose) {
+      tbl.define_column("READ", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("WRITE", TextTable::LEFT, TextTable::LEFT);
+    }
+  }
+
+  OSDMap &osdmap = mon->osdmon()->osdmap;
+  for (map<int64_t,pg_pool_t>::const_iterator p = osdmap.get_pools().begin();
+       p != osdmap.get_pools().end(); ++p) {
+    int64_t pool_id = p->first;
+    if ((pool_id < 0) || (pg_map.pg_pool_sum.count(pool_id) == 0))
+      continue;
+    string pool_name = osdmap.get_pool_name(pool_id);
+    pool_stat_t &stat = pg_map.pg_pool_sum[pool_id];
+
+    if (f) {
+      f->open_object_section("pool");
+      f->dump_string("name", pool_name);
+      f->dump_int("id", pool_id);
+      f->open_object_section("stats");
+    } else {
+      tbl << pool_name
+          << pool_id;
+      if (verbose)
+        tbl << "-";
+    }
+    dump_object_stat_sum(tbl, f, stat.stats.sum, verbose);
+    if (f)
+      f->close_section(); // stats
+    else
+      tbl << TextTable::endrow;
+
+    if (verbose) {
+      if (f)
+        f->open_array_section("categories");
+
+      for (map<string,object_stat_sum_t>::iterator it = stat.stats.cat_sum.begin();
+          it != stat.stats.cat_sum.end(); ++it) {
+        if (f) {
+          f->open_object_section(it->first.c_str());
+        } else {
+          tbl << ""
+              << ""
+              << it->first;
+        }
+        dump_object_stat_sum(tbl, f, it->second, verbose);
+        if (f)
+          f->close_section(); // category name
+        else
+          tbl << TextTable::endrow;
+      }
+      if (f)
+        f->close_section(); // categories
+    }
+    if (f)
+      f->close_section(); // pool
+  }
+  if (f)
+    f->close_section();
+  else {
+    ss << "POOLS:\n";
+    tbl.set_indent(4);
+    ss << tbl;
+  }
+}
+
+void PGMonitor::dump_fs_stats(stringstream &ss, Formatter *f, bool verbose)
+{
+  if (f) {
+    f->open_object_section("stats");
+    f->dump_int("total_space", pg_map.osd_sum.kb);
+    f->dump_int("total_used", pg_map.osd_sum.kb_used);
+    f->dump_int("total_avail", pg_map.osd_sum.kb_avail);
+    if (verbose) {
+      f->dump_int("total_objects", pg_map.pg_sum.stats.sum.num_objects);
+    }
+    f->close_section();
+  } else {
+    TextTable tbl;
+    tbl.define_column("SIZE", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("AVAIL", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("RAW USED", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("\%RAW USED", TextTable::LEFT, TextTable::LEFT);
+    if (verbose) {
+      tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::LEFT);
+    }
+    tbl << stringify(si_t(pg_map.osd_sum.kb))
+        << stringify(si_t(pg_map.osd_sum.kb_avail))
+        << stringify(si_t(pg_map.osd_sum.kb_used));
+    tbl << percentify(((float)pg_map.osd_sum.kb_used / pg_map.osd_sum.kb)*100);
+    if (verbose) {
+      tbl << stringify(si_t(pg_map.pg_sum.stats.sum.num_objects));
+    }
+    tbl << TextTable::endrow;
+
+    ss << "GLOBAL:\n";
+    tbl.set_indent(4);
+    ss << tbl;
+  }
+}
+
 
 void PGMonitor::dump_info(Formatter *f)
 {
