@@ -226,7 +226,7 @@ bool LogMonitor::preprocess_query(PaxosServiceMessage *m)
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
-    return preprocess_command((MMonCommand*)m);
+    return preprocess_command(static_cast<MMonCommand*>(m));
 
   case MSG_LOG:
     return preprocess_log((MLog*)m);
@@ -243,7 +243,7 @@ bool LogMonitor::prepare_update(PaxosServiceMessage *m)
   dout(10) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
-    return prepare_command((MMonCommand*)m);
+    return prepare_command(static_cast<MMonCommand*>(m));
   case MSG_LOG:
     return prepare_log((MLog*)m);
   default:
