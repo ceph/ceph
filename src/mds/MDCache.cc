@@ -4739,7 +4739,6 @@ void MDCache::rejoin_gather_finish()
   process_imported_caps();
   choose_lock_states_and_reconnect_caps();
 
-  vector<CInode*> recover_q, check_q;
   identify_files_to_recover(rejoin_recover_q, rejoin_check_q);
   rejoin_send_acks();
   
