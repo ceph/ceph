@@ -39,6 +39,7 @@ class MMonCommand;
 class MGetPoolStats;
 
 class RatioMonitor;
+class TextTable;
 
 class PGMonitor : public PaxosService {
 public:
@@ -129,6 +130,9 @@ private:
 			  bufferlist& rdata,
 			  vector<const char*>& args) const;
 
+  void dump_object_stat_sum(TextTable &tbl, Formatter *f,
+                            object_stat_sum_t &sum, bool verbose);
+
 public:
   PGMonitor(Monitor *mn, Paxos *p, const string& service_name)
   : PaxosService(mn, p, service_name), need_check_down_pgs(false) { }
@@ -144,6 +148,9 @@ public:
   void tick();  // check state, take actions
 
   void check_osd_map(epoch_t epoch);
+
+  void dump_pool_stats(stringstream &ss, Formatter *f, bool verbose);
+  void dump_fs_stats(stringstream &ss, Formatter *f, bool verbose);
 
   void dump_info(Formatter *f);
 
