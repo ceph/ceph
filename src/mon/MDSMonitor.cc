@@ -152,13 +152,13 @@ bool MDSMonitor::preprocess_query(PaxosServiceMessage *m)
   switch (m->get_type()) {
     
   case MSG_MDS_BEACON:
-    return preprocess_beacon((MMDSBeacon*)m);
+    return preprocess_beacon(static_cast<MMDSBeacon*>(m));
     
   case MSG_MON_COMMAND:
-    return preprocess_command((MMonCommand*)m);
+    return preprocess_command(static_cast<MMonCommand*>(m));
 
   case MSG_MDS_OFFLOAD_TARGETS:
-    return preprocess_offload_targets((MMDSLoadTargets*)m);
+    return preprocess_offload_targets(static_cast<MMDSLoadTargets*>(m));
 
   default:
     assert(0);
@@ -331,13 +331,13 @@ bool MDSMonitor::prepare_update(PaxosServiceMessage *m)
   switch (m->get_type()) {
     
   case MSG_MDS_BEACON:
-    return prepare_beacon((MMDSBeacon*)m);
+    return prepare_beacon(static_cast<MMDSBeacon*>(m));
 
   case MSG_MON_COMMAND:
-    return prepare_command((MMonCommand*)m);
+    return prepare_command(static_cast<MMonCommand*>(m));
 
   case MSG_MDS_OFFLOAD_TARGETS:
-    return prepare_offload_targets((MMDSLoadTargets*)m);
+    return prepare_offload_targets(static_cast<MMDSLoadTargets*>(m));
   
   default:
     assert(0);
