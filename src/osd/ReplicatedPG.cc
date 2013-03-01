@@ -1788,7 +1788,6 @@ int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
       } else if (op == CEPH_OSD_TMAP_CREATE) {
 	if (key_exists) {
 	  return -EEXIST;
-	  break;
 	}
 	bufferlist val;
 	try {
