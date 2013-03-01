@@ -4180,8 +4180,6 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
     }
   }
 
-  map<int64_t, int> pool_resize;  // poolid -> old size
-
   // scan pg creations
   hash_map<pg_t, create_pg_info>::iterator n = creating_pgs.begin();
   while (n != creating_pgs.end()) {
