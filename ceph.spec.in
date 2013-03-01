@@ -61,6 +61,7 @@ BuildRequires:	%insserv_prereq
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
 BuildRequires:	libatomic-ops-devel
+BuildRequires:  fdupes
 %else
 Requires:       gdisk
 BuildRequires:	nss-devel
@@ -312,6 +313,12 @@ mkdir -p $RPM_BUILD_ROOT/var/lib/ceph/osd
 mkdir -p $RPM_BUILD_ROOT/var/lib/ceph/mds
 mkdir -p $RPM_BUILD_ROOT/var/lib/ceph/bootstrap-osd
 mkdir -p $RPM_BUILD_ROOT/var/lib/ceph/bootstrap-mds
+
+%if %{defined suse_version}
+# Fedora seems to have some problems with this macro, use it only on SUSE
+%fdupes -s $RPM_BUILD_ROOT/%{python_sitelib}
+%fdupes %buildroot
+%endif 
 
 %clean
 rm -rf $RPM_BUILD_ROOT
