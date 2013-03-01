@@ -1265,9 +1265,9 @@ int FileStore::_sanity_check_fs()
 {
   // sanity check(s)
 
-  if ((int)m_filestore_journal_writeahead +
+  if (((int)m_filestore_journal_writeahead +
       (int)m_filestore_journal_parallel +
-      (int)m_filestore_journal_trailing > 1) {
+      (int)m_filestore_journal_trailing) > 1) {
     dout(0) << "mount ERROR: more than one of filestore journal {writeahead,parallel,trailing} enabled" << dendl;
     cerr << TEXT_RED 
 	 << " ** WARNING: more than one of 'filestore journal {writeahead,parallel,trailing}'\n"
