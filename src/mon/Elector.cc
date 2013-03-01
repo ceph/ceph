@@ -314,7 +314,7 @@ void Elector::dispatch(Message *m)
 	return;
       }
 
-      MMonElection *em = (MMonElection*)m;
+      MMonElection *em = static_cast<MMonElection*>(m);
 
       // assume an old message encoding would have matched
       if (em->fsid != mon->monmap->fsid) {
