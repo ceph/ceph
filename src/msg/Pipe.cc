@@ -1585,9 +1585,9 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
 {
   // create a buffer to read into that matches the data alignment
   unsigned left = len;
-  unsigned head = 0;
   if (off & ~CEPH_PAGE_MASK) {
     // head
+    unsigned head = 0;
     head = MIN(CEPH_PAGE_SIZE - (off & ~CEPH_PAGE_MASK), left);
     bufferptr bp = buffer::create(head);
     data.push_back(bp);
@@ -1650,10 +1650,10 @@ int Pipe::read_message(Message **pm)
   int aborted;
   Message *message;
   utime_t recv_stamp = ceph_clock_now(msgr->cct);
-  bool waited_on_throttle = false;
 
   uint64_t message_size = header.front_len + header.middle_len + header.data_len;
   if (message_size) {
+    bool waited_on_throttle = false;
     if (policy.throttler) {
       ldout(msgr->cct,10) << "reader wants " << message_size << " from policy throttler "
 	       << policy.throttler->get_current() << "/"
