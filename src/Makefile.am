@@ -1,26 +1,8 @@
 AUTOMAKE_OPTIONS = gnu
 SUBDIRS = ocf java
-DIST_SUBDIRS = gtest ocf libs3 java
+DIST_SUBDIRS = gtest ocf java
 
-EXTRA_DIST = \
-	libs3/COPYING \
-	libs3/ChangeLog \
-	libs3/GNUmakefile \
-	libs3/GNUmakefile.mingw \
-	libs3/GNUmakefile.osx \
-	libs3/INSTALL \
-	libs3/LICENSE \
-	libs3/README \
-	libs3/TODO \
-	libs3/archlinux \
-	libs3/debian \
-	libs3/doxyfile \
-	libs3/inc \
-	libs3/libs3.spec \
-	libs3/mswin \
-	libs3/src \
-	libs3/test \
-	unittest_bufferlist.sh
+EXTRA_DIST =
 
 CLEANFILES =
 bin_PROGRAMS =
@@ -439,17 +421,9 @@ bin_PROGRAMS += rados
 if WITH_REST_BENCH
 
 rest_bench_SOURCES = tools/rest_bench.cc common/obj_bencher.cc
-rest_bench_LDADD = libglobal.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+rest_bench_LDADD = libglobal.la $(PTHREAD_LIBS) -ls3 -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 rest_bench_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += rest-bench
-
-if WITH_SYSTEM_LIBS3
-rest_bench_LDADD += -ls3
-else
-rest_bench_LDADD += libs3/build/lib/libs3.a -lcurl -lxml2
-rest_bench_CXXFLAGS += -I$(top_srcdir)/src/libs3/inc
-SUBDIRS += libs3
-endif
 
 endif
 
