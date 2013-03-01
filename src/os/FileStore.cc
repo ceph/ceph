@@ -3610,10 +3610,8 @@ void FileStore::sync_and_flush()
     if (journal)
       journal->flush();
     _flush_op_queue();
-  } else if (m_filestore_journal_parallel) {
-    _flush_op_queue();
-    sync();
   } else {
+    // includes m_filestore_journal_parallel
     _flush_op_queue();
     sync();
   }
