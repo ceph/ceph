@@ -2921,7 +2921,6 @@ bool Monitor::_ms_dispatch(Message *m)
 
   Connection *connection = m->get_connection();
   MonSession *s = NULL;
-  bool reuse_caps = false;
   MonCaps caps;
   EntityName entity_name;
   bool src_is_mon;
@@ -2929,6 +2928,7 @@ bool Monitor::_ms_dispatch(Message *m)
   src_is_mon = !connection || (connection->get_peer_type() & CEPH_ENTITY_TYPE_MON);
 
   if (connection) {
+    bool reuse_caps = false;
     dout(20) << "have connection" << dendl;
     s = static_cast<MonSession *>(connection->get_priv());
     if (s && s->closed) {
