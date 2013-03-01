@@ -77,7 +77,7 @@ LogEvent *LogEvent::decode_event(bufferlist& bl, bufferlist::iterator& p, __u32 
   case EVENT_RESETJOURNAL: le = new EResetJournal; break;
 
   case EVENT_SESSION: le = new ESession; break;
-  case EVENT_SESSIONS_OLD: le = new ESessions; ((ESessions *)le)->mark_old_encoding(); break;
+  case EVENT_SESSIONS_OLD: le = new ESessions; (static_cast<ESessions *>(le))->mark_old_encoding(); break;
   case EVENT_SESSIONS: le = new ESessions; break;
 
   case EVENT_UPDATE: le = new EUpdate; break;
