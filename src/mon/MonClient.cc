@@ -18,6 +18,7 @@
 #include "messages/MMonGetVersionReply.h"
 #include "messages/MMonMap.h"
 #include "messages/MAuth.h"
+#include "messages/MLogAck.h"
 #include "messages/MAuthReply.h"
 
 #include "messages/MMonSubscribe.h"
@@ -191,20 +192,20 @@ bool MonClient::ms_dispatch(Message *m)
 
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:
-    handle_monmap((MMonMap*)m);
+    handle_monmap(static_cast<MMonMap*>(m));
     break;
   case CEPH_MSG_AUTH_REPLY:
-    handle_auth((MAuthReply*)m);
+    handle_auth(static_cast<MAuthReply*>(m));
     break;
   case CEPH_MSG_MON_SUBSCRIBE_ACK:
-    handle_subscribe_ack((MMonSubscribeAck*)m);
+    handle_subscribe_ack(static_cast<MMonSubscribeAck*>(m));
     break;
   case CEPH_MSG_MON_GET_VERSION_REPLY:
-    handle_get_version_reply((MMonGetVersionReply*)m);
+    handle_get_version_reply(static_cast<MMonGetVersionReply*>(m));
     break;
   case MSG_LOGACK:
     if (log_client) {
-      log_client->handle_log_ack((MLogAck*)m);
+      log_client->handle_log_ack(static_cast<MLogAck*>(m));
       if (more_log_pending) {
 	send_log();
       }
