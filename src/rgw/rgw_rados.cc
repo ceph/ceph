@@ -11,6 +11,7 @@
 #include "rgw_rados.h"
 #include "rgw_cache.h"
 #include "rgw_acl.h"
+#include "rgw_metadata.h"
 
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -467,6 +468,7 @@ void RGWRadosCtx::set_prefetch_data(rgw_obj& obj) {
 
 void RGWRados::finalize()
 {
+  delete meta_mgr;
   if (use_gc_thread) {
     gc->stop_processor();
     delete gc;
@@ -539,6 +541,8 @@ int RGWRados::init_complete()
 int RGWRados::initialize()
 {
   int ret;
+
+  meta_mgr = new RGWMetadataManager(this);
 
   ret = init_rados();
   if (ret < 0)

@@ -37,6 +37,8 @@ struct obj_version {
     return (ver == v->ver &&
             tag.compare(v->tag) == 0);
   }
+
+  void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(obj_version)
 
