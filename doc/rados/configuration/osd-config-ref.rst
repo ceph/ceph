@@ -175,8 +175,8 @@ uses default values when you don't specifically override the defaults. **We
 recommend** overridding some of the defaults. Specifically, we recommend setting
 a pools replica size and overriding the default number of placement groups. You
 can specifically set these values when running `pool`_ commands. You can also
-override the defaults by adding new ones in the ``[osd]`` section of  your Ceph
-configuration file. 
+override the defaults by adding new ones in the ``[global]`` section of  your
+Ceph configuration file. 
 
 
 .. literalinclude:: pool-pg.conf
