@@ -8,6 +8,7 @@
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/version/cls_version_types.h"
 #include "rgw_log.h"
+#include "rgw_metadata.h"
 
 class RGWWatcher;
 class SafeTimer;
@@ -528,7 +529,7 @@ public:
                num_watchers(0), watchers(NULL), watch_handles(NULL),
                bucket_id_lock("rados_bucket_id"), max_bucket_id(0),
                cct(NULL), rados(NULL),
-               pools_initialized(false) {}
+               pools_initialized(false), meta_mgr(NULL) {}
 
   void set_context(CephContext *_cct) {
     cct = _cct;
@@ -544,6 +545,8 @@ public:
 
   RGWRegion region;
   RGWZoneParams zone;
+
+  RGWMetadataManager *meta_mgr;
 
   virtual ~RGWRados() {
     if (rados) {
