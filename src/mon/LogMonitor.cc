@@ -42,8 +42,8 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, version_t v) {
 
 ostream& operator<<(ostream& out, LogMonitor& pm)
 {
-  std::stringstream ss;
   /*
+  std::stringstream ss;
   for (hash_map<int,int>::iterator p = pm.pg_map.num_pg_by_state.begin();
        p != pm.pg_map.num_pg_by_state.end();
        ++p) {
