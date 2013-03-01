@@ -26,7 +26,6 @@ Requires:	librados2 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
 Requires:	python
 Requires:	cryptsetup
-Requires:	gdisk
 Requires:	parted
 Requires:	util-linux
 Requires(post):	binutils
@@ -54,10 +53,12 @@ Recommends:	logrotate
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
 BuildRequires:	libatomic-ops-devel
+Requires:	gptfdisk
 %else
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
 BuildRequires:	libatomic_ops-devel
+Requires:	gdisk
 Requires(post):	chkconfig
 Requires(preun):chkconfig
 Requires(preun):initscripts
