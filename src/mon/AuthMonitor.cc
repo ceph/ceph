@@ -46,8 +46,6 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, version_t v) {
 
 ostream& operator<<(ostream& out, AuthMonitor& pm)
 {
-  std::stringstream ss;
- 
   return out << "auth";
 }
 

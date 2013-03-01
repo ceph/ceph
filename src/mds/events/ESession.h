@@ -30,7 +30,7 @@ class ESession : public LogEvent {
   version_t inotablev;
 
  public:
-  ESession() : LogEvent(EVENT_SESSION) { }
+  ESession() : LogEvent(EVENT_SESSION), open(false) { }
   ESession(const entity_inst_t& inst, bool o, version_t v) :
     LogEvent(EVENT_SESSION),
     client_inst(inst),

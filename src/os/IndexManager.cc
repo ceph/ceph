@@ -81,9 +81,9 @@ int IndexManager::init_index(coll_t c, const char *path, uint32_t version) {
 }
 
 int IndexManager::build_index(coll_t c, const char *path, Index *index) {
-  int r;
   if (upgrade) {
     // Need to check the collection generation
+    int r;
     uint32_t version = 0;
     r = get_version(path, &version);
     if (r < 0)

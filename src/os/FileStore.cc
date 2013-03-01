@@ -1265,9 +1265,9 @@ int FileStore::_sanity_check_fs()
 {
   // sanity check(s)
 
-  if ((int)m_filestore_journal_writeahead +
+  if (((int)m_filestore_journal_writeahead +
       (int)m_filestore_journal_parallel +
-      (int)m_filestore_journal_trailing > 1) {
+      (int)m_filestore_journal_trailing) > 1) {
     dout(0) << "mount ERROR: more than one of filestore journal {writeahead,parallel,trailing} enabled" << dendl;
     cerr << TEXT_RED 
 	 << " ** WARNING: more than one of 'filestore journal {writeahead,parallel,trailing}'\n"
@@ -2029,7 +2029,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   if (!posr)
     posr = &default_osr;
   if (posr->p) {
-    osr = (OpSequencer *)posr->p;
+    osr = static_cast<OpSequencer *>(posr->p);
     dout(5) << "queue_transactions existing " << *osr << "/" << osr->parent << dendl; //<< " w/ q " << osr->q << dendl;
   } else {
     osr = new OpSequencer;
@@ -3610,10 +3610,8 @@ void FileStore::sync_and_flush()
     if (journal)
       journal->flush();
     _flush_op_queue();
-  } else if (m_filestore_journal_parallel) {
-    _flush_op_queue();
-    sync();
   } else {
+    // includes m_filestore_journal_parallel
     _flush_op_queue();
     sync();
   }

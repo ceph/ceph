@@ -342,8 +342,8 @@ void MDS::forward_message_mds(Message *m, int mds)
 
   // client request?
   if (m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
-      ((MClientRequest*)m)->get_source().is_client()) {
-    MClientRequest *creq = (MClientRequest*)m;
+      (static_cast<MClientRequest*>(m))->get_source().is_client()) {
+    MClientRequest *creq = static_cast<MClientRequest*>(m);
     creq->inc_num_fwd();    // inc forward counter
 
     /*
@@ -395,7 +395,7 @@ void MDS::send_message_client_counted(Message *m, client_t client)
 
 void MDS::send_message_client_counted(Message *m, Connection *connection)
 {
-  Session *session = (Session *)connection->get_priv();
+  Session *session = static_cast<Session *>(connection->get_priv());
   if (session) {
     session->put();  // do not carry ref
     send_message_client_counted(m, session);
@@ -992,7 +992,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   // is someone else newly resolving?
   if (is_resolve() || is_rejoin() || is_clientreplay() || is_active() || is_stopping()) {
     if (!oldmap->is_resolving() && mdsmap->is_resolving()) {
-      set<int> oldresolve, resolve;
+      set<int> resolve;
       mdsmap->get_mds_set(resolve, MDSMap::STATE_RESOLVE);
       dout(10) << " resolve set is " << resolve << dendl;
       calc_recovery_set();
@@ -1694,17 +1694,17 @@ bool MDS::handle_core_message(Message *m)
     // MDS
   case CEPH_MSG_MDS_MAP:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_MDS);
-    handle_mds_map((MMDSMap*)m);
+    handle_mds_map(static_cast<MMDSMap*>(m));
     break;
   case MSG_MDS_BEACON:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
-    handle_mds_beacon((MMDSBeacon*)m);
+    handle_mds_beacon(static_cast<MMDSBeacon*>(m));
     break;
     
     // misc
   case MSG_MON_COMMAND:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
-    handle_command((MMonCommand*)m);
+    handle_command(static_cast<MMonCommand*>(m));
     break;    
 
     // OSD
@@ -1766,7 +1766,7 @@ bool MDS::handle_deferrable_message(Message *m)
     case MSG_MDS_TABLE_REQUEST:
       ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MDS);
       {
-	MMDSTableRequest *req = (MMDSTableRequest*)m;
+	MMDSTableRequest *req = static_cast<MMDSTableRequest*>(m);
 	if (req->op < 0) {
 	  MDSTableClient *client = get_table_client(req->table);
 	      client->handle_request(req);
@@ -2025,7 +2025,7 @@ bool MDS::ms_handle_reset(Connection *con)
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
     objecter->ms_handle_reset(con);
   } else if (con->get_peer_type() == CEPH_ENTITY_TYPE_CLIENT) {
-    Session *session = (Session *)con->get_priv();
+    Session *session = static_cast<Session *>(con->get_priv());
     if (session) {
       if (session->is_closed()) {
 	messenger->mark_down(con->get_peer_addr());
@@ -2125,7 +2125,7 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
 
 void MDS::ms_handle_accept(Connection *con)
 {
-  Session *s = (Session *)con->get_priv();
+  Session *s = static_cast<Session *>(con->get_priv());
   dout(10) << "ms_handle_accept " << con->get_peer_addr() << " con " << con << " session " << s << dendl;
   if (s) {
     s->put();

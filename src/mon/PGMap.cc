@@ -672,7 +672,6 @@ void PGMap::recovery_summary(ostream& out) const
 	<< si_t(pg_sum_delta.stats.sum.num_bytes_recovered / (double)stamp_delta) << "B/s";
     if (pg_sum_delta.stats.sum.num_keys_recovered)
       out << ", " << si_t(pg_sum_delta.stats.sum.num_keys_recovered / (double)stamp_delta) << " key/s";
-    first = false;
   }
 }
 
