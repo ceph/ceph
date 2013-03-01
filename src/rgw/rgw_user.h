@@ -616,4 +616,8 @@ public:
 		  RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 };
 
+class RGWMetadataManager;
+
+extern void rgw_user_init(RGWMetadataManager *mm);
+
 #endif

@@ -393,7 +393,8 @@ librgw_a_SOURCES =  \
 	rgw/rgw_multi_del.cc \
 	rgw/rgw_env.cc \
 	rgw/rgw_cors.cc \
-	rgw/rgw_cors_s3.cc
+	rgw/rgw_cors_s3.cc \
+	rgw/rgw_metadata.cc
 librgw_a_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librgw_a_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
 noinst_LIBRARIES += librgw.a
@@ -577,7 +578,8 @@ libcls_refcount_client_a_SOURCES =  \
 noinst_LIBRARIES += libcls_refcount_client.a
 
 libcls_version_client_a_SOURCES =  \
-	cls/version/cls_version_client.cc
+	cls/version/cls_version_client.cc \
+	cls/version/cls_version_types.cc
 noinst_LIBRARIES += libcls_version_client.a
 
 libcls_rgw_client_a_SOURCES =  \
@@ -2029,6 +2031,7 @@ noinst_HEADERS = \
 	rgw/rgw_multi.h\
 	rgw/rgw_policy_s3.h\
 	rgw/rgw_gc.h\
+	rgw/rgw_metadata.h\
 	rgw/rgw_multi_del.h\
 	rgw/rgw_op.h\
 	rgw/rgw_http_client.h\

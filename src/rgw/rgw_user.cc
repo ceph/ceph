@@ -4,6 +4,8 @@
 #include <map>
 
 #include "common/errno.h"
+#include "common/Formatter.h"
+#include "common/ceph_json.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 
@@ -148,15 +150,15 @@ int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucke
 }
 
 /**
- * Given an email, finds the user info associated with it.
+ * Given a uid, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-int rgw_get_user_info_by_uid(RGWRados *store, string& uid, RGWUserInfo& info)
+static int rgw_read_uid_info(RGWRados *store, string& uid, RGWUserInfo& info, obj_version *objv)
 {
   bufferlist bl;
   RGWUID user_id;
 
-  int ret = rgw_get_system_obj(store, NULL, store->zone.user_uid_pool, uid, bl, NULL);
+  int ret = rgw_get_system_obj(store, NULL, store->zone.user_uid_pool, uid, bl, objv);
   if (ret < 0)
     return ret;
 
@@ -176,6 +178,11 @@ int rgw_get_user_info_by_uid(RGWRados *store, string& uid, RGWUserInfo& info)
   }
 
   return 0;
+}
+
+int rgw_get_user_info_by_uid(RGWRados *store, string& uid, RGWUserInfo& info)
+{
+  return rgw_read_uid_info(store, uid, info, NULL);
 }
 
 /**
@@ -2184,6 +2191,7 @@ int RGWUserAdminOp_Caps::add(RGWRados *store, RGWUserAdminOpState& op_state,
   return 0;
 }
 
+
 int RGWUserAdminOp_Caps::remove(RGWRados *store, RGWUserAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
@@ -2209,4 +2217,35 @@ int RGWUserAdminOp_Caps::remove(RGWRados *store, RGWUserAdminOpState& op_state,
   flusher.flush();
 
   return 0;
+}
+
+class RGWUserMetadataHandler : public RGWMetadataHandler {
+public:
+  string get_type() { return "user"; }
+  int get(RGWRados *store, string& key, string& entry, Formatter *f) {
+    RGWUserInfo info;
+
+    obj_version objv;
+
+    int ret = rgw_read_uid_info(store, entry, info, &objv);
+    if (ret < 0)
+      return ret;
+
+    f->open_object_section("metadata_info");
+    encode_json("key", key, f);
+    encode_json("ver", objv, f);
+    encode_json("data", info, f);
+    f->close_section();
+    f->flush(cout);
+    return 0;
+  }
+
+  int update(RGWRados *store, string& metadata_key, bufferlist& bl) {
+    return 0;
+  }
+};
+
+void rgw_user_init(RGWMetadataManager *mm)
+{
+  mm->register_handler(new RGWUserMetadataHandler);
 }
