@@ -352,7 +352,6 @@ int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss,
     {
       jf.open_array_section("objects");
       int32_t num = 0;
-      set<int> empty;
       bufferlist bl;
       while (p != missing.missing.end() && num < g_conf->osd_command_max_records) {
 	jf.open_object_section("object");
@@ -3120,7 +3119,6 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       if (obs.exists)
 	t.remove(coll, soid);
       
-      map<string, bufferptr> attrs;
       t.clone(coll,
 	      rollback_to_sobject, soid);
       snapset.head_exists = true;
