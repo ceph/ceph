@@ -47,6 +47,9 @@ BuildRequires:  leveldb-devel > 1.2
 #################################################################################
 # specific
 #################################################################################
+%if ! 0%{?rhel}
+BuildRequires:  sharutils
+%endif
 %if 0%{defined suse_version}
 %if 0%{?suse_version} > 1210
 Requires:       gptfdisk
