@@ -115,14 +115,14 @@ or ``tail``.  For example::
 Stopping w/out Rebalancing
 ==========================
 
-If the problem with your cluster requires you to bring down a failure domain
-(e.g., a rack) for maintenance and you do not want CRUSH to automatically
-rebalance the cluster as you stop OSDs for maintenance, set the cluster to
-``nodown`` first::
+Periodically, you may need to perform maintenance on a subset of your cluster,
+or resolve a problem that affects a failure domain (e.g., a rack). If you do not
+want CRUSH to automatically rebalance the cluster as you stop OSDs for
+maintenance, set the cluster to ``noout`` first::
 
-	ceph osd set nodown
+	ceph osd set noout
 
-Once the cluster is set to ``nodown``, you can begin stopping the OSDs within the
+Once the cluster is set to ``noout``, you can begin stopping the OSDs within the
 failure domain that requires maintenance work. ::
 
 	ceph osd stop osd.{num}
@@ -134,9 +134,9 @@ Once you have completed your maintenance, restart the OSDs. ::
 
 	ceph osd start osd.{num}
 
-Finally, you must unset the cluster from ``nodown``. :: 
+Finally, you must unset the cluster from ``noout``. :: 
 
-	ceph osd unset nodown
+	ceph osd unset noout
 
 
 
