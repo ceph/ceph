@@ -3550,7 +3550,7 @@ int Client::check_permissions(Inode *in, int flags, int uid, int gid)
     }
   }
   // check permissions before doing anything else
-  if (!in->check_mode(uid, gid, sgids, sgid_count, flags)) {
+  if (uid != 0 && !in->check_mode(uid, gid, sgids, sgid_count, flags)) {
     return -EACCES;
   }
   return 0;
