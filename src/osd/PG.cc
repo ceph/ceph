@@ -5208,7 +5208,6 @@ void PG::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
 
   // In case of sobject_t based encoding, may need to list objects in the store
   // to find hashes
-  bool listed_collection = false;
   vector<hobject_t> ls;
   
   if (ondisklog_head > 0) {
@@ -5228,6 +5227,8 @@ void PG::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
     assert(log.empty());
     eversion_t last;
     bool reorder = false;
+    bool listed_collection = false;
+
     while (!p.end()) {
       uint64_t pos = ondisklog_tail + p.get_off();
       if (ondisklog_has_checksums) {
