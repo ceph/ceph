@@ -5,6 +5,7 @@ Snaps
 Overview
 --------
 Rados supports two related snapshotting mechanisms:
+
   1. *pool snaps*: snapshots are implicitely applied to all objects
      in a pool
   2. *self managed snaps*: the user must provide the current *SnapContext*
@@ -40,6 +41,7 @@ reads on snaps between the snapid of the last clone and the most recent
 snapid.
 
 The *head* object contains a *SnapSet* encoded in an attribute, which tracks
+
   1. The full set of snaps defined for the object
   2. The full set of clones which currently exist
   3. Overlapping intervals between clones for tracking space usage
@@ -61,43 +63,62 @@ the *PG* adds the snap to its *snaptrimq* for trimming.
 A clone can be removed when all of its snaps have been removed.  In
 order to determine which clones might need to be removed upon snap
 removal, we maintain a mapping from snap to *hobject_t* using the
-*snap collections*.  coll_t(<pgid>, <snapid>) constructs a collection
-identifier for the <snapid> snap collection for <pgid>.  This contains
-a hard link to each clone with <snapid> as either snaps[0] or
-snaps[snaps.size() - 1].  Trimming a snap therefore involves scanning
-the contents of the corresponding snap collection and updating the
-object_info attribute and corresponding snap collection hard links
-on each object by filtering out now removed snaps and updating the
-snap collections accordingly (removing the ones which now have no
-remaining snaps).
+*SnapMapper*.
 
-See ReplicatedPG::SnapTrimmer
+See ReplicatedPG::SnapTrimmer, SnapMapper
 
 This trimming is performed asynchronously by the snap_trim_wq while the
 pg is clean and not scrubbing.
-  1. The next snap in PG::snaptrimq is scanned for objects
-  2. For each object, we create a log entry and repop updating the
-     object info and the snap set (including adjusting the overlaps)
-  3. Locally, the primary also updates the snap collection hardlinks.
+
+  1. The next snap in PG::snaptrimq is selected for trimming
+  2. We determine the next object for trimming out of PG::snap_mapper.
+     For each object, we create a log entry and repop updating the
+     object info and the snap set (including adjusting the overlaps).
+  3. We also locally update our *SnapMapper* instance with the object's
+     new snaps.
   4. The log entry containing the modification of the object also
      contains the new set of snaps, which the replica uses to update
-		 its hardlinks.
-  5. Once the snap is fully trimmed, the primary locally removes the
-     snap collection and adds the snap to pg_info_t::purged_snaps.
-  6. The primary shares the info with the replica, which uses the
-     new items in purged_snaps to update its own snap collections.
+     its own *SnapMapper* instance.
+  6. The primary shares the info with the replica, which persists
+     the new set of purged_snaps along with the rest of the info.
 
 Recovery
 --------
 Because the trim operations are implemented using repops and log entries,
 normal pg peering and recovery maintain the snap trimmer operations with
-the caveat that push and removal operations need to take care to remove
-or create the snap links ensuring that the snap collection links always
-match the clone object_info snaps member.  The only thing it doesn't
-entirely handle is removing empty snap collections, thus
-PG::adjust_local_snaps is called when the replica is recovered to clean
-up any now empty snap collections.
+the caveat that push and removal operations need to update the local
+*SnapMapper* instance.  If the purged_snaps update is lost, we merely
+retrim a now empty snap.
+
+SnapMapper
+----------
+*SnapMapper* is implemented on top of map_cacher<string, bufferlist>,
+which provides an interface over a backing store such as the filesystem
+with async transactions.  While transactions are incomplete, the map_cacher
+instance buffers unstable keys allowing consistent access without having
+to flush the filestore.  *SnapMapper* provides two mappings:
+
+  1. hobject_t -> set<snapid_t>: stores the set of snaps for each clone
+     object
+  2. snapid_t -> hobject_t: stores the set of hobjects with a the snapshot
+     as one of its snaps
+
+Assumption: there are lots of hobjects and relatively few snaps.  The
+first encoding has a stringification of the object as the key and an
+encoding of the set of snaps as a value.  The second mapping, because there
+might be many hobjects for a single snap, is stored as a collection of keys
+of the form stringify(snap)_stringify(object) such that stringify(snap)
+is constant length.  These keys have a bufferlist encoding
+pair<snapid, hobject_t> as a value.  Thus, creating or trimming a single
+object does not involve reading all objects for any snap.  Additionally,
+upon construction, the *SnapMapper* is provided with a mask for filtering
+identifying the objects in the single SnapMapper keyspace belonging to that
+pg.
 
 Split
 -----
-The snap collections are split in the same way as the head collection.
+The snapid_t -> hobject_t key entries are arranged such that for any pg,
+up to 8 prefixes need to be checked to determine all hobjects in a particular
+snap for a particular pg.  Upon split, the prefixes to check on the parent
+are adjusted such that only the objects remaining in the pg will be visible.
+The children will immediately have the correct mapping.
