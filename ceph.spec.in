@@ -26,7 +26,7 @@ Requires:	librados2 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
 Requires:	python
 Requires:	cryptsetup
-Requires:	gptfdisk
+Requires:	gdisk
 Requires:	parted
 Requires:	util-linux
 Requires(post):	binutils
