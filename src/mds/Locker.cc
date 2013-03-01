@@ -2248,15 +2248,13 @@ void Locker::handle_client_caps(MClientCaps *m)
     return;
   }
 
-  CInode *in = 0;
-  in = mdcache->pick_inode_snap(head_in, follows);
+  CInode *in = mdcache->pick_inode_snap(head_in, follows);
   if (in != head_in)
     dout(10) << " head inode " << *head_in << dendl;
   dout(10) << "  cap inode " << *in << dendl;
 
   Capability *cap = 0;
-  if (in) 
-    cap = in->get_client_cap(client);
+  cap = in->get_client_cap(client);
   if (!cap && in != head_in)
     cap = head_in->get_client_cap(client);
   if (!cap) {
