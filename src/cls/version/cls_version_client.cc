@@ -4,6 +4,7 @@
 #include "cls/version/cls_version_ops.h"
 #include "include/rados/librados.hpp"
 
+
 using namespace librados;
 
 
@@ -54,6 +55,30 @@ void cls_version_check(librados::ObjectOperation& op, obj_version& objv, Version
 
   ::encode(call, in);
   op.exec("version", "check_conds", in);
+}
+
+class VersionReadCtx : public ObjectOperationCompletion {
+  obj_version *objv;
+public:
+  VersionReadCtx(obj_version *_objv) : objv(_objv) {}
+  void handle_completion(int r, bufferlist& outbl) {
+    if (r >= 0) {
+      cls_version_read_ret ret;
+      try {
+        bufferlist::iterator iter = outbl.begin();
+        ::decode(ret, iter);
+	*objv = ret.objv;
+      } catch (buffer::error& err) {
+        // nothing we can do about it atm
+      }
+    }
+  }
+};
+
+void cls_version_read(librados::ObjectReadOperation& op, obj_version *objv)
+{
+  bufferlist inbl;
+  op.exec("version", "read", inbl, new VersionReadCtx(objv));
 }
 
 int cls_version_read(librados::IoCtx& io_ctx, string& oid, obj_version *ver)

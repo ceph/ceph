@@ -16,7 +16,7 @@ void cls_version_inc(librados::ObjectWriteOperation& op);
 /* conditional increase, return -EAGAIN if condition fails */
 void cls_version_inc(librados::ObjectWriteOperation& op, obj_version& ver, VersionCond cond);
 
-int cls_version_read(bufferlist& outbl);
+void cls_version_read(librados::ObjectReadOperation& op, obj_version *objv);
 
 int cls_version_read(librados::IoCtx& io_ctx, string& oid, obj_version *ver);
 
