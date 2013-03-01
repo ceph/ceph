@@ -149,7 +149,7 @@ namespace librados
     void assert_exists();
 
     /**
-     * get key/value paris for specified keys
+     * get key/value pairs for specified keys
      *
      * @param assertions [in] comparison assertions
      * @param prval [out] place error code in prval upon completion
@@ -316,7 +316,7 @@ namespace librados
     void omap_get_header(bufferlist *header, int *prval);
 
     /**
-     * get key/value paris for specified keys
+     * get key/value pairs for specified keys
      *
      * @param to_get [in] keys to get
      * @param out_vals [out] place key/value pairs found here on completion
