@@ -219,7 +219,6 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
       string format = "plain";
       string val;
       epoch_t epoch = 0;
-      string cmd = args[0];
       for (std::vector<const char*>::iterator i = args.begin()+1; i != args.end(); ) {
 	if (ceph_argparse_double_dash(args, i))
 	  break;
