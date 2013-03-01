@@ -8,8 +8,10 @@
 
 class RGWRados;
 
+struct obj_version;
+
 int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, string& oid, const char *data, size_t size, bool exclusive, map<string, bufferlist> *pattrs = NULL);
-int rgw_get_obj(RGWRados *rgwstore, void *ctx, rgw_bucket& bucket, string& key, bufferlist& bl, map<string, bufferlist> *pattrs = NULL);
+int rgw_get_system_obj(RGWRados *rgwstore, void *ctx, rgw_bucket& bucket, string& key, bufferlist& bl, obj_version *objv, map<string, bufferlist> *pattrs = NULL);
 
 int rgw_tools_init(CephContext *cct);
 void rgw_tools_cleanup();

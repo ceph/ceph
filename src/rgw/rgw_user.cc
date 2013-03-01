@@ -131,7 +131,7 @@ int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucke
   bufferlist bl;
   RGWUID uid;
 
-  int ret = rgw_get_obj(store, NULL, bucket, key, bl);
+  int ret = rgw_get_system_obj(store, NULL, bucket, key, bl, NULL);
   if (ret < 0)
     return ret;
 
@@ -156,7 +156,7 @@ int rgw_get_user_info_by_uid(RGWRados *store, string& uid, RGWUserInfo& info)
   bufferlist bl;
   RGWUID user_id;
 
-  int ret = rgw_get_obj(store, NULL, store->zone.user_uid_pool, uid, bl);
+  int ret = rgw_get_system_obj(store, NULL, store->zone.user_uid_pool, uid, bl, NULL);
   if (ret < 0)
     return ret;
 

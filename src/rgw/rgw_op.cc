@@ -232,7 +232,7 @@ static int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map
 {
   void *handle;
   int ret = store->prepare_get_obj(s->obj_ctx, obj, NULL, NULL, &attrs, NULL,
-                                      NULL, NULL, NULL, NULL, NULL, obj_size, &handle, &s->err);
+                                      NULL, NULL, NULL, NULL, NULL, obj_size, NULL, &handle, &s->err);
   store->finish_get_obj(&handle);
   return ret;
 }
@@ -361,7 +361,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
   store->set_atomic(obj_ctx, part);
   store->set_prefetch_data(obj_ctx, part);
   ret = store->prepare_get_obj(obj_ctx, part, &cur_ofs, &cur_end, &attrs, NULL,
-                                  NULL, NULL, NULL, NULL, NULL, &obj_size, &handle, &s->err);
+                                  NULL, NULL, NULL, NULL, NULL, &obj_size, NULL, &handle, &s->err);
   if (ret < 0)
     goto done_err;
 
@@ -384,7 +384,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
   perfcounter->inc(l_rgw_get_b, cur_end - cur_ofs);
   while (cur_ofs <= cur_end) {
     bufferlist bl;
-    ret = store->get_obj(obj_ctx, &handle, part, bl, cur_ofs, cur_end);
+    ret = store->get_obj(obj_ctx, NULL, &handle, part, bl, cur_ofs, cur_end);
     if (ret < 0)
       goto done_err;
 
@@ -582,7 +582,7 @@ void RGWGetObj::execute()
   new_end = end;
 
   ret = store->prepare_get_obj(s->obj_ctx, obj, &new_ofs, &new_end, &attrs, mod_ptr,
-                               unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &s->obj_size, &handle, &s->err);
+                               unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &s->obj_size, NULL, &handle, &s->err);
   if (ret < 0)
     goto done_err;
 

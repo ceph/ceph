@@ -182,6 +182,7 @@ struct RGWObjState {
   bufferlist data;
   bool prefetch_data;
   bool keep_tail;
+  obj_version objv;
 
   map<string, bufferlist> attrset;
   RGWObjState() : is_atomic(false), has_attrs(0), exists(false),
@@ -465,7 +466,7 @@ class RGWRados
   Mutex bucket_id_lock;
   uint64_t max_bucket_id;
 
-  int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state);
+  int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, obj_version *objv);
   int append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state);
   int prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
@@ -822,10 +823,11 @@ public:
             const char *if_nomatch,
             uint64_t *total_size,
             uint64_t *obj_size,
+            obj_version *objv,
             void **handle,
             struct rgw_err *err);
 
-  virtual int get_obj(void *ctx, void **handle, rgw_obj& obj,
+  virtual int get_obj(void *ctx, obj_version *objv, void **handle, rgw_obj& obj,
                       bufferlist& bl, off_t ofs, off_t end);
 
   virtual void finish_get_obj(void **handle);
