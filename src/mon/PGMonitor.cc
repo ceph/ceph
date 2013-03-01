@@ -288,16 +288,16 @@ bool PGMonitor::preprocess_query(PaxosServiceMessage *m)
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case CEPH_MSG_STATFS:
-    handle_statfs((MStatfs*)m);
+    handle_statfs(static_cast<MStatfs*>(m));
     return true;
   case MSG_GETPOOLSTATS:
-    return preprocess_getpoolstats((MGetPoolStats*)m);
+    return preprocess_getpoolstats(static_cast<MGetPoolStats*>(m));
     
   case MSG_PGSTATS:
-    return preprocess_pg_stats((MPGStats*)m);
+    return preprocess_pg_stats(static_cast<MPGStats*>(m));
 
   case MSG_MON_COMMAND:
-    return preprocess_command((MMonCommand*)m);
+    return preprocess_command(static_cast<MMonCommand*>(m));
 
 
   default:
