@@ -992,7 +992,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   // is someone else newly resolving?
   if (is_resolve() || is_rejoin() || is_clientreplay() || is_active() || is_stopping()) {
     if (!oldmap->is_resolving() && mdsmap->is_resolving()) {
-      set<int> oldresolve, resolve;
+      set<int> resolve;
       mdsmap->get_mds_set(resolve, MDSMap::STATE_RESOLVE);
       dout(10) << " resolve set is " << resolve << dendl;
       calc_recovery_set();
