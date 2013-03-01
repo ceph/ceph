@@ -5486,9 +5486,8 @@ void OSD::handle_pg_query(OpRequestRef op)
       continue;
     }
 
-    PG *pg = 0;
-
     if (pg_map.count(pgid)) {
+      PG *pg = 0;
       pg = _lookup_lock_pg(pgid);
       pg->queue_query(it->second.epoch_sent, it->second.epoch_sent,
 		      from, it->second);
