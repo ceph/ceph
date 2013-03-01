@@ -165,6 +165,7 @@ OPTION(mon_max_log_entries_per_event, OPT_INT, 4096)
 OPTION(mon_health_data_update_interval, OPT_FLOAT, 60.0)
 OPTION(mon_data_avail_crit, OPT_INT, 5)
 OPTION(mon_data_avail_warn, OPT_INT, 30)
+OPTION(mon_config_key_max_entry_size, OPT_INT, 4096) // max num bytes per config-key entry
 OPTION(mon_sync_trim_timeout, OPT_DOUBLE, 30.0)
 OPTION(mon_sync_heartbeat_timeout, OPT_DOUBLE, 30.0)
 OPTION(mon_sync_heartbeat_interval, OPT_DOUBLE, 5.0)
