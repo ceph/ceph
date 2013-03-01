@@ -1139,12 +1139,34 @@ void Client::dump_mds_requests(Formatter *f)
   }
 }
 
+/**
+ * make a request
+ *
+ * Blocking helper to make an MDS request.
+ *
+ * If the ptarget flag is set, behavior changes slightly: the caller
+ * expects to get a pointer to the inode we are creating or operating
+ * on.  As a result, we will follow up any traceless mutation reply
+ * with a getattr or lookup to transparently handle a traceless reply
+ * from the MDS (as when the MDS restarts and the client has to replay
+ * a request).
+ *
+ * @param request the MetaRequest to execute
+ * @param uid uid to execute as
+ * @param gid gid to execute as
+ * @param ptarget [optional] address to store a pointer to the target inode we want to create or operate on
+ * @param pcreated [optional] where to store a bool of whether our create atomically created a file
+ * @param use_mds [optional] prefer a specific mds (-1 for default)
+ * @param pdirbl [optional] where to pass extra reply payload to the caller
+ */
 int Client::make_request(MetaRequest *request, 
 			 int uid, int gid, 
-			 Inode **ptarget,
+			 Inode **ptarget, bool *pcreated,
 			 int use_mds,
 			 bufferlist *pdirbl)
 {
+  int r = 0;
+
   // assign a unique tid
   tid_t tid = ++last_tid;
   request->set_tid(tid);
@@ -1169,7 +1191,7 @@ int Client::make_request(MetaRequest *request,
   // set up wait cond
   Cond cond;
   request->caller_cond = &cond;
-  
+
   while (1) {
     // choose mds
     int mds = choose_target_mds(request);
@@ -1233,8 +1255,7 @@ int Client::make_request(MetaRequest *request,
   // got it!
   MClientReply *reply = request->reply;
   request->reply = NULL;
-  if (ptarget)
-    *ptarget = request->target;
+  r = reply->get_result();
 
   // kick dispatcher (we've got it!)
   assert(request->dispatch_cond);
@@ -1242,6 +1263,66 @@ int Client::make_request(MetaRequest *request,
   ldout(cct, 20) << "sendrecv kickback on tid " << tid << " " << request->dispatch_cond << dendl;
   request->dispatch_cond = 0;
   
+  if (r >= 0 && ptarget) {
+    // check whether this request actually did the create, and set created flag
+    bufferlist extra_bl;
+    inodeno_t created_ino;
+    bool got_created_ino = false;
+    hash_map<vinodeno_t, Inode*>::iterator p;
+
+    extra_bl.claim(reply->get_extra_bl());
+    if (extra_bl.length() >= 8) {
+      // if the extra bufferlist has a buffer, we assume its the created inode
+      // and that this request to create succeeded in actually creating
+      // the inode (won the race with other create requests)
+      ::decode(created_ino, extra_bl);
+      got_created_ino = true;
+    }
+
+    if (pcreated)
+      *pcreated = got_created_ino;
+
+    if (request->target) {
+      *ptarget = request->target;
+    } else {
+      if (got_created_ino && (p = inode_map.find(vinodeno_t(created_ino, CEPH_NOSNAP))) != inode_map.end()) {
+	(*ptarget) = p->second;
+      } else {
+	// we got a traceless reply, and need to look up what we just
+	// created.  for now, do this by name.  someday, do this by the
+	// ino... which we know!  FIXME.
+	Inode *target = 0;  // ptarget may be NULL
+	if (request->dentry) {
+	  ldout(cct, 10) << "make_request got traceless reply, looking up #"
+			 << request->dentry->dir->parent_inode->ino << "/" << request->dentry->name
+			 << " got_ino " << got_created_ino
+			 << " ino " << created_ino
+			 << dendl;
+	  r = _lookup(request->dentry->dir->parent_inode, request->dentry->name, &target);
+	} else {
+	  ldout(cct, 10) << "make_request got traceless reply, forcing getattr on #"
+			 << request->inode->ino << dendl;
+	  r = _getattr(request->inode, request->regetattr_mask, uid, gid, true);
+	  target = request->inode;
+	}
+	if (r >= 0) {
+	  if (ptarget)
+	    *ptarget = target;
+
+	  // verify ino returned in reply and trace_dist are the same
+	  if (got_created_ino &&
+	      created_ino.val != target->ino.val) {
+	    ldout(cct, 5) << "create got ino " << created_ino << " but then failed on lookup; EINTR?" << dendl;
+	    r = -EINTR;
+	  }
+	}
+      }
+    }
+  }
+
+  if (pdirbl)
+    pdirbl->claim(reply->get_extra_bl());
+
   // -- log times --
   utime_t lat = ceph_clock_now(cct);
   lat -= request->sent_stamp;
@@ -1251,9 +1332,6 @@ int Client::make_request(MetaRequest *request,
 
   request->put();
 
-  int r = reply->get_result();
-  if (pdirbl)
-    pdirbl->claim(reply->get_extra_bl());
   reply->put();
   return r;
 }
@@ -4169,12 +4247,12 @@ int Client::readlink(const char *relpath, char *buf, loff_t size)
 
 // inode stuff
 
-int Client::_getattr(Inode *in, int mask, int uid, int gid)
+int Client::_getattr(Inode *in, int mask, int uid, int gid, bool force)
 {
   bool yes = in->caps_issued_mask(mask);
 
   ldout(cct, 10) << "_getattr mask " << ccap_string(mask) << " issued=" << yes << dendl;
-  if (yes)
+  if (yes && !force)
     return 0;
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
@@ -4754,7 +4832,7 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
   
   
   bufferlist dirbl;
-  int res = make_request(req, -1, -1, 0, -1, &dirbl);
+  int res = make_request(req, -1, -1, NULL, NULL, -1, &dirbl);
   
   if (res == -EAGAIN) {
     ldout(cct, 10) << "_readdir_get_frag got EAGAIN, retrying" << dendl;
@@ -5266,7 +5344,7 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name)
   path2.push_dentry(string(f));
   req->set_filepath2(path2);
 
-  int r = make_request(req, -1, -1, NULL, rand() % mdsmap->get_num_in_mds());
+  int r = make_request(req, -1, -1, NULL, NULL, rand() % mdsmap->get_num_in_mds());
   ldout(cct, 3) << "lookup_hash exit(" << ino << ", #" << dirino << "/" << name << ") = " << r << dendl;
   return r;
 }
@@ -5280,7 +5358,7 @@ int Client::lookup_ino(inodeno_t ino)
   filepath path(ino);
   req->set_filepath(path);
 
-  int r = make_request(req, -1, -1, NULL, rand() % mdsmap->get_num_in_mds());
+  int r = make_request(req, -1, -1, NULL, NULL, rand() % mdsmap->get_num_in_mds());
   ldout(cct, 3) << "lookup_ino exit(" << ino << ") = " << r << dendl;
   return r;
 }
@@ -6877,39 +6955,14 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
-  bufferlist extra_bl;
-  inodeno_t created_ino;
-  bool got_created_ino = false;
-
   int res = get_or_create(dir, name, &req->dentry);
   if (res < 0)
     goto fail;
 
-  res = make_request(req, uid, gid, 0, -1, &extra_bl);
+  res = make_request(req, uid, gid, inp, created);
   if (res < 0) {
     goto reply_error;
   }
-
-  // check whether this request actually did the create, and set created flag
-  if (extra_bl.length() >= 8) {
-    // if the extra bufferlist has a buffer, we assume its the created inode
-    // and that this request to create succeeded in actually creating
-    // the inode (won the race with other create requests)
-    ::decode(created_ino, extra_bl);
-    got_created_ino = true;
-  }
-
-  if (created)
-    *created = got_created_ino;
-
-  res = _lookup(dir, name, inp);
-  if (res < 0) {
-    goto reply_error;
-  }
-
-  // verify ino returned in reply and trace_dist are the same
-  if (got_created_ino)
-    assert(created_ino.val == (*inp)->ino.val);
 
   (*inp)->get_open_ref(cmode);
   *fhp = _create_fh(*inp, flags, cmode);
