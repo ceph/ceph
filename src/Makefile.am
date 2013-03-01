@@ -48,20 +48,19 @@ endif
 
 # use system leveldb
 LIBOS_LDA += -lleveldb -lsnappy
-LEVELDB_INCLUDE =
 
 # monitor
 ceph_mon_SOURCES = ceph_mon.cc
 ceph_mon_LDFLAGS = $(AM_LDFLAGS)
 ceph_mon_LDADD = libmon.a $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-ceph_mon_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} $(LEVELDB_INCLUDE)
+ceph_mon_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_PROGRAMS += ceph-mon
 
 ceph_mon_store_converter_SOURCES =  mon_store_converter.cc \
 			       mon/MonitorStore.cc
 ceph_mon_store_converter_LDFLAGS = ${AM_LDFLAGS}
 ceph_mon_store_converter_LDADD =  $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-ceph_mon_store_converter_CXXFLAGS = ${AM_CXXFLAGS} $(LEVELDB_INCLUDE)
+ceph_mon_store_converter_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += ceph_mon_store_converter
 
 
@@ -69,7 +68,7 @@ bin_PROGRAMS += ceph_mon_store_converter
 ceph_osd_SOURCES = ceph_osd.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
 ceph_osd_LDADD = libosd.a $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-ceph_osd_CXXFLAGS = ${AM_CXXFLAGS} $(LEVELDB_INCLUDE)
+ceph_osd_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += ceph-osd
 
 if LINUX
@@ -92,7 +91,7 @@ ceph_CXXFLAGS = ${AM_CXXFLAGS}
 
 ceph_conf_SOURCES = ceph_conf.cc
 ceph_conf_LDADD = $(LIBGLOBAL_LDA)
-ceph_conf_CXXFLAGS = ${AM_CXXFLAGS} $(LEVELDB_INCLUDE)
+ceph_conf_CXXFLAGS = ${AM_CXXFLAGS}
 ceph_authtool_SOURCES = ceph_authtool.cc
 ceph_authtool_LDADD = $(LIBGLOBAL_LDA)
 ceph_filestore_dump_SOURCES = tools/ceph-filestore-dump.cc objclass/class_debug.cc \
@@ -116,7 +115,7 @@ rgw_dencoder_src = rgw/rgw_dencoder.cc \
                    rgw/rgw_acl.cc
 
 ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc ${rgw_dencoder_src} perfglue/disabled_heap_profiler.cc
-ceph_dencoder_CXXFLAGS = ${AM_CXXFLAGS} $(LEVELDB_INCLUDE)
+ceph_dencoder_CXXFLAGS = ${AM_CXXFLAGS}
 ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libcls_lock_client.a libcls_rgw_client.a libosd.a libmds.a libosdc.la $(LIBOS_LDA) libmon.a
 bin_PROGRAMS += ceph-dencoder
 
@@ -749,7 +748,7 @@ check_PROGRAMS += unittest_escape
 unittest_chain_xattr_SOURCES = test/filestore/chain_xattr.cc
 unittest_chain_xattr_LDFLAGS = ${AM_LDFLAGS}
 unittest_chain_xattr_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-unittest_chain_xattr_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE) ${CRYPTO_CXXFLAGS}
+unittest_chain_xattr_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} ${CRYPTO_CXXFLAGS}
 check_PROGRAMS += unittest_chain_xattr
 
 unittest_strtol_SOURCES = test/strtol.cc
@@ -938,7 +937,7 @@ bin_DEBUGPROGRAMS += ceph_test_libcephfs
 ceph_test_filestore_SOURCES = test/filestore/store_test.cc
 ceph_test_filestore_LDFLAGS = ${AM_LDFLAGS}
 ceph_test_filestore_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-ceph_test_filestore_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE) ${CRYPTO_CXXFLAGS}
+ceph_test_filestore_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} ${CRYPTO_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_filestore
 
 ceph_test_filestore_workloadgen_SOURCES = \
@@ -951,7 +950,7 @@ bin_DEBUGPROGRAMS += ceph_test_filestore_workloadgen
 
 ceph_test_filestore_idempotent_SOURCES = test/filestore/test_idempotent.cc test/filestore/FileStoreTracker.cc test/common/ObjectContents.cc
 ceph_test_filestore_idempotent_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-ceph_test_filestore_idempotent_CXXFLAGS = $(AM_CXXFLAGS) $(LEVELDB_INCLUDE)
+ceph_test_filestore_idempotent_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_filestore_idempotent
 
 ceph_test_filestore_idempotent_sequence_SOURCES = \
@@ -966,7 +965,7 @@ bin_DEBUGPROGRAMS += ceph_test_filestore_idempotent_sequence
 ceph_xattr_bench_SOURCES = test/xattr_bench.cc
 ceph_xattr_bench_LDFLAGS = ${AM_LDFLAGS}
 ceph_xattr_bench_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-ceph_xattr_bench_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}  $(LEVELDB_INCLUDE) ${CRYPTO_CXXFLAGS}
+ceph_xattr_bench_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}  ${CRYPTO_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_xattr_bench
 
 ceph_test_filejournal_SOURCES = test/test_filejournal.cc
@@ -990,13 +989,13 @@ bin_DEBUGPROGRAMS += ceph_test_objectcacher_stress
 ceph_test_object_map_SOURCES = test/ObjectMap/test_object_map.cc test/ObjectMap/KeyValueDBMemory.cc os/DBObjectMap.cc os/LevelDBStore.cc
 ceph_test_object_map_LDFLAGS = ${AM_LDFLAGS}
 ceph_test_object_map_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-ceph_test_object_map_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE) ${CRYPTO_CXXFLAGS}
+ceph_test_object_map_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} ${CRYPTO_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_object_map
 
 ceph_test_keyvaluedb_atomicity_SOURCES = test/ObjectMap/test_keyvaluedb_atomicity.cc os/LevelDBStore.cc
 ceph_test_keyvaluedb_atomicity_LDFLAGS = ${AM_LDFLAGS}
 ceph_test_keyvaluedb_atomicity_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-ceph_test_keyvaluedb_atomicity_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE) ${CRYPTO_CXXFLAGS}
+ceph_test_keyvaluedb_atomicity_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} ${CRYPTO_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_keyvaluedb_atomicity
 
 ceph_test_keyvaluedb_iterators_SOURCES = test/ObjectMap/test_keyvaluedb_iterators.cc \
@@ -1004,14 +1003,14 @@ ceph_test_keyvaluedb_iterators_SOURCES = test/ObjectMap/test_keyvaluedb_iterator
                                     os/LevelDBStore.cc
 ceph_test_keyvaluedb_iterators_LDFLAGS = ${AM_LDFLAGS}
 ceph_test_keyvaluedb_iterators_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-ceph_test_keyvaluedb_iterators_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE) ${CRYPTO_CXXFLAGS}
+ceph_test_keyvaluedb_iterators_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} ${CRYPTO_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_keyvaluedb_iterators
 
 ceph_test_store_tool_SOURCES = test/ObjectMap/test_store_tool/test_store_tool.cc \
 			  os/LevelDBStore.cc
 ceph_test_store_tool_LDFLAGS = ${AM_LDFLAGS}
 ceph_test_store_tool_LDADD =  $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-ceph_test_store_tool_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} $(LEVELDB_INCLUDE)
+ceph_test_store_tool_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_store_tool
 
 ceph_test_cfuse_cache_invalidate_SOURCES = test/test_cfuse_cache_invalidate.cc
@@ -1333,7 +1332,7 @@ libmon_a_SOURCES = \
 	mon/Elector.cc \
 	mon/MonitorStore.cc \
 	os/LevelDBStore.cc
-libmon_a_CXXFLAGS= ${AM_CXXFLAGS} $(LEVELDB_INCLUDE)
+libmon_a_CXXFLAGS= ${AM_CXXFLAGS}
 noinst_LIBRARIES += libmon.a
 
 libmds_a_SOURCES = \
@@ -1381,7 +1380,7 @@ libos_a_SOURCES = \
 	os/FlatIndex.cc \
 	os/DBObjectMap.cc \
 	os/LevelDBStore.cc
-libos_a_CXXFLAGS= ${AM_CXXFLAGS} $(LEVELDB_INCLUDE)
+libos_a_CXXFLAGS= ${AM_CXXFLAGS}
 noinst_LIBRARIES += libos.a
 
 libosd_a_SOURCES = \
