@@ -69,7 +69,7 @@ LIBOS_LDA += -lleveldb -lsnappy
 LEVELDB_INCLUDE =
 
 # monitor
-ceph_mon_SOURCES = ceph_mon.cc
+ceph_mon_SOURCES = ceph_mon.cc common/TextTable.cc
 ceph_mon_LDFLAGS = $(AM_LDFLAGS)
 ceph_mon_LDADD = libmon.a $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 ceph_mon_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} $(LEVELDB_INCLUDE)
