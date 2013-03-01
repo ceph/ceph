@@ -903,6 +903,14 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
   bufferlist::iterator p = reply->get_trace_bl().begin();
   if (p.end()) {
     ldout(cct, 10) << "insert_trace -- no trace" << dendl;
+
+    if (request->dentry &&
+	request->dentry->dir &&
+	(request->dentry->dir->parent_inode->flags & I_COMPLETE)) {
+      ldout(cct, 10) << " clearing I_COMPLETE on " << *request->dentry->dir->parent_inode << dendl;
+      request->dentry->dir->parent_inode->flags &= ~I_COMPLETE;
+      request->dentry->dir->release_count++;
+    }
     return NULL;
   }
 
