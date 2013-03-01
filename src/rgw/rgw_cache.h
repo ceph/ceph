@@ -197,9 +197,9 @@ public:
   int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len, bool exclusive);
 
-  int get_obj(void *ctx, void **handle, rgw_obj& obj, bufferlist& bl, off_t ofs, off_t end);
+  int get_obj(void *ctx, obj_version *objv, void **handle, rgw_obj& obj, bufferlist& bl, off_t ofs, off_t end);
 
-  int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch, map<string, bufferlist> *attrs, bufferlist *first_chunk);
+  int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch, map<string, bufferlist> *attrs, bufferlist *first_chunk, obj_version *objv);
 
   int delete_obj(void *ctx, rgw_obj& obj);
 };
@@ -235,13 +235,13 @@ int RGWCache<T>::delete_obj(void *ctx, rgw_obj& obj)
 }
 
 template <class T>
-int RGWCache<T>::get_obj(void *ctx, void **handle, rgw_obj& obj, bufferlist& obl, off_t ofs, off_t end)
+int RGWCache<T>::get_obj(void *ctx, obj_version *objv, void **handle, rgw_obj& obj, bufferlist& obl, off_t ofs, off_t end)
 {
   rgw_bucket bucket;
   string oid;
   normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
   if (bucket.name[0] != '.' || ofs != 0)
-    return T::get_obj(ctx, handle, obj, obl, ofs, end);
+    return T::get_obj(ctx, objv, handle, obj, obl, ofs, end);
 
   string name = normal_name(obj.bucket, oid);
 
@@ -259,7 +259,7 @@ int RGWCache<T>::get_obj(void *ctx, void **handle, rgw_obj& obj, bufferlist& obl
     i.copy_all(obl);
     return bl.length();
   }
-  int r = T::get_obj(ctx, handle, obj, obl, ofs, end);
+  int r = T::get_obj(ctx, objv, handle, obj, obl, ofs, end);
   if (r < 0) {
     if (r == -ENOENT) { // only update ENOENT, we'd rather retry other errors
       info.status = r;
@@ -425,13 +425,13 @@ int RGWCache<T>::put_obj_data(void *ctx, rgw_obj& obj, const char *data,
 template <class T>
 int RGWCache<T>::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
                           uint64_t *pepoch, map<string, bufferlist> *attrs,
-                          bufferlist *first_chunk)
+                          bufferlist *first_chunk, obj_version *objv)
 {
   rgw_bucket bucket;
   string oid;
   normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
   if (bucket.name[0] != '.')
-    return T::obj_stat(ctx, obj, psize, pmtime, pepoch, attrs, first_chunk);
+    return T::obj_stat(ctx, obj, psize, pmtime, pepoch, attrs, first_chunk, objv);
 
   string name = normal_name(bucket, oid);
 
@@ -450,7 +450,7 @@ int RGWCache<T>::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmti
     epoch = info.epoch;
     goto done;
   }
-  r = T::obj_stat(ctx, obj, &size, &mtime, &epoch, &info.xattrs, first_chunk);
+  r = T::obj_stat(ctx, obj, &size, &mtime, &epoch, &info.xattrs, first_chunk, objv);
   if (r < 0) {
     if (r == -ENOENT) {
       info.status = r;
