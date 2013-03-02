@@ -123,6 +123,7 @@ To build the source code, you must install the following:
 - libboost-thread-dev
 - libexpat1-dev
 - libleveldb-dev
+- libsnappy-dev
 
 For example:
 
