@@ -113,7 +113,7 @@ int HashIndex::col_split_level(
     sub_path.push_back(*i);
     path_to_hobject_hash_prefix(sub_path, &bits, &hash);
     if (bits < inbits) {
-      if ((match & ~((~0)<<bits)) == (hash & ~((~0)<<bits))) {
+      if (hobject_t::match_hash(hash, bits, match)) {
 	r = col_split_level(
 	  from,
 	  to,
@@ -127,7 +127,7 @@ int HashIndex::col_split_level(
 	  *mkdirred = path.size();
       } // else, skip, doesn't need to be moved or recursed into
     } else {
-      if ((match & ~((~0)<<inbits)) == (hash & ~((~0)<<inbits))) {
+      if (hobject_t::match_hash(hash, inbits, match)) {
 	to_move.insert(*i);
       }
     } // else, skip, doesn't need to be moved or recursed into
@@ -138,7 +138,7 @@ int HashIndex::col_split_level(
   for (map<string, hobject_t>::iterator i = objects.begin();
        i != objects.end();
        ++i) {
-    if ((i->second.hash & ~((~0)<<inbits)) == match) {
+    if (i->second.match(inbits, match)) {
       objs_to_move.insert(*i);
     }
   }
