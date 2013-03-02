@@ -53,6 +53,7 @@ static void usage()
   cout << "CLUSTER COMMANDS\n";
   cout << "  ceph health [detail]\n";
   cout << "  ceph quorum_status\n";
+  cout << "  ceph df [detail]\n";
   cout << "  ceph -m <mon-ip-or-host> mon_status\n";
   cout << "\n";
   cout << "AUTHENTICATION (AUTH) COMMANDS\n";
