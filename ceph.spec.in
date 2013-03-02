@@ -47,14 +47,23 @@ BuildRequires:  leveldb-devel > 1.2
 #################################################################################
 # specific
 #################################################################################
+%if ! 0%{?rhel}
+BuildRequires:  sharutils
+%endif
 %if 0%{defined suse_version}
-BuildRequires:	%insserv_prereq
+%if 0%{?suse_version} > 1210
+Requires:       gptfdisk
+%else
+Requires:       scsirastools
+%endif
 Recommends:	logrotate
+BuildRequires:	%insserv_prereq
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
 BuildRequires:	libatomic-ops-devel
-Requires:	gptfdisk
+BuildRequires:  fdupes
 %else
+Requires:       gdisk
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
 BuildRequires:	libatomic_ops-devel
@@ -305,6 +314,12 @@ mkdir -p $RPM_BUILD_ROOT/var/lib/ceph/osd
 mkdir -p $RPM_BUILD_ROOT/var/lib/ceph/mds
 mkdir -p $RPM_BUILD_ROOT/var/lib/ceph/bootstrap-osd
 mkdir -p $RPM_BUILD_ROOT/var/lib/ceph/bootstrap-mds
+
+%if %{defined suse_version}
+# Fedora seems to have some problems with this macro, use it only on SUSE
+%fdupes -s $RPM_BUILD_ROOT/%{python_sitelib}
+%fdupes %buildroot
+%endif 
 
 %clean
 rm -rf $RPM_BUILD_ROOT
