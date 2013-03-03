@@ -315,8 +315,6 @@ public:
   unsigned _do_transaction(Transaction& t, uint64_t op_seq, int trans_num);
 
   int queue_transactions(Sequencer *osr, list<Transaction*>& tls,
-			 Context *onreadable, Context *ondisk=0,
-			 Context *onreadable_sync=0,
 			 TrackedOpRef op = TrackedOpRef());
 
   /**
