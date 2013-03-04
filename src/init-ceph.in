@@ -255,8 +255,8 @@ for name in $what; do
 	    runmode=""
 	    runarg=""
 	    
-	    [ -z "$crun" ] && get_conf_bool crun "0" "restart on core dump"
-	    [ "$crun" -eq 1 ] && wrap="$BINDIR/ceph-run"
+	    [ -z "$docrun" ] && get_conf_bool docrun "0" "restart on core dump"
+	    [ "$docrun" -eq 1 ] && wrap="$BINDIR/ceph-run"
 	    
 	    [ -z "$dovalgrind" ] && get_conf_bool valgrind "" "valgrind"
 	    [ -n "$valgrind" ] && wrap="$wrap valgrind $valgrind"
