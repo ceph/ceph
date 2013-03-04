@@ -1306,7 +1306,7 @@ int Client::make_request(MetaRequest *request,
 			 << " got_ino " << got_created_ino
 			 << " ino " << created_ino
 			 << dendl;
-	  r = _lookup(request->dentry->dir->parent_inode, request->dentry->name, &target);
+	  r = _do_lookup(request->dentry->dir->parent_inode, request->dentry->name, &target);
 	} else {
 	  ldout(cct, 10) << "make_request got traceless reply, forcing getattr on #"
 			 << request->inode->ino << dendl;
