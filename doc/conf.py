@@ -1,5 +1,5 @@
 project = u'Ceph'
-copyright = u'2010-2012, Inktank Storage, Inc. and contributors. Licensed under Creative Commons BY-SA'
+copyright = u'2010-2013, Inktank Storage, Inc. and contributors. Licensed under Creative Commons BY-SA'
 version = 'dev'
 release = 'dev'
 
@@ -11,7 +11,7 @@ pygments_style = 'sphinx'
 
 html_theme = 'ceph'
 html_theme_path = ['_themes']
-html_title = "Ceph documentation"
+html_title = "Ceph Documentation"
 html_logo = 'logo.png'
 html_favicon = 'favicon.ico'
 html_use_smartypants = True
