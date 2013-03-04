@@ -2440,7 +2440,8 @@ void Monitor::handle_command(MMonCommand *m)
       rs = "must supply options to be parsed in a single string";
       r = -EINVAL;
     }
-  } else if ((m->cmd[0] == "status") || (m->cmd[0] == "health")) {
+  } else if ((m->cmd[0] == "status") || (m->cmd[0] == "health")
+      || (m->cmd[0] == "df")) {
     if (!access_r) {
       r = -EACCES;
       rs = "access denied";
@@ -2492,6 +2493,28 @@ void Monitor::handle_command(MMonCommand *m)
         ss << '\n';
       } else {
         ss << health_str;
+      }
+    } else if (string(args[0]) == "df") {
+      if (args.size() > 1) {
+        if (string(args[1]) != "detail") {
+          r = -EINVAL;
+          rs = "usage: df [detail]";
+          goto out;
+        }
+      }
+      bool verbose = (args.size() > 1);
+      if (jf)
+        jf->open_object_section("stats");
+
+      pgmon()->dump_fs_stats(ss, jf, verbose);
+      if (!jf)
+        ss << '\n';
+      pgmon()->dump_pool_stats(ss, jf, verbose);
+
+      if (jf) {
+        jf->close_section();
+        jf->flush(ss);
+        ss << '\n';
       }
     } else {
       assert(0 == "We should never get here!");

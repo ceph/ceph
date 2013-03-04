@@ -10,6 +10,7 @@
   CLUSTER COMMANDS
     ceph health [detail]
     ceph quorum_status
+    ceph df [detail]
     ceph -m <mon-ip-or-host> mon_status
   
   AUTHENTICATION (AUTH) COMMANDS
