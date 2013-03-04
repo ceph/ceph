@@ -440,6 +440,14 @@ public:
   // pg state
   pg_info_t        info;
   __u8 info_struct_v;
+  static const __u8 cur_struct_v = 7;
+  bool must_upgrade() {
+    return info_struct_v < 7;
+  }
+  void upgrade(
+    ObjectStore *store,
+    const interval_set<snapid_t> &snapcolls);
+
   const coll_t coll;
   IndexedLog  log;
   static string get_info_key(pg_t pgid) {

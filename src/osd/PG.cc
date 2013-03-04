@@ -2352,10 +2352,149 @@ void PG::init(int role, vector<int>& newup, vector<int>& newacting, pg_history_t
   write_if_dirty(*t);
 }
 
+void PG::upgrade(
+  ObjectStore *store,
+  const interval_set<snapid_t> &snapcolls) {
+  unsigned removed = 0;
+  for (interval_set<snapid_t>::const_iterator i = snapcolls.begin();
+       i != snapcolls.end();
+       ++i) {
+    for (snapid_t next_dir = i.get_start();
+	 next_dir != i.get_start() + i.get_len();
+	 ++next_dir) {
+      ++removed;
+      coll_t cid(info.pgid, next_dir);
+      dout(1) << "Removing collection " << cid
+	      << " (" << removed << "/" << snapcolls.size()
+	      << ")" << dendl;
+
+      hobject_t cur;
+      vector<hobject_t> objects;
+      while (1) {
+	int r = store->collection_list_partial(
+	  cid,
+	  cur,
+	  store->get_ideal_list_min(),
+	  store->get_ideal_list_max(),
+	  0,
+	  &objects,
+	  &cur);
+	if (r != 0) {
+	  derr << __func__ << ": collection_list_partial returned "
+	       << cpp_strerror(r) << dendl;
+	  assert(0);
+	}
+	if (objects.empty()) {
+	  assert(cur.is_max());
+	  break;
+	}
+	ObjectStore::Transaction t;
+	for (vector<hobject_t>::iterator j = objects.begin();
+	     j != objects.end();
+	     ++j) {
+	  t.remove(cid, *j);
+	}
+	r = store->apply_transaction(t);
+	if (r != 0) {
+	  derr << __func__ << ": apply_transaction returned "
+	       << cpp_strerror(r) << dendl;
+	  assert(0);
+	}
+	objects.clear();
+      }
+      ObjectStore::Transaction t;
+      t.remove_collection(cid);
+      int r = store->apply_transaction(t);
+      if (r != 0) {
+	derr << __func__ << ": apply_transaction returned "
+	     << cpp_strerror(r) << dendl;
+	assert(0);
+      }
+    }
+  }
+
+  hobject_t cur;
+  coll_t cid(info.pgid);
+  unsigned done = 0;
+  vector<hobject_t> objects;
+  while (1) {
+    dout(1) << "Updating snap_mapper from main collection, "
+	    << done << " objects done" << dendl;
+    int r = store->collection_list_partial(
+      cid,
+      cur,
+      store->get_ideal_list_min(),
+      store->get_ideal_list_max(),
+      0,
+      &objects,
+      &cur);
+    if (r != 0) {
+      derr << __func__ << ": collection_list_partial returned "
+	   << cpp_strerror(r) << dendl;
+      assert(0);
+    }
+    if (objects.empty()) {
+      assert(cur.is_max());
+      break;
+    }
+    done += objects.size();
+    ObjectStore::Transaction t;
+    for (vector<hobject_t>::iterator j = objects.begin();
+	 j != objects.end();
+	 ++j) {
+      if (j->snap < CEPH_MAXSNAP) {
+	OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
+	bufferptr bp;
+	r = store->getattr(
+	  cid,
+	  *j,
+	  OI_ATTR,
+	  bp);
+	if (r < 0) {
+	  derr << __func__ << ": getattr returned "
+	       << cpp_strerror(r) << dendl;
+	  assert(0);
+	}
+	bufferlist bl;
+	bl.push_back(bp);
+	object_info_t oi(bl);
+	set<snapid_t> oi_snaps(oi.snaps.begin(), oi.snaps.end());
+	set<snapid_t> cur_snaps;
+	r = snap_mapper.get_snaps(*j, &cur_snaps);
+	if (r == 0) {
+	  assert(cur_snaps == oi_snaps);
+	} else if (r == -ENOENT) {
+	  snap_mapper.add_oid(*j, oi_snaps, &_t);
+	} else {
+	  derr << __func__ << ": get_snaps returned "
+	       << cpp_strerror(r) << dendl;
+	  assert(0);
+	}
+      }
+    }
+    r = store->apply_transaction(t);
+    if (r != 0) {
+      derr << __func__ << ": apply_transaction returned "
+	   << cpp_strerror(r) << dendl;
+      assert(0);
+    }
+    objects.clear();
+  }
+  ObjectStore::Transaction t;
+  dirty_info = true;
+  write_if_dirty(t);
+  int r = store->apply_transaction(t);
+  if (r != 0) {
+    derr << __func__ << ": apply_transaction returned "
+	 << cpp_strerror(r) << dendl;
+    assert(0);
+  }
+  assert(r == 0);
+}
+
 void PG::write_info(ObjectStore::Transaction& t)
 {
   // pg state
-  __u8 cur_struct_v = 6;
 
   assert(info_struct_v <= cur_struct_v);
 
