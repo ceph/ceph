@@ -2243,6 +2243,40 @@ public:
   int update(RGWRados *store, string& metadata_key, bufferlist& bl) {
     return 0;
   }
+
+  struct list_keys_info {
+    RGWRados *store;
+    RGWListRawObjsCtx ctx;
+  };
+
+  int list_keys_init(RGWRados *store, void **phandle)
+  {
+    list_keys_info *info = new list_keys_info;
+
+    info->store = store;
+
+    *phandle = (void *)info;
+
+    return 0;
+  }
+
+  int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) {
+    list_keys_info *info = (list_keys_info *)handle;
+
+    string no_filter;
+
+    keys.clear();
+
+    RGWRados *store = info->store;
+
+    return store->list_raw_objects(store->zone.user_uid_pool, no_filter,
+                                   max, info->ctx, keys, truncated);
+  }
+
+  void list_keys_complete(void *handle) {
+    list_keys_info *info = (list_keys_info *)handle;
+    delete info;
+  }
 };
 
 void rgw_user_init(RGWMetadataManager *mm)

@@ -187,6 +187,7 @@ enum {
   OPT_CAPS_ADD,
   OPT_CAPS_RM,
   OPT_METADATA_GET,
+  OPT_METADATA_LIST,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
@@ -340,6 +341,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "metadata") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_METADATA_GET;
+    if (strcmp(cmd, "list") == 0)
+      return OPT_METADATA_LIST;
   }
 
   return -EINVAL;
@@ -372,7 +375,6 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
   formatter->flush(cout);
   cout << std::endl;
 }
-
 
 static void dump_bucket_usage(map<RGWObjCategory, RGWBucketStats>& stats, Formatter *formatter)
 {
@@ -1458,6 +1460,40 @@ next:
     }
 
     formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_METADATA_LIST) {
+    void *handle;
+    int max = 1000;
+    int ret = store->meta_mgr->list_keys_init(metadata_key, &handle);
+    if (ret < 0) {
+      cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    bool truncated;
+
+    formatter->open_array_section("keys");
+
+    do {
+      list<string> keys;
+      ret = store->meta_mgr->list_keys_next(handle, max, keys, &truncated);
+      if (ret < 0) {
+        cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
+	formatter->dump_string("key", *iter);
+      }
+      formatter->flush(cout);
+
+    } while (truncated);
+
+    formatter->close_section();
+    formatter->flush(cout);
+
+    store->meta_mgr->list_keys_complete(handle);
   }
 
   return 0;

@@ -58,10 +58,10 @@ int RGWMetadataManager::get(string& metadata_key, Formatter *f)
 {
   RGWMetadataHandler *handler;
   string entry;
-
   int ret = find_handler(metadata_key, &handler, entry);
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   return handler->get(store, metadata_key, entry, f);
 }
@@ -76,6 +76,54 @@ int RGWMetadataManager::update(string& metadata_key, bufferlist& bl)
     return ret;
 
   return handler->update(store, entry, bl);
+}
+
+struct list_keys_handle {
+  void *handle;
+  RGWMetadataHandler *handler;
+};
+
+
+int RGWMetadataManager::list_keys_init(string& section, void **handle)
+{
+  string entry;
+  RGWMetadataHandler *handler;
+  int ret = find_handler(section, &handler, entry);
+  if (ret < 0) {
+    return -ENOENT;
+  }
+
+  list_keys_handle *h = new list_keys_handle;
+  h->handler = handler;
+  ret = handler->list_keys_init(store, &h->handle);
+  if (ret < 0) {
+    delete h;
+    return ret;
+  }
+
+  *handle = (void *)h;
+
+  return 0;
+}
+
+int RGWMetadataManager::list_keys_next(void *handle, int max, list<string>& keys, bool *truncated)
+{
+  list_keys_handle *h = (list_keys_handle *)handle;
+
+  RGWMetadataHandler *handler = h->handler;
+
+  return handler->list_keys_next(h->handle, max, keys, truncated);
+}
+
+
+void RGWMetadataManager::list_keys_complete(void *handle)
+{
+  list_keys_handle *h = (list_keys_handle *)handle;
+
+  RGWMetadataHandler *handler = h->handler;
+
+  handler->list_keys_complete(h->handle);
+  delete h;
 }
 
 
