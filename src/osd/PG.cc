@@ -3139,7 +3139,6 @@ void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep)
     if (r == 0) {
       ScrubMap::object &o = map.objects[poid];
       o.size = st.st_size;
-      o.nlinks = st.st_nlink;
       assert(!o.negative);
       osd->store->getattrs(coll, poid, o.attrs);
 
@@ -3340,6 +3339,76 @@ void PG::scrub_unreserve_replicas()
   }
 }
 
+void PG::_scan_snaps(ScrubMap &smap) {
+  for (map<hobject_t, ScrubMap::object>::iterator i = smap.objects.begin();
+       i != smap.objects.end();
+       ++i) {
+    const hobject_t &hoid = i->first;
+    ScrubMap::object &o = i->second;
+
+    if (hoid.snap < CEPH_MAXSNAP) {
+      // fake nlinks for old primaries
+      bufferlist bl;
+      bl.push_back(o.attrs[OI_ATTR]);
+      object_info_t oi(bl);
+      if (oi.snaps.empty()) {
+	// Just head
+	o.nlinks = 1;
+      } else if (oi.snaps.size() == 1) {
+	// Just head + only snap
+	o.nlinks = 2;
+      } else {
+	// Just head + 1st and last snaps
+	o.nlinks = 3;
+      }
+
+      // check and if necessary fix snap_mapper
+      set<snapid_t> oi_snaps(oi.snaps.begin(), oi.snaps.end());
+      set<snapid_t> cur_snaps;
+      int r = snap_mapper.get_snaps(hoid, &cur_snaps);
+      if (r != 0 && r != -ENOENT) {
+	derr << __func__ << ": get_snaps returned " << cpp_strerror(r) << dendl;
+	assert(0);
+      }
+      if (r == -ENOENT || cur_snaps != oi_snaps) {
+	ObjectStore::Transaction t;
+	OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
+	if (r == 0) {
+	  r = snap_mapper.remove_oid(hoid, &_t);
+	  if (r != 0) {
+	    derr << __func__ << ": remove_oid returned " << cpp_strerror(r)
+		 << dendl;
+	    assert(0);
+	  }
+	  osd->clog.error() << "osd." << osd->whoami
+			    << " found snap mapper error on pg "
+			    << info.pgid
+			    << " oid " << hoid << " snaps in mapper: "
+			    << cur_snaps << ", oi: "
+			    << oi_snaps
+			    << "...repaired";
+	} else {
+	  osd->clog.error() << "osd." << osd->whoami
+			    << " found snap mapper error on pg "
+			    << info.pgid
+			    << " oid " << hoid << " snaps missing in mapper"
+			    << ", should be: "
+			    << oi_snaps
+			    << "...repaired";
+	}
+	snap_mapper.add_oid(hoid, oi_snaps, &_t);
+	r = osd->store->apply_transaction(t);
+	if (r != 0) {
+	  derr << __func__ << ": apply_transaction got " << cpp_strerror(r)
+	       << dendl;
+	}
+      }
+    } else {
+      o.nlinks = 1;
+    }
+  }
+}
+
 /*
  * build a scrub map over a chunk without releasing the lock
  * only used by chunky scrub
@@ -3361,6 +3430,7 @@ int PG::build_scrub_map_chunk(ScrubMap &map,
   }
 
   _scan_list(map, ls, deep);
+  _scan_snaps(map);
 
   // pg attrs
   osd->store->collection_getattrs(coll, map.attrs);
@@ -3395,6 +3465,7 @@ void PG::build_scrub_map(ScrubMap &map)
 
   _scan_list(map, ls, false);
   lock();
+  _scan_snaps(map);
 
   if (pg_has_reset_since(epoch)) {
     dout(10) << "scrub  pg changed, aborting" << dendl;
