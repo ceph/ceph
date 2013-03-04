@@ -2621,6 +2621,10 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	// -ENOENT is normally okay
 	// ...including on a replayed OP_RMCOLL with !stable_commits
 	ok = true;
+      if (r == -ENOENT && (
+	  op == Transaction::OP_COLL_ADD &&
+	  i.tolerate_collection_add_enoent()))
+	ok = true; // Hack for upgrade from snapcolls to snapmapper
       if (r == -ENODATA)
 	ok = true;
 

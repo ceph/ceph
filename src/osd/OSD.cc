@@ -141,6 +141,7 @@ static CompatSet get_osd_compat_set() {
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_BIGINFO);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_LEVELDBINFO);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_LEVELDBLOG);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER);
   return CompatSet(ceph_osd_feature_compat, ceph_osd_feature_ro_compat,
 		   ceph_osd_feature_incompat);
 }
@@ -1615,6 +1616,14 @@ void OSD::load_pgs()
 
     // read pg state, log
     pg->read_state(store, bl);
+
+    if (pg->must_upgrade()) {
+      derr << "PG " << pg->info.pgid
+	   << " must upgrade..." << dendl;
+      pg->upgrade(store, i->second);
+    } else {
+      assert(i->second.empty());
+    }
 
     set<pg_t> split_pgs;
     if (osdmap->have_pg_pool(pg->info.pgid.pool()) &&

@@ -4558,6 +4558,8 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
       bufferlist::iterator p = m->get_data().begin();
 
       ::decode(rm->opt, p);
+      if (!(m->get_connection()->get_features() & CEPH_FEATURE_OSD_SNAPMAPPER))
+	rm->opt.set_tolerate_collection_add_enoent();
       p = m->logbl.begin();
       ::decode(log, p);
       if (m->hobject_incorrect_pool) {
