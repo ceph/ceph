@@ -3829,7 +3829,7 @@ void Client::renew_caps(const int mds) {
 // ===============================================================
 // high level (POSIXy) interface
 
-int Client::_do_lookup(Inode *dir, const char *name, Inode **target)
+int Client::_do_lookup(Inode *dir, const string& name, Inode **target)
 {
   int op = dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_LOOKUPSNAP : CEPH_MDS_OP_LOOKUP;
   MetaRequest *req = new MetaRequest(op);
@@ -3839,10 +3839,10 @@ int Client::_do_lookup(Inode *dir, const char *name, Inode **target)
   req->set_filepath(path);
   req->inode = dir;
   req->head.args.getattr.mask = 0;
-  ldout(cct, 10) << "_lookup on " << path << dendl;
+  ldout(cct, 10) << "_do_lookup on " << path << dendl;
 
   int r = make_request(req, 0, 0, target);
-  ldout(cct, 10) << "_lookup res is " << r << dendl;
+  ldout(cct, 10) << "_do_lookup res is " << r << dendl;
   return r;
 }
 
@@ -3921,7 +3921,7 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
     }
   }
 
-  r = _do_lookup(dir, dname.c_str(), target);
+  r = _do_lookup(dir, dname, target);
 
  done:
   if (r < 0)

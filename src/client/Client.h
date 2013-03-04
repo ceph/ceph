@@ -521,7 +521,7 @@ private:
 
   // internal interface
   //   call these with client_lock held!
-  int _do_lookup(Inode *dir, const char *name, Inode **target);
+  int _do_lookup(Inode *dir, const string& name, Inode **target);
   int _lookup(Inode *dir, const string& dname, Inode **target);
 
   int _link(Inode *in, Inode *dir, const char *name, int uid=-1, int gid=-1, Inode **inp = 0);
