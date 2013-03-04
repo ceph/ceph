@@ -555,6 +555,10 @@ public:
     }
   }
 
+  int list_raw_objects(rgw_bucket& pool, const string& prefix_filter, int max,
+                       RGWListRawObjsCtx& ctx, list<string>& oids,
+                       bool *is_truncated);
+
   int list_raw_prefixed_objs(string pool_name, const string& prefix, list<string>& result);
   int list_regions(list<string>& regions);
   int list_zones(list<string>& zones);
@@ -1002,10 +1006,6 @@ public:
    */
   int pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<RGWObjEnt>& objs,
                    bool *is_truncated, RGWAccessListFilter *filter);
-
-  int list_raw_objects(rgw_bucket& pool, const string& prefix_filter, int max,
-                       RGWListRawObjsCtx& ctx, vector<string>& oids,
-                       bool *is_truncated);
 
   uint64_t instance_id();
   uint64_t next_bucket_id();

@@ -577,13 +577,13 @@ int RGWRados::list_raw_prefixed_objs(string pool_name, const string& prefix, lis
   bool is_truncated;
   RGWListRawObjsCtx ctx;
   do {
-    vector<string> oids;
+    list<string> oids;
     int r = list_raw_objects(pool, prefix, 1000,
 			     ctx, oids, &is_truncated);
     if (r < 0) {
       return r;
     }
-    vector<string>::iterator iter;
+    list<string>::iterator iter;
     for (iter = oids.begin(); iter != oids.end(); ++iter) {
       string& val = *iter;
       if (val.size() > prefix.size())
@@ -3856,7 +3856,7 @@ struct RGWAccessListFilterPrefix : public RGWAccessListFilter {
 };
 
 int RGWRados::list_raw_objects(rgw_bucket& pool, const string& prefix_filter,
-			       int max, RGWListRawObjsCtx& ctx, vector<string>& oids,
+			       int max, RGWListRawObjsCtx& ctx, list<string>& oids,
 			       bool *is_truncated)
 {
   RGWAccessListFilterPrefix filter(prefix_filter);

@@ -16,6 +16,10 @@ public:
 
   virtual int get(RGWRados *store, string& key, string& entry, Formatter *f) = 0;
   virtual int update(RGWRados *store, string& entry, bufferlist& bl) = 0;
+
+  virtual int list_keys_init(RGWRados *store, void **phandle) = 0;
+  virtual int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) = 0;
+  virtual void list_keys_complete(void *handle) = 0;
 };
 
 
@@ -35,6 +39,10 @@ public:
 
   int get(string& metadata_key, Formatter *f);
   int update(string& metadata_key, bufferlist& bl);
+
+  int list_keys_init(string& section, void **phandle);
+  int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated);
+  void list_keys_complete(void *handle);
 };
 
 #endif
