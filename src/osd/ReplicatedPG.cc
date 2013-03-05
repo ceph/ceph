@@ -1288,98 +1288,84 @@ void ReplicatedPG::do_backfill(OpRequestRef op)
   }
 }
 
-/* Returns head of snap_trimq as snap_to_trim and the relevant objects as 
- * obs_to_trim */
-bool ReplicatedPG::get_obs_to_trim(snapid_t &snap_to_trim,
-				   coll_t &col_to_trim,
-				   vector<hobject_t> &obs_to_trim)
-{
-  assert_locked();
-  obs_to_trim.clear();
-
-  interval_set<snapid_t> s;
-  s.intersection_of(snap_trimq, info.purged_snaps);
-  if (!s.empty()) {
-    dout(0) << "WARNING - snap_trimmer: snap_trimq contained snaps already in "
-	    << "purged_snaps" << dendl;
-    snap_trimq.subtract(s);
-  }
-
-  dout(10) << "get_obs_to_trim , purged_snaps " << info.purged_snaps << dendl;
-
-  if (snap_trimq.size() == 0)
-    return false;
-
-  snap_to_trim = snap_trimq.range_start();
-  col_to_trim = coll_t(info.pgid, snap_to_trim);
-
-  if (!snap_collections.contains(snap_to_trim)) {
-    return true;
-  }
-
-  // flush pg ops to fs so we can rely on collection_list()
-  osr->flush();
-
-  osd->store->collection_list(col_to_trim, obs_to_trim);
-
-  return true;
-}
-
-ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid,
-						   const snapid_t &sn)
+ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 {
   // load clone info
   bufferlist bl;
   ObjectContext *obc = 0;
   int r = find_object_context(
-    hobject_t(coid.oid, coid.get_key(), sn, coid.hash, info.pgid.pool()),
+    coid,
     OLOC_BLANK, &obc, false, NULL);
   if (r == -ENOENT || coid.snap != obc->obs.oi.soid.snap) {
-    if (obc) put_object_context(obc);
-    return 0;
+    derr << __func__ << "could not find coid " << coid << dendl;
+    assert(0);
   }
   assert(r == 0);
   assert(obc->registered);
+
   object_info_t &coi = obc->obs.oi;
-  vector<snapid_t>& snaps = coi.snaps;
+  set<snapid_t> old_snaps(coi.snaps.begin(), coi.snaps.end());
+  assert(old_snaps.size());
 
   // get snap set context
   if (!obc->ssc)
-    obc->ssc = get_snapset_context(coid.oid, coid.get_key(), coid.hash, false);
-  SnapSetContext *ssc = obc->ssc;
-  assert(ssc);
-  SnapSet& snapset = ssc->snapset;
+    obc->ssc = get_snapset_context(
+      coid.oid,
+      coid.get_key(),
+      coid.hash,
+      false);
 
-  dout(10) << coid << " snaps " << snaps << " old snapset " << snapset << dendl;
+  assert(obc->ssc);
+  SnapSet& snapset = obc->ssc->snapset;
+
+  dout(10) << coid << " old_snaps " << old_snaps
+	   << " old snapset " << snapset << dendl;
   assert(snapset.seq);
 
   vector<OSDOp> ops;
   tid_t rep_tid = osd->get_tid();
   osd_reqid_t reqid(osd->get_cluster_msgr_name(), 0, rep_tid);
-  OpContext *ctx = new OpContext(OpRequestRef(), reqid, ops, &obc->obs, ssc, this);
+  OpContext *ctx = new OpContext(
+    OpRequestRef(),
+    reqid,
+    ops,
+    &obc->obs,
+    obc->ssc,
+    this);
   ctx->mtime = ceph_clock_now(g_ceph_context);
 
   ctx->at_version.epoch = get_osdmap()->get_epoch();
   ctx->at_version.version = log.head.version + 1;
 
-
   RepGather *repop = new_repop(ctx, obc, rep_tid);
 
   ObjectStore::Transaction *t = &ctx->op_t;
+  OSDriver::OSTransaction os_t(osdriver.get_transaction(t));
     
-  // trim clone's snaps
-  vector<snapid_t> newsnaps;
-  for (unsigned i=0; i<snaps.size(); i++)
-    if (!pool.info.is_removed_snap(snaps[i]))
-      newsnaps.push_back(snaps[i]);
+  set<snapid_t> new_snaps;
+  for (set<snapid_t>::iterator i = old_snaps.begin();
+       i != old_snaps.end();
+       ++i) {
+    if (!pool.info.is_removed_snap(*i))
+      new_snaps.insert(*i);
+  }
 
-  if (newsnaps.empty()) {
+  r = snap_mapper.update_snaps(
+    coid,
+    new_snaps,
+    &old_snaps, // debug
+    &os_t);
+  if (r != 0) {
+    derr << __func__ << ": snap_mapper.update_snap returned "
+	 << cpp_strerror(r) << dendl;
+    assert(0);
+  }
+
+  if (new_snaps.empty()) {
     // remove clone
-    dout(10) << coid << " snaps " << snaps << " -> " << newsnaps << " ... deleting" << dendl;
+    dout(10) << coid << " snaps " << old_snaps << " -> "
+	     << new_snaps << " ... deleting" << dendl;
     t->remove(coll, coid);
-    t->collection_remove(coll_t(info.pgid, snaps[0]), coid);
-    if (snaps.size() > 1)
-      t->collection_remove(coll_t(info.pgid, snaps[snaps.size()-1]), coid);
 
     // ...from snapset
     snapid_t last = coid.snap;
@@ -1393,11 +1379,16 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid,
       // not the oldest... merge overlap into next older clone
       vector<snapid_t>::iterator n = p - 1;
       interval_set<uint64_t> keep;
-      keep.union_of(snapset.clone_overlap[*n], snapset.clone_overlap[*p]);
+      keep.union_of(
+	snapset.clone_overlap[*n],
+	snapset.clone_overlap[*p]);
       add_interval_usage(keep, delta);  // not deallocated
-      snapset.clone_overlap[*n].intersection_of(snapset.clone_overlap[*p]);
+      snapset.clone_overlap[*n].intersection_of(
+	snapset.clone_overlap[*p]);
     } else {
-      add_interval_usage(snapset.clone_overlap[last], delta);  // not deallocated
+      add_interval_usage(
+	snapset.clone_overlap[last],
+	delta);  // not deallocated
     }
     delta.num_objects--;
     delta.num_object_clones--;
@@ -1408,53 +1399,37 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid,
     snapset.clone_overlap.erase(last);
     snapset.clone_size.erase(last);
 	
-    ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::DELETE, coid, ctx->at_version, ctx->obs->oi.version,
-				  osd_reqid_t(), ctx->mtime));
+    ctx->log.push_back(
+      pg_log_entry_t(
+	pg_log_entry_t::DELETE,
+	coid,
+	ctx->at_version,
+	ctx->obs->oi.version,
+	osd_reqid_t(),
+	ctx->mtime)
+      );
     ctx->at_version.version++;
   } else {
     // save adjusted snaps for this object
-    dout(10) << coid << " snaps " << snaps << " -> " << newsnaps << dendl;
-    coi.snaps.swap(newsnaps);
-    vector<snapid_t>& oldsnaps = newsnaps;
+    dout(10) << coid << " snaps " << old_snaps
+	     << " -> " << new_snaps << dendl;
+    coi.snaps = vector<snapid_t>(new_snaps.rbegin(), new_snaps.rend());
+
     coi.prior_version = coi.version;
     coi.version = ctx->at_version;
     bl.clear();
     ::encode(coi, bl);
     t->setattr(coll, coid, OI_ATTR, bl);
 
-    set<snapid_t> old_snapdirs, new_snapdirs;
-
-    old_snapdirs.insert(oldsnaps[0]);
-    old_snapdirs.insert(*(oldsnaps.rbegin()));
-
-    new_snapdirs.insert(snaps[0]);
-    new_snapdirs.insert(*(snaps.rbegin()));
-
-    set<snapid_t> to_remove, to_create;
-    for (set<snapid_t>::iterator i = old_snapdirs.begin();
-	 i != old_snapdirs.end();
-	 ++i) {
-      if (new_snapdirs.count(*i))
-	continue;
-      t->collection_remove(coll_t(info.pgid, *i), coid);
-      to_remove.insert(*i);
-    }
-    for (set<snapid_t>::iterator i = new_snapdirs.begin();
-	 i != new_snapdirs.end();
-	 ++i) {
-      if (old_snapdirs.count(*i))
-	continue;
-      make_snap_collection(ctx->local_t, *i);
-      t->collection_add(coll_t(info.pgid, *i), coll, coid);
-      to_create.insert(*i);
-    }
-
-    dout(10) << "removing coid " << coid << " from snap collections "
-	     << to_remove << " and adding to snap collections "
-	     << to_create << " for final snaps " << coi.snaps << dendl;
-
-    ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, coid, coi.version, coi.prior_version,
-				  osd_reqid_t(), ctx->mtime));
+    ctx->log.push_back(
+      pg_log_entry_t(
+	pg_log_entry_t::MODIFY,
+	coid,
+	coi.version,
+	coi.prior_version,
+	osd_reqid_t(),
+	ctx->mtime)
+      );
     ::encode(coi.snaps, ctx->log.back().snaps);
     ctx->at_version.version++;
   }
@@ -1462,24 +1437,41 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid,
   // save head snapset
   dout(10) << coid << " new snapset " << snapset << dendl;
 
-  hobject_t snapoid(coid.oid, coid.get_key(),
-		    snapset.head_exists ? CEPH_NOSNAP:CEPH_SNAPDIR, coid.hash,
-		    info.pgid.pool());
+  hobject_t snapoid(
+    coid.oid, coid.get_key(),
+    snapset.head_exists ? CEPH_NOSNAP:CEPH_SNAPDIR, coid.hash,
+    info.pgid.pool());
   ctx->snapset_obc = get_object_context(snapoid, coi.oloc, false);
   assert(ctx->snapset_obc->registered);
+
   if (snapset.clones.empty() && !snapset.head_exists) {
     dout(10) << coid << " removing " << snapoid << dendl;
-    ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::DELETE, snapoid, ctx->at_version, 
-				  ctx->snapset_obc->obs.oi.version, osd_reqid_t(), ctx->mtime));
+    ctx->log.push_back(
+      pg_log_entry_t(
+	pg_log_entry_t::DELETE,
+	snapoid,
+	ctx->at_version,
+	ctx->snapset_obc->obs.oi.version,
+	osd_reqid_t(),
+	ctx->mtime)
+      );
     ctx->snapset_obc->obs.exists = false;
 
     t->remove(coll, snapoid);
   } else {
     dout(10) << coid << " updating snapset on " << snapoid << dendl;
-    ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, snapoid, ctx->at_version, 
-				  ctx->snapset_obc->obs.oi.version, osd_reqid_t(), ctx->mtime));
+    ctx->log.push_back(
+      pg_log_entry_t(
+	pg_log_entry_t::MODIFY,
+	snapoid,
+	ctx->at_version,
+	ctx->snapset_obc->obs.oi.version,
+	osd_reqid_t(),
+	ctx->mtime)
+      );
 
-    ctx->snapset_obc->obs.oi.prior_version = ctx->snapset_obc->obs.oi.version;
+    ctx->snapset_obc->obs.oi.prior_version =
+      ctx->snapset_obc->obs.oi.version;
     ctx->snapset_obc->obs.oi.version = ctx->at_version;
 
     bl.clear();
@@ -3307,13 +3299,9 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     snap_oi->snaps = snaps;
     _make_clone(t, soid, coid, snap_oi);
     
-    // add to snap bound collections
-    coll_t fc = make_snap_collection(ctx->local_t, snaps[0]);
-    t.collection_add(fc, coll, coid);
-    if (snaps.size() > 1) {
-      coll_t lc = make_snap_collection(ctx->local_t, snaps[snaps.size()-1]);
-      t.collection_add(lc, coll, coid);
-    }
+    OSDriver::OSTransaction _t(osdriver.get_transaction(&(ctx->local_t)));
+    set<snapid_t> _snaps(snaps.begin(), snaps.end());
+    snap_mapper.add_oid(coid, _snaps, &_t);
     
     ctx->delta_stats.num_objects++;
     ctx->delta_stats.num_object_clones++;
@@ -4589,7 +4577,7 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
 	// last_backfill (according to the primary, not our
 	// not-quite-accurate value), and should update the
 	// collections now.  Otherwise, we do it later on push.
-	update_snap_collections(log, rm->localt);
+	update_snap_map(log, rm->localt);
       }
       append_log(log, m->pg_trim_to, rm->localt);
 
@@ -5154,7 +5142,7 @@ void ReplicatedPG::submit_push_data(
 {
   if (first) {
     missing.revise_have(recovery_info.soid, eversion_t());
-    remove_object_with_snap_hardlinks(*t, recovery_info.soid);
+    remove_snap_mapped_object(*t, recovery_info.soid);
     t->remove(get_temp_coll(t), recovery_info.soid);
     t->touch(get_temp_coll(t), recovery_info.soid);
     t->omap_setheader(get_temp_coll(t), recovery_info.soid, omap_header);
@@ -5179,7 +5167,7 @@ void ReplicatedPG::submit_push_data(
 void ReplicatedPG::submit_push_complete(ObjectRecoveryInfo &recovery_info,
 					ObjectStore::Transaction *t)
 {
-  remove_object_with_snap_hardlinks(*t, recovery_info.soid);
+  remove_snap_mapped_object(*t, recovery_info.soid);
   t->collection_move(coll, get_temp_coll(t), recovery_info.soid);
   for (map<hobject_t, interval_set<uint64_t> >::const_iterator p =
 	 recovery_info.clone_subset.begin();
@@ -5196,17 +5184,15 @@ void ReplicatedPG::submit_push_complete(ObjectRecoveryInfo &recovery_info,
   }
 
   if (recovery_info.soid.snap < CEPH_NOSNAP) {
-    if (recovery_info.oi.snaps.size()) {
-      coll_t lc = make_snap_collection(*t,
-				       recovery_info.oi.snaps[0]);
-      t->collection_add(lc, coll, recovery_info.soid);
-      if (recovery_info.oi.snaps.size() > 1) {
-	coll_t hc = make_snap_collection(
-	  *t,
-	  recovery_info.oi.snaps[recovery_info.oi.snaps.size()-1]);
-	t->collection_add(hc, coll, recovery_info.soid);
-      }
-    }
+    assert(recovery_info.oi.snaps.size());
+    OSDriver::OSTransaction _t(osdriver.get_transaction(t));
+    set<snapid_t> snaps(
+      recovery_info.oi.snaps.begin(),
+      recovery_info.oi.snaps.end());
+    snap_mapper.add_oid(
+      recovery_info.soid,
+      snaps,
+      &_t);
   }
 
   if (missing.is_missing(recovery_info.soid) &&
@@ -5740,9 +5726,6 @@ void ReplicatedPG::_committed_pushed_object(
 				      new MOSDPGTrim(get_osdmap()->get_epoch(), info.pgid,
 						     last_complete_ondisk),
 				      get_osdmap()->get_epoch());
-
-	// adjust local snaps!
-	adjust_local_snaps();
       } else if (is_primary()) {
 	// we are the primary.  tell replicas to trim?
 	if (calc_min_last_complete_ondisk())
@@ -5927,7 +5910,7 @@ void ReplicatedPG::sub_op_remove(OpRequestRef op)
   op->mark_started();
 
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  remove_object_with_snap_hardlinks(*t, m->poid);
+  remove_snap_mapped_object(*t, m->poid);
   int r = osd->store->queue_transaction(osr.get(), t);
   assert(r == 0);
 }
@@ -6998,7 +6981,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
     if (p->is_delete()) {
       dout(10) << " deleting " << p->soid
 	       << " when " << p->version << dendl;
-      remove_object_with_snap_hardlinks(t, p->soid);
+      remove_snap_mapped_object(t, p->soid);
     } else {
       // keep old(+missing) objects, just for kicks.
     }
@@ -7199,79 +7182,6 @@ void ReplicatedPG::_scrub_finish()
   }
 }
 
-static set<snapid_t> get_expected_snap_colls(
-  const map<string, bufferptr> &attrs,
-  object_info_t *oi = 0)
-{
-  object_info_t _oi;
-  if (!oi)
-    oi = &_oi;
-
-  set<snapid_t> to_check;
-  map<string, bufferptr>::const_iterator oiiter = attrs.find(OI_ATTR);
-  if (oiiter == attrs.end())
-    return to_check;
-
-  bufferlist oiattr;
-  oiattr.push_back(oiiter->second);
-  *oi = object_info_t(oiattr);
-  if (!oi->snaps.empty())
-    to_check.insert(*(oi->snaps.begin()));
-  if (oi->snaps.size() > 1)
-    to_check.insert(*(oi->snaps.rbegin()));
-  return to_check;
-}
-
-bool ReplicatedPG::_report_snap_collection_errors(
-  const hobject_t &hoid,
-  int osd,
-  const map<string, bufferptr> &attrs,
-  const set<snapid_t> &snapcolls,
-  uint32_t nlinks,
-  ostream &out)
-{
-  if (nlinks == 0)
-    return false; // replica didn't encode snap_collection information
-  bool errors = false;
-  set<snapid_t> to_check = get_expected_snap_colls(attrs);
-  if (to_check != snapcolls) {
-    out << info.pgid << " osd." << osd << " inconsistent snapcolls on "
-	<< hoid << " found " << snapcolls << " expected " << to_check
-	<< std::endl;
-    errors = true;
-  }
-  if (nlinks != snapcolls.size() + 1) {
-    out << info.pgid << " osd." << osd << " unaccounted for links on object "
-	<< hoid << " snapcolls " << snapcolls << " nlinks " << nlinks
-	<< std::endl;
-    errors = true;
-  }
-  return errors;
-}
-
-void ReplicatedPG::check_snap_collections(
-  ino_t hino,
-  const hobject_t &hoid,
-  const map<string, bufferptr> &attrs,
-  set<snapid_t> *snapcolls)
-{
-  object_info_t oi;
-  set<snapid_t> to_check = get_expected_snap_colls(attrs, &oi);
-
-  for (set<snapid_t>::iterator i = to_check.begin(); i != to_check.end(); ++i) {
-    struct stat st;
-    int r = osd->store->stat(coll_t(info.pgid, *i), hoid, &st);
-    if (r == -ENOENT) {
-    } else if (r == 0) {
-      if (hino == st.st_ino) {
-	snapcolls->insert(*i);
-      }
-    } else {
-      assert(0);
-    }
-  }
-}
-
 /*---SnapTrimmer Logging---*/
 #undef dout_prefix
 #define dout_prefix *_dout << pg->gen_prefix() 
@@ -7310,11 +7220,7 @@ boost::statechart::result ReplicatedPG::NotTrimming::react(const SnapTrim&)
   ReplicatedPG *pg = context< SnapTrimmer >().pg;
   dout(10) << "NotTrimming react" << dendl;
 
-  // Replica trimming
-  if (pg->is_replica() && pg->is_active() &&
-      pg->last_complete_ondisk.epoch >= pg->info.history.last_epoch_started) {
-    return transit<RepColTrim>();
-  } else if (!pg->is_primary() || !pg->is_active() || !pg->is_clean()) {
+  if (!pg->is_primary() || !pg->is_active() || !pg->is_clean()) {
     dout(10) << "NotTrimming not primary, active, clean" << dendl;
     return discard_event();
   } else if (pg->scrubber.active) {
@@ -7324,98 +7230,22 @@ boost::statechart::result ReplicatedPG::NotTrimming::react(const SnapTrim&)
   }
 
   // Primary trimming
-  vector<hobject_t> &obs_to_trim = context<SnapTrimmer>().obs_to_trim;
-  snapid_t &snap_to_trim = context<SnapTrimmer>().snap_to_trim;
-  coll_t &col_to_trim = context<SnapTrimmer>().col_to_trim;
-  if (!pg->get_obs_to_trim(snap_to_trim,
-			   col_to_trim,
-			   obs_to_trim)) {
-    // Nothing to trim
-    dout(10) << "NotTrimming: nothing to trim" << dendl;
-    return discard_event();
-  }
-
-  if (obs_to_trim.empty()) {
-    // Nothing to actually trim, just update info and try again
-    pg->info.purged_snaps.insert(snap_to_trim);
-    pg->snap_trimq.erase(snap_to_trim);
-    dout(10) << "NotTrimming: obs_to_trim empty!" << dendl;
-    dout(10) << "purged_snaps now " << pg->info.purged_snaps << ", snap_trimq now " 
-	     << pg->snap_trimq << dendl;
-    if (pg->snap_collections.contains(snap_to_trim)) {
-      ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      pg->snap_collections.erase(snap_to_trim);
-      t->remove_collection(col_to_trim);
-      pg->dirty_big_info = true;
-      pg->write_if_dirty(*t);
-      int r = pg->osd->store->queue_transaction(
-	NULL, t, new ObjectStore::C_DeleteTransaction(t));
-      assert(r == 0);
-    }
-    post_event(SnapTrim());
+  if (pg->snap_trimq.empty()) {
     return discard_event();
   } else {
-    // Actually have things to trim!
-    dout(10) << "NotTrimming: something to trim!" << dendl;
-    return transit< TrimmingObjects >();
+    context<SnapTrimmer>().snap_to_trim = pg->snap_trimq.range_start();
+    dout(10) << "NotTrimming: trimming "
+	     << pg->snap_trimq.range_start()
+	     << dendl;
+    post_event(SnapTrim());
+    return transit<TrimmingObjects>();
   }
-}
-
-/* RepColTrim */
-ReplicatedPG::RepColTrim::RepColTrim(my_context ctx) : my_base(ctx)
-{
-  state_name = "RepColTrim";
-  context< SnapTrimmer >().log_enter(state_name);
-}
-
-void ReplicatedPG::RepColTrim::exit()
-{
-  context< SnapTrimmer >().log_exit(state_name, enter_time);
-}
-
-boost::statechart::result ReplicatedPG::RepColTrim::react(const SnapTrim&)
-{
-  dout(10) << "RepColTrim react" << dendl;
-  ReplicatedPG *pg = context< SnapTrimmer >().pg;
-
-  if (to_trim.empty()) {
-    to_trim.intersection_of(pg->info.purged_snaps, pg->snap_collections);
-    if (to_trim.empty()) {
-      return transit<NotTrimming>();
-    }
-  }
-
-  snapid_t snap_to_trim(to_trim.range_start());
-  coll_t col_to_trim(pg->info.pgid, snap_to_trim);
-  to_trim.erase(snap_to_trim);
-  
-  // flush all operations to fs so we can rely on collection_list
-  // below.
-  pg->osr->flush();
-
-  vector<hobject_t> obs_to_trim;
-  pg->osd->store->collection_list(col_to_trim, obs_to_trim);
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  for (vector<hobject_t>::iterator i = obs_to_trim.begin();
-       i != obs_to_trim.end();
-       ++i) {
-    t->collection_remove(col_to_trim, *i);
-  }
-  t->remove_collection(col_to_trim);
-  pg->snap_collections.erase(snap_to_trim);
-  pg->dirty_big_info = true;
-  pg->write_if_dirty(*t);
-  int r = pg->osd->store->queue_transaction(NULL, t, new ObjectStore::C_DeleteTransaction(t));
-  assert(r == 0);
-  return discard_event();
 }
 
 /* TrimmingObjects */
 ReplicatedPG::TrimmingObjects::TrimmingObjects(my_context ctx) : my_base(ctx)
 {
   state_name = "Trimming/TrimmingObjects";
-  position = context<SnapTrimmer>().obs_to_trim.begin();
-  assert(position != context<SnapTrimmer>().obs_to_trim.end()); // Would not have transitioned if coll empty
   context< SnapTrimmer >().log_enter(state_name);
 }
 
@@ -7428,40 +7258,38 @@ boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
 {
   dout(10) << "TrimmingObjects react" << dendl;
   ReplicatedPG *pg = context< SnapTrimmer >().pg;
-  vector<hobject_t> &obs_to_trim = context<SnapTrimmer>().obs_to_trim;
-  snapid_t &snap_to_trim = context<SnapTrimmer>().snap_to_trim;
+  snapid_t snap_to_trim = context<SnapTrimmer>().snap_to_trim;
   set<RepGather *> &repops = context<SnapTrimmer>().repops;
 
-  // Done, 
-  if (position == obs_to_trim.end()) {
+  dout(10) << "TrimmingObjects: trimming snap " << snap_to_trim << dendl;
+
+  // Get next
+  int r = pg->snap_mapper.get_next_object_to_trim(snap_to_trim, &pos);
+  if (r != 0 && r != -ENOENT) {
+    derr << __func__ << ": get_next returned " << cpp_strerror(r) << dendl;
+    assert(0);
+  } else if (r == -ENOENT) {
+    // Done!
+    dout(10) << "TrimmingObjects: got ENOENT" << dendl;
     post_event(SnapTrim());
     return transit< WaitingOnReplicas >();
   }
 
-  dout(10) << "TrimmingObjects react trimming " << *position << dendl;
-  RepGather *repop = pg->trim_object(*position, snap_to_trim);
+  dout(10) << "TrimmingObjects react trimming " << pos << dendl;
+  RepGather *repop = pg->trim_object(pos);
+  assert(repop);
 
-  if (repop) {
-    repop->queue_snap_trimmer = true;
-    eversion_t old_last_update = pg->log.head;
-    bool old_exists = repop->obc->obs.exists;
-    uint64_t old_size = repop->obc->obs.oi.size;
-    eversion_t old_version = repop->obc->obs.oi.version;
-    
-    pg->append_log(repop->ctx->log, eversion_t(), repop->ctx->local_t);
-    pg->issue_repop(repop, repop->ctx->mtime, old_last_update, old_exists, old_size, old_version);
-    pg->eval_repop(repop);
-    
-    repops.insert(repop);
-    ++position;
-  } else {
-    // object has already been trimmed, this is an extra
-    coll_t col_to_trim(pg->info.pgid, snap_to_trim);
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    t->collection_remove(col_to_trim, *position);
-    int r = pg->osd->store->queue_transaction(NULL, t, new ObjectStore::C_DeleteTransaction(t));
-    assert(r == 0);
-  }
+  repop->queue_snap_trimmer = true;
+  eversion_t old_last_update = pg->log.head;
+  bool old_exists = repop->obc->obs.exists;
+  uint64_t old_size = repop->obc->obs.oi.size;
+  eversion_t old_version = repop->obc->obs.oi.version;
+
+  pg->append_log(repop->ctx->log, eversion_t(), repop->ctx->local_t);
+  pg->issue_repop(repop, repop->ctx->mtime, old_last_update, old_exists, old_size, old_version);
+  pg->eval_repop(repop);
+
+  repops.insert(repop);
   return discard_event();
 }
 /* WaitingOnReplicasObjects */
@@ -7501,22 +7329,18 @@ boost::statechart::result ReplicatedPG::WaitingOnReplicas::react(const SnapTrim&
     }
   }
 
-  // All applied, now to update and share info
   snapid_t &sn = context<SnapTrimmer>().snap_to_trim;
-  coll_t &c = context<SnapTrimmer>().col_to_trim;
+  dout(10) << "WaitingOnReplicas: adding snap " << sn << " to purged_snaps"
+	   << dendl;
 
   pg->info.purged_snaps.insert(sn);
   pg->snap_trimq.erase(sn);
   dout(10) << "purged_snaps now " << pg->info.purged_snaps << ", snap_trimq now " 
 	   << pg->snap_trimq << dendl;
   
-  // remove snap collection
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  dout(10) << "removing snap " << sn << " collection " << c << dendl;
-  pg->snap_collections.erase(sn);
   pg->dirty_big_info = true;
   pg->write_if_dirty(*t);
-  t->remove_collection(c);
   int tr = pg->osd->store->queue_transaction(pg->osr.get(), t);
   assert(tr == 0);
 

@@ -868,17 +868,6 @@ protected:
   virtual void _scrub_clear_state();
   virtual void _scrub_finish();
   object_stat_collection_t scrub_cstat;
-  virtual bool _report_snap_collection_errors(
-    const hobject_t &hoid,
-    int osd,
-    const map<string, bufferptr> &attrs,
-    const set<snapid_t> &snapcolls,
-    uint32_t nlinks,
-    ostream &out);
-  virtual void check_snap_collections(
-    ino_t hino, const hobject_t &hoid,
-    const map<string, bufferptr> &attrs,
-    set<snapid_t> *snapcolls);
 
   virtual void _split_into(pg_t child_pgid, PG *child, unsigned split_bits);
   void apply_and_flush_repops(bool requeue);
@@ -905,10 +894,7 @@ public:
   void do_sub_op_reply(OpRequestRef op);
   void do_scan(OpRequestRef op);
   void do_backfill(OpRequestRef op);
-  bool get_obs_to_trim(snapid_t &snap_to_trim,
-		       coll_t &col_to_trim,
-		       vector<hobject_t> &obs_to_trim);
-  RepGather *trim_object(const hobject_t &coid, const snapid_t &sn);
+  RepGather *trim_object(const hobject_t &coid);
   void snap_trimmer();
   int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops);
 
@@ -936,9 +922,7 @@ private:
   struct SnapTrimmer : public boost::statechart::state_machine< SnapTrimmer, NotTrimming > {
     ReplicatedPG *pg;
     set<RepGather *> repops;
-    vector<hobject_t> obs_to_trim;
     snapid_t snap_to_trim;
-    coll_t col_to_trim;
     bool need_share_pg_info;
     bool requeue;
     SnapTrimmer(ReplicatedPG *pg) : pg(pg), need_share_pg_info(false), requeue(false) {}
@@ -947,23 +931,12 @@ private:
   } snap_trimmer_machine;
 
   /* SnapTrimmerStates */
-  struct RepColTrim : boost::statechart::state< RepColTrim, SnapTrimmer >, NamedState {
-    typedef boost::mpl::list <
-      boost::statechart::custom_reaction< SnapTrim >,
-      boost::statechart::transition< Reset, NotTrimming >
-      > reactions;
-    interval_set<snapid_t> to_trim;
-    RepColTrim(my_context ctx);
-    void exit();
-    boost::statechart::result react(const SnapTrim&);
-  };
-
   struct TrimmingObjects : boost::statechart::state< TrimmingObjects, SnapTrimmer >, NamedState {
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< SnapTrim >,
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
-    vector<hobject_t>::iterator position;
+    hobject_t pos;
     TrimmingObjects(my_context ctx);
     void exit();
     boost::statechart::result react(const SnapTrim&);

@@ -926,9 +926,19 @@ int OSD::init()
 
   // make sure info object exists
   if (!store->exists(coll_t::META_COLL, service.infos_oid)) {
-    dout(10) << "init creating/touching infos object" << dendl;
+    dout(10) << "init creating/touching snapmapper object" << dendl;
     ObjectStore::Transaction t;
     t.touch(coll_t::META_COLL, service.infos_oid);
+    r = store->apply_transaction(t);
+    if (r < 0)
+      return r;
+  }
+
+  // make sure snap mapper object exists
+  if (!store->exists(coll_t::META_COLL, OSD::make_snapmapper_oid())) {
+    dout(10) << "init creating/touching infos object" << dendl;
+    ObjectStore::Transaction t;
+    t.touch(coll_t::META_COLL, OSD::make_snapmapper_oid());
     r = store->apply_transaction(t);
     if (r < 0)
       return r;
@@ -1605,8 +1615,6 @@ void OSD::load_pgs()
 
     // read pg state, log
     pg->read_state(store, bl);
-
-    pg->check_ondisk_snap_colls(i->second);
 
     set<pg_t> split_pgs;
     if (osdmap->have_pg_pool(pg->info.pgid.pool()) &&
@@ -4587,6 +4595,11 @@ void OSD::split_pgs(
   OSDMapRef nextmap,
   PG::RecoveryCtx *rctx)
 {
+  unsigned pg_num = nextmap->get_pg_num(
+    parent->pool.id);
+  parent->update_snap_mapper_bits(
+    parent->info.pgid.get_split_bits(pg_num)
+    );
   for (set<pg_t>::const_iterator i = childpgids.begin();
        i != childpgids.end();
        ++i) {
@@ -4595,9 +4608,6 @@ void OSD::split_pgs(
     PG* child = _make_pg(nextmap, *i);
     child->lock(true);
     out_pgs->insert(child);
-
-    unsigned pg_num = nextmap->get_pg_num(
-      parent->pool.id);
 
     unsigned split_bits = i->get_split_bits(pg_num);
     dout(10) << "pg_num is " << pg_num << dendl;
