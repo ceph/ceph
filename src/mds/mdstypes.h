@@ -1169,11 +1169,29 @@ class MDSCacheObject {
 protected:
   __s32      ref;       // reference count
 #ifdef MDS_REF_SET
-  multiset<int> ref_set;
+  map<int,int> ref_map;
 #endif
 
  public:
-  int get_num_ref() { return ref; }
+  int get_num_ref(int by = -1) {
+#ifdef MDS_REF_SET
+    if (by >= 0) {
+      if (ref_map.find(by) == ref_map.end())
+	return 0;
+      return ref_map[by];
+    }
+#endif
+    return ref;
+  }
+#ifdef MDS_REF_SET
+  int get_pin_totals() {
+    int total = 0;
+    for(map<int,int>::iterator i = ref_map.begin(); i != ref_map.end(); ++i) {
+      total += i->second;
+    }
+    return total;
+  }
+#endif
   virtual const char *pin_name(int by) = 0;
   //bool is_pinned_by(int by) { return ref_set.count(by); }
   //multiset<int>& get_ref_set() { return ref_set; }
@@ -1181,13 +1199,13 @@ protected:
   virtual void last_put() {}
   virtual void bad_put(int by) {
 #ifdef MDS_REF_SET
-    assert(ref_set.count(by) > 0);
+    assert(ref_map[by] > 0);
 #endif
     assert(ref > 0);
   }
   void put(int by) {
 #ifdef MDS_REF_SET
-    if (ref == 0 || ref_set.count(by) == 0) {
+    if (ref == 0 || ref_map[by] == 0) {
 #else
     if (ref == 0) {
 #endif
@@ -1195,8 +1213,8 @@ protected:
     } else {
       ref--;
 #ifdef MDS_REF_SET
-      ref_set.erase(ref_set.find(by));
-      assert(ref == (int)ref_set.size());
+      ref_map[by]--;
+      assert(ref == get_pin_totals());
 #endif
       if (ref == 0)
 	last_put();
@@ -1206,39 +1224,28 @@ protected:
   virtual void first_get() {}
   virtual void bad_get(int by) {
 #ifdef MDS_REF_SET
-    assert(by < 0 || ref_set.count(by) == 0);
+    assert(by < 0 || ref_map[by] == 0);
 #endif
     assert(0);
   }
   void get(int by) {
+    if (ref == 0)
+      first_get();
+    ref++;
 #ifdef MDS_REF_SET
-    if (by >= 0 && ref_set.count(by)) {
-      bad_get(by);
-    } else {
-#endif
-      if (ref == 0) 
-	first_get();
-      ref++;
-#ifdef MDS_REF_SET
-      ref_set.insert(by);
-      assert(ref == (int)ref_set.size());
-    }
+    if (ref_map.find(by) == ref_map.end())
+      ref_map[by] = 0;
+    ref_map[by]++;
+    assert(ref == get_pin_totals());
 #endif
   }
 
   void print_pin_set(ostream& out) {
 #ifdef MDS_REF_SET
-    multiset<int>::iterator it = ref_set.begin();
-    while (it != ref_set.end()) {
-      out << " " << pin_name(*it);
-      int last = *it;
-      int c = 0;
-      do {
-	++it;
-	c++;
-      } while (it != ref_set.end() && *it == last);
-      if (c > 1)
-	out << "*" << c;
+    map<int, int>::iterator it = ref_map.begin();
+    while (it != ref_map.end()) {
+      out << " " << pin_name(it->first) << "=" << it->second;
+      it++;
     }
 #else
     out << " nref=" << ref;
