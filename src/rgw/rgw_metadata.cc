@@ -1,8 +1,14 @@
 
 
 #include "rgw_metadata.h"
+#include "common/ceph_json.h"
+#include "cls/version/cls_version_types.h"
 
 
+obj_version& RGWMetadataObject::get_version()
+{
+  return objv;
+}
 
 RGWMetadataManager::~RGWMetadataManager()
 {
@@ -63,10 +69,25 @@ int RGWMetadataManager::get(string& metadata_key, Formatter *f)
     return ret;
   }
 
-  return handler->get(store, metadata_key, entry, f);
+  RGWMetadataObject *obj;
+
+  ret = handler->get(store, entry, &obj);
+  if (ret < 0) {
+    return ret;
+  }
+
+  f->open_object_section("metadata_info");
+  encode_json("key", metadata_key, f);
+  encode_json("ver", obj->get_version(), f);
+  encode_json("data", *obj, f);
+  f->close_section();
+
+  delete obj;
+
+  return 0;
 }
 
-int RGWMetadataManager::update(string& metadata_key, bufferlist& bl)
+int RGWMetadataManager::put(string& metadata_key, bufferlist& bl)
 {
   RGWMetadataHandler *handler;
   string entry;
@@ -75,7 +96,23 @@ int RGWMetadataManager::update(string& metadata_key, bufferlist& bl)
   if (ret < 0)
     return ret;
 
-  return handler->update(store, entry, bl);
+  JSONParser parser;
+  if (!parser.parse(bl.c_str(), bl.length())) {
+    return -EINVAL;
+  }
+
+  string meadata_key;
+  obj_version objv;
+
+  JSONDecoder::decode_json("key", metadata_key, &parser);
+  JSONDecoder::decode_json("ver", objv, &parser);
+
+  JSONObj *jo = parser.find_obj("data");
+  if (!jo) {
+    return -EINVAL;
+  }
+
+  return handler->put(store, entry, objv, jo);
 }
 
 struct list_keys_handle {

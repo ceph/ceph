@@ -4,6 +4,8 @@
 #include "include/encoding.h"
 #include "include/types.h"
 
+class JSONObj;
+
 
 struct obj_version {
   uint64_t ver;
@@ -39,6 +41,7 @@ struct obj_version {
   }
 
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(obj_version)
 
