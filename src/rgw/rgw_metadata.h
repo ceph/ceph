@@ -5,23 +5,38 @@
 
 #include "include/types.h"
 #include "rgw_common.h"
+#include "cls/version/cls_version_types.h"
+
 
 class RGWRados;
+class JSONObj;
 
+struct obj_version;
+
+
+class RGWMetadataObject {
+protected:
+  obj_version objv;
+  
+public:
+  virtual ~RGWMetadataObject() {}
+  obj_version& get_version();
+
+  virtual void dump(Formatter *f) const = 0;
+};
 
 class RGWMetadataHandler {
 public:
   virtual ~RGWMetadataHandler() {}
   virtual string get_type() = 0;
 
-  virtual int get(RGWRados *store, string& key, string& entry, Formatter *f) = 0;
-  virtual int update(RGWRados *store, string& entry, bufferlist& bl) = 0;
+  virtual int get(RGWRados *store, string& entry, RGWMetadataObject **obj) = 0;
+  virtual int put(RGWRados *store, string& entry, obj_version& objv, JSONObj *obj) = 0;
 
   virtual int list_keys_init(RGWRados *store, void **phandle) = 0;
   virtual int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) = 0;
   virtual void list_keys_complete(void *handle) = 0;
 };
-
 
 class RGWMetadataManager {
   map<string, RGWMetadataHandler *> handlers;
@@ -38,7 +53,7 @@ public:
   int register_handler(RGWMetadataHandler *handler);
 
   int get(string& metadata_key, Formatter *f);
-  int update(string& metadata_key, bufferlist& bl);
+  int put(string& metadata_key, bufferlist& bl);
 
   int list_keys_init(string& section, void **phandle);
   int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated);

@@ -2219,10 +2219,23 @@ int RGWUserAdminOp_Caps::remove(RGWRados *store, RGWUserAdminOpState& op_state,
   return 0;
 }
 
+class RGWUserMetadataObject : public RGWMetadataObject {
+  RGWUserInfo info;
+public:
+  RGWUserMetadataObject(RGWUserInfo& i, obj_version& v) : info(i) {
+    objv = v;
+  }
+
+  void dump(Formatter *f) const {
+    info.dump(f);
+  }
+};
+
 class RGWUserMetadataHandler : public RGWMetadataHandler {
 public:
   string get_type() { return "user"; }
-  int get(RGWRados *store, string& key, string& entry, Formatter *f) {
+
+  int get(RGWRados *store, string& entry, RGWMetadataObject **obj) {
     RGWUserInfo info;
 
     obj_version objv;
@@ -2231,16 +2244,29 @@ public:
     if (ret < 0)
       return ret;
 
-    f->open_object_section("metadata_info");
-    encode_json("key", key, f);
-    encode_json("ver", objv, f);
-    encode_json("data", info, f);
-    f->close_section();
-    f->flush(cout);
+    RGWUserMetadataObject *mdo = new RGWUserMetadataObject(info, objv);
+
+    *obj = mdo;
+
     return 0;
   }
 
-  int update(RGWRados *store, string& metadata_key, bufferlist& bl) {
+  int put(RGWRados *store, string& entry, obj_version& objv, JSONObj *obj) {
+    RGWUserInfo info;
+
+    decode_json_obj(info, obj);
+
+    RGWUserInfo old_info;
+    obj_version old_objv;
+    int ret = rgw_read_uid_info(store, entry, old_info, &old_objv);
+    if (ret < 0)
+      return ret;
+
+
+    ret = rgw_store_user_info(store, info, &old_info, false);
+    if (ret < 0)
+      return ret;
+
     return 0;
   }
 
