@@ -127,7 +127,6 @@ ostream& operator<<(ostream& out, CInode& in)
   if (in.state_test(CInode::STATE_AMBIGUOUSAUTH)) out << " AMBIGAUTH";
   if (in.state_test(CInode::STATE_NEEDSRECOVER)) out << " needsrecover";
   if (in.state_test(CInode::STATE_RECOVERING)) out << " recovering";
-  if (in.state_test(CInode::STATE_DIRTYPARENT)) out << " dirtyparent";
   if (in.is_freezing_inode()) out << " FREEZING=" << in.auth_pin_freeze_allowance;
   if (in.is_frozen_inode()) out << " FROZEN";
   if (in.is_frozen_auth_pin()) out << " FROZEN_AUTHPIN";
@@ -967,89 +966,67 @@ void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
   delete fin;
 }
 
+class C_CInode_FetchedBacktrace : public Context {
+  CInode *in;
+  inode_backtrace_t *backtrace;
+  Context *fin;
+public:
+  bufferlist bl;
+  C_CInode_FetchedBacktrace(CInode *i, inode_backtrace_t *bt, Context *f) :
+    in(i), backtrace(bt), fin(f) {}
 
+  void finish(int r) {
+    if (r == 0) {
+      in->_fetched_backtrace(&bl, backtrace, fin);
+    } else {
+      fin->finish(r);
+    }
+  }
+};
 
-// ------------------
-// parent dir
-
-void CInode::build_backtrace(inode_backtrace_t& bt)
+void CInode::fetch_backtrace(inode_backtrace_t *bt, Context *fin)
 {
-  bt.ino = inode.ino;
-  bt.ancestors.clear();
+  object_t oid = get_object_name(ino(), frag_t(), "");
+  object_locator_t oloc(inode.layout.fl_pg_pool);
+
+  SnapContext snapc;
+  C_CInode_FetchedBacktrace *c = new C_CInode_FetchedBacktrace(this, bt, fin);
+  mdcache->mds->objecter->getxattr(oid, oloc, "parent", CEPH_NOSNAP, &c->bl, 0, c);
+}
+
+void CInode::_fetched_backtrace(bufferlist *bl, inode_backtrace_t *bt, Context *fin)
+{
+  ::decode(*bt, *bl);
+  if (fin) {
+    fin->finish(0);
+  }
+}
+
+void CInode::build_backtrace(int64_t location, inode_backtrace_t* bt)
+{
+  bt->ino = inode.ino;
+  bt->ancestors.clear();
 
   CInode *in = this;
   CDentry *pdn = get_parent_dn();
   while (pdn) {
     CInode *diri = pdn->get_dir()->get_inode();
-    bt.ancestors.push_back(inode_backpointer_t(diri->ino(), pdn->name, in->inode.version));
+    bt->ancestors.push_back(inode_backpointer_t(diri->ino(), pdn->name, in->inode.version));
     in = diri;
     pdn = in->get_parent_dn();
   }
-}
-
-unsigned CInode::encode_parent_mutation(ObjectOperation& m)
-{
-  string path;
-  make_path_string(path);
-  m.setxattr("path", path);
-
-  inode_backtrace_t bt;
-  build_backtrace(bt);
-  
-  bufferlist parent;
-  ::encode(bt, parent);
-  m.setxattr("parent", parent);
-  return path.length() + parent.length();
-}
-
-struct C_Inode_StoredParent : public Context {
-  CInode *in;
-  version_t version;
-  Context *fin;
-  C_Inode_StoredParent(CInode *i, version_t v, Context *f) : in(i), version(v), fin(f) {}
-  void finish(int r) {
-    in->_stored_parent(version, fin);
-  }
-};
-
-void CInode::store_parent(Context *fin)
-{
-  dout(10) << "store_parent" << dendl;
-  
-  ObjectOperation m;
-  encode_parent_mutation(m);
-
-  // write it.
-  SnapContext snapc;
-
-  object_t oid = get_object_name(ino(), frag_t(), "");
-  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
-
-  mdcache->mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(g_ceph_context), 0,
-				 NULL, new C_Inode_StoredParent(this, inode.last_renamed_version, fin) );
-
-}
-
-void CInode::_stored_parent(version_t v, Context *fin)
-{
-  if (state_test(STATE_DIRTYPARENT)) {
-    if (v == inode.last_renamed_version) {
-      dout(10) << "stored_parent committed v" << v << ", removing from list" << dendl;
-      item_renamed_file.remove_myself();
-      state_clear(STATE_DIRTYPARENT);
-      put(PIN_DIRTYPARENT);
-    } else {
-      dout(10) << "stored_parent committed v" << v << " < " << inode.last_renamed_version
-	       << ", renamed again, not removing from list" << dendl;
-    }
-  } else {
-    dout(10) << "stored_parent committed v" << v << ", tho i wasn't on the renamed_files list" << dendl;
-  }
-  if (fin) {
-    fin->finish(0);
-    delete fin;
+  vector<ceph_file_layout>::iterator i = inode.old_layouts.begin();
+  while(i != inode.old_layouts.end()) {
+    // don't add our own pool id to old_pools to avoid looping (e.g. setlayout 0, 1, 0)
+    if (i->fl_pg_pool == location)
+      continue;
+    bt->old_pools.insert(i->fl_pg_pool);
+    i++;
   }
 }
+
+// ------------------
+// parent dir
 
 void CInode::encode_store(bufferlist& bl)
 {

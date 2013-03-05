@@ -323,6 +323,7 @@ struct inode_t {
   // file (data access)
   ceph_dir_layout  dir_layout;    // [dir only]
   ceph_file_layout layout;
+  vector <int64_t> old_pools;
   uint64_t   size;        // on directory, # dentries
   uint32_t   truncate_seq;
   uint64_t   truncate_size, truncate_from;
@@ -419,6 +420,10 @@ struct inode_t {
       else
 	++p;
     }
+  }
+
+  void add_old_pool(int64_t l) {
+    old_pools.push_back(l);
   }
 
   void encode(bufferlist &bl) const;
