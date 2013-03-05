@@ -13,6 +13,7 @@ Package: ceph
 Architecture: linux-any
 Depends: ${shlibs:Depends}, ${misc:Depends}, sdparm | hdparm, binutils, ceph-common, uuid-runtime, python, xfsprogs, gdisk, parted, cryptsetup-bin
 Recommends: ceph-mds, librados2, librbd1, btrfs-tools
+X-Python-Version: >= 2.6
 Description: distributed storage and file system
  Ceph is a distributed storage system designed to provide excellent
  performance, reliability, and scalability.
