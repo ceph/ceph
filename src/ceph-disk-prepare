@@ -75,13 +75,7 @@ def is_partition(dev):
     """
     Check whether a given device is a partition or a full disk.
     """
-    # resolve symlink(s)
-    max = 10
-    while stat.S_ISLNK(os.lstat(dev).st_mode):
-        dev = os.readlink(dev)
-        max -= 1
-        if max == 0:
-            raise PrepareError('%s is a rats nest of symlinks' % dev)
+    dev = os.path.realpath(dev)
     if not stat.S_ISBLK(os.lstat(dev).st_mode):
         raise PrepareError('not a block device', dev)
 
