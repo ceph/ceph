@@ -104,6 +104,6 @@ class LogSegment {
   void store_backtrace_update(MDS *mds, BacktraceInfo *info, Context *fin);
   void _stored_backtrace(BacktraceInfo *info, Context *fin);
   unsigned encode_parent_mutation(ObjectOperation& m, BacktraceInfo *info);
-    };
+};
 
 #endif
