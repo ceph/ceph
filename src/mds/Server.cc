@@ -6348,16 +6348,6 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
     if (destdn->is_auth()) {
       in->pop_and_dirty_projected_inode(mdr->ls);
 
-      if (in->is_dir()) {
-	mdr->ls->renamed_files.push_back(&in->item_renamed_file);
-	if (!in->state_test(CInode::STATE_DIRTYPARENT)) {
-	  in->state_set(CInode::STATE_DIRTYPARENT);
-	  in->get(CInode::PIN_DIRTYPARENT);
-	  dout(10) << "added dir to logsegment renamed_files list " << *in << dendl;
-	} else {
-	  dout(10) << "re-added dir to logsegment renamed_files list " << *in << dendl;
-	}
-      }
     } else {
       // FIXME: fix up snaprealm!
     }

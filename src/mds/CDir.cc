@@ -1962,12 +1962,6 @@ void CDir::_commit(version_t want)
   map_t::iterator committed_dn;
   unsigned max_write_size = cache->max_dir_commit_size;
 
-  // update parent pointer while we're here.
-  //  NOTE: the pointer is ONLY required to be valid for the first frag.  we put the xattr
-  //        on other frags too because it can't hurt, but it won't necessarily be up to date
-  //        in that case!!
-  max_write_size -= inode->encode_parent_mutation(m);
-
   if (is_complete() &&
       (num_dirty > (num_head_items*g_conf->mds_dir_commit_ratio))) {
     fnode.snap_purged_thru = realm->get_last_destroyed();
@@ -2025,16 +2019,6 @@ void CDir::_committed(version_t v, version_t lrv)
 
   bool stray = inode->is_stray();
 
-  // did we update the parent pointer too?
-  if (get_frag() == frag_t() &&     // only counts on first frag
-      inode->state_test(CInode::STATE_DIRTYPARENT) &&
-      lrv == inode->inode.last_renamed_version) {
-    inode->item_renamed_file.remove_myself();
-    inode->state_clear(CInode::STATE_DIRTYPARENT);
-    inode->put(CInode::PIN_DIRTYPARENT);
-    dout(10) << "_committed  stored parent pointer, removed from renamed_files list " << *inode << dendl;
-  }
-  
   // take note.
   assert(v > committed_version);
   assert(v <= committing_version);

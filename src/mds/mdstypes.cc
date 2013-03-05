@@ -204,7 +204,7 @@ ostream& operator<<(ostream& out, const client_writeable_range_t& r)
  */
 void inode_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(6, 6, bl);
+  ENCODE_START(7, 6, bl);
 
   ::encode(ino, bl);
   ::encode(rdev, bl);
@@ -237,13 +237,14 @@ void inode_t::encode(bufferlist &bl) const
   ::encode(file_data_version, bl);
   ::encode(xattr_version, bl);
   ::encode(last_renamed_version, bl);
+  ::encode(old_pools, bl);
 
   ENCODE_FINISH(bl);
 }
 
 void inode_t::decode(bufferlist::iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 6, 6, p);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 6, 6, p);
 
   ::decode(ino, p);
   ::decode(rdev, p);
@@ -291,6 +292,8 @@ void inode_t::decode(bufferlist::iterator &p)
   ::decode(xattr_version, p);
   if (struct_v >= 2)
     ::decode(last_renamed_version, p);
+  if (struct_v >= 7)
+    ::decode(old_pools, p);
 
   DECODE_FINISH(p);
 }
@@ -312,6 +315,13 @@ void inode_t::dump(Formatter *f) const
 
   f->open_object_section("layout");
   ::dump(layout, f);
+  f->close_section();
+
+  f->open_array_section("old_pools");
+  vector<ceph_file_layout>::const_iterator i = old_pools.begin();
+  while(i != old_pools.end()) {
+    ::dump(*i, f);
+  }
   f->close_section();
 
   f->dump_unsigned("size", size);

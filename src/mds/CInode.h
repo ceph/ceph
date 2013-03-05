@@ -151,7 +151,6 @@ public:
   static const int STATE_NEEDSRECOVER = (1<<11);
   static const int STATE_RECOVERING =   (1<<12);
   static const int STATE_PURGING =     (1<<13);
-  static const int STATE_DIRTYPARENT =  (1<<14);
   static const int STATE_DIRTYRSTAT =  (1<<15);
   static const int STATE_STRAYPINNED = (1<<16);
   static const int STATE_FROZENAUTHPIN = (1<<17);
@@ -385,7 +384,6 @@ public:
   elist<CInode*>::item item_dirty;
   elist<CInode*>::item item_caps;
   elist<CInode*>::item item_open_file;
-  elist<CInode*>::item item_renamed_file;
   elist<CInode*>::item item_dirty_dirfrag_dir;
   elist<CInode*>::item item_dirty_dirfrag_nest;
   elist<CInode*>::item item_dirty_dirfrag_dirfragtree;
@@ -426,7 +424,7 @@ private:
     parent(0),
     inode_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
-    item_dirty(this), item_caps(this), item_open_file(this), item_renamed_file(this), 
+    item_dirty(this), item_caps(this), item_open_file(this),
     item_dirty_dirfrag_dir(this), 
     item_dirty_dirfrag_nest(this), 
     item_dirty_dirfrag_dirfragtree(this), 
@@ -529,11 +527,10 @@ private:
   void fetch(Context *fin);
   void _fetched(bufferlist& bl, bufferlist& bl2, Context *fin);  
 
-  void store_parent(Context *fin);
-  void _stored_parent(version_t v, Context *fin);
+  void fetch_backtrace(inode_backtrace_t *bt, Context *fin);
+  void _fetched_backtrace(bufferlist *bl, inode_backtrace_t *bt, Context *fin);
 
-  void build_backtrace(inode_backtrace_t& bt);
-  unsigned encode_parent_mutation(ObjectOperation& m);
+  void build_backtrace(int64_t location, inode_backtrace_t* bt);
 
   void encode_store(bufferlist& bl);
   void decode_store(bufferlist::iterator& bl);
