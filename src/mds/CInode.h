@@ -783,22 +783,22 @@ public:
   void bad_put(int by) {
     generic_dout(0) << " bad put " << *this << " by " << by << " " << pin_name(by) << " was " << ref
 #ifdef MDS_REF_SET
-		    << " (" << ref_set << ")"
+		    << " (" << ref_map << ")"
 #endif
 		    << dendl;
 #ifdef MDS_REF_SET
-    assert(ref_set.count(by) == 1);
+    assert(ref_map[by] > 0);
 #endif
     assert(ref > 0);
   }
   void bad_get(int by) {
     generic_dout(0) << " bad get " << *this << " by " << by << " " << pin_name(by) << " was " << ref
 #ifdef MDS_REF_SET
-		    << " (" << ref_set << ")"
+		    << " (" << ref_map << ")"
 #endif
 		    << dendl;
 #ifdef MDS_REF_SET
-    assert(ref_set.count(by) == 0);
+    assert(ref_map[by] >= 0);
 #endif
   }
   void first_get();
