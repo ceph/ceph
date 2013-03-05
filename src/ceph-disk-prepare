@@ -4,6 +4,7 @@ import argparse
 import logging
 import os
 import os.path
+import re
 import subprocess
 import stat
 import sys
@@ -70,6 +71,24 @@ class UnmountError(PrepareError):
     Unmounting filesystem failed
     """
 
+def list_partitions(disk):
+    """
+    Return a list of partitions on the given device
+    """
+    disk = os.path.realpath(disk)
+    assert not is_partition(disk)
+    assert disk.startswith('/dev/')
+    base = disk[5:]
+    ls = []
+    with file('/proc/partitions', 'rb') as f:
+        for line in f.read().split('\n')[2:]:
+            fields = re.split('\s+', line)
+            if len(fields) < 5:
+                continue
+            (_, major, minor, blocks, name) = fields
+            if name != base and name.startswith(base):
+                ls.append('/dev/' + name)
+    return ls
 
 def is_partition(dev):
     """
@@ -84,6 +103,29 @@ def is_partition(dev):
         return True
     return False
 
+def is_mounted(dev):
+    """
+    Check if the given device is mounted.
+    """
+    dev = os.path.realpath(dev)
+    with file('/proc/mounts') as f:
+        for line in f.read().split('\n'):
+            d = line.split(' ')[0]
+            if os.path.exists(d):
+                d = os.path.realpath(d)
+                if dev == d:
+                    return True
+    return False
+
+def verify_not_in_use(dev):
+    assert os.path.exists(dev)
+    if is_partition(dev):
+        if is_mounted(dev):
+            raise PrepareError('Device is mounted', dev)
+    else:
+        for p in list_partitions(dev):
+            if is_mounted(p):
+                raise PrepareError('Device is mounted', p)
 
 def write_one_line(parent, name, text):
     """
@@ -372,6 +414,9 @@ def prepare_journal_dev(
     journal_uuid,
     journal_dm_keypath,
     ):
+
+    if os.path.exists(journal):
+        verify_not_in_use(journal)
 
     if is_partition(journal):
         log.debug('Journal %s is a partition', journal)
@@ -860,8 +905,12 @@ def main():
             )
         journal_size = int(journal_size)
 
-        # colocate journal with data?
+        # in use?
         dmode = os.stat(args.data).st_mode
+        if stat.S_ISBLK(dmode):
+            verify_not_in_use(args.data)
+
+        # colocate journal with data?
         if stat.S_ISBLK(dmode) and not is_partition(args.data) and args.journal is None and args.journal_file is None:
             log.info('Will colocate journal with data on %s', args.data)
             args.journal = args.data
