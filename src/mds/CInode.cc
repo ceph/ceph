@@ -1015,12 +1015,12 @@ void CInode::build_backtrace(int64_t location, inode_backtrace_t* bt)
     in = diri;
     pdn = in->get_parent_dn();
   }
-  vector<ceph_file_layout>::iterator i = inode.old_layouts.begin();
-  while(i != inode.old_layouts.end()) {
+  vector<int64_t>::iterator i = inode.old_pools.begin();
+  while(i != inode.old_pools.end()) {
     // don't add our own pool id to old_pools to avoid looping (e.g. setlayout 0, 1, 0)
-    if (i->fl_pg_pool == location)
+    if (*i == location)
       continue;
-    bt->old_pools.insert(i->fl_pg_pool);
+    bt->old_pools.insert(*i);
     i++;
   }
 }

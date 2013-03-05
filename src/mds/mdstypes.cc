@@ -318,9 +318,9 @@ void inode_t::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("old_pools");
-  vector<ceph_file_layout>::const_iterator i = old_pools.begin();
+  vector<int64_t>::const_iterator i = old_pools.begin();
   while(i != old_pools.end()) {
-    ::dump(*i, f);
+    f->dump_int("pool", *i);
   }
   f->close_section();
 

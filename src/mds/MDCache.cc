@@ -8419,6 +8419,91 @@ public:
   }
 };
 
+class C_MDC_PurgeForwardingPointers : public Context {
+  MDCache *cache;
+  CDentry *dn;
+  Context *fin;
+public:
+  inode_backtrace_t backtrace;
+  C_MDC_PurgeForwardingPointers(MDCache *c, CDentry *d, Context *f) :
+    cache(c), dn(d), fin(f) {}
+  void finish(int r) {
+    cache->_purge_forwarding_pointers(&backtrace, dn, r, fin);
+  }
+};
+
+class C_MDC_PurgeStray : public Context {
+  MDCache *cache;
+  CDentry *dn;
+public:
+  C_MDC_PurgeStray(MDCache *c, CDentry *d) :
+    cache(c), dn(d) {}
+  void finish(int r) {
+    cache->_purge_stray(dn, r);
+  }
+};
+
+void MDCache::_purge_forwarding_pointers(inode_backtrace_t *backtrace, CDentry *d, int r, Context *fin)
+{
+  assert(r == 0 || r == -ENOENT);
+  // setup gathering context
+  C_GatherBuilder gather_bld(g_ceph_context);
+
+  // remove all the objects with forwarding pointer backtraces (aka sentinels)
+  for (set<int64_t>::const_iterator i = backtrace->old_pools.begin();
+       i != backtrace->old_pools.end();
+       i++) {
+    SnapContext snapc;
+    object_t oid = CInode::get_object_name(backtrace->ino, frag_t(), "");
+    object_locator_t oloc(*i);
+
+    mds->objecter->remove(oid, oloc, snapc, ceph_clock_now(g_ceph_context), 0,
+                         NULL, gather_bld.new_sub());
+  }
+
+  if (gather_bld.has_subs()) {
+    gather_bld.set_finisher(fin);
+    gather_bld.activate();
+  } else {
+    fin->finish(r);
+  }
+}
+
+void MDCache::_purge_stray(CDentry *dn, int r)
+{
+  // purge the strays
+  CDentry::linkage_t *dnl = dn->get_projected_linkage();
+  CInode *in = dnl->get_inode();
+  dout(10) << "_purge_stray " << *dn << " " << *in << dendl;
+
+  SnapRealm *realm = in->find_snaprealm();
+  SnapContext nullsnap;
+  const SnapContext *snapc;
+  if (realm) {
+    dout(10) << " realm " << *realm << dendl;
+    snapc = &realm->get_snap_context();
+  } else {
+    dout(10) << " NO realm, using null context" << dendl;
+    snapc = &nullsnap;
+    assert(in->last == CEPH_NOSNAP);
+  }
+
+  uint64_t period = (uint64_t)in->inode.layout.fl_object_size * (uint64_t)in->inode.layout.fl_stripe_count;
+  uint64_t cur_max_size = in->inode.get_max_size();
+  uint64_t to = MAX(in->inode.size, cur_max_size);
+  if (to && period) {
+    uint64_t num = (to + period - 1) / period;
+    dout(10) << "purge_stray 0~" << to << " objects 0~" << num << " snapc " << snapc << " on " << *in << dendl;
+    mds->filer->purge_range(in->inode.ino, &in->inode.layout, *snapc,
+                           0, num, ceph_clock_now(g_ceph_context), 0,
+			   new C_MDC_PurgeStrayPurged(this, dn));
+
+  } else {
+    dout(10) << "purge_stray 0 objects snapc " << snapc << " on " << *in << dendl;
+    _purge_stray_purged(dn);
+  }
+}
+
 void MDCache::purge_stray(CDentry *dn)
 {
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
@@ -8441,35 +8526,20 @@ void MDCache::purge_stray(CDentry *dn)
   // that is implicit in the dentry's presence and non-use in the stray
   // dir.  on recovery, we'll need to re-eval all strays anyway.
   
-  SnapRealm *realm = in->find_snaprealm();
-  SnapContext nullsnap;
-  const SnapContext *snapc;
-  if (realm) {
-    dout(10) << " realm " << *realm << dendl;
-    snapc = &realm->get_snap_context();
-  } else {
-    dout(10) << " NO realm, using null context" << dendl;
-    snapc = &nullsnap;
-    assert(in->last == CEPH_NOSNAP);
-  }
-
   if (in->is_dir()) {
     dout(10) << "purge_stray dir ... implement me!" << dendl;  // FIXME XXX
-    _purge_stray_purged(dn);
+    // remove the backtrace
+    SnapContext snapc;
+    object_t oid = CInode::get_object_name(in->ino(), frag_t(), "");
+    object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+
+    mds->objecter->removexattr(oid, oloc, "parent", snapc, ceph_clock_now(g_ceph_context), 0,
+                               NULL, new C_MDC_PurgeStrayPurged(this, dn));
   } else if (in->is_file()) {
-    uint64_t period = (uint64_t)in->inode.layout.fl_object_size * (uint64_t)in->inode.layout.fl_stripe_count;
-    uint64_t cur_max_size = in->inode.get_max_size();
-    uint64_t to = MAX(in->inode.size, cur_max_size);
-    if (to && period) {
-      uint64_t num = (to + period - 1) / period;
-      dout(10) << "purge_stray 0~" << to << " objects 0~" << num << " snapc " << snapc << " on " << *in << dendl;
-      mds->filer->purge_range(in->inode.ino, &in->inode.layout, *snapc,
-			      0, num, ceph_clock_now(g_ceph_context), 0,
-			      new C_MDC_PurgeStrayPurged(this, dn));
-    } else {
-      dout(10) << "purge_stray 0 objects snapc " << snapc << " on " << *in << dendl;
-      _purge_stray_purged(dn);
-    }
+    // get the backtrace before blowing away the object
+    C_MDC_PurgeStray *strayfin = new C_MDC_PurgeStray(this, dn);
+    C_MDC_PurgeForwardingPointers *fpfin = new C_MDC_PurgeForwardingPointers(this, dn, strayfin);
+    in->fetch_backtrace(&fpfin->backtrace, fpfin);
   } else {
     // not a dir or file; purged!
     _purge_stray_purged(dn);

@@ -276,7 +276,7 @@ BacktraceInfo::BacktraceInfo(
   if (pool == -1) pool = location;
 
   bt.pool = pool;
-  i->build_backtrace(l, bt);
+  i->build_backtrace(l, &bt);
   ls->update_backtraces.push_back(&item_logseg);
 }
 
@@ -363,6 +363,8 @@ void LogSegment::_stored_backtrace(BacktraceInfo *info, Context *fin)
 EMetaBlob::EMetaBlob(MDLog *mdlog) : opened_ino(0), renamed_dirino(0),
 				     inotablev(0), sessionmapv(0),
 				     allocated_ino(0),
+				     old_pool(-1),
+				     update_bt(false),
 				     last_subtree_map(mdlog ? mdlog->get_last_segment_offset() : 0),
 				     my_offset(mdlog ? mdlog->get_write_pos() : 0) //, _segment(0)
 { }
@@ -813,7 +815,7 @@ void EMetaBlob::dirlump::generate_test_instances(list<dirlump*>& ls)
  */
 void EMetaBlob::encode(bufferlist& bl) const
 {
-  ENCODE_START(5, 5, bl);
+  ENCODE_START(6, 5, bl);
   ::encode(lump_order, bl);
   ::encode(lump_map, bl);
   ::encode(roots, bl);
@@ -831,11 +833,13 @@ void EMetaBlob::encode(bufferlist& bl) const
   ::encode(client_reqs, bl);
   ::encode(renamed_dirino, bl);
   ::encode(renamed_dir_frags, bl);
+  ::encode(old_pool, bl);
+  ::encode(update_bt, bl);
   ENCODE_FINISH(bl);
 }
 void EMetaBlob::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
   ::decode(lump_order, bl);
   ::decode(lump_map, bl);
   if (struct_v >= 4) {
@@ -872,6 +876,10 @@ void EMetaBlob::decode(bufferlist::iterator &bl)
   if (struct_v >= 3) {
     ::decode(renamed_dirino, bl);
     ::decode(renamed_dir_frags, bl);
+  }
+  if (struct_v >= 6) {
+    ::decode(old_pool, bl);
+    ::decode(update_bt, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -982,6 +990,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     if (!in)
       in = new CInode(mds->mdcache, true);
     (*p)->update_inode(mds, in);
+
     if (isnew)
       mds->mdcache->add_inode(in);
     if ((*p)->dirty) in->_mark_dirty(logseg);
@@ -1148,6 +1157,35 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	}
 	assert(in->first == p->dnfirst ||
 	       (in->is_multiversion() && in->first > p->dnfirst));
+      }
+
+      // store backtrace for allocated inos (create, mkdir, symlink, mknod)
+      if (allocated_ino || used_preallocated_ino) {
+	if (in->inode.is_dir()) {
+	  logseg->queue_backtrace_update(in, mds->mdsmap->get_metadata_pool());
+	} else {
+	  logseg->queue_backtrace_update(in, in->inode.layout.fl_pg_pool);
+	}
+      }
+      // handle change of pool with backtrace update
+      if (old_pool != -1 && old_pool != in->inode.layout.fl_pg_pool) {
+	// update backtrace on new data pool
+	logseg->queue_backtrace_update(in, in->inode.layout.fl_pg_pool);
+
+	// set forwarding pointer on old backtrace
+	logseg->queue_backtrace_update(in, old_pool, in->inode.layout.fl_pg_pool);
+      }
+      // handle backtrace update if specified (used by rename)
+      if (update_bt) {
+	if (in->is_dir()) {
+	  // replace previous backtrace on this inode with myself
+	  logseg->remove_pending_backtraces(in->ino(), mds->mdsmap->get_metadata_pool());
+	  logseg->queue_backtrace_update(in, mds->mdsmap->get_metadata_pool());
+	} else {
+	  // remove all pending backtraces going to the same pool
+	  logseg->remove_pending_backtraces(in->ino(), in->inode.layout.fl_pg_pool);
+	  logseg->queue_backtrace_update(in, in->inode.layout.fl_pg_pool);
+	}
       }
     }
 
