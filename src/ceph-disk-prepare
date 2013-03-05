@@ -80,9 +80,7 @@ def is_partition(dev):
         raise PrepareError('not a block device', dev)
 
     # if the device ends in a number, it is a partition (e.g., /dev/sda3)
-
-    # ugh i have no internet.. how do you do a python regex?
-    if dev.endswith('0') or dev.endswith('1') or dev.endswith('2') or dev.endswith('3') or dev.endswith('4') or dev.endswith('4') or dev.endswith('6') or dev.endswith('7') or dev.endswith('8') or dev.endswith('9'):
+    if dev[-1].isdigit():
         return True
     return False
 
