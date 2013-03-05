@@ -2,6 +2,43 @@
  Release Notes
 ===============
 
+v0.58
+-----
+
+Upgrading
+~~~~~~~~~
+
+* The monitor now enforces that MDS names be unique.  If you have
+  multiple daemons start with with the same id (e.g., ``mds.a``) the
+  second one will implicitly mark the first as failed.  This makes
+  things less confusing and makes a daemon restart faster (we no
+  longer wait for the stopped daemon to time out) but existing
+  multi-mds configurations may need to be adjusted accordingly to give
+  daemons unique names.
+
+Notable Changes
+~~~~~~~~~~~~~~~
+ * mon: rearchitected to utilize single instance of paxos and a key/value store (Joao Luis)
+ * librbd: fixed some locking issues with flatten (Josh Durgin)
+ * rbd: udevadm settle on map/unmap to avoid various races (Dan Mick)
+ * osd: move pg info, log into leveldb (== better performance) (David Zafman)
+ * osd: fix pg log trimming (avoids memory bloat on degraded clusters)
+ * osd: fixed bug in journal checksums (Sam Just)
+ * osd: verify snap collections on startup (Sam Just)
+ * ceph-disk-prepare/activate: support for dm-crypt (Alexandre Marangone)
+ * ceph-disk-prepare/activate: support for sysvinit, directories or partitions (not full disks)
+ * msgr: fixed race in connection reset
+ * msgr: fix comparison of IPv6 addresses (fixes monitor bringup via ceph-deploy, chef)
+ * radosgw: fix object copy onto self (Yehuda Sadeh)
+ * radosgw: ACL grants in headers (Caleb Miles)
+ * radosgw: ability to listen to fastcgi via a port (Guilhem Lettron)
+ * mds: new encoding for all data types (to allow forward/backward compatbility) (Greg Farnum)
+ * mds: fast failover between MDSs (enforce unique mds names)
+ * crush: ability to create, remove rules via CLI
+ * many many cleanups (Danny Al-Gaaf)
+ * buffer unit testing (Loic Dachary)
+ * fixed log rotation (Gary Lowell)
+
 v0.57
 -----
 
