@@ -149,7 +149,6 @@ public:
     on_deletion_complete.push_front(completion);
   }
   ~DeletingState() {
-    Mutex::Locker l(lock);
     for (list<Context *>::iterator i = on_deletion_complete.begin();
 	 i != on_deletion_complete.end();
 	 ++i) {
