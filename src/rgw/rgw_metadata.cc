@@ -4,11 +4,55 @@
 #include "common/ceph_json.h"
 #include "cls/version/cls_version_types.h"
 
+#include "rgw_rados.h"
+
 
 obj_version& RGWMetadataObject::get_version()
 {
   return objv;
 }
+
+class RGWMetadataTopHandler : public RGWMetadataHandler {
+  struct iter_data {
+    list<string> sections;
+    list<string>::iterator iter;
+  };
+
+public:
+  RGWMetadataTopHandler() {}
+
+  virtual string get_type() { return string(); }
+
+  virtual int get(RGWRados *store, string& entry, RGWMetadataObject **obj) { return -ENOTSUP; }
+  virtual int put(RGWRados *store, string& entry, obj_version& objv, JSONObj *obj) { return -ENOTSUP; }
+
+  virtual int list_keys_init(RGWRados *store, void **phandle) {
+    iter_data *data = new iter_data;
+    store->meta_mgr->get_sections(data->sections);
+    data->iter = data->sections.begin();
+
+    *phandle = data;
+
+    return 0;
+  }
+  virtual int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated)  {
+    iter_data *data = (iter_data *)handle;
+    for (int i = 0; i < max && data->iter != data->sections.end(); ++i, ++(data->iter)) {
+      keys.push_back(*data->iter);
+    }
+
+    *truncated = (data->iter != data->sections.end());
+
+    return 0;
+  }
+  virtual void list_keys_complete(void *handle) {
+    iter_data *data = (iter_data *)handle;
+
+    delete data;
+  }
+};
+
+static RGWMetadataTopHandler md_top_handler;
 
 RGWMetadataManager::~RGWMetadataManager()
 {
@@ -49,6 +93,11 @@ int RGWMetadataManager::find_handler(const string& metadata_key, RGWMetadataHand
   string type;
 
   parse_metadata_key(metadata_key, type, entry);
+
+  if (type.empty()) {
+    *handler = &md_top_handler;
+    return 0;
+  }
 
   map<string, RGWMetadataHandler *>::iterator iter = handlers.find(type);
   if (iter == handlers.end())
@@ -115,6 +164,7 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl)
   return handler->put(store, entry, objv, jo);
 }
 
+
 struct list_keys_handle {
   void *handle;
   RGWMetadataHandler *handler;
@@ -125,7 +175,10 @@ int RGWMetadataManager::list_keys_init(string& section, void **handle)
 {
   string entry;
   RGWMetadataHandler *handler;
-  int ret = find_handler(section, &handler, entry);
+
+  int ret;
+
+  ret = find_handler(section, &handler, entry);
   if (ret < 0) {
     return -ENOENT;
   }
@@ -161,6 +214,13 @@ void RGWMetadataManager::list_keys_complete(void *handle)
 
   handler->list_keys_complete(h->handle);
   delete h;
+}
+
+void RGWMetadataManager::get_sections(list<string>& sections)
+{
+  for (map<string, RGWMetadataHandler *>::iterator iter = handlers.begin(); iter != handlers.end(); ++iter) {
+    sections.push_back(iter->first);
+  }
 }
 
 
