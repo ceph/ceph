@@ -328,6 +328,9 @@ int HashIndex::_collection_list_partial(const hobject_t &start,
 					vector<hobject_t> *ls,
 					hobject_t *next) {
   vector<string> path;
+  hobject_t _next;
+  if (!next)
+    next = &_next;
   *next = start;
   dout(20) << "_collection_list_partial " << start << " " << min_count << "-" << max_count << " ls.size " << ls->size() << dendl;
   return list_by_hash(path, min_count, max_count, seq, next, ls);
