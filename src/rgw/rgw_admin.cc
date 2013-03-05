@@ -85,6 +85,8 @@ void _usage()
   cerr << "  gc list                    dump expired garbage collection objects\n";
   cerr << "  gc process                 manually process garbage\n";
   cerr << "  metadata get               get metadata info\n";
+  cerr << "  metadata put               put metadata info\n";
+  cerr << "  metadata list              list metadata info\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --subuser=<name>          subuser name\n";
@@ -187,6 +189,7 @@ enum {
   OPT_CAPS_ADD,
   OPT_CAPS_RM,
   OPT_METADATA_GET,
+  OPT_METADATA_PUT,
   OPT_METADATA_LIST,
 };
 
@@ -341,6 +344,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "metadata") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_METADATA_GET;
+    if (strcmp(cmd, "put") == 0)
+      return OPT_METADATA_PUT;
     if (strcmp(cmd, "list") == 0)
       return OPT_METADATA_LIST;
   }
@@ -657,18 +662,35 @@ int main(int argc, char **argv)
   }
   else {
     const char *prev_cmd = NULL;
-    for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ++i) {
+    std::vector<const char*>::iterator i ;
+    for (i = args.begin(); i != args.end(); ++i) {
       opt_cmd = get_cmd(*i, prev_cmd, &need_more);
       if (opt_cmd < 0) {
 	cerr << "unrecognized arg " << *i << std::endl;
 	return usage();
       }
-      if (!need_more)
+      if (!need_more) {
+	++i;
 	break;
+      }
       prev_cmd = *i;
     }
+
     if (opt_cmd == OPT_NO_CMD)
       return usage();
+
+    /* some commands may have an optional extra param */
+    if (i != args.end()) {
+      switch (opt_cmd) {
+        case OPT_METADATA_GET:
+        case OPT_METADATA_PUT:
+        case OPT_METADATA_LIST:
+          metadata_key = *i;
+          break;
+        default:
+          break;
+      }
+    }
   }
 
   // default to pretty json
@@ -1460,6 +1482,20 @@ next:
     }
 
     formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_METADATA_PUT) {
+    bufferlist bl;
+    int ret = read_input(infile, bl);
+    if (ret < 0) {
+      cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+    ret = store->meta_mgr->put(metadata_key, bl);
+    if (ret < 0) {
+      cerr << "ERROR: can't put key: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
   }
 
   if (opt_cmd == OPT_METADATA_LIST) {

@@ -47,6 +47,8 @@
     gc list                    dump expired garbage collection objects
     gc process                 manually process garbage
     metadata get               get metadata info
+    metadata put               put metadata info
+    metadata list              list metadata info
   options:
      --uid=<id>                user id
      --subuser=<name>          subuser name
