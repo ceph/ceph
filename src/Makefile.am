@@ -368,7 +368,9 @@ librgw_a_SOURCES =  \
 	rgw/rgw_policy_s3.cc \
 	rgw/rgw_gc.cc \
 	rgw/rgw_multi_del.cc \
-	rgw/rgw_env.cc
+	rgw/rgw_env.cc \
+  rgw/rgw_cors.cc \
+  rgw/rgw_cors_s3.cc
 librgw_a_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librgw_a_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
 noinst_LIBRARIES += librgw.a

@@ -148,6 +148,32 @@ public:
   int get_params();
 };
 
+class RGWGetCORS_ObjStore : public RGWGetCORS {
+public:
+  RGWGetCORS_ObjStore() {}
+  ~RGWGetCORS_ObjStore() {}
+};
+
+class RGWPutCORS_ObjStore : public RGWPutCORS {
+public:
+  RGWPutCORS_ObjStore() {}
+  ~RGWPutCORS_ObjStore() {}
+
+  int get_params();
+};
+
+class RGWDeleteCORS_ObjStore : public RGWDeleteCORS {
+public:
+  RGWDeleteCORS_ObjStore() {}
+  ~RGWDeleteCORS_ObjStore() {}
+};
+
+class RGWOptionsCORS_ObjStore : public RGWOptionsCORS {
+public:
+  RGWOptionsCORS_ObjStore() {}
+  ~RGWOptionsCORS_ObjStore() {}
+};
+
 class RGWInitMultipart_ObjStore : public RGWInitMultipart {
 public:
   RGWInitMultipart_ObjStore() {}
@@ -216,6 +242,7 @@ protected:
   virtual RGWOp *op_head() { return NULL; }
   virtual RGWOp *op_post() { return NULL; }
   virtual RGWOp *op_copy() { return NULL; }
+  virtual RGWOp *op_options() { return NULL; }
 
   virtual int validate_bucket_name(const string& bucket);
   virtual int validate_object_name(const string& object);
@@ -295,7 +322,8 @@ extern void dump_uri_from_state(struct req_state *s);
 extern void dump_redirect(struct req_state *s, const string& redirect);
 extern void dump_pair(struct req_state *s, const char *key, const char *value);
 extern bool is_valid_url(const char *url);
-
+extern void dump_access_control(struct req_state *s, const char *origin, const char *meth,
+                         const char *hdr, const char *exp_hdr, uint32_t max_age);
 
 
 #endif

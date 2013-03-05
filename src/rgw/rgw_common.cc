@@ -90,7 +90,7 @@ is_err() const
 
 
 req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL), op(OP_UNKNOWN), 
-                                                            os_auth_token(NULL),
+                                                            bucket_cors(NULL), os_auth_token(NULL), 
                                                             env(e)
 {
   enable_ops_log = env->conf->enable_ops_log;
@@ -128,6 +128,7 @@ req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL)
 req_state::~req_state() {
   delete formatter;
   delete bucket_acl;
+  if(bucket_cors) delete bucket_cors;
   delete object_acl;
   free((void *)object);
   free((void *)bucket_name);
@@ -452,7 +453,8 @@ int XMLArgs::parse()
           (name.compare("partNumber") == 0) ||
           (name.compare("uploadId") == 0) ||
           (name.compare("versionId") == 0) ||
-          (name.compare("torrent") == 0)) {
+          (name.compare("torrent") == 0) ||
+          (name.compare("cors") == 0)) {
         sub_resources[name] = val;
       } else if (name[0] == 'r') { // root of all evil
         if ((name.compare("response-content-type") == 0) ||

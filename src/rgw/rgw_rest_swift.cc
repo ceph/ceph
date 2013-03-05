@@ -4,6 +4,7 @@
 #include "rgw_swift.h"
 #include "rgw_rest_swift.h"
 #include "rgw_acl_swift.h"
+#include "rgw_cors_swift.h"
 #include "rgw_formats.h"
 #include "rgw_client_io.h"
 
@@ -364,6 +365,25 @@ int RGWPutMetadata_ObjStore_SWIFT::get_params()
       policy = swift_policy;
       has_policy = true;
     }
+
+    /*Check and update CORS configuration*/
+    const char *allow_origins = s->env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_ALLOW_ORIGIN");
+    const char *allow_headers = s->env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_ALLOW_HEADERS");
+    const char *expose_headers = s->env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_EXPOSE_HEADERS");
+    const char *max_age = s->env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_MAX_AGE");
+    if(allow_origins){
+      RGWCORSConfiguration_SWIFT *swift_cors = s->bucket_cors?
+          static_cast<RGWCORSConfiguration_SWIFT *>(s->bucket_cors):new RGWCORSConfiguration_SWIFT;
+      int r = swift_cors->create_update(allow_origins, allow_headers, expose_headers, max_age);
+      if (r < 0){
+        dout(0) << "Error creating/updating the cors configuration" << dendl;
+        return r;
+      }
+      has_cors = true;
+      cors_config = *swift_cors;
+      cors_config.dump();
+      if(!s->bucket_cors)delete swift_cors;
+    }
   }
 
   return 0;
@@ -512,6 +532,51 @@ send_data:
   return 0;
 }
 
+void RGWOptionsCORS_ObjStore_SWIFT::send_response()
+{
+  const char *origin = NULL, 
+       *method = NULL,
+       *req_hdrs = NULL;
+  string hdrs = "";
+  string exp_hdrs;
+  uint32_t max_age = CORS_MAX_AGE_INVALID;
+  /*EACCES means, there is no CORS registered yet for the bucket
+   *ENOENT means, there is no match of the Origin in the list of CORSRule
+   *ENOTSUPP means, the HTTP_METHOD is not supported
+   */
+  if(ret != -EACCES && ret != -ENOENT){
+    origin = s->env->get("HTTP_ORIGIN");
+    if(ret != -ENOTSUP){
+      method = s->env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
+    }
+    req_hdrs = s->env->get("HTTP_ACCESS_CONTROL_ALLOW_HEADERS");
+    for(const char *t = req_hdrs, *comma = req_hdrs; comma; t = comma + 1){
+      /*Strip the spaces*/
+      while(*t == ' ')t++;
+      comma = strchr(t, ',');
+      unsigned len = comma?(comma - t):strlen(t);
+      while((len > 0) && (*(t + (len - 1)) == ' '))len--;
+      if(!rule->is_header_allowed(t, len)){
+        dout(5) << "Header " << string(t, len) << " is not registered in this rule" << dendl;
+      }else {
+        if(hdrs.length() > 0)hdrs.append(",");
+        hdrs.append(string(t, len));
+      }
+    }
+    rule->format_exp_headers(exp_hdrs);
+    max_age = rule->get_max_age();
+  }else{
+    ret = -EACCES;
+    set_req_state_err(s, ret);
+    dump_errno(s);
+    end_header(s);
+    return;
+  }
+  dump_errno(s);
+  dump_access_control(s, origin, method, hdrs.c_str(), exp_hdrs.c_str(), max_age); 
+  end_header(s);
+}
+
 RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_get()
 {
   return new RGWListBuckets_ObjStore_SWIFT;
@@ -568,6 +633,11 @@ RGWOp *RGWHandler_ObjStore_Bucket_SWIFT::op_post()
   return new RGWPutMetadata_ObjStore_SWIFT;
 }
 
+RGWOp *RGWHandler_ObjStore_Bucket_SWIFT::op_options()
+{
+  return new RGWOptionsCORS_ObjStore_SWIFT;
+}
+
 RGWOp *RGWHandler_ObjStore_Obj_SWIFT::get_obj_op(bool get_data)
 {
   if (is_acl_op()) {
@@ -619,6 +689,11 @@ RGWOp *RGWHandler_ObjStore_Obj_SWIFT::op_post()
 RGWOp *RGWHandler_ObjStore_Obj_SWIFT::op_copy()
 {
   return new RGWCopyObj_ObjStore_SWIFT;
+}
+
+RGWOp *RGWHandler_ObjStore_Obj_SWIFT::op_options()
+{
+  return new RGWOptionsCORS_ObjStore_SWIFT;
 }
 
 int RGWHandler_ObjStore_SWIFT::authorize()
