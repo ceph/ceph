@@ -197,6 +197,8 @@ def install(ctx, config):
         'ceph-mds-dbg',
         'ceph-common',
         'ceph-common-dbg',
+        'ceph-fuse',
+        'ceph-fuse-dbg',
         'ceph-test',
         'ceph-test-dbg',
         'radosgw',

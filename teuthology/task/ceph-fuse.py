@@ -4,7 +4,6 @@ import os
 
 from teuthology import misc as teuthology
 from ..orchestra import run
-from teuthology.task import install as install_task
 
 log = logging.getLogger(__name__)
 
@@ -66,16 +65,8 @@ def task(ctx, config):
         log.info("Client client.%s config is %s" % (id_, client_config))
 
         daemon_signal = 'kill'
-        flavor = 'basic'
         if client_config.get('coverage') or client_config.get('valgrind') is not None:
             daemon_signal = 'term'
-            flavor='notcmalloc'
-
-        # install ceph fuse package
-        install_task.install_debs(ctx,
-                                  ['ceph-fuse', 'ceph-fuse-dbg'],
-                                  {'branch': config.get('branch', 'master'),
-                                   'flavor': flavor})
 
         mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
         log.info('Mounting ceph-fuse client.{id} at {remote} {mnt}...'.format(
@@ -181,6 +172,3 @@ def task(ctx, config):
                     mnt,
                     ],
                 )
-
-        # remove ceph-fuse package
-        install_task.remove_debs(ctx, ['ceph-fuse'])
