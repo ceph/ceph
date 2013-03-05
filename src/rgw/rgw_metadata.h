@@ -58,6 +58,8 @@ public:
   int list_keys_init(string& section, void **phandle);
   int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated);
   void list_keys_complete(void *handle);
+
+  void get_sections(list<string>& sections);
 };
 
 #endif
