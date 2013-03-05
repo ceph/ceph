@@ -465,6 +465,13 @@ public:
     return hobject_t(sobject_t(object_t(foo), 0)); 
   }
 
+  static hobject_t make_snapmapper_oid() {
+    return hobject_t(
+      sobject_t(
+	object_t("snapmapper"),
+	0));
+  }
+
   static hobject_t make_pg_log_oid(pg_t pg) {
     stringstream ss;
     ss << "pglog_" << pg;
