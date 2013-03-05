@@ -436,9 +436,6 @@ def prepare_journal_dev(
     journal_dm_keypath,
     ):
 
-    if os.path.exists(journal):
-        verify_not_in_use(journal)
-
     if is_partition(journal):
         log.debug('Journal %s is a partition', journal)
         log.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
@@ -862,12 +859,18 @@ def main():
         if not os.path.exists(args.data):
             raise PrepareError('data path does not exist', args.data)
 
-        # FIXME: verify disk/partitions is not in use
+        # in use?
+        dmode = os.stat(args.data).st_mode
+        if stat.S_ISBLK(dmode):
+            verify_not_in_use(args.data)
+
+        if args.journal and os.path.exists(args.journal):
+            jmode = os.stat(args.journal).st_mode
+            if stat.S_ISBLK(jmode):
+                verify_not_in_use(args.journal)
+
         if args.zap_disk is not None:
-            if not os.path.exists(args.data):
-                raise PrepareError('does not exist', args.data)
-            mode = os.stat(args.data).st_mode
-            if stat.S_ISBLK(mode) and not is_partition(args.data):
+            if stat.S_ISBLK(dmode) and not is_partition(args.data):
                 zap(args.data)
             else:
                 raise PrepareError('not full block device; cannot zap', args.data)
@@ -925,11 +928,6 @@ def main():
             variable='osd_journal_size',
             )
         journal_size = int(journal_size)
-
-        # in use?
-        dmode = os.stat(args.data).st_mode
-        if stat.S_ISBLK(dmode):
-            verify_not_in_use(args.data)
 
         # colocate journal with data?
         if stat.S_ISBLK(dmode) and not is_partition(args.data) and args.journal is None and args.journal_file is None:
