@@ -178,12 +178,10 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
     }
   }
 
-  // parent pointers on renamed dirs
-  for (elist<CInode*>::iterator p = renamed_files.begin(); !p.end(); ++p) {
-    CInode *in = *p;
-    dout(10) << "try_to_expire waiting for dir parent pointer update on " << *in << dendl;
-    assert(in->state_test(CInode::STATE_DIRTYPARENT));
-    in->store_parent(gather_bld.new_sub());
+  // backtraces to be stored/updated
+  for (elist<BacktraceInfo*>::iterator p = update_backtraces.begin(); !p.end(); ++p) {
+    BacktraceInfo *btinfo = *p;
+    store_backtrace_update(mds, btinfo, gather_bld.new_sub());
   }
 
   // slave updates
@@ -260,6 +258,100 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
   }
 }
 
+// ----------------------------
+// backtrace handling
+
+// BacktraceInfo is used for keeping the
+// current state of the backtrace to be stored later on
+// logsegment expire.  Constructing a BacktraceInfo
+// automatically puts it on the LogSegment list that is passed in,
+// after building the backtrace based on the current state of the inode.  We
+// construct the backtrace here to avoid keeping a ref to the inode.
+BacktraceInfo::BacktraceInfo(
+    int64_t l, CInode *i, LogSegment *ls, int64_t p) :
+        location(l), pool(p) {
+
+  // on setlayout cases, forward pointers mean
+  // pool != location, but for all others it does
+  if (pool == -1) pool = location;
+
+  bt.pool = pool;
+  i->build_backtrace(l, bt);
+  ls->update_backtraces.push_back(&item_logseg);
+}
+
+// When the info_t is destroyed, it just needs to remove itself
+// from the LogSegment list
+BacktraceInfo::~BacktraceInfo() {
+  item_logseg.remove_myself();
+}
+
+// Queue a backtrace for later
+void LogSegment::queue_backtrace_update(CInode *inode, int64_t location, int64_t pool) {
+    // allocating a pointer here and not setting it to anything
+    // might look strange, but the constructor adds itself to the backtraces
+    // list of this LogSegment, which is how we keep track of it
+    new BacktraceInfo(location, inode, this, pool);
+}
+
+void LogSegment::remove_pending_backtraces(inodeno_t ino, int64_t pool) {
+  elist<BacktraceInfo*>::iterator i = update_backtraces.begin();
+  while(!i.end()) {
+    ++i;
+    if((*i)->bt.ino == ino && (*i)->location == pool) {
+      delete (*i);
+    }
+  }
+}
+
+unsigned LogSegment::encode_parent_mutation(ObjectOperation& m, BacktraceInfo *info)
+{
+  bufferlist parent;
+  ::encode(info->bt, parent);
+  m.setxattr("parent", parent);
+  return parent.length();
+}
+
+struct C_LogSegment_StoredBacktrace : public Context {
+  LogSegment *ls;
+  BacktraceInfo *info;
+  Context *fin;
+  C_LogSegment_StoredBacktrace(LogSegment *l, BacktraceInfo *c,
+			       Context *f) : ls(l), info(c), fin(f) {}
+  void finish(int r) {
+    ls->_stored_backtrace(info, fin);
+  }
+};
+
+void LogSegment::store_backtrace_update(MDS *mds, BacktraceInfo *info, Context *fin)
+{
+  ObjectOperation m;
+  // prev_pool will be the target pool on create,mkdir,etc.
+  encode_parent_mutation(m, info);
+
+  // write it.
+  SnapContext snapc;
+
+  object_t oid = CInode::get_object_name(info->bt.ino, frag_t(), "");
+
+  dout(10) << "store_parent for oid " << oid << " location " << info->location << " pool " << info->pool << dendl;
+
+  // store the backtrace in the specified pool
+  object_locator_t oloc(info->location);
+
+  mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(g_ceph_context), 0,
+		        NULL, new C_LogSegment_StoredBacktrace(this, info, fin) );
+
+}
+
+void LogSegment::_stored_backtrace(BacktraceInfo *info, Context *fin)
+{
+  delete info;
+  if (fin) {
+    fin->finish(0);
+    delete fin;
+  }
+}
 
 #undef DOUT_COND
 #define DOUT_COND(cct, l) (l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_log)
