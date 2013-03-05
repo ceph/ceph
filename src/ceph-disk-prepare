@@ -117,15 +117,36 @@ def is_mounted(dev):
                     return True
     return False
 
+def is_held(dev):
+    """
+    Check if a device is held by another device (e.g., a dm-crypt mapping)
+    """
+    assert os.path.exists(dev)
+    dev = os.path.realpath(dev)
+    base = dev[5:]
+    disk = base
+    while disk[-1].isdigit():
+        disk = disk[:-1]
+    dir = '/sys/block/{disk}/{base}/holders'.format(disk=disk, base=base)
+    if not os.path.exists(dir):
+        return []
+    return os.listdir(dir)
+
 def verify_not_in_use(dev):
     assert os.path.exists(dev)
     if is_partition(dev):
         if is_mounted(dev):
             raise PrepareError('Device is mounted', dev)
+        holders = is_held(dev)
+        if holders:
+            raise PrepareError('Device is in use by a device-mapper mapping (dm-crypt?)' % dev, ','.join(holders))
     else:
         for p in list_partitions(dev):
             if is_mounted(p):
                 raise PrepareError('Device is mounted', p)
+            holders = is_held(p)
+            if holders:
+                raise PrepareError('Device %s is in use by a device-mapper mapping (dm-crypt?)' % p, ','.join(holders))
 
 def write_one_line(parent, name, text):
     """
