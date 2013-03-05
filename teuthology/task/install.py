@@ -206,6 +206,7 @@ def install(ctx, config):
         'python-ceph',
         'libcephfs1',
         'libcephfs1-dbg',
+        'libcephfs-java',
         ]
 
     # pull any additional packages out of config
