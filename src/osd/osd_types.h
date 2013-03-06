@@ -2101,6 +2101,8 @@ struct clone_info {
   vector< pair<uint64_t,uint64_t> > overlap;
   uint64_t size;
 
+  clone_info() : cloneid(CEPH_NOSNAP), size(0) {}
+
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(cloneid, bl);
@@ -2153,7 +2155,6 @@ struct clone_info {
     o.back()->size = 32768;
   }
 };
-
 WRITE_CLASS_ENCODER(clone_info)
 
 /**
