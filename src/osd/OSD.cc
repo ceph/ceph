@@ -2528,6 +2528,11 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 // =========================================
 void OSD::RemoveWQ::_process(boost::tuple<coll_t, SequencerRef, DeletingStateRef> *item)
 {
+  OSDriver driver(
+    store,
+    coll_t(),
+    make_snapmapper_oid());
+  SnapMapper mapper(&driver, 0, 0, 0);
   coll_t &coll = item->get<0>();
   ObjectStore::Sequencer *osr = item->get<1>().get();
   if (osr)
@@ -2540,6 +2545,11 @@ void OSD::RemoveWQ::_process(boost::tuple<coll_t, SequencerRef, DeletingStateRef
   for (vector<hobject_t>::iterator i = olist.begin();
        i != olist.end();
        ++i, ++num) {
+    OSDriver::OSTransaction _t(driver.get_transaction(t));
+    int r = mapper.remove_oid(*i, &_t);
+    if (r != 0 && r != -ENOENT) {
+      assert(0);
+    }
     t->remove(coll, *i);
     if (num >= g_conf->osd_target_transaction_size) {
       store->apply_transaction(osr, *t);
