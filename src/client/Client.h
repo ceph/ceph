@@ -666,12 +666,14 @@ public:
   // expose file layout
   int describe_layout(int fd, ceph_file_layout* layout);
   int get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>& address);
+  int get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& osds);
 
   // expose osdmap 
   int get_local_osd();
   int get_pool_replication(int64_t pool);
   int64_t get_pool_id(const char *pool_name);
   string get_pool_name(int64_t pool);
+  int get_osd_crush_location(int id, vector<pair<string, string> >& path);
 
   int enumerate_layout(int fd, vector<ObjectExtent>& result,
 		       loff_t length, loff_t offset);
