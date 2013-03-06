@@ -286,7 +286,7 @@ public:
   /**
    * returns the (type, name) of the parent bucket of id
    */
-  pair<string,string> get_immediate_parent(int id);
+  pair<string,string> get_immediate_parent(int id, int *ret = NULL);
   int get_immediate_parent_id(int id, int *parent);
 
   /**
@@ -299,6 +299,14 @@ public:
    * specified in the CRUSH map and foo is a name specified in the CRUSH map
    */
   map<string, string> get_full_location(int id);
+
+  /*
+   * identical to get_full_location(int id) although it returns the type/name
+   * pairs in the order they occur in the hierarchy.
+   *
+   * returns -ENOENT if id is not found.
+   */
+  int get_full_location_ordered(int id, vector<pair<string, string> >& path);
 
   /**
    * returns (type_id, type) of all parent buckets between id and

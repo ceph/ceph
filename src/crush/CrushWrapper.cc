@@ -133,12 +133,25 @@ bool CrushWrapper::check_item_loc(CephContext *cct, int item, const map<string,s
   return false;
 }
 
-map<string, string> CrushWrapper::get_full_location(int id){
-
+map<string, string> CrushWrapper::get_full_location(int id)
+{
+  vector<pair<string, string> > full_location_ordered;
   map<string,string> full_location;
+
+  get_full_location_ordered(id, full_location_ordered);
+
+  std::copy(full_location_ordered.begin(),
+      full_location_ordered.end(),
+      std::inserter(full_location, full_location.begin()));
+
+  return full_location;
+}
+
+int CrushWrapper::get_full_location_ordered(int id, vector<pair<string, string> >& path)
+{
+  int parent_id, ret;
   pair<string, string> parent_coord;
-  parent_coord = get_immediate_parent(id);
-  int parent_id;
+  parent_coord = get_immediate_parent(id, &ret);
 
   // read the type map and get the name of the type with the largest ID
   int high_type = 0;
@@ -149,19 +162,19 @@ map<string, string> CrushWrapper::get_full_location(int id){
 
   string high_type_name = type_map[high_type];
 
-  full_location[ parent_coord.first ] = parent_coord.second;
+  path.push_back(parent_coord);
   parent_id = get_item_id( (parent_coord.second).c_str() );
 
 
   while (parent_coord.first != high_type_name) {
     parent_coord = get_immediate_parent(parent_id);
-    full_location[ parent_coord.first ] = parent_coord.second;
+    path.push_back(parent_coord);
     if ( parent_coord.first != high_type_name ){
       parent_id = get_item_id( (parent_coord.second).c_str() );
     }
   }
 
-  return full_location;
+  return ret;
 }
 
 
@@ -439,9 +452,10 @@ bool CrushWrapper::check_item_present(int id)
 }
 
 
-pair<string,string> CrushWrapper::get_immediate_parent(int id)
+pair<string,string> CrushWrapper::get_immediate_parent(int id, int *_ret)
 {
   pair <string, string> loc;
+  int ret = -ENOENT;
 
   for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
     crush_bucket *b = crush->buckets[bidx];
@@ -452,8 +466,12 @@ pair<string,string> CrushWrapper::get_immediate_parent(int id)
         string parent_id = name_map[b->id];
         string parent_bucket_type = type_map[b->type];
         loc = make_pair(parent_bucket_type, parent_id);
+        ret = 0;
       }
   }
+
+  if (_ret)
+    *_ret = ret;
 
   return loc;
 }

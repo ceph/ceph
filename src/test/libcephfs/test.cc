@@ -980,3 +980,52 @@ TEST(LibCephFS, GetExtentOsds) {
 
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, GetOsdCrushLocation) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+
+  EXPECT_EQ(-ENOTCONN, ceph_get_osd_crush_location(cmount, 0, NULL, 0));
+
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  ASSERT_EQ(ceph_get_osd_crush_location(cmount, 0, NULL, 0), -EINVAL);
+
+  char path[256];
+  ASSERT_EQ(ceph_get_osd_crush_location(cmount, 9999999, path, 0), -ENOENT);
+  ASSERT_EQ(ceph_get_osd_crush_location(cmount, -1, path, 0), -ENOENT);
+
+  char test_file[256];
+  sprintf(test_file, "test_osds_loc_%d", getpid());
+  int fd = ceph_open(cmount, test_file, O_CREAT|O_RDWR, 0666);
+  ASSERT_GT(fd, 0);
+
+  /* get back how many osds > 0 */
+  int ret = ceph_get_file_extent_osds(cmount, fd, 0, NULL, NULL, 0);
+  EXPECT_GT(ret, 0);
+
+  /* full stripe extent */
+  int osds[ret];
+  EXPECT_EQ(ret, ceph_get_file_extent_osds(cmount, fd, 0, NULL, osds, ret));
+
+  ASSERT_GT(ceph_get_osd_crush_location(cmount, 0, path, 0), 0);
+  ASSERT_EQ(ceph_get_osd_crush_location(cmount, 0, path, 1), -ERANGE);
+
+  for (int i = 0; i < ret; i++) {
+    int len = ceph_get_osd_crush_location(cmount, osds[i], path, sizeof(path));
+    ASSERT_GT(len, 0);
+    int pos = 0;
+    while (pos < len) {
+      std::string type(path + pos);
+      ASSERT_GT((int)type.size(), 0);
+      pos += type.size() + 1;
+
+      std::string name(path + pos);
+      ASSERT_GT((int)name.size(), 0);
+      pos += name.size() + 1;
+    }
+  }
+
+  ceph_shutdown(cmount);
+}
