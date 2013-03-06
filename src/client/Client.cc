@@ -2591,16 +2591,18 @@ public:
   }
 };
 
-void Client::_async_invalidate(Inode *in, int64_t off, int64_t len, bool keep_caps) {
+void Client::_async_invalidate(Inode *in, int64_t off, int64_t len, bool keep_caps)
+{
+  ldout(cct, 10) << "_async_invalidate " << off << "~" << len << (keep_caps ? " keep_caps" : "") << dendl;
+  ino_invalidate_cb(ino_invalidate_cb_handle, in->vino(), off, len);
 
-    ino_invalidate_cb(ino_invalidate_cb_handle, in->vino(), off, len);
-
-    client_lock.Lock();
-    if (!keep_caps) {
-      put_cap_ref(in, CEPH_CAP_FILE_CACHE);
-    }
-    put_inode(in);
-    client_lock.Unlock();
+  client_lock.Lock();
+  if (!keep_caps) {
+    put_cap_ref(in, CEPH_CAP_FILE_CACHE);
+  }
+  put_inode(in);
+  client_lock.Unlock();
+  ldout(cct, 10) << "_async_invalidate " << off << "~" << len << (keep_caps ? " keep_caps" : "") << " done" << dendl;
 }
 
 void Client::_schedule_invalidate_callback(Inode *in, int64_t off, int64_t len, bool keep_caps) {
@@ -2640,6 +2642,7 @@ void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len, bool k
 
 void Client::_release(Inode *in)
 {
+  ldout(cct, 20) << "_release " << *in << dendl;
   if (in->cap_refs[CEPH_CAP_FILE_CACHE]) {
     _invalidate_inode_cache(in, false);
   }
