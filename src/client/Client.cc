@@ -7530,6 +7530,52 @@ int Client::get_pool_replication(int64_t pool)
   return osdmap->get_pg_pool(pool)->get_size();
 }
 
+int Client::get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& osds)
+{
+  Mutex::Locker lock(client_lock);
+
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
+  Inode *in = f->inode;
+
+  vector<ObjectExtent> extents;
+  Striper::file_to_extents(cct, in->ino, &in->layout, off, 1, extents);
+  assert(extents.size() == 1);
+
+  pg_t pg = osdmap->object_locator_to_pg(extents[0].oid, extents[0].oloc);
+  osdmap->pg_to_acting_osds(pg, osds);
+  if (osds.empty())
+    return -EINVAL;
+
+  /*
+   * Return the remainder of the extent (stripe unit)
+   *
+   * If length = 1 is passed to Striper::file_to_extents we get a single
+   * extent back, but its length is one so we still need to compute the length
+   * to the end of the stripe unit.
+   *
+   * If length = su then we may get 1 or 2 objects back in the extents vector
+   * which would have to be examined. Even then, the offsets are local to the
+   * object, so matching up to the file offset is extra work.
+   *
+   * It seems simpler to stick with length = 1 and manually compute the
+   * remainder.
+   */
+  if (len) {
+    uint64_t su = in->layout.fl_stripe_unit;
+    *len = su - (off % su);
+  }
+
+  return 0;
+}
+
+int Client::get_osd_crush_location(int id, vector<pair<string, string> >& path)
+{
+  Mutex::Locker lock(client_lock);
+  return osdmap->crush->get_full_location_ordered(id, path);
+}
+
 int Client::get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>& address)
 {
   Mutex::Locker lock(client_lock);
