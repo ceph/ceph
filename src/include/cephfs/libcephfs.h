@@ -897,6 +897,39 @@ int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int fd, loff_t 
 				 struct sockaddr_storage *addr, int naddr);
 
 /**
+ * Get the list of OSDs where the objects containing a file offset are located.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param fd the open file descriptor referring to the file.
+ * @param offset the offset within the file.
+ * @param length return the number of bytes between the offset and the end of
+ * the stripe unit (optional).
+ * @param osds an integer array to hold the OSD ids.
+ * @param nosds the size of the integer array.
+ * @returns the number of items stored in the output array, or -ERANGE if the
+ * array is not large enough.
+ */
+int ceph_get_file_extent_osds(struct ceph_mount_info *cmount, int fh,
+                              loff_t offset, loff_t *length, int *osds, int nosds);
+
+/**
+ * Get the fully qualified CRUSH location of an OSD.
+ *
+ * Returns (type, name) string pairs for each device in the CRUSH bucket
+ * hierarchy starting from the given osd to the root. Each pair element is
+ * separated by a NULL character.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param osd the OSD id.
+ * @param path buffer to store location.
+ * @param len size of buffer.
+ * @returns the amount of bytes written into the buffer, or -ERANGE if the
+ * array is not large enough.
+ */
+int ceph_get_osd_crush_location(struct ceph_mount_info *cmount,
+    int osd, char *path, size_t len);
+
+/**
  * Get the file layout stripe unit granularity.
  * @param cmount the ceph mount handle.
  * @returns the stripe unit granularity or a negative error code on failure.
