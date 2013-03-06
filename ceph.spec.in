@@ -461,6 +461,7 @@ fi
 %{_includedir}/rados/page.h
 %{_includedir}/rados/crc32c.h
 %{_includedir}/rados/rados_types.h
+%{_includedir}/rados/rados_types.hpp
 %dir %{_includedir}/rbd
 %{_includedir}/rbd/librbd.h
 %{_includedir}/rbd/librbd.hpp
