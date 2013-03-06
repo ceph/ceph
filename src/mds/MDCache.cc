@@ -269,6 +269,10 @@ void MDCache::init_layouts()
 
   default_log_layout = g_default_file_layout;
   default_log_layout.fl_pg_pool = mds->mdsmap->get_metadata_pool();
+  if (g_conf->mds_log_segment_size > 0) {
+    default_log_layout.fl_object_size = g_conf->mds_log_segment_size;
+    default_log_layout.fl_stripe_unit = g_conf->mds_log_segment_size;
+  }
 }
 
 CInode *MDCache::create_system_inode(inodeno_t ino, int mode)

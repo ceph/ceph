@@ -261,7 +261,9 @@ OPTION(mds_default_dir_hash, OPT_INT, CEPH_STR_HASH_RJENKINS)
 OPTION(mds_log, OPT_BOOL, true)
 OPTION(mds_log_skip_corrupt_events, OPT_BOOL, false)
 OPTION(mds_log_max_events, OPT_INT, -1)
-OPTION(mds_log_max_segments, OPT_INT, 30)  // segment size defined by FileLayout, above
+OPTION(mds_log_segment_size, OPT_INT, 0)  // segment size for mds log,
+	      // defaults to g_default_file_layout.fl_object_size (4MB)
+OPTION(mds_log_max_segments, OPT_INT, 30)
 OPTION(mds_log_max_expiring, OPT_INT, 20)
 OPTION(mds_bal_sample_interval, OPT_FLOAT, 3.0)  // every 5 seconds
 OPTION(mds_bal_replicate_threshold, OPT_FLOAT, 8000)
