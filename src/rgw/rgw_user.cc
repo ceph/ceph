@@ -2294,8 +2294,24 @@ public:
 
     RGWRados *store = info->store;
 
-    return store->list_raw_objects(store->zone.user_uid_pool, no_filter,
-                                   max, info->ctx, keys, truncated);
+    list<string> unfiltered_keys;
+
+    int ret = store->list_raw_objects(store->zone.user_uid_pool, no_filter,
+                                      max, info->ctx, unfiltered_keys, truncated);
+    if (ret < 0)
+      return ret;
+
+    // now filter out the buckets entries
+    list<string>::iterator iter;
+    for (iter = unfiltered_keys.begin(); iter != unfiltered_keys.end(); ++iter) {
+      string& k = *iter;
+
+      if (k.find(".buckets") == string::npos) {
+        keys.push_back(k);
+      }
+    }
+
+    return 0;
   }
 
   void list_keys_complete(void *handle) {
