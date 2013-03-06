@@ -673,6 +673,7 @@ public:
   int get_pool_replication(int64_t pool);
   int64_t get_pool_id(const char *pool_name);
   string get_pool_name(int64_t pool);
+  int get_osd_crush_location(int id, vector<pair<string, string> >& path);
 
   int enumerate_layout(int fd, vector<ObjectExtent>& result,
 		       loff_t length, loff_t offset);

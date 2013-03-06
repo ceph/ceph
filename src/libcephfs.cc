@@ -816,6 +816,44 @@ extern "C" int ceph_get_file_extent_osds(struct ceph_mount_info *cmount, int fh,
   return vosds.size();
 }
 
+extern "C" int ceph_get_osd_crush_location(struct ceph_mount_info *cmount,
+    int osd, char *path, size_t len)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+
+  if (!path)
+    return -EINVAL;
+
+  vector<pair<string, string> > loc;
+  int ret = cmount->get_client()->get_osd_crush_location(osd, loc);
+  if (ret)
+    return ret;
+
+  size_t needed = 0;
+  size_t cur = 0;
+  vector<pair<string, string> >::iterator it;
+  for (it = loc.begin(); it != loc.end(); it++) {
+    string& type = it->first;
+    string& name = it->second;
+    needed += type.size() + name.size() + 2;
+    if (needed < len) {
+      strcpy(path + cur, type.c_str());
+      cur += type.size() + 1;
+      strcpy(path + cur, name.c_str());
+      cur += name.size() + 1;
+    }
+  }
+
+  if (len == 0)
+    return needed;
+
+  if (needed > len)
+    return -ERANGE;
+
+  return needed;
+}
+
 extern "C" int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int fh,
 					    loff_t offset, struct sockaddr_storage *addr, int naddr)
 {
