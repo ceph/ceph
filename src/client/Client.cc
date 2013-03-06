@@ -7570,6 +7570,12 @@ int Client::get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& o
   return 0;
 }
 
+int Client::get_osd_crush_location(int id, vector<pair<string, string> >& path)
+{
+  Mutex::Locker lock(client_lock);
+  return osdmap->crush->get_full_location_ordered(id, path);
+}
+
 int Client::get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>& address)
 {
   Mutex::Locker lock(client_lock);
