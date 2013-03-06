@@ -130,7 +130,7 @@ int RGWRegion::set_as_default()
 
   ::encode(default_info, bl);
 
-  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL);
+  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, NULL);
   if (ret < 0)
     return ret;
 
@@ -230,7 +230,7 @@ int RGWRegion::store_info(bool exclusive)
 
   bufferlist bl;
   ::encode(*this, bl);
-  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), exclusive, NULL);
+  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), exclusive, NULL, NULL);
 
   return ret;
 }
@@ -309,7 +309,7 @@ int RGWZoneParams::store_info(CephContext *cct, RGWRados *store, RGWRegion& regi
 
   bufferlist bl;
   ::encode(*this, bl);
-  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL);
+  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, NULL);
 
   return ret;
 }
@@ -385,7 +385,7 @@ int RGWRegionMap::store(CephContext *cct, RGWRados *store)
 
   bufferlist bl;
   ::encode(*this, bl);
-  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL);
+  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, NULL);
 
   return ret;
 }
@@ -1205,7 +1205,7 @@ int RGWRados::store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pa
   bufferlist bl;
   ::encode(info, bl);
 
-  int ret = rgw_put_system_obj(this, zone.domain_root, info.bucket.name, bl.c_str(), bl.length(), exclusive, pattrs);
+  int ret = rgw_put_system_obj(this, zone.domain_root, info.bucket.name, bl.c_str(), bl.length(), exclusive, NULL, pattrs);
   if (ret < 0)
     return ret;
 
@@ -3652,7 +3652,7 @@ int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exc
 
   ::encode(info, bl);
 
-  int ret = rgw_put_system_obj(this, zone.domain_root, bucket_name, bl.c_str(), bl.length(), exclusive, pattrs);
+  int ret = rgw_put_system_obj(this, zone.domain_root, bucket_name, bl.c_str(), bl.length(), exclusive, NULL, pattrs);
 
   return ret;
 }
