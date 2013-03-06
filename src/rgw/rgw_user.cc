@@ -42,7 +42,7 @@ bool rgw_user_is_authenticated(RGWUserInfo& info)
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
  */
-int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_info, bool exclusive)
+int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_info, obj_version *objv, bool exclusive)
 {
   bufferlist bl;
   info.encode(bl);
@@ -88,14 +88,14 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_inf
   ::encode(ui, data_bl);
   ::encode(info, data_bl);
 
-  ret = rgw_put_system_obj(store, store->zone.user_uid_pool, info.user_id, data_bl.c_str(), data_bl.length(), exclusive);
+  ret = rgw_put_system_obj(store, store->zone.user_uid_pool, info.user_id, data_bl.c_str(), data_bl.length(), exclusive, objv);
   if (ret < 0)
     return ret;
 
   if (!info.user_email.empty()) {
     if (!old_info ||
         old_info->user_email.compare(info.user_email) != 0) { /* only if new index changed */
-      ret = rgw_put_system_obj(store, store->zone.user_email_pool, info.user_email, link_bl.c_str(), link_bl.length(), exclusive);
+      ret = rgw_put_system_obj(store, store->zone.user_email_pool, info.user_email, link_bl.c_str(), link_bl.length(), exclusive, objv);
       if (ret < 0)
         return ret;
     }
@@ -108,7 +108,7 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_inf
       if (old_info && old_info->access_keys.count(iter->first) != 0)
 	continue;
 
-      ret = rgw_put_system_obj(store, store->zone.user_keys_pool, k.id, link_bl.c_str(), link_bl.length(), exclusive);
+      ret = rgw_put_system_obj(store, store->zone.user_keys_pool, k.id, link_bl.c_str(), link_bl.length(), exclusive, objv);
       if (ret < 0)
         return ret;
     }
@@ -120,7 +120,7 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_inf
     if (old_info && old_info->swift_keys.count(siter->first) != 0)
       continue;
 
-    ret = rgw_put_system_obj(store, store->zone.user_swift_pool, k.id, link_bl.c_str(), link_bl.length(), exclusive);
+    ret = rgw_put_system_obj(store, store->zone.user_swift_pool, k.id, link_bl.c_str(), link_bl.length(), exclusive, objv);
     if (ret < 0)
       return ret;
   }
@@ -459,7 +459,6 @@ static bool remove_old_indexes(RGWRados *store,
  * NOTE: It is the caller's respnsibility to ensure that the
  * formatter is flushed at the correct time.
  */
-
 
 static void dump_subusers_info(Formatter *f, RGWUserInfo &info)
 {
@@ -1540,7 +1539,7 @@ int RGWUser::update(RGWUserAdminOpState& op_state, std::string *err_msg)
   }
 
   if (is_populated()) {
-    ret = rgw_store_user_info(store, user_info, &old_info, false);
+    ret = rgw_store_user_info(store, user_info, &old_info, NULL, false);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to store user info");
       return ret;
@@ -1552,7 +1551,7 @@ int RGWUser::update(RGWUserAdminOpState& op_state, std::string *err_msg)
       return ret;
     }
   } else {
-    ret = rgw_store_user_info(store, user_info, NULL, false);
+    ret = rgw_store_user_info(store, user_info, NULL, NULL, false);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to store user info");
       return ret;
@@ -2263,7 +2262,7 @@ public:
       return ret;
 
 
-    ret = rgw_store_user_info(store, info, &old_info, false);
+    ret = rgw_store_user_info(store, info, &old_info, &objv, false);
     if (ret < 0)
       return ret;
 
