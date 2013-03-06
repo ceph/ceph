@@ -1099,7 +1099,13 @@ void Server::handle_client_request(MClientRequest *req)
     inodeno_t created;
     if (session->have_completed_request(req->get_reqid().tid, &created)) {
       dout(5) << "already completed " << req->get_reqid() << dendl;
-      mds->messenger->send_message(new MClientReply(req, 0), req->get_connection());
+      MClientReply *reply = new MClientReply(req, 0);
+      if (created != inodeno_t()) {
+	bufferlist extra;
+	::encode(created, extra);
+	reply->set_extra_bl(extra);
+      }
+      mds->messenger->send_message(reply, req->get_connection());
 
       if (req->is_replay())
 	mds->queue_one_replay();
