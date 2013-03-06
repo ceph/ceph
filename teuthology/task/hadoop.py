@@ -166,12 +166,12 @@ def write_slaves(ctx):
 def write_master(ctx):
     mastersFile = "{tdir}/hadoop/conf/masters".format(tdir=teuthology.get_testdir(ctx))
     master = _get_master(ctx)
-    remote, _ = master
+    master_remote, _ = master
 
 
     hadoopNodes = ctx.cluster.only(teuthology.is_type('hadoop'))
     for remote, roles_for_host in hadoopNodes.remotes.iteritems():
-        teuthology.write_file(remote, mastersFile, '{remote}\n'.format(remote=remote.ssh.get_transport().getpeername()[0]))
+        teuthology.write_file(remote, mastersFile, '{master_host}\n'.format(master_host=master_remote.ssh.get_transport().getpeername()[0]))
         log.info("wrote file: " + mastersFile + " to host: " + str(remote))
 
 ## Call the various functions that configure Hadoop
