@@ -110,7 +110,7 @@ For a development release::
 
     rcp ceph-0.xx.tar.bz2 ceph-0.xx.tar.gz \
         ceph_site@ceph.com:ceph.com/downloads/.
-    rsync -av /tmp/repm-repo/0.xx/ ceph_site@ceph.com:ceph.com/rpm-testing
+    rsync -av /tmp/rpm-repo/0.xx/ ceph_site@ceph.com:ceph.com/rpm-testing
     rsync -av /tmp/debian-repo/ ceph_site@ceph.com:ceph.com/debian-testing
 
 For a stable release, replace {CODENAME} with the release codename (e.g., ``argonaut`` or ``bobtail``)::
@@ -143,7 +143,7 @@ Similarly, for a development release, for both ``teuthology.git`` and ``ceph-qa-
     git reset --hard origin/master
     git branch -f testing origin/next
     git push -f origin testing
-    git push -f master:next
+    git push -f origin master:next
 
 Stable release
 --------------
