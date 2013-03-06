@@ -1285,6 +1285,7 @@ int Client::make_request(MetaRequest *request,
       // the inode (won the race with other create requests)
       ::decode(created_ino, extra_bl);
       got_created_ino = true;
+      ldout(cct, 10) << "make_request created ino " << created_ino << dendl;
     }
 
     if (pcreated)
@@ -7471,6 +7472,7 @@ int Client::ll_create(vinodeno_t parent, const char *name, mode_t mode, int flag
   fill_stat(in, attr);
   _ll_get(in);
 
+  ldout(cct, 20) << "ll_create created = " << created << dendl;
   if (!created) {
     r = check_permissions(in, flags, uid, gid);
     if (r < 0) {
