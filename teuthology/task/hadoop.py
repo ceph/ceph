@@ -83,6 +83,10 @@ def write_core_site(ctx, config):
         <name>fs.default.name</name>
         <value>{default_fs}</value>
     </property>
+    <property>
+      <name>ceph.conf.file</name>
+      <value>/etc/ceph/ceph.conf</value>
+    </property>
 </configuration>
 '''.format(tdir=teuthology.get_testdir(ctx), default_fs=default_fs_string))
 
