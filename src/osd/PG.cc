@@ -5117,7 +5117,7 @@ bool PG::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
 	dout(20) << "read_log " << e << dendl;
 	if (!log.log.empty()) {
 	  pg_log_entry_t last_e(log.log.back());
-	  assert(last_e.version.version == e.version.version - 1);
+	  assert(last_e.version.version < e.version.version);
 	  assert(last_e.version.epoch <= e.version.epoch);
 	}
 	log.log.push_back(e);
