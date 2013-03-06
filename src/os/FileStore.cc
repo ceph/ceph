@@ -4352,7 +4352,7 @@ bool FileStore::collection_empty(coll_t c)
     assert(!m_filestore_fail_eio || r != -EIO);
     return false;
   }
-  return !ls.empty();
+  return ls.empty();
 }
 
 int FileStore::collection_list_range(coll_t c, hobject_t start, hobject_t end,
