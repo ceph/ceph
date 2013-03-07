@@ -245,6 +245,8 @@ for name in $what; do
 	lockfile=""
     fi
 
+    get_conf asok "$RUN_DIR/ceph-$type.$id.asok" "admin socket"
+
     case "$command" in
 	start)
             # Increase max_open_files, if the configuration calls for it.
@@ -327,7 +329,6 @@ for name in $what; do
 		# via mkcephfs, which is fine too; there is no harm
 		# in creating these keys.
 		get_conf mon_data "/var/lib/ceph/mon/ceph-$id" "mon data"
-		get_conf asok "/var/run/ceph-$type.$id.asok" "admin socket"
 		if [ "$mon_data" = "/var/lib/ceph/mon/ceph-$id" -a "$asok" = "/var/run/ceph/ceph-mon.$id.asok" ]; then
 		    echo Starting ceph-create-keys on $host...
 		    cmd2="$SBINDIR/ceph-create-keys -i $id 2> /dev/null &"
@@ -354,7 +355,6 @@ for name in $what; do
 
 	status)
 	    if daemon_is_running $name ceph-$type $id $pid_file; then
-		get_conf asok "$RUN_DIR/ceph-$type.$id.asok" "admin socket"
 		echo -n "$name: running "
 		do_cmd "$BINDIR/ceph --admin-daemon $asok version 2>/dev/null" || echo unknown
             elif [ -e "$pid_file" ]; then
