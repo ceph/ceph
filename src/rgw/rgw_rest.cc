@@ -227,10 +227,10 @@ void dump_errno(struct req_state *s, int err)
   dump_status(s, buf);
 }
 
-void dump_content_length(struct req_state *s, size_t len)
+void dump_content_length(struct req_state *s, uint64_t len)
 {
-  char buf[16];
-  snprintf(buf, sizeof(buf), "%lu", (long unsigned int)len);
+  char buf[21];
+  snprintf(buf, sizeof(buf), "%"PRIu64, len);
   int r = s->cio->print("Content-Length: %s\n", buf);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
