@@ -57,10 +57,13 @@ def lock(ctx, name, user=None):
 def unlock(ctx, name, user=None):
     if user is None:
         user = teuthology.get_user()
+    desc_success = update_lock(ctx, name, description='')
     success, _ , _ = send_request('DELETE', _lock_url(ctx) + '/' + name + '?' + \
                                   urllib.urlencode(dict(user=user)))
     if success:
         log.debug('unlocked %s', name)
+        if not desc_success:
+            log.warn('failed to remove description for %s', name)
     else:
         log.error('failed to unlock %s', name)
     return success
