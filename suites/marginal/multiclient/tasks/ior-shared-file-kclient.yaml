@@ -4,21 +4,21 @@ tasks:
 - kclient:
 - pexec:
     clients:
-      - cd /tmp/cephtest
+      - cd $TESTDIR
       - wget http://ceph.com/qa/ior.tbz2
       - tar xvfj ior.tbz2
       - cd ior
       - ./configure
       - make
-      - make install DESTDIR=/tmp/cephtest/binary/
-      - cd /tmp/cephtest/
+      - make install DESTDIR=$TESTDIR/binary/
+      - cd $TESTDIR/
       - rm ior.tbz2
       - rm -r ior
-      - ln -s /tmp/cephtest/mnt.* /tmp/cephtest/gmnt
+      - ln -s $TESTDIR/mnt.* $TESTDIR/gmnt
 - ssh_keys:
 - mpi:
-    exec: /tmp/cephtest/binary/usr/local/bin/ior -e -w -r -W -b 10m -a POSIX -o /tmp/cephtest/gmnt/ior.testfile
+    exec: $TESTDIR/binary/usr/local/bin/ior -e -w -r -W -b 10m -a POSIX -o $TESTDIR/gmnt/ior.testfile
 - pexec:
     all:
-      - rm -f /tmp/cephtest/gmnt/ior.testfile
-      - rm -f /tmp/cephtest/gmnt
+      - rm -f $TESTDIR/gmnt/ior.testfile
+      - rm -f $TESTDIR/gmnt

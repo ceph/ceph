@@ -4,16 +4,16 @@ tasks:
 - kclient:
 - pexec:
     clients:
-      - cd /tmp/cephtest
+      - cd $TESTDIR
       - wget http://ceph.com/qa/fsx-mpi.c
       - mpicc fsx-mpi.c -o fsx-mpi 
       - rm fsx-mpi.c
-      - ln -s /tmp/cephtest/mnt.* /tmp/cephtest/gmnt
+      - ln -s $TESTDIR/mnt.* $TESTDIR/gmnt
 - ssh_keys:
 - mpi:
-    exec: /tmp/cephtest/fsx-mpi 1MB -N 50000 -p 10000 -l 1048576
-    workdir: /tmp/cephtest/gmnt
+    exec: $TESTDIR/fsx-mpi 1MB -N 50000 -p 10000 -l 1048576
+    workdir: $TESTDIR/gmnt
 - pexec:
     all:
-      - rm /tmp/cephtest/gmnt
-      - rm /tmp/cephtest/fsx-mpi
+      - rm $TESTDIR/gmnt
+      - rm $TESTDIR/fsx-mpi
