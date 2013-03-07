@@ -853,6 +853,12 @@ unittest_texttable_LDADD = librados.la ${UNITTEST_LDADD}
 unittest_texttable_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_texttable
 
+unittest_cors_SOURCES = test/test_cors.cc
+unittest_cors_LDFLAGS = libglobal.la 
+unittest_cors_LDADD = librados.la librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} -lcryptopp -lcurl -luuid -lexpat 
+unittest_cors_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_cors
+
 ceph_test_librbd_SOURCES = test/librbd/test_librbd.cc test/librados/test.cc
 ceph_test_librbd_LDADD =  librbd.la librados.la ${UNITTEST_STATIC_LDADD}
 ceph_test_librbd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
