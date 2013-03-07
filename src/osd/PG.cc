@@ -5393,6 +5393,14 @@ PG::RecoveryState::Primary::Primary(my_context ctx)
   context< RecoveryMachine >().log_enter(state_name);
 }
 
+boost::statechart::result PG::RecoveryState::Primary::react(const AdvMap &advmap)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->remove_down_peer_info(advmap.osdmap);
+  pg->check_recovery_sources(advmap.osdmap);
+  return forward_event();
+}
+
 boost::statechart::result PG::RecoveryState::Primary::react(const MNotifyRec& notevt)
 {
   dout(7) << "handle_pg_notify from osd." << notevt.from << dendl;
@@ -5982,7 +5990,6 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
     dout(10) << *pg << " snap_trimq now " << pg->snap_trimq << dendl;
     pg->dirty_info = true;
   }
-  pg->check_recovery_sources(pg->get_osdmap());
 
   for (vector<int>::iterator p = pg->want_acting.begin();
        p != pg->want_acting.end(); ++p) {
@@ -6646,8 +6653,6 @@ boost::statechart::result PG::RecoveryState::WaitActingChange::react(const AdvMa
 {
   PG *pg = context< RecoveryMachine >().pg;
   OSDMapRef osdmap = advmap.osdmap;
-
-  pg->remove_down_peer_info(osdmap);
 
   dout(10) << "verifying no want_acting " << pg->want_acting << " targets didn't go down" << dendl;
   for (vector<int>::iterator p = pg->want_acting.begin(); p != pg->want_acting.end(); ++p) {
