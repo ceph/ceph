@@ -7465,9 +7465,12 @@ int Client::ll_create(vinodeno_t parent, const char *name, mode_t mode, int flag
 
   if (!created) {
     r = check_permissions(in, flags, uid, gid);
-    if (r < 0)
+    if (r < 0) {
+      if (*fhp) {
+	_release_fh(*fhp);
+      }
       goto out;
-
+    }
     if (*fhp == NULL) {
       r = _open(in, flags, mode, fhp);
       if (r < 0)
