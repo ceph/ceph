@@ -1,4 +1,6 @@
 tasks:
+- install:
+- ceph:
 - thrashosds:
     chance_down: 1.0
     powercycle: true
