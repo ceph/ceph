@@ -4,18 +4,18 @@ tasks:
 - kclient:
 - pexec:
     clients:
-      - cd /tmp/cephtest
+      - cd $TESTDIR
       - wget http://ceph.com/qa/mdtest-1.8.4.tgz
       - tar xvfz mdtest-1.8.4.tgz
-      - rm /tmp/cephtest/mdtest-1.8.4.tgz
+      - rm $TESTDIR/mdtest-1.8.4.tgz
       - cd mdtest-1.8.4
       - make
-      - ln -s /tmp/cephtest/mnt.* /tmp/cephtest/gmnt
+      - ln -s $TESTDIR/mnt.* $TESTDIR/gmnt
 - ssh_keys:
 - mpi:
-    exec: /tmp/cephtest/mdtest-1.8.4/mdtest -d /tmp/cephtest/gmnt -I 20 -z 5 -b 2 -R
+    exec: $TESTDIR/mdtest-1.8.4/mdtest -d $TESTDIR/gmnt -I 20 -z 5 -b 2 -R
 - pexec:
     all:
-      - rm -f /tmp/cephtest/gmnt
-      - rm -rf /tmp/cephtest/mdtest-1.8.4
-      - rm -rf /tmp/cephtest/._mdtest-1.8.4
+      - rm -f $TESTDIR/gmnt
+      - rm -rf $TESTDIR/mdtest-1.8.4
+      - rm -rf $TESTDIR/._mdtest-1.8.4
