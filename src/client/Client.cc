@@ -1278,6 +1278,7 @@ int Client::make_request(MetaRequest *request,
     }
 
     // open a session?
+    MetaSession *session = NULL;
     if (!have_open_session(mds)) {
       Cond cond;
 
@@ -1293,7 +1294,7 @@ int Client::make_request(MetaRequest *request,
 	}
       }
       
-      MetaSession *session = _get_or_open_mds_session(mds);
+      session = _get_or_open_mds_session(mds);
 
       // wait
       if (session->state == MetaSession::STATE_OPENING) {
@@ -1306,10 +1307,12 @@ int Client::make_request(MetaRequest *request,
 
       if (!have_open_session(mds))
 	continue;
+    } else {
+      session = mds_sessions[mds];
     }
 
     // send request.
-    send_request(request, mds);
+    send_request(request, session);
 
     // wait for signal
     ldout(cct, 20) << "awaiting reply|forward|kick on " << &cond << dendl;
@@ -1493,7 +1496,7 @@ void Client::_closed_mds_session(MetaSession *s)
   s->state = MetaSession::STATE_CLOSED;
   mount_cond.Signal();
   remove_session_caps(s);
-  kick_requests(s->mds_num, true);
+  kick_requests(s, true);
   mds_sessions.erase(s->mds_num);
   delete s;
 }
@@ -1551,11 +1554,12 @@ void Client::handle_client_session(MClientSession *m)
   m->put();
 }
 
-void Client::send_request(MetaRequest *request, int mds)
+void Client::send_request(MetaRequest *request, MetaSession *session)
 {
   // make the request
+  int mds = session->mds_num;
   ldout(cct, 10) << "send_request rebuilding request " << request->get_tid()
-	   << " for mds." << mds << dendl;
+		 << " for mds." << mds << dendl;
   MClientRequest *r = build_client_request(request);
   if (request->dentry)
     r->set_dentry_wanted();
@@ -1575,10 +1579,10 @@ void Client::send_request(MetaRequest *request, int mds)
   if (request->inode && request->inode->caps.count(mds))
     request->sent_on_mseq = request->inode->caps[mds]->mseq;
 
-  mds_sessions[mds]->requests.push_back(&request->item);
+  session->requests.push_back(&request->item);
 
   ldout(cct, 10) << "send_request " << *r << " to mds." << mds << dendl;
-  messenger->send_message(r, mdsmap->get_inst(mds));
+  messenger->send_message(r, session->inst);
 }
 
 MClientRequest* Client::build_client_request(MetaRequest *request)
@@ -1839,7 +1843,7 @@ void Client::handle_mds_map(MMDSMap* m)
 
     if (newstate >= MDSMap::STATE_ACTIVE) {
       if (oldstate < MDSMap::STATE_ACTIVE) {
-	kick_requests(p->first, false);
+	kick_requests(p->second, false);
 	kick_flushing_caps(p->first);
 	signal_cond_list(p->second->waiting_for_open);
       }
@@ -1922,31 +1926,31 @@ void Client::send_reconnect(int mds)
 }
 
 
-void Client::kick_requests(int mds, bool signal)
+void Client::kick_requests(MetaSession *session, bool signal)
 {
-  ldout(cct, 10) << "kick_requests for mds." << mds << dendl;
+  ldout(cct, 10) << "kick_requests for mds." << session->mds_num << dendl;
 
   for (map<tid_t, MetaRequest*>::iterator p = mds_requests.begin();
        p != mds_requests.end();
        ++p) 
-    if (p->second->mds == mds) {
+    if (p->second->mds == session->mds_num) {
       if (signal) {
 	p->second->kick = true;
 	p->second->caller_cond->Signal();
       }
       else {
-	send_request(p->second, mds);
+	send_request(p->second, session);
       }
     }
 }
 
 void Client::resend_unsafe_requests(int mds_num)
 {
-  MetaSession *mds = mds_sessions[mds_num];
-  for (xlist<MetaRequest*>::iterator iter = mds->unsafe_requests.begin();
+  MetaSession *session = mds_sessions[mds_num];
+  for (xlist<MetaRequest*>::iterator iter = session->unsafe_requests.begin();
        !iter.end();
        ++iter)
-    send_request(*iter, mds_num);
+    send_request(*iter, session);
 }
 
 
