@@ -519,7 +519,7 @@ void old_rstat_t::generate_test_instances(list<old_rstat_t*>& ls)
  */
 void session_info_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 3, bl);
   ::encode(inst, bl);
   ::encode(completed_requests, bl);
   ::encode(prealloc_inos, bl);   // hacky, see below.
@@ -529,9 +529,18 @@ void session_info_t::encode(bufferlist& bl) const
 
 void session_info_t::decode(bufferlist::iterator& p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, p);
   ::decode(inst, p);
-  ::decode(completed_requests, p);
+  if (struct_v == 2) {
+    set<tid_t> s;
+    ::decode(completed_requests, p);
+    while (!s.empty()) {
+      completed_requests[*s.begin()] = inodeno_t();
+      s.erase(s.begin());
+    }
+  } else {
+    ::decode(completed_requests, p);
+  }
   ::decode(prealloc_inos, p);
   ::decode(used_inos, p);
   prealloc_inos.insert(used_inos);
@@ -544,10 +553,14 @@ void session_info_t::dump(Formatter *f) const
   f->dump_stream("inst") << inst;
 
   f->open_array_section("completed_requests");
-  for (set<tid_t>::const_iterator p = completed_requests.begin();
+  for (map<tid_t,inodeno_t>::const_iterator p = completed_requests.begin();
        p != completed_requests.end();
-       ++p)
-    f->dump_unsigned("tid", *p);
+       ++p) {
+    f->open_object_section("request");
+    f->dump_unsigned("tid", p->first);
+    f->dump_stream("created_ino") << p->second;
+    f->close_section();
+  }
   f->close_section();
 
   f->open_array_section("prealloc_inos");
@@ -578,8 +591,8 @@ void session_info_t::generate_test_instances(list<session_info_t*>& ls)
   ls.push_back(new session_info_t);
   ls.push_back(new session_info_t);
   ls.back()->inst = entity_inst_t(entity_name_t::MDS(12), entity_addr_t());
-  ls.back()->completed_requests.insert(234);
-  ls.back()->completed_requests.insert(237);
+  ls.back()->completed_requests.insert(make_pair(234, inodeno_t(111222)));
+  ls.back()->completed_requests.insert(make_pair(237, inodeno_t(222333)));
   ls.back()->prealloc_inos.insert(333, 12);
   ls.back()->prealloc_inos.insert(377, 112);
   // we can't add used inos; they're cleared on decode

@@ -36,6 +36,7 @@ struct MetaRequest {
   Dentry *dentry; //associated with path
   Dentry *old_dentry; //associated with path2
 
+  int regetattr_mask;          // getattr mask if i need to re-stat after a traceless reply
  
   utime_t  sent_stamp;
   int      mds;                // who i am asking
@@ -81,6 +82,7 @@ struct MetaRequest {
     other_inode_drop(0), other_inode_unless(0),
     inode(NULL), old_inode(NULL), other_inode(NULL),
     dentry(NULL), old_dentry(NULL),
+    regetattr_mask(0),
     mds(-1), resend_mds(-1), send_to_auth(false), sent_on_mseq(0),
     num_fwd(0), retry_attempt(0),
     ref(1), reply(0), 

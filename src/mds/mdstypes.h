@@ -484,7 +484,7 @@ inline ostream& operator<<(ostream& out, const old_rstat_t& o) {
 
 struct session_info_t {
   entity_inst_t inst;
-  set<tid_t> completed_requests;
+  map<tid_t,inodeno_t> completed_requests;
   interval_set<inodeno_t> prealloc_inos;   // preallocated, ready to use.
   interval_set<inodeno_t> used_inos;       // journaling use
 
