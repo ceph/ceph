@@ -7,6 +7,17 @@
 
 #include "common/Formatter.h"
 
+const char *MetaSession::get_state_name() const
+{
+  switch (state) {
+  case STATE_NEW: return "new";
+  case STATE_OPENING: return "opening";
+  case STATE_OPEN: return "open";
+  case STATE_CLOSING: return "closing";
+  default: return "unknown";
+  }
+}
+
 void MetaSession::dump(Formatter *f) const
 {
   f->dump_int("mds", mds_num);
@@ -17,7 +28,7 @@ void MetaSession::dump(Formatter *f) const
   f->dump_stream("last_cap_renew_request") << last_cap_renew_request;
   f->dump_unsigned("cap_renew_seq", cap_renew_seq);
   f->dump_int("num_caps", num_caps);
-  f->dump_int("closing", (int)closing);
+  f->dump_string("state", get_state_name());
   f->dump_int("was_stale", (int)was_stale);
 }
 
