@@ -4581,6 +4581,7 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
 	}
 	rm->opt.set_pool_override(info.pgid.pool());
       }
+      rm->opt.set_replica();
       
       info.stats = m->pg_stats;
       if (!rm->opt.empty()) {
