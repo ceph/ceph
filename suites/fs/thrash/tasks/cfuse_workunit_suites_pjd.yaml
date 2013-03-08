@@ -1,0 +1,6 @@
+tasks:
+- ceph-fuse:
+- workunit:
+    clients:
+      all:
+        - suites/pjd.sh
