@@ -217,7 +217,7 @@ class Client : public Dispatcher {
   Context *tick_event;
   utime_t last_cap_renew;
   void renew_caps();
-  void renew_caps(int s);
+  void renew_caps(MetaSession *session);
   void flush_cap_releases();
 public:
   void tick();
@@ -229,10 +229,12 @@ public:
 
   // mds sessions
   map<int, MetaSession*> mds_sessions;  // mds -> push seq
-  map<int, list<Cond*> > waiting_for_session;
   list<Cond*> waiting_for_mdsmap;
 
+  bool have_open_session(int mds);
   void got_mds_push(int mds);
+  MetaSession *_get_or_open_mds_session(int mds);
+  MetaSession *_open_mds_session(int mds);
   void _closed_mds_session(int mds, MetaSession *s);
   void handle_client_session(MClientSession *m);
   void send_reconnect(int mds);
