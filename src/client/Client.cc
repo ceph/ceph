@@ -1147,6 +1147,78 @@ void Client::dump_mds_requests(Formatter *f)
   }
 }
 
+int Client::verify_reply_trace(int r,
+			       MetaRequest *request, MClientReply *reply,
+			       Inode **ptarget, bool *pcreated,
+			       int uid, int gid)
+{
+  // check whether this request actually did the create, and set created flag
+  bufferlist extra_bl;
+  inodeno_t created_ino;
+  bool got_created_ino = false;
+  hash_map<vinodeno_t, Inode*>::iterator p;
+
+  extra_bl.claim(reply->get_extra_bl());
+  if (extra_bl.length() >= 8) {
+    // if the extra bufferlist has a buffer, we assume its the created inode
+    // and that this request to create succeeded in actually creating
+    // the inode (won the race with other create requests)
+    ::decode(created_ino, extra_bl);
+    got_created_ino = true;
+    ldout(cct, 10) << "make_request created ino " << created_ino << dendl;
+  }
+
+  if (pcreated)
+    *pcreated = got_created_ino;
+
+  if (request->target) {
+    *ptarget = request->target;
+    ldout(cct, 20) << "make_request target is " << *request->target << dendl;
+  } else {
+    if (got_created_ino && (p = inode_map.find(vinodeno_t(created_ino, CEPH_NOSNAP))) != inode_map.end()) {
+      (*ptarget) = p->second;
+      ldout(cct, 20) << "make_request created, target is " << **ptarget << dendl;
+    } else {
+      // we got a traceless reply, and need to look up what we just
+      // created.  for now, do this by name.  someday, do this by the
+      // ino... which we know!  FIXME.
+      Inode *target = 0;  // ptarget may be NULL
+      if (request->dentry) {
+	// rename is special: we handle old_dentry unlink explicitly in insert_dentry_inode(), so
+	// we need to compensate and do the same here.
+	if (request->old_dentry) {
+	  unlink(request->old_dentry, false);
+	}
+	ldout(cct, 10) << "make_request got traceless reply, looking up #"
+		       << request->dentry->dir->parent_inode->ino << "/" << request->dentry->name
+		       << " got_ino " << got_created_ino
+		       << " ino " << created_ino
+		       << dendl;
+	r = _do_lookup(request->dentry->dir->parent_inode, request->dentry->name, &target);
+      } else {
+	ldout(cct, 10) << "make_request got traceless reply, forcing getattr on #"
+		       << request->inode->ino << dendl;
+	r = _getattr(request->inode, request->regetattr_mask, uid, gid, true);
+	target = request->inode;
+      }
+      if (r >= 0) {
+	if (ptarget)
+	  *ptarget = target;
+
+	// verify ino returned in reply and trace_dist are the same
+	if (got_created_ino &&
+	    created_ino.val != target->ino.val) {
+	  ldout(cct, 5) << "create got ino " << created_ino << " but then failed on lookup; EINTR?" << dendl;
+	  r = -EINTR;
+	}
+      }
+    }
+  }
+
+  return r;
+}
+
+
 /**
  * make a request
  *
@@ -1271,70 +1343,8 @@ int Client::make_request(MetaRequest *request,
   ldout(cct, 20) << "sendrecv kickback on tid " << tid << " " << request->dispatch_cond << dendl;
   request->dispatch_cond = 0;
   
-  if (r >= 0 && ptarget) {
-    // check whether this request actually did the create, and set created flag
-    bufferlist extra_bl;
-    inodeno_t created_ino;
-    bool got_created_ino = false;
-    hash_map<vinodeno_t, Inode*>::iterator p;
-
-    extra_bl.claim(reply->get_extra_bl());
-    if (extra_bl.length() >= 8) {
-      // if the extra bufferlist has a buffer, we assume its the created inode
-      // and that this request to create succeeded in actually creating
-      // the inode (won the race with other create requests)
-      ::decode(created_ino, extra_bl);
-      got_created_ino = true;
-      ldout(cct, 10) << "make_request created ino " << created_ino << dendl;
-    }
-
-    if (pcreated)
-      *pcreated = got_created_ino;
-
-    if (request->target) {
-      *ptarget = request->target;
-      ldout(cct, 20) << "make_request target is " << *request->target << dendl;
-    } else {
-      if (got_created_ino && (p = inode_map.find(vinodeno_t(created_ino, CEPH_NOSNAP))) != inode_map.end()) {
-	(*ptarget) = p->second;
-	ldout(cct, 20) << "make_request created, target is " << **ptarget << dendl;
-      } else {
-	// we got a traceless reply, and need to look up what we just
-	// created.  for now, do this by name.  someday, do this by the
-	// ino... which we know!  FIXME.
-	Inode *target = 0;  // ptarget may be NULL
-	if (request->dentry) {
-	  // rename is special: we handle old_dentry unlink explicitly in insert_dentry_inode(), so
-	  // we need to compensate and do the same here.
-	  if (request->old_dentry) {
-	    unlink(request->old_dentry, false);
-	  }
-	  ldout(cct, 10) << "make_request got traceless reply, looking up #"
-			 << request->dentry->dir->parent_inode->ino << "/" << request->dentry->name
-			 << " got_ino " << got_created_ino
-			 << " ino " << created_ino
-			 << dendl;
-	  r = _do_lookup(request->dentry->dir->parent_inode, request->dentry->name, &target);
-	} else {
-	  ldout(cct, 10) << "make_request got traceless reply, forcing getattr on #"
-			 << request->inode->ino << dendl;
-	  r = _getattr(request->inode, request->regetattr_mask, uid, gid, true);
-	  target = request->inode;
-	}
-	if (r >= 0) {
-	  if (ptarget)
-	    *ptarget = target;
-
-	  // verify ino returned in reply and trace_dist are the same
-	  if (got_created_ino &&
-	      created_ino.val != target->ino.val) {
-	    ldout(cct, 5) << "create got ino " << created_ino << " but then failed on lookup; EINTR?" << dendl;
-	    r = -EINTR;
-	  }
-	}
-      }
-    }
-  }
+  if (r >= 0 && ptarget)
+    r = verify_reply_trace(r, request, reply, ptarget, pcreated, uid, gid);
 
   if (pdirbl)
     pdirbl->claim(reply->get_extra_bl());
