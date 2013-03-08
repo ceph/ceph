@@ -407,6 +407,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   m_filestore_max_sync_interval(g_conf->filestore_max_sync_interval),
   m_filestore_min_sync_interval(g_conf->filestore_min_sync_interval),
   m_filestore_fail_eio(g_conf->filestore_fail_eio),
+  m_filestore_replica_fadvise(g_conf->filestore_replica_fadvise),
   do_update(do_update),
   m_journal_dio(g_conf->journal_dio),
   m_journal_aio(g_conf->journal_aio),
@@ -2929,7 +2930,7 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
       local_flush = true;
     }
 #endif
-    if (local_flush && replica) {
+    if (local_flush && replica && m_filestore_replica_fadvise) {
       int fa_r = posix_fadvise(fd, offset, len, POSIX_FADV_DONTNEED);
       if (fa_r) {
 	dout(0) << "posic_fadvise failed: " << cpp_strerror(fa_r) << dendl;
@@ -3281,7 +3282,7 @@ void FileStore::flusher_entry()
 	if (!stop && ep == sync_epoch) {
 	  dout(10) << "flusher_entry flushing+closing " << fd << " ep " << ep << dendl;
 	  ::sync_file_range(fd, off, len, SYNC_FILE_RANGE_WRITE);
-	  if (replica) {
+	  if (replica && m_filestore_replica_fadvise) {
 	    int fa_r = posix_fadvise(fd, off, len, POSIX_FADV_DONTNEED);
 	    if (fa_r) {
 	      dout(0) << "posic_fadvise failed: " << cpp_strerror(fa_r) << dendl;
@@ -4774,6 +4775,7 @@ const char** FileStore::get_tracked_conf_keys() const
     "filestore_dump_file",
     "filestore_kill_at",
     "filestore_fail_eio",
+    "filestore_replica_fadvise",
     NULL
   };
   return KEYS;
@@ -4792,7 +4794,8 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
       changed.count("filestore_flusher_max_fds") ||
       changed.count("filestore_flush_min") ||
       changed.count("filestore_kill_at") ||
-      changed.count("filestore_fail_eio")) {
+      changed.count("filestore_fail_eio") ||
+      changed.count("filestore_replica_fadvise")) {
     Mutex::Locker l(lock);
     m_filestore_min_sync_interval = conf->filestore_min_sync_interval;
     m_filestore_max_sync_interval = conf->filestore_max_sync_interval;
@@ -4806,6 +4809,7 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
     m_filestore_sync_flush = conf->filestore_sync_flush;
     m_filestore_kill_at.set(conf->filestore_kill_at);
     m_filestore_fail_eio = conf->filestore_fail_eio;
+    m_filestore_replica_fadvise = conf->filestore_replica_fadvise;
   }
   if (changed.count("filestore_commit_timeout")) {
     Mutex::Locker l(sync_entry_timeo_lock);
