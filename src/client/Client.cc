@@ -1838,8 +1838,11 @@ void Client::handle_mds_map(MMDSMap* m)
       continue;  // no change
     
     if (newstate == MDSMap::STATE_RECONNECT &&
-	mds_sessions.count(p->first))
-      send_reconnect(p->first);
+	mds_sessions.count(p->first)) {
+      MetaSession *session = mds_sessions[p->first];
+      session->inst = mdsmap->get_inst(p->first);
+      send_reconnect(session);
+    }
 
     if (newstate >= MDSMap::STATE_ACTIVE) {
       if (oldstate < MDSMap::STATE_ACTIVE) {
@@ -1862,13 +1865,12 @@ void Client::handle_mds_map(MMDSMap* m)
   monclient->sub_got("mdsmap", mdsmap->get_epoch());
 }
 
-void Client::send_reconnect(int mds)
+void Client::send_reconnect(MetaSession *session)
 {
+  int mds = session->mds_num;
   ldout(cct, 10) << "send_reconnect to mds." << mds << dendl;
 
   MClientReconnect *m = new MClientReconnect;
-
-  assert(mds_sessions.count(mds));
 
   // i have an open session.
   hash_set<inodeno_t> did_snaprealm;
@@ -1915,14 +1917,14 @@ void Client::send_reconnect(int mds)
   }
   
   // reset my cap seq number
-  mds_sessions[mds]->seq = 0;
+  session->seq = 0;
   
   //connect to the mds' offload targets
   connect_mds_targets(mds);
   //make sure unsafe requests get saved
-  resend_unsafe_requests(mds);
+  resend_unsafe_requests(session);
 
-  messenger->send_message(m, mdsmap->get_inst(mds));
+  messenger->send_message(m, session->inst);
 }
 
 
@@ -1944,9 +1946,8 @@ void Client::kick_requests(MetaSession *session, bool signal)
     }
 }
 
-void Client::resend_unsafe_requests(int mds_num)
+void Client::resend_unsafe_requests(MetaSession *session)
 {
-  MetaSession *session = mds_sessions[mds_num];
   for (xlist<MetaRequest*>::iterator iter = session->unsafe_requests.begin();
        !iter.end();
        ++iter)
