@@ -413,7 +413,7 @@ protected:
 
   // file caps
   void check_cap_issue(Inode *in, Cap *cap, unsigned issued);
-  void add_update_cap(Inode *in, int mds, uint64_t cap_id,
+  void add_update_cap(Inode *in, MetaSession *session, uint64_t cap_id,
 		      unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
 		      int flags);
   void remove_cap(Cap *cap);
@@ -422,7 +422,7 @@ protected:
   void mark_caps_dirty(Inode *in, int caps);
   int mark_caps_flushing(Inode *in);
   void flush_caps();
-  void flush_caps(Inode *in, int mds);
+  void flush_caps(Inode *in, MetaSession *session);
   void kick_flushing_caps(int mds);
   int get_caps(Inode *in, int need, int want, int *have, loff_t endoff);
 
@@ -438,7 +438,8 @@ protected:
   void handle_cap_flushsnap_ack(Inode *in, class MClientCaps *m);
   void handle_cap_grant(Inode *in, int mds, Cap *cap, class MClientCaps *m);
   void cap_delay_requeue(Inode *in);
-  void send_cap(Inode *in, int mds, Cap *cap, int used, int want, int retain, int flush);
+  void send_cap(Inode *in, MetaSession *session, Cap *cap,
+		int used, int want, int retain, int flush);
   void check_caps(Inode *in, bool is_delayed);
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);
@@ -479,17 +480,17 @@ protected:
   // metadata cache
   void update_dir_dist(Inode *in, DirStat *st);
 
-  void insert_readdir_results(MetaRequest *request, int mds, Inode *diri);
-  Inode* insert_trace(MetaRequest *request, int mds);
+  void insert_readdir_results(MetaRequest *request, MetaSession *session, Inode *diri);
+  Inode* insert_trace(MetaRequest *request, MetaSession *session);
   void update_inode_file_bits(Inode *in,
 			      uint64_t truncate_seq, uint64_t truncate_size, uint64_t size,
 			      uint64_t time_warp_seq, utime_t ctime, utime_t mtime, utime_t atime,
 			      int issued);
-  Inode *add_update_inode(InodeStat *st, utime_t ttl, int mds);
+  Inode *add_update_inode(InodeStat *st, utime_t ttl, MetaSession *session);
   Dentry *insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
-			      Inode *in, utime_t from, int mds, bool set_offset,
+			      Inode *in, utime_t from, MetaSession *session, bool set_offset,
 			      Dentry *old_dentry = NULL);
-  void update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, int mds);
+  void update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, MetaSession *session);
 
 
   // ----------------------
