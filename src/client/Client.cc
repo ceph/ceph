@@ -1110,7 +1110,9 @@ void Client::connect_mds_targets(int mds)
   for (set<int>::const_iterator q = info.export_targets.begin();
        q != info.export_targets.end();
        q++) {
-    if (mds_sessions.count(*q) == 0 && waiting_for_session.count(*q) == 0) {
+    if (mds_sessions.count(*q) == 0 &&
+	waiting_for_session.count(*q) == 0 &&
+	mdsmap->is_clientreplay_or_active_or_stopping(*q)) {
       ldout(cct, 10) << "check_mds_sessions opening mds." << mds
 	       << " export target mds." << *q << dendl;
       messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN),
@@ -1275,7 +1277,7 @@ int Client::make_request(MetaRequest *request,
   while (1) {
     // choose mds
     int mds = choose_target_mds(request);
-    if (mds < 0 || !mdsmap->is_active(mds)) {
+    if (mds < 0 || !mdsmap->is_active_or_stopping(mds)) {
       Cond cond;
       ldout(cct, 10) << " target mds." << mds << " not active, waiting for new mdsmap" << dendl;
       waiting_for_mdsmap.push_back(&cond);
@@ -1287,12 +1289,12 @@ int Client::make_request(MetaRequest *request,
     if (mds_sessions.count(mds) == 0) {
       Cond cond;
 
-      if (!mdsmap->is_active(mds)) {
+      if (!mdsmap->is_active_or_stopping(mds)) {
 	ldout(cct, 10) << "no address for mds." << mds << ", waiting for new mdsmap" << dendl;
 	waiting_for_mdsmap.push_back(&cond);
 	cond.Wait(client_lock);
 
-	if (!mdsmap->is_active(mds)) {
+	if (!mdsmap->is_active_or_stopping(mds)) {
 	  ldout(cct, 10) << "hmm, still have no address for mds." << mds << ", trying a random mds" << dendl;
 	  request->resend_mds = mdsmap->get_random_up_mds();
 	  continue;
@@ -2025,7 +2027,8 @@ void Client::release_lease(Inode *in, Dentry *dn, int mask)
   assert(dn);
 
   // dentry?
-  if (dn->lease_mds >= 0 && now < dn->lease_ttl && mdsmap->is_up(dn->lease_mds)) {
+  if (dn->lease_mds >= 0 && now < dn->lease_ttl &&
+      mdsmap->is_clientreplay_or_active_or_stopping(dn->lease_mds)) {
     ldout(cct, 10) << "release_lease mds." << dn->lease_mds << " mask " << mask
 	     << " on " << in->ino << " " << dn->name << dendl;
     messenger->send_message(new MClientLease(CEPH_MDS_LEASE_RELEASE, dn->lease_seq, 
@@ -3778,7 +3781,7 @@ void Client::flush_cap_releases()
   for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
        p++) {
-    if (p->second->release && mdsmap->is_up(p->first)) {
+    if (p->second->release && mdsmap->is_clientreplay_or_active_or_stopping(p->first)) {
       messenger->send_message(p->second->release, mdsmap->get_inst(p->first));
       p->second->release = 0;
     }
@@ -3836,7 +3839,8 @@ void Client::renew_caps()
   }
 }
 
-void Client::renew_caps(const int mds) {
+void Client::renew_caps(const int mds)
+{
   ldout(cct, 10) << "renew_caps mds." << mds << dendl;
   MetaSession *session = mds_sessions[mds];
   session->last_cap_renew_request = ceph_clock_now(cct);
