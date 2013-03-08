@@ -2010,27 +2010,6 @@ void Client::handle_lease(MClientLease *m)
 }
 
 
-void Client::release_lease(Inode *in, Dentry *dn, int mask)
-{
-  utime_t now = ceph_clock_now(cct);
-
-  assert(dn);
-
-  // dentry?
-  if (dn->lease_mds >= 0 && now < dn->lease_ttl &&
-      mdsmap->is_clientreplay_or_active_or_stopping(dn->lease_mds)) {
-    ldout(cct, 10) << "release_lease mds." << dn->lease_mds << " mask " << mask
-	     << " on " << in->ino << " " << dn->name << dendl;
-    messenger->send_message(new MClientLease(CEPH_MDS_LEASE_RELEASE, dn->lease_seq, 
-					     CEPH_LOCK_DN,
-					     in->ino, in->snapid, in->snapid, dn->name),
-			    mdsmap->get_inst(dn->lease_mds));
-  }
-}
-
-
-
-
 void Client::put_inode(Inode *in, int n)
 {
   ldout(cct, 10) << "put_inode on " << *in << dendl;
