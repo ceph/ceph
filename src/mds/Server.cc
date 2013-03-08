@@ -871,7 +871,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 
   // note successful request in session map?
   if (req->may_write() && mdr->session && reply->get_result() == 0)
-    mdr->session->add_completed_request(mdr->reqid.tid);
+    mdr->session->add_completed_request(mdr->reqid.tid, mdr->alloc_ino);
 
   // give any preallocated inos to the session
   apply_allocated_inos(mdr);
@@ -1096,7 +1096,8 @@ void Server::handle_client_request(MClientRequest *req)
        req->get_op() != CEPH_MDS_OP_OPEN && 
        req->get_op() != CEPH_MDS_OP_CREATE)) {
     assert(session);
-    if (session->have_completed_request(req->get_reqid().tid)) {
+    inodeno_t created;
+    if (session->have_completed_request(req->get_reqid().tid, &created)) {
       dout(5) << "already completed " << req->get_reqid() << dendl;
       mds->messenger->send_message(new MClientReply(req, 0), req->get_connection());
 
@@ -1209,7 +1210,7 @@ void Server::dispatch_client_request(MDRequest *mdr)
     // funky.
   case CEPH_MDS_OP_CREATE:
     if (req->get_retry_attempt() &&
-	mdr->session->have_completed_request(req->get_reqid().tid))
+	mdr->session->have_completed_request(req->get_reqid().tid, NULL))
       handle_client_open(mdr);  // already created.. just open
     else
       handle_client_openc(mdr);
@@ -2521,7 +2522,7 @@ void Server::handle_client_open(MDRequest *mdr)
   // O_TRUNC
   if ((flags & O_TRUNC) &&
       !(req->get_retry_attempt() &&
-	mdr->session->have_completed_request(req->get_reqid().tid))) {
+	mdr->session->have_completed_request(req->get_reqid().tid, NULL))) {
     assert(cur->is_auth());
 
     wrlocks.insert(&cur->filelock);
