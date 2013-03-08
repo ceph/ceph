@@ -14,6 +14,7 @@ const char *MetaSession::get_state_name() const
   case STATE_OPENING: return "opening";
   case STATE_OPEN: return "open";
   case STATE_CLOSING: return "closing";
+  case STATE_CLOSED: return "closed";
   default: return "unknown";
   }
 }
