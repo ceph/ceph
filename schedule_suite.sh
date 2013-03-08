@@ -6,10 +6,11 @@ kernel=$3
 email=$4
 flavor=$5
 teuthology_branch=$6
-template=$7
+mtype=$7
+template=$8
 
 if [ -z "$email" ]; then
-    echo "usage: $0 <suite> <ceph branch> <kernel branch> <email> [flavor] [teuthology-branch] [template]"
+    echo "usage: $0 <suite> <ceph branch> <kernel branch> <email> [flavor] [teuthology-branch] [machinetype] [template]"
     echo "  flavor can be 'basic', 'gcov', 'notcmalloc'."
     exit 1
 fi
@@ -49,6 +50,8 @@ if [ -z "$teuthology_branch" ]; then
 fi
 echo "teuthology branch $teuthology_branch"
 
+[ -z "$mtype" ] && mtype="plana"
+
 ## always include this
 fn="/tmp/schedule.suite.$$"
 trap "rm $fn" EXIT
@@ -57,6 +60,7 @@ kernel:
   kdb: true
   sha1: $KERNEL_SHA1
 nuke-on-error: true
+machine_type: $mtype
 tasks:
 - chef:
 - clock:
