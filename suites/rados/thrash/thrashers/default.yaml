@@ -6,3 +6,5 @@ tasks:
     - objects unfound and apparently lost
 - thrashosds:
     timeout: 1200
+    chance_pgnum_grow: 1
+    chance_pgpnum_fix: 1
