@@ -840,7 +840,8 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
       mdr->cap_releases.erase(tracedn->get_dir()->get_inode()->vino());
 
     set_trace_dist(mdr->session, reply, tracei, tracedn, mdr->snapid,
-		   mdr->client_request->get_dentry_wanted(), req->may_write());
+		   mdr->client_request->get_dentry_wanted(),
+		   mdr);
   }
 
   reply->set_extra_bl(mdr->reply_extra_bl);
@@ -870,7 +871,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 
   // note successful request in session map?
   if (req->may_write() && mdr->session && reply->get_result() == 0)
-    mdr->session->add_completed_request(mdr->reqid.tid);
+    mdr->session->add_completed_request(mdr->reqid.tid, mdr->alloc_ino);
 
   // give any preallocated inos to the session
   apply_allocated_inos(mdr);
@@ -922,7 +923,8 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
       } else {
 	// include metadata in reply
 	set_trace_dist(session, reply, tracei, tracedn,
-	               snapid, dentry_wanted, req->may_write());
+	               snapid, dentry_wanted,
+		       mdr);
       }
     }
 
@@ -980,10 +982,11 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
 			    CInode *in, CDentry *dn,
 			    snapid_t snapid,
 			    int dentry_wanted,
-			    bool modified)
+			    MDRequest *mdr)
 {
   // skip doing this for debugging purposes?
-  if (modified && g_conf->mds_inject_traceless_reply_probability &&
+  if (g_conf->mds_inject_traceless_reply_probability &&
+      mdr->ls && !mdr->o_trunc &&
       (rand() % 10000 < g_conf->mds_inject_traceless_reply_probability * 10000.0)) {
     dout(5) << "deliberately skipping trace for " << *reply << dendl;
     return;
@@ -1093,9 +1096,16 @@ void Server::handle_client_request(MClientRequest *req)
        req->get_op() != CEPH_MDS_OP_OPEN && 
        req->get_op() != CEPH_MDS_OP_CREATE)) {
     assert(session);
-    if (session->have_completed_request(req->get_reqid().tid)) {
+    inodeno_t created;
+    if (session->have_completed_request(req->get_reqid().tid, &created)) {
       dout(5) << "already completed " << req->get_reqid() << dendl;
-      mds->messenger->send_message(new MClientReply(req, 0), req->get_connection());
+      MClientReply *reply = new MClientReply(req, 0);
+      if (created != inodeno_t()) {
+	bufferlist extra;
+	::encode(created, extra);
+	reply->set_extra_bl(extra);
+      }
+      mds->messenger->send_message(reply, req->get_connection());
 
       if (req->is_replay())
 	mds->queue_one_replay();
@@ -1206,7 +1216,7 @@ void Server::dispatch_client_request(MDRequest *mdr)
     // funky.
   case CEPH_MDS_OP_CREATE:
     if (req->get_retry_attempt() &&
-	mdr->session->have_completed_request(req->get_reqid().tid))
+	mdr->session->have_completed_request(req->get_reqid().tid, NULL))
       handle_client_open(mdr);  // already created.. just open
     else
       handle_client_openc(mdr);
@@ -2518,7 +2528,7 @@ void Server::handle_client_open(MDRequest *mdr)
   // O_TRUNC
   if ((flags & O_TRUNC) &&
       !(req->get_retry_attempt() &&
-	mdr->session->have_completed_request(req->get_reqid().tid))) {
+	mdr->session->have_completed_request(req->get_reqid().tid, NULL))) {
     assert(cur->is_auth());
 
     wrlocks.insert(&cur->filelock);
@@ -3346,6 +3356,8 @@ void Server::do_open_truncate(MDRequest *mdr, int cmode)
   LogSegment *ls = mds->mdlog->get_current_segment();
   ls->open_files.push_back(&in->item_open_file);
   
+  mdr->o_trunc = true;
+
   journal_and_reply(mdr, in, 0, le, new C_MDS_inode_update_finish(mds, mdr, in, old_size > 0,
 								  changed_ranges));
 }
@@ -7235,6 +7247,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   le->metablob.add_table_transaction(TABLE_SNAP, stid);
   mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, diri);
+
   // journal the snaprealm changes
   mdlog->submit_entry(le, new C_MDS_mksnap_finish(mds, mdr, diri, info));
   mdlog->flush();

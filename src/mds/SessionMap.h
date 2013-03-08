@@ -168,17 +168,22 @@ private:
 
 
 public:
-  void add_completed_request(tid_t t) {
-    info.completed_requests.insert(t);
+  void add_completed_request(tid_t t, inodeno_t created) {
+    info.completed_requests[t] = created;
   }
   void trim_completed_requests(tid_t mintid) {
     // trim
     while (!info.completed_requests.empty() && 
-	   (mintid == 0 || *info.completed_requests.begin() < mintid))
+	   (mintid == 0 || info.completed_requests.begin()->first < mintid))
       info.completed_requests.erase(info.completed_requests.begin());
   }
-  bool have_completed_request(tid_t tid) const {
-    return info.completed_requests.count(tid);
+  bool have_completed_request(tid_t tid, inodeno_t *pcreated) const {
+    map<tid_t,inodeno_t>::const_iterator p = info.completed_requests.find(tid);
+    if (p == info.completed_requests.end())
+      return false;
+    if (pcreated)
+      *pcreated = p->second;
+    return true;
   }
 
 
@@ -349,14 +354,7 @@ public:
   }
   bool have_completed_request(metareqid_t rid) {
     Session *session = get_session(rid.name);
-    return session && session->have_completed_request(rid.tid);
-  }
-  void add_completed_request(metareqid_t rid, tid_t tid=0) {
-    Session *session = get_session(rid.name);
-    assert(session);
-    session->add_completed_request(rid.tid);
-    if (tid)
-      session->trim_completed_requests(tid);
+    return session && session->have_completed_request(rid.tid, NULL);
   }
   void trim_completed_requests(entity_name_t c, tid_t tid) {
     Session *session = get_session(c);

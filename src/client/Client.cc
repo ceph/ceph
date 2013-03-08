@@ -903,6 +903,14 @@ Inode* Client::insert_trace(MetaRequest *request, int mds)
   bufferlist::iterator p = reply->get_trace_bl().begin();
   if (p.end()) {
     ldout(cct, 10) << "insert_trace -- no trace" << dendl;
+
+    if (request->dentry &&
+	request->dentry->dir &&
+	(request->dentry->dir->parent_inode->flags & I_COMPLETE)) {
+      ldout(cct, 10) << " clearing I_COMPLETE on " << *request->dentry->dir->parent_inode << dendl;
+      request->dentry->dir->parent_inode->flags &= ~I_COMPLETE;
+      request->dentry->dir->release_count++;
+    }
     return NULL;
   }
 
@@ -1139,12 +1147,106 @@ void Client::dump_mds_requests(Formatter *f)
   }
 }
 
+int Client::verify_reply_trace(int r,
+			       MetaRequest *request, MClientReply *reply,
+			       Inode **ptarget, bool *pcreated,
+			       int uid, int gid)
+{
+  // check whether this request actually did the create, and set created flag
+  bufferlist extra_bl;
+  inodeno_t created_ino;
+  bool got_created_ino = false;
+  hash_map<vinodeno_t, Inode*>::iterator p;
+
+  extra_bl.claim(reply->get_extra_bl());
+  if (extra_bl.length() >= 8) {
+    // if the extra bufferlist has a buffer, we assume its the created inode
+    // and that this request to create succeeded in actually creating
+    // the inode (won the race with other create requests)
+    ::decode(created_ino, extra_bl);
+    got_created_ino = true;
+    ldout(cct, 10) << "make_request created ino " << created_ino << dendl;
+  }
+
+  if (pcreated)
+    *pcreated = got_created_ino;
+
+  if (request->target) {
+    *ptarget = request->target;
+    ldout(cct, 20) << "make_request target is " << *request->target << dendl;
+  } else {
+    if (got_created_ino && (p = inode_map.find(vinodeno_t(created_ino, CEPH_NOSNAP))) != inode_map.end()) {
+      (*ptarget) = p->second;
+      ldout(cct, 20) << "make_request created, target is " << **ptarget << dendl;
+    } else {
+      // we got a traceless reply, and need to look up what we just
+      // created.  for now, do this by name.  someday, do this by the
+      // ino... which we know!  FIXME.
+      Inode *target = 0;  // ptarget may be NULL
+      if (request->dentry) {
+	// rename is special: we handle old_dentry unlink explicitly in insert_dentry_inode(), so
+	// we need to compensate and do the same here.
+	if (request->old_dentry) {
+	  unlink(request->old_dentry, false);
+	}
+	ldout(cct, 10) << "make_request got traceless reply, looking up #"
+		       << request->dentry->dir->parent_inode->ino << "/" << request->dentry->name
+		       << " got_ino " << got_created_ino
+		       << " ino " << created_ino
+		       << dendl;
+	r = _do_lookup(request->dentry->dir->parent_inode, request->dentry->name, &target);
+      } else {
+	ldout(cct, 10) << "make_request got traceless reply, forcing getattr on #"
+		       << request->inode->ino << dendl;
+	r = _getattr(request->inode, request->regetattr_mask, uid, gid, true);
+	target = request->inode;
+      }
+      if (r >= 0) {
+	if (ptarget)
+	  *ptarget = target;
+
+	// verify ino returned in reply and trace_dist are the same
+	if (got_created_ino &&
+	    created_ino.val != target->ino.val) {
+	  ldout(cct, 5) << "create got ino " << created_ino << " but then failed on lookup; EINTR?" << dendl;
+	  r = -EINTR;
+	}
+      }
+    }
+  }
+
+  return r;
+}
+
+
+/**
+ * make a request
+ *
+ * Blocking helper to make an MDS request.
+ *
+ * If the ptarget flag is set, behavior changes slightly: the caller
+ * expects to get a pointer to the inode we are creating or operating
+ * on.  As a result, we will follow up any traceless mutation reply
+ * with a getattr or lookup to transparently handle a traceless reply
+ * from the MDS (as when the MDS restarts and the client has to replay
+ * a request).
+ *
+ * @param request the MetaRequest to execute
+ * @param uid uid to execute as
+ * @param gid gid to execute as
+ * @param ptarget [optional] address to store a pointer to the target inode we want to create or operate on
+ * @param pcreated [optional; required if ptarget] where to store a bool of whether our create atomically created a file
+ * @param use_mds [optional] prefer a specific mds (-1 for default)
+ * @param pdirbl [optional; disallowed if ptarget] where to pass extra reply payload to the caller
+ */
 int Client::make_request(MetaRequest *request, 
 			 int uid, int gid, 
-			 Inode **ptarget,
+			 Inode **ptarget, bool *pcreated,
 			 int use_mds,
 			 bufferlist *pdirbl)
 {
+  int r = 0;
+
   // assign a unique tid
   tid_t tid = ++last_tid;
   request->set_tid(tid);
@@ -1169,7 +1271,7 @@ int Client::make_request(MetaRequest *request,
   // set up wait cond
   Cond cond;
   request->caller_cond = &cond;
-  
+
   while (1) {
     // choose mds
     int mds = choose_target_mds(request);
@@ -1195,7 +1297,7 @@ int Client::make_request(MetaRequest *request,
 	  request->resend_mds = mdsmap->get_random_up_mds();
 	  continue;
 	}
-      }	
+      }
       
       if (waiting_for_session.count(mds) == 0) {
 	ldout(cct, 10) << "opening session to mds." << mds << dendl;
@@ -1233,8 +1335,7 @@ int Client::make_request(MetaRequest *request,
   // got it!
   MClientReply *reply = request->reply;
   request->reply = NULL;
-  if (ptarget)
-    *ptarget = request->target;
+  r = reply->get_result();
 
   // kick dispatcher (we've got it!)
   assert(request->dispatch_cond);
@@ -1242,6 +1343,12 @@ int Client::make_request(MetaRequest *request,
   ldout(cct, 20) << "sendrecv kickback on tid " << tid << " " << request->dispatch_cond << dendl;
   request->dispatch_cond = 0;
   
+  if (r >= 0 && ptarget)
+    r = verify_reply_trace(r, request, reply, ptarget, pcreated, uid, gid);
+
+  if (pdirbl)
+    pdirbl->claim(reply->get_extra_bl());
+
   // -- log times --
   utime_t lat = ceph_clock_now(cct);
   lat -= request->sent_stamp;
@@ -1251,9 +1358,6 @@ int Client::make_request(MetaRequest *request,
 
   request->put();
 
-  int r = reply->get_result();
-  if (pdirbl)
-    pdirbl->claim(reply->get_extra_bl());
   reply->put();
   return r;
 }
@@ -2497,16 +2601,18 @@ public:
   }
 };
 
-void Client::_async_invalidate(Inode *in, int64_t off, int64_t len, bool keep_caps) {
+void Client::_async_invalidate(Inode *in, int64_t off, int64_t len, bool keep_caps)
+{
+  ldout(cct, 10) << "_async_invalidate " << off << "~" << len << (keep_caps ? " keep_caps" : "") << dendl;
+  ino_invalidate_cb(ino_invalidate_cb_handle, in->vino(), off, len);
 
-    ino_invalidate_cb(ino_invalidate_cb_handle, in->vino(), off, len);
-
-    client_lock.Lock();
-    if (!keep_caps) {
-      put_cap_ref(in, CEPH_CAP_FILE_CACHE);
-    }
-    put_inode(in);
-    client_lock.Unlock();
+  client_lock.Lock();
+  if (!keep_caps) {
+    put_cap_ref(in, CEPH_CAP_FILE_CACHE);
+  }
+  put_inode(in);
+  client_lock.Unlock();
+  ldout(cct, 10) << "_async_invalidate " << off << "~" << len << (keep_caps ? " keep_caps" : "") << " done" << dendl;
 }
 
 void Client::_schedule_invalidate_callback(Inode *in, int64_t off, int64_t len, bool keep_caps) {
@@ -2546,6 +2652,7 @@ void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len, bool k
 
 void Client::_release(Inode *in)
 {
+  ldout(cct, 20) << "_release " << *in << dendl;
   if (in->cap_refs[CEPH_CAP_FILE_CACHE]) {
     _invalidate_inode_cache(in, false);
   }
@@ -3464,7 +3571,7 @@ int Client::check_permissions(Inode *in, int flags, int uid, int gid)
     }
   }
   // check permissions before doing anything else
-  if (!in->check_mode(uid, gid, sgids, sgid_count, flags)) {
+  if (uid != 0 && !in->check_mode(uid, gid, sgids, sgid_count, flags)) {
     return -EACCES;
   }
   return 0;
@@ -3743,7 +3850,7 @@ void Client::renew_caps(const int mds) {
 // ===============================================================
 // high level (POSIXy) interface
 
-int Client::_do_lookup(Inode *dir, const char *name, Inode **target)
+int Client::_do_lookup(Inode *dir, const string& name, Inode **target)
 {
   int op = dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_LOOKUPSNAP : CEPH_MDS_OP_LOOKUP;
   MetaRequest *req = new MetaRequest(op);
@@ -3753,10 +3860,10 @@ int Client::_do_lookup(Inode *dir, const char *name, Inode **target)
   req->set_filepath(path);
   req->inode = dir;
   req->head.args.getattr.mask = 0;
-  ldout(cct, 10) << "_lookup on " << path << dendl;
+  ldout(cct, 10) << "_do_lookup on " << path << dendl;
 
   int r = make_request(req, 0, 0, target);
-  ldout(cct, 10) << "_lookup res is " << r << dendl;
+  ldout(cct, 10) << "_do_lookup res is " << r << dendl;
   return r;
 }
 
@@ -3835,7 +3942,7 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
     }
   }
 
-  r = _do_lookup(dir, dname.c_str(), target);
+  r = _do_lookup(dir, dname, target);
 
  done:
   if (r < 0)
@@ -4169,12 +4276,12 @@ int Client::readlink(const char *relpath, char *buf, loff_t size)
 
 // inode stuff
 
-int Client::_getattr(Inode *in, int mask, int uid, int gid)
+int Client::_getattr(Inode *in, int mask, int uid, int gid, bool force)
 {
   bool yes = in->caps_issued_mask(mask);
 
   ldout(cct, 10) << "_getattr mask " << ccap_string(mask) << " issued=" << yes << dendl;
-  if (yes)
+  if (yes && !force)
     return 0;
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
@@ -4189,7 +4296,7 @@ int Client::_getattr(Inode *in, int mask, int uid, int gid)
   return res;
 }
 
-int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid)
+int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid, Inode **inp)
 {
   int issued = in->caps_issued();
 
@@ -4291,7 +4398,9 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid)
   }
   req->head.args.setattr.mask = mask;
 
-  int res = make_request(req, uid, gid);
+  req->regetattr_mask = mask;
+
+  int res = make_request(req, uid, gid, inp);
   ldout(cct, 10) << "_setattr result=" << res << dendl;
   return res;
 }
@@ -4754,7 +4863,7 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
   
   
   bufferlist dirbl;
-  int res = make_request(req, -1, -1, 0, -1, &dirbl);
+  int res = make_request(req, -1, -1, NULL, NULL, -1, &dirbl);
   
   if (res == -EAGAIN) {
     ldout(cct, 10) << "_readdir_get_frag got EAGAIN, retrying" << dendl;
@@ -5266,7 +5375,7 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name)
   path2.push_dentry(string(f));
   req->set_filepath2(path2);
 
-  int r = make_request(req, -1, -1, NULL, rand() % mdsmap->get_num_in_mds());
+  int r = make_request(req, -1, -1, NULL, NULL, rand() % mdsmap->get_num_in_mds());
   ldout(cct, 3) << "lookup_hash exit(" << ino << ", #" << dirino << "/" << name << ") = " << r << dendl;
   return r;
 }
@@ -5280,7 +5389,7 @@ int Client::lookup_ino(inodeno_t ino)
   filepath path(ino);
   req->set_filepath(path);
 
-  int r = make_request(req, -1, -1, NULL, rand() % mdsmap->get_num_in_mds());
+  int r = make_request(req, -1, -1, NULL, NULL, rand() % mdsmap->get_num_in_mds());
   ldout(cct, 3) << "lookup_ino exit(" << ino << ") = " << r << dendl;
   return r;
 }
@@ -6435,9 +6544,12 @@ int Client::ll_setattr(vinodeno_t vino, struct stat *attr, int mask, int uid, in
   tout(cct) << mask << std::endl;
 
   Inode *in = _ll_get_inode(vino);
-  int res = _setattr(in, attr, mask, uid, gid);
-  if (res == 0)
+  Inode *target = in;
+  int res = _setattr(in, attr, mask, uid, gid, &target);
+  if (res == 0) {
+    assert(in == target);
     fill_stat(in, attr);
+  }
   ldout(cct, 3) << "ll_setattr " << vino << " = " << res << dendl;
   return res;
 }
@@ -6771,7 +6883,7 @@ int Client::ll_readlink(vinodeno_t vino, const char **value, int uid, int gid)
   return r;
 }
 
-int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int uid, int gid) 
+int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int uid, int gid, Inode **inp)
 { 
   ldout(cct, 3) << "_mknod(" << dir->ino << " " << name << ", 0" << oct << mode << dec << ", " << rdev
 	  << ", uid " << uid << ", gid " << gid << ")" << dendl;
@@ -6799,7 +6911,7 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int ui
   if (res < 0)
     goto fail;
 
-  res = make_request(req, uid, gid);
+  res = make_request(req, uid, gid, inp);
 
   trim_cache();
 
@@ -6822,11 +6934,9 @@ int Client::ll_mknod(vinodeno_t parent, const char *name, mode_t mode, dev_t rde
   tout(cct) << rdev << std::endl;
 
   Inode *diri = _ll_get_inode(parent);
-
-  int r = _mknod(diri, name, mode, rdev, uid, gid);
+  Inode *in = 0;
+  int r = _mknod(diri, name, mode, rdev, uid, gid, &in);
   if (r == 0) {
-    string dname(name);
-    Inode *in = diri->dir->dentries[dname]->inode;
     fill_stat(in, attr);
     _ll_get(in);
   }
@@ -6877,39 +6987,14 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
-  bufferlist extra_bl;
-  inodeno_t created_ino;
-  bool got_created_ino = false;
-
   int res = get_or_create(dir, name, &req->dentry);
   if (res < 0)
     goto fail;
 
-  res = make_request(req, uid, gid, 0, -1, &extra_bl);
+  res = make_request(req, uid, gid, inp, created);
   if (res < 0) {
     goto reply_error;
   }
-
-  // check whether this request actually did the create, and set created flag
-  if (extra_bl.length() >= 8) {
-    // if the extra bufferlist has a buffer, we assume its the created inode
-    // and that this request to create succeeded in actually creating
-    // the inode (won the race with other create requests)
-    ::decode(created_ino, extra_bl);
-    got_created_ino = true;
-  }
-
-  if (created)
-    *created = got_created_ino;
-
-  res = _lookup(dir, name, inp);
-  if (res < 0) {
-    goto reply_error;
-  }
-
-  // verify ino returned in reply and trace_dist are the same
-  if (got_created_ino)
-    assert(created_ino.val == (*inp)->ino.val);
 
   (*inp)->get_open_ref(cmode);
   *fhp = _create_fh(*inp, flags, cmode);
@@ -6930,7 +7015,8 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
 }
 
 
-int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid)
+int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid,
+		   Inode **inp)
 {
   ldout(cct, 3) << "_mkdir(" << dir->ino << " " << name << ", 0" << oct << mode << dec
 	  << ", uid " << uid << ", gid " << gid << ")" << dendl;
@@ -6957,7 +7043,7 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid)
     goto fail;
   
   ldout(cct, 10) << "_mkdir: making request" << dendl;
-  res = make_request(req, uid, gid);
+  res = make_request(req, uid, gid, inp);
   ldout(cct, 10) << "_mkdir result is " << res << dendl;
 
   trim_cache();
@@ -6981,10 +7067,9 @@ int Client::ll_mkdir(vinodeno_t parent, const char *name, mode_t mode, struct st
 
   Inode *diri = _ll_get_inode(parent);
 
-  int r = _mkdir(diri, name, mode, uid, gid);
+  Inode *in = 0;
+  int r = _mkdir(diri, name, mode, uid, gid, &in);
   if (r == 0) {
-    string dname(name);
-    Inode *in = diri->dir->dentries[dname]->inode;
     fill_stat(in, attr);
     _ll_get(in);
   }
@@ -6994,7 +7079,8 @@ int Client::ll_mkdir(vinodeno_t parent, const char *name, mode_t mode, struct st
   return r;
 }
 
-int Client::_symlink(Inode *dir, const char *name, const char *target, int uid, int gid)
+int Client::_symlink(Inode *dir, const char *name, const char *target, int uid, int gid,
+		     Inode **inp)
 {
   ldout(cct, 3) << "_symlink(" << dir->ino << " " << name << ", " << target
 	  << ", uid " << uid << ", gid " << gid << ")" << dendl;
@@ -7021,7 +7107,7 @@ int Client::_symlink(Inode *dir, const char *name, const char *target, int uid, 
   if (res < 0)
     goto fail;
 
-  res = make_request(req, uid, gid);
+  res = make_request(req, uid, gid, inp);
 
   trim_cache();
   ldout(cct, 3) << "_symlink(\"" << path << "\", \"" << target << "\") = " << res << dendl;
@@ -7043,10 +7129,9 @@ int Client::ll_symlink(vinodeno_t parent, const char *name, const char *value, s
   tout(cct) << value << std::endl;
 
   Inode *diri = _ll_get_inode(parent);
-  int r = _symlink(diri, name, value, uid, gid);
+  Inode *in = 0;
+  int r = _symlink(diri, name, value, uid, gid, &in);
   if (r == 0) {
-    string dname(name);
-    Inode *in = diri->dir->dentries[dname]->inode;
     fill_stat(in, attr);
     _ll_get(in);
   }
@@ -7211,14 +7296,15 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
 
   req->inode = todir;
 
-  res = make_request(req, uid, gid);
+  Inode *target;
+  res = make_request(req, uid, gid, &target);
 
   ldout(cct, 10) << "rename result is " << res << dendl;
 
   // renamed item from our cache
 
   trim_cache();
-  ldout(cct, 3) << "rename(" << from << ", " << to << ") = " << res << dendl;
+  ldout(cct, 3) << "_rename(" << from << ", " << to << ") = " << res << dendl;
   return res;
 
  fail:
@@ -7242,7 +7328,7 @@ int Client::ll_rename(vinodeno_t parent, const char *name, vinodeno_t newparent,
   return _rename(fromdiri, name, todiri, newname, uid, gid);
 }
 
-int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid) 
+int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid, Inode **inp)
 {
   ldout(cct, 3) << "_link(" << in->ino << " to " << dir->ino << " " << newname
 	  << " uid " << uid << " gid " << gid << ")" << dendl;
@@ -7269,7 +7355,7 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid)
   if (res < 0)
     goto fail;
   
-  res = make_request(req, uid, gid);
+  res = make_request(req, uid, gid, inp);
   ldout(cct, 10) << "link result is " << res << dendl;
 
   trim_cache();
@@ -7293,7 +7379,7 @@ int Client::ll_link(vinodeno_t vino, vinodeno_t newparent, const char *newname, 
   Inode *old = _ll_get_inode(vino);
   Inode *diri = _ll_get_inode(newparent);
 
-  int r = _link(old, diri, newname, uid, gid);
+  int r = _link(old, diri, newname, uid, gid, &old);
   if (r == 0) {
     Inode *in = _ll_get_inode(vino);
     fill_stat(in, attr);
@@ -7399,11 +7485,15 @@ int Client::ll_create(vinodeno_t parent, const char *name, mode_t mode, int flag
   fill_stat(in, attr);
   _ll_get(in);
 
+  ldout(cct, 20) << "ll_create created = " << created << dendl;
   if (!created) {
     r = check_permissions(in, flags, uid, gid);
-    if (r < 0)
+    if (r < 0) {
+      if (*fhp) {
+	_release_fh(*fhp);
+      }
       goto out;
-
+    }
     if (*fhp == NULL) {
       r = _open(in, flags, mode, fhp);
       if (r < 0)
