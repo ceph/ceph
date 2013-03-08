@@ -42,15 +42,17 @@ For general object store configuration, refer to the following:
 To optimize the performance of your cluster, refer to the following:
 
 .. toctree::
+	:maxdepth: 2
 
-	General Settings <general-config-ref>
-	Monitor Settings <mon-config-ref>
+	Network Settings <network-config-ref>
 	Auth Settings <auth-config-ref>
+	Monitor Settings <mon-config-ref>
 	OSD Settings <osd-config-ref>
 	Filestore Settings <filestore-config-ref>
 	Journal Settings <journal-ref>
 	Log / Debug Settings <log-and-debug-ref>
 	Messaging Settings <ms-ref>	
+	General Settings <general-config-ref>
 
    
 .. raw:: html
