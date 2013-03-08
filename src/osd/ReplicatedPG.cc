@@ -1108,7 +1108,7 @@ void ReplicatedPG::log_subop_stats(OpRequestRef op, int tag_inb, int tag_lat)
 void ReplicatedPG::do_sub_op(OpRequestRef op)
 {
   MOSDSubOp *m = static_cast<MOSDSubOp*>(op->request);
-  assert(require_same_or_newer_map(m->map_epoch));
+  assert(have_same_or_newer_map(m->map_epoch));
   assert(m->get_header().type == MSG_OSD_SUBOP);
   dout(15) << "do_sub_op " << *op->request << dendl;
 
