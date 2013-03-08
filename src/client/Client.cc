@@ -1488,14 +1488,14 @@ void Client::_close_mds_session(MetaSession *s)
 			  s->inst);
 }
 
-void Client::_closed_mds_session(int mds, MetaSession *s)
+void Client::_closed_mds_session(MetaSession *s)
 {
+  s->state = MetaSession::STATE_CLOSED;
   mount_cond.Signal();
-  if (s)
-    remove_session_caps(s);
-  kick_requests(mds, true);
+  remove_session_caps(s);
+  kick_requests(s->mds_num, true);
+  mds_sessions.erase(s->mds_num);
   delete s;
-  mds_sessions.erase(mds);
 }
 
 void Client::handle_client_session(MClientSession *m) 
@@ -1522,7 +1522,7 @@ void Client::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_CLOSE:
-    _closed_mds_session(from, session);
+    _closed_mds_session(session);
     break;
 
   case CEPH_SESSION_RENEWCAPS:
@@ -7769,7 +7769,7 @@ void Client::ms_handle_remote_reset(Connection *con)
       if (mds >= 0) {
 	if (s->state == MetaSession::STATE_CLOSING) {
 	  ldout(cct, 1) << "reset from mds we were closing; we'll call that closed" << dendl;
-	  _closed_mds_session(mds, s);
+	  _closed_mds_session(s);
 	}
       }
     }
