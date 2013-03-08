@@ -33,6 +33,7 @@ struct MetaSession {
     STATE_OPENING,
     STATE_OPEN,
     STATE_CLOSING,
+    STATE_CLOSED,
   } state;
 
   list<Cond*> waiting_for_open;
