@@ -4484,6 +4484,8 @@ bool OSD::require_same_or_newer_map(OpRequestRef op, epoch_t epoch)
   Message *m = op->request;
   dout(15) << "require_same_or_newer_map " << epoch << " (i am " << osdmap->get_epoch() << ") " << m << dendl;
 
+  assert(osd_lock.is_locked());
+
   // do they have a newer map?
   if (epoch > osdmap->get_epoch()) {
     dout(7) << "waiting for newer map epoch " << epoch << " > my " << osdmap->get_epoch() << " with " << m << dendl;
@@ -4501,12 +4503,8 @@ bool OSD::require_same_or_newer_map(OpRequestRef op, epoch_t epoch)
     int from = m->get_source().num();
     if (!osdmap->have_inst(from) ||
 	osdmap->get_cluster_addr(from) != m->get_source_inst().addr) {
-      if (m->get_connection()->has_feature(CEPH_FEATURE_OSD_HBMSGS)) {
-	dout(10) << "from dead osd." << from << ", dropping, sharing map" << dendl;
-	send_incremental_map(epoch, m->get_connection());
-      } else {
-	dout(10) << "from dead osd." << from << ", but it lacks OSD_HBMSGS feature, not sharing map" << dendl;
-      }
+      dout(10) << "from dead osd." << from << ", marking down" << dendl;
+      cluster_messenger->mark_down(m->get_connection());
       return false;
     }
   }
