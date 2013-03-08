@@ -1480,6 +1480,14 @@ MetaSession *Client::_open_mds_session(int mds)
   return session;
 }
 
+void Client::_close_mds_session(MetaSession *s)
+{
+  ldout(cct, 2) << "_close_mds_session mds." << s->mds_num << " seq " << s->seq << dendl;
+  s->state = MetaSession::STATE_CLOSING;
+  messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, s->seq),
+			  s->inst);
+}
+
 void Client::_closed_mds_session(int mds, MetaSession *s)
 {
   mount_cond.Signal();
@@ -1505,12 +1513,10 @@ void Client::handle_client_session(MClientSession *m)
   switch (m->get_op()) {
   case CEPH_SESSION_OPEN:
     renew_caps(session);
+    session->state = MetaSession::STATE_OPEN;
     if (unmounting) {
-      session->state = MetaSession::STATE_CLOSING;
-      messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, session->seq),
-                              mdsmap->get_inst(from));
+      _close_mds_session(session);
     } else {
-      session->state = MetaSession::STATE_OPEN;
       connect_mds_targets(from);
     }
     break;
@@ -1961,9 +1967,10 @@ void Client::got_mds_push(int mds)
 
   s->seq++;
   ldout(cct, 10) << " mds." << mds << " seq now " << s->seq << dendl;
-  if (s->state == MetaSession::STATE_CLOSING)
+  if (s->state == MetaSession::STATE_CLOSING) {
     messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, s->seq),
 			    s->inst);
+  }
 }
 
 void Client::handle_lease(MClientLease *m)
@@ -3732,12 +3739,8 @@ void Client::unmount()
   for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
        ++p) {
-    ldout(cct, 2) << "sending client_session close to mds." << p->first
-	    << " seq " << p->second->seq << dendl;
     if (p->second->state != MetaSession::STATE_CLOSING) {
-      p->second->state = MetaSession::STATE_CLOSING;
-      messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, p->second->seq),
-                              mdsmap->get_inst(p->first));
+      _close_mds_session(p->second);
     }
   }
 
