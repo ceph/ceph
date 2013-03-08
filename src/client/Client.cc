@@ -2294,7 +2294,7 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
     in->requested_max_size = in->wanted_max_size;
     ldout(cct, 15) << "auth cap, setting max_size = " << in->requested_max_size << dendl;
   }
-  messenger->send_message(m, mdsmap->get_inst(session->mds_num));
+  messenger->send_message(m, session->inst);
 }
 
 
@@ -2478,9 +2478,8 @@ void Client::flush_snaps(Inode *in, bool all_again, CapSnap *again)
 
   // pick auth mds
   assert(in->auth_cap);
-  int mds = in->auth_cap->session->inst.name.num();
+  MetaSession *session = in->auth_cap->session;
   int mseq = in->auth_cap->mseq;
-  assert(mds >= 0);
 
   for (map<snapid_t,CapSnap*>::iterator p = in->cap_snaps.begin(); p != in->cap_snaps.end(); p++) {
     CapSnap *capsnap = p->second;
@@ -2494,7 +2493,7 @@ void Client::flush_snaps(Inode *in, bool all_again, CapSnap *again)
 	continue;
     }
 
-    ldout(cct, 10) << "flush_snaps mds." << mds
+    ldout(cct, 10) << "flush_snaps mds." << session->mds_num
 	     << " follows " << p->first
 	     << " size " << capsnap->size
 	     << " mtime " << capsnap->mtime
@@ -2528,7 +2527,7 @@ void Client::flush_snaps(Inode *in, bool all_again, CapSnap *again)
     capsnap->atime.encode_timeval(&m->head.atime);
     m->head.time_warp_seq = capsnap->time_warp_seq;
 
-    messenger->send_message(m, mdsmap->get_inst(mds));
+    messenger->send_message(m, session->inst);
   }
 }
 
@@ -3752,7 +3751,7 @@ void Client::flush_cap_releases()
        p != mds_sessions.end();
        p++) {
     if (p->second->release && mdsmap->is_clientreplay_or_active_or_stopping(p->first)) {
-      messenger->send_message(p->second->release, mdsmap->get_inst(p->first));
+      messenger->send_message(p->second->release, p->second->inst);
       p->second->release = 0;
     }
   }
