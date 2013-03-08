@@ -67,35 +67,45 @@ included under the processes that will receive the configuration as follows:
 
 ``[global]``
 
-:Description: Settings under ``[global]`` affect all daemons in a Ceph cluster. 
+:Description: Settings under ``[global]`` affect all daemons in a Ceph cluster.
 :Example: ``auth supported = cephx``
 
 ``[osd]``
 
-:Description: Settings under ``[osd]`` affect all ``ceph-osd`` daemons in the cluster.
+:Description: Settings under ``[osd]`` affect all ``ceph-osd`` daemons in 
+              the cluster.
+
 :Example: ``osd journal size = 1000``
 
 ``[mon]``
 
-:Description: Settings under ``[mon]`` affect all ``ceph-mon`` daemons in the cluster.
+:Description: Settings under ``[mon]`` affect all ``ceph-mon`` daemons in 
+              the cluster.
+
 :Example: ``mon addr = 10.0.0.101:6789``
 
 
 ``[mds]``
 
-:Description: Settings under ``[mds]`` affect all ``ceph-mds`` daemons in the cluster. 
+:Description: Settings under ``[mds]`` affect all ``ceph-mds`` daemons in 
+              the cluster. 
+
 :Example: ``host = myserver01``
 
 ``[client]``
 
-:Description: Settings under ``[client]`` affect all clients (e.g., mounted CephFS filesystems, mounted block devices, etc.)
+:Description: Settings under ``[client]`` affect all clients (e.g., mounted 
+              CephFS filesystems, mounted block devices, etc.)
+
 :Example: ``log file = /var/log/ceph/radosgw.log``
 
 Global settings affect all instances of all daemon in the cluster. Use the ``[global]`` 
 setting for values that are common for all daemons in the cluster. You can override each
 ``[global]`` setting by:
 
-#. Changing the setting in a particular process type (*e.g.,* ``[osd]``, ``[mon]``, ``[mds]`` ).
+#. Changing the setting in a particular process type 
+   (*e.g.,* ``[osd]``, ``[mon]``, ``[mds]`` ).
+
 #. Changing the setting in a particular process (*e.g.,* ``[osd.1]`` )
 
 Overriding a global setting affects all child processes, except those that
@@ -137,6 +147,7 @@ alphanumeric for monitors and metadata servers.
 	[mds.b]
 		# settings affect mds.b only.
 
+
 .. _ceph-metavariables:
 
 Metavariables
@@ -153,20 +164,26 @@ Ceph supports the following metavariables:
 
 ``$cluster``
 
-:Description: Expands to the cluster name. Useful when running multiple clusters on the same hardware.
+:Description: Expands to the cluster name. Useful when running multiple 
+              clusters on the same hardware.
+
 :Example: ``/etc/ceph/$cluster.keyring``
 :Default: ``ceph``
 
 
 ``$type``
 
-:Description: Expands to one of ``mds``, ``osd``, or ``mon``, depending on the type of the current daemon.
+:Description: Expands to one of ``mds``, ``osd``, or ``mon``, depending on the 
+              type of the current daemon.
+
 :Example: ``/var/lib/ceph/$type``
 
 
 ``$id``
 
-:Description: Expands to the daemon identifier. For ``osd.0``, this would be ``0``; for ``mds.a``, it would be ``a``.
+:Description: Expands to the daemon identifier. For ``osd.0``, this would be 
+              ``0``; for ``mds.a``, it would be ``a``.
+
 :Example: ``/var/lib/ceph/$type/$cluster-$id``
 
 
@@ -179,6 +196,7 @@ Ceph supports the following metavariables:
 
 :Description: Expands to ``$type.$id``.
 :Example: ``/var/run/ceph/$cluster-$name.asok``
+
 
 .. _ceph-conf-common-settings:
 
@@ -214,64 +232,15 @@ minimal settings for  each instance of a daemon. For example:
    **ONLY** for ``mkcephfs`` and manual deployment. It **MUST NOT**
    be used with ``chef`` or ``ceph-deploy``.
 
-.. _Hardware Recommendations: ../../../install/hardware-recommendations
 
 .. _ceph-network-config:
 
 Networks
 ========
 
-Monitors listen on port 6789 by default, while metadata servers and OSDs listen
-on the first available port beginning at 6800. Ensure that you open port 6789 on
-hosts that run a monitor daemon, and open one port beginning at port 6800 for
-each OSD or metadata server that runs on the host. Ports are host-specific, so
-you don't need to open any more ports than the number of daemons running on
-that host, other than potentially a few spares. You may consider opening a few
-additional ports in case a daemon fails and restarts without letting go of the
-port such that the restarted daemon binds to a new port. If you set up separate
-public and cluster networks, you may need to make entries for each network.
-For example:: 
+See the `Network Configuration Reference`_ for a detailed discussion about
+configuring a network for use with Ceph.
 
-	iptables -A INPUT -m multiport -p tcp -s {ip-address}/{netmask} --dports 6789,6800:6810 -j ACCEPT
-
-
-In our `hardware recommendations`_ section, we recommend having at least two NIC
-cards, because Ceph can support two networks: a public (front-side) network, and
-a cluster (back-side) network. Ceph functions just fine with a public network
-only. You only need to specify the public and cluster network settings if you
-use both public and cluster networks.
-
-There are several reasons to consider operating two separate networks. First,
-OSDs handle data replication for the clients. When OSDs replicate data more than
-once, the network load between OSDs easily dwarfs the network load between
-clients and the Ceph cluster. This can introduce latency and create a
-performance problem. Second, while most people are generally civil, a very tiny
-segment of the population likes to engage in what's known as a Denial of Service
-(DoS) attack. When traffic between OSDs gets disrupted, placement groups may no
-longer reflect an ``active + clean`` state, which may prevent users from reading
-and writing data. A great way to defeat this type of attack is to maintain a
-completely separate cluster network that doesn't connect directly to the
-internet.
-
-To configure the networks, add the following options to the ``[global]`` section
-of your Ceph configuration file. 
-
-.. code-block:: ini
-
-	[global]
-		public network = {public-network-ip-address/netmask}
-		cluster network = {enter cluster-network-ip-address/netmask}
-	
-To configure Ceph hosts to use the networks, you should set the following options
-in the daemon instance sections of your ``ceph.conf`` file. 
-
-.. code-block:: ini
-
-	[osd.0]
-		public addr = {host-public-ip-address}
-		cluster addr = {host-cluster-ip-address}
-
-.. _hardware recommendations: ../../../install/hardware-recommendations
 
 Authentication
 ==============
@@ -379,7 +348,8 @@ use with Ceph, and mount it to the directory you just created::
 We recommend using the ``xfs`` file system or the ``btrfs`` file system when 
 running :command:mkfs. 
 
-By default, Ceph expects that you will store an OSDs journal with the following path:: 
+By default, Ceph expects that you will store an OSDs journal with the 
+following path::
 
 	/var/lib/ceph/osd/$cluster-$id/journal
 
@@ -443,12 +413,13 @@ For example::
 		debug mds log = 20
 		debug mds migrator = 20
 
-When your system is running well, choose appropriate logging levels and remove 
+When your system is running well, choose appropriate logging levels and remove
 unnecessary debugging settings to ensure your cluster runs optimally. Logging
-debug output messages is relatively slow, and a waste of resources when operating
-your cluster. 
+debug output messages is relatively slow, and a waste of resources when
+operating your cluster. 
 
-.. tip: When debug output slows down your system, the latency can hide race conditions.
+.. tip: When debug output slows down your system, the latency can hide 
+   race conditions.
 
 Each subsystem has a logging level for its output logs,  and for its logs
 in-memory. You may set different values for each of these subsystems by setting
@@ -652,3 +623,9 @@ To invoke a cluster other than the default ``ceph`` cluster, use the
 ``--cluster=clustername`` option with the ``ceph`` command. For example:: 
 
 	ceph --cluster=openstack health
+
+
+
+.. _Hardware Recommendations: ../../../install/hardware-recommendations
+.. _hardware recommendations: ../../../install/hardware-recommendations
+.. _Network Configuration Reference: ../network-config-ref
