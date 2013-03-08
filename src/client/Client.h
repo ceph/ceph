@@ -238,8 +238,8 @@ public:
   void _close_mds_session(MetaSession *s);
   void _closed_mds_session(MetaSession *s);
   void handle_client_session(MClientSession *m);
-  void send_reconnect(int mds);
-  void resend_unsafe_requests(int mds);
+  void send_reconnect(MetaSession *s);
+  void resend_unsafe_requests(MetaSession *s);
 
   // mds requests
   tid_t last_tid, last_flush_seq;
