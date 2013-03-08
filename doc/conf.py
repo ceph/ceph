@@ -1,4 +1,4 @@
-project = u'CephNStuff'
+project = u'Ceph'
 copyright = u'2010-2013, Inktank Storage, Inc. and contributors. Licensed under Creative Commons BY-SA'
 version = 'dev'
 release = 'dev'
