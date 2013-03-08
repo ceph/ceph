@@ -214,6 +214,10 @@ def install(ctx, config):
     log.info('extra packages: {packages}'.format(packages=extra_debs))
     debs = debs + extra_debs
 
+    extras = config.get('extras')
+    if extras is not None:
+        debs = ['ceph-test', 'ceph-test-dbg', 'ceph-fuse', 'ceph-fuse-dbg']
+
     # install lib deps (so we explicitly specify version), but do not
     # uninstall them, as other packages depend on them (e.g., kvm)
     debs_install = debs + [
@@ -272,6 +276,7 @@ def task(ctx, config):
                 sha1=config.get('sha1'),
                 flavor=flavor,
                 extra_packages=config.get('extra_packages', []),
+                extras=config.get('extras',None),
                 wait_for_package=ctx.config.get('wait-for-package', False),
                 )),
         ):
