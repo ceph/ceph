@@ -69,7 +69,7 @@ case "$1" in
         ;;
     reload)
 	echo "Reloading $name..."
-	start-stop-daemon --signal HUP -x $RADOSGW --oknodo
+	start-stop-daemon --stop --signal HUP -x $RADOSGW --oknodo
 	;;
     restart|force-reload)
         $0 stop
