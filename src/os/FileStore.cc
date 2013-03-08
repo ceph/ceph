@@ -4761,6 +4761,7 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
       changed.count("filestore_queue_max_bytes") ||
       changed.count("filestore_queue_committing_max_ops") ||
       changed.count("filestore_queue_committing_max_bytes") ||
+      changed.count("filestore_flusher") ||
       changed.count("filestore_flusher_max_fds") ||
       changed.count("filestore_flush_min") ||
       changed.count("filestore_kill_at") ||
