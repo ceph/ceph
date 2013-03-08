@@ -263,7 +263,7 @@ private:
       return 0;
     }
   } flusher_thread;
-  bool queue_flusher(int fd, uint64_t off, uint64_t len);
+  bool queue_flusher(int fd, uint64_t off, uint64_t len, bool replica);
 
   int open_journal();
 
@@ -372,7 +372,8 @@ public:
   int fiemap(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
 
   int _touch(coll_t cid, const hobject_t& oid);
-  int _write(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len, const bufferlist& bl);
+  int _write(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len, const bufferlist& bl,
+      bool replica = false);
   int _zero(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len);
   int _truncate(coll_t cid, const hobject_t& oid, uint64_t size);
   int _clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newoid,
