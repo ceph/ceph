@@ -4900,23 +4900,23 @@ bool PG::must_delay_request(OpRequestRef op)
 {
   switch (op->request->get_type()) {
   case CEPH_MSG_OSD_OP:
-    return !require_same_or_newer_map(
+    return !have_same_or_newer_map(
       static_cast<MOSDOp*>(op->request)->get_map_epoch());
 
   case MSG_OSD_SUBOP:
-    return !require_same_or_newer_map(
+    return !have_same_or_newer_map(
       static_cast<MOSDSubOp*>(op->request)->map_epoch);
 
   case MSG_OSD_SUBOPREPLY:
-    return !require_same_or_newer_map(
+    return !have_same_or_newer_map(
       static_cast<MOSDSubOpReply*>(op->request)->map_epoch);
 
   case MSG_OSD_PG_SCAN:
-    return !require_same_or_newer_map(
+    return !have_same_or_newer_map(
       static_cast<MOSDPGScan*>(op->request)->map_epoch);
 
   case MSG_OSD_PG_BACKFILL:
-    return !require_same_or_newer_map(
+    return !have_same_or_newer_map(
       static_cast<MOSDPGBackfill*>(op->request)->map_epoch);
   }
   assert(0);
@@ -4937,7 +4937,7 @@ void PG::take_waiters()
 void PG::handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx)
 {
   dout(10) << "handle_peering_event: " << evt->get_desc() << dendl;
-  if (!require_same_or_newer_map(evt->get_epoch_sent())) {
+  if (!have_same_or_newer_map(evt->get_epoch_sent())) {
     dout(10) << "deferring event " << evt->get_desc() << dendl;
     peering_waiters.push_back(evt);
     return;
