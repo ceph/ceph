@@ -1512,13 +1512,11 @@ void OSDMap::print_tree(ostream *out, Formatter *f) const
 	if (out)
 	  *out << "\n";
 	if (f) {
+	  f->dump_float("crush_weight", weight);
+	  f->dump_unsigned("depth", depth);
 	  f->close_section();
 	}
 	touched.insert(cur);
-      }
-      if (f) {
-	f->dump_float("crush_weight", weight);
-	f->dump_unsigned("depth", depth);
       }
       if (cur >= 0) {
 	continue;
