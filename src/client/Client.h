@@ -235,6 +235,7 @@ public:
   void got_mds_push(int mds);
   MetaSession *_get_or_open_mds_session(int mds);
   MetaSession *_open_mds_session(int mds);
+  void _close_mds_session(MetaSession *s);
   void _closed_mds_session(int mds, MetaSession *s);
   void handle_client_session(MClientSession *m);
   void send_reconnect(int mds);
