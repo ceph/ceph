@@ -407,6 +407,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   m_filestore_max_sync_interval(g_conf->filestore_max_sync_interval),
   m_filestore_min_sync_interval(g_conf->filestore_min_sync_interval),
   m_filestore_fail_eio(g_conf->filestore_fail_eio),
+  m_filestore_replica_fadvise(g_conf->filestore_replica_fadvise),
   do_update(do_update),
   m_journal_dio(g_conf->journal_dio),
   m_journal_aio(g_conf->journal_aio),
@@ -2348,10 +2349,11 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	hobject_t oid = i.get_oid();
 	uint64_t off = i.get_length();
 	uint64_t len = i.get_length();
+	bool replica = i.get_replica();
 	bufferlist bl;
 	i.get_bl(bl);
 	if (_check_replay_guard(cid, oid, spos) > 0)
-	  r = _write(cid, oid, off, len, bl);
+	  r = _write(cid, oid, off, len, bl, replica);
       }
       break;
       
@@ -2869,7 +2871,7 @@ int FileStore::_touch(coll_t cid, const hobject_t& oid)
 
 int FileStore::_write(coll_t cid, const hobject_t& oid, 
                      uint64_t offset, size_t len,
-                     const bufferlist& bl)
+                     const bufferlist& bl, bool replica)
 {
   dout(15) << "write " << cid << "/" << oid << " " << offset << "~" << len << dendl;
   int r;
@@ -2908,21 +2910,36 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
   // flush?
   {
     bool should_flush = (ssize_t)len >= m_filestore_flush_min;
+    bool local_flush = false;
+    bool async_done = false;
 #ifdef HAVE_SYNC_FILE_RANGE
     if (!should_flush ||
 	!m_filestore_flusher ||
-	!queue_flusher(fd, offset, len)) {
-      if (should_flush && m_filestore_sync_flush)
+       !(async_done = queue_flusher(fd, offset, len, replica))) {
+      if (should_flush && m_filestore_sync_flush) {
 	::sync_file_range(fd, offset, len, SYNC_FILE_RANGE_WRITE);
-      lfn_close(fd);
+	local_flush = true;
+      }
     }
+    //Both lfn_close() and possible posix_fadvise() done by flusher
+    if (async_done) fd = -1;
 #else
     // no sync_file_range; (maybe) flush inline and close.
-    if (should_flush && m_filestore_sync_flush)
+    if (should_flush && m_filestore_sync_flush) {
       ::fdatasync(fd);
-    lfn_close(fd);
+      local_flush = true;
+    }
 #endif
+    if (local_flush && replica && m_filestore_replica_fadvise) {
+      int fa_r = posix_fadvise(fd, offset, len, POSIX_FADV_DONTNEED);
+      if (fa_r) {
+	dout(0) << "posic_fadvise failed: " << cpp_strerror(fa_r) << dendl;
+      } else {
+	dout(10) << "posix_fadvise performed after local flush" << dendl;
+      }
+    }
   }
+  if (fd >= 0) lfn_close(fd);
 
  out:
   dout(10) << "write " << cid << "/" << oid << " " << offset << "~" << len << " = " << r << dendl;
@@ -3211,7 +3228,7 @@ int FileStore::_clone_range(coll_t cid, const hobject_t& oldoid, const hobject_t
 }
 
 
-bool FileStore::queue_flusher(int fd, uint64_t off, uint64_t len)
+bool FileStore::queue_flusher(int fd, uint64_t off, uint64_t len, bool replica)
 {
   bool queued;
   lock.Lock();
@@ -3220,6 +3237,7 @@ bool FileStore::queue_flusher(int fd, uint64_t off, uint64_t len)
     flusher_queue.push_back(fd);
     flusher_queue.push_back(off);
     flusher_queue.push_back(len);
+    flusher_queue.push_back(replica);
     flusher_queue_len++;
     flusher_cond.Signal();
     dout(10) << "queue_flusher ep " << sync_epoch << " fd " << fd << " " << off << "~" << len
@@ -3259,13 +3277,23 @@ void FileStore::flusher_entry()
 	q.pop_front();
 	uint64_t len = q.front();
 	q.pop_front();
+	bool replica = q.front();
+	q.pop_front();
 	if (!stop && ep == sync_epoch) {
 	  dout(10) << "flusher_entry flushing+closing " << fd << " ep " << ep << dendl;
 	  ::sync_file_range(fd, off, len, SYNC_FILE_RANGE_WRITE);
+	  if (replica && m_filestore_replica_fadvise) {
+	    int fa_r = posix_fadvise(fd, off, len, POSIX_FADV_DONTNEED);
+	    if (fa_r) {
+	      dout(0) << "posic_fadvise failed: " << cpp_strerror(fa_r) << dendl;
+	    } else {
+	      dout(10) << "posix_fadvise performed after local flush" << dendl;
+	    }
+	  }
 	} else 
 	  dout(10) << "flusher_entry JUST closing " << fd << " (stop=" << stop << ", ep=" << ep
 		   << ", sync_epoch=" << sync_epoch << ")" << dendl;
-	TEMP_FAILURE_RETRY(::close(fd));
+	lfn_close(fd);
       }
       lock.Lock();
       flusher_queue_len -= num;   // they're definitely closed, forget
@@ -4747,6 +4775,7 @@ const char** FileStore::get_tracked_conf_keys() const
     "filestore_dump_file",
     "filestore_kill_at",
     "filestore_fail_eio",
+    "filestore_replica_fadvise",
     NULL
   };
   return KEYS;
@@ -4765,7 +4794,8 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
       changed.count("filestore_flusher_max_fds") ||
       changed.count("filestore_flush_min") ||
       changed.count("filestore_kill_at") ||
-      changed.count("filestore_fail_eio")) {
+      changed.count("filestore_fail_eio") ||
+      changed.count("filestore_replica_fadvise")) {
     Mutex::Locker l(lock);
     m_filestore_min_sync_interval = conf->filestore_min_sync_interval;
     m_filestore_max_sync_interval = conf->filestore_max_sync_interval;
@@ -4779,6 +4809,7 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
     m_filestore_sync_flush = conf->filestore_sync_flush;
     m_filestore_kill_at.set(conf->filestore_kill_at);
     m_filestore_fail_eio = conf->filestore_fail_eio;
+    m_filestore_replica_fadvise = conf->filestore_replica_fadvise;
   }
   if (changed.count("filestore_commit_timeout")) {
     Mutex::Locker l(sync_entry_timeo_lock);

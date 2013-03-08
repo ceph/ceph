@@ -165,11 +165,16 @@ public:
     bool sobject_encoding;
     int64_t pool_override;
     bool use_pool_override;
+    bool replica;
 
   public:
     void set_pool_override(int64_t pool) {
       pool_override = pool;
     }
+    void set_replica() {
+      replica = true;
+    }
+    bool get_replica() { return replica; }
 
     void swap(Transaction& other) {
       std::swap(ops, other.ops);
@@ -237,12 +242,14 @@ public:
       bool sobject_encoding;
       int64_t pool_override;
       bool use_pool_override;
+      bool replica;
 
       iterator(Transaction *t)
 	: p(t->tbl.begin()),
 	  sobject_encoding(t->sobject_encoding),
 	  pool_override(t->pool_override),
-	  use_pool_override(t->use_pool_override) {}
+	  use_pool_override(t->use_pool_override),
+	  replica(t->replica) {}
 
       friend class Transaction;
 
@@ -303,6 +310,7 @@ public:
 	::decode(bits, p);
 	return bits;
       }
+      bool get_replica() { return replica; }
     };
 
     iterator begin() {
@@ -569,15 +577,15 @@ public:
     // etc.
     Transaction() :
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
-      sobject_encoding(false), pool_override(-1), use_pool_override(false) {}
+      sobject_encoding(false), pool_override(-1), use_pool_override(false), replica(false) {}
     Transaction(bufferlist::iterator &dp) :
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
-      sobject_encoding(false), pool_override(-1), use_pool_override(false) {
+      sobject_encoding(false), pool_override(-1), use_pool_override(false), replica(false) {
       decode(dp);
     }
     Transaction(bufferlist &nbl) :
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
-      sobject_encoding(false), pool_override(-1), use_pool_override(false) {
+      sobject_encoding(false), pool_override(-1), use_pool_override(false), replica(false) {
       bufferlist::iterator dp = nbl.begin();
       decode(dp); 
     }
