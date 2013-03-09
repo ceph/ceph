@@ -62,7 +62,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left, loff_t o
       ++start_remove;
     for (map<loff_t, list<Context*> >::iterator p = start_remove;
 	 p != left->waitfor_read.end(); ++p) {
-      ldout(oc->cct, 0) << "split  moving waiters at byte " << p->first << " to right bh" << dendl;
+      ldout(oc->cct, 20) << "split  moving waiters at byte " << p->first << " to right bh" << dendl;
       right->waitfor_read[p->first].swap( p->second );
       assert(p->second.empty());
     }

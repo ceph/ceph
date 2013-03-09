@@ -79,6 +79,8 @@ CephContext *common_preinit(const CephInitParameters &iparams,
     conf->set_val_or_die("pid_file", "");
     conf->set_val_or_die("admin_socket", "");
     conf->set_val_or_die("log_file", "");
+    // use less memory for logs
+    conf->set_val_or_die("log_max_recent", "500");
   }
 
   return cct;
@@ -118,4 +120,3 @@ void common_init_finish(CephContext *cct)
     lockdep_register_ceph_context(cct);
   }
 }
-
