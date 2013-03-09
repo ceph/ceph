@@ -653,3 +653,23 @@ class TestClone(object):
 
     def test_flatten_larger_order(self):
         self.check_flatten_with_order(IMG_ORDER + 2)
+
+    def test_flatten_drops_cache(self):
+        global ioctx
+        global features
+        self.rbd.clone(ioctx, IMG_NAME, 'snap1', ioctx, 'clone2',
+                       features, IMG_ORDER)
+        with Image(ioctx, 'clone2') as clone:
+            with Image(ioctx, 'clone2') as clone2:
+                # cache object non-existence
+                data = clone.read(IMG_SIZE / 2, 256)
+                clone2_data = clone2.read(IMG_SIZE / 2, 256)
+                eq(data, clone2_data)
+                clone.flatten()
+                assert_raises(ImageNotFound, clone.parent_info)
+                assert_raises(ImageNotFound, clone2.parent_info)
+                after_flatten = clone.read(IMG_SIZE / 2, 256)
+                eq(data, after_flatten)
+                after_flatten = clone2.read(IMG_SIZE / 2, 256)
+                eq(data, after_flatten)
+        self.rbd.remove(ioctx, 'clone2')
