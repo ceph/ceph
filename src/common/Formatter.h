@@ -9,8 +9,16 @@
 #include <sstream>
 #include <stdarg.h>
 #include <string>
+#include <list>
 
 namespace ceph {
+
+
+struct FormatterAttrs {
+  std::list< std::pair<std::string, std::string> > attrs;
+
+  FormatterAttrs(const char *attr, ...);
+};
 
 class Formatter {
  public:
@@ -33,6 +41,17 @@ class Formatter {
   virtual void dump_format(const char *name, const char *fmt, ...) = 0;
   virtual int get_len() const = 0;
   virtual void write_raw_data(const char *data) = 0;
+
+  /* with attrs */
+  virtual void open_array_section_with_attrs(const char *name, const FormatterAttrs& attrs) {
+    open_array_section(name);
+  }
+  virtual void open_object_section_with_attrs(const char *name, const FormatterAttrs& attrs) {
+    open_object_section(name);
+  }
+  virtual void dump_string_with_attrs(const char *name, std::string s, const FormatterAttrs& attrs) {
+    dump_string(name, s);
+  }
 };
 
 
@@ -42,7 +61,7 @@ class JSONFormatter : public Formatter {
 
   void flush(std::ostream& os);
   void reset();
-  void open_array_section(const char *name);
+  virtual void open_array_section(const char *name);
   void open_array_section_in_ns(const char *name, const char *ns);
   void open_object_section(const char *name);
   void open_object_section_in_ns(const char *name, const char *ns);
@@ -96,11 +115,16 @@ class XMLFormatter : public Formatter {
   int get_len() const;
   void write_raw_data(const char *data);
 
+  /* with attrs */
+  void open_array_section_with_attrs(const char *name, const FormatterAttrs& attrs);
+  void open_object_section_with_attrs(const char *name, const FormatterAttrs& attrs);
+  void dump_string_with_attrs(const char *name, std::string s, const FormatterAttrs& attrs);
  private:
-  void open_section_in_ns(const char *name, const char *ns);
+  void open_section_in_ns(const char *name, const char *ns, const FormatterAttrs *attrs);
   void finish_pending_string();
   void print_spaces();
   static std::string escape_xml_str(const char *str);
+  void get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str);
 
   std::stringstream m_ss, m_pending_string;
   std::deque<std::string> m_sections;
