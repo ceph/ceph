@@ -594,8 +594,8 @@ void ObjectCacher::bh_read(BufferHead *bh)
   mark_rx(bh);
 
   // finisher
-  C_ReadFinish *onfinish = new C_ReadFinish(this, bh->ob->oloc.pool,
-                                            bh->ob->get_soid(), bh->start(), bh->length());
+  C_ReadFinish *onfinish = new C_ReadFinish(this, bh->ob,
+					    bh->start(), bh->length());
 
   ObjectSet *oset = bh->ob->oset;
 
