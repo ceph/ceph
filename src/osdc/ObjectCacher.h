@@ -45,6 +45,7 @@ class ObjectCacher {
   CephContext *cct;
   class Object;
   class ObjectSet;
+  class C_ReadFinish;
 
   typedef void (*flush_set_callback_t) (void *p, ObjectSet *oset);
 
@@ -182,6 +183,7 @@ class ObjectCacher {
     int dirty_or_tx;
 
     map< tid_t, list<Context*> > waitfor_commit;
+    xlist<C_ReadFinish*> reads;
 
   public:
     Object(const Object& other);
@@ -198,6 +200,7 @@ class ObjectCacher {
       os->objects.push_back(&set_item);
     }
     ~Object() {
+      reads.clear();
       assert(ref == 0);
       assert(data.empty());
       assert(dirty_or_tx == 0);
@@ -453,12 +456,21 @@ class ObjectCacher {
     sobject_t oid;
     loff_t start;
     uint64_t length;
+    xlist<C_ReadFinish*>::item set_item;
+
   public:
     bufferlist bl;
-    C_ReadFinish(ObjectCacher *c, int _poolid, sobject_t o, loff_t s, uint64_t l) :
-      oc(c), poolid(_poolid), oid(o), start(s), length(l) {}
+    C_ReadFinish(ObjectCacher *c, Object *ob, loff_t s, uint64_t l) :
+      oc(c), poolid(ob->oloc.pool), oid(ob->get_soid()), start(s), length(l),
+      set_item(this) {
+      ob->reads.push_back(&set_item);
+    }
+
     void finish(int r) {
       oc->bh_read_finish(poolid, oid, start, length, bl, r);
+      // object destructor clears the list
+      if (set_item.is_on_list())
+	set_item.remove_myself();
     }
   };
 
