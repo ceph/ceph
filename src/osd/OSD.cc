@@ -118,7 +118,7 @@
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
-#define dout_prefix _prefix(*_dout, whoami, get_osdmap())
+#define dout_prefix _prefix(_dout, whoami, get_osdmap())
 
 static ostream& _prefix(std::ostream* _dout, int whoami, OSDMapRef osdmap) {
   return *_dout << "osd." << whoami << " "
@@ -188,6 +188,7 @@ void OSDService::_start_split(const set<pg_t> &pgs)
   for (set<pg_t>::const_iterator i = pgs.begin();
        i != pgs.end();
        ++i) {
+    dout(10) << __func__ << ": Starting split on pg " << *i << dendl;
     assert(!in_progress_splits.count(*i));
     in_progress_splits.insert(*i);
   }
@@ -225,6 +226,7 @@ void OSDService::complete_split(const set<pg_t> &pgs)
   for (set<pg_t>::const_iterator i = pgs.begin();
        i != pgs.end();
        ++i) {
+    dout(10) << __func__ << ": Completing split on pg " << *i << dendl;
     assert(in_progress_splits.count(*i));
     in_progress_splits.erase(*i);
   }
