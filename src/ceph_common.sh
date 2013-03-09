@@ -38,6 +38,11 @@ check_host() {
 	echo "$0: use a proper short hostname (hostname -s), not 'localhost', in $conf section $type.$id; skipping entry"
 	return 1
     fi
+    if expr match "$host" '.*\.' > /dev/null 2>&1; then
+	echo "$0: $conf section $type.$id"
+	echo "contains host=$host, which contains dots; this is probably wrong"
+	echo "It must match the result of hostname -s"
+    fi
     ssh=""
     rootssh=""
     sshdir=$PWD
