@@ -12,7 +12,7 @@
 #include "buffer.h"
 
 #include "librados.h"
-#include "include/rados/rados_types.hpp"
+#include "rados_types.hpp"
 
 namespace librados
 {
