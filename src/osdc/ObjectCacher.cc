@@ -607,7 +607,8 @@ void ObjectCacher::bh_read(BufferHead *bh)
 }
 
 void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
-				  uint64_t length, bufferlist &bl, int r)
+				  uint64_t length, bufferlist &bl, int r,
+				  bool trust_enoent)
 {
   assert(lock.is_locked());
   ldout(cct, 7) << "bh_read_finish " 
@@ -634,9 +635,13 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
     Object *ob = objects[poolid][oid];
     
     if (r == -ENOENT && !ob->complete) {
-      ldout(cct, 7) << "bh_read_finish ENOENT, marking complete and !exists on " << *ob << dendl;
-      ob->complete = true;
-      ob->exists = false;
+      // just pass through and retry all waiters if we don't trust
+      // -ENOENT for this read
+      if (trust_enoent) {
+	ldout(cct, 7) << "bh_read_finish ENOENT, marking complete and !exists on " << *ob << dendl;
+	ob->complete = true;
+	ob->exists = false;
+      }
 
       // wake up *all* rx waiters, or else we risk reordering identical reads. e.g.
       //   read 1~1
@@ -701,9 +706,14 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
       opos = bh->end();
 
       if (r == -ENOENT) {
-	ldout(cct, 10) << "bh_read_finish removing " << *bh << dendl;
-	bh_remove(ob, bh);
-	delete bh;
+	if (trust_enoent) {
+	  ldout(cct, 10) << "bh_read_finish removing " << *bh << dendl;
+	  bh_remove(ob, bh);
+	  delete bh;
+	} else {
+	  ldout(cct, 10) << "skipping unstrusted -ENOENT and will retry for "
+			 << *bh << dendl;
+	}
 	continue;
       }
 
@@ -1681,7 +1691,26 @@ uint64_t ObjectCacher::release_all()
   return unclean;
 }
 
+void ObjectCacher::clear_nonexistence(ObjectSet *oset)
+{
+  assert(lock.is_locked());
+  ldout(cct, 10) << "clear_nonexistence() " << oset << dendl;
 
+  for (xlist<Object*>::iterator p = oset->objects.begin();
+       !p.end(); ++p) {
+    Object *ob = *p;
+    if (!ob->exists) {
+      ldout(cct, 10) << " setting exists and complete on " << *ob << dendl;
+      ob->exists = true;
+      ob->complete = false;
+    }
+    for (xlist<C_ReadFinish*>::iterator q = ob->reads.begin();
+	 !q.end(); ++q) {
+      C_ReadFinish *comp = *q;
+      comp->distrust_enoent();
+    }
+  }
+}
 
 /**
  * discard object extents from an ObjectSet by removing the objects in exls from the in-memory oset.
