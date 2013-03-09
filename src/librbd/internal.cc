@@ -1546,6 +1546,7 @@ reprotect_and_return_err:
 	  ictx->get_parent_pool_id(ictx->snap_id) ||
 	  ictx->parent->id != ictx->get_parent_image_id(ictx->snap_id) ||
 	  ictx->parent->snap_id != ictx->get_parent_snap_id(ictx->snap_id)) {
+	ictx->clear_nonexistence_cache();
 	close_image(ictx->parent);
 	ictx->parent = NULL;
       }
