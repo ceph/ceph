@@ -6183,6 +6183,8 @@ void ReplicatedPG::on_removal()
   clear_primary_state();
   osd->remove_want_pg_temp(info.pgid);
   cancel_recovery();
+  osd->remote_reserver.cancel_reservation(info.pgid);
+  osd->local_reserver.cancel_reservation(info.pgid);
 }
 
 void ReplicatedPG::on_shutdown()
