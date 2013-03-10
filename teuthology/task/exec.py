@@ -32,6 +32,7 @@ def task(ctx, config):
         (remote,) = ctx.cluster.only(role).remotes.iterkeys()
         log.info('Running commands on role %s host %s', role, remote.name)
         for c in ls:
+            c.replace('$TESTDIR', testdir)
             remote.run(
                 args=[
                     'sudo',

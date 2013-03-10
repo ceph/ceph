@@ -42,6 +42,7 @@ def _exec_host(barrier, barrier_queue, remote, sudo, testdir, ls):
     r.stdin.writelines(['set -e\n'])
     r.stdin.flush()
     for l in ls:
+        l.replace('$TESTDIR', testdir)
         if l == "barrier":
             _do_barrier(barrier, barrier_queue, remote)
             continue
