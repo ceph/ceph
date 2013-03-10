@@ -160,7 +160,8 @@ int MonMap::build_from_host_list(std::string hostlist, std::string prefix)
 	addrs[i].set_port(CEPH_MON_PORT);
       string name = prefix;
       name += n;
-      add(name, addrs[i]);
+      if (!contains(addrs[i]))
+	add(name, addrs[i]);
     }
     if (addrs.empty())
       return -ENOENT;
