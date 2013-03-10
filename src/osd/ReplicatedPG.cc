@@ -6246,6 +6246,9 @@ void ReplicatedPG::on_removal()
   dout(10) << "on_removal" << dendl;
   apply_and_flush_repops(false);
   remove_watchers_and_notifies();
+
+  osd->remote_reserver.cancel_reservation(info.pgid);
+  osd->local_reserver.cancel_reservation(info.pgid);
 }
 
 void ReplicatedPG::on_shutdown()
