@@ -63,7 +63,6 @@ nuke-on-error: true
 machine_type: $mtype
 tasks:
 - chef:
-- clock:
 overrides:
   workunit:
     sha1: $CEPH_SHA1

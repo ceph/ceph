@@ -62,3 +62,28 @@ def task(ctx, config):
                     ],
                 logger=log.getChild(rem.name),
                 )
+
+
+@contextlib.contextmanager
+def check(ctx, config):
+    log.info('Checking initial clock skew...')
+    for rem in ctx.cluster.remotes.iterkeys():
+        rem.run(
+            args=[
+                'ntpdc', '-p',
+                ],
+            logger=log.getChild(rem.name),
+            )
+
+    try:
+        yield
+
+    finally:
+        log.info('Checking final clock skew...')
+        for rem in ctx.cluster.remotes.iterkeys():
+            rem.run(
+                args=[
+                    'ntpdc', '-p',
+                    ],
+                logger=log.getChild(rem.name),
+                )
