@@ -55,7 +55,10 @@ def task(ctx, config):
     """
     assert isinstance(config, dict), 'task mpi got invalid config'
     assert 'exec' in config, 'task mpi got invalid config, missing exec'
-    mpiexec = config['exec']
+
+    testdir = teuthology.get_testdir(ctx)
+
+    mpiexec = config['exec'].replace('$TESTDIR', testdir)
     hosts = []
     remotes = []
     master_remote = None
@@ -85,11 +88,9 @@ def task(ctx, config):
 
     workdir = []
     if 'workdir' in config:
-        workdir = ['-wdir', config['workdir'] ]
+        workdir = ['-wdir', config['workdir'].replace('$TESTDIR', testdir) ]
 
     log.info('mpi rank 0 is: {name}'.format(name=master_remote.name))
-
-    testdir = teuthology.get_testdir(ctx)
 
     # write out the mpi hosts file
     log.info('mpi nodes: [%s]' % (', '.join(hosts)))
