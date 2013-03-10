@@ -246,12 +246,14 @@ def task(ctx, config):
     first, ctx=ctx, logger=log.getChild('ceph_manager'),
     )
 
-  statuses = {m : manager.get_mds_status(m) for m in mdslist}
-  statuses_by_rank = {s['rank'] : s for (_,s) in statuses.iteritems()}
-
-  log.info('Wait for all MDSs to reach steady state...')
   # make sure everyone is in active, standby, or standby-replay
+  log.info('Wait for all MDSs to reach steady state...')
+  statuses = None
+  statuses_by_rank = None
   while True:
+      statuses = {m : manager.get_mds_status(m) for m in mdslist}
+      statuses_by_rank = {s['rank'] : s for (_,s) in statuses.iteritems()}
+
       ready = filter(lambda (_,s): s['state'] == 'up:active'
                         or s['state'] == 'up:standby'
                         or s['state'] == 'up:standby-replay',
