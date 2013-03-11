@@ -512,7 +512,7 @@ struct rgw_bucket {
 };
 WRITE_CLASS_ENCODER(rgw_bucket)
 
-inline ostream& operator<<(ostream& out, const rgw_bucket b) {
+inline ostream& operator<<(ostream& out, const rgw_bucket &b) {
   out << b.name;
   if (b.name.compare(b.pool))
     out << "(@" << b.pool << "[" << b.marker << "])";
@@ -918,7 +918,7 @@ public:
 };
 WRITE_CLASS_ENCODER(rgw_obj)
 
-inline ostream& operator<<(ostream& out, const rgw_obj o) {
+inline ostream& operator<<(ostream& out, const rgw_obj &o) {
   return out << o.bucket.name << ":" << o.object;
 }
 

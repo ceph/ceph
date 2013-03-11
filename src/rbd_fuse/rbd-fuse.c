@@ -120,7 +120,6 @@ find_openrbd(const char *path)
 		if ((opentbl[i].image_name != NULL) &&
 		    (strcmp(opentbl[i].image_name, path) == 0)) {
 			return i;
-			break;
 		}
 	}
 	return -1;

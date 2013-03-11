@@ -226,21 +226,20 @@ static void perm_to_str(uint32_t mask, char *buf, int len)
 static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
 {
   *need_more = false;
-  if (strcmp(cmd, "user") == 0 ||
-      strcmp(cmd, "subuser") == 0 ||
-      strcmp(cmd, "key") == 0 ||
+  if (strcmp(cmd, "bucket") == 0 ||
       strcmp(cmd, "buckets") == 0 ||
-      strcmp(cmd, "bucket") == 0 ||
+      strcmp(cmd, "caps") == 0 ||
+      strcmp(cmd, "cluster") == 0 ||
+      strcmp(cmd, "gc") == 0 || 
+      strcmp(cmd, "key") == 0 ||
+      strcmp(cmd, "log") == 0 ||
       strcmp(cmd, "object") == 0 ||
       strcmp(cmd, "pool") == 0 ||
       strcmp(cmd, "pools") == 0 ||
-      strcmp(cmd, "log") == 0 ||
-      strcmp(cmd, "usage") == 0 ||
-      strcmp(cmd, "object") == 0 ||
-      strcmp(cmd, "cluster") == 0 ||
+      strcmp(cmd, "subuser") == 0 ||
       strcmp(cmd, "temp") == 0 ||
-      strcmp(cmd, "caps") == 0 ||
-      strcmp(cmd, "gc") == 0) {
+      strcmp(cmd, "usage") == 0 ||
+      strcmp(cmd, "user") == 0) {
     *need_more = true;
     return 0;
   }
@@ -343,7 +342,6 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
 string escape_str(string& src, char c)
 {
   int pos = 0;
-  string s = src;
   string dest;
 
   do {
@@ -1552,12 +1550,12 @@ next:
   
   if (opt_cmd == OPT_USER_RM) {
     RGWUserBuckets buckets;
-    int ret;
 
     if (rgw_read_user_buckets(store, user_id, buckets, false) >= 0) {
       map<string, RGWBucketEnt>& m = buckets.get_buckets();
 
       if (!m.empty() && purge_data) {
+	int ret;
         for (std::map<string, RGWBucketEnt>::iterator it = m.begin(); it != m.end(); it++) {
           ret = remove_bucket(store, ((*it).second).bucket, true);
 
@@ -1643,7 +1641,6 @@ next:
   }
 
   if (opt_cmd == OPT_USER_SUSPEND || opt_cmd == OPT_USER_ENABLE) {
-    string id;
     __u8 disable = (opt_cmd == OPT_USER_SUSPEND ? 1 : 0);
 
     if (user_id.empty()) {
@@ -1790,7 +1787,6 @@ next:
 
       while (is_truncated) {
 	map<string, RGWObjEnt> result;
-	string ns;
 	int r = store->cls_bucket_list(bucket, marker, prefix, 1000, 
 	                            result, &is_truncated, &marker,
                                     bucket_object_check_filter);

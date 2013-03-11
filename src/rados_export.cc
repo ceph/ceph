@@ -179,7 +179,6 @@ int do_rados_export(ThreadPool *tp, IoCtx& io_ctx,
       IoCtxDistributor *io_ctx_dist, const char *dir_name,
       bool create, bool force, bool delete_after)
 {
-  int ret;
   librados::ObjectIterator oi = io_ctx.objects_begin();
   librados::ObjectIterator oi_end = io_ctx.objects_end();
   auto_ptr <ExportDir> export_dir;
@@ -213,7 +212,7 @@ int do_rados_export(ThreadPool *tp, IoCtx& io_ctx,
 	char path[strlen(dir_name) + strlen(de->d_name) + 2];
 	snprintf(path, sizeof(path), "%s/%s", dir_name, de->d_name);
 	if (unlink(path)) {
-	  ret = errno;
+	  int ret = errno;
 	  cerr << ERR_PREFIX << "error unlinking temporary file '" << path << "': "
 	       << cpp_strerror(ret) << std::endl;
 	  return ret;

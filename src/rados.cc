@@ -936,7 +936,6 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
   if (cmd.compare("info") == 0) {
     map<rados::cls::lock::locker_id_t, rados::cls::lock::locker_info_t> lockers;
     ClsLockType type = LOCK_NONE;
-    string description;
     string tag;
     int ret = rados::cls::lock::get_lock_info(ioctx, oid, lock_name, &lockers, &type, &tag);
     if (ret < 0) {

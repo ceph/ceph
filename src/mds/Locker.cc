@@ -1235,7 +1235,7 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
   dout(10) << "wrlock_start " << *lock << " on " << *lock->get_parent() << dendl;
 
   bool want_scatter = lock->get_parent()->is_auth() &&
-    ((CInode*)lock->get_parent())->has_subtree_root_dirfrag();
+    (static_cast<CInode*>(lock->get_parent()))->has_subtree_root_dirfrag();
     
   CInode *in = static_cast<CInode *>(lock->get_parent());
   client_t client = mut->get_client();
@@ -2248,15 +2248,13 @@ void Locker::handle_client_caps(MClientCaps *m)
     return;
   }
 
-  CInode *in = 0;
-  in = mdcache->pick_inode_snap(head_in, follows);
+  CInode *in = mdcache->pick_inode_snap(head_in, follows);
   if (in != head_in)
     dout(10) << " head inode " << *head_in << dendl;
   dout(10) << "  cap inode " << *in << dendl;
 
   Capability *cap = 0;
-  if (in) 
-    cap = in->get_client_cap(client);
+  cap = in->get_client_cap(client);
   if (!cap && in != head_in)
     cap = head_in->get_client_cap(client);
   if (!cap) {

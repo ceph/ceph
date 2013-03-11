@@ -2228,7 +2228,7 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
     f->dump_int("epoch", get_epoch());
     f->dump_int("round", timecheck_round);
     f->dump_stream("round_status")
-      << (timecheck_round%2 ? "on-going" : "finished");
+      << ((timecheck_round%2) ? "on-going" : "finished");
   }
 
   if (!timecheck_skews.empty()) {

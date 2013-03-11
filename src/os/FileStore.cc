@@ -811,7 +811,6 @@ int FileStore::mkfs()
   fsid_fd = -1;
  close_basedir_fd:
   TEMP_FAILURE_RETRY(::close(basedir_fd));
-  basedir_fd = -1;
   return ret;
 }
 
@@ -2911,8 +2910,8 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
   {
     bool should_flush = (ssize_t)len >= m_filestore_flush_min;
     bool local_flush = false;
-    bool async_done = false;
 #ifdef HAVE_SYNC_FILE_RANGE
+    bool async_done = false;
     if (!should_flush ||
 	!m_filestore_flusher ||
        !(async_done = queue_flusher(fd, offset, len, replica))) {

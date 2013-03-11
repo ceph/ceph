@@ -68,7 +68,7 @@ bool is_suffix(const char *str, const char *suffix)
   return (strcmp(str + (strlen_str - strlen_suffix), suffix) == 0);
 }
 
-ExportDir* ExportDir::create_for_writing(const std::string path, int version,
+ExportDir* ExportDir::create_for_writing(const std::string &path, int version,
 				 bool create)
 {
   if (access(path.c_str(), R_OK | W_OK) == 0) {
@@ -101,7 +101,7 @@ ExportDir* ExportDir::create_for_writing(const std::string path, int version,
   return new ExportDir(version, path);
 }
 
-ExportDir* ExportDir::from_file_system(const std::string path)
+ExportDir* ExportDir::from_file_system(const std::string &path)
 {
   if (access(path.c_str(), R_OK)) {
       cerr << "ExportDir: source directory '" << path
@@ -141,7 +141,7 @@ ExportDir* ExportDir::from_file_system(const std::string path)
   return new ExportDir(ret, path);
 }
 
-std::string ExportDir::get_fs_path(const std::string rados_name) const
+std::string ExportDir::get_fs_path(const std::string &rados_name) const
 {
   static int HASH_LENGTH = 17;
   size_t i;
@@ -214,7 +214,7 @@ std::string ExportDir::get_fs_path(const std::string rados_name) const
   return oss.str();
 }
 
-ExportDir::ExportDir(int version_, const std::string path_)
+ExportDir::ExportDir(int version_, const std::string &path_)
   : version(version_),
     path(path_)
 {
@@ -883,11 +883,10 @@ int rados_tool_sync(const std::map < std::string, std::string > &opts,
     exit(ret);
   }
 
-  std::string dir_name = (action == "import") ? src : dst;
   IoCtxDistributor *io_ctx_dist = IoCtxDistributor::instance();
   ret = io_ctx_dist->init(rados, pool_name.c_str(), num_threads);
   if (ret) {
-    cerr << ERR_PREFIX << "failed to initialize Radso io contexts."
+    cerr << ERR_PREFIX << "failed to initialize Rados io contexts."
 	 << std::endl;
     _exit(ret);
   }
