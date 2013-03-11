@@ -61,9 +61,9 @@ bool is_suffix(const char *str, const char *suffix);
 class ExportDir
 {
 public:
-  static ExportDir* create_for_writing(const std::string path, int version,
+  static ExportDir* create_for_writing(const std::string &path, int version,
 					  bool create);
-  static ExportDir* from_file_system(const std::string path);
+  static ExportDir* from_file_system(const std::string &path);
 
   /* Given a rados object name, return something which looks kind of like the
    * first part of the name.
@@ -78,10 +78,10 @@ public:
    * correctly.
    * I guess a better hash would be nice too.
    */
-  std::string get_fs_path(const std::string rados_name) const;
+  std::string get_fs_path(const std::string &rados_name) const;
 
 private:
-  ExportDir(int version_, const std::string path_);
+  ExportDir(int version_, const std::string &path_);
 
   int version;
   std::string path;
