@@ -33,7 +33,7 @@ OPTION(fatal_signal_handlers, OPT_BOOL, true)
 
 OPTION(log_file, OPT_STR, "/var/log/ceph/$cluster-$name.log") // default changed by common_preinit()
 OPTION(log_max_new, OPT_INT, 1000) // default changed by common_preinit()
-OPTION(log_max_recent, OPT_INT, 100000) // default changed by common_preinit()
+OPTION(log_max_recent, OPT_INT, 10000) // default changed by common_preinit()
 OPTION(log_to_stderr, OPT_BOOL, true) // default changed by common_preinit()
 OPTION(err_to_stderr, OPT_BOOL, true) // default changed by common_preinit()
 OPTION(log_to_syslog, OPT_BOOL, false)
