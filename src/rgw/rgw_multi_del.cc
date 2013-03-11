@@ -14,7 +14,7 @@ using namespace std;
 
 bool RGWMultiDelObject::xml_end(const char *el)
 {
-  RGWMultiDelKey *key_obj = (RGWMultiDelKey *)find_first("Key");
+  RGWMultiDelKey *key_obj = static_cast<RGWMultiDelKey *>(find_first("Key"));
 
   if (!key_obj)
     return false;
@@ -29,18 +29,18 @@ bool RGWMultiDelObject::xml_end(const char *el)
 }
 
 bool RGWMultiDelDelete::xml_end(const char *el) {
-  RGWMultiDelQuiet *quiet_set = (RGWMultiDelQuiet *)find_first("Quiet");
+  RGWMultiDelQuiet *quiet_set = static_cast<RGWMultiDelQuiet *>(find_first("Quiet"));
   if (quiet_set) {
     string quiet_val = quiet_set->get_data();
     quiet = (strcasecmp(quiet_val.c_str(), "true") == 0);
   }
 
   XMLObjIter iter = find("Object");
-  RGWMultiDelObject *object = (RGWMultiDelObject *)iter.get_next();
+  RGWMultiDelObject *object = static_cast<RGWMultiDelObject *>(iter.get_next());
   while (object) {
     string key = object->get_key();
     objects.push_back(key);
-    object = (RGWMultiDelObject *)iter.get_next();
+    object = static_cast<RGWMultiDelObject *>(iter.get_next());
   }
   return true;
 }
