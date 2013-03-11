@@ -64,7 +64,7 @@ case "$1" in
 	    fi
 
             echo "Starting $name..."
-	    start-stop-daemon --start -u $user --chuid $user -x $RADOSGW -- -n $name
+	    start-stop-daemon --start -u $user -x $RADOSGW -- -n $name
 	done
         ;;
     reload)
