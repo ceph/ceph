@@ -179,7 +179,7 @@ OPTION(mon_sync_requester_kill_at, OPT_INT, 0) // kill the sync requester at a s
 OPTION(paxos_max_join_drift, OPT_INT, 10) // max paxos iterations before we must first sync the monitor stores
 OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long before proposing a map update
 OPTION(paxos_min_wait, OPT_DOUBLE, 0.05)  // min time to gather updates for after period of inactivity
-OPTION(paxos_trim_tolerance, OPT_INT, 3) // number of extra proposals tolerated before trimming
+OPTION(paxos_trim_tolerance, OPT_INT, 30) // number of extra proposals tolerated before trimming
 OPTION(paxos_trim_disabled_max_versions, OPT_INT, 100) // maximum amount of versions we shall allow passing by without trimming
 OPTION(clock_offset, OPT_DOUBLE, 0) // how much to offset the system clock in Clock.cc
 OPTION(auth_cluster_required, OPT_STR, "cephx")   // required of mon, mds, osd daemons
