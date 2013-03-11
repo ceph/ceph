@@ -27,7 +27,8 @@ def download_ceph_deploy(ctx, config):
     ctx.cluster.only(ceph_admin).run(
         args=[
             'git', 'clone',
-            'http://github.com/ceph/ceph-deploy.git',
+#            'http://github.com/ceph/ceph-deploy.git',
+            'git://ceph.com/ceph-deploy.git',
             '{tdir}/ceph-deploy'.format(tdir=testdir),
             ],
         )
