@@ -210,7 +210,6 @@ static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx, RG
       /* object exists, but policy is broken */
       RGWBucketInfo info;
       RGWUserInfo uinfo;
-      string name;
       int r = store->get_bucket_info(ctx, obj.bucket.name, info);
       if (r < 0)
         goto done;
@@ -1119,7 +1118,6 @@ int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, struct req_state *s)
 {
   RGWPutObjProcessor::prepare(store, s);
 
-  string oid = s->object_str;
   head_obj.init(s->bucket, s->object_str);
 
   char buf[33];
@@ -2091,7 +2089,6 @@ void RGWAbortMultipart::execute()
   ret = -EINVAL;
   string upload_id;
   string meta_oid;
-  string prefix;
   upload_id = s->args.get("uploadId");
   map<uint32_t, RGWUploadPartInfo> obj_parts;
   map<uint32_t, RGWUploadPartInfo>::iterator obj_iter;
