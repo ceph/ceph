@@ -421,19 +421,23 @@ int CrushWrapper::get_item_weight(int id)
 int CrushWrapper::adjust_item_weight(CephContext *cct, int id, int weight)
 {
   ldout(cct, 5) << "adjust_item_weight " << id << " weight " << weight << dendl;
+  int changed = 0;
   for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
     crush_bucket *b = crush->buckets[bidx];
     if (b == 0)
       continue;
-    for (unsigned i = 0; i < b->size; i++)
+    for (unsigned i = 0; i < b->size; i++) {
       if (b->items[i] == id) {
 	int diff = crush_bucket_adjust_item_weight(b, id, weight);
-	ldout(cct, 5) << "adjust_item_weight " << id << " diff " << diff << dendl;
+	ldout(cct, 5) << "adjust_item_weight " << id << " diff " << diff << " in bucket " << bidx << dendl;
 	adjust_item_weight(cct, -1 - bidx, b->weight);
-	return 0;
+	changed++;
       }
+    }
   }
-  return -ENOENT;
+  if (!changed)
+    return -ENOENT;
+  return changed;
 }
 
 bool CrushWrapper::check_item_present(int id)
