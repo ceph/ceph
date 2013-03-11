@@ -33,7 +33,7 @@ OPTION(fatal_signal_handlers, OPT_BOOL, true)
 
 OPTION(log_file, OPT_STR, "/var/log/ceph/$cluster-$name.log")
 OPTION(log_max_new, OPT_INT, 1000)
-OPTION(log_max_recent, OPT_INT, 100000)
+OPTION(log_max_recent, OPT_INT, 10000)
 OPTION(log_to_stderr, OPT_BOOL, true)
 OPTION(err_to_stderr, OPT_BOOL, true)
 OPTION(log_to_syslog, OPT_BOOL, false)
