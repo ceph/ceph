@@ -318,7 +318,7 @@ bool PGMonitor::prepare_update(PaxosServiceMessage *m)
     return prepare_pg_stats((MPGStats*)m);
 
   case MSG_MON_COMMAND:
-    return prepare_command((MMonCommand*)m);
+    return prepare_command(static_cast<MMonCommand*>(m));
 
   default:
     assert(0);
