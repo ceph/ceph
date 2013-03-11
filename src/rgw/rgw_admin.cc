@@ -1551,12 +1551,12 @@ next:
   
   if (opt_cmd == OPT_USER_RM) {
     RGWUserBuckets buckets;
-    int ret;
 
     if (rgw_read_user_buckets(store, user_id, buckets, false) >= 0) {
       map<string, RGWBucketEnt>& m = buckets.get_buckets();
 
       if (!m.empty() && purge_data) {
+	int ret;
         for (std::map<string, RGWBucketEnt>::iterator it = m.begin(); it != m.end(); it++) {
           ret = remove_bucket(store, ((*it).second).bucket, true);
 
