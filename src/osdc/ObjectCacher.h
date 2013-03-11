@@ -45,6 +45,7 @@ class ObjectCacher {
   CephContext *cct;
   class Object;
   class ObjectSet;
+  class C_ReadFinish;
 
   typedef void (*flush_set_callback_t) (void *p, ObjectSet *oset);
 
@@ -182,6 +183,7 @@ class ObjectCacher {
     int dirty_or_tx;
 
     map< tid_t, list<Context*> > waitfor_commit;
+    xlist<C_ReadFinish*> reads;
 
   public:
     Object(const Object& other);
@@ -198,6 +200,7 @@ class ObjectCacher {
       os->objects.push_back(&set_item);
     }
     ~Object() {
+      reads.clear();
       assert(ref == 0);
       assert(data.empty());
       assert(dirty_or_tx == 0);
@@ -443,7 +446,8 @@ class ObjectCacher {
 
  public:
   void bh_read_finish(int64_t poolid, sobject_t oid, loff_t offset,
-		      uint64_t length, bufferlist &bl, int r);
+		      uint64_t length, bufferlist &bl, int r,
+		      bool trust_enoent);
   void bh_write_commit(int64_t poolid, sobject_t oid, loff_t offset,
 		       uint64_t length, tid_t t, int r);
 
@@ -453,12 +457,26 @@ class ObjectCacher {
     sobject_t oid;
     loff_t start;
     uint64_t length;
+    xlist<C_ReadFinish*>::item set_item;
+    bool trust_enoent;
+
   public:
     bufferlist bl;
-    C_ReadFinish(ObjectCacher *c, int _poolid, sobject_t o, loff_t s, uint64_t l) :
-      oc(c), poolid(_poolid), oid(o), start(s), length(l) {}
+    C_ReadFinish(ObjectCacher *c, Object *ob, loff_t s, uint64_t l) :
+      oc(c), poolid(ob->oloc.pool), oid(ob->get_soid()), start(s), length(l),
+      set_item(this), trust_enoent(true) {
+      ob->reads.push_back(&set_item);
+    }
+
     void finish(int r) {
-      oc->bh_read_finish(poolid, oid, start, length, bl, r);
+      oc->bh_read_finish(poolid, oid, start, length, bl, r, trust_enoent);
+      // object destructor clears the list
+      if (set_item.is_on_list())
+	set_item.remove_myself();
+    }
+
+    void distrust_enoent() {
+      trust_enoent = false;
     }
   };
 
@@ -552,6 +570,15 @@ public:
   uint64_t release_all();
 
   void discard_set(ObjectSet *oset, vector<ObjectExtent>& ex);
+
+  /**
+   * Retry any in-flight reads that get -ENOENT instead of marking
+   * them zero, and get rid of any cached -ENOENTs.
+   * After this is called and the cache's lock is unlocked,
+   * any new requests will treat -ENOENT normally.
+   */
+  void clear_nonexistence(ObjectSet *oset);
+
 
   // cache sizes
   void set_max_dirty(int64_t v) {
