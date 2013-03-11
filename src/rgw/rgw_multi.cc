@@ -15,8 +15,8 @@ using namespace std;
 
 bool RGWMultiPart::xml_end(const char *el)
 {
-  RGWMultiPartNumber *num_obj = (RGWMultiPartNumber *)find_first("PartNumber");
-  RGWMultiETag *etag_obj = (RGWMultiETag *)find_first("ETag");
+  RGWMultiPartNumber *num_obj = static_cast<RGWMultiPartNumber *>(find_first("PartNumber"));
+  RGWMultiETag *etag_obj = static_cast<RGWMultiETag *>(find_first("ETag"));
 
   if (!num_obj || !etag_obj)
     return false;
@@ -35,12 +35,12 @@ bool RGWMultiPart::xml_end(const char *el)
 
 bool RGWMultiCompleteUpload::xml_end(const char *el) {
   XMLObjIter iter = find("Part");
-  RGWMultiPart *part = (RGWMultiPart *)iter.get_next();
+  RGWMultiPart *part = static_cast<RGWMultiPart *>(iter.get_next());
   while (part) {
     int num = part->get_num();
     string etag = part->get_etag();
     parts[num] = etag;
-    part = (RGWMultiPart *)iter.get_next();
+    part = static_cast<RGWMultiPart *>(iter.get_next());
   }
   return true;
 }

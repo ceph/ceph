@@ -120,8 +120,8 @@ public:
 };
 
 bool ACLOwner_S3::xml_end(const char *el) {
-  ACLID_S3 *acl_id = (ACLID_S3 *)find_first("ID");
-  ACLID_S3 *acl_name = (ACLID_S3 *)find_first("DisplayName");
+  ACLID_S3 *acl_id = static_cast<ACLID_S3 *>(find_first("ID"));
+  ACLID_S3 *acl_name = static_cast<ACLID_S3 *>(find_first("DisplayName"));
 
   // ID is mandatory
   if (!acl_id)
@@ -146,7 +146,7 @@ bool ACLGrant_S3::xml_end(const char *el) {
   ACLDisplayName_S3 *acl_name;
   string uri;
 
-  acl_grantee = (ACLGrantee_S3 *)find_first("Grantee");
+  acl_grantee = static_cast<ACLGrantee_S3 *>(find_first("Grantee"));
   if (!acl_grantee)
     return false;
   string type_str;
@@ -154,7 +154,7 @@ bool ACLGrant_S3::xml_end(const char *el) {
     return false;
   ACLGranteeType_S3::set(type_str.c_str(), type);
   
-  acl_permission = (ACLPermission_S3 *)find_first("Permission");
+  acl_permission = static_cast<ACLPermission_S3 *>(find_first("Permission"));
   if (!acl_permission)
     return false;
 
@@ -166,23 +166,23 @@ bool ACLGrant_S3::xml_end(const char *el) {
 
   switch (type.get_type()) {
   case ACL_TYPE_CANON_USER:
-    acl_id = (ACLID_S3 *)acl_grantee->find_first("ID");
+    acl_id = static_cast<ACLID_S3 *>(acl_grantee->find_first("ID"));
     if (!acl_id)
       return false;
     id = acl_id->to_str();
-    acl_name = (ACLDisplayName_S3 *)acl_grantee->find_first("DisplayName");
+    acl_name = static_cast<ACLDisplayName_S3 *>(acl_grantee->find_first("DisplayName"));
     if (acl_name)
       name = acl_name->get_data();
     break;
   case ACL_TYPE_GROUP:
-    acl_uri = (ACLURI_S3 *)acl_grantee->find_first("URI");
+    acl_uri = static_cast<ACLURI_S3 *>(acl_grantee->find_first("URI"));
     if (!acl_uri)
       return false;
     uri = acl_uri->get_data();
     group = uri_to_group(uri);
     break;
   case ACL_TYPE_EMAIL_USER:
-    acl_email = (ACLEmail_S3 *)acl_grantee->find_first("EmailAddress");
+    acl_email = static_cast<ACLEmail_S3 *>(acl_grantee->find_first("EmailAddress"));
     if (!acl_email)
       return false;
     email = acl_email->get_data();
@@ -256,10 +256,10 @@ ACLGroupTypeEnum ACLGrant_S3::uri_to_group(string& uri)
 
 bool RGWAccessControlList_S3::xml_end(const char *el) {
   XMLObjIter iter = find("Grant");
-  ACLGrant_S3 *grant = (ACLGrant_S3 *)iter.get_next();
+  ACLGrant_S3 *grant = static_cast<ACLGrant_S3 *>(iter.get_next());
   while (grant) {
     add_grant(grant);
-    grant = (ACLGrant_S3 *)iter.get_next();
+    grant = static_cast<ACLGrant_S3 *>(iter.get_next());
   }
   return true;
 }
@@ -406,13 +406,13 @@ int RGWAccessControlList_S3::create_from_grants(std::list<ACLGrant>& grants)
 
 bool RGWAccessControlPolicy_S3::xml_end(const char *el) {
   RGWAccessControlList_S3 *s3acl =
-      (RGWAccessControlList_S3 *)find_first("AccessControlList");
+      static_cast<RGWAccessControlList_S3 *>(find_first("AccessControlList"));
   if (!s3acl)
     return false;
 
   acl = *s3acl;
 
-  ACLOwner *owner_p = (ACLOwner_S3 *)find_first("Owner");
+  ACLOwner *owner_p = static_cast<ACLOwner_S3 *>(find_first("Owner"));
   if (!owner_p)
     return false;
   owner = *owner_p;
@@ -455,7 +455,7 @@ int RGWAccessControlPolicy_S3::rebuild(RGWRados *store, ACLOwner *owner, RGWAcce
   if (!owner)
     return -EINVAL;
 
-  ACLOwner *requested_owner = (ACLOwner_S3 *)find_first("Owner");
+  ACLOwner *requested_owner = static_cast<ACLOwner_S3 *>(find_first("Owner"));
   if (requested_owner && requested_owner->get_id().compare(owner->get_id()) != 0) {
     return -EPERM;
   }
