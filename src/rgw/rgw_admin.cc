@@ -226,21 +226,20 @@ static void perm_to_str(uint32_t mask, char *buf, int len)
 static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
 {
   *need_more = false;
-  if (strcmp(cmd, "user") == 0 ||
-      strcmp(cmd, "subuser") == 0 ||
-      strcmp(cmd, "key") == 0 ||
+  if (strcmp(cmd, "bucket") == 0 ||
       strcmp(cmd, "buckets") == 0 ||
-      strcmp(cmd, "bucket") == 0 ||
+      strcmp(cmd, "caps") == 0 ||
+      strcmp(cmd, "cluster") == 0 ||
+      strcmp(cmd, "gc") == 0 || 
+      strcmp(cmd, "key") == 0 ||
+      strcmp(cmd, "log") == 0 ||
       strcmp(cmd, "object") == 0 ||
       strcmp(cmd, "pool") == 0 ||
       strcmp(cmd, "pools") == 0 ||
-      strcmp(cmd, "log") == 0 ||
-      strcmp(cmd, "usage") == 0 ||
-      strcmp(cmd, "object") == 0 ||
-      strcmp(cmd, "cluster") == 0 ||
+      strcmp(cmd, "subuser") == 0 ||
       strcmp(cmd, "temp") == 0 ||
-      strcmp(cmd, "caps") == 0 ||
-      strcmp(cmd, "gc") == 0) {
+      strcmp(cmd, "usage") == 0 ||
+      strcmp(cmd, "user") == 0) {
     *need_more = true;
     return 0;
   }
