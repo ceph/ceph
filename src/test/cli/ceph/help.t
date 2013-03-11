@@ -37,8 +37,8 @@
     ceph osd down <osd-id>
     ceph osd in <osd-id>
     ceph osd out <osd-id>
-    ceph osd set <noout|noin|nodown|noup>
-    ceph osd unset <noout|noin|nodown|noup>
+    ceph osd set <noout|noin|nodown|noup|noscrub|nodeep-scrub
+    ceph osd unset <noout|noin|nodown|noup|noscrub|nodeep-scrub>
     ceph osd pause
     ceph osd unpause
     ceph osd tell <osd-id or *> injectargs '--<switch> <value> [--<switch> <value>...]'
