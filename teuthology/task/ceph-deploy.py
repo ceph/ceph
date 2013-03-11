@@ -20,12 +20,6 @@ def download_ceph_deploy(ctx, config):
 
     ctx.cluster.only(ceph_admin).run(
         args=[
-            'wget', '-q', '-O-','https://raw.github.com/ceph/ceph-qa-chef/master/solo/solo-from-scratch',
-            run.Raw('|'), 'sh',
-            ],
-        )
-    ctx.cluster.only(ceph_admin).run(
-        args=[
             'git', 'clone',
 #            'http://github.com/ceph/ceph-deploy.git',
             'git://ceph.com/ceph-deploy.git',
