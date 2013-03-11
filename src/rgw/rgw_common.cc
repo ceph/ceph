@@ -90,7 +90,7 @@ is_err() const
 
 
 req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL), op(OP_UNKNOWN), 
-                                                            os_auth_token(NULL),
+							    has_acl_header(false), os_auth_token(NULL),
                                                             env(e)
 {
   enable_ops_log = env->conf->enable_ops_log;

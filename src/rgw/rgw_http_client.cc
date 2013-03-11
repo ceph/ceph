@@ -8,7 +8,7 @@
 
 static size_t read_http_header(void *ptr, size_t size, size_t nmemb, void *_info)
 {
-  RGWHTTPClient *client = (RGWHTTPClient *)_info;
+  RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
   size_t len = size * nmemb;
   int ret = client->read_header(ptr, size * nmemb);
   if (ret < 0) {
@@ -20,7 +20,7 @@ static size_t read_http_header(void *ptr, size_t size, size_t nmemb, void *_info
 
 static size_t read_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
 {
-  RGWHTTPClient *client = (RGWHTTPClient *)_info;
+  RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
   size_t len = size * nmemb;
   int ret = client->read_data(ptr, size * nmemb);
   if (ret < 0) {

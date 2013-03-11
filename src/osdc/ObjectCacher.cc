@@ -206,8 +206,7 @@ int ObjectCacher::Object::map_read(OSDRead *rd,
 	  ldout(oc->cct, 20) << "map_read miss " << left << " left, " << *n << dendl;
 	}
         cur += left;
-        left -= left;
-        assert(left == 0);
+        left = 0;
         assert(cur == (loff_t)ex_it->offset + (loff_t)ex_it->length);
         break;  // no more.
       }
@@ -868,7 +867,7 @@ void ObjectCacher::flush(loff_t amount)
    */
   loff_t did = 0;
   while (amount == 0 || did < amount) {
-    BufferHead *bh = (BufferHead*) bh_lru_dirty.lru_get_next_expire();
+    BufferHead *bh = static_cast<BufferHead*>(bh_lru_dirty.lru_get_next_expire());
     if (!bh) break;
     if (bh->last_write > cutoff) break;
 
@@ -891,7 +890,7 @@ void ObjectCacher::trim(loff_t max_bytes, loff_t max_ob)
 		 << dendl;
 
   while (get_stat_clean() > max_bytes) {
-    BufferHead *bh = (BufferHead*) bh_lru_rest.lru_expire();
+    BufferHead *bh = static_cast<BufferHead*>(bh_lru_rest.lru_expire());
     if (!bh)
       break;
 
@@ -909,7 +908,7 @@ void ObjectCacher::trim(loff_t max_bytes, loff_t max_ob)
   }
 
   while (ob_lru.lru_get_size() > max_ob) {
-    Object *ob = (Object*)ob_lru.lru_expire();
+    Object *ob = static_cast<Object*>(ob_lru.lru_expire());
     if (!ob)
       break;
 
@@ -1357,7 +1356,7 @@ void ObjectCacher::flusher_entry()
       utime_t cutoff = ceph_clock_now(cct);
       cutoff -= max_dirty_age;
       BufferHead *bh = 0;
-      while ((bh = (BufferHead*)bh_lru_dirty.lru_get_next_expire()) != 0 &&
+      while ((bh = static_cast<BufferHead*>(bh_lru_dirty.lru_get_next_expire())) != 0 &&
 	     bh->last_write < cutoff) {
 	ldout(cct, 10) << "flusher flushing aged dirty bh " << *bh << dendl;
 	bh_write(bh);
