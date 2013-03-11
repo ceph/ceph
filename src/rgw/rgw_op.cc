@@ -1812,7 +1812,7 @@ void RGWPutACLs::execute()
     ret = -EACCES;
     return;
   }
-  policy = (RGWAccessControlPolicy_S3 *)parser.find_first("AccessControlPolicy");
+  policy = static_cast<RGWAccessControlPolicy_S3 *>(parser.find_first("AccessControlPolicy"));
   if (!policy) {
     ret = -EINVAL;
     return;
@@ -1984,7 +1984,7 @@ void RGWCompleteMultipart::execute()
     return;
   }
 
-  parts = (RGWMultiCompleteUpload *)parser.find_first("CompleteMultipartUpload");
+  parts = static_cast<RGWMultiCompleteUpload *>(parser.find_first("CompleteMultipartUpload"));
   if (!parts) {
     ret = -EINVAL;
     return;
@@ -2245,7 +2245,7 @@ void RGWDeleteMultiObj::execute()
     goto error;
   }
 
-  multi_delete = (RGWMultiDelDelete *)parser.find_first("Delete");
+  multi_delete = static_cast<RGWMultiDelDelete *>(parser.find_first("Delete"));
   if (!multi_delete) {
     ret = -EINVAL;
     goto error;
