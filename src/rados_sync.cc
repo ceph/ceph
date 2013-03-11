@@ -883,7 +883,6 @@ int rados_tool_sync(const std::map < std::string, std::string > &opts,
     exit(ret);
   }
 
-  std::string dir_name = (action == "import") ? src : dst;
   IoCtxDistributor *io_ctx_dist = IoCtxDistributor::instance();
   ret = io_ctx_dist->init(rados, pool_name.c_str(), num_threads);
   if (ret) {
