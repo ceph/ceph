@@ -328,7 +328,7 @@ uint64_t AuthMonitor::assign_global_id(MAuth *m, bool should_increase_max)
 
   uint64_t next_global_id = last_allocated_id + 1;
 
-  if (next_global_id < max_global_id) {
+  {
     int remainder = next_global_id % total_mon;
     if (remainder)
       remainder = total_mon - remainder;
@@ -340,9 +340,12 @@ uint64_t AuthMonitor::assign_global_id(MAuth *m, bool should_increase_max)
     if (!mon->is_leader() || !should_increase_max) {
       return 0;
     }
+    bool return_next = (next_global_id == max_global_id);
     while (next_global_id >= max_global_id) {
       increase_max_global_id();
     }
+    if (!return_next)
+      return 0;
   }
 
   last_allocated_id = next_global_id;
@@ -433,6 +436,12 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
   if (!s->global_id) {
     s->global_id = assign_global_id(m, paxos_writable);
     if (!s->global_id) {
+      if (mon->is_leader() && paxos_writable) {
+        dout(10) << "increasing global id, waitlisting message" << dendl;
+        wait_for_active(new C_RetryMessage(this, m));
+        goto done;
+      }
+
       delete s->auth_handler;
       s->auth_handler = NULL;
       s->put();
