@@ -64,7 +64,6 @@ int main(int argc, const char **argv)
   bool clobber = false;
   bool modified = false;
   std::string export_crush, import_crush, test_map_pg, test_map_object;
-  list<entity_addr_t> add, rm;
   bool test_crush = false;
   int range_first = -1;
   int range_last = -1;
@@ -290,7 +289,7 @@ int main(int argc, const char **argv)
 	  for (int i=0; i<100; i++) {
 	    cout << pgid << " attempt " << i << std::endl;
 
-	    vector<int> r, s;
+	    vector<int> r;
 	    osdmap.pg_to_acting_osds(pgid, r);
 	    //cout << pgid << " " << r << std::endl;
 	    if (m.count(pgid)) {
