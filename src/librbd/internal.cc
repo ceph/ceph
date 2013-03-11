@@ -376,7 +376,7 @@ namespace librbd {
       return r;
 
     // no children for non-layered or old format image
-    if (!ictx->features & RBD_FEATURE_LAYERING)
+    if ((ictx->features & RBD_FEATURE_LAYERING) == 0)
       return 0;
 
     parent_spec parent_spec(ictx->md_ctx.get_id(), ictx->id, ictx->snap_id);
