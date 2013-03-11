@@ -372,8 +372,7 @@ int RGWPutMetadata_ObjStore_SWIFT::get_params()
     const char *expose_headers = s->env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_EXPOSE_HEADERS");
     const char *max_age = s->env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_MAX_AGE");
     if(allow_origins){
-      RGWCORSConfiguration_SWIFT *swift_cors = s->bucket_cors?
-          static_cast<RGWCORSConfiguration_SWIFT *>(s->bucket_cors):new RGWCORSConfiguration_SWIFT;
+      RGWCORSConfiguration_SWIFT *swift_cors = new RGWCORSConfiguration_SWIFT;
       int r = swift_cors->create_update(allow_origins, allow_headers, expose_headers, max_age);
       if (r < 0){
         dout(0) << "Error creating/updating the cors configuration" << dendl;

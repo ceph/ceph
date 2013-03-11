@@ -1,3 +1,17 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2013 eNovance SAS <licensing@enovance.com>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation. See file COPYING.
+ *
+ */
+
 #ifndef CEPH_RGW_CORS_SWIFT3_H
 #define CEPH_RGW_CORS_SWIFT3_H
 
@@ -17,7 +31,7 @@ static inline void remove_proto_www(const char *in, unsigned len,
   *out = in;
   if(o && ((o - in) < len))*out = (o + 4);
   else if((o = strstr(in, "://")) && ((o - in) < len))*out = (o + 3);
-  *olen = (len - (o?(*out - o):0));
+  *olen = (len - (*out - in));
 }
 
 template <class T>
@@ -49,13 +63,7 @@ class RGWCORSConfiguration_SWIFT : public RGWCORSConfiguration
       if(allow_headers)char_to_str_list(allow_headers, h);
       if(expose_headers)char_to_str_list(expose_headers, e);
       if(max_age)a = (unsigned)atoi(max_age);
-      
-      /*Find if a rule exists already for a particular host*/
-      for(set<string>::iterator it = o.begin();
-          it != o.end(); it++){
-        /*Delete host name from the rule, if necessary delete the rule itself*/
-        erase_host_name_rule(*it);
-      }
+
       RGWCORSRule rule(o, h, e, flags, a);
       stack_rule(rule);
       return 0;
