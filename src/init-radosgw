@@ -64,12 +64,12 @@ case "$1" in
 	    fi
 
             echo "Starting $name..."
-	    start-stop-daemon --start -u $user -x $RADOSGW -- -n $name
+	    start-stop-daemon --start -u $user --chuid $user -x $RADOSGW -- -n $name
 	done
         ;;
     reload)
 	echo "Reloading $name..."
-	start-stop-daemon --signal HUP -x $RADOSGW --oknodo
+	start-stop-daemon --stop --signal HUP -x $RADOSGW --oknodo
 	;;
     restart|force-reload)
         $0 stop
