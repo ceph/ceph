@@ -164,7 +164,7 @@ void Paxos::handle_collect(MMonPaxos *collect)
   if (collect->first_committed > last_committed+1) {
     dout(5) << __func__
             << " leader's lowest version is too high for our last committed"
-            << "(theirs: " << collect->first_committed
+            << " (theirs: " << collect->first_committed
             << "; ours: " << last_committed << ") -- bootstrap!" << dendl;
     collect->put();
     mon->bootstrap();
@@ -366,9 +366,19 @@ void Paxos::handle_last(MMonPaxos *last)
   // push it to them.
   peer_last_committed[last->get_source().num()] = last->last_committed;
 
+  if (last->first_committed > last_committed+1) {
+    dout(5) << __func__
+            << " peon's lowest version is too high for our last committed"
+            << " (theirs: " << last->first_committed
+            << "; ours: " << last_committed << ") -- bootstrap!" << dendl;
+    last->put();
+    mon->bootstrap();
+    return;
+  }
+
   // store any committed values if any are specified in the message
   store_state(last);
-      
+
   // do they accept your pn?
   if (last->pn > accepted_pn) {
     // no, try again.
