@@ -709,6 +709,7 @@ def cluster(ctx, config):
         log.info('Checking cluster log for badness...')
         def first_in_ceph_log(pattern, excludes):
             args = [
+                'sudo',
                 'egrep', pattern,
                 '/var/log/ceph/ceph.log',
                 ]
