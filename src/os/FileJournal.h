@@ -292,7 +292,14 @@ private:
 
   void align_bl(off64_t pos, bufferlist& bl);
   int write_bl(off64_t& pos, bufferlist& bl);
-  void wrap_read_bl(off64_t& pos, int64_t len, bufferlist& bl);
+
+  /// read len from journal starting at in_pos and wrapping up to len
+  void wrap_read_bl(
+    off64_t in_pos,   ///< [in] start position
+    int64_t len,      ///< [in] length to read
+    bufferlist* bl,   ///< [out] result
+    off64_t *out_pos  ///< [out] next position to read, will be wrapped
+    );
 
   class Writer : public Thread {
     FileJournal *journal;
