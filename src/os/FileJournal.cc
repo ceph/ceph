@@ -1578,7 +1578,12 @@ void FileJournal::make_writeable()
   start_writer();
 }
 
-void FileJournal::wrap_read_bl(off64_t& pos, int64_t olen, bufferlist& bl)
+void FileJournal::wrap_read_bl(
+  off64_t pos,
+  int64_t olen,
+  bufferlist* bl,
+  off64_t *out_pos
+  )
 {
   while (olen > 0) {
     while (pos >= header.max_size)
@@ -1604,12 +1609,14 @@ void FileJournal::wrap_read_bl(off64_t& pos, int64_t olen, bufferlist& bl)
 	   << r << dendl;
       ceph_abort();
     }
-    bl.push_back(bp);
+    bl->push_back(bp);
     pos += len;
     olen -= len;
   }
   if (pos >= header.max_size)
     pos = pos + get_top() - header.max_size;
+  if (out_pos)
+    *out_pos = pos;
 }
 
 bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
@@ -1624,7 +1631,7 @@ bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
   // header
   entry_header_t *h;
   bufferlist hbl;
-  wrap_read_bl(pos, sizeof(*h), hbl);
+  wrap_read_bl(pos, sizeof(*h), &hbl, &pos);
   h = (entry_header_t *)hbl.c_str();
 
   if (!h->check_magic(read_pos, header.get_fsid64())) {
@@ -1644,7 +1651,7 @@ bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
     pos += h->pre_pad;
 
   bl.clear();
-  wrap_read_bl(pos, h->len, bl);
+  wrap_read_bl(pos, h->len, &bl, &pos);
 
   if (h->post_pad)
     pos += h->post_pad;
@@ -1652,7 +1659,7 @@ bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
   // footer
   entry_header_t *f;
   bufferlist fbl;
-  wrap_read_bl(pos, sizeof(*f), fbl);
+  wrap_read_bl(pos, sizeof(*f), &fbl, &pos);
   f = (entry_header_t *)fbl.c_str();
   if (memcmp(f, h, sizeof(*f))) {
     dout(2) << "read_entry " << read_pos << " : bad footer magic, partial entry, end of journal" << dendl;
