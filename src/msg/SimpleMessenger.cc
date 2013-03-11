@@ -375,7 +375,7 @@ Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
     }
     Mutex::Locker l(pipe->pipe_lock);
     if (pipe->connection_state)
-      return (Connection *)pipe->connection_state->get();
+      return static_cast<Connection *>(pipe->connection_state->get());
     // we failed too quickly!  retry.  FIXME.
   }
 }
