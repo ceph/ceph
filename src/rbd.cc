@@ -839,7 +839,7 @@ struct rbd_bencher {
 void rbd_bencher_completion(void *vc, void *pc)
 {
   librbd::RBD::AioCompletion *c = (librbd::RBD::AioCompletion *)vc;
-  rbd_bencher *b = (rbd_bencher *)pc;
+  rbd_bencher *b = static_cast<rbd_bencher *>(pc);
   //cout << "complete " << c << std::endl;
   b->lock.Lock();
   b->in_flight--;
@@ -917,7 +917,7 @@ struct ExportContext {
 static int export_read_cb(uint64_t ofs, size_t len, const char *buf, void *arg)
 {
   ssize_t ret;
-  ExportContext *ec = (ExportContext *)arg;
+  ExportContext *ec = static_cast<ExportContext *>(arg);
   int fd = ec->fd;
   static char *localbuf = NULL;
   static size_t maplen = 0;
