@@ -827,7 +827,7 @@ int SyntheticClient::run()
         int count = iargs.front();  iargs.pop_front();
         if (run_me()) {
           for (int i=0; i<count; i++) {
-            int fd = client->open("test", rand()%2 ? (O_WRONLY|O_CREAT):O_RDONLY);
+            int fd = client->open("test", (rand()%2) ? (O_WRONLY|O_CREAT) : O_RDONLY);
             if (fd > 0) client->close(fd);
           }
         }
