@@ -1736,7 +1736,9 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 			 CEPH_OSDMAP_NOIN |
 			 CEPH_OSDMAP_NOOUT |
 			 CEPH_OSDMAP_NOBACKFILL |
-			 CEPH_OSDMAP_NORECOVER)) {
+			 CEPH_OSDMAP_NORECOVER |
+			 CEPH_OSDMAP_NOSCRUB |
+			 CEPH_OSDMAP_NODEEP_SCRUB)) {
       ostringstream ss;
       ss << osdmap.get_flag_string() << " flag(s) set";
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
@@ -2659,6 +2661,18 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     }
     else if (m->cmd.size() == 3 && m->cmd[1] == "unset" && m->cmd[2] == "norecover") {
       return prepare_unset_flag(m, CEPH_OSDMAP_NORECOVER);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "set" && m->cmd[2] == "noscrub") {
+      return prepare_set_flag(m, CEPH_OSDMAP_NOSCRUB);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "unset" && m->cmd[2] == "noscrub") {
+      return prepare_unset_flag(m, CEPH_OSDMAP_NOSCRUB);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "set" && m->cmd[2] == "nodeep-scrub") {
+      return prepare_set_flag(m, CEPH_OSDMAP_NODEEP_SCRUB);
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "unset" && m->cmd[2] == "nodeep-scrub") {
+      return prepare_unset_flag(m, CEPH_OSDMAP_NODEEP_SCRUB);
     }
     else if (m->cmd[1] == "cluster_snap" && m->cmd.size() == 3) {
       // ** DISABLE THIS FOR NOW **
