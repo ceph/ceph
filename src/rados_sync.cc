@@ -886,7 +886,7 @@ int rados_tool_sync(const std::map < std::string, std::string > &opts,
   IoCtxDistributor *io_ctx_dist = IoCtxDistributor::instance();
   ret = io_ctx_dist->init(rados, pool_name.c_str(), num_threads);
   if (ret) {
-    cerr << ERR_PREFIX << "failed to initialize Radso io contexts."
+    cerr << ERR_PREFIX << "failed to initialize Rados io contexts."
 	 << std::endl;
     _exit(ret);
   }
