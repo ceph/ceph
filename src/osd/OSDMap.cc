@@ -1445,6 +1445,10 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",nobackfill";
   if (f & CEPH_OSDMAP_NORECOVER)
     s += ",norecover";
+  if (f & CEPH_OSDMAP_NOSCRUB)
+    s += ",noscrub";
+  if (f & CEPH_OSDMAP_NODEEP_SCRUB)
+    s += ",nodeep-scrub";
   if (s.length())
     s = s.erase(0, 1);
   return s;

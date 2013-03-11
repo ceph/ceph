@@ -2857,6 +2857,21 @@ bool PG::sched_scrub()
     return false;
   }
 
+  bool time_for_deep = (ceph_clock_now(g_ceph_context) >
+    info.history.last_deep_scrub_stamp + g_conf->osd_deep_scrub_interval);
+ 
+  //NODEEP_SCRUB so ignore time initiated deep-scrub
+  if (osd->osd->get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB))
+    time_for_deep = false;
+
+  if (!scrubber.must_scrub) {
+    assert(!scrubber.must_deep_scrub);
+
+    //NOSCRUB so skip regular scrubs
+    if (osd->osd->get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB) && !time_for_deep)
+      return false;
+  }
+
   bool ret = true;
   if (!scrubber.reserved) {
     assert(scrubber.reserved_peers.empty());
@@ -2878,8 +2893,7 @@ bool PG::sched_scrub()
       ret = false;
     } else if (scrubber.reserved_peers.size() == acting.size()) {
       dout(20) << "sched_scrub: success, reserved self and replicas" << dendl;
-      if (ceph_clock_now(g_ceph_context) >
-	  info.history.last_deep_scrub_stamp + g_conf->osd_deep_scrub_interval) {
+      if (time_for_deep) {
 	dout(10) << "sched_scrub: scrub will be deep" << dendl;
 	state_set(PG_STATE_DEEP_SCRUB);
       }
