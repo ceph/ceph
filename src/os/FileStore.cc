@@ -811,7 +811,6 @@ int FileStore::mkfs()
   fsid_fd = -1;
  close_basedir_fd:
   TEMP_FAILURE_RETRY(::close(basedir_fd));
-  basedir_fd = -1;
   return ret;
 }
 
