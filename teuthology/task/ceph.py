@@ -48,12 +48,32 @@ class DaemonState(object):
         self.proc = self.remote.run(*cmd_args, **cmd_kwargs)
         self.log.info('Started')
 
+    def restart_with_args(self, extra_args):
+        self.log.info('Restarting')
+        if self.proc is not None:
+            self.log.debug('stopping old one...')
+            self.stop()
+        cmd_args = list(self.command_args)
+        # we only want to make a temporary mod of the args list
+        # so we shallow copy the dict, and deepcopy the args list
+        cmd_kwargs = self.command_kwargs.copy()
+        from copy import deepcopy
+        cmd_kwargs['args'] = deepcopy(self.command_kwargs['args'])
+        cmd_kwargs['args'].extend(extra_args)
+        self.proc = self.remote.run(*cmd_args, **cmd_kwargs)
+        self.log.info('Started')
+
+
     def running(self):
-        return self.proc is not None
+        return self.proc is not None and not self.proc.exited
 
     def reset(self):
         self.proc = None
 
+    def wait_for_exit(self):
+        if self.proc:
+            run.wait([self.proc])
+            self.proc = None
 
 class CephState(object):
     def __init__(self):

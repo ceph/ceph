@@ -10,16 +10,17 @@ log = logging.getLogger(__name__)
 
 class RemoteProcess(object):
     __slots__ = [
-        'command', 'stdin', 'stdout', 'stderr', 'exitstatus',
+        'command', 'stdin', 'stdout', 'stderr', 'exitstatus', 'exited',
         # for orchestra.remote.Remote to place a backreference
         'remote',
         ]
-    def __init__(self, command, stdin, stdout, stderr, exitstatus):
+    def __init__(self, command, stdin, stdout, stderr, exitstatus, exited):
         self.command = command
         self.stdin = stdin
         self.stdout = stdout
         self.stderr = stderr
         self.exitstatus = exitstatus
+        self.exited = exited
 
 class Raw(object):
     def __init__(self, value):
@@ -65,6 +66,9 @@ def execute(client, args):
             status = None
         return status
 
+    def exitstatus_ready():
+        return out.channel.exit_status_ready()
+
     r = RemoteProcess(
         command=cmd,
         stdin=in_,
@@ -73,6 +77,7 @@ def execute(client, args):
         # this is a callable that will block until the status is
         # available
         exitstatus=get_exitstatus,
+        exited=exitstatus_ready,
         )
     return r
 
