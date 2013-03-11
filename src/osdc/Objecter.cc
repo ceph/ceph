@@ -405,23 +405,23 @@ void Objecter::dispatch(Message *m)
 {
   switch (m->get_type()) {
   case CEPH_MSG_OSD_OPREPLY:
-    handle_osd_op_reply((MOSDOpReply*)m);
+    handle_osd_op_reply(static_cast<MOSDOpReply*>(m));
     break;
     
   case CEPH_MSG_OSD_MAP:
-    handle_osd_map((MOSDMap*)m);
+    handle_osd_map(static_cast<MOSDMap*>(m));
     break;
 
   case MSG_GETPOOLSTATSREPLY:
-    handle_get_pool_stats_reply((MGetPoolStatsReply*)m);
+    handle_get_pool_stats_reply(static_cast<MGetPoolStatsReply*>(m));
     break;
 
   case CEPH_MSG_STATFS_REPLY:
-    handle_fs_stats_reply((MStatfsReply*)m);
+    handle_fs_stats_reply(static_cast<MStatfsReply*>(m));
     break;
 
   case CEPH_MSG_POOLOP_REPLY:
-    handle_pool_op_reply((MPoolOpReply*)m);
+    handle_pool_op_reply(static_cast<MPoolOpReply*>(m));
     break;
 
   default:
