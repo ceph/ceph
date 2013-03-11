@@ -60,7 +60,7 @@ int CrushWrapper::remove_item(CephContext *cct, int item)
 	  if (t && t->size) {
 	    ldout(cct, 1) << "remove_device bucket " << item << " has " << t->size << " items, not empty" << dendl;
 	    return -ENOTEMPTY;
-	  }	    
+	  }
 	  was_bucket = t;
 	}
 	adjust_item_weight(cct, item, 0);
