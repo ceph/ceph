@@ -28,6 +28,7 @@
 #include "include/types.h"
 #include "include/utime.h"
 #include "rgw_acl.h"
+#include "rgw_cors.h"
 
 using namespace std;
 
@@ -43,6 +44,7 @@ using ceph::crypto::MD5;
 #define RGW_AMZ_META_PREFIX "x-amz-meta-"
 
 #define RGW_ATTR_ACL		RGW_ATTR_PREFIX "acl"
+#define RGW_ATTR_CORS		RGW_ATTR_PREFIX "cors"
 #define RGW_ATTR_ETAG    	RGW_ATTR_PREFIX "etag"
 #define RGW_ATTR_BUCKETS	RGW_ATTR_PREFIX "buckets"
 #define RGW_ATTR_META_PREFIX	RGW_ATTR_PREFIX RGW_AMZ_META_PREFIX
@@ -269,6 +271,7 @@ enum http_op {
   OP_HEAD,
   OP_POST,
   OP_COPY,
+  OP_OPTIONS,
   OP_UNKNOWN,
 };
 
@@ -609,6 +612,7 @@ struct req_state {
    RGWUserInfo user; 
    RGWAccessControlPolicy *bucket_acl;
    RGWAccessControlPolicy *object_acl;
+   RGWCORSConfiguration   *bucket_cors;
 
    string canned_acl;
    bool has_acl_header;
