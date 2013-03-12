@@ -32,7 +32,8 @@ technology stack.
             |          OSDs          | |        Monitors        |
             +------------------------+ +------------------------+
 
-.. important:: To use Ceph block devices with OpenStack, you must have a running Ceph cluster.
+.. important:: To use Ceph block devices with OpenStack, you must have a 
+   running Ceph cluster.
 
 Two parts of OpenStack integrate with Ceph's block devices: 
 
@@ -97,19 +98,21 @@ Setup Ceph Client Authentication
 --------------------------------
 
 If you have `cephx authentication`_ enabled, create a new user for Nova/Cinder
-and Glance. For Ceph before version 0.54 or lower::
+and Glance. 
+
+For Ceph version 0.53 or lower, execute the following::
 
     ceph auth get-or-create client.volumes mon 'allow r' osd 'allow x, allow rwx pool=volumes, allow rx pool=images'
     ceph auth get-or-create client.images mon 'allow r' osd 'allow x, allow rwx pool=images'
 
-In Ceph version 0.54, more specific permissions were added, so the
-users can be restricted further::
+In Ceph version 0.54, more specific permissions were added, so the users can be
+restricted further. For Ceph version 0.54 or later, execute the following::
 
     ceph auth get-or-create client.volumes mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=volumes, allow rx pool=images'
     ceph auth get-or-create client.images mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=images'
 
-Add the keyrings for ``client.volumes`` and ``client.images`` to the
-appropriate hosts and change their ownership::
+Add the keyrings for ``client.volumes`` and ``client.images`` to the appropriate
+hosts and change their ownership::
 
   ceph auth get-or-create client.images | ssh {your-glance-api-server} sudo tee /etc/ceph/ceph.client.images.keyring
   ssh {your-glance-api-server} sudo chown glance:glance /etc/ceph/ceph.client.images.keyring
@@ -122,8 +125,8 @@ key on the hosts running ``nova-compute``::
 
   ssh {your-compute-host} client.volumes.key <`ceph auth get-key client.volumes`
 
-Then, on the compute hosts, add the secret key to libvirt and remove
-the temporary copy of the key::
+Then, on the compute hosts, add the secret key to libvirt and remove the
+temporary copy of the key::
 
   cat > secret.xml <<EOF
   <secret ephemeral='no' private='no'>
