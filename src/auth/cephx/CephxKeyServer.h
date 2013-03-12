@@ -276,7 +276,7 @@ public:
   void export_keyring(KeyRing& keyring) {
     for (map<EntityName, EntityAuth>::iterator p = data.secrets.begin();
 	 p != data.secrets.end();
-	 p++) {
+	 ++p) {
       keyring.add(p->first, p->second);
     }
   }
