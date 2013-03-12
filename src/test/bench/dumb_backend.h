@@ -91,7 +91,6 @@ class DumbBackend : public Backend {
 	item->bl,
 	item->on_applied,
 	item->on_commit);
-      delete item;
     }
     void _clear() {
       return item_queue.clear();

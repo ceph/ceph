@@ -682,13 +682,6 @@ void RGWPostObj_ObjStore_S3::rebuild_key(string& key)
 
 int RGWPostObj_ObjStore_S3::get_params()
 {
-  string temp_line;
-  string param;
-  string old_param;
-  string param_value;
-
-  string whitespaces (" \t\f\v\n\r");
-
   // get the part boundary
   string req_content_type_str = s->env->get("CONTENT_TYPE", "");
   string req_content_type;
@@ -824,7 +817,6 @@ int RGWPostObj_ObjStore_S3::get_params()
 int RGWPostObj_ObjStore_S3::get_policy()
 {
   bufferlist encoded_policy;
-  string uid;
 
   if (part_bl("policy", &encoded_policy)) {
 

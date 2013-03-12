@@ -746,7 +746,7 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
         return 0;
       }
     }
-    iter--;
+    --iter;
     start_key = iter->first;
   } while (true);
   return 0;
@@ -1071,7 +1071,7 @@ static int gc_iterate_entries(cls_method_context_t hctx, const string& marker,
       i++;
 
     }
-    iter--;
+    --iter;
     start_key = iter->first;
   } while (true);
   return 0;
