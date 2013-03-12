@@ -296,7 +296,6 @@ public:
     store->submit_transaction_sync(tx);
 
     deque<string> key_deque;
-    pair<string,string> key;
     KeyValueDB::WholeSpaceIterator iter = store->get_iterator();
     iter->seek_to_first();
 
