@@ -495,7 +495,7 @@ protected:
     dispatcher->process_context(ctx);
     ret = ctx->ret();
     ctx->put();
-    return bl.length();
+    return ret;
   }
   int sync_write(const std::string& oid, bufferlist& bl, size_t len) {
     struct req_context *ctx = new req_context;
