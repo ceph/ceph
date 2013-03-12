@@ -29,6 +29,27 @@ void cls_log_trim(librados::ObjectWriteOperation& op, utime_t& from, utime_t& to
   op.exec("log", "trim", in);
 }
 
+int cls_log_trim(librados::IoCtx& io_ctx, string& oid, utime_t& from, utime_t& to)
+{
+  bool done = false;
+
+  do {
+    ObjectWriteOperation op;
+
+    cls_log_trim(op, from, to);
+
+    int r = io_ctx.operate(oid, &op);
+    if (r == -ENODATA)
+      done = true;
+    else if (r < 0)
+      return r;
+
+  } while (!done);
+
+
+  return 0;
+}
+
 class LogListCtx : public ObjectOperationCompletion {
   list<cls_log_entry> *entries;
   bool *truncated;
