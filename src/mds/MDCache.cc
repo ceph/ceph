@@ -3325,8 +3325,10 @@ void MDCache::recalc_auth_bits()
 
   if (root) {
     root->inode_auth.first = mds->mdsmap->get_root();
-    if (mds->whoami != root->inode_auth.first)
+    if (mds->whoami != root->inode_auth.first) {
       root->state_clear(CInode::STATE_AUTH);
+      root->state_set(CInode::STATE_REJOINING);
+    }
   }
 
   set<CInode*> subtree_inodes;
@@ -3340,8 +3342,10 @@ void MDCache::recalc_auth_bits()
        ++p) {
 
     CInode *inode = p->first->get_inode();
-    if (inode->is_mdsdir() && inode->ino() != MDS_INO_MDSDIR(mds->get_nodeid()))
+    if (inode->is_mdsdir() && inode->ino() != MDS_INO_MDSDIR(mds->get_nodeid())) {
       inode->state_clear(CInode::STATE_AUTH);
+      inode->state_set(CInode::STATE_REJOINING);
+    }
 
     list<CDir*> dfq;  // dirfrag queue
     dfq.push_back(p->first);
@@ -3546,6 +3550,7 @@ void MDCache::rejoin_send_rejoins()
 				    root->filelock.get_state(),
 				    root->nestlock.get_state(),
 				    root->dirfragtreelock.get_state());
+	root->state_set(CInode::STATE_REJOINING);
 	if (root->is_dirty_scattered()) {
 	  dout(10) << " sending scatterlock state on root " << *root << dendl;
 	  p->second->add_scatterlock_state(root);
@@ -3559,6 +3564,7 @@ void MDCache::rejoin_send_rejoins()
 				    in->filelock.get_state(),
 				    in->nestlock.get_state(),
 				    in->dirfragtreelock.get_state());
+	in->state_set(CInode::STATE_REJOINING);
       }
     }
   }  
@@ -3698,6 +3704,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
     // STRONG
     dout(15) << " add_strong_dirfrag " << *dir << dendl;
     rejoin->add_strong_dirfrag(dir->dirfrag(), dir->get_replica_nonce(), dir->get_dir_rep());
+    dir->state_set(CDir::STATE_REJOINING);
 
     for (CDir::map_t::iterator p = dir->items.begin();
 	 p != dir->items.end();
@@ -3711,6 +3718,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 				dnl->is_remote() ? dnl->get_remote_d_type():0, 
 				dn->get_replica_nonce(),
 				dn->lock.get_state());
+      dn->state_set(CDentry::STATE_REJOINING);
       if (dnl->is_primary()) {
 	CInode *in = dnl->get_inode();
 	dout(15) << " add_strong_inode " << *in << dendl;
@@ -3720,6 +3728,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 				 in->filelock.get_state(),
 				 in->nestlock.get_state(),
 				 in->dirfragtreelock.get_state());
+	in->state_set(CInode::STATE_REJOINING);
 	in->get_nested_dirfrags(nested);
 	if (in->is_dirty_scattered()) {
 	  dout(10) << " sending scatterlock state on " << *in << dendl;
