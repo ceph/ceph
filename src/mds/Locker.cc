@@ -4403,6 +4403,8 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     lock->set_state(LOCK_SYNC);
 
     lock->get_rdlock();
+    if (caps)
+      issue_caps(in);
     lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
     lock->put_rdlock();
     break;
