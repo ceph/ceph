@@ -34,7 +34,7 @@ typename T::iterator rand_choose(T &cont) {
 
 string num_str(unsigned i) {
   char buf[100];
-  snprintf(buf, sizeof(buf), "%.10d", i);
+  snprintf(buf, sizeof(buf), "%.10u", i);
   return string(buf);
 }
 
