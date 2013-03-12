@@ -1356,7 +1356,7 @@ main(int argc, char **argv)
 			break;
 		case 'l':
 			maxfilelen = getnum(optarg, &endp);
-			if (maxfilelen <= 0)
+			if (maxfilelen == 0)
 				usage();
 			break;
 		case 'm':
