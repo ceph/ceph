@@ -2148,7 +2148,7 @@ void CDir::finish_export(utime_t now)
   dirty_old_rstat.clear();
 }
 
-void CDir::decode_import(bufferlist::iterator& blp, utime_t now)
+void CDir::decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls)
 {
   ::decode(first, blp);
   ::decode(fnode, blp);
@@ -2161,7 +2161,10 @@ void CDir::decode_import(bufferlist::iterator& blp, utime_t now)
   ::decode(s, blp);
   state &= MASK_STATE_IMPORT_KEPT;
   state |= (s & MASK_STATE_EXPORTED);
-  if (is_dirty()) get(PIN_DIRTY);
+  if (is_dirty()) {
+    get(PIN_DIRTY);
+    _mark_dirty(ls);
+  }
 
   ::decode(dir_rep, blp);
 
