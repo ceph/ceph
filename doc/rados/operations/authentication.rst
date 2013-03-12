@@ -14,7 +14,8 @@ do not need to generate the keys again.
 .. important: The ``cephx`` protocol does not address data encryption in transport 
    (e.g., SSL/TLS) or encryption at rest.   
 
-For additional information, see our `Cephx Intro`_ and `ceph-authtool manpage`_.
+For additional information, see our `Cephx Intro`_, our `Cephx Configuration
+Reference`_ and `ceph-authtool manpage`_.
 
 .. _Cephx Intro: ../auth-intro
 .. _ceph-authtool manpage: ../../../man/8/ceph-authtool
@@ -24,11 +25,19 @@ Configuring Cephx
 =================
 
 There are several important procedures you must follow to enable the ``cephx``
-protocol for your Ceph cluster and its daemons. First, you must generate a 
-secret key for the default ``client.admin`` user so the administrator can 
-execute Ceph commands. Second, you must generate a monitor secret key and 
-distribute it to all monitors in the cluster. Finally, you can follow the 
-remaining steps in `Enabling Cephx`_ to enable authentication.
+protocol for your Ceph cluster and its daemons: 
+
+#. You must generate a secret key for the default ``client.admin`` user so the 
+   administrator can execute Ceph commands. 
+   
+#. You must generate a monitor secret key and distribute it to all monitors in 
+   the cluster. 
+
+#. You must follow the remaining steps in `Enabling Cephx`_ to enable 
+   authentication.
+
+See the `Cephx Configuration Reference`_ for additional details.
+
 
 .. _client-admin-key:
 
@@ -130,15 +139,16 @@ you may skip the steps related to generating keys.
 	sudo service ceph -a start
 	sudo service ceph -a restart
 
+
 .. _disable-cephx:
 
 Disabling Cephx
 ---------------
 
 The following procedure describes how to disable Cephx. If your cluster
-environment is relatively safe, you can offset the computation expense of 
-running authentication. **We do not recommend it.** However, it may be 
-easier during setup and/or troubleshooting to temporarily disable authentication.
+environment is relatively safe, you can offset the computation expense of
+running authentication. **We do not recommend it.** However, it may be easier
+during setup and/or troubleshooting to temporarily disable authentication.
 
 #. Disable ``cephx`` authentication for versions ``0.51`` and above by setting
    the following options in the ``[global]`` section of your `Ceph configuration`_
@@ -163,11 +173,10 @@ easier during setup and/or troubleshooting to temporarily disable authentication
 Daemon Keyrings
 ---------------
 
-With the exception of the monitors, daemon keyrings are generated in
-the same way that user keyrings are.  By default, the daemons store
-their keyrings inside their data directory.  The default keyring
-locations, and the capabilities necessary for the daemon to function,
-are shown below.
+With the exception of the monitors, Ceph generates daemon keyrings in the same
+way that it generates user keyrings.  By default, the daemons store their
+keyrings inside their data directory.  The default keyring locations, and the
+capabilities necessary for the daemon to function, are shown below.
 
 ``ceph-mon``
 
@@ -203,11 +212,12 @@ For example, ``osd.12`` would be::
 
 You can override these locations, but it is not recommended.
 
+
 Cephx Administration
 ====================
 
 Cephx uses shared secret keys for authentication, meaning both the client and
-the monitor cluster have a copy of the client's secret key.  The authentication
+the monitor cluster have a copy of the client's secret key. The authentication
 protocol is such that both parties are able to prove to each other they have a
 copy of the key without actually revealing it.  This provides mutual
 authentication, which means the cluster is sure the user possesses the secret
@@ -216,6 +226,7 @@ key, and the user is sure that the cluster has a copy of the secret key.
 Default users and pools are suitable for initial testing purposes. For test bed 
 and production environments, you should create users and assign pool access to 
 the users.
+
 
 .. _add-a-key:
 
@@ -228,16 +239,25 @@ simple strings specifying some access permissions for a given server type.
 Each server type has its own string.  All capabilities are simply listed
 in ``{type}`` and ``{capability}`` pairs on the command line::
 
-	sudo ceph auth get-or-create-key client.{username} {daemon1} {cap1} {daemon2} {cap2} ...
+	sudo ceph auth get-or-create client.{username} {daemon1} {cap1} {daemon2} {cap2} ...
 
 For example, to create a user ``client.foo`` with access 'rw' for
 daemon type 'osd' and 'r' for daemon type 'mon'::
 
-   sudo ceph auth get-or-create-key client.foo osd 'allow rw' mon 'allow r' > keyring.foo
+   sudo ceph auth get-or-create client.foo osd 'allow rw' mon 'allow r' > keyring.foo
 
 .. note: User names are associated to user types, which include ``client``
    ``osd``, ``mon``, and ``mds``. In most cases, you will be
    creating keys for ``client`` users.
+
+After you add a key to the cluster keyring, go to the relevant client(s) and
+copy the keyring from the cluster host to the client(s). ::
+
+	sudo scp {user}@{ceph-cluster-host}:/etc/ceph/ceph.keyring /etc/ceph/ceph.keyring
+
+.. tip:: Ensure the ``ceph.keyring`` file has appropriate permissions set 
+   (e.g., ``chmod 644``) on your client machine.
+
 
 .. _auth-delete-key:
 
@@ -250,6 +270,16 @@ To delete a key for a user or a daemon, use ``ceph auth del``::
 	
 Where ``{daemon-type}`` is one of ``client``, ``osd``, ``mon``, or ``mds``, 
 and ``{ID|username}`` is the ID of the daemon or the username.
+
+After you delete a key from the cluster keyring, go to the relevant client(s) and
+copy the keyring from the cluster host to the client(s). ::
+
+	sudo scp {user}@{ceph-cluster-host}:/etc/ceph/ceph.keyring /etc/ceph/ceph.keyring
+
+.. tip:: Ensure the ``ceph.keyring`` file has appropriate permissions set 
+   (e.g., ``chmod 644``) on your client machine.
+
+
 
 List Keys in your Cluster
 -------------------------
@@ -298,7 +328,6 @@ Ceph supports the following usage for user name and secret:
 
                ceph --name client.foo --keyring /path/to/keyring health
                ceph -n client.foo --keyring /path/to/keyring health
-              
 
 
 ``--keyring``
@@ -392,3 +421,4 @@ foregoing flag** at the nearest practical time so that you may avail yourself
 of the enhanced authentication.
 
 .. _Ceph configuration: ../../configuration/ceph-conf
+.. _Cephx Configuration Reference: ../../configuration/auth-config-ref
