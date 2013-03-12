@@ -80,7 +80,7 @@ static void usage()
   cout << "  ceph osd down <osd-id>\n";
   cout << "  ceph osd in <osd-id>\n";
   cout << "  ceph osd out <osd-id>\n";
-  cout << "  ceph osd set <noout|noin|nodown|noup|noscrub|nodeep-scrub\n";
+  cout << "  ceph osd set <noout|noin|nodown|noup|noscrub|nodeep-scrub>\n";
   cout << "  ceph osd unset <noout|noin|nodown|noup|noscrub|nodeep-scrub>\n";
   cout << "  ceph osd pause\n";
   cout << "  ceph osd unpause\n";
