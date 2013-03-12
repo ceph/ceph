@@ -1214,7 +1214,6 @@ __aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
 	static struct timespec ts;
 	struct iocb *iocbs[] = { &iocb };
 	int ret;
-	long res;
 
 	if (rw == READ) {
 		io_prep_pread(&iocb, fd, buf, len, offset);
@@ -1250,7 +1249,7 @@ __aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
 		 * and it's used to pass negated error value.
 		 * Till the library is fixed use the temp var.
 		 */
-		res = (long)event.res;
+		long res = (long)event.res;
 		if (res >= 0)
 			fprintf(stderr, "bad io length: %lu instead of %u\n",
 					res, len);
