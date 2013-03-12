@@ -62,8 +62,6 @@ public:
 };
 
 void RGWOp_Usage_Delete::execute() {
-  map<std::string, bool> categories;
-
   string uid;
   uint64_t start, end;
 
