@@ -550,7 +550,7 @@ public:
   void abort_export() { 
     put(PIN_TEMPEXPORTING);
   }
-  void decode_import(bufferlist::iterator& blp, utime_t now);
+  void decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls);
 
 
   // -- auth pins --

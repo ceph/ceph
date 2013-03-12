@@ -2397,7 +2397,7 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
   dout(7) << "decode_import_dir " << *dir << dendl;
 
   // assimilate state
-  dir->decode_import(blp, now);
+  dir->decode_import(blp, now, ls);
 
   // mark  (may already be marked from get_or_open_dir() above)
   if (!dir->is_auth())
