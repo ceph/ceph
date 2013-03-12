@@ -299,7 +299,8 @@ Lock, unlock, or query lock status of machines.
                                 if status['description'] == ctx.desc]
             if ctx.desc_pattern is not None:
                 statuses = [status for status in statuses \
-                                if status['description'].find(ctx.desc_pattern) >= 0]
+                                if status['description'] is not None and \
+                                status['description'].find(ctx.desc_pattern) >= 0]
             if ctx.list:
                 if ctx.brief:
                     for s in statuses:
