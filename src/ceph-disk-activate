@@ -235,7 +235,6 @@ def mkfs(
             '--monmap', monmap,
             '--osd-data', path,
             '--osd-uuid', fsid,
-            '--keyring', os.path.join(path, 'keyring'),
             ],
         )
     # TODO ceph-osd --mkfs removes the monmap file?
