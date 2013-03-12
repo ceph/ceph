@@ -10,9 +10,9 @@ command1="mkdir -p $TESTDIR/hadoop_input"
 command2="wget http://ceph.com/qa/hadoop_input_files.tar -O $TESTDIR/hadoop_input/files.tar"
 command3="cd $TESTDIR/hadoop_input"
 command4="tar -xf $TESTDIR/hadoop_input/files.tar"
-command5="$TESTDIR/hadoop/bin/hadoop fs -mkdir wordcount_input"
-command6="$TESTDIR/hadoop/bin/hadoop fs -put $TESTDIR/hadoop_input/*txt wordcount_input/"
-command7="$TESTDIR/hadoop/bin/hadoop jar $TESTDIR/hadoop/build/hadoop-example*jar wordcount wordcount_input wordcount_output"
+command5="$TESTDIR/apache_hadoop/bin/hadoop fs -mkdir wordcount_input"
+command6="$TESTDIR/apache_hadoop/bin/hadoop fs -put $TESTDIR/hadoop_input/*txt wordcount_input/"
+command7="$TESTDIR/apache_hadoop/bin/hadoop jar $TESTDIR/apache_hadoop/build/hadoop-example*jar wordcount wordcount_input wordcount_output"
 command8="rm -rf $TESTDIR/hadoop_input"
 
 
