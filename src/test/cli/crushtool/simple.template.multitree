@@ -1,0 +1,70 @@
+# begin crush map
+
+# devices
+device 0 device0
+device 1 osd1
+
+# types
+type 0 device
+type 1 host
+type 2 cluster
+
+# buckets
+host host0 {
+	# weight 1.000
+	alg straw
+	hash 0	# rjenkins1
+	item device0 weight 1.000
+}
+host host1 {
+	# weight 2.000
+	alg straw
+	hash 0	# rjenkins1
+	item osd1 weight 2.000
+}
+cluster cluster0 {
+	# weight 3.000
+	alg straw
+	hash 0	# rjenkins1
+	item host0 weight 1.000
+	item host1 weight 2.000
+}
+
+cluster cluster1 {
+	# weight 3.000
+	alg straw
+	hash 0	# rjenkins1
+	item host0 weight 1.000
+	item host1 weight 2.000
+}
+
+# rules
+rule data {
+	ruleset 0
+	type replicated
+	min_size 1
+	max_size 10
+	step take cluster0
+	step chooseleaf firstn 0 type host
+	step emit
+}
+rule metadata {
+	ruleset 1
+	type replicated
+	min_size 1
+	max_size 10
+	step take cluster0
+	step chooseleaf firstn 0 type host
+	step emit
+}
+rule rbd {
+	ruleset 2
+	type replicated
+	min_size 1
+	max_size 10
+	step take cluster1
+	step chooseleaf firstn 0 type host
+	step emit
+}
+
+# end crush map
