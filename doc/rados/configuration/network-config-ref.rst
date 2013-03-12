@@ -156,7 +156,7 @@ to handle OSD heartbeat, object replication and recovery traffic.
    include each IP address/subnet in your IP tables and open ports for them
    as necessary.
 
-.. note:: Ceph uses `CIDR`_ notation for subnets (e.g., ``10.20.30.40/24``).
+.. note:: Ceph uses `CIDR`_ notation for subnets (e.g., ``10.20.30.0/24``).
 
 
 Public Network
@@ -260,7 +260,7 @@ setting for a specific daemon.
 ``public network``
 
 :Description: The IP address and netmask of the public (front-side) network 
-              (e.g., ``10.20.30.40/24``). Set in ``[global]``. You may specify
+              (e.g., ``10.20.30.0/24``). Set in ``[global]``. You may specify
               comma-delimited subnets.
 
 :Type: ``{ip-address}/{netmask} [, {ip-address}/{netmask}]``
@@ -291,7 +291,7 @@ settings using the ``cluster addr`` setting for specific OSD daemons.
 ``cluster network``
 
 :Description: The IP address and netmask of the cluster (back-side) network 
-              (e.g., ``10.20.30.41/24``).  Set in ``[global]``. You may specify
+              (e.g., ``10.20.40.0/24``).  Set in ``[global]``. You may specify
               comma-delimited subnets.
 
 :Type: ``{ip-address}/{netmask} [, {ip-address}/{netmask}]``
