@@ -99,10 +99,12 @@ below to an editor. Then, follow the steps below to modify it.
 Ceph v0.55 and above have authentication enabled by default. You should 
 explicitly enable or disable authentication with version 0.55 and above.
 The example configuration provides ``auth`` entries for authentication.
-For details on Ceph authentication see `Ceph Authentication`_.
+For details on Ceph authentication see `Cephx Configuration Reference`_ 
+and `Cephx Guide`_.
 
-.. _Ceph Authentication: ../../rados/operations/authentication
-   
+.. _Cephx Guide: ../../rados/operations/authentication
+.. _Cephx Configuration Reference: ../../rados/configuration/auth-config-ref
+
 
 Deploy the Configuration
 ========================
