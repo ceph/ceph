@@ -468,6 +468,31 @@ Troubleshooting PG Errors
 =========================
 
 
+Placement Groups Never Get Clean
+--------------------------------
+
+There are a few cases where Ceph placement groups never get clean: 
+
+#. **One OSD:** If you deviate from the quick start and use only one OSD, you
+   will likely run into problems. OSDs report other OSDs to the monitor, and 
+   also interact with other OSDs when replicating data. If you have only one 
+   OSD, a second OSD cannot check its heartbeat. Also, if you remove an OSD 
+   and have only one OSD remaining, you may encounter problems. An secondary 
+   or tertiary OSD expects another OSD to tell it which placement groups it 
+   should have. The lack of another OSD prevents this from occurring. So a 
+   placement group can remain stuck “stale” forever.
+
+#. **Pool Size = 1**: If you have only one copy of an object, no other OSD will
+   tell the OSD which objects it should have. For each placement group mapped 
+   to the remaining OSD (see ``ceph pg dump``), you can force the OSD to notice 
+   the placement groups it needs by running::
+   
+   	ceph pg force_create_pg <pgid>
+
+As a general rule, you should run your cluster with more than one OSD and a
+pool size greater than 1 object replica.
+
+
 Stuck Placement Groups
 ----------------------
 
