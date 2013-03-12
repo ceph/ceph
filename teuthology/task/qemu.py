@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 DEFAULT_NUM_RBD = 1
 DEFAULT_IMAGE_URL = 'http://ceph.com/qa/ubuntu-12.04.qcow2'
-DEFAULT_MEM = 1024 # in megabytes
+DEFAULT_MEM = 4096 # in megabytes
 
 @contextlib.contextmanager
 def create_dirs(ctx, config):
