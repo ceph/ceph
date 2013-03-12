@@ -40,13 +40,13 @@ def validate_config(ctx, config):
 
 ## Add required entries to conf/hadoop-env.sh
 def write_hadoop_env(ctx, config):
-    hadoopEnvFile = "{tdir}/hadoop/conf/hadoop-env.sh".format(tdir=teuthology.get_testdir(ctx))
+    hadoopEnvFile = "{tdir}/apache_hadoop/conf/hadoop-env.sh".format(tdir=teuthology.get_testdir(ctx))
 
     hadoopNodes = ctx.cluster.only(teuthology.is_type('hadoop'))
     for remote, roles_for_host in hadoopNodes.remotes.iteritems():
         teuthology.write_file(remote, hadoopEnvFile, 
 '''export JAVA_HOME=/usr/lib/jvm/default-java
-export HADOOP_CLASSPATH=$HADOOP_CLASSPATH:{tdir}/binary/usr/local/lib/libcephfs.jar:{tdir}/hadoop/build/hadoop-core*.jar
+export HADOOP_CLASSPATH=$HADOOP_CLASSPATH:/usr/share/java/libcephfs.jar:{tdir}/apache_hadoop/build/hadoop-core*.jar:{tdir}/inktank_hadoop/build/hadoop-cephfs.jar
 export HADOOP_NAMENODE_OPTS="-Dcom.sun.management.jmxremote $HADOOP_NAMENODE_OPTS"
 export HADOOP_SECONDARYNAMENODE_OPTS="-Dcom.sun.management.jmxremote $HADOOP_SECONDARYNAMENODE_OPTS"
 export HADOOP_DATANODE_OPTS="-Dcom.sun.management.jmxremote $HADOOP_DATANODE_OPTS"
@@ -58,7 +58,7 @@ export HADOOP_JOBTRACKER_OPTS="-Dcom.sun.management.jmxremote $HADOOP_JOBTRACKER
 ## Add required entries to conf/core-site.xml
 def write_core_site(ctx, config):
     testdir = teuthology.get_testdir(ctx)
-    coreSiteFile = "{tdir}/hadoop/conf/core-site.xml".format(tdir=testdir)
+    coreSiteFile = "{tdir}/apache_hadoop/conf/core-site.xml".format(tdir=testdir)
 
     hadoopNodes = ctx.cluster.only(teuthology.is_type('hadoop'))
     for remote, roles_for_host in hadoopNodes.remotes.iteritems():
@@ -87,6 +87,10 @@ def write_core_site(ctx, config):
       <name>ceph.conf.file</name>
       <value>/etc/ceph/ceph.conf</value>
     </property>
+    <property>
+      <name>fs.ceph.impl</name>
+      <value>org.apache.hadoop.fs.ceph.CephFileSystem</value>
+    </property>
 </configuration>
 '''.format(tdir=teuthology.get_testdir(ctx), default_fs=default_fs_string))
 
@@ -101,7 +105,7 @@ def get_hadoop_master_ip(ctx):
 
 ## Add required entries to conf/mapred-site.xml
 def write_mapred_site(ctx):
-    mapredSiteFile = "{tdir}/hadoop/conf/mapred-site.xml".format(tdir=teuthology.get_testdir(ctx))
+    mapredSiteFile = "{tdir}/apache_hadoop/conf/mapred-site.xml".format(tdir=teuthology.get_testdir(ctx))
 
     master_ip = get_hadoop_master_ip(ctx)
     log.info('adding host {remote} as jobtracker'.format(remote=master_ip))
@@ -124,7 +128,7 @@ def write_mapred_site(ctx):
 
 ## Add required entries to conf/hdfs-site.xml
 def write_hdfs_site(ctx):
-    hdfsSiteFile = "{tdir}/hadoop/conf/hdfs-site.xml".format(tdir=teuthology.get_testdir(ctx))
+    hdfsSiteFile = "{tdir}/apache_hadoop/conf/hdfs-site.xml".format(tdir=teuthology.get_testdir(ctx))
 
     hadoopNodes = ctx.cluster.only(teuthology.is_type('hadoop'))
     for remote, roles_for_host in hadoopNodes.remotes.iteritems():
@@ -146,7 +150,7 @@ def write_hdfs_site(ctx):
 def write_slaves(ctx):
     log.info('Setting up slave nodes...')
 
-    slavesFile = "{tdir}/hadoop/conf/slaves".format(tdir=teuthology.get_testdir(ctx))
+    slavesFile = "{tdir}/apache_hadoop/conf/slaves".format(tdir=teuthology.get_testdir(ctx))
     tmpFile = StringIO()
 
     slaves = ctx.cluster.only(teuthology.is_type('hadoop.slave'))
@@ -164,7 +168,7 @@ def write_slaves(ctx):
 ## Add required entries to conf/masters 
 ## These nodes host JobTrackers and Namenodes
 def write_master(ctx):
-    mastersFile = "{tdir}/hadoop/conf/masters".format(tdir=teuthology.get_testdir(ctx))
+    mastersFile = "{tdir}/apache_hadoop/conf/masters".format(tdir=teuthology.get_testdir(ctx))
     master = _get_master(ctx)
     master_remote, _ = master
 
@@ -200,7 +204,7 @@ def configure_hadoop(ctx, config):
         master = _get_master(ctx)
         remote, _ = master
         remote.run(
-        args=["{tdir}/hadoop/bin/hadoop".format(tdir=teuthology.get_testdir(ctx)),
+        args=["{tdir}/apache_hadoop/bin/hadoop".format(tdir=teuthology.get_testdir(ctx)),
               "namenode",
               "-format"],
             wait=True,
@@ -228,13 +232,13 @@ def _start_hadoop(ctx, remote, config):
     testdir = teuthology.get_testdir(ctx)
     if config.get('hdfs'):
         remote.run(
-            args=['{tdir}/hadoop/bin/start-dfs.sh'.format(tdir=testdir), ],
+            args=['{tdir}/apache_hadoop/bin/start-dfs.sh'.format(tdir=testdir), ],
             wait=True,
         )
         log.info('done starting hdfs')
 
     remote.run(
-        args=['{tdir}/hadoop/bin/start-mapred.sh'.format(tdir=testdir), ],
+        args=['{tdir}/apache_hadoop/bin/start-mapred.sh'.format(tdir=testdir), ],
         wait=True,
     )
     log.info('done starting mapred')
@@ -243,13 +247,13 @@ def _start_hadoop(ctx, remote, config):
 def _stop_hadoop(ctx, remote, config):
     testdir = teuthology.get_testdir(ctx)
     remote.run(
-        args=['{tdir}/hadoop/bin/stop-mapred.sh'.format(tdir=testdir), ],
+        args=['{tdir}/apache_hadoop/bin/stop-mapred.sh'.format(tdir=testdir), ],
         wait=True,
     )
 
     if config.get('hdfs'):
         remote.run(
-            args=['{tdir}/hadoop/bin/stop-dfs.sh'.format(tdir=testdir), ],
+            args=['{tdir}/apache_hadoop/bin/stop-dfs.sh'.format(tdir=testdir), ],
             wait=True,
         )
 
@@ -276,14 +280,14 @@ def start_hadoop(ctx, config):
         log.info('Running stop-mapred.sh on {remote}'.format(remote=remote.ssh.get_transport().getpeername()[0]))
         _stop_hadoop(ctx, remote, config)
 
-# download and untar the most recent hadoop binaries into {testdir}/hadoop
-def _download_hadoop_binaries(ctx, remote, hadoop_url):
-    log.info('_download_hadoop_binaries: path %s' % hadoop_url)
-    fileName = 'hadoop.tgz'
+# download and untar the most recent apache hadoop binaries into {testdir}/apache_hadoop
+def _download_apache_hadoop_binaries(ctx, remote, hadoop_url):
+    log.info('_download_apache_hadoop_binaries: path {path} on host {host}'.format(path=hadoop_url, host=str(remote)))
+    fileName = 'apache-hadoop.tgz'
     testdir = teuthology.get_testdir(ctx)
     remote.run(
         args=[
-            'mkdir', '-p', '-m0755', '{tdir}/hadoop'.format(tdir=testdir),
+            'mkdir', '-p', '-m0755', '{tdir}/apache_hadoop'.format(tdir=testdir),
             run.Raw('&&'),
             'echo',
             '{fileName}'.format(fileName=fileName),
@@ -295,20 +299,61 @@ def _download_hadoop_binaries(ctx, remote, hadoop_url):
             # need to use --input-file to make wget respect --base
             '--input-file=-',
             run.Raw('|'),
-            'tar', '-xzf', '-', '-C', '{tdir}/hadoop'.format(tdir=testdir),
+            'tar', '-xzf', '-', '-C', '{tdir}/apache_hadoop'.format(tdir=testdir),
         ],
     )
+
+# download and untar the most recent Inktank hadoop binaries into {testdir}/hadoop
+def _download_inktank_hadoop_binaries(ctx, remote, hadoop_url):
+    log.info('_download_inktank_hadoop_binaries: path {path} on host {host}'.format(path=hadoop_url, host=str(remote)))
+    fileName = 'hadoop.tgz'
+    testdir = teuthology.get_testdir(ctx)
+    remote.run(
+        args=[
+            'mkdir', '-p', '-m0755', '{tdir}/inktank_hadoop'.format(tdir=testdir),
+            run.Raw('&&'),
+            'echo',
+            '{fileName}'.format(fileName=fileName),
+            run.Raw('|'),
+            'wget',
+            '-nv',
+            '-O-',
+            '--base={url}'.format(url=hadoop_url),
+            # need to use --input-file to make wget respect --base
+            '--input-file=-',
+            run.Raw('|'),
+            'tar', '-xzf', '-', '-C', '{tdir}/inktank_hadoop'.format(tdir=testdir),
+        ],
+    )
+
+# copy hadoop-cephfs.jar and hadoop-cephfs-test.jar into apache_hadoop
+def _copy_hadoop_cephfs_jars(ctx, remote, from_dir, to_dir):
+    testdir = teuthology.get_testdir(ctx)
+    log.info('copy jars from {from_dir} to {to_dir} on host {host}'.format(from_dir=from_dir, to_dir=to_dir, host=str(remote)))
+    file_names = [ 'hadoop-cephfs.jar', 'hadoop-cephfs-test.jar' ] 
+    for file_name in file_names:
+        log.info('Copying file {file_name}'.format(file_name=file_name))
+        remote.run(
+            args=[ 'cp', '{tdir}/{from_dir}/{file_name}'.format(tdir=testdir,from_dir=from_dir,file_name=file_name),
+                '{tdir}/{to_dir}/'.format(tdir=testdir,to_dir=to_dir)
+            ],
+        )
+
+def _node_binaries(ctx, config, remote, inktank_hadoop_bindir_url, apache_hadoop_bindir_url):
+    _download_inktank_hadoop_binaries(ctx, remote, inktank_hadoop_bindir_url)
+    _download_apache_hadoop_binaries(ctx, remote, apache_hadoop_bindir_url)
+    _copy_hadoop_cephfs_jars(ctx, remote, 'inktank_hadoop/build', 'apache_hadoop/build')
 
 @contextlib.contextmanager
 def binaries(ctx, config):
     path = config.get('path')
 
     if path is None:
-        # fetch from gitbuilder gitbuilder
-        log.info('Fetching and unpacking hadoop binaries from gitbuilder...')
-        sha1, hadoop_bindir_url = teuthology.get_ceph_binary_url(
-            package='hadoop',
-            branch=config.get('branch'),
+        # fetch Apache Hadoop from gitbuilder
+        log.info('Fetching and unpacking Apache Hadoop binaries from gitbuilder...')
+        apache_sha1, apache_hadoop_bindir_url = teuthology.get_ceph_binary_url(
+            package='apache-hadoop',
+            branch=config.get('apache_branch'),
             tag=config.get('tag'),
             sha1=config.get('sha1'),
             flavor=config.get('flavor'),
@@ -316,16 +361,29 @@ def binaries(ctx, config):
             dist=config.get('dist'),
             arch=config.get('arch'),
             )
-        log.info('hadoop_bindir_url %s' % (hadoop_bindir_url))
-        ctx.summary['ceph-sha1'] = sha1
-        if ctx.archive is not None:
-            with file(os.path.join(ctx.archive, 'ceph-sha1'), 'w') as f:
-                f.write(sha1 + '\n')
+        log.info('apache_hadoop_bindir_url %s' % (apache_hadoop_bindir_url))
+        ctx.summary['apache-hadoop-sha1'] = apache_sha1
+
+        # fetch Inktank Hadoop from gitbuilder
+        log.info('Fetching and unpacking Inktank Hadoop binaries from gitbuilder...')
+        inktank_sha1, inktank_hadoop_bindir_url = teuthology.get_ceph_binary_url(
+            package='hadoop',
+            branch=config.get('inktank_branch'),
+            tag=config.get('tag'),
+            sha1=config.get('sha1'),
+            flavor=config.get('flavor'),
+            format=config.get('format'),
+            dist=config.get('dist'),
+            arch=config.get('arch'),
+            )
+        log.info('inktank_hadoop_bindir_url %s' % (inktank_hadoop_bindir_url))
+        ctx.summary['inktank-hadoop-sha1'] = inktank_sha1
 
     with parallel() as p:
         hadoopNodes = ctx.cluster.only(teuthology.is_type('hadoop'))
+        # these can happen independently
         for remote in hadoopNodes.remotes.iterkeys():
-            p.spawn(_download_hadoop_binaries, ctx, remote, hadoop_bindir_url)
+            p.spawn(_node_binaries, ctx, config, remote, inktank_hadoop_bindir_url, apache_hadoop_bindir_url)
 
     try:
         yield
@@ -333,7 +391,13 @@ def binaries(ctx, config):
         log.info('Removing hadoop binaries...')
         run.wait(
             ctx.cluster.run(
-                args=[ 'rm', '-rf', '--', '{tdir}/hadoop'.format(tdir=teuthology.get_testdir(ctx))],
+                args=[ 'rm', '-rf', '--', '{tdir}/apache_hadoop'.format(tdir=teuthology.get_testdir(ctx))],
+                wait=False,
+                ),
+            )
+        run.wait(
+            ctx.cluster.run(
+                args=[ 'rm', '-rf', '--', '{tdir}/inktank_hadoop'.format(tdir=teuthology.get_testdir(ctx))],
                 wait=False,
                 ),
             )
@@ -349,7 +413,7 @@ def out_of_safemode(ctx, config):
         master = _get_master(ctx)
         remote, _ = master
         remote.run(
-            args=["{tdir}/hadoop/bin/hadoop".format(tdir=teuthology.get_testdir(ctx)),
+            args=["{tdir}/apache_hadoop/bin/hadoop".format(tdir=teuthology.get_testdir(ctx)),
                   "dfsadmin",
                   "-safemode",
                   "wait"],
@@ -412,7 +476,8 @@ def task(ctx, config):
     format = 'jar'
     arch = 'x86_64'
     flavor = 'basic'
-    branch = 'cephfs_branch-1.0' # hadoop branch to acquire
+    apache_branch = 'branch-1.0' # hadoop branch to acquire
+    inktank_branch = 'cephfs_branch-1.0' # hadoop branch to acquire
 
     if config is None:
         config = {}
@@ -422,14 +487,15 @@ def task(ctx, config):
     with contextutil.nested(
         lambda: validate_config(ctx=ctx, config=config),
         lambda: binaries(ctx=ctx, config=dict(
-                branch=branch,
                 tag=config.get('tag'),
                 sha1=config.get('sha1'),
                 path=config.get('path'),
                 flavor=flavor,
                 dist=config.get('dist', dist),
                 format=format,
-                arch=arch
+                arch=arch,
+                apache_branch=apache_branch,
+                inktank_branch=inktank_branch,
                 )),
         lambda: configure_hadoop(ctx=ctx, config=config),
         lambda: start_hadoop(ctx=ctx, config=config),
