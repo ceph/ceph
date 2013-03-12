@@ -994,9 +994,6 @@ int main(int argc, const char *argv[])
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
 
-  std::string command;
-  std::vector<std::string> command_args;
-
   set<int> stub_ids;
   double duration = 300.0;
 
