@@ -1046,8 +1046,10 @@ void MDS::handle_mds_map(MMDSMap *m)
     oldmap->get_failed_mds_set(oldfailed);
     mdsmap->get_failed_mds_set(failed);
     for (set<int>::iterator p = failed.begin(); p != failed.end(); ++p)
-      if (oldfailed.count(*p) == 0)
+      if (oldfailed.count(*p) == 0) {
+	messenger->mark_down(oldmap->get_inst(*p).addr);
 	mdcache->handle_mds_failure(*p);
+      }
     
     // or down then up?
     //  did their addr/inst change?
@@ -1055,8 +1057,10 @@ void MDS::handle_mds_map(MMDSMap *m)
     mdsmap->get_up_mds_set(up);
     for (set<int>::iterator p = up.begin(); p != up.end(); ++p) 
       if (oldmap->have_inst(*p) &&
-	  oldmap->get_inst(*p) != mdsmap->get_inst(*p))
+	  oldmap->get_inst(*p) != mdsmap->get_inst(*p)) {
+	messenger->mark_down(oldmap->get_inst(*p).addr);
 	mdcache->handle_mds_failure(*p);
+      }
   }
   if (is_clientreplay() || is_active() || is_stopping()) {
     // did anyone stop?
