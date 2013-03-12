@@ -429,6 +429,24 @@ private:
     uint64_t &last_seq) {
     return read_entry(bl, last_seq, 0);
   }
+
+  // Debug/Testing
+  void get_header(
+    uint64_t wanted_seq,
+    off64_t *_pos,
+    entry_header_t *h);
+  void corrupt(
+    int wfd,
+    off64_t corrupt_at);
+  void corrupt_payload(
+    int wfd,
+    uint64_t seq);
+  void corrupt_footer_magic(
+    int wfd,
+    uint64_t seq);
+  void corrupt_header_magic(
+    int wfd,
+    uint64_t seq);
 };
 
 WRITE_CLASS_ENCODER(FileJournal::header_t)
