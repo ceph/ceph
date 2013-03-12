@@ -5066,6 +5066,8 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap)
   SnapRealm *realm = in->find_snaprealm();
   if (realm->have_past_parents_open()) {
     dout(10) << "do_cap_import " << session->info.inst.name << " mseq " << cap->get_mseq() << " on " << *in << dendl;
+    if (cap->get_last_seq() == 0)
+      cap->issue_norevoke(cap->issued()); // reconnected cap
     cap->set_last_issue();
     MClientCaps *reap = new MClientCaps(CEPH_CAP_OP_IMPORT,
 					in->ino(),
