@@ -658,6 +658,13 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
       // replica: tell auth
       int auth = lock->get_parent()->authority().first;
 
+      if (lock->get_parent()->is_rejoining() &&
+	  mds->mdsmap->get_state(auth) == MDSMap::STATE_REJOIN) {
+	dout(7) << "eval_gather finished gather, but still rejoining "
+		<< *lock->get_parent() << dendl;
+	return;
+      }
+
       if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_REJOIN) {
 	switch (lock->get_state()) {
 	case LOCK_SYNC_LOCK:
@@ -1050,9 +1057,11 @@ bool Locker::_rdlock_kick(SimpleLock *lock, bool as_anon)
     } else {
       // request rdlock state change from auth
       int auth = lock->get_parent()->authority().first;
-      dout(10) << "requesting rdlock from auth on " 
-	       << *lock << " on " << *lock->get_parent() << dendl;
-      mds->send_message_mds(new MLock(lock, LOCK_AC_REQRDLOCK, mds->get_nodeid()), auth);
+      if (mds->mdsmap->is_clientreplay_or_active_or_stopping(auth)) {
+	dout(10) << "requesting rdlock from auth on "
+		 << *lock << " on " << *lock->get_parent() << dendl;
+	mds->send_message_mds(new MLock(lock, LOCK_AC_REQRDLOCK, mds->get_nodeid()), auth);
+      }
       return false;
     }
   }
@@ -1272,9 +1281,11 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
       // replica.
       // auth should be auth_pinned (see acquire_locks wrlock weird mustpin case).
       int auth = lock->get_parent()->authority().first;
-      dout(10) << "requesting scatter from auth on " 
-	       << *lock << " on " << *lock->get_parent() << dendl;
-      mds->send_message_mds(new MLock(lock, LOCK_AC_REQSCATTER, mds->get_nodeid()), auth);
+      if (mds->mdsmap->is_clientreplay_or_active_or_stopping(auth)) {
+	dout(10) << "requesting scatter from auth on "
+		 << *lock << " on " << *lock->get_parent() << dendl;
+	mds->send_message_mds(new MLock(lock, LOCK_AC_REQSCATTER, mds->get_nodeid()), auth);
+      }
       break;
     }
   }
@@ -1899,13 +1910,19 @@ void Locker::request_inode_file_caps(CInode *in)
     }
 
     int auth = in->authority().first;
+    if (in->is_rejoining() &&
+	mds->mdsmap->get_state(auth) == MDSMap::STATE_REJOIN) {
+      mds->wait_for_active_peer(auth, new C_MDL_RequestInodeFileCaps(this, in));
+      return;
+    }
+
     dout(7) << "request_inode_file_caps " << ccap_string(wanted)
             << " was " << ccap_string(in->replica_caps_wanted) 
             << " on " << *in << " to mds." << auth << dendl;
 
     in->replica_caps_wanted = wanted;
 
-    if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_REJOIN)
+    if (mds->mdsmap->is_clientreplay_or_active_or_stopping(auth))
       mds->send_message_mds(new MInodeFileCaps(in->ino(), in->replica_caps_wanted),
 			    auth);
   }
@@ -1924,14 +1941,6 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
   assert(in);
   assert(in->is_auth());
 
-  if (mds->is_rejoin() &&
-      in->is_rejoining()) {
-    dout(7) << "handle_inode_file_caps still rejoining " << *in << ", dropping " << *m << dendl;
-    m->put();
-    return;
-  }
-
-  
   dout(7) << "handle_inode_file_caps replica mds." << from << " wants caps " << ccap_string(m->get_caps()) << " on " << *in << dendl;
 
   if (m->get_caps())
@@ -2849,6 +2858,11 @@ void Locker::handle_client_cap_release(MClientCapRelease *m)
 {
   client_t client = m->get_source().num();
   dout(10) << "handle_client_cap_release " << *m << dendl;
+
+  if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
+    mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
+    return;
+  }
 
   for (vector<ceph_mds_cap_item>::iterator p = m->caps.begin(); p != m->caps.end(); ++p) {
     inodeno_t ino((uint64_t)p->ino);
@@ -3859,7 +3873,7 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
 	     << *lock << " on " << *p << dendl;
     // request unscatter?
     int auth = lock->get_parent()->authority().first;
-    if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_ACTIVE)
+    if (mds->mdsmap->is_clientreplay_or_active_or_stopping(auth))
       mds->send_message_mds(new MLock(lock, LOCK_AC_NUDGE, mds->get_nodeid()), auth);
 
     // wait...
