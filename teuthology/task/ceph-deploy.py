@@ -284,9 +284,9 @@ def build_ceph_cluster(ctx, config):
                 teuthology.pull_directory(remote, '/var/log/ceph',
                                           os.path.join(sub, 'log'))
 
-            log.info('Purging and Uninstalling ceph on test machines')
-            execute_ceph_deploy(ctx, config, purge_nodes)
-            execute_ceph_deploy(ctx, config, uninstall_nodes)
+        log.info('Purging and Uninstalling ceph on test machines')
+        execute_ceph_deploy(ctx, config, purge_nodes)
+        execute_ceph_deploy(ctx, config, uninstall_nodes)
 
 @contextlib.contextmanager
 def task(ctx, config):
