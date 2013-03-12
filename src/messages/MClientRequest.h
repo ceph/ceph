@@ -99,8 +99,7 @@ public:
   bool may_write() {
     return
       (head.op & CEPH_MDS_OP_WRITE) || 
-      (head.op == CEPH_MDS_OP_OPEN && (head.args.open.flags & (O_CREAT|O_TRUNC))) ||
-      (head.op == CEPH_MDS_OP_CREATE);
+      (head.op == CEPH_MDS_OP_OPEN && (head.args.open.flags & (O_CREAT|O_TRUNC)));
   }
 
   int get_flags() const {
