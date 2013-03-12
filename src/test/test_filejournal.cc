@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
   common_init_finish(g_ceph_context);
 
   char mb[10];
-  sprintf(mb, "%d", size_mb);
+  sprintf(mb, "%u", size_mb);
   g_ceph_context->_conf->set_val("osd_journal_size", mb);
   g_ceph_context->_conf->apply_changes(NULL);
 
