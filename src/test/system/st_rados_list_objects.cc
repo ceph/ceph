@@ -80,8 +80,6 @@ run()
       printf("%s: rados_objects_list_next error: %d\n", get_id_str(), ret);
       return ret;
     }
-    char *obj_name_copy = strdup(obj_name);
-    free(obj_name_copy);
     if ((saw % 25) == 0) {
       printf("%s: listed object %d...\n", get_id_str(), saw);
     }
