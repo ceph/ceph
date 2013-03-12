@@ -64,13 +64,13 @@ cust_repl_conf=`mktemp`
 echo generating custom replication hadoop config $cust_repl_conf
 gen_hadoop_conf $cust_repl_conf $POOL_NAMES $conf
 
-pushd $TESTDIR/hadoop
+pushd $TESTDIR/apache_hadoop
 
 echo running default replication hadoop tests
-ant -Dextra.library.path=$ld_lib_path -Dhadoop.conf.file=$def_repl_conf -Dtestcase=TestCephDefaultReplication test
+java -Dhadoop.conf.file=$def_repl_conf -Djava.library.path=$ld_lib_path -cp /usr/share/java/junit4.jar:$TESTDIR/apache_hadoop/build/hadoop-core-1.0.4-SNAPSHOT.jar:$TESTDIR/inktank_hadoop/build/hadoop-cephfs.jar:$TESTDIR/inktank_hadoop/build/hadoop-cephfs-test.jar:$TESTDIR/apache_hadoop/build/hadoop-test-1.0.4-SNAPSHOT.jar:$TESTDIR/apache_hadoop/build/ivy/lib/Hadoop/common/commons-logging-1.1.1.jar:/usr/share/java/libcephfs.jar org.junit.runner.JUnitCore org.apache.hadoop.fs.ceph.TestCephDefaultReplication 
 
 echo running custom replication hadoop tests
-ant -Dextra.library.path=$ld_lib_path -Dhadoop.conf.file=$cust_repl_conf -Dtestcase=TestCephCustomReplication test
+java -Dhadoop.conf.file=$cust_repl_conf -Djava.library.path=$ld_lib_path -cp /usr/share/java/junit4.jar:$TESTDIR/apache_hadoop/build/hadoop-core-1.0.4-SNAPSHOT.jar:$TESTDIR/inktank_hadoop/build/hadoop-cephfs.jar:$TESTDIR/inktank_hadoop/build/hadoop-cephfs-test.jar:$TESTDIR/apache_hadoop/build/hadoop-test-1.0.4-SNAPSHOT.jar:$TESTDIR/apache_hadoop/build/ivy/lib/Hadoop/common/commons-logging-1.1.1.jar:/usr/share/java/libcephfs.jar org.junit.runner.JUnitCore org.apache.hadoop.fs.ceph.TestCephCustomReplication 
 
 popd
 
