@@ -315,7 +315,6 @@ int OmapBench::write_omap_asynchronously(AioWriter *aiow,
 int OmapBench::generate_uniform_omap(const int omap_entries, const int key_size,
     const int value_size, std::map<std::string,bufferlist> * out_omap) {
   bufferlist bl;
-  stringstream data;
   int err = 0;
 
   //setup omap
@@ -336,7 +335,6 @@ int OmapBench::generate_non_uniform_omap(const int omap_entries,
     const int key_size, const int value_size,
     std::map<std::string,bufferlist> * out_omap) {
   bufferlist bl;
-  stringstream data;
   int err = 0;
 
   int num_entries = rand() % omap_entries + 1;
