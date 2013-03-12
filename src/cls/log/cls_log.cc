@@ -153,13 +153,14 @@ static int cls_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *o
 #define MAX_TRIM_ENTRIES 1000
   size_t max_entries = MAX_TRIM_ENTRIES;
 
-  int rc = cls_cxx_map_get_vals(hctx, index, log_index_prefix, max_entries, &keys);
+  int rc = cls_cxx_map_get_vals(hctx, from_index, log_index_prefix, max_entries, &keys);
   if (rc < 0)
     return rc;
 
   map<string, bufferlist>::iterator iter = keys.begin();
 
   size_t i;
+  bool removed = false;
   for (i = 0; i < max_entries && iter != keys.end(); ++i, ++iter) {
     const string& index = iter->first;
 
@@ -171,7 +172,11 @@ static int cls_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *o
       CLS_LOG(1, "ERROR: cls_log_trim_op(): failed to decode entry\n");
       return -EINVAL;
     }
+    removed = true;
   }
+
+  if (!removed)
+    return -ENODATA;
 
   return 0;
 }
