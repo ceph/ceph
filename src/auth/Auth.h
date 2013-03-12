@@ -209,12 +209,12 @@ struct RotatingSecrets {
   }
   ExpiringCryptoKey& current() {
     map<uint64_t, ExpiringCryptoKey>::iterator p = secrets.begin();
-    p++;
+    ++p;
     return p->second;
   }
   const ExpiringCryptoKey& current() const {
     map<uint64_t, ExpiringCryptoKey>::const_iterator p = secrets.begin();
-    p++;
+    ++p;
     return p->second;
   }
   ExpiringCryptoKey& next() {
