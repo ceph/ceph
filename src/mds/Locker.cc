@@ -2089,7 +2089,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
 }
 
 
-void Locker::share_inode_max_size(CInode *in)
+void Locker::share_inode_max_size(CInode *in, Capability *only_cap)
 {
   /*
    * only share if currently issued a WR cap.  if client doesn't have it,
@@ -2097,9 +2097,12 @@ void Locker::share_inode_max_size(CInode *in)
    * the cap later.
    */
   dout(10) << "share_inode_max_size on " << *in << dendl;
-  for (map<client_t,Capability*>::iterator it = in->client_caps.begin();
-       it != in->client_caps.end();
-       ++it) {
+  map<client_t, Capability*>::iterator it;
+  if (only_cap)
+    it = in->client_caps.find(only_cap->get_client());
+  else
+    it = in->client_caps.begin();
+  for (; it != in->client_caps.end(); ++it) {
     const client_t client = it->first;
     Capability *cap = it->second;
     if (cap->is_suppress())
@@ -2115,6 +2118,8 @@ void Locker::share_inode_max_size(CInode *in)
       in->encode_cap_message(m, cap);
       mds->send_message_client_counted(m, client);
     }
+    if (only_cap)
+      break;
   }
 }
 
@@ -2398,6 +2403,11 @@ void Locker::handle_client_caps(MClientCaps *m)
       bool did_issue = eval(in, CEPH_CAP_LOCKS);
       if (!did_issue && (cap->wanted() & ~cap->pending()))
 	issue_caps(in, cap);
+      if (cap->get_last_seq() == 0 &&
+	  (cap->pending() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER))) {
+	cap->issue_norevoke(cap->issued());
+	share_inode_max_size(in, cap);
+      }
     }
   }
 
