@@ -3821,8 +3821,7 @@ class IntentLogNameFilter : public RGWAccessListFilter
   string prefix;
   bool filter_exact_date;
 public:
-  IntentLogNameFilter(const char *date, struct tm *tm) {
-    prefix = date;
+  IntentLogNameFilter(const char *date, struct tm *tm) : prefix(date) {
     filter_exact_date = !(tm->tm_hour || tm->tm_min || tm->tm_sec); /* if time was specified and is not 00:00:00
                                                                        we should look at objects from that date */
   }
