@@ -406,7 +406,9 @@ protected:
   CDir* rejoin_invent_dirfrag(dirfrag_t df);
   bool rejoin_fetch_dirfrags(MMDSCacheRejoin *m);
   void handle_cache_rejoin_strong(MMDSCacheRejoin *m);
-  void rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack, set<vinodeno_t>& acked_inodes);
+  void rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack,
+				      set<SimpleLock *>& gather_locks,
+				      set<vinodeno_t>& acked_inodes);
   void handle_cache_rejoin_ack(MMDSCacheRejoin *m);
   void handle_cache_rejoin_purge(MMDSCacheRejoin *m);
   void handle_cache_rejoin_missing(MMDSCacheRejoin *m);
@@ -607,8 +609,8 @@ public:
   }
 protected:
 
-  void inode_remove_replica(CInode *in, int rep);
-  void dentry_remove_replica(CDentry *dn, int rep);
+  void inode_remove_replica(CInode *in, int rep, set<SimpleLock *>& gather_locks);
+  void dentry_remove_replica(CDentry *dn, int rep, set<SimpleLock *>& gather_locks);
 
   void rename_file(CDentry *srcdn, CDentry *destdn);
 
