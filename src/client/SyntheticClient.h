@@ -123,7 +123,7 @@ class SyntheticClient {
   int get_random_fh() {
     int r = rand() % open_files.size();
     set<int>::iterator it = open_files.begin();
-    while (r--) it++;
+    while (r--) ++it;
     return *it;
   }
 
@@ -133,7 +133,7 @@ class SyntheticClient {
     assert(!subdirs.empty());
     int r = ((rand() % subdirs.size()) + (rand() % subdirs.size())) / 2;  // non-uniform distn
     set<string>::iterator it = subdirs.begin();
-    while (r--) it++;
+    while (r--) ++it;
 
     n1 = cwd;
     n1.push_dentry( *it );
@@ -148,7 +148,7 @@ class SyntheticClient {
     r %= contents.size();
 
     map<string,struct stat*>::iterator it = contents.begin();
-    while (r--) it++;
+    while (r--) ++it;
 
     n2 = cwd;
     n2.push_dentry( it->first );
