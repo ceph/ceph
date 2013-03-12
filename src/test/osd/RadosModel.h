@@ -563,7 +563,6 @@ public:
   void _begin()
   {
     ContDesc cont;
-    stringstream acc;
     {
       Mutex::Locker l(context->state_lock);
       cont = ContDesc(context->seq_num, context->current_snap,
@@ -656,7 +655,6 @@ public:
   void _begin()
   {
     ContDesc cont;
-    stringstream acc;
     {
       Mutex::Locker l(context->state_lock);
       cont = ContDesc(context->seq_num, context->current_snap,
@@ -876,8 +874,6 @@ public:
       context->state_lock.Unlock();
       return;
     }
-
-    stringstream acc;
 
     ObjectDesc contents(&context->cont_gen);
     context->find_object(oid, &contents);
