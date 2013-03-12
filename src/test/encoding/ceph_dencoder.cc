@@ -148,7 +148,7 @@ public:
 	throw std::runtime_error(ss.str());
       }
       m_object->put();
-      m_object = (T *)n;
+      m_object = static_cast<T *>(n);
     }
     catch (buffer::error& e) {
       return e.what();

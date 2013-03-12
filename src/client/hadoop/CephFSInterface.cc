@@ -449,7 +449,7 @@ JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1g
   int i = 0;
   for (list<string>::iterator it = contents.begin();
        it != contents.end();
-       it++) {
+       ++it) {
     env->SetObjectArrayElement(dirListingStringArray, i,
 			       env->NewStringUTF(it->c_str()));
     ++i;

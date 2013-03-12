@@ -124,7 +124,7 @@ find_first(string name)
   return NULL;
 }
 static void xml_start(void *data, const char *el, const char **attr) {
-  RGWXMLParser *handler = (RGWXMLParser *)data;
+  RGWXMLParser *handler = static_cast<RGWXMLParser *>(data);
 
   if (!handler->xml_start(el, attr))
     handler->set_failure();
@@ -168,7 +168,7 @@ bool RGWXMLParser::xml_start(const char *el, const char **attr) {
 }
 
 static void xml_end(void *data, const char *el) {
-  RGWXMLParser *handler = (RGWXMLParser *)data;
+  RGWXMLParser *handler = static_cast<RGWXMLParser *>(data);
 
   if (!handler->xml_end(el))
     handler->set_failure();
@@ -184,7 +184,7 @@ bool RGWXMLParser::xml_end(const char *el) {
 
 static void handle_data(void *data, const char *s, int len)
 {
-  RGWXMLParser *handler = (RGWXMLParser *)data;
+  RGWXMLParser *handler = static_cast<RGWXMLParser *>(data);
 
   handler->handle_data(s, len);
 }

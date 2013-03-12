@@ -420,7 +420,7 @@ int RGWRados::log_list_init(const string& prefix, RGWAccessHandle *handle)
 
 int RGWRados::log_list_next(RGWAccessHandle handle, string *name)
 {
-  log_list_state *state = (log_list_state *)handle;
+  log_list_state *state = static_cast<log_list_state *>(handle);
   while (true) {
     if (state->obit == state->io_ctx.objects_end()) {
       delete state;
@@ -474,7 +474,7 @@ int RGWRados::log_show_init(const string& name, RGWAccessHandle *handle)
 
 int RGWRados::log_show_next(RGWAccessHandle handle, rgw_log_entry *entry)
 {
-  log_show_state *state = (log_show_state *)handle;
+  log_show_state *state = static_cast<log_show_state *>(handle);
   off_t off = state->p.get_off();
 
   ldout(cct, 10) << "log_show_next pos " << state->pos << " bl " << state->bl.length()
@@ -974,7 +974,6 @@ int RGWRados::list_placement_set(set<string>& names)
 {
   bufferlist header;
   map<string, bufferlist> m;
-  string pool_name;
 
   rgw_obj obj(params.domain_root, avail_pools);
   int ret = omap_get_all(obj, header, m);
@@ -1048,12 +1047,11 @@ int RGWRados::put_obj_meta(void *ctx, rgw_obj& obj,  uint64_t size,
   std::string oid, key;
   get_obj_bucket_and_oid_key(obj, bucket, oid, key);
   librados::IoCtx io_ctx;
-  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
 
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
-
 
   io_ctx.locator_set_key(key);
 
@@ -1259,7 +1257,6 @@ int RGWRados::copy_obj(void *ctx,
   int ret;
   uint64_t total_len, obj_size;
   time_t lastmod;
-  map<string, bufferlist>::iterator iter;
   rgw_obj shadow_obj = dest_obj;
   string shadow_oid;
 
@@ -1291,7 +1288,7 @@ int RGWRados::copy_obj(void *ctx,
 
   RGWObjManifest manifest;
   RGWObjState *astate = NULL;
-  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
   ret = get_obj_state(rctx, src_obj, &astate);
   if (ret < 0)
     return ret;
@@ -1680,7 +1677,7 @@ int RGWRados::bucket_rebuild_index(rgw_bucket& bucket)
 
 int RGWRados::defer_gc(void *ctx, rgw_obj& obj)
 {
-  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
   rgw_bucket bucket;
   std::string oid, key;
   get_obj_bucket_and_oid_key(obj, bucket, oid, key);
@@ -1723,7 +1720,7 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj)
   std::string oid, key;
   get_obj_bucket_and_oid_key(obj, bucket, oid, key);
   librados::IoCtx io_ctx;
-  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
@@ -1907,7 +1904,7 @@ int RGWRados::get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& de
   librados::IoCtx io_ctx;
   rgw_bucket actual_bucket = bucket;
   string actual_obj = oid;
-  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
 
   if (actual_obj.size() == 0) {
     actual_obj = bucket.name;
@@ -2093,7 +2090,7 @@ int RGWRados::set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl
   librados::IoCtx io_ctx;
   rgw_bucket actual_bucket = bucket;
   string actual_obj = oid;
-  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
 
   if (actual_obj.size() == 0) {
     actual_obj = bucket.name;
@@ -2142,7 +2139,7 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
   get_obj_bucket_and_oid_key(obj, bucket, oid, key);
   librados::IoCtx io_ctx;
   string actual_obj = oid;
-  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
   rgw_bucket actual_bucket = bucket;
 
   if (actual_obj.size() == 0) {
@@ -2242,7 +2239,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
   int r = -EINVAL;
   bufferlist etag;
   time_t ctime;
-  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
   RGWRadosCtx *new_ctx = NULL;
   RGWObjState *astate = NULL;
   off_t ofs = 0;
@@ -2442,7 +2439,7 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
   std::string dst_oid, dst_key;
   get_obj_bucket_and_oid_key(dst_obj, bucket, dst_oid, dst_key);
   librados::IoCtx io_ctx;
-  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
   uint64_t size = 0;
   string etag;
   string content_type;
@@ -2581,7 +2578,7 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
   rgw_obj read_obj = obj;
   uint64_t read_ofs = ofs;
   uint64_t len, read_len;
-  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
   RGWRadosCtx *new_ctx = NULL;
   bool reading_from_head = true;
   ObjectReadOperation op;
@@ -2928,7 +2925,7 @@ int RGWRados::get_obj_iterate_cb(void *ctx, RGWObjState *astate,
                          off_t read_ofs, off_t len,
                          bool is_head_obj, void *arg)
 {
-  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
   ObjectReadOperation op;
   struct get_obj_data *d = (struct get_obj_data *)arg;
 
@@ -3041,7 +3038,7 @@ int RGWRados::iterate_obj(void *ctx, rgw_obj& obj,
   rgw_obj read_obj = obj;
   uint64_t read_ofs = ofs;
   uint64_t len;
-  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
   RGWRadosCtx *new_ctx = NULL;
   bool reading_from_head = true;
   RGWObjState *astate = NULL;
@@ -3119,7 +3116,7 @@ int RGWRados::read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& 
   std::string oid, key;
   get_obj_bucket_and_oid_key(obj, bucket, oid, key);
   librados::IoCtx io_ctx;
-  RGWRadosCtx *rctx = (RGWRadosCtx *)ctx;
+  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
   RGWObjState *astate = NULL;
   int r = open_bucket_ctx(bucket, io_ctx);
   if (r < 0)
@@ -3824,8 +3821,7 @@ class IntentLogNameFilter : public RGWAccessListFilter
   string prefix;
   bool filter_exact_date;
 public:
-  IntentLogNameFilter(const char *date, struct tm *tm) {
-    prefix = date;
+  IntentLogNameFilter(const char *date, struct tm *tm) : prefix(date) {
     filter_exact_date = !(tm->tm_hour || tm->tm_min || tm->tm_sec); /* if time was specified and is not 00:00:00
                                                                        we should look at objects from that date */
   }
@@ -3870,9 +3866,7 @@ int RGWRados::remove_temp_objects(string date, string time)
   }
   time_t epoch = mktime(&tm);
 
-  string prefix, delim, marker;
   vector<RGWObjEnt> objs;
-  map<string, bool> common_prefixes;
   
   int max = 1000;
   bool is_truncated;
