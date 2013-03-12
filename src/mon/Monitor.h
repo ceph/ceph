@@ -165,11 +165,11 @@ public:
     default: return "???";
     }
   }
-  const char *get_state_name() const {
+  const string get_state_name() const {
     string sn(get_state_name(state));
     string sync_name(get_sync_state_name());
     sn.append(sync_name);
-    return sn.c_str();
+    return sn;
   }
 
   bool is_probing() const { return state == STATE_PROBING; }
