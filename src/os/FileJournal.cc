@@ -1797,3 +1797,104 @@ void FileJournal::throttle()
   if (throttle_bytes.wait(g_conf->journal_queue_max_bytes))
     dout(2) << "throttle: waited for bytes" << dendl;
 }
+
+void FileJournal::get_header(
+  uint64_t wanted_seq,
+  off64_t *_pos,
+  entry_header_t *h)
+{
+  off64_t pos = header.start;
+  off64_t next_pos = pos;
+  bufferlist bl;
+  uint64_t seq = 0;
+  while (1) {
+    bl.clear();
+    pos = next_pos;
+    read_entry_result result = do_read_entry(
+      pos,
+      &next_pos,
+      &bl,
+      &seq,
+      0,
+      h);
+    if (result == FAILURE || result == MAYBE_CORRUPT)
+      assert(0);
+    if (seq == wanted_seq) {
+      if (_pos)
+	*_pos = pos;
+      return;
+    }
+  }
+  assert(0); // not reachable
+}
+
+void FileJournal::corrupt(
+  int wfd,
+  off64_t corrupt_at)
+{
+  if (corrupt_at >= header.max_size)
+    corrupt_at = corrupt_at + get_top() - header.max_size;
+
+#ifdef DARWIN
+    int64_t actual = ::lseek(fd, corrupt_at, SEEK_SET);
+#else
+    int64_t actual = ::lseek64(fd, corrupt_at, SEEK_SET);
+#endif
+    assert(actual == corrupt_at);
+
+    char buf[10];
+    int r = safe_read_exact(fd, buf, 1);
+    assert(r == 0);
+
+#ifdef DARWIN
+    actual = ::lseek(wfd, corrupt_at, SEEK_SET);
+#else
+    actual = ::lseek64(wfd, corrupt_at, SEEK_SET);
+#endif
+    assert(actual == corrupt_at);
+
+    buf[0]++;
+    r = safe_write(wfd, buf, 1);
+    assert(r == 0);
+}
+
+void FileJournal::corrupt_payload(
+  int wfd,
+  uint64_t seq)
+{
+  off64_t pos = 0;
+  entry_header_t h;
+  get_header(seq, &pos, &h);
+  off64_t corrupt_at =
+    pos + sizeof(entry_header_t) + h.pre_pad;
+  corrupt(wfd, corrupt_at);
+}
+
+
+void FileJournal::corrupt_footer_magic(
+  int wfd,
+  uint64_t seq)
+{
+  off64_t pos = 0;
+  entry_header_t h;
+  get_header(seq, &pos, &h);
+  off64_t corrupt_at =
+    pos + sizeof(entry_header_t) + h.pre_pad +
+    h.len + h.post_pad +
+    (reinterpret_cast<char*>(&h.magic2) - reinterpret_cast<char*>(&h));
+  corrupt(wfd, corrupt_at);
+}
+
+
+void FileJournal::corrupt_header_magic(
+  int wfd,
+  uint64_t seq)
+{
+  off64_t pos = 0;
+  entry_header_t h;
+  get_header(seq, &pos, &h);
+  off64_t corrupt_at =
+    pos +
+    (reinterpret_cast<char*>(&h.magic2) - reinterpret_cast<char*>(&h));
+  corrupt(wfd, corrupt_at);
+}
