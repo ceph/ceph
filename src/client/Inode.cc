@@ -161,7 +161,7 @@ int Inode::caps_issued(int *implemented)
   int i = 0;
   for (map<int,Cap*>::iterator it = caps.begin();
        it != caps.end();
-       it++)
+       ++it)
     if (cap_is_valid(it->second)) {
       c |= it->second->issued;
       i |= it->second->implemented;
@@ -198,7 +198,7 @@ bool Inode::caps_issued_mask(unsigned mask)
   // try any cap
   for (map<int,Cap*>::iterator it = caps.begin();
        it != caps.end();
-       it++) {
+       ++it) {
     if (cap_is_valid(it->second)) {
       if ((it->second->issued & mask) == mask) {
 	touch_cap(it->second);
@@ -211,7 +211,7 @@ bool Inode::caps_issued_mask(unsigned mask)
     // bah.. touch them all
     for (map<int,Cap*>::iterator it = caps.begin();
 	 it != caps.end();
-	 it++)
+	 ++it)
       touch_cap(it->second);
     return true;
   }
@@ -223,7 +223,7 @@ int Inode::caps_used()
   int w = 0;
   for (map<int,int>::iterator p = cap_refs.begin();
        p != cap_refs.end();
-       p++)
+       ++p)
     if (p->second)
       w |= p->first;
   return w;
@@ -234,7 +234,7 @@ int Inode::caps_file_wanted()
   int want = 0;
   for (map<int,int>::iterator p = open_by_mode.begin();
        p != open_by_mode.end();
-       p++)
+       ++p)
     if (p->second)
       want |= ceph_caps_for_mode(p->first);
   return want;
