@@ -414,13 +414,13 @@ report_failure(int status)
 void
 check_buffers(char *good_buf, char *temp_buf, unsigned offset, unsigned size)
 {
-	unsigned char c, t;
-	unsigned i = 0;
-	unsigned n = 0;
-	unsigned op = 0;
-	unsigned bad = 0;
-
 	if (memcmp(good_buf + offset, temp_buf, size) != 0) {
+		unsigned char c, t;
+		unsigned i = 0;
+		unsigned n = 0;
+		unsigned op = 0;
+		unsigned bad = 0;
+
 		prt("READ BAD DATA: offset = 0x%x, size = 0x%x, fname = %s\n",
 		    offset, size, iname);
 		prt("OFFSET\tGOOD\tBAD\tRANGE\n");
