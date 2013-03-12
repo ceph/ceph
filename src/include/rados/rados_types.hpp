@@ -3,7 +3,7 @@
 
 #include <utility>
 #include <vector>
-#include "include/inttypes.h"
+#include <stdint.h>
 
 namespace librados {
 
