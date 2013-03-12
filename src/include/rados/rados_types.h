@@ -1,7 +1,7 @@
 #ifndef CEPH_RADOS_TYPES_H
 #define CEPH_RADOS_TYPES_H
 
-#include "include/inttypes.h"
+#include <stdint.h>
 
 /**
  * @struct obj_watch_t
