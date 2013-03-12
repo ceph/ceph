@@ -1888,6 +1888,7 @@ noinst_HEADERS = \
         osd/OSDMap.h\
         osd/ObjectVersioner.h\
 	osd/OpRequest.h\
+	osd/SnapMapper.h\
         osd/PG.h\
         osd/ReplicatedPG.h\
         osd/Watch.h\
