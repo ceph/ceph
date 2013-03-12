@@ -71,7 +71,7 @@ bool VarLenGenerator::read_header(bufferlist::iterator &p, ContDesc &out) {
     unsigned test;
     p.copy(sizeof(test), (char *)&test);
     if (test != 0xDEADBEEF) return false;
-  } catch (ceph::buffer::end_of_buffer e) {
+  } catch (ceph::buffer::end_of_buffer &e) {
     std::cerr << "end_of_buffer" << endl;
     return false;
   }

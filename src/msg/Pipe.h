@@ -118,7 +118,7 @@ class DispatchQueue;
       STATE_WAIT       // just wait for racing connection
     };
 
-    static const char *get_state_name(int s) {
+    static const string get_state_name(int s) {
       switch (s) {
       case STATE_ACCEPTING: return "accepting";
       case STATE_CONNECTING: return "connecting";
@@ -130,7 +130,7 @@ class DispatchQueue;
       default: return "UNKNOWN";
       }
     }
-    const char *get_state_name() {
+    const string get_state_name() {
       return get_state_name(state);
     }
 

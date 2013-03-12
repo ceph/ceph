@@ -414,13 +414,13 @@ report_failure(int status)
 void
 check_buffers(char *good_buf, char *temp_buf, unsigned offset, unsigned size)
 {
-	unsigned char c, t;
-	unsigned i = 0;
-	unsigned n = 0;
-	unsigned op = 0;
-	unsigned bad = 0;
-
 	if (memcmp(good_buf + offset, temp_buf, size) != 0) {
+		unsigned char c, t;
+		unsigned i = 0;
+		unsigned n = 0;
+		unsigned op = 0;
+		unsigned bad = 0;
+
 		prt("READ BAD DATA: offset = 0x%x, size = 0x%x, fname = %s\n",
 		    offset, size, iname);
 		prt("OFFSET\tGOOD\tBAD\tRANGE\n");
@@ -1214,7 +1214,6 @@ __aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
 	static struct timespec ts;
 	struct iocb *iocbs[] = { &iocb };
 	int ret;
-	long res;
 
 	if (rw == READ) {
 		io_prep_pread(&iocb, fd, buf, len, offset);
@@ -1250,7 +1249,7 @@ __aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
 		 * and it's used to pass negated error value.
 		 * Till the library is fixed use the temp var.
 		 */
-		res = (long)event.res;
+		long res = (long)event.res;
 		if (res >= 0)
 			fprintf(stderr, "bad io length: %lu instead of %u\n",
 					res, len);
@@ -1356,7 +1355,7 @@ main(int argc, char **argv)
 			break;
 		case 'l':
 			maxfilelen = getnum(optarg, &endp);
-			if (maxfilelen <= 0)
+			if (maxfilelen == 0)
 				usage();
 			break;
 		case 'm':

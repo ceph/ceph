@@ -87,7 +87,7 @@ class SimpleLock {
 public:
   LockType *type;
   
-  const char *get_state_name(int n) const {
+  const string get_state_name(int n) const {
     switch (n) {
     case LOCK_UNDEF: return "UNDEF";
     case LOCK_SYNC: return "sync";

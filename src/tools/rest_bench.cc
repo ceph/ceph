@@ -495,7 +495,7 @@ protected:
     dispatcher->process_context(ctx);
     ret = ctx->ret();
     ctx->put();
-    return bl.length();
+    return ret;
   }
   int sync_write(const std::string& oid, bufferlist& bl, size_t len) {
     struct req_context *ctx = new req_context;
@@ -659,7 +659,6 @@ int main(int argc, const char **argv)
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  std::map < std::string, std::string > opts;
   std::vector<const char*>::iterator i;
   std::string host;
   std::string val;

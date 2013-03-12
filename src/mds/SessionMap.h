@@ -64,7 +64,7 @@ public:
     STATE_KILLING = 5
   };
 
-  const char *get_state_name(int s) {
+  const string get_state_name(int s) {
     switch (s) {
     case STATE_CLOSED: return "closed";
     case STATE_OPENING: return "opening";
@@ -123,7 +123,7 @@ public:
   }
 
   int get_state() { return state; }
-  const char *get_state_name() { return get_state_name(state); }
+  const string get_state_name() { return get_state_name(state); }
   uint64_t get_state_seq() { return state_seq; }
   bool is_closed() { return state == STATE_CLOSED; }
   bool is_opening() { return state == STATE_OPENING; }
