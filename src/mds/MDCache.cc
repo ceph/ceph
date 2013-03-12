@@ -984,15 +984,21 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<in
       }
       else {
 	dout(10) << "  want bound " << *bound << dendl;
+	CDir *t = get_subtree_root(bound->get_parent_dir());
+	if (subtrees[t].count(bound) == 0) {
+	  assert(t != dir);
+	  dout(10) << "  new bound " << *bound << dendl;
+	  adjust_subtree_auth(bound, t->authority());
+	}
 	// make sure it's nested beneath ambiguous subtree(s)
 	while (1) {
-	  CDir *t = get_subtree_root(bound->get_parent_dir());
-	  if (t == dir) break;
 	  while (subtrees[dir].count(t) == 0)
 	    t = get_subtree_root(t->get_parent_dir());
 	  dout(10) << "  swallowing intervening subtree at " << *t << dendl;
 	  adjust_subtree_auth(t, auth);
 	  try_subtree_merge_at(t);
+	  t = get_subtree_root(bound->get_parent_dir());
+	  if (t == dir) break;
 	}
       }
     }
