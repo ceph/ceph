@@ -974,7 +974,6 @@ int RGWRados::list_placement_set(set<string>& names)
 {
   bufferlist header;
   map<string, bufferlist> m;
-  string pool_name;
 
   rgw_obj obj(params.domain_root, avail_pools);
   int ret = omap_get_all(obj, header, m);
@@ -1258,7 +1257,6 @@ int RGWRados::copy_obj(void *ctx,
   int ret;
   uint64_t total_len, obj_size;
   time_t lastmod;
-  map<string, bufferlist>::iterator iter;
   rgw_obj shadow_obj = dest_obj;
   string shadow_oid;
 
@@ -3869,9 +3867,7 @@ int RGWRados::remove_temp_objects(string date, string time)
   }
   time_t epoch = mktime(&tm);
 
-  string prefix, delim, marker;
   vector<RGWObjEnt> objs;
-  map<string, bool> common_prefixes;
   
   int max = 1000;
   bool is_truncated;
