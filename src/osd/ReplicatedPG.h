@@ -107,7 +107,7 @@ public:
       DELAYED_FLUSHING,
       RMW_FLUSHING
     } state_t;
-    static const char *get_state_name(int s) {
+    static const string get_state_name(int s) {
       switch (s) {
       case IDLE: return "idle";
       case DELAYED: return "delayed";
