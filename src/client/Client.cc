@@ -1872,7 +1872,7 @@ void Client::handle_mds_map(MMDSMap* m)
     if (newstate >= MDSMap::STATE_ACTIVE) {
       if (oldstate < MDSMap::STATE_ACTIVE) {
 	kick_requests(p->second, false);
-	kick_flushing_caps(p->first);
+	kick_flushing_caps(p->second);
 	signal_cond_list(p->second->waiting_for_open);
       }
       connect_mds_targets(p->first);
@@ -2998,10 +2998,10 @@ void Client::wait_sync_caps(uint64_t want)
   }
 }
 
-void Client::kick_flushing_caps(int mds)
+void Client::kick_flushing_caps(MetaSession *session)
 {
-  ldout(cct, 10) << "kick_flushing_caps" << dendl;
-  MetaSession *session = mds_sessions[mds];
+  int mds = session->mds_num;
+  ldout(cct, 10) << "kick_flushing_caps mds." << mds << dendl;
 
   for (xlist<CapSnap*>::iterator p = session->flushing_capsnaps.begin(); !p.end(); ++p) {
     CapSnap *capsnap = *p;
