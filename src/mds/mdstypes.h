@@ -417,7 +417,7 @@ struct inode_t {
       if (p->second.follows >= last)
 	client_ranges.erase(p++);
       else
-	p++;
+	++p;
     }
   }
 
@@ -1234,7 +1234,7 @@ protected:
       int last = *it;
       int c = 0;
       do {
-	it++;
+	++it;
 	c++;
       } while (it != ref_set.end() && *it == last);
       if (c > 1)
@@ -1356,7 +1356,7 @@ protected:
 //				   << " tag " << hex << it->first << dec
 //				   << " on " << *this 
 //				   << dendl;
-	it++;
+	++it;
       }
     }
     if (waiting.empty())
