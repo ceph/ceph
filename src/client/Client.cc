@@ -1721,11 +1721,11 @@ void Client::handle_client_reply(MClientReply *reply)
   
   assert(request->reply == NULL);
   request->reply = reply;
-  insert_trace(request, mds_sessions[mds_num]);
+  insert_trace(request, session);
 
   if (!request->got_unsafe) {
     request->got_unsafe = true;
-    mds_sessions[mds_num]->unsafe_requests.push_back(&request->unsafe_item);
+    session->unsafe_requests.push_back(&request->unsafe_item);
 
     Cond cond;
     request->dispatch_cond = &cond;
