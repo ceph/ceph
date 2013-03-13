@@ -437,22 +437,28 @@ private:
     ::encode(dist, bl);
   }
 
-  void encode_replica(int who, bufferlist& bl) {
-    __u32 nonce = add_replica(who);
-    ::encode(nonce, bl);
+  void _encode_base(bufferlist& bl) {
     ::encode(first, bl);
     ::encode(fnode, bl);
     ::encode(dir_rep, bl);
     ::encode(dir_rep_by, bl);
   }
-  void decode_replica(bufferlist::iterator& p) {
-    __u32 nonce;
-    ::decode(nonce, p);
-    replica_nonce = nonce;
+  void _decode_base(bufferlist::iterator& p) {
     ::decode(first, p);
     ::decode(fnode, p);
     ::decode(dir_rep, p);
     ::decode(dir_rep_by, p);
+  }
+  void encode_replica(int who, bufferlist& bl) {
+    __u32 nonce = add_replica(who);
+    ::encode(nonce, bl);
+    _encode_base(bl);
+  }
+  void decode_replica(bufferlist::iterator& p) {
+    __u32 nonce;
+    ::decode(nonce, p);
+    replica_nonce = nonce;
+    _decode_base(p);
   }
 
 
