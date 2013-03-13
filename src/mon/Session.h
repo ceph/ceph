@@ -129,7 +129,7 @@ struct MonSessionMap {
 
     multimap<int,MonSession*>::iterator p = by_osd.lower_bound(r);
     if (p == by_osd.end())
-      p--;
+      --p;
 
     if (!osdmap) {
       return p->second;
