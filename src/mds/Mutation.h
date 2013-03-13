@@ -207,6 +207,7 @@ struct MDRequest : public Mutation {
     
     // for rename
     set<int> extra_witnesses; // replica list from srcdn auth (rename)
+    int srcdn_auth_mds;
     version_t src_reanchor_atid;  // src->dst
     version_t dst_reanchor_atid;  // dst->stray
     bufferlist inode_import;
@@ -233,6 +234,7 @@ struct MDRequest : public Mutation {
     bufferlist rollback_bl;
 
     More() : 
+      srcdn_auth_mds(-1),
       src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
       rename_inode(0), is_freeze_authpin(false), is_ambiguous_auth(false),
       is_remote_frozen_authpin(false), is_inode_exporter(false),

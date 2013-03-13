@@ -2495,7 +2495,7 @@ void MDCache::send_slave_resolves()
       if (!p->second->is_slave() || !p->second->slave_did_prepare())
 	continue;
       int master = p->second->slave_to_mds;
-      if (resolve_set.count(master)) {
+      if (resolve_set.count(master) || is_ambiguous_slave_update(p->first, master)) {
 	dout(10) << " including uncommitted " << *p->second << dendl;
 	if (!resolves.count(master))
 	  resolves[master] = new MMDSResolve;
@@ -2614,6 +2614,7 @@ void MDCache::handle_mds_failure(int who)
 
   resolve_gather.insert(who);
   discard_delayed_resolve(who);
+  ambiguous_slave_updates.erase(who);
 
   rejoin_gather.insert(who);
   rejoin_sent.erase(who);        // i need to send another
@@ -2646,14 +2647,46 @@ void MDCache::handle_mds_failure(int who)
 	  finish.push_back(p->second);
       }
     }
+
+    if (p->second->is_slave() &&
+	p->second->slave_did_prepare() && p->second->more()->srcdn_auth_mds == who &&
+	mds->mdsmap->is_clientreplay_or_active_or_stopping(p->second->slave_to_mds)) {
+      // rename srcdn's auth mds failed, resolve even I'm a survivor.
+      dout(10) << " slave request " << *p->second << " uncommitted, will resolve shortly" << dendl;
+      add_ambiguous_slave_update(p->first, p->second->slave_to_mds);
+    }
     
     // failed node is slave?
     if (p->second->is_master() && !p->second->committing) {
+      if (p->second->more()->srcdn_auth_mds == who) {
+	dout(10) << " master request " << *p->second << " waiting for rename srcdn's auth mds."
+		 << who << " to recover" << dendl;
+	assert(p->second->more()->witnessed.count(who) == 0);
+	if (p->second->more()->is_ambiguous_auth)
+	  p->second->clear_ambiguous_auth();
+	// rename srcdn's auth mds failed, all witnesses will rollback
+	p->second->more()->witnessed.clear();
+	pending_masters.erase(p->first);
+      }
+
       if (p->second->more()->witnessed.count(who)) {
-	dout(10) << " master request " << *p->second << " no longer witnessed by slave mds." << who
-		 << dendl;
-	// discard this peer's prepare (if any)
-	p->second->more()->witnessed.erase(who);
+	int srcdn_auth = p->second->more()->srcdn_auth_mds;
+	if (srcdn_auth >= 0 && p->second->more()->waiting_on_slave.count(srcdn_auth)) {
+	  dout(10) << " master request " << *p->second << " waiting for rename srcdn's auth mds."
+		   << p->second->more()->srcdn_auth_mds << " to reply" << dendl;
+	  // waiting for the slave (rename srcdn's auth mds), delay sending resolve ack
+	  // until either the request is committing or the slave also fails.
+	  assert(p->second->more()->waiting_on_slave.size() == 1);
+	  pending_masters.insert(p->first);
+	} else {
+	  dout(10) << " master request " << *p->second << " no longer witnessed by slave mds."
+		   << who << " to recover" << dendl;
+	  if (srcdn_auth >= 0)
+	    assert(p->second->more()->witnessed.count(srcdn_auth) == 0);
+
+	  // discard this peer's prepare (if any)
+	  p->second->more()->witnessed.erase(who);
+	}
       }
       
       if (p->second->more()->waiting_on_slave.count(who)) {
@@ -2661,14 +2694,8 @@ void MDCache::handle_mds_failure(int who)
 		 << " to recover" << dendl;
 	// retry request when peer recovers
 	p->second->more()->waiting_on_slave.erase(who);
-	mds->wait_for_active_peer(who, new C_MDS_RetryRequest(this, p->second));
-      }
-
-      if (p->second->has_more() && p->second->more()->is_ambiguous_auth &&
-	  p->second->more()->rename_inode->authority().first == who) {
-	dout(10) << " master request " << *p->second << " waiting for renamed inode's auth mds." << who
-		 << " to recover" << dendl;
-	p->second->clear_ambiguous_auth();
+	if (p->second->more()->waiting_on_slave.empty())
+	  mds->wait_for_active_peer(who, new C_MDS_RetryRequest(this, p->second));
       }
 
       if (p->second->locking && p->second->locking_target_mds == who)
@@ -2955,9 +2982,15 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
   dout(10) << "handle_resolve_ack " << *ack << " from " << ack->get_source() << dendl;
   int from = ack->get_source().num();
 
-  if (!resolve_ack_gather.count(from)) {
+  if (!resolve_ack_gather.count(from) ||
+      mds->mdsmap->get_state(from) < MDSMap::STATE_RESOLVE) {
     ack->put();
     return;
+  }
+
+  if (ambiguous_slave_updates.count(from)) {
+    assert(mds->mdsmap->is_clientreplay_or_active_or_stopping(from));
+    assert(mds->is_clientreplay() || mds->is_active() || mds->is_stopping());
   }
 
   for (vector<metareqid_t>::iterator p = ack->commit.begin();
@@ -2965,6 +2998,11 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
        ++p) {
     dout(10) << " commit on slave " << *p << dendl;
     
+    if (ambiguous_slave_updates.count(from)) {
+      remove_ambiguous_slave_update(*p, from);
+      continue;
+    }
+
     if (mds->is_resolve()) {
       // replay
       MDSlaveUpdate *su = get_uncommitted_slave_update(*p, from);
@@ -3024,13 +3062,8 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
     }
   }
 
-  if (!mds->is_resolve()) {
-    for (hash_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
-	p != active_requests.end(); ++p)
-      assert(p->second->slave_to_mds != from);
-  }
-
-  resolve_ack_gather.erase(from);
+  if (!ambiguous_slave_updates.count(from))
+    resolve_ack_gather.erase(from);
   if (resolve_ack_gather.empty() && need_resolve_rollback.empty()) {
     send_subtree_resolves();
     process_delayed_resolve();
