@@ -54,6 +54,7 @@ int RGWHTTPClient::process(const string& url)
 
   curl_easy_setopt(curl_handle, CURLOPT_URL, url.c_str());
   curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 1L);
+  curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1L);
   curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, read_http_header);
   curl_easy_setopt(curl_handle, CURLOPT_WRITEHEADER, (void *)this);
   curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, read_http_data);

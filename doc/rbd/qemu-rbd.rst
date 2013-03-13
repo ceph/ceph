@@ -124,6 +124,22 @@ for the block device. To do this, you must specify a
 Note that this uses the IDE driver. The virtio driver does not
 support discard.
 
+If using libvirt, edit your libvirt domain's configuration file using ``virsh
+edit`` to include the ``xmlns:qemu`` value. Then, add a ``qemu:commandline``
+block as a child of that domain. The following example shows how to set two
+devices with ``qemu id=`` to different ``discard_granularity`` values.
+
+.. code-block:: guess
+
+	<domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
+		<qemu:commandline>
+			<qemu:arg value='-set'/>
+			<qemu:arg value='block.scsi0-0-0.discard_granularity=4096'/>
+			<qemu:arg value='-set'/>
+			<qemu:arg value='block.scsi0-0-1.discard_granularity=65536'/>
+		</qemu:commandline>
+	</domain>
+
 
 QEMU Cache Options
 ==================

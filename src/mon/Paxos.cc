@@ -164,7 +164,7 @@ void Paxos::handle_collect(MMonPaxos *collect)
   if (collect->first_committed > last_committed+1) {
     dout(5) << __func__
             << " leader's lowest version is too high for our last committed"
-            << "(theirs: " << collect->first_committed
+            << " (theirs: " << collect->first_committed
             << "; ours: " << last_committed << ") -- bootstrap!" << dendl;
     collect->put();
     mon->bootstrap();
@@ -366,9 +366,19 @@ void Paxos::handle_last(MMonPaxos *last)
   // push it to them.
   peer_last_committed[last->get_source().num()] = last->last_committed;
 
+  if (last->first_committed > last_committed+1) {
+    dout(5) << __func__
+            << " peon's lowest version is too high for our last committed"
+            << " (theirs: " << last->first_committed
+            << "; ours: " << last_committed << ") -- bootstrap!" << dendl;
+    last->put();
+    mon->bootstrap();
+    return;
+  }
+
   // store any committed values if any are specified in the message
   store_state(last);
-      
+
   // do they accept your pn?
   if (last->pn > accepted_pn) {
     // no, try again.
@@ -773,20 +783,17 @@ void Paxos::warn_on_future_time(utime_t t, entity_name_t from)
 
 }
 
-void Paxos::finish_proposal()
+void Paxos::finish_queued_proposal()
 {
-  /* There is a lot of debug still going around. We will get rid of it later
-   * on, as soon as everything "just works (tm)"
-   */
   assert(mon->is_leader());
+  assert(!proposals.empty());
 
   dout(10) << __func__ << " finishing proposal" << dendl;
   C_Proposal *proposal = static_cast<C_Proposal*>(proposals.front());
   dout(10) << __func__ << " finish it (proposal = "
 	   << proposal << ")" << dendl;;
 
-  if (!proposal) // this is okay. It happens when we propose an old value.
-    return;
+  assert(proposal != NULL);
 
   if (!proposal->proposed) {
     dout(10) << __func__ << " we must have received a stay message and we're "
@@ -800,6 +807,16 @@ void Paxos::finish_proposal()
     proposals.pop_front();
     proposal->finish(0);
   }
+}
+
+void Paxos::finish_proposal()
+{
+  /* There is a lot of debug still going around. We will get rid of it later
+   * on, as soon as everything "just works (tm)"
+   */
+  assert(mon->is_leader());
+  if (!proposals.empty())
+    finish_queued_proposal();
 
   dout(10) << __func__ << " state " << state
 	   << " proposals left " << proposals.size() << dendl;

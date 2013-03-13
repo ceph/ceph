@@ -33,7 +33,7 @@ OPTION(fatal_signal_handlers, OPT_BOOL, true)
 
 OPTION(log_file, OPT_STR, "/var/log/ceph/$cluster-$name.log") // default changed by common_preinit()
 OPTION(log_max_new, OPT_INT, 1000) // default changed by common_preinit()
-OPTION(log_max_recent, OPT_INT, 100000) // default changed by common_preinit()
+OPTION(log_max_recent, OPT_INT, 10000) // default changed by common_preinit()
 OPTION(log_to_stderr, OPT_BOOL, true) // default changed by common_preinit()
 OPTION(err_to_stderr, OPT_BOOL, true) // default changed by common_preinit()
 OPTION(log_to_syslog, OPT_BOOL, false)
@@ -179,7 +179,7 @@ OPTION(mon_sync_requester_kill_at, OPT_INT, 0) // kill the sync requester at a s
 OPTION(paxos_max_join_drift, OPT_INT, 10) // max paxos iterations before we must first sync the monitor stores
 OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long before proposing a map update
 OPTION(paxos_min_wait, OPT_DOUBLE, 0.05)  // min time to gather updates for after period of inactivity
-OPTION(paxos_trim_tolerance, OPT_INT, 3) // number of extra proposals tolerated before trimming
+OPTION(paxos_trim_tolerance, OPT_INT, 30) // number of extra proposals tolerated before trimming
 OPTION(paxos_trim_disabled_max_versions, OPT_INT, 100) // maximum amount of versions we shall allow passing by without trimming
 OPTION(clock_offset, OPT_DOUBLE, 0) // how much to offset the system clock in Clock.cc
 OPTION(auth_cluster_required, OPT_STR, "cephx")   // required of mon, mds, osd daemons
@@ -192,6 +192,7 @@ OPTION(cephx_service_require_signatures, OPT_BOOL, false)
 OPTION(cephx_sign_messages, OPT_BOOL, true)  // Default to signing session messages if supported
 OPTION(auth_mon_ticket_ttl, OPT_DOUBLE, 60*60*12)
 OPTION(auth_service_ticket_ttl, OPT_DOUBLE, 60*60)
+OPTION(auth_debug, OPT_BOOL, false)          // if true, assert when weird things happen
 OPTION(mon_client_hunt_interval, OPT_DOUBLE, 3.0)   // try new mon every N seconds until we connect
 OPTION(mon_client_ping_interval, OPT_DOUBLE, 10.0)  // ping every N seconds
 OPTION(mon_client_max_log_entries_per_message, OPT_INT, 1000)

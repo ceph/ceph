@@ -38,9 +38,7 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_inf
 {
   bufferlist bl;
   info.encode(bl);
-  string md5;
   int ret;
-  map<string,bufferlist> attrs;
 
   map<string, RGWAccessKey>::iterator iter;
   for (iter = info.swift_keys.begin(); iter != info.swift_keys.end(); ++iter) {
@@ -266,8 +264,6 @@ int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& bucke
       return ret;
     }
   }
-
-  list<string> buckets_list;
 
   if (need_stats) {
    map<string, RGWBucketEnt>& m = buckets.get_buckets();

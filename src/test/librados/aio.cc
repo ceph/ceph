@@ -135,14 +135,14 @@ public:
 
 void set_completion_complete(rados_completion_t cb, void *arg)
 {
-  AioTestData *test = (AioTestData*)arg;
+  AioTestData *test = static_cast<AioTestData*>(arg);
   test->m_complete = true;
   sem_post(&test->m_sem);
 }
 
 void set_completion_safe(rados_completion_t cb, void *arg)
 {
-  AioTestData *test = (AioTestData*)arg;
+  AioTestData *test = static_cast<AioTestData*>(arg);
   test->m_safe = true;
   sem_post(&test->m_sem);
 }

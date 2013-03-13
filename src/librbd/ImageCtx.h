@@ -132,6 +132,7 @@ namespace librbd {
     int flush_cache();
     void shutdown_cache();
     void invalidate_cache();
+    void clear_nonexistence_cache();
     int register_watch();
     void unregister_watch();
     size_t parent_io_len(uint64_t offset, size_t length,
