@@ -52,7 +52,7 @@ int dupstore(ObjectStore* src, ObjectStore* dst)
     src->collection_list(*p, o);
     int numo = o.size();
     int j = 1;
-    for (vector<hobject_t>::iterator q = o.begin(); q != o.end(); q++) {
+    for (vector<hobject_t>::iterator q = o.begin(); q != o.end(); ++q) {
       ObjectStore::Transaction t;
       if (did_object.count(*q))
 	t.collection_add(*p, did_object[*q], *q);
