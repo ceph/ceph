@@ -20,6 +20,7 @@
 #include "include/types.h"
 
 #include "mds/CInode.h"
+#include "mds/CDir.h"
 
 // sent from replica to auth
 
@@ -173,6 +174,7 @@ class MMDSCacheRejoin : public Message {
   // full
   bufferlist inode_base;
   bufferlist inode_locks;
+  map<dirfrag_t, bufferlist> dirfrag_bases;
 
   // authpins, xlocks
   struct slave_reqid {
@@ -264,7 +266,11 @@ public:
   void add_strong_dirfrag(dirfrag_t df, int n, int dr) {
     strong_dirfrags[df] = dirfrag_strong(n, dr);
   }
-   
+  void add_dirfrag_base(CDir *dir) {
+    bufferlist& bl = dirfrag_bases[dir->dirfrag()];
+    dir->_encode_base(bl);
+  }
+
   // dentries
   void add_weak_dirfrag(dirfrag_t df) {
     weak_dirfrags.insert(df);
@@ -300,6 +306,7 @@ public:
     ::encode(wrlocked_inodes, payload);
     ::encode(cap_export_bl, payload);
     ::encode(strong_dirfrags, payload);
+    ::encode(dirfrag_bases, payload);
     ::encode(weak, payload);
     ::encode(weak_dirfrags, payload);
     ::encode(weak_inodes, payload);
@@ -325,6 +332,7 @@ public:
       ::decode(cap_export_paths, q);
     }
     ::decode(strong_dirfrags, p);
+    ::decode(dirfrag_bases, p);
     ::decode(weak, p);
     ::decode(weak_dirfrags, p);
     ::decode(weak_inodes, p);
