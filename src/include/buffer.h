@@ -422,7 +422,7 @@ public:
     __u32 crc32c(__u32 crc) {
       for (std::list<ptr>::const_iterator it = _buffers.begin(); 
 	   it != _buffers.end(); 
-	   it++)
+	   ++it)
 	if (it->length())
 	  crc = ceph_crc32c_le(crc, (unsigned char*)it->c_str(), it->length());
       return crc;
