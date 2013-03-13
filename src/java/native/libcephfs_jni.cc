@@ -814,7 +814,7 @@ JNIEXPORT jobjectArray JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1listdir
 	*
 	* FIXME: how should a partially filled array be cleaned-up properly?
 	*/
-	for (i = 0, it = contents.begin(); it != contents.end(); it++) {
+	for (i = 0, it = contents.begin(); it != contents.end(); ++it) {
 		name = env->NewStringUTF(it->c_str());
 		if (!name)
 			goto out;
@@ -2033,7 +2033,7 @@ JNIEXPORT jobjectArray JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1listxatt
 	if (!xattrlist)
 		goto out;
 
-	for (i = 0, it = contents.begin(); it != contents.end(); it++) {
+	for (i = 0, it = contents.begin(); it != contents.end(); ++it) {
 		name = env->NewStringUTF(it->c_str());
 		if (!name)
 			goto out;
@@ -2129,7 +2129,7 @@ JNIEXPORT jobjectArray JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1llistxat
 	if (!xattrlist)
 		goto out;
 
-	for (i = 0, it = contents.begin(); it != contents.end(); it++) {
+	for (i = 0, it = contents.begin(); it != contents.end(); ++it) {
 		name = env->NewStringUTF(it->c_str());
 		if (!name)
 			goto out;
