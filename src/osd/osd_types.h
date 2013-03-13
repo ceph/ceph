@@ -1381,14 +1381,14 @@ struct pg_log_t {
     list<pg_log_entry_t>::iterator p;
     if (fromhead < fromtail) {
       p = log.end();
-      p--;
+      --p;
       while (p->version > v)
-	p--;
+	--p;
       return p;
     } else {
       p = log.begin();
       while (p->version < v)
-	p++;
+	++p;
       return p;
     }      
   }

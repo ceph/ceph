@@ -44,7 +44,7 @@ int CrushTester::get_maximum_affected_by_rule(int ruleno)
   // loop through the vector of affected types
   for (vector<int>::iterator it = affected_types.begin(); it != affected_types.end(); ++it){
     // loop through the number of buckets looking for affected types
-    for (map<int,string>::iterator p = crush.name_map.begin(); p != crush.name_map.end(); p++){
+    for (map<int,string>::iterator p = crush.name_map.begin(); p != crush.name_map.end(); ++p){
       int bucket_type = crush.get_bucket_type(p->first);
       if ( bucket_type == *it)
         max_devices_of_type[*it]++;
@@ -152,7 +152,7 @@ bool CrushTester::check_valid_placement(int ruleno, vector<int> in, const vector
   map<string,string> seen_devices;
 
   // first do the easy check that all devices are "up"
-  for (vector<int>::iterator it = in.begin(); it != in.end(); it++) {
+  for (vector<int>::iterator it = in.begin(); it != in.end(); ++it) {
     if (weight[(*it)] == 0) {
       valid_placement = false;
       break;
@@ -173,7 +173,7 @@ bool CrushTester::check_valid_placement(int ruleno, vector<int> in, const vector
 
   // get the smallest type id, and name
   int min_map_type = crush.get_num_type_names();
-  for (map<int,string>::iterator it = crush.type_map.begin(); it != crush.type_map.end(); it++ ) {
+  for (map<int,string>::iterator it = crush.type_map.begin(); it != crush.type_map.end(); ++it ) {
     if ( (*it).first < min_map_type ) {
       min_map_type = (*it).first;
     }
@@ -202,7 +202,7 @@ bool CrushTester::check_valid_placement(int ruleno, vector<int> in, const vector
   }
 
   // check that we don't have any duplicate id's
-  for (vector<int>::iterator it = included_devices.begin(); it != included_devices.end(); it++) {
+  for (vector<int>::iterator it = included_devices.begin(); it != included_devices.end(); ++it) {
     int num_copies = count(included_devices.begin(), included_devices.end(), (*it) );
     if (num_copies > 1) {
       valid_placement = false;
@@ -212,7 +212,7 @@ bool CrushTester::check_valid_placement(int ruleno, vector<int> in, const vector
   // if we have more than just osd's affected we need to do a lot more work
   if (!only_osd_affected) {
     // loop through the devices that are "in/up"
-    for (vector<int>::iterator it = included_devices.begin(); it != included_devices.end(); it++) {
+    for (vector<int>::iterator it = included_devices.begin(); it != included_devices.end(); ++it) {
       if (valid_placement == false)
         break;
 
@@ -220,7 +220,7 @@ bool CrushTester::check_valid_placement(int ruleno, vector<int> in, const vector
       map<string,string> device_location_hierarchy = crush.get_full_location(*it);
 
       // loop over the types affected by RULENO looking for duplicate bucket assignments
-      for (vector<string>::iterator t = affected_types.begin(); t != affected_types.end(); t++) {
+      for (vector<string>::iterator t = affected_types.begin(); t != affected_types.end(); ++t) {
         if (seen_devices.count( device_location_hierarchy[*t])) {
           valid_placement = false;
           break;
@@ -523,7 +523,7 @@ int CrushTester::test()
           err << "  device " << i
           << ":\t" << per[i] << std::endl;
 
-      for (map<int,int>::iterator p = sizes.begin(); p != sizes.end(); p++)
+      for (map<int,int>::iterator p = sizes.begin(); p != sizes.end(); ++p)
         if (output_statistics)
           err << "rule " << r << " (" << crush.get_rule_name(r) << ") num_rep " << nr
           << " result size == " << p->first << ":\t"

@@ -549,9 +549,10 @@ public:
     m->set_dispatch_stamp(ceph_clock_now(cct));
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
-	 p++)
+	 ++p) {
       if ((*p)->ms_dispatch(m))
 	return;
+    }
     lsubdout(cct, ms, 0) << "ms_deliver_dispatch: unhandled message " << m << " " << *m << " from "
 			 << m->get_source_inst() << dendl;
     assert(!cct->_conf->ms_die_on_unhandled_msg);
@@ -566,7 +567,7 @@ public:
   void ms_deliver_handle_connect(Connection *con) {
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
-	 p++)
+	 ++p)
       (*p)->ms_handle_connect(con);
   }
 
@@ -579,7 +580,7 @@ public:
   void ms_deliver_handle_accept(Connection *con) {
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
-	 p++)
+	 ++p)
       (*p)->ms_handle_accept(con);
   }
 
@@ -593,9 +594,10 @@ public:
   void ms_deliver_handle_reset(Connection *con) {
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
-	 p++)
+	 ++p) {
       if ((*p)->ms_handle_reset(con))
 	return;
+    }
   }
   /**
    * Notify each Dispatcher of a Connection which has been "forgotten" about
@@ -607,7 +609,7 @@ public:
   void ms_deliver_handle_remote_reset(Connection *con) {
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
-	 p++)
+	 ++p)
       (*p)->ms_handle_remote_reset(con);
   }
   /**
@@ -621,9 +623,10 @@ public:
     AuthAuthorizer *a = 0;
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
-	 p++)
+	 ++p) {
       if ((*p)->ms_get_authorizer(peer_type, &a, force_new))
 	return a;
+    }
     return NULL;
   }
   /**
@@ -645,9 +648,10 @@ public:
 				    bool& isvalid, CryptoKey& session_key) {
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
-	 p++)
+	 ++p) {
       if ((*p)->ms_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid, session_key))
 	return true;
+    }
     return false;
   }
   /**
