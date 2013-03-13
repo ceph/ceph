@@ -1374,7 +1374,11 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
       mdr->locks.insert(lock);
       mdr->finish_locking(lock);
       lock->get_xlock(mdr, mdr->get_client());
-      lock->finish_waiters(SimpleLock::WAIT_REMOTEXLOCK);
+
+      assert(mdr->more()->waiting_on_slave.count(from));
+      mdr->more()->waiting_on_slave.erase(from);
+      assert(mdr->more()->waiting_on_slave.empty());
+      dispatch_client_request(mdr);
     }
     break;
     
@@ -1388,7 +1392,11 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
       mdr->remote_wrlocks[lock] = from;
       mdr->locks.insert(lock);
       mdr->finish_locking(lock);
-      lock->finish_waiters(SimpleLock::WAIT_REMOTEXLOCK);
+
+      assert(mdr->more()->waiting_on_slave.count(from));
+      mdr->more()->waiting_on_slave.erase(from);
+      assert(mdr->more()->waiting_on_slave.empty());
+      dispatch_client_request(mdr);
     }
     break;
 
