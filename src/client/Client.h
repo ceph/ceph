@@ -425,7 +425,7 @@ protected:
   int mark_caps_flushing(Inode *in);
   void flush_caps();
   void flush_caps(Inode *in, MetaSession *session);
-  void kick_flushing_caps(int mds);
+  void kick_flushing_caps(MetaSession *session);
   int get_caps(Inode *in, int need, int want, int *have, loff_t endoff);
 
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater, 
