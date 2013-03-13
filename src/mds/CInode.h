@@ -267,7 +267,7 @@ public:
   inode_t *get_previous_projected_inode() {
     assert(!projected_nodes.empty());
     list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
-    p++;
+    ++p;
     if (p != projected_nodes.rend())
       return (*p)->inode;
     else
@@ -277,7 +277,7 @@ public:
   map<string,bufferptr> *get_projected_xattrs() {
     for (list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
 	 p != projected_nodes.rend();
-	 p++)
+	 ++p)
       if ((*p)->xattrs)
 	return (*p)->xattrs;
     return &xattrs;
@@ -286,7 +286,7 @@ public:
     list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
     for (p++;  // skip the most recent projected value
 	 p != projected_nodes.rend();
-	 p++)
+	 ++p)
       if ((*p)->xattrs)
 	return (*p)->xattrs;
     return &xattrs;
@@ -302,7 +302,7 @@ public:
     } else {
       for (list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
           p != projected_nodes.rend();
-          p++)
+          ++p)
         if ((*p)->snapnode)
           return (*p)->snapnode;
     }
@@ -686,7 +686,7 @@ public:
     int n = 0;
     for (map<client_t,Capability*>::iterator it = client_caps.begin();
          it != client_caps.end();
-         it++) 
+         ++it) 
       if (!it->second->is_stale())
 	n++;
     return n;
@@ -695,7 +695,7 @@ public:
     int n = 0;
     for (map<client_t,Capability*>::iterator it = client_caps.begin();
          it != client_caps.end();
-         it++) 
+         ++it) 
       if (!it->second->is_stale()) {
 	if (n)
 	  return true;
