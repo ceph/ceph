@@ -517,7 +517,7 @@ int main(int argc, const char **argv)
 
     int type = 1;
     int rootid = 0;
-    for (vector<layer_t>::iterator p = layers.begin(); p != layers.end(); p++, type++) {
+    for (vector<layer_t>::iterator p = layers.begin(); p != layers.end(); ++p, type++) {
       layer_t &l = *p;
 
       dout(0) << "layer " << type
