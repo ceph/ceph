@@ -81,7 +81,7 @@ int main(int argc, const char **argv, char *envp[])
 
   for (list<SyntheticClient*>::iterator p = synclients.begin(); 
        p != synclients.end();
-       p++)
+       ++p)
     (*p)->start_thread();
 
   //cout << "waiting for client(s) to finish" << std::endl;
