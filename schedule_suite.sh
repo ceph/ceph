@@ -69,6 +69,11 @@ overrides:
   s3tests:
     branch: $s3branch
   ceph:
+    conf:
+      mon:
+        debug ms: 20
+        debug mon: 20
+        debug paxos: 20
     sha1: $CEPH_SHA1
     log-whitelist:
     - slow request
