@@ -43,14 +43,14 @@ class MonMap {
     addr_name.clear();
     for (map<string,entity_addr_t>::iterator p = mon_addr.begin();
 	 p != mon_addr.end();
-	 p++) {
+	 ++p) {
       assert(addr_name.count(p->second) == 0);
       addr_name[p->second] = p->first;
     }
     unsigned i = 0;
     for (map<entity_addr_t,string>::iterator p = addr_name.begin();
 	 p != addr_name.end();
-	 p++, i++) {
+	 ++p, i++) {
       rank_name[i] = p->second;
       rank_addr[i] = p->first;
     }
@@ -105,9 +105,10 @@ class MonMap {
   bool contains(const entity_addr_t &a) {
     for (map<string,entity_addr_t>::iterator p = mon_addr.begin();
 	 p != mon_addr.end();
-	 p++)
+	 ++p) {
       if (p->second == a)
 	return true;
+    }
     return false;
   }
 
