@@ -30,7 +30,6 @@ void MetaSession::dump(Formatter *f) const
   f->dump_unsigned("cap_renew_seq", cap_renew_seq);
   f->dump_int("num_caps", num_caps);
   f->dump_string("state", get_state_name());
-  f->dump_int("was_stale", (int)was_stale);
 }
 
 MetaSession::~MetaSession()
