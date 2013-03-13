@@ -4182,7 +4182,6 @@ void MDCache::rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack,
 
 CInode *MDCache::rejoin_invent_inode(inodeno_t ino, snapid_t last)
 {
-  assert(0);
   CInode *in = new CInode(this, true, 1, last);
   in->inode.ino = ino;
   in->state_set(CInode::STATE_REJOINUNDEF);
@@ -4194,96 +4193,18 @@ CInode *MDCache::rejoin_invent_inode(inodeno_t ino, snapid_t last)
 
 CDir *MDCache::rejoin_invent_dirfrag(dirfrag_t df)
 {
-  assert(0);
   CInode *in = get_inode(df.ino);
-  if (!in) {
+  if (!in)
     in = rejoin_invent_inode(df.ino, CEPH_NOSNAP);
-    if (!in->is_dir()) {
-      assert(in->state_test(CInode::STATE_REJOINUNDEF));
-      in->inode.mode = S_IFDIR;
-    }
+  if (!in->is_dir()) {
+    assert(in->state_test(CInode::STATE_REJOINUNDEF));
+    in->inode.mode = S_IFDIR;
   }
-  assert(in->is_dir());
   CDir *dir = in->get_or_open_dirfrag(this, df.frag);
   dir->state_set(CDir::STATE_REJOINUNDEF);
   rejoin_undef_dirfrags.insert(dir);
   dout(10) << " invented " << *dir << dendl;
   return dir;
-}
-
-bool MDCache::rejoin_fetch_dirfrags(MMDSCacheRejoin *strong)
-{
-  int skipped = 0;
-  set<CDir*> fetch_queue;
-  for (map<dirfrag_t, MMDSCacheRejoin::dirfrag_strong>::iterator p = strong->strong_dirfrags.begin();
-       p != strong->strong_dirfrags.end();
-       ++p) {
-    CInode *diri = get_inode(p->first.ino);
-    if (!diri) {
-      skipped++;
-      continue;
-    }
-    CDir *dir = diri->get_dirfrag(p->first.frag);
-    if (dir && dir->is_complete())
-      continue;
-
-    set<CDir*> frags;
-    bool refragged = false;
-    if (!dir) {
-      if (diri->dirfragtree.is_leaf(p->first.frag))
-	dir = diri->get_or_open_dirfrag(this, p->first.frag);
-      else {
-	list<frag_t> ls;
-	diri->dirfragtree.get_leaves_under(p->first.frag, ls);
-	if (ls.empty())
-	  ls.push_back(diri->dirfragtree[p->first.frag.value()]);
-	for (list<frag_t>::iterator q = ls.begin(); q != ls.end(); ++q) {
-	  dir = diri->get_or_open_dirfrag(this, p->first.frag);
-	  frags.insert(dir);
-	}
-	refragged = true;
-      }
-    }
-
-    map<string_snap_t,MMDSCacheRejoin::dn_strong>& dmap = strong->strong_dentries[p->first];
-    for (map<string_snap_t,MMDSCacheRejoin::dn_strong>::iterator q = dmap.begin();
-	q != dmap.end();
-	++q) {
-      if (!q->second.is_primary())
-	continue;
-      CDentry *dn;
-      if (!refragged)
-	dn = dir->lookup(q->first.name, q->first.snapid);
-      else {
-	frag_t fg = diri->pick_dirfrag(q->first.name);
-	dir = diri->get_dirfrag(fg);
-	assert(dir);
-	dn = dir->lookup(q->first.name, q->first.snapid);
-      }
-      if (!dn) {
-	fetch_queue.insert(dir);
-	if (!refragged)
-	  break;
-	frags.erase(dir);
-	if (frags.empty())
-	  break;
-      }
-    }
-  }
-
-  if (!fetch_queue.empty()) {
-    dout(10) << "rejoin_fetch_dirfrags " << fetch_queue.size() << " dirfrags" << dendl;
-    strong->get();
-    C_GatherBuilder gather(g_ceph_context, new C_MDS_RetryMessage(mds, strong));
-    for (set<CDir*>::iterator p = fetch_queue.begin(); p != fetch_queue.end(); ++p) {
-      CDir *dir = *p;
-      dir->fetch(gather.new_sub());
-    }
-    gather.activate();
-    return true;
-  }
-  assert(!skipped);
-  return false;
 }
 
 /* This functions DOES NOT put the passed message before returning */
@@ -4294,11 +4215,6 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
   // only a recovering node will get a strong rejoin.
   assert(mds->is_rejoin());
 
-  if (rejoin_fetch_dirfrags(strong))
-    return;
-
-  MMDSCacheRejoin *missing = 0;  // if i'm missing something..
-  
   // assimilate any potentially dirty scatterlock state
   for (map<inodeno_t,MMDSCacheRejoin::lock_bls>::iterator p = strong->inode_scatterlocks.begin();
        p != strong->inode_scatterlocks.end();
@@ -4323,12 +4239,16 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
        p != strong->strong_dirfrags.end();
        ++p) {
     CInode *diri = get_inode(p->first.ino);
+    if (!diri)
+      diri = rejoin_invent_inode(p->first.ino, CEPH_NOSNAP);
     CDir *dir = diri->get_dirfrag(p->first.frag);
     bool refragged = false;
     if (dir) {
       dout(10) << " have " << *dir << dendl;
     } else {
-      if (diri->dirfragtree.is_leaf(p->first.frag))
+      if (diri->state_test(CInode::STATE_REJOINUNDEF))
+	dir = rejoin_invent_dirfrag(dirfrag_t(diri->ino(), frag_t()));
+      else if (diri->dirfragtree.is_leaf(p->first.frag))
 	dir = rejoin_invent_dirfrag(p->first);
     }
     if (dir) {
@@ -4373,15 +4293,9 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	} else if (q->second.is_null()) {
 	  dn = dir->add_null_dentry(q->first.name, q->second.first, q->first.snapid);
 	} else {
-	  assert(0);
 	  CInode *in = get_inode(q->second.ino, q->first.snapid);
 	  if (!in) in = rejoin_invent_inode(q->second.ino, q->first.snapid);
 	  dn = dir->add_primary_dentry(q->first.name, in, q->second.first, q->first.snapid);
-
-	  dout(10) << " missing " << q->second.ino << "." << q->first.snapid << dendl;
-	  if (!missing)
-	    missing = new MMDSCacheRejoin(MMDSCacheRejoin::OP_MISSING);
-	  missing->add_weak_inode(vinodeno_t(q->second.ino, q->first.snapid));  // we want it back!
 	}
 	dout(10) << " invented " << *dn << dendl;
       }
@@ -4517,19 +4431,15 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
     in->add_replica(from);
   }
 
-  // send missing?
-  if (missing) {
-    // we expect a FULL soon.
-    mds->send_message(missing, strong->get_connection());
+
+
+  // done?
+  assert(rejoin_gather.count(from));
+  rejoin_gather.erase(from);
+  if (rejoin_gather.empty()) {
+    rejoin_gather_finish();
   } else {
-    // done?
-    assert(rejoin_gather.count(from));
-    rejoin_gather.erase(from);
-    if (rejoin_gather.empty()) {
-      rejoin_gather_finish();
-    } else {
-      dout(7) << "still need rejoin from (" << rejoin_gather << ")" << dendl;
-    }
+    dout(7) << "still need rejoin from (" << rejoin_gather << ")" << dendl;
   }
 }
 
@@ -4804,7 +4714,8 @@ void MDCache::rejoin_gather_finish()
   dout(10) << "rejoin_gather_finish" << dendl;
   assert(mds->is_rejoin());
 
-  rejoin_trim_undef_inodes();
+  if (open_undef_inodes_dirfrags())
+    return;
 
   // fetch paths?
   //  do this before ack, since some inodes we may have already gotten
@@ -5156,44 +5067,62 @@ void MDCache::open_snap_parents()
     gather.set_finisher(new C_MDC_OpenSnapParents(this));
     gather.activate();
   } else {
+    assert(rejoin_waiters.empty());
     assert(missing_snap_parents.empty());
     assert(reconnected_snaprealms.empty());
     dout(10) << "open_snap_parents - all open" << dendl;
     do_delayed_cap_imports();
 
-    open_undef_dirfrags();
+    start_files_to_recover(rejoin_recover_q, rejoin_check_q);
+    mds->rejoin_done();
   }
 }
 
-struct C_MDC_OpenUndefDirfragsFinish : public Context {
-  MDCache *cache;
-  C_MDC_OpenUndefDirfragsFinish(MDCache *c) : cache(c) {}
-  void finish(int r) {
-    cache->open_undef_dirfrags();
-  }
-};
-
-void MDCache::open_undef_dirfrags()
+bool MDCache::open_undef_inodes_dirfrags()
 {
-  dout(10) << "open_undef_dirfrags " << rejoin_undef_dirfrags.size() << " dirfrags" << dendl;
-  
-  C_GatherBuilder gather(g_ceph_context);
-  for (set<CDir*>::iterator p = rejoin_undef_dirfrags.begin();
-       p != rejoin_undef_dirfrags.end();
+  dout(10) << "open_undef_inodes_dirfrags "
+	   << rejoin_undef_inodes.size() << " inodes "
+	   << rejoin_undef_dirfrags.size() << " dirfrags" << dendl;
+
+  set<CDir*> fetch_queue = rejoin_undef_dirfrags;
+
+  for (set<CInode*>::iterator p = rejoin_undef_inodes.begin();
+       p != rejoin_undef_inodes.end();
+       ++p) {
+    CInode *in = *p;
+    assert(!in->is_base());
+    fetch_queue.insert(in->get_parent_dir());
+  }
+
+  if (fetch_queue.empty())
+    return false;
+
+  C_GatherBuilder gather(g_ceph_context, new C_MDC_RejoinGatherFinish(this));
+  for (set<CDir*>::iterator p = fetch_queue.begin();
+       p != fetch_queue.end();
        ++p) {
     CDir *dir = *p;
+    CInode *diri = dir->get_inode();
+    if (diri->state_test(CInode::STATE_REJOINUNDEF))
+      continue;
+    if (dir->state_test(CDir::STATE_REJOINUNDEF) && dir->get_frag() == frag_t()) {
+      rejoin_undef_dirfrags.erase(dir);
+      dir->state_clear(CDir::STATE_REJOINUNDEF);
+      diri->force_dirfrags();
+      list<CDir*> ls;
+      diri->get_dirfrags(ls);
+      for (list<CDir*>::iterator q = ls.begin(); q != ls.end(); ++q) {
+	rejoin_undef_dirfrags.insert(*q);
+	(*q)->state_set(CDir::STATE_REJOINUNDEF);
+	(*q)->fetch(gather.new_sub());
+      }
+      continue;
+    }
     dir->fetch(gather.new_sub());
   }
-
-  if (gather.has_subs()) {
-    gather.set_finisher(new C_MDC_OpenUndefDirfragsFinish(this));
-    gather.activate();
-  }
-  else {
-    start_files_to_recover(rejoin_recover_q, rejoin_check_q);
-    mds->queue_waiters(rejoin_waiters);
-    mds->rejoin_done();
-  }
+  assert(gather.has_subs());
+  gather.activate();
+  return true;
 }
 
 void MDCache::finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snapid_t seq)
