@@ -92,7 +92,7 @@ struct LogSummary {
   bool contains(const LogEntryKey& k) const {
     for (list<LogEntry>::const_iterator p = tail.begin();
 	 p != tail.end();
-	 p++)
+	 ++p)
       if (p->key() == k)
 	return true;
     return false;
