@@ -13,7 +13,7 @@ Our 5-minute Quick Start provides a trivial `Ceph configuration file`_ that sets
 monitor IP addresses and daemon host names only. The quick start configuration
 assumes a single "public" network. Ceph functions just fine with a public
 network only, but you may see significant performance improvement with a second
-network in a large cluster.
+"cluster" network in a large cluster.
 
 We recommend running a Ceph cluster with two networks: a public (front-side)
 network and a cluster (back-side) network. To support two networks, your hosts
@@ -69,8 +69,9 @@ There are several reasons to consider operating two separate networks:
 IP Tables
 =========
 
-Before configuring your IP tables, check the default ``iptables`` configuration.
-::
+By default, daemons `bind`_ to ports within the ``6800:7100`` range. You may
+configure this range at your discretion. Before configuring your IP tables,
+check the default ``iptables`` configuration. ::
 
 	sudo iptables -L
 
@@ -87,11 +88,11 @@ harden the ports on your cluster hosts.
 Monitor IP Tables
 -----------------
 
-Monitors listen on port 6789 by default. Additionally, monitors always operate
-on the public network. When you add the rule using the example below, make
-sure you replace ``{iface}`` with the public network interface (e.g., ``eth0``,
-``eth1``, etc.), ``{ip-address}`` with  the IP address of the public network and
-``{netmask}`` with the netmask for the public network. ::
+Monitors listen on port ``6789`` by default. Additionally, monitors always
+operate on the public network. When you add the rule using the example below,
+make sure you replace ``{iface}`` with the public network interface (e.g.,
+``eth0``, ``eth1``, etc.), ``{ip-address}`` with  the IP address of the public
+network and ``{netmask}`` with the netmask for the public network. ::
 
    sudo iptables -A INPUT -i {iface} -p tcp -s {ip-address}/{netmask} --dport 6789 -j ACCEPT
 
@@ -114,12 +115,35 @@ For example::
 OSD IP Tables
 -------------
 
-OSDs servers listen on the first available port beginning at port 6800. Ensure
-that you open one port beginning at port 6800 for each OSD server that runs on
-the host. Ports are host-specific, so you don't need to open any more ports than
-the number of Ceph daemons running on that host. You may consider opening a few
-additional ports in case a daemon fails and restarts without letting go of the
-port such that the restarted daemon binds to a new port. 
+OSDs listen on the first available ports beginning at port 6800. Ensure
+that you open at least one port beginning at port 6800 for each OSD that
+runs on the host. Each OSD may use up to three ports:
+
+#. One for talking to clients and monitors.
+#. One for sending data to other OSDs.
+#. One for heartbeating.
+
+.. ditaa:: 
+              /---------------\
+              |      OSD      |
+              |           +---+----------------+
+              |           | Clients & Monitors |
+              |           +---+----------------+
+              |               |
+              |           +---+----------------+
+              |           | Data Replication   |
+              |           +---+----------------+
+              |               |
+              |           +---+----------------+
+              |           | Heartbeat          |
+              |           +---+----------------+
+              | cCCC          |
+              \---------------/
+
+Ports are host-specific, so you don't need to open any more ports than the
+number of ports needed by Ceph daemons running on that host. You may consider
+opening a few additional ports in case a daemon fails and restarts without
+letting go of the port such that the restarted daemon binds to a new port. 
 
 If you set up separate public and cluster networks, you must add rules for both
 the public network and the cluster network, because clients will connect using
@@ -131,10 +155,9 @@ network. For example::
 
 	sudo iptables -A INPUT -i {iface}  -m multiport -p tcp -s {ip-address}/{netmask} --dports 6800:6810 -j ACCEPT
 
-
 .. tip:: If you run metadata servers on the same host as the OSDs,
    you can consolidate the public network configuration step. Ensure
-   you open a port for each daemon.
+   you the number of ports required for each daemon.
 
 
 
@@ -145,10 +168,13 @@ To configure Ceph networks, you must add a network configuration to the
 ``[global]`` section of the configuration file. Our 5-minute Quick Start
 provides a trivial `Ceph configuration file`_ that assumes one public network
 with client and server on the same network and subnet. Ceph functions just fine
-with a public network only. However, Ceph  allows you to establish much more
-specific criteria, including multiple network IP addresses and subnet masks
-for your public network. You can also establish a separate cluster network
-to handle OSD heartbeat, object replication and recovery traffic. 
+with a public network only. However, Ceph allows you to establish much more
+specific criteria, including multiple IP network and subnet masks for your
+public network. You can also establish a separate cluster network to handle OSD
+heartbeat, object replication and recovery traffic. Don't confuse the IP
+addresses you set in your configuration with the public-facing IP addresses
+customers may use to access your service. Typical IP networks are often
+``192.168.0.0`` or ``10.0.0.0`` or something similar.
 
 .. tip:: If you specify more than one IP address and subnet mask for
    either the public or the cluster network, the subnets within the network
@@ -156,8 +182,11 @@ to handle OSD heartbeat, object replication and recovery traffic.
    include each IP address/subnet in your IP tables and open ports for them
    as necessary.
 
-.. note:: Ceph uses `CIDR`_ notation for subnets (e.g., ``10.20.30.0/24``).
+.. note:: Ceph uses `CIDR`_ notation for subnets (e.g., ``10.0.0.0/24``).
 
+When you've configured your networks, you may restart your cluster or restart
+each daemon. Ceph daemons bind dynamically, so you do not have to restart the
+entire cluster at once if you change your network configuration.
 
 Public Network
 --------------
@@ -169,7 +198,7 @@ section of your Ceph configuration file.
 
 	[global]
 		...
-		public network = {public-network-ip-address/netmask}
+		public network = {public-network/netmask}
 
 
 Cluster Network
@@ -184,7 +213,7 @@ following option to the ``[global]`` section of your Ceph configuration file.
 
 	[global]
 		...
-		cluster network = {enter cluster-network-ip-address/netmask}
+		cluster network = {cluster-network/netmask}
 
 We prefer that the cluster network is **NOT** reachable from the public network
 or the Internet for added security.
@@ -249,6 +278,7 @@ Network configuration settings are not required. Ceph assumes a public network
 with all hosts operating on it unless you specifically configure a cluster 
 network.
 
+
 Public Network
 --------------
 
@@ -260,7 +290,7 @@ setting for a specific daemon.
 ``public network``
 
 :Description: The IP address and netmask of the public (front-side) network 
-              (e.g., ``10.20.30.0/24``). Set in ``[global]``. You may specify
+              (e.g., ``192.168.0.0/24``). Set in ``[global]``. You may specify
               comma-delimited subnets.
 
 :Type: ``{ip-address}/{netmask} [, {ip-address}/{netmask}]``
@@ -291,7 +321,7 @@ settings using the ``cluster addr`` setting for specific OSD daemons.
 ``cluster network``
 
 :Description: The IP address and netmask of the cluster (back-side) network 
-              (e.g., ``10.20.40.0/24``).  Set in ``[global]``. You may specify
+              (e.g., ``10.0.0.0/24``).  Set in ``[global]``. You may specify
               comma-delimited subnets.
 
 :Type: ``{ip-address}/{netmask} [, {ip-address}/{netmask}]``
@@ -307,6 +337,41 @@ settings using the ``cluster addr`` setting for specific OSD daemons.
 :Type: Address
 :Required: No
 :Default: N/A
+
+
+Bind
+----
+
+Bind settings set the default port ranges Ceph OSD and MDS daemons use. The
+default range is ``6800:7100``. Ensure that your `IP Tables`_ configuration
+allows you to use the configured port range.
+
+You may also enable Ceph daemons to bind to IPv6 addresses.
+
+
+``ms bind port min``
+
+:Description: The minimum port number to which an OSD or MDS daemon will bind.
+:Type: 32-bit Integer
+:Default: ``6800``
+:Required: No
+
+
+``ms bind port max``
+
+:Description: The maximum port number to which an OSD or MDS daemon will bind.
+:Type: 32-bit Integer
+:Default: ``7100``
+:Required: No. 
+
+
+``ms bind ipv6``
+
+:Description: Enables Ceph daemons to bind to IPv6 addresses.
+:Type: Boolean
+:Default: ``false``
+:Required: No
+
 
 
 Hosts
@@ -347,6 +412,49 @@ file.
 
 
 
+TCP
+---
+
+Ceph disables TCP buffering by default.
+
+
+``tcp nodelay``
+
+:Description: Ceph enables ``tcp nodelay`` so that each request is sent 
+              immediately (no buffering). Disabling `Nagle's algorithm`_
+              increases network traffic, which can introduce latency. If you 
+              experience large numbers of small packets, you may try 
+              disabling ``tcp nodelay``. 
+
+:Type: Boolean
+:Required: No
+:Default: ``true``
+
+
+
+``tcp rcvbuf``
+
+:Description: The size of the socket buffer on the receiving end of a network
+              connection. Disable by default.
+
+Type: 32-bit Integer
+:Required: No
+:Default: ``0``
+
+
+
+``ms tcp read timeout``
+
+:Description: If a client or daemon makes a request to another Ceph daemon and
+              does not drop an unused connection, the ``tcp read timeout`` 
+              defines the connection as idle after the specified number 
+              of seconds.
+
+:Type: Unsigned 64-bit Integer
+:Required: No
+:Default: ``900`` 15 minutes.
+
+
 
 .. _How Ceph Scales: ../../../architecture#how-ceph-scales
 .. _Hardware Recommendations - Networks: ../../../install/hardware-recommendations#networks
@@ -355,3 +463,4 @@ file.
 .. _Monitor / OSD Interaction: ../mon-osd-interaction
 .. _Message Signatures: ../auth-config-ref#signatures
 .. _CIDR: http://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing
+.. _Nagle's Algorithm: http://en.wikipedia.org/wiki/Nagle's_algorithm
