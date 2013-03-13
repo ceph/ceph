@@ -2050,6 +2050,17 @@ void MDS::ms_handle_remote_reset(Connection *con)
   case CEPH_ENTITY_TYPE_OSD:
     objecter->ms_handle_remote_reset(con);
     break;
+
+  case CEPH_ENTITY_TYPE_CLIENT:
+    Session *session = static_cast<Session *>(con->get_priv());
+    if (session) {
+      if (session->is_closed()) {
+	messenger->mark_down(con);
+	sessionmap.remove_session(session);
+      }
+      session->put();
+    }
+    break;
   }
 }
 
