@@ -1546,7 +1546,7 @@ void Client::handle_client_session(MClientSession *m)
     if (session->cap_renew_seq == m->get_seq()) {
       session->cap_ttl =
 	session->last_cap_renew_request + mdsmap->get_session_timeout();
-      wake_inode_waiters(from);
+      wake_inode_waiters(session);
     }
     break;
 
@@ -2576,10 +2576,9 @@ void Client::signal_cond_list(list<Cond*>& ls)
   ls.clear();
 }
 
-void Client::wake_inode_waiters(int mds_num)
+void Client::wake_inode_waiters(MetaSession *s)
 {
-  MetaSession * mds = mds_sessions[mds_num];
-  xlist<Cap*>::iterator iter = mds->caps.begin();
+  xlist<Cap*>::iterator iter = s->caps.begin();
   while (!iter.end()){
     signal_cond_list((*iter)->inode->waitfor_caps);
     ++iter;
