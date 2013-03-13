@@ -127,7 +127,7 @@ inline ostream& operator<<(ostream& out, const pair<A,B>& v) {
 template<class A>
 inline ostream& operator<<(ostream& out, const vector<A>& v) {
   out << "[";
-  for (typename vector<A>::const_iterator p = v.begin(); p != v.end(); p++) {
+  for (typename vector<A>::const_iterator p = v.begin(); p != v.end(); ++p) {
     if (p != v.begin()) out << ",";
     out << *p;
   }
@@ -137,7 +137,7 @@ inline ostream& operator<<(ostream& out, const vector<A>& v) {
 template<class A>
 inline ostream& operator<<(ostream& out, const deque<A>& v) {
   out << "<";
-  for (typename deque<A>::const_iterator p = v.begin(); p != v.end(); p++) {
+  for (typename deque<A>::const_iterator p = v.begin(); p != v.end(); ++p) {
     if (p != v.begin()) out << ",";
     out << *p;
   }
@@ -149,7 +149,7 @@ template<class A>
 inline ostream& operator<<(ostream& out, const list<A>& ilist) {
   for (typename list<A>::const_iterator it = ilist.begin();
        it != ilist.end();
-       it++) {
+       ++it) {
     if (it != ilist.begin()) out << ",";
     out << *it;
   }
@@ -160,7 +160,7 @@ template<class A>
 inline ostream& operator<<(ostream& out, const set<A>& iset) {
   for (typename set<A>::const_iterator it = iset.begin();
        it != iset.end();
-       it++) {
+       ++it) {
     if (it != iset.begin()) out << ",";
     out << *it;
   }
@@ -171,7 +171,7 @@ template<class A>
 inline ostream& operator<<(ostream& out, const multiset<A>& iset) {
   for (typename multiset<A>::const_iterator it = iset.begin();
        it != iset.end();
-       it++) {
+       ++it) {
     if (it != iset.begin()) out << ",";
     out << *it;
   }
@@ -184,7 +184,7 @@ inline ostream& operator<<(ostream& out, const map<A,B>& m)
   out << "{";
   for (typename map<A,B>::const_iterator it = m.begin();
        it != m.end();
-       it++) {
+       ++it) {
     if (it != m.begin()) out << ",";
     out << it->first << "=" << it->second;
   }
@@ -198,7 +198,7 @@ inline ostream& operator<<(ostream& out, const multimap<A,B>& m)
   out << "{{";
   for (typename multimap<A,B>::const_iterator it = m.begin();
        it != m.end();
-       it++) {
+       ++it) {
     if (it != m.begin()) out << ",";
     out << it->first << "=" << it->second;
   }
