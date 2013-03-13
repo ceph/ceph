@@ -328,6 +328,7 @@ protected:
   friend class ESlaveUpdate;
   friend class ECommitted;
 
+  bool resolves_pending;
   set<int> wants_resolve;   // nodes i need to send my resolve to
   set<int> got_resolve;     // nodes i got resolves from
   set<int> need_resolve_ack;   // nodes i need a resolve_ack from
@@ -367,10 +368,12 @@ public:
   void finish_ambiguous_import(dirfrag_t dirino);
   void resolve_start();
   void send_resolves();
-  void send_slave_resolve(int who);
-  void send_resolve_now(int who);
-  void send_resolve_later(int who);
-  void maybe_send_pending_resolves();
+  void send_slave_resolves();
+  void send_subtree_resolves();
+  void maybe_send_pending_resolves() {
+    if (resolves_pending)
+      send_subtree_resolves();
+  }
   
   void _move_subtree_map_bound(dirfrag_t df, dirfrag_t oldparent, dirfrag_t newparent,
 			       map<dirfrag_t,vector<dirfrag_t> >& subtrees);
