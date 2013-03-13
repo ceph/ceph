@@ -1489,7 +1489,7 @@ void Client::_close_mds_session(MetaSession *s)
   ldout(cct, 2) << "_close_mds_session mds." << s->mds_num << " seq " << s->seq << dendl;
   s->state = MetaSession::STATE_CLOSING;
   messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, s->seq),
-			  s->inst);
+			  s->con);
 }
 
 void Client::_closed_mds_session(MetaSession *s)
@@ -1972,7 +1972,7 @@ void Client::got_mds_push(int mds)
   ldout(cct, 10) << " mds." << mds << " seq now " << s->seq << dendl;
   if (s->state == MetaSession::STATE_CLOSING) {
     messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, s->seq),
-			    s->inst);
+			    s->con);
   }
 }
 
@@ -3754,7 +3754,7 @@ void Client::flush_cap_releases()
        p != mds_sessions.end();
        p++) {
     if (p->second->release && mdsmap->is_clientreplay_or_active_or_stopping(p->first)) {
-      messenger->send_message(p->second->release, p->second->inst);
+      messenger->send_message(p->second->release, p->second->con);
       p->second->release = 0;
     }
   }
