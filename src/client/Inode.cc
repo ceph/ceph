@@ -150,8 +150,6 @@ bool Inode::cap_is_valid(Cap* cap)
       && (ceph_clock_now(cct) < cap->session->cap_ttl)) {
     return true;
   }
-  //if we make it here, the capabilities aren't up-to-date
-  cap->session->was_stale = true;
   return true;
 }
 
