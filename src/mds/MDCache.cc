@@ -2181,6 +2181,17 @@ void MDCache::committed_master_slave(metareqid_t r, int from)
     log_master_commit(r);
 }
 
+void MDCache::logged_master_update(metareqid_t reqid)
+{
+  dout(10) << "logged_master_update " << reqid << dendl;
+  assert(uncommitted_masters.count(reqid));
+  uncommitted_masters[reqid].safe = true;
+  if (pending_masters.count(reqid)) {
+    pending_masters.erase(reqid);
+    if (pending_masters.empty())
+      process_delayed_resolve();
+  }
+}
 
 /*
  * The mds could crash after receiving all slaves' commit acknowledgement,
@@ -2768,8 +2779,23 @@ void MDCache::handle_resolve(MMDSResolve *m)
     return;
   }
 
+  discard_delayed_resolve(from);
+
   // ambiguous slave requests?
   if (!m->slave_requests.empty()) {
+    for (vector<metareqid_t>::iterator p = m->slave_requests.begin();
+	 p != m->slave_requests.end();
+	 ++p) {
+      if (uncommitted_masters.count(*p) && !uncommitted_masters[*p].safe)
+	pending_masters.insert(*p);
+    }
+
+    if (!pending_masters.empty()) {
+      dout(10) << " still have pending updates, delay processing slave resolve" << dendl;
+      delayed_resolve[from] = m;
+      return;
+    }
+
     MMDSResolveAck *ack = new MMDSResolveAck;
     for (vector<metareqid_t>::iterator p = m->slave_requests.begin();
 	 p != m->slave_requests.end();
@@ -2792,7 +2818,6 @@ void MDCache::handle_resolve(MMDSResolve *m)
 
   if (!resolve_ack_gather.empty() || !need_resolve_rollback.empty()) {
     dout(10) << "delay processing subtree resolve" << dendl;
-    discard_delayed_resolve(from);
     delayed_resolve[from] = m;
     return;
   }
@@ -2887,10 +2912,10 @@ void MDCache::handle_resolve(MMDSResolve *m)
 void MDCache::process_delayed_resolve()
 {
   dout(10) << "process_delayed_resolve" << dendl;
-  for (map<int, MMDSResolve *>::iterator p = delayed_resolve.begin();
-       p != delayed_resolve.end(); ++p)
+  map<int, MMDSResolve*> tmp;
+  tmp.swap(delayed_resolve);
+  for (map<int, MMDSResolve*>::iterator p = tmp.begin(); p != tmp.end(); ++p)
     handle_resolve(p->second);
-  delayed_resolve.clear();
 }
 
 void MDCache::discard_delayed_resolve(int who)

@@ -4501,6 +4501,9 @@ void Server::_link_remote_finish(MDRequest *mdr, bool inc,
 
   assert(g_conf->mds_kill_link_at != 3);
 
+  if (!mdr->more()->witnessed.empty())
+    mdcache->logged_master_update(mdr->reqid);
+
   if (inc) {
     // link the new dentry
     dn->pop_projected_linkage();
@@ -5110,6 +5113,9 @@ void Server::_unlink_local_finish(MDRequest *mdr,
 				  version_t dnpv) 
 {
   dout(10) << "_unlink_local_finish " << *dn << dendl;
+
+  if (!mdr->more()->witnessed.empty())
+    mdcache->logged_master_update(mdr->reqid);
 
   // unlink main dentry
   dn->get_dir()->unlink_inode(dn);
@@ -5918,6 +5924,9 @@ void Server::handle_client_rename(MDRequest *mdr)
 void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
   dout(10) << "_rename_finish " << *mdr << dendl;
+
+  if (!mdr->more()->witnessed.empty())
+    mdcache->logged_master_update(mdr->reqid);
 
   // apply
   _rename_apply(mdr, srcdn, destdn, straydn);

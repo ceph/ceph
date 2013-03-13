@@ -1885,7 +1885,7 @@ void EUpdate::replay(MDS *mds)
     dout(10) << "EUpdate.replay " << reqid << " had slaves, expecting a matching ECommitted" << dendl;
     _segment->uncommitted_masters.insert(reqid);
     set<int> slaves;
-    mds->mdcache->add_uncommitted_master(reqid, _segment, slaves);
+    mds->mdcache->add_uncommitted_master(reqid, _segment, slaves, true);
   }
   
   if (client_map.length()) {
