@@ -7726,6 +7726,18 @@ void MDCache::_find_ino_dir(inodeno_t ino, Context *fin, bufferlist& bl, int r)
 
 /* ---------------------------- */
 
+int MDCache::get_num_client_requests()
+{
+  int count = 0;
+  for (hash_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
+      p != active_requests.end();
+      ++p) {
+    if (p->second->reqid.name.is_client() && !p->second->is_slave())
+      count++;
+  }
+  return count;
+}
+
 /* This function takes over the reference to the passed Message */
 MDRequest *MDCache::request_start(MClientRequest *req)
 {

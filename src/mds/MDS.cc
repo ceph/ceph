@@ -1905,9 +1905,9 @@ bool MDS::_dispatch(Message *m)
       mdcache->is_open() &&
       replay_queue.empty() &&
       want_state == MDSMap::STATE_CLIENTREPLAY) {
-    dout(10) << " still have " << mdcache->get_num_active_requests()
-	     << " active replay requests" << dendl;
-    if (mdcache->get_num_active_requests() == 0)
+    int num_requests = mdcache->get_num_client_requests();
+    dout(10) << " still have " << num_requests << " active replay requests" << dendl;
+    if (num_requests == 0)
       clientreplay_done();
   }
 
