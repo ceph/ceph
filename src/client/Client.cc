@@ -1524,10 +1524,12 @@ void Client::handle_client_session(MClientSession *m)
     } else {
       connect_mds_targets(from);
     }
+    signal_cond_list(session->waiting_for_open);
     break;
 
   case CEPH_SESSION_CLOSE:
     _closed_mds_session(session);
+    signal_cond_list(session->waiting_for_open);
     break;
 
   case CEPH_SESSION_RENEWCAPS:
@@ -1549,9 +1551,6 @@ void Client::handle_client_session(MClientSession *m)
   default:
     assert(0);
   }
-
-  // kick waiting threads
-  signal_cond_list(session->waiting_for_open);
 
   m->put();
 }
