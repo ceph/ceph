@@ -1555,7 +1555,7 @@ void Client::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_RECALL_STATE:
-    trim_caps(from, m->get_max_caps());
+    trim_caps(session, m->get_max_caps());
     break;
 
   default:
@@ -2875,10 +2875,10 @@ void Client::remove_session_caps(MetaSession *mds)
   }
 }
 
-void Client::trim_caps(int mds, int max)
+void Client::trim_caps(MetaSession *s, int max)
 {
+  int mds = s->mds_num;
   ldout(cct, 10) << "trim_caps mds." << mds << " max " << max << dendl;
-  MetaSession *s = mds_sessions[mds];
 
   int trimmed = 0;
   xlist<Cap*>::iterator p = s->caps.begin();
