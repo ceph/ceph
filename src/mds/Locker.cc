@@ -544,8 +544,6 @@ void Locker::cancel_locking(Mutation *mut, set<CInode*> *pneed_issue)
       if (need_issue)
 	pneed_issue->insert(static_cast<CInode *>(lock->get_parent()));
     }
-  } else {
-    lock->finish_waiters(SimpleLock::WAIT_REMOTEXLOCK);
   }
   mut->finish_locking(lock);
 }
@@ -1326,18 +1324,16 @@ void Locker::remote_wrlock_start(SimpleLock *lock, int target, MDRequest *mut)
   }
 
   // send lock request
-  if (!lock->is_waiter_for(SimpleLock::WAIT_REMOTEXLOCK)) {
-    mut->start_locking(lock, target);
-    mut->more()->slaves.insert(target);
-    MMDSSlaveRequest *r = new MMDSSlaveRequest(mut->reqid, mut->attempt,
-					       MMDSSlaveRequest::OP_WRLOCK);
-    r->set_lock_type(lock->get_type());
-    lock->get_parent()->set_object_info(r->get_object_info());
-    mds->send_message_mds(r, target);
-  }
-  
-  // wait
-  lock->add_waiter(SimpleLock::WAIT_REMOTEXLOCK, new C_MDS_RetryRequest(mdcache, mut));
+  mut->start_locking(lock, target);
+  mut->more()->slaves.insert(target);
+  MMDSSlaveRequest *r = new MMDSSlaveRequest(mut->reqid, mut->attempt,
+					     MMDSSlaveRequest::OP_WRLOCK);
+  r->set_lock_type(lock->get_type());
+  lock->get_parent()->set_object_info(r->get_object_info());
+  mds->send_message_mds(r, target);
+
+  assert(mut->more()->waiting_on_slave.count(target) == 0);
+  mut->more()->waiting_on_slave.insert(target);
 }
 
 void Locker::remote_wrlock_finish(SimpleLock *lock, int target, Mutation *mut)
@@ -1411,19 +1407,18 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
     }
     
     // send lock request
-    if (!lock->is_waiter_for(SimpleLock::WAIT_REMOTEXLOCK)) {
-      int auth = lock->get_parent()->authority().first;
-      mut->more()->slaves.insert(auth);
-      mut->start_locking(lock, auth);
-      MMDSSlaveRequest *r = new MMDSSlaveRequest(mut->reqid, mut->attempt,
-						 MMDSSlaveRequest::OP_XLOCK);
-      r->set_lock_type(lock->get_type());
-      lock->get_parent()->set_object_info(r->get_object_info());
-      mds->send_message_mds(r, auth);
-    }
-    
-    // wait
-    lock->add_waiter(SimpleLock::WAIT_REMOTEXLOCK, new C_MDS_RetryRequest(mdcache, mut));
+    int auth = lock->get_parent()->authority().first;
+    mut->more()->slaves.insert(auth);
+    mut->start_locking(lock, auth);
+    MMDSSlaveRequest *r = new MMDSSlaveRequest(mut->reqid, mut->attempt,
+					       MMDSSlaveRequest::OP_XLOCK);
+    r->set_lock_type(lock->get_type());
+    lock->get_parent()->set_object_info(r->get_object_info());
+    mds->send_message_mds(r, auth);
+
+    assert(mut->more()->waiting_on_slave.count(auth) == 0);
+    mut->more()->waiting_on_slave.insert(auth);
+
     return false;
   }
 }
