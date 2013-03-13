@@ -89,14 +89,14 @@ class CrushTester {
    void write_to_csv(ofstream& csv_file, vector<string>& payload)
    {
      if (csv_file.good())
-       for (vector<string>::iterator it = payload.begin(); it != payload.end(); it++)
+       for (vector<string>::iterator it = payload.begin(); it != payload.end(); ++it)
          csv_file << (*it);
    }
 
    void write_to_csv(ofstream& csv_file, map<int, float>& payload)
    {
      if (csv_file.good())
-       for (map<int, float>::iterator it = payload.begin(); it != payload.end(); it++)
+       for (map<int, float>::iterator it = payload.begin(); it != payload.end(); ++it)
          csv_file << (*it).first << ',' << (*it).second << std::endl;
    }
 
