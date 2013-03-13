@@ -299,6 +299,14 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
     }
     
     if (session->is_closing()) {
+      // mark con disposable.  if there is a fault, we will get a
+      // reset and clean it up.  if the client hasn't received the
+      // CLOSE message yet, they will reconnect and get an
+      // ms_handle_remote_reset() and realize they had in fact closed.
+      // do this *before* sending the message to avoid a possible
+      // race.
+      mds->messenger->mark_disposable(session->connection);
+
       // reset session
       mds->send_message_client(new MClientSession(CEPH_SESSION_CLOSE), session);
       mds->sessionmap.set_state(session, Session::STATE_CLOSED);
