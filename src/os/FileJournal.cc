@@ -914,7 +914,7 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
   writing_seq = seq;
 
   queue_pos += size;
-  if (queue_pos > header.max_size)
+  if (queue_pos >= header.max_size)
     queue_pos = queue_pos + get_top() - header.max_size;
 
   return 0;
