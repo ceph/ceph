@@ -26,7 +26,6 @@ struct MetaSession {
   uint64_t cap_renew_seq;
   int num_caps;
   entity_inst_t inst;
-  bool was_stale;
 
   enum {
     STATE_NEW,
@@ -49,7 +48,6 @@ struct MetaSession {
   MetaSession()
     : mds_num(-1), con(NULL),
       seq(0), cap_gen(0), cap_renew_seq(0), num_caps(0),
-      was_stale(false),
       state(STATE_NEW),
       release(NULL)
   {}
