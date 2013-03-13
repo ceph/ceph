@@ -327,29 +327,32 @@ uint64_t AuthMonitor::assign_global_id(MAuth *m, bool should_increase_max)
 	   << " last_allocated=" << last_allocated_id << " max_global_id=" <<  max_global_id << dendl;
 
   uint64_t next_global_id = last_allocated_id + 1;
+  int remainder = next_global_id % total_mon;
+  if (remainder)
+    remainder = total_mon - remainder;
+  next_global_id += remainder + mon->rank;
+  dout(10) << "next_global_id should be " << next_global_id << dendl;
 
-  {
-    int remainder = next_global_id % total_mon;
-    if (remainder)
-      remainder = total_mon - remainder;
-    next_global_id += remainder + mon->rank;
-    dout(10) << "next_global_id should be " << next_global_id << dendl;
+  // if we can't bump the max, bail out now on an out-of-bounds gid
+  if (next_global_id > max_global_id &&
+      (!mon->is_leader() || !should_increase_max)) {
+    return 0;
   }
 
-  if (next_global_id >= max_global_id) {
-    if (!mon->is_leader() || !should_increase_max) {
-      return 0;
-    }
-    bool return_next = (next_global_id == max_global_id);
-    while (next_global_id >= max_global_id) {
-      increase_max_global_id();
-    }
-    if (!return_next)
-      return 0;
+  // can we return a gid?
+  bool return_next = (next_global_id <= max_global_id);
+
+  // bump the max?
+  while (next_global_id >= max_global_id) {
+    increase_max_global_id();
   }
 
-  last_allocated_id = next_global_id;
-  return next_global_id;
+  if (return_next) {
+    last_allocated_id = next_global_id;
+    return next_global_id;
+  } else {
+    return 0;
+  }
 }
 
 
