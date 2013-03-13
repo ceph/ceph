@@ -5810,12 +5810,52 @@ void Server::handle_client_rename(MDRequest *mdr)
   if (mdr->now == utime_t())
     mdr->now = ceph_clock_now(g_ceph_context);
 
+  // -- prepare anchor updates --
+  if (!linkmerge || srcdnl->is_primary()) {
+    C_GatherBuilder anchorgather(g_ceph_context);
+
+    if (srcdnl->is_primary() &&
+      (srcdnl->get_inode()->is_anchored() ||
+       (srcdnl->get_inode()->is_dir() && (srcdnl->get_inode()->inode.rstat.ranchors ||
+                                          srcdnl->get_inode()->nested_anchors ||
+                                          !mdcache->is_leaf_subtree(mdcache->get_projected_subtree_root(srcdn->get_dir()))))) &&
+      !mdr->more()->src_reanchor_atid) {
+      dout(10) << "reanchoring src->dst " << *srcdnl->get_inode() << dendl;
+      vector<Anchor> trace;
+      destdn->make_anchor_trace(trace, srcdnl->get_inode());
+      mds->anchorclient->prepare_update(srcdnl->get_inode()->ino(),
+					trace, &mdr->more()->src_reanchor_atid,
+					anchorgather.new_sub());
+    }
+    if (destdnl->is_primary() &&
+	destdnl->get_inode()->is_anchored() &&
+	!mdr->more()->dst_reanchor_atid) {
+      dout(10) << "reanchoring dst->stray " << *destdnl->get_inode() << dendl;
+
+      assert(straydn);
+      vector<Anchor> trace;
+      straydn->make_anchor_trace(trace, destdnl->get_inode());
+
+      mds->anchorclient->prepare_update(destdnl->get_inode()->ino(), trace,
+		  &mdr->more()->dst_reanchor_atid, anchorgather.new_sub());
+    }
+
+    if (anchorgather.has_subs())  {
+      anchorgather.set_finisher(new C_MDS_RetryRequest(mdcache, mdr));
+      anchorgather.activate();
+      return;  // waiting for anchor prepares
+    }
+
+    assert(g_conf->mds_kill_rename_at != 2);
+  }
+
   // -- prepare witnesses --
 
   // do srcdn auth last
   int last = -1;
   if (!srcdn->is_auth()) {
     last = srcdn->authority().first;
+    mdr->more()->srcdn_auth_mds = last;
     // ask auth of srci to mark srci as ambiguous auth if more than two MDS
     // are involved in the rename operation.
     if (srcdnl->is_primary() && !mdr->more()->is_ambiguous_auth) {
@@ -5841,58 +5881,18 @@ void Server::handle_client_rename(MDRequest *mdr)
   if (!mdr->more()->waiting_on_slave.empty())
     return;  // we're waiting for a witness.
 
-  if (last >= 0 &&
-      mdr->more()->witnessed.count(last) == 0 &&
-      mdr->more()->waiting_on_slave.count(last) == 0) {
+  if (last >= 0 && mdr->more()->witnessed.count(last) == 0) {
     dout(10) << " preparing last witness (srcdn auth)" << dendl;
+    assert(mdr->more()->waiting_on_slave.count(last) == 0);
     _rename_prepare_witness(mdr, last, witnesses, srcdn, destdn, straydn);
     return;
   }
 
   // test hack: bail after slave does prepare, so we can verify it's _live_ rollback.
   if (!mdr->more()->slaves.empty() && !srci->is_dir())
-    assert(g_conf->mds_kill_rename_at != 2);
+    assert(g_conf->mds_kill_rename_at != 3);
   if (!mdr->more()->slaves.empty() && srci->is_dir())
-    assert(g_conf->mds_kill_rename_at != 3);    
-  
-  // -- prepare anchor updates -- 
-  if (!linkmerge || srcdnl->is_primary()) {
-    C_GatherBuilder anchorgather(g_ceph_context);
-
-    if (srcdnl->is_primary() &&
-	(srcdnl->get_inode()->is_anchored() || 
-	 (srcdnl->get_inode()->is_dir() && (srcdnl->get_inode()->inode.rstat.ranchors ||
-					    srcdnl->get_inode()->nested_anchors ||
-					    !mdcache->is_leaf_subtree(mdcache->get_projected_subtree_root(srcdn->get_dir()))))) &&
-	!mdr->more()->src_reanchor_atid) {
-      dout(10) << "reanchoring src->dst " << *srcdnl->get_inode() << dendl;
-      vector<Anchor> trace;
-      destdn->make_anchor_trace(trace, srcdnl->get_inode());
-      mds->anchorclient->prepare_update(srcdnl->get_inode()->ino(),
-					trace, &mdr->more()->src_reanchor_atid,
-					anchorgather.new_sub());
-    }
-    if (destdnl->is_primary() &&
-	destdnl->get_inode()->is_anchored() &&
-	!mdr->more()->dst_reanchor_atid) {
-      dout(10) << "reanchoring dst->stray " << *destdnl->get_inode() << dendl;
-
-      assert(straydn);
-      vector<Anchor> trace;
-      straydn->make_anchor_trace(trace, destdnl->get_inode());
-      
-      mds->anchorclient->prepare_update(destdnl->get_inode()->ino(), trace,
-		  &mdr->more()->dst_reanchor_atid, anchorgather.new_sub());
-    }
-
-    if (anchorgather.has_subs())  {
-      anchorgather.set_finisher(new C_MDS_RetryRequest(mdcache, mdr));
-      anchorgather.activate();
-      return;  // waiting for anchor prepares
-    }
-
     assert(g_conf->mds_kill_rename_at != 4);
-  }
 
   // -- prepare journal entry --
   mdr->ls = mdlog->get_current_segment();
@@ -6808,10 +6808,17 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
     // abort
     //  rollback_bl may be empty if we froze the inode but had to provide an expanded
     // witness list from the master, and they failed before we tried prep again.
-    if (mdr->more()->rollback_bl.length())
-      do_rename_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, mdr);
-    else
+    if (mdr->more()->rollback_bl.length()) {
+      if (mdcache->is_ambiguous_slave_update(mdr->reqid, mdr->slave_to_mds)) {
+	mdcache->remove_ambiguous_slave_update(mdr->reqid, mdr->slave_to_mds);
+	// rollback but preserve the slave request
+	do_rename_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, NULL);
+      } else
+	do_rename_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, mdr);
+    } else {
       dout(10) << " rollback_bl empty, not rollback back rename (master failed after getting extra witnesses?)" << dendl;
+      mds->mdcache->request_finish(mdr);
+    }
   }
 }
 
@@ -6871,7 +6878,6 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   dout(10) << "do_rename_rollback on " << rollback.reqid << dendl;
   // need to finish this update before sending resolve to claim the subtree
   mds->mdcache->add_rollback(rollback.reqid, master);
-  assert(mdr || mds->is_resolve());
 
   Mutation *mut = new Mutation(rollback.reqid);
   mut->ls = mds->mdlog->get_current_segment();
