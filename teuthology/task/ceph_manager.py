@@ -684,7 +684,7 @@ class CephManager:
             remote.console.power_on()
             if not remote.console.check_status(300):
                 raise Exception('Failed to revive osd.{o} via ipmi'.format(o=osd))
-            teuthology.reconnect(self.ctx, 60)
+            teuthology.reconnect(self.ctx, 60, [remote])
             ceph_task.mount_osd_data(self.ctx, remote, osd)
             ceph_task.make_admin_daemon_dir(self.ctx, remote)
             self.ctx.daemons.get_daemon('osd', osd).reset()
