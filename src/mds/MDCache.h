@@ -281,14 +281,16 @@ public:
 				snapid_t follows=CEPH_NOSNAP);
 
   // slaves
-  void add_uncommitted_master(metareqid_t reqid, LogSegment *ls, set<int> &slaves) {
+  void add_uncommitted_master(metareqid_t reqid, LogSegment *ls, set<int> &slaves, bool safe=false) {
     uncommitted_masters[reqid].ls = ls;
     uncommitted_masters[reqid].slaves = slaves;
+    uncommitted_masters[reqid].safe = safe;
   }
   void wait_for_uncommitted_master(metareqid_t reqid, Context *c) {
     uncommitted_masters[reqid].waiters.push_back(c);
   }
   void log_master_commit(metareqid_t reqid);
+  void logged_master_update(metareqid_t reqid);
   void _logged_master_commit(metareqid_t reqid, LogSegment *ls, list<Context*> &waiters);
   void committed_master_slave(metareqid_t r, int from);
   void finish_committed_masters();
@@ -320,8 +322,11 @@ protected:
     set<int> slaves;
     LogSegment *ls;
     list<Context*> waiters;
+    bool safe;
   };
   map<metareqid_t, umaster>                 uncommitted_masters;         // master: req -> slave set
+
+  set<metareqid_t>		pending_masters;
 
   //map<metareqid_t, bool>     ambiguous_slave_updates;         // for log trimming.
   //map<metareqid_t, Context*> waiting_for_slave_update_commit;
