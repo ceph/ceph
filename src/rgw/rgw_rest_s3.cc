@@ -1273,40 +1273,18 @@ void RGWDeleteCORS_ObjStore_S3::send_response()
 
 void RGWOptionsCORS_ObjStore_S3::send_response()
 {
-  const char *origin = NULL, 
-       *method = NULL,
-       *req_hdrs = NULL;
   string hdrs = "";
-  string exp_hdrs;
+  string exp_hdrs = "";
   uint32_t max_age = CORS_MAX_AGE_INVALID;
   /*EACCES means, there is no CORS registered yet for the bucket
    *ENOENT means, there is no match of the Origin in the list of CORSRule
    *ENOTSUPP means, the HTTP_METHOD is not supported
    */
   if(ret != -EACCES && ret != -ENOENT){
-    origin = s->env->get("HTTP_ORIGIN");
-    if(ret != -ENOTSUP){
-      method = s->env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
-    }
-    req_hdrs = s->env->get("HTTP_ACCESS_CONTROL_ALLOW_HEADERS");
-    for(const char *t = req_hdrs, *comma = req_hdrs; comma; t = comma + 1){
-      /*Strip the spaces*/
-      while(*t == ' ')t++;
-      comma = strchr(t, ',');
-      unsigned len = comma?(comma - t):strlen(t);
-      while((len > 0) && (*(t + (len - 1)) == ' '))len--;
-      if(!rule->is_header_allowed(t, len)){
-        dout(5) << "Header " << string(t, len) << " is not registered in this rule" << dendl;
-      }else {
-        if(hdrs.length() > 0)hdrs.append(",");
-        hdrs.append(string(t, len));
-      }
-    }
-    rule->format_exp_headers(exp_hdrs);
-    max_age = rule->get_max_age();
+    get_response_params(hdrs, exp_hdrs, &max_age);
   }
   dump_errno(s);
-  dump_access_control(s, origin, method, hdrs.c_str(), exp_hdrs.c_str(), max_age); 
+  dump_access_control(s, origin, req_meth, hdrs.c_str(), exp_hdrs.c_str(), max_age); 
   end_header(s);
 }
 
@@ -1819,6 +1797,7 @@ int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClient
 
   return RGWHandler_ObjStore::init(store, s, cio);
 }
+
 
 /*
  * ?get the canonical amazon-style header for something?

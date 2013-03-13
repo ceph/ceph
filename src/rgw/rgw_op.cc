@@ -1958,13 +1958,31 @@ void RGWDeleteCORS::execute()
   ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs);
 }
 
-static RGWCORSRule *validate_cors_request(req_state *s, const char *origin, const char *req_meth, int *ret){
+void RGWOptionsCORS::get_response_params(string& hdrs, string& exp_hdrs, unsigned *max_age){
+  for(const char *t = req_hdrs, *comma = req_hdrs; comma; t = comma + 1){
+    /*Strip the spaces*/
+    while(*t == ' ')t++;
+    comma = strchr(t, ',');
+    unsigned len = comma?(comma - t):strlen(t);
+    while((len > 0) && (*(t + (len - 1)) == ' '))len--;
+    if(!rule->is_header_allowed(t, len)){
+      dout(5) << "Header " << string(t, len) << " is not registered in this rule" << dendl;
+    }else {
+      if(hdrs.length() > 0)hdrs.append(",");
+      hdrs.append(string(t, len));
+    }
+  }
+  rule->format_exp_headers(exp_hdrs);
+  *max_age = rule->get_max_age();
+}
+
+void RGWOptionsCORS::validate_cors_request(){
   RGWCORSConfiguration *cc = s->bucket_cors;
-  RGWCORSRule *cr = cc->host_name_rule(origin);
-  if(!cr){
+  rule = cc->host_name_rule(origin);
+  if(!rule){
     dout(10) << "There is no corsrule present for " << origin << dendl;
-    *ret = -ENOENT;
-    return NULL;
+    ret = -ENOENT;
+    return;
   }
 
   uint8_t flags = 0;
@@ -1974,42 +1992,42 @@ static RGWCORSRule *validate_cors_request(req_state *s, const char *origin, cons
   else if (strcmp(req_meth, "DELETE") == 0) flags = RGW_CORS_DELETE;
   else if (strcmp(req_meth, "HEAD") == 0) flags = RGW_CORS_HEAD;
 
-  if ((cr->get_allowed_methods() & flags) == flags){
+  if ((rule->get_allowed_methods() & flags) == flags){
     dout(10) << "Method " << req_meth << " is supported" << dendl;
   }else {
     dout(5) << "Method " << req_meth << " is not supported" << dendl;
-    *ret = -ENOTSUP;
+    req_meth = NULL;
+    ret = -ENOTSUP;
   }
-  return cr;
 }
 
 void RGWOptionsCORS::execute()
 {
-  const char *req_meths = NULL, 
-             *origin = NULL;
-  RGWCORSRule *r = NULL;
   if(!s->bucket_cors){
     dout(2) << "No CORS configuration set yet for this bucket" << dendl;
     ret = -EACCES;
     return;
   }
-  req_meths = s->env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
-  if(!req_meths){
+  req_meth = s->env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
+  if(!req_meth){
     dout(0) << 
     "Preflight request without mandatory Access-control-request-method header"
     << dendl;
-    ret = -ENOTSUP;
+    ret = -EACCES;
+    return;
   }
   origin = s->env->get("HTTP_ORIGIN");
   if(!origin){
     dout(0) << 
     "Preflight request without mandatory Origin header"
     << dendl;
-    ret = -ENOENT;
+    ret = -EACCES;
     return;
   }
-  rule = r = validate_cors_request(s, origin, req_meths, &ret);
-  if(!r){
+  req_hdrs = s->env->get("HTTP_ACCESS_CONTROL_ALLOW_HEADERS");
+  validate_cors_request();
+  if(!rule){
+    origin = req_meth = NULL;
     return;
   }
   return;

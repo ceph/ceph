@@ -128,7 +128,7 @@ req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL)
 req_state::~req_state() {
   delete formatter;
   delete bucket_acl;
-  if(bucket_cors) delete bucket_cors;
+  delete bucket_cors;
   delete object_acl;
   free((void *)object);
   free((void *)bucket_name);

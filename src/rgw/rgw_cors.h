@@ -22,8 +22,6 @@
 
 #include "common/debug.h"
 
-using namespace std;
-
 #define RGW_CORS_GET    0x1
 #define RGW_CORS_PUT    0x2
 #define RGW_CORS_HEAD   0x4
@@ -49,7 +47,7 @@ protected:
 
 public:
   RGWCORSRule() : max_age(CORS_MAX_AGE_INVALID),allowed_methods(0) {}
-  RGWCORSRule(set<string> o, set<string> h, list<string> e, uint8_t f, unsigned a)
+  RGWCORSRule(set<string>& o, set<string>& h, list<string>& e, uint8_t f, unsigned a)
       :max_age(a),
        allowed_methods(f),
        allowed_hdrs(h),
@@ -62,7 +60,7 @@ public:
   uint8_t get_allowed_methods() { return allowed_methods; }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 3, bl);
+    ENCODE_START(1, 1, bl);
     ::encode(max_age, bl);
     ::encode(allowed_methods, bl);
     ::encode(id, bl);
@@ -72,7 +70,7 @@ public:
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+    DECODE_START(1, bl);
     ::decode(max_age, bl);
     ::decode(allowed_methods, bl);
     ::decode(id, bl);
@@ -81,9 +79,9 @@ public:
     ::decode(exposable_hdrs, bl);
     DECODE_FINISH(bl);
   }
-  bool is_origin_present(list<string> origins);
+  bool is_origin_present(list<string>& origins);
   void format_exp_headers(string& s);
-  void erase_origin_if_present(string origin, bool *rule_empty);
+  void erase_origin_if_present(string& origin, bool *rule_empty);
   void dump_origins(); 
   void dump(Formatter *f) const;
   bool is_header_allowed(const char *hdr, size_t len){
@@ -102,12 +100,12 @@ class RGWCORSConfiguration
     ~RGWCORSConfiguration(){}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 2, bl);
+    ENCODE_START(1, 1, bl);
     ::encode(rules, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+    DECODE_START(1, bl);
     ::decode(rules, bl);
     DECODE_FINISH(bl);
   }
@@ -120,7 +118,7 @@ class RGWCORSConfiguration
   }
   void get_origins_list(const char *origin, list<string>& origins);
   RGWCORSRule * host_name_rule(const char *origin);
-  void erase_host_name_rule(string origin);
+  void erase_host_name_rule(string& origin);
   void dump();
   void stack_rule(RGWCORSRule& r){
     rules.push_front(r);    
@@ -128,4 +126,5 @@ class RGWCORSConfiguration
 };
 WRITE_CLASS_ENCODER(RGWCORSConfiguration)
 
+extern void parse_host_name(string& in, string& host_name, string& proto);
 #endif /*CEPH_RGW_CORS_H*/

@@ -530,7 +530,7 @@ public:
     data = NULL;
   }
   virtual ~RGWPutCORS() {
-    if(data)free(data);
+    free(data);
   }
 
   int verify_permission();
@@ -559,13 +559,17 @@ class RGWOptionsCORS : public RGWOp {
 protected:
   int ret;
   RGWCORSRule *rule;
+  const char *origin, *req_hdrs, *req_meth;
 
 public:
-  RGWOptionsCORS() : ret(0), rule(NULL) {}
+  RGWOptionsCORS() : ret(0), rule(NULL), origin(NULL),
+                     req_hdrs(NULL), req_meth(NULL){
+  }
 
   int verify_permission(){return 0;}
+  void validate_cors_request();
   void execute();
-
+  void get_response_params(string& allowed_hdrs, string& exp_hdrs, unsigned *max_age);
   virtual void send_response() = 0;
   virtual const char *name() { return "options_cors"; }
 };
