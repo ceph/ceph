@@ -240,7 +240,7 @@ protected:
   hash_map<metareqid_t, MDRequest*> active_requests; 
 
 public:
-  int get_num_active_requests() { return active_requests.size(); }
+  int get_num_client_requests();
 
   MDRequest* request_start(MClientRequest *req);
   MDRequest* request_start_slave(metareqid_t rid, __u32 attempt, int by);
