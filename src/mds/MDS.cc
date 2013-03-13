@@ -2028,12 +2028,12 @@ bool MDS::ms_handle_reset(Connection *con)
     Session *session = static_cast<Session *>(con->get_priv());
     if (session) {
       if (session->is_closed()) {
-	messenger->mark_down(con->get_peer_addr());
+	messenger->mark_down(con);
 	sessionmap.remove_session(session);
       }
       session->put();
     } else {
-      messenger->mark_down(con->get_peer_addr());
+      messenger->mark_down(con);
     }
   }
   return false;
