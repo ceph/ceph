@@ -232,7 +232,8 @@ public:
   list<Cond*> waiting_for_mdsmap;
 
   bool have_open_session(int mds);
-  void got_mds_push(int mds);
+  void got_mds_push(MetaSession *s);
+  MetaSession *_get_mds_session(int mds, Connection *con);  ///< return session for mds *and* con; null otherwise
   MetaSession *_get_or_open_mds_session(int mds);
   MetaSession *_open_mds_session(int mds);
   void _close_mds_session(MetaSession *s);
@@ -432,12 +433,12 @@ protected:
 
   void handle_snap(class MClientSnap *m);
   void handle_caps(class MClientCaps *m);
-  void handle_cap_import(Inode *in, class MClientCaps *m);
-  void handle_cap_export(Inode *in, class MClientCaps *m);
-  void handle_cap_trunc(Inode *in, class MClientCaps *m);
-  void handle_cap_flush_ack(Inode *in, int mds, Cap *cap, class MClientCaps *m);
-  void handle_cap_flushsnap_ack(Inode *in, class MClientCaps *m);
-  void handle_cap_grant(Inode *in, int mds, Cap *cap, class MClientCaps *m);
+  void handle_cap_import(MetaSession *session, Inode *in, class MClientCaps *m);
+  void handle_cap_export(MetaSession *session, Inode *in, class MClientCaps *m);
+  void handle_cap_trunc(MetaSession *session, Inode *in, class MClientCaps *m);
+  void handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, class MClientCaps *m);
+  void handle_cap_flushsnap_ack(MetaSession *session, Inode *in, class MClientCaps *m);
+  void handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, class MClientCaps *m);
   void cap_delay_requeue(Inode *in);
   void send_cap(Inode *in, MetaSession *session, Cap *cap,
 		int used, int want, int retain, int flush);
