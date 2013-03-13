@@ -342,11 +342,11 @@ kern.* -{adir}/syslog/kern.log;RSYSLOG_FileFormat
             ctx.cluster.run(
                 args=[
                     'sudo',
-                    'initctl',
+                    'service',
                     # a mere reload (SIGHUP) doesn't seem to make
                     # rsyslog open the files
-                    'restart',
                     'rsyslog',
+                    'restart',
                     ],
                 wait=False,
                 ),
@@ -366,9 +366,9 @@ kern.* -{adir}/syslog/kern.log;RSYSLOG_FileFormat
                     CONF,
                     run.Raw('&&'),
                     'sudo',
-                    'initctl',
-                    'restart',
+                    'service',
                     'rsyslog',
+                    'restart',
                     ],
                 wait=False,
                 ),

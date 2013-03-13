@@ -212,7 +212,7 @@ def reset_syslog_dir(ctx, log):
                 'then',
                 'sudo', 'rm', '-f', '--', '/etc/rsyslog.d/80-cephtest.conf',
                 run.Raw('&&'),
-                'sudo', 'initctl', 'restart', 'rsyslog',
+                'sudo', 'service', 'rsyslog', 'restart',
                 run.Raw(';'),
                 'fi',
                 run.Raw(';'),
