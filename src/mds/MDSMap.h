@@ -322,7 +322,7 @@ public:
       return -1;
     map<int32_t,uint64_t>::iterator p = up.begin();
     for (int n = rand() % up.size(); n; n--)
-      p++;
+      ++p;
     return p->first;
   }
 
