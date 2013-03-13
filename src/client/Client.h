@@ -338,7 +338,7 @@ protected:
   Mutex                  client_lock;
 
   // helpers
-  void wake_inode_waiters(int mds);
+  void wake_inode_waiters(MetaSession *s);
   void wait_on_list(list<Cond*>& ls);
   void signal_cond_list(list<Cond*>& ls);
 
