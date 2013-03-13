@@ -2549,9 +2549,10 @@ reprotect_and_return_err:
 	bl.append(buf + q->first, q->second);
       }
 
+      C_AioWrite *req_comp = new C_AioWrite(cct, c);
       if (ictx->object_cacher) {
-	// may block
-	ictx->write_to_cache(p->oid, bl, p->length, p->offset);
+	c->add_request();
+	ictx->write_to_cache(p->oid, bl, p->length, p->offset, req_comp);
       } else {
 	// reverse map this object extent onto the parent
 	vector<pair<uint64_t,uint64_t> > objectx;
@@ -2560,7 +2561,6 @@ reprotect_and_return_err:
 			      objectx);
 	uint64_t object_overlap = ictx->prune_parent_extents(objectx, overlap);
 
-	C_AioWrite *req_comp = new C_AioWrite(cct, c);
 	AioWrite *req = new AioWrite(ictx, p->oid.name, p->objectno, p->offset,
 				     objectx, object_overlap,
 				     bl, snapc, snap_id, req_comp);
