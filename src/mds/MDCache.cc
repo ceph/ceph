@@ -4514,6 +4514,17 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
     }
   }
 
+  // full dirfrags
+  for (map<dirfrag_t, bufferlist>::iterator p = ack->dirfrag_bases.begin();
+       p != ack->dirfrag_bases.end();
+       ++p) {
+    CDir *dir = get_dirfrag(p->first);
+    assert(dir);
+    bufferlist::iterator q = p->second.begin();
+    dir->_decode_base(q);
+    dout(10) << " got dir replica " << *dir << dendl;
+  }
+
   // full inodes
   bufferlist::iterator p = ack->inode_base.begin();
   while (!p.end()) {
@@ -5182,8 +5193,10 @@ void MDCache::rejoin_send_acks()
       // dir
       for (map<int,int>::iterator r = dir->replicas_begin();
 	   r != dir->replicas_end();
-	   ++r) 
+	   ++r) {
 	ack[r->first]->add_strong_dirfrag(dir->dirfrag(), ++r->second, dir->dir_rep);
+	ack[r->first]->add_dirfrag_base(dir);
+      }
 	   
       for (CDir::map_t::iterator q = dir->items.begin();
 	   q != dir->items.end();
