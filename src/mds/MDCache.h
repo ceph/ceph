@@ -327,9 +327,8 @@ protected:
   map<metareqid_t, umaster>                 uncommitted_masters;         // master: req -> slave set
 
   set<metareqid_t>		pending_masters;
+  map<int, set<metareqid_t> >	ambiguous_slave_updates;
 
-  //map<metareqid_t, bool>     ambiguous_slave_updates;         // for log trimming.
-  //map<metareqid_t, Context*> waiting_for_slave_update_commit;
   friend class ESlaveUpdate;
   friend class ECommitted;
 
@@ -352,6 +351,20 @@ protected:
   MDSlaveUpdate* get_uncommitted_slave_update(metareqid_t reqid, int master);
 public:
   void remove_inode_recursive(CInode *in);
+
+  bool is_ambiguous_slave_update(metareqid_t reqid, int master) {
+    return ambiguous_slave_updates.count(master) &&
+	   ambiguous_slave_updates[master].count(reqid);
+  }
+  void add_ambiguous_slave_update(metareqid_t reqid, int master) {
+    ambiguous_slave_updates[master].insert(reqid);
+  }
+  void remove_ambiguous_slave_update(metareqid_t reqid, int master) {
+    assert(ambiguous_slave_updates[master].count(reqid));
+    ambiguous_slave_updates[master].erase(reqid);
+    if (ambiguous_slave_updates[master].empty())
+      ambiguous_slave_updates.erase(master);
+  }
 
   void add_rollback(metareqid_t reqid, int master) {
     need_resolve_rollback[reqid] = master;
