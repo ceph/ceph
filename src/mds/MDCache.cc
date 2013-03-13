@@ -6991,6 +6991,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
       dout(10) << "traverse: xlocked dentry at " << *dn << dendl;
       dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req, fin));
       if (mds->logger) mds->logger->inc(l_mds_tlock);
+      mds->mdlog->flush();
       return 1;
     }
     
