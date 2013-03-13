@@ -85,7 +85,7 @@ struct PGRecoveryStats {
   }
   void dump(ostream& out) {
     Mutex::Locker l(lock);
-    for (map<const char *,per_state_info>::iterator p = info.begin(); p != info.end(); p++) {
+    for (map<const char *,per_state_info>::iterator p = info.begin(); p != info.end(); ++p) {
       per_state_info& i = p->second;
       out << i.enter << "\t" << i.exit << "\t"
 	  << i.events << "\t" << i.event_time << "\t"
@@ -211,7 +211,7 @@ public:
       caller_ops.clear();
       for (list<pg_log_entry_t>::iterator i = log.begin();
            i != log.end();
-           i++) {
+           ++i) {
         objects[i->soid] = &(*i);
 	if (i->reqid_is_indexed()) {
 	  //assert(caller_ops.count(i->reqid) == 0);  // divergent merge_log indexes new before unindexing old
