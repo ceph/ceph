@@ -217,7 +217,7 @@ class Client : public Dispatcher {
   Context *tick_event;
   utime_t last_cap_renew;
   void renew_caps();
-  void renew_caps(int s);
+  void renew_caps(MetaSession *session);
   void flush_cap_releases();
 public:
   void tick();
@@ -229,14 +229,18 @@ public:
 
   // mds sessions
   map<int, MetaSession*> mds_sessions;  // mds -> push seq
-  map<int, list<Cond*> > waiting_for_session;
   list<Cond*> waiting_for_mdsmap;
 
-  void got_mds_push(int mds);
-  void _closed_mds_session(int mds, MetaSession *s);
+  bool have_open_session(int mds);
+  void got_mds_push(MetaSession *s);
+  MetaSession *_get_mds_session(int mds, Connection *con);  ///< return session for mds *and* con; null otherwise
+  MetaSession *_get_or_open_mds_session(int mds);
+  MetaSession *_open_mds_session(int mds);
+  void _close_mds_session(MetaSession *s);
+  void _closed_mds_session(MetaSession *s);
   void handle_client_session(MClientSession *m);
-  void send_reconnect(int mds);
-  void resend_unsafe_requests(int mds);
+  void send_reconnect(MetaSession *s);
+  void resend_unsafe_requests(MetaSession *s);
 
   // mds requests
   tid_t last_tid, last_flush_seq;
@@ -260,9 +264,9 @@ public:
 			     int mds, int drop, int unless);
   int choose_target_mds(MetaRequest *req);
   void connect_mds_targets(int mds);
-  void send_request(MetaRequest *request, int mds);
+  void send_request(MetaRequest *request, MetaSession *session);
   MClientRequest *build_client_request(MetaRequest *request);
-  void kick_requests(int mds, bool signal);
+  void kick_requests(MetaSession *session, bool signal);
   void handle_client_request_forward(MClientRequestForward *reply);
   void handle_client_reply(MClientReply *reply);
 
@@ -334,7 +338,7 @@ protected:
   Mutex                  client_lock;
 
   // helpers
-  void wake_inode_waiters(int mds);
+  void wake_inode_waiters(MetaSession *s);
   void wait_on_list(list<Cond*>& ls);
   void signal_cond_list(list<Cond*>& ls);
 
@@ -367,7 +371,7 @@ protected:
   // trim cache.
   void trim_cache();
   void trim_dentry(Dentry *dn);
-  void trim_caps(int mds, int max);
+  void trim_caps(MetaSession *s, int max);
   
   void dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconnected);
   void dump_cache(Formatter *f);  // debug
@@ -409,11 +413,9 @@ protected:
 
   void handle_lease(MClientLease *m);
 
-  void release_lease(Inode *in, Dentry *dn, int mask);
-
   // file caps
   void check_cap_issue(Inode *in, Cap *cap, unsigned issued);
-  void add_update_cap(Inode *in, int mds, uint64_t cap_id,
+  void add_update_cap(Inode *in, MetaSession *session, uint64_t cap_id,
 		      unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
 		      int flags);
   void remove_cap(Cap *cap);
@@ -422,8 +424,8 @@ protected:
   void mark_caps_dirty(Inode *in, int caps);
   int mark_caps_flushing(Inode *in);
   void flush_caps();
-  void flush_caps(Inode *in, int mds);
-  void kick_flushing_caps(int mds);
+  void flush_caps(Inode *in, MetaSession *session);
+  void kick_flushing_caps(MetaSession *session);
   int get_caps(Inode *in, int need, int want, int *have, loff_t endoff);
 
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater, 
@@ -431,14 +433,15 @@ protected:
 
   void handle_snap(class MClientSnap *m);
   void handle_caps(class MClientCaps *m);
-  void handle_cap_import(Inode *in, class MClientCaps *m);
-  void handle_cap_export(Inode *in, class MClientCaps *m);
-  void handle_cap_trunc(Inode *in, class MClientCaps *m);
-  void handle_cap_flush_ack(Inode *in, int mds, Cap *cap, class MClientCaps *m);
-  void handle_cap_flushsnap_ack(Inode *in, class MClientCaps *m);
-  void handle_cap_grant(Inode *in, int mds, Cap *cap, class MClientCaps *m);
+  void handle_cap_import(MetaSession *session, Inode *in, class MClientCaps *m);
+  void handle_cap_export(MetaSession *session, Inode *in, class MClientCaps *m);
+  void handle_cap_trunc(MetaSession *session, Inode *in, class MClientCaps *m);
+  void handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, class MClientCaps *m);
+  void handle_cap_flushsnap_ack(MetaSession *session, Inode *in, class MClientCaps *m);
+  void handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, class MClientCaps *m);
   void cap_delay_requeue(Inode *in);
-  void send_cap(Inode *in, int mds, Cap *cap, int used, int want, int retain, int flush);
+  void send_cap(Inode *in, MetaSession *session, Cap *cap,
+		int used, int want, int retain, int flush);
   void check_caps(Inode *in, bool is_delayed);
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);
@@ -479,17 +482,17 @@ protected:
   // metadata cache
   void update_dir_dist(Inode *in, DirStat *st);
 
-  void insert_readdir_results(MetaRequest *request, int mds, Inode *diri);
-  Inode* insert_trace(MetaRequest *request, int mds);
+  void insert_readdir_results(MetaRequest *request, MetaSession *session, Inode *diri);
+  Inode* insert_trace(MetaRequest *request, MetaSession *session);
   void update_inode_file_bits(Inode *in,
 			      uint64_t truncate_seq, uint64_t truncate_size, uint64_t size,
 			      uint64_t time_warp_seq, utime_t ctime, utime_t mtime, utime_t atime,
 			      int issued);
-  Inode *add_update_inode(InodeStat *st, utime_t ttl, int mds);
+  Inode *add_update_inode(InodeStat *st, utime_t ttl, MetaSession *session);
   Dentry *insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
-			      Inode *in, utime_t from, int mds, bool set_offset,
+			      Inode *in, utime_t from, MetaSession *session, bool set_offset,
 			      Dentry *old_dentry = NULL);
-  void update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, int mds);
+  void update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, MetaSession *session);
 
 
   // ----------------------
