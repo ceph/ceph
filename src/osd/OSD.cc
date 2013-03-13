@@ -181,7 +181,10 @@ OSDService::OSDService(OSD *osd) :
   map_cache(g_conf->osd_map_cache_size),
   map_bl_cache(g_conf->osd_map_cache_size),
   map_bl_inc_cache(g_conf->osd_map_cache_size),
-  in_progress_split_lock("OSDService::in_progress_split_lock")
+  in_progress_split_lock("OSDService::in_progress_split_lock"),
+  full_status_lock("OSDService::full_status_lock"),
+  cur_state(NONE),
+  last_msg(0)
 {}
 
 void OSDService::_start_split(const set<pg_t> &pgs)
@@ -1968,6 +1971,60 @@ void OSD::project_pg_history(pg_t pgid, pg_history_t& h, epoch_t from,
 
 // -------------------------------------
 
+float OSDService::get_full_ratio()
+{
+  float full_ratio = g_conf->osd_failsafe_full_ratio;
+  if (full_ratio > 1.0) full_ratio /= 100.0;
+  return full_ratio;
+}
+
+float OSDService::get_nearfull_ratio()
+{
+  float nearfull_ratio = g_conf->osd_failsafe_nearfull_ratio;
+  if (nearfull_ratio > 1.0) nearfull_ratio /= 100.0;
+  return nearfull_ratio;
+}
+
+void OSDService::check_nearfull_warning(const osd_stat_t &osd_stat)
+{
+  Mutex::Locker l(full_status_lock);
+  enum s_names new_state;
+
+  time_t now = ceph_clock_gettime(NULL);
+
+  float ratio = ((float)osd_stat.kb_used) / ((float)osd_stat.kb);
+  float nearfull_ratio = get_nearfull_ratio();
+  float full_ratio = get_full_ratio();
+
+  if (full_ratio > 0 && ratio > full_ratio) {
+    new_state = FULL;
+  } else if (nearfull_ratio > 0 && ratio > nearfull_ratio) {
+    new_state = NEAR;
+  } else {
+    cur_state = NONE;
+    return;
+  }
+
+  if (cur_state != new_state) {
+    cur_state = new_state;
+  } else if (now - last_msg < g_conf->osd_op_complaint_time) {
+    return;
+  }
+  last_msg = now;
+  if (cur_state == FULL)
+    clog.error() << "OSD full dropping all updates " << (int)(ratio * 100) << "% full";
+  else
+    clog.warn() << "OSD near full (" << (int)(ratio * 100) << "%)";
+}
+
+bool OSDService::check_failsafe_full()
+{
+  Mutex::Locker l(full_status_lock);
+  if (cur_state == FULL)
+    return true;
+  return false;
+}
+
 void OSD::update_osd_stat()
 {
   // fill in osd stats too
@@ -1982,6 +2039,8 @@ void OSD::update_osd_stat()
   for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin(); p != heartbeat_peers.end(); p++)
     osd_stat.hb_in.push_back(p->first);
   osd_stat.hb_out.clear();
+
+  service.check_nearfull_warning(osd_stat);
 
   dout(20) << "update_osd_stat " << osd_stat << dendl;
 }
@@ -5948,7 +6007,8 @@ void OSD::handle_op(OpRequestRef op)
 
   if (op->may_write()) {
     // full?
-    if (osdmap->test_flag(CEPH_OSDMAP_FULL) &&
+    if ((service.check_failsafe_full() ||
+		  osdmap->test_flag(CEPH_OSDMAP_FULL)) &&
 	!m->get_source().is_mds()) {  // FIXME: we'll exclude mds writes for now.
       service.reply_op_error(op, -ENOSPC);
       return;
