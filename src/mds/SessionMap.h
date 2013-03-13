@@ -319,14 +319,14 @@ public:
   void get_client_set(set<client_t>& s) {
     for (hash_map<entity_name_t,Session*>::iterator p = session_map.begin();
 	 p != session_map.end();
-	 p++)
+	 ++p)
       if (p->second->info.inst.name.is_client())
 	s.insert(p->second->info.inst.name.num());
   }
   void get_client_session_set(set<Session*>& s) {
     for (hash_map<entity_name_t,Session*>::iterator p = session_map.begin();
 	 p != session_map.end();
-	 p++)
+	 ++p)
       if (p->second->info.inst.name.is_client())
 	s.insert(p->second);
   }
