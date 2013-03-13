@@ -496,9 +496,12 @@ public:
   void check_realm_past_parents(SnapRealm *realm);
   void open_snap_parents();
 
-  void open_undef_dirfrags();
+  bool open_undef_inodes_dirfrags();
   void opened_undef_dirfrag(CDir *dir) {
     rejoin_undef_dirfrags.erase(dir);
+  }
+  void opened_undef_inode(CInode *in) {
+    rejoin_undef_inodes.erase(in);
   }
 
   void reissue_all_caps();
