@@ -684,6 +684,7 @@ class CephManager:
                 raise Exception('Failed to revive osd.{o} via ipmi'.format(o=osd))
             teuthology.reconnect(self.ctx, 60)
             ceph_task.mount_osd_data(self.ctx, remote, osd)
+            ceph_task.make_admin_daemon_dir(self.ctx, remote)
             self.ctx.daemons.get_daemon('osd', osd).reset()
         self.ctx.daemons.get_daemon('osd', osd).restart()
         self.wait_run_admin_socket(osd)
@@ -710,6 +711,7 @@ class CephManager:
             (remote,) = self.ctx.cluster.only('mon.{m}'.format(m=mon)).remotes.iterkeys()
             self.log('revive_mon on mon.{m} doing powercycle of {s}'.format(m=mon, s=remote.name))
             remote.console.power_on()
+            ceph_task.make_admin_daemon_dir(self.ctx, remote)
         self.ctx.daemons.get_daemon('mon', mon).restart()
 
     def get_mon_status(self, mon):
@@ -758,6 +760,7 @@ class CephManager:
             (remote,) = self.ctx.cluster.only('mds.{m}'.format(m=mds)).remotes.iterkeys()
             self.log('revive_mds on mds.{m} doing powercycle of {s}'.format(m=mds, s=remote.name))
             remote.console.power_on()
+            ceph_task.make_admin_daemon_dir(self.ctx, remote)
         args = []
         if standby_for_rank:
           args.extend(['--hot-standby', standby_for_rank])

@@ -232,6 +232,14 @@ def mount_osd_data(ctx, remote, osd):
             remote.run( args=[ 'sudo', 'mount', '-t', 'tmpfs', 'tmpfs', '/mnt' ] )
             remote.run( args=[ 'truncate', '-s', '1500M', tmpfs ] )
 
+def make_admin_daemon_dir(ctx, remote):
+    remote.run(
+            args=[
+                'sudo',
+                'install', '-d', '-m0777', '--', '/var/run/ceph',
+                ],
+            )
+
 @contextlib.contextmanager
 def cluster(ctx, config):
     testdir = teuthology.get_testdir(ctx)
