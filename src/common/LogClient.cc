@@ -150,7 +150,7 @@ Message *LogClient::_get_mon_log_message()
   std::deque<LogEntry>::iterator p = log_queue.begin();
   std::deque<LogEntry> o;
   while (p->seq < last_log_sent) {
-    p++;
+    ++p;
     assert(p != log_queue.end());
   }
   while (num_send--) {
@@ -158,7 +158,7 @@ Message *LogClient::_get_mon_log_message()
     o.push_back(*p);
     last_log_sent = p->seq;
     ldout(cct,10) << " will send " << *p << dendl;
-    p++;
+    ++p;
   }
   
   MLog *log = new MLog(monmap->get_fsid());
