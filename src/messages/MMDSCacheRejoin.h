@@ -24,6 +24,10 @@
 // sent from replica to auth
 
 class MMDSCacheRejoin : public Message {
+
+  static const int HEAD_VERSION = 1;
+  static const int COMPAT_VERSION = 1;
+
  public:
   static const int OP_WEAK    = 1;  // replica -> auth, i exist, + maybe open files.
   static const int OP_STRONG  = 2;  // replica -> auth, i exist, + open files and lock state.
@@ -43,19 +47,22 @@ class MMDSCacheRejoin : public Message {
 
   // -- types --
   struct inode_strong { 
+    int32_t nonce;
     int32_t caps_wanted;
     int32_t filelock, nestlock, dftlock;
     inode_strong() {}
-    inode_strong(int cw, int dl, int nl, int dftl) : 
-      caps_wanted(cw),
+    inode_strong(int n, int cw, int dl, int nl, int dftl) :
+      nonce(n), caps_wanted(cw),
       filelock(dl), nestlock(nl), dftlock(dftl) { }
     void encode(bufferlist &bl) const {
+      ::encode(nonce, bl);
       ::encode(caps_wanted, bl);
       ::encode(filelock, bl);
       ::encode(nestlock, bl);
       ::encode(dftlock, bl);
     }
     void decode(bufferlist::iterator &bl) {
+      ::decode(nonce, bl);
       ::decode(caps_wanted, bl);
       ::decode(filelock, bl);
       ::decode(nestlock, bl);
@@ -190,9 +197,11 @@ class MMDSCacheRejoin : public Message {
   map<dirfrag_t, map<string_snap_t, slave_reqid> > authpinned_dentries;
   map<dirfrag_t, map<string_snap_t, slave_reqid> > xlocked_dentries;
   
-  MMDSCacheRejoin() : Message(MSG_MDS_CACHEREJOIN) {}
+  MMDSCacheRejoin() :
+    Message(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION)
+  {}
   MMDSCacheRejoin(int o) : 
-    Message(MSG_MDS_CACHEREJOIN),
+    Message(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
     op(o) {}
 private:
   ~MMDSCacheRejoin() {}
@@ -208,8 +217,8 @@ public:
   void add_weak_inode(vinodeno_t i) {
     weak_inodes.insert(i);
   }
-  void add_strong_inode(vinodeno_t i, int cw, int dl, int nl, int dftl) {
-    strong_inodes[i] = inode_strong(cw, dl, nl, dftl);
+  void add_strong_inode(vinodeno_t i, int n, int cw, int dl, int nl, int dftl) {
+    strong_inodes[i] = inode_strong(n, cw, dl, nl, dftl);
   }
   void add_inode_locks(CInode *in, __u32 nonce) {
     ::encode(in->inode.ino, inode_locks);

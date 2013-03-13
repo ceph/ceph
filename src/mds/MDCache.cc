@@ -3542,6 +3542,7 @@ void MDCache::rejoin_send_rejoins()
       if (p->first == 0 && root) {
 	p->second->add_weak_inode(root->vino());
 	p->second->add_strong_inode(root->vino(),
+				    root->get_replica_nonce(),
 				    root->get_caps_wanted(),
 				    root->filelock.get_state(),
 				    root->nestlock.get_state(),
@@ -3555,6 +3556,7 @@ void MDCache::rejoin_send_rejoins()
       if (CInode *in = get_inode(MDS_INO_MDSDIR(p->first))) {
 	p->second->add_weak_inode(in->vino());
 	p->second->add_strong_inode(in->vino(),
+				    in->get_replica_nonce(),
 				    in->get_caps_wanted(),
 				    in->filelock.get_state(),
 				    in->nestlock.get_state(),
@@ -3713,6 +3715,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 	CInode *in = dnl->get_inode();
 	dout(15) << " add_strong_inode " << *in << dendl;
 	rejoin->add_strong_inode(in->vino(),
+				 in->get_replica_nonce(),
 				 in->get_caps_wanted(),
 				 in->filelock.get_state(),
 				 in->nestlock.get_state(),
@@ -4252,7 +4255,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	dir = rejoin_invent_dirfrag(p->first);
     }
     if (dir) {
-      dir->add_replica(from);
+      dir->add_replica(from, p->second.nonce);
       dir->dir_rep = p->second.dir_rep;
     } else {
       dout(10) << " frag " << p->first << " doesn't match dirfragtree " << *diri << dendl;
@@ -4267,7 +4270,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	  dir = rejoin_invent_dirfrag(p->first);
 	else
 	  dout(10) << " have(approx) " << *dir << dendl;
-	dir->add_replica(from);
+	dir->add_replica(from, p->second.nonce);
 	dir->dir_rep = p->second.dir_rep;
       }
       refragged = true;
@@ -4331,7 +4334,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	mdr->locks.insert(&dn->lock);
       }
 
-      dn->add_replica(from);
+      dn->add_replica(from, q->second.nonce);
       dout(10) << " have " << *dn << dendl;
       
       // inode?
@@ -4416,7 +4419,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	  dout(10) << " sender has dentry but not inode, adding them as a replica" << dendl;
 	}
 	
-	in->add_replica(from);
+	in->add_replica(from, p->second.nonce);
 	dout(10) << " have " << *in << dendl;
       }
     }
@@ -5180,7 +5183,7 @@ void MDCache::rejoin_send_acks()
       for (map<int,int>::iterator r = dir->replicas_begin();
 	   r != dir->replicas_end();
 	   ++r) 
-	ack[r->first]->add_strong_dirfrag(dir->dirfrag(), r->second, dir->dir_rep);
+	ack[r->first]->add_strong_dirfrag(dir->dirfrag(), ++r->second, dir->dir_rep);
 	   
       for (CDir::map_t::iterator q = dir->items.begin();
 	   q != dir->items.end();
@@ -5196,7 +5199,7 @@ void MDCache::rejoin_send_acks()
 					   dnl->is_primary() ? dnl->get_inode()->ino():inodeno_t(0),
 					   dnl->is_remote() ? dnl->get_remote_ino():inodeno_t(0),
 					   dnl->is_remote() ? dnl->get_remote_d_type():0,
-					   r->second,
+					   ++r->second,
 					   dn->lock.get_replica_state());
 	
 	if (!dnl->is_primary())
@@ -5209,7 +5212,7 @@ void MDCache::rejoin_send_acks()
 	     r != in->replicas_end();
 	     ++r) {
 	  ack[r->first]->add_inode_base(in);
-	  ack[r->first]->add_inode_locks(in, r->second);
+	  ack[r->first]->add_inode_locks(in, ++r->second);
 	}
 	
 	// subdirs in this subtree?
@@ -5224,14 +5227,14 @@ void MDCache::rejoin_send_acks()
 	 r != root->replicas_end();
 	 ++r) {
       ack[r->first]->add_inode_base(root);
-      ack[r->first]->add_inode_locks(root, r->second);
+      ack[r->first]->add_inode_locks(root, ++r->second);
     }
   if (myin)
     for (map<int,int>::iterator r = myin->replicas_begin();
 	 r != myin->replicas_end();
 	 ++r) {
       ack[r->first]->add_inode_base(myin);
-      ack[r->first]->add_inode_locks(myin, r->second);
+      ack[r->first]->add_inode_locks(myin, ++r->second);
     }
 
   // include inode base for any inodes whose scatterlocks may have updated
@@ -5732,6 +5735,12 @@ void MDCache::send_expire_messages(map<int, MCacheExpire*>& expiremap)
   for (map<int, MCacheExpire*>::iterator it = expiremap.begin();
        it != expiremap.end();
        ++it) {
+    if (mds->mdsmap->get_state(it->first) < MDSMap::STATE_REJOIN ||
+	(mds->mdsmap->get_state(it->first) == MDSMap::STATE_REJOIN &&
+	 rejoin_sent.count(it->first) == 0)) {
+      it->second->put();
+      continue;
+    }
     dout(7) << "sending cache_expire to " << it->first << dendl;
     mds->send_message_mds(it->second, it->first);
   }
@@ -9714,9 +9723,11 @@ void MDCache::handle_dentry_link(MDentryLink *m)
     CInode *in = add_replica_inode(p, NULL, finished);
     assert(in->get_num_ref() == 0);
     assert(in->get_parent_dn() == NULL);
-    MCacheExpire* expire = new MCacheExpire(mds->get_nodeid());
-    expire->add_inode(m->get_subtree(), in->vino(), in->get_replica_nonce());
-    mds->send_message_mds(expire, m->get_source().num());
+    map<int, MCacheExpire*> expiremap;
+    int from = m->get_source().num();
+    expiremap[from] = new MCacheExpire(mds->get_nodeid());
+    expiremap[from]->add_inode(m->get_subtree(), in->vino(), in->get_replica_nonce());
+    send_expire_messages(expiremap);
     remove_inode(in);
   }
 
