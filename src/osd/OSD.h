@@ -397,6 +397,15 @@ public:
   void expand_pg_num(OSDMapRef old_map,
 		     OSDMapRef new_map);
 
+  // -- OSD Full Status --
+  Mutex full_status_lock;
+  enum s_names { NONE, NEAR, FULL } cur_state;
+  time_t last_msg;
+  float get_full_ratio();
+  float get_nearfull_ratio();
+  void check_nearfull_warning(const osd_stat_t &stat);
+  bool check_failsafe_full();
+
   OSDService(OSD *osd);
 };
 class OSD : public Dispatcher,

@@ -413,6 +413,8 @@ OPTION(osd_debug_verify_snaps_on_info, OPT_BOOL, false)
 OPTION(osd_op_history_size, OPT_U32, 20)    // Max number of completed ops to track
 OPTION(osd_op_history_duration, OPT_U32, 600) // Oldest completed op to track
 OPTION(osd_target_transaction_size, OPT_INT, 30)     // to adjust various transactions that batch smaller items
+OPTION(osd_failsafe_full_ratio, OPT_FLOAT, .97) // what % full makes an OSD "full" (failsafe)
+OPTION(osd_failsafe_nearfull_ratio, OPT_FLOAT, .90) // what % full makes an OSD near full (failsafe)
 
 /**
  * osd_client_op_priority and osd_recovery_op_priority adjust the relative
