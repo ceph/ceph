@@ -61,7 +61,8 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
 		   g_conf->client_oc_max_objects,
 		   g_conf->client_oc_max_dirty,
 		   g_conf->client_oc_target_dirty,
-		   g_conf->client_oc_max_dirty_age);
+		   g_conf->client_oc_max_dirty_age,
+		   true);
   obc.start();
 
   atomic_t outstanding_reads;
@@ -110,7 +111,7 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
       ObjectCacher::OSDWrite *wr = obc.prepare_write(snapc, bl, utime_t(), 0);
       wr->extents.push_back(op->extent);
       lock.Lock();
-      obc.writex(wr, &object_set, lock);
+      obc.writex(wr, &object_set, lock, NULL);
       lock.Unlock();
     }
   }
