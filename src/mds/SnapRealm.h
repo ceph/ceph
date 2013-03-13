@@ -57,9 +57,10 @@ struct SnapRealm {
   bool exists(const string &name) {
     for (map<snapid_t,SnapInfo>::iterator p = srnode.snaps.begin();
 	 p != srnode.snaps.end();
-	 p++)
+	 ++p) {
       if (p->second.name == name)
 	return true;
+    }
     return false;
   }
 
