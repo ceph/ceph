@@ -2046,7 +2046,11 @@ void MDS::ms_handle_remote_reset(Connection *con)
   dout(0) << "ms_handle_remote_reset on " << con->get_peer_addr() << dendl;
   if (want_state == CEPH_MDS_STATE_DNE)
     return;
-  objecter->ms_handle_remote_reset(con);
+  switch (con->get_peer_type()) {
+  case CEPH_ENTITY_TYPE_OSD:
+    objecter->ms_handle_remote_reset(con);
+    break;
+  }
 }
 
 bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
