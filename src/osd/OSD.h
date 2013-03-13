@@ -901,7 +901,7 @@ protected:
   void wake_all_pg_waiters() {
     for (map<pg_t, list<OpRequestRef> >::iterator p = waiting_for_pg.begin();
 	 p != waiting_for_pg.end();
-	 p++)
+	 ++p)
       take_waiters_front(p->second);
     waiting_for_pg.clear();
   }
