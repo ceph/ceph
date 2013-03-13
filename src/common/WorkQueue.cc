@@ -196,7 +196,7 @@ void ThreadPool::stop(bool clear_after)
   _lock.Unlock();
   for (set<WorkThread*>::iterator p = _threads.begin();
        p != _threads.end();
-       p++) {
+       ++p) {
     (*p)->join();
     delete *p;
   }
