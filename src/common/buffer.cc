@@ -620,7 +620,7 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
     unsigned left = len;
     for (std::list<ptr>::const_iterator i = otherl._buffers.begin();
 	 i != otherl._buffers.end();
-	 i++) {
+	 ++i) {
       unsigned l = (*i).length();
       if (left < l)
 	l = left;
@@ -663,12 +663,12 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
 	aoff += len;
 	if (aoff == a->length()) {
 	  aoff = 0;
-	  a++;
+	  ++a;
 	}
 	boff += len;
 	if (boff == b->length()) {
 	  boff = 0;
-	  b++;
+	  ++b;
 	}
       }
       assert(b == other._buffers.end());
@@ -693,7 +693,7 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
   {
     for (std::list<ptr>::const_iterator it = _buffers.begin();
 	 it != _buffers.end();
-	 it++) 
+	 ++it) 
       if (!it->is_page_aligned())
 	return false;
     return true;
@@ -703,7 +703,7 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
   {
     for (std::list<ptr>::const_iterator it = _buffers.begin();
 	 it != _buffers.end();
-	 it++) 
+	 ++it) 
       if (!it->is_n_page_sized())
 	return false;
     return true;
@@ -712,7 +712,7 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
   bool buffer::list::is_zero() const {
     for (std::list<ptr>::const_iterator it = _buffers.begin();
 	 it != _buffers.end();
-	 it++) {
+	 ++it) {
       if (!it->is_zero()) {
 	return false;
       }
@@ -724,7 +724,7 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
   {
     for (std::list<ptr>::iterator it = _buffers.begin();
 	 it != _buffers.end();
-	 it++)
+	 ++it)
       it->zero();
   }
 
@@ -734,7 +734,7 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
     unsigned p = 0;
     for (std::list<ptr>::iterator it = _buffers.begin();
 	 it != _buffers.end();
-	 it++) {
+	 ++it) {
       if (p + it->length() > o) {
 	if (p >= o && p+it->length() <= o+l)
 	  it->zero();                         // all
@@ -764,7 +764,7 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
     unsigned pos = 0;
     for (std::list<ptr>::iterator it = _buffers.begin();
 	 it != _buffers.end();
-	 it++) {
+	 ++it) {
       nb.copy_in(pos, it->length(), it->c_str());
       pos += it->length();
     }
@@ -783,7 +783,7 @@ void buffer::list::rebuild_page_aligned()
 	     << " length " << p->length()
 	     << " " << (p->length() & ~CEPH_PAGE_MASK) << " ok" << std::endl;
       */
-      p++;
+      ++p;
       continue;
     }
     
@@ -975,7 +975,7 @@ void buffer::list::rebuild_page_aligned()
     
     for (std::list<ptr>::const_iterator p = _buffers.begin();
 	 p != _buffers.end();
-	 p++) {
+	 ++p) {
       if (n >= p->length()) {
 	n -= p->length();
 	continue;
@@ -1012,7 +1012,7 @@ void buffer::list::rebuild_page_aligned()
       // skip this buffer
       //cout << "skipping over " << *curbuf << std::endl;
       off -= (*curbuf).length();
-      curbuf++;
+      ++curbuf;
     }
     assert(len == 0 || curbuf != other._buffers.end());
     
@@ -1032,7 +1032,7 @@ void buffer::list::rebuild_page_aligned()
       _len += howmuch;
       len -= howmuch;
       off = 0;
-      curbuf++;
+      ++curbuf;
     }
   }
 
@@ -1053,7 +1053,7 @@ void buffer::list::rebuild_page_aligned()
 	// skip this buffer
 	//cout << "off = " << off << " skipping over " << *curbuf << std::endl;
 	off -= (*curbuf).length();
-	curbuf++;
+	++curbuf;
       } else {
 	// somewhere in this buffer!
 	//cout << "off = " << off << " somewhere in " << *curbuf << std::endl;
@@ -1104,7 +1104,7 @@ void buffer::list::rebuild_page_aligned()
     s.substr_of(*this, off, len);
     for (std::list<ptr>::const_iterator it = s._buffers.begin(); 
 	 it != s._buffers.end(); 
-	 it++)
+	 ++it)
       if (it->length())
 	out.write(it->c_str(), it->length());
     /*iterator p(this, off);
@@ -1230,7 +1230,7 @@ int buffer::list::write_fd(int fd) const
       bytes += p->length();
       iovlen++;
     }
-    p++;
+    ++p;
 
     if (iovlen == IOV_MAX-1 ||
 	p == _buffers.end()) {
