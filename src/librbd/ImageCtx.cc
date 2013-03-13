@@ -90,7 +90,7 @@ namespace librbd {
 				       init_max_dirty,
 				       cct->_conf->rbd_cache_target_dirty,
 				       cct->_conf->rbd_cache_max_dirty_age,
-				       true);
+				       cct->_conf->rbd_cache_block_writes_upfront);
       object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
       object_set->return_enoent = true;
       object_cacher->start();
@@ -473,7 +473,7 @@ namespace librbd {
   }
 
   void ImageCtx::write_to_cache(object_t o, bufferlist& bl, size_t len,
-				uint64_t off) {
+				uint64_t off, Context *onfinish) {
     snap_lock.get_read();
     ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(snapc, bl,
 							      utime_t(), 0);
@@ -484,7 +484,7 @@ namespace librbd {
     wr->extents.push_back(extent);
     {
       Mutex::Locker l(cache_lock);
-      object_cacher->writex(wr, object_set, cache_lock, NULL);
+      object_cacher->writex(wr, object_set, cache_lock, onfinish);
     }
   }
 
