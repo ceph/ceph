@@ -2009,7 +2009,7 @@ bool MDS::_dispatch(Message *m)
 void MDS::ms_handle_connect(Connection *con) 
 {
   Mutex::Locker l(mds_lock);
-  dout(0) << "ms_handle_connect on " << con->get_peer_addr() << dendl;
+  dout(5) << "ms_handle_connect on " << con->get_peer_addr() << dendl;
   if (want_state == CEPH_MDS_STATE_DNE)
     return;
   objecter->ms_handle_connect(con);
@@ -2018,7 +2018,7 @@ void MDS::ms_handle_connect(Connection *con)
 bool MDS::ms_handle_reset(Connection *con) 
 {
   Mutex::Locker l(mds_lock);
-  dout(0) << "ms_handle_reset on " << con->get_peer_addr() << dendl;
+  dout(5) << "ms_handle_reset on " << con->get_peer_addr() << dendl;
   if (want_state == CEPH_MDS_STATE_DNE)
     return false;
 
@@ -2028,12 +2028,13 @@ bool MDS::ms_handle_reset(Connection *con)
     Session *session = static_cast<Session *>(con->get_priv());
     if (session) {
       if (session->is_closed()) {
-	messenger->mark_down(con->get_peer_addr());
+	dout(3) << "ms_handle_reset closing connection for session " << session->info.inst << dendl;
+	messenger->mark_down(con);
 	sessionmap.remove_session(session);
       }
       session->put();
     } else {
-      messenger->mark_down(con->get_peer_addr());
+      messenger->mark_down(con);
     }
   }
   return false;
@@ -2043,10 +2044,26 @@ bool MDS::ms_handle_reset(Connection *con)
 void MDS::ms_handle_remote_reset(Connection *con) 
 {
   Mutex::Locker l(mds_lock);
-  dout(0) << "ms_handle_remote_reset on " << con->get_peer_addr() << dendl;
+  dout(5) << "ms_handle_remote_reset on " << con->get_peer_addr() << dendl;
   if (want_state == CEPH_MDS_STATE_DNE)
     return;
-  objecter->ms_handle_remote_reset(con);
+  switch (con->get_peer_type()) {
+  case CEPH_ENTITY_TYPE_OSD:
+    objecter->ms_handle_remote_reset(con);
+    break;
+
+  case CEPH_ENTITY_TYPE_CLIENT:
+    Session *session = static_cast<Session *>(con->get_priv());
+    if (session) {
+      if (session->is_closed()) {
+	dout(3) << "ms_handle_remote_reset closing connection for session " << session->info.inst << dendl;
+	messenger->mark_down(con);
+	sessionmap.remove_session(session);
+      }
+      session->put();
+    }
+    break;
+  }
 }
 
 bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
