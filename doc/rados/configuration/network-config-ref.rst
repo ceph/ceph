@@ -437,7 +437,7 @@ Ceph disables TCP buffering by default.
 :Description: The size of the socket buffer on the receiving end of a network
               connection. Disable by default.
 
-Type: 32-bit Integer
+:Type: 32-bit Integer
 :Required: No
 :Default: ``0``
 
