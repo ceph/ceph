@@ -371,7 +371,7 @@ protected:
   // trim cache.
   void trim_cache();
   void trim_dentry(Dentry *dn);
-  void trim_caps(int mds, int max);
+  void trim_caps(MetaSession *s, int max);
   
   void dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconnected);
   void dump_cache(Formatter *f);  // debug
