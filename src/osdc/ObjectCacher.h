@@ -9,6 +9,7 @@
 #include "include/xlist.h"
 
 #include "common/Cond.h"
+#include "common/Finisher.h"
 #include "common/Thread.h"
 
 #include "Objecter.h"
@@ -327,6 +328,7 @@ class ObjectCacher {
   
   int64_t max_dirty, target_dirty, max_size, max_objects;
   utime_t max_dirty_age;
+  bool block_writes_upfront;
 
   flush_set_callback_t flush_set_callback;
   void *flush_set_callback_arg;
@@ -349,7 +351,8 @@ class ObjectCacher {
       return 0;
     }
   } flusher_thread;
-  
+
+  Finisher finisher;
 
   // objects
   Object *get_object_maybe(sobject_t oid, object_locator_t &l) {
@@ -495,6 +498,17 @@ class ObjectCacher {
     }
   };
 
+  class C_WaitForWrite : public Context {
+  public:
+    C_WaitForWrite(ObjectCacher *oc, uint64_t len, Context *onfinish) :
+      m_oc(oc), m_len(len), m_onfinish(onfinish) {}
+    void finish(int r);
+  private:
+    ObjectCacher *m_oc;
+    uint64_t m_len;
+    Context *m_onfinish;
+  };
+
   void perf_start();
   void perf_stop();
 
@@ -504,7 +518,8 @@ class ObjectCacher {
 	       flush_set_callback_t flush_callback,
 	       void *flush_callback_arg,
 	       uint64_t max_bytes, uint64_t max_objects,
-	       uint64_t max_dirty, uint64_t target_dirty, double max_age);
+	       uint64_t max_dirty, uint64_t target_dirty, double max_age,
+	       bool block_writes_upfront);
   ~ObjectCacher();
 
   void start() {
@@ -549,13 +564,16 @@ class ObjectCacher {
    * the return value is total bytes read
    */
   int readx(OSDRead *rd, ObjectSet *oset, Context *onfinish);
-  int writex(OSDWrite *wr, ObjectSet *oset, Mutex& wait_on_lock);
+  int writex(OSDWrite *wr, ObjectSet *oset, Mutex& wait_on_lock,
+	     Context *onfreespace);
   bool is_cached(ObjectSet *oset, vector<ObjectExtent>& extents, snapid_t snapid);
 
 private:
   // write blocking
-  int _wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset, Mutex& lock);
-  
+  int _wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset, Mutex& lock,
+		      Context *onfreespace);
+  void maybe_wait_for_writeback(uint64_t len);
+
 public:
   bool set_is_cached(ObjectSet *oset);
   bool set_is_dirty_or_committing(ObjectSet *oset);
@@ -626,7 +644,7 @@ public:
 		 Mutex& wait_on_lock) {
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags);
     Striper::file_to_extents(cct, oset->ino, layout, offset, len, wr->extents);
-    return writex(wr, oset, wait_on_lock);
+    return writex(wr, oset, wait_on_lock, NULL);
   }
 };
 

@@ -189,7 +189,8 @@ Client::Client(Messenger *m, MonClient *mc)
 				  cct->_conf->client_oc_max_objects,
 				  cct->_conf->client_oc_max_dirty,
 				  cct->_conf->client_oc_target_dirty,
-				  cct->_conf->client_oc_max_dirty_age);
+				  cct->_conf->client_oc_max_dirty_age,
+				  true);
   filer = new Filer(objecter);
 }
 

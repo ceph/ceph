@@ -89,7 +89,8 @@ namespace librbd {
 				       10,  /* reset this in init */
 				       init_max_dirty,
 				       cct->_conf->rbd_cache_target_dirty,
-				       cct->_conf->rbd_cache_max_dirty_age);
+				       cct->_conf->rbd_cache_max_dirty_age,
+				       true);
       object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
       object_set->return_enoent = true;
       object_cacher->start();
@@ -493,7 +494,7 @@ namespace librbd {
     wr->extents.push_back(extent);
     {
       Mutex::Locker l(cache_lock);
-      object_cacher->writex(wr, object_set, cache_lock);
+      object_cacher->writex(wr, object_set, cache_lock, NULL);
     }
   }
 
