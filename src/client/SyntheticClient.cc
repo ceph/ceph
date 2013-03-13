@@ -1481,25 +1481,25 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   // close open files
   for (hash_map<int64_t, int64_t>::iterator fi = open_files.begin();
        fi != open_files.end();
-       fi++) {
+       ++fi) {
     dout(1) << "leftover close " << fi->second << dendl;
     if (fi->second > 0) client->close(fi->second);
   }
   for (hash_map<int64_t, dir_result_t*>::iterator fi = open_dirs.begin();
        fi != open_dirs.end();
-       fi++) {
+       ++fi) {
     dout(1) << "leftover closedir " << fi->second << dendl;
     if (fi->second != 0) client->closedir(fi->second);
   }
   for (hash_map<int64_t,Fh*>::iterator fi = ll_files.begin();
        fi != ll_files.end();
-       fi++) {
+       ++fi) {
     dout(1) << "leftover ll_release " << fi->second << dendl;
     if (fi->second) client->ll_release(fi->second);
   }
   for (hash_map<int64_t,void*>::iterator fi = ll_dirs.begin();
        fi != ll_dirs.end();
-       fi++) {
+       ++fi) {
     dout(1) << "leftover ll_releasedir " << fi->second << dendl;
     if (fi->second) client->ll_releasedir(fi->second);
   }
@@ -1521,7 +1521,7 @@ int SyntheticClient::clean_dir(string& basedir)
 
   for (list<string>::iterator it = contents.begin();
        it != contents.end();
-       it++) {
+       ++it) {
     if (*it == ".") continue;
     if (*it == "..") continue;
     string file = basedir + "/" + *it;
@@ -1580,7 +1580,7 @@ int SyntheticClient::full_walk(string& basedir)
     
     for (list<string>::iterator it = contents.begin();
 	 it != contents.end();
-	 it++) {
+	 ++it) {
       if (*it == "." ||
 	  *it == "..") 
 	continue;
@@ -1638,7 +1638,7 @@ int SyntheticClient::full_walk(string& basedir)
     }
   }
 
-  for (hash_map<inodeno_t,int>::iterator p = nlink.begin(); p != nlink.end(); p++) {
+  for (hash_map<inodeno_t,int>::iterator p = nlink.begin(); p != nlink.end(); ++p) {
     if (nlink_seen[p->first] != p->second)
       dout(0) << p->first << " nlink " << p->second << " != " << nlink_seen[p->first] << "seen" << dendl;
   }
@@ -2833,7 +2833,7 @@ int SyntheticClient::random_walk(int num_req)
       
       for (list<string>::iterator it = c.begin();
            it != c.end();
-           it++) {
+           ++it) {
         //dout(DBL) << " got " << *it << dendl;
 	assert(0);
 	/*contents[*it] = it->second;
