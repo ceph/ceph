@@ -665,6 +665,7 @@ class CephManager:
         if self.config.get('powercycle'):
             (remote,) = self.ctx.cluster.only('osd.{o}'.format(o=osd)).remotes.iterkeys()
             self.log('kill_osd on osd.{o} doing powercycle of {s}'.format(o=osd, s=remote.name))
+            assert remote.console is not None, "powercycling requested but RemoteConsole is not initialized.  Check ipmi config."
             remote.console.power_off()
         else:
             self.ctx.daemons.get_daemon('osd', osd).stop()
@@ -679,11 +680,13 @@ class CephManager:
         if self.config.get('powercycle'):
             (remote,) = self.ctx.cluster.only('osd.{o}'.format(o=osd)).remotes.iterkeys()
             self.log('kill_osd on osd.{o} doing powercycle of {s}'.format(o=osd, s=remote.name))
+            assert remote.console is not None, "powercycling requested but RemoteConsole is not initialized.  Check ipmi config."
             remote.console.power_on()
             if not remote.console.check_status(300):
                 raise Exception('Failed to revive osd.{o} via ipmi'.format(o=osd))
-            teuthology.reconnect(self.ctx, 60)
+            teuthology.reconnect(self.ctx, 60, [remote])
             ceph_task.mount_osd_data(self.ctx, remote, osd)
+            ceph_task.make_admin_daemon_dir(self.ctx, remote)
             self.ctx.daemons.get_daemon('osd', osd).reset()
         self.ctx.daemons.get_daemon('osd', osd).restart()
         self.wait_run_admin_socket(osd)
@@ -701,6 +704,7 @@ class CephManager:
         if self.config.get('powercycle'):
             (remote,) = self.ctx.cluster.only('mon.{m}'.format(m=mon)).remotes.iterkeys()
             self.log('kill_mon on mon.{m} doing powercycle of {s}'.format(m=mon, s=remote.name))
+            assert remote.console is not None, "powercycling requested but RemoteConsole is not initialized.  Check ipmi config."
             remote.console.power_off()
         else:
             self.ctx.daemons.get_daemon('mon', mon).stop()
@@ -709,7 +713,9 @@ class CephManager:
         if self.config.get('powercycle'):
             (remote,) = self.ctx.cluster.only('mon.{m}'.format(m=mon)).remotes.iterkeys()
             self.log('revive_mon on mon.{m} doing powercycle of {s}'.format(m=mon, s=remote.name))
+            assert remote.console is not None, "powercycling requested but RemoteConsole is not initialized.  Check ipmi config."
             remote.console.power_on()
+            ceph_task.make_admin_daemon_dir(self.ctx, remote)
         self.ctx.daemons.get_daemon('mon', mon).restart()
 
     def get_mon_status(self, mon):
@@ -745,6 +751,7 @@ class CephManager:
         if self.config.get('powercycle'):
             (remote,) = self.ctx.cluster.only('mds.{m}'.format(m=mds)).remotes.iterkeys()
             self.log('kill_mds on mds.{m} doing powercycle of {s}'.format(m=mds, s=remote.name))
+            assert remote.console is not None, "powercycling requested but RemoteConsole is not initialized.  Check ipmi config."
             remote.console.power_off()
         else:
             self.ctx.daemons.get_daemon('mds', mds).stop()
@@ -757,7 +764,9 @@ class CephManager:
         if self.config.get('powercycle'):
             (remote,) = self.ctx.cluster.only('mds.{m}'.format(m=mds)).remotes.iterkeys()
             self.log('revive_mds on mds.{m} doing powercycle of {s}'.format(m=mds, s=remote.name))
+            assert remote.console is not None, "powercycling requested but RemoteConsole is not initialized.  Check ipmi config."
             remote.console.power_on()
+            ceph_task.make_admin_daemon_dir(self.ctx, remote)
         args = []
         if standby_for_rank:
           args.extend(['--hot-standby', standby_for_rank])

@@ -152,29 +152,13 @@ def connect(ctx, config):
     from ..orchestra import cluster
     remotes = []
     for t, key in ctx.config['targets'].iteritems():
-        console = None
-        if 'ipmi_user' in ctx.teuthology_config:
-            host = t.split('@')[-1]
-            shortname = host.split('.')[0]
-            console = remote.RemoteConsole(name=host,
-                                           ipmiuser=ctx.teuthology_config['ipmi_user'],
-                                           ipmipass=ctx.teuthology_config['ipmi_password'],
-                                           ipmidomain=ctx.teuthology_config['ipmi_domain'])
-            cname = '{host}.{domain}'.format(host=shortname, domain=ctx.teuthology_config['ipmi_domain'])
-            log.debug('checking console status of %s' % cname)
-            if not console.check_status():
-                log.info('Failed to get console status for %s, disabling console...' % cname)
-                console=None
-            else:
-                log.debug('console ready on %s' % cname)
-
         log.debug('connecting to %s', t)
         remotes.append(
             remote.Remote(name=t,
                           ssh=connection.connect(user_at_host=t,
                                                  host_key=key,
                                                  keep_alive=True),
-                          console=console))
+                          console=None))
     ctx.cluster = cluster.Cluster()
     if 'roles' in ctx.config:
         for rem, roles in zip(remotes, ctx.config['roles']):

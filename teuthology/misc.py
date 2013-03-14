@@ -508,7 +508,7 @@ def wait_until_fuse_mounted(remote, fuse, mountpoint):
         time.sleep(5)
     log.info('ceph-fuse is mounted on %s', mountpoint)
 
-def reconnect(ctx, timeout):
+def reconnect(ctx, timeout, remotes=None):
     """
     Connect to all the machines in ctx.cluster.
 
@@ -525,10 +525,14 @@ def reconnect(ctx, timeout):
     log.info('Re-opening connections...')
     starttime = time.time()
 
-    for r in ctx.cluster.remotes.iterkeys():
+    if remotes:
+        need_reconnect = remotes
+    else:
+        need_reconnect = ctx.cluster.remotes.keys()
+
+    for r in need_reconnect:
         r.ssh.close()
 
-    need_reconnect = ctx.cluster.remotes.keys()
     while need_reconnect:
         for remote in need_reconnect:
             try:
