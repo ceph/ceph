@@ -150,7 +150,6 @@ public:
     on_deletion_complete.push_front(completion);
   }
   ~DeletingState() {
-    Mutex::Locker l(lock);
     for (list<Context *>::iterator i = on_deletion_complete.begin();
 	 i != on_deletion_complete.end();
 	 ++i) {
@@ -464,6 +463,13 @@ public:
     char foo[20];
     snprintf(foo, sizeof(foo), "inc_osdmap.%d", epoch);
     return hobject_t(sobject_t(object_t(foo), 0)); 
+  }
+
+  static hobject_t make_snapmapper_oid() {
+    return hobject_t(
+      sobject_t(
+	object_t("snapmapper"),
+	0));
   }
 
   static hobject_t make_pg_log_oid(pg_t pg) {

@@ -166,8 +166,57 @@ public:
     int64_t pool_override;
     bool use_pool_override;
     bool replica;
+    bool tolerate_collection_add_enoent;
+
+    list<Context *> on_applied;
+    list<Context *> on_commit;
+    list<Context *> on_applied_sync;
 
   public:
+    void set_tolerate_collection_add_enoent() {
+      tolerate_collection_add_enoent = true;
+    }
+    void register_on_applied(Context *c) {
+      on_applied.push_back(c);
+    }
+    void register_on_commit(Context *c) {
+      on_commit.push_back(c);
+    }
+    void register_on_applied_sync(Context *c) {
+      on_applied_sync.push_back(c);
+    }
+
+    static void collect_contexts(
+      list<Transaction *> &t,
+      Context **out_on_applied,
+      Context **out_on_commit,
+      Context **out_on_applied_sync) {
+      assert(out_on_applied);
+      assert(out_on_commit);
+      assert(out_on_applied_sync);
+      list<Context *> on_applied, on_commit, on_applied_sync;
+      for (list<Transaction *>::iterator i = t.begin();
+	   i != t.end();
+	   ++i) {
+	on_applied.splice(on_applied.end(), (*i)->on_applied);
+	on_commit.splice(on_commit.end(), (*i)->on_commit);
+	on_applied_sync.splice(on_applied_sync.end(), (*i)->on_applied_sync);
+      }
+      *out_on_applied = C_Contexts::list_to_context(on_applied);
+      *out_on_commit = C_Contexts::list_to_context(on_commit);
+      *out_on_applied_sync = C_Contexts::list_to_context(on_applied_sync);
+    }
+
+    Context *get_on_applied() {
+      return C_Contexts::list_to_context(on_applied);
+    }
+    Context *get_on_commit() {
+      return C_Contexts::list_to_context(on_commit);
+    }
+    Context *get_on_applied_sync() {
+      return C_Contexts::list_to_context(on_applied_sync);
+    }
+
     void set_pool_override(int64_t pool) {
       pool_override = pool;
     }
@@ -181,6 +230,9 @@ public:
       std::swap(largest_data_len, other.largest_data_len);
       std::swap(largest_data_off, other.largest_data_off);
       std::swap(largest_data_off_in_tbl, other.largest_data_off_in_tbl);
+      std::swap(on_applied, other.on_applied);
+      std::swap(on_commit, other.on_commit);
+      std::swap(on_applied_sync, other.on_applied_sync);
       tbl.swap(other.tbl);
     }
 
@@ -194,6 +246,9 @@ public:
 	largest_data_off_in_tbl = tbl.length() + other.largest_data_off_in_tbl;
       }
       tbl.append(other.tbl);
+      on_applied.splice(on_applied.end(), other.on_applied);
+      on_commit.splice(on_commit.end(), other.on_commit);
+      on_applied_sync.splice(on_applied_sync.end(), other.on_applied_sync);
     }
 
     uint64_t get_encoded_bytes() {
@@ -243,17 +298,23 @@ public:
       int64_t pool_override;
       bool use_pool_override;
       bool replica;
+      bool _tolerate_collection_add_enoent;
 
       iterator(Transaction *t)
 	: p(t->tbl.begin()),
 	  sobject_encoding(t->sobject_encoding),
 	  pool_override(t->pool_override),
 	  use_pool_override(t->use_pool_override),
-	  replica(t->replica) {}
+	  replica(t->replica),
+	  _tolerate_collection_add_enoent(
+	    t->tolerate_collection_add_enoent) {}
 
       friend class Transaction;
 
     public:
+      bool tolerate_collection_add_enoent() const {
+	return _tolerate_collection_add_enoent;
+      }
       bool have_op() {
 	return !p.end();
       }
@@ -577,31 +638,40 @@ public:
     // etc.
     Transaction() :
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
-      sobject_encoding(false), pool_override(-1), use_pool_override(false), replica(false) {}
+      sobject_encoding(false), pool_override(-1), use_pool_override(false),
+      replica(false),
+      tolerate_collection_add_enoent(false) {}
+
     Transaction(bufferlist::iterator &dp) :
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
-      sobject_encoding(false), pool_override(-1), use_pool_override(false), replica(false) {
+      sobject_encoding(false), pool_override(-1), use_pool_override(false),
+      replica(false),
+      tolerate_collection_add_enoent(false) {
       decode(dp);
     }
+
     Transaction(bufferlist &nbl) :
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
-      sobject_encoding(false), pool_override(-1), use_pool_override(false), replica(false) {
+      sobject_encoding(false), pool_override(-1), use_pool_override(false),
+      replica(false),
+      tolerate_collection_add_enoent(false) {
       bufferlist::iterator dp = nbl.begin();
       decode(dp); 
     }
 
     void encode(bufferlist& bl) const {
-      ENCODE_START(6, 5, bl);
+      ENCODE_START(7, 5, bl);
       ::encode(ops, bl);
       ::encode(pad_unused_bytes, bl);
       ::encode(largest_data_len, bl);
       ::encode(largest_data_off, bl);
       ::encode(largest_data_off_in_tbl, bl);
       ::encode(tbl, bl);
+      ::encode(tolerate_collection_add_enoent, bl);
       ENCODE_FINISH(bl);
     }
     void decode(bufferlist::iterator &bl) {
-      DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
+      DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
       DECODE_OLDEST(2);
       if (struct_v < 4)
 	sobject_encoding = true;
@@ -615,10 +685,13 @@ public:
 	::decode(largest_data_off_in_tbl, bl);
       }
       ::decode(tbl, bl);
-      DECODE_FINISH(bl);
       if (struct_v < 6) {
 	use_pool_override = true;
       }
+      if (struct_v >= 7) {
+	::decode(tolerate_collection_add_enoent, bl);
+      }
+      DECODE_FINISH(bl);
     }
 
     void dump(ceph::Formatter *f);
@@ -659,17 +732,35 @@ public:
   }
   unsigned apply_transactions(Sequencer *osr, list<Transaction*>& tls, Context *ondisk=0);
 
-  virtual int queue_transaction(Sequencer *osr, Transaction* t) = 0;
-  virtual int queue_transaction(Sequencer *osr, Transaction *t, Context *onreadable, Context *ondisk=0,
+  int queue_transaction(Sequencer *osr, Transaction* t) {
+    list<Transaction *> tls;
+    tls.push_back(t);
+    return queue_transactions(osr, tls, new C_DeleteTransaction(t));
+  }
+
+  int queue_transaction(Sequencer *osr, Transaction *t, Context *onreadable, Context *ondisk=0,
 				Context *onreadable_sync=0,
 				TrackedOpRef op = TrackedOpRef()) {
     list<Transaction*> tls;
     tls.push_back(t);
     return queue_transactions(osr, tls, onreadable, ondisk, onreadable_sync, op);
   }
-  virtual int queue_transactions(Sequencer *osr, list<Transaction*>& tls, Context *onreadable, Context *ondisk=0,
-				 Context *onreadable_sync=0,
-				 TrackedOpRef op = TrackedOpRef()) = 0;
+
+  int queue_transactions(Sequencer *osr, list<Transaction*>& tls,
+			 Context *onreadable, Context *ondisk=0,
+			 Context *onreadable_sync=0,
+			 TrackedOpRef op = TrackedOpRef()) {
+    assert(!tls.empty());
+    tls.back()->register_on_applied(onreadable);
+    tls.back()->register_on_commit(ondisk);
+    tls.back()->register_on_applied_sync(onreadable_sync);
+    return queue_transactions(osr, tls, op);
+  }
+
+  virtual int queue_transactions(
+    Sequencer *osr, list<Transaction*>& tls,
+    TrackedOpRef op = TrackedOpRef()) = 0;
+
 
   int queue_transactions(
     Sequencer *osr,

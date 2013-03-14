@@ -67,12 +67,14 @@ inline void finish_contexts(CephContext *cct, std::list<Context*>& finished,
   list<Context*> ls;
   ls.swap(finished); // swap out of place to avoid weird loops
 
-  mydout(cct, 10) << ls.size() << " contexts to finish with " << result << dendl;
+  if (cct)
+    mydout(cct, 10) << ls.size() << " contexts to finish with " << result << dendl;
   for (std::list<Context*>::iterator it = ls.begin(); 
        it != ls.end(); 
        it++) {
     Context *c = *it;
-    mydout(cct,10) << "---- " << c << dendl;
+    if (cct)
+      mydout(cct,10) << "---- " << c << dendl;
     c->complete(result);
   }
 }
@@ -86,12 +88,14 @@ inline void finish_contexts(CephContext *cct, std::vector<Context*>& finished,
   vector<Context*> ls;
   ls.swap(finished); // swap out of place to avoid weird loops
 
-  mydout(cct,10) << ls.size() << " contexts to finish with " << result << dendl;
+  if (cct)
+    mydout(cct,10) << ls.size() << " contexts to finish with " << result << dendl;
   for (std::vector<Context*>::iterator it = ls.begin(); 
        it != ls.end(); 
        it++) {
     Context *c = *it;
-    mydout(cct,10) << "---- " << c << dendl;
+    if (cct)
+      mydout(cct,10) << "---- " << c << dendl;
     c->complete(result);
   }
 }
@@ -125,9 +129,21 @@ public:
     finish_contexts(cct, contexts, r);
   }
   bool empty() { return contexts.empty(); }
+
+  static Context *list_to_context(list<Context *> &cs) {
+    if (cs.size() == 0) {
+      return 0;
+    } else if (cs.size() == 1) {
+      Context *c = cs.front();
+      cs.clear();
+      return c;
+    } else {
+      C_Contexts *c(new C_Contexts(0));
+      c->take(cs);
+      return c;
+    }
+  }
 };
-
-
 
 
 /*

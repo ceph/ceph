@@ -409,6 +409,7 @@ OPTION(osd_debug_drop_pg_create_probability, OPT_DOUBLE, 0)
 OPTION(osd_debug_drop_pg_create_duration, OPT_INT, 1)
 OPTION(osd_debug_drop_op_probability, OPT_DOUBLE, 0)   // probability of stalling/dropping a client op
 OPTION(osd_debug_op_order, OPT_BOOL, false)
+OPTION(osd_debug_verify_snaps_on_info, OPT_BOOL, false)
 OPTION(osd_op_history_size, OPT_U32, 20)    // Max number of completed ops to track
 OPTION(osd_op_history_duration, OPT_U32, 600) // Oldest completed op to track
 OPTION(osd_target_transaction_size, OPT_INT, 30)     // to adjust various transactions that batch smaller items
@@ -468,6 +469,7 @@ OPTION(filestore_kill_at, OPT_INT, 0)            // inject a failure at the n'th
 OPTION(filestore_inject_stall, OPT_INT, 0)       // artificially stall for N seconds in op queue thread
 OPTION(filestore_fail_eio, OPT_BOOL, true)       // fail/crash on EIO
 OPTION(filestore_replica_fadvise, OPT_BOOL, true)
+OPTION(filestore_debug_verify_split, OPT_BOOL, false)
 OPTION(journal_dio, OPT_BOOL, true)
 OPTION(journal_aio, OPT_BOOL, false)
 OPTION(journal_block_align, OPT_BOOL, true)

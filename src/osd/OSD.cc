@@ -118,7 +118,7 @@
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
-#define dout_prefix _prefix(*_dout, whoami, get_osdmap())
+#define dout_prefix _prefix(_dout, whoami, get_osdmap())
 
 static ostream& _prefix(std::ostream* _dout, int whoami, OSDMapRef osdmap) {
   return *_dout << "osd." << whoami << " "
@@ -141,6 +141,7 @@ static CompatSet get_osd_compat_set() {
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_BIGINFO);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_LEVELDBINFO);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_LEVELDBLOG);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER);
   return CompatSet(ceph_osd_feature_compat, ceph_osd_feature_ro_compat,
 		   ceph_osd_feature_incompat);
 }
@@ -188,6 +189,7 @@ void OSDService::_start_split(const set<pg_t> &pgs)
   for (set<pg_t>::const_iterator i = pgs.begin();
        i != pgs.end();
        ++i) {
+    dout(10) << __func__ << ": Starting split on pg " << *i << dendl;
     assert(!in_progress_splits.count(*i));
     in_progress_splits.insert(*i);
   }
@@ -225,6 +227,7 @@ void OSDService::complete_split(const set<pg_t> &pgs)
   for (set<pg_t>::const_iterator i = pgs.begin();
        i != pgs.end();
        ++i) {
+    dout(10) << __func__ << ": Completing split on pg " << *i << dendl;
     assert(in_progress_splits.count(*i));
     in_progress_splits.erase(*i);
   }
@@ -924,9 +927,19 @@ int OSD::init()
 
   // make sure info object exists
   if (!store->exists(coll_t::META_COLL, service.infos_oid)) {
-    dout(10) << "init creating/touching infos object" << dendl;
+    dout(10) << "init creating/touching snapmapper object" << dendl;
     ObjectStore::Transaction t;
     t.touch(coll_t::META_COLL, service.infos_oid);
+    r = store->apply_transaction(t);
+    if (r < 0)
+      return r;
+  }
+
+  // make sure snap mapper object exists
+  if (!store->exists(coll_t::META_COLL, OSD::make_snapmapper_oid())) {
+    dout(10) << "init creating/touching infos object" << dendl;
+    ObjectStore::Transaction t;
+    t.touch(coll_t::META_COLL, OSD::make_snapmapper_oid());
     r = store->apply_transaction(t);
     if (r < 0)
       return r;
@@ -1604,7 +1617,13 @@ void OSD::load_pgs()
     // read pg state, log
     pg->read_state(store, bl);
 
-    pg->check_ondisk_snap_colls(i->second);
+    if (pg->must_upgrade()) {
+      derr << "PG " << pg->info.pgid
+	   << " must upgrade..." << dendl;
+      pg->upgrade(store, i->second);
+    } else {
+      assert(i->second.empty());
+    }
 
     set<pg_t> split_pgs;
     if (osdmap->have_pg_pool(pg->info.pgid.pool()) &&
@@ -2509,6 +2528,11 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 // =========================================
 void OSD::RemoveWQ::_process(boost::tuple<coll_t, SequencerRef, DeletingStateRef> *item)
 {
+  OSDriver driver(
+    store,
+    coll_t(),
+    make_snapmapper_oid());
+  SnapMapper mapper(&driver, 0, 0, 0);
   coll_t &coll = item->get<0>();
   ObjectStore::Sequencer *osr = item->get<1>().get();
   if (osr)
@@ -2521,6 +2545,11 @@ void OSD::RemoveWQ::_process(boost::tuple<coll_t, SequencerRef, DeletingStateRef
   for (vector<hobject_t>::iterator i = olist.begin();
        i != olist.end();
        ++i, ++num) {
+    OSDriver::OSTransaction _t(driver.get_transaction(t));
+    int r = mapper.remove_oid(*i, &_t);
+    if (r != 0 && r != -ENOENT) {
+      assert(0);
+    }
     t->remove(coll, *i);
     if (num >= g_conf->osd_target_transaction_size) {
       store->apply_transaction(osr, *t);
@@ -4585,6 +4614,11 @@ void OSD::split_pgs(
   OSDMapRef nextmap,
   PG::RecoveryCtx *rctx)
 {
+  unsigned pg_num = nextmap->get_pg_num(
+    parent->pool.id);
+  parent->update_snap_mapper_bits(
+    parent->info.pgid.get_split_bits(pg_num)
+    );
   for (set<pg_t>::const_iterator i = childpgids.begin();
        i != childpgids.end();
        ++i) {
@@ -4593,9 +4627,6 @@ void OSD::split_pgs(
     PG* child = _make_pg(nextmap, *i);
     child->lock(true);
     out_pgs->insert(child);
-
-    unsigned pg_num = nextmap->get_pg_num(
-      parent->pool.id);
 
     unsigned split_bits = i->get_split_bits(pg_num);
     dout(10) << "pg_num is " << pg_num << dendl;
