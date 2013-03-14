@@ -1390,17 +1390,9 @@ void Migrator::export_logged_finish(CDir *dir)
   for (set<int>::iterator p = export_notify_ack_waiting[dir].begin();
        p != export_notify_ack_waiting[dir].end();
        ++p) {
-    MExportDirNotify *notify;
-    if (mds->mdsmap->is_clientreplay_or_active_or_stopping(export_peer[dir])) 
-      // dest is still alive.
-      notify = new MExportDirNotify(dir->dirfrag(), true,
-				    pair<int,int>(mds->get_nodeid(), dest),
-				    pair<int,int>(dest, CDIR_AUTH_UNKNOWN));
-    else 
-      // dest is dead.  bystanders will think i am only auth, as per mdcache->handle_mds_failure()
-      notify = new MExportDirNotify(dir->dirfrag(), true,
-				    pair<int,int>(mds->get_nodeid(), CDIR_AUTH_UNKNOWN),
-				    pair<int,int>(dest, CDIR_AUTH_UNKNOWN));
+    MExportDirNotify *notify = new MExportDirNotify(dir->dirfrag(), true,
+						    pair<int,int>(mds->get_nodeid(), dest),
+						    pair<int,int>(dest, CDIR_AUTH_UNKNOWN));
 
     for (set<CDir*>::iterator i = bounds.begin(); i != bounds.end(); ++i)
       notify->get_bounds().push_back((*i)->dirfrag());
@@ -2115,11 +2107,9 @@ void Migrator::import_notify_abort(CDir *dir, set<CDir*>& bounds)
   for (set<int>::iterator p = import_bystanders[dir].begin();
        p != import_bystanders[dir].end();
        ++p) {
-    // NOTE: the bystander will think i am _only_ auth, because they will have seen
-    // the exporter's failure and updated the subtree auth.  see mdcache->handle_mds_failure().
-    MExportDirNotify *notify = 
+    MExportDirNotify *notify =
       new MExportDirNotify(dir->dirfrag(), true,
-			   pair<int,int>(mds->get_nodeid(), CDIR_AUTH_UNKNOWN),
+			   pair<int,int>(import_peer[dir->dirfrag()], mds->get_nodeid()),
 			   pair<int,int>(import_peer[dir->dirfrag()], CDIR_AUTH_UNKNOWN));
     for (set<CDir*>::iterator i = bounds.begin(); i != bounds.end(); ++i)
       notify->get_bounds().push_back((*i)->dirfrag());
