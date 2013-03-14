@@ -255,7 +255,7 @@ namespace librbd {
   {
     map<string, SnapInfo>::const_iterator it;
 
-    for (it = snaps_by_name.begin(); it != snaps_by_name.end(); it++) {
+    for (it = snaps_by_name.begin(); it != snaps_by_name.end(); ++it) {
       if (it->second.id == in_snap_id) {
 	*out_snap_name = it->first;
 	return 0;
@@ -268,7 +268,7 @@ namespace librbd {
   {
     map<string, SnapInfo>::iterator it;
 
-    for (it = snaps_by_name.begin(); it != snaps_by_name.end(); it++) {
+    for (it = snaps_by_name.begin(); it != snaps_by_name.end(); ++it) {
       if (it->second.id == in_snap_id) {
 	*out_pspec = it->second.parent.spec;
 	return 0;

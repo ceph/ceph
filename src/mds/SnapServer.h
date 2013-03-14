@@ -60,7 +60,7 @@ public:
     else {
       map<version_t, snapid_t> t;
       ::decode(t, bl);
-      for (map<version_t, snapid_t>::iterator p = t.begin(); p != t.end(); p++)
+      for (map<version_t, snapid_t>::iterator p = t.begin(); p != t.end(); ++p)
 	pending_destroy[p->first].first = p->second; 
     } 
     ::decode(pending_noop, bl);

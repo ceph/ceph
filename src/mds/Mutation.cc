@@ -42,7 +42,7 @@ void Mutation::drop_pins()
 {
   for (set<MDSCacheObject*>::iterator it = pins.begin();
        it != pins.end();
-       it++) 
+       ++it) 
     (*it)->put(MDSCacheObject::PIN_REQUEST);
   pins.clear();
 }
@@ -88,7 +88,7 @@ void Mutation::drop_local_auth_pins()
 {
   for (set<MDSCacheObject*>::iterator it = auth_pins.begin();
        it != auth_pins.end();
-       it++) {
+       ++it) {
     assert((*it)->is_auth());
     (*it)->auth_unpin(this);
   }
@@ -147,16 +147,16 @@ void Mutation::apply()
   
   for (list<CInode*>::iterator p = dirty_cow_inodes.begin();
        p != dirty_cow_inodes.end();
-       p++) 
+       ++p) 
     (*p)->_mark_dirty(ls);
   for (list<pair<CDentry*,version_t> >::iterator p = dirty_cow_dentries.begin();
        p != dirty_cow_dentries.end();
-       p++)
+       ++p)
     p->first->mark_dirty(p->second, ls);
   
   for (list<ScatterLock*>::iterator p = updated_locks.begin();
        p != updated_locks.end();
-       p++)
+       ++p)
     (*p)->mark_dirty();
 }
 

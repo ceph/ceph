@@ -107,7 +107,7 @@ void Locker::send_lock_message(SimpleLock *lock, int msg)
 {
   for (map<int,int>::iterator it = lock->get_parent()->replicas_begin(); 
        it != lock->get_parent()->replicas_end(); 
-       it++) {
+       ++it) {
     if (mds->mdsmap->get_state(it->first) < MDSMap::STATE_REJOIN) 
       continue;
     MLock *m = new MLock(lock, msg, mds->get_nodeid());
@@ -119,7 +119,7 @@ void Locker::send_lock_message(SimpleLock *lock, int msg, const bufferlist &data
 {
   for (map<int,int>::iterator it = lock->get_parent()->replicas_begin(); 
        it != lock->get_parent()->replicas_end(); 
-       it++) {
+       ++it) {
     if (mds->mdsmap->get_state(it->first) < MDSMap::STATE_REJOIN) 
       continue;
     MLock *m = new MLock(lock, msg, mds->get_nodeid());
@@ -463,7 +463,7 @@ void Locker::set_xlocks_done(Mutation *mut, bool skip_dentry)
 {
   for (set<SimpleLock*>::iterator p = mut->xlocks.begin();
        p != mut->xlocks.end();
-       p++) {
+       ++p) {
     if (skip_dentry &&
 	((*p)->get_type() == CEPH_LOCK_DN || (*p)->get_type() == CEPH_LOCK_DVERSION))
       continue;
@@ -518,7 +518,7 @@ void Locker::_drop_non_rdlocks(Mutation *mut, set<CInode*> *pneed_issue)
       pneed_issue->insert(static_cast<CInode*>(p));
   }
 
-  for (set<int>::iterator p = slaves.begin(); p != slaves.end(); p++) {
+  for (set<int>::iterator p = slaves.begin(); p != slaves.end(); ++p) {
     if (mds->mdsmap->get_state(*p) >= MDSMap::STATE_REJOIN) {
       dout(10) << "_drop_non_rdlocks dropping remote locks on mds." << *p << dendl;
       MMDSSlaveRequest *slavereq = new MMDSSlaveRequest(mut->reqid, mut->attempt,
@@ -1592,7 +1592,7 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, client_t 
 	gather = true;
 	in->client_snap_caps.erase(p++);
       } else
-	p++;
+	++p;
     }
     if (gather)
       eval_cap_gather(in, &need_issue);
@@ -1713,7 +1713,7 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
     it = in->client_caps.find(only_cap->get_client());
   else
     it = in->client_caps.begin();
-  for (; it != in->client_caps.end(); it++) {
+  for (; it != in->client_caps.end(); ++it) {
     Capability *cap = it->second;
     if (cap->is_stale())
       continue;
@@ -1791,7 +1791,7 @@ void Locker::issue_truncate(CInode *in)
   
   for (map<client_t, Capability*>::iterator it = in->client_caps.begin();
        it != in->client_caps.end();
-       it++) {
+       ++it) {
     Capability *cap = it->second;
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_TRUNC,
 				     in->ino(),
@@ -1970,7 +1970,7 @@ void Locker::calc_new_client_ranges(CInode *in, uint64_t size, map<client_t,clie
   // shrink to 0 if no WR|BUFFER caps issued.
   for (map<client_t,Capability*>::iterator p = in->client_caps.begin();
        p != in->client_caps.end();
-       p++) {
+       ++p) {
     if ((p->second->issued() | p->second->wanted()) & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
       client_writeable_range_t& nr = new_ranges[p->first];
       nr.range.first = 0;
@@ -2101,7 +2101,7 @@ void Locker::share_inode_max_size(CInode *in)
   dout(10) << "share_inode_max_size on " << *in << dendl;
   for (map<client_t,Capability*>::iterator it = in->client_caps.begin();
        it != in->client_caps.end();
-       it++) {
+       ++it) {
     const client_t client = it->first;
     Capability *cap = it->second;
     if (cap->is_suppress())
@@ -2500,7 +2500,7 @@ void Locker::kick_cap_releases(MDRequest *mdr)
   client_t client = mdr->get_client();
   for (map<vinodeno_t,ceph_seq_t>::iterator p = mdr->cap_releases.begin();
        p != mdr->cap_releases.end();
-       p++) {
+       ++p) {
     CInode *in = mdcache->get_inode(p->first);
     if (!in)
       continue;
@@ -2842,7 +2842,7 @@ void Locker::handle_client_cap_release(MClientCapRelease *m)
   client_t client = m->get_source().num();
   dout(10) << "handle_client_cap_release " << *m << dendl;
 
-  for (vector<ceph_mds_cap_item>::iterator p = m->caps.begin(); p != m->caps.end(); p++) {
+  for (vector<ceph_mds_cap_item>::iterator p = m->caps.begin(); p != m->caps.end(); ++p) {
     inodeno_t ino((uint64_t)p->ino);
     CInode *in = mdcache->get_inode(ino);
     if (!in) {
@@ -3018,7 +3018,7 @@ void Locker::revoke_client_leases(SimpleLock *lock)
   CDentry *dn = static_cast<CDentry*>(lock->get_parent());
   for (map<client_t, ClientLease*>::iterator p = dn->client_lease_map.begin();
        p != dn->client_lease_map.end();
-       p++) {
+       ++p) {
     ClientLease *l = p->second;
     
     n++;
