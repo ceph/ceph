@@ -854,6 +854,25 @@ extern "C" int ceph_get_osd_crush_location(struct ceph_mount_info *cmount,
   return needed;
 }
 
+extern "C" int ceph_get_osd_addr(struct ceph_mount_info *cmount, int osd,
+    struct sockaddr_storage *addr)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+
+  if (!addr)
+    return -EINVAL;
+
+  entity_addr_t address;
+  int ret = cmount->get_client()->get_osd_addr(osd, address);
+  if (ret < 0)
+    return ret;
+
+  memcpy(addr, &address.ss_addr(), sizeof(*addr));
+
+  return 0;
+}
+
 extern "C" int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int fh,
 					    loff_t offset, struct sockaddr_storage *addr, int naddr)
 {
