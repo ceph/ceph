@@ -930,6 +930,17 @@ int ceph_get_osd_crush_location(struct ceph_mount_info *cmount,
     int osd, char *path, size_t len);
 
 /**
+ * Get the network address of an OSD.
+ *
+ * @param cmount the ceph mount handle.
+ * @param osd the OSD id.
+ * @param addr the OSD network address.
+ * @returns zero on success, other returns a negative error code.
+ */
+int ceph_get_osd_addr(struct ceph_mount_info *cmount, int osd,
+    struct sockaddr_storage *addr);
+
+/**
  * Get the file layout stripe unit granularity.
  * @param cmount the ceph mount handle.
  * @returns the stripe unit granularity or a negative error code on failure.
