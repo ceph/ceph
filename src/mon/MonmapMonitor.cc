@@ -404,6 +404,11 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
         goto out;
       }
 
+      if (pending_map.size() == 1) {
+	err = -EINVAL;
+	ss << "error: refusing removal of last monitor " << name;
+	goto out;
+      }
       entity_addr_t addr = pending_map.get_addr(name);
       pending_map.remove(name);
       pending_map.last_changed = ceph_clock_now(g_ceph_context);
