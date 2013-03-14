@@ -191,7 +191,7 @@ PaxosService *Monitor::get_paxos_service_by_name(const string& name)
 
 Monitor::~Monitor()
 {
-  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
+  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     delete *p;
   delete paxos;
   assert(session_map.sessions.empty());
@@ -563,7 +563,7 @@ void Monitor::shutdown()
   }
   
   // clean up
-  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
+  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     (*p)->shutdown();
 
   finish_contexts(g_ceph_context, waitfor_quorum, -ECANCELED);
@@ -681,7 +681,7 @@ void Monitor::reset()
 
   paxos->restart();
 
-  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
+  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     (*p)->restart();
 }
 
@@ -1962,7 +1962,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features)
 		<< " won leader election with quorum " << quorum << "\n";
 
   paxos->leader_init();
-  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
+  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     (*p)->election_finished();
 
   finish_election();
@@ -1995,7 +1995,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features
   sync_role &= ~SYNC_ROLE_LEADER;
   
   paxos->peon_init();
-  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
+  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     (*p)->election_finished();
 
   finish_election();
@@ -2194,7 +2194,7 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
 
   for (vector<PaxosService*>::iterator p = paxos_service.begin();
        p != paxos_service.end();
-       p++) {
+       ++p) {
     PaxosService *s = *p;
     s->get_health(summary, detailbl ? &detail : NULL);
   }
@@ -2876,7 +2876,7 @@ void Monitor::resend_routed_requests()
   int mon = get_leader();
   for (map<uint64_t, RoutedRequest*>::iterator p = routed_requests.begin();
        p != routed_requests.end();
-       p++) {
+       ++p) {
     RoutedRequest *rr = p->second;
 
     bufferlist::iterator q = rr->request_bl.begin();
@@ -2896,7 +2896,7 @@ void Monitor::remove_session(MonSession *s)
   assert(!s->closed);
   for (set<uint64_t>::iterator p = s->routed_request_tids.begin();
        p != s->routed_request_tids.end();
-       p++) {
+       ++p) {
     if (routed_requests.count(*p)) {
       RoutedRequest *rr = routed_requests[*p];
       dout(10) << " dropping routed request " << rr->tid << dendl;
@@ -3574,7 +3574,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   s->until += g_conf->mon_subscribe_interval;
   for (map<string,ceph_mon_subscribe_item>::iterator p = m->what.begin();
        p != m->what.end();
-       p++) {
+       ++p) {
     // if there are any non-onetime subscriptions, we need to reply to start the resubscribe timer
     if ((p->second.flags & CEPH_SUBSCRIBE_ONETIME) == 0)
       reply = true;
@@ -3738,7 +3738,7 @@ void Monitor::tick()
   // ok go.
   dout(11) << "tick" << dendl;
   
-  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++) {
+  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p) {
     (*p)->tick();
   }
   
