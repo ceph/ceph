@@ -768,7 +768,7 @@ int CrushCompiler::compile(istream& in, const char *infn)
     assert(!line_pos.empty());
     map<int,int>::iterator p = line_pos.upper_bound(cpos);
     if (p != line_pos.begin())
-      p--;
+      --p;
     int line = p->second;
     int pos = cpos - p->first;
     err << infn << ":" << line //<< ":" << (pos+1)
