@@ -123,7 +123,7 @@ void MonMap::print(ostream& out) const
   unsigned i = 0;
   for (map<entity_addr_t,string>::const_iterator p = addr_name.begin();
        p != addr_name.end();
-       p++)
+       ++p)
     out << i++ << ": " << p->first << " mon." << p->second << "\n";
 }
 

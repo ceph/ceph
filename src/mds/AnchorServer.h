@@ -53,9 +53,9 @@ class AnchorServer : public MDSTableServer {
     sort.insert(pending_create.begin(), pending_create.end());
     sort.insert(pending_destroy.begin(), pending_destroy.end());
     for (map<version_t, pair<inodeno_t, vector<Anchor> > >::iterator p = pending_update.begin();
-	 p != pending_update.end(); p++)
+	 p != pending_update.end(); ++p)
       sort[p->first] = p->second.first;
-    for (map<version_t, inodeno_t>::iterator p = sort.begin(); p != sort.end(); p++)
+    for (map<version_t, inodeno_t>::iterator p = sort.begin(); p != sort.end(); ++p)
       pending_ops[p->second].push_back(pair<version_t, Context*>(p->first, NULL));
   }
 

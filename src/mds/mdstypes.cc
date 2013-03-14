@@ -278,7 +278,7 @@ void inode_t::decode(bufferlist::iterator &p)
     map<client_t, client_writeable_range_t::byte_range_t> m;
     ::decode(m, p);
     for (map<client_t, client_writeable_range_t::byte_range_t>::iterator
-	q = m.begin(); q != m.end(); q++)
+	q = m.begin(); q != m.end(); ++q)
       client_ranges[q->first].range = q->second;
   }
     
