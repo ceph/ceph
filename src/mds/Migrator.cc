@@ -238,7 +238,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	export_unlock(dir);
 	export_locks.erase(dir);
 	dir->state_clear(CDir::STATE_EXPORTING);
-	if (export_peer[dir] != who) // tell them.
+	if (mds->mdsmap->is_clientreplay_or_active_or_stopping(export_peer[dir])) // tell them.
 	  mds->send_message_mds(new MExportDirCancel(dir->dirfrag()), export_peer[dir]);
 	break;
 	
@@ -247,7 +247,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	dir->unfreeze_tree();  // cancel the freeze
 	export_state.erase(dir); // clean up
 	dir->state_clear(CDir::STATE_EXPORTING);
-	if (export_peer[dir] != who) // tell them.
+	if (mds->mdsmap->is_clientreplay_or_active_or_stopping(export_peer[dir])) // tell them.
 	  mds->send_message_mds(new MExportDirCancel(dir->dirfrag()), export_peer[dir]);
 	break;
 
@@ -278,7 +278,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	export_unlock(dir);
 	export_locks.erase(dir);
 	dir->state_clear(CDir::STATE_EXPORTING);
-	if (export_peer[dir] != who) // tell them.
+	if (mds->mdsmap->is_clientreplay_or_active_or_stopping(export_peer[dir])) // tell them.
 	  mds->send_message_mds(new MExportDirCancel(dir->dirfrag()), export_peer[dir]);
 	break;
 	
