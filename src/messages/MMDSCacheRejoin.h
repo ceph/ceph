@@ -192,11 +192,11 @@ class MMDSCacheRejoin : public Message {
       ::decode(attempt, bl);
     }
   };
-  map<vinodeno_t, slave_reqid> authpinned_inodes;
+  map<vinodeno_t, list<slave_reqid> > authpinned_inodes;
   map<vinodeno_t, slave_reqid> frozen_authpin_inodes;
   map<vinodeno_t, map<__s32, slave_reqid> > xlocked_inodes;
-  map<vinodeno_t, map<__s32, slave_reqid> > wrlocked_inodes;
-  map<dirfrag_t, map<string_snap_t, slave_reqid> > authpinned_dentries;
+  map<vinodeno_t, map<__s32, list<slave_reqid> > > wrlocked_inodes;
+  map<dirfrag_t, map<string_snap_t, list<slave_reqid> > > authpinned_dentries;
   map<dirfrag_t, map<string_snap_t, slave_reqid> > xlocked_dentries;
   
   MMDSCacheRejoin() :
@@ -238,7 +238,7 @@ public:
     ::encode(bl, inode_base);
   }
   void add_inode_authpin(vinodeno_t ino, const metareqid_t& ri, __u32 attempt) {
-    authpinned_inodes[ino] = slave_reqid(ri, attempt);
+    authpinned_inodes[ino].push_back(slave_reqid(ri, attempt));
   }
   void add_inode_frozen_authpin(vinodeno_t ino, const metareqid_t& ri, __u32 attempt) {
     frozen_authpin_inodes[ino] = slave_reqid(ri, attempt);
@@ -247,7 +247,7 @@ public:
     xlocked_inodes[ino][lt] = slave_reqid(ri, attempt);
   }
   void add_inode_wrlock(vinodeno_t ino, int lt, const metareqid_t& ri, __u32 attempt) {
-    wrlocked_inodes[ino][lt] = slave_reqid(ri, attempt);
+    wrlocked_inodes[ino][lt].push_back(slave_reqid(ri, attempt));
   }
 
   void add_scatterlock_state(CInode *in) {
@@ -286,7 +286,7 @@ public:
   }
   void add_dentry_authpin(dirfrag_t df, const string& dname, snapid_t last,
 			  const metareqid_t& ri, __u32 attempt) {
-    authpinned_dentries[df][string_snap_t(dname, last)] = slave_reqid(ri, attempt);
+    authpinned_dentries[df][string_snap_t(dname, last)].push_back(slave_reqid(ri, attempt));
   }
   void add_dentry_xlock(dirfrag_t df, const string& dname, snapid_t last,
 			const metareqid_t& ri, __u32 attempt) {
