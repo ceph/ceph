@@ -1933,7 +1933,7 @@ bool MDS::_dispatch(Message *m)
     do {
       int k = rand() % s.size();
       set<int>::iterator p = s.begin();
-      while (k--) p++;
+      while (k--) ++p;
       dest = *p;
     } while (dest == whoami);
     mdcache->migrator->export_dir_nicely(dir,dest);

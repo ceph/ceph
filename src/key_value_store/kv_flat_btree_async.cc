@@ -373,7 +373,7 @@ int KvFlatBtreeAsync::split(const index_data &idata) {
   client_index_lock.Unlock();
   for (int i = 0; i < k; i++) {
     to_create[0].omap.insert(*it);
-    it++;
+    ++it;
   }
   to_create[0].min_kdata = idata.min_kdata;
   to_create[0].max_kdata = key_data(to_create[0].omap.rbegin()->first);
@@ -758,7 +758,7 @@ void KvFlatBtreeAsync::set_up_ops(
     librados::ObjectWriteOperation* > >::iterator it;
 
   //skip the prefixing part
-  for(it = ops->begin(); it->first.first == ADD_PREFIX; it++) {}
+  for(it = ops->begin(); it->first.first == ADD_PREFIX; ++it) {}
   map<string, bufferlist> to_insert;
   std::set<string> to_remove;
   map<string, pair<bufferlist, int> > assertions;
@@ -766,7 +766,7 @@ void KvFlatBtreeAsync::set_up_ops(
     for (int i = 0; i < (int)idata.to_delete.size(); ++i) {
       it->first = pair<int, string>(UNWRITE_OBJECT, idata.to_delete[i].obj);
       set_up_unwrite_object(delete_vector[i].version, it->second);
-      it++;
+      ++it;
     }
   }
   for (int i = 0; i < (int)idata.to_create.size(); ++i) {
@@ -779,7 +779,7 @@ void KvFlatBtreeAsync::set_up_ops(
       it->first = pair<int, string>(AIO_MAKE_OBJECT, idata.to_create[i].obj);
     }
     set_up_make_object(create_vector[i].omap, it->second);
-    it++;
+    ++it;
   }
   for (int i = 0; i < (int)idata.to_delete.size(); ++i) {
     index_data this_entry = idata;
@@ -793,7 +793,7 @@ void KvFlatBtreeAsync::set_up_ops(
     to_remove.insert(idata.to_delete[i].max.encoded());
     it->first = pair<int, string>(REMOVE_OBJECT, idata.to_delete[i].obj);
     set_up_delete_object(it->second);
-    it++;
+    ++it;
   }
   if ((int)idata.to_create.size() <= 2) {
     it->second->omap_cmp(assertions, err);
@@ -2052,7 +2052,7 @@ bool KvFlatBtreeAsync::is_consistent() {
       idata.decode(b);
       if (idata.prefix != "") {
 	for(vector<delete_data>::iterator dit = idata.to_delete.begin();
-	    dit != idata.to_delete.end(); dit++) {
+	    dit != idata.to_delete.end(); ++dit) {
 	  librados::ObjectReadOperation oro;
 	  librados::AioCompletion * aioc = rados.aio_create_completion();
 	  bufferlist un;
@@ -2082,7 +2082,7 @@ bool KvFlatBtreeAsync::is_consistent() {
 	  special_names.insert(dit->obj);
 	}
 	for(vector<create_data >::iterator cit = idata.to_create.begin();
-	    cit != idata.to_create.end(); cit++) {
+	    cit != idata.to_create.end(); ++cit) {
 	  special_names.insert(cit->obj);
 	}
       }

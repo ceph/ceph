@@ -238,7 +238,7 @@ void AuthMonitor::encode_pending(MonitorDBStore::Transaction *t)
   __u8 v = 1;
   ::encode(v, bl);
   vector<Incremental>::iterator p;
-  for (p = pending_auth.begin(); p != pending_auth.end(); p++)
+  for (p = pending_auth.begin(); p != pending_auth.end(); ++p)
     p->encode(bl, mon->get_quorum_features());
 
   version_t version = get_version() + 1;
@@ -628,7 +628,7 @@ void AuthMonitor::import_keyring(KeyRing& keyring)
 {
   for (map<EntityName, EntityAuth>::iterator p = keyring.get_keys().begin();
        p != keyring.get_keys().end();
-       p++) {
+       ++p) {
     KeyServerData::Incremental auth_inc;
     auth_inc.name = p->first;
     auth_inc.auth = p->second; 

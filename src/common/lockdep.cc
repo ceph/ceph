@@ -81,11 +81,11 @@ int lockdep_dump_locks()
 
   for (hash_map<pthread_t, map<int,BackTrace*> >::iterator p = held.begin();
        p != held.end();
-       p++) {
+       ++p) {
     lockdep_dout(0) << "--- thread " << p->first << " ---" << dendl;
     for (map<int,BackTrace*>::iterator q = p->second.begin();
 	 q != p->second.end();
-	 q++) {
+	 ++q) {
       lockdep_dout(0) << "  * " << lock_names[q->first] << "\n";
       if (q->second)
 	q->second->print(*_dout);
@@ -166,7 +166,7 @@ int lockdep_will_lock(const char *name, int id)
   map<int, BackTrace *> &m = held[p];
   for (map<int, BackTrace *>::iterator p = m.begin();
        p != m.end();
-       p++) {
+       ++p) {
     if (p->first == id) {
       lockdep_dout(0) << "\n";
       *_dout << "recursive lock of " << name << " (" << id << ")\n";
@@ -195,7 +195,7 @@ int lockdep_will_lock(const char *name, int id)
 	lockdep_dout(0) << "btw, i am holding these locks:" << dendl;
 	for (map<int, BackTrace *>::iterator q = m.begin();
 	     q != m.end();
-	     q++) {
+	     ++q) {
 	  lockdep_dout(0) << "  " << lock_names[q->first] << " (" << q->first << ")" << dendl;
 	  if (q->second) {
 	    lockdep_dout(0) << " ";

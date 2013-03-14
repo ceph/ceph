@@ -593,7 +593,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   // snaprealms
   for (vector<ceph_mds_snaprealm_reconnect>::iterator p = m->realms.begin();
        p != m->realms.end();
-       p++) {
+       ++p) {
     CInode *in = mdcache->get_inode(inodeno_t(p->ino));
     if (in && in->state_test(CInode::STATE_PURGING))
       continue;
@@ -684,7 +684,7 @@ void Server::reconnect_tick()
     dout(10) << "reconnect timed out" << dendl;
     for (set<client_t>::iterator p = client_reconnect_gather.begin();
 	 p != client_reconnect_gather.end();
-	 p++) {
+	 ++p) {
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
       dout(1) << "reconnect gave up on " << session->info.inst << dendl;
       failed_reconnects++;
@@ -1148,7 +1148,7 @@ void Server::handle_client_request(MClientRequest *req)
     client_t client = req->get_source().num();
     for (vector<MClientRequest::Release>::iterator p = req->releases.begin();
 	 p != req->releases.end();
-	 p++)
+	 ++p)
       mds->locker->process_request_cap_release(mdr, client, p->item, p->dname);
     req->put();
   }
@@ -2912,7 +2912,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   __u32 numfiles = 0;
   while (it != dir->end() && numfiles < max) {
     CDentry *dn = it->second;
-    it++;
+    ++it;
 
     if (dn->state_test(CDentry::STATE_PURGING))
       continue;
@@ -2949,7 +2949,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
 	continue;
       } else {
 	// touch everything i _do_ have
-	for (CDir::map_t::iterator p = dir->begin(); p != dir->end(); p++)
+	for (CDir::map_t::iterator p = dir->begin(); p != dir->end(); ++p)
 	  if (!p->second->get_linkage()->is_null())
 	    mdcache->lru.lru_touch(p->second);
 
@@ -6602,7 +6602,7 @@ void Server::_logged_slave_rename(MDRequest *mdr,
     list<CDir*> bounds;
     if (srcdnl->get_inode()->is_dir()) {
       srcdnl->get_inode()->get_dirfrags(bounds);
-      for (list<CDir*>::iterator p = bounds.begin(); p != bounds.end(); p++)
+      for (list<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p)
 	(*p)->state_set(CDir::STATE_EXPORTBOUND);
     }
 
@@ -7110,7 +7110,7 @@ void Server::handle_client_lssnap(MDRequest *mdr)
   bufferlist dnbl;
   for (map<snapid_t,SnapInfo*>::iterator p = infomap.begin();
        p != infomap.end();
-       p++) {
+       ++p) {
     dout(10) << p->first << " -> " << *p->second << dendl;
 
     // actual

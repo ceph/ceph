@@ -158,7 +158,7 @@ void MDSTableServer::handle_mds_recovery(int who)
   // resend agrees for recovered mds
   for (map<version_t,mds_table_pending_t>::iterator p = pending_for_mds.begin();
        p != pending_for_mds.end();
-       p++) {
+       ++p) {
     if (who >= 0 && p->second.mds != who)
       continue;
     MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_AGREE, p->second.reqid, p->second.tid);
