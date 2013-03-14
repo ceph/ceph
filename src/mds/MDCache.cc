@@ -5495,8 +5495,10 @@ void MDCache::_queue_file_recover(CInode *in)
   dout(15) << "_queue_file_recover " << *in << dendl;
   assert(in->is_auth());
   in->state_clear(CInode::STATE_NEEDSRECOVER);
-  in->state_set(CInode::STATE_RECOVERING);
-  in->auth_pin(this);
+  if (!in->state_test(CInode::STATE_RECOVERING)) {
+    in->state_set(CInode::STATE_RECOVERING);
+    in->auth_pin(this);
+  }
   file_recover_queue.insert(in);
 }
 
