@@ -271,7 +271,7 @@ int librados::IoCtxImpl::snap_list(vector<uint64_t> *snaps)
   const pg_pool_t *pi = objecter->osdmap->get_pg_pool(poolid);
   for (map<snapid_t,pool_snap_info_t>::const_iterator p = pi->snaps.begin();
        p != pi->snaps.end();
-       p++)
+       ++p)
     snaps->push_back(p->first);
   return 0;
 }
@@ -282,7 +282,7 @@ int librados::IoCtxImpl::snap_lookup(const char *name, uint64_t *snapid)
   const pg_pool_t *pi = objecter->osdmap->get_pg_pool(poolid);
   for (map<snapid_t,pool_snap_info_t>::const_iterator p = pi->snaps.begin();
        p != pi->snaps.end();
-       p++) {
+       ++p) {
     if (p->second.name == name) {
       *snapid = p->first;
       return 0;
@@ -1374,7 +1374,7 @@ int librados::IoCtxImpl::getxattrs(const object_t& oid,
     cond.Wait(mylock);
   mylock.Unlock();
 
-  for (map<string,bufferlist>::iterator p = aset.begin(); p != aset.end(); p++) {
+  for (map<string,bufferlist>::iterator p = aset.begin(); p != aset.end(); ++p) {
     ldout(client->cct, 10) << "IoCtxImpl::getxattrs: xattr=" << p->first << dendl;
     attrset[p->first.c_str()] = p->second;
   }
