@@ -2521,7 +2521,8 @@ void MDCache::send_subtree_resolves()
        ++p) {
     if (*p == mds->whoami)
       continue;
-    resolves[*p] = new MMDSResolve;
+    if (mds->is_resolve() || mds->mdsmap->is_resolve(*p))
+      resolves[*p] = new MMDSResolve;
   }
 
   // known
@@ -2841,7 +2842,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
 	  migrator->import_reverse(dir);
 	} else {
 	  dout(7) << "ambiguous import succeeded on " << *dir << dendl;
-	  migrator->import_finish(dir);
+	  migrator->import_finish(dir, true);
 	}
 	my_ambiguous_imports.erase(p);  // no longer ambiguous.
       }
@@ -3436,7 +3437,12 @@ void MDCache::rejoin_send_rejoins()
        ++p) {
     CDir *dir = p->first;
     assert(dir->is_subtree_root());
-    assert(!dir->is_ambiguous_dir_auth());
+    if (dir->is_ambiguous_dir_auth()) {
+      // exporter is recovering, importer is survivor.
+      assert(rejoins.count(dir->authority().first));
+      assert(!rejoins.count(dir->authority().second));
+      continue;
+    }
 
     // my subtree?
     if (dir->is_auth())
