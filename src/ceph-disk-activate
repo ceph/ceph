@@ -483,8 +483,10 @@ def mount_activate(
     try:
         (osd_id, cluster) = activate(path, activate_key_template, init)
 
-        # check if the disk is already active
+        # check if the disk is already active, or if something else is already
+        # mounted there
         active = False
+        other = False
         src_dev = os.stat(path).st_dev
         try:
             dst_dev = os.stat('/var/lib/ceph/osd/{cluster}-{osd_id}'.format(
@@ -492,11 +494,17 @@ def mount_activate(
                     osd_id=osd_id)).st_dev
             if src_dev == dst_dev:
                 active = True
+            else:
+                parent_dev = os.stat('/var/lib/ceph/osd').st_dev
+                if dst_dev != parent_dev:
+                    other = True
         except:
             pass
         if active:
             log.info('%s osd.%s already mounted in position; unmounting ours.' % (cluster, osd_id))
             unmount(path)
+        elif other:
+            raise ActivateError('another %s osd.%s already mounted in position (old/different cluster instance?); unmounting ours.' % (cluster, osd_id))
         else:
             move_mount(
                 path=path,
