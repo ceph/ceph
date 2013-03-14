@@ -2918,6 +2918,8 @@ void MDCache::maybe_resolve_finish()
       recalc_auth_bits();
       trim_non_auth(); 
       mds->resolve_done();
+    } else {
+      maybe_send_pending_rejoins();
     }
   }
 }
@@ -3402,6 +3404,13 @@ void MDCache::rejoin_send_rejoins()
 {
   dout(10) << "rejoin_send_rejoins with recovery_set " << recovery_set << dendl;
 
+  if (!resolve_gather.empty()) {
+    dout(7) << "rejoin_send_rejoins still waiting for resolves ("
+	    << resolve_gather << ")" << dendl;
+    rejoins_pending = true;
+    return;
+  }
+
   map<int, MMDSCacheRejoin*> rejoins;
 
   // encode cap list once.
@@ -3575,6 +3584,7 @@ void MDCache::rejoin_send_rejoins()
     mds->send_message_mds(p->second, p->first);
   }
   rejoin_ack_gather.insert(mds->whoami);   // we need to complete rejoin_gather_finish, too
+  rejoins_pending = false;
 
   // nothing?
   if (mds->is_rejoin() && rejoins.empty()) {
