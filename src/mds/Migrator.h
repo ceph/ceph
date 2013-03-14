@@ -273,12 +273,13 @@ protected:
   void import_reverse_unfreeze(CDir *dir);
   void import_reverse_final(CDir *dir);
   void import_notify_abort(CDir *dir, set<CDir*>& bounds);
+  void import_notify_finish(CDir *dir, set<CDir*>& bounds);
   void import_logged_start(dirfrag_t df, CDir *dir, int from,
 			   map<client_t,entity_inst_t> &imported_client_map,
 			   map<client_t,uint64_t>& sseqmap);
   void handle_export_finish(MExportDirFinish *m);
 public:
-  void import_finish(CDir *dir);
+  void import_finish(CDir *dir, bool notify);
 protected:
 
   void handle_export_caps(MExportCaps *m);

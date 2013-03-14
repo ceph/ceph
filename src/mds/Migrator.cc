@@ -2088,6 +2088,23 @@ void Migrator::import_reverse(CDir *dir)
   }
 }
 
+void Migrator::import_notify_finish(CDir *dir, set<CDir*>& bounds)
+{
+  dout(7) << "import_notify_finish " << *dir << dendl;
+
+  for (set<int>::iterator p = import_bystanders[dir].begin();
+       p != import_bystanders[dir].end();
+       ++p) {
+    MExportDirNotify *notify =
+      new MExportDirNotify(dir->dirfrag(), false,
+			   pair<int,int>(import_peer[dir->dirfrag()], mds->get_nodeid()),
+			   pair<int,int>(mds->get_nodeid(), CDIR_AUTH_UNKNOWN));
+    for (set<CDir*>::iterator i = bounds.begin(); i != bounds.end(); i++)
+      notify->get_bounds().push_back((*i)->dirfrag());
+    mds->send_message_mds(notify, *p);
+  }
+}
+
 void Migrator::import_notify_abort(CDir *dir, set<CDir*>& bounds)
 {
   dout(7) << "import_notify_abort " << *dir << dendl;
@@ -2183,11 +2200,11 @@ void Migrator::handle_export_finish(MExportDirFinish *m)
   CDir *dir = cache->get_dirfrag(m->get_dirfrag());
   assert(dir);
   dout(7) << "handle_export_finish on " << *dir << dendl;
-  import_finish(dir);
+  import_finish(dir, false);
   m->put();
 }
 
-void Migrator::import_finish(CDir *dir) 
+void Migrator::import_finish(CDir *dir, bool notify)
 {
   dout(7) << "import_finish on " << *dir << dendl;
 
@@ -2205,6 +2222,10 @@ void Migrator::import_finish(CDir *dir)
   // remove pins
   set<CDir*> bounds;
   cache->get_subtree_bounds(dir, bounds);
+
+  if (notify)
+    import_notify_finish(dir, bounds);
+
   import_remove_pins(dir, bounds);
 
   map<CInode*, map<client_t,Capability::Export> > cap_imports;
