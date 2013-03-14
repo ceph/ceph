@@ -11,6 +11,53 @@ from ..orchestra import run
 
 log = logging.getLogger(__name__)
 
+def _get_system_type(remote):
+    """
+    Return this system type (for example, deb or rpm)
+    """
+    r = remote.run(
+        args= [
+            'sudo','lsb_release', '-is',
+        ],
+    stdout=StringIO(),
+    )
+    system_value = r.stdout.getvalue().strip()
+    log.debug("System to be installed: %s" % system_value)
+    if system_value in ['Ubuntu',]:
+	return "deb"
+    if system_value in ['CentOS',]:
+        return "rpm"
+    return system_value
+
+def _get_baseurlinfo_and_dist(ctx, remote, config):
+    retval = {}
+    r = remote.run(
+            args=['lsb_release', '-sc'],
+            stdout=StringIO(),
+            )
+    retval['dist'] = r.stdout.getvalue().strip()
+    r = remote.run(
+            args=['arch'],
+            stdout=StringIO(),
+            )
+    retval['arch'] = r.stdout.getvalue().strip()
+
+    # branch/tag/sha1 flavor
+    retval['flavor'] = config.get('flavor', 'basic')
+
+    uri = None
+    log.info('config is %s', config)
+    if config.get('sha1') is not None:
+        uri = 'sha1/' + config.get('sha1')
+    elif config.get('tag') is not None:
+        uri = 'ref/' + config.get('tag')
+    elif config.get('branch') is not None:
+        uri = 'ref/' + config.get('branch')
+    else:
+        uri = 'ref/master'
+    retval['uri'] = uri
+
+    return retval
 
 def _update_deb_package_list_and_install(ctx, remote, debs, config):
     """
@@ -38,39 +85,14 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
                 )
 
     # get distro name and arch
-    r = remote.run(
-            args=['lsb_release', '-sc'],
-            stdout=StringIO(),
-            )
-    dist = r.stdout.getvalue().strip()
-    r = remote.run(
-            args=['arch'],
-            stdout=StringIO(),
-            )
-    arch = r.stdout.getvalue().strip()
-    log.info("dist %s arch %s", dist, arch)
-
-    # branch/tag/sha1 flavor
-    flavor = config.get('flavor', 'basic')
-
-    uri = None
-    log.info('config is %s', config)
-    if config.get('sha1') is not None:
-        uri = 'sha1/' + config.get('sha1')
-    elif config.get('tag') is not None:
-        uri = 'ref/' + config.get('tag')
-    elif config.get('branch') is not None:
-        uri = 'ref/' + config.get('branch')
-    else:
-        uri = 'ref/master'
-
+    baseparms = _get_baseurlinfo_and_dist(ctx, remote, config)
+    log.info("Installing packages: {pkglist} on remote deb {arch}".format(
+            pkglist=", ".join(debs), arch=baseparms['arch']))
+    dist = baseparms['dist']
     base_url = 'http://{host}/ceph-deb-{dist}-{arch}-{flavor}/{uri}'.format(
         host=ctx.teuthology_config.get('gitbuilder_host',
                                        'gitbuilder.ceph.com'),
-        dist=dist,
-        arch=arch,
-        flavor=flavor,
-        uri=uri,
+        **baseparms
         )
     log.info('Pulling from %s', base_url)
 
@@ -111,20 +133,48 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
         stdout=StringIO(),
         )
 
+def _update_el6_package_list_and_install(ctx, remote, el6, config):
+    baseparms = _get_baseurlinfo_and_dist(ctx, remote, config)
+    log.info("Installing packages: {pkglist} on remote rpm {arch}".format(
+            pkglist=", ".join(el6), arch=baseparms['arch']))
+    host=ctx.teuthology_config.get('gitbuilder_host',
+                                       'gitbuilder.ceph.com')
+    r = remote.run(
+        args=[
+            'lsb_release', '-rs'], stdout=StringIO())
+    relval = r.stdout.getvalue()
+    relval = relval[0:relval.find('.')]
+    
+    start_of_url = 'http://{host}/ceph-rpm-centos{relval}-{arch}-{flavor}/'.format(
+            host=host,relval=relval,**baseparms)
+    # Should the REALEASE value get extracted from somewhere?
+    RELEASE = "1-0"
+    end_of_url = '{uri}/noarch/ceph-release-{release}.el{relval}.noarch.rpm'.format(
+            uri=baseparms['uri'],release=RELEASE,relval=relval)
+    base_url = '%s%s' % (start_of_url, end_of_url)
+    remote.run(
+        args=['sudo','yum','reinstall',base_url,'-y',], stdout=StringIO())
+    for cpack in el6:
+        remote.run(args=['sudo', 'yum', 'install', cpack, '-y',],stdout=StringIO())
 
-def install_debs(ctx, debs, config):
+def install_packages(ctx, pkgs, config):
     """
     installs Debian packages.
     """
-    log.info("Installing ceph debian packages: {debs}".format(
-            debs=', '.join(debs)))
+    install_pkgs = {
+        "deb": _update_deb_package_list_and_install,
+        "rpm": _update_el6_package_list_and_install,
+        }
     with parallel() as p:
         for remote in ctx.cluster.remotes.iterkeys():
+            system_type = _get_system_type(remote)
             p.spawn(
-                _update_deb_package_list_and_install,
-                ctx, remote, debs, config)
+                install_pkgs[system_type],
+                ctx, remote, pkgs[system_type], config)
 
 def _remove_deb(remote, debs):
+    log.info("Removing packages: {pkglist} on Debian system.".format(
+            pkglist=", ".join(debs)))
     # first ask nicely
     remote.run(
         args=[
@@ -161,14 +211,39 @@ def _remove_deb(remote, debs):
         stdout=StringIO(),
         )
 
-def remove_debs(ctx, debs):
-    log.info("Removing/purging debian packages {debs}".format(
-            debs=', '.join(debs)))
+def _remove_el6(remote, el6):
+    log.info("Removing packages: {pkglist} on rpm system.".format(
+            pkglist=", ".join(el6)))
+    remote.run(
+        args=[
+            'for', 'd', 'in',
+            ] + el6 + [
+            run.Raw(';'),
+            'do',
+            'sudo', 'yum', 'remove',
+            run.Raw('$d'),
+            '-y',
+            run.Raw('||'),
+            'true',
+            run.Raw(';'),
+            'done',
+            ])
+    remote.run(
+        args=[
+            'yum', 'clean', 'expire-cache',
+            ])
+
+def remove_packages(ctx, pkgs):
+    remove_pkgs = {
+        "deb": _remove_deb,
+        "rpm": _remove_el6,
+        }
     with parallel() as p:
         for remote in ctx.cluster.remotes.iterkeys():
-            p.spawn(_remove_deb, remote, debs)
+            system_type = _get_system_type(remote)
+            p.spawn(remove_pkgs[system_type], remote, pkgs[system_type])
 
-def _remove_sources_list(remote):
+def _remove_sources_list_deb(remote):
     remote.run(
         args=[
             'sudo', 'rm', '-f', '/etc/apt/sources.list.d/ceph.list',
@@ -181,12 +256,44 @@ def _remove_sources_list(remote):
         stdout=StringIO(),
        )
 
+def _remove_sources_list_el6(remote):
+    remote.run(
+        args=[
+            'sudo', 'rm', '-f', '/etc/yum.repos.d/ceph.repo',
+            run.Raw('||'),
+            'true',
+            ],
+        stdout=StringIO(),
+       )
+    # There probably should be a way of removing these files that is implemented in the yum/rpm
+    # remove procedures for the ceph package.
+    remote.run(
+        args=[
+            'sudo', 'rm', '-fr', '/var/lib/ceph',
+            run.Raw('||'),
+            'true',
+            ],
+        stdout=StringIO(),
+       )
+    remote.run(
+        args=[
+            'sudo', 'rm', '-fr', '/var/log/ceph',
+            run.Raw('||'),
+            'true',
+            ],
+        stdout=StringIO(),
+       )
+
 def remove_sources(ctx):
-    log.info("Removing ceph sources list from apt")
+    remove_sources_pkgs = {
+        'deb': _remove_sources_list_deb,
+        'rpm': _remove_sources_list_el6,
+        }
+    log.info("Removing ceph sources lists")
     with parallel() as p:
         for remote in ctx.cluster.remotes.iterkeys():
-            p.spawn(_remove_sources_list, remote)
-
+            system_type = _get_system_type(remote)
+            p.spawn(remove_sources_pkgs[system_type], remote)
 
 @contextlib.contextmanager
 def install(ctx, config):
@@ -206,17 +313,30 @@ def install(ctx, config):
         'python-ceph',
         'libcephfs1',
         'libcephfs1-dbg',
-        'libcephfs-java',
+        ]
+    el6 = [
+        'ceph-debug',
+        'ceph-radosgw',
+        'ceph-test',
+        'ceph-devel',
+        'ceph',
+	'ceph-fuse',
+        'rest-bench',
+        'libcephfs_jni1',
+        'libcephfs1',
+        'python-ceph',
         ]
 
     # pull any additional packages out of config
-    extra_debs = config.get('extra_packages')
-    log.info('extra packages: {packages}'.format(packages=extra_debs))
-    debs = debs + extra_debs
+    extra_pkgs = config.get('extra_packages')
+    log.info('extra packages: {packages}'.format(packages=extra_pkgs))
+    debs = debs + extra_pkgs
+    el6 = el6 + extra_pkgs
 
     extras = config.get('extras')
     if extras is not None:
         debs = ['ceph-test', 'ceph-test-dbg', 'ceph-fuse', 'ceph-fuse-dbg']
+	el6 = ['ceph-fuse',]
 
     # install lib deps (so we explicitly specify version), but do not
     # uninstall them, as other packages depend on them (e.g., kvm)
@@ -226,11 +346,17 @@ def install(ctx, config):
         'librbd1',
         'librbd1-dbg',
         ]
-    install_debs(ctx, debs_install, config)
+    el6_install = el6 + [
+        'librbd1',
+        'librados2',
+        ]
+    install_info = {"deb": debs_install, "rpm": el6_install}
+    remove_info = {"deb": debs, "rpm": el6}
+    install_packages(ctx, install_info, config)
     try:
         yield
     finally:
-        remove_debs(ctx, debs)
+        remove_packages(ctx, remove_info)
         remove_sources(ctx)
 
 

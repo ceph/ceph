@@ -256,7 +256,14 @@ def remove_installed_packages(ctx, log):
             'librados2',
             'librbd1',
             ]
-    install_task.remove_debs(ctx, debs)
+    el6 = ['ceph-fuse',
+              'ceph',
+              'python-ceph',
+              'librbd1',
+              'librados2',
+              'libcephfs1',
+              ]
+    install_task.remove_packages(ctx, {"deb": debs, "rpm": el6})
     install_task.remove_sources(ctx)
 
 def remove_testing_tree(ctx, log):
