@@ -383,6 +383,7 @@ public:
 
 protected:
   // [rejoin]
+  bool rejoins_pending;
   set<int> rejoin_gather;      // nodes from whom i need a rejoin
   set<int> rejoin_sent;        // nodes i sent a rejoin to
   set<int> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
@@ -417,6 +418,10 @@ protected:
   void handle_cache_rejoin_full(MMDSCacheRejoin *m);
   void rejoin_send_acks();
   void rejoin_trim_undef_inodes();
+  void maybe_send_pending_rejoins() {
+    if (rejoins_pending)
+      rejoin_send_rejoins();
+  }
 public:
   void rejoin_gather_finish();
   void rejoin_send_rejoins();
