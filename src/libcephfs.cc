@@ -833,7 +833,7 @@ extern "C" int ceph_get_osd_crush_location(struct ceph_mount_info *cmount,
   size_t needed = 0;
   size_t cur = 0;
   vector<pair<string, string> >::iterator it;
-  for (it = loc.begin(); it != loc.end(); it++) {
+  for (it = loc.begin(); it != loc.end(); ++it) {
     string& type = it->first;
     string& name = it->second;
     needed += type.size() + name.size() + 2;
