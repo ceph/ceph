@@ -2007,18 +2007,14 @@ struct C_JournaledAhead : public Context {
   }
 };
 
-int FileStore::queue_transaction(Sequencer *osr, Transaction *t)
-{
-  list<Transaction*> tls;
-  tls.push_back(t);
-  return queue_transactions(osr, tls, new C_DeleteTransaction(t));
-}
-
 int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
-				  Context *onreadable, Context *ondisk,
-				  Context *onreadable_sync,
 				  TrackedOpRef osd_op)
 {
+  Context *onreadable;
+  Context *ondisk;
+  Context *onreadable_sync;
+  ObjectStore::Transaction::collect_contexts(
+    tls, &onreadable, &ondisk, &onreadable_sync);
   if (g_conf->filestore_blackhole) {
     dout(0) << "queue_transactions filestore_blackhole = TRUE, dropping transaction" << dendl;
     return 0;
@@ -2625,6 +2621,10 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	// -ENOENT is normally okay
 	// ...including on a replayed OP_RMCOLL with !stable_commits
 	ok = true;
+      if (r == -ENOENT && (
+	  op == Transaction::OP_COLL_ADD &&
+	  i.tolerate_collection_add_enoent()))
+	ok = true; // Hack for upgrade from snapcolls to snapmapper
       if (r == -ENODATA)
 	ok = true;
 
@@ -4352,7 +4352,7 @@ bool FileStore::collection_empty(coll_t c)
     assert(!m_filestore_fail_eio || r != -EIO);
     return false;
   }
-  return !ls.empty();
+  return ls.empty();
 }
 
 int FileStore::collection_list_range(coll_t c, hobject_t start, hobject_t end,
@@ -4690,32 +4690,72 @@ int FileStore::_split_collection(coll_t cid,
 				 coll_t dest,
 				 const SequencerPosition &spos)
 {
-  dout(15) << __func__ << " " << cid << " bits: " << bits << dendl;
-  int dstcmp = _check_replay_guard(dest, spos);
-  if (dstcmp < 0)
-    return 0;
-  if (dstcmp > 0 && !collection_empty(dest))
-    return -ENOTEMPTY;
+  int r;
+  {
+    dout(15) << __func__ << " " << cid << " bits: " << bits << dendl;
+    int dstcmp = _check_replay_guard(dest, spos);
+    if (dstcmp < 0)
+      return 0;
+    if (dstcmp > 0 && !collection_empty(dest))
+      return -ENOTEMPTY;
 
-  int srccmp = _check_replay_guard(cid, spos);
-  if (srccmp < 0)
-    return 0;
+    int srccmp = _check_replay_guard(cid, spos);
+    if (srccmp < 0)
+      return 0;
 
-  _set_replay_guard(cid, spos, true);
-  _set_replay_guard(dest, spos, true);
+    _set_replay_guard(cid, spos, true);
+    _set_replay_guard(dest, spos, true);
 
-  Index from;
-  int r = get_index(cid, &from);
+    Index from;
+    r = get_index(cid, &from);
 
-  Index to;
-  if (!r)
-    r = get_index(dest, &to);
+    Index to;
+    if (!r)
+      r = get_index(dest, &to);
 
-  if (!r)
-    r = from->split(rem, bits, to);
+    if (!r)
+      r = from->split(rem, bits, to);
 
-  _close_replay_guard(cid, spos);
-  _close_replay_guard(dest, spos);
+    _close_replay_guard(cid, spos);
+    _close_replay_guard(dest, spos);
+  }
+  if (g_conf->filestore_debug_verify_split) {
+    vector<hobject_t> objects;
+    hobject_t next;
+    while (1) {
+      collection_list_partial(
+	cid,
+	next,
+	get_ideal_list_min(), get_ideal_list_max(), 0,
+	&objects,
+	&next);
+      if (objects.empty())
+	break;
+      for (vector<hobject_t>::iterator i = objects.begin();
+	   i != objects.end();
+	   ++i) {
+	assert(!i->match(bits, rem));
+      }
+      objects.clear();
+    }
+    next = hobject_t();
+    while (1) {
+      collection_list_partial(
+	dest,
+	next,
+	get_ideal_list_min(), get_ideal_list_max(), 0,
+	&objects,
+	&next);
+      if (objects.empty())
+	break;
+      for (vector<hobject_t>::iterator i = objects.begin();
+	   i != objects.end();
+	   ++i) {
+	assert(i->match(bits, rem));
+      }
+      objects.clear();
+    }
+  }
   return r;
 }
 

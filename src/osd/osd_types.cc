@@ -227,6 +227,8 @@ bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *childre
 }
 
 unsigned pg_t::get_split_bits(unsigned pg_num) const {
+  if (pg_num == 1)
+    return 0;
   assert(pg_num > 1);
 
   // Find unique p such that pg_num \in [2^(p-1), 2^p)
