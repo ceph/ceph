@@ -152,7 +152,7 @@ mds_load_t MDBalancer::get_load(utime_t now)
     mds->mdcache->get_root()->get_dirfrags(ls);
     for (list<CDir*>::iterator p = ls.begin();
 	 p != ls.end();
-	 p++) {
+	 ++p) {
       load.auth.add(now, mds->mdcache->decayrate, (*p)->pop_auth_subtree_nested);
       load.all.add(now, mds->mdcache->decayrate, (*p)->pop_nested);
     }
@@ -201,7 +201,7 @@ void MDBalancer::send_heartbeat()
   mds->mdcache->get_auth_subtrees(authsubs);
   for (set<CDir*>::iterator it = authsubs.begin();
        it != authsubs.end();
-       it++) {
+       ++it) {
     CDir *im = *it;
     int from = im->inode->authority().first;
     if (from == mds->get_nodeid()) continue;
@@ -214,7 +214,7 @@ void MDBalancer::send_heartbeat()
   dout(5) << "mds." << mds->get_nodeid() << " epoch " << beat_epoch << " load " << load << dendl;
   for (map<int, float>::iterator it = import_map.begin();
        it != import_map.end();
-       it++) {
+       ++it) {
     dout(5) << "  import_map from " << it->first << " -> " << it->second << dendl;
   }
 
@@ -294,7 +294,7 @@ void MDBalancer::export_empties()
 
   for (map<CDir*,set<CDir*> >::iterator it = mds->mdcache->subtrees.begin();
        it != mds->mdcache->subtrees.end();
-       it++) {
+       ++it) {
     CDir *dir = it->first;
     if (!dir->is_auth() ||
 	dir->is_ambiguous_auth() ||
@@ -358,7 +358,7 @@ void MDBalancer::do_fragmenting()
 
     for (set<dirfrag_t>::iterator i = q.begin();
 	 i != q.end();
-	 i++) {
+	 ++i) {
       CDir *dir = mds->mdcache->get_dirfrag(*i);
       if (!dir ||
 	  !dir->is_auth())
@@ -377,7 +377,7 @@ void MDBalancer::do_fragmenting()
 
     for (set<dirfrag_t>::iterator i = q.begin();
 	 i != q.end();
-	 i++) {
+	 ++i) {
       CDir *dir = mds->mdcache->get_dirfrag(*i);
       if (!dir ||
 	  !dir->is_auth() ||
@@ -398,7 +398,7 @@ void MDBalancer::do_fragmenting()
 	  break;
 	}
 	bool all = true;
-	for (list<CDir*>::iterator p = sibs.begin(); p != sibs.end(); p++) {
+	for (list<CDir*>::iterator p = sibs.begin(); p != sibs.end(); ++p) {
 	  CDir *sib = *p;
 	  if (!sib->is_auth() || !sib->should_merge()) {
 	    all = false;
@@ -515,7 +515,7 @@ void MDBalancer::prep_rebalance(int beat)
 
     for (multimap<double,int>::iterator it = load_map.begin();
 	 it != load_map.end();
-	 it++) {
+	 ++it) {
       if (it->first < target_load) {
 	dout(15) << "   mds." << it->second << " is importer" << dendl;
 	importers.insert(pair<double,int>(it->first,it->second));
@@ -538,14 +538,14 @@ void MDBalancer::prep_rebalance(int beat)
       // big -> small exporters
       for (multimap<double,int>::reverse_iterator ex = exporters.rbegin();
 	   ex != exporters.rend();
-	   ex++) {
+	   ++ex) {
 	double maxex = get_maxex(ex->second);
 	if (maxex <= .001) continue;
 
 	// check importers. for now, just in arbitrary order (no intelligent matching).
 	for (map<int, float>::iterator im = mds_import_map[ex->second].begin();
 	     im != mds_import_map[ex->second].end();
-	     im++) {
+	     ++im) {
 	  double maxim = get_maxim(im->first);
 	  if (maxim <= .001) continue;
 	  try_match(ex->second, maxex,
@@ -570,8 +570,8 @@ void MDBalancer::prep_rebalance(int beat)
 	  if (maxex < .001 || maxim < .001) break;
 	  try_match(ex->second, maxex,
 		    im->second, maxim);
-	  if (maxex <= .001) ex++;
-	  if (maxim <= .001) im++;
+	  if (maxex <= .001) ++ex;
+	  if (maxim <= .001) ++im;
 	}
       } else {
 	// new way
@@ -586,8 +586,8 @@ void MDBalancer::prep_rebalance(int beat)
 	  if (maxex < .001 || maxim < .001) break;
 	  try_match(ex->second, maxex,
 		    im->second, maxim);
-	  if (maxex <= .001) ex++;
-	  if (maxim <= .001) im++;
+	  if (maxex <= .001) ++ex;
+	  if (maxim <= .001) ++im;
 	}
       }
     }
@@ -616,7 +616,7 @@ void MDBalancer::try_rebalance()
   mds->mdcache->get_fullauth_subtrees(fullauthsubs);
   for (set<CDir*>::iterator it = fullauthsubs.begin();
        it != fullauthsubs.end();
-       it++) {
+       ++it) {
     CDir *im = *it;
     if (im->get_inode()->is_stray()) continue;
 
@@ -647,7 +647,7 @@ void MDBalancer::try_rebalance()
 
   for (map<int,double>::iterator it = my_targets.begin();
        it != my_targets.end();
-       it++) {
+       ++it) {
 
       /*
 	double fac = 1.0;
@@ -746,7 +746,7 @@ void MDBalancer::try_rebalance()
 
     for (set<CDir*>::iterator pot = candidates.begin();
 	 pot != candidates.end();
-	 pot++) {
+	 ++pot) {
       if ((*pot)->get_inode()->is_stray()) continue;
       find_exports(*pot, amount, exports, have, already_exporting);
       if (have > amount-MIN_OFFLOAD)
@@ -755,7 +755,7 @@ void MDBalancer::try_rebalance()
     //fudge = amount - have;
     total_sent += have;
 
-    for (list<CDir*>::iterator it = exports.begin(); it != exports.end(); it++) {
+    for (list<CDir*>::iterator it = exports.begin(); it != exports.end(); ++it) {
       dout(0) << "   - exporting "
 	       << (*it)->pop_auth_subtree
 	       << " "
@@ -783,7 +783,7 @@ bool MDBalancer::check_targets()
   bool ok = true;
 
   // make sure map targets are in the old_prev_targets map
-  for (set<int32_t>::iterator p = map_targets.begin(); p != map_targets.end(); p++) {
+  for (set<int32_t>::iterator p = map_targets.begin(); p != map_targets.end(); ++p) {
     if (old_prev_targets.count(*p) == 0)
       old_prev_targets[*p] = 0;
     if (my_targets.count(*p) == 0)
@@ -818,7 +818,7 @@ bool MDBalancer::check_targets()
       want_targets.insert(p->first);
     if (p->second >= g_conf->mds_bal_target_removal_max)
       send = true;
-    p++;
+    ++p;
   }
 
   dout(10) << "check_targets have " << map_targets << " need " << need_targets << " want " << want_targets << dendl;
@@ -853,7 +853,7 @@ void MDBalancer::find_exports(CDir *dir,
   double subdir_sum = 0;
   for (CDir::map_t::iterator it = dir->begin();
        it != dir->end();
-       it++) {
+       ++it) {
     CInode *in = it->second->get_linkage()->get_inode();
     if (!in) continue;
     if (!in->is_dir()) continue;
@@ -899,7 +899,7 @@ void MDBalancer::find_exports(CDir *dir,
   multimap<double,CDir*>::reverse_iterator it;
   for (it = smaller.rbegin();
        it != smaller.rend();
-       it++) {
+       ++it) {
 
     if ((*it).first < midchunk)
       break;  // try later
@@ -916,7 +916,7 @@ void MDBalancer::find_exports(CDir *dir,
   // apprently not enough; drill deeper into the hierarchy (if non-replicated)
   for (list<CDir*>::iterator it = bigger_unrep.begin();
        it != bigger_unrep.end();
-       it++) {
+       ++it) {
     dout(15) << "   descending into " << **it << dendl;
     find_exports(*it, amount, exports, have, already_exporting);
     if (have > needmin)
@@ -926,7 +926,7 @@ void MDBalancer::find_exports(CDir *dir,
   // ok fine, use smaller bits
   for (;
        it != smaller.rend();
-       it++) {
+       ++it) {
     dout(7) << "   taking (much) smaller " << it->first << " " << *(*it).second << dendl;
 
     exports.push_back((*it).second);
@@ -939,7 +939,7 @@ void MDBalancer::find_exports(CDir *dir,
   // ok fine, drill into replicated dirs
   for (list<CDir*>::iterator it = bigger_rep.begin();
        it != bigger_rep.end();
-       it++) {
+       ++it) {
     dout(7) << "   descending into replicated " << **it << dendl;
     find_exports(*it, amount, exports, have, already_exporting);
     if (have > needmin)
