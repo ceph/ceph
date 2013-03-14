@@ -227,6 +227,7 @@ public:
   void export_go(CDir *dir);
   void export_go_synced(CDir *dir);
   void export_reverse(CDir *dir);
+  void export_notify_abort(CDir *dir, set<CDir*>& bounds);
   void handle_export_ack(MExportDirAck *m);
   void export_logged_finish(CDir *dir);
   void handle_export_notify_ack(MExportDirNotifyAck *m);
