@@ -1073,6 +1073,15 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   if (*order == 0)
     *order = 22;
 
+  // try to fill whole imgblklen blocks for sparsification
+  uint64_t image_pos = 0;
+  size_t imgblklen = 1 << *order;
+  char *p = new char[imgblklen];
+  size_t reqlen = imgblklen;	// amount requested from read
+  ssize_t readlen;		// amount received from one read
+  size_t blklen = 0;		// amount accumulated from reads to fill blk
+  librbd::Image image;
+
   bool from_stdin = !strcmp(path, "-");
   if (from_stdin) {
     fd = 0;
@@ -1090,8 +1099,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     if (r < 0) {
       r = -errno;
       cerr << "rbd: stat error " << path << std::endl;
-      close(fd);
-      return r;
+      goto done;
     }
     if (stat_buf.st_size)
       size = (uint64_t)stat_buf.st_size;
@@ -1100,10 +1108,8 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
       int64_t bdev_size = 0;
       r = get_block_device_size(fd, &bdev_size);
       if (r < 0) {
-	cerr << "rbd: unable to get size of file/block device: "
-	     << cpp_strerror(r) << std::endl;
-	close(fd);
-	return r;
+	cerr << "rbd: unable to get size of file/block device" << std::endl;
+	goto done;
       }
       assert(bdev_size >= 0);
       size = (uint64_t) bdev_size;
@@ -1112,26 +1118,13 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   r = do_create(rbd, io_ctx, imgname, size, order, format, features, 0, 0);
   if (r < 0) {
     cerr << "rbd: image creation failed" << std::endl;
-    if (fd)
-      close(fd);
-    return r;
+    goto done;
   }
-  librbd::Image image;
   r = rbd.open(io_ctx, image, imgname);
   if (r < 0) {
     cerr << "rbd: failed to open image" << std::endl;
-    if (fd)
-      close(fd);
-    return r;
+    goto done;
   }
-
-  // try to fill whole imgblklen blocks for sparsification
-  uint64_t image_pos = 0;
-  size_t imgblklen = 1 << *order;
-  char *p = new char[imgblklen];
-  size_t reqlen = imgblklen;	// amount requested from read
-  ssize_t readlen;		// amount received from one read
-  size_t blklen = 0;		// amount accumulated from reads to fill blk
 
   // loop body handles 0 return, as we may have a block to flush
   while ((readlen = ::read(fd, p + blklen, reqlen)) >= 0) {
@@ -1161,7 +1154,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     if (!bl.is_zero()) {
       r = image.write(image_pos, blklen, bl);
       if (r < 0) {
-	cerr << "rbd: error writing to image block" << cpp_strerror(r)
+	cerr << "rbd: error writing to image position " << image_pos
 	     << std::endl;
 	goto done;
       }
