@@ -42,16 +42,20 @@ static int write_log_entry(cls_method_context_t hctx, string& index, cls_log_ent
 static void get_index_time_prefix(utime_t& ts, string& index)
 {
   char buf[32];
-  snprintf(buf, sizeof(buf), "%10ld.%10ld_", (long)ts.sec(), (long)ts.usec());
+  snprintf(buf, sizeof(buf), "%010ld.%06ld_", (long)ts.sec(), (long)ts.usec());
 
   index = log_index_prefix + buf;
 }
 
-static void get_index(utime_t& ts, string& section, string& name, string& index)
+static void get_index(cls_method_context_t hctx, utime_t& ts, string& index)
 {
   get_index_time_prefix(ts, index);
 
-  index += section + ":" + name;
+  string unique_id;
+
+  cls_cxx_subop_version(hctx, &unique_id);
+
+  index.append(unique_id);
 }
 
 static int cls_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -70,7 +74,9 @@ static int cls_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
 
   string index;
 
-  get_index(entry.timestamp, entry.section, entry.name, index);
+  get_index(hctx, entry.timestamp, index);
+
+  CLS_LOG(0, "storing entry at %s\n", index.c_str());
 
   int ret = write_log_entry(hctx, index, entry);
   if (ret < 0)
@@ -188,9 +194,9 @@ void __cls_init()
   cls_register("log", &h_class);
 
   /* log */
-  cls_register_cxx_method(h_class, "log_add", CLS_METHOD_RD | CLS_METHOD_WR, cls_log_add, &h_log_add);
-  cls_register_cxx_method(h_class, "log_list", CLS_METHOD_RD, cls_log_list, &h_log_list);
-  cls_register_cxx_method(h_class, "log_trim", CLS_METHOD_RD | CLS_METHOD_WR, cls_log_trim, &h_log_trim);
+  cls_register_cxx_method(h_class, "add", CLS_METHOD_RD | CLS_METHOD_WR, cls_log_add, &h_log_add);
+  cls_register_cxx_method(h_class, "list", CLS_METHOD_RD, cls_log_list, &h_log_list);
+  cls_register_cxx_method(h_class, "trim", CLS_METHOD_RD | CLS_METHOD_WR, cls_log_trim, &h_log_trim);
 
   return;
 }

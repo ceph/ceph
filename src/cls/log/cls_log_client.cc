@@ -9,7 +9,6 @@ using namespace librados;
 
 
 
-
 void cls_log_add(librados::ObjectWriteOperation& op, cls_log_entry& entry)
 {
   bufferlist in;
@@ -17,6 +16,19 @@ void cls_log_add(librados::ObjectWriteOperation& op, cls_log_entry& entry)
   call.entry = entry;
   ::encode(call, in);
   op.exec("log", "add", in);
+}
+
+void cls_log_add(librados::ObjectWriteOperation& op, const utime_t& timestamp,
+                 const string& section, const string& name, bufferlist& bl)
+{
+  cls_log_entry entry;
+
+  entry.timestamp = timestamp;
+  entry.section = section;
+  entry.name = name;
+  entry.data = bl;
+
+  cls_log_add(op, entry);
 }
 
 void cls_log_trim(librados::ObjectWriteOperation& op, utime_t& from, utime_t& to)
@@ -78,6 +90,9 @@ void cls_log_list(librados::ObjectReadOperation& op, utime_t& from, int max,
   cls_log_list_op call;
   call.from_time = from;
   call.num_entries = max;
+
+  ::encode(call, inbl);
+
   op.exec("log", "list", inbl, new LogListCtx(&entries, truncated));
 }
 
