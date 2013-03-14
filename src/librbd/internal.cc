@@ -341,7 +341,7 @@ namespace librbd {
       map<string,bufferlist> m;
       ::decode(header, p);
       ::decode(m, p);
-      for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); q++) {
+      for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); ++q) {
 	names.push_back(q->first);
       }
     }
@@ -603,9 +603,8 @@ namespace librbd {
     Rados rados(ictx->md_ctx);
     std::list<std::string> pools;
     rados.pool_list(pools);
-    std::list<std::string>::const_iterator it;
     std::set<std::string> children;
-    for (it = pools.begin(); it != pools.end(); it++) {
+    for (std::list<std::string>::const_iterator it = pools.begin(); it != pools.end(); ++it) {
       IoCtx pool_ioctx;
       r = rados.ioctx_create(it->c_str(), pool_ioctx);
       if (r < 0) {
