@@ -194,7 +194,7 @@ void LogMonitor::encode_pending(MonitorDBStore::Transaction *t)
   __u8 v = 1;
   ::encode(v, bl);
   multimap<utime_t,LogEntry>::iterator p;
-  for (p = pending_log.begin(); p != pending_log.end(); p++)
+  for (p = pending_log.begin(); p != pending_log.end(); ++p)
     p->second.encode(bl);
 
   put_version(t, version, bl);
@@ -269,7 +269,7 @@ bool LogMonitor::preprocess_log(MLog *m)
   
   for (deque<LogEntry>::iterator p = m->entries.begin();
        p != m->entries.end();
-       p++) {
+       ++p) {
     if (!pending_summary.contains(p->key()))
       num_new++;
   }
@@ -298,7 +298,7 @@ bool LogMonitor::prepare_log(MLog *m)
 
   for (deque<LogEntry>::iterator p = m->entries.begin();
        p != m->entries.end();
-       p++) {
+       ++p) {
     dout(10) << " logging " << *p << dendl;
     if (!pending_summary.contains(p->key())) {
       pending_summary.add(*p);
@@ -381,7 +381,7 @@ void LogMonitor::check_subs()
   dout(10) << __func__ << dendl;
   for (map<string, xlist<Subscription*>*>::iterator i = mon->session_map.subs.begin();
        i != mon->session_map.subs.end();
-       i++) {
+       ++i) {
     for (xlist<Subscription*>::iterator j = i->second->begin(); !j.end(); ++j) {
       if (sub_name_to_id((*j)->type) >= 0)
 	check_sub(*j);
@@ -449,7 +449,7 @@ bool LogMonitor::_create_sub_summary(MLog *mlog, int level)
     return false;
 
   list<LogEntry>::reverse_iterator it = summary.tail.rbegin();
-  for (; it != summary.tail.rend(); it++) {
+  for (; it != summary.tail.rend(); ++it) {
     LogEntry e = *it;
     if (e.type < level)
       continue;
