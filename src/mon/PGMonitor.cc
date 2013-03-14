@@ -384,7 +384,7 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
 
   for (list<string>::iterator p = m->pools.begin();
        p != m->pools.end();
-       p++) {
+       ++p) {
     int64_t poolid = mon->osdmon()->osdmap.lookup_pg_pool_name(p->c_str());
     if (poolid < 0)
       continue;
@@ -511,7 +511,7 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
   ack->set_tid(stats->get_tid());
   for (map<pg_t,pg_stat_t>::iterator p = stats->pg_stat.begin();
        p != stats->pg_stat.end();
-       p++) {
+       ++p) {
     pg_t pgid = p->first;
     ack->pg_stat[pgid] = p->second.reported;
 
@@ -611,7 +611,7 @@ void PGMonitor::check_osd_map(epoch_t epoch)
     OSDMap::Incremental inc(bl);
     for (map<int32_t,uint32_t>::iterator p = inc.new_weight.begin();
 	 p != inc.new_weight.end();
-	 p++)
+	 ++p)
       if (p->second == CEPH_OSD_OUT) {
 	dout(10) << "check_osd_map  osd." << p->first << " went OUT" << dendl;
 	pending_inc.osd_stat_rm.insert(p->first);
@@ -716,7 +716,7 @@ bool PGMonitor::register_new_pgs()
   int created = 0;
   for (map<int64_t,pg_pool_t>::iterator p = osdmap->pools.begin();
        p != osdmap->pools.end();
-       p++) {
+       ++p) {
     int64_t poolid = p->first;
     pg_pool_t &pool = p->second;
     int ruleno = pool.get_crush_ruleset();
@@ -747,7 +747,7 @@ bool PGMonitor::register_new_pgs()
   int removed = 0;
   for (set<pg_t>::iterator p = pg_map.creating_pgs.begin();
        p != pg_map.creating_pgs.end();
-       p++) {
+       ++p) {
     if (p->preferred() >= 0) {
       dout(20) << " removing creating_pg " << *p << " because it is localized and obsolete" << dendl;
       pending_inc.pg_remove.insert(*p);
@@ -793,7 +793,7 @@ void PGMonitor::send_pg_creates()
   
   for (set<pg_t>::iterator p = pg_map.creating_pgs.begin();
        p != pg_map.creating_pgs.end();
-       p++) {
+       ++p) {
     pg_t pgid = *p;
     pg_t on = pgid;
     pg_stat_t& s = pg_map.pg_stat[pgid];
@@ -1456,7 +1456,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   }
 
   if (!note.empty()) {
-    for (map<string,int>::iterator p = note.begin(); p != note.end(); p++) {
+    for (map<string,int>::iterator p = note.begin(); p != note.end(); ++p) {
       ostringstream ss;
       ss << p->second << " pgs " << p->first;
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
