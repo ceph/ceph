@@ -844,30 +844,74 @@ done_img:
   update_snap_name(*new_img, snap);
 }
 
-static int do_import_from_stdin(librbd::RBD &rbd, librados::IoCtx& io_ctx,
-		                const char *imgname, int *order, int format,
-				int64_t features, int64_t size)
+static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
+		     const char *imgname, int *order, const char *path,
+		     int format, uint64_t features, uint64_t size)
 {
-  int r;
-  // start with inherent block size; double as needed; fix when done
-  size_t cur_size = 1 << *order;
+  int fd, r;
+  struct stat stat_buf;
+  MyProgressContext pc("Importing image");
 
-  r = do_create(rbd, io_ctx, imgname, cur_size, order, format, features, 0, 0);
+  assert(imgname);
+
+  // default order as usual
+  if (*order == 0)
+    *order = 22;
+
+  bool from_stdin = !strcmp(path, "-");
+  if (from_stdin) {
+    fd = 0;
+    size = 1 << *order;
+  } else {
+    fd = open(path, O_RDONLY);
+
+    if (fd < 0) {
+      r = -errno;
+      cerr << "rbd: error opening " << path << std::endl;
+      return r;
+    }
+
+    r = fstat(fd, &stat_buf);
+    if (r < 0) {
+      r = -errno;
+      cerr << "rbd: stat error " << path << std::endl;
+      close(fd);
+      return r;
+    }
+    if (stat_buf.st_size)
+      size = (uint64_t)stat_buf.st_size;
+
+    if (!size) {
+      int64_t bdev_size = 0;
+      r = get_block_device_size(fd, &bdev_size);
+      if (r < 0) {
+	cerr << "rbd: unable to get size of file/block device: "
+	     << cpp_strerror(r) << std::endl;
+	close(fd);
+	return r;
+      }
+      assert(bdev_size >= 0);
+      size = (uint64_t) bdev_size;
+    }
+  }
+  r = do_create(rbd, io_ctx, imgname, size, order, format, features, 0, 0);
   if (r < 0) {
     cerr << "rbd: image creation failed" << std::endl;
+    if (fd)
+      close(fd);
     return r;
   }
   librbd::Image image;
   r = rbd.open(io_ctx, image, imgname);
   if (r < 0) {
     cerr << "rbd: failed to open image" << std::endl;
+    if (fd)
+      close(fd);
     return r;
   }
 
-  off_t image_pos = 0;
-
   // try to fill whole imgblklen blocks for sparsification
-
+  uint64_t image_pos = 0;
   size_t imgblklen = 1 << *order;
   char *p = new char[imgblklen];
   size_t reqlen = imgblklen;	// amount requested from read
@@ -875,33 +919,36 @@ static int do_import_from_stdin(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   size_t blklen = 0;		// amount accumulated from reads to fill blk
 
   // loop body handles 0 return, as we may have a block to flush
-  while ((readlen = ::read(0, p + blklen, reqlen)) >= 0) {
+  while ((readlen = ::read(fd, p + blklen, reqlen)) >= 0) {
     blklen += readlen;
     // if read was short, try again to fill the block before writing
     if (readlen && ((size_t)readlen < reqlen)) {
       reqlen -= readlen;
       continue;
     }
+    if (!from_stdin)
+      pc.update_progress(image_pos, size);
 
-    // resize output image by binary expansion as we go
-    if ((image_pos + (size_t)blklen) > cur_size) {
-      cur_size *= 2;
-      r = image.resize(cur_size);
+    bufferlist bl(blklen);
+    bl.append(p, blklen);
+    // resize output image by binary expansion as we go for stdin
+    if (from_stdin && (image_pos + (size_t)blklen) > size) {
+      size *= 2;
+      r = image.resize(size);
       if (r < 0) {
 	cerr << "rbd: can't resize image during import" << std::endl;
-	return r;
+	goto done;
       }
     }
 
     // write as much as we got; perhaps less than imgblklen
-    bufferlist bl(blklen);
-    bl.append(p, blklen);
     // but skip writing zeros to create sparse images
     if (!bl.is_zero()) {
       r = image.write(image_pos, blklen, bl);
       if (r < 0) {
-	cerr << "rbd: error writing to image block" << cpp_strerror(r) << std::endl;
-	return r;
+	cerr << "rbd: error writing to image block" << cpp_strerror(r)
+	     << std::endl;
+	goto done;
       }
     }
     // done with whole block, whether written or not 
@@ -912,179 +959,24 @@ static int do_import_from_stdin(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     blklen = 0;
     reqlen = imgblklen;
   }
-  r = image.resize(image_pos);
-  if (r < 0) {
-    cerr << "rbd: final image resize failed" << std::endl;
-    return r;
-  }
-  return readlen;	// 0 or -error
-}
-
-static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
-		     const char *imgname, int *order, const char *path,
-		     int format, uint64_t features, int64_t size)
-{
-  int fd, r;
-  struct stat stat_buf;
-  struct fiemap *fiemap;
-  MyProgressContext pc("Importing image");
-
-  assert(imgname);
-
-  // default order as usual
-  if (*order == 0)
-    *order = 22;
-
-  if (!strcmp(path, "-"))
-    return do_import_from_stdin(rbd, io_ctx, imgname, order, format,
-				features, size);
-  fd = open(path, O_RDONLY);
-
-  if (fd < 0) {
-    r = -errno;
-    cerr << "rbd: error opening " << path << std::endl;
-    return r;
-  }
-
-  r = fstat(fd, &stat_buf);
-  if (r < 0) {
-    r = -errno;
-    cerr << "rbd: stat error " << path << std::endl;
-    close(fd);
-    return r;
-  }
-  if (stat_buf.st_size)
-    size = (uint64_t)stat_buf.st_size;
-
-  if (!size) {
-    r = get_block_device_size(fd, &size);
+  if (from_stdin) {
+    r = image.resize(image_pos);
     if (r < 0) {
-      cerr << "rbd: unable to get size of file/block device: "
-	   << cpp_strerror(r) << std::endl;
-      close(fd);
-      return r;
-    }
-  }
-
-  r = do_create(rbd, io_ctx, imgname, size, order, format, features, 0, 0);
-  if (r < 0) {
-    cerr << "rbd: image creation failed" << std::endl;
-    close(fd);
-    return r;
-  }
-  librbd::Image image;
-  r = rbd.open(io_ctx, image, imgname);
-  if (r < 0) {
-    cerr << "rbd: failed to open image" << std::endl;
-    close(fd);
-    return r;
-  }
-
-  fsync(fd); /* flush it first, otherwise extents information might not have been flushed yet */
-  fiemap = read_fiemap(fd);
-  if (fiemap && !fiemap->fm_mapped_extents) {
-    cerr << "rbd: empty fiemap!" << std::endl;
-    free(fiemap);
-    fiemap = NULL;
-  }
-  if (!fiemap) {
-    fiemap = (struct fiemap *)malloc(sizeof(struct fiemap) +  sizeof(struct fiemap_extent));
-    if (!fiemap) {
-      cerr << "rbd: failed to allocate fiemap, not enough memory." << std::endl;
-      close(fd);
-      return -ENOMEM;
-    }
-    fiemap->fm_start = 0;
-    fiemap->fm_length = size;
-    fiemap->fm_flags = 0;
-    fiemap->fm_extent_count = 1;
-    fiemap->fm_mapped_extents = 1;
-    fiemap->fm_extents[0].fe_logical = 0;
-    fiemap->fm_extents[0].fe_physical = 0;
-    fiemap->fm_extents[0].fe_length = size;
-    fiemap->fm_extents[0].fe_flags = 0;
-  }
-
-  uint64_t extent = 0;
-
-  while (extent < fiemap->fm_mapped_extents) {
-    off_t file_pos, end_ofs;
-    size_t extent_len = 0;
-    size_t read_len = 1ULL << *order;
-
-    file_pos = fiemap->fm_extents[extent].fe_logical; /* position within the file we're reading */
-
-    do { /* try to merge consecutive extents */
-#define LARGE_ENOUGH_EXTENT (32 * 1024 * 1024)
-      if (extent_len &&
-          extent_len + fiemap->fm_extents[extent].fe_length > LARGE_ENOUGH_EXTENT)
-        break; /* don't try to merge if we're big enough */
-
-      extent_len += fiemap->fm_extents[extent].fe_length;  /* length of current extent */
-      end_ofs = MIN((off_t)size, file_pos + (off_t)extent_len);
-
-      extent++;
-      if (extent == fiemap->fm_mapped_extents)
-        break;
-
-    } while (end_ofs == (off_t)fiemap->fm_extents[extent].fe_logical);
-
-    uint64_t left = end_ofs - file_pos;
-    while (left) {
-      pc.update_progress(file_pos, size);
-      uint64_t cur_seg = (left < read_len ? left : read_len);
-      while (cur_seg) {
-        bufferptr p(cur_seg);
-	ssize_t rval;
-	if(extent == 0 && fiemap->fm_extents[extent].fe_logical == 0) {
-	  rval = TEMP_FAILURE_RETRY(::read(fd, p.c_str(), cur_seg));
-	} else {
-	  rval = TEMP_FAILURE_RETRY(::pread(fd, p.c_str(), cur_seg, file_pos));
-	}
-        if (rval < 0) {
-          r = -errno;
-          cerr << "rbd: error reading file: " << cpp_strerror(r) << std::endl;
-          goto done;
-        }
-	size_t len = rval;
-        if (!len) {
-          r = 0;
-          goto done;
-        }
-        bufferlist bl;
-        bl.append(p);
-        librbd::RBD::AioCompletion *completion = new librbd::RBD::AioCompletion(NULL, NULL);
-        if (!completion) {
-          r = -ENOMEM;
-          goto done;
-        }
-	r = image.aio_write(file_pos, len, bl, completion);
-        if (r < 0)
-          goto done;
-	completion->wait_for_complete();
-	r = completion->get_return_value();
-	completion->release();
-        if (r < 0) {
-          cerr << "rbd: error writing to image block" << std::endl;
-          goto done;
-        }
-
-        file_pos += len;
-        cur_seg -= len;
-        left -= len;
-      }
+      cerr << "rbd: final image resize failed" << std::endl;
+      goto done;
     }
   }
 
   r = 0;
 
  done:
-  if (r < 0)
-    pc.fail();
-  else
-    pc.finish();
-  free(fiemap);
-  close(fd);
+  if (!from_stdin) {
+    if (r < 0)
+      pc.fail();
+    else
+      pc.finish();
+    close(fd);
+  }
 
   return r;
 }
