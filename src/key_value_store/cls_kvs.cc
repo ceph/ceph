@@ -182,7 +182,7 @@ static int get_prev_idata(cls_method_context_t hctx, const index_data &idata,
     //it is the first object, there is no previous.
     return -ERANGE;
   } else {
-    it--;
+    --it;
   }
   out_data.kdata.parse(it->first);
   bufferlist::iterator b = it->second.begin();
