@@ -345,6 +345,8 @@ int FileStore::lfn_unlink(coll_t cid, const hobject_t& o,
       return r;
     }
     if (st.st_nlink == 1) {
+      dout(20) << __func__ << ": clearing omap on " << o
+	       << " in cid " << cid << dendl;
       r = object_map->clear(o, &spos);
       if (r < 0 && r != -ENOENT) {
 	assert(!m_filestore_fail_eio || r != -EIO);
@@ -4734,6 +4736,8 @@ int FileStore::_split_collection(coll_t cid,
       for (vector<hobject_t>::iterator i = objects.begin();
 	   i != objects.end();
 	   ++i) {
+	dout(20) << __func__ << ": " << *i << " still in source "
+		 << cid << dendl;
 	assert(!i->match(bits, rem));
       }
       objects.clear();
@@ -4751,6 +4755,8 @@ int FileStore::_split_collection(coll_t cid,
       for (vector<hobject_t>::iterator i = objects.begin();
 	   i != objects.end();
 	   ++i) {
+	dout(20) << __func__ << ": " << *i << " now in dest "
+		 << *i << dendl;
 	assert(i->match(bits, rem));
       }
       objects.clear();
