@@ -329,9 +329,8 @@ protected:
   friend class ECommitted;
 
   bool resolves_pending;
-  set<int> wants_resolve;   // nodes i need to send my resolve to
-  set<int> got_resolve;     // nodes i got resolves from
-  set<int> need_resolve_ack;   // nodes i need a resolve_ack from
+  set<int> resolve_gather;	// nodes i need resolves from
+  set<int> resolve_ack_gather;	// nodes i need a resolve_ack from
   map<metareqid_t, int> need_resolve_rollback;  // rollbacks i'm writing to the journal
   map<int, MMDSResolve*> delayed_resolve;
   
