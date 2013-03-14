@@ -644,7 +644,7 @@ void CDir::remove_null_dentries() {
   CDir::map_t::iterator p = items.begin();
   while (p != items.end()) {
     CDentry *dn = p->second;
-    p++;
+    ++p;
     if (dn->get_linkage()->is_null() && !dn->is_projected())
       remove_dentry(dn);
   }
@@ -687,7 +687,7 @@ void CDir::purge_stale_snap_data(const set<snapid_t>& snaps)
   CDir::map_t::iterator p = items.begin();
   while (p != items.end()) {
     CDentry *dn = p->second;
-    p++;
+    ++p;
 
     if (dn->last == CEPH_NOSNAP)
       continue;
@@ -931,7 +931,7 @@ void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
   int stale_rstat = 0;
   int stale_fragstat = 0;
 
-  for (list<CDir*>::iterator p = subs.begin(); p != subs.end(); p++) {
+  for (list<CDir*>::iterator p = subs.begin(); p != subs.end(); ++p) {
     CDir *dir = *p;
     dout(10) << " subfrag " << dir->get_frag() << " " << *dir << dendl;
     assert(!dir->is_auth() || dir->is_complete() || replay);
@@ -1744,7 +1744,7 @@ CDir::map_t::iterator CDir::_commit_full(ObjectOperation& m, const set<snapid_t>
   map_t::iterator p = items.begin();
   while (p != items.end() && bl.length() < max_write_size) {
     CDentry *dn = p->second;
-    p++;
+    ++p;
     
     if (dn->linkage.is_null()) 
       continue;  // skip negative entries
@@ -2053,9 +2053,8 @@ void CDir::_committed(version_t v, version_t lrv)
 
   // dentries clean?
   for (map_t::iterator it = items.begin();
-       it != items.end(); ) {
+       it != items.end(); ++it) {
     CDentry *dn = it->second;
-    it++;
     
     // inode?
     if (dn->linkage.is_primary()) {
@@ -2400,7 +2399,7 @@ void CDir::verify_fragstat()
 
   for (map_t::iterator it = items.begin();
        it != items.end();
-       it++) {
+       ++it) {
     CDentry *dn = it->second;
     if (dn->is_null())
       continue;
