@@ -906,7 +906,7 @@ private:
     assert(!inode_map.empty());
     int n = rand() % inode_map.size();
     hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
-    while (n--) p++;
+    while (n--) ++p;
     return p->second;
   }
 
