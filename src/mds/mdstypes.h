@@ -235,6 +235,9 @@ WRITE_CLASS_ENCODER(vinodeno_t)
 inline bool operator==(const vinodeno_t &l, const vinodeno_t &r) {
   return l.ino == r.ino && l.snapid == r.snapid;
 }
+inline bool operator!=(const vinodeno_t &l, const vinodeno_t &r) {
+  return !(l == r);
+}
 inline bool operator<(const vinodeno_t &l, const vinodeno_t &r) {
   return 
     l.ino < r.ino ||
