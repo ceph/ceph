@@ -7706,6 +7706,18 @@ int Client::get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>
   return 0;
 }
 
+int Client::get_osd_addr(int osd, entity_addr_t& addr)
+{
+  Mutex::Locker lock(client_lock);
+
+  if (!osdmap->exists(osd))
+    return -ENOENT;
+
+  addr = osdmap->get_addr(osd);
+
+  return 0;
+}
+
 int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
 			     loff_t length, loff_t offset)
 {
