@@ -232,7 +232,7 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
 	  }
 	  epoch = l;
 	} else
-	  i++;
+	  ++i;
       }
 
       MonMap *p = mon->monmap;

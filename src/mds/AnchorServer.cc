@@ -37,7 +37,7 @@ void AnchorServer::dump()
   dout(7) << "dump v " << version << dendl;
   for (map<inodeno_t, Anchor>::iterator it = anchor_map.begin();
        it != anchor_map.end();
-       it++) 
+       ++it)
     dout(15) << "dump " << it->second << dendl;
 }
 
@@ -210,7 +210,7 @@ bool AnchorServer::check_pending(version_t tid, MMDSTableRequest *req, list<Cont
     while (p != pending.end()) {
       if (p->first == tid)
 	break;
-      p++;
+      ++p;
     }
     assert(p != pending.end());
     assert(p->second == NULL);
@@ -225,7 +225,7 @@ bool AnchorServer::check_pending(version_t tid, MMDSTableRequest *req, list<Cont
   if (pending.empty()) {
     pending_ops.erase(ino);
   } else {
-    for (p = pending.begin(); p != pending.end() && p->second; p++) {
+    for (p = pending.begin(); p != pending.end() && p->second; ++p) {
       finished.push_back(p->second);
       p->second = NULL;
     }

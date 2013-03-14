@@ -202,7 +202,7 @@ ostream& operator<<(ostream& out, CInode& in)
     out << " caps={";
     for (map<client_t,Capability*>::iterator it = in.get_client_caps().begin();
          it != in.get_client_caps().end();
-         it++) {
+         ++it) {
       if (it != in.get_client_caps().begin()) out << ",";
       out << it->first << "="
 	  << ccap_string(it->second->pending());
@@ -758,7 +758,7 @@ void CInode::make_path_string_projected(string& s)
     s = "{" + q;
     for (list<CDentry*>::iterator p = projected_parent.begin();
 	 p != projected_parent.end();
-	 p++) {
+	 ++p) {
       string q;
       make_path_string(q, true, *p);
       s += " ";
@@ -1309,7 +1309,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	dirfragtree.swap(temp);
 	for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	     p != dirfrags.end();
-	     p++)
+	     ++p)
 	  if (!dirfragtree.is_leaf(p->first)) {
 	    dout(10) << " forcing open dirfrag " << p->first << " to leaf (racing with split|merge)" << dendl;
 	    dirfragtree.force_to_leaf(g_ceph_context, p->first);
@@ -1531,7 +1531,7 @@ void CInode::start_scatter(ScatterLock *lock)
 
   for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
        p != dirfrags.end();
-       p++) {
+       ++p) {
     frag_t fg = p->first;
     CDir *dir = p->second;
     fnode_t *pf = dir->get_projected_fnode();
@@ -1663,7 +1663,7 @@ void CInode::finish_scatter_gather_update(int type)
       pi->dirstat.version++;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();
-	   p++) {
+	   ++p) {
 	frag_t fg = p->first;
 	CDir *dir = p->second;
 	dout(20) << fg << " " << *dir << dendl;
@@ -1744,7 +1744,7 @@ void CInode::finish_scatter_gather_update(int type)
       pi->rstat.version++;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();
-	   p++) {
+	   ++p) {
 	frag_t fg = p->first;
 	CDir *dir = p->second;
 	dout(20) << fg << " " << *dir << dendl;
@@ -1769,7 +1769,7 @@ void CInode::finish_scatter_gather_update(int type)
 					       dir->first, CEPH_NOSNAP, this, true);
 	  for (map<snapid_t,old_rstat_t>::iterator q = dir->dirty_old_rstat.begin();
 	       q != dir->dirty_old_rstat.end();
-	       q++)
+	       ++q)
 	    mdcache->project_rstat_frag_to_inode(q->second.rstat, q->second.accounted_rstat,
 						 q->second.first, q->first, this, true);
 	  if (update)  // dir contents not valid if frozen or non-auth
@@ -1834,7 +1834,7 @@ void CInode::finish_scatter_gather_update_accounted(int type, Mutation *mut, EMe
 
   for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
        p != dirfrags.end();
-       p++) {
+       ++p) {
     CDir *dir = p->second;
     if (!dir->is_auth() || dir->is_frozen())
       continue;
@@ -2143,7 +2143,7 @@ void CInode::purge_stale_snap_data(const set<snapid_t>& snaps)
       dout(10) << " purging old_inode [" << p->second.first << "," << p->first << "]" << dendl;
       old_inodes.erase(p++);
     } else
-      p++;
+      ++p;
   }
 }
 
@@ -2249,7 +2249,7 @@ client_t CInode::calc_ideal_loner()
   client_t loner = -1;
   for (map<client_t,Capability*>::iterator it = client_caps.begin();
        it != client_caps.end();
-       it++) 
+       ++it) 
     if (!it->second->is_stale() &&
 	((it->second->wanted() & (CEPH_CAP_ANY_WR|CEPH_CAP_FILE_WR|CEPH_CAP_FILE_RD)) ||
 	 (inode.is_dir() && !has_subtree_root_dirfrag()))) {
@@ -2411,7 +2411,7 @@ void CInode::move_to_realm(SnapRealm *realm)
 	   << ", leaving realm " << *containing_realm << dendl;
   for (map<client_t,Capability*>::iterator q = client_caps.begin();
        q != client_caps.end();
-       q++) {
+       ++q) {
     containing_realm->remove_cap(q->first, q->second);
     realm->add_cap(q->first, q->second);
   }
@@ -2450,7 +2450,7 @@ void CInode::export_client_caps(map<client_t,Capability::Export>& cl)
 {
   for (map<client_t,Capability*>::iterator it = client_caps.begin();
        it != client_caps.end();
-       it++) {
+       ++it) {
     cl[it->first] = it->second->make_export();
   }
 }
@@ -2531,7 +2531,7 @@ int CInode::get_caps_issued(int *ploner, int *pother, int *pxlocker,
     loner_cap = -1;
   for (map<client_t,Capability*>::iterator it = client_caps.begin();
        it != client_caps.end();
-       it++) {
+       ++it) {
     int i = it->second->issued();
     c |= i;
     if (it->first == loner_cap)
@@ -2550,7 +2550,7 @@ bool CInode::is_any_caps_wanted()
 {
   for (map<client_t,Capability*>::iterator it = client_caps.begin();
        it != client_caps.end();
-       it++)
+       ++it)
     if (it->second->wanted())
       return true;
   return false;
@@ -2562,7 +2562,7 @@ int CInode::get_caps_wanted(int *ploner, int *pother, int shift, int mask)
   int loner = 0, other = 0;
   for (map<client_t,Capability*>::iterator it = client_caps.begin();
        it != client_caps.end();
-       it++) {
+       ++it) {
     if (!it->second->is_stale()) {
       int t = it->second->wanted();
       w |= t;
@@ -2576,7 +2576,7 @@ int CInode::get_caps_wanted(int *ploner, int *pother, int shift, int mask)
   if (is_auth())
     for (map<int,int>::iterator it = mds_caps_wanted.begin();
 	 it != mds_caps_wanted.end();
-	 it++) {
+	 ++it) {
       w |= it->second;
       other |= it->second;
       //cout << " get_caps_wanted mds " << it->first << " " << cap_string(it->second) << endl;
@@ -2843,7 +2843,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   ::encode(e, bl);
   for (map<frag_t,int32_t>::iterator p = dirfragtree._splits.begin();
        p != dirfragtree._splits.end();
-       p++) {
+       ++p) {
     ::encode(p->first, bl);
     ::encode(p->second, bl);
   }

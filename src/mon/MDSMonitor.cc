@@ -561,7 +561,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	  }
 	  epoch = l;
 	} else
-	  i++;
+	  ++i;
       }
 
       MDSMap *p = &mdsmap;
@@ -1088,7 +1088,7 @@ void MDSMonitor::tick()
       uint64_t gid = p->first;
       utime_t since = p->second.stamp;
       uint64_t seq = p->second.seq;
-      p++;
+      ++p;
       
       if (pending_mdsmap.mds_info.count(gid) == 0) {
 	// clean it out
@@ -1298,7 +1298,7 @@ void MDSMonitor::do_stop()
   while (p != pending_mdsmap.mds_info.end()) {
     uint64_t gid = p->first;
     MDSMap::mds_info_t& info = p->second;
-    p++;
+    ++p;
     switch (info.state) {
     case MDSMap::STATE_ACTIVE:
     case MDSMap::STATE_STOPPING:

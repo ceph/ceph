@@ -214,7 +214,7 @@ void MDSTableClient::handle_mds_recovery(int who)
   // prepares.
   for (map<uint64_t, _pending_prepare>::iterator p = pending_prepare.begin();
        p != pending_prepare.end();
-       p++) {
+       ++p) {
     dout(10) << "resending " << p->first << dendl;
     MMDSTableRequest *req = new MMDSTableRequest(table, TABLESERVER_OP_PREPARE, p->first);
     req->bl = p->second.mutation;

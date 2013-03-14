@@ -340,7 +340,7 @@ int SyntheticClient::run()
 
   for (list<int>::iterator it = modes.begin();
        it != modes.end();
-       it++) {
+       ++it) {
     int mode = *it;
     dout(3) << "mode " << mode << dendl;
 

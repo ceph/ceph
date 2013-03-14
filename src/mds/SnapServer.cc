@@ -117,7 +117,7 @@ bool SnapServer::_commit(version_t tid, MMDSTableRequest *req)
 
     for (set<int64_t>::const_iterator p = mds->mdsmap->get_data_pools().begin();
 	 p != mds->mdsmap->get_data_pools().end();
-	 p++) {
+	 ++p) {
       need_to_purge[*p].insert(sn);
       need_to_purge[*p].insert(seq);
     }
@@ -171,10 +171,10 @@ void SnapServer::_server_update(bufferlist& bl)
   dout(7) << "_server_update purged " << purge << dendl;
   for (map<int, vector<snapid_t> >::iterator p = purge.begin();
        p != purge.end();
-       p++) {
+       ++p) {
     for (vector<snapid_t>::iterator q = p->second.begin();
 	 q != p->second.end();
-	 q++)
+	 ++q)
       need_to_purge[p->first].erase(*q);
     if (need_to_purge[p->first].empty())
       need_to_purge.erase(p->first);
@@ -227,12 +227,12 @@ void SnapServer::check_osd_map(bool force)
 
   for (map<int, set<snapid_t> >::iterator p = need_to_purge.begin();
        p != need_to_purge.end();
-       p++) {
+       ++p) {
     int id = p->first;
     const pg_pool_t *pi = mds->osdmap->get_pg_pool(id);
     for (set<snapid_t>::iterator q = p->second.begin();
 	 q != p->second.end();
-	 q++) {
+	 ++q) {
       if (pi->is_removed_snap(*q)) {
 	dout(10) << " osdmap marks " << *q << " as removed" << dendl;
 	all_purged[id].push_back(*q);

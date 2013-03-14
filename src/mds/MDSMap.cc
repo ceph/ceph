@@ -168,12 +168,12 @@ void MDSMap::print(ostream& out)
   multimap< pair<unsigned,unsigned>, uint64_t > foo;
   for (map<uint64_t,mds_info_t>::iterator p = mds_info.begin();
        p != mds_info.end();
-       p++)
+       ++p)
     foo.insert(pair<pair<unsigned,unsigned>,uint64_t>(pair<unsigned,unsigned>(p->second.rank, p->second.inc-1), p->first));
 
   for (multimap< pair<unsigned,unsigned>, uint64_t >::iterator p = foo.begin();
        p != foo.end();
-       p++) {
+       ++p) {
     mds_info_t& info = mds_info[p->second];
     
     out << p->second << ":\t"
@@ -209,7 +209,7 @@ void MDSMap::print_summary(ostream& out)
 
   for (map<uint64_t,mds_info_t>::iterator p = mds_info.begin();
        p != mds_info.end();
-       p++) {
+       ++p) {
     string s = ceph_mds_state_name(p->second.state);
     if (p->second.laggy())
       s += "(laggy or crashed)";
@@ -225,7 +225,7 @@ void MDSMap::print_summary(ostream& out)
   if (!by_rank.empty())
     out << " " << by_rank;
 
-  for (map<string,int>::reverse_iterator p = by_state.rbegin(); p != by_state.rend(); p++)
+  for (map<string,int>::reverse_iterator p = by_state.rbegin(); p != by_state.rend(); ++p)
     out << ", " << p->second << " " << p->first;
   
   if (!failed.empty())

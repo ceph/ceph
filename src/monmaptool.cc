@@ -164,7 +164,7 @@ int main(int argc, const char **argv)
     modified = true;
   }
 
-  for (map<string,entity_addr_t>::iterator p = add.begin(); p != add.end(); p++) {
+  for (map<string,entity_addr_t>::iterator p = add.begin(); p != add.end(); ++p) {
     if (monmap.contains(p->first)) {
       cerr << me << ": map already contains mon." << p->first << std::endl;
       usage();
@@ -175,7 +175,7 @@ int main(int argc, const char **argv)
     }
     monmap.add(p->first, p->second);
   }
-  for (list<string>::iterator p = rm.begin(); p != rm.end(); p++) {
+  for (list<string>::iterator p = rm.begin(); p != rm.end(); ++p) {
     cout << me << ": removing " << *p << std::endl;
     if (!monmap.contains(*p)) {
       cerr << me << ": map does not contain " << *p << std::endl;

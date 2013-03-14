@@ -351,7 +351,7 @@ int librados::RadosClient::pool_list(std::list<std::string>& v)
   Mutex::Locker l(lock);
   for (map<int64_t,pg_pool_t>::const_iterator p = osdmap.get_pools().begin();
        p != osdmap.get_pools().end();
-       p++)
+       ++p)
     v.push_back(osdmap.get_pool_name(p->first));
   return 0;
 }

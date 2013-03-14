@@ -328,7 +328,7 @@ void MDLog::trim(int m)
     // look at first segment
     LogSegment *ls = p->second;
     assert(ls);
-    p++;
+    ++p;
     
     if (ls->end > journaler->get_write_safe_pos()) {
       dout(5) << "trim segment " << ls->offset << ", not fully flushed yet, safe "
