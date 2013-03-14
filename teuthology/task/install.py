@@ -133,10 +133,10 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
         stdout=StringIO(),
         )
 
-def _update_el6_package_list_and_install(ctx, remote, el6, config):
+def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     baseparms = _get_baseurlinfo_and_dist(ctx, remote, config)
     log.info("Installing packages: {pkglist} on remote rpm {arch}".format(
-            pkglist=", ".join(el6), arch=baseparms['arch']))
+            pkglist=", ".join(rpm), arch=baseparms['arch']))
     host=ctx.teuthology_config.get('gitbuilder_host',
                                        'gitbuilder.ceph.com')
     r = remote.run(
@@ -154,7 +154,7 @@ def _update_el6_package_list_and_install(ctx, remote, el6, config):
     base_url = '%s%s' % (start_of_url, end_of_url)
     remote.run(
         args=['sudo','yum','reinstall',base_url,'-y',], stdout=StringIO())
-    for cpack in el6:
+    for cpack in rpm:
         remote.run(args=['sudo', 'yum', 'install', cpack, '-y',],stdout=StringIO())
 
 def install_packages(ctx, pkgs, config):
@@ -163,7 +163,7 @@ def install_packages(ctx, pkgs, config):
     """
     install_pkgs = {
         "deb": _update_deb_package_list_and_install,
-        "rpm": _update_el6_package_list_and_install,
+        "rpm": _update_rpm_package_list_and_install,
         }
     with parallel() as p:
         for remote in ctx.cluster.remotes.iterkeys():
@@ -211,13 +211,13 @@ def _remove_deb(remote, debs):
         stdout=StringIO(),
         )
 
-def _remove_el6(remote, el6):
+def _remove_rpm(remote, rpm):
     log.info("Removing packages: {pkglist} on rpm system.".format(
-            pkglist=", ".join(el6)))
+            pkglist=", ".join(rpm)))
     remote.run(
         args=[
             'for', 'd', 'in',
-            ] + el6 + [
+            ] + rpm + [
             run.Raw(';'),
             'do',
             'sudo', 'yum', 'remove',
@@ -236,7 +236,7 @@ def _remove_el6(remote, el6):
 def remove_packages(ctx, pkgs):
     remove_pkgs = {
         "deb": _remove_deb,
-        "rpm": _remove_el6,
+        "rpm": _remove_rpm,
         }
     with parallel() as p:
         for remote in ctx.cluster.remotes.iterkeys():
@@ -256,7 +256,7 @@ def _remove_sources_list_deb(remote):
         stdout=StringIO(),
        )
 
-def _remove_sources_list_el6(remote):
+def _remove_sources_list_rpm(remote):
     remote.run(
         args=[
             'sudo', 'rm', '-f', '/etc/yum.repos.d/ceph.repo',
@@ -287,7 +287,7 @@ def _remove_sources_list_el6(remote):
 def remove_sources(ctx):
     remove_sources_pkgs = {
         'deb': _remove_sources_list_deb,
-        'rpm': _remove_sources_list_el6,
+        'rpm': _remove_sources_list_rpm,
         }
     log.info("Removing ceph sources lists")
     with parallel() as p:
@@ -314,7 +314,7 @@ def install(ctx, config):
         'libcephfs1',
         'libcephfs1-dbg',
         ]
-    el6 = [
+    rpm = [
         'ceph-debug',
         'ceph-radosgw',
         'ceph-test',
@@ -331,12 +331,12 @@ def install(ctx, config):
     extra_pkgs = config.get('extra_packages')
     log.info('extra packages: {packages}'.format(packages=extra_pkgs))
     debs = debs + extra_pkgs
-    el6 = el6 + extra_pkgs
+    rpm = rpm + extra_pkgs
 
     extras = config.get('extras')
     if extras is not None:
         debs = ['ceph-test', 'ceph-test-dbg', 'ceph-fuse', 'ceph-fuse-dbg']
-	el6 = ['ceph-fuse',]
+	rpm = ['ceph-fuse',]
 
     # install lib deps (so we explicitly specify version), but do not
     # uninstall them, as other packages depend on them (e.g., kvm)
@@ -346,12 +346,12 @@ def install(ctx, config):
         'librbd1',
         'librbd1-dbg',
         ]
-    el6_install = el6 + [
+    rpm_install = rpm + [
         'librbd1',
         'librados2',
         ]
-    install_info = {"deb": debs_install, "rpm": el6_install}
-    remove_info = {"deb": debs, "rpm": el6}
+    install_info = {"deb": debs_install, "rpm": rpm_install}
+    remove_info = {"deb": debs, "rpm": rpm}
     install_packages(ctx, install_info, config)
     try:
         yield
