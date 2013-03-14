@@ -1029,3 +1029,23 @@ TEST(LibCephFS, GetOsdCrushLocation) {
 
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, GetOsdAddr) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+
+  EXPECT_EQ(-ENOTCONN, ceph_get_osd_addr(cmount, 0, NULL));
+
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  ASSERT_EQ(-EINVAL, ceph_get_osd_addr(cmount, 0, NULL));
+
+  struct sockaddr_storage addr;
+  ASSERT_EQ(-ENOENT, ceph_get_osd_addr(cmount, -1, &addr));
+  ASSERT_EQ(-ENOENT, ceph_get_osd_addr(cmount, 9999999, &addr));
+
+  ASSERT_EQ(0, ceph_get_osd_addr(cmount, 0, &addr));
+
+  ceph_shutdown(cmount);
+}
