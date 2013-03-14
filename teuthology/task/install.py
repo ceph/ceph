@@ -23,7 +23,7 @@ def _get_system_type(remote):
     )
     system_value = r.stdout.getvalue().strip()
     log.debug("System to be installed: %s" % system_value)
-    if system_value in ['Ubuntu',]:
+    if system_value in ['Ubuntu','Debian',]:
 	return "deb"
     if system_value in ['CentOS',]:
         return "rpm"
