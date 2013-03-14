@@ -4309,16 +4309,19 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
       // dn auth_pin?
       if (strong->authpinned_dentries.count(p->first) &&
 	  strong->authpinned_dentries[p->first].count(q->first)) {
-	MMDSCacheRejoin::slave_reqid r = strong->authpinned_dentries[p->first][q->first];
-	dout(10) << " dn authpin by " << r << " on " << *dn << dendl;
-	
-	// get/create slave mdrequest
-	MDRequest *mdr;
-	if (have_request(r.reqid))
-	  mdr = request_get(r.reqid);
-	else
-	  mdr = request_start_slave(r.reqid, r.attempt, from);
-	mdr->auth_pin(dn);
+	for (list<MMDSCacheRejoin::slave_reqid>::iterator r = strong->authpinned_dentries[p->first][q->first].begin();
+	     r != strong->authpinned_dentries[p->first][q->first].end();
+	     ++r) {
+	  dout(10) << " dn authpin by " << *r << " on " << *dn << dendl;
+
+	  // get/create slave mdrequest
+	  MDRequest *mdr;
+	  if (have_request(r->reqid))
+	    mdr = request_get(r->reqid);
+	  else
+	    mdr = request_start_slave(r->reqid, r->attempt, from);
+	  mdr->auth_pin(dn);
+	}
       }
 
       // dn xlock?
@@ -4395,22 +4398,25 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 
     // auth pin?
     if (strong->authpinned_inodes.count(in->vino())) {
-      MMDSCacheRejoin::slave_reqid r = strong->authpinned_inodes[in->vino()];
-      dout(10) << " inode authpin by " << r << " on " << *in << dendl;
+      for (list<MMDSCacheRejoin::slave_reqid>::iterator r = strong->authpinned_inodes[in->vino()].begin();
+	   r != strong->authpinned_inodes[in->vino()].end();
+	   ++r) {
+	dout(10) << " inode authpin by " << *r << " on " << *in << dendl;
 
-      // get/create slave mdrequest
-      MDRequest *mdr;
-      if (have_request(r.reqid))
-	mdr = request_get(r.reqid);
-      else
-	mdr = request_start_slave(r.reqid, r.attempt, from);
-      if (strong->frozen_authpin_inodes.count(in->vino())) {
-	assert(!in->get_num_auth_pins());
-	mdr->freeze_auth_pin(in);
-      } else {
-	assert(!in->is_frozen_auth_pin());
+	// get/create slave mdrequest
+	MDRequest *mdr;
+	if (have_request(r->reqid))
+	  mdr = request_get(r->reqid);
+	else
+	  mdr = request_start_slave(r->reqid, r->attempt, from);
+	if (strong->frozen_authpin_inodes.count(in->vino())) {
+	  assert(!in->get_num_auth_pins());
+	  mdr->freeze_auth_pin(in);
+	} else {
+	  assert(!in->is_frozen_auth_pin());
+	}
+	mdr->auth_pin(in);
       }
-      mdr->auth_pin(in);
     }
     // xlock(s)?
     if (strong->xlocked_inodes.count(in->vino())) {
@@ -4433,19 +4439,23 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
     }
     // wrlock(s)?
     if (strong->wrlocked_inodes.count(in->vino())) {
-      for (map<int,MMDSCacheRejoin::slave_reqid>::iterator q = strong->wrlocked_inodes[in->vino()].begin();
+      for (map<int, list<MMDSCacheRejoin::slave_reqid> >::iterator q = strong->wrlocked_inodes[in->vino()].begin();
 	   q != strong->wrlocked_inodes[in->vino()].end();
 	   ++q) {
 	SimpleLock *lock = in->get_lock(q->first);
-	dout(10) << " inode wrlock by " << q->second << " on " << *lock << " on " << *in << dendl;
-	MDRequest *mdr = request_get(q->second.reqid);  // should have this from auth_pin above.
-	assert(mdr->is_auth_pinned(in));
-	lock->set_state(LOCK_LOCK);
-	if (lock == &in->filelock)
-	  in->loner_cap = -1;
-	lock->get_wrlock(true);
-	mdr->wrlocks.insert(lock);
-	mdr->locks.insert(lock);
+	for (list<MMDSCacheRejoin::slave_reqid>::iterator r = q->second.begin();
+	     r != q->second.end();
+	     ++r) {
+	  dout(10) << " inode wrlock by " << *r << " on " << *lock << " on " << *in << dendl;
+	  MDRequest *mdr = request_get(r->reqid);  // should have this from auth_pin above.
+	  assert(mdr->is_auth_pinned(in));
+	  lock->set_state(LOCK_MIX);
+	  if (lock == &in->filelock)
+	    in->loner_cap = -1;
+	  lock->get_wrlock(true);
+	  mdr->wrlocks.insert(lock);
+	  mdr->locks.insert(lock);
+	}
       }
     }
   }
