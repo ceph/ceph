@@ -1658,11 +1658,14 @@ void Migrator::handle_export_cancel(MExportDirCancel *m)
     CInode *in = cache->get_inode(df.ino);
     assert(in);
     import_reverse_discovered(df, in);
-  } else if (import_state[df] == IMPORT_PREPPING ||
-	     import_state[df] == IMPORT_PREPPED) {
+  } else if (import_state[df] == IMPORT_PREPPING) {
     CDir *dir = mds->mdcache->get_dirfrag(df);
     assert(dir);
     import_reverse_prepping(dir);
+  } else if (import_state[df] == IMPORT_PREPPED) {
+    CDir *dir = mds->mdcache->get_dirfrag(df);
+    assert(dir);
+    import_reverse_unfreeze(dir);
   } else {
     assert(0 == "got export_cancel in weird state");
   }
