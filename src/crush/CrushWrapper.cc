@@ -89,7 +89,7 @@ bool CrushWrapper::check_item_loc(CephContext *cct, int item, const map<string,s
 {
   ldout(cct, 5) << "check_item_loc item " << item << " loc " << loc << dendl;
 
-  for (map<int,string>::const_iterator p = type_map.begin(); p != type_map.end(); p++) {
+  for (map<int,string>::const_iterator p = type_map.begin(); p != type_map.end(); ++p) {
     // ignore device
     if (p->first == 0)
       continue;
@@ -155,7 +155,7 @@ int CrushWrapper::get_full_location_ordered(int id, vector<pair<string, string> 
 
   // read the type map and get the name of the type with the largest ID
   int high_type = 0;
-  for (map<int, string>::iterator it = type_map.begin(); it != type_map.end(); it++){
+  for (map<int, string>::iterator it = type_map.begin(); it != type_map.end(); ++it){
     if ( (*it).first > high_type )
       high_type = (*it).first;
   }
@@ -194,7 +194,7 @@ map<int, string> CrushWrapper::get_parent_hierarchy(int id)
 
   // read the type map and get the name of the type with the largest ID
   int high_type = 0;
-  for (map<int, string>::iterator it = type_map.begin(); it != type_map.end(); it++){
+  for (map<int, string>::iterator it = type_map.begin(); it != type_map.end(); ++it){
     if ( (*it).first > high_type )
       high_type = (*it).first;
   }
@@ -251,7 +251,7 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
 
   int cur = item;
 
-  for (map<int,string>::iterator p = type_map.begin(); p != type_map.end(); p++) {
+  for (map<int,string>::iterator p = type_map.begin(); p != type_map.end(); ++p) {
     // ignore device type
     if (p->first == 0)
       continue;
@@ -496,7 +496,7 @@ void CrushWrapper::reweight(CephContext *cct)
 {
   set<int> roots;
   find_roots(roots);
-  for (set<int>::iterator p = roots.begin(); p != roots.end(); p++) {
+  for (set<int>::iterator p = roots.begin(); p != roots.end(); ++p) {
     if (*p >= 0)
       continue;
     crush_bucket *b = get_bucket(*p);
