@@ -10,11 +10,11 @@ roles:
 
 tasks:
 - install:
-     tag: v0.57  
+     tag: v0.57
 - ceph:
 - install.upgrade:
      all:
-        tag: v0.58  
+        tag: v0.58
 - ceph.restart:
 - ceph-fuse: [client.0]
 - workunit:
