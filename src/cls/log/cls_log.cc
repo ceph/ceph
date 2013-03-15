@@ -66,7 +66,7 @@ static int cls_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
   try {
     ::decode(op, in_iter);
   } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: cls_log_add_op(): failed to decode entry\n");
+    CLS_LOG(1, "ERROR: cls_log_add_op(): failed to decode op");
     return -EINVAL;
   }
 
@@ -76,7 +76,7 @@ static int cls_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
 
   get_index(hctx, entry.timestamp, index);
 
-  CLS_LOG(0, "storing entry at %s\n", index.c_str());
+  CLS_LOG(0, "storing entry at %s", index.c_str());
 
   int ret = write_log_entry(hctx, index, entry);
   if (ret < 0)
@@ -93,7 +93,7 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   try {
     ::decode(op, in_iter);
   } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: cls_log_list_op(): failed to decode entry\n");
+    CLS_LOG(1, "ERROR: cls_log_list_op(): failed to decode op");
     return -EINVAL;
   }
 
@@ -124,7 +124,7 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
       ::decode(e, biter);
       entries.push_back(e);
     } catch (buffer::error& err) {
-      CLS_LOG(0, "ERROR: cls_log_list: could not decode entry, index=%s\n", index.c_str());
+      CLS_LOG(0, "ERROR: cls_log_list: could not decode entry, index=%s", index.c_str());
     }
   }
 
@@ -144,7 +144,7 @@ static int cls_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   try {
     ::decode(op, in_iter);
   } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: cls_log_list_op(): failed to decode entry\n");
+    CLS_LOG(0, "ERROR: cls_log_list_op(): failed to decode entry");
     return -EINVAL;
   }
 
@@ -154,7 +154,7 @@ static int cls_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   string to_index;
 
   get_index_time_prefix(op.from_time, from_index);
-  get_index_time_prefix(op.from_time, to_index);
+  get_index_time_prefix(op.to_time, to_index);
 
 #define MAX_TRIM_ENTRIES 1000
   size_t max_entries = MAX_TRIM_ENTRIES;
@@ -170,12 +170,16 @@ static int cls_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   for (i = 0; i < max_entries && iter != keys.end(); ++i, ++iter) {
     const string& index = iter->first;
 
-    if (index >= to_index)
+    CLS_LOG(20, "index=%s to_index=%s", index.c_str(), to_index.c_str());
+
+    if (index.compare(0, to_index.size(), to_index) > 0)
       break;
+
+    CLS_LOG(20, "removing key: index=%s", index.c_str());
 
     int rc = cls_cxx_map_remove_key(hctx, index);
     if (rc < 0) {
-      CLS_LOG(1, "ERROR: cls_log_trim_op(): failed to decode entry\n");
+      CLS_LOG(1, "ERROR: cls_cxx_map_remove_key failed rc=%d", rc);
       return -EINVAL;
     }
     removed = true;
