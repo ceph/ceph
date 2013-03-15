@@ -473,7 +473,7 @@ private:
     else
       in->encode_snap_blob(snapbl);
 
-    for (list<std::tr1::shared_ptr<fullbit> >::iterator p = roots.begin(); p != roots.end(); p++) {
+    for (list<std::tr1::shared_ptr<fullbit> >::iterator p = roots.begin(); p != roots.end(); ++p) {
       if ((*p)->inode.ino == in->ino()) {
 	roots.erase(p);
 	break;
