@@ -205,8 +205,12 @@ void OSDService::expand_pg_num(OSDMapRef old_map,
     if (!new_map->have_pg_pool(i->pool())) {
       in_progress_splits.erase(i++);
     } else {
-      i->is_split(old_map->get_pg_num(i->pool()),
-		  new_map->get_pg_num(i->pool()), &children);
+      if (i->ps() < static_cast<unsigned>(old_map->get_pg_num(i->pool()))) {
+	i->is_split(old_map->get_pg_num(i->pool()),
+		    new_map->get_pg_num(i->pool()), &children);
+      } else {
+	assert(i->ps() < static_cast<unsigned>(new_map->get_pg_num(i->pool())));
+      }
       ++i;
     }
   }
@@ -4247,9 +4251,6 @@ void OSD::consume_map()
   int num_pg_primary = 0, num_pg_replica = 0, num_pg_stray = 0;
   list<PG*> to_remove;
 
-  service.expand_pg_num(service.get_osdmap(),
-			osdmap);
-
   // scan pg's
   for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
        it != pg_map.end();
@@ -4287,6 +4288,8 @@ void OSD::consume_map()
     (*i)->put();
   }
   to_remove.clear();
+
+  service.expand_pg_num(service.get_osdmap(), osdmap);
 
   service.pre_publish_map(osdmap);
   service.publish_map(osdmap);
