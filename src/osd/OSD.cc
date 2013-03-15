@@ -1219,7 +1219,7 @@ int OSD::shutdown()
   // then kick all pgs,
   for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
        p != pg_map.end();
-       p++) {
+       ++p) {
     dout(20) << " kicking pg " << p->first << dendl;
     p->second->lock();
     p->second->kick();
@@ -1234,7 +1234,7 @@ int OSD::shutdown()
   // tell pgs we're shutting down
   for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
        p != pg_map.end();
-       p++) {
+       ++p) {
     p->second->lock();
     p->second->on_shutdown();
     p->second->unlock();
@@ -1277,7 +1277,7 @@ int OSD::shutdown()
   // close pgs
   for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
        p != pg_map.end();
-       p++) {
+       ++p) {
     PG *pg = p->second;
     pg->put();
   }
@@ -1355,7 +1355,7 @@ void OSD::clear_temp(ObjectStore *store, coll_t tmp)
   unsigned removed = 0;
   for (vector<hobject_t>::iterator p = objects.begin();
        p != objects.end();
-       p++, removed++) {
+       ++p, removed++) {
     t.collection_remove(tmp, *p);
     if (removed > 300) {
       int r = store->apply_transaction(t);
@@ -1548,7 +1548,7 @@ void OSD::load_pgs()
   map<pg_t, interval_set<snapid_t> > pgs;
   for (vector<coll_t>::iterator it = ls.begin();
        it != ls.end();
-       it++) {
+       ++it) {
     pg_t pgid;
     snapid_t snap;
 
@@ -1679,7 +1679,7 @@ void OSD::build_past_intervals_parallel()
   epoch_t cur_epoch = superblock.newest_map;
   for (hash_map<pg_t, PG*>::iterator i = pg_map.begin();
        i != pg_map.end();
-       i++) {
+       ++i) {
     PG *pg = i->second;
 
     epoch_t start, end;
@@ -2036,7 +2036,7 @@ void OSD::update_osd_stat()
   osd_stat.kb_avail = stbuf.f_bavail * stbuf.f_bsize / 1024;
 
   osd_stat.hb_in.clear();
-  for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin(); p != heartbeat_peers.end(); p++)
+  for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin(); p != heartbeat_peers.end(); ++p)
     osd_stat.hb_in.push_back(p->first);
   osd_stat.hb_out.clear();
 
@@ -2091,7 +2091,7 @@ void OSD::maybe_update_heartbeat_peers()
   // build heartbeat from set
   for (hash_map<pg_t, PG*>::iterator i = pg_map.begin();
        i != pg_map.end();
-       i++) {
+       ++i) {
     PG *pg = i->second;
     pg->heartbeat_peer_lock.Lock();
     dout(20) << i->first << " heartbeat_peers " << pg->heartbeat_peers << dendl;
@@ -2271,7 +2271,7 @@ void OSD::heartbeat_check()
   cutoff -= g_conf->osd_heartbeat_grace;
   for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
        p != heartbeat_peers.end();
-       p++) {
+       ++p) {
     dout(25) << "heartbeat_check osd." << p->first
 	     << " first_tx " << p->second.first_tx
 	     << " last_tx " << p->second.last_tx
@@ -2324,7 +2324,7 @@ void OSD::heartbeat()
   // send heartbeats
   for (map<int,HeartbeatInfo>::iterator i = heartbeat_peers.begin();
        i != heartbeat_peers.end();
-       i++) {
+       ++i) {
     int peer = i->first;
     dout(30) << "heartbeat allocating ping for osd." << peer << dendl;
     Message *m = new MOSDPing(monc->get_fsid(),
@@ -2571,7 +2571,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       if (r >= 0) {
           ss << "header=" << string(hdrbl.c_str(), hdrbl.length());
           for (map<string, bufferlist>::iterator it = keyvals.begin();
-              it != keyvals.end(); it++)
+              it != keyvals.end(); ++it)
             ss << " key=" << (*it).first << " val="
                << string((*it).second.c_str(), (*it).second.length());
       } else {
@@ -3666,7 +3666,7 @@ void OSD::handle_scrub(MOSDScrub *m)
   if (m->scrub_pgs.empty()) {
     for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
 	 p != pg_map.end();
-	 p++) {
+	 ++p) {
       PG *pg = p->second;
       pg->lock();
       if (pg->is_primary()) {
@@ -3682,7 +3682,7 @@ void OSD::handle_scrub(MOSDScrub *m)
   } else {
     for (vector<pg_t>::iterator p = m->scrub_pgs.begin();
 	 p != m->scrub_pgs.end();
-	 p++)
+	 ++p)
       if (pg_map.count(*p)) {
 	PG *pg = pg_map[*p];
 	pg->lock();
@@ -4050,7 +4050,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     // kill connections to newly down osds
     set<int> old;
     osdmap->get_all_osds(old);
-    for (set<int>::iterator p = old.begin(); p != old.end(); p++) {
+    for (set<int>::iterator p = old.begin(); p != old.end(); ++p) {
       if (*p != whoami &&
 	  osdmap->have_inst(*p) &&                        // in old map
 	  (!newmap->exists(*p) || !newmap->is_up(*p))) {  // but not the new one
@@ -4341,7 +4341,7 @@ void OSD::consume_map()
   // scan pg's
   for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
        it != pg_map.end();
-       it++) {
+       ++it) {
     PG *pg = it->second;
     pg->lock();
     if (pg->is_primary())
@@ -4382,7 +4382,7 @@ void OSD::consume_map()
   // scan pg's
   for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
        it != pg_map.end();
-       it++) {
+       ++it) {
     PG *pg = it->second;
     pg->lock();
     pg->queue_null(osdmap->get_epoch(), osdmap->get_epoch());
@@ -4737,7 +4737,7 @@ void OSD::do_split(PG *parent, set<pg_t>& childpgids, ObjectStore::Transaction& 
   map<pg_t,PG*> children;
   for (set<pg_t>::iterator q = childpgids.begin();
        q != childpgids.end();
-       q++) {
+       ++q) {
     pg_history_t history;
     history.epoch_created = history.same_up_since =
       history.same_interval_since = history.same_primary_since =
@@ -4764,7 +4764,7 @@ void OSD::do_split(PG *parent, set<pg_t>& childpgids, ObjectStore::Transaction& 
   // unlock parent, children
   parent->unlock();
 
-  for (map<pg_t,PG*>::iterator q = children.begin(); q != children.end(); q++) {
+  for (map<pg_t,PG*>::iterator q = children.begin(); q != children.end(); ++q) {
     PG *pg = q->second;
     pg->handle_create(&rctx);
     pg->write_if_dirty(t);
@@ -4787,7 +4787,7 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
   vector<hobject_t> olist;
   store->collection_list(coll_t(parent->info.pgid), olist);
 
-  for (vector<hobject_t>::iterator p = olist.begin(); p != olist.end(); p++) {
+  for (vector<hobject_t>::iterator p = olist.begin(); p != olist.end(); ++p) {
     hobject_t poid = *p;
     object_locator_t oloc(parentid.pool());
     if (poid.get_key().size())
@@ -4835,7 +4835,7 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
   list<pg_log_entry_t>::iterator p = parent->log.log.begin();
   while (p != parent->log.log.end()) {
     list<pg_log_entry_t>::iterator cur = p;
-    p++;
+    ++p;
     hobject_t& poid = cur->soid;
     object_locator_t oloc(parentid.pool());
     if (poid.get_key().size())
@@ -4857,7 +4857,7 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
 
   for (map<pg_t,PG*>::iterator p = children.begin();
        p != children.end();
-       p++) {
+       ++p) {
     PG *child = p->second;
 
     // fix log bounds
@@ -4922,7 +4922,7 @@ void OSD::handle_pg_create(OpRequestRef op)
 
   for (map<pg_t,pg_create_t>::iterator p = m->mkpg.begin();
        p != m->mkpg.end();
-       p++) {
+       ++p) {
     pg_t pgid = p->first;
     epoch_t created = p->second.created;
     pg_t parent = p->second.parent;
@@ -4978,7 +4978,7 @@ void OSD::handle_pg_create(OpRequestRef op)
     dout(10) << "mkpg " << pgid << " e" << created
 	     << " h " << history
 	     << " : querying priors " << pset << dendl;
-    for (set<int>::iterator p = pset.begin(); p != pset.end(); p++) 
+    for (set<int>::iterator p = pset.begin(); p != pset.end(); ++p) 
       if (osdmap->is_up(*p))
 	(*rctx.query_map)[*p][pgid] = pg_query_t(pg_query_t::INFO, history,
 						 osdmap->get_epoch());
@@ -5093,7 +5093,7 @@ void OSD::do_notifies(
 {
   for (map< int, vector<pair<pg_notify_t,pg_interval_map_t> > >::iterator it = notify_list.begin();
        it != notify_list.end();
-       it++) {
+       ++it) {
     if (it->first == whoami) {
       dout(7) << "do_notify osd." << it->first << " is self, skipping" << dendl;
       continue;
@@ -5136,7 +5136,7 @@ void OSD::do_queries(map< int, map<pg_t,pg_query_t> >& query_map,
 {
   for (map< int, map<pg_t,pg_query_t> >::iterator pit = query_map.begin();
        pit != query_map.end();
-       pit++) {
+       ++pit) {
     if (!curmap->is_up(pit->first))
       continue;
     int who = pit->first;
@@ -5226,7 +5226,7 @@ void OSD::handle_pg_notify(OpRequestRef op)
 
   for (vector<pair<pg_notify_t, pg_interval_map_t> >::iterator it = m->get_pg_list().begin();
        it != m->get_pg_list().end();
-       it++) {
+       ++it) {
     PG *pg = 0;
 
     if (it->first.info.pgid.preferred() >= 0) {
@@ -5555,7 +5555,7 @@ void OSD::handle_pg_query(OpRequestRef op)
   
   for (map<pg_t,pg_query_t>::iterator it = m->pg_list.begin();
        it != m->pg_list.end();
-       it++) {
+       ++it) {
     pg_t pgid = it->first;
 
     if (pgid.preferred() >= 0) {
@@ -5641,7 +5641,7 @@ void OSD::handle_pg_remove(OpRequestRef op)
 
   for (vector<pg_t>::iterator it = m->pg_list.begin();
        it != m->pg_list.end();
-       it++) {
+       ++it) {
     pg_t pgid = *it;
     if (pgid.preferred() >= 0) {
       dout(10) << "ignoring localized pg " << pgid << dendl;
@@ -5759,7 +5759,7 @@ void OSD::check_replay_queue()
   }
   replay_queue_lock.Unlock();
 
-  for (list< pair<pg_t,utime_t> >::iterator p = pgids.begin(); p != pgids.end(); p++) {
+  for (list< pair<pg_t,utime_t> >::iterator p = pgids.begin(); p != pgids.end(); ++p) {
     pg_t pgid = p->first;
     if (pg_map.count(pgid)) {
       PG *pg = _lookup_lock_pg_with_map_lock_held(pgid);
