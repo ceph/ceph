@@ -55,7 +55,7 @@ set<string> hobject_t::get_prefixes(
   char buf[20];
   char *t = buf;
   uint64_t poolid(pool);
-  t += snprintf(t, sizeof(buf), "%.*lX", 16, poolid);
+  t += snprintf(t, sizeof(buf), "%.*llX", 16, (long long unsigned)poolid);
   *(t++) = '.';
   string poolstr(buf, t - buf);
   set<string> ret;
@@ -78,7 +78,7 @@ string hobject_t::to_str() const
   char *end = t + sizeof(snap_with_hash);
 
   uint64_t poolid(pool);
-  t += snprintf(t, end - t, "%.*lX", 16, poolid);
+  t += snprintf(t, end - t, "%.*llX", 16, (long long unsigned)poolid);
 
   uint32_t revhash(get_filestore_key_u32());
   t += snprintf(t, end - t, ".%.*X", 8, revhash);
