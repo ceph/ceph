@@ -360,8 +360,9 @@ struct ObjectOperation {
 	  if (psnaps) {
 
             psnaps->clones.clear();
-            vector<clone_info>::iterator ci;
-            for (ci = resp.clones.begin(); ci != resp.clones.end(); ci++) {
+            for (vector<clone_info>::iterator ci = resp.clones.begin(); 
+		 ci != resp.clones.end(); 
+		 ++ci) {
               librados::clone_info_t clone;
 
               clone.cloneid = ci->cloneid;
@@ -1594,7 +1595,7 @@ public:
       C_GatherBuilder gather(cct);
       vector<bufferlist> resultbl(extents.size());
       int i=0;
-      for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
+      for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
 	read_trunc(p->oid, p->oloc, p->offset, p->length,
 	     snap, &resultbl[i++], flags, trunc_size, trunc_seq, gather.new_sub());
       }
@@ -1616,11 +1617,11 @@ public:
     } else {
       C_GatherBuilder gack(cct, onack);
       C_GatherBuilder gcom(cct, oncommit);
-      for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
+      for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
 	bufferlist cur;
 	for (vector<pair<uint64_t,uint64_t> >::iterator bit = p->buffer_extents.begin();
 	     bit != p->buffer_extents.end();
-	     bit++)
+	     ++bit)
 	  bl.copy(bit->first, bit->second, cur);
 	assert(cur.length() == p->length);
 	write_trunc(p->oid, p->oloc, p->offset, p->length, 
