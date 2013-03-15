@@ -233,7 +233,7 @@ int LFNIndex::remove_objects(const vector<string> &dir,
       remaining->insert(pair<string, hobject_t>(
 			  lfn_get_short_name(candidate->second.second, *i),
 					     candidate->second.second));
-      candidate++;
+      ++candidate;
     }
     if (!holes.empty())
       clean_chains.insert(lfn_get_short_name(to_clean->second, 0));
