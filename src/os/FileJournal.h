@@ -387,7 +387,48 @@ private:
   void set_wait_on_full(bool b) { wait_on_full = b; }
 
   // reads
-  bool read_entry(bufferlist& bl, uint64_t& seq);
+
+  /// Result code for read_entry
+  enum read_entry_result {
+    SUCCESS,
+    FAILURE,
+    MAYBE_CORRUPT
+  };
+
+  /**
+   * read_entry
+   *
+   * Reads next entry starting at pos.  If the entry appears
+   * clean, *bl will contain the payload, *seq will contain
+   * the sequence number, and *out_pos will reflect the next
+   * read position.  If the entry is invalid *ss will contain
+   * debug text, while *seq, *out_pos, and *bl will be unchanged.
+   *
+   * If the entry suggests a corrupt log, *ss will contain debug
+   * text, *out_pos will contain the next index to check.  If
+   * we find an entry in this way that returns SUCCESS, the journal
+   * is most likely corrupt.
+   */
+  read_entry_result do_read_entry(
+    off64_t pos,          ///< [in] position to read
+    off64_t *next_pos,    ///< [out] next position to read
+    bufferlist* bl,       ///< [out] payload for successful read
+    uint64_t *seq,        ///< [out] seq of successful read
+    ostream *ss,          ///< [out] error output
+    entry_header_t *h = 0 ///< [out] header
+    ); ///< @return result code
+
+  bool read_entry(
+    bufferlist &bl,
+    uint64_t &last_seq,
+    bool *corrupt
+    );
+
+  bool read_entry(
+    bufferlist &bl,
+    uint64_t &last_seq) {
+    return read_entry(bl, last_seq, 0);
+  }
 };
 
 WRITE_CLASS_ENCODER(FileJournal::header_t)
