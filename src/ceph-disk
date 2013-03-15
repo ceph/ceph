@@ -63,51 +63,42 @@ log = logging.getLogger(log_name)
 
 ###### exceptions ########
 
-class PrepareError(Exception):
+class Error(Exception):
     """
-    OSD preparation error
+    Error
     """
 
     def __str__(self):
         doc = self.__doc__.strip()
         return ': '.join([doc] + [str(a) for a in self.args])
 
-class MountError(PrepareError):
+class MountError(Error):
     """
     Mounting filesystem failed
     """
 
-class UnmountError(PrepareError):
+class UnmountError(Error):
     """
     Unmounting filesystem failed
     """
 
-class ActivateError(Exception):
-    """
-    OSD activation error
-    """
-
-    def __str__(self):
-        doc = self.__doc__.strip()
-        return ': '.join([doc] + [str(a) for a in self.args])
-
-class BadMagicError(ActivateError):
+class BadMagicError(Error):
     """
     Does not look like a Ceph OSD, or incompatible version
     """
 
-class TruncatedLineError(ActivateError):
+class TruncatedLineError(Error):
     """
     Line is truncated
     """
 
 
-class TooManyLinesError(ActivateError):
+class TooManyLinesError(Error):
     """
     Too many lines
     """
 
-class FilesystemTypeError(ActivateError):
+class FilesystemTypeError(Error):
     """
     Cannot discover filesystem type
     """
@@ -156,7 +147,7 @@ def is_partition(dev):
     """
     dev = os.path.realpath(dev)
     if not stat.S_ISBLK(os.lstat(dev).st_mode):
-        raise PrepareError('not a block device', dev)
+        raise Error('not a block device', dev)
 
     # if the device ends in a number, it is a partition (e.g., /dev/sda3)
     if dev[-1].isdigit():
@@ -199,17 +190,17 @@ def verify_not_in_use(dev):
     assert os.path.exists(dev)
     if is_partition(dev):
         if is_mounted(dev):
-            raise PrepareError('Device is mounted', dev)
+            raise Error('Device is mounted', dev)
         holders = is_held(dev)
         if holders:
-            raise PrepareError('Device is in use by a device-mapper mapping (dm-crypt?)' % dev, ','.join(holders))
+            raise Error('Device is in use by a device-mapper mapping (dm-crypt?)' % dev, ','.join(holders))
     else:
         for p in list_partitions(dev):
             if is_mounted(p):
-                raise PrepareError('Device is mounted', p)
+                raise Error('Device is mounted', p)
             holders = is_held(p)
             if holders:
-                raise PrepareError('Device %s is in use by a device-mapper mapping (dm-crypt?)' % p, ','.join(holders))
+                raise Error('Device %s is in use by a device-mapper mapping (dm-crypt?)' % p, ','.join(holders))
 
 
 def must_be_one_line(line):
@@ -241,7 +232,7 @@ def read_one_line(parent, name):
     try:
         line = must_be_one_line(line)
     except (TruncatedLineError, TooManyLinesError) as e:
-        raise ActivateError('File is corrupt: {path}: {msg}'.format(
+        raise Error('File is corrupt: {path}: {msg}'.format(
                 path=path,
                 msg=e,
                 ))
@@ -282,7 +273,7 @@ def check_osd_id(osd_id):
     Ensures osd id is numeric.
     """
     if not re.match(r'^[0-9]+$', osd_id):
-        raise ActivateError('osd id is not numeric')
+        raise Error('osd id is not numeric')
 
 
 def allocate_osd_id(
@@ -303,7 +294,7 @@ def allocate_osd_id(
                 ],
             )
     except subprocess.CalledProcessError as e:
-        raise ActivateError('ceph osd create failed', e)
+        raise Error('ceph osd create failed', e)
     osd_id = must_be_one_line(osd_id)
     check_osd_id(osd_id)
     return osd_id
@@ -346,14 +337,14 @@ def get_conf(cluster, variable):
             close_fds=True,
             )
     except OSError as e:
-        raise PrepareError('error executing ceph-conf', e)
+        raise Error('error executing ceph-conf', e)
     (out, _err) = p.communicate()
     ret = p.wait()
     if ret == 1:
         # config entry not found
         return None
     elif ret != 0:
-        raise PrepareError('getting variable from configuration failed')
+        raise Error('getting variable from configuration failed')
     value = out.split('\n', 1)[0]
     # don't differentiate between "var=" and no var set
     if not value:
@@ -382,7 +373,7 @@ def get_conf_with_default(cluster, variable):
             close_fds=True,
             )
     except subprocess.CalledProcessError as e:
-        raise PrepareError(
+        raise Error(
             'getting variable from configuration failed',
             e,
             )
@@ -394,7 +385,7 @@ def get_conf_with_default(cluster, variable):
 def get_fsid(cluster):
     fsid = get_conf(cluster=cluster, variable='fsid')
     if fsid is None:
-        raise PrepareError('getting cluster uuid from configuration failed')
+        raise Error('getting cluster uuid from configuration failed')
     return fsid
 
 
@@ -418,7 +409,7 @@ def get_or_create_dmcrypt_key(
                 f.write(key)
         return path
     except:
-        raise PrepareError('unable to read or create dm-crypt key', path)
+        raise Error('unable to read or create dm-crypt key', path)
 
 
 def dmcrypt_map(
@@ -441,7 +432,7 @@ def dmcrypt_map(
         return dev
 
     except subprocess.CalledProcessError as e:
-        raise PrepareError('unable to map device', rawdev)
+        raise Error('unable to map device', rawdev)
 
 
 def dmcrypt_unmap(
@@ -457,7 +448,7 @@ def dmcrypt_unmap(
         subprocess.check_call(args)
 
     except subprocess.CalledProcessError as e:
-        raise PrepareError('unable to unmap device', uuid)
+        raise Error('unable to unmap device', uuid)
 
 
 def mount(
@@ -532,15 +523,15 @@ def get_free_partition_index(dev):
         return 1
 
     if not lines:
-        raise PrepareError('parted failed to output anything')
+        raise Error('parted failed to output anything')
     lines = lines.splitlines(True)
 
     if lines[0] not in ['CHS;\n', 'CYL;\n', 'BYT;\n']:
-        raise PrepareError('weird parted units', lines[0])
+        raise Error('weird parted units', lines[0])
     del lines[0]
 
     if not lines[0].startswith('/dev/'):
-        raise PrepareError('weird parted disk entry', lines[0])
+        raise Error('weird parted disk entry', lines[0])
     del lines[0]
 
     seen = set()
@@ -581,7 +572,7 @@ def zap(dev):
                 ],
             )
     except subprocess.CalledProcessError as e:
-        raise PrepareError(e)
+        raise Error(e)
 
 
 def prepare_journal_dev(
@@ -668,7 +659,7 @@ def prepare_journal_dev(
         return (journal_symlink, journal_dmcrypt, journal_uuid)
 
     except subprocess.CalledProcessError as e:
-        raise PrepareError(e)
+        raise Error(e)
 
 
 def prepare_journal_file(
@@ -699,26 +690,26 @@ def prepare_journal(
 
     if journal is None:
         if force_dev:
-            raise PrepareError('Journal is unspecified; not a block device')
+            raise Error('Journal is unspecified; not a block device')
         return (None, None, None)
 
     if not os.path.exists(journal):
         if force_dev:
-            raise PrepareError('Journal does not exist; not a block device', journal)
+            raise Error('Journal does not exist; not a block device', journal)
         return prepare_journal_file(journal, journal_size)
 
     jmode = os.stat(journal).st_mode
     if stat.S_ISREG(jmode):
         if force_dev:
-            raise PrepareError('Journal is not a block device', journal)
+            raise Error('Journal is not a block device', journal)
         return prepare_journal_file(journal, journal_size)
 
     if stat.S_ISBLK(jmode):
         if force_file:
-            raise PrepareError('Journal is not a regular file', journal)
+            raise Error('Journal is not a regular file', journal)
         return prepare_journal_dev(data, journal, journal_size, journal_uuid, journal_dm_keypath)
 
-    raise PrepareError('Journal %s is neither a block device nor regular file', journal)
+    raise Error('Journal %s is neither a block device nor regular file', journal)
 
 
 def adjust_symlink(target, path):
@@ -737,13 +728,13 @@ def adjust_symlink(target, path):
                 else:
                     create = False
         except:
-            raise PrepareError('unable to remove (or adjust) old file (symlink)', canonical)
+            raise Error('unable to remove (or adjust) old file (symlink)', canonical)
     if create:
         log.debug('Creating symlink %s -> %s', path, target)
         try:
             os.symlink(target, path)
         except:
-            raise PrepareError('unable to create symlink %s -> %s' % (path, target))
+            raise Error('unable to create symlink %s -> %s' % (path, target))
 
 def prepare_dir(
     path,
@@ -834,7 +825,7 @@ def prepare_dev(
                     ],
                 )
         except subprocess.CalledProcessError as e:
-            raise PrepareError(e)
+            raise Error(e)
 
         rawdev = '{data}1'.format(data=data)
 
@@ -864,7 +855,7 @@ def prepare_dev(
             log.debug('Creating %s fs on %s', fstype, dev)
             subprocess.check_call(args=args)
         except subprocess.CalledProcessError as e:
-            raise PrepareError(e)
+            raise Error(e)
 
         #remove whitespaces from mount_options
         if mount_options is not None:
@@ -905,7 +896,7 @@ def prepare_dev(
                     ],
                 )
         except subprocess.CalledProcessError as e:
-            raise PrepareError(e)
+            raise Error(e)
 
 
 def main_prepare(args):
@@ -914,7 +905,7 @@ def main_prepare(args):
 
     try:
         if not os.path.exists(args.data):
-            raise PrepareError('data path does not exist', args.data)
+            raise Error('data path does not exist', args.data)
 
         # in use?
         dmode = os.stat(args.data).st_mode
@@ -930,12 +921,12 @@ def main_prepare(args):
             if stat.S_ISBLK(dmode) and not is_partition(args.data):
                 zap(args.data)
             else:
-                raise PrepareError('not full block device; cannot zap', args.data)
+                raise Error('not full block device; cannot zap', args.data)
 
         if args.cluster_uuid is None:
             args.cluster_uuid = get_fsid(cluster=args.cluster)
             if args.cluster_uuid is None:
-                raise PrepareError(
+                raise Error(
                     'must have fsid in config or pass --cluster--uuid=',
                     )
 
@@ -1015,7 +1006,7 @@ def main_prepare(args):
         # prepare data
         if stat.S_ISDIR(dmode):
             if args.data_dev:
-                raise PrepareError('data path is not a block device', args.data)
+                raise Error('data path is not a block device', args.data)
             prepare_dir(
                 path=args.data,
                 journal=journal_symlink,
@@ -1026,7 +1017,7 @@ def main_prepare(args):
                 )
         elif stat.S_ISBLK(dmode):
             if args.data_dir:
-                raise PrepareError('data path is not a directory', args.data)
+                raise Error('data path is not a directory', args.data)
             prepare_dev(
                 data=args.data,
                 journal=journal_symlink,
@@ -1040,19 +1031,14 @@ def main_prepare(args):
                 osd_dm_keypath=osd_dm_keypath,
                 )
         else:
-            raise PrepareError('not a dir or block device', args.data)
+            raise Error('not a dir or block device', args.data)
 
-    except PrepareError as e:
+    except Error as e:
         if journal_dm_keypath:
             os.unlink(journal_dm_keypath)
         if osd_dm_keypath:
             os.unlink(osd_dm_keypath)
-        print >>sys.stderr, '{prog}: {msg}'.format(
-            prog=args.prog,
-            msg=e,
-            )
-        sys.exit(1)
-
+        raise e
 
 
 ###########################
@@ -1175,12 +1161,12 @@ def start_daemon(
                     ],
                 )
         else:
-            raise ActivateError('{cluster} osd.{osd_id} is not tagged with an init system'.format(
+            raise Error('{cluster} osd.{osd_id} is not tagged with an init system'.format(
                     cluster=cluster,
                     osd_id=osd_id,
                     ))
     except subprocess.CalledProcessError as e:
-        raise ActivateError('ceph osd start failed', e)
+        raise Error('ceph osd start failed', e)
 
 def detect_fstype(
     dev,
@@ -1216,14 +1202,14 @@ def get_conf(cluster, variable):
             close_fds=True,
             )
     except OSError as e:
-        raise ActivateError('error executing ceph-conf', e)
+        raise Error('error executing ceph-conf', e)
     (out, _err) = p.communicate()
     ret = p.wait()
     if ret == 1:
         # config entry not found
         return None
     elif ret != 0:
-        raise ActivateError('getting variable from configuration failed')
+        raise Error('getting variable from configuration failed')
     value = out.split('\n', 1)[0]
     # don't differentiate between "var=" and no var set
     if not value:
@@ -1344,7 +1330,7 @@ def mount_activate(
             log.info('%s osd.%s already mounted in position; unmounting ours.' % (cluster, osd_id))
             unmount(path)
         elif other:
-            raise ActivateError('another %s osd.%s already mounted in position (old/different cluster instance?); unmounting ours.' % (cluster, osd_id))
+            raise Error('another %s osd.%s already mounted in position (old/different cluster instance?); unmounting ours.' % (cluster, osd_id))
         else:
             move_mount(
                 path=path,
@@ -1369,7 +1355,7 @@ def activate_dir(
     ):
 
     if not os.path.exists(path):
-        raise ActivateError(
+        raise Error(
             'directory %s does not exist' % path
             )
 
@@ -1387,7 +1373,7 @@ def activate_dir(
                 try:
                     os.unlink(canonical)
                 except:
-                    raise ActivateError('unable to remove old symlink %s', canonical)
+                    raise Error('unable to remove old symlink %s', canonical)
             else:
                 create = False
         if create:
@@ -1395,7 +1381,7 @@ def activate_dir(
             try:
                 os.symlink(path, canonical)
             except:
-                raise ActivateError('unable to create symlink %s -> %s', canonical, path)
+                raise Error('unable to create symlink %s -> %s', canonical, path)
 
     return (cluster, osd_id)
 
@@ -1434,17 +1420,17 @@ def activate(
 
         ceph_fsid = read_one_line(path, 'ceph_fsid')
         if ceph_fsid is None:
-            raise ActivateError('No cluster uuid assigned.')
+            raise Error('No cluster uuid assigned.')
         log.debug('Cluster uuid is %s', ceph_fsid)
 
         cluster = find_cluster_by_uuid(ceph_fsid)
         if cluster is None:
-            raise ActivateError('No cluster conf found in /etc/ceph with fsid %s' % ceph_fsid)
+            raise Error('No cluster conf found in /etc/ceph with fsid %s' % ceph_fsid)
         log.debug('Cluster name is %s', cluster)
 
         fsid = read_one_line(path, 'fsid')
         if fsid is None:
-            raise ActivateError('No OSD uuid assigned.')
+            raise Error('No OSD uuid assigned.')
         log.debug('OSD uuid is %s', fsid)
 
         keyring = activate_key_template.format(cluster=cluster)
@@ -1514,40 +1500,32 @@ def activate(
 
 
 def main_activate(args):
-    try:
-        cluster = None
-        osd_id = None
+    cluster = None
+    osd_id = None
 
-        if not os.path.exists(args.path):
-            raise ActivateError('%s does not exist', args.path)
+    if not os.path.exists(args.path):
+        raise Error('%s does not exist', args.path)
 
-        mode = os.stat(args.path).st_mode
-        if stat.S_ISBLK(mode):
-            (cluster, osd_id) = mount_activate(
-                dev=args.path,
-                activate_key_template=args.activate_key_template,
-                init=args.mark_init,
-                )
-        elif stat.S_ISDIR(mode):
-            (cluster, osd_id) = activate_dir(
-                path=args.path,
-                activate_key_template=args.activate_key_template,
-                init=args.mark_init,
-                )
-        else:
-            raise ActivateError('%s is not a directory or block device', args.path)
-
-        start_daemon(
-            cluster=cluster,
-            osd_id=osd_id,
+    mode = os.stat(args.path).st_mode
+    if stat.S_ISBLK(mode):
+        (cluster, osd_id) = mount_activate(
+            dev=args.path,
+            activate_key_template=args.activate_key_template,
+            init=args.mark_init,
             )
-
-    except ActivateError as e:
-        print >>sys.stderr, '{prog}: {msg}'.format(
-            prog=args.prog,
-            msg=e,
+    elif stat.S_ISDIR(mode):
+        (cluster, osd_id) = activate_dir(
+            path=args.path,
+            activate_key_template=args.activate_key_template,
+            init=args.mark_init,
             )
-        sys.exit(1)
+    else:
+        raise Error('%s is not a directory or block device', args.path)
+
+    start_daemon(
+        cluster=cluster,
+        osd_id=osd_id,
+        )
 
 
 
@@ -1708,14 +1686,23 @@ def main():
         level=loglevel,
         )
 
-    if args.command == 'prepare':
-        main_prepare(args)
-    elif args.command == 'activate':
-        main_activate(args)
-    elif args.command == 'list':
-        main_list(args)
-    else:
-        log.error('unimplemented command %s', args.command)
+    try:
+        if args.command == 'prepare':
+            main_prepare(args)
+        elif args.command == 'activate':
+            main_activate(args)
+        elif args.command == 'list':
+            main_list(args)
+        else:
+            log.error('unimplemented command %s', args.command)
+
+    except Error as e:
+        print >>sys.stderr, '{prog}: {msg}'.format(
+            prog=args.prog,
+            msg=e,
+            )
+        sys.exit(1)
+
 
 if __name__ == '__main__':
     main()
