@@ -328,8 +328,7 @@ static int parse_acl_header(RGWRados *store, RGWEnv *env,
   hacl_str = hacl;
   get_str_list(hacl_str, ",", grantees);
 
-  list<string>::iterator it = grantees.begin();
-  for (; it != grantees.end(); it++) {
+  for (list<string>::iterator it = grantees.begin(); it != grantees.end(); ++it) {
     ACLGrant grant;
     int ret = parse_grantee_str(store, *it, perm, grant);
     if (ret < 0)
@@ -395,8 +394,7 @@ int RGWAccessControlList_S3::create_from_grants(std::list<ACLGrant>& grants)
   acl_user_map.clear();
   grant_map.clear();
 
-  std::list<ACLGrant>::iterator it = grants.begin();
-  for (; it != grants.end(); it++) {
+  for (std::list<ACLGrant>::iterator it = grants.begin(); it != grants.end(); ++it) {
     ACLGrant g = *it;
     add_grant(&g);
   }
