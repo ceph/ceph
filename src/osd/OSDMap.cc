@@ -500,7 +500,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->open_array_section("new_pg_temp");
   for (map<pg_t,vector<int> >::const_iterator p = new_pg_temp.begin();
        p != new_pg_temp.end();
-       p++) {
+       ++p) {
     f->open_object_section("pg");
     f->dump_stream("pgid") << p->first;
     f->open_array_section("osds");
@@ -544,7 +544,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->open_array_section("new_blacklist");
   for (map<entity_addr_t,utime_t>::const_iterator p = new_blacklist.begin();
        p != new_blacklist.end();
-       p++) {
+       ++p) {
     stringstream ss;
     ss << p->first;
     f->dump_stream(ss.str().c_str()) << p->second;
@@ -590,7 +590,7 @@ void OSDMap::set_epoch(epoch_t e)
   epoch = e;
   for (map<int64_t,pg_pool_t>::iterator p = pools.begin();
        p != pools.end();
-       p++)
+       ++p)
     p->second.last_change = e;
 }
 
@@ -820,20 +820,20 @@ int OSDMap::apply_incremental(const Incremental &inc)
 
   for (set<int64_t>::const_iterator p = inc.old_pools.begin();
        p != inc.old_pools.end();
-       p++) {
+       ++p) {
     pools.erase(*p);
     name_pool.erase(pool_name[*p]);
     pool_name.erase(*p);
   }
   for (map<int64_t,pg_pool_t>::const_iterator p = inc.new_pools.begin();
        p != inc.new_pools.end();
-       p++) {
+       ++p) {
     pools[p->first] = p->second;
     pools[p->first].last_change = epoch;
   }
   for (map<int64_t,string>::const_iterator p = inc.new_pool_names.begin();
        p != inc.new_pool_names.end();
-       p++) {
+       ++p) {
     if (pool_name.count(p->first))
       name_pool.erase(pool_name[p->first]);
     pool_name[p->first] = p->second;
@@ -842,7 +842,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
 
   for (map<int32_t,uint32_t>::const_iterator i = inc.new_weight.begin();
        i != inc.new_weight.end();
-       i++) {
+       ++i) {
     set_weight(i->first, i->second);
 
     // if we are marking in, clear the AUTOOUT and NEW bits.
@@ -853,7 +853,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
   // up/down
   for (map<int32_t,uint8_t>::const_iterator i = inc.new_state.begin();
        i != inc.new_state.end();
-       i++) {
+       ++i) {
     int s = i->second ? i->second : CEPH_OSD_UP;
     if ((osd_state[i->first] & CEPH_OSD_UP) &&
 	(s & CEPH_OSD_UP)) {
@@ -867,7 +867,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
   }
   for (map<int32_t,entity_addr_t>::const_iterator i = inc.new_up_client.begin();
        i != inc.new_up_client.end();
-       i++) {
+       ++i) {
     osd_state[i->first] |= CEPH_OSD_EXISTS | CEPH_OSD_UP;
     osd_addrs->client_addr[i->first].reset(new entity_addr_t(i->second));
     if (inc.new_hb_up.empty())
@@ -879,13 +879,13 @@ int OSDMap::apply_incremental(const Incremental &inc)
   }
   for (map<int32_t,entity_addr_t>::const_iterator i = inc.new_up_internal.begin();
        i != inc.new_up_internal.end();
-       i++)
+       ++i)
     osd_addrs->cluster_addr[i->first].reset(new entity_addr_t(i->second));
 
   // info
   for (map<int32_t,epoch_t>::const_iterator i = inc.new_up_thru.begin();
        i != inc.new_up_thru.end();
-       i++)
+       ++i)
     osd_info[i->first].up_thru = i->second;
   for (map<int32_t,pair<epoch_t,epoch_t> >::const_iterator i = inc.new_last_clean_interval.begin();
        i != inc.new_last_clean_interval.end();
@@ -893,7 +893,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
     osd_info[i->first].last_clean_begin = i->second.first;
     osd_info[i->first].last_clean_end = i->second.second;
   }
-  for (map<int32_t,epoch_t>::const_iterator p = inc.new_lost.begin(); p != inc.new_lost.end(); p++)
+  for (map<int32_t,epoch_t>::const_iterator p = inc.new_lost.begin(); p != inc.new_lost.end(); ++p)
     osd_info[p->first].lost_at = p->second;
 
   // xinfo
@@ -905,7 +905,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
     (*osd_uuid)[p->first] = p->second;
 
   // pg rebuild
-  for (map<pg_t, vector<int> >::const_iterator p = inc.new_pg_temp.begin(); p != inc.new_pg_temp.end(); p++) {
+  for (map<pg_t, vector<int> >::const_iterator p = inc.new_pg_temp.begin(); p != inc.new_pg_temp.end(); ++p) {
     if (p->second.empty())
       pg_temp->erase(p->first);
     else
@@ -915,11 +915,11 @@ int OSDMap::apply_incremental(const Incremental &inc)
   // blacklist
   for (map<entity_addr_t,utime_t>::const_iterator p = inc.new_blacklist.begin();
        p != inc.new_blacklist.end();
-       p++)
+       ++p)
     blacklist[p->first] = p->second;
   for (vector<entity_addr_t>::const_iterator p = inc.old_blacklist.begin();
        p != inc.old_blacklist.end();
-       p++)
+       ++p)
     blacklist.erase(*p);
 
   // cluster snapshot?
@@ -1306,7 +1306,7 @@ void OSDMap::decode(bufferlist::iterator& p)
 
   // index pool names
   name_pool.clear();
-  for (map<int64_t,string>::iterator i = pool_name.begin(); i != pool_name.end(); i++)
+  for (map<int64_t,string>::iterator i = pool_name.begin(); i != pool_name.end(); ++i)
     name_pool[i->second] = i->first;
 
   calc_num_osds();
@@ -1386,7 +1386,7 @@ void OSDMap::dump(Formatter *f) const
   f->open_array_section("pg_temp");
   for (map<pg_t,vector<int> >::const_iterator p = pg_temp->begin();
        p != pg_temp->end();
-       p++) {
+       ++p) {
     f->open_object_section("osds");
     f->dump_stream("pgid") << p->first;
     f->open_array_section("osds");
@@ -1400,7 +1400,7 @@ void OSDMap::dump(Formatter *f) const
   f->open_array_section("blacklist");
   for (hash_map<entity_addr_t,utime_t>::const_iterator p = blacklist.begin();
        p != blacklist.end();
-       p++) {
+       ++p) {
     stringstream ss;
     ss << p->first;
     f->dump_stream(ss.str().c_str()) << p->second;
@@ -1489,7 +1489,7 @@ void OSDMap::print(ostream& out) const
 	<< "' " << p->second << "\n";
     for (map<snapid_t,pool_snap_info_t>::const_iterator q = p->second.snaps.begin();
 	 q != p->second.snaps.end();
-	 q++)
+	 ++q)
       out << "\tsnap " << q->second.snapid << " '" << q->second.name << "' " << q->second.stamp << "\n";
     if (!p->second.removed_snaps.empty())
       out << "\tremoved_snaps " << p->second.removed_snaps << "\n";
@@ -1518,12 +1518,12 @@ void OSDMap::print(ostream& out) const
 
   for (map<pg_t,vector<int> >::const_iterator p = pg_temp->begin();
        p != pg_temp->end();
-       p++)
+       ++p)
     out << "pg_temp " << p->first << " " << p->second << "\n";
 
   for (hash_map<entity_addr_t,utime_t>::const_iterator p = blacklist.begin();
        p != blacklist.end();
-       p++)
+       ++p)
     out << "blacklist " << p->first << " expires " << p->second << "\n";
 
   // ignore pg_swap_primary
@@ -1577,7 +1577,7 @@ void OSDMap::print_tree(ostream *out, Formatter *f) const
   set<int> touched;
   set<int> roots;
   crush->find_roots(roots);
-  for (set<int>::iterator p = roots.begin(); p != roots.end(); p++) {
+  for (set<int>::iterator p = roots.begin(); p != roots.end(); ++p) {
     list<qi> q;
     q.push_back(qi(*p, 0, crush->get_bucket_weight(*p) / (float)0x10000));
     while (!q.empty()) {
@@ -1713,7 +1713,7 @@ void OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
 
   int poolbase = nosd ? nosd : 1;
 
-  for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
+  for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); ++p) {
     int64_t pool = ++pool_max;
     pools[pool].type = pg_pool_t::TYPE_REP;
     pools[pool].flags = cct->_conf->osd_pool_default_flags;
@@ -1773,7 +1773,7 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
   int minrep = conf->osd_min_rep;
   int maxrep = conf->osd_max_rep;
   assert(maxrep >= minrep);
-  for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
+  for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); ++p) {
     int ruleset = p->first;
     crush_rule *rule = crush_make_rule(3, ruleset, pg_pool_t::TYPE_REP, minrep, maxrep);
     assert(rule);
@@ -1838,7 +1838,7 @@ int OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
   rulesets[CEPH_METADATA_RULE] = "metadata";
   rulesets[CEPH_RBD_RULE] = "rbd";
 
-  for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
+  for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); ++p) {
     int64_t pool = ++pool_max;
     pools[pool].type = pg_pool_t::TYPE_REP;
     pools[pool].flags = cct->_conf->osd_pool_default_flags;
@@ -1936,7 +1936,7 @@ void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& cr
   // rules
   int minrep = conf->osd_min_rep;
   int maxrep = conf->osd_max_rep;
-  for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
+  for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); ++p) {
     int ruleset = p->first;
     crush_rule *rule = crush_make_rule(3, ruleset, pg_pool_t::TYPE_REP, minrep, maxrep);
     assert(rule);
