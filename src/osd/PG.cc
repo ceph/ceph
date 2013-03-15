@@ -487,7 +487,7 @@ void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
   if (info.last_complete > newhead)
     info.last_complete = newhead;
 
-  for (list<pg_log_entry_t>::iterator d = divergent.begin(); d != divergent.end(); d++)
+  for (list<pg_log_entry_t>::iterator d = divergent.begin(); d != divergent.end(); ++d)
     merge_old_entry(t, *d);
 
   dirty_info = true;
@@ -526,7 +526,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
     list<pg_log_entry_t>::iterator to;
     for (to = from;
 	 to != olog.log.end();
-	 to++) {
+	 ++to) {
       if (to->version > log.tail)
 	break;
       log.index(*to);
@@ -565,18 +565,18 @@ void PG::merge_log(ObjectStore::Transaction& t,
     while (1) {
       if (from == olog.log.begin())
 	break;
-      from--;
+      --from;
       dout(20) << "  ? " << *from << dendl;
       if (from->version <= log.head) {
 	dout(20) << "merge_log cut point (usually last shared) is " << *from << dendl;
 	lower_bound = from->version;
-	from++;
+	++from;
 	break;
       }
     }
 
     // index, update missing, delete deleted
-    for (list<pg_log_entry_t>::iterator p = from; p != to; p++) {
+    for (list<pg_log_entry_t>::iterator p = from; p != to; ++p) {
       pg_log_entry_t &ne = *p;
       dout(20) << "merge_log " << ne << dendl;
       log.index(ne);
@@ -617,7 +617,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
 
     // process divergent items
     if (!divergent.empty()) {
-      for (list<pg_log_entry_t>::iterator d = divergent.begin(); d != divergent.end(); d++)
+      for (list<pg_log_entry_t>::iterator d = divergent.begin(); d != divergent.end(); ++d)
 	merge_old_entry(t, *d);
     }
 
@@ -769,7 +769,7 @@ ostream& PG::IndexedLog::print(ostream& out) const
   out << *this << std::endl;
   for (list<pg_log_entry_t>::const_iterator p = log.begin();
        p != log.end();
-       p++) {
+       ++p) {
     out << *p << " " << (logged_object(p->soid) ? "indexed":"NOT INDEXED") << std::endl;
     assert(!p->reqid_is_indexed() || logged_req(p->reqid));
   }
@@ -961,7 +961,7 @@ void PG::remove_down_peer_info(const OSDMapRef osdmap)
       peer_info.erase(p++);
       removed = true;
     } else
-      p++;
+      ++p;
   }
 
   // if we removed anyone, update peers (which include peer_info)
@@ -999,7 +999,7 @@ void PG::build_prior(std::auto_ptr<PriorSet> &prior_set)
     // sanity check
     for (map<int,pg_info_t>::iterator it = peer_info.begin();
 	 it != peer_info.end();
-	 it++) {
+	 ++it) {
       assert(info.history.last_epoch_started >= it->second.history.last_epoch_started);
     }
   }
@@ -1372,7 +1372,7 @@ void PG::build_might_have_unfound()
   // include any (stray) peers
   for (map<int,pg_info_t>::iterator p = peer_info.begin();
        p != peer_info.end();
-       p++)
+       ++p)
     might_have_unfound.insert(p->first);
 
   dout(15) << __func__ << ": built " << might_have_unfound << dendl;
@@ -1570,7 +1570,7 @@ void PG::activate(ObjectStore::Transaction& t,
       if (m && pi.last_backfill != hobject_t()) {
         for (list<pg_log_entry_t>::iterator p = m->log.log.begin();
              p != m->log.log.end();
-             p++)
+             ++p)
 	  if (p->soid <= pi.last_backfill)
 	    pm.add_next_event(*p);
       }
@@ -1751,7 +1751,7 @@ void PG::replay_queued_ops()
 
   for (map<eversion_t,OpRequestRef>::iterator p = replay_queue.begin();
        p != replay_queue.end();
-       p++) {
+       ++p) {
     if (p->first.version != c.version+1) {
       dout(10) << "activate replay " << p->first
 	       << " skipping " << c.version+1 - p->first.version 
@@ -2147,7 +2147,7 @@ void PG::purge_strays()
   bool removed = false;
   for (set<int>::iterator p = stray_set.begin();
        p != stray_set.end();
-       p++) {
+       ++p) {
     if (get_osdmap()->is_up(*p)) {
       dout(10) << "sending PGRemove to osd." << *p << dendl;
       vector<pg_t> to_remove;
@@ -2569,7 +2569,7 @@ void PG::write_log(ObjectStore::Transaction& t)
   map<string,bufferlist> keys;
   for (list<pg_log_entry_t>::iterator p = log.log.begin();
        p != log.log.end();
-       p++) {
+       ++p) {
     bufferlist bl(sizeof(*p) * 2);
     p->encode_with_checksum(bl);
     keys[p->get_key_name()].claim(bl);
@@ -2647,7 +2647,7 @@ void PG::append_log(
   map<string,bufferlist> keys;
   for (vector<pg_log_entry_t>::iterator p = logv.begin();
        p != logv.end();
-       p++) {
+       ++p) {
     p->offset = 0;
     add_log_entry(*p, keys[p->get_key_name()]);
   }
@@ -2950,7 +2950,7 @@ void PG::requeue_object_waiters(map<hobject_t, list<OpRequestRef> >& m)
 {
   for (map<hobject_t, list<OpRequestRef> >::iterator it = m.begin();
        it != m.end();
-       it++)
+       ++it)
     requeue_ops(it->second);
   m.clear();
 }
@@ -3131,7 +3131,7 @@ void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep)
   int i = 0;
   for (vector<hobject_t>::iterator p = ls.begin(); 
        p != ls.end(); 
-       p++, i++) {
+       ++p, i++) {
     hobject_t poid = *p;
 
     struct stat st;
@@ -3498,12 +3498,12 @@ void PG::build_inc_scrub_map(ScrubMap &map, eversion_t v)
     p = log.log.begin();
   } else if (v > log.tail) {
     p = log.find_entry(v);
-    p++;
+    ++p;
   } else {
     assert(0);
   }
   
-  for (; p != log.log.end(); p++) {
+  for (; p != log.log.end(); ++p) {
     if (p->is_update()) {
       ls.push_back(p->soid);
       map.objects[p->soid].negative = false;
@@ -4118,7 +4118,7 @@ bool PG::scrub_gather_replica_maps() {
 
   for (map<int,ScrubMap>::iterator p = scrubber.received_maps.begin();
        p != scrubber.received_maps.end();
-       p++) {
+       ++p) {
     
     if (scrubber.received_maps[p->first].valid_through != log.head) {
       scrubber.waiting_on++;
@@ -4167,7 +4167,7 @@ bool PG::_compare_scrub_objects(ScrubMap::object &auth,
   }
   for (map<string,bufferptr>::const_iterator i = auth.attrs.begin();
        i != auth.attrs.end();
-       i++) {
+       ++i) {
     if (!candidate.attrs.count(i->first)) {
       if (!ok)
 	errorstream << ", ";
@@ -4182,7 +4182,7 @@ bool PG::_compare_scrub_objects(ScrubMap::object &auth,
   }
   for (map<string,bufferptr>::const_iterator i = candidate.attrs.begin();
        i != candidate.attrs.end();
-       i++) {
+       ++i) {
     if (!auth.attrs.count(i->first)) {
       if (!ok)
 	errorstream << ", ";
@@ -4227,8 +4227,8 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
   set<hobject_t> master_set;
 
   // Construct master set
-  for (j = maps.begin(); j != maps.end(); j++) {
-    for (i = j->second->objects.begin(); i != j->second->objects.end(); i++) {
+  for (j = maps.begin(); j != maps.end(); ++j) {
+    for (i = j->second->objects.begin(); i != j->second->objects.end(); ++i) {
       master_set.insert(i->first);
     }
   }
@@ -4236,12 +4236,12 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
   // Check maps against master set and each other
   for (set<hobject_t>::const_iterator k = master_set.begin();
        k != master_set.end();
-       k++) {
+       ++k) {
     map<int, ScrubMap *>::const_iterator auth = _select_auth_object(*k, maps);
     assert(auth != maps.end());
     set<int> cur_missing;
     set<int> cur_inconsistent;
-    for (j = maps.begin(); j != maps.end(); j++) {
+    for (j = maps.begin(); j != maps.end(); ++j) {
       if (j->second->objects.count(*k)) {
 	// Compare
 	stringstream ss;
@@ -4352,13 +4352,13 @@ void PG::scrub_process_inconsistent() {
       for (map<hobject_t, pair<ScrubMap::object, int> >::iterator i =
 	     scrubber.authoritative.begin();
 	   i != scrubber.authoritative.end();
-	   i++) {
+	   ++i) {
 	set<int>::iterator j;
 	
 	if (scrubber.missing.count(i->first)) {
 	  for (j = scrubber.missing[i->first].begin();
 	       j != scrubber.missing[i->first].end(); 
-	       j++) {
+	       ++j) {
 	    repair_object(i->first, 
 	      &(i->second.first),
 	      acting[*j],
@@ -4369,7 +4369,7 @@ void PG::scrub_process_inconsistent() {
 	if (scrubber.inconsistent.count(i->first)) {
 	  for (j = scrubber.inconsistent[i->first].begin(); 
 	       j != scrubber.inconsistent[i->first].end(); 
-	       j++) {
+	       ++j) {
 	    repair_object(i->first, 
 	      &(i->second.first),
 	      acting[*j],
@@ -4601,7 +4601,7 @@ bool PG::may_need_replay(const OSDMapRef osdmap) const
 
   for (map<epoch_t,pg_interval_t>::const_reverse_iterator p = past_intervals.rbegin();
        p != past_intervals.rend();
-       p++) {
+       ++p) {
     const pg_interval_t &interval = p->second;
     dout(10) << "may_need_replay " << interval << dendl;
 
@@ -4837,7 +4837,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
       list<OpRequestRef> ls;
       for (map<eversion_t,OpRequestRef>::iterator it = replay_queue.begin();
 	   it != replay_queue.end();
-	   it++)
+	   ++it)
 	ls.push_back(it->second);
       replay_queue.clear();
       requeue_ops(ls);
@@ -5339,7 +5339,7 @@ bool PG::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
     set<hobject_t> did;
     for (list<pg_log_entry_t>::reverse_iterator i = log.log.rbegin();
 	 i != log.log.rend();
-	 i++) {
+	 ++i) {
       if (i->version <= info.last_complete) break;
       if (did.count(i->soid)) continue;
       did.insert(i->soid);
@@ -5536,10 +5536,10 @@ void PG::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
     if (reorder) {
       dout(0) << "read_log reordering log" << dendl;
       map<eversion_t, pg_log_entry_t> m;
-      for (list<pg_log_entry_t>::iterator p = log.log.begin(); p != log.log.end(); p++)
+      for (list<pg_log_entry_t>::iterator p = log.log.begin(); p != log.log.end(); ++p)
 	m[p->version] = *p;
       log.log.clear();
-      for (map<eversion_t, pg_log_entry_t>::iterator p = m.begin(); p != m.end(); p++)
+      for (map<eversion_t, pg_log_entry_t>::iterator p = m.begin(); p != m.end(); ++p)
 	log.log.push_back(p->second);
     }
   }
@@ -5858,7 +5858,7 @@ boost::statechart::result PG::RecoveryState::Peering::react(const QueryState& q)
   q.f->open_array_section("peering_blocked_by");
   for (map<int,epoch_t>::iterator p = prior_set->blocked_by.begin();
        p != prior_set->blocked_by.end();
-       p++) {
+       ++p) {
     q.f->open_object_section("osd");
     q.f->dump_int("osd", p->first);
     q.f->dump_int("current_lost_at", p->second);
@@ -7397,7 +7397,7 @@ PG::PriorSet::PriorSet(const OSDMap &osdmap,
 
   for (map<epoch_t,pg_interval_t>::const_reverse_iterator p = past_intervals.rbegin();
        p != past_intervals.rend();
-       p++) {
+       ++p) {
     const pg_interval_t &interval = p->second;
     dout(10) << "build_prior " << interval << dendl;
 
