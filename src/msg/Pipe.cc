@@ -588,7 +588,7 @@ int Pipe::accept()
     ldout(msgr->cct,10) << "accept re-queuing on out_seq " << out_seq << " in_seq " << in_seq << dendl;
     for (map<int, list<Message*> >::iterator p = existing->out_q.begin();
          p != existing->out_q.end();
-         p++)
+         ++p)
       out_q[p->first].splice(out_q[p->first].begin(), p->second);
   }
   existing->pipe_lock.Unlock();
@@ -1127,13 +1127,13 @@ void Pipe::discard_out_queue()
 {
   ldout(msgr->cct,10) << "discard_queue" << dendl;
 
-  for (list<Message*>::iterator p = sent.begin(); p != sent.end(); p++) {
+  for (list<Message*>::iterator p = sent.begin(); p != sent.end(); ++p) {
     ldout(msgr->cct,20) << "  discard " << *p << dendl;
     (*p)->put();
   }
   sent.clear();
-  for (map<int,list<Message*> >::iterator p = out_q.begin(); p != out_q.end(); p++)
-    for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++) {
+  for (map<int,list<Message*> >::iterator p = out_q.begin(); p != out_q.end(); ++p)
+    for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); ++r) {
       ldout(msgr->cct,20) << "  discard " << *r << dendl;
       (*r)->put();
     }
@@ -1998,7 +1998,7 @@ int Pipe::write_message(ceph_msg_header& header, ceph_msg_footer& footer, buffer
     if (left == 0)
       break;
     while (b_off == (int)pb->length()) {
-      pb++;
+      ++pb;
       b_off = 0;
     }
   }
