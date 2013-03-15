@@ -1619,39 +1619,127 @@ void FileJournal::wrap_read_bl(
     *out_pos = pos;
 }
 
-bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
+bool FileJournal::read_entry(
+  bufferlist &bl,
+  uint64_t &next_seq,
+  bool *corrupt)
 {
+  if (corrupt)
+    *corrupt = false;
+  uint64_t seq = next_seq;
+
   if (!read_pos) {
     dout(2) << "read_entry -- not readable" << dendl;
     return false;
   }
 
   off64_t pos = read_pos;
+  off64_t next_pos = pos;
+  stringstream ss;
+  read_entry_result result = do_read_entry(
+    pos,
+    &next_pos,
+    &bl,
+    &seq,
+    &ss);
+  if (result == SUCCESS) {
+    if (next_seq > seq) {
+      return false;
+    } else {
+      read_pos = next_pos;
+      next_seq = seq;
+      return true;
+    }
+  }
+
+  stringstream errss;
+  while (result == MAYBE_CORRUPT &&
+	 (static_cast<uint64_t>(pos - read_pos) <
+	  g_conf->journal_max_corrupt_search)) {
+    errss << "Entry at pos " << pos << " possibly corrupt due to: ("
+	  << ss.str() << ")" << std::endl;
+    ss.clear();
+    pos = next_pos;
+    result = do_read_entry(
+      pos,
+      &next_pos,
+      &bl,
+      &seq,
+      &ss);
+  }
+
+  if (result == SUCCESS) {
+    if (seq >= next_seq) {
+      derr << errss.str() << dendl;
+      derr << "Entry at pos " << pos << " valid, there are missing sequence "
+	   << "numbers prior to seq " << seq << dendl;
+      if (g_conf->journal_ignore_corruption) {
+	if (corrupt)
+	  *corrupt = true;
+	return false;
+      } else {
+	assert(0);
+      }
+    } else { // We read a valid, but old entry, no problem
+      return false;
+    }
+  }
+
+  if (seq < header.committed_up_to) {
+    derr << "Unable to read past sequence " << seq
+	 << " but header indicates the journal has committed up through "
+	 << header.committed_up_to << ", journal is corrupt" << dendl;
+    if (g_conf->journal_ignore_corruption) {
+      if (corrupt)
+	*corrupt = true;
+      return false;
+    } else {
+      assert(0);
+    }
+  }
+
+  dout(2) << errss.str() << dendl;
+  dout(2) << "No further valid entries found, journal is most likely valid"
+	  << dendl;
+  return false;
+}
+
+FileJournal::read_entry_result FileJournal::do_read_entry(
+  off64_t pos,
+  off64_t *next_pos,
+  bufferlist *bl,
+  uint64_t *seq,
+  ostream *ss,
+  entry_header_t *_h)
+{
+  bufferlist _bl;
+  if (!bl)
+    bl = &_bl;
 
   // header
   entry_header_t *h;
   bufferlist hbl;
-  wrap_read_bl(pos, sizeof(*h), &hbl, &pos);
+  off64_t _next_pos;
+  wrap_read_bl(pos, sizeof(*h), &hbl, &_next_pos);
   h = (entry_header_t *)hbl.c_str();
 
-  if (!h->check_magic(read_pos, header.get_fsid64())) {
-    if (header.committed_up_to && seq <= header.committed_up_to) {
-      derr << "ERROR: header claims we are committed up through "
-	   << header.committed_up_to << " however, we have failed to read "
-	   << "entry " << seq
-	   << " journal is likely corrupt" << dendl;
-      assert(0 == "FileJournal::read_entry(): corrupt journal");
-    }
-    dout(2) << "read_entry " << read_pos << " : bad header magic, end of journal" << dendl;
-    return false;
+  if (!h->check_magic(pos, header.get_fsid64())) {
+    dout(2) << "read_entry " << pos
+	    << " : bad header magic, end of journal" << dendl;
+    if (ss)
+      *ss << "bad header magic";
+    if (next_pos)
+      *next_pos = pos + (4<<10); // check 4k ahead
+    return MAYBE_CORRUPT;
   }
+  pos = _next_pos;
 
   // pad + body + pad
   if (h->pre_pad)
     pos += h->pre_pad;
 
-  bl.clear();
-  wrap_read_bl(pos, h->len, &bl, &pos);
+  bl->clear();
+  wrap_read_bl(pos, h->len, bl, &pos);
 
   if (h->post_pad)
     pos += h->post_pad;
@@ -1662,38 +1750,44 @@ bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
   wrap_read_bl(pos, sizeof(*f), &fbl, &pos);
   f = (entry_header_t *)fbl.c_str();
   if (memcmp(f, h, sizeof(*f))) {
-    dout(2) << "read_entry " << read_pos << " : bad footer magic, partial entry, end of journal" << dendl;
-    return false;
+    if (ss)
+      *ss << "bad footer magic, partial entry";
+    if (next_pos)
+      *next_pos = pos;
+    return MAYBE_CORRUPT;
   }
 
   if ((header.flags & header_t::FLAG_CRC) ||   // if explicitly enabled (new journal)
       h->crc32c != 0) {                        // newer entry in old journal
-    uint32_t actual_crc = bl.crc32c(0);
+    uint32_t actual_crc = bl->crc32c(0);
     if (actual_crc != h->crc32c) {
-      dout(2) << "read_entry " << read_pos << " : header crc (" << h->crc32c
-	      << ") doesn't match body crc (" << actual_crc << ")" << dendl;
-      return false;
+      if (ss)
+	*ss << "header crc (" << h->crc32c
+	    << ") doesn't match body crc (" << actual_crc << ")";
+      if (next_pos)
+	*next_pos = pos;
+      return MAYBE_CORRUPT;
     }
   }
 
   // yay!
-  dout(2) << "read_entry " << read_pos << " : seq " << h->seq
+  dout(2) << "read_entry " << pos << " : seq " << h->seq
 	  << " " << h->len << " bytes"
 	  << dendl;
 
-  if (seq && h->seq < seq) {
-    dout(2) << "read_entry " << read_pos << " : got seq " << h->seq << ", expected " << seq << ", stopping" << dendl;
-    return false;
-  }
-
   // ok!
-  seq = h->seq;
-  journalq.push_back(pair<uint64_t,off64_t>(h->seq, read_pos));
+  if (seq)
+    *seq = h->seq;
+  journalq.push_back(pair<uint64_t,off64_t>(h->seq, pos));
 
-  read_pos = pos;
-  assert(read_pos % header.alignment == 0);
- 
-  return true;
+  if (next_pos)
+    *next_pos = pos;
+
+  if (_h)
+    *_h = *h;
+
+  assert(pos % header.alignment == 0);
+  return SUCCESS;
 }
 
 void FileJournal::throttle()
