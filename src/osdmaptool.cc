@@ -282,7 +282,7 @@ int main(int argc, const char **argv)
       hash_map<pg_t,vector<int> > m;
       for (map<int64_t,pg_pool_t>::const_iterator p = osdmap.get_pools().begin();
 	   p != osdmap.get_pools().end();
-	   p++) {
+	   ++p) {
 	const pg_pool_t *pool = osdmap.get_pg_pool(p->first);
 	for (ps_t ps = 0; ps < pool->get_pg_num(); ps++) {
 	  pg_t pgid(ps, p->first, -1);
