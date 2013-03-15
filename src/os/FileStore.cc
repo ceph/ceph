@@ -1867,7 +1867,7 @@ FileStore::Op *FileStore::build_op(list<Transaction*>& tls,
   uint64_t bytes = 0, ops = 0;
   for (list<Transaction*>::iterator p = tls.begin();
        p != tls.end();
-       p++) {
+       ++p) {
     bytes += (*p)->get_num_bytes();
     ops += (*p)->get_num_ops();
   }
@@ -2122,7 +2122,7 @@ int FileStore::_do_transactions(
   uint64_t bytes = 0, ops = 0;
   for (list<Transaction*>::iterator p = tls.begin();
        p != tls.end();
-       p++) {
+       ++p) {
     bytes += (*p)->get_num_bytes();
     ops += (*p)->get_num_ops();
   }
@@ -2130,7 +2130,7 @@ int FileStore::_do_transactions(
   int trans_num = 0;
   for (list<Transaction*>::iterator p = tls.begin();
        p != tls.end();
-       p++, trans_num++) {
+       ++p, trans_num++) {
     r = _do_transaction(**p, op_seq, trans_num);
     if (r < 0)
       break;
@@ -4001,7 +4001,7 @@ int FileStore::_rmattrs(coll_t cid, const hobject_t& oid,
   }
   r = _fgetattrs(fd, aset, false);
   if (r >= 0) {
-    for (map<string,bufferptr>::iterator p = aset.begin(); p != aset.end(); p++) {
+    for (map<string,bufferptr>::iterator p = aset.begin(); p != aset.end(); ++p) {
       char n[CHAIN_XATTR_MAX_NAME_LEN];
       get_attrname(p->first.c_str(), n, CHAIN_XATTR_MAX_NAME_LEN);
       r = chain_fremovexattr(fd, n);
