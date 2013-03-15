@@ -346,6 +346,20 @@ fi
 %restart_on_update ceph
 %insserv_cleanup
 %endif
+# Package removal cleanup
+if [ "$1" -eq "0" ] ; then
+
+    # be a little careful, here: unmount anything beneath here before removing it.
+    rm -rf --one-file-system -- /var/lib/ceph || true
+    if [ -d /var/lib/ceph ]; then
+            find /var/lib/ceph -mindepth 1 -maxdepth 2 -type d -exec umount \{\} \;
+    fi
+    rm -rf --one-file-system -- /var/lib/ceph
+
+    # Other Ceph directories
+    rm -rf /var/log/ceph 
+    rm -rf /etc/ceph
+fi
 
 #################################################################################
 # files
