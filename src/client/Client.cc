@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -3593,16 +3593,17 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     }
 
 
-    if (revoked & (CEPH_CAP_FILE_CACHE |
-		   CEPH_CAP_FILE_RD)) {
-      in->recall_rw_caps(false);
-    }
-
-    if (revoked & (CEPH_CAP_FILE_WR |
+    if (revoked & (CEPH_CAP_FILE_CACHE  |
+		   CEPH_CAP_FILE_RD     |
+		   CEPH_CAP_FILE_WR     |
 		   CEPH_CAP_FILE_BUFFER |
 		   CEPH_CAP_FILE_WREXTEND)) {
-      in->recall_rw_caps(true);
+      in->recall_rw_caps(revoked &
+			 (CEPH_CAP_FILE_WR     |
+			  CEPH_CAP_FILE_BUFFER |
+			  CEPH_CAP_FILE_WREXTEND));
     }
+
   } else if (old_caps == new_caps) {
     ldout(cct, 10) << "  caps unchanged at " << ccap_string(old_caps) << dendl;
   } else {
