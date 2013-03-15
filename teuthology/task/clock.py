@@ -45,6 +45,7 @@ def task(ctx, config):
                 'sudo',
                 'service', 'ntp', 'start',
                 run.Raw(';'),
+                'PATH=/usr/bin:/usr/sbin',
                 'ntpdc', '-p',
                 ],
             logger=log.getChild(rem.name),
@@ -58,6 +59,7 @@ def task(ctx, config):
         for rem in ctx.cluster.remotes.iterkeys():
             rem.run(
                 args=[
+                    'PATH=/usr/bin:/usr/sbin',
                     'ntpdc', '-p',
                     ],
                 logger=log.getChild(rem.name),
@@ -70,6 +72,7 @@ def check(ctx, config):
     for rem in ctx.cluster.remotes.iterkeys():
         rem.run(
             args=[
+                'PATH=/usr/bin:/usr/sbin',
                 'ntpdc', '-p',
                 ],
             logger=log.getChild(rem.name),
@@ -83,6 +86,7 @@ def check(ctx, config):
         for rem in ctx.cluster.remotes.iterkeys():
             rem.run(
                 args=[
+                    'PATH=/usr/bin:/usr/sbin',
                     'ntpdc', '-p',
                     ],
                 logger=log.getChild(rem.name),
