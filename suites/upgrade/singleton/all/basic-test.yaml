@@ -1,0 +1,24 @@
+roles:
+- - mon.a
+  - mds.0
+  - osd.0
+  - osd.1
+- - mon.b
+  - osd.2
+  - osd.3
+- - client.0
+
+tasks:
+- install:
+     tag: v0.57  
+- ceph:
+- install.upgrade:
+     all:
+        tag: v0.58  
+- ceph.restart:
+- ceph-fuse: [client.0]
+- workunit:
+     clients:
+        client.0:
+           - suites/blogbench.sh
+
