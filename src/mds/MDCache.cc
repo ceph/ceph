@@ -3897,6 +3897,8 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     }
   }
 
+  assert(rejoin_gather.count(from));
+  rejoin_gather.erase(from);
   if (survivor) {
     // survivor.  do everything now.
     for (map<inodeno_t,MMDSCacheRejoin::lock_bls>::iterator p = weak->inode_scatterlocks.begin();
@@ -3915,8 +3917,6 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       mds->locker->eval_gather(*p);
   } else {
     // done?
-    assert(rejoin_gather.count(from));
-    rejoin_gather.erase(from);
     if (rejoin_gather.empty()) {
       rejoin_gather_finish();
     } else {
@@ -9656,7 +9656,9 @@ void MDCache::send_dentry_link(CDentry *dn)
   for (map<int,int>::iterator p = dn->replicas_begin(); 
        p != dn->replicas_end(); 
        ++p) {
-    if (mds->mdsmap->get_state(p->first) < MDSMap::STATE_REJOIN) 
+    if (mds->mdsmap->get_state(p->first) < MDSMap::STATE_REJOIN ||
+	(mds->mdsmap->get_state(p->first) == MDSMap::STATE_REJOIN &&
+	 rejoin_gather.count(p->first)))
       continue;
     CDentry::linkage_t *dnl = dn->get_linkage();
     MDentryLink *m = new MDentryLink(subtree->dirfrag(), dn->get_dir()->dirfrag(),
@@ -9740,6 +9742,11 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequest *mdr)
        ++it) {
     // don't tell (rmdir) witnesses; they already know
     if (mdr && mdr->more()->witnessed.count(it->first))
+      continue;
+
+    if (mds->mdsmap->get_state(it->first) < MDSMap::STATE_REJOIN ||
+	(mds->mdsmap->get_state(it->first) == MDSMap::STATE_REJOIN &&
+	 rejoin_gather.count(it->first)))
       continue;
 
     MDentryUnlink *unlink = new MDentryUnlink(dn->get_dir()->dirfrag(), dn->name);
