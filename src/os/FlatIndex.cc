@@ -421,7 +421,7 @@ int FlatIndex::collection_list(vector<hobject_t> *ls) {
   // build final list
   ls->resize(inolist.size());
   int i = 0;
-  for (vector< pair<ino_t,hobject_t> >::iterator p = inolist.begin(); p != inolist.end(); p++)
+  for (vector< pair<ino_t,hobject_t> >::iterator p = inolist.begin(); p != inolist.end(); ++p)
     (*ls)[i++].swap(p->second);
   
   ::closedir(dir);
