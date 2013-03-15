@@ -98,7 +98,7 @@ void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
   // waiters
   for (map<loff_t, list<Context*> >::iterator p = right->waitfor_read.begin();
        p != right->waitfor_read.end();
-       p++) 
+       ++p) 
     left->waitfor_read[p->first].splice( left->waitfor_read[p->first].begin(),
                                          p->second );
   
@@ -117,18 +117,18 @@ void ObjectCacher::Object::try_merge_bh(BufferHead *bh)
   map<loff_t,BufferHead*>::iterator p = data.find(bh->start());
   assert(p->second == bh);
   if (p != data.begin()) {
-    p--;
+    --p;
     if (p->second->end() == bh->start() &&
 	p->second->get_state() == bh->get_state()) {
       merge_left(p->second, bh);
       bh = p->second;
     } else {
-      p++;
+      ++p;
     }
   }
   // to the right?
   assert(p->second == bh);
-  p++;
+  ++p;
   if (p != data.end() &&
       p->second->start() == bh->end() &&
       p->second->get_state() == bh->get_state())
@@ -151,7 +151,7 @@ bool ObjectCacher::Object::is_cached(loff_t cur, loff_t left)
       loff_t lenfromcur = MIN(p->second->end() - cur, left);
       cur += lenfromcur;
       left -= lenfromcur;
-      p++;
+      ++p;
       continue;
     } else if (p->first > cur) {
       // gap
@@ -176,7 +176,7 @@ int ObjectCacher::Object::map_read(OSDRead *rd,
   assert(oc->lock.is_locked());
   for (vector<ObjectExtent>::iterator ex_it = rd->extents.begin();
        ex_it != rd->extents.end();
-       ex_it++) {
+       ++ex_it) {
     
     if (ex_it->oid != oid.oid)
       continue;
@@ -234,7 +234,7 @@ int ObjectCacher::Object::map_read(OSDRead *rd,
         loff_t lenfromcur = MIN(e->end() - cur, left);
         cur += lenfromcur;
         left -= lenfromcur;
-        p++;
+        ++p;
         continue;  // more?
         
       } else if (p->first > cur) {
@@ -310,7 +310,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(OSDWrite *wr)
 
   for (vector<ObjectExtent>::iterator ex_it = wr->extents.begin();
        ex_it != wr->extents.end();
-       ex_it++) {
+       ++ex_it) {
 
     if (ex_it->oid != oid.oid) continue;
 
@@ -354,12 +354,12 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(OSDWrite *wr)
           if (cur + max >= p->first + p->second->length()) {
             // we want right bit (one splice)
             final = split(bh, cur);   // just split it, take right half.
-            p++;
+            ++p;
             assert(p->second == final);
           } else {
             // we want middle bit (two splices)
             final = split(bh, cur);
-            p++;
+            ++p;
             assert(p->second == final);
             split(final, cur+max);
           }
@@ -374,7 +374,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(OSDWrite *wr)
           if (final) {
 	    oc->mark_dirty(bh);
 	    oc->mark_dirty(final);
-	    p--;  // move iterator back to final
+	    --p;  // move iterator back to final
 	    assert(p->second == final);
             merge_left(final, bh);
 	  } else {
@@ -386,7 +386,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(OSDWrite *wr)
         loff_t lenfromcur = final->end() - cur;
         cur += lenfromcur;
         left -= lenfromcur;
-        p++;
+        ++p;
         continue; 
       } else {
         // gap!
@@ -464,7 +464,7 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len)
     // split bh at truncation point?
     if (bh->start() < off) {
       split(bh, off);
-      p++;
+      ++p;
       continue;
     }
 
@@ -473,7 +473,7 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len)
       split(bh, off + len);
     }
 
-    p++;
+    ++p;
     ldout(oc->cct, 10) << "discard " << *this << " bh " << *bh << dendl;
     oc->bh_remove(this, bh);
     delete bh;
@@ -651,7 +651,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
 	BufferHead *bh = p->second;
 	for (map<loff_t, list<Context*> >::iterator p = bh->waitfor_read.begin();
 	     p != bh->waitfor_read.end();
-	     p++)
+	     ++p)
 	  ls.splice(ls.end(), p->second);
 	bh->waitfor_read.clear();
       }
@@ -676,7 +676,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
       // finishers?
       for (map<loff_t, list<Context*> >::iterator it = bh->waitfor_read.begin();
            it != bh->waitfor_read.end();
-           it++)
+           ++it)
 	ls.splice(ls.end(), it->second);
       bh->waitfor_read.clear();
 
@@ -802,7 +802,7 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
     // apply to bh's!
     for (map<loff_t, BufferHead*>::iterator p = ob->data_lower_bound(start);
          p != ob->data.end();
-         p++) {
+         ++p) {
       BufferHead *bh = p->second;
       
       if (bh->start() > start+(loff_t)length)
@@ -940,7 +940,7 @@ bool ObjectCacher::is_cached(ObjectSet *oset, vector<ObjectExtent>& extents, sna
   assert(lock.is_locked());
   for (vector<ObjectExtent>::iterator ex_it = extents.begin();
        ex_it != extents.end();
-       ex_it++) {
+       ++ex_it) {
     ldout(cct, 10) << "is_cached " << *ex_it << dendl;
 
     // get Object cache
@@ -978,7 +978,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 
   for (vector<ObjectExtent>::iterator ex_it = rd->extents.begin();
        ex_it != rd->extents.end();
-       ex_it++) {
+       ++ex_it) {
     ldout(cct, 10) << "readx " << *ex_it << dendl;
 
     total_bytes_read += ex_it->length;
@@ -1002,7 +1002,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	bool wait = false;
 	for (map<loff_t, BufferHead*>::iterator bh_it = o->data.begin();
 	     bh_it != o->data.end();
-	     bh_it++) {
+	     ++bh_it) {
 	  BufferHead *bh = bh_it->second;
 	  if (bh->is_dirty() || bh->is_tx()) {
 	    ldout(cct, 10) << "readx  flushing " << *bh << dendl;
@@ -1023,7 +1023,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
       bool allzero = true;
       for (map<loff_t, BufferHead*>::iterator bh_it = o->data.begin();
 	   bh_it != o->data.end();
-	   bh_it++) {
+	   ++bh_it) {
 	ldout(cct, 20) << "readx  ob has bh " << *bh_it->second << dendl;
 	if (!bh_it->second->is_zero() && !bh_it->second->is_rx()) {
 	  allzero = false;
@@ -1054,7 +1054,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
       // read missing
       for (map<loff_t, BufferHead*>::iterator bh_it = missing.begin();
            bh_it != missing.end();
-           bh_it++) {
+           ++bh_it) {
         bh_read(bh_it->second);
         if (success && onfinish) {
           ldout(cct, 10) << "readx missed, waiting on " << *bh_it->second 
@@ -1068,7 +1068,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
       // bump rx
       for (map<loff_t, BufferHead*>::iterator bh_it = rx.begin();
            bh_it != rx.end();
-           bh_it++) {
+           ++bh_it) {
         touch_bh(bh_it->second);        // bump in lru, so we don't lose it.
         if (success && onfinish) {
           ldout(cct, 10) << "readx missed, waiting on " << *bh_it->second 
@@ -1084,7 +1084,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
       // make a plain list
       for (map<loff_t, BufferHead*>::iterator bh_it = hits.begin();
            bh_it != hits.end();
-           bh_it++) {
+           ++bh_it) {
 	ldout(cct, 10) << "readx hit bh " << *bh_it->second << dendl;
 	if (bh_it->second->is_error() && bh_it->second->error)
 	  error = bh_it->second->error;
@@ -1129,11 +1129,11 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
         bhoff += len;
         foff += len;
         if (opos == bh->end()) {
-          bh_it++;
+          ++bh_it;
           bhoff = 0;
         }
         if (foff == f_it->second) {
-          f_it++;
+          ++f_it;
           foff = 0;
         }
         if (bh_it == hits.end()) break;
@@ -1148,7 +1148,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
   // bump hits in lru
   for (list<BufferHead*>::iterator bhit = hit_ls.begin();
        bhit != hit_ls.end();
-       bhit++) 
+       ++bhit) 
     touch_bh(*bhit);
   
   if (!success) {
@@ -1181,7 +1181,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
     rd->bl->clear();
     for (map<uint64_t,bufferlist>::iterator i = stripe_map.begin();
 	 i != stripe_map.end();
-	 i++) {
+	 ++i) {
       assert(pos == i->first);
       ldout(cct, 10) << "readx  adding buffer len " << i->second.length() << " at " << pos << dendl;
       pos += i->second.length();
@@ -1215,7 +1215,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Mutex& wait_on_lock)
   
   for (vector<ObjectExtent>::iterator ex_it = wr->extents.begin();
        ex_it != wr->extents.end();
-       ex_it++) {
+       ++ex_it) {
     // get object cache
     sobject_t soid(ex_it->oid, CEPH_NOSNAP);
     Object *o = get_object(soid, oset, ex_it->oloc);
@@ -1237,7 +1237,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Mutex& wait_on_lock)
     loff_t opos = ex_it->offset;
     for (vector<pair<uint64_t, uint64_t> >::iterator f_it = ex_it->buffer_extents.begin();
          f_it != ex_it->buffer_extents.end();
-         f_it++) {
+         ++f_it) {
       ldout(cct, 10) << "writex writing " << f_it->first << "~" << f_it->second << " into " << *bh << " at " << opos << dendl;
       uint64_t bhoff = bh->start() - opos;
       assert(f_it->second <= bh->length() - bhoff);
@@ -1395,7 +1395,7 @@ bool ObjectCacher::set_is_cached(ObjectSet *oset)
     Object *ob = *p;
     for (map<loff_t,BufferHead*>::iterator q = ob->data.begin();
          q != ob->data.end();
-         q++) {
+         ++q) {
       BufferHead *bh = q->second;
       if (!bh->is_dirty() && !bh->is_tx()) 
         return true;
@@ -1417,7 +1417,7 @@ bool ObjectCacher::set_is_dirty_or_committing(ObjectSet *oset)
     
     for (map<loff_t,BufferHead*>::iterator p = ob->data.begin();
          p != ob->data.end();
-         p++) {
+         ++p) {
       BufferHead *bh = p->second;
       if (bh->is_dirty() || bh->is_tx()) 
         return true;
@@ -1447,7 +1447,7 @@ bool ObjectCacher::flush(Object *ob, loff_t offset, loff_t length)
   assert(lock.is_locked());
   bool clean = true;
   ldout(cct, 10) << "flush " << *ob << " " << offset << "~" << length << dendl;
-  for (map<loff_t,BufferHead*>::iterator p = ob->data_lower_bound(offset); p != ob->data.end(); p++) {
+  for (map<loff_t,BufferHead*>::iterator p = ob->data_lower_bound(offset); p != ob->data.end(); ++p) {
     BufferHead *bh = p->second;
     ldout(cct, 20) << "flush  " << *bh << dendl;
     if (length && bh->start() > offset+length) {
@@ -1583,7 +1583,7 @@ loff_t ObjectCacher::release(Object *ob)
 
   for (map<loff_t,BufferHead*>::iterator p = ob->data.begin();
        p != ob->data.end();
-       p++) {
+       ++p) {
     BufferHead *bh = p->second;
     if (bh->is_clean() || bh->is_zero())
       clean.push_back(bh);
@@ -1593,7 +1593,7 @@ loff_t ObjectCacher::release(Object *ob)
 
   for (list<BufferHead*>::iterator p = clean.begin();
        p != clean.end();
-       p++) {
+       ++p) {
     bh_remove(ob, *p);
     delete *p;
   }
@@ -1667,7 +1667,7 @@ uint64_t ObjectCacher::release_all()
     hash_map<sobject_t, Object*>::iterator p = i->begin();
     while (p != i->end()) {
       hash_map<sobject_t, Object*>::iterator n = p;
-      n++;
+      ++n;
 
       Object *ob = p->second;
 
@@ -1760,7 +1760,7 @@ void ObjectCacher::verify_stats() const
       Object *ob = p->second;
       for (map<loff_t, BufferHead*>::const_iterator q = ob->data.begin();
           q != ob->data.end();
-          q++) {
+          ++q) {
         BufferHead *bh = q->second;
         switch (bh->get_state()) {
         case BufferHead::STATE_MISSING:
