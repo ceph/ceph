@@ -1976,7 +1976,7 @@ void Migrator::import_remove_pins(CDir *dir, set<CDir*>& bounds)
     // bounding dirfrags
     for (set<CDir*>::iterator it = bounds.begin();
 	 it != bounds.end();
-	 it++) {
+	 ++it) {
       CDir *bd = *it;
       bd->put(CDir::PIN_IMPORTBOUND);
       bd->state_clear(CDir::STATE_IMPORTBOUND);
