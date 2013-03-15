@@ -742,8 +742,7 @@ int LoadGen::run()
   cout << "waiting for all operations to complete" << std::endl;
 
   // now wait on all the pending requests
-  vector<librados::AioCompletion *>::iterator citer;
-  for (citer = completions.begin(); citer != completions.end(); citer++) {
+  for (vector<librados::AioCompletion *>::iterator citer = completions.begin(); citer != completions.end(); ++citer) {
     librados::AioCompletion *c = *citer;
     c->wait_for_complete();
     c->release();
@@ -1733,7 +1732,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       header.hexdump(cout);
       cout << "\n";
       cout << kv.size() << " keys\n";
-      for (map<string,bufferlist>::iterator q = kv.begin(); q != kv.end(); q++) {
+      for (map<string,bufferlist>::iterator q = kv.begin(); q != kv.end(); ++q) {
 	cout << "key '" << q->first << "' (" << q->second.length() << " bytes):\n";
 	q->second.hexdump(cout);
 	cout << "\n";
@@ -1823,7 +1822,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     io_ctx.snap_list(&snaps);
     for (vector<snap_t>::iterator i = snaps.begin();
 	 i != snaps.end();
-	 i++) {
+	 ++i) {
       string s;
       time_t t;
       if (io_ctx.snap_get_name(*i, &s) < 0)
@@ -2018,8 +2017,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     else
       ret = 0;
     
-    std::list<obj_watch_t>::iterator i;
-    for (i = lw.begin(); i != lw.end(); i++) {
+    for (std::list<obj_watch_t>::iterator i = lw.begin(); i != lw.end(); ++i) {
       cout << "watcher=client." << i->watcher_id << " cookie=" << i->cookie << std::endl;
     }
   } else if (strcmp(nargs[0], "listsnaps") == 0) {
@@ -2042,7 +2040,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       vector<snap_t> snaps;
       io_ctx.snap_list(&snaps);
       for (vector<snap_t>::iterator i = snaps.begin();
-          i != snaps.end(); i++) {
+          i != snaps.end(); ++i) {
         string s;
         if (io_ctx.snap_get_name(*i, &s) < 0)
           continue;
@@ -2060,7 +2058,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
     for (std::vector<clone_info_t>::iterator ci = ls.clones.begin();
-          ci != ls.clones.end(); ci++) {
+          ci != ls.clones.end(); ++ci) {
 
       if (formatter) formatter->open_object_section("clone");
 
@@ -2120,7 +2118,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
           cout << "\t[";
 
         for (std::vector< std::pair<uint64_t,uint64_t> >::iterator ovi = ci->overlap.begin();
-            ovi != ci->overlap.end(); ovi++) {
+            ovi != ci->overlap.end(); ++ovi) {
           if (formatter) {
             formatter->open_object_section("section");
             formatter->dump_unsigned("start", ovi->first);
@@ -2244,7 +2242,7 @@ int main(int argc, const char **argv)
     } else {
       if (val[0] == '-')
         usage_exit();
-      i++;
+      ++i;
     }
   }
 
