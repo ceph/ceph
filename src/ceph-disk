@@ -1,9 +1,11 @@
 #!/usr/bin/python
 
 import argparse
+import errno
 import logging
 import os
 import os.path
+import platform
 import re
 import subprocess
 import stat
@@ -119,6 +121,28 @@ def maybe_mkdir(*a, **kw):
             pass
         else:
             raise
+
+
+def list_all_partitions():
+    """
+    Return a list of devices and partitions
+    """
+    ls = {}
+    with file('/proc/partitions', 'rb') as f:
+        for line in f.read().split('\n')[2:]:
+            fields = re.split('\s+', line)
+            if len(fields) < 5:
+                continue
+            (_, major, minor, blocks, name) = fields
+            name = '/dev/' + name
+            if name[-1].isdigit():
+                base = name
+                while base[-1].isdigit():
+                    base = base[:-1]
+                    ls[base].append(name)
+            else:
+                ls[name] = []
+    return ls
 
 
 def list_partitions(disk):
@@ -1553,7 +1577,7 @@ def main_list(args):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        'Manage data disks or directories for use by a Ceph OSD',
+        'ceph-disk',
         )
     parser.add_argument(
         '-v', '--verbose',
@@ -1566,7 +1590,11 @@ def parse_args():
         cluster='ceph',
         )
 
-    subparsers = parser.add_subparsers(help='sub-command help')
+    subparsers = parser.add_subparsers(
+        title='subcommands',
+        description='valid subcommands',
+        help='sub-command help',
+        )
 
     prepare_parser = subparsers.add_parser('prepare', help='Prepare a directory or disk for a Ceph OSD')
     prepare_parser.add_argument(
@@ -1641,6 +1669,9 @@ def parse_args():
         help=('path to OSD journal disk block device;'
               + ' leave out to store journal in file'),
         )
+    prepare_parser.set_defaults(
+        func=main_prepare,
+        )
 
     activate_parser = subparsers.add_parser('activate', help='Activate a Ceph OSD')
     activate_parser.add_argument(
@@ -1661,14 +1692,20 @@ def parse_args():
         default='auto',
         choices=INIT_SYSTEMS,
         )
-    activate_parser.set_defaults(
-        activate_key_template='/var/lib/ceph/bootstrap-osd/{cluster}.keyring',
-        )
     activate_parser.add_argument(
         'path',
         metavar='PATH',
         nargs='?',
         help='path to block device or directory',
+        )
+    activate_parser.set_defaults(
+        activate_key_template='/var/lib/ceph/bootstrap-osd/{cluster}.keyring',
+        func=main_activate,
+        )
+
+    list_parser = subparsers.add_parser('list', help='List disks, partitions, and Ceph OSDs')
+    list_parser.set_defaults(
+        func=main_list,
         )
 
     args = parser.parse_args()
@@ -1687,14 +1724,7 @@ def main():
         )
 
     try:
-        if args.command == 'prepare':
-            main_prepare(args)
-        elif args.command == 'activate':
-            main_activate(args)
-        elif args.command == 'list':
-            main_list(args)
-        else:
-            log.error('unimplemented command %s', args.command)
+        args.func(args)
 
     except Error as e:
         print >>sys.stderr, '{prog}: {msg}'.format(
