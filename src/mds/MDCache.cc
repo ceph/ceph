@@ -9288,8 +9288,15 @@ void MDCache::handle_discover(MDiscover *dis)
     if (dis->get_want_ino()) {
       // lookup by ino
       CInode *in = get_inode(dis->get_want_ino(), snapid);
-      if (in && in->is_auth() && in->get_parent_dn()->get_dir() == curdir)
+      if (in && in->is_auth() && in->get_parent_dn()->get_dir() == curdir) {
 	dn = in->get_parent_dn();
+	if (dn->state_test(CDentry::STATE_PURGING)) {
+	  // set error flag in reply
+	  dout(7) << "dentry " << *dn << " is purging, flagging error ino" << dendl;
+	  reply->set_flag_error_ino();
+	  break;
+	}
+      }
     } else if (dis->get_want().depth() > 0) {
       // lookup dentry
       dn = curdir->lookup(dis->get_dentry(i), snapid);
