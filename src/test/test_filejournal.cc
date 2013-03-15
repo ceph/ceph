@@ -391,3 +391,147 @@ TEST(TestFileJournal, WriteTrimSmall) {
 
   j.close();
 }
+
+TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
+  g_ceph_context->_conf->set_val("journal_ignore_corruption", "true");
+  g_ceph_context->_conf->apply_changes(NULL);
+
+  fsid.generate_random();
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
+  ASSERT_EQ(0, j.create());
+  j.make_writeable();
+
+  C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&lock, &cond, &done));
+
+  const char *needle =    "i am a needle";
+  bufferlist bl;
+  bl.append(needle);
+  j.submit_entry(1, bl, 0, gb.new_sub());
+  bl.append(needle);
+  j.submit_entry(2, bl, 0, gb.new_sub());
+  bl.append(needle);
+  j.submit_entry(3, bl, 0, gb.new_sub());
+  bl.append(needle);
+  j.submit_entry(4, bl, 0, gb.new_sub());
+  gb.activate();
+  wait();
+
+  j.close();
+  int fd = open(path, O_WRONLY);
+
+  cout << "corrupting journal" << std::endl;
+  j.open(0);
+  j.corrupt_footer_magic(fd, 2);
+
+  uint64_t seq = 0;
+  bl.clear();
+  bool corrupt = false;
+  bool result = j.read_entry(bl, seq, &corrupt);
+  ASSERT_TRUE(result);
+  ASSERT_EQ(seq, 1UL);
+  ASSERT_FALSE(corrupt);
+
+  result = j.read_entry(bl, seq, &corrupt);
+  ASSERT_FALSE(result);
+  ASSERT_TRUE(corrupt);
+
+  j.make_writeable();
+  j.close();
+  ::close(fd);
+}
+
+TEST(TestFileJournal, ReplayDetectCorruptPayload) {
+  g_ceph_context->_conf->set_val("journal_ignore_corruption", "true");
+  g_ceph_context->_conf->apply_changes(NULL);
+
+  fsid.generate_random();
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
+  ASSERT_EQ(0, j.create());
+  j.make_writeable();
+
+  C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&lock, &cond, &done));
+
+  const char *needle =    "i am a needle";
+  bufferlist bl;
+  bl.append(needle);
+  j.submit_entry(1, bl, 0, gb.new_sub());
+  bl.append(needle);
+  j.submit_entry(2, bl, 0, gb.new_sub());
+  bl.append(needle);
+  j.submit_entry(3, bl, 0, gb.new_sub());
+  bl.append(needle);
+  j.submit_entry(4, bl, 0, gb.new_sub());
+  gb.activate();
+  wait();
+
+  j.close();
+  int fd = open(path, O_WRONLY);
+
+  cout << "corrupting journal" << std::endl;
+  j.open(0);
+  j.corrupt_payload(fd, 2);
+
+  uint64_t seq = 0;
+  bl.clear();
+  bool corrupt = false;
+  bool result = j.read_entry(bl, seq, &corrupt);
+  ASSERT_TRUE(result);
+  ASSERT_EQ(seq, 1UL);
+  ASSERT_FALSE(corrupt);
+
+  result = j.read_entry(bl, seq, &corrupt);
+  ASSERT_FALSE(result);
+  ASSERT_TRUE(corrupt);
+
+  j.make_writeable();
+  j.close();
+  ::close(fd);
+}
+
+TEST(TestFileJournal, ReplayDetectCorruptHeader) {
+  g_ceph_context->_conf->set_val("journal_ignore_corruption", "true");
+  g_ceph_context->_conf->apply_changes(NULL);
+
+  fsid.generate_random();
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
+  ASSERT_EQ(0, j.create());
+  j.make_writeable();
+
+  C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&lock, &cond, &done));
+
+  const char *needle =    "i am a needle";
+  bufferlist bl;
+  bl.append(needle);
+  j.submit_entry(1, bl, 0, gb.new_sub());
+  bl.append(needle);
+  j.submit_entry(2, bl, 0, gb.new_sub());
+  bl.append(needle);
+  j.submit_entry(3, bl, 0, gb.new_sub());
+  bl.append(needle);
+  j.submit_entry(4, bl, 0, gb.new_sub());
+  gb.activate();
+  wait();
+
+  j.close();
+  int fd = open(path, O_WRONLY);
+
+  cout << "corrupting journal" << std::endl;
+  j.open(0);
+  j.corrupt_header_magic(fd, 2);
+
+  uint64_t seq = 0;
+  bl.clear();
+  bool corrupt = false;
+  bool result = j.read_entry(bl, seq, &corrupt);
+  ASSERT_TRUE(result);
+  ASSERT_EQ(seq, 1UL);
+  ASSERT_FALSE(corrupt);
+
+  result = j.read_entry(bl, seq, &corrupt);
+  ASSERT_FALSE(result);
+  ASSERT_TRUE(corrupt);
+
+  j.make_writeable();
+  j.close();
+  ::close(fd);
+}

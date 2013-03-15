@@ -62,7 +62,12 @@ public:
 			    TrackedOpRef osd_op = TrackedOpRef()) = 0;
   virtual void commit_start() = 0;
   virtual void committed_thru(uint64_t seq) = 0;
-  virtual bool read_entry(bufferlist& bl, uint64_t &seq) = 0;
+
+  /// Read next journal entry - asserts on invalid journal
+  virtual bool read_entry(
+    bufferlist &bl, ///< [out] payload on successful read
+    uint64_t &seq   ///< [in,out] sequence number on last successful read
+    ) = 0; ///< @return true on successful read, false on journal end
 
   virtual bool should_commit_now() = 0;
 

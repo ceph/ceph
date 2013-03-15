@@ -698,6 +698,10 @@ int FileJournal::read_header()
 bufferptr FileJournal::prepare_header()
 {
   bufferlist bl;
+  {
+    Mutex::Locker l(finisher_lock);
+    header.committed_up_to = journaled_seq;
+  }
   ::encode(header, bl);
   bufferptr bp = buffer::create_page_aligned(get_top());
   bp.zero();
@@ -961,6 +965,12 @@ void FileJournal::do_write(bufferlist& bl)
     return;
 
   buffer::ptr hbp;
+  if (g_conf->journal_write_header_frequency &&
+      (((++journaled_since_start) %
+	g_conf->journal_write_header_frequency) == 0)) {
+    must_write_header = true;
+  }
+
   if (must_write_header) {
     must_write_header = false;
     hbp = prepare_header();
@@ -1170,6 +1180,13 @@ void FileJournal::write_thread_entry()
 #ifdef HAVE_LIBAIO
 void FileJournal::do_aio_write(bufferlist& bl)
 {
+
+  if (g_conf->journal_write_header_frequency &&
+      (((++journaled_since_start) %
+	g_conf->journal_write_header_frequency) == 0)) {
+    must_write_header = true;
+  }
+
   // nothing to do?
   if (bl.length() == 0 && !must_write_header) 
     return;
@@ -1561,7 +1578,12 @@ void FileJournal::make_writeable()
   start_writer();
 }
 
-void FileJournal::wrap_read_bl(off64_t& pos, int64_t olen, bufferlist& bl)
+void FileJournal::wrap_read_bl(
+  off64_t pos,
+  int64_t olen,
+  bufferlist* bl,
+  off64_t *out_pos
+  )
 {
   while (olen > 0) {
     while (pos >= header.max_size)
@@ -1587,40 +1609,137 @@ void FileJournal::wrap_read_bl(off64_t& pos, int64_t olen, bufferlist& bl)
 	   << r << dendl;
       ceph_abort();
     }
-    bl.push_back(bp);
+    bl->push_back(bp);
     pos += len;
     olen -= len;
   }
   if (pos >= header.max_size)
     pos = pos + get_top() - header.max_size;
+  if (out_pos)
+    *out_pos = pos;
 }
 
-bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
+bool FileJournal::read_entry(
+  bufferlist &bl,
+  uint64_t &next_seq,
+  bool *corrupt)
 {
+  if (corrupt)
+    *corrupt = false;
+  uint64_t seq = next_seq;
+
   if (!read_pos) {
     dout(2) << "read_entry -- not readable" << dendl;
     return false;
   }
 
   off64_t pos = read_pos;
+  off64_t next_pos = pos;
+  stringstream ss;
+  read_entry_result result = do_read_entry(
+    pos,
+    &next_pos,
+    &bl,
+    &seq,
+    &ss);
+  if (result == SUCCESS) {
+    if (next_seq > seq) {
+      return false;
+    } else {
+      read_pos = next_pos;
+      next_seq = seq;
+      return true;
+    }
+  }
+
+  stringstream errss;
+  while (result == MAYBE_CORRUPT &&
+	 (static_cast<uint64_t>(pos - read_pos) <
+	  g_conf->journal_max_corrupt_search)) {
+    errss << "Entry at pos " << pos << " possibly corrupt due to: ("
+	  << ss.str() << ")" << std::endl;
+    ss.clear();
+    pos = next_pos;
+    result = do_read_entry(
+      pos,
+      &next_pos,
+      &bl,
+      &seq,
+      &ss);
+  }
+
+  if (result == SUCCESS) {
+    if (seq >= next_seq) {
+      derr << errss.str() << dendl;
+      derr << "Entry at pos " << pos << " valid, there are missing sequence "
+	   << "numbers prior to seq " << seq << dendl;
+      if (g_conf->journal_ignore_corruption) {
+	if (corrupt)
+	  *corrupt = true;
+	return false;
+      } else {
+	assert(0);
+      }
+    } else { // We read a valid, but old entry, no problem
+      return false;
+    }
+  }
+
+  if (seq < header.committed_up_to) {
+    derr << "Unable to read past sequence " << seq
+	 << " but header indicates the journal has committed up through "
+	 << header.committed_up_to << ", journal is corrupt" << dendl;
+    if (g_conf->journal_ignore_corruption) {
+      if (corrupt)
+	*corrupt = true;
+      return false;
+    } else {
+      assert(0);
+    }
+  }
+
+  dout(2) << errss.str() << dendl;
+  dout(2) << "No further valid entries found, journal is most likely valid"
+	  << dendl;
+  return false;
+}
+
+FileJournal::read_entry_result FileJournal::do_read_entry(
+  off64_t pos,
+  off64_t *next_pos,
+  bufferlist *bl,
+  uint64_t *seq,
+  ostream *ss,
+  entry_header_t *_h)
+{
+  bufferlist _bl;
+  if (!bl)
+    bl = &_bl;
 
   // header
   entry_header_t *h;
   bufferlist hbl;
-  wrap_read_bl(pos, sizeof(*h), hbl);
+  off64_t _next_pos;
+  wrap_read_bl(pos, sizeof(*h), &hbl, &_next_pos);
   h = (entry_header_t *)hbl.c_str();
 
-  if (!h->check_magic(read_pos, header.get_fsid64())) {
-    dout(2) << "read_entry " << read_pos << " : bad header magic, end of journal" << dendl;
-    return false;
+  if (!h->check_magic(pos, header.get_fsid64())) {
+    dout(2) << "read_entry " << pos
+	    << " : bad header magic, end of journal" << dendl;
+    if (ss)
+      *ss << "bad header magic";
+    if (next_pos)
+      *next_pos = pos + (4<<10); // check 4k ahead
+    return MAYBE_CORRUPT;
   }
+  pos = _next_pos;
 
   // pad + body + pad
   if (h->pre_pad)
     pos += h->pre_pad;
 
-  bl.clear();
-  wrap_read_bl(pos, h->len, bl);
+  bl->clear();
+  wrap_read_bl(pos, h->len, bl, &pos);
 
   if (h->post_pad)
     pos += h->post_pad;
@@ -1628,41 +1747,47 @@ bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
   // footer
   entry_header_t *f;
   bufferlist fbl;
-  wrap_read_bl(pos, sizeof(*f), fbl);
+  wrap_read_bl(pos, sizeof(*f), &fbl, &pos);
   f = (entry_header_t *)fbl.c_str();
   if (memcmp(f, h, sizeof(*f))) {
-    dout(2) << "read_entry " << read_pos << " : bad footer magic, partial entry, end of journal" << dendl;
-    return false;
+    if (ss)
+      *ss << "bad footer magic, partial entry";
+    if (next_pos)
+      *next_pos = pos;
+    return MAYBE_CORRUPT;
   }
 
   if ((header.flags & header_t::FLAG_CRC) ||   // if explicitly enabled (new journal)
       h->crc32c != 0) {                        // newer entry in old journal
-    uint32_t actual_crc = bl.crc32c(0);
+    uint32_t actual_crc = bl->crc32c(0);
     if (actual_crc != h->crc32c) {
-      dout(2) << "read_entry " << read_pos << " : header crc (" << h->crc32c
-	      << ") doesn't match body crc (" << actual_crc << ")" << dendl;
-      return false;
+      if (ss)
+	*ss << "header crc (" << h->crc32c
+	    << ") doesn't match body crc (" << actual_crc << ")";
+      if (next_pos)
+	*next_pos = pos;
+      return MAYBE_CORRUPT;
     }
   }
 
   // yay!
-  dout(2) << "read_entry " << read_pos << " : seq " << h->seq
+  dout(2) << "read_entry " << pos << " : seq " << h->seq
 	  << " " << h->len << " bytes"
 	  << dendl;
 
-  if (seq && h->seq < seq) {
-    dout(2) << "read_entry " << read_pos << " : got seq " << h->seq << ", expected " << seq << ", stopping" << dendl;
-    return false;
-  }
-
   // ok!
-  seq = h->seq;
-  journalq.push_back(pair<uint64_t,off64_t>(h->seq, read_pos));
+  if (seq)
+    *seq = h->seq;
+  journalq.push_back(pair<uint64_t,off64_t>(h->seq, pos));
 
-  read_pos = pos;
-  assert(read_pos % header.alignment == 0);
- 
-  return true;
+  if (next_pos)
+    *next_pos = pos;
+
+  if (_h)
+    *_h = *h;
+
+  assert(pos % header.alignment == 0);
+  return SUCCESS;
 }
 
 void FileJournal::throttle()
@@ -1671,4 +1796,105 @@ void FileJournal::throttle()
     dout(2) << "throttle: waited for ops" << dendl;
   if (throttle_bytes.wait(g_conf->journal_queue_max_bytes))
     dout(2) << "throttle: waited for bytes" << dendl;
+}
+
+void FileJournal::get_header(
+  uint64_t wanted_seq,
+  off64_t *_pos,
+  entry_header_t *h)
+{
+  off64_t pos = header.start;
+  off64_t next_pos = pos;
+  bufferlist bl;
+  uint64_t seq = 0;
+  while (1) {
+    bl.clear();
+    pos = next_pos;
+    read_entry_result result = do_read_entry(
+      pos,
+      &next_pos,
+      &bl,
+      &seq,
+      0,
+      h);
+    if (result == FAILURE || result == MAYBE_CORRUPT)
+      assert(0);
+    if (seq == wanted_seq) {
+      if (_pos)
+	*_pos = pos;
+      return;
+    }
+  }
+  assert(0); // not reachable
+}
+
+void FileJournal::corrupt(
+  int wfd,
+  off64_t corrupt_at)
+{
+  if (corrupt_at >= header.max_size)
+    corrupt_at = corrupt_at + get_top() - header.max_size;
+
+#ifdef DARWIN
+    int64_t actual = ::lseek(fd, corrupt_at, SEEK_SET);
+#else
+    int64_t actual = ::lseek64(fd, corrupt_at, SEEK_SET);
+#endif
+    assert(actual == corrupt_at);
+
+    char buf[10];
+    int r = safe_read_exact(fd, buf, 1);
+    assert(r == 0);
+
+#ifdef DARWIN
+    actual = ::lseek(wfd, corrupt_at, SEEK_SET);
+#else
+    actual = ::lseek64(wfd, corrupt_at, SEEK_SET);
+#endif
+    assert(actual == corrupt_at);
+
+    buf[0]++;
+    r = safe_write(wfd, buf, 1);
+    assert(r == 0);
+}
+
+void FileJournal::corrupt_payload(
+  int wfd,
+  uint64_t seq)
+{
+  off64_t pos = 0;
+  entry_header_t h;
+  get_header(seq, &pos, &h);
+  off64_t corrupt_at =
+    pos + sizeof(entry_header_t) + h.pre_pad;
+  corrupt(wfd, corrupt_at);
+}
+
+
+void FileJournal::corrupt_footer_magic(
+  int wfd,
+  uint64_t seq)
+{
+  off64_t pos = 0;
+  entry_header_t h;
+  get_header(seq, &pos, &h);
+  off64_t corrupt_at =
+    pos + sizeof(entry_header_t) + h.pre_pad +
+    h.len + h.post_pad +
+    (reinterpret_cast<char*>(&h.magic2) - reinterpret_cast<char*>(&h));
+  corrupt(wfd, corrupt_at);
+}
+
+
+void FileJournal::corrupt_header_magic(
+  int wfd,
+  uint64_t seq)
+{
+  off64_t pos = 0;
+  entry_header_t h;
+  get_header(seq, &pos, &h);
+  off64_t corrupt_at =
+    pos +
+    (reinterpret_cast<char*>(&h.magic2) - reinterpret_cast<char*>(&h));
+  corrupt(wfd, corrupt_at);
 }
