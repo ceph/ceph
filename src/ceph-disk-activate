@@ -560,6 +560,29 @@ def activate_dir(
     return (cluster, osd_id)
 
 
+def find_cluster_by_uuid(uuid):
+    """
+    Find a cluster name by searching /etc/ceph/*.conf for a conf file
+    with the right uuid.
+    """
+    no_fsid = []
+    if not os.path.exists('/etc/ceph'):
+        return None
+    for file in os.listdir('/etc/ceph'):
+        if not file.endswith('.conf'):
+            continue
+        cluster = file[:-5]
+        u = get_conf(cluster, 'fsid')
+        if u is None:
+            no_fsid.append(cluster)
+        elif u == uuid:
+            return cluster
+    # be tolerant of /etc/ceph/ceph.conf without an fsid defined.
+    if len(no_fsid) == 1 and no_fsid[0] == 'ceph':
+        log.warning('No fsid defined in /etc/ceph/ceph.conf; using anyway')
+        return 'ceph'
+    return None
+
 def activate(
     path,
     activate_key_template,
@@ -574,8 +597,9 @@ def activate(
             raise ActivateError('No cluster uuid assigned.')
         log.debug('Cluster uuid is %s', ceph_fsid)
 
-        # TODO use ceph_fsid to find the right cluster
-        cluster = 'ceph'
+        cluster = find_cluster_by_uuid(ceph_fsid)
+        if cluster is None:
+            raise ActivateError('No cluster conf found in /etc/ceph with fsid %s' % ceph_fsid)
         log.debug('Cluster name is %s', cluster)
 
         fsid = read_one_line(path, 'fsid')
