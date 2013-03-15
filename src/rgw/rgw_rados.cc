@@ -496,6 +496,8 @@ int RGWRados::init_rados()
   if (ret < 0)
    return ret;
 
+  meta_mgr = new RGWMetadataManager(this);
+
   return ret;
 }
 
@@ -541,8 +543,6 @@ int RGWRados::init_complete()
 int RGWRados::initialize()
 {
   int ret;
-
-  meta_mgr = new RGWMetadataManager(this);
 
   ret = init_rados();
   if (ret < 0)
