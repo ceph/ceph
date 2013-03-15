@@ -359,6 +359,157 @@ def install(ctx, config):
         remove_packages(ctx, remove_info)
         remove_sources(ctx)
 
+def _upgrade_ceph_packages(ctx, remote, debs, ceph_branch):
+    """
+    upgrade all ceph packages
+    """
+    # check for ceph release key
+    r = remote.run(
+        args=[
+            'sudo', 'apt-key', 'list', run.Raw('|'), 'grep', 'Ceph',
+            ],
+        stdout=StringIO(),
+        )
+    if r.stdout.getvalue().find('Ceph automated package') == -1:
+        # if it doesn't exist, add it
+        remote.run(
+                args=[
+                    'wget', '-q', '-O-',
+                    'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc',
+                    run.Raw('|'),
+                    'sudo', 'apt-key', 'add', '-',
+                    ],
+                stdout=StringIO(),
+                )
+
+    # get distro name and arch
+    r = remote.run(
+            args=['lsb_release', '-sc'],
+            stdout=StringIO(),
+            )
+    dist = r.stdout.getvalue().strip()
+    r = remote.run(
+            args=['arch'],
+            stdout=StringIO(),
+            )
+    arch = r.stdout.getvalue().strip()
+    log.info("dist %s arch %s", dist, arch)
+
+    # branch/tag/sha1 flavor
+    flavor = 'basic'
+    uri = 'ref/'+ceph_branch
+    base_url = 'http://{host}/ceph-deb-{dist}-{arch}-{flavor}/{uri}'.format(
+        host=ctx.teuthology_config.get('gitbuilder_host',
+                                       'gitbuilder.ceph.com'),
+        dist=dist,
+        arch=arch,
+        flavor=flavor,
+        uri=uri,
+        )
+    log.info('Pulling from %s', base_url)
+
+    # get package version string
+    while True:
+        r = remote.run(
+            args=[
+                'wget', '-q', '-O-', base_url + '/version',
+                ],
+            stdout=StringIO(),
+            check_status=False,
+            )
+        if r.exitstatus != 0:
+            time.sleep(15)
+            raise Exception('failed to fetch package version from %s' %
+                            base_url + '/version')
+        version = r.stdout.getvalue().strip()
+        log.info('Package version is %s', version)
+        break
+    remote.run(
+        args=[
+            'echo', 'deb', base_url, dist, 'main',
+            run.Raw('|'),
+            'sudo', 'tee', '/etc/apt/sources.list.d/ceph.list'
+            ],
+        stdout=StringIO(),
+        )
+    remote.run(
+        args=[
+            'sudo', 'apt-get', 'update', run.Raw('&&'),
+            'sudo', 'apt-get', '-y', '--force-yes',
+            'dist-upgrade',
+            ] + ['%s=%s' % (d, version) for d in debs],
+        stdout=StringIO(),
+        )
+
+@contextlib.contextmanager
+def upgrade(ctx, config):
+    """
+    upgrades Ceph debian packages.
+
+    For example::
+
+        tasks:
+        - install.upgrade:
+             all:
+                branch: end
+    or
+        tasks:
+        - install.upgrade:
+             client.0:
+                branch: end
+             osd.0:
+                branch: other
+    """
+    assert config is None or isinstance(config, dict), \
+        "install.upgrade only supports a dictionary for configuration"
+
+    for i in config.keys():
+            assert isinstance(config.get(i), dict), 'host supports dictionary'
+
+    ceph_branch = None
+
+    debs = [
+        'ceph',
+        'ceph-dbg',
+        'ceph-mds',
+        'ceph-mds-dbg',
+        'ceph-common',
+        'ceph-common-dbg',
+        'ceph-fuse',
+        'ceph-fuse-dbg',
+        'ceph-test',
+        'ceph-test-dbg',
+        'radosgw',
+        'radosgw-dbg',
+        'python-ceph',
+        'libcephfs1',
+        'libcephfs1-dbg',
+        'libcephfs-java',
+        'librados2',
+        'librados2-dbg',
+        'librbd1',
+        'librbd1-dbg',
+        ]
+
+    log.info("Upgrading ceph debian packages: {debs}".format(
+            debs=', '.join(debs)))
+
+    if config.get('all') is not None:
+        node = config.get('all')
+        for var, branch_val in node.iteritems():
+            if var == 'branch' or var == 'tag' or var == 'sha1':
+                ceph_branch = branch_val
+        for remote in ctx.cluster.remotes.iterkeys():
+            _upgrade_ceph_packages(ctx, remote, debs, ceph_branch)
+    else:
+        for node in config.keys():
+            kkeys = config.get(node)
+            (remote,) = ctx.cluster.only(node).remotes.iterkeys()
+            for var, branch_val in kkeys.iteritems():
+                if var == 'branch' or var == 'tag' or var == 'sha1':
+                    ceph_branch = branch_val
+                    _upgrade_ceph_packages(ctx, remote, debs, ceph_branch)
+    yield
 
 @contextlib.contextmanager
 def task(ctx, config):
