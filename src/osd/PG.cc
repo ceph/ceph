@@ -6623,9 +6623,10 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const ActMap&)
 boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MQuery& query)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  assert(query.query.type == pg_query_t::MISSING);
-  pg->update_history_from_master(query.query.history);
-  pg->fulfill_log(query.from, query.query, query.query_epoch);
+  if (query.query.type == pg_query_t::MISSING) {
+    pg->update_history_from_master(query.query.history);
+    pg->fulfill_log(query.from, query.query, query.query_epoch);
+  } // else: from prior to activation, safe to ignore
   return discard_event();
 }
 
