@@ -131,7 +131,7 @@ void Striper::assimilate_extents(map<object_t,vector<ObjectExtent> >& object_ext
   // make final list
   for (map<object_t, vector<ObjectExtent> >::iterator it = object_extents.begin();
        it != object_extents.end();
-       it++) {
+       ++it) {
     for (vector<ObjectExtent>::iterator p = it->second.begin(); p != it->second.end(); ++p) {
       extents.push_back(*p);
     }
@@ -224,7 +224,7 @@ void Striper::StripedReadResult::add_partial_sparse_result(CephContext *cct,
       // skip zero-length extent
       if (s->second == 0) {
 	ldout(cct, 30) << "  s len 0, skipping" << dendl;
-	s++;
+	++s;
 	continue;
       }
 
@@ -257,7 +257,7 @@ void Striper::StripedReadResult::add_partial_sparse_result(CephContext *cct,
       }
       if (actual == left) {
 	ldout(cct, 30) << "  s advancing" << dendl;
-	s++;
+	++s;
       }
     }
   }
@@ -294,7 +294,7 @@ void Striper::StripedReadResult::assemble_result(CephContext *cct, bufferlist& b
     } else {
       bl.claim_prepend(p->second.first);
     }
-    p++;
+    ++p;
   }
   partial.clear();
 }

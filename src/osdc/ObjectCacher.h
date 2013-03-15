@@ -242,9 +242,9 @@ class ObjectCacher {
       map<loff_t,BufferHead*>::iterator p = data.lower_bound(offset);
       if (p != data.begin() &&
 	  (p == data.end() || p->first > offset)) {
-	p--;     // might overlap!
+	--p;     // might overlap!
 	if (p->first + p->second->length() <= offset)
-	  p++;   // doesn't overlap.
+	  ++p;   // doesn't overlap.
       }
       return p;
     }

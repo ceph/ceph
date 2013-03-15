@@ -2098,7 +2098,7 @@ void CDir::_committed(version_t v, version_t lrv)
   map<version_t, list<Context*> >::iterator p = waiting_for_commit.begin();
   while (p != waiting_for_commit.end()) {
     map<version_t, list<Context*> >::iterator n = p;
-    n++;
+    ++n;
     if (p->first > committed_version) {
       dout(10) << " there are waiters for " << p->first << ", committing again" << dendl;
       _commit(p->first);
