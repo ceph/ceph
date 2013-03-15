@@ -140,7 +140,7 @@ int SnapMapper::get_snaps(
   int r = backend.get_keys(keys, &got);
   if (r < 0)
     return r;
-  if (got.size() == 0)
+  if (got.empty())
     return -ENOENT;
   if (out) {
     bufferlist::iterator bp = got.begin()->second.begin();
