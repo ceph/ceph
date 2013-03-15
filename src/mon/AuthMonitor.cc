@@ -343,7 +343,8 @@ uint64_t AuthMonitor::assign_global_id(MAuth *m, bool should_increase_max)
   bool return_next = (next_global_id <= max_global_id);
 
   // bump the max?
-  while (next_global_id >= max_global_id - g_conf->mon_globalid_prealloc / 2) {
+  while (mon->is_leader() &&
+	 next_global_id >= max_global_id - g_conf->mon_globalid_prealloc / 2) {
     increase_max_global_id();
   }
 
