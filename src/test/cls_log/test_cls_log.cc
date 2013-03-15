@@ -24,11 +24,6 @@ static librados::ObjectReadOperation *new_rop() {
   return new librados::ObjectReadOperation();
 }
 
-static void reset_op(librados::ObjectWriteOperation **pop) {
-  delete *pop;
-  *pop = new_op();
-}
-
 static void reset_rop(librados::ObjectReadOperation **pop) {
   delete *pop;
   *pop = new_rop();
