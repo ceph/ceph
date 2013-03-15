@@ -240,7 +240,7 @@ bool OSDMonitor::thrash()
   hash_map<pg_t,pg_stat_t>::iterator p = mon->pgmon()->pg_map.pg_stat.begin();
   hash_map<pg_t,pg_stat_t>::iterator e = mon->pgmon()->pg_map.pg_stat.end();
   while (n--)
-    p++;
+    ++p;
   for (int i=0; i<50; i++) {
     vector<int> v;
     for (int j=0; j<3; j++) {
@@ -249,7 +249,7 @@ bool OSDMonitor::thrash()
 	v.push_back(o);
     }
     if (v.size() < 3) {
-      for (vector<int>::iterator q = p->second.acting.begin(); q != p->second.acting.end(); q++)
+      for (vector<int>::iterator q = p->second.acting.begin(); q != p->second.acting.end(); ++q)
 	if (std::find(v.begin(), v.end(), *q) == v.end())
 	  v.push_back(*q);
     }
@@ -257,7 +257,7 @@ bool OSDMonitor::thrash()
       pending_inc.new_pg_temp[p->first] = v;
     dout(5) << "thrash_map pg " << p->first << " pg_temp remapped to " << v << dendl;
 
-    p++;
+    ++p;
     if (p == e)
       p = mon->pgmon()->pg_map.pg_stat.begin();
   }
@@ -295,7 +295,7 @@ void OSDMonitor::remove_redundant_pg_temp()
 
   for (map<pg_t,vector<int> >::iterator p = osdmap.pg_temp->begin();
        p != osdmap.pg_temp->end();
-       p++) {
+       ++p) {
     if (pending_inc.new_pg_temp.count(p->first) == 0) {
       vector<int> raw_up;
       osdmap.pg_to_raw_up(p->first, raw_up);
@@ -315,7 +315,7 @@ void OSDMonitor::remove_down_pg_temp()
 
   for (map<pg_t,vector<int> >::iterator p = tmpmap.pg_temp->begin();
        p != tmpmap.pg_temp->end();
-       p++) {
+       ++p) {
     unsigned num_up = 0;
     for (vector<int>::iterator i = p->second.begin();
 	 i != p->second.end();
@@ -439,7 +439,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::Transaction *t)
   // tell me about it
   for (map<int32_t,uint8_t>::iterator i = pending_inc.new_state.begin();
        i != pending_inc.new_state.end();
-       i++) {
+       ++i) {
     int s = i->second ? i->second : CEPH_OSD_UP;
     if (s & CEPH_OSD_UP)
       dout(2) << " osd." << i->first << " DOWN" << dendl;
@@ -448,13 +448,13 @@ void OSDMonitor::encode_pending(MonitorDBStore::Transaction *t)
   }
   for (map<int32_t,entity_addr_t>::iterator i = pending_inc.new_up_client.begin();
        i != pending_inc.new_up_client.end();
-       i++) { 
+       ++i) { 
     //FIXME: insert cluster addresses too
     dout(2) << " osd." << i->first << " UP " << i->second << dendl;
   }
   for (map<int32_t,uint32_t>::iterator i = pending_inc.new_weight.begin();
        i != pending_inc.new_weight.end();
-       i++) {
+       ++i) {
     if (i->second == CEPH_OSD_OUT) {
       dout(2) << " osd." << i->first << " OUT" << dendl;
     } else if (i->second == CEPH_OSD_IN) {
@@ -794,7 +794,7 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
     assert(fi.reporters.size());
     for (map<int,failure_reporter_t>::iterator p = fi.reporters.begin();
 	 p != fi.reporters.end();
-	 p++) {
+	 ++p) {
       const osd_xinfo_t& xi = osdmap.get_xinfo(p->first);
       utime_t elapsed = now - xi.down_stamp;
       double decay = exp((double)elapsed * decay_k);
@@ -1185,7 +1185,7 @@ bool OSDMonitor::preprocess_pgtemp(MOSDPGTemp *m)
     goto ignore;
   }
 
-  for (map<pg_t,vector<int> >::iterator p = m->pg_temp.begin(); p != m->pg_temp.end(); p++) {
+  for (map<pg_t,vector<int> >::iterator p = m->pg_temp.begin(); p != m->pg_temp.end(); ++p) {
     dout(20) << " " << p->first
 	     << (osdmap.pg_temp->count(p->first) ? (*osdmap.pg_temp)[p->first] : empty)
 	     << " -> " << p->second << dendl;
@@ -1211,7 +1211,7 @@ bool OSDMonitor::prepare_pgtemp(MOSDPGTemp *m)
 {
   int from = m->get_orig_source().num();
   dout(7) << "prepare_pgtemp e" << m->map_epoch << " from " << m->get_orig_source_inst() << dendl;
-  for (map<pg_t,vector<int> >::iterator p = m->pg_temp.begin(); p != m->pg_temp.end(); p++)
+  for (map<pg_t,vector<int> >::iterator p = m->pg_temp.begin(); p != m->pg_temp.end(); ++p)
     pending_inc.new_pg_temp[p->first] = p->second;
   pending_inc.new_up_thru[from] = m->map_epoch;   // set up_thru too, so the osd doesn't have to ask again
   wait_for_finished_proposal(new C_ReplyMap(this, m, m->map_epoch));
@@ -1237,7 +1237,7 @@ bool OSDMonitor::preprocess_remove_snaps(MRemoveSnaps *m)
 
   for (map<int, vector<snapid_t> >::iterator q = m->snaps.begin();
        q != m->snaps.end();
-       q++) {
+       ++q) {
     if (!osdmap.have_pg_pool(q->first)) {
       dout(10) << " ignoring removed_snaps " << q->second << " on non-existent pool " << q->first << dendl;
       continue;
@@ -1245,7 +1245,7 @@ bool OSDMonitor::preprocess_remove_snaps(MRemoveSnaps *m)
     const pg_pool_t *pi = osdmap.get_pg_pool(q->first);
     for (vector<snapid_t>::iterator p = q->second.begin(); 
 	 p != q->second.end();
-	 p++) {
+	 ++p) {
       if (*p > pi->get_snap_seq() ||
 	  !pi->removed_snaps.contains(*p))
 	return false;
@@ -1263,11 +1263,11 @@ bool OSDMonitor::prepare_remove_snaps(MRemoveSnaps *m)
 
   for (map<int, vector<snapid_t> >::iterator p = m->snaps.begin(); 
        p != m->snaps.end();
-       p++) {
+       ++p) {
     pg_pool_t& pi = osdmap.pools[p->first];
     for (vector<snapid_t>::iterator q = p->second.begin();
 	 q != p->second.end();
-	 q++) {
+	 ++q) {
       if (!pi.removed_snaps.contains(*q) &&
 	  (!pending_inc.new_pools.count(p->first) ||
 	   !pending_inc.new_pools[p->first].removed_snaps.contains(*q))) {
@@ -1311,7 +1311,7 @@ void OSDMonitor::send_to_waiting()
 	}
       } else {
 	dout(10) << "send_to_waiting from " << from << dendl;
-	p++;
+	++p;
 	continue;
       }
     } else {
@@ -1534,7 +1534,7 @@ void OSDMonitor::tick()
       int o = i->first;
       utime_t down = now;
       down -= i->second;
-      i++;
+      ++i;
 
       if (osdmap.is_down(o) &&
 	  osdmap.is_in(o) &&
@@ -1596,7 +1596,7 @@ void OSDMonitor::tick()
   // expire blacklisted items?
   for (hash_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
        p != osdmap.blacklist.end();
-       p++) {
+       ++p) {
     if (p->second < now) {
       dout(10) << "expiring blacklist item " << p->first << " expired " << p->second << " < now " << now << dendl;
       pending_inc.old_blacklist.push_back(p->first);
@@ -1692,7 +1692,7 @@ void OSDMonitor::mark_all_down()
   osdmap.get_all_osds(ls);
   for (set<int32_t>::iterator it = ls.begin();
        it != ls.end();
-       it++) {
+       ++it) {
     if (osdmap.is_down(*it)) continue;
     pending_inc.new_state[*it] = CEPH_OSD_UP;
   }
@@ -1805,7 +1805,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	  }
 	  epoch = l;
 	} else
-	  i++;
+	  ++i;
       }
 
       OSDMap *p = &osdmap;
@@ -2045,7 +2045,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     else if (m->cmd.size() == 3 && m->cmd[1] == "blacklist" && m->cmd[2] == "ls") {
       for (hash_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
 	   p != osdmap.blacklist.end();
-	   p++) {
+	   ++p) {
 	stringstream ss;
 	string s;
 	ss << p->first << " " << p->second;
