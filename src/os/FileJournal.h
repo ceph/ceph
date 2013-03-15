@@ -108,8 +108,11 @@ public:
     __u32 alignment;
     int64_t max_size;   // max size of journal ring buffer
     int64_t start;      // offset of first entry
+    uint64_t committed_up_to; // committed up to
 
-    header_t() : flags(0), block_size(0), alignment(0), max_size(0), start(0) {}
+    header_t() :
+      flags(0), block_size(0), alignment(0), max_size(0), start(0),
+      committed_up_to(0) {}
 
     void clear() {
       start = block_size;
@@ -120,7 +123,7 @@ public:
     }
 
     void encode(bufferlist& bl) const {
-      __u32 v = 2;
+      __u32 v = 3;
       ::encode(v, bl);
       bufferlist em;
       {
@@ -130,6 +133,7 @@ public:
 	::encode(alignment, em);
 	::encode(max_size, em);
 	::encode(start, em);
+	::encode(committed_up_to, em);
       }
       ::encode(em, bl);
     }
@@ -159,6 +163,10 @@ public:
       ::decode(alignment, t);
       ::decode(max_size, t);
       ::decode(start, t);
+      if (v > 2)
+	::decode(committed_up_to, t);
+      else
+	committed_up_to = 0;
     }
   } header;
 
@@ -224,6 +232,7 @@ private:
 #endif
 
   uint64_t last_committed_seq;
+  uint64_t journaled_since_start;
 
   /*
    * full states cycle at the beginnging of each commit epoch, when commit_start()
@@ -283,7 +292,14 @@ private:
 
   void align_bl(off64_t pos, bufferlist& bl);
   int write_bl(off64_t& pos, bufferlist& bl);
-  void wrap_read_bl(off64_t& pos, int64_t len, bufferlist& bl);
+
+  /// read len from journal starting at in_pos and wrapping up to len
+  void wrap_read_bl(
+    off64_t in_pos,   ///< [in] start position
+    int64_t len,      ///< [in] length to read
+    bufferlist* bl,   ///< [out] result
+    off64_t *out_pos  ///< [out] next position to read, will be wrapped
+    );
 
   class Writer : public Thread {
     FileJournal *journal;
@@ -330,6 +346,7 @@ private:
     aio_num(0), aio_bytes(0),
 #endif
     last_committed_seq(0), 
+    journaled_since_start(0),
     full_state(FULL_NOTFULL),
     fd(-1),
     writing_seq(0),
@@ -370,7 +387,66 @@ private:
   void set_wait_on_full(bool b) { wait_on_full = b; }
 
   // reads
-  bool read_entry(bufferlist& bl, uint64_t& seq);
+
+  /// Result code for read_entry
+  enum read_entry_result {
+    SUCCESS,
+    FAILURE,
+    MAYBE_CORRUPT
+  };
+
+  /**
+   * read_entry
+   *
+   * Reads next entry starting at pos.  If the entry appears
+   * clean, *bl will contain the payload, *seq will contain
+   * the sequence number, and *out_pos will reflect the next
+   * read position.  If the entry is invalid *ss will contain
+   * debug text, while *seq, *out_pos, and *bl will be unchanged.
+   *
+   * If the entry suggests a corrupt log, *ss will contain debug
+   * text, *out_pos will contain the next index to check.  If
+   * we find an entry in this way that returns SUCCESS, the journal
+   * is most likely corrupt.
+   */
+  read_entry_result do_read_entry(
+    off64_t pos,          ///< [in] position to read
+    off64_t *next_pos,    ///< [out] next position to read
+    bufferlist* bl,       ///< [out] payload for successful read
+    uint64_t *seq,        ///< [out] seq of successful read
+    ostream *ss,          ///< [out] error output
+    entry_header_t *h = 0 ///< [out] header
+    ); ///< @return result code
+
+  bool read_entry(
+    bufferlist &bl,
+    uint64_t &last_seq,
+    bool *corrupt
+    );
+
+  bool read_entry(
+    bufferlist &bl,
+    uint64_t &last_seq) {
+    return read_entry(bl, last_seq, 0);
+  }
+
+  // Debug/Testing
+  void get_header(
+    uint64_t wanted_seq,
+    off64_t *_pos,
+    entry_header_t *h);
+  void corrupt(
+    int wfd,
+    off64_t corrupt_at);
+  void corrupt_payload(
+    int wfd,
+    uint64_t seq);
+  void corrupt_footer_magic(
+    int wfd,
+    uint64_t seq);
+  void corrupt_header_magic(
+    int wfd,
+    uint64_t seq);
 };
 
 WRITE_CLASS_ENCODER(FileJournal::header_t)
