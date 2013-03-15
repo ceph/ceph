@@ -617,7 +617,7 @@ snapid_t pg_pool_t::snap_exists(const char *s) const
 {
   for (map<snapid_t,pool_snap_info_t>::const_iterator p = snaps.begin();
        p != snaps.end();
-       p++)
+       ++p)
     if (p->second.name == s)
       return p->second.snapid;
   return 0;
@@ -664,7 +664,7 @@ SnapContext pg_pool_t::get_snap_context() const
   unsigned i = 0;
   for (map<snapid_t, pool_snap_info_t>::const_reverse_iterator p = snaps.rbegin();
        p != snaps.rend();
-       p++)
+       ++p)
     s[i++] = p->first;
   return SnapContext(get_snap_seq(), s);
 }
@@ -1946,7 +1946,7 @@ void pg_log_t::copy_after(const pg_log_t &other, eversion_t v)
   tail = other.tail;
   for (list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
        i != other.log.rend();
-       i++) {
+       ++i) {
     assert(i->version > other.tail);
     if (i->version <= v) {
       // make tail accurate.
@@ -1997,7 +1997,7 @@ ostream& pg_log_t::print(ostream& out) const
   out << *this << std::endl;
   for (list<pg_log_entry_t>::const_iterator p = log.begin();
        p != log.end();
-       p++) 
+       ++p) 
     out << *p << std::endl;
   return out;
 }
@@ -2802,7 +2802,7 @@ void ScrubMap::merge_incr(const ScrubMap &l)
 
   for (map<hobject_t,object>::const_iterator p = l.objects.begin();
        p != l.objects.end();
-       p++){
+       ++p){
     if (p->second.negative) {
       map<hobject_t,object>::iterator q = objects.find(p->first);
       if (q != objects.end()) {
