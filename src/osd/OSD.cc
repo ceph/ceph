@@ -4702,6 +4702,15 @@ void OSD::split_pgs(
       split_bits,
       i->m_seed,
       coll_t(*i));
+    if (parent->have_temp_coll()) {
+      rctx->transaction->create_collection(
+	coll_t::make_temp_coll(*i));
+      rctx->transaction->split_collection(
+	coll_t::make_temp_coll(parent->info.pgid),
+	split_bits,
+	i->m_seed,
+	coll_t::make_temp_coll(*i));
+    }
     for (interval_set<snapid_t>::iterator k = parent->snap_collections.begin();
 	 k != parent->snap_collections.end();
 	 ++k) {
