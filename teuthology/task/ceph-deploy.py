@@ -178,14 +178,21 @@ def build_ceph_cluster(ctx, config):
                                 execute_ceph_deploy(ctx, config, zap_disk)
                                 estatus_osd = execute_ceph_deploy(ctx, config, osd_create_cmds)
                                 if estatus_osd==0:
-                                    log.info('success')
+                                    log.info('successfully created osd')
                                 else:
-                                    log.info('failure')
+                                    log.info('failed to create osd')
+                    else:
+                        log.info('failed to deploy mds')
+                else:
+                    log.info('failed to create monitors')
+            else:
+                  log.info('failed to install ceph')
+        else:
+            log.info('failed to create config file and monitor keyring')
     else:
-        log.info('no monitor nodes')
+        log.info('no monitor nodes in the config file')
 
     log.info('Setting up client nodes...')
-
     conf_path = '/etc/ceph/ceph.conf'
     first_mon = teuthology.get_first_mon(ctx, config)
     (mon0_remote,) = ctx.cluster.only(first_mon).remotes.keys()
@@ -334,6 +341,6 @@ def task(ctx, config):
                  branch=config.get('branch',{}),
                  )),
         ):
-        #if config.get('wait-for-healthy', True):
-          #is_healthy(ctx=ctx, config=None)
+        if config.get('wait-for-healthy', True):
+          is_healthy(ctx=ctx, config=None)
         yield
