@@ -186,7 +186,7 @@ class Filer {
     } else {
       C_GatherBuilder gack(cct, onack);
       C_GatherBuilder gcom(cct, oncommit);
-      for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
+      for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
 	vector<OSDOp> ops(1);
 	ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
 	ops[0].op.extent.truncate_size = p->offset;
@@ -222,7 +222,7 @@ class Filer {
     } else {
       C_GatherBuilder gack(cct, onack);
       C_GatherBuilder gcom(cct, oncommit);
-      for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
+      for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
 	if (p->offset == 0 && p->length == layout->fl_object_size)
 	  objecter->remove(p->oid, p->oloc,
 			   snapc, mtime, flags,
