@@ -933,6 +933,67 @@ def healthy(ctx, config):
 
 
 @contextlib.contextmanager
+def restart(ctx, config):
+   """
+   restart ceph daemons
+
+   For example::
+      tasks:
+      - ceph.restart: [all]
+
+   For example::
+      tasks:
+      - ceph.restart: [osd.0, mon.1]
+
+   """
+   if config is None:
+       config = {}
+
+   ctx.daemons = CephState()
+
+   testdir = teuthology.get_testdir(ctx)
+   coverage_dir = '{tdir}/archive/coverage'.format(tdir=testdir)
+
+   daemon_signal = 'kill'
+
+   if isinstance(config, list):
+       assert isinstance(config, list), \
+              "task ceph.restart only supports a list for configuration"
+       config = dict.fromkeys(config)
+       for i in config.keys():
+           type_ = i.split('.')[0]
+           id_ = i.split('.')[1]
+           daemons = ctx.cluster.only(teuthology.is_type(type_))
+           for remote, roles_for_host in daemons.remotes.iteritems():
+              run_cmd = [
+                  '{tdir}/enable-coredump'.format(tdir=testdir),
+                  'ceph-coverage',
+                  coverage_dir,
+                  'sudo',
+                  '{tdir}/daemon-helper'.format(tdir=testdir),
+                  daemon_signal,
+                  ]
+              run_cmd_tail = [
+                  'ceph-%s' % (type_),
+                  '-f',
+                  '-i', id_]
+              run_cmd.extend(run_cmd_tail)
+              ctx.daemons.add_daemon(remote, type_, id_,
+                                    args=run_cmd,
+                                    logger=log.getChild(i),
+                                    stdin=run.PIPE,
+                                    wait=False,
+                                    )
+       yield
+   else:
+       with contextutil.nested(
+           lambda: run_daemon(ctx=ctx, config=config, type_='mon'),
+           lambda: run_daemon(ctx=ctx, config=config, type_='osd'),
+           lambda: run_daemon(ctx=ctx, config=config, type_='mds'),
+           ):
+           yield
+
+@contextlib.contextmanager
 def task(ctx, config):
     """
     Set up and tear down a Ceph cluster.
