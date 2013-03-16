@@ -1340,10 +1340,6 @@ void Migrator::export_reverse(CDir *dir)
   set<CDir*> bounds;
   cache->get_subtree_bounds(dir, bounds);
 
-  // adjust auth, with possible subtree merge.
-  cache->adjust_subtree_auth(dir, mds->get_nodeid());
-  cache->try_subtree_merge(dir);  // NOTE: may journal subtree_map as side-effect
-
   // remove exporting pins
   list<CDir*> rq;
   rq.push_back(dir);
@@ -1370,6 +1366,10 @@ void Migrator::export_reverse(CDir *dir)
     bd->put(CDir::PIN_EXPORTBOUND);
     bd->state_clear(CDir::STATE_EXPORTBOUND);
   }
+
+  // adjust auth, with possible subtree merge.
+  cache->adjust_subtree_auth(dir, mds->get_nodeid());
+  cache->try_subtree_merge(dir);  // NOTE: may journal subtree_map as side-effect
 
   // notify bystanders
   export_notify_abort(dir, bounds);
