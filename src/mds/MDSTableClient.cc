@@ -101,6 +101,15 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
     }
     break;
 
+  case TABLESERVER_OP_SERVER_READY:
+    if (last_reqid == ~0ULL)
+      last_reqid = reqid;
+
+    resend_queries();
+    resend_prepares();
+    resend_commits();
+    break;
+
   default:
     assert(0);
   }
@@ -126,6 +135,12 @@ void MDSTableClient::_logged_ack(version_t tid)
 void MDSTableClient::_prepare(bufferlist& mutation, version_t *ptid, bufferlist *pbl,
 			      Context *onfinish)
 {
+  if (last_reqid == ~0ULL) {
+    dout(10) << "tableserver is not ready yet, waiting for request id" << dendl;
+    waiting_for_reqid.push_back(_pending_prepare(onfinish, ptid, pbl, mutation));
+    return;
+  }
+
   uint64_t reqid = ++last_reqid;
   dout(10) << "_prepare " << reqid << dendl;
 
@@ -176,6 +191,7 @@ void MDSTableClient::got_journaled_agree(version_t tid, LogSegment *ls)
   ls->pending_commit_tids[table].insert(tid);
   pending_commit[tid] = ls;
 }
+
 void MDSTableClient::got_journaled_ack(version_t tid)
 {
   dout(10) << "got_journaled_ack " << tid << dendl;
@@ -183,12 +199,6 @@ void MDSTableClient::got_journaled_ack(version_t tid)
     pending_commit[tid]->pending_commit_tids[table].erase(tid);
     pending_commit.erase(tid);
   }
-}
-
-void MDSTableClient::finish_recovery()
-{
-  dout(7) << "finish_recovery" << dendl;
-  resend_commits();
 }
 
 void MDSTableClient::resend_commits()
@@ -202,24 +212,19 @@ void MDSTableClient::resend_commits()
   }
 }
 
-void MDSTableClient::handle_mds_recovery(int who)
+void MDSTableClient::resend_prepares()
 {
-  dout(7) << "handle_mds_recovery mds." << who << dendl;
+  while (!waiting_for_reqid.empty()) {
+    pending_prepare[++last_reqid] = waiting_for_reqid.front();
+    waiting_for_reqid.pop_front();
+  }
 
-  if (who != mds->mdsmap->get_tableserver()) 
-    return; // do nothing.
-
-  resend_queries();
-  
-  // prepares.
   for (map<uint64_t, _pending_prepare>::iterator p = pending_prepare.begin();
        p != pending_prepare.end();
        ++p) {
-    dout(10) << "resending " << p->first << dendl;
+    dout(10) << "resending prepare on " << p->first << dendl;
     MMDSTableRequest *req = new MMDSTableRequest(table, TABLESERVER_OP_PREPARE, p->first);
     req->bl = p->second.mutation;
     mds->send_message_mds(req, mds->mdsmap->get_tableserver());
-  } 
-
-  resend_commits();
+  }
 }

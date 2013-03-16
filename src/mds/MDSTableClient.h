@@ -38,9 +38,12 @@ protected:
     bufferlist mutation;
 
     _pending_prepare() : onfinish(0), ptid(0), pbl(0) {}
+    _pending_prepare(Context *c, version_t *pt, bufferlist *pb, bufferlist& m) :
+      onfinish(c), ptid(pt), pbl(pb), mutation(m) {}
   };
 
   map<uint64_t, _pending_prepare> pending_prepare;
+  list<_pending_prepare> waiting_for_reqid;
 
   // pending commits
   map<version_t, LogSegment*> pending_commit;
@@ -60,7 +63,7 @@ protected:
   void _logged_ack(version_t tid);
 
 public:
-  MDSTableClient(MDS *m, int tab) : mds(m), table(tab), last_reqid(0) {}
+  MDSTableClient(MDS *m, int tab) : mds(m), table(tab), last_reqid(~0ULL) {}
   virtual ~MDSTableClient() {}
 
   void handle_request(MMDSTableRequest *m);
@@ -68,9 +71,8 @@ public:
   void _prepare(bufferlist& mutation, version_t *ptid, bufferlist *pbl, Context *onfinish);
   void commit(version_t tid, LogSegment *ls);
 
-  // for recovery (by other nodes)
-  void handle_mds_recovery(int mds); // called when someone else recovers
   void resend_commits();
+  void resend_prepares();
 
   // for recovery (by me)
   void got_journaled_agree(version_t tid, LogSegment *ls);
@@ -82,7 +84,6 @@ public:
   void wait_for_ack(version_t tid, Context *c) {
     ack_waiters[tid].push_back(c);
   }
-  void finish_recovery();                // called when i recover and go active
 
   void send_to_tableserver(MMDSTableRequest *req);
 
