@@ -43,6 +43,7 @@ namespace librbd {
     bool snap_exists; // false if our snap_id was deleted
     // whether the image was opened read-only. cannot be changed after opening
     bool read_only;
+    bool flush_encountered;
 
     std::map<rados::cls::lock::locker_id_t,
 	     rados::cls::lock::locker_info_t> lockers;
@@ -130,6 +131,7 @@ namespace librbd {
 			     uint64_t off, Context *onfinish);
     void write_to_cache(object_t o, bufferlist& bl, size_t len, uint64_t off);
     int read_from_cache(object_t o, bufferlist *bl, size_t len, uint64_t off);
+    void user_flushed();
     int flush_cache();
     void shutdown_cache();
     void invalidate_cache();

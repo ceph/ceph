@@ -34,6 +34,7 @@ namespace librbd {
       snap_id(CEPH_NOSNAP),
       snap_exists(true),
       read_only(ro),
+      flush_encountered(false),
       exclusive_locked(false),
       name(image_name),
       wctx(NULL),
@@ -68,13 +69,25 @@ namespace librbd {
 
     if (cct->_conf->rbd_cache) {
       Mutex::Locker l(cache_lock);
-      ldout(cct, 20) << "enabling writeback caching..." << dendl;
+      ldout(cct, 20) << "enabling caching..." << dendl;
       writeback_handler = new LibrbdWriteback(this, cache_lock);
+
+      uint64_t init_max_dirty = cct->_conf->rbd_cache_max_dirty;
+      if (cct->_conf->rbd_cache_writethrough_until_flush)
+	init_max_dirty = 0;
+      ldout(cct, 20) << "Initial cache settings:"
+		     << " size=" << cct->_conf->rbd_cache_size
+		     << " num_objects=" << 10
+		     << " max_dirty=" << init_max_dirty
+		     << " target_dirty=" << cct->_conf->rbd_cache_target_dirty
+		     << " max_dirty_age="
+		     << cct->_conf->rbd_cache_max_dirty_age << dendl;
+
       object_cacher = new ObjectCacher(cct, pname, *writeback_handler, cache_lock,
 				       NULL, NULL,
 				       cct->_conf->rbd_cache_size,
 				       10,  /* reset this in init */
-				       cct->_conf->rbd_cache_max_dirty,
+				       init_max_dirty,
 				       cct->_conf->rbd_cache_target_dirty,
 				       cct->_conf->rbd_cache_max_dirty_age);
       object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
@@ -497,6 +510,25 @@ namespace librbd {
       cond.Wait(mylock);
     mylock.Unlock();
     return r;
+  }
+
+  void ImageCtx::user_flushed() {
+    if (object_cacher && cct->_conf->rbd_cache_writethrough_until_flush) {
+      md_lock.get_read();
+      bool flushed_before = flush_encountered;
+      md_lock.put_read();
+
+      uint64_t max_dirty = cct->_conf->rbd_cache_max_dirty;
+      if (!flushed_before && max_dirty > 0) {
+	md_lock.get_write();
+	flush_encountered = true;
+	md_lock.put_write();
+
+	ldout(cct, 10) << "saw first user flush, enabling writeback" << dendl;
+	Mutex::Locker l(cache_lock);
+	object_cacher->set_max_dirty(max_dirty);
+      }
+    }
   }
 
   int ImageCtx::flush_cache() {
