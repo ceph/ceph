@@ -144,10 +144,13 @@ def task(ctx, config):
               # abort the fuse mount, killing all hung processes
               remote.run(
                   args=[
+                      'if', 'test', '-e', '/sys/fs/fuse/connections/*/abort',
+                      run.Raw(';'), 'then',
                       'echo',
                       '1',
                       run.Raw('>'),
                       run.Raw('/sys/fs/fuse/connections/*/abort'),
+                      run.Raw(';'), 'fi',
                       ],
                  )
               # make sure its unmounted
