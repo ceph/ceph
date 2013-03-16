@@ -1514,14 +1514,14 @@ void MDS::recovery_done()
   
   // kick anchortable (resent AGREEs)
   if (mdsmap->get_tableserver() == whoami) {
-    anchorserver->finish_recovery();
-    snapserver->finish_recovery();
+    set<int> active;
+    mdsmap->get_mds_set(active, MDSMap::STATE_CLIENTREPLAY);
+    mdsmap->get_mds_set(active, MDSMap::STATE_ACTIVE);
+    mdsmap->get_mds_set(active, MDSMap::STATE_STOPPING);
+    anchorserver->finish_recovery(active);
+    snapserver->finish_recovery(active);
   }
-  
-  // kick anchorclient (resent COMMITs)
-  anchorclient->finish_recovery();
-  snapclient->finish_recovery();
-  
+
   mdcache->start_recovered_truncates();
   mdcache->do_file_recover();
 
@@ -1539,13 +1539,11 @@ void MDS::handle_mds_recovery(int who)
   
   mdcache->handle_mds_recovery(who);
 
-  if (anchorserver) {
+  if (mdsmap->get_tableserver() == whoami) {
     anchorserver->handle_mds_recovery(who);
     snapserver->handle_mds_recovery(who);
   }
-  anchorclient->handle_mds_recovery(who);
-  snapclient->handle_mds_recovery(who);
-  
+
   queue_waiters(waiting_for_active_peer[who]);
   waiting_for_active_peer.erase(who);
 }
