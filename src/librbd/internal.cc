@@ -2472,6 +2472,7 @@ reprotect_and_return_err:
     if (r < 0)
       return r;
 
+    ictx->user_flushed();
     return _flush(ictx);
   }
 
