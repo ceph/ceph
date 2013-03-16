@@ -1022,6 +1022,7 @@ void CDir::assimilate_dirty_rstat_inodes()
   for (elist<CInode*>::iterator p = dirty_rstat_inodes.begin_use_current();
        !p.end(); ++p) {
     CInode *in = *p;
+    assert(in->is_auth());
     if (in->is_frozen())
       continue;
 
