@@ -12,8 +12,8 @@
 
 * The 'ceph osd pool delete <poolname>' and 'rados rmpool <poolname>'
   now have safety interlocks with loud warnings that make you confirm
-  pool removal.  Any scripts curenty rely on these functions zapping
-  data without confirmation need to be adjusted accordingly.
+  pool removal.  Any scripts that rely on these functions zapping data
+  without confirmation need to be adjusted accordingly.
 
 * ceph-mon now requires the creation of its data directory prior to
   --mkfs, similarly to what happens on ceph-osd.  This directory is
