@@ -2052,6 +2052,8 @@ void Migrator::import_reverse(CDir *dir)
 	in->clear_replica_map();
 	if (in->is_dirty()) 
 	  in->mark_clean();
+	in->clear_dirty_rstat();
+
 	in->authlock.clear_gather();
 	in->linklock.clear_gather();
 	in->dirfragtreelock.clear_gather();
