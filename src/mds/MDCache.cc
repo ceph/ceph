@@ -3334,8 +3334,10 @@ void MDCache::recalc_auth_bits()
   set<CInode*> subtree_inodes;
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
        p != subtrees.end();
-       ++p)
-    subtree_inodes.insert(p->first->inode);      
+       ++p) {
+    if (p->first->dir_auth.first == mds->get_nodeid())
+      subtree_inodes.insert(p->first->inode);
+  }
 
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
        p != subtrees.end();
@@ -3394,11 +3396,8 @@ void MDCache::recalc_auth_bits()
 	    if (dnl->get_inode()->is_dirty())
 	      dnl->get_inode()->mark_clean();
 	    // avoid touching scatterlocks for our subtree roots!
-	    if (subtree_inodes.count(dnl->get_inode()) == 0) {
-	      dnl->get_inode()->filelock.remove_dirty();
-	      dnl->get_inode()->nestlock.remove_dirty();
-	      dnl->get_inode()->dirfragtreelock.remove_dirty();
-	    }
+	    if (subtree_inodes.count(dnl->get_inode()) == 0)
+	      dnl->get_inode()->clear_scatter_dirty();
 	  }
 
 	  // recurse?
