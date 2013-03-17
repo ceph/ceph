@@ -3827,6 +3827,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 	dout(10) << " claiming cap import " << p->first << " client." << q->first << " on " << *in << dendl;
 	rejoin_import_cap(in, q->first, q->second, from);
       }
+      mds->locker->eval(in, CEPH_CAP_LOCKS, true);
     }
   } else {
     assert(mds->is_rejoin());
