@@ -51,6 +51,9 @@
 #include <memory>
 #include <tr1/memory>
 #include <errno.h>
+#include <boost/intrusive_ptr.hpp>
+// Because intusive_ptr clobbers our assert...
+#include "include/assert.h"
 
 
 #define CEPH_MON_PROTOCOL     10 /* cluster internal */
@@ -83,6 +86,7 @@ enum {
   l_cluster_last,
 };
 
+class QuorumService;
 class PaxosService;
 
 class PerfCounters;
@@ -97,6 +101,7 @@ class MAuthRotating;
 class MRoute;
 class MForward;
 class MTimeCheck;
+class MMonHealth;
 
 #define COMPAT_SET_LOC "feature_set"
 
@@ -1135,7 +1140,30 @@ private:
   /**
    * @}
    */
+  /**
+   * @defgroup Monitor_h_stats Keep track of monitor statistics
+   * @{
+   */
+  struct MonStatsEntry {
+    // data dir
+    uint64_t kb_total;
+    uint64_t kb_used;
+    uint64_t kb_avail;
+    unsigned int latest_avail_ratio;
+    utime_t last_update;
+  };
 
+  struct MonStats {
+    MonStatsEntry ours;
+    map<entity_inst_t,MonStatsEntry> others;
+  };
+
+  MonStats stats;
+
+  void stats_update();
+  /**
+   * @}
+   */
 
   Context *probe_timeout_event;  // for probing
 
@@ -1215,6 +1243,7 @@ public:
   friend class PGMonitor;
   friend class LogMonitor;
 
+  boost::intrusive_ptr<QuorumService> health_monitor;
 
   // -- sessions --
   MonSessionMap session_map;
