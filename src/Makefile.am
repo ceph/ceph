@@ -1358,7 +1358,9 @@ libmon_a_SOURCES = \
 	mon/AuthMonitor.cc \
 	mon/Elector.cc \
 	mon/MonitorStore.cc \
-	os/LevelDBStore.cc
+	os/LevelDBStore.cc \
+	mon/HealthMonitor.cc \
+	mon/DataHealthService.cc
 libmon_a_CXXFLAGS= ${AM_CXXFLAGS}
 noinst_LIBRARIES += libmon.a
 
