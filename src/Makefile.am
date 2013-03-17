@@ -1817,6 +1817,7 @@ noinst_HEADERS = \
 	messages/MOSDPGScan.h\
         messages/MBackfillReserve.h\
         messages/MRecoveryReserve.h\
+	messages/MMonQuorumService.h\
         messages/MOSDPGTemp.h\
         messages/MOSDPGTrim.h\
         messages/MOSDPing.h\
@@ -1853,6 +1854,7 @@ noinst_HEADERS = \
         mon/PGMonitor.h\
         mon/Paxos.h\
         mon/PaxosService.h\
+	mon/QuorumService.h\
         mon/Session.h\
         mon/mon_types.h\
 	mount/canonicalize.c\
