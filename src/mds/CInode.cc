@@ -614,12 +614,13 @@ void CInode::close_dirfrags()
     close_dirfrag(dirfrags.begin()->first);
 }
 
-bool CInode::has_subtree_root_dirfrag()
+bool CInode::has_subtree_root_dirfrag(int auth)
 {
   for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
        p != dirfrags.end();
        ++p)
-    if (p->second->is_subtree_root())
+    if (p->second->is_subtree_root() &&
+	(auth == -1 || p->second->dir_auth.first == auth))
       return true;
   return false;
 }

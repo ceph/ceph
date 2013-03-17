@@ -1095,6 +1095,10 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, list<Context*>& fini
   
   in->clear_dirty_rstat();
 
+  // no more auth subtree? clear scatter dirty
+  if (!in->has_subtree_root_dirfrag(mds->get_nodeid()))
+    in->clear_scatter_dirty();
+
   in->item_open_file.remove_myself();
 
   // waiters
@@ -1533,6 +1537,11 @@ void Migrator::export_finish(CDir *dir)
   //  (we do this _after_ removing EXPORTBOUND pins, to allow merges)
   cache->adjust_subtree_auth(dir, export_peer[dir]);
   cache->try_subtree_merge(dir);  // NOTE: may journal subtree_map as sideeffect
+
+  // no more auth subtree? clear scatter dirty
+  if (!dir->get_inode()->is_auth() &&
+      !dir->get_inode()->has_subtree_root_dirfrag(mds->get_nodeid()))
+    dir->get_inode()->clear_scatter_dirty();
 
   // unpin path
   export_unlock(dir);
@@ -2020,6 +2029,10 @@ void Migrator::import_reverse(CDir *dir)
     cache->trim_non_auth_subtree(dir);
   cache->adjust_subtree_auth(dir, import_peer[dir->dirfrag()]);
 
+  if (!dir->get_inode()->is_auth() &&
+      !dir->get_inode()->has_subtree_root_dirfrag(mds->get_nodeid()))
+    dir->get_inode()->clear_scatter_dirty();
+
   // adjust auth bits.
   list<CDir*> q;
   q.push_back(dir);
@@ -2053,6 +2066,8 @@ void Migrator::import_reverse(CDir *dir)
 	if (in->is_dirty()) 
 	  in->mark_clean();
 	in->clear_dirty_rstat();
+	if (!in->has_subtree_root_dirfrag(mds->get_nodeid()))
+	  in->clear_scatter_dirty();
 
 	in->authlock.clear_gather();
 	in->linklock.clear_gather();
