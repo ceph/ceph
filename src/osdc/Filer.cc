@@ -106,7 +106,7 @@ void Filer::_probe(Probe *probe)
   
   for (vector<ObjectExtent>::iterator p = probe->probing.begin();
        p != probe->probing.end();
-       p++) {
+       ++p) {
     ldout(cct, 10) << "_probe  probing " << p->oid << dendl;
     C_Probe *c = new C_Probe(this, probe, p->oid);
     objecter->stat(p->oid, p->oloc, probe->snapid, &c->size, &c->mtime, 
@@ -145,14 +145,14 @@ void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mt
     vector<ObjectExtent> r;
     for (vector<ObjectExtent>::reverse_iterator p = probe->probing.rbegin();
 	 p != probe->probing.rend();
-	 p++)
+	 ++p)
       r.push_back(*p);
     probe->probing.swap(r);
   }
 
   for (vector<ObjectExtent>::iterator p = probe->probing.begin();
        p != probe->probing.end();
-       p++) {
+       ++p) {
     uint64_t shouldbe = p->length + p->offset;
     ldout(cct, 10) << "_probed  " << probe->ino << " object " << hex << p->oid << dec
 	     << " should be " << shouldbe
@@ -171,7 +171,7 @@ void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mt
       uint64_t oleft = probe->known_size[p->oid] - p->offset;
       for (vector<pair<uint64_t, uint64_t> >::iterator i = p->buffer_extents.begin();
 	   i != p->buffer_extents.end();
-	   i++) {
+	   ++i) {
 	if (oleft <= (uint64_t)i->second) {
 	  end = probe->probing_off + i->first + oleft;
 	  ldout(cct, 10) << "_probed  end is in buffer_extent " << i->first << "~" << i->second << " off " << oleft 

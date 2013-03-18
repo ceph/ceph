@@ -550,7 +550,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	for (map<int,OSDSession*>::iterator p = osd_sessions.begin();
 	     p != osd_sessions.end(); ) {
 	  OSDSession *s = p->second;
-	  p++;
+	  ++p;
 	  if (osdmap->is_up(s->osd)) {
 	    if (s->con && s->con->get_peer_addr() != osdmap->get_inst(s->osd).addr)
 	      close_session(s);
@@ -589,7 +589,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
       (was_pausewr && !pausewr))
     for (map<tid_t,Op*>::iterator p = ops.begin();
 	 p != ops.end();
-	 p++) {
+	 ++p) {
       Op *op = p->second;
       if (op->paused &&
 	  !((op->flags & CEPH_OSD_FLAG_READ) && pauserd) &&   // not still paused as a read
@@ -598,7 +598,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
     }
 
   // resend requests
-  for (map<tid_t, Op*>::iterator p = need_resend.begin(); p != need_resend.end(); p++) {
+  for (map<tid_t, Op*>::iterator p = need_resend.begin(); p != need_resend.end(); ++p) {
     Op *op = p->second;
     if (op->should_resend) {
       if (op->session) {
@@ -609,7 +609,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
       cancel_op(op);
     }
   }
-  for (list<LingerOp*>::iterator p = need_resend_linger.begin(); p != need_resend_linger.end(); p++) {
+  for (list<LingerOp*>::iterator p = need_resend_linger.begin(); p != need_resend_linger.end(); ++p) {
     LingerOp *op = *p;
     if (op->session) {
       logger->inc(l_osdc_linger_resend);
@@ -921,7 +921,7 @@ void Objecter::tick()
   unsigned laggy_ops = 0;
   for (map<tid_t,Op*>::iterator p = ops.begin();
        p != ops.end();
-       p++) {
+       ++p) {
     Op *op = p->second;
     if (op->session && op->stamp < cutoff) {
       ldout(cct, 2) << " tid " << p->first << " on osd." << op->session->osd << " is laggy" << dendl;
@@ -931,7 +931,7 @@ void Objecter::tick()
   }
   for (map<uint64_t,LingerOp*>::iterator p = linger_ops.begin();
        p != linger_ops.end();
-       p++) {
+       ++p) {
     LingerOp *op = p->second;
     if (op->session) {
       ldout(cct, 10) << " pinging osd that serves lingering tid " << p->first << " (osd." << op->session->osd << ")" << dendl;
@@ -951,7 +951,7 @@ void Objecter::tick()
     // (osd reply message policy is lossy)
     for (set<OSDSession*>::iterator i = toping.begin();
 	 i != toping.end();
-	 i++) {
+	 ++i) {
       messenger->send_message(new MPing, (*i)->con);
     }
   }
@@ -1968,7 +1968,7 @@ void Objecter::_sg_read_finish(vector<ObjectExtent>& extents, vector<bufferlist>
     vector<bufferlist>::iterator bit = resultbl.begin();
     for (vector<ObjectExtent>::iterator eit = extents.begin();
 	 eit != extents.end();
-	 eit++, bit++) {
+	 ++eit, ++bit) {
       r.add_partial_result(cct, *bit, eit->buffer_extents);
     }
     bl->clear();
@@ -2028,7 +2028,7 @@ void Objecter::ms_handle_remote_reset(Connection *con)
 void Objecter::dump_active()
 {
   ldout(cct, 20) << "dump_active .. " << num_homeless_ops << " homeless" << dendl;
-  for (map<tid_t,Op*>::iterator p = ops.begin(); p != ops.end(); p++) {
+  for (map<tid_t,Op*>::iterator p = ops.begin(); p != ops.end(); ++p) {
     Op *op = p->second;
     ldout(cct, 20) << op->tid << "\t" << op->pgid << "\tosd." << (op->session ? op->session->osd : -1)
 	    << "\t" << op->oid << "\t" << op->ops << dendl;
