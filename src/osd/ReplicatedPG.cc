@@ -6162,21 +6162,36 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
 void ReplicatedPG::on_removal()
 {
   dout(10) << "on_removal" << dendl;
-  apply_and_flush_repops(false);
-  context_registry_on_change();
 
-  clear_primary_state();
-  osd->remove_want_pg_temp(info.pgid);
-  cancel_recovery();
-  osd->remote_reserver.cancel_reservation(info.pgid);
-  osd->local_reserver.cancel_reservation(info.pgid);
+  on_shutdown();
 }
 
 void ReplicatedPG::on_shutdown()
 {
   dout(10) << "on_shutdown" << dendl;
+
+  // remove from queues
+  osd->recovery_wq.dequeue(this);
+  osd->scrub_wq.dequeue(this);
+  osd->scrub_finalize_wq.dequeue(this);
+  osd->snap_trim_wq.dequeue(this);
+  osd->pg_stat_queue_dequeue(this);
+  osd->dequeue_pg(this, 0);
+  osd->peering_wq.dequeue(this);
+
+  // handles queue races
+  deleting = true;
+
+  unreg_next_scrub();
   apply_and_flush_repops(false);
   context_registry_on_change();
+
+  osd->remote_reserver.cancel_reservation(info.pgid);
+  osd->local_reserver.cancel_reservation(info.pgid);
+
+  clear_primary_state();
+  osd->remove_want_pg_temp(info.pgid);
+  cancel_recovery();
 }
 
 void ReplicatedPG::on_flushed()
