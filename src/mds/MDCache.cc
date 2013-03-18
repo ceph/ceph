@@ -8449,7 +8449,7 @@ public:
 
 void MDCache::_purge_forwarding_pointers(inode_backtrace_t *backtrace, CDentry *d, int r, Context *fin)
 {
-  assert(r == 0 || r == -ENOENT);
+  assert(r == 0 || r == -ENOENT || r == -ENODATA);
   // setup gathering context
   C_GatherBuilder gather_bld(g_ceph_context);
 
