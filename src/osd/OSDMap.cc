@@ -889,7 +889,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
     osd_info[i->first].up_thru = i->second;
   for (map<int32_t,pair<epoch_t,epoch_t> >::const_iterator i = inc.new_last_clean_interval.begin();
        i != inc.new_last_clean_interval.end();
-       i++) {
+       ++i) {
     osd_info[i->first].last_clean_begin = i->second.first;
     osd_info[i->first].last_clean_end = i->second.second;
   }

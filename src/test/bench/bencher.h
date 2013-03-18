@@ -137,7 +137,7 @@ public:
     cur_pos += length;
     if (cur_pos > size) {
       cur_pos = 0;
-      object_pos++;
+      ++object_pos;
     }
     if (object_pos == objects.end())
       object_pos = objects.begin();

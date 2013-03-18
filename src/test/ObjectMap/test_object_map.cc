@@ -28,7 +28,7 @@ typename T::iterator rand_choose(T &cont) {
   int index = rand() % cont.size();
   typename T::iterator retval = cont.begin();
 
-  for (; index > 0; --index) retval++;
+  for (; index > 0; --index) ++retval;
   return retval;
 }
 
