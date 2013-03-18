@@ -27,6 +27,7 @@ bin_PROGRAMS =
 bin_DEBUGPROGRAMS =
 sbin_PROGRAMS =
 sbin_SCRIPTS = \
+	ceph-disk \
 	ceph-disk-prepare \
 	ceph-disk-activate \
 	ceph-create-keys \
@@ -1099,6 +1100,7 @@ EXTRA_DIST += \
 	$(srcdir)/upstart/radosgw.conf \
 	$(srcdir)/upstart/radosgw-all.conf \
 	$(srcdir)/upstart/radosgw-all-starter.conf \
+	ceph-disk \
 	ceph-disk-prepare \
 	ceph-disk-activate \
 	ceph-create-keys \

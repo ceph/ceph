@@ -6,6 +6,7 @@ usr/bin/ceph-run
 usr/bin/ceph-mon
 usr/bin/ceph-osd
 usr/bin/ceph-debugpack
+sbin/ceph-disk usr/sbin/
 sbin/ceph-disk-prepare usr/sbin/
 sbin/ceph-disk-activate usr/sbin/
 sbin/ceph-create-keys usr/sbin/
