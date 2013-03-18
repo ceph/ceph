@@ -890,7 +890,6 @@ protected:
 			ObjectStore::Transaction& t);
   PG   *_lookup_qlock_pg(pg_t pgid);
 
-  PG *lookup_lock_raw_pg(pg_t pgid);
   PG* _make_pg(OSDMapRef createmap, pg_t pgid);
   void add_newly_split_pg(PG *pg,
 			  PG::RecoveryCtx *rctx);
