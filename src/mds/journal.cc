@@ -113,7 +113,7 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
   // master ops with possibly uncommitted slaves
   for (set<metareqid_t>::iterator p = uncommitted_masters.begin();
        p != uncommitted_masters.end();
-       p++) {
+       ++p) {
     dout(10) << "try_to_expire waiting for slaves to ack commit on " << *p << dendl;
     mds->mdcache->wait_for_uncommitted_master(*p, gather_bld.new_sub());
   }
@@ -238,7 +238,7 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
   // table servers
   for (map<int, version_t>::iterator p = tablev.begin();
        p != tablev.end();
-       p++) {
+       ++p) {
     MDSTableServer *server = mds->get_table_server(p->first);
     if (p->second > server->get_committed_version()) {
       dout(10) << "try_to_expire waiting for " << get_mdstable_name(p->first) 
@@ -250,7 +250,7 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
   // truncating
   for (set<CInode*>::iterator p = truncating_inodes.begin();
        p != truncating_inodes.end();
-       p++) {
+       ++p) {
     dout(10) << "try_to_expire waiting for truncate of " << **p << dendl;
     (*p)->add_waiter(CInode::WAIT_TRUNC, gather_bld.new_sub());
   }
@@ -451,7 +451,7 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
   parents.splice(parents.begin(), maybe);
 
   dout(20) << "EMetaBlob::add_dir_context final: " << parents << dendl;
-  for (list<CDentry*>::iterator p = parents.begin(); p != parents.end(); p++) {
+  for (list<CDentry*>::iterator p = parents.begin(); p != parents.end(); ++p) {
     assert((*p)->get_projected_linkage()->is_primary());
     add_dentry(*p, false);
   }
@@ -995,7 +995,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 
   assert(g_conf->mds_kill_journal_replay_at != 1);
 
-  for (list<std::tr1::shared_ptr<fullbit> >::iterator p = roots.begin(); p != roots.end(); p++) {
+  for (list<std::tr1::shared_ptr<fullbit> >::iterator p = roots.begin(); p != roots.end(); ++p) {
     CInode *in = mds->mdcache->get_inode((*p)->inode.ino);
     bool isnew = in ? false:true;
     if (!in)
@@ -1100,7 +1100,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     // full dentry+inode pairs
     for (list<std::tr1::shared_ptr<fullbit> >::iterator pp = lump.get_dfull().begin();
 	 pp != lump.get_dfull().end();
-	 pp++) {
+	 ++pp) {
       std::tr1::shared_ptr<fullbit> p = *pp;
       CDentry *dn = dir->lookup_exact_snap(p->dn, p->dnlast);
       if (!dn) {
@@ -1205,7 +1205,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     // remote dentries
     for (list<remotebit>::iterator p = lump.get_dremote().begin();
 	 p != lump.get_dremote().end();
-	 p++) {
+	 ++p) {
       CDentry *dn = dir->lookup_exact_snap(p->dn, p->dnlast);
       if (!dn) {
 	dn = dir->add_remote_dentry(p->dn, p->ino, p->d_type, p->dnfirst, p->dnlast);
@@ -1236,7 +1236,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     // null dentries
     for (list<nullbit>::iterator p = lump.get_dnull().begin();
 	 p != lump.get_dnull().end();
-	 p++) {
+	 ++p) {
       CDentry *dn = dir->lookup_exact_snap(p->dn, p->dnlast);
       if (!dn) {
 	dn = dir->add_null_dentry(p->dn, p->dnfirst, p->dnlast);
@@ -1321,7 +1321,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
   }
 
   if (!unlinked.empty()) {
-    for (set<CInode*>::iterator p = linked.begin(); p != linked.end(); p++)
+    for (set<CInode*>::iterator p = linked.begin(); p != linked.end(); ++p)
       unlinked.erase(*p);
     dout(10) << " unlinked set contains " << unlinked << dendl;
     for (map<CInode*, CDir*>::iterator p = unlinked.begin(); p != unlinked.end(); ++p) {
@@ -1416,14 +1416,14 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
   // truncating inodes
   for (list<inodeno_t>::iterator p = truncate_start.begin();
        p != truncate_start.end();
-       p++) {
+       ++p) {
     CInode *in = mds->mdcache->get_inode(*p);
     assert(in);
     mds->mdcache->add_recovered_truncate(in, logseg);
   }
   for (map<inodeno_t,uint64_t>::iterator p = truncate_finish.begin();
        p != truncate_finish.end();
-       p++) {
+       ++p) {
     LogSegment *ls = mds->mdlog->get_segment(p->second);
     if (ls) {
       CInode *in = mds->mdcache->get_inode(p->first);
@@ -1435,7 +1435,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
   // destroyed inodes
   for (vector<inodeno_t>::iterator p = destroyed_inodes.begin();
        p != destroyed_inodes.end();
-       p++) {
+       ++p) {
     CInode *in = mds->mdcache->get_inode(*p);
     if (in) {
       dout(10) << "EMetaBlob.replay destroyed " << *p << ", dropping " << *in << dendl;
@@ -1958,7 +1958,7 @@ void EOpen::replay(MDS *mds)
   // note which segments inodes belong to, so we don't have to start rejournaling them
   for (vector<inodeno_t>::iterator p = inos.begin();
        p != inos.end();
-       p++) {
+       ++p) {
     CInode *in = mds->mdcache->get_inode(*p);
     if (!in) {
       dout(0) << "EOpen.replay ino " << *p << " not in metablob" << dendl;
