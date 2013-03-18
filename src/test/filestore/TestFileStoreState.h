@@ -99,10 +99,10 @@ public:
   }
   ~TestFileStoreState() { 
     map<int, coll_entry_t*>::iterator it = m_collections.begin();
-    for (; it != m_collections.end(); it++) {
-	if (it->second)
-	    delete it->second;
-	m_collections.erase(it);
+    while (it != m_collections.end()) {
+      if (it->second)
+	delete it->second;
+      m_collections.erase(it++);
     }
   }
 

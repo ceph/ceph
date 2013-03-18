@@ -726,7 +726,7 @@ int main(int argc, const char **argv)
     } else {
       if (val[0] == '-')
         usage_exit();
-      i++;
+      ++i;
     }
   }
 

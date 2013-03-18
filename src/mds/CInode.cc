@@ -1021,7 +1021,7 @@ void CInode::build_backtrace(int64_t location, inode_backtrace_t* bt)
     if (*i == location)
       continue;
     bt->old_pools.insert(*i);
-    i++;
+    ++i;
   }
 }
 

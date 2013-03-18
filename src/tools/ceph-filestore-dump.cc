@@ -187,7 +187,7 @@ int main(int argc, char **argv)
 
   for (vector<coll_t>::iterator it = ls.begin();
        it != ls.end();
-       it++) {
+       ++it) {
     coll_t coll = *it;
     pg_t pgid;
     snapid_t snap;

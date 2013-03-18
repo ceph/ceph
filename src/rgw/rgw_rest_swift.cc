@@ -123,7 +123,7 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
       do_pref = true;
     else if (iter->name.compare(pref_iter->first) == 0) {
       do_objs = true;
-      pref_iter++;
+      ++pref_iter;
     } else if (iter->name.compare(pref_iter->first) <= 0)
       do_objs = true;
     else
@@ -172,9 +172,9 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
     }
 next:
     if (do_objs)
-      iter++;
+      ++iter;
     else
-      pref_iter++;
+      ++pref_iter;
   }
 
   s->formatter->close_section();

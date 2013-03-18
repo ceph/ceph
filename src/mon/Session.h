@@ -101,7 +101,7 @@ struct MonSessionMap {
     if (s->inst.name.is_osd()) {
       for (multimap<int,MonSession*>::iterator p = by_osd.find(s->inst.name.num());
 	   p->first == s->inst.name.num();
-	   p++)
+	   ++p)
 	if (p->second == s) {
 	  by_osd.erase(p);
 	  break;

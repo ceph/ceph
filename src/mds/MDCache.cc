@@ -8456,7 +8456,7 @@ void MDCache::_purge_forwarding_pointers(inode_backtrace_t *backtrace, CDentry *
   // remove all the objects with forwarding pointer backtraces (aka sentinels)
   for (set<int64_t>::const_iterator i = backtrace->old_pools.begin();
        i != backtrace->old_pools.end();
-       i++) {
+       ++i) {
     SnapContext snapc;
     object_t oid = CInode::get_object_name(backtrace->ino, frag_t(), "");
     object_locator_t oloc(*i);

@@ -147,7 +147,7 @@ TestFileStoreState::coll_entry_t::~coll_entry_t()
 {
   if (m_objects.size() > 0) {
     map<int, hobject_t*>::iterator it = m_objects.begin();
-    for (; it != m_objects.end(); it++) {
+    for (; it != m_objects.end(); ++it) {
       hobject_t *obj = it->second;
       if (obj) {
         delete obj;
@@ -237,7 +237,7 @@ hobject_t *TestFileStoreState::coll_entry_t::get_obj_at(int pos,
 
   hobject_t *ret = NULL;
   map<int, hobject_t*>::iterator it = m_objects.begin();
-  for (int i = 0; it != m_objects.end(); it++, i++) {
+  for (int i = 0; it != m_objects.end(); ++it, i++) {
     if (i == pos) {
       ret = it->second;
       break;
