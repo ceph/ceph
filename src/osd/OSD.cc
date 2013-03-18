@@ -5733,17 +5733,6 @@ void OSD::_remove_pg(PG *pg)
 		      *i, pg->osr, deleting));
   }
 
-  recovery_wq.dequeue(pg);
-  scrub_wq.dequeue(pg);
-  scrub_finalize_wq.dequeue(pg);
-  snap_trim_wq.dequeue(pg);
-  pg_stat_queue_dequeue(pg);
-  op_wq.dequeue(pg);
-  peering_wq.dequeue(pg);
-
-  pg->deleting = true;
-
-  pg->unreg_next_scrub();
 
   // remove from map
   pg_map.erase(pg->info.pgid);
