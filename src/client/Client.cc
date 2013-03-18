@@ -3716,7 +3716,7 @@ void Client::unmount()
          p != inode_map.end(); 
          p = next) {
       next = p;
-      next++;
+      ++next;
       Inode *in = p->second;
       if (!in) {
 	ldout(cct, 0) << "null inode_map entry ino " << p->first << dendl;
@@ -6480,7 +6480,7 @@ void Client::_ll_drop_pins()
        it = next) {
     Inode *in = it->second;
     next = it;
-    next++;
+    ++next;
     if (in->ll_ref)
       _ll_put(in, in->ll_ref);
   }
