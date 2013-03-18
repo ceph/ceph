@@ -325,6 +325,12 @@ void shutdown_async_signal_handler()
   g_signal_handler = NULL;
 }
 
+void queue_async_signal(int signum)
+{
+  assert(g_signal_handler);
+  g_signal_handler->queue_signal(signum);
+}
+
 void register_async_signal_handler(int signum, signal_handler_t handler)
 {
   assert(g_signal_handler);

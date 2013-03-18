@@ -49,6 +49,7 @@
 #include "messages/MAuthReply.h"
 
 #include "messages/MTimeCheck.h"
+#include "messages/MMonHealth.h"
 
 #include "common/strtol.h"
 #include "common/ceph_argparse.h"
@@ -68,6 +69,8 @@
 #include "PGMonitor.h"
 #include "LogMonitor.h"
 #include "AuthMonitor.h"
+#include "mon/QuorumService.h"
+#include "mon/HealthMonitor.h"
 
 #include "auth/AuthMethodList.h"
 #include "auth/KeyRing.h"
@@ -162,6 +165,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_PGMAP] = new PGMonitor(this, paxos, "pgmap");
   paxos_service[PAXOS_LOG] = new LogMonitor(this, paxos, "logm");
   paxos_service[PAXOS_AUTH] = new AuthMonitor(this, paxos, "auth");
+
+  health_monitor = QuorumServiceRef(new HealthMonitor(this));
 
   mon_caps = new MonCaps();
   mon_caps->set_allow_all(true);
@@ -418,6 +423,7 @@ int Monitor::preinit()
   }
 
   init_paxos();
+  health_monitor->init();
 
   // we need to bootstrap authentication keys so we can form an
   // initial quorum.
@@ -565,6 +571,7 @@ void Monitor::shutdown()
   // clean up
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     (*p)->shutdown();
+  health_monitor->shutdown();
 
   finish_contexts(g_ceph_context, waitfor_quorum, -ECANCELED);
   finish_contexts(g_ceph_context, maybe_wait_for_quorum, -ECANCELED);
@@ -683,6 +690,7 @@ void Monitor::reset()
 
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     (*p)->restart();
+  health_monitor->finish();
 }
 
 set<string> Monitor::get_sync_targets_names() {
@@ -1964,6 +1972,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features)
   paxos->leader_init();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     (*p)->election_finished();
+  health_monitor->start(epoch);
 
   finish_election();
   if (monmap->size() > 1)
@@ -1997,6 +2006,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features
   paxos->peon_init();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     (*p)->election_finished();
+  health_monitor->start(epoch);
 
   finish_election();
 }
@@ -2282,6 +2292,9 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
   }
   if (f)
     f->close_section();
+
+  if (f)
+    health_monitor->get_health(f, (detailbl ? &detail : NULL));
 
   stringstream fss;
   fss << overall;
@@ -3172,6 +3185,10 @@ bool Monitor::_ms_dispatch(Message *m)
 
     case MSG_TIMECHECK:
       handle_timecheck(static_cast<MTimeCheck *>(m));
+      break;
+
+    case MSG_MON_HEALTH:
+      health_monitor->dispatch(static_cast<MMonHealth *>(m));
       break;
 
     default:

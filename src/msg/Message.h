@@ -147,6 +147,7 @@
 
 // *** generic ***
 #define MSG_TIMECHECK             0x600
+#define MSG_MON_HEALTH            0x601
 
 
 
