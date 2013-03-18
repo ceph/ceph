@@ -1364,7 +1364,9 @@ libmon_a_SOURCES = \
 	mon/AuthMonitor.cc \
 	mon/Elector.cc \
 	mon/MonitorStore.cc \
-	os/LevelDBStore.cc
+	os/LevelDBStore.cc \
+	mon/HealthMonitor.cc \
+	mon/DataHealthService.cc
 libmon_a_CXXFLAGS= ${AM_CXXFLAGS}
 noinst_LIBRARIES += libmon.a
 
@@ -1826,6 +1828,7 @@ noinst_HEADERS = \
 	messages/MOSDPGScan.h\
         messages/MBackfillReserve.h\
         messages/MRecoveryReserve.h\
+	messages/MMonQuorumService.h\
         messages/MOSDPGTemp.h\
         messages/MOSDPGTrim.h\
         messages/MOSDPing.h\
@@ -1847,14 +1850,17 @@ noinst_HEADERS = \
         messages/MWatchNotify.h\
 	messages/PaxosServiceMessage.h\
 	mon/AuthMonitor.h\
+        mon/DataHealthMonitor.h\
         mon/Elector.h\
 	mon/LogMonitor.h\
+        mon/HealthMonitor.h\
         mon/MDSMonitor.h\
 	mon/MonmapMonitor.h\
         mon/MonCaps.h\
         mon/MonClient.h\
         mon/MonMap.h\
         mon/Monitor.h\
+        mon/MonitorHealthService.h\
 	mon/MonitorStore.h\
         mon/MonitorDBStore.h\
         mon/OSDMonitor.h\
@@ -1862,6 +1868,7 @@ noinst_HEADERS = \
         mon/PGMonitor.h\
         mon/Paxos.h\
         mon/PaxosService.h\
+	mon/QuorumService.h\
         mon/Session.h\
         mon/mon_types.h\
 	mount/canonicalize.c\

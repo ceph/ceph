@@ -15,6 +15,8 @@
 #ifndef CEPH_MON_TYPES_H
 #define CEPH_MON_TYPES_H
 
+#include "include/utime.h"
+
 #define PAXOS_PGMAP      0  // before osd, for pg kick to behave
 #define PAXOS_MDSMAP     1
 #define PAXOS_OSDMAP     2
@@ -36,5 +38,37 @@ inline const char *get_paxos_name(int p) {
 }
 
 #define CEPH_MON_ONDISK_MAGIC "ceph mon volume v012"
+
+// data stats
+
+struct DataStats {
+  // data dir
+  uint64_t kb_total;
+  uint64_t kb_used;
+  uint64_t kb_avail;
+  int latest_avail_percent;
+  utime_t last_update;
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(kb_total, bl);
+    ::encode(kb_used, bl);
+    ::encode(kb_avail, bl);
+    ::encode(latest_avail_percent, bl);
+    ::encode(last_update, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &p) {
+    DECODE_START(1, p);
+    ::decode(kb_total, p);
+    ::decode(kb_used, p);
+    ::decode(kb_avail, p);
+    ::decode(latest_avail_percent, p);
+    ::decode(last_update, p);
+    DECODE_FINISH(p);
+  }
+};
+
+WRITE_CLASS_ENCODER(DataStats);
 
 #endif
