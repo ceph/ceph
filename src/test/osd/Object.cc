@@ -90,7 +90,7 @@ ObjectDesc::iterator &ObjectDesc::iterator::advance(bool init) {
   while (pos == limit) {
     limit = *stack.begin();
     stack.pop_front();
-    cur_cont--;
+    --cur_cont;
   }
 
   if (cur_cont == obj.layers.end()) {
@@ -110,7 +110,7 @@ ObjectDesc::iterator &ObjectDesc::iterator::advance(bool init) {
     if (next < limit) {
       limit = next;
     }
-    cur_cont++;
+    ++cur_cont;
     if (cur_cont == obj.layers.end()) {
       break;
     }
