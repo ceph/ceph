@@ -436,7 +436,7 @@ def _upgrade_ceph_packages(ctx, remote, debs, ceph_branch):
         args=[
             'sudo', 'apt-get', 'update', run.Raw('&&'),
             'sudo', 'apt-get', '-y', '--force-yes',
-            'dist-upgrade',
+            'upgrade',
             ] + ['%s=%s' % (d, version) for d in debs],
         stdout=StringIO(),
         )
