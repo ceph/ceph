@@ -389,7 +389,7 @@ protected:
   atomic_t ref;
 
 public:
-  bool deleting;  // true while RemoveWQ should be chewing on us
+  bool deleting;  // true while in removing or OSD is shutting down
 
   void lock(bool no_lockdep = false);
   void unlock() {
