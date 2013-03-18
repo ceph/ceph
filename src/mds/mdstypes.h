@@ -1250,7 +1250,7 @@ protected:
     map<int, int>::iterator it = ref_map.begin();
     while (it != ref_map.end()) {
       out << " " << pin_name(it->first) << "=" << it->second;
-      it++;
+      ++it;
     }
 #else
     out << " nref=" << ref;
