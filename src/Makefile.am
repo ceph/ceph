@@ -1850,7 +1850,7 @@ noinst_HEADERS = \
         messages/MWatchNotify.h\
 	messages/PaxosServiceMessage.h\
 	mon/AuthMonitor.h\
-        mon/DataHealthMonitor.h\
+        mon/DataHealthService.h\
         mon/Elector.h\
 	mon/LogMonitor.h\
         mon/HealthMonitor.h\
