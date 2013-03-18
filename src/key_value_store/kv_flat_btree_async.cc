@@ -143,7 +143,7 @@ int IndexCache::get(const string &key, index_data *idata,
       return -ENODATA;
     } else {
       *idata = it->second.first;
-      it++;
+      ++it;
       if (it != k2itmap.end()) {
 	*next_idata = it->second.first;
       }

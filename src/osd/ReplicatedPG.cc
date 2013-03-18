@@ -419,7 +419,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 
   snapid_t snapid = m->get_snapid();
 
-  for (vector<OSDOp>::iterator p = m->ops.begin(); p != m->ops.end(); p++) {
+  for (vector<OSDOp>::iterator p = m->ops.begin(); p != m->ops.end(); ++p) {
     bufferlist::iterator bp = p->indata.begin();
     switch (p->op.op) {
     case CEPH_OSD_OP_PGLS_FILTER:
@@ -776,7 +776,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
 
   // src_oids
   map<hobject_t,ObjectContext*> src_obc;
-  for (vector<OSDOp>::iterator p = m->ops.begin(); p != m->ops.end(); p++) {
+  for (vector<OSDOp>::iterator p = m->ops.begin(); p != m->ops.end(); ++p) {
     OSDOp& osd_op = *p;
     if (!ceph_osd_op_type_multi(osd_op.op.op))
       continue;
@@ -1370,7 +1370,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
     // ...from snapset
     snapid_t last = coid.snap;
     vector<snapid_t>::iterator p;
-    for (p = snapset.clones.begin(); p != snapset.clones.end(); p++)
+    for (p = snapset.clones.begin(); p != snapset.clones.end(); ++p)
       if (*p == last)
 	break;
     assert(p != snapset.clones.end());
@@ -1866,7 +1866,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
   dout(10) << "do_osd_op " << soid << " " << ops << dendl;
 
-  for (vector<OSDOp>::iterator p = ops.begin(); p != ops.end(); p++) {
+  for (vector<OSDOp>::iterator p = ops.begin(); p != ops.end(); ++p) {
     OSDOp& osd_op = *p;
     ceph_osd_op& op = osd_op.op;
  
@@ -2225,7 +2225,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
         map<pair<uint64_t, entity_name_t>, watch_info_t>::const_iterator oi_iter;
         for (oi_iter = oi.watchers.begin(); oi_iter != oi.watchers.end();
-                                       oi_iter++) {
+                                       ++oi_iter) {
           dout(20) << "key cookie=" << oi_iter->first.first
                << " entity=" << oi_iter->first.second << " "
                << oi_iter->second << dendl;
@@ -2271,7 +2271,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           ci.cloneid = *clone_iter;
 
           for (;snap_iter != ssc->snapset.snaps.rend()
-               && (*snap_iter <= ci.cloneid); snap_iter++) {
+               && (*snap_iter <= ci.cloneid); ++snap_iter) {
 
             dout(20) << "List snaps id=" << *snap_iter << dendl;
 
@@ -2316,7 +2316,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           ci.cloneid = clone_info::HEAD;
 
           //Put remaining snapshots into head clone
-          for (;snap_iter != ssc->snapset.snaps.rend(); snap_iter++)
+          for (;snap_iter != ssc->snapset.snaps.rend(); ++snap_iter)
             ci.snaps.push_back(*snap_iter);
 
           //Size for HEAD is oi.size
@@ -2896,7 +2896,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  if (r == 0) {
 	    for (set<string>::iterator iter = keys_to_get.begin();
 		 iter != keys_to_get.end();
-		 iter++) {
+		 ++iter) {
 	      if (vals.count(*iter)) {
 		out.insert(*(vals.find(*iter)));
 	      }
@@ -4094,7 +4094,7 @@ void ReplicatedPG::populate_obc_watchers(ObjectContext *obc)
   for (map<pair<uint64_t, entity_name_t>, watch_info_t>::iterator p =
 	obc->obs.oi.watchers.begin();
        p != obc->obs.oi.watchers.end();
-       p++) {
+       ++p) {
     utime_t expire = now;
     expire += p->second.timeout_seconds;
     dout(10) << "  unconnected watcher " << p->first << " will expire " << expire << dendl;
@@ -4379,7 +4379,7 @@ void ReplicatedPG::put_object_context(ObjectContext *obc)
 
   if (mode.wake) {
     requeue_ops(mode.waiting);
-    for (list<Cond*>::iterator p = mode.waiting_cond.begin(); p != mode.waiting_cond.end(); p++)
+    for (list<Cond*>::iterator p = mode.waiting_cond.begin(); p != mode.waiting_cond.end(); ++p)
       (*p)->Signal();
     mode.wake = false;
   }
@@ -4888,7 +4888,7 @@ int ReplicatedPG::pull(
     random_shuffle(shuffle.begin(), shuffle.end());
     for (vector<int>::iterator p = shuffle.begin();
 	 p != shuffle.end();
-	 p++) {
+	 ++p) {
       if (get_osdmap()->is_up(*p)) {
 	fromosd = *p;
 	break;
@@ -6041,7 +6041,7 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 	dout(10) << e << dendl;
 
 	// we are now missing the new version; recovery code will sort it out.
-	m++;
+	++m;
 	missing.revise_need(oid, info.last_update);
 	break;
       }
@@ -6271,7 +6271,7 @@ void ReplicatedPG::check_recovery_sources(const OSDMapRef osdmap)
        p != missing_loc_sources.end();
        ) {
     if (osdmap->is_up(*p)) {
-      p++;
+      ++p;
       continue;
     }
     dout(10) << "check_recovery_sources source osd." << *p << " now down" << dendl;
@@ -6311,12 +6311,12 @@ void ReplicatedPG::check_recovery_sources(const OSDMapRef osdmap)
 	  p->second.erase(q++);
 	} else {
 	  assert(missing_loc_sources.count(*q));
-	  q++;
+	  ++q;
 	}
       if (p->second.empty())
 	missing_loc.erase(p++);
       else
-	p++;
+	++p;
     }
   }
 
@@ -6487,7 +6487,7 @@ int ReplicatedPG::recover_primary(int max)
       soid = p->second;
     }
     pg_missing_t::item& item = missing.missing[p->second];
-    p++;
+    ++p;
 
     hobject_t head = soid;
     head.snap = CEPH_NOSNAP;
@@ -6975,7 +6975,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
   set<hobject_t> did;
   for (list<pg_log_entry_t>::reverse_iterator p = log.log.rbegin();
        p != log.log.rend();
-       p++) {
+       ++p) {
     if (did.count(p->soid))
       continue;
     did.insert(p->soid);
@@ -7015,7 +7015,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 
   for (map<hobject_t,ScrubMap::object>::reverse_iterator p = scrubmap.objects.rbegin(); 
        p != scrubmap.objects.rend(); 
-       p++) {
+       ++p) {
     const hobject_t& soid = p->first;
     object_stat_sum_t stat;
     if (soid.snap != CEPH_SNAPDIR)
@@ -7127,7 +7127,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 
       // what's next?
       if (curclone != snapset.clones.rend())
-	curclone++;
+	++curclone;
 
       if (curclone == snapset.clones.rend())
 	head = hobject_t();

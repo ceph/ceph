@@ -7560,7 +7560,7 @@ void MDCache::_do_find_ino_peer(find_ino_peer_info_t& fip)
     m = fip.hint;
     fip.hint = -1;
   } else {
-    for (set<int>::iterator p = active.begin(); p != active.end(); p++)
+    for (set<int>::iterator p = active.begin(); p != active.end(); ++p)
       if (*p != mds->whoami &&
 	  fip.checked.count(*p) == 0) {
 	m = *p;

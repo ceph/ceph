@@ -51,7 +51,7 @@ void *Finisher::finisher_thread_entry()
 
       for (vector<Context*>::iterator p = ls.begin();
 	   p != ls.end();
-	   p++) {
+	   ++p) {
 	if (*p) {
 	  (*p)->finish(0);
 	  delete *p;

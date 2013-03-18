@@ -214,7 +214,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
   }
   for (set<pg_t>::const_iterator p = inc.pg_remove.begin();
        p != inc.pg_remove.end();
-       p++) {
+       ++p) {
     const pg_t &removed_pg(*p);
     hash_map<pg_t,pg_stat_t>::iterator s = pg_stat.find(removed_pg);
     if (s != pg_stat.end()) {
@@ -225,7 +225,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
   
   for (set<int>::iterator p = inc.osd_stat_rm.begin();
        p != inc.osd_stat_rm.end();
-       p++) {
+       ++p) {
     hash_map<int,osd_stat_t>::iterator t = osd_stat.find(*p);
     if (t != osd_stat.end()) {
       stat_osd_sub(t->second);
@@ -537,7 +537,7 @@ void PGMap::dump(ostream& ss) const
   dump_pg_stats_plain(ss, pg_stat);
   for (hash_map<int,pool_stat_t>::const_iterator p = pg_pool_sum.begin();
        p != pg_pool_sum.end();
-       p++)
+       ++p)
     ss << "pool " << p->first
        << "\t" << p->second.stats.sum.num_objects
       //<< "\t" << p->second.num_object_copies
@@ -560,7 +560,7 @@ void PGMap::dump(ostream& ss) const
   ss << "osdstat\tkbused\tkbavail\tkb\thb in\thb out" << std::endl;
   for (hash_map<int,osd_stat_t>::const_iterator p = osd_stat.begin();
        p != osd_stat.end();
-       p++)
+       ++p)
     ss << p->first
        << "\t" << p->second.kb_used
        << "\t" << p->second.kb_avail 

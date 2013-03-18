@@ -1280,7 +1280,7 @@ int librados::Rados::get_pool_stats(std::list<string>& v, string& category,
   int r = client->get_pool_stats(v, rawresult);
   for (map<string,::pool_stat_t>::iterator p = rawresult.begin();
        p != rawresult.end();
-       p++) {
+       ++p) {
     stats_map& c = result[p->first];
 
     string cat;
