@@ -540,7 +540,7 @@ void Subscriptions::handle_log(MLog *m)
   last_known_version = m->version;
 
   std::deque<LogEntry>::iterator it = m->entries.begin();
-  for (; it != m->entries.end(); it++) {
+  for (; it != m->entries.end(); ++it) {
     LogEntry e = *it;
     cout << e.stamp << " " << e.who.name 
 	 << " " << e.type << " " << e.msg << std::endl;
