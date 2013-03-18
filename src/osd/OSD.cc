@@ -258,9 +258,14 @@ void OSDService::pg_stat_queue_dequeue(PG *pg)
 void OSDService::shutdown()
 {
   reserver_finisher.stop();
-  watch_lock.Lock();
-  watch_timer.shutdown();
-  watch_lock.Unlock();
+  {
+    Mutex::Locker l(watch_lock);
+    watch_timer.shutdown();
+  }
+  {
+    Mutex::Locker l(backfill_request_lock);
+    backfill_request_timer.shutdown();
+  }
 }
 
 void OSDService::init()
@@ -1181,10 +1186,6 @@ int OSD::shutdown()
   state = STATE_STOPPING;
 
   timer.shutdown();
-
-  service.backfill_request_lock.Lock();
-  service.backfill_request_timer.shutdown();
-  service.backfill_request_lock.Unlock();
 
   heartbeat_lock.Lock();
   heartbeat_stop = true;
