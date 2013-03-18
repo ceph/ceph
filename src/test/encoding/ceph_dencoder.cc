@@ -238,7 +238,7 @@ int main(int argc, const char **argv)
 	cout << p->first << std::endl;
       exit(0);
     } else if (*i == string("type")) {
-      i++;
+      ++i;
       if (i == args.end()) {
 	usage(cerr);
 	exit(1);
@@ -254,7 +254,7 @@ int main(int argc, const char **argv)
       cout << CEPH_FEATURES_SUPPORTED_DEFAULT << std::endl;
       exit(0);
     } else if (*i == string("set_features")) {
-      i++;
+      ++i;
       if (i == args.end()) {
 	usage(cerr);
 	exit(1);
@@ -289,14 +289,14 @@ int main(int argc, const char **argv)
       cout << std::endl;
 
     } else if (*i == string("import")) {
-      i++;
+      ++i;
       if (i == args.end()) {
 	usage(cerr);
 	exit(1);
       }
       encbl.read_file(*i, &err);
     } else if (*i == string("export")) {
-      i++;
+      ++i;
       if (i == args.end()) {
 	usage(cerr);
 	exit(1);
@@ -326,7 +326,7 @@ int main(int argc, const char **argv)
 	usage(cerr);
 	exit(1);
       }
-      i++;
+      ++i;
       if (i == args.end()) {
 	usage(cerr);
 	exit(1);
