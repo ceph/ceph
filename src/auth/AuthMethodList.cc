@@ -59,8 +59,10 @@ int AuthMethodList::pick(const std::set<__u32>& supported)
 
 void AuthMethodList::remove_supported_auth(int auth_type)
 {
-  for (list<__u32>::iterator p = auth_supported.begin(); p != auth_supported.end(); ++p) {
+  for (list<__u32>::iterator p = auth_supported.begin(); p != auth_supported.end(); ) {
     if (*p == (__u32)auth_type)
       auth_supported.erase(p++);
+    else 
+      ++p;
   }
 }
