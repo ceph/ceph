@@ -749,7 +749,7 @@ static int remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_childr
 
     while (!objs.empty()) {
       std::vector<RGWObjEnt>::iterator it = objs.begin();
-      for (it = objs.begin(); it != objs.end(); it++) {
+      for (it = objs.begin(); it != objs.end(); ++it) {
         ret = remove_object(store, bucket, (*it).name);
         if (ret < 0)
           return ret;
@@ -1556,7 +1556,7 @@ next:
 
       if (!m.empty() && purge_data) {
 	int ret;
-        for (std::map<string, RGWBucketEnt>::iterator it = m.begin(); it != m.end(); it++) {
+        for (std::map<string, RGWBucketEnt>::iterator it = m.begin(); it != m.end(); ++it) {
           ret = remove_bucket(store, ((*it).second).bucket, true);
 
           if (ret < 0)
