@@ -84,6 +84,7 @@ using namespace std;
 #include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
+#include "messages/MMonHealth.h"
 
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
@@ -610,6 +611,10 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
 
   case MSG_TIMECHECK:
     m = new MTimeCheck();
+    break;
+
+  case MSG_MON_HEALTH:
+    m = new MMonHealth();
     break;
 
     // -- simple messages without payload --
