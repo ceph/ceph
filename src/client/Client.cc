@@ -7248,7 +7248,6 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
   req->inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
-  req->set_inode(dir);
 
   Dentry *de;
   int res = get_or_create(dir, name, &de);
