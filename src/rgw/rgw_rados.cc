@@ -2490,7 +2490,7 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
       if (range.src_ofs + (int64_t)range.len != next.src_ofs ||
           range.dst_ofs + (int64_t)range.len != next.dst_ofs)
         break;
-      ++range_iter;
+      range_iter = next_iter;
       range.len += next.len;
     }
     if (range.len) {
