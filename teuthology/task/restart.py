@@ -135,7 +135,7 @@ def task(ctx, config):
                     log.debug('script command: {c}'.format(c=l))
                     ll = l.strip()
                     cmd = ll.split(' ')
-                    if cmd == "done":
+                    if cmd[0] == "done":
                         break
                     assert cmd[0] == 'restart', "script sent invalid command request to kill task"
                     # cmd should be: restart <role> <id> <conf_key1> <conf_value1> <conf_key2> <conf_value2>
