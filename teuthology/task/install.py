@@ -11,6 +11,9 @@ from ..orchestra import run
 
 log = logging.getLogger(__name__)
 
+# Should the RELEASE value get extracted from somewhere?
+RELEASE = "1-0"
+
 def _get_system_type(remote):
     """
     Return this system type (for example, deb or rpm)
@@ -24,7 +27,7 @@ def _get_system_type(remote):
     system_value = r.stdout.getvalue().strip()
     log.debug("System to be installed: %s" % system_value)
     if system_value in ['Ubuntu','Debian',]:
-	return "deb"
+        return "deb"
     if system_value in ['CentOS',]:
         return "rpm"
     return system_value
@@ -147,13 +150,11 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     
     start_of_url = 'http://{host}/ceph-rpm-centos{relval}-{arch}-{flavor}/'.format(
             host=host,relval=relval,**baseparms)
-    # Should the REALEASE value get extracted from somewhere?
-    RELEASE = "1-0"
     end_of_url = '{uri}/noarch/ceph-release-{release}.el{relval}.noarch.rpm'.format(
             uri=baseparms['uri'],release=RELEASE,relval=relval)
     base_url = '%s%s' % (start_of_url, end_of_url)
     remote.run(
-        args=['sudo','yum','reinstall',base_url,'-y',], stdout=StringIO())
+        args=['sudo','yum','install',base_url,'-y',], stdout=StringIO())
     for cpack in rpm:
         remote.run(args=['sudo', 'yum', 'install', cpack, '-y',],stdout=StringIO())
 
@@ -228,9 +229,11 @@ def _remove_rpm(remote, rpm):
             run.Raw(';'),
             'done',
             ])
+    cephRelease = 'ceph-release-%s.el6.noarch' % RELEASE
+    remote.run(args=['sudo', 'yum', 'erase', cephRelease, '-y'])
     remote.run(
         args=[
-            'yum', 'clean', 'expire-cache',
+            'sudo', 'yum', 'clean', 'expire-cache',
             ])
 
 def remove_packages(ctx, pkgs):
@@ -320,7 +323,7 @@ def install(ctx, config):
         'ceph-test',
         'ceph-devel',
         'ceph',
-	'ceph-fuse',
+        'ceph-fuse',
         'rest-bench',
         'libcephfs_jni1',
         'libcephfs1',
@@ -336,7 +339,7 @@ def install(ctx, config):
     extras = config.get('extras')
     if extras is not None:
         debs = ['ceph-test', 'ceph-test-dbg', 'ceph-fuse', 'ceph-fuse-dbg']
-	rpm = ['ceph-fuse',]
+        rpm = ['ceph-fuse',]
 
     # install lib deps (so we explicitly specify version), but do not
     # uninstall them, as other packages depend on them (e.g., kvm)
