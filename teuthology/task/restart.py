@@ -148,4 +148,10 @@ def task(ctx, config):
                 if e != 0:
                     raise Exception('restart task got non-zero exit status {d} from script: {s}'.format(d=e, s=c))
     finally:
-        pass
+        log.info('Finishing %s on %s...', task, role)
+        remote.run(
+            logger=log.getChild(role),
+            args=[
+                'rm', '-rf', '--', '{tdir}/restarts.list'.format(tdir=testdir), srcdir,
+                ],
+            )
