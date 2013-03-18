@@ -349,8 +349,7 @@ void WorkloadGenerator::do_destroy_collection(ObjectStore::Transaction *t,
   dout(2) << __func__ << " coll " << entry->m_coll
       << " (" << ls.size() << " objects)" << dendl;
 
-  vector<hobject_t>::iterator it;
-  for (it = ls.begin(); it < ls.end(); it++) {
+  for (vector<hobject_t>::iterator it = ls.begin(); it < ls.end(); ++it) {
     t->remove(entry->m_coll, *it);
   }
 
