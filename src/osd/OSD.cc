@@ -758,7 +758,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
 	 const std::string &dev, const std::string &jdev) :
   Dispatcher(external_messenger->cct),
   osd_lock("OSD::osd_lock"),
-  timer(external_messenger->cct, osd_lock),
+  tick_timer(external_messenger->cct, osd_lock),
   authorize_handler_cluster_registry(new AuthAuthorizeHandlerRegistry(external_messenger->cct,
 								      cct->_conf->auth_supported.length() ?
 								      cct->_conf->auth_supported :
@@ -912,7 +912,7 @@ int OSD::init()
 {
   Mutex::Locker lock(osd_lock);
 
-  timer.init();
+  tick_timer.init();
   service.backfill_request_timer.init();
 
   // mount.
@@ -1020,7 +1020,7 @@ int OSD::init()
   heartbeat_thread.create();
 
   // tick
-  timer.add_event_after(g_conf->osd_heartbeat_interval, new C_Tick(this));
+  tick_timer.add_event_after(g_conf->osd_heartbeat_interval, new C_Tick(this));
 
   AdminSocket *admin_socket = cct->get_admin_socket();
   asok_hook = new OSDSocketHook(this);
@@ -1185,7 +1185,7 @@ int OSD::shutdown()
 
   state = STATE_STOPPING;
 
-  timer.shutdown();
+  tick_timer.shutdown();
 
   heartbeat_lock.Lock();
   heartbeat_stop = true;
@@ -2459,7 +2459,7 @@ void OSD::tick()
 
   check_ops_in_flight();
 
-  timer.add_event_after(1.0, new C_Tick(this));
+  tick_timer.add_event_after(1.0, new C_Tick(this));
 }
 
 void OSD::check_ops_in_flight()
