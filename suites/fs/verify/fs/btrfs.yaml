@@ -2,7 +2,5 @@ overrides:
   ceph:
     fs: btrfs
     conf:
-      client:
-        fuse_use_invalidate_cb: true
       osd:
         osd op thread timeout: 60
