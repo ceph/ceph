@@ -143,10 +143,10 @@ def task(ctx, config):
                     restart_daemon(ctx, config, cmd[1], cmd[2], *cmd[3:])
                     proc.stdin.writelines(['restarted\n'])
                     proc.stdin.flush()
-                tor.wait([proc])
-                e = proc.exitstatus
-                if e != 0:
-                    raise Exception('restart task got non-zero exit status {d} from script: {s}'.format(d=e, s=c))
+                try:
+                    proc.exitstatus.get()
+                except tor.CommandFailedError:
+                    raise Exception('restart task got non-zero exit status from script: {s}'.format(s=c))
     finally:
         log.info('Finishing %s on %s...', task, role)
         remote.run(
