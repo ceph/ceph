@@ -189,8 +189,8 @@ void PaxosService::restart()
     mon->timer.cancel_event(proposal_timer);
     proposal_timer = 0;
   }
-  // ignore any callbacks waiting for us to finish our proposal
-  waiting_for_finished_proposal.clear();
+
+  finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
 
   on_restart();
 }
@@ -210,8 +210,7 @@ void PaxosService::election_finished()
   }
   proposing.set(0);
 
-  // ignore any callbacks waiting for us to finish our proposal
-  waiting_for_finished_proposal.clear();
+  finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
 
   // make sure we update our state
   if (is_active())
@@ -256,10 +255,11 @@ void PaxosService::_active()
     }
   }
 
-  /* wake people up before calling on_active(). We don't know how long we'll be
-   * on the service's on_active(), and we really should wake people up!
-   */
-  wakeup_proposing_waiters();
+  // wake up anyone who came in while we were proposing.  note that
+  // anyone waiting for the previous proposal to commit is no longer
+  // on this list; it is on Paxos's.
+  finish_contexts(g_ceph_context, waiting_for_finished_proposal, 0);
+
   // NOTE: it's possible that this will get called twice if we commit
   // an old paxos value.  Implementations should be mindful of that.
   if (is_active())
@@ -275,8 +275,8 @@ void PaxosService::shutdown()
     mon->timer.cancel_event(proposal_timer);
     proposal_timer = 0;
   }
-  // ignore any callbacks waiting for us to finish our proposal
-  waiting_for_finished_proposal.clear();
+
+  finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
 }
 
 void PaxosService::put_version(MonitorDBStore::Transaction *t,
@@ -296,11 +296,6 @@ int PaxosService::get_version(const string& prefix, version_t ver,
   os << ver;
   string key = mon->store->combine_strings(prefix, os.str());
   return mon->store->get(get_service_name(), key, bl);
-}
-
-void PaxosService::wakeup_proposing_waiters()
-{
-  finish_contexts(g_ceph_context, waiting_for_finished_proposal);
 }
 
 void PaxosService::trim(MonitorDBStore::Transaction *t,

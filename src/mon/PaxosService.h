@@ -561,11 +561,6 @@ public:
   }
 
   /**
-   * Wakeup all the callbacks waiting for the proposal to be finished
-   */
-  void wakeup_proposing_waiters();
-
-  /**
    * @defgroup PaxosService_h_Trim
    * @{
    */
