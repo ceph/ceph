@@ -1,0 +1,19 @@
+roles:
+- - mon.a
+  - mds.0
+  - osd.0
+- - mon.b
+  - osd.1
+- - client.0
+tasks:
+- install:
+     extras: yes
+- ssh_keys:
+- ceph-deploy:
+     branch:
+        dev: master
+- ceph-fuse:
+- workunit:
+     clients:
+        client.0:
+           - suites/blogbench.sh
