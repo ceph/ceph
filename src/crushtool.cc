@@ -616,7 +616,7 @@ int main(int argc, const char **argv)
       int item = crush.get_item_id(reweight_name.c_str());
       r = crush.adjust_item_weightf(g_ceph_context, item, reweight_weight);
     }
-    if (r == 0)
+    if (r >= 0)
       modified = true;
     else {
       cerr << me << " " << cpp_strerror(r) << std::endl;
