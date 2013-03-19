@@ -51,7 +51,6 @@ int rgw_get_system_obj(RGWRados *rgwstore, void *ctx, rgw_bucket& bucket, string
       return ret;
 
     ret = rgwstore->get_obj(ctx, objv_tracker, &handle, obj, bl, 0, request_len - 1);
-#warning FIXME objv_tracker
     rgwstore->finish_get_obj(&handle);
     if (ret < 0)
       return ret;
