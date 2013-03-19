@@ -1854,13 +1854,13 @@ noinst_HEADERS = \
         mon/Elector.h\
 	mon/LogMonitor.h\
         mon/HealthMonitor.h\
+        mon/HealthService.h\
         mon/MDSMonitor.h\
 	mon/MonmapMonitor.h\
         mon/MonCaps.h\
         mon/MonClient.h\
         mon/MonMap.h\
         mon/Monitor.h\
-        mon/MonitorHealthService.h\
 	mon/MonitorStore.h\
         mon/MonitorDBStore.h\
         mon/OSDMonitor.h\
