@@ -65,7 +65,7 @@ class DaemonState(object):
 
 
     def running(self):
-        return self.proc is not None and not self.proc.exited
+        return self.proc is not None
 
     def reset(self):
         self.proc = None
