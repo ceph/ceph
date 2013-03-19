@@ -7563,15 +7563,17 @@ uint32_t Client::ll_file_layout(vinodeno_t vino, ceph_file_layout *layout)
 /* Allow the client to get and hold a read capability or read and
    write capabilities.  If write is true, get both read and write
    capabilities.  The cb function is called when the the read or write
-   capabilities are revoked. Opaque is passed to ths function.  Serial
-   is an identifier that should be passed to ll_release_rw, and
+   capabilities are recalled. Opaque is passed to ths function.
+   Serial is an identifier that should be passed to ll_release_rw, and
    max_fs, if write is set to true, is the requested maximum filesize
    to which the file may be extended as input, and the allowed maximum
-   filesize on output.  If write is false, it is undefined. */
+   filesize on output.  If write is false, it is undefined.  The cb
+   function should return true if it intends to return the
+   capabilities later, and false if to return them now. */
 
 uint32_t Client::ll_hold_rw(vinodeno_t vino,
 			    bool write,
-			    void(*cb)(vinodeno_t, bool, void*),
+			    bool(*cb)(vinodeno_t, bool, void*),
 			    void *opaque,
 			    uint64_t* serial,
 			    uint64_t* max_fs)

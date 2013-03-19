@@ -496,7 +496,7 @@ void CapSnap::dump(Formatter *f) const
 }
 
 void Inode::add_revoke_notifier(bool write,
-                                void(*cb)(vinodeno_t, bool, void*),
+                                bool(*cb)(vinodeno_t, bool, void*),
                                 void *opaque,
                                 uint64_t *serial)
 {
@@ -516,13 +516,23 @@ bool Inode::remove_revoke_notifier(uint64_t serial)
 
 void Inode::recall_rw_caps(bool write)
 {
-  for (map<uint64_t,revoke_notifier*>::iterator p
-         = revoke_notifiers.begin();
-       p != revoke_notifiers.end();
-       ++p) {
-    if (write && !p->second->write) {
+
+  map<uint64_t,revoke_notifier*>::iterator p
+    = revoke_notifiers.begin();
+  bool will_return = false;
+  while (p != revoke_notifiers.end()) {
+    revoke_notifier *revoker = p->second;
+    if (write && !revoker->write) {
 	continue;
     }
-    p->second->cb(vino(), p->second->write, p->second->opaque);
+    will_return = revoker->cb(vino(), revoker->write,
+			      revoker->opaque);
+    if (will_return) {
+      ++p;
+    } else {
+      put_cap_ref(CEPH_CAP_FILE_RD | (write ? CEPH_CAP_FILE_WR : 0));
+      revoke_notifiers.erase(p++);
+      delete revoker;
+    }
   }
 }

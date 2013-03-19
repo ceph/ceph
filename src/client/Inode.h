@@ -259,11 +259,11 @@ class Inode {
 
   struct revoke_notifier {
     bool write;
-    void(*cb)(vinodeno_t, bool, void*);
+    bool(*cb)(vinodeno_t, bool, void*);
     void *opaque;
 
     revoke_notifier(bool write_,
-                    void(*cb_)(vinodeno_t, bool, void*),
+                    bool(*cb_)(vinodeno_t, bool, void*),
                     void* opaque_)
     : write(write_),
       cb(cb_),
@@ -274,7 +274,7 @@ class Inode {
   map<uint64_t,revoke_notifier*> revoke_notifiers;
   uint64_t revoke_serial;
   void add_revoke_notifier(bool write,
-                           void(*cb)(vinodeno_t, bool, void*),
+                           bool(*cb)(vinodeno_t, bool, void*),
                            void *opaque,
                            uint64_t *serial);
   bool remove_revoke_notifier(uint64_t serial);

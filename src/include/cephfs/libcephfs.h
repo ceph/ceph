@@ -1144,7 +1144,7 @@ int ceph_ll_connectable_m(struct ceph_mount_info *cmount,
 uint32_t ceph_ll_hold_rw(struct ceph_mount_info *cmount,
 			 vinodeno_t vino,
 			 bool write,
-			 void(*cb)(vinodeno_t, bool, void*),
+			 bool(*cb)(vinodeno_t, bool, void*),
 			 void *opaque,
 			 uint64_t* serial,
 			 uint64_t* max_fs);
