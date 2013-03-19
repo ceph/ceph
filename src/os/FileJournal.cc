@@ -1117,19 +1117,28 @@ void FileJournal::write_thread_entry()
       // should we back off to limit aios in flight?  try to do this
       // adaptively so that we submit larger aios once we have lots of
       // them in flight.
-      int exp = MIN(aio_num * 2, 24);
-      long unsigned min_new = 1ull << exp;
-      long unsigned cur = throttle_bytes.get_current();
-      dout(20) << "write_thread_entry aio throttle: aio num " << aio_num << " bytes " << aio_bytes
-	      << " ... exp " << exp << " min_new " << min_new
-	       << " ... pending " << cur << dendl;
-      if (cur < min_new) {
+      //
+      // NOTE: our condition here is based on aio_num (protected by
+      // aio_lock) and throttle_bytes (part of the write queue).  when
+      // we sleep, we *only* wait for aio_num to change, and do not
+      // wake when more data is queued.  this is not strictly correct,
+      // but should be fine given that we will have plenty of aios in
+      // flight if we hit this limit to ensure we keep the device
+      // saturated.
+      while (aio_num > 0) {
+	int exp = MIN(aio_num * 2, 24);
+	long unsigned min_new = 1ull << exp;
+	long unsigned cur = throttle_bytes.get_current();
+	dout(20) << "write_thread_entry aio throttle: aio num " << aio_num << " bytes " << aio_bytes
+		 << " ... exp " << exp << " min_new " << min_new
+		 << " ... pending " << cur << dendl;
+	if (cur >= min_new)
+	  break;
 	dout(20) << "write_thread_entry deferring until more aios complete: "
 		 << aio_num << " aios with " << aio_bytes << " bytes needs " << min_new
 		 << " bytes to start a new aio (currently " << cur << " pending)" << dendl;
 	aio_cond.Wait(aio_lock);
 	dout(20) << "write_thread_entry woke up" << dendl;
-	continue;
       }
     }
 #endif
