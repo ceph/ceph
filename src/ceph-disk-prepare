@@ -691,7 +691,8 @@ def prepare_dev(
     try:
         args = [
             'mkfs',
-            '--type={fstype}'.format(fstype=fstype),
+            '-t',
+            fstype,
             ]
         if mkfs_args is not None:
             args.extend(mkfs_args.split())
