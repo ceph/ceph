@@ -204,10 +204,10 @@ def is_held(dev):
     disk = base
     while disk[-1].isdigit():
         disk = disk[:-1]
-    dir = '/sys/block/{disk}/{base}/holders'.format(disk=disk, base=base)
-    if not os.path.exists(dir):
+    directory = '/sys/block/{disk}/{base}/holders'.format(disk=disk, base=base)
+    if not os.path.exists(directory):
         return []
-    return os.listdir(dir)
+    return os.listdir(directory)
 
 
 def verify_not_in_use(dev):
@@ -349,7 +349,7 @@ def get_conf(cluster, variable):
     try:
         p = subprocess.Popen(
             args=[
-                'ceph-conf',
+                '/usr/bin/ceph-conf',
                 '--cluster={cluster}'.format(
                     cluster=cluster,
                     ),
@@ -517,7 +517,7 @@ def unmount(
         log.debug('Unmounting %s', path)
         subprocess.check_call(
             args=[
-                'umount',
+                '/bin/umount',
                 '--',
                 path,
                 ],
@@ -1210,85 +1210,6 @@ def detect_fstype(
     return fstype
 
 
-def get_conf(cluster, variable):
-    try:
-        p = subprocess.Popen(
-            args=[
-                '/usr/bin/ceph-conf',
-                '--cluster={cluster}'.format(
-                    cluster=cluster,
-                    ),
-                '--name=osd.',
-                '--lookup',
-                variable,
-                ],
-            stdout=subprocess.PIPE,
-            close_fds=True,
-            )
-    except OSError as e:
-        raise Error('error executing ceph-conf', e)
-    (out, _err) = p.communicate()
-    ret = p.wait()
-    if ret == 1:
-        # config entry not found
-        return None
-    elif ret != 0:
-        raise Error('getting variable from configuration failed')
-    value = out.split('\n', 1)[0]
-    # don't differentiate between "var=" and no var set
-    if not value:
-        return None
-    return value
-
-
-def mount(
-    dev,
-    fstype,
-    options,
-    ):
-    # pick best-of-breed mount options based on fs type
-    if options is None:
-        options = MOUNT_OPTIONS.get(fstype, '')
-
-    # mount
-    path = tempfile.mkdtemp(
-        prefix='mnt.',
-        dir='/var/lib/ceph/tmp',
-        )
-    try:
-        subprocess.check_call(
-            args=[
-                '/bin/mount',
-                '-o', options,
-                '--',
-                dev,
-                path,
-                ],
-            )
-    except subprocess.CalledProcessError as e:
-        try:
-            os.rmdir(path)
-        except (OSError, IOError):
-            pass
-        raise MountError(e)
-
-    return path
-
-
-def unmount(
-    path,
-    ):
-    try:
-        subprocess.check_call(
-            args=[
-                '/bin/umount',
-                '--',
-                path,
-                ],
-            )
-    except subprocess.CalledProcessError as e:
-        raise UnmountError(e)
-
 def mount_activate(
     dev,
     activate_key_template,
@@ -1418,10 +1339,10 @@ def find_cluster_by_uuid(uuid):
     no_fsid = []
     if not os.path.exists('/etc/ceph'):
         return None
-    for file in os.listdir('/etc/ceph'):
-        if not file.endswith('.conf'):
+    for conf_file in os.listdir('/etc/ceph'):
+        if not conf_file.endswith('.conf'):
             continue
-        cluster = file[:-5]
+        cluster = conf_file[:-5]
         u = get_conf(cluster, 'fsid')
         if u is None:
             no_fsid.append(cluster)
