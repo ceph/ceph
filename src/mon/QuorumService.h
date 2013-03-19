@@ -45,8 +45,10 @@ class QuorumService : public RefCountedObject
   };
 
 public:
-  static const int SERVICE_HEALTH                   = 0x01;
-  static const int SERVICE_TIMECHECK                = 0x02;
+  enum {
+    SERVICE_HEALTH                   = 0x01,
+    SERVICE_TIMECHECK                = 0x02
+  };
 
 protected:
   Monitor *mon;
