@@ -349,7 +349,7 @@ def get_conf(cluster, variable):
     try:
         p = subprocess.Popen(
             args=[
-                'ceph-conf',
+                '/usr/bin/ceph-conf',
                 '--cluster={cluster}'.format(
                     cluster=cluster,
                     ),
@@ -1208,37 +1208,6 @@ def detect_fstype(
         )
     fstype = must_be_one_line(fstype)
     return fstype
-
-
-def get_conf(cluster, variable):
-    try:
-        p = subprocess.Popen(
-            args=[
-                '/usr/bin/ceph-conf',
-                '--cluster={cluster}'.format(
-                    cluster=cluster,
-                    ),
-                '--name=osd.',
-                '--lookup',
-                variable,
-                ],
-            stdout=subprocess.PIPE,
-            close_fds=True,
-            )
-    except OSError as e:
-        raise Error('error executing ceph-conf', e)
-    (out, _err) = p.communicate()
-    ret = p.wait()
-    if ret == 1:
-        # config entry not found
-        return None
-    elif ret != 0:
-        raise Error('getting variable from configuration failed')
-    value = out.split('\n', 1)[0]
-    # don't differentiate between "var=" and no var set
-    if not value:
-        return None
-    return value
 
 
 def mount(
