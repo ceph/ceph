@@ -1210,40 +1210,6 @@ def detect_fstype(
     return fstype
 
 
-def mount(
-    dev,
-    fstype,
-    options,
-    ):
-    # pick best-of-breed mount options based on fs type
-    if options is None:
-        options = MOUNT_OPTIONS.get(fstype, '')
-
-    # mount
-    path = tempfile.mkdtemp(
-        prefix='mnt.',
-        dir='/var/lib/ceph/tmp',
-        )
-    try:
-        subprocess.check_call(
-            args=[
-                '/bin/mount',
-                '-o', options,
-                '--',
-                dev,
-                path,
-                ],
-            )
-    except subprocess.CalledProcessError as e:
-        try:
-            os.rmdir(path)
-        except (OSError, IOError):
-            pass
-        raise MountError(e)
-
-    return path
-
-
 def unmount(
     path,
     ):
