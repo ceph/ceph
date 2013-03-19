@@ -47,16 +47,19 @@ public:
   virtual void list_keys_complete(void *handle) = 0;
 };
 
+class RGWMetadataLog;
+
 class RGWMetadataManager {
   map<string, RGWMetadataHandler *> handlers;
   RGWRados *store;
+  RGWMetadataLog *md_log;
 
   void parse_metadata_key(const string& metadata_key, string& type, string& entry);
 
   int find_handler(const string& metadata_key, RGWMetadataHandler **handler, string& entry);
 
 public:
-  RGWMetadataManager(RGWRados *_store) : store(_store) {}
+  RGWMetadataManager(CephContext *_cct, RGWRados *_store);
   ~RGWMetadataManager();
 
   int register_handler(RGWMetadataHandler *handler);

@@ -17,6 +17,7 @@
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/refcount/cls_refcount_client.h"
 #include "cls/version/cls_version_client.h"
+#include "cls/log/cls_log_client.h"
 
 #include "rgw_tools.h"
 
@@ -524,7 +525,7 @@ int RGWRados::init_rados()
   if (ret < 0)
    return ret;
 
-  meta_mgr = new RGWMetadataManager(this);
+  meta_mgr = new RGWMetadataManager(cct, this);
 
   return ret;
 }
@@ -1056,6 +1057,48 @@ next:
   } while (hash != first_hash);
 
   return 0;
+}
+
+void RGWRados::shard_name(const string& prefix, unsigned max_shards, string& key, string& name)
+{
+  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%u", (unsigned)(val % max_shards));
+  name = prefix + buf;
+}
+
+void RGWRados::shard_name(const string& prefix, unsigned max_shards, string& section, string& key, string& name)
+{
+  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
+  val ^= ceph_str_hash_linux(section.c_str(), section.size());
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%u", (unsigned)(val % max_shards));
+  name = prefix + buf;
+}
+
+int RGWRados::time_log_add(const string& oid, const utime_t& ut, string& section, string& key, bufferlist& bl)
+{
+  librados::IoCtx io_ctx;
+
+  const char *log_pool = zone.log_pool.name.c_str();
+  int r = rados->ioctx_create(log_pool, io_ctx);
+  if (r == -ENOENT) {
+    rgw_bucket pool(log_pool);
+    r = create_pool(pool);
+    if (r < 0)
+      return r;
+ 
+    // retry
+    r = rados->ioctx_create(log_pool, io_ctx);
+  }
+  if (r < 0)
+    return r;
+
+  ObjectWriteOperation op;
+  cls_log_add(op, ut, section, key, bl);
+
+  r = io_ctx.operate(oid, &op);
+  return r;
 }
 
 int RGWRados::decode_policy(bufferlist& bl, ACLOwner *owner)

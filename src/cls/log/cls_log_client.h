@@ -3,6 +3,7 @@
 
 #include "include/types.h"
 #include "include/rados/librados.hpp"
+#include "cls_log_types.h"
 
 /*
  * log objclass
