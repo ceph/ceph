@@ -976,6 +976,10 @@ public:
                              string& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage, bool *is_truncated);
   int cls_obj_usage_log_trim(string& oid, string& user, uint64_t start_epoch, uint64_t end_epoch);
 
+  void shard_name(const string& prefix, unsigned max_shards, string& key, string& name);
+  void shard_name(const string& prefix, unsigned max_shards, string& section, string& key, string& name);
+  int time_log_add(const string& oid, const utime_t& ut, string& section, string& key, bufferlist& bl);
+
   /// clean up/process any temporary objects older than given date[/time]
   int remove_temp_objects(string date, string time);
 
