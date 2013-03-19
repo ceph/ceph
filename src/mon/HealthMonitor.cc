@@ -30,6 +30,8 @@
 
 #include "common/config.h"
 
+const int HealthService::SERVICE_HEALTH_DATA;
+
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, this)
