@@ -184,7 +184,9 @@ OSDService::OSDService(OSD *osd) :
   in_progress_split_lock("OSDService::in_progress_split_lock"),
   full_status_lock("OSDService::full_status_lock"),
   cur_state(NONE),
-  last_msg(0)
+  last_msg(0),
+  is_stopping_lock("OSDService::is_stopping_lock"),
+  stopping(false)
 {}
 
 void OSDService::_start_split(const set<pg_t> &pgs)
@@ -266,6 +268,8 @@ void OSDService::shutdown()
     Mutex::Locker l(backfill_request_lock);
     backfill_request_timer.shutdown();
   }
+  osdmap = OSDMapRef();
+  next_osdmap = OSDMapRef();
 }
 
 void OSDService::init()
@@ -836,7 +840,7 @@ void OSD::handle_signal(int signum)
   assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got signal " << sys_siglist[signum] << " ***" << dendl;
   //suicide(128 + signum);
-  suicide(0);
+  shutdown();
 }
 
 int OSD::pre_init()
@@ -1178,33 +1182,44 @@ void OSD::suicide(int exitcode)
 
 int OSD::shutdown()
 {
-  g_conf->remove_observer(this);
+  osd_lock.Lock();
+  if (is_stopping()) {
+    osd_lock.Unlock();
+    return 0;
+  }
+  derr << "shutdown" << dendl;
 
-  service.shutdown();
+  state = STATE_STOPPING;
+  service.set_stopping();
+
+  // Debugging
   g_ceph_context->_conf->set_val("debug_osd", "100");
   g_ceph_context->_conf->set_val("debug_journal", "100");
   g_ceph_context->_conf->set_val("debug_filestore", "100");
   g_ceph_context->_conf->set_val("debug_ms", "100");
   g_ceph_context->_conf->apply_changes(NULL);
   
-  derr << "shutdown" << dendl;
-
-  state = STATE_STOPPING;
-
-  tick_timer.shutdown();
-
-  heartbeat_lock.Lock();
-  heartbeat_stop = true;
-  heartbeat_cond.Signal();
-  heartbeat_lock.Unlock();
-  heartbeat_thread.join();
-
-  command_tp.stop();
-
+  // Remove PGs
+  for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
+       p != pg_map.end();
+       ++p) {
+    dout(20) << " kicking pg " << p->first << dendl;
+    p->second->lock();
+    p->second->on_shutdown();
+    p->second->kick();
+    p->second->unlock();
+    p->second->put();
+  }
+  pg_map.clear();
+  
   // finish ops
-  op_wq.drain();
-  dout(10) << "no ops" << dendl;
+  op_wq.drain(); // should already be empty except for lagard PGs
+  {
+    Mutex::Locker l(finished_lock);
+    finished.clear(); // zap waiters (bleh, this is messy)
+  }
 
+  // unregister commands
   cct->get_admin_socket()->unregister_command("dump_ops_in_flight");
   cct->get_admin_socket()->unregister_command("dump_historic_ops");
   cct->get_admin_socket()->unregister_command("dump_op_pq_state");
@@ -1218,48 +1233,33 @@ int OSD::shutdown()
   delete test_ops_hook;
   test_ops_hook = NULL;
 
+  osd_lock.Unlock();
+
+  heartbeat_lock.Lock();
+  heartbeat_stop = true;
+  heartbeat_cond.Signal();
+  heartbeat_lock.Unlock();
+  heartbeat_thread.join();
+
+  recovery_tp.drain();
   recovery_tp.stop();
   dout(10) << "recovery tp stopped" << dendl;
+
+  op_tp.drain();
   op_tp.stop();
   dout(10) << "op tp stopped" << dendl;
 
-  // pause _new_ disk work first (to avoid racing with thread pool),
-  disk_tp.pause_new();
+  command_tp.drain();
+  command_tp.stop();
+  dout(10) << "command tp stopped" << dendl;
+
+  disk_tp.drain();
+  disk_tp.stop();
   dout(10) << "disk tp paused (new), kicking all pgs" << dendl;
 
-  // then kick all pgs,
-  for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
-       p != pg_map.end();
-       ++p) {
-    dout(20) << " kicking pg " << p->first << dendl;
-    p->second->lock();
-    p->second->kick();
-    p->second->unlock();
-  }
-  dout(20) << " kicked all pgs" << dendl;
-
-  // then stop thread.
-  disk_tp.stop();
-  dout(10) << "disk tp stopped" << dendl;
-
-  // tell pgs we're shutting down
-  for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
-       p != pg_map.end();
-       ++p) {
-    p->second->lock();
-    p->second->on_shutdown();
-    p->second->unlock();
-  }
-
-  osd_lock.Unlock();
-  store->sync();
-  store->flush();
   osd_lock.Lock();
 
-  // zap waiters (bleh, this is messy)
-  finished_lock.Lock();
-  finished.clear();
-  finished_lock.Unlock();
+  tick_timer.shutdown();
 
   // note unmount epoch
   dout(10) << "noting clean unmount in epoch " << osdmap->get_epoch() << dendl;
@@ -1273,33 +1273,31 @@ int OSD::shutdown()
 	 << cpp_strerror(r) << dendl;
   }
 
-  // flush data to disk
-  osd_lock.Unlock();
-  dout(10) << "sync" << dendl;
+  dout(10) << "syncing store" << dendl;
+  store->flush();
   store->sync();
-  r = store->umount();
+  store->umount();
   delete store;
   store = 0;
-  dout(10) << "sync done" << dendl;
-  osd_lock.Lock();
+  dout(10) << "Store synced" << dendl;
 
-  clear_pg_stat_queue();
-
-  // close pgs
-  for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
-       p != pg_map.end();
-       ++p) {
-    PG *pg = p->second;
-    pg->put();
+  {
+    Mutex::Locker l(pg_stat_queue_lock);
+    assert(pg_stat_queue.empty());
   }
-  pg_map.clear();
+
+  g_conf->remove_observer(this);
+
+  monc->shutdown();
+  osd_lock.Unlock();
+
+  osdmap = OSDMapRef();
+  service.shutdown();
 
   client_messenger->shutdown();
   cluster_messenger->shutdown();
   hbclient_messenger->shutdown();
   hbserver_messenger->shutdown();
-
-  monc->shutdown();
   return r;
 }
 
@@ -2357,6 +2355,8 @@ void OSD::heartbeat()
 
 bool OSD::heartbeat_reset(Connection *con)
 {
+  if (service.is_stopping())
+    return true;
   HeartbeatSession *s = static_cast<HeartbeatSession*>(con->get_priv());
   if (s) {
     heartbeat_lock.Lock();
@@ -2658,6 +2658,8 @@ void OSD::ms_handle_connect(Connection *con)
 
 bool OSD::ms_handle_reset(Connection *con)
 {
+  if (service.is_stopping())
+    return true;
   dout(1) << "OSD::ms_handle_reset()" << dendl;
   OSD::Session *session = (OSD::Session *)con->get_priv();
   if (!session)
@@ -3357,6 +3359,8 @@ void OSD::_share_map_outgoing(int peer, Connection *con, OSDMapRef map)
 bool OSD::heartbeat_dispatch(Message *m)
 {
   dout(30) << "heartbeat_dispatch " << m << dendl;
+  if (service.is_stopping())
+    return true;
 
   switch (m->get_type()) {
     
@@ -3390,8 +3394,10 @@ bool OSD::ms_dispatch(Message *m)
   // lock!
 
   osd_lock.Lock();
-  if (is_stopping())
+  if (is_stopping()) {
+    osd_lock.Unlock();
     return true;
+  }
 
   while (dispatch_running) {
     dout(10) << "ms_dispatch waiting for other dispatch thread to complete" << dendl;
