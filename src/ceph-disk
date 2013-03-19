@@ -204,10 +204,10 @@ def is_held(dev):
     disk = base
     while disk[-1].isdigit():
         disk = disk[:-1]
-    dir = '/sys/block/{disk}/{base}/holders'.format(disk=disk, base=base)
-    if not os.path.exists(dir):
+    directory = '/sys/block/{disk}/{base}/holders'.format(disk=disk, base=base)
+    if not os.path.exists(directory):
         return []
-    return os.listdir(dir)
+    return os.listdir(directory)
 
 
 def verify_not_in_use(dev):
