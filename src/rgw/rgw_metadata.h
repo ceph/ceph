@@ -6,6 +6,7 @@
 #include "include/types.h"
 #include "rgw_common.h"
 #include "cls/version/cls_version_types.h"
+#include "cls/log/cls_log_types.h"
 
 
 class RGWRados;
@@ -47,16 +48,32 @@ public:
   virtual void list_keys_complete(void *handle) = 0;
 };
 
+#define META_LOG_OBJ_PREFIX "meta.log."
+
+class RGWMetadataLog {
+  CephContext *cct;
+  RGWRados *store;
+  string prefix;
+
+public:
+  RGWMetadataLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store) {
+    prefix = META_LOG_OBJ_PREFIX;
+  }
+
+  int add_entry(RGWRados *store, string& section, string& key, bufferlist& bl);
+};
+
 class RGWMetadataManager {
   map<string, RGWMetadataHandler *> handlers;
   RGWRados *store;
+  RGWMetadataLog *md_log;
 
   void parse_metadata_key(const string& metadata_key, string& type, string& entry);
 
   int find_handler(const string& metadata_key, RGWMetadataHandler **handler, string& entry);
 
 public:
-  RGWMetadataManager(RGWRados *_store) : store(_store) {}
+  RGWMetadataManager(CephContext *_cct, RGWRados *_store);
   ~RGWMetadataManager();
 
   int register_handler(RGWMetadataHandler *handler);
@@ -73,6 +90,8 @@ public:
   void list_keys_complete(void *handle);
 
   void get_sections(list<string>& sections);
+
+  RGWMetadataLog *get_log() { return md_log; }
 };
 
 #endif

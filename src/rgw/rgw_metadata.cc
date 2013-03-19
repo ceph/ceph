@@ -6,6 +6,13 @@
 
 #include "rgw_rados.h"
 
+int RGWMetadataLog::add_entry(RGWRados *store, string& section, string& key, bufferlist& bl) {
+  string oid;
+
+  store->shard_name(prefix, cct->_conf->rgw_md_log_max_shards, section, key, oid);
+  utime_t now = ceph_clock_now(cct);
+  return store->time_log_add(oid, now, section, key, bl);
+}
 
 obj_version& RGWMetadataObject::get_version()
 {
@@ -55,6 +62,11 @@ public:
 };
 
 static RGWMetadataTopHandler md_top_handler;
+
+RGWMetadataManager::RGWMetadataManager(CephContext *_cct, RGWRados *_store) : store(_store)
+{
+  md_log = new RGWMetadataLog(_cct, _store);
+}
 
 RGWMetadataManager::~RGWMetadataManager()
 {
@@ -238,6 +250,20 @@ void RGWMetadataManager::get_sections(list<string>& sections)
 int RGWMetadataManager::put_obj(RGWMetadataHandler *handler, string& key, bufferlist& bl, bool exclusive,
                                 RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs)
 {
-  return handler->put_obj(store, key, bl, exclusive, objv_tracker, pattrs);
+  bufferlist logbl;
+  string section = handler->get_type();
+  int ret = md_log->add_entry(store, section, key, logbl);
+  if (ret < 0)
+    return ret;
+
+  ret = handler->put_obj(store, key, bl, exclusive, objv_tracker, pattrs);
+  if (ret < 0)
+    return ret;
+
+  ret = md_log->add_entry(store, section, key, logbl);
+  if (ret < 0)
+    return ret;
+
+  return 0;
 }
 
