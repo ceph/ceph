@@ -1099,6 +1099,10 @@ protected:
     }
     void _process(Command *c) {
       osd->osd_lock.Lock();
+      if (osd->is_stopping()) {
+	delete c;
+	return;
+      }
       osd->do_command(c->con, c->tid, c->cmd, c->indata);
       osd->osd_lock.Unlock();
       delete c;
@@ -1353,6 +1357,10 @@ protected:
     }
     void _process(MOSDRepScrub *msg) {
       osd->osd_lock.Lock();
+      if (osd->is_stopping()) {
+	osd->osd_lock.Unlock();
+	return;
+      }
       if (osd->_have_pg(msg->pgid)) {
 	PG *pg = osd->_lookup_lock_pg(msg->pgid);
 	osd->osd_lock.Unlock();
