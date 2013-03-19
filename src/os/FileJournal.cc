@@ -1658,6 +1658,7 @@ bool FileJournal::read_entry(
 	  g_conf->journal_max_corrupt_search)) {
     errss << "Entry at pos " << pos << " possibly corrupt due to: ("
 	  << ss.str() << ")" << std::endl;
+    ss.str(string());
     ss.clear();
     pos = next_pos;
     result = do_read_entry(
@@ -1698,7 +1699,7 @@ bool FileJournal::read_entry(
     }
   }
 
-  dout(2) << errss.str() << dendl;
+  dout(25) << errss.str() << dendl;
   dout(2) << "No further valid entries found, journal is most likely valid"
 	  << dendl;
   return false;
@@ -1724,8 +1725,8 @@ FileJournal::read_entry_result FileJournal::do_read_entry(
   h = (entry_header_t *)hbl.c_str();
 
   if (!h->check_magic(pos, header.get_fsid64())) {
-    dout(2) << "read_entry " << pos
-	    << " : bad header magic, end of journal" << dendl;
+    dout(25) << "read_entry " << pos
+	     << " : bad header magic, end of journal" << dendl;
     if (ss)
       *ss << "bad header magic";
     if (next_pos)
