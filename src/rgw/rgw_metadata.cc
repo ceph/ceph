@@ -24,7 +24,9 @@ public:
   virtual string get_type() { return string(); }
 
   virtual int get(RGWRados *store, string& entry, RGWMetadataObject **obj) { return -ENOTSUP; }
-  virtual int put(RGWRados *store, string& entry, obj_version& objv, JSONObj *obj) { return -ENOTSUP; }
+  virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, JSONObj *obj) { return -ENOTSUP; }
+  virtual int put_obj(RGWRados *store, string& key, bufferlist& bl, bool exclusive,
+                      RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs) { return -ENOTSUP; }
 
   virtual int list_keys_init(RGWRados *store, void **phandle) {
     iter_data *data = new iter_data;
@@ -75,6 +77,15 @@ int RGWMetadataManager::register_handler(RGWMetadataHandler *handler)
   handlers[type] = handler;
 
   return 0;
+}
+
+RGWMetadataHandler *RGWMetadataManager::get_handler(const char *type)
+{
+  map<string, RGWMetadataHandler *>::iterator iter = handlers.find(type);
+  if (iter == handlers.end())
+    return NULL;
+
+  return iter->second;
 }
 
 void RGWMetadataManager::parse_metadata_key(const string& metadata_key, string& type, string& entry)
@@ -151,17 +162,20 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl)
   }
 
   string meadata_key;
-  obj_version objv;
+  RGWObjVersionTracker objv_tracker;
+
+  obj_version *objv = &objv_tracker.write_version;
+
 
   JSONDecoder::decode_json("key", metadata_key, &parser);
-  JSONDecoder::decode_json("ver", objv, &parser);
+  JSONDecoder::decode_json("ver", *objv, &parser);
 
   JSONObj *jo = parser.find_obj("data");
   if (!jo) {
     return -EINVAL;
   }
 
-  return handler->put(store, entry, objv, jo);
+  return handler->put(store, entry, objv_tracker, jo);
 }
 
 
@@ -220,4 +234,10 @@ void RGWMetadataManager::get_sections(list<string>& sections)
   }
 }
 
+
+int RGWMetadataManager::put_obj(RGWMetadataHandler *handler, string& key, bufferlist& bl, bool exclusive,
+                                RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs)
+{
+  return handler->put_obj(store, key, bl, exclusive, objv_tracker, pattrs);
+}
 
