@@ -18,10 +18,10 @@
 #include <map>
 #include <string>
 #include <iostream>
-#include <include/types.h>
-
 #include <expat.h>
 
+#include <include/types.h>
+#include <common/Formatter.h>
 #include "rgw_xml.h"
 #include "rgw_cors.h"
 
@@ -34,7 +34,7 @@ class RGWCORSRule_S3 : public RGWCORSRule, public XMLObj
     ~RGWCORSRule_S3(){}
     
     bool xml_end(const char *el);
-    void to_xml(ostream& out);
+    void to_xml(XMLFormatter& f);
 };
 
 class RGWCORSConfiguration_S3 : public RGWCORSConfiguration, public XMLObj

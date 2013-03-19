@@ -20,27 +20,11 @@
 #include <iostream>
 #include <vector>
 #include <include/types.h>
+#include <include/str_list.h>
 
 #include "rgw_cors.h"
 
 using namespace std;
-
-template <class T>
-static inline void char_to_str_list(const char *in, T& out, 
-                                    bool is_host_name_list=false){
-  const char *start = in, *end = in;
-  while(end){
-    end = strchr(start, ' ');
-    unsigned len = (end > start)?(end - start):strlen(start);
-    if(is_host_name_list){
-      string host, proto, sin = string(start, len);
-      parse_host_name(sin, host, proto);
-      out.insert(out.end(), proto+host);
-    }else
-      out.insert(out.end(), string(start, (size_t)len));
-    start = end + 1;
-  }
-}
 
 class RGWCORSConfiguration_SWIFT : public RGWCORSConfiguration
 {
@@ -49,16 +33,35 @@ class RGWCORSConfiguration_SWIFT : public RGWCORSConfiguration
     ~RGWCORSConfiguration_SWIFT(){}
     int create_update(const char *allow_origins, const char *allow_headers, 
                   const char *expose_headers, const char *max_age){
-      set<string> o, h;
+      set<string> o, h, oc;
       list<string> e;
       unsigned a = CORS_MAX_AGE_INVALID;
       uint8_t flags = RGW_CORS_ALL;
 
-      char_to_str_list(allow_origins, o, true);
-      if(allow_headers)
-        char_to_str_list(allow_headers, h);
-      if(expose_headers)
-        char_to_str_list(expose_headers, e);
+      string ao = allow_origins;
+      get_str_set(ao, oc);
+      if(oc.empty())
+        return -EINVAL;
+      for(set<string>::iterator it = oc.begin(); it != oc.end(); it++){
+        string host = *it;
+        if(validate_name_string(host) != 0)
+          return -EINVAL;
+        o.insert(o.end(), host);
+      }
+      if(allow_headers){
+        string ah = allow_headers;
+        get_str_set(ah, h);
+        for(set<string>::iterator it = h.begin();
+            it != h.end(); it++){
+          string s = (*it);
+          if(validate_name_string(s) != 0)
+            return -EINVAL;
+        }
+      }
+      if(expose_headers){
+        string eh = expose_headers;
+        get_str_list(eh, e);
+      }
       if(max_age){
         char *end = NULL;
         a = strtol(max_age, &end, 10);

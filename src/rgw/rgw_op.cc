@@ -1896,7 +1896,7 @@ void RGWPutCORS::execute()
 
   ldout(s->cct, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
   if (!parser.parse(data, len, 1)) {
-    ret = -EACCES;
+    ret = -EINVAL;
     return;
   }
   cors_config = (RGWCORSConfiguration_S3 *)parser.find_first("CORSConfiguration");
@@ -1959,30 +1959,28 @@ void RGWDeleteCORS::execute()
 }
 
 void RGWOptionsCORS::get_response_params(string& hdrs, string& exp_hdrs, unsigned *max_age){
-  for(const char *t = req_hdrs, *comma = req_hdrs; comma; t = comma + 1){
-    /*Strip the spaces*/
-    while(*t == ' ')t++;
-    comma = strchr(t, ',');
-    unsigned len = comma?(comma - t):strlen(t);
-    while((len > 0) && (*(t + (len - 1)) == ' '))len--;
-    if(!rule->is_header_allowed(t, len)){
-      dout(5) << "Header " << string(t, len) << " is not registered in this rule" << dendl;
-    }else {
-      if(hdrs.length() > 0)hdrs.append(",");
-      hdrs.append(string(t, len));
+  if(req_hdrs){
+    list<string> hl;
+    get_str_list(req_hdrs, hl);
+    for(list<string>::iterator it = hl.begin(); it != hl.end(); it++){
+      if(!rule->is_header_allowed((*it).c_str(), (*it).length())){
+        dout(5) << "Header " << (*it) << " is not registered in this rule" << dendl;
+      }else {
+        if(hdrs.length() > 0)hdrs.append(",");
+        hdrs.append((*it));
+      }
     }
   }
   rule->format_exp_headers(exp_hdrs);
   *max_age = rule->get_max_age();
 }
 
-void RGWOptionsCORS::validate_cors_request(){
+int RGWOptionsCORS::validate_cors_request(){
   RGWCORSConfiguration *cc = s->bucket_cors;
   rule = cc->host_name_rule(origin);
   if(!rule){
     dout(10) << "There is no corsrule present for " << origin << dendl;
-    ret = -ENOENT;
-    return;
+    return -ENOENT;
   }
 
   uint8_t flags = 0;
@@ -1997,8 +1995,9 @@ void RGWOptionsCORS::validate_cors_request(){
   }else {
     dout(5) << "Method " << req_meth << " is not supported" << dendl;
     req_meth = NULL;
-    ret = -ENOTSUP;
+    return -ENOTSUP;
   }
+  return 0;
 }
 
 void RGWOptionsCORS::execute()
@@ -2025,7 +2024,7 @@ void RGWOptionsCORS::execute()
     return;
   }
   req_hdrs = s->env->get("HTTP_ACCESS_CONTROL_ALLOW_HEADERS");
-  validate_cors_request();
+  ret = validate_cors_request();
   if(!rule){
     origin = req_meth = NULL;
     return;

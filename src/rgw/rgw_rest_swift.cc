@@ -376,12 +376,13 @@ int RGWPutMetadata_ObjStore_SWIFT::get_params()
       int r = swift_cors->create_update(allow_origins, allow_headers, expose_headers, max_age);
       if (r < 0){
         dout(0) << "Error creating/updating the cors configuration" << dendl;
+        delete swift_cors;
         return r;
       }
       has_cors = true;
       cors_config = *swift_cors;
       cors_config.dump();
-      if(!s->bucket_cors)delete swift_cors;
+      delete swift_cors;
     }
   }
 
@@ -533,8 +534,7 @@ send_data:
 
 void RGWOptionsCORS_ObjStore_SWIFT::send_response()
 {
-  string hdrs = "";
-  string exp_hdrs = "";
+  string hdrs, exp_hdrs;
   uint32_t max_age = CORS_MAX_AGE_INVALID;
   /*EACCES means, there is no CORS registered yet for the bucket
    *ENOENT means, there is no match of the Origin in the list of CORSRule

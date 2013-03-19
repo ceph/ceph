@@ -337,7 +337,7 @@ size_t cors_read_xml(void *ptr, size_t s, size_t n, void *ud){
     cout << "Cannot copy xml data, as len is not enough\n";
     return 0;
   }
-  cout << "Copying \n" << ss->str() << "\nlen : " << len << "\n"; 
+  /*cout << "Copying \n" << ss->str() << "\nlen : " << len << "\n"; */
   memcpy(ptr, (void *)ss->str().c_str(), len);
   return len;
 }
@@ -395,15 +395,15 @@ void send_cors(set<string> o, set<string> h,
   }
 }
 
-TEST(TestCORS_S3, getcors_firsttime){
+TEST(TestCORS, getcors_firsttime){
   if(g_test->get_key_type() == KEY_TYPE_SWIFT)return;
   ASSERT_EQ(0, create_bucket());
   g_test->send_request(string("GET"), string("/"S3_BUCKET_NAME"?cors"));
-  EXPECT_EQ(204U, g_test->get_resp_code());
+  EXPECT_EQ(404U, g_test->get_resp_code());
   ASSERT_EQ(0, delete_bucket());
 }
 
-TEST(TestCORS_S3, putcors_firsttime){
+TEST(TestCORS, putcors_firsttime){
   ASSERT_EQ(0, create_bucket());
   set<string> origins, h;
   list<string> e;
@@ -419,7 +419,7 @@ TEST(TestCORS_S3, putcors_firsttime){
     g_test->send_request(string("GET"), string("/"S3_BUCKET_NAME"?cors"));
     EXPECT_EQ(200U, g_test->get_resp_code());
 
-    RGWCORSRule *r = xml_to_cors_rule(string("http://www.example.com"));
+    RGWCORSRule *r = xml_to_cors_rule(string("example.com"));
     EXPECT_TRUE(r != NULL);
     if(!r)return;
 
@@ -429,7 +429,49 @@ TEST(TestCORS_S3, putcors_firsttime){
   ASSERT_EQ(0, delete_bucket());
 }
 
-TEST(TestCORS_S3, optionscors_test_options_1){
+TEST(TestCORS, putcors_invalid_hostname){
+  ASSERT_EQ(0, create_bucket());
+  set<string> origins, h;
+  list<string> e;
+
+  origins.insert(origins.end(), "*.example.*");
+  uint8_t flags = RGW_CORS_GET | RGW_CORS_PUT;
+  send_cors(origins, h, e, flags, CORS_MAX_AGE_INVALID);
+  EXPECT_EQ((400U), g_test->get_resp_code());
+  origins.erase(origins.begin(), origins.end());
+ 
+  if((g_test->get_key_type() != KEY_TYPE_SWIFT)){
+    origins.insert(origins.end(), "");
+    send_cors(origins, h, e, flags, CORS_MAX_AGE_INVALID);
+    EXPECT_EQ((400U), g_test->get_resp_code());
+    origins.erase(origins.begin(), origins.end());
+  }
+  ASSERT_EQ(0, delete_bucket());
+}
+
+TEST(TestCORS, putcors_invalid_headers){
+  ASSERT_EQ(0, create_bucket());
+  set<string> origins, h;
+  list<string> e;
+
+  origins.insert(origins.end(), "www.example.com");
+  h.insert(h.end(), "*-Header-*");
+  uint8_t flags = RGW_CORS_GET | RGW_CORS_PUT;
+  send_cors(origins, h, e, flags, CORS_MAX_AGE_INVALID);
+  EXPECT_EQ((400U), g_test->get_resp_code());
+  h.erase(h.begin(), h.end());
+ 
+  if((g_test->get_key_type() != KEY_TYPE_SWIFT)){
+    h.insert(h.end(), "");
+    flags = RGW_CORS_GET | RGW_CORS_PUT;
+    send_cors(origins, h, e, flags, CORS_MAX_AGE_INVALID);
+    EXPECT_EQ((400U), g_test->get_resp_code());
+    h.erase(h.begin(), h.end());
+  }
+  ASSERT_EQ(0, delete_bucket());
+}
+
+TEST(TestCORS, optionscors_test_options_1){
   ASSERT_EQ(0, create_bucket());
   set<string> origins, h;
   list<string> e;
@@ -461,7 +503,7 @@ TEST(TestCORS_S3, optionscors_test_options_1){
   ASSERT_EQ(0, delete_bucket());
 }
 
-TEST(TestCORS_S3, optionscors_test_options_2){
+TEST(TestCORS, optionscors_test_options_2){
   ASSERT_EQ(0, create_bucket());
   set<string> origins, h;
   list<string> e;
@@ -493,24 +535,10 @@ TEST(TestCORS_S3, optionscors_test_options_2){
     s = g_test->get_response(string("Access-Control-Allow-Methods"));
     EXPECT_EQ(0, s.compare("HEAD"));
   }
-  g_test->set_extra_header(string("Origin: example.com"));
-  g_test->set_extra_header(string("Access-Control-Request-Method: HEAD"));
-  g_test->send_request(string("OPTIONS"), BUCKET_URL);
-  if(g_test->get_key_type() == KEY_TYPE_S3){
-    EXPECT_EQ(200U, g_test->get_resp_code());
-    if(g_test->get_resp_code() == 200){
-      string s = g_test->get_response(string("Access-Control-Allow-Origin"));
-      EXPECT_EQ(0U, s.length());
-      s = g_test->get_response(string("Access-Control-Allow-Methods"));
-      EXPECT_EQ(0U, s.length());
-    }
-  }else{
-    EXPECT_EQ(401U, g_test->get_resp_code());
-  }
   ASSERT_EQ(0, delete_bucket());
 }
 
-TEST(TestCORS_S3, optionscors_test_options_3){
+TEST(TestCORS, optionscors_test_options_3){
   ASSERT_EQ(0, create_bucket());
   set<string> origins, h;
   list<string> e;
@@ -576,7 +604,7 @@ TEST(TestCORS_S3, optionscors_test_options_3){
   ASSERT_EQ(0, delete_bucket());
 }
 
-TEST(TestCORS_S3, optionscors_test_options_4){
+TEST(TestCORS, optionscors_test_options_4){
   ASSERT_EQ(0, create_bucket());
   set<string> origins, h;
   list<string> e;
@@ -670,7 +698,7 @@ TEST(TestCORS_S3, optionscors_test_options_4){
   ASSERT_EQ(0, delete_bucket());
 }
 
-TEST(TestCORS_S3, optionscors_test_options_5){
+TEST(TestCORS, optionscors_test_options_5){
   ASSERT_EQ(0, create_bucket());
   set<string> origins, h;
   list<string> e;
@@ -698,7 +726,129 @@ TEST(TestCORS_S3, optionscors_test_options_5){
   ASSERT_EQ(0, delete_bucket());
 }
 
-TEST(TestCORS_S3, deletecors_firsttime){
+TEST(TestCORS, optionscors_test_options_6){
+  ASSERT_EQ(0, create_bucket());
+  set<string> origins, h;
+  list<string> e;
+  unsigned err = (g_test->get_key_type() == KEY_TYPE_SWIFT)?401U:403U;
+
+  origins.insert(origins.end(), "http://www.example.com");
+  uint8_t flags = RGW_CORS_GET | RGW_CORS_PUT;
+  
+  send_cors(origins, h, e, flags, CORS_MAX_AGE_INVALID);
+  EXPECT_EQ(((g_test->get_key_type() == KEY_TYPE_SWIFT)?202U:200U), g_test->get_resp_code());
+  
+  g_test->set_extra_header(string("Origin: example.com"));
+  g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
+  g_test->send_request(string("OPTIONS"), BUCKET_URL);
+  EXPECT_EQ(err, g_test->get_resp_code());
+  
+  g_test->set_extra_header(string("Origin: http://example.com"));
+  g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
+  g_test->send_request(string("OPTIONS"), BUCKET_URL);
+  EXPECT_EQ(err, g_test->get_resp_code());
+  
+  g_test->set_extra_header(string("Origin: www.example.com"));
+  g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
+  g_test->send_request(string("OPTIONS"), BUCKET_URL);
+  EXPECT_EQ(err, g_test->get_resp_code());
+  
+  g_test->set_extra_header(string("Origin: http://www.example.com"));
+  g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
+  g_test->send_request(string("OPTIONS"), BUCKET_URL);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+
+  origins.erase(origins.begin(), origins.end());
+  origins.insert(origins.end(), "*.example.com");
+  send_cors(origins, h, e, flags, CORS_MAX_AGE_INVALID);
+  EXPECT_EQ(((g_test->get_key_type() == KEY_TYPE_SWIFT)?202U:200U), g_test->get_resp_code());
+
+  g_test->set_extra_header(string("Origin: .example.com"));
+  g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
+  g_test->send_request(string("OPTIONS"), BUCKET_URL);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+  
+  g_test->set_extra_header(string("Origin: http://example.com"));
+  g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
+  g_test->send_request(string("OPTIONS"), BUCKET_URL);
+  EXPECT_EQ(err, g_test->get_resp_code());
+  
+  g_test->set_extra_header(string("Origin: www.example.com"));
+  g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
+  g_test->send_request(string("OPTIONS"), BUCKET_URL);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+  
+  g_test->set_extra_header(string("Origin: http://www.example.com"));
+  g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
+  g_test->send_request(string("OPTIONS"), BUCKET_URL);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+
+  g_test->set_extra_header(string("Origin: https://www.example.com"));
+  g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
+  g_test->send_request(string("OPTIONS"), BUCKET_URL);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+
+  origins.erase(origins.begin(), origins.end());
+  origins.insert(origins.end(), "https://example*.com");
+  send_cors(origins, h, e, flags, CORS_MAX_AGE_INVALID);
+  EXPECT_EQ(((g_test->get_key_type() == KEY_TYPE_SWIFT)?202U:200U), g_test->get_resp_code());
+
+  g_test->set_extra_header(string("Origin: https://example.com"));
+  g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
+  g_test->send_request(string("OPTIONS"), BUCKET_URL);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+  
+  g_test->set_extra_header(string("Origin: http://example.com"));
+  g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
+  g_test->send_request(string("OPTIONS"), BUCKET_URL);
+  EXPECT_EQ(err, g_test->get_resp_code());
+  
+  g_test->set_extra_header(string("Origin: www.example.com"));
+  g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
+  g_test->send_request(string("OPTIONS"), BUCKET_URL);
+  EXPECT_EQ(err, g_test->get_resp_code());
+
+  g_test->set_extra_header(string("Origin: https://example.a.b.com"));
+  g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
+  g_test->send_request(string("OPTIONS"), BUCKET_URL);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+
+  ASSERT_EQ(0, delete_bucket());
+}
+
+TEST(TestCORS, optionscors_test_options_7){
+  ASSERT_EQ(0, create_bucket());
+  set<string> origins, h;
+  list<string> e;
+
+  origins.insert(origins.end(), "example.com");
+  h.insert(h.end(), "Header*");
+  h.insert(h.end(), "Hdr-*-Length");
+  h.insert(h.end(), "*-Length");
+  uint8_t flags = RGW_CORS_GET | RGW_CORS_PUT;
+  
+  send_cors(origins, h, e, flags, CORS_MAX_AGE_INVALID);
+  EXPECT_EQ(((g_test->get_key_type() == KEY_TYPE_SWIFT)?202U:200U), g_test->get_resp_code());
+  
+  g_test->set_extra_header(string("Origin: example.com"));
+  g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
+  g_test->set_extra_header(string("Access-Control-Allow-Headers: Header1, Header2, Header3, "
+                                  "Hdr--Length, Hdr-1-Length, Header-Length, Content-Length"));
+  g_test->send_request(string("OPTIONS"), BUCKET_URL);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+  if(g_test->get_resp_code() == 200){
+    string s = g_test->get_response(string("Access-Control-Allow-Origin"));
+    EXPECT_EQ(0, s.compare("example.com"));
+    s = g_test->get_response(string("Access-Control-Allow-Methods"));
+    EXPECT_EQ(0, s.compare("GET"));
+    s = g_test->get_response(string("Access-Control-Allow-Headers"));
+    EXPECT_EQ(0, s.compare("Header1,Header2,Header3,"
+                           "Hdr--Length,Hdr-1-Length,Header-Length,Content-Length"));
+  }
+  ASSERT_EQ(0, delete_bucket());
+}
+
+TEST(TestCORS, deletecors_firsttime){
   if(g_test->get_key_type() == KEY_TYPE_SWIFT)return;
   ASSERT_EQ(0, create_bucket());
   g_test->send_request("DELETE", "/"S3_BUCKET_NAME"?cors");
@@ -706,7 +856,7 @@ TEST(TestCORS_S3, deletecors_firsttime){
   ASSERT_EQ(0, delete_bucket());
 }
 
-TEST(TestCORS_S3, deletecors_test){
+TEST(TestCORS, deletecors_test){
   set<string> origins, h;
   list<string> e;
   if(g_test->get_key_type() == KEY_TYPE_SWIFT)return;
@@ -722,7 +872,7 @@ TEST(TestCORS_S3, deletecors_test){
   g_test->send_request("DELETE", "/"S3_BUCKET_NAME"?cors");
   EXPECT_EQ(204U, g_test->get_resp_code());
   g_test->send_request("GET", "/"S3_BUCKET_NAME"?cors");
-  EXPECT_EQ(204U, g_test->get_resp_code());
+  EXPECT_EQ(404U, g_test->get_resp_code());
   ASSERT_EQ(0, delete_bucket());
 }
 
@@ -745,7 +895,7 @@ int main(int argc, char *argv[]){
   }
 #ifdef GTEST
   int r = RUN_ALL_TESTS();
-  //int r = TestCORS_S3.optionscors_test_options_1();
+  //int r = TestCORS.optionscors_test_options_1();
   if (r >= 0) {
     cout << "There are failures in the test case\n";
     return -1;

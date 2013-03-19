@@ -30,7 +30,7 @@ static bool get_next_token(const std::string &s, size_t& pos, const char *delims
     end = start + 1;
     pos = end;
   } else {
-    end = s.find_first_of(delims, start+1);
+    end = s.find_first_of(delims, start);
     if (end >= 0)
       pos = end + 1;
   }

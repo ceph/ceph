@@ -17,7 +17,8 @@
 #include <map>
 
 #include "include/types.h"
-
+#include "common/debug.h"
+#include "include/str_list.h"
 #include "common/Formatter.h"
 
 #include "rgw_cors.h"
@@ -48,17 +49,50 @@ void RGWCORSRule::erase_origin_if_present(string& origin, bool *rule_empty){
   }
 }
 
-bool RGWCORSRule::is_origin_present(list<string>& origins){
-  if(allowed_origins.find("*") != allowed_origins.end()) 
+static bool is_string_in_set(set<string>& s, string h){
+  if((s.find("*") != s.end()) || 
+          (s.find(h) != s.end())){
     return true;
-  for(list<string>::iterator it_o = origins.begin();
-      it_o != origins.end(); it_o++){
-    dout(10) << "** checking if " << *it_o << " is present" << dendl;
-    if(allowed_origins.find(*it_o) != allowed_origins.end()){
+  }
+  /* The header can be Content-*-type, or Content-* */
+  for(set<string>::iterator it = s.begin();
+      it != s.end(); it++){
+    unsigned off;
+    if((off = (*it).find("*"))!=string::npos){
+      list<string> ssplit;
+      unsigned flen = 0;
+      
+      get_str_list((*it), "*", ssplit);
+      if(off != 0){
+        string sl = ssplit.front();
+        flen = sl.length();
+        dout(10) << "Finding " << sl << ", in " << h << ", at offset 0" << dendl;
+        if(h.find(sl) != 0)
+          continue;
+        ssplit.pop_front();
+      }
+      if(off != ((*it).length() - 1)){
+        string sl = ssplit.front();
+        dout(10) << "Finding " << sl << ", in " << h 
+          << ", at offset not less than " << flen << dendl;
+        off = h.find(sl);
+        if((off == string::npos) || (off < flen))
+          continue;
+      }
       return true;
     }
   }
   return false;
+}
+
+bool RGWCORSRule::is_origin_present(const char *o){
+  string origin = o;
+  return is_string_in_set(allowed_origins, origin);
+}
+
+bool RGWCORSRule::is_header_allowed(const char *h, size_t len){
+  string hdr(h, len);
+  return is_string_in_set(allowed_hdrs, hdr);
 }
 
 void RGWCORSRule::format_exp_headers(string& s){
@@ -71,29 +105,11 @@ void RGWCORSRule::format_exp_headers(string& s){
   }
 }
 
-void RGWCORSConfiguration::get_origins_list(const char *origin, list<string>& origins){
-  const char *start, *t;
-  string proto, host_name, sorigin = origin;
-  parse_host_name(sorigin, host_name, proto);
-  start = t = host_name.c_str();
-  while(t){
-    if(t == start)
-      origins.push_back(proto+host_name);
-    else{
-      t++;
-      origins.push_back(proto + string("*.") + string(t));
-    }
-    t = strchr(t, '.');
-  }
-}
-
 RGWCORSRule * RGWCORSConfiguration::host_name_rule(const char *origin){
-  list<string> origins;
-  get_origins_list(origin, origins);
   for(list<RGWCORSRule>::iterator it_r = rules.begin(); 
       it_r != rules.end(); it_r++){
     RGWCORSRule& r = (*it_r);
-    if(r.is_origin_present(origins))
+    if(r.is_origin_present(origin))
       return &r;
   }
   return NULL;
@@ -126,29 +142,4 @@ void RGWCORSConfiguration::dump(){
     dout(10) << " <<<<<<< Rule " << loop << " >>>>>>> " << dendl;
     (*it).dump_origins();
   }
-}
-
-
-void parse_host_name(string& in, string& host_name, string& proto){
-  string _in = in;
-  /*check for protocol name first*/
-  proto = ""; /*For everything else except https*/
-  if(_in.compare(0, 8, "https://") == 0)
-    proto = "https://";
-  unsigned off = _in.find("://");
-  if(off != string::npos)
-    _in.assign(_in, off+3, string::npos);
-  
-  /*remove www. prefix*/
-  off = _in.find("www."); 
-  if(off != string::npos){
-    if(off == 0){
-      /*there could be a hostname http://www.org or http://www.* */
-      if((off + 3) != _in.find_last_of(".") ||
-         ((_in.length() > 4) && (_in[4] == '*'))){
-        _in.assign(_in, 4, string::npos);
-      }
-    }
-  }
-  host_name = _in;
 }
