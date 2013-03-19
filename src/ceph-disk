@@ -1339,10 +1339,10 @@ def find_cluster_by_uuid(uuid):
     no_fsid = []
     if not os.path.exists('/etc/ceph'):
         return None
-    for file in os.listdir('/etc/ceph'):
-        if not file.endswith('.conf'):
+    for conf_file in os.listdir('/etc/ceph'):
+        if not conf_file.endswith('.conf'):
             continue
-        cluster = file[:-5]
+        cluster = conf_file[:-5]
         u = get_conf(cluster, 'fsid')
         if u is None:
             no_fsid.append(cluster)
