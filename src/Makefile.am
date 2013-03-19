@@ -1860,7 +1860,7 @@ noinst_HEADERS = \
         mon/MonClient.h\
         mon/MonMap.h\
         mon/Monitor.h\
-        mon/MonitorHealthService.h\
+        mon/HealthService.h\
 	mon/MonitorStore.h\
         mon/MonitorDBStore.h\
         mon/OSDMonitor.h\
