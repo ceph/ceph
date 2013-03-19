@@ -27,7 +27,9 @@
 
 struct HealthService : public QuorumService
 {
-  static const int SERVICE_HEALTH_DATA              = 0x01;
+  enum {
+    SERVICE_HEALTH_DATA              = 0x01
+  };
 
   HealthService(Monitor *m) : QuorumService(m) { }
   virtual ~HealthService() { }
