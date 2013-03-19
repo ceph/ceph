@@ -51,27 +51,27 @@ extern bool rgw_user_is_authenticated(RGWUserInfo& info);
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
  */
-extern int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_info, obj_version *objv, bool exclusive);
+extern int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_info, RGWObjVersionTracker *objv_tracker, bool exclusive);
 /**
  * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_uid(RGWRados *store, string& user_id, RGWUserInfo& info);
+extern int rgw_get_user_info_by_uid(RGWRados *store, string& user_id, RGWUserInfo& info, RGWObjVersionTracker *objv_tracker = NULL);
 /**
  * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info);
+extern int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info, RGWObjVersionTracker *objv_tracker = NULL);
 /**
  * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUserInfo& info);
+extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUserInfo& info, RGWObjVersionTracker *objv_tracker = NULL);
 /**
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, RGWUserInfo& info);
+extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, RGWUserInfo& info, RGWObjVersionTracker *objv_tracker = NULL);
 /**
  * Given an RGWUserInfo, deletes the user and its bucket ACLs.
  */
@@ -139,6 +139,7 @@ struct RGWUserAdminOpState {
   uint32_t max_buckets;
   __u8 suspended;
   std::string caps;
+  RGWObjVersionTracker objv;
 
   // subuser attributes
   std::string subuser;

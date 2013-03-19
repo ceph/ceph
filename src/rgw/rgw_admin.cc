@@ -549,6 +549,7 @@ int main(int argc, char **argv)
   RGWBucketAdminOpState bucket_op;
   string infile;
   string metadata_key;
+  RGWObjVersionTracker objv_tracker;
 
   std::string val;
   std::ostringstream errs;

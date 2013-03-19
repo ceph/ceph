@@ -418,6 +418,34 @@ int RGWRegionMap::update(RGWRegion& region)
   return 0;
 }
 
+
+void RGWObjVersionTracker::prepare_op_for_read(ObjectReadOperation *op)
+{
+  obj_version *check_objv = version_for_check();
+
+  if (check_objv) {
+    cls_version_check(*op, *check_objv, VER_COND_EQ);
+  }
+
+  cls_version_read(*op, &read_version);
+}
+
+void RGWObjVersionTracker::prepare_op_for_write(ObjectWriteOperation *op)
+{
+  obj_version *check_objv = version_for_check();
+  obj_version *modify_version = version_for_write();
+
+  if (check_objv) {
+    cls_version_check(*op, *check_objv, VER_COND_EQ);
+  }
+
+  if (modify_version) {
+    cls_version_set(*op, *modify_version);
+  } else {
+    cls_version_inc(*op);
+  }
+}
+
 void RGWObjManifest::append(RGWObjManifest& m)
 {
   map<uint64_t, RGWObjManifestPart>::iterator iter;
@@ -1410,7 +1438,7 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
 		  const string *ptag,
                   list<string> *remove_objs,
                   bool modify_version,
-                  obj_version *objv)
+                  RGWObjVersionTracker *objv_tracker)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -1439,12 +1467,8 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
       return r;
   }
 
-  if (modify_version) {
-    if (objv) {
-      cls_version_set(op, *objv);
-    } else {
-      cls_version_inc(op);
-    }
+  if (objv_tracker) {
+    objv_tracker->prepare_op_for_write(&op);
   }
 
   if (data) {
@@ -1507,6 +1531,10 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
   r = io_ctx.operate(oid, &op);
   if (r < 0)
     goto done_cancel;
+
+  if (objv_tracker) {
+    objv_tracker->apply_write();
+  }
 
   epoch = io_ctx.get_last_version();
 
@@ -2239,7 +2267,7 @@ static void generate_fake_tag(CephContext *cct, map<string, bufferlist>& attrset
   tag_bl.append(tag.c_str(), tag.size() + 1);
 }
 
-int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, obj_version *objv)
+int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker)
 {
   RGWObjState *s = rctx->get_state(obj);
   ldout(cct, 20) << "get_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << " s->prefetch_data=" << s->prefetch_data << dendl;
@@ -2247,7 +2275,7 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state
   if (s->has_attrs)
     return 0;
 
-  int r = obj_stat(rctx, obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), objv);
+  int r = obj_stat(rctx, obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), objv_tracker);
   if (r == -ENOENT) {
     s->exists = false;
     s->has_attrs = true;
@@ -2642,7 +2670,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
             const char *if_nomatch,
             uint64_t *total_size,
             uint64_t *obj_size,
-            obj_version *objv,
+            RGWObjVersionTracker *objv_tracker,
             void **handle,
             struct rgw_err *err)
 {
@@ -2679,7 +2707,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
     rctx = new_ctx;
   }
 
-  r = get_obj_state(rctx, obj, &astate, objv);
+  r = get_obj_state(rctx, obj, &astate, objv_tracker);
   if (r < 0)
     goto done_err;
 
@@ -2983,7 +3011,7 @@ int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
 }
 
 
-int RGWRados::get_obj(void *ctx, obj_version *objv, void **handle, rgw_obj& obj,
+int RGWRados::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **handle, rgw_obj& obj,
                       bufferlist& bl, off_t ofs, off_t end)
 {
   rgw_bucket bucket;
@@ -3053,8 +3081,8 @@ int RGWRados::get_obj(void *ctx, obj_version *objv, void **handle, rgw_obj& obj,
       goto done_ret;
   }
 
-  if (objv) {
-    cls_version_check(op, *objv, VER_COND_EQ);
+  if (objv_tracker) {
+    objv_tracker->prepare_op_for_read(&op);
   }
 
   read_len = len;
@@ -3561,7 +3589,7 @@ int RGWRados::read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& 
 }
 
 int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch, map<string, bufferlist> *attrs, bufferlist *first_chunk,
-                       obj_version *objv)
+                       RGWObjVersionTracker *objv_tracker)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -3578,8 +3606,8 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
   time_t mtime = 0;
 
   ObjectReadOperation op;
-  if (objv) {
-    cls_version_read(op, objv);
+  if (objv_tracker) {
+    objv_tracker->prepare_op_for_read(&op);
   }
   op.getxattrs(&attrset, NULL);
   op.stat(&size, &mtime, NULL);

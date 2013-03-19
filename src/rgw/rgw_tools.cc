@@ -15,7 +15,7 @@
 static map<string, string> ext_mime_map;
 
 int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, string& oid, const char *data, size_t size, bool exclusive,
-                       obj_version *objv, map<string, bufferlist> *pattrs)
+                       RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs)
 {
   map<string,bufferlist> no_attrs;
   if (!pattrs)
@@ -23,18 +23,19 @@ int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, string& oid, cons
 
   rgw_obj obj(bucket, oid);
 
-  int ret = rgwstore->put_system_obj(NULL, obj, data, size, exclusive, NULL, *pattrs, objv);
+  int ret = rgwstore->put_system_obj(NULL, obj, data, size, exclusive, NULL, *pattrs, objv_tracker);
 
   if (ret == -ENOENT) {
     ret = rgwstore->create_pool(bucket);
     if (ret >= 0)
-      ret = rgwstore->put_system_obj(NULL, obj, data, size, exclusive, NULL, *pattrs, objv);
+      ret = rgwstore->put_system_obj(NULL, obj, data, size, exclusive, NULL, *pattrs, objv_tracker);
   }
 
   return ret;
 }
 
-int rgw_get_system_obj(RGWRados *rgwstore, void *ctx, rgw_bucket& bucket, string& key, bufferlist& bl, obj_version *objv, map<string, bufferlist> *pattrs)
+int rgw_get_system_obj(RGWRados *rgwstore, void *ctx, rgw_bucket& bucket, string& key, bufferlist& bl,
+                       RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs)
 {
   int ret;
   struct rgw_err err;
@@ -42,13 +43,15 @@ int rgw_get_system_obj(RGWRados *rgwstore, void *ctx, rgw_bucket& bucket, string
   bufferlist::iterator iter;
   int request_len = READ_CHUNK_LEN;
   rgw_obj obj(bucket, key);
+
   do {
     ret = rgwstore->prepare_get_obj(ctx, obj, NULL, NULL, pattrs, NULL,
-                                  NULL, NULL, NULL, NULL, NULL, NULL, objv, &handle, &err);
+                                  NULL, NULL, NULL, NULL, NULL, NULL, objv_tracker, &handle, &err);
     if (ret < 0)
       return ret;
 
-    ret = rgwstore->get_obj(ctx, objv, &handle, obj, bl, 0, request_len - 1);
+    ret = rgwstore->get_obj(ctx, objv_tracker, &handle, obj, bl, 0, request_len - 1);
+#warning FIXME objv_tracker
     rgwstore->finish_get_obj(&handle);
     if (ret < 0)
       return ret;
