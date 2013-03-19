@@ -842,6 +842,8 @@ void OSD::handle_signal(int signum)
 int OSD::pre_init()
 {
   Mutex::Locker lock(osd_lock);
+  if (is_stopping())
+    return 0;
   
   assert(!store);
   store = create_object_store(dev_path, journal_path);
@@ -911,6 +913,8 @@ public:
 int OSD::init()
 {
   Mutex::Locker lock(osd_lock);
+  if (is_stopping())
+    return 0;
 
   tick_timer.init();
   service.backfill_request_timer.init();
@@ -1058,6 +1062,7 @@ int OSD::init()
     monc->shutdown();
     store->umount();
     osd_lock.Lock(); // locker is going to unlock this on function exit
+    assert(!is_stopping());
     return r;
   }
 
@@ -1066,6 +1071,7 @@ int OSD::init()
   }
 
   osd_lock.Lock();
+  assert(!is_stopping());
 
   dout(10) << "ensuring pgs have consumed prior maps" << dendl;
   consume_map();
@@ -2633,6 +2639,8 @@ void OSD::ms_handle_connect(Connection *con)
 {
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
     Mutex::Locker l(osd_lock);
+    if (is_stopping())
+      return;
     dout(10) << "ms_handle_connect on mon" << dendl;
     if (is_booting()) {
       start_boot();
@@ -2680,6 +2688,9 @@ void OSD::start_boot()
 void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
 {
   Mutex::Locker l(osd_lock);
+  if (is_stopping()) {
+    return;
+  }
   dout(10) << "_maybe_boot mon has osdmaps " << oldest << ".." << newest << dendl;
 
   if (is_initializing()) {
@@ -3379,6 +3390,8 @@ bool OSD::ms_dispatch(Message *m)
   // lock!
 
   osd_lock.Lock();
+  if (is_stopping())
+    return true;
 
   while (dispatch_running) {
     dout(10) << "ms_dispatch waiting for other dispatch thread to complete" << dendl;
@@ -6285,6 +6298,8 @@ struct C_CompleteSplits : public Context {
     : osd(osd), pgs(in) {}
   void finish(int r) {
     Mutex::Locker l(osd->osd_lock);
+    if (osd->is_stopping())
+      return;
     PG::RecoveryCtx rctx = osd->create_context();
     set<pg_t> to_complete;
     for (set<boost::intrusive_ptr<PG> >::iterator i = pgs.begin();
