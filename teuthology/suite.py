@@ -367,8 +367,8 @@ def _results(args):
                         ))
 
     if failures or unfinished:
-        subject = ('{num_failed} failed, {num_hung} possibly hung, '
-                   'and {num_passed} passed tests in {suite}'.format(
+        subject = ('{num_failed} failed, {num_hung} hung, '
+                   '{num_passed} passed in {suite}'.format(
                 num_failed=num_failures,
                 num_hung=len(unfinished),
                 num_passed=len(passed),
@@ -390,7 +390,7 @@ These tests passed:
             timeout=args.timeout,
             )
     else:
-        subject = 'All {num_passed} tests passed in {suite}!'.format(suite=args.name, num_passed=len(passed))
+        subject = '{num_passed} passed in {suite}'.format(suite=args.name, num_passed=len(passed))
         body = '\n'.join(descriptions)
 
     try:
