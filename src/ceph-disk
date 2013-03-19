@@ -517,7 +517,7 @@ def unmount(
         log.debug('Unmounting %s', path)
         subprocess.check_call(
             args=[
-                'umount',
+                '/bin/umount',
                 '--',
                 path,
                 ],
@@ -1209,20 +1209,6 @@ def detect_fstype(
     fstype = must_be_one_line(fstype)
     return fstype
 
-
-def unmount(
-    path,
-    ):
-    try:
-        subprocess.check_call(
-            args=[
-                '/bin/umount',
-                '--',
-                path,
-                ],
-            )
-    except subprocess.CalledProcessError as e:
-        raise UnmountError(e)
 
 def mount_activate(
     dev,
