@@ -1125,6 +1125,7 @@ void Paxos::restart()
   if (!proposals.empty())
     proposals.clear();
 
+  state = STATE_RECOVERING;
   going_to_bootstrap = false;
 
   finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
