@@ -10,6 +10,7 @@
 
 class RGWRados;
 class JSONObj;
+class RGWObjVersionTracker;
 
 struct obj_version;
 
@@ -25,13 +26,21 @@ public:
   virtual void dump(Formatter *f) const = 0;
 };
 
+class RGWMetadataManager;
+
 class RGWMetadataHandler {
+  friend class RGWMetadataManager;
+
+protected:
+  virtual int put_obj(RGWRados *store, string& key, bufferlist& bl, bool exclusive,
+                      RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs = NULL) = 0;
 public:
   virtual ~RGWMetadataHandler() {}
   virtual string get_type() = 0;
 
   virtual int get(RGWRados *store, string& entry, RGWMetadataObject **obj) = 0;
-  virtual int put(RGWRados *store, string& entry, obj_version& objv, JSONObj *obj) = 0;
+  virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, JSONObj *obj) = 0;
+
 
   virtual int list_keys_init(RGWRados *store, void **phandle) = 0;
   virtual int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) = 0;
@@ -52,6 +61,10 @@ public:
 
   int register_handler(RGWMetadataHandler *handler);
 
+  RGWMetadataHandler *get_handler(const char *type);
+
+  int put_obj(RGWMetadataHandler *handler, string& key, bufferlist& bl, bool exclusive,
+              RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs = NULL);
   int get(string& metadata_key, Formatter *f);
   int put(string& metadata_key, bufferlist& bl);
 
