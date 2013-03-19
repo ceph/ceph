@@ -1804,6 +1804,7 @@ noinst_HEADERS = \
         messages/MMonGetVersion.h\
         messages/MMonGetVersionReply.h\
 	messages/MMonGlobalID.h\
+	messages/MMonHealth.h\
 	messages/MMonJoin.h\
         messages/MMonMap.h\
         messages/MMonPaxos.h\
