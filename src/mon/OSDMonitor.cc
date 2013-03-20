@@ -25,6 +25,7 @@
 #include "crush/CrushTester.h"
 
 #include "messages/MOSDFailure.h"
+#include "messages/MOSDMarkMeDown.h"
 #include "messages/MOSDMap.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDAlive.h"
@@ -540,6 +541,8 @@ bool OSDMonitor::preprocess_query(PaxosServiceMessage *m)
     return preprocess_command(static_cast<MMonCommand*>(m));
 
     // damp updates
+  case MSG_OSD_MARK_ME_DOWN:
+    return preprocess_mark_me_down(static_cast<MOSDMarkMeDown*>(m));
   case MSG_OSD_FAILURE:
     return preprocess_failure(static_cast<MOSDFailure*>(m));
   case MSG_OSD_BOOT:
@@ -568,6 +571,8 @@ bool OSDMonitor::prepare_update(PaxosServiceMessage *m)
   
   switch (m->get_type()) {
     // damp updates
+  case MSG_OSD_MARK_ME_DOWN:
+    return prepare_mark_me_down(static_cast<MOSDMarkMeDown*>(m));
   case MSG_OSD_FAILURE:
     return prepare_failure(static_cast<MOSDFailure*>(m));
   case MSG_OSD_BOOT:
@@ -664,7 +669,6 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
       goto didit;
     }
   }
-  
 
   // weird?
   if (!osdmap.have_inst(badboy)) {
@@ -699,6 +703,75 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
 
  didit:
   m->put();
+  return true;
+}
+
+class C_AckMarkedDown : public Context {
+  OSDMonitor *osdmon;
+  MOSDMarkMeDown *m;
+public:
+  C_AckMarkedDown(
+    OSDMonitor *osdmon,
+    MOSDMarkMeDown *m)
+    : osdmon(osdmon), m(m) {}
+
+  void finish(int) {
+    osdmon->mon->send_reply(
+      m,
+      new MOSDMarkMeDown(
+	m->fsid,
+	m->get_target(),
+	m->get_epoch(),
+	m->ack));
+  }
+  ~C_AckMarkedDown() {
+    m->put();
+  }
+};
+
+bool OSDMonitor::preprocess_mark_me_down(MOSDMarkMeDown *m)
+{
+  int requesting_down = m->get_target().name.num();
+
+  // check permissions
+  if (check_source(m, m->fsid))
+    goto didit;
+
+  // first, verify the reporting host is valid
+  if (m->get_orig_source().is_osd()) {
+    int from = m->get_orig_source().num();
+    if (!osdmap.exists(from) ||
+	osdmap.get_addr(from) != m->get_orig_source_inst().addr ||
+	osdmap.is_down(from)) {
+      dout(5) << "preprocess_mark_me_down from dead osd."
+	      << from << ", ignoring" << dendl;
+      send_incremental(m, m->get_epoch()+1);
+      goto didit;
+    }
+  }
+
+  // no down might be set
+  if (!can_mark_down(requesting_down))
+    goto didit;
+
+  dout(10) << "MOSDMarkMeDown for: " << m->get_target() << dendl;
+  return false;
+
+ didit:
+  Context *c(new C_AckMarkedDown(this, m));
+  c->complete(0);
+  return true;
+}
+
+bool OSDMonitor::prepare_mark_me_down(MOSDMarkMeDown *m)
+{
+  int target_osd = m->get_target().name.num();
+
+  assert(osdmap.is_up(target_osd));
+  assert(osdmap.get_addr(target_osd) == m->get_target().addr);
+
+  pending_inc.new_state[target_osd] = CEPH_OSD_UP;
+  wait_for_finished_proposal(new C_AckMarkedDown(this, m));
   return true;
 }
 
