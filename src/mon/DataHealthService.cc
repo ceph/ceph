@@ -102,14 +102,13 @@ void DataHealthService::get_health(Formatter *f,
   f->close_section(); // data_health
 }
 
-void DataHealthService::update_stats()
+int DataHealthService::update_stats()
 {
   struct statfs stbuf;
   int err = ::statfs(g_conf->mon_data.c_str(), &stbuf);
   if (err < 0) {
-    assert(errno != EIO);
-    mon->clog.error() << __func__ << " statfs error: " << cpp_strerror(errno) << "\n";
-    return;
+    derr << __func__ << " statfs error: " << cpp_strerror(errno) << dendl;
+    return -errno;
   }
 
   entity_inst_t our_inst = mon->monmap->get_inst(mon->name);
@@ -123,6 +122,7 @@ void DataHealthService::update_stats()
           << " total " << ours.kb_total << " used " << ours.kb_used << " avail " << ours.kb_avail
           << dendl;
   ours.last_update = ceph_clock_now(g_ceph_context);
+  return 0;
 }
 
 void DataHealthService::share_stats()
@@ -153,7 +153,13 @@ void DataHealthService::service_tick()
 {
   dout(10) << __func__ << dendl;
 
-  update_stats();
+  int err = update_stats();
+  if (err < 0) {
+    derr << "something went wrong obtaining our disk stats: "
+         << cpp_strerror(err) << dendl;
+    force_shutdown();
+    return;
+  }
   if (in_quorum())
     share_stats();
 
