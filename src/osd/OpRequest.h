@@ -26,18 +26,17 @@
 #include "osd/osd_types.h"
 
 class OpRequest;
+typedef std::tr1::shared_ptr<OpRequest> OpRequestRef;
 class OpHistory {
-  set<pair<utime_t, const OpRequest *> > arrived;
-  set<pair<double, const OpRequest *> > duration;
+  set<pair<utime_t, OpRequestRef> > arrived;
+  set<pair<double, OpRequestRef> > duration;
   void cleanup(utime_t now);
 
 public:
-  void insert(utime_t now, OpRequest *op);
+  void insert(utime_t now, OpRequestRef op);
   void dump_ops(utime_t now, Formatter *f);
 };
 
-class OpRequest;
-typedef std::tr1::shared_ptr<OpRequest> OpRequestRef;
 class OpTracker {
   class RemoveOnDelete {
     OpTracker *tracker;
