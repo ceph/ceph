@@ -1451,7 +1451,13 @@ public:
 	highest_last_pn(0), highest_accepted_pn(0)
     { }
 
-    bool needs_conversion();
+    /**
+     * Check if store needs to be converted from old format to a
+     * k/v store.
+     *
+     * @returns 0 if store doesn't need conversion; 1 if it does; <0 if error
+     */
+    int needs_conversion();
     int convert();
 
    private:
