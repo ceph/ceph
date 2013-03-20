@@ -25,6 +25,15 @@ public:
     utime_t now = ceph_clock_now(cct);
     return store->time_log_add(oid, now, section, key, bl);
   }
+  int list_entries(RGWRados *store, string& section, string& key,
+                   utime_t& from_time, utime_t& end_time,
+                   list<cls_log_entry>& entries,
+                   string& marker, bool *truncated) {
+    string oid;
+
+    store->shard_name(prefix, cct->_conf->rgw_md_log_max_shards, section, key, oid);
+    return store->time_log_list(oid, from_time, end_time,  0, entries, marker, truncated);
+  }
 };
 
 obj_version& RGWMetadataObject::get_version()
