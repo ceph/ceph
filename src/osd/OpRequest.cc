@@ -30,11 +30,11 @@ void OpHistory::insert(utime_t now, OpRequest *op)
 void OpHistory::cleanup(utime_t now)
 {
   while (arrived.size() &&
-	 now - arrived.begin()->first > (double)(g_conf->osd_op_history_duration)) {
+	 (now - arrived.begin()->first >
+	  (double)(g_conf->osd_op_history_duration))) {
     duration.erase(make_pair(
 	arrived.begin()->second->get_duration(),
 	arrived.begin()->second));
-    delete arrived.begin()->second;
     arrived.erase(arrived.begin());
   }
 
@@ -42,7 +42,6 @@ void OpHistory::cleanup(utime_t now)
     arrived.erase(make_pair(
 	duration.begin()->second->get_arrived(),
 	duration.begin()->second));
-    delete duration.begin()->second;
     duration.erase(duration.begin());
   }
 }
@@ -55,7 +54,7 @@ void OpHistory::dump_ops(utime_t now, Formatter *f)
   f->dump_int("duration to keep", g_conf->osd_op_history_duration);
   {
     f->open_array_section("Ops");
-    for (set<pair<utime_t, const OpRequest *> >::const_iterator i =
+    for (set<pair<utime_t, OpRequestRef> >::const_iterator i =
 	   arrived.begin();
 	 i != arrived.end();
 	 ++i) {
