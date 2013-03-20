@@ -22,7 +22,20 @@ int main()
 
 	printf("writing first 3 bytes of 10k file\n");
         r = write(fd, "foo", 3);
+	if (r == -1) {
+		err = errno;
+		printf("error: write() failed with: %d (%s)\n", err, strerror(err));
+		close(fd);
+		exit(err);
+	}
         r = ftruncate(fd, 10000);
+	if (r == -1) {
+		err = errno;
+		printf("error: ftruncate() failed with: %d (%s)\n", err, strerror(err));
+		close(fd);
+		exit(err);
+	}
+	
         fsync(fd);
         close(fd);
 
