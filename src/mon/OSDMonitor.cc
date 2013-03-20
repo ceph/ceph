@@ -2409,6 +2409,46 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
       } while (false);
     }
+    else if (m->cmd.size() >= 5 && m->cmd[1] == "crush" && m->cmd[2] == "link") {
+      do {
+	// osd crush link <name> <loc1> [<loc2> ...]
+	string name = m->cmd[3];
+	map<string,string> loc;
+	parse_loc_map(m->cmd, 4, &loc);
+
+	dout(0) << "linking crush item name '" << name << "' at location " << loc << dendl;
+	bufferlist bl;
+	if (pending_inc.crush.length())
+	  bl = pending_inc.crush;
+	else
+	  osdmap.crush->encode(bl);
+
+	CrushWrapper newcrush;
+	bufferlist::iterator p = bl.begin();
+	newcrush.decode(p);
+
+	if (!newcrush.name_exists(name.c_str())) {
+	  err = -ENOENT;
+	  ss << "item " << name << " does not exist";
+	  break;
+	}
+	int id = newcrush.get_item_id(name.c_str());
+
+	if (!newcrush.check_item_loc(g_ceph_context, id, loc, (int *)NULL)) {
+	  err = newcrush.link_bucket(g_ceph_context, id, loc);
+	  if (err >= 0) {
+	    ss << "linked item id " << id << " name '" << name << "' to location " << loc << " in crush map";
+	    pending_inc.crush.clear();
+	    newcrush.encode(pending_inc.crush);
+	    getline(ss, rs);
+	    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+	    return true;
+	  }
+	} else {
+	    ss << "no need to move item id " << id << " name '" << name << "' to location " << loc << " in crush map";
+	}
+      } while (false);
+    }
     else if (m->cmd.size() > 3 && m->cmd[1] == "crush" && (m->cmd[2] == "rm" || m->cmd[2] == "remove")) {
       do {
 	// osd crush rm <id>
