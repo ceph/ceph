@@ -35,7 +35,7 @@ class DataHealthService :
 {
   map<entity_inst_t,DataStats> stats;
   void handle_tell(MMonHealth *m);
-  void update_stats();
+  int update_stats();
   void share_stats();
 
   void force_shutdown() {
