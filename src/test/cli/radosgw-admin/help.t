@@ -49,6 +49,7 @@
     metadata get               get metadata info
     metadata put               put metadata info
     metadata list              list metadata info
+    mdlog show                 show metadata log
   options:
      --uid=<id>                user id
      --subuser=<name>          subuser name
