@@ -2715,7 +2715,14 @@ bool FileStore::exists(coll_t cid, const hobject_t& oid)
 int FileStore::stat(coll_t cid, const hobject_t& oid, struct stat *st)
 {
   int r = lfn_stat(cid, oid, st);
-  dout(10) << "stat " << cid << "/" << oid << " = " << r << " (size " << st->st_size << ")" << dendl;
+  if (r < 0) {
+    dout(10) << "stat " << cid << "/" << oid
+	     << " = " << r << dendl;
+  } else {
+    dout(10) << "stat " << cid << "/" << oid
+	     << " = " << r
+	     << " (size " << st->st_size << ")" << dendl;
+  }
   return r;
 }
 
