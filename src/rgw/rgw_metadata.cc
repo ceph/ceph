@@ -6,35 +6,76 @@
 
 #include "rgw_rados.h"
 
-#define META_LOG_OBJ_PREFIX "meta.log."
+int RGWMetadataLog::add_entry(RGWRados *store, string& section, string& key, bufferlist& bl) {
+  string oid;
 
-class RGWMetadataLog {
-  CephContext *cct;
-  RGWRados *store;
-  string prefix;
+  store->shard_name(prefix, cct->_conf->rgw_md_log_max_shards, section, key, oid);
+  utime_t now = ceph_clock_now(cct);
+  return store->time_log_add(oid, now, section, key, bl);
+}
 
-public:
-  RGWMetadataLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store) {
-    prefix = META_LOG_OBJ_PREFIX;
+void RGWMetadataLog::init_list_entries(RGWRados *store, utime_t& from_time, utime_t& end_time, void **handle)
+{
+  LogListCtx *ctx = new LogListCtx(store);
+
+  ctx->from_time = from_time;
+  ctx->end_time = end_time;
+
+  get_shard_oid(0, ctx->cur_oid);
+
+  *handle = (void *)ctx;
+}
+
+void RGWMetadataLog::complete_list_entries(void *handle) {
+  LogListCtx *ctx = (LogListCtx *)handle;
+  delete ctx;
+}
+
+int RGWMetadataLog::list_entries(void *handle,
+                 int max_entries,
+                 list<cls_log_entry>& entries,
+                 bool *truncated) {
+  LogListCtx *ctx = (LogListCtx *)handle;
+
+  if (ctx->done || !max_entries) {
+    *truncated = false;
+    return 0;
   }
 
-  int add_entry(RGWRados *store, string& section, string& key, bufferlist& bl) {
-    string oid;
+  entries.clear();
 
-    store->shard_name(prefix, cct->_conf->rgw_md_log_max_shards, section, key, oid);
-    utime_t now = ceph_clock_now(cct);
-    return store->time_log_add(oid, now, section, key, bl);
-  }
-  int list_entries(RGWRados *store, string& section, string& key,
-                   utime_t& from_time, utime_t& end_time,
-                   list<cls_log_entry>& entries,
-                   string& marker, bool *truncated) {
-    string oid;
+  do {
+    list<cls_log_entry> ents;
+    bool is_truncated;
+    int ret = store->time_log_list(ctx->cur_oid, ctx->from_time, ctx->end_time,
+                                 max_entries - entries.size(), ents, ctx->marker, &is_truncated);
+    if (ret = -ENOENT) {
+      is_truncated = false;
+      ret = 0;
+    }
+    if (ret < 0)
+      return ret;
 
-    store->shard_name(prefix, cct->_conf->rgw_md_log_max_shards, section, key, oid);
-    return store->time_log_list(oid, from_time, end_time,  0, entries, marker, truncated);
-  }
-};
+    if (ents.size()) {
+      entries.splice(entries.end(), ents);
+    }
+
+    if (!is_truncated) {
+      ++ctx->cur_shard;
+      if (ctx->cur_shard <cct->_conf->rgw_md_log_max_shards) {
+        get_shard_oid(ctx->cur_shard, ctx->cur_oid);
+        ctx->marker.clear();
+      } else {
+        ctx->done = true;
+        break;
+      }
+    }
+  } while (entries.size() < (size_t)max_entries);
+
+  *truncated = !ctx->done;
+
+  return 0;
+}
 
 obj_version& RGWMetadataObject::get_version()
 {

@@ -87,6 +87,7 @@ void _usage()
   cerr << "  metadata get               get metadata info\n";
   cerr << "  metadata put               put metadata info\n";
   cerr << "  metadata list              list metadata info\n";
+  cerr << "  mdlog show                 show metadata log\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --subuser=<name>          subuser name\n";
@@ -191,6 +192,7 @@ enum {
   OPT_METADATA_GET,
   OPT_METADATA_PUT,
   OPT_METADATA_LIST,
+  OPT_MDLOG_SHOW,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
@@ -215,9 +217,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "regionmap") == 0 ||
       strcmp(cmd, "zone") == 0 ||
       strcmp(cmd, "temp") == 0 ||
-      strcmp(cmd, "usage") == 0 ||
-      strcmp(cmd, "user") == 0 ||
-      strcmp(cmd, "metadata") == 0) {
+      strcmp(cmd, "metadata") == 0 ||
+      strcmp(cmd, "mdlog") == 0) {
     *need_more = true;
     return 0;
   }
@@ -348,6 +349,9 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_METADATA_PUT;
     if (strcmp(cmd, "list") == 0)
       return OPT_METADATA_LIST;
+  } else if (strcmp(prev_cmd, "mdlog") == 0) {
+    if (strcmp(cmd, "show") == 0)
+      return OPT_MDLOG_SHOW;
   }
 
   return -EINVAL;
@@ -1531,6 +1535,39 @@ next:
     formatter->flush(cout);
 
     store->meta_mgr->list_keys_complete(handle);
+  }
+
+  if (opt_cmd == OPT_MDLOG_SHOW) {
+    void *handle;
+    list<cls_log_entry> entries;
+
+    RGWMetadataLog *meta_log = store->meta_mgr->get_log();
+
+    utime_t from_time;
+    utime_t end_time;
+    meta_log->init_list_entries(store, from_time, end_time, &handle);
+
+    bool truncated;
+
+    formatter->open_array_section("entries");
+    do {
+      int ret = meta_log->list_entries(handle, 1000, entries, &truncated);
+      if (ret < 0) {
+        cerr << "ERROR: meta_log->list_entries(): " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      for (list<cls_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+        cls_log_entry& entry = *iter;
+        formatter->open_object_section("entry");
+        formatter->dump_string("name", entry.name);
+        formatter->close_section();
+      }
+      formatter->flush(cout);
+    } while (truncated);
+
+    formatter->close_section();
+    formatter->flush(cout);
   }
 
   return 0;
