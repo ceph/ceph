@@ -6,4 +6,4 @@ tasks:
 - cram:
     clients:
       client.0:
-      - https://raw.github.com/ceph/ceph/master/src/test/cli-integration/rbd/formatted-output.t
+      - https://ceph.com/git/?p=ceph.git;a=blob_plain;f=src/test/cli-integration/rbd/formatted-output.t

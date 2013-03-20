@@ -3,4 +3,4 @@ tasks:
     all:
       type: block
       num_rbd: 2
-      test: https://raw.github.com/ceph/ceph/master/qa/run_xfstests_qemu.sh
+      test: https://ceph.com/git/?p=ceph.git;a=blob_plain;f=qa/run_xfstests_qemu.sh
