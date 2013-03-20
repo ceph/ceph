@@ -625,25 +625,33 @@ bool OSDMonitor::should_propose(double& delay)
 
 // failure --
 
+bool OSDMonitor::check_source(PaxosServiceMessage *m, uuid_d fsid) {
+  // check permissions
+  MonSession *session = m->get_session();
+  if (!session)
+    return true;
+  if (!session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
+    dout(0) << "got osdmap change request from entity with insufficient caps "
+	    << session->caps << dendl;
+    return true;
+  }
+  if (fsid != mon->monmap->fsid) {
+    dout(0) << "check_source: on fsid " << fsid
+	    << " != " << mon->monmap->fsid << dendl;
+    return true;
+  }
+  return false;
+}
+
+
 bool OSDMonitor::preprocess_failure(MOSDFailure *m)
 {
   // who is target_osd
   int badboy = m->get_target().name.num();
 
   // check permissions
-  MonSession *session = m->get_session();
-  if (!session)
+  if (check_source(m, m->fsid))
     goto didit;
-  if (!session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
-    dout(0) << "got MOSDFailure from entity with insufficient caps "
-	    << session->caps << dendl;
-    goto didit;
-  }
-
-  if (m->fsid != mon->monmap->fsid) {
-    dout(0) << "preprocess_failure on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
-    goto didit;
-  }
 
   // first, verify the reporting host is valid
   if (m->get_orig_source().is_osd()) {
