@@ -786,7 +786,7 @@ def prepare_dir(
     else:
         try:
             os.unlink(os.path.join(path, 'journal_dmcrypt'))
-        except:
+        except OSError:
             pass
 
     write_one_line(path, 'ceph_fsid', cluster_uuid)
@@ -1273,7 +1273,7 @@ def mount_activate(
                 parent_dev = os.stat('/var/lib/ceph/osd').st_dev
                 if dst_dev != parent_dev:
                     other = True
-        except:
+        except OSError:
             pass
         if active:
             log.info('%s osd.%s already mounted in position; unmounting ours.' % (cluster, osd_id))
@@ -1429,7 +1429,7 @@ def activate(
                 if other != init:
                     try:
                         os.unlink(os.path.join(path, other))
-                    except:
+                    except OSError:
                         pass
 
         if not os.path.exists(os.path.join(path, 'active')):
