@@ -166,9 +166,8 @@ void DataHealthService::service_tick()
   DataStats &ours = stats[mon->monmap->get_inst(mon->name)];
 
   if (ours.latest_avail_percent <= g_conf->mon_data_avail_crit) {
-    mon->clog.error()
-      << "reached critical levels of available space on data store"
-      << " -- shutdown!\n";
+    derr << "reached critical levels of available space on data store"
+         << " -- shutdown!" << dendl;
     force_shutdown();
     return;
   }
