@@ -749,7 +749,7 @@ def adjust_symlink(target, path):
                 os.unlink(path)
             elif stat.S_ISLNK(mode):
                 old = os.readlink(path)
-                if old != journal:
+                if old != target:
                     log.debug('Removing old symlink %s -> %s', path, old)
                     os.unlink(path)
                 else:
