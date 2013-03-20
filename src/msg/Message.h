@@ -68,6 +68,7 @@
 #define MSG_OSD_BOOT         71
 #define MSG_OSD_FAILURE      72
 #define MSG_OSD_ALIVE        73
+#define MSG_OSD_MARK_ME_DOWN 74
 
 #define MSG_OSD_SUBOP        76
 #define MSG_OSD_SUBOPREPLY   77
