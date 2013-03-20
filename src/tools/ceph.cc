@@ -88,6 +88,7 @@ static void usage()
   cout << "  ceph osd getcrushmap -o <file>\n";
   cout << "  ceph osd getmap -o <file>\n";
   cout << "  ceph osd crush set <osd-id> <weight> <loc1> [<loc2> ...]\n";
+  cout << "  ceph osd crush add <osd-id> <weight> <loc1> [<loc2> ...]\n";
   cout << "  ceph osd crush move <bucketname> <loc1> [<loc2> ...]\n";
   cout << "  ceph osd crush create-or-move <osd-id> <initial-weight> <loc1> [<loc2> ...]\n";
   cout << "  ceph osd crush reweight <name> <weight>\n";

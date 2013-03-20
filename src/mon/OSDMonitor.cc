@@ -2256,7 +2256,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
       return true;
     }
-    else if (m->cmd.size() >= 5 && m->cmd[1] == "crush" && m->cmd[2] == "set") {
+    else if (m->cmd.size() >= 5 && m->cmd[1] == "crush" && (m->cmd[2] == "set" ||
+							    m->cmd[2] == "add")) {
       do {
 	// osd crush set <osd-id> [<osd.* name>] <weight> <loc1> [<loc2> ...]
 	int id = parse_osd_id(m->cmd[3].c_str(), &ss);
@@ -2297,16 +2298,22 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	bufferlist::iterator p = bl.begin();
 	newcrush.decode(p);
 
-	err = newcrush.update_item(g_ceph_context, id, weight, name, loc);
+	if (m->cmd[2] == "set") {
+	  err = newcrush.update_item(g_ceph_context, id, weight, name, loc);
+	} else {
+	  err = newcrush.insert_item(g_ceph_context, id, weight, name, loc);
+	  if (err == 0)
+	    err = 1;
+	}
 	if (err == 0) {
-	  ss << "updated item id " << id << " name '" << name << "' weight " << weight
+	  ss << m->cmd[2] << " item id " << id << " name '" << name << "' weight " << weight
 	     << " at location " << loc << " to crush map";
 	  break;
 	}
 	if (err > 0) {
 	  pending_inc.crush.clear();
 	  newcrush.encode(pending_inc.crush);
-	  ss << "updated item id " << id << " name '" << name << "' weight " << weight
+	  ss << m->cmd[2] << " item id " << id << " name '" << name << "' weight " << weight
 	     << " at location " << loc << " to crush map";
 	  getline(ss, rs);
 	  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
