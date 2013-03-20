@@ -349,6 +349,26 @@ int CrushWrapper::move_bucket(CephContext *cct, int id, const map<string,string>
   return insert_item(cct, id, bucket_weight / (float)0x10000, id_name, loc);
 }
 
+int CrushWrapper::link_bucket(CephContext *cct, int id, const map<string,string>& loc)
+{
+  // sorry this only works for buckets
+  if (id >= 0)
+    return -EINVAL;
+
+  if (!item_exists(id))
+    return -ENOENT;
+
+  // get the name of the bucket we are trying to move for later
+  string id_name = get_item_name(id);
+
+  // detach the bucket
+  crush_bucket *b = get_bucket(id);
+  unsigned bucket_weight = b->weight;
+
+  // insert the bucket back into the hierarchy
+  return insert_item(cct, id, bucket_weight / (float)0x10000, id_name, loc);
+}
+
 int CrushWrapper::create_or_move_item(CephContext *cct, int item, float weight, string name,
 				      const map<string,string>& loc)  // typename -> bucketname
 {
