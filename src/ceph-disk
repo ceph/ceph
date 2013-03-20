@@ -1652,7 +1652,7 @@ def main():
         args.func(args)
 
     except Error as e:
-        print >>sys.stderr, '{prog}: {msg}'.format(
+        print >> sys.stderr, '{prog}: {msg}'.format(
             prog=args.prog,
             msg=e,
             )
