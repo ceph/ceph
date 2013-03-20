@@ -1280,7 +1280,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	list<frag_t> leaves;
 	renamed_diri->dirfragtree.get_leaves(leaves);
 	for (list<frag_t>::iterator p = leaves.begin(); p != leaves.end(); ++p) {
-	  CDir *dir = renamed_diri->get_or_open_dirfrag(mds->mdcache, *p);
+	  CDir *dir = renamed_diri->get_dirfrag(*p);
+	  assert(dir);
 	  // preserve subtree bound until slave commit
 	  if (dir->get_dir_auth() == CDIR_AUTH_UNDEF)
 	    slaveup->olddirs.insert(dir);

@@ -6306,6 +6306,16 @@ void Server::_rename_prepare(MDRequest *mdr,
       dout(10) << " forced journaling destdn " << *destdn << dendl;
       metablob->add_dir_context(destdn->get_dir());
       metablob->add_primary_dentry(destdn, true, srci);
+      if (srcdn->is_auth() && srci->is_dir()) {
+	// journal new subtrees root dirfrags
+	list<CDir*> ls;
+	srci->get_dirfrags(ls);
+	for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
+	  CDir *dir = *p;
+	  if (dir->is_auth())
+	    metablob->add_dir(dir, true);
+	}
+      }
     }
   }
     
