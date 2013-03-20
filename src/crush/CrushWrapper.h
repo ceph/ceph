@@ -353,6 +353,20 @@ public:
   int move_bucket(CephContext *cct, int id, const map<string,string>& loc);
 
   /**
+   * add a link to an existing bucket in the hierarchy to the new location
+   *
+   * This has the same location and ancestor creation behavior as
+   * insert_item(), but will add a new link to the specified existing
+   * bucket.
+   *
+   * @param cct cct
+   * @param id bucket id
+   * @param loc location (map of type to bucket names)
+   * @return 0 for success, negative on error
+   */
+  int link_bucket(CephContext *cct, int id, const map<string,string>& loc);
+
+  /**
    * add or update an item's position in the map
    *
    * This is analogous to insert_item, except we will move an item if
