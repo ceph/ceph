@@ -743,19 +743,19 @@ def adjust_symlink(target, path):
     create = True
     if os.path.lexists(path):
         try:
-            mode = os.lstat(canonical).st_mode
+            mode = os.lstat(path).st_mode
             if stat.S_ISREG(mode):
-                log.debug('Removing old file %s', canonical)
-                os.unlink(canonical)
+                log.debug('Removing old file %s', path)
+                os.unlink(path)
             elif stat.S_ISLNK(mode):
-                old = os.readlink(canonical)
+                old = os.readlink(path)
                 if old != journal:
-                    log.debug('Removing old symlink %s -> %s', canonical, old)
-                    os.unlink(canonical)
+                    log.debug('Removing old symlink %s -> %s', path, old)
+                    os.unlink(path)
                 else:
                     create = False
         except:
-            raise Error('unable to remove (or adjust) old file (symlink)', canonical)
+            raise Error('unable to remove (or adjust) old file (symlink)', path)
     if create:
         log.debug('Creating symlink %s -> %s', path, target)
         try:
