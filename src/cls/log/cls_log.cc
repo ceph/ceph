@@ -99,14 +99,25 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
 
   map<string, bufferlist> keys;
 
-  string index;
+  string from_index;
+  string to_index;
 
-  get_index_time_prefix(op.from_time, index);
+  if (op.marker.empty()) {
+    get_index_time_prefix(op.from_time, from_index);
+  } else {
+    from_index = op.marker;
+  }
+  bool use_time_boundary = (op.to_time > op.from_time);
+
+  if (use_time_boundary)
+    get_index_time_prefix(op.to_time, to_index);
 
 #define MAX_ENTRIES 1000
-  size_t max_entries = min(MAX_ENTRIES, op.num_entries);
+  size_t max_entries = op.max_entries;
+  if (!max_entries || max_entries > MAX_ENTRIES)
+    max_entries = MAX_ENTRIES;
 
-  int rc = cls_cxx_map_get_vals(hctx, index, log_index_prefix, max_entries + 1, &keys);
+  int rc = cls_cxx_map_get_vals(hctx, from_index, log_index_prefix, max_entries + 1, &keys);
   if (rc < 0)
     return rc;
 
@@ -115,8 +126,18 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   list<cls_log_entry>& entries = ret.entries;
   map<string, bufferlist>::iterator iter = keys.begin();
 
+  bool done = false;
+  string marker;
+
   size_t i;
   for (i = 0; i < max_entries && iter != keys.end(); ++i, ++iter) {
+    const string& index = iter->first;
+    marker = index;
+    if (use_time_boundary && index.compare(0, to_index.size(), to_index) >= 0) {
+      done = true;
+      break;
+    }
+
     bufferlist& bl = iter->second;
     bufferlist::iterator biter = bl.begin();
     try {
@@ -128,7 +149,12 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
     }
   }
 
-  ret.truncated = (i < keys.size());
+  if (iter == keys.end())
+    done = true;
+  else
+    ret.marker = marker;
+
+  ret.truncated = !done;
 
   ::encode(ret, *out);
 
