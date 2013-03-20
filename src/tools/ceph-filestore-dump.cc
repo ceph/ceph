@@ -159,7 +159,7 @@ int main(int argc, char **argv)
 
   pg_t arg_pgid;
   if (!arg_pgid.parse(pgid.c_str())) {
-    cerr << "Invalid pgid '" << pgid << "' specified" << std::endl;
+    cout << "Invalid pgid '" << pgid << "' specified" << std::endl;
     exit(1);
   }
 
@@ -181,7 +181,7 @@ int main(int argc, char **argv)
   vector<coll_t> ls;
   r = fs->list_collections(ls);
   if (r < 0) {
-    cerr << "failed to list pgs: " << cpp_strerror(-r) << std::endl;
+    cout << "failed to list pgs: " << cpp_strerror(-r) << std::endl;
     exit(1);
   }
 
@@ -198,8 +198,8 @@ int main(int argc, char **argv)
     if (pgid != arg_pgid) {
       continue;
     }
-    if (snap != CEPH_NOSNAP) {
-      cout << "load_pgs skipping snapped dir " << coll
+    if (snap != CEPH_NOSNAP && vm.count("debug")) {
+      cerr << "skipping snapped dir " << coll
 	       << " (pg " << pgid << " snap " << snap << ")" << std::endl;
       continue;
     }
@@ -208,7 +208,8 @@ int main(int argc, char **argv)
     hobject_t infos_oid(sobject_t("infos", CEPH_NOSNAP));
     bufferlist bl;
     epoch_t map_epoch = PG::peek_map_epoch(fs, coll, infos_oid, &bl);
-    (void)map_epoch;
+    if (vm.count("debug"))
+      cerr << "map_epoch " << map_epoch << std::endl;
 
     found = true;
 
@@ -221,12 +222,12 @@ int main(int argc, char **argv)
     int r = PG::read_info(fs, coll, bl, info, past_intervals, biginfo_oid,
       infos_oid, snap_collections, struct_v);
     if (r < 0) {
-      cerr << "read_info error " << cpp_strerror(-r) << std::endl;
+      cout << "read_info error " << cpp_strerror(-r) << std::endl;
       ret = 1;
       continue;
     }
     if (vm.count("debug"))
-      cout << "struct_v " << (int)struct_v << std::endl;
+      cerr << "struct_v " << (int)struct_v << std::endl;
 
     if (type == "info") {
       formatter->open_object_section("info");
@@ -247,7 +248,7 @@ int main(int argc, char **argv)
           cerr << oss;
       }
       catch (const buffer::error &e) {
-        cerr << "read_log threw exception error", e.what();
+        cout << "read_log threw exception error", e.what();
         ret = 1;
         break;
       }
@@ -267,12 +268,12 @@ int main(int argc, char **argv)
   }
 
   if (!found) {
-    cerr << "PG '" << arg_pgid << "' not found" << std::endl;
+    cout << "PG '" << arg_pgid << "' not found" << std::endl;
     ret = 1;
   }
 
   if (fs->umount() < 0) {
-    cerr << "umount failed" << std::endl;
+    cout << "umount failed" << std::endl;
     return 1;
   }
 
