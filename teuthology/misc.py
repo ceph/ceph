@@ -270,6 +270,152 @@ def sudo_write_file(remote, path, data, perms=None):
         stdin=data,
         )
 
+def move_file(remote, from_path, to_path, sudo=False):
+
+    # need to stat the file first, to make sure we 
+    # maintain the same permissions  
+    args = []
+    if sudo:
+        args.append('sudo')
+    args.extend([
+            'stat',
+            '-c',
+            '\"%a\"',
+            to_path
+            ])
+    proc = remote.run(
+        args=args,
+        stdout=StringIO(),
+        )
+    perms = proc.stdout.getvalue().rstrip().strip('\"')
+
+    args = []
+    if sudo:
+        args.append('sudo')
+    args.extend([
+            'mv',
+            '--',
+            from_path,
+            to_path,
+            ])
+    proc = remote.run(
+        args=args,
+        stdout=StringIO(),
+        )
+
+    # reset the file back to the original permissions
+    args = []
+    if sudo:
+        args.append('sudo')
+    args.extend([
+            'chmod',
+            perms,
+            to_path,
+            ])
+    proc = remote.run(
+        args=args,
+        stdout=StringIO(),
+        )
+
+def delete_file(remote, path, sudo=False):
+    args = []
+    if sudo:
+        args.append('sudo')
+    args.extend([
+            'rm',
+            '--',
+            path,
+            ])
+    proc = remote.run(
+        args=args,
+        stdout=StringIO(),
+        )
+
+def remove_lines_from_file(remote, path, line_is_valid_test, string_to_test_for):
+    # read in the specified file
+    in_data = get_file(remote, path, False)
+    out_data = ""
+
+    first_line = True
+    # use the 'line_is_valid_test' function to remove unwanted lines
+    for line in in_data.split('\n'):
+        if line_is_valid_test(line, string_to_test_for):
+            if not first_line:
+                out_data += '\n'
+            else:
+                first_line = False
+
+            out_data += '{line}'.format(line=line)
+
+        else:
+            log.info('removing line: {bad_line}'.format(bad_line=line))
+
+    # get a temp file path on the remote host to write to, 
+    # we don't want to blow away the remote file and then have the 
+    # network drop out
+    temp_file_path = get_remote_tempnam(remote)
+
+    # write out the data to a temp file
+    write_file(remote, temp_file_path, out_data)
+
+    # then do a 'mv' to the actual file location
+    move_file(remote, temp_file_path, path)
+            
+def append_lines_to_file(remote, path, lines, sudo=False):
+    temp_file_path = get_remote_tempnam(remote)
+ 
+    data = get_file(remote, path, sudo)
+
+    # add the additional data and write it back out, using a temp file
+    # in case of connectivity of loss, and then mv it to the 
+    # actual desired location
+    data += lines
+    temp_file_path
+    write_file(remote, temp_file_path, data)
+
+    # then do a 'mv' to the actual file location
+    move_file(remote, temp_file_path, path)
+
+def get_remote_tempnam(remote, sudo=False):
+    args = []
+    if sudo:
+        args.append('sudo')
+    args.extend([
+            'python',
+            '-c',
+            'import os; print os.tempnam()'
+            ])
+    proc = remote.run(
+        args=args,
+        stdout=StringIO(),
+        )
+    data = proc.stdout.getvalue()
+    return data
+
+def create_file(remote, path, data="", permissions=str(644), sudo=False):
+    """
+    Create a file on the remote host.
+    """
+    args = []
+    if sudo:
+        args.append('sudo')
+    args.extend([
+            'touch',
+            path,
+            run.Raw('&&'),
+            'chmod',
+            permissions,
+            '--',
+            path
+            ])
+    proc = remote.run(
+        args=args,
+        stdout=StringIO(),
+        )
+    # now write out the data if any was passed in
+    if "" != data:
+        append_lines_to_file(remote, path, data, sudo)
+
 def get_file(remote, path, sudo=False):
     """
     Read a file from remote host into memory.

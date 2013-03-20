@@ -6,10 +6,12 @@ import re
 
 from cStringIO import StringIO
 from teuthology import contextutil
+import teuthology.misc as misc
 from ..orchestra import run
 from ..orchestra.connection import create_key
 
 log = logging.getLogger(__name__)
+ssh_keys_user = 'ssh-keys-user'
 
 # generatees a public and private key
 def generate_keys():
@@ -18,66 +20,53 @@ def generate_keys():
     key.write_private_key(privateString)
     return key.get_base64(), privateString.getvalue()
 
+def particular_ssh_key_test(line_to_test, ssh_key):
+    match = re.match('[\w-]+ {key} \S+@\S+'.format(key=ssh_key), line_to_test)
+
+    if match:
+        log.info('found matching ssh_key line: {line}'.format(line=line_to_test))
+        return False
+    else:
+        return True
+
+def ssh_keys_user_line_test(line_to_test, username ):
+    match = re.match('[\w-]+ \S+ {username}@\S+'.format(username=username), line_to_test)
+
+    if match:
+        log.info('found a ssh-keys-user line: {line}'.format(line=line_to_test))
+        return False
+    else:
+        return True
+
+# deletes keys that were previously generated
+def pre_run_cleanup_keys(ctx):
+    log.info('cleaning up any left-over keys from previous tests')
+
+    for remote in ctx.cluster.remotes:
+        username, hostname = str(remote).split('@')
+        if "" == username or "" == hostname:
+            continue
+        else:
+          path = '/home/{user}/.ssh/authorized_keys'.format(user=username)
+        
+          misc.remove_lines_from_file(remote, path, ssh_keys_user_line_test, ssh_keys_user)
+
 # deletes the keys and removes ~/.ssh/authorized_keys entries we added
-def cleanup_keys(ctx, public_key):
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+def cleanup_added_key(ctx, public_key):
+    log.info('cleaning up keys added for testing')
 
-    for host in ctx.cluster.remotes.iterkeys():
-        username, hostname = str(host).split('@')
-        log.info('cleaning up keys on {host}'.format(host=hostname, user=username))
+    for remote in ctx.cluster.remotes:
+        username, hostname = str(remote).split('@')
+        if "" == username or "" == hostname:
+            continue
+        else:
+          log.info('  cleaning up keys for user {user} on {host}'.format(host=hostname, user=username))
 
-        # try to extract a public key for the host from the ctx.config entries
-        host_key_found = False
-        for t, host_key in ctx.config['targets'].iteritems():
+          misc.delete_file(remote, '/home/{user}/.ssh/id_rsa'.format(user=username))
+          misc.delete_file(remote, '/home/{user}/.ssh/id_rsa.pub'.format(user=username))
+          path = '/home/{user}/.ssh/authorized_keys'.format(user=username)
 
-            if str(t) == str(host):
-                keytype, key = host_key.split(' ',1)
-                client.get_host_keys().add(
-                    hostname=hostname,
-                    keytype=keytype,
-                    key=create_key(keytype,key)
-                    )
-                host_key_found = True
-                log.info('ssh key found in ctx')
-
-        # if we did not find a key, load the system keys
-        if False == host_key_found:
-            client.load_system_host_keys()
-            log.info('no key found in ctx, using system host keys')
-
-        client.connect(hostname, username=username)
-        client.exec_command('rm ~/.ssh/id_rsa')
-        client.exec_command('rm ~/.ssh/id_rsa.pub')
-
-        # get the absolute path for authorized_keys
-        stdin, stdout, stderr = client.exec_command('ls ~/.ssh/authorized_keys')
-        auth_keys_file = stdout.readlines()[0].rstrip()
-
-        mySftp = client.open_sftp()
-
-        # write to a different authorized_keys file in case something
-        # fails 1/2 way through (don't want to break ssh on the vm)
-        old_auth_keys_file = mySftp.open(auth_keys_file)
-        new_auth_keys_file = mySftp.open(auth_keys_file + '.new', 'w')
-
-        for line in old_auth_keys_file.readlines():
-            match = re.search(re.escape(public_key), line)
-
-            if match:
-                pass
-            else:
-                new_auth_keys_file.write(line)
-
-        # close the files
-        old_auth_keys_file.close()
-        new_auth_keys_file.close()
-
-        # now try to do an atomic-ish rename. If we botch this, it's bad news
-        stdin, stdout, stderr = client.exec_command('mv ~/.ssh/authorized_keys.new ~/.ssh/authorized_keys')
-
-        mySftp.close()
-        client.close()
+          misc.remove_lines_from_file(remote, path, particular_ssh_key_test, public_key)
 
 @contextlib.contextmanager
 def tweak_ssh_config(ctx, config):   
@@ -107,46 +96,39 @@ def tweak_ssh_config(ctx, config):
 @contextlib.contextmanager
 def push_keys_to_host(ctx, config, public_key, private_key):   
 
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    # add an entry for all hosts in ctx to auth_keys_data
+    auth_keys_data = ''
 
-    for host in ctx.cluster.remotes.iterkeys():
-        log.info('host: {host}'.format(host=host))
-        username, hostname = str(host).split('@')
-   
-        # try to extract a public key for the host from the ctx.config entries
-        host_key_found = False
-        for t, host_key in ctx.config['targets'].iteritems():
+    for inner_host in ctx.cluster.remotes.iterkeys():
+        inner_username, inner_hostname = str(inner_host).split('@')
+        # create a 'user@hostname' string using our fake hostname
+        fake_hostname = '{user}@{host}'.format(user=ssh_keys_user,host=str(inner_hostname))
+        auth_keys_data += '\nssh-rsa {pub_key} {user_host}'.format(pub_key=public_key,user_host=fake_hostname)
 
-            if str(t) == str(host):
-                keytype, key = host_key.split(' ',1)
-                client.get_host_keys().add(
-                    hostname=hostname,
-                    keytype=keytype,
-                    key=create_key(keytype,key)
-                    )
-                host_key_found = True
-                log.info('ssh key found in ctx')
+    # for each host in ctx, add keys for all other hosts
+    for remote in ctx.cluster.remotes:
+        username, hostname = str(remote).split('@')
+        if "" == username or "" == hostname:
+            continue
+        else:
+            log.info('pushing keys to {host} for {user}'.format(host=hostname, user=username))
 
-        # if we did not find a key, load the system keys
-        if False == host_key_found:
-            client.load_system_host_keys()
-            log.info('no key found in ctx, using system host keys')
+            # adding a private key
+            priv_key_file = '/home/{user}/.ssh/id_rsa'.format(user=username)
+            priv_key_data = '{priv_key}'.format(priv_key=private_key)
+            # Hadoop requires that .ssh/id_rsa have permissions of '500'
+            misc.create_file(remote, priv_key_file, priv_key_data, str(500))
 
-        log.info('pushing keys to {host} for {user}'.format(host=hostname, user=username))
+            # then a private key
+            pub_key_file = '/home/{user}/.ssh/id_rsa.pub'.format(user=username)
+            pub_key_data = 'ssh-rsa {pub_key} {user_host}'.format(pub_key=public_key,user_host=str(remote))
+            misc.create_file(remote, pub_key_file, pub_key_data)
 
-        client.connect(hostname, username=username)
-        client.exec_command('echo "{priv_key}" > ~/.ssh/id_rsa'.format(priv_key=private_key))
-        # the default file permissions cause ssh to balk
-        client.exec_command('chmod 500 ~/.ssh/id_rsa')
-        client.exec_command('echo "ssh-rsa {pub_key} {user_host}" > ~/.ssh/id_rsa.pub'.format(pub_key=public_key,user_host=host))
-       
-        # for this host, add all hosts to the ~/.ssh/authorized_keys file
-        for inner_host in ctx.cluster.remotes.iterkeys():
-            client.exec_command('echo "ssh-rsa {pub_key} {user_host}" >> ~/.ssh/authorized_keys'.format(pub_key=public_key,user_host=str(inner_host)))
+            # adding appropriate entries to the authorized_keys file for this host
+            auth_keys_file = '/home/{user}/.ssh/authorized_keys'.format(user=username)
 
-
-        client.close()
+            # now add the list of keys for hosts in ctx to ~/.ssh/authorized_keys 
+            misc.append_lines_to_file(remote, auth_keys_file, auth_keys_data)
 
     try: 
         yield
@@ -154,7 +136,7 @@ def push_keys_to_host(ctx, config, public_key, private_key):
     finally:
         # cleanup the keys
         log.info("Cleaning up SSH keys")
-        cleanup_keys(ctx, public_key)
+        cleanup_added_key(ctx, public_key)
 
 
 @contextlib.contextmanager
@@ -177,6 +159,9 @@ def task(ctx, config):
     # this does not need to do cleanup and does not depend on 
     # ctx, so I'm keeping it outside of the nested calls
     public_key_string, private_key_string = generate_keys()
+
+    # cleanup old keys if they were somehow left behind
+    pre_run_cleanup_keys(ctx)
 
     with contextutil.nested(
         lambda: push_keys_to_host(ctx, config, public_key_string, private_key_string),
