@@ -162,8 +162,7 @@ public:
   int get_num_type_names() const {
     return type_map.size();
   }
-  int get_type_id(const char *s) {
-    string name(s);
+  int get_type_id(const string& name) {
     build_rmaps();
     if (type_rmap.count(name))
       return type_rmap[name];
@@ -175,18 +174,13 @@ public:
       return p->second.c_str();
     return 0;
   }
-  void set_type_name(int i, const char *n) {
-    string name(n);
+  void set_type_name(int i, const string& name) {
     type_map[i] = name;
     if (have_rmaps)
       type_rmap[name] = i;
   }
 
   // item/bucket names
-  bool name_exists(const char *s) {
-    string name(s);
-    return name_exists(name);
-  }
   bool name_exists(const string& name) {
     build_rmaps();
     return name_rmap.count(name);
@@ -200,19 +194,11 @@ public:
       return name_rmap[name];
     return 0;  /* hrm */
   }
-  int get_item_id(const char *s) {
-    string name(s);
-    return get_item_id(name);
-  }
   const char *get_item_name(int t) const {
     std::map<int,string>::const_iterator p = name_map.find(t);
     if (p != name_map.end())
       return p->second.c_str();
     return 0;
-  }
-  void set_item_name(int i, const char *n) {
-    string name(n);
-    set_item_name(i, name);
   }
   void set_item_name(int i, const string& name) {
     name_map[i] = name;
@@ -237,8 +223,7 @@ public:
       return p->second.c_str();
     return 0;
   }
-  void set_rule_name(int i, const char *n) {
-    string name(n);
+  void set_rule_name(int i, const string& name) {
     rule_name_map[i] = name;
     if (have_rmaps)
       rule_name_rmap[name] = i;
