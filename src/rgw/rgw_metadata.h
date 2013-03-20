@@ -6,6 +6,7 @@
 #include "include/types.h"
 #include "rgw_common.h"
 #include "cls/version/cls_version_types.h"
+#include "cls/log/cls_log_types.h"
 
 
 class RGWRados;
@@ -47,7 +48,47 @@ public:
   virtual void list_keys_complete(void *handle) = 0;
 };
 
-class RGWMetadataLog;
+#define META_LOG_OBJ_PREFIX "meta.log."
+
+class RGWMetadataLog {
+  CephContext *cct;
+  RGWRados *store;
+  string prefix;
+
+  void get_shard_oid(int id, string& oid) {
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d", id);
+    oid = prefix + buf;
+  }
+
+public:
+  RGWMetadataLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store) {
+    prefix = META_LOG_OBJ_PREFIX;
+  }
+
+  int add_entry(RGWRados *store, string& section, string& key, bufferlist& bl);
+
+  struct LogListCtx {
+    RGWRados *store;
+    int cur_shard;
+    string marker;
+    utime_t from_time;
+    utime_t end_time;
+
+    string cur_oid;
+
+    bool done;
+
+    LogListCtx(RGWRados *_store) : store(_store), cur_shard(0), done(false) {}
+  };
+
+  void init_list_entries(RGWRados *store, utime_t& from_time, utime_t& end_time, void **handle);
+  void complete_list_entries(void *handle);
+  int list_entries(void *handle,
+                   int max_entries,
+                   list<cls_log_entry>& entries,
+                   bool *truncated);
+};
 
 class RGWMetadataManager {
   map<string, RGWMetadataHandler *> handlers;
@@ -76,6 +117,8 @@ public:
   void list_keys_complete(void *handle);
 
   void get_sections(list<string>& sections);
+
+  RGWMetadataLog *get_log() { return md_log; }
 };
 
 #endif
