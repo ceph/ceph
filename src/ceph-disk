@@ -418,10 +418,10 @@ def get_fsid(cluster):
 
 
 def get_or_create_dmcrypt_key(
-    uuid,
+    _uuid,
     key_dir,
     ):
-    path = os.path.join(key_dir, uuid)
+    path = os.path.join(key_dir, _uuid)
 
     # already have it?
     if os.path.exists(path):
@@ -443,16 +443,16 @@ def get_or_create_dmcrypt_key(
 def dmcrypt_map(
     rawdev,
     keypath,
-    uuid,
+    _uuid,
     ):
-    dev = '/dev/mapper/'+ uuid
+    dev = '/dev/mapper/'+ _uuid
     args = [
         'cryptsetup',
         '--key-file',
         keypath,
         '--key-size', '256',
         'create',
-        uuid,
+        _uuid,
         rawdev,
         ]
     try:
@@ -464,19 +464,19 @@ def dmcrypt_map(
 
 
 def dmcrypt_unmap(
-    uuid
+    _uuid
     ):
     args = [
         'cryptsetup',
         'remove',
-        uuid
+        _uuid
     ]
 
     try:
         subprocess.check_call(args)
 
     except subprocess.CalledProcessError as e:
-        raise Error('unable to unmap device', uuid)
+        raise Error('unable to unmap device', _uuid)
 
 
 def mount(
@@ -1335,7 +1335,7 @@ def activate_dir(
     return (cluster, osd_id)
 
 
-def find_cluster_by_uuid(uuid):
+def find_cluster_by_uuid(_uuid):
     """
     Find a cluster name by searching /etc/ceph/*.conf for a conf file
     with the right uuid.
@@ -1350,7 +1350,7 @@ def find_cluster_by_uuid(uuid):
         u = get_conf(cluster, 'fsid')
         if u is None:
             no_fsid.append(cluster)
-        elif u == uuid:
+        elif u == _uuid:
             return cluster
     # be tolerant of /etc/ceph/ceph.conf without an fsid defined.
     if len(no_fsid) == 1 and no_fsid[0] == 'ceph':
