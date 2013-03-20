@@ -616,7 +616,6 @@ def prepare_journal_dev(
         log.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
         return (journal, None, None)
 
-    key = None
     ptype = JOURNAL_UUID
     if journal_dm_keypath:
         ptype = DMCRYPT_JOURNAL_UUID
