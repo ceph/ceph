@@ -1293,6 +1293,7 @@ int OSD::shutdown()
 
   osdmap = OSDMapRef();
   service.shutdown();
+  op_tracker.on_shutdown();
 
   client_messenger->shutdown();
   cluster_messenger->shutdown();

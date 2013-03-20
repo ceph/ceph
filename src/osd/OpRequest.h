@@ -31,10 +31,17 @@ class OpHistory {
   set<pair<utime_t, OpRequestRef> > arrived;
   set<pair<double, OpRequestRef> > duration;
   void cleanup(utime_t now);
+  bool shutdown;
 
 public:
+  OpHistory() : shutdown(false) {}
+  ~OpHistory() {
+    assert(arrived.empty());
+    assert(duration.empty());
+  }
   void insert(utime_t now, OpRequestRef op);
   void dump_ops(utime_t now, Formatter *f);
+  void on_shutdown();
 };
 
 class OpTracker {
@@ -69,6 +76,13 @@ public:
   void mark_event(OpRequest *op, const string &evt);
   void _mark_event(OpRequest *op, const string &evt, utime_t now);
   OpRequestRef create_request(Message *req);
+  void on_shutdown() {
+    Mutex::Locker l(ops_in_flight_lock);
+    history.on_shutdown();
+  }
+  ~OpTracker() {
+    assert(ops_in_flight.empty());
+  }
 };
 
 /**
