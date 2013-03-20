@@ -2451,7 +2451,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     }
     else if (m->cmd.size() > 3 && m->cmd[1] == "crush" && (m->cmd[2] == "rm" || m->cmd[2] == "remove")) {
       do {
-	// osd crush rm <id>
+	// osd crush rm <id> [ancestor]
 	bufferlist bl;
 	if (pending_inc.crush.length())
 	  bl = pending_inc.crush;
@@ -2472,7 +2472,17 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  ss << "item '" << m->cmd[3] << "' is not a leaf in the crush map";
 	  break;
 	}
-	err = newcrush.remove_item(g_ceph_context, id);
+	if (m->cmd.size() > 4) {
+	  if (!newcrush.name_exists(m->cmd[4])) {
+	    err = -ENOENT;
+	    ss << "ancestor item '" << m->cmd[4] << "' does not appear in the crush map";
+	    break;
+	  }
+	  int ancestor = newcrush.get_item_id(m->cmd[4]);
+	  err = newcrush.remove_item_under(g_ceph_context, id, ancestor);
+	} else {
+	  err = newcrush.remove_item(g_ceph_context, id);
+	}
 	if (err == 0) {
 	  pending_inc.crush.clear();
 	  newcrush.encode(pending_inc.crush);
