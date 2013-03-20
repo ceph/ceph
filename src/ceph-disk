@@ -133,8 +133,12 @@ def list_all_partitions():
             fields = re.split('\s+', line)
             if len(fields) < 5:
                 continue
-            (_, major, minor, blocks, name) = fields
+            name = fields[4]
             name = '/dev/' + name
+            if "dm-" in name:
+                if "/dev/dm" not in ls:
+                    ls["/dev/dm"] = []
+                ls["/dev/dm"].append(name)
             if name[-1].isdigit():
                 base = name
                 while base[-1].isdigit():
