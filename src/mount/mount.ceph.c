@@ -83,7 +83,6 @@ static char *parse_options(const char *data, int *filesys_flags)
 	char * next_keyword = NULL;
 	char * out = NULL;
 	int out_len = 0;
-	int word_len;
 	int skip;
 	int pos = 0;
 	char *name = NULL;
@@ -203,10 +202,6 @@ static char *parse_options(const char *data, int *filesys_flags)
 
 		/* Copy (possibly modified) option to out */
 		if (!skip) {
-			word_len = strlen(data);
-			if (value)
-				word_len += 1 + strlen(value);
-
 			if (pos)
 				pos = safe_cat(&out, &out_len, pos, ",");
 

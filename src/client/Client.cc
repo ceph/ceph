@@ -7196,6 +7196,8 @@ int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
 
   Inode *otherin;
   res = _lookup(dir, name, &otherin);
+  if (res < 0)
+    goto fail;
   req->set_other_inode(otherin);
   req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
 

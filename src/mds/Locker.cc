@@ -365,7 +365,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
     if (existing != mdr->locks.end() && *existing == *p) {
       // right kind?
       SimpleLock *have = *existing;
-      existing++;
+      ++existing;
       if (xlocks.count(have) && mdr->xlocks.count(have)) {
 	dout(10) << " already xlocked " << *have << " " << *have->get_parent() << dendl;
 	continue;
@@ -395,7 +395,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
     // hose any stray locks
     while (existing != mdr->locks.end()) {
       SimpleLock *stray = *existing;
-      existing++;
+      ++existing;
       dout(10) << " unlocking out-of-order " << *stray << " " << *stray->get_parent() << dendl;
       bool need_issue = false;
       if (mdr->xlocks.count(stray)) 
@@ -435,7 +435,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
   // any extra unneeded locks?
   while (existing != mdr->locks.end()) {
     SimpleLock *stray = *existing;
-    existing++;
+    ++existing;
     dout(10) << " unlocking extra " << *stray << " " << *stray->get_parent() << dendl;
     bool need_issue = false;
     if (mdr->xlocks.count(stray))
@@ -2172,7 +2172,7 @@ void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t follo
   while (p != head_in->client_need_snapflush.end()) {
     snapid_t snapid = p->first;
     set<client_t>& clients = p->second;
-    p++;  // be careful, q loop below depends on this
+    ++p;  // be careful, q loop below depends on this
 
     // snapid is the snap inode's ->last
     if (follows > snapid)
@@ -2186,7 +2186,7 @@ void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t follo
 	dout(10) << " didn't have " << head_in->ino() << " snapid " << snapid << dendl;
 	for (map<snapid_t, set<client_t> >::iterator q = p;  // p is already at next entry
 	     q != head_in->client_need_snapflush.end();
-	     q++) {
+	     ++q) {
 	  dout(10) << " trying snapid " << q->first << dendl;
 	  sin = mdcache->get_inode(head_in->ino(), q->first);
 	  if (sin) {
