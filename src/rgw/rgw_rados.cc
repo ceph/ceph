@@ -1101,6 +1101,23 @@ int RGWRados::time_log_add(const string& oid, const utime_t& ut, string& section
   return r;
 }
 
+int RGWRados::time_log_list(const string& oid, utime_t& start_time, utime_t& end_time,
+                            int max_entries, list<cls_log_entry>& entries, string& marker, bool *truncated)
+{
+  librados::IoCtx io_ctx;
+
+  librados::ObjectReadOperation op;
+  cls_log_list(op, start_time, end_time, marker, max_entries, entries, &marker, truncated);
+
+  bufferlist obl;
+
+  int ret = io_ctx.operate(oid, &op, &obl);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
 int RGWRados::decode_policy(bufferlist& bl, ACLOwner *owner)
 {
   bufferlist::iterator i = bl.begin();

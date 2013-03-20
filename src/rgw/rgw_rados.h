@@ -7,6 +7,7 @@
 #include "rgw_common.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/version/cls_version_types.h"
+#include "cls/log/cls_log_types.h"
 #include "rgw_log.h"
 #include "rgw_metadata.h"
 
@@ -979,6 +980,8 @@ public:
   void shard_name(const string& prefix, unsigned max_shards, string& key, string& name);
   void shard_name(const string& prefix, unsigned max_shards, string& section, string& key, string& name);
   int time_log_add(const string& oid, const utime_t& ut, string& section, string& key, bufferlist& bl);
+  int time_log_list(const string& oid, utime_t& start_time, utime_t& end_time,
+                    int max_entries, list<cls_log_entry>& entries, string& marker, bool *truncated);
 
   /// clean up/process any temporary objects older than given date[/time]
   int remove_temp_objects(string date, string time);
