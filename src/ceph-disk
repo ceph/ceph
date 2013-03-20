@@ -373,7 +373,7 @@ def get_conf(cluster, variable):
         return None
     elif ret != 0:
         raise Error('getting variable from configuration failed')
-    value = out.split('\n', 1)[0]
+    value = str(out).split('\n', 1)[0]
     # don't differentiate between "var=" and no var set
     if not value:
         return None
@@ -406,7 +406,7 @@ def get_conf_with_default(cluster, variable):
             e,
             )
 
-    value = out.split('\n', 1)[0]
+    value = str(out).split('\n', 1)[0]
     return value
 
 
@@ -552,7 +552,7 @@ def get_free_partition_index(dev):
 
     if not lines:
         raise Error('parted failed to output anything')
-    lines = lines.splitlines(True)
+    lines = str(lines).splitlines(True)
 
     if lines[0] not in ['CHS;\n', 'CYL;\n', 'BYT;\n']:
         raise Error('weird parted units', lines[0])
