@@ -46,8 +46,9 @@
     ceph osd getmap -o <file>
     ceph osd crush set <osd-id> <weight> <loc1> [<loc2> ...]
     ceph osd crush add <osd-id> <weight> <loc1> [<loc2> ...]
-    ceph osd crush move <bucketname> <loc1> [<loc2> ...]
     ceph osd crush create-or-move <osd-id> <initial-weight> <loc1> [<loc2> ...]
+    ceph osd crush move <bucketname> <loc1> [<loc2> ...]
+    ceph osd crush link <bucketname> <loc1> [<loc2> ...]
     ceph osd crush reweight <name> <weight>
     ceph osd crush tunables <legacy|argonaut|bobtail|optimal|default>
     ceph osd create [<uuid>]
