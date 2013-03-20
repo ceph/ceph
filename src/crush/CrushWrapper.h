@@ -241,6 +241,16 @@ public:
    */
   bool subtree_contains(int root, int item) const;
 
+private:
+  /**
+   * search for an item in any bucket
+   *
+   * @param i item
+   * @return true if present
+   */
+  bool _search_item_exists(int i);
+public:
+
   /**
    * see if item is located where we think it is
    *
@@ -395,13 +405,26 @@ public:
 			  const map<string,string>& loc);
 
   /**
-   * remove an item from the map
+   * remove all instances of an item from the map
    *
    * @param cct cct
    * @param id item id to remove
    * @return 0 on success, negative on error
    */
   int remove_item(CephContext *cct, int id);
+
+  /**
+   * remove all instances of an item nested beneath a certain point from the map
+   *
+   * @param cct cct
+   * @param id item id to remove
+   * @param ancestor ancestor item id under which to search for id
+   * @return 0 on success, negative on error
+   */
+private:
+  int _remove_item_under(CephContext *cct, int id, int ancestor);
+public:
+  int remove_item_under(CephContext *cct, int id, int ancestor);
 
   /**
    * get an item's weight
