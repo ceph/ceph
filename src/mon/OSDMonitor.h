@@ -171,6 +171,8 @@ private:
   void remove_redundant_pg_temp();
   void remove_down_pg_temp();
   int reweight_by_utilization(int oload, std::string& out_str);
+
+  bool check_source(PaxosServiceMessage *m, uuid_d fsid);
  
   bool preprocess_failure(class MOSDFailure *m);
   bool prepare_failure(class MOSDFailure *m);
