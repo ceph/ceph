@@ -1106,6 +1106,11 @@ int RGWRados::time_log_list(const string& oid, utime_t& start_time, utime_t& end
 {
   librados::IoCtx io_ctx;
 
+  const char *log_pool = zone.log_pool.name.c_str();
+  int r = rados->ioctx_create(log_pool, io_ctx);
+  if (r < 0)
+    return r;
+
   librados::ObjectReadOperation op;
   cls_log_list(op, start_time, end_time, marker, max_entries, entries, &marker, truncated);
 
