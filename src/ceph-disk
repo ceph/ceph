@@ -133,8 +133,12 @@ def list_all_partitions():
             fields = re.split('\s+', line)
             if len(fields) < 5:
                 continue
-            (_, major, minor, blocks, name) = fields
+            name = fields[4]
             name = '/dev/' + name
+            if "dm-" in name:
+                if "/dev/dm" not in ls:
+                    ls["/dev/dm"] = []
+                ls["/dev/dm"].append(name)
             if name[-1].isdigit():
                 base = name
                 while base[-1].isdigit():
@@ -159,7 +163,7 @@ def list_partitions(disk):
             fields = re.split('\s+', line)
             if len(fields) < 5:
                 continue
-            (_, major, minor, blocks, name) = fields
+	    name = fields [4]
             if name != base and name.startswith(base):
                 ls.append('/dev/' + name)
     return ls
@@ -369,7 +373,7 @@ def get_conf(cluster, variable):
         return None
     elif ret != 0:
         raise Error('getting variable from configuration failed')
-    value = out.split('\n', 1)[0]
+    value = str(out).split('\n', 1)[0]
     # don't differentiate between "var=" and no var set
     if not value:
         return None
@@ -402,7 +406,7 @@ def get_conf_with_default(cluster, variable):
             e,
             )
 
-    value = out.split('\n', 1)[0]
+    value = str(out).split('\n', 1)[0]
     return value
 
 
@@ -414,10 +418,10 @@ def get_fsid(cluster):
 
 
 def get_or_create_dmcrypt_key(
-    uuid,
+    _uuid,
     key_dir,
     ):
-    path = os.path.join(key_dir, uuid)
+    path = os.path.join(key_dir, _uuid)
 
     # already have it?
     if os.path.exists(path):
@@ -439,16 +443,16 @@ def get_or_create_dmcrypt_key(
 def dmcrypt_map(
     rawdev,
     keypath,
-    uuid,
+    _uuid,
     ):
-    dev = '/dev/mapper/'+ uuid
+    dev = '/dev/mapper/'+ _uuid
     args = [
         'cryptsetup',
         '--key-file',
         keypath,
         '--key-size', '256',
         'create',
-        uuid,
+        _uuid,
         rawdev,
         ]
     try:
@@ -460,19 +464,19 @@ def dmcrypt_map(
 
 
 def dmcrypt_unmap(
-    uuid
+    _uuid
     ):
     args = [
         'cryptsetup',
         'remove',
-        uuid
+        _uuid
     ]
 
     try:
         subprocess.check_call(args)
 
     except subprocess.CalledProcessError as e:
-        raise Error('unable to unmap device', uuid)
+        raise Error('unable to unmap device', _uuid)
 
 
 def mount(
@@ -548,7 +552,7 @@ def get_free_partition_index(dev):
 
     if not lines:
         raise Error('parted failed to output anything')
-    lines = lines.splitlines(True)
+    lines = str(lines).splitlines(True)
 
     if lines[0] not in ['CHS;\n', 'CYL;\n', 'BYT;\n']:
         raise Error('weird parted units', lines[0])
@@ -612,7 +616,6 @@ def prepare_journal_dev(
         log.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
         return (journal, None, None)
 
-    key = None
     ptype = JOURNAL_UUID
     if journal_dm_keypath:
         ptype = DMCRYPT_JOURNAL_UUID
@@ -740,19 +743,19 @@ def adjust_symlink(target, path):
     create = True
     if os.path.lexists(path):
         try:
-            mode = os.path.lstat(canonical).st_mode
+            mode = os.lstat(path).st_mode
             if stat.S_ISREG(mode):
-                log.debug('Removing old file %s', canonical)
-                os.unlink(canonical)
+                log.debug('Removing old file %s', path)
+                os.unlink(path)
             elif stat.S_ISLNK(mode):
-                old = os.readlink(canonical)
-                if old != journal:
-                    log.debug('Removing old symlink %s -> %s', canonical, old)
-                    os.unlink(canonical)
+                old = os.readlink(path)
+                if old != target:
+                    log.debug('Removing old symlink %s -> %s', path, old)
+                    os.unlink(path)
                 else:
                     create = False
         except:
-            raise Error('unable to remove (or adjust) old file (symlink)', canonical)
+            raise Error('unable to remove (or adjust) old file (symlink)', path)
     if create:
         log.debug('Creating symlink %s -> %s', path, target)
         try:
@@ -782,7 +785,7 @@ def prepare_dir(
     else:
         try:
             os.unlink(os.path.join(path, 'journal_dmcrypt'))
-        except:
+        except OSError:
             pass
 
     write_one_line(path, 'ceph_fsid', cluster_uuid)
@@ -1269,7 +1272,7 @@ def mount_activate(
                 parent_dev = os.stat('/var/lib/ceph/osd').st_dev
                 if dst_dev != parent_dev:
                     other = True
-        except:
+        except OSError:
             pass
         if active:
             log.info('%s osd.%s already mounted in position; unmounting ours.' % (cluster, osd_id))
@@ -1331,7 +1334,7 @@ def activate_dir(
     return (cluster, osd_id)
 
 
-def find_cluster_by_uuid(uuid):
+def find_cluster_by_uuid(_uuid):
     """
     Find a cluster name by searching /etc/ceph/*.conf for a conf file
     with the right uuid.
@@ -1346,7 +1349,7 @@ def find_cluster_by_uuid(uuid):
         u = get_conf(cluster, 'fsid')
         if u is None:
             no_fsid.append(cluster)
-        elif u == uuid:
+        elif u == _uuid:
             return cluster
     # be tolerant of /etc/ceph/ceph.conf without an fsid defined.
     if len(no_fsid) == 1 and no_fsid[0] == 'ceph':
@@ -1425,7 +1428,7 @@ def activate(
                 if other != init:
                     try:
                         os.unlink(os.path.join(path, other))
-                    except:
+                    except OSError:
                         pass
 
         if not os.path.exists(os.path.join(path, 'active')):
@@ -1648,7 +1651,7 @@ def main():
         args.func(args)
 
     except Error as e:
-        print >>sys.stderr, '{prog}: {msg}'.format(
+        print >> sys.stderr, '{prog}: {msg}'.format(
             prog=args.prog,
             msg=e,
             )
