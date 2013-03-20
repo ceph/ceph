@@ -241,13 +241,15 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
   ldout(cct, 5) << "insert_item item " << item << " weight " << weight
 		<< " name " << name << " loc " << loc << dendl;
 
-  if (name_exists(name.c_str())) {
-    ldout(cct, 1) << "error: device name '" << name << "' already exists as id "
-		  << get_item_id(name.c_str()) << dendl;
-    return -EEXIST;
+  if (name_exists(name)) {
+    if (get_item_id(name) != item) {
+      ldout(cct, 10) << "device name '" << name << "' already exists as id "
+		     << get_item_id(name.c_str()) << dendl;
+      return -EEXIST;
+    }
+  } else {
+    set_item_name(item, name);
   }
-
-  set_item_name(item, name.c_str());
 
   int cur = item;
 
