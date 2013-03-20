@@ -224,8 +224,14 @@ int main(int argc, const char **argv)
 
   {
     Monitor::StoreConverter converter(g_conf->mon_data);
-    if (converter.needs_conversion())
+    int ret = converter.needs_conversion();
+    if (ret > 0) {
       assert(!converter.convert());
+    } else if (ret < 0) {
+      derr << "found errors while attempting to convert the monitor store: "
+           << cpp_strerror(ret) << dendl;
+      exit(1);
+    }
   }
 
   MonitorDBStore store(g_conf->mon_data);
@@ -233,7 +239,6 @@ int main(int argc, const char **argv)
   if (err < 0) {
     cerr << argv[0] << ": error opening mon data store at '"
          << g_conf->mon_data << "': " << cpp_strerror(err) << std::endl;
-    cerr << "Have you run '--mkfs'?" << std::endl;
     exit(1);
   }
   assert(err == 0);
