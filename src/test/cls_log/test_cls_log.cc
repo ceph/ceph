@@ -136,7 +136,11 @@ TEST(cls_rgw, test_log_add_same_time)
 
   /* check list */
 
-  cls_log_list(*rop, start_time, 1000, entries, &truncated);
+  utime_t to_time = get_time(start_time, 1, true);
+
+  string marker;
+
+  cls_log_list(*rop, start_time, to_time, marker, 0, entries, &marker, &truncated);
 
   bufferlist obl;
   ASSERT_EQ(0, ioctx.operate(oid, rop, &obl));
@@ -177,7 +181,9 @@ TEST(cls_rgw, test_log_add_same_time)
 
   /* check list again, now want to be truncated*/
 
-  cls_log_list(*rop, start_time, 1, entries, &truncated);
+  marker.clear();
+
+  cls_log_list(*rop, start_time, to_time, marker, 1, entries, &marker, &truncated);
 
   ASSERT_EQ(0, ioctx.operate(oid, rop, &obl));
 
@@ -216,9 +222,13 @@ TEST(cls_rgw, test_log_add_different_time)
   list<cls_log_entry> entries;
   bool truncated;
 
+  utime_t to_time = utime_t(start_time.sec() + 10, start_time.nsec());
+
+  string marker;
+
   /* check list */
 
-  cls_log_list(*rop, start_time, 1000, entries, &truncated);
+  cls_log_list(*rop, start_time, to_time, marker, 0, entries, &marker, &truncated);
 
   bufferlist obl;
   ASSERT_EQ(0, ioctx.operate(oid, rop, &obl));
@@ -251,14 +261,35 @@ TEST(cls_rgw, test_log_add_different_time)
 
   utime_t next_time = get_time(start_time, 1, true);
 
-  cls_log_list(*rop, next_time, 10, entries, &truncated);
+  marker.clear();
+
+  cls_log_list(*rop, next_time, to_time, marker, 0, entries, &marker, &truncated);
 
   ASSERT_EQ(0, ioctx.operate(oid, rop, &obl));
 
   ASSERT_EQ(9, (int)entries.size());
   ASSERT_EQ(0, (int)truncated);
 
-  delete rop;
+  reset_rop(&rop);
+
+  marker.clear();
+
+  i = 0;
+  do {
+    bufferlist obl;
+    string old_marker = marker;
+    cls_log_list(*rop, start_time, to_time, old_marker, 1, entries, &marker, &truncated);
+
+    ASSERT_EQ(0, ioctx.operate(oid, rop, &obl));
+    ASSERT_NE(old_marker, marker);
+    ASSERT_EQ(1, (int)entries.size());
+
+    ++i;
+    ASSERT_GE(10, i);
+  } while (truncated);
+
+  ASSERT_EQ(10, i);
+
 }
 
 TEST(cls_rgw, test_log_trim)
@@ -293,6 +324,7 @@ TEST(cls_rgw, test_log_trim)
   /* check list */
 
   /* trim */
+  utime_t to_time = get_time(start_time, 10, true);
 
   for (int i = 0; i < 10; i++) {
     utime_t trim_time = get_time(start_time, i, true);
@@ -301,7 +333,9 @@ TEST(cls_rgw, test_log_trim)
 
     ASSERT_EQ(0, cls_log_trim(ioctx, oid, zero_time, trim_time));
 
-    cls_log_list(*rop, start_time, 1000, entries, &truncated);
+    string marker;
+
+    cls_log_list(*rop, start_time, to_time, marker, 0, entries, &marker, &truncated);
 
     bufferlist obl;
     ASSERT_EQ(0, ioctx.operate(oid, rop, &obl));

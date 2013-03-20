@@ -64,18 +64,23 @@ int cls_log_trim(librados::IoCtx& io_ctx, string& oid, utime_t& from, utime_t& t
 
 class LogListCtx : public ObjectOperationCompletion {
   list<cls_log_entry> *entries;
+  string *marker;
   bool *truncated;
 public:
-  LogListCtx(list<cls_log_entry> *_entries, bool *_truncated) :
-                                      entries(_entries), truncated(_truncated) {}
+  LogListCtx(list<cls_log_entry> *_entries, string *_marker, bool *_truncated) :
+                                      entries(_entries), marker(_marker), truncated(_truncated) {}
   void handle_completion(int r, bufferlist& outbl) {
     if (r >= 0) {
       cls_log_list_ret ret;
       try {
         bufferlist::iterator iter = outbl.begin();
         ::decode(ret, iter);
-	*entries = ret.entries;
-        *truncated = ret.truncated;
+        if (entries)
+	  *entries = ret.entries;
+        if (truncated)
+          *truncated = ret.truncated;
+        if (marker)
+          *marker = ret.marker;
       } catch (buffer::error& err) {
         // nothing we can do about it atm
       }
@@ -83,16 +88,19 @@ public:
   }
 };
 
-void cls_log_list(librados::ObjectReadOperation& op, utime_t& from, int max,
-                  list<cls_log_entry>& entries, bool *truncated)
+void cls_log_list(librados::ObjectReadOperation& op, utime_t& from, utime_t& to,
+                  string& in_marker, int max_entries, list<cls_log_entry>& entries,
+                  string *out_marker, bool *truncated)
 {
   bufferlist inbl;
   cls_log_list_op call;
   call.from_time = from;
-  call.num_entries = max;
+  call.to_time = to;
+  call.marker = in_marker;
+  call.max_entries = max_entries;
 
   ::encode(call, inbl);
 
-  op.exec("log", "list", inbl, new LogListCtx(&entries, truncated));
+  op.exec("log", "list", inbl, new LogListCtx(&entries, out_marker, truncated));
 }
 
