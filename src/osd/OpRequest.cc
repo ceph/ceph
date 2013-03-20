@@ -20,8 +20,16 @@ static ostream& _prefix(std::ostream* _dout)
   return *_dout << "--OSD::tracker-- ";
 }
 
-void OpHistory::insert(utime_t now, OpRequest *op)
+void OpHistory::on_shutdown()
 {
+  arrived.clear();
+  duration.clear();
+  shutdown = true;
+}
+
+void OpHistory::insert(utime_t now, OpRequestRef op)
+{
+  assert(!shutdown);
   duration.insert(make_pair(op->get_duration(), op));
   arrived.insert(make_pair(op->get_arrived(), op));
   cleanup(now);
@@ -108,7 +116,7 @@ void OpTracker::unregister_inflight_op(OpRequest *i)
   utime_t now = ceph_clock_now(g_ceph_context);
   i->xitem.remove_myself();
   i->request->clear_data();
-  history.insert(now, i);
+  history.insert(now, OpRequestRef(i));
 }
 
 bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
