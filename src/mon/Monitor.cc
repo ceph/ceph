@@ -4098,9 +4098,9 @@ bool Monitor::StoreConverter::_check_gv_store()
   return (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV));
 }
 
-bool Monitor::StoreConverter::needs_conversion()
+int Monitor::StoreConverter::needs_conversion()
 {
-  bool ret = false;
+  int ret = 0;
 
   dout(10) << __func__ << dendl;
   _init();
@@ -4109,17 +4109,23 @@ bool Monitor::StoreConverter::needs_conversion()
     dout(1) << "check for old monitor store format" << dendl;
     int err = store->mount();
     if (err < 0) {
-      dout(0) << "unable to mount monitor store; are you sure it exists?" << dendl;
-      dout(0) << "error: " << cpp_strerror(err) << dendl;
-      assert(0 == "non-existent store in mon data directory");
+      if (err == -ENOENT) {
+        derr << "unable to mount monitor store: "
+             << cpp_strerror(err) << dendl;
+      } else {
+        derr << "it appears that another monitor is running: "
+             << cpp_strerror(err) << dendl;
+      }
+      ret = err;
+      goto out;
     }
-    assert(!store->mount());
+    assert(err == 0);
     bufferlist magicbl;
     if (store->exists_bl_ss("magic", 0)) {
       if (_check_gv_store()) {
 	dout(1) << "found old GV monitor store format "
 		<< "-- should convert!" << dendl;
-	ret = true;
+	ret = 1;
       } else {
 	dout(0) << "Existing monitor store has not been converted "
 		<< "to 0.52 (bobtail) format" << dendl;
@@ -4127,7 +4133,14 @@ bool Monitor::StoreConverter::needs_conversion()
       }
     }
     assert(!store->umount());
+  } else {
+    if (db->exists("mon_convert", "on_going")) {
+      ret = -EEXIST;
+      derr << "there is an on-going (maybe aborted?) conversion." << dendl;
+      derr << "you should check what happened" << dendl;
+    }
   }
+out:
   _deinit();
   return ret;
 }
