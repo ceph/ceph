@@ -743,7 +743,7 @@ def adjust_symlink(target, path):
     create = True
     if os.path.lexists(path):
         try:
-            mode = os.path.lstat(canonical).st_mode
+            mode = os.lstat(canonical).st_mode
             if stat.S_ISREG(mode):
                 log.debug('Removing old file %s', canonical)
                 os.unlink(canonical)
