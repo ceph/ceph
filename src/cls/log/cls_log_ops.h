@@ -28,21 +28,28 @@ WRITE_CLASS_ENCODER(cls_log_add_op)
 
 struct cls_log_list_op {
   utime_t from_time;
-  int num_entries;
+  string marker; /* if not empty, overrides from_time */
+  utime_t to_time; /* not inclusive */
+  int max_entries; /* upperbound to returned num of entries
+                      might return less than that and still be truncated */
 
   cls_log_list_op() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(from_time, bl);
-    ::encode(num_entries, bl);
+    ::encode(marker, bl);
+    ::encode(to_time, bl);
+    ::encode(max_entries, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
     ::decode(from_time, bl);
-    ::decode(num_entries, bl);
+    ::decode(marker, bl);
+    ::decode(to_time, bl);
+    ::decode(max_entries, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -50,6 +57,7 @@ WRITE_CLASS_ENCODER(cls_log_list_op)
 
 struct cls_log_list_ret {
   list<cls_log_entry> entries;
+  string marker;
   bool truncated;
 
   cls_log_list_ret() : truncated(false) {}
@@ -57,6 +65,7 @@ struct cls_log_list_ret {
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(entries, bl);
+    ::encode(marker, bl);
     ::encode(truncated, bl);
     ENCODE_FINISH(bl);
   }
@@ -64,15 +73,21 @@ struct cls_log_list_ret {
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
     ::decode(entries, bl);
+    ::decode(marker, bl);
     ::decode(truncated, bl);
     DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(cls_log_list_ret)
 
+
+/*
+ * operation will return 0 when successfully removed but not done. Will return
+ * -ENODATA when done, so caller needs to repeat sending request until that.
+ */
 struct cls_log_trim_op {
   utime_t from_time;
-  utime_t to_time;
+  utime_t to_time; /* inclusive */
 
   cls_log_trim_op() {}
 
