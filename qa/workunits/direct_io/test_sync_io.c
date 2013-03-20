@@ -31,6 +31,11 @@ void write_pattern()
 	}
 	for (i=0; i<1048576 * sizeof(i); i += sizeof(i)) {
 		r = write(fd, &i, sizeof(i));
+		if (r == -1) {
+			r = errno;
+			printf("write_pattern: error: write() failed with: %d (%s)\n", r, strerror(r));
+			break;
+		}
 	}
 
 	close(fd);
@@ -69,6 +74,8 @@ int read_file(int buf_align, uint64_t offset, int len, int direct) {
 	void *rawbuf;
 	int r;
         int flags;
+	int err = 0;
+
 	if(direct)
 	   flags = O_RDONLY|O_DIRECT;
 	else
@@ -76,7 +83,7 @@ int read_file(int buf_align, uint64_t offset, int len, int direct) {
 
 	int fd = open("foo", flags);
 	if (fd < 0) {
-	   int err = errno;
+	   err = errno;
 	   printf("read_file: error: open() failed with: %d (%s)\n", err, strerror(err));
 	   exit(err);
 	}
@@ -86,14 +93,22 @@ int read_file(int buf_align, uint64_t offset, int len, int direct) {
 
 	if ((r = posix_memalign(&rawbuf, 4096, len + buf_align)) != 0) {
 	   printf("read_file: error: posix_memalign failed with %d", r);
+	   close(fd);
 	   exit (r);
 	}
 
 	void *buf = (char *)rawbuf + buf_align;
 	memset(buf, 0, len);
 	r = pread(fd, buf, len, offset);
-	close(fd);
+	if (r == -1) {
+	   err = errno;
+	   printf("read_file: error: pread() failed with: %d (%s)\n", err, strerror(err));
+	   goto out;
+	}
 	r = verify_pattern(buf, len, offset);
+
+out:
+	close(fd);
 	free(rawbuf);
 	return r;
 }
@@ -164,8 +179,14 @@ int write_file(int buf_align, uint64_t offset, int len, int direct)
 
 	memset(buf2, 0, len);
 	r = pread(fd, buf2, len, offset);
+	if (r == -1) {
+	   err = errno;
+	   printf("write_file: error: pread() failed with: %d (%s)\n", err, strerror(err));
+	   goto out_free_buf;
+	}
 	r = verify_pattern(buf2, len, offset);
 
+out_free_buf:
 	free(buf2);
 out_free:
 	free(rawbuf);
