@@ -349,7 +349,7 @@ class SnapIterator(object):
             elif (ret != -errno.ERANGE):
                 raise make_ex(ret, "error calling rados_snap_list for \
 ioctx '%s'" % self.ioctx.name)
-            num_snaps = num_snaps * 2;
+            num_snaps = num_snaps * 2
         self.cur_snap = 0
 
     def __iter__(self):
