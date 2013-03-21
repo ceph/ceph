@@ -406,6 +406,24 @@ public:
   void check_nearfull_warning(const osd_stat_t &stat);
   bool check_failsafe_full();
 
+  // -- stopping --
+  Mutex is_stopping_lock;
+  Cond is_stopping_cond;
+  enum {
+    NOT_STOPPING,
+    PREPARING_TO_STOP,
+    STOPPING } state;
+  bool is_stopping() {
+    Mutex::Locker l(is_stopping_lock);
+    return state == STOPPING;
+  }
+  bool is_preparing_to_stop() {
+    Mutex::Locker l(is_stopping_lock);
+    return state == PREPARING_TO_STOP;
+  }
+  bool prepare_to_stop();
+  void got_stop_ack();
+
   OSDService(OSD *osd);
 };
 class OSD : public Dispatcher,
