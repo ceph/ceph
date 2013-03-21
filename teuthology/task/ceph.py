@@ -9,6 +9,7 @@ import sys
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from ..orchestra import run
+import ceph_client as cclient
 
 log = logging.getLogger(__name__)
 
@@ -506,31 +507,7 @@ def cluster(ctx, config):
                     ],
                 )
 
-    log.info('Setting up client nodes...')
-    clients = ctx.cluster.only(teuthology.is_type('client'))
-    for remote, roles_for_host in clients.remotes.iteritems():
-        for id_ in teuthology.roles_of_type(roles_for_host, 'client'):
-            client_keyring = '/etc/ceph/ceph.client.{id}.keyring'.format(id=id_)
-            remote.run(
-                args=[
-                    '{tdir}/enable-coredump'.format(tdir=testdir),
-                    'ceph-coverage',
-                    coverage_dir,
-                    'sudo',
-                    'ceph-authtool',
-                    '--create-keyring',
-                    '--gen-key',
-                    # TODO this --name= is not really obeyed, all unknown "types" are munged to "client"
-                    '--name=client.{id}'.format(id=id_),
-                    client_keyring,
-                    run.Raw('&&'),
-                    'sudo',
-                    'chmod',
-                    '0644',
-                    client_keyring,
-                    ],
-                )
-
+    cclient.create_keyring(ctx)
     log.info('Running mkfs on osd nodes...')
     for remote, roles_for_host in osds.remotes.iteritems():
         roles_to_devs = remote_to_roles_to_devs[remote]
