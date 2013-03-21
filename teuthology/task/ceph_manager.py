@@ -147,9 +147,46 @@ class Thrasher:
         status = self.ceph_manager.get_osd_status()
         assert not the_one in status['down']
 
+    def test_backfill_full(self):
+        """
+        Test backfills stopping when the replica fills up.
+
+        First, use osd_backfill_full_ratio to simulate a now full
+        osd by setting it to 0 on all of the OSDs.
+
+        Second, on a random subset, set
+        osd_debug_skip_full_check_in_backfill_reservation to force
+        the more complicated check in do_scan to be exercised.
+
+        Then, verify that all backfills stop.
+        """
+        self.log("injecting osd_backfill_full_ratio = 0")
+        for i in self.live_osds:
+            self.ceph_manager.set_config(
+                i,
+                osd_debug_skip_full_check_in_backfill_reservation = random.choice(
+                    ['false', 'true']),
+                osd_backfill_full_ratio = 0)
+        for i in range(30):
+            status = self.ceph_manager.compile_pg_status()
+            if 'backfill' not in status.keys():
+                break
+            self.log(
+                "waiting for {still_going} backfills".format(
+                    still_going=status.get('backfill')))
+            time.sleep(1)
+        assert('backfill' not in self.ceph_manager.compile_pg_status().keys())
+        for i in self.live_osds:
+            self.ceph_manager.set_config(
+                i,
+                osd_debug_skip_full_check_in_backfill_reservation = \
+                    'false',
+                osd_backfill_full_ratio = 0.85)
+
     def choose_action(self):
         chance_down = self.config.get('chance_down', 0.4)
         chance_test_min_size = self.config.get('chance_test_min_size', 0)
+        chance_test_backfill_full= self.config.get('chance_test_backfill_full', 0)
         if isinstance(chance_down, int):
             chance_down = float(chance_down) / 100
         minin = self.config.get("min_in", 2)
@@ -171,6 +208,7 @@ class Thrasher:
         actions.append((self.grow_pool, self.config.get('chance_pgnum_grow', 0),))
         actions.append((self.fix_pgp_num, self.config.get('chance_pgpnum_fix', 0),))
         actions.append((self.test_pool_min_size, chance_test_min_size,))
+        actions.append((self.test_backfill_full, chance_test_backfill_full,))
         for key in ['heartbeat_inject_failure', 'filestore_inject_stall']:
             for scenario in [
                 (lambda: self.inject_pause(key,
@@ -480,6 +518,16 @@ class CephManager:
         out = self.raw_cluster_cmd('--', 'pg','dump','--format=json')
         j = json.loads('\n'.join(out.split('\n')[1:]))
         return j['pg_stats']
+
+    def compile_pg_status(self):
+        ret = {}
+        j = self.get_pg_stats()
+        for pg in j:
+            for status in pg['state'].split('+'):
+                if status not in ret:
+                    ret[status] = 0
+                ret[status] += 1
+        return ret
 
     def get_single_pg_stats(self, pgid):
         all_stats = self.get_pg_stats()

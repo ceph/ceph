@@ -72,6 +72,9 @@ def task(ctx, config):
         of just the osd process. Note that this assumes that a single
         osd is the only important process on the node.
 
+    chance_test_backfill_full: (0) chance to simulate full disks stopping
+        backfill
+
     example:
 
     tasks:
