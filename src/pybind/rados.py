@@ -322,7 +322,7 @@ class XattrIterator(object):
         ret = self.ioctx.librados.\
             rados_getxattrs_next(self.it, byref(name_), byref(val_), byref(len_))
         if (ret != 0):
-          raise make_ex(ret, "error iterating over the extended attributes \
+            raise make_ex(ret, "error iterating over the extended attributes \
 in '%s'" % self.oid)
         if name_.value == None:
             raise StopIteration()
