@@ -2468,10 +2468,6 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  break;
 	}
 	int id = newcrush.get_item_id(m->cmd[3].c_str());
-	if (id < 0) {
-	  ss << "item '" << m->cmd[3] << "' is not a leaf in the crush map";
-	  break;
-	}
 	if (m->cmd.size() > 4) {
 	  if (!newcrush.name_exists(m->cmd[4])) {
 	    err = -ENOENT;
