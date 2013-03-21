@@ -34,6 +34,7 @@
 
 #define CEPH_STAT_CP "com/ceph/fs/CephStat"
 #define CEPH_STAT_VFS_CP "com/ceph/fs/CephStatVFS"
+#define CEPH_FILE_EXTENT_CP "com/ceph/fs/CephFileExtent"
 #define CEPH_MOUNT_CP "com/ceph/fs/CephMount"
 #define CEPH_NOTMOUNTED_CP "com/ceph/fs/CephNotMountedException"
 #define CEPH_FILEEXISTS_CP "com/ceph/fs/CephFileAlreadyExistsException"
@@ -149,6 +150,10 @@ static jfieldID cephstatvfs_namemax_fid;
 /* Cached field IDs for com.ceph.fs.CephMount */
 static jfieldID cephmount_instance_ptr_fid;
 
+/* Cached field IDs for com.ceph.fs.CephFileExtent */
+static jclass cephfileextent_cls;
+static jmethodID cephfileextent_ctor_fid;
+
 /*
  * Exception throwing helper. Adapted from Apache Hadoop header
  * org_apache_hadoop.h by adding the do {} while (0) construct.
@@ -260,6 +265,7 @@ static void setup_field_ids(JNIEnv *env, jclass clz)
 {
 	jclass cephstat_cls;
 	jclass cephstatvfs_cls;
+	jclass tmp_cephfileextent_cls;
 
 /*
  * Get a fieldID from a class with a specific type
@@ -311,6 +317,19 @@ static void setup_field_ids(JNIEnv *env, jclass clz)
 	GETFID(cephstatvfs, files, J);
 	GETFID(cephstatvfs, fsid, J);
 	GETFID(cephstatvfs, namemax, J);
+
+	/* Cache CephFileExtent fields */
+
+	tmp_cephfileextent_cls = env->FindClass(CEPH_FILE_EXTENT_CP);
+	if (!tmp_cephfileextent_cls)
+		return;
+
+	cephfileextent_cls = (jclass)env->NewGlobalRef(tmp_cephfileextent_cls);
+	env->DeleteLocalRef(tmp_cephfileextent_cls);
+
+	cephfileextent_ctor_fid = env->GetMethodID(cephfileextent_cls, "<init>", "(JJ[I)V");
+	if (!cephfileextent_ctor_fid)
+		return;
 
 #undef GETFID
 
@@ -2626,4 +2645,71 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1get_1pool_1repli
 	ldout(cct, 10) << "jni: get_pool_replication: ret " << ret << dendl;
 
 	return ret;
+}
+
+/*
+ * Class:     com_ceph_fs_CephMount
+ * Method:    native_ceph_get_file_extent_osds
+ * Signature: (JIJ)Lcom/ceph/fs/CephFileExtent;
+ */
+JNIEXPORT jobject JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1get_1file_1extent_1osds
+  (JNIEnv *env, jclass clz, jlong mntp, jint fd, jlong off)
+{
+  struct ceph_mount_info *cmount = get_ceph_mount(mntp);
+  CephContext *cct = ceph_get_mount_context(cmount);
+  jobject extent = NULL;
+  int ret, nosds, *osds = NULL;
+  jintArray osd_array;
+  loff_t len;
+
+	CHECK_MOUNTED(cmount, NULL);
+
+	ldout(cct, 10) << "jni: get_file_extent_osds: fd " << fd << " off " << off << dendl;
+
+  for (;;) {
+    /* get pg size */
+    ret = ceph_get_file_extent_osds(cmount, fd, off, NULL, NULL, 0);
+    if (ret < 0)
+      break;
+
+    /* alloc osd id array */
+    if (osds)
+      delete [] osds;
+    nosds = ret;
+    osds = new int[nosds];
+
+    /* get osd ids */
+    ret = ceph_get_file_extent_osds(cmount, fd, off, &len, osds, nosds);
+    if (ret == -ERANGE)
+      continue;
+    else
+      break;
+  }
+
+	ldout(cct, 10) << "jni: get_file_extent_osds: ret " << ret << dendl;
+
+  if (ret < 0) {
+    handle_error(env, ret);
+    goto out;
+  }
+
+  nosds = ret;
+
+  osd_array = env->NewIntArray(nosds);
+  if (!osd_array)
+    goto out;
+
+  env->SetIntArrayRegion(osd_array, 0, nosds, osds);
+  if (env->ExceptionOccurred())
+    goto out;
+
+  extent = env->NewObject(cephfileextent_cls, cephfileextent_ctor_fid, off, len, osd_array);
+  if (!extent)
+    goto out;
+
+out:
+  if (osds)
+    delete [] osds;
+
+  return extent;
 }
