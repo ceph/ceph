@@ -2713,3 +2713,85 @@ out:
 
   return extent;
 }
+
+/*
+ * Class:     com_ceph_fs_CephMount
+ * Method:    native_ceph_get_osd_crush_location
+ * Signature: (JI)[Ljava/lang/String;
+ */
+JNIEXPORT jobjectArray JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1get_1osd_1crush_1location
+  (JNIEnv *env, jclass clz, jlong j_mntp, jint osdid)
+{
+	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
+	CephContext *cct = ceph_get_mount_context(cmount);
+  jobjectArray path = NULL;
+  vector<string> str_path;
+	int ret, bufpos, buflen = 0;
+  char *buf = NULL;
+
+	CHECK_MOUNTED(cmount, NULL);
+
+  ldout(cct, 10) << "jni: osd loc: osd " << osdid << dendl;
+
+  for (;;) {
+    /* get length of the location path */
+    ret = ceph_get_osd_crush_location(cmount, osdid, NULL, 0);
+    if (ret < 0)
+      break;
+
+    /* alloc path buffer */
+    if (buf)
+      delete [] buf;
+    buflen = ret;
+    buf = new char[buflen+1];
+    memset(buf, 0, buflen*sizeof(*buf));
+
+    /* empty path */
+    if (buflen == 0)
+      break;
+
+    /* get the path */
+    ret = ceph_get_osd_crush_location(cmount, osdid, buf, buflen);
+    if (ret == -ERANGE)
+      continue;
+    else
+      break;
+  }
+
+  ldout(cct, 10) << "jni: osd loc: osd " << osdid << " ret " << ret << dendl;
+
+  if (ret < 0) {
+    handle_error(env, ret);
+    goto out;
+  }
+
+  bufpos = 0;
+  while (bufpos < ret) {
+    string type(buf + bufpos);
+    bufpos += type.size() + 1;
+    string name(buf + bufpos);
+    bufpos += name.size() + 1;
+    str_path.push_back(type);
+    str_path.push_back(name);
+  }
+
+  path = env->NewObjectArray(str_path.size(), env->FindClass("java/lang/String"), NULL);
+  if (!path)
+    goto out;
+
+  for (unsigned i = 0; i < str_path.size(); i++) {
+    jstring ent = env->NewStringUTF(str_path[i].c_str());
+    if (!ent)
+      goto out;
+    env->SetObjectArrayElement(path, i, ent);
+    if (env->ExceptionOccurred())
+      goto out;
+    env->DeleteLocalRef(ent);
+  }
+
+out:
+  if (buf)
+    delete [] buf;
+
+  return path;
+}

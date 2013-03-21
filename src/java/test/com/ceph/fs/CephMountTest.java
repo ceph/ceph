@@ -26,6 +26,8 @@ import java.util.UUID;
 import org.junit.*;
 import static org.junit.Assert.*;
 
+import com.ceph.crush.Bucket;
+
 /*
  * Coverage
  *  - Everything is covered in at least success cases.
@@ -980,5 +982,15 @@ public class CephMountTest {
 
     mount.close(fd);
     mount.unlink(path);
+  }
+
+  @Test
+  public void test_get_osd_crush_location() throws Exception {
+    Bucket[] path = mount.get_osd_crush_location(0);
+    assertTrue(path.length > 0);
+    for (Bucket b : path) {
+      assertTrue(b.getType().length() > 0);
+      assertTrue(b.getName().length() > 0);
+    }
   }
 }
