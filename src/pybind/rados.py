@@ -361,7 +361,7 @@ ioctx '%s'" % self.ioctx.name)
         name_len = 10
         while True:
             name = create_string_buffer(name_len)
-            ret = self.ioctx.librados.rados_ioctx_snap_get_name(self.ioctx.io,\
+            ret = self.ioctx.librados.rados_ioctx_snap_get_name(self.ioctx.io, \
                                 snap_id, byref(name), name_len)
             if (ret == 0):
                 name_len = ret
@@ -558,7 +558,7 @@ class Ioctx(object):
 
     def change_auid(self, auid):
         self.require_ioctx_open()
-        ret = self.librados.rados_ioctx_pool_set_auid(self.io,\
+        ret = self.librados.rados_ioctx_pool_set_auid(self.io, \
                 ctypes.c_uint64(auid))
         if ret < 0:
             raise make_ex(ret, "error changing auid of '%s' to %lld" %\
@@ -568,7 +568,7 @@ class Ioctx(object):
         self.require_ioctx_open()
         if not isinstance(loc_key, str):
             raise TypeError('loc_key must be a string')
-        self.librados.rados_ioctx_locator_set_key(self.io,\
+        self.librados.rados_ioctx_locator_set_key(self.io, \
                 c_char_p(loc_key))
         self.locator_key = loc_key
 
@@ -758,7 +758,7 @@ written." % (self.name, ret, length))
         if not isinstance(snap_name, str):
             raise TypeError('snap_name must be a string')
         snap_id = c_uint64()
-        ret = self.librados.rados_ioctx_snap_lookup(self.io,\
+        ret = self.librados.rados_ioctx_snap_lookup(self.io, \
                             c_char_p(snap_name), byref(snap_id))
         if (ret != 0):
             raise make_ex(ret, "Failed to lookup snap %s" % snap_name)
