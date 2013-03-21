@@ -988,4 +988,22 @@ public class CephMount {
   }
 
   private static native int native_ceph_get_pool_replication(long mountp, int pool_id) throws FileNotFoundException;
+
+  /**
+   * Get file extent containing a given offset.
+   *
+   * @param fd The file descriptor.
+   * @param offset Offset in file.
+   * @return A CephFileExtent object.
+   */
+  public CephFileExtent get_file_extent(int fd, long offset) {
+    rlock.lock();
+    try {
+      return native_ceph_get_file_extent_osds(instance_ptr, fd, offset);
+    } finally {
+      rlock.unlock();
+    }
+  }
+
+  private static native CephFileExtent native_ceph_get_file_extent_osds(long mountp, int fd, long offset);
 }
