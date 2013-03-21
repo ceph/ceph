@@ -3305,6 +3305,16 @@ void PG::reject_reservation()
     get_osdmap()->get_epoch());
 }
 
+void PG::schedule_backfill_full_retry()
+{
+  Mutex::Locker lock(osd->backfill_request_lock);
+  osd->backfill_request_timer.add_event_after(
+    g_conf->osd_backfill_retry_interval,
+    new QueuePeeringEvt<RequestBackfill>(
+      this, get_osdmap()->get_epoch(),
+      RequestBackfill()));
+}
+
 void PG::clear_scrub_reserved()
 {
   osd->scrub_wq.dequeue(this);
@@ -5913,24 +5923,6 @@ void PG::RecoveryState::Backfilling::exit()
   pg->state_clear(PG_STATE_BACKFILL);
 }
 
-template <class EVT>
-struct QueuePeeringEvt : Context {
-  boost::intrusive_ptr<PG> pg;
-  epoch_t epoch;
-  EVT evt;
-  QueuePeeringEvt(PG *pg, epoch_t epoch, EVT evt) :
-    pg(pg), epoch(epoch), evt(evt) {}
-  void finish(int r) {
-    pg->lock();
-    pg->queue_peering_event(PG::CephPeeringEvtRef(
-	new PG::CephPeeringEvt(
-	  epoch,
-	  epoch,
-	  evt)));
-    pg->unlock();
-  }
-};
-
 /*--WaitRemoteBackfillReserved--*/
 
 PG::RecoveryState::WaitRemoteBackfillReserved::WaitRemoteBackfillReserved(my_context ctx)
@@ -5977,12 +5969,7 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationReje
   pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_set(PG_STATE_BACKFILL_TOOFULL);
 
-  Mutex::Locker lock(pg->osd->backfill_request_lock);
-  pg->osd->backfill_request_timer.add_event_after(
-    g_conf->osd_backfill_retry_interval,
-    new QueuePeeringEvt<RequestBackfill>(
-      pg, pg->get_osdmap()->get_epoch(),
-      RequestBackfill()));
+  pg->schedule_backfill_full_retry();
 
   return transit<NotBackfilling>();
 }

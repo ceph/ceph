@@ -1051,8 +1051,27 @@ public:
   void sub_op_scrub_stop(OpRequestRef op);
 
   void reject_reservation();
+  void schedule_backfill_full_retry();
 
   // -- recovery state --
+
+  template <class EVT>
+  struct QueuePeeringEvt : Context {
+    boost::intrusive_ptr<PG> pg;
+    epoch_t epoch;
+    EVT evt;
+    QueuePeeringEvt(PG *pg, epoch_t epoch, EVT evt) :
+      pg(pg), epoch(epoch), evt(evt) {}
+    void finish(int r) {
+      pg->lock();
+      pg->queue_peering_event(PG::CephPeeringEvtRef(
+				new PG::CephPeeringEvt(
+				  epoch,
+				  epoch,
+				  evt)));
+      pg->unlock();
+    }
+  };
 
   class CephPeeringEvt {
     epoch_t epoch_sent;
