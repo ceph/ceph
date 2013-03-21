@@ -59,7 +59,7 @@ The environment you create for Ceph requires an ``fsid``, the secret for
 your monitor(s) if you are running Ceph with ``cephx`` authentication, and
 the host name (i.e., short name) for your monitor hosts.
 
-.. tip: Open an empty text file to hold the following values until you create
+.. tip:: Open an empty text file to hold the following values until you create
    your Ceph environment.
 
 For the filesystem ID, use ``uuidgen`` from the ``uuid-runtime`` package to 
@@ -169,7 +169,7 @@ Identify nodes for your Ceph cluster. ::
 
 	knife node list
 	
-.. note: for each host where you installed Chef and executed ``chef-client``, 
+.. note:: for each host where you installed Chef and executed ``chef-client``, 
    the Chef server should have a minimal node configuration. You can create
    additional nodes with ``knife node create {node-name}``.
 
@@ -236,7 +236,7 @@ within ``"normal": {}``::
 	
 Supported values are ``device``, ``journal``, ``dmcrypt`` (deactivated by default).
 
-.. note: dmcrypt is only supported starting with Cuttlefish
+.. note:: dmcrypt is only supported starting with Cuttlefish
 
 .. _runchefclient:
 

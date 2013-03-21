@@ -418,7 +418,7 @@ unnecessary debugging settings to ensure your cluster runs optimally. Logging
 debug output messages is relatively slow, and a waste of resources when
 operating your cluster. 
 
-.. tip: When debug output slows down your system, the latency can hide 
+.. tip:: When debug output slows down your system, the latency can hide 
    race conditions.
 
 Each subsystem has a logging level for its output logs,  and for its logs

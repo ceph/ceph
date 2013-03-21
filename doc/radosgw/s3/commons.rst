@@ -18,7 +18,7 @@ The second method identifies the bucket via a virtual bucket host name. For exam
 	GET / HTTP/1.1
 	Host: mybucket.cname.domain.com
 
-.. tip: We prefer the first method, because the second method requires expensive domain certification and DNS wild cards.
+.. tip:: We prefer the first method, because the second method requires expensive domain certification and DNS wild cards.
 
 Common Request Headers
 ----------------------
