@@ -26,6 +26,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.Arrays;
 import java.lang.String;
 
+import com.ceph.crush.Bucket;
+
 public class CephMount {
 
   /*
@@ -1006,4 +1008,28 @@ public class CephMount {
   }
 
   private static native CephFileExtent native_ceph_get_file_extent_osds(long mountp, int fd, long offset);
+
+  /**
+   * Get the fully qualified CRUSH location of an OSD.
+   *
+   * Returns (type, name) string pairs for each device in the CRUSH bucket
+   * hierarchy starting from the given OSD to the root.
+   *
+   * @param osd The OSD device id.
+   * @return List of pairs.
+   */
+  public Bucket[] get_osd_crush_location(int osd) {
+    rlock.lock();
+    try {
+      String[] parts = native_ceph_get_osd_crush_location(instance_ptr, osd);
+      Bucket[] path = new Bucket[parts.length / 2];
+      for (int i = 0; i < path.length; i++)
+        path[i] = new Bucket(parts[i*2], parts[i*2+1]);
+      return path;
+    } finally {
+      rlock.unlock();
+    }
+  }
+
+  private static native String[] native_ceph_get_osd_crush_location(long mountp, int osd);
 }
