@@ -107,6 +107,7 @@ Rados object in state %s." % (self.state))
     def __init__(self, rados_id=None, conf=None, conffile=None):
         self.librados = CDLL('librados.so.2')
         self.cluster = c_void_p()
+        self.rados_id = rados_id
         if rados_id is not None and not isinstance(rados_id, str):
             raise TypeError('rados_id must be a string or None')
         if conffile is not None and not isinstance(conffile, str):
@@ -196,7 +197,7 @@ Rados object in state %s." % (self.state))
         ret = self.librados.rados_cluster_stat(self.cluster, byref(stats))
         if ret < 0:
             raise make_ex(
-                ret, "Rados.get_cluster_stats(%s): get_stats failed" % self.name)
+                ret, "Rados.get_cluster_stats(%s): get_stats failed" % self.rados_id)
         return {'kb': stats.kb,
                 'kb_used': stats.kb_used,
                 'kb_avail': stats.kb_avail,
@@ -321,7 +322,7 @@ class XattrIterator(object):
         ret = self.ioctx.librados.\
             rados_getxattrs_next(self.it, byref(name_), byref(val_), byref(len_))
         if (ret != 0):
-          raise make_ex(ret, "error iterating over the extended attributes \
+            raise make_ex(ret, "error iterating over the extended attributes \
 in '%s'" % self.oid)
         if name_.value == None:
             raise StopIteration()
@@ -348,7 +349,7 @@ class SnapIterator(object):
             elif (ret != -errno.ERANGE):
                 raise make_ex(ret, "error calling rados_snap_list for \
 ioctx '%s'" % self.ioctx.name)
-            num_snaps = num_snaps * 2;
+            num_snaps = num_snaps * 2
         self.cur_snap = 0
 
     def __iter__(self):
@@ -361,7 +362,7 @@ ioctx '%s'" % self.ioctx.name)
         name_len = 10
         while True:
             name = create_string_buffer(name_len)
-            ret = self.ioctx.librados.rados_ioctx_snap_get_name(self.ioctx.io,\
+            ret = self.ioctx.librados.rados_ioctx_snap_get_name(self.ioctx.io, \
                                 snap_id, byref(name), name_len)
             if (ret == 0):
                 name_len = ret
@@ -558,17 +559,17 @@ class Ioctx(object):
 
     def change_auid(self, auid):
         self.require_ioctx_open()
-        ret = self.librados.rados_ioctx_pool_set_auid(self.io,\
+        ret = self.librados.rados_ioctx_pool_set_auid(self.io, \
                 ctypes.c_uint64(auid))
         if ret < 0:
-            raise make_ex(ret, "error changing auid of '%s' to %lld" %\
+            raise make_ex(ret, "error changing auid of '%s' to %d" %\
                 (self.name, auid))
 
     def set_locator_key(self, loc_key):
         self.require_ioctx_open()
         if not isinstance(loc_key, str):
             raise TypeError('loc_key must be a string')
-        self.librados.rados_ioctx_locator_set_key(self.io,\
+        self.librados.rados_ioctx_locator_set_key(self.io, \
                 c_char_p(loc_key))
         self.locator_key = loc_key
 
@@ -594,7 +595,7 @@ class Ioctx(object):
             raise make_ex(ret, "Ioctx.write(%s): failed to write %s" % \
                 (self.name, key))
         elif ret < length:
-            raise IncompleteWriteError("Wrote only %ld out of %ld bytes" % \
+            raise IncompleteWriteError("Wrote only %d out of %d bytes" % \
                 (ret, length))
         else:
             raise LogicError("Ioctx.write(%s): rados_write \
@@ -758,7 +759,7 @@ written." % (self.name, ret, length))
         if not isinstance(snap_name, str):
             raise TypeError('snap_name must be a string')
         snap_id = c_uint64()
-        ret = self.librados.rados_ioctx_snap_lookup(self.io,\
+        ret = self.librados.rados_ioctx_snap_lookup(self.io, \
                             c_char_p(snap_name), byref(snap_id))
         if (ret != 0):
             raise make_ex(ret, "Failed to lookup snap %s" % snap_name)
