@@ -3294,6 +3294,17 @@ void PG::sub_op_scrub_stop(OpRequestRef op)
   osd->send_message_osd_cluster(reply, m->get_connection());
 }
 
+void PG::reject_reservation()
+{
+  osd->send_message_osd_cluster(
+    acting[0],
+    new MBackfillReserve(
+      MBackfillReserve::REJECT,
+      info.pgid,
+      get_osdmap()->get_epoch()),
+    get_osdmap()->get_epoch());
+}
+
 void PG::clear_scrub_reserved()
 {
   osd->scrub_wq.dequeue(this);
@@ -6102,13 +6113,7 @@ boost::statechart::result
 PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteReservationRejected &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->osd->send_message_osd_cluster(
-    pg->acting[0],
-    new MBackfillReserve(
-      MBackfillReserve::REJECT,
-      pg->info.pgid,
-      pg->get_osdmap()->get_epoch()),
-    pg->get_osdmap()->get_epoch());
+  pg->reject_reservation();
   return transit<RepNotRecovering>();
 }
 
