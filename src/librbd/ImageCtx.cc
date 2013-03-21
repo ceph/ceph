@@ -220,6 +220,8 @@ namespace librbd {
     plb.add_u64_counter(l_librbd_aio_discard, "aio_discard");
     plb.add_u64_counter(l_librbd_aio_discard_bytes, "aio_discard_bytes");
     plb.add_time_avg(l_librbd_aio_discard_latency, "aio_discard_latency");
+    plb.add_u64_counter(l_librbd_aio_flush, "aio_flush");
+    plb.add_time_avg(l_librbd_aio_flush_latency, "aio_flush_latency");
     plb.add_u64_counter(l_librbd_snap_create, "snap_create");
     plb.add_u64_counter(l_librbd_snap_remove, "snap_remove");
     plb.add_u64_counter(l_librbd_snap_rollback, "snap_rollback");
@@ -532,24 +534,26 @@ namespace librbd {
     }
   }
 
+  void ImageCtx::flush_cache_aio(Context *onfinish) {
+    cache_lock.Lock();
+    object_cacher->flush_set(object_set, onfinish);
+    cache_lock.Unlock();
+  }
+
   int ImageCtx::flush_cache() {
     int r = 0;
     Mutex mylock("librbd::ImageCtx::flush_cache");
     Cond cond;
     bool done;
     Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &r);
-    cache_lock.Lock();
-    bool already_flushed = object_cacher->flush_set(object_set, onfinish);
-    cache_lock.Unlock();
-    if (!already_flushed) {
-      mylock.Lock();
-      while (!done) {
-	ldout(cct, 20) << "waiting for cache to be flushed" << dendl;
-	cond.Wait(mylock);
-      }
-      mylock.Unlock();
-      ldout(cct, 20) << "finished flushing cache" << dendl;
+    flush_cache_aio(onfinish);
+    mylock.Lock();
+    while (!done) {
+      ldout(cct, 20) << "waiting for cache to be flushed" << dendl;
+      cond.Wait(mylock);
     }
+    mylock.Unlock();
+    ldout(cct, 20) << "finished flushing cache" << dendl;
     return r;
   }
 
