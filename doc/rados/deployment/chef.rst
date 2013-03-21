@@ -59,7 +59,7 @@ The environment you create for Ceph requires an ``fsid``, the secret for
 your monitor(s) if you are running Ceph with ``cephx`` authentication, and
 the host name (i.e., short name) for your monitor hosts.
 
-.. tip: Open an empty text file to hold the following values until you create
+.. tip:: Open an empty text file to hold the following values until you create
    your Ceph environment.
 
 For the filesystem ID, use ``uuidgen`` from the ``uuid-runtime`` package to 
