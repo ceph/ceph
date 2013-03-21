@@ -105,11 +105,12 @@ protected:
   public:
     C_RetryMessage(PaxosService *s, PaxosServiceMessage *m_) : svc(s), m(m_) {}
     void finish(int r) {
-      if (r == -ECANCELED) {
+      if (r == -EAGAIN || r >= 0)
+	svc->dispatch(m);
+      else if (r == -ECANCELED)
 	m->put();
-	return;
-      }
-      svc->dispatch(m);
+      else
+	assert(0 == "bad C_RetryMessage return value");
     }
   };
 
@@ -140,10 +141,13 @@ protected:
   public:
     C_Propose(PaxosService *p) : ps(p) { }
     void finish(int r) {
-      if (r == -ECANCELED)
-	return;
       ps->proposal_timer = 0;
-      ps->propose_pending(); 
+      if (r >= 0)
+	ps->propose_pending();
+      else if (r == -ECANCELED || r == -EAGAIN)
+	return;
+      else
+	assert(0 == "bad return value for C_Propose");
     }
   };
 
@@ -163,7 +167,12 @@ protected:
     C_Committed(PaxosService *p) : ps(p) { }
     void finish(int r) {
       ps->proposing.set(0);
-      ps->_active();
+      if (r >= 0)
+	ps->_active();
+      else if (r == -ECANCELED || r == -EAGAIN)
+	return;
+      else
+	assert(0 == "bad return value for C_Committed");
     }
   };
   /**
