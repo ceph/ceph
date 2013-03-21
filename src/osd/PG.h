@@ -1050,6 +1050,7 @@ public:
   void sub_op_scrub_unreserve(OpRequestRef op);
   void sub_op_scrub_stop(OpRequestRef op);
 
+  void reject_reservation();
 
   // -- recovery state --
 
