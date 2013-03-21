@@ -822,7 +822,7 @@ extern "C" int ceph_get_osd_crush_location(struct ceph_mount_info *cmount,
   if (!cmount->is_mounted())
     return -ENOTCONN;
 
-  if (!path)
+  if (!path && len)
     return -EINVAL;
 
   vector<pair<string, string> > loc;
@@ -837,7 +837,7 @@ extern "C" int ceph_get_osd_crush_location(struct ceph_mount_info *cmount,
     string& type = it->first;
     string& name = it->second;
     needed += type.size() + name.size() + 2;
-    if (needed < len) {
+    if (needed <= len) {
       strcpy(path + cur, type.c_str());
       cur += type.size() + 1;
       strcpy(path + cur, name.c_str());
