@@ -648,7 +648,7 @@ int Pipe::accept()
       ldout(msgr->cct,2) << "accept read error on newly_acked_seq" << dendl;
       goto fail_registered;
     }
-    requeue_sent(newly_acked_seq);
+    discard_requeued_up_to(newly_acked_seq);
   }
 
   pipe_lock.Lock();
@@ -1097,7 +1097,7 @@ void Pipe::unregister_pipe()
 }
 
 
-void Pipe::requeue_sent(uint64_t max_acked)
+void Pipe::requeue_sent()
 {
   if (sent.empty())
     return;
@@ -1106,16 +1106,26 @@ void Pipe::requeue_sent(uint64_t max_acked)
   while (!sent.empty()) {
     Message *m = sent.back();
     sent.pop_back();
-    if (m->get_seq() > max_acked) {
-      ldout(msgr->cct,10) << "requeue_sent " << *m << " for resend seq " << out_seq
-          << " (" << m->get_seq() << ")" << dendl;
-      rq.push_front(m);
-      out_seq--;
-    } else {
-      ldout(msgr->cct,10) << "requeue_sent " << *m << " for resend seq " << out_seq
-			  << " <= max_acked " << max_acked << ", discarding" << dendl;
-      m->put();
-    }
+    ldout(msgr->cct,10) << "requeue_sent " << *m << " for resend seq " << out_seq
+			<< " (" << m->get_seq() << ")" << dendl;
+    rq.push_front(m);
+    out_seq--;
+  }
+}
+
+void Pipe::discard_requeued_up_to(uint64_t seq)
+{
+  ldout(msgr->cct, 10) << "discard_requeued_up_to " << seq << dendl;
+  list<Message*>& rq = out_q[CEPH_MSG_PRIO_HIGHEST];
+  while (!rq.empty()) {
+    Message *m = rq.front();
+    if (m->get_seq() == 0 || m->get_seq() > seq)
+      break;
+    ldout(msgr->cct,10) << "discard_requeued_up_to " << *m << " for resend seq " << out_seq
+			<< " <= " << seq << ", discarding" << dendl;
+    m->put();
+    rq.pop_front();
+    out_seq++;
   }
 }
 
