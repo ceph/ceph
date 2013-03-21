@@ -562,7 +562,7 @@ class Ioctx(object):
         ret = self.librados.rados_ioctx_pool_set_auid(self.io, \
                 ctypes.c_uint64(auid))
         if ret < 0:
-            raise make_ex(ret, "error changing auid of '%s' to %lld" %\
+            raise make_ex(ret, "error changing auid of '%s' to %d" %\
                 (self.name, auid))
 
     def set_locator_key(self, loc_key):
@@ -595,7 +595,7 @@ class Ioctx(object):
             raise make_ex(ret, "Ioctx.write(%s): failed to write %s" % \
                 (self.name, key))
         elif ret < length:
-            raise IncompleteWriteError("Wrote only %ld out of %ld bytes" % \
+            raise IncompleteWriteError("Wrote only %d out of %d bytes" % \
                 (ret, length))
         else:
             raise LogicError("Ioctx.write(%s): rados_write \
