@@ -990,7 +990,7 @@ TEST(LibCephFS, GetOsdCrushLocation) {
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
-  ASSERT_EQ(ceph_get_osd_crush_location(cmount, 0, NULL, 0), -EINVAL);
+  ASSERT_EQ(ceph_get_osd_crush_location(cmount, 0, NULL, 1), -EINVAL);
 
   char path[256];
   ASSERT_EQ(ceph_get_osd_crush_location(cmount, 9999999, path, 0), -ENOENT);
