@@ -55,6 +55,7 @@
 #include "messages/MPing.h"
 #include "messages/MOSDPing.h"
 #include "messages/MOSDFailure.h"
+#include "messages/MOSDMarkMeDown.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDSubOp.h"
@@ -184,7 +185,9 @@ OSDService::OSDService(OSD *osd) :
   in_progress_split_lock("OSDService::in_progress_split_lock"),
   full_status_lock("OSDService::full_status_lock"),
   cur_state(NONE),
-  last_msg(0)
+  last_msg(0),
+  is_stopping_lock("OSDService::is_stopping_lock"),
+  state(NOT_STOPPING)
 {}
 
 void OSDService::_start_split(const set<pg_t> &pgs)
@@ -1182,6 +1185,8 @@ void OSD::suicide(int exitcode)
 
 int OSD::shutdown()
 {
+  if (!service.prepare_to_stop())
+    return 0; // already shutting down
   osd_lock.Lock();
   if (is_stopping()) {
     osd_lock.Unlock();
@@ -3398,6 +3403,11 @@ bool OSD::heartbeat_dispatch(Message *m)
 
 bool OSD::ms_dispatch(Message *m)
 {
+  if (m->get_type() == MSG_OSD_MARK_ME_DOWN) {
+    service.got_stop_ack();
+    return true;
+  }
+
   // lock!
 
   osd_lock.Lock();
@@ -3858,6 +3868,37 @@ void OSDService::dec_scrubs_active()
   sched_scrub_lock.Unlock();
 }
 
+bool OSDService::prepare_to_stop() {
+  Mutex::Locker l(is_stopping_lock);
+  if (state != NOT_STOPPING)
+    return false;
+
+  state = PREPARING_TO_STOP;
+  monc->send_mon_message(
+    new MOSDMarkMeDown(
+      monc->get_fsid(),
+      get_osdmap()->get_inst(whoami),
+      get_osdmap()->get_epoch(),
+      false
+      ));
+  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t timeout;
+  timeout.set_from_double(
+    now + g_conf->osd_mon_shutdown_timeout);
+  while ((ceph_clock_now(g_ceph_context) < timeout) &&
+	 (state != STOPPING)) {
+    is_stopping_cond.WaitUntil(is_stopping_lock, timeout);
+  }
+  state = STOPPING;
+  return true;
+}
+
+void OSDService::got_stop_ack() {
+  Mutex::Locker l(is_stopping_lock);
+  dout(10) << "Got stop ack" << dendl;
+  state = STOPPING;
+  is_stopping_cond.Signal();
+}
 // =====================================================
 // MAP
 
@@ -4104,9 +4145,14 @@ void OSD::handle_osd_map(MOSDMap *m)
 	       !osdmap->get_addr(whoami).probably_equals(client_messenger->get_myaddr()) ||
 	       !osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()) ||
 	       !osdmap->get_hb_addr(whoami).probably_equals(hbserver_messenger->get_myaddr())) {
-      if (!osdmap->is_up(whoami))
-	clog.warn() << "map e" << osdmap->get_epoch()
-		    << " wrongly marked me down";
+      if (!osdmap->is_up(whoami)) {
+	if (service.is_preparing_to_stop()) {
+	  service.got_stop_ack();
+	} else {
+	  clog.warn() << "map e" << osdmap->get_epoch()
+		      << " wrongly marked me down";
+	}
+      }
       else if (!osdmap->get_addr(whoami).probably_equals(client_messenger->get_myaddr()))
 	clog.error() << "map e" << osdmap->get_epoch()
 		    << " had wrong client addr (" << osdmap->get_addr(whoami)
@@ -4120,25 +4166,27 @@ void OSD::handle_osd_map(MOSDMap *m)
 		    << " had wrong hb addr (" << osdmap->get_hb_addr(whoami)
 		     << " != my " << hbserver_messenger->get_myaddr() << ")";
       
-      state = STATE_BOOTING;
-      up_epoch = 0;
-      do_restart = true;
-      bind_epoch = osdmap->get_epoch();
+      if (!service.is_stopping()) {
+	state = STATE_BOOTING;
+	up_epoch = 0;
+	do_restart = true;
+	bind_epoch = osdmap->get_epoch();
 
-      int cport = cluster_messenger->get_myaddr().get_port();
-      int hbport = hbserver_messenger->get_myaddr().get_port();
+	int cport = cluster_messenger->get_myaddr().get_port();
+	int hbport = hbserver_messenger->get_myaddr().get_port();
 
-      int r = cluster_messenger->rebind(hbport);
-      if (r != 0)
-	do_shutdown = true;  // FIXME: do_restart?
+	int r = cluster_messenger->rebind(hbport);
+	if (r != 0)
+	  do_shutdown = true;  // FIXME: do_restart?
 
-      r = hbserver_messenger->rebind(cport);
-      if (r != 0)
-	do_shutdown = true;  // FIXME: do_restart?
+	r = hbserver_messenger->rebind(cport);
+	if (r != 0)
+	  do_shutdown = true;  // FIXME: do_restart?
 
-      hbclient_messenger->mark_down_all();
+	hbclient_messenger->mark_down_all();
 
-      reset_heartbeat_peers();
+	reset_heartbeat_peers();
+      }
     }
   }
 
