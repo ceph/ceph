@@ -2,6 +2,53 @@
  Release Notes
 ===============
 
+v0.59
+-----
+
+Upgrading
+~~~~~~~~~
+
+* The monitor is using a completely new storage strategy and
+  intra-cluster protocol.  This means that v0.59 and pre-v0.59
+  monitors do not talk to each other.  When you upgrade each one, it
+  will convert its local data store to the new format.  Once you
+  upgrade a majority, the quorum will be formed using the new protocol
+  and the old monitors will be blocked out until they too get
+  upgraded.  For this reason, we recommend not running a mixed-version
+  cluster for very long.
+
+* ceph-mon now requires the creation of its data directory prior to
+  --mkfs, similarly to what happens on ceph-osd.  This directory is no
+  longer automatically created, and custom scripts should be adjusted to
+  reflect just that.
+
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+ * mon: rearchitected to utilize single instance of paxos and a key/value store (Joao Luis)
+ * mon: new 'ceph df [detail]' command
+ * osd: support for improved hashing of PGs across OSDs via HASHPSPOOL pool flag and feature
+ * osd: refactored watch/notify infrastructure (fixes protocol, removes many bugs) (Sam Just) 
+ * osd, librados: ability to list watchers (David Zafman)
+ * osd, librados: new listsnaps command (David Zafman)
+ * osd: trim log more aggressively, avoid appearance of leak memory
+ * osd: misc split fixes
+ * osd: a few journaling bug fixes
+ * osd: connection handling bug fixes
+ * rbd: avoid FIEMAP when importing from file (it can be buggy)
+ * librados: fix linger bugs (Josh Durgin)
+ * librbd: fixed flatten deadlock (Josh Durgin)
+ * rgw: fixed >4MB range requests (Jan Harkes)
+ * rgw: fix log rotation
+ * mds: allow xattrs on root
+ * ceph-fuse: fix statfs(2) reporting
+ * msgr: optionally tune TCP buffer size to avoid throughput collapse (Jim Schutt)
+ * consume less memory for logging by default
+ * always use system leveldb (Gary Lowell)
+
+
+
 v0.58
 -----
 
@@ -18,7 +65,7 @@ Upgrading
 
 Notable Changes
 ~~~~~~~~~~~~~~~
- * mon: rearchitected to utilize single instance of paxos and a key/value store (Joao Luis)
+
  * librbd: fixed some locking issues with flatten (Josh Durgin)
  * rbd: udevadm settle on map/unmap to avoid various races (Dan Mick)
  * osd: move pg info, log into leveldb (== better performance) (David Zafman)
