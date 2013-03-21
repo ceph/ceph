@@ -1186,6 +1186,19 @@ void ReplicatedPG::do_scan(OpRequestRef op)
   switch (m->op) {
   case MOSDPGScan::OP_SCAN_GET_DIGEST:
     {
+      double ratio, full_ratio;
+      if (osd->too_full_for_backfill(&ratio, &full_ratio)) {
+	dout(1) << __func__ << ": Canceling backfill, current usage is "
+		<< ratio << ", which exceeds " << full_ratio << dendl;
+	queue_peering_event(
+	  CephPeeringEvtRef(
+	    new CephPeeringEvt(
+	      get_osdmap()->get_epoch(),
+	      get_osdmap()->get_epoch(),
+	      BackfillTooFull())));
+	return;
+      }
+
       BackfillInterval bi;
       osr->flush();
       scan_range(m->begin, g_conf->osd_backfill_scan_min, g_conf->osd_backfill_scan_max, &bi);
