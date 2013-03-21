@@ -181,6 +181,15 @@ public:
   int aio_discard(uint64_t off, uint64_t len, RBD::AioCompletion *c);
 
   int flush();
+  /**
+   * Start a flush if caching is enabled. Get a callback when
+   * the currently pending writes are on disk.
+   *
+   * @param image the image to flush writes to
+   * @param c what to call when flushing is complete
+   * @returns 0 on success, negative error code on failure
+   */
+  int aio_flush(RBD::AioCompletion *c);
 
 private:
   friend class RBD;
