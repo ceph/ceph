@@ -9,7 +9,8 @@ JAVA_SRC = \
 	java/com/ceph/fs/CephFileAlreadyExistsException.java \
 	java/com/ceph/fs/CephAlreadyMountedException.java \
 	java/com/ceph/fs/CephNotDirectoryException.java \
-	java/com/ceph/fs/CephPoolException.java
+	java/com/ceph/fs/CephPoolException.java \
+	java/com/ceph/fs/CephFileExtent.java
 
 JAVA_TEST_SRC = \
   test/com/ceph/fs/CephDoubleMountTest.java \
