@@ -1178,6 +1178,7 @@ public:
   TrivialEvent(RequestBackfill)
   TrivialEvent(RequestRecovery)
   TrivialEvent(RecoveryDone)
+  TrivialEvent(BackfillTooFull)
 
   TrivialEvent(AllReplicasRecovered)
   TrivialEvent(DoRecovery)
@@ -1528,9 +1529,11 @@ public:
 
     struct RepRecovering : boost::statechart::state< RepRecovering, ReplicaActive >, NamedState {
       typedef boost::mpl::list<
-	boost::statechart::transition< RecoveryDone, RepNotRecovering >
+	boost::statechart::transition< RecoveryDone, RepNotRecovering >,
+	boost::statechart::custom_reaction< BackfillTooFull >
 	> reactions;
       RepRecovering(my_context ctx);
+      boost::statechart::result react(const BackfillTooFull &evt);
       void exit();
     };
 

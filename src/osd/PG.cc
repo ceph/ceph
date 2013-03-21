@@ -6125,6 +6125,14 @@ PG::RecoveryState::RepRecovering::RepRecovering(my_context ctx)
   context< RecoveryMachine >().log_enter(state_name);
 }
 
+boost::statechart::result
+PG::RecoveryState::RepRecovering::react(const BackfillTooFull &)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->reject_reservation();
+  return transit<RepNotRecovering>();
+}
+
 void PG::RecoveryState::RepRecovering::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
