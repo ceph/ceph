@@ -2,7 +2,7 @@
  Install Apache, FastCGI and RADOS GW
 ======================================
 
-.. note: If you deploy Ceph with Chef cookbooks, you may skip this section. 
+.. note:: If you deploy Ceph with Chef cookbooks, you may skip this section. 
 
 Install Packages
 ----------------

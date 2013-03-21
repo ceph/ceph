@@ -246,7 +246,7 @@ daemon type 'osd' and 'r' for daemon type 'mon'::
 
    sudo ceph auth get-or-create client.foo osd 'allow rw' mon 'allow r' > keyring.foo
 
-.. note: User names are associated to user types, which include ``client``
+.. note:: User names are associated to user types, which include ``client``
    ``osd``, ``mon``, and ``mds``. In most cases, you will be
    creating keys for ``client`` users.
 

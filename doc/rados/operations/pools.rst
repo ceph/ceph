@@ -126,7 +126,7 @@ If you rename a pool and you have per-pool capabilities for an authenticated
 user, you must update the user's capabilities (i.e., caps) with the new pool
 name. 
 
-.. note: Version ``0.48`` Argonaut and above.
+.. note:: Version ``0.48`` Argonaut and above.
 
 Show Pool Statistics
 ====================
@@ -143,7 +143,7 @@ To make a snapshot of a pool, execute::
 
 	ceph osd pool mksnap {pool-name} {snap-name}	
 	
-.. note: Version ``0.48`` Argonaut and above.
+.. note:: Version ``0.48`` Argonaut and above.
 
 
 Remove a Snapshot of a Pool
@@ -153,7 +153,7 @@ To remove a snapshot of a pool, execute::
 
 	ceph osd pool rmsnap {pool-name} {snap-name}
 
-.. note: Version ``0.48`` Argonaut and above.	
+.. note:: Version ``0.48`` Argonaut and above.	
 
 .. _setpoolvalues:
 
@@ -176,7 +176,7 @@ You may set values for the following keys:
 :Description: Sets the minimum number of replicas required for io.  See `Set the Number of Object Replicas`_ for further details
 :Type: Integer
 
-.. note: Version ``0.54`` and above
+.. note:: Version ``0.54`` and above
 
 ``crash_replay_interval``
 
@@ -197,7 +197,7 @@ You may set values for the following keys:
 :Type: Integer
 
 
-.. note: Version ``0.48`` Argonaut and above.	
+.. note:: Version ``0.48`` Argonaut and above.	
 
 
 Get Pool Values
