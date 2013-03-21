@@ -95,20 +95,29 @@ def task(ctx, config):
                 host = t.split('@')[-1]
                 shortname = host.split('.')[0]
                 from ..orchestra import remote as oremote
-                console = oremote.RemoteConsole(name=host,
-                                           ipmiuser=ctx.teuthology_config['ipmi_user'],
-                                           ipmipass=ctx.teuthology_config['ipmi_password'],
-                                           ipmidomain=ctx.teuthology_config['ipmi_domain'])
-                cname = '{host}.{domain}'.format(host=shortname, domain=ctx.teuthology_config['ipmi_domain'])
+                console = oremote.RemoteConsole(
+                    name=host,
+                    ipmiuser=ctx.teuthology_config['ipmi_user'],
+                    ipmipass=ctx.teuthology_config['ipmi_password'],
+                    ipmidomain=ctx.teuthology_config['ipmi_domain'])
+                cname = '{host}.{domain}'.format(
+                    host=shortname,
+                    domain=ctx.teuthology_config['ipmi_domain'])
                 log.debug('checking console status of %s' % cname)
                 if not console.check_status():
-                    log.info('Failed to get console status for %s, disabling console...' % cname)
+                    log.info(
+                        'Failed to get console status for '
+                        '%s, disabling console...'
+                        % cname)
                     console=None
                 else:
                     # find the remote for this console and add it
-                    remotes = [r for r in ctx.cluster.remotes.keys() if r.name == t]
+                    remotes = [
+                        r for r in ctx.cluster.remotes.keys() if r.name == t]
                     if len(remotes) != 1:
-                        raise Exception('Too many (or too few) remotes found for target {t}'.format(t=t))
+                        raise Exception(
+                            'Too many (or too few) remotes '
+                            'found for target {t}'.format(t=t))
                     remotes[0].console = console
                     log.debug('console ready on %s' % cname)
 
@@ -116,7 +125,10 @@ def task(ctx, config):
             osds = ctx.cluster.only(teuthology.is_type('osd'))
             for remote, _ in osds.remotes.iteritems():
                 if not remote.console:
-                    raise Exception('IPMI console required for powercycling, but not available on osd role: {r}'.format(r=remote.name))
+                    raise Exception(
+                        'IPMI console required for powercycling, '
+                        'but not available on osd role: {r}'.format(
+                            r=remote.name))
 
     log.info('Beginning thrashosds...')
     first_mon = teuthology.get_first_mon(ctx, config)
