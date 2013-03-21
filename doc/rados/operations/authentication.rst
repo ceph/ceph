@@ -11,7 +11,7 @@ If you disable ``cephx``, you do not need to generate keys using the procedures
 described here. If you re-enable ``cephx`` and have already generated keys, you 
 do not need to generate the keys again.
    
-.. important: The ``cephx`` protocol does not address data encryption in transport 
+.. important:: The ``cephx`` protocol does not address data encryption in transport 
    (e.g., SSL/TLS) or encryption at rest.   
 
 For additional information, see our `Cephx Intro`_, our `Cephx Configuration
@@ -49,7 +49,7 @@ assumes that you are the ``client.admin`` default user. When running Ceph with
 ``cephx`` enabled, you need to have a key for the ``client.admin`` user to run
 ``ceph`` commands as the administrator.
 
-.. important: To run Ceph commands on the command line with
+.. important:: To run Ceph commands on the command line with
    ``cephx`` enabled, you need to create a key for the ``client.admin`` 
    user, and create a secret file under ``/etc/ceph``. 
 
