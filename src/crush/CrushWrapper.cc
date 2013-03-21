@@ -55,7 +55,6 @@ int CrushWrapper::remove_item(CephContext *cct, int item)
 {
   ldout(cct, 5) << "remove_item " << item << dendl;
 
-  crush_bucket *was_bucket = 0;
   int ret = -ENOENT;
 
   for (int i = 0; i < crush->max_buckets; i++) {
@@ -73,7 +72,6 @@ int CrushWrapper::remove_item(CephContext *cct, int item)
 			  << " items, not empty" << dendl;
 	    return -ENOTEMPTY;
 	  }
-	  was_bucket = t;
 	}
 	adjust_item_weight(cct, item, 0);
 	ldout(cct, 5) << "remove_item removing item " << item
@@ -84,14 +82,18 @@ int CrushWrapper::remove_item(CephContext *cct, int item)
     }
   }
 
-  if (was_bucket) {
-    ldout(cct, 5) << "remove_item removing bucket " << item << dendl;
-    crush_remove_bucket(crush, was_bucket);
-  }
-  if (item >= 0 && name_map.count(item)) {
-    name_map.erase(item);
-    have_rmaps = false;
-    ret = 0;
+  // last instance?
+  if (!_search_item_exists(item)) {
+    if (item < 0) {
+      ldout(cct, 5) << "remove_item removing bucket " << item << dendl;
+      crush_bucket *t = get_bucket(item);
+      crush_remove_bucket(crush, t);
+      ret = 0;
+    }
+    if (name_map.count(item)) {
+      name_map.erase(item);
+      have_rmaps = false;
+    }
   }
   
   return ret;
@@ -161,7 +163,7 @@ int CrushWrapper::remove_item_under(CephContext *cct, int item, int ancestor)
       crush_bucket *t = get_bucket(item);
       crush_remove_bucket(crush, t);
     }
-    if (item >= 0 && name_map.count(item)) {
+    if (name_map.count(item)) {
       name_map.erase(item);
       have_rmaps = false;
     }
