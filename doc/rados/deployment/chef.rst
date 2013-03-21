@@ -102,21 +102,45 @@ A JSON file will appear. Perform the following steps:
 #. Within ``"config": {}`` and following the ``fsid`` key-value pair, add ``"mon_initial_members":``
 #. Immediately following ``"mon_initial_members":``, enter the initial monitor host names.
 
-For example:: 
+You may also set Ceph settings within ``"config": {}``.
 
-	"default_attributes" : {
-		"ceph": {
-			"monitor-secret": "{replace-with-generated-secret}",
-			"config": {
-				"fsid": "{replace-with-generated-uuid}",
-				"mon_initial_members": "{replace-with-monitor-hostname(s)}"
-			}
-		}
-	}
-	
-Advanced users (i.e., developers and QA) may also add ``"ceph_branch": "{branch}"``
-to ``default-attributes``, replacing ``{branch}`` with the name of the branch you
-wish to use (e.g., ``master``). 
+For example::
+
+    "default_attributes" : {
+        "ceph": {
+            "monitor-secret": "{replace-with-generated-secret}",
+            "config": {
+                "fsid": "{replace-with-generated-uuid}",
+                "mon_initial_members": "{replace-with-monitor-hostname(s)}",
+                "global": {
+                    "public network": "xxx.xxx.xxx.xxx/yy",
+                    "cluster network": "xxx.xxx.xxx.xxx/yy"
+                },
+                "osd": {
+                    "osd journal size": "1000"
+                }
+            }
+        }
+    }
+
+Will generate the following ceph.conf::
+
+    [global]
+        fsid = <fsid>
+        mon initial members = X,Y,Z
+        mon host = ipX:port, ipY:port, ipZ:port ;mon host is auto generated
+        public network = xxx.xxx.xxx.xxx/yy
+        cluster network = xxx.xxx.xxx.xxx/yy
+
+    [osd]
+        osd journal size = 1000
+
+Advanced users (i.e., developers and QA) may also add ``"branch": "{branch}"``
+to ``"ceph": {}``. Valid values are ``stable``, ``testing``, ``dev``.
+You can specify which stable release (e.g. argonaut, bobtail) or which dev
+branch to use with ``"version": "{version}"`` within ``"ceph": {}``.
+If ``version`` is not specified for ``stable``, the latest stable release
+will be used. ``testing`` does not require ``version``.
 
 .. configroles:
 
@@ -186,46 +210,33 @@ key to the host name for the node. ::
   		]
 	}
 
-.. _prepdisks:
+.. _deployosds:
 
-Prepare OSD Disks
+Deploy OSDs
 =================
 
 Configuring a node with an OSD role tells Chef that the node will run at
 least one OSD. However, you may run many OSDs on one host. For example, 
 you may run one ``ceph-osd`` daemon for each data disk on the system. 
-This step prepares the OSD disk(s) and tells Chef how many OSDs the 
-node will be running.
+To tell Chef to deploy OSDs, edit the node and add the following
+within ``"normal": {}``::
 
-
-For the Ceph 0.48 Argonaut release, install ``gdisk``:: 
-
-	sudo apt-get install gdisk
-
-For the Ceph 0.48 Argonaut release, on each hard disk that will store data for
-an OSD daemon, configure the  hard disk for use with Ceph. Replace ``{fsid}``
-with the UUID you generated  while using ``uuidgen -r``. 
-
-.. important: This procedure will erase all information in ``/dev/{disk}``.
-
-:: 
+    "ceph": {
+        "osd_devices": [
+            {
+                "device": "/dev/...",
+                "journal": "/dev/..."
+            },
+            {
+                "device": "/dev/...",
+                "dmcrypt": true
+            }
+        ]
+    }
 	
-	sudo sgdisk /dev/{disk} --zap-all --clear --mbrtogpt --largest-new=1 --change-name=1:'ceph data' --typecode=1:{fsid}
+Supported values are ``device``, ``journal``, ``dmcrypt`` (deactivated by default).
 
-Create a file system and allocate the disk to your cluster. Specify a 
-filesystem (e.g., ``ext4``, ``xfs``, ``btrfs``). When you execute 
-``ceph-disk-prepare``, remember to replace ``{fsid}`` with the UUID you 
-generated while using ``uuidgen -r``::
-
-	sudo mkfs -t ext4 /dev/{disk}
-	sudo mount -o user_xattr /dev/{disk} /mnt
-	sudo ceph-disk-prepare --cluster-uuid={fsid} /mnt
-	sudo umount /mnt
-
-Finally, simulate a hotplug event. :: 
-
-	sudo udevadm trigger --subsystem-match=block --action=add
-	
+.. note: dmcrypt is only supported starting with Cuttlefish
 
 .. _runchefclient:
 
