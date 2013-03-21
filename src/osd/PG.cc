@@ -3294,7 +3294,6 @@ void PG::sub_op_scrub_stop(OpRequestRef op)
   osd->send_message_osd_cluster(reply, m->get_connection());
 }
 
-
 void PG::clear_scrub_reserved()
 {
   osd->scrub_wq.dequeue(this);
@@ -6065,12 +6064,11 @@ PG::RecoveryState::RepWaitBackfillReserved::RepWaitBackfillReserved(my_context c
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
 
-  int64_t kb      = pg->osd->osd->osd_stat.kb,
-          kb_used = pg->osd->osd->osd_stat.kb_used;
-  int64_t max = kb * g_conf->osd_backfill_full_ratio;
-  if (kb_used >= max) {
-    dout(10) << "backfill reservation rejected: kb used >= max: "
-             << kb_used << " >= " << max << dendl;
+  double ratio, max_ratio;
+  if (pg->osd->too_full_for_backfill(&ratio, &max_ratio)) {
+    dout(10) << "backfill reservation rejected: full ratio is "
+	     << ratio << ", which is greater than max allowed ratio "
+	     << max_ratio << dendl;
     post_event(RemoteReservationRejected());
   } else {
     pg->osd->remote_reserver.request_reservation(
