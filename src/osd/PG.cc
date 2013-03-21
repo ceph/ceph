@@ -5914,6 +5914,19 @@ PG::RecoveryState::Backfilling::Backfilling(my_context ctx)
   pg->state_set(PG_STATE_BACKFILL);
 }
 
+boost::statechart::result
+PG::RecoveryState::Backfilling::react(const RemoteReservationRejected &)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+  pg->state_set(PG_STATE_BACKFILL_TOOFULL);
+
+  pg->osd->recovery_wq.dequeue(pg);
+
+  pg->schedule_backfill_full_retry();
+  return transit<NotBackfilling>();
+}
+
 void PG::RecoveryState::Backfilling::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);

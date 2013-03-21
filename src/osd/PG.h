@@ -1492,9 +1492,11 @@ public:
 
     struct Backfilling : boost::statechart::state< Backfilling, Active >, NamedState {
       typedef boost::mpl::list<
-	boost::statechart::transition< Backfilled, Recovered >
+	boost::statechart::transition< Backfilled, Recovered >,
+	boost::statechart::custom_reaction< RemoteReservationRejected >
 	> reactions;
       Backfilling(my_context ctx);
+      boost::statechart::result react(const RemoteReservationRejected& evt);
       void exit();
     };
 
