@@ -228,7 +228,7 @@ To set the number of object replicas, execute the following::
 
 	ceph osd pool set {poolname} size {num-replicas}
 
-.. important: The ``{num-replicas}`` includes the object itself.
+.. important:: The ``{num-replicas}`` includes the object itself.
    If you want the object and two copies of the object for a total of 
    three instances of the object, specify ``3``.
    
