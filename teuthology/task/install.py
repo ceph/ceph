@@ -458,7 +458,7 @@ def upgrade(ctx, config):
     or
         tasks:
         - install.upgrade:
-             client.0:
+             mon.a:
                 branch: end
              osd.0:
                 branch: other
@@ -505,13 +505,18 @@ def upgrade(ctx, config):
         for remote in ctx.cluster.remotes.iterkeys():
             _upgrade_ceph_packages(ctx, remote, debs, ceph_branch)
     else:
-        for node in config.keys():
-            kkeys = config.get(node)
-            (remote,) = ctx.cluster.only(node).remotes.iterkeys()
-            for var, branch_val in kkeys.iteritems():
-                if var == 'branch' or var == 'tag' or var == 'sha1':
-                    ceph_branch = branch_val
-                    _upgrade_ceph_packages(ctx, remote, debs, ceph_branch)
+        list_roles = []
+        for role in config.keys():
+            (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+            kkeys = config.get(role)
+            if remote in list_roles:
+                continue
+            else:
+                for var, branch_val in kkeys.iteritems():
+                    if var == 'branch' or var == 'tag' or var == 'sha1':
+                        ceph_branch = branch_val
+                        _upgrade_ceph_packages(ctx, remote, debs, ceph_branch)
+                        list_roles.append(remote)
     yield
 
 @contextlib.contextmanager
