@@ -2256,6 +2256,42 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
       return true;
     }
+    else if (m->cmd.size() == 5 && m->cmd[1] == "crush" && (m->cmd[2] == "add-bucket")) {
+      do {
+	// osd crush add-bucket <name> <type>
+	bufferlist bl;
+	if (pending_inc.crush.length())
+	  bl = pending_inc.crush;
+	else
+	  osdmap.crush->encode(bl);
+
+	CrushWrapper newcrush;
+	bufferlist::iterator p = bl.begin();
+	newcrush.decode(p);
+
+	if (newcrush.name_exists(m->cmd[3])) {
+	  ss << "bucket '" << m->cmd[3] << "' already exists";
+	  err = 0;
+	  break;
+	}
+	int type = newcrush.get_type_id(m->cmd[4]);
+	if (type <= 0) {
+	  ss << "type '" << m->cmd[4] << "' does not exist";
+	  err = -EINVAL;
+	  break;
+	}
+	int bucketno = newcrush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT,
+					   type, 0, NULL, NULL);
+	newcrush.set_item_name(bucketno, m->cmd[3]);
+
+	pending_inc.crush.clear();
+	newcrush.encode(pending_inc.crush);
+	ss << "added bucket " << m->cmd[3] << " type " << m->cmd[4] << " to crush map";
+	getline(ss, rs);
+	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+	return true;
+      } while (false);
+    }
     else if (m->cmd.size() >= 5 && m->cmd[1] == "crush" && (m->cmd[2] == "set" ||
 							    m->cmd[2] == "add")) {
       do {
