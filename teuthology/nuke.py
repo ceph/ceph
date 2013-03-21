@@ -265,6 +265,7 @@ def remove_installed_packages(ctx, log):
               ]
     install_task.remove_packages(ctx, {"deb": debs, "rpm": el6})
     install_task.remove_sources(ctx)
+    install_task.purge_data(ctx)
 
 def remove_testing_tree(ctx, log):
     from teuthology.misc import get_testdir_base

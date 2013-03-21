@@ -158,6 +158,32 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     for cpack in rpm:
         remote.run(args=['sudo', 'yum', 'install', cpack, '-y',],stdout=StringIO())
 
+def purge_data(ctx):
+    """
+    Purge /var/lib/ceph
+    """
+    with parallel() as p:
+        for remote in ctx.cluster.remotes.iterkeys():
+            p.spawn(_purge_data, remote)
+
+def _purge_data(remote):
+    log.info('Purging /var/lib/ceph on %s', remote)
+    remote.run(args=[
+            'rm', '-rf', '--one-file-system', '--', '/var/lib/ceph',
+            run.Raw('||'),
+            'true',
+            run.Raw(';'),
+            'test', '-d', '/var/lib/ceph',
+            run.Raw('&&'),
+            'find', '/var/lib/ceph',
+            '-mindepth', '1',
+            '-maxdepth', '2',
+            '-type', 'd',
+            '-exec', 'umount', '{}', ';',
+            run.Raw(';'),
+            'rm', '-rf', '--one-file-system', '--', '/var/lib/ceph',
+            ])
+
 def install_packages(ctx, pkgs, config):
     """
     installs Debian packages.
@@ -361,6 +387,7 @@ def install(ctx, config):
     finally:
         remove_packages(ctx, remove_info)
         remove_sources(ctx)
+        purge_data(ctx)
 
 def _upgrade_ceph_packages(ctx, remote, debs, ceph_branch):
     """
