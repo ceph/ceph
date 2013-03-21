@@ -107,6 +107,7 @@ Rados object in state %s." % (self.state))
     def __init__(self, rados_id=None, conf=None, conffile=None):
         self.librados = CDLL('librados.so.2')
         self.cluster = c_void_p()
+        self.rados_id = rados_id
         if rados_id is not None and not isinstance(rados_id, str):
             raise TypeError('rados_id must be a string or None')
         if conffile is not None and not isinstance(conffile, str):
@@ -196,7 +197,7 @@ Rados object in state %s." % (self.state))
         ret = self.librados.rados_cluster_stat(self.cluster, byref(stats))
         if ret < 0:
             raise make_ex(
-                ret, "Rados.get_cluster_stats(%s): get_stats failed" % self.name)
+                ret, "Rados.get_cluster_stats(%s): get_stats failed" % self.rados_id)
         return {'kb': stats.kb,
                 'kb_used': stats.kb_used,
                 'kb_avail': stats.kb_avail,
