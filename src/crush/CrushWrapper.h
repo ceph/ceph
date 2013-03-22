@@ -230,6 +230,18 @@ public:
   }
 
 
+  /**
+   * find tree nodes referenced by rules by a 'take' command
+   *
+   * Note that these may not be parentless roots.
+   */
+  void find_takes(set<int>& roots) const;
+
+  /**
+   * find tree roots
+   *
+   * These are parentless nodes in the map.
+   */
   void find_roots(set<int>& roots) const;
 
   /**
@@ -248,7 +260,7 @@ private:
    * @param i item
    * @return true if present
    */
-  bool _search_item_exists(int i);
+  bool _search_item_exists(int i) const;
 public:
 
   /**
