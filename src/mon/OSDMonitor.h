@@ -131,6 +131,8 @@ private:
   int thrash_last_up_osd;
   bool thrash();
 
+  void _get_pending_crush(CrushWrapper& newcrush);
+
   // svc
 public:  
   void create_initial();
