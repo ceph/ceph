@@ -1815,6 +1815,7 @@ noinst_HEADERS = \
         messages/MOSDAlive.h\
         messages/MOSDBoot.h\
         messages/MOSDFailure.h\
+        messages/MOSDMarkMeDown.h\
         messages/MOSDMap.h\
         messages/MOSDOp.h\
         messages/MOSDOpReply.h\

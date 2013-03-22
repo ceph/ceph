@@ -3071,6 +3071,7 @@ bool Monitor::_ms_dispatch(Message *m)
       break;
 
       // OSDs
+    case MSG_OSD_MARK_ME_DOWN:
     case MSG_OSD_FAILURE:
     case MSG_OSD_BOOT:
     case MSG_OSD_ALIVE:

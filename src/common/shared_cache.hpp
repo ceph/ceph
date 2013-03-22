@@ -78,6 +78,12 @@ class SharedLRU {
 
 public:
   SharedLRU(size_t max_size = 20) : lock("SharedLRU::lock"), max_size(max_size) {}
+  
+  ~SharedLRU() {
+    contents.clear();
+    lru.clear();
+    assert(weak_refs.empty());
+  }
 
   void set_size(size_t new_size) {
     list<VPtr> to_release;

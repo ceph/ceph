@@ -26,18 +26,24 @@
 #include "osd/osd_types.h"
 
 class OpRequest;
+typedef std::tr1::shared_ptr<OpRequest> OpRequestRef;
 class OpHistory {
-  set<pair<utime_t, const OpRequest *> > arrived;
-  set<pair<double, const OpRequest *> > duration;
+  set<pair<utime_t, OpRequestRef> > arrived;
+  set<pair<double, OpRequestRef> > duration;
   void cleanup(utime_t now);
+  bool shutdown;
 
 public:
-  void insert(utime_t now, OpRequest *op);
+  OpHistory() : shutdown(false) {}
+  ~OpHistory() {
+    assert(arrived.empty());
+    assert(duration.empty());
+  }
+  void insert(utime_t now, OpRequestRef op);
   void dump_ops(utime_t now, Formatter *f);
+  void on_shutdown();
 };
 
-class OpRequest;
-typedef std::tr1::shared_ptr<OpRequest> OpRequestRef;
 class OpTracker {
   class RemoveOnDelete {
     OpTracker *tracker;
@@ -70,6 +76,13 @@ public:
   void mark_event(OpRequest *op, const string &evt);
   void _mark_event(OpRequest *op, const string &evt, utime_t now);
   OpRequestRef create_request(Message *req);
+  void on_shutdown() {
+    Mutex::Locker l(ops_in_flight_lock);
+    history.on_shutdown();
+  }
+  ~OpTracker() {
+    assert(ops_in_flight.empty());
+  }
 };
 
 /**
