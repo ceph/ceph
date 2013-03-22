@@ -476,7 +476,8 @@ if [ $allhosts -eq 1 ]; then
 	check_host || continue
 
 	if [ -n "$ssh" ]; then
-	    rdir="/tmp/mkfs.ceph.$$"
+	    unique=`dd if=/dev/urandom bs=16 count=1 2>/dev/null | md5sum | awk '{print $1}'`
+	    rdir="/tmp/mkfs.ceph.$unique"
 	    echo pushing conf and monmap to $host:$rdir
 	    do_cmd "mkdir -p $rdir"
 	    scp -q $dir/conf $host:$rdir
