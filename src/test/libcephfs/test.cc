@@ -848,6 +848,9 @@ TEST(LibCephFS, Rename) {
   /* test that src path doesn't exist */
   ASSERT_EQ(-ENOENT, ceph_lstat(cmount, path_src, &st));
 
+  /* rename with non-existent source path */
+  ASSERT_EQ(-ENOENT, ceph_rename(cmount, path_src, path_dst));
+
   ASSERT_EQ(0, ceph_unlink(cmount, path_dst));
   ceph_shutdown(cmount);
 }
