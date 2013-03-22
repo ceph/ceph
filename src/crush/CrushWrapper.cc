@@ -7,7 +7,7 @@
 #define dout_subsys ceph_subsys_crush
 
 
-void CrushWrapper::find_roots(set<int>& roots) const
+void CrushWrapper::find_takes(set<int>& roots) const
 {
   for (unsigned i=0; i<crush->max_rules; i++) {
     crush_rule *r = crush->rules[i];
@@ -17,6 +17,17 @@ void CrushWrapper::find_roots(set<int>& roots) const
       if (r->steps[j].op == CRUSH_RULE_TAKE)
 	roots.insert(r->steps[j].arg1);
     }
+  }
+}
+
+void CrushWrapper::find_roots(set<int>& roots) const
+{
+  for (int i = 0; i < crush->max_buckets; i++) {
+    if (!crush->buckets[i])
+      continue;
+    crush_bucket *b = crush->buckets[i];
+    if (!_search_item_exists(b->id))
+      roots.insert(b->id);
   }
 }
 
@@ -86,7 +97,7 @@ int CrushWrapper::remove_item(CephContext *cct, int item)
   return ret;
 }
 
-bool CrushWrapper::_search_item_exists(int item)
+bool CrushWrapper::_search_item_exists(int item) const
 {
   for (int i = 0; i < crush->max_buckets; i++) {
     if (!crush->buckets[i])
