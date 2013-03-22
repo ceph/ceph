@@ -21,6 +21,7 @@ package com.ceph.fs;
 
 import java.io.IOException;
 import java.io.FileNotFoundException;
+import java.net.InetAddress;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.Arrays;
@@ -1032,4 +1033,21 @@ public class CephMount {
   }
 
   private static native String[] native_ceph_get_osd_crush_location(long mountp, int osd);
+
+  /**
+   * Get the network address of an OSD.
+   *
+   * @param osd The OSD device id.
+   * @return The network address.
+   */
+  public InetAddress get_osd_address(int osd) {
+    rlock.lock();
+    try {
+      return native_ceph_get_osd_addr(instance_ptr, osd);
+    } finally {
+      rlock.unlock();
+    }
+  }
+
+  private static native InetAddress native_ceph_get_osd_addr(long mountp, int osd);
 }
