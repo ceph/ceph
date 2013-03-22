@@ -421,9 +421,10 @@ public:
    *
    * @param cct cct
    * @param id item id to remove
+   * @param unlink_only unlink but do not remove bucket (useful if multiple links or not empty)
    * @return 0 on success, negative on error
    */
-  int remove_item(CephContext *cct, int id);
+  int remove_item(CephContext *cct, int id, bool unlink_only);
 
   /**
    * remove all instances of an item nested beneath a certain point from the map
@@ -431,12 +432,14 @@ public:
    * @param cct cct
    * @param id item id to remove
    * @param ancestor ancestor item id under which to search for id
+   * @param unlink_only unlink but do not remove bucket (useful if bucket has multiple links or is not empty)
    * @return 0 on success, negative on error
    */
 private:
-  int _remove_item_under(CephContext *cct, int id, int ancestor);
+  bool _maybe_remove_last_instance(CephContext *cct, int id, bool unlink_only);
+  int _remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
 public:
-  int remove_item_under(CephContext *cct, int id, int ancestor);
+  int remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
 
   /**
    * get an item's weight
