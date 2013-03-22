@@ -2485,7 +2485,9 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
       } while (false);
     }
-    else if (m->cmd.size() > 3 && m->cmd[1] == "crush" && (m->cmd[2] == "rm" || m->cmd[2] == "remove")) {
+    else if (m->cmd.size() > 3 && m->cmd[1] == "crush" && (m->cmd[2] == "rm" ||
+							   m->cmd[2] == "remove" ||
+							   m->cmd[2] == "unlink")) {
       do {
 	// osd crush rm <id> [ancestor]
 	bufferlist bl;
@@ -2504,6 +2506,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  break;
 	}
 	int id = newcrush.get_item_id(m->cmd[3].c_str());
+	bool unlink_only = m->cmd[2] == "unlink";
 	if (m->cmd.size() > 4) {
 	  if (!newcrush.name_exists(m->cmd[4])) {
 	    err = -ENOENT;
@@ -2511,9 +2514,9 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	    break;
 	  }
 	  int ancestor = newcrush.get_item_id(m->cmd[4]);
-	  err = newcrush.remove_item_under(g_ceph_context, id, ancestor);
+	  err = newcrush.remove_item_under(g_ceph_context, id, ancestor, unlink_only);
 	} else {
-	  err = newcrush.remove_item(g_ceph_context, id);
+	  err = newcrush.remove_item(g_ceph_context, id, unlink_only);
 	}
 	if (err == 0) {
 	  pending_inc.crush.clear();

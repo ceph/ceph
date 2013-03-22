@@ -50,12 +50,46 @@ bool CrushWrapper::subtree_contains(int root, int item) const
   return false;
 }
 
-
-int CrushWrapper::remove_item(CephContext *cct, int item)
+bool CrushWrapper::_maybe_remove_last_instance(CephContext *cct, int item, bool unlink_only)
 {
-  ldout(cct, 5) << "remove_item " << item << dendl;
+  // last instance?
+  if (_search_item_exists(item)) {
+    if (name_map.count(item)) {
+      ldout(cct, 5) << "_maybe_remove_last_instance removing name for item " << item << dendl;
+      name_map.erase(item);
+      have_rmaps = false;
+      return true;
+    }
+    return false;
+  }
+
+  if (item < 0 && !unlink_only) {
+    crush_bucket *t = get_bucket(item);
+    ldout(cct, 5) << "_maybe_remove_last_instance removing bucket " << item << dendl;
+    crush_remove_bucket(crush, t);
+  }
+  if ((item >= 0 || !unlink_only) && name_map.count(item)) {
+    ldout(cct, 5) << "_maybe_remove_last_instance removing name for item " << item << dendl;
+    name_map.erase(item);
+    have_rmaps = false;
+  }
+  return true;
+}
+
+int CrushWrapper::remove_item(CephContext *cct, int item, bool unlink_only)
+{
+  ldout(cct, 5) << "remove_item " << item << (unlink_only ? " unlink_only":"") << dendl;
 
   int ret = -ENOENT;
+
+  if (item < 0 && !unlink_only) {
+    crush_bucket *t = get_bucket(item);
+    if (t && t->size) {
+      ldout(cct, 1) << "remove_item bucket " << item << " has " << t->size
+		    << " items, not empty" << dendl;
+      return -ENOTEMPTY;
+    }
+  }
 
   for (int i = 0; i < crush->max_buckets; i++) {
     if (!crush->buckets[i])
@@ -65,14 +99,6 @@ int CrushWrapper::remove_item(CephContext *cct, int item)
     for (unsigned i=0; i<b->size; ++i) {
       int id = b->items[i];
       if (id == item) {
-	if (item < 0) {
-	  crush_bucket *t = get_bucket(item);
-	  if (t && t->size) {
-	    ldout(cct, 1) << "remove_item bucket " << item << " has " << t->size
-			  << " items, not empty" << dendl;
-	    return -ENOTEMPTY;
-	  }
-	}
 	adjust_item_weight(cct, item, 0);
 	ldout(cct, 5) << "remove_item removing item " << item
 		      << " from bucket " << b->id << dendl;
@@ -82,19 +108,8 @@ int CrushWrapper::remove_item(CephContext *cct, int item)
     }
   }
 
-  // last instance?
-  if (!_search_item_exists(item)) {
-    if (item < 0) {
-      ldout(cct, 5) << "remove_item removing bucket " << item << dendl;
-      crush_bucket *t = get_bucket(item);
-      crush_remove_bucket(crush, t);
-      ret = 0;
-    }
-    if (name_map.count(item)) {
-      name_map.erase(item);
-      have_rmaps = false;
-    }
-  }
+  if (_maybe_remove_last_instance(cct, item, unlink_only))
+    ret = 0;
   
   return ret;
 }
@@ -113,9 +128,10 @@ bool CrushWrapper::_search_item_exists(int item) const
   return false;
 }
 
-int CrushWrapper::_remove_item_under(CephContext *cct, int item, int ancestor)
+int CrushWrapper::_remove_item_under(CephContext *cct, int item, int ancestor, bool unlink_only)
 {
-  ldout(cct, 5) << "remove_item_under " << item << " under " << ancestor << dendl;
+  ldout(cct, 5) << "_remove_item_under " << item << " under " << ancestor
+		<< (unlink_only ? " unlink_only":"") << dendl;
 
   if (ancestor >= 0) {
     return -EINVAL;
@@ -130,19 +146,12 @@ int CrushWrapper::_remove_item_under(CephContext *cct, int item, int ancestor)
   for (unsigned i=0; i<b->size; ++i) {
     int id = b->items[i];
     if (id == item) {
-      if (item < 0) {
-	crush_bucket *t = get_bucket(item);
-	if (t && t->size) {
-	  ldout(cct, 1) << "remove_item_under bucket " << item << " has " << t->size << " items, not empty" << dendl;
-	  return -ENOTEMPTY;
-	}
-      }
       adjust_item_weight(cct, item, 0);
-      ldout(cct, 5) << "remove_item_under removing item " << item << " from bucket " << b->id << dendl;
+      ldout(cct, 5) << "_remove_item_under removing item " << item << " from bucket " << b->id << dendl;
       crush_bucket_remove_item(b, item);
       ret = 0;
     } else if (id < 0) {
-      int r = remove_item_under(cct, item, id);
+      int r = remove_item_under(cct, item, id, unlink_only);
       if (r == 0)
 	ret = 0;
     }
@@ -150,24 +159,25 @@ int CrushWrapper::_remove_item_under(CephContext *cct, int item, int ancestor)
   return ret;
 }
 
-int CrushWrapper::remove_item_under(CephContext *cct, int item, int ancestor)
+int CrushWrapper::remove_item_under(CephContext *cct, int item, int ancestor, bool unlink_only)
 {
-  int ret = _remove_item_under(cct, item, ancestor);
+  ldout(cct, 5) << "remove_item_under " << item << " under " << ancestor
+		<< (unlink_only ? " unlink_only":"") << dendl;
+  int ret = _remove_item_under(cct, item, ancestor, unlink_only);
   if (ret < 0)
     return ret;
 
-  // last instance?
-  if (!_search_item_exists(item)) {
-    if (item < 0) {
-      ldout(cct, 5) << "remove_item removing bucket " << item << dendl;
-      crush_bucket *t = get_bucket(item);
-      crush_remove_bucket(crush, t);
-    }
-    if (name_map.count(item)) {
-      name_map.erase(item);
-      have_rmaps = false;
+  if (item < 0 && !unlink_only) {
+    crush_bucket *t = get_bucket(item);
+    if (t && t->size) {
+      ldout(cct, 1) << "remove_item_undef bucket " << item << " has " << t->size
+		    << " items, not empty" << dendl;
+      return -ENOTEMPTY;
     }
   }
+
+  if (_maybe_remove_last_instance(cct, item, unlink_only))
+    ret = 0;
 
   return ret;
 }
@@ -475,7 +485,7 @@ int CrushWrapper::create_or_move_item(CephContext *cct, int item, float weight, 
     if (item_exists(item)) {
       weight = get_item_weightf(item);
       ldout(cct, 10) << "create_or_move_item " << item << " exists with weight " << weight << dendl;
-      remove_item(cct, item);
+      remove_item(cct, item, true);
     }
     ldout(cct, 5) << "create_or_move_item adding " << item << " weight " << weight
 		  << " at " << loc << dendl;
@@ -511,7 +521,7 @@ int CrushWrapper::update_item(CephContext *cct, int item, float weight, string n
     }
   } else {
     if (item_exists(item)) {
-      remove_item(cct, item);
+      remove_item(cct, item, true);
     }
     ldout(cct, 5) << "update_item adding " << item << " weight " << weight
 		  << " at " << loc << dendl;
