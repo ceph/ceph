@@ -20,24 +20,19 @@ using std::string;
 
 static bool get_next_token(const std::string &s, size_t& pos, const char *delims, string& token)
 {
-  int start = s.find_first_not_of(" \t", pos);
+  int start = s.find_first_not_of(delims, pos);
   int end;
 
-  if (start < 0)
+  if (start < 0){
+    pos = s.size();
     return false;
-
-  if (s[start] == ',') {
-    end = start + 1;
-    pos = end;
-  } else {
-    end = s.find_first_of(delims, start);
-    if (end >= 0)
-      pos = end + 1;
   }
 
-  if (end < 0) {
-    end = s.size();
-    pos = end;
+  end = s.find_first_of(delims, start);
+  if (end >= 0)
+    pos = end + 1;
+  else {
+    pos = end = s.size();
   }
 
   token = s.substr(start, end - start);
@@ -54,11 +49,17 @@ void get_str_list(const std::string& str, const char *delims, std::list<string>&
 {
   size_t pos = 0;
   string token;
+  string d = delims;
 
   str_list.clear();
 
+  if(d.find_first_of(" ") == string::npos)
+    d.append(" ");
+  if(d.find_first_of("\t") == string::npos)
+    d.append("\t");
+
   while (pos < str.size()) {
-    if (get_next_token(str, pos, delims, token)) {
+    if (get_next_token(str, pos, d.c_str(), token)) {
       if (token.size() > 0) {
         str_list.push_back(token);
       }

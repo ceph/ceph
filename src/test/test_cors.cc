@@ -337,7 +337,6 @@ size_t cors_read_xml(void *ptr, size_t s, size_t n, void *ud){
     cout << "Cannot copy xml data, as len is not enough\n";
     return 0;
   }
-  /*cout << "Copying \n" << ss->str() << "\nlen : " << len << "\n"; */
   memcpy(ptr, (void *)ss->str().c_str(), len);
   return len;
 }
@@ -825,6 +824,7 @@ TEST(TestCORS, optionscors_test_options_7){
   h.insert(h.end(), "Header*");
   h.insert(h.end(), "Hdr-*-Length");
   h.insert(h.end(), "*-Length");
+  h.insert(h.end(), "foo*foo");
   uint8_t flags = RGW_CORS_GET | RGW_CORS_PUT;
   
   send_cors(origins, h, e, flags, CORS_MAX_AGE_INVALID);
@@ -833,7 +833,7 @@ TEST(TestCORS, optionscors_test_options_7){
   g_test->set_extra_header(string("Origin: example.com"));
   g_test->set_extra_header(string("Access-Control-Request-Method: GET"));
   g_test->set_extra_header(string("Access-Control-Allow-Headers: Header1, Header2, Header3, "
-                                  "Hdr--Length, Hdr-1-Length, Header-Length, Content-Length"));
+                                  "Hdr--Length, Hdr-1-Length, Header-Length, Content-Length, foofoofoo"));
   g_test->send_request(string("OPTIONS"), BUCKET_URL);
   EXPECT_EQ(200U, g_test->get_resp_code());
   if(g_test->get_resp_code() == 200){
@@ -843,7 +843,7 @@ TEST(TestCORS, optionscors_test_options_7){
     EXPECT_EQ(0, s.compare("GET"));
     s = g_test->get_response(string("Access-Control-Allow-Headers"));
     EXPECT_EQ(0, s.compare("Header1,Header2,Header3,"
-                           "Hdr--Length,Hdr-1-Length,Header-Length,Content-Length"));
+                           "Hdr--Length,Hdr-1-Length,Header-Length,Content-Length,foofoofoo"));
   }
   ASSERT_EQ(0, delete_bucket());
 }
@@ -895,13 +895,11 @@ int main(int argc, char *argv[]){
   }
 #ifdef GTEST
   int r = RUN_ALL_TESTS();
-  //int r = TestCORS.optionscors_test_options_1();
   if (r >= 0) {
     cout << "There are failures in the test case\n";
     return -1;
   }
 #endif
-  //optionscors_test_options_1();
   finisher->stop();
   return 0;
 }

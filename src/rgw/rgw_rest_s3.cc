@@ -1281,10 +1281,11 @@ void RGWOptionsCORS_ObjStore_S3::send_response()
    *ENOENT means, there is no match of the Origin in the list of CORSRule
    *ENOTSUPP means, the HTTP_METHOD is not supported
    */
-  if(ret != -EACCES && ret != -ENOENT){
+  if(ret == -ENOENT)
+    ret = -EACCES;
+  if(ret != -EACCES){
     get_response_params(hdrs, exp_hdrs, &max_age);
   }else{
-    ret = -EACCES;
     set_req_state_err(s, ret);
     dump_errno(s);
     end_header(s);

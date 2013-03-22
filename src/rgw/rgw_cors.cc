@@ -75,8 +75,7 @@ static bool is_string_in_set(set<string>& s, string h){
         string sl = ssplit.front();
         dout(10) << "Finding " << sl << ", in " << h 
           << ", at offset not less than " << flen << dendl;
-        off = h.find(sl);
-        if((off == string::npos) || (off < flen))
+        if(h.compare((h.size() - sl.size()), sl.size(), sl) != 0)
           continue;
       }
       return true;

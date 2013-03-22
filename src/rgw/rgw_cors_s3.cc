@@ -150,7 +150,6 @@ bool RGWCORSRule_S3::xml_end(const char *el){
 
 void RGWCORSConfiguration_S3::to_xml(ostream& out){
   XMLFormatter f;
-  f.reset();
   f.open_object_section("CORSConfiguration");
   for(list<RGWCORSRule>::iterator it = rules.begin();
       it != rules.end(); it++){
