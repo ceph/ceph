@@ -186,6 +186,7 @@ OSDService::OSDService(OSD *osd) :
   full_status_lock("OSDService::full_status_lock"),
   cur_state(NONE),
   last_msg(0),
+  cur_ratio(0),
   is_stopping_lock("OSDService::is_stopping_lock"),
   state(NOT_STOPPING)
 {}
@@ -1997,6 +1998,7 @@ void OSDService::check_nearfull_warning(const osd_stat_t &osd_stat)
   float ratio = ((float)osd_stat.kb_used) / ((float)osd_stat.kb);
   float nearfull_ratio = get_nearfull_ratio();
   float full_ratio = get_full_ratio();
+  cur_ratio = ratio;
 
   if (full_ratio > 0 && ratio > full_ratio) {
     new_state = FULL;
@@ -2026,6 +2028,19 @@ bool OSDService::check_failsafe_full()
     return true;
   return false;
 }
+
+bool OSDService::too_full_for_backfill(double *_ratio, double *_max_ratio)
+{
+  Mutex::Locker l(full_status_lock);
+  double max_ratio;
+  max_ratio = g_conf->osd_backfill_full_ratio;
+  if (_ratio)
+    *_ratio = cur_ratio;
+  if (_max_ratio)
+    *_max_ratio = max_ratio;
+  return cur_ratio >= max_ratio;
+}
+
 
 void OSD::update_osd_stat()
 {
