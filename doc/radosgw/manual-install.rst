@@ -2,7 +2,7 @@
  Install Apache, FastCGI and RADOS GW
 ======================================
 
-.. note: If you deploy Ceph with Chef cookbooks, you may skip this section. 
+.. note:: If you deploy Ceph with Chef cookbooks, you may skip this section. 
 
 Install Packages
 ----------------
@@ -37,7 +37,7 @@ You may also clone Ceph's Apache and FastCGI git repositories::
 .. _FastCGI Precise: http://gitbuilder.ceph.com/libapache-mod-fastcgi-deb-precise-x86_64-basic/
 .. _RFC 2616, Section 8: http://www.w3.org/Protocols/rfc2616/rfc2616-sec8.html	
 
-.. important: If you do NOT use a modified fastcgi as described above,
+.. important:: If you do NOT use a modified fastcgi as described above,
    you should disable 100-Continue support by adding the following to
    your ``ceph.conf``::
 
