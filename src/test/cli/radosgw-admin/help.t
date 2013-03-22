@@ -48,6 +48,7 @@
     gc process                 manually process garbage
     metadata get               get metadata info
     metadata put               put metadata info
+    metadata rm                remove metadata info
     metadata list              list metadata info
     mdlog show                 show metadata log
   options:
