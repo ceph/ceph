@@ -198,7 +198,7 @@ static int cls_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *o
 
     CLS_LOG(20, "index=%s to_index=%s", index.c_str(), to_index.c_str());
 
-    if (index.compare(0, to_index.size(), to_index) > 0)
+    if (index.compare(0, to_index.size(), to_index) >= 0)
       break;
 
     CLS_LOG(20, "removing key: index=%s", index.c_str());
