@@ -215,6 +215,7 @@ for name in $what; do
 	unique=`dd if=/dev/urandom bs=16 count=1 2>/dev/null | md5sum | awk '{print $1}'`
 	if echo $pushed_to | grep -v -q " $host "; then
 	    scp -q $conf $host:/tmp/ceph.conf.$unique
+	    trap "ssh $host rm /tmp/ceph.conf.$unique" EXIT
 	    pushed_to="$pushed_to $host "
 	fi
 	cur_conf="/tmp/ceph.conf.$unique"
