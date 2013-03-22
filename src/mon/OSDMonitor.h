@@ -171,9 +171,15 @@ private:
   void remove_redundant_pg_temp();
   void remove_down_pg_temp();
   int reweight_by_utilization(int oload, std::string& out_str);
+
+  bool check_source(PaxosServiceMessage *m, uuid_d fsid);
  
+  bool preprocess_mark_me_down(class MOSDMarkMeDown *m);
+
+  friend class C_AckMarkedDown;
   bool preprocess_failure(class MOSDFailure *m);
   bool prepare_failure(class MOSDFailure *m);
+  bool prepare_mark_me_down(class MOSDMarkMeDown *m);
   void process_failures();
   void kick_all_failures();
 
