@@ -55,6 +55,7 @@
 #include "messages/MPing.h"
 #include "messages/MOSDPing.h"
 #include "messages/MOSDFailure.h"
+#include "messages/MOSDMarkMeDown.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDSubOp.h"
@@ -184,7 +185,9 @@ OSDService::OSDService(OSD *osd) :
   in_progress_split_lock("OSDService::in_progress_split_lock"),
   full_status_lock("OSDService::full_status_lock"),
   cur_state(NONE),
-  last_msg(0)
+  last_msg(0),
+  is_stopping_lock("OSDService::is_stopping_lock"),
+  state(NOT_STOPPING)
 {}
 
 void OSDService::_start_split(const set<pg_t> &pgs)
@@ -258,9 +261,16 @@ void OSDService::pg_stat_queue_dequeue(PG *pg)
 void OSDService::shutdown()
 {
   reserver_finisher.stop();
-  watch_lock.Lock();
-  watch_timer.shutdown();
-  watch_lock.Unlock();
+  {
+    Mutex::Locker l(watch_lock);
+    watch_timer.shutdown();
+  }
+  {
+    Mutex::Locker l(backfill_request_lock);
+    backfill_request_timer.shutdown();
+  }
+  osdmap = OSDMapRef();
+  next_osdmap = OSDMapRef();
 }
 
 void OSDService::init()
@@ -753,7 +763,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
 	 const std::string &dev, const std::string &jdev) :
   Dispatcher(external_messenger->cct),
   osd_lock("OSD::osd_lock"),
-  timer(external_messenger->cct, osd_lock),
+  tick_timer(external_messenger->cct, osd_lock),
   authorize_handler_cluster_registry(new AuthAuthorizeHandlerRegistry(external_messenger->cct,
 								      cct->_conf->auth_supported.length() ?
 								      cct->_conf->auth_supported :
@@ -831,12 +841,14 @@ void OSD::handle_signal(int signum)
   assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got signal " << sys_siglist[signum] << " ***" << dendl;
   //suicide(128 + signum);
-  suicide(0);
+  shutdown();
 }
 
 int OSD::pre_init()
 {
   Mutex::Locker lock(osd_lock);
+  if (is_stopping())
+    return 0;
   
   assert(!store);
   store = create_object_store(dev_path, journal_path);
@@ -906,8 +918,10 @@ public:
 int OSD::init()
 {
   Mutex::Locker lock(osd_lock);
+  if (is_stopping())
+    return 0;
 
-  timer.init();
+  tick_timer.init();
   service.backfill_request_timer.init();
 
   // mount.
@@ -1015,7 +1029,7 @@ int OSD::init()
   heartbeat_thread.create();
 
   // tick
-  timer.add_event_after(g_conf->osd_heartbeat_interval, new C_Tick(this));
+  tick_timer.add_event_after(g_conf->osd_heartbeat_interval, new C_Tick(this));
 
   AdminSocket *admin_socket = cct->get_admin_socket();
   asok_hook = new OSDSocketHook(this);
@@ -1053,6 +1067,8 @@ int OSD::init()
     monc->shutdown();
     store->umount();
     osd_lock.Lock(); // locker is going to unlock this on function exit
+    if (is_stopping())
+      return 0;
     return r;
   }
 
@@ -1061,6 +1077,8 @@ int OSD::init()
   }
 
   osd_lock.Lock();
+  if (is_stopping())
+    return 0;
 
   dout(10) << "ensuring pgs have consumed prior maps" << dendl;
   consume_map();
@@ -1167,37 +1185,47 @@ void OSD::suicide(int exitcode)
 
 int OSD::shutdown()
 {
-  g_conf->remove_observer(this);
+  if (!service.prepare_to_stop())
+    return 0; // already shutting down
+  osd_lock.Lock();
+  if (is_stopping()) {
+    osd_lock.Unlock();
+    return 0;
+  }
+  derr << "shutdown" << dendl;
 
-  service.shutdown();
+  heartbeat_lock.Lock();
+  state = STATE_STOPPING;
+  heartbeat_lock.Unlock();
+
+  // Debugging
   g_ceph_context->_conf->set_val("debug_osd", "100");
   g_ceph_context->_conf->set_val("debug_journal", "100");
   g_ceph_context->_conf->set_val("debug_filestore", "100");
   g_ceph_context->_conf->set_val("debug_ms", "100");
   g_ceph_context->_conf->apply_changes(NULL);
   
-  derr << "shutdown" << dendl;
-
-  state = STATE_STOPPING;
-
-  timer.shutdown();
-
-  service.backfill_request_lock.Lock();
-  service.backfill_request_timer.shutdown();
-  service.backfill_request_lock.Unlock();
-
-  heartbeat_lock.Lock();
-  heartbeat_stop = true;
-  heartbeat_cond.Signal();
-  heartbeat_lock.Unlock();
-  heartbeat_thread.join();
-
-  command_tp.stop();
-
+  // Remove PGs
+  for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
+       p != pg_map.end();
+       ++p) {
+    dout(20) << " kicking pg " << p->first << dendl;
+    p->second->lock();
+    p->second->on_shutdown();
+    p->second->kick();
+    p->second->unlock();
+    p->second->put();
+  }
+  pg_map.clear();
+  
   // finish ops
-  op_wq.drain();
-  dout(10) << "no ops" << dendl;
+  op_wq.drain(); // should already be empty except for lagard PGs
+  {
+    Mutex::Locker l(finished_lock);
+    finished.clear(); // zap waiters (bleh, this is messy)
+  }
 
+  // unregister commands
   cct->get_admin_socket()->unregister_command("dump_ops_in_flight");
   cct->get_admin_socket()->unregister_command("dump_historic_ops");
   cct->get_admin_socket()->unregister_command("dump_op_pq_state");
@@ -1211,48 +1239,33 @@ int OSD::shutdown()
   delete test_ops_hook;
   test_ops_hook = NULL;
 
+  osd_lock.Unlock();
+
+  heartbeat_lock.Lock();
+  heartbeat_stop = true;
+  heartbeat_cond.Signal();
+  heartbeat_lock.Unlock();
+  heartbeat_thread.join();
+
+  recovery_tp.drain();
   recovery_tp.stop();
   dout(10) << "recovery tp stopped" << dendl;
+
+  op_tp.drain();
   op_tp.stop();
   dout(10) << "op tp stopped" << dendl;
 
-  // pause _new_ disk work first (to avoid racing with thread pool),
-  disk_tp.pause_new();
+  command_tp.drain();
+  command_tp.stop();
+  dout(10) << "command tp stopped" << dendl;
+
+  disk_tp.drain();
+  disk_tp.stop();
   dout(10) << "disk tp paused (new), kicking all pgs" << dendl;
 
-  // then kick all pgs,
-  for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
-       p != pg_map.end();
-       ++p) {
-    dout(20) << " kicking pg " << p->first << dendl;
-    p->second->lock();
-    p->second->kick();
-    p->second->unlock();
-  }
-  dout(20) << " kicked all pgs" << dendl;
-
-  // then stop thread.
-  disk_tp.stop();
-  dout(10) << "disk tp stopped" << dendl;
-
-  // tell pgs we're shutting down
-  for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
-       p != pg_map.end();
-       ++p) {
-    p->second->lock();
-    p->second->on_shutdown();
-    p->second->unlock();
-  }
-
-  osd_lock.Unlock();
-  store->sync();
-  store->flush();
   osd_lock.Lock();
 
-  // zap waiters (bleh, this is messy)
-  finished_lock.Lock();
-  finished.clear();
-  finished_lock.Unlock();
+  tick_timer.shutdown();
 
   // note unmount epoch
   dout(10) << "noting clean unmount in epoch " << osdmap->get_epoch() << dendl;
@@ -1266,33 +1279,32 @@ int OSD::shutdown()
 	 << cpp_strerror(r) << dendl;
   }
 
-  // flush data to disk
-  osd_lock.Unlock();
-  dout(10) << "sync" << dendl;
+  dout(10) << "syncing store" << dendl;
+  store->flush();
   store->sync();
-  r = store->umount();
+  store->umount();
   delete store;
   store = 0;
-  dout(10) << "sync done" << dendl;
-  osd_lock.Lock();
+  dout(10) << "Store synced" << dendl;
 
-  clear_pg_stat_queue();
-
-  // close pgs
-  for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
-       p != pg_map.end();
-       ++p) {
-    PG *pg = p->second;
-    pg->put();
+  {
+    Mutex::Locker l(pg_stat_queue_lock);
+    assert(pg_stat_queue.empty());
   }
-  pg_map.clear();
+
+  g_conf->remove_observer(this);
+
+  monc->shutdown();
+  osd_lock.Unlock();
+
+  osdmap = OSDMapRef();
+  service.shutdown();
+  op_tracker.on_shutdown();
 
   client_messenger->shutdown();
   cluster_messenger->shutdown();
   hbclient_messenger->shutdown();
   hbserver_messenger->shutdown();
-
-  monc->shutdown();
   return r;
 }
 
@@ -1521,20 +1533,6 @@ PG *OSD::_lookup_lock_pg_with_map_lock_held(pg_t pgid)
   pg->lock_with_map_lock_held();
   return pg;
 }
-
-PG *OSD::lookup_lock_raw_pg(pg_t pgid)
-{
-  Mutex::Locker l(osd_lock);
-  if (osdmap->have_pg_pool(pgid.pool())) {
-    pgid = osdmap->raw_pg_to_pg(pgid);
-  }
-  if (!_have_pg(pgid)) {
-    return NULL;
-  }
-  PG *pg = _lookup_lock_pg(pgid);
-  return pg;
-}
-
 
 void OSD::load_pgs()
 {
@@ -2075,10 +2073,11 @@ void OSD::_add_heartbeat_peer(int p)
 
 void OSD::need_heartbeat_peer_update()
 {
-  heartbeat_lock.Lock();
+  Mutex::Locker l(heartbeat_lock);
+  if (is_stopping())
+    return;
   dout(20) << "need_heartbeat_peer_update" << dendl;
   heartbeat_need_update = true;
-  heartbeat_lock.Unlock();
 }
 
 void OSD::maybe_update_heartbeat_peers()
@@ -2130,15 +2129,15 @@ void OSD::maybe_update_heartbeat_peers()
 
 void OSD::reset_heartbeat_peers()
 {
+  assert(osd_lock.is_locked());
   dout(10) << "reset_heartbeat_peers" << dendl;
-  heartbeat_lock.Lock();
+  Mutex::Locker l(heartbeat_lock);
   while (!heartbeat_peers.empty()) {
     hbclient_messenger->mark_down(heartbeat_peers.begin()->second.con);
     heartbeat_peers.begin()->second.con->put();
     heartbeat_peers.erase(heartbeat_peers.begin());
   }
   failure_queue.clear();
-  heartbeat_lock.Unlock();
 }
 
 void OSD::handle_osd_ping(MOSDPing *m)
@@ -2153,6 +2152,10 @@ void OSD::handle_osd_ping(MOSDPing *m)
   int from = m->get_source().num();
 
   heartbeat_lock.Lock();
+  if (is_stopping()) {
+    heartbeat_lock.Unlock();
+    return;
+  }
 
   OSDMapRef curmap = service.get_osdmap();
   
@@ -2252,7 +2255,9 @@ void OSD::handle_osd_ping(MOSDPing *m)
 
 void OSD::heartbeat_entry()
 {
-  heartbeat_lock.Lock();
+  Mutex::Locker l(heartbeat_lock);
+  if (is_stopping())
+    return;
   while (!heartbeat_stop) {
     heartbeat();
 
@@ -2261,9 +2266,10 @@ void OSD::heartbeat_entry()
     w.set_from_double(wait);
     dout(30) << "heartbeat_entry sleeping for " << wait << dendl;
     heartbeat_cond.WaitInterval(g_ceph_context, heartbeat_lock, w);
+    if (is_stopping())
+      return;
     dout(30) << "heartbeat_entry woke up" << dendl;
   }
-  heartbeat_lock.Unlock();
 }
 
 void OSD::heartbeat_check()
@@ -2367,6 +2373,10 @@ bool OSD::heartbeat_reset(Connection *con)
   HeartbeatSession *s = static_cast<HeartbeatSession*>(con->get_priv());
   if (s) {
     heartbeat_lock.Lock();
+    if (is_stopping()) {
+      heartbeat_lock.Unlock();
+      return true;
+    }
     map<int,HeartbeatInfo>::iterator p = heartbeat_peers.find(s->peer);
     if (p != heartbeat_peers.end() &&
 	p->second.con == con) {
@@ -2458,7 +2468,7 @@ void OSD::tick()
 
   check_ops_in_flight();
 
-  timer.add_event_after(1.0, new C_Tick(this));
+  tick_timer.add_event_after(1.0, new C_Tick(this));
 }
 
 void OSD::check_ops_in_flight()
@@ -2646,6 +2656,8 @@ void OSD::ms_handle_connect(Connection *con)
 {
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
     Mutex::Locker l(osd_lock);
+    if (is_stopping())
+      return;
     dout(10) << "ms_handle_connect on mon" << dendl;
     if (is_booting()) {
       start_boot();
@@ -2693,6 +2705,8 @@ void OSD::start_boot()
 void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
 {
   Mutex::Locker l(osd_lock);
+  if (is_stopping())
+    return;
   dout(10) << "_maybe_boot mon has osdmaps " << oldest << ".." << newest << dendl;
 
   if (is_initializing()) {
@@ -2855,6 +2869,7 @@ void OSDService::send_pg_temp()
 
 void OSD::send_failures()
 {
+  assert(osd_lock.is_locked());
   bool locked = false;
   if (!failure_queue.empty()) {
     heartbeat_lock.Lock();
@@ -3359,7 +3374,6 @@ void OSD::_share_map_outgoing(int peer, Connection *con, OSDMapRef map)
 bool OSD::heartbeat_dispatch(Message *m)
 {
   dout(30) << "heartbeat_dispatch " << m << dendl;
-
   switch (m->get_type()) {
     
   case CEPH_MSG_PING:
@@ -3389,9 +3403,18 @@ bool OSD::heartbeat_dispatch(Message *m)
 
 bool OSD::ms_dispatch(Message *m)
 {
+  if (m->get_type() == MSG_OSD_MARK_ME_DOWN) {
+    service.got_stop_ack();
+    return true;
+  }
+
   // lock!
 
   osd_lock.Lock();
+  if (is_stopping()) {
+    osd_lock.Unlock();
+    return true;
+  }
 
   while (dispatch_running) {
     dout(10) << "ms_dispatch waiting for other dispatch thread to complete" << dendl;
@@ -3845,6 +3868,37 @@ void OSDService::dec_scrubs_active()
   sched_scrub_lock.Unlock();
 }
 
+bool OSDService::prepare_to_stop() {
+  Mutex::Locker l(is_stopping_lock);
+  if (state != NOT_STOPPING)
+    return false;
+
+  state = PREPARING_TO_STOP;
+  monc->send_mon_message(
+    new MOSDMarkMeDown(
+      monc->get_fsid(),
+      get_osdmap()->get_inst(whoami),
+      get_osdmap()->get_epoch(),
+      false
+      ));
+  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t timeout;
+  timeout.set_from_double(
+    now + g_conf->osd_mon_shutdown_timeout);
+  while ((ceph_clock_now(g_ceph_context) < timeout) &&
+	 (state != STOPPING)) {
+    is_stopping_cond.WaitUntil(is_stopping_lock, timeout);
+  }
+  state = STOPPING;
+  return true;
+}
+
+void OSDService::got_stop_ack() {
+  Mutex::Locker l(is_stopping_lock);
+  dout(10) << "Got stop ack" << dendl;
+  state = STOPPING;
+  is_stopping_cond.Signal();
+}
 // =====================================================
 // MAP
 
@@ -3867,6 +3921,7 @@ void OSD::wait_for_new_map(OpRequestRef op)
 
 void OSD::note_down_osd(int peer)
 {
+  assert(osd_lock.is_locked());
   cluster_messenger->mark_down(osdmap->get_cluster_addr(peer));
 
   heartbeat_lock.Lock();
@@ -4090,9 +4145,14 @@ void OSD::handle_osd_map(MOSDMap *m)
 	       !osdmap->get_addr(whoami).probably_equals(client_messenger->get_myaddr()) ||
 	       !osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()) ||
 	       !osdmap->get_hb_addr(whoami).probably_equals(hbserver_messenger->get_myaddr())) {
-      if (!osdmap->is_up(whoami))
-	clog.warn() << "map e" << osdmap->get_epoch()
-		    << " wrongly marked me down";
+      if (!osdmap->is_up(whoami)) {
+	if (service.is_preparing_to_stop()) {
+	  service.got_stop_ack();
+	} else {
+	  clog.warn() << "map e" << osdmap->get_epoch()
+		      << " wrongly marked me down";
+	}
+      }
       else if (!osdmap->get_addr(whoami).probably_equals(client_messenger->get_myaddr()))
 	clog.error() << "map e" << osdmap->get_epoch()
 		    << " had wrong client addr (" << osdmap->get_addr(whoami)
@@ -4106,25 +4166,27 @@ void OSD::handle_osd_map(MOSDMap *m)
 		    << " had wrong hb addr (" << osdmap->get_hb_addr(whoami)
 		     << " != my " << hbserver_messenger->get_myaddr() << ")";
       
-      state = STATE_BOOTING;
-      up_epoch = 0;
-      do_restart = true;
-      bind_epoch = osdmap->get_epoch();
+      if (!service.is_stopping()) {
+	state = STATE_BOOTING;
+	up_epoch = 0;
+	do_restart = true;
+	bind_epoch = osdmap->get_epoch();
 
-      int cport = cluster_messenger->get_myaddr().get_port();
-      int hbport = hbserver_messenger->get_myaddr().get_port();
+	int cport = cluster_messenger->get_myaddr().get_port();
+	int hbport = hbserver_messenger->get_myaddr().get_port();
 
-      int r = cluster_messenger->rebind(hbport);
-      if (r != 0)
-	do_shutdown = true;  // FIXME: do_restart?
+	int r = cluster_messenger->rebind(hbport);
+	if (r != 0)
+	  do_shutdown = true;  // FIXME: do_restart?
 
-      r = hbserver_messenger->rebind(cport);
-      if (r != 0)
-	do_shutdown = true;  // FIXME: do_restart?
+	r = hbserver_messenger->rebind(cport);
+	if (r != 0)
+	  do_shutdown = true;  // FIXME: do_restart?
 
-      hbclient_messenger->mark_down_all();
+	hbclient_messenger->mark_down_all();
 
-      reset_heartbeat_peers();
+	reset_heartbeat_peers();
+      }
     }
   }
 
@@ -5733,17 +5795,6 @@ void OSD::_remove_pg(PG *pg)
 		      *i, pg->osr, deleting));
   }
 
-  recovery_wq.dequeue(pg);
-  scrub_wq.dequeue(pg);
-  scrub_finalize_wq.dequeue(pg);
-  snap_trim_wq.dequeue(pg);
-  pg_stat_queue_dequeue(pg);
-  op_wq.dequeue(pg);
-  peering_wq.dequeue(pg);
-
-  pg->deleting = true;
-
-  pg->unreg_next_scrub();
 
   // remove from map
   pg_map.erase(pg->info.pgid);
@@ -6309,6 +6360,8 @@ struct C_CompleteSplits : public Context {
     : osd(osd), pgs(in) {}
   void finish(int r) {
     Mutex::Locker l(osd->osd_lock);
+    if (osd->is_stopping())
+      return;
     PG::RecoveryCtx rctx = osd->create_context();
     set<pg_t> to_complete;
     for (set<boost::intrusive_ptr<PG> >::iterator i = pgs.begin();

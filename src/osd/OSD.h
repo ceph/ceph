@@ -406,6 +406,24 @@ public:
   void check_nearfull_warning(const osd_stat_t &stat);
   bool check_failsafe_full();
 
+  // -- stopping --
+  Mutex is_stopping_lock;
+  Cond is_stopping_cond;
+  enum {
+    NOT_STOPPING,
+    PREPARING_TO_STOP,
+    STOPPING } state;
+  bool is_stopping() {
+    Mutex::Locker l(is_stopping_lock);
+    return state == STOPPING;
+  }
+  bool is_preparing_to_stop() {
+    Mutex::Locker l(is_stopping_lock);
+    return state == PREPARING_TO_STOP;
+  }
+  bool prepare_to_stop();
+  void got_stop_ack();
+
   OSDService(OSD *osd);
 };
 class OSD : public Dispatcher,
@@ -419,7 +437,7 @@ public:
 
 protected:
   Mutex osd_lock;			// global lock
-  SafeTimer timer;    // safe timer (osd_lock)
+  SafeTimer tick_timer;    // safe timer (osd_lock)
 
   AuthAuthorizeHandlerRegistry *authorize_handler_cluster_registry;
   AuthAuthorizeHandlerRegistry *authorize_handler_service_registry;
@@ -890,7 +908,6 @@ protected:
 			ObjectStore::Transaction& t);
   PG   *_lookup_qlock_pg(pg_t pgid);
 
-  PG *lookup_lock_raw_pg(pg_t pgid);
   PG* _make_pg(OSDMapRef createmap, pg_t pgid);
   void add_newly_split_pg(PG *pg,
 			  PG::RecoveryCtx *rctx);
@@ -1100,6 +1117,10 @@ protected:
     }
     void _process(Command *c) {
       osd->osd_lock.Lock();
+      if (osd->is_stopping()) {
+	delete c;
+	return;
+      }
       osd->do_command(c->con, c->tid, c->cmd, c->indata);
       osd->osd_lock.Unlock();
       delete c;
@@ -1354,6 +1375,10 @@ protected:
     }
     void _process(MOSDRepScrub *msg) {
       osd->osd_lock.Lock();
+      if (osd->is_stopping()) {
+	osd->osd_lock.Unlock();
+	return;
+      }
       if (osd->_have_pg(msg->pgid)) {
 	PG *pg = osd->_lookup_lock_pg(msg->pgid);
 	osd->osd_lock.Unlock();
