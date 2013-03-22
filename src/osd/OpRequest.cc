@@ -20,8 +20,16 @@ static ostream& _prefix(std::ostream* _dout)
   return *_dout << "--OSD::tracker-- ";
 }
 
-void OpHistory::insert(utime_t now, OpRequest *op)
+void OpHistory::on_shutdown()
 {
+  arrived.clear();
+  duration.clear();
+  shutdown = true;
+}
+
+void OpHistory::insert(utime_t now, OpRequestRef op)
+{
+  assert(!shutdown);
   duration.insert(make_pair(op->get_duration(), op));
   arrived.insert(make_pair(op->get_arrived(), op));
   cleanup(now);
@@ -30,11 +38,11 @@ void OpHistory::insert(utime_t now, OpRequest *op)
 void OpHistory::cleanup(utime_t now)
 {
   while (arrived.size() &&
-	 now - arrived.begin()->first > (double)(g_conf->osd_op_history_duration)) {
+	 (now - arrived.begin()->first >
+	  (double)(g_conf->osd_op_history_duration))) {
     duration.erase(make_pair(
 	arrived.begin()->second->get_duration(),
 	arrived.begin()->second));
-    delete arrived.begin()->second;
     arrived.erase(arrived.begin());
   }
 
@@ -42,7 +50,6 @@ void OpHistory::cleanup(utime_t now)
     arrived.erase(make_pair(
 	duration.begin()->second->get_arrived(),
 	duration.begin()->second));
-    delete duration.begin()->second;
     duration.erase(duration.begin());
   }
 }
@@ -55,7 +62,7 @@ void OpHistory::dump_ops(utime_t now, Formatter *f)
   f->dump_int("duration to keep", g_conf->osd_op_history_duration);
   {
     f->open_array_section("Ops");
-    for (set<pair<utime_t, const OpRequest *> >::const_iterator i =
+    for (set<pair<utime_t, OpRequestRef> >::const_iterator i =
 	   arrived.begin();
 	 i != arrived.end();
 	 ++i) {
@@ -109,7 +116,7 @@ void OpTracker::unregister_inflight_op(OpRequest *i)
   utime_t now = ceph_clock_now(g_ceph_context);
   i->xitem.remove_myself();
   i->request->clear_data();
-  history.insert(now, i);
+  history.insert(now, OpRequestRef(i));
 }
 
 bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)

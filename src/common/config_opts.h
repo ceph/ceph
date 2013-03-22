@@ -436,6 +436,9 @@ OPTION(osd_failsafe_nearfull_ratio, OPT_FLOAT, .90) // what % full makes an OSD 
 OPTION(osd_client_op_priority, OPT_INT, 63)
 OPTION(osd_recovery_op_priority, OPT_INT, 10)
 
+// Max time to wait between notifying mon of shutdown and shutting down
+OPTION(osd_mon_shutdown_timeout, OPT_DOUBLE, 5)
+
 OPTION(filestore, OPT_BOOL, false)
 
 // Tests index failure paths
