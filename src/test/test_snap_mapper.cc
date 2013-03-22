@@ -4,7 +4,6 @@
 #include <set>
 #include <boost/scoped_ptr.hpp>
 #include <sys/types.h>
-#include <tr1/memory>
 
 #include "include/buffer.h"
 #include "common/map_cacher.hpp"
