@@ -91,7 +91,7 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_inf
   ::encode(ui, data_bl);
   ::encode(info, data_bl);
 
-  ret = store->meta_mgr->put_obj(user_meta_handler, info.user_id, data_bl, exclusive, objv_tracker);
+  ret = store->meta_mgr->put_entry(user_meta_handler, info.user_id, data_bl, exclusive, objv_tracker);
   if (ret < 0)
     return ret;
 
@@ -1542,7 +1542,7 @@ int RGWUser::update(RGWUserAdminOpState& op_state, std::string *err_msg)
   }
 
   if (is_populated()) {
-    ret = rgw_store_user_info(store, user_info, &old_info, NULL, false);
+    ret = rgw_store_user_info(store, user_info, &old_info, &op_state.objv, false);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to store user info");
       return ret;
@@ -2276,8 +2276,20 @@ public:
     RGWListRawObjsCtx ctx;
   };
 
-  int put_obj(RGWRados *store, string& key, bufferlist& bl, bool exclusive,
-              RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs) {
+  int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) {
+#warning FIXME: use objv_tracker
+
+    RGWUserInfo info;
+    RGWObjVersionTracker ot;
+    int ret = rgw_get_user_info_by_uid(store, entry, info, &ot);
+    if (ret < 0)
+      return ret;
+
+    return rgw_delete_user(store, info);
+  }
+
+  int put_entry(RGWRados *store, string& key, bufferlist& bl, bool exclusive,
+                RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs) {
     return rgw_put_system_obj(store, store->zone.user_uid_pool, key,
                               bl.c_str(), bl.length(), exclusive,
                               objv_tracker, pattrs);
