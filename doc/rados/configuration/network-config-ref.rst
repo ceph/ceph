@@ -51,7 +51,7 @@ There are several reasons to consider operating two separate networks:
 #. **Peformance:** OSDs handle data replication for the clients. When OSDs 
    replicate data more than once, the network load between OSDs easily dwarfs 
    the network load between clients and the Ceph cluster. This can introduce 
-   latency and create a performance problem. Recovery and rebalacing can 
+   latency and create a performance problem. Recovery and rebalancing can 
    also introduce significant latency on the public network. See `How Ceph 
    Scales`_ for additional details on how Ceph replicates data. See 
    `Monitor / OSD Interaction`_  for details on heartbeat traffic.
@@ -115,9 +115,9 @@ For example::
 OSD IP Tables
 -------------
 
-OSDs listen on the first available ports beginning at port 6800. Ensure
-that you open at least one port beginning at port 6800 for each OSD that
-runs on the host. Each OSD may use up to three ports:
+By default, OSDs `bind`_ to the first available ports on a host beginning at
+port 6800. Ensure that you open at least three ports beginning at port 6800 for
+each OSD that runs on the host. Each OSD on a host may use up to three ports:
 
 #. One for talking to clients and monitors.
 #. One for sending data to other OSDs.
@@ -157,7 +157,7 @@ network. For example::
 
 .. tip:: If you run metadata servers on the same host as the OSDs,
    you can consolidate the public network configuration step. Ensure
-   you the number of ports required for each daemon.
+   that you open the number of ports required for each daemon per host.
 
 
 
@@ -173,8 +173,8 @@ specific criteria, including multiple IP network and subnet masks for your
 public network. You can also establish a separate cluster network to handle OSD
 heartbeat, object replication and recovery traffic. Don't confuse the IP
 addresses you set in your configuration with the public-facing IP addresses
-customers may use to access your service. Typical IP networks are often
-``192.168.0.0`` or ``10.0.0.0`` or something similar.
+network clients may use to access your service. Typical internal IP networks are
+often ``192.168.0.0`` or ``10.0.0.0``.
 
 .. tip:: If you specify more than one IP address and subnet mask for
    either the public or the cluster network, the subnets within the network
@@ -187,6 +187,7 @@ customers may use to access your service. Typical IP networks are often
 When you've configured your networks, you may restart your cluster or restart
 each daemon. Ceph daemons bind dynamically, so you do not have to restart the
 entire cluster at once if you change your network configuration.
+
 
 Public Network
 --------------
@@ -378,12 +379,12 @@ Hosts
 -----
 
 Ceph expects at least one monitor declared in the Ceph configuration file, with
-a ``mon host`` setting under each declared monitor. Ceph expects a ``host``
-setting under each declared metadata server and OSD in the  Ceph configuration
-file.
+a ``mon addr`` setting under each declared monitor. Ceph expects a ``host``
+setting under each declared monitor, metadata server and OSD in the Ceph
+configuration file.
 
 
-``mon host``
+``mon addr``
 
 :Description: A list of ``{hostname}:{port}`` entries that clients can use to 
               connect to a Ceph monitor. If not set, Ceph searches ``[mon.*]`` 
