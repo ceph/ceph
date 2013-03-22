@@ -54,12 +54,6 @@ bool CrushWrapper::_maybe_remove_last_instance(CephContext *cct, int item, bool 
 {
   // last instance?
   if (_search_item_exists(item)) {
-    if (name_map.count(item)) {
-      ldout(cct, 5) << "_maybe_remove_last_instance removing name for item " << item << dendl;
-      name_map.erase(item);
-      have_rmaps = false;
-      return true;
-    }
     return false;
   }
 
