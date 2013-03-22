@@ -485,7 +485,7 @@ OPTION(filestore_fail_eio, OPT_BOOL, true)       // fail/crash on EIO
 OPTION(filestore_replica_fadvise, OPT_BOOL, true)
 OPTION(filestore_debug_verify_split, OPT_BOOL, false)
 OPTION(journal_dio, OPT_BOOL, true)
-OPTION(journal_aio, OPT_BOOL, false)
+OPTION(journal_aio, OPT_BOOL, true)
 
 // max bytes to search ahead in journal searching for corruption
 OPTION(journal_max_corrupt_search, OPT_U64, 10<<20)
