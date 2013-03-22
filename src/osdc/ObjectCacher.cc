@@ -1503,14 +1503,14 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
   assert(lock.is_locked());
   if (oset->objects.empty()) {
     ldout(cct, 10) << "flush_set on " << oset << " dne" << dendl;
-    delete onfinish;
+    onfinish->complete(0);
     return true;
   }
 
   ldout(cct, 10) << "flush_set " << oset << dendl;
 
   // we'll need to wait for all objects to flush!
-  C_GatherBuilder gather(cct, onfinish);
+  C_GatherBuilder gather(cct);
 
   bool safe = true;
   for (xlist<Object*>::iterator i = oset->objects.begin();
@@ -1529,11 +1529,14 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
         ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
     }
   }
+  if (gather.has_subs())
+    gather.set_finisher(onfinish);
   if (onfinish != NULL)
     gather.activate();
   
   if (safe) {
     ldout(cct, 10) << "flush_set " << oset << " has no dirty|tx bhs" << dendl;
+    onfinish->complete(0);
     return true;
   }
   return false;
@@ -1546,14 +1549,14 @@ bool ObjectCacher::flush_set(ObjectSet *oset, vector<ObjectExtent>& exv, Context
   assert(lock.is_locked());
   if (oset->objects.empty()) {
     ldout(cct, 10) << "flush_set on " << oset << " dne" << dendl;
-    delete onfinish;
+    onfinish->complete(0);
     return true;
   }
 
   ldout(cct, 10) << "flush_set " << oset << " on " << exv.size() << " ObjectExtents" << dendl;
 
   // we'll need to wait for all objects to flush!
-  C_GatherBuilder gather(cct, onfinish);
+  C_GatherBuilder gather(cct);
 
   bool safe = true;
   for (vector<ObjectExtent>::iterator p = exv.begin();
@@ -1577,11 +1580,14 @@ bool ObjectCacher::flush_set(ObjectSet *oset, vector<ObjectExtent>& exv, Context
         ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
     }
   }
+  if (gather.has_subs())
+    gather.set_finisher(onfinish);
   if (onfinish != NULL)
     gather.activate();
   
   if (safe) {
     ldout(cct, 10) << "flush_set " << oset << " has no dirty|tx bhs" << dendl;
+    onfinish->complete(0);
     return true;
   }
   return false;
