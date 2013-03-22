@@ -9,7 +9,6 @@
 #include <sstream>
 #include <stdarg.h>
 #include <string>
-#include <list>
 
 namespace ceph {
 
