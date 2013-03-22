@@ -1500,6 +1500,7 @@ bool ObjectCacher::flush(Object *ob, loff_t offset, loff_t length)
 bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
 {
   assert(lock.is_locked());
+  assert(onfinish != NULL);
   if (oset->objects.empty()) {
     ldout(cct, 10) << "flush_set on " << oset << " dne" << dendl;
     onfinish->complete(0);
@@ -1524,14 +1525,12 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
                << ob->last_write_tid 
                << " on " << *ob
                << dendl;
-      if (onfinish != NULL)
-        ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
+      ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
     }
   }
   if (gather.has_subs())
     gather.set_finisher(onfinish);
-  if (onfinish != NULL)
-    gather.activate();
+  gather.activate();
   
   if (safe) {
     ldout(cct, 10) << "flush_set " << oset << " has no dirty|tx bhs" << dendl;
@@ -1546,6 +1545,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
 bool ObjectCacher::flush_set(ObjectSet *oset, vector<ObjectExtent>& exv, Context *onfinish)
 {
   assert(lock.is_locked());
+  assert(onfinish != NULL);
   if (oset->objects.empty()) {
     ldout(cct, 10) << "flush_set on " << oset << " dne" << dendl;
     onfinish->complete(0);
@@ -1575,15 +1575,13 @@ bool ObjectCacher::flush_set(ObjectSet *oset, vector<ObjectExtent>& exv, Context
 
       ldout(cct, 10) << "flush_set " << oset << " will wait for ack tid " 
 		     << ob->last_write_tid << " on " << *ob << dendl;
-      if (onfinish != NULL)
-        ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
+      ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
     }
   }
   if (gather.has_subs())
     gather.set_finisher(onfinish);
-  if (onfinish != NULL)
-    gather.activate();
-  
+  gather.activate();
+
   if (safe) {
     ldout(cct, 10) << "flush_set " << oset << " has no dirty|tx bhs" << dendl;
     onfinish->complete(0);
