@@ -22,6 +22,7 @@ package com.ceph.fs;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.util.UUID;
 import org.junit.*;
 import static org.junit.Assert.*;
@@ -992,5 +993,11 @@ public class CephMountTest {
       assertTrue(b.getType().length() > 0);
       assertTrue(b.getName().length() > 0);
     }
+  }
+
+  @Test
+  public void test_get_osd_address() throws Exception {
+    InetAddress addr = mount.get_osd_address(0);
+    assertTrue(addr.getHostAddress().length() > 0);
   }
 }
