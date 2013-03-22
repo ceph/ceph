@@ -212,6 +212,11 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, subdir):
             for remote, role in client_remotes:
                 p.spawn(_run_tests, ctx, refspec, role, [unit], env, subdir)
 
+    # cleanup the generated client directories
+    client_generator = teuthology.all_roles_of_type(ctx.cluster, 'client')
+    for client in client_generator:
+        _delete_dir(ctx, 'client.{id}'.format(id=client), subdir)
+
 def _run_tests(ctx, refspec, role, tests, env, subdir=None):
     testdir = teuthology.get_testdir(ctx)
     assert isinstance(role, basestring)
