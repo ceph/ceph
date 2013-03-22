@@ -2698,11 +2698,7 @@ bool Client::_flush(Inode *in, Context *onfinish)
   if (!onfinish) {
     onfinish = new C_Client_PutInode(this, in);
   }
-  bool safe = objectcacher->flush_set(&in->oset, onfinish);
-  if (safe) {
-    onfinish->complete(0);
-  }
-  return safe;
+  return objectcacher->flush_set(&in->oset, onfinish);
 }
 
 void Client::_flush_range(Inode *in, int64_t offset, uint64_t size)
