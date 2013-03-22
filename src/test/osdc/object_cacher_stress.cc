@@ -147,13 +147,11 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
   bool already_flushed = obc.flush_set(&object_set, onfinish);
   std::cout << "already flushed = " << already_flushed << std::endl;
   lock.Unlock();
-  if (!already_flushed) {
-    mylock.Lock();
-    while (!done) {
-      cond.Wait(mylock);
-    }
-    mylock.Unlock();
+  mylock.Lock();
+  while (!done) {
+    cond.Wait(mylock);
   }
+  mylock.Unlock();
 
   lock.Lock();
   bool unclean = obc.release_set(&object_set);
