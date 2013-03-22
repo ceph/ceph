@@ -335,6 +335,7 @@ def get_osd_id(path):
     return osd_id
 
 
+# TODO depend on python2.7
 def _check_output(*args, **kwargs):
     process = subprocess.Popen(
         stdout=subprocess.PIPE,
