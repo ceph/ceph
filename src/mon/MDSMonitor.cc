@@ -12,6 +12,7 @@
  * 
  */
 
+#include <sstream>
 
 #include "MDSMonitor.h"
 #include "Monitor.h"
@@ -31,12 +32,8 @@
 #include "common/perf_counters.h"
 #include "common/Timer.h"
 
-#include <sstream>
-
 #include "common/config.h"
 #include "include/assert.h"
-
-#include "MonitorDBStore.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
