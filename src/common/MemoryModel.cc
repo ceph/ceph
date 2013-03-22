@@ -97,19 +97,7 @@ void MemoryModel::_sample(snap *psnap)
   
   psnap->malloc = mi.uordblks >> 10;
   psnap->mmap = mi.hblks >> 10;
-  
-
-  ofstream log("/tmp/memlog", ios::app);
-  log << "heap " << heap
-      << "\trss " << psnap->rss
-      << "\tmi\t" << mi.arena
-      << "\t" << mi.ordblks
-      << "\t" << mi.uordblks / 1024
-      << "\t" << mi.fordblks / 1024
-      << "\t" << mi.hblks 
-      << "\t" << mi.hblkhd / 1024
-      << std::endl;
 #else
-#warning "Not implemented!"
+#warning "mallinfo not implemented"
 #endif
 }
