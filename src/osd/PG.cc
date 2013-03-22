@@ -4745,13 +4745,20 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     dout(10) << " no lastmap" << dendl;
     dirty_info = true;
   } else {
+    std::stringstream debug;
     bool new_interval = pg_interval_t::check_new_interval(
       oldacting, newacting,
       oldup, newup,
       info.history.same_interval_since,
       info.history.last_epoch_clean,
       osdmap,
-      lastmap, info.pgid.pool(), info.pgid, &past_intervals);
+      lastmap,
+      info.pgid.pool(),
+      info.pgid,
+      &past_intervals,
+      &debug);
+    dout(10) << __func__ << ": check_new_interval output: "
+	     << debug.str() << dendl;
     if (new_interval) {
       dout(10) << " noting past " << past_intervals.rbegin()->second << dendl;
       dirty_info = true;

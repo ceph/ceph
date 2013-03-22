@@ -1581,6 +1581,13 @@ bool pg_interval_t::check_new_interval(
 
     if (i.acting.size() >=
 	osdmap->get_pools().find(pool_id)->second.min_size) {
+      if (out)
+	*out << "generate_past_intervals " << i
+	     << ": not rw,"
+	     << " up_thru " << lastmap->get_up_thru(i.acting[0])
+	     << " up_from " << lastmap->get_up_from(i.acting[0])
+	     << " last_epoch_clean " << last_epoch_clean
+	     << std::endl;
       if (lastmap->get_up_thru(i.acting[0]) >= i.first &&
 	  lastmap->get_up_from(i.acting[0]) <= i.first) {
 	i.maybe_went_rw = true;
