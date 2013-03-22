@@ -59,7 +59,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_MANIFEST    	RGW_ATTR_PREFIX "manifest"
 #define RGW_ATTR_USER_MANIFEST  RGW_ATTR_PREFIX "user_manifest"
 
-#define RGW_BUCKETS_OBJ_PREFIX ".buckets"
+#define RGW_BUCKETS_OBJ_SUFFIX ".buckets"
 
 #define RGW_MAX_CHUNK_SIZE	(512*1024)
 #define RGW_MAX_PENDING_CHUNKS  16

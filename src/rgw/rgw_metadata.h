@@ -33,15 +33,15 @@ class RGWMetadataHandler {
   friend class RGWMetadataManager;
 
 protected:
-  virtual int put_obj(RGWRados *store, string& key, bufferlist& bl, bool exclusive,
-                      RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs = NULL) = 0;
+  virtual int put_entry(RGWRados *store, string& key, bufferlist& bl, bool exclusive,
+                        RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs = NULL) = 0;
 public:
   virtual ~RGWMetadataHandler() {}
   virtual string get_type() = 0;
 
   virtual int get(RGWRados *store, string& entry, RGWMetadataObject **obj) = 0;
   virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, JSONObj *obj) = 0;
-
+  virtual int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) = 0;
 
   virtual int list_keys_init(RGWRados *store, void **phandle) = 0;
   virtual int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) = 0;
@@ -92,6 +92,7 @@ public:
 
 class RGWMetadataManager {
   map<string, RGWMetadataHandler *> handlers;
+  CephContext *cct;
   RGWRados *store;
   RGWMetadataLog *md_log;
 
@@ -107,14 +108,17 @@ public:
 
   RGWMetadataHandler *get_handler(const char *type);
 
-  int put_obj(RGWMetadataHandler *handler, string& key, bufferlist& bl, bool exclusive,
-              RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs = NULL);
+  int put_entry(RGWMetadataHandler *handler, string& key, bufferlist& bl, bool exclusive,
+                RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs = NULL);
   int get(string& metadata_key, Formatter *f);
   int put(string& metadata_key, bufferlist& bl);
+  int remove(string& metadata_key);
 
   int list_keys_init(string& section, void **phandle);
   int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated);
   void list_keys_complete(void *handle);
+
+  void dump_log_entry(cls_log_entry& entry, Formatter *f);
 
   void get_sections(list<string>& sections);
 

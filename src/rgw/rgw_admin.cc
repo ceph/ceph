@@ -86,6 +86,7 @@ void _usage()
   cerr << "  gc process                 manually process garbage\n";
   cerr << "  metadata get               get metadata info\n";
   cerr << "  metadata put               put metadata info\n";
+  cerr << "  metadata rm                remove metadata info\n";
   cerr << "  metadata list              list metadata info\n";
   cerr << "  mdlog show                 show metadata log\n";
   cerr << "options:\n";
@@ -191,6 +192,7 @@ enum {
   OPT_CAPS_RM,
   OPT_METADATA_GET,
   OPT_METADATA_PUT,
+  OPT_METADATA_RM,
   OPT_METADATA_LIST,
   OPT_MDLOG_SHOW,
 };
@@ -347,6 +349,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_METADATA_GET;
     if (strcmp(cmd, "put") == 0)
       return OPT_METADATA_PUT;
+    if (strcmp(cmd, "rm") == 0)
+      return OPT_METADATA_RM;
     if (strcmp(cmd, "list") == 0)
       return OPT_METADATA_LIST;
   } else if (strcmp(prev_cmd, "mdlog") == 0) {
@@ -510,6 +514,24 @@ static int read_decode_json(const string& infile, T& t)
   }
   return 0;
 }
+    
+static int parse_date_str(const string& date_str, utime_t& ut)
+{
+  uint64_t epoch = 0;
+
+  if (!date_str.empty()) {
+    int ret = parse_date(date_str, &epoch);
+    if (ret < 0) {
+      cerr << "ERROR: failed to parse date: " << date_str << std::endl;
+      return -EINVAL;
+    }
+  }
+
+  ut = utime_t(epoch, 0);
+
+  return 0;
+}
+
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -689,6 +711,7 @@ int main(int argc, char **argv)
       switch (opt_cmd) {
         case OPT_METADATA_GET:
         case OPT_METADATA_PUT:
+        case OPT_METADATA_RM:
         case OPT_METADATA_LIST:
           metadata_key = *i;
           break;
@@ -1503,6 +1526,14 @@ next:
     }
   }
 
+  if (opt_cmd == OPT_METADATA_RM) {
+    int ret = store->meta_mgr->remove(metadata_key);
+    if (ret < 0) {
+      cerr << "ERROR: can't remove key: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+  }
+
   if (opt_cmd == OPT_METADATA_LIST) {
     void *handle;
     int max = 1000;
@@ -1541,11 +1572,19 @@ next:
     void *handle;
     list<cls_log_entry> entries;
 
+    utime_t start_time, end_time;
+
+    int ret = parse_date_str(start_date, start_time);
+    if (ret < 0)
+      return -ret;
+
+    ret = parse_date_str(end_date, end_time);
+    if (ret < 0)
+      return -ret;
+
     RGWMetadataLog *meta_log = store->meta_mgr->get_log();
 
-    utime_t from_time;
-    utime_t end_time;
-    meta_log->init_list_entries(store, from_time, end_time, &handle);
+    meta_log->init_list_entries(store, start_time, end_time, &handle);
 
     bool truncated;
 
@@ -1559,9 +1598,7 @@ next:
 
       for (list<cls_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
         cls_log_entry& entry = *iter;
-        formatter->open_object_section("entry");
-        formatter->dump_string("name", entry.name);
-        formatter->close_section();
+        store->meta_mgr->dump_log_entry(entry, formatter);
       }
       formatter->flush(cout);
     } while (truncated);
