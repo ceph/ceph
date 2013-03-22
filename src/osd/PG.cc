@@ -6076,7 +6076,8 @@ PG::RecoveryState::RepWaitBackfillReserved::RepWaitBackfillReserved(my_context c
   PG *pg = context< RecoveryMachine >().pg;
 
   double ratio, max_ratio;
-  if (pg->osd->too_full_for_backfill(&ratio, &max_ratio)) {
+  if (pg->osd->too_full_for_backfill(&ratio, &max_ratio) &&
+      !g_conf->osd_debug_skip_full_check_in_backfill_reservation) {
     dout(10) << "backfill reservation rejected: full ratio is "
 	     << ratio << ", which is greater than max allowed ratio "
 	     << max_ratio << dendl;
