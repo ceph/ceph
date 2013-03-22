@@ -33,7 +33,6 @@
 
 #include "common/config.h"
 #include "include/assert.h"
-#include <sstream>
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
