@@ -6,6 +6,74 @@
 
 #include "rgw_rados.h"
 
+#define dout_subsys ceph_subsys_rgw
+
+enum RGWMDLogStatus {
+  MDLOG_STATUS_UNKNOWN,
+  MDLOG_STATUS_WRITING,
+  MDLOG_STATUS_REMOVING,
+  MDLOG_STATUS_COMPLETE,
+};
+
+struct LogStatusDump {
+  RGWMDLogStatus status;
+
+  LogStatusDump(RGWMDLogStatus _status) : status(_status) {}
+  void dump(Formatter *f) const {
+    string s;
+    switch (status) {
+      case MDLOG_STATUS_WRITING:
+        s = "writing";
+        break;
+      case MDLOG_STATUS_REMOVING:
+        s = "removing";
+        break;
+      case MDLOG_STATUS_COMPLETE:
+        s = "complete";
+        break;
+      default:
+        s = "unknown";
+        break;
+    }
+    encode_json("status", s, f);
+  }
+};
+
+struct RGWMetadataLogData {
+  obj_version read_version;
+  obj_version write_version;
+  RGWMDLogStatus status;
+  
+  RGWMetadataLogData() : status(MDLOG_STATUS_UNKNOWN) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(read_version, bl);
+    ::encode(write_version, bl);
+    uint32_t s = (uint32_t)status;
+    ::encode(s, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+     ::decode(read_version, bl);
+     ::decode(write_version, bl);
+     uint32_t s;
+     ::decode(s, bl);
+     status = (RGWMDLogStatus)s;
+     DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const {
+    encode_json("read_version", read_version, f);
+    encode_json("write_version", write_version, f);
+    encode_json("status", LogStatusDump(status), f);
+  };
+};
+WRITE_CLASS_ENCODER(RGWMetadataLogData);
+
+
 int RGWMetadataLog::add_entry(RGWRados *store, string& section, string& key, bufferlist& bl) {
   string oid;
 
@@ -49,7 +117,7 @@ int RGWMetadataLog::list_entries(void *handle,
     bool is_truncated;
     int ret = store->time_log_list(ctx->cur_oid, ctx->from_time, ctx->end_time,
                                  max_entries - entries.size(), ents, ctx->marker, &is_truncated);
-    if (ret = -ENOENT) {
+    if (ret == -ENOENT) {
       is_truncated = false;
       ret = 0;
     }
@@ -95,8 +163,9 @@ public:
 
   virtual int get(RGWRados *store, string& entry, RGWMetadataObject **obj) { return -ENOTSUP; }
   virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, JSONObj *obj) { return -ENOTSUP; }
-  virtual int put_obj(RGWRados *store, string& key, bufferlist& bl, bool exclusive,
-                      RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs) { return -ENOTSUP; }
+  virtual int put_entry(RGWRados *store, string& key, bufferlist& bl, bool exclusive,
+                        RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs) { return -ENOTSUP; }
+  virtual int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) { return -ENOTSUP; }
 
   virtual int list_keys_init(RGWRados *store, void **phandle) {
     iter_data *data = new iter_data;
@@ -126,7 +195,7 @@ public:
 
 static RGWMetadataTopHandler md_top_handler;
 
-RGWMetadataManager::RGWMetadataManager(CephContext *_cct, RGWRados *_store) : store(_store)
+RGWMetadataManager::RGWMetadataManager(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store)
 {
   md_log = new RGWMetadataLog(_cct, _store);
 }
@@ -236,7 +305,6 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl)
     return -EINVAL;
   }
 
-  string meadata_key;
   RGWObjVersionTracker objv_tracker;
 
   obj_version *objv = &objv_tracker.write_version;
@@ -251,6 +319,59 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl)
   }
 
   return handler->put(store, entry, objv_tracker, jo);
+}
+
+int RGWMetadataManager::remove(string& metadata_key)
+{
+  RGWMetadataHandler *handler;
+  string entry;
+
+  int ret = find_handler(metadata_key, &handler, entry);
+  if (ret < 0)
+    return ret;
+
+  RGWMetadataObject *obj;
+
+  ret = handler->get(store, entry, &obj);
+  if (ret < 0) {
+    return ret;
+  }
+
+  RGWObjVersionTracker objv_tracker;
+
+  objv_tracker.read_version = obj->get_version();
+
+
+  RGWMetadataLogData log_data;
+  bufferlist logbl;
+
+  log_data.read_version = objv_tracker.read_version;
+  log_data.write_version = objv_tracker.write_version;
+
+  log_data.status = MDLOG_STATUS_REMOVING;
+
+  ::encode(log_data, logbl);
+
+  string section, key;
+  parse_metadata_key(entry, section, key);
+
+  ret = md_log->add_entry(store, section, key, logbl);
+  if (ret < 0)
+    return ret;
+
+  ret = handler->remove(store, entry, objv_tracker);
+  if (ret < 0) {
+    return ret;
+  }
+
+  logbl.clear();
+  log_data.status = MDLOG_STATUS_COMPLETE;
+
+  ret = md_log->add_entry(store, section, key, logbl);
+  if (ret < 0)
+    return ret;
+
+  return 0;
 }
 
 
@@ -305,6 +426,25 @@ void RGWMetadataManager::list_keys_complete(void *handle)
   delete h;
 }
 
+void RGWMetadataManager::dump_log_entry(cls_log_entry& entry, Formatter *f)
+{
+  f->open_object_section("entry");
+  f->dump_string("section", entry.section);
+  f->dump_string("name", entry.name);
+  entry.timestamp.gmtime(f->dump_stream("timestamp"));
+
+  try {
+    RGWMetadataLogData log_data;
+    bufferlist::iterator iter = entry.data.begin();
+    ::decode(log_data, iter);
+
+    encode_json("data", log_data, f);
+  } catch (buffer::error& err) {
+    lderr(cct) << "failed to decode log entry: " << entry.section << ":" << entry.name<< " ts=" << entry.timestamp << dendl;
+  }
+  f->close_section();
+}
+
 void RGWMetadataManager::get_sections(list<string>& sections)
 {
   for (map<string, RGWMetadataHandler *>::iterator iter = handlers.begin(); iter != handlers.end(); ++iter) {
@@ -312,19 +452,41 @@ void RGWMetadataManager::get_sections(list<string>& sections)
   }
 }
 
-
-int RGWMetadataManager::put_obj(RGWMetadataHandler *handler, string& key, bufferlist& bl, bool exclusive,
-                                RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs)
+int RGWMetadataManager::put_entry(RGWMetadataHandler *handler, string& key, bufferlist& bl, bool exclusive,
+                                  RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs)
 {
   bufferlist logbl;
   string section = handler->get_type();
+
+  /* if write version has not been set, and there's a read version, set it so that we can
+   * log it
+   */
+  if (objv_tracker && objv_tracker->read_version.ver &&
+      !objv_tracker->write_version.ver) {
+    objv_tracker->write_version = objv_tracker->read_version;
+    objv_tracker->write_version.ver++;
+  }
+
+  RGWMetadataLogData log_data;
+  log_data.read_version = objv_tracker->read_version;
+  log_data.write_version = objv_tracker->write_version;
+
+  log_data.status = MDLOG_STATUS_WRITING;
+
+  ::encode(log_data, logbl);
+
   int ret = md_log->add_entry(store, section, key, logbl);
   if (ret < 0)
     return ret;
 
-  ret = handler->put_obj(store, key, bl, exclusive, objv_tracker, pattrs);
+  ret = handler->put_entry(store, key, bl, exclusive, objv_tracker, pattrs);
   if (ret < 0)
     return ret;
+
+  log_data.status = MDLOG_STATUS_COMPLETE;
+
+  logbl.clear();
+  ::encode(log_data, logbl);
 
   ret = md_log->add_entry(store, section, key, logbl);
   if (ret < 0)
