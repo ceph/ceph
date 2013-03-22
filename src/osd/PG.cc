@@ -7204,7 +7204,14 @@ boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& lo
 		       logevt.msg->info, logevt.msg->log, logevt.msg->missing, logevt.from);
   
   if (peer_missing_requested.empty()) {
-    post_event(CheckRepops());
+    if (pg->need_up_thru) {
+      dout(10) << " still need up_thru update before going active" << dendl;
+      post_event(NeedUpThru());
+    } else {
+      dout(10) << "Got last missing, don't need missing "
+	       << "posting CheckRepops" << dendl;
+      post_event(CheckRepops());
+    }
   }
   return discard_event();
 };
