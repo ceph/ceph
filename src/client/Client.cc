@@ -7340,10 +7340,12 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
 
   Inode *otherin;
   res = _lookup(todir, toname, &otherin);
-  if (res != 0 && res != -ENOENT)
+  if (res != 0 && res != -ENOENT) {
     goto fail;
-  req->set_other_inode(otherin);
-  req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
+  } else if (res == 0) {
+    req->set_other_inode(otherin);
+    req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
+  }
 
   req->set_inode(todir);
 
