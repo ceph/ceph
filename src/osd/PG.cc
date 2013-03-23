@@ -4800,13 +4800,20 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     dirty_info = true;
     dirty_big_info = true;
   } else {
+    std::stringstream debug;
     bool new_interval = pg_interval_t::check_new_interval(
       oldacting, newacting,
       oldup, newup,
       info.history.same_interval_since,
       info.history.last_epoch_clean,
       osdmap,
-      lastmap, info.pgid.pool(), info.pgid, &past_intervals);
+      lastmap,
+      info.pgid.pool(),
+      info.pgid,
+      &past_intervals,
+      &debug);
+    dout(10) << __func__ << ": check_new_interval output: "
+	     << debug.str() << dendl;
     if (new_interval) {
       dout(10) << " noting past " << past_intervals.rbegin()->second << dendl;
       dirty_info = true;
@@ -7209,7 +7216,14 @@ boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& lo
 		       logevt.msg->info, logevt.msg->log, logevt.msg->missing, logevt.from);
   
   if (peer_missing_requested.empty()) {
-    post_event(CheckRepops());
+    if (pg->need_up_thru) {
+      dout(10) << " still need up_thru update before going active" << dendl;
+      post_event(NeedUpThru());
+    } else {
+      dout(10) << "Got last missing, don't need missing "
+	       << "posting CheckRepops" << dendl;
+      post_event(CheckRepops());
+    }
   }
   return discard_event();
 };
