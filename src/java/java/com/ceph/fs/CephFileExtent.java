@@ -19,6 +19,8 @@
  */
 package com.ceph.fs;
 
+import java.util.Arrays;
+
 /**
  * Holds information about a file extent in CephFS.
  */
@@ -52,5 +54,13 @@ public class CephFileExtent {
    */
   public int[] getOSDs() {
     return osds;
+  }
+
+  /**
+   * Pretty print.
+   */
+  public String toString() {
+    return "extent[" + offset + "," + length + ","
+      + Arrays.toString(osds) + "]";
   }
 }
