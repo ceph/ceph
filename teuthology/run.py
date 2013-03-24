@@ -161,6 +161,7 @@ def main():
             {'internal.check_lock': None},
             {'internal.connect': None},
             {'internal.check_conflict': None},
+            {'internal.check_ceph_data': None},
             ])
     if 'kernel' in ctx.config:
         init_tasks.append({'kernel': ctx.config['kernel']})

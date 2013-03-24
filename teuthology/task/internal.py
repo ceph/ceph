@@ -170,6 +170,25 @@ def connect(ctx, config):
         for rem in remotes:
             ctx.cluster.add(rem, rem.name)
 
+def check_ceph_data(ctx, config):
+    log.info('Checking for old /var/lib/ceph...')
+    processes = ctx.cluster.run(
+        args=[
+            'test', '!', '-e', '/var/lib/ceph',
+            ],
+        wait=False,
+        )
+    failed = False
+    for proc in processes:
+        assert isinstance(proc.exitstatus, gevent.event.AsyncResult)
+        try:
+            proc.exitstatus.get()
+        except run.CommandFailedError:
+            log.error('Host %s has stale /var/lib/ceph, check lock and nuke/cleanup.', proc.remote.shortname)
+            failed = True
+    if failed:
+        raise RuntimeError('Stale /var/lib/ceph detected, aborting.')
+
 def check_conflict(ctx, config):
     log.info('Checking for old test directory...')
     test_basedir = teuthology.get_testdir_base(ctx)
