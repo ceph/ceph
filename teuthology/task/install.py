@@ -169,18 +169,21 @@ def purge_data(ctx):
 def _purge_data(remote):
     log.info('Purging /var/lib/ceph on %s', remote)
     remote.run(args=[
+            'sudo',
             'rm', '-rf', '--one-file-system', '--', '/var/lib/ceph',
             run.Raw('||'),
             'true',
             run.Raw(';'),
             'test', '-d', '/var/lib/ceph',
             run.Raw('&&'),
+            'sudo',
             'find', '/var/lib/ceph',
             '-mindepth', '1',
             '-maxdepth', '2',
             '-type', 'd',
             '-exec', 'umount', '{}', ';',
             run.Raw(';'),
+            'sudo',
             'rm', '-rf', '--one-file-system', '--', '/var/lib/ceph',
             ])
 
