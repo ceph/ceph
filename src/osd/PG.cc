@@ -3154,6 +3154,11 @@ void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep)
           pos += bl.length();
           bl.clear();
         }
+	if (r == -EIO) {
+	  dout(25) << "_scan_list  " << poid << " got "
+		   << r << " on read, read_error" << dendl;
+	  o.read_error = true;
+	}
         o.digest = h.digest();
         o.digest_present = true;
 
@@ -3165,7 +3170,11 @@ void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep)
           ::encode(hdrbl, bl);
           oh << bl;
           bl.clear();
-        }
+        } else if (r == -EIO) {
+	  dout(25) << "_scan_list  " << poid << " got "
+		   << r << " on omap header read, read_error" << dendl;
+	  o.read_error = true;
+	}
 
         ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
           coll, poid);
@@ -3179,6 +3188,12 @@ void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep)
           oh << bl;
           bl.clear();
         }
+	if (iter->status() == -EIO) {
+	  dout(25) << "_scan_list  " << poid << " got "
+		   << r << " on omap scan, read_error" << dendl;
+	  o.read_error = true;
+	  break;
+	}
 
         //Store final calculated CRC32 of omap header & key/values
         o.omap_digest = oh.digest();
@@ -3186,8 +3201,12 @@ void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep)
       }
 
       dout(25) << "_scan_list  " << poid << dendl;
-    } else {
+    } else if (r == -ENOENT) {
       dout(25) << "_scan_list  " << poid << " got " << r << ", skipping" << dendl;
+    } else if (r == -EIO) {
+      dout(25) << "_scan_list  " << poid << " got " << r << ", read_error" << dendl;
+      ScrubMap::object &o = map.objects[poid];
+      o.read_error = true;
     }
   }
 }
