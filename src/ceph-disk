@@ -163,7 +163,7 @@ def list_partitions(disk):
             fields = re.split('\s+', line)
             if len(fields) < 5:
                 continue
-	    name = fields [4]
+            name = fields [4]
             if name != base and name.startswith(base):
                 ls.append('/dev/' + name)
     return ls
