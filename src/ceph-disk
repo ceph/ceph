@@ -1434,10 +1434,10 @@ def find_cluster_by_uuid(_uuid):
         if not conf_file.endswith('.conf'):
             continue
         cluster = conf_file[:-5]
-        u = get_conf(cluster, 'fsid')
-        if u is None:
+        fsid = get_conf(cluster, 'fsid')
+        if fsid is None:
             no_fsid.append(cluster)
-        elif u == _uuid:
+        elif fsid == _uuid:
             return cluster
     # be tolerant of /etc/ceph/ceph.conf without an fsid defined.
     if len(no_fsid) == 1 and no_fsid[0] == 'ceph':
