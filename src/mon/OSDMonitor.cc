@@ -58,6 +58,18 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, OSDMap& osdmap) {
 }
 
 
+void OSDMonitor::_get_pending_crush(CrushWrapper& newcrush)
+{
+  bufferlist bl;
+  if (pending_inc.crush.length())
+    bl = pending_inc.crush;
+  else
+    osdmap.crush->encode(bl);
+
+  bufferlist::iterator p = bl.begin();
+  newcrush.decode(p);
+}
+
 
 /************ MAPS ****************/
 
@@ -2337,7 +2349,37 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
       return true;
     }
-    else if (m->cmd.size() >= 5 && m->cmd[1] == "crush" && m->cmd[2] == "set") {
+    else if (m->cmd.size() == 5 && m->cmd[1] == "crush" && (m->cmd[2] == "add-bucket")) {
+      do {
+	// osd crush add-bucket <name> <type>
+	CrushWrapper newcrush;
+	_get_pending_crush(newcrush);
+
+	if (newcrush.name_exists(m->cmd[3])) {
+	  ss << "bucket '" << m->cmd[3] << "' already exists";
+	  err = 0;
+	  break;
+	}
+	int type = newcrush.get_type_id(m->cmd[4]);
+	if (type <= 0) {
+	  ss << "type '" << m->cmd[4] << "' does not exist";
+	  err = -EINVAL;
+	  break;
+	}
+	int bucketno = newcrush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT,
+					   type, 0, NULL, NULL);
+	newcrush.set_item_name(bucketno, m->cmd[3]);
+
+	pending_inc.crush.clear();
+	newcrush.encode(pending_inc.crush);
+	ss << "added bucket " << m->cmd[3] << " type " << m->cmd[4] << " to crush map";
+	getline(ss, rs);
+	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+	return true;
+      } while (false);
+    }
+    else if (m->cmd.size() >= 5 && m->cmd[1] == "crush" && (m->cmd[2] == "set" ||
+							    m->cmd[2] == "add")) {
       do {
 	// osd crush set <osd-id> [<osd.* name>] <weight> <loc1> [<loc2> ...]
 	int id = parse_osd_id(m->cmd[3].c_str(), &ss);
@@ -2368,26 +2410,25 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 
 	dout(0) << "adding/updating crush item id " << id << " name '" << name << "' weight " << weight
 		<< " at location " << loc << dendl;
-	bufferlist bl;
-	if (pending_inc.crush.length())
-	  bl = pending_inc.crush;
-	else
-	  osdmap.crush->encode(bl);
-
 	CrushWrapper newcrush;
-	bufferlist::iterator p = bl.begin();
-	newcrush.decode(p);
+	_get_pending_crush(newcrush);
 
-	err = newcrush.update_item(g_ceph_context, id, weight, name, loc);
+	if (m->cmd[2] == "set") {
+	  err = newcrush.update_item(g_ceph_context, id, weight, name, loc);
+	} else {
+	  err = newcrush.insert_item(g_ceph_context, id, weight, name, loc);
+	  if (err == 0)
+	    err = 1;
+	}
 	if (err == 0) {
-	  ss << "updated item id " << id << " name '" << name << "' weight " << weight
+	  ss << m->cmd[2] << " item id " << id << " name '" << name << "' weight " << weight
 	     << " at location " << loc << " to crush map";
 	  break;
 	}
 	if (err > 0) {
 	  pending_inc.crush.clear();
 	  newcrush.encode(pending_inc.crush);
-	  ss << "updated item id " << id << " name '" << name << "' weight " << weight
+	  ss << m->cmd[2] << " item id " << id << " name '" << name << "' weight " << weight
 	     << " at location " << loc << " to crush map";
 	  getline(ss, rs);
 	  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
@@ -2416,15 +2457,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 
 	dout(0) << "create-or-move crush item id " << id << " name '" << name << "' initial_weight " << weight
 		<< " at location " << loc << dendl;
-	bufferlist bl;
-	if (pending_inc.crush.length())
-	  bl = pending_inc.crush;
-	else
-	  osdmap.crush->encode(bl);
-
 	CrushWrapper newcrush;
-	bufferlist::iterator p = bl.begin();
-	newcrush.decode(p);
+	_get_pending_crush(newcrush);
 
 	err = newcrush.create_or_move_item(g_ceph_context, id, weight, name, loc);
 	if (err == 0) {
@@ -2451,15 +2485,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	parse_loc_map(m->cmd, 4, &loc);
 
 	dout(0) << "moving crush item name '" << name << "' to location " << loc << dendl;
-	bufferlist bl;
-	if (pending_inc.crush.length())
-	  bl = pending_inc.crush;
-	else
-	  osdmap.crush->encode(bl);
-
 	CrushWrapper newcrush;
-	bufferlist::iterator p = bl.begin();
-	newcrush.decode(p);
+	_get_pending_crush(newcrush);
 
 	if (!newcrush.name_exists(name.c_str())) {
 	  err = -ENOENT;
@@ -2483,18 +2510,46 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
       } while (false);
     }
-    else if (m->cmd.size() > 3 && m->cmd[1] == "crush" && (m->cmd[2] == "rm" || m->cmd[2] == "remove")) {
+    else if (m->cmd.size() >= 5 && m->cmd[1] == "crush" && m->cmd[2] == "link") {
       do {
-	// osd crush rm <id>
-	bufferlist bl;
-	if (pending_inc.crush.length())
-	  bl = pending_inc.crush;
-	else
-	  osdmap.crush->encode(bl);
+	// osd crush link <name> <loc1> [<loc2> ...]
+	string name = m->cmd[3];
+	map<string,string> loc;
+	parse_loc_map(m->cmd, 4, &loc);
 
+	dout(0) << "linking crush item name '" << name << "' at location " << loc << dendl;
 	CrushWrapper newcrush;
-	bufferlist::iterator p = bl.begin();
-	newcrush.decode(p);
+	_get_pending_crush(newcrush);
+
+	if (!newcrush.name_exists(name.c_str())) {
+	  err = -ENOENT;
+	  ss << "item " << name << " does not exist";
+	  break;
+	}
+	int id = newcrush.get_item_id(name.c_str());
+
+	if (!newcrush.check_item_loc(g_ceph_context, id, loc, (int *)NULL)) {
+	  err = newcrush.link_bucket(g_ceph_context, id, loc);
+	  if (err >= 0) {
+	    ss << "linked item id " << id << " name '" << name << "' to location " << loc << " in crush map";
+	    pending_inc.crush.clear();
+	    newcrush.encode(pending_inc.crush);
+	    getline(ss, rs);
+	    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+	    return true;
+	  }
+	} else {
+	    ss << "no need to move item id " << id << " name '" << name << "' to location " << loc << " in crush map";
+	}
+      } while (false);
+    }
+    else if (m->cmd.size() > 3 && m->cmd[1] == "crush" && (m->cmd[2] == "rm" ||
+							   m->cmd[2] == "remove" ||
+							   m->cmd[2] == "unlink")) {
+      do {
+	// osd crush rm <id> [ancestor]
+	CrushWrapper newcrush;
+	_get_pending_crush(newcrush);
 
 	if (!newcrush.name_exists(m->cmd[3].c_str())) {
 	  err = -ENOENT;
@@ -2502,11 +2557,18 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  break;
 	}
 	int id = newcrush.get_item_id(m->cmd[3].c_str());
-	if (id < 0) {
-	  ss << "item '" << m->cmd[3] << "' is not a leaf in the crush map";
-	  break;
+	bool unlink_only = m->cmd[2] == "unlink";
+	if (m->cmd.size() > 4) {
+	  if (!newcrush.name_exists(m->cmd[4])) {
+	    err = -ENOENT;
+	    ss << "ancestor item '" << m->cmd[4] << "' does not appear in the crush map";
+	    break;
+	  }
+	  int ancestor = newcrush.get_item_id(m->cmd[4]);
+	  err = newcrush.remove_item_under(g_ceph_context, id, ancestor, unlink_only);
+	} else {
+	  err = newcrush.remove_item(g_ceph_context, id, unlink_only);
 	}
-	err = newcrush.remove_item(g_ceph_context, id);
 	if (err == 0) {
 	  pending_inc.crush.clear();
 	  newcrush.encode(pending_inc.crush);
@@ -2520,15 +2582,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd.size() > 4 && m->cmd[1] == "crush" && m->cmd[2] == "reweight") {
       do {
 	// osd crush reweight <name> <weight>
-	bufferlist bl;
-	if (pending_inc.crush.length())
-	  bl = pending_inc.crush;
-	else
-	  osdmap.crush->encode(bl);
-
 	CrushWrapper newcrush;
-	bufferlist::iterator p = bl.begin();
-	newcrush.decode(p);
+	_get_pending_crush(newcrush);
 
 	if (!newcrush.name_exists(m->cmd[3].c_str())) {
 	  err = -ENOENT;
@@ -2556,15 +2611,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       } while (false);
     }
     else if (m->cmd.size() == 4 && m->cmd[1] == "crush" && m->cmd[2] == "tunables") {
-      bufferlist bl;
-      if (pending_inc.crush.length())
-	bl = pending_inc.crush;
-      else
-	osdmap.crush->encode(bl);
-
       CrushWrapper newcrush;
-      bufferlist::iterator p = bl.begin();
-      newcrush.decode(p);
+      _get_pending_crush(newcrush);
 
       err = 0;
       if (m->cmd[3] == "legacy" || m->cmd[3] == "argonaut") {
@@ -2602,14 +2650,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	goto out;
       }
 
-      bufferlist bl;
-      if (pending_inc.crush.length())
-	bl = pending_inc.crush;
-      else
-	osdmap.crush->encode(bl);
       CrushWrapper newcrush;
-      bufferlist::iterator p = bl.begin();
-      newcrush.decode(p);
+      _get_pending_crush(newcrush);
 
       if (newcrush.rule_exists(name)) {
 	ss << "rule " << name << " already exists";
@@ -2639,14 +2681,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	goto out;
       }
 
-      bufferlist bl;
-      if (pending_inc.crush.length())
-	bl = pending_inc.crush;
-      else
-	osdmap.crush->encode(bl);
       CrushWrapper newcrush;
-      bufferlist::iterator p = bl.begin();
-      newcrush.decode(p);
+      _get_pending_crush(newcrush);
 
       if (!newcrush.rule_exists(name)) {
 	ss << "rule " << name << " does not exist";
