@@ -63,7 +63,6 @@ public:
   string readdir_last_name;
 
   //possible responses
-  bool got_safe;
   bool got_unsafe;
 
   xlist<MetaRequest*>::item item;
@@ -90,7 +89,7 @@ public:
     ref(1), reply(0), 
     kick(false),
     readdir_offset(0), readdir_end(false), readdir_num(0),
-    got_safe(false), got_unsafe(false), item(this), unsafe_item(this),
+    got_unsafe(false), item(this), unsafe_item(this),
     lock("MetaRequest lock"),
     caller_cond(0), dispatch_cond(0),
     target(0) {
