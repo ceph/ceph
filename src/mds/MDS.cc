@@ -1032,7 +1032,9 @@ void MDS::handle_mds_map(MMDSMap *m)
 
     set<int> oldactive, active;
     oldmap->get_mds_set(oldactive, MDSMap::STATE_ACTIVE);
+    oldmap->get_mds_set(oldactive, MDSMap::STATE_CLIENTREPLAY);
     mdsmap->get_mds_set(active, MDSMap::STATE_ACTIVE);
+    mdsmap->get_mds_set(active, MDSMap::STATE_CLIENTREPLAY);
     for (set<int>::iterator p = active.begin(); p != active.end(); ++p) 
       if (*p != whoami &&            // not me
 	  oldactive.count(*p) == 0)  // newly so?
