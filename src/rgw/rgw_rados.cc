@@ -1573,6 +1573,29 @@ int RGWRados::delete_bucket(rgw_bucket& bucket)
   return 0;
 }
 
+
+int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner)
+{
+  RGWBucketInfo info;
+  map<string, bufferlist> attrs;
+  int r = get_bucket_info(NULL, bucket.name, info, &attrs);
+  if (r < 0) {
+    ldout(cct, 0) << "NOTICE: get_bucket_info on bucket=" << bucket.name << " returned err=" << r << dendl;
+    return r;
+  }
+
+  info.owner = owner.get_id();
+
+  r = put_bucket_info(bucket.name, info, false, &attrs);
+  if (r < 0) {
+    ldout(cct, 0) << "NOTICE: put_bucket_info on bucket=" << bucket.name << " returned err=" << r << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+
 int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
 {
   int ret = 0;

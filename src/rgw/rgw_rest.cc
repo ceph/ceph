@@ -506,6 +506,46 @@ int RESTArgs::get_int64(struct req_state *s, const string& name, int64_t def_val
   return 0;
 }
 
+int RESTArgs::get_uint32(struct req_state *s, const string& name, uint32_t def_val, uint32_t *val, bool *existed)
+{
+  bool exists;
+  string sval = s->args.get(name, &exists);
+
+  if (existed)
+    *existed = exists;
+
+  if (!exists) {
+    *val = def_val;
+    return 0;
+  }
+
+  int r = stringtoul(sval, val);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int RESTArgs::get_int32(struct req_state *s, const string& name, int32_t def_val, int32_t *val, bool *existed)
+{
+  bool exists;
+  string sval = s->args.get(name, &exists);
+
+  if (existed)
+    *existed = exists;
+
+  if (!exists) {
+    *val = def_val;
+    return 0;
+  }
+
+  int r = stringtol(sval, val);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
 int RESTArgs::get_time(struct req_state *s, const string& name, const utime_t& def_val, utime_t *val, bool *existed)
 {
   bool exists;
