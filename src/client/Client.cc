@@ -1736,17 +1736,22 @@ void Client::handle_client_reply(MClientReply *reply)
   request->reply = reply;
   insert_trace(request, session);
 
-  if (!request->got_unsafe) {
+  // Handle unsafe reply
+  if (!is_safe) {
     request->got_unsafe = true;
     session->unsafe_requests.push_back(&request->unsafe_item);
+  }
 
+  // Only signal the caller once (on the first reply):
+  // Either its an unsafe reply, or its a safe reply and no unsafe reply was sent.
+  if (!is_safe || !request->got_unsafe) {
     Cond cond;
     request->dispatch_cond = &cond;
-    
+
     // wake up waiter
     ldout(cct, 20) << "handle_client_reply signalling caller " << (void*)request->caller_cond << dendl;
     request->caller_cond->Signal();
-    
+
     // wake for kick back
     while (request->dispatch_cond) {
       ldout(cct, 20) << "handle_client_reply awaiting kickback on tid " << tid << " " << &cond << dendl;
