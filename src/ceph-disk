@@ -57,10 +57,10 @@ INIT_SYSTEMS = [
     ]
 
 
-log_name = __name__
-if log_name == '__main__':
-    log_name = os.path.basename(sys.argv[0])
-log = logging.getLogger(log_name)
+LOG_NAME = __name__
+if LOG_NAME == '__main__':
+    LOG_NAME = os.path.basename(sys.argv[0])
+LOG = logging.getLogger(LOG_NAME)
 
 
 ###### exceptions ########
@@ -115,7 +115,7 @@ def maybe_mkdir(*a, **kw):
     """
     # remove any symlink, if it is there..
     if os.path.exists(*a) and stat.S_ISLNK(os.lstat(*a).st_mode):
-        log.debug('Removing old symlink at %s', *a)
+        LOG.debug('Removing old symlink at %s', *a)
         os.unlink(*a)
     try:
         os.mkdir(*a, **kw)
@@ -331,7 +331,7 @@ def allocate_osd_id(
     :return: The allocated OSD id.
     """
 
-    log.debug('Allocating OSD id...')
+    LOG.debug('Allocating OSD id...')
     try:
         osd_id = _check_output(
             args=[
@@ -549,7 +549,7 @@ def mount(
         dir='/var/lib/ceph/tmp',
         )
     try:
-        log.debug('Mounting %s on %s with options %s', dev, path, options)
+        LOG.debug('Mounting %s on %s with options %s', dev, path, options)
         subprocess.check_call(
             args=[
                 'mount',
@@ -576,7 +576,7 @@ def unmount(
     Unmount and removes the given mount point.
     """
     try:
-        log.debug('Unmounting %s', path)
+        LOG.debug('Unmounting %s', path)
         subprocess.check_call(
             args=[
                 '/bin/umount',
@@ -643,7 +643,7 @@ def zap(dev):
     Destroy the partition table and content of a given disk.
     """
     try:
-        log.debug('Zapping partition table on %s', dev)
+        LOG.debug('Zapping partition table on %s', dev)
 
         # try to wipe out any GPT partition table backups.  sgdisk
         # isn't too thorough.
@@ -676,8 +676,8 @@ def prepare_journal_dev(
     ):
 
     if is_partition(journal):
-        log.debug('Journal %s is a partition', journal)
-        log.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
+        LOG.debug('Journal %s is a partition', journal)
+        LOG.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
         return (journal, None, None)
 
     ptype = JOURNAL_UUID
@@ -708,10 +708,10 @@ def prepare_journal_dev(
             num=num,
             size=journal_size,
             )
-        log.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
+        LOG.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
 
     try:
-        log.debug('Creating journal partition num %d size %d on %s', num, journal_size, journal)
+        LOG.debug('Creating journal partition num %d size %d on %s', num, journal_size, journal)
         subprocess.check_call(
             args=[
                 'sgdisk',
@@ -746,7 +746,7 @@ def prepare_journal_dev(
             journal_dmcrypt = journal_symlink
             journal_symlink = '/dev/mapper/{uuid}'.format(uuid=journal_uuid)
 
-        log.debug('Journal is GPT partition %s', journal_symlink)
+        LOG.debug('Journal is GPT partition %s', journal_symlink)
         return (journal_symlink, journal_dmcrypt, journal_uuid)
 
     except subprocess.CalledProcessError as e:
@@ -758,14 +758,14 @@ def prepare_journal_file(
     journal_size):
 
     if not os.path.exists(journal):
-        log.debug('Creating journal file %s with size %dM', journal, journal_size)
+        LOG.debug('Creating journal file %s with size %dM', journal, journal_size)
         with file(journal, 'wb') as f:
             f.truncate(journal_size * 1048576)
 
     # FIXME: should we resize an existing journal file?
 
-    log.debug('Journal is file %s', journal)
-    log.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
+    LOG.debug('Journal is file %s', journal)
+    LOG.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
     return (journal, None, None)
 
 
@@ -809,19 +809,19 @@ def adjust_symlink(target, path):
         try:
             mode = os.lstat(path).st_mode
             if stat.S_ISREG(mode):
-                log.debug('Removing old file %s', path)
+                LOG.debug('Removing old file %s', path)
                 os.unlink(path)
             elif stat.S_ISLNK(mode):
                 old = os.readlink(path)
                 if old != target:
-                    log.debug('Removing old symlink %s -> %s', path, old)
+                    LOG.debug('Removing old symlink %s -> %s', path, old)
                     os.unlink(path)
                 else:
                     create = False
         except:
             raise Error('unable to remove (or adjust) old file (symlink)', path)
     if create:
-        log.debug('Creating symlink %s -> %s', path, target)
+        LOG.debug('Creating symlink %s -> %s', path, target)
         try:
             os.symlink(target, path)
         except:
@@ -835,7 +835,7 @@ def prepare_dir(
     journal_uuid,
     journal_dmcrypt = None,
     ):
-    log.debug('Preparing osd data dir %s', path)
+    LOG.debug('Preparing osd data dir %s', path)
 
     if osd_uuid is None:
         osd_uuid = str(uuid.uuid4())
@@ -890,10 +890,10 @@ def prepare_dev(
 
     rawdev = None
     if is_partition(data):
-        log.debug('OSD data device %s is a partition', data)
+        LOG.debug('OSD data device %s is a partition', data)
         rawdev = data
     else:
-        log.debug('Creating osd partition on %s', data)
+        LOG.debug('Creating osd partition on %s', data)
         try:
             subprocess.check_call(
                 args=[
@@ -943,7 +943,7 @@ def prepare_dev(
                 dev,
                 ])
         try:
-            log.debug('Creating %s fs on %s', fstype, dev)
+            LOG.debug('Creating %s fs on %s', fstype, dev)
             subprocess.check_call(args=args)
         except subprocess.CalledProcessError as e:
             raise Error(e)
@@ -1070,7 +1070,7 @@ def main_prepare(args):
 
         # colocate journal with data?
         if stat.S_ISBLK(dmode) and not is_partition(args.data) and args.journal is None and args.journal_file is None:
-            log.info('Will colocate journal with data on %s', args.data)
+            LOG.info('Will colocate journal with data on %s', args.data)
             args.journal = args.data
 
         if args.journal_uuid is None:
@@ -1196,7 +1196,7 @@ def move_mount(
     cluster,
     osd_id,
     ):
-    log.debug('Moving mount to final location...')
+    LOG.debug('Moving mount to final location...')
     parent = '/var/lib/ceph/osd'
     osd_data = os.path.join(
         parent,
@@ -1218,7 +1218,7 @@ def start_daemon(
     cluster,
     osd_id,
     ):
-    log.debug('Starting %s osd.%s...', cluster, osd_id)
+    LOG.debug('Starting %s osd.%s...', cluster, osd_id)
 
     path = '/var/lib/ceph/osd/{cluster}-{osd_id}'.format(
         cluster=cluster, osd_id=osd_id)
@@ -1339,7 +1339,7 @@ def mount_activate(
         except OSError:
             pass
         if active:
-            log.info('%s osd.%s already mounted in position; unmounting ours.' % (cluster, osd_id))
+            LOG.info('%s osd.%s already mounted in position; unmounting ours.' % (cluster, osd_id))
             unmount(path)
         elif other:
             raise Error('another %s osd.%s already mounted in position (old/different cluster instance?); unmounting ours.' % (cluster, osd_id))
@@ -1352,7 +1352,7 @@ def mount_activate(
         return (cluster, osd_id)
 
     except:
-        log.error('Failed to activate')
+        LOG.error('Failed to activate')
         unmount(path)
         raise
     finally:
@@ -1381,7 +1381,7 @@ def activate_dir(
         if os.path.lexists(canonical):
             old = os.readlink(canonical)
             if old != path:
-                log.debug('Removing old symlink %s -> %s', canonical, old)
+                LOG.debug('Removing old symlink %s -> %s', canonical, old)
                 try:
                     os.unlink(canonical)
                 except:
@@ -1389,7 +1389,7 @@ def activate_dir(
             else:
                 create = False
         if create:
-            log.debug('Creating symlink %s -> %s', canonical, path)
+            LOG.debug('Creating symlink %s -> %s', canonical, path)
             try:
                 os.symlink(path, canonical)
             except:
@@ -1417,7 +1417,7 @@ def find_cluster_by_uuid(_uuid):
             return cluster
     # be tolerant of /etc/ceph/ceph.conf without an fsid defined.
     if len(no_fsid) == 1 and no_fsid[0] == 'ceph':
-        log.warning('No fsid defined in /etc/ceph/ceph.conf; using anyway')
+        LOG.warning('No fsid defined in /etc/ceph/ceph.conf; using anyway')
         return 'ceph'
     return None
 
@@ -1433,17 +1433,17 @@ def activate(
         ceph_fsid = read_one_line(path, 'ceph_fsid')
         if ceph_fsid is None:
             raise Error('No cluster uuid assigned.')
-        log.debug('Cluster uuid is %s', ceph_fsid)
+        LOG.debug('Cluster uuid is %s', ceph_fsid)
 
         cluster = find_cluster_by_uuid(ceph_fsid)
         if cluster is None:
             raise Error('No cluster conf found in /etc/ceph with fsid %s' % ceph_fsid)
-        log.debug('Cluster name is %s', cluster)
+        LOG.debug('Cluster name is %s', cluster)
 
         fsid = read_one_line(path, 'fsid')
         if fsid is None:
             raise Error('No OSD uuid assigned.')
-        log.debug('OSD uuid is %s', fsid)
+        LOG.debug('OSD uuid is %s', fsid)
 
         keyring = activate_key_template.format(cluster=cluster)
 
@@ -1455,10 +1455,10 @@ def activate(
                 keyring=keyring,
                 )
             write_one_line(path, 'whoami', osd_id)
-        log.debug('OSD id is %s', osd_id)
+        LOG.debug('OSD id is %s', osd_id)
 
         if not os.path.exists(os.path.join(path, 'ready')):
-            log.debug('Initializing OSD...')
+            LOG.debug('Initializing OSD...')
             # re-running mkfs is safe, so just run until it completes
             mkfs(
                 path=path,
@@ -1483,7 +1483,7 @@ def activate(
                     else:
                         init = 'sysvinit'
 
-            log.debug('Marking with init system %s', init)
+            LOG.debug('Marking with init system %s', init)
             with file(os.path.join(path, init), 'w'):
                 pass
 
@@ -1496,7 +1496,7 @@ def activate(
                         pass
 
         if not os.path.exists(os.path.join(path, 'active')):
-            log.debug('Authorizing OSD key...')
+            LOG.debug('Authorizing OSD key...')
             auth_key(
                 path=path,
                 cluster=cluster,
@@ -1504,7 +1504,7 @@ def activate(
                 keyring=keyring,
                 )
             write_one_line(path, 'active', 'ok')
-        log.debug('%s osd.%s data dir is ready at %s', cluster, osd_id, path)
+        LOG.debug('%s osd.%s data dir is ready at %s', cluster, osd_id, path)
         return (osd_id, cluster)
     except:
         raise
@@ -1549,7 +1549,7 @@ def list_dev(dev):
     
 def main_list(args):
     ls = list_all_partitions()
-    log.debug('partitions are %s' % ls)
+    LOG.debug('partitions are %s' % ls)
 
     for base, parts in ls.iteritems():
         if parts:
