@@ -13,7 +13,7 @@ struct clone_info_t {
   static const snap_t HEAD = ((snap_t)-1);
   snap_t cloneid;
   std::vector<snap_t> snaps;          // ascending
-  std::vector< std::pair<uint64_t,uint64_t> > overlap;
+  std::vector< std::pair<uint64_t,uint64_t> > overlap;  // with next newest
   uint64_t size;
 };
 

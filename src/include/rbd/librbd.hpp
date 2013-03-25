@@ -155,6 +155,9 @@ public:
   ssize_t read(uint64_t ofs, size_t len, ceph::bufferlist& bl);
   int64_t read_iterate(uint64_t ofs, size_t len,
 		       int (*cb)(uint64_t, size_t, const char *, void *), void *arg);
+  int64_t diff_iterate(const char *fromsnapname,
+		       uint64_t ofs, size_t len,
+		       int (*cb)(uint64_t, size_t, bool, void *), void *arg);
   ssize_t write(uint64_t ofs, size_t len, ceph::bufferlist& bl);
   int discard(uint64_t ofs, uint64_t len);
 
