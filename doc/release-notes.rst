@@ -134,6 +134,10 @@ Upgrading
 
 * There is a fix in the syntax for the output of 'ceph osd tree --format=json'.
 
+* The MDS disk format has changed from prior releases *and* from v0.57.  In particular,
+  upgrades to v0.56.4 are safe, but you cannot move from v0.56.4 to v0.57 if you are using
+  the MDS for CephFS; you must upgrade directly to v0.58 (or later) instead.
+
 Notable changes
 ~~~~~~~~~~~~~~~
 
@@ -156,6 +160,7 @@ Notable changes
 * osd: fix for op ordering when rebalancing
 * ceph-fuse: report file system size with correct units
 * mds: get and set directory layout policies via virtual xattrs
+* mds: on-disk format revision (see upgrading note above)
 * mkcephfs, init-ceph: close potential security issues with predictable filenames
 
 
