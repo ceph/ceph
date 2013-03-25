@@ -1744,7 +1744,7 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj)
   r = io_ctx.operate(oid, &op);
   bool removed = (r >= 0);
 
-  if ((r >= 0 || r == -ENOENT) && bucket.marker.size()) {
+  if (r >= 0 || r == -ENOENT) {
     uint64_t epoch = io_ctx.get_last_version();
     r = complete_update_index_del(bucket, obj.object, tag, epoch);
   } else {
