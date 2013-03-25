@@ -94,7 +94,6 @@ class TruncatedLineError(Error):
     Line is truncated
     """
 
-
 class TooManyLinesError(Error):
     """
     Too many lines
@@ -110,6 +109,10 @@ class FilesystemTypeError(Error):
 
 
 def maybe_mkdir(*a, **kw):
+    """
+    Creates a new directory if it doesn't exist, removes
+    existing symlink before creating the directory.
+    """
     # remove any symlink, if it is there..
     if os.path.exists(*a) and stat.S_ISLNK(os.lstat(*a).st_mode):
         log.debug('Removing old symlink at %s', *a)
@@ -215,6 +218,12 @@ def is_held(dev):
 
 
 def verify_not_in_use(dev):
+    """
+    Verify if a given device (path) is in use (e.g. mounted or
+    in use by device-mapper).
+
+    :raises: Error if device is in use.
+    """
     assert os.path.exists(dev)
     if is_partition(dev):
         if is_mounted(dev):
@@ -232,6 +241,12 @@ def verify_not_in_use(dev):
 
 
 def must_be_one_line(line):
+    """
+    Checks if given line is really one single line.
+
+    :raises: TruncatedLineError or TooManyLinesError
+    :return: Content of the line, or None if line isn't valid.
+    """
     if line[-1:] != '\n':
         raise TruncatedLineError(line)
     line = line[:-1]
@@ -309,6 +324,13 @@ def allocate_osd_id(
     fsid,
     keyring,
     ):
+    """
+    Accocates an OSD id on the given cluster.
+
+    :raises: Error if the call to allocate the OSD id fails.
+    :return: The allocated OSD id.
+    """
+
     log.debug('Allocating OSD id...')
     try:
         osd_id = _check_output(
@@ -329,6 +351,9 @@ def allocate_osd_id(
 
 
 def get_osd_id(path):
+    """
+    Gets the OSD id of the OSD at the given path.
+    """
     osd_id = read_one_line(path, 'whoami')
     if osd_id is not None:
         check_osd_id(osd_id)
@@ -351,6 +376,13 @@ def _check_output(*args, **kwargs):
 
 
 def get_conf(cluster, variable):
+    """
+    Get the value of the given configuration variable from the
+    cluster.
+
+    :raises: Error if call to ceph-conf fails.
+    :return: The variable value or None.
+    """
     try:
         p = subprocess.Popen(
             args=[
@@ -412,6 +444,11 @@ def get_conf_with_default(cluster, variable):
 
 
 def get_fsid(cluster):
+    """
+    Get the fsid of the cluster.
+
+    :return: The fsid or raises Error.
+    """
     fsid = get_conf(cluster=cluster, variable='fsid')
     if fsid is None:
         raise Error('getting cluster uuid from configuration failed')
@@ -422,6 +459,11 @@ def get_or_create_dmcrypt_key(
     _uuid,
     key_dir,
     ):
+    """
+    Get path to dmcrypt key or create a new key file.
+
+    :return: Path to the dmcrypt key file.
+    """
     path = os.path.join(key_dir, _uuid)
 
     # already have it?
@@ -446,6 +488,11 @@ def dmcrypt_map(
     keypath,
     _uuid,
     ):
+    """
+    Maps a device to a dmcrypt device.
+
+    :return: Path to the dmcrypt device.
+    """
     dev = '/dev/mapper/'+ _uuid
     args = [
         'cryptsetup',
@@ -467,6 +514,9 @@ def dmcrypt_map(
 def dmcrypt_unmap(
     _uuid
     ):
+    """
+    Removes the dmcrypt device with the given UUID.
+    """
     args = [
         'cryptsetup',
         'remove',
@@ -485,6 +535,10 @@ def mount(
     fstype,
     options,
     ):
+    """
+    Mounts a device with given filessystem type and
+    mount options to a tempfile path under /var/lib/ceph/tmp.
+    """
     # pick best-of-breed mount options based on fs type
     if options is None:
         options = MOUNT_OPTIONS.get(fstype, '')
@@ -518,6 +572,9 @@ def mount(
 def unmount(
     path,
     ):
+    """
+    Unmount and removes the given mount point.
+    """
     try:
         log.debug('Unmounting %s', path)
         subprocess.check_call(
@@ -537,6 +594,12 @@ def unmount(
 
 
 def get_free_partition_index(dev):
+    """
+    Get the next free partition index on a given device.
+
+    :return: Index number (> 1 if there is already a partition on the device)
+    or 1 if there is no partition table.
+    """
     try:
         lines = _check_output(
             args=[
