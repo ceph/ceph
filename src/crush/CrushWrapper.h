@@ -162,8 +162,7 @@ public:
   int get_num_type_names() const {
     return type_map.size();
   }
-  int get_type_id(const char *s) {
-    string name(s);
+  int get_type_id(const string& name) {
     build_rmaps();
     if (type_rmap.count(name))
       return type_rmap[name];
@@ -175,18 +174,13 @@ public:
       return p->second.c_str();
     return 0;
   }
-  void set_type_name(int i, const char *n) {
-    string name(n);
+  void set_type_name(int i, const string& name) {
     type_map[i] = name;
     if (have_rmaps)
       type_rmap[name] = i;
   }
 
   // item/bucket names
-  bool name_exists(const char *s) {
-    string name(s);
-    return name_exists(name);
-  }
   bool name_exists(const string& name) {
     build_rmaps();
     return name_rmap.count(name);
@@ -200,19 +194,11 @@ public:
       return name_rmap[name];
     return 0;  /* hrm */
   }
-  int get_item_id(const char *s) {
-    string name(s);
-    return get_item_id(name);
-  }
   const char *get_item_name(int t) const {
     std::map<int,string>::const_iterator p = name_map.find(t);
     if (p != name_map.end())
       return p->second.c_str();
     return 0;
-  }
-  void set_item_name(int i, const char *n) {
-    string name(n);
-    set_item_name(i, name);
   }
   void set_item_name(int i, const string& name) {
     name_map[i] = name;
@@ -237,14 +223,25 @@ public:
       return p->second.c_str();
     return 0;
   }
-  void set_rule_name(int i, const char *n) {
-    string name(n);
+  void set_rule_name(int i, const string& name) {
     rule_name_map[i] = name;
     if (have_rmaps)
       rule_name_rmap[name] = i;
   }
 
 
+  /**
+   * find tree nodes referenced by rules by a 'take' command
+   *
+   * Note that these may not be parentless roots.
+   */
+  void find_takes(set<int>& roots) const;
+
+  /**
+   * find tree roots
+   *
+   * These are parentless nodes in the map.
+   */
   void find_roots(set<int>& roots) const;
 
   /**
@@ -255,6 +252,16 @@ public:
    * @return true if the item is located beneath the given node
    */
   bool subtree_contains(int root, int item) const;
+
+private:
+  /**
+   * search for an item in any bucket
+   *
+   * @param i item
+   * @return true if present
+   */
+  bool _search_item_exists(int i) const;
+public:
 
   /**
    * see if item is located where we think it is
@@ -368,6 +375,20 @@ public:
   int move_bucket(CephContext *cct, int id, const map<string,string>& loc);
 
   /**
+   * add a link to an existing bucket in the hierarchy to the new location
+   *
+   * This has the same location and ancestor creation behavior as
+   * insert_item(), but will add a new link to the specified existing
+   * bucket.
+   *
+   * @param cct cct
+   * @param id bucket id
+   * @param loc location (map of type to bucket names)
+   * @return 0 for success, negative on error
+   */
+  int link_bucket(CephContext *cct, int id, const map<string,string>& loc);
+
+  /**
    * add or update an item's position in the map
    *
    * This is analogous to insert_item, except we will move an item if
@@ -396,13 +417,29 @@ public:
 			  const map<string,string>& loc);
 
   /**
-   * remove an item from the map
+   * remove all instances of an item from the map
    *
    * @param cct cct
    * @param id item id to remove
+   * @param unlink_only unlink but do not remove bucket (useful if multiple links or not empty)
    * @return 0 on success, negative on error
    */
-  int remove_item(CephContext *cct, int id);
+  int remove_item(CephContext *cct, int id, bool unlink_only);
+
+  /**
+   * remove all instances of an item nested beneath a certain point from the map
+   *
+   * @param cct cct
+   * @param id item id to remove
+   * @param ancestor ancestor item id under which to search for id
+   * @param unlink_only unlink but do not remove bucket (useful if bucket has multiple links or is not empty)
+   * @return 0 on success, negative on error
+   */
+private:
+  bool _maybe_remove_last_instance(CephContext *cct, int id, bool unlink_only);
+  int _remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
+public:
+  int remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
 
   /**
    * get an item's weight
