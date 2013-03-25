@@ -1798,6 +1798,16 @@ int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClient
   return RGWHandler_ObjStore::init(store, s, cio);
 }
 
+// subresources that we shouldn't include in the uri to sign
+static const char *nonsigned_subresources[] = {
+  "key",
+  "subuser",
+  "caps",
+  "index",
+  "object",
+  "policy",
+  NULL
+};
 
 /*
  * ?get the canonical amazon-style header for something?
@@ -1908,6 +1918,22 @@ static bool get_auth_header(struct req_state *s, string& dest, bool qsr)
 
   string canon_resource;
   get_canon_resource(s, canon_resource);
+
+  map<string, string> sub_resources = s->args.get_sub_resources();
+  map<string, string>::iterator sres_iter;
+
+  for (const char **sres = nonsigned_subresources; *sres; ++sres) {
+    sres_iter = sub_resources.find(*sres);
+    if (sres_iter != sub_resources.end()) {
+      size_t pos = canon_resource.find(*sres) -1;
+      size_t len = strlen(*sres) + 1;
+      std::string sres_val = sres_iter->second;
+      if (!sres_val.empty())
+        len += sres_val.size();
+      canon_resource.erase(pos, len);
+    }
+  }
+
   dest.append(canon_resource);
 
   return true;
