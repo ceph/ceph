@@ -130,26 +130,26 @@ def list_all_partitions():
     """
     Return a list of devices and partitions
     """
-    ls = {}
-    with file('/proc/partitions', 'rb') as f:
-        for line in f.read().split('\n')[2:]:
+    dev_part_list = {}
+    with file('/proc/partitions', 'rb') as proc_partitions:
+        for line in proc_partitions.read().split('\n')[2:]:
             fields = re.split('\s+', line)
             if len(fields) < 5:
                 continue
             name = fields[4]
             name = '/dev/' + name
             if "dm-" in name:
-                if "/dev/dm" not in ls:
-                    ls["/dev/dm"] = []
-                ls["/dev/dm"].append(name)
+                if "/dev/dm" not in dev_part_list:
+                    dev_part_list["/dev/dm"] = []
+                dev_part_list["/dev/dm"].append(name)
             if name[-1].isdigit():
                 base = name
                 while base[-1].isdigit():
                     base = base[:-1]
-                    ls[base].append(name)
+                    dev_part_list[base].append(name)
             else:
-                ls[name] = []
-    return ls
+                dev_part_list[name] = []
+    return dev_part_list
 
 
 def list_partitions(disk):
@@ -160,16 +160,16 @@ def list_partitions(disk):
     assert not is_partition(disk)
     assert disk.startswith('/dev/')
     base = disk[5:]
-    ls = []
-    with file('/proc/partitions', 'rb') as f:
-        for line in f.read().split('\n')[2:]:
+    partitions = []
+    with file('/proc/partitions', 'rb') as proc_partitions:
+        for line in proc_partitions.read().split('\n')[2:]:
             fields = re.split('\s+', line)
             if len(fields) < 5:
                 continue
             name = fields [4]
             if name != base and name.startswith(base):
-                ls.append('/dev/' + name)
-    return ls
+                partitions.append('/dev/' + name)
+    return partitions
 
 
 def is_partition(dev):
