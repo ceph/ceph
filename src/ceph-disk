@@ -461,7 +461,7 @@ def dmcrypt_map(
         return dev
 
     except subprocess.CalledProcessError as e:
-        raise Error('unable to map device', rawdev)
+        raise Error('unable to map device', rawdev, e)
 
 
 def dmcrypt_unmap(
@@ -477,7 +477,7 @@ def dmcrypt_unmap(
         subprocess.check_call(args)
 
     except subprocess.CalledProcessError as e:
-        raise Error('unable to unmap device', _uuid)
+        raise Error('unable to unmap device', _uuid, e)
 
 
 def mount(
@@ -548,7 +548,7 @@ def get_free_partition_index(dev):
                 ],
             )
     except subprocess.CalledProcessError as e:
-        print 'cannot read partition index; assume it isn\'t present\n'
+        print 'cannot read partition index; assume it isn\'t present\n (Error: %s)' % e
         return 1
 
     if not lines:
