@@ -20,6 +20,8 @@
 #include "librbd/parent_types.h"
 #include "include/util.h"
 
+#include "osdc/snap_set_diff.h"
+
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd: "
@@ -2251,6 +2253,141 @@ reprotect_and_return_err:
     ictx->perfcounter->tinc(l_librbd_rd_latency, elapsed);
     ictx->perfcounter->inc(l_librbd_rd);
     ictx->perfcounter->inc(l_librbd_rd_bytes, mylen);
+    return total_read;
+  }
+
+  int64_t diff_iterate(ImageCtx *ictx, const char *fromsnapname,
+		       uint64_t off, size_t len,
+		       int (*cb)(uint64_t, size_t, bool, void *),
+		       void *arg)
+  {
+    utime_t start_time, elapsed;
+
+    ldout(ictx->cct, 20) << "diff_iterate " << ictx << " off = " << off
+			 << " len = " << len << dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0)
+      return r;
+
+    uint64_t mylen = len;
+    r = clip_io(ictx, off, &mylen);
+    if (r < 0)
+      return r;
+
+    librados::IoCtx head_ctx;
+
+    ictx->md_lock.get_read();
+    ictx->snap_lock.get_read();
+    head_ctx.dup(ictx->data_ctx);
+    snap_t from_snap_id = 0;
+    uint64_t from_size = 0;
+    if (fromsnapname) {
+      from_snap_id = ictx->get_snap_id(fromsnapname);
+      from_size = ictx->get_image_size(from_snap_id);
+    }
+    snap_t end_snap_id = ictx->snap_id;
+    uint64_t end_size = ictx->get_image_size(end_snap_id);
+    ictx->snap_lock.put_read();
+    ictx->md_lock.put_read();
+    if (from_snap_id == CEPH_NOSNAP) {
+      return -EINVAL;
+    }
+    if (from_snap_id == end_snap_id) {
+      // no diff.
+      return 0;
+    }
+
+    // we must list snaps via the head, not end snap
+    head_ctx.snap_set_read(CEPH_SNAPDIR);
+
+    ldout(ictx->cct, 20) << "diff_iterate from " << from_snap_id << " to " << end_snap_id
+			 << " size from " << from_size << " to " << end_size << dendl;
+
+    // FIXME: if end_size > from_size, we could read_iterate for the
+    // final part, and skip the listsnaps op.
+
+    int64_t total_read = 0;
+    uint64_t period = ictx->get_stripe_period();
+    uint64_t left = mylen;
+
+    start_time = ceph_clock_now(ictx->cct);
+    while (left > 0) {
+      uint64_t period_off = off - (off % period);
+      uint64_t read_len = min(period_off + period - off, left);
+
+      // map to extents
+      map<object_t,vector<ObjectExtent> > object_extents;
+      Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout,
+			       off, read_len, object_extents, 0);
+
+      // get snap info for each object
+      for (map<object_t,vector<ObjectExtent> >::iterator p = object_extents.begin();
+	   p != object_extents.end();
+	   ++p) {
+	ldout(ictx->cct, 20) << "diff_iterate object " << p->first << dendl;
+
+	librados::snap_set_t snap_set;
+	uint64_t size;
+
+	librados::ObjectReadOperation op;
+	op.stat(&size, NULL, NULL);
+	op.list_snaps(&snap_set, NULL);
+	int r = head_ctx.operate(p->first.name, &op, NULL);
+	if (r == -ENOENT)
+	  continue;
+	if (r < 0)
+	  return r;
+
+	// calc diff from from_snap_id -> to_snap_id
+	interval_set<uint64_t> diff;
+	bool end_exists;
+	calc_snap_set_diff(ictx->cct, snap_set,
+			   from_snap_id,
+			   end_snap_id == CEPH_NOSNAP ? librados::clone_info_t::HEAD : end_snap_id,
+			   &diff, &end_exists);
+	ldout(ictx->cct, 20) << "  diff " << diff << " end_exists=" << end_exists << dendl;
+	if (diff.empty())
+	  continue;
+
+	for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
+	  ldout(ictx->cct, 20) << "diff_iterate object " << p->first
+			       << " extent " << q->offset << "~" << q->length
+			       << " from " << q->buffer_extents
+			       << dendl;
+	  uint64_t opos = q->offset;
+	  for (vector<pair<uint64_t,uint64_t> >::iterator r = q->buffer_extents.begin();
+	       r != q->buffer_extents.end();
+	       ++r) {
+	    interval_set<uint64_t> overlap;
+	    overlap.insert(opos, r->second);
+	    overlap.intersection_of(diff);
+	    ldout(ictx->cct, 20) << " opos " << opos
+				 << " buf " << r->first << "~" << r->second
+				 << " overlap " << overlap
+				 << dendl;
+	    for (interval_set<uint64_t>::iterator s = overlap.begin();
+		 s != overlap.end();
+		 ++s) {
+	      uint64_t logical_off = off + s.get_start();
+	      ldout(ictx->cct, 20) << "   overlap extent " << s.get_start() << "~" << s.get_len()
+				   << " logical "
+				   << logical_off << "~" << s.get_len()
+				   << dendl;
+	      cb(logical_off, s.get_len(), !end_exists, arg);
+	    }
+	    opos += r->second;
+	  }
+	  assert(opos == q->offset + q->length);
+	}
+      }
+
+      total_read += read_len;
+      left -= read_len;
+      off += read_len;
+    }
+
+    elapsed = ceph_clock_now(ictx->cct) - start_time;
     return total_read;
   }
 

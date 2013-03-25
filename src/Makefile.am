@@ -423,6 +423,7 @@ librbd_la_SOURCES = \
 	librbd/WatchCtx.cc \
 	osdc/ObjectCacher.cc \
 	osdc/Striper.cc \
+	osdc/snap_set_diff.cc \
 	cls/lock/cls_lock_client.cc \
 	cls/lock/cls_lock_types.cc \
 	cls/lock/cls_lock_ops.cc \
@@ -1940,6 +1941,7 @@ noinst_HEADERS = \
         osd/ReplicatedPG.h\
         osd/Watch.h\
         osd/osd_types.h\
+	osdc/snap_set_diff.h\
         osdc/Blinker.h\
         osdc/Filer.h\
         osdc/Journaler.h\
