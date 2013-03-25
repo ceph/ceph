@@ -374,7 +374,8 @@ struct ObjectOperation {
               psnaps->clones.push_back(clone);
             }
           }
-          *prval = 0;
+          if (prval)
+	    *prval = 0;
 	}
 	catch (buffer::error& e) {
 	  if (prval)
