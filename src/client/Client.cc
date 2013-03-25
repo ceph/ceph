@@ -1700,8 +1700,7 @@ void Client::handle_client_reply(MClientReply *reply)
   MetaRequest *request = mds_requests[tid];
   assert(request);
     
-  if ((request->got_unsafe && !is_safe)
-      || (request->got_safe && is_safe)) {
+  if (request->got_unsafe && !is_safe) {
     //duplicate response
     ldout(cct, 0) << "got a duplicate reply on tid " << tid << " from mds "
 	    << mds_num << " safe:" << is_safe << dendl;
@@ -1752,7 +1751,6 @@ void Client::handle_client_reply(MClientReply *reply)
 
   if (is_safe) {
     // the filesystem change is committed to disk
-    request->got_safe = true;
     if (request->got_unsafe) {
       // we're done, clean up
       request->item.remove_myself();
