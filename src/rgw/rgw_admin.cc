@@ -19,6 +19,7 @@ using namespace std;
 
 #include "common/armor.h"
 #include "rgw_user.h"
+#include "rgw_bucket.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
@@ -170,21 +171,6 @@ enum {
   OPT_CAPS_RM,
 };
 
-static uint32_t str_to_perm(const char *str)
-{
-  if (strcasecmp(str, "read") == 0)
-    return RGW_PERM_READ;
-  else if (strcasecmp(str, "write") == 0)
-    return RGW_PERM_WRITE;
-  else if (strcasecmp(str, "readwrite") == 0)
-    return RGW_PERM_READ | RGW_PERM_WRITE;
-  else if (strcasecmp(str, "full") == 0)
-    return RGW_PERM_FULL_CONTROL;
-
-  usage_exit();
-  return 0; // unreachable
-}
-
 static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
 {
   *need_more = false;
@@ -329,119 +315,8 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
   encode_json("user_info", info, formatter);
   formatter->flush(cout);
   cout << std::endl;
-
 }
 
-static int create_bucket(string bucket_str, string& user_id, string& display_name)
-{
-  RGWAccessControlPolicy policy, old_policy;
-  map<string, bufferlist> attrs;
-  bufferlist aclbl;
-  string no_oid;
-  rgw_obj obj;
-  RGWBucketInfo bucket_info;
-
-  int ret;
-
-  // defaule policy (private)
-  policy.create_default(user_id, display_name);
-  policy.encode(aclbl);
-
-  ret = store->get_bucket_info(NULL, bucket_str, bucket_info);
-  if (ret < 0)
-    return ret;
-
-  rgw_bucket& bucket = bucket_info.bucket;
-
-  ret = store->create_bucket(user_id, bucket, attrs);
-  if (ret && ret != -EEXIST)   
-    goto done;
-
-  obj.init(bucket, no_oid);
-
-  ret = store->set_attr(NULL, obj, RGW_ATTR_ACL, aclbl);
-  if (ret < 0) {
-    cerr << "couldn't set acl on bucket" << std::endl;
-  }
-
-  ret = rgw_add_bucket(store, user_id, bucket);
-
-  dout(20) << "ret=" << ret << dendl;
-
-  if (ret == -EEXIST)
-    ret = 0;
-done:
-  return ret;
-}
-
-static void remove_old_indexes(RGWUserInfo& old_info, RGWUserInfo& new_info)
-{
-  int ret;
-  bool success = true;
-
-  if (!old_info.user_id.empty() && old_info.user_id.compare(new_info.user_id) != 0) {
-    ret = rgw_remove_uid_index(store, old_info.user_id);
-    if (ret < 0 && ret != -ENOENT) {
-      cerr << "ERROR: could not remove index for uid " << old_info.user_id << " return code: " << ret << std::endl;
-      success = false;
-    }
-  }
-
-  if (!old_info.user_email.empty() &&
-      old_info.user_email.compare(new_info.user_email) != 0) {
-    ret = rgw_remove_email_index(store, old_info.user_email);
-    if (ret < 0 && ret != -ENOENT) {
-      cerr << "ERROR: could not remove index for email " << old_info.user_email << " return code: " << ret << std::endl;
-      success = false;
-    }
-  }
-
-  map<string, RGWAccessKey>::iterator old_iter;
-  for (old_iter = old_info.swift_keys.begin(); old_iter != old_info.swift_keys.end(); ++old_iter) {
-    RGWAccessKey& swift_key = old_iter->second;
-    map<string, RGWAccessKey>::iterator new_iter = new_info.swift_keys.find(swift_key.id);
-    if (new_iter == new_info.swift_keys.end()) {
-      ret = rgw_remove_swift_name_index(store, swift_key.id);
-      if (ret < 0 && ret != -ENOENT) {
-        cerr << "ERROR: could not remove index for swift_name " << swift_key.id << " return code: " << ret << std::endl;
-        success = false;
-      }
-    }
-  }
-
-  /* we're not removing access keys here.. keys are removed explicitly using the key rm command and removing the old key
-     index is handled there */
-
-  if (!success)
-    cerr << "ERROR: this should be fixed manually!" << std::endl;
-}
-
-static bool char_is_unreserved_url(char c)
-{
-  if (isalnum(c))
-    return true;
-
-  switch (c) {
-  case '-':
-  case '.':
-  case '_':
-  case '~':
-    return true;
-  default:
-    return false;
-  }
-}
-
-static bool validate_access_key(string& key)
-{
-  const char *p = key.c_str();
-  while (*p) {
-    if (!char_is_unreserved_url(*p))
-      return false;
-    p++;
-  }
-  return true;
-}
 
 static void dump_bucket_usage(map<RGWObjCategory, RGWBucketStats>& stats, Formatter *formatter)
 {
@@ -487,213 +362,27 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
   return 0;
 }
 
-enum ObjectKeyType {
-  KEY_TYPE_SWIFT,
-  KEY_TYPE_S3,
+class StoreDestructor {
+  RGWRados *store;
+public:
+  StoreDestructor(RGWRados *_s) : store(_s) {}
+  ~StoreDestructor() {
+    RGWStoreManager::close_storage(store);
+  }
 };
 
-static void check_bad_index_multipart(RGWRados *store, rgw_bucket& bucket, bool fix)
+static int init_bucket(string& bucket_name, rgw_bucket& bucket)
 {
-  int max = 1000;
-  string prefix;
-  string marker;
-  string delim;
-
-  map<string, bool> common_prefixes;
-  string ns = "multipart";
-
-  bool is_truncated;
-  list<string> objs_to_unlink;
-  map<string, bool> meta_objs;
-  map<string, string> all_objs;
-
-  do {
-    vector<RGWObjEnt> result;
-    int r = store->list_objects(bucket, max, prefix, delim, marker,
-				result, common_prefixes, false, ns,
-				&is_truncated, NULL);
-
-    if (r < 0) {
-      cerr << "failed to list objects in bucket=" << bucket << " err=" << cpp_strerror(-r) << std::endl;
-      return;
-    }
-
-    vector<RGWObjEnt>::iterator iter;
-    for (iter = result.begin(); iter != result.end(); ++iter) {
-      RGWObjEnt& ent = *iter;
-
-      rgw_obj obj(bucket, ent.name);
-      obj.set_ns(ns);
-
-      string& oid = obj.object;
-      marker = oid;
-
-      int pos = oid.find_last_of('.');
-      if (pos < 0)
-	continue;
-
-      string name = oid.substr(0, pos);
-      string suffix = oid.substr(pos + 1);
-
-      if (suffix.compare("meta") == 0) {
-	meta_objs[name] = true;
-      } else {
-	all_objs[oid] = name;
-      }
-    }
-
-  } while (is_truncated);
-
-  map<string, string>::iterator aiter;
-  for (aiter = all_objs.begin(); aiter != all_objs.end(); ++aiter) {
-    string& name = aiter->second;
-
-    if (meta_objs.find(name) == meta_objs.end()) {
-      objs_to_unlink.push_back(aiter->first);
-    }
-  }
-
-  if (objs_to_unlink.empty())
-    return;
-
-  if (!fix) {
-    cout << "Need to unlink the following objects from bucket=" << bucket << std::endl;
-  } else {
-    cout << "Unlinking the following objects from bucket=" << bucket << std::endl;
-  }
-  for (list<string>::iterator oiter = objs_to_unlink.begin(); oiter != objs_to_unlink.end(); ++oiter) {
-    cout << *oiter << std::endl;
-  }
-
-  if (fix) {
-    int r = store->remove_objs_from_index(bucket, objs_to_unlink);
-    if (r < 0) {
-      cerr << "ERROR: remove_obj_from_index() returned error: " << cpp_strerror(-r) << std::endl;
-    }
-  }
-}
-
-static void check_bad_user_bucket_mapping(RGWRados *store, const string& user_id, bool fix)
-{
-  RGWUserBuckets user_buckets;
-  int ret = rgw_read_user_buckets(store, user_id, user_buckets, false);
-  if (ret < 0) {
-    cerr << "failed to read user buckets: " << cpp_strerror(-ret) << std::endl;
-    return;
-  }
-
-  map<string, RGWBucketEnt>& buckets = user_buckets.get_buckets();
-  for (map<string, RGWBucketEnt>::iterator i = buckets.begin();
-       i != buckets.end();
-       ++i) {
-    RGWBucketEnt& bucket_ent = i->second;
-    rgw_bucket& bucket = bucket_ent.bucket;
-
+  if (!bucket_name.empty()) {
     RGWBucketInfo bucket_info;
-    int r = store->get_bucket_info(NULL, bucket.name, bucket_info);
+    int r = store->get_bucket_info(NULL, bucket_name, bucket_info);
     if (r < 0) {
-      cerr << "could not get bucket info for bucket=" << bucket << std::endl;
-      continue;
+      cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
+      return r;
     }
-
-    rgw_bucket& actual_bucket = bucket_info.bucket;
-
-    if (actual_bucket.name.compare(bucket.name) != 0 ||
-        actual_bucket.pool.compare(bucket.pool) != 0 ||
-        actual_bucket.marker.compare(bucket.marker) != 0 ||
-        actual_bucket.bucket_id.compare(bucket.bucket_id) != 0) {
-      cout << "bucket info mismatch: expected " << actual_bucket << " got " << bucket << std::endl;
-      if (fix) {
-	cout << "fixing" << std::endl;
-	r = rgw_add_bucket(store, user_id, actual_bucket);
-	if (r < 0) {
-	  cerr << "failed to fix bucket: " << cpp_strerror(-r) << std::endl;
-	}
-      }
-    }
+    bucket = bucket_info.bucket;
   }
-}
-
-static int remove_object(RGWRados *store, rgw_bucket& bucket, std::string& object)
-{
-  RGWRadosCtx *rctx = new RGWRadosCtx(store);
-  rgw_obj obj(bucket,object);
-
-  int ret = store->delete_obj(rctx, obj);
-
-  return ret;
-}
-
-static int remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
-{
-  map<RGWObjCategory, RGWBucketStats> stats;
-  std::vector<RGWObjEnt> objs;
-  std::string prefix, delim, marker, ns;
-  map<string, bool> common_prefixes;
-  rgw_obj obj;
-  RGWBucketInfo info;
-  bufferlist bl;
-
-  int ret = store->get_bucket_stats(bucket, stats);
-
-  if (ret < 0)
-    return ret;
-
-  obj.bucket = bucket;
-  int max = 1000;
-
-  ret = rgw_get_obj(store, NULL, store->zone.domain_root, bucket.name, bl, NULL);
-
-  bufferlist::iterator iter = bl.begin();
-  try {
-    ::decode(info, iter);
-  } catch (buffer::error& err) {
-    cerr << "ERROR: could not decode buffer info, caught buffer::error" << std::endl;
-    return -EIO;
-  }
-
-  if (delete_children) {
-    ret = store->list_objects(bucket, max, prefix, delim, marker, objs, common_prefixes,
-                                 false, ns, (bool *)false, NULL);
-    if (ret < 0)
-      return ret;
-
-    while (!objs.empty()) {
-      std::vector<RGWObjEnt>::iterator it = objs.begin();
-      for (it = objs.begin(); it != objs.end(); ++it) {
-        ret = remove_object(store, bucket, (*it).name);
-        if (ret < 0)
-          return ret;
-      }
-      objs.clear();
-
-      ret = store->list_objects(bucket, max, prefix, delim, marker, objs, common_prefixes,
-                                   false, ns, (bool *)false, NULL);
-      if (ret < 0)
-        return ret;
-    }
-  }
-
-  ret = store->delete_bucket(bucket);
-  if (ret < 0) {
-    cerr << "ERROR: could not remove bucket " << bucket.name << std::endl;
-
-    return ret;
-  }
-
-  ret = rgw_remove_user_bucket_info(store, info.owner, bucket);
-  if (ret < 0) {
-    cerr << "ERROR: unable to remove user bucket information" << std::endl;
-  }
-
-  return ret;
-}
-
-static bool bucket_object_check_filter(const string& name)
-{
-  string ns;
-  string obj = name;
-  return rgw_obj::translate_raw_obj_to_obj_in_ns(obj, ns);
+  return 0;
 }
 
 static int read_input(const string& infile, bufferlist& bl)
@@ -754,16 +443,6 @@ static int read_decode_json(const string& infile, T& t)
   }
   return 0;
 }
-    
-class StoreDestructor {
-  RGWRados *store;
-public:
-  StoreDestructor(RGWRados *_s) : store(_s) {}
-  ~StoreDestructor() {
-    RGWStoreManager::close_storage(store);
-  }
-};
-
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -778,20 +457,15 @@ int main(int argc, char **argv)
   std::string date, subuser, access, format;
   std::string start_date, end_date;
   std::string key_type_str;
-  ObjectKeyType key_type = KEY_TYPE_S3;
+  int key_type = KEY_TYPE_UNDEFINED;
   rgw_bucket bucket;
   uint32_t perm_mask = 0;
-  bool specified_perm_mask = false;
   RGWUserInfo info;
   int opt_cmd = OPT_NO_CMD;
   bool need_more;
-  int gen_secret = false;
-  int gen_key = false;
-  bool implicit_gen_secret = true;
-  bool implicit_gen_key = true;
-  char secret_key_buf[SECRET_KEY_LEN + 1];
-  char public_id_buf[PUBLIC_ID_LEN + 1];
-  bool user_modify_op;
+  int gen_access_key = 0;
+  int gen_secret_key = 0;
+  bool set_perm = false;
   string bucket_id;
   Formatter *formatter = NULL;
   int purge_data = false;
@@ -808,7 +482,9 @@ int main(int argc, char **argv)
   map<string, bool> categories;
   string caps;
   int check_objects = false;
-  string infile;
+  std::string infile;
+  RGWUserAdminOpState user_op;
+  RGWBucketAdminOpState bucket_op;
 
   std::string val;
   std::ostringstream errs;
@@ -847,10 +523,10 @@ int main(int argc, char **argv)
         cerr << "bad key type: " << key_type_str << std::endl;
         return usage();
       }
-    } else if (ceph_argparse_binary_flag(args, i, &gen_key, NULL, "--gen-access-key", (char*)NULL)) {
-      implicit_gen_key = false;
-    } else if (ceph_argparse_binary_flag(args, i, &gen_secret, NULL, "--gen-secret", (char*)NULL)) {
-      implicit_gen_secret = false;
+    } else if (ceph_argparse_binary_flag(args, i, &gen_access_key, NULL, "--gen-access-key", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &gen_secret_key, NULL, "--gen-secret", (char*)NULL)) {
+      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &show_log_entries, NULL, "--show_log_entries", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &show_log_sum, NULL, "--show_log_sum", (char*)NULL)) {
@@ -874,8 +550,8 @@ int main(int argc, char **argv)
       end_date = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--access", (char*)NULL)) {
       access = val;
-      perm_mask = str_to_perm(access.c_str());
-      specified_perm_mask = true;
+      perm_mask = rgw_str_to_perm(access.c_str());
+      set_perm = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--bucket-id", (char*)NULL)) {
       bucket_id = val;
       if (bucket_id.empty()) {
@@ -905,7 +581,7 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &fix, NULL, "--fix", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &check_objects, NULL, "--check-objects", (char*)NULL)) {
-      // do nothing
+     // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
       caps = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--infile", (char*)NULL)) {
@@ -949,33 +625,7 @@ int main(int argc, char **argv)
     return usage();
   }
 
-  if (!subuser.empty()) {
-    char *suser = strdup(subuser.c_str());
-    char *p = strchr(suser, ':');
-    if (p) {
-      *p = '\0';
-      if (!user_id.empty()) {
-        if (user_id != suser) {
-          cerr << "bad subuser " << subuser << " for uid " << user_id << std::endl;
-          return 1;
-        }
-      } else {
-        user_id = suser;
-      }
-      subuser = p + 1;
-    }
-    free(suser);
-  }
-
-  if (opt_cmd == OPT_KEY_RM && key_type == KEY_TYPE_S3 && access_key.empty()) {
-    cerr << "error: access key was not specified" << std::endl;
-    return usage();
-  }
-
-  user_modify_op = (opt_cmd == OPT_USER_MODIFY || opt_cmd == OPT_SUBUSER_MODIFY ||
-                    opt_cmd == OPT_SUBUSER_CREATE || opt_cmd == OPT_SUBUSER_RM ||
-                    opt_cmd == OPT_KEY_CREATE || opt_cmd == OPT_KEY_RM || opt_cmd == OPT_USER_RM ||
-		    opt_cmd == OPT_CAPS_ADD || opt_cmd == OPT_CAPS_RM);
+  RGWStreamFlusher f(formatter, cout);
 
   store = RGWStoreManager::get_storage(g_ceph_context, false);
   if (!store) {
@@ -985,389 +635,207 @@ int main(int argc, char **argv)
 
   StoreDestructor store_destructor(store);
 
-  if (opt_cmd != OPT_USER_CREATE && 
-      opt_cmd != OPT_LOG_SHOW && opt_cmd != OPT_LOG_LIST && opt_cmd != OPT_LOG_RM && 
-      user_id.empty()) {
-    bool found = false;
-    string s;
-    if (!found && (!user_email.empty())) {
-      s = user_email;
-      if (rgw_get_user_info_by_email(store, s, info) >= 0) {
-	found = true;
-      } else {
-	cerr << "could not find user by specified email" << std::endl;
-      }
-    }
-    if (!found && (!access_key.empty())) {
-      s = access_key;
-      if (rgw_get_user_info_by_access_key(store, s, info) >= 0) {
-	found = true;
-      } else {
-	cerr << "could not find user by specified access key" << std::endl;
-      }
-    }
-    if (found)
-      user_id = info.user_id.c_str();
+  /* populate user operation */
+
+  if (!user_id.empty()) {
+    user_op.set_user_id(user_id);
+    bucket_op.set_user_id(user_id);
   }
 
+  if (!display_name.empty())
+    user_op.set_display_name(display_name);
 
-  if (user_modify_op || opt_cmd == OPT_USER_CREATE ||
-      opt_cmd == OPT_USER_INFO || opt_cmd == OPT_BUCKET_UNLINK || opt_cmd == OPT_BUCKET_LINK ||
-      opt_cmd == OPT_USER_SUSPEND || opt_cmd == OPT_USER_ENABLE) {
-    if (user_id.empty()) {
-      cerr << "user_id was not specified, aborting" << std::endl;
-      return usage();
-    }
+  if (!user_email.empty())
+    user_op.set_user_email(user_email);
 
-    bool found = (rgw_get_user_info_by_uid(store, user_id, info) >= 0);
+  if (!access_key.empty())
+    user_op.set_access_key(access_key);
 
-    if (opt_cmd == OPT_USER_CREATE) {
-      if (found) {
-        if (info.display_name.compare(display_name) != 0 ||
-            info.user_email.compare(user_email) != 0) {
-          cerr << "error: user already exists with different display_name/email" << std::endl;
-          return 1;
-        }
-        /* turn into OPT_USER_MODIFY */
-        opt_cmd = OPT_USER_MODIFY;
-        user_modify_op = true;
-      }
-    } else if (!found) {
-      cerr << "error reading user info, aborting" << std::endl;
-      return 1;
-    }
-  }
+  if (!secret_key.empty())
+    user_op.set_secret_key(secret_key);
 
-  bool subuser_found = false;
+  if (!subuser.empty())
+    user_op.set_subuser(subuser);
 
-  if (!subuser.empty()) {
-    map<string, RGWSubUser>::iterator iter = info.subusers.find(subuser);
-    subuser_found = (iter != info.subusers.end());
+  if (!caps.empty())
+    user_op.set_caps(caps);
 
-    if (!subuser_found && opt_cmd != OPT_SUBUSER_CREATE && opt_cmd != OPT_USER_CREATE) {
-      cerr << "subuser specified but was not found, aborting" << std::endl;
-      return 1;
+  user_op.set_purge_data(purge_data);
+
+  if (purge_keys)
+    user_op.set_purge_keys();
+
+  if (gen_access_key)
+    user_op.set_gen_access();
+
+  if (gen_secret_key)
+    user_op.set_gen_secret();
+
+  if (max_buckets >= 0)
+    user_op.set_max_buckets(max_buckets);
+
+  if (set_perm)
+    user_op.set_perm(perm_mask);
+
+  if (key_type != KEY_TYPE_UNDEFINED)
+    user_op.set_key_type(key_type);
+
+  // set suspension operation parameters
+  if (opt_cmd == OPT_USER_ENABLE)
+    user_op.set_suspension(false);
+  else if (opt_cmd == OPT_USER_SUSPEND)
+    user_op.set_suspension(true);
+
+  // RGWUser to use for user operations
+  RGWUser user;
+  int ret = 0;
+  if (!user_id.empty() || !subuser.empty()) {
+    ret = user.init(store, user_op);
+    if (ret < 0) {
+      cerr << "user.init failed: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
     }
   }
 
-  if (opt_cmd == OPT_SUBUSER_CREATE || opt_cmd == OPT_SUBUSER_MODIFY ||
-      opt_cmd == OPT_SUBUSER_RM) {
-    if (subuser.empty()) {
-      cerr << "subuser creation was requires specifying subuser name" << std::endl;
-      return 1;
-    }
-    if (opt_cmd == OPT_SUBUSER_CREATE) {
-      if (subuser_found) {
-        cerr << "error: subuser already exists" << std::endl;
-        return 1;
-      }
-      if (!key_type_str.empty() && key_type == KEY_TYPE_S3) {
-        cerr << "error: subusers may not be created with an S3 key, aborting" << std::endl;
-        return 1;
-      }
-    } else if (!subuser_found) {
-      cerr << "error: subuser doesn't exist" << std::endl;
-      return 1;
-    }
-  }
+  /* populate bucket operation */
+  bucket_op.set_bucket_name(bucket_name);
+  bucket_op.set_object(object);
+  bucket_op.set_check_objects(check_objects);
+  bucket_op.set_delete_children(delete_child_objects);
 
-  bool keys_not_requested = (access_key.empty() && secret_key.empty() && !gen_secret && !gen_key &&
-                             opt_cmd != OPT_KEY_CREATE);
+  // required to gather errors from operations
+  std::string err_msg;
 
-  if (opt_cmd == OPT_USER_CREATE || (user_modify_op && !keys_not_requested)) {
-    int ret;
+  bool output_user_info = true;
 
-    if (opt_cmd == OPT_USER_CREATE && display_name.empty()) {
-      cerr << "display name was not specified, aborting" << std::endl;
-      return 0;
-    }
-
-    if ((secret_key.empty() && implicit_gen_secret) || gen_secret) {
-      ret = gen_rand_base64(g_ceph_context, secret_key_buf, sizeof(secret_key_buf));
-      if (ret < 0) {
-        cerr << "aborting" << std::endl;
-        return 1;
-      }
-      secret_key = secret_key_buf;
-    }
-    if ((access_key.empty() && implicit_gen_key) || gen_key) {
-      RGWUserInfo duplicate_check;
-      string duplicate_check_id;
-      do {
-	ret = gen_rand_alphanumeric_upper(g_ceph_context, public_id_buf, sizeof(public_id_buf));
-	if (ret < 0) {
-	  cerr << "aborting" << std::endl;
-	  return 1;
-	}
-	access_key = public_id_buf;
-	duplicate_check_id = access_key;
-      } while (!rgw_get_user_info_by_access_key(store, duplicate_check_id, duplicate_check));
-    }
-  }
-
-  map<string, RGWAccessKey>::iterator kiter;
-  map<string, RGWSubUser>::iterator uiter;
-  RGWUserInfo old_info = info;
-
-  if (!bucket_name.empty()) {
-    string bucket_name_str = bucket_name;
-    RGWBucketInfo bucket_info;
-    int r = store->get_bucket_info(NULL, bucket_name_str, bucket_info);
-    if (r < 0) {
-      cerr << "could not get bucket info for bucket=" << bucket_name_str << std::endl;
-      return r;
-    }
-    bucket = bucket_info.bucket;
-  }
-
-  int err;
   switch (opt_cmd) {
-  case OPT_USER_CREATE:
-  case OPT_USER_MODIFY:
-  case OPT_SUBUSER_CREATE:
-  case OPT_SUBUSER_MODIFY:
-  case OPT_KEY_CREATE:
-  case OPT_CAPS_ADD:
-  case OPT_CAPS_RM:
-    if (!user_id.empty())
-      info.user_id = user_id;
-    if (max_buckets >= 0)
-      info.max_buckets = max_buckets;
-    if (key_type == KEY_TYPE_SWIFT) {
-      access_key = info.user_id;
-      access_key.append(":");
-      access_key.append(subuser);
-    }
-    if ((!access_key.empty()) && (!secret_key.empty())) {
-      if (key_type == KEY_TYPE_S3 && !validate_access_key(access_key)) {
-        cerr << "access key contains illegal characters" << std::endl;
-        return 1;
-      }
-      RGWAccessKey k;
-      k.id = access_key;
-      k.key = secret_key;
-      if (!subuser.empty())
-        k.subuser = subuser;
-      if (key_type == KEY_TYPE_SWIFT)
-        info.swift_keys[access_key] = k;
-      else
-        info.access_keys[access_key] = k;
-   } else if (opt_cmd == OPT_KEY_CREATE && (access_key.empty() || secret_key.empty())) {
-      if (key_type == KEY_TYPE_SWIFT)
-        cerr << "swift key modification requires both subuser and secret key" << std::endl;
-      else
-        cerr << "access key modification requires both access key and secret key" << std::endl;
-      return 1;
-    } else if (opt_cmd == OPT_CAPS_ADD) {
-      err = info.caps.add_from_string(caps);
-      if (err < 0) {
-        cerr << "failed to add caps, err=" << cpp_strerror(-err) << std::endl;
-	return 1;
-      }
-    } else if (opt_cmd == OPT_CAPS_RM) {
-      err = info.caps.remove_from_string(caps);
-      if (err < 0) {
-        cerr << "failed to remove caps, err=" << cpp_strerror(-err) << std::endl;
-	return 1;
-      }
-    }
-    if (!display_name.empty())
-      info.display_name = display_name;
-    if (!user_email.empty())
-      info.user_email = user_email;
-    if (!subuser.empty()) {
-      RGWSubUser u = info.subusers[subuser];
-      u.name = subuser;
-      if (specified_perm_mask)
-        u.perm_mask = perm_mask;
-
-      info.subusers[subuser] = u;
-    }
-    if ((err = rgw_store_user_info(store, info, &old_info, false)) < 0) {
-      cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
-      break;
-    }
-
-    remove_old_indexes(old_info, info);
-
-    show_user_info(info, formatter);
-    break;
-
-  case OPT_SUBUSER_RM:
-    uiter = info.subusers.find(subuser);
-    assert (uiter != info.subusers.end());
-    info.subusers.erase(uiter);
-    if (purge_keys) {
-      map<string, RGWAccessKey> *keys_map;
-      access_key = info.user_id;
-      access_key.append(":");
-      access_key.append(subuser);
-      keys_map = &info.swift_keys;
-      kiter = keys_map->find(access_key);
-      if (kiter != keys_map->end()) {
-        rgw_remove_key_index(store, kiter->second);
-        keys_map->erase(kiter);
-      }
-    }
-    if ((err = rgw_store_user_info(store, info, &old_info, false)) < 0) {
-      cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
-      break;
-    }
-    remove_old_indexes(old_info, info);
-
-    show_user_info(info, formatter);
-    break;
-
-  case OPT_KEY_RM:
-    {
-      map<string, RGWAccessKey> *keys_map;
-      if (key_type == KEY_TYPE_SWIFT) {
-        access_key = info.user_id;
-        access_key.append(":");
-        access_key.append(subuser);
-        keys_map = &info.swift_keys;
-      } else {
-        keys_map = &info.access_keys;
-      }
-      kiter = keys_map->find(access_key);
-      if (kiter == keys_map->end()) {
-        cerr << "key not found" << std::endl;
-      } else {
-        rgw_remove_key_index(store, kiter->second);
-        keys_map->erase(kiter);
-        if ((err = rgw_store_user_info(store, info, &old_info, false)) < 0) {
-          cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
-          break;
-        }
-      }
-    }
-    show_user_info(info, formatter);
-    break;
-
   case OPT_USER_INFO:
-    show_user_info(info, formatter);
     break;
+  case OPT_USER_CREATE:
+    ret = user.add(user_op, &err_msg);
+    if (ret < 0) {
+      cerr << "could not create user: " << err_msg << std::endl;
+      return -ret;
+    }
+
+    break;
+  case OPT_USER_RM:
+    ret = user.remove(user_op, &err_msg);
+    if (ret < 0) {
+      cerr << "could not remove user: " << err_msg << std::endl;
+      return -ret;
+    }
+
+    output_user_info = false;
+    break;
+  case OPT_USER_ENABLE:
+  case OPT_USER_SUSPEND:
+  case OPT_USER_MODIFY:
+    ret = user.modify(user_op, &err_msg);
+    if (ret < 0) {
+      cerr << "could not modify user: " << err_msg << std::endl;
+      return -ret;
+    }
+
+    break;
+  case OPT_SUBUSER_CREATE:
+    ret = user.subusers.add(user_op, &err_msg);
+    if (ret < 0) {
+      cerr << "could not create subuser: " << err_msg << std::endl;
+      return -ret;
+    }
+
+    break;
+  case OPT_SUBUSER_MODIFY:
+    ret = user.subusers.modify(user_op, &err_msg);
+    if (ret < 0) {
+      cerr << "could not modify subuser: " << err_msg << std::endl;
+      return -ret;
+    }
+
+    ret = user.info(info, &err_msg);
+    if (ret < 0) {
+      cerr << "could not fetch user info: " << err_msg << std::endl;
+      return -ret;
+    }
+
+    show_user_info(info, formatter);
+
+    break;
+  case OPT_SUBUSER_RM:
+    ret = user.subusers.remove(user_op, &err_msg);
+    if (ret < 0) {
+      cerr << "could not remove subuser: " << err_msg << std::endl;
+      return -ret;
+    }
+
+    break;
+  case OPT_CAPS_ADD:
+    ret = user.caps.add(user_op, &err_msg);
+    if (ret < 0) {
+      cerr << "could not add caps: " << err_msg << std::endl;
+      return -ret;
+    }
+
+    break;
+  case OPT_CAPS_RM:
+    ret = user.caps.remove(user_op, &err_msg);
+    if (ret < 0) {
+      cerr << "could not add remove caps: " << err_msg << std::endl;
+      return -ret;
+    }
+
+    break;
+  case OPT_KEY_CREATE:
+    ret = user.keys.add(user_op, &err_msg);
+    if (ret < 0) {
+      cerr << "could not create key: " << err_msg << std::endl;
+      return -ret;
+    }
+
+    break;
+  case OPT_KEY_RM:
+    ret = user.keys.remove(user_op, &err_msg);
+    if (ret < 0) {
+      cerr << "could not remove key: " << err_msg << std::endl;
+      return -ret;
+    }
+
+    break;
+  default:
+    output_user_info = false;
+  }
+
+  // output the result of a user operation
+  if (output_user_info) {
+    ret = user.info(info, &err_msg);
+    if (ret < 0) {
+      cerr << "could not fetch user info: " << err_msg << std::endl;
+      return -ret;
+    }
+    show_user_info(info, formatter);
   }
 
   if (opt_cmd == OPT_POLICY) {
-    bufferlist bl;
-    rgw_obj obj(bucket, object);
-    int ret = store->get_attr(NULL, obj, RGW_ATTR_ACL, bl);
-
-    RGWAccessControlPolicy_S3 policy(g_ceph_context);
+    int ret = RGWBucketAdminOp::get_policy(store, bucket_op, cout);
     if (ret >= 0) {
-      bufferlist::iterator iter = bl.begin();
-      try {
-        policy.decode(iter);
-      } catch (buffer::error& err) {
-        dout(0) << "ERROR: caught buffer::error, could not decode policy" << dendl;
-        return -EIO;
-      }
-      policy.to_xml(cout);
       cout << std::endl;
     }
   }
 
-  if (opt_cmd == OPT_BUCKETS_LIST) {
-    RGWAccessHandle handle;
+  if (opt_cmd == OPT_BUCKETS_LIST || opt_cmd == OPT_BUCKET_STATS) {
+    if (opt_cmd == OPT_BUCKET_STATS)
+      bucket_op.set_fetch_stats(true);
 
-    formatter->reset();
-    formatter->open_array_section("buckets");
-    if (!user_id.empty()) {
-      RGWUserBuckets buckets;
-      if (rgw_read_user_buckets(store, user_id, buckets, false) < 0) {
-        cerr << "list buckets: could not get buckets for uid " << user_id << std::endl;
-      } else {
-        map<string, RGWBucketEnt>& m = buckets.get_buckets();
-        map<string, RGWBucketEnt>::iterator iter;
-
-        for (iter = m.begin(); iter != m.end(); ++iter) {
-          RGWBucketEnt obj = iter->second;
-	  formatter->dump_string("bucket", obj.bucket.name);
-        }
-      }
-    } else {
-      if (store->list_buckets_init(&handle) < 0) {
-        cerr << "list buckets: no buckets found" << std::endl;
-      } else {
-        RGWObjEnt obj;
-        while (store->list_buckets_next(obj, &handle) >= 0) {
-          formatter->dump_string("bucket", obj.name);
-        }
-      }
-    }
-    formatter->close_section();
-    formatter->flush(cout);
-    cout << std::endl;
+    RGWBucketAdminOp::info(store, bucket_op, f);
   }
 
   if (opt_cmd == OPT_BUCKET_LINK) {
-    if (bucket_name.empty()) {
-      cerr << "bucket name was not specified" << std::endl;
-      return usage();
-    }
-    string uid_str(user_id);
-    
-    string no_oid;
-    bufferlist aclbl;
-    rgw_obj obj(bucket, no_oid);
-
-    int r = store->get_attr(NULL, obj, RGW_ATTR_ACL, aclbl);
-    if (r >= 0) {
-      RGWAccessControlPolicy policy;
-      ACLOwner owner;
-      try {
-       bufferlist::iterator iter = aclbl.begin();
-       ::decode(policy, iter);
-       owner = policy.get_owner();
-      } catch (buffer::error& err) {
-	dout(10) << "couldn't decode policy" << dendl;
-	return -EINVAL;
-      }
-      //cout << "bucket is linked to user '" << owner.get_id() << "'.. unlinking" << std::endl;
-      r = rgw_remove_user_bucket_info(store, owner.get_id(), bucket);
-      if (r < 0) {
-        cerr << "could not unlink policy from user '" << owner.get_id() << "'" << std::endl;
-        return r;
-      }
-
-      // now update the user for the bucket...
-      if (info.display_name.empty()) {
-        cerr << "WARNING: user " << info.user_id << " has no display name set" << std::endl;
-      } else {
-        policy.create_default(info.user_id, info.display_name);
-
-        // ...and encode the acl
-        aclbl.clear();
-        policy.encode(aclbl);
-
-        r = store->set_attr(NULL, obj, RGW_ATTR_ACL, aclbl);
-        if (r < 0)
-          return r;
-
-        r = rgw_add_bucket(store, info.user_id, bucket);
-        if (r < 0)
-          return r;
-      }
-    } else {
-      // the bucket seems not to exist, so we should probably create it...
-      r = create_bucket(bucket_name.c_str(), uid_str, info.display_name);
-      if (r < 0)
-        cerr << "error linking bucket to user: r=" << r << std::endl;
-      return -r;
-    }
+   RGWBucketAdminOp::link(store, bucket_op);
   }
 
   if (opt_cmd == OPT_BUCKET_UNLINK) {
-    if (bucket_name.empty()) {
-      cerr << "bucket name was not specified" << std::endl;
-      return usage();
-    }
-
-    int r = rgw_remove_user_bucket_info(store, user_id, bucket);
-    if (r < 0)
-      cerr << "error unlinking bucket " <<  cpp_strerror(-r) << std::endl;
-    return -r;
+    RGWBucketAdminOp::unlink(store, bucket_op);
   }
 
   if (opt_cmd == OPT_TEMP_REMOVE) {
@@ -1521,30 +989,6 @@ next:
     }
   }
   
-  if (opt_cmd == OPT_USER_RM) {
-    RGWUserBuckets buckets;
-
-    if (rgw_read_user_buckets(store, user_id, buckets, false) >= 0) {
-      map<string, RGWBucketEnt>& m = buckets.get_buckets();
-
-      if (!m.empty() && purge_data) {
-	int ret;
-        for (std::map<string, RGWBucketEnt>::iterator it = m.begin(); it != m.end(); ++it) {
-          ret = remove_bucket(store, ((*it).second).bucket, true);
-
-          if (ret < 0)
-            return ret;
-        }
-      }
-
-      if (!m.empty() && !purge_data) {
-        cerr << "ERROR: specify --purge-data to remove a user with a non-empty bucket list" << std::endl;
-        return 1;
-      }
-    }
-    rgw_delete_user(store, info);
-  }
-  
   if (opt_cmd == OPT_POOL_ADD) {
     if (pool_name.empty()) {
       cerr << "need to specify pool to add!" << std::endl;
@@ -1587,71 +1031,6 @@ next:
     cout << std::endl;
   }
 
-  if (opt_cmd == OPT_BUCKET_STATS) {
-    if (bucket_name.empty() && user_id.empty()) {
-      cerr << "either bucket or uid needs to be specified" << std::endl;
-      return usage();
-    }
-    formatter->reset();
-    if (user_id.empty()) {
-      bucket_stats(bucket, formatter);
-    } else {
-      RGWUserBuckets buckets;
-      if (rgw_read_user_buckets(store, user_id, buckets, false) < 0) {
-	cerr << "could not get buckets for uid " << user_id << std::endl;
-      } else {
-	formatter->open_array_section("buckets");
-	map<string, RGWBucketEnt>& m = buckets.get_buckets();
-	for (map<string, RGWBucketEnt>::iterator iter = m.begin(); iter != m.end(); ++iter) {
-	  RGWBucketEnt obj = iter->second;
-	  bucket_stats(obj.bucket, formatter);
-	}
-	formatter->close_section();
-      }
-    }
-    formatter->flush(cout);
-    cout << std::endl;
-  }
-
-  if (opt_cmd == OPT_USER_SUSPEND || opt_cmd == OPT_USER_ENABLE) {
-    __u8 disable = (opt_cmd == OPT_USER_SUSPEND ? 1 : 0);
-
-    if (user_id.empty()) {
-      cerr << "uid was not specified" << std::endl;
-      return usage();
-    }
-    RGWUserBuckets buckets;
-    if (rgw_read_user_buckets(store, user_id, buckets, false) < 0) {
-      cerr << "could not get buckets for uid " << user_id << std::endl;
-    }
-    map<string, RGWBucketEnt>& m = buckets.get_buckets();
-    map<string, RGWBucketEnt>::iterator iter;
-
-    int ret;
-    info.suspended = disable;
-    ret = rgw_store_user_info(store, info, &old_info, false);
-    if (ret < 0) {
-      cerr << "ERROR: failed to store user info user=" << user_id << " ret=" << ret << std::endl;
-      return 1;
-    }
-     
-    if (disable)
-      dout(0) << "disabling user buckets" << dendl;
-    else
-      dout(0) << "enabling user buckets" << dendl;
-
-    vector<rgw_bucket> bucket_names;
-    for (iter = m.begin(); iter != m.end(); ++iter) {
-      RGWBucketEnt obj = iter->second;
-      bucket_names.push_back(obj.bucket);
-    }
-    ret = store->set_buckets_enabled(bucket_names, !disable);
-    if (ret < 0) {
-      cerr << "ERROR: failed to change pool" << std::endl;
-      return 1;
-    }
-  } 
-
   if (opt_cmd == OPT_USAGE_SHOW) {
     uint64_t start_epoch = 0;
     uint64_t end_epoch = (uint64_t)-1;
@@ -1673,7 +1052,6 @@ next:
       }
     }
 
-    RGWStreamFlusher f(formatter, cout);
 
     ret = RGWUsage::show(store, user_id, start_epoch, end_epoch,
 			 show_log_entries, show_log_sum, &categories,
@@ -1719,18 +1097,28 @@ next:
   }
 
   if (opt_cmd == OPT_OBJECT_RM) {
-    int ret = remove_object(store, bucket, object);
+    int ret = init_bucket(bucket_name, bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    ret = rgw_remove_object(store, bucket, object);
 
     if (ret < 0) {
       cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
-      return 1;
+      return -ret;
     }
   }
 
   if (opt_cmd == OPT_OBJECT_UNLINK) {
+    int ret = init_bucket(bucket_name, bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
     list<string> oid_list;
     oid_list.push_back(object);
-    int ret = store->remove_objs_from_index(bucket, oid_list);
+    ret = store->remove_objs_from_index(bucket, oid_list);
     if (ret < 0) {
       cerr << "ERROR: remove_obj_from_index() returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
@@ -1738,82 +1126,11 @@ next:
   }
 
   if (opt_cmd == OPT_BUCKET_CHECK) {
-    check_bad_index_multipart(store, bucket, fix);
-
-    map<RGWObjCategory, RGWBucketStats> existing_stats;
-    map<RGWObjCategory, RGWBucketStats> calculated_stats;
-
-    if (check_objects) {
-      if (!fix) {
-	cerr << "--check-objects flag requires --fix" << std::endl;
-	return 1;
-      }
-#define BUCKET_TAG_TIMEOUT 30
-      cout << "Checking objects, decreasing bucket 2-phase commit timeout.\n"
-              "** Note that timeout will reset only when operation completes successfully **" << std::endl;
-
-      store->cls_obj_set_bucket_tag_timeout(bucket, BUCKET_TAG_TIMEOUT);
-
-      string prefix;
-      string marker;
-      bool is_truncated = true;
-
-      while (is_truncated) {
-	map<string, RGWObjEnt> result;
-	int r = store->cls_bucket_list(bucket, marker, prefix, 1000, 
-	                            result, &is_truncated, &marker,
-                                    bucket_object_check_filter);
-
-	if (r < 0 && r != -ENOENT) {
-          cerr << "ERROR: failed operation r=" << r << std::endl;
-	}
-
-	if (r == -ENOENT)
-	  break;
-
-	map<string, RGWObjEnt>::iterator iter;
-	for (iter = result.begin(); iter != result.end(); ++iter) {
-	  cout << iter->first << std::endl;
-	}
-
-      }
-
-      store->cls_obj_set_bucket_tag_timeout(bucket, 0);
-
-    }
-    int r = store->bucket_check_index(bucket, &existing_stats, &calculated_stats);
-    if (r < 0) {
-      cerr << "failed to check index err=" << cpp_strerror(-r) << std::endl;
-      return r;
-    }
-
-    formatter->open_object_section("check_result");
-    formatter->open_object_section("existing_header");
-    dump_bucket_usage(existing_stats, formatter);
-    formatter->close_section();
-    formatter->open_object_section("calculated_header");
-    dump_bucket_usage(calculated_stats, formatter);
-    formatter->close_section();
-    formatter->close_section();
-    formatter->flush(cout);
-
-    if (fix) {
-      r = store->bucket_rebuild_index(bucket);
-      if (r < 0) {
-        cerr << "failed to rebuild index err=" << cpp_strerror(-r) << std::endl;
-        return r;
-      }
-    }
-
+    RGWBucketAdminOp::check_index(store, bucket_op, f);
   }
 
   if (opt_cmd == OPT_BUCKET_RM) {
-    int ret = remove_bucket(store, bucket, delete_child_objects);
-
-    if (ret < 0) {
-      cerr << "ERROR: bucket remove returned: " << cpp_strerror(-ret) << std::endl;
-      return 1;
-    }
+    RGWBucketAdminOp::remove_bucket(store, bucket_op);
   }
 
   if (opt_cmd == OPT_GC_LIST) {

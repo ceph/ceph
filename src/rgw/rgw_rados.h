@@ -561,8 +561,9 @@ public:
    * Returns 0 on success, -ERR# otherwise.
    */  virtual int delete_bucket(rgw_bucket& bucket);
 
-  virtual int set_buckets_enabled(std::vector<rgw_bucket>& buckets, bool enabled);
-  virtual int bucket_suspended(rgw_bucket& bucket, bool *suspended);
+  int set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner);
+  int set_buckets_enabled(std::vector<rgw_bucket>& buckets, bool enabled);
+  int bucket_suspended(rgw_bucket& bucket, bool *suspended);
 
   /** Delete an object.*/
   virtual int delete_obj(void *ctx, rgw_obj& src_obj);

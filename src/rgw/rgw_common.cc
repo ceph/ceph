@@ -92,10 +92,9 @@ is_err() const
 }
 
 
-req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL), op(OP_UNKNOWN), 
-                                                            bucket_cors(NULL), has_acl_header(false),
-                                                            os_auth_token(NULL),
-                                                            env(e)
+req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL), op(OP_UNKNOWN),
+							    bucket_cors(NULL), has_acl_header(false),
+                                                            os_auth_token(NULL), env(e)
 {
   enable_ops_log = env->conf->enable_ops_log;
   enable_usage_log = env->conf->enable_usage_log;
@@ -236,7 +235,6 @@ bool parse_iso8601(const char *s, struct tm *t)
 {
   memset(t, 0, sizeof(*t));
   const char *p = strptime(s, "%Y-%m-%dT%T", t);
-
   if (!p) {
     dout(0) << "parse_iso8601 failed" << dendl;
     return false;
@@ -432,6 +430,7 @@ int XMLArgs::parse()
 {
   int pos = 0, fpos;
   bool end = false;
+  bool admin_subresource_added = false; 
   if (str[pos] == '?') pos++;
 
   while (!end) {
@@ -458,8 +457,7 @@ int XMLArgs::parse()
           (name.compare("partNumber") == 0) ||
           (name.compare("uploadId") == 0) ||
           (name.compare("versionId") == 0) ||
-          (name.compare("torrent") == 0) ||
-          (name.compare("cors") == 0)) {
+          (name.compare("torrent") == 0)) {
         sub_resources[name] = val;
       } else if (name[0] == 'r') { // root of all evil
         if ((name.compare("response-content-type") == 0) ||
@@ -471,6 +469,17 @@ int XMLArgs::parse()
 	  sub_resources[name] = val;
 	  has_resp_modifier = true;
 	}
+      } else if  ((name.compare("subuser") == 0) ||
+          (name.compare("key") == 0) ||
+          (name.compare("caps") == 0) ||
+          (name.compare("index") == 0) ||
+          (name.compare("policy") == 0) ||
+          (name.compare("object") == 0)) {
+
+        if (!admin_subresource_added) {
+          sub_resources[name] = "";
+          admin_subresource_added = true;
+        }
       }
     }
 
