@@ -1267,30 +1267,30 @@ int Client::make_request(MetaRequest *request,
   if (use_mds >= 0)
     request->resend_mds = use_mds;
 
-  // set up wait cond
-  Cond cond;
-  request->caller_cond = &cond;
-
   while (1) {
+    // set up wait cond
+    Cond caller_cond;
+    request->caller_cond = &caller_cond;
+
     // choose mds
     int mds = choose_target_mds(request);
     if (mds < 0 || !mdsmap->is_active_or_stopping(mds)) {
-      Cond cond;
+      Cond mdsmap_cond;
       ldout(cct, 10) << " target mds." << mds << " not active, waiting for new mdsmap" << dendl;
-      waiting_for_mdsmap.push_back(&cond);
-      cond.Wait(client_lock);
+      waiting_for_mdsmap.push_back(&mdsmap_cond);
+      mdsmap_cond.Wait(client_lock);
       continue;
     }
 
     // open a session?
     MetaSession *session = NULL;
     if (!have_open_session(mds)) {
-      Cond cond;
+      Cond session_cond;
 
       if (!mdsmap->is_active_or_stopping(mds)) {
 	ldout(cct, 10) << "no address for mds." << mds << ", waiting for new mdsmap" << dendl;
-	waiting_for_mdsmap.push_back(&cond);
-	cond.Wait(client_lock);
+	waiting_for_mdsmap.push_back(&session_cond);
+	session_cond.Wait(client_lock);
 
 	if (!mdsmap->is_active_or_stopping(mds)) {
 	  ldout(cct, 10) << "hmm, still have no address for mds." << mds << ", trying a random mds" << dendl;
@@ -1303,10 +1303,10 @@ int Client::make_request(MetaRequest *request,
 
       // wait
       if (session->state == MetaSession::STATE_OPENING) {
-	session->waiting_for_open.push_back(&cond);
+	session->waiting_for_open.push_back(&session_cond);
 	while (session->state == MetaSession::STATE_OPENING) {
 	  ldout(cct, 10) << "waiting for session to mds." << mds << " to open" << dendl;
-	  cond.Wait(client_lock);
+	  session_cond.Wait(client_lock);
 	}
       }
 
@@ -1320,13 +1320,14 @@ int Client::make_request(MetaRequest *request,
     send_request(request, session);
 
     // wait for signal
-    ldout(cct, 20) << "awaiting reply|forward|kick on " << &cond << dendl;
+    ldout(cct, 20) << "awaiting reply|forward|kick on " << &caller_cond << dendl;
     request->kick = false;
     while (!request->reply &&         // reply
 	   request->resend_mds < 0 && // forward
 	   !request->kick)
-      cond.Wait(client_lock);
-    
+      caller_cond.Wait(client_lock);
+    request->caller_cond = NULL;
+
     // did we get a reply?
     if (request->reply) 
       break;
@@ -1766,6 +1767,7 @@ void Client::handle_client_reply(MClientReply *reply)
       request->unsafe_item.remove_myself();
     }
     request->item.remove_myself();
+    mds_requests.erase(tid);
     request->put(); // for the dumb data structure
   }
   if (unmounting)
@@ -1978,10 +1980,13 @@ void Client::kick_requests(MetaSession *session, bool signal)
        ++p) 
     if (p->second->mds == session->mds_num) {
       if (signal) {
-	p->second->kick = true;
-	p->second->caller_cond->Signal();
-      }
-      else {
+	// only signal caller if there is a caller
+	// otherwise, let resend_unsafe handle it
+	if (p->second->caller_cond) {
+	  p->second->kick = true;
+	  p->second->caller_cond->Signal();
+	}
+      } else {
 	send_request(p->second, session);
       }
     }
