@@ -1698,7 +1698,12 @@ void Client::handle_client_reply(MClientReply *reply)
   ldout(cct, 20) << "handle_client_reply got a reply. Safe:" << is_safe
 		 << " tid " << tid << dendl;
   MetaRequest *request = mds_requests[tid];
-  assert(request);
+  if (!request) {
+    ldout(cct, 0) << "got an unknown reply (probably duplicate) on tid " << tid << " from mds "
+      << mds_num << " safe: " << is_safe << dendl;
+    reply->put();
+    return;
+  }
     
   if (request->got_unsafe && !is_safe) {
     //duplicate response
@@ -1756,7 +1761,6 @@ void Client::handle_client_reply(MClientReply *reply)
       request->unsafe_item.remove_myself();
     }
     request->item.remove_myself();
-    mds_requests.erase(tid);
     request->put(); // for the dumb data structure
   }
   if (unmounting)
