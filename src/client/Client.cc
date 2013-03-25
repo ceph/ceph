@@ -1751,13 +1751,13 @@ void Client::handle_client_reply(MClientReply *reply)
 
   if (is_safe) {
     // the filesystem change is committed to disk
+    // we're done, clean up
     if (request->got_unsafe) {
-      // we're done, clean up
-      request->item.remove_myself();
       request->unsafe_item.remove_myself();
-      mds_requests.erase(tid);
-      request->put(); // for the dumb data structure
     }
+    request->item.remove_myself();
+    mds_requests.erase(tid);
+    request->put(); // for the dumb data structure
   }
   if (unmounting)
     mount_cond.Signal();
