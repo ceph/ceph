@@ -673,6 +673,12 @@ void ReplicatedPG::do_op(OpRequestRef op)
     return;
   }
  
+  // asking for SNAPDIR is only ok for reads
+  if (m->get_snapid() == CEPH_SNAPDIR && op->may_write()) {
+    osd->reply_op_error(op, -EINVAL);
+    return;
+  }
+
   entity_inst_t client = m->get_source_inst();
 
   ObjectContext *obc;
@@ -4296,9 +4302,30 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
 				      bool can_create,
 				      snapid_t *psnapid)
 {
-  // want the head?
   hobject_t head(oid.oid, oid.get_key(), CEPH_NOSNAP, oid.hash,
 		 info.pgid.pool());
+  hobject_t snapdir(oid.oid, oid.get_key(), CEPH_SNAPDIR, oid.hash,
+		    info.pgid.pool());
+
+  // want the snapdir?
+  if (oid.snap == CEPH_SNAPDIR) {
+    // return head or snapdir, whichever exists.
+    ObjectContext *obc = get_object_context(head, oloc, can_create);
+    if (!obc) {
+      obc = get_object_context(snapdir, oloc, can_create);
+    }
+    if (!obc)
+      return -ENOENT;
+    dout(10) << "find_object_context " << oid << " @" << oid.snap << dendl;
+    *pobc = obc;
+
+    // always populate ssc for SNAPDIR...
+    if (!obc->ssc)
+      obc->ssc = get_snapset_context(oid.oid, oid.get_key(), oid.hash, true);
+    return 0;
+  }
+
+  // want the head?
   if (oid.snap == CEPH_NOSNAP) {
     ObjectContext *obc = get_object_context(head, oloc, can_create);
     if (!obc)
