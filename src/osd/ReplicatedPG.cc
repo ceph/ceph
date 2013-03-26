@@ -2323,25 +2323,25 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         }
         assert(ssc);
 
-        vector<snapid_t>::reverse_iterator snap_iter =
-	  ssc->snapset.snaps.rbegin();
-
         int clonecount = ssc->snapset.clones.size();
         if (ssc->snapset.head_exists)
           clonecount++;
         resp.clones.reserve(clonecount);
         for (vector<snapid_t>::const_iterator clone_iter = ssc->snapset.clones.begin();
 	     clone_iter != ssc->snapset.clones.end(); ++clone_iter) {
-          dout(20) << "List clones id=" << *clone_iter << dendl;
           clone_info ci;
           ci.cloneid = *clone_iter;
-          for ( ; snap_iter != ssc->snapset.snaps.rend() &&
-		  (*snap_iter <= ci.cloneid); ++snap_iter) {
-            dout(20) << "List snaps id=" << *snap_iter << dendl;
-            assert(*snap_iter != CEPH_NOSNAP);
-            assert(*snap_iter != CEPH_SNAPDIR);
-            ci.snaps.push_back(*snap_iter);
-          }
+
+	  hobject_t clone_oid = soid;
+	  clone_oid.snap = *clone_iter;
+	  ObjectContext *clone_obc = ctx->src_obc[clone_oid];
+	  for (vector<snapid_t>::reverse_iterator p = clone_obc->obs.oi.snaps.rbegin();
+	       p != clone_obc->obs.oi.snaps.rend();
+	       ++p) {
+	    ci.snaps.push_back(*p);
+	  }
+
+          dout(20) << " clone " << *clone_iter << " snaps " << ci.snaps << dendl;
 
           map<snapid_t, interval_set<uint64_t> >::const_iterator coi;
           coi = ssc->snapset.clone_overlap.find(ci.cloneid);
