@@ -336,7 +336,7 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
   if (name_exists(name)) {
     if (get_item_id(name) != item) {
       ldout(cct, 10) << "device name '" << name << "' already exists as id "
-		     << get_item_id(name.c_str()) << dendl;
+		     << get_item_id(name) << dendl;
       return -EEXIST;
     }
   } else {
@@ -510,7 +510,7 @@ int CrushWrapper::update_item(CephContext *cct, int item, float weight, string n
     }
     if (get_item_name(item) != name) {
       ldout(cct, 5) << "update_item setting " << item << " name to " << name << dendl;
-      set_item_name(item, name.c_str());
+      set_item_name(item, name);
       ret = 1;
     }
   } else {
@@ -635,12 +635,12 @@ int CrushWrapper::add_simple_rule(string name, string root_name, string failure_
 {
   if (rule_exists(name))
     return -EEXIST;
-  if (!name_exists(root_name.c_str()))
+  if (!name_exists(root_name))
     return -ENOENT;
-  int root = get_item_id(root_name.c_str());
+  int root = get_item_id(root_name);
   int type = 0;
   if (failure_domain_name.length()) {
-    type = get_type_id(failure_domain_name.c_str());
+    type = get_type_id(failure_domain_name);
     if (type <= 0) // bah, returns 0 on error; but its ok, device isn't a domain really
       return -EINVAL;
   }
@@ -668,7 +668,7 @@ int CrushWrapper::add_simple_rule(string name, string root_name, string failure_
 			0);
   crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
   int rno = crush_add_rule(crush, rule, -1);
-  set_rule_name(rno, name.c_str());
+  set_rule_name(rno, name);
   have_rmaps = false;
   return rno;
 }
