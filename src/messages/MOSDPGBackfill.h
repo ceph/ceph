@@ -19,6 +19,8 @@
 #include "osd/osd_types.h"
 
 class MOSDPGBackfill : public Message {
+  static const int HEAD_VERSION = 2;
+  static const int COMPAT_VERSION = 1;
 public:
   enum {
     OP_BACKFILL_PROGRESS = 2,
@@ -38,7 +40,8 @@ public:
   epoch_t map_epoch, query_epoch;
   pg_t pgid;
   hobject_t last_backfill;
-  object_stat_collection_t stats;
+  bool compat_stat_sum;
+  pg_stat_t stats;
 
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -47,7 +50,15 @@ public:
     ::decode(query_epoch, p);
     ::decode(pgid, p);
     ::decode(last_backfill, p);
-    ::decode(stats, p);
+
+    // For compatibility with version 1
+    ::decode(stats.stats, p);
+
+    if (header.version >= 2) {
+      ::decode(stats, p);
+    } else {
+      compat_stat_sum = true;
+    }
 
     // Handle hobject_t format change
     if (!last_backfill.is_max() &&
@@ -61,16 +72,22 @@ public:
     ::encode(query_epoch, payload);
     ::encode(pgid, payload);
     ::encode(last_backfill, payload);
+
+    // For compatibility with version 1
+    ::encode(stats.stats, payload);
+
     ::encode(stats, payload);
   }
 
-  MOSDPGBackfill() : Message(MSG_OSD_PG_BACKFILL) {}
+  MOSDPGBackfill() :
+    Message(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION),
+    compat_stat_sum(false) {}
   MOSDPGBackfill(__u32 o, epoch_t e, epoch_t qe, pg_t p)
-    : Message(MSG_OSD_PG_BACKFILL),
+    : Message(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION),
       op(o),
       map_epoch(e), query_epoch(e),
-      pgid(p) {
-  }
+      pgid(p),
+      compat_stat_sum(false) {}
 private:
   ~MOSDPGBackfill() {}
 
