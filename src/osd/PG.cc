@@ -4239,17 +4239,61 @@ map<int, ScrubMap *>::const_iterator PG::_select_auth_object(
   const map<int,ScrubMap*> &maps)
 {
   map<int, ScrubMap *>::const_iterator auth = maps.end();
-  // Select first present replica
   for (map<int, ScrubMap *>::const_iterator j = maps.begin();
        j != maps.end();
        ++j) {
-    if (!j->second->objects.count(obj)) {
+    map<hobject_t, ScrubMap::object>::iterator i =
+      j->second->objects.find(obj);
+    if (i == j->second->objects.end()) {
       continue;
     }
     if (auth == maps.end()) {
+      // Something is better than nothing
+      // TODO: something is NOT better than nothing, do something like
+      // unfound_lost if no valid copies can be found, or just mark unfound
       auth = j;
+      dout(10) << __func__ << ": selecting osd " << j->first
+	       << " for obj " << obj
+	       << ", auth == maps.end()"
+	       << dendl;
       continue;
     }
+    map<string, bufferptr>::iterator k = i->second.attrs.find(OI_ATTR);
+    if (k == i->second.attrs.end()) {
+      // no object info on object, probably corrupt
+      dout(10) << __func__ << ": rejecting osd " << j->first
+	       << " for obj " << obj
+	       << ", no oi attr"
+	       << dendl;
+      continue;
+    }
+    bufferlist bl;
+    bl.push_back(k->second);
+    object_info_t oi;
+    try {
+      bufferlist::iterator bliter = bl.begin();
+      ::decode(oi, bliter);
+    } catch (...) {
+      dout(10) << __func__ << ": rejecting osd " << j->first
+	       << " for obj " << obj
+	       << ", corrupt oi attr"
+	       << dendl;
+      // invalid object info, probably corrupt
+      continue;
+    }
+    if (oi.size != i->second.size) {
+      // invalid size, probably corrupt
+      dout(10) << __func__ << ": rejecting osd " << j->first
+	       << " for obj " << obj
+	       << ", size mismatch"
+	       << dendl;
+      // invalid object info, probably corrupt
+      continue;
+    }
+    dout(10) << __func__ << ": selecting osd " << j->first
+	     << " for obj " << obj
+	     << dendl;
+    auth = j;
   }
   return auth;
 }
