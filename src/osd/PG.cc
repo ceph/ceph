@@ -4258,6 +4258,14 @@ map<int, ScrubMap *>::const_iterator PG::_select_auth_object(
 	       << dendl;
       continue;
     }
+    if (i->second.read_error) {
+      // scrub encountered read error, probably corrupt
+      dout(10) << __func__ << ": rejecting osd " << j->first
+	       << " for obj " << obj
+	       << ", read_error"
+	       << dendl;
+      continue;
+    }
     map<string, bufferptr>::iterator k = i->second.attrs.find(OI_ATTR);
     if (k == i->second.attrs.end()) {
       // no object info on object, probably corrupt
