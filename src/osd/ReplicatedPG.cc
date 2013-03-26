@@ -2333,10 +2333,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           clone_info ci;
           ci.cloneid = clone_info::HEAD;
 
-          //Put remaining snapshots into head clone
-          for ( ; snap_iter != ssc->snapset.snaps.rend(); ++snap_iter)
-            ci.snaps.push_back(*snap_iter);
-
           //Size for HEAD is oi.size
           ci.size = oi.size;
 
