@@ -35,7 +35,6 @@ void MetaRequest::dump(Formatter *f) const
   f->dump_unsigned("sent_on_mseq", sent_on_mseq);
   f->dump_int("retry_attempt", retry_attempt);
 
-  f->dump_int("got_safe", got_safe);
   f->dump_int("got_unsafe", got_unsafe);
 
   if (head.op == CEPH_MDS_OP_READDIR ||
