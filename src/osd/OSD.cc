@@ -5927,11 +5927,16 @@ void OSD::handle_pg_create(OpRequestRef op)
     }
   }
 
-  if (!require_mon_peer(op->request)) {
-    // we have to hack around require_mon_peer's interface limits
-    op->request = NULL;
+  /* we have to hack around require_mon_peer's interface limits, so
+   * grab an extra reference before going in. If the peer isn't
+   * a Monitor, the reference is put for us (and then cleared
+   * up automatically by our OpTracker infrastructure). Otherwise,
+   * we put the extra ref ourself.
+   */
+  if (!require_mon_peer(op->request->get())) {
     return;
   }
+  op->request->put();
 
   if (!require_same_or_newer_map(op, m->epoch)) return;
 
