@@ -958,7 +958,7 @@ public class CephMountTest {
   }
 
   @Test
-  public void test_get_file_exist() throws Exception {
+  public void test_get_file_extent() throws Exception {
     int stripe_unit = 1<<18;
     String path = makePath();
     int fd = mount.open(path, CephMount.O_WRONLY|CephMount.O_CREAT, 0,
