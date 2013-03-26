@@ -20,6 +20,11 @@
                                                 (dest defaults
                                                  as the filename part of file)
                                                 "-" for stdin
+    export-diff <image-name> [--from-snap <snap-name>] <path>
+                                                export an incremental diff to
+                                                path, or "-" for stdout
+    import-diff <path> <image-name>             import an incremental diff from
+                                                path or "-" for stdin
     (cp | copy) <src> <dest>                    copy src image to dest
     (mv | rename) <src> <dest>                  rename src image to dest
     snap ls <image-name>                        dump list of image snapshots
