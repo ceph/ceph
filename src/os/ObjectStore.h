@@ -939,6 +939,10 @@ public:
     
   virtual void set_fsid(uuid_d u) = 0;
   virtual uuid_d get_fsid() = 0;
+
+  // DEBUG
+  virtual void inject_data_error(const hobject_t &oid) {}
+  virtual void inject_mdata_error(const hobject_t &oid) {}
 };
 
 
