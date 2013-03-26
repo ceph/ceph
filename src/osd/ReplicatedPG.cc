@@ -2348,7 +2348,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           if (coi == ssc->snapset.clone_overlap.end()) {
             osd->clog.error() << "osd." << osd->whoami << ": inconsistent clone_overlap found for oid "
 			      << soid << " clone " << *clone_iter;
-            result = EINVAL;
+            result = -EINVAL;
             break;
           }
           const interval_set<uint64_t> &o = coi->second;
@@ -2363,7 +2363,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           if (si == ssc->snapset.clone_size.end()) {
             osd->clog.error() << "osd." << osd->whoami << ": inconsistent clone_size found for oid "
 			      << soid << " clone " << *clone_iter;
-            result = EINVAL;
+            result = -EINVAL;
             break;
           }
           ci.size = si->second;
