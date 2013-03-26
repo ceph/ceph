@@ -113,7 +113,11 @@ void usage()
 "  lock list <image-name>                      show locks held on an image\n"
 "  lock add <image-name> <id> [--shared <tag>] take a lock called id on an image\n"
 "  lock remove <image-name> <id> <locker>      release a lock on an image\n"
-"  bench-write <image-name> --io-size <bytes> --io-threads <num> --io-total <bytes>\n"
+"  bench-write <image-name>                    simple write benchmark\n"
+"                 --io-size <bytes>              write size\n"
+"                 --io-threads <num>             ios in flight\n"
+"                 --io-total <bytes>             total bytes to write\n"
+"                 --io-pattern <seq|rand>        write pattern\n"
 "\n"
 "<image-name>, <snap-name> are [pool/]name[@snap], or you may specify\n"
 "individual pieces of names with -p/--pool, --image, and/or --snap.\n"
@@ -849,7 +853,8 @@ void rbd_bencher_completion(void *vc, void *pc)
 }
 
 static int do_bench_write(librbd::Image& image, uint64_t io_size,
-			  uint64_t io_threads, uint64_t io_bytes)
+			  uint64_t io_threads, uint64_t io_bytes,
+			  string pattern)
 {
   rbd_bencher b(&image);
 
@@ -857,10 +862,14 @@ static int do_bench_write(librbd::Image& image, uint64_t io_size,
        << " io_size " << io_size
        << " io_threads " << io_threads
        << " bytes " << io_bytes
+       << " pattern " << pattern
        << std::endl;
 
+  if (pattern != "rand" && pattern != "seq")
+    return -EINVAL;
+
   bufferptr bp(io_size);
-  bp.zero();
+  memset(bp.c_str(), rand() & 0xff, io_size);
   bufferlist bl;
   bl.push_back(bp);
 
@@ -868,13 +877,20 @@ static int do_bench_write(librbd::Image& image, uint64_t io_size,
   utime_t last;
   unsigned ios = 0;
 
+  uint64_t size = 0;
+  image.size(&size);
+
   printf("  SEC       OPS   OPS/SEC   BYTES/SEC\n");
   uint64_t off;
   for (off = 0; off < io_bytes; off += io_size) {
     b.wait_for(io_threads - 1);
     uint64_t i = 0;
+    uint64_t real_off = off;
+    if (pattern == "rand") {
+      real_off = (rand() % (size / io_size)) * io_size;
+    }
     while (i < io_threads &&
-	   b.start_write(io_threads, off, io_size, bl)) {
+	   b.start_write(io_threads, real_off, io_size, bl)) {
       ++i;
       ++ios;
     }
@@ -1742,6 +1758,7 @@ int main(int argc, const char **argv)
   int pretty_format = 0;
   long long stripe_unit = 0, stripe_count = 0;
   long long bench_io_size = 4096, bench_io_threads = 16, bench_bytes = 1 << 30;
+  string bench_pattern = "seq";
 
   std::string val;
   std::ostringstream err;
@@ -1797,6 +1814,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_withlonglong(args, i, &bench_io_size, &err, "--io-size", (char*)NULL)) {
     } else if (ceph_argparse_withlonglong(args, i, &bench_io_threads, &err, "--io-threads", (char*)NULL)) {
     } else if (ceph_argparse_withlonglong(args, i, &bench_bytes, &err, "--io-total", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &bench_pattern, &err, "--io-pattern", (char*)NULL)) {
     } else if (ceph_argparse_withlonglong(args, i, &stripe_count, &err, "--stripe-count", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &val, "--path", (char*)NULL)) {
       path = strdup(val.c_str());
@@ -2441,7 +2459,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_BENCH_WRITE:
-    r = do_bench_write(image, bench_io_size, bench_io_threads, bench_bytes);
+    r = do_bench_write(image, bench_io_size, bench_io_threads, bench_bytes, bench_pattern);
     if (r < 0) {
       cerr << "bench-write failed: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
