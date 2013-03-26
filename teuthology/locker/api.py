@@ -29,7 +29,7 @@ class MachineLock:
         res = DB.update('machine',
                         where='locked = true AND name = $name AND locked_by = $user',
                         vars=dict(name=name, user=user),
-                        locked=False, locked_by=None, desc=None)
+                        locked=False, locked_by=None, description=None)
         assert res == 1, 'Failed to unlock machine {name}'.format(name=name)
         print user, 'unlocked', name
 
