@@ -246,10 +246,34 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
 	<< " failed";
     summary.push_back(make_pair(HEALTH_ERR, oss.str()));
     if (detail) {
-      for (set<int>::iterator p = failed.begin(); p != failed.end(); ++p) {
+      for (set<int>::const_iterator p = failed.begin(); p != failed.end(); ++p) {
 	std::ostringstream oss;
 	oss << "mds." << *p << " has failed";
 	detail->push_back(make_pair(HEALTH_ERR, oss.str()));
+      }
+    }
+  }
+
+  if (is_degraded()) {
+    summary.push_back(make_pair(HEALTH_WARN, "mds cluster is degraded"));
+    if (detail) {
+      detail->push_back(make_pair(HEALTH_WARN, "mds cluster is degraded"));
+      for (unsigned i=0; i< get_max_mds(); i++) {
+	if (!is_up(i))
+	  continue;
+	uint64_t gid = up.find(i)->second;
+	map<uint64_t,mds_info_t>::const_iterator info = mds_info.find(gid);
+	stringstream ss;
+	if (is_resolve(i))
+	  ss << "mds." << info->second.name << " at " << info->second.addr << " rank " << i << " is resolving";
+	if (is_replay(i))
+	  ss << "mds." << info->second.name << " at " << info->second.addr << " rank " << i << " is replaying journal";
+	if (is_rejoin(i))
+	  ss << "mds." << info->second.name << " at " << info->second.addr << " rank " << i << " is rejoining";
+	if (is_reconnect(i))
+	  ss << "mds." << info->second.name << " at " << info->second.addr << " rank " << i << " is reconnecting to clients";
+	if (ss.str().length())
+	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
       }
     }
   }
@@ -271,6 +295,7 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
       }
     }
   }
+
   if (!laggy.empty()) {
     std::ostringstream oss;
     oss << "mds " << laggy
