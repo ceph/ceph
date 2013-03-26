@@ -28,14 +28,15 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
     if user is None:
         user = teuthology.get_user()
     success, content, status = send_request('POST', _lock_url(ctx),
-                                    urllib.urlencode(dict(user=user, num=num, machinetype=machinetype)))
+                                    urllib.urlencode(dict(
+                user=user,
+                num=num,
+                machinetype=machinetype,
+                desc=description,
+                )))
     if success:
         machines = json.loads(content)
         log.debug('locked {machines}'.format(machines=', '.join(machines.keys())))
-        if description is not None:
-            log.debug('Setting locked machine descriptions to %s', description)
-            for m in machines.keys():
-                update_lock(ctx, m, description)
         return machines
     if status == 503:
         log.error('Insufficient nodes available to lock %d nodes.', num)
@@ -57,13 +58,10 @@ def lock(ctx, name, user=None):
 def unlock(ctx, name, user=None):
     if user is None:
         user = teuthology.get_user()
-    desc_success = update_lock(ctx, name, description='')
     success, _ , _ = send_request('DELETE', _lock_url(ctx) + '/' + name + '?' + \
                                   urllib.urlencode(dict(user=user)))
     if success:
         log.debug('unlocked %s', name)
-        if not desc_success:
-            log.warn('failed to remove description for %s', name)
     else:
         log.error('failed to unlock %s', name)
     return success

@@ -29,18 +29,20 @@ class MachineLock:
         res = DB.update('machine',
                         where='locked = true AND name = $name AND locked_by = $user',
                         vars=dict(name=name, user=user),
-                        locked=False, locked_by=None)
+                        locked=False, locked_by=None, desc=None)
         assert res == 1, 'Failed to unlock machine {name}'.format(name=name)
         print user, 'unlocked', name
 
     def POST(self, name):
         user = web.input('user')['user']
+        desc = web.input('desc')['desc']
         machine = load_machine(name)
         if machine.locked:
             raise web.Forbidden()
         res = DB.update('machine', where='name = $name AND locked = false',
                         vars=dict(name=name),
                         locked=True,
+                        description=desc,
                         locked_by=user,
                         locked_since=web.db.SQLLiteral('NOW()'))
         assert res == 1, 'Failed to lock machine {name}'.format(name=name)
@@ -77,6 +79,7 @@ class Lock:
 
     def POST(self):
         user = web.input('user')['user']
+        desc = web.input('desc')['desc']
         num = int(web.input('num')['num'])
         machinetype = dict(machinetype=(web.input(machinetype='plana')['machinetype']))
 
@@ -102,6 +105,7 @@ class Lock:
                                            where=where_cond,
                                            locked=True,
                                            locked_by=user,
+                                           description=desc,
                                            locked_since=web.db.SQLLiteral('NOW()'))
                     assert num_locked == num, 'Failed to lock machines'
             except:
