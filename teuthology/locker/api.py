@@ -35,7 +35,7 @@ class MachineLock:
 
     def POST(self, name):
         user = web.input('user')['user']
-        desc = web.input('desc')['desc']
+        desc = web.input(desc=None)['desc']
         machine = load_machine(name)
         if machine.locked:
             raise web.Forbidden()
@@ -79,7 +79,7 @@ class Lock:
 
     def POST(self):
         user = web.input('user')['user']
-        desc = web.input('desc')['desc']
+        desc = web.input(desc=None)['desc']
         num = int(web.input('num')['num'])
         machinetype = dict(machinetype=(web.input(machinetype='plana')['machinetype']))
 
