@@ -358,7 +358,6 @@ struct ObjectOperation {
           obj_list_snap_response_t resp;
 	  ::decode(resp, p);
 	  if (psnaps) {
-
             psnaps->clones.clear();
             for (vector<clone_info>::iterator ci = resp.clones.begin(); 
 		 ci != resp.clones.end(); 
@@ -373,6 +372,7 @@ struct ObjectOperation {
 
               psnaps->clones.push_back(clone);
             }
+	    psnaps->seq = resp.seq;
           }
           if (prval)
 	    *prval = 0;
