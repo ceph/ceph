@@ -285,3 +285,12 @@ void OpRequest::mark_event(const string &event)
   }
   tracker->mark_event(this, event);
 }
+
+void OpRequest::init_from_message()
+{
+  if (request->get_type() == CEPH_MSG_OSD_OP) {
+    reqid = static_cast<MOSDOp*>(request)->get_reqid();
+  } else if (request->get_type() == MSG_OSD_SUBOP) {
+    reqid = static_cast<MOSDSubOp*>(request)->reqid;
+  }
+}
