@@ -352,6 +352,9 @@ int FileStore::lfn_unlink(coll_t cid, const hobject_t& o,
 	assert(!m_filestore_fail_eio || r != -EIO);
 	return r;
       }
+      if (g_conf->filestore_debug_inject_read_err) {
+	debug_delete_obj(o);
+      }
     } else {
       /* Ensure that replay of this op doesn't result in the object_map
        * going away.
@@ -393,6 +396,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
 	g_conf->filestore_op_thread_suicide_timeout, &op_tp),
   flusher_queue_len(0), flusher_thread(this),
   logger(NULL),
+  read_error_lock("FileStore::read_error_lock"),
   m_filestore_btrfs_clone_range(g_conf->filestore_btrfs_clone_range),
   m_filestore_btrfs_snap (g_conf->filestore_btrfs_snap ),
   m_filestore_commit_timeout(g_conf->filestore_commit_timeout),
@@ -2723,7 +2727,12 @@ int FileStore::stat(coll_t cid, const hobject_t& oid, struct stat *st)
 	     << " = " << r
 	     << " (size " << st->st_size << ")" << dendl;
   }
-  return r;
+  if (g_conf->filestore_debug_inject_read_err &&
+      debug_mdata_eio(oid)) {
+    return -EIO;
+  } else {
+    return r;
+  }
 }
 
 int FileStore::read(coll_t cid, const hobject_t& oid, 
@@ -2761,7 +2770,12 @@ int FileStore::read(coll_t cid, const hobject_t& oid,
 
   dout(10) << "FileStore::read " << cid << "/" << oid << " " << offset << "~"
 	   << got << "/" << len << dendl;
-  return got;
+  if (g_conf->filestore_debug_inject_read_err &&
+      debug_data_eio(oid)) {
+    return -EIO;
+  } else {
+    return got;
+  }
 }
 
 int FileStore::fiemap(coll_t cid, const hobject_t& oid,
@@ -3776,6 +3790,43 @@ int FileStore::_fsetattrs(int fd, map<string, bufferptr> &aset)
   return 0;
 }
 
+// debug EIO injection
+void FileStore::inject_data_error(const hobject_t &oid) {
+  Mutex::Locker l(read_error_lock);
+  dout(10) << __func__ << ": init error on " << oid << dendl;
+  data_error_set.insert(oid);
+}
+void FileStore::inject_mdata_error(const hobject_t &oid) {
+  Mutex::Locker l(read_error_lock);
+  dout(10) << __func__ << ": init error on " << oid << dendl;
+  mdata_error_set.insert(oid);
+}
+void FileStore::debug_delete_obj(const hobject_t &oid) {
+  Mutex::Locker l(read_error_lock);
+  dout(10) << __func__ << ": clear error on " << oid << dendl;
+  data_error_set.erase(oid);
+  mdata_error_set.erase(oid);
+}
+bool FileStore::debug_data_eio(const hobject_t &oid) {
+  Mutex::Locker l(read_error_lock);
+  if (data_error_set.count(oid)) {
+    dout(10) << __func__ << ": inject error on " << oid << dendl;
+    return true;
+  } else {
+    return false;
+  }
+}
+bool FileStore::debug_mdata_eio(const hobject_t &oid) {
+  Mutex::Locker l(read_error_lock);
+  if (mdata_error_set.count(oid)) {
+    dout(10) << __func__ << ": inject error on " << oid << dendl;
+    return true;
+  } else {
+    return false;
+  }
+}
+
+
 // objects
 
 int FileStore::getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr &bp)
@@ -3817,7 +3868,12 @@ int FileStore::getattr(coll_t cid, const hobject_t& oid, const char *name, buffe
  out:
   dout(10) << "getattr " << cid << "/" << oid << " '" << name << "' = " << r << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
-  return r;
+  if (g_conf->filestore_debug_inject_read_err &&
+      debug_mdata_eio(oid)) {
+    return -EIO;
+  } else {
+    return r;
+  }
 }
 
 int FileStore::getattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset, bool user_only) 
@@ -3871,7 +3927,13 @@ int FileStore::getattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>&
  out:
   dout(10) << "getattrs " << cid << "/" << oid << " = " << r << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
-  return r;
+
+  if (g_conf->filestore_debug_inject_read_err &&
+      debug_mdata_eio(oid)) {
+    return -EIO;
+  } else {
+    return r;
+  }
 }
 
 int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset,
