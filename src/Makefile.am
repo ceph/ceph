@@ -561,7 +561,11 @@ endif
 ##  - The JNI library is here
 ##  - The Java source Makefile.am is in src/java
 if ENABLE_CEPHFS_JAVA
-libcephfs_jni_la_SOURCES = java/native/libcephfs_jni.cc
+libcephfs_jni_la_SOURCES = \
+	java/native/libcephfs_jni.cc \
+	java/native/ScopedLocalRef.h \
+	java/native/JniConstants.cpp \
+	java/native/JniConstants.h
 libcephfs_jni_la_LIBADD = libcephfs.la $(EXTRALIBS)
 libcephfs_jni_la_CPPFLAGS = $(JDK_CPPFLAGS)
 libcephfs_jni_la_CXXFLAGS = ${AM_CXXFLAGS}
