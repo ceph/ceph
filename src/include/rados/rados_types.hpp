@@ -19,6 +19,7 @@ struct clone_info_t {
 
 struct snap_set_t {
   std::vector<clone_info_t> clones;   // ascending
+  snap_t seq;   // newest snapid seen by the object
 };
 
 }
