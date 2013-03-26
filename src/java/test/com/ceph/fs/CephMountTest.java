@@ -22,9 +22,12 @@ package com.ceph.fs;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.util.UUID;
 import org.junit.*;
 import static org.junit.Assert.*;
+
+import com.ceph.crush.Bucket;
 
 /*
  * Coverage
@@ -952,5 +955,49 @@ public class CephMountTest {
   @Test(expected=IOException.class)
   public void test_get_file_pool_name_ebadf() throws Exception {
     String pool = mount.get_file_pool_name(-40);
+  }
+
+  @Test
+  public void test_get_file_extent() throws Exception {
+    int stripe_unit = 1<<18;
+    String path = makePath();
+    int fd = mount.open(path, CephMount.O_WRONLY|CephMount.O_CREAT, 0,
+        stripe_unit, 2, stripe_unit*2, null);
+
+    CephFileExtent e = mount.get_file_extent(fd, 0);
+    assertTrue(e.getOSDs().length > 0);
+
+    assertTrue(e.getOffset() == 0);
+    assertTrue(e.getLength() == stripe_unit);
+
+    e = mount.get_file_extent(fd, stripe_unit/2);
+    assertTrue(e.getOffset() == stripe_unit/2);
+    assertTrue(e.getLength() == stripe_unit/2);
+
+    e = mount.get_file_extent(fd, 3*stripe_unit/2-1);
+    assertTrue(e.getOffset() == 3*stripe_unit/2-1);
+    assertTrue(e.getLength() == stripe_unit/2+1);
+
+    e = mount.get_file_extent(fd, 3*stripe_unit/2+1);
+    assertTrue(e.getLength() == stripe_unit/2-1);
+
+    mount.close(fd);
+    mount.unlink(path);
+  }
+
+  @Test
+  public void test_get_osd_crush_location() throws Exception {
+    Bucket[] path = mount.get_osd_crush_location(0);
+    assertTrue(path.length > 0);
+    for (Bucket b : path) {
+      assertTrue(b.getType().length() > 0);
+      assertTrue(b.getName().length() > 0);
+    }
+  }
+
+  @Test
+  public void test_get_osd_address() throws Exception {
+    InetAddress addr = mount.get_osd_address(0);
+    assertTrue(addr.getHostAddress().length() > 0);
   }
 }

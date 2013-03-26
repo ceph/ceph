@@ -23,7 +23,11 @@
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/un.h>
 #include <jni.h>
+
+#include "ScopedLocalRef.h"
+#include "JniConstants.h"
 
 #include "include/cephfs/libcephfs.h"
 #include "common/dout.h"
@@ -34,6 +38,7 @@
 
 #define CEPH_STAT_CP "com/ceph/fs/CephStat"
 #define CEPH_STAT_VFS_CP "com/ceph/fs/CephStatVFS"
+#define CEPH_FILE_EXTENT_CP "com/ceph/fs/CephFileExtent"
 #define CEPH_MOUNT_CP "com/ceph/fs/CephMount"
 #define CEPH_NOTMOUNTED_CP "com/ceph/fs/CephNotMountedException"
 #define CEPH_FILEEXISTS_CP "com/ceph/fs/CephFileAlreadyExistsException"
@@ -149,6 +154,10 @@ static jfieldID cephstatvfs_namemax_fid;
 /* Cached field IDs for com.ceph.fs.CephMount */
 static jfieldID cephmount_instance_ptr_fid;
 
+/* Cached field IDs for com.ceph.fs.CephFileExtent */
+static jclass cephfileextent_cls;
+static jmethodID cephfileextent_ctor_fid;
+
 /*
  * Exception throwing helper. Adapted from Apache Hadoop header
  * org_apache_hadoop.h by adding the do {} while (0) construct.
@@ -260,6 +269,7 @@ static void setup_field_ids(JNIEnv *env, jclass clz)
 {
 	jclass cephstat_cls;
 	jclass cephstatvfs_cls;
+	jclass tmp_cephfileextent_cls;
 
 /*
  * Get a fieldID from a class with a specific type
@@ -311,6 +321,21 @@ static void setup_field_ids(JNIEnv *env, jclass clz)
 	GETFID(cephstatvfs, files, J);
 	GETFID(cephstatvfs, fsid, J);
 	GETFID(cephstatvfs, namemax, J);
+
+	/* Cache CephFileExtent fields */
+
+	tmp_cephfileextent_cls = env->FindClass(CEPH_FILE_EXTENT_CP);
+	if (!tmp_cephfileextent_cls)
+		return;
+
+	cephfileextent_cls = (jclass)env->NewGlobalRef(tmp_cephfileextent_cls);
+	env->DeleteLocalRef(tmp_cephfileextent_cls);
+
+	cephfileextent_ctor_fid = env->GetMethodID(cephfileextent_cls, "<init>", "(JJ[I)V");
+	if (!cephfileextent_ctor_fid)
+		return;
+
+  JniConstants::init(env);
 
 #undef GETFID
 
@@ -2626,4 +2651,293 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1get_1pool_1repli
 	ldout(cct, 10) << "jni: get_pool_replication: ret " << ret << dendl;
 
 	return ret;
+}
+
+/*
+ * Class:     com_ceph_fs_CephMount
+ * Method:    native_ceph_get_file_extent_osds
+ * Signature: (JIJ)Lcom/ceph/fs/CephFileExtent;
+ */
+JNIEXPORT jobject JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1get_1file_1extent_1osds
+  (JNIEnv *env, jclass clz, jlong mntp, jint fd, jlong off)
+{
+  struct ceph_mount_info *cmount = get_ceph_mount(mntp);
+  CephContext *cct = ceph_get_mount_context(cmount);
+  jobject extent = NULL;
+  int ret, nosds, *osds = NULL;
+  jintArray osd_array;
+  loff_t len;
+
+	CHECK_MOUNTED(cmount, NULL);
+
+	ldout(cct, 10) << "jni: get_file_extent_osds: fd " << fd << " off " << off << dendl;
+
+  for (;;) {
+    /* get pg size */
+    ret = ceph_get_file_extent_osds(cmount, fd, off, NULL, NULL, 0);
+    if (ret < 0)
+      break;
+
+    /* alloc osd id array */
+    if (osds)
+      delete [] osds;
+    nosds = ret;
+    osds = new int[nosds];
+
+    /* get osd ids */
+    ret = ceph_get_file_extent_osds(cmount, fd, off, &len, osds, nosds);
+    if (ret == -ERANGE)
+      continue;
+    else
+      break;
+  }
+
+	ldout(cct, 10) << "jni: get_file_extent_osds: ret " << ret << dendl;
+
+  if (ret < 0) {
+    handle_error(env, ret);
+    goto out;
+  }
+
+  nosds = ret;
+
+  osd_array = env->NewIntArray(nosds);
+  if (!osd_array)
+    goto out;
+
+  env->SetIntArrayRegion(osd_array, 0, nosds, osds);
+  if (env->ExceptionOccurred())
+    goto out;
+
+  extent = env->NewObject(cephfileextent_cls, cephfileextent_ctor_fid, off, len, osd_array);
+  if (!extent)
+    goto out;
+
+out:
+  if (osds)
+    delete [] osds;
+
+  return extent;
+}
+
+/*
+ * Class:     com_ceph_fs_CephMount
+ * Method:    native_ceph_get_osd_crush_location
+ * Signature: (JI)[Ljava/lang/String;
+ */
+JNIEXPORT jobjectArray JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1get_1osd_1crush_1location
+  (JNIEnv *env, jclass clz, jlong j_mntp, jint osdid)
+{
+	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
+	CephContext *cct = ceph_get_mount_context(cmount);
+  jobjectArray path = NULL;
+  vector<string> str_path;
+	int ret, bufpos, buflen = 0;
+  char *buf = NULL;
+
+	CHECK_MOUNTED(cmount, NULL);
+
+  ldout(cct, 10) << "jni: osd loc: osd " << osdid << dendl;
+
+  for (;;) {
+    /* get length of the location path */
+    ret = ceph_get_osd_crush_location(cmount, osdid, NULL, 0);
+    if (ret < 0)
+      break;
+
+    /* alloc path buffer */
+    if (buf)
+      delete [] buf;
+    buflen = ret;
+    buf = new char[buflen+1];
+    memset(buf, 0, buflen*sizeof(*buf));
+
+    /* empty path */
+    if (buflen == 0)
+      break;
+
+    /* get the path */
+    ret = ceph_get_osd_crush_location(cmount, osdid, buf, buflen);
+    if (ret == -ERANGE)
+      continue;
+    else
+      break;
+  }
+
+  ldout(cct, 10) << "jni: osd loc: osd " << osdid << " ret " << ret << dendl;
+
+  if (ret < 0) {
+    handle_error(env, ret);
+    goto out;
+  }
+
+  bufpos = 0;
+  while (bufpos < ret) {
+    string type(buf + bufpos);
+    bufpos += type.size() + 1;
+    string name(buf + bufpos);
+    bufpos += name.size() + 1;
+    str_path.push_back(type);
+    str_path.push_back(name);
+  }
+
+  path = env->NewObjectArray(str_path.size(), env->FindClass("java/lang/String"), NULL);
+  if (!path)
+    goto out;
+
+  for (unsigned i = 0; i < str_path.size(); i++) {
+    jstring ent = env->NewStringUTF(str_path[i].c_str());
+    if (!ent)
+      goto out;
+    env->SetObjectArrayElement(path, i, ent);
+    if (env->ExceptionOccurred())
+      goto out;
+    env->DeleteLocalRef(ent);
+  }
+
+out:
+  if (buf)
+    delete [] buf;
+
+  return path;
+}
+
+/*
+ * sockaddrToInetAddress uses with the following license, and is adapted for
+ * use in this project by using Ceph JNI exception utilities.
+ *
+ * ----
+ *
+ * Copyright (C) 2010 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+jobject sockaddrToInetAddress(JNIEnv* env, const sockaddr_storage& ss, jint* port) {
+    // Convert IPv4-mapped IPv6 addresses to IPv4 addresses.
+    // The RI states "Java will never return an IPv4-mapped address".
+    const sockaddr_in6& sin6 = reinterpret_cast<const sockaddr_in6&>(ss);
+    if (ss.ss_family == AF_INET6 && IN6_IS_ADDR_V4MAPPED(&sin6.sin6_addr)) {
+        // Copy the IPv6 address into the temporary sockaddr_storage.
+        sockaddr_storage tmp;
+        memset(&tmp, 0, sizeof(tmp));
+        memcpy(&tmp, &ss, sizeof(sockaddr_in6));
+        // Unmap it into an IPv4 address.
+        sockaddr_in& sin = reinterpret_cast<sockaddr_in&>(tmp);
+        sin.sin_family = AF_INET;
+        sin.sin_port = sin6.sin6_port;
+        memcpy(&sin.sin_addr.s_addr, &sin6.sin6_addr.s6_addr[12], 4);
+        // Do the regular conversion using the unmapped address.
+        return sockaddrToInetAddress(env, tmp, port);
+    }
+
+    const void* rawAddress;
+    size_t addressLength;
+    int sin_port = 0;
+    int scope_id = 0;
+    if (ss.ss_family == AF_INET) {
+        const sockaddr_in& sin = reinterpret_cast<const sockaddr_in&>(ss);
+        rawAddress = &sin.sin_addr.s_addr;
+        addressLength = 4;
+        sin_port = ntohs(sin.sin_port);
+    } else if (ss.ss_family == AF_INET6) {
+        const sockaddr_in6& sin6 = reinterpret_cast<const sockaddr_in6&>(ss);
+        rawAddress = &sin6.sin6_addr.s6_addr;
+        addressLength = 16;
+        sin_port = ntohs(sin6.sin6_port);
+        scope_id = sin6.sin6_scope_id;
+    } else if (ss.ss_family == AF_UNIX) {
+        const sockaddr_un& sun = reinterpret_cast<const sockaddr_un&>(ss);
+        rawAddress = &sun.sun_path;
+        addressLength = strlen(sun.sun_path);
+    } else {
+        // We can't throw SocketException. We aren't meant to see bad addresses, so seeing one
+        // really does imply an internal error.
+        //jniThrowExceptionFmt(env, "java/lang/IllegalArgumentException",
+        //                     "sockaddrToInetAddress unsupported ss_family: %i", ss.ss_family);
+        cephThrowIllegalArg(env, "sockaddrToInetAddress unsupposed ss_family");
+        return NULL;
+    }
+    if (port != NULL) {
+        *port = sin_port;
+    }
+
+    ScopedLocalRef<jbyteArray> byteArray(env, env->NewByteArray(addressLength));
+    if (byteArray.get() == NULL) {
+        return NULL;
+    }
+    env->SetByteArrayRegion(byteArray.get(), 0, addressLength,
+            reinterpret_cast<const jbyte*>(rawAddress));
+
+    if (ss.ss_family == AF_UNIX) {
+        // Note that we get here for AF_UNIX sockets on accept(2). The unix(7) man page claims
+        // that the peer's sun_path will contain the path, but in practice it doesn't, and the
+        // peer length is returned as 2 (meaning only the sun_family field was set).
+        //
+        // Ceph Note: this isn't supported. inetUnixAddress appears to just be
+        // something in Dalvik/Android stuff.
+        cephThrowInternal(env, "OSD address should never be a UNIX socket");
+        return NULL;
+        //static jmethodID ctor = env->GetMethodID(JniConstants::inetUnixAddressClass, "<init>", "([B)V");
+        //return env->NewObject(JniConstants::inetUnixAddressClass, ctor, byteArray.get());
+    }
+
+    if (addressLength == 4) {
+      static jmethodID getByAddressMethod = env->GetStaticMethodID(JniConstants::inetAddressClass,
+          "getByAddress", "(Ljava/lang/String;[B)Ljava/net/InetAddress;");
+      if (getByAddressMethod == NULL) {
+        return NULL;
+      }
+      return env->CallStaticObjectMethod(JniConstants::inetAddressClass, getByAddressMethod,
+          NULL, byteArray.get());
+    } else if (addressLength == 16) {
+      static jmethodID getByAddressMethod = env->GetStaticMethodID(JniConstants::inet6AddressClass,
+          "getByAddress", "(Ljava/lang/String;[BI)Ljava/net/Inet6Address;");
+      if (getByAddressMethod == NULL) {
+        return NULL;
+      }
+      return env->CallStaticObjectMethod(JniConstants::inet6AddressClass, getByAddressMethod,
+          NULL, byteArray.get(), scope_id);
+    } else {
+      abort();
+      return NULL;
+    }
+}
+
+/*
+ * Class:     com_ceph_fs_CephMount
+ * Method:    native_ceph_get_osd_addr
+ * Signature: (JI)Ljava/net/InetAddress;
+ */
+JNIEXPORT jobject JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1get_1osd_1addr
+  (JNIEnv *env, jclass clz, jlong j_mntp, jint osd)
+{
+	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
+	CephContext *cct = ceph_get_mount_context(cmount);
+  struct sockaddr_storage addr;
+  int ret;
+
+	CHECK_MOUNTED(cmount, NULL);
+
+  ldout(cct, 10) << "jni: get_osd_addr: osd " << osd << dendl;
+
+  ret = ceph_get_osd_addr(cmount, osd, &addr);
+
+  ldout(cct, 10) << "jni: get_osd_addr: ret " << ret << dendl;
+
+  if (ret < 0) {
+    handle_error(env, ret);
+    return NULL;
+  }
+
+  return sockaddrToInetAddress(env, addr, NULL);
 }
