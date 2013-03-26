@@ -1256,7 +1256,11 @@ void ReplicatedPG::do_backfill(OpRequestRef op)
       assert(g_conf->osd_kill_backfill_at != 2);
 
       info.last_backfill = m->last_backfill;
-      info.stats.stats = m->stats;
+      if (m->compat_stat_sum) {
+	info.stats.stats = m->stats.stats; // Previously, we only sent sum
+      } else {
+	info.stats = m->stats;
+      }
 
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       write_info(*t);
@@ -6980,7 +6984,7 @@ int ReplicatedPG::recover_backfill(int max)
       // Use default priority here, must match sub_op priority
     }
     m->last_backfill = bound;
-    m->stats = pinfo.stats.stats;
+    m->stats = pinfo.stats;
     osd->send_message_osd_cluster(backfill_target, m, get_osdmap()->get_epoch());
   }
 
