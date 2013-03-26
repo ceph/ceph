@@ -25,9 +25,6 @@
 #include <tr1/memory>
 #include "common/TrackedOp.h"
 #include "osd/osd_types.h"
-// FIXME: augh, get these outta here!
-#include "messages/MOSDOp.h"
-#include "messages/MOSDSubOp.h"
 
 class OpTracker;
 class OpHistory {
@@ -101,15 +98,13 @@ public:
     TRef retval(new T(ref, this),
                 RemoveOnDelete(this));
 
-    if (ref->get_type() == CEPH_MSG_OSD_OP) {
-      retval->reqid = static_cast<MOSDOp*>(ref)->get_reqid();
-    } else if (ref->get_type() == MSG_OSD_SUBOP) {
-      retval->reqid = static_cast<MOSDSubOp*>(ref)->reqid;
-    }
     _mark_event(retval.get(), "header_read", ref->get_recv_stamp());
     _mark_event(retval.get(), "throttled", ref->get_throttle_stamp());
     _mark_event(retval.get(), "all_read", ref->get_recv_complete_stamp());
     _mark_event(retval.get(), "dispatched", ref->get_dispatch_stamp());
+
+    retval->init_from_message();
+
     return retval;
   }
 };
@@ -238,6 +233,8 @@ public:
   osd_reqid_t get_reqid() const {
     return reqid;
   }
+
+  void init_from_message();
 };
 
 typedef std::tr1::shared_ptr<OpRequest> OpRequestRef;
