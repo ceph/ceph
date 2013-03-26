@@ -257,7 +257,7 @@ public:
   int get_num_failed_mds() {
     return failed.size();
   }
-  unsigned get_num_mds(int state) {
+  unsigned get_num_mds(int state) const {
     unsigned n = 0;
     for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
@@ -383,41 +383,51 @@ public:
 		  list<pair<health_status_t,string> > *detail) const;
 
   // mds states
-  bool is_down(int m) { return up.count(m) == 0; }
-  bool is_up(int m) { return up.count(m); }
-  bool is_in(int m) { return up.count(m) || failed.count(m); }
-  bool is_out(int m) { return !is_in(m); }
+  bool is_down(int m) const { return up.count(m) == 0; }
+  bool is_up(int m) const { return up.count(m); }
+  bool is_in(int m) const { return up.count(m) || failed.count(m); }
+  bool is_out(int m) const { return !is_in(m); }
 
-  bool is_failed(int m)    { return failed.count(m); }
-  bool is_stopped(int m)    { return stopped.count(m); }
+  bool is_failed(int m) const   { return failed.count(m); }
+  bool is_stopped(int m) const    { return stopped.count(m); }
 
-  bool is_dne(int m)      { return in.count(m) == 0; }
-  bool is_dne_gid(uint64_t gid)      { return mds_info.count(gid) == 0; }
+  bool is_dne(int m) const      { return in.count(m) == 0; }
+  bool is_dne_gid(uint64_t gid) const     { return mds_info.count(gid) == 0; }
 
-  int get_state(int m) { return up.count(m) ? mds_info[up[m]].state : 0; }
-  int get_state_gid(uint64_t gid) { return mds_info.count(gid) ? mds_info[gid].state : 0; }
+  int get_state(int m) const {
+    map<int32_t,uint64_t>::const_iterator u = up.find(m);
+    if (u == up.end())
+      return 0;
+    return get_state_gid(u->second);
+  }
+  int get_state_gid(uint64_t gid) const {
+    map<uint64_t,mds_info_t>::const_iterator i = mds_info.find(gid);
+    if (i == mds_info.end())
+      return 0;
+    return i->second.state;
+  }
 
   mds_info_t& get_info(int m) { assert(up.count(m)); return mds_info[up[m]]; }
   mds_info_t& get_info_gid(uint64_t gid) { assert(mds_info.count(gid)); return mds_info[gid]; }
 
-  bool is_boot(int m)  { return get_state(m) == STATE_BOOT; }
-  bool is_creating(int m) { return get_state(m) == STATE_CREATING; }
-  bool is_starting(int m) { return get_state(m) == STATE_STARTING; }
-  bool is_replay(int m)    { return get_state(m) == STATE_REPLAY; }
-  bool is_resolve(int m)   { return get_state(m) == STATE_RESOLVE; }
-  bool is_reconnect(int m) { return get_state(m) == STATE_RECONNECT; }
-  bool is_rejoin(int m)    { return get_state(m) == STATE_REJOIN; }
-  bool is_clientreplay(int m)   { return get_state(m) == STATE_CLIENTREPLAY; }
-  bool is_active(int m)   { return get_state(m) == STATE_ACTIVE; }
-  bool is_stopping(int m) { return get_state(m) == STATE_STOPPING; }
-  bool is_active_or_stopping(int m) {
+  bool is_boot(int m) const { return get_state(m) == STATE_BOOT; }
+  bool is_creating(int m) const { return get_state(m) == STATE_CREATING; }
+  bool is_starting(int m) const { return get_state(m) == STATE_STARTING; }
+  bool is_replay(int m) const   { return get_state(m) == STATE_REPLAY; }
+  bool is_resolve(int m) const  { return get_state(m) == STATE_RESOLVE; }
+  bool is_reconnect(int m) const { return get_state(m) == STATE_RECONNECT; }
+  bool is_rejoin(int m) const   { return get_state(m) == STATE_REJOIN; }
+  bool is_clientreplay(int m) const { return get_state(m) == STATE_CLIENTREPLAY; }
+  bool is_active(int m) const  { return get_state(m) == STATE_ACTIVE; }
+  bool is_stopping(int m) const { return get_state(m) == STATE_STOPPING; }
+  bool is_active_or_stopping(int m) const {
     return is_active(m) || is_stopping(m);
   }
-  bool is_clientreplay_or_active_or_stopping(int m) {
+  bool is_clientreplay_or_active_or_stopping(int m) const {
     return is_clientreplay(m) || is_active(m) || is_stopping(m);
   }
 
-  bool is_followable(int m) {
+  bool is_followable(int m) const {
     return (is_resolve(m) ||
 	    is_replay(m) ||
 	    is_rejoin(m) ||
@@ -426,14 +436,19 @@ public:
 	    is_stopping(m));
   }
 
-  bool is_laggy_gid(uint64_t gid) { return mds_info.count(gid) && mds_info[gid].laggy(); }
+  bool is_laggy_gid(uint64_t gid) const {
+    if (!mds_info.count(gid))
+      return false;
+    map<uint64_t,mds_info_t>::const_iterator p = mds_info.find(gid);
+    return p->second.laggy();
+  }
 
 
   // cluster states
-  bool is_full() {
+  bool is_full() const {
     return in.size() >= max_mds;
   }
-  bool is_degraded() {   // degraded = some recovery in process.  fixes active membership and recovery_set.
+  bool is_degraded() const {   // degraded = some recovery in process.  fixes active membership and recovery_set.
     return 
       get_num_mds(STATE_REPLAY) + 
       get_num_mds(STATE_RESOLVE) + 
