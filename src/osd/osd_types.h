@@ -2183,15 +2183,21 @@ WRITE_CLASS_ENCODER(clone_info)
  */
 struct obj_list_snap_response_t {
   vector<clone_info> clones;   // ascending
+  snapid_t seq;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(clones, bl);
+    ::encode(seq, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(clones, bl);
+    if (struct_v >= 2)
+      ::decode(seq, bl);
+    else
+      seq = CEPH_NOSNAP;
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const {
@@ -2201,6 +2207,7 @@ struct obj_list_snap_response_t {
       p->dump(f);
       f->close_section();
     }
+    f->dump_unsigned("seq", seq);
     f->close_section();
   }
   static void generate_test_instances(list<obj_list_snap_response_t*>& o) {
@@ -2218,6 +2225,7 @@ struct obj_list_snap_response_t {
     cl.overlap.clear();
     cl.size = 32768;
     o.back()->clones.push_back(cl);
+    o.back()->seq = 123;
   }
 };
 
