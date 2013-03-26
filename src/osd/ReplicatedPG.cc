@@ -2351,6 +2351,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
           resp.clones.push_back(ci);
         }
+	resp.seq = ssc->snapset.seq;
 
         resp.encode(osd_op.outdata);
         result = 0;
