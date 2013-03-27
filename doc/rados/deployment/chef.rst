@@ -182,7 +182,7 @@ The node configuration should appear in your text editor. Change the
 ``chef_environment`` value to ``Ceph`` (or whatever name you set for your
 Ceph environment). 
 
-In the ``run_list``, add ``"recipe[ceph::apt]",`` to all nodes as 
+In the ``run_list``, add ``"recipe[ceph::repo]",`` to all nodes as
 the first setting, so that Chef can install or update the necessary packages. 
 Then, add at least one of:: 
 
@@ -204,7 +204,7 @@ key to the host name for the node. ::
     		]
   		},
  		 "run_list": [
-			"recipe[ceph::apt]",
+			"recipe[ceph::repo]",
 			"role[ceph-mon]",
 			"role[ceph-mds]"
   		]
