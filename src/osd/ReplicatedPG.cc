@@ -837,6 +837,42 @@ void ReplicatedPG::do_op(OpRequestRef op)
     return;
   }
 
+  // any SNAPDIR op needs to hvae all clones present.  treat them as
+  // src_obc's so that we track references properly and clean up later.
+  if (m->get_snapid() == CEPH_SNAPDIR) {
+    for (vector<snapid_t>::iterator p = obc->ssc->snapset.clones.begin();
+	 p != obc->ssc->snapset.clones.end();
+	 ++p) {
+      object_locator_t src_oloc;
+      get_src_oloc(m->get_oid(), m->get_object_locator(), src_oloc);
+      hobject_t clone_oid = obc->obs.oi.soid;
+      clone_oid.snap = *p;
+      if (!src_obc.count(clone_oid)) {
+	ObjectContext *sobc;
+	snapid_t ssnapid;
+
+	int r = find_object_context(clone_oid, src_oloc, &sobc, false, &ssnapid);
+	if (r == -EAGAIN) {
+	  // missing the specific snap we need; requeue and wait.
+	  hobject_t wait_oid(clone_oid.oid, src_oloc.key, ssnapid, m->get_pg().ps(),
+			     info.pgid.pool());
+	  wait_for_missing_object(wait_oid, op);
+	} else if (r) {
+	  osd->reply_op_error(op, r);
+	} else {
+	  dout(10) << " clone_oid " << clone_oid << " obc " << src_obc << dendl;
+	  src_obc[clone_oid] = sobc;
+	  continue;
+	}
+	put_object_contexts(src_obc);
+	put_object_context(obc);
+	return;
+      } else {
+	continue;
+      }
+    }
+  }
+
   op->mark_started();
 
   const hobject_t& soid = obc->obs.oi.soid;
