@@ -63,6 +63,7 @@ public:
   struct AioCompletion {
     void *pc;
     AioCompletion(void *cb_arg, callback_t complete_cb);
+    bool is_complete();
     int wait_for_complete();
     ssize_t get_return_value();
     void release();
