@@ -584,9 +584,10 @@ location, all you need is the object name and the pool name. For example::
    
 		rados -p data ls
    
-	Now, identify the object location:: 
-   
-		ceph osd map test-object-1 --pool=data
+	Now, identify the object location::	
+
+		ceph osd map {pool-name} {object-name}
+		ceph osd map data test-object-1
    
 	Ceph should output the object's location. For example:: 
    
