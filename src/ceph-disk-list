@@ -1,0 +1,3 @@
+#!/bin/sh
+dir=`dirname $0`
+$dir/ceph-disk list $*

@@ -31,6 +31,7 @@ sbin_SCRIPTS = \
 	ceph-disk \
 	ceph-disk-prepare \
 	ceph-disk-activate \
+        ceph-disk-list \
 	ceph-create-keys \
 	mount.fuse.ceph
 bin_SCRIPTS = ceph-run $(srcdir)/ceph-clsinfo ceph-debugpack ceph-rbdnamer
@@ -1149,6 +1150,7 @@ EXTRA_DIST += \
 	ceph-disk \
 	ceph-disk-prepare \
 	ceph-disk-activate \
+        ceph-disk-list \
 	ceph-create-keys \
 	mount.fuse.ceph
 
