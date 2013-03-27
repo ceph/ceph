@@ -1,0 +1,23 @@
+roles:
+- - mon.a
+  - mds.a
+  - osd.0
+  - osd.1
+- - mon.b
+  - mon.c
+  - osd.2
+  - osd.3
+- - client.0
+tasks:
+- install:
+     branch: bobtail
+- ceph:
+- install.upgrade:
+     all:
+        branch: master
+- ceph.restart: [mds.a, mon.a, mon.b, mon.c, osd.0, osd.1, osd.2, osd.3]
+- ceph-fuse:
+- workunit:
+     clients:
+        client.0:
+           - suites/blogbench.sh
