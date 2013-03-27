@@ -54,7 +54,6 @@ private:
   snapid_t snap_seq;
   vector<snapid_t> snaps;
   bool check_rmw(int flag) {
-    assert(rmw_flags);
     return rmw_flags & flag;
   }
 
