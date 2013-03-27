@@ -1230,8 +1230,8 @@ void RGWPutACLs_ObjStore_S3::send_response()
 
 void RGWGetCORS_ObjStore_S3::send_response()
 {
-  if(ret){
-    if(ret == -ENOENT) 
+  if (ret) {
+    if (ret == -ENOENT) 
       set_req_state_err(s, ERR_NOT_FOUND);
     else 
       set_req_state_err(s, ret);
@@ -1239,7 +1239,9 @@ void RGWGetCORS_ObjStore_S3::send_response()
   dump_errno(s);
   end_header(s, "application/xml");
   dump_start(s);
-  if(!ret)s->cio->write(cors.c_str(), cors.size());
+  if (!ret) {
+    s->cio->write(cors.c_str(), cors.size());
+  }
 }
 
 void RGWPutCORS_ObjStore_S3::send_response()
@@ -1270,11 +1272,11 @@ void RGWOptionsCORS_ObjStore_S3::send_response()
    *ENOENT means, there is no match of the Origin in the list of CORSRule
    *ENOTSUPP means, the HTTP_METHOD is not supported
    */
-  if(ret == -ENOENT)
+  if (ret == -ENOENT)
     ret = -EACCES;
-  if(ret != -EACCES){
+  if (ret != -EACCES) {
     get_response_params(hdrs, exp_hdrs, &max_age);
-  }else{
+  } else {
     set_req_state_err(s, ret);
     dump_errno(s);
     end_header(s);
@@ -1541,7 +1543,7 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_get()
     return new RGWGetBucketLogging_ObjStore_S3;
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
-  } else if (is_cors_op()){
+  } else if (is_cors_op()) {
     return new RGWGetCORS_ObjStore_S3;
   } else if (s->args.exists("uploads")) {
     return new RGWListBucketMultiparts_ObjStore_S3;
@@ -1565,7 +1567,7 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_put()
     return NULL;
   if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_S3;
-  } else if (is_cors_op()){
+  } else if (is_cors_op()) {
     return new RGWPutCORS_ObjStore_S3;
   } 
   return new RGWCreateBucket_ObjStore_S3;
@@ -1573,7 +1575,7 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_put()
 
 RGWOp *RGWHandler_ObjStore_Bucket_S3::op_delete()
 {
-  if(is_cors_op()) {
+  if (is_cors_op()) {
     return new RGWDeleteCORS_ObjStore_S3;
   }
   return new RGWDeleteBucket_ObjStore_S3;
