@@ -1504,7 +1504,7 @@ void MDS::active_start()
 void MDS::recovery_done()
 {
   dout(1) << "recovery_done -- successful recovery!" << dendl;
-  assert(is_clientreplay() || is_active() || is_clientreplay());
+  assert(is_clientreplay() || is_active());
   
   // kick anchortable (resent AGREEs)
   if (mdsmap->get_tableserver() == whoami) {
