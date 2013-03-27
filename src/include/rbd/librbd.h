@@ -31,7 +31,7 @@ extern "C" {
 
 #define LIBRBD_VER_MAJOR 0
 #define LIBRBD_VER_MINOR 1
-#define LIBRBD_VER_EXTRA 7
+#define LIBRBD_VER_EXTRA 8
 
 #define LIBRBD_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 
