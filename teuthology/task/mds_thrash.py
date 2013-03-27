@@ -136,6 +136,7 @@ class MDSThrasher:
       # wait for mon to report killed mds as crashed
       status = {}
       last_laggy_since = None
+      itercount = 0
       while True:
         failed = self.manager.get_mds_status_all()['failed']
         status = self.manager.get_mds_status(active_mds)
@@ -147,6 +148,9 @@ class MDSThrasher:
         if any([(f == active_mds) for f in failed]):
             break
         self.log('waiting till mds map indicates mds.{_id} is laggy/crashed, in failed state, or mds.{_id} is removed from mdsmap'.format(_id=active_mds))
+        itercount = itercount + 1
+        if itercount > 10:
+            self.log('mds map: {status}'.format(status=self.manager.get_mds_status_all()))
         time.sleep(2)
       if last_laggy_since:
         self.log('mds.{_id} reported laggy/crashed since: {since}'.format(_id=active_mds, since=last_laggy_since))
@@ -156,6 +160,7 @@ class MDSThrasher:
       # wait for a standby mds to takeover and become active
       takeover_mds = None
       takeover_rank = None
+      itercount = 0
       while True:
         statuses = [self.manager.get_mds_status(m) for m in self.failure_group]
         actives = filter(lambda s: s and s['state'] == 'up:active', statuses)
@@ -164,6 +169,9 @@ class MDSThrasher:
             takeover_mds = actives[0]['name']
             takeover_rank = actives[0]['rank']
             break
+        itercount = itercount + 1
+        if itercount > 10:
+            self.log('mds map: {status}'.format(status=self.manager.get_mds_status_all()))
 
       self.log('New active mds is mds.{_id}'.format(_id=takeover_mds))
 
