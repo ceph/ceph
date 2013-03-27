@@ -1,5 +1,5 @@
 tasks:
 - qemu:
     all:
-      test: https://raw.github.com/ceph/ceph/master/qa/workunits/suites/iozone.sh
+      test: https://ceph.com/git/?p=ceph.git;a=blob_plain;f=qa/workunits/suites/iozone.sh
       image_size: 20480

@@ -7,8 +7,6 @@ tasks:
       client:
         debug ms: 1
         rgw gc obj min wait: 15
-        rgw gc processor max time: 30
-        rgw gc processor period: 30
       osd:
         debug ms: 1
         debug objclass : 20
