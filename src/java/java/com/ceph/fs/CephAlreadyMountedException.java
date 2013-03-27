@@ -26,6 +26,8 @@ import java.io.IOException;
  */
 public class CephAlreadyMountedException extends IOException {
 
+  private static final long serialVersionUID = 1L;
+
   /**
    * Construct CephAlreadyMountedException.
    */
