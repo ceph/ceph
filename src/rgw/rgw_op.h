@@ -563,10 +563,10 @@ protected:
 
 public:
   RGWOptionsCORS() : ret(0), rule(NULL), origin(NULL),
-                     req_hdrs(NULL), req_meth(NULL){
+                     req_hdrs(NULL), req_meth(NULL) {
   }
 
-  int verify_permission(){return 0;}
+  int verify_permission() {return 0;}
   int validate_cors_request();
   void execute();
   void get_response_params(string& allowed_hdrs, string& exp_hdrs, unsigned *max_age);

@@ -371,10 +371,10 @@ int RGWPutMetadata_ObjStore_SWIFT::get_params()
     const char *allow_headers = s->env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_ALLOW_HEADERS");
     const char *expose_headers = s->env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_EXPOSE_HEADERS");
     const char *max_age = s->env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_MAX_AGE");
-    if(allow_origins){
+    if (allow_origins) {
       RGWCORSConfiguration_SWIFT *swift_cors = new RGWCORSConfiguration_SWIFT;
       int r = swift_cors->create_update(allow_origins, allow_headers, expose_headers, max_age);
-      if (r < 0){
+      if (r < 0) {
         dout(0) << "Error creating/updating the cors configuration" << dendl;
         delete swift_cors;
         return r;
@@ -540,11 +540,11 @@ void RGWOptionsCORS_ObjStore_SWIFT::send_response()
    *ENOENT means, there is no match of the Origin in the list of CORSRule
    *ENOTSUPP means, the HTTP_METHOD is not supported
    */
-  if(ret == -ENOENT)
+  if (ret == -ENOENT)
     ret = -EACCES;
-  if(ret != -EACCES){
+  if (ret != -EACCES) {
     get_response_params(hdrs, exp_hdrs, &max_age);
-  }else{
+  } else {
     set_req_state_err(s, ret);
     dump_errno(s);
     end_header(s);

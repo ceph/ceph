@@ -30,8 +30,8 @@ using namespace std;
 class RGWCORSRule_S3 : public RGWCORSRule, public XMLObj
 {
   public:
-    RGWCORSRule_S3(){}
-    ~RGWCORSRule_S3(){}
+    RGWCORSRule_S3() {}
+    ~RGWCORSRule_S3() {}
     
     bool xml_end(const char *el);
     void to_xml(XMLFormatter& f);
@@ -40,8 +40,8 @@ class RGWCORSRule_S3 : public RGWCORSRule, public XMLObj
 class RGWCORSConfiguration_S3 : public RGWCORSConfiguration, public XMLObj
 {
   public:
-    RGWCORSConfiguration_S3(){}
-    ~RGWCORSConfiguration_S3(){}
+    RGWCORSConfiguration_S3() {}
+    ~RGWCORSConfiguration_S3() {}
 
     bool xml_end(const char *el);
     void to_xml(ostream& out);

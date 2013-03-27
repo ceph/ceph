@@ -345,17 +345,17 @@ void dump_owner(struct req_state *s, string& id, string& name, const char *secti
 }
 
 void dump_access_control(struct req_state *s, const char *origin, const char *meth,
-                         const char *hdr, const char *exp_hdr, uint32_t max_age){
-  if(origin && (origin[0] != '\0')){
+                         const char *hdr, const char *exp_hdr, uint32_t max_age) {
+  if (origin && (origin[0] != '\0')) {
     s->cio->print("Access-Control-Allow-Origin: %s\n", origin?origin:"");
-    if(meth && (meth[0] != '\0'))
+    if (meth && (meth[0] != '\0'))
       s->cio->print("Access-Control-Allow-Methods: %s\n", meth?meth:"");
-    if(hdr && (hdr[0] != '\0'))
+    if (hdr && (hdr[0] != '\0'))
       s->cio->print("Access-Control-Allow-Headers: %s\n", hdr);
-    if(exp_hdr && (exp_hdr[0] != '\0')){
+    if (exp_hdr && (exp_hdr[0] != '\0')) {
       s->cio->print("Access-Control-Expose-Headers: %s\n", exp_hdr);
     }
-    if(max_age != CORS_MAX_AGE_INVALID){
+    if (max_age != CORS_MAX_AGE_INVALID) {
       s->cio->print("Access-Control-Max-Age: %d\n", max_age);
     }
   }
