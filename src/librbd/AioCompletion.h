@@ -125,6 +125,11 @@ namespace librbd {
 
     void complete_request(CephContext *cct, ssize_t r);
 
+    bool is_complete() {
+      Mutex::Locker l(lock);
+      return done;
+    }
+
     ssize_t get_return_value() {
       lock.Lock();
       ssize_t r = rval;
