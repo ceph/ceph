@@ -62,7 +62,7 @@ static bool is_string_in_set(set<string>& s, string h){
       list<string> ssplit;
       unsigned flen = 0;
       
-      get_str_list((*it), "*", ssplit);
+      get_str_list((*it), "* \t", ssplit);
       if(off != 0){
         string sl = ssplit.front();
         flen = sl.length();
