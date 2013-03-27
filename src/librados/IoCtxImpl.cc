@@ -70,22 +70,58 @@ void librados::IoCtxImpl::queue_aio_write(AioCompletionImpl *c)
   aio_write_list_lock.Lock();
   assert(c->io == this);
   c->aio_write_seq = ++aio_write_seq;
+  ldout(client->cct, 20) << "queue_aio_write " << this << " completion " << c
+			 << " write_seq " << aio_write_seq << dendl;
   aio_write_list.push_back(&c->aio_write_list_item);
   aio_write_list_lock.Unlock();
 }
 
 void librados::IoCtxImpl::complete_aio_write(AioCompletionImpl *c)
 {
+  ldout(client->cct, 20) << "complete_aio_write " << c << dendl;
   aio_write_list_lock.Lock();
   assert(c->io == this);
   c->aio_write_list_item.remove_myself();
+  // queue async flush waiters
+  map<tid_t, std::list<AioCompletionImpl*> >::iterator waiters =
+    aio_write_waiters.find(c->aio_write_seq);
+  if (waiters != aio_write_waiters.end()) {
+    ldout(client->cct, 20) << "found " << waiters->second.size()
+			   << " waiters" << dendl;
+    for (std::list<AioCompletionImpl*>::iterator it = waiters->second.begin();
+	 it != waiters->second.end(); ++it) {
+      client->finisher.queue(new C_AioCompleteAndSafe(*it));
+      (*it)->put();
+    }
+    aio_write_waiters.erase(waiters);
+  } else {
+    ldout(client->cct, 20) << "found no waiters for tid "
+			   << c->aio_write_seq << dendl;
+  }
   aio_write_cond.Signal();
   aio_write_list_lock.Unlock();
   put();
 }
 
+void librados::IoCtxImpl::flush_aio_writes_async(AioCompletionImpl *c)
+{
+  ldout(client->cct, 20) << "flush_aio_writes_async " << this
+			 << " completion " << c << dendl;
+  Mutex::Locker l(aio_write_list_lock);
+  tid_t seq = aio_write_seq;
+  ldout(client->cct, 20) << "flush_aio_writes_async waiting on tid "
+			 << seq << dendl;
+  if (aio_write_list.empty()) {
+    client->finisher.queue(new C_AioCompleteAndSafe(c));
+  } else {
+    c->get();
+    aio_write_waiters[seq].push_back(c);
+  }
+}
+
 void librados::IoCtxImpl::flush_aio_writes()
 {
+  ldout(client->cct, 20) << "flush_aio_writes" << dendl;
   aio_write_list_lock.Lock();
   tid_t seq = aio_write_seq;
   while (!aio_write_list.empty() &&
