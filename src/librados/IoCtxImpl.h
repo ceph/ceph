@@ -46,6 +46,7 @@ struct librados::IoCtxImpl {
   tid_t aio_write_seq;
   Cond aio_write_cond;
   xlist<AioCompletionImpl*> aio_write_list;
+  map<tid_t, std::list<AioCompletionImpl*> > aio_write_waiters;
 
   Mutex *lock;
   Objecter *objecter;
@@ -84,6 +85,7 @@ struct librados::IoCtxImpl {
 
   void queue_aio_write(struct AioCompletionImpl *c);
   void complete_aio_write(struct AioCompletionImpl *c);
+  void flush_aio_writes_async(AioCompletionImpl *c);
   void flush_aio_writes();
 
   int64_t get_id() {
