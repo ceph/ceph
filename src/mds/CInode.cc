@@ -1018,8 +1018,10 @@ void CInode::build_backtrace(int64_t location, inode_backtrace_t* bt)
   vector<int64_t>::iterator i = inode.old_pools.begin();
   while(i != inode.old_pools.end()) {
     // don't add our own pool id to old_pools to avoid looping (e.g. setlayout 0, 1, 0)
-    if (*i == location)
+    if (*i == location) {
+      ++i;
       continue;
+    }
     bt->old_pools.insert(*i);
     ++i;
   }
