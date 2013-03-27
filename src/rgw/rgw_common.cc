@@ -1,5 +1,8 @@
 #include <errno.h>
 
+#include "json_spirit/json_spirit.h"
+#include "common/ceph_json.h"
+
 #include "rgw_common.h"
 #include "rgw_acl.h"
 #include "rgw_string.h"
@@ -231,6 +234,7 @@ bool parse_iso8601(const char *s, struct tm *t)
 {
   memset(t, 0, sizeof(*t));
   const char *p = strptime(s, "%Y-%m-%dT%T", t);
+
   if (!p) {
     dout(0) << "parse_iso8601 failed" << dendl;
     return false;
@@ -640,7 +644,7 @@ int RGWUserCaps::get_cap(const string& cap, string& type, uint32_t *pperm)
   uint32_t perm = 0;
   if (pos < (int)cap.size() - 1) {
     cap_perm = cap.substr(pos + 1);
-    int r = parse_cap_perm(cap_perm, &perm);
+    int r = RGWUserCaps::parse_cap_perm(cap_perm, &perm);
     if (r < 0)
       return r;
   }
@@ -725,7 +729,12 @@ int RGWUserCaps::remove_from_string(const string& str)
 
 void RGWUserCaps::dump(Formatter *f) const
 {
-  f->open_array_section("caps");
+  dump(f, "caps");
+}
+
+void RGWUserCaps::dump(Formatter *f, const char *name) const
+{
+  f->open_array_section(name);
   map<string, uint32_t>::const_iterator iter;
   for (iter = caps.begin(); iter != caps.end(); ++iter)
   {
@@ -750,6 +759,32 @@ void RGWUserCaps::dump(Formatter *f) const
   }
 
   f->close_section();
+}
+
+struct RGWUserCap {
+  string type;
+  uint32_t perm;
+
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("type", type, obj);
+    string perm_str;
+    JSONDecoder::decode_json("perm", perm_str, obj);
+    if (RGWUserCaps::parse_cap_perm(perm_str, &perm) < 0) {
+      throw JSONDecoder::err("failed to parse permissions");
+    }
+  }
+};
+
+void RGWUserCaps::decode_json(JSONObj *obj)
+{
+  list<RGWUserCap> caps_list;
+  decode_json_obj(caps_list, obj);
+
+  list<RGWUserCap>::iterator iter;
+  for (iter = caps_list.begin(); iter != caps_list.end(); ++iter) {
+    RGWUserCap& cap = *iter;
+    caps[cap.type] = cap.perm;
+  }
 }
 
 int RGWUserCaps::check_cap(const string& cap, uint32_t perm)
