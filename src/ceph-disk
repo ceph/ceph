@@ -1574,10 +1574,10 @@ def getrootdev():
     if re.search(' on / ', rootcheck) is not None:
         for line in iter(rootcheck.splitlines()):
             if re.match('.* on / *', line):
-               root = line.split()[0].split('/')[2]
-               # remove partition number if partition
-               root = re.sub(r'(\d)+', '', root)
-               return root
+                root = line.split()[0].split('/')[2]
+                # remove partition number if partition
+                root = re.sub(r'(\d)+', '', root)
+                return root
     else:
         return None
 
@@ -1619,10 +1619,9 @@ def checkactive(blockdev, partition=None):
 
 def hasmagic(mountpath):
     if os.path.isfile(mountpath + '/magic'):
-        hasmagic = True
+        return True
     else:
-        hasmagic = False
-    return hasmagic
+        return False
 
 def whoami(mountpath):
     if os.path.isfile(mountpath + '/whoami'):
@@ -1648,27 +1647,27 @@ def getfs(blockdev):
 
 def checkactivejournal(mountpath):
     if os.path.islink(mountpath + '/journal'):
-        abspath= os.path.realpath(mountpath + '/journal').split('/')[2]
+        abspath = os.path.realpath(mountpath + '/journal').split('/')[2]
         return abspath
     else:
         return None
 
-def dooutput(type, blockdev, active, osdnum, partition=None, uuid=None, fstype=None):
+def dooutput(disk_type, blockdev, active, osdnum, partition=None, _uuid=None, fstype=None):
     if partition is not None:
         blockdev = blockdev + str(partition)
     if osdnum is None:
-        returnstring = str('/dev/' + blockdev + ' ' + type + ' ' + active)
+        returnstring = str('/dev/' + blockdev + ' ' + disk_type + ' ' + active)
     else:
-        returnstring = str('/dev/' + blockdev + ' ' + type + ' ' + active + ' osd.' + osdnum)
+        returnstring = str('/dev/' + blockdev + ' ' + disk_type + ' ' + active + ' osd.' + osdnum)
 
     if fstype is not None:
         returnstring += ' ' + fstype
 
-    if uuid is not None:
-        cluster = find_cluster_by_uuid(uuid)
+    if _uuid is not None:
+        cluster = find_cluster_by_uuid(_uuid)
 
         if cluster is None:
-            returnstring += ' Cluster: ' + uuid
+            returnstring += ' Cluster: ' + _uuid
         else:
             returnstring += ' Cluster: ' + cluster
     return returnstring
@@ -1684,14 +1683,14 @@ def main_list(args):
     if rootdev is not None:
         if rootdev in block:
             block.remove(rootdev)
-            output.append(dooutput(type='os', blockdev=rootdev, active='mounted', osdnum=None))
+            output.append(dooutput(disk_type='os', blockdev=rootdev, active='mounted', osdnum=None))
 
     for blockdev in block:
         osd, journal = getpartitions(blockdev)
         if not any([osd, journal]):
             # No partitions:
             fstype = getfs(blockdev)
-            type = 'data'
+            disk_type = 'data'
             mountpath = checkactive(blockdev)
             if mountpath is not None:
                 # If its mounted:
@@ -1699,35 +1698,35 @@ def main_list(args):
                 magic = hasmagic(mountpath)
                 if magic:
                     osdnum = whoami(mountpath)
-                    uuid = getuuid(mountpath)
-                    output.append(dooutput(type=type, blockdev=blockdev, active=active, osdnum=osdnum, uuid=uuid, fstype=fstype))
+                    _uuid = getuuid(mountpath)
+                    output.append(dooutput(disk_type=disk_type, blockdev=blockdev, active=active, osdnum=osdnum, _uuid=_uuid, fstype=fstype))
                 else:
-                    output.append(dooutput(type='formated', blockdev=blockdev, active=active, osdnum=None, fstype=fstype))
+                    output.append(dooutput(disk_type='formated', blockdev=blockdev, active=active, osdnum=None, fstype=fstype))
             else:
                 # If its not mounted:
                 getfs(blockdev)
                 try:
                     mountpath = mount(dev='/dev/'+blockdev, fstype='auto', options=None, error=False)
-                except Exception:
+                except MountError:
                     mountpath = None
                 if mountpath is not None:
                     magic = hasmagic(mountpath)
                     if magic:
                         active = 'prepared'
                         activejournal = checkactivejournal(mountpath)
-                        uuid = getuuid(mountpath)
+                        _uuid = getuuid(mountpath)
                         if activejournal is not None:
-                            type = 'journal'
-                            output.append(dooutput(type=type, blockdev=blockdev, active=active, osdnum=osdnum, partition=journal, uuid=uuid, fstype=fstype))
+                            disk_type = 'journal'
+                            output.append(dooutput(disk_type=disk_type, blockdev=blockdev, active=active, osdnum=osdnum, partition=journal, _uuid=_uuid, fstype=fstype))
                     else:
-                        type = 'formatted'
+                        disk_type = 'formatted'
                         active = 'unprepared'
-                        output.append(dooutput(type=type, blockdev=blockdev, active=active, osdnum=None, fstype=fstype))
+                        output.append(dooutput(disk_type=disk_type, blockdev=blockdev, active=active, osdnum=None, fstype=fstype))
                     unmount (mountpath)
                 else:
-                    type = 'unformatted'
+                    disk_type = 'unformatted'
                     active = 'unprepared'
-                    output.append(dooutput(type=type, blockdev=blockdev, active=active, osdnum=None, fstype=fstype))
+                    output.append(dooutput(disk_type=disk_type, blockdev=blockdev, active=active, osdnum=None, fstype=fstype))
         else:
             # Partitions:
             if osd is not None:
@@ -1738,39 +1737,39 @@ def main_list(args):
             if mountpath is not None:
                 # If its mounted:
                 active = 'active'
-                type='data'
+                disk_type = 'data'
                 magic = hasmagic(mountpath)
                 if magic:
                     osdnum = whoami(mountpath)
-                    uuid = getuuid(mountpath)
-                    output.append(dooutput(type=type, blockdev=blockdev, active=active, osdnum=osdnum, partition=osd, uuid=uuid, fstype=fstype))
+                    _uuid = getuuid(mountpath)
+                    output.append(dooutput(disk_type=disk_type, blockdev=blockdev, active=active, osdnum=osdnum, partition=osd, _uuid=_uuid, fstype=fstype))
                     activejournal = checkactivejournal(mountpath)
                     if activejournal is not None:
-                        output.append(dooutput(type='journal', blockdev=blockdev, active=active, osdnum=osdnum, partition=journal, uuid=uuid, fstype=fstype))
+                        output.append(dooutput(disk_type='journal', blockdev=blockdev, active=active, osdnum=osdnum, partition=journal, _uuid=_uuid, fstype=fstype))
                 else:
-                    output.append(dooutput(type='formated', blockdev=blockdev, active='mounted', osdnum=None, partition=osd, fstype=fstype))
+                    output.append(dooutput(disk_type='formated', blockdev=blockdev, active='mounted', osdnum=None, partition=osd, fstype=fstype))
             else: 
                 # If it is not mounted:
                 try:
                     mountpath = mount(dev='/dev/'+blockdev+osd, fstype='auto', options=None)
-                except Exception:
+                except MountError:
                     mountpath = None
                 if mountpath is not None:
                     osdnum = whoami(mountpath)
                     magic = hasmagic(mountpath)
                     if magic:
-                        uuid = getuuid(mountpath)
+                        _uuid = getuuid(mountpath)
                         activejournal = checkactivejournal(mountpath)
                         if activejournal is not None:
-                            output.append(dooutput(type='journal', blockdev=activejournal, active='prepared', osdnum=osdnum, uuid=uuid, fstype=fstype))
+                            output.append(dooutput(disk_type='journal', blockdev=activejournal, active='prepared', osdnum=osdnum, _uuid=_uuid, fstype=fstype))
                     else:
-                        output.append(dooutput(type='formated', blockdev=blockdev+osd, active='unprepared', osdnum=None, fstype=fstype))
+                        output.append(dooutput(disk_type='formated', blockdev=blockdev+osd, active='unprepared', osdnum=None, fstype=fstype))
                     unmount (mountpath)
                 else:
-                     if osd is not None:
-                         output.append(dooutput(type='unformatted', blockdev=blockdev+osd, active='unprepared', osdnum=None, fstype=fstype))
-                     if journal is not None:
-                         output.append(dooutput(type='journal(s)', blockdev=blockdev, active='unprepared', osdnum=None, fstype=fstype))
+                    if osd is not None:
+                        output.append(dooutput(disk_type='unformatted', blockdev=blockdev+osd, active='unprepared', osdnum=None, fstype=fstype))
+                    if journal is not None:
+                        output.append(dooutput(disk_type='journal(s)', blockdev=blockdev, active='unprepared', osdnum=None, fstype=fstype))
 
 
     # Print each value in output list in sorted order
