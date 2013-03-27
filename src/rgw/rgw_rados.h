@@ -718,9 +718,15 @@ public:
                             utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category,
 			    list<string> *remove_objs);
   int complete_update_index_del(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch) {
+    if (bucket_is_system(bucket))
+      return 0;
+
     return cls_obj_complete_del(bucket, tag, epoch, oid);
   }
   int complete_update_index_cancel(rgw_bucket& bucket, string& oid, string& tag) {
+    if (bucket_is_system(bucket))
+      return 0;
+
     return cls_obj_complete_cancel(bucket, tag, oid);
   }
 
