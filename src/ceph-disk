@@ -1619,10 +1619,9 @@ def checkactive(blockdev, partition=None):
 
 def hasmagic(mountpath):
     if os.path.isfile(mountpath + '/magic'):
-        hasmagic = True
+        return True
     else:
-        hasmagic = False
-    return hasmagic
+        return False
 
 def whoami(mountpath):
     if os.path.isfile(mountpath + '/whoami'):
