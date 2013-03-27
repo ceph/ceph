@@ -12,11 +12,14 @@ tasks:
 - install:
      branch: bobtail
 - ceph:
+- workunit:
+     clients:
+        client.0:
+           - suites/fsstress.sh
 - install.upgrade:
      all:
         branch: master
 - ceph.restart: [mds.a, osd.0, osd.1, osd.2, osd.3, mon.a, mon.b, mon.c]
-- ceph-fuse:
 - workunit:
      clients:
         client.0:
