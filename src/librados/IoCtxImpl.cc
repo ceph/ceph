@@ -711,7 +711,8 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 }
 
 int librados::IoCtxImpl::aio_operate(const object_t& oid,
-				     ::ObjectOperation *o, AioCompletionImpl *c)
+				     ::ObjectOperation *o, AioCompletionImpl *c,
+				     snap_t seq, vector<snapid_t>& snaps)
 {
   utime_t ut = ceph_clock_now(client->cct);
   /* can't write to a snapshot */
@@ -724,14 +725,17 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
   c->io = this;
   queue_aio_write(c);
 
+  SnapContext local_snapc(seq, snaps);
   Mutex::Locker l(*lock);
-  objecter->mutate(oid, oloc, *o, snapc, ut, 0, onack, oncommit, &c->objver);
+  objecter->mutate(oid, oloc, *o, local_snapc, ut, 0, onack, oncommit,
+		   &c->objver);
 
   return 0;
 }
 
 int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
-				  bufferlist *pbl, size_t len, uint64_t off)
+				  bufferlist *pbl, size_t len, uint64_t off,
+				  uint64_t snapid)
 {
   if (len > (size_t) INT_MAX)
     return -EDOM;
@@ -745,13 +749,14 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 
   Mutex::Locker l(*lock);
   objecter->read(oid, oloc,
-		 off, len, snap_seq, &c->bl, 0,
+		 off, len, snapid, &c->bl, 0,
 		 onack, &c->objver);
   return 0;
 }
 
 int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
-				  char *buf, size_t len, uint64_t off)
+				  char *buf, size_t len, uint64_t off,
+				  uint64_t snapid)
 {
   if (len > (size_t) INT_MAX)
     return -EDOM;
@@ -765,7 +770,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 
   Mutex::Locker l(*lock);
   objecter->read(oid, oloc,
-		 off, len, snap_seq, &c->bl, 0,
+		 off, len, snapid, &c->bl, 0,
 		 onack, &c->objver);
 
   return 0;
@@ -775,7 +780,7 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
 					 AioCompletionImpl *c,
 					 std::map<uint64_t,uint64_t> *m,
 					 bufferlist *data_bl, size_t len,
-					 uint64_t off)
+					 uint64_t off, uint64_t snapid)
 {
   if (len > (size_t) INT_MAX)
     return -EDOM;
@@ -788,7 +793,7 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
 
   Mutex::Locker l(*lock);
   objecter->sparse_read(oid, oloc,
-		 off, len, snap_seq, &c->bl, 0,
+		 off, len, snapid, &c->bl, 0,
 		 onack);
   return 0;
 }
