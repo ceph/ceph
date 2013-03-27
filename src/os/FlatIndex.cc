@@ -280,6 +280,7 @@ int FlatIndex::init() {
 
 int FlatIndex::created(const hobject_t &hoid, const char *path) {
   char long_name[PATH_MAX];
+  long_name[0] = '\0';
   int actual_len = append_oname(hoid, long_name, sizeof(long_name));
   if (actual_len < (int)FILENAME_PREFIX_LEN) {
     return 0;
