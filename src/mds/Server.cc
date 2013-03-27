@@ -103,7 +103,10 @@ void Server::dispatch(Message *m)
       mds->enqueue_replay(new C_MDS_RetryMessage(mds, m));
       return;
     } else if (mds->is_clientreplay() &&
-	       (m->get_type() == CEPH_MSG_CLIENT_SESSION ||
+	       // session open requests need to be handled during replay,
+	       // close requests need to be delayed
+	       ((m->get_type() == CEPH_MSG_CLIENT_SESSION &&
+		 (static_cast<MClientSession*>(m))->get_op() != CEPH_SESSION_REQUEST_CLOSE) ||
 		(m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
 		 (static_cast<MClientRequest*>(m))->is_replay()))) {
       // replaying!
