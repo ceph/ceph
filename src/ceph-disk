@@ -1380,8 +1380,9 @@ def mount_activate(
         unmount(path)
         raise
     finally:
-        # remove out temp dir
-        os.rmdir(path)
+        # remove our temp dir
+        if os.path.exists(path):
+            os.rmdir(path)
 
 
 def activate_dir(
