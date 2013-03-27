@@ -379,6 +379,9 @@ def binaries(ctx, config):
         log.info('inktank_hadoop_bindir_url %s' % (inktank_hadoop_bindir_url))
         ctx.summary['inktank-hadoop-sha1'] = inktank_sha1
 
+    else:
+        raise Exception("The hadoop task does not support the path argument at present")
+
     with parallel() as p:
         hadoopNodes = ctx.cluster.only(teuthology.is_type('hadoop'))
         # these can happen independently
@@ -472,17 +475,37 @@ def task(ctx, config):
           - {tdir}/hadoop/bin/hadoop jar {tdir}/hadoop/build/hadoop-example*jar wordcount wordcount_input wordcount_output
           - rm -rf /tmp/hadoop_input
     """.format(tdir=teuthology.get_testdir(ctx))
-    dist = 'precise'
-    format = 'jar'
-    arch = 'x86_64'
-    flavor = 'basic'
-    apache_branch = 'branch-1.0' # hadoop branch to acquire
-    inktank_branch = 'cephfs_branch-1.0' # hadoop branch to acquire
 
     if config is None:
         config = {}
     assert isinstance(config, dict), \
         "task hadoop only supports a dictionary for configuration"
+
+    dist = 'precise' 
+    format = 'jar'
+    arch = 'x86_64'
+    flavor = config.get('flavor', 'basic')
+
+    ctx.summary['flavor'] = flavor
+
+    overrides = ctx.config.get('overrides', {})
+    teuthology.deep_merge(config, overrides.get('hadoop', {}))
+
+    apache_branch = None
+    if config.get('apache_hadoop_branch') is not None:
+        apache_branch = config.get('apache_hadoop_branch')
+    else:
+        apache_branch = 'branch-1.0' # hadoop branch to acquire
+
+    inktank_branch = None
+    if config.get('inktank_hadoop_branch') is not None:
+        inktank_branch = config.get('inktank_hadoop_branch')
+    else:
+        inktank_branch = 'cephfs/branch-1.0' # default branch name
+
+    # replace any '/' with a '_' to match the artifact paths
+    inktank_branch = inktank_branch.replace('/','_')
+    apache_branch = apache_branch.replace('/','_')
 
     with contextutil.nested(
         lambda: validate_config(ctx=ctx, config=config),
