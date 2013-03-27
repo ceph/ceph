@@ -178,7 +178,7 @@ int ClassHandler::ClassData::get_method_flags(const char *mname)
   Mutex::Locker l(handler->mutex);
   ClassMethod *method = _get_method(mname);
   if (!method)
-    return 0;
+    return -ENOENT;
   return method->flags;
 }
 
