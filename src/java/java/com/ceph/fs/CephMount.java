@@ -24,7 +24,6 @@ import java.io.FileNotFoundException;
 import java.net.InetAddress;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.Arrays;
 import java.lang.String;
 
 import com.ceph.crush.Bucket;
