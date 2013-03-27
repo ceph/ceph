@@ -582,11 +582,16 @@ location, all you need is the object name and the pool name. For example::
    
 	To verify that the Ceph Object Store stored the object, execute the following::
    
-		rados -p data ls
+		rados --pool=data ls
    
+<<<<<<< HEAD
 	Now, identify the object location::	
 
 		ceph osd map {pool-name} {object-name}
+=======
+	Now, identify the object location:: 
+   
+>>>>>>> ee5ca01... Command to map an object location is wrong
 		ceph osd map data test-object-1
    
 	Ceph should output the object's location. For example:: 
