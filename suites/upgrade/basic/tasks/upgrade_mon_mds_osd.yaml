@@ -11,11 +11,15 @@ roles:
 tasks:
 - install:
      branch: bobtail
+- ceph:
+- workunit:
+     clients:
+        client.0:
+           - suites/bonnie.sh
 - install.upgrade:
      all:
         branch: master
 - ceph.restart: [mon.a, mon.b, mon.c, mds.a, osd.0, osd.1, osd.2, osd.3]
-- ceph-fuse:
 - workunit:
      clients:
         client.0:
