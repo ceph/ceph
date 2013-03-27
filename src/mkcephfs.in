@@ -505,6 +505,7 @@ if [ $allhosts -eq 1 ]; then
 	if [ -n "$ssh" ]; then
 	    echo collecting $name key
 	    scp -q $host:$rdir/key.$name $dir
+	    #cleanup no longer need rdir
 	    do_cmd "rm -r $rdir"
 	fi
     done
@@ -542,6 +543,11 @@ if [ $allhosts -eq 1 ]; then
 	fi
 	
 	do_root_cmd "$0 -d $rdir --init-daemon $name"
+
+	if [ -n "$ssh" ]; then
+	    #cleanup no longer need rdir
+	    do_cmd "rm -r $rdir"
+	fi
     done
 
     # admin keyring
