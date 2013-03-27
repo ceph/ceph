@@ -782,6 +782,12 @@ unittest_chain_xattr_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_
 unittest_chain_xattr_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} ${CRYPTO_CXXFLAGS}
 check_PROGRAMS += unittest_chain_xattr
 
+unittest_flatindex_SOURCES = test/os/TestFlatIndex.cc
+unittest_flatindex_LDFLAGS = ${AM_LDFLAGS}
+unittest_flatindex_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+unittest_flatindex_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} ${CRYPTO_CXXFLAGS}
+check_PROGRAMS += unittest_flatindex
+
 unittest_strtol_SOURCES = test/strtol.cc
 unittest_strtol_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_strtol_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
