@@ -314,6 +314,30 @@ class CephManager:
             )
         return proc
 
+    def do_put(self, pool, obj, fname):
+        return self.do_rados(
+            self.controller,
+            [
+                '-p',
+                pool,
+                'put',
+                obj,
+                fname
+                ]
+            )
+
+    def do_get(self, pool, obj, fname='/dev/null'):
+        return self.do_rados(
+            self.controller,
+            [
+                '-p',
+                pool,
+                'stat',
+                obj,
+                fname
+                ]
+            )
+
     def osd_admin_socket(self, osdnum, command, check_status=True):
         testdir = teuthology.get_testdir(self.ctx)
         remote = None
@@ -339,14 +363,32 @@ class CephManager:
             check_status=check_status
             )
 
+    def get_pgid(self, pool, pgnum):
+        poolnum = self.get_pool_num(pool)
+        pg_str = "{poolnum}.{pgnum}".format(
+            poolnum=poolnum,
+            pgnum=pgnum)
+        return pg_str
+
+    def get_pg_replica(self, pool, pgnum):
+        """
+        get replica for pool, pgnum (e.g. (data, 0)->0
+        """
+        output = self.raw_cluster_cmd("pg", "dump", '--format=json')
+        j = json.loads('\n'.join(output.split('\n')[1:]))
+        pg_str = self.get_pgid(pool, pgnum)
+        for pg in j['pg_stats']:
+            if pg['pgid'] == pg_str:
+                return int(pg['acting'][-1])
+        assert False
+
     def get_pg_primary(self, pool, pgnum):
         """
         get primary for pool, pgnum (e.g. (data, 0)->0
         """
-        poolnum = self.get_pool_num(pool)
         output = self.raw_cluster_cmd("pg", "dump", '--format=json')
         j = json.loads('\n'.join(output.split('\n')[1:]))
-        pg_str = "%d.%d" % (poolnum, pgnum)
+        pg_str = self.get_pgid(pool, pgnum)
         for pg in j['pg_stats']:
             if pg['pgid'] == pg_str:
                 return int(pg['acting'][0])
@@ -553,6 +595,32 @@ class CephManager:
                     ret[status] = 0
                 ret[status] += 1
         return ret
+
+    def pg_scrubbing(self, pool, pgnum):
+        pgstr = self.get_pgid(pool, pgnum)
+        stats = self.get_single_pg_stats(pgstr)
+        return 'scrub' in stats['state']
+
+    def pg_repairing(self, pool, pgnum):
+        pgstr = self.get_pgid(pool, pgnum)
+        stats = self.get_single_pg_stats(pgstr)
+        return 'repair' in stats['state']
+
+    def pg_inconsistent(self, pool, pgnum):
+        pgstr = self.get_pgid(pool, pgnum)
+        stats = self.get_single_pg_stats(pgstr)
+        return 'inconsistent' in stats['state']
+
+    def get_last_scrub_stamp(self, pool, pgnum):
+        stats = self.get_single_pg_stats(self.get_pgid(pool, pgnum))
+        return stats["last_scrub_stamp"]
+
+    def do_pg_scrub(self, pool, pgnum, stype):
+        init = self.get_last_scrub_stamp(pool, pgnum)
+        self.raw_cluster_cmd('pg', stype, self.get_pgid(pool, pgnum))
+        while init == self.get_last_scrub_stamp(pool, pgnum):
+            self.log("waiting for scrub type %s"%(stype,))
+            time.sleep(10)
 
     def get_single_pg_stats(self, pgid):
         all_stats = self.get_pg_stats()
