@@ -1647,7 +1647,7 @@ def getfs(blockdev):
 
 def checkactivejournal(mountpath):
     if os.path.islink(mountpath + '/journal'):
-        abspath= os.path.realpath(mountpath + '/journal').split('/')[2]
+        abspath = os.path.realpath(mountpath + '/journal').split('/')[2]
         return abspath
     else:
         return None
@@ -1737,7 +1737,7 @@ def main_list(args):
             if mountpath is not None:
                 # If its mounted:
                 active = 'active'
-                type='data'
+                type = 'data'
                 magic = hasmagic(mountpath)
                 if magic:
                     osdnum = whoami(mountpath)
