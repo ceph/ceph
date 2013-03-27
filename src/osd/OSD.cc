@@ -1215,6 +1215,7 @@ int OSD::shutdown()
     p->second->on_shutdown();
     p->second->kick();
     p->second->unlock();
+    p->second->osr->flush();
     p->second->put();
   }
   pg_map.clear();
