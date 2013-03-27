@@ -138,7 +138,8 @@ struct librados::IoCtxImpl {
 
   int operate(const object_t& oid, ::ObjectOperation *o, time_t *pmtime);
   int operate_read(const object_t& oid, ::ObjectOperation *o, bufferlist *pbl);
-  int aio_operate(const object_t& oid, ::ObjectOperation *o, AioCompletionImpl *c);
+  int aio_operate(const object_t& oid, ::ObjectOperation *o,
+		  AioCompletionImpl *c, snap_t seq, vector<snapid_t>& snaps);
   int aio_operate_read(const object_t& oid, ::ObjectOperation *o, AioCompletionImpl *c, bufferlist *pbl);
 
   struct C_aio_Ack : public Context {
@@ -172,12 +173,12 @@ struct librados::IoCtxImpl {
   };
 
   int aio_read(const object_t oid, AioCompletionImpl *c,
-			  bufferlist *pbl, size_t len, uint64_t off);
+	       bufferlist *pbl, size_t len, uint64_t off, uint64_t snapid);
   int aio_read(object_t oid, AioCompletionImpl *c,
-	       char *buf, size_t len, uint64_t off);
+	       char *buf, size_t len, uint64_t off, uint64_t snapid);
   int aio_sparse_read(const object_t oid, AioCompletionImpl *c,
 		      std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
-		      size_t len, uint64_t off);
+		      size_t len, uint64_t off, uint64_t snapid);
   int aio_write(const object_t &oid, AioCompletionImpl *c,
 		const bufferlist& bl, size_t len, uint64_t off);
   int aio_append(const object_t &oid, AioCompletionImpl *c,
