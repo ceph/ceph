@@ -1,8 +1,8 @@
 
 #include <errno.h>
 
+#include "common/ceph_json.h"
 #include "rgw_policy_s3.h"
-#include "rgw_json.h"
 #include "rgw_common.h"
 
 
@@ -229,7 +229,7 @@ int RGWPolicy::check(RGWPolicyEnv *env, string& err_msg)
 
 int RGWPolicy::from_json(bufferlist& bl, string& err_msg)
 {
-  RGWJSONParser parser;
+  JSONParser parser;
 
   if (!parser.parse(bl.c_str(), bl.length())) {
     err_msg = "Malformed JSON";
