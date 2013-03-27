@@ -729,7 +729,7 @@ def prepare_journal_dev(
                 journal,
                 ],
             )
-        subprocess.check_call(
+        subprocess.call(
             args=[
                 # wait for udev event queue to clear
                 'udevadm',
@@ -916,7 +916,7 @@ def prepare_dev(
                     data,
                     ],
                 )
-            subprocess.check_call(
+            subprocess.call(
                 args=[
                     # wait for udev event queue to clear
                     'udevadm',
@@ -995,7 +995,7 @@ def prepare_dev(
                     data,
                     ],
                 )
-            subprocess.check_call(
+            subprocess.call(
                 args=[
                     # wait for udev event queue to clear
                     'udevadm',
