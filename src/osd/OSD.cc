@@ -6509,6 +6509,13 @@ int OSD::init_op_flags(OpRequestRef op)
 	  return r;
 	}
 	int flags = cls->get_method_flags(mname.c_str());
+	if (flags < 0) {
+	  if (flags == -ENOENT)
+	    r = -EOPNOTSUPP;
+	  else
+	    r = flags;
+	  return r;
+	}
 	is_read = flags & CLS_METHOD_RD;
 	is_write = flags & CLS_METHOD_WR;
 
