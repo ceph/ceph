@@ -1707,7 +1707,7 @@ def main_list(args):
                 getfs(blockdev)
                 try:
                     mountpath = mount(dev='/dev/'+blockdev, fstype='auto', options=None, error=False)
-                except Exception:
+                except MountError:
                     mountpath = None
                 if mountpath is not None:
                     magic = hasmagic(mountpath)
@@ -1752,7 +1752,7 @@ def main_list(args):
                 # If it is not mounted:
                 try:
                     mountpath = mount(dev='/dev/'+blockdev+osd, fstype='auto', options=None)
-                except Exception:
+                except MountError:
                     mountpath = None
                 if mountpath is not None:
                     osdnum = whoami(mountpath)
