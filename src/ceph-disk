@@ -1574,10 +1574,10 @@ def getrootdev():
     if re.search(' on / ', rootcheck) is not None:
         for line in iter(rootcheck.splitlines()):
             if re.match('.* on / *', line):
-               root = line.split()[0].split('/')[2]
-               # remove partition number if partition
-               root = re.sub(r'(\d)+', '', root)
-               return root
+                root = line.split()[0].split('/')[2]
+                # remove partition number if partition
+                root = re.sub(r'(\d)+', '', root)
+                return root
     else:
         return None
 
@@ -1767,10 +1767,10 @@ def main_list(args):
                         output.append(dooutput(type='formated', blockdev=blockdev+osd, active='unprepared', osdnum=None, fstype=fstype))
                     unmount (mountpath)
                 else:
-                     if osd is not None:
-                         output.append(dooutput(type='unformatted', blockdev=blockdev+osd, active='unprepared', osdnum=None, fstype=fstype))
-                     if journal is not None:
-                         output.append(dooutput(type='journal(s)', blockdev=blockdev, active='unprepared', osdnum=None, fstype=fstype))
+                    if osd is not None:
+                        output.append(dooutput(type='unformatted', blockdev=blockdev+osd, active='unprepared', osdnum=None, fstype=fstype))
+                    if journal is not None:
+                        output.append(dooutput(type='journal(s)', blockdev=blockdev, active='unprepared', osdnum=None, fstype=fstype))
 
 
     # Print each value in output list in sorted order
