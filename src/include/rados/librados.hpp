@@ -481,6 +481,16 @@ namespace librados
     
     int aio_flush();
 
+    /**
+     * Schedule a callback for when all currently pending
+     * aio writes are safe. This is a non-blocking version of
+     * aio_flush().
+     *
+     * @param c what to do when the writes are safe
+     * @returns 0 on success, negative error code on failure
+     */
+    int aio_flush_async(AioCompletion *c);
+
     int aio_exec(const std::string& oid, AioCompletion *c, const char *cls, const char *method,
 	         bufferlist& inbl, bufferlist *outbl);
 
