@@ -476,7 +476,7 @@ if [ $allhosts -eq 1 ]; then
 	check_host || continue
 
 	if [ -n "$ssh" ]; then
-	    rdir=`mktemp -u /tmp/mkfs.ceph.XXXXXXXXXXXXXXXX` || exit 1
+	    rdir=`mktemp -u /tmp/mkfs.ceph.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX` || exit 1
 	    echo pushing conf and monmap to $host:$rdir
 	    do_cmd "mkdir -p $rdir"
 	    scp -q $dir/conf $host:$rdir
@@ -524,7 +524,7 @@ if [ $allhosts -eq 1 ]; then
 	check_host || continue
 	
 	if [ -n "$ssh" ]; then
-	    rdir=`mktemp -u /tmp/mkfs.ceph.XXXXXXXXXXXXXXXX` || exit 1
+	    rdir=`mktemp -u /tmp/mkfs.ceph.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX` || exit 1
 	    echo pushing everything to $host
 	    ssh $host mkdir -p $rdir
 	    scp -q $dir/* $host:$rdir
