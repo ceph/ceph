@@ -569,7 +569,7 @@ calculates how to map the object to a `placement group`_, and then calculates
 how to assign the placement group to an OSD dynamically. To find the object
 location, all you need is the object name and the pool name. For example:: 
 
-	ceph osd map {object-name} {poolname}
+	ceph osd map {poolname} {object-name}
 
 .. topic:: Excercise: Locate an Object
 
@@ -582,11 +582,11 @@ location, all you need is the object name and the pool name. For example::
    
 	To verify that the Ceph Object Store stored the object, execute the following::
    
-		rados -p data ls
+		rados --pool=data ls
    
 	Now, identify the object location:: 
    
-		ceph osd map test-object-1 --pool=data
+		ceph osd map data test-object-1
    
 	Ceph should output the object's location. For example:: 
    
