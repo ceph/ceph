@@ -1795,7 +1795,6 @@ void PG::_activate_committed(epoch_t e)
 
   if (dirty_info) {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    dirty_info = true;
     write_if_dirty(*t);
     int tr = osd->store->queue_transaction(osr.get(), t);
     assert(tr == 0);
@@ -2352,9 +2351,8 @@ void PG::init(int role, vector<int>& newup, vector<int>& newacting, pg_history_t
   write_if_dirty(*t);
 }
 
-void PG::upgrade(
-  ObjectStore *store,
-  const interval_set<snapid_t> &snapcolls) {
+void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
+{
   unsigned removed = 0;
   for (interval_set<snapid_t>::const_iterator i = snapcolls.begin();
        i != snapcolls.end();
@@ -2504,6 +2502,7 @@ void PG::write_info(ObjectStore::Transaction& t)
     info_struct_v = cur_struct_v;
     ::encode(info_struct_v, attrbl);
     t.collection_setattr(coll, "info", attrbl);
+    dirty_big_info = true;
   }
 
   // info.  store purged_snaps separately.
