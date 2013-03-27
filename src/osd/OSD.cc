@@ -6532,5 +6532,8 @@ int OSD::init_op_flags(OpRequestRef op)
     }
   }
 
+  if (op->rmw_flags == 0)
+    return -EINVAL;
+
   return 0;
 }
