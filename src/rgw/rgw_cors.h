@@ -51,7 +51,7 @@ public:
        allowed_methods(f),
        allowed_hdrs(h),
        allowed_origins(o),
-       exposable_hdrs(e){}
+       exposable_hdrs(e) {}
   virtual ~RGWCORSRule() {}
 
   std::string& get_id() { return id; }
@@ -92,8 +92,8 @@ class RGWCORSConfiguration
   protected:
     std::list<RGWCORSRule> rules;
   public:
-    RGWCORSConfiguration(){}
-    ~RGWCORSConfiguration(){}
+    RGWCORSConfiguration() {}
+    ~RGWCORSConfiguration() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -106,26 +106,26 @@ class RGWCORSConfiguration
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  std::list<RGWCORSRule>& get_rules(){
+  std::list<RGWCORSRule>& get_rules() {
     return rules;
   }
-  bool is_empty(){
+  bool is_empty() {
     return rules.empty();
   }
   void get_origins_list(const char *origin, std::list<string>& origins);
   RGWCORSRule * host_name_rule(const char *origin);
   void erase_host_name_rule(std::string& origin);
   void dump();
-  void stack_rule(RGWCORSRule& r){
+  void stack_rule(RGWCORSRule& r) {
     rules.push_front(r);    
   }
 };
 WRITE_CLASS_ENCODER(RGWCORSConfiguration)
 
-static inline int validate_name_string(string& o){
-  if(o.length() == 0)
+static inline int validate_name_string(string& o) {
+  if (o.length() == 0)
     return -1;
-  if(o.find_first_of("*") != o.find_last_of("*"))
+  if (o.find_first_of("*") != o.find_last_of("*"))
     return -1;
   return 0;
 }

@@ -29,40 +29,40 @@ using namespace std;
 class RGWCORSConfiguration_SWIFT : public RGWCORSConfiguration
 {
   public:
-    RGWCORSConfiguration_SWIFT(){}
-    ~RGWCORSConfiguration_SWIFT(){}
+    RGWCORSConfiguration_SWIFT() {}
+    ~RGWCORSConfiguration_SWIFT() {}
     int create_update(const char *allow_origins, const char *allow_headers, 
-                  const char *expose_headers, const char *max_age){
+                  const char *expose_headers, const char *max_age) {
       set<string> o, h, oc;
       list<string> e;
-      unsigned a = CORS_MAX_AGE_INVALID;
+      long a = CORS_MAX_AGE_INVALID;
       uint8_t flags = RGW_CORS_ALL;
 
       string ao = allow_origins;
       get_str_set(ao, oc);
-      if(oc.empty())
+      if (oc.empty())
         return -EINVAL;
-      for(set<string>::iterator it = oc.begin(); it != oc.end(); it++){
+      for(set<string>::iterator it = oc.begin(); it != oc.end(); it++) {
         string host = *it;
-        if(validate_name_string(host) != 0)
+        if (validate_name_string(host) != 0)
           return -EINVAL;
         o.insert(o.end(), host);
       }
-      if(allow_headers){
+      if (allow_headers) {
         string ah = allow_headers;
         get_str_set(ah, h);
         for(set<string>::iterator it = h.begin();
-            it != h.end(); it++){
+            it != h.end(); it++) {
           string s = (*it);
-          if(validate_name_string(s) != 0)
+          if (validate_name_string(s) != 0)
             return -EINVAL;
         }
       }
-      if(expose_headers){
+      if (expose_headers) {
         string eh = expose_headers;
         get_str_list(eh, e);
       }
-      if(max_age){
+      if (max_age) {
         char *end = NULL;
         a = strtol(max_age, &end, 10);
         if (a == LONG_MAX)

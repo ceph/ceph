@@ -1559,7 +1559,7 @@ void RGWPutMetadata::execute()
     policy.encode(bl);
     attrs[RGW_ATTR_ACL] = bl;
   }
-  if(has_cors) {
+  if (has_cors) {
     cors_config.encode(cors_bl);
     attrs[RGW_ATTR_CORS] = cors_bl;
   }
@@ -1855,7 +1855,7 @@ int RGWGetCORS::verify_permission()
 void RGWGetCORS::execute()
 {
   stringstream ss;
-  if(!s->bucket_cors){
+  if (!s->bucket_cors) {
     dout(2) << "No CORS configuration set yet for this bucket" << dendl;
     ret = -ENOENT;
     return;
@@ -1929,7 +1929,7 @@ void RGWDeleteCORS::execute()
   bufferlist bl;
   rgw_obj obj;
   string no_obj;
-  if(!s->bucket_cors){
+  if (!s->bucket_cors) {
     dout(2) << "No CORS configuration set yet for this bucket" << dendl;
     ret = -ENOENT;
     return;
@@ -1956,15 +1956,15 @@ void RGWDeleteCORS::execute()
   ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs);
 }
 
-void RGWOptionsCORS::get_response_params(string& hdrs, string& exp_hdrs, unsigned *max_age){
-  if(req_hdrs){
+void RGWOptionsCORS::get_response_params(string& hdrs, string& exp_hdrs, unsigned *max_age) {
+  if (req_hdrs) {
     list<string> hl;
     get_str_list(req_hdrs, hl);
-    for(list<string>::iterator it = hl.begin(); it != hl.end(); it++){
-      if(!rule->is_header_allowed((*it).c_str(), (*it).length())){
+    for(list<string>::iterator it = hl.begin(); it != hl.end(); it++) {
+      if (!rule->is_header_allowed((*it).c_str(), (*it).length())) {
         dout(5) << "Header " << (*it) << " is not registered in this rule" << dendl;
-      }else {
-        if(hdrs.length() > 0)hdrs.append(",");
+      } else {
+        if (hdrs.length() > 0)hdrs.append(",");
         hdrs.append((*it));
       }
     }
@@ -1973,24 +1973,24 @@ void RGWOptionsCORS::get_response_params(string& hdrs, string& exp_hdrs, unsigne
   *max_age = rule->get_max_age();
 }
 
-int RGWOptionsCORS::validate_cors_request(){
+int RGWOptionsCORS::validate_cors_request() {
   RGWCORSConfiguration *cc = s->bucket_cors;
   rule = cc->host_name_rule(origin);
-  if(!rule){
+  if (!rule) {
     dout(10) << "There is no corsrule present for " << origin << dendl;
     return -ENOENT;
   }
 
   uint8_t flags = 0;
-  if(strcmp(req_meth, "GET") == 0) flags = RGW_CORS_GET;
+  if (strcmp(req_meth, "GET") == 0) flags = RGW_CORS_GET;
   else if (strcmp(req_meth, "POST") == 0) flags = RGW_CORS_POST;
   else if (strcmp(req_meth, "PUT") == 0) flags = RGW_CORS_PUT;
   else if (strcmp(req_meth, "DELETE") == 0) flags = RGW_CORS_DELETE;
   else if (strcmp(req_meth, "HEAD") == 0) flags = RGW_CORS_HEAD;
 
-  if ((rule->get_allowed_methods() & flags) == flags){
+  if ((rule->get_allowed_methods() & flags) == flags) {
     dout(10) << "Method " << req_meth << " is supported" << dendl;
-  }else {
+  } else {
     dout(5) << "Method " << req_meth << " is not supported" << dendl;
     req_meth = NULL;
     return -ENOTSUP;
@@ -2000,13 +2000,13 @@ int RGWOptionsCORS::validate_cors_request(){
 
 void RGWOptionsCORS::execute()
 {
-  if(!s->bucket_cors){
+  if (!s->bucket_cors) {
     dout(2) << "No CORS configuration set yet for this bucket" << dendl;
     ret = -EACCES;
     return;
   }
   req_meth = s->env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
-  if(!req_meth){
+  if (!req_meth) {
     dout(0) << 
     "Preflight request without mandatory Access-control-request-method header"
     << dendl;
@@ -2014,7 +2014,7 @@ void RGWOptionsCORS::execute()
     return;
   }
   origin = s->env->get("HTTP_ORIGIN");
-  if(!origin){
+  if (!origin) {
     dout(0) << 
     "Preflight request without mandatory Origin header"
     << dendl;
@@ -2023,7 +2023,7 @@ void RGWOptionsCORS::execute()
   }
   req_hdrs = s->env->get("HTTP_ACCESS_CONTROL_ALLOW_HEADERS");
   ret = validate_cors_request();
-  if(!rule){
+  if (!rule) {
     origin = req_meth = NULL;
     return;
   }
@@ -2512,7 +2512,7 @@ int RGWHandler::do_read_permissions(RGWOp *op, bool only_bucket)
 
 int RGWHandler::read_cors_config(void)
 {
-  int ret;
+  int ret = 0;
   bufferlist bl;
  
   dout(10) << "Going to read cors from attrs" << dendl;
@@ -2535,11 +2535,10 @@ int RGWHandler::read_cors_config(void)
         s3cors->to_xml(*_dout);
         *_dout << dendl;
       }
-    }else{
+    } else {
       /*Not a serious error*/
       dout(2) << "Warning: There is no content for CORS xattr,"
             " cors may not be set yet" << dendl;
-      ret = 0;
     }
   }
   return ret;
