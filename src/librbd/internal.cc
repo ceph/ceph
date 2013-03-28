@@ -2387,7 +2387,7 @@ reprotect_and_return_err:
 	bool end_exists;
 	calc_snap_set_diff(ictx->cct, snap_set,
 			   from_snap_id,
-			   end_snap_id == CEPH_NOSNAP ? librados::clone_info_t::HEAD : end_snap_id,
+			   end_snap_id,
 			   &diff, &end_exists);
 	ldout(ictx->cct, 20) << "  diff " << diff << " end_exists=" << end_exists << dendl;
 	if (diff.empty())

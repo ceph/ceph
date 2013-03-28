@@ -2114,8 +2114,6 @@ struct obj_list_watch_response_t {
 WRITE_CLASS_ENCODER(obj_list_watch_response_t)
 
 struct clone_info {
-  static const snapid_t HEAD;
-
   snapid_t cloneid;
   vector<snapid_t> snaps;  // ascending
   vector< pair<uint64_t,uint64_t> > overlap;
@@ -2140,7 +2138,7 @@ struct clone_info {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const {
-    if (cloneid == HEAD)
+    if (cloneid == CEPH_NOSNAP)
       f->dump_string("cloneid", "HEAD");
     else
       f->dump_unsigned("cloneid", cloneid.val);
@@ -2171,7 +2169,7 @@ struct clone_info {
     o.back()->overlap.push_back(pair<uint64_t,uint64_t>(8192,4096));
     o.back()->size = 16384;
     o.push_back(new clone_info);
-    o.back()->cloneid = HEAD;
+    o.back()->cloneid = CEPH_NOSNAP;
     o.back()->size = 32768;
   }
 };
@@ -2220,7 +2218,7 @@ struct obj_list_snap_response_t {
     cl.overlap.push_back(pair<uint64_t,uint64_t>(8192,4096));
     cl.size = 16384;
     o.back()->clones.push_back(cl);
-    cl.cloneid = clone_info::HEAD;
+    cl.cloneid = CEPH_NOSNAP;
     cl.snaps.clear();
     cl.overlap.clear();
     cl.size = 32768;
