@@ -31,7 +31,7 @@ void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
     // include itself in the snaps list
     librados::snap_t a, b;
     b = r->cloneid;
-    if (b == librados::clone_info_t::HEAD) {
+    if (b == librados::SNAP_HEAD) {
       // head is valid starting from right after the last seen seq
       a = snap_set.seq + 1;
     } else {
