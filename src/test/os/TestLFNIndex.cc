@@ -97,6 +97,139 @@ public:
   }
 };
 
+TEST_F(TestLFNIndex, remove_object) {
+  const vector<string> path;
+
+  //
+  // small object name removal
+  //
+  {
+    std::string mangled_name;
+    int exists = 666;
+    hobject_t hoid(sobject_t("ABC", CEPH_NOSNAP));
+
+    EXPECT_EQ(0, ::chmod("PATH", 0000));
+    EXPECT_EQ(-EACCES, remove_object(path, hoid));
+    EXPECT_EQ(0, ::chmod("PATH", 0700));
+    EXPECT_EQ(-ENOENT, remove_object(path, hoid));
+    EXPECT_EQ(0, get_mangled_name(path, hoid, &mangled_name, &exists));
+    const std::string pathname("PATH/" + mangled_name);
+    EXPECT_EQ(0, ::close(::creat(pathname.c_str(), 0600)));
+    EXPECT_EQ(0, remove_object(path, hoid));
+    EXPECT_EQ(-1, ::access(pathname.c_str(), 0));
+    EXPECT_EQ(ENOENT, errno);
+  }
+  //
+  // long object name removal of a single file
+  //
+  {
+    std::string mangled_name;
+    int exists;
+    const std::string object_name(1024, 'A');
+    hobject_t hoid(sobject_t(object_name, CEPH_NOSNAP));
+
+    EXPECT_EQ(0, get_mangled_name(path, hoid, &mangled_name, &exists));
+    EXPECT_EQ(0, exists);
+    EXPECT_NE(std::string::npos, mangled_name.find("0_long"));
+    std::string pathname("PATH/" + mangled_name);
+    EXPECT_EQ(0, ::close(::creat(pathname.c_str(), 0600)));
+    EXPECT_EQ(0, created(hoid, pathname.c_str()));
+
+    EXPECT_EQ(0, remove_object(path, hoid));
+    EXPECT_EQ(-1, ::access(pathname.c_str(), 0));
+    EXPECT_EQ(ENOENT, errno);
+  }
+
+  //
+  // long object name removal of the last file 
+  //
+  {
+    std::string mangled_name;
+    int exists;
+    const std::string object_name(1024, 'A');
+    hobject_t hoid(sobject_t(object_name, CEPH_NOSNAP));
+
+    //
+    //   PATH/AAA..._0_long => does not match long object name
+    //
+    EXPECT_EQ(0, get_mangled_name(path, hoid, &mangled_name, &exists));
+    EXPECT_EQ(0, exists);
+    EXPECT_NE(std::string::npos, mangled_name.find("0_long"));
+    std::string pathname("PATH/" + mangled_name);
+    EXPECT_EQ(0, ::close(::creat(pathname.c_str(), 0600)));
+    EXPECT_EQ(0, created(hoid, pathname.c_str()));
+    const string LFN_ATTR = "user.cephos.lfn";
+    const std::string object_name_1 = object_name + "SUFFIX";
+    EXPECT_EQ(object_name_1.size(), (unsigned)chain_setxattr(pathname.c_str(), LFN_ATTR.c_str(), object_name_1.c_str(), object_name_1.size()));
+
+    //
+    //   PATH/AAA..._1_long => matches long object name
+    //
+    std::string mangled_name_1;
+    exists = 666;
+    EXPECT_EQ(0, get_mangled_name(path, hoid, &mangled_name_1, &exists));
+    EXPECT_NE(std::string::npos, mangled_name_1.find("1_long"));
+    EXPECT_EQ(0, exists);
+    std::string pathname_1("PATH/" + mangled_name_1);
+    EXPECT_EQ(0, ::close(::creat(pathname_1.c_str(), 0600)));
+    EXPECT_EQ(0, created(hoid, pathname_1.c_str()));
+
+    //
+    // remove_object skips PATH/AAA..._0_long and removes PATH/AAA..._1_long
+    //
+    EXPECT_EQ(0, remove_object(path, hoid));
+    EXPECT_EQ(0, ::access(pathname.c_str(), 0));
+    EXPECT_EQ(-1, ::access(pathname_1.c_str(), 0));
+    EXPECT_EQ(ENOENT, errno);
+    EXPECT_EQ(0, ::unlink(pathname.c_str()));
+  }
+
+  //
+  // long object name removal of a file in the middle of the list
+  //
+  {
+    std::string mangled_name;
+    int exists;
+    const std::string object_name(1024, 'A');
+    hobject_t hoid(sobject_t(object_name, CEPH_NOSNAP));
+
+    //
+    //   PATH/AAA..._0_long => matches long object name
+    //
+    EXPECT_EQ(0, get_mangled_name(path, hoid, &mangled_name, &exists));
+    EXPECT_EQ(0, exists);
+    EXPECT_NE(std::string::npos, mangled_name.find("0_long"));
+    std::string pathname("PATH/" + mangled_name);
+    EXPECT_EQ(0, ::close(::creat(pathname.c_str(), 0600)));
+    EXPECT_EQ(0, created(hoid, pathname.c_str()));
+    //
+    //   PATH/AAA..._1_long => matches long object name
+    //
+    std::string mangled_name_1 = mangled_name;
+    mangled_name_1.replace(mangled_name_1.find("0_long"), 6, "1_long");
+    const std::string pathname_1("PATH/" + mangled_name_1);
+    const std::string cmd("cp --preserve=xattr " + pathname + " " + pathname_1);
+    EXPECT_EQ(0, ::system(cmd.c_str()));
+    const string ATTR = "user.MARK";
+    EXPECT_EQ((unsigned)1, (unsigned)chain_setxattr(pathname_1.c_str(), ATTR.c_str(), "Y", 1));
+
+    //
+    // remove_object replaces the file to be removed with the last from the
+    // collision list. In this case it replaces
+    //    PATH/AAA..._0_long 
+    // with
+    //    PATH/AAA..._1_long 
+    //
+    EXPECT_EQ(0, remove_object(path, hoid));
+    EXPECT_EQ(0, ::access(pathname.c_str(), 0));
+    char buffer[1] = { 0, };
+    EXPECT_EQ((unsigned)1, (unsigned)chain_getxattr(pathname.c_str(), ATTR.c_str(), buffer, 1));
+    EXPECT_EQ('Y', buffer[0]);
+    EXPECT_EQ(-1, ::access(pathname_1.c_str(), 0));
+    EXPECT_EQ(ENOENT, errno);
+  }
+}
+
 TEST_F(TestLFNIndex, get_mangled_name) {
   const vector<string> path;
 
@@ -243,5 +376,5 @@ int main(int argc, char **argv) {
 }
 
 // Local Variables:
-// compile-command: "cd ../.. ; make unittest_lfnindex ; ./unittest_lfnindex # --gtest_filter=LFNIndexTest.LFNIndex --log-to-stderr=true --debug-filestore=20"
+// compile-command: "cd ../.. ; make unittest_lfnindex ; ./unittest_lfnindex # --gtest_filter=TestLFNIndex.* --log-to-stderr=true --debug-filestore=20"
 // End:
