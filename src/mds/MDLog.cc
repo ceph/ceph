@@ -622,6 +622,7 @@ void MDLog::standby_trim_segments()
     seg->dirty_dirfrag_dir.clear_list();
     seg->dirty_dirfrag_nest.clear_list();
     seg->dirty_dirfrag_dirfragtree.clear_list();
+    seg->update_backtraces.clear_list();
     remove_oldest_segment();
     removed_segment = true;
   }
