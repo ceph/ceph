@@ -283,6 +283,22 @@ class CephManager:
             )
         return proc.stdout.getvalue()
 
+    def raw_cluster_cmd_result(self, *args):
+        testdir = teuthology.get_testdir(self.ctx)
+        ceph_args = [
+                '{tdir}/enable-coredump'.format(tdir=testdir),
+                'ceph-coverage',
+                '{tdir}/archive/coverage'.format(tdir=testdir),
+                'ceph',
+                '--concise',
+                ]
+        ceph_args.extend(args)
+        proc = self.controller.run(
+            args=ceph_args,
+            check_status=False,
+            )
+        return proc.exitstatus
+
     def do_rados(self, remote, cmd):
         testdir = teuthology.get_testdir(self.ctx)
         pre = [
@@ -463,14 +479,23 @@ class CephManager:
             assert isinstance(pool_name, str)
             assert isinstance(prop, str)
             assert isinstance(val, int)
-            self.raw_cluster_cmd(
-                'osd',
-                'pool',
-                'set',
-                pool_name,
-                prop,
-                str(val),
-                '--allow-experimental-feature')
+            tries = 0
+            while True:
+                r = self.raw_cluster_cmd_result(
+                    'osd',
+                    'pool',
+                    'set',
+                    pool_name,
+                    prop,
+                    str(val),
+                    '--allow-experimental-feature')
+                if r != 11: # EAGAIN
+                    break
+                tries += 1
+                if tries > 50:
+                    raise Exception('timed out getting EAGAIN when setting pool property %s %s = %s' % (pool_name, prop, val))
+                self.log('got EAGAIN setting pool property, waiting a few seconds...')
+                time.sleep(2)
 
     def expand_pool(self, pool_name, by, max_pgs):
         with self.lock:
