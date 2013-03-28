@@ -308,19 +308,19 @@ void RGWSubUser::decode_json(JSONObj *obj)
 
 static void user_info_dump_subuser(const char *name, const RGWSubUser& subuser, Formatter *f, void *parent)
 {
-  RGWUserInfo *info = (RGWUserInfo *)parent;
+  RGWUserInfo *info = static_cast<RGWUserInfo *>(parent);
   subuser.dump(f, info->user_id);
 }
 
 static void user_info_dump_key(const char *name, const RGWAccessKey& key, Formatter *f, void *parent)
 {
-  RGWUserInfo *info = (RGWUserInfo *)parent;
+  RGWUserInfo *info = static_cast<RGWUserInfo *>(parent);
   key.dump(f, info->user_id, false);
 }
 
 static void user_info_dump_swift_key(const char *name, const RGWAccessKey& key, Formatter *f, void *parent)
 {
-  RGWUserInfo *info = (RGWUserInfo *)parent;
+  RGWUserInfo *info = static_cast<RGWUserInfo *>(parent);
   key.dump(f, info->user_id, true);
 }
 
