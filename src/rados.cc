@@ -1804,7 +1804,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	   << "  This will PERMANENTLY DESTROY an entire pool of objects with no way back.\n"
 	   << "  To confirm, pass the pool to remove twice, followed by\n"
 	   << "  --yes-i-really-really-mean-it" << std::endl;
-      cout << nargs << std::endl;
       return 1;
     }
     ret = rados.pool_delete(nargs[1]);
