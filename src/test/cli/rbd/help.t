@@ -20,6 +20,8 @@
                                                 (dest defaults
                                                  as the filename part of file)
                                                 "-" for stdin
+    diff <image-name> [--from-snap <snap-name>] print extents that differ since
+                                                a previous snap, or image creation
     export-diff <image-name> [--from-snap <snap-name>] <path>
                                                 export an incremental diff to
                                                 path, or "-" for stdout
