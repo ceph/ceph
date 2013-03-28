@@ -35,7 +35,7 @@ class RGWCORSConfiguration_SWIFT : public RGWCORSConfiguration
                   const char *expose_headers, const char *max_age) {
       set<string> o, h, oc;
       list<string> e;
-      long a = CORS_MAX_AGE_INVALID;
+      unsigned a = CORS_MAX_AGE_INVALID;
       uint8_t flags = RGW_CORS_ALL;
 
       string ao = allow_origins;
@@ -58,14 +58,15 @@ class RGWCORSConfiguration_SWIFT : public RGWCORSConfiguration
             return -EINVAL;
         }
       }
+
       if (expose_headers) {
         string eh = expose_headers;
         get_str_list(eh, e);
       }
       if (max_age) {
         char *end = NULL;
-        a = strtol(max_age, &end, 10);
-        if (a == LONG_MAX)
+        a = strtoul(max_age, &end, 10);
+        if (a == ULONG_MAX)
           a = CORS_MAX_AGE_INVALID;
       }
 
