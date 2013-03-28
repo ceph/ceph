@@ -377,7 +377,7 @@ int rados_cluster_fsid(rados_t cluster, char *buf, size_t len);
  */
 
 /**
- * List objects in a pool
+ * List pools
  *
  * Gets a list of pool names as NULL-terminated strings.  The pool
  * names will be placed in the supplied buffer one after another.
