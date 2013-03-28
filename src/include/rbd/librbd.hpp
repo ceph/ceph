@@ -155,6 +155,24 @@ public:
   ssize_t read(uint64_t ofs, size_t len, ceph::bufferlist& bl);
   int64_t read_iterate(uint64_t ofs, size_t len,
 		       int (*cb)(uint64_t, size_t, const char *, void *), void *arg);
+  /**
+   * get difference between two versions of an image
+   *
+   * This will return the differences between two versions of an image
+   * via a callback, which gets the offset and length and a flag
+   * indicating whether the extent is known/defined to be zeros (a
+   * hole).  If the source snapshot name is NULL, we interpret that as
+   * the beginning of time and return all allocated regions of the
+   * image.  The end version is whatever is currently selected for the
+   * image handle (either a snapshot or the writeable head).
+   *
+   * @param fromsnapname start snapshot name, or NULL
+   * @param ofs start offset
+   * @param len len in bytes of region to report on
+   * @param cb callback to call for each allocated region
+   * @param arg argument to pass to the callback
+   * @returns len on success, or negative error code on error
+   */
   int64_t diff_iterate(const char *fromsnapname,
 		       uint64_t ofs, size_t len,
 		       int (*cb)(uint64_t, size_t, bool, void *), void *arg);
