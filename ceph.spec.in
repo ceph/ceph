@@ -315,6 +315,12 @@ mkdir -p $RPM_BUILD_ROOT/var/lib/ceph/mds
 mkdir -p $RPM_BUILD_ROOT/var/lib/ceph/bootstrap-osd
 mkdir -p $RPM_BUILD_ROOT/var/lib/ceph/bootstrap-mds
 
+# Makefile puts these in sbin, but we want to package them in usr/sbin
+mv -f $RPM_BUILD_ROOT/sbin/ceph-disk $RPM_BUILD_ROOT/usr/sbin/ceph-disk
+mv -f $RPM_BUILD_ROOT/sbin/ceph-disk-activate $RPM_BUILD_ROOT/usr/sbin/ceph-disk-activate
+mv -f $RPM_BUILD_ROOT/sbin/ceph-disk-prepare $RPM_BUILD_ROOT/usr/sbin/ceph-disk-prepare
+mv -f $RPM_BUILD_ROOT/sbin/ceph-create-keys $RPM_BUILD_ROOT/usr/sbin/ceph-create-keys
+
 %if %{defined suse_version}
 # Fedora seems to have some problems with this macro, use it only on SUSE
 %fdupes -s $RPM_BUILD_ROOT/%{python_sitelib}
@@ -425,10 +431,10 @@ fi
 %{_libdir}/rados-classes/libcls_lock.so*
 %{_libdir}/rados-classes/libcls_kvs.so*
 %{_libdir}/rados-classes/libcls_refcount.so*
-/sbin/ceph-disk
-/sbin/ceph-disk-activate
-/sbin/ceph-disk-prepare
-/sbin/ceph-create-keys
+/usr/sbin/ceph-disk
+/usr/sbin/ceph-disk-activate
+/usr/sbin/ceph-disk-prepare
+/usr/sbin/ceph-create-keys
 /lib/udev/rules.d/95-ceph-osd.rules
 
 #set up placeholder directories
