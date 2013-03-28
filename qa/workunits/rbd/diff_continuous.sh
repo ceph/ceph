@@ -1,12 +1,13 @@
 #!/bin/bash -ex
 
-max=30
+max=20
 size=1500
 
 iosize=16384
 iototal=16384000
 iothreads=16
 
+parent=`uuidgen`"-parent"
 src=`uuidgen`"-src";
 dst=`uuidgen`"-dst";
 
@@ -15,24 +16,32 @@ function cleanup() {
     rbd rm $src || :
     rbd snap purge $dst || :
     rbd rm $dst || :
+    rbd snap unprotect $parent --snap parent || :
+    rbd snap purge $parent || :
+    rbd rm $parent || :
 }
 trap cleanup EXIT
 
-rbd create $src --size $size
-rbd create $dst --size $size
+# start from a clone
+rbd create $parent --size $size --image-format 2
+rbd bench-write $parent --io-size $iosize --io-threads $iothreads --io-total $iototal --io-pattern rand 
+rbd snap create $parent --snap parent
+rbd snap protect $parent --snap parent
+rbd clone $parent@parent $src
+#rbd create $src --size $size --format 2
+rbd create $dst --size $size --image-format 2
 
 # mirror for a while
-
-rbd snap create $src --snap=snap0
-rbd bench-write $src --io-size $iosize --io-threads $iothreads --io-total $iototal --io-pattern rand 
-lastsnap=snap0
 for s in `seq 1 $max`; do
     rbd snap create $src --snap=snap$s
-    rbd export-diff $src@snap$s - --from-snap $lastsnap | rbd import-diff - $dst  &
+    rbd export-diff $src@snap$s - $lastsnap | rbd import-diff - $dst  &
     rbd bench-write $src --io-size $iosize --io-threads $iothreads --io-total $iototal --io-pattern rand  &
     wait
-    lastsnap=snap$s
+    lastsnap="--from-snap snap$s"
 done
+
+#trap "" EXIT
+#exit 0
 
 # validate
 for s in `seq 1 $max`; do
