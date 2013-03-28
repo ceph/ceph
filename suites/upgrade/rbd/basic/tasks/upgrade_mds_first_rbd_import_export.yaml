@@ -1,0 +1,30 @@
+roles:
+- - mon.a
+  - mds.a
+  - osd.0
+  - osd.1
+- - mon.b
+  - mon.c
+  - osd.2
+  - osd.3
+- - client.0
+tasks:
+- install:
+     branch: bobtail
+- ceph:
+- workunit:
+     clients:
+        client.0:
+           - rbd/import_export.sh
+     env:
+        RBD_CREATE_ARGS: --new-format
+- install.upgrade:
+     all:
+        branch: master
+- ceph.restart: [mds.a, osd.0, osd.1, osd.2, osd.3, mon.a, mon.b, mon.c]
+- workunit:
+     clients:
+        client.0:
+           - rbd/import_export.sh
+     env:
+        RBD_CREATE_ARGS: --new-format
