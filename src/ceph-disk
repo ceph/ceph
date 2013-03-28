@@ -131,24 +131,21 @@ def list_all_partitions():
     Return a list of devices and partitions
     """
     dev_part_list = {}
-    with file('/proc/partitions', 'rb') as proc_partitions:
-        for line in proc_partitions.read().split('\n')[2:]:
-            fields = re.split('\s+', line)
-            if len(fields) < 5:
-                continue
-            name = fields[4]
-            name = '/dev/' + name
-            if "dm-" in name:
-                if "/dev/dm" not in dev_part_list:
-                    dev_part_list["/dev/dm"] = []
-                dev_part_list["/dev/dm"].append(name)
-            if name[-1].isdigit():
-                base = name
-                while base[-1].isdigit():
-                    base = base[:-1]
-                    dev_part_list[base].append(name)
-            else:
-                dev_part_list[name] = []
+    for name in os.listdir('/dev/disk/by-path'):
+        target = os.readlink(os.path.join('/dev/disk/by-path', name))
+        dev = target.split('/')[-1]
+        #print "name %s target %s dev %s" % (name, target, dev)
+        (baser) = re.search('(.*)-part\d+$', name)
+        if baser is not None:
+            basename = baser.group(1)
+            #print 'basename %s' % basename
+            base = os.readlink(os.path.join('/dev/disk/by-path', basename)).split('/')[-1]
+            if base not in dev_part_list:
+                dev_part_list[base] = []
+            dev_part_list[base].append(dev)
+        else:
+            if dev not in dev_part_list:
+                dev_part_list[dev] = []
     return dev_part_list
 
 
