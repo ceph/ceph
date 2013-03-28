@@ -2256,6 +2256,14 @@ reprotect_and_return_err:
     return total_read;
   }
 
+  int simple_diff_cb(uint64_t off, size_t len, bool exists, void *arg)
+  {
+    interval_set<uint64_t> *diff = static_cast<interval_set<uint64_t> *>(arg);
+    diff->insert(off, len);
+    return 0;
+  }
+
+
   int64_t diff_iterate(ImageCtx *ictx, const char *fromsnapname,
 		       uint64_t off, size_t len,
 		       int (*cb)(uint64_t, size_t, bool, void *),
@@ -2307,6 +2315,22 @@ reprotect_and_return_err:
     // FIXME: if end_size > from_size, we could read_iterate for the
     // final part, and skip the listsnaps op.
 
+    // check parent overlap only if we are comparing to the beginning of time
+    interval_set<uint64_t> parent_diff;
+    if (from_snap_id == 0) {
+      ictx->parent_lock.get_read();
+      uint64_t overlap = end_size;
+      ictx->get_parent_overlap(from_snap_id, &overlap);
+      r = 0;
+      if (ictx->parent && overlap > 0) {
+	ldout(ictx->cct, 10) << " first getting parent diff" << dendl;
+	r = diff_iterate(ictx->parent, NULL, 0, overlap, simple_diff_cb, &parent_diff);
+      }
+      ictx->parent_lock.put_read();
+      if (r < 0)
+	return r;
+    }
+
     int64_t total_read = 0;
     uint64_t period = ictx->get_stripe_period();
     uint64_t left = mylen;
@@ -2334,8 +2358,25 @@ reprotect_and_return_err:
 	op.stat(&size, NULL, NULL);
 	op.list_snaps(&snap_set, NULL);
 	int r = head_ctx.operate(p->first.name, &op, NULL);
-	if (r == -ENOENT)
+	if (r == -ENOENT) {
+	  if (from_snap_id == 0 && !parent_diff.empty()) {
+	    // report parent diff instead
+	    for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
+	      for (vector<pair<uint64_t,uint64_t> >::iterator r = q->buffer_extents.begin();
+		   r != q->buffer_extents.end();
+		   ++r) {
+		interval_set<uint64_t> o;
+		o.insert(off + r->first, r->second);
+		o.intersection_of(parent_diff);
+		ldout(ictx->cct, 20) << " reporting parent overlap " << o << dendl;
+		for (interval_set<uint64_t>::iterator s = o.begin(); s != o.end(); ++s) {
+		  cb(s.get_start(), s.get_len(), false, arg);
+		}
+	      }
+	    }
+	  }
 	  continue;
+	}
 	if (r < 0)
 	  return r;
 
