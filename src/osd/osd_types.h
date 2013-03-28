@@ -623,6 +623,7 @@ struct pg_pool_t {
   };
   enum {
     FLAG_HASHPSPOOL = 1, // hash pg seed and pool together (instead of adding)
+    FLAG_FULL       = 2, // pool is full
   };
 
   static const char *get_type_name(int t) {
@@ -650,6 +651,9 @@ public:
   uint64_t auid;            /// who owns the pg
   __u32 crash_replay_interval; /// seconds to allow clients to replay ACKed but unCOMMITted requests
 
+  uint64_t quota_max_bytes; /// maximum number of bytes for this pool
+  uint64_t quota_max_objects; /// maximum number of objects for this pool
+
   /*
    * Pool snaps (global to this pool).  These define a SnapContext for
    * the pool, unless the client manually specifies an alternate
@@ -674,6 +678,7 @@ public:
       snap_seq(0), snap_epoch(0),
       auid(0),
       crash_replay_interval(0),
+      quota_max_bytes(0), quota_max_objects(0),
       pg_num_mask(0), pgp_num_mask(0) { }
 
   void dump(Formatter *f) const;
@@ -712,6 +717,20 @@ public:
   void set_pgp_num(int p) {
     pgp_num = p;
     calc_pg_masks();
+  }
+
+  void set_quota_max_bytes(uint64_t m) {
+    quota_max_bytes = m;
+  }
+  uint64_t get_quota_max_bytes() {
+    return quota_max_bytes;
+  }
+
+  void set_quota_max_objects(uint64_t m) {
+    quota_max_objects = m;
+  }
+  uint64_t get_quota_max_objects() {
+    return quota_max_objects;
   }
 
   static int calc_bits_of(int t);
