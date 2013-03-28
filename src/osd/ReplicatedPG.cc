@@ -2373,7 +2373,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         if (ssc->snapset.head_exists) {
           assert(obs.exists);
           clone_info ci;
-          ci.cloneid = clone_info::HEAD;
+          ci.cloneid = CEPH_NOSNAP;
 
           //Size for HEAD is oi.size
           ci.size = oi.size;
