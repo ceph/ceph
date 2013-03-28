@@ -337,8 +337,9 @@ int main(int argc, const char **argv)
 	  }
 
 	  bufferlist obl;
-	  if (do_command(ctx, cmd, indata, obl) < 0) {
-	    ret = 1;
+	  ret = do_command(ctx, cmd, indata, obl);
+	  if (ret < 0) {
+	    ret = -ret;
 	    break;
 	  }
 	  outbl.claim(obl);
