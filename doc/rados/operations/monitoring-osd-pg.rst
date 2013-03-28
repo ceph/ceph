@@ -569,7 +569,7 @@ calculates how to map the object to a `placement group`_, and then calculates
 how to assign the placement group to an OSD dynamically. To find the object
 location, all you need is the object name and the pool name. For example:: 
 
-	ceph osd map {object-name} {poolname}
+	ceph osd map {poolname} {object-name}
 
 .. topic:: Excercise: Locate an Object
 
