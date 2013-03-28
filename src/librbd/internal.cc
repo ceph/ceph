@@ -20,7 +20,7 @@
 #include "librbd/parent_types.h"
 #include "include/util.h"
 
-#include "osdc/snap_set_diff.h"
+#include "librados/snap_set_diff.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
