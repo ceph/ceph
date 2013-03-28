@@ -23,13 +23,12 @@ function cleanup() {
 trap cleanup EXIT
 
 # start from a clone
-rbd create $parent --size $size --image-format 2
+rbd create $parent --size $size --image-format 2 --stripe-count 8 --stripe-unit 65536
 rbd bench-write $parent --io-size $iosize --io-threads $iothreads --io-total $iototal --io-pattern rand 
 rbd snap create $parent --snap parent
 rbd snap protect $parent --snap parent
-rbd clone $parent@parent $src
-#rbd create $src --size $size --format 2
-rbd create $dst --size $size --image-format 2
+rbd clone $parent@parent $src --stripe-count 4 --stripe-unit 262144
+rbd create $dst --size $size --image-format 2 --order 19
 
 # mirror for a while
 for s in `seq 1 $max`; do
