@@ -328,6 +328,21 @@ namespace librados
      * @param prval [out] place error code in prval upon completion
      */
     void list_watchers(std::list<obj_watch_t> *out_watchers, int *prval);
+
+    /**
+     * list snapshot clones associated with a logical object
+     *
+     * This will include a record for each version of the object,
+     * include the "HEAD" (which will have a cloneid of
+     * librados::clone_info_t::HEAD).  Each clone includes a vector
+     * of snap ids for which it is defined to exist.
+     *
+     * NOTE: this operation must be submitted from an IoCtx with a
+     * read snapid of CEPH_SNAPDIR for reliable results.
+     *
+     * @param out_snaps [out] pointer to resulting snap_set_t
+     * @param prval [out] place error code in prval upon completion
+     */
     void list_snaps(snap_set_t *out_snaps, int *prval);
 
   };
