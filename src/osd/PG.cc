@@ -49,6 +49,7 @@ void PGPool::update(OSDMapRef map)
   assert(pi);
   info = *pi;
   auid = pi->auid;
+  name = map->get_pool_name(id);
   if (pi->get_snap_epoch() == map->get_epoch()) {
     pi->build_removed_snaps(newly_removed_snaps);
     newly_removed_snaps.subtract(cached_removed_snaps);
