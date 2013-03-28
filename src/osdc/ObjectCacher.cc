@@ -1513,15 +1513,12 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
   // we'll need to wait for all objects to flush!
   C_GatherBuilder gather(cct);
 
-  bool safe = true;
   for (xlist<Object*>::iterator i = oset->objects.begin();
        !i.end(); ++i) {
     Object *ob = *i;
 
     if (!flush(ob, 0, 0)) {
       // we'll need to gather...
-      safe = false;
-
       ldout(cct, 10) << "flush_set " << oset << " will wait for ack tid " 
                << ob->last_write_tid 
                << " on " << *ob
@@ -1529,16 +1526,16 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
       ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
     }
   }
-  if (gather.has_subs())
+
+  if (gather.has_subs()) {
     gather.set_finisher(onfinish);
-  gather.activate();
-  
-  if (safe) {
+    gather.activate();
+    return false;
+  } else {
     ldout(cct, 10) << "flush_set " << oset << " has no dirty|tx bhs" << dendl;
     onfinish->complete(0);
     return true;
   }
-  return false;
 }
 
 // flush.  non-blocking, takes callback.
@@ -1558,7 +1555,6 @@ bool ObjectCacher::flush_set(ObjectSet *oset, vector<ObjectExtent>& exv, Context
   // we'll need to wait for all objects to flush!
   C_GatherBuilder gather(cct);
 
-  bool safe = true;
   for (vector<ObjectExtent>::iterator p = exv.begin();
        p != exv.end();
        ++p) {
@@ -1572,23 +1568,21 @@ bool ObjectCacher::flush_set(ObjectSet *oset, vector<ObjectExtent>& exv, Context
 
     if (!flush(ob, ex.offset, ex.length)) {
       // we'll need to gather...
-      safe = false;
-
       ldout(cct, 10) << "flush_set " << oset << " will wait for ack tid " 
 		     << ob->last_write_tid << " on " << *ob << dendl;
       ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
     }
   }
-  if (gather.has_subs())
-    gather.set_finisher(onfinish);
-  gather.activate();
 
-  if (safe) {
+  if (gather.has_subs()) {
+    gather.set_finisher(onfinish);
+    gather.activate();
+    return false;
+  } else {
     ldout(cct, 10) << "flush_set " << oset << " has no dirty|tx bhs" << dendl;
     onfinish->complete(0);
     return true;
   }
-  return false;
 }
 
 void ObjectCacher::purge_set(ObjectSet *oset)
