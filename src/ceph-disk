@@ -180,9 +180,22 @@ def is_partition(dev):
     if not stat.S_ISBLK(os.lstat(dev).st_mode):
         raise Error('not a block device', dev)
 
-    # if the device ends in a number, it is a partition (e.g., /dev/sda3)
-    if dev[-1].isdigit():
-        return True
+    # we can't tell just from the name of the device if it is a
+    # partition or not.  look in the by-path dir and see if the
+    # referring symlink ends in -partNNN.
+    name = dev.split('/')[-1]
+    for name in os.listdir('/dev/disk/by-path'):
+        target = os.readlink(os.path.join('/dev/disk/by-path', name))
+        cdev = target.split('/')[-1]
+        if '/dev/' + cdev != dev:
+            continue
+        (baser) = re.search('(.*)-part\d+$', name)
+        if baser is not None:
+            return True
+        else:
+            return False
+
+    # hrm, don't know...
     return False
 
 
