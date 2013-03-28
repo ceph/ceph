@@ -330,12 +330,9 @@ void RGWProcess::handle_request(RGWRequest *req)
     abort_early(s, ret);
     goto done;
   }
+
   req->log(s, "reading the cors attr");
-  ret = handler->read_cors_config();
-  if (ret < 0) {
-    abort_early(s, ret);
-    goto done;
-  }
+  handler->read_cors_config();
   
   req->log(s, "verifying op permissions");
   ret = op->verify_permission();
