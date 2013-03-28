@@ -1899,6 +1899,12 @@ reprotect_and_return_err:
     // ignore return value, since we may be set to a non-existent
     // snapshot and the user is trying to fix that
     ictx_check(ictx);
+    if (ictx->object_cacher) {
+      // complete pending writes before we're set to a snapshot and
+      // get -EROFS for writes
+      RWLock::WLocker l(ictx->md_lock);
+      ictx->flush_cache();
+    }
     return _snap_set(ictx, snap_name);
   }
 
