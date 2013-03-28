@@ -116,7 +116,7 @@ struct PGRecoveryStats {
 };
 
 struct PGPool {
-  int id;
+  int64_t id;
   string name;
   uint64_t auid;
 
@@ -126,7 +126,7 @@ struct PGPool {
   interval_set<snapid_t> cached_removed_snaps;      // current removed_snaps set
   interval_set<snapid_t> newly_removed_snaps;  // newly removed in the last epoch
 
-  PGPool(int i, const char *_name, uint64_t au) :
+  PGPool(int64_t i, const char *_name, uint64_t au) :
     id(i), auid(au) {
     if (_name)
       name = _name;
