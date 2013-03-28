@@ -2305,6 +2305,9 @@ reprotect_and_return_err:
       // no diff.
       return 0;
     }
+    if (from_snap_id >= end_snap_id) {
+      return -EINVAL;
+    }
 
     // we must list snaps via the head, not end snap
     head_ctx.snap_set_read(CEPH_SNAPDIR);
