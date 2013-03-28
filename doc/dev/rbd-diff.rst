@@ -7,8 +7,7 @@ two snapshots (or a snapshot and the head) of an RBD image.
 Header
 ------
 
-le32: string length, always 13
-"rbd diff v1"
+"rbd diff v1\n"
 
 Record
 ------
@@ -50,6 +49,11 @@ Zero data
 u8: 'z'
 le64: offset
 le64: length
+
+End
+---
+
+u8: 'e'
 
 
 
