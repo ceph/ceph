@@ -1,5 +1,6 @@
 #include <iostream>
 #include <include/types.h>
+#include <limits.h>
 #include <errno.h>
 
 #include "common/ceph_json.h"
