@@ -2400,7 +2400,7 @@ reprotect_and_return_err:
 	  for (vector<pair<uint64_t,uint64_t> >::iterator r = q->buffer_extents.begin();
 	       r != q->buffer_extents.end();
 	       ++r) {
-	    interval_set<uint64_t> overlap;
+	    interval_set<uint64_t> overlap;  // object extents
 	    overlap.insert(opos, r->second);
 	    overlap.intersection_of(diff);
 	    ldout(ictx->cct, 20) << " opos " << opos
@@ -2410,7 +2410,8 @@ reprotect_and_return_err:
 	    for (interval_set<uint64_t>::iterator s = overlap.begin();
 		 s != overlap.end();
 		 ++s) {
-	      uint64_t logical_off = off + s.get_start();
+	      uint64_t su_off = s.get_start() - opos;
+	      uint64_t logical_off = off + r->first + su_off;
 	      ldout(ictx->cct, 20) << "   overlap extent " << s.get_start() << "~" << s.get_len()
 				   << " logical "
 				   << logical_off << "~" << s.get_len()
