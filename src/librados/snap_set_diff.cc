@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #include <vector>
 
@@ -7,7 +9,7 @@
 #include "include/interval_set.h"
 #include "common/debug.h"
 
-#define dout_subsys ceph_subsys_rbd
+#define dout_subsys ceph_subsys_rados
 
 /**
  * calculate intervals/extents that vary between two snapshots
