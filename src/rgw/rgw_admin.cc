@@ -198,13 +198,10 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "pool") == 0 ||
       strcmp(cmd, "pools") == 0 ||
       strcmp(cmd, "subuser") == 0 ||
-      strcmp(cmd, "log") == 0 ||
-      strcmp(cmd, "usage") == 0 ||
-      strcmp(cmd, "object") == 0 ||
-      strcmp(cmd, "zone") == 0 ||
       strcmp(cmd, "temp") == 0 ||
       strcmp(cmd, "usage") == 0 ||
-      strcmp(cmd, "user") == 0) {
+      strcmp(cmd, "user") == 0 ||
+      strcmp(cmd, "zone") == 0) {
     *need_more = true;
     return 0;
   }
