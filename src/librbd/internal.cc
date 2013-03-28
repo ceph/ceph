@@ -2265,7 +2265,7 @@ reprotect_and_return_err:
 
 
   int64_t diff_iterate(ImageCtx *ictx, const char *fromsnapname,
-		       uint64_t off, size_t len,
+		       uint64_t off, uint64_t len,
 		       int (*cb)(uint64_t, size_t, bool, void *),
 		       void *arg)
   {

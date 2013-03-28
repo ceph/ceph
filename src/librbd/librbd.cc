@@ -437,7 +437,7 @@ namespace librbd {
   }
 
   int64_t Image::diff_iterate(const char *fromsnapname,
-			      uint64_t ofs, size_t len,
+			      uint64_t ofs, uint64_t len,
 			      int (*cb)(uint64_t, size_t, bool, void *),
 			      void *arg)
   {
