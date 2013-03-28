@@ -98,6 +98,8 @@ void usage()
 "                                              (dest defaults\n"
 "                                               as the filename part of file)\n"
 "                                              \"-\" for stdin\n"
+"  diff <image-name> [--from-snap <snap-name>] print extents that differ since\n"
+"                                              a previous snap, or image creation\n"
 "  export-diff <image-name> [--from-snap <snap-name>] <path>\n"
 "                                              export an incremental diff to\n"
 "                                              path, or \"-\" for stdout\n"
@@ -1135,6 +1137,26 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
   return r;
 }
 
+static int diff_cb(uint64_t ofs, size_t len, bool zero, void *arg)
+{
+  cout << ofs << "\t" << len << "\t"
+       << (zero ? "zero" : "data") << "\n";
+  return 0;
+}
+
+static int do_diff(librbd::Image& image, const char *fromsnapname,
+		   const char *endsnapname)
+{
+  int64_t r;
+  librbd::image_info_t info;
+
+  r = image.stat(info, sizeof(info));
+  if (r < 0)
+    return r;
+
+  return image.diff_iterate(fromsnapname, 0, info.size, diff_cb, NULL);
+}
+
 static const char *imgname_from_path(const char *path)
 {
   const char *imgname;
@@ -1893,6 +1915,7 @@ enum {
   OPT_RM,
   OPT_EXPORT,
   OPT_EXPORT_DIFF,
+  OPT_DIFF,
   OPT_IMPORT,
   OPT_IMPORT_DIFF,
   OPT_COPY,
@@ -1938,6 +1961,8 @@ static int get_cmd(const char *cmd, bool snapcmd, bool lockcmd)
       return OPT_EXPORT;
     if (strcmp(cmd, "export-diff") == 0)
       return OPT_EXPORT_DIFF;
+    if (strcmp(cmd, "diff") == 0)
+      return OPT_DIFF;
     if (strcmp(cmd, "import") == 0)
       return OPT_IMPORT;
     if (strcmp(cmd, "import-diff") == 0)
@@ -2193,6 +2218,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       case OPT_MAP:
       case OPT_BENCH_WRITE:
       case OPT_LOCK_LIST:
+      case OPT_DIFF:
 	SET_CONF_PARAM(v, &imgname, NULL, NULL);
 	break;
       case OPT_UNMAP:
@@ -2308,7 +2334,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 		      (char **)&imgname, (char **)&snapname);
   if (snapname && opt_cmd != OPT_SNAP_CREATE && opt_cmd != OPT_SNAP_ROLLBACK &&
       opt_cmd != OPT_SNAP_REMOVE && opt_cmd != OPT_INFO &&
-      opt_cmd != OPT_EXPORT && opt_cmd != OPT_EXPORT_DIFF && opt_cmd != OPT_COPY &&
+      opt_cmd != OPT_EXPORT && opt_cmd != OPT_EXPORT_DIFF && opt_cmd != OPT_DIFF && opt_cmd != OPT_COPY &&
       opt_cmd != OPT_MAP && opt_cmd != OPT_CLONE &&
       opt_cmd != OPT_SNAP_PROTECT && opt_cmd != OPT_SNAP_UNPROTECT &&
       opt_cmd != OPT_CHILDREN) {
@@ -2405,6 +2431,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
        opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
        opt_cmd == OPT_IMPORT_DIFF ||
        opt_cmd == OPT_EXPORT || opt_cmd == OPT_EXPORT_DIFF || opt_cmd == OPT_COPY ||
+       opt_cmd == OPT_DIFF ||
        opt_cmd == OPT_CHILDREN || opt_cmd == OPT_LOCK_LIST)) {
 
     if (opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
@@ -2425,6 +2452,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       (opt_cmd == OPT_INFO ||
        opt_cmd == OPT_EXPORT ||
        opt_cmd == OPT_EXPORT_DIFF ||
+       opt_cmd == OPT_DIFF ||
        opt_cmd == OPT_COPY ||
        opt_cmd == OPT_CHILDREN)) {
     r = image.snap_set(snapname);
@@ -2664,6 +2692,14 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     r = do_export(image, path);
     if (r < 0) {
       cerr << "rbd: export error: " << cpp_strerror(-r) << std::endl;
+      return EXIT_FAILURE;
+    }
+    break;
+
+  case OPT_DIFF:
+    r = do_diff(image, fromsnapname, snapname);
+    if (r < 0) {
+      cerr << "rbd: diff error: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
     }
     break;
