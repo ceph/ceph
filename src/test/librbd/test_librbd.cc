@@ -1391,3 +1391,106 @@ TEST(LibRBD, LockingPP)
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
+
+TEST(LibRBD, FlushAio)
+{
+  rados_t cluster;
+  rados_ioctx_t ioctx;
+  string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
+  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  const char *name = "testimg";
+  uint64_t size = 2 << 20;
+  size_t num_aios = 256;
+
+  ASSERT_EQ(0, create_image(ioctx, name, size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name, &image, NULL));
+
+  char test_data[TEST_IO_SIZE + 1];
+  size_t i;
+  for (i = 0; i < TEST_IO_SIZE; ++i) {
+    test_data[i] = (char) (rand() % (126 - 33) + 33);
+  }
+
+  rbd_completion_t write_comps[num_aios];
+  for (i = 0; i < num_aios; ++i) {
+    ASSERT_EQ(0, rbd_aio_create_completion(NULL, NULL, &write_comps[i]));
+    uint64_t offset = rand() % (size - TEST_IO_SIZE);
+    ASSERT_EQ(0, rbd_aio_write(image, offset, TEST_IO_SIZE, test_data,
+			       write_comps[i]));
+  }
+
+  rbd_completion_t flush_comp;
+  ASSERT_EQ(0, rbd_aio_create_completion(NULL, NULL, &flush_comp));
+  ASSERT_EQ(0, rbd_aio_flush(image, flush_comp));
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(flush_comp));
+  ASSERT_EQ(1, rbd_aio_is_complete(flush_comp));
+  rbd_aio_release(flush_comp);
+
+  for (i = 0; i < num_aios; ++i) {
+    ASSERT_EQ(1, rbd_aio_is_complete(write_comps[i]));
+    rbd_aio_release(write_comps[i]);
+  }
+
+  ASSERT_EQ(0, rbd_close(image));
+  ASSERT_EQ(0, rbd_remove(ioctx, name));
+  rados_ioctx_destroy(ioctx);
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
+
+TEST(LibRBD, FlushAioPP)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    const char *name = "testimg";
+    uint64_t size = 2 << 20;
+    size_t num_aios = 256;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name, size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
+
+    char test_data[TEST_IO_SIZE + 1];
+    size_t i;
+    for (i = 0; i < TEST_IO_SIZE; ++i) {
+      test_data[i] = (char) (rand() % (126 - 33) + 33);
+    }
+
+    librbd::RBD::AioCompletion *write_comps[num_aios];
+    for (i = 0; i < num_aios; ++i) {
+      ceph::bufferlist bl;
+      bl.append(test_data, strlen(test_data));
+      write_comps[i] = new librbd::RBD::AioCompletion(NULL, NULL);
+      uint64_t offset = rand() % (size - TEST_IO_SIZE);
+      ASSERT_EQ(0, image.aio_write(offset, TEST_IO_SIZE, bl,
+				   write_comps[i]));
+    }
+
+    librbd::RBD::AioCompletion *flush_comp =
+      new librbd::RBD::AioCompletion(NULL, NULL);
+    ASSERT_EQ(0, image.aio_flush(flush_comp));
+    ASSERT_EQ(0, flush_comp->wait_for_complete());
+    ASSERT_EQ(1, flush_comp->is_complete());
+    delete flush_comp;
+
+    for (i = 0; i < num_aios; ++i) {
+      librbd::RBD::AioCompletion *comp = write_comps[i];
+      ASSERT_EQ(1, comp->is_complete());
+      delete comp;
+    }
+  }
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
