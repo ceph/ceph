@@ -103,9 +103,8 @@ def main():
 
     machine_type = ctx.machine_type
     if machine_type is None:
-        machine_type = ctx.config.get('machine-type')
-        if machine_type is None:
-            machine_type = ctx.config.get('machine_type', 'plana')
+        fallback_default = ctx.config.get('machine_type', 'plana')
+        machine_type = ctx.config.get('machine-type', fallback_default)
 
     if ctx.block:
         assert ctx.lock, \
