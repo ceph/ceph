@@ -142,6 +142,7 @@ public:
 
   /* snapshots */
   int snap_list(std::vector<snap_info_t>& snaps);
+  bool snap_exists(const char *snapname);
   int snap_create(const char *snapname);
   int snap_remove(const char *snapname);
   int snap_rollback(const char *snap_name);
