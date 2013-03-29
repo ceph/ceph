@@ -855,10 +855,26 @@ int librados::IoCtx::operate(const std::string& oid, librados::ObjectReadOperati
   return io_ctx_impl->operate_read(obj, (::ObjectOperation*)o->impl, pbl);
 }
 
-int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c, librados::ObjectWriteOperation *o)
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+				 librados::ObjectWriteOperation *o)
 {
   object_t obj(oid);
-  return io_ctx_impl->aio_operate(obj, (::ObjectOperation*)o->impl, c->pc);
+  return io_ctx_impl->aio_operate(obj, (::ObjectOperation*)o->impl, c->pc,
+				  io_ctx_impl->snapc);
+}
+
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+				 librados::ObjectWriteOperation *o,
+				 snap_t snap_seq, std::vector<snap_t>& snaps)
+{
+  object_t obj(oid);
+  vector<snapid_t> snv;
+  snv.resize(snaps.size());
+  for (size_t i = 0; i < snaps.size(); ++i)
+    snv[i] = snaps[i];
+  SnapContext snapc(snap_seq, snv);
+  return io_ctx_impl->aio_operate(obj, (::ObjectOperation*)o->impl, c->pc,
+				  snapc);
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c, librados::ObjectReadOperation *o, bufferlist *pbl)
@@ -956,7 +972,15 @@ uint64_t librados::IoCtx::get_last_version()
 int librados::IoCtx::aio_read(const std::string& oid, librados::AioCompletion *c,
 			      bufferlist *pbl, size_t len, uint64_t off)
 {
-  return io_ctx_impl->aio_read(oid, c->pc, pbl, len, off);
+  return io_ctx_impl->aio_read(oid, c->pc, pbl, len, off,
+			       io_ctx_impl->snap_seq);
+}
+
+int librados::IoCtx::aio_read(const std::string& oid, librados::AioCompletion *c,
+			      bufferlist *pbl, size_t len, uint64_t off,
+			      uint64_t snapid)
+{
+  return io_ctx_impl->aio_read(oid, c->pc, pbl, len, off, snapid);
 }
 
 int librados::IoCtx::aio_exec(const std::string& oid,
@@ -973,7 +997,16 @@ int librados::IoCtx::aio_sparse_read(const std::string& oid, librados::AioComple
 				     size_t len, uint64_t off)
 {
   return io_ctx_impl->aio_sparse_read(oid, c->pc,
-				      m, data_bl, len, off);
+				      m, data_bl, len, off,
+				      io_ctx_impl->snap_seq);
+}
+
+int librados::IoCtx::aio_sparse_read(const std::string& oid, librados::AioCompletion *c,
+				     std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
+				     size_t len, uint64_t off, uint64_t snapid)
+{
+  return io_ctx_impl->aio_sparse_read(oid, c->pc,
+				      m, data_bl, len, off, snapid);
 }
 
 int librados::IoCtx::aio_write(const std::string& oid, librados::AioCompletion *c,
@@ -998,6 +1031,12 @@ int librados::IoCtx::aio_write_full(const std::string& oid, librados::AioComplet
 int librados::IoCtx::aio_remove(const std::string& oid, librados::AioCompletion *c)
 {
   return io_ctx_impl->aio_remove(oid, c->pc);
+}
+
+int librados::IoCtx::aio_flush_async(librados::AioCompletion *c)
+{
+  io_ctx_impl->flush_aio_writes_async(c->pc);
+  return 0;
 }
 
 int librados::IoCtx::aio_flush()
@@ -2183,7 +2222,7 @@ extern "C" int rados_aio_read(rados_ioctx_t io, const char *o,
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   object_t oid(o);
   return ctx->aio_read(oid, (librados::AioCompletionImpl*)completion,
-		       buf, len, off);
+		       buf, len, off, ctx->snap_seq);
 }
 
 extern "C" int rados_aio_write(rados_ioctx_t io, const char *o,
@@ -2227,6 +2266,14 @@ extern "C" int rados_aio_remove(rados_ioctx_t io, const char *o,
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   object_t oid(o);
   return ctx->aio_remove(oid, (librados::AioCompletionImpl*)completion);
+}
+
+extern "C" int rados_aio_flush_async(rados_ioctx_t io,
+				     rados_completion_t completion)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  ctx->flush_aio_writes_async((librados::AioCompletionImpl*)completion);
+  return 0;
 }
 
 extern "C" int rados_aio_flush(rados_ioctx_t io)
