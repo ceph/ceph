@@ -414,6 +414,12 @@ namespace librbd {
     return librbd::snap_list(ictx, snaps);
   }
 
+  bool Image::snap_exists(const char *snap_name)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::snap_exists(ictx, snap_name);
+  }
+
   int Image::snap_set(const char *snap_name)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;

@@ -1462,6 +1462,19 @@ reprotect_and_return_err:
     return 0;
   }
 
+  bool snap_exists(ImageCtx *ictx, const char *snap_name)
+  {
+    ldout(ictx->cct, 20) << "snap_exists " << ictx << " " << snap_name << dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0)
+      return r;
+
+    RWLock::RLocker l(ictx->snap_lock);
+    return ictx->snaps_by_name.count(snap_name);
+  }
+
+
   int add_snap(ImageCtx *ictx, const char *snap_name)
   {
     uint64_t snap_id;
