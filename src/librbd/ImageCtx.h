@@ -128,9 +128,11 @@ namespace librbd {
 			   uint64_t *overlap) const;
     void aio_read_from_cache(object_t o, bufferlist *bl, size_t len,
 			     uint64_t off, Context *onfinish);
-    void write_to_cache(object_t o, bufferlist& bl, size_t len, uint64_t off);
+    void write_to_cache(object_t o, bufferlist& bl, size_t len, uint64_t off,
+			Context *onfinish);
     int read_from_cache(object_t o, bufferlist *bl, size_t len, uint64_t off);
     void user_flushed();
+    void flush_cache_aio(Context *onfinish);
     int flush_cache();
     void shutdown_cache();
     void invalidate_cache();

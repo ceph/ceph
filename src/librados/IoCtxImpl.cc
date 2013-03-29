@@ -70,22 +70,58 @@ void librados::IoCtxImpl::queue_aio_write(AioCompletionImpl *c)
   aio_write_list_lock.Lock();
   assert(c->io == this);
   c->aio_write_seq = ++aio_write_seq;
+  ldout(client->cct, 20) << "queue_aio_write " << this << " completion " << c
+			 << " write_seq " << aio_write_seq << dendl;
   aio_write_list.push_back(&c->aio_write_list_item);
   aio_write_list_lock.Unlock();
 }
 
 void librados::IoCtxImpl::complete_aio_write(AioCompletionImpl *c)
 {
+  ldout(client->cct, 20) << "complete_aio_write " << c << dendl;
   aio_write_list_lock.Lock();
   assert(c->io == this);
   c->aio_write_list_item.remove_myself();
+  // queue async flush waiters
+  map<tid_t, std::list<AioCompletionImpl*> >::iterator waiters =
+    aio_write_waiters.find(c->aio_write_seq);
+  if (waiters != aio_write_waiters.end()) {
+    ldout(client->cct, 20) << "found " << waiters->second.size()
+			   << " waiters" << dendl;
+    for (std::list<AioCompletionImpl*>::iterator it = waiters->second.begin();
+	 it != waiters->second.end(); ++it) {
+      client->finisher.queue(new C_AioCompleteAndSafe(*it));
+      (*it)->put();
+    }
+    aio_write_waiters.erase(waiters);
+  } else {
+    ldout(client->cct, 20) << "found no waiters for tid "
+			   << c->aio_write_seq << dendl;
+  }
   aio_write_cond.Signal();
   aio_write_list_lock.Unlock();
   put();
 }
 
+void librados::IoCtxImpl::flush_aio_writes_async(AioCompletionImpl *c)
+{
+  ldout(client->cct, 20) << "flush_aio_writes_async " << this
+			 << " completion " << c << dendl;
+  Mutex::Locker l(aio_write_list_lock);
+  tid_t seq = aio_write_seq;
+  ldout(client->cct, 20) << "flush_aio_writes_async waiting on tid "
+			 << seq << dendl;
+  if (aio_write_list.empty()) {
+    client->finisher.queue(new C_AioCompleteAndSafe(c));
+  } else {
+    c->get();
+    aio_write_waiters[seq].push_back(c);
+  }
+}
+
 void librados::IoCtxImpl::flush_aio_writes()
 {
+  ldout(client->cct, 20) << "flush_aio_writes" << dendl;
   aio_write_list_lock.Lock();
   tid_t seq = aio_write_seq;
   while (!aio_write_list.empty() &&
@@ -675,7 +711,8 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 }
 
 int librados::IoCtxImpl::aio_operate(const object_t& oid,
-				     ::ObjectOperation *o, AioCompletionImpl *c)
+				     ::ObjectOperation *o, AioCompletionImpl *c,
+				     const SnapContext& snap_context)
 {
   utime_t ut = ceph_clock_now(client->cct);
   /* can't write to a snapshot */
@@ -689,13 +726,15 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
   queue_aio_write(c);
 
   Mutex::Locker l(*lock);
-  objecter->mutate(oid, oloc, *o, snapc, ut, 0, onack, oncommit, &c->objver);
+  objecter->mutate(oid, oloc, *o, snap_context, ut, 0, onack, oncommit,
+		   &c->objver);
 
   return 0;
 }
 
 int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
-				  bufferlist *pbl, size_t len, uint64_t off)
+				  bufferlist *pbl, size_t len, uint64_t off,
+				  uint64_t snapid)
 {
   if (len > (size_t) INT_MAX)
     return -EDOM;
@@ -709,13 +748,14 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 
   Mutex::Locker l(*lock);
   objecter->read(oid, oloc,
-		 off, len, snap_seq, &c->bl, 0,
+		 off, len, snapid, &c->bl, 0,
 		 onack, &c->objver);
   return 0;
 }
 
 int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
-				  char *buf, size_t len, uint64_t off)
+				  char *buf, size_t len, uint64_t off,
+				  uint64_t snapid)
 {
   if (len > (size_t) INT_MAX)
     return -EDOM;
@@ -729,7 +769,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 
   Mutex::Locker l(*lock);
   objecter->read(oid, oloc,
-		 off, len, snap_seq, &c->bl, 0,
+		 off, len, snapid, &c->bl, 0,
 		 onack, &c->objver);
 
   return 0;
@@ -739,7 +779,7 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
 					 AioCompletionImpl *c,
 					 std::map<uint64_t,uint64_t> *m,
 					 bufferlist *data_bl, size_t len,
-					 uint64_t off)
+					 uint64_t off, uint64_t snapid)
 {
   if (len > (size_t) INT_MAX)
     return -EDOM;
@@ -752,7 +792,7 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
 
   Mutex::Locker l(*lock);
   objecter->sparse_read(oid, oloc,
-		 off, len, snap_seq, &c->bl, 0,
+		 off, len, snapid, &c->bl, 0,
 		 onack);
   return 0;
 }

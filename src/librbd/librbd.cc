@@ -181,6 +181,12 @@ namespace librbd {
     c->rbd_comp = this;
   }
 
+  bool RBD::AioCompletion::is_complete()
+  {
+    librbd::AioCompletion *c = (librbd::AioCompletion *)pc;
+    return c->is_complete();
+  }
+
   int RBD::AioCompletion::wait_for_complete()
   {
     librbd::AioCompletion *c = (librbd::AioCompletion *)pc;
@@ -473,6 +479,12 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     return librbd::flush(ictx);
+  }
+
+  int Image::aio_flush(RBD::AioCompletion *c)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::aio_flush(ictx, (librbd::AioCompletion *)c->pc);
   }
 
 } // namespace librbd
@@ -1058,6 +1070,19 @@ extern "C" int rbd_flush(rbd_image_t image)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   return librbd::flush(ictx);
+}
+
+extern "C" int rbd_aio_flush(rbd_image_t image, rbd_completion_t c)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+  return librbd::aio_flush(ictx, (librbd::AioCompletion *)comp->pc);
+}
+
+extern "C" int rbd_aio_is_complete(rbd_completion_t c)
+{
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+  return comp->is_complete();
 }
 
 extern "C" int rbd_aio_wait_for_complete(rbd_completion_t c)

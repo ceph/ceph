@@ -37,6 +37,8 @@ enum {
   l_librbd_aio_discard,
   l_librbd_aio_discard_bytes,
   l_librbd_aio_discard_latency,
+  l_librbd_aio_flush,
+  l_librbd_aio_flush_latency,
 
   l_librbd_snap_create,
   l_librbd_snap_remove,
@@ -177,6 +179,7 @@ namespace librbd {
 	       char *buf, bufferlist *pbl, AioCompletion *c);
   int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
 	       char *buf, bufferlist *pbl, AioCompletion *c);
+  int aio_flush(ImageCtx *ictx, AioCompletion *c);
   int flush(ImageCtx *ictx);
   int _flush(ImageCtx *ictx);
 

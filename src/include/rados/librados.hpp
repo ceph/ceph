@@ -457,9 +457,54 @@ namespace librados
 
     int aio_read(const std::string& oid, AioCompletion *c,
 		 bufferlist *pbl, size_t len, uint64_t off);
+    /**
+     * Asynchronously read from an object at a particular snapshot
+     *
+     * This is the same as normal aio_read, except that it chooses
+     * the snapshot to read from from its arguments instead of the
+     * internal IoCtx state.
+     *
+     * The return value of the completion will be number of bytes read on
+     * success, negative error code on failure.
+     *
+     * @param oid the name of the object to read from
+     * @param c what to do when the read is complete
+     * @param pbl where to store the results
+     * @param len the number of bytes to read
+     * @param off the offset to start reading from in the object
+     * @param snapid the id of the snapshot to read from
+     * @returns 0 on success, negative error code on failure
+     */
+    int aio_read(const std::string& oid, AioCompletion *c,
+		 bufferlist *pbl, size_t len, uint64_t off, uint64_t snapid);
     int aio_sparse_read(const std::string& oid, AioCompletion *c,
 			std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
 			size_t len, uint64_t off);
+    /**
+     * Asynchronously read existing extents from an object at a
+     * particular snapshot
+     *
+     * This is the same as normal aio_sparse_read, except that it chooses
+     * the snapshot to read from from its arguments instead of the
+     * internal IoCtx state.
+     *
+     * m will be filled in with a map of extents in the object,
+     * mapping offsets to lengths (in bytes) within the range
+     * requested. The data for all of the extents are stored
+     * back-to-back in offset order in data_bl.
+     *
+     * @param oid the name of the object to read from
+     * @param c what to do when the read is complete
+     * @param m where to store the map of extents
+     * @param data_bl where to store the data
+     * @param len the number of bytes to read
+     * @param off the offset to start reading from in the object
+     * @param snapid the id of the snapshot to read from
+     * @returns 0 on success, negative error code on failure
+     */
+    int aio_sparse_read(const std::string& oid, AioCompletion *c,
+			std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
+			size_t len, uint64_t off, uint64_t snapid);
     int aio_write(const std::string& oid, AioCompletion *c, const bufferlist& bl,
 		  size_t len, uint64_t off);
     int aio_append(const std::string& oid, AioCompletion *c, const bufferlist& bl,
@@ -484,6 +529,16 @@ namespace librados
 
     int aio_flush();
 
+    /**
+     * Schedule a callback for when all currently pending
+     * aio writes are safe. This is a non-blocking version of
+     * aio_flush().
+     *
+     * @param c what to do when the writes are safe
+     * @returns 0 on success, negative error code on failure
+     */
+    int aio_flush_async(AioCompletion *c);
+
     int aio_stat(const std::string& oid, AioCompletion *c, uint64_t *psize, time_t *pmtime);
 
     int aio_exec(const std::string& oid, AioCompletion *c, const char *cls, const char *method,
@@ -493,6 +548,23 @@ namespace librados
     int operate(const std::string& oid, ObjectWriteOperation *op);
     int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl);
     int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op);
+    /**
+     * Schedule an async write operation with explicit snapshot parameters
+     *
+     * This is the same as the first aio_operate(), except that it
+     * gets the snapshot context from its arguments instead of the
+     * IoCtx internal state.
+     *
+     * @param oid the object to operate on
+     * @param c what to do when the operation is complete and safe
+     * @param op which operations to perform
+     * @param seq latest selfmanaged snapshot sequence number for this object
+     * @param snaps currently existing selfmanaged snapshot ids for this object
+     * @returns 0 on success, negative error code on failure
+     */
+    int aio_operate(const std::string& oid, AioCompletion *c,
+		    ObjectWriteOperation *op, snap_t seq,
+		    std::vector<snap_t>& snaps);
     int aio_operate(const std::string& oid, AioCompletion *c, ObjectReadOperation *op,
 		    bufferlist *pbl);
 
