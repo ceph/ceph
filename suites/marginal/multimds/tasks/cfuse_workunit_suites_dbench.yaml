@@ -1,0 +1,8 @@
+tasks:
+- install:
+- ceph:
+- ceph-fuse:
+- workunit:
+    clients:
+      all:
+        - suites/dbench.sh
