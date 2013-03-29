@@ -180,6 +180,12 @@ Commands
   continuing.  If there was an end snapshot we verify it does not already exist before
   applying the changes, and create the snapshot when we are done.
 
+:command:`diff` [*image-name*] [--from-snap *snapname*]
+  Dump a list of byte extents in the image that have changed since the specified start
+  snapshot, or since the image was created.  Each output line includes the starting offset
+  (in bytes), the length of the region (in bytes), and either 'zero' or 'data' to indicate
+  whether the region is known to be zeros or may contain other data.
+
 :command:`cp` [*src-image*] [*dest-image*]
   Copies the content of a src-image into the newly created dest-image.
   dest-image will have the same size, order, and format as src-image.
