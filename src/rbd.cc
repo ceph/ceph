@@ -1062,6 +1062,8 @@ static int export_diff_cb(uint64_t ofs, size_t _len, bool zero, void *arg)
       return r;
   }
 
+  ec->pc.update_progress(ofs, ec->totalsize);
+
   return 0;
 }
 
