@@ -26,7 +26,6 @@
 #include "common/config.h"
 
 #include "mon/Monitor.h"
-#include "messages/MMonQuorumService.h"
 
 class QuorumService : public RefCountedObject
 {
@@ -47,7 +46,8 @@ class QuorumService : public RefCountedObject
 public:
   enum {
     SERVICE_HEALTH                   = 0x01,
-    SERVICE_TIMECHECK                = 0x02
+    SERVICE_TIMECHECK                = 0x02,
+    SERVICE_CONFIG_KEY               = 0x03,
   };
 
 protected:
@@ -116,7 +116,7 @@ public:
     return epoch;
   }
 
-  bool dispatch(MMonQuorumService *m) {
+  bool dispatch(Message *m) {
     return service_dispatch(m);
   }
 
