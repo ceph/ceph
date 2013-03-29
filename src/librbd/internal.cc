@@ -2441,6 +2441,12 @@ reprotect_and_return_err:
     req->complete(rados_aio_get_return_value(c));
   }
 
+  void rados_ctx_cb(rados_completion_t c, void *arg)
+  {
+    Context *comp = reinterpret_cast<Context *>(arg);
+    comp->complete(rados_aio_get_return_value(c));
+  }
+
   // validate extent against image size; clip to image size if necessary
   int clip_io(ImageCtx *ictx, uint64_t off, uint64_t *len)
   {
@@ -2465,6 +2471,36 @@ reprotect_and_return_err:
     // clip requests that extend past end to just end
     if ((off + *len) > image_size)
       *len = (size_t)(image_size - off);
+
+    return 0;
+  }
+
+  int aio_flush(ImageCtx *ictx, AioCompletion *c)
+  {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << "aio_flush " << ictx << " completion " << c <<  dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0)
+      return r;
+
+    ictx->user_flushed();
+
+    c->get();
+    c->add_request();
+    c->init_time(ictx, AIO_TYPE_FLUSH);
+    C_AioWrite *req_comp = new C_AioWrite(cct, c);
+    if (ictx->object_cacher) {
+      ictx->flush_cache_aio(req_comp);
+    } else {
+      librados::AioCompletion *rados_completion =
+	librados::Rados::aio_create_completion(req_comp, NULL, rados_ctx_cb);
+      ictx->data_ctx.aio_flush_async(rados_completion);
+      rados_completion->release();
+    }
+    c->finish_adding_requests(cct);
+    c->put();
+    ictx->perfcounter->inc(l_librbd_aio_flush);
 
     return 0;
   }
@@ -2550,9 +2586,10 @@ reprotect_and_return_err:
 	bl.append(buf + q->first, q->second);
       }
 
+      C_AioWrite *req_comp = new C_AioWrite(cct, c);
       if (ictx->object_cacher) {
-	// may block
-	ictx->write_to_cache(p->oid, bl, p->length, p->offset);
+	c->add_request();
+	ictx->write_to_cache(p->oid, bl, p->length, p->offset, req_comp);
       } else {
 	// reverse map this object extent onto the parent
 	vector<pair<uint64_t,uint64_t> > objectx;
@@ -2561,7 +2598,6 @@ reprotect_and_return_err:
 			      objectx);
 	uint64_t object_overlap = ictx->prune_parent_extents(objectx, overlap);
 
-	C_AioWrite *req_comp = new C_AioWrite(cct, c);
 	AioWrite *req = new AioWrite(ictx, p->oid.name, p->objectno, p->offset,
 				     objectx, object_overlap,
 				     bl, snapc, snap_id, req_comp);
