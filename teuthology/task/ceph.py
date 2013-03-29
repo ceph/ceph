@@ -708,6 +708,10 @@ def cluster(ctx, config):
 
     try:
         yield
+    except:
+        # we need to know this below
+        ctx.summary['success'] = False
+        raise
     finally:
         (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
 
@@ -769,7 +773,8 @@ def cluster(ctx, config):
                     check_status=False,
                 )
 
-        if ctx.archive is not None:
+        if ctx.archive is not None and \
+                not (ctx.config.get('archive-on-error') and ctx.summary['success']):
             # archive mon data, too
             log.info('Archiving mon data...')
             path = os.path.join(ctx.archive, 'data')
