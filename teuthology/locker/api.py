@@ -46,7 +46,7 @@ class MachineLock:
                         locked_by=user,
                         locked_since=web.db.SQLLiteral('NOW()'))
         assert res == 1, 'Failed to lock machine {name}'.format(name=name)
-        print user, 'locked single machine', name
+        print user, 'locked single machine', name, 'desc', desc
 
     def PUT(self, name):
         desc = web.input(desc=None)['desc']
@@ -65,7 +65,7 @@ class MachineLock:
             raise web.BadRequest()
         DB.update('machine', where='name = $name',
                   vars=dict(name=name), **updated)
-        print 'updated', name, 'with', updated
+        print 'updated', name, 'with', updated, 'desc', desc
 
 class Lock:
     def GET(self):
@@ -116,7 +116,7 @@ class Lock:
             else:
                 break
 
-        print user, 'locked', name_keys.keys()
+        print user, 'locked', name_keys.keys(), 'desc', desc
 
         web.header('Content-type', 'text/json')
         return json.dumps(name_keys)
