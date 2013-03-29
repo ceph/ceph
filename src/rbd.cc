@@ -1413,8 +1413,7 @@ static int do_import_diff(librbd::Image &image, const char *path)
     if (tag == 'e') {
       dout(2) << " end diff" << dendl;
       break;
-    }
-    else if (tag == 'f') {
+    } else if (tag == 'f') {
       r = read_string(fd, 4096, &from);   // 4k limit to make sure we don't get a garbage string
       if (r < 0)
 	goto done;
@@ -1438,8 +1437,7 @@ static int do_import_diff(librbd::Image &image, const char *path)
 	r = -EEXIST;
 	goto done;
       }
-    }
-    else if (tag == 's') {
+    } else if (tag == 's') {
       uint64_t end_size;
       char buf[8];
       r = safe_read(fd, buf, 8);
@@ -1459,8 +1457,7 @@ static int do_import_diff(librbd::Image &image, const char *path)
       }
       if (from_stdin)
 	size = end_size;
-    }
-    else if (tag == 'w' || tag == 'z') {
+    } else if (tag == 'w' || tag == 'z') {
       uint64_t len;
       char buf[16];
       r = safe_read(fd, buf, 16);
@@ -1485,8 +1482,7 @@ static int do_import_diff(librbd::Image &image, const char *path)
 	dout(2) << " zero " << off << "~" << len << dendl;
 	image.discard(off, len);
       }
-    }
-    else {
+    } else {
       cerr << "unrecognized tag byte " << (int)tag << " in stream; aborting" << std::endl;
       r = -EINVAL;
       goto done;
