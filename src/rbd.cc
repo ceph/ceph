@@ -1348,7 +1348,7 @@ static int read_string(int fd, unsigned max, string *out)
 {
   char buf[4];
 
-  int r = safe_read(fd, buf, 4);
+  int r = safe_read_exact(fd, buf, 4);
   if (r < 0)
     return r;
 
@@ -1361,7 +1361,7 @@ static int read_string(int fd, unsigned max, string *out)
     return -EINVAL;
 
   char sbuf[len];
-  r = safe_read(fd, sbuf, len);
+  r = safe_read_exact(fd, sbuf, len);
   if (r < 0)
     return r;
   out->assign(sbuf, len);
@@ -1394,7 +1394,7 @@ static int do_import_diff(librbd::Image &image, const char *path)
   }
 
   char buf[15];
-  r = safe_read(fd, buf, strlen(RBD_DIFF_BANNER));
+  r = safe_read_exact(fd, buf, strlen(RBD_DIFF_BANNER));
   if (r < 0)
     goto done;
   buf[strlen(RBD_DIFF_BANNER)] = '\0';
@@ -1406,9 +1406,10 @@ static int do_import_diff(librbd::Image &image, const char *path)
 
   while (true) {
     __u8 tag;
-    r = safe_read(fd, &tag, 1);
-    if (r <= 0)
+    r = safe_read_exact(fd, &tag, 1);
+    if (r < 0) {
       goto done;
+    }
 
     if (tag == 'e') {
       dout(2) << " end diff" << dendl;
@@ -1440,7 +1441,7 @@ static int do_import_diff(librbd::Image &image, const char *path)
     } else if (tag == 's') {
       uint64_t end_size;
       char buf[8];
-      r = safe_read(fd, buf, 8);
+      r = safe_read_exact(fd, buf, 8);
       if (r < 0)
 	goto done;
       bufferlist bl;
@@ -1460,7 +1461,7 @@ static int do_import_diff(librbd::Image &image, const char *path)
     } else if (tag == 'w' || tag == 'z') {
       uint64_t len;
       char buf[16];
-      r = safe_read(fd, buf, 16);
+      r = safe_read_exact(fd, buf, 16);
       if (r < 0)
 	goto done;
       bufferlist bl;
@@ -1471,7 +1472,7 @@ static int do_import_diff(librbd::Image &image, const char *path)
 
       if (tag == 'w') {
 	bufferptr bp = buffer::create(len);
-	r = safe_read(fd, bp.c_str(), len);
+	r = safe_read_exact(fd, bp.c_str(), len);
 	if (r < 0)
 	  goto done;
 	bufferlist data;
