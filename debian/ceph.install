@@ -1,29 +1,29 @@
+etc/bash_completion.d/ceph
+lib/udev/rules.d/95-ceph-osd.rules
+sbin/ceph-create-keys usr/sbin/
+sbin/ceph-disk usr/sbin/
+sbin/ceph-disk-activate usr/sbin/
+sbin/ceph-disk-prepare usr/sbin/
+sbin/mkcephfs
 usr/bin/ceph-clsinfo
+usr/bin/ceph-debugpack
+usr/bin/ceph-mon
+usr/bin/ceph-osd
+usr/bin/ceph-run
+usr/bin/ceph_mon_store_converter
 usr/bin/crushtool
 usr/bin/monmaptool
 usr/bin/osdmaptool
-usr/bin/ceph-run
-usr/bin/ceph-mon
-usr/bin/ceph-osd
-usr/bin/ceph-debugpack
-usr/bin/ceph_mon_store_converter
-sbin/ceph-disk usr/sbin/
-sbin/ceph-disk-prepare usr/sbin/
-sbin/ceph-disk-activate usr/sbin/
-sbin/ceph-create-keys usr/sbin/
-sbin/mkcephfs
 usr/lib/ceph/ceph_common.sh
 usr/lib/rados-classes/*
 usr/share/doc/ceph/sample.ceph.conf
 usr/share/doc/ceph/sample.fetch_config
-usr/share/man/man8/ceph-mon.8
-usr/share/man/man8/ceph-osd.8
-usr/share/man/man8/mkcephfs.8
-usr/share/man/man8/ceph-run.8
-usr/share/man/man8/crushtool.8
-usr/share/man/man8/osdmaptool.8
-usr/share/man/man8/monmaptool.8
 usr/share/man/man8/ceph-clsinfo.8
 usr/share/man/man8/ceph-debugpack.8
-etc/bash_completion.d/ceph
-lib/udev/rules.d/95-ceph-osd.rules
+usr/share/man/man8/ceph-mon.8
+usr/share/man/man8/ceph-osd.8
+usr/share/man/man8/ceph-run.8
+usr/share/man/man8/crushtool.8
+usr/share/man/man8/mkcephfs.8
+usr/share/man/man8/monmaptool.8
+usr/share/man/man8/osdmaptool.8

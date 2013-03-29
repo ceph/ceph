@@ -1,5 +1,5 @@
+etc/bash_completion.d/radosgw-admin
 usr/bin/radosgw
 usr/bin/radosgw-admin
-usr/share/man/man8/radosgw.8
 usr/share/man/man8/radosgw-admin.8
-etc/bash_completion.d/radosgw-admin
+usr/share/man/man8/radosgw.8
