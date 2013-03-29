@@ -1578,21 +1578,190 @@ def main_activate(args):
 
 ###########################
 
+def is_swap(dev):
+    with file('/proc/swaps', 'rb') as proc_swaps:
+        for line in proc_swaps.readlines()[1:]:
+            fields = line.split()
+            if len(fields) < 3:
+                continue
+            d = fields[0]
+            if d.startswith('/') and os.path.exists(d):
+                d = os.path.realpath(d)
+                if d == dev:
+                    return True
+    return False
 
-def list_dev(dev):
-    print '%s' % dev
+def get_oneliner(base, name):
+    path = os.path.join(base, name)
+    if os.path.isfile(path):
+        with open(path, 'r') as f:
+            return f.readline().rstrip()
+    return None
+
+def get_dev_fs(dev):
+    fscheck = subprocess.Popen(
+        [
+            'blkid',
+            '-s',
+            'TYPE',
+            dev
+            ],
+        stdout = subprocess.PIPE,
+        stderr=subprocess.PIPE).stdout.read()
+    if 'TYPE' in fscheck:
+        fs = fscheck.split()[1].split('"')[1]
+        return fs
+    else:
+        return None
+
+def get_partition_type(part):
+    (base, partnum) = re.match('(\D+)(\d+)', part).group(1,2)
+    sgdisk = subprocess.Popen(
+        [
+            'sgdisk',
+            '-p',
+            base,
+            ],
+        stdout = subprocess.PIPE,
+        stderr = subprocess.PIPE).stdout.read()
+    for line in sgdisk.splitlines():
+        m = re.search('\s+(\d+)\s+\d+\s+\d+\s+\S+ \S+B\s+\S+\s+(.*)', line)
+        if m is not None:
+            num = m.group(1)
+            if num != partnum:
+                continue
+            return m.group(2)
+    return None
+
+def get_partition_uuid(dev):
+    (base, partnum) = re.match('(\D+)(\d+)', dev).group(1,2)
+    out = subprocess.Popen(
+        [ 'sgdisk', '-i', partnum, base ],
+        stdout = subprocess.PIPE,
+        stderr = subprocess.PIPE).stdout.read()
+    for line in out.splitlines():
+        m = re.match('Partition unique GUID: (\S+)', line)
+        if m:
+            return m.group(1).lower()
+    return None
+
+def is_mounted(dev):
+    with file('/proc/mounts', 'rb') as proc_mounts:
+        for line in proc_mounts:
+            fields = line.split()
+            if len(fields) < 3:
+                continue
+            d = fields[0]
+            path = fields[1]
+            if d.startswith('/') and os.path.exists(d):
+                d = os.path.realpath(d)
+                if d == dev:
+                    return path
+    return None
+
+def more_osd_info(path, uuid_map):
+    desc = []
+    ceph_fsid = get_oneliner(path, 'ceph_fsid')
+    if ceph_fsid:
+        cluster = find_cluster_by_uuid(ceph_fsid)
+        if cluster:
+            desc.append('cluster ' + cluster)
+
+    who = get_oneliner(path, 'whoami')
+    if who:
+        desc.append('osd.%s' % who)
+
+    journal_uuid = get_oneliner(path, 'journal_uuid').lower()
+    if journal_uuid and journal_uuid in uuid_map:
+        desc.append('journal %s' % uuid_map[journal_uuid])
+
+    return desc
+
+
+def list_dev(dev, uuid_map, journal_map):
+    ptype = 'unknown'
+    prefix = ''
+    if is_partition(dev):
+        ptype = get_partition_type(dev)
+        prefix = ' '
+    fs = get_dev_fs(dev)
+    path = is_mounted(dev)
+
+    desc = []
+    if ptype == 'ceph data':
+        if path:
+            desc.append('active')
+            desc.extend(more_osd_info(path, uuid_map))
+        elif fs:
+            try:
+                tpath = mount(dev=dev, fstype=fs, options='')
+                if tpath:
+                    try:
+                        magic = get_oneliner(tpath, 'magic')
+                        if magic is not None:
+                            desc.append('prepared')
+                            desc.extend(more_osd_info(tpath, uuid_map))
+                    finally:
+                        unmount(tpath)
+            except:
+                pass
+        if desc:
+            desc = ['ceph data'] + desc
+        else:
+            desc = ['ceph data', 'unprepared']
+    elif ptype == 'ceph journal':
+        desc.append('ceph journal')
+        uuid = get_partition_uuid(dev)
+        if uuid and uuid in journal_map:
+            desc.append('for %s' % journal_map[uuid])
+    else:
+        if is_swap(dev):
+            desc.append('swap')
+        else:
+            desc.append('other')
+        if fs:
+            desc.append(fs)
+        elif ptype:
+            desc.append(ptype)
+        if path:
+            desc.append('mounted on %s' % path)
+
+    print '%s%s %s' % (prefix, dev, ', '.join(desc))
+
+
 
 def main_list(args):
-    ls = list_all_partitions()
-    LOG.debug('partitions are %s' % ls)
+    partmap = list_all_partitions()
 
-    for base, parts in ls.iteritems():
+    uuid_map = {}
+    journal_map = {}
+    for base, parts in sorted(partmap.iteritems()):
+        for p in parts:
+            dev = '/dev/' + p
+            uuid = get_partition_uuid(dev)
+            if uuid:
+                uuid_map[uuid] = dev
+            ptype = get_partition_type(dev)
+            if ptype == 'ceph data':
+                fs = get_dev_fs(dev)
+                try:
+                    tpath = mount(dev=dev, fstype=fs, options='')
+                    try:
+                        journal_uuid = get_oneliner(tpath, 'journal_uuid').lower()
+                        if journal_uuid:
+                            journal_map[journal_uuid] = dev
+                    finally:
+                        unmount(tpath)
+                except:
+                    pass
+
+    for base, parts in sorted(partmap.iteritems()):
         if parts:
-            print '%s :' % base
-            for part in parts:
-                list_dev(part)
+            print '/dev/%s :' % base
+            for p in sorted(parts):
+                list_dev('/dev/' + p, uuid_map, journal_map)
         else:
-            list_dev(base)
+            list_dev('/dev/' + base, uuid_map, journal_map)
 
 
 ###########################
