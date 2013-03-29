@@ -200,19 +200,19 @@ struct MyProgressContext : public librbd::ProgressContext {
   int update_progress(uint64_t offset, uint64_t total) {
     int pc = total ? (offset * 100ull / total) : 0;
     if (pc != last_pc) {
-      cout << "\r" << operation << ": "
+      cerr << "\r" << operation << ": "
 	//	   << offset << " / " << total << " "
 	   << pc << "% complete...";
-      cout.flush();
+      cerr.flush();
       last_pc = pc;
     }
     return 0;
   }
   void finish() {
-    cout << "\r" << operation << ": 100% complete...done." << std::endl;
+    cerr << "\r" << operation << ": 100% complete...done." << std::endl;
   }
   void fail() {
-    cout << "\r" << operation << ": " << last_pc << "% complete...failed."
+    cerr << "\r" << operation << ": " << last_pc << "% complete...failed."
 	 << std::endl;
   }
 };
