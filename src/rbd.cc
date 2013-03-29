@@ -1424,6 +1424,13 @@ static int do_import_diff(librbd::Image &image, const char *path)
       if (r < 0)
 	goto done;
       dout(2) << "   to snap " << to << dendl;
+
+      // verify this snap isn't already present
+      if (image.snap_exists(to.c_str())) {
+	cerr << "end snapshot '" << to << "' already exists, aborting" << std::endl;
+	r = -EEXIST;
+	goto done;
+      }
     }
     else if (tag == 's') {
       uint64_t end_size;
