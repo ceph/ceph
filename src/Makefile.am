@@ -820,6 +820,12 @@ unittest_libcephfs_config_LDADD =  libcephfs.la ${UNITTEST_LDADD}
 unittest_libcephfs_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_libcephfs_config
 
+unittest_lfnindex_SOURCES = test/os/TestLFNIndex.cc
+unittest_lfnindex_LDFLAGS = ${AM_LDFLAGS}
+unittest_lfnindex_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+unittest_lfnindex_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} ${CRYPTO_CXXFLAGS}
+check_PROGRAMS += unittest_lfnindex
+
 unittest_librados_config_SOURCES = test/librados/librados_config.cc
 unittest_librados_config_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_librados_config_LDADD =  librados.la ${UNITTEST_LDADD}
