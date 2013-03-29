@@ -1451,7 +1451,7 @@ static int do_import_diff(librbd::Image &image, const char *path)
       uint64_t cur_size;
       image.size(&cur_size);
       if (cur_size != end_size) {
-	dout(2) << "resize " << end_size << " -> " << size << dendl;
+	dout(2) << "resize " << cur_size << " -> " << end_size << dendl;
 	image.resize(end_size);
       } else {
 	dout(2) << "size " << end_size << " (no change)" << dendl;
