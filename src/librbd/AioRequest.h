@@ -49,7 +49,7 @@ namespace librbd {
     void read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents);
 
     ImageCtx *m_ictx;
-    librados::IoCtx m_ioctx;
+    librados::IoCtx *m_ioctx;
     std::string m_oid;
     uint64_t m_object_no, m_object_off, m_object_len;
     librados::snap_t m_snap_id;
@@ -69,7 +69,6 @@ namespace librbd {
       : AioRequest(ictx, oid, objectno, offset, len, snap_id, completion, false),
 	m_buffer_extents(be),
 	m_tried_parent(false), m_sparse(sparse) {
-      m_ioctx.snap_set_read(m_snap_id);
     }
     virtual ~AioRead() {}
     virtual bool should_complete(int r);
@@ -138,6 +137,8 @@ namespace librbd {
     uint64_t m_parent_overlap;
     librados::ObjectWriteOperation m_write;
     librados::ObjectWriteOperation m_copyup;
+    uint64_t m_snap_seq;
+    std::vector<librados::snap_t> m_snaps;
 
   private:
     void send_copyup();
