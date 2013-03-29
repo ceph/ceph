@@ -28,6 +28,7 @@ Requires:	python
 Requires:	cryptsetup
 Requires:	parted
 Requires:	util-linux
+Requires:	python-argparse
 Requires(post):	binutils
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 BuildRequires:	gcc-c++
