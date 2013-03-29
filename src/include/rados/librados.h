@@ -24,7 +24,7 @@ extern "C" {
 #endif
 
 #define LIBRADOS_VER_MAJOR 0
-#define LIBRADOS_VER_MINOR 49
+#define LIBRADOS_VER_MINOR 51
 #define LIBRADOS_VER_EXTRA 0
 
 #define LIBRADOS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
@@ -1444,6 +1444,18 @@ int rados_aio_read(rados_ioctx_t io, const char *oid,
  * @returns 0 on success, negative error code on failure
  */
 int rados_aio_flush(rados_ioctx_t io);
+
+
+/**
+ * Schedule a callback for when all currently pending
+ * aio writes are safe. This is a non-blocking version of
+ * rados_aio_flush().
+ *
+ * @param io the context to flush
+ * @param completion what to do when the writes are safe
+ * @returns 0 on success, negative error code on failure
+ */
+int rados_aio_flush_async(rados_ioctx_t io, rados_completion_t completion);
 
 
 /**
