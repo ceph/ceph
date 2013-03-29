@@ -1505,13 +1505,12 @@ static int do_import_diff(librbd::Image &image, const char *path)
   }
 
  done:
-  if (!from_stdin) {
-    if (r < 0)
-      pc.fail();
-    else
-      pc.finish();
+  if (r < 0)
+    pc.fail();
+  else
+    pc.finish();
+  if (!from_stdin)
     close(fd);
-  }
   return r;
 }
 
