@@ -27,6 +27,7 @@ rm foo.diff
 
 rbd export-diff foo@three --from-snap two foo.diff
 rbd import-diff foo.diff foo.copy
+rbd import-diff foo.diff foo.copy && exit 1 || true   # this should fail with EEXIST on the end snap
 rbd snap ls foo.copy | grep three
 
 rbd export foo foo.out
