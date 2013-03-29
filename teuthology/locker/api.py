@@ -87,12 +87,34 @@ class Lock:
             raise web.BadRequest()
 
         tries = 0
+        check_existing = True
         while True:
             try:
                 # transaction will be rolled back if an exception is raised
                 with DB.transaction():
-                    results = list(DB.select('machine', machinetype, what='name, sshpubkey',
-                                             where='locked = false AND up = true AND type =$machinetype',
+                    if desc is not None and check_existing:
+                        # if a description is provided, treat it as a
+                        # key for locking in case the same run locked
+                        # machines in the db successfully before, but
+                        # the web server reported failure to it
+                        # because the request took too long. Only try
+                        # this once per request.
+                        check_existing = False
+                        results = list(DB.select('machine',
+                                                 machinetype, desc, user,
+                                                 what='name, sshpubkey',
+                                                 where='locked = true AND up = true AND type = $machinetype AND description = $desc AND locked_by = $user',
+                                                 limit=num))
+                        if len(results) == num:
+                            name_keys = {}
+                            for row in results:
+                                name_keys[row.name] = row.sshpubkey
+                            print 'reusing machines', name_keys.keys()
+                            break
+
+                    results = list(DB.select('machine', machinetype,
+                                             what='name, sshpubkey',
+                                             where='locked = false AND up = true AND type = $machinetype',
                                              limit=num))
                     if len(results) < num:
                         raise web.HTTPError(status='503 Service Unavailable')
