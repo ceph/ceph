@@ -5,6 +5,8 @@ function cleanup() {
     rbd rm foo || :
     rbd snap purge foo.copy || :
     rbd rm foo.copy || :
+    rbd snap purge foo.copy2 || :
+    rbd rm foo.copy2 || :
     rm -f foo.diff foo.out
 }
 
@@ -29,6 +31,9 @@ rbd export-diff foo@three --from-snap two foo.diff
 rbd import-diff foo.diff foo.copy
 rbd import-diff foo.diff foo.copy && exit 1 || true   # this should fail with EEXIST on the end snap
 rbd snap ls foo.copy | grep three
+
+rbd create foo.copy2 --size 1000
+rbd import-diff foo.diff foo.copy2 && exit 1 || true   # this should fail bc the start snap dne
 
 rbd export foo foo.out
 orig=`md5sum foo.out | awk '{print $1}'`

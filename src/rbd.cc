@@ -1418,6 +1418,12 @@ static int do_import_diff(librbd::Image &image, const char *path)
       if (r < 0)
 	goto done;
       dout(2) << " from snap " << from << dendl;
+
+      if (!image.snap_exists(from.c_str())) {
+	cerr << "start snapshot '" << from << "' does not exist in the image, aborting" << std::endl;
+	r = -EINVAL;
+	goto done;
+      }
     }
     else if (tag == 't') {
       r = read_string(fd, 4096, &to);   // 4k limit to make sure we don't get a garbage string
