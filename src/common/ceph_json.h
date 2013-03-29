@@ -127,6 +127,8 @@ static inline void decode_json_obj(string& val, JSONObj *obj)
   val = obj->get_data();
 }
 
+void decode_json_obj(unsigned long long& val, JSONObj *obj);
+void decode_json_obj(long long& val, JSONObj *obj);
 void decode_json_obj(unsigned long& val, JSONObj *obj);
 void decode_json_obj(long& val, JSONObj *obj);
 void decode_json_obj(unsigned& val, JSONObj *obj);
@@ -252,6 +254,8 @@ void encode_json(const char *name, long val, Formatter *f);
 void encode_json(const char *name, unsigned long val, Formatter *f);
 void encode_json(const char *name, const utime_t& val, Formatter *f);
 void encode_json(const char *name, const bufferlist& bl, Formatter *f);
+void encode_json(const char *name, long long val, Formatter *f);
+void encode_json(const char *name, long long unsigned val, Formatter *f);
 
 template<class K, class V>
 void encode_json_map(const char *name, const char *index_name,
