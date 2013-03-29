@@ -1671,9 +1671,11 @@ def more_osd_info(path, uuid_map):
     if who:
         desc.append('osd.%s' % who)
 
-    journal_uuid = get_oneliner(path, 'journal_uuid').lower()
-    if journal_uuid and journal_uuid in uuid_map:
-        desc.append('journal %s' % uuid_map[journal_uuid])
+    journal_uuid = get_oneliner(path, 'journal_uuid')
+    if journal_uuid:
+        journal_uuid = journal_uuid.lower()
+        if journal_uuid in uuid_map:
+            desc.append('journal %s' % uuid_map[journal_uuid])
 
     return desc
 
@@ -1747,9 +1749,9 @@ def main_list(args):
                 try:
                     tpath = mount(dev=dev, fstype=fs, options='')
                     try:
-                        journal_uuid = get_oneliner(tpath, 'journal_uuid').lower()
+                        journal_uuid = get_oneliner(tpath, 'journal_uuid')
                         if journal_uuid:
-                            journal_map[journal_uuid] = dev
+                            journal_map[journal_uuid.lower()] = dev
                     finally:
                         unmount(tpath)
                 except:
