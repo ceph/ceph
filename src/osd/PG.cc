@@ -4179,6 +4179,10 @@ bool PG::_compare_scrub_objects(ScrubMap::object &auth,
 				ostream &errorstream)
 {
   bool ok = true;
+  if (candidate.read_error) {
+    ok = false;
+    errorstream << "candidate had a read error";
+  }
   if (auth.size != candidate.size) {
     ok = false;
     errorstream << "size " << candidate.size 
