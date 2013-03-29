@@ -1144,8 +1144,7 @@ static int diff_cb(uint64_t ofs, size_t len, bool zero, void *arg)
   return 0;
 }
 
-static int do_diff(librbd::Image& image, const char *fromsnapname,
-		   const char *endsnapname)
+static int do_diff(librbd::Image& image, const char *fromsnapname)
 {
   int64_t r;
   librbd::image_info_t info;
@@ -2710,7 +2709,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_DIFF:
-    r = do_diff(image, fromsnapname, snapname);
+    r = do_diff(image, fromsnapname);
     if (r < 0) {
       cerr << "rbd: diff error: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
