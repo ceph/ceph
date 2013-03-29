@@ -476,6 +476,7 @@ public:
    * discard its outgoing queue, and if the endpoint tries
    * to reconnect they will discard their queue when we
    * inform them of the session reset.
+   * If the Connection* is NULL, this is a no-op.
    * It does not generate any notifications to the Dispatcher.
    *
    * @param con The Connection to mark down.
