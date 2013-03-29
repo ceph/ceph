@@ -146,6 +146,7 @@ private:
 public:
   MonitorDBStore *store;
   static const string MONITOR_NAME;
+  static const string MONITOR_STORE_PREFIX;
 
   // -- monitor state --
 private:
@@ -1244,6 +1245,7 @@ public:
   friend class LogMonitor;
 
   boost::intrusive_ptr<QuorumService> health_monitor;
+  boost::intrusive_ptr<QuorumService> config_key_service;
 
   // -- sessions --
   MonSessionMap session_map;
