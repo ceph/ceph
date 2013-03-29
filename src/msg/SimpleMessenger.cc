@@ -585,6 +585,8 @@ void SimpleMessenger::mark_down(const entity_addr_t& addr)
 
 void SimpleMessenger::mark_down(Connection *con)
 {
+  if (con == NULL)
+    return;
   lock.Lock();
   Pipe *p = static_cast<Pipe *>(con->get_pipe());
   if (p) {
