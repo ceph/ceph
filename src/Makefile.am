@@ -1381,7 +1381,8 @@ libmon_a_SOURCES = \
 	mon/MonitorStore.cc \
 	os/LevelDBStore.cc \
 	mon/HealthMonitor.cc \
-	mon/DataHealthService.cc
+	mon/DataHealthService.cc \
+	mon/ConfigKeyService.cc
 libmon_a_CXXFLAGS= ${AM_CXXFLAGS}
 noinst_LIBRARIES += libmon.a
 
@@ -1871,6 +1872,7 @@ noinst_HEADERS = \
         mon/DataHealthService.h\
         mon/Elector.h\
 	mon/LogMonitor.h\
+	mon/ConfigKeyService.h\
         mon/HealthMonitor.h\
         mon/HealthService.h\
         mon/MDSMonitor.h\
