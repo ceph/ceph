@@ -47,6 +47,8 @@
 
 set -e
 
+trap 'echo "\nWARNING: mkcephfs is now deprecated in favour of ceph-deploy. Please see: \n http://github.com/ceph/ceph-deploy"' INT TERM EXIT
+
 # if we start up as ./mkcephfs, assume everything else is in the
 # current directory too.
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
@@ -63,9 +65,7 @@ usage_exit() {
     echo "usage: $0 -a -c ceph.conf [-k adminkeyring] [--mkfs]"
     echo "   to generate a new ceph cluster on all nodes; for advanced usage see man page"
     echo "   ** be careful, this WILL clobber old data; check your ceph.conf carefully **"
-    echo ""
-    echo "WARNING: mkcephfs is now deprecated in favour of ceph-deploy. Please see:"
-    echo " http://github.com/ceph/ceph-deploy "t
+    exit
 }
 
 . $LIBDIR/ceph_common.sh
@@ -208,8 +208,6 @@ if [ $preparemonmap -eq 1 ]; then
 	get_conf addr "" "mon addr"
 	if [ -z "$addr" ]; then
 	    echo "$0: monitor $name has no address defined." 1>&2
-    echo "WARNING: mkcephfs is now deprecated in favour of ceph-deploy. Please see:"
-    echo " http://github.com/ceph/ceph-deploy "
 	    exit 1
 	fi
 	args=$args" --add $id $addr"
@@ -217,8 +215,6 @@ if [ $preparemonmap -eq 1 ]; then
 
     if [ -z "$args" ]; then
 	echo "$0: no monitors found in config, aborting." 1>&2
-    echo "WARNING: mkcephfs is now deprecated in favour of ceph-deploy. Please see:"
-    echo " http://github.com/ceph/ceph-deploy "
 	exit 1
     fi
 
@@ -230,8 +226,6 @@ if [ $preparemonmap -eq 1 ]; then
     # copy conf
     cp $conf $dir/conf
 
-    echo "WARNING: mkcephfs is now deprecated in favour of ceph-deploy. Please see:"
-    echo " http://github.com/ceph/ceph-deploy "
     exit 0
 fi
 
@@ -279,9 +273,6 @@ if [ -n "$initdaemon" ]; then
 	if ! find "$mon_data" -maxdepth 0 -empty | read foo; then
 	    echo "ERROR: $name mon_data directory $mon_data is not empty."
 	    echo "       Please make sure that it is empty before running mkcephfs."
- 	    echo ""
-    	    echo "WARNING: mkcephfs is now deprecated in favour of ceph-deploy. Please see:"
-            echo " http://github.com/ceph/ceph-deploy "
 	    exit 1
 	fi
 	$BINDIR/ceph-mon -c $conf --mkfs -i $id --monmap $dir/monmap --osdmap $dir/osdmap -k $dir/keyring.mon
@@ -305,8 +296,6 @@ if [ -n "$initlocaldaemons" ]; then
 
 	$0 -d $dir --init-daemon $name	
     done
-    echo "WARNING: mkcephfs is now deprecated in favour of ceph-deploy. Please see:"
-    echo " http://github.com/ceph/ceph-deploy "
     exit 0
 fi
 
@@ -332,8 +321,6 @@ if [ -n "$prepareosdfs" ]; then
             fs_devs="$tmp_btrfs_devs"
         else
             echo "no devs defined for $name"
-            echo "WARNING: mkcephfs is now deprecated in favour of ceph-deploy. Please see:"
-            echo " http://github.com/ceph/ceph-deploy "
             exit 1
         fi
     fi
@@ -344,8 +331,6 @@ if [ -n "$prepareosdfs" ]; then
             fs_type="btrfs"
         else
             echo No filesystem type defined!
-            echo "WARNING: mkcephfs is now deprecated in favour of ceph-deploy. Please see:"
-            echo " http://github.com/ceph/ceph-deploy "
             exit 1
         fi
     fi
@@ -371,8 +356,6 @@ if [ -n "$prepareosdfs" ]; then
     
     if [ -n "$osd_journal" ] && echo "fs_devs" | grep -q -w "$osd_journal" ; then
         echo "ERROR: osd journal device ($osd_journal) also used by devs ($fs_devs)"
-        echo "WARNING: mkcephfs is now deprecated in favour of ceph-deploy. Please see:"
-        echo " http://github.com/ceph/ceph-deploy "
 	exit 1
     fi
     
@@ -398,8 +381,6 @@ if [ -n "$prepareosdfs" ]; then
     chown $osd_user $fs_path
     chmod +w $fs_path
 
-    echo "WARNING: mkcephfs is now deprecated in favour of ceph-deploy. Please see:"
-    echo " http://github.com/ceph/ceph-deploy "
     exit 0
 fi
 
@@ -464,8 +445,6 @@ if [ $preparemon -eq 1 ]; then
 	fi
     done
 
-    echo "WARNING: mkcephfs is now deprecated in favour of ceph-deploy. Please see:"
-    echo " http://github.com/ceph/ceph-deploy "
     exit 0
 fi
 
@@ -580,8 +559,6 @@ if [ $allhosts -eq 1 ]; then
     echo "placing client.admin keyring in $adminkeyring"
     cp $dir/keyring.admin $adminkeyring
 
-    echo "WARNING: mkcephfs is now deprecated in favour of ceph-deploy. Please see:"
-    echo " http://github.com/ceph/ceph-deploy "
     exit 0
 fi
 
