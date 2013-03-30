@@ -201,6 +201,8 @@ OPTION(mon_client_hunt_interval, OPT_DOUBLE, 3.0)   // try new mon every N secon
 OPTION(mon_client_ping_interval, OPT_DOUBLE, 10.0)  // ping every N seconds
 OPTION(mon_client_max_log_entries_per_message, OPT_INT, 1000)
 OPTION(mon_max_pool_pg_num, OPT_INT, 65536)
+OPTION(mon_pool_quota_warn_threshold, OPT_INT, 0) // percent of quota at which to issue warnings
+OPTION(mon_pool_quota_crit_threshold, OPT_INT, 0) // percent of quota at which to issue errors
 OPTION(client_cache_size, OPT_INT, 16384)
 OPTION(client_cache_mid, OPT_FLOAT, .75)
 OPTION(client_use_random_mds, OPT_BOOL, false)

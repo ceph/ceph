@@ -1393,7 +1393,8 @@ libmon_a_SOURCES = \
 	os/LevelDBStore.cc \
 	mon/HealthMonitor.cc \
 	mon/DataHealthService.cc \
-	mon/ConfigKeyService.cc
+	mon/ConfigKeyService.cc \
+	common/util.cc
 libmon_a_CXXFLAGS= ${AM_CXXFLAGS}
 noinst_LIBRARIES += libmon.a
 
