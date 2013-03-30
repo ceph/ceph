@@ -1479,7 +1479,7 @@ static int do_import_diff(librbd::Image &image, const char *path)
 	data.append(bp);
 	dout(2) << " write " << off << "~" << len << dendl;
 	image.write(off, len, data);
-      } else if (tag == 'z') {
+      } else {
 	dout(2) << " zero " << off << "~" << len << dendl;
 	image.discard(off, len);
       }
