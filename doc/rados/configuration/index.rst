@@ -33,7 +33,7 @@ For general object store configuration, refer to the following:
 
    Disks and Filesystems <filesystem-recommendations>
    ceph-conf
-   mon-osd-interaction
+
 
 .. raw:: html 
 
@@ -47,9 +47,11 @@ To optimize the performance of your cluster, refer to the following:
 	Network Settings <network-config-ref>
 	Auth Settings <auth-config-ref>
 	Monitor Settings <mon-config-ref>
+	Heartbeat Settings <mon-osd-interaction>
 	OSD Settings <osd-config-ref>
 	Filestore Settings <filestore-config-ref>
 	Journal Settings <journal-ref>
+	Pool, PG & CRUSH Settings <pool-pg-config-ref.rst>
 	Log / Debug Settings <log-and-debug-ref>
 	Messaging Settings <ms-ref>	
 	General Settings <general-config-ref>
