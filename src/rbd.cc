@@ -1393,7 +1393,7 @@ static int do_import_diff(librbd::Image &image, const char *path)
     size = (uint64_t)stat_buf.st_size;
   }
 
-  char buf[15];
+  char buf[strlen(RBD_DIFF_BANNER) + 1];
   r = safe_read_exact(fd, buf, strlen(RBD_DIFF_BANNER));
   if (r < 0)
     goto done;
