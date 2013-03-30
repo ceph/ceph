@@ -27,11 +27,11 @@
 #include "global/global_init.h"
 #include <gtest/gtest.h>
 
-class TestIndex : public LFNIndex {
+class TestWrapLFNIndex : public LFNIndex {
 public:
-  TestIndex(coll_t collection,
-	    const char *base_path,
-	    uint32_t index_version) : LFNIndex(collection, base_path, index_version) {}
+  TestWrapLFNIndex(coll_t collection,
+		   const char *base_path,
+		   uint32_t index_version) : LFNIndex(collection, base_path, index_version) {}
 
   virtual uint32_t collection_version() {
     return index_version;
@@ -44,6 +44,14 @@ public:
 		     uint32_t bits,                            
 		     std::tr1::shared_ptr<CollectionIndex> dest
 		     ) { return 0; }
+
+  void test_generate_and_parse(const hobject_t &hoid, const std::string &mangled_expected) {
+    const std::string mangled_name = lfn_generate_object_name(hoid);
+    EXPECT_EQ(mangled_expected, mangled_name);
+    hobject_t hoid_parsed;
+    EXPECT_TRUE(lfn_parse_object_name(mangled_name, &hoid_parsed));
+    EXPECT_EQ(hoid, hoid_parsed);
+  }
 
 protected:
   virtual int _init() { return 0; }
@@ -81,9 +89,51 @@ protected:
 				       ) { return 0; }
 };
 
-class TestLFNIndex : public TestIndex, public ::testing::Test {
+class TestHASH_INDEX_TAG : public TestWrapLFNIndex, public ::testing::Test {
 public:
-  TestLFNIndex() : TestIndex(coll_t("ABC"), "PATH", 1) {
+  TestHASH_INDEX_TAG() : TestWrapLFNIndex(coll_t("ABC"), "PATH", CollectionIndex::HASH_INDEX_TAG) {
+  }
+};
+
+TEST_F(TestHASH_INDEX_TAG, generate_and_parse_name) {
+  const vector<string> path;
+  const std::string key;
+  uint64_t hash = 0xABABABAB;
+  uint64_t pool = -1;
+
+  test_generate_and_parse(hobject_t(object_t(".A/B_\\C.D"), key, CEPH_NOSNAP, hash, pool),
+			  "\\.A\\sB_\\\\C.D_head_ABABABAB");
+  test_generate_and_parse(hobject_t(object_t("DIR_A"), key, CEPH_NOSNAP, hash, pool),
+			  "\\dA_head_ABABABAB");
+}
+
+class TestHASH_INDEX_TAG_2 : public TestWrapLFNIndex, public ::testing::Test {
+public:
+  TestHASH_INDEX_TAG_2() : TestWrapLFNIndex(coll_t("ABC"), "PATH", CollectionIndex::HASH_INDEX_TAG_2) {
+  }
+};
+
+TEST_F(TestHASH_INDEX_TAG_2, generate_and_parse_name) {
+  const vector<string> path;
+  std::string mangled_name;
+  const std::string key("KEY");
+  uint64_t hash = 0xABABABAB;
+  uint64_t pool = -1;
+
+  {
+    std::string name(".XA/B_\\C.D");
+    name[1] = '\0';
+    hobject_t hoid(object_t(name), key, CEPH_NOSNAP, hash, pool);
+
+    test_generate_and_parse(hoid, "\\.\\nA\\sB\\u\\\\C.D_KEY_head_ABABABAB");
+  }
+  test_generate_and_parse(hobject_t(object_t("DIR_A"), key, CEPH_NOSNAP, hash, pool),
+			  "\\dA_KEY_head_ABABABAB");
+}
+
+class TestLFNIndex : public TestWrapLFNIndex, public ::testing::Test {
+public:
+  TestLFNIndex() : TestWrapLFNIndex(coll_t("ABC"), "PATH", CollectionIndex::HASH_INDEX_TAG) {
   }
 
   virtual void SetUp() {
@@ -234,29 +284,6 @@ TEST_F(TestLFNIndex, get_mangled_name) {
   const vector<string> path;
 
   //
-  // object name escape logic
-  //
-  {
-    std::string mangled_name;
-    int exists = 666;
-
-    hobject_t hoid(sobject_t(".A/B_\\C.D", CEPH_NOSNAP));
-
-    EXPECT_EQ(0, get_mangled_name(path, hoid, &mangled_name, &exists));
-    EXPECT_NE(std::string::npos, mangled_name.find("\\.A\\sB_\\\\C.D_head"));
-    EXPECT_EQ(0, exists);
-  }
-  {
-    std::string mangled_name;
-    int exists = 666;
-
-    hobject_t hoid(sobject_t("DIR_A", CEPH_NOSNAP));
-
-    EXPECT_EQ(0, get_mangled_name(path, hoid, &mangled_name, &exists));
-    EXPECT_NE(std::string::npos, mangled_name.find("\\dA_head"));
-    EXPECT_EQ(0, exists);
-  }
-  //
   // small object name
   //
   {
@@ -376,5 +403,5 @@ int main(int argc, char **argv) {
 }
 
 // Local Variables:
-// compile-command: "cd ../.. ; make unittest_lfnindex ; ./unittest_lfnindex # --gtest_filter=TestLFNIndex.* --log-to-stderr=true --debug-filestore=20"
+// compile-command: "cd ../.. ; make unittest_lfnindex ; valgrind --tool=memcheck ./unittest_lfnindex # --gtest_filter=TestLFNIndex.* --log-to-stderr=true --debug-filestore=20"
 // End:
