@@ -6,3 +6,5 @@ tasks:
     clients:
       client.0:
         - rados/test.sh
+        - rados/test_pool_quota.sh
+
