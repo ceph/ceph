@@ -93,7 +93,8 @@ const string Monitor::MONITOR_STORE_PREFIX = "monitor_store";
 long parse_pos_long(const char *s, ostream *pss)
 {
   if (*s == '-' || *s == '+') {
-    *pss << "expected numerical value, got: " << s;
+    if (pss)
+      *pss << "expected numerical value, got: " << s;
     return -EINVAL;
   }
 
