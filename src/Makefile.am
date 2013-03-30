@@ -656,6 +656,11 @@ unittest_addrs_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 unittest_addrs_LDADD = libglobal.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
 check_PROGRAMS += unittest_addrs
 
+unittest_util_SOURCES = test/common/test_util.cc common/util.cc
+unittest_util_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_util_LDADD = libcommon.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
+check_PROGRAMS += unittest_util
+
 unittest_workqueue_SOURCES = test/test_workqueue.cc
 unittest_workqueue_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 unittest_workqueue_LDADD = libglobal.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
@@ -1388,7 +1393,8 @@ libmon_a_SOURCES = \
 	os/LevelDBStore.cc \
 	mon/HealthMonitor.cc \
 	mon/DataHealthService.cc \
-	mon/ConfigKeyService.cc
+	mon/ConfigKeyService.cc \
+	common/util.cc
 libmon_a_CXXFLAGS= ${AM_CXXFLAGS}
 noinst_LIBRARIES += libmon.a
 

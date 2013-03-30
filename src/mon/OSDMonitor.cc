@@ -47,6 +47,7 @@
 #include "include/compat.h"
 #include "include/assert.h"
 #include "include/stringify.h"
+#include "include/util.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -1736,6 +1737,9 @@ void OSDMonitor::tick()
 #endif
   // ---------------
 
+  if (update_pools_status())
+    do_propose = true;
+
   update_trim();
 
   if (do_propose ||
@@ -1838,6 +1842,8 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       if (detail)
 	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
     }
+
+    get_pools_health(summary, detail);
   }
 }
 
@@ -2193,6 +2199,148 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   } else
     return false;
 }
+
+void OSDMonitor::update_pool_flags(int64_t pool_id, uint64_t flags)
+{
+  const pg_pool_t *pool = osdmap.get_pg_pool(pool_id);
+  if (pending_inc.new_pools.count(pool_id) == 0)
+    pending_inc.new_pools[pool_id] = *pool;
+  pending_inc.new_pools[pool_id].flags = flags;
+}
+
+bool OSDMonitor::update_pools_status()
+{
+  if (!mon->pgmon()->is_readable())
+    return false;
+
+  bool ret = false;
+
+  const map<int64_t,pg_pool_t>& pools = osdmap.get_pools();
+  for (map<int64_t,pg_pool_t>::const_iterator it = pools.begin();
+       it != pools.end();
+       ++it) {
+    pool_stat_t& stats = mon->pgmon()->pg_map.pg_pool_sum[it->first];
+    object_stat_sum_t& sum = stats.stats.sum;
+    const pg_pool_t &pool = it->second;
+    const char *pool_name = osdmap.get_pool_name(it->first);
+
+    bool pool_is_full =
+      (pool.quota_max_bytes > 0 && (uint64_t)sum.num_bytes >= pool.quota_max_bytes) ||
+      (pool.quota_max_objects > 0 && (uint64_t)sum.num_objects >= pool.quota_max_objects);
+
+    if (pool.get_flags() & pg_pool_t::FLAG_FULL) {
+      if (pool_is_full)
+        continue;
+
+      mon->clog.info() << "pool '" << pool_name
+                       << "' no longer full; removing FULL flag";
+
+      update_pool_flags(it->first, pool.get_flags() & ~pg_pool_t::FLAG_FULL);
+      ret = true;
+    } else {
+      if (!pool_is_full)
+	continue;
+
+      if ((uint64_t)sum.num_bytes >= pool.quota_max_bytes) {
+        mon->clog.warn() << "pool '" << pool_name << "' is full"
+                         << " (reached quota's max_bytes: "
+                         << si_t(pool.quota_max_bytes) << ")";
+      } else if ((uint64_t)sum.num_objects >= pool.quota_max_objects) {
+        mon->clog.warn() << "pool '" << pool_name << "' is full"
+                         << " (reached quota's max_objects: "
+                         << pool.quota_max_objects << ")";
+      } else {
+        assert(0 == "we shouldn't reach this");
+      }
+      update_pool_flags(it->first, pool.get_flags() | pg_pool_t::FLAG_FULL);
+      ret = true;
+    }
+  }
+  return ret;
+}
+
+void OSDMonitor::get_pools_health(
+    list<pair<health_status_t,string> >& summary,
+    list<pair<health_status_t,string> > *detail) const
+{
+  const map<int64_t,pg_pool_t>& pools = osdmap.get_pools();
+  for (map<int64_t,pg_pool_t>::const_iterator it = pools.begin();
+       it != pools.end(); ++it) {
+    pool_stat_t& stats = mon->pgmon()->pg_map.pg_pool_sum[it->first];
+    object_stat_sum_t& sum = stats.stats.sum;
+    const pg_pool_t &pool = it->second;
+    const char *pool_name = osdmap.get_pool_name(it->first);
+
+    if (pool.get_flags() & pg_pool_t::FLAG_FULL) {
+      // uncomment these asserts if/when we update the FULL flag on pg_stat update
+      //assert((pool.quota_max_objects > 0) || (pool.quota_max_bytes > 0));
+
+      stringstream ss;
+      ss << "pool '" << pool_name << "' is full";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      if (detail)
+	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+    }
+
+    float warn_threshold = g_conf->mon_pool_quota_warn_threshold/100;
+    float crit_threshold = g_conf->mon_pool_quota_crit_threshold/100;
+
+    if (pool.quota_max_objects > 0) {
+      stringstream ss;
+      health_status_t status = HEALTH_OK;
+      if ((uint64_t)sum.num_objects >= pool.quota_max_objects) {
+	// uncomment these asserts if/when we update the FULL flag on pg_stat update
+        //assert(pool.get_flags() & pg_pool_t::FLAG_FULL);
+      } else if (crit_threshold > 0 &&
+		 sum.num_objects >= pool.quota_max_objects*crit_threshold) {
+        ss << "pool '" << pool_name
+           << "' has " << sum.num_objects << " objects"
+           << " (max " << pool.quota_max_objects << ")";
+        status = HEALTH_ERR;
+      } else if (warn_threshold > 0 &&
+		 sum.num_objects >= pool.quota_max_objects*warn_threshold) {
+        ss << "pool '" << pool_name
+           << "' has " << sum.num_objects << " objects"
+           << " (max " << pool.quota_max_objects << ")";
+        status = HEALTH_WARN;
+      }
+      if (status != HEALTH_OK) {
+        pair<health_status_t,string> s(status, ss.str());
+        summary.push_back(s);
+        if (detail)
+          detail->push_back(s);
+      }
+    }
+
+    if (pool.quota_max_bytes > 0) {
+      health_status_t status = HEALTH_OK;
+      stringstream ss;
+      if ((uint64_t)sum.num_bytes >= pool.quota_max_bytes) {
+	// uncomment these asserts if/when we update the FULL flag on pg_stat update
+	//assert(pool.get_flags() & pg_pool_t::FLAG_FULL);
+      } else if (crit_threshold > 0 &&
+		 sum.num_bytes >= pool.quota_max_bytes*crit_threshold) {
+        ss << "pool '" << pool_name
+           << "' has " << si_t(sum.num_bytes) << " bytes"
+           << " (max " << si_t(pool.quota_max_bytes) << ")";
+        status = HEALTH_ERR;
+      } else if (warn_threshold > 0 &&
+		 sum.num_bytes >= pool.quota_max_bytes*warn_threshold) {
+        ss << "pool '" << pool_name
+           << "' has " << si_t(sum.num_bytes) << " objects"
+           << " (max " << si_t(pool.quota_max_bytes) << ")";
+        status = HEALTH_WARN;
+      }
+      if (status != HEALTH_OK) {
+        pair<health_status_t,string> s(status, ss.str());
+        summary.push_back(s);
+        if (detail)
+          detail->push_back(s);
+      }
+    }
+  }
+}
+
 
 int OSDMonitor::prepare_new_pool(MPoolOp *m)
 {
@@ -3286,11 +3434,48 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 		ss << "crush ruleset " << n << " does not exist";
 		err = -ENOENT;
 	      }
-	    } else {
+            } else {
 	      ss << "unrecognized pool field " << m->cmd[4];
 	    }
 	  }
 	}
+      } else if (m->cmd[2] == "set-quota" && m->cmd.size() == 6) {
+        int64_t pool_id = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
+        if (pool_id < 0) {
+          ss << "unrecognized pool '" << m->cmd[3] << "'";
+          err = -ENOENT;
+          goto out;
+        }
+
+        string field = m->cmd[4];
+        if (field != "max_objects" && field != "max_bytes") {
+          ss << "unrecognized field '" << field << "'; max_bytes of max_objects";
+          err = -EINVAL;
+          goto out;
+        }
+
+        stringstream tss;
+        int64_t value = unit_to_bytesize(m->cmd[5], &tss);
+        if (value < 0) {
+          ss << "error parsing value '" << value << "': " << tss.str();
+          err = value;
+          goto out;
+        }
+
+        if (pending_inc.new_pools.count(pool_id) == 0)
+          pending_inc.new_pools[pool_id] = *osdmap.get_pg_pool(pool_id);
+
+        if (field == "max_objects") {
+          pending_inc.new_pools[pool_id].quota_max_objects = value;
+        } else if (field == "max_bytes") {
+          pending_inc.new_pools[pool_id].quota_max_bytes = value;
+        } else {
+          assert(0 == "unrecognized option");
+        }
+        ss << "set-quota " << field << " = " << value << " for pool " << m->cmd[3];
+        rs = ss.str();
+        wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+        return true;
       }
       else if (m->cmd[2] == "get") {
 	if (m->cmd.size() != 5) {

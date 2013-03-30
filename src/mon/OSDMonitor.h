@@ -208,7 +208,12 @@ private:
   int prepare_new_pool(string& name, uint64_t auid, int crush_rule,
                        unsigned pg_num, unsigned pgp_num);
   int prepare_new_pool(MPoolOp *m);
-  
+
+  void update_pool_flags(int64_t pool_id, uint64_t flags);
+  bool update_pools_status();
+  void get_pools_health(list<pair<health_status_t,string> >& summary,
+                        list<pair<health_status_t,string> > *detail) const;
+
   bool prepare_set_flag(MMonCommand *m, int flag);
   bool prepare_unset_flag(MMonCommand *m, int flag);
 

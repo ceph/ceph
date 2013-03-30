@@ -948,6 +948,16 @@ void ReplicatedPG::do_op(OpRequestRef op)
     return;
   }
 
+  // check for full
+  if (ctx->delta_stats.num_bytes > 0 &&
+      pool.info.get_flags() & pg_pool_t::FLAG_FULL) {
+    delete ctx;
+    put_object_context(obc);
+    put_object_contexts(src_obc);
+    osd->reply_op_error(op, -ENOSPC);
+    return;
+  }
+
   // prepare the reply
   ctx->reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
 
