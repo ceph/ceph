@@ -1666,6 +1666,8 @@ def more_osd_info(path, uuid_map):
         cluster = find_cluster_by_uuid(ceph_fsid)
         if cluster:
             desc.append('cluster ' + cluster)
+        else:
+            desc.append('unknown cluster ' + ceph_fsid)
 
     who = get_oneliner(path, 'whoami')
     if who:
