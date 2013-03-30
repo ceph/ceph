@@ -201,6 +201,8 @@ OPTION(mon_client_hunt_interval, OPT_DOUBLE, 3.0)   // try new mon every N secon
 OPTION(mon_client_ping_interval, OPT_DOUBLE, 10.0)  // ping every N seconds
 OPTION(mon_client_max_log_entries_per_message, OPT_INT, 1000)
 OPTION(mon_max_pool_pg_num, OPT_INT, 65536)
+OPTION(mon_pool_quota_warn_threshold, OPT_INT, 0) // percent of quota at which to issue warnings
+OPTION(mon_pool_quota_crit_threshold, OPT_INT, 0) // percent of quota at which to issue errors
 OPTION(client_cache_size, OPT_INT, 16384)
 OPTION(client_cache_mid, OPT_FLOAT, .75)
 OPTION(client_use_random_mds, OPT_BOOL, false)
@@ -507,6 +509,7 @@ OPTION(rbd_cache_size, OPT_LONGLONG, 32<<20)         // cache size in bytes
 OPTION(rbd_cache_max_dirty, OPT_LONGLONG, 24<<20)    // dirty limit in bytes - set to 0 for write-through caching
 OPTION(rbd_cache_target_dirty, OPT_LONGLONG, 16<<20) // target dirty limit in bytes
 OPTION(rbd_cache_max_dirty_age, OPT_FLOAT, 1.0)      // seconds in cache before writeback starts
+OPTION(rbd_cache_block_writes_upfront, OPT_BOOL, false) // whether to block writes to the cache before the aio_write call completes (true), or block before the aio completion is called (false)
 
 OPTION(nss_db_path, OPT_STR, "") // path to nss db
 
@@ -516,7 +519,7 @@ OPTION(rgw_cache_enabled, OPT_BOOL, true)   // rgw cache enabled
 OPTION(rgw_cache_lru_size, OPT_INT, 10000)   // num of entries in rgw cache
 OPTION(rgw_socket_path, OPT_STR, "")   // path to unix domain socket, if not specified, rgw will not run as external fcgi
 OPTION(rgw_host, OPT_STR, "")  // host for radosgw, can be an IP, default is 0.0.0.0
-OPTION(rgw_port, OPT_STR, "")  // port TCP to listen, format as "8080" "5000", if not specified, rgw will not run as external fcgi
+OPTION(rgw_port, OPT_STR, "")  // port to listen, format as "8080" "5000", if not specified, rgw will not run external fcgi
 OPTION(rgw_dns_name, OPT_STR, "")
 OPTION(rgw_script_uri, OPT_STR, "") // alternative value for SCRIPT_URI if not set in request
 OPTION(rgw_request_uri, OPT_STR,  "") // alternative value for REQUEST_URI if not set in request

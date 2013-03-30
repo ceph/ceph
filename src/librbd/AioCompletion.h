@@ -24,6 +24,7 @@ namespace librbd {
     AIO_TYPE_READ = 0,
     AIO_TYPE_WRITE,
     AIO_TYPE_DISCARD,
+    AIO_TYPE_FLUSH,
     AIO_TYPE_NONE,
   } aio_type_t;
 
@@ -104,12 +105,14 @@ namespace librbd {
 	complete_cb(rbd_comp, complete_arg);
       }
       switch (aio_type) {
-      case AIO_TYPE_READ: 
+      case AIO_TYPE_READ:
 	ictx->perfcounter->tinc(l_librbd_aio_rd_latency, elapsed); break;
       case AIO_TYPE_WRITE:
 	ictx->perfcounter->tinc(l_librbd_aio_wr_latency, elapsed); break;
       case AIO_TYPE_DISCARD:
 	ictx->perfcounter->tinc(l_librbd_aio_discard_latency, elapsed); break;
+      case AIO_TYPE_FLUSH:
+	ictx->perfcounter->tinc(l_librbd_aio_flush_latency, elapsed); break;
       default:
 	lderr(ictx->cct) << "completed invalid aio_type: " << aio_type << dendl;
 	break;
@@ -124,6 +127,11 @@ namespace librbd {
     }
 
     void complete_request(CephContext *cct, ssize_t r);
+
+    bool is_complete() {
+      Mutex::Locker l(lock);
+      return done;
+    }
 
     ssize_t get_return_value() {
       lock.Lock();

@@ -27,6 +27,8 @@ that Ceph uses the entire partition for the journal.
 :Description: The universally unique identifier (UUID) for the OSD.
 :Type: UUID
 :Default: The UUID.
+:Note: The ``osd uuid`` applies to a single OSD. The ``fsid`` applies to the 
+       entire cluster.
 
 
 ``osd data`` 
@@ -93,215 +95,10 @@ you may need to adopt longer intervals. See `Configuring Monitor/OSD
 Interaction`_ for a detailed discussion of heartbeats.
 
 
-``osd heartbeat address``
-
-:Description: An OSD's network address for heartbeats. 
-:Type: Address
-:Default: The host address.
-
-
-``osd heartbeat interval`` 
-
-:Description: How often an OSD pings its peers (in seconds).
-:Type: 32-bit Integer
-:Default: ``6``
-
-
-``osd heartbeat grace`` 
-
-:Description: The elapsed time when an OSD hasn't shown a heartbeat that the 
-              cluster considers it ``down``.
- 
-:Type: 32-bit Integer
-:Default: ``20``
-
-
-``osd mon heartbeat interval`` 
-
-:Description: How often the OSD pings a monitor if it has no OSD peers.
-:Type: 32-bit Integer
-:Default: ``30`` 
-
-
-``osd mon report interval max`` 
-
-:Description: The maximum time in seconds for an OSD to report to a monitor 
-              before the monitor considers the OSD ``down``.
-
-:Type: 32-bit Integer
-:Default: ``120`` 
-
-
-``osd mon report interval min`` 
-
-:Description: The minimum number of seconds for an OSD to report to a monitor 
-              to avoid the monitor considering the OSD ``down``.
-
-:Type: 32-bit Integer
-:Default: ``5``
-:Valid Range: Should be less than ``osd mon report interval max`` 
-
-
-``osd mon ack timeout`` 
-
-:Description: The number of seconds to wait for a monitor to acknowledge a 
-              request for statistics.
-
-:Type: 32-bit Integer
-:Default: ``30`` 
-
-
-``osd min down reporters`` 
-
-:Description: The minimum number of OSDs required to report a ``down`` OSD.
-:Type: 32-bit Integer
-:Default: ``1``
-
-
-``osd min down reports`` 
-
-:Description: The minimum number of times an OSD must report that another 
-              is ``down``.
-
-:Type: 32-bit Integer
-:Default: ``3`` 
-
-
 Data Placement
 ==============
 
-When you create pools and set the number of placement groups for the pool,  Ceph
-uses default values when you don't specifically override the defaults. **We
-recommend** overridding some of the defaults. Specifically, we recommend setting
-a pools replica size and overriding the default number of placement groups. You
-can specifically set these values when running `pool`_ commands. You can also
-override the defaults by adding new ones in the ``[global]`` section of  your
-Ceph configuration file. 
-
-
-.. literalinclude:: pool-pg.conf
-   :language: ini
-
-
-``osd pg bits`` 
-
-:Description: Placement group bits per OSD.
-:Type: 32-bit Integer
-:Default: ``6`` 
-
-
-``osd pgp bits`` 
-
-:Description: The number of bits per OSD for PGPs.
-:Type: 32-bit Integer
-:Default: ``6``
-
-
-``osd crush chooseleaf type``
-
-:Description: The bucket type to use for ``chooseleaf`` in a CRUSH rule. Uses 
-              ordinal rank rather than name.
-
-:Type: 32-bit Integer
-:Default: ``1``. Typically a host containing one or more OSDs.
-
-
-``osd min rep``
-
-:Description: The minimum number of replicas for a ruleset.
-:Type: 32-bit Integer
-:Default: ``1``
-
-
-``osd max rep``
-
-:Description: The maximum number of replicas for a ruleset.
-:Type: 32-bit Integer
-:Default: ``10``
-
-
-``osd pool default crush rule`` 
-
-:Description: The default CRUSH ruleset to use when creating a pool.
-:Type: 32-bit Integer
-:Default: ``0``
-
-
-``osd pool default size`` 
-
-:Description: Sets the number of replicas for objects in the pool. The default 
-              value is the same as 
-              ``ceph osd pool set {pool-name} size {size}``.
-
-:Type: 32-bit Integer
-:Default: ``2`` 
-
-
-``osd pool default min size``
-
-:Descrption: Sets the minimum number of written replicas for objects in the 
-             pool in order to acknowledge a write operation to the client. 
-             If minimum is not met, Ceph will not acknowledge the write to the 
-             client. This setting ensures a minimum number of replicas when 
-             operating in ``degraded`` mode.
-
-:Type: 32-bit Integer
-:Default: ``0``, which means no particular minimum. If ``0``, 
-          minimum is ``size - (size / 2)``.
-
-
-``osd pool default pg num`` 
-
-:Description: The default number of placement groups for a pool. The default 
-              value is the same as ``pg_num`` with ``mkpool``.
-
-:Type: 32-bit Integer
-:Default: ``8`` 
-
-
-``osd pool default pgp num`` 
-
-:Description: The default number of placement groups for placement for a pool. 
-              The default value is the same as ``pgp_num`` with ``mkpool``. 
-              PG and PGP should be equal (for now).
-
-:Type: 32-bit Integer
-:Default: ``8``
-
-
-``osd pool default flags``
-
-:Description: The default flags for new pools. 
-:Type: 32-bit Integer
-:Default: ``0``
-
-
-``osd max pgls``
-
-:Description: The maximum number of placement groups to list. A client 
-              requesting a large number can tie up the OSD.
-
-:Type: Unsigned 64-bit Integer
-:Default: ``1024``
-:Note: Default should be fine.
-
-
-``osd min pg log entries`` 
-
-:Description: The minimum number of placement group logs to maintain 
-              when trimming log files.
-
-:Type: 32-bit Int Unsigned
-:Default: ``1000``
-
-
-``osd default data pool replay window``
-
-:Description: The time (in seconds) for an OSD to wait for a client to replay
-              a request.
-
-:Type: 32-bit Integer
-:Default: ``45``
+See `Pool & PG Config Reference`_ for details.
 
 
 Scrubbing
@@ -472,7 +269,6 @@ recovery operations to ensure optimal performance during recovery.
 :Default: ``5``
 
 
-
 Backfilling
 ===========
 
@@ -522,7 +318,6 @@ or write data.
 :Description: The number of seconds to wait before retrying backfill requests.
 :Type: Double
 :Default: ``10.0``
-
 
 
 
@@ -721,3 +516,4 @@ Miscellaneous
 .. _pool: ../../operations/pools
 .. _Configuring Monitor/OSD Interaction: ../mon-osd-interaction
 .. _Monitoring OSDs and PGs: ../../operations/monitoring-osd-pg#peering
+.. _Pool & PG Config Reference: ../pool-pg-config-ref

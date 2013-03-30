@@ -66,6 +66,7 @@
     ceph osd pool delete <pool> [<pool> --yes-i-really-really-mean-it]
     ceph osd pool rename <pool> <new pool name>
     ceph osd pool set <pool> <field> <value>
+    ceph osd pool set-quota <pool> (max_bytes|max_objects) <value>
     ceph osd scrub <osd-id>
     ceph osd deep-scrub <osd-id>
     ceph osd repair <osd-id>
