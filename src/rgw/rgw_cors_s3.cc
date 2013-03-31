@@ -12,6 +12,7 @@
  *
  */
 #include <string.h>
+#include <limits.h>
 
 #include <iostream>
 #include <map>
