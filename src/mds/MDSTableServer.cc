@@ -120,10 +120,13 @@ void MDSTableServer::_commit_logged(MMDSTableRequest *req)
 void MDSTableServer::handle_rollback(MMDSTableRequest *req)
 {
   dout(7) << "handle_rollback " << *req << dendl;
-  _rollback(req->get_tid());
-  _note_rollback(req->get_tid());
+
+  version_t tid = req->get_tid();
+  assert(pending_for_mds.count(tid));
+  _rollback(tid);
+  _note_rollback(tid);
   mds->mdlog->start_submit_entry(new ETableServer(table, TABLESERVER_OP_ROLLBACK, 0, -1, 
-						  req->get_tid(), version));
+						  tid, version));
   req->put();
 }
 
