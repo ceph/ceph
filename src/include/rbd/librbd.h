@@ -313,6 +313,29 @@ typedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg);
 ssize_t rbd_read(rbd_image_t image, uint64_t ofs, size_t len, char *buf);
 int64_t rbd_read_iterate(rbd_image_t image, uint64_t ofs, size_t len,
 			 int (*cb)(uint64_t, size_t, const char *, void *), void *arg);
+/**
+ * get difference between two versions of an image
+ *
+ * This will return the differences between two versions of an image
+ * via a callback, which gets the offset and length and a flag
+ * indicating whether the extent exists (1), or is known/defined to
+ * be zeros (a hole, 0).  If the source snapshot name is NULL, we
+ * interpret that as the beginning of time and return all allocated
+ * regions of the image.  The end version is whatever is currently
+ * selected for the image handle (either a snapshot or the writeable
+ * head).
+ *
+ * @param fromsnapname start snapshot name, or NULL
+ * @param ofs start offset
+ * @param len len in bytes of region to report on
+ * @param cb callback to call for each allocated region
+ * @param arg argument to pass to the callback
+ * @returns 0 on success, or negative error code on error
+ */
+int rbd_diff_iterate(rbd_image_t image,
+		     const char *fromsnapname,
+		     uint64_t ofs, size_t len,
+		     int (*cb)(uint64_t, size_t, int, void *), void *arg);
 ssize_t rbd_write(rbd_image_t image, uint64_t ofs, size_t len, const char *buf);
 int rbd_discard(rbd_image_t image, uint64_t ofs, uint64_t len);
 int rbd_aio_write(rbd_image_t image, uint64_t off, size_t len, const char *buf, rbd_completion_t c);
