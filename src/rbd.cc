@@ -879,6 +879,8 @@ static int do_bench_write(librbd::Image& image, uint64_t io_size,
   if (pattern != "rand" && pattern != "seq")
     return -EINVAL;
 
+  srand(time(NULL) % (unsigned long) -1);
+
   bufferptr bp(io_size);
   memset(bp.c_str(), rand() & 0xff, io_size);
   bufferlist bl;
