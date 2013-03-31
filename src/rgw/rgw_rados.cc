@@ -728,24 +728,17 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
 			   bool get_content_type, string& ns, bool *is_truncated, RGWAccessListFilter *filter)
 {
   int count = 0;
-  string cur_marker = marker;
   bool truncated;
-  string ns_prefix;
 
   if (bucket_is_system(bucket)) {
     return -EINVAL;
   }
   result.clear();
-  if (!ns.empty()) {
-    ns_prefix = "_";
-    ns_prefix += ns + "_";
-    if (cur_marker < ns_prefix) {
-      cur_marker = ns_prefix;
-    } else if (cur_marker.substr(0, ns.size()) > ns_prefix) {
-      truncated = false;
-      goto done;
-    }
-  }
+
+  rgw_obj marker_obj;
+  marker_obj.set_ns(ns);
+  marker_obj.set_obj(marker);
+  string cur_marker = marker_obj.object;
 
   do {
     std::map<string, RGWObjEnt> ent_map;
