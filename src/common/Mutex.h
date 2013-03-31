@@ -33,7 +33,7 @@ enum {
 
 class Mutex {
 private:
-  const char *name;
+  std::string name;
   int id;
   bool recursive;
   bool lockdep;
@@ -50,20 +50,20 @@ private:
   Mutex( const Mutex &M ) {}
 
   void _register() {
-    id = lockdep_register(name);
+    id = lockdep_register(name.c_str());
   }
   void _will_lock() { // about to lock
-    id = lockdep_will_lock(name, id);
+    id = lockdep_will_lock(name.c_str(), id);
   }
   void _locked() {    // just locked
-    id = lockdep_locked(name, id, backtrace);
+    id = lockdep_locked(name.c_str(), id, backtrace);
   }
   void _will_unlock() {  // about to unlock
-    id = lockdep_will_unlock(name, id);
+    id = lockdep_will_unlock(name.c_str(), id);
   }
 
 public:
-  Mutex(const char *n, bool r = false, bool ld=true, bool bt=false,
+  Mutex(const std::string& n, bool r = false, bool ld=true, bool bt=false,
 	CephContext *cct = 0);
   ~Mutex();
   bool is_locked() const {
