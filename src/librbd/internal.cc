@@ -2269,18 +2269,22 @@ reprotect_and_return_err:
     return total_read;
   }
 
-  int simple_diff_cb(uint64_t off, size_t len, bool exists, void *arg)
+  int simple_diff_cb(uint64_t off, size_t len, int exists, void *arg)
   {
+    // This reads the existing extents in a parent from the beginning
+    // of time.  Since images are thin-provisioned, the extents will
+    // always represent data, not holes.
+    assert(exists);
     interval_set<uint64_t> *diff = static_cast<interval_set<uint64_t> *>(arg);
     diff->insert(off, len);
     return 0;
   }
 
 
-  int64_t diff_iterate(ImageCtx *ictx, const char *fromsnapname,
-		       uint64_t off, uint64_t len,
-		       int (*cb)(uint64_t, size_t, bool, void *),
-		       void *arg)
+  int diff_iterate(ImageCtx *ictx, const char *fromsnapname,
+		   uint64_t off, uint64_t len,
+		   int (*cb)(uint64_t, size_t, int, void *),
+		   void *arg)
   {
     utime_t start_time, elapsed;
 
@@ -2291,8 +2295,7 @@ reprotect_and_return_err:
     if (r < 0)
       return r;
 
-    uint64_t mylen = len;
-    r = clip_io(ictx, off, &mylen);
+    r = clip_io(ictx, off, &len);
     if (r < 0)
       return r;
 
@@ -2347,9 +2350,8 @@ reprotect_and_return_err:
 	return r;
     }
 
-    int64_t total_read = 0;
     uint64_t period = ictx->get_stripe_period();
-    uint64_t left = mylen;
+    uint64_t left = len;
 
     while (left > 0) {
       uint64_t period_off = off - (off % period);
@@ -2385,7 +2387,7 @@ reprotect_and_return_err:
 		o.intersection_of(parent_diff);
 		ldout(ictx->cct, 20) << " reporting parent overlap " << o << dendl;
 		for (interval_set<uint64_t>::iterator s = o.begin(); s != o.end(); ++s) {
-		  cb(s.get_start(), s.get_len(), false, arg);
+		  cb(s.get_start(), s.get_len(), true, arg);
 		}
 	      }
 	    }
@@ -2431,7 +2433,7 @@ reprotect_and_return_err:
 				   << " logical "
 				   << logical_off << "~" << s.get_len()
 				   << dendl;
-	      cb(logical_off, s.get_len(), !end_exists, arg);
+	      cb(logical_off, s.get_len(), end_exists, arg);
 	    }
 	    opos += r->second;
 	  }
@@ -2439,12 +2441,11 @@ reprotect_and_return_err:
 	}
       }
 
-      total_read += read_len;
       left -= read_len;
       off += read_len;
     }
 
-    return total_read;
+    return 0;
   }
 
   int simple_read_cb(uint64_t ofs, size_t len, const char *buf, void *arg)
