@@ -65,18 +65,15 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
       }
     } 
     else if (pending_commit.count(tid)) {
-      dout(10) << "stray agree on " << reqid
-	       << " tid " << tid
-	       << ", already committing, resending COMMIT"
-	       << dendl;      
-      MMDSTableRequest *req = new MMDSTableRequest(table, TABLESERVER_OP_COMMIT, 0, tid);
-      mds->send_message_mds(req, mds->mdsmap->get_tableserver());
+      dout(10) << "stray agree on " << reqid << " tid " << tid
+	       << ", already committing, will resend COMMIT" << dendl;
+      assert(!server_ready);
+      // will re-send commit when receiving the server ready message
     }
     else {
-      dout(10) << "stray agree on " << reqid
-	       << " tid " << tid
-	       << ", sending ROLLBACK"
-	       << dendl;      
+      dout(10) << "stray agree on " << reqid << " tid " << tid
+	       << ", sending ROLLBACK" << dendl;
+      assert(!server_ready);
       MMDSTableRequest *req = new MMDSTableRequest(table, TABLESERVER_OP_ROLLBACK, 0, tid);
       mds->send_message_mds(req, mds->mdsmap->get_tableserver());
     }
@@ -102,6 +99,9 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
     break;
 
   case TABLESERVER_OP_SERVER_READY:
+    assert(!server_ready);
+    server_ready = true;
+
     if (last_reqid == ~0ULL)
       last_reqid = reqid;
 
@@ -144,26 +144,18 @@ void MDSTableClient::_prepare(bufferlist& mutation, version_t *ptid, bufferlist 
   uint64_t reqid = ++last_reqid;
   dout(10) << "_prepare " << reqid << dendl;
 
-  // send message
-  MMDSTableRequest *req = new MMDSTableRequest(table, TABLESERVER_OP_PREPARE, reqid);
-  req->bl = mutation;
-
   pending_prepare[reqid].mutation = mutation;
   pending_prepare[reqid].ptid = ptid;
   pending_prepare[reqid].pbl = pbl;
   pending_prepare[reqid].onfinish = onfinish;
 
-  send_to_tableserver(req);
-}
-
-void MDSTableClient::send_to_tableserver(MMDSTableRequest *req)
-{
-  int ts = mds->mdsmap->get_tableserver();
-  if (mds->mdsmap->get_state(ts) >= MDSMap::STATE_CLIENTREPLAY)
-    mds->send_message_mds(req, ts);
-  else {
-    dout(10) << " deferring request to not-yet-active tableserver mds." << ts << dendl;
-  }
+  if (server_ready) {
+    // send message
+    MMDSTableRequest *req = new MMDSTableRequest(table, TABLESERVER_OP_PREPARE, reqid);
+    req->bl = mutation;
+    mds->send_message_mds(req, mds->mdsmap->get_tableserver());
+  } else
+    dout(10) << "tableserver is not ready yet, deferring request" << dendl;
 }
 
 void MDSTableClient::commit(version_t tid, LogSegment *ls)
@@ -176,9 +168,12 @@ void MDSTableClient::commit(version_t tid, LogSegment *ls)
 
   assert(g_conf->mds_kill_mdstable_at != 4);
 
-  // send message
-  MMDSTableRequest *req = new MMDSTableRequest(table, TABLESERVER_OP_COMMIT, 0, tid);
-  send_to_tableserver(req);
+  if (server_ready) {
+    // send message
+    MMDSTableRequest *req = new MMDSTableRequest(table, TABLESERVER_OP_COMMIT, 0, tid);
+    mds->send_message_mds(req, mds->mdsmap->get_tableserver());
+  } else
+    dout(10) << "tableserver is not ready yet, deferring request" << dendl;
 }
 
 
@@ -227,4 +222,13 @@ void MDSTableClient::resend_prepares()
     req->bl = p->second.mutation;
     mds->send_message_mds(req, mds->mdsmap->get_tableserver());
   }
+}
+
+void MDSTableClient::handle_mds_failure(int who)
+{
+  if (who != mds->mdsmap->get_tableserver())
+    return; // do nothing.
+
+  dout(7) << "tableserver mds." << who << " fails" << dendl;
+  server_ready = false;
 }
