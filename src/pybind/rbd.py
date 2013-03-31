@@ -671,12 +671,12 @@ class Image(object):
         RBD_DIFF_CB = CFUNCTYPE(c_int, c_uint64, c_size_t, c_int, c_void_p)
         cb_holder = DiffIterateCB(iterate_cb)
         cb = RBD_DIFF_CB(cb_holder.callback)
-        ret = self.librbd.diff_iterate(self.image,
-                                       c_char_p(from_snapshot),
-                                       c_uint64(offset),
-                                       c_uint64(length),
-                                       cb,
-                                       c_void_p(None))
+        ret = self.librbd.rbd_diff_iterate(self.image,
+                                           c_char_p(from_snapshot),
+                                           c_uint64(offset),
+                                           c_uint64(length),
+                                           cb,
+                                           c_void_p(None))
         if ret < 0:
             msg = 'error generating diff from snapshot %s' % from_snapshot
             raise make_ex(ret, msg)
@@ -709,6 +709,40 @@ class Image(object):
             raise LogicError("logic error: rbd_write(%s) \
 returned %d, but %d was the maximum number of bytes it could have \
 written." % (self.name, ret, length))
+
+    def discard(self, offset, length):
+        """
+        Trim the range from the image. It will be logically filled
+        with zeroes.
+        """
+        ret = self.librbd.rbd_discard(self.image,
+                                      c_uint64(offset),
+                                      c_uint64(length))
+        if ret < 0:
+            msg = 'error discarding region %d~%d' % (offset, length)
+            raise make_ex(ret, msg)
+
+    def flush(self):
+        """
+        Block until all writes are fully flushed if caching is enabled.
+        """
+        ret = self.librbd.rbd_flush(self.image)
+        if ret < 0:
+            raise make_ex(ret, 'error flushing image')
+
+    def stripe_unit(self):
+        """
+        Returns the stripe unit used for the image.
+        """
+        ret = self.librbd.rbd_get_stripe_unit()
+        return ret.value
+
+    def stripe_count(self):
+        """
+        Returns the stripe count used for the image.
+        """
+        ret = self.librbd.rbd_get_stripe_count()
+        return ret.value
 
     def flatten(self):
         """
