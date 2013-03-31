@@ -1035,14 +1035,14 @@ static int do_export(librbd::Image& image, const char *path)
   return r;
 }
 
-static int export_diff_cb(uint64_t ofs, size_t _len, bool zero, void *arg)
+static int export_diff_cb(uint64_t ofs, size_t _len, int exists, void *arg)
 {
   ExportContext *ec = static_cast<ExportContext *>(arg);
   int r;
 
   // extent
   bufferlist bl;
-  __u8 tag = zero ? 'z' : 'w';
+  __u8 tag = exists ? 'w' : 'z';
   ::encode(tag, bl);
   ::encode(ofs, bl);
   uint64_t len = _len;
@@ -1051,7 +1051,7 @@ static int export_diff_cb(uint64_t ofs, size_t _len, bool zero, void *arg)
   if (r < 0)
     return r;
 
-  if (!zero) {
+  if (exists) {
     // read block
     bl.clear();
     r = ec->image->read(ofs, len, bl);
@@ -1071,7 +1071,7 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
 			  const char *endsnapname,
 			  const char *path)
 {
-  int64_t r;
+  int r;
   librbd::image_info_t info;
   int fd;
 
@@ -1139,7 +1139,7 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
   return r;
 }
 
-static int diff_cb(uint64_t ofs, size_t len, bool zero, void *arg)
+static int diff_cb(uint64_t ofs, size_t len, int exists, void *arg)
 {
   cout << ofs << "\t" << len << "\t"
        << (zero ? "zero" : "data") << "\n";
@@ -1148,7 +1148,7 @@ static int diff_cb(uint64_t ofs, size_t len, bool zero, void *arg)
 
 static int do_diff(librbd::Image& image, const char *fromsnapname)
 {
-  int64_t r;
+  int r;
   librbd::image_info_t info;
 
   r = image.stat(info, sizeof(info));

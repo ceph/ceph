@@ -1503,7 +1503,7 @@ TEST(LibRBD, FlushAioPP)
 }
 
 
-int iterate_cb(uint64_t off, size_t len, bool zero, void *arg)
+int iterate_cb(uint64_t off, size_t len, int exists, void *arg)
 {
   cout << "iterate_cb " << off << "~" << len << std::endl;
   interval_set<uint64_t> *diff = static_cast<interval_set<uint64_t> *>(arg);
@@ -1564,7 +1564,7 @@ TEST(LibRBD, DiffIterate)
     cout << " wrote " << two << std::endl;
 
     interval_set<uint64_t> diff;
-    ASSERT_EQ((int)size, image.diff_iterate("one", 0, size, iterate_cb, (void *)&diff));
+    ASSERT_EQ(0, image.diff_iterate("one", 0, size, iterate_cb, (void *)&diff));
     cout << " diff was " << diff << std::endl;
     if (!two.subset_of(diff)) {
       interval_set<uint64_t> i;
@@ -1620,7 +1620,7 @@ TEST(LibRBD, DiffIterateStress)
 	cout << "from " << i << " to " << j << " diff " << diff << std::endl;
 
 	image.snap_set(snap[j].c_str());
-	ASSERT_EQ((int)size, image.diff_iterate(snap[i].c_str(), 0, size, iterate_cb, (void *)&actual));
+	ASSERT_EQ(0, image.diff_iterate(snap[i].c_str(), 0, size, iterate_cb, (void *)&actual));
 	cout << " actual was " << actual << std::endl;
 	if (!diff.subset_of(actual)) {
 	  interval_set<uint64_t> i;
