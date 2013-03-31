@@ -378,12 +378,14 @@ class MDS : public Dispatcher {
   void rejoin_joint_start();
   void rejoin_done();
   void recovery_done();
-  void handle_mds_recovery(int who);
   void clientreplay_start();
   void clientreplay_done();
   void active_start();
   void stopping_start();
   void stopping_done();
+
+  void handle_mds_recovery(int who);
+  void handle_mds_failure(int who);
 
   void suicide();
   void respawn();

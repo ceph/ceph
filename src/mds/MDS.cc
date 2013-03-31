@@ -1050,7 +1050,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     for (set<int>::iterator p = failed.begin(); p != failed.end(); ++p)
       if (oldfailed.count(*p) == 0) {
 	messenger->mark_down(oldmap->get_inst(*p).addr);
-	mdcache->handle_mds_failure(*p);
+	handle_mds_failure(*p);
       }
     
     // or down then up?
@@ -1061,7 +1061,7 @@ void MDS::handle_mds_map(MMDSMap *m)
       if (oldmap->have_inst(*p) &&
 	  oldmap->get_inst(*p) != mdsmap->get_inst(*p)) {
 	messenger->mark_down(oldmap->get_inst(*p).addr);
-	mdcache->handle_mds_failure(*p);
+	handle_mds_failure(*p);
       }
   }
   if (is_clientreplay() || is_active() || is_stopping()) {
@@ -1546,6 +1546,16 @@ void MDS::handle_mds_recovery(int who)
 
   queue_waiters(waiting_for_active_peer[who]);
   waiting_for_active_peer.erase(who);
+}
+
+void MDS::handle_mds_failure(int who)
+{
+  dout(5) << "handle_mds_failure mds." << who << dendl;
+
+  mdcache->handle_mds_failure(who);
+
+  anchorclient->handle_mds_failure(who);
+  snapclient->handle_mds_failure(who);
 }
 
 void MDS::stopping_start()

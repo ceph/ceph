@@ -30,6 +30,8 @@ protected:
 
   uint64_t last_reqid;
 
+  bool server_ready;
+
   // prepares
   struct _pending_prepare {
     Context *onfinish;
@@ -63,7 +65,8 @@ protected:
   void _logged_ack(version_t tid);
 
 public:
-  MDSTableClient(MDS *m, int tab) : mds(m), table(tab), last_reqid(~0ULL) {}
+  MDSTableClient(MDS *m, int tab) :
+    mds(m), table(tab), last_reqid(~0ULL), server_ready(false) {}
   virtual ~MDSTableClient() {}
 
   void handle_request(MMDSTableRequest *m);
@@ -85,7 +88,7 @@ public:
     ack_waiters[tid].push_back(c);
   }
 
-  void send_to_tableserver(MMDSTableRequest *req);
+  void handle_mds_failure(int mds);
 
   // child must implement
   virtual void resend_queries() = 0;
