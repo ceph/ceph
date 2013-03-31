@@ -121,7 +121,7 @@ int test_cors_helper::extract_input(int argc, char *argv[]){
 
 void test_cors_helper::set_response(char *r){
   string sr(r), h, v;
-  unsigned off = sr.find(": ");
+  size_t off = sr.find(": ");
   if(off != string::npos){
     h.assign(sr, 0, off);
     v.assign(sr, off + 2, sr.find("\r\n") - (off+2));
@@ -171,7 +171,7 @@ static void calc_hmac_sha1(const char *key, int key_len,
 
 static int get_s3_auth(string method, string creds, string date, string res, string& out){
   string aid, secret, auth_hdr;
-  unsigned off = creds.find(":");
+  size_t off = creds.find(":");
   out = "";
   if(off != string::npos){
     aid.assign(creds, 0, off);
