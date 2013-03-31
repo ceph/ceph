@@ -4371,6 +4371,10 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
 
 void PG::scrub_compare_maps() {
   dout(10) << "scrub_compare_maps has maps, analyzing" << dendl;
+
+  // construct authoritative scrub map for type specific scrubbing
+  ScrubMap authmap(scrubber.primary_scrubmap);
+
   if (acting.size() > 1) {
     dout(10) << "scrub  comparing replica scrub maps" << dendl;
 
@@ -4410,10 +4414,17 @@ void PG::scrub_compare_maps() {
 	  i->first,
 	  make_pair(maps[i->second]->objects[i->first], i->second)));
     }
+
+    for (map<hobject_t, int>::iterator i = authoritative.begin();
+	 i != authoritative.end();
+	 ++i) {
+      authmap.objects.erase(i->first);
+      authmap.objects.insert(*(maps[i->second]->objects.find(i->first)));
+    }
   }
 
   // ok, do the pg-type specific scrubbing
-  _scrub(scrubber.primary_scrubmap);
+  _scrub(authmap);
 }
 
 void PG::scrub_process_inconsistent() {
