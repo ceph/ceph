@@ -2315,7 +2315,7 @@ reprotect_and_return_err:
     ictx->snap_lock.put_read();
     ictx->md_lock.put_read();
     if (from_snap_id == CEPH_NOSNAP) {
-      return -EINVAL;
+      return -ENOENT;
     }
     if (from_snap_id == end_snap_id) {
       // no diff.
