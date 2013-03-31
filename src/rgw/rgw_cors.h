@@ -46,7 +46,7 @@ protected:
 public:
   RGWCORSRule() : max_age(CORS_MAX_AGE_INVALID),allowed_methods(0) {}
   RGWCORSRule(std::set<string>& o, std::set<string>& h, 
-              std::list<string>& e, uint8_t f, unsigned a)
+              std::list<string>& e, uint8_t f, uint32_t a)
       :max_age(a),
        allowed_methods(f),
        allowed_hdrs(h),
