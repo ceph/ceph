@@ -577,6 +577,8 @@ private:
     char *hash,		  ///< [out] Hash of filename.
     int len		  ///< [in] Size of hash buffer.
     ); ///< @return Error Code, 0 on success.
+
+  friend class TestWrapLFNIndex;
 };
 typedef LFNIndex::IndexedPath IndexedPath;
 
