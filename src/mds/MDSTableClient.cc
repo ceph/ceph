@@ -59,11 +59,17 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
       if (pending_prepare[reqid].pbl)
 	*pending_prepare[reqid].pbl = m->bl;
       pending_prepare.erase(reqid);
+      prepared_update[tid] = reqid;
       if (onfinish) {
         onfinish->finish(0);
         delete onfinish;
       }
-    } 
+    }
+    else if (prepared_update.count(tid)) {
+      dout(10) << "got duplicated agree on " << reqid << " atid " << tid << dendl;
+      assert(prepared_update[tid] == reqid);
+      assert(!server_ready);
+    }
     else if (pending_commit.count(tid)) {
       dout(10) << "stray agree on " << reqid << " tid " << tid
 	       << ", already committing, will resend COMMIT" << dendl;
@@ -161,6 +167,9 @@ void MDSTableClient::_prepare(bufferlist& mutation, version_t *ptid, bufferlist 
 void MDSTableClient::commit(version_t tid, LogSegment *ls)
 {
   dout(10) << "commit " << tid << dendl;
+
+  assert(prepared_update.count(tid));
+  prepared_update.erase(tid);
 
   assert(pending_commit.count(tid) == 0);
   pending_commit[tid] = ls;
