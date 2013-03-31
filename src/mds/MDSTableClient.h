@@ -45,6 +45,7 @@ protected:
   };
 
   map<uint64_t, _pending_prepare> pending_prepare;
+  map<version_t, uint64_t> prepared_update;
   list<_pending_prepare> waiting_for_reqid;
 
   // pending commits
