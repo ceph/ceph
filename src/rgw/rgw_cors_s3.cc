@@ -121,9 +121,13 @@ bool RGWCORSRule_S3::xml_end(const char *el) {
   iter = find("MaxAgeSeconds");
   if ((obj = iter.get_next())) {
     char *end = NULL;
-    max_age = strtoul(obj->get_data().c_str(), &end, 10);
-    if (max_age == ULONG_MAX)
+
+    unsigned long ul = strtoul(obj->get_data().c_str(), &end, 10);
+    if (ul == ULONG_MAX || ul >= 0x100000000LL) {
       max_age = CORS_MAX_AGE_INVALID;
+    } else  {
+      max_age = (uint32_t)ul;
+    }
     dout(10) << "RGWCORSRule : max_age : " << max_age << dendl;
   }
   /*Check and update ExposeHeader*/

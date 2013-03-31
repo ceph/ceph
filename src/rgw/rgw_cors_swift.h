@@ -35,7 +35,7 @@ class RGWCORSConfiguration_SWIFT : public RGWCORSConfiguration
                   const char *expose_headers, const char *max_age) {
       set<string> o, h, oc;
       list<string> e;
-      unsigned a = CORS_MAX_AGE_INVALID;
+      unsigned long a = CORS_MAX_AGE_INVALID;
       uint8_t flags = RGW_CORS_ALL;
 
       string ao = allow_origins;
