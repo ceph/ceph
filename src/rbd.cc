@@ -1141,14 +1141,32 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
   return r;
 }
 
+struct output_method {
+  output_method() : f(NULL), t(NULL), empty(true) {}
+  Formatter *f;
+  TextTable *t;
+  bool empty;
+};
+
 static int diff_cb(uint64_t ofs, size_t len, int exists, void *arg)
 {
-  cout << ofs << "\t" << len << "\t"
-       << (zero ? "zero" : "data") << "\n";
+  output_method *om = (output_method *) arg;
+  om->empty = false;
+  if (om->f) {
+    om->f->open_object_section("extent");
+    om->f->dump_unsigned("offset", ofs);
+    om->f->dump_unsigned("length", len);
+    om->f->dump_string("exists", exists ? "true" : "false");
+    om->f->close_section();
+  } else {
+    assert(om->t);
+    *(om->t) << ofs << len << (exists ? "data" : "zero") << TextTable::endrow;
+  }
   return 0;
 }
 
-static int do_diff(librbd::Image& image, const char *fromsnapname)
+static int do_diff(librbd::Image& image, const char *fromsnapname,
+		   Formatter *f)
 {
   int r;
   librbd::image_info_t info;
@@ -1157,7 +1175,27 @@ static int do_diff(librbd::Image& image, const char *fromsnapname)
   if (r < 0)
     return r;
 
-  return image.diff_iterate(fromsnapname, 0, info.size, diff_cb, NULL);
+  output_method om;
+  if (f) {
+    om.f = f;
+    f->open_array_section("extents");
+  } else {
+    om.t = new TextTable();
+    om.t->define_column("Offset", TextTable::LEFT, TextTable::LEFT);
+    om.t->define_column("Length", TextTable::LEFT, TextTable::LEFT);
+    om.t->define_column("Type", TextTable::LEFT, TextTable::LEFT);
+  }
+
+  r = image.diff_iterate(fromsnapname, 0, info.size, diff_cb, &om);
+  if (f) {
+    f->close_section();
+    f->flush(cout);
+  } else {
+    if (!om.empty)
+      cout << *om.t;
+    delete om.t;
+  }
+  return r;
 }
 
 static const char *imgname_from_path(const char *path)
@@ -2281,8 +2319,9 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 
   boost::scoped_ptr<Formatter> formatter;
   if (output_format_specified && opt_cmd != OPT_SHOWMAPPED &&
-      opt_cmd != OPT_INFO && opt_cmd != OPT_LIST && opt_cmd != OPT_SNAP_LIST &&
-      opt_cmd != OPT_LOCK_LIST && opt_cmd != OPT_CHILDREN) {
+      opt_cmd != OPT_INFO && opt_cmd != OPT_LIST &&
+      opt_cmd != OPT_SNAP_LIST && opt_cmd != OPT_LOCK_LIST &&
+      opt_cmd != OPT_CHILDREN && opt_cmd != OPT_DIFF) {
     cerr << "rbd: command doesn't use output formatting"
 	 << std::endl;
     return EXIT_FAILURE;
@@ -2709,7 +2748,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_DIFF:
-    r = do_diff(image, fromsnapname);
+    r = do_diff(image, fromsnapname, formatter.get());
     if (r < 0) {
       cerr << "rbd: diff error: " << cpp_strerror(-r) << std::endl;
       return EXIT_FAILURE;
