@@ -460,19 +460,25 @@ class TestImage(object):
         check_diff(self.image, 0, IMG_SIZE, None, [(0, 256, True)])
         self.image.write('b' * 256, 256)
         check_diff(self.image, 0, IMG_SIZE, None, [(0, 512, True)])
-        
+        self.image.discard(128, 256)
+        check_diff(self.image, 0, IMG_SIZE, None, [(0, 512, True)])
+
+        self.image.create_snap('snap1')
+        self.image.discard(0, 1 << IMG_ORDER)
+        self.image.create_snap('snap2')
+        self.image.set_snap('snap2')
+        check_diff(self.image, 0, IMG_SIZE, 
+                   'snap1', [(0, 512, False)])
+        self.image.remove_snap('snap1')
+        self.image.remove_snap('snap2')
+
 
 def check_diff(image, offset, length, from_snapshot, expected):
-    cb_holder = DiffExtents()
-    image.diff_iterate(0, IMG_SIZE, None, cb_holder.callback)
-    eq(cb_holder.extents, expected)
-
-class DiffExtents(object):
-    def __init__(self):
-        self.extents = []
-
-    def callback(self, offset, length, exists):
-        self.extents.append((offset, length, exists))
+    extents = []
+    def cb(offset, length, exists):
+        extents.append((offset, length, exists))
+    image.diff_iterate(0, IMG_SIZE, None, cb)
+    eq(extents, expected)
 
 class TestClone(object):
 
