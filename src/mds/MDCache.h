@@ -240,7 +240,7 @@ protected:
   hash_map<metareqid_t, MDRequest*> active_requests; 
 
 public:
-  int get_num_active_requests() { return active_requests.size(); }
+  int get_num_client_requests();
 
   MDRequest* request_start(MClientRequest *req);
   MDRequest* request_start_slave(metareqid_t rid, __u32 attempt, int by);
@@ -281,14 +281,16 @@ public:
 				snapid_t follows=CEPH_NOSNAP);
 
   // slaves
-  void add_uncommitted_master(metareqid_t reqid, LogSegment *ls, set<int> &slaves) {
+  void add_uncommitted_master(metareqid_t reqid, LogSegment *ls, set<int> &slaves, bool safe=false) {
     uncommitted_masters[reqid].ls = ls;
     uncommitted_masters[reqid].slaves = slaves;
+    uncommitted_masters[reqid].safe = safe;
   }
   void wait_for_uncommitted_master(metareqid_t reqid, Context *c) {
     uncommitted_masters[reqid].waiters.push_back(c);
   }
   void log_master_commit(metareqid_t reqid);
+  void logged_master_update(metareqid_t reqid);
   void _logged_master_commit(metareqid_t reqid, LogSegment *ls, list<Context*> &waiters);
   void committed_master_slave(metareqid_t r, int from);
   void finish_committed_masters();
@@ -320,17 +322,19 @@ protected:
     set<int> slaves;
     LogSegment *ls;
     list<Context*> waiters;
+    bool safe;
   };
   map<metareqid_t, umaster>                 uncommitted_masters;         // master: req -> slave set
 
-  //map<metareqid_t, bool>     ambiguous_slave_updates;         // for log trimming.
-  //map<metareqid_t, Context*> waiting_for_slave_update_commit;
+  set<metareqid_t>		pending_masters;
+  map<int, set<metareqid_t> >	ambiguous_slave_updates;
+
   friend class ESlaveUpdate;
   friend class ECommitted;
 
-  set<int> wants_resolve;   // nodes i need to send my resolve to
-  set<int> got_resolve;     // nodes i got resolves from
-  set<int> need_resolve_ack;   // nodes i need a resolve_ack from
+  bool resolves_pending;
+  set<int> resolve_gather;	// nodes i need resolves from
+  set<int> resolve_ack_gather;	// nodes i need a resolve_ack from
   map<metareqid_t, int> need_resolve_rollback;  // rollbacks i'm writing to the journal
   map<int, MMDSResolve*> delayed_resolve;
   
@@ -347,6 +351,20 @@ protected:
   MDSlaveUpdate* get_uncommitted_slave_update(metareqid_t reqid, int master);
 public:
   void remove_inode_recursive(CInode *in);
+
+  bool is_ambiguous_slave_update(metareqid_t reqid, int master) {
+    return ambiguous_slave_updates.count(master) &&
+	   ambiguous_slave_updates[master].count(reqid);
+  }
+  void add_ambiguous_slave_update(metareqid_t reqid, int master) {
+    ambiguous_slave_updates[master].insert(reqid);
+  }
+  void remove_ambiguous_slave_update(metareqid_t reqid, int master) {
+    assert(ambiguous_slave_updates[master].count(reqid));
+    ambiguous_slave_updates[master].erase(reqid);
+    if (ambiguous_slave_updates[master].empty())
+      ambiguous_slave_updates.erase(master);
+  }
 
   void add_rollback(metareqid_t reqid, int master) {
     need_resolve_rollback[reqid] = master;
@@ -367,10 +385,12 @@ public:
   void finish_ambiguous_import(dirfrag_t dirino);
   void resolve_start();
   void send_resolves();
-  void send_slave_resolve(int who);
-  void send_resolve_now(int who);
-  void send_resolve_later(int who);
-  void maybe_send_pending_resolves();
+  void send_slave_resolves();
+  void send_subtree_resolves();
+  void maybe_send_pending_resolves() {
+    if (resolves_pending)
+      send_subtree_resolves();
+  }
   
   void _move_subtree_map_bound(dirfrag_t df, dirfrag_t oldparent, dirfrag_t newparent,
 			       map<dirfrag_t,vector<dirfrag_t> >& subtrees);
@@ -381,6 +401,7 @@ public:
 
 protected:
   // [rejoin]
+  bool rejoins_pending;
   set<int> rejoin_gather;      // nodes from whom i need a rejoin
   set<int> rejoin_sent;        // nodes i sent a rejoin to
   set<int> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
@@ -395,6 +416,7 @@ protected:
   set<CInode*> rejoin_undef_inodes;
   set<CInode*> rejoin_potential_updated_scatterlocks;
   set<CDir*>   rejoin_undef_dirfrags;
+  map<int, set<CInode*> > rejoin_unlinked_inodes;
 
   vector<CInode*> rejoin_recover_q, rejoin_check_q;
   list<Context*> rejoin_waiters;
@@ -406,13 +428,19 @@ protected:
   CDir* rejoin_invent_dirfrag(dirfrag_t df);
   bool rejoin_fetch_dirfrags(MMDSCacheRejoin *m);
   void handle_cache_rejoin_strong(MMDSCacheRejoin *m);
-  void rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack, set<vinodeno_t>& acked_inodes);
+  void rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack,
+				      set<SimpleLock *>& gather_locks,
+				      set<vinodeno_t>& acked_inodes);
   void handle_cache_rejoin_ack(MMDSCacheRejoin *m);
   void handle_cache_rejoin_purge(MMDSCacheRejoin *m);
   void handle_cache_rejoin_missing(MMDSCacheRejoin *m);
   void handle_cache_rejoin_full(MMDSCacheRejoin *m);
   void rejoin_send_acks();
   void rejoin_trim_undef_inodes();
+  void maybe_send_pending_rejoins() {
+    if (rejoins_pending)
+      rejoin_send_rejoins();
+  }
 public:
   void rejoin_gather_finish();
   void rejoin_send_rejoins();
@@ -469,9 +497,12 @@ public:
   void check_realm_past_parents(SnapRealm *realm);
   void open_snap_parents();
 
-  void open_undef_dirfrags();
+  bool open_undef_inodes_dirfrags();
   void opened_undef_dirfrag(CDir *dir) {
     rejoin_undef_dirfrags.erase(dir);
+  }
+  void opened_undef_inode(CInode *in) {
+    rejoin_undef_inodes.erase(in);
   }
 
   void reissue_all_caps();
@@ -607,8 +638,8 @@ public:
   }
 protected:
 
-  void inode_remove_replica(CInode *in, int rep);
-  void dentry_remove_replica(CDentry *dn, int rep);
+  void inode_remove_replica(CInode *in, int rep, set<SimpleLock *>& gather_locks);
+  void dentry_remove_replica(CDentry *dn, int rep, set<SimpleLock *>& gather_locks);
 
   void rename_file(CDentry *srcdn, CDentry *destdn);
 
