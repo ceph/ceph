@@ -817,8 +817,20 @@ public:
 
   // objects
   virtual bool exists(coll_t cid, const hobject_t& oid) = 0;                   // useful?
-  virtual int stat(coll_t cid, const hobject_t& oid, struct stat *st) = 0;     // struct stat?
-  virtual int read(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) = 0;
+  virtual int stat(
+    coll_t cid,
+    const hobject_t& oid,
+    struct stat *st,
+    bool allow_eio = false) = 0; // struct stat?
+
+  virtual int read(
+    coll_t cid,
+    const hobject_t& oid,
+    uint64_t offset,
+    size_t len,
+    bufferlist& bl,
+    bool allow_eio = false) = 0;
+
   virtual int fiemap(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) = 0;
 
   virtual int getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr& value) = 0;
@@ -888,7 +900,8 @@ public:
   virtual int omap_get_header(
     coll_t c,                ///< [in] Collection containing hoid
     const hobject_t &hoid,   ///< [in] Object containing omap
-    bufferlist *header       ///< [out] omap header
+    bufferlist *header,      ///< [out] omap header
+    bool allow_eio = false ///< [in] don't assert on eio
     ) = 0;
 
   /// Get keys defined on hoid
@@ -939,6 +952,10 @@ public:
     
   virtual void set_fsid(uuid_d u) = 0;
   virtual uuid_d get_fsid() = 0;
+
+  // DEBUG
+  virtual void inject_data_error(const hobject_t &oid) {}
+  virtual void inject_mdata_error(const hobject_t &oid) {}
 };
 
 
