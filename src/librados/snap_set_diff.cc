@@ -54,7 +54,8 @@ void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
       if (start < a) {
 	ldout(cct, 20) << "  start, after " << start << dendl;
 	// this means the object didn't exist at start
-	diff->insert(0, r->size);
+	if (r->size)
+	  diff->insert(0, r->size);
 	start_size = 0;
       } else {
 	ldout(cct, 20) << "  start" << dendl;
