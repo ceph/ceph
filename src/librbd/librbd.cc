@@ -414,6 +414,12 @@ namespace librbd {
     return librbd::snap_list(ictx, snaps);
   }
 
+  bool Image::snap_exists(const char *snap_name)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::snap_exists(ictx, snap_name);
+  }
+
   int Image::snap_set(const char *snap_name)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -434,6 +440,15 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     return librbd::read_iterate(ictx, ofs, len, cb, arg);
+  }
+
+  int Image::diff_iterate(const char *fromsnapname,
+			  uint64_t ofs, uint64_t len,
+			  int (*cb)(uint64_t, size_t, int, void *),
+			  void *arg)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::diff_iterate(ictx, fromsnapname, ofs, len, cb, arg);
   }
 
   ssize_t Image::write(uint64_t ofs, size_t len, bufferlist& bl)
@@ -1015,6 +1030,16 @@ extern "C" int64_t rbd_read_iterate(rbd_image_t image, uint64_t ofs, size_t len,
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   return librbd::read_iterate(ictx, ofs, len, cb, arg);
+}
+
+extern "C" int rbd_diff_iterate(rbd_image_t image,
+				const char *fromsnapname,
+				uint64_t ofs, uint64_t len,
+				int (*cb)(uint64_t, size_t, int, void *),
+				void *arg)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::diff_iterate(ictx, fromsnapname, ofs, len, cb, arg);
 }
 
 extern "C" ssize_t rbd_write(rbd_image_t image, uint64_t ofs, size_t len,
