@@ -18,6 +18,7 @@
 #include "rgw_rados.h"
 #include "rgw_user.h"
 #include "rgw_acl.h"
+#include "rgw_cors.h"
 
 using namespace std;
 
@@ -363,11 +364,13 @@ class RGWPutMetadata : public RGWOp {
 protected:
   int ret;
   map<string, bufferlist> attrs;
-  bool has_policy;
+  bool has_policy, has_cors;
   RGWAccessControlPolicy policy;
+  RGWCORSConfiguration cors_config;
 
 public:
   RGWPutMetadata() {
+    has_cors = false;
     has_policy = false;
     ret = 0;
   }
@@ -497,6 +500,78 @@ public:
   virtual int get_params() = 0;
   virtual void send_response() = 0;
   virtual const char *name() { return "put_acls"; }
+};
+
+class RGWGetCORS : public RGWOp {
+protected:
+  int ret;
+  string cors;
+
+public:
+  RGWGetCORS() : ret(0) {}
+
+  int verify_permission();
+  void execute();
+
+  virtual void send_response() = 0;
+  virtual const char *name() { return "get_cors"; }
+};
+
+class RGWPutCORS : public RGWOp {
+protected:
+  int ret;
+  size_t len;
+  char *data;
+
+public:
+  RGWPutCORS() {
+    ret = 0;
+    len = 0;
+    data = NULL;
+  }
+  virtual ~RGWPutCORS() {
+    free(data);
+  }
+
+  int verify_permission();
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual const char *name() { return "put_cors"; }
+};
+
+class RGWDeleteCORS : public RGWOp {
+protected:
+  int ret;
+
+public:
+  RGWDeleteCORS() : ret(0) {}
+
+  int verify_permission();
+  void execute();
+
+  virtual void send_response() = 0;
+  virtual const char *name() { return "delete_cors"; }
+};
+
+class RGWOptionsCORS : public RGWOp {
+protected:
+  int ret;
+  RGWCORSRule *rule;
+  const char *origin, *req_hdrs, *req_meth;
+
+public:
+  RGWOptionsCORS() : ret(0), rule(NULL), origin(NULL),
+                     req_hdrs(NULL), req_meth(NULL) {
+  }
+
+  int verify_permission() {return 0;}
+  int validate_cors_request();
+  void execute();
+  void get_response_params(string& allowed_hdrs, string& exp_hdrs, unsigned *max_age);
+  virtual void send_response() = 0;
+  virtual const char *name() { return "options_cors"; }
 };
 
 class RGWInitMultipart : public RGWOp {
@@ -746,8 +821,10 @@ protected:
   virtual RGWOp *op_head() { return NULL; }
   virtual RGWOp *op_post() { return NULL; }
   virtual RGWOp *op_copy() { return NULL; }
+  virtual RGWOp *op_options() { return NULL; }
 public:
   RGWHandler() : store(NULL), s(NULL) {}
+  int read_cors_config();
   virtual ~RGWHandler();
   virtual int init(RGWRados *store, struct req_state *_s, RGWClientIO *cio);
 

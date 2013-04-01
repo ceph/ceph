@@ -126,6 +126,14 @@ public:
   void send_response() {}
 };
 
+class RGWOptionsCORS_ObjStore_SWIFT : public RGWOptionsCORS_ObjStore {
+public:
+  RGWOptionsCORS_ObjStore_SWIFT() {}
+  ~RGWOptionsCORS_ObjStore_SWIFT() {}
+
+  void send_response();
+};
+
 class RGWHandler_ObjStore_SWIFT : public RGWHandler_ObjStore {
   friend class RGWRESTMgr_SWIFT;
 protected:
@@ -168,6 +176,7 @@ protected:
   RGWOp *op_put();
   RGWOp *op_delete();
   RGWOp *op_post();
+  RGWOp *op_options();
 public:
   RGWHandler_ObjStore_Bucket_SWIFT() {}
   virtual ~RGWHandler_ObjStore_Bucket_SWIFT() {}
@@ -186,6 +195,7 @@ protected:
   RGWOp *op_delete();
   RGWOp *op_post();
   RGWOp *op_copy();
+  RGWOp *op_options();
 public:
   RGWHandler_ObjStore_Obj_SWIFT() {}
   virtual ~RGWHandler_ObjStore_Obj_SWIFT() {}
