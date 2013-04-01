@@ -3135,7 +3135,7 @@ void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep)
     hobject_t poid = *p;
 
     struct stat st;
-    int r = osd->store->stat(coll, poid, &st);
+    int r = osd->store->stat(coll, poid, &st, true);
     if (r == 0) {
       ScrubMap::object &o = map.objects[poid];
       o.size = st.st_size;
@@ -3149,7 +3149,8 @@ void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep)
         int r;
         __u64 pos = 0;
         while ( (r = osd->store->read(coll, poid, pos,
-                                      g_conf->osd_deep_scrub_stride, bl)) > 0) {
+                                      g_conf->osd_deep_scrub_stride, bl,
+		                      true)) > 0) {
           h << bl;
           pos += bl.length();
           bl.clear();
@@ -3163,7 +3164,7 @@ void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep)
         o.digest_present = true;
 
         bl.clear();
-        r = osd->store->omap_get_header(coll, poid, &hdrbl);
+        r = osd->store->omap_get_header(coll, poid, &hdrbl, true);
         if (r == 0) {
           dout(25) << "CRC header " << string(hdrbl.c_str(), hdrbl.length())
              << dendl;
