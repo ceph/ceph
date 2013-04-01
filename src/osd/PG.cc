@@ -2322,6 +2322,9 @@ void PG::update_stats()
     if (info.stats.state != state) {
       info.stats.state = state;
       info.stats.last_change = now;
+      if ((state & PG_STATE_ACTIVE) &&
+	  !(info.stats.state & PG_STATE_ACTIVE))
+	info.stats.last_became_active = now;
     }
     if (info.stats.state & PG_STATE_CLEAN)
       info.stats.last_clean = now;
