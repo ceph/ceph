@@ -3208,6 +3208,9 @@ void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep)
       dout(25) << "_scan_list  " << poid << " got " << r << ", read_error" << dendl;
       ScrubMap::object &o = map.objects[poid];
       o.read_error = true;
+    } else {
+      derr << "_scan_list got: " << cpp_strerror(r) << dendl;
+      assert(0);
     }
   }
 }
