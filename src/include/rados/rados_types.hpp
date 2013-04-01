@@ -9,16 +9,21 @@ namespace librados {
 
 typedef uint64_t snap_t;
 
+enum {
+  SNAP_HEAD = (uint64_t)(-2),
+  SNAP_DIR = (uint64_t)(-1)
+};
+
 struct clone_info_t {
-  static const snap_t HEAD = ((snap_t)-1);
   snap_t cloneid;
   std::vector<snap_t> snaps;          // ascending
-  std::vector< std::pair<uint64_t,uint64_t> > overlap;
+  std::vector< std::pair<uint64_t,uint64_t> > overlap;  // with next newest
   uint64_t size;
 };
 
 struct snap_set_t {
   std::vector<clone_info_t> clones;   // ascending
+  snap_t seq;   // newest snapid seen by the object
 };
 
 }

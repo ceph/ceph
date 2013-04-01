@@ -102,6 +102,7 @@ namespace librbd {
   int resize_helper(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx);
   int snap_create(ImageCtx *ictx, const char *snap_name);
   int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
+  bool snap_exists(ImageCtx *ictx, const char *snap_name);
   int snap_rollback(ImageCtx *ictx, const char *snap_name,
 		    ProgressContext& prog_ctx);
   int snap_remove(ImageCtx *ictx, const char *snap_name);
@@ -167,6 +168,10 @@ namespace librbd {
   int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
 		       int (*cb)(uint64_t, size_t, const char *, void *),
 		       void *arg);
+  int diff_iterate(ImageCtx *ictx, const char *fromsnapname,
+		   uint64_t off, uint64_t len,
+		   int (*cb)(uint64_t, size_t, int, void *),
+		   void *arg);
   ssize_t read(ImageCtx *ictx, uint64_t off, size_t len, char *buf);
   ssize_t read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
 	       char *buf, bufferlist *pbl);
