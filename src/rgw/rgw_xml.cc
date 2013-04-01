@@ -108,7 +108,10 @@ find(string name)
   map<string, XMLObj *>::iterator first;
   map<string, XMLObj *>::iterator last;
   first = children.find(name);
-  last = children.upper_bound(name);
+  if (first != children.end()) {
+    last = children.upper_bound(name);
+  }else
+    last = children.end();
   iter.set(first, last);
   return iter;
 }
