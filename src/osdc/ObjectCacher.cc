@@ -1496,6 +1496,20 @@ bool ObjectCacher::flush(Object *ob, loff_t offset, loff_t length)
   return clean;
 }
 
+bool ObjectCacher::_flush_set_finish(C_GatherBuilder *gather, Context *onfinish)
+{
+  assert(lock.is_locked());
+  if (gather->has_subs()) {
+    gather->set_finisher(onfinish);
+    gather->activate();
+    return false;
+  }
+
+  ldout(cct, 10) << "flush_set has no dirty|tx bhs" << dendl;
+  onfinish->complete(0);
+  return true;
+}
+
 // flush.  non-blocking, takes callback.
 // returns true if already flushed
 bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
@@ -1527,15 +1541,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
     }
   }
 
-  if (gather.has_subs()) {
-    gather.set_finisher(onfinish);
-    gather.activate();
-    return false;
-  } else {
-    ldout(cct, 10) << "flush_set " << oset << " has no dirty|tx bhs" << dendl;
-    onfinish->complete(0);
-    return true;
-  }
+  return _flush_set_finish(&gather, onfinish);
 }
 
 // flush.  non-blocking, takes callback.
@@ -1550,7 +1556,8 @@ bool ObjectCacher::flush_set(ObjectSet *oset, vector<ObjectExtent>& exv, Context
     return true;
   }
 
-  ldout(cct, 10) << "flush_set " << oset << " on " << exv.size() << " ObjectExtents" << dendl;
+  ldout(cct, 10) << "flush_set " << oset << " on " << exv.size()
+		 << " ObjectExtents" << dendl;
 
   // we'll need to wait for all objects to flush!
   C_GatherBuilder gather(cct);
@@ -1574,15 +1581,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, vector<ObjectExtent>& exv, Context
     }
   }
 
-  if (gather.has_subs()) {
-    gather.set_finisher(onfinish);
-    gather.activate();
-    return false;
-  } else {
-    ldout(cct, 10) << "flush_set " << oset << " has no dirty|tx bhs" << dendl;
-    onfinish->complete(0);
-    return true;
-  }
+  return _flush_set_finish(&gather, onfinish);
 }
 
 void ObjectCacher::purge_set(ObjectSet *oset)
