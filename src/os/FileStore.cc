@@ -193,7 +193,6 @@ int FileStore::lfn_stat(coll_t cid, const hobject_t& oid, struct stat *buf)
   r = ::stat(path->path(), buf);
   if (r < 0)
     r = -errno;
-  assert(!m_filestore_fail_eio || r != -EIO);
   return r;
 }
 
@@ -2716,9 +2715,11 @@ bool FileStore::exists(coll_t cid, const hobject_t& oid)
     return false;
 }
   
-int FileStore::stat(coll_t cid, const hobject_t& oid, struct stat *st)
+int FileStore::stat(
+  coll_t cid, const hobject_t& oid, struct stat *st, bool allow_eio)
 {
   int r = lfn_stat(cid, oid, st);
+  assert(allow_eio || !m_filestore_fail_eio || r != -EIO);
   if (r < 0) {
     dout(10) << "stat " << cid << "/" << oid
 	     << " = " << r << dendl;
@@ -2735,8 +2736,13 @@ int FileStore::stat(coll_t cid, const hobject_t& oid, struct stat *st)
   }
 }
 
-int FileStore::read(coll_t cid, const hobject_t& oid, 
-                    uint64_t offset, size_t len, bufferlist& bl)
+int FileStore::read(
+  coll_t cid,
+  const hobject_t& oid, 
+  uint64_t offset,
+  size_t len,
+  bufferlist& bl,
+  bool allow_eio)
 {
   int got;
 
@@ -2761,7 +2767,7 @@ int FileStore::read(coll_t cid, const hobject_t& oid,
   if (got < 0) {
     dout(10) << "FileStore::read(" << cid << "/" << oid << ") pread error: " << cpp_strerror(got) << dendl;
     lfn_close(fd);
-    assert(!m_filestore_fail_eio || got != -EIO);
+    assert(allow_eio || !m_filestore_fail_eio || got != -EIO);
     return got;
   }
   bptr.set_length(got);   // properly size the buffer
@@ -4507,8 +4513,11 @@ int FileStore::omap_get(coll_t c, const hobject_t &hoid,
   return 0;
 }
 
-int FileStore::omap_get_header(coll_t c, const hobject_t &hoid,
-			       bufferlist *bl)
+int FileStore::omap_get_header(
+  coll_t c,
+  const hobject_t &hoid,
+  bufferlist *bl,
+  bool allow_eio)
 {
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   IndexedPath path;
@@ -4517,7 +4526,7 @@ int FileStore::omap_get_header(coll_t c, const hobject_t &hoid,
     return r;
   r = object_map->get_header(hoid, bl);
   if (r < 0 && r != -ENOENT) {
-    assert(!m_filestore_fail_eio || r != -EIO);
+    assert(allow_eio || !m_filestore_fail_eio || r != -EIO);
     return r;
   }
   return 0;
