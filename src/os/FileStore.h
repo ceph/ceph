@@ -364,8 +364,18 @@ public:
     return 0;
   }
   bool exists(coll_t cid, const hobject_t& oid);
-  int stat(coll_t cid, const hobject_t& oid, struct stat *st);
-  int read(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
+  int stat(
+    coll_t cid,
+    const hobject_t& oid,
+    struct stat *st,
+    bool allow_eio = false);
+  int read(
+    coll_t cid,
+    const hobject_t& oid,
+    uint64_t offset,
+    size_t len,
+    bufferlist& bl,
+    bool allow_eio = false);
   int fiemap(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
 
   int _touch(coll_t cid, const hobject_t& oid);
@@ -453,7 +463,11 @@ public:
   // omap (see ObjectStore.h for documentation)
   int omap_get(coll_t c, const hobject_t &hoid, bufferlist *header,
 	       map<string, bufferlist> *out);
-  int omap_get_header(coll_t c, const hobject_t &hoid, bufferlist *out);
+  int omap_get_header(
+    coll_t c,
+    const hobject_t &hoid,
+    bufferlist *out,
+    bool allow_eio = false);
   int omap_get_keys(coll_t c, const hobject_t &hoid, set<string> *keys);
   int omap_get_values(coll_t c, const hobject_t &hoid, const set<string> &keys,
 		      map<string, bufferlist> *out);
