@@ -1579,6 +1579,103 @@ TEST(LibRBD, DiffIterate)
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
 
+struct diff_extent {
+  diff_extent(uint64_t offset, uint64_t length, bool exists) :
+    offset(offset), length(length), exists(exists) {}
+  uint64_t offset;
+  uint64_t length;
+  bool exists;
+  bool operator==(const diff_extent& o) const {
+    return offset == o.offset && length == o.length && exists == o.exists;
+  }
+};
+
+ostream& operator<<(ostream & o, const diff_extent& e) {
+  return o << '(' << e.offset << '~' << e.length << ' ' << (e.exists ? "true" : "false") << ')';
+}
+
+int vector_iterate_cb(uint64_t off, size_t len, int exists, void *arg)
+{
+  cout << "iterate_cb " << off << "~" << len << std::endl;
+  vector<diff_extent> *diff = static_cast<vector<diff_extent> *>(arg);
+  diff->push_back(diff_extent(off, len, exists));
+  return 0;
+}
+
+TEST(LibRBD, DiffIterateDiscard)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    const char *name = "testimg";
+    uint64_t size = 20 << 20;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name, size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
+
+    vector<diff_extent> extents;
+    ceph::bufferlist bl;
+
+    ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
+				    vector_iterate_cb, (void *) &extents));
+    ASSERT_EQ(0u, extents.size());
+
+    char data[256];
+    bl.append(data, 256);
+    ASSERT_EQ(256, image.write(0, 256, bl));
+    ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
+				    vector_iterate_cb, (void *) &extents));
+    ASSERT_EQ(1u, extents.size());
+    ASSERT_EQ(diff_extent(0, 256, true), extents[0]);
+
+    int obj_ofs = 256;
+    ASSERT_EQ(obj_ofs, image.discard(0, obj_ofs));
+
+    extents.clear();
+    ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
+				    vector_iterate_cb, (void *) &extents));
+    ASSERT_EQ(0u, extents.size());
+
+    ASSERT_EQ(0, image.snap_create("snap1"));
+    ASSERT_EQ(256, image.write(0, 256, bl));
+    ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
+				    vector_iterate_cb, (void *) &extents));
+    ASSERT_EQ(1u, extents.size());
+    ASSERT_EQ(diff_extent(0, 256, true), extents[0]);
+    ASSERT_EQ(0, image.snap_create("snap2"));
+
+    ASSERT_EQ(obj_ofs, image.discard(0, obj_ofs));
+
+    extents.clear();
+    ASSERT_EQ(0, image.snap_set("snap2"));
+    ASSERT_EQ(0, image.diff_iterate("snap1", 0, size,
+				    vector_iterate_cb, (void *) &extents));
+    ASSERT_EQ(1u, extents.size());
+    ASSERT_EQ(diff_extent(0, 256, true), extents[0]);
+
+    ASSERT_EQ(0, image.snap_set(NULL));
+    ASSERT_EQ(1 << order, image.discard(0, 1 << order));
+    ASSERT_EQ(0, image.snap_create("snap3"));
+    ASSERT_EQ(0, image.snap_set("snap3"));
+
+    extents.clear();
+    ASSERT_EQ(0, image.diff_iterate("snap1", 0, size,
+				    vector_iterate_cb, (void *) &extents));
+    ASSERT_EQ(1u, extents.size());
+    ASSERT_EQ(diff_extent(0, 256, false), extents[0]);
+  }
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
 TEST(LibRBD, DiffIterateStress)
 {
   librados::Rados rados;
