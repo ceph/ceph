@@ -126,6 +126,44 @@ Notable Changes
 * auth: ability to require new cephx signatures on messages (still off by default)
 
 
+v0.56.4 "bobtail"
+-----------------
+
+Upgrading
+~~~~~~~~~
+
+* There is a fix in the syntax for the output of 'ceph osd tree --format=json'.
+
+* The MDS disk format has changed from prior releases *and* from v0.57.  In particular,
+  upgrades to v0.56.4 are safe, but you cannot move from v0.56.4 to v0.57 if you are using
+  the MDS for CephFS; you must upgrade directly to v0.58 (or later) instead.
+
+Notable changes
+~~~~~~~~~~~~~~~
+
+* mon: fix bug in bringup with IPv6
+* reduce default memory utilization by internal logging (all daemons)
+* rgw: fix for bucket removal
+* rgw: reopen logs after log rotation
+* rgw: fix multipat upload listing
+* rgw: don't copy object when copied onto self
+* osd: fix caps parsing for pools with - or _
+* osd: allow pg log trimming when degraded, scrubbing, recoverying (reducing memory consumption)
+* osd: fix potential deadlock when 'journal aio = true'
+* osd: various fixes for collection creation/removal, rename, temp collections
+* osd: various fixes for PG split
+* osd: deep-scrub omap key/value data
+* osd: fix rare bug in journal replay
+* osd: misc fixes for snapshot tracking
+* osd: fix leak in recovery reservations on pool deletion
+* osd: fix bug in connection management
+* osd: fix for op ordering when rebalancing
+* ceph-fuse: report file system size with correct units
+* mds: get and set directory layout policies via virtual xattrs
+* mds: on-disk format revision (see upgrading note above)
+* mkcephfs, init-ceph: close potential security issues with predictable filenames
+
+
 v0.56.3 "bobtail"
 -----------------
 

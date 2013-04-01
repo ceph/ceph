@@ -912,7 +912,7 @@ static bool append_unescaped(string::const_iterator begin,
       else if (*i == 's')
 	out->append("/");
       else if (*i == 'n')
-	out->append('\0');
+	(*out) += '\0';
       else if (*i == 'u')
 	out->append("_");
       else

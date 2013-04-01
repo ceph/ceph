@@ -20,8 +20,6 @@ extern "C" {
 #include "PG.h"
 #include "OSDMap.h"
 
-const snapid_t clone_info::HEAD((uint64_t)-1);
-
 // -- osd_reqid_t --
 void osd_reqid_t::encode(bufferlist &bl) const
 {
@@ -551,6 +549,8 @@ void pg_pool_t::dump(Formatter *f) const
   }
   f->close_section();
   f->dump_stream("removed_snaps") << removed_snaps;
+  f->dump_int("quota_max_bytes", quota_max_bytes);
+  f->dump_int("quota_max_objects", quota_max_objects);
 }
 
 
@@ -755,7 +755,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(7, 5, bl);
+  ENCODE_START(8, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -774,6 +774,8 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(flags, bl);
   ::encode(crash_replay_interval, bl);
   ::encode(min_size, bl);
+  ::encode(quota_max_bytes, bl);
+  ::encode(quota_max_objects, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -828,6 +830,10 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   } else {
     min_size = size - size/2;
   }
+  if (struct_v >= 8) {
+    ::decode(quota_max_bytes, bl);
+    ::decode(quota_max_objects, bl);
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
 }
@@ -848,6 +854,8 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.snap_epoch = 11;
   a.auid = 12;
   a.crash_replay_interval = 13;
+  a.quota_max_bytes = 473;
+  a.quota_max_objects = 474;
   o.push_back(new pg_pool_t(a));
 
   a.snaps[3].name = "asdf";
@@ -859,6 +867,8 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   o.push_back(new pg_pool_t(a));
 
   a.removed_snaps.insert(2);   // not quite valid to combine with snaps!
+  a.quota_max_bytes = 2473;
+  a.quota_max_objects = 4374;
   o.push_back(new pg_pool_t(a));
 }
 
@@ -877,6 +887,10 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
     out << " flags " << p.flags;
   if (p.crash_replay_interval)
     out << " crash_replay_interval " << p.crash_replay_interval;
+  if (p.quota_max_bytes)
+    out << " max_bytes " << p.quota_max_bytes;
+  if (p.quota_max_objects)
+    out << " max_objects " << p.quota_max_objects;
   return out;
 }
 
@@ -2974,6 +2988,8 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     switch (op.op.op) {
     case CEPH_OSD_OP_STAT:
     case CEPH_OSD_OP_DELETE:
+    case CEPH_OSD_OP_LIST_WATCHERS:
+    case CEPH_OSD_OP_LIST_SNAPS:
       break;
     case CEPH_OSD_OP_TRUNCATE:
       out << " " << op.op.extent.offset;

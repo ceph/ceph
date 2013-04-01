@@ -28,6 +28,7 @@ bin_PROGRAMS =
 bin_DEBUGPROGRAMS =
 sbin_PROGRAMS =
 sbin_SCRIPTS = \
+	ceph-disk \
 	ceph-disk-prepare \
 	ceph-disk-activate \
 	ceph-create-keys \
@@ -130,7 +131,9 @@ osdmaptool_LDADD = $(LIBGLOBAL_LDA)
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
 rgw_dencoder_src = rgw/rgw_dencoder.cc \
-                   rgw/rgw_acl.cc
+                   rgw/rgw_acl.cc \
+                   rgw/rgw_common.cc \
+                   rgw/rgw_json_enc.cc
 
 ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc ${rgw_dencoder_src} perfglue/disabled_heap_profiler.cc
 ceph_dencoder_CXXFLAGS = ${AM_CXXFLAGS}
@@ -354,7 +357,7 @@ librgw_a_SOURCES =  \
 	rgw/rgw_fcgi.cc \
 	rgw/rgw_xml.cc \
 	rgw/rgw_usage.cc \
-	rgw/rgw_json.cc \
+	rgw/rgw_json_enc.cc \
 	rgw/rgw_user.cc \
 	rgw/rgw_tools.cc \
 	rgw/rgw_rados.cc \
@@ -367,7 +370,9 @@ librgw_a_SOURCES =  \
 	rgw/rgw_policy_s3.cc \
 	rgw/rgw_gc.cc \
 	rgw/rgw_multi_del.cc \
-	rgw/rgw_env.cc
+	rgw/rgw_env.cc \
+	rgw/rgw_cors.cc \
+	rgw/rgw_cors_s3.cc
 librgw_a_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librgw_a_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
 noinst_LIBRARIES += librgw.a
@@ -401,7 +406,7 @@ ceph_rgw_multiparser_CXXFLAGS = ${AM_CXXFLAGS}
 ceph_rgw_multiparser_LDADD = $(my_radosgw_ldadd)
 bin_DEBUGPROGRAMS += ceph_rgw_multiparser
 
-ceph_rgw_jsonparser_SOURCES = rgw/rgw_jsonparser.cc
+ceph_rgw_jsonparser_SOURCES = rgw/rgw_jsonparser.cc rgw/rgw_common.cc rgw/rgw_json_enc.cc
 ceph_rgw_jsonparser_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 ceph_rgw_jsonparser_LDADD = $(my_radosgw_ldadd)
 bin_DEBUGPROGRAMS += ceph_rgw_jsonparser
@@ -420,6 +425,7 @@ librbd_la_SOURCES = \
 	librbd/WatchCtx.cc \
 	osdc/ObjectCacher.cc \
 	osdc/Striper.cc \
+	librados/snap_set_diff.cc \
 	cls/lock/cls_lock_client.cc \
 	cls/lock/cls_lock_types.cc \
 	cls/lock/cls_lock_ops.cc \
@@ -560,7 +566,11 @@ endif
 ##  - The JNI library is here
 ##  - The Java source Makefile.am is in src/java
 if ENABLE_CEPHFS_JAVA
-libcephfs_jni_la_SOURCES = java/native/libcephfs_jni.cc
+libcephfs_jni_la_SOURCES = \
+	java/native/libcephfs_jni.cc \
+	java/native/ScopedLocalRef.h \
+	java/native/JniConstants.cpp \
+	java/native/JniConstants.h
 libcephfs_jni_la_LIBADD = libcephfs.la $(EXTRALIBS)
 libcephfs_jni_la_CPPFLAGS = $(JDK_CPPFLAGS)
 libcephfs_jni_la_CXXFLAGS = ${AM_CXXFLAGS}
@@ -648,6 +658,11 @@ unittest_addrs_SOURCES = test/test_addrs.cc
 unittest_addrs_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 unittest_addrs_LDADD = libglobal.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
 check_PROGRAMS += unittest_addrs
+
+unittest_util_SOURCES = test/common/test_util.cc common/util.cc
+unittest_util_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_util_LDADD = libcommon.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
+check_PROGRAMS += unittest_util
 
 unittest_workqueue_SOURCES = test/test_workqueue.cc
 unittest_workqueue_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
@@ -777,6 +792,12 @@ unittest_chain_xattr_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_
 unittest_chain_xattr_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} ${CRYPTO_CXXFLAGS}
 check_PROGRAMS += unittest_chain_xattr
 
+unittest_flatindex_SOURCES = test/os/TestFlatIndex.cc
+unittest_flatindex_LDFLAGS = ${AM_LDFLAGS}
+unittest_flatindex_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+unittest_flatindex_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} ${CRYPTO_CXXFLAGS}
+check_PROGRAMS += unittest_flatindex
+
 unittest_strtol_SOURCES = test/strtol.cc
 unittest_strtol_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_strtol_LDADD = ${UNITTEST_LDADD} $(LIBGLOBAL_LDA)
@@ -806,6 +827,12 @@ unittest_libcephfs_config_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_libcephfs_config_LDADD =  libcephfs.la ${UNITTEST_LDADD}
 unittest_libcephfs_config_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_libcephfs_config
+
+unittest_lfnindex_SOURCES = test/os/TestLFNIndex.cc
+unittest_lfnindex_LDFLAGS = ${AM_LDFLAGS}
+unittest_lfnindex_LDADD =  ${UNITTEST_STATIC_LDADD} $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+unittest_lfnindex_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} ${CRYPTO_CXXFLAGS}
+check_PROGRAMS += unittest_lfnindex
 
 unittest_librados_config_SOURCES = test/librados/librados_config.cc
 unittest_librados_config_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
@@ -849,6 +876,12 @@ unittest_texttable_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_texttable_LDADD = librados.la ${UNITTEST_LDADD}
 unittest_texttable_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_texttable
+
+ceph_test_cors_SOURCES = test/test_cors.cc
+ceph_test_cors_LDFLAGS = libglobal.la
+ceph_test_cors_LDADD = librados.la librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} -lcryptopp -lcurl -luuid -lexpat
+ceph_test_cors_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += ceph_test_cors
 
 ceph_test_librbd_SOURCES = test/librbd/test_librbd.cc test/librados/test.cc
 ceph_test_librbd_LDADD =  librbd.la librados.la ${UNITTEST_STATIC_LDADD}
@@ -1145,6 +1178,7 @@ EXTRA_DIST += \
 	$(srcdir)/upstart/radosgw.conf \
 	$(srcdir)/upstart/radosgw-all.conf \
 	$(srcdir)/upstart/radosgw-all-starter.conf \
+	ceph-disk \
 	ceph-disk-prepare \
 	ceph-disk-activate \
 	ceph-create-keys \
@@ -1333,6 +1367,7 @@ libcommon_files = \
 	common/entity_name.cc \
 	common/ceph_crypto.cc \
 	common/ceph_crypto_cms.cc \
+	common/ceph_json.cc \
 	common/ipaddr.cc \
 	common/pick_address.cc \
 	include/addr_parsing.c \
@@ -1366,7 +1401,9 @@ libmon_a_SOURCES = \
 	mon/MonitorStore.cc \
 	os/LevelDBStore.cc \
 	mon/HealthMonitor.cc \
-	mon/DataHealthService.cc
+	mon/DataHealthService.cc \
+	mon/ConfigKeyService.cc \
+	common/util.cc
 libmon_a_CXXFLAGS= ${AM_CXXFLAGS}
 noinst_LIBRARIES += libmon.a
 
@@ -1584,6 +1621,7 @@ noinst_HEADERS = \
 	common/config_opts.h\
 	common/ceph_crypto.h\
 	common/ceph_crypto_cms.h\
+	common/ceph_json.h\
 	common/utf8.h\
 	common/mime.h\
 	common/pick_address.h\
@@ -1664,6 +1702,7 @@ noinst_HEADERS = \
 	include/rbd/librbd.h\
 	include/rbd/librbd.hpp\
         include/util.h\
+	librados/snap_set_diff.h\
 	librados/AioCompletionImpl.h\
 	librados/IoCtxImpl.h\
 	librados/PoolAsyncCompletionImpl.h\
@@ -1815,6 +1854,7 @@ noinst_HEADERS = \
         messages/MOSDAlive.h\
         messages/MOSDBoot.h\
         messages/MOSDFailure.h\
+        messages/MOSDMarkMeDown.h\
         messages/MOSDMap.h\
         messages/MOSDOp.h\
         messages/MOSDOpReply.h\
@@ -1854,6 +1894,7 @@ noinst_HEADERS = \
         mon/DataHealthService.h\
         mon/Elector.h\
 	mon/LogMonitor.h\
+	mon/ConfigKeyService.h\
         mon/HealthMonitor.h\
         mon/HealthService.h\
         mon/MDSMonitor.h\
@@ -1925,9 +1966,11 @@ noinst_HEADERS = \
 	rgw/rgw_client_io.h\
 	rgw/rgw_fcgi.h\
 	rgw/rgw_xml.h\
-	rgw/rgw_json.h\
 	rgw/rgw_cache.h\
 	rgw/rgw_common.h\
+	rgw/rgw_cors.h\
+	rgw/rgw_cors_s3.h\
+	rgw/rgw_cors_swift.h\
 	rgw/rgw_string.h\
 	rgw/rgw_formats.h\
 	rgw/rgw_html_errors.h\

@@ -1796,7 +1796,6 @@ void PG::_activate_committed(epoch_t e)
 
   if (dirty_info) {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    dirty_info = true;
     write_if_dirty(*t);
     int tr = osd->store->queue_transaction(osr.get(), t);
     assert(tr == 0);
@@ -2353,9 +2352,8 @@ void PG::init(int role, vector<int>& newup, vector<int>& newacting, pg_history_t
   write_if_dirty(*t);
 }
 
-void PG::upgrade(
-  ObjectStore *store,
-  const interval_set<snapid_t> &snapcolls) {
+void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
+{
   unsigned removed = 0;
   for (interval_set<snapid_t>::const_iterator i = snapcolls.begin();
        i != snapcolls.end();
@@ -2505,6 +2503,7 @@ void PG::write_info(ObjectStore::Transaction& t)
     info_struct_v = cur_struct_v;
     ::encode(info_struct_v, attrbl);
     t.collection_setattr(coll, "info", attrbl);
+    dirty_big_info = true;
   }
 
   // info.  store purged_snaps separately.
@@ -3295,6 +3294,26 @@ void PG::sub_op_scrub_stop(OpRequestRef op)
   osd->send_message_osd_cluster(reply, m->get_connection());
 }
 
+void PG::reject_reservation()
+{
+  osd->send_message_osd_cluster(
+    acting[0],
+    new MBackfillReserve(
+      MBackfillReserve::REJECT,
+      info.pgid,
+      get_osdmap()->get_epoch()),
+    get_osdmap()->get_epoch());
+}
+
+void PG::schedule_backfill_full_retry()
+{
+  Mutex::Locker lock(osd->backfill_request_lock);
+  osd->backfill_request_timer.add_event_after(
+    g_conf->osd_backfill_retry_interval,
+    new QueuePeeringEvt<RequestBackfill>(
+      this, get_osdmap()->get_epoch(),
+      RequestBackfill()));
+}
 
 void PG::clear_scrub_reserved()
 {
@@ -5902,6 +5921,19 @@ PG::RecoveryState::Backfilling::Backfilling(my_context ctx)
   pg->state_set(PG_STATE_BACKFILL);
 }
 
+boost::statechart::result
+PG::RecoveryState::Backfilling::react(const RemoteReservationRejected &)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+  pg->state_set(PG_STATE_BACKFILL_TOOFULL);
+
+  pg->osd->recovery_wq.dequeue(pg);
+
+  pg->schedule_backfill_full_retry();
+  return transit<NotBackfilling>();
+}
+
 void PG::RecoveryState::Backfilling::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
@@ -5910,24 +5942,6 @@ void PG::RecoveryState::Backfilling::exit()
   pg->backfill_reserving = false;
   pg->state_clear(PG_STATE_BACKFILL);
 }
-
-template <class EVT>
-struct QueuePeeringEvt : Context {
-  boost::intrusive_ptr<PG> pg;
-  epoch_t epoch;
-  EVT evt;
-  QueuePeeringEvt(PG *pg, epoch_t epoch, EVT evt) :
-    pg(pg), epoch(epoch), evt(evt) {}
-  void finish(int r) {
-    pg->lock();
-    pg->queue_peering_event(PG::CephPeeringEvtRef(
-	new PG::CephPeeringEvt(
-	  epoch,
-	  epoch,
-	  evt)));
-    pg->unlock();
-  }
-};
 
 /*--WaitRemoteBackfillReserved--*/
 
@@ -5975,12 +5989,7 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationReje
   pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_set(PG_STATE_BACKFILL_TOOFULL);
 
-  Mutex::Locker lock(pg->osd->backfill_request_lock);
-  pg->osd->backfill_request_timer.add_event_after(
-    g_conf->osd_backfill_retry_interval,
-    new QueuePeeringEvt<RequestBackfill>(
-      pg, pg->get_osdmap()->get_epoch(),
-      RequestBackfill()));
+  pg->schedule_backfill_full_retry();
 
   return transit<NotBackfilling>();
 }
@@ -6073,12 +6082,12 @@ PG::RecoveryState::RepWaitBackfillReserved::RepWaitBackfillReserved(my_context c
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
 
-  int64_t kb      = pg->osd->osd->osd_stat.kb,
-          kb_used = pg->osd->osd->osd_stat.kb_used;
-  int64_t max = kb * g_conf->osd_backfill_full_ratio;
-  if (kb_used >= max) {
-    dout(10) << "backfill reservation rejected: kb used >= max: "
-             << kb_used << " >= " << max << dendl;
+  double ratio, max_ratio;
+  if (pg->osd->too_full_for_backfill(&ratio, &max_ratio) &&
+      !g_conf->osd_debug_skip_full_check_in_backfill_reservation) {
+    dout(10) << "backfill reservation rejected: full ratio is "
+	     << ratio << ", which is greater than max allowed ratio "
+	     << max_ratio << dendl;
     post_event(RemoteReservationRejected());
   } else {
     pg->osd->remote_reserver.request_reservation(
@@ -6112,13 +6121,7 @@ boost::statechart::result
 PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteReservationRejected &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->osd->send_message_osd_cluster(
-    pg->acting[0],
-    new MBackfillReserve(
-      MBackfillReserve::REJECT,
-      pg->info.pgid,
-      pg->get_osdmap()->get_epoch()),
-    pg->get_osdmap()->get_epoch());
+  pg->reject_reservation();
   return transit<RepNotRecovering>();
 }
 
@@ -6128,6 +6131,14 @@ PG::RecoveryState::RepRecovering::RepRecovering(my_context ctx)
 {
   state_name = "Started/ReplicaActive/RepRecovering";
   context< RecoveryMachine >().log_enter(state_name);
+}
+
+boost::statechart::result
+PG::RecoveryState::RepRecovering::react(const BackfillTooFull &)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->reject_reservation();
+  return transit<RepNotRecovering>();
 }
 
 void PG::RecoveryState::RepRecovering::exit()

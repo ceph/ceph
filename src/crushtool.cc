@@ -632,7 +632,7 @@ int main(int argc, const char **argv)
       r = -ENOENT;
     } else {
       int remove_item = crush.get_item_id(remove_name.c_str());
-      r = crush.remove_item(g_ceph_context, remove_item);
+      r = crush.remove_item(g_ceph_context, remove_item, false);
     }
     if (r == 0)
       modified = true;

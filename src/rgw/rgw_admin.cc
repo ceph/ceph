@@ -6,9 +6,12 @@
 
 using namespace std;
 
+#include "common/ceph_json.h"
+
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "common/Formatter.h"
+#include "common/ceph_json.h"
 #include "global/global_init.h"
 #include "common/errno.h"
 #include "include/utime.h"
@@ -57,7 +60,7 @@ void _usage()
   cerr << "  bucket check               check bucket index\n";
   cerr << "  object rm                  remove object\n";
   cerr << "  object unlink              unlink object from bucket index\n";
-  cerr << "  cluster info               show cluster params info\n";
+  cerr << "  zone info                  show zone params info\n";
   cerr << "  pool add                   add an existing pool for data placement\n";
   cerr << "  pool rm                    remove an existing pool from data placement set\n";
   cerr << "  pools list                 list placement active set\n";
@@ -161,7 +164,8 @@ enum {
   OPT_OBJECT_UNLINK,
   OPT_GC_LIST,
   OPT_GC_PROCESS,
-  OPT_CLUSTER_INFO,
+  OPT_ZONE_INFO,
+  OPT_ZONE_SET,
   OPT_CAPS_ADD,
   OPT_CAPS_RM,
 };
@@ -181,55 +185,12 @@ static uint32_t str_to_perm(const char *str)
   return 0; // unreachable
 }
 
-struct rgw_flags_desc {
-  uint32_t mask;
-  const char *str;
-};
-
-static struct rgw_flags_desc rgw_perms[] = {
- { RGW_PERM_FULL_CONTROL, "full-control" },
- { RGW_PERM_READ | RGW_PERM_WRITE, "read-write" },
- { RGW_PERM_READ, "read" },
- { RGW_PERM_WRITE, "write" },
- { RGW_PERM_READ_ACP, "read-acp" },
- { RGW_PERM_WRITE_ACP, "read-acp" },
- { 0, NULL }
-};
-
-static void perm_to_str(uint32_t mask, char *buf, int len)
-{
-  const char *sep = "";
-  int pos = 0;
-  if (!mask) {
-    snprintf(buf, len, "<none>");
-    return;
-  }
-  while (mask) {
-    uint32_t orig_mask = mask;
-    for (int i = 0; rgw_perms[i].mask; i++) {
-      struct rgw_flags_desc *desc = &rgw_perms[i];
-      if ((mask & desc->mask) == desc->mask) {
-        pos += snprintf(buf + pos, len - pos, "%s%s", sep, desc->str);
-        if (pos == len)
-          return;
-        sep = ", ";
-        mask &= ~desc->mask;
-        if (!mask)
-          return;
-      }
-    }
-    if (mask == orig_mask) // no change
-      break;
-  }
-}
-
 static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
 {
   *need_more = false;
   if (strcmp(cmd, "bucket") == 0 ||
       strcmp(cmd, "buckets") == 0 ||
       strcmp(cmd, "caps") == 0 ||
-      strcmp(cmd, "cluster") == 0 ||
       strcmp(cmd, "gc") == 0 || 
       strcmp(cmd, "key") == 0 ||
       strcmp(cmd, "log") == 0 ||
@@ -239,7 +200,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "subuser") == 0 ||
       strcmp(cmd, "temp") == 0 ||
       strcmp(cmd, "usage") == 0 ||
-      strcmp(cmd, "user") == 0) {
+      strcmp(cmd, "user") == 0 ||
+      strcmp(cmd, "zone") == 0) {
     *need_more = true;
     return 0;
   }
@@ -326,9 +288,11 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_OBJECT_RM;
     if (strcmp(cmd, "unlink") == 0)
       return OPT_OBJECT_UNLINK;
-  } else if (strcmp(prev_cmd, "cluster") == 0) {
+  } else if (strcmp(prev_cmd, "zone") == 0) {
     if (strcmp(cmd, "info") == 0)
-      return OPT_CLUSTER_INFO;
+      return OPT_ZONE_INFO;
+    if (strcmp(cmd, "set") == 0)
+      return OPT_ZONE_SET;
   } else if (strcmp(prev_cmd, "gc") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_GC_LIST;
@@ -362,63 +326,10 @@ string escape_str(string& src, char c)
 
 static void show_user_info(RGWUserInfo& info, Formatter *formatter)
 {
-  map<string, RGWAccessKey>::iterator kiter;
-  map<string, RGWSubUser>::iterator uiter;
-
-
-  formatter->open_object_section("user_info");
-
-  formatter->dump_string("user_id", info.user_id);
-  formatter->dump_string("display_name", info.display_name);
-  formatter->dump_string("email", info.user_email);
-  formatter->dump_int("suspended", (int)info.suspended);
-  formatter->dump_int("max_buckets", (int)info.max_buckets);
-
-  // subusers
-  formatter->open_array_section("subusers");
-  for (uiter = info.subusers.begin(); uiter != info.subusers.end(); ++uiter) {
-    RGWSubUser& u = uiter->second;
-    formatter->open_object_section("user");
-    formatter->dump_format("id", "%s:%s", info.user_id.c_str(), u.name.c_str());
-    char buf[256];
-    perm_to_str(u.perm_mask, buf, sizeof(buf));
-    formatter->dump_string("permissions", buf);
-    formatter->close_section();
-    formatter->flush(cout);
-  }
-  formatter->close_section();
-
-  // keys
-  formatter->open_array_section("keys");
-  for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
-    RGWAccessKey& k = kiter->second;
-    const char *sep = (k.subuser.empty() ? "" : ":");
-    const char *subuser = (k.subuser.empty() ? "" : k.subuser.c_str());
-    formatter->open_object_section("key");
-    formatter->dump_format("user", "%s%s%s", info.user_id.c_str(), sep, subuser);
-    formatter->dump_string("access_key", k.id);
-    formatter->dump_string("secret_key", k.key);
-    formatter->close_section();
-  }
-  formatter->close_section();
-
-  formatter->open_array_section("swift_keys");
-  for (kiter = info.swift_keys.begin(); kiter != info.swift_keys.end(); ++kiter) {
-    RGWAccessKey& k = kiter->second;
-    const char *sep = (k.subuser.empty() ? "" : ":");
-    const char *subuser = (k.subuser.empty() ? "" : k.subuser.c_str());
-    formatter->open_object_section("key");
-    formatter->dump_format("user", "%s%s%s", info.user_id.c_str(), sep, subuser);
-    formatter->dump_string("secret_key", k.key);
-    formatter->close_section();
-  }
-  formatter->close_section();
-
-  info.caps.dump(formatter);
-
-  formatter->close_section();
+  encode_json("user_info", info, formatter);
   formatter->flush(cout);
   cout << std::endl;
+
 }
 
 static int create_bucket(string bucket_str, string& user_id, string& display_name)
@@ -731,7 +642,7 @@ static int remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_childr
   obj.bucket = bucket;
   int max = 1000;
 
-  ret = rgw_get_obj(store, NULL, store->params.domain_root, bucket.name, bl, NULL);
+  ret = rgw_get_obj(store, NULL, store->zone.domain_root, bucket.name, bl, NULL);
 
   bufferlist::iterator iter = bl.begin();
   try {
@@ -785,6 +696,65 @@ static bool bucket_object_check_filter(const string& name)
   return rgw_obj::translate_raw_obj_to_obj_in_ns(obj, ns);
 }
 
+static int read_input(const string& infile, bufferlist& bl)
+{
+  int fd = 0;
+  if (infile.size()) {
+    fd = open(infile.c_str(), O_RDONLY);
+    if (fd < 0) {
+      int err = -errno;
+      cerr << "error reading input file " << infile << std::endl;
+      return err;
+    }
+  }
+
+#define READ_CHUNK 8196
+  int r;
+
+  do {
+    char buf[READ_CHUNK];
+
+    r = read(fd, buf, READ_CHUNK);
+    if (r < 0) {
+      int err = -errno;
+      cerr << "error while reading input" << std::endl;
+      return err;
+    }
+    bl.append(buf, r);
+  } while (r > 0);
+
+  if (infile.size()) {
+    close(fd);
+  }
+
+  return 0;
+}
+
+template <class T>
+static int read_decode_json(const string& infile, T& t)
+{
+  bufferlist bl;
+  int ret = read_input(infile, bl);
+  if (ret < 0) {
+    cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
+    return ret;
+  }
+  JSONParser p;
+  ret = p.parse(bl.c_str(), bl.length());
+  if (ret < 0) {
+    cout << "failed to parse JSON" << std::endl;
+    return ret;
+  }
+
+  try {
+    t.decode_json(&p);
+  } catch (JSONDecoder::err& e) {
+    cout << "failed to decode JSON input: " << e.message << std::endl;
+    return -EINVAL;
+  }
+  return 0;
+}
+    
 class StoreDestructor {
   RGWRados *store;
 public:
@@ -838,6 +808,7 @@ int main(int argc, char **argv)
   map<string, bool> categories;
   string caps;
   int check_objects = false;
+  string infile;
 
   std::string val;
   std::ostringstream errs;
@@ -937,6 +908,8 @@ int main(int argc, char **argv)
       // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
       caps = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-i", "--infile", (char*)NULL)) {
+      infile = val;
     } else {
       ++i;
     }
@@ -1891,8 +1864,26 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_CLUSTER_INFO) {
-    store->params.dump(formatter);
+  if (opt_cmd == OPT_ZONE_INFO) {
+    store->zone.dump(formatter);
+    formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_ZONE_SET) {
+    RGWZoneParams zone;
+    zone.init_default();
+    int ret = read_decode_json(infile, zone);
+    if (ret < 0) {
+      return 1;
+    }
+
+    ret = zone.store_info(g_ceph_context, store);
+    if (ret < 0) {
+      cerr << "ERROR: couldn't store zone info: " << cpp_strerror(-ret) << std::endl;
+      return 1;
+    }
+
+    zone.dump(formatter);
     formatter->flush(cout);
   }
 

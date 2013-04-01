@@ -12,6 +12,7 @@
 #include "rgw_rest_swift.h"
 #include "rgw_rest_s3.h"
 #include "rgw_swift_auth.h"
+#include "rgw_cors_s3.h"
 
 #include "rgw_client_io.h"
 #include "rgw_resolve.h"
@@ -343,6 +344,23 @@ void dump_owner(struct req_state *s, string& id, string& name, const char *secti
   s->formatter->close_section();
 }
 
+void dump_access_control(struct req_state *s, const char *origin, const char *meth,
+                         const char *hdr, const char *exp_hdr, uint32_t max_age) {
+  if (origin && (origin[0] != '\0')) {
+    s->cio->print("Access-Control-Allow-Origin: %s\n", origin?origin:"");
+    if (meth && (meth[0] != '\0'))
+      s->cio->print("Access-Control-Allow-Methods: %s\n", meth?meth:"");
+    if (hdr && (hdr[0] != '\0'))
+      s->cio->print("Access-Control-Allow-Headers: %s\n", hdr);
+    if (exp_hdr && (exp_hdr[0] != '\0')) {
+      s->cio->print("Access-Control-Expose-Headers: %s\n", exp_hdr);
+    }
+    if (max_age != CORS_MAX_AGE_INVALID) {
+      s->cio->print("Access-Control-Max-Age: %d\n", max_age);
+    }
+  }
+}
+
 void dump_start(struct req_state *s)
 {
   if (!s->content_started) {
@@ -648,6 +666,30 @@ int RGWPostObj_ObjStore::verify_params()
 }
 
 int RGWPutACLs_ObjStore::get_params()
+{
+  size_t cl = 0;
+  if (s->length)
+    cl = atoll(s->length);
+  if (cl) {
+    data = (char *)malloc(cl + 1);
+    if (!data) {
+       ret = -ENOMEM;
+       return ret;
+    }
+    int read_len;
+    int r = s->cio->read(data, cl, &read_len);
+    len = read_len;
+    if (r < 0)
+      return r;
+    data[len] = '\0';
+  } else {
+    len = 0;
+  }
+
+  return ret;
+}
+
+int RGWPutCORS_ObjStore::get_params()
 {
   size_t cl = 0;
   if (s->length)
@@ -1031,6 +1073,8 @@ static http_op op_from_method(const char *method)
     return OP_POST;
   if (strcmp(method, "COPY") == 0)
     return OP_COPY;
+  if (strcmp(method, "OPTIONS") == 0)
+    return OP_OPTIONS;
 
   return OP_UNKNOWN;
 }
@@ -1065,6 +1109,9 @@ int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
     break;
   case OP_COPY: // op itself will read and verify the permissions
     return 0;
+  case OP_OPTIONS:
+    only_bucket = false;
+    break;
   default:
     return -EINVAL;
   }

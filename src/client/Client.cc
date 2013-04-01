@@ -1268,30 +1268,25 @@ int Client::make_request(MetaRequest *request,
   if (use_mds >= 0)
     request->resend_mds = use_mds;
 
-  // set up wait cond
-  Cond cond;
-  request->caller_cond = &cond;
-
   while (1) {
+    // set up wait cond
+    Cond caller_cond;
+    request->caller_cond = &caller_cond;
+
     // choose mds
     int mds = choose_target_mds(request);
     if (mds < 0 || !mdsmap->is_active_or_stopping(mds)) {
-      Cond cond;
       ldout(cct, 10) << " target mds." << mds << " not active, waiting for new mdsmap" << dendl;
-      waiting_for_mdsmap.push_back(&cond);
-      cond.Wait(client_lock);
+      wait_on_list(waiting_for_mdsmap);
       continue;
     }
 
     // open a session?
     MetaSession *session = NULL;
     if (!have_open_session(mds)) {
-      Cond cond;
-
       if (!mdsmap->is_active_or_stopping(mds)) {
 	ldout(cct, 10) << "no address for mds." << mds << ", waiting for new mdsmap" << dendl;
-	waiting_for_mdsmap.push_back(&cond);
-	cond.Wait(client_lock);
+	wait_on_list(waiting_for_mdsmap);
 
 	if (!mdsmap->is_active_or_stopping(mds)) {
 	  ldout(cct, 10) << "hmm, still have no address for mds." << mds << ", trying a random mds" << dendl;
@@ -1304,11 +1299,13 @@ int Client::make_request(MetaRequest *request,
 
       // wait
       if (session->state == MetaSession::STATE_OPENING) {
-	session->waiting_for_open.push_back(&cond);
+	Cond session_cond;
+	session->waiting_for_open.push_back(&session_cond);
 	while (session->state == MetaSession::STATE_OPENING) {
 	  ldout(cct, 10) << "waiting for session to mds." << mds << " to open" << dendl;
-	  cond.Wait(client_lock);
+	  session_cond.Wait(client_lock);
 	}
+	session->waiting_for_open.remove(&session_cond);
       }
 
       if (!have_open_session(mds))
@@ -1321,13 +1318,14 @@ int Client::make_request(MetaRequest *request,
     send_request(request, session);
 
     // wait for signal
-    ldout(cct, 20) << "awaiting reply|forward|kick on " << &cond << dendl;
+    ldout(cct, 20) << "awaiting reply|forward|kick on " << &caller_cond << dendl;
     request->kick = false;
     while (!request->reply &&         // reply
 	   request->resend_mds < 0 && // forward
 	   !request->kick)
-      cond.Wait(client_lock);
-    
+      caller_cond.Wait(client_lock);
+    request->caller_cond = NULL;
+
     // did we get a reply?
     if (request->reply) 
       break;
@@ -1699,10 +1697,14 @@ void Client::handle_client_reply(MClientReply *reply)
   ldout(cct, 20) << "handle_client_reply got a reply. Safe:" << is_safe
 		 << " tid " << tid << dendl;
   MetaRequest *request = mds_requests[tid];
-  assert(request);
+  if (!request) {
+    ldout(cct, 0) << "got an unknown reply (probably duplicate) on tid " << tid << " from mds "
+      << mds_num << " safe: " << is_safe << dendl;
+    reply->put();
+    return;
+  }
     
-  if ((request->got_unsafe && !is_safe)
-      || (request->got_safe && is_safe)) {
+  if (request->got_unsafe && !is_safe) {
     //duplicate response
     ldout(cct, 0) << "got a duplicate reply on tid " << tid << " from mds "
 	    << mds_num << " safe:" << is_safe << dendl;
@@ -1733,17 +1735,22 @@ void Client::handle_client_reply(MClientReply *reply)
   request->reply = reply;
   insert_trace(request, session);
 
-  if (!request->got_unsafe) {
+  // Handle unsafe reply
+  if (!is_safe) {
     request->got_unsafe = true;
     session->unsafe_requests.push_back(&request->unsafe_item);
+  }
 
+  // Only signal the caller once (on the first reply):
+  // Either its an unsafe reply, or its a safe reply and no unsafe reply was sent.
+  if (!is_safe || !request->got_unsafe) {
     Cond cond;
     request->dispatch_cond = &cond;
-    
+
     // wake up waiter
     ldout(cct, 20) << "handle_client_reply signalling caller " << (void*)request->caller_cond << dendl;
     request->caller_cond->Signal();
-    
+
     // wake for kick back
     while (request->dispatch_cond) {
       ldout(cct, 20) << "handle_client_reply awaiting kickback on tid " << tid << " " << &cond << dendl;
@@ -1753,14 +1760,13 @@ void Client::handle_client_reply(MClientReply *reply)
 
   if (is_safe) {
     // the filesystem change is committed to disk
-    request->got_safe = true;
+    // we're done, clean up
     if (request->got_unsafe) {
-      // we're done, clean up
-      request->item.remove_myself();
       request->unsafe_item.remove_myself();
-      mds_requests.erase(tid);
-      request->put(); // for the dumb data structure
     }
+    request->item.remove_myself();
+    mds_requests.erase(tid);
+    request->put(); // for the dumb data structure
   }
   if (unmounting)
     mount_cond.Signal();
@@ -1890,9 +1896,7 @@ void Client::handle_mds_map(MMDSMap* m)
   }
 
   // kick any waiting threads
-  list<Cond*> ls;
-  ls.swap(waiting_for_mdsmap);
-  signal_cond_list(ls);
+  signal_cond_list(waiting_for_mdsmap);
 
   delete oldmap;
   m->put();
@@ -1972,10 +1976,13 @@ void Client::kick_requests(MetaSession *session, bool signal)
        ++p) 
     if (p->second->mds == session->mds_num) {
       if (signal) {
-	p->second->kick = true;
-	p->second->caller_cond->Signal();
-      }
-      else {
+	// only signal caller if there is a caller
+	// otherwise, let resend_unsafe handle it
+	if (p->second->caller_cond) {
+	  p->second->kick = true;
+	  p->second->caller_cond->Signal();
+	}
+      } else {
 	send_request(p->second, session);
       }
     }
@@ -2577,13 +2584,13 @@ void Client::wait_on_list(list<Cond*>& ls)
   Cond cond;
   ls.push_back(&cond);
   cond.Wait(client_lock);
+  ls.remove(&cond);
 }
 
 void Client::signal_cond_list(list<Cond*>& ls)
 {
   for (list<Cond*>::iterator it = ls.begin(); it != ls.end(); ++it)
     (*it)->Signal();
-  ls.clear();
 }
 
 void Client::wake_inode_waiters(MetaSession *s)
@@ -3552,6 +3559,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
   if (old_caps & ~new_caps) { 
     ldout(cct, 10) << "  revocation of " << ccap_string(~new_caps & old_caps) << dendl;
     cap->issued = new_caps;
+    cap->implemented |= new_caps;
 
     if ((~cap->issued & old_caps) & CEPH_CAP_FILE_CACHE)
       _release(in);

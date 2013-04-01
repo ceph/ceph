@@ -25,6 +25,7 @@
 #include "crush/CrushTester.h"
 
 #include "messages/MOSDFailure.h"
+#include "messages/MOSDMarkMeDown.h"
 #include "messages/MOSDMap.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDAlive.h"
@@ -46,6 +47,7 @@
 #include "include/compat.h"
 #include "include/assert.h"
 #include "include/stringify.h"
+#include "include/util.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -56,6 +58,18 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, OSDMap& osdmap) {
 		<< ").osd e" << osdmap.get_epoch() << " ";
 }
 
+
+void OSDMonitor::_get_pending_crush(CrushWrapper& newcrush)
+{
+  bufferlist bl;
+  if (pending_inc.crush.length())
+    bl = pending_inc.crush;
+  else
+    osdmap.crush->encode(bl);
+
+  bufferlist::iterator p = bl.begin();
+  newcrush.decode(p);
+}
 
 
 /************ MAPS ****************/
@@ -540,6 +554,8 @@ bool OSDMonitor::preprocess_query(PaxosServiceMessage *m)
     return preprocess_command(static_cast<MMonCommand*>(m));
 
     // damp updates
+  case MSG_OSD_MARK_ME_DOWN:
+    return preprocess_mark_me_down(static_cast<MOSDMarkMeDown*>(m));
   case MSG_OSD_FAILURE:
     return preprocess_failure(static_cast<MOSDFailure*>(m));
   case MSG_OSD_BOOT:
@@ -568,6 +584,8 @@ bool OSDMonitor::prepare_update(PaxosServiceMessage *m)
   
   switch (m->get_type()) {
     // damp updates
+  case MSG_OSD_MARK_ME_DOWN:
+    return prepare_mark_me_down(static_cast<MOSDMarkMeDown*>(m));
   case MSG_OSD_FAILURE:
     return prepare_failure(static_cast<MOSDFailure*>(m));
   case MSG_OSD_BOOT:
@@ -625,25 +643,33 @@ bool OSDMonitor::should_propose(double& delay)
 
 // failure --
 
+bool OSDMonitor::check_source(PaxosServiceMessage *m, uuid_d fsid) {
+  // check permissions
+  MonSession *session = m->get_session();
+  if (!session)
+    return true;
+  if (!session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
+    dout(0) << "got osdmap change request from entity with insufficient caps "
+	    << session->caps << dendl;
+    return true;
+  }
+  if (fsid != mon->monmap->fsid) {
+    dout(0) << "check_source: on fsid " << fsid
+	    << " != " << mon->monmap->fsid << dendl;
+    return true;
+  }
+  return false;
+}
+
+
 bool OSDMonitor::preprocess_failure(MOSDFailure *m)
 {
   // who is target_osd
   int badboy = m->get_target().name.num();
 
   // check permissions
-  MonSession *session = m->get_session();
-  if (!session)
+  if (check_source(m, m->fsid))
     goto didit;
-  if (!session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
-    dout(0) << "got MOSDFailure from entity with insufficient caps "
-	    << session->caps << dendl;
-    goto didit;
-  }
-
-  if (m->fsid != mon->monmap->fsid) {
-    dout(0) << "preprocess_failure on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
-    goto didit;
-  }
 
   // first, verify the reporting host is valid
   if (m->get_orig_source().is_osd()) {
@@ -656,7 +682,6 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
       goto didit;
     }
   }
-  
 
   // weird?
   if (!osdmap.have_inst(badboy)) {
@@ -691,6 +716,75 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
 
  didit:
   m->put();
+  return true;
+}
+
+class C_AckMarkedDown : public Context {
+  OSDMonitor *osdmon;
+  MOSDMarkMeDown *m;
+public:
+  C_AckMarkedDown(
+    OSDMonitor *osdmon,
+    MOSDMarkMeDown *m)
+    : osdmon(osdmon), m(m) {}
+
+  void finish(int) {
+    osdmon->mon->send_reply(
+      m,
+      new MOSDMarkMeDown(
+	m->fsid,
+	m->get_target(),
+	m->get_epoch(),
+	m->ack));
+  }
+  ~C_AckMarkedDown() {
+    m->put();
+  }
+};
+
+bool OSDMonitor::preprocess_mark_me_down(MOSDMarkMeDown *m)
+{
+  int requesting_down = m->get_target().name.num();
+
+  // check permissions
+  if (check_source(m, m->fsid))
+    goto didit;
+
+  // first, verify the reporting host is valid
+  if (m->get_orig_source().is_osd()) {
+    int from = m->get_orig_source().num();
+    if (!osdmap.exists(from) ||
+	osdmap.get_addr(from) != m->get_orig_source_inst().addr ||
+	osdmap.is_down(from)) {
+      dout(5) << "preprocess_mark_me_down from dead osd."
+	      << from << ", ignoring" << dendl;
+      send_incremental(m, m->get_epoch()+1);
+      goto didit;
+    }
+  }
+
+  // no down might be set
+  if (!can_mark_down(requesting_down))
+    goto didit;
+
+  dout(10) << "MOSDMarkMeDown for: " << m->get_target() << dendl;
+  return false;
+
+ didit:
+  Context *c(new C_AckMarkedDown(this, m));
+  c->complete(0);
+  return true;
+}
+
+bool OSDMonitor::prepare_mark_me_down(MOSDMarkMeDown *m)
+{
+  int target_osd = m->get_target().name.num();
+
+  assert(osdmap.is_up(target_osd));
+  assert(osdmap.get_addr(target_osd) == m->get_target().addr);
+
+  pending_inc.new_state[target_osd] = CEPH_OSD_UP;
+  wait_for_finished_proposal(new C_AckMarkedDown(this, m));
   return true;
 }
 
@@ -1643,6 +1737,9 @@ void OSDMonitor::tick()
 #endif
   // ---------------
 
+  if (update_pools_status())
+    do_propose = true;
+
   update_trim();
 
   if (do_propose ||
@@ -1745,6 +1842,8 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       if (detail)
 	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
     }
+
+    get_pools_health(summary, detail);
   }
 }
 
@@ -2101,6 +2200,150 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     return false;
 }
 
+void OSDMonitor::update_pool_flags(int64_t pool_id, uint64_t flags)
+{
+  const pg_pool_t *pool = osdmap.get_pg_pool(pool_id);
+  if (pending_inc.new_pools.count(pool_id) == 0)
+    pending_inc.new_pools[pool_id] = *pool;
+  pending_inc.new_pools[pool_id].flags = flags;
+}
+
+bool OSDMonitor::update_pools_status()
+{
+  if (!mon->pgmon()->is_readable())
+    return false;
+
+  bool ret = false;
+
+  const map<int64_t,pg_pool_t>& pools = osdmap.get_pools();
+  for (map<int64_t,pg_pool_t>::const_iterator it = pools.begin();
+       it != pools.end();
+       ++it) {
+    pool_stat_t& stats = mon->pgmon()->pg_map.pg_pool_sum[it->first];
+    object_stat_sum_t& sum = stats.stats.sum;
+    const pg_pool_t &pool = it->second;
+    const char *pool_name = osdmap.get_pool_name(it->first);
+
+    bool pool_is_full =
+      (pool.quota_max_bytes > 0 && (uint64_t)sum.num_bytes >= pool.quota_max_bytes) ||
+      (pool.quota_max_objects > 0 && (uint64_t)sum.num_objects >= pool.quota_max_objects);
+
+    if (pool.get_flags() & pg_pool_t::FLAG_FULL) {
+      if (pool_is_full)
+        continue;
+
+      mon->clog.info() << "pool '" << pool_name
+                       << "' no longer full; removing FULL flag";
+
+      update_pool_flags(it->first, pool.get_flags() & ~pg_pool_t::FLAG_FULL);
+      ret = true;
+    } else {
+      if (!pool_is_full)
+	continue;
+
+      if (pool.quota_max_bytes > 0 &&
+          (uint64_t)sum.num_bytes >= pool.quota_max_bytes) {
+        mon->clog.warn() << "pool '" << pool_name << "' is full"
+                         << " (reached quota's max_bytes: "
+                         << si_t(pool.quota_max_bytes) << ")";
+      } else if (pool.quota_max_objects > 0 &&
+		 (uint64_t)sum.num_objects >= pool.quota_max_objects) {
+        mon->clog.warn() << "pool '" << pool_name << "' is full"
+                         << " (reached quota's max_objects: "
+                         << pool.quota_max_objects << ")";
+      } else {
+        assert(0 == "we shouldn't reach this");
+      }
+      update_pool_flags(it->first, pool.get_flags() | pg_pool_t::FLAG_FULL);
+      ret = true;
+    }
+  }
+  return ret;
+}
+
+void OSDMonitor::get_pools_health(
+    list<pair<health_status_t,string> >& summary,
+    list<pair<health_status_t,string> > *detail) const
+{
+  const map<int64_t,pg_pool_t>& pools = osdmap.get_pools();
+  for (map<int64_t,pg_pool_t>::const_iterator it = pools.begin();
+       it != pools.end(); ++it) {
+    pool_stat_t& stats = mon->pgmon()->pg_map.pg_pool_sum[it->first];
+    object_stat_sum_t& sum = stats.stats.sum;
+    const pg_pool_t &pool = it->second;
+    const char *pool_name = osdmap.get_pool_name(it->first);
+
+    if (pool.get_flags() & pg_pool_t::FLAG_FULL) {
+      // uncomment these asserts if/when we update the FULL flag on pg_stat update
+      //assert((pool.quota_max_objects > 0) || (pool.quota_max_bytes > 0));
+
+      stringstream ss;
+      ss << "pool '" << pool_name << "' is full";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      if (detail)
+	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+    }
+
+    float warn_threshold = g_conf->mon_pool_quota_warn_threshold/100;
+    float crit_threshold = g_conf->mon_pool_quota_crit_threshold/100;
+
+    if (pool.quota_max_objects > 0) {
+      stringstream ss;
+      health_status_t status = HEALTH_OK;
+      if ((uint64_t)sum.num_objects >= pool.quota_max_objects) {
+	// uncomment these asserts if/when we update the FULL flag on pg_stat update
+        //assert(pool.get_flags() & pg_pool_t::FLAG_FULL);
+      } else if (crit_threshold > 0 &&
+		 sum.num_objects >= pool.quota_max_objects*crit_threshold) {
+        ss << "pool '" << pool_name
+           << "' has " << sum.num_objects << " objects"
+           << " (max " << pool.quota_max_objects << ")";
+        status = HEALTH_ERR;
+      } else if (warn_threshold > 0 &&
+		 sum.num_objects >= pool.quota_max_objects*warn_threshold) {
+        ss << "pool '" << pool_name
+           << "' has " << sum.num_objects << " objects"
+           << " (max " << pool.quota_max_objects << ")";
+        status = HEALTH_WARN;
+      }
+      if (status != HEALTH_OK) {
+        pair<health_status_t,string> s(status, ss.str());
+        summary.push_back(s);
+        if (detail)
+          detail->push_back(s);
+      }
+    }
+
+    if (pool.quota_max_bytes > 0) {
+      health_status_t status = HEALTH_OK;
+      stringstream ss;
+      if ((uint64_t)sum.num_bytes >= pool.quota_max_bytes) {
+	// uncomment these asserts if/when we update the FULL flag on pg_stat update
+	//assert(pool.get_flags() & pg_pool_t::FLAG_FULL);
+      } else if (crit_threshold > 0 &&
+		 sum.num_bytes >= pool.quota_max_bytes*crit_threshold) {
+        ss << "pool '" << pool_name
+           << "' has " << si_t(sum.num_bytes) << " bytes"
+           << " (max " << si_t(pool.quota_max_bytes) << ")";
+        status = HEALTH_ERR;
+      } else if (warn_threshold > 0 &&
+		 sum.num_bytes >= pool.quota_max_bytes*warn_threshold) {
+        ss << "pool '" << pool_name
+           << "' has " << si_t(sum.num_bytes) << " objects"
+           << " (max " << si_t(pool.quota_max_bytes) << ")";
+        status = HEALTH_WARN;
+      }
+      if (status != HEALTH_OK) {
+        pair<health_status_t,string> s(status, ss.str());
+        summary.push_back(s);
+        if (detail)
+          detail->push_back(s);
+      }
+    }
+  }
+}
+
+
 int OSDMonitor::prepare_new_pool(MPoolOp *m)
 {
   dout(10) << "prepare_new_pool from " << m->get_connection() << dendl;
@@ -2256,7 +2499,37 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
       return true;
     }
-    else if (m->cmd.size() >= 5 && m->cmd[1] == "crush" && m->cmd[2] == "set") {
+    else if (m->cmd.size() == 5 && m->cmd[1] == "crush" && (m->cmd[2] == "add-bucket")) {
+      do {
+	// osd crush add-bucket <name> <type>
+	CrushWrapper newcrush;
+	_get_pending_crush(newcrush);
+
+	if (newcrush.name_exists(m->cmd[3])) {
+	  ss << "bucket '" << m->cmd[3] << "' already exists";
+	  err = 0;
+	  break;
+	}
+	int type = newcrush.get_type_id(m->cmd[4]);
+	if (type <= 0) {
+	  ss << "type '" << m->cmd[4] << "' does not exist";
+	  err = -EINVAL;
+	  break;
+	}
+	int bucketno = newcrush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT,
+					   type, 0, NULL, NULL);
+	newcrush.set_item_name(bucketno, m->cmd[3]);
+
+	pending_inc.crush.clear();
+	newcrush.encode(pending_inc.crush);
+	ss << "added bucket " << m->cmd[3] << " type " << m->cmd[4] << " to crush map";
+	getline(ss, rs);
+	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+	return true;
+      } while (false);
+    }
+    else if (m->cmd.size() >= 5 && m->cmd[1] == "crush" && (m->cmd[2] == "set" ||
+							    m->cmd[2] == "add")) {
       do {
 	// osd crush set <osd-id> [<osd.* name>] <weight> <loc1> [<loc2> ...]
 	int id = parse_osd_id(m->cmd[3].c_str(), &ss);
@@ -2287,26 +2560,25 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 
 	dout(0) << "adding/updating crush item id " << id << " name '" << name << "' weight " << weight
 		<< " at location " << loc << dendl;
-	bufferlist bl;
-	if (pending_inc.crush.length())
-	  bl = pending_inc.crush;
-	else
-	  osdmap.crush->encode(bl);
-
 	CrushWrapper newcrush;
-	bufferlist::iterator p = bl.begin();
-	newcrush.decode(p);
+	_get_pending_crush(newcrush);
 
-	err = newcrush.update_item(g_ceph_context, id, weight, name, loc);
+	if (m->cmd[2] == "set") {
+	  err = newcrush.update_item(g_ceph_context, id, weight, name, loc);
+	} else {
+	  err = newcrush.insert_item(g_ceph_context, id, weight, name, loc);
+	  if (err == 0)
+	    err = 1;
+	}
 	if (err == 0) {
-	  ss << "updated item id " << id << " name '" << name << "' weight " << weight
+	  ss << m->cmd[2] << " item id " << id << " name '" << name << "' weight " << weight
 	     << " at location " << loc << " to crush map";
 	  break;
 	}
 	if (err > 0) {
 	  pending_inc.crush.clear();
 	  newcrush.encode(pending_inc.crush);
-	  ss << "updated item id " << id << " name '" << name << "' weight " << weight
+	  ss << m->cmd[2] << " item id " << id << " name '" << name << "' weight " << weight
 	     << " at location " << loc << " to crush map";
 	  getline(ss, rs);
 	  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
@@ -2335,15 +2607,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 
 	dout(0) << "create-or-move crush item id " << id << " name '" << name << "' initial_weight " << weight
 		<< " at location " << loc << dendl;
-	bufferlist bl;
-	if (pending_inc.crush.length())
-	  bl = pending_inc.crush;
-	else
-	  osdmap.crush->encode(bl);
-
 	CrushWrapper newcrush;
-	bufferlist::iterator p = bl.begin();
-	newcrush.decode(p);
+	_get_pending_crush(newcrush);
 
 	err = newcrush.create_or_move_item(g_ceph_context, id, weight, name, loc);
 	if (err == 0) {
@@ -2370,15 +2635,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	parse_loc_map(m->cmd, 4, &loc);
 
 	dout(0) << "moving crush item name '" << name << "' to location " << loc << dendl;
-	bufferlist bl;
-	if (pending_inc.crush.length())
-	  bl = pending_inc.crush;
-	else
-	  osdmap.crush->encode(bl);
-
 	CrushWrapper newcrush;
-	bufferlist::iterator p = bl.begin();
-	newcrush.decode(p);
+	_get_pending_crush(newcrush);
 
 	if (!newcrush.name_exists(name.c_str())) {
 	  err = -ENOENT;
@@ -2402,18 +2660,46 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
       } while (false);
     }
-    else if (m->cmd.size() > 3 && m->cmd[1] == "crush" && (m->cmd[2] == "rm" || m->cmd[2] == "remove")) {
+    else if (m->cmd.size() >= 5 && m->cmd[1] == "crush" && m->cmd[2] == "link") {
       do {
-	// osd crush rm <id>
-	bufferlist bl;
-	if (pending_inc.crush.length())
-	  bl = pending_inc.crush;
-	else
-	  osdmap.crush->encode(bl);
+	// osd crush link <name> <loc1> [<loc2> ...]
+	string name = m->cmd[3];
+	map<string,string> loc;
+	parse_loc_map(m->cmd, 4, &loc);
 
+	dout(0) << "linking crush item name '" << name << "' at location " << loc << dendl;
 	CrushWrapper newcrush;
-	bufferlist::iterator p = bl.begin();
-	newcrush.decode(p);
+	_get_pending_crush(newcrush);
+
+	if (!newcrush.name_exists(name.c_str())) {
+	  err = -ENOENT;
+	  ss << "item " << name << " does not exist";
+	  break;
+	}
+	int id = newcrush.get_item_id(name.c_str());
+
+	if (!newcrush.check_item_loc(g_ceph_context, id, loc, (int *)NULL)) {
+	  err = newcrush.link_bucket(g_ceph_context, id, loc);
+	  if (err >= 0) {
+	    ss << "linked item id " << id << " name '" << name << "' to location " << loc << " in crush map";
+	    pending_inc.crush.clear();
+	    newcrush.encode(pending_inc.crush);
+	    getline(ss, rs);
+	    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+	    return true;
+	  }
+	} else {
+	    ss << "no need to move item id " << id << " name '" << name << "' to location " << loc << " in crush map";
+	}
+      } while (false);
+    }
+    else if (m->cmd.size() > 3 && m->cmd[1] == "crush" && (m->cmd[2] == "rm" ||
+							   m->cmd[2] == "remove" ||
+							   m->cmd[2] == "unlink")) {
+      do {
+	// osd crush rm <id> [ancestor]
+	CrushWrapper newcrush;
+	_get_pending_crush(newcrush);
 
 	if (!newcrush.name_exists(m->cmd[3].c_str())) {
 	  err = -ENOENT;
@@ -2421,11 +2707,18 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  break;
 	}
 	int id = newcrush.get_item_id(m->cmd[3].c_str());
-	if (id < 0) {
-	  ss << "item '" << m->cmd[3] << "' is not a leaf in the crush map";
-	  break;
+	bool unlink_only = m->cmd[2] == "unlink";
+	if (m->cmd.size() > 4) {
+	  if (!newcrush.name_exists(m->cmd[4])) {
+	    err = -ENOENT;
+	    ss << "ancestor item '" << m->cmd[4] << "' does not appear in the crush map";
+	    break;
+	  }
+	  int ancestor = newcrush.get_item_id(m->cmd[4]);
+	  err = newcrush.remove_item_under(g_ceph_context, id, ancestor, unlink_only);
+	} else {
+	  err = newcrush.remove_item(g_ceph_context, id, unlink_only);
 	}
-	err = newcrush.remove_item(g_ceph_context, id);
 	if (err == 0) {
 	  pending_inc.crush.clear();
 	  newcrush.encode(pending_inc.crush);
@@ -2439,15 +2732,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd.size() > 4 && m->cmd[1] == "crush" && m->cmd[2] == "reweight") {
       do {
 	// osd crush reweight <name> <weight>
-	bufferlist bl;
-	if (pending_inc.crush.length())
-	  bl = pending_inc.crush;
-	else
-	  osdmap.crush->encode(bl);
-
 	CrushWrapper newcrush;
-	bufferlist::iterator p = bl.begin();
-	newcrush.decode(p);
+	_get_pending_crush(newcrush);
 
 	if (!newcrush.name_exists(m->cmd[3].c_str())) {
 	  err = -ENOENT;
@@ -2475,15 +2761,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       } while (false);
     }
     else if (m->cmd.size() == 4 && m->cmd[1] == "crush" && m->cmd[2] == "tunables") {
-      bufferlist bl;
-      if (pending_inc.crush.length())
-	bl = pending_inc.crush;
-      else
-	osdmap.crush->encode(bl);
-
       CrushWrapper newcrush;
-      bufferlist::iterator p = bl.begin();
-      newcrush.decode(p);
+      _get_pending_crush(newcrush);
 
       err = 0;
       if (m->cmd[3] == "legacy" || m->cmd[3] == "argonaut") {
@@ -2521,14 +2800,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	goto out;
       }
 
-      bufferlist bl;
-      if (pending_inc.crush.length())
-	bl = pending_inc.crush;
-      else
-	osdmap.crush->encode(bl);
       CrushWrapper newcrush;
-      bufferlist::iterator p = bl.begin();
-      newcrush.decode(p);
+      _get_pending_crush(newcrush);
 
       if (newcrush.rule_exists(name)) {
 	ss << "rule " << name << " already exists";
@@ -2558,14 +2831,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	goto out;
       }
 
-      bufferlist bl;
-      if (pending_inc.crush.length())
-	bl = pending_inc.crush;
-      else
-	osdmap.crush->encode(bl);
       CrushWrapper newcrush;
-      bufferlist::iterator p = bl.begin();
-      newcrush.decode(p);
+      _get_pending_crush(newcrush);
 
       if (!newcrush.rule_exists(name)) {
 	ss << "rule " << name << " does not exist";
@@ -3169,11 +3436,48 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 		ss << "crush ruleset " << n << " does not exist";
 		err = -ENOENT;
 	      }
-	    } else {
+            } else {
 	      ss << "unrecognized pool field " << m->cmd[4];
 	    }
 	  }
 	}
+      } else if (m->cmd[2] == "set-quota" && m->cmd.size() == 6) {
+        int64_t pool_id = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
+        if (pool_id < 0) {
+          ss << "unrecognized pool '" << m->cmd[3] << "'";
+          err = -ENOENT;
+          goto out;
+        }
+
+        string field = m->cmd[4];
+        if (field != "max_objects" && field != "max_bytes") {
+          ss << "unrecognized field '" << field << "'; max_bytes of max_objects";
+          err = -EINVAL;
+          goto out;
+        }
+
+        stringstream tss;
+        int64_t value = unit_to_bytesize(m->cmd[5], &tss);
+        if (value < 0) {
+          ss << "error parsing value '" << value << "': " << tss.str();
+          err = value;
+          goto out;
+        }
+
+        if (pending_inc.new_pools.count(pool_id) == 0)
+          pending_inc.new_pools[pool_id] = *osdmap.get_pg_pool(pool_id);
+
+        if (field == "max_objects") {
+          pending_inc.new_pools[pool_id].quota_max_objects = value;
+        } else if (field == "max_bytes") {
+          pending_inc.new_pools[pool_id].quota_max_bytes = value;
+        } else {
+          assert(0 == "unrecognized option");
+        }
+        ss << "set-quota " << field << " = " << value << " for pool " << m->cmd[3];
+        rs = ss.str();
+        wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+        return true;
       }
       else if (m->cmd[2] == "get") {
 	if (m->cmd.size() != 5) {

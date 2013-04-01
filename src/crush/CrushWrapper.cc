@@ -7,7 +7,7 @@
 #define dout_subsys ceph_subsys_crush
 
 
-void CrushWrapper::find_roots(set<int>& roots) const
+void CrushWrapper::find_takes(set<int>& roots) const
 {
   for (unsigned i=0; i<crush->max_rules; i++) {
     crush_rule *r = crush->rules[i];
@@ -17,6 +17,17 @@ void CrushWrapper::find_roots(set<int>& roots) const
       if (r->steps[j].op == CRUSH_RULE_TAKE)
 	roots.insert(r->steps[j].arg1);
     }
+  }
+}
+
+void CrushWrapper::find_roots(set<int>& roots) const
+{
+  for (int i = 0; i < crush->max_buckets; i++) {
+    if (!crush->buckets[i])
+      continue;
+    crush_bucket *b = crush->buckets[i];
+    if (!_search_item_exists(b->id))
+      roots.insert(b->id);
   }
 }
 
@@ -39,13 +50,40 @@ bool CrushWrapper::subtree_contains(int root, int item) const
   return false;
 }
 
-
-int CrushWrapper::remove_item(CephContext *cct, int item)
+bool CrushWrapper::_maybe_remove_last_instance(CephContext *cct, int item, bool unlink_only)
 {
-  ldout(cct, 5) << "remove_item " << item << dendl;
+  // last instance?
+  if (_search_item_exists(item)) {
+    return false;
+  }
 
-  crush_bucket *was_bucket = 0;
+  if (item < 0 && !unlink_only) {
+    crush_bucket *t = get_bucket(item);
+    ldout(cct, 5) << "_maybe_remove_last_instance removing bucket " << item << dendl;
+    crush_remove_bucket(crush, t);
+  }
+  if ((item >= 0 || !unlink_only) && name_map.count(item)) {
+    ldout(cct, 5) << "_maybe_remove_last_instance removing name for item " << item << dendl;
+    name_map.erase(item);
+    have_rmaps = false;
+  }
+  return true;
+}
+
+int CrushWrapper::remove_item(CephContext *cct, int item, bool unlink_only)
+{
+  ldout(cct, 5) << "remove_item " << item << (unlink_only ? " unlink_only":"") << dendl;
+
   int ret = -ENOENT;
+
+  if (item < 0 && !unlink_only) {
+    crush_bucket *t = get_bucket(item);
+    if (t && t->size) {
+      ldout(cct, 1) << "remove_item bucket " << item << " has " << t->size
+		    << " items, not empty" << dendl;
+      return -ENOTEMPTY;
+    }
+  }
 
   for (int i = 0; i < crush->max_buckets; i++) {
     if (!crush->buckets[i])
@@ -55,32 +93,86 @@ int CrushWrapper::remove_item(CephContext *cct, int item)
     for (unsigned i=0; i<b->size; ++i) {
       int id = b->items[i];
       if (id == item) {
-	if (item < 0) {
-	  crush_bucket *t = get_bucket(item);
-	  if (t && t->size) {
-	    ldout(cct, 1) << "remove_device bucket " << item << " has " << t->size << " items, not empty" << dendl;
-	    return -ENOTEMPTY;
-	  }
-	  was_bucket = t;
-	}
 	adjust_item_weight(cct, item, 0);
-	ldout(cct, 5) << "remove_device removing item " << item << " from bucket " << b->id << dendl;
+	ldout(cct, 5) << "remove_item removing item " << item
+		      << " from bucket " << b->id << dendl;
 	crush_bucket_remove_item(b, item);
 	ret = 0;
       }
     }
   }
 
-  if (was_bucket) {
-    ldout(cct, 5) << "remove_device removing bucket " << item << dendl;
-    crush_remove_bucket(crush, was_bucket);
-  }
-  if (item >= 0 && name_map.count(item)) {
-    name_map.erase(item);
-    have_rmaps = false;
+  if (_maybe_remove_last_instance(cct, item, unlink_only))
     ret = 0;
-  }
   
+  return ret;
+}
+
+bool CrushWrapper::_search_item_exists(int item) const
+{
+  for (int i = 0; i < crush->max_buckets; i++) {
+    if (!crush->buckets[i])
+      continue;
+    crush_bucket *b = crush->buckets[i];
+    for (unsigned i=0; i<b->size; ++i) {
+      if (b->items[i] == item)
+	return true;
+    }
+  }
+  return false;
+}
+
+int CrushWrapper::_remove_item_under(CephContext *cct, int item, int ancestor, bool unlink_only)
+{
+  ldout(cct, 5) << "_remove_item_under " << item << " under " << ancestor
+		<< (unlink_only ? " unlink_only":"") << dendl;
+
+  if (ancestor >= 0) {
+    return -EINVAL;
+  }
+
+  if (!bucket_exists(ancestor))
+    return -EINVAL;
+
+  int ret = -ENOENT;
+
+  crush_bucket *b = get_bucket(ancestor);
+  for (unsigned i=0; i<b->size; ++i) {
+    int id = b->items[i];
+    if (id == item) {
+      adjust_item_weight(cct, item, 0);
+      ldout(cct, 5) << "_remove_item_under removing item " << item << " from bucket " << b->id << dendl;
+      crush_bucket_remove_item(b, item);
+      ret = 0;
+    } else if (id < 0) {
+      int r = remove_item_under(cct, item, id, unlink_only);
+      if (r == 0)
+	ret = 0;
+    }
+  }
+  return ret;
+}
+
+int CrushWrapper::remove_item_under(CephContext *cct, int item, int ancestor, bool unlink_only)
+{
+  ldout(cct, 5) << "remove_item_under " << item << " under " << ancestor
+		<< (unlink_only ? " unlink_only":"") << dendl;
+  int ret = _remove_item_under(cct, item, ancestor, unlink_only);
+  if (ret < 0)
+    return ret;
+
+  if (item < 0 && !unlink_only) {
+    crush_bucket *t = get_bucket(item);
+    if (t && t->size) {
+      ldout(cct, 1) << "remove_item_undef bucket " << item << " has " << t->size
+		    << " items, not empty" << dendl;
+      return -ENOTEMPTY;
+    }
+  }
+
+  if (_maybe_remove_last_instance(cct, item, unlink_only))
+    ret = 0;
+
   return ret;
 }
 
@@ -241,13 +333,15 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
   ldout(cct, 5) << "insert_item item " << item << " weight " << weight
 		<< " name " << name << " loc " << loc << dendl;
 
-  if (name_exists(name.c_str())) {
-    ldout(cct, 1) << "error: device name '" << name << "' already exists as id "
-		  << get_item_id(name.c_str()) << dendl;
-    return -EEXIST;
+  if (name_exists(name)) {
+    if (get_item_id(name) != item) {
+      ldout(cct, 10) << "device name '" << name << "' already exists as id "
+		     << get_item_id(name) << dendl;
+      return -EEXIST;
+    }
+  } else {
+    set_item_name(item, name);
   }
-
-  set_item_name(item, name.c_str());
 
   int cur = item;
 
@@ -303,6 +397,13 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
 	return -EEXIST;
       }
     
+    // are we forming a loop?
+    if (subtree_contains(cur, b->id)) {
+      ldout(cct, 1) << "insert_item " << cur << " already contains " << b->id
+		    << "; cannot form loop" << dendl;
+      return -ELOOP;
+    }
+
     ldout(cct, 5) << "insert_item adding " << cur << " weight " << weight
 		  << " to bucket " << id << dendl;
     int r = crush_bucket_add_item(b, cur, 0);
@@ -347,6 +448,26 @@ int CrushWrapper::move_bucket(CephContext *cct, int id, const map<string,string>
   return insert_item(cct, id, bucket_weight / (float)0x10000, id_name, loc);
 }
 
+int CrushWrapper::link_bucket(CephContext *cct, int id, const map<string,string>& loc)
+{
+  // sorry this only works for buckets
+  if (id >= 0)
+    return -EINVAL;
+
+  if (!item_exists(id))
+    return -ENOENT;
+
+  // get the name of the bucket we are trying to move for later
+  string id_name = get_item_name(id);
+
+  // detach the bucket
+  crush_bucket *b = get_bucket(id);
+  unsigned bucket_weight = b->weight;
+
+  // insert the bucket back into the hierarchy
+  return insert_item(cct, id, bucket_weight / (float)0x10000, id_name, loc);
+}
+
 int CrushWrapper::create_or_move_item(CephContext *cct, int item, float weight, string name,
 				      const map<string,string>& loc)  // typename -> bucketname
 {
@@ -358,7 +479,7 @@ int CrushWrapper::create_or_move_item(CephContext *cct, int item, float weight, 
     if (item_exists(item)) {
       weight = get_item_weightf(item);
       ldout(cct, 10) << "create_or_move_item " << item << " exists with weight " << weight << dendl;
-      remove_item(cct, item);
+      remove_item(cct, item, true);
     }
     ldout(cct, 5) << "create_or_move_item adding " << item << " weight " << weight
 		  << " at " << loc << dendl;
@@ -389,12 +510,12 @@ int CrushWrapper::update_item(CephContext *cct, int item, float weight, string n
     }
     if (get_item_name(item) != name) {
       ldout(cct, 5) << "update_item setting " << item << " name to " << name << dendl;
-      set_item_name(item, name.c_str());
+      set_item_name(item, name);
       ret = 1;
     }
   } else {
     if (item_exists(item)) {
-      remove_item(cct, item);
+      remove_item(cct, item, true);
     }
     ldout(cct, 5) << "update_item adding " << item << " weight " << weight
 		  << " at " << loc << dendl;
@@ -514,12 +635,12 @@ int CrushWrapper::add_simple_rule(string name, string root_name, string failure_
 {
   if (rule_exists(name))
     return -EEXIST;
-  if (!name_exists(root_name.c_str()))
+  if (!name_exists(root_name))
     return -ENOENT;
-  int root = get_item_id(root_name.c_str());
+  int root = get_item_id(root_name);
   int type = 0;
   if (failure_domain_name.length()) {
-    type = get_type_id(failure_domain_name.c_str());
+    type = get_type_id(failure_domain_name);
     if (type <= 0) // bah, returns 0 on error; but its ok, device isn't a domain really
       return -EINVAL;
   }
@@ -547,7 +668,7 @@ int CrushWrapper::add_simple_rule(string name, string root_name, string failure_
 			0);
   crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
   int rno = crush_add_rule(crush, rule, -1);
-  set_rule_name(rno, name.c_str());
+  set_rule_name(rno, name);
   have_rmaps = false;
   return rno;
 }

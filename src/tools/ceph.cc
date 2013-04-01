@@ -88,8 +88,13 @@ static void usage()
   cout << "  ceph osd getcrushmap -o <file>\n";
   cout << "  ceph osd getmap -o <file>\n";
   cout << "  ceph osd crush set <osd-id> <weight> <loc1> [<loc2> ...]\n";
-  cout << "  ceph osd crush move <bucketname> <loc1> [<loc2> ...]\n";
+  cout << "  ceph osd crush add <osd-id> <weight> <loc1> [<loc2> ...]\n";
   cout << "  ceph osd crush create-or-move <osd-id> <initial-weight> <loc1> [<loc2> ...]\n";
+  cout << "  ceph osd crush rm <name> [ancestor]\n";
+  cout << "  ceph osd crush move <bucketname> <loc1> [<loc2> ...]\n";
+  cout << "  ceph osd crush link <bucketname> <loc1> [<loc2> ...]\n";
+  cout << "  ceph osd crush unlink <bucketname> [ancestor]\n";
+  cout << "  ceph osd crush add-bucket <bucketname> <type>\n";
   cout << "  ceph osd crush reweight <name> <weight>\n";
   cout << "  ceph osd crush tunables <legacy|argonaut|bobtail|optimal|default>\n";
   cout << "  ceph osd create [<uuid>]\n";
@@ -104,6 +109,7 @@ static void usage()
   cout << "  ceph osd pool delete <pool> [<pool> --yes-i-really-really-mean-it]\n";
   cout << "  ceph osd pool rename <pool> <new pool name>\n";
   cout << "  ceph osd pool set <pool> <field> <value>\n";
+  cout << "  ceph osd pool set-quota <pool> (max_bytes|max_objects) <value>\n";
   cout << "  ceph osd scrub <osd-id>\n";
   cout << "  ceph osd deep-scrub <osd-id>\n";
   cout << "  ceph osd repair <osd-id>\n";

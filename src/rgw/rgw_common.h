@@ -28,6 +28,7 @@
 #include "include/types.h"
 #include "include/utime.h"
 #include "rgw_acl.h"
+#include "rgw_cors.h"
 
 using namespace std;
 
@@ -43,6 +44,7 @@ using ceph::crypto::MD5;
 #define RGW_AMZ_META_PREFIX "x-amz-meta-"
 
 #define RGW_ATTR_ACL		RGW_ATTR_PREFIX "acl"
+#define RGW_ATTR_CORS		RGW_ATTR_PREFIX "cors"
 #define RGW_ATTR_ETAG    	RGW_ATTR_PREFIX "etag"
 #define RGW_ATTR_BUCKETS	RGW_ATTR_PREFIX "buckets"
 #define RGW_ATTR_META_PREFIX	RGW_ATTR_PREFIX RGW_AMZ_META_PREFIX
@@ -108,6 +110,7 @@ using ceph::crypto::MD5;
 #define ERR_TOO_MANY_BUCKETS     2020
 #define ERR_INVALID_REQUEST      2021
 #define ERR_TOO_SMALL            2022
+#define ERR_NOT_FOUND            2023
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 
@@ -269,10 +272,12 @@ enum http_op {
   OP_HEAD,
   OP_POST,
   OP_COPY,
+  OP_OPTIONS,
   OP_UNKNOWN,
 };
 
 class RGWAccessControlPolicy;
+class JSONObj;
 
 struct RGWAccessKey {
   string id;
@@ -296,7 +301,11 @@ struct RGWAccessKey {
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void dump(Formatter *f, const string& user, bool swift) const;
   static void generate_test_instances(list<RGWAccessKey*>& o);
+
+  void decode_json(JSONObj *obj);
+  void decode_json(JSONObj *obj, bool swift);
 };
 WRITE_CLASS_ENCODER(RGWAccessKey);
 
@@ -319,7 +328,10 @@ struct RGWSubUser {
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void dump(Formatter *f, const string& user) const;
   static void generate_test_instances(list<RGWSubUser*>& o);
+
+  void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(RGWSubUser);
 
@@ -328,10 +340,10 @@ class RGWUserCaps
   map<string, uint32_t> caps;
 
   int get_cap(const string& cap, string& type, uint32_t *perm);
-  int parse_cap_perm(const string& str, uint32_t *perm);
   int add_cap(const string& cap);
   int remove_cap(const string& cap);
 public:
+  static int parse_cap_perm(const string& str, uint32_t *perm);
   int add_from_string(const string& str);
   int remove_from_string(const string& str);
 
@@ -347,9 +359,13 @@ public:
   }
   int check_cap(const string& cap, uint32_t perm);
   void dump(Formatter *f) const;
+  void dump(Formatter *f, const char *name) const;
+
+  void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(RGWUserCaps);
 
+void encode_json(const char *name, const RGWUserCaps& val, Formatter *f);
 
 struct RGWUserInfo
 {
@@ -447,6 +463,8 @@ struct RGWUserInfo
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<RGWUserInfo*>& o);
+
+  void decode_json(JSONObj *obj);
 
   void clear() {
     user_id.clear();
@@ -609,6 +627,7 @@ struct req_state {
    RGWUserInfo user; 
    RGWAccessControlPolicy *bucket_acl;
    RGWAccessControlPolicy *object_acl;
+   RGWCORSConfiguration   *bucket_cors;
 
    string canned_acl;
    bool has_acl_header;

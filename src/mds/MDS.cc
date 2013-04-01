@@ -1032,7 +1032,9 @@ void MDS::handle_mds_map(MMDSMap *m)
 
     set<int> oldactive, active;
     oldmap->get_mds_set(oldactive, MDSMap::STATE_ACTIVE);
+    oldmap->get_mds_set(oldactive, MDSMap::STATE_CLIENTREPLAY);
     mdsmap->get_mds_set(active, MDSMap::STATE_ACTIVE);
+    mdsmap->get_mds_set(active, MDSMap::STATE_CLIENTREPLAY);
     for (set<int>::iterator p = active.begin(); p != active.end(); ++p) 
       if (*p != whoami &&            // not me
 	  oldactive.count(*p) == 0)  // newly so?
@@ -1046,8 +1048,10 @@ void MDS::handle_mds_map(MMDSMap *m)
     oldmap->get_failed_mds_set(oldfailed);
     mdsmap->get_failed_mds_set(failed);
     for (set<int>::iterator p = failed.begin(); p != failed.end(); ++p)
-      if (oldfailed.count(*p) == 0)
-	mdcache->handle_mds_failure(*p);
+      if (oldfailed.count(*p) == 0) {
+	messenger->mark_down(oldmap->get_inst(*p).addr);
+	handle_mds_failure(*p);
+      }
     
     // or down then up?
     //  did their addr/inst change?
@@ -1055,8 +1059,10 @@ void MDS::handle_mds_map(MMDSMap *m)
     mdsmap->get_up_mds_set(up);
     for (set<int>::iterator p = up.begin(); p != up.end(); ++p) 
       if (oldmap->have_inst(*p) &&
-	  oldmap->get_inst(*p) != mdsmap->get_inst(*p))
-	mdcache->handle_mds_failure(*p);
+	  oldmap->get_inst(*p) != mdsmap->get_inst(*p)) {
+	messenger->mark_down(oldmap->get_inst(*p).addr);
+	handle_mds_failure(*p);
+      }
   }
   if (is_clientreplay() || is_active() || is_stopping()) {
     // did anyone stop?
@@ -1504,18 +1510,18 @@ void MDS::active_start()
 void MDS::recovery_done()
 {
   dout(1) << "recovery_done -- successful recovery!" << dendl;
-  assert(is_clientreplay() || is_active() || is_clientreplay());
+  assert(is_clientreplay() || is_active());
   
   // kick anchortable (resent AGREEs)
   if (mdsmap->get_tableserver() == whoami) {
-    anchorserver->finish_recovery();
-    snapserver->finish_recovery();
+    set<int> active;
+    mdsmap->get_mds_set(active, MDSMap::STATE_CLIENTREPLAY);
+    mdsmap->get_mds_set(active, MDSMap::STATE_ACTIVE);
+    mdsmap->get_mds_set(active, MDSMap::STATE_STOPPING);
+    anchorserver->finish_recovery(active);
+    snapserver->finish_recovery(active);
   }
-  
-  // kick anchorclient (resent COMMITs)
-  anchorclient->finish_recovery();
-  snapclient->finish_recovery();
-  
+
   mdcache->start_recovered_truncates();
   mdcache->do_file_recover();
 
@@ -1533,15 +1539,23 @@ void MDS::handle_mds_recovery(int who)
   
   mdcache->handle_mds_recovery(who);
 
-  if (anchorserver) {
+  if (mdsmap->get_tableserver() == whoami) {
     anchorserver->handle_mds_recovery(who);
     snapserver->handle_mds_recovery(who);
   }
-  anchorclient->handle_mds_recovery(who);
-  snapclient->handle_mds_recovery(who);
-  
+
   queue_waiters(waiting_for_active_peer[who]);
   waiting_for_active_peer.erase(who);
+}
+
+void MDS::handle_mds_failure(int who)
+{
+  dout(5) << "handle_mds_failure mds." << who << dendl;
+
+  mdcache->handle_mds_failure(who);
+
+  anchorclient->handle_mds_failure(who);
+  snapclient->handle_mds_failure(who);
 }
 
 void MDS::stopping_start()
@@ -1891,9 +1905,9 @@ bool MDS::_dispatch(Message *m)
       mdcache->is_open() &&
       replay_queue.empty() &&
       want_state == MDSMap::STATE_CLIENTREPLAY) {
-    dout(10) << " still have " << mdcache->get_num_active_requests()
-	     << " active replay requests" << dendl;
-    if (mdcache->get_num_active_requests() == 0)
+    int num_requests = mdcache->get_num_client_requests();
+    dout(10) << " still have " << num_requests << " active replay requests" << dendl;
+    if (num_requests == 0)
       clientreplay_done();
   }
 

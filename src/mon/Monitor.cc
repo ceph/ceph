@@ -71,6 +71,7 @@
 #include "AuthMonitor.h"
 #include "mon/QuorumService.h"
 #include "mon/HealthMonitor.h"
+#include "mon/ConfigKeyService.h"
 
 #include "auth/AuthMethodList.h"
 #include "auth/KeyRing.h"
@@ -87,11 +88,13 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon) {
 }
 
 const string Monitor::MONITOR_NAME = "monitor";
+const string Monitor::MONITOR_STORE_PREFIX = "monitor_store";
 
 long parse_pos_long(const char *s, ostream *pss)
 {
   if (*s == '-' || *s == '+') {
-    *pss << "expected numerical value, got: " << s;
+    if (pss)
+      *pss << "expected numerical value, got: " << s;
     return -EINVAL;
   }
 
@@ -167,6 +170,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_AUTH] = new AuthMonitor(this, paxos, "auth");
 
   health_monitor = QuorumServiceRef(new HealthMonitor(this));
+  config_key_service = ConfigKeyServiceRef(new ConfigKeyService(this, paxos));
 
   mon_caps = new MonCaps();
   mon_caps->set_allow_all(true);
@@ -2401,6 +2405,16 @@ void Monitor::handle_command(MMonCommand *m)
     return;
   }
 
+  if (m->cmd[0] == "config-key") {
+    if (!access_all) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
+    }
+    config_key_service->dispatch(m);
+    return;
+  }
+
   if (m->cmd[0] == "fsid") {
     stringstream ss;
     ss << monmap->fsid;
@@ -3071,6 +3085,7 @@ bool Monitor::_ms_dispatch(Message *m)
       break;
 
       // OSDs
+    case MSG_OSD_MARK_ME_DOWN:
     case MSG_OSD_FAILURE:
     case MSG_OSD_BOOT:
     case MSG_OSD_ALIVE:

@@ -51,6 +51,12 @@ enum {
 /** @endcond */
 /** @} */
 
+/*
+ * snap id contants
+ */
+#define LIBRADOS_SNAP_HEAD  ((uint64_t)(-2))
+#define LIBRADOS_SNAP_DIR   ((uint64_t)(-1))
+
 /**
  * @typedef rados_t
  *
@@ -377,7 +383,7 @@ int rados_cluster_fsid(rados_t cluster, char *buf, size_t len);
  */
 
 /**
- * List objects in a pool
+ * List pools
  *
  * Gets a list of pool names as NULL-terminated strings.  The pool
  * names will be placed in the supplied buffer one after another.
@@ -727,7 +733,7 @@ int rados_rollback(rados_ioctx_t io, const char *oid,
  * snapshot.
  *
  * @param io the io context to change
- * @param snap the id of the snapshot to set, or CEPH_NOSNAP for no
+ * @param snap the id of the snapshot to set, or LIBRADOS_SNAP_HEAD for no
  * snapshot (i.e. normal operation)
  */
 void rados_ioctx_snap_set_read(rados_ioctx_t io, rados_snap_t snap);
@@ -1343,7 +1349,7 @@ void rados_aio_release(rados_completion_t c);
  * @param len length of the data, in bytes
  * @param off byte offset in the object to begin writing at
  * @returns 0 on success, -EROFS if the io context specifies a snap_seq
- * other than CEPH_NOSNAP
+ * other than LIBRADOS_SNAP_HEAD
  */
 int rados_aio_write(rados_ioctx_t io, const char *oid,
 		    rados_completion_t completion,
@@ -1363,7 +1369,7 @@ int rados_aio_write(rados_ioctx_t io, const char *oid,
  * @param buf the data to append
  * @param len length of buf (in bytes)
  * @returns 0 on success, -EROFS if the io context specifies a snap_seq
- * other than CEPH_NOSNAP
+ * other than LIBRADOS_SNAP_HEAD
  */
 int rados_aio_append(rados_ioctx_t io, const char *oid,
 		     rados_completion_t completion,
@@ -1385,7 +1391,7 @@ int rados_aio_append(rados_ioctx_t io, const char *oid,
  * @param buf data to write
  * @param len length of the data, in bytes
  * @returns 0 on success, -EROFS if the io context specifies a snap_seq
- * other than CEPH_NOSNAP
+ * other than LIBRADOS_SNAP_HEAD
  */
 int rados_aio_write_full(rados_ioctx_t io, const char *oid,
 			 rados_completion_t completion,
@@ -1403,7 +1409,7 @@ int rados_aio_write_full(rados_ioctx_t io, const char *oid,
  * @param oid the name of the object
  * @param completion what to do when the remove is safe and complete
  * @returns 0 on success, -EROFS if the io context specifies a snap_seq
- * other than CEPH_NOSNAP
+ * other than LIBRADOS_SNAP_HEAD
  */
 int rados_aio_remove(rados_ioctx_t io, const char *oid,
 		     rados_completion_t completion);

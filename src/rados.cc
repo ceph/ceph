@@ -1804,7 +1804,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	   << "  This will PERMANENTLY DESTROY an entire pool of objects with no way back.\n"
 	   << "  To confirm, pass the pool to remove twice, followed by\n"
 	   << "  --yes-i-really-really-mean-it" << std::endl;
-      cout << nargs << std::endl;
       return 1;
     }
     ret = rados.pool_delete(nargs[1]);
@@ -2062,7 +2061,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
       if (formatter) formatter->open_object_section("clone");
 
-      if (ci->cloneid == clone_info_t::HEAD) {
+      if (ci->cloneid == librados::SNAP_HEAD) {
         if (formatter)
           formatter->dump_string("id", "head");
         else
@@ -2111,7 +2110,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
         cout << "\t" << ci->size;
       }
 
-      if (ci->cloneid != clone_info_t::HEAD) {
+      if (ci->cloneid != librados::SNAP_HEAD) {
         if (formatter)
           formatter->open_array_section("overlaps");
         else

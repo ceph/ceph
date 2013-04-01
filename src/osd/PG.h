@@ -389,7 +389,7 @@ protected:
   atomic_t ref;
 
 public:
-  bool deleting;  // true while RemoveWQ should be chewing on us
+  bool deleting;  // true while in removing or OSD is shutting down
 
   void lock(bool no_lockdep = false);
   void unlock() {
@@ -1050,8 +1050,28 @@ public:
   void sub_op_scrub_unreserve(OpRequestRef op);
   void sub_op_scrub_stop(OpRequestRef op);
 
+  void reject_reservation();
+  void schedule_backfill_full_retry();
 
   // -- recovery state --
+
+  template <class EVT>
+  struct QueuePeeringEvt : Context {
+    boost::intrusive_ptr<PG> pg;
+    epoch_t epoch;
+    EVT evt;
+    QueuePeeringEvt(PG *pg, epoch_t epoch, EVT evt) :
+      pg(pg), epoch(epoch), evt(evt) {}
+    void finish(int r) {
+      pg->lock();
+      pg->queue_peering_event(PG::CephPeeringEvtRef(
+				new PG::CephPeeringEvt(
+				  epoch,
+				  epoch,
+				  evt)));
+      pg->unlock();
+    }
+  };
 
   class CephPeeringEvt {
     epoch_t epoch_sent;
@@ -1177,6 +1197,7 @@ public:
   TrivialEvent(RequestBackfill)
   TrivialEvent(RequestRecovery)
   TrivialEvent(RecoveryDone)
+  TrivialEvent(BackfillTooFull)
 
   TrivialEvent(AllReplicasRecovered)
   TrivialEvent(DoRecovery)
@@ -1471,9 +1492,11 @@ public:
 
     struct Backfilling : boost::statechart::state< Backfilling, Active >, NamedState {
       typedef boost::mpl::list<
-	boost::statechart::transition< Backfilled, Recovered >
+	boost::statechart::transition< Backfilled, Recovered >,
+	boost::statechart::custom_reaction< RemoteReservationRejected >
 	> reactions;
       Backfilling(my_context ctx);
+      boost::statechart::result react(const RemoteReservationRejected& evt);
       void exit();
     };
 
@@ -1527,9 +1550,11 @@ public:
 
     struct RepRecovering : boost::statechart::state< RepRecovering, ReplicaActive >, NamedState {
       typedef boost::mpl::list<
-	boost::statechart::transition< RecoveryDone, RepNotRecovering >
+	boost::statechart::transition< RecoveryDone, RepNotRecovering >,
+	boost::statechart::custom_reaction< BackfillTooFull >
 	> reactions;
       RepRecovering(my_context ctx);
+      boost::statechart::result react(const BackfillTooFull &evt);
       void exit();
     };
 

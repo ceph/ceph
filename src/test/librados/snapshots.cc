@@ -332,7 +332,7 @@ TEST(LibRadosSnapshots, SelfManagedSnapRollbackPP) {
 
   snap_set_t ss;
 
-  snap_t head = clone_info_t::HEAD;
+  snap_t head = SNAP_HEAD;
   ASSERT_EQ(0, ioctx.list_snaps("foo", &ss));
   ASSERT_EQ(1u, ss.clones.size());
   ASSERT_EQ(head, ss.clones[0].cloneid);
@@ -357,7 +357,7 @@ TEST(LibRadosSnapshots, SelfManagedSnapRollbackPP) {
 
   ASSERT_EQ(0, ioctx.list_snaps("foo", &ss));
   ASSERT_EQ(2u, ss.clones.size());
-  ASSERT_EQ(3u, ss.clones[0].cloneid);
+  ASSERT_EQ(my_snaps[1], ss.clones[0].cloneid);
   ASSERT_EQ(2u, ss.clones[0].snaps.size());
   ASSERT_EQ(my_snaps[0], ss.clones[0].snaps[0]);	//this could go away in the future
   ASSERT_EQ(my_snaps[1], ss.clones[0].snaps[1]);
@@ -415,7 +415,7 @@ TEST(LibRadosSnapshots, SelfManagedSnapOverlapPP) {
   ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), bufsize*8));
 
   snap_set_t ss;
-  snap_t head = clone_info_t::HEAD;
+  snap_t head = SNAP_HEAD;
   ASSERT_EQ(0, ioctx.list_snaps("foo", &ss));
   ASSERT_EQ(1u, ss.clones.size());
   ASSERT_EQ(head, ss.clones[0].cloneid);
@@ -441,7 +441,7 @@ TEST(LibRadosSnapshots, SelfManagedSnapOverlapPP) {
 
   ASSERT_EQ(0, ioctx.list_snaps("foo", &ss));
   ASSERT_EQ(2u, ss.clones.size());
-  ASSERT_EQ(3u, ss.clones[0].cloneid);
+  ASSERT_EQ(my_snaps[1], ss.clones[0].cloneid);
   ASSERT_EQ(2u, ss.clones[0].snaps.size());
   ASSERT_EQ(my_snaps[0], ss.clones[0].snaps[0]);	//this could go away in the future
   ASSERT_EQ(my_snaps[1], ss.clones[0].snaps[1]);
@@ -479,7 +479,7 @@ TEST(LibRadosSnapshots, SelfManagedSnapOverlapPP) {
 
   ASSERT_EQ(0, ioctx.list_snaps("foo", &ss));
   ASSERT_EQ(3u, ss.clones.size());
-  ASSERT_EQ(3u, ss.clones[0].cloneid);
+  ASSERT_EQ(my_snaps[1], ss.clones[0].cloneid);
   ASSERT_EQ(2u, ss.clones[0].snaps.size());
   ASSERT_EQ(my_snaps[0], ss.clones[0].snaps[0]);	//this could go away in the future
   ASSERT_EQ(my_snaps[1], ss.clones[0].snaps[1]);
@@ -496,7 +496,7 @@ TEST(LibRadosSnapshots, SelfManagedSnapOverlapPP) {
   ASSERT_EQ(128u, ss.clones[0].overlap[4].second);
   ASSERT_EQ(1152u, ss.clones[0].size);
 
-  ASSERT_EQ(4u, ss.clones[1].cloneid);
+  ASSERT_EQ(my_snaps[2], ss.clones[1].cloneid);
   ASSERT_EQ(1u, ss.clones[1].snaps.size());
   ASSERT_EQ(my_snaps[2], ss.clones[1].snaps[0]);
   ASSERT_EQ(4u, ss.clones[1].overlap.size());

@@ -165,6 +165,7 @@ OPTION(mon_max_log_entries_per_event, OPT_INT, 4096)
 OPTION(mon_health_data_update_interval, OPT_FLOAT, 60.0)
 OPTION(mon_data_avail_crit, OPT_INT, 5)
 OPTION(mon_data_avail_warn, OPT_INT, 30)
+OPTION(mon_config_key_max_entry_size, OPT_INT, 4096) // max num bytes per config-key entry
 OPTION(mon_sync_trim_timeout, OPT_DOUBLE, 30.0)
 OPTION(mon_sync_heartbeat_timeout, OPT_DOUBLE, 30.0)
 OPTION(mon_sync_heartbeat_interval, OPT_DOUBLE, 5.0)
@@ -200,6 +201,8 @@ OPTION(mon_client_hunt_interval, OPT_DOUBLE, 3.0)   // try new mon every N secon
 OPTION(mon_client_ping_interval, OPT_DOUBLE, 10.0)  // ping every N seconds
 OPTION(mon_client_max_log_entries_per_message, OPT_INT, 1000)
 OPTION(mon_max_pool_pg_num, OPT_INT, 65536)
+OPTION(mon_pool_quota_warn_threshold, OPT_INT, 0) // percent of quota at which to issue warnings
+OPTION(mon_pool_quota_crit_threshold, OPT_INT, 0) // percent of quota at which to issue errors
 OPTION(client_cache_size, OPT_INT, 16384)
 OPTION(client_cache_mid, OPT_FLOAT, .75)
 OPTION(client_use_random_mds, OPT_BOOL, false)
@@ -419,6 +422,7 @@ OPTION(osd_debug_drop_pg_create_duration, OPT_INT, 1)
 OPTION(osd_debug_drop_op_probability, OPT_DOUBLE, 0)   // probability of stalling/dropping a client op
 OPTION(osd_debug_op_order, OPT_BOOL, false)
 OPTION(osd_debug_verify_snaps_on_info, OPT_BOOL, false)
+OPTION(osd_debug_skip_full_check_in_backfill_reservation, OPT_BOOL, false)
 OPTION(osd_op_history_size, OPT_U32, 20)    // Max number of completed ops to track
 OPTION(osd_op_history_duration, OPT_U32, 600) // Oldest completed op to track
 OPTION(osd_target_transaction_size, OPT_INT, 30)     // to adjust various transactions that batch smaller items
@@ -435,6 +439,9 @@ OPTION(osd_failsafe_nearfull_ratio, OPT_FLOAT, .90) // what % full makes an OSD 
  */
 OPTION(osd_client_op_priority, OPT_INT, 63)
 OPTION(osd_recovery_op_priority, OPT_INT, 10)
+
+// Max time to wait between notifying mon of shutdown and shutting down
+OPTION(osd_mon_shutdown_timeout, OPT_DOUBLE, 5)
 
 OPTION(filestore, OPT_BOOL, false)
 
@@ -512,7 +519,7 @@ OPTION(rgw_cache_enabled, OPT_BOOL, true)   // rgw cache enabled
 OPTION(rgw_cache_lru_size, OPT_INT, 10000)   // num of entries in rgw cache
 OPTION(rgw_socket_path, OPT_STR, "")   // path to unix domain socket, if not specified, rgw will not run as external fcgi
 OPTION(rgw_host, OPT_STR, "")  // host for radosgw, can be an IP, default is 0.0.0.0
-OPTION(rgw_port, OPT_STR, "")  // port TCP to listen, format as "8080" "5000", if not specified, rgw will not run as external fcgi
+OPTION(rgw_port, OPT_STR, "")  // port to listen, format as "8080" "5000", if not specified, rgw will not run external fcgi
 OPTION(rgw_dns_name, OPT_STR, "")
 OPTION(rgw_script_uri, OPT_STR, "") // alternative value for SCRIPT_URI if not set in request
 OPTION(rgw_request_uri, OPT_STR,  "") // alternative value for REQUEST_URI if not set in request
@@ -535,7 +542,7 @@ OPTION(rgw_op_thread_suicide_timeout, OPT_INT, 0)
 OPTION(rgw_thread_pool_size, OPT_INT, 100)
 OPTION(rgw_num_control_oids, OPT_INT, 8)
 
-OPTION(rgw_cluster_root_pool, OPT_STR, ".rgw.root")
+OPTION(rgw_zone_root_pool, OPT_STR, ".rgw.root")
 OPTION(rgw_log_nonexistent_bucket, OPT_BOOL, false)
 OPTION(rgw_log_object_name, OPT_STR, "%Y-%m-%d-%H-%i-%n")      // man date to see codes (a subset are supported)
 OPTION(rgw_log_object_name_utc, OPT_BOOL, false)

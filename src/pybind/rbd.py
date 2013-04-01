@@ -16,7 +16,8 @@ methods, a :class:`TypeError` will be raised.
 """
 # Copyright 2011 Josh Durgin
 from ctypes import CDLL, c_char, c_char_p, c_size_t, c_void_p, c_int, \
-    create_string_buffer, byref, Structure, c_uint64, c_int64, c_uint8
+    create_string_buffer, byref, Structure, c_uint64, c_int64, c_uint8, \
+    CFUNCTYPE, pointer
 import ctypes
 import errno
 
@@ -628,6 +629,58 @@ class Image(object):
             raise make_ex(ret, 'error reading %s %ld~%ld' % (self.image, offset, length))
         return ctypes.string_at(ret_buf, ret)
 
+    def diff_iterate(self, offset, length, from_snapshot, iterate_cb):
+        """
+        Iterate over the changed extents of an image.
+
+        This will call iterate_cb with three arguments:
+
+        (offset, length, exists)
+
+        where the changed extent starts at offset bytes, continues for
+        length bytes, and is full of data (if exists is True) or zeroes
+        (if exists is False).
+
+        If from_snapshot is None, it is interpreted as the beginning
+        of time and this generates all allocated extents.
+
+        The end version is whatever is currently selected (via set_snap)
+        for the image.
+
+        Raises :class:`InvalidArgument` if from_snapshot is after
+        the currently set snapshot.
+
+        Raises :class:`ImageNotFound` if from_snapshot is not the name
+        of a snapshot of the image.
+
+        :param offset: start offset in bytes
+        :type offset: int
+        :param length: size of region to report on, in bytes
+        :type length: int
+        :param from_snapshot: starting snapshot name, or None
+        :type from_snapshot: str or None
+        :param iterate_cb: function to call for each extent
+        :type iterate_cb: function acception arguments for offset,
+                           length, and exists
+        :raises: :class:`InvalidArgument`, :class:`IOError`,
+                 :class:`ImageNotFound`
+        """
+        if from_snapshot is not None and not isinstance(from_snapshot, str):
+            raise TypeError('client must be a string')
+
+        RBD_DIFF_CB = CFUNCTYPE(c_int, c_uint64, c_size_t, c_int, c_void_p)
+        cb_holder = DiffIterateCB(iterate_cb)
+        cb = RBD_DIFF_CB(cb_holder.callback)
+        ret = self.librbd.rbd_diff_iterate(self.image,
+                                           c_char_p(from_snapshot),
+                                           c_uint64(offset),
+                                           c_uint64(length),
+                                           cb,
+                                           c_void_p(None))
+        if ret < 0:
+            msg = 'error generating diff from snapshot %s' % from_snapshot
+            raise make_ex(ret, msg)
+
     def write(self, data, offset):
         """
         Write data to the image. Raises :class:`InvalidArgument` if
@@ -656,6 +709,40 @@ class Image(object):
             raise LogicError("logic error: rbd_write(%s) \
 returned %d, but %d was the maximum number of bytes it could have \
 written." % (self.name, ret, length))
+
+    def discard(self, offset, length):
+        """
+        Trim the range from the image. It will be logically filled
+        with zeroes.
+        """
+        ret = self.librbd.rbd_discard(self.image,
+                                      c_uint64(offset),
+                                      c_uint64(length))
+        if ret < 0:
+            msg = 'error discarding region %d~%d' % (offset, length)
+            raise make_ex(ret, msg)
+
+    def flush(self):
+        """
+        Block until all writes are fully flushed if caching is enabled.
+        """
+        ret = self.librbd.rbd_flush(self.image)
+        if ret < 0:
+            raise make_ex(ret, 'error flushing image')
+
+    def stripe_unit(self):
+        """
+        Returns the stripe unit used for the image.
+        """
+        ret = self.librbd.rbd_get_stripe_unit()
+        return ret.value
+
+    def stripe_count(self):
+        """
+        Returns the stripe count used for the image.
+        """
+        ret = self.librbd.rbd_get_stripe_count()
+        return ret.value
 
     def flatten(self):
         """
@@ -794,6 +881,13 @@ written." % (self.name, ret, length))
         if ret < 0:
             raise make_ex(ret, 'error unlocking image')
 
+class DiffIterateCB(object):
+    def __init__(self, cb):
+        self.cb = cb
+
+    def callback(self, offset, length, exists, unused):
+        self.cb(offset, length, exists == 1)
+        return 0
 
 class SnapIterator(object):
     """

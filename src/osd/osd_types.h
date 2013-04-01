@@ -623,6 +623,7 @@ struct pg_pool_t {
   };
   enum {
     FLAG_HASHPSPOOL = 1, // hash pg seed and pool together (instead of adding)
+    FLAG_FULL       = 2, // pool is full
   };
 
   static const char *get_type_name(int t) {
@@ -650,6 +651,9 @@ public:
   uint64_t auid;            /// who owns the pg
   __u32 crash_replay_interval; /// seconds to allow clients to replay ACKed but unCOMMITted requests
 
+  uint64_t quota_max_bytes; /// maximum number of bytes for this pool
+  uint64_t quota_max_objects; /// maximum number of objects for this pool
+
   /*
    * Pool snaps (global to this pool).  These define a SnapContext for
    * the pool, unless the client manually specifies an alternate
@@ -674,6 +678,7 @@ public:
       snap_seq(0), snap_epoch(0),
       auid(0),
       crash_replay_interval(0),
+      quota_max_bytes(0), quota_max_objects(0),
       pg_num_mask(0), pgp_num_mask(0) { }
 
   void dump(Formatter *f) const;
@@ -712,6 +717,20 @@ public:
   void set_pgp_num(int p) {
     pgp_num = p;
     calc_pg_masks();
+  }
+
+  void set_quota_max_bytes(uint64_t m) {
+    quota_max_bytes = m;
+  }
+  uint64_t get_quota_max_bytes() {
+    return quota_max_bytes;
+  }
+
+  void set_quota_max_objects(uint64_t m) {
+    quota_max_objects = m;
+  }
+  uint64_t get_quota_max_objects() {
+    return quota_max_objects;
   }
 
   static int calc_bits_of(int t);
@@ -2095,8 +2114,6 @@ struct obj_list_watch_response_t {
 WRITE_CLASS_ENCODER(obj_list_watch_response_t)
 
 struct clone_info {
-  static const snapid_t HEAD;
-
   snapid_t cloneid;
   vector<snapid_t> snaps;  // ascending
   vector< pair<uint64_t,uint64_t> > overlap;
@@ -2121,7 +2138,7 @@ struct clone_info {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const {
-    if (cloneid == HEAD)
+    if (cloneid == CEPH_NOSNAP)
       f->dump_string("cloneid", "HEAD");
     else
       f->dump_unsigned("cloneid", cloneid.val);
@@ -2152,7 +2169,7 @@ struct clone_info {
     o.back()->overlap.push_back(pair<uint64_t,uint64_t>(8192,4096));
     o.back()->size = 16384;
     o.push_back(new clone_info);
-    o.back()->cloneid = HEAD;
+    o.back()->cloneid = CEPH_NOSNAP;
     o.back()->size = 32768;
   }
 };
@@ -2164,15 +2181,21 @@ WRITE_CLASS_ENCODER(clone_info)
  */
 struct obj_list_snap_response_t {
   vector<clone_info> clones;   // ascending
+  snapid_t seq;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(clones, bl);
+    ::encode(seq, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(clones, bl);
+    if (struct_v >= 2)
+      ::decode(seq, bl);
+    else
+      seq = CEPH_NOSNAP;
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const {
@@ -2182,6 +2205,7 @@ struct obj_list_snap_response_t {
       p->dump(f);
       f->close_section();
     }
+    f->dump_unsigned("seq", seq);
     f->close_section();
   }
   static void generate_test_instances(list<obj_list_snap_response_t*>& o) {
@@ -2194,11 +2218,12 @@ struct obj_list_snap_response_t {
     cl.overlap.push_back(pair<uint64_t,uint64_t>(8192,4096));
     cl.size = 16384;
     o.back()->clones.push_back(cl);
-    cl.cloneid = clone_info::HEAD;
+    cl.cloneid = CEPH_NOSNAP;
     cl.snaps.clear();
     cl.overlap.clear();
     cl.size = 32768;
     o.back()->clones.push_back(cl);
+    o.back()->seq = 123;
   }
 };
 

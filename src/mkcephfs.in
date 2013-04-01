@@ -47,6 +47,8 @@
 
 set -e
 
+trap 'echo "\nWARNING: mkcephfs is now deprecated in favour of ceph-deploy. Please see: \n http://github.com/ceph/ceph-deploy"' EXIT
+
 # if we start up as ./mkcephfs, assume everything else is in the
 # current directory too.
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
@@ -476,8 +478,7 @@ if [ $allhosts -eq 1 ]; then
 	check_host || continue
 
 	if [ -n "$ssh" ]; then
-	    unique=`dd if=/dev/urandom bs=16 count=1 2>/dev/null | md5sum | awk '{print $1}'`
-	    rdir="/tmp/mkfs.ceph.$unique"
+	    rdir=`mktemp -u /tmp/mkfs.ceph.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX` || exit 1
 	    echo pushing conf and monmap to $host:$rdir
 	    do_cmd "mkdir -p $rdir"
 	    scp -q $dir/conf $host:$rdir
@@ -506,6 +507,7 @@ if [ $allhosts -eq 1 ]; then
 	if [ -n "$ssh" ]; then
 	    echo collecting $name key
 	    scp -q $host:$rdir/key.$name $dir
+	    #cleanup no longer need rdir
 	    do_cmd "rm -r $rdir"
 	fi
     done
@@ -524,6 +526,7 @@ if [ $allhosts -eq 1 ]; then
 	check_host || continue
 	
 	if [ -n "$ssh" ]; then
+	    rdir=`mktemp -u /tmp/mkfs.ceph.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX` || exit 1
 	    echo pushing everything to $host
 	    ssh $host mkdir -p $rdir
 	    scp -q $dir/* $host:$rdir
@@ -542,6 +545,11 @@ if [ $allhosts -eq 1 ]; then
 	fi
 	
 	do_root_cmd "$0 -d $rdir --init-daemon $name"
+
+	if [ -n "$ssh" ]; then
+	    #cleanup no longer need rdir
+	    do_cmd "rm -r $rdir"
+	fi
     done
 
     # admin keyring

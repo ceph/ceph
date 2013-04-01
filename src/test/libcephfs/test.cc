@@ -821,6 +821,40 @@ TEST(LibCephFS, StripeUnitGran) {
   ceph_shutdown(cmount);
 }
 
+TEST(LibCephFS, Rename) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  int mypid = getpid();
+  char path_src[256];
+  char path_dst[256];
+
+  /* make a source file */
+  sprintf(path_src, "test_rename_src%d", mypid);
+  int fd = ceph_open(cmount, path_src, O_CREAT|O_TRUNC|O_WRONLY, 0777);
+  ASSERT_GT(fd, 0);
+  ASSERT_EQ(0, ceph_close(cmount, fd));
+
+  /* rename to a new dest path */
+  sprintf(path_dst, "test_rename_dst%d", mypid);
+  ASSERT_EQ(0, ceph_rename(cmount, path_src, path_dst));
+
+  /* test that dest path exists */
+  struct stat st;
+  ASSERT_EQ(0, ceph_lstat(cmount, path_dst, &st));
+
+  /* test that src path doesn't exist */
+  ASSERT_EQ(-ENOENT, ceph_lstat(cmount, path_src, &st));
+
+  /* rename with non-existent source path */
+  ASSERT_EQ(-ENOENT, ceph_rename(cmount, path_src, path_dst));
+
+  ASSERT_EQ(0, ceph_unlink(cmount, path_dst));
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, UseUnmounted) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
@@ -990,7 +1024,7 @@ TEST(LibCephFS, GetOsdCrushLocation) {
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
-  ASSERT_EQ(ceph_get_osd_crush_location(cmount, 0, NULL, 0), -EINVAL);
+  ASSERT_EQ(ceph_get_osd_crush_location(cmount, 0, NULL, 1), -EINVAL);
 
   char path[256];
   ASSERT_EQ(ceph_get_osd_crush_location(cmount, 9999999, path, 0), -ENOENT);

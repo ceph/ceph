@@ -673,6 +673,12 @@ void ReplicatedPG::do_op(OpRequestRef op)
     return;
   }
  
+  // asking for SNAPDIR is only ok for reads
+  if (m->get_snapid() == CEPH_SNAPDIR && op->may_write()) {
+    osd->reply_op_error(op, -EINVAL);
+    return;
+  }
+
   entity_inst_t client = m->get_source_inst();
 
   ObjectContext *obc;
@@ -831,6 +837,42 @@ void ReplicatedPG::do_op(OpRequestRef op)
     return;
   }
 
+  // any SNAPDIR op needs to hvae all clones present.  treat them as
+  // src_obc's so that we track references properly and clean up later.
+  if (m->get_snapid() == CEPH_SNAPDIR) {
+    for (vector<snapid_t>::iterator p = obc->ssc->snapset.clones.begin();
+	 p != obc->ssc->snapset.clones.end();
+	 ++p) {
+      object_locator_t src_oloc;
+      get_src_oloc(m->get_oid(), m->get_object_locator(), src_oloc);
+      hobject_t clone_oid = obc->obs.oi.soid;
+      clone_oid.snap = *p;
+      if (!src_obc.count(clone_oid)) {
+	ObjectContext *sobc;
+	snapid_t ssnapid;
+
+	int r = find_object_context(clone_oid, src_oloc, &sobc, false, &ssnapid);
+	if (r == -EAGAIN) {
+	  // missing the specific snap we need; requeue and wait.
+	  hobject_t wait_oid(clone_oid.oid, src_oloc.key, ssnapid, m->get_pg().ps(),
+			     info.pgid.pool());
+	  wait_for_missing_object(wait_oid, op);
+	} else if (r) {
+	  osd->reply_op_error(op, r);
+	} else {
+	  dout(10) << " clone_oid " << clone_oid << " obc " << src_obc << dendl;
+	  src_obc[clone_oid] = sobc;
+	  continue;
+	}
+	put_object_contexts(src_obc);
+	put_object_context(obc);
+	return;
+      } else {
+	continue;
+      }
+    }
+  }
+
   op->mark_started();
 
   const hobject_t& soid = obc->obs.oi.soid;
@@ -945,6 +987,16 @@ void ReplicatedPG::do_op(OpRequestRef op)
     delete ctx;
     put_object_context(obc);
     put_object_contexts(src_obc);
+    return;
+  }
+
+  // check for full
+  if (ctx->delta_stats.num_bytes > 0 &&
+      pool.info.get_flags() & pg_pool_t::FLAG_FULL) {
+    delete ctx;
+    put_object_context(obc);
+    put_object_contexts(src_obc);
+    osd->reply_op_error(op, -ENOSPC);
     return;
   }
 
@@ -1186,6 +1238,19 @@ void ReplicatedPG::do_scan(OpRequestRef op)
   switch (m->op) {
   case MOSDPGScan::OP_SCAN_GET_DIGEST:
     {
+      double ratio, full_ratio;
+      if (osd->too_full_for_backfill(&ratio, &full_ratio)) {
+	dout(1) << __func__ << ": Canceling backfill, current usage is "
+		<< ratio << ", which exceeds " << full_ratio << dendl;
+	queue_peering_event(
+	  CephPeeringEvtRef(
+	    new CephPeeringEvt(
+	      get_osdmap()->get_epoch(),
+	      get_osdmap()->get_epoch(),
+	      BackfillTooFull())));
+	return;
+      }
+
       BackfillInterval bi;
       osr->flush();
       scan_range(m->begin, g_conf->osd_backfill_scan_min, g_conf->osd_backfill_scan_max, &bi);
@@ -2253,44 +2318,37 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         obj_list_snap_response_t resp;
 
         if (!ssc) {
-            ssc = ctx->obc->ssc = get_snapset_context(soid.oid,
-                soid.get_key(), soid.hash, false);
+	  ssc = ctx->obc->ssc = get_snapset_context(soid.oid,
+						    soid.get_key(), soid.hash, false);
         }
-
         assert(ssc);
-
-        vector<snapid_t>::reverse_iterator snap_iter =
-            ssc->snapset.snaps.rbegin();
 
         int clonecount = ssc->snapset.clones.size();
         if (ssc->snapset.head_exists)
           clonecount++;
         resp.clones.reserve(clonecount);
         for (vector<snapid_t>::const_iterator clone_iter = ssc->snapset.clones.begin();
-               clone_iter != ssc->snapset.clones.end(); ++clone_iter) {
+	     clone_iter != ssc->snapset.clones.end(); ++clone_iter) {
           clone_info ci;
-
-          dout(20) << "List clones id=" << *clone_iter << dendl;
-
           ci.cloneid = *clone_iter;
 
-          for (;snap_iter != ssc->snapset.snaps.rend()
-               && (*snap_iter <= ci.cloneid); ++snap_iter) {
+	  hobject_t clone_oid = soid;
+	  clone_oid.snap = *clone_iter;
+	  ObjectContext *clone_obc = ctx->src_obc[clone_oid];
+	  for (vector<snapid_t>::reverse_iterator p = clone_obc->obs.oi.snaps.rbegin();
+	       p != clone_obc->obs.oi.snaps.rend();
+	       ++p) {
+	    ci.snaps.push_back(*p);
+	  }
 
-            dout(20) << "List snaps id=" << *snap_iter << dendl;
-
-            assert(*snap_iter != CEPH_NOSNAP);
-            assert(*snap_iter != CEPH_SNAPDIR);
-
-            ci.snaps.push_back(*snap_iter);
-          }
+          dout(20) << " clone " << *clone_iter << " snaps " << ci.snaps << dendl;
 
           map<snapid_t, interval_set<uint64_t> >::const_iterator coi;
           coi = ssc->snapset.clone_overlap.find(ci.cloneid);
           if (coi == ssc->snapset.clone_overlap.end()) {
             osd->clog.error() << "osd." << osd->whoami << ": inconsistent clone_overlap found for oid "
-                    << soid << " clone " << *clone_iter;
-            result = EINVAL;
+			      << soid << " clone " << *clone_iter;
+            result = -EINVAL;
             break;
           }
           const interval_set<uint64_t> &o = coi->second;
@@ -2304,8 +2362,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           si = ssc->snapset.clone_size.find(ci.cloneid);
           if (si == ssc->snapset.clone_size.end()) {
             osd->clog.error() << "osd." << osd->whoami << ": inconsistent clone_size found for oid "
-                    << soid << " clone " << *clone_iter;
-            result = EINVAL;
+			      << soid << " clone " << *clone_iter;
+            result = -EINVAL;
             break;
           }
           ci.size = si->second;
@@ -2313,21 +2371,16 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           resp.clones.push_back(ci);
         }
         if (ssc->snapset.head_exists) {
-          clone_info ci;
-
           assert(obs.exists);
-
-          ci.cloneid = clone_info::HEAD;
-
-          //Put remaining snapshots into head clone
-          for (;snap_iter != ssc->snapset.snaps.rend(); ++snap_iter)
-            ci.snaps.push_back(*snap_iter);
+          clone_info ci;
+          ci.cloneid = CEPH_NOSNAP;
 
           //Size for HEAD is oi.size
           ci.size = oi.size;
 
           resp.clones.push_back(ci);
         }
+	resp.seq = ssc->snapset.seq;
 
         resp.encode(osd_op.outdata);
         result = 0;
@@ -4285,9 +4338,30 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
 				      bool can_create,
 				      snapid_t *psnapid)
 {
-  // want the head?
   hobject_t head(oid.oid, oid.get_key(), CEPH_NOSNAP, oid.hash,
 		 info.pgid.pool());
+  hobject_t snapdir(oid.oid, oid.get_key(), CEPH_SNAPDIR, oid.hash,
+		    info.pgid.pool());
+
+  // want the snapdir?
+  if (oid.snap == CEPH_SNAPDIR) {
+    // return head or snapdir, whichever exists.
+    ObjectContext *obc = get_object_context(head, oloc, can_create);
+    if (!obc) {
+      obc = get_object_context(snapdir, oloc, can_create);
+    }
+    if (!obc)
+      return -ENOENT;
+    dout(10) << "find_object_context " << oid << " @" << oid.snap << dendl;
+    *pobc = obc;
+
+    // always populate ssc for SNAPDIR...
+    if (!obc->ssc)
+      obc->ssc = get_snapset_context(oid.oid, oid.get_key(), oid.hash, true);
+    return 0;
+  }
+
+  // want the head?
   if (oid.snap == CEPH_NOSNAP) {
     ObjectContext *obc = get_object_context(head, oloc, can_create);
     if (!obc)
@@ -6166,21 +6240,36 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
 void ReplicatedPG::on_removal()
 {
   dout(10) << "on_removal" << dendl;
-  apply_and_flush_repops(false);
-  context_registry_on_change();
 
-  clear_primary_state();
-  osd->remove_want_pg_temp(info.pgid);
-  cancel_recovery();
-  osd->remote_reserver.cancel_reservation(info.pgid);
-  osd->local_reserver.cancel_reservation(info.pgid);
+  on_shutdown();
 }
 
 void ReplicatedPG::on_shutdown()
 {
   dout(10) << "on_shutdown" << dendl;
+
+  // remove from queues
+  osd->recovery_wq.dequeue(this);
+  osd->scrub_wq.dequeue(this);
+  osd->scrub_finalize_wq.dequeue(this);
+  osd->snap_trim_wq.dequeue(this);
+  osd->pg_stat_queue_dequeue(this);
+  osd->dequeue_pg(this, 0);
+  osd->peering_wq.dequeue(this);
+
+  // handles queue races
+  deleting = true;
+
+  unreg_next_scrub();
   apply_and_flush_repops(false);
   context_registry_on_change();
+
+  osd->remote_reserver.cancel_reservation(info.pgid);
+  osd->local_reserver.cancel_reservation(info.pgid);
+
+  clear_primary_state();
+  osd->remove_want_pg_temp(info.pgid);
+  cancel_recovery();
 }
 
 void ReplicatedPG::on_flushed()

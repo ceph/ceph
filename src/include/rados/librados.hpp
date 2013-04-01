@@ -328,6 +328,21 @@ namespace librados
      * @param prval [out] place error code in prval upon completion
      */
     void list_watchers(std::list<obj_watch_t> *out_watchers, int *prval);
+
+    /**
+     * list snapshot clones associated with a logical object
+     *
+     * This will include a record for each version of the object,
+     * include the "HEAD" (which will have a cloneid of SNAP_HEAD).
+     * Each clone includes a vector of snap ids for which it is
+     * defined to exist.
+     *
+     * NOTE: this operation must be submitted from an IoCtx with a
+     * read snapid of SNAP_DIR for reliable results.
+     *
+     * @param out_snaps [out] pointer to resulting snap_set_t
+     * @param prval [out] place error code in prval upon completion
+     */
     void list_snaps(snap_set_t *out_snaps, int *prval);
 
   };
@@ -523,7 +538,7 @@ namespace librados
      * @param oid the name of the object
      * @param completion what to do when the remove is safe and complete
      * @returns 0 on success, -EROFS if the io context specifies a snap_seq
-     * other than CEPH_NOSNAP
+     * other than SNAP_HEAD
      */
     int aio_remove(const std::string& oid, AioCompletion *c);
 

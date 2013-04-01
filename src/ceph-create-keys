@@ -9,7 +9,7 @@ import sys
 import time
 
 
-log = logging.getLogger(os.path.basename(sys.argv[0]))
+LOG = logging.getLogger(os.path.basename(sys.argv[0]))
 
 QUORUM_STATES = ['leader', 'peon']
 
@@ -30,14 +30,14 @@ def wait_for_quorum(cluster, mon_id):
         out = p.stdout.read()
         returncode = p.wait()
         if returncode != 0:
-            log.info('ceph-mon admin socket not ready yet.')
+            LOG.info('ceph-mon admin socket not ready yet.')
             time.sleep(1)
             continue
 
         data = json.loads(out)
         state = data['state']
         if state not in QUORUM_STATES:
-            log.info('ceph-mon is not in quorum: %r', state)
+            LOG.info('ceph-mon is not in quorum: %r', state)
             time.sleep(1)
             continue
 
@@ -49,7 +49,7 @@ def get_key(cluster, mon_id):
         cluster=cluster,
         )
     if os.path.exists(path):
-        log.info('Key exists already: %s', path)
+        LOG.info('Key exists already: %s', path)
         return
     tmp = '{path}.{pid}.tmp'.format(
         path=path,
@@ -59,7 +59,7 @@ def get_key(cluster, mon_id):
         try:
             with file(tmp, 'w') as f:
                 os.fchmod(f.fileno(), 0600)
-                log.info('Talking to monitor...')
+                LOG.info('Talking to monitor...')
                 returncode = subprocess.call(
                     args=[
                         'ceph',
@@ -79,7 +79,7 @@ def get_key(cluster, mon_id):
                     stdout=f,
                     )
             if returncode != 0:
-                log.info('Cannot get or create admin key')
+                LOG.info('Cannot get or create admin key')
                 time.sleep(1)
                 continue
 
@@ -100,7 +100,7 @@ def bootstrap_key(cluster, type_, caps):
         cluster=cluster,
         )
     if os.path.exists(path):
-        log.info('Key exists already: %s', path)
+        LOG.info('Key exists already: %s', path)
         return
     tmp = '{path}.{pid}.tmp'.format(
         path=path,
@@ -124,13 +124,13 @@ def bootstrap_key(cluster, type_, caps):
         try:
             with file(tmp, 'w') as f:
                 os.fchmod(f.fileno(), 0600)
-                log.info('Talking to monitor...')
+                LOG.info('Talking to monitor...')
                 returncode = subprocess.call(
                     args=args,
                     stdout=f,
                     )
             if returncode != 0:
-                log.info('Cannot get or create bootstrap key for %s', type_)
+                LOG.info('Cannot get or create bootstrap key for %s', type_)
                 time.sleep(1)
                 continue
 

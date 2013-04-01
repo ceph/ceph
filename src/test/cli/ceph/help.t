@@ -45,8 +45,13 @@
     ceph osd getcrushmap -o <file>
     ceph osd getmap -o <file>
     ceph osd crush set <osd-id> <weight> <loc1> [<loc2> ...]
-    ceph osd crush move <bucketname> <loc1> [<loc2> ...]
+    ceph osd crush add <osd-id> <weight> <loc1> [<loc2> ...]
     ceph osd crush create-or-move <osd-id> <initial-weight> <loc1> [<loc2> ...]
+    ceph osd crush rm <name> [ancestor]
+    ceph osd crush move <bucketname> <loc1> [<loc2> ...]
+    ceph osd crush link <bucketname> <loc1> [<loc2> ...]
+    ceph osd crush unlink <bucketname> [ancestor]
+    ceph osd crush add-bucket <bucketname> <type>
     ceph osd crush reweight <name> <weight>
     ceph osd crush tunables <legacy|argonaut|bobtail|optimal|default>
     ceph osd create [<uuid>]
@@ -61,6 +66,7 @@
     ceph osd pool delete <pool> [<pool> --yes-i-really-really-mean-it]
     ceph osd pool rename <pool> <new pool name>
     ceph osd pool set <pool> <field> <value>
+    ceph osd pool set-quota <pool> (max_bytes|max_objects) <value>
     ceph osd scrub <osd-id>
     ceph osd deep-scrub <osd-id>
     ceph osd repair <osd-id>

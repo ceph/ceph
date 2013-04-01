@@ -94,7 +94,7 @@ int RGWDNSResolver::resolve_cname(const string& hostname, string& cname, bool *f
   answend = answer + len;
 
   /* read query */
-  if((len = dn_expand(answer, answend, pt, host, sizeof(host))) < 0) {
+  if ((len = dn_expand(answer, answend, pt, host, sizeof(host))) < 0) {
     dout(0) << "ERROR: dn_expand() failed" << dendl;
     ret = -EINVAL;
     goto done;
@@ -120,7 +120,7 @@ int RGWDNSResolver::resolve_cname(const string& hostname, string& cname, bool *f
 
   /* read answer */
 
-  if((len = dn_expand(answer, answend, pt, host, sizeof(host))) < 0) {
+  if ((len = dn_expand(answer, answend, pt, host, sizeof(host))) < 0) {
     ret = 0;
     goto done;
   }
@@ -138,7 +138,7 @@ int RGWDNSResolver::resolve_cname(const string& hostname, string& cname, bool *f
   pt += INT32SZ; /* ttl */
   pt += INT16SZ; /* size */
 
-  if((len = dn_expand(answer, answend, pt, host, sizeof(host))) < 0) {
+  if ((len = dn_expand(answer, answend, pt, host, sizeof(host))) < 0) {
     ret = 0;
     goto done;
   }

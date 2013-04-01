@@ -363,6 +363,13 @@ class MonitorDBStore
     );
   }
 
+  KeyValueDB::Iterator get_iterator(const string &prefix) {
+    assert(!prefix.empty());
+    KeyValueDB::Iterator iter = db->get_snapshot_iterator(prefix);
+    iter->seek_to_first();
+    return iter;
+  }
+
   int get(const string& prefix, const string& key, bufferlist& bl) {
     set<string> k;
     k.insert(key);
