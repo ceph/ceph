@@ -176,7 +176,7 @@ public:
    * @returns 0 on success, or negative error code on error
    */
   int diff_iterate(const char *fromsnapname,
-		   uint64_t ofs, size_t len,
+		   uint64_t ofs, uint64_t len,
 		   int (*cb)(uint64_t, size_t, int, void *), void *arg);
   ssize_t write(uint64_t ofs, size_t len, ceph::bufferlist& bl);
   int discard(uint64_t ofs, uint64_t len);

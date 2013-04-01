@@ -334,7 +334,7 @@ int64_t rbd_read_iterate(rbd_image_t image, uint64_t ofs, size_t len,
  */
 int rbd_diff_iterate(rbd_image_t image,
 		     const char *fromsnapname,
-		     uint64_t ofs, size_t len,
+		     uint64_t ofs, uint64_t len,
 		     int (*cb)(uint64_t, size_t, int, void *), void *arg);
 ssize_t rbd_write(rbd_image_t image, uint64_t ofs, size_t len, const char *buf);
 int rbd_discard(rbd_image_t image, uint64_t ofs, uint64_t len);
