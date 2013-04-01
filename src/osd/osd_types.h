@@ -931,6 +931,8 @@ struct pg_stat_t {
   vector<int> up, acting;
   epoch_t mapping_epoch;
 
+  utime_t last_became_active;
+
   pg_stat_t()
     : state(0),
       created(0), last_epoch_clean(0),
