@@ -418,7 +418,7 @@ public:
   set<hobject_t> mdata_error_set; // getattr(),stat() will return -EIO
   void inject_data_error(const hobject_t &oid);
   void inject_mdata_error(const hobject_t &oid);
-  void debug_delete_obj(const hobject_t &oid);
+  void debug_obj_on_delete(const hobject_t &oid);
   bool debug_data_eio(const hobject_t &oid);
   bool debug_mdata_eio(const hobject_t &oid);
 
