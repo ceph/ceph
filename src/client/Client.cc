@@ -1890,6 +1890,8 @@ void Client::handle_mds_map(MMDSMap* m)
 	kick_requests(p->second, false);
 	kick_flushing_caps(p->second);
 	signal_cond_list(p->second->waiting_for_open);
+	kick_maxsize_requests(p->second);
+	wake_inode_waiters(p->second);
       }
       connect_mds_targets(p->first);
     }
@@ -3028,6 +3030,17 @@ void Client::kick_flushing_caps(MetaSession *session)
     ldout(cct, 20) << " reflushing caps on " << *in << " to mds." << mds << dendl;
     if (in->flushing_caps)
       flush_caps(in, session);
+  }
+}
+
+void Client::kick_maxsize_requests(MetaSession *session)
+{
+  xlist<Cap*>::iterator iter = session->caps.begin();
+  while (!iter.end()){
+    (*iter)->inode->requested_max_size = 0;
+    (*iter)->inode->wanted_max_size = 0;
+    signal_cond_list((*iter)->inode->waitfor_caps);
+    ++iter;
   }
 }
 
