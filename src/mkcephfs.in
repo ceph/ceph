@@ -47,6 +47,8 @@
 
 set -e
 
+trap 'echo "\nWARNING: mkcephfs is now deprecated in favour of ceph-deploy. Please see: \n http://github.com/ceph/ceph-deploy"' EXIT
+
 # if we start up as ./mkcephfs, assume everything else is in the
 # current directory too.
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
