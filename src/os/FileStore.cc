@@ -352,7 +352,7 @@ int FileStore::lfn_unlink(coll_t cid, const hobject_t& o,
 	return r;
       }
       if (g_conf->filestore_debug_inject_read_err) {
-	debug_delete_obj(o);
+	debug_obj_on_delete(o);
       }
     } else {
       /* Ensure that replay of this op doesn't result in the object_map
@@ -3807,7 +3807,7 @@ void FileStore::inject_mdata_error(const hobject_t &oid) {
   dout(10) << __func__ << ": init error on " << oid << dendl;
   mdata_error_set.insert(oid);
 }
-void FileStore::debug_delete_obj(const hobject_t &oid) {
+void FileStore::debug_obj_on_delete(const hobject_t &oid) {
   Mutex::Locker l(read_error_lock);
   dout(10) << __func__ << ": clear error on " << oid << dendl;
   data_error_set.erase(oid);
