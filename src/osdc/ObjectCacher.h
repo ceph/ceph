@@ -573,6 +573,7 @@ private:
   int _wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset, Mutex& lock,
 		      Context *onfreespace);
   void maybe_wait_for_writeback(uint64_t len);
+  bool _flush_set_finish(C_GatherBuilder *gather, Context *onfinish);
 
 public:
   bool set_is_cached(ObjectSet *oset);
