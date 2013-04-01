@@ -544,8 +544,6 @@ void Locker::cancel_locking(Mutation *mut, set<CInode*> *pneed_issue)
       if (need_issue)
 	pneed_issue->insert(static_cast<CInode *>(lock->get_parent()));
     }
-  } else {
-    lock->finish_waiters(SimpleLock::WAIT_REMOTEXLOCK);
   }
   mut->finish_locking(lock);
 }
@@ -659,6 +657,13 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
     if (!lock->get_parent()->is_auth()) {
       // replica: tell auth
       int auth = lock->get_parent()->authority().first;
+
+      if (lock->get_parent()->is_rejoining() &&
+	  mds->mdsmap->get_state(auth) == MDSMap::STATE_REJOIN) {
+	dout(7) << "eval_gather finished gather, but still rejoining "
+		<< *lock->get_parent() << dendl;
+	return;
+      }
 
       if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_REJOIN) {
 	switch (lock->get_state()) {
@@ -803,6 +808,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
 bool Locker::eval(CInode *in, int mask, bool caps_imported)
 {
   bool need_issue = false;
+  list<Context*> finishers;
   
   dout(10) << "eval " << mask << " " << *in << dendl;
 
@@ -821,19 +827,19 @@ bool Locker::eval(CInode *in, int mask, bool caps_imported)
 
  retry:
   if (mask & CEPH_LOCK_IFILE)
-    eval_any(&in->filelock, &need_issue, caps_imported);
+    eval_any(&in->filelock, &need_issue, &finishers, caps_imported);
   if (mask & CEPH_LOCK_IAUTH)
-    eval_any(&in->authlock, &need_issue, caps_imported);
+    eval_any(&in->authlock, &need_issue, &finishers, caps_imported);
   if (mask & CEPH_LOCK_ILINK)
-    eval_any(&in->linklock, &need_issue,caps_imported);
+    eval_any(&in->linklock, &need_issue, &finishers, caps_imported);
   if (mask & CEPH_LOCK_IXATTR)
-    eval_any(&in->xattrlock, &need_issue, caps_imported);
+    eval_any(&in->xattrlock, &need_issue, &finishers, caps_imported);
   if (mask & CEPH_LOCK_INEST)
-    eval_any(&in->nestlock, &need_issue, caps_imported);
+    eval_any(&in->nestlock, &need_issue, &finishers, caps_imported);
   if (mask & CEPH_LOCK_IFLOCK)
-    eval_any(&in->flocklock, &need_issue, caps_imported);
+    eval_any(&in->flocklock, &need_issue, &finishers, caps_imported);
   if (mask & CEPH_LOCK_IPOLICY)
-    eval_any(&in->policylock, &need_issue, caps_imported);
+    eval_any(&in->policylock, &need_issue, &finishers, caps_imported);
 
   // drop loner?
   if (in->is_auth() && in->is_head() && in->get_wanted_loner() != in->get_loner()) {
@@ -853,6 +859,8 @@ bool Locker::eval(CInode *in, int mask, bool caps_imported)
       }
     }
   }
+
+  finish_contexts(g_ceph_context, finishers);
 
   if (need_issue && in->is_head())
     issue_caps(in);
@@ -1049,9 +1057,11 @@ bool Locker::_rdlock_kick(SimpleLock *lock, bool as_anon)
     } else {
       // request rdlock state change from auth
       int auth = lock->get_parent()->authority().first;
-      dout(10) << "requesting rdlock from auth on " 
-	       << *lock << " on " << *lock->get_parent() << dendl;
-      mds->send_message_mds(new MLock(lock, LOCK_AC_REQRDLOCK, mds->get_nodeid()), auth);
+      if (mds->mdsmap->is_clientreplay_or_active_or_stopping(auth)) {
+	dout(10) << "requesting rdlock from auth on "
+		 << *lock << " on " << *lock->get_parent() << dendl;
+	mds->send_message_mds(new MLock(lock, LOCK_AC_REQRDLOCK, mds->get_nodeid()), auth);
+      }
       return false;
     }
   }
@@ -1271,9 +1281,11 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
       // replica.
       // auth should be auth_pinned (see acquire_locks wrlock weird mustpin case).
       int auth = lock->get_parent()->authority().first;
-      dout(10) << "requesting scatter from auth on " 
-	       << *lock << " on " << *lock->get_parent() << dendl;
-      mds->send_message_mds(new MLock(lock, LOCK_AC_REQSCATTER, mds->get_nodeid()), auth);
+      if (mds->mdsmap->is_clientreplay_or_active_or_stopping(auth)) {
+	dout(10) << "requesting scatter from auth on "
+		 << *lock << " on " << *lock->get_parent() << dendl;
+	mds->send_message_mds(new MLock(lock, LOCK_AC_REQSCATTER, mds->get_nodeid()), auth);
+      }
       break;
     }
   }
@@ -1323,18 +1335,16 @@ void Locker::remote_wrlock_start(SimpleLock *lock, int target, MDRequest *mut)
   }
 
   // send lock request
-  if (!lock->is_waiter_for(SimpleLock::WAIT_REMOTEXLOCK)) {
-    mut->start_locking(lock, target);
-    mut->more()->slaves.insert(target);
-    MMDSSlaveRequest *r = new MMDSSlaveRequest(mut->reqid, mut->attempt,
-					       MMDSSlaveRequest::OP_WRLOCK);
-    r->set_lock_type(lock->get_type());
-    lock->get_parent()->set_object_info(r->get_object_info());
-    mds->send_message_mds(r, target);
-  }
-  
-  // wait
-  lock->add_waiter(SimpleLock::WAIT_REMOTEXLOCK, new C_MDS_RetryRequest(mdcache, mut));
+  mut->start_locking(lock, target);
+  mut->more()->slaves.insert(target);
+  MMDSSlaveRequest *r = new MMDSSlaveRequest(mut->reqid, mut->attempt,
+					     MMDSSlaveRequest::OP_WRLOCK);
+  r->set_lock_type(lock->get_type());
+  lock->get_parent()->set_object_info(r->get_object_info());
+  mds->send_message_mds(r, target);
+
+  assert(mut->more()->waiting_on_slave.count(target) == 0);
+  mut->more()->waiting_on_slave.insert(target);
 }
 
 void Locker::remote_wrlock_finish(SimpleLock *lock, int target, Mutation *mut)
@@ -1408,19 +1418,18 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
     }
     
     // send lock request
-    if (!lock->is_waiter_for(SimpleLock::WAIT_REMOTEXLOCK)) {
-      int auth = lock->get_parent()->authority().first;
-      mut->more()->slaves.insert(auth);
-      mut->start_locking(lock, auth);
-      MMDSSlaveRequest *r = new MMDSSlaveRequest(mut->reqid, mut->attempt,
-						 MMDSSlaveRequest::OP_XLOCK);
-      r->set_lock_type(lock->get_type());
-      lock->get_parent()->set_object_info(r->get_object_info());
-      mds->send_message_mds(r, auth);
-    }
-    
-    // wait
-    lock->add_waiter(SimpleLock::WAIT_REMOTEXLOCK, new C_MDS_RetryRequest(mdcache, mut));
+    int auth = lock->get_parent()->authority().first;
+    mut->more()->slaves.insert(auth);
+    mut->start_locking(lock, auth);
+    MMDSSlaveRequest *r = new MMDSSlaveRequest(mut->reqid, mut->attempt,
+					       MMDSSlaveRequest::OP_XLOCK);
+    r->set_lock_type(lock->get_type());
+    lock->get_parent()->set_object_info(r->get_object_info());
+    mds->send_message_mds(r, auth);
+
+    assert(mut->more()->waiting_on_slave.count(auth) == 0);
+    mut->more()->waiting_on_slave.insert(auth);
+
     return false;
   }
 }
@@ -1901,13 +1910,19 @@ void Locker::request_inode_file_caps(CInode *in)
     }
 
     int auth = in->authority().first;
+    if (in->is_rejoining() &&
+	mds->mdsmap->get_state(auth) == MDSMap::STATE_REJOIN) {
+      mds->wait_for_active_peer(auth, new C_MDL_RequestInodeFileCaps(this, in));
+      return;
+    }
+
     dout(7) << "request_inode_file_caps " << ccap_string(wanted)
             << " was " << ccap_string(in->replica_caps_wanted) 
             << " on " << *in << " to mds." << auth << dendl;
 
     in->replica_caps_wanted = wanted;
 
-    if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_REJOIN)
+    if (mds->mdsmap->is_clientreplay_or_active_or_stopping(auth))
       mds->send_message_mds(new MInodeFileCaps(in->ino(), in->replica_caps_wanted),
 			    auth);
   }
@@ -1926,14 +1941,6 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
   assert(in);
   assert(in->is_auth());
 
-  if (mds->is_rejoin() &&
-      in->is_rejoining()) {
-    dout(7) << "handle_inode_file_caps still rejoining " << *in << ", dropping " << *m << dendl;
-    m->put();
-    return;
-  }
-
-  
   dout(7) << "handle_inode_file_caps replica mds." << from << " wants caps " << ccap_string(m->get_caps()) << " on " << *in << dendl;
 
   if (m->get_caps())
@@ -2091,7 +2098,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
 }
 
 
-void Locker::share_inode_max_size(CInode *in)
+void Locker::share_inode_max_size(CInode *in, Capability *only_cap)
 {
   /*
    * only share if currently issued a WR cap.  if client doesn't have it,
@@ -2099,9 +2106,12 @@ void Locker::share_inode_max_size(CInode *in)
    * the cap later.
    */
   dout(10) << "share_inode_max_size on " << *in << dendl;
-  for (map<client_t,Capability*>::iterator it = in->client_caps.begin();
-       it != in->client_caps.end();
-       ++it) {
+  map<client_t, Capability*>::iterator it;
+  if (only_cap)
+    it = in->client_caps.find(only_cap->get_client());
+  else
+    it = in->client_caps.begin();
+  for (; it != in->client_caps.end(); ++it) {
     const client_t client = it->first;
     Capability *cap = it->second;
     if (cap->is_suppress())
@@ -2117,6 +2127,8 @@ void Locker::share_inode_max_size(CInode *in)
       in->encode_cap_message(m, cap);
       mds->send_message_client_counted(m, client);
     }
+    if (only_cap)
+      break;
   }
 }
 
@@ -2400,6 +2412,11 @@ void Locker::handle_client_caps(MClientCaps *m)
       bool did_issue = eval(in, CEPH_CAP_LOCKS);
       if (!did_issue && (cap->wanted() & ~cap->pending()))
 	issue_caps(in, cap);
+      if (cap->get_last_seq() == 0 &&
+	  (cap->pending() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER))) {
+	cap->issue_norevoke(cap->issued());
+	share_inode_max_size(in, cap);
+      }
     }
   }
 
@@ -2841,6 +2858,11 @@ void Locker::handle_client_cap_release(MClientCapRelease *m)
 {
   client_t client = m->get_source().num();
   dout(10) << "handle_client_cap_release " << *m << dendl;
+
+  if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
+    mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
+    return;
+  }
 
   for (vector<ceph_mds_cap_item>::iterator p = m->caps.begin(); p != m->caps.end(); ++p) {
     inodeno_t ino((uint64_t)p->ino);
@@ -3851,7 +3873,7 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
 	     << *lock << " on " << *p << dendl;
     // request unscatter?
     int auth = lock->get_parent()->authority().first;
-    if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_ACTIVE)
+    if (mds->mdsmap->is_clientreplay_or_active_or_stopping(auth))
       mds->send_message_mds(new MLock(lock, LOCK_AC_NUDGE, mds->get_nodeid()), auth);
 
     // wait...
@@ -4395,6 +4417,8 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     lock->set_state(LOCK_SYNC);
 
     lock->get_rdlock();
+    if (caps)
+      issue_caps(in);
     lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
     lock->put_rdlock();
     break;

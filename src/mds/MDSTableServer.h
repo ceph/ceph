@@ -90,7 +90,7 @@ private:
   }
 
   // recovery
-  void finish_recovery();
+  void finish_recovery(set<int>& active);
   void handle_mds_recovery(int who);
 };
 

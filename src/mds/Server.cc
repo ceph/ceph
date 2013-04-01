@@ -110,10 +110,8 @@ void Server::dispatch(Message *m)
 		(m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
 		 (static_cast<MClientRequest*>(m))->is_replay()))) {
       // replaying!
-    } else if (mds->is_clientreplay() && m->get_type() == MSG_MDS_SLAVE_REQUEST &&
-	       ((static_cast<MMDSSlaveRequest*>(m))->is_reply() ||
-		!mds->mdsmap->is_active(m->get_source().num()))) {
-      // slave reply or the master is also in the clientreplay stage
+    } else if (m->get_type() == MSG_MDS_SLAVE_REQUEST) {
+      // handle_slave_request() will wait if necessary
     } else {
       dout(3) << "not active yet, waiting" << dendl;
       mds->wait_for_active(new C_MDS_RetryMessage(mds, m));
@@ -1294,6 +1292,13 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
   if (m->is_reply())
     return handle_slave_request_reply(m);
 
+  CDentry *straydn = NULL;
+  if (m->stray.length() > 0) {
+    straydn = mdcache->add_replica_stray(m->stray, from);
+    assert(straydn);
+    m->stray.clear();
+  }
+
   // am i a new slave?
   MDRequest *mdr = NULL;
   if (mdcache->have_request(m->get_reqid())) {
@@ -1329,9 +1334,26 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       m->put();
       return;
     }
-    mdr = mdcache->request_start_slave(m->get_reqid(), m->get_attempt(), m->get_source().num());
+    mdr = mdcache->request_start_slave(m->get_reqid(), m->get_attempt(), from);
   }
   assert(mdr->slave_request == 0);     // only one at a time, please!  
+
+  if (straydn) {
+    mdr->pin(straydn);
+    mdr->straydn = straydn;
+  }
+
+  if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
+    dout(3) << "not clientreplay|active yet, waiting" << dendl;
+    mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
+    return;
+  } else if (mds->is_clientreplay() && !mds->mdsmap->is_clientreplay(from) &&
+	     mdr->locks.empty()) {
+    dout(3) << "not active yet, waiting" << dendl;
+    mds->wait_for_active(new C_MDS_RetryMessage(mds, m));
+    return;
+  }
+
   mdr->slave_request = m;
   
   dispatch_slave_request(mdr);
@@ -1342,6 +1364,12 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
 {
   int from = m->get_source().num();
   
+  if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
+    dout(3) << "not clientreplay|active yet, waiting" << dendl;
+    mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
+    return;
+  }
+
   if (m->get_op() == MMDSSlaveRequest::OP_COMMITTED) {
     metareqid_t r = m->get_reqid();
     mds->mdcache->committed_master_slave(r, from);
@@ -1374,7 +1402,11 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
       mdr->locks.insert(lock);
       mdr->finish_locking(lock);
       lock->get_xlock(mdr, mdr->get_client());
-      lock->finish_waiters(SimpleLock::WAIT_REMOTEXLOCK);
+
+      assert(mdr->more()->waiting_on_slave.count(from));
+      mdr->more()->waiting_on_slave.erase(from);
+      assert(mdr->more()->waiting_on_slave.empty());
+      dispatch_client_request(mdr);
     }
     break;
     
@@ -1388,7 +1420,11 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
       mdr->remote_wrlocks[lock] = from;
       mdr->locks.insert(lock);
       mdr->finish_locking(lock);
-      lock->finish_waiters(SimpleLock::WAIT_REMOTEXLOCK);
+
+      assert(mdr->more()->waiting_on_slave.count(from));
+      mdr->more()->waiting_on_slave.erase(from);
+      assert(mdr->more()->waiting_on_slave.empty());
+      dispatch_client_request(mdr);
     }
     break;
 
@@ -4465,6 +4501,9 @@ void Server::_link_remote_finish(MDRequest *mdr, bool inc,
 
   assert(g_conf->mds_kill_link_at != 3);
 
+  if (!mdr->more()->witnessed.empty())
+    mdcache->logged_master_update(mdr->reqid);
+
   if (inc) {
     // link the new dentry
     dn->pop_projected_linkage();
@@ -5075,6 +5114,9 @@ void Server::_unlink_local_finish(MDRequest *mdr,
 {
   dout(10) << "_unlink_local_finish " << *dn << dendl;
 
+  if (!mdr->more()->witnessed.empty())
+    mdcache->logged_master_update(mdr->reqid);
+
   // unlink main dentry
   dn->get_dir()->unlink_inode(dn);
   dn->pop_projected_linkage();
@@ -5168,10 +5210,8 @@ void Server::handle_slave_rmdir_prep(MDRequest *mdr)
   dout(10) << " dn " << *dn << dendl;
   mdr->pin(dn);
 
-  assert(mdr->slave_request->stray.length() > 0);
-  CDentry *straydn = mdcache->add_replica_stray(mdr->slave_request->stray, mdr->slave_to_mds);
-  assert(straydn);
-  mdr->pin(straydn);
+  assert(mdr->straydn);
+  CDentry *straydn = mdr->straydn;
   dout(10) << " straydn " << *straydn << dendl;
   
   mdr->now = mdr->slave_request->now;
@@ -5238,6 +5278,7 @@ void Server::_logged_slave_rmdir(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   // done.
   mdr->slave_request->put();
   mdr->slave_request = 0;
+  mdr->straydn = 0;
 }
 
 void Server::handle_slave_rmdir_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
@@ -5769,12 +5810,52 @@ void Server::handle_client_rename(MDRequest *mdr)
   if (mdr->now == utime_t())
     mdr->now = ceph_clock_now(g_ceph_context);
 
+  // -- prepare anchor updates --
+  if (!linkmerge || srcdnl->is_primary()) {
+    C_GatherBuilder anchorgather(g_ceph_context);
+
+    if (srcdnl->is_primary() &&
+      (srcdnl->get_inode()->is_anchored() ||
+       (srcdnl->get_inode()->is_dir() && (srcdnl->get_inode()->inode.rstat.ranchors ||
+                                          srcdnl->get_inode()->nested_anchors ||
+                                          !mdcache->is_leaf_subtree(mdcache->get_projected_subtree_root(srcdn->get_dir()))))) &&
+      !mdr->more()->src_reanchor_atid) {
+      dout(10) << "reanchoring src->dst " << *srcdnl->get_inode() << dendl;
+      vector<Anchor> trace;
+      destdn->make_anchor_trace(trace, srcdnl->get_inode());
+      mds->anchorclient->prepare_update(srcdnl->get_inode()->ino(),
+					trace, &mdr->more()->src_reanchor_atid,
+					anchorgather.new_sub());
+    }
+    if (destdnl->is_primary() &&
+	destdnl->get_inode()->is_anchored() &&
+	!mdr->more()->dst_reanchor_atid) {
+      dout(10) << "reanchoring dst->stray " << *destdnl->get_inode() << dendl;
+
+      assert(straydn);
+      vector<Anchor> trace;
+      straydn->make_anchor_trace(trace, destdnl->get_inode());
+
+      mds->anchorclient->prepare_update(destdnl->get_inode()->ino(), trace,
+		  &mdr->more()->dst_reanchor_atid, anchorgather.new_sub());
+    }
+
+    if (anchorgather.has_subs())  {
+      anchorgather.set_finisher(new C_MDS_RetryRequest(mdcache, mdr));
+      anchorgather.activate();
+      return;  // waiting for anchor prepares
+    }
+
+    assert(g_conf->mds_kill_rename_at != 2);
+  }
+
   // -- prepare witnesses --
 
   // do srcdn auth last
   int last = -1;
   if (!srcdn->is_auth()) {
     last = srcdn->authority().first;
+    mdr->more()->srcdn_auth_mds = last;
     // ask auth of srci to mark srci as ambiguous auth if more than two MDS
     // are involved in the rename operation.
     if (srcdnl->is_primary() && !mdr->more()->is_ambiguous_auth) {
@@ -5800,58 +5881,18 @@ void Server::handle_client_rename(MDRequest *mdr)
   if (!mdr->more()->waiting_on_slave.empty())
     return;  // we're waiting for a witness.
 
-  if (last >= 0 &&
-      mdr->more()->witnessed.count(last) == 0 &&
-      mdr->more()->waiting_on_slave.count(last) == 0) {
+  if (last >= 0 && mdr->more()->witnessed.count(last) == 0) {
     dout(10) << " preparing last witness (srcdn auth)" << dendl;
+    assert(mdr->more()->waiting_on_slave.count(last) == 0);
     _rename_prepare_witness(mdr, last, witnesses, srcdn, destdn, straydn);
     return;
   }
 
   // test hack: bail after slave does prepare, so we can verify it's _live_ rollback.
   if (!mdr->more()->slaves.empty() && !srci->is_dir())
-    assert(g_conf->mds_kill_rename_at != 2);
+    assert(g_conf->mds_kill_rename_at != 3);
   if (!mdr->more()->slaves.empty() && srci->is_dir())
-    assert(g_conf->mds_kill_rename_at != 3);    
-  
-  // -- prepare anchor updates -- 
-  if (!linkmerge || srcdnl->is_primary()) {
-    C_GatherBuilder anchorgather(g_ceph_context);
-
-    if (srcdnl->is_primary() &&
-	(srcdnl->get_inode()->is_anchored() || 
-	 (srcdnl->get_inode()->is_dir() && (srcdnl->get_inode()->inode.rstat.ranchors ||
-					    srcdnl->get_inode()->nested_anchors ||
-					    !mdcache->is_leaf_subtree(mdcache->get_projected_subtree_root(srcdn->get_dir()))))) &&
-	!mdr->more()->src_reanchor_atid) {
-      dout(10) << "reanchoring src->dst " << *srcdnl->get_inode() << dendl;
-      vector<Anchor> trace;
-      destdn->make_anchor_trace(trace, srcdnl->get_inode());
-      mds->anchorclient->prepare_update(srcdnl->get_inode()->ino(),
-					trace, &mdr->more()->src_reanchor_atid,
-					anchorgather.new_sub());
-    }
-    if (destdnl->is_primary() &&
-	destdnl->get_inode()->is_anchored() &&
-	!mdr->more()->dst_reanchor_atid) {
-      dout(10) << "reanchoring dst->stray " << *destdnl->get_inode() << dendl;
-
-      assert(straydn);
-      vector<Anchor> trace;
-      straydn->make_anchor_trace(trace, destdnl->get_inode());
-      
-      mds->anchorclient->prepare_update(destdnl->get_inode()->ino(), trace,
-		  &mdr->more()->dst_reanchor_atid, anchorgather.new_sub());
-    }
-
-    if (anchorgather.has_subs())  {
-      anchorgather.set_finisher(new C_MDS_RetryRequest(mdcache, mdr));
-      anchorgather.activate();
-      return;  // waiting for anchor prepares
-    }
-
     assert(g_conf->mds_kill_rename_at != 4);
-  }
 
   // -- prepare journal entry --
   mdr->ls = mdlog->get_current_segment();
@@ -5883,6 +5924,9 @@ void Server::handle_client_rename(MDRequest *mdr)
 void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
   dout(10) << "_rename_finish " << *mdr << dendl;
+
+  if (!mdr->more()->witnessed.empty())
+    mdcache->logged_master_update(mdr->reqid);
 
   // apply
   _rename_apply(mdr, srcdn, destdn, straydn);
@@ -6498,15 +6542,12 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   // stray?
   bool linkmerge = (srcdnl->get_inode() == destdnl->get_inode() &&
 		    (srcdnl->is_primary() || destdnl->is_primary()));
-  CDentry *straydn = 0;
-  if (destdnl->is_primary() && !linkmerge) {
-    assert(mdr->slave_request->stray.length() > 0);
-    straydn = mdcache->add_replica_stray(mdr->slave_request->stray, mdr->slave_to_mds);
+  CDentry *straydn = mdr->straydn;
+  if (destdnl->is_primary() && !linkmerge)
     assert(straydn);
-    mdr->pin(straydn);
-  }
 
   mdr->now = mdr->slave_request->now;
+  mdr->more()->srcdn_auth_mds = srcdn->authority().first;
 
   // set up commit waiter (early, to clean up any freezing etc we do)
   if (!mdr->more()->slave_commit)
@@ -6689,6 +6730,7 @@ void Server::_logged_slave_rename(MDRequest *mdr,
   // done.
   mdr->slave_request->put();
   mdr->slave_request = 0;
+  mdr->straydn = 0;
 }
 
 void Server::_commit_slave_rename(MDRequest *mdr, int r,
@@ -6766,10 +6808,17 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
     // abort
     //  rollback_bl may be empty if we froze the inode but had to provide an expanded
     // witness list from the master, and they failed before we tried prep again.
-    if (mdr->more()->rollback_bl.length())
-      do_rename_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, mdr);
-    else
+    if (mdr->more()->rollback_bl.length()) {
+      if (mdcache->is_ambiguous_slave_update(mdr->reqid, mdr->slave_to_mds)) {
+	mdcache->remove_ambiguous_slave_update(mdr->reqid, mdr->slave_to_mds);
+	// rollback but preserve the slave request
+	do_rename_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, NULL);
+      } else
+	do_rename_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, mdr);
+    } else {
       dout(10) << " rollback_bl empty, not rollback back rename (master failed after getting extra witnesses?)" << dendl;
+      mds->mdcache->request_finish(mdr);
+    }
   }
 }
 
@@ -6829,7 +6878,6 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   dout(10) << "do_rename_rollback on " << rollback.reqid << dendl;
   // need to finish this update before sending resolve to claim the subtree
   mds->mdcache->add_rollback(rollback.reqid, master);
-  assert(mdr || mds->is_resolve());
 
   Mutation *mut = new Mutation(rollback.reqid);
   mut->ls = mds->mdlog->get_current_segment();

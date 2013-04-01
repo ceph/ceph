@@ -343,7 +343,7 @@ public:
   CDir *add_dirfrag(CDir *dir);
   void close_dirfrag(frag_t fg);
   void close_dirfrags();
-  bool has_subtree_root_dirfrag();
+  bool has_subtree_root_dirfrag(int auth=-1);
 
   void force_dirfrags();
   void verify_dirfrags();

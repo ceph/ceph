@@ -41,7 +41,9 @@ void AnchorClient::handle_query_result(class MMDSTableRequest *m)
   ::decode(ino, p);
   ::decode(trace, p);
 
-  assert(pending_lookup.count(ino));
+  if (!pending_lookup.count(ino))
+    return;
+
   list<_pending_lookup> ls;
   ls.swap(pending_lookup[ino]);
   pending_lookup.erase(ino);
@@ -80,9 +82,12 @@ void AnchorClient::lookup(inodeno_t ino, vector<Anchor>& trace, Context *onfinis
 
 void AnchorClient::_lookup(inodeno_t ino)
 {
+  int ts = mds->mdsmap->get_tableserver();
+  if (mds->mdsmap->get_state(ts) < MDSMap::STATE_REJOIN)
+    return;
   MMDSTableRequest *req = new MMDSTableRequest(table, TABLESERVER_OP_QUERY, 0, 0);
   ::encode(ino, req->bl);
-  mds->send_message_mds(req, mds->mdsmap->get_tableserver());
+  mds->send_message_mds(req, ts);
 }
 
 

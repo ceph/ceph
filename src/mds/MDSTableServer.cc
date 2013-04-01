@@ -120,10 +120,13 @@ void MDSTableServer::_commit_logged(MMDSTableRequest *req)
 void MDSTableServer::handle_rollback(MMDSTableRequest *req)
 {
   dout(7) << "handle_rollback " << *req << dendl;
-  _rollback(req->get_tid());
-  _note_rollback(req->get_tid());
+
+  version_t tid = req->get_tid();
+  assert(pending_for_mds.count(tid));
+  _rollback(tid);
+  _note_rollback(tid);
   mds->mdlog->start_submit_entry(new ETableServer(table, TABLESERVER_OP_ROLLBACK, 0, -1, 
-						  req->get_tid(), version));
+						  tid, version));
   req->put();
 }
 
@@ -144,24 +147,30 @@ void MDSTableServer::do_server_update(bufferlist& bl)
 
 // recovery
 
-void MDSTableServer::finish_recovery()
+void MDSTableServer::finish_recovery(set<int>& active)
 {
   dout(7) << "finish_recovery" << dendl;
-  handle_mds_recovery(-1);  // resend agrees for everyone.
+  for (set<int>::iterator p = active.begin(); p != active.end(); ++p)
+    handle_mds_recovery(*p);  // resend agrees for everyone.
 }
 
 void MDSTableServer::handle_mds_recovery(int who)
 {
-  if (who >= 0)
-    dout(7) << "handle_mds_recovery mds." << who << dendl;
-  
+  dout(7) << "handle_mds_recovery mds." << who << dendl;
+
+  uint64_t next_reqid = 0;
   // resend agrees for recovered mds
   for (map<version_t,mds_table_pending_t>::iterator p = pending_for_mds.begin();
        p != pending_for_mds.end();
        ++p) {
-    if (who >= 0 && p->second.mds != who)
+    if (p->second.mds != who)
       continue;
+    if (p->second.reqid >= next_reqid)
+      next_reqid = p->second.reqid + 1;
     MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_AGREE, p->second.reqid, p->second.tid);
-    mds->send_message_mds(reply, p->second.mds);
+    mds->send_message_mds(reply, who);
   }
+
+  MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_SERVER_READY, next_reqid);
+  mds->send_message_mds(reply, who);
 }

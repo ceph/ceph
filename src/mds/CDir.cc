@@ -1022,6 +1022,7 @@ void CDir::assimilate_dirty_rstat_inodes()
   for (elist<CInode*>::iterator p = dirty_rstat_inodes.begin_use_current();
        !p.end(); ++p) {
     CInode *in = *p;
+    assert(in->is_auth());
     if (in->is_frozen())
       continue;
 
@@ -1553,16 +1554,59 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
       if (stale)
 	continue;
 
+      bool undef_inode = false;
       if (dn) {
-        if (dn->get_linkage()->get_inode() == 0) {
-          dout(12) << "_fetched  had NEG dentry " << *dn << dendl;
-        } else {
-          dout(12) << "_fetched  had dentry " << *dn << dendl;
-        }
-      } else {
+	CInode *in = dn->get_linkage()->get_inode();
+	if (in) {
+	  dout(12) << "_fetched  had dentry " << *dn << dendl;
+	  if (in->state_test(CInode::STATE_REJOINUNDEF)) {
+	    assert(cache->mds->is_rejoin());
+	    assert(in->vino() == vinodeno_t(inode.ino, last));
+	    in->state_clear(CInode::STATE_REJOINUNDEF);
+	    cache->opened_undef_inode(in);
+	    undef_inode = true;
+	  }
+	} else
+	  dout(12) << "_fetched  had NEG dentry " << *dn << dendl;
+      }
+
+      if (!dn || undef_inode) {
 	// add inode
 	CInode *in = cache->get_inode(inode.ino, last);
-	if (in) {
+	if (!in || undef_inode) {
+	  if (undef_inode)
+	    in->first = first;
+	  else
+	    in = new CInode(cache, true, first, last);
+	  
+	  in->inode = inode;
+	  // symlink?
+	  if (in->is_symlink()) 
+	    in->symlink = symlink;
+	  
+	  in->dirfragtree.swap(fragtree);
+	  in->xattrs.swap(xattrs);
+	  in->decode_snap_blob(snapbl);
+	  in->old_inodes.swap(old_inodes);
+	  if (snaps)
+	    in->purge_stale_snap_data(*snaps);
+
+	  if (undef_inode) {
+	    if (inode.anchored)
+	      dn->adjust_nested_anchors(1);
+	  } else {
+	    cache->add_inode( in ); // add
+	    dn = add_primary_dentry(dname, in, first, last); // link
+	  }
+	  dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
+
+	  if (in->inode.is_dirty_rstat())
+	    in->mark_dirty_rstat();
+
+	  //in->hack_accessed = false;
+	  //in->hack_load_stamp = ceph_clock_now(g_ceph_context);
+	  //num_new_inodes_loaded++;
+	} else {
 	  dout(0) << "_fetched  badness: got (but i already had) " << *in
 		  << " mode " << in->inode.mode
 		  << " mtime " << in->inode.mtime << dendl;
@@ -1575,35 +1619,6 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
 	    << ", but inode " << in->vino() << " v" << in->inode.version
 	    << " already exists at " << inopath << "\n";
 	  continue;
-	} else {
-	  // inode
-	  in = new CInode(cache, true, first, last);
-	  in->inode = inode;
-	  
-	  // symlink?
-	  if (in->is_symlink()) 
-	    in->symlink = symlink;
-	  
-	  in->dirfragtree.swap(fragtree);
-	  in->xattrs.swap(xattrs);
-	  in->decode_snap_blob(snapbl);
-	  in->old_inodes.swap(old_inodes);
-	  if (snaps)
-	    in->purge_stale_snap_data(*snaps);
-
-	  // add 
-	  cache->add_inode( in );
-	
-	  // link
-	  dn = add_primary_dentry(dname, in, first, last);
-	  dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
-
-	  if (in->inode.is_dirty_rstat())
-	    in->mark_dirty_rstat();
-
-	  //in->hack_accessed = false;
-	  //in->hack_load_stamp = ceph_clock_now(g_ceph_context);
-	  //num_new_inodes_loaded++;
 	}
       }
     } else {
@@ -2134,7 +2149,7 @@ void CDir::finish_export(utime_t now)
   dirty_old_rstat.clear();
 }
 
-void CDir::decode_import(bufferlist::iterator& blp, utime_t now)
+void CDir::decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls)
 {
   ::decode(first, blp);
   ::decode(fnode, blp);
@@ -2147,7 +2162,10 @@ void CDir::decode_import(bufferlist::iterator& blp, utime_t now)
   ::decode(s, blp);
   state &= MASK_STATE_IMPORT_KEPT;
   state |= (s & MASK_STATE_EXPORTED);
-  if (is_dirty()) get(PIN_DIRTY);
+  if (is_dirty()) {
+    get(PIN_DIRTY);
+    _mark_dirty(ls);
+  }
 
   ::decode(dir_rep, blp);
 
