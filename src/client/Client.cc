@@ -1276,22 +1276,17 @@ int Client::make_request(MetaRequest *request,
     // choose mds
     int mds = choose_target_mds(request);
     if (mds < 0 || !mdsmap->is_active_or_stopping(mds)) {
-      Cond mdsmap_cond;
       ldout(cct, 10) << " target mds." << mds << " not active, waiting for new mdsmap" << dendl;
-      waiting_for_mdsmap.push_back(&mdsmap_cond);
-      mdsmap_cond.Wait(client_lock);
+      wait_on_list(waiting_for_mdsmap);
       continue;
     }
 
     // open a session?
     MetaSession *session = NULL;
     if (!have_open_session(mds)) {
-      Cond session_cond;
-
       if (!mdsmap->is_active_or_stopping(mds)) {
 	ldout(cct, 10) << "no address for mds." << mds << ", waiting for new mdsmap" << dendl;
-	waiting_for_mdsmap.push_back(&session_cond);
-	session_cond.Wait(client_lock);
+	wait_on_list(waiting_for_mdsmap);
 
 	if (!mdsmap->is_active_or_stopping(mds)) {
 	  ldout(cct, 10) << "hmm, still have no address for mds." << mds << ", trying a random mds" << dendl;
@@ -1304,11 +1299,13 @@ int Client::make_request(MetaRequest *request,
 
       // wait
       if (session->state == MetaSession::STATE_OPENING) {
+	Cond session_cond;
 	session->waiting_for_open.push_back(&session_cond);
 	while (session->state == MetaSession::STATE_OPENING) {
 	  ldout(cct, 10) << "waiting for session to mds." << mds << " to open" << dendl;
 	  session_cond.Wait(client_lock);
 	}
+	session->waiting_for_open.remove(&session_cond);
       }
 
       if (!have_open_session(mds))
@@ -1899,9 +1896,7 @@ void Client::handle_mds_map(MMDSMap* m)
   }
 
   // kick any waiting threads
-  list<Cond*> ls;
-  ls.swap(waiting_for_mdsmap);
-  signal_cond_list(ls);
+  signal_cond_list(waiting_for_mdsmap);
 
   delete oldmap;
   m->put();
@@ -2589,13 +2584,13 @@ void Client::wait_on_list(list<Cond*>& ls)
   Cond cond;
   ls.push_back(&cond);
   cond.Wait(client_lock);
+  ls.remove(&cond);
 }
 
 void Client::signal_cond_list(list<Cond*>& ls)
 {
   for (list<Cond*>::iterator it = ls.begin(); it != ls.end(); ++it)
     (*it)->Signal();
-  ls.clear();
 }
 
 void Client::wake_inode_waiters(MetaSession *s)
