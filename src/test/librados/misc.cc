@@ -308,6 +308,10 @@ TEST(LibRadosMisc, Operate1PP) {
     o.setxattr("key1", bl);
   }
   ASSERT_EQ(0, ioctx.operate("foo", &o));
+
+  ObjectWriteOperation empty;
+  ASSERT_EQ(0, ioctx.operate("foo", &empty));
+
   {
     bufferlist bl;
     ASSERT_GT(ioctx.getxattr("foo", "key1", bl), 0);
