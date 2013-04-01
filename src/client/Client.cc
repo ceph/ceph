@@ -1510,6 +1510,7 @@ void Client::_closed_mds_session(MetaSession *s)
 {
   s->state = MetaSession::STATE_CLOSED;
   messenger->mark_down(s->con);
+  signal_cond_list(s->waiting_for_open);
   mount_cond.Signal();
   remove_session_caps(s);
   kick_requests(s, true);
@@ -1543,7 +1544,6 @@ void Client::handle_client_session(MClientSession *m)
 
   case CEPH_SESSION_CLOSE:
     _closed_mds_session(session);
-    signal_cond_list(session->waiting_for_open);
     break;
 
   case CEPH_SESSION_RENEWCAPS:
@@ -5639,7 +5639,8 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
     movepos = true;
   }
 
-  if (!conf->client_debug_force_sync_read && (have & CEPH_CAP_FILE_CACHE)) {
+  if (!conf->client_debug_force_sync_read &&
+      (cct->_conf->client_oc && (have & CEPH_CAP_FILE_CACHE))) {
 
     if (f->flags & O_RSYNC) {
       _flush_range(in, offset, size);
