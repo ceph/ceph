@@ -123,11 +123,11 @@ bool RGWCORSRule_S3::xml_end(const char *el) {
   if ((obj = iter.get_next())) {
     char *end = NULL;
 
-    unsigned long ul = strtoul(obj->get_data().c_str(), &end, 10);
-    if (ul == ULONG_MAX || ul >= 0x100000000LL) {
+    unsigned long long ull = strtoull(obj->get_data().c_str(), &end, 10);
+    if (ull >= 0x100000000ull) {
       max_age = CORS_MAX_AGE_INVALID;
     } else  {
-      max_age = (uint32_t)ul;
+      max_age = (uint32_t)ull;
     }
     dout(10) << "RGWCORSRule : max_age : " << max_age << dendl;
   }
