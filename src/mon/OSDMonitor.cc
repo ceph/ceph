@@ -2241,11 +2241,13 @@ bool OSDMonitor::update_pools_status()
       if (!pool_is_full)
 	continue;
 
-      if ((uint64_t)sum.num_bytes >= pool.quota_max_bytes) {
+      if (pool.quota_max_bytes > 0 &&
+          (uint64_t)sum.num_bytes >= pool.quota_max_bytes) {
         mon->clog.warn() << "pool '" << pool_name << "' is full"
                          << " (reached quota's max_bytes: "
                          << si_t(pool.quota_max_bytes) << ")";
-      } else if ((uint64_t)sum.num_objects >= pool.quota_max_objects) {
+      } else if (pool.quota_max_objects > 0 &&
+		 (uint64_t)sum.num_objects >= pool.quota_max_objects) {
         mon->clog.warn() << "pool '" << pool_name << "' is full"
                          << " (reached quota's max_objects: "
                          << pool.quota_max_objects << ")";
