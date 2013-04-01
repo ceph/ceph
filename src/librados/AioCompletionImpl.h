@@ -47,7 +47,7 @@ struct librados::AioCompletionImpl {
   tid_t aio_write_seq;
   xlist<AioCompletionImpl*>::item aio_write_list_item;
 
-  AioCompletionImpl() : lock("AioCompletionImpl lock"),
+  AioCompletionImpl() : lock("AioCompletionImpl lock", false, false),
 			ref(1), rval(0), released(false), ack(false), safe(false),
 			callback_complete(0), callback_safe(0), callback_arg(0),
 			is_read(false), pbl(0), buf(0), maxlen(0),
