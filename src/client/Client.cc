@@ -5631,7 +5631,8 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
     movepos = true;
   }
 
-  if (!conf->client_debug_force_sync_read && (have & CEPH_CAP_FILE_CACHE)) {
+  if (!conf->client_debug_force_sync_read &&
+      (cct->_conf->client_oc && (have & CEPH_CAP_FILE_CACHE))) {
 
     if (f->flags & O_RSYNC) {
       _flush_range(in, offset, size);
