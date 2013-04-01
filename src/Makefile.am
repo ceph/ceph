@@ -425,6 +425,7 @@ librbd_la_SOURCES = \
 	librbd/WatchCtx.cc \
 	osdc/ObjectCacher.cc \
 	osdc/Striper.cc \
+	librados/snap_set_diff.cc \
 	cls/lock/cls_lock_client.cc \
 	cls/lock/cls_lock_types.cc \
 	cls/lock/cls_lock_ops.cc \
@@ -1701,6 +1702,7 @@ noinst_HEADERS = \
 	include/rbd/librbd.h\
 	include/rbd/librbd.hpp\
         include/util.h\
+	librados/snap_set_diff.h\
 	librados/AioCompletionImpl.h\
 	librados/IoCtxImpl.h\
 	librados/PoolAsyncCompletionImpl.h\

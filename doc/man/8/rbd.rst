@@ -166,6 +166,26 @@ Commands
   if possible.  For import from stdin, the sparsification unit is
   the data block size of the destination image (1 << order).
 
+:command:`export-diff` [*image-name*] [*dest-path*] [--from-snap *snapname*]
+  Exports an incremental diff for an image to dest path (use - for stdout).  If
+  an initial snapshot is specified, only changes since that snapshot are included; otherwise,
+  any regions of the image that contain data are included.  The end snapshot is specified
+  using the standard --snap option or @snap syntax (see below).  The image diff format includes
+  metadata about image size changes, and the start and end snapshots.  It efficiently represents
+  discarded or 'zero' regions of the image.
+
+:command:`import-diff` [*src-path*] [*image-name*]
+  Imports an incremental diff of an image and applies it to the current image.  If the diff
+  was generated relative to a start snapshot, we verify that snapshot already exists before
+  continuing.  If there was an end snapshot we verify it does not already exist before
+  applying the changes, and create the snapshot when we are done.
+
+:command:`diff` [*image-name*] [--from-snap *snapname*]
+  Dump a list of byte extents in the image that have changed since the specified start
+  snapshot, or since the image was created.  Each output line includes the starting offset
+  (in bytes), the length of the region (in bytes), and either 'zero' or 'data' to indicate
+  whether the region is known to be zeros or may contain other data.
+
 :command:`cp` [*src-image*] [*dest-image*]
   Copies the content of a src-image into the newly created dest-image.
   dest-image will have the same size, order, and format as src-image.

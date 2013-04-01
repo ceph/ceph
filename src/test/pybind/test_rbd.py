@@ -454,6 +454,31 @@ class TestImage(object):
             self.image.unlock(str(i))
         eq([], self.image.list_lockers())
 
+    def test_diff_iterate(self):
+        check_diff(self.image, 0, IMG_SIZE, None, [])
+        self.image.write('a' * 256, 0)
+        check_diff(self.image, 0, IMG_SIZE, None, [(0, 256, True)])
+        self.image.write('b' * 256, 256)
+        check_diff(self.image, 0, IMG_SIZE, None, [(0, 512, True)])
+        self.image.discard(128, 256)
+        check_diff(self.image, 0, IMG_SIZE, None, [(0, 512, True)])
+
+        self.image.create_snap('snap1')
+        self.image.discard(0, 1 << IMG_ORDER)
+        self.image.create_snap('snap2')
+        self.image.set_snap('snap2')
+        check_diff(self.image, 0, IMG_SIZE, 
+                   'snap1', [(0, 512, False)])
+        self.image.remove_snap('snap1')
+        self.image.remove_snap('snap2')
+
+
+def check_diff(image, offset, length, from_snapshot, expected):
+    extents = []
+    def cb(offset, length, exists):
+        extents.append((offset, length, exists))
+    image.diff_iterate(0, IMG_SIZE, None, cb)
+    eq(extents, expected)
 
 class TestClone(object):
 

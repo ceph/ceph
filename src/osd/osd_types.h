@@ -2114,8 +2114,6 @@ struct obj_list_watch_response_t {
 WRITE_CLASS_ENCODER(obj_list_watch_response_t)
 
 struct clone_info {
-  static const snapid_t HEAD;
-
   snapid_t cloneid;
   vector<snapid_t> snaps;  // ascending
   vector< pair<uint64_t,uint64_t> > overlap;
@@ -2140,7 +2138,7 @@ struct clone_info {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const {
-    if (cloneid == HEAD)
+    if (cloneid == CEPH_NOSNAP)
       f->dump_string("cloneid", "HEAD");
     else
       f->dump_unsigned("cloneid", cloneid.val);
@@ -2171,7 +2169,7 @@ struct clone_info {
     o.back()->overlap.push_back(pair<uint64_t,uint64_t>(8192,4096));
     o.back()->size = 16384;
     o.push_back(new clone_info);
-    o.back()->cloneid = HEAD;
+    o.back()->cloneid = CEPH_NOSNAP;
     o.back()->size = 32768;
   }
 };
@@ -2183,15 +2181,21 @@ WRITE_CLASS_ENCODER(clone_info)
  */
 struct obj_list_snap_response_t {
   vector<clone_info> clones;   // ascending
+  snapid_t seq;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(clones, bl);
+    ::encode(seq, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(clones, bl);
+    if (struct_v >= 2)
+      ::decode(seq, bl);
+    else
+      seq = CEPH_NOSNAP;
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const {
@@ -2201,6 +2205,7 @@ struct obj_list_snap_response_t {
       p->dump(f);
       f->close_section();
     }
+    f->dump_unsigned("seq", seq);
     f->close_section();
   }
   static void generate_test_instances(list<obj_list_snap_response_t*>& o) {
@@ -2213,11 +2218,12 @@ struct obj_list_snap_response_t {
     cl.overlap.push_back(pair<uint64_t,uint64_t>(8192,4096));
     cl.size = 16384;
     o.back()->clones.push_back(cl);
-    cl.cloneid = clone_info::HEAD;
+    cl.cloneid = CEPH_NOSNAP;
     cl.snaps.clear();
     cl.overlap.clear();
     cl.size = 32768;
     o.back()->clones.push_back(cl);
+    o.back()->seq = 123;
   }
 };
 

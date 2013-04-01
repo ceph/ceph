@@ -20,6 +20,13 @@
                                                 (dest defaults
                                                  as the filename part of file)
                                                 "-" for stdin
+    diff <image-name> [--from-snap <snap-name>] print extents that differ since
+                                                a previous snap, or image creation
+    export-diff <image-name> [--from-snap <snap-name>] <path>
+                                                export an incremental diff to
+                                                path, or "-" for stdout
+    import-diff <path> <image-name>             import an incremental diff from
+                                                path or "-" for stdin
     (cp | copy) <src> <dest>                    copy src image to dest
     (mv | rename) <src> <dest>                  rename src image to dest
     snap ls <image-name>                        dump list of image snapshots
@@ -39,7 +46,11 @@
     lock list <image-name>                      show locks held on an image
     lock add <image-name> <id> [--shared <tag>] take a lock called id on an image
     lock remove <image-name> <id> <locker>      release a lock on an image
-    bench-write <image-name> --io-size <bytes> --io-threads <num> --io-total <bytes>
+    bench-write <image-name>                    simple write benchmark
+                   --io-size <bytes>              write size
+                   --io-threads <num>             ios in flight
+                   --io-total <bytes>             total bytes to write
+                   --io-pattern <seq|rand>        write pattern
   
   <image-name>, <snap-name> are [pool/]name[@snap], or you may specify
   individual pieces of names with -p/--pool, --image, and/or --snap.

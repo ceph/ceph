@@ -33,6 +33,7 @@
 
 #include "test/librados/test.h"
 #include "common/errno.h"
+#include "include/interval_set.h"
 #include "include/stringify.h"
 
 using namespace std;
@@ -565,14 +566,20 @@ TEST(LibRBD, TestCreateLsDeleteSnapPP)
     ASSERT_EQ(0, create_image_pp(rbd, ioctx, name, size, &order));
     ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
 
+    ASSERT_FALSE(image.snap_exists("snap1"));
     ASSERT_EQ(0, image.snap_create("snap1"));
+    ASSERT_TRUE(image.snap_exists("snap1"));
     ASSERT_EQ(1, test_ls_snaps(image, 1, "snap1", size));
     ASSERT_EQ(0, image.resize(size2));
+    ASSERT_FALSE(image.snap_exists("snap2"));
     ASSERT_EQ(0, image.snap_create("snap2"));
+    ASSERT_TRUE(image.snap_exists("snap2"));
     ASSERT_EQ(2, test_ls_snaps(image, 2, "snap1", size, "snap2", size2));
     ASSERT_EQ(0, image.snap_remove("snap1"));
+    ASSERT_FALSE(image.snap_exists("snap1"));
     ASSERT_EQ(1, test_ls_snaps(image, 1, "snap2", size2));
     ASSERT_EQ(0, image.snap_remove("snap2"));
+    ASSERT_FALSE(image.snap_exists("snap2"));
     ASSERT_EQ(0, test_ls_snaps(image, 0));
   }
 
@@ -1491,6 +1498,239 @@ TEST(LibRBD, FlushAioPP)
     }
   }
 
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
+
+int iterate_cb(uint64_t off, size_t len, int exists, void *arg)
+{
+  cout << "iterate_cb " << off << "~" << len << std::endl;
+  interval_set<uint64_t> *diff = static_cast<interval_set<uint64_t> *>(arg);
+  diff->insert(off, len);
+  return 0;
+}
+
+void scribble(librbd::Image& image, int n, int max, interval_set<uint64_t> *exists, interval_set<uint64_t> *what)
+{
+  uint64_t size;
+  image.size(&size);
+  for (int i=0; i<n; i++) {
+    uint64_t off = rand() % (size - max + 1);
+    uint64_t len = 1 + rand() % max;
+    interval_set<uint64_t> w;
+    w.insert(off, len);
+    if (rand() % 4 == 0) {
+      ASSERT_EQ((int)len, image.discard(off, len));
+      w.intersection_of(*exists);
+      what->union_of(w);
+      exists->subtract(w);
+    } else {
+      bufferlist bl;
+      bl.append(buffer::create(len));
+      bl.zero();
+      ASSERT_EQ((int)len, image.write(off, len, bl));
+      what->union_of(w);
+      exists->union_of(w);
+    }
+  }
+}
+
+TEST(LibRBD, DiffIterate)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    const char *name = "testimg";
+    uint64_t size = 20 << 20;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name, size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
+
+    interval_set<uint64_t> exists;
+    interval_set<uint64_t> one, two;
+    scribble(image, 10, 102400, &exists, &one);
+    cout << " wrote " << one << std::endl;
+    ASSERT_EQ(0, image.snap_create("one"));
+    scribble(image, 10, 102400, &exists, &two);
+    cout << " wrote " << two << std::endl;
+
+    interval_set<uint64_t> diff;
+    ASSERT_EQ(0, image.diff_iterate("one", 0, size, iterate_cb, (void *)&diff));
+    cout << " diff was " << diff << std::endl;
+    if (!two.subset_of(diff)) {
+      interval_set<uint64_t> i;
+      i.intersection_of(two, diff);
+      interval_set<uint64_t> l = two;
+      l.subtract(i);
+      cout << " ... two - (two*diff) = " << l << std::endl;     
+    }
+    ASSERT_TRUE(two.subset_of(diff));
+  }
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
+struct diff_extent {
+  diff_extent(uint64_t offset, uint64_t length, bool exists) :
+    offset(offset), length(length), exists(exists) {}
+  uint64_t offset;
+  uint64_t length;
+  bool exists;
+  bool operator==(const diff_extent& o) const {
+    return offset == o.offset && length == o.length && exists == o.exists;
+  }
+};
+
+ostream& operator<<(ostream & o, const diff_extent& e) {
+  return o << '(' << e.offset << '~' << e.length << ' ' << (e.exists ? "true" : "false") << ')';
+}
+
+int vector_iterate_cb(uint64_t off, size_t len, int exists, void *arg)
+{
+  cout << "iterate_cb " << off << "~" << len << std::endl;
+  vector<diff_extent> *diff = static_cast<vector<diff_extent> *>(arg);
+  diff->push_back(diff_extent(off, len, exists));
+  return 0;
+}
+
+TEST(LibRBD, DiffIterateDiscard)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    const char *name = "testimg";
+    uint64_t size = 20 << 20;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name, size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
+
+    vector<diff_extent> extents;
+    ceph::bufferlist bl;
+
+    ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
+				    vector_iterate_cb, (void *) &extents));
+    ASSERT_EQ(0u, extents.size());
+
+    char data[256];
+    bl.append(data, 256);
+    ASSERT_EQ(256, image.write(0, 256, bl));
+    ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
+				    vector_iterate_cb, (void *) &extents));
+    ASSERT_EQ(1u, extents.size());
+    ASSERT_EQ(diff_extent(0, 256, true), extents[0]);
+
+    int obj_ofs = 256;
+    ASSERT_EQ(obj_ofs, image.discard(0, obj_ofs));
+
+    extents.clear();
+    ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
+				    vector_iterate_cb, (void *) &extents));
+    ASSERT_EQ(0u, extents.size());
+
+    ASSERT_EQ(0, image.snap_create("snap1"));
+    ASSERT_EQ(256, image.write(0, 256, bl));
+    ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
+				    vector_iterate_cb, (void *) &extents));
+    ASSERT_EQ(1u, extents.size());
+    ASSERT_EQ(diff_extent(0, 256, true), extents[0]);
+    ASSERT_EQ(0, image.snap_create("snap2"));
+
+    ASSERT_EQ(obj_ofs, image.discard(0, obj_ofs));
+
+    extents.clear();
+    ASSERT_EQ(0, image.snap_set("snap2"));
+    ASSERT_EQ(0, image.diff_iterate("snap1", 0, size,
+				    vector_iterate_cb, (void *) &extents));
+    ASSERT_EQ(1u, extents.size());
+    ASSERT_EQ(diff_extent(0, 256, true), extents[0]);
+
+    ASSERT_EQ(0, image.snap_set(NULL));
+    ASSERT_EQ(1 << order, image.discard(0, 1 << order));
+    ASSERT_EQ(0, image.snap_create("snap3"));
+    ASSERT_EQ(0, image.snap_set("snap3"));
+
+    extents.clear();
+    ASSERT_EQ(0, image.diff_iterate("snap1", 0, size,
+				    vector_iterate_cb, (void *) &extents));
+    ASSERT_EQ(1u, extents.size());
+    ASSERT_EQ(diff_extent(0, 256, false), extents[0]);
+  }
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
+TEST(LibRBD, DiffIterateStress)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    const char *name = "testimg";
+    uint64_t size = 400 << 20;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name, size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
+
+    interval_set<uint64_t> exists;
+    vector<interval_set<uint64_t> > wrote;
+    vector<string> snap;
+    int n = 10;
+    for (int i=0; i<n; i++) {
+      interval_set<uint64_t> w;
+      scribble(image, 10, 8192000, &exists, &w);
+      cout << " i=" << i << " exists " << exists << " wrote " << w << std::endl;
+      string s = "snap" + stringify(i);
+      ASSERT_EQ(0, image.snap_create(s.c_str()));
+      wrote.push_back(w);
+      snap.push_back(s);
+    }
+
+    for (int i=0; i<n-1; i++) {
+      for (int j=i+1; j<n; j++) {
+	interval_set<uint64_t> diff, actual;
+	for (int k=i+1; k<=j; k++)
+	  diff.union_of(wrote[k]);
+	cout << "from " << i << " to " << j << " diff " << diff << std::endl;
+
+	image.snap_set(snap[j].c_str());
+	ASSERT_EQ(0, image.diff_iterate(snap[i].c_str(), 0, size, iterate_cb, (void *)&actual));
+	cout << " actual was " << actual << std::endl;
+	if (!diff.subset_of(actual)) {
+	  interval_set<uint64_t> i;
+	  i.intersection_of(diff, actual);
+	  interval_set<uint64_t> l = diff;
+	  l.subtract(i);
+	  cout << " ... diff - (actual*diff) = " << l << std::endl;     
+	}
+	ASSERT_TRUE(diff.subset_of(actual));
+      }
+    }
+
+  }
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }

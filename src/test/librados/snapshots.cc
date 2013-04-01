@@ -332,7 +332,7 @@ TEST(LibRadosSnapshots, SelfManagedSnapRollbackPP) {
 
   snap_set_t ss;
 
-  snap_t head = clone_info_t::HEAD;
+  snap_t head = SNAP_HEAD;
   ASSERT_EQ(0, ioctx.list_snaps("foo", &ss));
   ASSERT_EQ(1u, ss.clones.size());
   ASSERT_EQ(head, ss.clones[0].cloneid);
@@ -415,7 +415,7 @@ TEST(LibRadosSnapshots, SelfManagedSnapOverlapPP) {
   ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), bufsize*8));
 
   snap_set_t ss;
-  snap_t head = clone_info_t::HEAD;
+  snap_t head = SNAP_HEAD;
   ASSERT_EQ(0, ioctx.list_snaps("foo", &ss));
   ASSERT_EQ(1u, ss.clones.size());
   ASSERT_EQ(head, ss.clones[0].cloneid);
