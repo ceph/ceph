@@ -74,7 +74,7 @@ class test_cors_helper {
     int send_request(string method, string uri, 
                      size_t (*function)(void *,size_t,size_t,void *) = 0,
                      void *ud = 0, size_t length = 0);
-    int extract_input(int argc, char *argv[]);
+    int extract_input(unsigned argc, char *argv[]);
     string& get_response(string hdr){
       return response[hdr];
     }
@@ -92,12 +92,12 @@ class test_cors_helper {
     key_type get_key_type(){return kt;}
 };
 
-int test_cors_helper::extract_input(int argc, char *argv[]){
+int test_cors_helper::extract_input(unsigned argc, char *argv[]){
 #define ERR_CHECK_NEXT_PARAM(o) \
   if((loop + 1) >= argc)return -1; \
   else o = argv[loop+1];
 
-  for(unsigned loop = 1;loop < (unsigned)argc; loop += 2){
+  for(unsigned loop = 1;loop < argc; loop += 2){
     if(strcmp(argv[loop], "-g") == 0){
       ERR_CHECK_NEXT_PARAM(host);
     }else if(strcmp(argv[loop], "-k") == 0){
@@ -889,7 +889,7 @@ int main(int argc, char *argv[]){
 #endif
   finisher->start();
 
-  if(g_test->extract_input(argc, argv) < 0){
+  if(g_test->extract_input((unsigned)argc, argv) < 0){
     print_usage(argv[0]);
     return -1;
   }
