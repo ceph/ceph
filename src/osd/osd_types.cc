@@ -20,8 +20,6 @@ extern "C" {
 #include "PG.h"
 #include "OSDMap.h"
 
-const snapid_t clone_info::HEAD((uint64_t)-1);
-
 // -- osd_reqid_t --
 void osd_reqid_t::encode(bufferlist &bl) const
 {
@@ -2990,6 +2988,8 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     switch (op.op.op) {
     case CEPH_OSD_OP_STAT:
     case CEPH_OSD_OP_DELETE:
+    case CEPH_OSD_OP_LIST_WATCHERS:
+    case CEPH_OSD_OP_LIST_SNAPS:
       break;
     case CEPH_OSD_OP_TRUNCATE:
       out << " " << op.op.extent.offset;
