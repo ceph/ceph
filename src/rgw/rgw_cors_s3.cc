@@ -47,13 +47,13 @@ void RGWCORSRule_S3::to_xml(XMLFormatter& f) {
   /*AllowedOrigins*/
   for(set<string>::iterator it = allowed_origins.begin(); 
       it != allowed_origins.end(); 
-      it++) {
+      ++it) {
     string host = *it;
     f.dump_string("AllowedOrigin", host);
   }
   /*AllowedHeader*/
   for(set<string>::iterator it = allowed_hdrs.begin(); 
-      it != allowed_hdrs.end(); it++) {
+      it != allowed_hdrs.end(); ++it) {
     f.dump_string("AllowedHeader", *it);
   }
   /*MaxAgeSeconds*/
@@ -62,7 +62,7 @@ void RGWCORSRule_S3::to_xml(XMLFormatter& f) {
   }
   /*ExposeHeader*/
   for(list<string>::iterator it = exposable_hdrs.begin(); 
-      it != exposable_hdrs.end(); it++) {
+      it != exposable_hdrs.end(); ++it) {
     f.dump_string("ExposeHeader", *it);
   }
   f.close_section();
@@ -156,7 +156,7 @@ void RGWCORSConfiguration_S3::to_xml(ostream& out) {
   XMLFormatter f;
   f.open_object_section("CORSConfiguration");
   for(list<RGWCORSRule>::iterator it = rules.begin();
-      it != rules.end(); it++) {
+      it != rules.end(); ++it) {
     (static_cast<RGWCORSRule_S3 &>(*it)).to_xml(f);
   }
   f.close_section();
