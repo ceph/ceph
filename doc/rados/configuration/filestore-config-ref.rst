@@ -21,6 +21,12 @@ Additionally, in some cases, the filesystem may not be as fast as an alternative
 method of storing XATTRs. The following settings may help improve performance
 by using a method of storing XATTRs that is extrinsic to the underlying filesystem.
 
+Ceph XATTRs are stored as ``inline xattr``, using the XATTRs provided
+by the underlying file system, if it does not impose a size limit. If
+there is a size limit ( 4KB total on ext4, for instance ), some Ceph
+XATTRs will be stored in an key/value database ( aka ``omap`` ) when
+the ``filestore max inline xattr size`` or ``filestore max inline
+xattrs`` threshold are reached.
 
 ``filestore xattr use omap``
 
