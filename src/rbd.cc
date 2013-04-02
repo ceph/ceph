@@ -1150,7 +1150,7 @@ struct output_method {
 
 static int diff_cb(uint64_t ofs, size_t len, int exists, void *arg)
 {
-  output_method *om = (output_method *) arg;
+  output_method *om = static_cast<output_method *>(arg);
   om->empty = false;
   if (om->f) {
     om->f->open_object_section("extent");
