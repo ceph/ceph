@@ -201,14 +201,18 @@ def is_mounted(dev):
     Check if the given device is mounted.
     """
     dev = os.path.realpath(dev)
-    with file('/proc/mounts') as f:
-        for line in f.read().split('\n'):
-            d = line.split(' ')[0]
-            if os.path.exists(d):
+    with file('/proc/mounts', 'rb') as proc_mounts:
+        for line in proc_mounts:
+            fields = line.split()
+            if len(fields) < 3:
+                continue
+            d = fields[0]
+            path = fields[1]
+            if d.startswith('/') and os.path.exists(d):
                 d = os.path.realpath(d)
-                if dev == d:
-                    return True
-    return False
+                if d == dev:
+                    return path
+    return None
 
 
 def is_held(dev):
@@ -1643,20 +1647,6 @@ def get_partition_uuid(dev):
         m = re.match('Partition unique GUID: (\S+)', line)
         if m:
             return m.group(1).lower()
-    return None
-
-def is_mounted(dev):
-    with file('/proc/mounts', 'rb') as proc_mounts:
-        for line in proc_mounts:
-            fields = line.split()
-            if len(fields) < 3:
-                continue
-            d = fields[0]
-            path = fields[1]
-            if d.startswith('/') and os.path.exists(d):
-                d = os.path.realpath(d)
-                if d == dev:
-                    return path
     return None
 
 def more_osd_info(path, uuid_map):
