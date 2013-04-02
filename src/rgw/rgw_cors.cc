@@ -45,7 +45,7 @@ void RGWCORSRule::erase_origin_if_present(string& origin, bool *rule_empty) {
     dout(10) << "Found origin " << origin << ", set size:" << 
         allowed_origins.size() << dendl;
     allowed_origins.erase(it);
-    *rule_empty = (allowed_origins.size() == 0);
+    *rule_empty = (allowed_origins.empty());
   }
 }
 
