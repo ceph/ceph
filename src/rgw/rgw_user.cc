@@ -1785,11 +1785,11 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
   user_info = old_info;
 
   std::string old_email = old_info.user_email;
-  bool same_email = false;
   if (!op_email.empty()) {
+    bool same_email = false;
     same_email = (old_email.compare(op_email) == 0);
 
-  // make sure we are not adding a duplicate email
+    // make sure we are not adding a duplicate email
     if (!same_email) {
       ret = rgw_get_user_info_by_email(store, op_email, duplicate_check);
       if (ret >= 0 && duplicate_check.user_id != user_id) {
