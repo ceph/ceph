@@ -385,7 +385,6 @@ struct RGWUserAdminOpState {
     key_specified = false;
     type_specified = false;
     purge_data = false;
-    purge_keys = false;
     display_name_specified = false;
     user_email_specified = false;
     max_buckets_specified = false;
