@@ -1715,9 +1715,9 @@ def list_dev(dev, uuid_map, journal_map):
             desc = ['ceph data', 'unprepared']
     elif ptype == 'ceph journal':
         desc.append('ceph journal')
-        uuid = get_partition_uuid(dev)
-        if uuid and uuid in journal_map:
-            desc.append('for %s' % journal_map[uuid])
+        part_uuid = get_partition_uuid(dev)
+        if part_uuid and part_uuid in journal_map:
+            desc.append('for %s' % journal_map[part_uuid])
     else:
         if is_swap(dev):
             desc.append('swap')
@@ -1742,9 +1742,9 @@ def main_list(args):
     for base, parts in sorted(partmap.iteritems()):
         for p in parts:
             dev = '/dev/' + p
-            uuid = get_partition_uuid(dev)
-            if uuid:
-                uuid_map[uuid] = dev
+            part_uuid = get_partition_uuid(dev)
+            if part_uuid:
+                uuid_map[part_uuid] = dev
             ptype = get_partition_type(dev)
             if ptype == 'ceph data':
                 fs = get_dev_fs(dev)
