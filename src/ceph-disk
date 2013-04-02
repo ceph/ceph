@@ -206,11 +206,11 @@ def is_mounted(dev):
             fields = line.split()
             if len(fields) < 3:
                 continue
-            d = fields[0]
+            mounts_dev = fields[0]
             path = fields[1]
-            if d.startswith('/') and os.path.exists(d):
-                d = os.path.realpath(d)
-                if d == dev:
+            if mounts_dev.startswith('/') and os.path.exists(mounts_dev):
+                mounts_dev = os.path.realpath(mounts_dev)
+                if mounts_dev == dev:
                     return path
     return None
 
