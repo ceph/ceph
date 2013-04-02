@@ -281,10 +281,10 @@ def main():
       cmd += [ key ]
       opLOG.debug('key: {k}'.format(k=key))
       run_cmd(cmd, expects=expected)
-      if op == 'existing':
+      if sop == 'existing':
         config_del.append(key)
         config_put.remove(key)
-        config_existing.erase(key)
+        del config_existing[key]
       continue
     elif op == 'exists':
 
