@@ -1752,7 +1752,6 @@ int RGWUser::remove(RGWUserAdminOpState& op_state, std::string *err_msg)
 
 int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
 {
-  bool same_email = false;
   bool populated = op_state.is_populated();
   bool defer_user_update = true;
   int ret = 0;
@@ -1787,6 +1786,7 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
   user_info = old_info;
 
   std::string old_email = old_info.user_email;
+  bool same_email = false;
   if (!op_email.empty()) {
     same_email = (old_email.compare(op_email) == 0);
 
