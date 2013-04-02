@@ -394,6 +394,9 @@ struct RGWUserAdminOpState {
     key_op = false;
     populated = false;
     initialized = false;
+    key_params_checked = false;
+    subuser_params_checked = false;
+    user_params_checked = false;
   }
 };
 
