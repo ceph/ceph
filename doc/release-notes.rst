@@ -2,6 +2,44 @@
  Release Notes
 ===============
 
+v0.60
+-----
+
+Upgrading
+~~~~~~~~~
+
+* Please note that the recently added librados 'list_snaps' function
+  call is in a state of flux and is changing slightly in v0.61.  You
+  are advised not to make use of it in v0.59 or v0.60.
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* osd: make tracking of object snapshot metadata more efficient (Sam Just)
+* osd: misc fixes to PG split (Sam Just)
+* osd: improve journal corruption detection (Sam Just)
+* osd: improve handling when disk fills up (David Zafman)
+* osd: add 'noscrub', 'nodeepscrub' osdmap flags (David Zafman)
+* osd: fix hang in 'journal aio = true' mode (Sage Weil)
+* ceph-disk-prepare: fix mkfs args on old distros (Alexandre Marangone)
+* ceph-disk-activate: improve multicluster support, error handling (Sage Weil)
+* librbd: optionally wait for flush before enabling writeback (Josh Durgin)
+* crush: update weights for all instances of an item, not just the first (Sage Weil)
+* mon: shut down safely if disk approaches full (Joao Luis)
+* rgw: fix Content-Length on 32-bit machines (Jan Harkes)
+* mds: store and update backpointers/traces on directory, file objects (Sam Lang)
+* mds: improve session cleanup (Sage Weil)
+* mds, ceph-fuse: fix bugs with replayed requests after MDS restart (Sage Weil)
+* ceph-fuse: enable kernel cache invalidation (Sam Lang)
+* libcephfs: new topo API requests for Hadoop (Noah Watkins)
+* ceph-fuse: session handling cleanup, bug fixes (Sage Weil)
+* much code cleanup and optimization (Danny Al-Gaaf)
+* use less memory for logging by default
+* upstart: automatically set osd weight based on df (Guilhem Lettron)
+* init-ceph, mkcephfs: close a few security holes with -a  (Sage Weil)
+* rpm/deb: do not remove /var/lib/ceph on purge (v0.59 was the only release to do so)
+
+
 v0.59
 -----
 
