@@ -255,7 +255,7 @@ int test_cors_helper::send_request(string method, string res,
     slist = curl_slist_append(slist, auth.c_str());
     slist = curl_slist_append(slist, http_date.c_str());
     for(list<string>::iterator it = extra_hdrs.begin();
-        it != extra_hdrs.end(); it++){
+        it != extra_hdrs.end(); ++it){
       slist = curl_slist_append(slist, (*it).c_str());
     }
     if(read_function)
@@ -358,7 +358,7 @@ void send_cors(set<string> o, set<string> h,
   }else if(g_test->get_key_type() == KEY_TYPE_SWIFT){
     set<string>::iterator it;
     string a_o;
-    for(it = o.begin(); it != o.end(); it++){
+    for(it = o.begin(); it != o.end(); ++it){
       if(a_o.length() > 0)a_o.append(" ");
       a_o.append(*it);
     }
@@ -366,16 +366,15 @@ void send_cors(set<string> o, set<string> h,
 
     if(!h.empty()){
       string a_h;
-      for(it = h.begin(); it != h.end(); it++){
+      for(it = h.begin(); it != h.end(); ++it){
         if(a_h.length() > 0)a_h.append(" ");
         a_h.append(*it);
       }
       g_test->set_extra_header(string("X-Container-Meta-Access-Control-Allow-Headers: ") + a_h);
     }
     if(!e.empty()){
-      list<string>::iterator lit;
       string e_h;
-      for(lit = e.begin(); lit != e.end(); lit++){
+      for(list<string>::iterator lit = e.begin(); lit != e.end(); ++lit){
         if(e_h.length() > 0)e_h.append(" ");
         e_h.append(*lit);
       }
