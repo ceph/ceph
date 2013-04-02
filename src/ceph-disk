@@ -374,7 +374,6 @@ def get_osd_id(path):
     return osd_id
 
 
-# TODO depend on python2.7
 def _check_output(*args, **kwargs):
     process = subprocess.Popen(
         stdout=subprocess.PIPE,
@@ -385,7 +384,10 @@ def _check_output(*args, **kwargs):
         cmd = kwargs.get("args")
         if cmd is None:
             cmd = args[0]
-        raise subprocess.CalledProcessError(ret, cmd, output=out)
+        #raise subprocess.CalledProcessError(ret, cmd, output=out)
+        error = subprocess.CalledProcessError(ret, cmd)
+        error.output = out
+        raise error
     return out
 
 
