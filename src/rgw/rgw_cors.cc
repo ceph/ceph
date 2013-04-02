@@ -31,7 +31,7 @@ void RGWCORSRule::dump_origins() {
   dout(10) << "Allowed origins : " << num_origins << dendl;
   for(set<string>::iterator it = allowed_origins.begin();
       it != allowed_origins.end(); 
-      it++) {
+      ++it) {
     dout(10) << *it << "," << dendl;
   }
 }
@@ -56,7 +56,7 @@ static bool is_string_in_set(set<string>& s, string h) {
   }
   /* The header can be Content-*-type, or Content-* */
   for(set<string>::iterator it = s.begin();
-      it != s.end(); it++) {
+      it != s.end(); ++it) {
     size_t off;
     if ((off = (*it).find("*"))!=string::npos) {
       list<string> ssplit;
@@ -97,7 +97,7 @@ bool RGWCORSRule::is_header_allowed(const char *h, size_t len) {
 void RGWCORSRule::format_exp_headers(string& s) {
   s = "";
   for(list<string>::iterator it = exposable_hdrs.begin();
-      it != exposable_hdrs.end(); it++) {
+      it != exposable_hdrs.end(); ++it) {
       if (s.length() > 0)
         s.append(",");
       s.append((*it));
@@ -106,7 +106,7 @@ void RGWCORSRule::format_exp_headers(string& s) {
 
 RGWCORSRule * RGWCORSConfiguration::host_name_rule(const char *origin) {
   for(list<RGWCORSRule>::iterator it_r = rules.begin(); 
-      it_r != rules.end(); it_r++) {
+      it_r != rules.end(); ++it_r) {
     RGWCORSRule& r = (*it_r);
     if (r.is_origin_present(origin))
       return &r;
@@ -120,7 +120,7 @@ void RGWCORSConfiguration::erase_host_name_rule(string& origin) {
   /*Erase the host name from that rule*/
   dout(10) << "Num of rules : " << rules.size() << dendl;
   for(list<RGWCORSRule>::iterator it_r = rules.begin(); 
-      it_r != rules.end(); it_r++, loop++) {
+      it_r != rules.end(); ++it_r, loop++) {
     RGWCORSRule& r = (*it_r);
     r.erase_origin_if_present(origin, &rule_empty);
     dout(10) << "Origin:" << origin << ", rule num:" 
@@ -137,7 +137,7 @@ void RGWCORSConfiguration::dump() {
   unsigned num_rules = rules.size();
   dout(10) << "Number of rules: " << num_rules << dendl;
   for(list<RGWCORSRule>::iterator it = rules.begin();
-      it!= rules.end(); it++, loop++) {
+      it!= rules.end(); ++it, loop++) {
     dout(10) << " <<<<<<< Rule " << loop << " >>>>>>> " << dendl;
     (*it).dump_origins();
   }
