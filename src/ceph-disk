@@ -1707,7 +1707,7 @@ def list_dev(dev, uuid_map, journal_map):
                             desc.extend(more_osd_info(tpath, uuid_map))
                     finally:
                         unmount(tpath)
-            except:
+            except MountError:
                 pass
         if desc:
             desc = ['ceph data'] + desc
@@ -1756,7 +1756,7 @@ def main_list(args):
                             journal_map[journal_uuid.lower()] = dev
                     finally:
                         unmount(tpath)
-                except:
+                except MountError:
                     pass
 
     for base, parts in sorted(partmap.iteritems()):
