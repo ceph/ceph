@@ -1898,7 +1898,7 @@ void RGWPutCORS::execute()
     ret = -EINVAL;
     return;
   }
-  cors_config = (RGWCORSConfiguration_S3 *)parser.find_first("CORSConfiguration");
+  cors_config = static_cast<RGWCORSConfiguration_S3 *>(parser.find_first("CORSConfiguration"));
   if (!cors_config) {
     ret = -EINVAL;
     return;
