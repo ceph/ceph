@@ -581,7 +581,7 @@ def task(ctx, config):
     (err, out) = rgwadmin(ctx, client, ['pools', 'list'])
     assert out[0]['name'] == default_pool
 
-    # TESTCASE 'cluster-info', 'cluster', 'info', 'get cluser info', 'succeeds'
-    (err, out) = rgwadmin(ctx, client, ['cluster', 'info'])
+    # TESTCASE 'zone-info', 'zone', 'info', 'get zone info', 'succeeds'
+    (err, out) = rgwadmin(ctx, client, ['zone', 'info'])
 
     assert len(out) > 0
