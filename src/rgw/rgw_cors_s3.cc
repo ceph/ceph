@@ -34,7 +34,6 @@ void RGWCORSRule_S3::to_xml(XMLFormatter& f) {
     f.dump_string("ID", id);;
   }
   /*AllowedMethods*/
-  string m;
   if (allowed_methods & RGW_CORS_GET)
     f.dump_string("AllowedMethod", "GET");
   if (allowed_methods & RGW_CORS_PUT)
