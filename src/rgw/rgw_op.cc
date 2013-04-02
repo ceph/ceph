@@ -1880,7 +1880,6 @@ void RGWPutCORS::execute()
 
   RGWCORSConfiguration_S3 *cors_config;
   RGWCORSXMLParser_S3 parser(s->cct);
-  stringstream ss;
   rgw_obj obj;
 
   ret = 0;
