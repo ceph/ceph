@@ -1036,7 +1036,8 @@ void MDS::handle_mds_map(MMDSMap *m)
     mdsmap->get_mds_set(active, MDSMap::STATE_ACTIVE);
     mdsmap->get_mds_set(active, MDSMap::STATE_CLIENTREPLAY);
     for (set<int>::iterator p = active.begin(); p != active.end(); ++p) 
-      if (oldactive.count(*p) == 0)  // newly so?
+      if (*p != whoami &&            // not me
+	  oldactive.count(*p) == 0)  // newly so?
 	handle_mds_recovery(*p);
   }
 
@@ -1532,26 +1533,19 @@ void MDS::recovery_done()
   mdcache->populate_mydir();
 }
 
-// NOTE: called when any mds becomes active (even after creation)
 void MDS::handle_mds_recovery(int who) 
 {
   dout(5) << "handle_mds_recovery mds." << who << dendl;
   
-  if (who != whoami) {
-    mdcache->handle_mds_recovery(who);
-  }
+  mdcache->handle_mds_recovery(who);
 
-  // NOTE: trigger this even for self, so that we nudge the
-  // client side.
   if (mdsmap->get_tableserver() == whoami) {
     anchorserver->handle_mds_recovery(who);
     snapserver->handle_mds_recovery(who);
   }
 
-  if (who != whoami) {
-    queue_waiters(waiting_for_active_peer[who]);
-    waiting_for_active_peer.erase(who);
-  }
+  queue_waiters(waiting_for_active_peer[who]);
+  waiting_for_active_peer.erase(who);
 }
 
 void MDS::handle_mds_failure(int who)
