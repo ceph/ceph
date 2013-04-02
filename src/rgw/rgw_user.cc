@@ -630,7 +630,6 @@ bool RGWAccessKeyPool::check_existing_key(RGWUserAdminOpState& op_state)
 int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
      std::string *err_msg)
 {
-  std::string subprocess_msg;
   RGWUserInfo dup_info;
 
   if (!op_state.is_populated()) {
@@ -666,7 +665,6 @@ int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
 // Generate a new random key
 int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *err_msg)
 {
-  std::string duplicate_check_id;
   std::string id;
   std::string key;
 
@@ -1031,7 +1029,6 @@ int RGWSubUserPool::check_op(RGWUserAdminOpState& op_state,
         std::string *err_msg)
 {
   bool existing = false;
-  string subprocess_msg;
   std::string subuser = op_state.get_subuser();
 
   if (!op_state.is_populated()) {
@@ -1308,7 +1305,6 @@ int RGWUserCapPool::add(RGWUserAdminOpState& op_state, std::string *err_msg)
 int RGWUserCapPool::add(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save)
 {
   int ret = 0;
-  std::string subprocess_msg;
   std::string caps_str = op_state.get_caps();
 
   if (!op_state.is_populated()) {
@@ -1349,7 +1345,6 @@ int RGWUserCapPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg)
 int RGWUserCapPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save)
 {
   int ret = 0;
-  std::string subprocess_msg;
 
   std::string caps_str = op_state.get_caps();
 
@@ -1551,7 +1546,6 @@ int RGWUser::update(RGWUserAdminOpState& op_state, std::string *err_msg)
 
 int RGWUser::check_op(RGWUserAdminOpState& op_state, std::string *err_msg)
 {
-  std::string subprocess_msg;
   bool same_id;
   bool populated;
   //bool existing_email = false; // this check causes a fault
