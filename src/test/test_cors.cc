@@ -138,13 +138,13 @@ void test_cors_helper::set_response(char *r){
 }
 
 size_t write_header(void *ptr, size_t size, size_t nmemb, void *ud){
-  test_cors_helper *h = (test_cors_helper *)ud;
+  test_cors_helper *h = static_cast<test_cors_helper *>(ud);
   h->set_response((char *)ptr);
   return size*nmemb;
 }
 
 size_t write_data(void *ptr, size_t size, size_t nmemb, void *ud){
-  test_cors_helper *h = (test_cors_helper *)ud;
+  test_cors_helper *h = static_cast<test_cors_helper *>(ud);
   h->set_response_data((char *)ptr, size*nmemb);
   return size*nmemb;
 }
