@@ -297,6 +297,10 @@ Enables debug messages. ::
 
 Displays the status of all metadata servers.
 
+	ceph mds fail 0
+
+Marks the active MDS as failed, triggering failover to a stadnby if present.
+
 .. todo:: ``ceph mds`` subcommands missing docs: set_max_mds, dump, getmap, stop, setmap
 
 
