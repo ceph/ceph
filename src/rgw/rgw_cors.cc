@@ -16,6 +16,8 @@
 #include <iostream>
 #include <map>
 
+#include <boost/algorithm/string.hpp> 
+
 #include "include/types.h"
 #include "common/debug.h"
 #include "include/str_list.h"
@@ -67,7 +69,7 @@ static bool is_string_in_set(set<string>& s, string h) {
         string sl = ssplit.front();
         flen = sl.length();
         dout(10) << "Finding " << sl << ", in " << h << ", at offset 0" << dendl;
-        if (h.find(sl) != 0)
+        if (!boost::algorithm::starts_with(h,sl))
           continue;
         ssplit.pop_front();
       }
