@@ -383,7 +383,7 @@ void send_cors(set<string> o, set<string> h,
     }
     if(max_age != CORS_MAX_AGE_INVALID){
       char age[32];
-      sprintf(age, "%d", max_age);
+      sprintf(age, "%u", max_age);
       g_test->set_extra_header(string("X-Container-Meta-Access-Control-Max-Age: ") + string(age));
     }
     //const char *data = "1";
