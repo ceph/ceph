@@ -2129,7 +2129,7 @@ void Migrator::import_notify_finish(CDir *dir, set<CDir*>& bounds)
       new MExportDirNotify(dir->dirfrag(), false,
 			   pair<int,int>(import_peer[dir->dirfrag()], mds->get_nodeid()),
 			   pair<int,int>(mds->get_nodeid(), CDIR_AUTH_UNKNOWN));
-    for (set<CDir*>::iterator i = bounds.begin(); i != bounds.end(); i++)
+    for (set<CDir*>::iterator i = bounds.begin(); i != bounds.end(); ++i)
       notify->get_bounds().push_back((*i)->dirfrag());
     mds->send_message_mds(notify, *p);
   }
