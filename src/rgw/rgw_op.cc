@@ -1960,7 +1960,7 @@ void RGWOptionsCORS::get_response_params(string& hdrs, string& exp_hdrs, unsigne
   if (req_hdrs) {
     list<string> hl;
     get_str_list(req_hdrs, hl);
-    for(list<string>::iterator it = hl.begin(); it != hl.end(); it++) {
+    for(list<string>::iterator it = hl.begin(); it != hl.end(); ++it) {
       if (!rule->is_header_allowed((*it).c_str(), (*it).length())) {
         dout(5) << "Header " << (*it) << " is not registered in this rule" << dendl;
       } else {
