@@ -70,7 +70,7 @@ int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& bucke
     if (ret < 0)
       return ret;
 
-    for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); q++) {
+    for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); ++q) {
       bufferlist::iterator iter = q->second.begin();
       RGWBucketEnt bucket;
       ::decode(bucket, iter);
