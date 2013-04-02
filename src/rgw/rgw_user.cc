@@ -1753,7 +1753,6 @@ int RGWUser::remove(RGWUserAdminOpState& op_state, std::string *err_msg)
 int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
 {
   bool populated = op_state.is_populated();
-  bool defer_user_update = true;
   int ret = 0;
   std::string subprocess_msg;
   std::string op_email = op_state.get_user_email();
@@ -1850,7 +1849,7 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   // if we're supposed to modify keys, do so
   if (op_state.has_key_op()) {
-    ret = keys.add(op_state, &subprocess_msg, defer_user_update);
+    ret = keys.add(op_state, &subprocess_msg, true);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to create or modify keys, " + subprocess_msg);
       return ret;
