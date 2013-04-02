@@ -1651,7 +1651,7 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
       dout(10) << "_fetched  had underwater dentry " << *dn << ", marking clean" << dendl;
       dn->mark_clean();
 
-      if (dn->get_linkage()->get_inode()) {
+      if (dn->get_linkage()->is_primary()) {
 	assert(dn->get_linkage()->get_inode()->get_version() <= got_fnode.version);
 	dout(10) << "_fetched  had underwater inode " << *dn->get_linkage()->get_inode() << ", marking clean" << dendl;
 	dn->get_linkage()->get_inode()->mark_clean();
