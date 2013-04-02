@@ -167,11 +167,11 @@ void RGWCORSConfiguration_S3::to_xml(ostream& out) {
 bool RGWCORSConfiguration_S3::xml_end(const char *el) {
   XMLObjIter iter = find("CORSRule");
   RGWCORSRule_S3 *obj;
-  if (!(obj = (RGWCORSRule_S3 *)iter.get_next())) {
+  if (!(obj = static_cast<RGWCORSRule_S3 *>(iter.get_next()))) {
     dout(0) << "CORSConfiguration should have atleast one CORSRule" << dendl;
     return false;
   }
-  for(; obj; obj = (RGWCORSRule_S3 *)iter.get_next()) {
+  for(; obj; obj = static_cast<RGWCORSRule_S3 *>(iter.get_next())) {
     rules.push_back(*obj);
   }
   return true;
