@@ -312,9 +312,12 @@ TEST(LibRadosSnapshots, SelfManagedSnapRollbackPP) {
   std::vector<uint64_t> my_snaps;
   Rados cluster;
   IoCtx ioctx;
+  IoCtx readioctx;
   std::string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
+  ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), readioctx));
+  readioctx.snap_set_read(LIBRADOS_SNAP_DIR);
 
   my_snaps.push_back(-2);
   ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps.back()));
@@ -333,12 +336,10 @@ TEST(LibRadosSnapshots, SelfManagedSnapRollbackPP) {
   snap_set_t ss;
 
   snap_t head = SNAP_HEAD;
-  ASSERT_EQ(0, ioctx.list_snaps("foo", &ss));
+  ASSERT_EQ(0, readioctx.list_snaps("foo", &ss));
   ASSERT_EQ(1u, ss.clones.size());
   ASSERT_EQ(head, ss.clones[0].cloneid);
-  ASSERT_EQ(1u, ss.clones[0].snaps.size());	//this could go away in the future
-  ASSERT_EQ(my_snaps[0], ss.clones[0].snaps[0]);
-  ASSERT_EQ(0u, ss.clones[0].overlap.size());
+  ASSERT_EQ(0u, ss.clones[0].snaps.size());	//this could go away in the future
   ASSERT_EQ(384u, ss.clones[0].size);
 
   my_snaps.push_back(-2);
@@ -355,12 +356,11 @@ TEST(LibRadosSnapshots, SelfManagedSnapRollbackPP) {
   //Add another after
   ASSERT_EQ((int)sizeof(buf2), ioctx.write("foo", bl2, sizeof(buf2), bufsize*3));
 
-  ASSERT_EQ(0, ioctx.list_snaps("foo", &ss));
+  ASSERT_EQ(0, readioctx.list_snaps("foo", &ss));
   ASSERT_EQ(2u, ss.clones.size());
   ASSERT_EQ(my_snaps[1], ss.clones[0].cloneid);
-  ASSERT_EQ(2u, ss.clones[0].snaps.size());
-  ASSERT_EQ(my_snaps[0], ss.clones[0].snaps[0]);	//this could go away in the future
-  ASSERT_EQ(my_snaps[1], ss.clones[0].snaps[1]);
+  ASSERT_EQ(1u, ss.clones[0].snaps.size());
+  ASSERT_EQ(my_snaps[1], ss.clones[0].snaps[0]);
   ASSERT_EQ(2u, ss.clones[0].overlap.size());
   ASSERT_EQ(0u, ss.clones[0].overlap[0].first);
   ASSERT_EQ(128u, ss.clones[0].overlap[0].second);
@@ -395,9 +395,12 @@ TEST(LibRadosSnapshots, SelfManagedSnapOverlapPP) {
   std::vector<uint64_t> my_snaps;
   Rados cluster;
   IoCtx ioctx;
+  IoCtx readioctx;
   std::string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
+  ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), readioctx));
+  readioctx.snap_set_read(LIBRADOS_SNAP_DIR);
 
   my_snaps.push_back(-2);
   ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps.back()));
@@ -416,7 +419,7 @@ TEST(LibRadosSnapshots, SelfManagedSnapOverlapPP) {
 
   snap_set_t ss;
   snap_t head = SNAP_HEAD;
-  ASSERT_EQ(0, ioctx.list_snaps("foo", &ss));
+  ASSERT_EQ(0, readioctx.list_snaps("foo", &ss));
   ASSERT_EQ(1u, ss.clones.size());
   ASSERT_EQ(head, ss.clones[0].cloneid);
   ASSERT_EQ(1u, ss.clones[0].snaps.size());
@@ -439,7 +442,7 @@ TEST(LibRadosSnapshots, SelfManagedSnapOverlapPP) {
   ASSERT_EQ((int)sizeof(buf2), ioctx.write("foo", bl2, sizeof(buf2), bufsize*7));
   ASSERT_EQ((int)sizeof(buf2), ioctx.write("foo", bl2, sizeof(buf2), bufsize*9));
 
-  ASSERT_EQ(0, ioctx.list_snaps("foo", &ss));
+  ASSERT_EQ(0, readioctx.list_snaps("foo", &ss));
   ASSERT_EQ(2u, ss.clones.size());
   ASSERT_EQ(my_snaps[1], ss.clones[0].cloneid);
   ASSERT_EQ(2u, ss.clones[0].snaps.size());
@@ -477,7 +480,7 @@ TEST(LibRadosSnapshots, SelfManagedSnapOverlapPP) {
   ASSERT_EQ((int)sizeof(buf3), ioctx.write("foo", bl2, sizeof(buf3), bufsize*5));
   ASSERT_EQ((int)sizeof(buf3), ioctx.write("foo", bl2, sizeof(buf3), bufsize*8));
 
-  ASSERT_EQ(0, ioctx.list_snaps("foo", &ss));
+  ASSERT_EQ(0, readioctx.list_snaps("foo", &ss));
   ASSERT_EQ(3u, ss.clones.size());
   ASSERT_EQ(my_snaps[1], ss.clones[0].cloneid);
   ASSERT_EQ(2u, ss.clones[0].snaps.size());
