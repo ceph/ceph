@@ -36,7 +36,7 @@ import argparse
 
 LOG = logging.getLogger(os.path.basename(sys.argv[0].replace('.py','')))
 
-sizes = [
+SIZES = [
     (0, 0),
     (10, 0),
     (25, 0),
@@ -48,16 +48,16 @@ sizes = [
     (8192, -errno.EFBIG)
     ]
 
-ops = {
+OPS = {
       'put':['existing','new'],
       'del':['existing','enoent'],
       'exists':['existing','enoent'],
       'get':['existing','enoent']
       }
 
-config_put = []       #list: keys
-config_del = []       #list: keys
-config_existing = {}  #map: key -> size
+CONFIG_PUT = []       #list: keys
+CONFIG_DEL = []       #list: keys
+CONFIG_EXISTING = {}  #map: key -> size
 
 def run_cmd(cmd, expects=0):
     full_cmd = [ 'ceph', 'config-key' ] + cmd
@@ -126,8 +126,8 @@ def write_data_file(data, rnd):
 #end write_data_file
 
 def choose_random_op(rnd):
-    op = rnd.choice(ops.keys())
-    sop = rnd.choice(ops[op])
+    op = rnd.choice(OPS.keys())
+    sop = rnd.choice(OPS[op])
     return (op, sop)
 
 
@@ -196,26 +196,26 @@ def main():
             key = None
 
             if sop == 'existing':
-                if len(config_existing) == 0:
+                if len(CONFIG_EXISTING) == 0:
                     opLOG.debug('no existing keys; continue')
                     continue
-                key = rnd.choice(config_put)
-                assert key in config_existing, \
-                    'key \'{k_}\' not in config_existing'.format(k_=key)
+                key = rnd.choice(CONFIG_PUT)
+                assert key in CONFIG_EXISTING, \
+                    'key \'{k_}\' not in CONFIG_EXISTING'.format(k_=key)
 
                 expected = 0 # the store just overrides the value if the key exists
             #end if sop == 'existing'
             elif sop == 'new':
                 for x in xrange(0, 10):
                     key = gen_key(rnd)
-                    if key not in config_existing:
+                    if key not in CONFIG_EXISTING:
                         break
                     key = None
                 if key is None:
                     opLOG.error('unable to generate an unique key -- try again later.')
                     continue
 
-                assert key not in config_put and key not in config_existing, \
+                assert key not in CONFIG_PUT and key not in CONFIG_EXISTING, \
                     'key {k} was not supposed to exist!'.format(k=key)
 
             assert key is not None, \
@@ -223,15 +223,15 @@ def main():
 
             cmd += [ key ]
 
-            (size, error) = rnd.choice(sizes)
+            (size, error) = rnd.choice(SIZES)
             if size > 25:
                 via_file = True
 
             data = gen_data(size, rnd)
             if error == 0: # only add if we expect the put to be successful
                 if sop == 'new':
-                    config_put.append(key)
-                config_existing[key] = size
+                    CONFIG_PUT.append(key)
+                CONFIG_EXISTING[key] = size
             expected = error
 
             if via_file:
@@ -255,23 +255,23 @@ def main():
             key = None
 
             if sop == 'existing':
-                if len(config_existing) == 0:
+                if len(CONFIG_EXISTING) == 0:
                     opLOG.debug('no existing keys; continue')
                     continue
-                key = rnd.choice(config_put)
-                assert key in config_existing, \
-                    'key \'{k_}\' not in config_existing'.format(k_=key)
+                key = rnd.choice(CONFIG_PUT)
+                assert key in CONFIG_EXISTING, \
+                    'key \'{k_}\' not in CONFIG_EXISTING'.format(k_=key)
 
             if sop == 'enoent':
                 for x in xrange(0, 10):
                     key = base64.b64encode(os.urandom(20))
-                    if key not in config_existing:
+                    if key not in CONFIG_EXISTING:
                         break
                     key = None
                 if key is None:
                     opLOG.error('unable to generate an unique key -- try again later.')
                     continue
-                assert key not in config_put and key not in config_existing, \
+                assert key not in CONFIG_PUT and key not in CONFIG_EXISTING, \
                     'key {k} was not supposed to exist!'.format(k=key)
                 expected = 0  # deleting a non-existent key succeeds
 
@@ -282,9 +282,9 @@ def main():
             opLOG.debug('key: {k}'.format(k=key))
             run_cmd(cmd, expects=expected)
             if sop == 'existing':
-                config_del.append(key)
-                config_put.remove(key)
-                del config_existing[key]
+                CONFIG_DEL.append(key)
+                CONFIG_PUT.remove(key)
+                del CONFIG_EXISTING[key]
             continue
 
         elif op == 'exists':
@@ -293,23 +293,23 @@ def main():
             key = None
 
             if sop == 'existing':
-                if len(config_existing) == 0:
+                if len(CONFIG_EXISTING) == 0:
                     opLOG.debug('no existing keys; continue')
                     continue
-                key = rnd.choice(config_put)
-                assert key in config_existing, \
-                    'key \'{k_}\' not in config_existing'.format(k_=key)
+                key = rnd.choice(CONFIG_PUT)
+                assert key in CONFIG_EXISTING, \
+                    'key \'{k_}\' not in CONFIG_EXISTING'.format(k_=key)
 
             if sop == 'enoent':
                 for x in xrange(0, 10):
                     key = base64.b64encode(os.urandom(20))
-                    if key not in config_existing:
+                    if key not in CONFIG_EXISTING:
                         break
                     key = None
                 if key is None:
                     opLOG.error('unable to generate an unique key -- try again later.')
                     continue
-                assert key not in config_put and key not in config_existing, \
+                assert key not in CONFIG_PUT and key not in CONFIG_EXISTING, \
                     'key {k} was not supposed to exist!'.format(k=key)
                 expected = -errno.ENOENT
 
@@ -327,23 +327,23 @@ def main():
             key = None
 
             if sop == 'existing':
-                if len(config_existing) == 0:
+                if len(CONFIG_EXISTING) == 0:
                     opLOG.debug('no existing keys; continue')
                     continue
-                key = rnd.choice(config_put)
-                assert key in config_existing, \
-                    'key \'{k_}\' not in config_existing'.format(k_=key)
+                key = rnd.choice(CONFIG_PUT)
+                assert key in CONFIG_EXISTING, \
+                    'key \'{k_}\' not in CONFIG_EXISTING'.format(k_=key)
 
             if sop == 'enoent':
                 for x in xrange(0, 10):
                     key = base64.b64encode(os.urandom(20))
-                    if key not in config_existing:
+                    if key not in CONFIG_EXISTING:
                         break
                     key = None
                 if key is None:
                     opLOG.error('unable to generate an unique key -- try again later.')
                     continue
-                assert key not in config_put and key not in config_existing, \
+                assert key not in CONFIG_PUT and key not in CONFIG_EXISTING, \
                     'key {k} was not supposed to exist!'.format(k=key)
                 expected = -errno.ENOENT
 
@@ -359,7 +359,7 @@ def main():
                     f = open(file_path, 'r+')
                 except IOError as err:
                     if err.errno == errno.ENOENT:
-                        assert config_existing[key] == 0, \
+                        assert CONFIG_EXISTING[key] == 0, \
                             'error opening \'{fp}\': {e}'.format(fp=file_path,e=err)
                         continue
                     else:
@@ -371,20 +371,20 @@ def main():
                     if l == '':
                         break
                     cnt += len(l)
-                assert cnt == config_existing[key], \
+                assert cnt == CONFIG_EXISTING[key], \
                     'wrong size from store for key \'{k}\': {sz}, expected {es}'.format(
-                        k=key,sz=cnt,es=config_existing[key])
+                        k=key,sz=cnt,es=CONFIG_EXISTING[key])
                 destroy_tmp_file(file_path)
             continue
         else:
             assert False, 'unknown op {o}'.format(o=op)
 
-    # check if all keys in 'config_put' exist and
-    # if all keys on 'config_del' don't.
-    # but first however, remove all keys in config_put that might
-    # be in config_del as well.
-    config_put_set = set(config_put)
-    config_del_set = set(config_del).difference(config_put_set)
+    # check if all keys in 'CONFIG_PUT' exist and
+    # if all keys on 'CONFIG_DEL' don't.
+    # but first however, remove all keys in CONFIG_PUT that might
+    # be in CONFIG_DEL as well.
+    config_put_set = set(CONFIG_PUT)
+    config_del_set = set(CONFIG_DEL).difference(config_put_set)
 
     LOG.info('perform sanity checks on store')
 
