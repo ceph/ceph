@@ -1551,6 +1551,10 @@ void MDS::handle_mds_recovery(int who)
 
 void MDS::handle_mds_failure(int who)
 {
+  if (who == whoami) {
+    dout(5) << "handle_mds_failure for myself; not doing anything" << dendl;
+    return;
+  }
   dout(5) << "handle_mds_failure mds." << who << dendl;
 
   mdcache->handle_mds_failure(who);
