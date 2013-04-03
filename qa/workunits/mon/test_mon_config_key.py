@@ -356,7 +356,7 @@ def main():
             run_cmd(cmd, expects=expected)
             if sop == 'existing':
                 try:
-                    f = open(file_path, 'r+')
+                    temp_file = open(file_path, 'r+')
                 except IOError as err:
                     if err.errno == errno.ENOENT:
                         assert CONFIG_EXISTING[key] == 0, \
@@ -367,10 +367,10 @@ def main():
                             'some error occurred: {e}'.format(e=err)
                 cnt = 0
                 while True:
-                    l = f.read()
-                    if l == '':
+                    read_data = temp_file.read()
+                    if read_data == '':
                         break
-                    cnt += len(l)
+                    cnt += len(read_data)
                 assert cnt == CONFIG_EXISTING[key], \
                     'wrong size from store for key \'{k}\': {sz}, expected {es}'.format(
                         k=key,sz=cnt,es=CONFIG_EXISTING[key])
