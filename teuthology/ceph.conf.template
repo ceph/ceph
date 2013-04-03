@@ -23,6 +23,7 @@
 
 [mon]
 	debug ms = 1
+	mon data avail warn = 10
 
 [mds]
         lockdep = 1
