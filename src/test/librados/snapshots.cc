@@ -356,6 +356,11 @@ TEST(LibRadosSnapshots, SelfManagedSnapRollbackPP) {
   //Add another after
   ASSERT_EQ((int)sizeof(buf2), ioctx.write("foo", bl2, sizeof(buf2), bufsize*3));
 
+  ASSERT_EQ(-EINVAL, ioctx.list_snaps("foo", &ss));
+  ObjectReadOperation o;
+  o.list_snaps(&ss, NULL);
+  ASSERT_EQ(-EINVAL, ioctx.operate("foo", &o, NULL));
+
   ASSERT_EQ(0, readioctx.list_snaps("foo", &ss));
   ASSERT_EQ(2u, ss.clones.size());
   ASSERT_EQ(my_snaps[1], ss.clones[0].cloneid);
