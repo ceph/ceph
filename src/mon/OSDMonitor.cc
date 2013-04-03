@@ -2702,7 +2702,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	_get_pending_crush(newcrush);
 
 	if (!newcrush.name_exists(m->cmd[3].c_str())) {
-	  err = -ENOENT;
+	  err = 0;
 	  ss << "device '" << m->cmd[3] << "' does not appear in the crush map";
 	  break;
 	}
