@@ -100,15 +100,15 @@ def run_cmd(cmd, expects=0):
 
 #end run_cmd
 
-def gen_data(size,rnd):
+def gen_data(size, rnd):
     chars = string.ascii_letters + string.digits
     return ''.join(rnd.choice(chars) for i in range(size))
 
 def gen_key(rnd):
-    return gen_data(20,rnd)
+    return gen_data(20, rnd)
 
 def gen_tmp_file_path(rnd):
-    file_name = gen_data(20,rnd)
+    file_name = gen_data(20, rnd)
     file_path = os.path.join('/tmp', 'ceph-test.'+file_name)
     return file_path
 
@@ -128,7 +128,7 @@ def write_data_file(data, rnd):
 def choose_random_op(rnd):
     op = rnd.choice(ops.keys())
     sop = rnd.choice(ops[op])
-    return (op,sop)
+    return (op, sop)
 
 
 def parse_args(args):
@@ -183,13 +183,13 @@ def main():
     start = time.time()
 
     while (time.time() - start) < duration:
-        (op,sop) = choose_random_op(rnd)
+        (op, sop) = choose_random_op(rnd)
 
-        LOG.info('{o}({s})'.format(o=op,s=sop))
-        opLOG = LOG.getChild('{o}({s})'.format(o=op,s=sop))
+        LOG.info('{o}({s})'.format(o=op, s=sop))
+        opLOG = LOG.getChild('{o}({s})'.format(o=op, s=sop))
 
         if op == 'put':
-            via_file = (rnd.uniform(0,100) < 50.0)
+            via_file = (rnd.uniform(0, 100) < 50.0)
 
             expected = 0
             cmd = [ 'put' ]
@@ -206,7 +206,7 @@ def main():
                 expected = 0 # the store just overrides the value if the key exists
             #end if sop == 'existing'
             elif sop == 'new':
-                for x in xrange(0,10):
+                for x in xrange(0, 10):
                     key = gen_key(rnd)
                     if key not in config_existing:
                         break
@@ -215,7 +215,7 @@ def main():
                     opLOG.error('unable to generate an unique key -- try again later.')
                     continue
 
-                assert key not in config_put and key not in config_existing,\
+                assert key not in config_put and key not in config_existing, \
                     'key {k} was not supposed to exist!'.format(k=key)
 
             assert key is not None, \
@@ -223,11 +223,11 @@ def main():
 
             cmd += [ key ]
 
-            (size,error) = rnd.choice(sizes)
+            (size, error) = rnd.choice(sizes)
             if size > 25:
                 via_file = True
 
-            data = gen_data(size,rnd)
+            data = gen_data(size, rnd)
             if error == 0: # only add if we expect the put to be successful
                 if sop == 'new':
                     config_put.append(key)
@@ -263,7 +263,7 @@ def main():
                     'key \'{k_}\' not in config_existing'.format(k_=key)
 
             if sop == 'enoent':
-                for x in xrange(0,10):
+                for x in xrange(0, 10):
                     key = base64.b64encode(os.urandom(20))
                     if key not in config_existing:
                         break
@@ -271,7 +271,7 @@ def main():
                 if key is None:
                     opLOG.error('unable to generate an unique key -- try again later.')
                     continue
-                assert key not in config_put and key not in config_existing,\
+                assert key not in config_put and key not in config_existing, \
                     'key {k} was not supposed to exist!'.format(k=key)
                 expected = 0  # deleting a non-existent key succeeds
 
@@ -301,7 +301,7 @@ def main():
                     'key \'{k_}\' not in config_existing'.format(k_=key)
 
             if sop == 'enoent':
-                for x in xrange(0,10):
+                for x in xrange(0, 10):
                     key = base64.b64encode(os.urandom(20))
                     if key not in config_existing:
                         break
@@ -309,7 +309,7 @@ def main():
                 if key is None:
                     opLOG.error('unable to generate an unique key -- try again later.')
                     continue
-                assert key not in config_put and key not in config_existing,\
+                assert key not in config_put and key not in config_existing, \
                     'key {k} was not supposed to exist!'.format(k=key)
                 expected = -errno.ENOENT
 
@@ -335,7 +335,7 @@ def main():
                     'key \'{k_}\' not in config_existing'.format(k_=key)
 
             if sop == 'enoent':
-                for x in xrange(0,10):
+                for x in xrange(0, 10):
                     key = base64.b64encode(os.urandom(20))
                     if key not in config_existing:
                         break
@@ -343,7 +343,7 @@ def main():
                 if key is None:
                     opLOG.error('unable to generate an unique key -- try again later.')
                     continue
-                assert key not in config_put and key not in config_existing,\
+                assert key not in config_put and key not in config_existing, \
                     'key {k} was not supposed to exist!'.format(k=key)
                 expected = -errno.ENOENT
 
