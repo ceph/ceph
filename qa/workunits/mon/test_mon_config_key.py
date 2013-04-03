@@ -369,7 +369,7 @@ def main():
                 while True:
                     l = f.read()
                     if l == '':
-                        break;
+                        break
                     cnt += len(l)
                 assert cnt == config_existing[key], \
                     'wrong size from store for key \'{k}\': {sz}, expected {es}'.format(
