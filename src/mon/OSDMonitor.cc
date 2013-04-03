@@ -2719,6 +2719,11 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	} else {
 	  err = newcrush.remove_item(g_ceph_context, id, unlink_only);
 	}
+	if (err == -ENOENT) {
+	  ss << "item " << m->cmd[3] << " does not appear in that position";
+	  err = 0;
+	  break;
+	}
 	if (err == 0) {
 	  pending_inc.crush.clear();
 	  newcrush.encode(pending_inc.crush);
