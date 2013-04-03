@@ -558,6 +558,21 @@ def task(ctx, config):
     (err, out) = rgwadmin(ctx, client, ['bucket', 'rm', '--bucket', bucket_name, '--purge-objects'])
     assert not err
 
+    # TESTCASE 'create-bucket', 'bucket', 'create', 'bucket starting with underscore', 'succeeds'
+    underscore_bucket_name = '_' + bucket_name
+    underscore_bucket = connection.create_bucket(underscore_bucket_name)
+
+    # add something to the bucket
+    test_key = underscore_bucket.new_key('test_key')
+    test_key.set_contents_from_string('test_string')
+
+    (err, out) = rgwadmin(ctx, client, ['bucket', 'list', '--bucket', underscore_bucket_name])
+    assert not err
+    assert out['bucket'] == underscore_bucket_name
+
+    test_key.delete()
+    underscore_bucket.delete()
+
     # TESTCASE 'caps-add', 'caps', 'add', 'add user cap', 'succeeds'
     caps='user=read'
     (err, out) = rgwadmin(ctx, client, ['caps', 'add', '--uid', user1, '--caps', caps])
