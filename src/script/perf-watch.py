@@ -79,9 +79,9 @@ def main():
 
     varline = '#'
     if ctx.time or ctx.absolute_time:
-        varline = varline + ' %8s' % 'time';
+        varline = varline + ' %8s' % 'time'
     for v in vars:
-        varline = varline + (' %8s' % v);
+        varline = varline + (' %8s' % v)
 
     n = 0
     prev = None
@@ -94,7 +94,7 @@ def main():
         (code,raw) = commands.getstatusoutput('./ceph --admin-daemon %s perf dump' % ctx.socket)
         r = json.loads(raw)
         if prev is None:
-            prev = r;
+            prev = r
 
         vline = ' '
         now = time.time()
