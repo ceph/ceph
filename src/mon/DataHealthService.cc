@@ -51,6 +51,7 @@ void DataHealthService::start_epoch()
   // to hold the cluster back, even confusing the user, due to some possibly
   // outdated stats.
   stats.clear();
+  last_warned_percent = 0;
 }
 
 void DataHealthService::get_health(Formatter *f,
@@ -177,9 +178,13 @@ void DataHealthService::service_tick()
   // otherwise we may very well contribute to the consumption of the
   // already low available disk space.
   if (ours.latest_avail_percent <= g_conf->mon_data_avail_warn) {
-    mon->clog.warn()
-      << "reached concerning levels of available space on data store"
-      << " (" << ours.latest_avail_percent << "\% free)\n";
+    if (ours.latest_avail_percent != last_warned_percent)
+      mon->clog.warn()
+	<< "reached concerning levels of available space on data store"
+	<< " (" << ours.latest_avail_percent << "\% free)\n";
+    last_warned_percent = ours.latest_avail_percent;
+  } else {
+    last_warned_percent = 0;
   }
 }
 
