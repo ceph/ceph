@@ -170,7 +170,7 @@ class StateMachineRenderer(object):
                 if v == state:
                     yield state+"[shape=Mdiamond];"
                     found = True
-                    break;
+                    break
             if not found:
                 yield state+";"
 
