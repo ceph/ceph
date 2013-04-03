@@ -5,9 +5,12 @@ import logging
 import os
 import time
 import yaml
+import re
+import subprocess
 
 from teuthology import lock
 from teuthology import misc as teuthology
+from teuthology.parallel import parallel
 from ..orchestra import run
 
 log = logging.getLogger(__name__)
@@ -260,6 +263,8 @@ def archive(ctx, config):
                 not (ctx.config.get('archive-on-error') and ctx.summary['success']):
             log.info('Transferring archived files...')
             logdir = os.path.join(ctx.archive, 'remote')
+            if (not os.path.exists(logdir)):
+                os.mkdir(logdir)
             for remote in ctx.cluster.remotes.iterkeys():
                 path = os.path.join(logdir, remote.shortname)
                 teuthology.pull_directory(remote, archive_dir, path)
@@ -463,3 +468,32 @@ kern.* -{adir}/syslog/kern.log;RSYSLOG_FileFormat
                 wait=False,
                 ),
             )
+
+def vm_setup(ctx, config):
+    """
+    Look for virtual machines and handle their initialization
+    """
+    with parallel() as p:
+        editinfo = './teuthology/task/edit_sudoers.sh'
+        for remote in ctx.cluster.remotes.iterkeys():
+            mname = re.match(".*@([^\.]*)\..*", str(remote)).group(1) 
+            if mname[0:3] == 'vpm':
+                r = remote.run(args=['test', '-e', '/ceph-qa-ready',],
+                        stdout=StringIO(),
+                        check_status=False,)
+                if r.exitstatus != 0:
+                    p1 = subprocess.Popen(['cat', editinfo], stdout=subprocess.PIPE)
+                    p2 = subprocess.Popen(['ssh','-t','-t',str(remote)],stdin=p1.stdout, stdout=subprocess.PIPE)
+                    _,err = p2.communicate()
+                    if err:
+                        log.info("Edit of /etc/sudoers failed: %s",err)
+                    p.spawn(_handle_vm_init, remote)
+
+def _handle_vm_init(remote):
+    log.info('Running ceph_qa_chef on ', remote)
+    remote.run(args=['wget','-q','-O-',
+            'https://raw.github.com/ceph/ceph-qa-chef/master/solo/solo-from-scratch',
+            run.Raw('|'),
+            'sh',
+        ])
+
