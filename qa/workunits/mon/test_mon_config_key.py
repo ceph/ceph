@@ -186,7 +186,7 @@ def main():
         (op, sop) = choose_random_op(rnd)
 
         LOG.info('{o}({s})'.format(o=op, s=sop))
-        opLOG = LOG.getChild('{o}({s})'.format(o=op, s=sop))
+        op_log = LOG.getChild('{o}({s})'.format(o=op, s=sop))
 
         if op == 'put':
             via_file = (rnd.uniform(0, 100) < 50.0)
@@ -197,7 +197,7 @@ def main():
 
             if sop == 'existing':
                 if len(CONFIG_EXISTING) == 0:
-                    opLOG.debug('no existing keys; continue')
+                    op_log.debug('no existing keys; continue')
                     continue
                 key = rnd.choice(CONFIG_PUT)
                 assert key in CONFIG_EXISTING, \
@@ -212,7 +212,7 @@ def main():
                         break
                     key = None
                 if key is None:
-                    opLOG.error('unable to generate an unique key -- try again later.')
+                    op_log.error('unable to generate an unique key -- try again later.')
                     continue
 
                 assert key not in CONFIG_PUT and key not in CONFIG_EXISTING, \
@@ -240,7 +240,7 @@ def main():
             else:
                 cmd += [ data ]
 
-            opLOG.debug('size: {sz}, via: {v}'.format(
+            op_log.debug('size: {sz}, via: {v}'.format(
                 sz=size,
                 v='file: {f}'.format(f=data_file) if via_file == True else 'cli')
                 )
@@ -256,7 +256,7 @@ def main():
 
             if sop == 'existing':
                 if len(CONFIG_EXISTING) == 0:
-                    opLOG.debug('no existing keys; continue')
+                    op_log.debug('no existing keys; continue')
                     continue
                 key = rnd.choice(CONFIG_PUT)
                 assert key in CONFIG_EXISTING, \
@@ -269,7 +269,7 @@ def main():
                         break
                     key = None
                 if key is None:
-                    opLOG.error('unable to generate an unique key -- try again later.')
+                    op_log.error('unable to generate an unique key -- try again later.')
                     continue
                 assert key not in CONFIG_PUT and key not in CONFIG_EXISTING, \
                     'key {k} was not supposed to exist!'.format(k=key)
@@ -279,7 +279,7 @@ def main():
                 'key must be != None'
 
             cmd += [ key ]
-            opLOG.debug('key: {k}'.format(k=key))
+            op_log.debug('key: {k}'.format(k=key))
             run_cmd(cmd, expects=expected)
             if sop == 'existing':
                 CONFIG_DEL.append(key)
@@ -294,7 +294,7 @@ def main():
 
             if sop == 'existing':
                 if len(CONFIG_EXISTING) == 0:
-                    opLOG.debug('no existing keys; continue')
+                    op_log.debug('no existing keys; continue')
                     continue
                 key = rnd.choice(CONFIG_PUT)
                 assert key in CONFIG_EXISTING, \
@@ -307,7 +307,7 @@ def main():
                         break
                     key = None
                 if key is None:
-                    opLOG.error('unable to generate an unique key -- try again later.')
+                    op_log.error('unable to generate an unique key -- try again later.')
                     continue
                 assert key not in CONFIG_PUT and key not in CONFIG_EXISTING, \
                     'key {k} was not supposed to exist!'.format(k=key)
@@ -317,7 +317,7 @@ def main():
                 'key must be != None'
 
             cmd += [ key ]
-            opLOG.debug('key: {k}'.format(k=key))
+            op_log.debug('key: {k}'.format(k=key))
             run_cmd(cmd, expects=expected)
             continue
 
@@ -328,7 +328,7 @@ def main():
 
             if sop == 'existing':
                 if len(CONFIG_EXISTING) == 0:
-                    opLOG.debug('no existing keys; continue')
+                    op_log.debug('no existing keys; continue')
                     continue
                 key = rnd.choice(CONFIG_PUT)
                 assert key in CONFIG_EXISTING, \
@@ -341,7 +341,7 @@ def main():
                         break
                     key = None
                 if key is None:
-                    opLOG.error('unable to generate an unique key -- try again later.')
+                    op_log.error('unable to generate an unique key -- try again later.')
                     continue
                 assert key not in CONFIG_PUT and key not in CONFIG_EXISTING, \
                     'key {k} was not supposed to exist!'.format(k=key)
@@ -352,7 +352,7 @@ def main():
 
             file_path = gen_tmp_file_path(rnd)
             cmd += [ key, '-o', file_path ]
-            opLOG.debug('key: {k}'.format(k=key))
+            op_log.debug('key: {k}'.format(k=key))
             run_cmd(cmd, expects=expected)
             if sop == 'existing':
                 try:
