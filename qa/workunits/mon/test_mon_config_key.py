@@ -65,8 +65,8 @@ def run_cmd(cmd, expects=0):
     if expects < 0:
         expects = -expects
 
-    cmdLOG = LOG.getChild('run_cmd')
-    cmdLOG.debug('{fc}'.format(fc=' '.join(full_cmd)))
+    cmdlog = LOG.getChild('run_cmd')
+    cmdlog.debug('{fc}'.format(fc=' '.join(full_cmd)))
 
     proc = subprocess.Popen(full_cmd,
         stdout=subprocess.PIPE,
@@ -79,24 +79,24 @@ def run_cmd(cmd, expects=0):
             (out, err) = proc.communicate()
             if out is not None:
                 stdout += out.split('\n')
-                cmdLOG.debug('stdout: {s}'.format(s=out))
+                cmdlog.debug('stdout: {s}'.format(s=out))
             if err is not None:
                 stdout += err.split('\n')
-                cmdLOG.debug('stderr: {s}'.format(s=err))
+                cmdlog.debug('stderr: {s}'.format(s=err))
         except ValueError:
             ret = proc.wait()
             break
 
     if ret != expects:
-        cmdLOG.error('cmd > {cmd}'.format(cmd=full_cmd))
-        cmdLOG.error('expected return \'{expected}\' got \'{got}\''.format(
+        cmdlog.error('cmd > {cmd}'.format(cmd=full_cmd))
+        cmdlog.error('expected return \'{expected}\' got \'{got}\''.format(
             expected=expects,got=ret))
-        cmdLOG.error('stdout')
+        cmdlog.error('stdout')
         for i in stdout:
-            cmdLOG.error('{x}'.format(x=i))
-        cmdLOG.error('stderr')
+            cmdlog.error('{x}'.format(x=i))
+        cmdlog.error('stderr')
         for i in stderr:
-            cmdLOG.error('{x}'.format(x=i))
+            cmdlog.error('{x}'.format(x=i))
 
 #end run_cmd
 
