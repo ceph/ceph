@@ -42,7 +42,7 @@ class RGWCORSConfiguration_SWIFT : public RGWCORSConfiguration
       get_str_set(ao, oc);
       if (oc.empty())
         return -EINVAL;
-      for(set<string>::iterator it = oc.begin(); it != oc.end(); it++) {
+      for(set<string>::iterator it = oc.begin(); it != oc.end(); ++it) {
         string host = *it;
         if (validate_name_string(host) != 0)
           return -EINVAL;
@@ -52,7 +52,7 @@ class RGWCORSConfiguration_SWIFT : public RGWCORSConfiguration
         string ah = allow_headers;
         get_str_set(ah, h);
         for(set<string>::iterator it = h.begin();
-            it != h.end(); it++) {
+            it != h.end(); ++it) {
           string s = (*it);
           if (validate_name_string(s) != 0)
             return -EINVAL;

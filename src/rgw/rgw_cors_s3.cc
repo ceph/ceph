@@ -34,7 +34,6 @@ void RGWCORSRule_S3::to_xml(XMLFormatter& f) {
     f.dump_string("ID", id);;
   }
   /*AllowedMethods*/
-  string m;
   if (allowed_methods & RGW_CORS_GET)
     f.dump_string("AllowedMethod", "GET");
   if (allowed_methods & RGW_CORS_PUT)
@@ -48,13 +47,13 @@ void RGWCORSRule_S3::to_xml(XMLFormatter& f) {
   /*AllowedOrigins*/
   for(set<string>::iterator it = allowed_origins.begin(); 
       it != allowed_origins.end(); 
-      it++) {
+      ++it) {
     string host = *it;
     f.dump_string("AllowedOrigin", host);
   }
   /*AllowedHeader*/
   for(set<string>::iterator it = allowed_hdrs.begin(); 
-      it != allowed_hdrs.end(); it++) {
+      it != allowed_hdrs.end(); ++it) {
     f.dump_string("AllowedHeader", *it);
   }
   /*MaxAgeSeconds*/
@@ -63,7 +62,7 @@ void RGWCORSRule_S3::to_xml(XMLFormatter& f) {
   }
   /*ExposeHeader*/
   for(list<string>::iterator it = exposable_hdrs.begin(); 
-      it != exposable_hdrs.end(); it++) {
+      it != exposable_hdrs.end(); ++it) {
     f.dump_string("ExposeHeader", *it);
   }
   f.close_section();
@@ -157,7 +156,7 @@ void RGWCORSConfiguration_S3::to_xml(ostream& out) {
   XMLFormatter f;
   f.open_object_section("CORSConfiguration");
   for(list<RGWCORSRule>::iterator it = rules.begin();
-      it != rules.end(); it++) {
+      it != rules.end(); ++it) {
     (static_cast<RGWCORSRule_S3 &>(*it)).to_xml(f);
   }
   f.close_section();
@@ -167,11 +166,11 @@ void RGWCORSConfiguration_S3::to_xml(ostream& out) {
 bool RGWCORSConfiguration_S3::xml_end(const char *el) {
   XMLObjIter iter = find("CORSRule");
   RGWCORSRule_S3 *obj;
-  if (!(obj = (RGWCORSRule_S3 *)iter.get_next())) {
+  if (!(obj = static_cast<RGWCORSRule_S3 *>(iter.get_next()))) {
     dout(0) << "CORSConfiguration should have atleast one CORSRule" << dendl;
     return false;
   }
-  for(; obj; obj = (RGWCORSRule_S3 *)iter.get_next()) {
+  for(; obj; obj = static_cast<RGWCORSRule_S3 *>(iter.get_next())) {
     rules.push_back(*obj);
   }
   return true;

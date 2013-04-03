@@ -138,13 +138,13 @@ void test_cors_helper::set_response(char *r){
 }
 
 size_t write_header(void *ptr, size_t size, size_t nmemb, void *ud){
-  test_cors_helper *h = (test_cors_helper *)ud;
+  test_cors_helper *h = static_cast<test_cors_helper *>(ud);
   h->set_response((char *)ptr);
   return size*nmemb;
 }
 
 size_t write_data(void *ptr, size_t size, size_t nmemb, void *ud){
-  test_cors_helper *h = (test_cors_helper *)ud;
+  test_cors_helper *h = static_cast<test_cors_helper *>(ud);
   h->set_response_data((char *)ptr, size*nmemb);
   return size*nmemb;
 }
@@ -255,7 +255,7 @@ int test_cors_helper::send_request(string method, string res,
     slist = curl_slist_append(slist, auth.c_str());
     slist = curl_slist_append(slist, http_date.c_str());
     for(list<string>::iterator it = extra_hdrs.begin();
-        it != extra_hdrs.end(); it++){
+        it != extra_hdrs.end(); ++it){
       slist = curl_slist_append(slist, (*it).c_str());
     }
     if(read_function)
@@ -358,7 +358,7 @@ void send_cors(set<string> o, set<string> h,
   }else if(g_test->get_key_type() == KEY_TYPE_SWIFT){
     set<string>::iterator it;
     string a_o;
-    for(it = o.begin(); it != o.end(); it++){
+    for(it = o.begin(); it != o.end(); ++it){
       if(a_o.length() > 0)a_o.append(" ");
       a_o.append(*it);
     }
@@ -366,16 +366,15 @@ void send_cors(set<string> o, set<string> h,
 
     if(!h.empty()){
       string a_h;
-      for(it = h.begin(); it != h.end(); it++){
+      for(it = h.begin(); it != h.end(); ++it){
         if(a_h.length() > 0)a_h.append(" ");
         a_h.append(*it);
       }
       g_test->set_extra_header(string("X-Container-Meta-Access-Control-Allow-Headers: ") + a_h);
     }
     if(!e.empty()){
-      list<string>::iterator lit;
       string e_h;
-      for(lit = e.begin(); lit != e.end(); lit++){
+      for(list<string>::iterator lit = e.begin(); lit != e.end(); ++lit){
         if(e_h.length() > 0)e_h.append(" ");
         e_h.append(*lit);
       }
@@ -383,7 +382,7 @@ void send_cors(set<string> o, set<string> h,
     }
     if(max_age != CORS_MAX_AGE_INVALID){
       char age[32];
-      sprintf(age, "%d", max_age);
+      sprintf(age, "%u", max_age);
       g_test->set_extra_header(string("X-Container-Meta-Access-Control-Max-Age: ") + string(age));
     }
     //const char *data = "1";

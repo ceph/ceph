@@ -364,14 +364,8 @@ struct RGWUserAdminOpState {
     return generated_subuser;
   }
 
-  RGWUserAdminOpState()
+  RGWUserAdminOpState() : user_id(RGW_USER_ANON_ID), user_email(""), display_name(""), id(""), key ("")
   {
-    user_id = RGW_USER_ANON_ID;
-    display_name = "";
-    user_email = "";
-    id = "";
-    key = "";
-
     max_buckets = RGW_DEFAULT_MAX_BUCKETS;
     key_type = -1;
     perm_mask = 0;
@@ -391,7 +385,6 @@ struct RGWUserAdminOpState {
     key_specified = false;
     type_specified = false;
     purge_data = false;
-    purge_keys = false;
     display_name_specified = false;
     user_email_specified = false;
     max_buckets_specified = false;
@@ -400,6 +393,9 @@ struct RGWUserAdminOpState {
     key_op = false;
     populated = false;
     initialized = false;
+    key_params_checked = false;
+    subuser_params_checked = false;
+    user_params_checked = false;
   }
 };
 
