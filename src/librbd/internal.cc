@@ -2369,12 +2369,7 @@ reprotect_and_return_err:
 	ldout(ictx->cct, 20) << "diff_iterate object " << p->first << dendl;
 
 	librados::snap_set_t snap_set;
-	uint64_t size;
-
-	librados::ObjectReadOperation op;
-	op.stat(&size, NULL, NULL);
-	op.list_snaps(&snap_set, NULL);
-	int r = head_ctx.operate(p->first.name, &op, NULL);
+	int r = head_ctx.list_snaps(p->first.name, &snap_set);
 	if (r == -ENOENT) {
 	  if (from_snap_id == 0 && !parent_diff.empty()) {
 	    // report parent diff instead
