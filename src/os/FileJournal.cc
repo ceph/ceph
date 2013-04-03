@@ -387,7 +387,12 @@ int FileJournal::create()
     header.alignment = block_size;
   else
     header.alignment = 16;  // at least stay word aligned on 64bit machines...
+
   header.start = get_top();
+  /* FileStore::mkfs initializes the fs op sequence file at 1.  Therefore,
+   * the first entry written must be  at sequence 2.*/
+  header.start_seq = 2;
+
   print_header();
 
   // static zeroed buffer for alignment padding
@@ -519,7 +524,7 @@ int FileJournal::open(uint64_t fs_op_seq)
 
   // find next entry
   read_pos = header.start;
-  uint64_t seq = 0;
+  uint64_t seq = header.start_seq;
   while (1) {
     bufferlist bl;
     off64_t old_pos = read_pos;
@@ -1522,8 +1527,10 @@ void FileJournal::committed_thru(uint64_t seq)
   }
   if (!journalq.empty()) {
     header.start = journalq.front().second;
+    header.start_seq = journalq.front().first + 1;
   } else {
     header.start = write_pos;
+    header.start_seq = journaled_seq + 1;
   }
   must_write_header = true;
   print_header();
