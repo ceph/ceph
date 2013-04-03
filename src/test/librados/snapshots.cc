@@ -339,7 +339,8 @@ TEST(LibRadosSnapshots, SelfManagedSnapRollbackPP) {
   ASSERT_EQ(0, readioctx.list_snaps("foo", &ss));
   ASSERT_EQ(1u, ss.clones.size());
   ASSERT_EQ(head, ss.clones[0].cloneid);
-  ASSERT_EQ(0u, ss.clones[0].snaps.size());	//this could go away in the future
+  ASSERT_EQ(0u, ss.clones[0].snaps.size());
+  ASSERT_EQ(0u, ss.clones[0].overlap.size());
   ASSERT_EQ(384u, ss.clones[0].size);
 
   my_snaps.push_back(-2);
@@ -427,8 +428,7 @@ TEST(LibRadosSnapshots, SelfManagedSnapOverlapPP) {
   ASSERT_EQ(0, readioctx.list_snaps("foo", &ss));
   ASSERT_EQ(1u, ss.clones.size());
   ASSERT_EQ(head, ss.clones[0].cloneid);
-  ASSERT_EQ(1u, ss.clones[0].snaps.size());
-  ASSERT_EQ(my_snaps[0], ss.clones[0].snaps[0]);	//this could go away in the future
+  ASSERT_EQ(0u, ss.clones[0].snaps.size());
   ASSERT_EQ(0u, ss.clones[0].overlap.size());
   ASSERT_EQ(1152u, ss.clones[0].size);
 
@@ -450,9 +450,8 @@ TEST(LibRadosSnapshots, SelfManagedSnapOverlapPP) {
   ASSERT_EQ(0, readioctx.list_snaps("foo", &ss));
   ASSERT_EQ(2u, ss.clones.size());
   ASSERT_EQ(my_snaps[1], ss.clones[0].cloneid);
-  ASSERT_EQ(2u, ss.clones[0].snaps.size());
-  ASSERT_EQ(my_snaps[0], ss.clones[0].snaps[0]);	//this could go away in the future
-  ASSERT_EQ(my_snaps[1], ss.clones[0].snaps[1]);
+  ASSERT_EQ(1u, ss.clones[0].snaps.size());
+  ASSERT_EQ(my_snaps[1], ss.clones[0].snaps[0]);
   ASSERT_EQ(5u, ss.clones[0].overlap.size());
   ASSERT_EQ(0u, ss.clones[0].overlap[0].first);
   ASSERT_EQ(128u, ss.clones[0].overlap[0].second);
@@ -488,9 +487,8 @@ TEST(LibRadosSnapshots, SelfManagedSnapOverlapPP) {
   ASSERT_EQ(0, readioctx.list_snaps("foo", &ss));
   ASSERT_EQ(3u, ss.clones.size());
   ASSERT_EQ(my_snaps[1], ss.clones[0].cloneid);
-  ASSERT_EQ(2u, ss.clones[0].snaps.size());
-  ASSERT_EQ(my_snaps[0], ss.clones[0].snaps[0]);	//this could go away in the future
-  ASSERT_EQ(my_snaps[1], ss.clones[0].snaps[1]);
+  ASSERT_EQ(1u, ss.clones[0].snaps.size());
+  ASSERT_EQ(my_snaps[1], ss.clones[0].snaps[0]);
   ASSERT_EQ(5u, ss.clones[0].overlap.size());
   ASSERT_EQ(0u, ss.clones[0].overlap[0].first);
   ASSERT_EQ(128u, ss.clones[0].overlap[0].second);
