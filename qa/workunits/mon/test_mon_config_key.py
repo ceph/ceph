@@ -118,10 +118,10 @@ def destroy_tmp_file(fpath):
 
 def write_data_file(data, rnd):
     file_path = gen_tmp_file_path(rnd)
-    f = open(file_path, 'wr+')
-    f.truncate()
-    f.write(data)
-    f.close()
+    data_file = open(file_path, 'wr+')
+    data_file.truncate()
+    data_file.write(data)
+    data_file.close()
     return file_path
 #end write_data_file
 
