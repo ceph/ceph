@@ -152,6 +152,7 @@ public:
 	::decode(alignment, bl);
 	::decode(max_size, bl);
 	::decode(start, bl);
+	committed_up_to = 0;
 	return;
       }
       bufferlist em;
