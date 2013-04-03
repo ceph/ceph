@@ -209,3 +209,66 @@ run directories.  If not specified, this defaults to: ``/tmp/cephtest``.
 The ``test_path`` option will set the complete path to use for the test directory.
 This allows for the old behavior, where ``/tmp/cephtest`` was used as the sandbox
 directory.
+
+
+VIRTUAL MACHINE SUPPORT
+======= ======= =======
+
+Teuthology also supports virtual machines, which can function like
+physical machines but differ in the following ways:
+
+VPSHOST:
+
+A new entry, vpshost, has been added to the teuthology database of
+available machines.  For physical machines, this value is null. For
+virtual machines, this entry is the name of the physical machine that
+that virtual machine resides on.
+
+There are fixed "slots" for virtual machines that appear in the teuthology
+database.  These slots have a machine type of vps and can be locked like
+any other machine.  The existence of a vpshost field is how teuthology
+knows whether or not a database entry represents a physical or a virtual
+machine.  
+
+DOWNBURST:
+
+When a virtual machine is locked, downburst is run on that machine to 
+install a new image.  This allows the user to set different virtual
+OSes to be installed on the newly created virtual machine.  Currently
+the default virtual machine is ubuntu (precise).  A different vm installation
+can be set using the --vm-type option in teuthology.lock.
+
+When a virtual machine is unlocked, downburst destroys the image on the
+machine.
+
+Temporary yaml files are used to downburst a virtual machine.  A typical
+yaml file will look like this:
+
+downburst:
+  cpus: 1
+  disk-size: 30G
+  distro: centos
+  networks:
+  - {source: front}
+  ram: 4G
+
+These values are used by downburst to create the virtual machine.  
+
+HOST KEYS:
+
+Because teuthology reinstalls a new machine, a new hostkey is generated.
+After locking, once a connection is established to the new machine,
+teuthology-lock with the --list or --list-targets options will display
+the new keys.  When vps machines are locked using the --lock-many option,
+a message is displayed indicating that --list-targets should be run later.
+
+CEPH-QA-CHEF:
+
+Once teuthology starts after a new vm is installed, teuthology
+checks for the existence of /ceph-qa-ready.  If this file is not
+present, ceph-qa-chef is run when teuthology first comes up.   
+
+ASSUMPTIONS:
+
+It is assumed that downburst is on the user's PATH.  
+

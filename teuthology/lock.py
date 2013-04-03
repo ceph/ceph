@@ -7,6 +7,8 @@ import urllib
 import yaml
 import re
 import collections
+import os
+import tempfile
 
 from teuthology import misc as teuthology
 
@@ -222,6 +224,11 @@ Lock, unlock, or query lock status of machines.
         nargs='*',
         help='machines to operate on',
         )
+    parser.add_argument(
+        '--vm-type',
+        default='ubuntu',
+        help='virtual machine type',
+        )
 
     ctx = parser.parse_args()
 
@@ -279,7 +286,18 @@ Lock, unlock, or query lock status of machines.
             statuses = [get_status(ctx, machine) for machine in machines]
         else:
             statuses = list_locks(ctx)
+        vmachines = []
 
+        for vmachine in statuses:
+            if vmachine['vpshost']:
+                if vmachine['locked']:
+                    vmachines.append(vmachine['name'])
+        if vmachines:
+            scan_for_locks(ctx, vmachines)
+            if machines:
+                statuses = [get_status(ctx, machine) for machine in machines]
+            else:
+                statuses = list_locks(ctx)
         if statuses:
             if not machines and ctx.owner is None and not ctx.all:
                 ctx.owner = teuthology.get_user()
@@ -331,6 +349,9 @@ Lock, unlock, or query lock status of machines.
                     return ret
             else:
                 machines_to_update.append(machine)
+                status_info = get_status(ctx,machine)
+                if status_info['vpshost']:
+                    do_create(ctx, machine, status_info['vpshost'])
     elif ctx.unlock:
         for machine in machines:
             if not unlock(ctx, machine, user):
@@ -339,13 +360,21 @@ Lock, unlock, or query lock status of machines.
                     return ret
             else:
                 machines_to_update.append(machine)
+                status_info = get_status(ctx,machine)
+                if status_info['vpshost']:
+                    do_destroy(machine, status_info['vpshost'])
     elif ctx.num_to_lock:
         result = lock_many(ctx, ctx.num_to_lock, ctx.machine_type, user)
         if not result:
             ret = 1
         else:
             machines_to_update = result.keys()
-            print yaml.safe_dump(dict(targets=result), default_flow_style=False)
+            if ctx.machine_type == 'vps':
+                print "Locks successful"
+                print "Unable to display keys at this time (virtual machines are rebooting)."
+                print "Please run teuthology-lock --list-targets once these machines come up."
+            else:
+                print yaml.safe_dump(dict(targets=result), default_flow_style=False)
     elif ctx.update:
         assert ctx.desc is not None or ctx.status is not None, \
             'you must specify description or status to update'
@@ -404,7 +433,6 @@ to run on, or use -a to check all of them automatically.
     if ctx.all:
         assert not ctx.targets and not ctx.machines, \
             'You can\'t specify machines with the --all option'
-
     machines = [canonicalize_hostname(m) for m in ctx.machines]
 
     if ctx.targets:
@@ -417,7 +445,10 @@ to run on, or use -a to check all of them automatically.
                             machines.append(t)
         except IOError, e:
             raise argparse.ArgumentTypeError(str(e))
+    
+    return scan_for_locks(ctx, machines)
 
+def scan_for_locks(ctx, machines):
     locks = list_locks(ctx)
     current_locks = {}
     for lock in locks:
@@ -429,7 +460,6 @@ to run on, or use -a to check all of them automatically.
     for i, machine in enumerate(machines):
         if '@' in machine:
             _, machines[i] = machine.rsplit('@')
-
     args = ['ssh-keyscan']
     args.extend(machines)
     p = subprocess.Popen(
@@ -477,4 +507,48 @@ def do_summary(ctx):
 
     print "         ---  ---"
     print "{cnt:12d}  {up:3d}".format(cnt = total_count, up = total_up)
+
+def decanonicalize_hostname(s):
+    if re.match('ubuntu@.*\.front\.sepia\.ceph\.com', s):
+        s = s[len('ubuntu@'): -len('.front.sepia.ceph.com')]
+    return s
+#
+# Use downburst to create a virtual machine
+#
+def do_create(ctx, machine_name, phys_host):
+    vmType = ctx.vm_type
+    createMe = decanonicalize_hostname(machine_name)
+    with tempfile.NamedTemporaryFile() as tmp:
+        fileInfo1 = {}
+        fileInfo1['disk-size'] = '30G'
+        fileInfo1['ram'] = '4G'
+        fileInfo1['cpus'] = 1;
+        fileInfo1['networks'] = [{'source' : 'front'}]
+        fileInfo1['distro'] = vmType.lower()
+        fileOwt = {'downburst': fileInfo1}
+        yaml.safe_dump(fileOwt,tmp)
+        metadata = "--meta-data=%s" % tmp.name
+        p = subprocess.Popen(['downburst', '-c', phys_host,
+                'create', metadata, createMe],
+                stdout=subprocess.PIPE,stderr=subprocess.PIPE,)
+        owt,err = p.communicate()
+        if err:
+            log.info("Downburst command to create %s may have failed: %s",
+                    (machine_name,err))
+        else:
+            log.info("%s created: %s" % (machine_name,owt))
+    return True
+#
+# Use downburst to destroy a virtual machine
+#
+def do_destroy(machine_name, phys_host):
+    destroyMe = decanonicalize_hostname(machine_name)
+    p = subprocess.Popen(['downburst', '-c', phys_host,
+            'destroy', destroyMe],
+            stdout=subprocess.PIPE,stderr=subprocess.PIPE,)
+    owt,err = p.communicate()
+    if err:
+        log.info("Error occurred while deleting %s" % destroyMe)
+    else:
+        log.info("%s destroyed: %s" % (machine_name,owt))
 

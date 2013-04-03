@@ -163,6 +163,7 @@ def main():
             {'internal.connect': None},
             {'internal.check_conflict': None},
             {'internal.check_ceph_data': None},
+            {'internal.vm_setup': None},
             ])
     if 'kernel' in ctx.config:
         init_tasks.append({'kernel': ctx.config['kernel']})
