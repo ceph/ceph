@@ -36,32 +36,27 @@ ceph osd tree | grep -c osd.$o1 | grep -q 2
 ceph osd tree | grep -c host1 | grep -q 2
 ceph osd tree | grep -c osd.$o2 | grep -q 2
 ceph osd tree | grep -c host2 | grep -q 2
-# FIXME: these should be idempotent!
 ceph osd crush rm host1 foo && exit 1 || true   # not empty
 ceph osd crush unlink host1 foo
-# FIXME: these should be idempotent!
-ceph osd crush unlink host1 foo && exit 1 || true # not there anymore
+ceph osd crush unlink host1 foo
 ceph osd tree | grep -c host1 | grep -q 1
 
-# FIXME: these should be idempotent!
-ceph osd crush rm foo && exit 1 || true
-ceph osd crush rm bar && exit 1 || true
+ceph osd crush rm foo  && exit 1 || true  # not empty
+ceph osd crush rm bar  && exit 1 || true  # not empty
 ceph osd crush unlink host1 bar
 ceph osd tree | grep -c host1 | grep -q 1   # now an orphan
 ceph osd crush rm osd.$o1 host1
 ceph osd crush rm host1
 ceph osd tree | grep -c host1 | grep -q 0
 
-# FIXME: these should be idempotent!
-ceph osd crush rm bar && exit 1 || true
+ceph osd crush rm bar && exit 1 || true   # not empty
 ceph osd crush unlink host2
 ceph osd crush rm bar
 ceph osd crush rm foo
 ceph osd crush rm osd.$o2 host2
 ceph osd crush rm host2
 
-# FIXME: these should be idempotent!
-ceph osd crush rm osd.$o1 && exit 1 || true
-ceph osd crush rm osd.$o2 && exit 1 || true
+ceph osd crush rm osd.$o1
+ceph osd crush rm osd.$o2
 
 echo OK
