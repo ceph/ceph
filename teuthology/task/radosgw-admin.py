@@ -109,6 +109,15 @@ def task(ctx, config):
             ])
     assert not err
 
+    # TESTCASE 'duplicate email','user','create','existing user email','fails'
+    (err, out) = rgwadmin(ctx, client, [
+            'user', 'create',
+            '--uid', user2,
+            '--display-name', display_name2,
+            '--email', email,
+            ])
+    assert err
+
     # TESTCASE 'info-existing','user','info','existing user','returns correct info'
     (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user1])
     assert not err
