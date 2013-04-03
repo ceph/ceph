@@ -52,7 +52,7 @@ def main():
     log.info('ctx %s', ctx)
 
     # check schema
-    (code,raw) = commands.getstatusoutput('./ceph --admin-daemon %s perf schema' % ctx.socket)
+    (code, raw) = commands.getstatusoutput('./ceph --admin-daemon %s perf schema' % ctx.socket)
     schema = json.loads(raw)
 
     # normalize var list
@@ -91,7 +91,7 @@ def main():
             print(varline)
         n += 1
 
-        (code,raw) = commands.getstatusoutput('./ceph --admin-daemon %s perf dump' % ctx.socket)
+        (code, raw) = commands.getstatusoutput('./ceph --admin-daemon %s perf dump' % ctx.socket)
         r = json.loads(raw)
         if prev is None:
             prev = r
