@@ -142,7 +142,7 @@ class StateMachineRenderer(object):
         for state in self.machines.keys():
             if state not in self.states.keys():
                 top_level.append(state)
-        print >>sys.stderr, "Top Level States: ", str(top_level)
+        print >> sys.stderr, "Top Level States: ", str(top_level)
         print """digraph G {"""
         print '\tsize="7,7"'
         print """\tcompound=true;"""
@@ -155,10 +155,10 @@ class StateMachineRenderer(object):
 
     def emit_state(self, state):
         if state in self.state_contents.keys():
-            self.clusterlabel[state] = "cluster%s"%(str(self.subgraphnum),)
-            yield "subgraph cluster%s {"%(str(self.subgraphnum),)
+            self.clusterlabel[state] = "cluster%s" % (str(self.subgraphnum),)
+            yield "subgraph cluster%s {" % (str(self.subgraphnum),)
             self.subgraphnum += 1
-            yield """\tlabel = "%s";"""%(state,)
+            yield """\tlabel = "%s";""" % (state,)
             yield """\tcolor = "blue";"""
             for j in self.state_contents[state]:
                 for i in self.emit_state(j):
@@ -166,7 +166,7 @@ class StateMachineRenderer(object):
             yield "}"
         else:
             found = False
-            for (k,v) in self.machines.items():
+            for (k, v) in self.machines.items():
                 if v == state:
                     yield state+"[shape=Mdiamond];"
                     found = True
@@ -182,16 +182,16 @@ class StateMachineRenderer(object):
             retval += "]"
             return retval
         for (fro, to) in self.edges[event]:
-            appendix = ['label="%s"'%(event,)]
+            appendix = ['label="%s"' % (event,)]
             if fro in self.machines.keys():
-                appendix.append("ltail=%s"%(self.clusterlabel[fro],))
+                appendix.append("ltail=%s" % (self.clusterlabel[fro],))
                 while fro in self.machines.keys():
                     fro = self.machines[fro]
             if to in self.machines.keys():
-                appendix.append("lhead=%s"%(self.clusterlabel[to],))
+                appendix.append("lhead=%s" % (self.clusterlabel[to],))
                 while to in self.machines.keys():
                     to = self.machines[to]
-            yield("%s -> %s %s;"%(fro, to, ap(appendix)))
+            yield("%s -> %s %s;" % (fro, to, ap(appendix)))
 
 
 
