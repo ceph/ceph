@@ -83,13 +83,13 @@ def main():
     for v in vars:
         varline = varline + (' %8s' % v)
 
-    n = 0
+    print_count = 0
     prev = None
     start = time.time()
     while True:
-        if n % 10 == 0:
+        if print_count % 10 == 0:
             print(varline)
-        n += 1
+        print_count += 1
 
         (code, raw) = commands.getstatusoutput('./ceph --admin-daemon %s perf dump' % ctx.socket)
         r = json.loads(raw)
