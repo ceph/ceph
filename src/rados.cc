@@ -2026,6 +2026,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     string oid(nargs[1]);
     snap_set_t ls;
 
+    io_ctx.snap_set_read(LIBRADOS_SNAP_DIR);
     ret = io_ctx.list_snaps(oid, &ls);
     if (ret < 0) {
       cerr << "error listing snap shots " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
