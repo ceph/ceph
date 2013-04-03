@@ -201,14 +201,18 @@ def is_mounted(dev):
     Check if the given device is mounted.
     """
     dev = os.path.realpath(dev)
-    with file('/proc/mounts') as f:
-        for line in f.read().split('\n'):
-            d = line.split(' ')[0]
-            if os.path.exists(d):
-                d = os.path.realpath(d)
-                if dev == d:
-                    return True
-    return False
+    with file('/proc/mounts', 'rb') as proc_mounts:
+        for line in proc_mounts:
+            fields = line.split()
+            if len(fields) < 3:
+                continue
+            mounts_dev = fields[0]
+            path = fields[1]
+            if mounts_dev.startswith('/') and os.path.exists(mounts_dev):
+                mounts_dev = os.path.realpath(mounts_dev)
+                if mounts_dev == dev:
+                    return path
+    return None
 
 
 def is_held(dev):
@@ -242,12 +246,12 @@ def verify_not_in_use(dev):
         if holders:
             raise Error('Device is in use by a device-mapper mapping (dm-crypt?)' % dev, ','.join(holders))
     else:
-        for p in list_partitions(dev):
-            if is_mounted(p):
-                raise Error('Device is mounted', p)
-            holders = is_held(p)
+        for partition in list_partitions(dev):
+            if is_mounted(partition):
+                raise Error('Device is mounted', partition)
+            holders = is_held(partition)
             if holders:
-                raise Error('Device %s is in use by a device-mapper mapping (dm-crypt?)' % p, ','.join(holders))
+                raise Error('Device %s is in use by a device-mapper mapping (dm-crypt?)' % partition, ','.join(holders))
 
 
 def must_be_one_line(line):
@@ -300,9 +304,9 @@ def write_one_line(parent, name, text):
     """
     path = os.path.join(parent, name)
     tmp = '{path}.{pid}.tmp'.format(path=path, pid=os.getpid())
-    with file(tmp, 'wb') as f:
-        f.write(text + '\n')
-        os.fsync(f.fileno())
+    with file(tmp, 'wb') as tmp_file:
+        tmp_file.write(text + '\n')
+        os.fsync(tmp_file.fileno())
     os.rename(tmp, path)
 
 
@@ -394,7 +398,7 @@ def get_conf(cluster, variable):
     :return: The variable value or None.
     """
     try:
-        p = subprocess.Popen(
+        process = subprocess.Popen(
             args=[
                 '/usr/bin/ceph-conf',
                 '--cluster={cluster}'.format(
@@ -409,8 +413,8 @@ def get_conf(cluster, variable):
             )
     except OSError as e:
         raise Error('error executing ceph-conf', e)
-    (out, _err) = p.communicate()
-    ret = p.wait()
+    (out, _err) = process.communicate()
+    ret = process.wait()
     if ret == 1:
         # config entry not found
         return None
@@ -486,8 +490,8 @@ def get_or_create_dmcrypt_key(
             os.makedirs(key_dir)
         with file('/dev/urandom', 'rb') as i:
             key = i.read(256)
-            with file(path, 'wb') as f:
-                f.write(key)
+            with file(path, 'wb') as key_file:
+                key_file.write(key)
         return path
     except:
         raise Error('unable to read or create dm-crypt key', path)
@@ -659,9 +663,9 @@ def zap(dev):
         # isn't too thorough.
         lba_size = 4096
         size = 33 * lba_size
-        with file(dev, 'wb') as f:
-            f.seek(-size, os.SEEK_END)
-            f.write(size*'\0')
+        with file(dev, 'wb') as dev_file:
+            dev_file.seek(-size, os.SEEK_END)
+            dev_file.write(size*'\0')
 
         subprocess.check_call(
             args=[
@@ -777,8 +781,8 @@ def prepare_journal_file(
 
     if not os.path.exists(journal):
         LOG.debug('Creating journal file %s with size %dM', journal, journal_size)
-        with file(journal, 'wb') as f:
-            f.truncate(journal_size * 1048576)
+        with file(journal, 'wb') as journal_file:
+            journal_file.truncate(journal_size * 1048576)
 
     # FIXME: should we resize an existing journal file?
 
@@ -1505,12 +1509,12 @@ def activate(
 
         if init is not None:
             if init == 'auto':
-                c = get_conf(
+                conf_val = get_conf(
                     cluster=cluster,
                     variable='init'
                     )
-                if c is not None:
-                    init = c
+                if conf_val is not None:
+                    init = conf_val
                 else:
                     (distro, release, codename) = platform.dist()
                     if distro == 'Ubuntu':
@@ -1579,23 +1583,24 @@ def main_activate(args):
 ###########################
 
 def is_swap(dev):
+    dev = os.path.realpath(dev)
     with file('/proc/swaps', 'rb') as proc_swaps:
         for line in proc_swaps.readlines()[1:]:
             fields = line.split()
             if len(fields) < 3:
                 continue
-            d = fields[0]
-            if d.startswith('/') and os.path.exists(d):
-                d = os.path.realpath(d)
-                if d == dev:
+            swaps_dev = fields[0]
+            if swaps_dev.startswith('/') and os.path.exists(swaps_dev):
+                swaps_dev = os.path.realpath(swaps_dev)
+                if swaps_dev == dev:
                     return True
     return False
 
 def get_oneliner(base, name):
     path = os.path.join(base, name)
     if os.path.isfile(path):
-        with open(path, 'r') as f:
-            return f.readline().rstrip()
+        with open(path, 'r') as _file:
+            return _file.readline().rstrip()
     return None
 
 def get_dev_fs(dev):
@@ -1609,13 +1614,13 @@ def get_dev_fs(dev):
         stdout = subprocess.PIPE,
         stderr=subprocess.PIPE).stdout.read()
     if 'TYPE' in fscheck:
-        fs = fscheck.split()[1].split('"')[1]
-        return fs
+        fstype = fscheck.split()[1].split('"')[1]
+        return fstype
     else:
         return None
 
 def get_partition_type(part):
-    (base, partnum) = re.match('(\D+)(\d+)', part).group(1,2)
+    (base, partnum) = re.match('(\D+)(\d+)', part).group(1, 2)
     sgdisk = subprocess.Popen(
         [
             'sgdisk',
@@ -1634,7 +1639,7 @@ def get_partition_type(part):
     return None
 
 def get_partition_uuid(dev):
-    (base, partnum) = re.match('(\D+)(\d+)', dev).group(1,2)
+    (base, partnum) = re.match('(\D+)(\d+)', dev).group(1, 2)
     out = subprocess.Popen(
         [ 'sgdisk', '-i', partnum, base ],
         stdout = subprocess.PIPE,
@@ -1643,20 +1648,6 @@ def get_partition_uuid(dev):
         m = re.match('Partition unique GUID: (\S+)', line)
         if m:
             return m.group(1).lower()
-    return None
-
-def is_mounted(dev):
-    with file('/proc/mounts', 'rb') as proc_mounts:
-        for line in proc_mounts:
-            fields = line.split()
-            if len(fields) < 3:
-                continue
-            d = fields[0]
-            path = fields[1]
-            if d.startswith('/') and os.path.exists(d):
-                d = os.path.realpath(d)
-                if d == dev:
-                    return path
     return None
 
 def more_osd_info(path, uuid_map):
@@ -1688,7 +1679,7 @@ def list_dev(dev, uuid_map, journal_map):
     if is_partition(dev):
         ptype = get_partition_type(dev)
         prefix = ' '
-    fs = get_dev_fs(dev)
+    fs_type = get_dev_fs(dev)
     path = is_mounted(dev)
 
     desc = []
@@ -1696,9 +1687,9 @@ def list_dev(dev, uuid_map, journal_map):
         if path:
             desc.append('active')
             desc.extend(more_osd_info(path, uuid_map))
-        elif fs:
+        elif fs_type:
             try:
-                tpath = mount(dev=dev, fstype=fs, options='')
+                tpath = mount(dev=dev, fstype=fs_type, options='')
                 if tpath:
                     try:
                         magic = get_oneliner(tpath, 'magic')
@@ -1707,7 +1698,7 @@ def list_dev(dev, uuid_map, journal_map):
                             desc.extend(more_osd_info(tpath, uuid_map))
                     finally:
                         unmount(tpath)
-            except:
+            except MountError:
                 pass
         if desc:
             desc = ['ceph data'] + desc
@@ -1715,16 +1706,16 @@ def list_dev(dev, uuid_map, journal_map):
             desc = ['ceph data', 'unprepared']
     elif ptype == 'ceph journal':
         desc.append('ceph journal')
-        uuid = get_partition_uuid(dev)
-        if uuid and uuid in journal_map:
-            desc.append('for %s' % journal_map[uuid])
+        part_uuid = get_partition_uuid(dev)
+        if part_uuid and part_uuid in journal_map:
+            desc.append('for %s' % journal_map[part_uuid])
     else:
         if is_swap(dev):
             desc.append('swap')
         else:
             desc.append('other')
-        if fs:
-            desc.append(fs)
+        if fs_type:
+            desc.append(fs_type)
         elif ptype:
             desc.append(ptype)
         if path:
@@ -1742,21 +1733,21 @@ def main_list(args):
     for base, parts in sorted(partmap.iteritems()):
         for p in parts:
             dev = '/dev/' + p
-            uuid = get_partition_uuid(dev)
-            if uuid:
-                uuid_map[uuid] = dev
+            part_uuid = get_partition_uuid(dev)
+            if part_uuid:
+                uuid_map[part_uuid] = dev
             ptype = get_partition_type(dev)
             if ptype == 'ceph data':
-                fs = get_dev_fs(dev)
+                fs_type = get_dev_fs(dev)
                 try:
-                    tpath = mount(dev=dev, fstype=fs, options='')
+                    tpath = mount(dev=dev, fstype=fs_type, options='')
                     try:
                         journal_uuid = get_oneliner(tpath, 'journal_uuid')
                         if journal_uuid:
                             journal_map[journal_uuid.lower()] = dev
                     finally:
                         unmount(tpath)
-                except:
+                except MountError:
                     pass
 
     for base, parts in sorted(partmap.iteritems()):
