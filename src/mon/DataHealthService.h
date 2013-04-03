@@ -34,6 +34,8 @@ class DataHealthService :
   public HealthService
 {
   map<entity_inst_t,DataStats> stats;
+  int last_warned_percent;
+
   void handle_tell(MMonHealth *m);
   int update_stats();
   void share_stats();
@@ -58,7 +60,8 @@ protected:
 
 public:
   DataHealthService(Monitor *m) :
-    HealthService(m)
+    HealthService(m),
+    last_warned_percent(0)
   {
     set_update_period(g_conf->mon_health_data_update_interval);
   }
