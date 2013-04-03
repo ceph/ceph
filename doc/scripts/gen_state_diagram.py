@@ -195,7 +195,7 @@ class StateMachineRenderer(object):
 
 
 
-input_generator = do_filter(sys.stdin.xreadlines())
-renderer = StateMachineRenderer()
-renderer.read_input(input_generator)
-renderer.emit_dot()
+INPUT_GENERATOR = do_filter(sys.stdin.xreadlines())
+RENDERER = StateMachineRenderer()
+RENDERER.read_input(INPUT_GENERATOR)
+RENDERER.emit_dot()
