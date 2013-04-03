@@ -1880,7 +1880,6 @@ void RGWPutCORS::execute()
 
   RGWCORSConfiguration_S3 *cors_config;
   RGWCORSXMLParser_S3 parser(s->cct);
-  stringstream ss;
   rgw_obj obj;
 
   ret = 0;
@@ -1898,7 +1897,7 @@ void RGWPutCORS::execute()
     ret = -EINVAL;
     return;
   }
-  cors_config = (RGWCORSConfiguration_S3 *)parser.find_first("CORSConfiguration");
+  cors_config = static_cast<RGWCORSConfiguration_S3 *>(parser.find_first("CORSConfiguration"));
   if (!cors_config) {
     ret = -EINVAL;
     return;
@@ -1961,7 +1960,7 @@ void RGWOptionsCORS::get_response_params(string& hdrs, string& exp_hdrs, unsigne
   if (req_hdrs) {
     list<string> hl;
     get_str_list(req_hdrs, hl);
-    for(list<string>::iterator it = hl.begin(); it != hl.end(); it++) {
+    for(list<string>::iterator it = hl.begin(); it != hl.end(); ++it) {
       if (!rule->is_header_allowed((*it).c_str(), (*it).length())) {
         dout(5) << "Header " << (*it) << " is not registered in this rule" << dendl;
       } else {
