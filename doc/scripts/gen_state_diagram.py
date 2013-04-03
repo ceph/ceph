@@ -175,7 +175,7 @@ class StateMachineRenderer(object):
                 yield state+";"
 
     def emit_event(self, event):
-        def ap(app):
+        def append(app):
             retval = "["
             for i in app:
                 retval += (i + ",")
@@ -191,7 +191,7 @@ class StateMachineRenderer(object):
                 appendix.append("lhead=%s" % (self.clusterlabel[to],))
                 while to in self.machines.keys():
                     to = self.machines[to]
-            yield("%s -> %s %s;" % (fro, to, ap(appendix)))
+            yield("%s -> %s %s;" % (fro, to, append(appendix)))
 
 
 
