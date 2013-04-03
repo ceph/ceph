@@ -111,7 +111,7 @@ namespace librados
   };
 
   /*
-   * ObjectOperation : compount object operation
+   * ObjectOperation : compound object operation
    * Batch multiple object operations into a single request, to be applied
    * atomically.
    */
@@ -174,7 +174,7 @@ namespace librados
   };
 
   /*
-   * ObjectWriteOperation : compount object write operation
+   * ObjectWriteOperation : compound object write operation
    * Batch multiple object operations into a single request, to be applied
    * atomically.
    */
@@ -236,7 +236,7 @@ namespace librados
   };
 
   /*
-   * ObjectReadOperation : compount object operation that return value
+   * ObjectReadOperation : compound object operation that return value
    * Batch multiple object operations into a single request, to be applied
    * atomically.
    */
