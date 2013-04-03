@@ -2612,11 +2612,11 @@ void MDCache::handle_mds_failure(int who)
   recovery_set.erase(mds->get_nodeid());
   dout(1) << "handle_mds_failure mds." << who << " : recovery peers are " << recovery_set << dendl;
 
-  resolve_gather.insert(who);
+  resolve_gather.erase(who);
   discard_delayed_resolve(who);
   ambiguous_slave_updates.erase(who);
 
-  rejoin_gather.insert(who);
+  rejoin_gather.erase(who);
   rejoin_sent.erase(who);        // i need to send another
   rejoin_ack_gather.erase(who);  // i'll need/get another.
 
