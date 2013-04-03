@@ -784,6 +784,15 @@ void ReplicatedPG::do_op(OpRequestRef op)
   map<hobject_t,ObjectContext*> src_obc;
   for (vector<OSDOp>::iterator p = m->ops.begin(); p != m->ops.end(); ++p) {
     OSDOp& osd_op = *p;
+
+    // make sure LIST_SNAPS is on CEPH_SNAPDIR and nothing else
+    if (osd_op.op.op == CEPH_OSD_OP_LIST_SNAPS &&
+	m->get_snapid() != CEPH_SNAPDIR) {
+      dout(10) << "LIST_SNAPS with incorrect context" << dendl;
+      osd->reply_op_error(op, -EINVAL);
+      return;
+    }
+
     if (!ceph_osd_op_type_multi(osd_op.op.op))
       continue;
     if (osd_op.soid.oid.name.length()) {
@@ -860,7 +869,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
 	} else if (r) {
 	  osd->reply_op_error(op, r);
 	} else {
-	  dout(10) << " clone_oid " << clone_oid << " obc " << src_obc << dendl;
+	  dout(10) << " clone_oid " << clone_oid << " obc " << sobc << dendl;
 	  src_obc[clone_oid] = sobc;
 	  continue;
 	}
@@ -2335,6 +2344,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  hobject_t clone_oid = soid;
 	  clone_oid.snap = *clone_iter;
 	  ObjectContext *clone_obc = ctx->src_obc[clone_oid];
+          assert(clone_obc);
 	  for (vector<snapid_t>::reverse_iterator p = clone_obc->obs.oi.snaps.rbegin();
 	       p != clone_obc->obs.oi.snaps.rend();
 	       ++p) {
