@@ -43,6 +43,8 @@
 #include "msg/Message.h"
 #include "msg/Messenger.h"
 
+#include "common/errno.h"
+#include "common/safe_io.h"
 #include "common/perf_counters.h"
 #include "common/MemoryModel.h"
 #include "osdc/Journaler.h"
@@ -10803,6 +10805,7 @@ void MDCache::show_cache()
 
 void MDCache::dump_cache(const char *fn)
 {
+  int r;
   char deffn[200];
   if (!fn) {
     snprintf(deffn, sizeof(deffn), "cachedump.%d.mds%d", (int)mds->mdsmap->get_epoch(), mds->get_nodeid());
@@ -10811,32 +10814,50 @@ void MDCache::dump_cache(const char *fn)
 
   dout(1) << "dump_cache to " << fn << dendl;
 
-  ofstream myfile;
-  myfile.open(fn);
+  int fd = ::open(fn, O_WRONLY|O_CREAT|O_EXCL, 0600);
+  if (fd < 0) {
+    derr << "failed to open " << fn << ": " << cpp_strerror(errno) << dendl;
+    return;
+  }
   
   for (hash_map<vinodeno_t,CInode*>::iterator it = inode_map.begin();
        it != inode_map.end();
        ++it) {
     CInode *in = it->second;
-    myfile << *in << std::endl;
+    ostringstream ss;
+    ss << *in << std::endl;
+    std::string s = ss.str();
+    r = safe_write(fd, s.c_str(), s.length());
+    if (r < 0)
+      return;
 
     list<CDir*> dfs;
     in->get_dirfrags(dfs);
     for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p) {
       CDir *dir = *p;
-      myfile << " " << *dir << std::endl;
+      ostringstream tt;
+      tt << " " << *dir << std::endl;
+      string t = tt.str();
+      r = safe_write(fd, t.c_str(), t.length());
+      if (r < 0)
+	return;
       
       for (CDir::map_t::iterator q = dir->items.begin();
 	   q != dir->items.end();
 	   ++q) {
 	CDentry *dn = q->second;
-	myfile << "  " << *dn << std::endl;
+	ostringstream uu;
+	uu << "  " << *dn << std::endl;
+	string u = uu.str();
+	r = safe_write(fd, u.c_str(), u.length());
+	if (r < 0)
+	  return;
       }
       dir->check_rstats();
     }
   }
 
-  myfile.close();
+  ::close(fd);
 }
 
 
