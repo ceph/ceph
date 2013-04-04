@@ -307,14 +307,14 @@ install -D -m 644 udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rule
 install -D -m 644 udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
 
 #set up placeholder directories
-mkdir -p $RPM_BUILD_ROOT/etc/ceph
-mkdir -p $RPM_BUILD_ROOT/var/log/ceph
-mkdir -p $RPM_BUILD_ROOT/var/lib/ceph/tmp
-mkdir -p $RPM_BUILD_ROOT/var/lib/ceph/mon
-mkdir -p $RPM_BUILD_ROOT/var/lib/ceph/osd
-mkdir -p $RPM_BUILD_ROOT/var/lib/ceph/mds
-mkdir -p $RPM_BUILD_ROOT/var/lib/ceph/bootstrap-osd
-mkdir -p $RPM_BUILD_ROOT/var/lib/ceph/bootstrap-mds
+mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/mon
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/osd
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/mds
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-osd
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-mds
 
 
 %if %{defined suse_version}
