@@ -385,9 +385,22 @@ fi
 %{_bindir}/ceph-coverage
 %{_bindir}/ceph_mon_store_converter
 %{_initrddir}/ceph
+%{_sbindir}/ceph-disk
+%{_sbindir}/ceph-disk-activate
+%{_sbindir}/ceph-disk-prepare
+%{_sbindir}/ceph-create-keys
+%{_sbindir}/rcceph
 /sbin/mkcephfs
 /sbin/mount.ceph
+%dir %{_libdir}/rados-classes
+%{_libdir}/rados-classes/libcls_rbd.so*
+%{_libdir}/rados-classes/libcls_rgw.so*
+%{_libdir}/rados-classes/libcls_lock.so*
+%{_libdir}/rados-classes/libcls_kvs.so*
+%{_libdir}/rados-classes/libcls_refcount.so*
 %{_libdir}/ceph
+/lib/udev/rules.d/95-ceph-osd.rules
+%dir %{_sysconfdir}/ceph/
 %config %{_sysconfdir}/bash_completion.d/ceph
 %config %{_sysconfdir}/bash_completion.d/rados
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
@@ -415,34 +428,17 @@ fi
 %{_mandir}/man8/ceph-debugpack.8*
 %{_mandir}/man8/ceph-clsinfo.8.gz
 %{_mandir}/man8/librados-config.8.gz
+#set up placeholder directories
 %dir %{_localstatedir}/lib/ceph/
-%dir %{_localstatedir}/lib/ceph/tmp/
+%dir %{_localstatedir}/lib/ceph/tmp
+%dir %{_localstatedir}/lib/ceph/mon
+%dir %{_localstatedir}/lib/ceph/osd
+%dir %{_localstatedir}/lib/ceph/mds
+%dir %{_localstatedir}/lib/ceph/bootstrap-osd
+%dir %{_localstatedir}/lib/ceph/bootstrap-mds
 %dir %{_localstatedir}/log/ceph/
 %ghost %dir %{_localstatedir}/run/ceph/
-%dir %{_sysconfdir}/ceph/
-%{_sbindir}/rcceph
-%dir %{_libdir}/rados-classes
-%{_libdir}/rados-classes/libcls_rbd.so*
-%{_libdir}/rados-classes/libcls_rgw.so*
-%{_libdir}/rados-classes/libcls_lock.so*
-%{_libdir}/rados-classes/libcls_kvs.so*
-%{_libdir}/rados-classes/libcls_refcount.so*
-%{_sbindir}/ceph-disk
-%{_sbindir}/ceph-disk-activate
-%{_sbindir}/ceph-disk-prepare
-%{_sbindir}/ceph-create-keys
-/lib/udev/rules.d/95-ceph-osd.rules
 
-#set up placeholder directories
-%defattr(-,root,root,755)
-%dir /etc/ceph
-%dir /var/log/ceph
-%dir /var/lib/ceph/tmp
-%dir /var/lib/ceph/mon
-%dir /var/lib/ceph/osd
-%dir /var/lib/ceph/mds
-%dir /var/lib/ceph/bootstrap-osd
-%dir /var/lib/ceph/bootstrap-mds
 
 #################################################################################
 %files fuse
