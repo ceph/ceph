@@ -26,12 +26,17 @@ bin_PROGRAMS =
 # like bin_PROGRAMS, but these targets are only built for debug builds
 bin_DEBUGPROGRAMS =
 sbin_PROGRAMS =
-sbin_SCRIPTS = \
+# like sbin_SCRIPTS but can be used to install to e.g. /usr/sbin
+ceph_sbindir = $(prefix)$(sbindir)
+ceph_sbin_SCRIPTS = \
 	ceph-disk \
 	ceph-disk-prepare \
 	ceph-disk-activate \
-	ceph-create-keys \
+	ceph-create-keys
+
+sbin_SCRIPTS = \
 	mount.fuse.ceph
+
 bin_SCRIPTS = ceph-run $(srcdir)/ceph-clsinfo ceph-debugpack ceph-rbdnamer
 dist_bin_SCRIPTS =
 # C/C++ tests to build will be appended to this
