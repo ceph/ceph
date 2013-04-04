@@ -303,7 +303,7 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None):
                     )
                 remote.run(
                     logger=log.getChild(role),
-                    args=['rm', '-rf', '--', scratch_tmp],
+                    args=['sudo', 'rm', '-rf', '--', scratch_tmp],
                     )
     finally:
         log.info('Stopping %s on %s...', spec, role)
