@@ -17,6 +17,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 #include "include/Context.h"
+#include "include/stringify.h"
 #include <errno.h>
 #include "Paxos.h"
 #include "Monitor.h"
@@ -917,6 +918,17 @@ public:
   bool exists_key(const string& prefix, const string& name) {
     string key = mon->store->combine_strings(prefix, name);
     return mon->store->exists(get_service_name(), key);
+  }
+
+  /**
+   * Checks if a given version @v exists
+   *
+   * @param prefix key's prefix
+   * @param v key's suffix
+   * @returns true if key exists; false otherwise.
+   */
+  bool exists_version(const string& prefix, const version_t v) {
+    return exists_key(prefix, stringify(v));
   }
   /**
    * @}
