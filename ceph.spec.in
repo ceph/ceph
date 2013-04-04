@@ -581,6 +581,7 @@ fi
 %{_bindir}/ceph_test_cls_rbd
 %{_bindir}/ceph_test_cls_refcount
 %{_bindir}/ceph_test_cls_rgw
+%{_bindir}/ceph_test_cors
 %{_bindir}/ceph_test_filejournal
 %{_bindir}/ceph_test_filestore
 %{_bindir}/ceph_test_filestore_idempotent
@@ -617,6 +618,7 @@ fi
 %{_bindir}/ceph_test_rados_open_pools_parallel
 %{_bindir}/ceph_test_rados_watch_notify
 %{_bindir}/ceph_test_signal_handlers
+%{_bindir}/ceph_test_snap_mapper
 %{_bindir}/ceph_test_store_tool
 %{_bindir}/ceph_test_timers
 %{_bindir}/ceph_tpbench
