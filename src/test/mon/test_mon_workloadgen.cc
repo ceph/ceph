@@ -366,8 +366,8 @@ class OSDStub : public TestStub
 
     messenger->set_default_policy(
 	Messenger::Policy::stateless_server(supported, 0));
-    messenger->set_policy_throttler(entity_name_t::TYPE_CLIENT,
-	&throttler);
+    messenger->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
+				    &throttler, NULL);
     messenger->set_policy(entity_name_t::TYPE_MON,
 	Messenger::Policy::lossy_client(supported, CEPH_FEATURE_UID |
 	  CEPH_FEATURE_PGID64 |

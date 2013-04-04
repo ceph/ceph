@@ -162,12 +162,15 @@ public:
    * ownership of this pointer, but you must not destroy it before
    * you destroy SimpleMessenger.
    */
-  void set_policy_throttler(int type, Throttle *t) {
+  void set_policy_throttlers(int type, Throttle *byte_throttle, Throttle *msg_throttle) {
     Mutex::Locker l(policy_lock);
-    if (policy_map.count(type))
-      policy_map[type].throttler = t;
-    else
-      default_policy.throttler = t;
+    if (policy_map.count(type)) {
+      policy_map[type].throttler_bytes = byte_throttle;
+      policy_map[type].throttler_messages = msg_throttle;
+    } else {
+      default_policy.throttler_bytes = byte_throttle;
+      default_policy.throttler_messages = msg_throttle;
+    }
   }
   /**
    * Bind the SimpleMessenger to a specific address. If bind_addr
