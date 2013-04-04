@@ -4332,6 +4332,37 @@ out:
   dout(10) << __func__ << " machine " << machine << " finished" << dendl;
 }
 
+void Monitor::StoreConverter::_convert_osdmap_full()
+{
+  dout(10) << __func__ << dendl;
+  version_t first_committed =
+    store->get_int("osdmap", "first_committed");
+  version_t last_committed =
+    store->get_int("osdmap", "last_committed");
+
+  int err = 0;
+  for (version_t ver = first_committed; ver <= last_committed; ver++) {
+    if (!store->exists_bl_sn("osdmap_full", ver)) {
+      dout(20) << __func__ << " osdmap_full  ver " << ver << " dne" << dendl;
+      err++;
+      continue;
+    }
+
+    bufferlist bl;
+    int r = store->get_bl_sn(bl, "osdmap_full", ver);
+    assert(r >= 0);
+    dout(20) << __func__ << " osdmap_full ver " << ver
+             << " bl " << bl.length() << " bytes" << dendl;
+
+    string full_key = "full_" + stringify(ver);
+    MonitorDBStore::Transaction tx;
+    tx.put("osdmap", full_key, bl);
+    db->apply_transaction(tx);
+  }
+  dout(10) << __func__ << " found " << err << " conversion errors!" << dendl;
+  assert(err == 0);
+}
+
 void Monitor::StoreConverter::_convert_paxos()
 {
   dout(10) << __func__ << dendl;
@@ -4384,5 +4415,11 @@ void Monitor::StoreConverter::_convert_machines()
   for (; it != machine_names.end(); ++it) {
     _convert_machines(*it);
   }
+  // convert osdmap full versions
+  // this stays here as these aren't really an independent paxos
+  // machine, but rather machine-specific and don't fit on the
+  // _convert_machines(string) function.
+  _convert_osdmap_full();
+
   dout(10) << __func__ << " finished" << dendl;
 }
