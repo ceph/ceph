@@ -198,7 +198,8 @@ int FileStore::lfn_stat(coll_t cid, const hobject_t& oid, struct stat *buf)
 
 int FileStore::lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode,
 			IndexedPath *path,
-			Index *index) {
+			Index *index) 
+{
   Index index2;
   IndexedPath path2;
   if (!path)

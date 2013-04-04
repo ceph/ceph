@@ -39,7 +39,8 @@
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
-static ostream& _prefix(std::ostream *_dout, const PG *pg) {
+static ostream& _prefix(std::ostream *_dout, const PG *pg) 
+{
   return *_dout << pg->gen_prefix();
 }
 
@@ -3383,7 +3384,8 @@ void PG::scrub_unreserve_replicas()
   }
 }
 
-void PG::_scan_snaps(ScrubMap &smap) {
+void PG::_scan_snaps(ScrubMap &smap) 
+{
   for (map<hobject_t, ScrubMap::object>::iterator i = smap.objects.begin();
        i != smap.objects.end();
        ++i) {
