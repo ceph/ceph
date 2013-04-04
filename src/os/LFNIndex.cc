@@ -1073,6 +1073,7 @@ bool LFNIndex::lfn_parse_object_name(const string &long_name, hobject_t *out) {
     pool = strtoull(pstring.c_str(), NULL, 16);
 
   (*out) = hobject_t(name, key, snap, hash, (int64_t)pool);
+  out->nspace = ns;
   return true;
 }
 

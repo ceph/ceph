@@ -131,6 +131,35 @@ TEST_F(TestHASH_INDEX_TAG_2, generate_and_parse_name) {
 			  "\\dA_KEY_head_ABABABAB");
 }
 
+class TestHOBJECT_WITH_POOL : public TestWrapLFNIndex, public ::testing::Test {
+public:
+  TestHOBJECT_WITH_POOL() : TestWrapLFNIndex(coll_t("ABC"), "PATH", CollectionIndex::HOBJECT_WITH_POOL) {
+  }
+};
+
+TEST_F(TestHOBJECT_WITH_POOL, generate_and_parse_name) {
+  const vector<string> path;
+  std::string mangled_name;
+  const std::string key("KEY");
+  uint64_t hash = 0xABABABAB;
+  uint64_t pool = 0xCDCDCDCD;
+
+  {
+    std::string name(".XA/B_\\C.D");
+    name[1] = '\0';
+    hobject_t hoid(object_t(name), key, CEPH_NOSNAP, hash, pool);
+    hoid.nspace = "NSPACE";
+
+    test_generate_and_parse(hoid, "\\.\\nA\\sB\\u\\\\C.D_KEY_head_ABABABAB_NSPACE_cdcdcdcd");
+  }
+  {
+    hobject_t hoid(object_t("DIR_A"), key, CEPH_NOSNAP, hash, pool);
+    hoid.nspace = "NSPACE";
+
+    test_generate_and_parse(hoid, "\\dA_KEY_head_ABABABAB_NSPACE_cdcdcdcd");
+  }
+}
+
 class TestLFNIndex : public TestWrapLFNIndex, public ::testing::Test {
 public:
   TestLFNIndex() : TestWrapLFNIndex(coll_t("ABC"), "PATH", CollectionIndex::HASH_INDEX_TAG) {
