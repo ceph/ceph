@@ -1534,9 +1534,7 @@ void Client::handle_client_session(MClientSession *m)
   case CEPH_SESSION_OPEN:
     renew_caps(session);
     session->state = MetaSession::STATE_OPEN;
-    if (unmounting) {
-      _close_mds_session(session);
-    } else {
+    if (!unmounting) {
       connect_mds_targets(from);
     }
     signal_cond_list(session->waiting_for_open);
@@ -1966,6 +1964,8 @@ void Client::send_reconnect(MetaSession *session)
   resend_unsafe_requests(session);
 
   messenger->send_message(m, session->con);
+
+  mount_cond.Signal();
 }
 
 
@@ -3778,17 +3778,17 @@ void Client::unmount()
   }
 
   
-  // send session closes!
-  for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
-       p != mds_sessions.end();
-       ++p) {
-    if (p->second->state != MetaSession::STATE_CLOSING) {
-      _close_mds_session(p->second);
-    }
-  }
-
-  // wait for sessions to close
   while (!mds_sessions.empty()) {
+    // send session closes!
+    for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
+	p != mds_sessions.end();
+	++p) {
+      if (p->second->state != MetaSession::STATE_CLOSING) {
+	_close_mds_session(p->second);
+      }
+    }
+
+    // wait for sessions to close
     ldout(cct, 2) << "waiting for " << mds_sessions.size() << " mds sessions to close" << dendl;
     mount_cond.Wait(client_lock);
   }
