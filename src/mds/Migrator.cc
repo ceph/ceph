@@ -397,7 +397,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	  cache->get_subtree_bounds(dir, bounds);
 	  import_remove_pins(dir, bounds);
 	  
-	  // adjust auth back to me
+	  // adjust auth back to the exporter
 	  cache->adjust_subtree_auth(dir, import_peer[df]);
 	  cache->try_subtree_merge(dir);   // NOTE: may journal subtree_map as side-effect
 
@@ -1684,6 +1684,12 @@ void Migrator::handle_export_cancel(MExportDirCancel *m)
   } else if (import_state[df] == IMPORT_PREPPED) {
     CDir *dir = mds->mdcache->get_dirfrag(df);
     assert(dir);
+    set<CDir*> bounds;
+    cache->get_subtree_bounds(dir, bounds);
+    import_remove_pins(dir, bounds);
+    // adjust auth back to the exportor
+    cache->adjust_subtree_auth(dir, import_peer[df]);
+    cache->try_subtree_merge(dir);
     import_reverse_unfreeze(dir);
   } else {
     assert(0 == "got export_cancel in weird state");
