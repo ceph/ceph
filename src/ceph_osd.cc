@@ -338,9 +338,12 @@ int main(int argc, const char **argv)
 		    "(no journal)" : g_conf->osd_journal)
        << std::endl;
 
-  boost::scoped_ptr<Throttle> client_throttler(
+  boost::scoped_ptr<Throttle> client_byte_throttler(
     new Throttle(g_ceph_context, "osd_client_bytes",
 		 g_conf->osd_client_message_size_cap));
+  boost::scoped_ptr<Throttle> client_msg_throttler(
+    new Throttle(g_ceph_context, "osd_client_messages",
+		 g_conf->osd_client_message_cap));
 
   uint64_t supported =
     CEPH_FEATURE_UID | 
@@ -350,8 +353,8 @@ int main(int argc, const char **argv)
 
   client_messenger->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
   client_messenger->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
-					  client_throttler.get(),
-					  NULL);
+					  client_byte_throttler.get(),
+					  client_msg_throttler.get());
   client_messenger->set_policy(entity_name_t::TYPE_MON,
                                Messenger::Policy::lossy_client(supported,
 							       CEPH_FEATURE_UID |
@@ -462,7 +465,8 @@ int main(int argc, const char **argv)
   delete messenger_hbclient;
   delete messenger_hbserver;
   delete cluster_messenger;
-  client_throttler.reset();
+  client_byte_throttler.reset();
+  client_msg_throttler.reset();
   g_ceph_context->put();
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
