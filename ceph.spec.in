@@ -290,9 +290,9 @@ find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
 install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
 install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
-mkdir -p $RPM_BUILD_ROOT/usr/sbin
-ln -sf ../../etc/init.d/ceph %{buildroot}/usr/sbin/rcceph
-ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/usr/sbin/rcceph-radosgw
+mkdir -p $RPM_BUILD_ROOT%{_sbindir}
+ln -sf ../../etc/init.d/ceph %{buildroot}/%{_sbindir}/rcceph
+ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/%{_sbindir}/rcceph-radosgw
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
 install -m 0644 -D src/rgw/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/radosgw
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
@@ -317,10 +317,10 @@ mkdir -p $RPM_BUILD_ROOT/var/lib/ceph/bootstrap-osd
 mkdir -p $RPM_BUILD_ROOT/var/lib/ceph/bootstrap-mds
 
 # Makefile puts these in sbin, but we want to package them in usr/sbin
-mv -f $RPM_BUILD_ROOT/sbin/ceph-disk $RPM_BUILD_ROOT/usr/sbin/ceph-disk
-mv -f $RPM_BUILD_ROOT/sbin/ceph-disk-activate $RPM_BUILD_ROOT/usr/sbin/ceph-disk-activate
-mv -f $RPM_BUILD_ROOT/sbin/ceph-disk-prepare $RPM_BUILD_ROOT/usr/sbin/ceph-disk-prepare
-mv -f $RPM_BUILD_ROOT/sbin/ceph-create-keys $RPM_BUILD_ROOT/usr/sbin/ceph-create-keys
+mv -f $RPM_BUILD_ROOT/sbin/ceph-disk $RPM_BUILD_ROOT%{_sbindir}/ceph-disk
+mv -f $RPM_BUILD_ROOT/sbin/ceph-disk-activate $RPM_BUILD_ROOT%{_sbindir}/ceph-disk-activate
+mv -f $RPM_BUILD_ROOT/sbin/ceph-disk-prepare $RPM_BUILD_ROOT%{_sbindir}/ceph-disk-prepare
+mv -f $RPM_BUILD_ROOT/sbin/ceph-create-keys $RPM_BUILD_ROOT%{_sbindir}/ceph-create-keys
 
 %if %{defined suse_version}
 # Fedora seems to have some problems with this macro, use it only on SUSE
@@ -425,17 +425,17 @@ fi
 %dir %{_localstatedir}/log/ceph/
 %ghost %dir %{_localstatedir}/run/ceph/
 %dir %{_sysconfdir}/ceph/
-/usr/sbin/rcceph
+%{_sbindir}/rcceph
 %dir %{_libdir}/rados-classes
 %{_libdir}/rados-classes/libcls_rbd.so*
 %{_libdir}/rados-classes/libcls_rgw.so*
 %{_libdir}/rados-classes/libcls_lock.so*
 %{_libdir}/rados-classes/libcls_kvs.so*
 %{_libdir}/rados-classes/libcls_refcount.so*
-/usr/sbin/ceph-disk
-/usr/sbin/ceph-disk-activate
-/usr/sbin/ceph-disk-prepare
-/usr/sbin/ceph-create-keys
+%{_sbindir}/ceph-disk
+%{_sbindir}/ceph-disk-activate
+%{_sbindir}/ceph-disk-prepare
+%{_sbindir}/ceph-create-keys
 /lib/udev/rules.d/95-ceph-osd.rules
 
 #set up placeholder directories
@@ -492,7 +492,7 @@ fi
 %{_bindir}/radosgw-admin
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw-admin.8*
-/usr/sbin/rcceph-radosgw
+%{_sbindir}/rcceph-radosgw
 
 %post radosgw
 /sbin/ldconfig
