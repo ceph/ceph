@@ -297,10 +297,6 @@ install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/
 install -m 0644 -D src/rgw/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/radosgw
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph/
-mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph/
 
 # udev rules
 install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
@@ -308,6 +304,7 @@ install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ce
 
 #set up placeholder directories
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/mon
