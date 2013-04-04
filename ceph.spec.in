@@ -303,8 +303,8 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph/
 
 # udev rules
-install -D -m 644 udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
-install -D -m 644 udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
+install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
+install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
 
 #set up placeholder directories
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph
@@ -399,6 +399,7 @@ fi
 %{_libdir}/rados-classes/libcls_kvs.so*
 %{_libdir}/rados-classes/libcls_refcount.so*
 %{_libdir}/ceph
+/lib/udev/rules.d/50-rbd.rules
 /lib/udev/rules.d/95-ceph-osd.rules
 %dir %{_sysconfdir}/ceph/
 %config %{_sysconfdir}/bash_completion.d/ceph
@@ -528,7 +529,6 @@ fi
 %files -n librbd1
 %defattr(-,root,root,-)
 %{_libdir}/librbd.so.*
-/lib/udev/rules.d/50-rbd.rules
 
 %post -n librbd1
 /sbin/ldconfig
