@@ -136,6 +136,9 @@ Rados object in state %s." % (self.state))
                 self.conf_set(key, value)
 
     def shutdown(self):
+        """
+        Disconnects from the cluster.
+        """
         if (self.__dict__.has_key("state") and self.state != "shutdown"):
             self.librados.rados_shutdown(self.cluster)
             self.state = "shutdown"
@@ -152,6 +155,12 @@ Rados object in state %s." % (self.state))
         self.shutdown()
 
     def version(self):
+        """
+        Get the version number of the ``librados`` C library.
+    
+        :returns: a tuple of ``(major, minor, extra)`` components of the
+                  librados version
+        """
         major = c_int(0)
         minor = c_int(0)
         extra = c_int(0)
@@ -159,6 +168,12 @@ Rados object in state %s." % (self.state))
         return Version(major.value, minor.value, extra.value)
 
     def conf_read_file(self, path=None):
+        """
+        Configure the cluster handle using a Ceph config file.
+
+        :param path: path to the config file
+        :type path: str
+        """
         self.require_state("configuring", "connected")
         if path is not None and not isinstance(path, str):
             raise TypeError('path must be a string')
@@ -167,6 +182,15 @@ Rados object in state %s." % (self.state))
             raise make_ex(ret, "error calling conf_read_file")
 
     def conf_get(self, option):
+        """
+        Get the value of a configuration option
+
+        :param option: which option to read
+        :type option: str
+
+        :returns: str - value of the option or None
+        :raises: :class:`TypeError`
+        """
         self.require_state("configuring", "connected")
         if not isinstance(option, str):
             raise TypeError('option must be a string')
@@ -185,6 +209,16 @@ Rados object in state %s." % (self.state))
                 raise make_ex(ret, "error calling conf_get")
 
     def conf_set(self, option, val):
+        """
+        Set the value of a configuration option
+
+        :param option: which option to set
+        :type option: str
+        :param option: value of the option
+        :type option: str
+
+        :raises: :class:`TypeError`, :class:`ObjectNotFound`
+        """
         self.require_state("configuring", "connected")
         if not isinstance(option, str):
             raise TypeError('option must be a string')
@@ -196,6 +230,9 @@ Rados object in state %s." % (self.state))
             raise make_ex(ret, "error calling conf_set")
 
     def connect(self):
+        """
+        Connect to the cluster.
+        """
         self.require_state("configuring")
         ret = self.librados.rados_connect(self.cluster)
         if (ret != 0):
@@ -203,6 +240,24 @@ Rados object in state %s." % (self.state))
         self.state = "connected"
 
     def get_cluster_stats(self):
+        """
+        Read usage info about the cluster
+        
+        This tells you total space, space used, space available, and number
+        of objects. These are not updated immediately when data is written,
+        they are eventually consistent.
+
+        :returns: dict - contains the following keys:
+
+            *``kb`` (int) - total space 
+
+            *``kb_used`` (int) - space used
+
+            *``kb_avail`` (int) - free space available
+
+            *``num_objects`` (int) - number of objects
+
+        """
         stats = rados_cluster_stat_t()
         ret = self.librados.rados_cluster_stat(self.cluster, byref(stats))
         if ret < 0:
@@ -213,8 +268,16 @@ Rados object in state %s." % (self.state))
                 'kb_avail': stats.kb_avail,
                 'num_objects': stats.num_objects}
 
-    # Returns true if the pool exists; false otherwise.
     def pool_exists(self, pool_name):
+        """
+        Checks if a given pool exists.
+
+        :param pool_name: name of the pool to check
+        :type pool_name: str
+
+        :raises: :class:`TypeError`, :class:`Error`
+        :returns: bool - whether the pool exists, false otherwise.
+        """
         self.require_state("connected")
         if not isinstance(pool_name, str):
             raise TypeError('pool_name must be a string')
@@ -227,6 +290,22 @@ Rados object in state %s." % (self.state))
             raise make_ex(ret, "error looking up pool '%s'" % pool_name)
 
     def create_pool(self, pool_name, auid=None, crush_rule=None):
+        """
+        Create a pool:
+        - with default settings: if auid=None and crush_rule=None
+        - owned by a specific auid: auid given and crush_rule=None
+        - with a specific CRUSH rule: if auid=None and crush_rule given
+        - with a specific CRUSH rule and auid: if auid and crush_rule given
+
+        :param pool_name: name of the pool to create
+        :type pool_name: str
+        :param auid: the id of the owner of the new pool
+        :type auid: int
+        :param crush_rule: rule to use for placement in the new pool
+        :type crush_rule: str
+
+        :raises: :class:`TypeError`, :class:`Error`
+        """
         self.require_state("connected")
         if not isinstance(pool_name, str):
             raise TypeError('pool_name must be a string')
