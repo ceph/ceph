@@ -130,7 +130,8 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
     remote.run(
         args=[
             'sudo', 'apt-get', 'update', run.Raw('&&'),
-            'sudo', 'apt-get', '-y', '--force-yes',
+            'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y', '--force-yes',
+            '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw('Dpkg::Options::="--force-confold"'),
             'install',
             ] + ['%s=%s' % (d, version) for d in debs],
         stdout=StringIO(),
@@ -212,7 +213,8 @@ def _remove_deb(remote, debs):
             ] + debs + [
             run.Raw(';'),
             'do',
-            'sudo', 'apt-get', '-y', '--force-yes', 'purge',
+            'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y', '--force-yes',
+            '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw('Dpkg::Options::="--force-confold"'), 'purge',
             run.Raw('$d'),
             run.Raw('||'),
             'true',
@@ -235,7 +237,8 @@ def _remove_deb(remote, debs):
     # then let apt clean up
     remote.run(
         args=[
-            'sudo', 'apt-get', '-y', '--force-yes',
+            'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y', '--force-yes',
+            '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw('Dpkg::Options::="--force-confold"'),
             'autoremove',
             ],
         stdout=StringIO(),
@@ -468,7 +471,8 @@ def _upgrade_ceph_packages(ctx, remote, debs, ceph_branch):
     remote.run(
         args=[
             'sudo', 'apt-get', 'update', run.Raw('&&'),
-            'sudo', 'apt-get', '-y', '--force-yes',
+            'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y', '--force-yes',
+            '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw('Dpkg::Options::="--force-confold"'),
             'upgrade',
             ] + ['%s=%s' % (d, version) for d in debs],
         stdout=StringIO(),
