@@ -23,6 +23,7 @@ Makefile
 /ceph_dupstore
 /ceph_filestore_dump
 /ceph_mon_store_converter
+/ceph_mon_kvstore_fix
 /ceph_multi_stress_watch
 /ceph_psim
 /ceph_radosacl
