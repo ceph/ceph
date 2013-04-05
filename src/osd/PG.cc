@@ -2493,11 +2493,17 @@ void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
   assert(r == 0);
 }
 
-void PG::write_info(ObjectStore::Transaction& t)
+int PG::_write_info(ObjectStore::Transaction& t, epoch_t epoch,
+    pg_info_t &info, coll_t coll,
+    map<epoch_t,pg_interval_t> &past_intervals,
+    interval_set<snapid_t> &snap_collections,
+    hobject_t &infos_oid,
+    __u8 info_struct_v, bool dirty_big_info)
 {
   // pg state
 
-  assert(info_struct_v <= cur_struct_v);
+  if (info_struct_v > cur_struct_v)
+    return -EINVAL;
 
   // Only need to write struct_v to attr when upgrading
   if (info_struct_v < cur_struct_v) {
@@ -2511,7 +2517,7 @@ void PG::write_info(ObjectStore::Transaction& t)
   // info.  store purged_snaps separately.
   interval_set<snapid_t> purged_snaps;
   map<string,bufferlist> v;
-  ::encode(get_osdmap()->get_epoch(), v[get_epoch_key(info.pgid)]);
+  ::encode(epoch, v[get_epoch_key(info.pgid)]);
   purged_snaps.swap(info.purged_snaps);
   ::encode(info, v[get_info_key(info.pgid)]);
   purged_snaps.swap(info.purged_snaps);
@@ -2522,10 +2528,20 @@ void PG::write_info(ObjectStore::Transaction& t)
     ::encode(past_intervals, bigbl);
     ::encode(snap_collections, bigbl);
     ::encode(info.purged_snaps, bigbl);
-    dout(20) << "write_info bigbl " << bigbl.length() << dendl;
+    //dout(20) << "write_info bigbl " << bigbl.length() << dendl;
   }
 
-  t.omap_setkeys(coll_t::META_COLL, osd->infos_oid, v);
+  t.omap_setkeys(coll_t::META_COLL, infos_oid, v);
+
+  return 0;
+}
+
+void PG::write_info(ObjectStore::Transaction& t)
+{
+  int ret = _write_info(t, get_osdmap()->get_epoch(), info, coll,
+     past_intervals, snap_collections, osd->infos_oid,
+     info_struct_v, dirty_big_info);
+  assert(ret == 0);
 
   dirty_info = false;
   dirty_big_info = false;
