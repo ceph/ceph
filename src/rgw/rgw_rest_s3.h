@@ -261,7 +261,10 @@ public:
   RGWHandler_Auth_S3() : RGWHandler_ObjStore() {}
   virtual ~RGWHandler_Auth_S3() {}
 
-  virtual int validate_bucket_name(const string& bucket) { return 0; }
+  virtual int validate_bucket_name(const string& bucket) {
+    return 0;
+  }
+
   virtual int validate_object_name(const string& bucket) { return 0; }
 
   virtual int init(RGWRados *store, struct req_state *state, RGWClientIO *cio);
@@ -278,7 +281,7 @@ public:
   RGWHandler_ObjStore_S3() : RGWHandler_ObjStore() {}
   virtual ~RGWHandler_ObjStore_S3() {}
 
-  int validate_bucket_name(const string& bucket);
+  int validate_bucket_name(const string& bucket, bool relaxed_names);
 
   virtual int init(RGWRados *store, struct req_state *state, RGWClientIO *cio);
   virtual int authorize() {
