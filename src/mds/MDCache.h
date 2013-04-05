@@ -291,7 +291,7 @@ public:
   }
   void log_master_commit(metareqid_t reqid);
   void logged_master_update(metareqid_t reqid);
-  void _logged_master_commit(metareqid_t reqid, LogSegment *ls, list<Context*> &waiters);
+  void _logged_master_commit(metareqid_t reqid);
   void committed_master_slave(metareqid_t r, int from);
   void finish_committed_masters();
 
