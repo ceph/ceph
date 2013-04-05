@@ -28,7 +28,7 @@ class NoData(Error):
 class ObjectExists(Error):
     pass
 
-class IOError(Error):
+class IoError(Error):
     pass
 
 class NoSpace(Error):
@@ -56,7 +56,7 @@ def make_ex(ret, msg):
     elif (ret == errno.ENOENT):
         return ObjectNotFound(msg)
     elif (ret == errno.EIO):
-        return IOError(msg)
+        return IoError(msg)
     elif (ret == errno.ENOSPC):
         return NoSpace(msg)
     elif (ret == errno.EEXIST):
