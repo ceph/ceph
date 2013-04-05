@@ -152,6 +152,9 @@ class LibCephFS(object):
             raise make_ex(ret, "error calling conf_read_file")
 
     def shutdown(self):
+        """
+        Unmount and destroy the ceph mount handle. 
+        """
         if self.state != "shutdown":
             self.libcephfs.ceph_shutdown(self.cluster)
             self.state = "shutdown"
@@ -168,6 +171,12 @@ class LibCephFS(object):
         self.shutdown()
 
     def version(self):
+        """
+        Get the version number of the ``libcephfs`` C library.
+
+        :returns: a tuple of ``(major, minor, extra)`` components of the
+                  libcephfs version
+        """
         major = c_int(0)
         minor = c_int(0)
         extra = c_int(0)
