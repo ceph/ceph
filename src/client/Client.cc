@@ -1890,6 +1890,8 @@ void Client::handle_mds_map(MMDSMap* m)
 	kick_requests(p->second, false);
 	kick_flushing_caps(p->second);
 	signal_cond_list(p->second->waiting_for_open);
+	kick_maxsize_requests(p->second);
+	wake_inode_waiters(p->second);
       }
       connect_mds_targets(p->first);
     }
@@ -2230,7 +2232,7 @@ int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
     }
     
     if (endoff >= 0 && endoff > (loff_t)in->max_size) {
-      ldout(cct, 10) << "waiting on max_size, endoff " << endoff << " max_size " << in->max_size << dendl;
+      ldout(cct, 10) << "waiting on max_size, endoff " << endoff << " max_size " << in->max_size << " on " << *in << dendl;
     } else if (!in->cap_snaps.empty() && in->cap_snaps.rbegin()->second->writing) {
       ldout(cct, 10) << "waiting on cap_snap write to complete" << dendl;
     } else {
@@ -3028,6 +3030,17 @@ void Client::kick_flushing_caps(MetaSession *session)
     ldout(cct, 20) << " reflushing caps on " << *in << " to mds." << mds << dendl;
     if (in->flushing_caps)
       flush_caps(in, session);
+  }
+}
+
+void Client::kick_maxsize_requests(MetaSession *session)
+{
+  xlist<Cap*>::iterator iter = session->caps.begin();
+  while (!iter.end()){
+    (*iter)->inode->requested_max_size = 0;
+    (*iter)->inode->wanted_max_size = 0;
+    signal_cond_list((*iter)->inode->waitfor_caps);
+    ++iter;
   }
 }
 
