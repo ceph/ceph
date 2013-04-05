@@ -21,6 +21,7 @@ usr/bin/ceph_test_cls_lock
 usr/bin/ceph_test_cls_rbd
 usr/bin/ceph_test_cls_refcount
 usr/bin/ceph_test_cls_rgw
+usr/bin/ceph_test_cors
 usr/bin/ceph_test_crypto
 usr/bin/ceph_test_filejournal
 usr/bin/ceph_test_filestore
@@ -55,6 +56,7 @@ usr/bin/ceph_test_rados_open_pools_parallel
 usr/bin/ceph_test_rados_watch_notify
 usr/bin/ceph_test_rewrite_latency
 usr/bin/ceph_test_signal_handlers
+usr/bin/ceph_test_snap_mapper
 usr/bin/ceph_test_store_tool
 usr/bin/ceph_test_stress_watch
 usr/bin/ceph_test_timers

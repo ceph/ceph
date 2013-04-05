@@ -1,9 +1,9 @@
 etc/bash_completion.d/ceph
 lib/udev/rules.d/95-ceph-osd.rules
-sbin/ceph-create-keys usr/sbin/
-sbin/ceph-disk usr/sbin/
-sbin/ceph-disk-activate usr/sbin/
-sbin/ceph-disk-prepare usr/sbin/
+usr/sbin/ceph-create-keys
+usr/sbin/ceph-disk
+usr/sbin/ceph-disk-activate
+usr/sbin/ceph-disk-prepare
 sbin/mkcephfs
 usr/bin/ceph-clsinfo
 usr/bin/ceph-debugpack
