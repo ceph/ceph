@@ -16,39 +16,51 @@ ANONYMOUS_AUID = 0xffffffffffffffff
 ADMIN_AUID = 0
 
 class Error(Exception):
+    """ `Error` class, derived from `Exception` """
     pass
 
 class PermissionError(Error):
+    """ `PermissionError` class, derived from `Error` """
     pass
 
 class ObjectNotFound(Error):
+    """ `ObjectNotFound` class, derived from `Error` """
     pass
 
 class NoData(Error):
+    """ `NoData` class, derived from `Error` """
     pass
 
 class ObjectExists(Error):
+    """ `ObjectExists` class, derived from `Error` """
     pass
 
 class IOError(Error):
+    """ `IOError` class, derived from `Error` """
     pass
 
 class NoSpace(Error):
+    """ `NoSpace` class, derived from `Error` """
     pass
 
 class IncompleteWriteError(Error):
+    """ `IncompleteWriteError` class, derived from `Error` """
     pass
 
 class RadosStateError(Error):
+    """ `RadosStateError` class, derived from `Error` """
     pass
 
 class IoctxStateError(Error):
+    """ `IoctxStateError` class, derived from `Error` """
     pass
 
 class ObjectStateError(Error):
+    """ `ObjectStateError` class, derived from `Error` """
     pass
 
 class LogicError(Error):
+    """ `` class, derived from `Error` """
     pass
 
 def make_ex(ret, msg):
@@ -330,6 +342,17 @@ Rados object in state %s." % (self.state))
             raise make_ex(ret, "error creating pool '%s'" % pool_name)
 
     def delete_pool(self, pool_name):
+        """
+        Delete a pool and all data inside it.
+
+        The pool is removed from the cluster immediately,
+        but the actual data is deleted in the background.
+
+        :param pool_name: name of the pool to delete 
+        :type pool_name: str
+
+        :raises: :class:`TypeError`, :class:`Error`
+        """
         self.require_state("connected")
         if not isinstance(pool_name, str):
             raise TypeError('pool_name must be a string')
@@ -338,6 +361,11 @@ Rados object in state %s." % (self.state))
             raise make_ex(ret, "error deleting pool '%s'" % pool_name)
 
     def list_pools(self):
+        """
+        Gets a list of pool names. 
+
+        :returns: list - of pool names.
+        """
         self.require_state("connected")
         size = c_size_t(512)
         while True:
@@ -351,6 +379,12 @@ Rados object in state %s." % (self.state))
         return filter(lambda name: name != '', c_names.raw.split('\0'))
 
     def get_fsid(self):
+        """
+        Get the fsid of the cluster as a hexadecimal string.
+
+        :raises: :class:`Error`
+        :returns: str - cluster fsid
+        """
         self.require_state("connected")
         fsid_len = 36
         fsid = create_string_buffer(fsid_len + 1)
@@ -362,6 +396,18 @@ Rados object in state %s." % (self.state))
         return fsid.value
 
     def open_ioctx(self, ioctx_name):
+        """
+        Create an io context
+
+        The io context allows you to perform operations within a particular
+        pool. 
+
+        :param ioctx_name: name of the pool 
+        :type ioctx_name: str
+
+        :raises: :class:`TypeError`, :class:`Error`
+        :returns: Ioctx - Rados Ioctx object 
+        """
         self.require_state("connected")
         if not isinstance(ioctx_name, str):
             raise TypeError('ioctx_name must be a string')
@@ -386,6 +432,12 @@ class ObjectIterator(object):
         return self
 
     def next(self):
+        """
+        Get the next object name and locator in the pool
+
+        :raises: StopIteration
+        :returns: next rados.Ioctx Object
+        """
         key = c_char_p()
         locator = c_char_p()
         ret = self.ioctx.librados.rados_objects_list_next(self.ctx, byref(key),
@@ -403,9 +455,17 @@ class XattrIterator(object):
         self.ioctx = ioctx
         self.it = it
         self.oid = oid
+
     def __iter__(self):
         return self
+
     def next(self):
+        """
+        Get the next xattr on the object
+
+        :raises: StopIteration
+        :returns: pair - of name and value of the next Xattr
+        """
         name_ = c_char_p(0)
         val_ = c_char_p(0)
         len_ = c_int(0)
@@ -419,6 +479,7 @@ in '%s'" % self.oid)
         name = ctypes.string_at(name_)
         val = ctypes.string_at(val_, len_)
         return (name, val)
+
     def __del__(self):
         self.ioctx.librados.rados_getxattrs_end(self.it)
 
