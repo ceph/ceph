@@ -21,10 +21,9 @@ def generate_keys():
     return key.get_base64(), privateString.getvalue()
 
 def particular_ssh_key_test(line_to_test, ssh_key):
-    match = re.match('[\w-]+ {key} \S+@\S+'.format(key=ssh_key), line_to_test)
+    match = re.match('[\w-]+ {key} \S+@\S+'.format(key=re.escape(ssh_key)), line_to_test)
 
     if match:
-        log.info('found matching ssh_key line: {line}'.format(line=line_to_test))
         return False
     else:
         return True
@@ -33,7 +32,6 @@ def ssh_keys_user_line_test(line_to_test, username ):
     match = re.match('[\w-]+ \S+ {username}@\S+'.format(username=username), line_to_test)
 
     if match:
-        log.info('found a ssh-keys-user line: {line}'.format(line=line_to_test))
         return False
     else:
         return True
@@ -95,6 +93,8 @@ def tweak_ssh_config(ctx, config):
 
 @contextlib.contextmanager
 def push_keys_to_host(ctx, config, public_key, private_key):   
+
+    log.info('generated public key {pub_key}'.format(pub_key=public_key))
 
     # add an entry for all hosts in ctx to auth_keys_data
     auth_keys_data = ''
