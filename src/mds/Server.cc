@@ -1797,6 +1797,24 @@ CDentry* Server::prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dn
   return dn;
 }
 
+CDentry* Server::prepare_stray_dentry(MDRequest *mdr, CInode *in)
+{
+  CDentry *straydn = mdr->straydn;
+  if (straydn) {
+    string name;
+    in->name_stray_dentry(name);
+    if (straydn->get_name() == name)
+      return straydn;
+
+    assert(!mdr->done_locking);
+    mdr->unpin(straydn);
+  }
+
+  straydn = mdcache->get_or_create_stray_dentry(in);
+  mdr->straydn = straydn;
+  mdr->pin(straydn);
+  return straydn;
+}
 
 /** prepare_new_inode
  *
@@ -4899,18 +4917,14 @@ void Server::handle_client_unlink(MDRequest *mdr)
   }
 
   // -- create stray dentry? --
-  CDentry *straydn = mdr->straydn;
+  CDentry *straydn = NULL;
   if (dnl->is_primary()) {
-    if (!straydn) {
-      straydn = mdcache->get_or_create_stray_dentry(dnl->get_inode());
-      mdr->pin(straydn);
-      mdr->straydn = straydn;
-    }
-  } else if (straydn)
-    straydn = NULL;
-  if (straydn)
+    straydn = prepare_stray_dentry(mdr, dnl->get_inode());
     dout(10) << " straydn is " << *straydn << dendl;
-
+  } else if (mdr->straydn) {
+    mdr->unpin(mdr->straydn);
+    mdr->straydn = NULL;
+  }
 
   // lock
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
@@ -5650,17 +5664,14 @@ void Server::handle_client_rename(MDRequest *mdr)
     dout(10) << " this is a link merge" << dendl;
 
   // -- create stray dentry? --
-  CDentry *straydn = mdr->straydn;
+  CDentry *straydn = NULL;
   if (destdnl->is_primary() && !linkmerge) {
-    if (!straydn) {
-      straydn = mdcache->get_or_create_stray_dentry(destdnl->get_inode());
-      mdr->pin(straydn);
-      mdr->straydn = straydn;
-    }
-  } else if (straydn)
-    straydn = NULL;
-  if (straydn)
+    straydn = prepare_stray_dentry(mdr, destdnl->get_inode());
     dout(10) << " straydn is " << *straydn << dendl;
+  } else if (mdr->straydn) {
+    mdr->unpin(mdr->straydn);
+    mdr->straydn = NULL;
+  }
 
   // -- prepare witness list --
   /*
