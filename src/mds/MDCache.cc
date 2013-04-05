@@ -2144,32 +2144,27 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 struct C_MDC_CommittedMaster : public Context {
   MDCache *cache;
   metareqid_t reqid;
-  LogSegment *ls;
-  list<Context*> waiters;
-  C_MDC_CommittedMaster(MDCache *s, metareqid_t r, LogSegment *l, list<Context*> &w) :
-    cache(s), reqid(r), ls(l) {
-    waiters.swap(w);
-  }
+  C_MDC_CommittedMaster(MDCache *s, metareqid_t r) : cache(s), reqid(r) {}
   void finish(int r) {
-    cache->_logged_master_commit(reqid, ls, waiters);
+    cache->_logged_master_commit(reqid);
   }
 };
 
 void MDCache::log_master_commit(metareqid_t reqid)
 {
   dout(10) << "log_master_commit " << reqid << dendl;
+  uncommitted_masters[reqid].committing = true;
   mds->mdlog->start_submit_entry(new ECommitted(reqid), 
-				 new C_MDC_CommittedMaster(this, reqid, 
-							   uncommitted_masters[reqid].ls,
-							   uncommitted_masters[reqid].waiters));
-  mds->mdcache->uncommitted_masters.erase(reqid);
+				 new C_MDC_CommittedMaster(this, reqid));
 }
 
-void MDCache::_logged_master_commit(metareqid_t reqid, LogSegment *ls, list<Context*> &waiters)
+void MDCache::_logged_master_commit(metareqid_t reqid)
 {
   dout(10) << "_logged_master_commit " << reqid << dendl;
-  ls->uncommitted_masters.erase(reqid);
-  mds->queue_waiters(waiters);
+  assert(uncommitted_masters.count(reqid));
+  uncommitted_masters[reqid].ls->uncommitted_masters.erase(reqid);
+  mds->queue_waiters(uncommitted_masters[reqid].waiters);
+  uncommitted_masters.erase(reqid);
 }
 
 // while active...
