@@ -1742,7 +1742,7 @@ static bool looks_like_ip_address(const char *bucket)
   return (num_periods == 3);
 }
 
-int RGWHandler_ObjStore_S3::validate_bucket_name(const string& bucket)
+int RGWHandler_ObjStore_S3::validate_bucket_name(const string& bucket, bool relaxed_names)
 {
   int ret = RGWHandler_ObjStore::validate_bucket_name(bucket);
   if (ret < 0)
@@ -1751,10 +1751,13 @@ int RGWHandler_ObjStore_S3::validate_bucket_name(const string& bucket)
   if (bucket.size() == 0)
     return 0;
 
+  // bucket names must start with a number, letter, or underscore
   if (!(isalpha(bucket[0]) || isdigit(bucket[0]))) {
-    // bucket names must start with a number or letter
-    return -ERR_INVALID_BUCKET_NAME;
-  }
+    if (!relaxed_names)
+      return -ERR_INVALID_BUCKET_NAME;
+    else if (!(bucket[0] == '_' || bucket[0] == '.' || bucket[0] == '-'))
+      return -ERR_INVALID_BUCKET_NAME;
+  } 
 
   for (const char *s = bucket.c_str(); *s; ++s) {
     char c = *s;
@@ -1778,7 +1781,8 @@ int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClient
 {
   dout(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket_name ? s->bucket_name : "<NULL>") << dendl;
 
-  int ret = validate_bucket_name(s->bucket_name_str);
+  bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
+  int ret = validate_bucket_name(s->bucket_name_str, relaxed_names);
   if (ret)
     return ret;
   ret = validate_object_name(s->object_str);
