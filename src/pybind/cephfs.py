@@ -1,4 +1,5 @@
-"""libcephfs Python ctypes wrapper
+"""
+This module is a thin wrapper around libcephfs.
 """
 from ctypes import CDLL, c_char_p, c_size_t, c_void_p, c_int, c_long, c_uint, c_ulong, \
     create_string_buffer, byref, Structure, c_uint64, c_ubyte, pointer, \
@@ -34,6 +35,16 @@ class LibCephFSStateError(Error):
     pass
 
 def make_ex(ret, msg):
+    """
+    Translate a libcephfs return code into an exception.
+
+    :param ret: the return code
+    :type ret: int
+    :param msg: the error message to use
+    :type msg: str
+    :returns: a subclass of :class:`Error`
+    """
+
     ret = abs(ret)
     if ret == errno.EPERM:
         return PermissionError(msg)
