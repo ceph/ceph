@@ -62,19 +62,17 @@ def make_ex(ret, msg):
     :returns: a subclass of :class:`Error`
     """
 
+    errors = {
+        errno.EPERM     : PermissionError,
+        errno.ENOENT    : ObjectNotFound,
+        errno.EIO       : IoError,
+        errno.ENOSPC    : NoSpace,
+        errno.EEXIST    : ObjectExists,
+        errno.ENODATA   : NoData
+        }
     ret = abs(ret)
-    if (ret == errno.EPERM):
-        return PermissionError(msg)
-    elif (ret == errno.ENOENT):
-        return ObjectNotFound(msg)
-    elif (ret == errno.EIO):
-        return IoError(msg)
-    elif (ret == errno.ENOSPC):
-        return NoSpace(msg)
-    elif (ret == errno.EEXIST):
-        return ObjectExists(msg)
-    elif (ret == errno.ENODATA):
-        return NoData(msg)
+    if ret in errors:
+        return errors[ret](msg)
     else:
         return Error(msg + (": error code %d" % ret))
 
