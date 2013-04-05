@@ -316,15 +316,16 @@ Rados object in state %s." % (self.state))
                 ret = self.librados.rados_pool_create(
                             self.cluster, c_char_p(pool_name))
             else:
-                ret = self.librados.rados_pool_create_with_all(
-                            self.cluster, c_char_p(pool_name), c_uint64(auid),
-                            c_ubyte(crush_rule))
+                ret = self.librados.rados_pool_create_with_crush_rule(
+                            self.cluster, c_char_p(pool_name), c_ubyte(crush_rule))
+
         elif (crush_rule == None):
             ret = self.librados.rados_pool_create_with_auid(
                         self.cluster, c_char_p(pool_name), c_uint64(auid))
         else:
-            ret = self.librados.rados_pool_create_with_crush_rule(
-                        self.cluster, c_char_p(pool_name), c_ubyte(crush_rule))
+            ret = self.librados.rados_pool_create_with_all(
+                        self.cluster, c_char_p(pool_name), c_uint64(auid),
+                        c_ubyte(crush_rule))
         if ret < 0:
             raise make_ex(ret, "error creating pool '%s'" % pool_name)
 
