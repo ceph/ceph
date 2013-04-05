@@ -541,9 +541,9 @@ void session_info_t::decode(bufferlist::iterator& p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, p);
   ::decode(inst, p);
-  if (struct_v == 2) {
+  if (struct_v <= 2) {
     set<tid_t> s;
-    ::decode(completed_requests, p);
+    ::decode(s, p);
     while (!s.empty()) {
       completed_requests[*s.begin()] = inodeno_t();
       s.erase(s.begin());
