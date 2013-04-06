@@ -116,6 +116,7 @@ public:
 protected:
   map<dirfrag_t,int>              import_state;  // FIXME make these dirfrags
   map<dirfrag_t,int>              import_peer;
+  map<dirfrag_t,Message*>         import_pending_msg;
   map<CDir*,set<int> >            import_bystanders;
   map<CDir*,list<dirfrag_t> >     import_bound_ls;
   map<CDir*,list<ScatterLock*> >  import_updated_scatterlocks;
