@@ -1515,21 +1515,37 @@ void scribble(librbd::Image& image, int n, int max, interval_set<uint64_t> *exis
 {
   uint64_t size;
   image.size(&size);
+  interval_set<uint64_t> exists_at_start = *exists;
   for (int i=0; i<n; i++) {
     uint64_t off = rand() % (size - max + 1);
     uint64_t len = 1 + rand() % max;
-    interval_set<uint64_t> w;
-    w.insert(off, len);
     if (rand() % 4 == 0) {
       ASSERT_EQ((int)len, image.discard(off, len));
-      w.intersection_of(*exists);
-      what->union_of(w);
+      interval_set<uint64_t> w;      
+      w.insert(off, len);
+
+      // the zeroed bit no longer exists...
+      w.intersection_of(*exists); 
       exists->subtract(w);
+
+      // the bits we discarded are no long written...
+      interval_set<uint64_t> w2 = w;
+      w2.intersection_of(*what);
+      what->subtract(w2);
+
+      // except for the extents that existed at the start that we overwrote.
+      interval_set<uint64_t> w3;
+      w3.insert(off, len);
+      w3.intersection_of(exists_at_start);
+      what->union_of(w3);
+
     } else {
       bufferlist bl;
       bl.append(buffer::create(len));
       bl.zero();
       ASSERT_EQ((int)len, image.write(off, len, bl));
+      interval_set<uint64_t> w;
+      w.insert(off, len);
       what->union_of(w);
       exists->union_of(w);
     }
@@ -1695,26 +1711,35 @@ TEST(LibRBD, DiffIterateStress)
     ASSERT_EQ(0, create_image_pp(rbd, ioctx, name, size, &order));
     ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
 
-    interval_set<uint64_t> exists;
+    interval_set<uint64_t> curexists;
     vector<interval_set<uint64_t> > wrote;
+    vector<interval_set<uint64_t> > exists;
     vector<string> snap;
-    int n = 10;
+    int n = 20;
     for (int i=0; i<n; i++) {
       interval_set<uint64_t> w;
-      scribble(image, 10, 8192000, &exists, &w);
-      cout << " i=" << i << " exists " << exists << " wrote " << w << std::endl;
+      scribble(image, 10, 8192000, &curexists, &w);
+      cout << " i=" << i << " exists " << curexists << " wrote " << w << std::endl;
       string s = "snap" + stringify(i);
       ASSERT_EQ(0, image.snap_create(s.c_str()));
       wrote.push_back(w);
+      exists.push_back(curexists);
       snap.push_back(s);
     }
 
     for (int i=0; i<n-1; i++) {
       for (int j=i+1; j<n; j++) {
-	interval_set<uint64_t> diff, actual;
+	interval_set<uint64_t> diff, actual, uex;
 	for (int k=i+1; k<=j; k++)
 	  diff.union_of(wrote[k]);
 	cout << "from " << i << " to " << j << " diff " << diff << std::endl;
+
+	// limit to extents that exists both at the beginning and at the end
+	uex = exists[j];
+	if (i)
+	  uex.union_of(exists[i-1]);
+	diff.intersection_of(uex);
+	cout << "  limited diff " << diff << std::endl;
 
 	image.snap_set(snap[j].c_str());
 	ASSERT_EQ(0, image.diff_iterate(snap[i].c_str(), 0, size, iterate_cb, (void *)&actual));
