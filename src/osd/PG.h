@@ -1837,6 +1837,8 @@ public:
     interval_set<snapid_t> &snap_collections,
     hobject_t &infos_oid,
     __u8 info_struct_v, bool dirty_big_info);
+  static void _write_log(ObjectStore::Transaction& t, pg_log_t &log,
+    const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors);
   void write_if_dirty(ObjectStore::Transaction& t);
 
   void add_log_entry(pg_log_entry_t& e, bufferlist& log_bl);
