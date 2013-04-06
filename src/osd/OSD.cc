@@ -151,7 +151,7 @@ OSDService::OSDService(OSD *osd) :
   osd(osd),
   whoami(osd->whoami), store(osd->store), clog(osd->clog),
   pg_recovery_stats(osd->pg_recovery_stats),
-  infos_oid(sobject_t("infos", CEPH_NOSNAP)),
+  infos_oid(OSD::make_infos_oid()),
   cluster_messenger(osd->cluster_messenger),
   client_messenger(osd->client_messenger),
   logger(osd->logger),
