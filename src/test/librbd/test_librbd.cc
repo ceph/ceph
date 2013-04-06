@@ -1505,7 +1505,7 @@ TEST(LibRBD, FlushAioPP)
 
 int iterate_cb(uint64_t off, size_t len, int exists, void *arg)
 {
-  cout << "iterate_cb " << off << "~" << len << std::endl;
+  //cout << "iterate_cb " << off << "~" << len << std::endl;
   interval_set<uint64_t> *diff = static_cast<interval_set<uint64_t> *>(arg);
   diff->insert(off, len);
   return 0;
@@ -1701,6 +1701,10 @@ TEST(LibRBD, DiffIterateStress)
   ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
   ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
 
+  int seed = getpid();
+  cout << "seed " << seed << std::endl;
+  srand(seed);
+
   {
     librbd::RBD rbd;
     librbd::Image image;
@@ -1735,9 +1739,7 @@ TEST(LibRBD, DiffIterateStress)
 	cout << "from " << i << " to " << j << " diff " << diff << std::endl;
 
 	// limit to extents that exists both at the beginning and at the end
-	uex = exists[j];
-	if (i)
-	  uex.union_of(exists[i-1]);
+	uex.union_of(exists[i], exists[j]);
 	diff.intersection_of(uex);
 	cout << "  limited diff " << diff << std::endl;
 
