@@ -2579,9 +2579,10 @@ epoch_t PG::peek_map_epoch(ObjectStore *store, coll_t coll, hobject_t &infos_oid
   return cur_epoch;
 }
 
-void PG::write_log(ObjectStore::Transaction& t)
+void PG::_write_log(ObjectStore::Transaction& t, pg_log_t &log,
+    const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors)
 {
-  dout(10) << "write_log" << dendl;
+  //dout(10) << "write_log" << dendl;
   t.remove(coll_t::META_COLL, log_oid);
   t.touch(coll_t::META_COLL, log_oid);
   map<string,bufferlist> keys;
@@ -2592,12 +2593,16 @@ void PG::write_log(ObjectStore::Transaction& t)
     p->encode_with_checksum(bl);
     keys[p->get_key_name()].claim(bl);
   }
-  dout(10) << "write_log " << keys.size() << " keys" << dendl;
+  //dout(10) << "write_log " << keys.size() << " keys" << dendl;
 
-  ::encode(ondisklog.divergent_priors, keys["divergent_priors"]);
+  ::encode(divergent_priors, keys["divergent_priors"]);
 
   t.omap_setkeys(coll_t::META_COLL, log_oid, keys);
+}
 
+void PG::write_log(ObjectStore::Transaction& t)
+{
+  _write_log(t, log, log_oid, ondisklog.divergent_priors);
   dirty_log = false;
 }
 
