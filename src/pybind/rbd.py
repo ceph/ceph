@@ -7,7 +7,7 @@ not use callbacks.
 Error codes from librbd are turned into exceptions that subclass
 :class:`Error`. Almost all methods may raise :class:`Error`
 (the base class of all rbd exceptions), :class:`PermissionError`
-and :class:`IOError`, in addition to those documented for the
+and :class:`IoError`, in addition to those documented for the
 method.
 
 A number of methods have string arguments, which must not be unicode
@@ -39,7 +39,7 @@ class ImageNotFound(Error):
 class ImageExists(Error):
     pass
 
-class IOError(Error):
+class IoError(Error):
     pass
 
 class NoSpace(Error):
@@ -85,7 +85,7 @@ def make_ex(ret, msg):
     errors = {
         errno.EPERM     : PermissionError,
         errno.ENOENT    : ImageNotFound,
-        errno.EIO       : IOError,
+        errno.EIO       : IoError,
         errno.ENOSPC    : NoSpace,
         errno.EEXIST    : ImageExists,
         errno.EINVAL    : InvalidArgument,
@@ -431,7 +431,7 @@ class Image(object):
 
     def parent_info(self):
         ret = -errno.ERANGE
-        size = 8;
+        size = 8
         while ret == -errno.ERANGE and size < 128:
             pool = create_string_buffer(size)
             name = create_string_buffer(size)
@@ -439,7 +439,7 @@ class Image(object):
             ret = self.librbd.rbd_get_parent_info(self.image, pool, len(pool), 
                 name, len(name), snapname, len(snapname))
             if ret == -errno.ERANGE:
-                size *= 2;
+                size *= 2
 
         if (ret != 0):
             raise make_ex(ret, 'error getting parent info for image %s' % (self.name,))
@@ -523,7 +523,7 @@ class Image(object):
 
         :param name: the name of the snapshot
         :type name: str
-        :raises: :class:`IOError`, :class:`ImageBusy`
+        :raises: :class:`IoError`, :class:`ImageBusy`
         """
         if not isinstance(name, str):
             raise TypeError('name must be a string')
@@ -539,7 +539,7 @@ class Image(object):
 
         :param name: the snapshot to rollback to
         :type name: str
-        :raises: :class:`IOError`
+        :raises: :class:`IoError`
         """
         if not isinstance(name, str):
             raise TypeError('name must be a string')
@@ -554,7 +554,7 @@ class Image(object):
 
         :param name: the snapshot to protect
         :type name: str
-        :raises: :class:`IOError`, :class:`ImageNotFound`
+        :raises: :class:`IoError`, :class:`ImageNotFound`
         """
         if not isinstance(name, str):
             raise TypeError('name must be a string')
@@ -569,7 +569,7 @@ class Image(object):
 
         :param name: the snapshot to unprotect
         :type name: str
-        :raises: :class:`IOError`, :class:`ImageNotFound`
+        :raises: :class:`IoError`, :class:`ImageNotFound`
         """
         if not isinstance(name, str):
             raise TypeError('name must be a string')
@@ -584,7 +584,7 @@ class Image(object):
         :param name: the snapshot to check
         :type name: str
         :returns: bool - whether the snapshot is protected
-        :raises: :class:`IOError`, :class:`ImageNotFound`
+        :raises: :class:`IoError`, :class:`ImageNotFound`
         """
         if not isinstance(name, str):
             raise TypeError('name must be a string')
@@ -620,7 +620,7 @@ class Image(object):
         :param length: how many bytes to read
         :type length: int
         :returns: str - the data read
-        :raises: :class:`InvalidArgument`, :class:`IOError`
+        :raises: :class:`InvalidArgument`, :class:`IoError`
         """
         ret_buf = create_string_buffer(length)
         ret = self.librbd.rbd_read(self.image, c_uint64(offset),
@@ -662,7 +662,7 @@ class Image(object):
         :param iterate_cb: function to call for each extent
         :type iterate_cb: function acception arguments for offset,
                            length, and exists
-        :raises: :class:`InvalidArgument`, :class:`IOError`,
+        :raises: :class:`InvalidArgument`, :class:`IoError`,
                  :class:`ImageNotFound`
         """
         if from_snapshot is not None and not isinstance(from_snapshot, str):
@@ -692,7 +692,7 @@ class Image(object):
         :type offset: int
         :returns: int - the number of bytes written
         :raises: :class:`IncompleteWriteError`, :class:`LogicError`,
-                 :class:`InvalidArgument`, :class:`IOError`
+                 :class:`InvalidArgument`, :class:`IoError`
         """
         if not isinstance(data, str):
             raise TypeError('data must be a string')

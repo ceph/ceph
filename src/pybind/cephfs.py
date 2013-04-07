@@ -1,4 +1,5 @@
-"""libcephfs Python ctypes wrapper
+"""
+This module is a thin wrapper around libcephfs.
 """
 from ctypes import CDLL, c_char_p, c_size_t, c_void_p, c_int, c_long, c_uint, c_ulong, \
     create_string_buffer, byref, Structure, c_uint64, c_ubyte, pointer, \
@@ -21,7 +22,7 @@ class NoData(Error):
 class ObjectExists(Error):
     pass
 
-class IOError(Error):
+class IoError(Error):
     pass
 
 class NoSpace(Error):
@@ -34,19 +35,27 @@ class LibCephFSStateError(Error):
     pass
 
 def make_ex(ret, msg):
+    """
+    Translate a libcephfs return code into an exception.
+
+    :param ret: the return code
+    :type ret: int
+    :param msg: the error message to use
+    :type msg: str
+    :returns: a subclass of :class:`Error`
+    """
+
+    errors = {
+        errno.EPERM     : PermissionError,
+        errno.ENOENT    : ObjectNotFound,
+        errno.EIO       : IoError,
+        errno.ENOSPC    : NoSpace,
+        errno.EEXIST    : ObjectExists,
+        errno.ENODATA   : NoData
+        }
     ret = abs(ret)
-    if ret == errno.EPERM:
-        return PermissionError(msg)
-    elif ret == errno.ENOENT:
-        return ObjectNotFound(msg)
-    elif ret == errno.EIO:
-        return IOError(msg)
-    elif ret == errno.ENOSPC:
-        return NoSpace(msg)
-    elif ret == errno.EEXIST:
-        return ObjectExists(msg)
-    elif ret == errno.ENODATA:
-        return NoData(msg)
+    if ret in errors:
+        return errors[ret](msg)
     else:
         return Error(msg + (": error code %d" % ret))
 
@@ -143,6 +152,9 @@ class LibCephFS(object):
             raise make_ex(ret, "error calling conf_read_file")
 
     def shutdown(self):
+        """
+        Unmount and destroy the ceph mount handle. 
+        """
         if self.state != "shutdown":
             self.libcephfs.ceph_shutdown(self.cluster)
             self.state = "shutdown"
@@ -159,6 +171,12 @@ class LibCephFS(object):
         self.shutdown()
 
     def version(self):
+        """
+        Get the version number of the ``libcephfs`` C library.
+
+        :returns: a tuple of ``(major, minor, extra)`` components of the
+                  libcephfs version
+        """
         major = c_int(0)
         minor = c_int(0)
         extra = c_int(0)
