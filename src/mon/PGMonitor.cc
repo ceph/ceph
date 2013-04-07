@@ -212,6 +212,7 @@ void PGMonitor::update_from_paxos()
 
   update_trim();
 
+  map_pg_creates();
   send_pg_creates();
 
   update_logger();
@@ -664,6 +665,7 @@ void PGMonitor::check_osd_map(epoch_t epoch)
   if (propose)
     propose_pending();
 
+  map_pg_creates();
   send_pg_creates();
 }
 
@@ -785,12 +787,10 @@ bool PGMonitor::register_new_pgs()
   return false;
 }
 
-void PGMonitor::send_pg_creates()
+void PGMonitor::map_pg_creates()
 {
-  dout(10) << "send_pg_creates to " << pg_map.creating_pgs.size() << " pgs" << dendl;
+  dout(10) << "map_pg_creates to " << pg_map.creating_pgs.size() << " pgs" << dendl;
 
-  utime_t now = ceph_clock_now(g_ceph_context);
-  
   for (set<pg_t>::iterator p = pg_map.creating_pgs.begin();
        p != pg_map.creating_pgs.end();
        ++p) {
@@ -820,12 +820,23 @@ void PGMonitor::send_pg_creates()
     if (nrep) {
       pg_map.creating_pgs_by_osd[acting[0]].insert(pgid);
     } else {
-      dout(20) << "send_pg_creates  " << pgid << " -> no osds in epoch "
+      dout(20) << "map_pg_creates  " << pgid << " -> no osds in epoch "
 	       << mon->osdmon()->osdmap.get_epoch() << ", skipping" << dendl;
       continue;  // blarney!
     }
   }
+  for (map<int, set<pg_t> >::iterator p = pg_map.creating_pgs_by_osd.begin();
+       p != pg_map.creating_pgs_by_osd.end();
+       ++p) {
+    dout(10) << "map_pg_creates osd." << p->first << " has " << p->second.size() << " pgs" << dendl;
+  }
+}
 
+void PGMonitor::send_pg_creates()
+{
+  dout(10) << "send_pg_creates to " << pg_map.creating_pgs.size() << " pgs" << dendl;
+
+  utime_t now = ceph_clock_now(g_ceph_context);
   for (map<int, set<pg_t> >::iterator p = pg_map.creating_pgs_by_osd.begin();
        p != pg_map.creating_pgs_by_osd.end();
        ++p) {
@@ -1082,6 +1093,11 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     else if (m->cmd[1] == "getmap") {
       pg_map.encode(rdata);
       ss << "got pgmap version " << pg_map.version;
+      r = 0;
+    }
+    else if (m->cmd[1] == "map_pg_creates") {
+      map_pg_creates();
+      ss << "mapped pg creates ";
       r = 0;
     }
     else if (m->cmd[1] == "send_pg_creates") {

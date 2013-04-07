@@ -109,6 +109,7 @@ private:
    */
   bool register_new_pgs();
 
+  void map_pg_creates();
   void send_pg_creates();
   void send_pg_creates(int osd, Connection *con);
 
