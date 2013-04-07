@@ -7017,7 +7017,7 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   }
 
   if (straydn)
-    destdn->push_projected_linkage();
+    straydn->push_projected_linkage();
 
   if (target) {
     inode_t *ti = NULL;
@@ -7094,7 +7094,7 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
 void Server::_rename_rollback_finish(Mutation *mut, MDRequest *mdr, CDentry *srcdn,
 				     version_t srcdnpv, CDentry *destdn, CDentry *straydn)
 {
-  dout(10) << "_rename_rollback_finish" << mut->reqid << dendl;
+  dout(10) << "_rename_rollback_finish " << mut->reqid << dendl;
 
   if (straydn) {
     straydn->get_dir()->unlink_inode(straydn);
