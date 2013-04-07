@@ -148,6 +148,7 @@ void global_init_daemonize(CephContext *cct, int flags)
     return;
 
   // stop log thread
+  g_ceph_context->_log->flush();
   g_ceph_context->_log->stop();
 
   int ret = daemon(1, 1);
