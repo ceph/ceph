@@ -11,6 +11,7 @@ usr/bin/ceph-mon
 usr/bin/ceph-osd
 usr/bin/ceph-run
 usr/bin/ceph_mon_store_converter
+usr/bin/ceph_mon_kvstore_fix
 usr/bin/crushtool
 usr/bin/monmaptool
 usr/bin/osdmaptool
