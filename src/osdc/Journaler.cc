@@ -835,6 +835,7 @@ void Journaler::_issue_read(uint64_t len)
 
 void Journaler::_prefetch()
 {
+  ldout(cct, 10) << "_prefetch" << dendl;
   // prefetch
   uint64_t pf;
   if (temp_fetch_len) {
@@ -847,9 +848,11 @@ void Journaler::_prefetch()
 
   uint64_t raw_target = read_pos + pf;
 
-  // only read full log segments
+  // read full log segments, so increase if necessary
   uint64_t period = get_layout_period();
-  uint64_t target = raw_target - (raw_target % period);
+  uint64_t remainder = raw_target % period;
+  uint64_t adjustment = remainder ? period - remainder : 0;
+  uint64_t target = raw_target + adjustment;
 
   // don't read past the log tail
   if (target > write_pos)
@@ -883,7 +886,9 @@ bool Journaler::_is_readable()
       read_buf.length() >= sizeof(s) + s) 
     return true;  // yep, next entry is ready.
 
-  // darn it!
+  ldout (cct, 10) << "_is_readable read_buf.length() == " << read_buf.length()
+		  << ", but need " << s + sizeof(s)
+		  << " for next entry; fetch_len is " << fetch_len << dendl;
 
   // partial fragment at the end?
   if (received_pos == write_pos) {
@@ -902,12 +907,14 @@ bool Journaler::_is_readable()
     return false;
   }
 
-  uint64_t need = (sizeof(s)+s-read_buf.length());
+  uint64_t need = sizeof(s) + s;
   if (need > fetch_len) {
+    temp_fetch_len = sizeof(s) + s;
     ldout(cct, 10) << "_is_readable noting temp_fetch_len " << temp_fetch_len
 	     << " for len " << s << " entry" << dendl;
-    temp_fetch_len = need;
   }
+
+  ldout(cct, 10) << "_is_readable: not readable, returning false" << dendl;
   return false;
 }
 
