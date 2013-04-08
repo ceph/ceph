@@ -56,6 +56,8 @@ bool ceph_argparse_flag(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, ...);
 bool ceph_argparse_witharg(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, std::string *ret, ...);
+bool ceph_argparse_witharg_daemon(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, std::string *ret, ...);
 bool ceph_argparse_binary_flag(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, int *ret,
 	std::ostream *oss, ...);
@@ -63,6 +65,9 @@ extern CephInitParameters ceph_argparse_early_args
 	    (std::vector<const char*>& args, uint32_t module_type, int flags,
 	     std::string *cluster, std::string *conf_file_list);
 extern bool ceph_argparse_withint(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, int *ret,
+	std::ostream *oss, ...);
+extern bool ceph_argparse_withint_daemon(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, int *ret,
 	std::ostream *oss, ...);
 extern bool ceph_argparse_withfloat(std::vector<const char*> &args,
