@@ -387,6 +387,7 @@ fi
 %{_bindir}/ceph-debugpack
 %{_bindir}/ceph-coverage
 %{_bindir}/ceph_mon_store_converter
+%{_bindir}/ceph_mon_kvstore_fix
 %{_initrddir}/ceph
 %{_sbindir}/ceph-disk
 %{_sbindir}/ceph-disk-activate
