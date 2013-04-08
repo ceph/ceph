@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -72,12 +72,13 @@ static string dir_info_oid = RBD_INFO;
 
 bool udevadm_settle = true;
 bool progress = true;
+bool resize_allow_shrink = false;
 
 #define dout_subsys ceph_subsys_rbd
 
 void usage()
 {
-  cout << 
+  cout <<
 "usage: rbd [-n <auth user>] [OPTIONS] <cmd> ...\n"
 "where 'pool' is a rados pool name (default is 'rbd') and 'cmd' is one of:\n"
 "  (ls | list) [-l | --long ] [pool-name] list rbd images\n"
@@ -154,7 +155,8 @@ void usage()
 "  --format <output-format>           output format (default: plain, json, xml)\n"
 "  --pretty-format                    make json or xml output more readable\n"
 "  --no-settle                        do not wait for udevadm to settle on map/unmap\n"
-"  --no-progress                      do not show progress for long-running commands\n";
+"  --no-progress                      do not show progress for long-running commands\n"
+"  --allow-shrink                     allow shrinking of an image when resizing\n";
 }
 
 static string feature_str(uint64_t feature)
@@ -1362,7 +1364,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 	goto done;
       }
     }
-    // done with whole block, whether written or not 
+    // done with whole block, whether written or not
     image_pos += blklen;
     // if read had returned 0, we're at EOF and should quit
     if (readlen == 0)
@@ -2198,6 +2200,8 @@ int main(int argc, const char **argv)
       udevadm_settle = false;
     } else if (ceph_argparse_flag(args, i, "--no-progress", (char *)NULL)) {
       progress = false;
+    } else if (ceph_argparse_flag(args, i , "--allow-shrink", (char *)NULL)) {
+      resize_allow_shrink = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char *) NULL)) {
       std::string err;
       long long ret = strict_strtoll(val.c_str(), 10, &err);
@@ -2637,6 +2641,18 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_RESIZE:
+    librbd::image_info_t info;
+    r = image.stat(info, sizeof(info));
+    if (r < 0) {
+      cerr << "rbd: resize error: " << cpp_strerror(-r) << std::endl;
+      return EXIT_FAILURE;
+    }
+
+    if (info.size > size && !resize_allow_shrink) {
+      cerr << "rbd: shrinking an image is only allowed with the --allow-shrink flag" << std::endl;
+      return EXIT_FAILURE;
+    }
+
     r = do_resize(image, size);
     if (r < 0) {
       cerr << "rbd: resize error: " << cpp_strerror(-r) << std::endl;
