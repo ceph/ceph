@@ -311,6 +311,10 @@ int Pipe::accept()
   //  http://ceph.newdream.net/wiki/Messaging_protocol
   int reply_tag = 0;
   uint64_t existing_seq = -1;
+
+  // used for reading in the remote acked seq on connect
+  uint64_t newly_acked_seq = 0;
+
   while (1) {
     if (tcp_read((char*)&connect, sizeof(connect)) < 0) {
       ldout(msgr->cct,10) << "accept couldn't read connect" << dendl;
@@ -639,7 +643,6 @@ int Pipe::accept()
   }
 
   if (reply_tag == CEPH_MSGR_TAG_SEQ) {
-    uint64_t newly_acked_seq = 0;
     if(tcp_write((char*)&existing_seq, sizeof(existing_seq)) < 0) {
       ldout(msgr->cct,2) << "accept write error on in_seq" << dendl;
       goto fail_registered;
@@ -648,10 +651,10 @@ int Pipe::accept()
       ldout(msgr->cct,2) << "accept read error on newly_acked_seq" << dendl;
       goto fail_registered;
     }
-    discard_requeued_up_to(newly_acked_seq);
   }
 
   pipe_lock.Lock();
+  discard_requeued_up_to(newly_acked_seq);
   if (state != STATE_CLOSED) {
     ldout(msgr->cct,10) << "accept starting writer, state " << get_state_name() << dendl;
     start_writer();
