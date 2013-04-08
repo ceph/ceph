@@ -106,6 +106,10 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
 
   g_lockdep = cct->_conf->lockdep;
 
+  // call all observers now.  this has the side-effect of configuring
+  // and opening the log file immediately.
+  conf->call_all_observers();
+
   // Now we're ready to complain about config file parse errors
   complain_about_parse_errors(cct, &parse_errors);
 
@@ -148,6 +152,7 @@ void global_init_daemonize(CephContext *cct, int flags)
     return;
 
   // stop log thread
+  g_ceph_context->_log->flush();
   g_ceph_context->_log->stop();
 
   int ret = daemon(1, 1);
