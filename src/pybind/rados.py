@@ -646,6 +646,9 @@ class Ioctx(object):
         self.close()
 
     def __aio_safe_cb(self, completion, _):
+        """ 
+        Callback to onsafe() for asynchronous operations 
+        """
         cb = None
         with self.lock:
             cb = self.safe_cbs[completion]
@@ -654,6 +657,9 @@ class Ioctx(object):
         return 0
 
     def __aio_complete_cb(self, completion, _):
+        """ 
+        Callback to oncomplete() for asynchronous operations 
+        """
         cb = None
         with self.lock:
             cb = self.complete_cbs[completion]
