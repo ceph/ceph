@@ -64,7 +64,6 @@ void Journaler::set_layout(ceph_file_layout *l)
   if (periods < 2)
     periods = 2;  // we need at least 2 periods to make progress.
   fetch_len = layout.fl_stripe_count * layout.fl_object_size * periods;
-  prefetch_from = fetch_len / 2;
 }
 
 
