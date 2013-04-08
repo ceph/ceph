@@ -4453,8 +4453,14 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
   // 1. send LinkPrepare to dest (journal nlink++ prepare)
   int linkauth = targeti->authority().first;
   if (mdr->more()->witnessed.count(linkauth) == 0) {
-    dout(10) << " targeti auth must prepare nlink++/--" << dendl;
+    if (!mds->mdsmap->is_clientreplay_or_active_or_stopping(linkauth)) {
+      dout(10) << " targeti auth mds." << linkauth << " is not active" << dendl;
+      if (mdr->more()->waiting_on_slave.empty())
+	mds->wait_for_active_peer(linkauth, new C_MDS_RetryRequest(mdcache, mdr));
+      return;
+    }
 
+    dout(10) << " targeti auth must prepare nlink++/--" << dendl;
     int op;
     if (inc)
       op = MMDSSlaveRequest::OP_LINKPREP;
@@ -5010,7 +5016,8 @@ void Server::handle_client_unlink(MDRequest *mdr)
       } else if (mdr->more()->waiting_on_slave.count(*p)) {
 	dout(10) << " already waiting on witness mds." << *p << dendl;      
       } else {
-	_rmdir_prepare_witness(mdr, *p, dn, straydn);
+	if (!_rmdir_prepare_witness(mdr, *p, dn, straydn))
+	  return;
       }
     }
     if (!mdr->more()->waiting_on_slave.empty())
@@ -5172,10 +5179,16 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   dn->get_dir()->try_remove_unlinked_dn(dn);
 }
 
-void Server::_rmdir_prepare_witness(MDRequest *mdr, int who, CDentry *dn, CDentry *straydn)
+bool Server::_rmdir_prepare_witness(MDRequest *mdr, int who, CDentry *dn, CDentry *straydn)
 {
-  dout(10) << "_rmdir_prepare_witness mds." << who << " for " << *mdr << dendl;
+  if (!mds->mdsmap->is_clientreplay_or_active_or_stopping(who)) {
+    dout(10) << "_rmdir_prepare_witness mds." << who << " is not active" << dendl;
+    if (mdr->more()->waiting_on_slave.empty())
+      mds->wait_for_active_peer(who, new C_MDS_RetryRequest(mdcache, mdr));
+    return false;
+  }
   
+  dout(10) << "_rmdir_prepare_witness mds." << who << dendl;
   MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
 					       MMDSSlaveRequest::OP_RMDIRPREP);
   dn->make_path(req->srcdnpath);
@@ -5188,6 +5201,7 @@ void Server::_rmdir_prepare_witness(MDRequest *mdr, int who, CDentry *dn, CDentr
   
   assert(mdr->more()->waiting_on_slave.count(who) == 0);
   mdr->more()->waiting_on_slave.insert(who);
+  return true;
 }
 
 struct C_MDS_SlaveRmdirPrep : public Context {
@@ -5880,7 +5894,8 @@ void Server::handle_client_rename(MDRequest *mdr)
     } else if (mdr->more()->waiting_on_slave.count(*p)) {
       dout(10) << " already waiting on witness mds." << *p << dendl;      
     } else {
-      _rename_prepare_witness(mdr, *p, witnesses, srcdn, destdn, straydn);
+      if (!_rename_prepare_witness(mdr, *p, witnesses, srcdn, destdn, straydn))
+	return;
     }
   }
   if (!mdr->more()->waiting_on_slave.empty())
@@ -5986,9 +6001,16 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
 
 // helpers
 
-void Server::_rename_prepare_witness(MDRequest *mdr, int who, set<int> &witnesse,
+bool Server::_rename_prepare_witness(MDRequest *mdr, int who, set<int> &witnesse,
 				     CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
+  if (!mds->mdsmap->is_clientreplay_or_active_or_stopping(who)) {
+    dout(10) << "_rename_prepare_witness mds." << who << " is not active" << dendl;
+    if (mdr->more()->waiting_on_slave.empty())
+      mds->wait_for_active_peer(who, new C_MDS_RetryRequest(mdcache, mdr));
+    return false;
+  }
+
   dout(10) << "_rename_prepare_witness mds." << who << dendl;
   MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
 					       MMDSSlaveRequest::OP_RENAMEPREP);
@@ -6006,6 +6028,7 @@ void Server::_rename_prepare_witness(MDRequest *mdr, int who, set<int> &witnesse
   
   assert(mdr->more()->waiting_on_slave.count(who) == 0);
   mdr->more()->waiting_on_slave.insert(who);
+  return true;
 }
 
 version_t Server::_rename_prepare_import(MDRequest *mdr, CDentry *srcdn, bufferlist *client_map_bl)

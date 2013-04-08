@@ -327,6 +327,14 @@ bool Locker::acquire_locks(MDRequest *mdr,
 	 p != mustpin_remote.end();
 	 ++p) {
       dout(10) << "requesting remote auth_pins from mds." << p->first << dendl;
+
+      // wait for active auth
+      if (!mds->mdsmap->is_clientreplay_or_active_or_stopping(p->first)) {
+	dout(10) << " mds." << p->first << " is not active" << dendl;
+	if (mdr->more()->waiting_on_slave.empty())
+	  mds->wait_for_active_peer(p->first, new C_MDS_RetryRequest(mdcache, mdr));
+	return false;
+      }
       
       MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
 						   MMDSSlaveRequest::OP_AUTHPIN);
@@ -1332,10 +1340,11 @@ void Locker::remote_wrlock_start(SimpleLock *lock, int target, MDRequest *mut)
 {
   dout(7) << "remote_wrlock_start mds." << target << " on " << *lock << " on " << *lock->get_parent() << dendl;
 
-  // wait for single auth
-  if (lock->get_parent()->is_ambiguous_auth()) {
-    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, 
-				   new C_MDS_RetryRequest(mdcache, mut));
+  // wait for active target
+  if (!mds->mdsmap->is_clientreplay_or_active_or_stopping(target)) {
+    dout(7) << " mds." << target << " is not active" << dendl;
+    if (mut->more()->waiting_on_slave.empty())
+      mds->wait_for_active_peer(target, new C_MDS_RetryRequest(mdcache, mut));
     return;
   }
 
@@ -1422,8 +1431,16 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
       return false;
     }
     
-    // send lock request
+    // wait for active auth
     int auth = lock->get_parent()->authority().first;
+    if (!mds->mdsmap->is_clientreplay_or_active_or_stopping(auth)) {
+      dout(7) << " mds." << auth << " is not active" << dendl;
+      if (mut->more()->waiting_on_slave.empty())
+	mds->wait_for_active_peer(auth, new C_MDS_RetryRequest(mdcache, mut));
+      return false;
+    }
+
+    // send lock request
     mut->more()->slaves.insert(auth);
     mut->start_locking(lock, auth);
     MMDSSlaveRequest *r = new MMDSSlaveRequest(mut->reqid, mut->attempt,

@@ -207,7 +207,7 @@ public:
   void _unlink_local_finish(MDRequest *mdr, 
 			    CDentry *dn, CDentry *straydn,
 			    version_t);
-  void _rmdir_prepare_witness(MDRequest *mdr, int who, CDentry *dn, CDentry *straydn);
+  bool _rmdir_prepare_witness(MDRequest *mdr, int who, CDentry *dn, CDentry *straydn);
   void handle_slave_rmdir_prep(MDRequest *mdr);
   void _logged_slave_rmdir(MDRequest *mdr, CDentry *srcdn, CDentry *straydn);
   void _commit_slave_rmdir(MDRequest *mdr, int r);
@@ -227,7 +227,7 @@ public:
   void _rmsnap_finish(MDRequest *mdr, CInode *diri, snapid_t snapid);
 
   // helpers
-  void _rename_prepare_witness(MDRequest *mdr, int who, set<int> &witnesse,
+  bool _rename_prepare_witness(MDRequest *mdr, int who, set<int> &witnesse,
 			       CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   version_t _rename_prepare_import(MDRequest *mdr, CDentry *srcdn, bufferlist *client_map_bl);
   bool _need_force_journal(CInode *diri, bool empty);
