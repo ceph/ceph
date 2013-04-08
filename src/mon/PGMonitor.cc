@@ -919,7 +919,8 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       for (std::vector<const char*>::iterator i = args.begin()+1; i != args.end(); ) {
 	if (ceph_argparse_double_dash(args, i)) {
 	  break;
-	} else if (ceph_argparse_witharg(args, i, &val, "-f", "--format", (char*)NULL)) {
+	} else if (ceph_argparse_witharg_daemon(args, i, &val, "-f",
+						"--format", (char*)NULL)) {
 	  format = val;
 	} else {
 	  what = *i++;
@@ -1395,14 +1396,14 @@ int PGMonitor::dump_stuck_pg_stats(ostream& ss,
        i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_witharg(args, i, &val,
+    } else if (ceph_argparse_witharg_daemon(args, i, &val,
 				     "-f", "--format", (char*)NULL)) {
       if (val != "json" && val != "plain") {
 	ss << "format must be json or plain";
 	return -EINVAL;
       }
       format = val;
-    } else if (ceph_argparse_withint(args, i, &seconds, &err,
+    } else if (ceph_argparse_withint_daemon(args, i, &seconds, &err,
 				     "-t", "--threshold", (char*)NULL)) {
       if (!err.str().empty()) {
 	ss << err.str();
