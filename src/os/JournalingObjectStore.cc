@@ -177,6 +177,7 @@ bool JournalingObjectStore::ApplyManager::commit_start()
 {
   bool ret = false;
 
+  uint64_t _committing_seq = 0;
   {
     Mutex::Locker l(apply_lock);
     dout(10) << "commit_start max_applied_seq " << max_applied_seq
@@ -198,7 +199,7 @@ bool JournalingObjectStore::ApplyManager::commit_start()
 	goto out;
       }
 
-      committing_seq = max_applied_seq;
+      _committing_seq = committing_seq = max_applied_seq;
 
       dout(10) << "commit_start committing " << committing_seq
 	       << ", still blocked" << dendl;
@@ -208,7 +209,7 @@ bool JournalingObjectStore::ApplyManager::commit_start()
 
  out:
   if (journal)
-    journal->commit_start();  // tell the journal too
+    journal->commit_start(_committing_seq);  // tell the journal too
   return ret;
 }
 
