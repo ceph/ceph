@@ -287,11 +287,15 @@ def install_and_reboot(ctx, config):
 def enable_disable_kdb(ctx, config):
     for role, enable in config.iteritems():
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
+        if "mira" in role_remote.name:
+            serialdev = "ttyS2"
+        else:
+            serialdev = "ttyS1"
         if enable:
             log.info('Enabling kdb on {role}...'.format(role=role))
             role_remote.run(
                 args=[
-                    'echo', 'ttyS1',
+                    'echo', serialdev,
                     run.Raw('|'),
                     'sudo', 'tee', '/sys/module/kgdboc/parameters/kgdboc'
                     ])
