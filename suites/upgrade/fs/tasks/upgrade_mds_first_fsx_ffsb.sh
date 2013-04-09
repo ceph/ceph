@@ -18,7 +18,7 @@ tasks:
            - suites/fsx.sh
 - install.upgrade:
      all:
-        branch: master
+        branch: next
 - ceph.restart: [mds.a, osd.0, osd.1, osd.2, osd.3, mon.a, mon.b, mon.c]
 - workunit:
      clients:
