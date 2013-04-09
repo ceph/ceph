@@ -486,6 +486,7 @@ public:
   void rejoin_import_cap(CInode *in, client_t client, ceph_mds_cap_reconnect& icr, int frommds);
   void finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snapid_t seq);
   void try_reconnect_cap(CInode *in, Session *session);
+  void export_remaining_imported_caps();
 
   // cap imports.  delayed snap parent opens.
   //  realm inode -> client -> cap inodes needing to split to this realm

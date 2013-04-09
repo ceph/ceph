@@ -1504,6 +1504,7 @@ void MDS::active_start()
 
   mdcache->clean_open_file_lists();
   mdcache->scan_stray_dir();
+  mdcache->export_remaining_imported_caps();
   finish_contexts(g_ceph_context, waiting_for_replay);  // kick waiters
   finish_contexts(g_ceph_context, waiting_for_active);  // kick waiters
 }
