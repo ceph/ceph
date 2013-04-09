@@ -1538,7 +1538,7 @@ void FileJournal::committed_thru(uint64_t seq)
     header.start_seq = journalq.front().first;
   } else {
     header.start = write_pos;
-    header.start_seq = journaled_seq + 1;
+    header.start_seq = seq + 1;
   }
   must_write_header = true;
   print_header();
