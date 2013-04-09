@@ -2,6 +2,7 @@ from cStringIO import StringIO
 
 import logging
 import re
+import shlex
 
 from teuthology import misc as teuthology
 from ..orchestra import run
@@ -219,12 +220,19 @@ def install_and_reboot(ctx, config):
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
         proc = role_remote.run(
             args=[
+                # install the kernel deb
                 'sudo',
                 'dpkg',
                 '-i',
                 '/tmp/linux-image.deb',
-                run.Raw('&&'),
-                # and now extract the actual boot image name from the deb
+                ],
+            )
+
+        # collect kernel image name from the .deb
+        cmdout = StringIO()
+        proc = role_remote.run(
+            args=[
+                # extract the actual boot image name from the deb
                 'dpkg-deb',
                 '--fsys-tarfile',
                 '/tmp/linux-image.deb',
@@ -237,12 +245,53 @@ def install_and_reboot(ctx, config):
                 '--',
                 './boot/vmlinuz-*',
                 run.Raw('|'),
-                # we can only rely on mawk being installed, so just call it explicitly
-                'mawk',
-                # and use the image name to construct the content of
-                # the grub menu entry, so we can default to it;
-                # hardcoded to assume Ubuntu, English, etc.
-                r'{sub("^\\./boot/vmlinuz-", "", $6); print "cat <<EOF\n" "set default=\"Ubuntu, with Linux " $6 "\"\n" "EOF"}',
+                'sed',
+                r'-e s;.*\./boot/vmlinuz-;;',
+            ],
+            stdout = cmdout,
+            )
+        kernel_title = cmdout.getvalue().rstrip()
+        cmdout.close()
+        log.info('searching for kernel {}'.format(kernel_title))
+
+        # look for menuentry for our kernel, and collect any
+        # submenu entries for their titles.  Assume that if our
+        # kernel entry appears later in the file than a submenu entry,
+        # it's actually nested under that submenu.  If it gets more
+        # complex this will totally break.
+        cmdout = StringIO()
+        proc = role_remote.run(
+            args=[
+                'egrep',
+                '(submenu|menuentry.*' + kernel_title + ').*{',
+                '/boot/grub/grub.cfg'
+               ],
+            stdout = cmdout,
+            )
+        submenu_title = ''
+        default_title = ''
+        for l in cmdout.getvalue().split('\n'):
+            fields = shlex.split(l)
+            if len(fields) >= 2:
+                command, title = fields[:2]
+                if command == 'submenu':
+                    submenu_title = title + '>'
+                if command == 'menuentry':
+                    if title.endswith(kernel_title):
+                        default_title = title
+                        break
+        cmdout.close()
+        log.info('submenu_title:{}'.format(submenu_title))
+        log.info('default_title:{}'.format(default_title))
+
+        proc = role_remote.run(
+            args=[
+                # use the title(s) to construct the content of
+                # the grub menu entry, so we can default to it.
+                '/bin/echo',
+                '-e',
+                r'cat <<EOF\nset default="' + submenu_title + \
+                    default_title + r'"\nEOF\n',
                 # make it look like an emacs backup file so
                 # unfortunately timed update-grub runs don't pick it
                 # up yet; use sudo tee so we are able to write to /etc
@@ -264,6 +313,7 @@ def install_and_reboot(ctx, config):
                 '--',
                 '/etc/grub.d/01_ceph_kernel.tmp~',
                 '/etc/grub.d/01_ceph_kernel',
+                # update grub again so it accepts our default
                 run.Raw('&&'),
                 'sudo',
                 'update-grub',
