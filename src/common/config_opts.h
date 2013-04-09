@@ -349,7 +349,7 @@ OPTION(osd_journal_size, OPT_INT, 5120)         // in mb
 OPTION(osd_max_write_size, OPT_INT, 90)
 OPTION(osd_max_pgls, OPT_U64, 1024) // max number of pgls entries to return
 OPTION(osd_client_message_size_cap, OPT_U64, 500*1024L*1024L) // client data allowed in-memory (in bytes)
-OPTION(osd_client_message_cap, OPT_U64, 100)              // client messages allowed in-memory (in bytes)
+OPTION(osd_client_message_cap, OPT_U64, 100)              // num client messages allowed in-memory
 OPTION(osd_pg_bits, OPT_INT, 6)  // bits per osd
 OPTION(osd_pgp_bits, OPT_INT, 6)  // bits per osd
 OPTION(osd_crush_chooseleaf_type, OPT_INT, 1) // 1 = host
