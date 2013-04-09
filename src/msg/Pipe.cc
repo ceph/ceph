@@ -1664,14 +1664,20 @@ int Pipe::read_message(Message **pm)
   Message *message;
   utime_t recv_stamp = ceph_clock_now(msgr->cct);
 
+  if (policy.throttler_messages) {
+    ldout(msgr->cct,10) << "reader wants " << 1 << " message from policy throttler "
+			<< policy.throttler_messages->get_current() << "/"
+			<< policy.throttler_messages->get_max() << dendl;
+    policy.throttler_messages->get();
+  }
+
   uint64_t message_size = header.front_len + header.middle_len + header.data_len;
   if (message_size) {
-    bool waited_on_throttle = false;
-    if (policy.throttler) {
-      ldout(msgr->cct,10) << "reader wants " << message_size << " from policy throttler "
-	       << policy.throttler->get_current() << "/"
-	       << policy.throttler->get_max() << dendl;
-      waited_on_throttle = policy.throttler->get(message_size);
+    if (policy.throttler_bytes) {
+      ldout(msgr->cct,10) << "reader wants " << message_size << " bytes from policy throttler "
+	       << policy.throttler_bytes->get_current() << "/"
+	       << policy.throttler_bytes->get_max() << dendl;
+      policy.throttler_bytes->get(message_size);
     }
 
     // throttle total bytes waiting for dispatch.  do this _after_ the
@@ -1681,7 +1687,7 @@ int Pipe::read_message(Message **pm)
     ldout(msgr->cct,10) << "reader wants " << message_size << " from dispatch throttler "
 	     << msgr->dispatch_throttler.get_current() << "/"
 	     << msgr->dispatch_throttler.get_max() << dendl;
-    waited_on_throttle |= msgr->dispatch_throttler.get(message_size);
+    msgr->dispatch_throttler.get(message_size);
   }
 
   utime_t throttle_stamp = ceph_clock_now(msgr->cct);
@@ -1810,7 +1816,8 @@ int Pipe::read_message(Message **pm)
     } 
   }
 
-  message->set_throttler(policy.throttler);
+  message->set_byte_throttler(policy.throttler_bytes);
+  message->set_message_throttler(policy.throttler_messages);
 
   // store reservation size in message, so we don't get confused
   // by messages entering the dispatch queue through other paths.
@@ -1825,12 +1832,18 @@ int Pipe::read_message(Message **pm)
 
  out_dethrottle:
   // release bytes reserved from the throttlers on failure
+  if (policy.throttler_messages) {
+    ldout(msgr->cct,10) << "reader releasing " << 1 << " message to policy throttler "
+			<< policy.throttler_messages->get_current() << "/"
+			<< policy.throttler_messages->get_max() << dendl;
+    policy.throttler_messages->put();
+  }
   if (message_size) {
-    if (policy.throttler) {
-      ldout(msgr->cct,10) << "reader releasing " << message_size << " to policy throttler "
-	       << policy.throttler->get_current() << "/"
-	       << policy.throttler->get_max() << dendl;
-      policy.throttler->put(message_size);
+    if (policy.throttler_bytes) {
+      ldout(msgr->cct,10) << "reader releasing " << message_size << " bytes to policy throttler "
+			  << policy.throttler_bytes->get_current() << "/"
+			  << policy.throttler_bytes->get_max() << dendl;
+      policy.throttler_bytes->put(message_size);
     }
 
     msgr->dispatch_throttle_release(message_size);
