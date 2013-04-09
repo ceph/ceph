@@ -1480,7 +1480,7 @@ void FileJournal::pop_write()
   writeq.pop_front();
 }
 
-void FileJournal::commit_start()
+void FileJournal::commit_start(uint64_t seq)
 {
   dout(10) << "commit_start" << dendl;
 
