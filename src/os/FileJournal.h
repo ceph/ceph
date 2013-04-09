@@ -109,7 +109,22 @@ public:
     int64_t max_size;   // max size of journal ring buffer
     int64_t start;      // offset of first entry
     uint64_t committed_up_to; // committed up to
-    uint64_t start_seq;   // entry at header.start
+
+    /**
+     * start_seq
+     *
+     * entry at header.start has sequence >= start_seq
+     *
+     * Generally, the entry at header.start will have sequence
+     * start_seq if it exists.  The only exception is immediately
+     * after journal creation since the first sequence number is
+     * not known.
+     *
+     * If the first read on open fails, we can assume corruption
+     * if start_seq > committed_up_thru because the entry would have
+     * a sequence >= start_seq and therefore > committed_up_thru.
+     */
+    uint64_t start_seq;
 
     header_t() :
       flags(0), block_size(0), alignment(0), max_size(0), start(0),

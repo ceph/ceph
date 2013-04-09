@@ -389,9 +389,7 @@ int FileJournal::create()
     header.alignment = 16;  // at least stay word aligned on 64bit machines...
 
   header.start = get_top();
-  /* FileStore::mkfs initializes the fs op sequence file at 1.  Therefore,
-   * the first entry written must be  at sequence 2.*/
-  header.start_seq = 2;
+  header.start_seq = 0;
 
   print_header();
 
