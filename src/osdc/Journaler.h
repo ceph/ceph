@@ -194,7 +194,6 @@ private:
 
   uint64_t fetch_len;     // how much to read at a time
   uint64_t temp_fetch_len;
-  uint64_t prefetch_from; // how far from end do we read next chunk
 
   // for wait_for_readable()
   Context    *on_readable;
@@ -251,7 +250,7 @@ public:
     prezeroing_pos(0), prezero_pos(0), write_pos(0), flush_pos(0), safe_pos(0),
     waiting_for_zero(false),
     read_pos(0), requested_pos(0), received_pos(0),
-    fetch_len(0), temp_fetch_len(0), prefetch_from(0),
+    fetch_len(0), temp_fetch_len(0),
     on_readable(0), on_write_error(NULL),
     expire_pos(0), trimming_pos(0), trimmed_pos(0) 
   {
@@ -273,7 +272,6 @@ public:
     requested_pos = 0;
     received_pos = 0;
     fetch_len = 0;
-    prefetch_from = 0;
     assert(!on_readable);
     expire_pos = 0;
     trimming_pos = 0;
