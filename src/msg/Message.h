@@ -299,7 +299,10 @@ protected:
 
   // release our size in bytes back to this throttler when our payload
   // is adjusted or when we are destroyed.
-  Throttle *throttler;
+  Throttle *byte_throttler;
+
+  // release a count back to this throttler when we are destroyed
+  Throttle *msg_throttler;
 
   // keep track of how big this message was when we reserved space in
   // the msgr dispatch_throttler, so that we can properly release it
@@ -313,14 +316,16 @@ protected:
 public:
   Message()
     : connection(NULL),
-      throttler(NULL),
+      byte_throttler(NULL),
+      msg_throttler(NULL),
       dispatch_throttle_size(0) {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
   };
   Message(int t, int version=1, int compat_version=0)
     : connection(NULL),
-      throttler(NULL),
+      byte_throttler(NULL),
+      msg_throttler(NULL),
       dispatch_throttle_size(0) {
     memset(&header, 0, sizeof(header));
     header.type = t;
@@ -340,8 +345,10 @@ protected:
     assert(nref.read() == 0);
     if (connection)
       connection->put();
-    if (throttler)
-      throttler->put(payload.length() + middle.length() + data.length());
+    if (byte_throttler)
+      byte_throttler->put(payload.length() + middle.length() + data.length());
+    if (msg_throttler)
+      msg_throttler->put();
   }
 public:
   Connection *get_connection() { return connection; }
@@ -350,8 +357,10 @@ public:
       connection->put();
     connection = c;
   }
-  void set_throttler(Throttle *t) { throttler = t; }
-  Throttle *get_throttler() { return throttler; }
+  void set_byte_throttler(Throttle *t) { byte_throttler = t; }
+  Throttle *get_byte_throttler() { return byte_throttler; }
+  void set_message_throttler(Throttle *t) { msg_throttler = t; }
+  Throttle *get_message_throttler() { return msg_throttler; }
  
   void set_dispatch_throttle_size(uint64_t s) { dispatch_throttle_size = s; }
   uint64_t get_dispatch_throttle_size() { return dispatch_throttle_size; }
@@ -369,39 +378,48 @@ public:
    */
 
   void clear_payload() {
-    if (throttler) throttler->put(payload.length() + middle.length());
+    if (byte_throttler)
+      byte_throttler->put(payload.length() + middle.length());
     payload.clear();
     middle.clear();
   }
   void clear_data() {
-    if (throttler) throttler->put(data.length());
+    if (byte_throttler)
+      byte_throttler->put(data.length());
     data.clear();
   }
 
   bool empty_payload() { return payload.length() == 0; }
   bufferlist& get_payload() { return payload; }
   void set_payload(bufferlist& bl) {
-    if (throttler) throttler->put(payload.length());
+    if (byte_throttler)
+      byte_throttler->put(payload.length());
     payload.claim(bl);
-    if (throttler) throttler->take(payload.length());
+    if (byte_throttler)
+      byte_throttler->take(payload.length());
   }
 
   void set_middle(bufferlist& bl) {
-    if (throttler) throttler->put(payload.length());
+    if (byte_throttler)
+      byte_throttler->put(payload.length());
     middle.claim(bl);
-    if (throttler) throttler->take(payload.length());
+    if (byte_throttler)
+      byte_throttler->take(payload.length());
   }
   bufferlist& get_middle() { return middle; }
 
   void set_data(const bufferlist &d) {
-    if (throttler) throttler->put(data.length());
+    if (byte_throttler)
+      byte_throttler->put(data.length());
     data = d;
-    if (throttler) throttler->take(data.length());
+    if (byte_throttler)
+      byte_throttler->take(data.length());
   }
 
   bufferlist& get_data() { return data; }
   void claim_data(bufferlist& bl) {
-    if (throttler) throttler->put(data.length());
+    if (byte_throttler)
+      byte_throttler->put(data.length());
     bl.claim(data);
   }
   off_t get_data_len() { return data.length(); }
