@@ -1490,8 +1490,18 @@ void FileJournal::commit_start(uint64_t seq)
     break; // all good
 
   case FULL_FULL:
-    dout(1) << " FULL_FULL -> FULL_WAIT.  last commit epoch committed, waiting for a new one to start." << dendl;
-    full_state = FULL_WAIT;
+    if (seq >= journaled_seq) {
+      dout(1) << " FULL_FULL -> FULL_WAIT.  commit_start on seq "
+	      << seq << " > journaled_seq " << journaled_seq
+	      << ", moving to FULL_WAIT."
+	      << dendl;
+      full_state = FULL_WAIT;
+    } else {
+      dout(1) << "FULL_FULL commit_start on seq "
+	      << seq << " < journaled_seq " << journaled_seq
+	      << ", remaining in FULL_FULL"
+	      << dendl;
+    }
     break;
 
   case FULL_WAIT:
@@ -1537,7 +1547,7 @@ void FileJournal::committed_thru(uint64_t seq)
     Mutex::Locker locker(finisher_lock);
     // completions!
     queue_completions_thru(seq);
-    if (plug_journal_completions) {
+    if (plug_journal_completions && seq >= header.start_seq) {
       dout(10) << " removing completion plug, queuing completions thru journaled_seq " << journaled_seq << dendl;
       plug_journal_completions = false;
       queue_completions_thru(journaled_seq);
