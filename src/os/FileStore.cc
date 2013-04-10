@@ -3145,7 +3145,7 @@ int FileStore::_do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, 
     if (err >= 0) {
       r += err;
     } else {
-      return -errno;
+      return err;
     }
   }
 
@@ -3158,7 +3158,7 @@ int FileStore::_do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, 
     if (err >= 0) {
       r += err;
     } else {
-      return -errno;
+      return err;
     }
   }
   dout(20) << "_do_clone_range finished " << srcoff << "~" << len 
