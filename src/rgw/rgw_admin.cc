@@ -666,10 +666,10 @@ int main(int argc, char **argv)
     user_op.set_purge_keys();
 
   if (gen_access_key)
-    user_op.set_gen_access();
+    user_op.set_generate_key();
 
   if (gen_secret_key)
-    user_op.set_gen_secret();
+    user_op.set_gen_secret(); // assume that a key pair should be created
 
   if (max_buckets >= 0)
     user_op.set_max_buckets(max_buckets);
@@ -712,6 +712,7 @@ int main(int argc, char **argv)
   case OPT_USER_INFO:
     break;
   case OPT_USER_CREATE:
+    user_op.set_generate_key(); // generate a new key by default
     ret = user.add(user_op, &err_msg);
     if (ret < 0) {
       cerr << "could not create user: " << err_msg << std::endl;
