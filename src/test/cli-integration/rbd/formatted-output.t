@@ -19,7 +19,7 @@ clone
   $ rbd snap protect bar@snap
   $ rbd clone bar@snap data/child
   $ rbd snap create data/child@snap
-  $ rbd flatten data/child > /dev/null
+  $ rbd flatten data/child 2> /dev/null
 
 lock
 ====
@@ -687,10 +687,10 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
 # cleanup
   $ rbd snap remove data/child@snap
   $ rbd snap unprotect bar@snap
-  $ rbd snap purge bar > /dev/null
-  $ rbd snap purge foo > /dev/null
-  $ rbd rm data/child > /dev/null
-  $ rbd rm foo > /dev/null
-  $ rbd rm bar > /dev/null
-  $ rbd rm quux > /dev/null
-  $ rbd rm baz > /dev/null
+  $ rbd snap purge bar 2> /dev/null
+  $ rbd snap purge foo 2> /dev/null
+  $ rbd rm data/child 2> /dev/null
+  $ rbd rm foo 2> /dev/null
+  $ rbd rm bar 2> /dev/null
+  $ rbd rm quux 2> /dev/null
+  $ rbd rm baz 2> /dev/null

@@ -74,7 +74,8 @@ public:
      *  the associated Connection(s). When reading in a new Message, the Messenger
      *  will call throttler->throttle() for the size of the new Message.
      */
-    Throttle *throttler;
+    Throttle *throttler_bytes;
+    Throttle *throttler_messages;
 
     /// Specify features supported locally by the endpoint.
     uint64_t features_supported;
@@ -82,12 +83,16 @@ public:
     uint64_t features_required;
 
     Policy()
-      : lossy(false), server(false), standby(false), resetcheck(true), throttler(NULL),
+      : lossy(false), server(false), standby(false), resetcheck(true),
+	throttler_bytes(NULL),
+	throttler_messages(NULL),
 	features_supported(CEPH_FEATURES_SUPPORTED_DEFAULT),
 	features_required(0) {}
   private:
     Policy(bool l, bool s, bool st, bool r, uint64_t sup, uint64_t req)
-      : lossy(l), server(s), standby(st), resetcheck(r), throttler(NULL),
+      : lossy(l), server(s), standby(st), resetcheck(r),
+	throttler_bytes(NULL),
+	throttler_messages(NULL),
 	features_supported(sup | CEPH_FEATURES_SUPPORTED_DEFAULT),
 	features_required(req) {}
 
@@ -266,7 +271,7 @@ public:
    * ownership of this pointer, but you must not destroy it before
    * you destroy the Messenger.
    */
-  virtual void set_policy_throttler(int type, Throttle *t) = 0;
+  virtual void set_policy_throttlers(int type, Throttle *bytes, Throttle *msgs=NULL) = 0;
   /**
    * Set the default send priority
    *
