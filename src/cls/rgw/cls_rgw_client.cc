@@ -21,7 +21,7 @@ void cls_rgw_bucket_set_tag_timeout(ObjectWriteOperation& o, uint64_t tag_timeou
   o.exec("rgw", "bucket_set_tag_timeout", in);
 }
 
-void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, uint8_t op, string& tag,
+void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, string& tag,
                                string& name, string& locator)
 {
   struct rgw_cls_obj_prepare_op call;
@@ -34,8 +34,8 @@ void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, uint8_t op, string& tag,
   o.exec("rgw", "bucket_prepare_op", in);
 }
 
-void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, uint8_t op, string& tag,
-                                uint64_t epoch, string& name, rgw_bucket_dir_entry_meta& dir_meta,
+void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, string& tag,
+                                rgw_bucket_entry_ver& ver, string& name, rgw_bucket_dir_entry_meta& dir_meta,
 				list<string> *remove_objs)
 {
 
@@ -44,7 +44,7 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, uint8_t op, string& tag
   call.op = op;
   call.tag = tag;
   call.name = name;
-  call.epoch = epoch;
+  call.ver = ver;
   call.meta = dir_meta;
   if (remove_objs)
     call.remove_objs = *remove_objs;

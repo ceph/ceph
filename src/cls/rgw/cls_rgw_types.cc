@@ -55,7 +55,8 @@ void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& 
     rgw_bucket_dir_entry_meta *m = *iter;
     rgw_bucket_dir_entry *e = new rgw_bucket_dir_entry;
     e->name = "name";
-    e->epoch = 1234;
+    e->ver.pool = 1;
+    e->ver.epoch = 1234;
     e->locator = "locator";
     e->exists = true;
     e->meta = *m;
@@ -66,11 +67,18 @@ void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& 
   }
   o.push_back(new rgw_bucket_dir_entry);
 }
+void rgw_bucket_entry_ver::dump(Formatter *f) const
+{
+  f->dump_unsigned("pool", pool);
+  f->dump_unsigned("epoch", epoch);
+}
 
 void rgw_bucket_dir_entry::dump(Formatter *f) const
 {
   f->dump_string("name", name);
-  f->dump_unsigned("epoch", epoch);
+  f->open_object_section("ver");
+  ver.dump(f);
+  f->close_section();
   f->dump_string("locator", locator);
   f->dump_int("exists", (int)exists);
   f->open_object_section("meta");
