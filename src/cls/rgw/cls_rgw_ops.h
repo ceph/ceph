@@ -27,16 +27,17 @@ WRITE_CLASS_ENCODER(rgw_cls_tag_timeout_op)
 
 struct rgw_cls_obj_prepare_op
 {
-  uint8_t op;
+  RGWModifyOp op;
   string name;
   string tag;
   string locator;
 
-  rgw_cls_obj_prepare_op() : op(0) {}
+  rgw_cls_obj_prepare_op() : op(CLS_RGW_OP_UNKNOWN) {}
 
   void encode(bufferlist &bl) const {
     ENCODE_START(3, 3, bl);
-    ::encode(op, bl);
+    uint8_t c = (uint8_t)op;
+    ::encode(c, bl);
     ::encode(name, bl);
     ::encode(tag, bl);
     ::encode(locator, bl);
@@ -44,7 +45,9 @@ struct rgw_cls_obj_prepare_op
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
-    ::decode(op, bl);
+    uint8_t c;
+    ::decode(c, bl);
+    op = (RGWModifyOp)c;
     ::decode(name, bl);
     ::decode(tag, bl);
     if (struct_v >= 2) {
@@ -59,20 +62,21 @@ WRITE_CLASS_ENCODER(rgw_cls_obj_prepare_op)
 
 struct rgw_cls_obj_complete_op
 {
-  uint8_t op;
+  RGWModifyOp op;
   string name;
   string locator;
-  uint64_t epoch;
+  rgw_bucket_entry_ver ver;
   struct rgw_bucket_dir_entry_meta meta;
   string tag;
 
   list<string> remove_objs;
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(4, 3, bl);
-    ::encode(op, bl);
+    ENCODE_START(5, 3, bl);
+    uint8_t c = (uint8_t)op;
+    ::encode(c, bl);
     ::encode(name, bl);
-    ::encode(epoch, bl);
+    ::encode(ver, bl);
     ::encode(meta, bl);
     ::encode(tag, bl);
     ::encode(locator, bl);
@@ -80,10 +84,17 @@ struct rgw_cls_obj_complete_op
     ENCODE_FINISH(bl);
  }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
-    ::decode(op, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
+    uint8_t c;
+    ::decode(c, bl);
+    op = (RGWModifyOp)c;
     ::decode(name, bl);
-    ::decode(epoch, bl);
+    if (struct_v >= 5) {
+      ::decode(ver, bl);
+    } else {
+      ver.pool = 0;
+      ::decode(ver.epoch, bl);
+    }
     ::decode(meta, bl);
     ::decode(tag, bl);
     if (struct_v >= 2) {
