@@ -1606,6 +1606,7 @@ void OSD::load_pgs()
     dout(10) << "load_pgs ignoring unrecognized " << *it << dendl;
   }
 
+  bool has_upgraded = false;
   for (map<pg_t, interval_set<snapid_t> >::iterator i = pgs.begin();
        i != pgs.end();
        ++i) {
@@ -1639,8 +1640,12 @@ void OSD::load_pgs()
     pg->read_state(store, bl);
 
     if (pg->must_upgrade()) {
-      derr << "PG " << pg->info.pgid
-	   << " must upgrade..." << dendl;
+      if (!has_upgraded) {
+	derr << "PGs are upgrading" << dendl;
+	has_upgraded = true;
+      }
+      dout(10) << "PG " << pg->info.pgid
+	       << " must upgrade..." << dendl;
       pg->upgrade(store, i->second);
     } else {
       assert(i->second.empty());
