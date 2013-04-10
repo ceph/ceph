@@ -36,7 +36,7 @@ namespace librbd {
 			__u32 trunc_seq, Context *oncommit);
 
   private:
-    int m_tid;
+    tid_t m_tid;
     Mutex& m_lock;
     librbd::ImageCtx *m_ictx;
   };
