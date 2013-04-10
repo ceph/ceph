@@ -136,7 +136,7 @@ hard drive than older hosts in the cluster (i.e., they may have greater weight).
 
    For Bobtail (v 0.56), execute the following:: 
 
-	ceph osd crush set {id-or-name} {weight} pool={pool-name}  [{bucket-type}={bucket-name} ...]
+	ceph osd crush set {id-or-name} {weight} root={pool-name}  [{bucket-type}={bucket-name} ...]
 
 
 .. topic:: Argonaut (v0.48) Best Practices
