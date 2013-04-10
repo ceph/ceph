@@ -48,7 +48,6 @@ namespace librbd {
     C_Request(CephContext *cct, Context *c, Mutex *l)
       : m_cct(cct), m_ctx(c), m_lock(l) {}
     virtual ~C_Request() {}
-    void set_req(AioRequest *req);
     virtual void finish(int r) {
       ldout(m_cct, 20) << "aio_cb completing " << dendl;
       {
