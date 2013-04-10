@@ -68,11 +68,11 @@ namespace librbd {
   {
   }
 
-  tid_t LibrbdWriteback::read(const object_t& oid,
-			      const object_locator_t& oloc,
-			      uint64_t off, uint64_t len, snapid_t snapid,
-			      bufferlist *pbl, uint64_t trunc_size,
-			      __u32 trunc_seq, Context *onfinish)
+  void LibrbdWriteback::read(const object_t& oid,
+			     const object_locator_t& oloc,
+			     uint64_t off, uint64_t len, snapid_t snapid,
+			     bufferlist *pbl, uint64_t trunc_size,
+			     __u32 trunc_seq, Context *onfinish)
   {
     // on completion, take the mutex and then call onfinish.
     Context *req = new C_Request(m_ictx->cct, onfinish, &m_lock);
@@ -82,7 +82,6 @@ namespace librbd {
 				      len, off);
     rados_completion->release();
     assert(r >= 0);
-    return ++m_tid;
   }
 
   bool LibrbdWriteback::may_copy_on_write(const object_t& oid, uint64_t read_off, uint64_t read_len, snapid_t snapid)
