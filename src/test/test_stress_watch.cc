@@ -72,16 +72,10 @@ TEST(WatchStress, Stress1) {
     uint64_t handle;
     WatchNotifyTestCtx ctx;
 
-    utime_t duration = ceph_clock_now(NULL);
     ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
-    duration = ceph_clock_now(NULL) - duration;
-    ASSERT_LT(duration.sec(), 5);
 
     bufferlist bl2;
-    duration = ceph_clock_now(NULL);
     ASSERT_EQ(0, ioctx.notify("foo", 0, bl2));
-    duration = ceph_clock_now(NULL) - duration;
-    ASSERT_LT(duration.sec(), 5);
 
     TestAlarm alarm;
     sem_wait(&sem);
