@@ -3,6 +3,8 @@
 #ifndef CEPH_LIBRBD_LIBRBDWRITEBACKHANDLER_H
 #define CEPH_LIBRBD_LIBRBDWRITEBACKHANDLER_H
 
+#include <queue>
+
 #include "include/Context.h"
 #include "include/types.h"
 #include "include/rados/librados.hpp"
@@ -35,10 +37,26 @@ namespace librbd {
 			const bufferlist &bl, utime_t mtime, uint64_t trunc_size,
 			__u32 trunc_seq, Context *oncommit);
 
+    struct write_result_d {
+      bool done;
+      int ret;
+      std::string oid;
+      Context *oncommit;
+      write_result_d(const std::string& oid, Context *oncommit) :
+	done(false), ret(0), oid(oid), oncommit(oncommit) {}
+    private:
+      write_result_d(const write_result_d& rhs);
+      const write_result_d& operator=(const write_result_d& rhs);
+    };
+
   private:
+    void complete_writes(const std::string& oid);
+
     tid_t m_tid;
     Mutex& m_lock;
     librbd::ImageCtx *m_ictx;
+    hash_map<std::string, std::queue<write_result_d*> > m_writes;
+    friend class C_OrderedWrite;
   };
 }
 
