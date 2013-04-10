@@ -1588,6 +1588,7 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
 
   string index_tag;
   uint64_t epoch;
+  int64_t poolid;
   utime_t ut;
   r = prepare_update_index(NULL, bucket, obj, index_tag);
   if (r < 0)
@@ -1602,6 +1603,7 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
   }
 
   epoch = io_ctx.get_last_version();
+  poolid = io_ctx.get_id();
 
   r = complete_atomic_overwrite(rctx, state, obj);
   if (r < 0) {
@@ -1609,7 +1611,7 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
   }
 
   ut = ceph_clock_now(cct);
-  r = complete_update_index(bucket, obj.object, index_tag, epoch, size,
+  r = complete_update_index(bucket, obj.object, index_tag, poolid, epoch, size,
                             ut, etag, content_type, &acl_bl, category, remove_objs);
   if (r < 0)
     goto done_cancel;
@@ -2249,9 +2251,10 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj)
   r = io_ctx.operate(oid, &op);
   bool removed = (r >= 0);
 
+  int64_t poolid = io_ctx.get_id();
   if (r >= 0 || r == -ENOENT) {
     uint64_t epoch = io_ctx.get_last_version();
-    r = complete_update_index_del(bucket, obj.object, tag, epoch);
+    r = complete_update_index_del(bucket, obj.object, tag, poolid, epoch);
   } else {
     int ret = complete_update_index_cancel(bucket, obj.object, tag);
     if (ret < 0) {
@@ -2295,7 +2298,7 @@ int RGWRados::delete_obj_index(rgw_obj& obj)
   get_obj_bucket_and_oid_key(obj, bucket, oid, key);
 
   string tag;
-  int r = complete_update_index_del(bucket, obj.object, tag, 0);
+  int r = complete_update_index_del(bucket, obj.object, tag, -1 /* pool */, 0);
 
   return r;
 }
@@ -2903,7 +2906,7 @@ int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
   return ret;
 }
 
-int RGWRados::complete_update_index(rgw_bucket& bucket, string& oid, string& tag, uint64_t epoch, uint64_t size,
+int RGWRados::complete_update_index(rgw_bucket& bucket, string& oid, string& tag, int64_t poolid, uint64_t epoch, uint64_t size,
                                     utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category,
                                     list<string> *remove_objs)
 {
@@ -2926,7 +2929,7 @@ int RGWRados::complete_update_index(rgw_bucket& bucket, string& oid, string& tag
   ent.owner_display_name = owner.get_display_name();
   ent.content_type = content_type;
 
-  int ret = cls_obj_complete_add(bucket, tag, epoch, ent, category, remove_objs);
+  int ret = cls_obj_complete_add(bucket, tag, poolid, epoch, ent, category, remove_objs);
 
   return ret;
 }
@@ -3027,6 +3030,7 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
 
   string tag;
   uint64_t epoch = 0;
+  int64_t poolid = io_ctx.get_id();
   int ret;
 
   if (update_index) {
@@ -3044,7 +3048,7 @@ done:
 
   if (update_index) {
     if (ret >= 0) {
-      ret = complete_update_index(bucket, dst_obj.object, tag, epoch, size,
+      ret = complete_update_index(bucket, dst_obj.object, tag, poolid, epoch, size,
                                   ut, etag, content_type, &acl_bl, category, NULL);
     } else {
       int r = complete_update_index_cancel(bucket, dst_obj.object, tag);
@@ -4014,7 +4018,7 @@ int RGWRados::cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteO
   return r;
 }
 
-int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag,
+int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, RGWModifyOp op, string& tag,
                                  string& name, string& locator)
 {
   librados::IoCtx io_ctx;
@@ -4030,7 +4034,9 @@ int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, uint8_t op, string& tag,
   return r;
 }
 
-int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category,
+int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, RGWModifyOp op, string& tag,
+                                  int64_t pool, uint64_t epoch,
+                                  RGWObjEnt& ent, RGWObjCategory category,
 				  list<string> *remove_objs)
 {
   librados::IoCtx io_ctx;
@@ -4049,7 +4055,11 @@ int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, u
   dir_meta.owner_display_name = ent.owner_display_name;
   dir_meta.content_type = ent.content_type;
   dir_meta.category = category;
-  cls_rgw_bucket_complete_op(o, op, tag, epoch, ent.name, dir_meta, remove_objs);
+
+  rgw_bucket_entry_ver ver;
+  ver.pool = pool;
+  ver.epoch = epoch;
+  cls_rgw_bucket_complete_op(o, op, tag, ver, ent.name, dir_meta, remove_objs);
 
   AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
   r = io_ctx.aio_operate(oid, c, &o);
@@ -4057,23 +4067,28 @@ int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, uint8_t op, string& tag, u
   return r;
 }
 
-int RGWRados::cls_obj_complete_add(rgw_bucket& bucket, string& tag, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category, list<string> *remove_objs)
+int RGWRados::cls_obj_complete_add(rgw_bucket& bucket, string& tag,
+                                   int64_t pool, uint64_t epoch,
+                                   RGWObjEnt& ent, RGWObjCategory category,
+                                   list<string> *remove_objs)
 {
-  return cls_obj_complete_op(bucket, CLS_RGW_OP_ADD, tag, epoch, ent, category, remove_objs);
+  return cls_obj_complete_op(bucket, CLS_RGW_OP_ADD, tag, pool, epoch, ent, category, remove_objs);
 }
 
-int RGWRados::cls_obj_complete_del(rgw_bucket& bucket, string& tag, uint64_t epoch, string& name)
+int RGWRados::cls_obj_complete_del(rgw_bucket& bucket, string& tag,
+                                   int64_t pool, uint64_t epoch,
+                                   string& name)
 {
   RGWObjEnt ent;
   ent.name = name;
-  return cls_obj_complete_op(bucket, CLS_RGW_OP_DEL, tag, epoch, ent, RGW_OBJ_CATEGORY_NONE, NULL);
+  return cls_obj_complete_op(bucket, CLS_RGW_OP_DEL, tag, pool, epoch, ent, RGW_OBJ_CATEGORY_NONE, NULL);
 }
 
 int RGWRados::cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, string& name)
 {
   RGWObjEnt ent;
   ent.name = name;
-  return cls_obj_complete_op(bucket, CLS_RGW_OP_ADD, tag, 0, ent, RGW_OBJ_CATEGORY_NONE, NULL);
+  return cls_obj_complete_op(bucket, CLS_RGW_OP_ADD, tag, -1 /* pool id */, 0, ent, RGW_OBJ_CATEGORY_NONE, NULL);
 }
 
 int RGWRados::cls_obj_set_bucket_tag_timeout(rgw_bucket& bucket, uint64_t timeout)
@@ -4244,7 +4259,7 @@ int RGWRados::remove_objs_from_index(rgw_bucket& bucket, list<string>& oid_list)
     string& oid = *iter;
     dout(2) << "RGWRados::remove_objs_from_index bucket=" << bucket << " oid=" << oid << dendl;
     rgw_bucket_dir_entry entry;
-    entry.epoch = (uint64_t)-1; // ULLONG_MAX, needed to that objclass doesn't skip out request
+    entry.ver.epoch = (uint64_t)-1; // ULLONG_MAX, needed to that objclass doesn't skip out request
     entry.name = oid;
     updates.append(CEPH_RGW_REMOVE);
     ::encode(entry, updates);
@@ -4290,7 +4305,8 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
        * to handle!) */
     }
     // encode a suggested removal of that key
-    list_state.epoch = io_ctx.get_last_version();
+    list_state.ver.epoch = io_ctx.get_last_version();
+    list_state.ver.pool = io_ctx.get_id();
     cls_rgw_encode_suggestion(CEPH_RGW_REMOVE, list_state, suggested_updates);
     return -ENOENT;
   }
@@ -4342,7 +4358,8 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   object.owner_display_name = owner.get_display_name();
 
   // encode suggested updates
-  list_state.epoch = astate->epoch;
+  list_state.ver.pool = io_ctx.get_id();
+  list_state.ver.epoch = astate->epoch;
   list_state.meta.size = object.size;
   list_state.meta.mtime.set_from_double(double(object.mtime));
   list_state.meta.category = main_category;
