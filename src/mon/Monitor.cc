@@ -2483,7 +2483,7 @@ void Monitor::handle_command(MMonCommand *m)
     JSONFormatter *jf = NULL;
     for (vector<const char*>::iterator i = args.begin(); i != args.end();) {
       string val;
-      if (ceph_argparse_witharg(args, i, &val,
+      if (ceph_argparse_witharg_daemon(args, i, &val,
             "-f", "--format", (char*)NULL)) {
         format = val;
       } else {

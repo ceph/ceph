@@ -2684,11 +2684,12 @@ public:
 
     mds->balancer->hit_inode(mdr->now, newi, META_POP_IWR);
 
+    mdr->ls->queue_backtrace_update(newi, newi->inode.layout.fl_pg_pool);
+
     MClientReply *reply = new MClientReply(mdr->client_request, 0);
     reply->set_extra_bl(mdr->reply_extra_bl);
     mds->server->reply_request(mdr, reply);
 
-    mdr->ls->queue_backtrace_update(newi, newi->inode.layout.fl_pg_pool);
     assert(g_conf->mds_kill_openc_at != 1);
   }
 };
