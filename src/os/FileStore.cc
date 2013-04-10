@@ -3194,10 +3194,14 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
     r = ::read(from, buf, l);
     dout(25) << "  read from " << pos << "~" << l << " got " << r << dendl;
     if (r < 0) {
-      r = -errno;
-      derr << "FileStore::_do_copy_range: read error at " << pos << "~" << len
-	   << ", " << cpp_strerror(r) << dendl;
-      break;
+      if (errno == EINTR) {
+	continue;
+      } else {
+	r = -errno;
+	derr << "FileStore::_do_copy_range: read error at " << pos << "~" << len
+	     << ", " << cpp_strerror(r) << dendl;
+	break;
+      }
     }
     if (r == 0) {
       // hrm, bad source range, wtf.
