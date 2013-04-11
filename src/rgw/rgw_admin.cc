@@ -202,6 +202,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   *need_more = false;
   if (strcmp(cmd, "bucket") == 0 ||
       strcmp(cmd, "buckets") == 0 ||
+      strcmp(cmd, "user") == 0 ||
       strcmp(cmd, "caps") == 0 ||
       strcmp(cmd, "gc") == 0 || 
       strcmp(cmd, "key") == 0 ||
