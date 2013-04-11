@@ -5,7 +5,30 @@
 You can configure OSDs in the Ceph configuration file, but OSDs can use the
 default values and a very minimal configuration. A minimal OSD configuration
 sets ``osd journal size`` and ``osd host``,  and uses default values for
-nearly everything else. 
+nearly everything else.
+
+OSDs are numerically identified in incremental fashion, beginning with ``0``
+using the following convention. ::
+
+	osd.0
+	osd.1
+	osd.2
+
+In a configuration file, you may specify settings for all OSDs in the cluster
+by adding configuration settings to the ``[osd]`` section of your configuration
+file. To add settings directly to a specific OSD (e.g., ``osd host``), enter 
+it in an OSD-specific section of your configuration file. For example:
+
+.. code-block:: ini
+	
+	[osd]
+		osd journal size = 1024
+	
+	[osd.0]
+		osd host = osd-host-a
+		
+	[osd.1]
+		osd host = osd-host-b
 
 
 General Settings
