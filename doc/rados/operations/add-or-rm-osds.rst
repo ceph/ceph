@@ -75,8 +75,9 @@ hard drive than older hosts in the cluster (i.e., they may have greater weight).
 
 
 #. Create the OSD. If no UUID is given, it will be set automatically when the 
-   OSD starts up. ::
-
+   OSD starts up. The following command will output the OSD number, which you 
+   will need for subsequent steps. ::
+	
 	ceph osd create [{uuid}]
 
 
@@ -105,7 +106,7 @@ hard drive than older hosts in the cluster (i.e., they may have greater weight).
 	
    .. code-block:: ini
 
-     [osd.123]
+     [osd.1]
          host = {hostname}
  
 #. From the host where you keep the master copy of the cluster's 
@@ -330,7 +331,7 @@ OSD for each drive by repeating this procedure.
 
 	ceph osd rm {osd-num}
 	#for example
-	ceph osd rm 123
+	ceph osd rm 1
 	
 #. Navigate to the host where you keep the master copy of the cluster's 
    ``ceph.conf`` file. ::
@@ -341,7 +342,7 @@ OSD for each drive by repeating this procedure.
 
 #. Remove the OSD entry from your ``ceph.conf`` file. ::
 
-	[osd.123]
+	[osd.1]
 		host = {hostname}
  
 #. From the host where you keep the master copy of the cluster's ``ceph.conf`` file, 
