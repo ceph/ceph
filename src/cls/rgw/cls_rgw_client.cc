@@ -4,6 +4,8 @@
 #include "cls/rgw/cls_rgw_ops.h"
 #include "include/rados/librados.hpp"
 
+#include "common/debug.h"
+
 using namespace librados;
 
 void cls_rgw_bucket_init(ObjectWriteOperation& o)
@@ -149,6 +151,34 @@ int cls_rgw_get_dir_header(IoCtx& io_ctx, string& oid, rgw_bucket_dir_header *he
 
   if (header)
     *header = ret.dir.header;
+
+ return r;
+}
+
+int cls_rgw_bi_log_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max,
+                    list<rgw_bi_log_entry>& entries, bool *truncated)
+{
+  bufferlist in, out;
+  cls_rgw_bi_log_list_op call;
+  call.marker = marker;
+  call.max = max;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "bi_log_list", in, out);
+  if (r < 0)
+    return r;
+
+  cls_rgw_bi_log_list_ret ret;
+  try {
+    bufferlist::iterator iter = out.begin();
+    ::decode(ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  entries = ret.entries;
+
+  if (truncated)
+    *truncated = ret.truncated;
 
  return r;
 }
