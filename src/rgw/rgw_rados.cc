@@ -3985,6 +3985,30 @@ int RGWRados::list_raw_objects(rgw_bucket& pool, const string& prefix_filter,
   return oids.size();
 }
 
+int RGWRados::list_bi_log_entries(rgw_bucket& bucket, string& marker, uint32_t max,
+                                  std::list<rgw_bi_log_entry>& result, bool *truncated)
+{
+  result.clear();
+
+  librados::IoCtx io_ctx;
+  string oid;
+  int r = open_bucket(bucket, io_ctx, oid);
+  if (r < 0)
+    return r;
+
+  std::list<rgw_bi_log_entry> entries;
+  int ret = cls_rgw_bi_log_list(io_ctx, oid, marker, max - result.size(), entries, truncated);
+  if (ret < 0)
+    return ret;
+
+  std::list<rgw_bi_log_entry>::iterator iter;
+  for (iter = entries.begin(); iter != entries.end(); ++iter) {
+    result.push_back(*iter);
+  }
+
+  return 0;
+}
+
 int RGWRados::gc_operate(string& oid, librados::ObjectWriteOperation *op)
 {
   return gc_pool_ctx.operate(oid, op);

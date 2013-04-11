@@ -971,6 +971,7 @@ public:
 
     return cls_obj_complete_cancel(bucket, tag, oid);
   }
+  int list_bi_log_entries(rgw_bucket& bucket, string& marker, uint32_t max, std::list<rgw_bi_log_entry>& result, bool *truncated);
 
   int cls_obj_usage_log_add(const string& oid, rgw_usage_log_info& info);
   int cls_obj_usage_log_read(string& oid, string& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,

@@ -32,6 +32,11 @@ void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, bufferlist
 
 void cls_rgw_suggest_changes(librados::ObjectWriteOperation& o, bufferlist& updates);
 
+/* bucket index log */
+
+int cls_rgw_bi_log_list(librados::IoCtx& io_ctx, string& oid, string& marker, uint32_t max,
+                    list<rgw_bi_log_entry>& entries, bool *truncated);
+
 /* usage logging */
 int cls_rgw_usage_log_read(librados::IoCtx& io_ctx, string& oid, string& user,
                            uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,

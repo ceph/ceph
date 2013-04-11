@@ -88,7 +88,8 @@ void _usage()
   cerr << "  metadata put               put metadata info\n";
   cerr << "  metadata rm                remove metadata info\n";
   cerr << "  metadata list              list metadata info\n";
-  cerr << "  mdlog show                 show metadata log\n";
+  cerr << "  mdlog list                 list metadata log\n";
+  cerr << "  bilog list                 list bucket index log\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --subuser=<name>          subuser name\n";
@@ -194,7 +195,8 @@ enum {
   OPT_METADATA_PUT,
   OPT_METADATA_RM,
   OPT_METADATA_LIST,
-  OPT_MDLOG_SHOW,
+  OPT_MDLOG_LIST,
+  OPT_BILOG_LIST,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
@@ -221,7 +223,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "zone") == 0 ||
       strcmp(cmd, "temp") == 0 ||
       strcmp(cmd, "metadata") == 0 ||
-      strcmp(cmd, "mdlog") == 0) {
+      strcmp(cmd, "mdlog") == 0 ||
+      strcmp(cmd, "bilog") == 0) {
     *need_more = true;
     return 0;
   }
@@ -355,8 +358,11 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
     if (strcmp(cmd, "list") == 0)
       return OPT_METADATA_LIST;
   } else if (strcmp(prev_cmd, "mdlog") == 0) {
-    if (strcmp(cmd, "show") == 0)
-      return OPT_MDLOG_SHOW;
+    if (strcmp(cmd, "list") == 0)
+      return OPT_MDLOG_LIST;
+  } else if (strcmp(prev_cmd, "bilog") == 0) {
+    if (strcmp(cmd, "list") == 0)
+      return OPT_BILOG_LIST;
   }
 
   return -EINVAL;
@@ -1572,7 +1578,7 @@ next:
     store->meta_mgr->list_keys_complete(handle);
   }
 
-  if (opt_cmd == OPT_MDLOG_SHOW) {
+  if (opt_cmd == OPT_MDLOG_LIST) {
     void *handle;
     list<cls_log_entry> entries;
 
@@ -1611,5 +1617,28 @@ next:
     formatter->flush(cout);
   }
 
+  if (opt_cmd == OPT_BILOG_LIST) {
+    string marker;
+    formatter->open_array_section("entries");
+    bool truncated;
+    do {
+      list<rgw_bi_log_entry> entries;
+      int ret = store->list_bi_log_entries(bucket, marker, 1000, entries, &truncated);
+      if (ret < 0) {
+        cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+        rgw_bi_log_entry& entry = *iter;
+        encode_json("entry", entry, formatter);
+      }
+      formatter->flush(cout);
+    } while (truncated);
+
+    formatter->close_section();
+    formatter->flush(cout);
+  }
+  
   return 0;
 }

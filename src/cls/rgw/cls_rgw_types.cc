@@ -96,6 +96,48 @@ void rgw_bucket_dir_entry::dump(Formatter *f) const
   f->close_section();
 }
 
+void rgw_bi_log_entry::dump(Formatter *f) const
+{
+  f->dump_string("id", id);
+  f->dump_string("object", object);
+
+  f->dump_int("index_ver", index_ver);
+  f->dump_stream("timestamp") << timestamp;
+  f->open_object_section("ver");
+  ver.dump(f);
+  f->close_section();
+
+  switch (op) {
+    case CLS_RGW_OP_ADD:
+      f->dump_string("op", "write");
+      break;
+    case CLS_RGW_OP_DEL:
+      f->dump_string("op", "del");
+      break;
+    case CLS_RGW_OP_CANCEL:
+      f->dump_string("op", "cancel");
+      break;
+    case CLS_RGW_OP_UNKNOWN:
+      f->dump_string("op", "unknown");
+      break;
+    default:
+      f->dump_string("op", "invalid");
+      break;
+  }
+
+  switch (state) {
+    case CLS_RGW_STATE_PENDING_MODIFY:
+      f->dump_string("state", "pending");
+      break;
+    case CLS_RGW_STATE_COMPLETE:
+      f->dump_string("state", "complete");
+      break;
+    default:
+      f->dump_string("state", "invalid");
+      break;
+  }
+}
+
 void rgw_bucket_category_stats::generate_test_instances(list<rgw_bucket_category_stats*>& o)
 {
   rgw_bucket_category_stats *s = new rgw_bucket_category_stats;
