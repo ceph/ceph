@@ -200,12 +200,14 @@ commands, refer to `Virsh Command Reference`_.
 		<disk type='file' device='disk'>
 			<driver name='qemu' type='raw'/>
 			<source file='/path/to/image/recent-linux.img'/>
-			<target dev='hda' bus='ide'/>
+			<target dev='vda' bus='virtio'/>
 			<address type='drive' controller='0' bus='0' unit='0'/>
 		</disk>
 
 
    Replace ``/path/to/image/recent-linux.img`` with the path to the OS image.
+   The minimum kernel for using the faster ``virtio`` bus is 2.6.25. See 
+   `Virtio`_ for details.
 
    **IMPORTANT:** Use ``sudo virsh edit`` instead of a text editor. If you edit 
    the configuration file under ``/etc/libvirt/qemu`` with a text editor, 
@@ -334,3 +336,4 @@ within your VM.
 .. _Disks: http://www.libvirt.org/formatdomain.html#elementsDisks
 .. _rbd create: ../rados-rbd-cmds#creating-a-block-device-image
 .. _Cephx Commandline: ../../rados/operations/authentication#cephx-commandline-options
+.. _Virtio: http://www.linux-kvm.org/page/Virtio
