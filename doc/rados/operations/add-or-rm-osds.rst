@@ -73,6 +73,13 @@ When you add the OSD to the CRUSH map, consider the weight you give to the new
 OSD.  Hard drive capacity grows 40% per year, so newer OSD hosts may have larger
 hard drive than older hosts in the cluster (i.e., they may have greater weight).
 
+
+#. Create the OSD. If no UUID is given, it will be set automatically when the 
+   OSD starts up. ::
+
+	ceph osd create [{uuid}]
+
+
 #. Create the default directory on your new OSD. :: 
 
 	ssh {new-osd-host}
@@ -107,9 +114,6 @@ hard drive than older hosts in the cluster (i.e., they may have greater weight).
 
 	ssh {new-osd} sudo tee /etc/ceph/ceph.conf < /etc/ceph/ceph.conf
 
-#. Create the OSD. If no UUID is given, it will be set automatically when the OSD starts up. ::
-
-	ceph osd create [{uuid}]
 	
 #. Initialize the OSD data directory. :: 
 
@@ -174,8 +178,8 @@ Adding an OSD (Chef)
 --------------------
 
 This procedure configures your OSD using ``chef-client``. If your host has
-multiple drives, you may need to execute the procedure for preparing an OSD drive
-for each data drive on your host.
+multiple drives, you may need to execute the procedure for preparing an OSD
+drive for each data drive on your host.
 
 When you add the OSD to the CRUSH map, consider the weight you give to the new
 OSD.  Hard drive capacity grows 40% per year, so newer OSD hosts may have larger
