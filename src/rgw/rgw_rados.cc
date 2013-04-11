@@ -3702,7 +3702,7 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
   return 0;
 }
 
-int RGWRados::get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucketStats>& stats)
+int RGWRados::get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_t *master_ver, map<RGWObjCategory, RGWBucketStats>& stats)
 {
   rgw_bucket_dir_header header;
   int r = cls_bucket_head(bucket, header);
@@ -3712,6 +3712,9 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, map<RGWObjCategory, RGWBucket
   stats.clear();
 
   translate_raw_stats(header, stats);
+
+  *bucket_ver = header.ver;
+  *master_ver = header.master_ver;
 
   return 0;
 }
