@@ -106,18 +106,21 @@ static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id,
   key.append(id);
 }
 
-static int log_index_operation(cls_method_context_t hctx, string& obj, RGWModifyOp op, rgw_bucket_entry_ver& ver, RGWPendingState state, uint64_t index_ver)
+static int log_index_operation(cls_method_context_t hctx, string& obj, RGWModifyOp op,
+                               string& tag, utime_t& timestamp,
+                               rgw_bucket_entry_ver& ver, RGWPendingState state, uint64_t index_ver)
 {
   bufferlist bl;
 
   struct rgw_bi_log_entry entry;
 
   entry.object = obj;
-  entry.timestamp = ceph_clock_now(g_ceph_context);
+  entry.timestamp = timestamp;
   entry.op = op;
   entry.ver = ver;
   entry.state = state;
   entry.index_ver = index_ver;
+  entry.tag = tag;
 
   string key;
   bi_log_index_key(hctx, key, entry.id, index_ver);
@@ -413,7 +416,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
     return -EINVAL;
   }
 
-  rc = log_index_operation(hctx, op.name, op.op, entry.ver, info.state, header.ver);
+  rc = log_index_operation(hctx, op.name, op.op, op.tag, entry.meta.mtime, entry.ver, info.state, header.ver);
   if (rc < 0)
     return rc;
 
@@ -525,7 +528,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 
   bufferlist op_bl;
   if (cancel) {
-    rc = log_index_operation(hctx, op.name, op.op, entry.ver, CLS_RGW_STATE_COMPLETE, header.ver);
+    rc = log_index_operation(hctx, op.name, op.op, op.tag, entry.meta.mtime, entry.ver, CLS_RGW_STATE_COMPLETE, header.ver);
     if (rc < 0)
       return rc;
 
@@ -542,6 +545,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     unaccount_entry(header, entry);
   }
 
+  entry.ver = op.ver;
   switch ((int)op.op) {
   case CLS_RGW_OP_DEL:
     if (ondisk) {
@@ -567,7 +571,6 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       struct rgw_bucket_category_stats& stats = header.stats[meta.category];
       entry.meta = meta;
       entry.name = op.name;
-      entry.ver = op.ver;
       entry.exists = true;
       stats.num_entries++;
       stats.total_size += meta.size;
@@ -581,7 +584,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     break;
   }
 
-  rc = log_index_operation(hctx, op.name, op.op, entry.ver, CLS_RGW_STATE_COMPLETE, header.ver);
+  rc = log_index_operation(hctx, op.name, op.op, op.tag, entry.meta.mtime, entry.ver, CLS_RGW_STATE_COMPLETE, header.ver);
   if (rc < 0)
     return rc;
 
@@ -599,7 +602,8 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     CLS_LOG(0, "rgw_bucket_complete_op(): entry.name=%s entry.meta.category=%d\n", remove_entry.name.c_str(), remove_entry.meta.category);
     unaccount_entry(header, remove_entry);
 
-    rc = log_index_operation(hctx, op.name, CLS_RGW_OP_DEL, remove_entry.ver, CLS_RGW_STATE_COMPLETE, header.ver);
+    rc = log_index_operation(hctx, op.name, CLS_RGW_OP_DEL, op.tag, remove_entry.meta.mtime,
+                             remove_entry.ver, CLS_RGW_STATE_COMPLETE, header.ver);
     if (rc < 0)
       continue;
 

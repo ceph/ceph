@@ -69,7 +69,7 @@ void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& 
 }
 void rgw_bucket_entry_ver::dump(Formatter *f) const
 {
-  f->dump_unsigned("pool", pool);
+  f->dump_int("pool", pool);
   f->dump_unsigned("epoch", epoch);
 }
 
@@ -98,15 +98,8 @@ void rgw_bucket_dir_entry::dump(Formatter *f) const
 
 void rgw_bi_log_entry::dump(Formatter *f) const
 {
-  f->dump_string("id", id);
-  f->dump_string("object", object);
-
-  f->dump_int("index_ver", index_ver);
-  f->dump_stream("timestamp") << timestamp;
-  f->open_object_section("ver");
-  ver.dump(f);
-  f->close_section();
-
+  f->dump_string("op_id", id);
+  f->dump_string("op_tag", tag);
   switch (op) {
     case CLS_RGW_OP_ADD:
       f->dump_string("op", "write");
@@ -125,6 +118,8 @@ void rgw_bi_log_entry::dump(Formatter *f) const
       break;
   }
 
+  f->dump_string("object", object);
+
   switch (state) {
     case CLS_RGW_STATE_PENDING_MODIFY:
       f->dump_string("state", "pending");
@@ -136,6 +131,12 @@ void rgw_bi_log_entry::dump(Formatter *f) const
       f->dump_string("state", "invalid");
       break;
   }
+
+  f->dump_int("index_ver", index_ver);
+  f->dump_stream("timestamp") << timestamp;
+  f->open_object_section("ver");
+  ver.dump(f);
+  f->close_section();
 }
 
 void rgw_bucket_category_stats::generate_test_instances(list<rgw_bucket_category_stats*>& o)
