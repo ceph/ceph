@@ -18,7 +18,7 @@
 #include <set>
 #include <string>
 
-class md_config_t;
+struct md_config_t;
 
 class md_config_obs_t {
 public:

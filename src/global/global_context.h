@@ -20,7 +20,7 @@
 #include <iostream>
 #include <stdint.h>
 
-class md_config_t;
+struct md_config_t;
 
 extern CephContext *g_ceph_context;
 extern md_config_t *g_conf;

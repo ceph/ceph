@@ -67,7 +67,7 @@ extern const char *CEPH_CONF_FILE_DEFAULT;
  * FIXME: really we shouldn't allow changing integer or floating point values
  * while another thread is reading them, either.
  */
-class md_config_t {
+struct md_config_t {
 public:
   /* Maps configuration options to the observer listening for them. */
   typedef std::multimap <std::string, md_config_obs_t*> obs_map_t;
