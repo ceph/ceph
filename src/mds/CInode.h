@@ -736,9 +736,9 @@ public:
 
   // caps issued, wanted
   int get_caps_issued(int *ploner = 0, int *pother = 0, int *pxlocker = 0,
-		      int shift = 0, int mask = 0xffff);
+		      int shift = 0, int mask = -1);
   bool is_any_caps_wanted();
-  int get_caps_wanted(int *ploner = 0, int *pother = 0, int shift = 0, int mask = 0xffff);
+  int get_caps_wanted(int *ploner = 0, int *pother = 0, int shift = 0, int mask = -1);
   bool issued_caps_need_gather(SimpleLock *lock);
   void replicate_relax_locks();
 
