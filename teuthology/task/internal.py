@@ -6,6 +6,7 @@ import os
 import time
 import yaml
 
+from teuthology import lockstatus
 from teuthology import lock
 from teuthology import misc as teuthology
 from ..orchestra import run
@@ -121,7 +122,7 @@ def check_lock(ctx, config):
         return
     log.info('Checking locks...')
     for machine in ctx.config['targets'].iterkeys():
-        status = lock.get_status(ctx, machine)
+        status = lockstatus.get_status(ctx, machine)
         log.debug('machine status is %s', repr(status))
         assert status is not None, \
             'could not read lock status for {name}'.format(name=machine)

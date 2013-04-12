@@ -1,5 +1,4 @@
 import argparse
-import httplib2
 import json
 import logging
 import subprocess
@@ -8,26 +7,15 @@ import yaml
 import re
 import collections
 
+from teuthology import lockstatus as ls
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
-def _lock_url(ctx):
-    return ctx.teuthology_config['lock_server']
-
-def send_request(method, url, body=None, headers=None):
-    http = httplib2.Http()
-    resp, content = http.request(url, method=method, body=body, headers=headers)
-    if resp.status == 200:
-        return (True, content, resp.status)
-    log.info("%s request to '%s' with body '%s' failed with response code %d",
-             method, url, body, resp.status)
-    return (False, None, resp.status)
-
 def lock_many(ctx, num, machinetype, user=None, description=None):
     if user is None:
         user = teuthology.get_user()
-    success, content, status = send_request('POST', _lock_url(ctx),
+    success, content, status = ls.send_request('POST', ls._lock_url(ctx),
                                     urllib.urlencode(dict(
                 user=user,
                 num=num,
@@ -47,7 +35,7 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
 def lock(ctx, name, user=None):
     if user is None:
         user = teuthology.get_user()
-    success, _, _ = send_request('POST', _lock_url(ctx) + '/' + name,
+    success, _, _ = ls.send_request('POST', ls._lock_url(ctx) + '/' + name,
                               urllib.urlencode(dict(user=user)))
     if success:
         log.debug('locked %s as %s', name, user)
@@ -58,7 +46,7 @@ def lock(ctx, name, user=None):
 def unlock(ctx, name, user=None):
     if user is None:
         user = teuthology.get_user()
-    success, _ , _ = send_request('DELETE', _lock_url(ctx) + '/' + name + '?' + \
+    success, _ , _ = ls.send_request('DELETE', ls._lock_url(ctx) + '/' + name + '?' + \
                                   urllib.urlencode(dict(user=user)))
     if success:
         log.debug('unlocked %s', name)
@@ -66,14 +54,8 @@ def unlock(ctx, name, user=None):
         log.error('failed to unlock %s', name)
     return success
 
-def get_status(ctx, name):
-    success, content, _ = send_request('GET', _lock_url(ctx) + '/' + name)
-    if success:
-        return json.loads(content)
-    return None
-
 def list_locks(ctx):
-    success, content, _ = send_request('GET', _lock_url(ctx))
+    success, content, _ = ls.send_request('GET', ls._lock_url(ctx))
     if success:
         return json.loads(content)
     return None
@@ -88,7 +70,7 @@ def update_lock(ctx, name, description=None, status=None, sshpubkey=None):
         updated['sshpubkey'] = sshpubkey
 
     if updated:
-        success, _, _ = send_request('PUT', _lock_url(ctx) + '/' + name,
+        success, _, _ = ls.send_request('PUT', ls._lock_url(ctx) + '/' + name,
                                   body=urllib.urlencode(updated),
                                   headers={'Content-type': 'application/x-www-form-urlencoded'})
         return success
@@ -276,10 +258,9 @@ Lock, unlock, or query lock status of machines.
         assert ctx.desc is None, '--desc does nothing with --list'
 
         if machines:
-            statuses = [get_status(ctx, machine) for machine in machines]
+            statuses = [ls.get_status(ctx, machine) for machine in machines]
         else:
             statuses = list_locks(ctx)
-
         if statuses:
             if not machines and ctx.owner is None and not ctx.all:
                 ctx.owner = teuthology.get_user()
