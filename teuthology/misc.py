@@ -13,12 +13,15 @@ import yaml
 import json
 
 from teuthology import safepath
+from teuthology import lock
 from .orchestra import run
 
 log = logging.getLogger(__name__)
 
 import datetime
-stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+stamp = datetime.datetime.now().strftime("%y%m%d%H%M")
+global_jobid = None
+checked_jobid = False
 
 def get_testdir(ctx):
     if 'test_path' in ctx.teuthology_config:
@@ -26,17 +29,51 @@ def get_testdir(ctx):
 
     basedir = ctx.teuthology_config.get('base_test_dir', '/tmp/cephtest')
 
-    if hasattr(ctx, 'name') and ctx.name:
+    global global_jobid
+    global checked_jobid
+
+    # check if a jobid exists in the machine status for all our targets
+    # and if its the same jobid, use that as the subdir for the test
+    if not checked_jobid:
+        jobids = {}
+        for machine in ctx.config['targets'].iterkeys():
+            status = lock.get_status(ctx, machine)
+            jid = status['description'].split('/')[-1]
+            jobids[jid] = 1
+            if len(jobids) > 1:
+                break
+        if len(jobids) == 1:
+            # same job id on all machines, use that as the test subdir
+            (jobid,) = jobids.iterkeys()
+            global_jobid = jobid
+        checked_jobid = True
+
+    # the subdir is chosen using the priority:
+    # 1. jobid chosen by the teuthology beanstalk queue
+    # 2. run name specified by teuthology schedule
+    # 3. user@timestamp
+    if global_jobid:
+        log.debug('with jobid basedir: {b}'.format(b=str(global_jobid)))
+        return '{basedir}/{jobid}'.format(
+                    basedir=basedir,
+                    jobid=global_jobid,
+                    )
+    elif hasattr(ctx, 'name') and ctx.name:
         log.debug('with name basedir: {b}'.format(b=basedir))
+        # we need a short string to keep the path short
+        import re
+        m = re.match(r"(.*)-(.*)-(.*)-(.*)_(.*)-(.*)-(.*)-(.*)-(.*)", ctx.name)
+        (u, y, m, d, hms, s, c, k, f) = m.groups()
+        short = u[0:2] + y[2:3] + m[0:2] + d[0:2] + hms[0:2] + hms[3:5] + s[0] + c[0] + k[0] + f[0]
         return '{basedir}/{rundir}'.format(
                     basedir=basedir,
-                    rundir=ctx.name.replace(':','-'),  # : breaks the $PATH list
+                    rundir=short,
                     )
     else:
         log.debug('basedir: {b}'.format(b=basedir))
-        return '{basedir}/{user}-{stamp}'.format(
+        return '{basedir}/{user}{stamp}'.format(
                     basedir=basedir,
-                    user=get_user(),
+                    user=get_user()[0:2],
                     stamp=stamp)
 
 def get_testdir_base(ctx):
