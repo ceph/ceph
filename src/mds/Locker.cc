@@ -2731,6 +2731,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   // increase or zero max_size?
   uint64_t size = m->get_size();
   bool change_max = false;
+  bool forced_change_max = false;
   uint64_t old_max = latest->client_ranges.count(client) ? latest->client_ranges[client].range.last : 0;
   uint64_t new_max = old_max;
   
@@ -2743,6 +2744,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	dout(10) << "client requests file_max " << m->get_max_size()
 		 << " > max " << old_max << dendl;
 	change_max = true;
+	forced_change_max = true;
 	new_max = ROUND_UP_TO((m->get_max_size()+1) << 1, latest->get_layout_size_increment());
       } else {
 	new_max = calc_bounding(size * 2);
@@ -2783,7 +2785,8 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	  !in->filelock.can_force_wrlock(client)) {
 	C_MDL_CheckMaxSize *cms = new C_MDL_CheckMaxSize(this, in,
 	                                                 false, 0,
-	                                                 change_max, new_max,
+	                                                 forced_change_max,
+	                                                 new_max,
 	                                                 utime_t());
 
 	in->filelock.add_waiter(SimpleLock::WAIT_STABLE, cms);
