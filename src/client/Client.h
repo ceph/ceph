@@ -715,7 +715,7 @@ public:
   int ll_listxattr_chunks(vinodeno_t vino, char *names, size_t size,
 			  int *cookie, int *eol, int uid, int gid);
   uint32_t ll_stripe_unit(vinodeno_t vino);
-  uint32_t ll_file_layout(vinodeno_t vino, ceph_file_layout *layout);
+  int ll_file_layout(vinodeno_t vino, ceph_file_layout *layout);
   uint64_t ll_snap_seq(vinodeno_t vino);
   uint32_t ll_hold_rw(vinodeno_t vino,
 		      bool write,

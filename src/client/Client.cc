@@ -7553,11 +7553,14 @@ uint64_t Client::ll_snap_seq(vinodeno_t vino)
   return in->snaprealm->seq;
 }
 
-uint32_t Client::ll_file_layout(vinodeno_t vino, ceph_file_layout *layout)
+int Client::ll_file_layout(vinodeno_t vino, ceph_file_layout *layout)
 {
   Inode *in = _ll_get_inode(vino);
-  *layout = in->layout;
-  return 0;
+  if (in) {
+    *layout = in->layout;
+    return 0;
+  }
+  return -1;
 }
 
 /* Allow the client to get and hold a read capability or read and
