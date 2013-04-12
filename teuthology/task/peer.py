@@ -23,11 +23,6 @@ def rados(ctx, remote, cmd):
         )
     return proc.exitstatus
 
-def normalize_state(r):
-    r = r.replace('+scrubbing', '')
-    r = r.replace('+deep', '')
-    return r
-
 def task(ctx, config):
     """
     Test peering.
@@ -90,7 +85,6 @@ def task(ctx, config):
 	log.debug("out string %s",out)
         j = json.loads('\n'.join(out.split('\n')[1:]))
         log.info("pg is %s, query json is %s", pg, j)
-        assert normalize_state(j['state']) == normalize_state(pg['state'])
 
         if pg['state'].count('down'):
             num_down_pgs += 1
