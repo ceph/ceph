@@ -247,6 +247,7 @@ struct rgw_bi_log_entry {
   RGWModifyOp op;
   RGWPendingState state;
   uint64_t index_ver;
+  string tag;
 
   rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), index_ver(0) {}
 
@@ -256,6 +257,7 @@ struct rgw_bi_log_entry {
     ::encode(object, bl);
     ::encode(timestamp, bl);
     ::encode(ver, bl);
+    ::encode(tag, bl);
     uint8_t c = (uint8_t)op;
     ::encode(c, bl);
     c = (uint8_t)state;
@@ -269,6 +271,7 @@ struct rgw_bi_log_entry {
     ::decode(object, bl);
     ::decode(timestamp, bl);
     ::decode(ver, bl);
+    ::decode(tag, bl);
     uint8_t c;
     ::decode(c, bl);
     op = (RGWModifyOp)c;
