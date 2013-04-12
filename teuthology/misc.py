@@ -64,7 +64,7 @@ def get_testdir(ctx):
         import re
         m = re.match(r"(.*)-(.*)-(.*)-(.*)_(.*)-(.*)-(.*)-(.*)-(.*)", ctx.name)
         (u, y, m, d, hms, s, c, k, f) = m.groups()
-        short = u[0:2] + y[2:3] + m[0:2] + d[0:2] + hms[0:2] + hms[3:5] + s[0] + c[0] + k[0] + f[0]
+        short = u[0:2] + y[2:4] + m[0:2] + d[0:2] + hms[0:2] + hms[3:5] + s[0] + c[0] + k[0] + f[0]
         return '{basedir}/{rundir}'.format(
                     basedir=basedir,
                     rundir=short,
