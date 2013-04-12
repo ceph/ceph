@@ -586,6 +586,8 @@ int main(int argc, char **argv)
   string infile;
   string metadata_key;
   RGWObjVersionTracker objv_tracker;
+  string marker;
+  int max_entries = -1;
 
   std::string val;
   std::ostringstream errs;
@@ -641,6 +643,8 @@ int main(int argc, char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--max-buckets", (char*)NULL)) {
       max_buckets = atoi(val.c_str());
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-entries", (char*)NULL)) {
+      max_entries = atoi(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--date", "--time", (char*)NULL)) {
       date = val;
       if (end_date.empty())
@@ -689,6 +693,8 @@ int main(int argc, char **argv)
       infile = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--metadata-key", (char*)NULL)) {
       metadata_key = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--marker", (char*)NULL)) {
+      marker = val;
     } else {
       ++i;
     }
@@ -1463,7 +1469,6 @@ next:
   if (opt_cmd == OPT_GC_LIST) {
     int ret;
     int index = 0;
-    string marker;
     bool truncated;
     formatter->open_array_section("entries");
 
@@ -1618,23 +1623,30 @@ next:
   }
 
   if (opt_cmd == OPT_BILOG_LIST) {
-    string marker;
     formatter->open_array_section("entries");
     bool truncated;
+    int count = 0;
+    if (max_entries < 0)
+      max_entries = 1000;
+
     do {
       list<rgw_bi_log_entry> entries;
-      int ret = store->list_bi_log_entries(bucket, marker, 1000, entries, &truncated);
+      int ret = store->list_bi_log_entries(bucket, marker, max_entries - count, entries, &truncated);
       if (ret < 0) {
         cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
 
+      count += entries.size();
+
       for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
         rgw_bi_log_entry& entry = *iter;
         encode_json("entry", entry, formatter);
+
+        marker = entry.id;
       }
       formatter->flush(cout);
-    } while (truncated);
+    } while (truncated && count < max_entries);
 
     formatter->close_section();
     formatter->flush(cout);
