@@ -1948,9 +1948,9 @@ void Client::send_reconnect(MetaSession *session)
       in->exporting_mseq = 0;
       if (!in->is_any_caps()) {
 	ldout(cct, 10) << "  removing last cap, closing snaprealm" << dendl;
+	in->snaprealm_item.remove_myself();
 	put_snap_realm(in->snaprealm);
 	in->snaprealm = 0;
-	in->snaprealm_item.remove_myself();
       }
     }
   }
@@ -3257,8 +3257,8 @@ void Client::handle_snap(MClientSnap *m)
 	// queue for snap writeback
 	queue_cap_snap(in, in->snaprealm->get_snap_context().seq);
 
-	put_snap_realm(in->snaprealm);
 	in->snaprealm_item.remove_myself();
+	put_snap_realm(in->snaprealm);
 	to_move.push_back(in);
       }
     }
