@@ -608,7 +608,8 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
 
   int loner_issued = 0, other_issued = 0, xlocker_issued = 0;
   if (caps && in->is_head()) {
-    in->get_caps_issued(&loner_issued, &other_issued, &xlocker_issued, lock->get_cap_shift(), 3);
+    in->get_caps_issued(&loner_issued, &other_issued, &xlocker_issued,
+			lock->get_cap_shift(), lock->get_cap_mask());
     dout(10) << " next state is " << lock->get_state_name(next) 
 	     << " issued/allows loner " << gcap_string(loner_issued)
 	     << "/" << gcap_string(lock->gcaps_allowed(CAP_LONER, next))
