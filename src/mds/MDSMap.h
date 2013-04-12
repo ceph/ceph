@@ -56,7 +56,6 @@ using namespace std;
 
 */
 
-class md_config_t;
 class CephContext;
 
 extern CompatSet get_mdsmap_compat_set();
