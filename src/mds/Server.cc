@@ -574,7 +574,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 
   // notify client of success with an OPEN
   mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), m->get_connection());
-    
+
   if (session->is_closed()) {
     dout(10) << " session is closed, will make best effort to reconnect " 
 	     << m->get_source_inst() << dendl;
@@ -636,15 +636,12 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     }
       
     filepath path(p->second.path, (uint64_t)p->second.capinfo.pathbase);
-    if ((in && !in->is_auth()) ||
-	!mds->mdcache->path_is_mine(path)) {
+    if (in && !in->is_auth()) {
       // not mine.
       dout(0) << "non-auth " << p->first << " " << path
 	      << ", will pass off to authority" << dendl;
       
       // mark client caps stale.
-      inode_t fake_inode;
-      fake_inode.ino = p->first;
       MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0, 0, 0);
       //stale->head.migrate_seq = 0; // FIXME ******
       mds->send_message_client_counted(stale, session);
@@ -652,11 +649,11 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       // add to cap export list.
       mdcache->rejoin_export_caps(p->first, from, p->second);
     } else {
-      // mine.  fetch later.
+      // don't know if the inode is mine
       dout(0) << "missing " << p->first << " " << path
-	      << " (mine), will load later" << dendl;
-      mdcache->rejoin_recovered_caps(p->first, from, p->second, 
-				     -1);  // "from" me.
+	      << " will load or export later" << dendl;
+      mdcache->rejoin_recovered_caps(p->first, from, p->second, -1);
+      mdcache->rejoin_export_caps(p->first, from, p->second);
     }
   }
 

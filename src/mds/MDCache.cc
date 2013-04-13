@@ -4097,20 +4097,25 @@ bool MDCache::parallel_fetch_traverse_dir(inodeno_t ino, filepath& path,
     frag_t fg = cur->pick_dirfrag(path[i]);
     CDir *dir = cur->get_or_open_dirfrag(this, fg);
     CDentry *dn = dir->lookup(path[i]);
-    CDentry::linkage_t *dnl = dn->get_linkage();
-    if (!dn || dnl->is_null()) {
-      if (!dir->is_complete()) {
-	// fetch dir
-	fetch_queue.insert(dir);
-	return false;
-      } else {
+    CDentry::linkage_t *dnl = dn ? dn->get_linkage() : NULL;
+
+    if (!dnl || dnl->is_null()) {
+      if (!dir->is_auth()) {
+	dout(10) << " not dirfrag auth " << *dir << dendl;
+	return true;
+      }
+      if (dnl || dir->is_complete()) {
 	// probably because the client created it and held a cap but it never committed
 	// to the journal, and the op hasn't replayed yet.
 	dout(5) << " dne (not created yet?) " << ino << " at " << path << dendl;
 	missing.insert(ino);
 	return true;
       }
+      // fetch dir
+      fetch_queue.insert(dir);
+      return false;
     }
+
     cur = dnl->get_inode();
     if (!cur) {
       assert(dnl->is_remote());
@@ -5041,8 +5046,32 @@ void MDCache::rejoin_import_cap(CInode *in, client_t client, ceph_mds_cap_reconn
 
   Capability *cap = in->reconnect_cap(client, icr, session);
 
-  if (frommds >= 0)
+  if (frommds >= 0) {
+    cap->rejoin_import();
     do_cap_import(session, in, cap);
+  }
+}
+
+void MDCache::export_remaining_imported_caps()
+{
+  dout(10) << "export_remaining_imported_caps" << dendl;
+
+  for (map<inodeno_t,map<client_t,map<int,ceph_mds_cap_reconnect> > >::iterator p = cap_imports.begin();
+       p != cap_imports.end();
+       ++p) {
+    for (map<client_t,map<int,ceph_mds_cap_reconnect> >::iterator q = p->second.begin();
+	q != p->second.end();
+	++q) {
+      Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
+      if (session) {
+	// mark client caps stale.
+	MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0, 0, 0);
+	mds->send_message_client_counted(stale, q->first);
+      }
+    }
+  }
+
+  cap_imports.clear();
 }
 
 void MDCache::try_reconnect_cap(CInode *in, Session *session)

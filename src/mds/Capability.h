@@ -272,6 +272,7 @@ public:
   Export make_export() {
     return Export(_wanted, issued(), pending(), client_follows, mseq+1, last_issue_stamp);
   }
+  void rejoin_import() { mseq++; }
   void merge(Export& other) {
     // issued + pending
     int newpending = other.pending | pending();

@@ -146,7 +146,7 @@ void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)
     decode_state(p);
   }
   else {
-    dout(10) << "load_2 found no table" << dendl;
+    dout(10) << "load_2 could not read table; error: " << r << dendl;
     assert(0); // this shouldn't happen if mkfs finished.
     reset();   
   }
