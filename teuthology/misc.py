@@ -46,13 +46,14 @@ def get_testdir(ctx):
             # same job id on all machines, use that as the test subdir
             (jobid,) = jobids.iterkeys()
             global_jobid = jobid
+            log.debug('setting my jobid to {jid}'.format(jid=global_jobid))
         checked_jobid = True
 
     # the subdir is chosen using the priority:
     # 1. jobid chosen by the teuthology beanstalk queue
     # 2. run name specified by teuthology schedule
     # 3. user@timestamp
-    if global_jobid:
+    if global_jobid is not None:
         log.debug('with jobid basedir: {b}'.format(b=str(global_jobid)))
         return '{basedir}/{jobid}'.format(
                     basedir=basedir,
