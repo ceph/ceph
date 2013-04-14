@@ -7847,21 +7847,23 @@ int Client::ll_write_block(vinodeno_t vino, uint64_t blockid,
   Mutex::Locker lock(client_lock);
   Mutex flock("Client::ll_write_block flock");
   Cond cond;
-  bool done = false;
+  bool done;
   int r = 0;
   Context *onack;
   Context *onsafe;
-  if ((length == 0)) {
+
+  if (length == 0) {
     return -EINVAL;
   }
   if (sync) {
-      onack = new C_NoopContext;
-      onsafe = new C_SafeCond(&flock, &cond, &done, &r);
+    onack = new C_NoopContext;
+    onsafe = new C_SafeCond(&flock, &cond, &done, &r);
+    done = false;
   } else {
-      onack = new C_SafeCond(&flock, &cond, &done, &r);
-      onsafe = new C_Block_Sync(
-	this, vino.ino,
-	barrier_interval(offset, offset + length));
+    onack = new C_NoopContext;
+    onsafe = new C_Block_Sync(this, vino.ino,
+			      barrier_interval(offset, offset + length), &r);
+    done = true;
   }
   object_t oid = file_object_t(vino.ino, blockid);
   SnapContext fakesnap;

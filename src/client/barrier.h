@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 /*
  *
- * Copyright (C) 2012 Linux Box Corporation.
+ * Copyright (C) 2012 CohortFS, LLC.
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -35,7 +35,6 @@ using std::fstream;
 
 #include "common/Mutex.h"
 #include "common/Cond.h"
-
 #include "common/config.h"
 
 class Client;
@@ -69,11 +68,12 @@ private:
   barrier_interval iv;
   enum CBlockSync_State state;
   Barrier *barrier;
+  int *rval; /* see Cond.h */
 
 public:
   boost::intrusive::list_member_hook<> intervals_hook;
-  C_Block_Sync(Client *c, uint64_t i, barrier_interval iv);
-  void finish(int);
+  C_Block_Sync(Client *c, uint64_t i, barrier_interval iv, int *r);
+  void finish(int rval);
 
   friend class Barrier;
   friend class BarrierContext;
