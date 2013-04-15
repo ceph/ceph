@@ -391,7 +391,7 @@ def remove_lines_from_file(remote, path, line_is_valid_test, string_to_test_for)
     # get a temp file path on the remote host to write to, 
     # we don't want to blow away the remote file and then have the 
     # network drop out
-    temp_file_path = get_remote_tempnam(remote)
+    temp_file_path = remote_mktemp(remote)
 
     # write out the data to a temp file
     write_file(remote, temp_file_path, out_data)
