@@ -63,8 +63,8 @@ public:
       mem_prefix(prefix)
   { }
 
-  int get(const string &prefix, const string &key, bufferlist &bl) {
-    generic_dout(0) << "MemMonitorDBStore::get("
+  virtual int get(const string &prefix, const string &key, bufferlist &bl) {
+    generic_dout(20) << "MemMonitorDBStore::get("
                     << prefix << "," << key << ")" << dendl;
     if (prefix == mem_prefix) {
       if (mem_store.count(key)) {
@@ -75,9 +75,17 @@ public:
     return MonitorDBStore::get(prefix, key, bl);
   }
 
-  int apply_transaction(MonitorDBStore::Transaction &t) {
-    generic_dout(0) << "MemMonitorDBStore::apply_transaction()"
-                    << " " << t.ops.size() << " ops" << dendl;
+  virtual bool exists(const string &prefix, const string &key) {
+    if (prefix == mem_prefix) {
+      if (mem_store.count(key) > 0)
+        return true;
+    }
+    return MonitorDBStore::exists(prefix, key);
+  }
+
+  virtual int apply_transaction(MonitorDBStore::Transaction &t) {
+    generic_dout(20) << "MemMonitorDBStore::apply_transaction()"
+                     << " " << t.ops.size() << " ops" << dendl;
 
     list<Op> not_our_ops;
 
@@ -95,13 +103,22 @@ public:
     if (not_our_ops.size() == 0)
       return 0;
 
-    generic_dout(0) << "MemMonitorDBStore::apply_transaction()"
-                    << " " << not_our_ops.size() << " ops delegated" << dendl;
+    generic_dout(20) << "MemMonitorDBStore::apply_transaction()"
+                     << " " << not_our_ops.size() << " ops delegated" << dendl;
     t.ops = not_our_ops;
     return MonitorDBStore::apply_transaction(t);
   }
 };
 
+void print_progress(version_t first, version_t last, version_t curr)
+{
+  version_t delta = last - first;
+  version_t count = curr - first;
+
+  int percent = (int) ((count/delta)*100);
+  if (percent % 10)
+    generic_dout(0) << " " << percent << "\% progress" << dendl;
+}
 
 int check_old_service_versions(MonitorStoreRef store,
                                map<string,ServiceVersions> &versions)
@@ -115,7 +132,9 @@ int check_old_service_versions(MonitorStoreRef store,
     svc.first_committed = store->get_int(name.c_str(), "first_committed");
     svc.last_committed = store->get_int(name.c_str(), "last_committed");
 
+    generic_dout(0) << " " << name << dendl;
     for (version_t v = svc.first_committed; v <= svc.last_committed; ++v) {
+      print_progress(svc.first_committed, svc.last_committed, v);
       if (!store->exists_bl_sn(name.c_str(), v)) {
         derr << " service " << name << " ver " << v << " does not exist"
              << dendl;
@@ -140,7 +159,9 @@ int check_new_service_versions(MonitorDBStoreRef db,
     svc.first_committed = db->get(name, "first_committed");
     svc.last_committed = db->get(name, "last_committed");
 
+    generic_dout(0) << " " << name << dendl;
     for (version_t v = svc.first_committed; v <= svc.last_committed; ++v) {
+      print_progress(svc.first_committed, svc.last_committed, v);
       if (!db->exists(name.c_str(), v)) {
         derr << " service " << name << " ver " << v << " does not exist"
              << dendl;
@@ -434,6 +455,7 @@ int main(int argc, const char *argv[])
   MonitorDBStore *db_ptr;
 
   if (dry) {
+    generic_dout(0) << "running dry" << dendl;
     db_ptr = new MemMonitorDBStore(db_path, "osdmap");
   } else {
     db_ptr = new MonitorDBStore(db_path);
