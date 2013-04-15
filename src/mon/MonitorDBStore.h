@@ -168,7 +168,7 @@ class MonitorDBStore
     }
   };
 
-  int apply_transaction(MonitorDBStore::Transaction& t) {
+  virtual int apply_transaction(MonitorDBStore::Transaction& t) {
     KeyValueDB::Transaction dbt = db->get_transaction();
 
     for (list<Op>::iterator it = t.ops.begin(); it != t.ops.end(); ++it) {
@@ -367,7 +367,7 @@ class MonitorDBStore
     return iter;
   }
 
-  int get(const string& prefix, const string& key, bufferlist& bl) {
+  virtual int get(const string& prefix, const string& key, bufferlist& bl) {
     set<string> k;
     k.insert(key);
     map<string,bufferlist> out;
@@ -405,7 +405,7 @@ class MonitorDBStore
     return ver;
   }
 
-  bool exists(const string& prefix, const string& key) {
+  virtual bool exists(const string& prefix, const string& key) {
     KeyValueDB::Iterator it = db->get_iterator(prefix);
     int err = it->lower_bound(key);
     if (err < 0)
@@ -475,7 +475,7 @@ class MonitorDBStore
   MonitorDBStore(LevelDBStore *db_ptr) {
     db.reset(db_ptr);
   }
-  ~MonitorDBStore() { }
+  virtual ~MonitorDBStore() { }
 
 };
 
