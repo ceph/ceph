@@ -83,7 +83,7 @@ To upgrade an MDS, perform the following steps:
 #. Upgrade the ceph package::
 
 	ssh {mds-host}
-	sudo apt-get update && sudo apt-get install ceph
+	sudo apt-get update && sudo apt-get install ceph-mds
  
 #. Restart the metadata server::
 
