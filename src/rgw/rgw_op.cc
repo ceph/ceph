@@ -1301,11 +1301,7 @@ RGWPutObjProcessor *RGWPutObj::select_processor()
   uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
 
   if (!multipart) {
-    if (s->content_length <= RGW_MAX_CHUNK_SIZE && !chunked_upload) {
-      processor = new RGWPutObjProcessor_Plain();
-    } else {
-      processor = new RGWPutObjProcessor_Atomic(part_size);
-    }
+    processor = new RGWPutObjProcessor_Atomic(part_size);
   } else {
     processor = new RGWPutObjProcessor_Multipart(part_size);
   }

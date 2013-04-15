@@ -58,7 +58,6 @@ static string default_region_info_oid = "default.region";
 static string region_map_oid = "region_map";
 
 
-static RGWObjCategory shadow_category = RGW_OBJ_CATEGORY_SHADOW;
 static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 
 #define RGW_USAGE_OBJ_PREFIX "usage."
@@ -1590,6 +1589,11 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
   uint64_t epoch;
   int64_t poolid;
   utime_t ut;
+
+  if (state) {
+    index_tag = state->write_tag;
+  }
+
   r = prepare_update_index(NULL, bucket, obj, index_tag);
   if (r < 0)
     return r;
@@ -2492,46 +2496,6 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
     return 0;
   }
 
-  if (state->obj_tag.length() == 0 ||
-      state->shadow_obj.size() == 0) {
-    ldout(cct, 10) << "can't clone object " << obj << " to shadow object, tag/shadow_obj haven't been set" << dendl;
-    // FIXME: need to test object does not exist
-  } else if (state->has_manifest) {
-    ldout(cct, 10) << "obj contains manifest" << dendl;
-  } else if (state->size <= RGW_MAX_CHUNK_SIZE) {
-    ldout(cct, 10) << "not cloning object, object size (" << state->size << ")" << " <= chunk size" << dendl;
-  } else {
-    ldout(cct, 10) << "cloning object " << obj << " to name=" << state->shadow_obj << dendl;
-    rgw_obj dest_obj(obj.bucket, state->shadow_obj);
-    dest_obj.set_ns(shadow_ns);
-    if (obj.key.size())
-      dest_obj.set_key(obj.key);
-    else
-      dest_obj.set_key(obj.object);
-
-    pair<string, bufferlist> cond(RGW_ATTR_ID_TAG, state->obj_tag);
-    ldout(cct, 10) << "cloning: dest_obj=" << dest_obj << " size=" << state->size << " tag=" << state->obj_tag.c_str() << dendl;
-    r = clone_obj_cond(NULL, dest_obj, 0, obj, 0, state->size, state->attrset, shadow_category, &state->mtime, false, true, &cond);
-    if (r == -EEXIST)
-      r = 0;
-    if (r == -ECANCELED) {
-      /* we lost in a race here, original object was replaced, we assume it was cloned
-         as required */
-      ldout(cct, 5) << "clone_obj_cond was cancelled, lost in a race" << dendl;
-      state->clear();
-      return r;
-    } else {
-      int ret = rctx->notify_intent(this, dest_obj, DEL_OBJ);
-      if (ret < 0) {
-        ldout(cct, 0) << "WARNING: failed to log intent ret=" << ret << dendl;
-      }
-    }
-    if (r < 0) {
-      ldout(cct, 0) << "ERROR: failed to clone object r=" << r << dendl;
-      return r;
-    }
-  }
-
   if (need_guard) {
     /* first verify that the object wasn't replaced under */
     op.cmpxattr(RGW_ATTR_ID_TAG, LIBRADOS_CMPXATTR_OP_EQ, state->obj_tag);
@@ -2543,22 +2507,21 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
     op.remove();
   }
 
-  string tag;
   if (ptag) {
-    tag = *ptag;
+    state->write_tag = *ptag;
   } else {
-    append_rand_alpha(cct, tag, tag, 32);
+    append_rand_alpha(cct, state->write_tag, state->write_tag, 32);
   }
   bufferlist bl;
-  bl.append(tag.c_str(), tag.size() + 1);
+  bl.append(state->write_tag.c_str(), state->write_tag.size() + 1);
 
-  ldout(cct, 0) << "setting object tag=" << tag << dendl;
+  ldout(cct, 0) << "setting object write_tag=" << state->write_tag << dendl;
 
   op.setxattr(RGW_ATTR_ID_TAG, bl);
 
   string shadow = obj.object;
   shadow.append(".");
-  shadow.append(tag);
+  shadow.append(state->write_tag);
 
   bufferlist shadow_bl;
   shadow_bl.append(shadow);
