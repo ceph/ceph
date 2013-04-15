@@ -7844,7 +7844,6 @@ int Client::ll_write_block(vinodeno_t vino, uint64_t blockid,
 			   uint64_t length, ceph_file_layout* layout,
 			   uint64_t snapseq, uint32_t sync)
 {
-  Mutex::Locker lock(client_lock);
   Mutex flock("Client::ll_write_block flock");
   Cond cond;
   bool done;
@@ -7856,10 +7855,14 @@ int Client::ll_write_block(vinodeno_t vino, uint64_t blockid,
     return -EINVAL;
   }
   if (sync) {
+    /* if write is stable, the epilogue is waiting on
+     * flock */
     onack = new C_NoopContext;
     onsafe = new C_SafeCond(&flock, &cond, &done, &r);
     done = false;
   } else {
+    /* if write is unstable, we just place a barrier for
+     * future commits to wait on */
     onack = new C_NoopContext;
     onsafe = new C_Block_Sync(this, vino.ino,
 			      barrier_interval(offset, offset + length), &r);
@@ -7877,6 +7880,9 @@ int Client::ll_write_block(vinodeno_t vino, uint64_t blockid,
 
   fakesnap.seq = snapseq;
 
+  /* lock just in time */
+  client_lock.Lock();
+
   objecter->write(oid,
 		  object_locator_t(layout->fl_pg_pool),
 		  offset,
@@ -7888,8 +7894,13 @@ int Client::ll_write_block(vinodeno_t vino, uint64_t blockid,
 		  onack,
 		  onsafe);
 
-  while (!done)
-      cond.Wait(client_lock);
+  client_lock.Unlock();
+  if (!done /* also !sync */) {
+    flock.Lock();
+    while (! done)
+      cond.Wait(flock);
+    flock.Unlock();
+  }
 
   if (r < 0) {
       return r;
