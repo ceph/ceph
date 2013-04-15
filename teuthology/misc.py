@@ -400,7 +400,7 @@ def remove_lines_from_file(remote, path, line_is_valid_test, string_to_test_for)
     move_file(remote, temp_file_path, path)
             
 def append_lines_to_file(remote, path, lines, sudo=False):
-    temp_file_path = get_remote_tempnam(remote)
+    temp_file_path = remote_mktemp(remote)
  
     data = get_file(remote, path, sudo)
 
@@ -414,14 +414,14 @@ def append_lines_to_file(remote, path, lines, sudo=False):
     # then do a 'mv' to the actual file location
     move_file(remote, temp_file_path, path)
 
-def get_remote_tempnam(remote, sudo=False):
+def remote_mktemp(remote, sudo=False):
     args = []
     if sudo:
         args.append('sudo')
     args.extend([
             'python',
             '-c',
-            'import os; print os.tempnam()'
+            'import os; import tempfile; (fd,fname) = tempfile.mkstemp(); fd.close(); print fname.rstrip()'
             ])
     proc = remote.run(
         args=args,
