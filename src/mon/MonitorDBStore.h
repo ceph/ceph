@@ -24,6 +24,7 @@
 #include "os/LevelDBStore.h"
 
 #include "include/assert.h"
+#include "include/stringify.h"
 #include "common/Formatter.h"
 #include "common/errno.h"
 
@@ -77,9 +78,7 @@ class MonitorDBStore
     }
 
     void put(string prefix, version_t ver, bufferlist& bl) {
-      ostringstream os;
-      os << ver;
-      put(prefix, os.str(), bl);
+      put(prefix, stringify(ver), bl);
     }
 
     void put(string prefix, string key, version_t ver) {
@@ -93,9 +92,7 @@ class MonitorDBStore
     }
 
     void erase(string prefix, version_t ver) {
-      ostringstream os;
-      os << ver;
-      erase(prefix, os.str());
+      erase(prefix, stringify(ver));
     }
 
     void encode(bufferlist& bl) const {
@@ -384,9 +381,7 @@ class MonitorDBStore
   }
 
   int get(const string& prefix, const version_t ver, bufferlist& bl) {
-    ostringstream os;
-    os << ver;
-    return get(prefix, os.str(), bl);
+    return get(prefix, stringify(ver), bl);
   }
 
   version_t get(const string& prefix, const string& key) {
@@ -420,9 +415,7 @@ class MonitorDBStore
   }
 
   bool exists(const string& prefix, version_t ver) {
-    ostringstream os;
-    os << ver;
-    return exists(prefix, os.str());
+    return exists(prefix, stringify(ver));
   }
 
   string combine_strings(const string& prefix, const string& value) {
@@ -433,9 +426,7 @@ class MonitorDBStore
   }
 
   string combine_strings(const string& prefix, const version_t ver) {
-    ostringstream os;
-    os << ver;
-    return combine_strings(prefix, os.str());
+    return combine_strings(prefix, stringify(ver));
   }
 
   void clear(set<string>& prefixes) {
