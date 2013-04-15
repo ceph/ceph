@@ -52,6 +52,57 @@ struct ServiceVersions {
 
 list<string> services;
 
+class MemMonitorDBStore : public MonitorDBStore
+{
+  map<string,bufferlist> mem_store;
+  string mem_prefix;
+
+public:
+  MemMonitorDBStore(string &path, string prefix)
+    : MonitorDBStore(path),
+      mem_prefix(prefix)
+  { }
+
+  int get(const string &prefix, const string &key, bufferlist &bl) {
+    generic_dout(0) << "MemMonitorDBStore::get("
+                    << prefix << "," << key << ")" << dendl;
+    if (prefix == mem_prefix) {
+      if (mem_store.count(key)) {
+        bl.append(mem_store[key]);
+        return 0;
+      }
+    }
+    return MonitorDBStore::get(prefix, key, bl);
+  }
+
+  int apply_transaction(MonitorDBStore::Transaction &t) {
+    generic_dout(0) << "MemMonitorDBStore::apply_transaction()"
+                    << " " << t.ops.size() << " ops" << dendl;
+
+    list<Op> not_our_ops;
+
+    for (list<Op>::iterator it = t.ops.begin(); it != t.ops.end(); ++it) {
+      Op &op = *it;
+
+      if (op.prefix != mem_prefix) {
+        not_our_ops.push_back(op);
+        continue;
+      }
+
+      mem_store[op.key] = op.bl;
+    }
+
+    if (not_our_ops.size() == 0)
+      return 0;
+
+    generic_dout(0) << "MemMonitorDBStore::apply_transaction()"
+                    << " " << not_our_ops.size() << " ops delegated" << dendl;
+    t.ops = not_our_ops;
+    return MonitorDBStore::apply_transaction(t);
+  }
+};
+
+
 int check_old_service_versions(MonitorStoreRef store,
                                map<string,ServiceVersions> &versions)
 {
@@ -306,8 +357,11 @@ bool check_gv_store(MonitorStoreRef store)
 void usage(const char *pname)
 {
   std::cerr << "usage: " << pname
-            << " <old-format-store-path> <new-format-store-path>"
+            << " <old-format-store-path> <new-format-store-path> [options]"
             << std::endl;
+  std::cerr << "  options:" << std::endl;
+  std::cerr << "    --for-real        Really go through with the fix" << std::endl;
+  std::cerr << "                      (default is a dry run)" << std::endl;
 }
 
 int main(int argc, const char *argv[])
@@ -324,6 +378,7 @@ int main(int argc, const char *argv[])
   g_ceph_context->_conf->apply_changes(NULL);
 
   bool sure_thing = false;
+  bool dry = true;
   for (vector<const char*>::iterator it = args.begin();
        it != args.end(); ++it) {
     if (ceph_argparse_double_dash(args, it)) {
@@ -333,6 +388,8 @@ int main(int argc, const char *argv[])
       return 0;
     } else if (ceph_argparse_flag(args, it, "--i-am-sure", (char*) NULL)) {
       sure_thing = true;
+    } else if (ceph_argparse_flag(args, it, "--for-real", (char*) NULL)) {
+      dry = false;
     }
   }
 
@@ -374,7 +431,13 @@ int main(int argc, const char *argv[])
   }
   store.reset(store_ptr);
 
-  MonitorDBStore *db_ptr = new MonitorDBStore(db_path);
+  MonitorDBStore *db_ptr;
+
+  if (dry) {
+    db_ptr = new MemMonitorDBStore(db_path, "osdmap");
+  } else {
+    db_ptr = new MonitorDBStore(db_path);
+  }
 
   ostringstream err_ss;
   err = db_ptr->open(err_ss);
