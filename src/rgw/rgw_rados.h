@@ -207,6 +207,7 @@ struct RGWObjState {
   time_t mtime;
   uint64_t epoch;
   bufferlist obj_tag;
+  string write_tag;
   bool fake_tag;
   RGWObjManifest manifest;
   bool has_manifest;
