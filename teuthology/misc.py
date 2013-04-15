@@ -421,7 +421,7 @@ def remote_mktemp(remote, sudo=False):
     args.extend([
             'python',
             '-c',
-            'import os; import tempfile; (fd,fname) = tempfile.mkstemp(); fd.close(); print fname.rstrip()'
+            'import os; import tempfile; (fd,fname) = tempfile.mkstemp(); os.close(fd); print fname.rstrip()'
             ])
     proc = remote.run(
         args=args,
