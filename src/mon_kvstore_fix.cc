@@ -220,6 +220,10 @@ int fix_osdmap_full(MonitorStoreRef store,
   generic_dout(0) << " old-format available versions:"
                   << " [" << osdm_old.first_committed << ","
                   << osdm_old.last_committed << "]" << dendl;
+  generic_dout(0) << " new-format available versions:"
+                  << " [" << osdm_new.first_committed << ", "
+                  << osdm_new.last_committed << "]" << dendl;
+
   // check for all the osdmap_full versions
   for (version_t v = osdm_old.first_committed;
        v <= osdm_old.last_committed; ++v) {
@@ -233,6 +237,7 @@ int fix_osdmap_full(MonitorStoreRef store,
   // already existing full version on the kv store, stop and check if we have
   // any gaps in the osdmap's full versions on the kv store.
   generic_dout(0) << "move old-format osdmap full versions to kv store" << dendl;
+  int count = 0;
   for (version_t v = osdm_old.first_committed;
        v <= osdm_old.last_committed; ++v) {
 
@@ -250,7 +255,11 @@ int fix_osdmap_full(MonitorStoreRef store,
     MonitorDBStore::Transaction t;
     t.put("osdmap", full_ver, bl);
     db->apply_transaction(t);
+
+    count ++;
   }
+  generic_dout(0) << " " << count << "version" << (count > 1 ? "s" : "")
+                  << " moved" << dendl;
 
   // check for gaps in kv store's osdmap's full versions
   generic_dout(0) << "check for gaps in kv store's osdmap's full versions"
@@ -297,7 +306,7 @@ bool check_gv_store(MonitorStoreRef store)
 void usage(const char *pname)
 {
   std::cerr << "usage: " << pname
-            << " <old-format-store-path> <new-format-store-path>\n"
+            << " <old-format-store-path> <new-format-store-path>"
             << std::endl;
 }
 
@@ -314,10 +323,32 @@ int main(int argc, const char *argv[])
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
 
+  bool sure_thing = false;
+  for (vector<const char*>::iterator it = args.begin();
+       it != args.end(); ++it) {
+    if (ceph_argparse_double_dash(args, it)) {
+      break;
+    } else if (ceph_argparse_flag(args, it, "-h", "--help", (char*) NULL)) {
+      usage(our_name);
+      return 0;
+    } else if (ceph_argparse_flag(args, it, "--i-am-sure", (char*) NULL)) {
+      sure_thing = true;
+    }
+  }
+
   if (args.size() < 2) {
     usage(our_name);
     return 1;
   }
+
+  if (!sure_thing) {
+    derr << "*** This is a manual fix for bug #4521 ***" << dendl;
+    derr << "*** Before using make sure you have backed up both the old-format"
+         << " and new-format stores ***" << dendl;
+    derr << "*** Add '--i-am-sure' once you are ready. ***" << dendl;
+    return 1;
+  }
+
   string store_path(args[0]);
   string db_path(args[1]);
 
