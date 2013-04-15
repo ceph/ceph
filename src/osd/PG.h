@@ -172,6 +172,7 @@ protected:
   Mutex map_lock;
   list<OpRequestRef> waiting_for_map;
   OSDMapRef osdmap_ref;
+  OSDMapRef last_persisted_osdmap_ref;
   PGPool pool;
 
   void queue_op(OpRequestRef op);
