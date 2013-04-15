@@ -502,13 +502,15 @@ public:
    *  - our monitor is the leader;
    *  - we have a valid lease;
    *  - Paxos is not boostrapping.
+   *  - Paxos is not recovering.
    *
    * @returns true if writeable; false otherwise
    */
   bool is_writeable() {
     return (!is_proposing() && mon->is_leader()
         && !paxos->is_locked()
-	&& paxos->is_lease_valid() && !paxos->is_bootstrapping());
+	&& paxos->is_lease_valid() && !paxos->is_bootstrapping()
+        && !paxos->is_recovering());
   }
 
   /**
