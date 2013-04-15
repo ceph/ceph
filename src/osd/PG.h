@@ -354,6 +354,7 @@ public:
 protected:
   OSDService *osd;
   OSDMapRef osdmap_ref;
+  OSDMapRef last_persisted_osdmap_ref;
   PGPool pool;
 
   OSDMapRef get_osdmap() const {
