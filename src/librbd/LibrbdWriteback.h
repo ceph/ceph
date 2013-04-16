@@ -3,6 +3,8 @@
 #ifndef CEPH_LIBRBD_LIBRBDWRITEBACKHANDLER_H
 #define CEPH_LIBRBD_LIBRBDWRITEBACKHANDLER_H
 
+#include <queue>
+
 #include "include/Context.h"
 #include "include/types.h"
 #include "include/rados/librados.hpp"
@@ -21,10 +23,10 @@ namespace librbd {
     virtual ~LibrbdWriteback() {}
 
     // Note that oloc, trunc_size, and trunc_seq are ignored
-    virtual tid_t read(const object_t& oid, const object_locator_t& oloc,
-		       uint64_t off, uint64_t len, snapid_t snapid,
-		       bufferlist *pbl, uint64_t trunc_size,  __u32 trunc_seq,
-		       Context *onfinish);
+    virtual void read(const object_t& oid, const object_locator_t& oloc,
+		      uint64_t off, uint64_t len, snapid_t snapid,
+		      bufferlist *pbl, uint64_t trunc_size,  __u32 trunc_seq,
+		      Context *onfinish);
 
     // Determine whether a read to this extent could be affected by a write-triggered copy-on-write
     virtual bool may_copy_on_write(const object_t& oid, uint64_t read_off, uint64_t read_len, snapid_t snapid);
@@ -35,10 +37,26 @@ namespace librbd {
 			const bufferlist &bl, utime_t mtime, uint64_t trunc_size,
 			__u32 trunc_seq, Context *oncommit);
 
+    struct write_result_d {
+      bool done;
+      int ret;
+      std::string oid;
+      Context *oncommit;
+      write_result_d(const std::string& oid, Context *oncommit) :
+	done(false), ret(0), oid(oid), oncommit(oncommit) {}
+    private:
+      write_result_d(const write_result_d& rhs);
+      const write_result_d& operator=(const write_result_d& rhs);
+    };
+
   private:
-    int m_tid;
+    void complete_writes(const std::string& oid);
+
+    tid_t m_tid;
     Mutex& m_lock;
     librbd::ImageCtx *m_ictx;
+    hash_map<std::string, std::queue<write_result_d*> > m_writes;
+    friend class C_OrderedWrite;
   };
 }
 
