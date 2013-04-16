@@ -503,13 +503,25 @@ public:
    *  - we have a valid lease;
    *  - Paxos is not boostrapping.
    *  - Paxos is not recovering.
+   *  - we are ready to be written to -- i.e., we have a pending value.
    *
    * @returns true if writeable; false otherwise
    */
   bool is_writeable() {
     return (is_active()
         && mon->is_leader()
-        && paxos->is_lease_valid());
+        && paxos->is_lease_valid()
+        && is_write_ready());
+  }
+
+  /**
+   * Check if we are ready to be written to.  This means we must have a
+   * pending value and be active.
+   *
+   * @returns true if we are ready to be written to; false otherwise.
+   */
+  bool is_write_ready() {
+    return is_active() && have_pending;
   }
 
   /**
