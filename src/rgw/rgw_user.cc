@@ -1553,7 +1553,7 @@ int RGWUser::update(RGWUserAdminOpState& op_state, std::string *err_msg)
       return ret;
     }
   } else {
-    ret = rgw_store_user_info(store, user_info, NULL, NULL, false);
+    ret = rgw_store_user_info(store, user_info, NULL, &op_state.objv, false);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to store user info");
       return ret;
