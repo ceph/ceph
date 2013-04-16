@@ -2498,7 +2498,7 @@ int PG::_write_info(ObjectStore::Transaction& t, epoch_t epoch,
     map<epoch_t,pg_interval_t> &past_intervals,
     interval_set<snapid_t> &snap_collections,
     hobject_t &infos_oid,
-    __u8 info_struct_v, bool dirty_big_info)
+    __u8 info_struct_v, bool dirty_big_info, bool force_ver)
 {
   // pg state
 
@@ -2506,7 +2506,7 @@ int PG::_write_info(ObjectStore::Transaction& t, epoch_t epoch,
     return -EINVAL;
 
   // Only need to write struct_v to attr when upgrading
-  if (info_struct_v < cur_struct_v) {
+  if (force_ver || info_struct_v < cur_struct_v) {
     bufferlist attrbl;
     info_struct_v = cur_struct_v;
     ::encode(info_struct_v, attrbl);
