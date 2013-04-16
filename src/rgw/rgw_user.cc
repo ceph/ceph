@@ -1409,7 +1409,6 @@ RGWUser::RGWUser() : caps(this), keys(this), subusers(this)
 int RGWUser::init(RGWRados *storage, RGWUserAdminOpState& op_state)
 {
   init_default();
-
   int ret = init_storage(storage);
   if (ret < 0)
     return ret;
