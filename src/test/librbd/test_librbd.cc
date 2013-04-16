@@ -1561,6 +1561,10 @@ TEST(LibRBD, DiffIterate)
   ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
   ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
 
+  int seed = getpid();
+  cout << "seed " << seed << std::endl;
+  srand(seed);
+
   {
     librbd::RBD rbd;
     librbd::Image image;
@@ -1626,6 +1630,10 @@ TEST(LibRBD, DiffIterateDiscard)
 
   ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
   ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  int seed = getpid();
+  cout << "seed " << seed << std::endl;
+  srand(seed);
 
   {
     librbd::RBD rbd;
