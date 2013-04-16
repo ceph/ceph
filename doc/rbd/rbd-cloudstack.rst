@@ -1,55 +1,121 @@
-===========================
- RBD and Apache CloudStack
-===========================
+==============================
+ Block Devices and CloudStack
+==============================
 
-You can use RBD to run instances on in Apache CloudStack.
+You may use Ceph block device images with CloudStack 4.0 and higher through
+``libvirt``, which configures the QEMU interface to ``librbd``. Ceph stripes
+block device images as objects across the cluster, which means that large Ceph
+block device images have better performance than a standalone server!
 
-This can be done by adding a RBD pool as Primary Storage.
+To use Ceph block devices with CloudStack 4.0 and higher, you must install QEMU,
+``libvirt``, and CloudStack first. We recommend using a separate physical host
+for your CloudStack installation. CloudStack recommends a minimum of 4GB of RAM
+and a dual-core processor, but more CPU and RAM will perform better. The
+following diagram depicts the CloudStack/Ceph technology stack.
 
-There are a couple of prerequisites:
 
-* You need to use CloudStack 4.0 or higher
-* Qemu on the Hypervisor has to be compiled with RBD enabled
-* The libvirt version on the Hypervisor has to be at least 0.10 with RBD enabled
+.. ditaa::  +---------------------------------------------------+
+            |                   CloudStack                      |
+            +---------------------------------------------------+
+            |                     libvirt                       |
+            +------------------------+--------------------------+
+                                     |
+                                     | configures
+                                     v
+            +---------------------------------------------------+
+            |                       QEMU                        |
+            +---------------------------------------------------+
+            |                      librbd                       |
+            +---------------------------------------------------+
+            |                     librados                      |
+            +------------------------+-+------------------------+
+            |          OSDs          | |        Monitors        |
+            +------------------------+ +------------------------+
 
-Make sure you meet these requirements before installing the CloudStack Agent on the Hypervisor(s).
+.. important:: To use Ceph block devices with CloudStack, you must have a 
+   running Ceph cluster.
 
-.. important:: To use RBD with CloudStack, you must have a running Ceph cluster.
+CloudStack integrates with Ceph's block devices to provide CloudStack with a
+back end for CloudStack's Primary Storage. The instructions below detail the
+setup for CloudStack Primary Storage.
+
+.. note:: We recommend installing with Ubuntu 12.04 or later so that 
+   you can use package installation instead of having to compile 
+   QEMU from source.
+   
+Installing and configuring QEMU for use with CloudStack doesn't require any
+special handling. Ensure that you have a running Ceph  cluster. Install QEMU and
+configure it for use with Ceph; then, install ``libvirt`` version 0.9.13 or
+higher (you may need to compile from source) and ensure it is running with Ceph.
+
+#. `Install and Configure QEMU`_.
+#. `Install and Configure libvirt`_ version 0.9.13 or higher.
+#. Also see `KVM Hypervisor Host Installation`_.
+
+
+.. note:: Raring Ringtail (13.04) will have ``libvirt`` verison 0.9.13 or higher
+   by default.
+
+Create a Pool
+=============
+
+By default, Ceph block devices use the ``rbd`` pool. Create a pool for
+CloudStack NFS Primary Storage. Ensure your Ceph cluster is running, then create
+the pool. ::
+
+   ceph osd pool create cloudstack
+   
+See `Create a Pool`_ for details on specifying the number of placement groups
+for your pools, and `Placement Groups`_ for details on the number of placement
+groups you should set for your pools.
+
+
+Add Primary Storage
+===================
+
+To add primary storage, refer to `Add Primary Storage (4.0.0)`_ or 
+`Add Primary Storage (4.0.1)`_. To add a Ceph block device, the steps
+include: 
+
+#. Log in to the CloudStack UI.
+#. Click **Infrastructure** on the left side navigation bar. 
+#. Select the Zone you want to use for Primary Storage.
+#. Click the **Compute** tab.
+#. Select **View All** on the `Primary Storage` node in the diagram.
+#. Click **Add Primary Storage**.
+#. Follow the CloudStack instructions.
+
+   - For **Protocol**, select ``RBD``.
+   - Add cluster information (cephx is supported).
+   - Add ``rbd`` as a tag.
+
+
+Create a Disk Offering
+======================
+
+To create a new disk offering, refer to `Create a New Disk Offering (4.0.0)`_ or
+ `Create a New Disk Offering (4.0.1)`_. Create a disk offering so that it
+matches the ``rbd`` tag. The ``StoragePoolAllocator`` will choose the  ``rbd``
+pool when searching for a suitable storage pool. If the disk offering doesn't
+match the ``rbd`` tag, the ``StoragePoolAllocator`` may select the pool you
+created (e.g., ``cloudstack``).
+
 
 Limitations
 ===========
 
-Running instances from RBD has a couple of limitations:
+- CloudStack will only bind to one monitor.
+- CloudStack does not support cloning snapshots.
+- You may need to compile ``libvirt`` to use version 0.9.13 with Ubuntu.
 
-* An additional NFS Primary Storage pool is required for running System VM's
-* Snapshotting RBD volumes is not possible (at this moment)
-* Only one monitor can be configured
 
-Add Hypervisor
-==============
 
-Please follow the official CloudStack documentation how to do this.
-
-There is no special way of adding a Hypervisor when using RBD, nor is any configuration needed on the hypervisor.
-
-Add RBD Primary Storage
-=======================
-
-Once the hypervisor has been added, log on to the CloudStack UI.
-
-* Infrastructure 
-* Primary Storage
-* "Add Primary Storage"
-* Select "Protocol" RBD
-* Fill in your cluster information (cephx is supported)
-* Optionally add the tag 'rbd'
-
-Now you should be able to deploy instances on RBD.
-
-RBD Disk Offering
-=================
-
-Create a special "Disk Offering" which needs to match the tag 'rbd' so you can make sure the StoragePoolAllocator
-chooses the RBD pool when searching for a suiteable storage pool.
-
-Since there is also a NFS storage pool it's possible that instances get deployed on NFS instead of RBD.
+.. _Create a Pool: ../../rados/operations/pools#createpool
+.. _Placement Groups: ../../rados/operations/placement-groups
+.. _Install and Configure QEMU: ../qemu-rbd
+.. _Install and Configure libvirt: ../libvirt
+.. _KVM Hypervisor Host Installation: http://cloudstack.apache.org/docs/en-US/Apache_CloudStack/4.0.0-incubating/html/Installation_Guide/hypervisor-kvm-install-flow.html
+.. _Add Primary Storage (4.0.0): http://cloudstack.apache.org/docs/en-US/Apache_CloudStack/4.0.0-incubating/html/Admin_Guide/primary-storage-add.html
+.. _Add Primary Storage (4.0.1): http://cloudstack.apache.org/docs/en-US/Apache_CloudStack/4.0.1-incubating/html/Admin_Guide/primary-storage-add.html
+.. _Create a New Disk Offering (4.0.0): http://cloudstack.apache.org/docs/en-US/Apache_CloudStack/4.0.0-incubating/html/Admin_Guide/compute-disk-service-offerings.html#creating-disk-offerings
+.. _Create a New Disk Offering (4.0.1): http://cloudstack.apache.org/docs/en-US/Apache_CloudStack/4.0.1-incubating/html/Admin_Guide/compute-disk-service-offerings.html#creating-disk-offerings
