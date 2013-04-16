@@ -974,6 +974,11 @@ int main(int argc, char **argv)
     return 0;
   }
 
+  if (!user_id.empty()) {
+    user_op.set_user_id(user_id);
+    bucket_op.set_user_id(user_id);
+  }
+
   if (!display_name.empty())
     user_op.set_display_name(display_name);
 
