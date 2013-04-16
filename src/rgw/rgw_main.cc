@@ -295,6 +295,8 @@ void RGWProcess::handle_request(RGWRequest *req)
   s->obj_ctx = store->create_context(s);
   store->set_intent_cb(s->obj_ctx, call_log_intent);
 
+  s->req_id = store->unique_id(req->id);
+
   req->log(s, "initializing");
 
   RGWOp *op = NULL;
