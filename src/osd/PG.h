@@ -1836,7 +1836,7 @@ public:
     map<epoch_t,pg_interval_t> &past_intervals,
     interval_set<snapid_t> &snap_collections,
     hobject_t &infos_oid,
-    __u8 info_struct_v, bool dirty_big_info);
+    __u8 info_struct_v, bool dirty_big_info, bool force_ver = false);
   static void _write_log(ObjectStore::Transaction& t, pg_log_t &log,
     const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors);
   void write_if_dirty(ObjectStore::Transaction& t);
