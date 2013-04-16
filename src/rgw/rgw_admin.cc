@@ -1161,9 +1161,55 @@ int main(int argc, char **argv)
     }
   }
 
-  if (opt_cmd == OPT_BUCKETS_LIST || opt_cmd == OPT_BUCKET_STATS) {
-    if (opt_cmd == OPT_BUCKET_STATS)
-      bucket_op.set_fetch_stats(true);
+  if (opt_cmd == OPT_BUCKETS_LIST) {
+    if (bucket_name.empty()) {
+      RGWBucketAdminOp::info(store, bucket_op, f);
+    } else {
+     int ret = init_bucket(bucket_name, bucket);
+      if (ret < 0) {
+        cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+      formatter->open_array_section("entries");
+      bool truncated;
+      int count = 0;
+      if (max_entries < 0)
+        max_entries = 1000;
+
+      string prefix;
+      string delim;
+      vector<RGWObjEnt> result;
+      map<string, bool> common_prefixes;
+      string ns;
+      
+      do {
+        list<rgw_bi_log_entry> entries;
+        ret = store->list_objects(bucket, max_entries - count, prefix, delim,
+                                  marker, result, common_prefixes, true, ns,
+                                  &truncated, NULL);
+        if (ret < 0) {
+          cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+
+        count += result.size();
+
+        for (vector<RGWObjEnt>::iterator iter = result.begin(); iter != result.end(); ++iter) {
+          RGWObjEnt& entry = *iter;
+          encode_json("entry", entry, formatter);
+
+          marker = entry.name;
+        }
+        formatter->flush(cout);
+      } while (truncated && count < max_entries);
+
+      formatter->close_section();
+      formatter->flush(cout);
+    }
+  }
+
+  if (opt_cmd == OPT_BUCKET_STATS) {
+    bucket_op.set_fetch_stats(true);
 
     RGWBucketAdminOp::info(store, bucket_op, f);
   }
