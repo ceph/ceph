@@ -27,7 +27,6 @@ void rgw_bucket_dir_entry_meta::generate_test_instances(list<rgw_bucket_dir_entr
   m->etag = "etag";
   m->owner = "owner";
   m->owner_display_name = "display name";
-  m->tag = "tag";
   m->content_type = "content/type";
   o.push_back(m);
   o.push_back(new rgw_bucket_dir_entry_meta);
@@ -41,7 +40,6 @@ void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
   f->dump_string("etag", etag);
   f->dump_string("owner", owner);
   f->dump_string("owner_display_name", owner_display_name);
-  f->dump_string("tag", tag);
   f->dump_string("content_type", content_type);
 }
 
@@ -60,6 +58,7 @@ void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& 
     e->locator = "locator";
     e->exists = true;
     e->meta = *m;
+    e->tag = "tag";
 
     o.push_back(e);
 
@@ -84,6 +83,7 @@ void rgw_bucket_dir_entry::dump(Formatter *f) const
   f->open_object_section("meta");
   meta.dump(f);
   f->close_section();
+  f->dump_string("tag", tag);
 
   map<string, struct rgw_bucket_pending_info>::const_iterator iter = pending_map.begin();
   f->open_array_section("pending_map");

@@ -397,6 +397,18 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("flags", flags, f);
 }
 
+void RGWObjEnt::dump(Formatter *f) const
+{
+  encode_json("name", name, f);
+  encode_json("owner", owner, f);
+  encode_json("owner_display_name", owner_display_name, f);
+  encode_json("size", size, f);
+  encode_json("mtime", mtime, f);
+  encode_json("etag", etag, f);
+  encode_json("content_type", content_type, f);
+  encode_json("tag", tag, f);
+}
+
 void RGWBucketEnt::dump(Formatter *f) const
 {
   encode_json("bucket", bucket, f);

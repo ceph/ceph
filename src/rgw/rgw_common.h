@@ -661,18 +661,14 @@ struct RGWObjEnt {
   std::string owner;
   std::string owner_display_name;
   uint64_t size;
-  time_t mtime;
+  utime_t mtime;
   string etag;
   string content_type;
+  string tag;
 
-  RGWObjEnt() : size(0), mtime(0) {}
+  RGWObjEnt() : size(0) {}
 
-  void clear() { // not clearing etag
-    name="";
-    size = 0;
-    mtime = 0;
-    content_type="";
-  }
+  void dump(Formatter *f) const;
 };
 
 /** Store basic data on bucket */

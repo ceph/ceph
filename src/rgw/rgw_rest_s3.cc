@@ -237,7 +237,8 @@ void RGWListBucket_ObjStore_S3::send_response()
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       s->formatter->open_array_section("Contents");
       s->formatter->dump_string("Key", iter->name);
-      dump_time(s, "LastModified", &iter->mtime);
+      time_t mtime = iter->mtime.sec();
+      dump_time(s, "LastModified", &mtime);
       s->formatter->dump_format("ETag", "\"%s\"", iter->etag.c_str());
       s->formatter->dump_int("Size", iter->size);
       s->formatter->dump_string("StorageClass", "STANDARD");
@@ -1461,7 +1462,8 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
       dump_owner(s, s->user.user_id, s->user.display_name, "Initiator");
       dump_owner(s, s->user.user_id, s->user.display_name);
       s->formatter->dump_string("StorageClass", "STANDARD");
-      dump_time(s, "Initiated", &iter->obj.mtime);
+      time_t mtime = iter->obj.mtime.sec();
+      dump_time(s, "Initiated", &mtime);
       s->formatter->close_section();
     }
     if (common_prefixes.size() > 0) {

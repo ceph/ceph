@@ -4130,6 +4130,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, string prefix,
     e.owner = dirent.meta.owner;
     e.owner_display_name = dirent.meta.owner_display_name;
     e.content_type = dirent.meta.content_type;
+    e.tag = dirent.tag;
 
     /* oh, that shouldn't happen! */
     if (e.name.empty()) {
@@ -4306,7 +4307,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   ACLOwner owner;
 
   object.size = astate->size;
-  object.mtime = astate->mtime;
+  object.mtime = utime_t(astate->mtime, 0);
 
   map<string, bufferlist>::iterator iter = astate->attrset.find(RGW_ATTR_ETAG);
   if (iter != astate->attrset.end()) {
@@ -4356,7 +4357,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   list_state.meta.etag = etag;
   list_state.meta.content_type = content_type;
   if (astate->obj_tag.length() > 0)
-    list_state.meta.tag = astate->obj_tag.c_str();
+    list_state.tag = astate->obj_tag.c_str();
   list_state.meta.owner = owner.get_id();
   list_state.meta.owner_display_name = owner.get_display_name();
 

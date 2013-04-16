@@ -173,7 +173,8 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
         }
         s->formatter->dump_string("content_type", single_content_type);
       }
-      dump_time(s, "last_modified", &iter->mtime);
+      time_t mtime = iter->mtime.sec();
+      dump_time(s, "last_modified", &mtime);
       s->formatter->close_section();
     }
 
