@@ -1653,6 +1653,7 @@ TEST(LibRBD, DiffIterateDiscard)
     ASSERT_EQ(0u, extents.size());
 
     char data[256];
+    memset(data, 1, sizeof(data));
     bl.append(data, 256);
     ASSERT_EQ(256, image.write(0, 256, bl));
     ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
