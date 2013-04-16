@@ -1728,6 +1728,7 @@ int RGWRados::copy_obj(void *ctx,
                bool replace_attrs,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
+               string *ptag,
                struct rgw_err *err)
 {
   int ret;
@@ -1789,7 +1790,7 @@ int RGWRados::copy_obj(void *ctx,
   }
 
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
-    return copy_obj_data(ctx, handle, end, dest_obj, src_obj, mtime, attrset, category, err);
+    return copy_obj_data(ctx, handle, end, dest_obj, src_obj, mtime, attrset, category, ptag, err);
   }
 
   map<uint64_t, RGWObjManifestPart>::iterator miter = astate->manifest.objs.begin();
@@ -1810,14 +1811,21 @@ int RGWRados::copy_obj(void *ctx,
 
   bufferlist first_chunk;
 
-  string tag;
   bool copy_itself = (dest_obj == src_obj);
   RGWObjManifest *pmanifest; 
   ldout(cct, 0) << "dest_obj=" << dest_obj << " src_obj=" << src_obj << " copy_itself=" << (int)copy_itself << dendl;
 
-  if (!copy_itself) {
-    append_rand_alpha(cct, tag, tag, 32);
 
+  string tag;
+
+  if (ptag)
+    tag = *ptag;
+
+  if (tag.empty()) {
+    append_rand_alpha(cct, tag, tag, 32);
+  }
+
+  if (!copy_itself) {
     for (; miter != astate->manifest.objs.end(); ++miter) {
       RGWObjManifestPart& part = miter->second;
       ObjectWriteOperation op;
@@ -1838,8 +1846,6 @@ int RGWRados::copy_obj(void *ctx,
     pmanifest = &manifest;
   } else {
     pmanifest = &astate->manifest;
-    tag = astate->obj_tag.c_str();
-
     /* don't send the object's tail for garbage collection */
     astate->keep_tail = true;
   }
@@ -1895,11 +1901,13 @@ int RGWRados::copy_obj_data(void *ctx,
 	       time_t *mtime,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
+               string *ptag,
                struct rgw_err *err)
 {
   bufferlist first_chunk;
   RGWObjManifest manifest;
   RGWObjManifestPart *first_part;
+  map<string, bufferlist>::iterator iter;
 
   rgw_obj shadow_obj = dest_obj;
   string shadow_oid;
@@ -1954,6 +1962,7 @@ int RGWRados::copy_obj_data(void *ctx,
 
   ep.data = &first_chunk;
   ep.manifest = &manifest;
+  ep.ptag = ptag;
 
   ret = put_obj_meta(ctx, dest_obj, end + 1, attrs, category, PUT_OBJ_CREATE, ep);
   if (mtime)
@@ -2861,7 +2870,9 @@ int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
     buf[len] = '\0';
     tag = buf;
   } else {
-    append_rand_alpha(cct, tag, tag, 32);
+    if (tag.empty()) {
+      append_rand_alpha(cct, tag, tag, 32);
+    }
   }
   int ret = cls_obj_prepare_op(bucket, CLS_RGW_OP_ADD, tag,
                                obj.object, obj.key);

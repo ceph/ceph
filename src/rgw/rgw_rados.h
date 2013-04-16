@@ -782,6 +782,7 @@ public:
                bool replace_attrs,
                map<std::string, bufferlist>& attrs,
                RGWObjCategory category,
+               string *ptag,
                struct rgw_err *err);
 
   int copy_obj_data(void *ctx,
@@ -791,6 +792,7 @@ public:
 	       time_t *mtime,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
+               string *ptag,
                struct rgw_err *err);
   /**
    * Delete a bucket.
@@ -1002,6 +1004,13 @@ public:
   int bucket_rebuild_index(rgw_bucket& bucket);
   int remove_objs_from_index(rgw_bucket& bucket, list<string>& oid_list);
 
+  string unique_id(uint64_t unique_num) {
+    char buf[32];
+    snprintf(buf, sizeof(buf), ".%llu.%llu", (unsigned long long)instance_id(), (unsigned long long)unique_num);
+    string s = zone.name + buf;
+    return s;
+  }
+
  private:
   int process_intent_log(rgw_bucket& bucket, string& oid,
 			 time_t epoch, int flags, bool purge);
@@ -1050,7 +1059,6 @@ public:
 
   uint64_t instance_id();
   uint64_t next_bucket_id();
-
 };
 
 class RGWStoreManager {

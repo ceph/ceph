@@ -1217,6 +1217,7 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, map<string, bufferlist>
 
   extra_params.data = &first_chunk;
   extra_params.manifest = &manifest;
+  extra_params.ptag = &s->req_id; /* use req_id as operation tag */
 
   int r = store->put_obj_meta(s->obj_ctx, head_obj, obj_len, attrs,
                               RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
@@ -1764,7 +1765,9 @@ void RGWCopyObj::execute()
                         if_match,
                         if_nomatch,
                         replace_attrs,
-                        attrs, RGW_OBJ_CATEGORY_MAIN, &s->err);
+                        attrs, RGW_OBJ_CATEGORY_MAIN,
+                        &s->req_id, /* use req_id as tag */
+                        &s->err);
 }
 
 int RGWGetACLs::verify_permission()
@@ -2299,6 +2302,8 @@ void RGWCompleteMultipart::execute()
 
   extra_params.manifest = &manifest;
   extra_params.remove_objs = &remove_objs;
+
+  extra_params.ptag = &s->req_id; /* use req_id as operation tag */
 
   ret = store->put_obj_meta(s->obj_ctx, target_obj, ofs, attrs,
                             RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,

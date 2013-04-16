@@ -651,6 +651,8 @@ struct req_state {
 
    string dialect;
 
+   string req_id;
+
    req_state(CephContext *_cct, struct RGWEnv *e);
    ~req_state();
 };
