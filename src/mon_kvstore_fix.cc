@@ -46,11 +46,9 @@ struct ServiceVersions {
   version_t first_found;
   version_t last_found;
 
-  version_t first_full_found;
-  version_t last_full_found;
+  list<version_t> found_full;
+  list<version_t> missing_full;
 };
-
-list<string> services;
 
 class MemMonitorDBStore : public MonitorDBStore
 {
@@ -64,7 +62,7 @@ public:
   { }
 
   virtual int get(const string &prefix, const string &key, bufferlist &bl) {
-    generic_dout(20) << "MemMonitorDBStore::get("
+    generic_dout(30) << "MemMonitorDBStore::get("
                     << prefix << "," << key << ")" << dendl;
     if (prefix == mem_prefix) {
       if (mem_store.count(key)) {
@@ -84,7 +82,7 @@ public:
   }
 
   virtual int apply_transaction(MonitorDBStore::Transaction &t) {
-    generic_dout(20) << "MemMonitorDBStore::apply_transaction()"
+    generic_dout(30) << "MemMonitorDBStore::apply_transaction()"
                      << " " << t.ops.size() << " ops" << dendl;
 
     list<Op> not_our_ops;
@@ -103,72 +101,169 @@ public:
     if (not_our_ops.size() == 0)
       return 0;
 
-    generic_dout(20) << "MemMonitorDBStore::apply_transaction()"
+    generic_dout(30) << "MemMonitorDBStore::apply_transaction()"
                      << " " << not_our_ops.size() << " ops delegated" << dendl;
     t.ops = not_our_ops;
     return MonitorDBStore::apply_transaction(t);
   }
 };
 
-void print_progress(version_t first, version_t last, version_t curr)
+int calc_progress(version_t first, version_t last, version_t curr)
 {
   version_t delta = last - first;
   version_t count = curr - first;
 
-  int percent = (int) ((count/delta)*100);
-  if (percent % 10)
-    generic_dout(0) << " " << percent << "\% progress" << dendl;
+  return ((int) (((float)count/delta)*100));
+}
+
+list<pair<version_t,version_t> > gen_intervals(list<version_t> &lst)
+{
+  list<pair<version_t,version_t> > intervals;
+
+  for (list<version_t>::iterator it = lst.begin(); it != lst.end(); ++it) {
+    version_t v = *it;
+    if (intervals.size() == 0) {
+      intervals.push_back(make_pair(v, 0));
+      continue;
+    }
+
+    pair<version_t,version_t> &last = intervals.back();
+
+    if (last.second == 0) {
+      if (v == last.first + 1) {
+        last.second = v;
+        continue;
+      } else {
+        last.second = last.first;
+        intervals.push_back(make_pair(v, 0));
+        continue;
+      }
+    }
+
+    if (v == last.second + 1) {
+      last.second = v;
+      continue;
+    } else {
+      intervals.push_back(make_pair(v, 0));
+      continue;
+    }
+  }
+
+  pair<version_t,version_t> &last = intervals.back();
+  if (last.second == 0)
+    last.second = last.first;
+
+  return intervals;
+}
+
+string dump_intervals(list<version_t> &vers) {
+  list<pair<version_t,version_t> > gaps = gen_intervals(vers);
+  ostringstream os;
+  for (list<pair<version_t,version_t> >::iterator it = gaps.begin();
+       it != gaps.end(); ++it) {
+    pair<version_t,version_t> &v = *it;
+    if (v.first == v.second)
+      os << " " << v.first;
+    else
+      os << " [" << v.first << "," << v.second << "]";
+  }
+  return os.str();
 }
 
 int check_old_service_versions(MonitorStoreRef store,
-                               map<string,ServiceVersions> &versions)
+                               ServiceVersions &svc)
 {
   generic_dout(0) << __func__ << dendl;
-  for (list<string>::iterator it = services.begin();
-       it != services.end(); ++it) {
-    string name = *it;
-    ServiceVersions &svc = versions[name];
 
-    svc.first_committed = store->get_int(name.c_str(), "first_committed");
-    svc.last_committed = store->get_int(name.c_str(), "last_committed");
+  svc.first_committed = store->get_int("osdmap", "first_committed");
+  svc.last_committed = store->get_int("osdmap", "last_committed");
 
-    generic_dout(0) << " " << name << dendl;
-    for (version_t v = svc.first_committed; v <= svc.last_committed; ++v) {
-      print_progress(svc.first_committed, svc.last_committed, v);
-      if (!store->exists_bl_sn(name.c_str(), v)) {
-        derr << " service " << name << " ver " << v << " does not exist"
-             << dendl;
-        return -EINVAL;
-      }
+  int last_progress = -1;
+  for (version_t v = svc.first_committed; v <= svc.last_committed; ++v) {
+    int done = calc_progress(svc.first_committed, svc.last_committed, v);
+    if (done > last_progress && !(done % 10)) {
+      generic_dout(0) << " " << done << "\% done" << dendl;
+      last_progress = done;
     }
-    generic_dout(0) << " service " << name << " is okay" << dendl;
+
+    if (!store->exists_bl_sn("osdmap", v)) {
+      derr << " osdmap       ver " << v << " does not exist" << dendl;
+      return -EINVAL;
+    }
+
+    if (!store->exists_bl_sn("osdmap_full", v)) {
+      generic_dout(20) << " osdmap full  ver " << v
+                       << " does not exist" << dendl;
+      svc.missing_full.push_back(v);
+    } else {
+      if (svc.missing_full.size() > 0
+          && svc.missing_full.back() < v
+          && svc.found_full.back() < svc.missing_full.back()) {
+        generic_dout(20) << " osdmap full  gap from "
+                         << svc.missing_full.back()
+                         << " to " << v << dendl;
+      }
+      svc.found_full.push_back(v);
+    }
   }
 
   return 0;
 }
 
 int check_new_service_versions(MonitorDBStoreRef db,
-                               map<string,ServiceVersions> &versions)
+                               ServiceVersions &svc)
 {
   generic_dout(0) << __func__ << dendl;
-  for (list<string>::iterator it = services.begin();
-       it != services.end(); ++it) {
-    string name = *it;
-    ServiceVersions &svc = versions[name];
 
-    svc.first_committed = db->get(name, "first_committed");
-    svc.last_committed = db->get(name, "last_committed");
+  svc.first_committed = db->get("osdmap", "first_committed");
+  svc.last_committed = db->get("osdmap", "last_committed");
 
-    generic_dout(0) << " " << name << dendl;
-    for (version_t v = svc.first_committed; v <= svc.last_committed; ++v) {
-      print_progress(svc.first_committed, svc.last_committed, v);
-      if (!db->exists(name.c_str(), v)) {
-        derr << " service " << name << " ver " << v << " does not exist"
-             << dendl;
-        return -EINVAL;
-      }
+  int last_progress = -1;
+  for (version_t v = svc.first_committed; v <= svc.last_committed; ++v) {
+    int done = calc_progress(svc.first_committed, svc.last_committed, v);
+    if (done > last_progress && !(done % 10)) {
+      generic_dout(0) << " " << done << "\% done" << dendl;
+      last_progress = done;
     }
-    generic_dout(0) << " service " << name << " is okay" << dendl;
+
+    if (!db->exists("osdmap", v)) {
+      derr << " osdmap       ver " << v << " does not exist" << dendl;
+      return -EINVAL;
+    }
+
+    string full_key = "full_" + stringify(v);
+    if (!db->exists("osdmap", full_key)) {
+      generic_dout(20) << " osdmap full  ver " << v
+                       << " does not exist" << dendl;
+      svc.missing_full.push_back(v);
+    } else {
+      if (svc.missing_full.size() > 0
+          && svc.missing_full.back() < v
+          && svc.found_full.back() < svc.missing_full.back()) {
+        generic_dout(20) << " osdmap full  gap from "
+                         << svc.missing_full.back()
+                         << " to " << v << dendl;
+      }
+      svc.found_full.push_back(v);
+    }
+  }
+
+  return 0;
+}
+
+int check_fix_viability(ServiceVersions &o, ServiceVersions &n)
+{
+  generic_dout(0) << __func__ << dendl;
+
+  if (o.last_committed < n.first_committed) {
+    derr << " old store versions and new store versions do not intersect!"
+         << dendl;
+    return -1;
+  }
+
+  if (o.found_full.size() == 0) {
+    derr << " old store doesn't have full versions!" << dendl;
+    return -1;
   }
 
   return 0;
@@ -216,8 +311,20 @@ int fix_osdmap_gaps(MonitorDBStoreRef db, list<version_t> &missing)
   osdmap.decode(bl);
 
   generic_dout(0) << " recreating full maps from incrementals" << dendl;
+
+  size_t total = missing.size();
+  size_t count = 0;
+  int last_progress = -1;
+
   for (list<version_t>::iterator it = missing.begin();
        it != missing.end(); ++it) {
+    count ++;
+    int done = calc_progress(0, total, count);
+    if (done > last_progress && !(done % 10)) {
+      generic_dout(0) << " " << done << "\% done" << dendl;
+      last_progress = done;
+    }
+
     version_t v = *it;
 
     full_ver = "full_" + stringify(v);
@@ -291,27 +398,35 @@ int fix_osdmap_full(MonitorStoreRef store,
   generic_dout(0) << "check old-format osdmap full versions" << dendl;
   generic_dout(0) << " old-format available versions:"
                   << " [" << osdm_old.first_committed << ","
-                  << osdm_old.last_committed << "]" << dendl;
+                  << osdm_old.last_committed << "]"
+                  << " full " << dump_intervals(osdm_old.found_full);
+  if (osdm_old.missing_full.size() > 0) {
+    *_dout << " missing " << dump_intervals(osdm_old.missing_full);
+  }
+  *_dout << dendl;
   generic_dout(0) << " new-format available versions:"
                   << " [" << osdm_new.first_committed << ", "
-                  << osdm_new.last_committed << "]" << dendl;
-
-  // check for all the osdmap_full versions
-  for (version_t v = osdm_old.first_committed;
-       v <= osdm_old.last_committed; ++v) {
-    if (!store->exists_bl_sn("osdmap_full", v)) {
-      derr << "osdmap_full ver " << v << " does not exist!" << dendl;
-      return -ENOENT;
-    }
+                  << osdm_new.last_committed << "]"
+                  << " full " << dump_intervals(osdm_old.found_full);
+  if (osdm_old.missing_full.size() > 0) {
+    *_dout << " missing " << dump_intervals(osdm_old.missing_full);
   }
+  *_dout << dendl;
 
   // move versions to kvstore if they don't exist there; as soon as we find an
   // already existing full version on the kv store, stop and check if we have
   // any gaps in the osdmap's full versions on the kv store.
   generic_dout(0) << "move old-format osdmap full versions to kv store" << dendl;
   int count = 0;
+  int last_progress = -1;
   for (version_t v = osdm_old.first_committed;
        v <= osdm_old.last_committed; ++v) {
+    int done = calc_progress(osdm_old.first_committed,
+                             osdm_old.last_committed, v);
+    if (done > last_progress && !(done % 10)) {
+      generic_dout(0) << " " << done << "\% done" << dendl;
+      last_progress = done;
+    }
 
     string full_ver = "full_" + stringify(v);
     if (db->exists("osdmap", full_ver)) {
@@ -330,11 +445,21 @@ int fix_osdmap_full(MonitorStoreRef store,
 
     count ++;
   }
-  generic_dout(0) << " " << count << "version" << (count > 1 ? "s" : "")
+  generic_dout(0) << " " << count << " version" << (count > 1 ? "s" : "")
                   << " moved" << dendl;
 
-  // check for gaps in kv store's osdmap's full versions
-  generic_dout(0) << "check for gaps in kv store's osdmap's full versions"
+  if (osdm_old.missing_full.size() > 0) {
+    int err = fix_osdmap_gaps(db, osdm_old.missing_full);
+    if (err < 0) {
+      derr << " unable to fix osdmap full version gaps" << dendl;
+      return -EINVAL;
+    }
+
+    generic_dout(0) << " all gaps fixed!" << dendl;
+  }
+
+  // sanity check gaps in kv store's osdmap's full versions
+  generic_dout(0) << "sanity check gaps in kv store's osdmap's full versions"
                   << dendl;
   list<version_t> missing;
   int err = check_osdmap_gaps(db,
@@ -343,14 +468,9 @@ int fix_osdmap_full(MonitorStoreRef store,
                               missing);
   if (err < 0) {
     assert(missing.size() > 0);
-
-    err = fix_osdmap_gaps(db, missing);
-    if (err < 0) {
-      derr << "unable to fix osdmap full version gaps" << dendl;
-      return -EINVAL;
-    }
-
-    generic_dout(0) << " all gaps fixed!" << dendl;
+    derr << " there are still gaps in the osdmap's full version history!"
+         << dendl;
+    return err;
   }
   generic_dout(0) << " store should be fine now!" << dendl;
 
@@ -383,6 +503,7 @@ void usage(const char *pname)
   std::cerr << "  options:" << std::endl;
   std::cerr << "    --for-real        Really go through with the fix" << std::endl;
   std::cerr << "                      (default is a dry run)" << std::endl;
+  std::cerr << "    --checks-only     Only check if fix is possible" << std::endl;
 }
 
 int main(int argc, const char *argv[])
@@ -400,8 +521,9 @@ int main(int argc, const char *argv[])
 
   bool sure_thing = false;
   bool dry = true;
+  bool checks_only = false;
   for (vector<const char*>::iterator it = args.begin();
-       it != args.end(); ++it) {
+       it != args.end(); ) {
     if (ceph_argparse_double_dash(args, it)) {
       break;
     } else if (ceph_argparse_flag(args, it, "-h", "--help", (char*) NULL)) {
@@ -411,6 +533,10 @@ int main(int argc, const char *argv[])
       sure_thing = true;
     } else if (ceph_argparse_flag(args, it, "--for-real", (char*) NULL)) {
       dry = false;
+    } else if (ceph_argparse_flag(args, it, "--checks-only", (char*)NULL)) {
+      checks_only = true;
+    } else {
+      ++it;
     }
   }
 
@@ -480,16 +606,9 @@ int main(int argc, const char *argv[])
     goto cleanup_db;
   }
 
-  services.push_back("auth");
-  services.push_back("logm");
-  services.push_back("mdsmap");
-  services.push_back("monmap");
-  services.push_back("osdmap");
-  services.push_back("pgmap");
-
   do {
-    map<string,ServiceVersions> old_vers;
-    map<string,ServiceVersions> new_vers;
+    ServiceVersions old_vers;
+    ServiceVersions new_vers;
 
     err = check_old_service_versions(store, old_vers);
     if (err < 0) {
@@ -505,7 +624,17 @@ int main(int argc, const char *argv[])
       break;
     }
 
-    err = fix_osdmap_full(store, db, old_vers["osdmap"], new_vers["osdmap"]);
+    err = check_fix_viability(old_vers, new_vers);
+    if (err < 0) {
+      derr << "we can't do anything to fix this" << dendl;
+      break;
+    }
+    generic_dout(0) << "fix is viable" << dendl;
+
+    if (checks_only)
+      break;
+
+    err = fix_osdmap_full(store, db, old_vers, new_vers);
     if (err < 0) {
       derr << "something went wrong while fixing the store" << dendl;
     }
