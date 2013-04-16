@@ -1529,6 +1529,17 @@ void FileJournal::committed_thru(uint64_t seq)
   dout(5) << "committed_thru " << seq << " (last_committed_seq " << last_committed_seq << ")" << dendl;
   last_committed_seq = seq;
 
+  // completions!
+  {
+    Mutex::Locker locker(finisher_lock);
+    queue_completions_thru(seq);
+    if (plug_journal_completions && seq >= header.start_seq) {
+      dout(10) << " removing completion plug, queuing completions thru journaled_seq " << journaled_seq << dendl;
+      plug_journal_completions = false;
+      queue_completions_thru(journaled_seq);
+    }
+  }
+
   // adjust start pointer
   while (!journalq.empty() && journalq.front().first <= seq) {
     journalq.pop_front();
@@ -1542,17 +1553,6 @@ void FileJournal::committed_thru(uint64_t seq)
   }
   must_write_header = true;
   print_header();
-
-  {
-    Mutex::Locker locker(finisher_lock);
-    // completions!
-    queue_completions_thru(seq);
-    if (plug_journal_completions && seq >= header.start_seq) {
-      dout(10) << " removing completion plug, queuing completions thru journaled_seq " << journaled_seq << dendl;
-      plug_journal_completions = false;
-      queue_completions_thru(journaled_seq);
-    }
-  }
 
   // committed but unjournaled items
   while (!writeq_empty() && peek_write().seq <= seq) {
