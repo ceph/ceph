@@ -274,6 +274,35 @@ public:
    *	   the class that is implementing PaxosService
    */
   void propose_pending();
+
+  /**
+   * Let others request us to propose.
+   *
+   * At the moment, this is just a wrapper to propose_pending() with an
+   * extra check for is_writeable(), but it's a good practice to dissociate
+   * requests for proposals from direct usage of propose_pending() for
+   * future use -- we might want to perform additional checks or put a
+   * request on hold, for instance.
+   */
+  void request_proposal() {
+    assert(is_writeable());
+
+    propose_pending();
+  }
+  /**
+   * Request service @p other to perform a proposal.
+   *
+   * We could simply use the function above, requesting @p other directly,
+   * but we might eventually want to do something to the request -- say,
+   * set a flag stating we're waiting on a cross-proposal to be finished.
+   */
+  void request_proposal(PaxosService *other) {
+    assert(other != NULL);
+    assert(other->is_writeable());
+
+    other->request_proposal();
+  }
+
   /**
    * Dispatch a message by passing it to several different functions that are
    * either implemented directly by this service, or that should be implemented
