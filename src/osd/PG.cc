@@ -4814,16 +4814,13 @@ void PG::set_last_peering_reset()
 }
 
 struct FlushState {
-  PG *pg;
+  PGRef pg;
   epoch_t epoch;
-  FlushState(PG *pg, epoch_t epoch) : pg(pg), epoch(epoch) {
-    pg->get();
-  }
+  FlushState(PG *pg, epoch_t epoch) : pg(pg), epoch(epoch) {}
   ~FlushState() {
     pg->lock();
     pg->queue_flushed(epoch);
     pg->unlock();
-    pg->put();
   }
 };
 typedef std::tr1::shared_ptr<FlushState> FlushStateRef;
