@@ -660,6 +660,7 @@ struct req_state {
 /** Store basic data on an object */
 struct RGWObjEnt {
   std::string name;
+  std::string ns;
   std::string owner;
   std::string owner_display_name;
   uint64_t size;
