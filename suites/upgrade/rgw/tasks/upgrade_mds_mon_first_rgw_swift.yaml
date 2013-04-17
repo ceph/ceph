@@ -13,15 +13,14 @@ tasks:
      branch: bobtail
 - ceph:
 - rgw: [client.0]
-- s3tests:
+- swift:
     client.0:
       rgw_server: client.0
 - install.upgrade:
      all:
         branch: next
-- ceph.restart: [mds.a, osd.0, osd.1, osd.2, osd.3, mon.a, mon.b, mon.c]
+- ceph.restart: [mds.a, mon.a, mon.b, mon.c, osd.0, osd.1, osd.2, osd.3]
 - rgw: [client.0]
-- s3tests:
+- swift:
     client.0:
       rgw_server: client.0
-
