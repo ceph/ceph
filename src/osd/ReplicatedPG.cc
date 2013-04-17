@@ -3696,17 +3696,15 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
 class C_OSD_OpApplied : public Context {
 public:
-  ReplicatedPG *pg;
+  ReplicatedPGRef pg;
   ReplicatedPG::RepGather *repop;
 
   C_OSD_OpApplied(ReplicatedPG *p, ReplicatedPG::RepGather *rg) :
     pg(p), repop(rg) {
     repop->get();
-    pg->get();    // we're copying the pointer
   }
   void finish(int r) {
     pg->op_applied(repop);
-    pg->put();
   }
 };
 
