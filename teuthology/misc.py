@@ -38,7 +38,7 @@ def get_testdir(ctx):
         jobids = {}
         for machine in ctx.config['targets'].iterkeys():
             status = lockstatus.get_status(ctx, machine)
-            if status is None or 'description' not in status:
+            if status is None or 'description' not in status or status['description'] is None:
                 continue
             jid = status['description'].split('/')[-1]
             if jid is None or jid == 'None':

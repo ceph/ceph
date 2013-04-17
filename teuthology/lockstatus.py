@@ -22,3 +22,4 @@ def get_status(ctx, name):
         return json.loads(content)
     return None
 
+
