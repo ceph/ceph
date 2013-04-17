@@ -75,3 +75,4 @@
     --format <output-format>           output format (default: plain, json, xml)
     --pretty-format                    make json or xml output more readable
     --no-settle                        do not wait for udevadm to settle on map/unmap
+    --no-progress                      do not show progress for long-running commands
