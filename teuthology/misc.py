@@ -38,15 +38,20 @@ def get_testdir(ctx):
         jobids = {}
         for machine in ctx.config['targets'].iterkeys():
             status = lockstatus.get_status(ctx, machine)
+            if status is None or 'description' not in status:
+                continue
             jid = status['description'].split('/')[-1]
+            if jid is None or jid == 'None':
+                continue
             jobids[jid] = 1
             if len(jobids) > 1:
                 break
         if len(jobids) == 1:
             # same job id on all machines, use that as the test subdir
             (jobid,) = jobids.iterkeys()
-            global_jobid = jobid
-            log.debug('setting my jobid to {jid}'.format(jid=global_jobid))
+            if jobid is not None:
+                global_jobid = jobid
+                log.debug('setting my jobid to {jid}'.format(jid=global_jobid))
         checked_jobid = True
 
     # the subdir is chosen using the priority:
@@ -54,7 +59,7 @@ def get_testdir(ctx):
     # 2. run name specified by teuthology schedule
     # 3. user@timestamp
     if global_jobid is not None:
-        log.debug('with jobid basedir: {b}'.format(b=str(global_jobid)))
+        log.debug('with jobid basedir: {b}'.format(b=global_jobid))
         return '{basedir}/{jobid}'.format(
                     basedir=basedir,
                     jobid=global_jobid,
