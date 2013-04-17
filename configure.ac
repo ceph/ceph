@@ -416,6 +416,10 @@ AM_CONDITIONAL(WITH_OCF, [ test "$with_ocf" = "yes" ])
 AC_CHECK_LIB([snappy], [snappy_compress], [], [AC_MSG_FAILURE([libsnappy not found])])
 # use system leveldb
 AC_CHECK_LIB([leveldb], [leveldb_open], [], [AC_MSG_FAILURE([libleveldb not found])], [-lsnappy -lpthread])
+# see if we can use bloom filters with leveldb
+AC_LANG_PUSH([C++])
+AC_CHECK_HEADER([leveldb/filter_policy.h], [AC_DEFINE([HAVE_LEVELDB_FILTER_POLICY], [1], [Defined if LevelDB supports bloom filters ])])
+AC_LANG_POP([C++])
 
 # use system libs3?
 AC_ARG_WITH([system-libs3],

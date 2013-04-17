@@ -15,7 +15,9 @@
 #include "leveldb/write_batch.h"
 #include "leveldb/slice.h"
 #include "leveldb/cache.h"
+#ifdef HAVE_LEVELDB_FILTER_POLICY
 #include "leveldb/filter_policy.h"
+#endif
 
 /**
  * Uses LevelDB to implement the KeyValueDB interface
@@ -24,7 +26,9 @@ class LevelDBStore : public KeyValueDB {
   string path;
   boost::scoped_ptr<leveldb::DB> db;
   boost::scoped_ptr<leveldb::Cache> db_cache;
+#ifdef HAVE_LEVELDB_FILTER_POLICY
   boost::scoped_ptr<const leveldb::FilterPolicy> filterpolicy;
+#endif
 
   int init(ostream &out, bool create_if_missing);
 
@@ -68,7 +72,9 @@ public:
   LevelDBStore(const string &path) :
     path(path),
     db_cache(NULL),
+#ifdef HAVE_LEVELDB_FILTER_POLICY
     filterpolicy(NULL),
+#endif
     options()
   {}
 
