@@ -156,19 +156,33 @@ list<pair<version_t,version_t> > gen_intervals(list<version_t> &lst)
   return intervals;
 }
 
-string dump_intervals(list<version_t> &vers) {
-  list<pair<version_t,version_t> > gaps = gen_intervals(vers);
+string print_interval(pair<version_t,version_t> p)
+{
+  ostringstream s;
+  if (p.first == p.second)
+    s << p.first;
+  else
+    s << "[" << p.first << "," << p.second << "]";
+  return s.str();
+}
+
+string dump_intervals(list<pair<version_t,version_t> > &lst)
+{
   ostringstream os;
-  for (list<pair<version_t,version_t> >::iterator it = gaps.begin();
-       it != gaps.end(); ++it) {
-    pair<version_t,version_t> &v = *it;
-    if (v.first == v.second)
-      os << " " << v.first;
-    else
-      os << " [" << v.first << "," << v.second << "]";
+  for (list<pair<version_t,version_t> >::iterator it = lst.begin();
+       it != lst.end(); ++it) {
+    os << " ";
+    os << print_interval(*it);
   }
   return os.str();
 }
+
+string dump_intervals(list<version_t> &vers)
+{
+  list<pair<version_t,version_t> > gaps = gen_intervals(vers);
+  return dump_intervals(gaps);
+}
+
 
 int check_old_service_versions(MonitorStoreRef store,
                                ServiceVersions &svc)
@@ -291,81 +305,69 @@ int check_osdmap_gaps(MonitorDBStoreRef db,
   return 0;
 }
 
-int fix_osdmap_gaps(MonitorDBStoreRef db, list<version_t> &missing)
+
+int copy_full_maps(MonitorStoreRef store,
+                   MonitorDBStoreRef db,
+                   pair<version_t,version_t> &interval)
 {
-  generic_dout(0) << __func__ << dendl;
-  assert(missing.size() > 0);
+  generic_dout(0) << " copying " << print_interval(interval) << dendl;
 
-  // obtain last known full map (which should be the last version before
-  // the first missing version).
-  version_t last_full = missing.front() - 1;
-  string full_ver = "full_" + stringify(last_full);
-  bufferlist bl;
+  version_t first = interval.first;
+  version_t last = interval.second;
 
-  assert(db->exists("osdmap", full_ver));
-  db->get("osdmap", full_ver, bl);
-
-  generic_dout(0) << " loading latest available full map before the gap"
-                  << " (e" << last_full << ")" << dendl;
-  OSDMap osdmap;
-  osdmap.decode(bl);
-
-  generic_dout(0) << " recreating full maps from incrementals" << dendl;
-
-  size_t total = missing.size();
-  size_t count = 0;
+  int count = 0;
   int last_progress = -1;
 
-  for (list<version_t>::iterator it = missing.begin();
-       it != missing.end(); ++it) {
-    count ++;
-    int done = calc_progress(0, total, count);
+  for (version_t v = first; v <= last; ++v) {
+    int done = calc_progress(first, last, v);
     if (done > last_progress && !(done % 10)) {
-      generic_dout(0) << " " << done << "\% done" << dendl;
+      generic_dout(1) << " " << done << "\% done" << dendl;
       last_progress = done;
     }
 
-    version_t v = *it;
+    string full_ver = "full_" + stringify(v);
 
-    full_ver = "full_" + stringify(v);
+    // this should have been guaranteed before!
     assert(!db->exists("osdmap", full_ver));
+    assert(store->exists_bl_sn("osdmap", v));
 
-    generic_dout(0) << "   read incremental e" << v << dendl;
-    assert(db->exists("osdmap", v));
-    bufferlist inc_bl;
-    db->get("osdmap", v, inc_bl);
+    bufferlist bl;
+    store->get_bl_sn_safe(bl, "osdmap_full", v);
 
-    generic_dout(0) << "   applying incremental e" << v << dendl;
-    OSDMap::Incremental inc(inc_bl);
-    osdmap.apply_incremental(inc);
-
-    generic_dout(0) << "   write out new full map e" << v << dendl;
-    bufferlist full_bl;
-    osdmap.encode(full_bl);
     MonitorDBStore::Transaction t;
-    t.put("osdmap", full_ver, full_bl);
+    t.put("osdmap", full_ver, bl);
     db->apply_transaction(t);
+
+    count ++;
   }
+  generic_dout(0) << " " << count << " version" << (count > 1 ? "s" : "")
+                  << " copied" << dendl;
 
-  generic_dout(0) << " check rebuilt maps" << dendl;
-  version_t last_rebuilt = missing.back();
-  string last_rebuilt_full_ver = "full_" + stringify(last_rebuilt);
-  assert(db->exists("osdmap", last_rebuilt_full_ver));
+  return 0;
+}
 
-  version_t next_full = last_rebuilt + 1;
-  string next_full_ver = "full_" + stringify(next_full);
-  if (!db->exists("osdmap", next_full)) {
-    assert(!db->exists("osdmap", next_full_ver));
-    generic_dout(0) << " everything should be fine" << dendl;
+int check_rebuilt_map(MonitorDBStoreRef db, OSDMap &osdmap)
+{
+  version_t epoch = osdmap.get_epoch();
+  generic_dout(0) << "   check rebuilt map e" << epoch << dendl;
+
+  version_t next_ver = epoch+1;
+  string next_full_ver = "full_" + next_ver;
+
+  if (!db->exists("osdmap", next_ver)) {
+    generic_dout(5) << "      last version!" << dendl;
+    return 0;
+  } else if (!db->exists("osdmap", next_full_ver)) {
+    generic_dout(5) << "      there are more versions but not yet rebuilt"
+                    << dendl;
     return 0;
   }
-  assert(db->exists("osdmap", next_full_ver));
 
   bufferlist next_full_bl;
   bufferlist next_inc_bl;
 
   db->get("osdmap", next_full_ver, next_full_bl);
-  db->get("osdmap", next_full, next_inc_bl);
+  db->get("osdmap", next_full_ver, next_inc_bl);
 
   OSDMap::Incremental inc(next_inc_bl);
   osdmap.apply_incremental(inc);
@@ -375,12 +377,84 @@ int fix_osdmap_gaps(MonitorDBStoreRef db, list<version_t> &missing)
 
   if (!resulting_bl.contents_equal(next_full_bl)) {
     derr << " unable to guarantee maps correctness!" << dendl;
-    derr << " contents from full map e" << last_rebuilt << " + next incremental"
-         << " don't match full map e" << next_full << dendl;
+    derr << " contents from full map e" << epoch << " + next incremental"
+         << " don't match full map e" << next_ver << dendl;
     return -EINVAL;
   }
 
-  generic_dout(0) << " everything matched!" << dendl;
+  return 0;
+}
+
+int rebuild_full_maps(MonitorStoreRef store,
+                      MonitorDBStoreRef db,
+                      pair<version_t,version_t> &interval)
+{
+  generic_dout(0) << " rebuilding " << print_interval(interval)
+                  << " from incrementals" << dendl;
+
+  version_t first = interval.first;
+  version_t last = interval.second;
+
+  version_t last_full = first - 1;
+  string full_ver = "full_" + stringify(last_full);
+
+  bufferlist bl;
+
+  if (db->exists("osdmap", full_ver)) {
+    generic_dout(1) << "   reading last full map from kv store" << dendl;
+    db->get("osdmap", full_ver, bl);
+  } else if (store->exists_bl_sn("osdmap_full", last_full)) {
+    generic_dout(1) << "   reading last full map from old-format store"
+                    << dendl;
+    store->get_bl_sn_safe(bl, "osdmap_full", last_full);
+  } else {
+    derr << "unable to find the last full map e" << last_full << dendl;
+    return -ENOENT;
+  }
+
+  assert(bl.length() > 0);
+
+  OSDMap osdmap;
+  osdmap.decode(bl);
+
+  int count = 0;
+  int last_progress = -1;
+
+  for (version_t v = first; v <= last; ++v) {
+    int done = calc_progress(first, last, v);
+    if (done > last_progress && !(done % 10)) {
+      generic_dout(1) << " " << done << "\% done" << dendl;
+      last_progress = done;
+    }
+
+    full_ver = "full_" + stringify(v);
+    assert(!db->exists("osdmap", full_ver));
+
+    generic_dout(5) << "   read incremental e" << v << dendl;
+    assert(db->exists("osdmap", v));
+    bufferlist inc_bl;
+    db->get("osdmap", v, inc_bl);
+
+    generic_dout(5) << "   applying incremental e" << v << dendl;
+    OSDMap::Incremental inc(inc_bl);
+    osdmap.apply_incremental(inc);
+
+    generic_dout(5) << "   write out new full map e" << v << dendl;
+    bufferlist full_bl;
+    osdmap.encode(full_bl);
+    MonitorDBStore::Transaction t;
+    t.put("osdmap", full_ver, full_bl);
+    db->apply_transaction(t);
+  }
+  generic_dout(0) << " " << count << " version" << (count > 1 ? "s" : "")
+                  << " rebuilt" << dendl;
+
+  int err = check_rebuilt_map(db, osdmap);
+  if (err < 0) {
+    derr << "error checking rebuilt maps -- unable to guarantee correctness"
+         << dendl;
+    return err;
+  }
 
   return 0;
 }
@@ -405,57 +479,70 @@ int fix_osdmap_full(MonitorStoreRef store,
   }
   *_dout << dendl;
   generic_dout(0) << " new-format available versions:"
-                  << " [" << osdm_new.first_committed << ", "
+                  << " [" << osdm_new.first_committed << ","
                   << osdm_new.last_committed << "]"
-                  << " full " << dump_intervals(osdm_old.found_full);
-  if (osdm_old.missing_full.size() > 0) {
-    *_dout << " missing " << dump_intervals(osdm_old.missing_full);
+                  << " full " << dump_intervals(osdm_new.found_full);
+  if (osdm_new.missing_full.size() > 0) {
+    *_dout << " missing " << dump_intervals(osdm_new.missing_full);
   }
   *_dout << dendl;
 
-  // move versions to kvstore if they don't exist there; as soon as we find an
-  // already existing full version on the kv store, stop and check if we have
-  // any gaps in the osdmap's full versions on the kv store.
-  generic_dout(0) << "move old-format osdmap full versions to kv store" << dendl;
-  int count = 0;
-  int last_progress = -1;
-  for (version_t v = osdm_old.first_committed;
-       v <= osdm_old.last_committed; ++v) {
-    int done = calc_progress(osdm_old.first_committed,
-                             osdm_old.last_committed, v);
-    if (done > last_progress && !(done % 10)) {
-      generic_dout(0) << " " << done << "\% done" << dendl;
-      last_progress = done;
+  list<pair<version_t,version_t> > missing_full;
+  missing_full = gen_intervals(osdm_new.missing_full);
+
+  list<pair<version_t,version_t> > to_copy;
+  list<pair<version_t,version_t> > to_rebuild;
+
+  generic_dout(0) << "generate intervals to copy and to rebuild" << dendl;
+
+  for (list<pair<version_t,version_t> >::iterator it = missing_full.begin();
+       it != missing_full.end(); ++it) {
+
+    version_t first = (*it).first;
+    version_t last = (*it).second;
+
+    assert(first >= osdm_old.first_committed);
+
+    if ((first >= osdm_old.first_committed)
+        && (last <= osdm_old.last_committed)) {
+      to_copy.push_back(*it);
+    } else if (first > osdm_old.last_committed) {
+      to_rebuild.push_back(*it);
+    } else if (last > osdm_old.last_committed) {
+      to_copy.push_back(make_pair(first, osdm_old.last_committed));
+      to_rebuild.push_back(make_pair(osdm_old.last_committed+1, last));
+    } else {
+      // We already guaranteed that we are only dealing with a kv store
+      // having versions >= than those on the old-format store.
+      assert(0 == "this should never happen!");
     }
-
-    string full_ver = "full_" + stringify(v);
-    if (db->exists("osdmap", full_ver)) {
-      generic_dout(0) << " osdmap full ver " << v
-              << " already exists on kv store -- stop!"
-              << dendl;
-      break;
-    }
-
-    bufferlist bl;
-    store->get_bl_sn_safe(bl, "osdmap_full", v);
-
-    MonitorDBStore::Transaction t;
-    t.put("osdmap", full_ver, bl);
-    db->apply_transaction(t);
-
-    count ++;
   }
-  generic_dout(0) << " " << count << " version" << (count > 1 ? "s" : "")
-                  << " moved" << dendl;
 
-  if (osdm_old.missing_full.size() > 0) {
-    int err = fix_osdmap_gaps(db, osdm_old.missing_full);
+  generic_dout(0) << " to copy:    " << dump_intervals(to_copy) << dendl;
+  generic_dout(0) << " to rebuild: " << dump_intervals(to_rebuild) << dendl;
+
+  generic_dout(0) << "copying from old-format store to kv store" << dendl;
+  for (list<pair<version_t,version_t> >::iterator it = to_copy.begin();
+       it != to_copy.end(); ++it) {
+
+    int err = copy_full_maps(store, db, (*it));
     if (err < 0) {
-      derr << " unable to fix osdmap full version gaps" << dendl;
-      return -EINVAL;
+      derr << "error copying versions for interval " << print_interval(*it)
+           << ": " << cpp_strerror(err) << dendl;
+      return err;
     }
+  }
 
-    generic_dout(0) << " all gaps fixed!" << dendl;
+  generic_dout(0) << "rebuilding missing maps from incrementals" << dendl;
+  for (list<pair<version_t,version_t> >::iterator it = to_rebuild.begin();
+       it != to_rebuild.end(); ++it) {
+
+    int err = rebuild_full_maps(store, db, (*it));
+    if (err < 0) {
+      derr << "error rebuilding maps for interval " << print_interval(*it)
+           << ": " << cpp_strerror(err) << dendl;
+      return err;
+    }
   }
 
   // sanity check gaps in kv store's osdmap's full versions
@@ -463,7 +550,7 @@ int fix_osdmap_full(MonitorStoreRef store,
                   << dendl;
   list<version_t> missing;
   int err = check_osdmap_gaps(db,
-                              osdm_old.first_committed,
+                              osdm_new.first_committed,
                               osdm_new.last_committed,
                               missing);
   if (err < 0) {
