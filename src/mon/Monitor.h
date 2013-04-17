@@ -1507,6 +1507,7 @@ public:
 
     void _convert_monitor();
     void _convert_machines(string machine);
+    void _convert_osdmap_full();
     void _convert_machines();
     void _convert_paxos();
   };
