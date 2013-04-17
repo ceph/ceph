@@ -1809,7 +1809,6 @@ static const char *nonsigned_subresources[] = {
   "caps",
   "index",
   "object",
-  "policy",
   NULL
 };
 
