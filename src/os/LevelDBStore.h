@@ -14,6 +14,8 @@
 #include "leveldb/db.h"
 #include "leveldb/write_batch.h"
 #include "leveldb/slice.h"
+#include "leveldb/cache.h"
+#include "leveldb/filter_policy.h"
 
 /**
  * Uses LevelDB to implement the KeyValueDB interface
@@ -21,11 +23,56 @@
 class LevelDBStore : public KeyValueDB {
   string path;
   boost::scoped_ptr<leveldb::DB> db;
+  boost::scoped_ptr<leveldb::Cache> db_cache;
+  boost::scoped_ptr<const leveldb::FilterPolicy> filterpolicy;
 
   int init(ostream &out, bool create_if_missing);
 
 public:
-  LevelDBStore(const string &path) : path(path) {}
+  /**
+   * options_t: Holds options which are minimally interpreted
+   * on initialization and then passed through to LevelDB.
+   * We transform a couple of these into actual LevelDB
+   * structures, but the rest are simply passed through unchanged. See
+   * leveldb/options.h for more precise details on each.
+   *
+   * Set them after constructing the LevelDBStore, but before calling
+   * open() or create_and_open().
+   */
+  struct options_t {
+    uint64_t write_buffer_size; /// in-memory write buffer size
+    int max_open_files; /// maximum number of files LevelDB can open at once
+    uint64_t cache_size; /// size of extra decompressed cache to use
+    uint64_t block_size; /// user data per block
+    int bloom_size; /// number of bits per entry to put in a bloom filter
+    bool compression_enabled; /// whether to use libsnappy compression or not
+
+    // don't change these ones. No, seriously
+    int block_restart_interval;
+    bool error_if_exists;
+    bool paranoid_checks;
+
+    options_t() :
+      write_buffer_size(0), //< 0 means default
+      max_open_files(0), //< 0 means default
+      cache_size(0), //< 0 means no cache (default)
+      block_size(0), //< 0 means default
+      bloom_size(0), //< 0 means no bloom filter (default)
+      compression_enabled(true), //< set to false for no compression
+      block_restart_interval(0), //< 0 means default
+      error_if_exists(false), //< set to true if you want to check nonexistence
+      paranoid_checks(false) //< set to true if you want paranoid checks
+    {}
+  } options;
+
+  LevelDBStore(const string &path) :
+    path(path),
+    db_cache(NULL),
+    filterpolicy(NULL),
+    options()
+  {}
+
+  ~LevelDBStore() {}
 
   /// Opens underlying db
   int open(ostream &out) {
