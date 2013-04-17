@@ -87,6 +87,14 @@ ceph_mon_store_converter_LDADD =  $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 ceph_mon_store_converter_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += ceph_mon_store_converter
 
+ceph_mon_kvstore_fix_SOURCES =  mon_kvstore_fix.cc \
+			       mon/MonitorStore.cc
+ceph_mon_kvstore_fix_LDFLAGS = ${AM_LDFLAGS}
+ceph_mon_kvstore_fix_LDADD =  $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+ceph_mon_kvstore_fix_CXXFLAGS = ${AM_CXXFLAGS}
+bin_PROGRAMS += ceph_mon_kvstore_fix
+
+
 
 # osd
 ceph_osd_SOURCES = ceph_osd.cc objclass/class_debug.cc \
