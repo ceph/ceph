@@ -177,6 +177,7 @@ enum {
   OPT_TEMP_REMOVE,
   OPT_OBJECT_RM,
   OPT_OBJECT_UNLINK,
+  OPT_OBJECT_STAT,
   OPT_GC_LIST,
   OPT_GC_PROCESS,
   OPT_REGION_INFO,
@@ -312,6 +313,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_OBJECT_RM;
     if (strcmp(cmd, "unlink") == 0)
       return OPT_OBJECT_UNLINK;
+    if (strcmp(cmd, "stat") == 0)
+      return OPT_OBJECT_STAT;
   } else if (strcmp(prev_cmd, "region") == 0) {
     if (strcmp(cmd, "info") == 0)
       return OPT_REGION_INFO;
@@ -540,6 +543,36 @@ static int parse_date_str(const string& date_str, utime_t& ut)
 
   return 0;
 }
+
+template <class T>
+static bool decode_dump(const char *field_name, bufferlist& bl, Formatter *f)
+{
+  T t;
+
+  bufferlist::iterator iter = bl.begin();
+
+  try {
+    ::decode(t, iter);
+  } catch (buffer::error& err) {
+    return false;
+  }
+
+  encode_json(field_name, t, f);
+
+  return true;
+}
+
+static bool dump_string(const char *field_name, bufferlist& bl, Formatter *f)
+{
+  string val;
+  if (bl.length() > 0) {
+    val.assign(bl.c_str(), bl.length());
+  }
+  f->dump_string(field_name, val);
+
+  return true;
+}
+
 
 int main(int argc, char **argv) 
 {
@@ -1506,6 +1539,58 @@ next:
       cerr << "ERROR: remove_obj_from_index() returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
     }
+  }
+
+  if (opt_cmd == OPT_OBJECT_STAT) {
+    int ret = init_bucket(bucket_name, bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    rgw_obj obj(bucket, object);
+
+    void *handle;
+    uint64_t obj_size;
+    map<string, bufferlist> attrs;
+    void *obj_ctx = store->create_context(NULL);
+    ret = store->prepare_get_obj(obj_ctx, obj, NULL, NULL, &attrs, NULL,
+                                 NULL, NULL, NULL, NULL, NULL, &obj_size, NULL, &handle, NULL);
+    store->finish_get_obj(&handle);
+    store->destroy_context(obj_ctx);
+    if (ret < 0) {
+      cerr << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << std::endl;
+      return 1;
+    }
+    formatter->open_object_section("object_metadata");
+    formatter->dump_string("name", object);
+    formatter->dump_unsigned("size", obj_size);
+
+    map<string, bufferlist>::iterator iter;
+    map<string, bufferlist> other_attrs;
+    for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+      bufferlist& bl = iter->second;
+      bool handled = false;
+      if (iter->first == RGW_ATTR_MANIFEST) {
+        handled = decode_dump<RGWObjManifest>("manifest", bl, formatter);
+      } else if (iter->first == RGW_ATTR_ACL) {
+        handled = decode_dump<RGWAccessControlPolicy>("policy", bl, formatter);
+      } else if (iter->first == RGW_ATTR_ID_TAG) {
+        handled = dump_string("tag", bl, formatter);
+      } else if (iter->first == RGW_ATTR_ETAG) {
+        handled = dump_string("etag", bl, formatter);
+      }
+
+      if (!handled)
+        other_attrs[iter->first] = bl;
+    }
+
+    formatter->open_object_section("attrs");
+    for (iter = other_attrs.begin(); iter != other_attrs.end(); ++iter) {
+      dump_string(iter->first.c_str(), iter->second, formatter);
+    }
+    formatter->close_section();
+    formatter->close_section();
+    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT_BUCKET_CHECK) {
