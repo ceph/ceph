@@ -1573,6 +1573,8 @@ next:
       bool handled = false;
       if (iter->first == RGW_ATTR_MANIFEST) {
         handled = decode_dump<RGWObjManifest>("manifest", bl, formatter);
+      } else if (iter->first == RGW_ATTR_ACL) {
+        handled = decode_dump<RGWAccessControlPolicy>("policy", bl, formatter);
       } else if (iter->first == RGW_ATTR_ID_TAG) {
         handled = dump_string("tag", bl, formatter);
       } else if (iter->first == RGW_ATTR_ETAG) {
