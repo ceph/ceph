@@ -48,7 +48,6 @@ namespace librbd {
     C_Request(CephContext *cct, Context *c, Mutex *l)
       : m_cct(cct), m_ctx(c), m_lock(l) {}
     virtual ~C_Request() {}
-    void set_req(AioRequest *req);
     virtual void finish(int r) {
       ldout(m_cct, 20) << "aio_cb completing " << dendl;
       {
@@ -63,16 +62,39 @@ namespace librbd {
     Mutex *m_lock;
   };
 
+  class C_OrderedWrite : public Context {
+  public:
+    C_OrderedWrite(CephContext *cct, LibrbdWriteback::write_result_d *result,
+		   LibrbdWriteback *wb)
+      : m_cct(cct), m_result(result), m_wb_handler(wb) {}
+    virtual ~C_OrderedWrite() {}
+    virtual void finish(int r) {
+      ldout(m_cct, 20) << "C_OrderedWrite completing " << m_result << dendl;
+      {
+	Mutex::Locker l(m_wb_handler->m_lock);
+	assert(!m_result->done);
+	m_result->done = true;
+	m_result->ret = r;
+	m_wb_handler->complete_writes(m_result->oid);
+      }
+      ldout(m_cct, 20) << "C_OrderedWrite finished " << m_result << dendl;
+    }
+  private:
+    CephContext *m_cct;
+    LibrbdWriteback::write_result_d *m_result;
+    LibrbdWriteback *m_wb_handler;
+  };
+
   LibrbdWriteback::LibrbdWriteback(ImageCtx *ictx, Mutex& lock)
     : m_tid(0), m_lock(lock), m_ictx(ictx)
   {
   }
 
-  tid_t LibrbdWriteback::read(const object_t& oid,
-			      const object_locator_t& oloc,
-			      uint64_t off, uint64_t len, snapid_t snapid,
-			      bufferlist *pbl, uint64_t trunc_size,
-			      __u32 trunc_seq, Context *onfinish)
+  void LibrbdWriteback::read(const object_t& oid,
+			     const object_locator_t& oloc,
+			     uint64_t off, uint64_t len, snapid_t snapid,
+			     bufferlist *pbl, uint64_t trunc_size,
+			     __u32 trunc_seq, Context *onfinish)
   {
     // on completion, take the mutex and then call onfinish.
     Context *req = new C_Request(m_ictx->cct, onfinish, &m_lock);
@@ -82,7 +104,6 @@ namespace librbd {
 				      len, off);
     rados_completion->release();
     assert(r >= 0);
-    return ++m_tid;
   }
 
   bool LibrbdWriteback::may_copy_on_write(const object_t& oid, uint64_t read_off, uint64_t read_len, snapid_t snapid)
@@ -132,13 +153,43 @@ namespace librbd {
 			  object_no, 0, m_ictx->layout.fl_object_size,
 			  objectx);
     uint64_t object_overlap = m_ictx->prune_parent_extents(objectx, overlap);
-
-    C_Request *req_comp = new C_Request(m_ictx->cct, oncommit, &m_lock);
+    write_result_d *result = new write_result_d(oid.name, oncommit);
+    m_writes[oid.name].push(result);
+    ldout(m_ictx->cct, 20) << "write will wait for result " << result << dendl;
+    C_OrderedWrite *req_comp = new C_OrderedWrite(m_ictx->cct, result, this);
     AioWrite *req = new AioWrite(m_ictx, oid.name,
 				 object_no, off, objectx, object_overlap,
 				 bl, snapc, snap_id,
 				 req_comp);
     req->send();
     return ++m_tid;
+  }
+
+  void LibrbdWriteback::complete_writes(const std::string& oid)
+  {
+    assert(m_lock.is_locked());
+    std::queue<write_result_d*>& results = m_writes[oid];
+    ldout(m_ictx->cct, 20) << "complete_writes() oid " << oid << dendl;
+    std::list<write_result_d*> finished;
+
+    while (!results.empty()) {
+      write_result_d *result = results.front();
+      if (!result->done)
+	break;
+      finished.push_back(result);
+      results.pop();
+    }
+
+    if (results.empty())
+      m_writes.erase(oid);
+
+    for (std::list<write_result_d*>::iterator it = finished.begin();
+	 it != finished.end(); ++it) {
+      write_result_d *result = *it;
+      ldout(m_ictx->cct, 20) << "complete_writes() completing " << result
+			     << dendl;
+      result->oncommit->complete(result->ret);
+      delete result;
+    }
   }
 }

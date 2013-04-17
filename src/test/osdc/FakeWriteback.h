@@ -17,10 +17,10 @@ public:
   FakeWriteback(CephContext *cct, Mutex *lock, uint64_t delay_ns);
   virtual ~FakeWriteback();
 
-  virtual tid_t read(const object_t& oid, const object_locator_t& oloc,
-		     uint64_t off, uint64_t len, snapid_t snapid,
-		     bufferlist *pbl, uint64_t trunc_size,  __u32 trunc_seq,
-		     Context *onfinish);
+  virtual void read(const object_t& oid, const object_locator_t& oloc,
+		    uint64_t off, uint64_t len, snapid_t snapid,
+		    bufferlist *pbl, uint64_t trunc_size,  __u32 trunc_seq,
+		    Context *onfinish);
 
   virtual tid_t write(const object_t& oid, const object_locator_t& oloc,
 		      uint64_t off, uint64_t len, const SnapContext& snapc,

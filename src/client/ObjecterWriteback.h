@@ -11,12 +11,12 @@ class ObjecterWriteback : public WritebackHandler {
   ObjecterWriteback(Objecter *o) : m_objecter(o) {}
   virtual ~ObjecterWriteback() {}
 
-  virtual tid_t read(const object_t& oid, const object_locator_t& oloc,
-		     uint64_t off, uint64_t len, snapid_t snapid,
-		     bufferlist *pbl, uint64_t trunc_size,  __u32 trunc_seq,
-		     Context *onfinish) {
-    return m_objecter->read_trunc(oid, oloc, off, len, snapid, pbl, 0,
-				  trunc_size, trunc_seq, onfinish);
+  virtual void read(const object_t& oid, const object_locator_t& oloc,
+		    uint64_t off, uint64_t len, snapid_t snapid,
+		    bufferlist *pbl, uint64_t trunc_size,  __u32 trunc_seq,
+		    Context *onfinish) {
+    m_objecter->read_trunc(oid, oloc, off, len, snapid, pbl, 0,
+			   trunc_size, trunc_seq, onfinish);
   }
 
   virtual bool may_copy_on_write(const object_t& oid, uint64_t read_off, uint64_t read_len, snapid_t snapid) {

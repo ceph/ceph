@@ -2291,6 +2291,9 @@ reprotect_and_return_err:
     ldout(ictx->cct, 20) << "diff_iterate " << ictx << " off = " << off
 			 << " len = " << len << dendl;
 
+    // ensure previous writes are visible to listsnaps
+    _flush(ictx);
+
     int r = ictx_check(ictx);
     if (r < 0)
       return r;

@@ -8,7 +8,7 @@
 # This will only work with particular qemu versions, like 1.0. Later
 # versions of qemu includ qemu-iotests directly in the qemu
 # repository.
-git clone git://repo.or.cz/qemu-iotests.git
+git clone git://ceph.com/git/qemu-iotests.git
 
 cd qemu-iotests
 mkdir bin

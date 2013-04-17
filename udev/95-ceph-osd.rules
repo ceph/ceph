@@ -17,5 +17,5 @@ ACTION=="add" SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-5ec00ceff05d", \
   RUN+="/sbin/cryptsetup --key-file /etc/ceph/dmcrypt-keys/$env{ID_PART_ENTRY_UUID} --key-size 256 create $env{ID_PART_ENTRY_UUID} /dev/$name", \
-  RUN+="bash -c 'while [ ! -e /dev/mapper/$env{ID_PART_ENTRY_UUID} ];do sleep 1; done'", \
+  RUN+="/bin/bash -c 'while [ ! -e /dev/mapper/$env{ID_PART_ENTRY_UUID} ];do sleep 1; done'", \
   RUN+="/usr/sbin/ceph-disk-activate --mount /dev/mapper/$env{ID_PART_ENTRY_UUID}"
