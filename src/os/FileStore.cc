@@ -1647,6 +1647,14 @@ int FileStore::mount()
 
   {
     LevelDBStore *omap_store = new LevelDBStore(omap_dir);
+
+    omap_store->options.write_buffer_size = g_conf->osd_leveldb_write_buffer_size;
+    omap_store->options.cache_size = g_conf->osd_leveldb_cache_size;
+    omap_store->options.block_size = g_conf->osd_leveldb_block_size;
+    omap_store->options.bloom_size = g_conf->osd_leveldb_bloom_size;
+    omap_store->options.compression_enabled = g_conf->osd_leveldb_compression;
+    omap_store->options.max_open_files = g_conf->osd_leveldb_max_open_files;
+
     stringstream err;
     if (omap_store->create_and_open(err)) {
       delete omap_store;

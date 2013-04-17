@@ -180,6 +180,12 @@ OPTION(mon_sync_debug_provider_fallback, OPT_STR, "") // monitor to be used as f
 OPTION(mon_sync_leader_kill_at, OPT_INT, 0) // kill the sync leader at a specifc point in the work flow
 OPTION(mon_sync_provider_kill_at, OPT_INT, 0) // kill the sync provider at a specific point in the work flow
 OPTION(mon_sync_requester_kill_at, OPT_INT, 0) // kill the sync requester at a specific point in the work flow
+OPTION(mon_leveldb_write_buffer_size, OPT_U64, 32*1024*1024) // monitor's leveldb write buffer size
+OPTION(mon_leveldb_cache_size, OPT_U64, 0) // monitor's leveldb cache size
+OPTION(mon_leveldb_block_size, OPT_U64, 4*1024*1024) // monitor's leveldb block size
+OPTION(mon_leveldb_bloom_size, OPT_INT, 0) // monitor's leveldb bloom bits per entry
+OPTION(mon_leveldb_max_open_files, OPT_INT, 0) // monitor's leveldb max open files
+OPTION(mon_leveldb_compression, OPT_BOOL, false) // monitor's leveldb uses compression
 OPTION(paxos_max_join_drift, OPT_INT, 10) // max paxos iterations before we must first sync the monitor stores
 OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long before proposing a map update
 OPTION(paxos_min_wait, OPT_DOUBLE, 0.05)  // min time to gather updates for after period of inactivity
@@ -429,6 +435,12 @@ OPTION(osd_op_history_duration, OPT_U32, 600) // Oldest completed op to track
 OPTION(osd_target_transaction_size, OPT_INT, 30)     // to adjust various transactions that batch smaller items
 OPTION(osd_failsafe_full_ratio, OPT_FLOAT, .97) // what % full makes an OSD "full" (failsafe)
 OPTION(osd_failsafe_nearfull_ratio, OPT_FLOAT, .90) // what % full makes an OSD near full (failsafe)
+OPTION(osd_leveldb_write_buffer_size, OPT_U64, 0) // OSD's leveldb write buffer size
+OPTION(osd_leveldb_cache_size, OPT_U64, 0) // OSD's leveldb cache size
+OPTION(osd_leveldb_block_size, OPT_U64, 0) // OSD's leveldb block size
+OPTION(osd_leveldb_bloom_size, OPT_INT, 0) // OSD's leveldb bloom bits per entry
+OPTION(osd_leveldb_max_open_files, OPT_INT, 0) // OSD's leveldb max open files
+OPTION(osd_leveldb_compression, OPT_BOOL, true) // OSD's leveldb uses compression
 
 /**
  * osd_client_op_priority and osd_recovery_op_priority adjust the relative
