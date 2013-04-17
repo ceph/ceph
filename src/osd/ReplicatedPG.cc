@@ -6065,14 +6065,11 @@ ObjectContext *ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
 }
 
 struct C_PG_MarkUnfoundLost : public Context {
-  ReplicatedPG *pg;
+  ReplicatedPGRef pg;
   list<ObjectContext*> obcs;
-  C_PG_MarkUnfoundLost(ReplicatedPG *p) : pg(p) {
-    pg->get();
-  }
+  C_PG_MarkUnfoundLost(ReplicatedPG *p) : pg(p) {}
   void finish(int r) {
     pg->_finish_mark_all_unfound_lost(obcs);
-    pg->put();
   }
 };
 
