@@ -502,8 +502,6 @@ public:
 
   // [primary only] content recovery state
  protected:
-  bool prior_set_built;
-
   struct PriorSet {
     set<int> probe; /// current+prior OSDs we need to probe.
     set<int> down;  /// down osds that would normally be in @a probe and might be interesting.
