@@ -1,0 +1,35 @@
+roles:
+- - mon.a
+  - mds.a
+  - osd.0
+  - osd.1
+- - mon.b
+  - mon.c
+  - osd.2
+  - osd.3
+- - client.0
+tasks:
+- install:
+     branch: bobtail
+- ceph:
+- rgw: [client.0]
+- swift:
+    client.0:
+      rgw_server: client.0
+- install.upgrade:
+     all:
+        branch: next
+- ceph.restart: [mon.a, mon.b, mon.c, osd.0, osd.1, osd.2, osd.3, mds.a]
+- rgw: [client.0]
+- s3readwrite:
+    client.0:
+      rgw_server: client.0
+      readwrite:
+        bucket: rwtest
+        readers: 10
+        writers: 3
+        duration: 300
+        files:
+          num: 10
+          size: 2000
+          stddev: 500
