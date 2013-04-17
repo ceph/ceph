@@ -2531,14 +2531,6 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
 
   op.setxattr(RGW_ATTR_ID_TAG, bl);
 
-  string shadow = obj.object;
-  shadow.append(".");
-  shadow.append(state->write_tag);
-
-  bufferlist shadow_bl;
-  shadow_bl.append(shadow);
-  op.setxattr(RGW_ATTR_SHADOW_OBJ, shadow_bl);
-
   return 0;
 }
 
