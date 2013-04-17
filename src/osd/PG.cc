@@ -1858,10 +1858,8 @@ bool PG::queue_scrub()
 }
 
 struct C_PG_FinishRecovery : public Context {
-  PG *pg;
-  C_PG_FinishRecovery(PG *p) : pg(p) {
-    pg->get();
-  }
+  PGRef pg;
+  C_PG_FinishRecovery(PG *p) : pg(p) {}
   void finish(int r) {
     pg->_finish_recovery(this);
   }
@@ -1920,7 +1918,6 @@ void PG::_finish_recovery(Context *c)
     dout(10) << "_finish_recovery -- stale" << dendl;
   }
   unlock();
-  put();
 }
 
 void PG::start_recovery_op(const hobject_t& soid)
