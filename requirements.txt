@@ -12,3 +12,4 @@ nose >=1.0.0
 fudge >=1.0.3
 boto >=2.0b4
 pexpect
+requests ==0.14.0
