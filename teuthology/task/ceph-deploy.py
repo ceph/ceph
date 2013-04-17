@@ -145,7 +145,6 @@ def build_ceph_cluster(ctx, config):
     install_nodes = './ceph-deploy install '+ceph_branch+" "+all_nodes
     purge_nodes = './ceph-deploy purge'+" "+all_nodes
     purgedata_nodes = './ceph-deploy purgedata'+" "+all_nodes
-    uninstall_nodes = './ceph-deploy uninstall'+" "+all_nodes
     mon_create_nodes = './ceph-deploy mon create'+" "+mon_nodes
     mon_hostname = mon_nodes.split(' ')[0]
     mon_hostname = str(mon_hostname)
@@ -246,6 +245,9 @@ def build_ceph_cluster(ctx, config):
         yield
 
     finally:
+        log.info('Purging package...')
+        execute_ceph_deploy(ctx, config, purge_nodes)
+
         if ctx.archive is not None:
             # archive mon data, too
             log.info('Archiving mon data...')
@@ -292,10 +294,8 @@ def build_ceph_cluster(ctx, config):
                 teuthology.pull_directory(remote, '/var/log/ceph',
                                           os.path.join(sub, 'log'))
 
-        log.info('Purging and Uninstalling ceph on test machines')
-        execute_ceph_deploy(ctx, config, purge_nodes)
+        log.info('Purging data on test machines')
         execute_ceph_deploy(ctx, config, purgedata_nodes)
-        execute_ceph_deploy(ctx, config, uninstall_nodes)
 
 @contextlib.contextmanager
 def task(ctx, config):
