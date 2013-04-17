@@ -1381,7 +1381,7 @@ void PG::build_might_have_unfound()
 }
 
 struct C_PG_ActivateCommitted : public Context {
-  PG *pg;
+  PGRef pg;
   epoch_t epoch;
   C_PG_ActivateCommitted(PG *p, epoch_t e)
     : pg(p), epoch(e) {}
@@ -1452,7 +1452,6 @@ void PG::activate(ObjectStore::Transaction& t,
   clean_up_local(t); 
 
   // find out when we commit
-  get();   // for callback
   tfin.push_back(new C_PG_ActivateCommitted(this, query_epoch));
   
   // initialize snap_trimq
@@ -1803,7 +1802,6 @@ void PG::_activate_committed(epoch_t e)
   }
 
   unlock();
-  put();
 }
 
 /*
