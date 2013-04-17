@@ -290,9 +290,9 @@ find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
 install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
 install -D src/init-radosgw.sysv $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
-mkdir -p $RPM_BUILD_ROOT/usr/sbin
-ln -sf ../../etc/init.d/ceph %{buildroot}/usr/sbin/rcceph
-ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/usr/sbin/rcceph-radosgw
+mkdir -p $RPM_BUILD_ROOT%{_sbindir}
+ln -sf ../../etc/init.d/ceph %{buildroot}/%{_sbindir}/rcceph
+ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/%{_sbindir}/rcceph-radosgw
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
 install -m 0644 -D src/rgw/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/radosgw
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
