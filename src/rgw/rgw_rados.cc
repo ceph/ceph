@@ -1151,7 +1151,8 @@ int RGWRados::decode_policy(bufferlist& bl, ACLOwner *owner)
  */
 int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& delim,
 			   string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
-			   bool get_content_type, string& ns, bool *is_truncated, RGWAccessListFilter *filter)
+			   bool get_content_type, string& ns, bool enforce_ns,
+                           bool *is_truncated, RGWAccessListFilter *filter)
 {
   int count = 0;
   bool truncated;
@@ -1178,7 +1179,9 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
       string obj = eiter->first;
       string key = obj;
 
-      if (!rgw_obj::translate_raw_obj_to_obj_in_ns(obj, ns)) {
+      bool check_ns = rgw_obj::translate_raw_obj_to_obj_in_ns(obj, ns);
+
+      if (enforce_ns && !check_ns) {
         if (!ns.empty()) {
           /* we've iterated past the namespace we're searching -- done now */
           truncated = false;
@@ -1206,6 +1209,7 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
 
       RGWObjEnt ent = eiter->second;
       ent.name = obj;
+      ent.ns = ns;
       result.push_back(ent);
       count++;
     }

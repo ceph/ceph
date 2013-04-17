@@ -292,7 +292,7 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
   if (delete_children) {
     ret = store->list_objects(bucket, max, prefix, delim, marker,
             objs, common_prefixes,
-            false, ns, (bool *)false, NULL);
+            false, ns, true, NULL, NULL);
 
     if (ret < 0)
       return ret;
@@ -307,7 +307,7 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
       objs.clear();
 
       ret = store->list_objects(bucket, max, prefix, delim, marker, objs, common_prefixes,
-                                false, ns, (bool *)false, NULL);
+                                false, ns, true, NULL, NULL);
       if (ret < 0)
         return ret;
     }
@@ -549,7 +549,8 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
   do {
     vector<RGWObjEnt> result;
     int r = store->list_objects(bucket, max, prefix, delim, marker,
-                                result, common_prefixes, false, ns,
+                                result, common_prefixes, false,
+                                ns, true,
                                 &is_truncated, NULL);
 
     if (r < 0) {

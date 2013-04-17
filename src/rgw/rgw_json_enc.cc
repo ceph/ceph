@@ -400,6 +400,7 @@ void RGWBucketInfo::dump(Formatter *f) const
 void RGWObjEnt::dump(Formatter *f) const
 {
   encode_json("name", name, f);
+  encode_json("namespace", ns, f);
   encode_json("owner", owner, f);
   encode_json("owner_display_name", owner_display_name, f);
   encode_json("size", size, f);
