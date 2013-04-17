@@ -3710,17 +3710,15 @@ public:
 
 class C_OSD_OpCommit : public Context {
 public:
-  ReplicatedPG *pg;
+  ReplicatedPGRef pg;
   ReplicatedPG::RepGather *repop;
 
   C_OSD_OpCommit(ReplicatedPG *p, ReplicatedPG::RepGather *rg) :
     pg(p), repop(rg) {
     repop->get();
-    pg->get();    // we're copying the pointer
   }
   void finish(int r) {
     pg->op_commit(repop);
-    pg->put();
   }
 };
 
