@@ -23,7 +23,15 @@
     bucket check               check bucket index
     object rm                  remove object
     object unlink              unlink object from bucket index
-    zone info                  show zone params info
+    region info                show region info
+    regions list               list all regions set on this cluster
+    region set                 set region info
+    region default             set default region
+    region-map show            show region-map
+    region-map set             set region-map
+    zone info                  show zone cluster params
+    zone set                   set zone cluster params
+    zone list                  list all zones set on this cluster
     pool add                   add an existing pool for data placement
     pool rm                    remove an existing pool from data placement set
     pools list                 list placement active set
@@ -38,6 +46,12 @@
                                specified date (and optional time)
     gc list                    dump expired garbage collection objects
     gc process                 manually process garbage
+    metadata get               get metadata info
+    metadata put               put metadata info
+    metadata rm                remove metadata info
+    metadata list              list metadata info
+    mdlog list                 list metadata log
+    bilog list                 list bucket index log
   options:
      --uid=<id>                user id
      --subuser=<name>          subuser name
