@@ -1185,8 +1185,8 @@ int main(int argc, char **argv)
       do {
         list<rgw_bi_log_entry> entries;
         ret = store->list_objects(bucket, max_entries - count, prefix, delim,
-                                  marker, result, common_prefixes, true, ns,
-                                  &truncated, NULL);
+                                  marker, result, common_prefixes, true,
+                                  ns, false, &truncated, NULL);
         if (ret < 0) {
           cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
           return -ret;
