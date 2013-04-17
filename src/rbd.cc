@@ -71,6 +71,7 @@ static string dir_oid = RBD_DIRECTORY;
 static string dir_info_oid = RBD_INFO;
 
 bool udevadm_settle = true;
+bool progress = true;
 
 #define dout_subsys ceph_subsys_rbd
 
@@ -152,7 +153,8 @@ void usage()
 "  --shared <tag>                     take a shared (rather than exclusive) lock\n"
 "  --format <output-format>           output format (default: plain, json, xml)\n"
 "  --pretty-format                    make json or xml output more readable\n"
-"  --no-settle                        do not wait for udevadm to settle on map/unmap\n";
+"  --no-settle                        do not wait for udevadm to settle on map/unmap\n"
+"  --no-progress                      do not show progress for long-running commands\n";
 }
 
 static string feature_str(uint64_t feature)
@@ -198,22 +200,28 @@ struct MyProgressContext : public librbd::ProgressContext {
   }
 
   int update_progress(uint64_t offset, uint64_t total) {
-    int pc = total ? (offset * 100ull / total) : 0;
-    if (pc != last_pc) {
-      cerr << "\r" << operation << ": "
-	//	   << offset << " / " << total << " "
-	   << pc << "% complete...";
-      cerr.flush();
-      last_pc = pc;
+    if (progress) {
+      int pc = total ? (offset * 100ull / total) : 0;
+      if (pc != last_pc) {
+	cerr << "\r" << operation << ": "
+	  //	   << offset << " / " << total << " "
+	     << pc << "% complete...";
+	cerr.flush();
+	last_pc = pc;
+      }
     }
     return 0;
   }
   void finish() {
-    cerr << "\r" << operation << ": 100% complete...done." << std::endl;
+    if (progress) {
+      cerr << "\r" << operation << ": 100% complete...done." << std::endl;
+    }
   }
   void fail() {
-    cerr << "\r" << operation << ": " << last_pc << "% complete...failed."
-	 << std::endl;
+    if (progress) {
+      cerr << "\r" << operation << ": " << last_pc << "% complete...failed."
+	   << std::endl;
+    }
   }
 };
 
@@ -2188,6 +2196,8 @@ int main(int argc, const char **argv)
       lock_tag = strdup(val.c_str());
     } else if (ceph_argparse_flag(args, i, "--no-settle", (char *)NULL)) {
       udevadm_settle = false;
+    } else if (ceph_argparse_flag(args, i, "--no-progress", (char *)NULL)) {
+      progress = false;
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char *) NULL)) {
       std::string err;
       long long ret = strict_strtoll(val.c_str(), 10, &err);
