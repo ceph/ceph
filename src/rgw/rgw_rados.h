@@ -466,8 +466,10 @@ class RGWRados
   int open_root_pool_ctx();
   int open_gc_pool_ctx();
 
-  int open_bucket_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
-  int open_bucket(rgw_bucket& bucket, librados::IoCtx&  io_ctx, string& bucket_oid);
+  int open_bucket_pool_ctx(const string& bucket_name, const string& pool, librados::IoCtx&  io_ctx);
+  int open_bucket_index_ctx(rgw_bucket& bucket, librados::IoCtx&  index_ctx);
+  int open_bucket_data_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
+  int open_bucket_index(rgw_bucket& bucket, librados::IoCtx&  index_ctx, string& bucket_oid);
 
   struct GetObjState {
     librados::IoCtx io_ctx;

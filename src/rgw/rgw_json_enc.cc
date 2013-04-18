@@ -385,7 +385,8 @@ void RGWUserInfo::decode_json(JSONObj *obj)
 void rgw_bucket::dump(Formatter *f) const
 {
   encode_json("name", name, f);
-  encode_json("pool", pool, f);
+  encode_json("pool", data_pool, f);
+  encode_json("index_pool", index_pool, f);
   encode_json("marker", marker, f);
   encode_json("bucket_id", bucket_id, f);
 }
@@ -437,16 +438,16 @@ void rgw_obj::dump(Formatter *f) const
 
 void RGWZoneParams::dump(Formatter *f) const
 {
-  encode_json("domain_root", domain_root.pool, f);
-  encode_json("control_pool", control_pool.pool, f);
-  encode_json("gc_pool", gc_pool.pool, f);
-  encode_json("log_pool", log_pool.pool, f);
-  encode_json("intent_log_pool", intent_log_pool.pool, f);
-  encode_json("usage_log_pool", usage_log_pool.pool, f);
-  encode_json("user_keys_pool", user_keys_pool.pool, f);
-  encode_json("user_email_pool", user_email_pool.pool, f);
-  encode_json("user_swift_pool", user_swift_pool.pool, f);
-  encode_json("user_uid_pool ", user_uid_pool.pool, f);
+  encode_json("domain_root", domain_root.data_pool, f);
+  encode_json("control_pool", control_pool.data_pool, f);
+  encode_json("gc_pool", gc_pool.data_pool, f);
+  encode_json("log_pool", log_pool.data_pool, f);
+  encode_json("intent_log_pool", intent_log_pool.data_pool, f);
+  encode_json("usage_log_pool", usage_log_pool.data_pool, f);
+  encode_json("user_keys_pool", user_keys_pool.data_pool, f);
+  encode_json("user_email_pool", user_email_pool.data_pool, f);
+  encode_json("user_swift_pool", user_swift_pool.data_pool, f);
+  encode_json("user_uid_pool ", user_uid_pool.data_pool, f);
 }
 
 static void decode_json(const char *field, rgw_bucket& bucket, JSONObj *obj)
