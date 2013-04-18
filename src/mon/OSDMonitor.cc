@@ -2813,6 +2813,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 
       if (newcrush.rule_exists(name)) {
 	ss << "rule " << name << " already exists";
+	err = 0;
       } else {
 	int rule = newcrush.add_simple_rule(name, root, type);
 	if (rule < 0) {
@@ -2844,6 +2845,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 
       if (!newcrush.rule_exists(name)) {
 	ss << "rule " << name << " does not exist";
+	err = 0;
       } else {
 	int ruleno = newcrush.get_rule_id(name);
 	assert(ruleno >= 0);
