@@ -7993,9 +7993,9 @@ int Client::ll_connectable_x(vinodeno_t vino, uint64_t* parent_ino,
 	r = -EINVAL;
     } else {
         in  = _ll_get_inode(vino);
-	if ( in->dn_set.empty())
+	if ( in->dn_set.empty()) {
 	    r = -ENOLINK;
-	else {
+	} else {
 	    dentry = in->get_first_parent();
 	    parent_inode = dentry->dir->parent_inode;
 	    *parent_ino = parent_inode->ino.val;
@@ -8004,9 +8004,14 @@ int Client::ll_connectable_x(vinodeno_t vino, uint64_t* parent_ino,
 	    } else if (parent_inode->dn_set.empty()) {
 		r = -ESTALE;
 	    } else {
-	      *parent_name_hash = ceph_str_hash(CEPH_STR_HASH_RJENKINS,
-						dentry->name.c_str(),
-						dentry->name.length());
+		Dentry *parent_dentry = parent_inode->get_first_parent();
+		Inode *grandparent_inode = parent_dentry->dir->parent_inode;
+		int which = grandparent_inode->dir_layout.dl_dir_hash;
+		if (!which)
+		    which = CEPH_STR_HASH_LINUX;
+		*parent_name_hash = ceph_str_hash(which,
+						  parent_dentry->name.c_str(),
+						  parent_dentry->name.length());
 		r = 0;
 	    }
 	}
@@ -8019,7 +8024,7 @@ int Client::ll_connectable_m(vinodeno_t* vino, uint64_t parent_ino,
 {
     Mutex::Locker lock(client_lock);
     int r = 0;
-    
+
     if (inode_map.count(*vino)) {
 	r = 0;
     } else if (vino->snapid.val != CEPH_NOSNAP) {
@@ -8036,30 +8041,13 @@ int Client::ll_connectable_m(vinodeno_t* vino, uint64_t parent_ino,
 	hashreq->head.args.getattr.mask = 0;
 
 	r = make_request(hashreq, -1, -1, NULL);
+	target = hashreq->target;
 
 	if (r == 0) {
 	    if (!target) {
 		r = -ESTALE;
-	    }
-	    else {
+	    } else {
 		target->ll_get();
-		MetaRequest *lookupreq = new MetaRequest(CEPH_MDS_OP_LOOKUP);
-		filepath parentpath;
-		Inode *parent_inode, *dummy = NULL;
-                Dentry *dentry = target->get_first_parent();
-		if ((! dentry) || (! dentry->dir->parent_inode))
-		  r = -ESTALE;
-		else {
-		  parent_inode = dentry->dir->parent_inode;
-		  parent_inode->make_nosnap_relative_path(parentpath);
-		  parentpath.push_dentry(dentry->name);
-
-		  lookupreq->set_filepath(parentpath);
-		  lookupreq->set_inode(parent_inode);
-		  lookupreq->head.args.getattr.mask = 0;
-
-		  r = make_request(lookupreq, 0, 0, &dummy);
-		}
 	    }
 	}
     }
