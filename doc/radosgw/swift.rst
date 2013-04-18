@@ -10,7 +10,6 @@ API
 .. toctree::
    :maxdepth: 1
 
-   Common <swift/index>
    Authentication <swift/auth>
    Service Ops <swift/serviceops>
    Container Ops <swift/containerops>
