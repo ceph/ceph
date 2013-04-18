@@ -468,7 +468,7 @@ private:
 
     if (!pi) pi = in->get_projected_inode();
     if (!pdft) pdft = &in->dirfragtree;
-    if (!px) px = &in->xattrs;
+    if (!px) px = in->get_projected_xattrs();
 
     bufferlist snapbl;
     if (psnapbl)
