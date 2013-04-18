@@ -3689,7 +3689,6 @@ void PG::scrub()
   lock();
   if (deleting) {
     unlock();
-    put();
     return;
   }
 
