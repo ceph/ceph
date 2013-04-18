@@ -581,7 +581,6 @@ static void dump_index_check(map<RGWObjCategory, RGWBucketStats> existing_stats,
   dump_bucket_usage(calculated_stats, formatter);
   formatter->close_section();
   formatter->close_section();
-  formatter->flush(cout);
 }
 
 int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
