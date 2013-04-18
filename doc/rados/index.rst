@@ -41,8 +41,17 @@ Once you have a deployed Ceph cluster, you may begin  operating your cluster.
 	
 	
 	Operations <operations/index>
-	Manual Pages <man/index>
 
+.. toctree::
+	:maxdepth: 1
+
+	Man Pages <man/index>
+
+
+.. toctree:: 
+	:hidden:
+	
+	troubleshooting/index
 
 .. raw:: html 
 
