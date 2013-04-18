@@ -31,7 +31,12 @@ set automatically.
 
 ``rgw socket path``
 
-:Description: The socket path for the domain socket. ``FastCgiExternalServer`` uses this socket. If you do not specify a socket path, RADOS Gateway will not run as an external server. The path you specify here must be the same as the path specified in the ``rgw.conf`` file.
+:Description: The socket path for the domain socket. ``FastCgiExternalServer`` 
+              uses this socket. If you do not specify a socket path, RADOS 
+              Gateway will not run as an external server. The path you specify 
+              here must be the same as the path specified in the ``rgw.conf`` 
+              file.
+
 :Type: String
 :Default: N/A
 
@@ -73,7 +78,9 @@ set automatically.
 
 ``rgw remote addr param``
 
-:Description: The remote address parameter. For example, the HTTP field containing the remote address, or the ``X-Forwarded-For`` address if a reverse proxy is operational.
+:Description: The remote address parameter. For example, the HTTP field 
+              containing the remote address, or the ``X-Forwarded-For`` 
+              address if a reverse proxy is operational.
 
 :Type: String
 :Default: ``REMOTE_ADDR``
@@ -88,7 +95,9 @@ set automatically.
 
 ``rgw op thread suicide timeout``
 	
-:Description: The time ``timeout`` in seconds before a RADOS Gateway process dies. Disbled if set to ``0``.
+:Description: The time ``timeout`` in seconds before a RADOS Gateway process 
+              dies. Disbled if set to ``0``.
+
 :Type: Integer 
 :Default: ``0``
 
@@ -102,7 +111,9 @@ set automatically.
 
 ``rgw num control oids``
 
-:Description: The number of notification objects used for cache synchronization between different ``rgw`` instances.
+:Description: The number of notification objects used for cache synchronization
+              between different ``rgw`` instances.
+
 :Type: Integer
 :Default: ``8``
 
@@ -116,14 +127,18 @@ set automatically.
 
 ``rgw log object name``
 
-:Description: The logging format for an object name. See manpage :manpage:`date` for details about format specifiers.
+:Description: The logging format for an object name. See manpage 
+              :manpage:`date` for details about format specifiers.
+
 :Type: Date
 :Default: ``%Y-%m-%d-%H-%i-%n``
 
 
 ``rgw log object name utc``
 
-:Description: Whether a logged object name includes a UTC time. If ``false``, it uses the local time.
+:Description: Whether a logged object name includes a UTC time. 
+              If ``false``, it uses the local time.
+
 :Type: Boolean
 :Default: ``false``
 
@@ -137,7 +152,9 @@ set automatically.
 
 ``rgw usage max user shards``
 
-:Description: The maximum number of shards used for a single user's usage logging.
+:Description: The maximum number of shards used for a single user's 
+              usage logging.
+
 :Type: Integer
 :Default: ``1``
 
@@ -158,7 +175,9 @@ set automatically.
 
 ``rgw usage log flush threshold``
 
-:Description: The number of dirty merged entries in the usage log before flushing synchronously.
+:Description: The number of dirty merged entries in the usage log before 
+              flushing synchronously.
+
 :Type: Integer
 :Default: 1024
 
@@ -172,14 +191,18 @@ set automatically.
 
 ``rgw intent log object name``
 
-:Description: The logging format for the intent log object name. See manpage :manpage:`date` for details about format specifiers.
+:Description: The logging format for the intent log object name. See manpage 
+              :manpage:`date` for details about format specifiers.
+
 :Type: Date
 :Default: ``%Y-%m-%d-%i-%n``
 
 
 ``rgw intent log object name utc``
 
-:Description: Whether the intent log object name includes a UTC time. If ``false``, it uses the local time.
+:Description: Whether the intent log object name includes a UTC time. 
+              If ``false``, it uses the local time.
+
 :Type: Boolean
 :Default: ``false``
 
@@ -193,16 +216,20 @@ set automatically.
 
 ``rgw mime types file``
 
-:Description: The path and location of the MIME types. Used for Swift auto-detection of object types.
+:Description: The path and location of the MIME types. Used for Swift 
+              auto-detection of object types.
+
 :Type: String
 :Default: ``/etc/mime.types``
 
+
 ``rgw resolve cname``
 
-:Description: Whether rgw should use dns cname record of the request hostname field (if hostname is not equal to ``rgw dns name``)
+:Description: Whether ``rgw`` should use DNS CNAME record of the request hostname 
+              field (if hostname is not equal to ``rgw dns name``).
+
 :Type: Boolean
 :Default: ``false``
-
 
 
 ``rgw enable ops log``
@@ -213,25 +240,75 @@ set automatically.
 
 ``rgw ops log rados``
 
-:Description: Whether rgw operations logging should be written into the RADOS backend
+:Description: Whether ``rgw`` operations logging should be written into the 
+              RADOS backend.
+
 :Type: Boolean
 :Default: ``true``
 
 ``rgw ops log socket path``
 
-:Description: The path of a unix domain socket to which operations logging data will be written.
+:Description: The path of a UNIX domain socket to which operations logging 
+              data will be written.
+
 :Type: String
 :Default: N/A
 
 ``rgw ops log data backlog``
 
-:Description: Total backlog data size for unix domain socket operations logging
+:Description: Total backlog data size for UNIX domain socket 
+              operations logging.
+
 :Type: Integer
 :Default: ``5ul << 20``
 
 ``rgw extended http attrs``
 
-:Description: Add new set of attributes that could be set on an object. These extra attributes can be set through HTTP header fields when putting the objects. If set, these attributes will return as HTTP fields when doing GET/HEAD on the object.
+:Description: Add new set of attributes that could be set on an object. These 
+              extra attributes can be set through HTTP header fields when 
+              putting the objects. If set, these attributes will return as HTTP 
+              fields when doing GET/HEAD on the object.
+
 :Type: String
 :Default: N/A
 :Example: "content_foo, content_bar"
+
+
+``rgw cluster root pool``
+
+:Description: RADOS pool to store ``radosgw`` metadata for this instance.
+:Type: String
+:Required: No
+:Default: ``.rgw.root``
+
+
+``rgw gc max objs``
+
+:Description: Number of objects to collect garbage collection data.
+:Type: 32-bit Integer
+:Default: 32
+
+
+``rgw gc obj min wait``
+
+:Description: Minimum time to wait before object's removal and its processing 
+              by the garbage collector.
+
+:Type: 32-bit Integer
+:Default: 2 hours.  ``2*60*60``
+
+
+``rgw gc processor max time``
+
+:Description: Max time for a single garbage collection process run.
+:Type: 32-bit Integer
+:Default: 1 hour.  ``60*60``
+
+
+``rgw gc processor max period``
+
+:Description: Max time between the beginning of two consecutive garbage 
+              collection processes run.
+
+:Type: 32-bit Integer
+:Default: 1 hour.  ``60*60``
