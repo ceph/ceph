@@ -2691,7 +2691,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	    return true;
 	  }
 	} else {
-	    ss << "no need to move item id " << id << " name '" << name << "' to location " << loc << " in crush map";
+	  ss << "no need to move item id " << id << " name '" << name << "' to location " << loc << " in crush map";
+	  err = 0;
 	}
       } while (false);
     }
