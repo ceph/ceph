@@ -245,8 +245,12 @@ def build_ceph_cluster(ctx, config):
         yield
 
     finally:
-        log.info('Purging package...')
-        execute_ceph_deploy(ctx, config, purge_nodes)
+        log.info('Stopping ceph...')
+        ctx.cluster.run(args=[
+                'sudo', 'stop', 'ceph',
+                run.Raw('||'),
+                'sudo', 'service', 'ceph', 'stop'
+                ])
 
         if ctx.archive is not None:
             # archive mon data, too
@@ -294,7 +298,9 @@ def build_ceph_cluster(ctx, config):
                 teuthology.pull_directory(remote, '/var/log/ceph',
                                           os.path.join(sub, 'log'))
 
-        log.info('Purging data on test machines')
+        log.info('Purging package...')
+        execute_ceph_deploy(ctx, config, purge_nodes)
+        log.info('Purging data...')
         execute_ceph_deploy(ctx, config, purgedata_nodes)
 
 @contextlib.contextmanager
