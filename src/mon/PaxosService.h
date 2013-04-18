@@ -600,6 +600,24 @@ public:
    */
   virtual void encode_trim(MonitorDBStore::Transaction *t);
   /**
+   *
+   */
+  virtual bool should_trim() {
+    bool want_trim = service_should_trim();
+
+    if (!want_trim)
+      return false;
+
+    if (g_conf->paxos_service_trim_min > 0) {
+      version_t trim_to = get_trim_to();
+      version_t first = get_first_committed();
+
+      if ((trim_to > 0) && trim_to > first)
+        return ((trim_to - first) >= (version_t)g_conf->paxos_service_trim_min);
+    }
+    return true;
+  }
+  /**
    * Check if we should trim.
    *
    * We define this function here, because we assume that as long as we know of
@@ -608,7 +626,7 @@ public:
    *
    * @returns true if we should trim; false otherwise.
    */
-  virtual bool should_trim() {
+  virtual bool service_should_trim() {
     update_trim();
     return (get_trim_to() > 0);
   }

@@ -536,7 +536,7 @@ void OSDMonitor::update_trim()
   }
 }
 
-bool OSDMonitor::should_trim()
+bool OSDMonitor::service_should_trim()
 {
   update_trim();
   return (get_trim_to() > 0);
