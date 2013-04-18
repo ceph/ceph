@@ -1259,11 +1259,11 @@ void Paxos::propose_queued()
   assert(!proposal->proposed);
 
   cancel_events();
-  dout(5) << __func__ << " " << (last_committed + 1)
+  dout(10) << __func__ << " " << (last_committed + 1)
 	  << " " << proposal->bl.length() << " bytes" << dendl;
   proposal->proposed = true;
 
-  dout(10) << __func__ << " ";
+  dout(30) << __func__ << " ";
   list_proposals(*_dout);
   *_dout << dendl;
 
