@@ -75,7 +75,7 @@ class MDSMonitor : public PaxosService {
   // we don't require full versions; don't encode any.
   virtual void encode_full(MonitorDBStore::Transaction *t) { }
 
-  bool should_trim() { return false; }
+  bool service_should_trim() { return false; }
   void encode_trim(MonitorDBStore::Transaction *t) { }
 
   void update_logger();
