@@ -64,6 +64,56 @@ that Ceph uses the entire partition for the journal.
 :Default: ``/var/lib/ceph/osd/$cluster-$id``
 
 
+``osd max write size`` 
+
+:Description: The maximum size of a write in megabytes.
+:Type: 32-bit Integer
+:Default: ``90``
+
+
+``osd client message size cap`` 
+
+:Description: The largest client data message allowed in memory.
+:Type: 64-bit Integer Unsigned
+:Default: 500MB default. ``500*1024L*1024L`` 
+
+
+``osd class dir`` 
+
+:Description: The class path for RADOS class plug-ins.
+:Type: String
+:Default: ``$libdir/rados-classes``
+
+
+Journal Settings
+================
+
+By default, Ceph expects that you will store an OSDs journal with the 
+following path::
+
+	/var/lib/ceph/osd/$cluster-$id/journal
+
+Without performance optimization, Ceph stores the journal on the same disk as
+the OSDs data. An OSD optimized for performance may use a separate disk to store
+journal data (e.g., a solid state drive delivers high performance journaling).
+
+Ceph's default ``osd journal size`` is 0, so you will need to set this in your 
+``ceph.conf`` file. A journal size should find the product of the ``filestore
+max sync interval`` and the expected throughput, and multiply the product by 
+two (2)::  
+	  
+	osd journal size = {2 * (expected throughput * filestore max sync interval)}
+
+The expected throughput number should include the expected disk throughput
+(i.e., sustained data transfer rate), and network throughput. For example, 
+a 7200 RPM disk will likely have approximately 100 MB/s. Taking the ``min()``
+of the disk and network throughput should provide a reasonable expected 
+throughput. Some users just start off with a 10GB journal size. For 
+example::
+
+	osd journal size = 10000
+
+
 ``osd journal`` 
 
 :Description: The path to the OSD's journal. This may be a path to a file or a
@@ -88,25 +138,7 @@ that Ceph uses the entire partition for the journal.
               expected speed multiplied by ``filestore max sync interval``.
 
 
-``osd max write size`` 
-
-:Description: The maximum size of a write in megabytes.
-:Type: 32-bit Integer
-:Default: ``90``
-
-
-``osd client message size cap`` 
-
-:Description: The largest client data message allowed in memory.
-:Type: 64-bit Integer Unsigned
-:Default: 500MB default. ``500*1024L*1024L`` 
-
-
-``osd class dir`` 
-
-:Description: The class path for RADOS class plug-ins.
-:Type: String
-:Default: ``$libdir/rados-classes``
+See `Journal Config Reference`_ for additional details.
 
 
 Monitor OSD Interaction
@@ -540,3 +572,4 @@ Miscellaneous
 .. _Configuring Monitor/OSD Interaction: ../mon-osd-interaction
 .. _Monitoring OSDs and PGs: ../../operations/monitoring-osd-pg#peering
 .. _Pool & PG Config Reference: ../pool-pg-config-ref
+.. _Journal Config Reference: ../journal-ref
