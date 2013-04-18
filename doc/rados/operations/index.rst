@@ -72,6 +72,7 @@ settings to identify and remedy issues you are encountering with your cluster.
 	../troubleshooting/community
 	../troubleshooting/troubleshooting-mon
 	../troubleshooting/troubleshooting-osd
+	../troubleshooting/troubleshooting-pg
 	../troubleshooting/log-and-debug
 	../troubleshooting/cpu-profiling
 	../troubleshooting/memory-profiling
