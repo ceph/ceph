@@ -224,7 +224,8 @@ void check_bad_user_bucket_mapping(RGWRados *store, const string& user_id, bool 
       rgw_bucket& actual_bucket = bucket_info.bucket;
 
       if (actual_bucket.name.compare(bucket.name) != 0 ||
-          actual_bucket.pool.compare(bucket.pool) != 0 ||
+          actual_bucket.data_pool.compare(bucket.data_pool) != 0 ||
+          actual_bucket.index_pool.compare(bucket.index_pool) != 0 ||
           actual_bucket.marker.compare(bucket.marker) != 0 ||
           actual_bucket.bucket_id.compare(bucket.bucket_id) != 0) {
         cout << "bucket info mismatch: expected " << actual_bucket << " got " << bucket << std::endl;
@@ -850,8 +851,8 @@ static int bucket_stats(RGWRados *store, std::string&  bucket_name, Formatter *f
 
   formatter->open_object_section("stats");
   formatter->dump_string("bucket", bucket.name);
-  formatter->dump_string("pool", bucket.pool);
-
+  formatter->dump_string("pool", bucket.data_pool);
+  formatter->dump_string("index_pool", bucket.index_pool);
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
   formatter->dump_string("owner", bucket_info.owner);
