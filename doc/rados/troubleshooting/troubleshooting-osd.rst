@@ -1,6 +1,6 @@
-==============================
- Troubleshooting OSDs and PGs
-==============================
+======================
+ Troubleshooting OSDs
+======================
 
 Before troubleshooting your OSDs, check your monitors and network first. If
 you execute ``ceph health`` or ``ceph -s`` on the command line and Ceph returns
