@@ -521,6 +521,7 @@ public:
     hobject_t oid(sobject_t("infos", CEPH_NOSNAP));
     return oid;
   }
+  static void clear_temp(ObjectStore *store, coll_t tmp);
   
 
 private:
@@ -991,8 +992,6 @@ protected:
   void _send_boot();
   
   friend class C_OSD_GetVersion;
-
-  static void clear_temp(ObjectStore *store, coll_t tmp);
 
   // -- alive --
   epoch_t up_thru_wanted;
