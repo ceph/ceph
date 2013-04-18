@@ -432,7 +432,8 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
   }
   formatter->open_object_section("stats");
   formatter->dump_string("bucket", bucket.name);
-  formatter->dump_string("pool", bucket.pool);
+  formatter->dump_string("pool", bucket.data_pool);
+  formatter->dump_string("index_pool", bucket.index_pool);
   
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
