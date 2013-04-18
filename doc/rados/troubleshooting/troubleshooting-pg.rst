@@ -259,3 +259,19 @@ If we want to get placement group 2.5 back online, for example, this tells us th
 it was last managed by ``osd.0`` and ``osd.2``.  Restarting those ``ceph-osd``
 daemons will allow the cluster to recover that placement group (and, presumably,
 many others).
+
+
+Only a Few OSDs Receive Data
+============================
+
+If you have many nodes in your cluster and only a few of them receive data,
+`check`_ the number of placement groups in your pool. Since placement groups get
+mapped to OSDs, a small number of placement groups will not distribute across
+your cluster. Try creating a pool with a placement group count that is a
+multiple of the number of OSDs. See `Placement Groups`_ for details. The default
+placement group count for pools isn't useful, but you can change it `here`_.
+
+
+.. _check: ../../operations/placement-groups#get-the-number-of-placement-groups
+.. _here: ../../configuration/pool-pg-config-ref
+.. _Placement Groups: ../../operations/placement-groups
