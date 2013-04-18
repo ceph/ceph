@@ -11,33 +11,6 @@ are running properly, because networks may have a significant impact on OSD
 operation and performance.
 
 
-The Ceph Community
-==================
-
-The Ceph community is an excellent source of information and help. For
-operational issues with Ceph releases we recommend you `subscribe to the
-ceph-users email list`_. When  you no longer want to receive emails, you can
-`unsubscribe from the ceph-users email list`_. 
-
-If you have read through this guide and you have contacted ``ceph-users``,
-but you haven't resolved your issue, you may contact `Inktank`_ for support.
-
-You may also `subscribe to the ceph-devel email list`_. You should do so if
-your issue is: 
-
-- Likely related to a bug
-- Related to a development release package
-- Related to a development testing package
-- Related to your own builds
-
-If you no longer want to receive emails from the ``ceph-devel`` email list, you
-may `unsubscribe from the ceph-devel email list`_.
-
-.. tip:: The Ceph community is growing rapidly, and community members can help
-   you if you provide them with detailed information about your problem. See 
-   `Obtaining Data About OSDs`_ before you post questions to ensure that 
-   community members have sufficient data to help you.
-
 
 Obtaining Data About OSDs
 =========================
@@ -56,10 +29,8 @@ If you haven't changed the default path, you can find Ceph log files at
 	ls /var/log/ceph
 
 If you don't get enough log detail, you can change your logging level.  See
-`Ceph Logging and Debugging`_ and `Logging and Debugging Config Reference`_ in
-the Ceph Configuration documentation for details. Also, see `Debugging and
-Logging`_ in the Ceph Operations documentation to ensure that Ceph performs
-adequately under high logging volume.
+`Logging and Debugging`_ for details to ensure that Ceph performs adequately
+under high logging volume.
 
 
 Admin Socket
@@ -250,6 +221,8 @@ some placement group directories in the full OSD.
    **DO NOT** delete the same placement group directory on another full OSD, or
    **YOU MAY LOSE DATA**. You **MUST** maintain at least one copy of your data on
    at least one OSD.
+   
+See `Monitor Config Reference`_ for additional details.
 
 
 OSDs are Slow/Unresponsive
@@ -424,19 +397,20 @@ Flapping OSDs
 =============
 
 We recommend using both a public (front-end) network and a cluster (back-end)
-network so that you can better meet the capacity requirements of object replication. Another
-advantage is that you can run a cluster network such that it isn't connected to
-the internet, thereby preventing some denial of service attacks. When OSDs peer
-and check heartbeats, they use the cluster (back-end) network when it's available.
-See `Monitor/OSD Interaction`_ for details.
+network so that you can better meet the capacity requirements of object
+replication. Another advantage is that you can run a cluster network such that
+it isn't connected to the internet, thereby preventing some denial of service
+attacks. When OSDs peer and check heartbeats, they use the cluster (back-end)
+network when it's available. See `Monitor/OSD Interaction`_ for details.
 
 However, if the cluster (back-end) network fails or develops significant latency
 while the public (front-end) network operates optimally, OSDs currently do not
 handle this situation well. What happens is that OSDs mark each other ``down``
-on the monitor, while marking themselves ``up``. We call this scenario 'flapping`.
+on the monitor, while marking themselves ``up``. We call this scenario
+'flapping`.
 
-If something is causing OSDs to 'flap' (repeatedly getting marked ``down`` and then
-``up`` again), you can force the monitors to stop the flapping with::
+If something is causing OSDs to 'flap' (repeatedly getting marked ``down`` and
+then ``up`` again), you can force the monitors to stop the flapping with::
 
 	ceph osd set noup      # prevent osds from getting marked up
 	ceph osd set nodown    # prevent osds from getting marked down
@@ -726,10 +700,11 @@ many others).
 
 .. _iostat: http://en.wikipedia.org/wiki/Iostat
 .. _Ceph Logging and Debugging: ../../configuration/ceph-conf#ceph-logging-and-debugging
-.. _Logging and Debugging Config Reference: ../../configuration/log-and-debug-ref
+.. _Logging and Debugging: ../log-and-debug
 .. _Debugging and Logging: ../debug
 .. _Monitor/OSD Interaction: ../../configuration/mon-osd-interaction
-.. _monitoring your OSDs: ../monitoring-osd-pg
+.. _Monitor Config Reference: ../../configuration/mon-config-ref
+.. _monitoring your OSDs: ../../operations/monitoring-osd-pg
 .. _subscribe to the ceph-devel email list: mailto:majordomo@vger.kernel.org?body=subscribe+ceph-devel
 .. _unsubscribe from the ceph-devel email list: mailto:majordomo@vger.kernel.org?body=unsubscribe+ceph-devel
 .. _subscribe to the ceph-users email list: mailto:majordomo@vger.kernel.org?body=subscribe+ceph-users
