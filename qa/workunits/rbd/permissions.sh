@@ -64,7 +64,7 @@ test_volumes_access() {
     rbd -k $KEYRING --id volumes lock list images/foo
 
     # commands that fail with read-only access
-    ! rbd -k $KEYRING --id volumes resize -s 2 images/foo
+    ! rbd -k $KEYRING --id volumes resize -s 2 images/foo --allow-shrink
     ! rbd -k $KEYRING --id volumes snap create images/foo@2
     ! rbd -k $KEYRING --id volumes snap rollback images/foo@snap
     ! rbd -k $KEYRING --id volumes snap remove images/foo@snap
