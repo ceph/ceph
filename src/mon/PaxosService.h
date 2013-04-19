@@ -485,7 +485,7 @@ public:
   bool is_readable(version_t ver = 0) {
     if ((ver > get_last_committed())
 	|| ((!mon->is_peon() && !mon->is_leader()))
-	|| (is_proposing() || paxos->is_recovering() || paxos->is_locked())
+        || !is_active()
 	|| (get_last_committed() <= 0)
 	|| ((mon->get_quorum().size() != 1) && !paxos->is_lease_valid())) {
       return false;
@@ -507,10 +507,9 @@ public:
    * @returns true if writeable; false otherwise
    */
   bool is_writeable() {
-    return (!is_proposing() && mon->is_leader()
-        && !paxos->is_locked()
-	&& paxos->is_lease_valid() && !paxos->is_bootstrapping()
-        && !paxos->is_recovering());
+    return (is_active()
+        && mon->is_leader()
+        && paxos->is_lease_valid());
   }
 
   /**
