@@ -704,11 +704,9 @@ def prepare_journal_dev(
     num = None
     if journal == data:
         # we're sharing the disk between osd data and journal;
-        # make journal be partition number 2, so it's pretty; put
-        # journal at end of free space so partitioning tools don't
-        # reorder them suddenly
+        # make journal be partition number 2, so it's pretty
         num = 2
-        journal_part = '{num}:-{size}M:0'.format(
+        journal_part = '{num}:0:{size}M'.format(
             num=num,
             size=journal_size,
             )
