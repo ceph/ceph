@@ -4455,7 +4455,7 @@ void OSD::consume_map()
   dout(7) << "consume_map version " << osdmap->get_epoch() << dendl;
 
   int num_pg_primary = 0, num_pg_replica = 0, num_pg_stray = 0;
-  list<PG*> to_remove;
+  list<PGRef> to_remove;
 
   // scan pg's
   for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
@@ -4473,8 +4473,7 @@ void OSD::consume_map()
     set<pg_t> split_pgs;
     if (!osdmap->have_pg_pool(pg->info.pgid.pool())) {
       //pool is deleted!
-      pg->get();
-      to_remove.push_back(pg);
+      to_remove.push_back(PGRef(pg));
     } else if (it->first.is_split(
 		 service.get_osdmap()->get_pg_num(it->first.pool()),
 		 osdmap->get_pg_num(it->first.pool()),
@@ -4485,13 +4484,12 @@ void OSD::consume_map()
     pg->unlock();
   }
 
-  for (list<PG*>::iterator i = to_remove.begin();
+  for (list<PGRef>::iterator i = to_remove.begin();
        i != to_remove.end();
-       ++i) {
+       to_remove.erase(i++)) {
     (*i)->lock();
-    _remove_pg((*i));
+    _remove_pg(&**i);
     (*i)->unlock();
-    (*i)->put();
   }
   to_remove.clear();
 
