@@ -4627,7 +4627,7 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
 
   RepModify *rm = new RepModify;
   rm->pg = this;
-  get();
+  get("RepModify");
   rm->op = op;
   rm->ctx = 0;
   rm->ackerosd = ackerosd;
@@ -4760,7 +4760,7 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
   if (done) {
     delete rm->ctx;
     delete rm;
-    put();
+    put("RepModify");
   }
 }
 
@@ -4795,7 +4795,7 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
   if (done) {
     delete rm->ctx;
     delete rm;
-    put();
+    put("RepModify");
   }
 }
 
@@ -7449,5 +7449,10 @@ boost::statechart::result ReplicatedPG::WaitingOnReplicas::react(const SnapTrim&
   return transit< NotTrimming >();
 }
 
-void intrusive_ptr_add_ref(ReplicatedPG *pg) { pg->get(); }
-void intrusive_ptr_release(ReplicatedPG *pg) { pg->put(); }
+void intrusive_ptr_add_ref(ReplicatedPG *pg) { pg->get("intptr"); }
+void intrusive_ptr_release(ReplicatedPG *pg) { pg->put("intptr"); }
+
+#ifdef PG_DEBUG_REFS
+uint64_t get_with_id(ReplicatedPG *pg) { return pg->get_with_id(); }
+void put_with_id(ReplicatedPG *pg, uint64_t id) { return pg->put_with_id(id); }
+#endif

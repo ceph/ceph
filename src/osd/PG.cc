@@ -33,6 +33,7 @@
 
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
+#include "common/BackTrace.h"
 
 #include <sstream>
 
@@ -42,6 +43,73 @@
 static ostream& _prefix(std::ostream *_dout, const PG *pg) {
   return *_dout << pg->gen_prefix();
 }
+
+void PG::get(const string &tag) {
+  ref.inc();
+#ifdef PG_DEBUG_REFS
+  Mutex::Locker l(_ref_id_lock);
+  if (!_tag_counts.count(tag)) {
+    _tag_counts[tag] = 0;
+  }
+  _tag_counts[tag]++;
+#endif
+}
+void PG::put(const string &tag) {
+#ifdef PG_DEBUG_REFS
+  {
+    Mutex::Locker l(_ref_id_lock);
+    assert(_tag_counts.count(tag));
+    _tag_counts[tag]--;
+    if (_tag_counts[tag] == 0) {
+      _tag_counts.erase(tag);
+    }
+  }
+#endif
+  if (ref.dec() == 0)
+    delete this;
+}
+
+#ifdef PG_DEBUG_REFS
+uint64_t PG::get_with_id() {
+  ref.inc();
+  Mutex::Locker l(_ref_id_lock);
+  uint64_t id = ++_ref_id;
+  BackTrace bt(0);
+  stringstream ss;
+  bt.print(ss);
+  dout(20) << __func__ << ": " << info.pgid << " got id " << id << dendl;
+  assert(!_live_ids.count(id));
+  _live_ids.insert(make_pair(id, ss.str()));
+  return id;
+}
+
+void PG::put_with_id(uint64_t id) {
+  dout(20) << __func__ << ": " << info.pgid << " put id " << id << dendl;
+  {
+    Mutex::Locker l(_ref_id_lock);
+    assert(_live_ids.count(id));
+    _live_ids.erase(id);
+  }
+  if (ref.dec() == 0)
+    delete this;
+}
+
+void PG::dump_live_ids() {
+  Mutex::Locker l(_ref_id_lock);
+  dout(0) << "\t" << __func__ << ": " << info.pgid << " live ids:" << dendl;
+  for (map<uint64_t, string>::iterator i = _live_ids.begin();
+       i != _live_ids.end();
+       ++i) {
+    dout(0) << "\t\tid: " << *i << dendl;
+  }
+  dout(0) << "\t" << __func__ << ": " << info.pgid << " live tags:" << dendl;
+  for (map<string, uint64_t>::iterator i = _tag_counts.begin();
+       i != _tag_counts.end();
+       ++i) {
+    dout(0) << "\t\tid: " << *i << dendl;
+  }
+}
+#endif
 
 void PGPool::update(OSDMapRef map)
 {
@@ -72,7 +140,11 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     _pool.id),
   osdmap_ref(curmap), pool(_pool),
   _lock("PG::_lock"),
-  ref(0), deleting(false), dirty_info(false), dirty_big_info(false), dirty_log(false),
+  ref(0),
+  #ifdef PG_DEBUG_REFS
+  _ref_id_lock("PG::_ref_id_lock"), _ref_id(0),
+  #endif
+  deleting(false), dirty_info(false), dirty_big_info(false), dirty_log(false),
   info(p),
   info_struct_v(0),
   coll(p), log_oid(loid), biginfo_oid(ioid),
@@ -98,10 +170,16 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   active_pushes(0),
   recovery_state(this)
 {
+#ifdef PG_DEBUG_REFS
+  osd->add_pgid(p, this);
+#endif
 }
 
 PG::~PG()
 {
+#ifdef PG_DEBUG_REFS
+  osd->remove_pgid(info.pgid, this);
+#endif
 }
 
 void PG::lock(bool no_lockdep)
@@ -7630,5 +7708,10 @@ bool PG::PriorSet::affected_by_map(const OSDMapRef osdmap, const PG *debug_pg) c
   return false;
 }
 
-void intrusive_ptr_add_ref(PG *pg) { pg->get(); }
-void intrusive_ptr_release(PG *pg) { pg->put(); }
+void intrusive_ptr_add_ref(PG *pg) { pg->get("intptr"); }
+void intrusive_ptr_release(PG *pg) { pg->put("intptr"); }
+
+#ifdef PG_DEBUG_REFS
+  uint64_t get_with_id(PG *pg) { return pg->get_with_id(); }
+  void put_with_id(PG *pg, uint64_t id) { return pg->put_with_id(id); }
+#endif
