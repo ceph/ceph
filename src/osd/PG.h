@@ -1063,7 +1063,7 @@ public:
 
   template <class EVT>
   struct QueuePeeringEvt : Context {
-    boost::intrusive_ptr<PG> pg;
+    PGRef pg;
     epoch_t epoch;
     EVT evt;
     QueuePeeringEvt(PG *pg, epoch_t epoch, EVT evt) :
