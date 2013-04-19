@@ -29,10 +29,11 @@ test_others() {
 
     # import, snapshot
     rbd import $RBD_CREATE_ARGS /tmp/img1 testimg1
-    rbd resize testimg1 --size=256
+    rbd resize testimg1 --size=256 --allow-shrink
     rbd export testimg1 /tmp/img2
     rbd snap create testimg1 --snap=snap1
-    rbd resize testimg1 --size=128
+    rbd resize testimg1 --size=128 && exit 1 || true   # shrink should fail
+    rbd resize testimg1 --size=128 --allow-shrink
     rbd export testimg1 /tmp/img3
 
     # info
