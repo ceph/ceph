@@ -124,16 +124,24 @@ public:
 class RGWListBuckets : public RGWOp {
 protected:
   int ret;
-  RGWUserBuckets buckets;
+  bool sent_data;
+  string marker;
+  uint64_t limit;
+  uint64_t limit_max;
 
 public:
-  RGWListBuckets() : ret(0) {}
+  RGWListBuckets() : ret(0), sent_data(false) {
+    limit = limit_max = 10000;
+  }
 
   int verify_permission();
   void execute();
 
   virtual int get_params() = 0;
-  virtual void send_response() = 0;
+  virtual void send_response_begin() = 0;
+  virtual void send_response_data(RGWUserBuckets& buckets) = 0;
+  virtual void send_response_end() = 0;
+  virtual void send_response() {}
 
   virtual const char *name() { return "list_buckets"; }
 };

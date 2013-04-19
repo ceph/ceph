@@ -3293,7 +3293,7 @@ int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exc
   return ret;
 }
 
-int RGWRados::omap_get_all(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m)
+int RGWRados::omap_get_vals(rgw_obj& obj, bufferlist& header, const string& marker, uint64_t count, std::map<string, bufferlist>& m)
 {
   bufferlist bl;
   librados::IoCtx io_ctx;
@@ -3306,13 +3306,19 @@ int RGWRados::omap_get_all(rgw_obj& obj, bufferlist& header, std::map<string, bu
 
   io_ctx.locator_set_key(key);
 
-  string start_after;
-  r = io_ctx.omap_get_vals(oid, start_after, -1, &m);
+  r = io_ctx.omap_get_vals(oid, marker, count, &m);
   if (r < 0)
     return r;
 
   return 0;
  
+}
+
+int RGWRados::omap_get_all(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m)
+{
+  string start_after;
+
+  return omap_get_vals(obj, header, start_after, (uint64_t)-1, m);
 }
 
 int RGWRados::omap_set(rgw_obj& obj, std::string& key, bufferlist& bl)

@@ -653,21 +653,54 @@ void RGWListBuckets::execute()
   if (ret < 0)
     return;
 
-  ret = rgw_read_user_buckets(store, s->user.user_id, buckets, !!(s->prot_flags & RGW_REST_SWIFT));
-  if (ret < 0) {
-    /* hmm.. something wrong here.. the user was authenticated, so it
-       should exist, just try to recreate */
-    ldout(s->cct, 10) << "WARNING: failed on rgw_get_user_buckets uid=" << s->user.user_id << dendl;
+  bool done;
 
-    /*
+  bool started = false;
+  uint64_t total_count = 0;
 
-    on a second thought, this is probably a bug and we should fail
+  size_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
 
-    rgw_put_user_buckets(s->user.user_id, buckets);
-    ret = 0;
+  do {
+    RGWUserBuckets buckets;
+    uint64_t read_count = min(limit - total_count, max_buckets);
+    ret = rgw_read_user_buckets(store, s->user.user_id, buckets,
+                                marker, read_count, !!(s->prot_flags & RGW_REST_SWIFT));
 
-    */
-  }
+    if (!started) {
+      send_response_begin();
+      started = true;
+    }
+
+    if (ret < 0) {
+      /* hmm.. something wrong here.. the user was authenticated, so it
+         should exist, just try to recreate */
+      ldout(s->cct, 10) << "WARNING: failed on rgw_get_user_buckets uid=" << s->user.user_id << dendl;
+
+      /*
+
+      on a second thought, this is probably a bug and we should fail
+
+      rgw_put_user_buckets(s->user.user_id, buckets);
+      ret = 0;
+
+      */
+      break;
+    }
+    map<string, RGWBucketEnt>& m = buckets.get_buckets();
+
+    total_count += m.size();
+
+    done = (m.size() < read_count);
+
+    if (m.size()) {
+      send_response_data(buckets);
+
+      map<string, RGWBucketEnt>::reverse_iterator riter = m.rbegin();
+      marker = riter->first;
+    }
+  } while (!done);
+
+  send_response_end();
 }
 
 int RGWStatAccount::verify_permission()
@@ -677,33 +710,43 @@ int RGWStatAccount::verify_permission()
 
 void RGWStatAccount::execute()
 {
-  RGWUserBuckets buckets;
+  string marker;
+  bool done;
+  size_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
 
-  ret = rgw_read_user_buckets(store, s->user.user_id, buckets, true);
-  if (ret < 0) {
-    /* hmm.. something wrong here.. the user was authenticated, so it
-       should exist, just try to recreate */
-    ldout(s->cct, 10) << "WARNING: failed on rgw_get_user_buckets uid=" << s->user.user_id << dendl;
+  do {
+    RGWUserBuckets buckets;
 
-    /*
+    ret = rgw_read_user_buckets(store, s->user.user_id, buckets, marker, max_buckets, true);
+    if (ret < 0) {
+      /* hmm.. something wrong here.. the user was authenticated, so it
+         should exist, just try to recreate */
+      ldout(s->cct, 10) << "WARNING: failed on rgw_get_user_buckets uid=" << s->user.user_id << dendl;
 
-    on a second thought, this is probably a bug and we should fail
+      /*
 
-    rgw_put_user_buckets(s->user.user_id, buckets);
-    ret = 0;
+      on a second thought, this is probably a bug and we should fail
 
-    */
-  } else {
-    map<string, RGWBucketEnt>& m = buckets.get_buckets();
-    map<string, RGWBucketEnt>::iterator iter;
-    for (iter = m.begin(); iter != m.end(); ++iter) {
-      RGWBucketEnt& bucket = iter->second;
-      buckets_size += bucket.size;
-      buckets_size_rounded += bucket.size_rounded;
-      buckets_objcount += bucket.count;
+      rgw_put_user_buckets(s->user.user_id, buckets);
+      ret = 0;
+
+      */
+
+      break;
+    } else {
+      map<string, RGWBucketEnt>& m = buckets.get_buckets();
+      map<string, RGWBucketEnt>::iterator iter;
+      for (iter = m.begin(); iter != m.end(); ++iter) {
+        RGWBucketEnt& bucket = iter->second;
+        buckets_size += bucket.size;
+        buckets_size_rounded += bucket.size_rounded;
+        buckets_objcount += bucket.count;
+      }
+      buckets_count = m.size();
+
+      done = (m.size() < max_buckets);
     }
-    buckets_count = m.size();
-  }
+  } while (!done);
 }
 
 int RGWStatBucket::verify_permission()
@@ -788,11 +831,13 @@ int RGWCreateBucket::verify_permission()
 
   if (s->user.max_buckets) {
     RGWUserBuckets buckets;
-    int ret = rgw_read_user_buckets(store, s->user.user_id, buckets, false);
+    string marker;
+    int ret = rgw_read_user_buckets(store, s->user.user_id, buckets, marker, s->user.max_buckets, false);
     if (ret < 0)
       return ret;
 
-    if (buckets.count() >= s->user.max_buckets) {
+    map<string, RGWBucketEnt>& m = buckets.get_buckets();
+    if (m.size() >= s->user.max_buckets) {
       return -ERR_TOO_MANY_BUCKETS;
     }
   }

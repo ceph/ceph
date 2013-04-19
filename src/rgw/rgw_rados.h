@@ -661,6 +661,7 @@ public:
                        uint64_t *epoch, map<string, bufferlist> *attrs, bufferlist *first_chunk);
 
   virtual bool supports_omap() { return true; }
+  int omap_get_vals(rgw_obj& obj, bufferlist& header, const std::string& marker, uint64_t count, std::map<string, bufferlist>& m);
   virtual int omap_get_all(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m);
   virtual int omap_set(rgw_obj& obj, std::string& key, bufferlist& bl);
   virtual int omap_set(rgw_obj& obj, map<std::string, bufferlist>& m);
