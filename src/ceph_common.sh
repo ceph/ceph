@@ -87,6 +87,24 @@ do_cmd() {
     fi
 }
 
+do_cmd_okfail() {
+    ERR=0
+    if [ -z "$ssh" ]; then
+	[ $verbose -eq 1 ] && echo "--- $host# $1"
+	ulimit -c unlimited
+	whoami=`whoami`
+	if [ "$whoami" = "$user" ] || [ -z "$user" ]; then
+	    bash -c "$1" || { [ -z "$3" ] && echo "failed: '$1'" && ERR=1 && return 1; }
+	else
+	    sudo su $user -c "$1" || { [ -z "$3" ] && echo "failed: '$1'" && ERR=1 && return 1; }
+	fi
+    else
+	[ $verbose -eq 1 ] && echo "--- $ssh $2 \"if [ ! -d $sshdir ]; then mkdir -p $sshdir; fi; cd $sshdir ; ulimit -c unlimited ; $1\""
+	$ssh $2 "if [ ! -d $sshdir ]; then mkdir -p $sshdir; fi; cd $sshdir ; ulimit -c unlimited ; $1" || { [ -z "$3" ] && echo "failed: '$ssh $1'" && ERR=1 && return 1; }
+    fi
+    return 0
+}
+
 do_root_cmd() {
     if [ -z "$ssh" ]; then
 	[ $verbose -eq 1 ] && echo "--- $host# $1"

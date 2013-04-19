@@ -314,7 +314,10 @@ for name in $what; do
 	    get_conf pre_start "" "pre start command"
 	    get_conf post_start "" "post start command"
 	    [ -n "$pre_start" ] && do_cmd "$pre_start"
-	    do_cmd "$cmd" $runarg
+	    do_cmd_okfail "$cmd" $runarg
+	    if [ "$ERR" != "0" ]; then
+		EXIT_STATUS=$ERR
+	    fi
 	    [ -n "$post_start" ] && do_cmd "$post_start"
 	    [ -n "$lockfile" ] && [ "$?" -eq 0 ] && touch $lockfile
 	    ;;
