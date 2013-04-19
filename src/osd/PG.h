@@ -67,6 +67,8 @@ class MOSDPGInfo;
 
 class PG;
 
+#define PG_DEBUG_REFS
+
 void intrusive_ptr_add_ref(PG *pg);
 void intrusive_ptr_release(PG *pg);
 
