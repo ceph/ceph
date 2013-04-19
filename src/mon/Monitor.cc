@@ -408,7 +408,7 @@ int Monitor::preinit()
     // We have a potentially inconsistent store state in hands. Get rid of it
     // and start fresh.
     bool clear_store = false;
-    if (store->get("mon_sync", "in_sync") > 0) {
+    if (is_sync_on_going()) {
       dout(1) << __func__ << " clean up potentially inconsistent store state"
 	      << dendl;
       clear_store = true;
@@ -421,8 +421,12 @@ int Monitor::preinit()
 
     if (clear_store) {
       set<string> sync_prefixes = get_sync_targets_names();
-      sync_prefixes.insert("mon_sync");
       store->clear(sync_prefixes);
+
+      MonitorDBStore::Transaction t;
+      t.erase("mon_sync", "in_sync");
+      t.erase("mon_sync", "force_sync");
+      store->apply_transaction(t);
     }
   }
 
@@ -1276,6 +1280,47 @@ void Monitor::sync_requester_abort()
 }
 
 /**
+ *
+ */
+void Monitor::sync_store_init()
+{
+  MonitorDBStore::Transaction t;
+  t.put("mon_sync", "in_sync", 1);
+
+  bufferlist latest_monmap;
+  int err = monmon()->get_monmap(latest_monmap);
+  if (err < 0) {
+    if (err != -ENOENT) {
+      derr << __func__
+           << " something wrong happened while reading the store: "
+           << cpp_strerror(err) << dendl;
+      assert(0 == "error reading the store");
+      return; // this is moot
+    } else {
+      dout(10) << __func__ << " backup current monmap" << dendl;
+      monmap->encode(latest_monmap, get_quorum_features());
+    }
+  }
+
+  t.put("mon_sync", "latest_monmap", latest_monmap);
+
+  store->apply_transaction(t);
+}
+
+void Monitor::sync_store_cleanup()
+{
+  MonitorDBStore::Transaction t;
+  t.erase("mon_sync", "in_sync");
+  t.erase("mon_sync", "latest_monmap");
+  store->apply_transaction(t);
+}
+
+bool Monitor::is_sync_on_going()
+{
+  return store->exists("mon_sync", "in_sync");
+}
+
+/**
  * Start Sync process
  *
  * Create SyncEntity instances for the leader and the provider;
@@ -1321,9 +1366,8 @@ void Monitor::sync_start(entity_inst_t &other)
   targets.insert("mon_sync");
   store->clear(targets);
 
-  MonitorDBStore::Transaction t;
-  t.put("mon_sync", "in_sync", 1);
-  store->apply_transaction(t);
+
+  sync_store_init();
 
   // assume 'other' as the leader. We will update the leader once we receive
   // a reply to the sync start.
@@ -1618,9 +1662,7 @@ void Monitor::handle_sync_finish_reply(MMonSync *m)
 
   paxos->reapply_all_versions();
 
-  MonitorDBStore::Transaction t;
-  t.erase("mon_sync", "in_sync");
-  store->apply_transaction(t);
+  sync_store_cleanup();
 
   init_paxos();
 
