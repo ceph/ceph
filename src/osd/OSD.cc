@@ -5788,10 +5788,9 @@ void OSD::handle_pg_remove(OpRequestRef op)
 		       up, acting);
     if (history.same_interval_since <= m->get_epoch()) {
       assert(pg->get_primary() == m->get_source().num());
-      pg->get();
+      PGRef _pg(pg);
       _remove_pg(pg);
       pg->unlock();
-      pg->put();
     } else {
       dout(10) << *pg << " ignoring remove request, pg changed in epoch "
 	       << history.same_interval_since
