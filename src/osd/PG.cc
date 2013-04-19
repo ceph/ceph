@@ -4901,7 +4901,8 @@ struct FlushState {
   FlushState(PG *pg, epoch_t epoch) : pg(pg), epoch(epoch) {}
   ~FlushState() {
     pg->lock();
-    pg->queue_flushed(epoch);
+    if (!pg->pg_has_reset_since(epoch))
+      pg->queue_flushed(epoch);
     pg->unlock();
   }
 };
