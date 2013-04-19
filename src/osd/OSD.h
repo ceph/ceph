@@ -427,6 +427,41 @@ public:
   bool prepare_to_stop();
   void got_stop_ack();
 
+
+#ifdef PG_DEBUG_REFS
+  Mutex pgid_lock;
+  map<pg_t, int> pgid_tracker;
+  map<pg_t, PG*> live_pgs;
+  void add_pgid(pg_t pgid, PG *pg) {
+    Mutex::Locker l(pgid_lock);
+    if (!pgid_tracker.count(pgid)) {
+      pgid_tracker[pgid] = 0;
+      live_pgs[pgid] = pg;
+    }
+    pgid_tracker[pgid]++;
+  }
+  void remove_pgid(pg_t pgid, PG *pg) {
+    Mutex::Locker l(pgid_lock);
+    assert(pgid_tracker.count(pgid));
+    assert(pgid_tracker[pgid] > 0);
+    pgid_tracker[pgid]--;
+    if (pgid_tracker[pgid] == 0) {
+      pgid_tracker.erase(pgid);
+      live_pgs.erase(pgid);
+    }
+  }
+  void dump_live_pgids() {
+    Mutex::Locker l(pgid_lock);
+    derr << "live pgids:" << dendl;
+    for (map<pg_t, int>::iterator i = pgid_tracker.begin();
+	 i != pgid_tracker.end();
+	 ++i) {
+      derr << "\t" << *i << dendl;
+      live_pgs[i->first]->dump_live_ids();
+    }
+  }
+#endif
+
   OSDService(OSD *osd);
 };
 class OSD : public Dispatcher,
@@ -759,14 +794,15 @@ private:
 	   ) {
 	if (*i == pg) {
 	  peering_queue.erase(i++);
-	  pg->put();
+	  pg->put("PeeringWQ");
 	} else {
 	  ++i;
 	}
       }
     }
     bool _enqueue(PG *pg) {
-      pg->get();
+      pg->get("PeeringWQ");
+      assert(!pg->deleting);
       peering_queue.push_back(pg);
       return true;
     }
@@ -795,7 +831,7 @@ private:
       for (list<PG *>::const_iterator i = pgs.begin();
 	   i != pgs.end();
 	   ++i) {
-	(*i)->put();
+	(*i)->put("PeeringWQ");
       }
     }
     void _process_finish(const list<PG *> &pgs) {
@@ -1019,7 +1055,7 @@ protected:
   void pg_stat_queue_enqueue(PG *pg) {
     pg_stat_queue_lock.Lock();
     if (pg->is_primary() && !pg->stat_queue_item.is_on_list()) {
-      pg->get();
+      pg->get("pg_stat_queue");
       pg_stat_queue.push_back(&pg->stat_queue_item);
     }
     osd_stat_updated = true;
@@ -1028,7 +1064,7 @@ protected:
   void pg_stat_queue_dequeue(PG *pg) {
     pg_stat_queue_lock.Lock();
     if (pg->stat_queue_item.remove_myself())
-      pg->put();
+      pg->put("pg_stat_queue");
     pg_stat_queue_lock.Unlock();
   }
   void clear_pg_stat_queue() {
@@ -1036,7 +1072,7 @@ protected:
     while (!pg_stat_queue.empty()) {
       PG *pg = pg_stat_queue.front();
       pg_stat_queue.pop_front();
-      pg->put();
+      pg->put("pg_stat_queue");
     }
     pg_stat_queue_lock.Unlock();
   }
@@ -1159,7 +1195,7 @@ protected:
     }
     bool _enqueue(PG *pg) {
       if (!pg->recovery_item.is_on_list()) {
-	pg->get();
+	pg->get("RecoveryWQ");
 	osd->recovery_queue.push_back(&pg->recovery_item);
 
 	if (g_conf->osd_recovery_delay_start > 0) {
@@ -1172,7 +1208,7 @@ protected:
     }
     void _dequeue(PG *pg) {
       if (pg->recovery_item.remove_myself())
-	pg->put();
+	pg->put("RecoveryWQ");
     }
     PG *_dequeue() {
       if (osd->recovery_queue.empty())
@@ -1187,19 +1223,19 @@ protected:
     }
     void _queue_front(PG *pg) {
       if (!pg->recovery_item.is_on_list()) {
-	pg->get();
+	pg->get("RecoveryWQ");
 	osd->recovery_queue.push_front(&pg->recovery_item);
       }
     }
     void _process(PG *pg) {
       osd->do_recovery(pg);
-      pg->put();
+      pg->put("RecoveryWQ");
     }
     void _clear() {
       while (!osd->recovery_queue.empty()) {
 	PG *pg = osd->recovery_queue.front();
 	osd->recovery_queue.pop_front();
-	pg->put();
+	pg->put("RecoveryWQ");
       }
     }
   } recovery_wq;
@@ -1231,13 +1267,13 @@ protected:
     bool _enqueue(PG *pg) {
       if (pg->snap_trim_item.is_on_list())
 	return false;
-      pg->get();
+      pg->get("SnapTrimWQ");
       osd->snap_trim_queue.push_back(&pg->snap_trim_item);
       return true;
     }
     void _dequeue(PG *pg) {
       if (pg->snap_trim_item.remove_myself())
-	pg->put();
+	pg->put("SnapTrimWQ");
     }
     PG *_dequeue() {
       if (osd->snap_trim_queue.empty())
@@ -1248,7 +1284,7 @@ protected:
     }
     void _process(PG *pg) {
       pg->snap_trimmer();
-      pg->put();
+      pg->put("SnapTrimWQ");
     }
     void _clear() {
       osd->snap_trim_queue.clear();
@@ -1275,13 +1311,13 @@ protected:
       if (pg->scrub_item.is_on_list()) {
 	return false;
       }
-      pg->get();
+      pg->get("ScrubWQ");
       osd->scrub_queue.push_back(&pg->scrub_item);
       return true;
     }
     void _dequeue(PG *pg) {
       if (pg->scrub_item.remove_myself()) {
-	pg->put();
+	pg->put("ScrubWQ");
       }
     }
     PG *_dequeue() {
@@ -1293,13 +1329,13 @@ protected:
     }
     void _process(PG *pg) {
       pg->scrub();
-      pg->put();
+      pg->put("ScrubWQ");
     }
     void _clear() {
       while (!osd->scrub_queue.empty()) {
 	PG *pg = osd->scrub_queue.front();
 	osd->scrub_queue.pop_front();
-	pg->put();
+	pg->put("ScrubWQ");
       }
     }
   } scrub_wq;
@@ -1320,13 +1356,13 @@ protected:
       if (pg->scrub_finalize_item.is_on_list()) {
 	return false;
       }
-      pg->get();
+      pg->get("ScrubFinalizeWQ");
       scrub_finalize_queue.push_back(&pg->scrub_finalize_item);
       return true;
     }
     void _dequeue(PG *pg) {
       if (pg->scrub_finalize_item.remove_myself()) {
-	pg->put();
+	pg->put("ScrubFinalizeWQ");
       }
     }
     PG *_dequeue() {
@@ -1338,13 +1374,13 @@ protected:
     }
     void _process(PG *pg) {
       pg->scrub_finalize();
-      pg->put();
+      pg->put("ScrubFinalizeWQ");
     }
     void _clear() {
       while (!scrub_finalize_queue.empty()) {
 	PG *pg = scrub_finalize_queue.front();
 	scrub_finalize_queue.pop_front();
-	pg->put();
+	pg->put("ScrubFinalizeWQ");
       }
     }
   } scrub_finalize_wq;
