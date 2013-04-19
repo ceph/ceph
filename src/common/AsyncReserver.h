@@ -90,6 +90,7 @@ public:
     ) {
     Mutex::Locker l(lock);
     if (queue_pointers.count(item)) {
+      delete queue_pointers[item]->second;
       queue.erase(queue_pointers[item]);
       queue_pointers.erase(item);
     } else {
