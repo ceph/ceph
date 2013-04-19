@@ -2297,12 +2297,9 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
   if (f)
     f->close_section();
 
-  if (f) {
-    health_status_t hmstatus =
-      health_monitor->get_health(f, (detailbl ? &detail : NULL));
-    if (overall > hmstatus)
-      overall = hmstatus;
-  }
+  health_status_t hmstatus = health_monitor->get_health(f, (detailbl ? &detail : NULL));
+  if (overall > hmstatus)
+    overall = hmstatus;
 
   stringstream fss;
   fss << overall;

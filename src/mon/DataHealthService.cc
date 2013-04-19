@@ -59,10 +59,10 @@ health_status_t DataHealthService::get_health(
     list<pair<health_status_t,string> > *detail)
 {
   dout(10) << __func__ << dendl;
-  assert(f != NULL);
-
-  f->open_object_section("data_health");
-  f->open_array_section("mons");
+  if (f) {
+    f->open_object_section("data_health");
+    f->open_array_section("mons");
+  }
 
   health_status_t overall_status = HEALTH_OK;
 
@@ -92,21 +92,25 @@ health_status_t DataHealthService::get_health(
       detail->push_back(make_pair(health_status, ss.str()));
     }
 
-    f->open_object_section(mon_name.c_str());
-    f->dump_string("name", mon_name.c_str());
-    f->dump_int("kb_total", stats.kb_total);
-    f->dump_int("kb_used", stats.kb_used);
-    f->dump_int("kb_avail", stats.kb_avail);
-    f->dump_int("avail_percent", stats.latest_avail_percent);
-    f->dump_stream("last_updated") << stats.last_update;
-    f->dump_stream("health") << health_status;
-    if (health_status != HEALTH_OK)
-      f->dump_string("health_detail", health_detail);
-    f->close_section();
+    if (f) {
+      f->open_object_section(mon_name.c_str());
+      f->dump_string("name", mon_name.c_str());
+      f->dump_int("kb_total", stats.kb_total);
+      f->dump_int("kb_used", stats.kb_used);
+      f->dump_int("kb_avail", stats.kb_avail);
+      f->dump_int("avail_percent", stats.latest_avail_percent);
+      f->dump_stream("last_updated") << stats.last_update;
+      f->dump_stream("health") << health_status;
+      if (health_status != HEALTH_OK)
+	f->dump_string("health_detail", health_detail);
+      f->close_section();
+    }
   }
-
-  f->close_section(); // mons
-  f->close_section(); // data_health
+  
+  if (f) {
+    f->close_section(); // mons
+    f->close_section(); // data_health
+  }
 
   return overall_status;
 }
