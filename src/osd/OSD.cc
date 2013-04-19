@@ -3025,7 +3025,7 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
   xlist<PG*>::iterator p = pg_stat_queue.begin();
   while (!p.end()) {
     PG *pg = *p;
-    pg->get();
+    PGRef _pg(pg);
     ++p;
 
     if (ack->pg_stat.count(pg->info.pgid)) {
@@ -3043,7 +3043,6 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
     } else {
       dout(30) << " still pending " << pg->info.pgid << " " << pg->pg_stats_stable.reported << dendl;
     }
-    pg->put();
   }
   
   if (!pg_stat_queue.size()) {
