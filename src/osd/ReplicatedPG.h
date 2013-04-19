@@ -28,6 +28,10 @@
 #include "messages/MOSDSubOp.h"
 class MOSDSubOpReply;
 
+class ReplicatedPG;
+void intrusive_ptr_add_ref(ReplicatedPG *pg);
+void intrusive_ptr_release(ReplicatedPG *pg);
+  typedef boost::intrusive_ptr<ReplicatedPG> ReplicatedPGRef;
 class PGLSFilter {
 protected:
   string xattr;
@@ -1020,10 +1024,5 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::AccessMode& mode)
   out << ")";
   return out;
 }
-
-void intrusive_ptr_add_ref(ReplicatedPG *pg);
-void intrusive_ptr_release(ReplicatedPG *pg);
-
-typedef boost::intrusive_ptr<ReplicatedPG> ReplicatedPGRef;
 
 #endif
