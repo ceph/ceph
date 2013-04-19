@@ -155,28 +155,40 @@ send_data:
   return 0;
 }
 
-void RGWListBuckets_ObjStore_S3::send_response()
+void RGWListBuckets_ObjStore_S3::send_response_begin()
 {
   if (ret)
     set_req_state_err(s, ret);
   dump_errno(s);
   dump_start(s);
+  end_header(s, "application/xml");
 
-  list_all_buckets_start(s);
-  dump_owner(s, s->user.user_id, s->user.display_name);
+  if (!ret) {
+    list_all_buckets_start(s);
+    dump_owner(s, s->user.user_id, s->user.display_name);
+    s->formatter->open_array_section("Buckets");
+    sent_data = true;
+  }
+}
 
+void RGWListBuckets_ObjStore_S3::send_response_data(RGWUserBuckets& buckets)
+{
   map<string, RGWBucketEnt>& m = buckets.get_buckets();
   map<string, RGWBucketEnt>::iterator iter;
 
-  s->formatter->open_array_section("Buckets");
   for (iter = m.begin(); iter != m.end(); ++iter) {
     RGWBucketEnt obj = iter->second;
     dump_bucket(s, obj);
   }
-  s->formatter->close_section();
-  list_all_buckets_end(s);
-  dump_content_length(s, s->formatter->get_len());
-  end_header(s, "application/xml");
+  rgw_flush_formatter(s, s->formatter);
+}
+
+void RGWListBuckets_ObjStore_S3::send_response_end()
+{
+  if (sent_data) {
+    s->formatter->close_section();
+    list_all_buckets_end(s);
+  }
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
