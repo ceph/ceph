@@ -2259,7 +2259,8 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
       ostringstream tcss;
       health_status_t tcstatus = timecheck_status(tcss, skew, latency);
       if (tcstatus != HEALTH_OK) {
-        overall = tcstatus;
+        if (overall > tcstatus)
+          overall = tcstatus;
         warns.push_back(name);
 
         ostringstream tmp_ss;
@@ -2297,8 +2298,9 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
   if (f)
     f->close_section();
 
-  if (f)
-    health_monitor->get_health(f, (detailbl ? &detail : NULL));
+  health_status_t hmstatus = health_monitor->get_health(f, (detailbl ? &detail : NULL));
+  if (overall > hmstatus)
+    overall = hmstatus;
 
   stringstream fss;
   fss << overall;
