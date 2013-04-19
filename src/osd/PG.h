@@ -42,6 +42,7 @@
 #include "msg/Messenger.h"
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDPGLog.h"
+#include "common/tracked_int_ptr.hpp"
 
 #include <list>
 #include <memory>
@@ -69,7 +70,13 @@ class PG;
 void intrusive_ptr_add_ref(PG *pg);
 void intrusive_ptr_release(PG *pg);
 
+#ifdef PG_DEBUG_REFS
+  uint64_t get_with_id(PG *pg);
+  void put_with_id(PG *pg, uint64_t id);
+  typedef TrackedIntPtr<PG> PGRef;
+#else
   typedef boost::intrusive_ptr<PG> PGRef;
+#endif
 
 struct PGRecoveryStats {
   struct per_state_info {
@@ -394,6 +401,13 @@ protected:
   Cond _cond;
   atomic_t ref;
 
+#ifdef PG_DEBUG_REFS
+  Mutex _ref_id_lock;
+  map<uint64_t, string> _live_ids;
+  map<string, uint64_t> _tag_counts;
+  uint64_t _ref_id;
+#endif
+
 public:
   bool deleting;  // true while in removing or OSD is shutting down
 
@@ -428,17 +442,13 @@ public:
     _cond.Signal();
   }
 
-  void get() {
-    //generic_dout(0) << this << " " << info.pgid << " get " << ref.test() << dendl;
-    //assert(_lock.is_locked());
-    ref.inc();
-  }
-  void put() { 
-    //generic_dout(0) << this << " " << info.pgid << " put " << ref.test() << dendl;
-    if (ref.dec() == 0)
-      delete this;
-  }
-
+#ifdef PG_DEBUG_REFS
+  uint64_t get_with_id();
+  void put_with_id(uint64_t);
+  void dump_live_ids();
+#endif
+  void get(const string &tag);
+  void put(const string &tag);
 
   bool dirty_info, dirty_big_info, dirty_log;
 

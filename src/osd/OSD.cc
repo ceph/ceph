@@ -189,6 +189,9 @@ OSDService::OSDService(OSD *osd) :
   cur_ratio(0),
   is_stopping_lock("OSDService::is_stopping_lock"),
   state(NOT_STOPPING)
+#ifdef PG_DEBUG_REFS
+  , pgid_lock("OSDService::pgid_lock")
+#endif
 {}
 
 void OSDService::_start_split(const set<pg_t> &pgs)
@@ -1217,7 +1220,7 @@ int OSD::shutdown()
   g_ceph_context->_conf->set_val("debug_ms", "100");
   g_ceph_context->_conf->apply_changes(NULL);
   
-  // Remove PGs
+  // Shutdown PGs
   for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
        p != pg_map.end();
        ++p) {
@@ -1227,9 +1230,7 @@ int OSD::shutdown()
     p->second->kick();
     p->second->unlock();
     p->second->osr->flush();
-    p->second->put();
   }
-  pg_map.clear();
   
   // finish ops
   op_wq.drain(); // should already be empty except for lagard PGs
@@ -1308,6 +1309,28 @@ int OSD::shutdown()
     assert(pg_stat_queue.empty());
   }
 
+  peering_wq.clear();
+  // Remove PGs
+#ifdef PG_DEBUG_REFS
+  service.dump_live_pgids();
+#endif
+  for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
+       p != pg_map.end();
+       ++p) {
+    dout(20) << " kicking pg " << p->first << dendl;
+    p->second->lock();
+    if (p->second->ref.read() != 1) {
+      derr << "pgid " << p->first << " has ref count of "
+	   << p->second->ref.read() << dendl;
+      assert(0);
+    }
+    p->second->unlock();
+    p->second->put("PGMap");
+  }
+  pg_map.clear();
+#ifdef PG_DEBUG_REFS
+  service.dump_live_pgids();
+#endif
   g_conf->remove_observer(this);
 
   monc->shutdown();
@@ -1321,6 +1344,7 @@ int OSD::shutdown()
   cluster_messenger->shutdown();
   hbclient_messenger->shutdown();
   hbserver_messenger->shutdown();
+  peering_wq.clear();
   return r;
 }
 
@@ -1440,7 +1464,7 @@ PG *OSD::_open_lock_pg(
     pg->lock_with_map_lock_held(no_lockdep_check);
   else
     pg->lock(no_lockdep_check);
-  pg->get();  // because it's in pg_map
+  pg->get("PGMap");  // because it's in pg_map
   return pg;
 }
 
@@ -1467,7 +1491,7 @@ PG* OSD::_make_pg(
 void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
 {
   epoch_t e(service.get_osdmap()->get_epoch());
-  pg->get();  // For pg_map
+  pg->get("PGMap");  // For pg_map
   pg_map[pg->info.pgid] = pg;
   dout(10) << "Adding newly split pg " << *pg << dendl;
   vector<int> up, acting;
@@ -2981,7 +3005,7 @@ void OSD::send_pg_stats(const utime_t &now)
       ++p;
       if (!pg->is_primary()) {  // we hold map_lock; role is stable.
 	pg->stat_queue_item.remove_myself();
-	pg->put();
+	pg->put("pg_stat_queue");
 	continue;
       }
       pg->pg_stats_lock.Lock();
@@ -3034,7 +3058,7 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
       if (acked == pg->pg_stats_stable.reported) {
 	dout(25) << " ack on " << pg->info.pgid << " " << pg->pg_stats_stable.reported << dendl;
 	pg->stat_queue_item.remove_myself();
-	pg->put();
+	pg->put("pg_stat_queue");
       } else {
 	dout(25) << " still pending " << pg->info.pgid << " " << pg->pg_stats_stable.reported
 		 << " > acked " << acked << dendl;
@@ -5850,7 +5874,7 @@ void OSD::_remove_pg(PG *pg)
 
   // remove from map
   pg_map.erase(pg->info.pgid);
-  pg->put(); // since we've taken it out of map
+  pg->put("PGMap"); // since we've taken it out of map
 }
 
 
