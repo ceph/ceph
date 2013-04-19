@@ -802,6 +802,7 @@ private:
     }
     bool _enqueue(PG *pg) {
       pg->get("PeeringWQ");
+      assert(!pg->deleting);
       peering_queue.push_back(pg);
       return true;
     }
