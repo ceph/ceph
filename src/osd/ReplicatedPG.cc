@@ -6180,7 +6180,8 @@ void ReplicatedPG::_finish_mark_all_unfound_lost(list<ObjectContext*>& obcs)
   lock();
   dout(10) << "_finish_mark_all_unfound_lost " << dendl;
 
-  requeue_ops(waiting_for_all_missing);
+  if (!deleting)
+    requeue_ops(waiting_for_all_missing);
   waiting_for_all_missing.clear();
 
   while (!obcs.empty()) {
