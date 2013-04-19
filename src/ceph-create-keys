@@ -79,9 +79,13 @@ def get_key(cluster, mon_id):
                     stdout=f,
                     )
             if returncode != 0:
-                LOG.info('Cannot get or create admin key')
-                time.sleep(1)
-                continue
+                if returncode == errno.EPERM or returncode == errno.EACCES:
+                    LOG.info('Cannot get or create admin key, permission denied')
+                    sys.exit(returncode)
+                else:
+                    LOG.info('Cannot get or create admin key')
+                    time.sleep(1)
+                    continue
 
             os.rename(tmp, path)
             break
@@ -130,9 +134,13 @@ def bootstrap_key(cluster, type_, caps):
                     stdout=f,
                     )
             if returncode != 0:
-                LOG.info('Cannot get or create bootstrap key for %s', type_)
-                time.sleep(1)
-                continue
+                if returncode == errno.EPERM or returncode == errno.EACCES:
+                    LOG.info('Cannot get or create bootstrap key for %s, permission denied', type_)
+                    break
+                else:
+                    LOG.info('Cannot get or create bootstrap key for %s', type_)
+                    time.sleep(1)
+                    continue
 
             os.rename(tmp, path)
             break
