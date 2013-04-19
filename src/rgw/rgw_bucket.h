@@ -81,7 +81,8 @@ WRITE_CLASS_ENCODER(RGWUserBuckets)
  * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
  * Returns: 0 on success, -ERR# on failure.
  */
-extern int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& buckets, bool need_stats);
+extern int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& buckets,
+                                 const string& marker, uint64_t max, bool need_stats);
 
 /**
  * Store the set of buckets associated with a user.
@@ -113,7 +114,6 @@ struct RGWBucketAdminOpState {
   bool bucket_stored;
 
   rgw_bucket bucket;
-  RGWUserBuckets buckets;
 
   void set_fetch_stats(bool value) { stat_buckets = value; }
   void set_check_objects(bool value) { check_objects = value; }
@@ -141,9 +141,6 @@ struct RGWBucketAdminOpState {
     bucket = _bucket; 
     bucket_stored = true;
   }
-
-  RGWUserBuckets& get_user_buckets() { return buckets; };
-  void set_user_buckets(RGWUserBuckets& _buckets) { buckets = _buckets; };
 
   bool will_fetch_stats() { return stat_buckets; };
   bool will_fix_index() { return fix_index; };

@@ -240,19 +240,33 @@ int rgw_remove_swift_name_index(RGWRados *store, string& swift_name)
  * themselves alone, as well as any ACLs embedded in object xattrs.
  */
 int rgw_delete_user(RGWRados *store, RGWUserInfo& info) {
-  RGWUserBuckets user_buckets;
-  int ret = rgw_read_user_buckets(store, info.user_id, user_buckets, false);
-  if (ret < 0)
-    return ret;
-
-  map<string, RGWBucketEnt>& buckets = user_buckets.get_buckets();
+  string marker;
   vector<rgw_bucket> buckets_vec;
-  for (map<string, RGWBucketEnt>::iterator i = buckets.begin();
-      i != buckets.end();
-      ++i) {
-    RGWBucketEnt& bucket = i->second;
-    buckets_vec.push_back(bucket.bucket);
-  }
+
+  bool done;
+  int ret;
+  CephContext *cct = store->ctx();
+  size_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
+
+  do {
+    RGWUserBuckets user_buckets;
+    ret = rgw_read_user_buckets(store, info.user_id, user_buckets, marker, max_buckets, false);
+    if (ret < 0)
+      return ret;
+
+    map<string, RGWBucketEnt>& buckets = user_buckets.get_buckets();
+    for (map<string, RGWBucketEnt>::iterator i = buckets.begin();
+        i != buckets.end();
+        ++i) {
+      RGWBucketEnt& bucket = i->second;
+      buckets_vec.push_back(bucket.bucket);
+
+      marker = i->first;
+    }
+
+    done = (buckets.size() < max_buckets);
+  } while (!done);
+
   map<string, RGWAccessKey>::iterator kiter = info.access_keys.begin();
   for (; kiter != info.access_keys.end(); ++kiter) {
     ldout(store->ctx(), 10) << "removing key index: " << kiter->first << dendl;
@@ -1694,20 +1708,24 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg)
     return -EINVAL;
   }
 
-  RGWUserBuckets buckets;
-  ret = rgw_read_user_buckets(store, uid, buckets, false);
-  if (ret < 0) {
-    set_err_msg(err_msg, "unable to read user bucket info");
-    return ret;
-  }
+  bool done;
+  string marker;
+  CephContext *cct = store->ctx();
+  size_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
+  do {
+    RGWUserBuckets buckets;
+    ret = rgw_read_user_buckets(store, uid, buckets, marker, max_buckets, false);
+    if (ret < 0) {
+      set_err_msg(err_msg, "unable to read user bucket info");
+      return ret;
+    }
 
-  map<std::string, RGWBucketEnt>& m = buckets.get_buckets();
-  if (!m.empty() && !purge_data) {
-    set_err_msg(err_msg, "must specify purge data to remove user with buckets");
-    return -EEXIST; // change to code that maps to 409: conflict
-  }
+    map<std::string, RGWBucketEnt>& m = buckets.get_buckets();
+    if (!m.empty() && !purge_data) {
+      set_err_msg(err_msg, "must specify purge data to remove user with buckets");
+      return -EEXIST; // change to code that maps to 409: conflict
+    }
 
-  if (!m.empty()) {
     std::map<std::string, RGWBucketEnt>::iterator it;
     for (it = m.begin(); it != m.end(); ++it) {
       ret = rgw_remove_bucket(store, ((*it).second).bucket, true);
@@ -1715,8 +1733,12 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg)
         set_err_msg(err_msg, "unable to delete user data");
         return ret;
       }
+
+      marker = it->first;
     }
-  }
+
+    done = (m.size() < max_buckets);
+  } while (!done);
 
   ret = rgw_delete_user(store, user_info);
   if (ret < 0) {
@@ -1824,26 +1846,36 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
       return -EINVAL;
     }
 
-    ret = rgw_read_user_buckets(store, user_id, buckets, false);
-    if (ret < 0) {
-      set_err_msg(err_msg, "could not get buckets for uid:  " + user_id);
-      return ret;
-    }
+    bool done;
+    string marker;
+    CephContext *cct = store->ctx();
+    size_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
+    do {
+      ret = rgw_read_user_buckets(store, user_id, buckets, marker, max_buckets, false);
+      if (ret < 0) {
+        set_err_msg(err_msg, "could not get buckets for uid:  " + user_id);
+        return ret;
+      }
 
-    map<string, RGWBucketEnt>& m = buckets.get_buckets();
-    map<string, RGWBucketEnt>::iterator iter;
+      map<string, RGWBucketEnt>& m = buckets.get_buckets();
+      map<string, RGWBucketEnt>::iterator iter;
 
-    vector<rgw_bucket> bucket_names;
-    for (iter = m.begin(); iter != m.end(); ++iter) {
-      RGWBucketEnt obj = iter->second;
-      bucket_names.push_back(obj.bucket);
-    }
+      vector<rgw_bucket> bucket_names;
+      for (iter = m.begin(); iter != m.end(); ++iter) {
+        RGWBucketEnt obj = iter->second;
+        bucket_names.push_back(obj.bucket);
 
-    ret = store->set_buckets_enabled(bucket_names, !suspended);
-    if (ret < 0) {
-      set_err_msg(err_msg, "failed to change pool");
-      return ret;
-    }
+        marker = iter->first;
+      }
+
+      ret = store->set_buckets_enabled(bucket_names, !suspended);
+      if (ret < 0) {
+        set_err_msg(err_msg, "failed to modify bucket");
+        return ret;
+      }
+
+      done = (m.size() < max_buckets);
+    } while (!done);
   }
   op_state.set_user_info(user_info);
 
