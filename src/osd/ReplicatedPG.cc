@@ -5841,7 +5841,8 @@ void ReplicatedPG::_applied_recovered_object(ObjectStore::Transaction *t, Object
   --active_pushes;
 
   // requeue an active chunky scrub waiting on recovery ops
-  if (active_pushes == 0 && scrubber.is_chunky_scrub_active()) {
+  if (!deleting && active_pushes == 0
+      && scrubber.is_chunky_scrub_active()) {
     osd->scrub_wq.queue(this);
   }
 
@@ -5858,7 +5859,7 @@ void ReplicatedPG::_applied_recovered_object_replica(ObjectStore::Transaction *t
   --active_pushes;
 
   // requeue an active chunky scrub waiting on recovery ops
-  if (active_pushes == 0 &&
+  if (!deleting && active_pushes == 0 &&
       scrubber.active_rep_scrub && scrubber.active_rep_scrub->chunky) {
     osd->rep_scrub_wq.queue(scrubber.active_rep_scrub);
     scrubber.active_rep_scrub = 0;
