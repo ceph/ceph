@@ -320,7 +320,10 @@ for name in $what; do
 	    get_conf pre_start "" "pre start command"
 	    get_conf post_start "" "post start command"
 	    [ -n "$pre_start" ] && do_cmd "$pre_start"
-	    do_cmd "$cmd" $runarg
+	    do_cmd_okfail "$cmd" $runarg
+	    if [ "$ERR" != "0" ]; then
+		EXIT_STATUS=$ERR
+	    fi
 
 	    if [ "$type" = "mon" ]; then
 		# this will only work if we are using default paths
