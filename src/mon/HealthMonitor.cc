@@ -78,7 +78,7 @@ void HealthMonitor::service_shutdown()
   services.clear();
 }
 
-void HealthMonitor::get_health(Formatter *f,
+health_status_t HealthMonitor::get_health(Formatter *f,
                                list<pair<health_status_t,string> > *detail) {
   assert(f != NULL);
   f->open_object_section("health");
