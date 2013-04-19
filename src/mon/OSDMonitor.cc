@@ -3396,12 +3396,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
 	      return true;
 	    } else if (m->cmd[4] == "pg_num") {
-	      if (m->cmd.size() < 7 ||
-		  m->cmd[6] != "--allow-experimental-feature") {
-		ss << "increasing pg_num is currently experimental, add "
-		   << "--allow-experimental-feature as the last argument "
-		   << "to force";
-	      } else if (n <= p->get_pg_num()) {
+	      if (n <= p->get_pg_num()) {
 		ss << "specified pg_num " << n << " <= current " << p->get_pg_num();
 	      } else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
 		ss << "currently creating pgs, wait";
