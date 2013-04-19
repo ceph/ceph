@@ -64,6 +64,12 @@ class MOSDPGScan;
 class MOSDPGBackfill;
 class MOSDPGInfo;
 
+class PG;
+
+void intrusive_ptr_add_ref(PG *pg);
+void intrusive_ptr_release(PG *pg);
+
+  typedef boost::intrusive_ptr<PG> PGRef;
 
 struct PGRecoveryStats {
   struct per_state_info {
@@ -1966,10 +1972,5 @@ public:
 WRITE_CLASS_ENCODER(PG::OndiskLog)
 
 ostream& operator<<(ostream& out, const PG& pg);
-
-void intrusive_ptr_add_ref(PG *pg);
-void intrusive_ptr_release(PG *pg);
-
-typedef boost::intrusive_ptr<PG> PGRef;
 
 #endif
