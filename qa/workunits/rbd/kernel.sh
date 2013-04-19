@@ -72,7 +72,7 @@ sudo dd if=/dev/rbd/rbd/testimg1@snap1 of=/tmp/img1.snap1
 cmp /tmp/img1 /tmp/img1.snap1
 
 # resize
-rbd resize testimg1 --size=40
+rbd resize testimg1 --size=40 --allow-shrink
 echo 1 | sudo tee /sys/bus/rbd/devices/$DEV_ID1/refresh
 cat /sys/bus/rbd/devices/$DEV_ID1/size | grep 41943040
 echo 1 | sudo tee /sys/bus/rbd/devices/$DEV_ID2/refresh
