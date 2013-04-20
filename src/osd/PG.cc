@@ -40,7 +40,8 @@
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
-static ostream& _prefix(std::ostream *_dout, const PG *pg) {
+static ostream& _prefix(std::ostream *_dout, const PG *pg) 
+{
   return *_dout << pg->gen_prefix();
 }
 
@@ -2569,14 +2570,20 @@ void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
   assert(r == 0);
 }
 
-void PG::write_info(ObjectStore::Transaction& t)
+int PG::_write_info(ObjectStore::Transaction& t, epoch_t epoch,
+    pg_info_t &info, coll_t coll,
+    map<epoch_t,pg_interval_t> &past_intervals,
+    interval_set<snapid_t> &snap_collections,
+    hobject_t &infos_oid,
+    __u8 info_struct_v, bool dirty_big_info, bool force_ver)
 {
   // pg state
 
-  assert(info_struct_v <= cur_struct_v);
+  if (info_struct_v > cur_struct_v)
+    return -EINVAL;
 
   // Only need to write struct_v to attr when upgrading
-  if (info_struct_v < cur_struct_v) {
+  if (force_ver || info_struct_v < cur_struct_v) {
     bufferlist attrbl;
     info_struct_v = cur_struct_v;
     ::encode(info_struct_v, attrbl);
@@ -2587,7 +2594,7 @@ void PG::write_info(ObjectStore::Transaction& t)
   // info.  store purged_snaps separately.
   interval_set<snapid_t> purged_snaps;
   map<string,bufferlist> v;
-  ::encode(get_osdmap()->get_epoch(), v[get_epoch_key(info.pgid)]);
+  ::encode(epoch, v[get_epoch_key(info.pgid)]);
   purged_snaps.swap(info.purged_snaps);
   ::encode(info, v[get_info_key(info.pgid)]);
   purged_snaps.swap(info.purged_snaps);
@@ -2598,10 +2605,20 @@ void PG::write_info(ObjectStore::Transaction& t)
     ::encode(past_intervals, bigbl);
     ::encode(snap_collections, bigbl);
     ::encode(info.purged_snaps, bigbl);
-    dout(20) << "write_info bigbl " << bigbl.length() << dendl;
+    //dout(20) << "write_info bigbl " << bigbl.length() << dendl;
   }
 
-  t.omap_setkeys(coll_t::META_COLL, osd->infos_oid, v);
+  t.omap_setkeys(coll_t::META_COLL, infos_oid, v);
+
+  return 0;
+}
+
+void PG::write_info(ObjectStore::Transaction& t)
+{
+  int ret = _write_info(t, get_osdmap()->get_epoch(), info, coll,
+     past_intervals, snap_collections, osd->infos_oid,
+     info_struct_v, dirty_big_info);
+  assert(ret == 0);
 
   dirty_info = false;
   dirty_big_info = false;
@@ -2639,9 +2656,10 @@ epoch_t PG::peek_map_epoch(ObjectStore *store, coll_t coll, hobject_t &infos_oid
   return cur_epoch;
 }
 
-void PG::write_log(ObjectStore::Transaction& t)
+void PG::_write_log(ObjectStore::Transaction& t, pg_log_t &log,
+    const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors)
 {
-  dout(10) << "write_log" << dendl;
+  //dout(10) << "write_log" << dendl;
   t.remove(coll_t::META_COLL, log_oid);
   t.touch(coll_t::META_COLL, log_oid);
   map<string,bufferlist> keys;
@@ -2652,12 +2670,16 @@ void PG::write_log(ObjectStore::Transaction& t)
     p->encode_with_checksum(bl);
     keys[p->get_key_name()].claim(bl);
   }
-  dout(10) << "write_log " << keys.size() << " keys" << dendl;
+  //dout(10) << "write_log " << keys.size() << " keys" << dendl;
 
-  ::encode(ondisklog.divergent_priors, keys["divergent_priors"]);
+  ::encode(divergent_priors, keys["divergent_priors"]);
 
   t.omap_setkeys(coll_t::META_COLL, log_oid, keys);
+}
 
+void PG::write_log(ObjectStore::Transaction& t)
+{
+  _write_log(t, log, log_oid, ondisklog.divergent_priors);
   dirty_log = false;
 }
 
@@ -3460,7 +3482,8 @@ void PG::scrub_unreserve_replicas()
   }
 }
 
-void PG::_scan_snaps(ScrubMap &smap) {
+void PG::_scan_snaps(ScrubMap &smap) 
+{
   for (map<hobject_t, ScrubMap::object>::iterator i = smap.objects.begin();
        i != smap.objects.end();
        ++i) {

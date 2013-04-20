@@ -1847,6 +1847,14 @@ private:
   void write_log(ObjectStore::Transaction& t);
 public:
 
+  static int _write_info(ObjectStore::Transaction& t, epoch_t epoch,
+    pg_info_t &info, coll_t coll,
+    map<epoch_t,pg_interval_t> &past_intervals,
+    interval_set<snapid_t> &snap_collections,
+    hobject_t &infos_oid,
+    __u8 info_struct_v, bool dirty_big_info, bool force_ver = false);
+  static void _write_log(ObjectStore::Transaction& t, pg_log_t &log,
+    const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors);
   void write_if_dirty(ObjectStore::Transaction& t);
 
   void add_log_entry(pg_log_entry_t& e, bufferlist& log_bl);
