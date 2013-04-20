@@ -11,12 +11,9 @@ objects on storage nodes; and Monitors maintain a master copy of the cluster
 map. A Ceph cluster may contain thousands of storage nodes. A minimal system 
 will have at least two OSDs for data replication. 
 
-.. ditaa::  +---------------+ +---------------+
-            |      OSDs     | |    Monitor    |
-            +---------------+ +---------------+
-
 .. raw:: html
 
+	<style type="text/css">div.body h3{margin:5px 0px 0px 0px;}</style>
 	<table cellpadding="10"><colgroup><col width="33%"><col width="33%"><col width="33%"></colgroup><tbody valign="top"><tr><td><h3>Config and Deploy</h3>
 
 Once you have installed Ceph packages, you must configure. There are a  a few
