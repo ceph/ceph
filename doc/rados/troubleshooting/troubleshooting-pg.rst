@@ -272,6 +272,18 @@ multiple of the number of OSDs. See `Placement Groups`_ for details. The default
 placement group count for pools isn't useful, but you can change it `here`_.
 
 
+Can't Write Data
+================
+
+If your cluster is up, but some OSDs are down and you cannot write data, 
+check to ensure that you have the minimum number of OSDs running for the
+placement group. If you don't have the minimum number of OSDs running, 
+Ceph will not allow you to write data because there is no guarantee
+that Ceph can replicate your data. See ``osd pool default min size``
+in the `Pool, PG and CRUSH Config Reference`_ for details.
+
+
 .. _check: ../../operations/placement-groups#get-the-number-of-placement-groups
 .. _here: ../../configuration/pool-pg-config-ref
 .. _Placement Groups: ../../operations/placement-groups
+.. _Pool, PG and CRUSH Config Reference: ../../configuration/pool-pg-config-ref
