@@ -3696,33 +3696,29 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
 class C_OSD_OpApplied : public Context {
 public:
-  ReplicatedPG *pg;
+  ReplicatedPGRef pg;
   ReplicatedPG::RepGather *repop;
 
   C_OSD_OpApplied(ReplicatedPG *p, ReplicatedPG::RepGather *rg) :
     pg(p), repop(rg) {
     repop->get();
-    pg->get();    // we're copying the pointer
   }
   void finish(int r) {
     pg->op_applied(repop);
-    pg->put();
   }
 };
 
 class C_OSD_OpCommit : public Context {
 public:
-  ReplicatedPG *pg;
+  ReplicatedPGRef pg;
   ReplicatedPG::RepGather *repop;
 
   C_OSD_OpCommit(ReplicatedPG *p, ReplicatedPG::RepGather *rg) :
     pg(p), repop(rg) {
     repop->get();
-    pg->get();    // we're copying the pointer
   }
   void finish(int r) {
     pg->op_commit(repop);
-    pg->put();
   }
 };
 
@@ -4631,7 +4627,7 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
 
   RepModify *rm = new RepModify;
   rm->pg = this;
-  get();
+  get("RepModify");
   rm->op = op;
   rm->ctx = 0;
   rm->ackerosd = ackerosd;
@@ -4764,7 +4760,7 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
   if (done) {
     delete rm->ctx;
     delete rm;
-    put();
+    put("RepModify");
   }
 }
 
@@ -4799,7 +4795,7 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
   if (done) {
     delete rm->ctx;
     delete rm;
-    put();
+    put("RepModify");
   }
 }
 
@@ -5845,7 +5841,8 @@ void ReplicatedPG::_applied_recovered_object(ObjectStore::Transaction *t, Object
   --active_pushes;
 
   // requeue an active chunky scrub waiting on recovery ops
-  if (active_pushes == 0 && scrubber.is_chunky_scrub_active()) {
+  if (!deleting && active_pushes == 0
+      && scrubber.is_chunky_scrub_active()) {
     osd->scrub_wq.queue(this);
   }
 
@@ -5862,7 +5859,7 @@ void ReplicatedPG::_applied_recovered_object_replica(ObjectStore::Transaction *t
   --active_pushes;
 
   // requeue an active chunky scrub waiting on recovery ops
-  if (active_pushes == 0 &&
+  if (!deleting && active_pushes == 0 &&
       scrubber.active_rep_scrub && scrubber.active_rep_scrub->chunky) {
     osd->rep_scrub_wq.queue(scrubber.active_rep_scrub);
     scrubber.active_rep_scrub = 0;
@@ -6069,14 +6066,11 @@ ObjectContext *ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
 }
 
 struct C_PG_MarkUnfoundLost : public Context {
-  ReplicatedPG *pg;
+  ReplicatedPGRef pg;
   list<ObjectContext*> obcs;
-  C_PG_MarkUnfoundLost(ReplicatedPG *p) : pg(p) {
-    pg->get();
-  }
+  C_PG_MarkUnfoundLost(ReplicatedPG *p) : pg(p) {}
   void finish(int r) {
     pg->_finish_mark_all_unfound_lost(obcs);
-    pg->put();
   }
 };
 
@@ -6186,7 +6180,8 @@ void ReplicatedPG::_finish_mark_all_unfound_lost(list<ObjectContext*>& obcs)
   lock();
   dout(10) << "_finish_mark_all_unfound_lost " << dendl;
 
-  requeue_ops(waiting_for_all_missing);
+  if (!deleting)
+    requeue_ops(waiting_for_all_missing);
   waiting_for_all_missing.clear();
 
   while (!obcs.empty()) {
@@ -7456,5 +7451,10 @@ boost::statechart::result ReplicatedPG::WaitingOnReplicas::react(const SnapTrim&
   return transit< NotTrimming >();
 }
 
-void intrusive_ptr_add_ref(ReplicatedPG *pg) { pg->get(); }
-void intrusive_ptr_release(ReplicatedPG *pg) { pg->put(); }
+void intrusive_ptr_add_ref(ReplicatedPG *pg) { pg->get("intptr"); }
+void intrusive_ptr_release(ReplicatedPG *pg) { pg->put("intptr"); }
+
+#ifdef PG_DEBUG_REFS
+uint64_t get_with_id(ReplicatedPG *pg) { return pg->get_with_id(); }
+void put_with_id(ReplicatedPG *pg, uint64_t id) { return pg->put_with_id(id); }
+#endif
