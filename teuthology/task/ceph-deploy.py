@@ -194,11 +194,17 @@ def build_ceph_cluster(ctx, config):
 
     log.info('Setting up client nodes...')
     conf_path = '/etc/ceph/ceph.conf'
+    admin_keyring_path = '/etc/ceph/ceph.client.admin.keyring'
     first_mon = teuthology.get_first_mon(ctx, config)
     (mon0_remote,) = ctx.cluster.only(first_mon).remotes.keys()
     conf_data = teuthology.get_file(
         remote=mon0_remote,
         path=conf_path,
+        sudo=True,
+        )
+    admin_keyring = teuthology.get_file(
+        remote=mon0_remote,
+        path=admin_keyring_path,
         sudo=True,
         )
 
@@ -233,6 +239,12 @@ def build_ceph_cluster(ctx, config):
                 remote=remot,
                 path=client_keyring,
                 data=key_data,
+                perms='0644'
+            )
+            teuthology.sudo_write_file(
+                remote=remot,
+                path=admin_keyring_path,
+                data=admin_keyring,
                 perms='0644'
             )
             teuthology.sudo_write_file(
