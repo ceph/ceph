@@ -370,8 +370,8 @@ def install(ctx, config):
 
     extras = config.get('extras')
     if extras is not None:
-        debs = ['ceph-test', 'ceph-test-dbg', 'ceph-fuse', 'ceph-fuse-dbg']
-        rpm = ['ceph-fuse',]
+        debs = ['ceph-test', 'ceph-test-dbg', 'ceph-fuse', 'ceph-fuse-dbg', 'librados2', 'librados2-dbg', 'librbd1', 'librbd1-dbg', 'python-ceph']
+        rpm = ['ceph-fuse', 'librbd1', 'librados2', 'ceph-test', 'python-ceph']
 
     # install lib deps (so we explicitly specify version), but do not
     # uninstall them, as other packages depend on them (e.g., kvm)
