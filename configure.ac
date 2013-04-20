@@ -268,6 +268,12 @@ AS_IF([test "x$with_tcmalloc" != xno],
 		  [no tcmalloc found (use --without-tcmalloc to disable)])])])
 AM_CONDITIONAL(WITH_TCMALLOC, [test "$HAVE_LIBTCMALLOC" = "1"])
 
+#set pg ref debugging?
+AC_ARG_ENABLE([pgrefdebugging],
+	    [AS_HELP_STRING([--enable-pgrefdebugging], [enable pg ref debugging])],
+			[AC_DEFINE([PG_DEBUG_REFS], [1], [Defined if you want pg ref debugging])],
+			[])
+
 #
 # Java is painful
 #   - adapted from OMPI wrappers package
