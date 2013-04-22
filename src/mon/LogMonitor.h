@@ -49,6 +49,11 @@ private:
 
   bool should_propose(double& delay);
 
+  bool should_stash_full() {
+    // commit a LogSummary on every commit
+    return true;
+  }
+
   struct C_Log : public Context {
     LogMonitor *logmon;
     MLog *ack;
