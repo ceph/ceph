@@ -3180,7 +3180,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  return true;
 	}
 	ss << addr << " isn't blacklisted";
-	err = -ENOENT;
+	err = 0;
 	goto out;
       }
     }
