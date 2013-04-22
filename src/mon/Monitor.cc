@@ -2440,16 +2440,6 @@ void Monitor::handle_command(MMonCommand *m)
     reply_command(m, 0, rs, rdata, 0);
     return;
   }
-  if (m->cmd[0] == "stop_cluster") {
-    if (!access_all) {
-      r = -EACCES;
-      rs = "access denied";
-      goto out;
-    }
-    stop_cluster();
-    reply_command(m, 0, "initiating cluster shutdown", 0);
-    return;
-  }
 
   if (m->cmd[0] == "injectargs") {
     if (!access_all) {
@@ -2953,14 +2943,6 @@ void Monitor::send_command(const entity_inst_t& inst,
   c->cmd = com;
   try_send_message(c, inst);
 }
-
-
-void Monitor::stop_cluster()
-{
-  dout(0) << "stop_cluster -- initiating shutdown" << dendl;
-  mdsmon()->do_stop();
-}
-
 
 bool Monitor::_ms_dispatch(Message *m)
 {
