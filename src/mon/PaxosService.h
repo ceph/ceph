@@ -663,7 +663,7 @@ public:
    * @defgroup PaxosService_h_Stash_Full
    * @{
    */
-  bool should_stash_full();
+  virtual bool should_stash_full();
   /**
    * Encode a full version on @p t
    *
