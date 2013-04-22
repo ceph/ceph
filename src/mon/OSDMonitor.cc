@@ -3199,7 +3199,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  if (p->snap_exists(snapname.c_str()) ||
 	      (pp && pp->snap_exists(snapname.c_str()))) {
 	    ss << "pool " << m->cmd[3] << " snap " << snapname << " already exists";
-	    err = -EEXIST;
+	    err = 0;
 	  } else {
 	    if (!pp) {
 	      pp = &pending_inc.new_pools[pool];
