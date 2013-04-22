@@ -28,10 +28,19 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "-- " << msgr->get_myaddr() << " "
 
+double DispatchQueue::get_max_age(utime_t now) {
+  Mutex::Locker l(lock);
+  if (marrival.empty())
+    return 0;
+  else
+    return (now - marrival.begin()->first);
+}
+
 void DispatchQueue::enqueue(Message *m, int priority, uint64_t id)
 {
   Mutex::Locker l(lock);
   ldout(cct,20) << "queue " << m << " prio " << priority << dendl;
+  add_arrival(m);
   if (priority >= CEPH_MSG_PRIO_LOW) {
     mqueue.enqueue_strict(
       id, priority, QueueItem(m));
@@ -46,6 +55,7 @@ void DispatchQueue::local_delivery(Message *m, int priority)
 {
   Mutex::Locker l(lock);
   m->set_connection(msgr->local_connection->get());
+  add_arrival(m);
   if (priority >= CEPH_MSG_PRIO_LOW) {
     mqueue.enqueue_strict(
       0, priority, QueueItem(m));
@@ -71,6 +81,8 @@ void DispatchQueue::entry()
   while (!stop) {
     while (!mqueue.empty() && !stop) {
       QueueItem qitem = mqueue.dequeue();
+      if (!qitem.is_code())
+	remove_arrival(qitem.get_message());
       lock.Unlock();
 
       if (qitem.is_code()) {
@@ -128,6 +140,7 @@ void DispatchQueue::discard_queue(uint64_t id) {
        ++i) {
     assert(!(i->is_code())); // We don't discard id 0, ever!
     Message *m = i->get_message();
+    remove_arrival(m);
     msgr->dispatch_throttle_release(m->get_dispatch_throttle_size());
     m->put();
   }
