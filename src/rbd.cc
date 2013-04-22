@@ -177,9 +177,11 @@ static string features_str(uint64_t features)
 
   for (uint64_t feature = 1; feature <= RBD_FEATURE_STRIPINGV2;
        feature <<= 1) {
-    if (s.size())
-      s += ", ";
-    s += feature_str(feature);
+    if (feature & features) {
+      if (s.size())
+	s += ", ";
+      s += feature_str(feature);
+    }
   }
   return s;
 }
