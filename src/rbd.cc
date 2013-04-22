@@ -177,9 +177,11 @@ static string features_str(uint64_t features)
 
   for (uint64_t feature = 1; feature <= RBD_FEATURE_STRIPINGV2;
        feature <<= 1) {
-    if (s.size())
-      s += ", ";
-    s += feature_str(feature);
+    if (feature & features) {
+      if (s.size())
+	s += ", ";
+      s += feature_str(feature);
+    }
   }
   return s;
 }
@@ -427,8 +429,10 @@ static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     if (features == 0) {
       features = RBD_FEATURE_LAYERING;
     }
-    if (stripe_unit != (1ull << *order) && stripe_count != 1)
+    if ((stripe_unit || stripe_count) &&
+	(stripe_unit != (1ull << *order) && stripe_count != 1)) {
       features |= RBD_FEATURE_STRIPINGV2;
+    }
     r = rbd.create3(io_ctx, imgname, size, features, order,
 		    stripe_unit, stripe_count);
   }
