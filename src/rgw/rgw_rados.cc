@@ -1364,6 +1364,9 @@ int RGWRados::copy_obj(void *ctx,
   } else {
     pmanifest = &astate->manifest;
     tag = astate->obj_tag.c_str();
+
+    /* don't send the object's tail for garbage collection */
+    astate->keep_tail = true;
   }
 
   if (copy_first) {
@@ -1585,7 +1588,7 @@ int RGWRados::bucket_suspended(rgw_bucket& bucket, bool *suspended)
 
 int RGWRados::complete_atomic_overwrite(RGWRadosCtx *rctx, RGWObjState *state, rgw_obj& obj)
 {
-  if (!state || !state->has_manifest)
+  if (!state || !state->has_manifest || state->keep_tail)
     return 0;
 
   cls_rgw_obj_chain chain;
