@@ -191,6 +191,8 @@ OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long
 OPTION(paxos_min_wait, OPT_DOUBLE, 0.05)  // min time to gather updates for after period of inactivity
 OPTION(paxos_trim_tolerance, OPT_INT, 30) // number of extra proposals tolerated before trimming
 OPTION(paxos_trim_disabled_max_versions, OPT_INT, 100) // maximum amount of versions we shall allow passing by without trimming
+OPTION(paxos_service_trim_max, OPT_INT, 50) // maximum amount of versions to trim during a single proposal (0 disables it)
+OPTION(paxos_service_trim_min, OPT_INT, 30) // minimum amount of versions to trigger a trim (0 disables it)
 OPTION(clock_offset, OPT_DOUBLE, 0) // how much to offset the system clock in Clock.cc
 OPTION(auth_cluster_required, OPT_STR, "cephx")   // required of mon, mds, osd daemons
 OPTION(auth_service_required, OPT_STR, "cephx")   // required by daemons of clients
