@@ -502,3 +502,33 @@ void MonmapMonitor::get_health(list<pair<health_status_t, string> >& summary,
     }
   }
 }
+
+int MonmapMonitor::get_monmap(bufferlist &bl)
+{
+  version_t latest_ver = get_last_committed();
+  dout(10) << __func__ << " ver " << latest_ver << dendl;
+
+  if (!exists_version(latest_ver))
+    return -ENOENT;
+
+  int err = get_version(latest_ver, bl);
+  if (err < 0) {
+    dout(1) << __func__ << " error obtaining monmap: "
+            << cpp_strerror(err) << dendl;
+    return err;
+  }
+  return 0;
+}
+
+int MonmapMonitor::get_monmap(MonMap &m)
+{
+  dout(10) << __func__ << dendl;
+  bufferlist monmap_bl;
+
+  int err = get_monmap(monmap_bl);
+  if (err < 0) {
+    return err;
+  }
+  m.decode(monmap_bl);
+  return 0;
+}

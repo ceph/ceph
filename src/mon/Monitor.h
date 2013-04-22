@@ -364,6 +364,10 @@ private:
     }
   };
 
+  void sync_store_init();
+  void sync_store_cleanup();
+  bool is_sync_on_going();
+
   /**
    * Send a heartbeat message to another entity.
    *
