@@ -178,7 +178,9 @@ bool PaxosService::should_stash_full()
    *	   nonetheless because, in that event,
    *	      latest_full == get_trim_to() == 0.
    */
-  return (!latest_full || (latest_full <= get_trim_to()));
+  return (!latest_full ||
+	  (latest_full <= get_trim_to()) ||
+	  (get_version() - latest_full > (unsigned)g_conf->paxos_stash_full_interval));
 }
 
 void PaxosService::restart()
