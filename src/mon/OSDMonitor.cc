@@ -3180,7 +3180,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  return true;
 	}
 	ss << addr << " isn't blacklisted";
-	err = -ENOENT;
+	err = 0;
 	goto out;
       }
     }
@@ -3199,7 +3199,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  if (p->snap_exists(snapname.c_str()) ||
 	      (pp && pp->snap_exists(snapname.c_str()))) {
 	    ss << "pool " << m->cmd[3] << " snap " << snapname << " already exists";
-	    err = -EEXIST;
+	    err = 0;
 	  } else {
 	    if (!pp) {
 	      pp = &pending_inc.new_pools[pool];
@@ -3228,7 +3228,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  if (!p->snap_exists(snapname.c_str()) &&
 	      (!pp || !pp->snap_exists(snapname.c_str()))) {
 	    ss << "pool " << m->cmd[3] << " snap " << snapname << " does not exists";
-	    err = -ENOENT;
+	    err = 0;
 	  } else {
 	    if (!pp) {
 	      pp = &pending_inc.new_pools[pool];
