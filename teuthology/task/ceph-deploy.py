@@ -247,7 +247,7 @@ def build_ceph_cluster(ctx, config):
     finally:
         log.info('Stopping ceph...')
         ctx.cluster.run(args=[
-                'sudo', 'stop', 'ceph',
+                'sudo', 'stop', 'ceph-all',
                 run.Raw('||'),
                 'sudo', 'service', 'ceph', 'stop'
                 ])
