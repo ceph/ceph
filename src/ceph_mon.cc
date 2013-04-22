@@ -52,6 +52,53 @@ void handle_mon_signal(int signum)
     mon->handle_signal(signum);
 }
 
+
+int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
+{
+  dout(10) << __func__ << dendl;
+  /*
+   * the monmap may be in one of three places:
+   *  'monmap:<latest_version_no>' - the monmap we'd really like to have
+   *  'mon_sync:latest_monmap'     - last monmap backed up for the last sync
+   *  'mkfs:monmap'                - a monmap resulting from mkfs
+   */
+
+  if (store.exists("monmap", "last_committed")) {
+    version_t latest_ver = store.get("monmap", "last_committed");
+    if (store.exists("monmap", latest_ver)) {
+      int err = store.get("monmap", latest_ver, bl);
+      assert(err == 0);
+      assert(bl.length() > 0);
+      dout(10) << __func__ << " read last committed monmap ver "
+               << latest_ver << dendl;
+      return 0;
+    }
+  }
+
+  if (store.exists("mon_sync", "in_sync")) {
+    dout(10) << __func__ << " detected aborted sync" << dendl;
+    if (store.exists("mon_sync", "latest_monmap")) {
+      int err = store.get("mon_sync", "latest_monmap", bl);
+      assert(err == 0);
+      assert(bl.length() > 0);
+      dout(10) << __func__ << " read backup monmap" << dendl;
+      return 0;
+    }
+  }
+
+  if (store.exists("mkfs", "monmap")) {
+    dout(10) << __func__ << " found mkfs monmap" << dendl;
+    int err = store.get("mkfs", "monmap", bl);
+    assert(err == 0);
+    assert(bl.length() > 0);
+    return 0;
+  }
+
+  derr << __func__ << " unable to find a monmap" << dendl;
+  return -ENOENT;
+}
+
+
 void usage()
 {
   cerr << "usage: ceph-mon -i monid [--mon-data=pathtodata] [flags]" << std::endl;
@@ -301,30 +348,22 @@ int main(int argc, const char **argv)
     exit(0);
   }
 
-
   // monmap?
   MonMap monmap;
   {
+    // note that even if we don't find a viable monmap, we should go ahead
+    // and try to build it up in the next if-else block.
     bufferlist mapbl;
-    bufferlist latest;
-    store.get("monmap", "latest", latest);
-    if (latest.length() > 0) {
-      bufferlist::iterator p = latest.begin();
-      version_t v;
-      ::decode(v, p);
-      ::decode(mapbl, p);
-    } else {
-      store.get("mkfs", "monmap", mapbl);
-      if (mapbl.length() == 0) {
-	cerr << "mon fs missing 'monmap/latest' and 'mkfs/monmap'" << std::endl;
-	exit(1);
+    int err = obtain_monmap(store, mapbl);
+    if (err >= 0) {
+      try {
+        monmap.decode(mapbl);
+      } catch (const buffer::error& e) {
+        cerr << "can't decode monmap: " << e.what() << std::endl;
       }
-    }
-    try {
-      monmap.decode(mapbl);
-    }
-    catch (const buffer::error& e) {
-      cerr << "can't decode monmap: " << e.what() << std::endl;
+    } else {
+      std::cerr << "unable to obtain a monmap: "
+                << cpp_strerror(err) << std::endl;
     }
   }
 
