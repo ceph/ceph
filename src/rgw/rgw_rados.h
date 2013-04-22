@@ -180,11 +180,12 @@ struct RGWObjState {
   bool has_data;
   bufferlist data;
   bool prefetch_data;
+  bool keep_tail;
 
   map<string, bufferlist> attrset;
   RGWObjState() : is_atomic(false), has_attrs(0), exists(false),
                   size(0), mtime(0), epoch(0), fake_tag(false), has_manifest(false),
-                  has_data(false), prefetch_data(false) {}
+                  has_data(false), prefetch_data(false), keep_tail(false) {}
 
   bool get_attr(string name, bufferlist& dest) {
     map<string, bufferlist>::iterator iter = attrset.find(name);
