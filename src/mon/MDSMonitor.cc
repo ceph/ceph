@@ -359,8 +359,18 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
   if (state == MDSMap::STATE_BOOT) {
     // zap previous instance of this name?
     if (g_conf->mds_enforce_unique_name) {
+      bool failed_mds = false;
       while (uint64_t existing = pending_mdsmap.find_mds_gid_by_name(m->get_name())) {
+        if (!mon->osdmon()->is_writeable()) {
+          mon->osdmon()->wait_for_writeable(new C_RetryMessage(this, m));
+          return false;
+        }
 	fail_mds_gid(existing);
+        failed_mds = true;
+      }
+      if (failed_mds) {
+        assert(mon->osdmon()->is_writeable());
+        request_proposal(mon->osdmon());
       }
     }
 
@@ -696,7 +706,6 @@ void MDSMonitor::fail_mds_gid(uint64_t gid)
   until += g_conf->mds_blacklist_interval;
 
   pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(info.addr, until);
-  mon->osdmon()->propose_pending();
 
   if (info.rank >= 0) {
     pending_mdsmap.up.erase(info.rank);
@@ -720,14 +729,27 @@ int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
     w = mds_info->rank;
   }
 
+  if (!mon->osdmon()->is_writeable()) {
+    return -EAGAIN;
+ }
+
+  bool failed_mds_gid = false;
   if (pending_mdsmap.up.count(w)) {
     uint64_t gid = pending_mdsmap.up[w];
-    if (pending_mdsmap.mds_info.count(gid))
+    if (pending_mdsmap.mds_info.count(gid)) {
       fail_mds_gid(gid);
+      failed_mds_gid = true;
+    }
     ss << "failed mds." << w;
   } else if (pending_mdsmap.mds_info.count(w)) {
     fail_mds_gid(w);
+    failed_mds_gid = true;
     ss << "failed mds gid " << w;
+  }
+
+  if (failed_mds_gid) {
+    assert(mon->osdmon()->is_writeable());
+    request_proposal(mon->osdmon());
   }
   return 0;
 }
@@ -757,7 +779,7 @@ int MDSMonitor::cluster_fail(std::ostream &ss)
       dout(10) << " blacklisting gid " << p->second << " " << info.addr << dendl;
       pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(info.addr, until);
     }
-    mon->osdmon()->propose_pending();
+    request_proposal(mon->osdmon());
   }
   pending_mdsmap.up.clear();
   pending_mdsmap.failed.insert(pending_mdsmap.in.begin(),
@@ -858,6 +880,10 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
     }
     else if (m->cmd[1] == "fail" && m->cmd.size() == 3) {
       r = fail_mds(ss, m->cmd[2]);
+      if (r < 0 && r == -EAGAIN) {
+        mon->osdmon()->wait_for_writeable(new C_RetryMessage(this, m));
+        return false; // don't propose yet; wait for message to be retried
+      }
     }
     else if (m->cmd[1] == "rm" && m->cmd.size() == 3) {
       int64_t gid = parse_pos_long(m->cmd[2].c_str(), &ss);
@@ -895,6 +921,10 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
     }
     else if (m->cmd[1] == "cluster_fail") {
       r = cluster_fail(ss);
+      if (r < 0 && r == -EAGAIN) {
+        mon->osdmon()->wait_for_writeable(new C_RetryMessage(this,m));
+        return false; // don't propose yet; wait for message to be retried
+      }
     }
     else if (m->cmd[1] == "cluster_down") {
       if (pending_mdsmap.test_flag(CEPH_MDSMAP_DOWN)) {
@@ -1177,7 +1207,7 @@ void MDSMonitor::tick()
     }
 
     if (propose_osdmap)
-      mon->osdmon()->propose_pending();
+      request_proposal(mon->osdmon());
 
   }
 
