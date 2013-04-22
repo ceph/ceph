@@ -1712,7 +1712,7 @@ static int do_kernel_add(const char *poolname, const char *imgname,
 
   // let udevadm do its job before we return
   if (udevadm_settle) {
-    r = system("/sbin/udevadm settle");
+    int r = system("/sbin/udevadm settle");
     if (r) {
       if (r < 0)
         cerr << "rbd: error executing udevadm as shell command!" << std::endl;
@@ -1921,7 +1921,7 @@ static int do_kernel_rm(const char *dev)
 
   // let udevadm do its job *before* we try to unmap
   if (udevadm_settle) {
-    r = system("/sbin/udevadm settle");
+    int r = system("/sbin/udevadm settle");
     if (r) {
       if (r < 0)
         cerr << "rbd: error executing udevadm as shell command!" << std::endl;
@@ -1948,7 +1948,7 @@ static int do_kernel_rm(const char *dev)
 
   // let udevadm finish, if present
   if (udevadm_settle){
-    r = system("/sbin/udevadm settle");
+    int r = system("/sbin/udevadm settle");
     if (r) {
       if (r < 0)
         cerr << "rbd: error executing udevadm as shell command!" << std::endl;
