@@ -70,6 +70,25 @@ class DispatchQueue {
   Cond cond;
 
   PrioritizedQueue<QueueItem, uint64_t> mqueue;
+
+  set<pair<double, Message*> > marrival;
+  map<Message *, set<pair<double, Message*> >::iterator> marrival_map;
+  void add_arrival(Message *m) {
+    marrival_map.insert(
+      make_pair(
+	m,
+	marrival.insert(make_pair(m->get_recv_stamp(), m)).first
+	)
+      );
+  }
+  void remove_arrival(Message *m) {
+    map<Message *, set<pair<double, Message*> >::iterator>::iterator i =
+      marrival_map.find(m);
+    assert(i != marrival_map.end());
+    marrival.erase(i->second);
+    marrival_map.erase(i);
+  }
+
   uint64_t next_pipe_id;
     
   enum { D_CONNECT = 1, D_ACCEPT, D_BAD_REMOTE_RESET, D_BAD_RESET, D_NUM_CODES };
@@ -90,6 +109,8 @@ class DispatchQueue {
   public:
   bool stop;
   void local_delivery(Message *m, int priority);
+
+  double get_max_age(utime_t now);
 
   int get_queue_len() {
     Mutex::Locker l(lock);
