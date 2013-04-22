@@ -63,7 +63,6 @@ class MDSMonitor : public PaxosService {
     }
   };
 
-
   void create_new_fs(MDSMap &m, int metadata_pool, int data_pool);
 
 
@@ -121,7 +120,6 @@ public:
   }
 
   void tick();     // check state, take actions
-  void do_stop();
 
   void dump_info(Formatter *f);
 
