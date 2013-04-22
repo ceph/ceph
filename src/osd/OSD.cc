@@ -2334,9 +2334,15 @@ void OSD::heartbeat_entry()
 void OSD::heartbeat_check()
 {
   assert(heartbeat_lock.is_locked());
+  utime_t now = ceph_clock_now(g_ceph_context);
+  double age = hbclient_messenger->get_dispatch_queue_max_age(now);
+  if (age > (g_conf->osd_heartbeat_grace / 2)) {
+    derr << "skipping heartbeat_check, hbqueue max age: " << age << dendl;
+    return; // hb dispatch is too backed up for our hb status to be meaningful
+  }
 
   // check for incoming heartbeats (move me elsewhere?)
-  utime_t cutoff = ceph_clock_now(g_ceph_context);
+  utime_t cutoff = now;
   cutoff -= g_conf->osd_heartbeat_grace;
   for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
        p != heartbeat_peers.end();
