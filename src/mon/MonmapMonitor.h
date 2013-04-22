@@ -70,6 +70,9 @@ class MonmapMonitor : public PaxosService {
   void get_health(list<pair<health_status_t,string> >& summary,
 		  list<pair<health_status_t,string> > *detail) const;
 
+  int get_monmap(bufferlist &bl);
+  int get_monmap(MonMap &m);
+
   /*
    * Since monitors are pretty
    * important, this implementation will just write 0.0.
