@@ -274,6 +274,35 @@ public:
    *	   the class that is implementing PaxosService
    */
   void propose_pending();
+
+  /**
+   * Let others request us to propose.
+   *
+   * At the moment, this is just a wrapper to propose_pending() with an
+   * extra check for is_writeable(), but it's a good practice to dissociate
+   * requests for proposals from direct usage of propose_pending() for
+   * future use -- we might want to perform additional checks or put a
+   * request on hold, for instance.
+   */
+  void request_proposal() {
+    assert(is_writeable());
+
+    propose_pending();
+  }
+  /**
+   * Request service @p other to perform a proposal.
+   *
+   * We could simply use the function above, requesting @p other directly,
+   * but we might eventually want to do something to the request -- say,
+   * set a flag stating we're waiting on a cross-proposal to be finished.
+   */
+  void request_proposal(PaxosService *other) {
+    assert(other != NULL);
+    assert(other->is_writeable());
+
+    other->request_proposal();
+  }
+
   /**
    * Dispatch a message by passing it to several different functions that are
    * either implemented directly by this service, or that should be implemented
@@ -485,7 +514,7 @@ public:
   bool is_readable(version_t ver = 0) {
     if ((ver > get_last_committed())
 	|| ((!mon->is_peon() && !mon->is_leader()))
-	|| (is_proposing() || paxos->is_recovering() || paxos->is_locked())
+        || !is_active()
 	|| (get_last_committed() <= 0)
 	|| ((mon->get_quorum().size() != 1) && !paxos->is_lease_valid())) {
       return false;
@@ -502,13 +531,26 @@ public:
    *  - our monitor is the leader;
    *  - we have a valid lease;
    *  - Paxos is not boostrapping.
+   *  - Paxos is not recovering.
+   *  - we are ready to be written to -- i.e., we have a pending value.
    *
    * @returns true if writeable; false otherwise
    */
   bool is_writeable() {
-    return (!is_proposing() && mon->is_leader()
-        && !paxos->is_locked()
-	&& paxos->is_lease_valid() && !paxos->is_bootstrapping());
+    return (is_active()
+        && mon->is_leader()
+        && paxos->is_lease_valid()
+        && is_write_ready());
+  }
+
+  /**
+   * Check if we are ready to be written to.  This means we must have a
+   * pending value and be active.
+   *
+   * @returns true if we are ready to be written to; false otherwise.
+   */
+  bool is_write_ready() {
+    return is_active() && have_pending;
   }
 
   /**

@@ -1415,8 +1415,6 @@ public:
 
   void handle_signal(int sig);
 
-  void stop_cluster();
-
   int mkfs(bufferlist& osdmapbl);
 
   /**
