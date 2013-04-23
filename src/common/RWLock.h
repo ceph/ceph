@@ -48,7 +48,7 @@ public:
   // read
   void get_read() {
     if (g_lockdep) id = lockdep_will_lock(name, id);
-    pthread_rwlock_rdlock(&L);    
+    pthread_rwlock_rdlock(&L);
     if (g_lockdep) id = lockdep_locked(name, id);
   }
   bool try_get_read() {
@@ -78,6 +78,31 @@ public:
   void put_write() {
     unlock();
   }
+
+public:
+  class RLocker {
+    RWLock &m_lock;
+
+  public:
+    RLocker(RWLock& lock) : m_lock(lock) {
+      m_lock.get_read();
+    }
+    ~RLocker() {
+      m_lock.put_read();
+    }
+  };
+
+  class WLocker {
+    RWLock &m_lock;
+
+  public:
+    WLocker(RWLock& lock) : m_lock(lock) {
+      m_lock.get_write();
+    }
+    ~WLocker() {
+      m_lock.put_write();
+    }
+  };
 };
 
 #endif // !_Mutex_Posix_

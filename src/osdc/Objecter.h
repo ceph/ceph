@@ -801,6 +801,9 @@ public:
     vector<int> acting;
 
     snapid_t snap;
+    SnapContext snapc;
+    utime_t mtime;
+
     int flags;
     vector<OSDOp> ops;
     bufferlist inbl;
@@ -816,7 +819,8 @@ public:
     tid_t register_tid;
     epoch_t map_dne_bound;
 
-    LingerOp() : linger_id(0), flags(0), poutbl(NULL), pobjver(NULL),
+    LingerOp() : linger_id(0), snap(CEPH_NOSNAP), flags(0),
+		 poutbl(NULL), pobjver(NULL),
 		 registered(false),
 		 on_reg_ack(NULL), on_reg_commit(NULL),
 		 session(NULL), session_item(this),
@@ -1067,11 +1071,17 @@ private:
     o->out_rval.swap(op.out_rval);
     return op_submit(o);
   }
-  tid_t linger(const object_t& oid, const object_locator_t& oloc, 
-	       ObjectOperation& op,
-	       snapid_t snap, bufferlist& inbl, bufferlist *poutbl, int flags,
-               Context *onack, Context *onfinish,
-               eversion_t *objver);
+  tid_t linger_mutate(const object_t& oid, const object_locator_t& oloc,
+		      ObjectOperation& op,
+		      const SnapContext& snapc, utime_t mtime,
+		      bufferlist& inbl, int flags,
+		      Context *onack, Context *onfinish,
+		      eversion_t *objver);
+  tid_t linger_read(const object_t& oid, const object_locator_t& oloc,
+		    ObjectOperation& op,
+		    snapid_t snap, bufferlist& inbl, bufferlist *poutbl, int flags,
+		    Context *onack,
+		    eversion_t *objver);
   void unregister_linger(uint64_t linger_id);
 
   /**

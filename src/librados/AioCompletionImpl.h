@@ -47,7 +47,7 @@ struct librados::AioCompletionImpl {
   tid_t aio_write_seq;
   xlist<AioCompletionImpl*>::item aio_write_list_item;
 
-  AioCompletionImpl() : lock("AioCompletionImpl lock"),
+  AioCompletionImpl() : lock("AioCompletionImpl lock", false, false),
 			ref(1), rval(0), released(false), ack(false), safe(false),
 			callback_complete(0), callback_safe(0), callback_arg(0),
 			is_read(false), pbl(0), buf(0), maxlen(0),
@@ -190,6 +190,42 @@ struct C_AioSafe : public Context {
     cb(c, cb_arg);
 
     c->lock.Lock();
+    c->callback_safe = NULL;
+    c->cond.Signal();
+    c->put_unlock();
+  }
+};
+
+/**
+  * Fills in all completed request data, and calls both
+  * complete and safe callbacks if they exist.
+  *
+  * Not useful for usual I/O, but for special things like
+  * flush where we only want to wait for things to be safe,
+  * but allow users to specify any of the callbacks.
+  */
+struct C_AioCompleteAndSafe : public Context {
+  AioCompletionImpl *c;
+
+  C_AioCompleteAndSafe(AioCompletionImpl *cc) : c(cc) {
+    c->ref++;
+  }
+
+  void finish(int r) {
+    c->rval = r;
+    c->ack = true;
+    c->safe = true;
+    rados_callback_t cb_complete = c->callback_complete;
+    void *cb_arg = c->callback_arg;
+    if (cb_complete)
+      cb_complete(c, cb_arg);
+
+    rados_callback_t cb_safe = c->callback_safe;
+    if (cb_safe)
+      cb_safe(c, cb_arg);
+
+    c->lock.Lock();
+    c->callback_complete = NULL;
     c->callback_safe = NULL;
     c->cond.Signal();
     c->put_unlock();

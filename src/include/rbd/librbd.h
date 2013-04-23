@@ -38,6 +38,7 @@ extern "C" {
 #define LIBRBD_VERSION_CODE LIBRBD_VERSION(LIBRBD_VER_MAJOR, LIBRBD_VER_MINOR, LIBRBD_VER_EXTRA)
 
 #define LIBRBD_SUPPORTS_WATCH 0
+#define LIBRBD_SUPPORTS_AIO_FLUSH 1
 
 typedef void *rbd_snap_t;
 typedef void *rbd_image_t;
@@ -318,10 +319,20 @@ int rbd_aio_write(rbd_image_t image, uint64_t off, size_t len, const char *buf, 
 int rbd_aio_read(rbd_image_t image, uint64_t off, size_t len, char *buf, rbd_completion_t c);
 int rbd_aio_discard(rbd_image_t image, uint64_t off, uint64_t len, rbd_completion_t c);
 int rbd_aio_create_completion(void *cb_arg, rbd_callback_t complete_cb, rbd_completion_t *c);
+int rbd_aio_is_complete(rbd_completion_t c);
 int rbd_aio_wait_for_complete(rbd_completion_t c);
 ssize_t rbd_aio_get_return_value(rbd_completion_t c);
 void rbd_aio_release(rbd_completion_t c);
 int rbd_flush(rbd_image_t image);
+/**
+ * Start a flush if caching is enabled. Get a callback when
+ * the currently pending writes are on disk.
+ *
+ * @param image the image to flush writes to
+ * @param c what to call when flushing is complete
+ * @returns 0 on success, negative error code on failure
+ */
+int rbd_aio_flush(rbd_image_t image, rbd_completion_t c);
 
 #ifdef __cplusplus
 }

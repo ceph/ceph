@@ -70,22 +70,58 @@ void librados::IoCtxImpl::queue_aio_write(AioCompletionImpl *c)
   aio_write_list_lock.Lock();
   assert(c->io == this);
   c->aio_write_seq = ++aio_write_seq;
+  ldout(client->cct, 20) << "queue_aio_write " << this << " completion " << c
+			 << " write_seq " << aio_write_seq << dendl;
   aio_write_list.push_back(&c->aio_write_list_item);
   aio_write_list_lock.Unlock();
 }
 
 void librados::IoCtxImpl::complete_aio_write(AioCompletionImpl *c)
 {
+  ldout(client->cct, 20) << "complete_aio_write " << c << dendl;
   aio_write_list_lock.Lock();
   assert(c->io == this);
   c->aio_write_list_item.remove_myself();
+  // queue async flush waiters
+  map<tid_t, std::list<AioCompletionImpl*> >::iterator waiters =
+    aio_write_waiters.find(c->aio_write_seq);
+  if (waiters != aio_write_waiters.end()) {
+    ldout(client->cct, 20) << "found " << waiters->second.size()
+			   << " waiters" << dendl;
+    for (std::list<AioCompletionImpl*>::iterator it = waiters->second.begin();
+	 it != waiters->second.end(); ++it) {
+      client->finisher.queue(new C_AioCompleteAndSafe(*it));
+      (*it)->put();
+    }
+    aio_write_waiters.erase(waiters);
+  } else {
+    ldout(client->cct, 20) << "found no waiters for tid "
+			   << c->aio_write_seq << dendl;
+  }
   aio_write_cond.Signal();
   aio_write_list_lock.Unlock();
   put();
 }
 
+void librados::IoCtxImpl::flush_aio_writes_async(AioCompletionImpl *c)
+{
+  ldout(client->cct, 20) << "flush_aio_writes_async " << this
+			 << " completion " << c << dendl;
+  Mutex::Locker l(aio_write_list_lock);
+  tid_t seq = aio_write_seq;
+  ldout(client->cct, 20) << "flush_aio_writes_async waiting on tid "
+			 << seq << dendl;
+  if (aio_write_list.empty()) {
+    client->finisher.queue(new C_AioCompleteAndSafe(c));
+  } else {
+    c->get();
+    aio_write_waiters[seq].push_back(c);
+  }
+}
+
 void librados::IoCtxImpl::flush_aio_writes()
 {
+  ldout(client->cct, 20) << "flush_aio_writes" << dendl;
   aio_write_list_lock.Lock();
   tid_t seq = aio_write_seq;
   while (!aio_write_list.empty() &&
@@ -675,7 +711,8 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 }
 
 int librados::IoCtxImpl::aio_operate(const object_t& oid,
-				     ::ObjectOperation *o, AioCompletionImpl *c)
+				     ::ObjectOperation *o, AioCompletionImpl *c,
+				     const ::SnapContext& snap_context)
 {
   utime_t ut = ceph_clock_now(client->cct);
   /* can't write to a snapshot */
@@ -689,13 +726,15 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
   queue_aio_write(c);
 
   Mutex::Locker l(*lock);
-  objecter->mutate(oid, oloc, *o, snapc, ut, 0, onack, oncommit, &c->objver);
+  objecter->mutate(oid, oloc, *o, snap_context, ut, 0, onack, oncommit,
+		   &c->objver);
 
   return 0;
 }
 
 int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
-				  bufferlist *pbl, size_t len, uint64_t off)
+				  bufferlist *pbl, size_t len, uint64_t off,
+				  uint64_t snapid)
 {
   if (len > (size_t) INT_MAX)
     return -EDOM;
@@ -709,13 +748,14 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 
   Mutex::Locker l(*lock);
   objecter->read(oid, oloc,
-		 off, len, snap_seq, &c->bl, 0,
+		 off, len, snapid, &c->bl, 0,
 		 onack, &c->objver);
   return 0;
 }
 
 int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
-				  char *buf, size_t len, uint64_t off)
+				  char *buf, size_t len, uint64_t off,
+				  uint64_t snapid)
 {
   if (len > (size_t) INT_MAX)
     return -EDOM;
@@ -729,7 +769,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 
   Mutex::Locker l(*lock);
   objecter->read(oid, oloc,
-		 off, len, snap_seq, &c->bl, 0,
+		 off, len, snapid, &c->bl, 0,
 		 onack, &c->objver);
 
   return 0;
@@ -739,7 +779,7 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
 					 AioCompletionImpl *c,
 					 std::map<uint64_t,uint64_t> *m,
 					 bufferlist *data_bl, size_t len,
-					 uint64_t off)
+					 uint64_t off, uint64_t snapid)
 {
   if (len > (size_t) INT_MAX)
     return -EDOM;
@@ -752,7 +792,7 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
 
   Mutex::Locker l(*lock);
   objecter->sparse_read(oid, oloc,
-		 off, len, snap_seq, &c->bl, 0,
+		 off, len, snapid, &c->bl, 0,
 		 onack);
   return 0;
 }
@@ -1377,7 +1417,7 @@ void librados::IoCtxImpl::set_sync_op_version(eversion_t& ver)
 int librados::IoCtxImpl::watch(const object_t& oid, uint64_t ver,
 			       uint64_t *cookie, librados::WatchCtx *ctx)
 {
-  ::ObjectOperation rd;
+  ::ObjectOperation wr;
   Mutex mylock("IoCtxImpl::watch::mylock");
   Cond cond;
   bool done;
@@ -1389,13 +1429,13 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t ver,
 
   WatchContext *wc = new WatchContext(this, oid, ctx);
   client->register_watcher(wc, oid, ctx, cookie);
-  prepare_assert_ops(&rd);
-  rd.watch(*cookie, ver, 1);
+  prepare_assert_ops(&wr);
+  wr.watch(*cookie, ver, 1);
   bufferlist bl;
-  wc->linger_id = objecter->linger(
-    oid, oloc, rd, snap_seq, bl, NULL,
-    CEPH_OSD_FLAG_WRITE,
-    NULL, onfinish, &objver);
+  wc->linger_id = objecter->linger_mutate(oid, oloc, wr,
+					  snapc, ceph_clock_now(NULL), bl,
+					  0,
+					  NULL, onfinish, &objver);
   lock->Unlock();
 
   mylock.Lock();
@@ -1435,16 +1475,16 @@ int librados::IoCtxImpl::unwatch(const object_t& oid, uint64_t cookie)
   Cond cond;
   bool done;
   int r;
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  Context *oncommit = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
   lock->Lock();
 
   client->unregister_watcher(cookie);
 
-  ::ObjectOperation rd;
-  prepare_assert_ops(&rd);
-  rd.watch(cookie, 0, 0);
-  objecter->read(oid, oloc, rd, snap_seq, &outbl, 0, onack, &ver);
+  ::ObjectOperation wr;
+  prepare_assert_ops(&wr);
+  wr.watch(cookie, 0, 0);
+  objecter->mutate(oid, oloc, wr, snapc, ceph_clock_now(client->cct), 0, NULL, oncommit, &ver);
   lock->Unlock();
 
   mylock.Lock();
@@ -1483,8 +1523,8 @@ int librados::IoCtxImpl::notify(const object_t& oid, uint64_t ver, bufferlist& b
   ::encode(timeout, inbl);
   ::encode(bl, inbl);
   rd.notify(cookie, ver, inbl);
-  wc->linger_id = objecter->linger(oid, oloc, rd, snap_seq, inbl, NULL,
-				   0, onack, NULL, &objver);
+  wc->linger_id = objecter->linger_read(oid, oloc, rd, snap_seq, inbl, NULL, 0,
+					onack, &objver);
   lock->Unlock();
 
   mylock.Lock();
