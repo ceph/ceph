@@ -414,7 +414,7 @@ class MonitorDBStore
     return (it->valid() && it->key() == key);
   }
 
-  bool exists(const string& prefix, version_t ver) {
+  virtual bool exists(const string& prefix, version_t ver) {
     return exists(prefix, stringify(ver));
   }
 
