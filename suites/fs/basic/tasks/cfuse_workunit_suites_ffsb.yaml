@@ -1,6 +1,9 @@
 tasks:
 - install:
 - ceph:
+    conf:
+      osd:
+        filestore flush min: 0
 - ceph-fuse:
 - workunit:
     clients:

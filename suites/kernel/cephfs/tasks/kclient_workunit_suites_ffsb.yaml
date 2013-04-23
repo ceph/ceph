@@ -2,10 +2,8 @@ tasks:
 - install:
 - ceph:
     conf:
-      mds:
-        debug mds: 0/20
-        debug ms: 0/1
-        debug journaler: 0/20
+      osd:
+        filestore flush min: 0
 - kclient:
 - workunit:
     clients:
