@@ -12,6 +12,9 @@ tasks:
 - install:
      branch: bobtail
 - ceph:
+    conf:
+      osd:
+        filestore flush min: 0
 - workunit:
      clients:
         all:

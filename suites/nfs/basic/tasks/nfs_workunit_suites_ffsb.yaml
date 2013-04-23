@@ -1,6 +1,9 @@
 tasks:
 - install:
 - ceph:
+    conf:
+      osd:
+        filestore flush min: 0
 - kclient: [client.0]
 - knfsd: [client.0]
 - nfs:
