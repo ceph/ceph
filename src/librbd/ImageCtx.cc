@@ -34,6 +34,7 @@ namespace librbd {
       snap_id(CEPH_NOSNAP),
       snap_exists(true),
       read_only(ro),
+      flush_encountered(false),
       exclusive_locked(false),
       name(image_name),
       wctx(NULL),
@@ -68,15 +69,28 @@ namespace librbd {
 
     if (cct->_conf->rbd_cache) {
       Mutex::Locker l(cache_lock);
-      ldout(cct, 20) << "enabling writeback caching..." << dendl;
+      ldout(cct, 20) << "enabling caching..." << dendl;
       writeback_handler = new LibrbdWriteback(this, cache_lock);
+
+      uint64_t init_max_dirty = cct->_conf->rbd_cache_max_dirty;
+      if (cct->_conf->rbd_cache_writethrough_until_flush)
+	init_max_dirty = 0;
+      ldout(cct, 20) << "Initial cache settings:"
+		     << " size=" << cct->_conf->rbd_cache_size
+		     << " num_objects=" << 10
+		     << " max_dirty=" << init_max_dirty
+		     << " target_dirty=" << cct->_conf->rbd_cache_target_dirty
+		     << " max_dirty_age="
+		     << cct->_conf->rbd_cache_max_dirty_age << dendl;
+
       object_cacher = new ObjectCacher(cct, pname, *writeback_handler, cache_lock,
 				       NULL, NULL,
 				       cct->_conf->rbd_cache_size,
 				       10,  /* reset this in init */
-				       cct->_conf->rbd_cache_max_dirty,
+				       init_max_dirty,
 				       cct->_conf->rbd_cache_target_dirty,
-				       cct->_conf->rbd_cache_max_dirty_age);
+				       cct->_conf->rbd_cache_max_dirty_age,
+				       cct->_conf->rbd_cache_block_writes_upfront);
       object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
       object_set->return_enoent = true;
       object_cacher->start();
@@ -206,6 +220,8 @@ namespace librbd {
     plb.add_u64_counter(l_librbd_aio_discard, "aio_discard");
     plb.add_u64_counter(l_librbd_aio_discard_bytes, "aio_discard_bytes");
     plb.add_time_avg(l_librbd_aio_discard_latency, "aio_discard_latency");
+    plb.add_u64_counter(l_librbd_aio_flush, "aio_flush");
+    plb.add_time_avg(l_librbd_aio_flush_latency, "aio_flush_latency");
     plb.add_u64_counter(l_librbd_snap_create, "snap_create");
     plb.add_u64_counter(l_librbd_snap_remove, "snap_remove");
     plb.add_u64_counter(l_librbd_snap_rollback, "snap_rollback");
@@ -224,7 +240,6 @@ namespace librbd {
 
   int ImageCtx::snap_set(string in_snap_name)
   {
-    assert(snap_lock.is_locked());
     map<string, SnapInfo>::iterator it = snaps_by_name.find(in_snap_name);
     if (it != snaps_by_name.end()) {
       snap_name = in_snap_name;
@@ -238,7 +253,6 @@ namespace librbd {
 
   void ImageCtx::snap_unset()
   {
-    assert(snap_lock.is_locked());
     snap_id = CEPH_NOSNAP;
     snap_name = "";
     snap_exists = true;
@@ -247,7 +261,6 @@ namespace librbd {
 
   snap_t ImageCtx::get_snap_id(string in_snap_name) const
   {
-    assert(snap_lock.is_locked());
     map<string, SnapInfo>::const_iterator it = snaps_by_name.find(in_snap_name);
     if (it != snaps_by_name.end())
       return it->second.id;
@@ -256,7 +269,6 @@ namespace librbd {
 
   int ImageCtx::get_snap_name(snapid_t in_snap_id, string *out_snap_name) const
   {
-    assert(snap_lock.is_locked());
     map<string, SnapInfo>::const_iterator it;
 
     for (it = snaps_by_name.begin(); it != snaps_by_name.end(); it++) {
@@ -270,7 +282,6 @@ namespace librbd {
 
   int ImageCtx::get_parent_spec(snapid_t in_snap_id, parent_spec *out_pspec)
   {
-    assert(snap_lock.is_locked());
     map<string, SnapInfo>::iterator it;
 
     for (it = snaps_by_name.begin(); it != snaps_by_name.end(); it++) {
@@ -322,7 +333,6 @@ namespace librbd {
 
   int ImageCtx::is_snap_protected(string in_snap_name, bool *is_protected) const
   {
-    assert(snap_lock.is_locked());
     map<string, SnapInfo>::const_iterator it = snaps_by_name.find(in_snap_name);
     if (it != snaps_by_name.end()) {
       *is_protected =
@@ -335,7 +345,6 @@ namespace librbd {
   int ImageCtx::is_snap_unprotected(string in_snap_name,
 				    bool *is_unprotected) const
   {
-    assert(snap_lock.is_locked());
     map<string, SnapInfo>::const_iterator it = snaps_by_name.find(in_snap_name);
     if (it != snaps_by_name.end()) {
       *is_unprotected =
@@ -347,7 +356,6 @@ namespace librbd {
 
   int ImageCtx::get_snap_size(string in_snap_name, uint64_t *out_size) const
   {
-    assert(snap_lock.is_locked());
     map<string, SnapInfo>::const_iterator it = snaps_by_name.find(in_snap_name);
     if (it != snaps_by_name.end()) {
       *out_size = it->second.size;
@@ -361,7 +369,6 @@ namespace librbd {
 			  parent_info parent,
 			  uint8_t protection_status)
   {
-    assert(snap_lock.is_locked());
     snaps.push_back(id);
     SnapInfo info(id, in_size, features, parent, protection_status);
     snaps_by_name.insert(pair<string, SnapInfo>(in_snap_name, info));
@@ -369,8 +376,6 @@ namespace librbd {
 
   uint64_t ImageCtx::get_image_size(snap_t in_snap_id) const
   {
-    assert(md_lock.is_locked());
-    assert(snap_lock.is_locked());
     if (in_snap_id == CEPH_NOSNAP) {
       return size;
     }
@@ -386,8 +391,6 @@ namespace librbd {
 
   int ImageCtx::get_features(snap_t in_snap_id, uint64_t *out_features) const
   {
-    assert(md_lock.is_locked());
-    assert(snap_lock.is_locked());
     if (in_snap_id == CEPH_NOSNAP) {
       *out_features = features;
       return 0;
@@ -405,8 +408,6 @@ namespace librbd {
 
   int64_t ImageCtx::get_parent_pool_id(snap_t in_snap_id) const
   {
-    assert(snap_lock.is_locked());
-    assert(parent_lock.is_locked());
     if (in_snap_id == CEPH_NOSNAP) {
       return parent_md.spec.pool_id;
     }
@@ -422,8 +423,6 @@ namespace librbd {
 
   string ImageCtx::get_parent_image_id(snap_t in_snap_id) const
   {
-    assert(snap_lock.is_locked());
-    assert(parent_lock.is_locked());
     if (in_snap_id == CEPH_NOSNAP) {
       return parent_md.spec.image_id;
     }
@@ -439,8 +438,6 @@ namespace librbd {
 
   uint64_t ImageCtx::get_parent_snap_id(snap_t in_snap_id) const
   {
-    assert(snap_lock.is_locked());
-    assert(parent_lock.is_locked());
     if (in_snap_id == CEPH_NOSNAP) {
       return parent_md.spec.snap_id;
     }
@@ -456,8 +453,6 @@ namespace librbd {
 
   int ImageCtx::get_parent_overlap(snap_t in_snap_id, uint64_t *overlap) const
   {
-    assert(snap_lock.is_locked());
-    assert(parent_lock.is_locked());
     if (in_snap_id == CEPH_NOSNAP) {
       *overlap = parent_md.overlap;
       return 0;
@@ -475,9 +470,9 @@ namespace librbd {
 
   void ImageCtx::aio_read_from_cache(object_t o, bufferlist *bl, size_t len,
 				     uint64_t off, Context *onfinish) {
-    snap_lock.Lock();
+    snap_lock.get_read();
     ObjectCacher::OSDRead *rd = object_cacher->prepare_read(snap_id, bl, 0);
-    snap_lock.Unlock();
+    snap_lock.put_read();
     ObjectExtent extent(o, 0 /* a lie */, off, len);
     extent.oloc.pool = data_ctx.get_id();
     extent.buffer_extents.push_back(make_pair(0, len));
@@ -490,18 +485,18 @@ namespace librbd {
   }
 
   void ImageCtx::write_to_cache(object_t o, bufferlist& bl, size_t len,
-				uint64_t off) {
-    snap_lock.Lock();
+				uint64_t off, Context *onfinish) {
+    snap_lock.get_read();
     ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(snapc, bl,
 							      utime_t(), 0);
-    snap_lock.Unlock();
+    snap_lock.put_read();
     ObjectExtent extent(o, 0, off, len);
     extent.oloc.pool = data_ctx.get_id();
     extent.buffer_extents.push_back(make_pair(0, len));
     wr->extents.push_back(extent);
     {
       Mutex::Locker l(cache_lock);
-      object_cacher->writex(wr, object_set, cache_lock);
+      object_cacher->writex(wr, object_set, cache_lock, onfinish);
     }
   }
 
@@ -520,36 +515,56 @@ namespace librbd {
     return r;
   }
 
+  void ImageCtx::user_flushed() {
+    if (object_cacher && cct->_conf->rbd_cache_writethrough_until_flush) {
+      md_lock.get_read();
+      bool flushed_before = flush_encountered;
+      md_lock.put_read();
+
+      uint64_t max_dirty = cct->_conf->rbd_cache_max_dirty;
+      if (!flushed_before && max_dirty > 0) {
+	md_lock.get_write();
+	flush_encountered = true;
+	md_lock.put_write();
+
+	ldout(cct, 10) << "saw first user flush, enabling writeback" << dendl;
+	Mutex::Locker l(cache_lock);
+	object_cacher->set_max_dirty(max_dirty);
+      }
+    }
+  }
+
+  void ImageCtx::flush_cache_aio(Context *onfinish) {
+    cache_lock.Lock();
+    object_cacher->flush_set(object_set, onfinish);
+    cache_lock.Unlock();
+  }
+
   int ImageCtx::flush_cache() {
     int r = 0;
     Mutex mylock("librbd::ImageCtx::flush_cache");
     Cond cond;
     bool done;
     Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &r);
-    cache_lock.Lock();
-    bool already_flushed = object_cacher->commit_set(object_set, onfinish);
-    cache_lock.Unlock();
-    if (!already_flushed) {
-      mylock.Lock();
-      while (!done) {
-	ldout(cct, 20) << "waiting for cache to be flushed" << dendl;
-	cond.Wait(mylock);
-      }
-      mylock.Unlock();
-      ldout(cct, 20) << "finished flushing cache" << dendl;
+    flush_cache_aio(onfinish);
+    mylock.Lock();
+    while (!done) {
+      ldout(cct, 20) << "waiting for cache to be flushed" << dendl;
+      cond.Wait(mylock);
     }
+    mylock.Unlock();
+    ldout(cct, 20) << "finished flushing cache" << dendl;
     return r;
   }
 
   void ImageCtx::shutdown_cache() {
-    md_lock.Lock();
+    md_lock.get_write();
     invalidate_cache();
-    md_lock.Unlock();
+    md_lock.put_write();
     object_cacher->stop();
   }
 
   void ImageCtx::invalidate_cache() {
-    assert(md_lock.is_locked());
     if (!object_cacher)
       return;
     cache_lock.Lock();
@@ -563,6 +578,14 @@ namespace librbd {
     cache_lock.Unlock();
     if (unclean)
       lderr(cct) << "could not release all objects from cache" << dendl;
+  }
+
+  void ImageCtx::clear_nonexistence_cache() {
+    if (!object_cacher)
+      return;
+    cache_lock.Lock();
+    object_cacher->clear_nonexistence(object_set);
+    cache_lock.Unlock();
   }
 
   int ImageCtx::register_watch() {
@@ -582,8 +605,6 @@ namespace librbd {
   size_t ImageCtx::parent_io_len(uint64_t offset, size_t length,
 				 snap_t in_snap_id)
   {
-    assert(snap_lock.is_locked());
-    assert(parent_lock.is_locked());
     uint64_t overlap = 0;
     get_parent_overlap(in_snap_id, &overlap);
 

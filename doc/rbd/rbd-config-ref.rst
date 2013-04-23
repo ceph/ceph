@@ -86,4 +86,13 @@ section of your configuration file. The settings include:
 :Required: No
 :Default: ``1.0``
 
+.. versionadded:: 0.60
+
+``rbd cache writethrough until flush``
+
+:Description: Start out in write-through mode, and switch to write-back after the first flush request is received. Enabling this is a conservative but safe setting in case VMs running on rbd are too old to send flushes, like the virtio driver in Linux before 2.6.32.
+:Type: Boolean
+:Required: No
+:Default: ``false``
+
 .. _Block Device: ../../rbd/rbd/

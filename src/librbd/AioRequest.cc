@@ -4,6 +4,7 @@
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/Mutex.h"
+#include "common/RWLock.h"
 
 #include "librbd/AioCompletion.h"
 #include "librbd/ImageCtx.h"
@@ -18,7 +19,7 @@
 namespace librbd {
 
   AioRequest::AioRequest() :
-    m_ictx(NULL),
+    m_ictx(NULL), m_ioctx(NULL),
     m_object_no(0), m_object_off(0), m_object_len(0),
     m_snap_id(CEPH_NOSNAP), m_completion(NULL), m_parent_completion(NULL),
     m_hide_enoent(false) {}
@@ -26,19 +27,11 @@ namespace librbd {
 			 uint64_t objectno, uint64_t off, uint64_t len,
 			 librados::snap_t snap_id,
 			 Context *completion,
-			 bool hide_enoent) {
-    m_ictx = ictx;
-    m_ioctx.dup(ictx->data_ctx);
-    m_ioctx.snap_set_read(snap_id);
-    m_oid = oid;
-    m_object_no = objectno;
-    m_object_off = off;
-    m_object_len = len;
-    m_snap_id = snap_id;
-    m_completion = completion;
-    m_parent_completion = NULL;
-    m_hide_enoent = hide_enoent;
-  }
+			 bool hide_enoent) :
+    m_ictx(ictx), m_ioctx(&ictx->data_ctx), m_oid(oid), m_object_no(objectno),
+    m_object_off(off), m_object_len(len), m_snap_id(snap_id),
+    m_completion(completion), m_parent_completion(NULL),
+    m_hide_enoent(hide_enoent) {}
 
   AioRequest::~AioRequest() {
     if (m_parent_completion) {
@@ -50,7 +43,6 @@ namespace librbd {
   void AioRequest::read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents)
   {
     assert(!m_parent_completion);
-    assert(m_ictx->parent_lock.is_locked());
     m_parent_completion = aio_create_completion_internal(this, rbd_req_cb);
     ldout(m_ictx->cct, 20) << "read_from_parent this = " << this
 			   << " parent completion " << m_parent_completion
@@ -68,8 +60,8 @@ namespace librbd {
 			   << " r = " << r << dendl;
 
     if (!m_tried_parent && r == -ENOENT) {
-      Mutex::Locker l(m_ictx->snap_lock);
-      Mutex::Locker l2(m_ictx->parent_lock);
+      RWLock::RLocker l(m_ictx->snap_lock);
+      RWLock::RLocker l2(m_ictx->parent_lock);
 
       // calculate reverse mapping onto the image
       vector<pair<uint64_t,uint64_t> > image_extents;
@@ -100,11 +92,13 @@ namespace librbd {
       librados::Rados::aio_create_completion(this, rados_req_cb, NULL);
     int r;
     if (m_sparse) {
-      r = m_ioctx.aio_sparse_read(m_oid, rados_completion, &m_ext_map,
-				  &m_read_data, m_object_len, m_object_off);
+      r = m_ioctx->aio_sparse_read(m_oid, rados_completion, &m_ext_map,
+				   &m_read_data, m_object_len, m_object_off,
+				   m_snap_id);
     } else {
-      r = m_ioctx.aio_read(m_oid, rados_completion, &m_read_data,
-			   m_object_len, m_object_off);
+      r = m_ioctx->aio_read(m_oid, rados_completion, &m_read_data,
+			    m_object_len, m_object_off,
+			    m_snap_id);
     }
     rados_completion->release();
     return r;
@@ -123,18 +117,16 @@ namespace librbd {
 			       Context *completion,
 			       bool hide_enoent)
     : AioRequest(ictx, oid, object_no, object_off, len, snap_id, completion, hide_enoent),
-      m_state(LIBRBD_AIO_WRITE_FLAT)
+      m_state(LIBRBD_AIO_WRITE_FLAT), m_snap_seq(snapc.seq.val)
   {
     m_object_image_extents = objectx;
     m_parent_overlap = object_overlap;
 
     // TODO: find a way to make this less stupid
-    std::vector<librados::snap_t> snaps;
     for (std::vector<snapid_t>::const_iterator it = snapc.snaps.begin();
 	 it != snapc.snaps.end(); ++it) {
-      snaps.push_back(it->val);
+      m_snaps.push_back(it->val);
     }
-    m_ioctx.selfmanaged_snap_set_write_ctx(snapc.seq.val, snaps);
   }
 
   void AbstractWrite::guard_write()
@@ -158,8 +150,8 @@ namespace librbd {
 
       if (r == -ENOENT) {
 
-	Mutex::Locker l(m_ictx->snap_lock);
-	Mutex::Locker l2(m_ictx->parent_lock);
+	RWLock::RLocker l(m_ictx->snap_lock);
+	RWLock::RLocker l2(m_ictx->parent_lock);
 
 	/*
 	 * Parent may have disappeared; if so, recover by using
@@ -235,7 +227,8 @@ namespace librbd {
       librados::Rados::aio_create_completion(this, NULL, rados_req_cb);
     int r;
     assert(m_write.size());
-    r = m_ioctx.aio_operate(m_oid, rados_completion, &m_write);
+    r = m_ioctx->aio_operate(m_oid, rados_completion, &m_write,
+			     m_snap_seq, m_snaps);
     rados_completion->release();
     return r;
   }
@@ -246,7 +239,8 @@ namespace librbd {
 
     librados::AioCompletion *rados_completion =
       librados::Rados::aio_create_completion(this, NULL, rados_req_cb);
-    m_ictx->md_ctx.aio_operate(m_oid, rados_completion, &m_copyup);
+    m_ictx->md_ctx.aio_operate(m_oid, rados_completion, &m_copyup,
+			       m_snap_seq, m_snaps);
     rados_completion->release();
   }
 }

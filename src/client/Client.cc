@@ -189,7 +189,8 @@ Client::Client(Messenger *m, MonClient *mc)
 				  cct->_conf->client_oc_max_objects,
 				  cct->_conf->client_oc_max_dirty,
 				  cct->_conf->client_oc_target_dirty,
-				  cct->_conf->client_oc_max_dirty_age);
+				  cct->_conf->client_oc_max_dirty_age,
+				  true);
   filer = new Filer(objecter);
 }
 
@@ -2580,11 +2581,7 @@ bool Client::_flush(Inode *in)
   }
 
   Context *onfinish = new C_Client_PutInode(this, in);
-  bool safe = objectcacher->commit_set(&in->oset, onfinish);
-  if (safe) {
-    onfinish->complete(0);
-  }
-  return safe;
+  return objectcacher->flush_set(&in->oset, onfinish);
 }
 
 void Client::flush_set_callback(ObjectCacher::ObjectSet *oset)

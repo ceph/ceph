@@ -61,7 +61,8 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
 		   g_conf->client_oc_max_objects,
 		   g_conf->client_oc_max_dirty,
 		   g_conf->client_oc_target_dirty,
-		   g_conf->client_oc_max_dirty_age);
+		   g_conf->client_oc_max_dirty_age,
+		   true);
   obc.start();
 
   atomic_t outstanding_reads;
@@ -110,7 +111,7 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
       ObjectCacher::OSDWrite *wr = obc.prepare_write(snapc, bl, utime_t(), 0);
       wr->extents.push_back(op->extent);
       lock.Lock();
-      obc.writex(wr, &object_set, lock);
+      obc.writex(wr, &object_set, lock, NULL);
       lock.Unlock();
     }
   }
@@ -143,16 +144,14 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
   bool done;
   Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &r);
   lock.Lock();
-  bool already_flushed = obc.commit_set(&object_set, onfinish);
+  bool already_flushed = obc.flush_set(&object_set, onfinish);
   std::cout << "already flushed = " << already_flushed << std::endl;
   lock.Unlock();
-  if (!already_flushed) {
-    mylock.Lock();
-    while (!done) {
-      cond.Wait(mylock);
-    }
-    mylock.Unlock();
+  mylock.Lock();
+  while (!done) {
+    cond.Wait(mylock);
   }
+  mylock.Unlock();
 
   lock.Lock();
   bool unclean = obc.release_set(&object_set);
