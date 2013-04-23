@@ -2775,7 +2775,9 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
   } else if (session && !session->closed) {
     RoutedRequest *rr = new RoutedRequest;
     rr->tid = ++routed_request_tid;
-    rr->client = req->get_source_inst();
+    rr->client_inst = req->get_source_inst();
+    rr->con = req->get_connection();
+    rr->con->get();
     encode_message(req, CEPH_FEATURES_ALL, rr->request_bl);   // for my use only; use all features
     rr->session = static_cast<MonSession *>(session->get());
     routed_requests[rr->tid] = rr;
@@ -2920,7 +2922,7 @@ void Monitor::handle_route(MRoute *m)
       // reset payload, in case encoding is dependent on target features
       if (m->msg) {
 	m->msg->clear_payload();
-	messenger->send_message(m->msg, rr->session->inst);
+	messenger->send_message(m->msg, rr->con);
 	m->msg = NULL;
       }
       routed_requests.erase(m->session_mon_tid);
@@ -2955,7 +2957,7 @@ void Monitor::resend_routed_requests()
 
     dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req << dendl;
     MForward *forward = new MForward(rr->tid, req, rr->session->caps);
-    forward->client = rr->client;
+    forward->client = rr->client_inst;
     forward->set_priority(req->get_priority());
     messenger->send_message(forward, monmap->get_inst(mon));
   }  
