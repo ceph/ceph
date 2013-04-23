@@ -1,3 +1,4 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #include <gtest/gtest.h>
 #include <stdlib.h>
 #include <limits.h>
@@ -394,6 +395,7 @@ TEST(TestFileJournal, WriteTrimSmall) {
 
 TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
   g_ceph_context->_conf->set_val("journal_ignore_corruption", "true");
+  g_ceph_context->_conf->set_val("journal_write_header_frequency", "1");
   g_ceph_context->_conf->apply_changes(NULL);
 
   fsid.generate_random();
@@ -404,16 +406,17 @@ TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
   C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&lock, &cond, &done));
 
   const char *needle =    "i am a needle";
-  bufferlist bl;
-  bl.append(needle);
-  j.submit_entry(1, bl, 0, gb.new_sub());
-  bl.append(needle);
-  j.submit_entry(2, bl, 0, gb.new_sub());
-  bl.append(needle);
-  j.submit_entry(3, bl, 0, gb.new_sub());
-  bl.append(needle);
-  j.submit_entry(4, bl, 0, gb.new_sub());
+  for (unsigned i = 1; i <= 4; ++i) {
+    bufferlist bl;
+    bl.append(needle);
+    j.submit_entry(i, bl, 0, gb.new_sub());
+  }
   gb.activate();
+  wait();
+
+  bufferlist bl;
+  bl.append("needle");
+  j.submit_entry(5, bl, 0, new C_SafeCond(&lock, &cond, &done));
   wait();
 
   j.close();
@@ -442,6 +445,7 @@ TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
 
 TEST(TestFileJournal, ReplayDetectCorruptPayload) {
   g_ceph_context->_conf->set_val("journal_ignore_corruption", "true");
+  g_ceph_context->_conf->set_val("journal_write_header_frequency", "1");
   g_ceph_context->_conf->apply_changes(NULL);
 
   fsid.generate_random();
@@ -452,16 +456,17 @@ TEST(TestFileJournal, ReplayDetectCorruptPayload) {
   C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&lock, &cond, &done));
 
   const char *needle =    "i am a needle";
-  bufferlist bl;
-  bl.append(needle);
-  j.submit_entry(1, bl, 0, gb.new_sub());
-  bl.append(needle);
-  j.submit_entry(2, bl, 0, gb.new_sub());
-  bl.append(needle);
-  j.submit_entry(3, bl, 0, gb.new_sub());
-  bl.append(needle);
-  j.submit_entry(4, bl, 0, gb.new_sub());
+  for (unsigned i = 1; i <= 4; ++i) {
+    bufferlist bl;
+    bl.append(needle);
+    j.submit_entry(i, bl, 0, gb.new_sub());
+  }
   gb.activate();
+  wait();
+
+  bufferlist bl;
+  bl.append("needle");
+  j.submit_entry(5, bl, 0, new C_SafeCond(&lock, &cond, &done));
   wait();
 
   j.close();
@@ -490,6 +495,7 @@ TEST(TestFileJournal, ReplayDetectCorruptPayload) {
 
 TEST(TestFileJournal, ReplayDetectCorruptHeader) {
   g_ceph_context->_conf->set_val("journal_ignore_corruption", "true");
+  g_ceph_context->_conf->set_val("journal_write_header_frequency", "1");
   g_ceph_context->_conf->apply_changes(NULL);
 
   fsid.generate_random();
@@ -500,16 +506,17 @@ TEST(TestFileJournal, ReplayDetectCorruptHeader) {
   C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&lock, &cond, &done));
 
   const char *needle =    "i am a needle";
-  bufferlist bl;
-  bl.append(needle);
-  j.submit_entry(1, bl, 0, gb.new_sub());
-  bl.append(needle);
-  j.submit_entry(2, bl, 0, gb.new_sub());
-  bl.append(needle);
-  j.submit_entry(3, bl, 0, gb.new_sub());
-  bl.append(needle);
-  j.submit_entry(4, bl, 0, gb.new_sub());
+  for (unsigned i = 1; i <= 4; ++i) {
+    bufferlist bl;
+    bl.append(needle);
+    j.submit_entry(i, bl, 0, gb.new_sub());
+  }
   gb.activate();
+  wait();
+
+  bufferlist bl;
+  bl.append("needle");
+  j.submit_entry(5, bl, 0, new C_SafeCond(&lock, &cond, &done));
   wait();
 
   j.close();
