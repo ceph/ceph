@@ -81,6 +81,10 @@ public:
     return MonitorDBStore::exists(prefix, key);
   }
 
+  virtual bool exists(const string &prefix, const version_t ver) {
+    return exists(prefix, stringify(ver));
+  }
+
   virtual int apply_transaction(MonitorDBStore::Transaction &t) {
     generic_dout(30) << "MemMonitorDBStore::apply_transaction()"
                      << " " << t.ops.size() << " ops" << dendl;
