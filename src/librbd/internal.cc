@@ -1883,7 +1883,7 @@ reprotect_and_return_err:
       r = 0;
       prog_ctx.update_progress(cp.src_size, cp.src_size);
     }
-    return r;
+    return (int)r;
   }
 
   // common snap_set functionality for snap_set and open_image
@@ -2201,7 +2201,7 @@ reprotect_and_return_err:
     ctx->complete(comp->get_return_value());
   }
 
-  int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
+  int64_t read_iterate(ImageCtx *ictx, uint64_t off, uint64_t len,
 		       int (*cb)(uint64_t, size_t, const char *, void *),
 		       void *arg)
   {

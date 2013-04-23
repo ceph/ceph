@@ -442,6 +442,17 @@ namespace librbd {
     return librbd::read_iterate(ictx, ofs, len, cb, arg);
   }
 
+  int Image::read_iterate2(uint64_t ofs, uint64_t len,
+			      int (*cb)(uint64_t, size_t, const char *, void *),
+			      void *arg)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    int64_t r = librbd::read_iterate(ictx, ofs, len, cb, arg);
+    if (r > 0)
+      r = 0;
+    return (int)r;
+  }
+
   int Image::diff_iterate(const char *fromsnapname,
 			  uint64_t ofs, uint64_t len,
 			  int (*cb)(uint64_t, size_t, int, void *),
@@ -1030,6 +1041,17 @@ extern "C" int64_t rbd_read_iterate(rbd_image_t image, uint64_t ofs, size_t len,
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   return librbd::read_iterate(ictx, ofs, len, cb, arg);
+}
+
+extern "C" int rbd_read_iterate2(rbd_image_t image, uint64_t ofs, uint64_t len,
+				 int (*cb)(uint64_t, size_t, const char *, void *),
+				 void *arg)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  int64_t r = librbd::read_iterate(ictx, ofs, len, cb, arg);
+  if (r > 0)
+    r = 0;
+  return (int)r;
 }
 
 extern "C" int rbd_diff_iterate(rbd_image_t image,
