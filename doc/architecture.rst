@@ -2,13 +2,14 @@
  Architecture 
 ==============
 
-Ceph provides an infinitely scalable Object Store. It is based 
-upon :abbr:`RADOS (Reliable Autonomic Distributed Object Store)`, which
-you can read about in 
-`RADOS - A Scalable, Reliable Storage Service for Petabyte-scale Storage Clusters`_. 
-Its high-level features include providing a native interface to the 
-Object Store via ``librados``, and a number of service interfaces 
-built on top of ``librados``. These include:
+Ceph provides an infinitely scalable Object Store based upon a :abbr:`RADOS
+(Reliable Autonomic Distributed Object Store)`, which you can read about in
+`RADOS - A Scalable, Reliable Storage Service for Petabyte-scale Storage
+Clusters`_. Storage clients and OSDs both use the CRUSH algorithm to efficiently
+compute information about data location, instead of having to depend on a
+central lookup table. Ceph's high-level features include providing a native
+interface to the Object Store via ``librados``, and a number of service
+interfaces built on top of ``librados``. These include:
 
 - **Block Devices:** The RADOS Block Device (RBD) service provides
   resizable, thin-provisioned block devices with snapshotting and 
@@ -79,27 +80,191 @@ How Ceph Scales
 ===============
 
 In traditional architectures, clients talk to a centralized component (e.g., a
-gateway,  broker, API, facade, etc.), which acts as a single point of entry to a
+gateway, broker, API, facade, etc.), which acts as a single point of entry to a
 complex subsystem. This imposes a limit to both performance and scalability,
 while introducing a single point of failure (i.e., if the centralized component
-goes down, the whole system goes  down, too).
+goes down, the whole system goes down, too). Ceph eliminates this problem.
 
-Ceph uses a new and innovative approach. Ceph clients contact a Ceph monitor and
-retrieve a copy of the cluster map. The :abbr:`CRUSH (Controlled Replication
-Under Scalable Hashing)` algorithm allows a client to compute where objects
-*should* be stored, and enables the client to contact the primary OSD to store
-or retrieve the objects. The OSD daemon also uses the CRUSH algorithm, but the
-OSD daemon uses it to compute where replicas of objects should be stored (and
-for rebalancing). For a detailed discussion of CRUSH, see  `CRUSH - Controlled,
-Scalable, Decentralized Placement of Replicated Data`_
+
+CRUSH Background
+----------------
+
+Key to Ceph’s design is the autonomous, self-healing, and intelligent Object
+Storage Daemon (OSD). Storage clients and OSDs both use the CRUSH algorithm to
+efficiently compute information about data containers on demand, instead of
+having to depend on a central lookup table. CRUSH provides a better data
+management mechanism compared to older approaches, and enables massive scale by
+cleanly distributing the work to all the clients and OSDs in the cluster. CRUSH
+uses intelligent data replication to ensure resiliency, which is better suited
+to hyper-scale storage. Let's take a deeper look at how CRUSH works to enable
+modern cloud storage infrastructures.
+
+Cluster Map
+-----------
+
+Ceph depends upon clients and OSDs having knowledge of the cluster topology,
+which is inclusive of 5 maps collectively referred to as the "Cluster Map":
+
+#. **The Monitor Map:** Contains the cluster ``fsid``, the position, name 
+   address and port of each monitor. It also indicates the current epoch, 
+   when the map was created, and the last time it changed. To view a monitor
+   map, execute ``ceph mon dump``.   
+   
+#. **The OSD Map:** Contains the cluster ``fsid``, when the map was created and 
+   last modified, a list of pools, replica sizes, PG numbers, a list of OSDs
+   and their status (e.g., ``up``, ``in``). To view an OSD map, execute
+   ``ceph osd dump``. 
+   
+#. **The PG Map:** Contains the PG version, its time stamp, the last OSD
+   map epoch, the full ratios, and details on each placement group such as
+   the PG ID, the `Up Set`, the `Acting Set`, the state of the PG (e.g., 
+   ``active + clean``), and data usage statistics for each pool.
+
+#. **The CRUSH Map:** Contains a list of storage devices, the failure domain
+   hierarchy (e.g., device, host, rack, row, room, etc.), and rules for 
+   traversing the hierarchy when storing data. To view a CRUSH map, execute
+   ``ceph osd getcrushmap -o {filename}``; then, decompile it by executing
+   ``crushtool -d {comp-crushmap-filename} -o {decomp-crushmap-filename}``.
+   You can view the decompiled map in a text editor or with ``cat``. 
+
+#. **The MDS Map:** Contains the current MDS map epoch, when the map was 
+   created, and the last time it changed. It also contains the pool for 
+   storing metadata, a list of metadata servers, and which metadata servers
+   are ``up`` and ``in``. To view an MDS map, execute ``ceph mds dump``.
+
+Each map maintains an iterative history of its operating state changes, which
+enables Ceph to monitor the cluster. The maps that are the most relevant to
+scalability include the CRUSH Map, the OSD Map, and the PG Map.
+
+
+Monitor Quorums
+---------------
+
+Ceph's monitors maintain a master copy of the cluster map. So Ceph daemons and
+clients merely contact the monitor periodically to ensure they have the most
+recent copy of the cluster map. Ceph monitors are light-weight processes, but
+for added reliability and fault tolerance, Ceph supports distributed monitors.
+Ceph must have agreement among various monitor instances regarding the state of
+the cluster. To establish a consensus, Ceph always uses a majority of
+monitors (e.g., 1, 3-*n*, etc.) and the `Paxos`_ algorithm in order to
+establish a consensus.
+
+For details on configuring monitors, see the `Monitor Config Reference`_.
+
+.. _Paxos: http://en.wikipedia.org/wiki/Paxos_(computer_science)
+.. _Monitor Config Reference: ../rados/configuration/mon-config-ref
+
+
+Smart Daemons
+-------------
+
+Ceph's cluster map determines whether a node in a network is ``in`` the 
+Ceph cluster or ``out`` of the Ceph cluster. 
+
+.. ditaa:: +----------------+
+           |                |
+           |   Node ID In   |
+           |                |
+           +----------------+
+                   ^
+                   |
+                   |
+                   v
+           +----------------+
+           |                |
+           |  Node ID Out   |
+           |                |
+           +----------------+
+
+In many clustered architectures, the primary purpose of cluster membership
+is so that a centralized interface knows which hosts it can access. Ceph
+takes it a step further: Ceph's nodes are cluster aware. Each node knows 
+about other nodes in the cluster. This enables Ceph's monitor, OSD, and 
+metadata server daemons to interact directly with each other. One major 
+benefit of this approach is that Ceph can utilize the CPU and RAM of its
+nodes to easily perform tasks that would bog down a centralized server.
+
+Ceph OSDs join a cluster and report on their status. At the lowest level, 
+the OSD status is ``up`` or ``down`` reflecting whether or not it is 
+running and able to service requests. If an OSD is ``down`` and ``in``
+the cluster, this status may indicate the failure of the OSD. 
+
+With peer awareness, OSDs can communicate with other OSDs and monitors
+to perform tasks. OSDs take client requests to read data from or write
+data to pools, which have placement groups. When a client makes a request
+to write data to a primary OSD, the primary OSD knows how to determine 
+which OSDs have the placement groups for the replica copies, and then
+update those OSDs. This means that OSDs can also take requests from 
+other OSDs. With multiple replicas of data across OSDs, OSDs can also 
+"peer" to ensure that the placement groups are in sync. See `Monitoring
+OSDs and PGs`_ for additional details.
+
+If an OSD is not running (e.g., it crashes), the OSD cannot notify the monitor
+that it is ``down``. The monitor can ping an OSD periodically to ensure that it
+is running. However, Ceph also empowers OSDs to determine if a neighboring OSD
+is ``down``, to update the cluster map and to report it to the monitor(s). When
+an OSD is ``down``,  the data in the placement group is said to be ``degraded``.
+If the OSD is ``down`` and ``in``, but subsequently taken ``out`` of the
+cluster,  the OSDs receive an update to the cluster map and rebalance the
+placement groups within the cluster automatically. See `Heartbeats`_ for 
+additional details.
+
+
+.. _Monitoring OSDs and PGs: ../rados/operations/monitoring-osd-pg
+.. _Heartbeats: ../rados/configuration/mon-osd-interaction
+
+
+Calculating PG IDs
+------------------
+
+When a Ceph client binds to a monitor, it retrieves the latest copy of the
+cluster map. With the cluster map, the client knows about all of the monitors,
+OSDs, and metadata servers in the cluster. However, it doesn't know anything
+about object locations. Object locations get computed.
+
+The only input required by the client is the object ID and the pool.
+It's simple: Ceph stores data in named pools (e.g., "liverpool"). When a client
+wants to store a named object (e.g., "john," "paul," "george," "ringo", etc.)
+it calculates a placement group using the object name, a hash code, the
+number of OSDs in the cluster and the pool name. Ceph clients use the following
+steps to compute PG IDs.
+
+#. The client inputs the pool ID and the object ID. (e.g., pool = "liverpool" 
+   and object-id = "john")
+#. CRUSH takes the object ID and hashes it.
+#. CRUSH calculates the hash modulo the number of OSDs. (e.g., ``0x58``) to get a PG ID.
+#. CRUSH gets the pool ID given the pool name (e.g., "liverpool" = ``4``)
+#. CRUSH prepends the pool ID to the pool ID to the PG ID (e.g., ``4.0x58``).
+
+Computing object locations is much faster than performing object location query
+over a chatty session. The :abbr:`CRUSH (Controlled Replication Under Scalable
+Hashing)` algorithm allows a client to compute where objects *should* be stored,
+and enables the client to contact the primary OSD to store or retrieve the
+objects.
+
+
+About Pools
+-----------
 
 The Ceph storage system supports the notion of 'Pools', which are logical
 partitions for storing objects. Pools set ownership/access, the number of
 object replicas, the number of placement groups, and the CRUSH rule set to use.
 Each pool has a number of placement groups that are mapped dynamically to OSDs. 
 When clients store objects, CRUSH maps each object to a placement group.
-The following diagram depicts how CRUSH maps objects to placement groups, and
-placement groups to OSDs.
+
+
+Mapping PGs to OSDs
+-------------------
+
+Mapping objects to placement groups instead of directly to OSDs creates a layer
+of indirection between the OSD and the client.  The cluster must be able to grow
+(or shrink) and rebalance where it stores objects dynamically. If the client
+"knew" which OSD had which object, that would create a tight coupling between
+the client and the OSD. Instead, the CRUSH algorithm maps each object to a
+placement group and then maps each placement group to one or more OSDs. This
+layer of indirection allows Ceph to rebalance dynamically when new OSDs come
+online. The following diagram depicts how CRUSH maps objects to placement
+groups, and placement groups to OSDs.
 
 .. ditaa:: 
            /-----\  /-----\  /-----\  /-----\  /-----\
@@ -124,27 +289,26 @@ placement groups to OSDs.
    |          |  |          |  |          |  |          |
    \----------/  \----------/  \----------/  \----------/  
 
-Mapping objects to placement groups instead of directly to OSDs creates a layer
-of indirection between the OSD and the client.  The cluster must be able to grow
-(or shrink) and rebalance where it stores objects dynamically. If the client
-"knew" which OSD had which object, that would create a tight coupling between
-the client and the OSD. Instead, the CRUSH algorithm maps each objecct to a
-placement group and then maps each placement group to one or more OSDs. This
-layer of indirection allows Ceph to rebalance dynamically when new OSDs come
-online. 
 
 With a copy of the cluster map and the CRUSH algorithm, the client can compute
 exactly which OSD to use when reading or writing a particular object.
 
-In a typical write scenario, a client uses the CRUSH algorithm to compute where
-to store an object, maps the object to a placement group, then looks at the
-CRUSH map to identify the primary OSD for the placement group. The client writes
-the object to the identified placement group in the primary OSD. Then, the
-primary OSD with its own copy of the CRUSH map identifies the secondary and
-tertiary OSDs for replication purposes, and replicates the object to the
-appropriate placement groups in the secondary and tertiary OSDs (as many OSDs as
-additional replicas), and responds to the client once it has confirmed the
-object was stored successfully.
+
+Cluster-side Replication
+------------------------
+
+The OSD daemon also uses the CRUSH algorithm, but the OSD daemon uses it to
+compute where replicas of objects should be stored (and for rebalancing). In a
+typical write scenario, a client uses the CRUSH algorithm to compute where to
+store an object, maps the object to a pool and placement group, then looks at
+the CRUSH map to identify the primary OSD for the placement group.
+
+The client writes the object to the identified placement group in the primary
+OSD. Then, the primary OSD with its own copy of the CRUSH map identifies the
+secondary and tertiary OSDs for replication purposes, and replicates the object
+to the appropriate placement groups in the secondary and tertiary OSDs (as many
+OSDs as additional replicas), and responds to the client once it has confirmed
+the object was stored successfully.
 
 
 .. ditaa:: 
@@ -173,13 +337,21 @@ object was stored successfully.
 
 
 Since any network device has a limit to the number of concurrent connections it
-can support, a centralized system has a low physical limit at high scales.  By
+can support, a centralized system has a low physical limit at high scales. By
 enabling clients to contact nodes directly, Ceph increases both performance and
 total system capacity simultaneously, while removing a single point of failure.
-Ceph clients can maintain a session when they need to, and with a particular
-OSD instead of a centralized server.
+Ceph clients can maintain a session when they need to, and with a particular OSD
+instead of a centralized server. For a detailed discussion of CRUSH, see  `CRUSH
+- Controlled, Scalable, Decentralized Placement of Replicated Data`_.
           
 .. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: http://ceph.com/papers/weil-crush-sc06.pdf
+
+
+Extending Ceph
+--------------
+
+.. todo:: explain "classes"
+
 
 How Ceph Clients Stripe Data
 ============================
@@ -380,89 +552,16 @@ metadata in one placement group with its replicas in placement groups stored in
 other OSDs. Scrubbing (usually performed daily) catches OSD bugs or filesystem
 errors.  OSDs can also perform deeper scrubbing by comparing data in objects
 bit-for-bit.  Deep scrubbing (usually performed weekly) finds bad sectors on a
-disk that weren't apparent in a light scrub.  
+disk that weren't apparent in a light scrub.
+
+See `Data Scrubbing`_ for details on configuring scrubbing.
+
+.. _Data Scrubbing: ../rados/configuration/osd-config-ref#scrubbing
 
 
-Peer-Aware Nodes
+
+Metadata Servers
 ================
-
-Ceph's cluster map determines whether a node in a network is ``in`` the 
-Ceph cluster or ``out`` of the Ceph cluster. 
-
-.. ditaa:: +----------------+
-           |                |
-           |   Node ID In   |
-           |                |
-           +----------------+
-                   ^
-                   |
-                   |
-                   v
-           +----------------+
-           |                |
-           |  Node ID Out   |
-           |                |
-           +----------------+
-
-In many clustered architectures, the primary purpose of cluster membership
-is so that a centralized interface knows which hosts it can access. Ceph
-takes it a step further: Ceph's nodes are cluster aware. Each node knows 
-about other nodes in the cluster. This enables Ceph's monitor, OSD, and 
-metadata server daemons to interact directly with each other. One major 
-benefit of this approach is that Ceph can utilize the CPU and RAM of its
-nodes to easily perform tasks that would bog down a centralized server.
-
-.. todo:: Explain OSD maps, Monitor Maps, MDS maps
-
-
-Smart OSDs
-==========
-
-Ceph OSDs join a cluster and report on their status. At the lowest level, 
-the OSD status is ``up`` or ``down`` reflecting whether or not it is 
-running and able to service requests. If an OSD is ``down`` and ``in``
-the cluster, this status may indicate the failure of the OSD. 
-
-With peer awareness, OSDs can communicate with other OSDs and monitors
-to perform tasks. OSDs take client requests to read data from or write
-data to pools, which have placement groups. When a client makes a request
-to write data to a primary OSD, the primary OSD knows how to determine 
-which OSDs have the placement groups for the replica copies, and then
-update those OSDs. This means that OSDs can also take requests from 
-other OSDs. With multiple replicas of data across OSDs, OSDs can also 
-"peer" to ensure that the placement groups are in sync. See 
-`Placement Group States`_ and `Placement Group Concepts`_ for details.
-
-If an OSD is not running (e.g., it crashes), the OSD cannot notify the monitor
-that it is ``down``. The monitor can ping an OSD periodically to ensure that it
-is running. However, Ceph also empowers OSDs to determine if a neighboring OSD
-is ``down``, to update the cluster map and to report it to the monitor(s). When
-an OSD is ``down``,  the data in the placement group is said to be ``degraded``.
-If the OSD is ``down`` and ``in``, but subsequently taken ``out`` of the
-cluster,  the OSDs receive an update to the cluster map and rebalance the
-placement groups within the cluster automatically.
-
-.. todo:: explain "classes"
-
-.. _Placement Group States: ../rados/operations/pg-states
-.. _Placement Group Concepts: ../rados/operations/pg-concepts
-
-Monitor Quorums
-===============
-
-Ceph's monitors maintain a master copy of the cluster map.  So Ceph daemons and
-clients  merely contact the monitor periodically to ensure they have the most
-recent  copy of the cluster map. Ceph monitors are light-weight processes, but
-for added reliability and fault tolerance, Ceph supports distributed monitors.
-Ceph must have agreement among various monitor instances regarding the state of
-the cluster. To establish a consensus, Ceph always uses an odd number of
-monitors (e.g., 1, 3, 5, 7, etc) and the `Paxos`_ algorithm in order to
-establish a consensus.
-
-.. _Paxos: http://en.wikipedia.org/wiki/Paxos_(computer_science)
-
-MDS
-===
 
 The Ceph filesystem service is provided by a daemon called ``ceph-mds``. It uses
 RADOS to store all the filesystem metadata (directories, file ownership, access
