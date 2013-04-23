@@ -236,6 +236,9 @@ int check_new_service_versions(MonitorDBStoreRef db,
   svc.first_committed = db->get("osdmap", "first_committed");
   svc.last_committed = db->get("osdmap", "last_committed");
 
+  generic_dout(0) << __func__ << " fc " << svc.first_committed
+                  << " lc " << svc.last_committed << dendl;
+
   int last_progress = -1;
   for (version_t v = svc.first_committed; v <= svc.last_committed; ++v) {
     int done = calc_progress(svc.first_committed, svc.last_committed, v);
