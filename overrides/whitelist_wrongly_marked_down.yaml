@@ -2,3 +2,9 @@ overrides:
   ceph:
     log-whitelist:
     - wrongly marked me down
+    config:
+      mds:
+        debug mds: 20
+        debug ms: 1
+      client:
+        debug client: 10
