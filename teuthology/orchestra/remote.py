@@ -127,7 +127,7 @@ class RemoteConsole(object):
         if r != 0:
             self._exec('sol deactivate')
 
-    def _wait_for_login(self, timeout=None, attempts=3):
+    def _wait_for_login(self, timeout=None, attempts=6):
         log.debug('Waiting for login prompt on {s}'.format(s=self.shortname))
         # wait for login prompt to indicate boot completed
         t = timeout
