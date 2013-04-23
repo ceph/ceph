@@ -23,6 +23,8 @@
 
 [mon]
 	debug ms = 1
+	debug mon = 20
+	debug paxos = 20
 	mon data avail warn = 10
 
 [mds]
