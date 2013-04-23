@@ -493,6 +493,27 @@ def decanonicalize_hostname(s):
     if re.match('ubuntu@.*\.front\.sepia\.ceph\.com', s):
         s = s[len('ubuntu@'): -len('.front.sepia.ceph.com')]
     return s
+
+def _get_downburst_exec():
+    """
+    First check for downburst in the user's path.
+    Then check in ~/src, ~ubuntu/src, and ~teuthology/src.
+    Return '' if no executable downburst is found.
+    """
+    path = os.environ.get('PATH', None)
+    if path:
+        for p in os.environ.get('PATH','').split(os.pathsep):
+            pth = os.path.join(p, 'downburst')
+            if os.access(pth, os.X_OK):
+                return pth
+    import pwd
+    little_old_me = pwd.getpwuid(os.getuid()).pw_name
+    for user in [little_old_me, 'ubuntu', 'teuthology']:
+        pth = "/home/%s/src/downburst/virtualenv/bin/downburst" % user
+        if os.access(pth, os.X_OK):
+            return pth
+    return ''
+
 #
 # Use downburst to create a virtual machine
 #
@@ -509,12 +530,16 @@ def do_create(ctx, machine_name, phys_host):
         fileOwt = {'downburst': fileInfo1}
         yaml.safe_dump(fileOwt,tmp)
         metadata = "--meta-data=%s" % tmp.name
-        p = subprocess.Popen(['downburst', '-c', phys_host,
+        dbrst = _get_downburst_exec()
+        if not dbrst:
+            log.info("Error: no downburst executable found")
+            return False
+        p = subprocess.Popen([dbrst, '-c', phys_host,
                 'create', metadata, createMe],
                 stdout=subprocess.PIPE,stderr=subprocess.PIPE,)
         owt,err = p.communicate()
         if err:
-            log.info("Downburst command to create %s may have failed: %s",
+            log.info("Downburst command to create %s failed: %s" %
                     (machine_name,err))
         else:
             log.info("%s created: %s" % (machine_name,owt))
@@ -524,7 +549,11 @@ def do_create(ctx, machine_name, phys_host):
 #
 def do_destroy(machine_name, phys_host):
     destroyMe = decanonicalize_hostname(machine_name)
-    p = subprocess.Popen(['downburst', '-c', phys_host,
+    dbrst = _get_downburst_exec()
+    if not dbrst:
+        log.info("Error: no downburst executable found")
+        return False
+    p = subprocess.Popen([dbrst, '-c', phys_host,
             'destroy', destroyMe],
             stdout=subprocess.PIPE,stderr=subprocess.PIPE,)
     owt,err = p.communicate()
