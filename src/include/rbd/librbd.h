@@ -311,8 +311,27 @@ int rbd_break_lock(rbd_image_t image, const char *client, const char *cookie);
 typedef void *rbd_completion_t;
 typedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg);
 ssize_t rbd_read(rbd_image_t image, uint64_t ofs, size_t len, char *buf);
+
+/* DEPRECATED; use rbd_read_iterate2 */
 int64_t rbd_read_iterate(rbd_image_t image, uint64_t ofs, size_t len,
 			 int (*cb)(uint64_t, size_t, const char *, void *), void *arg);
+
+/**
+ * iterate read over an image
+ *
+ * Reads each region of the image and calls the callback.  If the
+ * buffer pointer passed to the callback is NULL, the given extent is
+ * defined to be zeros (a hole).  Normally the granularity for the
+ * callback is the image stripe size.
+ *
+ * @param image image to read
+ * @param ofs offset to start from
+ * @param len bytes of source image to cover
+ * @param cb callback for each region
+ * @returns 0 success, error otherwise
+ */
+int rbd_read_iterate2(rbd_image_t image, uint64_t ofs, uint64_t len,
+		      int (*cb)(uint64_t, size_t, const char *, void *), void *arg);
 /**
  * get difference between two versions of an image
  *
