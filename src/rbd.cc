@@ -1033,7 +1033,7 @@ static int do_export(librbd::Image& image, const char *path)
     return -errno;
 
   ExportContext ec(&image, fd, info.size);
-  r = image.read_iterate(0, info.size, export_read_cb, (void *)&ec);
+  r = image.read_iterate2(0, info.size, export_read_cb, (void *)&ec);
   if (r < 0)
     goto out;
 
