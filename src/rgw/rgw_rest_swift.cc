@@ -26,6 +26,20 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
   if (limit == 0)
     limit = limit_max;
 
+  need_stats = (s->format != RGW_FORMAT_PLAIN);
+
+  if (need_stats) {
+    bool stats, exists;
+    int r = s->args.get_bool("stats", &stats, &exists);
+
+    if (r < 0)
+      return r;
+
+    if (exists) {
+      need_stats = stats;
+    }
+  }
+
   return 0;
 }
 
@@ -49,12 +63,17 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data(RGWUserBuckets& buckets)
   map<string, RGWBucketEnt>& m = buckets.get_buckets();
   map<string, RGWBucketEnt>::iterator iter;
 
+  if (!sent_data)
+    return;
+
   for (iter = m.begin(); iter != m.end(); ++iter) {
     RGWBucketEnt obj = iter->second;
     s->formatter->open_object_section("container");
     s->formatter->dump_string("name", obj.bucket.name);
-    s->formatter->dump_int("count", obj.count);
-    s->formatter->dump_int("bytes", obj.size);
+    if (need_stats) {
+      s->formatter->dump_int("count", obj.count);
+      s->formatter->dump_int("bytes", obj.size);
+    }
     s->formatter->close_section();
     rgw_flush_formatter(s, s->formatter);
   }
@@ -64,9 +83,8 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
 {
   if (sent_data) {
     s->formatter->close_section();
+    rgw_flush_formatter_and_reset(s, s->formatter);
   }
-
-  rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 int RGWListBucket_ObjStore_SWIFT::get_params()

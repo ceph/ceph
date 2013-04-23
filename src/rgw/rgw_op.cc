@@ -649,22 +649,21 @@ int RGWListBuckets::verify_permission()
 
 void RGWListBuckets::execute()
 {
-  ret = get_params();
-  if (ret < 0)
-    return;
-
   bool done;
-
   bool started = false;
   uint64_t total_count = 0;
 
   size_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
 
+  ret = get_params();
+  if (ret < 0)
+    goto send_end;
+
   do {
     RGWUserBuckets buckets;
     uint64_t read_count = min(limit - total_count, max_buckets);
     ret = rgw_read_user_buckets(store, s->user.user_id, buckets,
-                                marker, read_count, !!(s->prot_flags & RGW_REST_SWIFT));
+                                marker, read_count, should_get_stats());
 
     if (!started) {
       send_response_begin();
@@ -700,6 +699,10 @@ void RGWListBuckets::execute()
     }
   } while (!done);
 
+send_end:
+  if (!started) {
+    send_response_begin();
+  }
   send_response_end();
 }
 

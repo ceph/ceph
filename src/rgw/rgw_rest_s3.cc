@@ -173,6 +173,9 @@ void RGWListBuckets_ObjStore_S3::send_response_begin()
 
 void RGWListBuckets_ObjStore_S3::send_response_data(RGWUserBuckets& buckets)
 {
+  if (!sent_data)
+    return;
+
   map<string, RGWBucketEnt>& m = buckets.get_buckets();
   map<string, RGWBucketEnt>::iterator iter;
 
@@ -188,8 +191,8 @@ void RGWListBuckets_ObjStore_S3::send_response_end()
   if (sent_data) {
     s->formatter->close_section();
     list_all_buckets_end(s);
+    rgw_flush_formatter_and_reset(s, s->formatter);
   }
-  rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 int RGWListBucket_ObjStore_S3::get_params()

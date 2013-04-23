@@ -143,6 +143,8 @@ public:
   virtual void send_response_end() = 0;
   virtual void send_response() {}
 
+  virtual bool should_get_stats() { return false; }
+
   virtual const char *name() { return "list_buckets"; }
 };
 
