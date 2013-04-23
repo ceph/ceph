@@ -2459,7 +2459,9 @@ reprotect_and_return_err:
 
   ssize_t read(ImageCtx *ictx, uint64_t ofs, size_t len, char *buf)
   {
-    return read_iterate(ictx, ofs, len, simple_read_cb, buf);
+    vector<pair<uint64_t,uint64_t> > extents;
+    extents.push_back(make_pair(ofs, len));
+    return read(ictx, extents, buf, NULL);
   }
 
   ssize_t read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents, char *buf, bufferlist *pbl)
