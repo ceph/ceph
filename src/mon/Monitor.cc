@@ -2821,6 +2821,14 @@ void Monitor::handle_forward(MForward *m)
     PaxosServiceMessage *req = m->msg;
     m->msg = NULL;  // so ~MForward doesn't delete it
     req->set_connection(c);
+
+    /*
+     * note which election epoch this is; we will drop the message if
+     * there is a future election since our peers will resend routed
+     * requests in that case.
+     */
+    req->rx_election_epoch = get_epoch();
+
     /* Because this is a special fake connection, we need to break
        the ref loop between Connection and MonSession differently
        than we normally do. Here, the Message refers to the Connection
