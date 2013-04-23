@@ -1309,13 +1309,16 @@ public:
   // request routing
   struct RoutedRequest {
     uint64_t tid;
-    entity_inst_t client;
     bufferlist request_bl;
     MonSession *session;
+    Connection *con;
+    entity_inst_t client_inst;
 
     ~RoutedRequest() {
       if (session)
 	session->put();
+      if (con)
+	con->put();
     }
   };
   uint64_t routed_request_tid;
