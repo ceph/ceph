@@ -2,6 +2,71 @@
  Release Notes
 ===============
 
+v0.61 "Cuttlefish"
+------------------
+
+Upgrading
+~~~~~~~~~
+
+* radosgw-admin now uses the term zone instead of cluster to describe
+  each instance of the radosgw data store (and corresponding
+  collection of radosgw daemons).  The usage for the radosgw-admin
+  command and the 'rgw zone root pool' config optoins have changed
+  accordingly.
+
+* rbd progress indicators now go to standard error instead of standard
+  out.  (You can disable progress with --no-progress.)
+
+* The 'rbd resize ...' command now requires the --allow-shrink option
+  when resizing to a smaller size.  Expanding images to a larger size
+  is unchanged.
+
+* Please review the changes going back to 0.56.4 if you are upgrading
+  all the way from bobtail.
+
+* The old 'ceph stop_cluster' command has been removed.
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* rbd: incremental backups
+* rbd: only set STRIPINGV2 feature if striping parameters are incompatible with old versions
+* rbd: require --allow-shrink for resizing images down
+* librbd: many bug fixes
+* rgw: fix object corruption on COPY to self
+* rgw: new sysvinit script for rpm-based systems
+* rgw: allow buckets with '_'
+* rgw: CORS support
+* mon: many fixes
+* mon: improved trimming behavior
+* mon: fix data conversion/upgrade problem (from bobtail)
+* mon: ability to tune leveldb
+* mon: config-keys service to store arbitrary data on monitor
+* mon: 'osd crush add|link|unlink|add-bucket ...' commands
+* osd: per-rados pool quotas (objects, bytes)
+* osd: tool to export, import, and delete PGs from an individual OSD data store
+* osd: notify mon on clean shutdown to avoid IO stall
+* osd: improved detection of corrupted journals
+* osd: ability to tune leveldb
+* osd: improve client request throttling
+* osd, librados: fixes to the LIST_SNAPS operation
+* osd: improvements to scrub error repair
+* osd: many small fixes
+* mds: fix xattr handling on root inode
+* mds: fixed bugs in journal replay
+* mds: many fixes
+* librados: clean up snapshot constant definitions
+* libcephfs: calls to query CRUSH topology (used by Hadoop)
+* ceph-fuse, libcephfs: misc fixes to mds session management
+* ceph-fuse: disabled cache invalidation (again) due to potential deadlock with kernel
+* sysvinit: try to start all daemons despite early failures
+* ceph-disk: new 'list' command
+* ceph-disk: hotplug fixes for RHEL/CentOS
+* ceph-disk: fix creation of OSD data partitions on >2TB disks
+* osd: fix udev rules for RHEL/CentOS systems
+* fix daemon logging during initial startup
+
+
 v0.60
 -----
 
