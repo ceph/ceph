@@ -1900,7 +1900,9 @@ void Monitor::handle_probe_reply(MMonProbe *m)
   if (m->quorum.size()) {
     dout(10) << " existing quorum " << m->quorum << dendl;
 
-    if (paxos->get_version() + g_conf->paxos_max_join_drift < m->paxos_last_version) {
+    if ((paxos->get_version() + g_conf->paxos_max_join_drift <
+	m->paxos_last_version) ||
+	(paxos->get_version() < m->paxos_first_version)){
       dout(10) << " peer paxos version " << m->paxos_last_version
 	       << " vs my version " << paxos->get_version()
 	       << " (too far ahead)"
