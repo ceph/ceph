@@ -406,12 +406,18 @@ class MonitorDBStore
   }
 
   virtual bool exists(const string& prefix, const string& key) {
+    bufferlist bl;
+    int err = get(prefix, key, bl);
+    return err >= 0;
+
+    /*
     KeyValueDB::Iterator it = db->get_iterator(prefix);
     int err = it->lower_bound(key);
     if (err < 0)
       return false;
 
     return (it->valid() && it->key() == key);
+    */
   }
 
   virtual bool exists(const string& prefix, version_t ver) {
