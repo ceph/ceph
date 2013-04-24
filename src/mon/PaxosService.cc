@@ -34,6 +34,16 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, Paxos *paxos, string 
 bool PaxosService::dispatch(PaxosServiceMessage *m)
 {
   dout(10) << "dispatch " << *m << " from " << m->get_orig_source_inst() << dendl;
+
+  // make sure this message isn't forwarded from a previous election epoch
+  if (m->rx_election_epoch &&
+      m->rx_election_epoch < mon->get_epoch()) {
+    dout(10) << " discarding forwarded message from previous election epoch "
+	     << m->rx_election_epoch << " < " << mon->get_epoch() << dendl;
+    m->put();
+    return true;
+  }
+
   // make sure our map is readable and up to date
   if (!is_readable(m->version)) {
     dout(10) << " waiting for paxos -> readable (v" << m->version << ")" << dendl;
