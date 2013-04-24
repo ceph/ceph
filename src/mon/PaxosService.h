@@ -514,7 +514,7 @@ public:
   bool is_readable(version_t ver = 0) {
     if ((ver > get_last_committed())
 	|| ((!mon->is_peon() && !mon->is_leader()))
-        || !is_active()
+	|| (is_proposing() || paxos->is_recovering() || paxos->is_locked())
 	|| (get_last_committed() <= 0)
 	|| ((mon->get_quorum().size() != 1) && !paxos->is_lease_valid())) {
       return false;
