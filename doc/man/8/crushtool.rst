@@ -36,7 +36,7 @@ The tool has four modes of operation.
    will take the compiled map and decompile it into a plaintext source
    file, suitable for editing.
 
-.. option:: --build numosds layer1 ...
+.. option:: --build --num_osds {num-osds} layer1 ...
 
    will create a relatively generic map with the given layer
    structure. See below for examples.

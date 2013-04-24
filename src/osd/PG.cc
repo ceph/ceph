@@ -33,15 +33,84 @@
 
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
+#include "common/BackTrace.h"
 
 #include <sstream>
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
-static ostream& _prefix(std::ostream *_dout, const PG *pg) {
+static ostream& _prefix(std::ostream *_dout, const PG *pg) 
+{
   return *_dout << pg->gen_prefix();
 }
+
+void PG::get(const string &tag) {
+  ref.inc();
+#ifdef PG_DEBUG_REFS
+  Mutex::Locker l(_ref_id_lock);
+  if (!_tag_counts.count(tag)) {
+    _tag_counts[tag] = 0;
+  }
+  _tag_counts[tag]++;
+#endif
+}
+void PG::put(const string &tag) {
+#ifdef PG_DEBUG_REFS
+  {
+    Mutex::Locker l(_ref_id_lock);
+    assert(_tag_counts.count(tag));
+    _tag_counts[tag]--;
+    if (_tag_counts[tag] == 0) {
+      _tag_counts.erase(tag);
+    }
+  }
+#endif
+  if (ref.dec() == 0)
+    delete this;
+}
+
+#ifdef PG_DEBUG_REFS
+uint64_t PG::get_with_id() {
+  ref.inc();
+  Mutex::Locker l(_ref_id_lock);
+  uint64_t id = ++_ref_id;
+  BackTrace bt(0);
+  stringstream ss;
+  bt.print(ss);
+  dout(20) << __func__ << ": " << info.pgid << " got id " << id << dendl;
+  assert(!_live_ids.count(id));
+  _live_ids.insert(make_pair(id, ss.str()));
+  return id;
+}
+
+void PG::put_with_id(uint64_t id) {
+  dout(20) << __func__ << ": " << info.pgid << " put id " << id << dendl;
+  {
+    Mutex::Locker l(_ref_id_lock);
+    assert(_live_ids.count(id));
+    _live_ids.erase(id);
+  }
+  if (ref.dec() == 0)
+    delete this;
+}
+
+void PG::dump_live_ids() {
+  Mutex::Locker l(_ref_id_lock);
+  dout(0) << "\t" << __func__ << ": " << info.pgid << " live ids:" << dendl;
+  for (map<uint64_t, string>::iterator i = _live_ids.begin();
+       i != _live_ids.end();
+       ++i) {
+    dout(0) << "\t\tid: " << *i << dendl;
+  }
+  dout(0) << "\t" << __func__ << ": " << info.pgid << " live tags:" << dendl;
+  for (map<string, uint64_t>::iterator i = _tag_counts.begin();
+       i != _tag_counts.end();
+       ++i) {
+    dout(0) << "\t\tid: " << *i << dendl;
+  }
+}
+#endif
 
 void PGPool::update(OSDMapRef map)
 {
@@ -72,7 +141,11 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     _pool.id),
   osdmap_ref(curmap), pool(_pool),
   _lock("PG::_lock"),
-  ref(0), deleting(false), dirty_info(false), dirty_big_info(false), dirty_log(false),
+  ref(0),
+  #ifdef PG_DEBUG_REFS
+  _ref_id_lock("PG::_ref_id_lock"), _ref_id(0),
+  #endif
+  deleting(false), dirty_info(false), dirty_big_info(false), dirty_log(false),
   info(p),
   info_struct_v(0),
   coll(p), log_oid(loid), biginfo_oid(ioid),
@@ -98,10 +171,16 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   active_pushes(0),
   recovery_state(this)
 {
+#ifdef PG_DEBUG_REFS
+  osd->add_pgid(p, this);
+#endif
 }
 
 PG::~PG()
 {
+#ifdef PG_DEBUG_REFS
+  osd->remove_pgid(info.pgid, this);
+#endif
 }
 
 void PG::lock(bool no_lockdep)
@@ -1381,7 +1460,7 @@ void PG::build_might_have_unfound()
 }
 
 struct C_PG_ActivateCommitted : public Context {
-  PG *pg;
+  PGRef pg;
   epoch_t epoch;
   C_PG_ActivateCommitted(PG *p, epoch_t e)
     : pg(p), epoch(e) {}
@@ -1452,7 +1531,6 @@ void PG::activate(ObjectStore::Transaction& t,
   clean_up_local(t); 
 
   // find out when we commit
-  get();   // for callback
   tfin.push_back(new C_PG_ActivateCommitted(this, query_epoch));
   
   // initialize snap_trimq
@@ -1803,7 +1881,6 @@ void PG::_activate_committed(epoch_t e)
   }
 
   unlock();
-  put();
 }
 
 /*
@@ -1860,10 +1937,8 @@ bool PG::queue_scrub()
 }
 
 struct C_PG_FinishRecovery : public Context {
-  PG *pg;
-  C_PG_FinishRecovery(PG *p) : pg(p) {
-    pg->get();
-  }
+  PGRef pg;
+  C_PG_FinishRecovery(PG *p) : pg(p) {}
   void finish(int r) {
     pg->_finish_recovery(this);
   }
@@ -1906,6 +1981,10 @@ void PG::finish_recovery(list<Context*>& tfin)
 void PG::_finish_recovery(Context *c)
 {
   lock();
+  if (deleting) {
+    unlock();
+    return;
+  }
   if (c == finish_sync_event) {
     dout(10) << "_finish_recovery" << dendl;
     finish_sync_event = 0;
@@ -1922,7 +2001,6 @@ void PG::_finish_recovery(Context *c)
     dout(10) << "_finish_recovery -- stale" << dendl;
   }
   unlock();
-  put();
 }
 
 void PG::start_recovery_op(const hobject_t& soid)
@@ -2492,14 +2570,20 @@ void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
   assert(r == 0);
 }
 
-void PG::write_info(ObjectStore::Transaction& t)
+int PG::_write_info(ObjectStore::Transaction& t, epoch_t epoch,
+    pg_info_t &info, coll_t coll,
+    map<epoch_t,pg_interval_t> &past_intervals,
+    interval_set<snapid_t> &snap_collections,
+    hobject_t &infos_oid,
+    __u8 info_struct_v, bool dirty_big_info, bool force_ver)
 {
   // pg state
 
-  assert(info_struct_v <= cur_struct_v);
+  if (info_struct_v > cur_struct_v)
+    return -EINVAL;
 
   // Only need to write struct_v to attr when upgrading
-  if (info_struct_v < cur_struct_v) {
+  if (force_ver || info_struct_v < cur_struct_v) {
     bufferlist attrbl;
     info_struct_v = cur_struct_v;
     ::encode(info_struct_v, attrbl);
@@ -2510,7 +2594,7 @@ void PG::write_info(ObjectStore::Transaction& t)
   // info.  store purged_snaps separately.
   interval_set<snapid_t> purged_snaps;
   map<string,bufferlist> v;
-  ::encode(get_osdmap()->get_epoch(), v[get_epoch_key(info.pgid)]);
+  ::encode(epoch, v[get_epoch_key(info.pgid)]);
   purged_snaps.swap(info.purged_snaps);
   ::encode(info, v[get_info_key(info.pgid)]);
   purged_snaps.swap(info.purged_snaps);
@@ -2521,10 +2605,20 @@ void PG::write_info(ObjectStore::Transaction& t)
     ::encode(past_intervals, bigbl);
     ::encode(snap_collections, bigbl);
     ::encode(info.purged_snaps, bigbl);
-    dout(20) << "write_info bigbl " << bigbl.length() << dendl;
+    //dout(20) << "write_info bigbl " << bigbl.length() << dendl;
   }
 
-  t.omap_setkeys(coll_t::META_COLL, osd->infos_oid, v);
+  t.omap_setkeys(coll_t::META_COLL, infos_oid, v);
+
+  return 0;
+}
+
+void PG::write_info(ObjectStore::Transaction& t)
+{
+  int ret = _write_info(t, get_osdmap()->get_epoch(), info, coll,
+     past_intervals, snap_collections, osd->infos_oid,
+     info_struct_v, dirty_big_info);
+  assert(ret == 0);
 
   dirty_info = false;
   dirty_big_info = false;
@@ -2562,9 +2656,10 @@ epoch_t PG::peek_map_epoch(ObjectStore *store, coll_t coll, hobject_t &infos_oid
   return cur_epoch;
 }
 
-void PG::write_log(ObjectStore::Transaction& t)
+void PG::_write_log(ObjectStore::Transaction& t, pg_log_t &log,
+    const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors)
 {
-  dout(10) << "write_log" << dendl;
+  //dout(10) << "write_log" << dendl;
   t.remove(coll_t::META_COLL, log_oid);
   t.touch(coll_t::META_COLL, log_oid);
   map<string,bufferlist> keys;
@@ -2575,12 +2670,16 @@ void PG::write_log(ObjectStore::Transaction& t)
     p->encode_with_checksum(bl);
     keys[p->get_key_name()].claim(bl);
   }
-  dout(10) << "write_log " << keys.size() << " keys" << dendl;
+  //dout(10) << "write_log " << keys.size() << " keys" << dendl;
 
-  ::encode(ondisklog.divergent_priors, keys["divergent_priors"]);
+  ::encode(divergent_priors, keys["divergent_priors"]);
 
   t.omap_setkeys(coll_t::META_COLL, log_oid, keys);
+}
 
+void PG::write_log(ObjectStore::Transaction& t)
+{
+  _write_log(t, log, log_oid, ondisklog.divergent_priors);
   dirty_log = false;
 }
 
@@ -3383,7 +3482,8 @@ void PG::scrub_unreserve_replicas()
   }
 }
 
-void PG::_scan_snaps(ScrubMap &smap) {
+void PG::_scan_snaps(ScrubMap &smap) 
+{
   for (map<hobject_t, ScrubMap::object>::iterator i = smap.objects.begin();
        i != smap.objects.end();
        ++i) {
@@ -3689,7 +3789,6 @@ void PG::scrub()
   lock();
   if (deleting) {
     unlock();
-    put();
     return;
   }
 
@@ -4820,16 +4919,14 @@ void PG::set_last_peering_reset()
 }
 
 struct FlushState {
-  PG *pg;
+  PGRef pg;
   epoch_t epoch;
-  FlushState(PG *pg, epoch_t epoch) : pg(pg), epoch(epoch) {
-    pg->get();
-  }
+  FlushState(PG *pg, epoch_t epoch) : pg(pg), epoch(epoch) {}
   ~FlushState() {
     pg->lock();
-    pg->queue_flushed(epoch);
+    if (!pg->pg_has_reset_since(epoch))
+      pg->queue_flushed(epoch);
     pg->unlock();
-    pg->put();
   }
 };
 typedef std::tr1::shared_ptr<FlushState> FlushStateRef;
@@ -7639,5 +7736,10 @@ bool PG::PriorSet::affected_by_map(const OSDMapRef osdmap, const PG *debug_pg) c
   return false;
 }
 
-void intrusive_ptr_add_ref(PG *pg) { pg->get(); }
-void intrusive_ptr_release(PG *pg) { pg->put(); }
+void intrusive_ptr_add_ref(PG *pg) { pg->get("intptr"); }
+void intrusive_ptr_release(PG *pg) { pg->put("intptr"); }
+
+#ifdef PG_DEBUG_REFS
+  uint64_t get_with_id(PG *pg) { return pg->get_with_id(); }
+  void put_with_id(PG *pg, uint64_t id) { return pg->put_with_id(id); }
+#endif

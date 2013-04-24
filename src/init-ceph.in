@@ -217,11 +217,8 @@ for name in $what; do
 	cur_conf=$conf
     else
 	unique=`dd if=/dev/urandom bs=16 count=1 2>/dev/null | md5sum | awk '{print $1}'`
-	if echo $pushed_to | grep -v -q " $host "; then
-	    scp -q $conf $host:/tmp/ceph.conf.$unique
-	    trap "ssh $host rm /tmp/ceph.conf.$unique" EXIT
-	    pushed_to="$pushed_to $host "
-	fi
+	scp -q $conf $host:/tmp/ceph.conf.$unique
+	trap "ssh $host rm /tmp/ceph.conf.$unique" EXIT
 	cur_conf="/tmp/ceph.conf.$unique"
     fi
     cmd="$cmd -c $cur_conf"
@@ -320,7 +317,10 @@ for name in $what; do
 	    get_conf pre_start "" "pre start command"
 	    get_conf post_start "" "post start command"
 	    [ -n "$pre_start" ] && do_cmd "$pre_start"
-	    do_cmd "$cmd" $runarg
+	    do_cmd_okfail "$cmd" $runarg
+	    if [ "$ERR" != "0" ]; then
+		EXIT_STATUS=$ERR
+	    fi
 
 	    if [ "$type" = "mon" ]; then
 		# this will only work if we are using default paths

@@ -30,6 +30,7 @@ instance (a single context).
 For general object store configuration, refer to the following:
 
 .. toctree::
+   :maxdepth: 1
 
    Disks and Filesystems <filesystem-recommendations>
    ceph-conf
@@ -42,7 +43,7 @@ For general object store configuration, refer to the following:
 To optimize the performance of your cluster, refer to the following:
 
 .. toctree::
-	:maxdepth: 2
+	:maxdepth: 1
 
 	Network Settings <network-config-ref>
 	Auth Settings <auth-config-ref>
@@ -52,7 +53,6 @@ To optimize the performance of your cluster, refer to the following:
 	Filestore Settings <filestore-config-ref>
 	Journal Settings <journal-ref>
 	Pool, PG & CRUSH Settings <pool-pg-config-ref.rst>
-	Log / Debug Settings <log-and-debug-ref>
 	Messaging Settings <ms-ref>	
 	General Settings <general-config-ref>
 

@@ -536,7 +536,7 @@ void OSDMonitor::update_trim()
   }
 }
 
-bool OSDMonitor::should_trim()
+bool OSDMonitor::service_should_trim()
 {
   update_trim();
   return (get_trim_to() > 0);
@@ -2691,7 +2691,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	    return true;
 	  }
 	} else {
-	    ss << "no need to move item id " << id << " name '" << name << "' to location " << loc << " in crush map";
+	  ss << "no need to move item id " << id << " name '" << name << "' to location " << loc << " in crush map";
+	  err = 0;
 	}
       } while (false);
     }
@@ -2812,6 +2813,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 
       if (newcrush.rule_exists(name)) {
 	ss << "rule " << name << " already exists";
+	err = 0;
       } else {
 	int rule = newcrush.add_simple_rule(name, root, type);
 	if (rule < 0) {
@@ -2843,6 +2845,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 
       if (!newcrush.rule_exists(name)) {
 	ss << "rule " << name << " does not exist";
+	err = 0;
       } else {
 	int ruleno = newcrush.get_rule_id(name);
 	assert(ruleno >= 0);
@@ -3177,7 +3180,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  return true;
 	}
 	ss << addr << " isn't blacklisted";
-	err = -ENOENT;
+	err = 0;
 	goto out;
       }
     }
@@ -3196,7 +3199,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  if (p->snap_exists(snapname.c_str()) ||
 	      (pp && pp->snap_exists(snapname.c_str()))) {
 	    ss << "pool " << m->cmd[3] << " snap " << snapname << " already exists";
-	    err = -EEXIST;
+	    err = 0;
 	  } else {
 	    if (!pp) {
 	      pp = &pending_inc.new_pools[pool];
@@ -3225,7 +3228,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  if (!p->snap_exists(snapname.c_str()) &&
 	      (!pp || !pp->snap_exists(snapname.c_str()))) {
 	    ss << "pool " << m->cmd[3] << " snap " << snapname << " does not exists";
-	    err = -ENOENT;
+	    err = 0;
 	  } else {
 	    if (!pp) {
 	      pp = &pending_inc.new_pools[pool];
@@ -3393,12 +3396,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
 	      return true;
 	    } else if (m->cmd[4] == "pg_num") {
-	      if (m->cmd.size() < 7 ||
-		  m->cmd[6] != "--allow-experimental-feature") {
-		ss << "increasing pg_num is currently experimental, add "
-		   << "--allow-experimental-feature as the last argument "
-		   << "to force";
-	      } else if (n <= p->get_pg_num()) {
+	      if (n <= p->get_pg_num()) {
 		ss << "specified pg_num " << n << " <= current " << p->get_pg_num();
 	      } else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
 		ss << "currently creating pgs, wait";

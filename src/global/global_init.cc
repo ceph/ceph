@@ -125,6 +125,10 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
   }
   register_assert_context(cct);
 
+  // call all observers now.  this has the side-effect of configuring
+  // and opening the log file immediately.
+  conf->call_all_observers();
+
   if (code_env == CODE_ENVIRONMENT_DAEMON)
     output_ceph_version();
 }

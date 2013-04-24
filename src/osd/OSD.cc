@@ -151,7 +151,7 @@ OSDService::OSDService(OSD *osd) :
   osd(osd),
   whoami(osd->whoami), store(osd->store), clog(osd->clog),
   pg_recovery_stats(osd->pg_recovery_stats),
-  infos_oid(sobject_t("infos", CEPH_NOSNAP)),
+  infos_oid(OSD::make_infos_oid()),
   cluster_messenger(osd->cluster_messenger),
   client_messenger(osd->client_messenger),
   logger(osd->logger),
@@ -189,6 +189,9 @@ OSDService::OSDService(OSD *osd) :
   cur_ratio(0),
   is_stopping_lock("OSDService::is_stopping_lock"),
   state(NOT_STOPPING)
+#ifdef PG_DEBUG_REFS
+  , pgid_lock("OSDService::pgid_lock")
+#endif
 {}
 
 void OSDService::_start_split(const set<pg_t> &pgs)
@@ -1217,7 +1220,7 @@ int OSD::shutdown()
   g_ceph_context->_conf->set_val("debug_ms", "100");
   g_ceph_context->_conf->apply_changes(NULL);
   
-  // Remove PGs
+  // Shutdown PGs
   for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
        p != pg_map.end();
        ++p) {
@@ -1227,9 +1230,7 @@ int OSD::shutdown()
     p->second->kick();
     p->second->unlock();
     p->second->osr->flush();
-    p->second->put();
   }
-  pg_map.clear();
   
   // finish ops
   op_wq.drain(); // should already be empty except for lagard PGs
@@ -1308,6 +1309,28 @@ int OSD::shutdown()
     assert(pg_stat_queue.empty());
   }
 
+  peering_wq.clear();
+  // Remove PGs
+#ifdef PG_DEBUG_REFS
+  service.dump_live_pgids();
+#endif
+  for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
+       p != pg_map.end();
+       ++p) {
+    dout(20) << " kicking pg " << p->first << dendl;
+    p->second->lock();
+    if (p->second->ref.read() != 1) {
+      derr << "pgid " << p->first << " has ref count of "
+	   << p->second->ref.read() << dendl;
+      assert(0);
+    }
+    p->second->unlock();
+    p->second->put("PGMap");
+  }
+  pg_map.clear();
+#ifdef PG_DEBUG_REFS
+  service.dump_live_pgids();
+#endif
   g_conf->remove_observer(this);
 
   monc->shutdown();
@@ -1321,6 +1344,7 @@ int OSD::shutdown()
   cluster_messenger->shutdown();
   hbclient_messenger->shutdown();
   hbserver_messenger->shutdown();
+  peering_wq.clear();
   return r;
 }
 
@@ -1440,7 +1464,7 @@ PG *OSD::_open_lock_pg(
     pg->lock_with_map_lock_held(no_lockdep_check);
   else
     pg->lock(no_lockdep_check);
-  pg->get();  // because it's in pg_map
+  pg->get("PGMap");  // because it's in pg_map
   return pg;
 }
 
@@ -1467,7 +1491,7 @@ PG* OSD::_make_pg(
 void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
 {
   epoch_t e(service.get_osdmap()->get_epoch());
-  pg->get();  // For pg_map
+  pg->get("PGMap");  // For pg_map
   pg_map[pg->info.pgid] = pg;
   dout(10) << "Adding newly split pg " << *pg << dendl;
   vector<int> up, acting;
@@ -2310,9 +2334,15 @@ void OSD::heartbeat_entry()
 void OSD::heartbeat_check()
 {
   assert(heartbeat_lock.is_locked());
+  utime_t now = ceph_clock_now(g_ceph_context);
+  double age = hbclient_messenger->get_dispatch_queue_max_age(now);
+  if (age > (g_conf->osd_heartbeat_grace / 2)) {
+    derr << "skipping heartbeat_check, hbqueue max age: " << age << dendl;
+    return; // hb dispatch is too backed up for our hb status to be meaningful
+  }
 
   // check for incoming heartbeats (move me elsewhere?)
-  utime_t cutoff = ceph_clock_now(g_ceph_context);
+  utime_t cutoff = now;
   cutoff -= g_conf->osd_heartbeat_grace;
   for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
        p != heartbeat_peers.end();
@@ -2981,7 +3011,7 @@ void OSD::send_pg_stats(const utime_t &now)
       ++p;
       if (!pg->is_primary()) {  // we hold map_lock; role is stable.
 	pg->stat_queue_item.remove_myself();
-	pg->put();
+	pg->put("pg_stat_queue");
 	continue;
       }
       pg->pg_stats_lock.Lock();
@@ -3025,7 +3055,7 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
   xlist<PG*>::iterator p = pg_stat_queue.begin();
   while (!p.end()) {
     PG *pg = *p;
-    pg->get();
+    PGRef _pg(pg);
     ++p;
 
     if (ack->pg_stat.count(pg->info.pgid)) {
@@ -3034,7 +3064,7 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
       if (acked == pg->pg_stats_stable.reported) {
 	dout(25) << " ack on " << pg->info.pgid << " " << pg->pg_stats_stable.reported << dendl;
 	pg->stat_queue_item.remove_myself();
-	pg->put();
+	pg->put("pg_stat_queue");
       } else {
 	dout(25) << " still pending " << pg->info.pgid << " " << pg->pg_stats_stable.reported
 		 << " > acked " << acked << dendl;
@@ -3043,7 +3073,6 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
     } else {
       dout(30) << " still pending " << pg->info.pgid << " " << pg->pg_stats_stable.reported << dendl;
     }
-    pg->put();
   }
   
   if (!pg_stat_queue.size()) {
@@ -4455,7 +4484,7 @@ void OSD::consume_map()
   dout(7) << "consume_map version " << osdmap->get_epoch() << dendl;
 
   int num_pg_primary = 0, num_pg_replica = 0, num_pg_stray = 0;
-  list<PG*> to_remove;
+  list<PGRef> to_remove;
 
   // scan pg's
   for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
@@ -4473,8 +4502,7 @@ void OSD::consume_map()
     set<pg_t> split_pgs;
     if (!osdmap->have_pg_pool(pg->info.pgid.pool())) {
       //pool is deleted!
-      pg->get();
-      to_remove.push_back(pg);
+      to_remove.push_back(PGRef(pg));
     } else if (it->first.is_split(
 		 service.get_osdmap()->get_pg_num(it->first.pool()),
 		 osdmap->get_pg_num(it->first.pool()),
@@ -4485,13 +4513,12 @@ void OSD::consume_map()
     pg->unlock();
   }
 
-  for (list<PG*>::iterator i = to_remove.begin();
+  for (list<PGRef>::iterator i = to_remove.begin();
        i != to_remove.end();
-       ++i) {
+       to_remove.erase(i++)) {
     (*i)->lock();
-    _remove_pg((*i));
+    _remove_pg(&**i);
     (*i)->unlock();
-    (*i)->put();
   }
   to_remove.clear();
 
@@ -5791,10 +5818,9 @@ void OSD::handle_pg_remove(OpRequestRef op)
 		       up, acting);
     if (history.same_interval_since <= m->get_epoch()) {
       assert(pg->get_primary() == m->get_source().num());
-      pg->get();
+      PGRef _pg(pg);
       _remove_pg(pg);
       pg->unlock();
-      pg->put();
     } else {
       dout(10) << *pg << " ignoring remove request, pg changed in epoch "
 	       << history.same_interval_since
@@ -5854,7 +5880,7 @@ void OSD::_remove_pg(PG *pg)
 
   // remove from map
   pg_map.erase(pg->info.pgid);
-  pg->put(); // since we've taken it out of map
+  pg->put("PGMap"); // since we've taken it out of map
 }
 
 
