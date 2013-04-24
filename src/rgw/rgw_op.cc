@@ -653,7 +653,7 @@ void RGWListBuckets::execute()
   bool started = false;
   uint64_t total_count = 0;
 
-  size_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
+  uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
 
   ret = get_params();
   if (ret < 0)
@@ -715,7 +715,7 @@ void RGWStatAccount::execute()
 {
   string marker;
   bool done;
-  size_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
+  uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
 
   do {
     RGWUserBuckets buckets;
