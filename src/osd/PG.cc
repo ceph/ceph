@@ -949,6 +949,7 @@ void PG::remove_down_peer_info(const OSDMapRef osdmap)
   // if we removed anyone, update peers (which include peer_info)
   if (removed)
     update_heartbeat_peers();
+  check_recovery_sources(osdmap);
 }
 
 /*
@@ -5455,7 +5456,6 @@ boost::statechart::result PG::RecoveryState::Primary::react(const AdvMap &advmap
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->remove_down_peer_info(advmap.osdmap);
-  pg->check_recovery_sources(advmap.osdmap);
   return forward_event();
 }
 
