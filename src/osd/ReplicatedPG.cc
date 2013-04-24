@@ -4153,12 +4153,11 @@ void ReplicatedPG::populate_obc_watchers(ObjectContext *obc)
   dout(10) << "populate_obc_watchers " << obc->obs.oi.soid << dendl;
   assert(obc->watchers.empty());
   // populate unconnected_watchers
-  utime_t now = ceph_clock_now(g_ceph_context);
   for (map<pair<uint64_t, entity_name_t>, watch_info_t>::iterator p =
 	obc->obs.oi.watchers.begin();
        p != obc->obs.oi.watchers.end();
        ++p) {
-    utime_t expire = now;
+    utime_t expire = info.stats.last_became_active;
     expire += p->second.timeout_seconds;
     dout(10) << "  unconnected watcher " << p->first << " will expire " << expire << dendl;
     WatchRef watch(
