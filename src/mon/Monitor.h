@@ -1332,6 +1332,7 @@ public:
   void resend_routed_requests();
   void remove_session(MonSession *s);
   void remove_all_sessions();
+  void waitlist_or_zap_client(Message *m);
 
   void send_command(const entity_inst_t& inst,
 		    const vector<string>& com, version_t version);
