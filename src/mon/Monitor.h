@@ -364,6 +364,10 @@ private:
     }
   };
 
+  void sync_store_init();
+  void sync_store_cleanup();
+  bool is_sync_on_going();
+
   /**
    * Send a heartbeat message to another entity.
    *
@@ -1305,13 +1309,16 @@ public:
   // request routing
   struct RoutedRequest {
     uint64_t tid;
-    entity_inst_t client;
     bufferlist request_bl;
     MonSession *session;
+    Connection *con;
+    entity_inst_t client_inst;
 
     ~RoutedRequest() {
       if (session)
 	session->put();
+      if (con)
+	con->put();
     }
   };
   uint64_t routed_request_tid;
@@ -1411,8 +1418,6 @@ public:
 
   void handle_signal(int sig);
 
-  void stop_cluster();
-
   int mkfs(bufferlist& osdmapbl);
 
   /**
@@ -1507,6 +1512,7 @@ public:
 
     void _convert_monitor();
     void _convert_machines(string machine);
+    void _convert_osdmap_full();
     void _convert_machines();
     void _convert_paxos();
   };

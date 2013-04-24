@@ -408,7 +408,7 @@ int Monitor::preinit()
     // We have a potentially inconsistent store state in hands. Get rid of it
     // and start fresh.
     bool clear_store = false;
-    if (store->get("mon_sync", "in_sync") > 0) {
+    if (is_sync_on_going()) {
       dout(1) << __func__ << " clean up potentially inconsistent store state"
 	      << dendl;
       clear_store = true;
@@ -421,8 +421,12 @@ int Monitor::preinit()
 
     if (clear_store) {
       set<string> sync_prefixes = get_sync_targets_names();
-      sync_prefixes.insert("mon_sync");
       store->clear(sync_prefixes);
+
+      MonitorDBStore::Transaction t;
+      t.erase("mon_sync", "in_sync");
+      t.erase("mon_sync", "force_sync");
+      store->apply_transaction(t);
     }
   }
 
@@ -1276,6 +1280,47 @@ void Monitor::sync_requester_abort()
 }
 
 /**
+ *
+ */
+void Monitor::sync_store_init()
+{
+  MonitorDBStore::Transaction t;
+  t.put("mon_sync", "in_sync", 1);
+
+  bufferlist latest_monmap;
+  int err = monmon()->get_monmap(latest_monmap);
+  if (err < 0) {
+    if (err != -ENOENT) {
+      derr << __func__
+           << " something wrong happened while reading the store: "
+           << cpp_strerror(err) << dendl;
+      assert(0 == "error reading the store");
+      return; // this is moot
+    } else {
+      dout(10) << __func__ << " backup current monmap" << dendl;
+      monmap->encode(latest_monmap, get_quorum_features());
+    }
+  }
+
+  t.put("mon_sync", "latest_monmap", latest_monmap);
+
+  store->apply_transaction(t);
+}
+
+void Monitor::sync_store_cleanup()
+{
+  MonitorDBStore::Transaction t;
+  t.erase("mon_sync", "in_sync");
+  t.erase("mon_sync", "latest_monmap");
+  store->apply_transaction(t);
+}
+
+bool Monitor::is_sync_on_going()
+{
+  return store->exists("mon_sync", "in_sync");
+}
+
+/**
  * Start Sync process
  *
  * Create SyncEntity instances for the leader and the provider;
@@ -1321,9 +1366,8 @@ void Monitor::sync_start(entity_inst_t &other)
   targets.insert("mon_sync");
   store->clear(targets);
 
-  MonitorDBStore::Transaction t;
-  t.put("mon_sync", "in_sync", 1);
-  store->apply_transaction(t);
+
+  sync_store_init();
 
   // assume 'other' as the leader. We will update the leader once we receive
   // a reply to the sync start.
@@ -1618,9 +1662,7 @@ void Monitor::handle_sync_finish_reply(MMonSync *m)
 
   paxos->reapply_all_versions();
 
-  MonitorDBStore::Transaction t;
-  t.erase("mon_sync", "in_sync");
-  store->apply_transaction(t);
+  sync_store_cleanup();
 
   init_paxos();
 
@@ -2259,7 +2301,8 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
       ostringstream tcss;
       health_status_t tcstatus = timecheck_status(tcss, skew, latency);
       if (tcstatus != HEALTH_OK) {
-        overall = tcstatus;
+        if (overall > tcstatus)
+          overall = tcstatus;
         warns.push_back(name);
 
         ostringstream tmp_ss;
@@ -2297,8 +2340,9 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
   if (f)
     f->close_section();
 
-  if (f)
-    health_monitor->get_health(f, (detailbl ? &detail : NULL));
+  health_status_t hmstatus = health_monitor->get_health(f, (detailbl ? &detail : NULL));
+  if (overall > hmstatus)
+    overall = hmstatus;
 
   stringstream fss;
   fss << overall;
@@ -2436,16 +2480,6 @@ void Monitor::handle_command(MMonCommand *m)
     clog.info(ss);
     rs = "ok";
     reply_command(m, 0, rs, rdata, 0);
-    return;
-  }
-  if (m->cmd[0] == "stop_cluster") {
-    if (!access_all) {
-      r = -EACCES;
-      rs = "access denied";
-      goto out;
-    }
-    stop_cluster();
-    reply_command(m, 0, "initiating cluster shutdown", 0);
     return;
   }
 
@@ -2731,7 +2765,9 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
   } else if (session && !session->closed) {
     RoutedRequest *rr = new RoutedRequest;
     rr->tid = ++routed_request_tid;
-    rr->client = req->get_source_inst();
+    rr->client_inst = req->get_source_inst();
+    rr->con = req->get_connection();
+    rr->con->get();
     encode_message(req, CEPH_FEATURES_ALL, rr->request_bl);   // for my use only; use all features
     rr->session = static_cast<MonSession *>(session->get());
     routed_requests[rr->tid] = rr;
@@ -2775,6 +2811,14 @@ void Monitor::handle_forward(MForward *m)
     PaxosServiceMessage *req = m->msg;
     m->msg = NULL;  // so ~MForward doesn't delete it
     req->set_connection(c);
+
+    /*
+     * note which election epoch this is; we will drop the message if
+     * there is a future election since our peers will resend routed
+     * requests in that case.
+     */
+    req->rx_election_epoch = get_epoch();
+
     /* Because this is a special fake connection, we need to break
        the ref loop between Connection and MonSession differently
        than we normally do. Here, the Message refers to the Connection
@@ -2876,7 +2920,7 @@ void Monitor::handle_route(MRoute *m)
       // reset payload, in case encoding is dependent on target features
       if (m->msg) {
 	m->msg->clear_payload();
-	messenger->send_message(m->msg, rr->session->inst);
+	messenger->send_message(m->msg, rr->con);
 	m->msg = NULL;
       }
       routed_requests.erase(m->session_mon_tid);
@@ -2901,6 +2945,7 @@ void Monitor::resend_routed_requests()
 {
   dout(10) << "resend_routed_requests" << dendl;
   int mon = get_leader();
+  list<Context*> retry;
   for (map<uint64_t, RoutedRequest*>::iterator p = routed_requests.begin();
        p != routed_requests.end();
        ++p) {
@@ -2909,12 +2954,24 @@ void Monitor::resend_routed_requests()
     bufferlist::iterator q = rr->request_bl.begin();
     PaxosServiceMessage *req = (PaxosServiceMessage *)decode_message(cct, q);
 
-    dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req << dendl;
-    MForward *forward = new MForward(rr->tid, req, rr->session->caps);
-    forward->client = rr->client;
-    forward->set_priority(req->get_priority());
-    messenger->send_message(forward, monmap->get_inst(mon));
-  }  
+    if (mon == rank) {
+      dout(10) << " requeue for self tid " << rr->tid << " " << *req << dendl;
+      req->set_connection(rr->con);
+      rr->con->get();
+      retry.push_back(new C_RetryMessage(this, req));
+      delete rr;
+    } else {
+      dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req << dendl;
+      MForward *forward = new MForward(rr->tid, req, rr->session->caps);
+      forward->client = rr->client_inst;
+      forward->set_priority(req->get_priority());
+      messenger->send_message(forward, monmap->get_inst(mon));
+    }
+  }
+  if (mon == rank) {
+    routed_requests.clear();
+    finish_contexts(g_ceph_context, retry);
+  }
 }
 
 void Monitor::remove_session(MonSession *s)
@@ -2951,14 +3008,6 @@ void Monitor::send_command(const entity_inst_t& inst,
   c->cmd = com;
   try_send_message(c, inst);
 }
-
-
-void Monitor::stop_cluster()
-{
-  dout(0) << "stop_cluster -- initiating shutdown" << dendl;
-  mdsmon()->do_stop();
-}
-
 
 bool Monitor::_ms_dispatch(Message *m)
 {
@@ -4332,6 +4381,37 @@ out:
   dout(10) << __func__ << " machine " << machine << " finished" << dendl;
 }
 
+void Monitor::StoreConverter::_convert_osdmap_full()
+{
+  dout(10) << __func__ << dendl;
+  version_t first_committed =
+    store->get_int("osdmap", "first_committed");
+  version_t last_committed =
+    store->get_int("osdmap", "last_committed");
+
+  int err = 0;
+  for (version_t ver = first_committed; ver <= last_committed; ver++) {
+    if (!store->exists_bl_sn("osdmap_full", ver)) {
+      dout(20) << __func__ << " osdmap_full  ver " << ver << " dne" << dendl;
+      err++;
+      continue;
+    }
+
+    bufferlist bl;
+    int r = store->get_bl_sn(bl, "osdmap_full", ver);
+    assert(r >= 0);
+    dout(20) << __func__ << " osdmap_full ver " << ver
+             << " bl " << bl.length() << " bytes" << dendl;
+
+    string full_key = "full_" + stringify(ver);
+    MonitorDBStore::Transaction tx;
+    tx.put("osdmap", full_key, bl);
+    db->apply_transaction(tx);
+  }
+  dout(10) << __func__ << " found " << err << " conversion errors!" << dendl;
+  assert(err == 0);
+}
+
 void Monitor::StoreConverter::_convert_paxos()
 {
   dout(10) << __func__ << dendl;
@@ -4384,5 +4464,11 @@ void Monitor::StoreConverter::_convert_machines()
   for (; it != machine_names.end(); ++it) {
     _convert_machines(*it);
   }
+  // convert osdmap full versions
+  // this stays here as these aren't really an independent paxos
+  // machine, but rather machine-specific and don't fit on the
+  // _convert_machines(string) function.
+  _convert_osdmap_full();
+
   dout(10) << __func__ << " finished" << dendl;
 }

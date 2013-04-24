@@ -474,7 +474,7 @@ A rule takes the following form::
 :Default: 10
 
 
-``step take <bucket-type>``
+``step take <bucket-name>``
 
 :Description: Takes a bucket name, and begins iterating down the tree.
 :Purpose: A component of the rule.

@@ -198,7 +198,8 @@ int FileStore::lfn_stat(coll_t cid, const hobject_t& oid, struct stat *buf)
 
 int FileStore::lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode,
 			IndexedPath *path,
-			Index *index) {
+			Index *index) 
+{
   Index index2;
   IndexedPath path2;
   if (!path)
@@ -1647,6 +1648,14 @@ int FileStore::mount()
 
   {
     LevelDBStore *omap_store = new LevelDBStore(omap_dir);
+
+    omap_store->options.write_buffer_size = g_conf->osd_leveldb_write_buffer_size;
+    omap_store->options.cache_size = g_conf->osd_leveldb_cache_size;
+    omap_store->options.block_size = g_conf->osd_leveldb_block_size;
+    omap_store->options.bloom_size = g_conf->osd_leveldb_bloom_size;
+    omap_store->options.compression_enabled = g_conf->osd_leveldb_compression;
+    omap_store->options.max_open_files = g_conf->osd_leveldb_max_open_files;
+
     stringstream err;
     if (omap_store->create_and_open(err)) {
       delete omap_store;
@@ -3137,7 +3146,7 @@ int FileStore::_do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, 
     if (err >= 0) {
       r += err;
     } else {
-      return -errno;
+      return err;
     }
   }
 
@@ -3150,7 +3159,7 @@ int FileStore::_do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, 
     if (err >= 0) {
       r += err;
     } else {
-      return -errno;
+      return err;
     }
   }
   dout(20) << "_do_clone_range finished " << srcoff << "~" << len 
@@ -3186,10 +3195,14 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
     r = ::read(from, buf, l);
     dout(25) << "  read from " << pos << "~" << l << " got " << r << dendl;
     if (r < 0) {
-      r = -errno;
-      derr << "FileStore::_do_copy_range: read error at " << pos << "~" << len
-	   << ", " << cpp_strerror(r) << dendl;
-      break;
+      if (errno == EINTR) {
+	continue;
+      } else {
+	r = -errno;
+	derr << "FileStore::_do_copy_range: read error at " << pos << "~" << len
+	     << ", " << cpp_strerror(r) << dendl;
+	break;
+      }
     }
     if (r == 0) {
       // hrm, bad source range, wtf.

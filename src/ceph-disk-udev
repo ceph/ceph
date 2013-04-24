@@ -1,0 +1,56 @@
+#! /bin/sh
+
+# Wrapper for the ceph udev rules.  Since older versions of udev do not support gpt label fields, this shell
+# script is invoked from the udev rule to read the needed gpt label fields and call the appropriate ceph
+# OSD functions.
+
+PARTNO=$1
+NAME=$2
+PARENT_NAME=$3
+
+# Get GPT partition type guid
+ID_PART_ENTRY_TYPE=$(/usr/sbin/sgdisk --info=${PARTNO} /dev/${PARENT_NAME} | grep "Partition GUID code" | awk '{print $4}' | tr '[:upper:]' '[:lower:]')
+case $ID_PART_ENTRY_TYPE in
+
+45b0969e-9b03-4f30-b4c6-b4b80ceff106)
+    # JOURNAL_UUID
+    ;;
+
+45b0969e-9b03-4f30-b4c6-5ec00ceff106)
+    # DMCRYPT_JOURNAL_UUID
+    # Map journal if using dm-crypt
+    ID_PART_ENTRY_UUID=$(/usr/sbin/sgdisk --info=${PARTNO} /dev/${PARENT_NAME} | grep "Partition unique GUID" | awk '{print $4}' | tr '[:upper:]' '[:lower:]')
+    /sbin/cryptsetup --key-file /etc/ceph/dmcrypt-keys/${ID_PART_ENTRY_UUID} --key-size 256 create ${ID_PART_ENTRY_UUID} /dev/${NAME}
+    ;;
+
+4fbd7e29-9d25-41b8-afd0-062c0ceff05d)
+    # OSD_UUID
+    # activate ceph-tagged partitions.
+    /usr/sbin/ceph-disk -v activate --mount /dev/${NAME}
+    ;;
+
+4fbd7e29-9d25-41b8-afd0-5ec00ceff05d)
+    # DMCRYPT_OSD_UUID
+    # Map data device and activate ceph-tagged partitions
+    # for dm-crypted data devices
+    ID_PART_ENTRY_UUID=$(/usr/sbin/sgdisk --info=${PARTNO} /dev/${PARENT_NAME} | grep "Partition unique GUID" | awk '{print $4}' | tr '[:upper:]' '[:lower:]')
+    /sbin/cryptsetup --key-file /etc/ceph/dmcrypt-keys/${ID_PART_ENTRY_UUID} --key-size 256 create ${ID_PART_ENTRY_UUID} /dev/${NAME}
+    bash -c 'while [ ! -e /dev/mapper/${ID_PART_ENTRY_UUID} ];do sleep 1; done'
+    /usr/sbin/ceph-disk-activate --mount /dev/mapper/${ID_PART_ENTRY_UUID}
+    ;;
+
+89c57f98-2fe5-4dc0-89c1-f3ad0ceff2be)
+    # TOBE_UUID
+    ;;
+
+89c57f98-2fe5-4dc0-89c1-5ec00ceff2be)
+    # DMCRYPT_TOBE_UUID
+    ;;
+
+*)
+    # Not a Ceph device
+    ;;
+
+esac
+
+exit

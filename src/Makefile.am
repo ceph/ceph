@@ -33,6 +33,7 @@ ceph_sbin_SCRIPTS = \
 	ceph-disk \
 	ceph-disk-prepare \
 	ceph-disk-activate \
+	ceph-disk-udev \
 	ceph-create-keys
 
 sbin_SCRIPTS = \
@@ -1192,6 +1193,7 @@ EXTRA_DIST += \
 	ceph-disk \
 	ceph-disk-prepare \
 	ceph-disk-activate \
+	ceph-disk-udev \
 	ceph-create-keys \
 	mount.fuse.ceph
 
@@ -1601,6 +1603,7 @@ noinst_HEADERS = \
 	common/admin_socket.h \
 	common/admin_socket_client.h \
 	common/shared_cache.hpp \
+	common/tracked_int_ptr.hpp \
 	common/simple_cache.hpp \
 	common/sharedptr_registry.hpp \
 	common/map_cacher.hpp \

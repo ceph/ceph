@@ -110,6 +110,13 @@ public:
   int get_dispatch_queue_len() {
     return dispatch_queue.get_queue_len();
   }
+  /**
+   * Get age of oldest undelivered message
+   * (0 if the queue is empty)
+   */
+  double get_dispatch_queue_max_age(utime_t now) {
+    return dispatch_queue.get_max_age(now);
+  }
   /** @} Accessors */
 
   /**

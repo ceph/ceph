@@ -607,9 +607,9 @@ the migration manually. See the  `Architecture`_ section for details.
 .. _pool: ../pools
 .. _placement group: ../placement-groups
 .. _Architecture: ../../../architecture
-.. _OSD Not Running: ../troubleshooting-osd#osd-not-running
-.. _Troubleshooting PG Errors: ../troubleshooting-osd#troubleshooting-pg-errors
-.. _Peering Failure: ../troubleshooting-osd#failures-osd-peering
+.. _OSD Not Running: ../../troubleshooting/troubleshooting-osd#osd-not-running
+.. _Troubleshooting PG Errors: ../../troubleshooting/troubleshooting-pg#troubleshooting-pg-errors
+.. _Peering Failure: ../../troubleshooting/troubleshooting-pg#failures-osd-peering
 .. _CRUSH map: ../crush-map
 .. _Configuring Monitor/OSD Interaction: ../../configuration/mon-osd-interaction/
 .. _Placement Group Subsystem: ../control#placement-group-subsystem

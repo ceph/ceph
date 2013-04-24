@@ -134,7 +134,7 @@ OPTION(mon_osd_auto_mark_in, OPT_BOOL, false)         // mark any booting osds '
 OPTION(mon_osd_auto_mark_auto_out_in, OPT_BOOL, true) // mark booting auto-marked-out osds 'in'
 OPTION(mon_osd_auto_mark_new_in, OPT_BOOL, true)      // mark booting new osds 'in'
 OPTION(mon_osd_down_out_interval, OPT_INT, 300) // seconds
-OPTION(mon_osd_down_out_subtree_limit, OPT_STR, "rack")   // largest crush unit/type that we will automatically mark out
+OPTION(mon_osd_down_out_subtree_limit, OPT_STR, "rack")   // smallest crush unit/type that we will not automatically mark out
 OPTION(mon_osd_min_up_ratio, OPT_DOUBLE, .3)    // min osds required to be up to mark things down
 OPTION(mon_osd_min_in_ratio, OPT_DOUBLE, .3)   // min osds required to be in to mark things out
 OPTION(mon_stat_smooth_intervals, OPT_INT, 2)  // smooth stats over last N PGMap maps
@@ -180,11 +180,20 @@ OPTION(mon_sync_debug_provider_fallback, OPT_STR, "") // monitor to be used as f
 OPTION(mon_sync_leader_kill_at, OPT_INT, 0) // kill the sync leader at a specifc point in the work flow
 OPTION(mon_sync_provider_kill_at, OPT_INT, 0) // kill the sync provider at a specific point in the work flow
 OPTION(mon_sync_requester_kill_at, OPT_INT, 0) // kill the sync requester at a specific point in the work flow
+OPTION(mon_leveldb_write_buffer_size, OPT_U64, 32*1024*1024) // monitor's leveldb write buffer size
+OPTION(mon_leveldb_cache_size, OPT_U64, 0) // monitor's leveldb cache size
+OPTION(mon_leveldb_block_size, OPT_U64, 4*1024*1024) // monitor's leveldb block size
+OPTION(mon_leveldb_bloom_size, OPT_INT, 0) // monitor's leveldb bloom bits per entry
+OPTION(mon_leveldb_max_open_files, OPT_INT, 0) // monitor's leveldb max open files
+OPTION(mon_leveldb_compression, OPT_BOOL, false) // monitor's leveldb uses compression
+OPTION(paxos_stash_full_interval, OPT_INT, 25)   // how often (in commits) to stash a full copy of the PaxosService state
 OPTION(paxos_max_join_drift, OPT_INT, 10) // max paxos iterations before we must first sync the monitor stores
 OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long before proposing a map update
 OPTION(paxos_min_wait, OPT_DOUBLE, 0.05)  // min time to gather updates for after period of inactivity
 OPTION(paxos_trim_tolerance, OPT_INT, 30) // number of extra proposals tolerated before trimming
 OPTION(paxos_trim_disabled_max_versions, OPT_INT, 100) // maximum amount of versions we shall allow passing by without trimming
+OPTION(paxos_service_trim_max, OPT_INT, 50) // maximum amount of versions to trim during a single proposal (0 disables it)
+OPTION(paxos_service_trim_min, OPT_INT, 30) // minimum amount of versions to trigger a trim (0 disables it)
 OPTION(clock_offset, OPT_DOUBLE, 0) // how much to offset the system clock in Clock.cc
 OPTION(auth_cluster_required, OPT_STR, "cephx")   // required of mon, mds, osd daemons
 OPTION(auth_service_required, OPT_STR, "cephx")   // required by daemons of clients
@@ -225,7 +234,7 @@ OPTION(client_oc_max_objects, OPT_INT, 1000)      // max objects in cache
 OPTION(client_debug_force_sync_read, OPT_BOOL, false)     // always read synchronously (go to osds)
 OPTION(client_debug_inject_tick_delay, OPT_INT, 0) // delay the client tick for a number of seconds
 // note: the max amount of "in flight" dirty data is roughly (max - target)
-OPTION(fuse_use_invalidate_cb, OPT_BOOL, true) // use fuse 2.8+ invalidate callback to keep page cache consistent
+OPTION(fuse_use_invalidate_cb, OPT_BOOL, false) // use fuse 2.8+ invalidate callback to keep page cache consistent
 OPTION(fuse_allow_other, OPT_BOOL, true)
 OPTION(fuse_default_permissions, OPT_BOOL, true)
 OPTION(fuse_big_writes, OPT_BOOL, true)
@@ -429,6 +438,12 @@ OPTION(osd_op_history_duration, OPT_U32, 600) // Oldest completed op to track
 OPTION(osd_target_transaction_size, OPT_INT, 30)     // to adjust various transactions that batch smaller items
 OPTION(osd_failsafe_full_ratio, OPT_FLOAT, .97) // what % full makes an OSD "full" (failsafe)
 OPTION(osd_failsafe_nearfull_ratio, OPT_FLOAT, .90) // what % full makes an OSD near full (failsafe)
+OPTION(osd_leveldb_write_buffer_size, OPT_U64, 0) // OSD's leveldb write buffer size
+OPTION(osd_leveldb_cache_size, OPT_U64, 0) // OSD's leveldb cache size
+OPTION(osd_leveldb_block_size, OPT_U64, 0) // OSD's leveldb block size
+OPTION(osd_leveldb_bloom_size, OPT_INT, 0) // OSD's leveldb bloom bits per entry
+OPTION(osd_leveldb_max_open_files, OPT_INT, 0) // OSD's leveldb max open files
+OPTION(osd_leveldb_compression, OPT_BOOL, true) // OSD's leveldb uses compression
 
 /**
  * osd_client_op_priority and osd_recovery_op_priority adjust the relative

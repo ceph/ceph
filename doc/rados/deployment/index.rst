@@ -18,8 +18,8 @@ such as Juju, Puppet, Chef or Crowbar.
 
 .. toctree:: 
 
-	mkcephfs <mkcephfs>
 	Ceph Deploy <ceph-deploy>
+	mkcephfs (deprecated) <mkcephfs>
 
 .. raw:: html 
 

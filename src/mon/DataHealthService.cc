@@ -54,14 +54,17 @@ void DataHealthService::start_epoch()
   last_warned_percent = 0;
 }
 
-void DataHealthService::get_health(Formatter *f,
-                                   list<pair<health_status_t,string> > *detail)
+health_status_t DataHealthService::get_health(
+    Formatter *f,
+    list<pair<health_status_t,string> > *detail)
 {
   dout(10) << __func__ << dendl;
-  assert(f != NULL);
+  if (f) {
+    f->open_object_section("data_health");
+    f->open_array_section("mons");
+  }
 
-  f->open_object_section("data_health");
-  f->open_array_section("mons");
+  health_status_t overall_status = HEALTH_OK;
 
   for (map<entity_inst_t,DataStats>::iterator it = stats.begin();
        it != stats.end(); ++it) {
@@ -78,6 +81,9 @@ void DataHealthService::get_health(Formatter *f,
       health_detail = "low disk space!";
     }
 
+    if (overall_status > health_status)
+      overall_status = health_status;
+
     if (detail && health_status != HEALTH_OK) {
       stringstream ss;
       ss << "mon." << mon_name << " addr " << it->first.addr
@@ -86,21 +92,27 @@ void DataHealthService::get_health(Formatter *f,
       detail->push_back(make_pair(health_status, ss.str()));
     }
 
-    f->open_object_section(mon_name.c_str());
-    f->dump_string("name", mon_name.c_str());
-    f->dump_int("kb_total", stats.kb_total);
-    f->dump_int("kb_used", stats.kb_used);
-    f->dump_int("kb_avail", stats.kb_avail);
-    f->dump_int("avail_percent", stats.latest_avail_percent);
-    f->dump_stream("last_updated") << stats.last_update;
-    f->dump_stream("health") << health_status;
-    if (health_status != HEALTH_OK)
-      f->dump_string("health_detail", health_detail);
-    f->close_section();
+    if (f) {
+      f->open_object_section(mon_name.c_str());
+      f->dump_string("name", mon_name.c_str());
+      f->dump_int("kb_total", stats.kb_total);
+      f->dump_int("kb_used", stats.kb_used);
+      f->dump_int("kb_avail", stats.kb_avail);
+      f->dump_int("avail_percent", stats.latest_avail_percent);
+      f->dump_stream("last_updated") << stats.last_update;
+      f->dump_stream("health") << health_status;
+      if (health_status != HEALTH_OK)
+	f->dump_string("health_detail", health_detail);
+      f->close_section();
+    }
+  }
+  
+  if (f) {
+    f->close_section(); // mons
+    f->close_section(); // data_health
   }
 
-  f->close_section(); // mons
-  f->close_section(); // data_health
+  return overall_status;
 }
 
 int DataHealthService::update_stats()

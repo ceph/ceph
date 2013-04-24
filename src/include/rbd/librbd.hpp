@@ -156,6 +156,8 @@ public:
   ssize_t read(uint64_t ofs, size_t len, ceph::bufferlist& bl);
   int64_t read_iterate(uint64_t ofs, size_t len,
 		       int (*cb)(uint64_t, size_t, const char *, void *), void *arg);
+  int read_iterate2(uint64_t ofs, uint64_t len,
+		    int (*cb)(uint64_t, size_t, const char *, void *), void *arg);
   /**
    * get difference between two versions of an image
    *

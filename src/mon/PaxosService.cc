@@ -34,6 +34,16 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, Paxos *paxos, string 
 bool PaxosService::dispatch(PaxosServiceMessage *m)
 {
   dout(10) << "dispatch " << *m << " from " << m->get_orig_source_inst() << dendl;
+
+  // make sure this message isn't forwarded from a previous election epoch
+  if (m->rx_election_epoch &&
+      m->rx_election_epoch < mon->get_epoch()) {
+    dout(10) << " discarding forwarded message from previous election epoch "
+	     << m->rx_election_epoch << " < " << mon->get_epoch() << dendl;
+    m->put();
+    return true;
+  }
+
   // make sure our map is readable and up to date
   if (!is_readable(m->version)) {
     dout(10) << " waiting for paxos -> readable (v" << m->version << ")" << dendl;
@@ -152,7 +162,6 @@ void PaxosService::propose_pending()
 
   if (should_trim()) {
     encode_trim(&t);
-    set_trim_to(0);
   }
 
   encode_pending(&t);
@@ -179,7 +188,9 @@ bool PaxosService::should_stash_full()
    *	   nonetheless because, in that event,
    *	      latest_full == get_trim_to() == 0.
    */
-  return (!latest_full || (latest_full <= get_trim_to()));
+  return (!latest_full ||
+	  (latest_full <= get_trim_to()) ||
+	  (get_version() - latest_full > (unsigned)g_conf->paxos_stash_full_interval));
 }
 
 void PaxosService::restart()
@@ -327,7 +338,19 @@ void PaxosService::encode_trim(MonitorDBStore::Transaction *t)
   if (first_committed >= trim_to)
     return;
 
-  trim(t, first_committed, trim_to);
-  put_first_committed(t, trim_to);
+  version_t trim_to_max = trim_to;
+  if ((g_conf->paxos_service_trim_max > 0)
+      && (trim_to - first_committed > (size_t)g_conf->paxos_service_trim_max)) {
+    trim_to_max = first_committed + g_conf->paxos_service_trim_max;
+  }
+
+  dout(10) << __func__ << " trimming versions " << first_committed
+           << " to " << trim_to_max << dendl;
+
+  trim(t, first_committed, trim_to_max);
+  put_first_committed(t, trim_to_max);
+
+  if (trim_to_max == trim_to)
+    set_trim_to(0);
 }
 

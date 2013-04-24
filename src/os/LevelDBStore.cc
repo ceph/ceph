@@ -6,18 +6,46 @@
 #include <map>
 #include <string>
 #include <tr1/memory>
-#include "leveldb/db.h"
-#include "leveldb/write_batch.h"
-#include "leveldb/slice.h"
 #include <errno.h>
 using std::string;
 
 int LevelDBStore::init(ostream &out, bool create_if_missing)
 {
-  leveldb::Options options;
-  options.create_if_missing = create_if_missing;
+  leveldb::Options ldoptions;
+
+  if (options.write_buffer_size)
+    ldoptions.write_buffer_size = options.write_buffer_size;
+  if (options.max_open_files)
+    ldoptions.max_open_files = options.max_open_files;
+  if (options.cache_size) {
+    leveldb::Cache *_db_cache = leveldb::NewLRUCache(options.cache_size);
+    db_cache.reset(_db_cache);
+    ldoptions.block_cache = db_cache.get();
+  }
+  if (options.block_size)
+    ldoptions.block_size = options.block_size;
+  if (options.bloom_size) {
+#ifdef HAVE_LEVELDB_FILTER_POLICY
+    const leveldb::FilterPolicy *_filterpolicy =
+	leveldb::NewBloomFilterPolicy(options.bloom_size);
+    filterpolicy.reset(_filterpolicy);
+    ldoptions.filter_policy = filterpolicy.get();
+#else
+    assert(0 == "bloom size set but installed leveldb doesn't support bloom filters");
+#endif
+  }
+  if (!options.compression_enabled)
+    ldoptions.compression = leveldb::kNoCompression;
+  if (options.block_restart_interval)
+    ldoptions.block_restart_interval = options.block_restart_interval;
+
+  ldoptions.error_if_exists = options.error_if_exists;
+  ldoptions.paranoid_checks = options.paranoid_checks;
+  ldoptions.compression = leveldb::kNoCompression;
+  ldoptions.create_if_missing = create_if_missing;
+
   leveldb::DB *_db;
-  leveldb::Status status = leveldb::DB::Open(options, path, &_db);
+  leveldb::Status status = leveldb::DB::Open(ldoptions, path, &_db);
   db.reset(_db);
   if (!status.ok()) {
     out << status.ToString() << std::endl;

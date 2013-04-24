@@ -1677,39 +1677,6 @@ bool FileJournal::read_entry(
   }
 
   stringstream errss;
-  while (result == MAYBE_CORRUPT &&
-	 (static_cast<uint64_t>(pos - read_pos) <
-	  g_conf->journal_max_corrupt_search)) {
-    errss << "Entry at pos " << pos << " possibly corrupt due to: ("
-	  << ss.str() << ")" << std::endl;
-    ss.str(string());
-    ss.clear();
-    pos = next_pos;
-    result = do_read_entry(
-      pos,
-      &next_pos,
-      &bl,
-      &seq,
-      &ss);
-  }
-
-  if (result == SUCCESS) {
-    if (seq >= next_seq) {
-      derr << errss.str() << dendl;
-      derr << "Entry at pos " << pos << " valid, there are missing sequence "
-	   << "numbers prior to seq " << seq << dendl;
-      if (g_conf->journal_ignore_corruption) {
-	if (corrupt)
-	  *corrupt = true;
-	return false;
-      } else {
-	assert(0);
-      }
-    } else { // We read a valid, but old entry, no problem
-      return false;
-    }
-  }
-
   if (seq < header.committed_up_to) {
     derr << "Unable to read past sequence " << seq
 	 << " but header indicates the journal has committed up through "

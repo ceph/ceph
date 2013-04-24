@@ -99,9 +99,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 KB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering, striping (esc)
-  \tstripe unit: 4096 KB (esc)
-  \tstripe count: 1 (esc)
+  \tfeatures: layering (esc)
   $ rbd info bar --format json | python -mjson.tool
   {
       "block_name_prefix": "rbd_data.*",  (glob)
@@ -114,9 +112,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "object_size": 4194304, 
       "objects": 256, 
       "order": 22, 
-      "size": 1073741824, 
-      "stripe_count": 1, 
-      "stripe_unit": 4194304
+      "size": 1073741824
   }
   $ rbd info bar --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <image>
@@ -131,8 +127,6 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <feature>layering</feature>
       <feature>striping</feature>
     </features>
-    <stripe_unit>4194304</stripe_unit>
-    <stripe_count>1</stripe_count>
   </image>
   $ rbd info bar@snap
   rbd image 'bar':
@@ -140,10 +134,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 KB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering, striping (esc)
+  \tfeatures: layering (esc)
   \tprotected: True (esc)
-  \tstripe unit: 4096 KB (esc)
-  \tstripe count: 1 (esc)
   $ rbd info bar@snap --format json | python -mjson.tool
   {
       "block_name_prefix": "rbd_data.*",  (glob)
@@ -157,9 +149,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "objects": 128, 
       "order": 22, 
       "protected": "true", 
-      "size": 536870912, 
-      "stripe_count": 1, 
-      "stripe_unit": 4194304
+      "size": 536870912
   }
   $ rbd info bar@snap --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <image>
@@ -175,8 +165,6 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <feature>striping</feature>
     </features>
     <protected>true</protected>
-    <stripe_unit>4194304</stripe_unit>
-    <stripe_count>1</stripe_count>
   </image>
   $ rbd info bar@snap2
   rbd image 'bar':
@@ -184,10 +172,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 KB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering, striping (esc)
+  \tfeatures: layering (esc)
   \tprotected: False (esc)
-  \tstripe unit: 4096 KB (esc)
-  \tstripe count: 1 (esc)
   $ rbd info bar@snap2 --format json | python -mjson.tool
   {
       "block_name_prefix": "rbd_data.*",  (glob)
@@ -201,9 +187,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "objects": 256, 
       "order": 22, 
       "protected": "false", 
-      "size": 1073741824, 
-      "stripe_count": 1, 
-      "stripe_unit": 4194304
+      "size": 1073741824
   }
   $ rbd info bar@snap2 --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <image>
@@ -219,8 +203,6 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <feature>striping</feature>
     </features>
     <protected>false</protected>
-    <stripe_unit>4194304</stripe_unit>
-    <stripe_count>1</stripe_count>
   </image>
   $ rbd info baz
   rbd image 'baz':
@@ -228,9 +210,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 KB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering, striping (esc)
-  \tstripe unit: 4096 KB (esc)
-  \tstripe count: 1 (esc)
+  \tfeatures: layering (esc)
   $ rbd info baz --format json | python -mjson.tool
   {
       "block_name_prefix": "rbd_data.*",  (glob)
@@ -243,9 +223,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "object_size": 4194304, 
       "objects": 512, 
       "order": 22, 
-      "size": 2147483648, 
-      "stripe_count": 1, 
-      "stripe_unit": 4194304
+      "size": 2147483648
   }
   $ rbd info baz --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <image>
@@ -260,8 +238,6 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <feature>layering</feature>
       <feature>striping</feature>
     </features>
-    <stripe_unit>4194304</stripe_unit>
-    <stripe_count>1</stripe_count>
   </image>
   $ rbd info quux
   rbd image 'quux':
@@ -295,7 +271,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 KB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering, striping (esc)
+  \tfeatures: layering (esc)
   $ rbd info data/child --format json | python -mjson.tool
   {
       "block_name_prefix": "rbd_data.*",  (glob)
@@ -330,7 +306,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 KB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering, striping (esc)
+  \tfeatures: layering (esc)
   \tprotected: False (esc)
   \tparent: rbd/bar@snap (esc)
   \toverlap: 512 MB (esc)
