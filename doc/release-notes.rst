@@ -51,6 +51,7 @@ Notable Changes
 * osd: improve client request throttling
 * osd, librados: fixes to the LIST_SNAPS operation
 * osd: improvements to scrub error repair
+* osd: better prevention of wedging OSDs with ENOSPC 
 * osd: many small fixes
 * mds: fix xattr handling on root inode
 * mds: fixed bugs in journal replay
