@@ -638,19 +638,12 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
     Object *ob = objects[poolid][oid];
     
     if (r == -ENOENT && !ob->complete) {
-      // just pass through and retry all waiters if we don't trust
-      // -ENOENT for this read
-      if (trust_enoent) {
-	ldout(cct, 7) << "bh_read_finish ENOENT, marking complete and !exists on " << *ob << dendl;
-	ob->complete = true;
-	ob->exists = false;
-      }
-
       // wake up *all* rx waiters, or else we risk reordering identical reads. e.g.
       //   read 1~1
       //   reply to unrelated 3~1 -> !exists
       //   read 1~1 -> immediate ENOENT
       //   reply to first 1~1 -> ooo ENOENT
+      bool allzero = true;
       for (map<loff_t, BufferHead*>::iterator p = ob->data.begin(); p != ob->data.end(); ++p) {
 	BufferHead *bh = p->second;
 	for (map<loff_t, list<Context*> >::iterator p = bh->waitfor_read.begin();
@@ -658,6 +651,41 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
 	     ++p)
 	  ls.splice(ls.end(), p->second);
 	bh->waitfor_read.clear();
+	if (!bh->is_zero() && !bh->is_rx())
+	  allzero = false;
+      }
+
+      // just pass through and retry all waiters if we don't trust
+      // -ENOENT for this read
+      if (trust_enoent) {
+	ldout(cct, 7) << "bh_read_finish ENOENT, marking complete and !exists on " << *ob << dendl;
+	ob->complete = true;
+	ob->exists = false;
+
+	/* If all the bhs are effectively zero, get rid of them.  All
+	 * the waiters will be retried and get -ENOENT immediately, so
+	 * it's safe to clean up the unneeded bh's now. Since we know
+	 * it's safe to remove them now, do so, so they aren't hanging
+	 *around waiting for more -ENOENTs from rados while the cache
+	 * is being shut down.
+	 *
+	 * Only do this when all the bhs are rx or clean, to match the
+	 * condition in _readx(). If there are any non-rx or non-clean
+	 * bhs, _readx() will wait for the final result instead of
+	 * returning -ENOENT immediately.
+	 */
+	if (allzero) {
+	  ldout(cct, 10) << "bh_read_finish ENOENT and allzero, getting rid of "
+			 << "bhs for " << *ob << dendl;
+	  map<loff_t, BufferHead*>::iterator p = ob->data.begin();
+	  while (p != ob->data.end()) {
+	    BufferHead *bh = p->second;
+	    // current iterator will be invalidated by bh_remove()
+	    ++p;
+	    bh_remove(ob, bh);
+	    delete bh;
+	  }
+	}
       }
     }
 
