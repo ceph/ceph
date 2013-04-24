@@ -1090,6 +1090,7 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_stream("last_change") << last_change;
   f->dump_stream("last_active") << last_active;
   f->dump_stream("last_clean") << last_clean;
+  f->dump_stream("last_became_active") << last_became_active;
   f->dump_stream("last_unstale") << last_unstale;
   f->dump_unsigned("mapping_epoch", mapping_epoch);
   f->dump_stream("log_start") << log_start;
@@ -1119,7 +1120,7 @@ void pg_stat_t::dump(Formatter *f) const
 
 void pg_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(12, 8, bl);
+  ENCODE_START(13, 8, bl);
   ::encode(version, bl);
   ::encode(reported, bl);
   ::encode(state, bl);
@@ -1146,12 +1147,13 @@ void pg_stat_t::encode(bufferlist &bl) const
   ::encode(last_deep_scrub_stamp, bl);
   ::encode(stats_invalid, bl);
   ::encode(last_clean_scrub_stamp, bl);
+  ::encode(last_became_active, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(12, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(13, 8, 8, bl);
   ::decode(version, bl);
   ::decode(reported, bl);
   ::decode(state, bl);
@@ -1224,6 +1226,11 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
     ::decode(last_clean_scrub_stamp, bl);
   } else {
     last_clean_scrub_stamp = utime_t();
+  }
+  if (struct_v >= 13) {
+    ::decode(last_became_active, bl);
+  } else {
+    last_became_active = last_active;
   }
   DECODE_FINISH(bl);
 }
