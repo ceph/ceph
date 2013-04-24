@@ -268,6 +268,12 @@ AS_IF([test "x$with_tcmalloc" != xno],
 		  [no tcmalloc found (use --without-tcmalloc to disable)])])])
 AM_CONDITIONAL(WITH_TCMALLOC, [test "$HAVE_LIBTCMALLOC" = "1"])
 
+#set pg ref debugging?
+AC_ARG_ENABLE([pgrefdebugging],
+	    [AS_HELP_STRING([--enable-pgrefdebugging], [enable pg ref debugging])],
+			[AC_DEFINE([PG_DEBUG_REFS], [1], [Defined if you want pg ref debugging])],
+			[])
+
 #
 # Java is painful
 #   - adapted from OMPI wrappers package
@@ -416,6 +422,10 @@ AM_CONDITIONAL(WITH_OCF, [ test "$with_ocf" = "yes" ])
 AC_CHECK_LIB([snappy], [snappy_compress], [], [AC_MSG_FAILURE([libsnappy not found])])
 # use system leveldb
 AC_CHECK_LIB([leveldb], [leveldb_open], [], [AC_MSG_FAILURE([libleveldb not found])], [-lsnappy -lpthread])
+# see if we can use bloom filters with leveldb
+AC_LANG_PUSH([C++])
+AC_CHECK_HEADER([leveldb/filter_policy.h], [AC_DEFINE([HAVE_LEVELDB_FILTER_POLICY], [1], [Defined if LevelDB supports bloom filters ])])
+AC_LANG_POP([C++])
 
 # use system libs3?
 AC_ARG_WITH([system-libs3],

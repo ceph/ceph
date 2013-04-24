@@ -42,14 +42,13 @@ example::
 Ceph Configuration 
 ==================
 
-Ensure that you disable ``lockdep``. Consider setting `logging`_ to 
+Ensure that you disable ``lockdep``. Consider setting logging to 
 levels appropriate for a production cluster. See `Ceph Logging and Debugging`_ 
 for details.
 
-.. _logging: ../../rados/configuration/log-and-debug-ref
-.. _Ceph Logging and Debugging: ../../rados/configuration/ceph-conf/#ceph-logging-and-debugging
+.. _Ceph Logging and Debugging: ../../rados/troubleshooting/log-and-debug
 
-See the `CPU Profiling`_ section of the RADOS Operations documentation for details on using Oprofile.
+See the `CPU Profiling`_ section of the RADOS Troubleshooting documentation for details on using Oprofile.
 
 
-.. _CPU Profiling: ../../rados/operations/cpu-profiling
+.. _CPU Profiling: ../../rados/troubleshooting/cpu-profiling

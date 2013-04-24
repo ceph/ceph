@@ -21,6 +21,7 @@ frequently-asked questions in our mailing list involve hardware-related
 questions and how to install Ceph on various distributions. 
 
 .. toctree::
+   :maxdepth: 2
 
    Hardware Recommendations <hardware-recommendations>
    OS Recommendations <os-recommendations>
@@ -34,6 +35,7 @@ install Ceph using our stable release packages. For testing, you
 may install development release and testing packages.
 
 .. toctree::
+   :maxdepth: 2
 
    Installing Debian/Ubuntu Packages <debian>
    Installing RPM Packages <rpm>
@@ -48,7 +50,8 @@ repository at github. If you intend to build Ceph from source, please see the
 build pre-requisites first. Making sure you have all the pre-requisites
 will save you time.
 
-.. toctree:: 
+.. toctree::
+   :maxdepth: 1
 
 	Prerequisites <build-prerequisites>
 	Get a Tarball <get-tarballs>

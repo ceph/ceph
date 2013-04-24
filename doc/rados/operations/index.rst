@@ -11,15 +11,13 @@ restarting a cluster with the ``ceph`` service;  checking the cluster's health;
 and, monitoring an operating cluster.
 
 .. toctree::
-	:maxdepth: 2 
+	:maxdepth: 1 
 	
 	operating
 	monitoring
 	monitoring-osd-pg
-	cpu-profiling
-	memory-profiling
-	troubleshooting
-	debug
+	Authentication Overview <auth-intro>
+	Cephx Authentication <authentication>
 
 .. raw:: html 
 
@@ -31,6 +29,7 @@ pools and placement groups that distribute data across the cluster using Ceph's
 CRUSH algorithm.
 
 .. toctree::
+	:maxdepth: 1
 
 	data-placement
 	pools
@@ -41,22 +40,7 @@ CRUSH algorithm.
 
 .. raw:: html
 
-	</td></tr><tr><td><h3>Authentication and Authorization</h3>
-
-Once you have data placement policies in place, you can begin creating users
-and assigning them capabilities, such as the ability to read and write data
-to one or more pools, or the cluster as a whole.  
-
-.. toctree:: 
-
-	Authentication Overview <auth-intro>
-	Cephx Authentication <authentication>
-	
-
-
-.. raw:: html
-
-	</td><td><h3>Daemon Operations</h3>
+	</td></tr><tr><td><h3>Low-level Operations</h3>
 
 Low-level cluster operations consist of starting, stopping, and restarting a
 particular daemon within a cluster; changing the settings of a particular
@@ -65,11 +49,35 @@ from the cluster. The most common use cases for low-level operations include
 growing or shrinking the Ceph cluster and replacing legacy or failed hardware
 with new hardware.
 
-.. toctree:: 
+.. toctree::
+	:maxdepth: 1
 
 	add-or-rm-osds
 	add-or-rm-mons
 	Command Reference <control>
+
+	
+
+.. raw:: html
+
+	</td><td><h3>Troubleshooting</h3>
+
+Ceph is still on the leading edge, so you may encounter situations that require
+you to evaluate your Ceph configuration and modify your logging and debugging
+settings to identify and remedy issues you are encountering with your cluster.
+
+.. toctree::
+	:maxdepth: 1 
+
+	../troubleshooting/community
+	../troubleshooting/troubleshooting-mon
+	../troubleshooting/troubleshooting-osd
+	../troubleshooting/troubleshooting-pg
+	../troubleshooting/log-and-debug
+	../troubleshooting/cpu-profiling
+	../troubleshooting/memory-profiling
+
+
 
 
 .. raw:: html

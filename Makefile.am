@@ -10,7 +10,8 @@ EXTRA_DIST += \
 	src/test/cli \
 	src/test/downloads \
 	udev/50-rbd.rules \
-	udev/95-ceph-osd.rules
+	udev/95-ceph-osd.rules \
+	udev/95-ceph-osd-alt.rules
 
 
 all-local:

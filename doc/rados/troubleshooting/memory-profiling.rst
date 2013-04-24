@@ -9,7 +9,7 @@ installed::
 	sudo apt-get google-perftools
 
 The profiler dumps output to your ``log file`` directory (i.e.,
-``/var/log/ceph``). See `Logging and Debugging Config Reference`_ for details.
+``/var/log/ceph``). See `Logging and Debugging`_ for details.
 To view the profiler logs with Google's performance tools, execute the
 following:: 
 
@@ -89,7 +89,7 @@ For example::
 
 	ceph {daemon-type} tell {daemon-id} heap stop_profiler
 
-.. _Logging and Debugging Config Reference: ../../configuration/log-and-debug-ref
+.. _Logging and Debugging: ../log-and-debug
 .. _Google Heap Profiler: http://google-perftools.googlecode.com/svn/trunk/doc/heapprofile.html
 
 

@@ -17,6 +17,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 #include "include/Context.h"
+#include "include/stringify.h"
 #include <errno.h>
 #include "Paxos.h"
 #include "Monitor.h"
@@ -273,6 +274,35 @@ public:
    *	   the class that is implementing PaxosService
    */
   void propose_pending();
+
+  /**
+   * Let others request us to propose.
+   *
+   * At the moment, this is just a wrapper to propose_pending() with an
+   * extra check for is_writeable(), but it's a good practice to dissociate
+   * requests for proposals from direct usage of propose_pending() for
+   * future use -- we might want to perform additional checks or put a
+   * request on hold, for instance.
+   */
+  void request_proposal() {
+    assert(is_writeable());
+
+    propose_pending();
+  }
+  /**
+   * Request service @p other to perform a proposal.
+   *
+   * We could simply use the function above, requesting @p other directly,
+   * but we might eventually want to do something to the request -- say,
+   * set a flag stating we're waiting on a cross-proposal to be finished.
+   */
+  void request_proposal(PaxosService *other) {
+    assert(other != NULL);
+    assert(other->is_writeable());
+
+    other->request_proposal();
+  }
+
   /**
    * Dispatch a message by passing it to several different functions that are
    * either implemented directly by this service, or that should be implemented
@@ -501,13 +531,26 @@ public:
    *  - our monitor is the leader;
    *  - we have a valid lease;
    *  - Paxos is not boostrapping.
+   *  - Paxos is not recovering.
+   *  - we are ready to be written to -- i.e., we have a pending value.
    *
    * @returns true if writeable; false otherwise
    */
   bool is_writeable() {
-    return (!is_proposing() && mon->is_leader()
-        && !paxos->is_locked()
-	&& paxos->is_lease_valid() && !paxos->is_bootstrapping());
+    return (is_active()
+        && mon->is_leader()
+        && paxos->is_lease_valid()
+        && is_write_ready());
+  }
+
+  /**
+   * Check if we are ready to be written to.  This means we must have a
+   * pending value and be active.
+   *
+   * @returns true if we are ready to be written to; false otherwise.
+   */
+  bool is_write_ready() {
+    return is_active() && have_pending;
   }
 
   /**
@@ -599,6 +642,24 @@ public:
    */
   virtual void encode_trim(MonitorDBStore::Transaction *t);
   /**
+   *
+   */
+  virtual bool should_trim() {
+    bool want_trim = service_should_trim();
+
+    if (!want_trim)
+      return false;
+
+    if (g_conf->paxos_service_trim_min > 0) {
+      version_t trim_to = get_trim_to();
+      version_t first = get_first_committed();
+
+      if ((trim_to > 0) && trim_to > first)
+        return ((trim_to - first) >= (version_t)g_conf->paxos_service_trim_min);
+    }
+    return true;
+  }
+  /**
    * Check if we should trim.
    *
    * We define this function here, because we assume that as long as we know of
@@ -607,7 +668,7 @@ public:
    *
    * @returns true if we should trim; false otherwise.
    */
-  virtual bool should_trim() {
+  virtual bool service_should_trim() {
     update_trim();
     return (get_trim_to() > 0);
   }
@@ -644,7 +705,7 @@ public:
    * @defgroup PaxosService_h_Stash_Full
    * @{
    */
-  bool should_stash_full();
+  virtual bool should_stash_full();
   /**
    * Encode a full version on @p t
    *
@@ -907,6 +968,15 @@ public:
   int get_mkfs(bufferlist& bl) {
     return mon->store->get(mkfs_name, get_service_name(), bl);
   }
+
+  bool exists_key(const string &key) {
+    return mon->store->exists(get_service_name(), key);
+  }
+
+  bool exists_version(const version_t v) {
+    return exists_key(stringify(v));
+  }
+
   /**
    * Checks if a given key composed by @p prefix and @p name exists.
    *
@@ -916,7 +986,18 @@ public:
    */
   bool exists_key(const string& prefix, const string& name) {
     string key = mon->store->combine_strings(prefix, name);
-    return mon->store->exists(get_service_name(), key);
+    return exists_key(key);
+  }
+
+  /**
+   * Checks if a given version @v exists
+   *
+   * @param prefix key's prefix
+   * @param v key's suffix
+   * @returns true if key exists; false otherwise.
+   */
+  bool exists_version(const string& prefix, const version_t v) {
+    return exists_key(prefix, stringify(v));
   }
   /**
    * @}

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -71,12 +71,14 @@ static string dir_oid = RBD_DIRECTORY;
 static string dir_info_oid = RBD_INFO;
 
 bool udevadm_settle = true;
+bool progress = true;
+bool resize_allow_shrink = false;
 
 #define dout_subsys ceph_subsys_rbd
 
 void usage()
 {
-  cout << 
+  cout <<
 "usage: rbd [-n <auth user>] [OPTIONS] <cmd> ...\n"
 "where 'pool' is a rados pool name (default is 'rbd') and 'cmd' is one of:\n"
 "  (ls | list) [-l | --long ] [pool-name] list rbd images\n"
@@ -152,7 +154,9 @@ void usage()
 "  --shared <tag>                     take a shared (rather than exclusive) lock\n"
 "  --format <output-format>           output format (default: plain, json, xml)\n"
 "  --pretty-format                    make json or xml output more readable\n"
-"  --no-settle                        do not wait for udevadm to settle on map/unmap\n";
+"  --no-settle                        do not wait for udevadm to settle on map/unmap\n"
+"  --no-progress                      do not show progress for long-running commands\n"
+"  --allow-shrink                     allow shrinking of an image when resizing\n";
 }
 
 static string feature_str(uint64_t feature)
@@ -173,9 +177,11 @@ static string features_str(uint64_t features)
 
   for (uint64_t feature = 1; feature <= RBD_FEATURE_STRIPINGV2;
        feature <<= 1) {
-    if (s.size())
-      s += ", ";
-    s += feature_str(feature);
+    if (feature & features) {
+      if (s.size())
+	s += ", ";
+      s += feature_str(feature);
+    }
   }
   return s;
 }
@@ -198,22 +204,28 @@ struct MyProgressContext : public librbd::ProgressContext {
   }
 
   int update_progress(uint64_t offset, uint64_t total) {
-    int pc = total ? (offset * 100ull / total) : 0;
-    if (pc != last_pc) {
-      cerr << "\r" << operation << ": "
-	//	   << offset << " / " << total << " "
-	   << pc << "% complete...";
-      cerr.flush();
-      last_pc = pc;
+    if (progress) {
+      int pc = total ? (offset * 100ull / total) : 0;
+      if (pc != last_pc) {
+	cerr << "\r" << operation << ": "
+	  //	   << offset << " / " << total << " "
+	     << pc << "% complete...";
+	cerr.flush();
+	last_pc = pc;
+      }
     }
     return 0;
   }
   void finish() {
-    cerr << "\r" << operation << ": 100% complete...done." << std::endl;
+    if (progress) {
+      cerr << "\r" << operation << ": 100% complete...done." << std::endl;
+    }
   }
   void fail() {
-    cerr << "\r" << operation << ": " << last_pc << "% complete...failed."
-	 << std::endl;
+    if (progress) {
+      cerr << "\r" << operation << ": " << last_pc << "% complete...failed."
+	   << std::endl;
+    }
   }
 };
 
@@ -417,8 +429,10 @@ static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     if (features == 0) {
       features = RBD_FEATURE_LAYERING;
     }
-    if (stripe_unit != (1ull << *order) && stripe_count != 1)
+    if ((stripe_unit || stripe_count) &&
+	(stripe_unit != (1ull << *order) && stripe_count != 1)) {
       features |= RBD_FEATURE_STRIPINGV2;
+    }
     r = rbd.create3(io_ctx, imgname, size, features, order,
 		    stripe_unit, stripe_count);
   }
@@ -1019,7 +1033,7 @@ static int do_export(librbd::Image& image, const char *path)
     return -errno;
 
   ExportContext ec(&image, fd, info.size);
-  r = image.read_iterate(0, info.size, export_read_cb, (void *)&ec);
+  r = image.read_iterate2(0, info.size, export_read_cb, (void *)&ec);
   if (r < 0)
     goto out;
 
@@ -1354,7 +1368,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 	goto done;
       }
     }
-    // done with whole block, whether written or not 
+    // done with whole block, whether written or not
     image_pos += blklen;
     // if read had returned 0, we're at EOF and should quit
     if (readlen == 0)
@@ -1702,7 +1716,7 @@ static int do_kernel_add(const char *poolname, const char *imgname,
 
   // let udevadm do its job before we return
   if (udevadm_settle) {
-    r = system("/sbin/udevadm settle");
+    int r = system("/sbin/udevadm settle");
     if (r) {
       if (r < 0)
         cerr << "rbd: error executing udevadm as shell command!" << std::endl;
@@ -1911,7 +1925,7 @@ static int do_kernel_rm(const char *dev)
 
   // let udevadm do its job *before* we try to unmap
   if (udevadm_settle) {
-    r = system("/sbin/udevadm settle");
+    int r = system("/sbin/udevadm settle");
     if (r) {
       if (r < 0)
         cerr << "rbd: error executing udevadm as shell command!" << std::endl;
@@ -1938,7 +1952,7 @@ static int do_kernel_rm(const char *dev)
 
   // let udevadm finish, if present
   if (udevadm_settle){
-    r = system("/sbin/udevadm settle");
+    int r = system("/sbin/udevadm settle");
     if (r) {
       if (r < 0)
         cerr << "rbd: error executing udevadm as shell command!" << std::endl;
@@ -2188,6 +2202,10 @@ int main(int argc, const char **argv)
       lock_tag = strdup(val.c_str());
     } else if (ceph_argparse_flag(args, i, "--no-settle", (char *)NULL)) {
       udevadm_settle = false;
+    } else if (ceph_argparse_flag(args, i, "--no-progress", (char *)NULL)) {
+      progress = false;
+    } else if (ceph_argparse_flag(args, i , "--allow-shrink", (char *)NULL)) {
+      resize_allow_shrink = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char *) NULL)) {
       std::string err;
       long long ret = strict_strtoll(val.c_str(), 10, &err);
@@ -2627,6 +2645,18 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_RESIZE:
+    librbd::image_info_t info;
+    r = image.stat(info, sizeof(info));
+    if (r < 0) {
+      cerr << "rbd: resize error: " << cpp_strerror(-r) << std::endl;
+      return EXIT_FAILURE;
+    }
+
+    if (info.size > size && !resize_allow_shrink) {
+      cerr << "rbd: shrinking an image is only allowed with the --allow-shrink flag" << std::endl;
+      return EXIT_FAILURE;
+    }
+
     r = do_resize(image, size);
     if (r < 0) {
       cerr << "rbd: resize error: " << cpp_strerror(-r) << std::endl;

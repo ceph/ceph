@@ -28,6 +28,18 @@
 #include "messages/MOSDSubOp.h"
 class MOSDSubOpReply;
 
+class ReplicatedPG;
+void intrusive_ptr_add_ref(ReplicatedPG *pg);
+void intrusive_ptr_release(ReplicatedPG *pg);
+uint64_t get_with_id(ReplicatedPG *pg);
+void put_with_id(ReplicatedPG *pg, uint64_t id);
+
+#ifdef PG_DEBUG_REFS
+  typedef TrackedIntPtr<ReplicatedPG> ReplicatedPGRef;
+#else
+  typedef boost::intrusive_ptr<ReplicatedPG> ReplicatedPGRef;
+#endif
+
 class PGLSFilter {
 protected:
   string xattr;
@@ -783,7 +795,7 @@ protected:
     }
   };
   struct C_OSD_AppliedRecoveredObject : public Context {
-    boost::intrusive_ptr<ReplicatedPG> pg;
+    ReplicatedPGRef pg;
     ObjectStore::Transaction *t;
     ObjectContext *obc;
     C_OSD_AppliedRecoveredObject(ReplicatedPG *p, ObjectStore::Transaction *tt, ObjectContext *o) :
@@ -793,7 +805,7 @@ protected:
     }
   };
   struct C_OSD_CommittedPushedObject : public Context {
-    boost::intrusive_ptr<ReplicatedPG> pg;
+    ReplicatedPGRef pg;
     OpRequestRef op;
     epoch_t epoch;
     eversion_t last_complete;
@@ -818,7 +830,7 @@ protected:
     }
   };
   struct C_OSD_CompletedPull : public Context {
-    boost::intrusive_ptr<ReplicatedPG> pg;
+    ReplicatedPGRef pg;
     hobject_t hoid;
     epoch_t epoch;
     C_OSD_CompletedPull(
@@ -835,7 +847,7 @@ protected:
   };
   friend class C_OSD_CompletedPull;
   struct C_OSD_AppliedRecoveredObjectReplica : public Context {
-    boost::intrusive_ptr<ReplicatedPG> pg;
+    ReplicatedPGRef pg;
     ObjectStore::Transaction *t;
     C_OSD_AppliedRecoveredObjectReplica(ReplicatedPG *p, ObjectStore::Transaction *tt) :
       pg(p), t(tt) {}
@@ -1020,8 +1032,5 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::AccessMode& mode)
   out << ")";
   return out;
 }
-
-void intrusive_ptr_add_ref(ReplicatedPG *pg);
-void intrusive_ptr_release(ReplicatedPG *pg);
 
 #endif

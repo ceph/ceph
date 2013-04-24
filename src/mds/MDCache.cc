@@ -5667,7 +5667,7 @@ void MDCache::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
     remove_inode(in);
   } else {
     // journal
-    mds->locker->check_inode_max_size(in, true, true, size, mtime);
+    mds->locker->check_inode_max_size(in, true, true, size, false, 0, mtime);
     in->auth_unpin(this);
   }
 

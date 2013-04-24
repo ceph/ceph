@@ -29,7 +29,8 @@ void OpHistory::on_shutdown()
 
 void OpHistory::insert(utime_t now, OpRequestRef op)
 {
-  assert(!shutdown);
+  if (shutdown)
+    return;
   duration.insert(make_pair(op->get_duration(), op));
   arrived.insert(make_pair(op->get_arrived(), op));
   cleanup(now);
