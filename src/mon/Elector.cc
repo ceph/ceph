@@ -80,18 +80,21 @@ void Elector::start()
   electing_me = true;
   acked_me[mon->rank] = CEPH_FEATURES_ALL;
   leader_acked = -1;
+  acked_first_paxos_version = mon->paxos->get_first_committed();
 
   // bcast to everyone else
   for (unsigned i=0; i<mon->monmap->size(); ++i) {
     if ((int)i == mon->rank) continue;
-    Message *m = new MMonElection(MMonElection::OP_PROPOSE, epoch, mon->monmap);
+    Message *m = new MMonElection(MMonElection::OP_PROPOSE, epoch, mon->monmap,
+                                  mon->paxos->get_first_committed(),
+                                  mon->paxos->get_version());
     mon->messenger->send_message(m, mon->monmap->get_inst(i));
   }
   
   reset_timer();
 }
 
-void Elector::defer(int who)
+void Elector::defer(int who, version_t paxos_first)
 {
   dout(5) << "defer to " << who << dendl;
 
@@ -103,8 +106,11 @@ void Elector::defer(int who)
 
   // ack them
   leader_acked = who;
+  acked_first_paxos_version = paxos_first;
   ack_stamp = ceph_clock_now(g_ceph_context);
-  mon->messenger->send_message(new MMonElection(MMonElection::OP_ACK, epoch, mon->monmap),
+  mon->messenger->send_message(new MMonElection(MMonElection::OP_ACK, epoch, mon->monmap,
+                                                mon->paxos->get_first_committed(),
+                                                mon->paxos->get_version()),
 			       mon->monmap->get_inst(who));
   
   // set a timer
@@ -168,7 +174,10 @@ void Elector::victory()
        p != quorum.end();
        ++p) {
     if (*p == mon->rank) continue;
-    MMonElection *m = new MMonElection(MMonElection::OP_VICTORY, epoch, mon->monmap);
+    MMonElection *m = new MMonElection(MMonElection::OP_VICTORY, epoch,
+                                       mon->monmap,
+                                       mon->paxos->get_first_committed(),
+                                       mon->paxos->get_version());
     m->quorum = quorum;
     mon->messenger->send_message(m, mon->monmap->get_inst(*p));
   }
@@ -204,10 +213,13 @@ void Elector::handle_propose(MMonElection *m)
     }
   }
 
-  if (mon->rank < from) {
+  if ((mon->rank < from) &&
+      // be careful that we have new enough data to be leader!
+      (m->paxos_first_version <= mon->paxos->get_version())) {
     // i would win over them.
     if (leader_acked >= 0) {        // we already acked someone
-      assert(leader_acked < from);  // and they still win, of course
+      assert((leader_acked < from) || // and they still win, of course
+             (acked_first_paxos_version > mon->paxos->get_version()));
       dout(5) << "no, we already acked " << leader_acked << dendl;
     } else {
       // wait, i should win!
@@ -216,16 +228,20 @@ void Elector::handle_propose(MMonElection *m)
 	mon->start_election();
       }
     }
-  } else {
+  } else if (m->paxos_last_version >= mon->paxos->get_first_committed()) {
     // they would win over me
     if (leader_acked < 0 ||      // haven't acked anyone yet, or
 	leader_acked > from ||   // they would win over who you did ack, or
-	leader_acked == from) {  // this is the guy we're already deferring to
-      defer(from);
+	leader_acked == from) { // this is the guy we're already deferring to
+      defer(from, m->paxos_first_version);
     } else {
       // ignore them!
       dout(5) << "no, we already acked " << leader_acked << dendl;
     }
+  } else { // they are too out-of-date
+    dout(5) << "no, they are too far behind; paxos version: "
+	    << m->paxos_last_version << " versus my first "
+	    << mon->paxos->get_first_committed() << dendl;
   }
   
   m->put();
