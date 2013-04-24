@@ -415,7 +415,8 @@ class MonitorDBStore
   }
 
   virtual bool exists(const string& prefix, version_t ver) {
-    return exists(prefix, stringify(ver));
+    bool ret = MonitorDBStore::exists(prefix, stringify(ver));
+    return ret;
   }
 
   string combine_strings(const string& prefix, const string& value) {
