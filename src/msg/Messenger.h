@@ -207,6 +207,13 @@ public:
    * but not yet dispatched.
    */
   virtual int get_dispatch_queue_len() = 0;
+
+  /**
+   * Get age of oldest undelivered message
+   * (0 if the queue is empty)
+   */
+  virtual double get_dispatch_queue_max_age(utime_t now) = 0;
+
   /**
    * @} // Accessors
    */
@@ -660,6 +667,7 @@ public:
     }
     return false;
   }
+
   /**
    * @} // Dispatcher Interfacing
    */
