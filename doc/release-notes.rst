@@ -26,6 +26,13 @@ Upgrading
 
 * The old 'ceph stop_cluster' command has been removed.
 
+* The sysvinit script now uses the ceph.conf file on the remote host
+  when starting remote daemons via the '-a' option.  Note that if '-a'
+  is used in conjuction with '-c path', the path must also be present
+  on the remote host (it is not copied to a temporary file, as it was
+  previously).
+
+
 Notable Changes
 ~~~~~~~~~~~~~~~
 
