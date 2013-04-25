@@ -4153,12 +4153,11 @@ void ReplicatedPG::populate_obc_watchers(ObjectContext *obc)
   dout(10) << "populate_obc_watchers " << obc->obs.oi.soid << dendl;
   assert(obc->watchers.empty());
   // populate unconnected_watchers
-  utime_t now = ceph_clock_now(g_ceph_context);
   for (map<pair<uint64_t, entity_name_t>, watch_info_t>::iterator p =
 	obc->obs.oi.watchers.begin();
        p != obc->obs.oi.watchers.end();
        ++p) {
-    utime_t expire = now;
+    utime_t expire = info.stats.last_became_active;
     expire += p->second.timeout_seconds;
     dout(10) << "  unconnected watcher " << p->first << " will expire " << expire << dendl;
     WatchRef watch(
@@ -7125,7 +7124,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       if (p->second.attrs.count(SS_ATTR) == 0) {
 	osd->clog.error() << mode << " " << info.pgid << " " << soid
 			  << " no '" << SS_ATTR << "' attr";
-        ++scrubber.errors;
+        ++scrubber.shallow_errors;
 	continue;
       }
       bufferlist bl;
@@ -7137,7 +7136,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       if (head != hobject_t()) {
 	osd->clog.error() << mode << " " << info.pgid << " " << head
 			  << " missing clones";
-        ++scrubber.errors;
+        ++scrubber.shallow_errors;
       }
       
       // what will be next?
@@ -7170,7 +7169,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
     if (p->second.attrs.count(OI_ATTR) == 0) {
       osd->clog.error() << mode << " " << info.pgid << " " << soid
 			<< " no '" << OI_ATTR << "' attr";
-      ++scrubber.errors;
+      ++scrubber.shallow_errors;
       continue;
     }
     bufferlist bv;
@@ -7181,7 +7180,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       osd->clog.error() << mode << " " << info.pgid << " " << soid
 			<< " on disk size (" << p->second.size
 			<< ") does not match object info size (" << oi.size << ")";
-      ++scrubber.errors;
+      ++scrubber.shallow_errors;
     }
 
     dout(20) << mode << "  " << soid << " " << oi << dendl;
@@ -7197,7 +7196,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       if (!snapset.head_exists) {
 	osd->clog.error() << mode << " " << info.pgid << " " << soid
 			  << " snapset.head_exists=false, but object exists";
-        ++scrubber.errors;
+        ++scrubber.shallow_errors;
 	continue;
       }
     } else if (soid.snap) {
@@ -7207,14 +7206,14 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       if (head == hobject_t()) {
 	osd->clog.error() << mode << " " << info.pgid << " " << soid
 			  << " found clone without head";
-	++scrubber.errors;
+	++scrubber.shallow_errors;
 	continue;
       }
 
       if (soid.snap != *curclone) {
 	osd->clog.error() << mode << " " << info.pgid << " " << soid
 			  << " expected clone " << *curclone;
-        ++scrubber.errors;
+        ++scrubber.shallow_errors;
 	assert(soid.snap == *curclone);
       }
 
@@ -7271,7 +7270,7 @@ void ReplicatedPG::_scrub_finish()
 		      << scrub_cstat.sum.num_objects << "/" << info.stats.stats.sum.num_objects << " objects, "
 		      << scrub_cstat.sum.num_object_clones << "/" << info.stats.stats.sum.num_object_clones << " clones, "
 		      << scrub_cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes.\n";
-    ++scrubber.errors;
+    ++scrubber.shallow_errors;
 
     if (repair) {
       ++scrubber.fixed;

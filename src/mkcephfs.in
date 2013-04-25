@@ -423,7 +423,7 @@ if [ $preparemon -eq 1 ]; then
 	--cap mds 'allow' \
 	$dir/keyring.mon
 
-    $BINDIR/ceph-authtool --gen-key -n mon. $dir/keyring.mon
+    $BINDIR/ceph-authtool --gen-key -n mon. $dir/keyring.mon --cap mon 'allow *'
 
     for k in $dir/key.*
     do

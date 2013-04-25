@@ -1048,6 +1048,7 @@ void PG::remove_down_peer_info(const OSDMapRef osdmap)
   // if we removed anyone, update peers (which include peer_info)
   if (removed)
     update_heartbeat_peers();
+  check_recovery_sources(osdmap);
 }
 
 /*
@@ -1995,6 +1996,7 @@ void PG::_finish_recovery(Context *c)
     if (scrub_after_recovery) {
       dout(10) << "_finish_recovery requeueing for scrub" << dendl;
       scrub_after_recovery = false;
+      scrubber.must_deep_scrub = true;
       queue_scrub();
     }
   } else {
@@ -2322,6 +2324,9 @@ void PG::update_stats()
     if (info.stats.state != state) {
       info.stats.state = state;
       info.stats.last_change = now;
+      if ((state & PG_STATE_ACTIVE) &&
+	  !(info.stats.state & PG_STATE_ACTIVE))
+	info.stats.last_became_active = now;
     }
     if (info.stats.state & PG_STATE_CLEAN)
       info.stats.last_clean = now;
@@ -4278,25 +4283,22 @@ bool PG::scrub_gather_replica_maps() {
   }
 }
 
-bool PG::_compare_scrub_objects(ScrubMap::object &auth,
+enum PG::error_type PG::_compare_scrub_objects(ScrubMap::object &auth,
 				ScrubMap::object &candidate,
 				ostream &errorstream)
 {
-  bool ok = true;
+  enum PG::error_type error = CLEAN;
   if (candidate.read_error) {
-    ok = false;
+    // This can occur on stat() of a shallow scrub, but in that case size will
+    // be invalid, and this will be over-ridden below.
+    error = DEEP_ERROR;
     errorstream << "candidate had a read error";
-  }
-  if (auth.size != candidate.size) {
-    ok = false;
-    errorstream << "size " << candidate.size 
-		<< " != known size " << auth.size;
   }
   if (auth.digest_present && candidate.digest_present) {
     if (auth.digest != candidate.digest) {
-      if (!ok)
+      if (error != CLEAN)
         errorstream << ", ";
-      ok = false;
+      error = DEEP_ERROR;
 
       errorstream << "digest " << candidate.digest
                   << " != known digest " << auth.digest;
@@ -4304,26 +4306,35 @@ bool PG::_compare_scrub_objects(ScrubMap::object &auth,
   }
   if (auth.omap_digest_present && candidate.omap_digest_present) {
     if (auth.omap_digest != candidate.omap_digest) {
-      if (!ok)
+      if (error != CLEAN)
         errorstream << ", ";
-      ok = false;
+      error = DEEP_ERROR;
 
       errorstream << "omap_digest " << candidate.omap_digest
                   << " != known omap_digest " << auth.omap_digest;
     }
   }
+  // Shallow error takes precendence because this will be seen by
+  // both types of scrubs.
+  if (auth.size != candidate.size) {
+    if (error != CLEAN)
+      errorstream << ", ";
+    error = SHALLOW_ERROR;
+    errorstream << "size " << candidate.size 
+		<< " != known size " << auth.size;
+  }
   for (map<string,bufferptr>::const_iterator i = auth.attrs.begin();
        i != auth.attrs.end();
        ++i) {
     if (!candidate.attrs.count(i->first)) {
-      if (!ok)
-	errorstream << ", ";
-      ok = false;
+      if (error != CLEAN)
+        errorstream << ", ";
+      error = SHALLOW_ERROR;
       errorstream << "missing attr " << i->first;
     } else if (candidate.attrs.find(i->first)->second.cmp(i->second)) {
-      if (!ok)
-	errorstream << ", ";
-      ok = false;
+      if (error != CLEAN)
+        errorstream << ", ";
+      error = SHALLOW_ERROR;
       errorstream << "attr value mismatch " << i->first;
     }
   }
@@ -4331,13 +4342,13 @@ bool PG::_compare_scrub_objects(ScrubMap::object &auth,
        i != candidate.attrs.end();
        ++i) {
     if (!auth.attrs.count(i->first)) {
-      if (!ok)
-	errorstream << ", ";
-      ok = false;
+      if (error != CLEAN)
+        errorstream << ", ";
+      error = SHALLOW_ERROR;
       errorstream << "extra attr " << i->first;
     }
   }
-  return ok;
+  return error;
 }
 
 
@@ -4446,17 +4457,21 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
       if (j->second->objects.count(*k)) {
 	// Compare
 	stringstream ss;
-	if (!_compare_scrub_objects(auth->second->objects[*k],
+	enum PG::error_type error = _compare_scrub_objects(auth->second->objects[*k],
 	    j->second->objects[*k],
-	    ss)) {
+	    ss);
+        if (error != CLEAN) {
 	  cur_inconsistent.insert(j->first);
-	  ++scrubber.errors;
+          if (error == SHALLOW_ERROR)
+	    ++scrubber.shallow_errors;
+          else
+	    ++scrubber.deep_errors;
 	  errorstream << info.pgid << " osd." << acting[j->first]
 		      << ": soid " << *k << " " << ss.str() << std::endl;
 	}
       } else {
 	cur_missing.insert(j->first);
-	++scrubber.errors;
+	++scrubber.shallow_errors;
 	errorstream << info.pgid
 		    << " osd." << acting[j->first] 
 		    << " missing " << *k << std::endl;
@@ -4548,7 +4563,7 @@ void PG::scrub_process_inconsistent() {
       for (set<int>::iterator j = obj->second.begin();
 	   j != obj->second.end();
 	   ++j) {
-	++scrubber.errors;
+	++scrubber.shallow_errors;
 	ss << info.pgid << " " << mode << " " << " object " << obj->first
 	   << " has inconsistent snapcolls on " << *j << std::endl;
       }
@@ -4639,14 +4654,18 @@ void PG::scrub_finish() {
   {
     stringstream oss;
     oss << info.pgid << " " << mode << " ";
-    if (scrubber.errors)
-      oss << scrubber.errors << " errors";
+    int total_errors = scrubber.shallow_errors + scrubber.deep_errors;
+    if (total_errors)
+      oss << total_errors << " errors";
     else
       oss << "ok";
+    if (!deep_scrub && info.stats.stats.sum.num_deep_scrub_errors)
+      oss << " ( " << info.stats.stats.sum.num_deep_scrub_errors
+          << " remaining deep scrub error(s) )";
     if (repair)
       oss << ", " << scrubber.fixed << " fixed";
     oss << "\n";
-    if (scrubber.errors)
+    if (total_errors)
       osd->clog.error(oss);
     else
       osd->clog.info(oss);
@@ -4661,9 +4680,21 @@ void PG::scrub_finish() {
     info.history.last_deep_scrub = info.last_update;
     info.history.last_deep_scrub_stamp = now;
   }
-  if (scrubber.errors == 0)
-    info.history.last_clean_scrub_stamp = now;
-  info.stats.stats.sum.num_scrub_errors = scrubber.errors;
+  if (deep_scrub) {
+    if ((scrubber.shallow_errors == 0) && (scrubber.deep_errors == 0))
+      info.history.last_clean_scrub_stamp = now;
+    info.stats.stats.sum.num_shallow_scrub_errors = scrubber.shallow_errors;
+    info.stats.stats.sum.num_deep_scrub_errors = scrubber.deep_errors;
+  } else {
+    info.stats.stats.sum.num_shallow_scrub_errors = scrubber.shallow_errors;
+    // XXX: last_clean_scrub_stamp doesn't mean the pg is not inconsistent
+    // because of deep-scrub errors
+    if (scrubber.shallow_errors == 0)
+      info.history.last_clean_scrub_stamp = now;
+  }
+  info.stats.stats.sum.num_scrub_errors = 
+    info.stats.stats.sum.num_shallow_scrub_errors +
+    info.stats.stats.sum.num_deep_scrub_errors;
   reg_next_scrub();
 
   {
@@ -5980,7 +6011,6 @@ boost::statechart::result PG::RecoveryState::Primary::react(const AdvMap &advmap
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->remove_down_peer_info(advmap.osdmap);
-  pg->check_recovery_sources(advmap.osdmap);
   return forward_event();
 }
 

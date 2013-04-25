@@ -4786,6 +4786,17 @@ int FileStore::_split_collection(coll_t cid,
   int r;
   {
     dout(15) << __func__ << " " << cid << " bits: " << bits << dendl;
+    if (!collection_exists(cid)) {
+      dout(2) << __func__ << ": " << cid << " DNE" << dendl;
+      assert(replaying);
+      return 0;
+    }
+    if (!collection_exists(dest)) {
+      dout(2) << __func__ << ": " << dest << " DNE" << dendl;
+      assert(replaying);
+      return 0;
+    }
+
     int dstcmp = _check_replay_guard(dest, spos);
     if (dstcmp < 0)
       return 0;
