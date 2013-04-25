@@ -2766,6 +2766,9 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
   if (req->session_mon >= 0) {
     dout(10) << "forward_request won't double fwd request " << *req << dendl;
     req->put();
+  } else if (req->get_source().is_mon() && req->get_source_addr() != messenger->get_myaddr()) {
+    dout(10) << "forward_request won't forward (non-local) mon request " << *req << dendl;
+    req->put();
   } else if (session && !session->closed) {
     RoutedRequest *rr = new RoutedRequest;
     rr->tid = ++routed_request_tid;
