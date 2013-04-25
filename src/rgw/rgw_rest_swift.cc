@@ -17,55 +17,74 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
   marker = s->args.get("marker");
   string limit_str;
   limit_str = s->args.get("limit");
-  limit = strtol(limit_str.c_str(), NULL, 10);
-  if (limit > limit_max || limit < 0)
+  long l = strtol(limit_str.c_str(), NULL, 10);
+  if (l > (long)limit_max || l < 0)
     return -ERR_PRECONDITION_FAILED;
+
+  limit = (uint64_t)l;
 
   if (limit == 0)
     limit = limit_max;
 
+  need_stats = (s->format != RGW_FORMAT_PLAIN);
+
+  if (need_stats) {
+    bool stats, exists;
+    int r = s->args.get_bool("stats", &stats, &exists);
+
+    if (r < 0)
+      return r;
+
+    if (exists) {
+      need_stats = stats;
+    }
+  }
+
   return 0;
 }
 
-void RGWListBuckets_ObjStore_SWIFT::send_response()
+void RGWListBuckets_ObjStore_SWIFT::send_response_begin()
+{
+  if (ret)
+    set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s);
+
+  if (!ret) {
+    dump_start(s);
+    s->formatter->open_array_section("account");
+
+    sent_data = true;
+  }
+}
+
+void RGWListBuckets_ObjStore_SWIFT::send_response_data(RGWUserBuckets& buckets)
 {
   map<string, RGWBucketEnt>& m = buckets.get_buckets();
   map<string, RGWBucketEnt>::iterator iter;
 
-  if (ret < 0)
-    goto done;
+  if (!sent_data)
+    return;
 
-  dump_start(s);
-
-  s->formatter->open_array_section("account");
-
-  if (marker.empty())
-    iter = m.begin();
-  else
-    iter = m.upper_bound(marker);
-
-  for (int i = 0; i < limit && iter != m.end(); ++iter, ++i) {
+  for (iter = m.begin(); iter != m.end(); ++iter) {
     RGWBucketEnt obj = iter->second;
     s->formatter->open_object_section("container");
     s->formatter->dump_string("name", obj.bucket.name);
-    s->formatter->dump_int("count", obj.count);
-    s->formatter->dump_int("bytes", obj.size);
+    if (need_stats) {
+      s->formatter->dump_int("count", obj.count);
+      s->formatter->dump_int("bytes", obj.size);
+    }
     s->formatter->close_section();
+    rgw_flush_formatter(s, s->formatter);
   }
-  s->formatter->close_section();
+}
 
-  if (!ret && s->formatter->get_len() == 0)
-    ret = STATUS_NO_CONTENT;
-done:
-  set_req_state_err(s, ret);
-  dump_errno(s);
-  end_header(s);
-
-  if (ret < 0) {
-    return;
+void RGWListBuckets_ObjStore_SWIFT::send_response_end()
+{
+  if (sent_data) {
+    s->formatter->close_section();
+    rgw_flush_formatter_and_reset(s, s->formatter);
   }
-
-  rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 int RGWListBucket_ObjStore_SWIFT::get_params()

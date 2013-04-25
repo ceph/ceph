@@ -507,6 +507,36 @@ string& XMLArgs::get(const char *name, bool *exists)
   return get(s, exists);
 }
 
+
+int XMLArgs::get_bool(const string& name, bool *val, bool *exists)
+{
+  map<string, string>::iterator iter;
+  iter = val_map.find(name);
+  bool e = (iter != val_map.end());
+  if (exists)
+    *exists = e;
+
+  if (e) {
+    const char *s = iter->second.c_str();
+
+    if (strcasecmp(s, "false") == 0) {
+      *val = false;
+    } else if (strcasecmp(s, "true") == 0) {
+      *val = true;
+    } else {
+      return -EINVAL;
+    }
+  }
+
+  return 0;
+}
+
+int XMLArgs::get_bool(const char *name, bool *val, bool *exists)
+{
+  string s(name);
+  return get_bool(s, val, exists);
+}
+
 bool verify_bucket_permission(struct req_state *s, int perm)
 {
   if (!s->bucket_acl)
