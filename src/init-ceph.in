@@ -216,10 +216,10 @@ for name in $what; do
     if [ "$host" = "$hostname" ]; then
 	cur_conf=$conf
     else
-	unique=`dd if=/dev/urandom bs=16 count=1 2>/dev/null | md5sum | awk '{print $1}'`
-	scp -q $conf $host:/tmp/ceph.conf.$unique
-	trap "ssh $host rm /tmp/ceph.conf.$unique" EXIT
-	cur_conf="/tmp/ceph.conf.$unique"
+	rfile=`mktemp -u /tmp/ceph.conf.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX` || exit 1
+	scp -q $conf $host:$rfile
+	trap "ssh $host rm $rfile" EXIT
+	cur_conf="$rfile"
     fi
     cmd="$cmd -c $cur_conf"
 
