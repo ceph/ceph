@@ -862,7 +862,8 @@ public:
       reserved(false), reserve_failed(false),
       epoch_start(0),
       block_writes(false), active(false), queue_snap_trim(false),
-      waiting_on(0), errors(0), fixed(0), active_rep_scrub(0),
+      waiting_on(0), shallow_errors(0), deep_errors(0), fixed(0),
+      active_rep_scrub(0),
       must_scrub(false), must_deep_scrub(false), must_repair(false),
       classic(false),
       finalizing(false), is_chunky(false), state(INACTIVE),
@@ -881,7 +882,8 @@ public:
     bool queue_snap_trim;
     int waiting_on;
     set<int> waiting_on_whom;
-    int errors;
+    int shallow_errors;
+    int deep_errors;
     int fixed;
     ScrubMap primary_scrubmap;
     map<int,ScrubMap> received_maps;
@@ -891,7 +893,7 @@ public:
     // flags to indicate explicitly requested scrubs (by admin)
     bool must_scrub, must_deep_scrub, must_repair;
 
-    // Maps from objects with erros to missing/inconsistent peers
+    // Maps from objects with errors to missing/inconsistent peers
     map<hobject_t, set<int> > missing;
     map<hobject_t, set<int> > inconsistent;
     map<hobject_t, set<int> > inconsistent_snapcolls;
@@ -993,7 +995,8 @@ public:
       start = hobject_t();
       end = hobject_t();
       subset_last_update = eversion_t();
-      errors = 0;
+      shallow_errors = 0;
+      deep_errors = 0;
       fixed = 0;
       deep = false;
       run_callbacks();
@@ -1012,7 +1015,13 @@ public:
   map<int, ScrubMap *>::const_iterator _select_auth_object(
     const hobject_t &obj,
     const map<int,ScrubMap*> &maps);
-  bool _compare_scrub_objects(ScrubMap::object &auth,
+
+  enum error_type {
+    CLEAN,
+    DEEP_ERROR,
+    SHALLOW_ERROR
+  };
+  enum error_type _compare_scrub_objects(ScrubMap::object &auth,
 			      ScrubMap::object &candidate,
 			      ostream &errorstream);
   void _compare_scrubmaps(const map<int,ScrubMap*> &maps,  

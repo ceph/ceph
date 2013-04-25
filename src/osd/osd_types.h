@@ -800,7 +800,9 @@ struct object_stat_sum_t {
   int64_t num_objects_unfound;
   int64_t num_rd, num_rd_kb;
   int64_t num_wr, num_wr_kb;
-  int64_t num_scrub_errors;
+  int64_t num_scrub_errors;	// total deep and shallow scrub errors
+  int64_t num_shallow_scrub_errors;
+  int64_t num_deep_scrub_errors;
   int64_t num_objects_recovered;
   int64_t num_bytes_recovered;
   int64_t num_keys_recovered;
@@ -810,7 +812,8 @@ struct object_stat_sum_t {
       num_objects(0), num_object_clones(0), num_object_copies(0),
       num_objects_missing_on_primary(0), num_objects_degraded(0), num_objects_unfound(0),
       num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0),
-      num_scrub_errors(0),
+      num_scrub_errors(0), num_shallow_scrub_errors(0),
+      num_deep_scrub_errors(0),
       num_objects_recovered(0),
       num_bytes_recovered(0),
       num_keys_recovered(0)
@@ -930,6 +933,8 @@ struct pg_stat_t {
 
   vector<int> up, acting;
   epoch_t mapping_epoch;
+
+  utime_t last_became_active;
 
   pg_stat_t()
     : state(0),
@@ -1974,7 +1979,8 @@ struct ScrubMap {
     bool read_error;
 
     object() :
-      size(0), negative(false), digest(0), digest_present(false),
+      // Init invalid size so it won't match if we get a stat EIO error
+      size(-1), negative(false), digest(0), digest_present(false),
       nlinks(0), omap_digest(0), omap_digest_present(false),
       read_error(false) {}
 
