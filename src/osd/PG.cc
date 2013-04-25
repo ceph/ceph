@@ -4998,7 +4998,6 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
 
   up = newup;
   acting = newacting;
-  want_acting.clear();
 
   if (info.stats.up != up ||
       info.stats.acting != acting) {
@@ -6005,6 +6004,8 @@ PG::RecoveryState::Primary::Primary(my_context ctx)
 {
   state_name = "Started/Primary";
   context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+  assert(pg->want_acting.empty());
 }
 
 boost::statechart::result PG::RecoveryState::Primary::react(const AdvMap &advmap)
@@ -6040,6 +6041,8 @@ boost::statechart::result PG::RecoveryState::Primary::react(const ActMap&)
 void PG::RecoveryState::Primary::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->want_acting.clear();
 }
 
 /*---------Peering--------*/
