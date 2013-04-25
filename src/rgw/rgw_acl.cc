@@ -92,7 +92,7 @@ int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
 
 bool RGWAccessControlPolicy::verify_permission(string& uid, int user_perm_mask, int perm)
 {
-  int test_perm = perm;
+  int test_perm = perm | RGW_PERM_READ_OBJS | RGW_PERM_WRITE_OBJS;
 
   int policy_perm = get_perm(uid, test_perm);
 
@@ -107,7 +107,7 @@ bool RGWAccessControlPolicy::verify_permission(string& uid, int user_perm_mask, 
     policy_perm |= (RGW_PERM_READ | RGW_PERM_READ_ACP);
   }
    
-  int acl_perm = policy_perm & user_perm_mask;
+  int acl_perm = policy_perm & perm & user_perm_mask;
 
   ldout(cct, 10) << " uid=" << uid << " requested perm (type)=" << perm << ", policy perm=" << policy_perm << ", user_perm_mask=" << user_perm_mask << ", acl perm=" << acl_perm << dendl;
 
