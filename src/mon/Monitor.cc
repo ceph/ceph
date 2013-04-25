@@ -989,6 +989,8 @@ void Monitor::sync_finish(entity_inst_t &entity, bool abort)
     trim_enable_timer = new C_TrimEnable(this);
     timer.add_event_after(30.0, trim_enable_timer);
   }
+
+  finish_contexts(g_ceph_context, maybe_wait_for_quorum);
 }
 
 void Monitor::handle_sync_finish(MMonSync *m)
@@ -3011,6 +3013,35 @@ void Monitor::send_command(const entity_inst_t& inst,
   try_send_message(c, inst);
 }
 
+void Monitor::waitlist_or_zap_client(Message *m)
+{
+  /**
+   * Wait list the new session until we're in the quorum, assuming it's
+   * sufficiently new.
+   * tick() will periodically send them back through so we can send
+   * the client elsewhere if we don't think we're getting back in.
+   *
+   * But we whitelist a few sorts of messages:
+   * 1) Monitors can talk to us at any time, of course.
+   * 2) auth messages. It's unlikely to go through much faster, but
+   * it's possible we've just lost our quorum status and we want to take...
+   * 3) command messages. We want to accept these under all possible
+   * circumstances.
+   */
+  Connection *con = m->get_connection();
+  utime_t too_old = ceph_clock_now(g_ceph_context);
+  too_old -= g_ceph_context->_conf->mon_lease;
+  if (m->get_recv_stamp() > too_old &&
+      con->is_connected()) {
+    dout(5) << "waitlisting message " << *m << dendl;
+    maybe_wait_for_quorum.push_back(new C_RetryMessage(this, m));
+  } else {
+    dout(1) << "discarding message " << *m << " and sending client elsewhere" << dendl;
+    messenger->mark_down(con);
+    m->put();
+  }
+}
+
 bool Monitor::_ms_dispatch(Message *m)
 {
   bool ret = true;
@@ -3039,36 +3070,9 @@ bool Monitor::_ms_dispatch(Message *m)
       s = NULL;
     }
     if (!s) {
-      if (!exited_quorum.is_zero()
-          && !src_is_mon) {
-        /**
-         * Wait list the new session until we're in the quorum, assuming it's
-         * sufficiently new.
-         * tick() will periodically send them back through so we can send
-         * the client elsewhere if we don't think we're getting back in.
-         *
-         * But we whitelist a few sorts of messages:
-         * 1) Monitors can talk to us at any time, of course.
-         * 2) auth messages. It's unlikely to go through much faster, but
-         * it's possible we've just lost our quorum status and we want to take...
-         * 3) command messages. We want to accept these under all possible
-         * circumstances.
-         */
-        utime_t too_old = ceph_clock_now(g_ceph_context);
-        too_old -= g_ceph_context->_conf->mon_lease;
-        if (m->get_recv_stamp() > too_old
-            && connection->is_connected()) {
-          dout(5) << "waitlisting message " << *m
-                  << " until we get in quorum" << dendl;
-          maybe_wait_for_quorum.push_back(new C_RetryMessage(this, m));
-        } else {
-          dout(1) << "discarding message " << *m
-                  << " and sending client elsewhere; we are not in quorum"
-                  << dendl;
-          messenger->mark_down(connection);
-          m->put();
-        }
-        return true;
+      if (!exited_quorum.is_zero() && !src_is_mon) {
+	waitlist_or_zap_client(m);
+	return true;
       }
       dout(10) << "do not have session, making new one" << dendl;
       s = session_map.new_session(m->get_source_inst(), m->get_connection());
@@ -3100,6 +3104,11 @@ bool Monitor::_ms_dispatch(Message *m)
 
   if (s)
     dout(20) << " caps " << s->caps.get_str() << dendl;
+
+  if (is_synchronizing() && !src_is_mon) {
+    waitlist_or_zap_client(m);
+    return true;
+  }
 
   {
     switch (m->get_type()) {

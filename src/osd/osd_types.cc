@@ -911,6 +911,8 @@ void object_stat_sum_t::dump(Formatter *f) const
   f->dump_int("num_write", num_wr);
   f->dump_int("num_write_kb", num_wr_kb);
   f->dump_int("num_scrub_errors", num_scrub_errors);
+  f->dump_int("num_shallow_scrub_errors", num_shallow_scrub_errors);
+  f->dump_int("num_deep_scrub_errors", num_deep_scrub_errors);
   f->dump_int("num_objects_recovered", num_objects_recovered);
   f->dump_int("num_bytes_recovered", num_bytes_recovered);
   f->dump_int("num_keys_recovered", num_keys_recovered);
@@ -918,7 +920,7 @@ void object_stat_sum_t::dump(Formatter *f) const
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(5, 3, bl);
+  ENCODE_START(6, 3, bl);
   ::encode(num_bytes, bl);
   ::encode(num_objects, bl);
   ::encode(num_object_clones, bl);
@@ -934,12 +936,14 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   ::encode(num_objects_recovered, bl);
   ::encode(num_bytes_recovered, bl);
   ::encode(num_keys_recovered, bl);
+  ::encode(num_shallow_scrub_errors, bl);
+  ::encode(num_deep_scrub_errors, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_stat_sum_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
   ::decode(num_bytes, bl);
   if (struct_v < 3) {
     uint64_t num_kb;
@@ -969,6 +973,13 @@ void object_stat_sum_t::decode(bufferlist::iterator& bl)
     num_bytes_recovered = 0;
     num_keys_recovered = 0;
   }
+  if (struct_v >= 6) {
+    ::decode(num_shallow_scrub_errors, bl);
+    ::decode(num_deep_scrub_errors, bl);
+  } else {
+    num_shallow_scrub_errors = 0;
+    num_deep_scrub_errors = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -986,10 +997,12 @@ void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
   a.num_objects_unfound = 8;
   a.num_rd = 9; a.num_rd_kb = 10;
   a.num_wr = 11; a.num_wr_kb = 12;
-  a.num_scrub_errors = 13;
   a.num_objects_recovered = 14;
   a.num_bytes_recovered = 15;
   a.num_keys_recovered = 16;
+  a.num_deep_scrub_errors = 17;
+  a.num_shallow_scrub_errors = 18;
+  a.num_scrub_errors = a.num_deep_scrub_errors + a.num_shallow_scrub_errors;
   o.push_back(new object_stat_sum_t(a));
 }
 
@@ -1007,6 +1020,8 @@ void object_stat_sum_t::add(const object_stat_sum_t& o)
   num_wr_kb += o.num_wr_kb;
   num_objects_unfound += o.num_objects_unfound;
   num_scrub_errors += o.num_scrub_errors;
+  num_shallow_scrub_errors += o.num_shallow_scrub_errors;
+  num_deep_scrub_errors += o.num_deep_scrub_errors;
   num_objects_recovered += o.num_objects_recovered;
   num_bytes_recovered += o.num_bytes_recovered;
   num_keys_recovered += o.num_keys_recovered;
@@ -1026,6 +1041,8 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
   num_wr_kb -= o.num_wr_kb;
   num_objects_unfound -= o.num_objects_unfound;
   num_scrub_errors -= o.num_scrub_errors;
+  num_shallow_scrub_errors -= o.num_shallow_scrub_errors;
+  num_deep_scrub_errors -= o.num_deep_scrub_errors;
   num_objects_recovered -= o.num_objects_recovered;
   num_bytes_recovered -= o.num_bytes_recovered;
   num_keys_recovered -= o.num_keys_recovered;
