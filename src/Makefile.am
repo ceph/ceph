@@ -577,13 +577,13 @@ testrados_list_parallel_SOURCES = \
 	test/system/rados_list_parallel.cc \
 	test/system/st_rados_create_pool.cc \
 	test/system/st_rados_list_objects.cc
-testrados_list_parallel_LDADD = libsystest.la librados.la
+testrados_list_parallel_LDADD = libsystest.la librados.la $(PTHREAD_LIBS)
 bin_DEBUGPROGRAMS += testrados_list_parallel
 
 testrados_open_pools_parallel_SOURCES = \
 	test/system/rados_open_pools_parallel.cc \
 	test/system/st_rados_create_pool.cc
-testrados_open_pools_parallel_LDADD = libsystest.la librados.la
+testrados_open_pools_parallel_LDADD = libsystest.la librados.la $(PTHREAD_LIBS)
 bin_DEBUGPROGRAMS += testrados_open_pools_parallel
 
 testrados_delete_pools_parallel_SOURCES = \
@@ -591,7 +591,7 @@ testrados_delete_pools_parallel_SOURCES = \
 	test/system/st_rados_create_pool.cc \
 	test/system/st_rados_delete_pool.cc \
 	test/system/st_rados_list_objects.cc
-testrados_delete_pools_parallel_LDADD = libsystest.la librados.la
+testrados_delete_pools_parallel_LDADD = libsystest.la librados.la $(PTHREAD_LIBS)
 bin_DEBUGPROGRAMS += testrados_delete_pools_parallel
 
 testrados_watch_notify_SOURCES = \
@@ -601,7 +601,7 @@ testrados_watch_notify_SOURCES = \
 	test/system/st_rados_delete_objs.cc \
 	test/system/st_rados_watch.cc \
 	test/system/st_rados_notify.cc
-testrados_watch_notify_LDADD = libsystest.la librados.la
+testrados_watch_notify_LDADD = libsystest.la librados.la $(PTHREAD_LIBS)
 bin_DEBUGPROGRAMS += testrados_watch_notify
 
 bench_log_SOURCES = \
