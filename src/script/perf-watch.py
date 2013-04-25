@@ -52,7 +52,7 @@ def main():
     log.info('ctx %s', ctx)
 
     # check schema
-    (code,raw) = commands.getstatusoutput('./ceph --admin-daemon %s perf schema' % ctx.socket)
+    (code, raw) = commands.getstatusoutput('./ceph --admin-daemon %s perf schema' % ctx.socket)
     schema = json.loads(raw)
 
     # normalize var list
@@ -79,22 +79,22 @@ def main():
 
     varline = '#'
     if ctx.time or ctx.absolute_time:
-        varline = varline + ' %8s' % 'time';
+        varline = varline + ' %8s' % 'time'
     for v in vars:
-        varline = varline + (' %8s' % v);
+        varline = varline + (' %8s' % v)
 
-    n = 0
+    print_count = 0
     prev = None
     start = time.time()
     while True:
-        if n % 10 == 0:
+        if print_count % 10 == 0:
             print(varline)
-        n += 1
+        print_count += 1
 
-        (code,raw) = commands.getstatusoutput('./ceph --admin-daemon %s perf dump' % ctx.socket)
-        r = json.loads(raw)
+        (code, raw) = commands.getstatusoutput('./ceph --admin-daemon %s perf dump' % ctx.socket)
+        json_raw = json.loads(raw)
         if prev is None:
-            prev = r;
+            prev = json_raw
 
         vline = ' '
         now = time.time()
@@ -106,7 +106,7 @@ def main():
         for v in vars:
             (sec, var) = v.split('.')
             val = 0
-            if sec in r and var in r[sec]:
+            if sec in json_raw and var in json_raw[sec]:
 
                 formatstr = '%' + str(max(len(v), 8))
                 if vartype[v] & 1:
@@ -116,18 +116,18 @@ def main():
 
                 val = 0
                 if vartype[v] & 4:
-                    den = (r[sec][var]['avgcount'] - r[sec][var]['avgcount'])
+                    den = (json_raw[sec][var]['avgcount'] - json_raw[sec][var]['avgcount'])
                     if den > 0:
-                        val = (r[sec][var]['sum'] - prev[sec][var]['sum']) / den
+                        val = (json_raw[sec][var]['sum'] - prev[sec][var]['sum']) / den
                 elif vartype[v] & 8:
-                    val = r[sec][var] - prev[sec][var]
+                    val = json_raw[sec][var] - prev[sec][var]
                 else:
-                    val = r[sec][var]
+                    val = json_raw[sec][var]
 
                 vline = vline + ' ' + (formatstr % val)
         print(vline)
 
-        prev = r
+        prev = json_raw
         time.sleep(1)
 
 
