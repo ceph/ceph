@@ -32,13 +32,14 @@ void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
     // make an interval, and hide the fact that the HEAD doesn't
     // include itself in the snaps list
     librados::snap_t a, b;
-    b = r->cloneid;
-    if (b == librados::SNAP_HEAD) {
+    if (r->cloneid == librados::SNAP_HEAD) {
       // head is valid starting from right after the last seen seq
       a = snap_set.seq + 1;
+      b = librados::SNAP_HEAD;
     } else {
-      assert(b == r->snaps[r->snaps.size()-1]);
       a = r->snaps[0];
+      // note: b might be < r->cloneid if a snap has been trimmed.
+      b = r->snaps[r->snaps.size()-1];
     }
     ldout(cct, 20) << " clone " << r->cloneid << " snaps " << r->snaps
 		   << " -> [" << a << "," << b << "]"

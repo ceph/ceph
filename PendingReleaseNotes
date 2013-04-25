@@ -1,2 +1,3 @@
 * radosgw-admin now uses the term zone instead of cluster.
 * rbd progress indicators now go to standard error instead of standard out.
+* rbd resize now requires the --allow-shrink option when resizing to a smaller size.
