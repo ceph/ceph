@@ -78,10 +78,10 @@ def run_cmd(cmd, expects=0):
         try:
             (out, err) = proc.communicate()
             if out is not None:
-                stdout += out.split('\n')
+                stdout += str(out).split('\n')
                 cmdlog.debug('stdout: {s}'.format(s=out))
             if err is not None:
-                stdout += err.split('\n')
+                stdout += str(err).split('\n')
                 cmdlog.debug('stderr: {s}'.format(s=err))
         except ValueError:
             ret = proc.wait()
