@@ -533,14 +533,25 @@ def create_if_vm(ctx, machine_name):
         vm_type = 'ubuntu'
     createMe = decanonicalize_hostname(machine_name)
     with tempfile.NamedTemporaryFile() as tmp:
-        fileInfo1 = {}
-        fileInfo1['disk-size'] = '30G'
-        fileInfo1['ram'] = '4G'
-        fileInfo1['cpus'] = 1;
-        fileInfo1['networks'] = [{'source' : 'front'}]
-        fileInfo1['distro'] = vm_type.lower()
-        fileOwt = {'downburst': fileInfo1}
-        yaml.safe_dump(fileOwt,tmp)
+        lcnfg = ctx.teuthology_config
+        file_out = lcnfg.get('downburst')
+        if not file_out:
+            file_info = {}
+            file_info['disk-size'] = lcnfg.get('disk-size', '30G')
+            file_info['ram'] = lcnfg.get('ram', '4G')
+            file_info['cpus'] = lcnfg.get('cpus', 1)
+            file_info['networks'] = lcnfg.get('networks',
+                    [{'source' : 'front'}])
+            file_info['distro'] = lcnfg.get('distro', vm_type.lower())
+            file_info['additional-disks'] = lcnfg.get(
+                    'additional-disks', 3)
+            file_info['additional-disks-size'] = lcnfg.get(
+                    'additional-disks-size', '200G')
+            file_info['distroversion'] = lcnfg.get('distroversion',
+                    'ubuntu')
+            file_info['arch'] = lcnfg.get('arch', 'amd64/x86_64')
+            file_out = {'downburst': file_info}
+        yaml.safe_dump(file_out, tmp)
         metadata = "--meta-data=%s" % tmp.name
         dbrst = _get_downburst_exec()
         if not dbrst:
