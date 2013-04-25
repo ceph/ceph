@@ -515,14 +515,6 @@ bool verify_bucket_permission(struct req_state *s, int perm)
   if ((perm & (int)s->perm_mask) != perm)
     return false;
 
-  if (s->bucket_acl->verify_permission(s->user.user_id, perm, perm))
-    return true;
-
-  if (perm & (RGW_PERM_READ | RGW_PERM_READ_ACP))
-    perm |= RGW_PERM_READ_OBJS;
-  if (perm & RGW_PERM_WRITE)
-    perm |= RGW_PERM_WRITE_OBJS;
-
   return s->bucket_acl->verify_permission(s->user.user_id, perm, perm);
 }
 
