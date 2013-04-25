@@ -213,15 +213,7 @@ for name in $what; do
     fi
 
     # conf file
-    if [ "$host" = "$hostname" ]; then
-	cur_conf=$conf
-    else
-	unique=`dd if=/dev/urandom bs=16 count=1 2>/dev/null | md5sum | awk '{print $1}'`
-	scp -q $conf $host:/tmp/ceph.conf.$unique
-	trap "ssh $host rm /tmp/ceph.conf.$unique" EXIT
-	cur_conf="/tmp/ceph.conf.$unique"
-    fi
-    cmd="$cmd -c $cur_conf"
+    cmd="$cmd -c $conf"
 
     if echo $name | grep -q ^osd; then
 	get_conf osd_data "/var/lib/ceph/osd/ceph-$id" "osd data"
