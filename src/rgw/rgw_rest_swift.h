@@ -14,18 +14,17 @@ public:
 };
 
 class RGWListBuckets_ObjStore_SWIFT : public RGWListBuckets_ObjStore {
-  int limit_max;
-  int limit;
-  string marker;
+  bool need_stats;
 public:
-  RGWListBuckets_ObjStore_SWIFT() {
-    limit_max = 10000;
-    limit = limit_max;
-  }
+  RGWListBuckets_ObjStore_SWIFT() : need_stats(true) {}
   ~RGWListBuckets_ObjStore_SWIFT() {}
 
   int get_params();
-  void send_response();
+  void send_response_begin();
+  void send_response_data(RGWUserBuckets& buckets);
+  void send_response_end();
+
+  bool should_get_stats() { return need_stats; }
 };
 
 class RGWListBucket_ObjStore_SWIFT : public RGWListBucket_ObjStore {
