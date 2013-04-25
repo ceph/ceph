@@ -29,64 +29,34 @@ void rgw_get_buckets_obj(string& user_id, string& buckets_obj_id)
   buckets_obj_id += RGW_BUCKETS_OBJ_PREFIX;
 }
 
-static int rgw_read_buckets_from_attr(RGWRados *store, string& user_id, RGWUserBuckets& buckets)
-{
-  bufferlist bl;
-  rgw_obj obj(store->zone.user_uid_pool, user_id);
-  int ret = store->get_attr(NULL, obj, RGW_ATTR_BUCKETS, bl);
-  if (ret)
-    return ret;
-
-  bufferlist::iterator iter = bl.begin();
-  try {
-    buckets.decode(iter);
-  } catch (buffer::error& err) {
-    ldout(store->ctx(), 0) << "ERROR: failed to decode buckets info, caught buffer::error" << dendl;
-    return -EIO;
-  }
-  return 0;
-}
-
 /**
  * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
  * Returns: 0 on success, -ERR# on failure.
  */
-int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& buckets, bool need_stats)
+int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& buckets,
+                          const string& marker, uint64_t max, bool need_stats)
 {
   int ret;
   buckets.clear();
-  if (store->supports_omap()) {
-    string buckets_obj_id;
-    rgw_get_buckets_obj(user_id, buckets_obj_id);
-    bufferlist bl;
-    rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
-    bufferlist header;
-    map<string,bufferlist> m;
+  string buckets_obj_id;
+  rgw_get_buckets_obj(user_id, buckets_obj_id);
+  bufferlist bl;
+  rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
+  bufferlist header;
+  map<string,bufferlist> m;
 
-    ret = store->omap_get_all(obj, header, m);
-    if (ret == -ENOENT)
-      ret = 0;
+  ret = store->omap_get_vals(obj, header, marker, max, m);
+  if (ret == -ENOENT)
+    ret = 0;
 
-    if (ret < 0)
-      return ret;
+  if (ret < 0)
+    return ret;
 
-    for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); ++q) {
-      bufferlist::iterator iter = q->second.begin();
-      RGWBucketEnt bucket;
-      ::decode(bucket, iter);
-      buckets.add(bucket);
-    }
-  } else {
-    ret = rgw_read_buckets_from_attr(store, user_id, buckets);
-    switch (ret) {
-    case 0:
-      break;
-    case -ENODATA:
-      ret = 0;
-      return 0;
-    default:
-      return ret;
-    }
+  for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); ++q) {
+    bufferlist::iterator iter = q->second.begin();
+    RGWBucketEnt bucket;
+    ::decode(bucket, iter);
+    buckets.add(bucket);
   }
 
   if (need_stats) {
@@ -122,44 +92,22 @@ int rgw_add_bucket(RGWRados *store, string user_id, rgw_bucket& bucket)
   int ret;
   string& bucket_name = bucket.name;
 
-  if (store->supports_omap()) {
-    bufferlist bl;
+  bufferlist bl;
 
-    RGWBucketEnt new_bucket;
-    new_bucket.bucket = bucket;
-    new_bucket.size = 0;
-    time(&new_bucket.mtime);
-    ::encode(new_bucket, bl);
+  RGWBucketEnt new_bucket;
+  new_bucket.bucket = bucket;
+  new_bucket.size = 0;
+  time(&new_bucket.mtime);
+  ::encode(new_bucket, bl);
 
-    string buckets_obj_id;
-    rgw_get_buckets_obj(user_id, buckets_obj_id);
+  string buckets_obj_id;
+  rgw_get_buckets_obj(user_id, buckets_obj_id);
 
-    rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
-    ret = store->omap_set(obj, bucket_name, bl);
-    if (ret < 0) {
-      ldout(store->ctx(), 0) << "ERROR: error adding bucket to directory: "
-          << cpp_strerror(-ret)<< dendl;
-    }
-  } else {
-    RGWUserBuckets buckets;
-
-    ret = rgw_read_user_buckets(store, user_id, buckets, false);
-    RGWBucketEnt new_bucket;
-
-    switch (ret) {
-    case 0:
-    case -ENOENT:
-    case -ENODATA:
-      new_bucket.bucket = bucket;
-      new_bucket.size = 0;
-      time(&new_bucket.mtime);
-      buckets.add(new_bucket);
-      ret = rgw_write_buckets_attr(store, user_id, buckets);
-      break;
-    default:
-      ldout(store->ctx(), 10) << "rgw_write_buckets_attr returned " << ret << dendl;
-      break;
-    }
+  rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
+  ret = store->omap_set(obj, bucket_name, bl);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: error adding bucket to directory: "
+        << cpp_strerror(-ret)<< dendl;
   }
 
   return ret;
@@ -169,27 +117,16 @@ int rgw_remove_user_bucket_info(RGWRados *store, string user_id, rgw_bucket& buc
 {
   int ret;
 
-  if (store->supports_omap()) {
-    bufferlist bl;
+  bufferlist bl;
 
-    string buckets_obj_id;
-    rgw_get_buckets_obj(user_id, buckets_obj_id);
+  string buckets_obj_id;
+  rgw_get_buckets_obj(user_id, buckets_obj_id);
 
-    rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
-    ret = store->omap_del(obj, bucket.name);
-    if (ret < 0) {
-      ldout(store->ctx(), 0) << "ERROR: error removing bucket from directory: "
-          << cpp_strerror(-ret)<< dendl;
-    }
-  } else {
-    RGWUserBuckets buckets;
-
-    ret = rgw_read_user_buckets(store, user_id, buckets, false);
-
-    if (ret == 0 || ret == -ENOENT) {
-      buckets.remove(bucket.name);
-      ret = rgw_write_buckets_attr(store, user_id, buckets);
-    }
+  rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
+  ret = store->omap_del(obj, bucket.name);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: error removing bucket from directory: "
+        << cpp_strerror(-ret)<< dendl;
   }
 
   return ret;
@@ -254,42 +191,54 @@ static void dump_mulipart_index_results(list<std::string>& objs_to_unlink,
 void check_bad_user_bucket_mapping(RGWRados *store, const string& user_id, bool fix)
 {
   RGWUserBuckets user_buckets;
-  int ret = rgw_read_user_buckets(store, user_id, user_buckets, false);
-  if (ret < 0) {
-    ldout(store->ctx(), 0) << "failed to read user buckets: " << cpp_strerror(-ret) << dendl;
-    return;
-  }
+  bool done;
+  string marker;
 
-  map<string, RGWBucketEnt>& buckets = user_buckets.get_buckets();
-  for (map<string, RGWBucketEnt>::iterator i = buckets.begin();
-       i != buckets.end();
-       ++i) {
-    RGWBucketEnt& bucket_ent = i->second;
-    rgw_bucket& bucket = bucket_ent.bucket;
+  CephContext *cct = store->ctx();
 
-    RGWBucketInfo bucket_info;
-    int r = store->get_bucket_info(NULL, bucket.name, bucket_info);
-    if (r < 0) {
-      ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket << dendl;
-      continue;
+  size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
+
+  do {
+    int ret = rgw_read_user_buckets(store, user_id, user_buckets, marker, max_entries, false);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "failed to read user buckets: " << cpp_strerror(-ret) << dendl;
+      return;
     }
 
-    rgw_bucket& actual_bucket = bucket_info.bucket;
+    map<string, RGWBucketEnt>& buckets = user_buckets.get_buckets();
+    for (map<string, RGWBucketEnt>::iterator i = buckets.begin();
+         i != buckets.end();
+         ++i) {
+      marker = i->first;
 
-    if (actual_bucket.name.compare(bucket.name) != 0 ||
-        actual_bucket.pool.compare(bucket.pool) != 0 ||
-        actual_bucket.marker.compare(bucket.marker) != 0 ||
-        actual_bucket.bucket_id.compare(bucket.bucket_id) != 0) {
-      cout << "bucket info mismatch: expected " << actual_bucket << " got " << bucket << std::endl;
-      if (fix) {
-        cout << "fixing" << std::endl;
-        r = rgw_add_bucket(store, user_id, actual_bucket);
-        if (r < 0) {
-          cerr << "failed to fix bucket: " << cpp_strerror(-r) << std::endl;
+      RGWBucketEnt& bucket_ent = i->second;
+      rgw_bucket& bucket = bucket_ent.bucket;
+
+      RGWBucketInfo bucket_info;
+      int r = store->get_bucket_info(NULL, bucket.name, bucket_info);
+      if (r < 0) {
+        ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket << dendl;
+        continue;
+      }
+
+      rgw_bucket& actual_bucket = bucket_info.bucket;
+
+      if (actual_bucket.name.compare(bucket.name) != 0 ||
+          actual_bucket.pool.compare(bucket.pool) != 0 ||
+          actual_bucket.marker.compare(bucket.marker) != 0 ||
+          actual_bucket.bucket_id.compare(bucket.bucket_id) != 0) {
+        cout << "bucket info mismatch: expected " << actual_bucket << " got " << bucket << std::endl;
+        if (fix) {
+          cout << "fixing" << std::endl;
+          r = rgw_add_bucket(store, user_id, actual_bucket);
+          if (r < 0) {
+            cerr << "failed to fix bucket: " << cpp_strerror(-r) << std::endl;
+          }
         }
       }
     }
-  }
+    done = (buckets.size() < max_entries);
+  } while (!done);
 }
 
 static bool bucket_object_check_filter(const string& name)
@@ -415,11 +364,6 @@ int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state)
     if (r < 0)
       return r;
 
-    r = rgw_read_user_buckets(store, user_id, user_buckets, true);
-    if (r < 0)
-      return r;
-
-    op_state.set_user_buckets(user_buckets);
     op_state.display_name = info.display_name;
   }
 
@@ -927,21 +871,39 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
   Formatter *formatter = flusher.get_formatter();
   flusher.start(0);
 
+  CephContext *cct = store->ctx();
+
+  size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
+
   bool show_stats = op_state.will_fetch_stats();
   if (op_state.is_user_op()) {
     formatter->open_array_section("buckets");
 
-    RGWUserBuckets buckets = op_state.get_user_buckets();
-    map<string, RGWBucketEnt>& m = buckets.get_buckets();
-    map<string, RGWBucketEnt>::iterator iter;
+    RGWUserBuckets buckets;
+    string marker;
+    bool done;
 
-    for (iter = m.begin(); iter != m.end(); ++iter) {
-      std::string  obj_name = iter->first;
-      if (show_stats)
-        bucket_stats(store, obj_name, formatter);
-      else
-        formatter->dump_string("bucket", obj_name);
-    }
+    do {
+      ret = rgw_read_user_buckets(store, op_state.get_user_id(), buckets, marker, max_entries, false);
+      if (ret < 0)
+        return ret;
+
+      map<string, RGWBucketEnt>& m = buckets.get_buckets();
+      map<string, RGWBucketEnt>::iterator iter;
+
+      for (iter = m.begin(); iter != m.end(); ++iter) {
+        std::string  obj_name = iter->first;
+        if (show_stats)
+          bucket_stats(store, obj_name, formatter);
+        else
+          formatter->dump_string("bucket", obj_name);
+
+        marker = obj_name;
+      }
+
+      flusher.flush();
+      done = (m.size() < max_entries);
+    } while (!done);
 
     formatter->close_section();
   } else if (!bucket_name.empty()) {
