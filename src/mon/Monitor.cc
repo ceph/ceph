@@ -3429,8 +3429,8 @@ void Monitor::timecheck()
            << " round " << timecheck_round << dendl;
 
   // we are at the eye of the storm; the point of reference
-  timecheck_skews[monmap->get_inst(name)] = 0.0;
-  timecheck_latencies[monmap->get_inst(name)] = 0.0;
+  timecheck_skews[messenger->get_myinst()] = 0.0;
+  timecheck_latencies[messenger->get_myinst()] = 0.0;
 
   for (set<int>::iterator it = quorum.begin(); it != quorum.end(); ++it) {
     if (monmap->get_name(*it) == name)

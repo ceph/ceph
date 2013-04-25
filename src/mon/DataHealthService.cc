@@ -124,7 +124,7 @@ int DataHealthService::update_stats()
     return -errno;
   }
 
-  entity_inst_t our_inst = mon->monmap->get_inst(mon->name);
+  entity_inst_t our_inst = mon->messenger->get_myinst();
   DataStats& ours = stats[our_inst];
 
   ours.kb_total = stbuf.f_blocks * stbuf.f_bsize / 1024;
@@ -145,7 +145,7 @@ void DataHealthService::share_stats()
     return;
 
   assert(!stats.empty());
-  entity_inst_t our_inst = mon->monmap->get_inst(mon->rank);
+  entity_inst_t our_inst = mon->messenger->get_myinst();
   assert(stats.count(our_inst) > 0);
   DataStats &ours = stats[our_inst];
   const set<int>& quorum = mon->get_quorum();
@@ -176,7 +176,7 @@ void DataHealthService::service_tick()
   if (in_quorum())
     share_stats();
 
-  DataStats &ours = stats[mon->monmap->get_inst(mon->name)];
+  DataStats &ours = stats[mon->messenger->get_myinst()];
 
   if (ours.latest_avail_percent <= g_conf->mon_data_avail_crit) {
     derr << "reached critical levels of available space on data store"
