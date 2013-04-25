@@ -219,6 +219,9 @@ class XMLArgs
   /** Get the value for a specific argument parameter */
   string& get(const string& name, bool *exists = NULL);
   string& get(const char *name, bool *exists = NULL);
+  int get_bool(const string& name, bool *val, bool *exists);
+  int get_bool(const char *name, bool *val, bool *exists);
+
   /** see if a parameter is contained in this XMLArgs */
   bool exists(const char *name) {
     map<string, string>::iterator iter = val_map.find(name);
