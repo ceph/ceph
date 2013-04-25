@@ -21,7 +21,7 @@
 
 class MMonElection : public Message {
 
-  static const int HEAD_VERSION = 3;
+  static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 2;
 
 public:
@@ -45,11 +45,20 @@ public:
   bufferlist monmap_bl;
   set<int> quorum;
   uint64_t quorum_features;
+  version_t paxos_first_version;
+  version_t paxos_last_version;
   
-  MMonElection() : Message(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION) { }
-  MMonElection(int o, epoch_t e, MonMap *m)
+  MMonElection() : Message(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
+    op(0), epoch(0), quorum_features(0), paxos_first_version(0),
+    paxos_last_version(0)
+  { }
+
+  MMonElection(int o, epoch_t e, MonMap *m,
+               version_t paxos_first, version_t paxos_last)
     : Message(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
-      fsid(m->fsid), op(o), epoch(e), quorum_features(0) {
+      fsid(m->fsid), op(o), epoch(e), quorum_features(0),
+      paxos_first_version(paxos_first), paxos_last_version(paxos_last)
+  {
     // encode using full feature set; we will reencode for dest later,
     // if necessary
     m->encode(monmap_bl, CEPH_FEATURES_ALL);
@@ -78,6 +87,8 @@ public:
     ::encode(monmap_bl, payload);
     ::encode(quorum, payload);
     ::encode(quorum_features, payload);
+    ::encode(paxos_first_version, payload);
+    ::encode(paxos_last_version, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -93,6 +104,10 @@ public:
       ::decode(quorum_features, p);
     else
       quorum_features = 0;
+    if (header.version >= 4) {
+      ::decode(paxos_first_version, p);
+      ::decode(paxos_last_version, p);
+    }
   }
   
 };
