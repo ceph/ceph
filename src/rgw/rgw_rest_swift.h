@@ -20,7 +20,7 @@ public:
   ~RGWListBuckets_ObjStore_SWIFT() {}
 
   int get_params();
-  void send_response_begin();
+  void send_response_begin(bool has_buckets);
   void send_response_data(RGWUserBuckets& buckets);
   void send_response_end();
 
