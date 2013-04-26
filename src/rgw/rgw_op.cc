@@ -725,8 +725,10 @@ void RGWStatAccount::execute()
         buckets_size += bucket.size;
         buckets_size_rounded += bucket.size_rounded;
         buckets_objcount += bucket.count;
+
+        marker = iter->first;
       }
-      buckets_count = m.size();
+      buckets_count += m.size();
 
       done = (m.size() < max_buckets);
     }
