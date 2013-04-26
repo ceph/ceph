@@ -663,7 +663,7 @@ void RGWListBuckets::execute()
     RGWUserBuckets buckets;
     uint64_t read_count;
     if (limit > 0)
-      read_count = min(limit - total_count, max_buckets);
+      read_count = min(limit - total_count, (uint64_t)max_buckets);
     else
       read_count = max_buckets;
 
