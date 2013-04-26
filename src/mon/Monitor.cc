@@ -2763,7 +2763,10 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
   MonSession *session = 0;
   if (req->get_connection())
     session = static_cast<MonSession *>(req->get_connection()->get_priv());
-  if (req->session_mon >= 0) {
+  if (req->get_source().is_mon() && req->get_source_addr() != messenger->get_myaddr()) {
+    dout(10) << "forward_request won't forward (non-local) mon request " << *req << dendl;
+    req->put();
+  } else if (session && session->proxy_con) {
     dout(10) << "forward_request won't double fwd request " << *req << dendl;
     req->put();
   } else if (session && !session->closed) {
@@ -2867,7 +2870,7 @@ void Monitor::send_reply(PaxosServiceMessage *req, Message *reply)
   }
   if (session->proxy_con) {
     dout(15) << "send_reply routing reply to " << req->get_connection()->get_peer_addr()
-	     << " via mon" << req->session_mon
+	     << " via " << session->proxy_con->get_peer_addr()
 	     << " for request " << *req << dendl;
     messenger->send_message(new MRoute(session->proxy_tid, reply),
 			    session->proxy_con);    
@@ -2886,12 +2889,14 @@ void Monitor::no_reply(PaxosServiceMessage *req)
   }
   if (session->proxy_con) {
     if (get_quorum_features() & CEPH_FEATURE_MON_NULLROUTE) {
-      dout(10) << "no_reply to " << req->get_source_inst() << " via mon." << req->session_mon
+      dout(10) << "no_reply to " << req->get_source_inst()
+	       << " via " << session->proxy_con->get_peer_addr()
 	       << " for request " << *req << dendl;
       messenger->send_message(new MRoute(session->proxy_tid, NULL),
 			      session->proxy_con);
     } else {
-      dout(10) << "no_reply no quorum nullroute feature for " << req->get_source_inst() << " via mon." << req->session_mon
+      dout(10) << "no_reply no quorum nullroute feature for " << req->get_source_inst()
+	       << " via " << session->proxy_con->get_peer_addr()
 	       << " for request " << *req << dendl;
     }
   } else {
