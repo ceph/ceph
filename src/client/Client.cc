@@ -1579,6 +1579,7 @@ void Client::send_request(MetaRequest *request, MetaSession *session)
   }
   if (request->got_unsafe) {
     r->set_replayed_op();
+  } else {
     encode_cap_releases(request, mds);
     r->releases.swap(request->cap_releases);
   }
