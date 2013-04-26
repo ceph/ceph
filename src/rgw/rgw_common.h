@@ -646,6 +646,7 @@ struct req_state {
    int format;
    ceph::Formatter *formatter;
    string decoded_uri;
+   string effective_uri;
    string request_uri;
    string script_uri;
    string request_params;
@@ -671,7 +672,6 @@ struct req_state {
    rgw_bucket bucket;
    string bucket_name_str;
    string object_str;
-   string meta_section_str;
    ACLOwner bucket_owner;
    ACLOwner owner;
 
