@@ -6,10 +6,10 @@ usr/bin/ceph-run
 usr/bin/ceph-mon
 usr/bin/ceph-osd
 usr/bin/ceph-debugpack
-sbin/ceph-disk usr/sbin/
-sbin/ceph-disk-prepare usr/sbin/
-sbin/ceph-disk-activate usr/sbin/
-sbin/ceph-create-keys usr/sbin/
+usr/sbin/ceph-disk
+usr/sbin/ceph-disk-prepare
+usr/sbin/ceph-disk-activate
+usr/sbin/ceph-create-keys
 sbin/mkcephfs
 usr/lib/ceph/ceph_common.sh
 usr/lib/rados-classes/*
