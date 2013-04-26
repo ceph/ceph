@@ -17,6 +17,7 @@ struct plain_stack_entry {
  * There is a much better way to do this.
  */
 class RGWFormatter_Plain : public Formatter {
+  void reset_buf();
 public:
   RGWFormatter_Plain();
   virtual ~RGWFormatter_Plain();
