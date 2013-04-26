@@ -1574,14 +1574,16 @@ void Client::send_request(MetaRequest *request, MetaSession *session)
   ldout(cct, 10) << "send_request rebuilding request " << request->get_tid()
 		 << " for mds." << mds << dendl;
   MClientRequest *r = build_client_request(request);
-  if (request->dentry())
+  if (request->dentry()) {
     r->set_dentry_wanted();
-  if (request->got_unsafe)
+  }
+  if (request->got_unsafe) {
     r->set_replayed_op();
+  } else {
+    encode_cap_releases(request, mds);
+    r->releases.swap(request->cap_releases);
+  }
   r->set_mdsmap_epoch(mdsmap->get_epoch());
-
-  encode_cap_releases(request, mds);
-  r->releases.swap(request->cap_releases);
 
   if (request->mds == -1) {
     request->sent_stamp = ceph_clock_now(cct);

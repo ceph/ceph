@@ -610,13 +610,13 @@ ceph_test_rados_list_parallel_SOURCES = \
 	test/system/rados_list_parallel.cc \
 	test/system/st_rados_create_pool.cc \
 	test/system/st_rados_list_objects.cc
-ceph_test_rados_list_parallel_LDADD = libsystest.la librados.la
+ceph_test_rados_list_parallel_LDADD = libsystest.la librados.la $(PTHREAD_LIBS)
 bin_DEBUGPROGRAMS += ceph_test_rados_list_parallel
 
 ceph_test_rados_open_pools_parallel_SOURCES = \
 	test/system/rados_open_pools_parallel.cc \
 	test/system/st_rados_create_pool.cc
-ceph_test_rados_open_pools_parallel_LDADD = libsystest.la librados.la
+ceph_test_rados_open_pools_parallel_LDADD = libsystest.la librados.la $(PTHREAD_LIBS)
 bin_DEBUGPROGRAMS += ceph_test_rados_open_pools_parallel
 
 ceph_test_rados_delete_pools_parallel_SOURCES = \
@@ -624,7 +624,7 @@ ceph_test_rados_delete_pools_parallel_SOURCES = \
 	test/system/st_rados_create_pool.cc \
 	test/system/st_rados_delete_pool.cc \
 	test/system/st_rados_list_objects.cc
-ceph_test_rados_delete_pools_parallel_LDADD = libsystest.la librados.la
+ceph_test_rados_delete_pools_parallel_LDADD = libsystest.la librados.la $(PTHREAD_LIBS)
 bin_DEBUGPROGRAMS += ceph_test_rados_delete_pools_parallel
 
 ceph_test_rados_watch_notify_SOURCES = \
@@ -634,7 +634,7 @@ ceph_test_rados_watch_notify_SOURCES = \
 	test/system/st_rados_delete_objs.cc \
 	test/system/st_rados_watch.cc \
 	test/system/st_rados_notify.cc
-ceph_test_rados_watch_notify_LDADD = libsystest.la librados.la
+ceph_test_rados_watch_notify_LDADD = libsystest.la librados.la $(PTHREAD_LIBS)
 bin_DEBUGPROGRAMS += ceph_test_rados_watch_notify
 
 ceph_bench_log_SOURCES = \
