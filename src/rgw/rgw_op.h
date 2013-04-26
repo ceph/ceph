@@ -140,7 +140,7 @@ public:
   void execute();
 
   virtual int get_params() = 0;
-  virtual void send_response_begin() = 0;
+  virtual void send_response_begin(bool has_buckets) = 0;
   virtual void send_response_data(RGWUserBuckets& buckets) = 0;
   virtual void send_response_end() = 0;
   virtual void send_response() {}
