@@ -1173,8 +1173,10 @@ void RGWRESTMgr::register_default_mgr(RGWRESTMgr *mgr)
   default_mgr = mgr;
 }
 
-RGWRESTMgr *RGWRESTMgr::get_resource_mgr(struct req_state *s, const string& uri)
+RGWRESTMgr *RGWRESTMgr::get_resource_mgr(struct req_state *s, const string& uri, string *out_uri)
 {
+  *out_uri = uri;
+
   if (resources_by_size.empty())
     return this;
 
@@ -1186,7 +1188,7 @@ RGWRESTMgr *RGWRESTMgr::get_resource_mgr(struct req_state *s, const string& uri)
 	(resource.size() == iter->first ||
 	 resource[iter->first] == '/')) {
       string suffix = uri.substr(iter->first);
-      return resource_mgrs[resource]->get_resource_mgr(s, suffix);
+      return resource_mgrs[resource]->get_resource_mgr(s, suffix, out_uri);
     }
   }
 
@@ -1286,7 +1288,7 @@ RGWHandler *RGWREST::get_handler(RGWRados *store, struct req_state *s, RGWClient
   if (*init_error < 0)
     return NULL;
 
-  RGWRESTMgr *m = mgr.get_resource_mgr(s, s->decoded_uri);
+  RGWRESTMgr *m = mgr.get_resource_mgr(s, s->decoded_uri, &s->effective_uri);
   if (!m) {
     *init_error = -ERR_METHOD_NOT_ALLOWED;
     return NULL;
