@@ -7,8 +7,8 @@
 class PaxosServiceMessage : public Message {
  public:
   version_t version;
-  __s16 session_mon;
-  uint64_t session_mon_tid;
+  __s16 deprecated_session_mon;
+  uint64_t deprecated_session_mon_tid;
 
   // track which epoch the leader received a forwarded request in, so we can
   // discard forwarded requests appropriately on election boundaries.
@@ -16,11 +16,11 @@ class PaxosServiceMessage : public Message {
   
   PaxosServiceMessage()
     : Message(MSG_PAXOS),
-      version(0), session_mon(-1), session_mon_tid(0),
+      version(0), deprecated_session_mon(-1), deprecated_session_mon_tid(0),
       rx_election_epoch(0) { }
   PaxosServiceMessage(int type, version_t v, int enc_version=1, int compat_enc_version=0)
     : Message(type, enc_version, compat_enc_version),
-      version(v), session_mon(-1), session_mon_tid(0),
+      version(v), deprecated_session_mon(-1), deprecated_session_mon_tid(0),
       rx_election_epoch(0)  { }
  protected:
   ~PaxosServiceMessage() {}
@@ -28,14 +28,14 @@ class PaxosServiceMessage : public Message {
  public:
   void paxos_encode() {
     ::encode(version, payload);
-    ::encode(session_mon, payload);
-    ::encode(session_mon_tid, payload);
+    ::encode(deprecated_session_mon, payload);
+    ::encode(deprecated_session_mon_tid, payload);
   }
 
   void paxos_decode( bufferlist::iterator& p ) {
     ::decode(version, p);
-    ::decode(session_mon, p);
-    ::decode(session_mon_tid, p);
+    ::decode(deprecated_session_mon, p);
+    ::decode(deprecated_session_mon_tid, p);
   }
 
   void encode_payload(uint64_t features) {
