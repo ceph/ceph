@@ -764,6 +764,13 @@ void Monitor::handle_sync_start(MMonSync *m)
 {
   dout(10) << __func__ << " " << *m << dendl;
 
+  /**
+   * This looks a bit odd, but we've seen cases where sync start messages
+   * get bounced around and end up at the originator without anybody
+   * noticing!
+   */
+  assert(m->reply_to != messenger->get_myinst());
+
   /* If we are not the leader, then some monitor picked us as the point of
    * entry to the quorum during its synchronization process. Therefore, we
    * have an obligation of forwarding this message to leader, so the sender
