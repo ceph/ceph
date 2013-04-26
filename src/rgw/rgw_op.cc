@@ -672,17 +672,8 @@ void RGWListBuckets::execute()
 
     if (ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
-         should exist, just try to recreate */
+         should exist */
       ldout(s->cct, 10) << "WARNING: failed on rgw_get_user_buckets uid=" << s->user.user_id << dendl;
-
-      /*
-
-      on a second thought, this is probably a bug and we should fail
-
-      rgw_put_user_buckets(s->user.user_id, buckets);
-      ret = 0;
-
-      */
       break;
     }
     map<string, RGWBucketEnt>& m = buckets.get_buckets();
@@ -723,18 +714,8 @@ void RGWStatAccount::execute()
     ret = rgw_read_user_buckets(store, s->user.user_id, buckets, marker, max_buckets, true);
     if (ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
-         should exist, just try to recreate */
+         should exist */
       ldout(s->cct, 10) << "WARNING: failed on rgw_get_user_buckets uid=" << s->user.user_id << dendl;
-
-      /*
-
-      on a second thought, this is probably a bug and we should fail
-
-      rgw_put_user_buckets(s->user.user_id, buckets);
-      ret = 0;
-
-      */
-
       break;
     } else {
       map<string, RGWBucketEnt>& m = buckets.get_buckets();

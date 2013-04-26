@@ -121,6 +121,8 @@ public:
   virtual const char *name() { return "get_obj"; }
 };
 
+#define RGW_LIST_BUCKETS_LIMIT_MAX 10000
+
 class RGWListBuckets : public RGWOp {
 protected:
   int ret;
@@ -131,7 +133,7 @@ protected:
 
 public:
   RGWListBuckets() : ret(0), sent_data(false) {
-    limit = limit_max = 10000;
+    limit = limit_max = RGW_LIST_BUCKETS_LIMIT_MAX;
   }
 
   int verify_permission();
