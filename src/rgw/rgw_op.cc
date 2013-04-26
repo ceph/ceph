@@ -666,7 +666,7 @@ void RGWListBuckets::execute()
                                 marker, read_count, should_get_stats());
 
     if (!started) {
-      send_response_begin();
+      send_response_begin(buckets.count() > 0);
       started = true;
     }
 
@@ -692,7 +692,7 @@ void RGWListBuckets::execute()
 
 send_end:
   if (!started) {
-    send_response_begin();
+    send_response_begin(false);
   }
   send_response_end();
 }
