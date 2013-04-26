@@ -205,14 +205,8 @@ bool OSDMap::containing_subtree_is_down(CephContext *cct, int id, int subtree_ty
     down_cache = &local_down_cache;
   }
 
-  if (!subtree_is_down(id, down_cache)) {
-    ldout(cct, 30) << "containing_subtree_is_down(" << id << ") = false" << dendl;
-    return false;
-  }
-
   int current = id;
   while (true) {
-    // invariant: current subtree is known to be down.
     int type;
     if (current >= 0) {
       type = 0;
@@ -220,6 +214,11 @@ bool OSDMap::containing_subtree_is_down(CephContext *cct, int id, int subtree_ty
       type = crush->get_bucket_type(current);
     }
     assert(type >= 0);
+
+    if (!subtree_is_down(current, down_cache)) {
+      ldout(cct, 30) << "containing_subtree_is_down(" << id << ") = false" << dendl;
+      return false;
+    }
 
     // is this a big enough subtree to be done?
     if (type >= subtree_type) {
