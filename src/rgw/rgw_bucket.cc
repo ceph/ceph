@@ -4,6 +4,7 @@
 #include <map>
 
 #include "common/errno.h"
+#include "common/ceph_json.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
@@ -932,3 +933,190 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
   return 0;
 }
 
+
+#if 0
+
+class CompletionMap {
+  map<rgw_bucket, RefCountedCond *> entries;
+  Mutex lock;
+
+public:
+
+  void add(string& s) {
+    Mutex::Locker l(lock);
+
+    entries[s] = new RefCountedObject;
+  }
+
+
+  bool wait(string& s) {
+    map<string, RefCountedCond *>::iterator iter;
+    l.Lock();
+    iter = entries.find(s);
+    if (iter == entries.end()) {
+      l.Unlock();
+      return false;
+    }
+
+    RefCountedCond *rcc = iter->second;
+    rcc->get();
+    l.Unlock();
+
+    rcc->wait();
+    rcc->put();
+
+    return true;
+
+  }
+
+  void complete(string& s) {
+    lock.Lock();
+
+    map<string, RefCountedCond *>::iterator iter = entries.find(s);
+    if (iter == entries.end()) {
+      lock.Unlock();
+      return;
+    }
+
+    RefCountedCond *rcc = iter->second;
+
+    entries.erase(iter);
+
+    lock.Unlock();
+
+    rcc->complete();
+    rcc->put();
+  }
+
+};
+
+
+class RGWChangedBucketsTracker {
+  CephContext *cct;
+  RGWRados *store;
+
+  map<rgw_bucket, utime_t> last_reported;
+
+  struct PendingInfo : public RefCountedCond {
+    PendingInfo() {}
+  };
+
+  CompletionMap pending;
+
+  Mutex lock;
+public:
+  RGWChangedBucketsTracker(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), lock("RGWChanedBucketsTracker") {}
+
+  int report_bucket_changed(rgw_bucket& bucket) {
+    lock.Lock();
+
+    map<rgw_bucket, utime_t>::iteartor iter = last_reported.find(bucket);
+
+    bool exists = (iter != iter.end());
+    if (exists) {
+      utime_t& t = iter->second;
+      utime_t now = ceph_clock_now(cct);
+
+      if (now > t + get_resolution_sec())
+        exists = false;
+    }
+
+    lock.Unlock();
+
+    if (exists)
+      return true;
+  }
+
+  uint32_t get_resolution_sec();
+};
+
+
+#endif
+
+void rgw_data_change::dump(Formatter *f) const
+{
+  string type;
+  switch (entity_type) {
+    case ENTITY_TYPE_BUCKET:
+      type = "bucket";
+      break;
+    default:
+      type = "unknown";
+  }
+  encode_json("entity_type", type, f);
+  encode_json("key", key, f);
+}
+
+
+int RGWDataChangesLog::choose_oid(rgw_bucket& bucket) {
+    string& name = bucket.name;
+    uint32_t r = ceph_str_hash_linux(name.c_str(), name.size()) % num_shards;
+
+    return (int)r;
+}
+
+int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
+  string& oid = oids[choose_oid(bucket)];
+
+  utime_t ut = ceph_clock_now(cct);
+  bufferlist bl;
+  rgw_data_change change;
+  change.entity_type = ENTITY_TYPE_BUCKET;
+  change.key = bucket.name;
+  ::encode(change, bl);
+  string section;
+  return store->time_log_add(oid, ut, section, change.key, bl);
+}
+
+int RGWDataChangesLog::list_entries(int shard, utime_t& start_time, utime_t& end_time, int max_entries,
+             list<rgw_data_change>& entries, string& marker, bool *truncated) {
+
+  list<cls_log_entry> log_entries;
+
+  int ret = store->time_log_list(oids[shard], start_time, end_time,
+                                 max_entries, log_entries, marker, truncated);
+  if (ret < 0)
+    return ret;
+
+  list<cls_log_entry>::iterator iter;
+  for (iter = log_entries.begin(); iter != log_entries.end(); ++iter) {
+    rgw_data_change entry;
+    bufferlist::iterator liter = iter->data.begin();
+    try {
+      ::decode(entry, liter);
+    } catch (buffer::error& err) {
+      lderr(cct) << "ERROR: failed to decode data changes log entry" << dendl;
+      return -EIO;
+    }
+    entries.push_back(entry);
+  }
+
+  return 0;
+}
+
+int RGWDataChangesLog::list_entries(utime_t& start_time, utime_t& end_time, int max_entries,
+             list<rgw_data_change>& entries, LogMarker& marker, bool *ptruncated) {
+  bool truncated;
+
+  entries.clear();
+
+  for (; marker.shard < num_shards && (int)entries.size() < max_entries;
+       marker.shard++, marker.marker.clear()) {
+    int ret = list_entries(marker.shard, start_time, end_time, max_entries - entries.size(), entries,
+                       marker.marker, &truncated);
+    if (ret == -ENOENT) {
+      continue;
+    }
+    if (ret < 0) {
+      return ret;
+    }
+    if (truncated) {
+      *ptruncated = true;
+      return 0;
+    }
+  }
+
+  *ptruncated = (marker.shard < num_shards);
+
+  return 0;
+}

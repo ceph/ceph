@@ -219,4 +219,76 @@ public:
   static int info(RGWRados *store, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher);
 };
 
+
+enum DataLogEntityType {
+  ENTITY_TYPE_BUCKET = 1,
+};
+
+struct rgw_data_change {
+  DataLogEntityType entity_type;
+  string key;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    uint8_t t = (uint8_t)entity_type;
+    ::encode(t, bl);
+    ::encode(key, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+     uint8_t t;
+     ::decode(t, bl);
+     entity_type = (DataLogEntityType)t;
+     ::decode(key, bl);
+     DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(rgw_data_change)
+
+class RGWDataChangesLog {
+  CephContext *cct;
+  RGWRados *store;
+
+  int num_shards;
+  string *oids;
+
+public:
+
+  RGWDataChangesLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store) {
+    num_shards = 128; /* FIXME */
+    oids = new string[num_shards];
+
+    const char *prefix = "bucket_log"; /* FIXME */
+
+    for (int i = 0; i < num_shards; i++) {
+      char buf[16];
+      snprintf(buf, sizeof(buf), "%s.%d", prefix, i);
+      oids[i] = buf;
+    }
+  }
+
+  ~RGWDataChangesLog() {
+    delete[] oids;
+  }
+
+  int choose_oid(rgw_bucket& bucket);
+  int add_entry(rgw_bucket& bucket);
+  int list_entries(int shard, utime_t& start_time, utime_t& end_time, int max_entries,
+               list<rgw_data_change>& entries, string& marker, bool *truncated);
+
+  struct LogMarker {
+    int shard;
+    string marker;
+
+    LogMarker() : shard(0) {}
+  };
+  int list_entries(utime_t& start_time, utime_t& end_time, int max_entries,
+               list<rgw_data_change>& entries, LogMarker& marker, bool *ptruncated);
+};
+
+
 #endif
