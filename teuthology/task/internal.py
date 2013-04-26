@@ -106,7 +106,7 @@ def lock_machines(ctx, config):
                 while not keyscan_out:
                     time.sleep(10)
                     keyscan_out, current_locks = lock.keyscan_check(ctx, vmlist)
-		if lock.update_keys(ctx, keyscan_out, current_locks):
+                if lock.update_keys(ctx, keyscan_out, current_locks):
                     log.info("Error in virtual machine keys")
                 newscandict = {}
                 for dkey in newly_locked.iterkeys():
