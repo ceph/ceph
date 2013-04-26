@@ -1106,6 +1106,17 @@ void Monitor::sync_timeout(entity_inst_t &entity)
       }
     }
 
+    // well that sucks. Let's see if we can find a monitor to connect to
+    for (int i = 0; i < monmap->size(); ++i) {
+      entity_inst_t i_inst = monmap->get_inst(i);
+      if (i != rank && i_inst != entity) {
+	sync_provider->entity = i_inst;
+	sync_state = SYNC_STATE_START;
+	sync_start_chunks(sync_provider);
+	return;
+      }
+    }
+
     assert(0 == "Unable to find a new monitor to connect to. Not cool.");
   } else if (sync_role & SYNC_ROLE_PROVIDER) {
     dout(10) << __func__ << " cleanup " << entity << dendl;
