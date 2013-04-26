@@ -37,14 +37,6 @@ ifneq ($(DEB_HOST_ARCH), amd64)
 endif
 endif
 
-ifeq ($(shell perl -n -e 'BEGIN{$$/=""}' -e '/Build-Depends:.*libgoogle-perftools-dev/ && exit 1' debian/control),0)
-  # if Build-Deps have been edited to skip libgoogle-perftools-dev (as
-  # we do for Debian lenny), tell configure it's ok to not have
-  # tcmalloc.
-  $(warning skipping -ltcmalloc because of no libgoogle-perftools-dev)
-  extraopts += --without-tcmalloc
-endif
-
 configure: configure-stamp
 configure-stamp:
 	dh_testdir
