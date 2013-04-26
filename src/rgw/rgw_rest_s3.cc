@@ -1685,7 +1685,7 @@ int RGWHandler_ObjStore_S3::init_from_header(struct req_state *s, int default_fo
   string req;
   string first;
 
-  const char *req_name = s->decoded_uri.c_str();
+  const char *req_name = s->effective_uri.c_str();
   const char *p;
 
   if (*req_name == '?') {

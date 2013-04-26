@@ -275,7 +275,7 @@ public:
   void register_resource(string resource, RGWRESTMgr *mgr);
   void register_default_mgr(RGWRESTMgr *mgr);
 
-  virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri);
+  virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri, string *out_uri);
   virtual RGWHandler *get_handler(struct req_state *s) { return NULL; }
   virtual void put_handler(RGWHandler *handler) { delete handler; }
 };
