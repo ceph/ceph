@@ -1107,7 +1107,7 @@ void Monitor::sync_timeout(entity_inst_t &entity)
     }
 
     // well that sucks. Let's see if we can find a monitor to connect to
-    for (int i = 0; i < monmap->size(); ++i) {
+    for (int i = 0; i < (int)monmap->size(); ++i) {
       entity_inst_t i_inst = monmap->get_inst(i);
       if (i != rank && i_inst != entity) {
 	sync_provider->entity = i_inst;
