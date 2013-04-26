@@ -25,7 +25,10 @@ public:
   RGWListBuckets_ObjStore_S3() {}
   ~RGWListBuckets_ObjStore_S3() {}
 
-  int get_params() { return 0; }
+  int get_params() {
+    limit = 0; /* no limit */
+    return 0;
+  }
   virtual void send_response_begin(bool has_buckets);
   virtual void send_response_data(RGWUserBuckets& buckets);
   virtual void send_response_end();
