@@ -468,17 +468,17 @@ void encode_json(const char *name, long val, Formatter *f)
 
 void encode_json(const char *name, unsigned val, Formatter *f)
 {
-  f->dump_int(name, val);
+  f->dump_unsigned(name, val);
 }
 
 void encode_json(const char *name, unsigned long val, Formatter *f)
 {
-  f->dump_int(name, val);
+  f->dump_unsigned(name, val);
 }
 
 void encode_json(const char *name, unsigned long long val, Formatter *f)
 {
-  f->dump_int(name, val);
+  f->dump_unsigned(name, val);
 }
 
 void encode_json(const char *name, long long val, Formatter *f)
