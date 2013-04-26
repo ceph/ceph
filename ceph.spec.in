@@ -1,9 +1,4 @@
 %bcond_with ocf
-# it seems there is no usable tcmalloc rpm for x86_64; parts of
-# google-perftools don't compile on x86_64, and apparently the
-# decision was to not build the package at all, even if tcmalloc
-# itself would have worked just fine.
-%bcond_with tcmalloc
 
 %if ! (0%{?fedora} > 12 || 0%{?rhel} > 5)
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
@@ -53,11 +48,14 @@ BuildRequires:  leveldb-devel > 1.2
 %if ! 0%{?rhel}
 BuildRequires:  sharutils
 %endif
+
 %if 0%{defined suse_version}
 %if 0%{?suse_version} > 1210
 Requires:       gptfdisk
+BuildRequires:  gperftools-devel
 %else
 Requires:       scsirastools
+BuildRequires:  google-perftools-devel
 %endif
 Recommends:	logrotate
 BuildRequires:	%insserv_prereq
@@ -74,12 +72,7 @@ Requires:	gdisk
 Requires(post):	chkconfig
 Requires(preun):chkconfig
 Requires(preun):initscripts
-%endif
-%if 0%{with tcmalloc}
-# use isa so this will not be satisfied by
-# google-perftools-devel.i686 on a x86_64 box
-# http://rpm.org/wiki/PackagerDocs/ArchDependencies
-BuildRequires: google-perftools-devel%{?_isa}
+BuildRequires:  gperftools-devel
 %endif
 
 %description
@@ -256,8 +249,6 @@ MY_CONF_OPT="$MY_CONF_OPT --with-radosgw"
 
 export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 
-# be explicit about --with/without-tcmalloc because the
-# autoconf default differs from what's needed for rpm
 %{configure}	CPPFLAGS="$java_inc" \
 		--prefix=/usr \
 		--sbindir=/sbin \
@@ -272,7 +263,6 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 		--enable-cephfs-java \
 		$MY_CONF_OPT \
 		%{?_with_ocf} \
-		%{?with_tcmalloc:--with-tcmalloc} %{!?with_tcmalloc:--without-tcmalloc} \
 		CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
 
 # fix bug in specific version of libedit-devel
