@@ -52,6 +52,7 @@
     metadata list              list metadata info
     mdlog list                 list metadata log
     bilog list                 list bucket index log
+    datalog list               list data log
   options:
      --uid=<id>                user id
      --subuser=<name>          subuser name

@@ -90,6 +90,7 @@ void _usage()
   cerr << "  metadata list              list metadata info\n";
   cerr << "  mdlog list                 list metadata log\n";
   cerr << "  bilog list                 list bucket index log\n";
+  cerr << "  datalog list               list data log\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --subuser=<name>          subuser name\n";
@@ -198,6 +199,7 @@ enum {
   OPT_METADATA_LIST,
   OPT_MDLOG_LIST,
   OPT_BILOG_LIST,
+  OPT_DATALOG_LIST,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
@@ -224,7 +226,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "temp") == 0 ||
       strcmp(cmd, "metadata") == 0 ||
       strcmp(cmd, "mdlog") == 0 ||
-      strcmp(cmd, "bilog") == 0) {
+      strcmp(cmd, "bilog") == 0 ||
+      strcmp(cmd, "datalog") == 0) {
     *need_more = true;
     return 0;
   }
@@ -365,6 +368,9 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "bilog") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_BILOG_LIST;
+  } else if (strcmp(prev_cmd, "datalog") == 0) {
+    if (strcmp(cmd, "list") == 0)
+      return OPT_DATALOG_LIST;
   }
 
   return -EINVAL;
@@ -1789,6 +1795,47 @@ next:
         encode_json("entry", entry, formatter);
 
         marker = entry.id;
+      }
+      formatter->flush(cout);
+    } while (truncated && count < max_entries);
+
+    formatter->close_section();
+    formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_DATALOG_LIST) {
+    formatter->open_array_section("entries");
+    bool truncated;
+    int count = 0;
+    if (max_entries < 0)
+      max_entries = 1000;
+
+    utime_t start_time, end_time;
+
+    int ret = parse_date_str(start_date, start_time);
+    if (ret < 0)
+      return -ret;
+
+    ret = parse_date_str(end_date, end_time);
+    if (ret < 0)
+      return -ret;
+
+    RGWDataChangesLog *log = store->data_log;
+    RGWDataChangesLog::LogMarker marker;
+
+    do {
+      list<rgw_data_change> entries;
+      ret = log->list_entries(start_time, end_time, max_entries - count, entries, marker, &truncated);
+      if (ret < 0) {
+        cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      count += entries.size();
+
+      for (list<rgw_data_change>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+        rgw_data_change& entry = *iter;
+        encode_json("entry", entry, formatter);
       }
       formatter->flush(cout);
     } while (truncated && count < max_entries);

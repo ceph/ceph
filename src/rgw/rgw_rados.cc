@@ -12,6 +12,7 @@
 #include "rgw_cache.h"
 #include "rgw_acl.h"
 #include "rgw_metadata.h"
+#include "rgw_bucket.h"
 
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -497,6 +498,7 @@ void RGWRadosCtx::set_prefetch_data(rgw_obj& obj) {
 void RGWRados::finalize()
 {
   delete meta_mgr;
+  delete data_log;
   if (use_gc_thread) {
     gc->stop_processor();
     delete gc;
@@ -525,6 +527,7 @@ int RGWRados::init_rados()
    return ret;
 
   meta_mgr = new RGWMetadataManager(cct, this);
+  data_log = new RGWDataChangesLog(cct, this);
 
   return ret;
 }
@@ -2885,6 +2888,12 @@ int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
   if (bucket_is_system(bucket))
     return 0;
 
+  int ret = data_log->add_entry(obj.bucket);
+  if (ret < 0) {
+    lderr(cct) << "ERROR: failed writing data log" << dendl;
+    return ret;
+  }
+
   if (state && state->obj_tag.length()) {
     int len = state->obj_tag.length();
     char buf[len + 1];
@@ -2896,7 +2905,7 @@ int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
       append_rand_alpha(cct, tag, tag, 32);
     }
   }
-  int ret = cls_obj_prepare_op(bucket, CLS_RGW_OP_ADD, tag,
+  ret = cls_obj_prepare_op(bucket, CLS_RGW_OP_ADD, tag,
                                obj.object, obj.key);
 
   return ret;
