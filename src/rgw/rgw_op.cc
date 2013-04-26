@@ -680,7 +680,7 @@ void RGWListBuckets::execute()
 
     total_count += m.size();
 
-    done = (m.size() < read_count);
+    done = (m.size() < read_count || total_count == limit);
 
     if (m.size()) {
       send_response_data(buckets);
