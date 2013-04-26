@@ -391,10 +391,10 @@ fi
 %{_libdir}/rados-classes/libcls_lock.so*
 %{_libdir}/rados-classes/libcls_kvs.so*
 %{_libdir}/rados-classes/libcls_refcount.so*
-/sbin/ceph-disk
-/sbin/ceph-disk-activate
-/sbin/ceph-disk-prepare
-/sbin/ceph-create-keys
+%{_sbindir}/ceph-disk
+%{_sbindir}/ceph-disk-activate
+%{_sbindir}/ceph-disk-prepare
+%{_sbindir}/ceph-create-keys
 /lib/udev/rules.d/95-ceph-osd.rules
 
 #################################################################################
