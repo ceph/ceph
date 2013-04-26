@@ -1034,7 +1034,7 @@ void Monitor::handle_sync_finish(MMonSync *m)
 
 // synchronization provider
 
-string Monitor::_pick_random_mon(int other)
+string Monitor::_pick_random_mon()
 {
   assert(monmap->size() > 0);
   if (monmap->size() == 1)
@@ -1042,8 +1042,6 @@ string Monitor::_pick_random_mon(int other)
 
   int max = monmap->size();
   int n = sync_rng() % max;
-  if (other >= 0 && n >= other)
-    n++;
   return monmap->get_name(n);
 }
 
