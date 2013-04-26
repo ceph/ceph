@@ -1,5 +1,0 @@
-=============
- Ceph Deploy
-=============
-
-Coming soon.
