@@ -40,6 +40,7 @@
 #include "rgw_rest_usage.h"
 #include "rgw_rest_user.h"
 #include "rgw_rest_bucket.h"
+#include "rgw_rest_metadata.h"
 #include "rgw_swift_auth.h"
 #include "rgw_swift.h"
 #include "rgw_log.h"
@@ -496,7 +497,11 @@ int main(int argc, const char **argv)
     admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
     admin_resource->register_resource("user", new RGWRESTMgr_User);
     admin_resource->register_resource("bucket", new RGWRESTMgr_Bucket);
+  
+    /*Registering resource for /admin/metadata */
+    admin_resource->register_resource("metadata", new RGWRESTMgr_Metadata);
     rest.register_resource(g_conf->rgw_admin_entry, admin_resource);
+    rgw_user_init(store->meta_mgr);
   }
 
   OpsLogSocket *olog = NULL;

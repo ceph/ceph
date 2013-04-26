@@ -57,7 +57,7 @@ struct ObjectCacheInfo {
   ObjectMetaInfo meta;
   obj_version version;
 
-  ObjectCacheInfo() : status(0), flags(0), epoch(0) {}
+  ObjectCacheInfo() : status(0), flags(0), epoch(0), version() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(5, 3, bl);
@@ -550,7 +550,7 @@ int RGWCache<T>::watch_cb(int opcode, uint64_t ver, bufferlist& bl)
   string oid;
   normalize_bucket_and_obj(info.obj.bucket, info.obj.object, bucket, oid);
   string name = normal_name(bucket, oid);
-
+  
   switch (info.op) {
   case UPDATE_OBJ:
     cache.put(name, info.obj_info);
