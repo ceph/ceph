@@ -43,10 +43,14 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
   return 0;
 }
 
-void RGWListBuckets_ObjStore_SWIFT::send_response_begin()
+void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
 {
-  if (ret)
+  if (ret) {
     set_req_state_err(s, ret);
+  } else if (!has_buckets && s->format == RGW_FORMAT_PLAIN) {
+    ret = STATUS_NO_CONTENT;
+    set_req_state_err(s, ret);
+  }
   dump_errno(s);
   end_header(s);
 
