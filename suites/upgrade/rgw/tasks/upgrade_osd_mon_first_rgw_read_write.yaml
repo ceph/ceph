@@ -20,7 +20,6 @@ tasks:
      all:
         branch: next
 - ceph.restart: [osd.0, osd.1, osd.2, osd.3, mon.a, mon.b, mon.c, mds.a]
-- rgw: [client.0]
 - s3readwrite:
     client.0:
       rgw_server: client.0
