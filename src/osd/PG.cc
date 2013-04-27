@@ -2341,6 +2341,7 @@ void PG::publish_stats_to_osd()
 
     pg_stats_publish_valid = true;
     pg_stats_publish = info.stats;
+    pg_stats_publish.stats.add(unstable_stats);
 
     // calc copies, degraded
     unsigned target = MAX(get_osdmap()->get_pg_size(info.pgid), acting.size());
@@ -2620,6 +2621,9 @@ int PG::_write_info(ObjectStore::Transaction& t, epoch_t epoch,
 
 void PG::write_info(ObjectStore::Transaction& t)
 {
+  info.stats.stats.add(unstable_stats);
+  unstable_stats.clear();
+
   int ret = _write_info(t, get_osdmap()->get_epoch(), info, coll,
      past_intervals, snap_collections, osd->infos_oid,
      info_struct_v, dirty_big_info);
