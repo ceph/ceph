@@ -2197,9 +2197,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (r >= 0) {
 	  op.xattr.value_len = r;
 	  result = 0;
+	  ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(r, 10);
+	  ctx->delta_stats.num_rd++;
 	} else
 	  result = r;
-	ctx->delta_stats.num_rd++;
       }
       break;
 
@@ -2217,6 +2218,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         
         bufferlist bl;
         ::encode(newattrs, bl);
+	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(bl.length(), 10);
+        ctx->delta_stats.num_rd++;
         osd_op.outdata.claim_append(bl);
       }
       break;
@@ -2237,6 +2240,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (result < 0 && result != -EEXIST && result != -ENODATA)
 	  break;
 	
+	ctx->delta_stats.num_rd++;
+	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(xattr.length(), 10);
+
 	switch (op.xattr.cmp_mode) {
 	case CEPH_OSD_CMPXATTR_MODE_STRING:
 	  {
@@ -2281,7 +2287,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 
 	dout(10) << "comparison returned true" << dendl;
-	ctx->delta_stats.num_rd++;
       }
       break;
 
@@ -2848,6 +2853,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      out_set.insert(iter->first);
 	    }
 	    ::encode(out_set, osd_op.outdata);
+	    ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
+	    ctx->delta_stats.num_rd++;
 	    break;
 	  }
 	  dout(10) << "failed, reading from omap" << dendl;
@@ -2867,6 +2874,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 	}
 	::encode(out_set, osd_op.outdata);
+	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
+	ctx->delta_stats.num_rd++;
       }
       break;
     case CEPH_OSD_OP_OMAPGETVALS:
@@ -2901,6 +2910,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      out_set.insert(*iter);
 	    }
 	    ::encode(out_set, osd_op.outdata);
+	    ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
+	    ctx->delta_stats.num_rd++;
 	    break;
 	  }
 	  // No valid tmap, use omap
@@ -2923,6 +2934,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 	}
 	::encode(out_set, osd_op.outdata);
+	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
+	ctx->delta_stats.num_rd++;
       }
       break;
     case CEPH_OSD_OP_OMAPGETHEADER:
@@ -2941,6 +2954,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  dout(10) << "failed, reading from omap" << dendl;
 	}
 	osd->store->omap_get_header(coll, soid, &osd_op.outdata);
+	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
+	ctx->delta_stats.num_rd++;
       }
       break;
     case CEPH_OSD_OP_OMAPGETVALSBYKEYS:
@@ -2969,6 +2984,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      }
 	    }
 	    ::encode(out, osd_op.outdata);
+	    ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
+	    ctx->delta_stats.num_rd++;
 	    break;
 	  }
 	  // No valid tmap, use omap
@@ -2976,6 +2993,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	osd->store->omap_get_values(coll, soid, keys_to_get, &out);
 	::encode(out, osd_op.outdata);
+	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
+	ctx->delta_stats.num_rd++;
       }
       break;
     case CEPH_OSD_OP_OMAP_CMP:
@@ -3004,6 +3023,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = r;
 	  break;
 	}
+	//Should set num_rd_kb based on encode length of map
+	ctx->delta_stats.num_rd++;
 
 	r = 0;
 	bufferlist empty;
@@ -3066,6 +3087,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  dout(20) << "\t" << i->first << dendl;
 	}
 	t.omap_setkeys(coll, soid, to_set);
+	ctx->delta_stats.num_wr++;
       }
       break;
     case CEPH_OSD_OP_OMAPSETHEADER:
@@ -3079,6 +3101,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	t.touch(coll, soid);
 	t.omap_setheader(coll, soid, osd_op.indata);
+	ctx->delta_stats.num_wr++;
       }
       break;
     case CEPH_OSD_OP_OMAPCLEAR:
@@ -3092,6 +3115,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	t.touch(coll, soid);
 	t.omap_clear(coll, soid);
+	ctx->delta_stats.num_wr++;
       }
       break;
     case CEPH_OSD_OP_OMAPRMKEYS:
@@ -3113,6 +3137,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  goto fail;
 	}
 	t.omap_rmkeys(coll, soid, to_rm);
+	ctx->delta_stats.num_wr++;
       }
       break;
     default:
