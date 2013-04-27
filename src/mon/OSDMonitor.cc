@@ -156,13 +156,24 @@ void OSDMonitor::update_from_paxos()
   if (!t.empty())
     mon->store->apply_transaction(t);
 
-  // populate down -> out map
-  for (int o = 0; o < osdmap.get_max_osd(); o++)
-    if (osdmap.is_down(o) && osdmap.is_in(o) &&
-	down_pending_out.count(o) == 0) {
-      dout(10) << " adding osd." << o << " to down_pending_out map" << dendl;
-      down_pending_out[o] = ceph_clock_now(g_ceph_context);
+  for (int o = 0; o < osdmap.get_max_osd(); o++) {
+    if (osdmap.is_down(o)) {
+      // invalidate osd_epoch cache
+      osd_epoch.erase(o);
+
+      // populate down -> out map
+      if (osdmap.is_in(o) &&
+	  down_pending_out.count(o) == 0) {
+	dout(10) << " adding osd." << o << " to down_pending_out map" << dendl;
+	down_pending_out[o] = ceph_clock_now(g_ceph_context);
+      }
     }
+  }
+  // blow away any osd_epoch items beyond max_osd
+  map<int,epoch_t>::iterator p = osd_epoch.upper_bound(osdmap.get_max_osd());
+  while (p != osd_epoch.end()) {
+    osd_epoch.erase(p++);
+  }
 
   if (mon->is_leader()) {
     // kick pgmon, make sure it's seen the latest map
@@ -1495,7 +1506,21 @@ void OSDMonitor::send_full(PaxosServiceMessage *m)
 void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
 {
   dout(5) << "send_incremental [" << first << ".." << osdmap.get_epoch() << "]"
-	  << " to " << req->get_orig_source_inst() << dendl;
+	  << " to " << req->get_orig_source_inst()
+	  << dendl;
+
+  int osd = -1;
+  if (req->get_source().is_osd()) {
+    osd = req->get_source().num();
+    map<int,epoch_t>::iterator p = osd_epoch.find(osd);
+    if (p != osd_epoch.end()) {
+      dout(10) << " osd." << osd << " should have epoch " << p->second << dendl;
+      first = p->second + 1;
+      if (first > osdmap.get_epoch())
+	return;
+    }
+  }
+
   if (first < get_first_committed()) {
     first = get_first_committed();
     bufferlist bl;
@@ -1511,6 +1536,9 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
     m->newest_map = osdmap.get_epoch();
     m->maps[first] = bl;
     mon->send_reply(req, m);
+
+    if (osd >= 0)
+      osd_epoch[osd] = osdmap.get_epoch();
     return;
   }
 
@@ -1521,6 +1549,9 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
   m->oldest_map = get_first_committed();
   m->newest_map = osdmap.get_epoch();
   mon->send_reply(req, m);
+
+  if (osd >= 0)
+    osd_epoch[osd] = last;
 }
 
 void OSDMonitor::send_incremental(epoch_t first, entity_inst_t& dest, bool onetime)

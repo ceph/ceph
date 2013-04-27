@@ -661,35 +661,31 @@ void RGWListBuckets::execute()
 
   do {
     RGWUserBuckets buckets;
-    uint64_t read_count = min(limit - total_count, max_buckets);
+    uint64_t read_count;
+    if (limit > 0)
+      read_count = min(limit - total_count, (uint64_t)max_buckets);
+    else
+      read_count = max_buckets;
+
     ret = rgw_read_user_buckets(store, s->user.user_id, buckets,
                                 marker, read_count, should_get_stats());
 
     if (!started) {
-      send_response_begin();
+      send_response_begin(buckets.count() > 0);
       started = true;
     }
 
     if (ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
-         should exist, just try to recreate */
+         should exist */
       ldout(s->cct, 10) << "WARNING: failed on rgw_get_user_buckets uid=" << s->user.user_id << dendl;
-
-      /*
-
-      on a second thought, this is probably a bug and we should fail
-
-      rgw_put_user_buckets(s->user.user_id, buckets);
-      ret = 0;
-
-      */
       break;
     }
     map<string, RGWBucketEnt>& m = buckets.get_buckets();
 
     total_count += m.size();
 
-    done = (m.size() < read_count);
+    done = (m.size() < read_count || (limit > 0 && total_count == limit));
 
     if (m.size()) {
       send_response_data(buckets);
@@ -701,7 +697,7 @@ void RGWListBuckets::execute()
 
 send_end:
   if (!started) {
-    send_response_begin();
+    send_response_begin(false);
   }
   send_response_end();
 }
@@ -723,18 +719,8 @@ void RGWStatAccount::execute()
     ret = rgw_read_user_buckets(store, s->user.user_id, buckets, marker, max_buckets, true);
     if (ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
-         should exist, just try to recreate */
+         should exist */
       ldout(s->cct, 10) << "WARNING: failed on rgw_get_user_buckets uid=" << s->user.user_id << dendl;
-
-      /*
-
-      on a second thought, this is probably a bug and we should fail
-
-      rgw_put_user_buckets(s->user.user_id, buckets);
-      ret = 0;
-
-      */
-
       break;
     } else {
       map<string, RGWBucketEnt>& m = buckets.get_buckets();
@@ -744,8 +730,10 @@ void RGWStatAccount::execute()
         buckets_size += bucket.size;
         buckets_size_rounded += bucket.size_rounded;
         buckets_objcount += bucket.count;
+
+        marker = iter->first;
       }
-      buckets_count = m.size();
+      buckets_count += m.size();
 
       done = (m.size() < max_buckets);
     }

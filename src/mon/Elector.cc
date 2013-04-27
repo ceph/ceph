@@ -286,7 +286,7 @@ void Elector::handle_victory(MMonElection *m)
   dout(5) << "handle_victory from " << m->get_source() << " quorum_features " << m->quorum_features << dendl;
   int from = m->get_source().num();
 
-  assert(from < mon->rank);
+  assert((from < mon->rank) || (acked_first_paxos_version > mon->paxos->get_version()));
   assert(m->epoch % 2 == 0);  
 
   leader_acked = -1;

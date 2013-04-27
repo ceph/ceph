@@ -36,18 +36,25 @@ void RGWFormatter_Plain::flush(ostream& os)
   if (!buf)
     return;
 
-  os << buf;
-  os.flush();
-  reset();
+  if (len) {
+    os << buf << "\n";
+    os.flush();
+  }
+
+  reset_buf();
 }
 
-void RGWFormatter_Plain::reset()
+void RGWFormatter_Plain::reset_buf()
 {
   free(buf);
   buf = NULL;
   len = 0;
   max_len = 0;
+}
 
+void RGWFormatter_Plain::reset()
+{
+  reset_buf();
   stack.clear();
   min_stack_level = 0;
 }
