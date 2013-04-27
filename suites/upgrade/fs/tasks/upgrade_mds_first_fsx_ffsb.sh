@@ -15,6 +15,7 @@ tasks:
     conf:
       osd:
         filestore flush min: 0
+- ceph-fuse:
 - workunit:
      clients:
         all:

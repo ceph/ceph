@@ -12,6 +12,7 @@ tasks:
 - install:
      branch: bobtail
 - ceph:
+- ceph-fuse:
 - workunit:
      clients:
         all:
