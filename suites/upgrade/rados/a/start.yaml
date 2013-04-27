@@ -12,16 +12,10 @@ tasks:
 - install:
      branch: bobtail
 - ceph:
-- ceph-fuse:
 - workunit:
      clients:
         client.0:
-           - suites/blogbench.sh
+           - rados/load-gen-mix.sh
 - install.upgrade:
      all:
         branch: next
-- ceph.restart: [osd.0, osd.1, osd.2, osd.3, mon.a, mon.b, mon.c, mds.a]
-- workunit:
-     clients:
-        client.0:
-           - suites/blogbench.sh
