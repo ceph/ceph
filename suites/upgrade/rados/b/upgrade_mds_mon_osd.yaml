@@ -1,0 +1,2 @@
+tasks:
+- ceph.restart: [mds.a, mon.a, mon.b, mon.c, osd.0, osd.1, osd.2, osd.3]
