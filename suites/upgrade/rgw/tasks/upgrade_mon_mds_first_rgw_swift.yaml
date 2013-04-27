@@ -20,7 +20,6 @@ tasks:
      all:
         branch: next
 - ceph.restart: [mon.a, mon.b, mon.c, mds.a, osd.0, osd.1, osd.2, osd.3]
-- rgw: [client.0]
 - swift:
     client.0:
       rgw_server: client.0
