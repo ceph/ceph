@@ -58,6 +58,15 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, OSDMap& osdmap) {
 		<< ").osd e" << osdmap.get_epoch() << " ";
 }
 
+bool OSDMonitor::_have_pending_crush()
+{
+  return pending_inc.crush.length();
+}
+
+CrushWrapper &OSDMonitor::_get_stable_crush()
+{
+  return *osdmap.crush;
+}
 
 void OSDMonitor::_get_pending_crush(CrushWrapper& newcrush)
 {
@@ -2534,27 +2543,33 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd.size() == 5 && m->cmd[1] == "crush" && (m->cmd[2] == "add-bucket")) {
       do {
 	// osd crush add-bucket <name> <type>
-	CrushWrapper newcrush;
-	_get_pending_crush(newcrush);
-
-	if (newcrush.name_exists(m->cmd[3])) {
+	if (!_have_pending_crush() &&
+	    _get_stable_crush().name_exists(m->cmd[3])) {
 	  ss << "bucket '" << m->cmd[3] << "' already exists";
 	  err = 0;
 	  break;
 	}
-	int type = newcrush.get_type_id(m->cmd[4]);
-	if (type <= 0) {
-	  ss << "type '" << m->cmd[4] << "' does not exist";
-	  err = -EINVAL;
-	  break;
-	}
-	int bucketno = newcrush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT,
-					   type, 0, NULL, NULL);
-	newcrush.set_item_name(bucketno, m->cmd[3]);
 
-	pending_inc.crush.clear();
-	newcrush.encode(pending_inc.crush);
-	ss << "added bucket " << m->cmd[3] << " type " << m->cmd[4] << " to crush map";
+	CrushWrapper newcrush;
+	_get_pending_crush(newcrush);
+	if (newcrush.name_exists(m->cmd[3])) {
+	  ss << "bucket '" << m->cmd[3] << "' already exists";
+	  err = 0;
+	} else {
+	  int type = newcrush.get_type_id(m->cmd[4]);
+	  if (type <= 0) {
+	    ss << "type '" << m->cmd[4] << "' does not exist";
+	    err = -EINVAL;
+	    break;
+	  }
+	  int bucketno = newcrush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT,
+					     type, 0, NULL, NULL);
+	  newcrush.set_item_name(bucketno, m->cmd[3]);
+
+	  pending_inc.crush.clear();
+	  newcrush.encode(pending_inc.crush);
+	  ss << "added bucket " << m->cmd[3] << " type " << m->cmd[4] << " to crush map";
+	}
 	getline(ss, rs);
 	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
 	return true;
