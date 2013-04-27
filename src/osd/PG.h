@@ -716,6 +716,9 @@ protected:
   void requeue_object_waiters(map<hobject_t, list<OpRequestRef> >& m);
   void requeue_ops(list<OpRequestRef> &l);
 
+  // stats that persist lazily
+  object_stat_collection_t unstable_stats;
+
   // publish stats
   Mutex pg_stats_publish_lock;
   bool pg_stats_publish_valid;
