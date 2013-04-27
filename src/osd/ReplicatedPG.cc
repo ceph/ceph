@@ -3575,6 +3575,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   // read-op?  done?
   if (ctx->op_t.empty() && !ctx->modify) {
     ctx->reply_version = ctx->obs->oi.user_version;
+    unstable_stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
     return result;
   }
 
@@ -6335,6 +6336,7 @@ void ReplicatedPG::on_change()
   snap_trimmer_machine.process_event(Reset());
 
   debug_op_order.clear();
+  unstable_stats.clear();
 }
 
 void ReplicatedPG::on_role_change()
