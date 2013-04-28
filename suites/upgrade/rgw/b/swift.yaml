@@ -1,0 +1,4 @@
+tasks:
+- swift:
+    client.0:
+      rgw_server: client.0
