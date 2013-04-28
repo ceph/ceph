@@ -50,12 +50,12 @@ def _get_baseurlinfo_and_dist(ctx, remote, config):
 
     uri = None
     log.info('config is %s', config)
-    if config.get('sha1') is not None:
-        uri = 'sha1/' + config.get('sha1')
-    elif config.get('tag') is not None:
+    if config.get('tag') is not None:
         uri = 'ref/' + config.get('tag')
     elif config.get('branch') is not None:
         uri = 'ref/' + config.get('branch')
+    elif config.get('sha1') is not None:
+        uri = 'sha1/' + config.get('sha1')
     else:
         uri = 'ref/master'
     retval['uri'] = uri
