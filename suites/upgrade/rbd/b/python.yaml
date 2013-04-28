@@ -1,0 +1,6 @@
+tasks:
+- workunit:
+     branch: bobtail
+     clients:
+        client.0:
+           - rbd/test_librbd_python.sh
