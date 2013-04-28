@@ -473,7 +473,7 @@ def _upgrade_ceph_packages(ctx, remote, debs, ceph_branch):
             'sudo', 'apt-get', 'update', run.Raw('&&'),
             'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y', '--force-yes', 
             '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw('Dpkg::Options::="--force-confold"'),
-            'upgrade',
+            'install',
             ] + ['%s=%s' % (d, version) for d in debs],
         stdout=StringIO(),
         )
