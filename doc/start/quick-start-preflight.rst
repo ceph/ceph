@@ -30,6 +30,15 @@ hosts. For additional details on operating systems or to use other operating
 systems other than Debian or Ubuntu, see `OS Recommendations`_.
 
 
+Install an SSH Server
+=====================
+
+The ``ceph-deploy`` utility requires ``ssh``, so your server host(s) require an
+SSH server. ::
+
+	sudo apt-get install openssh-server
+
+
 Create a User
 =============
 
