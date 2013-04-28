@@ -142,7 +142,13 @@ start the cluster, execute the following::
 
 	sudo service ceph -a start
 
-See `Operating a Cluster`_ for details.
+See `Operating a Cluster`_ for details. Also see `man mkcephfs`_.
 
 .. _Authentication: ../authentication
 .. _Operating a Cluster: ../../operations/
+.. _man mkcephfs: ../../../man/8/mkcephfs
+
+.. toctree:: 
+   :hidden: 
+   
+   ../../../man/8/mkcephfs
