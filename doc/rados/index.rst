@@ -31,7 +31,7 @@ of creating and initializing data directories,  keys, etc.
 
 	</td><td><h3>Operations</h3>
 
-Once you have a deployed Ceph cluster, you may begin  operating your cluster.
+Once you have a deployed Ceph cluster, you may begin operating your cluster.
 
 .. toctree::
 	:maxdepth: 2
