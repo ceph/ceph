@@ -1,6 +1,6 @@
 tasks:
 - s3readwrite:
-    client.0:
+    client.1:
       rgw_server: client.0
       readwrite:
         bucket: rwtest

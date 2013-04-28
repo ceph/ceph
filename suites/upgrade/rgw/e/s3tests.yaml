@@ -1,4 +1,4 @@
 tasks:
 - s3tests:
-    client.0:
+    client.1:
       rgw_server: client.0
