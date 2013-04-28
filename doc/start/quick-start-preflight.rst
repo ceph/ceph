@@ -52,10 +52,10 @@ the user you create requires passwordless ``sudo`` priveleges.
    for security reasons. 
 
 To provide full privileges to the user, add the following to 
-``/etc/sudoers.d/chef``. ::
+``/etc/sudoers.d/ceph``. ::
 
-	echo "chef ALL = (root) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/chef
-	sudo chmod 0440 /etc/sudoers.d/chef
+	echo "ceph ALL = (root) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/ceph
+	sudo chmod 0440 /etc/sudoers.d/ceph
 
 
 Configure SSH
