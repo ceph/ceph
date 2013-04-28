@@ -20,6 +20,16 @@ Install a recent release of Debian or Ubuntu (e.g., 12.04, 12.10) on your
 hosts. For additional details on operating systems or to use other operating
 systems other than Debian or Ubuntu, see `OS Recommendations`_.
 
+
+Install an SSH Server
+=====================
+
+The ``ceph-deploy`` utility requires ``ssh``, so your server host(s) require an
+SSH server. ::
+
+	sudo apt-get install openssh-server
+
+
 Create a User
 =============
 
@@ -44,8 +54,8 @@ the user you create requires passwordless ``sudo`` priveleges.
 To provide full privileges to the user, add the following to 
 ``/etc/sudoers.d/chef``. ::
 
-	echo "chef ALL = (root) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/chef
-	sudo chmod 0440 /etc/sudoers.d/chef
+	echo "ceph ALL = (root) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/ceph
+	sudo chmod 0440 /etc/sudoers.d/ceph
 
 
 Configure SSH
@@ -113,3 +123,4 @@ remaining in ``ceph-deploy``  directory (e.g., ``/etc/environment``,
 ``~/.pam_environment``). Once you have completed this pre-flight checklist, you
 are ready to begin using ``ceph-deploy``.
 
+.. _OS Recommendations: ../../../install/os-recommendations
