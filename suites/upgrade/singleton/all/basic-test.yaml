@@ -12,6 +12,13 @@ tasks:
 - install:
      branch: bobtail
 - ceph:
+    conf:
+      mds:
+        debug mds: 20
+        debug ms: 1
+      client: 
+        debug ms: 1
+        debug client: 20
 - install.upgrade:
      all:
         branch: next
