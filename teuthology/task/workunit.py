@@ -232,8 +232,6 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None):
         scratch_tmp = os.path.join(mnt, subdir)
     srcdir = '{tdir}/workunit.{role}'.format(tdir=testdir, role=role)
 
-    ceph_ref = ctx.summary.get('ceph-sha1', 'master')
-
     remote.run(
         logger=log.getChild(role),
         args=[
@@ -278,7 +276,7 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None):
                     run.Raw('&&'),
                     'cd', '--', scratch_tmp,
                     run.Raw('&&'),
-                    run.Raw('CEPH_REF={ref}'.format(ref=ceph_ref)),
+                    run.Raw('CEPH_REF={ref}'.format(ref=refspec)),
                     run.Raw('TESTDIR="{tdir}"'.format(tdir=testdir)),
                     run.Raw('CEPH_ID="{id}"'.format(id=id_)),
                     run.Raw('PYTHONPATH="$PYTHONPATH:{tdir}/binary/usr/local/lib/python2.7/dist-packages:{tdir}/binary/usr/local/lib/python2.6/dist-packages"'.format(tdir=testdir)),
