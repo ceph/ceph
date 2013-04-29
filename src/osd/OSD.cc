@@ -1707,8 +1707,10 @@ void OSD::load_pgs()
        ++it) {
     pg_t pgid;
     snapid_t snap;
+    uint64_t seq;
 
-    if (it->is_temp(pgid)) {
+    if (it->is_temp(pgid) ||
+	it->is_removal(&seq, &pgid)) {
       dout(10) << "load_pgs " << *it << " clearing temp" << dendl;
       clear_temp(store, *it);
       continue;
@@ -1723,21 +1725,6 @@ void OSD::load_pgs()
 	pgs[pgid];
 	head_pgs.insert(pgid);
       }
-      continue;
-    }
-
-    uint64_t seq;
-    if (it->is_removal(&seq, &pgid)) {
-      if (seq >= next_removal_seq)
-	next_removal_seq = seq + 1;
-      dout(10) << "load_pgs queueing " << *it << " for removal, seq is "
-	       << seq << " pgid is " << pgid << dendl;
-      boost::tuple<coll_t, SequencerRef, DeletingStateRef> *to_queue =
-	new boost::tuple<coll_t, SequencerRef, DeletingStateRef>;
-      to_queue->get<0>() = *it;
-      to_queue->get<1>() = service.osr_registry.lookup_or_create(pgid, stringify(pgid));
-      to_queue->get<2>() = service.deleting_pgs.lookup_or_create(pgid);
-      remove_wq.queue(to_queue);
       continue;
     }
 
