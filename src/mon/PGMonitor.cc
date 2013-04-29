@@ -220,6 +220,13 @@ void PGMonitor::update_from_paxos()
   update_logger();
 }
 
+void PGMonitor::init()
+{
+  if (mon->osdmon()->osdmap.get_epoch()) {
+    map_pg_creates();
+  }
+}
+
 void PGMonitor::handle_osd_timeouts()
 {
   if (!mon->is_leader())
