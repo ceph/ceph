@@ -40,6 +40,7 @@ Makefile
 /ceph_smalliobenchdumb
 /ceph_smalliobenchfs
 /ceph_smalliobenchrbd
+/ceph_monstore_tool
 /ceph_ver.h
 /dev
 /init-ceph
