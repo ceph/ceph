@@ -373,6 +373,7 @@ int get_creds(string& json, string& creds) {
     /*cout << "accesskeys [ " << it->first << " ] = " << 
       "{ " << _k.id << ", " << _k.key << ", " << _k.subuser << "}" << std::endl;*/
     creds.append(it->first + string(":") + _k.key);
+    break;
   }
   return 0;
 }
@@ -652,7 +653,7 @@ TEST(TestRGWAdmin, meta_get){
  
   /*Check with a wrong parameter*/
   g_test->send_request(string("GET"), string("/admin/metadata/user?keys=test"));
-  EXPECT_EQ(400U, g_test->get_resp_code());
+  EXPECT_EQ(405U, g_test->get_resp_code());
   g_test->send_request(string("GET"), string("/admin/metadata/user?key=test"));
   EXPECT_EQ(404U, g_test->get_resp_code());
 
