@@ -6271,7 +6271,10 @@ void ReplicatedPG::on_removal(ObjectStore::Transaction *t)
 {
   dout(10) << "on_removal" << dendl;
 
-  clear_info_log(info.pgid, osd->infos_oid, log_oid, t);
+  // adjust info to backfill
+  info.last_backfill = hobject_t();
+  dirty_info = true;
+  write_if_dirty(*t);
 
   on_shutdown();
 }
