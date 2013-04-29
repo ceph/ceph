@@ -634,6 +634,13 @@ void Monitor::bootstrap()
 
   reset();
 
+  // sync store
+  if (g_conf->mon_compact_on_bootstrap) {
+    dout(10) << "bootstrap -- triggering compaction" << dendl;
+    store->compact();
+    dout(10) << "bootstrap -- finished compaction" << dendl;
+  }
+
   // singleton monitor?
   if (monmap->size() == 1 && rank == 0) {
     win_standalone_election();
