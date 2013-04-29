@@ -1299,13 +1299,9 @@ int Client::make_request(MetaRequest *request,
 
       // wait
       if (session->state == MetaSession::STATE_OPENING) {
-	Cond session_cond;
-	session->waiting_for_open.push_back(&session_cond);
-	while (session->state == MetaSession::STATE_OPENING) {
-	  ldout(cct, 10) << "waiting for session to mds." << mds << " to open" << dendl;
-	  session_cond.Wait(client_lock);
-	}
-	session->waiting_for_open.remove(&session_cond);
+	ldout(cct, 10) << "waiting for session to mds." << mds << " to open" << dendl;
+	wait_on_list(session->waiting_for_open);
+	continue;
       }
 
       if (!have_open_session(mds))
@@ -1688,8 +1684,8 @@ void Client::handle_client_reply(MClientReply *reply)
   bool is_safe = reply->is_safe();
 
   if (mds_requests.count(tid) == 0) {
-    ldout(cct, 10) << "handle_client_reply no pending request on tid " << tid
-	     << " safe is:" << is_safe << dendl;
+    lderr(cct) << "handle_client_reply no pending request on tid " << tid
+	       << " safe is:" << is_safe << dendl;
     reply->put();
     return;
   }
