@@ -33,6 +33,11 @@ class LevelDBStore : public KeyValueDB {
   int init(ostream &out, bool create_if_missing);
 
 public:
+  /// compact the underlying leveldb store
+  void compact() {
+    db->CompactRange(NULL, NULL);
+  }
+
   /**
    * options_t: Holds options which are minimally interpreted
    * on initialization and then passed through to LevelDB.
