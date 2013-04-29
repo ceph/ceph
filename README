@@ -76,7 +76,7 @@ To build the documentation, you must install the following:
 
 - python-dev
 - python-pip
-- python-virualenv
+- python-virtualenv
 - doxygen
 - ditaa
 - libxml2-dev
@@ -86,7 +86,7 @@ To build the documentation, you must install the following:
 
 For example:
 
-	sudo apt-get install python-dev python-pip python-virualenv doxygen ditaa libxml2-dev libxslt-dev dot graphviz
+	sudo apt-get install python-dev python-pip python-virtualenv doxygen ditaa libxml2-dev libxslt-dev dot graphviz
 
 Building the Documentation
 --------------------------
