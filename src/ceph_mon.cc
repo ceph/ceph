@@ -114,6 +114,7 @@ int main(int argc, const char **argv)
   int err;
 
   bool mkfs = false;
+  bool compact = false;
   std::string osdmapfn, inject_monmap;
 
   vector<const char*> args;
@@ -132,6 +133,8 @@ int main(int argc, const char **argv)
       exit(0);
     } else if (ceph_argparse_flag(args, i, "--mkfs", (char*)NULL)) {
       mkfs = true;
+    } else if (ceph_argparse_flag(args, i, "--compact", (char*)NULL)) {
+      compact = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--osdmap", (char*)NULL)) {
       osdmapfn = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--inject_monmap", (char*)NULL)) {
@@ -473,6 +476,12 @@ int main(int argc, const char **argv)
   err = mon->preinit();
   if (err < 0)
     return 1;
+
+  if (compact || g_conf->mon_compact_on_start) {
+    derr << "compacting monitor store ..." << dendl;
+    mon->store->compact();
+    derr << "done compacting" << dendl;
+  }
 
   global_init_daemonize(g_ceph_context, 0);
   common_init_finish(g_ceph_context);
