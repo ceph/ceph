@@ -447,7 +447,8 @@ int XMLArgs::parse()
     if (ret >= 0) {
       string& name = nv.get_name();
       string& val = nv.get_val();
-      val_map[name] = val;
+      if(name.length() > 0)
+        val_map[name] = val;
 
       if ((name.compare("acl") == 0) ||
           (name.compare("location") == 0) ||
@@ -466,9 +467,9 @@ int XMLArgs::parse()
            (name.compare("response-cache-control") == 0) ||
            (name.compare("response-content-disposition") == 0) ||
            (name.compare("response-content-encoding") == 0)) {
-	  sub_resources[name] = val;
-	  has_resp_modifier = true;
-	}
+          sub_resources[name] = val;
+          has_resp_modifier = true;
+        }
       } else if  ((name.compare("subuser") == 0) ||
           (name.compare("key") == 0) ||
           (name.compare("caps") == 0) ||
