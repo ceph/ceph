@@ -153,7 +153,7 @@ public:
     }
 
   };
-  template<typename T, typename U>
+  template<typename T, typename U = T>
   class WorkQueueVal : public WorkQueue_ {
     Mutex _lock;
     ThreadPool *pool;
