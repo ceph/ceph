@@ -338,6 +338,14 @@ public:
   virtual void update_from_paxos() = 0;
 
   /**
+   * Init on startup
+   *
+   * This is called on mon startup, after all of the PaxosService instances'
+   * update_from_paxos() methods have been called
+   */
+  virtual void init() {}
+
+  /**
    * Create the pending state.
    *
    * @invariant This function is only called on a Leader.
