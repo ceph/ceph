@@ -52,6 +52,7 @@ private:
 
   void create_initial();
   void update_from_paxos();
+  void init();
   void handle_osd_timeouts();
   void create_pending();  // prepare a new pending
   // propose pending update to peers
@@ -109,6 +110,7 @@ private:
    */
   bool register_new_pgs();
 
+  void map_pg_creates();
   void send_pg_creates();
   void send_pg_creates(int osd, Connection *con);
 
