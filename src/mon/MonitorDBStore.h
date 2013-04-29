@@ -456,6 +456,10 @@ class MonitorDBStore
     return db->create_and_open(out);
   }
 
+  void compact() {
+    db->compact();
+  }
+
   MonitorDBStore(const string& path) : db(0) {
     string::const_reverse_iterator rit;
     int pos = 0;
