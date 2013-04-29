@@ -29,15 +29,7 @@ def download(ctx, config):
     try:
         yield
     finally:
-        log.info('Removing swift...')
-        for client in config:
-            ctx.cluster.only(client).run(
-                args=[
-                    'rm',
-                    '-rf',
-                    '{tdir}/swift'.format(tdir=testdir),
-                    ],
-                )
+        cleanup_tests(ctx, config)
 
 def _config_user(testswift_conf, account, user, suffix):
     testswift_conf['func_test'].setdefault('account{s}'.format(s=suffix), account);
@@ -134,6 +126,18 @@ def run_tests(ctx, config):
             )
     yield
 
+@contextlib.contextmanager
+def cleanup_tests(ctx, config):
+    log.info('Removing swift...')
+    testdir = teuthology.get_testdir(ctx)
+    for client in config:
+        ctx.cluster.only(client).run(
+            args=[
+                'rm',
+                '-rf',
+                '{tdir}/swift'.format(tdir=testdir),
+                ],
+            )
 
 @contextlib.contextmanager
 def task(ctx, config):
@@ -212,5 +216,6 @@ def task(ctx, config):
                 testswift_conf=testswift_conf,
                 )),
         lambda: run_tests(ctx=ctx, config=config),
+        lambda: cleanup_tests(ctx=ctx, config=config),
         ):
         yield
