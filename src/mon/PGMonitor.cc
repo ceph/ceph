@@ -212,8 +212,10 @@ void PGMonitor::update_from_paxos()
 
   update_trim();
 
-  map_pg_creates();
-  send_pg_creates();
+  if (mon->osdmon()->osdmap.get_epoch()) {
+    map_pg_creates();
+    send_pg_creates();
+  }
 
   update_logger();
 }
@@ -665,8 +667,10 @@ void PGMonitor::check_osd_map(epoch_t epoch)
   if (propose)
     propose_pending();
 
-  map_pg_creates();
-  send_pg_creates();
+  if (mon->osdmon()->osdmap.get_epoch()) {
+    map_pg_creates();
+    send_pg_creates();
+  }
 }
 
 void PGMonitor::register_pg(pg_pool_t& pool, pg_t pgid, epoch_t epoch, bool new_pool)
