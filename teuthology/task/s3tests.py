@@ -42,15 +42,7 @@ def do_download(ctx, config):
     try:
         yield
     finally:
-        log.info('Removing s3-tests...')
-        for client in config:
-            ctx.cluster.only(client).run(
-                args=[
-                    'rm',
-                    '-rf',
-                    '{tdir}/s3-tests'.format(tdir=testdir),
-                    ],
-                )
+        cleanup_tests(ctx, config)
 
 @contextlib.contextmanager
 def download(ctx, config):
@@ -158,6 +150,20 @@ def run_tests(ctx, config):
     yield
 
 @contextlib.contextmanager
+def cleanup_tests(ctx, config):
+    log.info('Removing s3-tests...')
+    testdir = teuthology.get_testdir(ctx)
+    for client in config:
+        ctx.cluster.only(client).run(
+            args=[
+                'rm',
+                '-rf',
+                '{tdir}/s3-tests'.format(tdir=testdir),
+                ],
+            )
+    yield
+
+@contextlib.contextmanager
 def task(ctx, config):
     """
     Run the s3-tests suite against rgw.
@@ -241,5 +247,6 @@ def task(ctx, config):
                 s3tests_conf=s3tests_conf,
                 )),
         lambda: run_tests(ctx=ctx, config=config),
+        lambda: cleanup_tests(ctx=ctx, config=config),
         ):
         yield
