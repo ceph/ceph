@@ -1507,6 +1507,12 @@ int OSD::read_superblock()
 
 void OSD::clear_temp(ObjectStore *store, coll_t tmp)
 {
+  OSDriver driver(
+    store,
+    coll_t(),
+    make_snapmapper_oid());
+  SnapMapper mapper(&driver, 0, 0, 0);
+
   vector<hobject_t> objects;
   store->collection_list(tmp, objects);
 
@@ -1516,6 +1522,10 @@ void OSD::clear_temp(ObjectStore *store, coll_t tmp)
   for (vector<hobject_t>::iterator p = objects.begin();
        p != objects.end();
        ++p, removed++) {
+    OSDriver::OSTransaction _t(driver.get_transaction(&t));
+    int r = mapper.remove_oid(*p, &_t);
+    if (r != 0 && r != -ENOENT)
+      assert(0);
     t.collection_remove(tmp, *p);
     if (removed > 300) {
       int r = store->apply_transaction(t);
