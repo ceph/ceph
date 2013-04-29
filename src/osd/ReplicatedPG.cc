@@ -1039,7 +1039,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
   if (ctx->op_t.empty() || result < 0) {
     if (result >= 0) {
       log_op_stats(ctx);
-      update_stats();
+      publish_stats_to_osd();
     }
     
     MOSDOpReply *reply = ctx->reply;
@@ -3879,7 +3879,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
     if (repop->waitfor_disk.empty()) {
 
       log_op_stats(repop->ctx);
-      update_stats();
+      publish_stats_to_osd();
 
       // send dup commits, in order
       if (waiting_for_ondisk.count(repop->v)) {
@@ -5454,7 +5454,7 @@ void ReplicatedPG::handle_pull_response(OpRequestRef op)
   if (complete) {
     pulling.erase(hoid);
     pull_from_peer[m->get_source().num()].erase(hoid);
-    update_stats();
+    publish_stats_to_osd();
     if (waiting_for_missing_object.count(hoid)) {
       dout(20) << " kicking waiters on " << hoid << dendl;
       requeue_ops(waiting_for_missing_object[hoid]);
@@ -5701,7 +5701,7 @@ void ReplicatedPG::sub_op_push_reply(OpRequestRef op)
       pushing[soid].erase(peer);
       pi = NULL;
       
-      update_stats();
+      publish_stats_to_osd();
       
       if (pushing[soid].empty()) {
 	pushing.erase(soid);
@@ -7277,7 +7277,7 @@ void ReplicatedPG::_scrub_finish()
     if (repair) {
       ++scrubber.fixed;
       info.stats.stats = scrub_cstat;
-      update_stats();
+      publish_stats_to_osd();
       share_pg_info();
     }
   }
