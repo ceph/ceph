@@ -2629,6 +2629,21 @@ void PG::write_info(ObjectStore::Transaction& t)
   dirty_big_info = false;
 }
 
+void PG::clear_info_log(
+  pg_t pgid,
+  const hobject_t &infos_oid,
+  const hobject_t &log_oid,
+  ObjectStore::Transaction *t) {
+
+  set<string> keys_to_remove;
+  keys_to_remove.insert(get_epoch_key(pgid));
+  keys_to_remove.insert(get_biginfo_key(pgid));
+  keys_to_remove.insert(get_info_key(pgid));
+
+  t->remove(coll_t::META_COLL, log_oid);
+  t->omap_rmkeys(coll_t::META_COLL, infos_oid, keys_to_remove);
+}
+
 epoch_t PG::peek_map_epoch(ObjectStore *store, coll_t coll, hobject_t &infos_oid, bufferlist *bl)
 {
   assert(bl);

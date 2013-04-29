@@ -5834,6 +5834,13 @@ void OSD::_remove_pg(PG *pg)
 {
   vector<coll_t> removals;
   ObjectStore::Transaction *rmt = new ObjectStore::Transaction;
+
+  // on_removal, which calls remove_watchers_and_notifies, and the erasure from
+  // the pg_map must be done together without unlocking the pg lock,
+  // to avoid racing with watcher cleanup in ms_handle_reset
+  // and handle_notify_timeout
+  pg->on_removal(rmt);
+
   coll_t to_remove = get_next_removal_coll(pg->info.pgid);
   removals.push_back(to_remove);
   rmt->collection_rename(coll_t(pg->info.pgid), to_remove);
@@ -5842,8 +5849,6 @@ void OSD::_remove_pg(PG *pg)
     removals.push_back(to_remove);
     rmt->collection_rename(pg->get_temp_coll(), to_remove);
   }
-  rmt->remove(coll_t::META_COLL, pg->log_oid);
-  rmt->remove(coll_t::META_COLL, pg->biginfo_oid);
 
   store->queue_transaction(
     pg->osr.get(), rmt,
@@ -5851,12 +5856,6 @@ void OSD::_remove_pg(PG *pg)
       SequencerRef>(rmt, pg->osr),
     new ContainerContext<
       SequencerRef>(pg->osr));
-
-  // on_removal, which calls remove_watchers_and_notifies, and the erasure from 
-  // the pg_map must be done together without unlocking the pg lock,
-  // to avoid racing with watcher cleanup in ms_handle_reset
-  // and handle_notify_timeout
-  pg->on_removal();
 
   DeletingStateRef deleting = service.deleting_pgs.lookup_or_create(pg->info.pgid);
   for (vector<coll_t>::iterator i = removals.begin();

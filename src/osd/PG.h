@@ -1854,7 +1854,13 @@ public:
 private:
   void write_info(ObjectStore::Transaction& t);
   void write_log(ObjectStore::Transaction& t);
+
 public:
+  static void clear_info_log(
+    pg_t pgid,
+    const hobject_t &infos_oid,
+    const hobject_t &log_oid,
+    ObjectStore::Transaction *t);
 
   static int _write_info(ObjectStore::Transaction& t, epoch_t epoch,
     pg_info_t &info, coll_t coll,
@@ -1969,7 +1975,7 @@ public:
   void handle_loaded(RecoveryCtx *rctx);
   void handle_query_state(Formatter *f);
 
-  virtual void on_removal() = 0;
+  virtual void on_removal(ObjectStore::Transaction *t) = 0;
 
 
   // abstract bits
