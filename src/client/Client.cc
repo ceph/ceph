@@ -1299,13 +1299,9 @@ int Client::make_request(MetaRequest *request,
 
       // wait
       if (session->state == MetaSession::STATE_OPENING) {
-	Cond session_cond;
-	session->waiting_for_open.push_back(&session_cond);
-	while (session->state == MetaSession::STATE_OPENING) {
-	  ldout(cct, 10) << "waiting for session to mds." << mds << " to open" << dendl;
-	  session_cond.Wait(client_lock);
-	}
-	session->waiting_for_open.remove(&session_cond);
+	ldout(cct, 10) << "waiting for session to mds." << mds << " to open" << dendl;
+	wait_on_list(session->waiting_for_open);
+	continue;
       }
 
       if (!have_open_session(mds))
