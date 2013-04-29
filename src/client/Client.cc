@@ -1684,8 +1684,8 @@ void Client::handle_client_reply(MClientReply *reply)
   bool is_safe = reply->is_safe();
 
   if (mds_requests.count(tid) == 0) {
-    ldout(cct, 10) << "handle_client_reply no pending request on tid " << tid
-	     << " safe is:" << is_safe << dendl;
+    lderr(cct) << "handle_client_reply no pending request on tid " << tid
+	       << " safe is:" << is_safe << dendl;
     reply->put();
     return;
   }
