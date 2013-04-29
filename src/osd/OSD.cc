@@ -5834,17 +5834,6 @@ void OSD::_remove_pg(PG *pg)
 {
   vector<coll_t> removals;
   ObjectStore::Transaction *rmt = new ObjectStore::Transaction;
-  for (interval_set<snapid_t>::iterator p = pg->snap_collections.begin();
-       p != pg->snap_collections.end();
-       ++p) {
-    for (snapid_t cur = p.get_start();
-	 cur < p.get_start() + p.get_len();
-	 ++cur) {
-      coll_t to_remove = get_next_removal_coll(pg->info.pgid);
-      removals.push_back(to_remove);
-      rmt->collection_rename(coll_t(pg->info.pgid, cur), to_remove);
-    }
-  }
   coll_t to_remove = get_next_removal_coll(pg->info.pgid);
   removals.push_back(to_remove);
   rmt->collection_rename(coll_t(pg->info.pgid), to_remove);
