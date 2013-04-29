@@ -510,10 +510,18 @@ void Monitor::init_paxos()
 {
   dout(10) << __func__ << dendl;
   paxos->init();
-  // init paxos
+
+  // update paxos
   for (int i = 0; i < PAXOS_NUM; ++i) {
     if (paxos->is_consistent()) {
       paxos_service[i]->update_from_paxos();
+    }
+  }
+
+  // init services
+  for (int i = 0; i < PAXOS_NUM; ++i) {
+    if (paxos->is_consistent()) {
+      paxos_service[i]->init();
     }
   }
 }
