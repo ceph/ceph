@@ -12,6 +12,8 @@ tasks:
 - install:
      branch: bobtail
 - ceph:
+    log-whitelist:
+      - wrongly marked
 - ceph-fuse:
 - workunit:
      clients:
