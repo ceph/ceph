@@ -35,9 +35,16 @@ JAVA_H = native/com_ceph_fs_CephMount.h
 # target to make automake happy
 CEPH_PROXY=java/com/ceph/fs/CephMount.class
 
+# note: for the -source 1.5 builds, we add
+#   -Xlint:-options
+# to get rid of the warning
+#   warning: [options] bootstrap class path not set in conjunction with -source 1.5
+# as per
+#   https://blogs.oracle.com/darcy/entry/bootclasspath_older_source
+
 $(CEPH_PROXY): $(JAVA_SRC)
 	export CLASSPATH=java/ ; \
-	$(JAVAC) -source 1.5 -target 1.5 java/com/ceph/fs/*.java
+	$(JAVAC) -source 1.5 -target 1.5 -Xlint:-options java/com/ceph/fs/*.java
 
 $(JAVA_H): $(CEPH_PROXY)
 	export CLASSPATH=java/ ; \
@@ -63,7 +70,7 @@ CEPH_TEST_PROXY=test/com/ceph/fs/CephMountTest.class
 
 $(CEPH_TEST_PROXY): $(JAVA_TEST_SRC) $(CEPH_PROXY)
 	export CLASSPATH=$(CLASSPATH):$(EXTRA_CLASSPATH_JAR):java/:test/ ; \
-	$(JAVAC) -source 1.5 -target 1.5 test/com/ceph/fs/*.java
+	$(JAVAC) -source 1.5 -target 1.5 -Xlint:-options test/com/ceph/fs/*.java
 
 libcephfs-test.jar: $(CEPH_TEST_PROXY)
 	$(JAR) cf $@ $(JAVA_TEST_CLASSES:%=-C test %) $(ESCAPED_JAVA_TEST_CLASSES:%=-C test %)
