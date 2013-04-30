@@ -110,8 +110,8 @@ To begin working with ``ceph-deploy``, clone its repository. ::
 	git clone https://github.com/ceph/ceph-deploy.git ceph-deploy
 
 
-Install python-virualenv
-========================
+Install python-virtualenv
+=========================
 
 To bootstrap ``ceph-deploy`` and run it, you must install the
 ``python-virtualenv`` package. :: 
