@@ -52,9 +52,10 @@ def create_users(ctx, config):
     assert isinstance(config, dict)
     log.info('Creating rgw users...')
     testdir = teuthology.get_testdir(ctx)
+    users = {'': 'foo', '2': 'bar'}
     for client in config['clients']:
         testswift_conf = config['testswift_conf'][client]
-        for user, suffix in [('foo', ''), ('bar', '2')]:
+        for suffix, user in users.iteritems():
             _config_user(testswift_conf, '{user}.{client}'.format(user=user, client=client), user, suffix)
             ctx.cluster.only(client).run(
                 args=[
@@ -70,8 +71,23 @@ def create_users(ctx, config):
                     '--key-type', 'swift',
                 ],
             )
-    yield
-
+    try:
+        yield
+    finally:
+        for client in config['clients']:
+            for user in users.itervalues():
+                uid = '{user}.{client}'.format(user=user, client=client)
+                ctx.cluster.only(client).run(
+                    args=[
+                        '{tdir}/enable-coredump'.format(tdir=testdir),
+                        'ceph-coverage',
+                        '{tdir}/archive/coverage'.format(tdir=testdir),
+                        'radosgw-admin',
+                        'user', 'rm',
+                        '--uid', uid,
+                        '--purge-data',
+                        ],
+                    )
 
 @contextlib.contextmanager
 def configure(ctx, config):
