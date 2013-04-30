@@ -138,6 +138,7 @@ def cleanup_tests(ctx, config):
                 '{tdir}/swift'.format(tdir=testdir),
                 ],
             )
+    yield
 
 @contextlib.contextmanager
 def task(ctx, config):

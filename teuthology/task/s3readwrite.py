@@ -152,6 +152,7 @@ def cleanup_tests(ctx, config):
                 '{tdir}/s3-tests'.format(tdir=teuthology.get_testdir(ctx)),
                 ],
             )
+    yield
 
 @contextlib.contextmanager
 def task(ctx, config):
