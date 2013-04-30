@@ -27,7 +27,7 @@ set -e
 case "$1" in
     configure)
 	rm -f /etc/init/ceph.conf
-	start ceph-all || :
+	[ -x /sbin/start ] && start ceph-all || :
     ;;
     abort-upgrade|abort-remove|abort-deconfigure)
 	:

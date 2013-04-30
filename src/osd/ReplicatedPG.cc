@@ -6241,9 +6241,11 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
   waiting_for_ack.clear();
 }
 
-void ReplicatedPG::on_removal()
+void ReplicatedPG::on_removal(ObjectStore::Transaction *t)
 {
   dout(10) << "on_removal" << dendl;
+
+  clear_info_log(info.pgid, osd->infos_oid, log_oid, t);
 
   on_shutdown();
 }

@@ -13,12 +13,13 @@ Object Store. A Ceph object store cluster has three essential daemons:
 
 - **OSDs**: Object Storage Daemons (OSDs) store data, handle data replication, 
   recovery, backfilling, rebalancing, and provide some monitoring information
-  to Ceph monitors by checking other OSDs for a heartbeat.
+  to Ceph monitors by checking other OSDs for a heartbeat. A cluster requires
+  at least two OSDs to achieve an ``active + clean`` state.
   
 - **Monitors**: Ceph monitors maintain maps of the cluster state, including 
   the monitor map, the OSD map, the Placement Group (PG) map, and the CRUSH 
   map. Ceph maintains a history (called an "epoch") of each state change in 
-  the monitors, OSDs, or PGs.
+  the monitors, OSDs, and PGs.
 
 - **MDSs**: Metadata Servers (MDSs) store metadata on behalf of the CephFS
   filesystem (i.e., Ceph block devices and Ceph gateways do not use MDS).
@@ -30,7 +31,11 @@ Object Store. A Ceph object store cluster has three essential daemons:
 .. raw:: html
 
 	<style type="text/css">div.body h3{margin:5px 0px 0px 0px;}</style>
-	<table cellpadding="10"><colgroup><col width="25%"><col width="25%"><col width="25%"><col width="25%"></colgroup><tbody valign="top"><tr><td><h3>Step 1: Preflight</h3>
+	<table cellpadding="10"><colgroup><col width="33%"><col width="33%"><col width="33%"></colgroup><tbody valign="top"><tr><td><h3>Step 1: Preflight</h3>
+
+Client and server machines may require some basic configuration work prior to
+deploying a Ceph cluster. You can also avail yourself of help from the Ceph 
+community by getting involved.
 
 .. toctree::
 
@@ -40,6 +45,9 @@ Object Store. A Ceph object store cluster has three essential daemons:
 .. raw:: html 
 
 	</td><td><h3>Step 2: Object Store</h3>
+	
+Once you've completed your preflight checklist,  you should be able to begin
+deploying a Ceph cluster.
 
 .. toctree::
 
@@ -49,6 +57,9 @@ Object Store. A Ceph object store cluster has three essential daemons:
 .. raw:: html 
 
 	</td><td><h3>Step 3: Ceph Client(s)</h3>
+	
+Most Ceph users don't store objects directly. They typically use at least one of
+Ceph block devices, the CephFS filesystem, and the RESTful gateway.
 
 .. toctree::
 	
@@ -57,18 +68,21 @@ Object Store. A Ceph object store cluster has three essential daemons:
    Gateway Quick Start <quick-rgw>
 
 
-.. raw:: html 
-
-	</td><td><h3>Step 4: Expand Your Cluster</h3>
-	
-	<placeholder>
-
 .. raw:: html
 
 	</td></tr></tbody></table>
 
+For releases prior to Cuttlefish, see the `5-minute Quick Start`_ for deploying
+with `mkcephfs`_. To transition  a cluster deployed with ``mkcephfs`` for use
+with ``ceph-deploy``, see `Transitioning to ceph-deploy`_.
 
+.. _5-minute Quick Start: quick-start 
+.. _mkcephfs: ../rados/deployment/mkcephfs
+.. _Transitioning to ceph-deploy: ../rados/deployment/ceph-deploy-transition
 
 .. toctree::
+   :hidden:
+	
+   quick-start
 
 

@@ -128,6 +128,13 @@ ceph_filestore_dump_LDADD += -ldl
 endif
 bin_PROGRAMS += ceph ceph-conf ceph-authtool ceph_filestore_dump
 
+ceph_monstore_tool_SOURCES = tools/ceph-monstore-tool.cc \
+			  os/LevelDBStore.cc
+ceph_monstore_tool_LDFLAGS = ${AM_LDFLAGS}
+ceph_monstore_tool_LDADD =  $(LIBOS_LDA) $(LIBGLOBAL_LDA) -lboost_program_options
+ceph_monstore_tool_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_PROGRAMS += ceph_monstore_tool
+
 monmaptool_SOURCES = monmaptool.cc
 monmaptool_LDADD = $(LIBGLOBAL_LDA)
 crushtool_SOURCES = crushtool.cc

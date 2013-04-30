@@ -451,7 +451,7 @@ int header::get_header()
   ssize_t bytes;
 
   bytes = ebl.read_fd(file_fd, sh.header_size);
-  if (bytes != sh.header_size) {
+  if ((size_t)bytes != sh.header_size) {
     cout << "Unexpected EOF" << std::endl;
     return EFAULT;
   }
@@ -468,7 +468,7 @@ int footer::get_footer()
   ssize_t bytes;
 
   bytes = ebl.read_fd(file_fd, sh.footer_size);
-  if (bytes != sh.footer_size) {
+  if ((size_t)bytes != sh.footer_size) {
     cout << "Unexpected EOF" << std::endl;
     return EFAULT;
   }
@@ -694,7 +694,7 @@ int super_header::read_super()
   ssize_t bytes;
 
   bytes = ebl.read_fd(file_fd, super_header::FIXED_LENGTH);
-  if (bytes != super_header::FIXED_LENGTH) {
+  if ((size_t)bytes != super_header::FIXED_LENGTH) {
     cout << "Unexpected EOF" << std::endl;
     return EFAULT;
   }
