@@ -1213,3 +1213,16 @@ bool DBObjectMap::check_spos(const hobject_t &hoid,
     return true;
   }
 }
+
+int DBObjectMap::list_objects(vector<hobject_t> *out)
+{
+  KeyValueDB::Iterator iter = db->get_iterator(HOBJECT_TO_SEQ);
+  for (iter->seek_to_first(); iter->valid(); iter->next()) {
+    bufferlist bl = iter->value();
+    bufferlist::iterator bliter = bl.begin();
+    _Header header;
+    header.decode(bliter);
+    out->push_back(header.hoid);
+  }
+  return 0;
+}
