@@ -142,30 +142,26 @@ def start_rgw(ctx, config):
 
         run_cmd.extend(run_cmd_tail)
 
-        proc = remote.run(
+        ctx.daemons.add_daemon(
+            remote, 'rgw', client,
             args=run_cmd,
             logger=log.getChild(client),
             stdin=run.PIPE,
             wait=False,
             )
-        rgws[client] = proc
 
     try:
         yield
     finally:
-        log.info('Stopping rgw...')
-        for client, proc in rgws.iteritems():
-            proc.stdin.close()
-
+        teuthology.stop_daemons_of_type(ctx, 'rgw')
+        for client in config.iterkeys():
             ctx.cluster.only(client).run(
                 args=[
                     'rm',
-                    '-rf',
+                    '-f',
                     '{tdir}/rgw.opslog.sock'.format(tdir=testdir),
-                     ],
-             )
-
-        run.wait(rgws.itervalues())
+                    ],
+                )
 
 
 @contextlib.contextmanager
