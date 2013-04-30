@@ -159,10 +159,6 @@ void RGWOp_Metadata_Delete::execute() {
 }
 
 RGWOp *RGWHandler_Metadata::op_get() {
-  if (s->args.get_num_params() > 0 && 
-      !s->args.exists("key")) {
-    return NULL;
-  }
   if (s->args.exists("key"))
     return new RGWOp_Metadata_Get;
   else
