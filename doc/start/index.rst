@@ -72,10 +72,13 @@ Ceph block devices, the CephFS filesystem, and the RESTful gateway.
 
 	</td></tr></tbody></table>
 
-For releases prior to Cuttlefish, see the `5-minute Quick Start`_ for deploying with `mkcephfs`_.
+For releases prior to Cuttlefish, see the `5-minute Quick Start`_ for deploying
+with `mkcephfs`_. To transition  a cluster deployed with ``mkcephfs`` for use
+with ``ceph-deploy``, see `Transitioning to ceph-deploy`_.
 
 .. _5-minute Quick Start: quick-start 
 .. _mkcephfs: ../rados/deployment/mkcephfs
+.. _Transitioning to ceph-deploy: ../rados/deployment/ceph-deploy-transition
 
 .. toctree::
    :hidden:
