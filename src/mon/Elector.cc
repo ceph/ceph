@@ -55,6 +55,7 @@ void Elector::bump_epoch(epoch_t e)
   MonitorDBStore::Transaction t;
   t.put(Monitor::MONITOR_NAME, "election_epoch", epoch);
   mon->store->apply_transaction(t);
+  mon->reset();
 
   // clear up some state
   electing_me = false;
