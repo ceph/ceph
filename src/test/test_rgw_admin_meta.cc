@@ -651,9 +651,6 @@ TEST(TestRGWAdmin, meta_get){
 
   ASSERT_EQ(0, user_info(uid, display_name, info));
  
-  /*Check with a wrong parameter*/
-  g_test->send_request(string("GET"), string("/admin/metadata/user?keys=test"));
-  EXPECT_EQ(405U, g_test->get_resp_code());
   g_test->send_request(string("GET"), string("/admin/metadata/user?key=test"));
   EXPECT_EQ(404U, g_test->get_resp_code());
 
