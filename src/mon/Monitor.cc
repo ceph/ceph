@@ -780,13 +780,6 @@ void Monitor::handle_sync_start(MMonSync *m)
 {
   dout(10) << __func__ << " " << *m << dendl;
 
-  /**
-   * This looks a bit odd, but we've seen cases where sync start messages
-   * get bounced around and end up at the originator without anybody
-   * noticing!
-   */
-  assert(m->reply_to != messenger->get_myinst());
-
   /* If we are not the leader, then some monitor picked us as the point of
    * entry to the quorum during its synchronization process. Therefore, we
    * have an obligation of forwarding this message to leader, so the sender
@@ -828,6 +821,20 @@ void Monitor::handle_sync_start(MMonSync *m)
     assert(!(sync_role & SYNC_ROLE_PROVIDER));
     assert(quorum.empty());
     assert(sync_leader.get() != NULL);
+
+    /**
+     * This looks a bit odd, but we've seen cases where sync start messages
+     * get bounced around and end up at the originator without anybody
+     * noticing!* If it happens, just drop the message and the timeouts
+     * will clean everything up -- eventually.
+     * [*] If a leader gets elected who is too far behind, he'll drop into
+     * bootstrap and sync, but the person he sends his sync to thinks he's
+     * still the leader and forwards the reply back.
+     */
+    if (m->reply_to == messenger->get_myinst()) {
+      m->put();
+      return;
+    }
 
     dout(10) << __func__ << " forward " << *m
              << " to our sync leader at "
@@ -1936,10 +1943,9 @@ void Monitor::handle_probe_reply(MMonProbe *m)
   if (m->quorum.size()) {
     dout(10) << " existing quorum " << m->quorum << dendl;
 
-    if ((paxos->get_version() + g_conf->paxos_max_join_drift <
-	m->paxos_last_version) ||
-	(paxos->get_version() < m->paxos_first_version)){
-      dout(10) << " peer paxos version " << m->paxos_last_version
+    if (paxos->get_version() < m->paxos_first_version) {
+      dout(10) << " peer paxos versions [" << m->paxos_first_version
+               << "," << m->paxos_last_version << "]"
 	       << " vs my version " << paxos->get_version()
 	       << " (too far ahead)"
 	       << dendl;
