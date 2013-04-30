@@ -1064,17 +1064,17 @@ void Monitor::handle_sync_finish(MMonSync *m)
 
 // synchronization provider
 
-string Monitor::_pick_random_mon(int other)
+int Monitor::_pick_random_mon(int other)
 {
   assert(monmap->size() > 0);
   if (monmap->size() == 1)
-    return monmap->get_name(0);
+    return 0;
 
   int max = monmap->size();
   int n = sync_rng() % max;
   if (other >= 0 && n >= other)
     n++;
-  return monmap->get_name(n);
+  return n;
 }
 
 int Monitor::_pick_random_quorum_mon(int other)
@@ -1112,24 +1112,31 @@ void Monitor::sync_timeout(entity_inst_t &entity)
     }
 
     unsigned int i = 0;
-    string entity_name = monmap->get_name(entity.addr);
-    string debug_mon = g_conf->mon_sync_debug_provider;
-    string debug_fallback = g_conf->mon_sync_debug_provider_fallback;
+    int entity_rank = monmap->get_rank(entity.addr);
+    int debug_mon = g_conf->mon_sync_debug_provider;
+    int debug_fallback = g_conf->mon_sync_debug_provider_fallback;
+
+    dout(10) << __func__ << " entity " << entity << " rank " << entity_rank << dendl;
+    dout(10) << __func__ << " our-rank " << rank << dendl;
+
     while ((i++) < 2*monmap->size()) {
       // we are trying to pick a random monitor, but we cannot do this forever.
       // in case something goes awfully wrong, just stop doing it after a
       // couple of attempts and try again later.
-      string new_mon = _pick_random_mon();
+      int new_mon = _pick_random_mon(rank);
 
-      if (!debug_fallback.empty()) {
-	if (entity_name != debug_fallback)
+      if (debug_fallback >= 0) {
+	if (entity_rank != debug_fallback)
 	  new_mon = debug_fallback;
-	else if (!debug_mon.empty() && (entity_name != debug_mon))
+	else if (debug_mon >= 0 && (entity_rank != debug_mon))
 	  new_mon = debug_mon;
       }
 
-      if ((new_mon != name) && (new_mon != entity_name)) {
+      dout(10) << __func__ << " randomly picking mon rank " << new_mon << dendl;
+
+      if ((new_mon != rank) && (new_mon != entity_rank)) {
 	sync_provider->entity = monmap->get_inst(new_mon);
+	dout(10) << __func__ << " randomly choosing " << sync_provider->entity << " rank " << new_mon << dendl;
 	sync_state = SYNC_STATE_START;
 	sync_start_chunks(sync_provider);
 	return;
@@ -1417,13 +1424,13 @@ void Monitor::sync_start(entity_inst_t &other)
   entity_inst_t leader = other;
   entity_inst_t provider = other;
 
-  if (!g_conf->mon_sync_debug_leader.empty()) {
+  if (g_conf->mon_sync_debug_leader >= 0) {
     leader = monmap->get_inst(g_conf->mon_sync_debug_leader);
     dout(10) << __func__ << " assuming " << leader
 	     << " as the leader for debug" << dendl;
   }
 
-  if (!g_conf->mon_sync_debug_provider.empty()) {
+  if (g_conf->mon_sync_debug_provider >= 0) {
     provider = monmap->get_inst(g_conf->mon_sync_debug_provider);
     dout(10) << __func__ << " assuming " << provider
 	     << " as the provider for debug" << dendl;
