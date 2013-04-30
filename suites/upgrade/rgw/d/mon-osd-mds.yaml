@@ -1,2 +1,2 @@
 tasks:
-- ceph.restart: [mon.a, mon.b, mon.c, osd.0, osd.1, osd.2, osd.3, mds.a]
+- ceph.restart: [mon.a, mon.b, mon.c, osd.0, osd.1, osd.2, osd.3, mds.a, rgw.client.0]
