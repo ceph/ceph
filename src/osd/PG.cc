@@ -163,8 +163,8 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   backfill_reserved(0),
   backfill_reserving(0),
   flushed(false),
-  pg_stats_lock("PG::pg_stats_lock"),
-  pg_stats_valid(false),
+  pg_stats_publish_lock("PG::pg_stats_publish_lock"),
+  pg_stats_publish_valid(false),
   osr(osd->osr_registry.lookup_or_create(p, (stringify(p)))),
   finish_sync_event(NULL),
   scrub_after_recovery(false),
@@ -790,7 +790,7 @@ bool PG::search_for_missing(const pg_info_t &oinfo, const pg_missing_t *omissing
     found_missing = true;
   }
   if (stats_updated) {
-    update_stats();
+    publish_stats_to_osd();
   }
 
   dout(20) << "search_for_missing missing " << missing.missing << dendl;
@@ -1705,7 +1705,7 @@ void PG::activate(ObjectStore::Transaction& t,
             AllReplicasRecovered())));
     }
 
-    update_stats();
+    publish_stats_to_osd();
   }
 
   // we need to flush this all out before doing anything else..
@@ -1848,7 +1848,7 @@ void PG::replay_queued_ops()
   requeue_ops(replay);
   requeue_ops(waiting_for_active);
 
-  update_stats();
+  publish_stats_to_osd();
 }
 
 void PG::_activate_committed(epoch_t e)
@@ -1899,7 +1899,7 @@ void PG::all_activated_and_committed()
   info.history.last_epoch_started = info.last_epoch_started;
 
   share_pg_info();
-  update_stats();
+  publish_stats_to_osd();
 
   queue_peering_event(
     CephPeeringEvtRef(
@@ -1991,7 +1991,7 @@ void PG::_finish_recovery(Context *c)
     finish_sync_event = 0;
     purge_strays();
 
-    update_stats();
+    publish_stats_to_osd();
 
     if (scrub_after_recovery) {
       dout(10) << "_finish_recovery requeueing for scrub" << dendl;
@@ -2299,9 +2299,9 @@ void PG::update_heartbeat_peers()
     osd->need_heartbeat_peer_update();
 }
 
-void PG::update_stats()
+void PG::publish_stats_to_osd()
 {
-  pg_stats_lock.Lock();
+  pg_stats_publish_lock.Lock();
   if (is_primary()) {
     // update our stat summary
     info.stats.reported.inc(info.history.same_primary_since);
@@ -2339,17 +2339,18 @@ void PG::update_stats()
     info.stats.log_start = log.tail;
     info.stats.ondisk_log_start = log.tail;
 
-    pg_stats_valid = true;
-    pg_stats_stable = info.stats;
+    pg_stats_publish_valid = true;
+    pg_stats_publish = info.stats;
+    pg_stats_publish.stats.add(unstable_stats);
 
     // calc copies, degraded
     unsigned target = MAX(get_osdmap()->get_pg_size(info.pgid), acting.size());
-    pg_stats_stable.stats.calc_copies(target);
-    pg_stats_stable.stats.sum.num_objects_degraded = 0;
+    pg_stats_publish.stats.calc_copies(target);
+    pg_stats_publish.stats.sum.num_objects_degraded = 0;
     if ((is_degraded() || !is_clean()) && is_active()) {
       // NOTE: we only generate copies, degraded, unfound values for
       // the summation, not individual stat categories.
-      uint64_t num_objects = pg_stats_stable.stats.sum.num_objects;
+      uint64_t num_objects = pg_stats_publish.stats.sum.num_objects;
 
       uint64_t degraded = 0;
 
@@ -2358,7 +2359,7 @@ void PG::update_stats()
 	degraded += (target - acting.size()) * num_objects;
 
       // missing on primary
-      pg_stats_stable.stats.sum.num_objects_missing_on_primary = missing.num_missing();
+      pg_stats_publish.stats.sum.num_objects_missing_on_primary = missing.num_missing();
       degraded += missing.num_missing();
       
       for (unsigned i=1; i<acting.size(); i++) {
@@ -2370,27 +2371,27 @@ void PG::update_stats()
 	// not yet backfilled
 	degraded += num_objects - peer_info[acting[i]].stats.stats.sum.num_objects;
       }
-      pg_stats_stable.stats.sum.num_objects_degraded = degraded;
-      pg_stats_stable.stats.sum.num_objects_unfound = get_num_unfound();
+      pg_stats_publish.stats.sum.num_objects_degraded = degraded;
+      pg_stats_publish.stats.sum.num_objects_unfound = get_num_unfound();
     }
 
-    dout(15) << "update_stats " << pg_stats_stable.reported << dendl;
+    dout(15) << "publish_stats_to_osd " << pg_stats_publish.reported << dendl;
   } else {
-    pg_stats_valid = false;
-    dout(15) << "update_stats -- not primary" << dendl;
+    pg_stats_publish_valid = false;
+    dout(15) << "publish_stats_to_osd -- not primary" << dendl;
   }
-  pg_stats_lock.Unlock();
+  pg_stats_publish_lock.Unlock();
 
   if (is_primary())
     osd->pg_stat_queue_enqueue(this);
 }
 
-void PG::clear_stats()
+void PG::clear_publish_stats()
 {
   dout(15) << "clear_stats" << dendl;
-  pg_stats_lock.Lock();
-  pg_stats_valid = false;
-  pg_stats_lock.Unlock();
+  pg_stats_publish_lock.Lock();
+  pg_stats_publish_valid = false;
+  pg_stats_publish_lock.Unlock();
 
   osd->pg_stat_queue_dequeue(this);
 }
@@ -2620,6 +2621,9 @@ int PG::_write_info(ObjectStore::Transaction& t, epoch_t epoch,
 
 void PG::write_info(ObjectStore::Transaction& t)
 {
+  info.stats.stats.add(unstable_stats);
+  unstable_stats.clear();
+
   int ret = _write_info(t, get_osdmap()->get_epoch(), info, coll,
      past_intervals, snap_collections, osd->infos_oid,
      info_struct_v, dirty_big_info);
@@ -3817,7 +3821,7 @@ void PG::scrub()
     state_clear(PG_STATE_SCRUBBING);
     state_clear(PG_STATE_REPAIR);
     state_clear(PG_STATE_DEEP_SCRUB);
-    update_stats();
+    publish_stats_to_osd();
     unlock();
     return;
   }
@@ -3903,7 +3907,7 @@ void PG::classic_scrub()
     scrubber.active = true;
     scrubber.classic = true;
 
-    update_stats();
+    publish_stats_to_osd();
     scrubber.received_maps.clear();
     scrubber.epoch_start = info.history.same_interval_since;
 
@@ -4078,7 +4082,7 @@ void PG::chunky_scrub() {
       case PG::Scrubber::INACTIVE:
         dout(10) << "scrub start" << dendl;
 
-        update_stats();
+        publish_stats_to_osd();
         scrubber.epoch_start = info.history.same_interval_since;
         scrubber.active = true;
 
@@ -4256,7 +4260,7 @@ void PG::scrub_clear_state()
   state_clear(PG_STATE_SCRUBBING);
   state_clear(PG_STATE_REPAIR);
   state_clear(PG_STATE_DEEP_SCRUB);
-  update_stats();
+  publish_stats_to_osd();
 
   // active -> nothing.
   if (scrubber.active)
@@ -5093,7 +5097,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     // old primary?
     if (oldrole == 0) {
       state_clear(PG_STATE_CLEAN);
-      clear_stats();
+      clear_publish_stats();
 	
       // take replay queue waiters
       list<OpRequestRef> ls;
@@ -6048,7 +6052,7 @@ boost::statechart::result PG::RecoveryState::Primary::react(const ActMap&)
 {
   dout(7) << "handle ActMap primary" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
-  pg->update_stats();
+  pg->publish_stats_to_osd();
   pg->take_waiters();
   return discard_event();
 }
@@ -6568,7 +6572,7 @@ PG::RecoveryState::Clean::Clean(my_context ctx)
   pg->mark_clean();
 
   pg->share_pg_info();
-  pg->update_stats();
+  pg->publish_stats_to_osd();
 
 }
 
@@ -6636,7 +6640,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
       pg->state_clear(PG_STATE_DEGRADED);
     else
       pg->state_set(PG_STATE_DEGRADED);
-    pg->update_stats(); // degraded may have changed
+    pg->publish_stats_to_osd(); // degraded may have changed
   }
   return forward_event();
 }
@@ -7015,7 +7019,7 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx)
   if (!prior_set.get())
     pg->build_prior(prior_set);
 
-  pg->update_stats();
+  pg->publish_stats_to_osd();
 
   get_infos();
   if (peer_info_requested.empty() && !prior_set->pg_down) {
@@ -7348,7 +7352,7 @@ PG::RecoveryState::Incomplete::Incomplete(my_context ctx)
 
   pg->state_clear(PG_STATE_PEERING);
   pg->state_set(PG_STATE_INCOMPLETE);
-  pg->update_stats();
+  pg->publish_stats_to_osd();
 }
 
 boost::statechart::result PG::RecoveryState::Incomplete::react(const AdvMap &advmap) {

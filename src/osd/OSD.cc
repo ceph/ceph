@@ -3014,14 +3014,14 @@ void OSD::send_pg_stats(const utime_t &now)
 	pg->put("pg_stat_queue");
 	continue;
       }
-      pg->pg_stats_lock.Lock();
-      if (pg->pg_stats_valid) {
-	m->pg_stat[pg->info.pgid] = pg->pg_stats_stable;
-	dout(25) << " sending " << pg->info.pgid << " " << pg->pg_stats_stable.reported << dendl;
+      pg->pg_stats_publish_lock.Lock();
+      if (pg->pg_stats_publish_valid) {
+	m->pg_stat[pg->info.pgid] = pg->pg_stats_publish;
+	dout(25) << " sending " << pg->info.pgid << " " << pg->pg_stats_publish.reported << dendl;
       } else {
-	dout(25) << " NOT sending " << pg->info.pgid << " " << pg->pg_stats_stable.reported << ", not valid" << dendl;
+	dout(25) << " NOT sending " << pg->info.pgid << " " << pg->pg_stats_publish.reported << ", not valid" << dendl;
       }
-      pg->pg_stats_lock.Unlock();
+      pg->pg_stats_publish_lock.Unlock();
     }
 
     if (!outstanding_pg_stats) {
@@ -3060,18 +3060,18 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
 
     if (ack->pg_stat.count(pg->info.pgid)) {
       eversion_t acked = ack->pg_stat[pg->info.pgid];
-      pg->pg_stats_lock.Lock();
-      if (acked == pg->pg_stats_stable.reported) {
-	dout(25) << " ack on " << pg->info.pgid << " " << pg->pg_stats_stable.reported << dendl;
+      pg->pg_stats_publish_lock.Lock();
+      if (acked == pg->pg_stats_publish.reported) {
+	dout(25) << " ack on " << pg->info.pgid << " " << pg->pg_stats_publish.reported << dendl;
 	pg->stat_queue_item.remove_myself();
 	pg->put("pg_stat_queue");
       } else {
-	dout(25) << " still pending " << pg->info.pgid << " " << pg->pg_stats_stable.reported
+	dout(25) << " still pending " << pg->info.pgid << " " << pg->pg_stats_publish.reported
 		 << " > acked " << acked << dendl;
       }
-      pg->pg_stats_lock.Unlock();
+      pg->pg_stats_publish_lock.Unlock();
     } else {
-      dout(30) << " still pending " << pg->info.pgid << " " << pg->pg_stats_stable.reported << dendl;
+      dout(30) << " still pending " << pg->info.pgid << " " << pg->pg_stats_publish.reported << dendl;
     }
   }
   
@@ -5153,7 +5153,7 @@ void OSD::handle_pg_create(OpRequestRef op)
       wake_pg_waiters(pg->info.pgid);
       pg->handle_create(&rctx);
       pg->write_if_dirty(*rctx.transaction);
-      pg->update_stats();
+      pg->publish_stats_to_osd();
       pg->unlock();
       num_created++;
     }
