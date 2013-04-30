@@ -20,6 +20,7 @@ def task(ctx, config):
                 'http://ceph.com/git/?p=ceph-qa-chef.git;a=blob_plain;f=solo/solo-from-scratch;hb=HEAD',
                 run.Raw('|'),
                 'sh',
+                '-x',
                 ],
             wait=False,
             )
