@@ -154,8 +154,6 @@ private:
   void pre_auth(MAuth *m);
   
   void tick();  // check state, take actions
-
-  void init();
 };
 
 

@@ -1004,7 +1004,7 @@ public:
   void on_change();
   void on_activate();
   void on_flushed();
-  void on_removal();
+  void on_removal(ObjectStore::Transaction *t);
   void on_shutdown();
 };
 

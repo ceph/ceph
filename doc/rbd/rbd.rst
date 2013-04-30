@@ -47,6 +47,7 @@ devices simultaneously.
 	OpenStack <rbd-openstack>
 	CloudStack <rbd-cloudstack>
 	Manpage rbd <../../man/8/rbd>
+	Manpage rbd-fuse <../../man/8/rbd-fuse>
 	Manpage ceph-rbdnamer <../../man/8/ceph-rbdnamer>
 	librbd <librbdpy>
 	

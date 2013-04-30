@@ -294,19 +294,13 @@ void PaxosService::put_version(MonitorDBStore::Transaction *t,
 			       const string& prefix, version_t ver,
 			       bufferlist& bl)
 {
-  ostringstream os;
-  os << ver;
-  string key = mon->store->combine_strings(prefix, os.str());
-  t->put(get_service_name(), key, bl);
+  t->put(get_service_name(), ver, bl);
 }
 
 int PaxosService::get_version(const string& prefix, version_t ver,
 			      bufferlist& bl)
 {
-  ostringstream os;
-  os << ver;
-  string key = mon->store->combine_strings(prefix, os.str());
-  return mon->store->get(get_service_name(), key, bl);
+  return mon->store->get(get_service_name(), ver, bl);
 }
 
 void PaxosService::trim(MonitorDBStore::Transaction *t,

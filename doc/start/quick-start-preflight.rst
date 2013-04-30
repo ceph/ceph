@@ -30,6 +30,15 @@ hosts. For additional details on operating systems or to use other operating
 systems other than Debian or Ubuntu, see `OS Recommendations`_.
 
 
+Install an SSH Server
+=====================
+
+The ``ceph-deploy`` utility requires ``ssh``, so your server host(s) require an
+SSH server. ::
+
+	sudo apt-get install openssh-server
+
+
 Create a User
 =============
 
@@ -52,10 +61,10 @@ the user you create requires passwordless ``sudo`` priveleges.
    for security reasons. 
 
 To provide full privileges to the user, add the following to 
-``/etc/sudoers.d/chef``. ::
+``/etc/sudoers.d/ceph``. ::
 
-	echo "chef ALL = (root) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/chef
-	sudo chmod 0440 /etc/sudoers.d/chef
+	echo "ceph ALL = (root) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/ceph
+	sudo chmod 0440 /etc/sudoers.d/ceph
 
 
 Configure SSH
@@ -101,8 +110,8 @@ To begin working with ``ceph-deploy``, clone its repository. ::
 	git clone https://github.com/ceph/ceph-deploy.git ceph-deploy
 
 
-Install python-virualenv
-========================
+Install python-virtualenv
+=========================
 
 To bootstrap ``ceph-deploy`` and run it, you must install the
 ``python-virtualenv`` package. :: 

@@ -401,6 +401,7 @@ int Monitor::preinit()
 				  &extra_probe_peers);
 
       dout(10) << " monmap is " << *monmap << dendl;
+      dout(10) << " extra probe peers " << extra_probe_peers << dendl;
     }
   }
 
@@ -510,10 +511,18 @@ void Monitor::init_paxos()
 {
   dout(10) << __func__ << dendl;
   paxos->init();
-  // init paxos
+
+  // update paxos
   for (int i = 0; i < PAXOS_NUM; ++i) {
     if (paxos->is_consistent()) {
       paxos_service[i]->update_from_paxos();
+    }
+  }
+
+  // init services
+  for (int i = 0; i < PAXOS_NUM; ++i) {
+    if (paxos->is_consistent()) {
+      paxos_service[i]->init();
     }
   }
 }
@@ -2244,6 +2253,13 @@ void Monitor::_mon_status(ostream& ss)
   jf.open_array_section("outside_quorum");
   for (set<string>::iterator p = outside_quorum.begin(); p != outside_quorum.end(); ++p)
     jf.dump_string("mon", *p);
+  jf.close_section();
+
+  jf.open_array_section("extra_probe_peers");
+  for (set<entity_addr_t>::iterator p = extra_probe_peers.begin();
+       p != extra_probe_peers.end();
+       ++p)
+    jf.dump_stream("peer") << *p;
   jf.close_section();
 
   if (is_synchronizing()) {

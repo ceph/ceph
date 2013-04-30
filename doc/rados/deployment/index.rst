@@ -24,18 +24,35 @@ configure admin hosts, and tear down the clusters. With a single tool, you can
 develop scripts to  create, deploy and tear down clusters quickly and easily.
 
 
+.. raw:: html
+
+	<table cellpadding="10"><colgroup><col width="50%"><col width="50%"></colgroup><tbody valign="top"><tr><td>
+
 .. toctree:: 
 
+	Transition from mkcephfs <ceph-deploy-transition>   
    Preflight Checklist <preflight-checklist>	
 	Install Ceph <ceph-deploy-install>
 	Create a Cluster <ceph-deploy-new>
 	Add/Remove Monitor(s) <ceph-deploy-mon>
-	Key Management <ceph-deploy-keys>
 	
+	
+
+.. raw:: html
+
+	</td><td>	
+	
+.. toctree::
+	
+	Key Management <ceph-deploy-keys>
+	Add/Remove OSD(s) <ceph-deploy-osd>
+	Add/Remove MDS(s) <ceph-deploy-mds>
+	Purge Hosts <ceph-deploy-purge>
+	Admin Tasks <ceph-deploy-admin>
 
 .. raw:: html 
 
-	</td><td><h3>mkcephfs (deprecated)</h3>
+	</td></tr></tbody></table></td><td><h3>mkcephfs (deprecated)</h3>
 	
 The ``mkcephfs`` utility generates an ``fsid`` and keys for your cluster, as
 defined by the Ceph configuration file. It does not create directories for you
