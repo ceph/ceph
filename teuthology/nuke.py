@@ -59,6 +59,11 @@ def parse_args():
         metavar='NAME',
         help='Name of run to cleanup'
         )
+    parser.add_argument(
+        '-i', '--noipmi',
+        action='store_true', default=False,
+        help='Skip ipmi checking'
+        )
     args = parser.parse_args()
     return args
 
@@ -395,6 +400,7 @@ def nuke_one(ctx, targets, log, should_unlock, synch_clocks, reboot_all, check_l
         reboot_all=reboot_all,
         teuthology_config=ctx.teuthology_config,
         name=ctx.name,
+        noipmi=ctx.noipmi,
         )
     try:
         nuke_helper(ctx, log)
@@ -416,7 +422,8 @@ def nuke_helper(ctx, log):
     host = target.split('@')[-1]
     shortname = host.split('.')[0]
     log.debug('shortname: %s' % shortname)
-    if 'ipmi_user' in ctx.teuthology_config:
+    log.debug('{ctx}'.format(ctx=ctx))
+    if not ctx.noipmi and 'ipmi_user' in ctx.teuthology_config:
         console = remote.RemoteConsole(name=host,
                                        ipmiuser=ctx.teuthology_config['ipmi_user'],
                                        ipmipass=ctx.teuthology_config['ipmi_password'],
