@@ -126,10 +126,6 @@ class Elector {
    */
   int	    leader_acked;
   /**
-   * Indicates the first_paxos_commit on who we've acked
-   */
-  version_t acked_first_paxos_version;
-  /**
    * Indicates when we have acked him
    */
   utime_t   ack_stamp;
@@ -201,17 +197,16 @@ class Elector {
    * to become the Leader. We will only defer an election if the monitor we
    * are deferring to outranks us.
    *
-   * @pre   @p who outranks us (who < our rank, or we're behind their store)
+   * @pre   @p who outranks us (i.e., who < our rank)
    * @pre   @p who outranks any other monitor we have deferred to in the past
    * @post  electing_me is false
    * @post  leader_acked equals @p who
    * @post  we sent an ack message to @p who
    * @post  we reset the expire_event timer
    *
-   * @param who Some other monitor's numeric identifier.
-   * @param paxos_first The other monitor's first committed paxos version
+   * @param who Some other monitor's numeric identifier. 
    */
-  void defer(int who, version_t paxos_first);
+  void defer(int who);
   /**
    * The election has taken too long and has expired.
    *
@@ -331,8 +326,7 @@ class Elector {
 			       epoch(0),
 			       participating(true),
 			       electing_me(false),
-			       leader_acked(-1),
-			       acked_first_paxos_version(0) { }
+			       leader_acked(-1) { }
 
   /**
    * Initiate the Elector class.

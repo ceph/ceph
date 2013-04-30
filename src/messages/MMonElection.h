@@ -45,19 +45,20 @@ public:
   bufferlist monmap_bl;
   set<int> quorum;
   uint64_t quorum_features;
-  version_t paxos_first_version;
-  version_t paxos_last_version;
+  /* the following were both used in the next branch for a while
+   * on user cluster, so we've left them in for compatibility. */
+  version_t defunct_one;
+  version_t defunct_two;
   
   MMonElection() : Message(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
-    op(0), epoch(0), quorum_features(0), paxos_first_version(0),
-    paxos_last_version(0)
+    op(0), epoch(0), quorum_features(0), defunct_one(0),
+    defunct_two(0)
   { }
 
-  MMonElection(int o, epoch_t e, MonMap *m,
-               version_t paxos_first, version_t paxos_last)
+  MMonElection(int o, epoch_t e, MonMap *m)
     : Message(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
       fsid(m->fsid), op(o), epoch(e), quorum_features(0),
-      paxos_first_version(paxos_first), paxos_last_version(paxos_last)
+      defunct_one(0), defunct_two(0)
   {
     // encode using full feature set; we will reencode for dest later,
     // if necessary
@@ -87,8 +88,8 @@ public:
     ::encode(monmap_bl, payload);
     ::encode(quorum, payload);
     ::encode(quorum_features, payload);
-    ::encode(paxos_first_version, payload);
-    ::encode(paxos_last_version, payload);
+    ::encode(defunct_one, payload);
+    ::encode(defunct_two, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -105,8 +106,8 @@ public:
     else
       quorum_features = 0;
     if (header.version >= 4) {
-      ::decode(paxos_first_version, p);
-      ::decode(paxos_last_version, p);
+      ::decode(defunct_one, p);
+      ::decode(defunct_two, p);
     }
   }
   
