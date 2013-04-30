@@ -54,6 +54,7 @@ def create_users(ctx, config):
     assert isinstance(config, dict)
     log.info('Creating rgw users...')
     testdir = teuthology.get_testdir(ctx)
+    users = {'s3': 'foo'}
     for client in config['clients']:
         s3tests_conf = config['s3tests_conf'][client]
         s3tests_conf.setdefault('readwrite', {})
@@ -66,7 +67,7 @@ def create_users(ctx, config):
         rwconf['files'].setdefault('num', 10)
         rwconf['files'].setdefault('size', 2000)
         rwconf['files'].setdefault('stddev', 500)
-        for section, user in [('s3', 'foo')]:
+        for section, user in users.iteritems():
             _config_user(s3tests_conf, section, '{user}.{client}'.format(user=user, client=client))
             ctx.cluster.only(client).run(
                 args=[
@@ -82,8 +83,23 @@ def create_users(ctx, config):
                     '--email', s3tests_conf[section]['email'],
                 ],
             )
-    yield
-
+    try:
+        yield
+    finally:
+        for client in config['clients']:
+            for user in users.itervalues():
+                uid = '{user}.{client}'.format(user=user, client=client)
+                ctx.cluster.only(client).run(
+                    args=[
+                        '{tdir}/enable-coredump'.format(tdir=testdir),
+                        'ceph-coverage',
+                        '{tdir}/archive/coverage'.format(tdir=testdir),
+                        'radosgw-admin',
+                        'user', 'rm',
+                        '--uid', uid,
+                        '--purge-data',
+                        ],
+                    )
 
 @contextlib.contextmanager
 def configure(ctx, config):
