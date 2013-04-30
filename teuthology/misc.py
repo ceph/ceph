@@ -27,7 +27,7 @@ def get_testdir(ctx):
     if 'test_path' in ctx.teuthology_config:
         return ctx.teuthology_config['test_path']
 
-    basedir = ctx.teuthology_config.get('base_test_dir', '/tmp/cephtest')
+    basedir = ctx.teuthology_config.get('base_test_dir', '/home/ubuntu/cephtest')
 
     global global_jobid
     global checked_jobid
@@ -85,7 +85,7 @@ def get_testdir(ctx):
 def get_testdir_base(ctx):
     if 'test_path' in ctx.teuthology_config:
         return ctx.teuthology_config['test_path']
-    return ctx.teuthology_config.get('base_test_dir', '/tmp/cephtest')
+    return ctx.teuthology_config.get('base_test_dir', '/home/ubuntu/cephtest')
 
 def get_ceph_binary_url(package=None,
                         branch=None, tag=None, sha1=None, dist=None,
