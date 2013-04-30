@@ -253,4 +253,5 @@ def task(ctx, config):
                 )),
         lambda: run_tests(ctx=ctx, config=config),
         ):
-        yield
+        pass
+    yield

@@ -31,7 +31,16 @@ def download(ctx, config):
     try:
         yield
     finally:
-        cleanup_tests(ctx, config)
+        log.info('Removing s3-tests...')
+        for client in config:
+            ctx.cluster.only(client).run(
+                args=[
+                    'rm',
+                    '-rf',
+                    '{tdir}/s3-tests'.format(tdir=teuthology.get_testdir(ctx)),
+                    ],
+                )
+
 
 def _config_user(s3tests_conf, section, user):
     s3tests_conf[section].setdefault('user_id', user)
@@ -142,19 +151,6 @@ def run_tests(ctx, config):
 
 
 @contextlib.contextmanager
-def cleanup_tests(ctx, config):
-    log.info('Removing s3-tests...')
-    for client in config:
-        ctx.cluster.only(client).run(
-            args=[
-                'rm',
-                '-rf',
-                '{tdir}/s3-tests'.format(tdir=teuthology.get_testdir(ctx)),
-                ],
-            )
-    yield
-
-@contextlib.contextmanager
 def task(ctx, config):
     """
     Run the s3tests-test-readwrite suite against rgw.
@@ -255,6 +251,6 @@ def task(ctx, config):
                 s3tests_conf=s3tests_conf,
                 )),
         lambda: run_tests(ctx=ctx, config=config),
-        lambda: cleanup_tests(ctx=ctx, config=config),
         ):
-        yield
+        pass
+    yield
