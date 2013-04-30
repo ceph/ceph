@@ -642,8 +642,10 @@ public:
       { }
 
     void finish(int r) {
-      if (proposer_context)
-        proposer_context->finish(r);
+      if (proposer_context) {
+	proposer_context->complete(r);
+	proposer_context = NULL;
+      }
     }
   };
   /**

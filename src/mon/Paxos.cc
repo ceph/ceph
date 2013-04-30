@@ -805,7 +805,7 @@ void Paxos::finish_queued_proposal()
 	     << " to finish" << dendl;
 
     proposals.pop_front();
-    proposal->finish(0);
+    proposal->complete(0);
   }
 }
 
