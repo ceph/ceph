@@ -1311,9 +1311,13 @@ def start_daemon(
                     ],
                 )
         elif os.path.exists(os.path.join(path, 'sysvinit')):
+            if os.path.exists('/usr/sbin/service'):
+                svc = '/usr/sbin/service'
+            else:
+                svc = '/sbin/service'
             subprocess.check_call(
                 args=[
-                    '/usr/sbin/service',
+                    svc,
                     'ceph',
                     'start',
                     'osd.{osd_id}'.format(osd_id=osd_id),
