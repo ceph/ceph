@@ -128,6 +128,13 @@ ceph_filestore_dump_LDADD += -ldl
 endif
 bin_PROGRAMS += ceph ceph-conf ceph-authtool ceph_filestore_dump
 
+ceph_osdomap_tool_SOURCES = tools/ceph-osdomap-tool.cc \
+			  os/LevelDBStore.cc
+ceph_osdomap_tool_LDFLAGS = ${AM_LDFLAGS}
+ceph_osdomap_tool_LDADD =  $(LIBOS_LDA) $(LIBGLOBAL_LDA) -lboost_program_options
+ceph_osdomap_tool_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += ceph-osdomap-tool
+
 ceph_monstore_tool_SOURCES = tools/ceph-monstore-tool.cc \
 			  os/LevelDBStore.cc
 ceph_monstore_tool_LDFLAGS = ${AM_LDFLAGS}
