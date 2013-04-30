@@ -37,6 +37,11 @@ Options
 
    Interact with the given pool. Required by most commands.
 
+.. option:: --no-progress
+
+   Do not output progress information (goes to standard error by
+   default for some commands).
+
 
 Parameters
 ==========
@@ -150,8 +155,9 @@ Commands
 
   This requires format 2.
 
-:command:`resize` [*image-name*]
+:command:`resize` [*image-name*] [--allow-shrink]
   Resizes rbd image. The size parameter also needs to be specified.
+  The --allow-shrink option lets the size be reduced.
 
 :command:`rm` [*image-name*]
   Deletes an rbd image (including all data blocks). If the image has
