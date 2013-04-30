@@ -704,3 +704,17 @@ def get_valgrind_args(testdir, name, v):
     extra_args.extend(v)
     log.debug('running %s under valgrind with args %s', name, extra_args)
     return extra_args
+
+def stop_daemons_of_type(ctx, type_):
+    log.info('Shutting down %s daemons...' % type_)
+    exc_info = (None, None, None)
+    for daemon in ctx.daemons.iter_daemons_of_role(type_):
+        try:
+            daemon.stop()
+        except (run.CommandFailedError,
+                run.CommandCrashedError,
+                run.ConnectionLostError):
+            exc_info = sys.exc_info()
+            log.exception('Saw exception from %s.%s', daemon.role, daemon.id_)
+    if exc_info != (None, None, None):
+        raise exc_info[0], exc_info[1], exc_info[2]
