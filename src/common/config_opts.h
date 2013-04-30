@@ -182,7 +182,7 @@ OPTION(mon_sync_provider_kill_at, OPT_INT, 0) // kill the sync provider at a spe
 OPTION(mon_sync_requester_kill_at, OPT_INT, 0) // kill the sync requester at a specific point in the work flow
 OPTION(mon_leveldb_write_buffer_size, OPT_U64, 32*1024*1024) // monitor's leveldb write buffer size
 OPTION(mon_leveldb_cache_size, OPT_U64, 0) // monitor's leveldb cache size
-OPTION(mon_leveldb_block_size, OPT_U64, 4*1024*1024) // monitor's leveldb block size
+OPTION(mon_leveldb_block_size, OPT_U64, 64*1024) // monitor's leveldb block size
 OPTION(mon_leveldb_bloom_size, OPT_INT, 0) // monitor's leveldb bloom bits per entry
 OPTION(mon_leveldb_max_open_files, OPT_INT, 0) // monitor's leveldb max open files
 OPTION(mon_leveldb_compression, OPT_BOOL, false) // monitor's leveldb uses compression
