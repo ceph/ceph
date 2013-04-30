@@ -386,16 +386,24 @@ public:
 
   // split
   Mutex in_progress_split_lock;
-  set<pg_t> in_progress_splits;
-  void _start_split(const set<pg_t> &pgs);
-  void start_split(const set<pg_t> &pgs) {
+  map<pg_t, pg_t> pending_splits; // child -> parent
+  map<pg_t, set<pg_t> > rev_pending_splits; // parent -> [children]
+  set<pg_t> in_progress_splits;       // child
+
+  void _start_split(pg_t parent, const set<pg_t> &children);
+  void start_split(pg_t parent, const set<pg_t> &children) {
     Mutex::Locker l(in_progress_split_lock);
-    return _start_split(pgs);
+    return _start_split(parent, children);
   }
+  void mark_split_in_progress(pg_t parent, const set<pg_t> &pgs);
   void complete_split(const set<pg_t> &pgs);
+  void cancel_pending_splits_for_parent(pg_t parent);
   bool splitting(pg_t pgid);
   void expand_pg_num(OSDMapRef old_map,
 		     OSDMapRef new_map);
+  void _maybe_split_pgid(OSDMapRef old_map,
+			 OSDMapRef new_map,
+			 pg_t pgid);
 
   // -- OSD Full Status --
   Mutex full_status_lock;
