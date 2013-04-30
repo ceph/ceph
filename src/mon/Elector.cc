@@ -53,6 +53,7 @@ void Elector::bump_epoch(epoch_t e)
   assert(epoch <= e);
   epoch = e;
   mon->store->put_int(epoch, "election_epoch");
+  mon->reset();
 
   // clear up some state
   electing_me = false;
