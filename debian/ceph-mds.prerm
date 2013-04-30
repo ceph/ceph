@@ -1,5 +1,5 @@
 #!/bin/sh
 
-stop ceph-mds-all || :
+[ -x /sbin/stop ] && stop ceph-mds-all || :
 
 exit 0

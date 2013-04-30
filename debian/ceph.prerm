@@ -1,5 +1,5 @@
 #!/bin/sh
 
-stop ceph-all || :
+[ -x /sbin/stop ] && stop ceph-all || :
 
 exit 0
