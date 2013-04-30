@@ -974,6 +974,10 @@ void Paxos::trim_to(MonitorDBStore::Transaction *t,
     t->erase(get_name(), from);
     from++;
   }
+  if (g_conf->mon_compact_on_trim) {
+    dout(10) << " compacting prefix" << dendl;
+    t->compact_prefix(get_name());
+  }
 }
 
 void Paxos::trim_to(MonitorDBStore::Transaction *t, version_t first)
