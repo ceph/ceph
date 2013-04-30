@@ -716,16 +716,19 @@ protected:
   void requeue_object_waiters(map<hobject_t, list<OpRequestRef> >& m);
   void requeue_ops(list<OpRequestRef> &l);
 
-  // stats
-  Mutex pg_stats_lock;
-  bool pg_stats_valid;
-  pg_stat_t pg_stats_stable;
+  // stats that persist lazily
+  object_stat_collection_t unstable_stats;
+
+  // publish stats
+  Mutex pg_stats_publish_lock;
+  bool pg_stats_publish_valid;
+  pg_stat_t pg_stats_publish;
 
   // for ordering writes
   std::tr1::shared_ptr<ObjectStore::Sequencer> osr;
 
-  void update_stats();
-  void clear_stats();
+  void publish_stats_to_osd();
+  void clear_publish_stats();
 
 public:
   void clear_primary_state();
