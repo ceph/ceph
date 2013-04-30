@@ -946,12 +946,12 @@ def restart(ctx, config):
               "task ceph.restart only supports a list for configuration"
        config = dict.fromkeys(config)
        for i in config.keys():
-           type_ = i.split('.')[0]
-           id_ = i.split('.')[1]
+           type_ = i.split('.', 1)[0]
+           id_ = i.split('.', 1)[1]
            ctx.daemons.get_daemon(type_, id_).stop()
            ctx.daemons.get_daemon(type_, id_).restart()
    else:
-       type_daemon = ['mon', 'osd', 'mds']
+       type_daemon = ['mon', 'osd', 'mds', 'rgw']
        for d in type_daemon:
            type_ = d
            for daemon in ctx.daemons.iter_daemons_of_role(type_):
