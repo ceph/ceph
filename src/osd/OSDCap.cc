@@ -93,7 +93,7 @@ ostream& operator<<(ostream& out, const OSDCapGrant& g)
 bool OSDCap::allow_all() const
 {
   for (vector<OSDCapGrant>::const_iterator p = grants.begin(); p != grants.end(); ++p)
-    if (p->spec.allow_all())
+    if (p->match.is_match(string(), CEPH_AUTH_UID_DEFAULT, string()) && p->spec.allow_all())
       return true;
   return false;
 }
