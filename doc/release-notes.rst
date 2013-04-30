@@ -5,8 +5,8 @@
 v0.61 "Cuttlefish"
 ------------------
 
-Upgrading
-~~~~~~~~~
+Upgrading from v0.60
+~~~~~~~~~~~~~~~~~~~~
 
 * radosgw-admin now uses the term zone instead of cluster to describe
   each instance of the radosgw data store (and corresponding
@@ -33,8 +33,67 @@ Upgrading
   previously).
 
 
-Notable Changes
-~~~~~~~~~~~~~~~
+Upgrading from v0.56.4 "Bobtail"
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Please see `Upgrading from Bobtail to Cuttlefish`_ for details.
+
+.. _Upgrading from Bobtail to Cuttlefish: ../install/upgrading-ceph/#upgrading-from-bobtail-to-cuttlefish
+
+* radosgw-admin now uses the term zone instead of cluster to describe
+  each instance of the radosgw data store (and corresponding
+  collection of radosgw daemons).  The usage for the radosgw-admin
+  command and the 'rgw zone root pool' config optoins have changed
+  accordingly.
+
+* rbd progress indicators now go to standard error instead of standard
+  out.  (You can disable progress with --no-progress.)
+
+* The 'rbd resize ...' command now requires the --allow-shrink option
+  when resizing to a smaller size.  Expanding images to a larger size
+  is unchanged.
+
+* Please review the changes going back to 0.56.4 if you are upgrading
+  all the way from bobtail.
+
+* The old 'ceph stop_cluster' command has been removed.
+
+* The sysvinit script now uses the ceph.conf file on the remote host
+  when starting remote daemons via the '-a' option.  Note that if '-a'
+  is used in conjuction with '-c path', the path must also be present
+  on the remote host (it is not copied to a temporary file, as it was
+  previously).
+
+* The monitor is using a completely new storage strategy and
+  intra-cluster protocol.  This means that cuttlefish and bobtail
+  monitors do not talk to each other.  When you upgrade each one, it
+  will convert its local data store to the new format.  Once you
+  upgrade a majority, the quorum will be formed using the new protocol
+  and the old monitors will be blocked out until they too get
+  upgraded.  For this reason, we recommend not running a mixed-version
+  cluster for very long.
+
+* ceph-mon now requires the creation of its data directory prior to
+  --mkfs, similarly to what happens on ceph-osd.  This directory is no
+  longer automatically created, and custom scripts should be adjusted to
+  reflect just that.
+
+* The monitor now enforces that MDS names be unique.  If you have
+  multiple daemons start with with the same id (e.g., ``mds.a``) the
+  second one will implicitly mark the first as failed.  This makes
+  things less confusing and makes a daemon restart faster (we no
+  longer wait for the stopped daemon to time out) but existing
+  multi-mds configurations may need to be adjusted accordingly to give
+  daemons unique names.
+
+* The 'ceph osd pool delete <poolname>' and 'rados rmpool <poolname>'
+  now have safety interlocks with loud warnings that make you confirm
+  pool removal.  Any scripts curenty rely on these functions zapping
+  data without confirmation need to be adjusted accordingly.
+
+
+Notable Changes from v0.60
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * rbd: incremental backups
 * rbd: only set STRIPINGV2 feature if striping parameters are incompatible with old versions
@@ -50,6 +109,7 @@ Notable Changes
 * mon: ability to tune leveldb
 * mon: config-keys service to store arbitrary data on monitor
 * mon: 'osd crush add|link|unlink|add-bucket ...' commands
+* mon: trigger leveldb compaction on trim
 * osd: per-rados pool quotas (objects, bytes)
 * osd: tool to export, import, and delete PGs from an individual OSD data store
 * osd: notify mon on clean shutdown to avoid IO stall
@@ -73,6 +133,126 @@ Notable Changes
 * ceph-disk: fix creation of OSD data partitions on >2TB disks
 * osd: fix udev rules for RHEL/CentOS systems
 * fix daemon logging during initial startup
+
+Notable changes from v0.56 "Bobtail"
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+* always use installed system leveldb (Gary Lowell)
+* auth: ability to require new cephx signatures on messages (still off by default)
+* buffer unit testing (Loic Dachary)
+* ceph tool: some CLI interface cleanups
+* ceph-disk: improve multicluster support, error handling (Sage Weil)
+* ceph-disk: support for dm-crypt (Alexandre Marangone)
+* ceph-disk: support for sysvinit, directories or partitions (not full disks)
+* ceph-disk: fix mkfs args on old distros (Alexandre Marangone)
+* ceph-disk: fix creation of OSD data partitions on >2TB disks
+* ceph-disk: hotplug fixes for RHEL/CentOS
+* ceph-disk: new 'list' command
+* ceph-fuse, libcephfs: misc fixes to mds session management
+* ceph-fuse: disabled cache invalidation (again) due to potential deadlock with kernel
+* ceph-fuse: enable kernel cache invalidation (Sam Lang)
+* ceph-fuse: fix statfs(2) reporting
+* ceph-fuse: session handling cleanup, bug fixes (Sage Weil)
+* crush: ability to create, remove rules via CLI
+* crush: update weights for all instances of an item, not just the first (Sage Weil)
+* fix daemon logging during initial startup
+* fixed log rotation (Gary Lowell)
+* init-ceph, mkcephfs: close a few security holes with -a  (Sage Weil)
+* libcephfs: calls to query CRUSH topology (used by Hadoop)
+* libcephfs: many fixes, cleanups with the Java bindings
+* libcephfs: new topo API requests for Hadoop (Noah Watkins)
+* librados: clean up snapshot constant definitions
+* librados: fix linger bugs (Josh Durgin)
+* librbd: fixed flatten deadlock (Josh Durgin)
+* librbd: fixed some locking issues with flatten (Josh Durgin)
+* librbd: many bug fixes
+* librbd: optionally wait for flush before enabling writeback (Josh Durgin)
+* many many cleanups (Danny Al-Gaaf)
+* mds, ceph-fuse: fix bugs with replayed requests after MDS restart (Sage Weil)
+* mds, ceph-fuse: manage layouts via xattrs
+* mds: allow xattrs on root
+* mds: fast failover between MDSs (enforce unique mds names)
+* mds: fix xattr handling on root inode
+* mds: fixed bugs in journal replay
+* mds: improve session cleanup (Sage Weil)
+* mds: many fixes (Yan Zheng)
+* mds: misc bug fixes with clustered MDSs and failure recovery
+* mds: misc bug fixes with readdir
+* mds: new encoding for all data types (to allow forward/backward compatbility) (Greg Farnum)
+* mds: store and update backpointers/traces on directory, file objects (Sam Lang)
+* mon: 'osd crush add|link|unlink|add-bucket ...' commands
+* mon: ability to tune leveldb
+* mon: approximate recovery, IO workload stats
+* mon: avoid marking entire CRUSH subtrees out (e.g., if an entire rack goes offline)
+* mon: config-keys service to store arbitrary data on monitor
+* mon: easy adjustment of crush tunables via 'ceph osd crush tunables ...'
+* mon: easy creation of crush rules vai 'ceph osd rule ...'
+* mon: fix data conversion/upgrade problem (from bobtail)
+* mon: improved trimming behavior
+* mon: many fixes
+* mon: new 'ceph df [detail]' command
+* mon: new checks for identifying and reporting clock drift
+* mon: rearchitected to utilize single instance of paxos and a key/value store (Joao Luis)
+* mon: safety check for pool deletion
+* mon: shut down safely if disk approaches full (Joao Luis)
+* mon: trigger leveldb compaction on trim
+* msgr: fix comparison of IPv6 addresses (fixes monitor bringup via ceph-deploy, chef)
+* msgr: fixed race in connection reset
+* msgr: optionally tune TCP buffer size to avoid throughput collapse (Jim Schutt)
+* much code cleanup and optimization (Danny Al-Gaaf)
+* osd, librados: ability to list watchers (David Zafman)
+* osd, librados: fixes to the LIST_SNAPS operation
+* osd, librados: new listsnaps command (David Zafman)
+* osd: a few journaling bug fixes
+* osd: ability to tune leveldb
+* osd: add 'noscrub', 'nodeepscrub' osdmap flags (David Zafman)
+* osd: better prevention of wedging OSDs with ENOSPC
+* osd: ceph-filestore-dump tool for debugging
+* osd: connection handling bug fixes
+* osd: deep-scrub omap keys/values
+* osd: default to libaio for the journal (some performance boost)
+* osd: fix hang in 'journal aio = true' mode (Sage Weil)
+* osd: fix pg log trimming (avoids memory bloat on degraded clusters)
+* osd: fix udev rules for RHEL/CentOS systems
+* osd: fixed bug in journal checksums (Sam Just)
+* osd: improved client request throttling
+* osd: improved handling when disk fills up (David Zafman)
+* osd: improved journal corruption detection (Sam Just)
+* osd: improved detection of corrupted journals
+* osd: improvements to scrub error repair
+* osd: make tracking of object snapshot metadata more efficient (Sam Just)
+* osd: many small fixes
+* osd: misc fixes to PG split (Sam Just)
+* osd: move pg info, log into leveldb (== better performance) (David Zafman)
+* osd: notify mon on clean shutdown to avoid IO stall
+* osd: per-rados pool quotas (objects, bytes)
+* osd: refactored watch/notify infrastructure (fixes protocol, removes many bugs) (Sam Just)
+* osd: support for improved hashing of PGs across OSDs via HASHPSPOOL pool flag and feature
+* osd: tool to export, import, and delete PGs from an individual OSD data store
+* osd: trim log more aggressively, avoid appearance of leak memory
+* osd: validate snap collections on startup
+* osd: verify snap collections on startup (Sam Just)
+* radosgw: ACL grants in headers (Caleb Miles)
+* radosgw: ability to listen to fastcgi via a port (Guilhem Lettron)
+* radosgw: fix object copy onto self (Yehuda Sadeh)
+* radosgw: misc fixes
+* rbd-fuse: new tool, package
+* rbd: avoid FIEMAP when importing from file (it can be buggy)
+* rbd: incremental backups
+* rbd: only set STRIPINGV2 feature if striping parameters are incompatible with old versions
+* rbd: require --allow-shrink for resizing images down
+* rbd: udevadm settle on map/unmap to avoid various races (Dan Mick)
+* rbd: wait for udev to settle in strategic places (avoid spurious errors, failures)
+* rgw: CORS support
+* rgw: allow buckets with '_'
+* rgw: fix Content-Length on 32-bit machines (Jan Harkes)
+* rgw: fix log rotation
+* rgw: fix object corruption on COPY to self
+* rgw: fixed >4MB range requests (Jan Harkes)
+* rgw: new sysvinit script for rpm-based systems
+* rpm/deb: do not remove /var/lib/ceph on purge (v0.59 was the only release to do so)
+* sysvinit: try to start all daemons despite early failures
+* upstart: automatically set osd weight based on df (Guilhem Lettron)
+* use less memory for logging by default
 
 
 v0.60
