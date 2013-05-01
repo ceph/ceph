@@ -24,6 +24,11 @@ Source0:	http://ceph.com/download/%{name}-%{version}.tar.bz2
 Requires:	librbd1 = %{version}-%{release}
 Requires:	librados2 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
+Requires:	python
+Requires:	cryptsetup
+Requires:	gptfdisk
+Requires:	parted
+Requires:	util-linux
 Requires(post):	binutils
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 BuildRequires:	gcc-c++
@@ -285,6 +290,10 @@ mkdir -p $RPM_BUILD_ROOT/usr/share/java
 mv $RPM_BUILD_ROOT/usr/lib64/libcephfs.jar  $RPM_BUILD_ROOT/usr/share/java/.
 mv $RPM_BUILD_ROOT/usr/lib64/libcephfs-test.jar $RPM_BUILD_ROOT/usr/share/java/.
 
+# udev rules
+install -D -m 644 udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
+install -D -m 644 udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
+
 %clean
 rm -rf $RPM_BUILD_ROOT
 
@@ -382,9 +391,11 @@ fi
 %{_libdir}/rados-classes/libcls_lock.so*
 %{_libdir}/rados-classes/libcls_kvs.so*
 %{_libdir}/rados-classes/libcls_refcount.so*
-/sbin/ceph-disk-activate
-/sbin/ceph-disk-prepare
-/sbin/ceph-create-keys
+%{_sbindir}/ceph-disk
+%{_sbindir}/ceph-disk-activate
+%{_sbindir}/ceph-disk-prepare
+%{_sbindir}/ceph-create-keys
+/lib/udev/rules.d/95-ceph-osd.rules
 
 #################################################################################
 %files fuse

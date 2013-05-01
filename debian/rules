@@ -90,6 +90,7 @@ install: build
 	$(MAKE) DESTDIR=$(DESTDIR) install
 	sed -i "/dependency_libs/ s/'.*'/''/" `find . -name '*.la'`
 	install -D -m 644 udev/50-rbd.rules $(DESTDIR)/lib/udev/rules.d/50-rbd.rules
+	install -D -m 644 udev/95-ceph-osd.rules $(DESTDIR)/lib/udev/rules.d/95-ceph-osd.rules
 
 # Add here commands to install the package into debian/testpack.
 # Build architecture-independent files here.
@@ -127,6 +128,8 @@ binary-arch: build install
 	# per package, so do this ourselves
 	install -d -m0755 debian/ceph/etc/init
 	install -m0644 src/upstart/ceph*.conf debian/ceph/etc/init
+	install -d -m0755 debian/ceph-mds/etc/init
+	mv debian/ceph/etc/init/ceph-mds* debian/ceph-mds/etc/init
 	install -d -m0755 debian/radosgw/etc/init
 	install -m0644 src/upstart/radosgw*.conf debian/radosgw/etc/init
 	dh_installman -a
