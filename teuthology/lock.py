@@ -547,9 +547,7 @@ def create_if_vm(ctx, machine_name):
                     'additional-disks', 3)
             file_info['additional-disks-size'] = lcnfg.get(
                     'additional-disks-size', '200G')
-            file_info['distroversion'] = lcnfg.get('distroversion',
-                    'ubuntu')
-            file_info['arch'] = lcnfg.get('arch', 'amd64/x86_64')
+            file_info['arch'] = lcnfg.get('arch', 'x86_64')
             file_out = {'downburst': file_info}
         yaml.safe_dump(file_out, tmp)
         metadata = "--meta-data=%s" % tmp.name
