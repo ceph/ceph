@@ -164,8 +164,15 @@ Bobtail to Cuttlefish
 
 Upgrading your cluster from Bobtail to Cuttlefish has a few important
 considerations. First, the monitor uses a new architecture, so you should
-upgrade the full set of monitors to use Cuttlefish. Second, ensure metadata
-servers have unique names. See the following sections for details.
+upgrade the full set of monitors to use Cuttlefish. Second, if you run multiple
+metadata servers in a cluster, ensure the metadata servers have unique names.
+See the following sections for details.
+
+Replace any ``apt`` reference to older repositories with a reference to the
+Cuttlefish repository. For example:: 
+
+	sudo rm /etc/apt/sources.sources.list.d/ceph.list
+	echo deb http://ceph.com/debian-cuttlefish/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 
 Monitor
@@ -186,10 +193,12 @@ monitors in immediate succession.
 MDS Unique Names
 ----------------
 
-The monitor now enforces that MDS names be unique. If you have multiple daemons
-start with with the same id (e.g., mds.a) the second one will implicitly mark
-the first as failed. Multi-MDS configurations with identical names must be
-adjusted accordingly to give daemons unique names.
+The monitor now enforces that MDS names be unique. If you have multiple metadata
+server daemons that start with with the same ID (e.g., mds.a) the second
+metadata server will implicitly mark the first metadata server as ``failed``.
+Multi-MDS configurations with identical names must be adjusted accordingly to
+give daemons unique names. If you run your cluster with one  metadata server,
+you can disregard this notice for now.
 
 
 Upgrade Procedures
