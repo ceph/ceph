@@ -24,10 +24,6 @@ To list the disks on a host, execute the following command::
 
 	ceph-deploy disk list {host-name [host-name]...}
 
-Or: 
-
-	ceph-disk-prepare list {host-name [host-name]...}
-
 
 Zap Disks
 =========

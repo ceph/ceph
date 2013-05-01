@@ -30,12 +30,13 @@ the host(s) that will be initial members of the monitor quorum. ::
 	
 For example:: 
 
-	ceph-deploy new ceph-mon1
-	ceph-deploy new ceph-mon{1,2,3}	
+	ceph-deploy new mon1.foo.com
+	ceph-deploy new mon{1,2,3}
 
-The ``ceph-deploy`` utility will connect to each host to verify its hostname and
-IP address. Then, it will add the specified host names to the Ceph configuration
-file. For additional details, execute:: 
+The ``ceph-deploy`` utility will use DNS to resolve hostnames to IP
+addresses.  The monitors will be named using the first component of
+the name (e.g., ``mon1'' above).  It will add the specified host names
+to the Ceph configuration file. For additional details, execute::
 
 	ceph-deploy new -h
 
