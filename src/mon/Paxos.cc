@@ -362,8 +362,9 @@ void Paxos::handle_last(MMonPaxos *last)
     return;
   }
 
-  // note peer's last_committed, in case we learn a new commit and need to
-  // push it to them.
+  // note peer's first_ and last_committed, in case we learn a new
+  // commit and need to push it to them.
+  peer_first_committed[last->get_source().num()] = last->first_committed;
   peer_last_committed[last->get_source().num()] = last->last_committed;
 
   if (last->first_committed > last_committed+1) {
@@ -974,6 +975,10 @@ void Paxos::trim_to(MonitorDBStore::Transaction *t,
     t->erase(get_name(), from);
     from++;
   }
+  if (g_conf->mon_compact_on_trim) {
+    dout(10) << " compacting prefix" << dendl;
+    t->compact_prefix(get_name());
+  }
 }
 
 void Paxos::trim_to(MonitorDBStore::Transaction *t, version_t first)
@@ -985,6 +990,7 @@ void Paxos::trim_to(MonitorDBStore::Transaction *t, version_t first)
     return;
   trim_to(t, first_committed, first);
   t->put(get_name(), "first_committed", first);
+  first_committed = first;
 }
 
 void Paxos::trim_to(version_t first)

@@ -502,7 +502,7 @@ ObjectCacher::ObjectCacher(CephContext *cct_, string name, WritebackHandler& wb,
     flush_set_callback(flush_callback), flush_set_callback_arg(flush_callback_arg),
     flusher_stop(false), flusher_thread(this), finisher(cct),
     stat_clean(0), stat_zero(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0),
-    stat_error(0), stat_dirty_waiting(0)
+    stat_error(0), stat_dirty_waiting(0), reads_outstanding(0)
 {
   this->max_dirty_age.set_from_double(max_dirty_age);
   perf_start();
@@ -592,7 +592,8 @@ void ObjectCacher::close_object(Object *ob)
 void ObjectCacher::bh_read(BufferHead *bh)
 {
   assert(lock.is_locked());
-  ldout(cct, 7) << "bh_read on " << *bh << dendl;
+  ldout(cct, 7) << "bh_read on " << *bh << " outstanding reads "
+		<< reads_outstanding << dendl;
 
   mark_rx(bh);
 
@@ -607,6 +608,7 @@ void ObjectCacher::bh_read(BufferHead *bh)
 			 bh->start(), bh->length(), bh->ob->get_snap(),
 			 &onfinish->bl, oset->truncate_size, oset->truncate_seq,
 			 onfinish);
+  ++reads_outstanding;
 }
 
 void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
@@ -619,6 +621,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
 		<< " " << start << "~" << length
 		<< " (bl is " << bl.length() << ")"
 		<< " returned " << r
+		<< " outstanding reads " << reads_outstanding
 		<< dendl;
 
   if (bl.length() < length) {
@@ -768,6 +771,8 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
   ldout(cct, 20) << "finishing waiters " << ls << dendl;
 
   finish_contexts(cct, ls, err);
+  --reads_outstanding;
+  read_cond.Signal();
 }
 
 
@@ -1433,6 +1438,19 @@ void ObjectCacher::flusher_entry()
       break;
     flusher_cond.WaitInterval(cct, lock, utime_t(1,0));
   }
+
+  /* Wait for reads to finish. This is only possible if handling
+   * -ENOENT made some read completions finish before their rados read
+   * came back. If we don't wait for them, and destroy the cache, when
+   * the rados reads do come back their callback will try to access the
+   * no-longer-valid ObjectCacher.
+   */
+  while (reads_outstanding > 0) {
+    ldout(cct, 10) << "Waiting for all reads to complete. Number left: "
+		   << reads_outstanding << dendl;
+    read_cond.Wait(lock);
+  }
+
   lock.Unlock();
   ldout(cct, 10) << "flusher finish" << dendl;
 }
