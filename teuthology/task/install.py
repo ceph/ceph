@@ -92,9 +92,10 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
     log.info("Installing packages: {pkglist} on remote deb {arch}".format(
             pkglist=", ".join(debs), arch=baseparms['arch']))
     dist = baseparms['dist']
-    base_url = 'http://{host}/ceph-deb-{dist}-{arch}-{flavor}/{uri}'.format(
+    base_url = 'http://{host}/{proj}-deb-{dist}-{arch}-{flavor}/{uri}'.format(
         host=ctx.teuthology_config.get('gitbuilder_host',
                                        'gitbuilder.ceph.com'),
+        proj=config.get('project'),
         **baseparms
         )
     log.info('Pulling from %s', base_url)
@@ -123,7 +124,7 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
         args=[
             'echo', 'deb', base_url, dist, 'main',
             run.Raw('|'),
-            'sudo', 'tee', '/etc/apt/sources.list.d/ceph.list'
+            'sudo', 'tee', '/etc/apt/sources.list.d/{proj}.list'.format(proj=config.get('project')),
             ],
         stdout=StringIO(),
         )
@@ -149,10 +150,10 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     relval = r.stdout.getvalue()
     relval = relval[0:relval.find('.')]
     
-    start_of_url = 'http://{host}/ceph-rpm-centos{relval}-{arch}-{flavor}/'.format(
-            host=host,relval=relval,**baseparms)
-    end_of_url = '{uri}/noarch/ceph-release-{release}.el{relval}.noarch.rpm'.format(
-            uri=baseparms['uri'],release=RELEASE,relval=relval)
+    start_of_url = 'http://{host}/{proj}-rpm-centos{relval}-{arch}-{flavor}/'.format(
+            host=host,proj=config.get('project'),relval=relval,**baseparms)
+    end_of_url = '{uri}/noarch/{proj}-release-{release}.el{relval}.noarch.rpm'.format(
+            uri=baseparms['uri'],proj=config.get('project'),release=RELEASE,relval=relval)
     base_url = '%s%s' % (start_of_url, end_of_url)
     remote.run(
         args=['sudo','yum','install',base_url,'-y',], stdout=StringIO())
@@ -203,7 +204,7 @@ def install_packages(ctx, pkgs, config):
                 install_pkgs[system_type],
                 ctx, remote, pkgs[system_type], config)
 
-def _remove_deb(remote, debs):
+def _remove_deb(config, remote, debs):
     log.info("Removing packages: {pkglist} on Debian system.".format(
             pkglist=", ".join(debs)))
     # first ask nicely
@@ -244,7 +245,7 @@ def _remove_deb(remote, debs):
         stdout=StringIO(),
         )
 
-def _remove_rpm(remote, rpm):
+def _remove_rpm(config, remote, rpm):
     log.info("Removing packages: {pkglist} on rpm system.".format(
             pkglist=", ".join(rpm)))
     remote.run(
@@ -261,14 +262,14 @@ def _remove_rpm(remote, rpm):
             run.Raw(';'),
             'done',
             ])
-    cephRelease = 'ceph-release-%s.el6.noarch' % RELEASE
-    remote.run(args=['sudo', 'yum', 'erase', cephRelease, '-y'])
+    projRelease = '%s-release-%s.el6.noarch' % (config.get('project'), RELEASE)
+    remote.run(args=['sudo', 'yum', 'erase', projRelease, '-y'])
     remote.run(
         args=[
             'sudo', 'yum', 'clean', 'expire-cache',
             ])
 
-def remove_packages(ctx, pkgs):
+def remove_packages(ctx, config, pkgs):
     remove_pkgs = {
         "deb": _remove_deb,
         "rpm": _remove_rpm,
@@ -276,12 +277,12 @@ def remove_packages(ctx, pkgs):
     with parallel() as p:
         for remote in ctx.cluster.remotes.iterkeys():
             system_type = _get_system_type(remote)
-            p.spawn(remove_pkgs[system_type], remote, pkgs[system_type])
+            p.spawn(remove_pkgs[system_type], config, remote, pkgs[system_type])
 
-def _remove_sources_list_deb(remote):
+def _remove_sources_list_deb(remote, proj):
     remote.run(
         args=[
-            'sudo', 'rm', '-f', '/etc/apt/sources.list.d/ceph.list',
+            'sudo', 'rm', '-f', '/etc/apt/sources.list.d/{proj}.list'.format(proj=proj),
             run.Raw('&&'),
             'sudo', 'apt-get', 'update',
             # ignore failure
@@ -291,10 +292,10 @@ def _remove_sources_list_deb(remote):
         stdout=StringIO(),
        )
 
-def _remove_sources_list_rpm(remote):
+def _remove_sources_list_rpm(remote, proj):
     remote.run(
         args=[
-            'sudo', 'rm', '-f', '/etc/yum.repos.d/ceph.repo',
+            'sudo', 'rm', '-f', '/etc/yum.repos.d/{proj}.repo'.format(proj=proj),
             run.Raw('||'),
             'true',
             ],
@@ -304,7 +305,7 @@ def _remove_sources_list_rpm(remote):
     # remove procedures for the ceph package.
     remote.run(
         args=[
-            'sudo', 'rm', '-fr', '/var/lib/ceph',
+            'sudo', 'rm', '-fr', '/var/lib/{proj}'.format(proj=proj),
             run.Raw('||'),
             'true',
             ],
@@ -312,62 +313,72 @@ def _remove_sources_list_rpm(remote):
        )
     remote.run(
         args=[
-            'sudo', 'rm', '-fr', '/var/log/ceph',
+            'sudo', 'rm', '-fr', '/var/log/{proj}'.format(proj=proj),
             run.Raw('||'),
             'true',
             ],
         stdout=StringIO(),
        )
 
-def remove_sources(ctx):
+def remove_sources(ctx, config):
     remove_sources_pkgs = {
         'deb': _remove_sources_list_deb,
         'rpm': _remove_sources_list_rpm,
         }
-    log.info("Removing ceph sources lists")
+    log.info("Removing {proj} sources lists".format(proj=config.get('project')))
     with parallel() as p:
         for remote in ctx.cluster.remotes.iterkeys():
             system_type = _get_system_type(remote)
-            p.spawn(remove_sources_pkgs[system_type], remote)
+            p.spawn(remove_sources_pkgs[system_type], remote, config.get('project'))
+
+deb_packages = {'ceph': [
+            'ceph',
+            'ceph-dbg',
+            'ceph-mds',
+            'ceph-mds-dbg',
+            'ceph-common',
+            'ceph-common-dbg',
+            'ceph-fuse',
+            'ceph-fuse-dbg',
+            'ceph-test',
+            'ceph-test-dbg',
+            'radosgw',
+            'radosgw-dbg',
+            'python-ceph',
+            'libcephfs1',
+            'libcephfs1-dbg',
+        ]}
+
+rpm_packages = {'ceph': [
+            'ceph-debug',
+            'ceph-radosgw',
+            'ceph-test',
+            'ceph-devel',
+            'ceph',
+            'ceph-fuse',
+            'rest-bench',
+            'libcephfs_jni1',
+            'libcephfs1',
+            'python-ceph',
+        ]}
 
 @contextlib.contextmanager
 def install(ctx, config):
-    debs = [
-        'ceph',
-        'ceph-dbg',
-        'ceph-mds',
-        'ceph-mds-dbg',
-        'ceph-common',
-        'ceph-common-dbg',
-        'ceph-fuse',
-        'ceph-fuse-dbg',
-        'ceph-test',
-        'ceph-test-dbg',
-        'radosgw',
-        'radosgw-dbg',
-        'python-ceph',
-        'libcephfs1',
-        'libcephfs1-dbg',
-        ]
-    rpm = [
-        'ceph-debug',
-        'ceph-radosgw',
-        'ceph-test',
-        'ceph-devel',
-        'ceph',
-        'ceph-fuse',
-        'rest-bench',
-        'libcephfs_jni1',
-        'libcephfs1',
-        'python-ceph',
-        ]
+
+    project = config.get('project')
+
+    global deb_packages
+    global rpm_packages
+    debs = deb_packages.get(project, [])
+    rpm = rpm_packages.get(project, [])
 
     # pull any additional packages out of config
     extra_pkgs = config.get('extra_packages')
     log.info('extra packages: {packages}'.format(packages=extra_pkgs))
-    debs = debs + extra_pkgs
-    rpm = rpm + extra_pkgs
+    debs += extra_pkgs
+    rpm += extra_pkgs
 
+    # the extras option right now is specific to the 'ceph' project
     extras = config.get('extras')
     if extras is not None:
         debs = ['ceph-test', 'ceph-test-dbg', 'ceph-fuse', 'ceph-fuse-dbg', 'librados2', 'librados2-dbg', 'librbd1', 'librbd1-dbg', 'python-ceph']
@@ -375,29 +386,38 @@ def install(ctx, config):
 
     # install lib deps (so we explicitly specify version), but do not
     # uninstall them, as other packages depend on them (e.g., kvm)
-    debs_install = debs + [
-        'librados2',
-        'librados2-dbg',
-        'librbd1',
-        'librbd1-dbg',
-        ]
-    rpm_install = rpm + [
-        'librbd1',
-        'librados2',
-        ]
-    install_info = {"deb": debs_install, "rpm": rpm_install}
-    remove_info = {"deb": debs, "rpm": rpm}
+    proj_install_debs = {'ceph': [
+                                  'librados2',
+                                  'librados2-dbg',
+                                  'librbd1',
+                                  'librbd1-dbg',
+                                 ]}
+
+    proj_install_rpm = {'ceph': [
+                                 'librbd1',
+                                 'librados2',
+                                ]}
+
+    install_debs = proj_install_debs.get(project, [])
+    install_rpm = proj_install_rpm.get(project, [])
+
+    install_info = {
+            "deb": debs + install_debs,
+            "rpm": rpm + install_rpm}
+    remove_info = {
+            "deb": debs,
+            "rpm": rpm}
     install_packages(ctx, install_info, config)
     try:
         yield
     finally:
-        remove_packages(ctx, remove_info)
-        remove_sources(ctx)
+        remove_packages(ctx, config, remove_info)
+        remove_sources(ctx, config)
         purge_data(ctx)
 
-def _upgrade_ceph_packages(ctx, remote, debs, ceph_branch):
+def _upgrade_packages(ctx, config, remote, debs, branch):
     """
-    upgrade all ceph packages
+    upgrade all packages
     """
     # check for ceph release key
     r = remote.run(
@@ -433,10 +453,11 @@ def _upgrade_ceph_packages(ctx, remote, debs, ceph_branch):
 
     # branch/tag/sha1 flavor
     flavor = 'basic'
-    uri = 'ref/'+ceph_branch
-    base_url = 'http://{host}/ceph-deb-{dist}-{arch}-{flavor}/{uri}'.format(
+    uri = 'ref/'+branch
+    base_url = 'http://{host}/{proj}-deb-{dist}-{arch}-{flavor}/{uri}'.format(
         host=ctx.teuthology_config.get('gitbuilder_host',
                                        'gitbuilder.ceph.com'),
+        proj=config.get('project'),
         dist=dist,
         arch=arch,
         flavor=flavor,
@@ -464,7 +485,7 @@ def _upgrade_ceph_packages(ctx, remote, debs, ceph_branch):
         args=[
             'echo', 'deb', base_url, dist, 'main',
             run.Raw('|'),
-            'sudo', 'tee', '/etc/apt/sources.list.d/ceph.list'
+            'sudo', 'tee', '/etc/apt/sources.list.d/{proj}.list'.format(proj=config.get('project')),
             ],
         stdout=StringIO(),
         )
@@ -481,7 +502,7 @@ def _upgrade_ceph_packages(ctx, remote, debs, ceph_branch):
 @contextlib.contextmanager
 def upgrade(ctx, config):
     """
-    upgrades Ceph debian packages.
+    upgrades project debian packages.
 
     For example::
 
@@ -503,9 +524,10 @@ def upgrade(ctx, config):
     for i in config.keys():
             assert isinstance(config.get(i), dict), 'host supports dictionary'
 
-    ceph_branch = None
+    branch = None
 
-    debs = [
+    proj_debs = {}
+    proj_debs['ceph'] = [
         'ceph',
         'ceph-dbg',
         'ceph-mds',
@@ -528,16 +550,25 @@ def upgrade(ctx, config):
         'librbd1-dbg',
         ]
 
-    log.info("Upgrading ceph debian packages: {debs}".format(
-            debs=', '.join(debs)))
+    project = config.get('project')
+
+    debs = proj_debs.get(project, [])
+
+    extra_pkgs = config.get('extra_packages')
+    log.info('extra packages: {packages}'.format(packages=extra_pkgs))
+    debs += extra_pkgs
+
+    log.info("Upgrading {proj} debian packages: {debs}".format(
+            proj=project, debs=', '.join(debs)))
+
 
     if config.get('all') is not None:
         node = config.get('all')
         for var, branch_val in node.iteritems():
             if var == 'branch' or var == 'tag' or var == 'sha1':
-                ceph_branch = branch_val
+                branch = branch_val
         for remote in ctx.cluster.remotes.iterkeys():
-            _upgrade_ceph_packages(ctx, remote, debs, ceph_branch)
+            _upgrade_packages(ctx, config, remote, debs, branch)
     else:
         list_roles = []
         for role in config.keys():
@@ -548,23 +579,23 @@ def upgrade(ctx, config):
             else:
                 for var, branch_val in kkeys.iteritems():
                     if var == 'branch' or var == 'tag' or var == 'sha1':
-                        ceph_branch = branch_val
-                        _upgrade_ceph_packages(ctx, remote, debs, ceph_branch)
+                        branch = branch_val
+                        _upgrade_packages(ctx, config, remote, debs[project], branch)
                         list_roles.append(remote)
     yield
 
 @contextlib.contextmanager
 def task(ctx, config):
     """
-    Install ceph packages
+    Install packages
     """
     if config is None:
         config = {}
     assert isinstance(config, dict), \
-        "task ceph only supports a dictionary for configuration"
+        "task install only supports a dictionary for configuration"
 
     overrides = ctx.config.get('overrides', {})
-    teuthology.deep_merge(config, overrides.get('ceph', {}))
+    teuthology.deep_merge(config, overrides.get('install', {}))
 
     # Flavor tells us what gitbuilder to fetch the prebuilt software
     # from. It's a combination of possible keywords, in a specific
@@ -597,6 +628,7 @@ def task(ctx, config):
                 extra_packages=config.get('extra_packages', []),
                 extras=config.get('extras',None),
                 wait_for_package=ctx.config.get('wait-for-package', False),
+                project=config.get('project', 'ceph'),
                 )),
         ):
         yield

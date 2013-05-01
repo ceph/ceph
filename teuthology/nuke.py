@@ -249,22 +249,11 @@ def remove_installed_packages(ctx, log):
     from teuthology.task import install as install_task
 
     dpkg_configure(ctx, log)
-    debs = ['ceph',
-            'ceph-test',
-            'ceph-fuse',
-            'python-ceph',
-            'librados2',
-            'librbd1',
-            ]
-    el6 = ['ceph-fuse',
-              'ceph',
-              'python-ceph',
-              'librbd1',
-              'librados2',
-              'libcephfs1',
-              ]
-    install_task.remove_packages(ctx, {"deb": debs, "rpm": el6})
-    install_task.remove_sources(ctx)
+    config = {'project': 'ceph'}
+    install_task.remove_packages(ctx, config,
+            {"deb": install_task.deb_packages['ceph'],
+             "rpm": install_task.rpm_packages['ceph']})
+    install_task.remove_sources(ctx, config)
     install_task.purge_data(ctx)
 
 def remove_testing_tree(ctx, log):
