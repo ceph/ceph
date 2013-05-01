@@ -26,17 +26,13 @@ they are all on the same release. We also recommend that you upgrade all the
 daemons in your cluster before you try to exercise new functionality in a
 release.
 
-
-Release-specific Upgrade Details
-================================
-
 Each release of Ceph may have some additional steps. Refer to the following
 sections to identify release-specific procedures for your cluster before 
 using the upgrade procedures.
 
 
-Upgrading from Argonaut to Bobtail
-----------------------------------
+Argonaut to Bobtail
+===================
 
 When upgrading from Argonaut to Bobtail, you need to be aware of several things:
 
@@ -52,7 +48,7 @@ Ensure that you update package repository paths. For example::
 See the following sections for additional details.
 
 Authentication
-~~~~~~~~~~~~~~
+--------------
 
 The Ceph Bobtail release enables authentication by default. Bobtail also has
 finer-grained authentication configuration settings. In previous versions of
@@ -86,7 +82,7 @@ See `Ceph Authentication - Backward Compatibility`_ for details.
 
 
 Monitor On-wire Protocol
-~~~~~~~~~~~~~~~~~~~~~~~~
+------------------------
 
 We recommend upgrading all monitors to Bobtail. A mixture of Bobtail and
 Argonaut monitors will not be able to use the new on-wire protocol, as the
@@ -98,7 +94,7 @@ not waiting for an extended period of time between ``ceph-mon`` upgrades.
 
 
 RBD Images
-~~~~~~~~~~
+----------
 
 The Bobtail release supports ``format 2`` images! However, you should not create
 or use ``format 2`` RBD images until after all ``ceph-osd`` daemons have been
@@ -113,8 +109,8 @@ OSD version strings: ::
       done
 
 
-Upgrading from Argonaut to Cuttlefish
--------------------------------------
+Argonaut to Cuttlefish
+======================
 
 To upgrade your cluster from Argonaut to Cuttlefish, please read this section,
 and the sections on upgrading from Argonaut to Bobtail and upgrading from
@@ -163,8 +159,8 @@ MDS daemons using the generic procedures. See `Upgrading an OSD`_ and `Upgrading
 a Metadata Server`_ for details.
 
 
-Upgrading from Bobtail to Cuttlefish
-------------------------------------
+Bobtail to Cuttlefish
+=====================
 
 Upgrading your cluster from Bobtail to Cuttlefish has a few important
 considerations. First, the monitor uses a new architecture, so you should
@@ -173,7 +169,7 @@ servers have unique names. See the following sections for details.
 
 
 Monitor
-~~~~~~~
+-------
 
 The architecture of the monitors changed significantly from Bobtail to
 Cuttlefish. See `Monitor Config Reference`_ and `Joao's blog post`_ for 
@@ -188,7 +184,7 @@ monitors in immediate succession.
 
 
 MDS Unique Names
-~~~~~~~~~~~~~~~~
+----------------
 
 The monitor now enforces that MDS names be unique. If you have multiple daemons
 start with with the same id (e.g., mds.a) the second one will implicitly mark
