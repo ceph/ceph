@@ -39,9 +39,9 @@ CloudStack integrates with Ceph's block devices to provide CloudStack with a
 back end for CloudStack's Primary Storage. The instructions below detail the
 setup for CloudStack Primary Storage.
 
-.. note:: We recommend installing with Ubuntu 12.04 or later so that 
+.. note:: We recommend installing with Ubuntu 13.04 or later so that 
    you can use package installation instead of having to compile 
-   QEMU from source.
+   libvirt from source.
    
 Installing and configuring QEMU for use with CloudStack doesn't require any
 special handling. Ensure that you have a running Ceph  cluster. Install QEMU and
@@ -53,8 +53,8 @@ higher (you may need to compile from source) and ensure it is running with Ceph.
 #. Also see `KVM Hypervisor Host Installation`_.
 
 
-.. note:: Raring Ringtail (13.04) will have ``libvirt`` verison 0.9.13 or higher
-   by default.
+.. note:: Raring Ringtail (13.04) will have ``libvirt`` version 0.9.13 or higher
+   with RBD storage pool support enabled by default.
 
 Create a Pool
 =============
@@ -104,8 +104,9 @@ created (e.g., ``cloudstack``).
 Limitations
 ===========
 
-- CloudStack will only bind to one monitor.
+- CloudStack will only bind to one monitor (You can however create a Round Robin DNS record over multiple monitors)
 - CloudStack does not support cloning snapshots.
+- You still need a (small) NFS based Primary Storage for the SystemVMs
 - You may need to compile ``libvirt`` to use version 0.9.13 with Ubuntu.
 
 
