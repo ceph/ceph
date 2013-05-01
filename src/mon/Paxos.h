@@ -300,8 +300,11 @@ private:
    */
   version_t accepted_pn_from;
   /**
-   * @todo Check out if this map has any purpose at all. So far, we have only
-   *	   seen it being read, although it is never affected.
+   * Map holding the first committed version by each quorum member.
+   *
+   * The versions kept in this map are updated during the collect phase.
+   * When the Leader starts the collect phase, each Peon will reply with its
+   * first committed version, which will then be kept in this map.
    */
   map<int,version_t> peer_first_committed;
   /**

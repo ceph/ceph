@@ -362,8 +362,9 @@ void Paxos::handle_last(MMonPaxos *last)
     return;
   }
 
-  // note peer's last_committed, in case we learn a new commit and need to
-  // push it to them.
+  // note peer's first_ and last_committed, in case we learn a new
+  // commit and need to push it to them.
+  peer_first_committed[last->get_source().num()] = last->first_committed;
   peer_last_committed[last->get_source().num()] = last->last_committed;
 
   if (last->first_committed > last_committed+1) {
