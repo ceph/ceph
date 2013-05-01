@@ -13,4 +13,7 @@ tasks:
 - install:
      branch: bobtail
 - ceph:
+    conf:
+      client:
+        client mount timeout: 600
 - rgw: [client.0]
