@@ -956,6 +956,50 @@ int RGWDataChangesLog::choose_oid(rgw_bucket& bucket) {
 }
 
 int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
+  lock.Lock();
+
+  ChangeStatusPtr status;
+  if (!changes.find(bucket.name, status)) {
+    status = ChangeStatusPtr(new ChangeStatus);
+    changes.add(bucket.name, status);
+  }
+
+  lock.Unlock();
+
+  utime_t now = ceph_clock_now(cct);
+
+  status->lock->Lock();
+
+#warning FIXME delta config
+  if (now < status->cur_expiration) {
+    /* no need to send, recently completed */
+    status->lock->Unlock();
+    return 0;
+  }
+
+  RefCountedCond *cond;
+
+  if (status->pending) {
+    cond = status->cond;
+
+    assert(cond);
+
+    status->cond->get();
+    status->lock->Unlock();
+
+    cond->wait();
+    cond->put();
+#warning FIXME need to return actual status
+    return 0;
+  }
+
+  status->cond = new RefCountedCond;
+  status->pending = true;
+
+  status->cur_sent = now;
+
+  status->lock->Unlock();
+  
   string& oid = oids[choose_oid(bucket)];
 
   utime_t ut = ceph_clock_now(cct);
@@ -965,7 +1009,22 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
   change.key = bucket.name;
   ::encode(change, bl);
   string section;
-  return store->time_log_add(oid, ut, section, change.key, bl);
+  int ret = store->time_log_add(oid, ut, section, change.key, bl);
+
+  status->lock->Lock();
+
+  cond = status->cond;
+
+  status->pending = false;
+  status->cur_expiration = status->cur_sent; /* time of when operation started, not completed */
+  status->cur_expiration += utime_t(5, 0);
+  status->cond = NULL;
+  status->lock->Unlock();
+
+  cond->done();
+  cond->put();
+
+  return ret;
 }
 
 int RGWDataChangesLog::list_entries(int shard, utime_t& start_time, utime_t& end_time, int max_entries,

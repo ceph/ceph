@@ -2,6 +2,7 @@
 #define CEPH_RGW_BUCKET_H
 
 #include <string>
+#include <memory>
 
 #include "include/types.h"
 #include "rgw_common.h"
@@ -12,6 +13,7 @@
 #include "rgw_string.h"
 
 #include "common/Formatter.h"
+#include "common/lru_map.h"
 #include "rgw_formats.h"
 
 
@@ -256,9 +258,32 @@ class RGWDataChangesLog {
   int num_shards;
   string *oids;
 
+  Mutex lock;
+
+  struct ChangeStatus {
+    utime_t cur_expiration;
+    utime_t cur_sent;
+    bool pending;
+    RefCountedCond *cond;
+    Mutex *lock;
+
+    ChangeStatus() : pending(false), cond(NULL) {
+      lock = new Mutex("RGWDataChangesLog::ChangeStatus");
+    }
+
+    ~ChangeStatus() {
+      delete lock;
+    }
+  };
+
+  typedef std::tr1::shared_ptr<ChangeStatus> ChangeStatusPtr;
+
+  lru_map<string, ChangeStatusPtr> changes;
+
 public:
 
-  RGWDataChangesLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store) {
+  RGWDataChangesLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), lock("RGWDataChangesLog"),
+                                                          changes(1000) /* FIXME */ {
     num_shards = 128; /* FIXME */
     oids = new string[num_shards];
 
