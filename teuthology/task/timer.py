@@ -2,8 +2,6 @@ import logging
 import contextlib
 import datetime
 
-from ..orchestra import run
-
 log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
@@ -43,8 +41,3 @@ def task(ctx, config):
             else:
                 ctx.summary['timer'][config] = [dateinfo]
         log.info('Elapsed time for %s -- %s' % (config,elapsedtime))
-
-
-
-
-        

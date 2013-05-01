@@ -4,7 +4,6 @@ import argparse
 import contextlib
 import logging
 import os
-import sys
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -906,18 +905,7 @@ def run_daemon(ctx, config, type_):
     try:
         yield
     finally:
-        log.info('Shutting down %s daemons...' % type_)
-        exc_info = (None, None, None)
-        for daemon in ctx.daemons.iter_daemons_of_role(type_):
-            try:
-                daemon.stop()
-            except (run.CommandFailedError,
-                    run.CommandCrashedError,
-                    run.ConnectionLostError):
-                exc_info = sys.exc_info()
-                log.exception('Saw exception from %s.%s', daemon.role, daemon.id_)
-        if exc_info != (None, None, None):
-            raise exc_info[0], exc_info[1], exc_info[2]
+        teuthology.stop_daemons_of_type(ctx, type_)
 
 def healthy(ctx, config):
     log.info('Waiting until ceph is healthy...')
@@ -957,12 +945,12 @@ def restart(ctx, config):
               "task ceph.restart only supports a list for configuration"
        config = dict.fromkeys(config)
        for i in config.keys():
-           type_ = i.split('.')[0]
-           id_ = i.split('.')[1]
+           type_ = i.split('.', 1)[0]
+           id_ = i.split('.', 1)[1]
            ctx.daemons.get_daemon(type_, id_).stop()
            ctx.daemons.get_daemon(type_, id_).restart()
    else:
-       type_daemon = ['mon', 'osd', 'mds']
+       type_daemon = ['mon', 'osd', 'mds', 'rgw']
        for d in type_daemon:
            type_ = d
            for daemon in ctx.daemons.iter_daemons_of_role(type_):

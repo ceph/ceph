@@ -2,7 +2,6 @@ from cStringIO import StringIO
 
 import contextlib
 import logging
-import os
 
 from teuthology import misc as teuthology
 from teuthology import contextutil

@@ -14,12 +14,13 @@ def task(ctx, config):
         ctx.cluster.run(
             args=[
                 'wget',
-                '-q',
+#                '-q',
                 '-O-',
 #                'https://raw.github.com/ceph/ceph-qa-chef/master/solo/solo-from-scratch',
                 'http://ceph.com/git/?p=ceph-qa-chef.git;a=blob_plain;f=solo/solo-from-scratch;hb=HEAD',
                 run.Raw('|'),
                 'sh',
+                '-x',
                 ],
             wait=False,
             )

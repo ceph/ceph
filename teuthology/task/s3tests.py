@@ -14,8 +14,8 @@ from ..orchestra.connection import split_user
 
 log = logging.getLogger(__name__)
 
-
-def do_download(ctx, config):
+@contextlib.contextmanager
+def download(ctx, config):
     assert isinstance(config, dict)
     log.info('Downloading s3-tests...')
     testdir = teuthology.get_testdir(ctx)
@@ -43,6 +43,7 @@ def do_download(ctx, config):
         yield
     finally:
         log.info('Removing s3-tests...')
+        testdir = teuthology.get_testdir(ctx)
         for client in config:
             ctx.cluster.only(client).run(
                 args=[
@@ -52,9 +53,6 @@ def do_download(ctx, config):
                     ],
                 )
 
-@contextlib.contextmanager
-def download(ctx, config):
-    return do_download(ctx, config)
 
 def _config_user(s3tests_conf, section, user):
     s3tests_conf[section].setdefault('user_id', user)
@@ -63,15 +61,18 @@ def _config_user(s3tests_conf, section, user):
     s3tests_conf[section].setdefault('access_key', ''.join(random.choice(string.uppercase) for i in xrange(20)))
     s3tests_conf[section].setdefault('secret_key', base64.b64encode(os.urandom(40)))
 
-def do_create_users(ctx, config):
+
+@contextlib.contextmanager
+def create_users(ctx, config):
     assert isinstance(config, dict)
     log.info('Creating rgw users...')
     testdir = teuthology.get_testdir(ctx)
+    users = {'s3 main': 'foo', 's3 alt': 'bar'}
     for client in config['clients']:
         s3tests_conf = config['s3tests_conf'][client]
         s3tests_conf.setdefault('fixtures', {})
         s3tests_conf['fixtures'].setdefault('bucket prefix', 'test-' + client + '-{random}-')
-        for section, user in [('s3 main', 'foo'), ('s3 alt', 'bar')]:
+        for section, user in users.iteritems():
             _config_user(s3tests_conf, section, '{user}.{client}'.format(user=user, client=client))
             ctx.cluster.only(client).run(
                 args=[
@@ -87,13 +88,27 @@ def do_create_users(ctx, config):
                     '--email', s3tests_conf[section]['email'],
                 ],
             )
-    yield
+    try:
+        yield
+    finally:
+        for client in config['clients']:
+            for user in users.itervalues():
+                uid = '{user}.{client}'.format(user=user, client=client)
+                ctx.cluster.only(client).run(
+                    args=[
+                        '{tdir}/enable-coredump'.format(tdir=testdir),
+                        'ceph-coverage',
+                        '{tdir}/archive/coverage'.format(tdir=testdir),
+                        'radosgw-admin',
+                        'user', 'rm',
+                        '--uid', uid,
+                        '--purge-data',
+                        ],
+                    )
+
 
 @contextlib.contextmanager
-def create_users(ctx, config):
-    return do_create_users(ctx, config)
-
-def do_configure(ctx, config):
+def configure(ctx, config):
     assert isinstance(config, dict)
     log.info('Configuring s3-tests...')
     testdir = teuthology.get_testdir(ctx)
@@ -130,10 +145,7 @@ def do_configure(ctx, config):
     yield
 
 @contextlib.contextmanager
-def configure(ctx, config):
-    return do_configure(ctx, config)
-
-def do_run_tests(ctx, config):
+def run_tests(ctx, config):
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
@@ -151,10 +163,6 @@ def do_run_tests(ctx, config):
         ctx.cluster.only(client).run(
             args=args,
             )
-
-@contextlib.contextmanager
-def run_tests(ctx, config):
-    do_run_tests(ctx, config)
     yield
 
 @contextlib.contextmanager
@@ -242,4 +250,5 @@ def task(ctx, config):
                 )),
         lambda: run_tests(ctx=ctx, config=config),
         ):
-        yield
+        pass
+    yield
