@@ -33,6 +33,22 @@ class LevelDBStore : public KeyValueDB {
   int init(ostream &out, bool create_if_missing);
 
 public:
+  /// compact the underlying leveldb store
+  void compact() {
+    db->CompactRange(NULL, NULL);
+  }
+
+  /// compact leveldb for all keys with a given prefix
+  void compact_prefix(const string& prefix) {
+    // if we combine the prefix with key by adding a '\0' separator,
+    // a char(1) will capture all such keys.
+    string end = prefix;
+    end += (char)1;
+    leveldb::Slice cstart(prefix);
+    leveldb::Slice cend(end);
+    db->CompactRange(&cstart, &cend);
+  }
+
   /**
    * options_t: Holds options which are minimally interpreted
    * on initialization and then passed through to LevelDB.

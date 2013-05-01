@@ -55,6 +55,7 @@ void Elector::bump_epoch(epoch_t e)
   MonitorDBStore::Transaction t;
   t.put(Monitor::MONITOR_NAME, "election_epoch", epoch);
   mon->store->apply_transaction(t);
+  mon->reset();
 
   // clear up some state
   electing_me = false;
@@ -80,21 +81,18 @@ void Elector::start()
   electing_me = true;
   acked_me[mon->rank] = CEPH_FEATURES_ALL;
   leader_acked = -1;
-  acked_first_paxos_version = mon->paxos->get_first_committed();
 
   // bcast to everyone else
   for (unsigned i=0; i<mon->monmap->size(); ++i) {
     if ((int)i == mon->rank) continue;
-    Message *m = new MMonElection(MMonElection::OP_PROPOSE, epoch, mon->monmap,
-                                  mon->paxos->get_first_committed(),
-                                  mon->paxos->get_version());
+    Message *m = new MMonElection(MMonElection::OP_PROPOSE, epoch, mon->monmap);
     mon->messenger->send_message(m, mon->monmap->get_inst(i));
   }
   
   reset_timer();
 }
 
-void Elector::defer(int who, version_t paxos_first)
+void Elector::defer(int who)
 {
   dout(5) << "defer to " << who << dendl;
 
@@ -106,11 +104,8 @@ void Elector::defer(int who, version_t paxos_first)
 
   // ack them
   leader_acked = who;
-  acked_first_paxos_version = paxos_first;
   ack_stamp = ceph_clock_now(g_ceph_context);
-  mon->messenger->send_message(new MMonElection(MMonElection::OP_ACK, epoch, mon->monmap,
-                                                mon->paxos->get_first_committed(),
-                                                mon->paxos->get_version()),
+  mon->messenger->send_message(new MMonElection(MMonElection::OP_ACK, epoch, mon->monmap),
 			       mon->monmap->get_inst(who));
   
   // set a timer
@@ -174,11 +169,9 @@ void Elector::victory()
        p != quorum.end();
        ++p) {
     if (*p == mon->rank) continue;
-    MMonElection *m = new MMonElection(MMonElection::OP_VICTORY, epoch,
-                                       mon->monmap,
-                                       mon->paxos->get_first_committed(),
-                                       mon->paxos->get_version());
+    MMonElection *m = new MMonElection(MMonElection::OP_VICTORY, epoch, mon->monmap);
     m->quorum = quorum;
+    m->quorum_features = features;
     mon->messenger->send_message(m, mon->monmap->get_inst(*p));
   }
     
@@ -213,13 +206,10 @@ void Elector::handle_propose(MMonElection *m)
     }
   }
 
-  if ((mon->rank < from) &&
-      // be careful that we have new enough data to be leader!
-      (m->paxos_first_version <= mon->paxos->get_version())) {
+  if (mon->rank < from) {
     // i would win over them.
     if (leader_acked >= 0) {        // we already acked someone
-      assert((leader_acked < from) || // and they still win, of course
-             (acked_first_paxos_version > mon->paxos->get_version()));
+      assert(leader_acked < from);  // and they still win, of course
       dout(5) << "no, we already acked " << leader_acked << dendl;
     } else {
       // wait, i should win!
@@ -228,20 +218,16 @@ void Elector::handle_propose(MMonElection *m)
 	mon->start_election();
       }
     }
-  } else if (m->paxos_last_version >= mon->paxos->get_first_committed()) {
+  } else {
     // they would win over me
     if (leader_acked < 0 ||      // haven't acked anyone yet, or
 	leader_acked > from ||   // they would win over who you did ack, or
-	leader_acked == from) { // this is the guy we're already deferring to
-      defer(from, m->paxos_first_version);
+	leader_acked == from) {  // this is the guy we're already deferring to
+      defer(from);
     } else {
       // ignore them!
       dout(5) << "no, we already acked " << leader_acked << dendl;
     }
-  } else { // they are too out-of-date
-    dout(5) << "no, they are too far behind; paxos version: "
-	    << m->paxos_last_version << " versus my first "
-	    << mon->paxos->get_first_committed() << dendl;
   }
   
   m->put();
@@ -286,7 +272,7 @@ void Elector::handle_victory(MMonElection *m)
   dout(5) << "handle_victory from " << m->get_source() << " quorum_features " << m->quorum_features << dendl;
   int from = m->get_source().num();
 
-  assert((from < mon->rank) || (acked_first_paxos_version > mon->paxos->get_version()));
+  assert(from < mon->rank);
   assert(m->epoch % 2 == 0);  
 
   leader_acked = -1;
