@@ -20,9 +20,8 @@ you may select from the following:
 
 For example:: 
 
-	ceph-deploy install --stable <code-name> <hostname1 [hostname2] ...>
-	ceph-deploy install --stable bobtail hostname{1,2,3,4,5}
-	ceph-deploy install --testing hostname1
+	ceph-deploy install --stable cuttlefish hostname1
+	ceph-deploy install --testing hostname2
 	ceph-deploy install --dev wip-some-branch hostname{1,2,3,4,5}
 	
 For additional details, see `Installing Debian/Ubuntu Packages`_.
@@ -34,13 +33,17 @@ For additional usage, execute::
 Uninstall
 =========
 
-To uninstall Ceph packages from your cluster hosts, open a commandline on 
+To uninstall Ceph packages from your cluster hosts, open a terminal on
 your admin host and type the following:: 
 
 	ceph-deploy uninstall {hostname [hostname] ...}
 
-The tool will unininstall ``ceph`` packages from the specified hosts. Other
-commands may also invoke ``ceph-deploy uninstall``, such as ``purge``.
+On a Debian or Ubuntu system, you may also::
+
+	ceph-deploy purge {hostname [hostname] ...}
+
+The tool will unininstall ``ceph`` packages from the specified hosts.  Purge
+additionally removes configuration files.
 
 .. _Installing Debian/Ubuntu Packages:  ../../../install/debian
 
