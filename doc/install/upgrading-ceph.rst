@@ -23,7 +23,7 @@ daemons in this order:
 As a general rule, we recommend upgrading all the daemons of a specific type
 (e.g., all ``ceph-osd`` daemons, all ``ceph-mon`` daemons, etc.) to ensure that
 they are all on the same release. We also recommend that you upgrade all the
-daemons in your cluster before you try to exorcise new functionality in a
+daemons in your cluster before you try to exercise new functionality in a
 release.
 
 
@@ -32,7 +32,7 @@ Release-specific Upgrade Details
 
 Each release of Ceph may have some additional steps. Refer to the following
 sections to identify release-specific procedures for your cluster before 
-using the updgrade procedures.
+using the upgrade procedures.
 
 
 Upgrading from Argonaut to Bobtail
