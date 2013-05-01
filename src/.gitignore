@@ -40,7 +40,7 @@ Makefile
 /ceph_smalliobenchdumb
 /ceph_smalliobenchfs
 /ceph_smalliobenchrbd
-/ceph_monstore_tool
+/ceph-monstore-tool
 /ceph-osdomap-tool
 /ceph_ver.h
 /dev
