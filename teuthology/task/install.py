@@ -19,7 +19,7 @@ def _get_system_type(remote):
     Return this system type (for example, deb or rpm)
     """
     r = remote.run(
-        args= [
+        args=[
             'sudo','lsb_release', '-is',
         ],
     stdout=StringIO(),
@@ -149,15 +149,59 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     relval = r.stdout.getvalue()
     relval = relval[0:relval.find('.')]
     
-    start_of_url = 'http://{host}/ceph-rpm-centos{relval}-{arch}-{flavor}/'.format(
-            host=host,relval=relval,**baseparms)
-    end_of_url = '{uri}/noarch/ceph-release-{release}.el{relval}.noarch.rpm'.format(
-            uri=baseparms['uri'],release=RELEASE,relval=relval)
-    base_url = '%s%s' % (start_of_url, end_of_url)
+    start_of_url = 'http://{host}/ceph-rpm-centos{relval}-{arch}-{flavor}/{uri}'.format(host=host,relval=relval,**baseparms)
+    ceph_release = 'ceph-release-{release}.el{relval}.noarch'.format(
+            release=RELEASE,relval=relval)
+    rpm_name = "{rpm_nm}.rpm".format(rpm_nm=ceph_release)
+    base_url = "{start_of_url}/noarch/{rpm_name}".format(
+            start_of_url=start_of_url, rpm_name=rpm_name)
+    err_mess = StringIO()
+    try:
+        # When this was one command with a pipe, it would sometimes
+        # fail with the message 'rpm: no packages given for install'
+        remote.run(args=['wget', base_url,],)
+        remote.run(args=['sudo', 'rpm', '-i', rpm_name,],
+                stderr=err_mess,)
+    except:
+        cmp_msg = 'package {pkg} is already installed'.format(
+                pkg=ceph_release)
+        if cmp_msg != err_mess.getvalue().strip():
+            raise
+    
     remote.run(
-        args=['sudo','yum','install',base_url,'-y',], stdout=StringIO())
+        args=[
+            'sudo', 'yum', 'clean', 'all',
+            ])
+    version_no = StringIO()
+    version_url = "{start_of_url}/version".format(start_of_url=start_of_url)
+    while True:
+        r = remote.run(args=['wget', '-q', '-O-', version_url,],
+            stdout=version_no, check_status=False)
+        if r.exitstatus != 0:
+            if config.get('wait_for_package'):
+                log.info('Package not there yet, waiting...')
+                time.sleep(15)
+                continue
+            raise Exception('failed to fetch package version from %s' %
+                            version_url)
+        version = r.stdout.getvalue().strip()
+        log.info('Package version is %s', version)
+        break
+
+    tmp_vers = version_no.getvalue().strip()[1:]
+    dloc = tmp_vers.rfind('-')
+    t_vers1 = tmp_vers[0:dloc]
+    t_vers2 = tmp_vers[dloc+1:]
+    trailer = "-{tv1}.{tv2}.el6".format(tv1=t_vers1, tv2=t_vers2)
     for cpack in rpm:
-        remote.run(args=['sudo', 'yum', 'install', cpack, '-y',],stdout=StringIO())
+        pk_err_mess = StringIO()
+        pkg2add = "{cpack}{trailer}".format(cpack=cpack,trailer=trailer)
+        try:
+            remote.run(args=['sudo', 'yum', 'install', pkg2add, '-y',],
+                    stderr=pk_err_mess)
+        except:
+            if not pk_err_mess.getvalue().strip() == "Error: Nothing to do":
+                raise
 
 def purge_data(ctx):
     """
@@ -261,6 +305,10 @@ def _remove_rpm(remote, rpm):
             run.Raw(';'),
             'done',
             ])
+    remote.run(
+        args=[
+            'sudo', 'yum', 'clean', 'all',
+            ])
     cephRelease = 'ceph-release-%s.el6.noarch' % RELEASE
     remote.run(args=['sudo', 'yum', 'erase', cephRelease, '-y'])
     remote.run(
@@ -350,16 +398,18 @@ def install(ctx, config):
         'libcephfs1-dbg',
         ]
     rpm = [
+        'ceph',
         'ceph-debug',
+        'ceph-devel',
+        'ceph-fuse',
         'ceph-radosgw',
         'ceph-test',
-        'ceph-devel',
-        'ceph',
-        'ceph-fuse',
-        'rest-bench',
-        'libcephfs_jni1',
+        'cephfs-java',
         'libcephfs1',
+        'libcephfs_jni1',
         'python-ceph',
+        'rbd-fuse',
+        'rest-bench',
         ]
 
     # pull any additional packages out of config
