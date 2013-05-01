@@ -2,6 +2,7 @@
 #define CEPH_RGW_BUCKET_H
 
 #include <string>
+#include <memory>
 
 #include "include/types.h"
 #include "rgw_common.h"
@@ -258,7 +259,7 @@ class RGWDataChangesLog {
 
   Mutex lock;
 
-  struct ChangeStatus : public RefCountedObject {
+  struct ChangeStatus {
     utime_t cur_expiration;
     utime_t cur_sent;
     bool pending;
@@ -274,7 +275,9 @@ class RGWDataChangesLog {
     }
   };
 
-  map<string, ChangeStatus *> changes;
+  typedef std::tr1::shared_ptr<ChangeStatus> ChangeStatusPtr;
+
+  map<string, ChangeStatusPtr> changes;
 
 public:
 

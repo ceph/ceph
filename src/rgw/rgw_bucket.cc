@@ -1057,12 +1057,11 @@ int RGWDataChangesLog::choose_oid(rgw_bucket& bucket) {
 
 int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
   lock.Lock();
-  ChangeStatus *& status = changes[bucket.name];
+  ChangeStatusPtr& status = changes[bucket.name];
   if (!status) {
-    status = new ChangeStatus;
+    status = ChangeStatusPtr(new ChangeStatus);
   }
 
-  status->get();
   lock.Unlock();
 
   utime_t now = ceph_clock_now(cct);
@@ -1073,7 +1072,6 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
   if (now < status->cur_expiration) {
     /* no need to send, recently completed */
     status->lock->Unlock();
-    status->put();
     return 0;
   }
 
@@ -1086,7 +1084,6 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
 
     status->cond->get();
     status->lock->Unlock();
-    status->put();
 
     cond->wait();
     cond->put();
@@ -1121,8 +1118,6 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
   status->cur_expiration += utime_t(5, 0);
   status->cond = NULL;
   status->lock->Unlock();
-
-  status->put();
 
   cond->done();
   cond->put();
