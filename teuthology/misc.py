@@ -5,6 +5,7 @@ import logging
 import configobj
 import getpass
 import socket
+import sys
 import tarfile
 import time
 import urllib2

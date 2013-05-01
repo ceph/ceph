@@ -100,7 +100,6 @@ exec radosgw -f
 def start_rgw(ctx, config):
     log.info('Starting rgw...')
     testdir = teuthology.get_testdir(ctx)
-    rgws = {}
     for client in config.iterkeys():
         (remote,) = ctx.cluster.only(client).remotes.iterkeys()
 

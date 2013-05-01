@@ -4,7 +4,6 @@ import argparse
 import contextlib
 import logging
 import os
-import sys
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
