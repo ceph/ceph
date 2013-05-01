@@ -234,6 +234,11 @@ void OSDService::mark_split_in_progress(pg_t parent, const set<pg_t> &children)
 void OSDService::cancel_pending_splits_for_parent(pg_t parent)
 {
   Mutex::Locker l(in_progress_split_lock);
+  return _cancel_pending_splits_for_parent(parent);
+}
+
+void OSDService::_cancel_pending_splits_for_parent(pg_t parent)
+{
   map<pg_t, set<pg_t> >::iterator piter = rev_pending_splits.find(parent);
   if (piter == rev_pending_splits.end())
     return;
@@ -244,6 +249,7 @@ void OSDService::cancel_pending_splits_for_parent(pg_t parent)
     assert(pending_splits.count(*i));
     assert(!in_progress_splits.count(*i));
     pending_splits.erase(*i);
+    _cancel_pending_splits_for_parent(*i);
   }
   rev_pending_splits.erase(piter);
 }
