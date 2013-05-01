@@ -140,7 +140,7 @@ ceph_monstore_tool_SOURCES = tools/ceph-monstore-tool.cc \
 ceph_monstore_tool_LDFLAGS = ${AM_LDFLAGS}
 ceph_monstore_tool_LDADD =  $(LIBOS_LDA) $(LIBGLOBAL_LDA) -lboost_program_options
 ceph_monstore_tool_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-bin_DEBUGPROGRAMS += ceph_monstore_tool
+bin_DEBUGPROGRAMS += ceph-monstore-tool
 
 monmaptool_SOURCES = monmaptool.cc
 monmaptool_LDADD = $(LIBGLOBAL_LDA)
