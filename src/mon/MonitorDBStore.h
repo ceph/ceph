@@ -70,6 +70,7 @@ class MonitorDBStore
     enum {
       OP_PUT	= 1,
       OP_ERASE	= 2,
+      OP_COMPACT_PREFIX = 3,
     };
 
     void put(string prefix, string key, bufferlist& bl) {
@@ -96,6 +97,10 @@ class MonitorDBStore
       ostringstream os;
       os << ver;
       erase(prefix, os.str());
+    }
+
+    void compact_prefix(string prefix) {
+      ops.push_back(Op(OP_COMPACT_PREFIX, prefix, string()));
     }
 
     void encode(bufferlist& bl) const {
@@ -157,6 +162,12 @@ class MonitorDBStore
 	    f->dump_string("key", op.key);
 	  }
 	  break;
+	case OP_COMPACT_PREFIX:
+	  {
+	    f->dump_string("type", "COMPACT_PREFIX");
+	    f->dump_string("prefix", op.prefix);
+	  }
+	  break;
 	default:
 	  {
 	    f->dump_string("type", "unknown");
@@ -174,6 +185,7 @@ class MonitorDBStore
   int apply_transaction(MonitorDBStore::Transaction& t) {
     KeyValueDB::Transaction dbt = db->get_transaction();
 
+    list<string> compact_prefixes;
     for (list<Op>::iterator it = t.ops.begin(); it != t.ops.end(); ++it) {
       Op& op = *it;
       switch (op.type) {
@@ -183,13 +195,23 @@ class MonitorDBStore
       case Transaction::OP_ERASE:
 	dbt->rmkey(op.prefix, op.key);
 	break;
+      case Transaction::OP_COMPACT_PREFIX:
+	compact_prefixes.push_back(op.prefix);
+	break;
       default:
 	derr << __func__ << " unknown op type " << op.type << dendl;
 	ceph_assert(0);
 	break;
       }
     }
-    return db->submit_transaction_sync(dbt);
+    int r = db->submit_transaction_sync(dbt);
+    if (r >= 0) {
+      while (!compact_prefixes.empty()) {
+	db->compact_prefix(compact_prefixes.front());
+	compact_prefixes.pop_front();
+      }
+    }
+    return r;
   }
 
   class StoreIteratorImpl {
@@ -454,6 +476,14 @@ class MonitorDBStore
 
   int create_and_open(ostream &out) {
     return db->create_and_open(out);
+  }
+
+  void compact() {
+    db->compact();
+  }
+
+  void compact_prefix(const string& prefix) {
+    db->compact_prefix(prefix);
   }
 
   MonitorDBStore(const string& path) : db(0) {

@@ -1039,7 +1039,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
   if (ctx->op_t.empty() || result < 0) {
     if (result >= 0) {
       log_op_stats(ctx);
-      update_stats();
+      publish_stats_to_osd();
     }
     
     MOSDOpReply *reply = ctx->reply;
@@ -2197,9 +2197,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (r >= 0) {
 	  op.xattr.value_len = r;
 	  result = 0;
+	  ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(r, 10);
+	  ctx->delta_stats.num_rd++;
 	} else
 	  result = r;
-	ctx->delta_stats.num_rd++;
       }
       break;
 
@@ -2217,6 +2218,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         
         bufferlist bl;
         ::encode(newattrs, bl);
+	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(bl.length(), 10);
+        ctx->delta_stats.num_rd++;
         osd_op.outdata.claim_append(bl);
       }
       break;
@@ -2237,6 +2240,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (result < 0 && result != -EEXIST && result != -ENODATA)
 	  break;
 	
+	ctx->delta_stats.num_rd++;
+	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(xattr.length(), 10);
+
 	switch (op.xattr.cmp_mode) {
 	case CEPH_OSD_CMPXATTR_MODE_STRING:
 	  {
@@ -2281,7 +2287,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 
 	dout(10) << "comparison returned true" << dendl;
-	ctx->delta_stats.num_rd++;
       }
       break;
 
@@ -2848,6 +2853,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      out_set.insert(iter->first);
 	    }
 	    ::encode(out_set, osd_op.outdata);
+	    ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
+	    ctx->delta_stats.num_rd++;
 	    break;
 	  }
 	  dout(10) << "failed, reading from omap" << dendl;
@@ -2867,6 +2874,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 	}
 	::encode(out_set, osd_op.outdata);
+	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
+	ctx->delta_stats.num_rd++;
       }
       break;
     case CEPH_OSD_OP_OMAPGETVALS:
@@ -2901,6 +2910,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      out_set.insert(*iter);
 	    }
 	    ::encode(out_set, osd_op.outdata);
+	    ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
+	    ctx->delta_stats.num_rd++;
 	    break;
 	  }
 	  // No valid tmap, use omap
@@ -2923,6 +2934,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 	}
 	::encode(out_set, osd_op.outdata);
+	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
+	ctx->delta_stats.num_rd++;
       }
       break;
     case CEPH_OSD_OP_OMAPGETHEADER:
@@ -2941,6 +2954,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  dout(10) << "failed, reading from omap" << dendl;
 	}
 	osd->store->omap_get_header(coll, soid, &osd_op.outdata);
+	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
+	ctx->delta_stats.num_rd++;
       }
       break;
     case CEPH_OSD_OP_OMAPGETVALSBYKEYS:
@@ -2969,6 +2984,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      }
 	    }
 	    ::encode(out, osd_op.outdata);
+	    ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
+	    ctx->delta_stats.num_rd++;
 	    break;
 	  }
 	  // No valid tmap, use omap
@@ -2976,6 +2993,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	osd->store->omap_get_values(coll, soid, keys_to_get, &out);
 	::encode(out, osd_op.outdata);
+	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
+	ctx->delta_stats.num_rd++;
       }
       break;
     case CEPH_OSD_OP_OMAP_CMP:
@@ -3004,6 +3023,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = r;
 	  break;
 	}
+	//Should set num_rd_kb based on encode length of map
+	ctx->delta_stats.num_rd++;
 
 	r = 0;
 	bufferlist empty;
@@ -3066,6 +3087,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  dout(20) << "\t" << i->first << dendl;
 	}
 	t.omap_setkeys(coll, soid, to_set);
+	ctx->delta_stats.num_wr++;
       }
       break;
     case CEPH_OSD_OP_OMAPSETHEADER:
@@ -3079,6 +3101,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	t.touch(coll, soid);
 	t.omap_setheader(coll, soid, osd_op.indata);
+	ctx->delta_stats.num_wr++;
       }
       break;
     case CEPH_OSD_OP_OMAPCLEAR:
@@ -3092,6 +3115,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	t.touch(coll, soid);
 	t.omap_clear(coll, soid);
+	ctx->delta_stats.num_wr++;
       }
       break;
     case CEPH_OSD_OP_OMAPRMKEYS:
@@ -3113,6 +3137,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  goto fail;
 	}
 	t.omap_rmkeys(coll, soid, to_rm);
+	ctx->delta_stats.num_wr++;
       }
       break;
     default:
@@ -3575,6 +3600,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   // read-op?  done?
   if (ctx->op_t.empty() && !ctx->modify) {
     ctx->reply_version = ctx->obs->oi.user_version;
+    unstable_stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
     return result;
   }
 
@@ -3879,7 +3905,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
     if (repop->waitfor_disk.empty()) {
 
       log_op_stats(repop->ctx);
-      update_stats();
+      publish_stats_to_osd();
 
       // send dup commits, in order
       if (waiting_for_ondisk.count(repop->v)) {
@@ -5454,7 +5480,7 @@ void ReplicatedPG::handle_pull_response(OpRequestRef op)
   if (complete) {
     pulling.erase(hoid);
     pull_from_peer[m->get_source().num()].erase(hoid);
-    update_stats();
+    publish_stats_to_osd();
     if (waiting_for_missing_object.count(hoid)) {
       dout(20) << " kicking waiters on " << hoid << dendl;
       requeue_ops(waiting_for_missing_object[hoid]);
@@ -5701,7 +5727,7 @@ void ReplicatedPG::sub_op_push_reply(OpRequestRef op)
       pushing[soid].erase(peer);
       pi = NULL;
       
-      update_stats();
+      publish_stats_to_osd();
       
       if (pushing[soid].empty()) {
 	pushing.erase(soid);
@@ -6335,6 +6361,7 @@ void ReplicatedPG::on_change()
   snap_trimmer_machine.process_event(Reset());
 
   debug_op_order.clear();
+  unstable_stats.clear();
 }
 
 void ReplicatedPG::on_role_change()
@@ -7277,7 +7304,7 @@ void ReplicatedPG::_scrub_finish()
     if (repair) {
       ++scrubber.fixed;
       info.stats.stats = scrub_cstat;
-      update_stats();
+      publish_stats_to_osd();
       share_pg_info();
     }
   }

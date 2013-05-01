@@ -294,13 +294,19 @@ void PaxosService::put_version(MonitorDBStore::Transaction *t,
 			       const string& prefix, version_t ver,
 			       bufferlist& bl)
 {
-  t->put(get_service_name(), ver, bl);
+  ostringstream os;
+  os << ver;
+  string key = mon->store->combine_strings(prefix, os.str());
+  t->put(get_service_name(), key, bl);
 }
 
 int PaxosService::get_version(const string& prefix, version_t ver,
 			      bufferlist& bl)
 {
-  return mon->store->get(get_service_name(), ver, bl);
+  ostringstream os;
+  os << ver;
+  string key = mon->store->combine_strings(prefix, os.str());
+  return mon->store->get(get_service_name(), key, bl);
 }
 
 void PaxosService::trim(MonitorDBStore::Transaction *t,
@@ -317,6 +323,10 @@ void PaxosService::trim(MonitorDBStore::Transaction *t,
       dout(20) << __func__ << " " << full_key << dendl;
       t->erase(get_service_name(), full_key);
     }
+  }
+  if (g_conf->mon_compact_on_trim) {
+    dout(20) << " compacting prefix " << get_service_name() << dendl;
+    t->compact_prefix(get_service_name());
   }
 }
 

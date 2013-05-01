@@ -444,6 +444,9 @@ class ObjectCacher {
   loff_t release(Object *o);
   void purge(Object *o);
 
+  int64_t reads_outstanding;
+  Cond read_cond;
+
   int _readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	     bool external_call);
 

@@ -194,14 +194,72 @@ OSDService::OSDService(OSD *osd) :
 #endif
 {}
 
-void OSDService::_start_split(const set<pg_t> &pgs)
+void OSDService::_start_split(pg_t parent, const set<pg_t> &children)
 {
-  for (set<pg_t>::const_iterator i = pgs.begin();
-       i != pgs.end();
+  for (set<pg_t>::const_iterator i = children.begin();
+       i != children.end();
        ++i) {
-    dout(10) << __func__ << ": Starting split on pg " << *i << dendl;
+    dout(10) << __func__ << ": Starting split on pg " << *i
+	     << ", parent=" << parent << dendl;
+    assert(!pending_splits.count(*i));
     assert(!in_progress_splits.count(*i));
+    pending_splits.insert(make_pair(*i, parent));
+
+    assert(!rev_pending_splits[parent].count(*i));
+    rev_pending_splits[parent].insert(*i);
+  }
+}
+
+void OSDService::mark_split_in_progress(pg_t parent, const set<pg_t> &children)
+{
+  Mutex::Locker l(in_progress_split_lock);
+  map<pg_t, set<pg_t> >::iterator piter = rev_pending_splits.find(parent);
+  assert(piter != rev_pending_splits.end());
+  for (set<pg_t>::const_iterator i = children.begin();
+       i != children.end();
+       ++i) {
+    assert(piter->second.count(*i));
+    assert(pending_splits.count(*i));
+    assert(!in_progress_splits.count(*i));
+    assert(pending_splits[*i] == parent);
+
+    pending_splits.erase(*i);
+    piter->second.erase(*i);
     in_progress_splits.insert(*i);
+  }
+  if (piter->second.empty())
+    rev_pending_splits.erase(piter);
+}
+
+void OSDService::cancel_pending_splits_for_parent(pg_t parent)
+{
+  Mutex::Locker l(in_progress_split_lock);
+  map<pg_t, set<pg_t> >::iterator piter = rev_pending_splits.find(parent);
+  if (piter == rev_pending_splits.end())
+    return;
+
+  for (set<pg_t>::iterator i = piter->second.begin();
+       i != piter->second.end();
+       ++i) {
+    assert(pending_splits.count(*i));
+    assert(!in_progress_splits.count(*i));
+    pending_splits.erase(*i);
+  }
+  rev_pending_splits.erase(piter);
+}
+
+void OSDService::_maybe_split_pgid(OSDMapRef old_map,
+				  OSDMapRef new_map,
+				  pg_t pgid)
+{
+  assert(old_map->have_pg_pool(pgid.pool()));
+  if (pgid.ps() < static_cast<unsigned>(old_map->get_pg_num(pgid.pool()))) {
+    set<pg_t> children;
+    pgid.is_split(old_map->get_pg_num(pgid.pool()),
+		  new_map->get_pg_num(pgid.pool()), &children);
+    _start_split(pgid, children);
+  } else {
+    assert(pgid.ps() < static_cast<unsigned>(new_map->get_pg_num(pgid.pool())));
   }
 }
 
@@ -209,30 +267,34 @@ void OSDService::expand_pg_num(OSDMapRef old_map,
 			       OSDMapRef new_map)
 {
   Mutex::Locker l(in_progress_split_lock);
-  set<pg_t> children;
   for (set<pg_t>::iterator i = in_progress_splits.begin();
        i != in_progress_splits.end();
-       ) {
-    assert(old_map->have_pg_pool(i->pool()));
+    ) {
     if (!new_map->have_pg_pool(i->pool())) {
       in_progress_splits.erase(i++);
     } else {
-      if (i->ps() < static_cast<unsigned>(old_map->get_pg_num(i->pool()))) {
-	i->is_split(old_map->get_pg_num(i->pool()),
-		    new_map->get_pg_num(i->pool()), &children);
-      } else {
-	assert(i->ps() < static_cast<unsigned>(new_map->get_pg_num(i->pool())));
-      }
+      _maybe_split_pgid(old_map, new_map, *i);
       ++i;
     }
   }
-  _start_split(children);
+  for (map<pg_t, pg_t>::iterator i = pending_splits.begin();
+       i != pending_splits.end();
+    ) {
+    if (!new_map->have_pg_pool(i->first.pool())) {
+      rev_pending_splits.erase(i->second);
+      pending_splits.erase(i++);
+    } else {
+      _maybe_split_pgid(old_map, new_map, i->first);
+      ++i;
+    }
+  }
 }
 
 bool OSDService::splitting(pg_t pgid)
 {
   Mutex::Locker l(in_progress_split_lock);
-  return in_progress_splits.count(pgid);
+  return in_progress_splits.count(pgid) ||
+    pending_splits.count(pgid);
 }
 
 void OSDService::complete_split(const set<pg_t> &pgs)
@@ -242,6 +304,7 @@ void OSDService::complete_split(const set<pg_t> &pgs)
        i != pgs.end();
        ++i) {
     dout(10) << __func__ << ": Completing split on pg " << *i << dendl;
+    assert(!pending_splits.count(*i));
     assert(in_progress_splits.count(*i));
     in_progress_splits.erase(*i);
   }
@@ -1680,7 +1743,7 @@ void OSD::load_pgs()
 	pg->info.pgid.is_split(pg->get_osdmap()->get_pg_num(pg->info.pgid.pool()),
 			       osdmap->get_pg_num(pg->info.pgid.pool()),
 			       &split_pgs)) {
-      service.start_split(split_pgs);
+      service.start_split(pg->info.pgid, split_pgs);
     }
 
     pg->reg_next_scrub();
@@ -3014,14 +3077,14 @@ void OSD::send_pg_stats(const utime_t &now)
 	pg->put("pg_stat_queue");
 	continue;
       }
-      pg->pg_stats_lock.Lock();
-      if (pg->pg_stats_valid) {
-	m->pg_stat[pg->info.pgid] = pg->pg_stats_stable;
-	dout(25) << " sending " << pg->info.pgid << " " << pg->pg_stats_stable.reported << dendl;
+      pg->pg_stats_publish_lock.Lock();
+      if (pg->pg_stats_publish_valid) {
+	m->pg_stat[pg->info.pgid] = pg->pg_stats_publish;
+	dout(25) << " sending " << pg->info.pgid << " " << pg->pg_stats_publish.reported << dendl;
       } else {
-	dout(25) << " NOT sending " << pg->info.pgid << " " << pg->pg_stats_stable.reported << ", not valid" << dendl;
+	dout(25) << " NOT sending " << pg->info.pgid << " " << pg->pg_stats_publish.reported << ", not valid" << dendl;
       }
-      pg->pg_stats_lock.Unlock();
+      pg->pg_stats_publish_lock.Unlock();
     }
 
     if (!outstanding_pg_stats) {
@@ -3060,18 +3123,18 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
 
     if (ack->pg_stat.count(pg->info.pgid)) {
       eversion_t acked = ack->pg_stat[pg->info.pgid];
-      pg->pg_stats_lock.Lock();
-      if (acked == pg->pg_stats_stable.reported) {
-	dout(25) << " ack on " << pg->info.pgid << " " << pg->pg_stats_stable.reported << dendl;
+      pg->pg_stats_publish_lock.Lock();
+      if (acked == pg->pg_stats_publish.reported) {
+	dout(25) << " ack on " << pg->info.pgid << " " << pg->pg_stats_publish.reported << dendl;
 	pg->stat_queue_item.remove_myself();
 	pg->put("pg_stat_queue");
       } else {
-	dout(25) << " still pending " << pg->info.pgid << " " << pg->pg_stats_stable.reported
+	dout(25) << " still pending " << pg->info.pgid << " " << pg->pg_stats_publish.reported
 		 << " > acked " << acked << dendl;
       }
-      pg->pg_stats_lock.Unlock();
+      pg->pg_stats_publish_lock.Unlock();
     } else {
-      dout(30) << " still pending " << pg->info.pgid << " " << pg->pg_stats_stable.reported << dendl;
+      dout(30) << " still pending " << pg->info.pgid << " " << pg->pg_stats_publish.reported << dendl;
     }
   }
   
@@ -4385,6 +4448,7 @@ void OSD::advance_pg(
 	lastmap->get_pg_num(pg->pool.id),
 	nextmap->get_pg_num(pg->pool.id),
 	&children)) {
+      service.mark_split_in_progress(pg->info.pgid, children);
       split_pgs(
 	pg, children, new_pgs, lastmap, nextmap,
 	rctx);
@@ -4507,7 +4571,7 @@ void OSD::consume_map()
 		 service.get_osdmap()->get_pg_num(it->first.pool()),
 		 osdmap->get_pg_num(it->first.pool()),
 		 &split_pgs)) {
-      service.start_split(split_pgs);
+      service.start_split(it->first, split_pgs);
     }
 
     pg->unlock();
@@ -5153,7 +5217,7 @@ void OSD::handle_pg_create(OpRequestRef op)
       wake_pg_waiters(pg->info.pgid);
       pg->handle_create(&rctx);
       pg->write_if_dirty(*rctx.transaction);
-      pg->update_stats();
+      pg->publish_stats_to_osd();
       pg->unlock();
       num_created++;
     }
@@ -5840,6 +5904,8 @@ void OSD::_remove_pg(PG *pg)
   // to avoid racing with watcher cleanup in ms_handle_reset
   // and handle_notify_timeout
   pg->on_removal(rmt);
+
+  service.cancel_pending_splits_for_parent(pg->info.pgid);
 
   coll_t to_remove = get_next_removal_coll(pg->info.pgid);
   removals.push_back(to_remove);
