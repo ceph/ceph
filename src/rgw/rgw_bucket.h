@@ -256,9 +256,29 @@ class RGWDataChangesLog {
   int num_shards;
   string *oids;
 
+  Mutex lock;
+
+  struct ChangeStatus : public RefCountedObject {
+    utime_t cur_expiration;
+    utime_t cur_sent;
+    bool pending;
+    RefCountedCond *cond;
+    Mutex *lock;
+
+    ChangeStatus() : pending(false), cond(NULL) {
+      lock = new Mutex("RGWDataChangesLog::ChangeStatus");
+    }
+
+    ~ChangeStatus() {
+      delete lock;
+    }
+  };
+
+  map<string, ChangeStatus *> changes;
+
 public:
 
-  RGWDataChangesLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store) {
+  RGWDataChangesLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), lock("RGWDataChangesLog") {
     num_shards = 128; /* FIXME */
     oids = new string[num_shards];
 
