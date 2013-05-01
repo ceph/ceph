@@ -85,6 +85,8 @@ To list the OSDs deployed on a host(s), execute the following command::
 Destroy OSDs
 ============
 
+.. note:: Coming soon.
+
 To destroy an OSD, execute the following command:: 
 
 	ceph-deploy osd destroy {host-name}:{path-to-disk}[:{path/to/journal}]
