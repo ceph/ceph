@@ -990,6 +990,7 @@ void Paxos::trim_to(MonitorDBStore::Transaction *t, version_t first)
     return;
   trim_to(t, first_committed, first);
   t->put(get_name(), "first_committed", first);
+  first_committed = first;
 }
 
 void Paxos::trim_to(version_t first)
