@@ -25,6 +25,8 @@
 #include "mon/MonClient.h"
 #include "osdc/Journaler.h"
 
+#define dout_subsys ceph_subsys_mds
+
 Dumper::~Dumper()
 {
 }
@@ -69,9 +71,9 @@ void Dumper::init(int rank)
   objecter->init_unlocked();
   lock.Lock();
   objecter->init_locked();
+  lock.Unlock();
   objecter->wait_for_osd_map();
   timer.init();
-  lock.Unlock();
 }
 
 void Dumper::shutdown()
@@ -91,11 +93,14 @@ void Dumper::dump(const char *dump_file)
   int rank = strtol(g_conf->name.get_id().c_str(), 0, 0);
   inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
 
+  Mutex localLock("dump:lock");
   lock.Lock();
-  journaler->recover(new C_SafeCond(&lock, &cond, &done, &r));
-  while (!done)
-    cond.Wait(lock);
+  journaler->recover(new C_SafeCond(&localLock, &cond, &done, &r));
   lock.Unlock();
+  localLock.Lock();
+  while (!done)
+    cond.Wait(localLock);
+  localLock.Unlock();
 
   if (r < 0) { // Error
     derr << "error on recovery: " << cpp_strerror(r) << dendl;
@@ -103,6 +108,8 @@ void Dumper::dump(const char *dump_file)
     // wait for messenger to finish
     messenger->wait();
     shutdown();
+  } else {
+    dout(10) << "completed journal recovery" << dendl;
   }
 
   uint64_t start = journaler->get_read_pos();
@@ -112,12 +119,14 @@ void Dumper::dump(const char *dump_file)
 
   Filer filer(objecter);
   bufferlist bl;
-  filer.read(ino, &journaler->get_layout(), CEPH_NOSNAP,
-             start, len, &bl, 0, new C_SafeCond(&lock, &cond, &done));
   lock.Lock();
-  while (!done)
-    cond.Wait(lock);
+  filer.read(ino, &journaler->get_layout(), CEPH_NOSNAP,
+             start, len, &bl, 0, new C_SafeCond(&localLock, &cond, &done));
   lock.Unlock();
+  localLock.Lock();
+  while (!done)
+    cond.Wait(localLock);
+  localLock.Unlock();
 
   cout << "read " << bl.length() << " bytes at offset " << start << std::endl;
 
