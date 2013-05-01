@@ -171,6 +171,7 @@ void Elector::victory()
     if (*p == mon->rank) continue;
     MMonElection *m = new MMonElection(MMonElection::OP_VICTORY, epoch, mon->monmap);
     m->quorum = quorum;
+    m->quorum_features = features;
     mon->messenger->send_message(m, mon->monmap->get_inst(*p));
   }
     
