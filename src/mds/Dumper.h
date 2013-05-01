@@ -62,6 +62,7 @@ public:
   virtual ~Dumper();
 
   bool ms_dispatch(Message *m) {
+    Mutex::Locker locker(lock);
     switch (m->get_type()) {
     case CEPH_MSG_OSD_OPREPLY:
       objecter->handle_osd_op_reply((MOSDOpReply *)m);
