@@ -227,7 +227,6 @@ def mount_osd_data(ctx, remote, osd):
     log.debug('Mounting data for osd.{o} on {r}'.format(o=osd, r=remote))
     if remote in ctx.disk_config.remote_to_roles_to_dev and osd in ctx.disk_config.remote_to_roles_to_dev[remote]:
         dev = ctx.disk_config.remote_to_roles_to_dev[remote][osd]
-        journal = ctx.disk_config.remote_to_roles_to_journals[remote][osd]
         mount_options = ctx.disk_config.remote_to_roles_to_dev_mount_options[remote][osd]
         fstype = ctx.disk_config.remote_to_roles_to_dev_fstype[remote][osd]
         mnt = os.path.join('/var/lib/ceph/osd', 'ceph-{id}'.format(id=osd))
@@ -245,12 +244,6 @@ def mount_osd_data(ctx, remote, osd):
                 mnt,
             ]
             )
-
-        if journal == ('/mnt/osd.%s' % osd):
-            tmpfs = '/mnt/osd.%s' % osd
-            log.info('Creating journal file on tmpfs at {t}'.format(t=tmpfs))
-            remote.run( args=[ 'sudo', 'mount', '-t', 'tmpfs', 'tmpfs', '/mnt' ] )
-            remote.run( args=[ 'truncate', '-s', '1500M', tmpfs ] )
 
 def make_admin_daemon_dir(ctx, remote):
     remote.run(
