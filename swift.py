@@ -152,9 +152,6 @@ def run_tests(ctx, config):
     yield
 
 @contextlib.contextmanager
-def cleanup_tests(ctx, config):
-
-@contextlib.contextmanager
 def task(ctx, config):
     """
     Run the testswift suite against rgw.
