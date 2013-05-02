@@ -25,11 +25,24 @@ end_signal = signal.SIGKILL
 if sys.argv[1] == "term":
     end_signal = signal.SIGTERM
 
-with file('/dev/null', 'rb') as devnull:
+cmd_start = 2
+
+nostdin = False
+if sys.argv[cmd_start] == "nostdin":
+    nostdin = True
+    cmd_start += 1
+
+proc = None
+if nostdin:
     proc = subprocess.Popen(
-        args=sys.argv[2:],
-        stdin=devnull,
+        args=sys.argv[cmd_start:],
         )
+else:
+    with file('/dev/null', 'rb') as devnull:
+        proc = subprocess.Popen(
+            args=sys.argv[cmd_start:],
+            stdin=devnull,
+            )
 
 flags = fcntl.fcntl(0, fcntl.F_GETFL)
 fcntl.fcntl(0, fcntl.F_SETFL, flags | os.O_NDELAY)
