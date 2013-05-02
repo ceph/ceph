@@ -39,10 +39,13 @@ using namespace std;
 int main(int argc, char **argv) {
   po::options_description desc("Allowed options");
   string store_path, cmd, out_path;
+  bool paranoid = false;
   desc.add_options()
     ("help", "produce help message")
     ("omap-path", po::value<string>(&store_path),
      "path to mon directory, mandatory (current/omap usually)")
+    ("paranoid", po::value<bool>(&paranoid),
+     "use paranoid checking")
     ("command", po::value<string>(&cmd),
      "command")
     ;
@@ -85,6 +88,10 @@ int main(int argc, char **argv) {
   }
 
   LevelDBStore* store(new LevelDBStore(store_path));
+  if (paranoid) {
+    std::cerr << "Enabling paranoid checks" << std::endl;
+    store->options.paranoid_checks = paranoid;
+  }
   DBObjectMap omap(store);
   stringstream out;
   int r = store->open(out);

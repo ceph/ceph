@@ -249,6 +249,8 @@ void OSDService::_cancel_pending_splits_for_parent(pg_t parent)
     assert(pending_splits.count(*i));
     assert(!in_progress_splits.count(*i));
     pending_splits.erase(*i);
+    dout(10) << __func__ << ": Completing split on pg " << *i
+	     << " for parent: " << parent << dendl;
     _cancel_pending_splits_for_parent(*i);
   }
   rev_pending_splits.erase(piter);
@@ -266,6 +268,39 @@ void OSDService::_maybe_split_pgid(OSDMapRef old_map,
     _start_split(pgid, children);
   } else {
     assert(pgid.ps() < static_cast<unsigned>(new_map->get_pg_num(pgid.pool())));
+  }
+}
+
+void OSDService::init_splits_between(pg_t pgid,
+				     OSDMapRef frommap,
+				     OSDMapRef tomap)
+{
+  // First, check whether we can avoid this potentially expensive check
+  if (tomap->have_pg_pool(pgid.pool()) &&
+      pgid.is_split(
+	frommap->get_pg_num(pgid.pool()),
+	tomap->get_pg_num(pgid.pool()),
+	NULL)) {
+    // Ok, a split happened, so we need to walk the osdmaps
+    set<pg_t> new_pgs; // pgs to scan on each map
+    new_pgs.insert(pgid);
+    for (epoch_t e = frommap->get_epoch() + 1;
+	 e <= tomap->get_epoch();
+	 ++e) {
+      OSDMapRef curmap(get_map(e-1));
+      OSDMapRef nextmap(get_map(e));
+      set<pg_t> even_newer_pgs; // pgs added in this loop
+      for (set<pg_t>::iterator i = new_pgs.begin(); i != new_pgs.end(); ++i) {
+	set<pg_t> split_pgs;
+	if (i->is_split(curmap->get_pg_num(i->pool()),
+			nextmap->get_pg_num(i->pool()),
+			&split_pgs)) {
+	  start_split(*i, split_pgs);
+	  even_newer_pgs.insert(split_pgs.begin(), split_pgs.end());
+	}
+      }
+      new_pgs.insert(even_newer_pgs.begin(), even_newer_pgs.end());
+    }
   }
 }
 
@@ -1744,33 +1779,7 @@ void OSD::load_pgs()
       assert(i->second.empty());
     }
 
-    // First, check whether we can avoid this potentially expensive check
-    if (osdmap->have_pg_pool(pg->info.pgid.pool()) &&
-	pg->info.pgid.is_split(
-	  pg->get_osdmap()->get_pg_num(pg->info.pgid.pool()),
-	  osdmap->get_pg_num(pg->info.pgid.pool()),
-	  0)) {
-      // Ok, a split happened, so we need to walk the osdmaps
-      set<pg_t> new_pgs; // pgs to scan on each map
-      new_pgs.insert(pg->info.pgid);
-      for (epoch_t e = pg->get_osdmap()->get_epoch() + 1;
-	   e <= osdmap->get_epoch();
-	   ++e) {
-	OSDMapRef curmap(get_map(e-1));
-	OSDMapRef nextmap(get_map(e));
-	set<pg_t> even_newer_pgs; // pgs added in this loop
-	for (set<pg_t>::iterator i = new_pgs.begin(); i != new_pgs.end(); ++i) {
-	  set<pg_t> split_pgs;
-	  if (i->is_split(curmap->get_pg_num(i->pool()),
-			  nextmap->get_pg_num(i->pool()),
-			  &split_pgs)) {
-	    service.start_split(*i, split_pgs);
-	    even_newer_pgs.insert(split_pgs.begin(), split_pgs.end());
-	  }
-	}
-	new_pgs.insert(even_newer_pgs.begin(), even_newer_pgs.end());
-      }
-    }
+    service.init_splits_between(pg->info.pgid, pg->get_osdmap(), osdmap);
 
     pg->reg_next_scrub();
 
@@ -4589,15 +4598,11 @@ void OSD::consume_map()
     else
       num_pg_stray++;
 
-    set<pg_t> split_pgs;
     if (!osdmap->have_pg_pool(pg->info.pgid.pool())) {
       //pool is deleted!
       to_remove.push_back(PGRef(pg));
-    } else if (it->first.is_split(
-		 service.get_osdmap()->get_pg_num(it->first.pool()),
-		 osdmap->get_pg_num(it->first.pool()),
-		 &split_pgs)) {
-      service.start_split(it->first, split_pgs);
+    } else {
+      service.init_splits_between(it->first, service.get_osdmap(), osdmap);
     }
 
     pg->unlock();
