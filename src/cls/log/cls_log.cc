@@ -70,17 +70,20 @@ static int cls_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
     return -EINVAL;
   }
 
-  cls_log_entry& entry = op.entry;
+  for (list<cls_log_entry>::iterator iter = op.entries.begin();
+       iter != op.entries.end(); ++iter) {
+    cls_log_entry& entry = *iter;
 
-  string index;
+    string index;
 
-  get_index(hctx, entry.timestamp, index);
+    get_index(hctx, entry.timestamp, index);
 
-  CLS_LOG(0, "storing entry at %s", index.c_str());
+    CLS_LOG(0, "storing entry at %s", index.c_str());
 
-  int ret = write_log_entry(hctx, index, entry);
-  if (ret < 0)
-    return ret;
+    int ret = write_log_entry(hctx, index, entry);
+    if (ret < 0)
+      return ret;
+  }
   
   return 0;
 }

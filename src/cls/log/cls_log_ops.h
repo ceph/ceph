@@ -8,19 +8,19 @@
 #include "cls_log_types.h"
 
 struct cls_log_add_op {
-  cls_log_entry entry;
+  list<cls_log_entry> entries;
 
   cls_log_add_op() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(entry, bl);
+    ::encode(entries, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(entry, bl);
+    ::decode(entries, bl);
     DECODE_FINISH(bl);
   }
 };

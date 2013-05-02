@@ -1096,6 +1096,11 @@ void RGWRados::shard_name(const string& prefix, unsigned max_shards, string& sec
   name = prefix + buf;
 }
 
+void RGWRados::time_log_prepare_entry(cls_log_entry& entry, const utime_t& ut, string& section, string& key, bufferlist& bl)
+{
+  cls_log_add_prepare_entry(entry, ut, section, key, bl);
+}
+
 int RGWRados::time_log_add(const string& oid, const utime_t& ut, string& section, string& key, bufferlist& bl)
 {
   librados::IoCtx io_ctx;
@@ -1116,6 +1121,31 @@ int RGWRados::time_log_add(const string& oid, const utime_t& ut, string& section
 
   ObjectWriteOperation op;
   cls_log_add(op, ut, section, key, bl);
+
+  r = io_ctx.operate(oid, &op);
+  return r;
+}
+
+int RGWRados::time_log_add(const string& oid, list<cls_log_entry>& entries)
+{
+  librados::IoCtx io_ctx;
+
+  const char *log_pool = zone.log_pool.name.c_str();
+  int r = rados->ioctx_create(log_pool, io_ctx);
+  if (r == -ENOENT) {
+    rgw_bucket pool(log_pool);
+    r = create_pool(pool);
+    if (r < 0)
+      return r;
+ 
+    // retry
+    r = rados->ioctx_create(log_pool, io_ctx);
+  }
+  if (r < 0)
+    return r;
+
+  ObjectWriteOperation op;
+  cls_log_add(op, entries);
 
   r = io_ctx.operate(oid, &op);
   return r;

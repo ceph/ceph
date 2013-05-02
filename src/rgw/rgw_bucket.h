@@ -260,6 +260,8 @@ class RGWDataChangesLog {
 
   Mutex lock;
 
+  atomic_t down_flag;
+
   struct ChangeStatus {
     utime_t cur_expiration;
     utime_t cur_sent;
@@ -280,6 +282,22 @@ class RGWDataChangesLog {
 
   lru_map<string, ChangeStatusPtr> changes;
 
+  map<string, rgw_bucket> cur_cycle;
+
+  class ChangesRenewThread : public Thread {
+    CephContext *cct;
+    RGWDataChangesLog *log;
+    Mutex lock;
+    Cond cond;
+
+  public:
+    ChangesRenewThread(CephContext *_cct, RGWDataChangesLog *_log) : cct(_cct), log(_log), lock("ChangesRenewThread") {}
+    void *entry();
+    void stop();
+  };
+
+  ChangesRenewThread *renew_thread;
+
 public:
 
   RGWDataChangesLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), lock("RGWDataChangesLog"),
@@ -294,14 +312,16 @@ public:
       snprintf(buf, sizeof(buf), "%s.%d", prefix, i);
       oids[i] = buf;
     }
+
+    renew_thread = new ChangesRenewThread(cct, this);
+    renew_thread->create();
   }
 
-  ~RGWDataChangesLog() {
-    delete[] oids;
-  }
+  ~RGWDataChangesLog();
 
   int choose_oid(rgw_bucket& bucket);
   int add_entry(rgw_bucket& bucket);
+  int renew_entries();
   int list_entries(int shard, utime_t& start_time, utime_t& end_time, int max_entries,
                list<rgw_data_change>& entries, string& marker, bool *truncated);
 
@@ -313,6 +333,8 @@ public:
   };
   int list_entries(utime_t& start_time, utime_t& end_time, int max_entries,
                list<rgw_data_change>& entries, LogMarker& marker, bool *ptruncated);
+
+  bool going_down();
 };
 
 

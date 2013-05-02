@@ -934,105 +934,6 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
 }
 
 
-#if 0
-
-class CompletionMap {
-  map<rgw_bucket, RefCountedCond *> entries;
-  Mutex lock;
-
-public:
-
-  void add(string& s) {
-    Mutex::Locker l(lock);
-
-    entries[s] = new RefCountedObject;
-  }
-
-
-  bool wait(string& s) {
-    map<string, RefCountedCond *>::iterator iter;
-    l.Lock();
-    iter = entries.find(s);
-    if (iter == entries.end()) {
-      l.Unlock();
-      return false;
-    }
-
-    RefCountedCond *rcc = iter->second;
-    rcc->get();
-    l.Unlock();
-
-    rcc->wait();
-    rcc->put();
-
-    return true;
-
-  }
-
-  void complete(string& s) {
-    lock.Lock();
-
-    map<string, RefCountedCond *>::iterator iter = entries.find(s);
-    if (iter == entries.end()) {
-      lock.Unlock();
-      return;
-    }
-
-    RefCountedCond *rcc = iter->second;
-
-    entries.erase(iter);
-
-    lock.Unlock();
-
-    rcc->complete();
-    rcc->put();
-  }
-
-};
-
-
-class RGWChangedBucketsTracker {
-  CephContext *cct;
-  RGWRados *store;
-
-  map<rgw_bucket, utime_t> last_reported;
-
-  struct PendingInfo : public RefCountedCond {
-    PendingInfo() {}
-  };
-
-  CompletionMap pending;
-
-  Mutex lock;
-public:
-  RGWChangedBucketsTracker(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), lock("RGWChanedBucketsTracker") {}
-
-  int report_bucket_changed(rgw_bucket& bucket) {
-    lock.Lock();
-
-    map<rgw_bucket, utime_t>::iteartor iter = last_reported.find(bucket);
-
-    bool exists = (iter != iter.end());
-    if (exists) {
-      utime_t& t = iter->second;
-      utime_t now = ceph_clock_now(cct);
-
-      if (now > t + get_resolution_sec())
-        exists = false;
-    }
-
-    lock.Unlock();
-
-    if (exists)
-      return true;
-  }
-
-  uint32_t get_resolution_sec();
-};
-
-
-#endif
-
 void rgw_data_change::dump(Formatter *f) const
 {
   string type;
@@ -1055,6 +956,44 @@ int RGWDataChangesLog::choose_oid(rgw_bucket& bucket) {
     return (int)r;
 }
 
+int RGWDataChangesLog::renew_entries()
+{
+  map<int, list<cls_log_entry> > m;
+
+  map<string, rgw_bucket>::iterator iter;
+  string section;
+  utime_t ut = ceph_clock_now(cct);
+  for (iter = cur_cycle.begin(); iter != cur_cycle.end(); ++iter) {
+    rgw_bucket& bucket = iter->second;
+    int index = choose_oid(bucket);
+
+    cls_log_entry entry;
+
+    rgw_data_change change;
+    bufferlist bl;
+    change.entity_type = ENTITY_TYPE_BUCKET;
+    change.key = bucket.name;
+    ::encode(change, bl);
+
+    store->time_log_prepare_entry(entry, ut, section, bucket.name, bl);
+
+    m[index].push_back(entry);
+  }
+
+  map<int, list<cls_log_entry> >::iterator miter;
+  for (miter = m.begin(); miter != m.end(); ++miter) {
+    list<cls_log_entry>& entries = miter->second;
+
+    int ret = store->time_log_add(oids[miter->first], entries);
+    if (ret < 0) {
+      lderr(cct) << "ERROR: store->time_log_add() returned " << ret << dendl;
+      return ret;
+    }
+  }
+
+  return 0;
+}
+
 int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
   lock.Lock();
 
@@ -1063,6 +1002,8 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
     status = ChangeStatusPtr(new ChangeStatus);
     changes.add(bucket.name, status);
   }
+
+  cur_cycle[bucket.name] = bucket;
 
   lock.Unlock();
 
@@ -1179,3 +1120,41 @@ int RGWDataChangesLog::list_entries(utime_t& start_time, utime_t& end_time, int 
 
   return 0;
 }
+
+bool RGWDataChangesLog::going_down()
+{
+  return (down_flag.read() != 0);
+}
+
+RGWDataChangesLog::~RGWDataChangesLog() {
+  down_flag.set(1);
+  renew_thread->stop();
+  renew_thread->join();
+  delete[] oids;
+}
+
+void *RGWDataChangesLog::ChangesRenewThread::entry() {
+  do {
+    dout(2) << "RGWDataChangesLog::ChangesRenewThread: start" << dendl;
+    int r = log->renew_entries();
+    if (r < 0) {
+      dout(0) << "ERROR: RGWDataChangesLog::renew_entries returned error r=" << r << dendl;
+    }
+
+    if (log->going_down())
+      break;
+
+    lock.Lock();
+    cond.WaitInterval(cct, lock, utime_t(20, 0));
+    lock.Unlock();
+  } while (!log->going_down());
+
+  return NULL;
+}
+
+void RGWDataChangesLog::ChangesRenewThread::stop()
+{
+  Mutex::Locker l(lock);
+  cond.Signal();
+}
+
