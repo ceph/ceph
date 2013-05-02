@@ -217,6 +217,11 @@ void JSONParser::handle_data(const char *s, int len)
 // parse a supplied JSON fragment
 bool JSONParser::parse(const char *buf_, int len)
 {
+  if (!buf_) {
+    set_failure();
+    return false;
+  }
+
   string json_string = buf_;
   // make a substring to len
   json_string = json_string.substr(0, len);
