@@ -869,6 +869,16 @@ int remove_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
   }
 
+  // remove LAYERING feature, since we are not (now) layered
+  uint64_t features;
+  r = read_key(hctx, "features", &features);
+  features &= ~RBD_FEATURE_LAYERING;
+  bufferlist featuresbl;
+  ::encode(features, featuresbl);
+  r = cls_cxx_map_set_val(hctx, "features", &featuresbl);
+  if (r < 0)
+    return r;
+
   return 0;
 }
 
