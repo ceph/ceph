@@ -223,6 +223,28 @@ int main(int argc, char **argv) {
       iter.next();
     }
     std::cerr << "Read up to transaction " << iter.num() << std::endl;
+  } else if (cmd == "replay-trace") {
+    if (!store_path.size()) {
+      std::cerr << "need mon store path" << std::endl;
+      std::cerr << desc << std::endl;
+      goto done;
+    }
+    if (tfile.empty()) {
+      std::cerr << "Need trace_file" << std::endl;
+      std::cerr << desc << std::endl;
+      goto done;
+    }
+    TraceIter iter(tfile.c_str());
+    iter.init();
+    while (true) {
+      if (!iter.valid())
+	break;
+      if (iter.num() % 20 == 0)
+	std::cerr << "Replaying trans num " << iter.num() << std::endl;
+      st.apply_transaction(iter.cur());
+      iter.next();
+    }
+    std::cerr << "Read up to transaction " << iter.num() << std::endl;
   } else {
     std::cerr << "Unrecognized command: " << cmd << std::endl;
     goto done;
