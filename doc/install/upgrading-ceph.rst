@@ -200,6 +200,19 @@ Multi-MDS configurations with identical names must be adjusted accordingly to
 give daemons unique names. If you run your cluster with one  metadata server,
 you can disregard this notice for now.
 
+ceph-deploy
+-----------
+
+The ceph-deploy tool is now the preferred method of provisioning new
+clusters.  For existing clusters created via mkcephfs that would like
+to transition to the new tool, there is a migration path, documented
+at `Transitioning to ceph-deploy`_.  Note that transitioning to
+ceph-deploy is not required; it is entirely acceptable to continue
+provisioning new OSDs and monitors using the previous methods.
+However, ceph-deploy streamlines these processes significantly.
+
+.. _Transitioning to ceph-deploy: rados/deployment/ceph-deploy-transition
+
 
 Upgrade Procedures
 ==================
