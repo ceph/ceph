@@ -8,6 +8,13 @@ v0.61 "Cuttlefish"
 Upgrading from v0.60
 ~~~~~~~~~~~~~~~~~~~~
 
+* The ceph-deploy tool is now the preferred method of provisioning
+  new clusters.  For existing clusters created via mkcephfs that
+  would like to transition to the new tool, there is a migration
+  path, documented at `Transitioning to ceph-deploy`_.
+
+.. _Transitioning to ceph-deploy: rados/deployment/ceph-deploy-transition
+
 * radosgw-admin now uses the term zone instead of cluster to describe
   each instance of the radosgw data store (and corresponding
   collection of radosgw daemons).  The usage for the radosgw-admin
@@ -39,6 +46,13 @@ Upgrading from v0.56.4 "Bobtail"
 Please see `Upgrading from Bobtail to Cuttlefish`_ for details.
 
 .. _Upgrading from Bobtail to Cuttlefish: ../install/upgrading-ceph/#upgrading-from-bobtail-to-cuttlefish
+
+* The ceph-deploy tool is now the preferred method of provisioning
+  new clusters.  For existing clusters created via mkcephfs that
+  would like to transition to the new tool, there is a migration
+  path, documented at `Transitioning to ceph-deploy`_.
+
+.. _Transitioning to ceph-deploy: rados/deployment/ceph-deploy-transition
 
 * radosgw-admin now uses the term zone instead of cluster to describe
   each instance of the radosgw data store (and corresponding
