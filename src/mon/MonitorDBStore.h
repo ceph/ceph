@@ -136,13 +136,13 @@ class MonitorDBStore
       return ops.size();
     }
 
-    void dump(ceph::Formatter *f) {
+    void dump(ceph::Formatter *f, bool dump_val=false) const {
       f->open_object_section("transaction");
       f->open_array_section("ops");
-      list<Op>::iterator it;
+      list<Op>::const_iterator it;
       int op_num = 0;
       for (it = ops.begin(); it != ops.end(); ++it) {
-	Op& op = *it;
+	const Op& op = *it;
 	f->open_object_section("op");
 	f->dump_int("op_num", op_num++);
 	switch (op.type) {
@@ -151,10 +151,12 @@ class MonitorDBStore
 	    f->dump_string("type", "PUT");
 	    f->dump_string("prefix", op.prefix);
 	    f->dump_string("key", op.key);
-	    ostringstream os;
-	    op.bl.hexdump(os);
 	    f->dump_unsigned("length", op.bl.length());
-	    f->dump_string("bl", os.str());
+	    if (dump_val) {
+	      ostringstream os;
+	      op.bl.hexdump(os);
+	      f->dump_string("bl", os.str());
+	    }
 	  }
 	  break;
 	case OP_ERASE:
@@ -184,7 +186,7 @@ class MonitorDBStore
     }
   };
 
-  int apply_transaction(MonitorDBStore::Transaction& t) {
+  int apply_transaction(const MonitorDBStore::Transaction& t) {
     KeyValueDB::Transaction dbt = db->get_transaction();
 
     if (do_dump) {
@@ -194,8 +196,8 @@ class MonitorDBStore
     }
 
     list<string> compact_prefixes;
-    for (list<Op>::iterator it = t.ops.begin(); it != t.ops.end(); ++it) {
-      Op& op = *it;
+    for (list<Op>::const_iterator it = t.ops.begin(); it != t.ops.end(); ++it) {
+      const Op& op = *it;
       switch (op.type) {
       case Transaction::OP_PUT:
 	dbt->set(op.prefix, op.key, op.bl);
