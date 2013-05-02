@@ -177,9 +177,9 @@ OPTION(mon_sync_timeout, OPT_DOUBLE, 30.0)
 OPTION(mon_sync_max_retries, OPT_INT, 5)
 OPTION(mon_sync_max_payload_size, OPT_U32, 1048576) // max size for a sync chunk payload (say, 1MB)
 OPTION(mon_sync_debug, OPT_BOOL, false) // enable sync-specific debug
-OPTION(mon_sync_debug_leader, OPT_STR, "") // monitor to be used as the sync leader
-OPTION(mon_sync_debug_provider, OPT_STR, "") // monitor to be used as the sync provider
-OPTION(mon_sync_debug_provider_fallback, OPT_STR, "") // monitor to be used as fallback if sync provider fails
+OPTION(mon_sync_debug_leader, OPT_INT, -1) // monitor to be used as the sync leader
+OPTION(mon_sync_debug_provider, OPT_INT, -1) // monitor to be used as the sync provider
+OPTION(mon_sync_debug_provider_fallback, OPT_INT, -1) // monitor to be used as fallback if sync provider fails
 OPTION(mon_sync_leader_kill_at, OPT_INT, 0) // kill the sync leader at a specifc point in the work flow
 OPTION(mon_sync_provider_kill_at, OPT_INT, 0) // kill the sync provider at a specific point in the work flow
 OPTION(mon_sync_requester_kill_at, OPT_INT, 0) // kill the sync requester at a specific point in the work flow

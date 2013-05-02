@@ -719,7 +719,7 @@ private:
    * @param other Any monitor other than the one with rank @p other
    * @returns The picked monitor's name.
    */
-  string _pick_random_mon(int other = -1);
+  int _pick_random_mon(int other = -1);
   int _pick_random_quorum_mon(int other = -1);
   /**
    * Deal with the consequences of @p entity's sync timing out.
