@@ -398,6 +398,7 @@ public:
   void mark_split_in_progress(pg_t parent, const set<pg_t> &pgs);
   void complete_split(const set<pg_t> &pgs);
   void cancel_pending_splits_for_parent(pg_t parent);
+  void _cancel_pending_splits_for_parent(pg_t parent);
   bool splitting(pg_t pgid);
   void expand_pg_num(OSDMapRef old_map,
 		     OSDMapRef new_map);

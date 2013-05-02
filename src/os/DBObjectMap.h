@@ -164,6 +164,10 @@ public:
   /// Ensure that all previous operations are durable
   int sync(const hobject_t *hoid=0, const SequencerPosition *spos=0);
 
+  /// Util, list all objects, there must be no other concurrent access
+  int list_objects(vector<hobject_t> *objs ///< [out] objects
+    );
+
   ObjectMapIterator get_iterator(const hobject_t &hoid);
 
   static const string USER_PREFIX;
