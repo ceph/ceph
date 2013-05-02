@@ -1,4 +1,5 @@
 tasks:
 - s3tests:
+    branch: bobtail
     client.0:
       rgw_server: client.0
