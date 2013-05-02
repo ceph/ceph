@@ -6134,15 +6134,6 @@ void OSD::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
   recovery_wq.unlock();
 }
 
-void OSD::defer_recovery(PG *pg)
-{
-  dout(10) << "defer_recovery " << *pg << dendl;
-
-  // move pg to the end of the queue...
-  recovery_wq.queue(pg);
-}
-
-
 // =========================================================
 // OPS
 

@@ -1254,7 +1254,6 @@ protected:
 
   void start_recovery_op(PG *pg, const hobject_t& soid);
   void finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue);
-  void defer_recovery(PG *pg);
   void do_recovery(PG *pg);
   bool _recover_now();
 
