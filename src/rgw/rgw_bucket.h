@@ -13,6 +13,7 @@
 #include "rgw_string.h"
 
 #include "common/Formatter.h"
+#include "common/lru_map.h"
 #include "rgw_formats.h"
 
 
@@ -277,11 +278,12 @@ class RGWDataChangesLog {
 
   typedef std::tr1::shared_ptr<ChangeStatus> ChangeStatusPtr;
 
-  map<string, ChangeStatusPtr> changes;
+  lru_map<string, ChangeStatusPtr> changes;
 
 public:
 
-  RGWDataChangesLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), lock("RGWDataChangesLog") {
+  RGWDataChangesLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), lock("RGWDataChangesLog"),
+                                                          changes(1000) /* FIXME */ {
     num_shards = 128; /* FIXME */
     oids = new string[num_shards];
 

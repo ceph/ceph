@@ -1057,9 +1057,11 @@ int RGWDataChangesLog::choose_oid(rgw_bucket& bucket) {
 
 int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
   lock.Lock();
-  ChangeStatusPtr& status = changes[bucket.name];
-  if (!status) {
+
+  ChangeStatusPtr status;
+  if (!changes.find(bucket.name, status)) {
     status = ChangeStatusPtr(new ChangeStatus);
+    changes.add(bucket.name, status);
   }
 
   lock.Unlock();
