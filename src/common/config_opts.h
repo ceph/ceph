@@ -180,6 +180,11 @@ OPTION(mon_sync_debug, OPT_BOOL, false) // enable sync-specific debug
 OPTION(mon_sync_debug_leader, OPT_STR, "") // monitor to be used as the sync leader
 OPTION(mon_sync_debug_provider, OPT_STR, "") // monitor to be used as the sync provider
 OPTION(mon_sync_debug_provider_fallback, OPT_STR, "") // monitor to be used as fallback if sync provider fails
+
+// dump transactions
+OPTION(mon_debug_dump_transactions, OPT_BOOL, true)
+OPTION(mon_debug_dump_location, OPT_STR, "/var/log/ceph/$cluster-$name.tdump")
+
 OPTION(mon_sync_leader_kill_at, OPT_INT, 0) // kill the sync leader at a specifc point in the work flow
 OPTION(mon_sync_provider_kill_at, OPT_INT, 0) // kill the sync provider at a specific point in the work flow
 OPTION(mon_sync_requester_kill_at, OPT_INT, 0) // kill the sync requester at a specific point in the work flow
