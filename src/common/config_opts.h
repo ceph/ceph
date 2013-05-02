@@ -177,9 +177,9 @@ OPTION(mon_sync_timeout, OPT_DOUBLE, 30.0)
 OPTION(mon_sync_max_retries, OPT_INT, 5)
 OPTION(mon_sync_max_payload_size, OPT_U32, 1048576) // max size for a sync chunk payload (say, 1MB)
 OPTION(mon_sync_debug, OPT_BOOL, false) // enable sync-specific debug
-OPTION(mon_sync_debug_leader, OPT_STR, "") // monitor to be used as the sync leader
-OPTION(mon_sync_debug_provider, OPT_STR, "") // monitor to be used as the sync provider
-OPTION(mon_sync_debug_provider_fallback, OPT_STR, "") // monitor to be used as fallback if sync provider fails
+OPTION(mon_sync_debug_leader, OPT_INT, -1) // monitor to be used as the sync leader
+OPTION(mon_sync_debug_provider, OPT_INT, -1) // monitor to be used as the sync provider
+OPTION(mon_sync_debug_provider_fallback, OPT_INT, -1) // monitor to be used as fallback if sync provider fails
 OPTION(mon_sync_leader_kill_at, OPT_INT, 0) // kill the sync leader at a specifc point in the work flow
 OPTION(mon_sync_provider_kill_at, OPT_INT, 0) // kill the sync provider at a specific point in the work flow
 OPTION(mon_sync_requester_kill_at, OPT_INT, 0) // kill the sync requester at a specific point in the work flow
@@ -189,6 +189,7 @@ OPTION(mon_leveldb_block_size, OPT_U64, 64*1024) // monitor's leveldb block size
 OPTION(mon_leveldb_bloom_size, OPT_INT, 0) // monitor's leveldb bloom bits per entry
 OPTION(mon_leveldb_max_open_files, OPT_INT, 0) // monitor's leveldb max open files
 OPTION(mon_leveldb_compression, OPT_BOOL, false) // monitor's leveldb uses compression
+OPTION(mon_leveldb_paranoid, OPT_BOOL, false)   // monitor's leveldb paranoid flag
 OPTION(paxos_stash_full_interval, OPT_INT, 25)   // how often (in commits) to stash a full copy of the PaxosService state
 OPTION(paxos_max_join_drift, OPT_INT, 10) // max paxos iterations before we must first sync the monitor stores
 OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long before proposing a map update
@@ -218,7 +219,7 @@ OPTION(mon_pool_quota_crit_threshold, OPT_INT, 0) // percent of quota at which t
 OPTION(client_cache_size, OPT_INT, 16384)
 OPTION(client_cache_mid, OPT_FLOAT, .75)
 OPTION(client_use_random_mds, OPT_BOOL, false)
-OPTION(client_mount_timeout, OPT_DOUBLE, 30.0)
+OPTION(client_mount_timeout, OPT_DOUBLE, 300.0)
 OPTION(client_tick_interval, OPT_DOUBLE, 1.0)
 OPTION(client_trace, OPT_STR, "")
 OPTION(client_readahead_min, OPT_LONGLONG, 128*1024)  // readahead at _least_ this much.
@@ -447,6 +448,7 @@ OPTION(osd_leveldb_block_size, OPT_U64, 0) // OSD's leveldb block size
 OPTION(osd_leveldb_bloom_size, OPT_INT, 0) // OSD's leveldb bloom bits per entry
 OPTION(osd_leveldb_max_open_files, OPT_INT, 0) // OSD's leveldb max open files
 OPTION(osd_leveldb_compression, OPT_BOOL, true) // OSD's leveldb uses compression
+OPTION(osd_leveldb_paranoid, OPT_BOOL, false) // OSD's leveldb paranoid flag
 
 /**
  * osd_client_op_priority and osd_recovery_op_priority adjust the relative
@@ -579,7 +581,7 @@ OPTION(rgw_usage_log_flush_threshold, OPT_INT, 1024) // threshold to flush pendi
 OPTION(rgw_usage_log_tick_interval, OPT_INT, 30) // flush pending log data every X seconds
 OPTION(rgw_intent_log_object_name, OPT_STR, "%Y-%m-%d-%i-%n")  // man date to see codes (a subset are supported)
 OPTION(rgw_intent_log_object_name_utc, OPT_BOOL, false)
-OPTION(rgw_init_timeout, OPT_INT, 30) // time in seconds
+OPTION(rgw_init_timeout, OPT_INT, 300) // time in seconds
 OPTION(rgw_mime_types_file, OPT_STR, "/etc/mime.types")
 OPTION(rgw_gc_max_objs, OPT_INT, 32)
 OPTION(rgw_gc_obj_min_wait, OPT_INT, 2 * 3600)    // wait time before object may be handled by gc
