@@ -20,7 +20,9 @@ def download(ctx, config):
     log.info('Downloading s3-tests...')
     testdir = teuthology.get_testdir(ctx)
     for (client, cconf) in config.items():
-        branch = cconf.get('branch', 'master')
+        branch = cconf.get('force-branch', 'master')
+        if not branch:
+            branch = cconf.get('branch', 'master')
         sha1 = cconf.get('sha1')
         ctx.cluster.only(client).run(
             args=[
