@@ -219,7 +219,7 @@ OPTION(mon_pool_quota_crit_threshold, OPT_INT, 0) // percent of quota at which t
 OPTION(client_cache_size, OPT_INT, 16384)
 OPTION(client_cache_mid, OPT_FLOAT, .75)
 OPTION(client_use_random_mds, OPT_BOOL, false)
-OPTION(client_mount_timeout, OPT_DOUBLE, 30.0)
+OPTION(client_mount_timeout, OPT_DOUBLE, 300.0)
 OPTION(client_tick_interval, OPT_DOUBLE, 1.0)
 OPTION(client_trace, OPT_STR, "")
 OPTION(client_readahead_min, OPT_LONGLONG, 128*1024)  // readahead at _least_ this much.
