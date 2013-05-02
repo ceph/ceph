@@ -581,7 +581,7 @@ OPTION(rgw_usage_log_flush_threshold, OPT_INT, 1024) // threshold to flush pendi
 OPTION(rgw_usage_log_tick_interval, OPT_INT, 30) // flush pending log data every X seconds
 OPTION(rgw_intent_log_object_name, OPT_STR, "%Y-%m-%d-%i-%n")  // man date to see codes (a subset are supported)
 OPTION(rgw_intent_log_object_name_utc, OPT_BOOL, false)
-OPTION(rgw_init_timeout, OPT_INT, 30) // time in seconds
+OPTION(rgw_init_timeout, OPT_INT, 300) // time in seconds
 OPTION(rgw_mime_types_file, OPT_STR, "/etc/mime.types")
 OPTION(rgw_gc_max_objs, OPT_INT, 32)
 OPTION(rgw_gc_obj_min_wait, OPT_INT, 2 * 3600)    // wait time before object may be handled by gc
