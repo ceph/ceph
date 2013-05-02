@@ -2186,12 +2186,6 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   dirty_log = true;
 }
 
-void PG::defer_recovery()
-{
-  // TODOSAM: osd->osd-> not good
-  osd->osd->defer_recovery(this);
-}
-
 void PG::clear_recovery_state() 
 {
   dout(10) << "clear_recovery_state" << dendl;
