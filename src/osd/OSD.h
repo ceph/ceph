@@ -405,6 +405,7 @@ public:
   void _maybe_split_pgid(OSDMapRef old_map,
 			 OSDMapRef new_map,
 			 pg_t pgid);
+  void init_splits_between(pg_t pgid, OSDMapRef frommap, OSDMapRef tomap);
 
   // -- OSD Full Status --
   Mutex full_status_lock;
