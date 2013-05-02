@@ -1,0 +1,17 @@
+tasks:
+- install:
+- install:
+    project: samba
+    extra_packages: ['samba']
+- ceph:
+- ceph-fuse: [client.0]
+- samba:
+    samba.0:
+      cephfuse: "{testdir}/mnt.0"
+- cifs-mount:
+    client.1:
+      share: cephfuse
+- workunit:
+    clients:
+      client.1:
+        - suites/fsstress.sh

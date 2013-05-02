@@ -1,0 +1,3 @@
+roles:
+- [mon.a, mon.b, mon.c, mds.a, osd.0, osd.1]
+- [samba.0, client.0, client.1]
