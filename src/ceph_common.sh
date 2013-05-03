@@ -133,7 +133,7 @@ get_local_daemon_list() {
     if [ -d "/var/lib/ceph/$type" ]; then
 	for i in `find /var/lib/ceph/$type -mindepth 1 -maxdepth 1 -type d -printf '%f\n'`; do
 	    if [ -e "/var/lib/ceph/$type/$i/sysvinit" ]; then
-		id=`echo $i | sed 's/.*-//'`
+		id=`echo $i | sed 's/[^-]*-//'`
 		local="$local $type.$id"
 	    fi
 	done
@@ -162,12 +162,12 @@ get_local_name_list() {
 }
 
 get_name_list() {
-    orig=$1
+    orig="$*"
 
     # extract list of monitors, mdss, osds defined in startup.conf
-    allconf=`$CCONF -c $conf -l mon | egrep -v '^mon$' ; \
-	$CCONF -c $conf -l mds | egrep -v '^mds$' ; \
-	$CCONF -c $conf -l osd | egrep -v '^osd$'`
+    allconf=`$CCONF -c $conf -l mon | egrep -v '^mon$' || true ; \
+	$CCONF -c $conf -l mds | egrep -v '^mds$' || true ; \
+	$CCONF -c $conf -l osd | egrep -v '^osd$' || true`
 
     if [ -z "$orig" ]; then
 	what="$allconf $local"
@@ -180,14 +180,14 @@ get_name_list() {
 	id=`echo $f | cut -c 4- | sed 's/\\.//'`
 	case $f in
 	    mon | osd | mds)
-		what=`echo $allconf $local | grep ^$type || true`
+                what="$what "`echo "$allconf" "$local" | grep ^$type || true`
 		;;
 	    *)
-		if echo " " "$allconf" "$local" " " | egrep -v -q "( $type$id | $type.$id )"; then
-		    echo "$0: $type.$id not found ($conf defines \"$all\", /var/lib/ceph defines \"$local\")"
+		if ! echo " " $allconf $local " " | egrep -q "( $type$id | $type.$id )"; then
+                    echo "$0: $type.$id not found ($conf defines" $allconf", /var/lib/ceph defines" $local")"
 		    exit 1
 		fi
-		what="$f"
+		what="$what $f"
 		;;
 	esac
     done
