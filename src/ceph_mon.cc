@@ -477,12 +477,6 @@ int main(int argc, const char **argv)
   if (err < 0)
     return 1;
 
-  if (compact || g_conf->mon_compact_on_start) {
-    derr << "compacting monitor store ..." << dendl;
-    mon->store->compact();
-    derr << "done compacting" << dendl;
-  }
-
   global_init_daemonize(g_ceph_context, 0);
   common_init_finish(g_ceph_context);
   global_init_chdir(g_ceph_context);
@@ -492,6 +486,12 @@ int main(int argc, const char **argv)
   register_async_signal_handler(SIGHUP, sighup_handler);
   register_async_signal_handler_oneshot(SIGINT, handle_mon_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_mon_signal);
+
+  if (compact || g_conf->mon_compact_on_start) {
+    derr << "compacting monitor store ..." << dendl;
+    mon->store->compact();
+    derr << "done compacting" << dendl;
+  }
 
   messenger->start();
 
