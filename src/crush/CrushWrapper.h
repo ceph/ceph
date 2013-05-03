@@ -575,7 +575,8 @@ public:
     return set_rule_step(ruleno, step, CRUSH_RULE_EMIT, 0, 0);
   }
 
-  int add_simple_rule(string name, string root_name, string failure_domain_type);
+  int add_simple_rule(string name, string root_name, string failure_domain_type,
+		      ostream *err = 0);
 
   int remove_rule(int ruleno);
 
