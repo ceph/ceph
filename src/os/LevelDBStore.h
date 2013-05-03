@@ -108,6 +108,12 @@ public:
     return init(out, true);
   }
 
+  /// re-opens underlying db (e.g., after a fork())
+  int reopen(ostream &out) {
+    init(out, false);
+  }
+
+
   class LevelDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
     leveldb::WriteBatch bat;

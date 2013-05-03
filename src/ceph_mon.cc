@@ -487,6 +487,10 @@ int main(int argc, const char **argv)
   register_async_signal_handler_oneshot(SIGINT, handle_mon_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_mon_signal);
 
+  // reopen leveldb, post-fork!
+  ostringstream ss;
+  store->reopen(ss);
+
   if (compact || g_conf->mon_compact_on_start) {
     derr << "compacting monitor store ..." << dendl;
     mon->store->compact();
