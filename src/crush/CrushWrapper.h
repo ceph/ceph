@@ -166,7 +166,7 @@ public:
     build_rmaps();
     if (type_rmap.count(name))
       return type_rmap[name];
-    return 0;
+    return -1;
   }
   const char *get_type_name(int t) const {
     std::map<int,string>::const_iterator p = type_map.find(t);
