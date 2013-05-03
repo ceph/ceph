@@ -36,6 +36,7 @@ using namespace std;
 #include "common/pick_address.h"
 #include "common/Timer.h"
 #include "common/errno.h"
+#include "common/Preforker.h"
 
 #include "global/global_init.h"
 #include "global/signal_handler.h"
@@ -272,6 +273,20 @@ int main(int argc, const char **argv)
     return 0;
   }
 
+  // we fork early to prevent leveldb's environment static state from
+  // screwing us over
+  Preforker prefork;
+  if (g_conf->daemonize) {
+    global_init_prefork(g_ceph_context, 0);
+    prefork.prefork();
+    if (prefork.is_parent()) {
+      return prefork.parent_wait();
+    }
+    global_init_postfork(g_ceph_context, 0);
+    common_init_finish(g_ceph_context);
+    global_init_chdir(g_ceph_context);
+  }
+
   {
     Monitor::StoreConverter converter(g_conf->mon_data);
     int ret = converter.needs_conversion();
@@ -280,7 +295,7 @@ int main(int argc, const char **argv)
     } else if (ret < 0) {
       derr << "found errors while attempting to convert the monitor store: "
            << cpp_strerror(ret) << dendl;
-      exit(1);
+      prefork.exit(1);
     }
   }
 
@@ -289,7 +304,7 @@ int main(int argc, const char **argv)
   if (err < 0) {
     cerr << argv[0] << ": error opening mon data store at '"
          << g_conf->mon_data << "': " << cpp_strerror(err) << std::endl;
-    exit(1);
+    prefork.exit(1);
   }
   assert(err == 0);
 
@@ -297,18 +312,18 @@ int main(int argc, const char **argv)
   err = store.get(Monitor::MONITOR_NAME, "magic", magicbl);
   if (!magicbl.length()) {
     cerr << "unable to read magic from mon data.. did you run mkcephfs?" << std::endl;
-    exit(1);
+    prefork.exit(1);
   }
   string magic(magicbl.c_str(), magicbl.length()-1);  // ignore trailing \n
   if (strcmp(magic.c_str(), CEPH_MON_ONDISK_MAGIC)) {
     cerr << "mon fs magic '" << magic << "' != current '" << CEPH_MON_ONDISK_MAGIC << "'" << std::endl;
-    exit(1);
+    prefork.exit(1);
   }
 
   err = Monitor::check_features(&store);
   if (err < 0) {
     cerr << "error checking features: " << cpp_strerror(err) << std::endl;
-    exit(1);
+    prefork.exit(1);
   }
 
   // inject new monmap?
@@ -319,7 +334,7 @@ int main(int argc, const char **argv)
     if (r) {
       cerr << "unable to read monmap from " << inject_monmap << ": "
 	   << error << std::endl;
-      exit(1);
+      prefork.exit(1);
     }
 
     // get next version
@@ -348,7 +363,7 @@ int main(int argc, const char **argv)
     store.apply_transaction(t);
 
     cout << "done." << std::endl;
-    exit(0);
+    prefork.exit(0);
   }
 
   // monmap?
@@ -403,14 +418,14 @@ int main(int argc, const char **argv)
       if (err < 0) {
 	cerr << argv[0] << ": error generating initial monmap: " << cpp_strerror(err) << std::endl;
 	usage();
-	exit(1);
+	prefork.exit(1);
       }
       if (tmpmap.contains(g_conf->name.get_id())) {
 	ipaddr = tmpmap.get_addr(g_conf->name.get_id());
       } else {
 	derr << "no public_addr or public_network specified, and " << g_conf->name
 	     << " not present in monmap or ceph.conf" << dendl;
-	exit(1);
+	prefork.exit(1);
       }
     }
   }
@@ -467,7 +482,7 @@ int main(int argc, const char **argv)
 
   err = messenger->bind(ipaddr);
   if (err < 0)
-    return 1;
+    prefork.exit(1);
 
   // start monitor
   mon = new Monitor(g_ceph_context, g_conf->name.get_id(), &store, 
@@ -475,7 +490,7 @@ int main(int argc, const char **argv)
 
   err = mon->preinit();
   if (err < 0)
-    return 1;
+    prefork.exit(1);
 
   if (compact || g_conf->mon_compact_on_start) {
     derr << "compacting monitor store ..." << dendl;
@@ -483,9 +498,8 @@ int main(int argc, const char **argv)
     derr << "done compacting" << dendl;
   }
 
-  global_init_daemonize(g_ceph_context, 0);
-  common_init_finish(g_ceph_context);
-  global_init_chdir(g_ceph_context);
+  if (g_conf->daemonize)
+    prefork.daemonize();
 
   // set up signal handlers, now that we've daemonized/forked.
   init_async_signal_handler();
@@ -518,6 +532,6 @@ int main(int argc, const char **argv)
     dout(0) << "ceph-mon: gmon.out should be in " << s << dendl;
   }
 
-  return 0;
+  prefork.exit(0);
 }
 

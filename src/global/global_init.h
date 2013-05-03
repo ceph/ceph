@@ -34,9 +34,24 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
 	       uint32_t module_type, code_environment_t code_env, int flags);
 
 /*
+ * perform all of the steps that global_init_daemonize performs just prior
+ * to actually forking (via daemon(3)).  return 0 if we are going to proceed
+ * with the fork, or -1 otherwise.
+ */
+int global_init_prefork(CephContext *cct, int flags);
+
+/*
+ * perform all of the steps that global_init_daemonize performs just after
+ * the fork.
+ */
+void global_init_postfork(CephContext *cct, int flags);
+
+/*
  * global_init_daemonize handles daemonizing a process. 
  *
- * If this is called, it *must* be called before common_init_finish
+ * If this is called, it *must* be called before common_init_finish.
+ * Note that this is equivalent to calling _prefork(), daemon(), and
+ * _postfork.
  */
 void global_init_daemonize(CephContext *cct, int flags);
 
