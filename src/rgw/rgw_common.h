@@ -79,6 +79,12 @@ using ceph::crypto::MD5;
 
 #define RGW_SUSPENDED_USER_AUID (uint64_t)-2
 
+#define RGW_OP_TYPE_READ         0x01
+#define RGW_OP_TYPE_WRITE        0x02
+#define RGW_OP_TYPE_DELETE       0x04
+
+#define RGW_OP_TYPE_ALL          (RGW_OP_TYPE_READ | RGW_OP_TYPE_WRITE | RGW_OP_TYPE_DELETE)
+
 #define RGW_DEFAULT_MAX_BUCKETS 1000
 
 #define STATUS_CREATED           1900
@@ -381,12 +387,13 @@ struct RGWUserInfo
   map<string, RGWSubUser> subusers;
   __u8 suspended;
   uint32_t max_buckets;
+  uint32_t op_mask;
   RGWUserCaps caps;
 
-  RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS) {}
+  RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS), op_mask(RGW_OP_TYPE_ALL) {}
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(11, 9, bl);
+     ENCODE_START(12, 9, bl);
      ::encode(auid, bl);
      string access_key;
      string secret_key;
@@ -417,6 +424,7 @@ struct RGWUserInfo
      ::encode(swift_keys, bl);
      ::encode(max_buckets, bl);
      ::encode(caps, bl);
+     ::encode(op_mask, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -461,6 +469,11 @@ struct RGWUserInfo
     }
     if (struct_v >= 11) {
       ::decode(caps, bl);
+    }
+    if (struct_v >= 12) {
+      ::decode(op_mask, bl);
+    } else {
+      op_mask = RGW_OP_TYPE_ALL;
     }
     DECODE_FINISH(bl);
   }
@@ -1045,5 +1058,7 @@ extern bool url_decode(string& src_str, string& dest_str);
 extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);
 /* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
+
+extern int rgw_parse_op_type_list(const string& str, uint32_t *perm);
 
 #endif

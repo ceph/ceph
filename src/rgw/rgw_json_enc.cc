@@ -235,7 +235,7 @@ static struct rgw_flags_desc rgw_perms[] = {
  { 0, NULL }
 };
 
-static void perm_to_str(uint32_t mask, char *buf, int len)
+static void mask_to_str(rgw_flags_desc *mask_list, uint32_t mask, char *buf, int len)
 {
   const char *sep = "";
   int pos = 0;
@@ -245,8 +245,8 @@ static void perm_to_str(uint32_t mask, char *buf, int len)
   }
   while (mask) {
     uint32_t orig_mask = mask;
-    for (int i = 0; rgw_perms[i].mask; i++) {
-      struct rgw_flags_desc *desc = &rgw_perms[i];
+    for (int i = 0; mask_list[i].mask; i++) {
+      struct rgw_flags_desc *desc = &mask_list[i];
       if ((mask & desc->mask) == desc->mask) {
         pos += snprintf(buf + pos, len - pos, "%s%s", sep, desc->str);
         if (pos == len)
@@ -260,6 +260,23 @@ static void perm_to_str(uint32_t mask, char *buf, int len)
     if (mask == orig_mask) // no change
       break;
   }
+}
+
+static void perm_to_str(uint32_t mask, char *buf, int len)
+{
+  return mask_to_str(rgw_perms, mask, buf, len);
+}
+
+static struct rgw_flags_desc op_type_flags[] = {
+ { RGW_OP_TYPE_READ, "read" },
+ { RGW_OP_TYPE_WRITE, "write" },
+ { RGW_OP_TYPE_DELETE, "delete" },
+ { 0, NULL }
+};
+
+static void op_type_to_str(uint32_t mask, char *buf, int len)
+{
+  return mask_to_str(op_type_flags, mask, buf, len);
 }
 
 void RGWSubUser::dump(Formatter *f) const
@@ -340,6 +357,10 @@ void RGWUserInfo::dump(Formatter *f) const
   encode_json_map("swift_keys", NULL, "key", NULL, user_info_dump_swift_key,(void *)this, swift_keys, f);
 
   encode_json("caps", caps, f);
+
+  char buf[256];
+  op_type_to_str(op_mask, buf, sizeof(buf));
+  encode_json("op_mask", (const char *)buf, f);
 }
 
 
@@ -380,6 +401,10 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("subusers", subusers, decode_subusers, obj);
 
   JSONDecoder::decode_json("caps", caps, obj);
+
+  string mask_str;
+  JSONDecoder::decode_json("op_mask", mask_str, obj);
+  rgw_parse_op_type_list(mask_str, &op_mask);
 }
 
 void rgw_bucket::dump(Formatter *f) const
