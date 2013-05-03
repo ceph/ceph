@@ -1586,6 +1586,7 @@ noinst_HEADERS = \
 	common/HeartbeatMap.h\
 	common/LogClient.h\
 	common/LogEntry.h\
+	common/Preforker.h\
 	common/WorkQueue.h\
 	common/PrioritizedQueue.h\
 	common/ceph_argparse.h\

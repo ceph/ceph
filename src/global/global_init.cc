@@ -143,17 +143,24 @@ static void pidfile_remove_void(void)
   pidfile_remove();
 }
 
-void global_init_daemonize(CephContext *cct, int flags)
+int global_init_prefork(CephContext *cct, int flags)
 {
   if (g_code_env != CODE_ENVIRONMENT_DAEMON)
-    return;
+    return -1;
   const md_config_t *conf = cct->_conf;
   if (!conf->daemonize)
-    return;
+    return -1;
 
   // stop log thread
   g_ceph_context->_log->flush();
   g_ceph_context->_log->stop();
+  return 0;
+}
+
+void global_init_daemonize(CephContext *cct, int flags)
+{
+  if (global_init_prefork(cct, flags) < 0)
+    return;
 
   int ret = daemon(1, 1);
   if (ret) {
@@ -162,6 +169,13 @@ void global_init_daemonize(CephContext *cct, int flags)
 	 << cpp_strerror(ret) << dendl;
     exit(1);
   }
+
+  global_init_postfork(cct, flags);
+}
+
+void global_init_postfork(CephContext *cct, int flags)
+{
+  int ret;
 
   // restart log thread
   g_ceph_context->_log->start();
