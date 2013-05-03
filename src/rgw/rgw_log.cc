@@ -233,7 +233,7 @@ void OpsLogSocket::init_connection(bufferlist& bl)
   bl.append("[");
 }
 
-OpsLogSocket::OpsLogSocket(CephContext *cct, uint64_t _backlog) : OutputDataSocket(cct, _backlog)
+OpsLogSocket::OpsLogSocket(CephContext *cct, uint64_t _backlog) : OutputDataSocket(cct, _backlog), lock("OpsLogSocket")
 {
   formatter = new JSONFormatter;
   delim.append(",\n");
@@ -248,8 +248,10 @@ void OpsLogSocket::log(struct rgw_log_entry& entry)
 {
   bufferlist bl;
 
+  lock.Lock();
   rgw_format_ops_log_entry(entry, formatter);
   formatter_to_bl(bl);
+  lock.Unlock();
 
   append_output(bl);
 }
