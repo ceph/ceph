@@ -431,6 +431,36 @@ Notable Changes
 * auth: ability to require new cephx signatures on messages (still off by default)
 
 
+v0.56.5 "bobtail"
+-----------------
+
+Upgrading
+~~~~~~~~~
+
+* ceph-disk[-prepare,-activate] behavior has changed in various ways.
+  There should not be any compatibility issues, but chef users should
+  be aware.
+
+Notable changes
+~~~~~~~~~~~~~~~
+
+* mon: fix recording of quorum feature set (important for argonaut -> bobtail -> cuttlefish mon upgrades)
+* osd: minor peering bug fixes
+* osd: fix a few bugs when pools are renamed
+* osd: fix occasionally corrupted pg stats
+* osd: fix behavior when broken v0.56[.0] clients connect
+* rbd: avoid FIEMAP ioctl on import (it is broken on some kernels)
+* librbd: fixes for several request/reply ordering bugs
+* librbd: only set STRIPINGV2 feature on new images when needed
+* librbd: new async flush method to resolve qemu hangs (requires Qemu update as well)
+* librbd: a few fixes to flatten
+* ceph-disk: support for dm-crypt
+* ceph-disk: many backports to allow bobtail deployments with ceph-deploy, chef
+* sysvinit: do not stop starting daemons on first failure
+* udev: fixed rules for redhat-based distros
+* build fixes for raring
+
+
 v0.56.4 "bobtail"
 -----------------
 
