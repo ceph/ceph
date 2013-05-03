@@ -460,6 +460,7 @@ Notable changes
 * udev: fixed rules for redhat-based distros
 * build fixes for raring
 
+For more detailed information, see :download:`the complete changelog <changelog/v0.56.5.txt>`.
 
 v0.56.4 "bobtail"
 -----------------
@@ -498,6 +499,7 @@ Notable changes
 * mds: on-disk format revision (see upgrading note above)
 * mkcephfs, init-ceph: close potential security issues with predictable filenames
 
+For more detailed information, see :download:`the complete changelog <changelog/v0.56.4.txt>`.
 
 v0.56.3 "bobtail"
 -----------------
@@ -541,6 +543,8 @@ Notable changes
 * radosgw: make fallback URI configurable (necessary on some web servers)
 * librbd: fix handling for interrupted 'unprotect' operations
 * mds, ceph-fuse: allow file and directory layouts to be modified via virtual xattrs
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.56.3.txt>`.
 
 
 v0.56.2 "bobtail"
