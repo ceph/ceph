@@ -638,15 +638,13 @@ bool url_decode(string& src_str, string& dest_str)
   return true;
 }
 
-static struct {
+struct rgw_name_to_flag {
   const char *type_name;
-  uint32_t perm;
-} cap_names[] = { {"*",     RGW_CAP_ALL},
-                  {"read",  RGW_CAP_READ},
-		  {"write", RGW_CAP_WRITE},
-		  {NULL, 0} };
+  uint32_t flag;
+};
 
-int RGWUserCaps::parse_cap_perm(const string& str, uint32_t *perm)
+static int parse_list_of_flags(struct rgw_name_to_flag *mapping,
+                               const string& str, uint32_t *perm)
 {
   list<string> strs;
   get_str_list(str, strs);
@@ -654,14 +652,24 @@ int RGWUserCaps::parse_cap_perm(const string& str, uint32_t *perm)
   uint32_t v = 0;
   for (iter = strs.begin(); iter != strs.end(); ++iter) {
     string& s = *iter;
-    for (int i = 0; cap_names[i].type_name; i++) {
-      if (s.compare(cap_names[i].type_name) == 0)
-        v |= cap_names[i].perm;
+    for (int i = 0; mapping[i].type_name; i++) {
+      if (s.compare(mapping[i].type_name) == 0)
+        v |= mapping[i].flag;
     }
   }
 
   *perm = v;
   return 0;
+}
+
+static struct rgw_name_to_flag cap_names[] = { {"*",     RGW_CAP_ALL},
+                  {"read",  RGW_CAP_READ},
+		  {"write", RGW_CAP_WRITE},
+		  {NULL, 0} };
+
+int RGWUserCaps::parse_cap_perm(const string& str, uint32_t *perm)
+{
+  return parse_list_of_flags(cap_names, str, perm);
 }
 
 int RGWUserCaps::get_cap(const string& cap, string& type, uint32_t *pperm)
@@ -777,12 +785,12 @@ void RGWUserCaps::dump(Formatter *f, const char *name) const
     uint32_t perm = iter->second;
     string perm_str;
     for (int i=0; cap_names[i].type_name; i++) {
-      if ((perm & cap_names[i].perm) == cap_names[i].perm) {
+      if ((perm & cap_names[i].flag) == cap_names[i].flag) {
 	if (perm_str.size())
 	  perm_str.append(", ");
 
 	perm_str.append(cap_names[i].type_name);
-	perm &= ~cap_names[i].perm;
+	perm &= ~cap_names[i].flag;
       }
     }
     if (perm_str.empty())
@@ -831,5 +839,18 @@ int RGWUserCaps::check_cap(const string& cap, uint32_t perm)
   }
 
   return 0;
+}
+
+
+static struct rgw_name_to_flag op_type_mapping[] = { {"*",  RGW_OP_TYPE_ALL},
+                  {"read",  RGW_OP_TYPE_READ},
+		  {"write", RGW_OP_TYPE_WRITE},
+		  {"delete", RGW_OP_TYPE_DELETE},
+		  {NULL, 0} };
+
+
+int rgw_parse_op_type_list(const string& str, uint32_t *perm)
+{
+  return parse_list_of_flags(op_type_mapping, str, perm);
 }
 

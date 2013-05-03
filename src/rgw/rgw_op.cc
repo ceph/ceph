@@ -339,6 +339,20 @@ int RGWGetObj::verify_permission()
 }
 
 
+int RGWOp::verify_op_mask()
+{
+  uint32_t required_mask = op_mask();
+
+  ldout(s->cct, 20) << "required_mask= " << required_mask << " user.op_mask=" << s->user.op_mask << dendl;
+
+  if ((s->user.op_mask & required_mask) != required_mask) {
+    return -EPERM;
+  }
+
+  return 0;
+}
+
+
 int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs)
 {
   ldout(s->cct, 0) << "user manifest obj=" << ent.name << dendl;

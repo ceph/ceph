@@ -485,6 +485,7 @@ int main(int argc, char **argv)
   std::string infile;
   RGWUserAdminOpState user_op;
   RGWBucketAdminOpState bucket_op;
+  string op_mask_str;
 
   std::string val;
   std::ostringstream errs;
@@ -513,6 +514,8 @@ int main(int argc, char **argv)
       pool_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--object", (char*)NULL)) {
       object = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--op-mask", (char*)NULL)) {
+      op_mask_str = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--key-type", (char*)NULL)) {
       key_type_str = val;
       if (key_type_str.compare("swift") == 0) {
@@ -676,6 +679,17 @@ int main(int argc, char **argv)
 
   if (set_perm)
     user_op.set_perm(perm_mask);
+
+  if (!op_mask_str.empty()) {
+    uint32_t op_mask;
+    int ret = rgw_parse_op_type_list(op_mask_str, &op_mask);
+    if (ret < 0) {
+      cerr << "failed to parse op_mask: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    user_op.set_op_mask(op_mask);
+  }
 
   if (key_type != KEY_TYPE_UNDEFINED)
     user_op.set_key_type(key_type);

@@ -1639,6 +1639,9 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   user_info.max_buckets = op_state.get_max_buckets();
   user_info.suspended = op_state.get_suspension_status();
 
+  if (op_state.op_mask_specified)
+    user_info.op_mask = op_state.get_op_mask();
+
   // update the request
   op_state.set_user_info(user_info);
   op_state.set_populated();
@@ -1834,6 +1837,9 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   if (op_state.max_buckets_specified)
     user_info.max_buckets = max_buckets;
+
+  if (op_state.op_mask_specified)
+    user_info.op_mask = op_state.get_op_mask();
 
   if (op_state.has_suspension_op()) {
     __u8 suspended = op_state.get_suspension_status();

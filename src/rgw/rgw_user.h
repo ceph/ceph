@@ -139,6 +139,7 @@ struct RGWUserAdminOpState {
   uint32_t max_buckets;
   __u8 suspended;
   std::string caps;
+  uint32_t op_mask;
 
   // subuser attributes
   std::string subuser;
@@ -167,6 +168,7 @@ struct RGWUserAdminOpState {
   bool user_email_specified;
   bool max_buckets_specified;
   bool perm_specified;
+  bool op_mask_specified;
   bool caps_specified;
   bool suspension_op;
   bool key_op;
@@ -243,6 +245,10 @@ struct RGWUserAdminOpState {
     perm_mask = perm;
     perm_specified = true;
   }
+  void set_op_mask(uint32_t mask) {
+    op_mask = mask;
+    op_mask_specified = true;
+  }
   void set_key_type(int32_t type) {
     key_type = type;
     type_specified = true;
@@ -294,6 +300,7 @@ struct RGWUserAdminOpState {
   bool has_caps_op() { return caps_specified; };
   bool has_suspension_op() { return suspension_op; };
   bool has_subuser_perm() { return perm_specified; };
+  bool has_op_mask() { return op_mask_specified; };
   bool will_gen_access() { return gen_access; };
   bool will_gen_secret() { return gen_secret; };
   bool will_gen_subuser() { return gen_subuser; };
@@ -313,6 +320,7 @@ struct RGWUserAdminOpState {
   int32_t get_key_type() {return key_type; };
   uint32_t get_subuser_perm() { return perm_mask; };
   uint32_t get_max_buckets() { return max_buckets; };
+  uint32_t get_op_mask() { return op_mask; };
 
   std::string get_user_id() { return user_id; };
   std::string get_subuser() { return subuser; };
@@ -370,6 +378,7 @@ struct RGWUserAdminOpState {
     key_type = -1;
     perm_mask = 0;
     suspended = 0;
+    op_mask = 0;
 
     existing_user = false;
     existing_key = false;
@@ -389,6 +398,7 @@ struct RGWUserAdminOpState {
     user_email_specified = false;
     max_buckets_specified = false;
     perm_specified = false;
+    op_mask_specified = false;
     suspension_op = false;
     key_op = false;
     populated = false;

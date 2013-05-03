@@ -336,6 +336,13 @@ void RGWProcess::handle_request(RGWRequest *req)
   req->log(s, "reading the cors attr");
   handler->read_cors_config();
   
+  req->log(s, "verifying op mask");
+  ret = op->verify_op_mask();
+  if (ret < 0) {
+    abort_early(s, ret);
+    goto done;
+  }
+
   req->log(s, "verifying op permissions");
   ret = op->verify_permission();
   if (ret < 0) {
