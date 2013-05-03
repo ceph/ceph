@@ -2287,8 +2287,14 @@ void Monitor::_mon_status(ostream& ss)
   jf.close_section();
 
   if (is_synchronizing()) {
-    jf.dump_stream("sync_leader") << sync_leader->entity;
-    jf.dump_stream("sync_provider") << sync_provider->entity;
+    if (sync_leader)
+      jf.dump_stream("sync_leader") << sync_leader->entity;
+    else
+      jf.dump_string("sync_leader", "");
+    if (sync_provider)
+      jf.dump_stream("sync_provider") << sync_provider->entity;
+    else
+      jf.dump_string("sync_provider", "");
   }
 
   jf.open_object_section("monmap");
