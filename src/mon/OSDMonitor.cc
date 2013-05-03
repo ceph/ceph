@@ -2557,7 +2557,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  err = 0;
 	} else {
 	  int type = newcrush.get_type_id(m->cmd[4]);
-	  if (type <= 0) {
+	  if (type < 0) {
 	    ss << "type '" << m->cmd[4] << "' does not exist";
 	    err = -EINVAL;
 	    break;

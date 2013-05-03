@@ -641,8 +641,9 @@ int CrushWrapper::add_simple_rule(string name, string root_name, string failure_
   int type = 0;
   if (failure_domain_name.length()) {
     type = get_type_id(failure_domain_name);
-    if (type <= 0) // bah, returns 0 on error; but its ok, device isn't a domain really
+    if (type < 0) {
       return -EINVAL;
+    }
   }
 
   int ruleset = 0;
