@@ -54,6 +54,9 @@
     ceph osd crush add-bucket <bucketname> <type>
     ceph osd crush reweight <name> <weight>
     ceph osd crush tunables <legacy|argonaut|bobtail|optimal|default>
+    ceph osd crush rule list
+    ceph osd crush rule dump
+    ceph osd crush rule create-simple <name> <root> <failure-domain>
     ceph osd create [<uuid>]
     ceph osd rm <osd-id> [<osd-id>...]
     ceph osd lost [--yes-i-really-mean-it]

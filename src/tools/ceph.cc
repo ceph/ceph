@@ -97,6 +97,9 @@ static void usage()
   cout << "  ceph osd crush add-bucket <bucketname> <type>\n";
   cout << "  ceph osd crush reweight <name> <weight>\n";
   cout << "  ceph osd crush tunables <legacy|argonaut|bobtail|optimal|default>\n";
+  cout << "  ceph osd crush rule list\n";
+  cout << "  ceph osd crush rule dump\n";
+  cout << "  ceph osd crush rule create-simple <name> <root> <failure-domain>\n";
   cout << "  ceph osd create [<uuid>]\n";
   cout << "  ceph osd rm <osd-id> [<osd-id>...]\n";
   cout << "  ceph osd lost [--yes-i-really-mean-it]\n";
