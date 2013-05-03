@@ -489,7 +489,7 @@ class MonitorDBStore
   }
 
   void reopen(ostream &out) {
-    return db->ropen(out);
+    return db->reopen(out);
   }
 
   void compact() {
