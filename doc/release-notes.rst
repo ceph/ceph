@@ -15,6 +15,15 @@ Upgrading from v0.60
 
 .. _Transitioning to ceph-deploy: rados/deployment/ceph-deploy-transition
 
+* The sysvinit script (/etc/init.d/ceph) will now verify (and, if
+  necessary, update) the OSD's position in the CRUSH map on startup.
+  (The upstart script has always worked this way.) By default, this
+  ensures that the OSD is under a 'host' with a name that matches the
+  hostname (``hostname -s``).  Legacy clusters create with mkcephfs do
+  this by default, so this should not cause any problems, but legacy
+  clusters with customized CRUSH maps with an alternate structure
+  should set ``osd crush update on start = false``.
+
 * radosgw-admin now uses the term zone instead of cluster to describe
   each instance of the radosgw data store (and corresponding
   collection of radosgw daemons).  The usage for the radosgw-admin
@@ -53,6 +62,15 @@ Please see `Upgrading from Bobtail to Cuttlefish`_ for details.
   path, documented at `Transitioning to ceph-deploy`_.
 
 .. _Transitioning to ceph-deploy: rados/deployment/ceph-deploy-transition
+
+* The sysvinit script (/etc/init.d/ceph) will now verify (and, if
+  necessary, update) the OSD's position in the CRUSH map on startup.
+  (The upstart script has always worked this way.) By default, this
+  ensures that the OSD is under a 'host' with a name that matches the
+  hostname (``hostname -s``).  Legacy clusters create with mkcephfs do
+  this by default, so this should not cause any problems, but legacy
+  clusters with customized CRUSH maps with an alternate structure
+  should set ``osd crush update on start = false``.
 
 * radosgw-admin now uses the term zone instead of cluster to describe
   each instance of the radosgw data store (and corresponding
