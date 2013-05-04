@@ -170,7 +170,7 @@ void CephContext::do_command(std::string command, std::string args, bufferlist *
     _perf_counters_collection->write_json_to_buf(*out, false);
   }
   else if (command == "perfcounters_schema" || command == "2" ||
-	   command == "perf schema") {
+    command == "perf schema") {
     _perf_counters_collection->write_json_to_buf(*out, true);
   }
   else {
@@ -183,18 +183,18 @@ void CephContext::do_command(std::string command, std::string args, bufferlist *
       std::string var = args;
       size_t pos = var.find(' ');
       if (pos == string::npos) {
-	jf.dump_string("error", "syntax error: 'config set <var> <value>'");
+        jf.dump_string("error", "syntax error: 'config set <var> <value>'");
       } else {
-	std::string val = var.substr(pos+1);
-	var.resize(pos);
-	int r = _conf->set_val(var.c_str(), val.c_str());
-	if (r < 0) {
-	  jf.dump_stream("error") << "error setting '" << var << "' to '" << val << "': " << cpp_strerror(r);
-	} else {
-	  ostringstream ss;
-	  _conf->apply_changes(&ss);
-	  jf.dump_string("success", ss.str());
-	}
+        std::string val = var.substr(pos+1);
+        var.resize(pos);
+        int r = _conf->set_val(var.c_str(), val.c_str());
+        if (r < 0) {
+          jf.dump_stream("error") << "error setting '" << var << "' to '" << val << "': " << cpp_strerror(r);
+        } else {
+          ostringstream ss;
+          _conf->apply_changes(&ss);
+          jf.dump_string("success", ss.str());
+        }
       }
     } else if (command == "config get") {
         char buf[128];
