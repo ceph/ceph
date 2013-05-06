@@ -44,6 +44,11 @@ int LevelDBStore::init(ostream &out, bool create_if_missing)
   ldoptions.compression = leveldb::kNoCompression;
   ldoptions.create_if_missing = create_if_missing;
 
+  if (options.log_file.length()) {
+    leveldb::Env *env = leveldb::Env::Default();
+    env->NewLogger(options.log_file, &ldoptions.info_log);
+  }
+
   leveldb::DB *_db;
   leveldb::Status status = leveldb::DB::Open(ldoptions, path, &_db);
   db.reset(_db);
