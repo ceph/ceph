@@ -21,11 +21,18 @@ Deploy Config File
 ==================
 
 To send an updated copy of the Ceph configuration file to hosts
-in your cluster, use the ``config`` command. ::
+in your cluster, use the ``config push`` command. ::
 
-	ceph-deploy config {host-name [host-name]...}
+	ceph-deploy config push {host-name [host-name]...}
 	
 .. tip:: With a base name and increment host-naming convention, 
    it is easy to deploy configuration files via simple scripts
    (e.g., ``ceph-deploy config hostname{1,2,3,4,5}``).
 
+Retrieve Config File
+====================
+
+To retrieve a copy of the Ceph configuration file from a host
+in your cluster, use the ``config pull`` command. ::
+
+	ceph-deploy config pull {host-name [host-name]...}
