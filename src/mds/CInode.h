@@ -155,6 +155,11 @@ public:
   static const int STATE_STRAYPINNED = (1<<16);
   static const int STATE_FROZENAUTHPIN = (1<<17);
 
+  static const int MASK_STATE_EXPORTED =
+    (STATE_DIRTY|STATE_NEEDSRECOVER);
+  static const int MASK_STATE_EXPORT_KEPT =
+    (STATE_FROZEN|STATE_AMBIGUOUSAUTH|STATE_EXPORTINGCAPS);
+
   // -- waiters --
   static const uint64_t WAIT_DIR         = (1<<0);
   static const uint64_t WAIT_ANCHORED    = (1<<1);
