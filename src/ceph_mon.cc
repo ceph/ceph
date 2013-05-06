@@ -164,7 +164,7 @@ int main(int argc, const char **argv)
   // -- mkfs --
   if (mkfs) {
     // resolve public_network -> public_addr
-    pick_addresses(g_ceph_context);
+    pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 
     common_init_finish(g_ceph_context);
 
@@ -419,7 +419,7 @@ int main(int argc, const char **argv)
   } else {
     dout(0) << g_conf->name << " does not exist in monmap, will attempt to join an existing cluster" << dendl;
 
-    pick_addresses(g_ceph_context);
+    pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
     if (!g_conf->public_addr.is_blank_ip()) {
       ipaddr = g_conf->public_addr;
       if (ipaddr.get_port() == 0)
