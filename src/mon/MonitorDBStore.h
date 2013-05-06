@@ -511,6 +511,7 @@ class MonitorDBStore
     db->options.compression_enabled = g_conf->mon_leveldb_compression;
     db->options.max_open_files = g_conf->mon_leveldb_max_open_files;
     db->options.paranoid_checks = g_conf->mon_leveldb_paranoid;
+    db->options.log_file = g_conf->mon_leveldb_log;
   }
   MonitorDBStore(LevelDBStore *db_ptr) {
     db.reset(db_ptr);
