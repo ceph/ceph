@@ -621,6 +621,8 @@ fi
 %{_bindir}/ceph_tpbench
 %{_bindir}/ceph_xattr_bench
 %{_bindir}/ceph-coverage
+%{_bindir}/ceph-monstore-tool
+%{_bindir}/ceph-osdomap-tool
 
 %files -n libcephfs_jni1
 %defattr(-,root,root,-)
