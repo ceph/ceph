@@ -728,6 +728,71 @@ extern "C" int ceph_get_file_stripe_unit(struct ceph_mount_info *cmount, int fh)
   return l.fl_stripe_unit;
 }
 
+extern "C" int ceph_get_path_stripe_unit(struct ceph_mount_info *cmount, const char *path)
+{
+  struct ceph_file_layout l;
+  int r;
+
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  r = cmount->get_client()->describe_layout(path, &l);
+  if (r < 0)
+    return r;
+  return l.fl_stripe_unit;
+}
+
+extern "C" int ceph_get_file_stripe_count(struct ceph_mount_info *cmount, int fh)
+{
+  struct ceph_file_layout l;
+  int r;
+
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  r = cmount->get_client()->fdescribe_layout(fh, &l);
+  if (r < 0)
+    return r;
+  return l.fl_stripe_count;
+}
+
+extern "C" int ceph_get_path_stripe_count(struct ceph_mount_info *cmount, const char *path)
+{
+  struct ceph_file_layout l;
+  int r;
+
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  r = cmount->get_client()->describe_layout(path, &l);
+  if (r < 0)
+    return r;
+  return l.fl_stripe_count;
+}
+
+extern "C" int ceph_get_file_object_size(struct ceph_mount_info *cmount, int fh)
+{
+  struct ceph_file_layout l;
+  int r;
+
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  r = cmount->get_client()->fdescribe_layout(fh, &l);
+  if (r < 0)
+    return r;
+  return l.fl_object_size;
+}
+
+extern "C" int ceph_get_path_object_size(struct ceph_mount_info *cmount, const char *path)
+{
+  struct ceph_file_layout l;
+  int r;
+
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  r = cmount->get_client()->describe_layout(path, &l);
+  if (r < 0)
+    return r;
+  return l.fl_object_size;
+}
+
 extern "C" int ceph_get_file_pool(struct ceph_mount_info *cmount, int fh)
 {
   struct ceph_file_layout l;
@@ -736,6 +801,19 @@ extern "C" int ceph_get_file_pool(struct ceph_mount_info *cmount, int fh)
   if (!cmount->is_mounted())
     return -ENOTCONN;
   r = cmount->get_client()->fdescribe_layout(fh, &l);
+  if (r < 0)
+    return r;
+  return l.fl_pg_pool;
+}
+
+extern "C" int ceph_get_path_pool(struct ceph_mount_info *cmount, const char *path)
+{
+  struct ceph_file_layout l;
+  int r;
+
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  r = cmount->get_client()->describe_layout(path, &l);
   if (r < 0)
     return r;
   return l.fl_pg_pool;
