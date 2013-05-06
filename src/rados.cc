@@ -72,6 +72,7 @@ void usage(ostream& out)
 "   create <obj-name> [category]     create object\n"
 "   rm <obj-name> ...                remove object(s)\n"
 "   cp <obj-name> [target-obj]       copy object\n"
+"   clonedata <src-obj> <dst-obj>    clone object data\n"
 "   listxattr <obj-name>\n"
 "   getxattr <obj-name> attr\n"
 "   setxattr <obj-name> attr val\n"
@@ -299,6 +300,26 @@ static int do_copy(IoCtx& io_ctx, const char *objname, IoCtx& target_ctx, const 
 err:
   target_ctx.remove(target_oid);
   return ret;
+}
+
+static int do_clone_data(IoCtx& io_ctx, const char *objname, IoCtx& target_ctx, const char *target_obj)
+{
+  string oid(objname);
+
+  // get size
+  uint64_t size;
+  int r = target_ctx.stat(oid, &size, NULL);
+  if (r < 0)
+    return r;
+
+  librados::ObjectWriteOperation write_op;
+  string target_oid(target_obj);
+
+  /* reset data stream only */
+  write_op.create(false);
+  write_op.truncate(0);
+  write_op.clone_range(0, oid, 0, size);
+  return target_ctx.operate(target_oid, &write_op);
 }
 
 static int do_copy_pool(Rados& rados, const char *src_pool, const char *target_pool)
@@ -1682,7 +1703,49 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       return 1;
     }
   }
-  else if (strcmp(nargs[0], "rm") == 0) {
+  else if (strcmp(nargs[0], "clonedata") == 0) {
+    if (!pool_name)
+      usage_exit();
+
+    if (nargs.size() < 2 || nargs.size() > 3)
+      usage_exit();
+
+    const char *target = target_pool_name;
+    if (!target)
+      target = pool_name;
+
+    const char *target_obj;
+    if (nargs.size() < 3) {
+      if (strcmp(target, pool_name) == 0) {
+        cerr << "cannot copy object into itself" << std::endl;
+        return 1;
+      }
+      target_obj = nargs[1];
+    } else {
+      target_obj = nargs[2];
+    }
+
+    // open io context.
+    IoCtx target_ctx;
+    ret = rados.ioctx_create(target, target_ctx);
+    if (ret < 0) {
+      cerr << "error opening target pool " << target << ": "
+           << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
+    }
+    if (oloc.size()) {
+      target_ctx.locator_set_key(oloc);
+    } else {
+      cerr << "must specify locator for clone" << std::endl;
+      return 1;
+    }
+
+    ret = do_clone_data(io_ctx, nargs[1], target_ctx, target_obj);
+    if (ret < 0) {
+      cerr << "error cloning " << pool_name << "/" << nargs[1] << " => " << target << "/" << target_obj << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
+    }
+  } else if (strcmp(nargs[0], "rm") == 0) {
     if (!pool_name || nargs.size() < 2)
       usage_exit();
     vector<const char *>::iterator iter = nargs.begin();
