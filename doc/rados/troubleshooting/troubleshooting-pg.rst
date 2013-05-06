@@ -24,8 +24,8 @@ There are a few cases where Ceph placement groups never get clean:
    
    	ceph pg force_create_pg <pgid>
    	
- #. **CRUSH Rules:** Another candidate for placement groups remaining
-    unclean involves errors in your CRUSH map.
+#. **CRUSH Rules:** Another candidate for placement groups remaining
+   unclean involves errors in your CRUSH map.
 
 As a general rule, you should run your cluster with more than one OSD and a
 pool size greater than 1 object replica.
