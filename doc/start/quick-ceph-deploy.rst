@@ -31,20 +31,6 @@ for maintaining the configuration of your cluster. ::
    current directory.
 
 
-Install Ceph
-============
-
-To install Ceph on your server, open a command line on your client
-machine and type the following::
-
-	ceph-deploy install {server-name}[,{server-name}]
-	ceph-deploy install --stable cuttlefish ceph-server
-
-Without additional arguments, ``ceph-deploy`` will install the most recent
-stable Ceph package to the host machine. See `ceph-deploy install -h`_ for
-additional details.
-
-
 Create a Cluster
 ================
 
@@ -67,6 +53,20 @@ See `ceph-deploy new -h`_ for additional details.
 	line to your Ceph configuration file:: 
 	
 		osd crush chooseleaf type = 0 
+
+
+Install Ceph
+============
+
+To install Ceph on your server, open a command line on your client
+machine and type the following::
+
+	ceph-deploy install {server-name}[,{server-name}]
+	ceph-deploy install --stable cuttlefish ceph-server
+
+Without additional arguments, ``ceph-deploy`` will install the most recent
+stable Ceph package to the host machine. See `ceph-deploy install -h`_ for
+additional details.
 
 
 Add a Monitor
