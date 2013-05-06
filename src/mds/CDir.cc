@@ -2142,6 +2142,7 @@ void CDir::encode_export(bufferlist& bl)
 
 void CDir::finish_export(utime_t now)
 {
+  state &= MASK_STATE_EXPORT_KEPT;
   pop_auth_subtree_nested.sub(now, cache->decayrate, pop_auth_subtree);
   pop_me.zero(now);
   pop_auth_subtree.zero(now);

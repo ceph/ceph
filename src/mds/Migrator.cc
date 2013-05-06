@@ -1066,10 +1066,6 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, list<Context*>& fini
 {
   dout(12) << "finish_export_inode " << *in << dendl;
 
-  in->finish_export(now);
-
-  finish_export_inode_caps(in);
-
   // clean
   if (in->is_dirty())
     in->mark_clean();
@@ -1103,7 +1099,11 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, list<Context*>& fini
 
   // waiters
   in->take_waiting(CInode::WAIT_ANY_MASK, finished);
+
+  in->finish_export(now);
   
+  finish_export_inode_caps(in);
+
   // *** other state too?
 
   // move to end of LRU so we drop out of cache quickly!
@@ -1218,9 +1218,6 @@ void Migrator::finish_export_dir(CDir *dir, list<Context*>& finished, utime_t no
 
   if (dir->is_dirty())
     dir->mark_clean();
-  
-  // discard most dir state
-  dir->state &= CDir::MASK_STATE_EXPORT_KEPT;  // i only retain a few things.
 
   // suck up all waiters
   dir->take_waiting(CDir::WAIT_ANY_MASK, finished);    // all dir waiters

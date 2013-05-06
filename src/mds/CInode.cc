@@ -2989,11 +2989,10 @@ void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waite
 
 void CInode::encode_export(bufferlist& bl)
 {
-  ENCODE_START(3, 3, bl)
+  ENCODE_START(4, 4, bl)
   _encode_base(bl);
 
-  bool dirty = is_dirty();
-  ::encode(dirty, bl);
+  ::encode(state, bl);
 
   ::encode(pop, bl);
 
@@ -3024,6 +3023,8 @@ void CInode::encode_export(bufferlist& bl)
 
 void CInode::finish_export(utime_t now)
 {
+  state &= MASK_STATE_EXPORT_KEPT;
+
   pop.zero(now);
 
   // just in case!
@@ -3037,14 +3038,17 @@ void CInode::finish_export(utime_t now)
 void CInode::decode_import(bufferlist::iterator& p,
 			   LogSegment *ls)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, p);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, p);
 
   _decode_base(p);
 
-  bool dirty;
-  ::decode(dirty, p);
-  if (dirty) 
+  unsigned s;
+  ::decode(s, p);
+  state |= (s & MASK_STATE_EXPORTED);
+  if (is_dirty()) {
+    get(PIN_DIRTY);
     _mark_dirty(ls);
+  }
 
   ::decode(pop, ceph_clock_now(g_ceph_context), p);
 
