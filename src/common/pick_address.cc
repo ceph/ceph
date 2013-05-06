@@ -79,7 +79,7 @@ static void fill_in_one_address(CephContext *cct,
   cct->_conf->apply_changes(NULL);
 }
 
-void pick_addresses(CephContext *cct)
+void pick_addresses(CephContext *cct, int needs)
 {
   struct ifaddrs *ifa;
   int r = getifaddrs(&ifa);
@@ -89,11 +89,15 @@ void pick_addresses(CephContext *cct)
     exit(1);
   }
 
-  if (cct->_conf->public_addr.is_blank_ip() && !cct->_conf->public_network.empty()) {
+  if ((needs & PICK_ADDRESS_NEEDS_PUBLIC)
+      && cct->_conf->public_addr.is_blank_ip()
+      && !cct->_conf->public_network.empty()) {
     fill_in_one_address(cct, ifa, cct->_conf->public_network, "public_addr");
   }
 
-  if (cct->_conf->cluster_addr.is_blank_ip() && !cct->_conf->cluster_network.empty()) {
+  if ((needs & PICK_ADDRESS_NEEDS_CLUSTER)
+      && cct->_conf->cluster_addr.is_blank_ip()
+      && !cct->_conf->cluster_network.empty()) {
     fill_in_one_address(cct, ifa, cct->_conf->cluster_network, "cluster_addr");
   }
 
