@@ -953,12 +953,22 @@ int ceph_get_file_layout(struct ceph_mount_info *cmount, int fh, int *stripe_uni
 int ceph_get_path_layout(struct ceph_mount_info *cmount, const char *path, int *stripe_unit, int *stripe_count, int *object_size, int *pg_pool);
 
 /**
- * Get the file replication information.
+ * Get the file replication information from an open file descriptor.
+ *
  * @param cmount the ceph mount handle to use.
  * @param fh the open file descriptor referring to the file to get the replication information of.
  * @returns the replication factor of the file.
  */
 int ceph_get_file_replication(struct ceph_mount_info *cmount, int fh);
+
+/**
+ * Get the file replication information.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param path the path of the file/directory get the replication information of.
+ * @returns the replication factor of the file.
+ */
+int ceph_get_path_replication(struct ceph_mount_info *cmount, const char *path);
 
 /**
  * Get the id of the named pool.

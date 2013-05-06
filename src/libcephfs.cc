@@ -894,6 +894,20 @@ extern "C" int ceph_get_file_replication(struct ceph_mount_info *cmount, int fh)
   return rep;
 }
 
+extern "C" int ceph_get_path_replication(struct ceph_mount_info *cmount, const char *path)
+{
+  struct ceph_file_layout l;
+  int r;
+
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  r = cmount->get_client()->describe_layout(path, &l);
+  if (r < 0)
+    return r;
+  int rep = cmount->get_client()->get_pool_replication(l.fl_pg_pool);
+  return rep;
+}
+
 extern "C" int ceph_set_default_file_stripe_unit(struct ceph_mount_info *cmount,
 						 int stripe)
 {
