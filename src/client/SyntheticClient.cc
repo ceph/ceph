@@ -3402,7 +3402,7 @@ int SyntheticClient::chunk_file(string &filename)
   inode_t inode;
   memset(&inode, 0, sizeof(inode));
   inode.ino = st.st_ino;
-  ret = client->describe_layout(fd, &inode.layout);
+  ret = client->fdescribe_layout(fd, &inode.layout);
   if (ret < 0)
     return ret;
 
