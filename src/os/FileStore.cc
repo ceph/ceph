@@ -1656,6 +1656,7 @@ int FileStore::mount()
     omap_store->options.compression_enabled = g_conf->osd_leveldb_compression;
     omap_store->options.paranoid_checks = g_conf->osd_leveldb_paranoid;
     omap_store->options.max_open_files = g_conf->osd_leveldb_max_open_files;
+    omap_store->options.log_file = g_conf->osd_leveldb_log;
 
     stringstream err;
     if (omap_store->create_and_open(err)) {
