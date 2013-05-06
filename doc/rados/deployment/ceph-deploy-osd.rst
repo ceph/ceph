@@ -74,12 +74,12 @@ for executing the ``prepare`` and ``activate`` command sequentially.  ::
 	ceph-deploy osd create {host-name}:{path-to-disk}[:{path/to/journal}]
 	ceph-deploy osd create osdserver1:/dev/sdb1:/dev/ssd1
 
-List OSDs
-=========
+.. List OSDs
+.. =========
 
-To list the OSDs deployed on a host(s), execute the following command:: 
+.. To list the OSDs deployed on a host(s), execute the following command:: 
 
-	ceph-deploy osd list {host-name}
+..	ceph-deploy osd list {host-name}
 
 
 Destroy OSDs
