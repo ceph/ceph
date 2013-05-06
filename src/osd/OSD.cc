@@ -6653,7 +6653,7 @@ int OSD::init_op_flags(OpRequestRef op)
 	ClassHandler::ClassData *cls;
 	int r = class_handler->open_class(cname, &cls);
 	if (r) {
-	  dout(10) << "class " << cname << " open got " << cpp_strerror(r) << dendl;
+	  derr << "class " << cname << " open got " << cpp_strerror(r) << dendl;
 	  if (r == -ENOENT)
 	    r = -EOPNOTSUPP;
 	  else
