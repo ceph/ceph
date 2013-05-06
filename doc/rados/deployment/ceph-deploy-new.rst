@@ -35,7 +35,7 @@ For example::
 
 The ``ceph-deploy`` utility will use DNS to resolve hostnames to IP
 addresses.  The monitors will be named using the first component of
-the name (e.g., ``mon1'' above).  It will add the specified host names
+the name (e.g., ``mon1`` above).  It will add the specified host names
 to the Ceph configuration file. For additional details, execute::
 
 	ceph-deploy new -h
