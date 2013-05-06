@@ -5,6 +5,12 @@
 
 class CephContext;
 
+
+#define PICK_ADDRESS_NEEDS_PUBLIC     0x01
+#define PICK_ADDRESS_NEEDS_CLUSTER    0x02
+#define PICK_ADDRESS_NEEDS_ALL        ( PICK_ADDRESS_NEEDS_PUBLIC | \
+                                        PICK_ADDRESS_NEEDS_CLUSTER )
+
 /*
   Pick addresses based on subnets if needed.
 
@@ -24,7 +30,7 @@ class CephContext;
 
   This function will exit on error.
  */
-void pick_addresses(CephContext *cct);
+void pick_addresses(CephContext *cct, int needs = PICK_ADDRESS_NEEDS_ALL);
 
 /**
  * check for a locally configured address
