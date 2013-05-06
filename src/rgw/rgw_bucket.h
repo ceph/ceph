@@ -284,6 +284,10 @@ class RGWDataChangesLog {
 
   map<string, rgw_bucket> cur_cycle;
 
+  void _get_change(string& bucket_name, ChangeStatusPtr& status);
+  void register_renew(rgw_bucket& bucket);
+  void update_renewed(string& bucket_name, utime_t& expiration);
+
   class ChangesRenewThread : public Thread {
     CephContext *cct;
     RGWDataChangesLog *log;
@@ -301,15 +305,20 @@ class RGWDataChangesLog {
 public:
 
   RGWDataChangesLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), lock("RGWDataChangesLog"),
-                                                          changes(1000) /* FIXME */ {
-    num_shards = 128; /* FIXME */
+                                                           changes(cct->_conf->rgw_data_log_changes_size) {
+    num_shards = cct->_conf->rgw_data_log_num_shards;
+
     oids = new string[num_shards];
 
-    const char *prefix = "bucket_log"; /* FIXME */
+    string prefix = cct->_conf->rgw_data_log_obj_prefix;
+
+    if (prefix.empty()) {
+      prefix = "data_log";
+    }
 
     for (int i = 0; i < num_shards; i++) {
       char buf[16];
-      snprintf(buf, sizeof(buf), "%s.%d", prefix, i);
+      snprintf(buf, sizeof(buf), "%s.%d", prefix.c_str(), i);
       oids[i] = buf;
     }
 
