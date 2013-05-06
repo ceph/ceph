@@ -23,8 +23,10 @@ You may specify a daemon instance a name (optional) if you would like to run
 multiple daemons on a single server.
 
 
-.. Remove a Metadata Server
-.. ========================
+Remove a Metadata Server
+========================
+
+Coming soon...
 
 .. If you have a metadata server in your cluster that you'd like to remove, you may use 
 .. the ``destroy`` option. :: 
