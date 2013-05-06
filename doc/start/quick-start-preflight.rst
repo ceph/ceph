@@ -107,8 +107,10 @@ Clone ceph-deploy
 
 To begin working with ``ceph-deploy``, clone its repository. :: 
 
-	git clone https://github.com/ceph/ceph-deploy.git ceph-deploy
+	git clone https://github.com/ceph/ceph-deploy.git [{directory-name}]
 
+If you do not specify a directory name, ``git clone`` will use the repository
+name ``ceph-deploy``.
 
 Install python-virtualenv
 =========================
