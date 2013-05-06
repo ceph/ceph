@@ -20,6 +20,10 @@ class Thrasher:
         self.stopping = False
         self.logger = logger
         self.config = config
+        self.revive_timeout = self.config.get("revive_timeout", 75)
+        if self.config.get('powercycle'):
+            self.revive_timeout += 120
+
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * num_osds
         if self.logger is not None:
@@ -57,7 +61,7 @@ class Thrasher:
         self.log("Reviving osd %s" % (str(osd),))
         self.live_osds.append(osd)
         self.dead_osds.remove(osd)
-        self.ceph_manager.revive_osd(osd)
+        self.ceph_manager.revive_osd(osd, self.revive_timeout)
 
     def out_osd(self, osd=None):
         if osd is None:
@@ -412,7 +416,7 @@ class CephManager:
             'kick_recovery_wq',
             '0')
 
-    def wait_run_admin_socket(self, osdnum, args=['version']):
+    def wait_run_admin_socket(self, osdnum, args=['version'], timeout=75):
         tries = 0
         while True:
             proc = self.osd_admin_socket(
@@ -422,7 +426,7 @@ class CephManager:
                 break
             else:
                 tries += 1
-                if tries > 15:
+                if (tries * 5) > timeout:
                     raise Exception('timed out waiting for admin_socket to appear after osd.{o} restart'.format(o=osdnum))
                 self.log(
                     "waiting on admin_socket for {osdnum}, {command}".format(
@@ -817,7 +821,7 @@ class CephManager:
         time.sleep(2)
         self.ctx.daemons.get_daemon('osd', osd).stop()
 
-    def revive_osd(self, osd):
+    def revive_osd(self, osd, timeout=75):
         if self.config.get('powercycle'):
             (remote,) = self.ctx.cluster.only('osd.{o}'.format(o=osd)).remotes.iterkeys()
             self.log('kill_osd on osd.{o} doing powercycle of {s}'.format(o=osd, s=remote.name))
@@ -830,7 +834,7 @@ class CephManager:
             ceph_task.make_admin_daemon_dir(self.ctx, remote)
             self.ctx.daemons.get_daemon('osd', osd).reset()
         self.ctx.daemons.get_daemon('osd', osd).restart()
-        self.wait_run_admin_socket(osd)
+        self.wait_run_admin_socket(osd, timeout=timeout)
 
     def mark_down_osd(self, osd):
         self.raw_cluster_cmd('osd', 'down', str(osd))

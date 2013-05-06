@@ -57,6 +57,9 @@ def task(ctx, config):
        to become clean after each cluster change. If this doesn't
        happen within the timeout, an exception will be raised.
 
+    revive_timeout: (75) number of seconds to wait for an osd asok to
+       appear after attempting to revive the osd
+
     chance_pgnum_grow: (0) chance to increase a pool's size
     chance_pgpnum_fix: (0) chance to adjust pgpnum to pg for a pool
     pool_grow_by: (10) amount to increase pgnum by
