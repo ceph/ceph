@@ -129,7 +129,7 @@ After you clone the repository, bootstrap ``ceph-deploy``. ::
 	cd ceph-deploy
 	./bootstrap
 
-Add ``ceph-deploy`` to your path so that so that you can execute it without
+Add ``ceph-deploy`` to your path so that you can execute it without
 remaining in ``ceph-deploy``  directory (e.g., ``/etc/environment``,
 ``~/.pam_environment``). Once you have completed this pre-flight checklist, you
 are ready to begin using ``ceph-deploy``.
