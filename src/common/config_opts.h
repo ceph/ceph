@@ -514,6 +514,7 @@ OPTION(filestore_replica_fadvise, OPT_BOOL, true)
 OPTION(filestore_debug_verify_split, OPT_BOOL, false)
 OPTION(journal_dio, OPT_BOOL, true)
 OPTION(journal_aio, OPT_BOOL, true)
+OPTION(journal_force_aio, OPT_BOOL, false)
 
 // max bytes to search ahead in journal searching for corruption
 OPTION(journal_max_corrupt_search, OPT_U64, 10<<20)
