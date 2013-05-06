@@ -984,6 +984,7 @@ int RGWDataChangesLog::renew_entries()
 
     store->time_log_prepare_entry(entry, ut, section, bucket.name, bl);
 
+    m[index].first.push_back(bucket.name);
     m[index].second.push_back(entry);
   }
 
@@ -1035,6 +1036,7 @@ void RGWDataChangesLog::update_renewed(string& bucket_name, utime_t& expiration)
   ChangeStatusPtr status;
   _get_change(bucket_name, status);
 
+  ldout(cct, 20) << "RGWDataChangesLog::update_renewd() bucket_name=" << bucket_name << " expiration=" << expiration << dendl;
   status->cur_expiration = expiration;
 }
 
@@ -1049,6 +1051,8 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
   utime_t now = ceph_clock_now(cct);
 
   status->lock->Lock();
+
+  ldout(cct, 20) << "RGWDataChangesLog::add_entry() bucket.name=" << bucket.name << " now=" << now << " cur_expiration=" << status->cur_expiration << dendl;
 
   if (now < status->cur_expiration) {
     /* no need to send, recently completed */
@@ -1079,22 +1083,35 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
   status->cond = new RefCountedCond;
   status->pending = true;
 
-  status->cur_sent = now;
-
-  status->lock->Unlock();
-  
   string& oid = oids[choose_oid(bucket)];
+  utime_t expiration;
 
-  utime_t ut = ceph_clock_now(cct);
-  bufferlist bl;
-  rgw_data_change change;
-  change.entity_type = ENTITY_TYPE_BUCKET;
-  change.key = bucket.name;
-  ::encode(change, bl);
-  string section;
-  int ret = store->time_log_add(oid, ut, section, change.key, bl);
+  int ret;
 
-  status->lock->Lock();
+  do {
+    status->cur_sent = now;
+
+    expiration = now;
+    expiration += utime_t(cct->_conf->rgw_data_log_window, 0);
+
+    status->lock->Unlock();
+  
+    bufferlist bl;
+    rgw_data_change change;
+    change.entity_type = ENTITY_TYPE_BUCKET;
+    change.key = bucket.name;
+    ::encode(change, bl);
+    string section;
+
+    ldout(cct, 20) << "RGWDataChangesLog::add_entry() sending update with now=" << now << " cur_expiration=" << expiration << dendl;
+
+    ret = store->time_log_add(oid, now, section, change.key, bl);
+
+    now = ceph_clock_now(cct);
+
+    status->lock->Lock();
+
+  } while (!ret && ceph_clock_now(cct) > expiration);
 
   cond = status->cond;
 
