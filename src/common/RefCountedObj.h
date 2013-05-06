@@ -47,20 +47,27 @@ struct RefCountedCond : public RefCountedObject {
   bool complete;
   Mutex lock;
   Cond cond;
+  int rval;
 
-  RefCountedCond() : complete(false), lock("RefCountedCond") {}
+  RefCountedCond() : complete(false), lock("RefCountedCond"), rval(0) {}
 
-  void wait() {
+  int wait() {
     Mutex::Locker l(lock);
     while (!complete) {
       cond.Wait(lock);
     }
+    return rval;
+  }
+
+  void done(int r) {
+    Mutex::Locker l(lock);
+    rval = r;
+    complete = true;
+    cond.SignalAll();
   }
 
   void done() {
-    Mutex::Locker l(lock);
-    complete = true;
-    cond.SignalAll();
+    done(0);
   }
 };
 
