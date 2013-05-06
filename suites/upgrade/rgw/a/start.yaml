@@ -16,4 +16,5 @@ tasks:
     conf:
       client:
         client mount timeout: 600
+        rgw init timeout: 600
 - rgw: [client.0]
