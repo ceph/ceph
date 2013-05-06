@@ -124,6 +124,7 @@ To zap a disk (delete its partition table) in preparation for use with Ceph,
 execute the following::
 
 	ceph-deploy disk zap {osd-server-name}:/path/to/disk
+	ceph-deploy disk zap ceph-server:/dev/sdb1 ceph-server:/dev/sdb2
 
 .. important:: This will delete all data in the partition.
 
@@ -133,9 +134,8 @@ Add OSDs
 
 To prepare an OSD disk and activate it, execute the following:: 
 
-	ceph-deploy osd create {osd-server-name}:/path/to/disk[:/path/to/journal]
-	ceph-deploy osd create {osd-server-name}:/dev/sdb1
-	ceph-deploy osd create {osd-server-name}:/dev/sdb2
+	ceph-deploy osd create {osd-server-name}:/path/to/disk[:/path/to/journal] [{osd-server-name}:/path/to/disk[:/path/to/journal]]
+	ceph-deploy osd create ceph-server:/dev/sdb1 ceph-server:/dev/sdb2
 
 You must add a minimum of two OSDs for the placement groups in a cluster to achieve
 an ``active + clean`` state.  
