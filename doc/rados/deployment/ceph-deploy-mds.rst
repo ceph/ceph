@@ -9,7 +9,7 @@ command.
 .. note:: CephFS is in production using 1 metadata server per cluster. You
    **MUST** deploy at least one metadata server to use CephFS.
 
-See `MDS Config Reference`_ for details on configuring monitors.
+See `MDS Config Reference`_ for details on configuring metadata servers.
 
 
 Add a Metadata Server
