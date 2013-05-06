@@ -7654,7 +7654,23 @@ int Client::ll_release(Fh *fh)
 
 // expose file layouts
 
-int Client::describe_layout(int fd, ceph_file_layout *lp)
+int Client::describe_layout(const char *relpath, ceph_file_layout *lp)
+{
+  Mutex::Locker lock(client_lock);
+
+  filepath path(relpath);
+  Inode *in;
+  int r = path_walk(path, &in);
+  if (r < 0)
+    return r;
+
+  *lp = in->layout;
+
+  ldout(cct, 3) << "describe_layout(" << relpath << ") = 0" << dendl;
+  return 0;
+}
+
+int Client::fdescribe_layout(int fd, ceph_file_layout *lp)
 {
   Mutex::Locker lock(client_lock);
 
@@ -7665,7 +7681,7 @@ int Client::describe_layout(int fd, ceph_file_layout *lp)
 
   *lp = in->layout;
 
-  ldout(cct, 3) << "describe_layout(" << fd << ") = 0" << dendl;
+  ldout(cct, 3) << "fdescribe_layout(" << fd << ") = 0" << dendl;
   return 0;
 }
 

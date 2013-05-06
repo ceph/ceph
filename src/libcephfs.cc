@@ -722,7 +722,7 @@ extern "C" int ceph_get_file_stripe_unit(struct ceph_mount_info *cmount, int fh)
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->describe_layout(fh, &l);
+  r = cmount->get_client()->fdescribe_layout(fh, &l);
   if (r < 0)
     return r;
   return l.fl_stripe_unit;
@@ -735,7 +735,7 @@ extern "C" int ceph_get_file_pool(struct ceph_mount_info *cmount, int fh)
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->describe_layout(fh, &l);
+  r = cmount->get_client()->fdescribe_layout(fh, &l);
   if (r < 0)
     return r;
   return l.fl_pg_pool;
@@ -748,7 +748,7 @@ extern "C" int ceph_get_file_pool_name(struct ceph_mount_info *cmount, int fh, c
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->describe_layout(fh, &l);
+  r = cmount->get_client()->fdescribe_layout(fh, &l);
   if (r < 0)
     return r;
   string name = cmount->get_client()->get_pool_name(l.fl_pg_pool);
@@ -767,7 +767,7 @@ extern "C" int ceph_get_file_replication(struct ceph_mount_info *cmount, int fh)
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->describe_layout(fh, &l);
+  r = cmount->get_client()->fdescribe_layout(fh, &l);
   if (r < 0)
     return r;
   int rep = cmount->get_client()->get_pool_replication(l.fl_pg_pool);
