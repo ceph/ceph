@@ -369,7 +369,7 @@ public:
 protected:
   // file capabilities
   map<client_t, Capability*> client_caps;         // client -> caps
-  map<int, int>         mds_caps_wanted;     // [auth] mds -> caps wanted
+  map<int32_t, int32_t>      mds_caps_wanted;     // [auth] mds -> caps wanted
   int                   replica_caps_wanted; // [replica] what i've requested from auth
 
   map<int, set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
@@ -709,7 +709,7 @@ public:
   bool is_any_caps() { return !client_caps.empty(); }
   bool is_any_nonstale_caps() { return count_nonstale_caps(); }
 
-  map<int,int>& get_mds_caps_wanted() { return mds_caps_wanted; }
+  map<int32_t,int32_t>& get_mds_caps_wanted() { return mds_caps_wanted; }
 
   map<client_t,Capability*>& get_client_caps() { return client_caps; }
   Capability *get_client_cap(client_t client) {
