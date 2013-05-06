@@ -54,7 +54,7 @@ class PaxosService {
    * If we are or have queued anything for proposal, this variable will be true
    * until our proposal has been finished.
    */
-  atomic_t proposing;
+  bool proposing;
 
  protected:
   /**
@@ -167,7 +167,7 @@ protected:
   public:
     C_Committed(PaxosService *p) : ps(p) { }
     void finish(int r) {
-      ps->proposing.set(0);
+      ps->proposing = false;
       if (r >= 0)
 	ps->_active();
       else if (r == -ECANCELED || r == -EAGAIN)
@@ -190,6 +190,7 @@ public:
    */
   PaxosService(Monitor *mn, Paxos *p, string name) 
     : mon(mn), paxos(p), service_name(name),
+      proposing(false),
       service_version(0), proposal_timer(0), have_pending(false),
       trim_version(0),
       last_committed_name("last_committed"),
@@ -198,7 +199,6 @@ public:
       mkfs_name("mkfs"),
       full_version_name("full"), full_latest_name("latest")
   {
-    proposing.set(0);
   }
 
   virtual ~PaxosService() {}
@@ -486,7 +486,7 @@ public:
    * @returns true if we are proposing; false otherwise.
    */
   bool is_proposing() {
-    return ((int) proposing.read() == 1);
+    return proposing;
   }
 
   /**

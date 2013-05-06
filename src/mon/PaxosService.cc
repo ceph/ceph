@@ -176,7 +176,7 @@ void PaxosService::propose_pending()
   t.encode(bl);
 
   // apply to paxos
-  proposing.set(1);
+  proposing = true;
   paxos->propose_new_value(bl, new C_Committed(this));
 }
 
@@ -219,7 +219,7 @@ void PaxosService::election_finished()
     discard_pending();
     have_pending = false;
   }
-  proposing.set(0);
+  proposing = false;
 
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
 
