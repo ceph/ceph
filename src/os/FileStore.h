@@ -524,7 +524,7 @@ private:
   bool m_filestore_fail_eio;
   bool m_filestore_replica_fadvise;
   int do_update;
-  bool m_journal_dio, m_journal_aio;
+  bool m_journal_dio, m_journal_aio, m_journal_force_aio;
   std::string m_osd_rollback_to_cluster_snap;
   bool m_osd_use_stale_snap;
   int m_filestore_queue_max_ops;
