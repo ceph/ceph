@@ -957,12 +957,19 @@ int RGWDataChangesLog::choose_oid(rgw_bucket& bucket) {
 
 int RGWDataChangesLog::renew_entries()
 {
-  map<int, list<cls_log_entry> > m;
+  /* we can't keep the bucket name as part of the cls_log_entry, and we need
+   * it later, so we keep two lists under the map */
+  map<int, pair<list<string>, list<cls_log_entry> > > m;
+
+  lock.Lock();
+  map<string, rgw_bucket> entries;
+  entries.swap(cur_cycle);
+  lock.Unlock();
 
   map<string, rgw_bucket>::iterator iter;
   string section;
   utime_t ut = ceph_clock_now(cct);
-  for (iter = cur_cycle.begin(); iter != cur_cycle.end(); ++iter) {
+  for (iter = entries.begin(); iter != entries.end(); ++iter) {
     rgw_bucket& bucket = iter->second;
     int index = choose_oid(bucket);
 
@@ -976,33 +983,65 @@ int RGWDataChangesLog::renew_entries()
 
     store->time_log_prepare_entry(entry, ut, section, bucket.name, bl);
 
-    m[index].push_back(entry);
+    m[index].second.push_back(entry);
   }
 
-  map<int, list<cls_log_entry> >::iterator miter;
+  map<int, pair<list<string>, list<cls_log_entry> > >::iterator miter;
   for (miter = m.begin(); miter != m.end(); ++miter) {
-    list<cls_log_entry>& entries = miter->second;
+    list<cls_log_entry>& entries = miter->second.second;
+
+    utime_t now = ceph_clock_now(cct);
 
     int ret = store->time_log_add(oids[miter->first], entries);
     if (ret < 0) {
+      /* we don't really need to have a special handling for failed cases here,
+       * as this is just an optimization. */
       lderr(cct) << "ERROR: store->time_log_add() returned " << ret << dendl;
       return ret;
+    }
+
+    utime_t expiration = now;
+    expiration += utime_t(cct->_conf->rgw_data_log_window, 0);
+
+    list<string>& buckets = miter->second.first;
+    list<string>::iterator liter;
+    for (liter = buckets.begin(); liter != buckets.end(); ++liter) {
+      update_renewed(*liter, expiration);
     }
   }
 
   return 0;
 }
 
+void RGWDataChangesLog::_get_change(string& bucket_name, ChangeStatusPtr& status)
+{
+  assert(lock.is_locked());
+  if (!changes.find(bucket_name, status)) {
+    status = ChangeStatusPtr(new ChangeStatus);
+    changes.add(bucket_name, status);
+  }
+}
+
+void RGWDataChangesLog::register_renew(rgw_bucket& bucket)
+{
+  Mutex::Locker l(lock);
+  cur_cycle[bucket.name] = bucket;
+}
+
+void RGWDataChangesLog::update_renewed(string& bucket_name, utime_t& expiration)
+{
+  Mutex::Locker l(lock);
+  ChangeStatusPtr status;
+  _get_change(bucket_name, status);
+
+  status->cur_expiration = expiration;
+}
+
 int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
   lock.Lock();
 
   ChangeStatusPtr status;
-  if (!changes.find(bucket.name, status)) {
-    status = ChangeStatusPtr(new ChangeStatus);
-    changes.add(bucket.name, status);
-  }
-
-  cur_cycle[bucket.name] = bucket;
+  _get_change(bucket.name, status);
 
   lock.Unlock();
 
@@ -1010,10 +1049,11 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
 
   status->lock->Lock();
 
-#warning FIXME delta config
   if (now < status->cur_expiration) {
     /* no need to send, recently completed */
     status->lock->Unlock();
+
+    register_renew(bucket);
     return 0;
   }
 
@@ -1027,10 +1067,12 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
     status->cond->get();
     status->lock->Unlock();
 
-    cond->wait();
+    int ret = cond->wait();
     cond->put();
-#warning FIXME need to return actual status
-    return 0;
+    if (!ret) {
+      register_renew(bucket);
+    }
+    return ret;
   }
 
   status->cond = new RefCountedCond;
@@ -1057,11 +1099,11 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
 
   status->pending = false;
   status->cur_expiration = status->cur_sent; /* time of when operation started, not completed */
-  status->cur_expiration += utime_t(5, 0);
+  status->cur_expiration += utime_t(cct->_conf->rgw_data_log_window, 0);
   status->cond = NULL;
   status->lock->Unlock();
 
-  cond->done();
+  cond->done(ret);
   cond->put();
 
   return ret;
@@ -1143,8 +1185,9 @@ void *RGWDataChangesLog::ChangesRenewThread::entry() {
     if (log->going_down())
       break;
 
+    int interval = cct->_conf->rgw_data_log_window * 3 / 4;
     lock.Lock();
-    cond.WaitInterval(cct, lock, utime_t(20, 0));
+    cond.WaitInterval(cct, lock, utime_t(interval, 0));
     lock.Unlock();
   } while (!log->going_down());
 
