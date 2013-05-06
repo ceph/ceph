@@ -1025,6 +1025,7 @@ void Migrator::encode_export_inode_caps(CInode *in, bufferlist& bl,
   map<client_t,Capability::Export> cap_map;
   in->export_client_caps(cap_map);
   ::encode(cap_map, bl);
+  ::encode(in->get_mds_caps_wanted(), bl);
 
   in->state_set(CInode::STATE_EXPORTINGCAPS);
   in->get(CInode::PIN_EXPORTINGCAPS);
@@ -2379,7 +2380,8 @@ void Migrator::decode_import_inode_caps(CInode *in,
 {
   map<client_t,Capability::Export> cap_map;
   ::decode(cap_map, blp);
-  if (!cap_map.empty()) {
+  ::decode(in->get_mds_caps_wanted(), blp);
+  if (!cap_map.empty() || !in->get_mds_caps_wanted().empty()) {
     cap_imports[in].swap(cap_map);
     in->get(CInode::PIN_IMPORTINGCAPS);
   }
@@ -2388,8 +2390,6 @@ void Migrator::decode_import_inode_caps(CInode *in,
 void Migrator::finish_import_inode_caps(CInode *in, int from, 
 					map<client_t,Capability::Export> &cap_map)
 {
-  assert(!cap_map.empty());
-  
   for (map<client_t,Capability::Export>::iterator it = cap_map.begin();
        it != cap_map.end();
        ++it) {
@@ -2406,6 +2406,7 @@ void Migrator::finish_import_inode_caps(CInode *in, int from,
     mds->mdcache->do_cap_import(session, in, cap);
   }
 
+  in->replica_caps_wanted = 0;
   in->put(CInode::PIN_IMPORTINGCAPS);
 }
 
