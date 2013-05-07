@@ -1846,8 +1846,14 @@ public:
 
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
 
-  void init(int role, vector<int>& up, vector<int>& acting, pg_history_t& history,
-	    pg_interval_map_t& pim, ObjectStore::Transaction *t);
+  void init(
+    int role,
+    vector<int>& up,
+    vector<int>& acting,
+    pg_history_t& history,
+    pg_interval_map_t& pim,
+    bool backfill,
+    ObjectStore::Transaction *t);
 
   // pg on-disk state
   void do_pending_flush();
