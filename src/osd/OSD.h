@@ -142,9 +142,19 @@ typedef std::tr1::shared_ptr<ObjectStore::Sequencer> SequencerRef;
 
 class DeletingState {
   Mutex lock;
+  Cond cond;
   list<Context *> on_deletion_complete;
+  enum {
+    QUEUED,
+    CLEARING_DIR,
+    DELETING_DIR,
+    DELETED_DIR,
+    CANCELED,
+  } status;
+  bool stop_deleting;
 public:
-  DeletingState() : lock("DeletingState::lock") {}
+  DeletingState() :
+    lock("DeletingState::lock"), status(QUEUED), stop_deleting(false) {}
   void register_on_delete(Context *completion) {
     Mutex::Locker l(lock);
     on_deletion_complete.push_front(completion);
@@ -156,6 +166,72 @@ public:
       (*i)->complete(0);
     }
   }
+
+  /// check whether removal was canceled
+  bool check_canceled() {
+    Mutex::Locker l(lock);
+    assert(status == CLEARING_DIR);
+    if (stop_deleting) {
+      status = CANCELED;
+      cond.Signal();
+      return false;
+    }
+    return true;
+  } ///< @return false if canceled, true if we should continue
+
+  /// transition status to clearing
+  bool start_clearing() {
+    Mutex::Locker l(lock);
+    assert(
+      status == QUEUED ||
+      status == DELETED_DIR);
+    if (stop_deleting) {
+      status = CANCELED;
+      cond.Signal();
+      return false;
+    }
+    status = CLEARING_DIR;
+    return true;
+  } ///< @return false if we should cancel deletion
+
+  /// transition status to deleting
+  bool start_deleting() {
+    Mutex::Locker l(lock);
+    assert(status == CLEARING_DIR);
+    if (stop_deleting) {
+      status = CANCELED;
+      cond.Signal();
+      return false;
+    }
+    status = DELETING_DIR;
+    return true;
+  } ///< @return false if we should cancel deletion
+
+  /// signal collection removal queued
+  void finish_deleting() {
+    Mutex::Locker l(lock);
+    assert(status == DELETING_DIR);
+    status = DELETED_DIR;
+    cond.Signal();
+  }
+
+  /// try to halt the deletion
+  bool try_stop_deletion() {
+    Mutex::Locker l(lock);
+    stop_deleting = true;
+    /**
+     * If we are in DELETING_DIR or DELETED_DIR, there are in progress
+     * operations we have to wait for before continuing on.  States
+     * DELETED_DIR, QUEUED, and CANCELED either check for stop_deleting
+     * prior to performing any operations or signify the end of the
+     * deleting process.  We don't want to wait to leave the QUEUED
+     * state, because this might block the caller behind entire pg
+     * removals.
+     */
+    while (status == DELETING_DIR || status == DELETING_DIR)
+      cond.Wait(lock);
+    return status != DELETED_DIR;
+  } ///< @return true if we don't need to recreate the collection
 };
 typedef std::tr1::shared_ptr<DeletingState> DeletingStateRef;
 
