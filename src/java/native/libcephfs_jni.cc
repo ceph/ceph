@@ -1109,7 +1109,6 @@ JNIEXPORT jstring JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1readlink
 	char *linkname;
 	struct stat st;
 	jstring j_linkname;
-	int ret;
 
 	CHECK_ARG_NULL(j_path, "@path is null", NULL);
 	CHECK_MOUNTED(cmount, NULL);
@@ -1122,7 +1121,7 @@ JNIEXPORT jstring JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1readlink
 
 	for (;;) {
 		ldout(cct, 10) << "jni: readlink: lstatx " << c_path << dendl;
-		ret = ceph_lstat(cmount, c_path, &st);
+		int ret = ceph_lstat(cmount, c_path, &st);
 		ldout(cct, 10) << "jni: readlink: lstat exit ret " << ret << dendl;
 		if (ret) {
 			env->ReleaseStringUTFChars(j_path, c_path);
