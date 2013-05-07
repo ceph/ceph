@@ -450,7 +450,7 @@ int main(int argc, const char **argv)
     oom_adjust << "-1000";
     oom_adjust.close();
   } else {
-    ofstream oom_adjust_legacy("/proc/self/oom_adj", ios::out);
+    ofstream oom_adjust_legacy("/proc/self/oom_adj");
     if (oom_adjust_legacy.is_open()) {
       oom_adjust_legacy << "-17";
       oom_adjust_legacy.close();
