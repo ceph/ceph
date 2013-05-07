@@ -54,4 +54,6 @@ These are exciting times in the Ceph community! Get involved!
 .. _Gmane for Developers: http://news.gmane.org/gmane.comp.file-systems.ceph.devel
 .. _Gmane for Users: http://news.gmane.org/gmane.comp.file-systems.ceph.user
 .. _Blog: http://ceph.com/community/blog/
+.. _Tracker: http://tracker.ceph.com/
+.. _Support: http://ceph.com/help/professional/
 .. _Ceph Source Code: http://github.com/ceph/ceph
