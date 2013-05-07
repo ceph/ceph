@@ -196,8 +196,17 @@ void CephContext::do_command(std::string command, std::string args, bufferlist *
 	  jf.dump_string("success", ss.str());
 	}
       }
-    }
-    else if (command == "log flush") {
+    } else if (command == "config get") {
+        char buf[4096];
+        memset(buf, 0, sizeof(buf));
+        char *tmp = buf;
+        int r = _conf->get_val(args.c_str(), &tmp, sizeof(buf));
+        if (r < 0) {
+            jf.dump_stream("error") << "error getting '" << args << "': " << cpp_strerror(r);
+        } else {
+            jf.dump_string(args.c_str(), buf);
+        }
+    } else if (command == "log flush") {
       _log->flush();
     }
     else if (command == "log dump") {
@@ -253,6 +262,7 @@ CephContext::CephContext(uint32_t module_type_)
   _admin_socket->register_command("perf schema", _admin_hook, "dump perfcounters schema");
   _admin_socket->register_command("config show", _admin_hook, "dump current config settings");
   _admin_socket->register_command("config set", _admin_hook, "config set <field> <val>: set a config variable");
+  _admin_socket->register_command("config get", _admin_hook, "config get <field>: get the config value");
   _admin_socket->register_command("log flush", _admin_hook, "flush log entries to log file");
   _admin_socket->register_command("log dump", _admin_hook, "dump recent log entries to log file");
   _admin_socket->register_command("log reopen", _admin_hook, "reopen log file");
@@ -277,6 +287,7 @@ CephContext::~CephContext()
   _admin_socket->unregister_command("2");
   _admin_socket->unregister_command("config show");
   _admin_socket->unregister_command("config set");
+  _admin_socket->unregister_command("config get");
   _admin_socket->unregister_command("log flush");
   _admin_socket->unregister_command("log dump");
   _admin_socket->unregister_command("log reopen");
