@@ -7,7 +7,7 @@
 
 There are multiple build envrionments, debian based packages are built via pbuilder for multiple distributions.  The build hosts are listed in the ``deb_hosts`` file, and the list of distributions are in ``deb_dist``.  All distributions are build on each of the build hosts.  Currently there is 1 64 bit and 1 32 bit build host.
 
-The RPM based packages are are built natively, so one distribution per build host.  The list of hosts is found in ``rpm_hosts``.
+The RPM based packages are built natively, so one distribution per build host.  The list of hosts is found in ``rpm_hosts``.
 
 Prior to building, it's necessary to update the pbuilder seed tarballs::
 
