@@ -442,6 +442,8 @@ int main(int argc, const char **argv)
   register_async_signal_handler_oneshot(SIGINT, handle_osd_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_osd_signal);
 
+
+#if defined(__linux__)
   // OOM handler
   ofstream oom_adjust("/proc/self/oom_score_adj");
   if (oom_adjust.is_open()) {
@@ -456,6 +458,7 @@ int main(int argc, const char **argv)
       derr << TEXT_YELLOW << " ** WARNING: failed to adjust OOM **" << TEXT_NORMAL << dendl;
     }
   }
+#endif // __linux__
 
   // start osd
   err = osd->init();
