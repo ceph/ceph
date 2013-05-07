@@ -21,11 +21,10 @@
 
 ssize_t safe_read(int fd, void *buf, size_t count)
 {
-	ssize_t r;
 	size_t cnt = 0;
 
 	while (cnt < count) {
-		r = read(fd, buf, count - cnt);
+		ssize_t r = read(fd, buf, count - cnt);
 		if (r <= 0) {
 			if (r == 0) {
 				// EOF
@@ -53,10 +52,8 @@ ssize_t safe_read_exact(int fd, void *buf, size_t count)
  
 ssize_t safe_write(int fd, const void *buf, size_t count)
 {
-	ssize_t r;
-
 	while (count > 0) {
-		r = write(fd, buf, count);
+		ssize_t r = write(fd, buf, count);
 		if (r < 0) {
 			if (errno == EINTR)
 				continue;
@@ -70,12 +67,11 @@ ssize_t safe_write(int fd, const void *buf, size_t count)
 
 ssize_t safe_pread(int fd, void *buf, size_t count, off_t offset)
 {
-	ssize_t r;
 	size_t cnt = 0;
 	char *b = (char*)buf;
 
 	while (cnt < count) {
-		r = pread(fd, b + cnt, count - cnt, offset + cnt);
+		ssize_t r = pread(fd, b + cnt, count - cnt, offset + cnt);
 		if (r <= 0) {
 			if (r == 0) {
 				// EOF
@@ -103,10 +99,8 @@ ssize_t safe_pread_exact(int fd, void *buf, size_t count, off_t offset)
 
 ssize_t safe_pwrite(int fd, const void *buf, size_t count, off_t offset)
 {
-	ssize_t r;
-
 	while (count > 0) {
-		r = pwrite(fd, buf, count, offset);
+		ssize_t r = pwrite(fd, buf, count, offset);
 		if (r < 0) {
 			if (errno == EINTR)
 				continue;
