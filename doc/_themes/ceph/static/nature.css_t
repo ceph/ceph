@@ -317,3 +317,9 @@ h2 .literal {
     color: #fff;
     background-color: #37424a;
 }
+
+dl.glossary dt {
+	font-size: 1.0em;
+	padding-top:20px;	
+
+}
