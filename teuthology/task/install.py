@@ -365,7 +365,7 @@ rpm_packages = {'ceph': [
 @contextlib.contextmanager
 def install(ctx, config):
 
-    project = config.get('project')
+    project = config.get('project', 'ceph')
 
     global deb_packages
     global rpm_packages
@@ -551,7 +551,7 @@ def upgrade(ctx, config):
         'librbd1-dbg',
         ]
 
-    project = config.get('project')
+    project = config.get('project', 'ceph')
 
     debs = proj_debs.get(project, [])
 
