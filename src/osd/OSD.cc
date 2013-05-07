@@ -1775,8 +1775,29 @@ void OSD::load_pgs()
       dout(10) << "PG " << pg->info.pgid
 	       << " must upgrade..." << dendl;
       pg->upgrade(store, i->second);
-    } else {
-      assert(i->second.empty());
+    } else if (!i->second.empty()) {
+      // handle upgrade bug
+      for (interval_set<snapid_t>::iterator j = i->second.begin();
+	   j != i->second.end();
+	   ++j) {
+	for (snapid_t k = j.get_start();
+	     k != j.get_start() + j.get_len();
+	     ++k) {
+	  assert(store->collection_empty(coll_t(pgid, k)));
+	  ObjectStore::Transaction t;
+	  t.remove_collection(coll_t(pgid, k));
+	  store->apply_transaction(t);
+	}
+      }
+    }
+
+    if (!pg->snap_collections.empty()) {
+      pg->snap_collections.clear();
+      pg->dirty_big_info = true;
+      pg->dirty_info = true;
+      ObjectStore::Transaction t;
+      pg->write_if_dirty(t);
+      store->apply_transaction(t);
     }
 
     service.init_splits_between(pg->info.pgid, pg->get_osdmap(), osdmap);
