@@ -172,12 +172,11 @@ bool ceph_argparse_flag(std::vector<const char*> &args,
   char tmp[strlen(first)+1];
   dashes_to_underscores(first, tmp);
   first = tmp;
-  const char *a;
   va_list ap;
 
   va_start(ap, i);
   while (1) {
-    a = va_arg(ap, char*);
+    const char *a = va_arg(ap, char*);
     if (a == NULL) {
       va_end(ap);
       return false;
@@ -200,15 +199,13 @@ static bool va_ceph_argparse_binary_flag(std::vector<const char*> &args,
   char tmp[strlen(first)+1];
   dashes_to_underscores(first, tmp);
   first = tmp;
-  const char *a;
-  int strlen_a;
 
   // does this argument match any of the possibilities?
   while (1) {
-    a = va_arg(ap, char*);
+    const char *a = va_arg(ap, char*);
     if (a == NULL)
       return false;
-    strlen_a = strlen(a);
+    int strlen_a = strlen(a);
     char a2[strlen_a+1];
     dashes_to_underscores(a, a2);
     if (strncmp(a2, first, strlen(a2)) == 0) {
@@ -259,15 +256,13 @@ static bool va_ceph_argparse_witharg(std::vector<const char*> &args,
   char tmp[strlen(first)+1];
   dashes_to_underscores(first, tmp);
   first = tmp;
-  const char *a;
-  int strlen_a;
 
   // does this argument match any of the possibilities?
   while (1) {
-    a = va_arg(ap, char*);
+    const char *a = va_arg(ap, char*);
     if (a == NULL)
       return false;
-    strlen_a = strlen(a);
+    int strlen_a = strlen(a);
     char a2[strlen_a+1];
     dashes_to_underscores(a, a2);
     if (strncmp(a2, first, strlen(a2)) == 0) {
