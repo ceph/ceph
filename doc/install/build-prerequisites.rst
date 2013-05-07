@@ -42,7 +42,7 @@ installed on your host. ::
 	
 On Debian/Wheezy, you may also need:: 
 
-	keyutils-dev libaio and libboost-thread-dev
+	keyutils-dev libaio libboost-thread-dev
 
 .. note:: Some distributions that support Google's memory profiler tool may use
    a different package name (e.g., ``libgoogle-perftools4``).
