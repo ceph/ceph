@@ -205,6 +205,7 @@ namespace librados
     void clone_range(uint64_t dst_off,
                      const std::string& src_oid, uint64_t src_off,
                      size_t len);
+    void selfmanaged_snap_rollback(uint64_t snapid);
 
     /**
      * set keys and values according to map

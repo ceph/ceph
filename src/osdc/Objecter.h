@@ -618,6 +618,10 @@ struct ObjectOperation {
     o.op.xattr.cmp_mode = mode;
   }
 
+  void rollback(uint64_t snapid) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_ROLLBACK);
+    osd_op.op.snap.snapid = snapid;
+  }
 };
 
 
