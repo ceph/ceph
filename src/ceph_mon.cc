@@ -283,9 +283,9 @@ int main(int argc, const char **argv)
       return prefork.parent_wait();
     }
     global_init_postfork(g_ceph_context, 0);
-    common_init_finish(g_ceph_context);
-    global_init_chdir(g_ceph_context);
   }
+  common_init_finish(g_ceph_context);
+  global_init_chdir(g_ceph_context);
 
   {
     Monitor::StoreConverter converter(g_conf->mon_data);

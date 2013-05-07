@@ -222,7 +222,7 @@ private:
   off64_t max_size;
   size_t block_size;
   bool is_bdev;
-  bool directio, aio;
+  bool directio, aio, force_aio;
   bool must_write_header;
   off64_t write_pos;      // byte where the next entry to be written will go
   off64_t read_pos;       // 
@@ -351,7 +351,7 @@ private:
   }
 
  public:
-  FileJournal(uuid_d fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false, bool ai=true) : 
+  FileJournal(uuid_d fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false, bool ai=true, bool faio=false) :
     Journal(fsid, fin, sync_cond),
     finisher_lock("FileJournal::finisher_lock", false, true, false, g_ceph_context),
     journaled_seq(0),
@@ -362,7 +362,7 @@ private:
     fn(f),
     zero_buf(NULL),
     max_size(0), block_size(0),
-    is_bdev(false), directio(dio), aio(ai),
+    is_bdev(false), directio(dio), aio(ai), force_aio(faio),
     must_write_header(false),
     write_pos(0), read_pos(0),
 #ifdef HAVE_LIBAIO

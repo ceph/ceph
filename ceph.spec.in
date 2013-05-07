@@ -22,6 +22,7 @@ Requires:	libcephfs1 = %{version}-%{release}
 Requires:	python
 Requires:	python-argparse
 Requires:	python-lockfile
+Requires:       xfsprogs
 Requires:	cryptsetup
 Requires:	parted
 Requires:	util-linux
