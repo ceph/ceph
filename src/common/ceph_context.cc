@@ -51,19 +51,19 @@ public:
   {
     while (1) {
       if (_cct->_conf->heartbeat_interval) {
-	struct timespec timeout;
-	clock_gettime(CLOCK_REALTIME, &timeout);
-	timeout.tv_sec += _cct->_conf->heartbeat_interval;
-	sem_timedwait(&_sem, &timeout);
+        struct timespec timeout;
+        clock_gettime(CLOCK_REALTIME, &timeout);
+        timeout.tv_sec += _cct->_conf->heartbeat_interval;
+        sem_timedwait(&_sem, &timeout);
       } else {
-	sem_wait(&_sem);
+        sem_wait(&_sem);
       }
       if (_exit_thread) {
-	break;
+        break;
       }
       if (_reopen_logs) {
-	_cct->_log->reopen_log_file();
-	_reopen_logs = false;
+        _cct->_log->reopen_log_file();
+        _reopen_logs = false;
       }
       _cct->_heartbeat_map->check_touch_file();
     }
@@ -118,7 +118,7 @@ public:
   }
 
   void handle_conf_change(const md_config_t *conf,
-			  const std::set <std::string> &changed) {
+                          const std::set <std::string> &changed) {
     // stderr
     if (changed.count("log_to_stderr") || changed.count("err_to_stderr")) {
       int l = conf->log_to_stderr ? 99 : (conf->err_to_stderr ? -1 : -2);
@@ -170,7 +170,7 @@ void CephContext::do_command(std::string command, std::string args, bufferlist *
     _perf_counters_collection->write_json_to_buf(*out, false);
   }
   else if (command == "perfcounters_schema" || command == "2" ||
-	   command == "perf schema") {
+    command == "perf schema") {
     _perf_counters_collection->write_json_to_buf(*out, true);
   }
   else {
@@ -183,18 +183,18 @@ void CephContext::do_command(std::string command, std::string args, bufferlist *
       std::string var = args;
       size_t pos = var.find(' ');
       if (pos == string::npos) {
-	jf.dump_string("error", "syntax error: 'config set <var> <value>'");
+        jf.dump_string("error", "syntax error: 'config set <var> <value>'");
       } else {
-	std::string val = var.substr(pos+1);
-	var.resize(pos);
-	int r = _conf->set_val(var.c_str(), val.c_str());
-	if (r < 0) {
-	  jf.dump_stream("error") << "error setting '" << var << "' to '" << val << "': " << cpp_strerror(r);
-	} else {
-	  ostringstream ss;
-	  _conf->apply_changes(&ss);
-	  jf.dump_string("success", ss.str());
-	}
+        std::string val = var.substr(pos+1);
+        var.resize(pos);
+        int r = _conf->set_val(var.c_str(), val.c_str());
+        if (r < 0) {
+          jf.dump_stream("error") << "error setting '" << var << "' to '" << val << "': " << cpp_strerror(r);
+        } else {
+          ostringstream ss;
+          _conf->apply_changes(&ss);
+          jf.dump_string("success", ss.str());
+        }
       }
     } else if (command == "config get") {
         char buf[4096];
