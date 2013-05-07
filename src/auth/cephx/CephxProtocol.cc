@@ -475,7 +475,7 @@ bool CephXAuthorizer::verify_reply(bufferlist::iterator& indata)
 
   std::string error;
   if (decode_decrypt(cct, reply, session_key, indata, error)) {
-      ldout(cct, 0) << "verify_reply coudln't decrypt with error: " << error << dendl;
+      ldout(cct, 0) << "verify_reply couldn't decrypt with error: " << error << dendl;
       return false;
   }
 
