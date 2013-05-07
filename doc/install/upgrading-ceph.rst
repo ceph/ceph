@@ -212,7 +212,7 @@ ceph-deploy is not required; it is entirely acceptable to continue
 provisioning new OSDs and monitors using the previous methods.
 However, ceph-deploy streamlines these processes significantly.
 
-.. _Transitioning to ceph-deploy: rados/deployment/ceph-deploy-transition
+.. _Transitioning to ceph-deploy: ../../rados/deployment/ceph-deploy-transition
 
 
 Upgrade Procedures
