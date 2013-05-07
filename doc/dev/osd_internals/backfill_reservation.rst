@@ -10,9 +10,9 @@ incoming backfills on a single node.
 Each OSDService now has two AsyncReserver instances: one for backfills going
 from the osd (local_reserver) and one for backfills going to the osd
 (remote_reserver).  An AsyncReserver (common/AsyncReserver.h) manages a queue
-of waiting items and a set of current reservation holders.  When a slot frees
-up, the AsyncReserver queues the Context* associated with the next item in the
-finisher provided to the constructor.
+by priority of waiting items and a set of current reservation holders.  When a
+slot frees up, the AsyncReserver queues the Context* associated with the next
+item on the highest priority queue in the finisher provided to the constructor.
 
 For a primary to initiate a backfill, it must first obtain a reservation from
 its own local_reserver.  Then, it must obtain a reservation from the backfill
