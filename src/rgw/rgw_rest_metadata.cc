@@ -11,6 +11,8 @@
  * Foundation. See file COPYING.
  *
  */
+#include "include/page.h"
+
 #include "rgw_rest.h"
 #include "rgw_op.h"
 #include "rgw_rest_s3.h"
@@ -104,14 +106,16 @@ void RGWOp_Metadata_List::execute() {
 
 int RGWOp_Metadata_Put::get_data(bufferlist& bl) {
   size_t cl = 0;
+  char *data;
+  int read_len;
+
   if (s->length)
     cl = atoll(s->length);
   if (cl) {
-    char *data = (char *)malloc(cl + 1);
+    data = (char *)malloc(cl + 1);
     if (!data) {
        return -ENOMEM;
     }
-    int read_len;
     int r = s->cio->read(data, cl, &read_len);
     if (cl != (size_t)read_len) {
       dout(10) << "cio->read incomplete" << dendl;
@@ -121,9 +125,27 @@ int RGWOp_Metadata_Put::get_data(bufferlist& bl) {
       return r;
     }
     bl.append(data, read_len);
-    free(data);
+  } else {
+    int chunk_size = CEPH_PAGE_SIZE; 
+    const char *enc = s->env->get("HTTP_TRANSFER_ENCODING");
+    if (!enc || strcmp(enc, "chunked")) {
+      return -ERR_LENGTH_REQUIRED;
+    }
+    data = (char *)malloc(chunk_size);
+    if (!data) {
+      return -ENOMEM;
+    }
+    do {
+      int r = s->cio->read(data, chunk_size, &read_len);
+      if (r < 0) {
+        free(data);
+        return r;
+      }
+      bl.append(data, read_len);
+    } while ((read_len == chunk_size));
   }
 
+  free(data);
   return 0;
 }
 
