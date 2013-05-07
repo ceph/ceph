@@ -131,6 +131,7 @@ Notable Changes from v0.60
 * rbd: only set STRIPINGV2 feature if striping parameters are incompatible with old versions
 * rbd: require --allow-shrink for resizing images down
 * librbd: many bug fixes
+* rgw: management REST API
 * rgw: fix object corruption on COPY to self
 * rgw: new sysvinit script for rpm-based systems
 * rgw: allow buckets with '_'
