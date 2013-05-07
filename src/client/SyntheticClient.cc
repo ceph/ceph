@@ -1031,7 +1031,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       ll_inos[1] = attr.st_ino;
       dout(5) << "'root' ino is " << inodeno_t(attr.st_ino) << dendl;
     } else {
-      dout(0) << "warning: play_trace coudln't lookup up my per-client directory" << dendl;
+      dout(0) << "warning: play_trace couldn't lookup up my per-client directory" << dendl;
     }
   }
 
