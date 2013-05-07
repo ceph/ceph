@@ -6,6 +6,7 @@
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/Throttle.h"
 #include "cls/lock/cls_lock_client.h"
 #include "include/inttypes.h"
 #include "include/stringify.h"
@@ -151,22 +152,30 @@ namespace librbd {
     uint64_t period = ictx->get_stripe_period();
     uint64_t num_period = ((newsize + period - 1) / period);
     uint64_t delete_off = MIN(num_period * period, size);
-    uint64_t delete_start = num_period * ictx->get_stripe_count();     // first object we can delete free and clear
+    // first object we can delete free and clear
+    uint64_t delete_start = num_period * ictx->get_stripe_count();
     uint64_t num_objects = ictx->get_num_objects();
     uint64_t object_size = ictx->get_object_size();
 
     ldout(cct, 10) << "trim_image " << size << " -> " << newsize
 		   << " periods " << num_period
 		   << " discard to offset " << delete_off
-		   << " delete objects " << delete_start << " to " << (num_objects-1)
+		   << " delete objects " << delete_start
+		   << " to " << (num_objects-1)
 		   << dendl;
 
+    SimpleThrottle throttle(cct->_conf->rbd_concurrent_management_ops, true);
     if (delete_start < num_objects) {
       ldout(cct, 2) << "trim_image objects " << delete_start << " to "
 		    << (num_objects - 1) << dendl;
       for (uint64_t i = delete_start; i < num_objects; ++i) {
+	throttle.start_op();
 	string oid = ictx->get_object_name(i);
-	ictx->data_ctx.remove(oid);
+	Context *req_comp = new C_SimpleThrottle(&throttle);
+	librados::AioCompletion *rados_completion =
+	  librados::Rados::aio_create_completion(req_comp, NULL, rados_ctx_cb);
+	ictx->data_ctx.aio_remove(oid, rados_completion);
+	rados_completion->release();
 	prog_ctx.update_progress((i - delete_start) * object_size,
 				 (num_objects - delete_start) * object_size);
       }
@@ -175,18 +184,30 @@ namespace librbd {
     // discard the weird boundary, if any
     if (delete_off > newsize) {
       vector<ObjectExtent> extents;
-      Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, newsize, delete_off - newsize, extents);
+      Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout,
+			       newsize, delete_off - newsize, extents);
 
-      for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
+      for (vector<ObjectExtent>::iterator p = extents.begin();
+	   p != extents.end(); ++p) {
 	ldout(ictx->cct, 20) << " ex " << *p << dendl;
+	throttle.start_op();
+	Context *req_comp = new C_SimpleThrottle(&throttle);
+	librados::AioCompletion *rados_completion =
+	  librados::Rados::aio_create_completion(req_comp, NULL, rados_ctx_cb);
 	if (p->offset == 0) {
-	  ictx->data_ctx.remove(p->oid.name);
+	  ictx->data_ctx.aio_remove(p->oid.name, rados_completion);
 	} else {
 	  librados::ObjectWriteOperation op;
 	  op.truncate(p->offset);
-	  ictx->data_ctx.operate(p->oid.name, &op);
+	  ictx->data_ctx.aio_operate(p->oid.name, rados_completion, &op);
 	}
+	rados_completion->release();
       }
+    }
+    int r = throttle.wait_for_ret();
+    if (r < 0) {
+      lderr(cct) << "warning: failed to remove some object(s): "
+		 << cpp_strerror(r) << dendl;
     }
   }
 
