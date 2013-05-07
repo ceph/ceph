@@ -90,7 +90,6 @@ void *ObjBencher::status_printer(void *_bencher) {
   int i = 0;
   int previous_writes = 0;
   int cycleSinceChange = 0;
-  double avg_bandwidth;
   double bandwidth;
   utime_t ONE_SECOND;
   ONE_SECOND.set_from_double(1.0);
@@ -131,7 +130,7 @@ void *ObjBencher::status_printer(void *_bencher) {
       data.history.bandwidth.push_back(bandwidth);
     }
 
-    avg_bandwidth = (double) (data.trans_size) * (data.finished)
+    double avg_bandwidth = (double) (data.trans_size) * (data.finished)
       / (double)(cur_time - data.start_time) / (1024*1024);
     if (previous_writes != data.finished) {
       previous_writes = data.finished;
