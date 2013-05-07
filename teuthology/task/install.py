@@ -413,7 +413,8 @@ def install(ctx, config):
     finally:
         remove_packages(ctx, config, remove_info)
         remove_sources(ctx, config)
-        purge_data(ctx)
+        if project == 'ceph':
+            purge_data(ctx)
 
 def _upgrade_packages(ctx, config, remote, debs, branch):
     """
