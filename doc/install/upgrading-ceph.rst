@@ -42,7 +42,7 @@ When upgrading from Argonaut to Bobtail, you need to be aware of several things:
 
 Ensure that you update package repository paths. For example:: 
 
-	sudo rm /etc/apt/sources.sources.list.d/ceph.list
+	sudo rm /etc/apt/sources.list.d/ceph.list
 	echo deb http://ceph.com/debian-bobtail/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 See the following sections for additional details.
@@ -124,7 +124,7 @@ Argonaut to Cuttlefish without the intermediate upgrade to Bobtail.
 
 For example:: 
 
-	sudo rm /etc/apt/sources.sources.list.d/ceph.list
+	sudo rm /etc/apt/sources.list.d/ceph.list
 	echo deb http://ceph.com/debian-bobtail/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 We recommend upgrading all monitors to Bobtail before proceeding with the
@@ -148,7 +148,7 @@ before beginning this upgrade procedure. Before upgrading, remember to
 replace the reference to the Bobtail repository with a reference to
 the Cuttlefish repository. For example::
 
-	sudo rm /etc/apt/sources.sources.list.d/ceph.list
+	sudo rm /etc/apt/sources.list.d/ceph.list
 	echo deb http://ceph.com/debian-cuttlefish/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 See `Upgrading a Monitor`_ for details.
@@ -172,7 +172,7 @@ See the following sections for details.
 Replace any ``apt`` reference to older repositories with a reference to the
 Cuttlefish repository. For example:: 
 
-	sudo rm /etc/apt/sources.sources.list.d/ceph.list
+	sudo rm /etc/apt/sources.list.d/ceph.list
 	echo deb http://ceph.com/debian-cuttlefish/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 
