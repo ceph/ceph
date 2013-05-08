@@ -51,6 +51,7 @@
     metadata rm                remove metadata info
     metadata list              list metadata info
     mdlog list                 list metadata log
+    mdlog trim                 trim metadata log
     bilog list                 list bucket index log
     datalog list               list data log
   options:

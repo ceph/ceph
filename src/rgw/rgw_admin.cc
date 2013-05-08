@@ -89,6 +89,7 @@ void _usage()
   cerr << "  metadata rm                remove metadata info\n";
   cerr << "  metadata list              list metadata info\n";
   cerr << "  mdlog list                 list metadata log\n";
+  cerr << "  mdlog trim                 trim metadata log\n";
   cerr << "  bilog list                 list bucket index log\n";
   cerr << "  datalog list               list data log\n";
   cerr << "options:\n";
@@ -198,6 +199,7 @@ enum {
   OPT_METADATA_RM,
   OPT_METADATA_LIST,
   OPT_MDLOG_LIST,
+  OPT_MDLOG_TRIM,
   OPT_BILOG_LIST,
   OPT_DATALOG_LIST,
 };
@@ -365,6 +367,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "mdlog") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_MDLOG_LIST;
+    if (strcmp(cmd, "trim") == 0)
+      return OPT_MDLOG_TRIM;
   } else if (strcmp(prev_cmd, "bilog") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_BILOG_LIST;
@@ -1764,6 +1768,26 @@ next:
     formatter->flush(cout);
   }
 
+  if (opt_cmd == OPT_MDLOG_TRIM) {
+    utime_t start_time, end_time;
+
+    int ret = parse_date_str(start_date, start_time);
+    if (ret < 0)
+      return -ret;
+
+    ret = parse_date_str(end_date, end_time);
+    if (ret < 0)
+      return -ret;
+
+    RGWMetadataLog *meta_log = store->meta_mgr->get_log();
+
+    ret = meta_log->trim(store, start_time, end_time);
+    if (ret < 0) {
+      cerr << "ERROR: meta_log->trim(): " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+  }
+  
   if (opt_cmd == OPT_BILOG_LIST) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
