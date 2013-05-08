@@ -6416,7 +6416,7 @@ void OSD::enqueue_op(PG *pg, OpRequestRef op)
 	   << " cost " << op->request->get_cost()
 	   << " latency " << latency
 	   << " " << *(op->request) << dendl;
-  op_wq.queue(make_pair(PGRef(pg), op));
+  pg->queue_op(op);
 }
 
 void OSD::OpWQ::_enqueue(pair<PGRef, OpRequestRef> item)
