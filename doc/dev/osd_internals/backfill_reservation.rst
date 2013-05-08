@@ -25,3 +25,10 @@ ReplicaActive.
 
 It's important that we always grab the local reservation before the remote
 reservation in order to prevent a circular dependency.
+
+We want to minimize the risk of data loss by prioritizing the order in which
+PGs are recovered.  We use 3 AsyncReserver priorities to hand out reservations.
+The highest priority is log based recovery (RECOVERY) since this must always
+complete before backfill can start.  The next priority is backfill of degraded
+PGs (BACKFILL_HIGH).  The lowest priority is backfill of non-degraded PGs
+(BACKFILL_LOW).
