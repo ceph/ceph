@@ -55,6 +55,7 @@
     bilog list                 list bucket index log
     bilog trim                 trim bucket index log (use start-marker, end-marker)
     datalog list               list data log
+    datalog trim               trim data log
   options:
      --uid=<id>                user id
      --subuser=<name>          subuser name

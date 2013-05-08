@@ -93,6 +93,7 @@ void _usage()
   cerr << "  bilog list                 list bucket index log\n";
   cerr << "  bilog trim                 trim bucket index log (use start-marker, end-marker)\n";
   cerr << "  datalog list               list data log\n";
+  cerr << "  datalog trim               trim data log\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --subuser=<name>          subuser name\n";
@@ -204,6 +205,7 @@ enum {
   OPT_BILOG_LIST,
   OPT_BILOG_TRIM,
   OPT_DATALOG_LIST,
+  OPT_DATALOG_TRIM,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
@@ -379,6 +381,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "datalog") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_DATALOG_LIST;
+    if (strcmp(cmd, "trim") == 0)
+      return OPT_DATALOG_TRIM;
   }
 
   return -EINVAL;
@@ -1895,5 +1899,23 @@ next:
     formatter->flush(cout);
   }
   
+  if (opt_cmd == OPT_DATALOG_TRIM) {
+    utime_t start_time, end_time;
+
+    int ret = parse_date_str(start_date, start_time);
+    if (ret < 0)
+      return -ret;
+
+    ret = parse_date_str(end_date, end_time);
+    if (ret < 0)
+      return -ret;
+
+    RGWDataChangesLog *log = store->data_log;
+    ret = log->trim_entries(start_time, end_time);
+    if (ret < 0) {
+      cerr << "ERROR: trim_entries(): " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+  }
   return 0;
 }

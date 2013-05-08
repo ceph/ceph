@@ -195,14 +195,14 @@ int cls_rgw_bi_log_trim(IoCtx& io_ctx, string& oid, string& start_marker, string
     r = io_ctx.exec(oid, "rgw", "bi_log_trim", in, out);
 
     if (r == -ENODATA)
-      return 0;
+      break;
 
     if (r < 0)
       return r;
 
-  } while (r != -ENODATA);
+  } while (1);
 
- return 0;
+  return 0;
 }
 
 int cls_rgw_usage_log_read(IoCtx& io_ctx, string& oid, string& user,

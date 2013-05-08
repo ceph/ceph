@@ -945,6 +945,7 @@ void rgw_data_change::dump(Formatter *f) const
   }
   encode_json("entity_type", type, f);
   encode_json("key", key, f);
+  encode_json("timestamp", timestamp, f);
 }
 
 
@@ -979,6 +980,7 @@ int RGWDataChangesLog::renew_entries()
     bufferlist bl;
     change.entity_type = ENTITY_TYPE_BUCKET;
     change.key = bucket.name;
+    change.timestamp = ut;
     ::encode(change, bl);
 
     store->time_log_prepare_entry(entry, ut, section, bucket.name, bl);
@@ -1099,6 +1101,7 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
     rgw_data_change change;
     change.entity_type = ENTITY_TYPE_BUCKET;
     change.key = bucket.name;
+    change.timestamp = now;
     ::encode(change, bl);
     string section;
 
@@ -1175,6 +1178,20 @@ int RGWDataChangesLog::list_entries(utime_t& start_time, utime_t& end_time, int 
   }
 
   *ptruncated = (marker.shard < num_shards);
+
+  return 0;
+}
+
+int RGWDataChangesLog::trim_entries(utime_t& start_time, utime_t& end_time)
+{
+  for (int shard = 0; shard < num_shards; shard++) {
+    int ret = store->time_log_trim(oids[shard], start_time, end_time);
+    if (ret == -ENOENT) {
+      continue;
+    }
+    if (ret < 0)
+      return ret;
+  }
 
   return 0;
 }
