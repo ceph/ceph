@@ -5715,7 +5715,7 @@ void OSD::handle_pg_backfill_reserve(OpRequestRef op)
 	new PG::CephPeeringEvt(
 	  m->query_epoch,
 	  m->query_epoch,
-	  PG::RequestBackfill())));
+	  PG::RequestBackfillPrio(m->priority))));
   } else if (m->type == MBackfillReserve::GRANT) {
     pg->queue_peering_event(
       PG::CephPeeringEvtRef(

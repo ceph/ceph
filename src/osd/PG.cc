@@ -6192,11 +6192,13 @@ PG::RecoveryState::WaitRemoteBackfillReserved::WaitRemoteBackfillReserved(my_con
     pg->backfill_target, pg->get_osdmap()->get_epoch());
   if (con) {
     if ((con->features & CEPH_FEATURE_BACKFILL_RESERVATION)) {
+      unsigned priority = pg->is_degraded() ? OSDService::BACKFILL_HIGH
+	  : OSDService::BACKFILL_LOW;
       pg->osd->send_message_osd_cluster(
         new MBackfillReserve(
 	  MBackfillReserve::REQUEST,
 	  pg->info.pgid,
-	  pg->get_osdmap()->get_epoch()),
+	  pg->get_osdmap()->get_epoch(), priority),
 	con.get());
     } else {
       post_event(RemoteBackfillReserved());
@@ -6242,7 +6244,8 @@ PG::RecoveryState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_conte
     pg->info.pgid,
     new QueuePeeringEvt<LocalBackfillReserved>(
       pg, pg->get_osdmap()->get_epoch(),
-      LocalBackfillReserved()));
+      LocalBackfillReserved()), pg->is_degraded() ? OSDService::BACKFILL_HIGH
+	 : OSDService::BACKFILL_LOW);
 }
 
 void PG::RecoveryState::WaitLocalBackfillReserved::exit()
@@ -6288,7 +6291,7 @@ PG::RecoveryState::RepWaitRecoveryReserved::RepWaitRecoveryReserved(my_context c
     pg->info.pgid,
     new QueuePeeringEvt<RemoteRecoveryReserved>(
       pg, pg->get_osdmap()->get_epoch(),
-      RemoteRecoveryReserved()));
+      RemoteRecoveryReserved()), OSDService::RECOVERY);
 }
 
 boost::statechart::result
@@ -6316,6 +6319,11 @@ PG::RecoveryState::RepWaitBackfillReserved::RepWaitBackfillReserved(my_context c
 {
   state_name = "Started/ReplicaActive/RepWaitBackfillReserved";
   context< RecoveryMachine >().log_enter(state_name);
+}
+
+boost::statechart::result 
+PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
+{
   PG *pg = context< RecoveryMachine >().pg;
 
   double ratio, max_ratio;
@@ -6330,8 +6338,9 @@ PG::RecoveryState::RepWaitBackfillReserved::RepWaitBackfillReserved(my_context c
       pg->info.pgid,
       new QueuePeeringEvt<RemoteBackfillReserved>(
         pg, pg->get_osdmap()->get_epoch(),
-        RemoteBackfillReserved()));
+        RemoteBackfillReserved()), evt.priority);
   }
+  return transit<RepWaitBackfillReserved>();
 }
 
 void PG::RecoveryState::RepWaitBackfillReserved::exit()
@@ -6408,7 +6417,7 @@ PG::RecoveryState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_conte
     pg->info.pgid,
     new QueuePeeringEvt<LocalRecoveryReserved>(
       pg, pg->get_osdmap()->get_epoch(),
-      LocalRecoveryReserved()));
+      LocalRecoveryReserved()), OSDService::RECOVERY);
 }
 
 void PG::RecoveryState::WaitLocalRecoveryReserved::exit()

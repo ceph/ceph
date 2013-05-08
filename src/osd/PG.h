@@ -1202,6 +1202,15 @@ public:
       *out << "Activate from " << query_epoch;
     }
   };
+  struct RequestBackfillPrio : boost::statechart::event< RequestBackfillPrio > {
+    unsigned priority;
+    RequestBackfillPrio(unsigned prio) :
+              boost::statechart::event< RequestBackfillPrio >(),
+			  priority(prio) {}
+    void print(std::ostream *out) const {
+      *out << "RequestBackfillPrio: priority " << priority;
+    }
+  };
 #define TrivialEvent(T) struct T : boost::statechart::event< T > { \
     T() : boost::statechart::event< T >() {}			   \
     void print(std::ostream *out) const {			   \
@@ -1605,11 +1614,12 @@ public:
 
     struct RepNotRecovering : boost::statechart::state< RepNotRecovering, ReplicaActive>, NamedState {
       typedef boost::mpl::list<
-	boost::statechart::transition< RequestBackfill, RepWaitBackfillReserved >,
+	boost::statechart::custom_reaction< RequestBackfillPrio >,
         boost::statechart::transition< RequestRecovery, RepWaitRecoveryReserved >,
 	boost::statechart::transition< RecoveryDone, RepNotRecovering >  // for compat with pre-reservation peers
 	> reactions;
       RepNotRecovering(my_context ctx);
+      boost::statechart::result react(const RequestBackfillPrio &evt);
       void exit();
     };
 
