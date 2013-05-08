@@ -194,14 +194,6 @@ void PG::lock(bool no_lockdep)
   dout(30) << "lock" << dendl;
 }
 
-void PG::reassert_lock_with_map_lock_held()
-{
-  assert(_lock.is_locked());
-  osdmap_ref = osd->osdmap;
-
-  dout(30) << "reassert_lock_with_map_lock_held" << dendl;
-}
-
 std::string PG::gen_prefix() const
 {
   stringstream out;
