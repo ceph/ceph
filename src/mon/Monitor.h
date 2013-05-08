@@ -56,7 +56,7 @@
 #include "include/assert.h"
 
 
-#define CEPH_MON_PROTOCOL     10 /* cluster internal */
+#define CEPH_MON_PROTOCOL     11 /* cluster internal */
 
 
 enum {
