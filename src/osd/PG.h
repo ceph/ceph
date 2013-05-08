@@ -381,8 +381,26 @@ public:
     snap_mapper.update_bits(bits);
   }
 protected:
+  // Ops waiting for map, should be queued at back
+  Mutex map_lock;
+  list<OpRequestRef> waiting_for_map;
   OSDMapRef osdmap_ref;
   PGPool pool;
+
+  void queue_op(OpRequestRef op);
+  void take_op_map_waiters();
+
+  void update_osdmap_ref(OSDMapRef newmap) {
+    assert(_lock.is_locked_by_me());
+    Mutex::Locker l(map_lock);
+    osdmap_ref = newmap;
+  }
+
+  OSDMapRef get_osdmap_with_maplock() const {
+    assert(map_lock.is_locked());
+    assert(osdmap_ref);
+    return osdmap_ref;
+  }
 
   OSDMapRef get_osdmap() const {
     assert(is_locked());
@@ -692,8 +710,6 @@ protected:
 
   // Ops waiting on backfill_pos to change
   list<OpRequestRef> waiting_for_backfill_pos;
-
-  list<OpRequestRef> waiting_for_map;
   list<OpRequestRef>            waiting_for_active;
   list<OpRequestRef>            waiting_for_all_missing;
   map<hobject_t, list<OpRequestRef> > waiting_for_missing_object,

@@ -139,6 +139,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     p.m_seed,
     p.get_split_bits(curmap->get_pg_num(_pool.id)),
     _pool.id),
+  map_lock("PG::map_lock"),
   osdmap_ref(curmap), pool(_pool),
   _lock("PG::_lock"),
   ref(0),
@@ -1748,6 +1749,36 @@ bool PG::op_has_sufficient_caps(OpRequestRef op)
   return cap;
 }
 
+void PG::take_op_map_waiters()
+{
+  Mutex::Locker l(map_lock);
+  for (list<OpRequestRef>::iterator i = waiting_for_map.begin();
+       i != waiting_for_map.end();
+       ) {
+    if (op_must_wait_for_map(get_osdmap_with_maplock(), *i)) {
+      break;
+    } else {
+      osd->op_wq.queue(make_pair(PGRef(this), *i));
+      waiting_for_map.erase(i++);
+    }
+  }
+}
+
+void PG::queue_op(OpRequestRef op)
+{
+  Mutex::Locker l(map_lock);
+  if (!waiting_for_map.empty()) {
+    // preserve ordering
+    waiting_for_map.push_back(op);
+    return;
+  }
+  if (op_must_wait_for_map(get_osdmap_with_maplock(), op)) {
+    waiting_for_map.push_back(op);
+    return;
+  }
+  osd->op_wq.queue(make_pair(PGRef(this), op));
+}
+
 void PG::do_request(OpRequestRef op)
 {
   // do any pending flush
@@ -1757,11 +1788,7 @@ void PG::do_request(OpRequestRef op)
     osd->reply_op_error(op, -EPERM);
     return;
   }
-  if (op_must_wait_for_map(get_osdmap(), op)) {
-    dout(20) << " waiting for map on " << op << dendl;
-    waiting_for_map.push_back(op);
-    return;
-  }
+  assert(!op_must_wait_for_map(get_osdmap(), op));
   if (can_discard_request(op)) {
     return;
   }
@@ -2099,7 +2126,6 @@ static void split_replay_queue(
 
 void PG::split_ops(PG *child, unsigned split_bits) {
   unsigned match = child->info.pgid.m_seed;
-  assert(waiting_for_map.empty());
   assert(waiting_for_all_missing.empty());
   assert(waiting_for_missing_object.empty());
   assert(waiting_for_degraded_object.empty());
@@ -2109,12 +2135,16 @@ void PG::split_ops(PG *child, unsigned split_bits) {
 
   osd->dequeue_pg(this, &waiting_for_active);
   split_list(&waiting_for_active, &(child->waiting_for_active), match, split_bits);
+  {
+    Mutex::Locker l(map_lock); // to avoid a race with the osd dispatch
+    split_list(&waiting_for_map, &(child->waiting_for_map), match, split_bits);
+  }
 }
 
 void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
 {
   child->update_snap_mapper_bits(split_bits);
-  child->osdmap_ref = osdmap_ref;
+  child->update_osdmap_ref(get_osdmap());
 
   child->pool = pool;
 
@@ -5396,7 +5426,7 @@ bool PG::op_must_wait_for_map(OSDMapRef curmap, OpRequestRef op)
 void PG::take_waiters()
 {
   dout(10) << "take_waiters" << dendl;
-  requeue_ops(waiting_for_map);
+  take_op_map_waiters();
   for (list<CephPeeringEvtRef>::iterator i = peering_waiters.begin();
        i != peering_waiters.end();
        ++i) osd->queue_for_peering(this);
@@ -5491,7 +5521,7 @@ void PG::handle_advance_map(OSDMapRef osdmap, OSDMapRef lastmap,
   assert(lastmap->get_epoch() == osdmap_ref->get_epoch());
   assert(lastmap == osdmap_ref);
   dout(10) << "handle_advance_map " << newup << "/" << newacting << dendl;
-  osdmap_ref = osdmap;
+  update_osdmap_ref(osdmap);
   pool.update(osdmap);
   AdvMap evt(osdmap, lastmap, newup, newacting);
   recovery_state.handle_event(evt, rctx);
