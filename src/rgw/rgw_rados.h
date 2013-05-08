@@ -992,6 +992,7 @@ public:
   int time_log_add(const string& oid, const utime_t& ut, string& section, string& key, bufferlist& bl);
   int time_log_list(const string& oid, utime_t& start_time, utime_t& end_time,
                     int max_entries, list<cls_log_entry>& entries, string& marker, bool *truncated);
+  int time_log_trim(const string& oid, utime_t& start_time, utime_t& end_time);
 
   /// clean up/process any temporary objects older than given date[/time]
   int remove_temp_objects(string date, string time);

@@ -88,6 +88,8 @@ public:
                    int max_entries,
                    list<cls_log_entry>& entries,
                    bool *truncated);
+
+  int trim(RGWRados *store, utime_t& from_time, utime_t& end_time);
 };
 
 class RGWMetadataManager {
