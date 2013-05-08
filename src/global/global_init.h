@@ -24,6 +24,7 @@
 #include "common/common_init.h"
 
 #if defined(__linux__)
+// Out of memory killer avoidance related parameters
 #define OOM_SCORE_ADJ_MIN -1000
 #define OOM_SCORE_ADJ_BE_NICE 500
 #define OOM_SCORE_ADJ (OOM_SCORE_ADJ_MIN + OOM_SCORE_ADJ_BE_NICE)
