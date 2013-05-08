@@ -183,6 +183,28 @@ int cls_rgw_bi_log_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max
  return r;
 }
 
+int cls_rgw_bi_log_trim(IoCtx& io_ctx, string& oid, string& start_marker, string& end_marker)
+{
+  int r;
+  do {
+    bufferlist in, out;
+    cls_rgw_bi_log_trim_op call;
+    call.start_marker = start_marker;
+    call.end_marker = end_marker;
+    ::encode(call, in);
+    r = io_ctx.exec(oid, "rgw", "bi_log_trim", in, out);
+
+    if (r == -ENODATA)
+      return 0;
+
+    if (r < 0)
+      return r;
+
+  } while (r != -ENODATA);
+
+ return 0;
+}
+
 int cls_rgw_usage_log_read(IoCtx& io_ctx, string& oid, string& user,
                            uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
                            string& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage,

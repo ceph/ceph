@@ -91,6 +91,7 @@ void _usage()
   cerr << "  mdlog list                 list metadata log\n";
   cerr << "  mdlog trim                 trim metadata log\n";
   cerr << "  bilog list                 list bucket index log\n";
+  cerr << "  bilog trim                 trim bucket index log (use start-marker, end-marker)\n";
   cerr << "  datalog list               list data log\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
@@ -201,6 +202,7 @@ enum {
   OPT_MDLOG_LIST,
   OPT_MDLOG_TRIM,
   OPT_BILOG_LIST,
+  OPT_BILOG_TRIM,
   OPT_DATALOG_LIST,
 };
 
@@ -373,6 +375,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "bilog") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_BILOG_LIST;
+    if (strcmp(cmd, "trim") == 0)
+      return OPT_BILOG_TRIM;
   } else if (strcmp(prev_cmd, "datalog") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_DATALOG_LIST;
@@ -631,6 +635,8 @@ int main(int argc, char **argv)
   string metadata_key;
   RGWObjVersionTracker objv_tracker;
   string marker;
+  string start_marker;
+  string end_marker;
   int max_entries = -1;
 
   std::string val;
@@ -739,6 +745,10 @@ int main(int argc, char **argv)
       metadata_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--marker", (char*)NULL)) {
       marker = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--start-marker", (char*)NULL)) {
+      start_marker = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--end-marker", (char*)NULL)) {
+      end_marker = val;
     } else {
       ++i;
     }
@@ -1826,6 +1836,23 @@ next:
 
     formatter->close_section();
     formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_BILOG_TRIM) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return -EINVAL;
+    }
+    int ret = init_bucket(bucket_name, bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    ret = store->trim_bi_log_entries(bucket, start_marker, end_marker);
+    if (ret < 0) {
+      cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
   }
 
   if (opt_cmd == OPT_DATALOG_LIST) {
