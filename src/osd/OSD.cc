@@ -1564,10 +1564,7 @@ PG *OSD::_open_lock_pg(
 
   pg_map[pgid] = pg;
 
-  if (hold_map_lock)
-    pg->lock_with_map_lock_held(no_lockdep_check);
-  else
-    pg->lock(no_lockdep_check);
+  pg->lock(no_lockdep_check);
   pg->get("PGMap");  // because it's in pg_map
   return pg;
 }
@@ -1674,7 +1671,7 @@ PG *OSD::_lookup_lock_pg_with_map_lock_held(pg_t pgid)
   assert(osd_lock.is_locked());
   assert(pg_map.count(pgid));
   PG *pg = pg_map[pgid];
-  pg->lock_with_map_lock_held();
+  pg->lock();
   return pg;
 }
 
@@ -4989,7 +4986,7 @@ void OSD::do_split(PG *parent, set<pg_t>& childpgids, ObjectStore::Transaction& 
 {
   dout(10) << "do_split to " << childpgids << " on " << *parent << dendl;
 
-  parent->lock_with_map_lock_held();
+  parent->lock();
  
   // create and lock children
   map<pg_t,PG*> children;
