@@ -1757,7 +1757,7 @@ void PG::do_request(OpRequestRef op)
     osd->reply_op_error(op, -EPERM);
     return;
   }
-  if (must_delay_request(op)) {
+  if (op_must_wait_for_map(get_osdmap(), op)) {
     dout(20) << " waiting for map on " << op << dendl;
     waiting_for_map.push_back(op);
     return;
@@ -5361,27 +5361,32 @@ bool PG::split_request(OpRequestRef op, unsigned match, unsigned bits)
   return false;
 }
 
-bool PG::must_delay_request(OpRequestRef op)
+bool PG::op_must_wait_for_map(OSDMapRef curmap, OpRequestRef op)
 {
   switch (op->request->get_type()) {
   case CEPH_MSG_OSD_OP:
     return !have_same_or_newer_map(
+      curmap,
       static_cast<MOSDOp*>(op->request)->get_map_epoch());
 
   case MSG_OSD_SUBOP:
     return !have_same_or_newer_map(
+      curmap,
       static_cast<MOSDSubOp*>(op->request)->map_epoch);
 
   case MSG_OSD_SUBOPREPLY:
     return !have_same_or_newer_map(
+      curmap,
       static_cast<MOSDSubOpReply*>(op->request)->map_epoch);
 
   case MSG_OSD_PG_SCAN:
     return !have_same_or_newer_map(
+      curmap,
       static_cast<MOSDPGScan*>(op->request)->map_epoch);
 
   case MSG_OSD_PG_BACKFILL:
     return !have_same_or_newer_map(
+      curmap,
       static_cast<MOSDPGBackfill*>(op->request)->map_epoch);
   }
   assert(0);
