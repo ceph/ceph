@@ -475,7 +475,7 @@ void encode_json(const char *name, long long val, Formatter *f)
 
 void encode_json(const char *name, const utime_t& val, Formatter *f)
 {
-  f->dump_stream(name) << val;
+  val.gmtime(f->dump_stream(name));
 }
 
 void encode_json(const char *name, const bufferlist& bl, Formatter *f)
