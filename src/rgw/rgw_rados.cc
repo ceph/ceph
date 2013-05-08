@@ -4059,6 +4059,21 @@ int RGWRados::list_bi_log_entries(rgw_bucket& bucket, string& marker, uint32_t m
   return 0;
 }
 
+int RGWRados::trim_bi_log_entries(rgw_bucket& bucket, string& start_marker, string& end_marker)
+{
+  librados::IoCtx index_ctx;
+  string oid;
+  int r = open_bucket_index(bucket, index_ctx, oid);
+  if (r < 0)
+    return r;
+
+  int ret = cls_rgw_bi_log_trim(index_ctx, oid, start_marker, end_marker);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
 int RGWRados::gc_operate(string& oid, librados::ObjectWriteOperation *op)
 {
   return gc_pool_ctx.operate(oid, op);

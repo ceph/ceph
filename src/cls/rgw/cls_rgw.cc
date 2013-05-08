@@ -737,7 +737,7 @@ int bi_log_record_decode(bufferlist& bl, rgw_bi_log_entry& e)
   return 0;
 }
 
-static int bi_log_iterate_entries(cls_method_context_t hctx, const string& marker,
+static int bi_log_iterate_entries(cls_method_context_t hctx, const string& marker, const string& end_marker,
                               string& key_iter, uint32_t max_entries, bool *truncated,
                               int (*cb)(cls_method_context_t, const string&, rgw_bi_log_entry&, void *),
                               void *param)
@@ -763,10 +763,16 @@ static int bi_log_iterate_entries(cls_method_context_t hctx, const string& marke
     start_key = key_iter;
   }
 
-  end_key = BI_PREFIX_CHAR;
-  end_key.append(bucket_index_prefixes[BI_BUCKET_LAST_INDEX]);
+  if (end_marker.empty()) {
+    end_key = BI_PREFIX_CHAR;
+    end_key.append(bucket_index_prefixes[BI_BUCKET_LAST_INDEX]);
+  } else {
+    end_key = BI_PREFIX_CHAR;
+    end_key.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX]);
+    end_key.append(end_marker);
+  }
 
-  CLS_LOG(0, "bi_log_iterate_entries end_key=%s\n", end_key.c_str());
+  CLS_LOG(0, "bi_log_iterate_entries start_key=%s end_key=%s\n", start_key.c_str(), end_key.c_str());
 
   string filter;
 
@@ -824,7 +830,8 @@ static int bi_log_list_entries(cls_method_context_t hctx, const string& marker,
 			   uint32_t max, list<rgw_bi_log_entry>& entries, bool *truncated)
 {
   string key_iter;
-  int ret = bi_log_iterate_entries(hctx, marker,
+  string end_marker;
+  int ret = bi_log_iterate_entries(hctx, marker, end_marker,
                               key_iter, max, truncated,
                               bi_log_list_cb, &entries);
   return ret;
@@ -848,6 +855,70 @@ static int rgw_bi_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist
     return ret;
 
   ::encode(op_ret, *out);
+
+  return 0;
+}
+
+static int bi_log_list_trim_cb(cls_method_context_t hctx, const string& key, rgw_bi_log_entry& info, void *param)
+{
+  list<rgw_bi_log_entry> *entries = (list<rgw_bi_log_entry> *)param;
+
+  entries->push_back(info);
+  return 0;
+}
+
+static int bi_log_remove_entry(cls_method_context_t hctx, rgw_bi_log_entry& entry)
+{
+  string key;
+  key = BI_PREFIX_CHAR;
+  key.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX]);
+  key.append(entry.id);
+  return cls_cxx_map_remove_key(hctx, key);
+}
+
+static int bi_log_list_trim_entries(cls_method_context_t hctx,
+                                    const string& start_marker, const string& end_marker,
+			            list<rgw_bi_log_entry>& entries, bool *truncated)
+{
+  string key_iter;
+#define MAX_TRIM_ENTRIES 1000 /* max entries to trim in a single operation */
+  int ret = bi_log_iterate_entries(hctx, start_marker, end_marker,
+                              key_iter, MAX_TRIM_ENTRIES, truncated,
+                              bi_log_list_trim_cb, &entries);
+  return ret;
+}
+
+static int rgw_bi_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist::iterator in_iter = in->begin();
+
+  cls_rgw_bi_log_trim_op op;
+  try {
+    ::decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_bi_log_list(): failed to decode entry\n");
+    return -EINVAL;
+  }
+
+  cls_rgw_bi_log_list_ret op_ret;
+  list<rgw_bi_log_entry> entries;
+#define MAX_TRIM_ENTRIES 1000 /* don't do more than that in a single operation */
+  bool truncated;
+  int ret = bi_log_list_trim_entries(hctx, op.start_marker, op.end_marker, entries, &truncated);
+  if (ret < 0)
+    return ret;
+
+  if (entries.size() == 0)
+    return -ENODATA;
+
+  list<rgw_bi_log_entry>::iterator iter;
+  for (iter = entries.begin(); iter != entries.end(); ++iter) {
+    rgw_bi_log_entry& entry = *iter;
+
+    ret = bi_log_remove_entry(hctx, entry);
+    if (ret < 0)
+      return ret;
+  }
 
   return 0;
 }
@@ -1445,6 +1516,7 @@ void __cls_init()
   cls_register_cxx_method(h_class, "bucket_prepare_op", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_prepare_op, &h_rgw_bucket_prepare_op);
   cls_register_cxx_method(h_class, "bucket_complete_op", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_complete_op, &h_rgw_bucket_complete_op);
   cls_register_cxx_method(h_class, "bi_log_list", CLS_METHOD_RD, rgw_bi_log_list, &h_rgw_bi_log_list_op);
+  cls_register_cxx_method(h_class, "bi_log_trim", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_trim, &h_rgw_bi_log_list_op);
   cls_register_cxx_method(h_class, "dir_suggest_changes", CLS_METHOD_RD | CLS_METHOD_WR, rgw_dir_suggest_changes, &h_rgw_dir_suggest_changes);
 
   /* usage logging */

@@ -36,6 +36,7 @@ void cls_rgw_suggest_changes(librados::ObjectWriteOperation& o, bufferlist& upda
 
 int cls_rgw_bi_log_list(librados::IoCtx& io_ctx, string& oid, string& marker, uint32_t max,
                     list<rgw_bi_log_entry>& entries, bool *truncated);
+int cls_rgw_bi_log_trim(librados::IoCtx& io_ctx, string& oid, string& start_marker, string& end_marker);
 
 /* usage logging */
 int cls_rgw_usage_log_read(librados::IoCtx& io_ctx, string& oid, string& user,
