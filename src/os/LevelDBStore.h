@@ -12,6 +12,7 @@
 #include <tr1/memory>
 #include <boost/scoped_ptr.hpp>
 #include "leveldb/db.h"
+#include "leveldb/env.h"
 #include "leveldb/write_batch.h"
 #include "leveldb/slice.h"
 #include "leveldb/cache.h"
@@ -71,6 +72,8 @@ public:
     int block_restart_interval;
     bool error_if_exists;
     bool paranoid_checks;
+
+    string log_file;
 
     options_t() :
       write_buffer_size(0), //< 0 means default
