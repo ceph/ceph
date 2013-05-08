@@ -22,6 +22,6 @@ void cls_log_list(librados::ObjectReadOperation& op, utime_t& from, utime_t& to,
                   string *out_marker, bool *truncated);
 
 void cls_log_trim(librados::ObjectWriteOperation& op, utime_t& from, utime_t& to);
-int cls_log_trim(librados::IoCtx& io_ctx, string& oid, utime_t& from, utime_t& to);
+int cls_log_trim(librados::IoCtx& io_ctx, const string& oid, utime_t& from, utime_t& to);
 
 #endif

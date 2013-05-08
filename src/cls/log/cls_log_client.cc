@@ -55,7 +55,7 @@ void cls_log_trim(librados::ObjectWriteOperation& op, utime_t& from, utime_t& to
   op.exec("log", "trim", in);
 }
 
-int cls_log_trim(librados::IoCtx& io_ctx, string& oid, utime_t& from, utime_t& to)
+int cls_log_trim(librados::IoCtx& io_ctx, const string& oid, utime_t& from, utime_t& to)
 {
   bool done = false;
 

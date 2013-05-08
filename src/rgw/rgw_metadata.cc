@@ -130,7 +130,7 @@ int RGWMetadataLog::list_entries(void *handle,
 
     if (!is_truncated) {
       ++ctx->cur_shard;
-      if (ctx->cur_shard <cct->_conf->rgw_md_log_max_shards) {
+      if (ctx->cur_shard < cct->_conf->rgw_md_log_max_shards) {
         get_shard_oid(ctx->cur_shard, ctx->cur_oid);
         ctx->marker.clear();
       } else {
@@ -141,6 +141,26 @@ int RGWMetadataLog::list_entries(void *handle,
   } while (entries.size() < (size_t)max_entries);
 
   *truncated = !ctx->done;
+
+  return 0;
+}
+
+int RGWMetadataLog::trim(RGWRados *store, utime_t& from_time, utime_t& end_time)
+{
+  string oid;
+  for (int shard = 0; shard < cct->_conf->rgw_md_log_max_shards; shard++) {
+    get_shard_oid(shard, oid);
+
+    int ret;
+
+    ret = store->time_log_trim(oid, from_time, end_time);
+
+    if (ret == -ENOENT)
+      ret = 0;
+
+    if (ret < 0)
+      return ret;
+  }
 
   return 0;
 }
