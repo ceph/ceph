@@ -631,18 +631,28 @@ void CrushWrapper::reweight(CephContext *cct)
   }
 }
 
-int CrushWrapper::add_simple_rule(string name, string root_name, string failure_domain_name)
+int CrushWrapper::add_simple_rule(string name, string root_name, string failure_domain_name,
+				  ostream *err)
 {
-  if (rule_exists(name))
+  if (rule_exists(name)) {
+    if (err)
+      *err << "rule " << name << " exists";
     return -EEXIST;
-  if (!name_exists(root_name))
+  }
+  if (!name_exists(root_name)) {
+    if (err)
+      *err << "root item " << root_name << " does not exist";
     return -ENOENT;
+  }
   int root = get_item_id(root_name);
   int type = 0;
   if (failure_domain_name.length()) {
     type = get_type_id(failure_domain_name);
-    if (type <= 0) // bah, returns 0 on error; but its ok, device isn't a domain really
+    if (type < 0) {
+      if (err)
+	*err << "unknown type " << failure_domain_name;
       return -EINVAL;
+    }
   }
 
   int ruleset = 0;
