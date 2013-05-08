@@ -21,6 +21,8 @@
 #include "MonCap.h"
 #include "common/config.h"
 #include "common/debug.h"
+#include "common/Formatter.h"
+
 using std::ostream;
 using std::vector;
 
@@ -113,6 +115,45 @@ bool MonCap::is_capable(const string& service,
   return false;
 }
 
+void MonCap::encode(bufferlist& bl) const
+{
+  ENCODE_START(4, 4, bl);   // legacy MonCaps was 3, 3
+  ::encode(text, bl);
+  ENCODE_FINISH(bl);
+}
+
+void MonCap::decode(bufferlist::iterator& bl)
+{
+  string s;
+  DECODE_START(4, bl);
+  ::decode(s, bl);
+  DECODE_FINISH(bl);
+  parse(s, NULL);
+}
+
+void MonCap::dump(Formatter *f) const
+{
+  f->dump_string("text", text);
+}
+
+void MonCap::generate_test_instances(list<MonCap*>& ls)
+{
+  ls.push_back(new MonCap);
+  ls.push_back(new MonCap);
+  ls.back()->parse("allow *");
+  ls.push_back(new MonCap);
+  ls.back()->parse("allow rwx");
+  ls.push_back(new MonCap);
+  ls.back()->parse("allow service foo x");
+  ls.push_back(new MonCap);
+  ls.back()->parse("allow command bar x");
+  ls.push_back(new MonCap);
+  ls.back()->parse("allow service foo r, allow command bar x");
+  ls.push_back(new MonCap);
+  ls.back()->parse("allow command bar with k1=v1 x");
+  ls.push_back(new MonCap);
+  ls.back()->parse("allow command bar with k1=v1 k2=v2 x");
+}
 
 // grammar
 namespace qi = boost::spirit::qi;

@@ -100,7 +100,13 @@ struct MonCap {
   bool is_capable(const string& service,
 		  const string& command, const map<string,string>& command_args,
 		  bool op_may_read, bool op_may_write, bool op_may_exec) const;
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<MonCap*>& ls);
 };
+WRITE_CLASS_ENCODER(MonCap)
 
 static inline ostream& operator<<(ostream& out, const MonCap& cap)
 {
