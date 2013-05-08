@@ -166,7 +166,7 @@ public:
     build_rmaps();
     if (type_rmap.count(name))
       return type_rmap[name];
-    return 0;
+    return -1;
   }
   const char *get_type_name(int t) const {
     std::map<int,string>::const_iterator p = type_map.find(t);
@@ -575,7 +575,8 @@ public:
     return set_rule_step(ruleno, step, CRUSH_RULE_EMIT, 0, 0);
   }
 
-  int add_simple_rule(string name, string root_name, string failure_domain_type);
+  int add_simple_rule(string name, string root_name, string failure_domain_type,
+		      ostream *err = 0);
 
   int remove_rule(int ruleno);
 

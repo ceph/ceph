@@ -2557,7 +2557,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  err = 0;
 	} else {
 	  int type = newcrush.get_type_id(m->cmd[4]);
-	  if (type <= 0) {
+	  if (type < 0) {
 	    ss << "type '" << m->cmd[4] << "' does not exist";
 	    err = -EINVAL;
 	    break;
@@ -2861,7 +2861,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	ss << "rule " << name << " already exists";
 	err = 0;
       } else {
-	int rule = newcrush.add_simple_rule(name, root, type);
+	int rule = newcrush.add_simple_rule(name, root, type, &ss);
 	if (rule < 0) {
 	  err = rule;
 	  goto out;
