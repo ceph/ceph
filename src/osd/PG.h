@@ -420,9 +420,6 @@ public:
     _lock.Unlock();
   }
 
-  // assert we still have lock held, and update our map ref
-  void reassert_lock_with_map_lock_held();
-
   void assert_locked() {
     assert(_lock.is_locked());
   }
