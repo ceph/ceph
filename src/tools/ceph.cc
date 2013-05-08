@@ -246,6 +246,7 @@ int do_admin_socket(string path, string cmd)
   }
   if (r < 4) {
     cerr << "read only got " << r << " bytes of 4 expected for response length; invalid command?" << std::endl;
+    r = -1;
     goto out;
   }
   len = ntohl(len);
