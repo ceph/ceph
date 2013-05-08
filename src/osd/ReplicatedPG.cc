@@ -2922,7 +2922,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
 	    coll, soid
 	    );
-	  assert(iter);
+          if (!iter) {
+            result = -ENOENT;
+            goto fail;
+          }
 	  iter->upper_bound(start_after);
 	  if (filter_prefix >= start_after) iter->lower_bound(filter_prefix);
 	  for (uint64_t i = 0;
