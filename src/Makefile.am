@@ -882,6 +882,12 @@ unittest_osd_osdcap_LDADD =  ${UNITTEST_LDADD} ${LIBGLOBAL_LDA}
 unittest_osd_osdcap_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_osd_osdcap
 
+unittest_mon_moncap_SOURCES = test/mon/moncap.cc mon/MonCap.cc
+unittest_mon_moncap_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
+unittest_mon_moncap_LDADD =  ${UNITTEST_LDADD} ${LIBGLOBAL_LDA}
+unittest_mon_moncap_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_mon_moncap
+
 #if WITH_RADOSGW
 #unittest_librgw_SOURCES = test/librgw.cc
 #unittest_librgw_LDFLAGS = -lrt $(PTHREAD_CFLAGS) -lcurl ${AM_LDFLAGS}
@@ -1368,6 +1374,7 @@ libcommon_files = \
 	json_spirit/json_spirit_value.cpp \
 	log/Log.cc \
 	log/SubsystemMap.cc \
+	mon/MonCap.cc \
 	mon/MonCaps.cc \
 	mon/MonClient.cc \
 	mon/MonMap.cc \
@@ -1948,6 +1955,7 @@ noinst_HEADERS = \
         mon/HealthService.h\
         mon/MDSMonitor.h\
 	mon/MonmapMonitor.h\
+        mon/MonCap.h\
         mon/MonCaps.h\
         mon/MonClient.h\
 	mon/MonCommands.h\
