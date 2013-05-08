@@ -53,6 +53,7 @@
     mdlog list                 list metadata log
     mdlog trim                 trim metadata log
     bilog list                 list bucket index log
+    bilog trim                 trim bucket index log (use start-marker, end-marker)
     datalog list               list data log
   options:
      --uid=<id>                user id

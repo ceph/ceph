@@ -406,6 +406,28 @@ struct cls_rgw_bi_log_list_op {
 };
 WRITE_CLASS_ENCODER(cls_rgw_bi_log_list_op)
 
+struct cls_rgw_bi_log_trim_op {
+  string start_marker;
+  string end_marker;
+
+  cls_rgw_bi_log_trim_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(start_marker, bl);
+    ::encode(end_marker, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(start_marker, bl);
+    ::decode(end_marker, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_bi_log_trim_op)
+
 struct cls_rgw_bi_log_list_ret {
   list<rgw_bi_log_entry> entries;
   bool truncated;
