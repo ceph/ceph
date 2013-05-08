@@ -46,13 +46,13 @@ Create a user on hosts running Ceph daemons.
 
 
 ``ceph-deploy`` installs packages onto your hosts. This means that
-the user you create requires passwordless ``sudo`` priveleges. 
+the user you create requires passwordless ``sudo`` privileges. 
 
-.. note:: We **DO NOT** recommmend enabling the ``root`` password 
+.. note:: We **DO NOT** recommend enabling the ``root`` password 
    for security reasons. 
 
 To provide full privileges to the user, add the following to 
-``/etc/sudoers.d/chef``. ::
+``/etc/sudoers.d/ceph``. ::
 
 	echo "ceph ALL = (root) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/ceph
 	sudo chmod 0440 /etc/sudoers.d/ceph
