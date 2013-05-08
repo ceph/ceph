@@ -6328,7 +6328,6 @@ void ReplicatedPG::on_change()
 
   // requeue everything in the reverse order they should be
   // reexamined.
-  requeue_ops(waiting_for_map);
 
   clear_scrub_reserved();
   scrub_clear_state();
