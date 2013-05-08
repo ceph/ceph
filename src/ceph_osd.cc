@@ -442,35 +442,8 @@ int main(int argc, const char **argv)
   register_async_signal_handler_oneshot(SIGINT, handle_osd_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_osd_signal);
 
-
-
-  // Make life harder for Out Of Memory (OOM) killer to beat us
-
-#if defined(__linux__)
-
-#define OOM_SCORE_ADJ_MIN -1000
-#define OOM_SCORE_ADJ_BE_NICE 500
-#define OOM_SCORE_ADJ (OOM_SCORE_ADJ_MIN + OOM_SCORE_ADJ_BE_NICE)
-
-#define OOM_ADJ_DISABLE -17
-#define OOM_ADJ_MIN -16
-#define OOM_ADJ_BE_NICE 9
-#define OOM_ADJ (OOM_ADJ_MIN + OOM_ADJ_BE_NICE)
-
-  ofstream oom_adjust("/proc/self/oom_score_adj");
-  if (oom_adjust.is_open()) {
-    oom_adjust << OOM_SCORE_ADJ;
-    oom_adjust.close();
-  } else {
-    ofstream oom_adjust_legacy("/proc/self/oom_adj");
-    if (oom_adjust_legacy.is_open()) {
-      oom_adjust_legacy << OOM_ADJ;
-      oom_adjust_legacy.close();
-    } else {
-      derr << TEXT_YELLOW << " ** WARNING: failed to adjust OOM **" << TEXT_NORMAL << dendl;
-    }
-  }
-#endif // __linux__
+  // adjust out of memory scoring for the daemon
+  global_init_adj_oom();
 
   // start osd
   err = osd->init();

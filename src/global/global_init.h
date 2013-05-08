@@ -23,6 +23,17 @@
 #include "common/code_environment.h"
 #include "common/common_init.h"
 
+#if defined(__linux__)
+#define OOM_SCORE_ADJ_MIN -1000
+#define OOM_SCORE_ADJ_BE_NICE 500
+#define OOM_SCORE_ADJ (OOM_SCORE_ADJ_MIN + OOM_SCORE_ADJ_BE_NICE)
+
+#define OOM_ADJ_DISABLE -17
+#define OOM_ADJ_MIN -16
+#define OOM_ADJ_BE_NICE 9
+#define OOM_ADJ (OOM_ADJ_MIN + OOM_ADJ_BE_NICE)
+#endif // __linux__
+
 class CephContext;
 
 /*
@@ -75,5 +86,10 @@ int global_init_shutdown_stderr(CephContext *cct);
  * print daemon startup banner/warning
  */
 void global_print_banner(void);
+
+/*
+ * Adjust out of memory killer score to make it less likely we get killed
+ */
+void global_init_adj_oom(void);
 
 #endif
