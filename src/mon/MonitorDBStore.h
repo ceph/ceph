@@ -30,6 +30,8 @@
 class MonitorDBStore
 {
   boost::scoped_ptr<LevelDBStore> db;
+  bool do_dump;
+  int dump_fd;
 
  public:
 
@@ -134,13 +136,13 @@ class MonitorDBStore
       return ops.size();
     }
 
-    void dump(ceph::Formatter *f) {
+    void dump(ceph::Formatter *f, bool dump_val=false) const {
       f->open_object_section("transaction");
       f->open_array_section("ops");
-      list<Op>::iterator it;
+      list<Op>::const_iterator it;
       int op_num = 0;
       for (it = ops.begin(); it != ops.end(); ++it) {
-	Op& op = *it;
+	const Op& op = *it;
 	f->open_object_section("op");
 	f->dump_int("op_num", op_num++);
 	switch (op.type) {
@@ -149,10 +151,12 @@ class MonitorDBStore
 	    f->dump_string("type", "PUT");
 	    f->dump_string("prefix", op.prefix);
 	    f->dump_string("key", op.key);
-	    ostringstream os;
-	    op.bl.hexdump(os);
 	    f->dump_unsigned("length", op.bl.length());
-	    f->dump_string("bl", os.str());
+	    if (dump_val) {
+	      ostringstream os;
+	      op.bl.hexdump(os);
+	      f->dump_string("bl", os.str());
+	    }
 	  }
 	  break;
 	case OP_ERASE:
@@ -182,12 +186,18 @@ class MonitorDBStore
     }
   };
 
-  int apply_transaction(MonitorDBStore::Transaction& t) {
+  int apply_transaction(const MonitorDBStore::Transaction& t) {
     KeyValueDB::Transaction dbt = db->get_transaction();
 
+    if (do_dump) {
+      bufferlist bl;
+      t.encode(bl);
+      bl.write_fd(dump_fd);
+    }
+
     list<string> compact_prefixes;
-    for (list<Op>::iterator it = t.ops.begin(); it != t.ops.end(); ++it) {
-      Op& op = *it;
+    for (list<Op>::const_iterator it = t.ops.begin(); it != t.ops.end(); ++it) {
+      const Op& op = *it;
       switch (op.type) {
       case Transaction::OP_PUT:
 	dbt->set(op.prefix, op.key, op.bl);
@@ -471,6 +481,14 @@ class MonitorDBStore
   }
 
   int open(ostream &out) {
+    db->options.write_buffer_size = g_conf->mon_leveldb_write_buffer_size;
+    db->options.cache_size = g_conf->mon_leveldb_cache_size;
+    db->options.block_size = g_conf->mon_leveldb_block_size;
+    db->options.bloom_size = g_conf->mon_leveldb_bloom_size;
+    db->options.compression_enabled = g_conf->mon_leveldb_compression;
+    db->options.max_open_files = g_conf->mon_leveldb_max_open_files;
+    db->options.paranoid_checks = g_conf->mon_leveldb_paranoid;
+    db->options.log_file = g_conf->mon_leveldb_log;
     return db->open(out);
   }
 
@@ -486,7 +504,8 @@ class MonitorDBStore
     db->compact_prefix(prefix);
   }
 
-  MonitorDBStore(const string& path) : db(0) {
+  MonitorDBStore(const string& path) :
+    db(0), do_dump(false), dump_fd(-1) {
     string::const_reverse_iterator rit;
     int pos = 0;
     for (rit = path.rbegin(); rit != path.rend(); ++rit, ++pos) {
@@ -504,19 +523,27 @@ class MonitorDBStore
       assert(0 != "MonitorDBStore: error initializing level db back storage");
     }
     db.reset(db_ptr);
-    db->options.write_buffer_size = g_conf->mon_leveldb_write_buffer_size;
-    db->options.cache_size = g_conf->mon_leveldb_cache_size;
-    db->options.block_size = g_conf->mon_leveldb_block_size;
-    db->options.bloom_size = g_conf->mon_leveldb_bloom_size;
-    db->options.compression_enabled = g_conf->mon_leveldb_compression;
-    db->options.max_open_files = g_conf->mon_leveldb_max_open_files;
-    db->options.paranoid_checks = g_conf->mon_leveldb_paranoid;
-    db->options.log_file = g_conf->mon_leveldb_log;
+
+    if (g_conf->mon_debug_dump_transactions) {
+      do_dump = true;
+      dump_fd = ::open(
+	g_conf->mon_debug_dump_location.c_str(),
+	O_CREAT|O_APPEND|O_WRONLY, 0644);
+      if (!dump_fd) {
+	dump_fd = -errno;
+	derr << "Could not open log file, got "
+	     << cpp_strerror(dump_fd) << dendl;
+      }
+    }
   }
-  MonitorDBStore(LevelDBStore *db_ptr) {
+  MonitorDBStore(LevelDBStore *db_ptr) :
+    db(0), do_dump(false), dump_fd(-1) {
     db.reset(db_ptr);
   }
-  ~MonitorDBStore() { }
+  ~MonitorDBStore() {
+    if (do_dump)
+      ::close(dump_fd);
+  }
 
 };
 
