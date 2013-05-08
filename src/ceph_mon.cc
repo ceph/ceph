@@ -507,6 +507,9 @@ int main(int argc, const char **argv)
   register_async_signal_handler_oneshot(SIGINT, handle_mon_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_mon_signal);
 
+  // adjust out of memory scoring for the daemon
+  global_init_adj_oom();
+
   messenger->start();
 
   mon->init();
