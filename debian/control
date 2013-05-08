@@ -41,7 +41,7 @@ Package: ceph
 Architecture: linux-any
 Depends: binutils,
          ceph-common,
-         cryptsetup-bin,
+         cryptsetup-bin | cryptsetup,
          gdisk,
          parted,
          python,
