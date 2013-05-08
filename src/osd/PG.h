@@ -420,10 +420,6 @@ public:
     _lock.Unlock();
   }
 
-  /* During handle_osd_map, the osd holds a write lock to the osdmap.
-   * *_with_map_lock_held assume that the map_lock is already held */
-  void lock_with_map_lock_held(bool no_lockdep = false);
-
   // assert we still have lock held, and update our map ref
   void reassert_lock_with_map_lock_held();
 
