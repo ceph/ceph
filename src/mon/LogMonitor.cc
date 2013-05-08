@@ -260,7 +260,7 @@ bool LogMonitor::preprocess_log(MLog *m)
   MonSession *session = m->get_session();
   if (!session)
     goto done;
-  if (!session->caps.check_privileges(PAXOS_LOG, MON_CAP_X)) {
+  if (!session->is_capable("log", MON_CAP_X)) {
     dout(0) << "preprocess_log got MLog from entity with insufficient privileges "
 	    << session->caps << dendl;
     goto done;

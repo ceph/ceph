@@ -479,7 +479,8 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
 
       proto = s->auth_handler->start_session(entity_name, indata, response_bl, caps_info);
       ret = 0;
-      s->caps.set_allow_all(caps_info.allow_all);
+      if (caps_info.allow_all)
+	s->caps.set_allow_all();
     } else {
       // request
       ret = s->auth_handler->handle_request(indata, response_bl, s->global_id, caps_info, &auid);
@@ -490,9 +491,14 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
       goto done;
     }
     if (caps_info.caps.length()) {
-      bufferlist::iterator iter = caps_info.caps.begin();
-      s->caps.parse(iter, NULL);
-      s->caps.set_auid(auid);
+      bufferlist::iterator p = caps_info.caps.begin();
+      string str;
+      try {
+	::decode(str, p);
+      } catch (const buffer::error &err) {
+      }
+      s->caps.parse(str, NULL);
+      s->auid = auid;
     }
   } catch (const buffer::error &err) {
     ret = -EINVAL;
@@ -545,8 +551,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
   vector<string> fullcmd;
   build_fullcmd(prefix, cmdmap, &fullcmd);
   if (!session ||
-      (!session->caps.get_allow_all() &&
-       !mon->_allowed_command(session, fullcmd))) {
+      (!mon->_allowed_command(session, fullcmd))) {
     mon->reply_command(m, -EACCES, "access denied", rdata, get_version());
     return true;
   }
@@ -665,8 +670,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
   build_fullcmd(prefix, cmdmap, &fullcmd);
   MonSession *session = m->get_session();
   if (!session ||
-      (!session->caps.get_allow_all() &&
-       !mon->_allowed_command(session, fullcmd))) {
+      (!mon->_allowed_command(session, fullcmd))) {
     mon->reply_command(m, -EACCES, "access denied", rdata, get_version());
     return true;
   }

@@ -21,7 +21,7 @@
 #include "auth/AuthServiceHandler.h"
 #include "osd/OSDMap.h"
 
-#include "MonCaps.h"
+#include "MonCap.h"
 
 struct MonSession;
 
@@ -45,7 +45,8 @@ struct MonSession : public RefCountedObject {
   bool closed;
   xlist<MonSession*>::item item;
   set<uint64_t> routed_request_tids;
-  MonCaps caps;
+  MonCap caps;
+  uint64_t auid;
   uint64_t global_id;
   uint64_t notified_global_id;
 
@@ -58,6 +59,7 @@ struct MonSession : public RefCountedObject {
 
   MonSession(const entity_inst_t& i, Connection *c) :
     con(c->get()), inst(i), closed(false), item(this),
+    auid(0),
     global_id(0), notified_global_id(0), auth_handler(NULL),
     proxy_con(NULL), proxy_tid(0) {
     time_established = ceph_clock_now(g_ceph_context);
@@ -72,6 +74,12 @@ struct MonSession : public RefCountedObject {
     assert(!item.is_on_list());
     assert(sub_map.empty());
     delete auth_handler;
+  }
+
+  bool is_capable(string service, int mask) {
+    map<string,string> args;
+    return caps.is_capable(service, "", args,
+			   mask & MON_CAP_R, mask & MON_CAP_W, mask & MON_CAP_X);
   }
 };
 
