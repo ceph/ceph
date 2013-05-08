@@ -95,7 +95,7 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
     base_url = 'http://{host}/{proj}-deb-{dist}-{arch}-{flavor}/{uri}'.format(
         host=ctx.teuthology_config.get('gitbuilder_host',
                                        'gitbuilder.ceph.com'),
-        proj=config.get('project'),
+        proj=config.get('project', 'ceph'),
         **baseparms
         )
     log.info('Pulling from %s', base_url)
@@ -124,7 +124,7 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
         args=[
             'echo', 'deb', base_url, dist, 'main',
             run.Raw('|'),
-            'sudo', 'tee', '/etc/apt/sources.list.d/{proj}.list'.format(proj=config.get('project')),
+            'sudo', 'tee', '/etc/apt/sources.list.d/{proj}.list'.format(proj=config.get('project', 'ceph')),
             ],
         stdout=StringIO(),
         )
@@ -373,11 +373,11 @@ def remove_sources(ctx, config):
         'deb': _remove_sources_list_deb,
         'rpm': _remove_sources_list_rpm,
         }
-    log.info("Removing {proj} sources lists".format(proj=config.get('project')))
+    log.info("Removing {proj} sources lists".format(proj=config.get('project', 'ceph')))
     with parallel() as p:
         for remote in ctx.cluster.remotes.iterkeys():
             system_type = _get_system_type(remote)
-            p.spawn(remove_sources_pkgs[system_type], remote, config.get('project'))
+            p.spawn(remove_sources_pkgs[system_type], remote, config.get('project', 'ceph'))
 
 deb_packages = {'ceph': [
             'ceph',
@@ -506,7 +506,7 @@ def _upgrade_packages(ctx, config, remote, debs, branch):
     base_url = 'http://{host}/{proj}-deb-{dist}-{arch}-{flavor}/{uri}'.format(
         host=ctx.teuthology_config.get('gitbuilder_host',
                                        'gitbuilder.ceph.com'),
-        proj=config.get('project'),
+        proj=config.get('project', 'ceph'),
         dist=dist,
         arch=arch,
         flavor=flavor,
@@ -534,7 +534,7 @@ def _upgrade_packages(ctx, config, remote, debs, branch):
         args=[
             'echo', 'deb', base_url, dist, 'main',
             run.Raw('|'),
-            'sudo', 'tee', '/etc/apt/sources.list.d/{proj}.list'.format(proj=config.get('project')),
+            'sudo', 'tee', '/etc/apt/sources.list.d/{proj}.list'.format(proj=config.get('project', 'ceph')),
             ],
         stdout=StringIO(),
         )
@@ -603,7 +603,7 @@ def upgrade(ctx, config):
 
     debs = proj_debs.get(project, [])
 
-    extra_pkgs = config.get('extra_packages')
+    extra_pkgs = config.get('extra_packages', [])
     log.info('extra packages: {packages}'.format(packages=extra_pkgs))
     debs += extra_pkgs
 
