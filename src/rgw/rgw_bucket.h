@@ -229,12 +229,14 @@ enum DataLogEntityType {
 struct rgw_data_change {
   DataLogEntityType entity_type;
   string key;
+  utime_t timestamp;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     uint8_t t = (uint8_t)entity_type;
     ::encode(t, bl);
     ::encode(key, bl);
+    ::encode(timestamp, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -244,6 +246,7 @@ struct rgw_data_change {
      ::decode(t, bl);
      entity_type = (DataLogEntityType)t;
      ::decode(key, bl);
+     ::decode(timestamp, bl);
      DECODE_FINISH(bl);
   }
 
@@ -333,6 +336,7 @@ public:
   int renew_entries();
   int list_entries(int shard, utime_t& start_time, utime_t& end_time, int max_entries,
                list<rgw_data_change>& entries, string& marker, bool *truncated);
+  int trim_entries(utime_t& start_time, utime_t& end_time);
 
   struct LogMarker {
     int shard;
