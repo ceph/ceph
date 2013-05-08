@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
+#include <errno.h>
 #include <unistd.h>
 #include "common/safe_io.h"
 
@@ -78,7 +79,7 @@ public:
   int exit(int r) {
     if (forked) {
       // tell parent
-      ::write(fd[1], &r, sizeof(r));
+      (void)::write(fd[1], &r, sizeof(r));
     }
     return r;
   }
@@ -86,7 +87,7 @@ public:
   void daemonize() {
     assert(forked);
     static int r = -1;
-    ::write(fd[1], &r, sizeof(r));
+    (void)::write(fd[1], &r, sizeof(r));
   }
   
 };
