@@ -1932,13 +1932,16 @@ public:
   bool can_discard_backfill(OpRequestRef op);
   bool can_discard_request(OpRequestRef op);
 
-  bool must_delay_request(OpRequestRef op);
+  static bool op_must_wait_for_map(OSDMapRef curmap, OpRequestRef op);
 
   static bool split_request(OpRequestRef op, unsigned match, unsigned bits);
 
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch);
   bool old_peering_evt(CephPeeringEvtRef evt) {
     return old_peering_msg(evt->get_epoch_sent(), evt->get_epoch_requested());
+  }
+  static bool have_same_or_newer_map(OSDMapRef osdmap, epoch_t e) {
+    return e <= osdmap->get_epoch();
   }
   bool have_same_or_newer_map(epoch_t e) {
     return e <= get_osdmap()->get_epoch();
