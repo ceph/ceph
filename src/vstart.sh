@@ -425,7 +425,7 @@ EOF
 
 	    key_fn=dev/osd$osd/keyring
 	    echo adding osd$osd key to auth repository
-	    $SUDO $CEPH_ADM -i $key_fn auth add osd.$osd osd "allow *" mon "allow rwx"
+	    $SUDO $CEPH_ADM -i $key_fn auth add osd.$osd osd "allow *" mon "allow profile osd"
 	fi
 	echo start osd$osd
 	run 'osd' $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS $COSD_ARGS
@@ -464,7 +464,7 @@ EOF
 		fi
 	    fi
 	    $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mds.$name $key_fn
-	    $SUDO $CEPH_ADM -i $key_fn auth add mds.$name mon 'allow *' osd 'allow *' mds 'allow'
+	    $SUDO $CEPH_ADM -i $key_fn auth add mds.$name mon 'allow profile mds' osd 'allow *' mds 'allow'
 	    if [ "$standby" -eq 1 ]; then
 		    $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mds.${name}s \
 			dev/mds.${name}s/keyring
