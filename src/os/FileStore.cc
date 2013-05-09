@@ -4015,7 +4015,7 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
 
   r = _fsetattrs(fd, inline_to_set);
   if (r < 0)
-    return r;
+    goto out_close;
 
   if (!omap_remove.empty()) {
     assert(g_conf->filestore_xattr_use_omap);
