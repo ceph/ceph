@@ -1,10 +1,12 @@
 =======================================
-RADOS Gateway developer documentation
+ RADOS Gateway developer documentation
 =======================================
 
 .. rubric:: Contents
 
 .. toctree::
-   :glob:
-
-   *
+   :maxdepth: 1   
+   
+   
+   usage
+   Admin Ops Nonimplemented <admin/adminops_nonimplemented>
