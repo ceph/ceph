@@ -143,7 +143,6 @@ typedef std::tr1::shared_ptr<ObjectStore::Sequencer> SequencerRef;
 class DeletingState {
   Mutex lock;
   Cond cond;
-  list<Context *> on_deletion_complete;
   enum {
     QUEUED,
     CLEARING_DIR,
@@ -155,17 +154,6 @@ class DeletingState {
 public:
   DeletingState() :
     lock("DeletingState::lock"), status(QUEUED), stop_deleting(false) {}
-  void register_on_delete(Context *completion) {
-    Mutex::Locker l(lock);
-    on_deletion_complete.push_front(completion);
-  }
-  ~DeletingState() {
-    for (list<Context *>::iterator i = on_deletion_complete.begin();
-	 i != on_deletion_complete.end();
-	 ++i) {
-      (*i)->complete(0);
-    }
-  }
 
   /// check whether removal was canceled
   bool check_canceled() {
