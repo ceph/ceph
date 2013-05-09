@@ -2,6 +2,25 @@
  Release Notes
 ===============
 
+v0.61.1 "Cuttlefish"
+--------------------
+
+This release fixes a problem when upgrading a bobtail cluster that had
+snapshots to cuttlefish.
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* osd: handle upgrade when legacy snap collections are present; repair from previous failed restart
+* ceph-create-keys: fix race with ceph-mon startup (which broke 'ceph-deploy gatherkeys ...')
+* ceph-create-keys: gracefully handle bad response from ceph-osd
+* sysvinit: do not assume default osd_data when automatically weighting OSD
+* osd: avoid crash from ill-behaved classes using getomapvals
+* debian: fix squeeze dependency
+* mon: debug options to log or dump leveldb transactactions
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.61.1.txt>`.
+
 v0.61 "Cuttlefish"
 ------------------
 
