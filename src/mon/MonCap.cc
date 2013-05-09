@@ -100,6 +100,7 @@ bool MonCap::is_capable(const string& service,
   mon_rwxa_t allow = 0;
   for (vector<MonCapGrant>::const_iterator p = grants.begin();
        p != grants.end(); ++p) {
+    // check enumerated caps
     if (p->is_match(service, command, command_args)) {
       allow = allow | p->allow;
       if ((op_may_read && !(allow & MON_CAP_R)) ||
@@ -107,6 +108,40 @@ bool MonCap::is_capable(const string& service,
 	  (op_may_exec && !(allow & MON_CAP_X)))
 	continue;
       return true;
+    }
+    // match against profiles
+    if (p->profile == "osd" || p->profile == "mds" || p->profile == "mon") {
+      // daemons can log
+      if (service == "log")
+	return true;
+      // everyone can read mon, osd maps
+      if ((service == "mon" || service == "osd" || service == "pg") &&
+	  !op_may_write && !op_may_exec)
+	return true;
+    }
+    if (p->profile == "mds") {
+      if (service == "mds")      // FIXME, this needs some refinement.
+	return true;
+    }
+    if (p->profile == "osd") {
+      if (service == "osd")      // FIXME, this needs some refinement.
+	return true;
+    }
+    if (p->profile == "mon") {
+      if (service == "mon")
+	return true;
+    }
+    if (p->profile == "fs-client") {
+      // can read mon, osd, mds maps
+      if ((service == "mon" || service == "osd" || service == "mds" || service == "pg") &&
+	  !op_may_write && !op_may_exec)
+	return true;
+    }
+    if (p->profile == "simple-rados-client") {
+      // can read mon, osd maps
+      if ((service == "mon" || service == "osd" || service == "pg") &&
+	  !op_may_write && !op_may_exec)
+	return true;
     }
   }
   return false;
