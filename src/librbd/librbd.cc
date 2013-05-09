@@ -692,7 +692,8 @@ extern "C" int rbd_open(rados_ioctx_t p, const char *name, rbd_image_t *image,
   librbd::ImageCtx *ictx = new librbd::ImageCtx(name, "", snap_name, io_ctx,
 						false);
   int r = librbd::open_image(ictx);
-  *image = (rbd_image_t)ictx;
+  if (r >= 0)
+    *image = (rbd_image_t)ictx;
   return r;
 }
 
@@ -704,7 +705,8 @@ extern "C" int rbd_open_read_only(rados_ioctx_t p, const char *name,
   librbd::ImageCtx *ictx = new librbd::ImageCtx(name, "", snap_name, io_ctx,
 						true);
   int r = librbd::open_image(ictx);
-  *image = (rbd_image_t)ictx;
+  if (r >= 0)
+    *image = (rbd_image_t)ictx;
   return r;
 }
 
