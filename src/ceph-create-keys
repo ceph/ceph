@@ -34,7 +34,17 @@ def wait_for_quorum(cluster, mon_id):
             time.sleep(1)
             continue
 
-        data = json.loads(out)
+        if out == '':
+            LOG.info('ceph-mon admin socket returned no data')
+            time.sleep(1)
+            continue
+
+        try:
+            data = json.loads(out)
+        except:
+            LOG.info('failed to parse json %s', out)
+            sys.exit(errno.EINVAL)
+
         state = data['state']
         if state not in QUORUM_STATES:
             LOG.info('ceph-mon is not in quorum: %r', state)

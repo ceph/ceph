@@ -1775,8 +1775,29 @@ void OSD::load_pgs()
       dout(10) << "PG " << pg->info.pgid
 	       << " must upgrade..." << dendl;
       pg->upgrade(store, i->second);
-    } else {
-      assert(i->second.empty());
+    } else if (!i->second.empty()) {
+      // handle upgrade bug
+      for (interval_set<snapid_t>::iterator j = i->second.begin();
+	   j != i->second.end();
+	   ++j) {
+	for (snapid_t k = j.get_start();
+	     k != j.get_start() + j.get_len();
+	     ++k) {
+	  assert(store->collection_empty(coll_t(pgid, k)));
+	  ObjectStore::Transaction t;
+	  t.remove_collection(coll_t(pgid, k));
+	  store->apply_transaction(t);
+	}
+      }
+    }
+
+    if (!pg->snap_collections.empty()) {
+      pg->snap_collections.clear();
+      pg->dirty_big_info = true;
+      pg->dirty_info = true;
+      ObjectStore::Transaction t;
+      pg->write_if_dirty(t);
+      store->apply_transaction(t);
     }
 
     service.init_splits_between(pg->info.pgid, pg->get_osdmap(), osdmap);
@@ -4951,21 +4972,6 @@ void OSD::split_pgs(
 	i->m_seed,
 	coll_t::make_temp_coll(*i));
     }
-    for (interval_set<snapid_t>::iterator k = parent->snap_collections.begin();
-	 k != parent->snap_collections.end();
-	 ++k) {
-      for (snapid_t j = k.get_start(); j < k.get_start() + k.get_len();
-	   ++j) {
-	rctx->transaction->create_collection(
-	  coll_t(*i, j));
-	rctx->transaction->split_collection(
-	  coll_t(parent->info.pgid, j),
-	  split_bits,
-	  i->m_seed,
-	  coll_t(*i, j));
-      }
-    }
-    child->snap_collections = parent->snap_collections;
     parent->split_into(
       *i,
       child,
