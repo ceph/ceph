@@ -526,9 +526,12 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info)
 RGWAccessKeyPool::RGWAccessKeyPool(RGWUser* usr)
 {
   user = usr;
+  swift_keys = NULL;
+  access_keys = NULL;
 
   if (!user) {
     keys_allowed = false;
+    store = NULL;
     return;
   }
 
@@ -987,13 +990,10 @@ int RGWAccessKeyPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg
 
 RGWSubUserPool::RGWSubUserPool(RGWUser *usr)
 {
-   if (!usr)
-    subusers_allowed = false;
-
-  subusers_allowed = true;
-
+  subusers_allowed = (usr != NULL);
   store = usr->get_store();
   user = usr;
+  subuser_map = NULL;
 }
 
 RGWSubUserPool::~RGWSubUserPool()
@@ -1276,10 +1276,8 @@ int RGWSubUserPool::modify(RGWUserAdminOpState& op_state, std::string *err_msg, 
 RGWUserCapPool::RGWUserCapPool(RGWUser *usr)
 {
   user = usr;
-
-  if (!user) {
-    caps_allowed = false;
-  }
+  caps = NULL;
+  caps_allowed = (user != NULL);
 }
 
 RGWUserCapPool::~RGWUserCapPool()
@@ -1392,7 +1390,7 @@ int RGWUserCapPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg, 
   return 0;
 }
 
-RGWUser::RGWUser() : caps(this), keys(this), subusers(this)
+RGWUser::RGWUser() : store(NULL), info_stored(false), caps(this), keys(this), subusers(this)
 {
   init_default();
 }
