@@ -213,7 +213,8 @@ static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx, RG
       /* object exists, but policy is broken */
       RGWBucketInfo info;
       RGWUserInfo uinfo;
-      int r = store->get_bucket_info(ctx, obj.bucket.name, info);
+      RGWObjVersionTracker objv_tracker;
+      int r = store->get_bucket_info(ctx, obj.bucket.name, info, &objv_tracker);
       if (r < 0)
         goto done;
       r = rgw_get_user_info_by_uid(store, info.owner, uinfo);
@@ -295,7 +296,8 @@ int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bucket, b
 
   RGWBucketInfo bucket_info;
   if (s->bucket_name_str.size()) {
-    ret = store->get_bucket_info(s->obj_ctx, s->bucket_name_str, bucket_info);
+    RGWObjVersionTracker objv_tracker;
+    ret = store->get_bucket_info(s->obj_ctx, s->bucket_name_str, bucket_info, &objv_tracker);
     if (ret < 0) {
       ldout(s->cct, 0) << "NOTICE: couldn't get bucket from bucket_name (name=" << s->bucket_name_str << ")" << dendl;
       return ret;
@@ -496,7 +498,8 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
 
   if (bucket_name.compare(s->bucket.name) != 0) {
     RGWBucketInfo bucket_info;
-    int r = store->get_bucket_info(NULL, bucket_name, bucket_info);
+    RGWObjVersionTracker objv_tracker;
+    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, &objv_tracker);
     if (r < 0) {
       ldout(s->cct, 0) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return r;
@@ -881,7 +884,8 @@ void RGWCreateBucket::execute()
      */
     RGWBucketInfo info;
     map<string, bufferlist> attrs;
-    int r = store->get_bucket_info(NULL, s->bucket.name, info, &attrs);
+    RGWObjVersionTracker objv_tracker;
+    int r = store->get_bucket_info(NULL, s->bucket.name, info, &objv_tracker, &attrs);
     if (r < 0) {
       ldout(s->cct, 0) << "ERROR: get_bucket_info on bucket=" << s->bucket.name << " returned err=" << r << " after create_bucket returned -EEXIST" << dendl;
       ret = r;
@@ -1662,7 +1666,7 @@ int RGWCopyObj::verify_permission()
 
   /* get buckets info (source and dest) */
 
-  ret = store->get_bucket_info(s->obj_ctx, src_bucket_name, src_bucket_info);
+  ret = store->get_bucket_info(s->obj_ctx, src_bucket_name, src_bucket_info, NULL);
   if (ret < 0)
     return ret;
 
@@ -1671,7 +1675,7 @@ int RGWCopyObj::verify_permission()
   if (src_bucket_name.compare(dest_bucket_name) == 0) {
     dest_bucket_info = src_bucket_info;
   } else {
-    ret = store->get_bucket_info(s->obj_ctx, dest_bucket_name, dest_bucket_info);
+    ret = store->get_bucket_info(s->obj_ctx, dest_bucket_name, dest_bucket_info, NULL);
     if (ret < 0)
       return ret;
   }

@@ -1316,7 +1316,7 @@ int RGWRados::create_pool(rgw_bucket& bucket)
  * returns 0 on success, -ERR# otherwise.
  */
 int RGWRados::create_bucket(string& owner, rgw_bucket& bucket, 
-			    map<std::string, bufferlist>& attrs, 
+			    map<std::string, bufferlist>& attrs,
 			    bool exclusive)
 {
   int ret = 0;
@@ -1356,30 +1356,17 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
   if (r < 0 && r != -EEXIST)
     return r;
 
+  RGWObjVersionTracker objv_tracker;
   RGWBucketInfo info;
   info.bucket = bucket;
   info.owner = owner;
-  ret = store_bucket_info(info, &attrs, exclusive);
+  ret = put_bucket_info(bucket.name, info, exclusive, &objv_tracker, &attrs);
   if (ret == -EEXIST) {
     index_ctx.remove(dir_oid);
   }
 
   return ret;
 }
-
-int RGWRados::store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pattrs, bool exclusive)
-{
-  bufferlist bl;
-  ::encode(info, bl);
-
-  int ret = rgw_put_system_obj(this, zone.domain_root, info.bucket.name, bl.c_str(), bl.length(), exclusive, NULL, pattrs);
-  if (ret < 0)
-    return ret;
-
-  ldout(cct, 20) << "store_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
-  return 0;
-}
-
 
 int RGWRados::select_bucket_placement(string& bucket_name, rgw_bucket& bucket)
 {
@@ -2109,7 +2096,8 @@ int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner)
 {
   RGWBucketInfo info;
   map<string, bufferlist> attrs;
-  int r = get_bucket_info(NULL, bucket.name, info, &attrs);
+  RGWObjVersionTracker objv_tracker;
+  int r = get_bucket_info(NULL, bucket.name, info, &objv_tracker, &attrs);
   if (r < 0) {
     ldout(cct, 0) << "NOTICE: get_bucket_info on bucket=" << bucket.name << " returned err=" << r << dendl;
     return r;
@@ -2117,7 +2105,7 @@ int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner)
 
   info.owner = owner.get_id();
 
-  r = put_bucket_info(bucket.name, info, false, &attrs);
+  r = put_bucket_info(bucket.name, info, false, &objv_tracker, &attrs);
   if (r < 0) {
     ldout(cct, 0) << "NOTICE: put_bucket_info on bucket=" << bucket.name << " returned err=" << r << dendl;
     return r;
@@ -2141,8 +2129,9 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
       ldout(cct, 20) << "disabling bucket name=" << bucket.name << dendl;
 
     RGWBucketInfo info;
+    RGWObjVersionTracker objv_tracker;
     map<string, bufferlist> attrs;
-    int r = get_bucket_info(NULL, bucket.name, info, &attrs);
+    int r = get_bucket_info(NULL, bucket.name, info, &objv_tracker, &attrs);
     if (r < 0) {
       ldout(cct, 0) << "NOTICE: get_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
       ret = r;
@@ -2154,7 +2143,7 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
       info.flags |= BUCKET_SUSPENDED;
     }
 
-    r = put_bucket_info(bucket.name, info, false, &attrs);
+    r = put_bucket_info(bucket.name, info, false, &objv_tracker, &attrs);
     if (r < 0) {
       ldout(cct, 0) << "NOTICE: put_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
       ret = r;
@@ -2167,7 +2156,7 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
 int RGWRados::bucket_suspended(rgw_bucket& bucket, bool *suspended)
 {
   RGWBucketInfo bucket_info;
-  int ret = get_bucket_info(NULL, bucket.name, bucket_info);
+  int ret = get_bucket_info(NULL, bucket.name, bucket_info, NULL);
   if (ret < 0) {
     return ret;
   }
@@ -3767,11 +3756,11 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_
   return 0;
 }
 
-int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info, map<string, bufferlist> *pattrs)
+int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info, RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs)
 {
   bufferlist bl;
 
-  int ret = rgw_get_system_obj(this, ctx, zone.domain_root, bucket_name, bl, NULL, pattrs);
+  int ret = rgw_get_system_obj(this, ctx, zone.domain_root, bucket_name, bl, objv_tracker, pattrs);
   if (ret < 0) {
     if (ret != -ENOENT)
       return ret;
@@ -3795,13 +3784,13 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
   return 0;
 }
 
-int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive, map<string, bufferlist> *pattrs)
+int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive, RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs)
 {
   bufferlist bl;
 
   ::encode(info, bl);
 
-  int ret = rgw_put_system_obj(this, zone.domain_root, bucket_name, bl.c_str(), bl.length(), exclusive, NULL, pattrs);
+  int ret = rgw_bucket_store_info(this, info.bucket.name, bl, exclusive, pattrs, objv_tracker);
 
   return ret;
 }
