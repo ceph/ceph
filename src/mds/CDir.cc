@@ -1055,7 +1055,7 @@ void CDir::assimilate_dirty_rstat_inodes_finish(Mutation *mut, EMetaBlob *blob)
     mut->add_projected_inode(in);
 
     in->clear_dirty_rstat();
-    blob->add_primary_dentry(dn, true, in);
+    blob->add_primary_dentry(dn, in, true);
   }
 
   if (!dirty_rstat_inodes.empty())

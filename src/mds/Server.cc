@@ -2839,7 +2839,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  le->metablob.add_primary_dentry(dn, true, in);
+  le->metablob.add_primary_dentry(dn, in, true);
 
   // do the open
   mds->locker->issue_new_caps(in, cmode, mdr->session, realm, req->is_replay());
@@ -4135,7 +4135,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(),
 				    PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  le->metablob.add_primary_dentry(dn, true, newi);
+  le->metablob.add_primary_dentry(dn, newi, true);
 
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
@@ -4193,7 +4193,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  le->metablob.add_primary_dentry(dn, true, newi);
+  le->metablob.add_primary_dentry(dn, newi, true);
   le->metablob.add_new_dir(newdir); // dirty AND complete AND new
   
   // issue a cap on the directory
@@ -4263,7 +4263,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  le->metablob.add_primary_dentry(dn, true, newi);
+  le->metablob.add_primary_dentry(dn, newi, true);
 
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
@@ -4801,7 +4801,7 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   mdlog->start_entry(le);
   le->commit.add_dir_context(parent);
   le->commit.add_dir(parent, true);
-  le->commit.add_primary_dentry(in->get_projected_parent_dn(), true, 0);
+  le->commit.add_primary_dentry(in->get_projected_parent_dn(), 0, true);
   
   mdlog->submit_entry(le, new C_MDS_LoggedLinkRollback(this, mut, mdr));
   mdlog->flush();
@@ -5096,7 +5096,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
     if (in->snaprealm || follows + 1 > dn->first)
       in->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
 
-    le->metablob.add_primary_dentry(straydn, true, in);
+    le->metablob.add_primary_dentry(straydn, in, true);
   } else {
     // remote link.  update remote inode.
     mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_DIR, -1);
@@ -5256,7 +5256,7 @@ void Server::handle_slave_rmdir_prep(MDRequest *mdr)
   le->rollback = mdr->more()->rollback_bl;
 
   le->commit.add_dir_context(straydn->get_dir());
-  le->commit.add_primary_dentry(straydn, true, in);
+  le->commit.add_primary_dentry(straydn, in, true);
   // slave: no need to journal original dentry
 
   dout(10) << " noting renamed (unlinked) dir ino " << in->ino() << " in metablob" << dendl;
@@ -5386,7 +5386,7 @@ void Server::do_rmdir_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   mdlog->start_entry(le);
   
   le->commit.add_dir_context(dn->get_dir());
-  le->commit.add_primary_dentry(dn, true, in);
+  le->commit.add_primary_dentry(dn, in, true);
   // slave: no need to journal straydn
   
   dout(10) << " noting renamed (unlinked) dir ino " << in->ino() << " in metablob" << dendl;
@@ -6282,11 +6282,11 @@ void Server::_rename_prepare(MDRequest *mdr,
 	if (oldin->snaprealm || src_realm->get_newest_seq() + 1 > srcdn->first)
 	  oldin->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
 	straydn->first = MAX(oldin->first, next_dest_snap);
-	metablob->add_primary_dentry(straydn, true, oldin);
+	metablob->add_primary_dentry(straydn, oldin, true);
       } else if (force_journal_stray) {
 	dout(10) << " forced journaling straydn " << *straydn << dendl;
 	metablob->add_dir_context(straydn->get_dir());
-	metablob->add_primary_dentry(straydn, true, oldin);
+	metablob->add_primary_dentry(straydn, oldin, true);
       }
     } else if (destdnl->is_remote()) {
       if (oldin->is_auth()) {
@@ -6294,7 +6294,7 @@ void Server::_rename_prepare(MDRequest *mdr,
 	metablob->add_dir_context(oldin->get_projected_parent_dir());
 	mdcache->journal_cow_dentry(mdr, metablob, oldin->get_projected_parent_dn(),
 				    CEPH_NOSNAP, 0, destdnl);
-	metablob->add_primary_dentry(oldin->get_projected_parent_dn(), true, oldin);
+	metablob->add_primary_dentry(oldin->get_projected_parent_dn(), oldin, true);
       }
     }
   }
@@ -6312,7 +6312,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       if (srci->get_projected_parent_dn()->is_auth()) { // it's remote
 	metablob->add_dir_context(srci->get_projected_parent_dir());
         mdcache->journal_cow_dentry(mdr, metablob, srci->get_projected_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
-	metablob->add_primary_dentry(srci->get_projected_parent_dn(), true, srci);
+	metablob->add_primary_dentry(srci->get_projected_parent_dn(), srci, true);
       }
     } else {
       if (destdn->is_auth() && !destdnl->is_null())
@@ -6321,7 +6321,7 @@ void Server::_rename_prepare(MDRequest *mdr,
 	destdn->first = MAX(destdn->first, next_dest_snap);
 
       if (destdn->is_auth())
-        metablob->add_primary_dentry(destdn, true, destdnl->get_inode());
+        metablob->add_primary_dentry(destdn, destdnl->get_inode(), true);
     }
   } else if (srcdnl->is_primary()) {
     // project snap parent update?
@@ -6335,11 +6335,11 @@ void Server::_rename_prepare(MDRequest *mdr,
       destdn->first = MAX(destdn->first, next_dest_snap);
 
     if (destdn->is_auth())
-      metablob->add_primary_dentry(destdn, true, srci);
+      metablob->add_primary_dentry(destdn, srci, true);
     else if (force_journal_dest) {
       dout(10) << " forced journaling destdn " << *destdn << dendl;
       metablob->add_dir_context(destdn->get_dir());
-      metablob->add_primary_dentry(destdn, true, srci);
+      metablob->add_primary_dentry(destdn, srci, true);
       if (srcdn->is_auth() && srci->is_dir()) {
 	// journal new subtrees root dirfrags
 	list<CDir*> ls;
@@ -6361,7 +6361,7 @@ void Server::_rename_prepare(MDRequest *mdr,
     // both primary and NULL dentries. Because during journal replay, null dentry is
     // processed after primary dentry.
     if (srcdnl->is_primary() && !srci->is_dir() && !destdn->is_auth())
-      metablob->add_primary_dentry(srcdn, true, srci);
+      metablob->add_primary_dentry(srcdn, srci, true);
     metablob->add_null_dentry(srcdn, true);
   } else
     dout(10) << " NOT journaling srcdn " << *srcdn << dendl;
@@ -7073,7 +7073,7 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr,
   if (srcdn && (srcdn->authority().first == whoami || force_journal_src)) {
     le->commit.add_dir_context(srcdir);
     if (rollback.orig_src.ino)
-      le->commit.add_primary_dentry(srcdn, true);
+      le->commit.add_primary_dentry(srcdn, 0, true);
     else
       le->commit.add_remote_dentry(srcdn, true);
   }
@@ -7081,7 +7081,7 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr,
   if (force_journal_dest) {
     assert(rollback.orig_dest.ino);
     le->commit.add_dir_context(destdir);
-    le->commit.add_primary_dentry(destdn, true);
+    le->commit.add_primary_dentry(destdn, 0, true);
   }
 
   // slave: no need to journal straydn
@@ -7089,7 +7089,7 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr,
   if (target && target->authority().first == whoami) {
     assert(rollback.orig_dest.remote_ino);
     le->commit.add_dir_context(target->get_projected_parent_dir());
-    le->commit.add_primary_dentry(target->get_projected_parent_dn(), true, target);
+    le->commit.add_primary_dentry(target->get_projected_parent_dn(), target, true);
   }
 
   if (force_journal_dest) {
