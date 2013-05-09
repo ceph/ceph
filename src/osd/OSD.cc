@@ -170,6 +170,7 @@ OSDService::OSDService(OSD *osd) :
   scrubs_active(0),
   watch_lock("OSD::watch_lock"),
   watch_timer(osd->client_messenger->cct, watch_lock),
+  next_notif_id(0),
   backfill_request_lock("OSD::backfill_request_lock"),
   backfill_request_timer(g_ceph_context, backfill_request_lock, false),
   last_tid(0),
