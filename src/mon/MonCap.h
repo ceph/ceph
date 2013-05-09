@@ -45,11 +45,12 @@ ostream& operator<<(ostream& out, const MonCapSpec& s);
 
 struct MonCapMatch {
   std::string service;
+  std::string profile;
   std::string command;
   map<std::string,std::string> command_args;
 
   MonCapMatch() {}
-  MonCapMatch(std::string s) : service(s) {}
+  MonCapMatch(std::string s, std::string p) : service(s), profile(p) {}
   MonCapMatch(std::string c, map<std::string,std::string> m) : command(c), command_args(m) {}
 
   /**

@@ -197,9 +197,12 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
 
     // service
     service_match %= -spaces >> lit("service") >> (lit('=') | spaces) >> str
-      [_val = phoenix::construct<MonCapMatch>(_1)];
+      [_val = phoenix::construct<MonCapMatch>(_1, string())];
 
-    match = -(command_match || service_match);
+    profile_match %= -spaces >> lit("profile") >> (lit('=') | spaces) >> str
+      [_val = phoenix::construct<MonCapMatch>(string(), _1)];
+
+    match = -(command_match || service_match || profile_match);
 
     // rwxa := * | [r][w][x]
     rwxa =
@@ -241,6 +244,7 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
   qi::rule<Iterator, string()> command_name;
   qi::rule<Iterator, MonCapMatch()> command_match;
   qi::rule<Iterator, MonCapMatch()> service_match;
+  qi::rule<Iterator, MonCapMatch()> profile_match;
   qi::rule<Iterator, MonCapMatch()> match;
   qi::rule<Iterator, MonCapGrant()> grant;
   qi::rule<Iterator, std::vector<MonCapGrant>()> grants;

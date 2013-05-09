@@ -41,6 +41,8 @@ const char *parse_good[] = {
   " allow   rwx ",
   "allow service=foo x",
   "allow service=\"froo\" x",
+  "allow profile osd x",
+  "allow profile osd-bootstrap r",
   "allow command \"a b c\" x",
   "allow command abc x",
   "allow command abc with arg=foo x",
