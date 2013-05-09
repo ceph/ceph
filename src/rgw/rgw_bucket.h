@@ -79,6 +79,9 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWUserBuckets)
 
+class RGWMetadataManager;
+
+extern void rgw_bucket_init(RGWMetadataManager *mm);
 /**
  * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
  * Returns: 0 on success, -ERR# on failure.

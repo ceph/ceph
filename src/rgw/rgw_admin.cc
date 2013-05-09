@@ -830,6 +830,7 @@ int main(int argc, char **argv)
   }
 
   rgw_user_init(store->meta_mgr);
+  rgw_bucket_init(store->meta_mgr);
 
   StoreDestructor store_destructor(store);
 
