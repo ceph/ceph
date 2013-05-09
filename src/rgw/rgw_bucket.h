@@ -22,6 +22,8 @@ using namespace std;
 // define as static when RGWBucket implementation compete
 extern void rgw_get_buckets_obj(string& user_id, string& buckets_obj_id);
 
+extern int rgw_bucket_store_info(RGWRados *store, string& bucket_name, bufferlist& bl, bool exclusive,
+                                 map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker);
 
 /**
  * Store a list of the user's buckets, with associated functinos.

@@ -546,7 +546,7 @@ class RGWRados
 
   int update_placement_map();
   int select_bucket_placement(std::string& bucket_name, rgw_bucket& bucket);
-  int store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pattrs, bool exclusive);
+  int store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker, bool exclusive);
 
 protected:
   CephContext *cct;
@@ -945,8 +945,8 @@ public:
 
   int decode_policy(bufferlist& bl, ACLOwner *owner);
   int get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_t *master_ver, map<RGWObjCategory, RGWBucketStats>& stats);
-  virtual int get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info, map<string, bufferlist> *pattrs = NULL);
-  virtual int put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive, map<string, bufferlist> *pattrs);
+  virtual int get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info, RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs = NULL);
+  virtual int put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive, RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs);
 
   int cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid);
   int cls_obj_prepare_op(rgw_bucket& bucket, RGWModifyOp op, string& tag,
