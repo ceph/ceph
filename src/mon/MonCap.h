@@ -14,7 +14,18 @@ static const __u8 MON_CAP_W     = (1 << 2);      // write
 static const __u8 MON_CAP_X     = (1 << 3);      // execute
 static const __u8 MON_CAP_ANY   = 0xff;          // *
 
-typedef __u8 mon_rwxa_t;
+struct mon_rwxa_t {
+  __u8 val;
+
+  mon_rwxa_t(__u8 v = 0) : val(v) {}
+  mon_rwxa_t& operator=(__u8 v) {
+    val = v;
+    return *this;
+  }
+  operator __u8() const {
+    return val;
+  }
+};
 
 ostream& operator<<(ostream& out, mon_rwxa_t p);
 

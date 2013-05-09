@@ -104,7 +104,7 @@ bool MonCap::is_capable(const string& service,
   for (vector<MonCapGrant>::const_iterator p = grants.begin();
        p != grants.end(); ++p) {
     if (p->match.is_match(service, command, command_args)) {
-      allow |= p->spec.allow;
+      allow = allow | p->spec.allow;
       if ((op_may_read && !(allow & MON_CAP_R)) ||
 	  (op_may_write && !(allow & MON_CAP_W)) ||
 	  (op_may_exec && !(allow & MON_CAP_X)))
