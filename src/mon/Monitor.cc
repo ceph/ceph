@@ -2624,6 +2624,7 @@ void Monitor::handle_command(MMonCommand *m)
     } else if (string(args[0]) == "df") {
       if (args.size() > 1) {
         if (string(args[1]) != "detail") {
+	  delete jf;
           r = -EINVAL;
           rs = "usage: df [detail]";
           goto out;
