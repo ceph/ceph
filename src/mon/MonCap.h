@@ -29,29 +29,19 @@ struct mon_rwxa_t {
 
 ostream& operator<<(ostream& out, mon_rwxa_t p);
 
-struct MonCapSpec {
-  mon_rwxa_t allow;
-
-  MonCapSpec() : allow(0) {}
-  MonCapSpec(mon_rwxa_t v) : allow(v) {}
-
-  bool allow_all() const {
-    return allow == MON_CAP_ANY;
-  }
-};
-
-ostream& operator<<(ostream& out, const MonCapSpec& s);
-
-
-struct MonCapMatch {
+struct MonCapGrant {
   std::string service;
   std::string profile;
   std::string command;
   map<std::string,std::string> command_args;
 
-  MonCapMatch() {}
-  MonCapMatch(std::string s, std::string p) : service(s), profile(p) {}
-  MonCapMatch(std::string c, map<std::string,std::string> m) : command(c), command_args(m) {}
+  mon_rwxa_t allow;
+
+  MonCapGrant() : allow(0) {}
+  MonCapGrant(mon_rwxa_t a) : allow(a) {}
+  MonCapGrant(std::string s, mon_rwxa_t a) : service(s), allow(a) {}
+  MonCapGrant(std::string p) : profile(p), allow(0) {}
+  MonCapGrant(std::string c, map<std::string,std::string> m) : command(c), command_args(m), allow(0) {}
 
   /**
    * check if given request parameters match our constraints
@@ -64,21 +54,17 @@ struct MonCapMatch {
   bool is_match(const std::string& service,
 		const std::string& command,
 		const map<string,string>& command_args) const;
-};
 
-ostream& operator<<(ostream& out, const MonCapMatch& m);
-
-
-struct MonCapGrant {
-  MonCapMatch match;
-  MonCapSpec spec;
-
-  MonCapGrant() {}
-  MonCapGrant(MonCapMatch m, MonCapSpec s) : match(m), spec(s) {}
+  bool is_allow_all() const {
+    return
+      allow == MON_CAP_ANY &&
+      service.length() == 0 &&
+      profile.length() == 0 &&
+      command.length() == 0;
+  }
 };
 
 ostream& operator<<(ostream& out, const MonCapGrant& g);
-
 
 struct MonCap {
   string text;
@@ -91,7 +77,7 @@ struct MonCap {
     return text;
   }
 
-  bool allow_all() const;
+  bool is_allow_all() const;
   void set_allow_all();
   bool parse(const std::string& str, ostream *err=NULL);
 

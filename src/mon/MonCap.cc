@@ -40,23 +40,27 @@ ostream& operator<<(ostream& out, mon_rwxa_t p)
   return out;
 }
 
-ostream& operator<<(ostream& out, const MonCapSpec& s)
+ostream& operator<<(ostream& out, const MonCapGrant& m)
 {
-  return out << s.allow;
-}
-
-ostream& operator<<(ostream& out, const MonCapMatch& m)
-{
+  out << "allow";
   if (m.service.length()) {
-    out << "service " << m.service << " ";
+    out << " service " << m.service;
   }
   if (m.command.length()) {
-    out << "command " << m.command << " ";
+    out << " command " << m.command;
+    if (m.command_args.size()) {
+      out << " with " << m.command_args;
+    }
   }
+  if (m.profile.length()) {
+    out << " profile " << m.profile;
+  }
+  if (m.allow != 0)
+    out << " " << m.allow;
   return out;
 }
 
-bool MonCapMatch::is_match(const std::string& s, const std::string& c,
+bool MonCapGrant::is_match(const std::string& s, const std::string& c,
 			   const map<string,string>& c_args) const
 {
   if (service.length()) {
@@ -75,17 +79,10 @@ bool MonCapMatch::is_match(const std::string& s, const std::string& c,
   return true;
 }
 
-ostream& operator<<(ostream& out, const MonCapGrant& g)
+bool MonCap::is_allow_all() const
 {
-  return out << "grant(" << g.match << g.spec << ")";
-}
-
-
-bool MonCap::allow_all() const
-{
-  map<string,string> empty;
   for (vector<MonCapGrant>::const_iterator p = grants.begin(); p != grants.end(); ++p)
-    if (p->match.is_match(string(), string(), empty) && p->spec.allow_all())
+    if (p->is_allow_all())
       return true;
   return false;
 }
@@ -93,7 +90,7 @@ bool MonCap::allow_all() const
 void MonCap::set_allow_all()
 {
   grants.clear();
-  grants.push_back(MonCapGrant(MonCapMatch(), MonCapSpec(MON_CAP_ANY)));
+  grants.push_back(MonCapGrant(MON_CAP_ANY));
 }
 
 bool MonCap::is_capable(const string& service,
@@ -103,8 +100,8 @@ bool MonCap::is_capable(const string& service,
   mon_rwxa_t allow = 0;
   for (vector<MonCapGrant>::const_iterator p = grants.begin();
        p != grants.end(); ++p) {
-    if (p->match.is_match(service, command, command_args)) {
-      allow = allow | p->spec.allow;
+    if (p->is_match(service, command, command_args)) {
+      allow = allow | p->allow;
       if ((op_may_read && !(allow & MON_CAP_R)) ||
 	  (op_may_write && !(allow & MON_CAP_W)) ||
 	  (op_may_exec && !(allow & MON_CAP_X)))
@@ -189,42 +186,34 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
     kv_pair = str >> '=' >> str;
     kv_map %= kv_pair >> *(spaces >> kv_pair);
     command_match =
-      (-spaces >> lit("command") >> (lit('=') | spaces) >> str
+      (-spaces >> lit("allow") >> spaces >> lit("command") >> (lit('=') | spaces) >> str
        >> spaces >> lit("with") >> spaces >> kv_map)
-             [_val = phoenix::construct<MonCapMatch>(_1, _2)] ||
-      (-spaces >> lit("command") >> (lit('=') | spaces) >> str)
-             [_val = phoenix::construct<MonCapMatch>(_1, map<string,string>())];
+             [_val = phoenix::construct<MonCapGrant>(_1, _2)] ||
+      (-spaces >> lit("allow") >> spaces >> lit("command") >> (lit('=') | spaces) >> str)
+             [_val = phoenix::construct<MonCapGrant>(_1, map<string,string>())];
 
     // service
-    service_match %= -spaces >> lit("service") >> (lit('=') | spaces) >> str
-      [_val = phoenix::construct<MonCapMatch>(_1, string())];
+    service_match %= -spaces >> lit("allow") >> spaces >> lit("service") >> (lit('=') | spaces) >>
+      (str >> spaces >> rwxa)[_val = phoenix::construct<MonCapGrant>(_1, _2)];
 
-    profile_match %= -spaces >> lit("profile") >> (lit('=') | spaces) >> str
-      [_val = phoenix::construct<MonCapMatch>(string(), _1)];
+    profile_match = -spaces >> lit("allow") >> spaces >> lit("profile") >> (lit('=') | spaces) >> str
+      [_val = phoenix::construct<MonCapGrant>(_1)];
 
-    match = -(command_match || service_match || profile_match);
+    rwxa_match %= -spaces >> lit("allow") >> spaces >> rwxa   [_val = phoenix::construct<MonCapGrant>(_1)];
 
     // rwxa := * | [r][w][x]
     rwxa =
-      (spaces >> lit("*")[_val = MON_CAP_ANY]) |
+      (lit("*")[_val = MON_CAP_ANY]) |
       ( eps[_val = 0] >>
-	(
-	 spaces >>
-	 ( lit('r')[_val |= MON_CAP_R] ||
-	   lit('w')[_val |= MON_CAP_W] ||
-	   lit('x')[_val |= MON_CAP_X]
-	   )
-	 )
+	( lit('r')[_val |= MON_CAP_R] ||
+	  lit('w')[_val |= MON_CAP_W] ||
+	  lit('x')[_val |= MON_CAP_X]
+	  )
 	);
-	 
-    // capspec := * | rwx
-    capspec = rwxa                                          [_val = phoenix::construct<MonCapSpec>(_1)];
 
-    // grant := allow match capspec
-    grant = (*lit(' ') >> lit("allow") >>
-	     ((capspec >> match)       [_val = phoenix::construct<MonCapGrant>(_2, _1)] |
-	      (match >> capspec)       [_val = phoenix::construct<MonCapGrant>(_1, _2)]) >>
-	     *lit(' '));
+    // grant := allow ...
+    grant = profile_match | rwxa_match | command_match | service_match;
+
     // moncap := grant [grant ...]
     grants %= (grant % (*lit(' ') >> (lit(';') | lit(',')) >> *lit(' ')));
     moncap = grants  [_val = phoenix::construct<MonCap>(_1)]; 
@@ -238,14 +227,10 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
   qi::rule<Iterator, pair<string, string>()> kv_pair;
   qi::rule<Iterator, map<string, string>()> kv_map;
 
-  qi::rule<Iterator, MonCapSpec()> capspec;
-  qi::rule<Iterator, string()> pool_name;
-  qi::rule<Iterator, string()> service_name;
-  qi::rule<Iterator, string()> command_name;
-  qi::rule<Iterator, MonCapMatch()> command_match;
-  qi::rule<Iterator, MonCapMatch()> service_match;
-  qi::rule<Iterator, MonCapMatch()> profile_match;
-  qi::rule<Iterator, MonCapMatch()> match;
+  qi::rule<Iterator, MonCapGrant()> rwxa_match;
+  qi::rule<Iterator, MonCapGrant()> command_match;
+  qi::rule<Iterator, MonCapGrant()> service_match;
+  qi::rule<Iterator, MonCapGrant()> profile_match;
   qi::rule<Iterator, MonCapGrant()> grant;
   qi::rule<Iterator, std::vector<MonCapGrant>()> grants;
   qi::rule<Iterator, MonCap()> moncap;
@@ -258,9 +243,9 @@ bool MonCap::parse(const string& str, ostream *err)
   string::iterator end = text.end();
 
   MonCapParser<string::iterator> g;
-  //MonCapMatch mm;
-  //bool r = qi::phrase_parse(iter, end, g, ascii::space, mm);
   bool r = qi::phrase_parse(iter, end, g, ascii::space, *this);
+  //MonCapGrant foo;
+  //bool r = qi::phrase_parse(iter, end, g, ascii::space, foo);
   if (r && iter == end)
     return true;
 

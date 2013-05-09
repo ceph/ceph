@@ -31,7 +31,6 @@ const char *parse_good[] = {
   "command foo key=value key2=value2",
   "command \"foo bar\" key=value key2=value2",
   */
-
   "allow *",
   "allow r",
   "allow rwx",
@@ -41,13 +40,14 @@ const char *parse_good[] = {
   " allow   rwx ",
   "allow service=foo x",
   "allow service=\"froo\" x",
-  "allow profile osd x",
-  "allow profile osd-bootstrap r",
-  "allow command \"a b c\" x",
-  "allow command abc x",
-  "allow command abc with arg=foo x",
-  "allow command abc with arg=foo arg2=bar x",
-  "allow command abc with arg=foo arg2=bar x",
+  "allow profile osd",
+  "allow profile osd-bootstrap",
+  "allow profile \"mds-bootstrap\", allow *",
+  "allow command \"a b c\"",
+  "allow command abc",
+  "allow command abc with arg=foo",
+  "allow command abc with arg=foo arg2=bar",
+  "allow command abc with arg=foo arg2=bar",
   "allow service foo x",
   "allow service foo x; allow service bar x",
   "allow service foo w ;allow service bar x",
@@ -56,7 +56,7 @@ const char *parse_good[] = {
   "allow service foo_foo r, allow service bar r",
   "allow service foo-foo r, allow service bar r",
   "allow service \" foo \" w, allow service bar r",
-  "allow command abc with arg=foo arg2=bar x, allow service foo r",
+  "allow command abc with arg=foo arg2=bar, allow service foo r",
 #if 0  
   "allow r pool foo ",
   "allow r pool=foo",
@@ -96,11 +96,17 @@ TEST(MonCap, ParseGood) {
     MonCap cap;
     std::cout << "Testing good input: '" << str << "'" << std::endl;
     ASSERT_TRUE(cap.parse(str, &cout));
+    std::cout << "                                         -> " << cap << std::endl;
   }
 }
 
 const char *parse_bad[] = {
-  "allow r poolfoo",
+  "allow*",
+  "foo allow *",
+  "allow r foo",
+  "allow profile foo rwx",
+  "allow service bar",
+  "allow command baz x",
   "allow r w",
   "ALLOW r",
   "allow rwx,",
@@ -111,10 +117,6 @@ const char *parse_bad[] = {
   "allow rwx pool 'weird name''",
   "allow rwx object_prefix \"beforepool\" pool weird",
   "allow rwx auid 123 pool asdf",
-  "allow xrwx pool foo,, allow r pool bar",
-  ";allow rwx pool foo rwx ; allow r pool bar",
-  "allow rwx pool foo ;allow r pool bar gibberish",
-  "allow command asdf",
   0
 };
 
@@ -127,44 +129,49 @@ TEST(MonCap, ParseBad) {
   }
 }
 
-#if 0
-
 TEST(MonCap, AllowAll) {
   MonCap cap;
-  ASSERT_FALSE(cap.allow_all());
+  ASSERT_FALSE(cap.is_allow_all());
 
   ASSERT_TRUE(cap.parse("allow r", NULL));
-  ASSERT_FALSE(cap.allow_all());
+  ASSERT_FALSE(cap.is_allow_all());
   cap.grants.clear();
 
   ASSERT_TRUE(cap.parse("allow w", NULL));
-  ASSERT_FALSE(cap.allow_all());
+  ASSERT_FALSE(cap.is_allow_all());
   cap.grants.clear();
 
   ASSERT_TRUE(cap.parse("allow x", NULL));
-  ASSERT_FALSE(cap.allow_all());
+  ASSERT_FALSE(cap.is_allow_all());
   cap.grants.clear();
 
   ASSERT_TRUE(cap.parse("allow rwx", NULL));
-  ASSERT_FALSE(cap.allow_all());
+  ASSERT_FALSE(cap.is_allow_all());
   cap.grants.clear();
 
   ASSERT_TRUE(cap.parse("allow rw", NULL));
-  ASSERT_FALSE(cap.allow_all());
+  ASSERT_FALSE(cap.is_allow_all());
   cap.grants.clear();
 
   ASSERT_TRUE(cap.parse("allow rx", NULL));
-  ASSERT_FALSE(cap.allow_all());
+  ASSERT_FALSE(cap.is_allow_all());
   cap.grants.clear();
 
   ASSERT_TRUE(cap.parse("allow wx", NULL));
-  ASSERT_FALSE(cap.allow_all());
+  ASSERT_FALSE(cap.is_allow_all());
   cap.grants.clear();
 
   ASSERT_TRUE(cap.parse("allow *", NULL));
-  ASSERT_TRUE(cap.allow_all());
-  ASSERT_TRUE(cap.is_capable("foo", 0, "asdf", true, true, true, true));
+  ASSERT_TRUE(cap.is_allow_all());
+  ASSERT_TRUE(cap.is_capable("foo", "asdf", map<string,string>(), true, true, true));
+
+  MonCap cap2;
+  ASSERT_FALSE(cap2.is_allow_all());
+  cap2.set_allow_all();
+  ASSERT_TRUE(cap2.is_allow_all());
 }
+
+#if 0
 
 TEST(MonCap, AllowPool) {
   MonCap cap;

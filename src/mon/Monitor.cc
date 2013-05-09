@@ -2133,7 +2133,7 @@ void Monitor::finish_election()
 
 bool Monitor::_allowed_command(MonSession *s, const vector<string>& cmd)
 {
-  if (s->caps.allow_all())
+  if (s->caps.is_allow_all())
     return true;
 
   // REIMPLEMENT ME
@@ -2603,7 +2603,7 @@ void Monitor::handle_command(MMonCommand *m)
 
   access_cmd = _allowed_command(session, fullcmd);
   access_r = (session->is_capable("mon", MON_CAP_R) || access_cmd);
-  access_all = (session->caps.allow_all() || access_cmd);
+  access_all = (session->caps.is_allow_all() || access_cmd);
 
   if (module == "mds") {
     mdsmon()->dispatch(m);
@@ -3245,7 +3245,7 @@ bool Monitor::_ms_dispatch(Message *m)
 	//give it monitor caps; the peer type has been authenticated
 	reuse_caps = false;
 	dout(5) << "setting monitor caps on this connection" << dendl;
-	if (!s->caps.allow_all()) //but no need to repeatedly copy
+	if (!s->caps.is_allow_all()) //but no need to repeatedly copy
 	  s->caps = *mon_caps;
       }
       if (reuse_caps)
