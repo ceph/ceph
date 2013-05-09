@@ -135,6 +135,12 @@ int rgw_remove_user_bucket_info(RGWRados *store, string user_id, rgw_bucket& buc
   return ret;
 }
 
+int rgw_bucket_store_info(RGWRados *store, string& bucket_name, bufferlist& bl, bool exclusive,
+                          map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker) {
+  return store->meta_mgr->put_entry(bucket_meta_handler, bucket_name, bl, exclusive, objv_tracker, pattrs);
+}
+
+
 int RGWBucket::create_bucket(string bucket_str, string& user_id, string& display_name)
 {
   RGWAccessControlPolicy policy, old_policy;
@@ -150,7 +156,9 @@ int RGWBucket::create_bucket(string bucket_str, string& user_id, string& display
   policy.create_default(user_id, display_name);
   policy.encode(aclbl);
 
-  ret = store->get_bucket_info(NULL, bucket_str, bucket_info);
+  RGWObjVersionTracker objv_tracker;
+
+  ret = store->get_bucket_info(NULL, bucket_str, bucket_info, &objv_tracker);
   if (ret < 0)
     return ret;
 
@@ -218,7 +226,8 @@ void check_bad_user_bucket_mapping(RGWRados *store, const string& user_id, bool 
       rgw_bucket& bucket = bucket_ent.bucket;
 
       RGWBucketInfo bucket_info;
-      int r = store->get_bucket_info(NULL, bucket.name, bucket_info);
+      RGWObjVersionTracker objv_tracker;
+      int r = store->get_bucket_info(NULL, bucket.name, bucket_info, &objv_tracker);
       if (r < 0) {
         ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket << dendl;
         continue;
@@ -355,7 +364,8 @@ int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state)
     return -EINVAL;
 
   if (!bucket_name.empty()) {
-    int r = store->get_bucket_info(NULL, bucket_name, bucket_info);
+    RGWObjVersionTracker objv_tracker;
+    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, &objv_tracker);
     if (r < 0) {
       ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return r;
@@ -839,7 +849,8 @@ static int bucket_stats(RGWRados *store, std::string&  bucket_name, Formatter *f
   rgw_bucket bucket;
   map<RGWObjCategory, RGWBucketStats> stats;
 
-  int r = store->get_bucket_info(NULL, bucket_name, bucket_info);
+  RGWObjVersionTracker objv_tracker;
+  int r = store->get_bucket_info(NULL, bucket_name, bucket_info, &objv_tracker);
   if (r < 0)
     return r;
 
@@ -1266,9 +1277,9 @@ public:
 
 class RGWBucketMetadataHandler : public RGWMetadataHandler {
 
-  int init_bucket(RGWRados *store, string& bucket_name, rgw_bucket& bucket) {
+  int init_bucket(RGWRados *store, string& bucket_name, rgw_bucket& bucket, RGWObjVersionTracker *objv_tracker) {
     RGWBucketInfo bucket_info;
-    int r = store->get_bucket_info(NULL, bucket_name, bucket_info);
+    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, objv_tracker);
     if (r < 0) {
       cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
       return r;
@@ -1286,8 +1297,7 @@ public:
 
     RGWObjVersionTracker objv_tracker;
 
-
-    int ret = store->get_bucket_info(NULL, entry, bci.info, &bci.attrs);
+    int ret = store->get_bucket_info(NULL, entry, bci.info, &objv_tracker, &bci.attrs);
     if (ret < 0)
       return ret;
 
@@ -1303,7 +1313,7 @@ public:
 
     decode_json_obj(bci, obj);
 
-    int ret = store->put_bucket_info(entry, bci.info, false, &bci.attrs);
+    int ret = store->put_bucket_info(entry, bci.info, false, &objv_tracker, &bci.attrs);
     if (ret < 0)
       return ret;
 
@@ -1318,7 +1328,7 @@ public:
   int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) {
 #warning FIXME: use objv_tracker
     rgw_bucket bucket;
-    int r = init_bucket(store, entry, bucket);
+    int r = init_bucket(store, entry, bucket, &objv_tracker);
     if (r < 0) {
       cerr << "could not init bucket=" << entry << std::endl;
       return r;
