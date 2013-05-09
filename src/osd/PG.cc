@@ -2565,6 +2565,7 @@ void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
     objects.clear();
   }
   ObjectStore::Transaction t;
+  snap_collections.clear();
   dirty_info = true;
   write_if_dirty(t);
   int r = store->apply_transaction(t);
