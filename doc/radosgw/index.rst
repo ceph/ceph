@@ -41,7 +41,7 @@ one API and retrieve it with the other.
 	Purging Temp Data <purge-temp>
 	S3 API <s3>
 	Swift API <swift>
-	Admin API <admin/index>
+	Admin Ops API <adminops>
 	troubleshooting
 	Manpage radosgw <../../man/8/radosgw>
 	Manpage radosgw-admin <../../man/8/radosgw-admin>
