@@ -1451,36 +1451,36 @@ protected:
   } rep_scrub_wq;
 
   // -- removing --
-  struct RemoveWQ : public ThreadPool::WorkQueue<boost::tuple<coll_t, SequencerRef, DeletingStateRef> > {
+  struct RemoveWQ :
+    public ThreadPool::WorkQueueVal<pair<PGRef, DeletingStateRef> > {
     ObjectStore *&store;
-    list<boost::tuple<coll_t, SequencerRef, DeletingStateRef> *> remove_queue;
+    list<pair<PGRef, DeletingStateRef> > remove_queue;
     RemoveWQ(ObjectStore *&o, time_t ti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<boost::tuple<coll_t, SequencerRef, DeletingStateRef> >("OSD::RemoveWQ", ti, 0, tp),
+      : ThreadPool::WorkQueueVal<pair<PGRef, DeletingStateRef> >(
+	"OSD::RemoveWQ", ti, 0, tp),
 	store(o) {}
 
     bool _empty() {
       return remove_queue.empty();
     }
-    bool _enqueue(boost::tuple<coll_t, SequencerRef, DeletingStateRef> *item) {
+    void _enqueue(pair<PGRef, DeletingStateRef> item) {
       remove_queue.push_back(item);
-      return true;
     }
-    void _dequeue(boost::tuple<coll_t, SequencerRef, DeletingStateRef> *item) {
+    void _enqueue_front(pair<PGRef, DeletingStateRef> item) {
+      remove_queue.push_front(item);
+    }
+    bool _dequeue(pair<PGRef, DeletingStateRef> item) {
       assert(0);
     }
-    boost::tuple<coll_t, SequencerRef, DeletingStateRef> *_dequeue() {
-      if (remove_queue.empty())
-	return NULL;
-      boost::tuple<coll_t, SequencerRef, DeletingStateRef> *item = remove_queue.front();
+    pair<PGRef, DeletingStateRef> _dequeue() {
+      assert(!remove_queue.empty());
+      pair<PGRef, DeletingStateRef> item = remove_queue.front();
       remove_queue.pop_front();
       return item;
     }
-    void _process(boost::tuple<coll_t, SequencerRef, DeletingStateRef> *item);
+    void _process(pair<PGRef, DeletingStateRef>);
     void _clear() {
-      while (!remove_queue.empty()) {
-	delete remove_queue.front();
-	remove_queue.pop_front();
-      }
+      remove_queue.clear();
     }
   } remove_wq;
   uint64_t next_removal_seq;
