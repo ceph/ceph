@@ -333,16 +333,29 @@ namespace librbd {
   {
     uint64_t numseg = ictx->get_num_objects();
     uint64_t bsize = ictx->get_object_size();
+    int r;
+    CephContext *cct = ictx->cct;
+    SimpleThrottle throttle(cct->_conf->rbd_concurrent_management_ops, true);
 
     for (uint64_t i = 0; i < numseg; i++) {
-      int r;
       string oid = ictx->get_object_name(i);
-      r = ictx->data_ctx.selfmanaged_snap_rollback(oid, snap_id);
-      ldout(ictx->cct, 10) << "selfmanaged_snap_rollback on " << oid << " to "
-			   << snap_id << " returned " << r << dendl;
+      throttle.start_op();
+      Context *req_comp = new C_SimpleThrottle(&throttle);
+      librados::AioCompletion *rados_completion =
+	librados::Rados::aio_create_completion(req_comp, NULL, rados_ctx_cb);
+      librados::ObjectWriteOperation op;
+      op.selfmanaged_snap_rollback(snap_id);
+      ictx->data_ctx.aio_operate(oid, rados_completion, &op);
+      ldout(cct, 10) << "scheduling selfmanaged_snap_rollback on "
+		     << oid << " to " << snap_id << dendl;
       prog_ctx.update_progress(i * bsize, numseg * bsize);
-      if (r < 0 && r != -ENOENT)
-	return r;
+    }
+
+    r = throttle.wait_for_ret();
+    if (r < 0) {
+      ldout(cct, 10) << "failed to rollback at least one object: "
+		     << cpp_strerror(r) << dendl;
+      return r;
     }
     return 0;
   }
