@@ -399,24 +399,26 @@ static int read_input(const string& infile, bufferlist& bl)
 
 #define READ_CHUNK 8196
   int r;
+  int err;
 
   do {
     char buf[READ_CHUNK];
 
     r = read(fd, buf, READ_CHUNK);
     if (r < 0) {
-      int err = -errno;
+      err = -errno;
       cerr << "error while reading input" << std::endl;
-      return err;
+      goto out;
     }
     bl.append(buf, r);
   } while (r > 0);
+  err = 0;
 
+ out:
   if (infile.size()) {
     close(fd);
   }
-
-  return 0;
+  return err;
 }
 
 template <class T>
