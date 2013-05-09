@@ -1301,7 +1301,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     if (fd < 0) {
       r = -errno;
       cerr << "rbd: error opening " << path << std::endl;
-      return r;
+      goto done2;
     }
 
     r = fstat(fd, &stat_buf);
@@ -1394,7 +1394,8 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
       pc.finish();
     close(fd);
   }
-
+ done2:
+  delete[] p;
   return r;
 }
 
