@@ -134,6 +134,7 @@ void decode_json_obj(long& val, JSONObj *obj);
 void decode_json_obj(unsigned& val, JSONObj *obj);
 void decode_json_obj(int& val, JSONObj *obj);
 void decode_json_obj(bool& val, JSONObj *obj);
+void decode_json_obj(bufferlist& val, JSONObj *obj);
 
 template<class T>
 void decode_json_obj(list<T>& l, JSONObj *obj)
@@ -145,6 +146,21 @@ void decode_json_obj(list<T>& l, JSONObj *obj)
     JSONObj *o = *iter;
     decode_json_obj(val, o);
     l.push_back(val);
+  }
+}
+
+template<class K, class V>
+void decode_json_obj(map<K, V>& m, JSONObj *obj)
+{
+  JSONObjIter iter = obj->find_first();
+
+  for (; !iter.end(); ++iter) {
+    K key;
+    V val;
+    JSONObj *o = *iter;
+    JSONDecoder::decode_json("key", key, o);
+    JSONDecoder::decode_json("val", val, o);
+    m[key] = val;
   }
 }
 
@@ -246,6 +262,19 @@ void encode_json(const char *name, const bufferlist& bl, Formatter *f);
 void encode_json(const char *name, long long val, Formatter *f);
 void encode_json(const char *name, long long unsigned val, Formatter *f);
 
+template<class K, class V>
+static void encode_json(const char *name, const std::map<K, V>& m, Formatter *f)
+{
+  f->open_array_section(name);
+  for (typename std::map<K, V>::const_iterator i = m.begin(); i != m.end(); ++i) {
+    f->open_object_section("entry");
+    encode_json("key", i->first, f);
+    encode_json("val", i->second, f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
 template<class T>
 static void encode_json(const char *name, const std::list<T>& l, Formatter *f)
 {
@@ -257,7 +286,7 @@ static void encode_json(const char *name, const std::list<T>& l, Formatter *f)
 }
 
 template<class K, class V>
-void encode_json(const char *name, const map<K, V>& m, Formatter *f)
+void encode_json_map(const char *name, const map<K, V>& m, Formatter *f)
 {
   f->open_array_section(name);
   typename map<K,V>::const_iterator iter;
@@ -266,6 +295,7 @@ void encode_json(const char *name, const map<K, V>& m, Formatter *f)
   }
   f->close_section(); 
 }
+
 
 template<class K, class V>
 void encode_json_map(const char *name, const char *index_name,

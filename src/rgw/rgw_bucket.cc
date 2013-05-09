@@ -23,6 +23,8 @@
 
 using namespace std;
 
+static RGWMetadataHandler *bucket_meta_handler = NULL;
+
 // define as static when RGWBucket implementation compete
 void rgw_get_buckets_obj(string& user_id, string& buckets_obj_id)
 {
@@ -1235,3 +1237,151 @@ void RGWDataChangesLog::ChangesRenewThread::stop()
   cond.Signal();
 }
 
+struct RGWBucketCompleteInfo {
+  RGWBucketInfo info;
+  map<string, bufferlist> attrs;
+
+ void dump(Formatter *f) const {
+    encode_json("bucket_info", info, f);
+    encode_json("attrs", attrs, f);
+  }
+
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("bucket_info", info, obj);
+    JSONDecoder::decode_json("attrs", attrs, obj);
+  }
+};
+
+class RGWBucketMetadataObject : public RGWMetadataObject {
+  RGWBucketCompleteInfo info;
+public:
+  RGWBucketMetadataObject(RGWBucketCompleteInfo& i, obj_version& v) : info(i) {
+    objv = v;
+  }
+
+  void dump(Formatter *f) const {
+    info.dump(f);
+  }
+};
+
+class RGWBucketMetadataHandler : public RGWMetadataHandler {
+
+  int init_bucket(RGWRados *store, string& bucket_name, rgw_bucket& bucket) {
+    RGWBucketInfo bucket_info;
+    int r = store->get_bucket_info(NULL, bucket_name, bucket_info);
+    if (r < 0) {
+      cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
+      return r;
+    }
+    bucket = bucket_info.bucket;
+
+    return 0;
+  }
+
+public:
+  string get_type() { return "bucket"; }
+
+  int get(RGWRados *store, string& entry, RGWMetadataObject **obj) {
+    RGWBucketCompleteInfo bci;
+
+    RGWObjVersionTracker objv_tracker;
+
+
+    int ret = store->get_bucket_info(NULL, entry, bci.info, &bci.attrs);
+    if (ret < 0)
+      return ret;
+
+    RGWBucketMetadataObject *mdo = new RGWBucketMetadataObject(bci, objv_tracker.read_version);
+
+    *obj = mdo;
+
+    return 0;
+  }
+
+  int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, JSONObj *obj) {
+    RGWBucketCompleteInfo bci;
+
+    decode_json_obj(bci, obj);
+
+    int ret = store->put_bucket_info(entry, bci.info, false, &bci.attrs);
+    if (ret < 0)
+      return ret;
+
+    return 0;
+  }
+
+  struct list_keys_info {
+    RGWRados *store;
+    RGWListRawObjsCtx ctx;
+  };
+
+  int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) {
+#warning FIXME: use objv_tracker
+    rgw_bucket bucket;
+    int r = init_bucket(store, entry, bucket);
+    if (r < 0) {
+      cerr << "could not init bucket=" << entry << std::endl;
+      return r;
+    }
+
+    return store->delete_bucket(bucket);
+  }
+
+  int put_entry(RGWRados *store, string& key, bufferlist& bl, bool exclusive,
+                RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs) {
+    return rgw_put_system_obj(store, store->zone.domain_root, key,
+                              bl.c_str(), bl.length(), exclusive,
+                              objv_tracker, pattrs);
+  }
+
+  int list_keys_init(RGWRados *store, void **phandle)
+  {
+    list_keys_info *info = new list_keys_info;
+
+    info->store = store;
+
+    *phandle = (void *)info;
+
+    return 0;
+  }
+
+  int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) {
+    list_keys_info *info = (list_keys_info *)handle;
+
+    string no_filter;
+
+    keys.clear();
+
+    RGWRados *store = info->store;
+
+    list<string> unfiltered_keys;
+
+    int ret = store->list_raw_objects(store->zone.domain_root, no_filter,
+                                      max, info->ctx, unfiltered_keys, truncated);
+    if (ret < 0)
+      return ret;
+
+    // now filter out the system entries
+    list<string>::iterator iter;
+    for (iter = unfiltered_keys.begin(); iter != unfiltered_keys.end(); ++iter) {
+      string& k = *iter;
+
+      if (k[0] != '.') {
+        keys.push_back(k);
+      }
+    }
+
+    return 0;
+  }
+
+  void list_keys_complete(void *handle) {
+    list_keys_info *info = (list_keys_info *)handle;
+    delete info;
+  }
+};
+
+void rgw_bucket_init(RGWMetadataManager *mm)
+{
+  bucket_meta_handler = new RGWBucketMetadataHandler;
+  mm->register_handler(bucket_meta_handler);
+}
