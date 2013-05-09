@@ -192,25 +192,28 @@ static int do_get(IoCtx& io_ctx, const char *objname, const char *outfile, unsig
   }
 
   uint64_t offset = 0;
+  int ret;
   while (true) {
     bufferlist outdata;
-    int ret = io_ctx.read(oid, outdata, op_size, offset);
+    ret = io_ctx.read(oid, outdata, op_size, offset);
     if (ret <= 0) {
-      return ret;
+      goto out;
     }
     ret = outdata.write_fd(fd);
     if (ret < 0) {
       cerr << "error writing to file: " << cpp_strerror(ret) << std::endl;
-      return ret;
+      goto out;
     }
     if (outdata.length() < op_size)
       break;
     offset += outdata.length();
   }
+  ret = 0;
 
+ out:
   if (fd != 1)
     TEMP_FAILURE_RETRY(::close(fd));
-  return 0;
+  return ret;
 }
 
 static int do_copy(IoCtx& io_ctx, const char *objname, IoCtx& target_ctx, const char *target_obj)
