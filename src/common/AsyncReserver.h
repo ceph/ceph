@@ -53,7 +53,6 @@ public:
 
   void set_max(unsigned max) {
     Mutex::Locker l(lock);
-    assert(max > 0);
     max_allowed = max;
     do_queues();
   }
