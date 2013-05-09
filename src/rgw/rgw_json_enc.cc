@@ -391,11 +391,25 @@ void rgw_bucket::dump(Formatter *f) const
   encode_json("bucket_id", bucket_id, f);
 }
 
+void rgw_bucket::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("pool", data_pool, obj);
+  JSONDecoder::decode_json("index_pool", index_pool, obj);
+  JSONDecoder::decode_json("marker", marker, obj);
+  JSONDecoder::decode_json("bucket_id", bucket_id, obj);
+}
+
 void RGWBucketInfo::dump(Formatter *f) const
 {
   encode_json("bucket", bucket, f);
   encode_json("owner", owner, f);
   encode_json("flags", flags, f);
+}
+
+void RGWBucketInfo::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("bucket", bucket, obj);
+  JSONDecoder::decode_json("owner", owner, obj);
+  JSONDecoder::decode_json("flags", flags, obj);
 }
 
 void RGWObjEnt::dump(Formatter *f) const

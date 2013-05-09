@@ -537,6 +537,7 @@ struct rgw_bucket {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bucket*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket)
@@ -580,6 +581,8 @@ struct RGWBucketInfo
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<RGWBucketInfo*>& o);
+
+  void decode_json(JSONObj *obj);
 
   RGWBucketInfo() : flags(0) {}
 };

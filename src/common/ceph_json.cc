@@ -422,6 +422,19 @@ void decode_json_obj(bool& val, JSONObj *obj)
   val = (bool)i;
 }
 
+void decode_json_obj(bufferlist& val, JSONObj *obj)
+{
+  string s = obj->get_data();
+
+  bufferlist bl;
+  bl.append(s.c_str(), s.size());
+  try {
+    val.decode_base64(bl);
+  } catch (buffer::error& err) {
+   throw JSONDecoder::err("failed to decode base64");
+  }
+}
+
 void encode_json(const char *name, const string& val, Formatter *f)
 {
   f->dump_string(name, val);
@@ -480,6 +493,14 @@ void encode_json(const char *name, const utime_t& val, Formatter *f)
 
 void encode_json(const char *name, const bufferlist& bl, Formatter *f)
 {
-  encode_json(name, bl.length(), f);
+  /* need to copy data from bl, as it is const bufferlist */
+  bufferlist src = bl;
+
+  bufferlist b64;
+  src.encode_base64(b64);
+
+  string s(b64.c_str(), b64.length());
+
+  encode_json(name, s, f);
 }
 
