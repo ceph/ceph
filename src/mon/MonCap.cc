@@ -187,9 +187,13 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
 
     // command := command[=]cmd [k1=v1 k2=v2 ...]
     kv_pair = str >> '=' >> str;
-    kv_map = kv_pair >> *(spaces >> kv_pair);
-    command_match = -spaces >> lit("command") >> (lit('=') | spaces) >> str
-			    >> -(spaces >> lit("with") >> spaces >> kv_map);
+    kv_map %= kv_pair >> *(spaces >> kv_pair);
+    command_match =
+      (-spaces >> lit("command") >> (lit('=') | spaces) >> str
+       >> spaces >> lit("with") >> spaces >> kv_map)
+             [_val = phoenix::construct<MonCapMatch>(_1, _2)] ||
+      (-spaces >> lit("command") >> (lit('=') | spaces) >> str)
+             [_val = phoenix::construct<MonCapMatch>(_1, map<string,string>())];
 
     // service
     service_match %= -spaces >> lit("service") >> (lit('=') | spaces) >> str
