@@ -2780,27 +2780,20 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 }
 
 // =========================================
-void OSD::RemoveWQ::_process(boost::tuple<coll_t, SequencerRef, DeletingStateRef> *item)
-{
-  OSDriver driver(
-    store,
-    coll_t(),
-    make_snapmapper_oid());
-  SnapMapper mapper(&driver, 0, 0, 0);
-  coll_t &coll = item->get<0>();
-  ObjectStore::Sequencer *osr = item->get<1>().get();
-  if (osr)
-    osr->flush();
+void remove_dir(
+  ObjectStore *store, SnapMapper *mapper,
+  OSDriver *osdriver,
+  ObjectStore::Sequencer *osr,
+  coll_t coll, DeletingStateRef dstate) {
   vector<hobject_t> olist;
   store->collection_list(coll, olist);
-  //*_dout << "OSD::RemoveWQ::_process removing coll " << coll << std::endl;
   int64_t num = 0;
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   for (vector<hobject_t>::iterator i = olist.begin();
        i != olist.end();
        ++i, ++num) {
-    OSDriver::OSTransaction _t(driver.get_transaction(t));
-    int r = mapper.remove_oid(*i, &_t);
+    OSDriver::OSTransaction _t(osdriver->get_transaction(t));
+    int r = mapper->remove_oid(*i, &_t);
     if (r != 0 && r != -ENOENT) {
       assert(0);
     }
@@ -2812,10 +2805,37 @@ void OSD::RemoveWQ::_process(boost::tuple<coll_t, SequencerRef, DeletingStateRef
       num = 0;
     }
   }
-  t->remove_collection(coll);
   store->apply_transaction(*t);
   delete t;
-  delete item;
+}
+
+void OSD::RemoveWQ::_process(pair<PGRef, DeletingStateRef> item)
+{
+  PGRef pg(item.first);
+  SnapMapper &mapper = pg->snap_mapper;
+  OSDriver &driver = pg->osdriver;
+  coll_t coll = coll_t(pg->info.pgid);
+  pg->osr->flush();
+
+  if (pg->have_temp_coll())
+    remove_dir(
+      store, &mapper, &driver, pg->osr.get(), pg->get_temp_coll(), item.second);
+  remove_dir(store, &mapper, &driver, pg->osr.get(), coll, item.second);
+
+  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  PG::clear_info_log(
+    pg->info.pgid,
+    OSD::make_infos_oid(),
+    pg->log_oid,
+    t);
+  if (pg->have_temp_coll())
+    t->remove_collection(pg->get_temp_coll());
+  t->remove_collection(coll);
+  store->queue_transaction(
+    pg->osr.get(),
+    t,
+    new ObjectStore::C_DeleteTransactionHolder<pair<PGRef, DeletingStateRef> >(
+      t, item));
 }
 // =========================================
 
@@ -5935,14 +5955,8 @@ void OSD::_remove_pg(PG *pg)
 
   service.cancel_pending_splits_for_parent(pg->info.pgid);
 
-  coll_t to_remove = get_next_removal_coll(pg->info.pgid);
-  removals.push_back(to_remove);
-  rmt->collection_rename(coll_t(pg->info.pgid), to_remove);
-  if (pg->have_temp_coll()) {
-    to_remove = get_next_removal_coll(pg->info.pgid);
-    removals.push_back(to_remove);
-    rmt->collection_rename(pg->get_temp_coll(), to_remove);
-  }
+  DeletingStateRef deleting = service.deleting_pgs.lookup_or_create(pg->info.pgid);
+  remove_wq.queue(make_pair(PGRef(pg), deleting));
 
   store->queue_transaction(
     pg->osr.get(), rmt,
@@ -5950,15 +5964,6 @@ void OSD::_remove_pg(PG *pg)
       SequencerRef>(rmt, pg->osr),
     new ContainerContext<
       SequencerRef>(pg->osr));
-
-  DeletingStateRef deleting = service.deleting_pgs.lookup_or_create(pg->info.pgid);
-  for (vector<coll_t>::iterator i = removals.begin();
-       i != removals.end();
-       ++i) {
-    remove_wq.queue(new boost::tuple<coll_t, SequencerRef, DeletingStateRef>(
-		      *i, pg->osr, deleting));
-  }
-
 
   // remove from map
   pg_map.erase(pg->info.pgid);
