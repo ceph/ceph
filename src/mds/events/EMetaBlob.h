@@ -414,11 +414,11 @@ private:
   }
 
   // return remote pointer to to-be-journaled inode
-  void add_primary_dentry(CDentry *dn, bool dirty, CInode *in=0) {
+  void add_primary_dentry(CDentry *dn, CInode *in, bool dirty) {
     add_primary_dentry(add_dir(dn->get_dir(), false),
-		       dn, dirty, in);
+		       dn, in, dirty);
   }
-  void add_primary_dentry(dirlump& lump, CDentry *dn, bool dirty, CInode *in=0) {
+  void add_primary_dentry(dirlump& lump, CDentry *dn, CInode *in, bool dirty) {
     if (!in) 
       in = dn->get_projected_linkage()->get_inode();
 
@@ -458,7 +458,7 @@ private:
       return;
     }
     assert(dn->get_projected_linkage()->is_primary());
-    add_primary_dentry(dn, dirty);
+    add_primary_dentry(dn, 0, dirty);
   }
 
   void add_root(bool dirty, CInode *in, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
