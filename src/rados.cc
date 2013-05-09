@@ -412,6 +412,7 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
   ret = 0;
  out:
   TEMP_FAILURE_RETRY(close(fd));
+  delete[] buf;
   return ret;
 }
 
