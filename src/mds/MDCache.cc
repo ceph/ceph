@@ -10869,7 +10869,7 @@ void MDCache::dump_cache(const char *fn)
       string t = tt.str();
       r = safe_write(fd, t.c_str(), t.length());
       if (r < 0)
-	return;
+	goto out;
       
       for (CDir::map_t::iterator q = dir->items.begin();
 	   q != dir->items.end();
@@ -10880,12 +10880,13 @@ void MDCache::dump_cache(const char *fn)
 	string u = uu.str();
 	r = safe_write(fd, u.c_str(), u.length());
 	if (r < 0)
-	  return;
+	  goto out;
       }
       dir->check_rstats();
     }
   }
 
+ out:
   ::close(fd);
 }
 
