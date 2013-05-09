@@ -4,12 +4,12 @@
 
 .. versionadded:: 0.60
 
-This **Preflight Checklist** will help you prepare an admin host for use with
-``ceph-deploy``,  and server hosts for use with passwordless ``ssh`` and
+This **Preflight Checklist** will help you prepare an admin node for use with
+``ceph-deploy``,  and server nodes for use with passwordless ``ssh`` and
 ``sudo``.
 
 Before you can deploy Ceph using ``ceph-deploy``, you need to ensure that you
-have a few things set up first on your admin host and on hosts running Ceph
+have a few things set up first on your admin node and on nodes running Ceph
 daemons.
  
 
@@ -17,14 +17,14 @@ Install an Operating System
 ===========================
 
 Install a recent release of Debian or Ubuntu (e.g., 12.04, 12.10) on your
-hosts. For additional details on operating systems or to use other operating
+nodes. For additional details on operating systems or to use other operating
 systems other than Debian or Ubuntu, see `OS Recommendations`_.
 
 
 Install an SSH Server
 =====================
 
-The ``ceph-deploy`` utility requires ``ssh``, so your server host(s) require an
+The ``ceph-deploy`` utility requires ``ssh``, so your server node(s) require an
 SSH server. ::
 
 	sudo apt-get install openssh-server
@@ -33,7 +33,7 @@ SSH server. ::
 Create a User
 =============
 
-Create a user on hosts running Ceph daemons. 
+Create a user on nodes running Ceph daemons. 
 
 .. tip:: We recommend a username that brute force attackers won't
    guess easily (e.g., something other than ``root``, ``ceph``, etc).
@@ -45,7 +45,7 @@ Create a user on hosts running Ceph daemons.
 	sudo passwd ceph
 
 
-``ceph-deploy`` installs packages onto your hosts. This means that
+``ceph-deploy`` installs packages onto your nodes. This means that
 the user you create requires passwordless ``sudo`` privileges. 
 
 .. note:: We **DO NOT** recommend enabling the ``root`` password 
@@ -61,7 +61,7 @@ To provide full privileges to the user, add the following to
 Configure SSH
 =============
 
-Configure your admin machine with password-less SSH access to each host
+Configure your admin machine with password-less SSH access to each node
 running Ceph daemons (leave the passphrase empty). ::
 
 	ssh-keygen
@@ -72,11 +72,11 @@ running Ceph daemons (leave the passphrase empty). ::
 	Your identification has been saved in /ceph-client/.ssh/id_rsa.
 	Your public key has been saved in /ceph-client/.ssh/id_rsa.pub.
 
-Copy the key to each host running Ceph daemons:: 
+Copy the key to each node running Ceph daemons:: 
 
 	ssh-copy-id ceph@ceph-server
 
-Modify your ~/.ssh/config file of your admin host so that it defaults 
+Modify your ~/.ssh/config file of your admin node so that it defaults 
 to logging in as the user you created when no username is specified. ::
 
 	Host ceph-server
@@ -88,7 +88,7 @@ Install git
 ===========
 
 To clone the ``ceph-deploy`` repository, you will need install ``git``
-on your admin host. ::
+on your admin node. ::
 
 	sudo apt-get install git
 	
@@ -118,9 +118,22 @@ After you clone the repository, bootstrap ``ceph-deploy``. ::
 	cd ceph-deploy
 	./bootstrap
 
-Add ``ceph-deploy`` to your path so that so that you can execute it without
-remaining in ``ceph-deploy``  directory (e.g., ``/etc/environment``,
-``~/.pam_environment``). Once you have completed this pre-flight checklist, you
-are ready to begin using ``ceph-deploy``.
+Add ``ceph-deploy`` to your path (e.g., ``/etc/environment``,
+``~/.pam_environment``) so that you can execute it without remaining in the
+directory that contains ``ceph-deploy``. 
+
+
+Ensure Connectivity
+===================
+
+Ensure that your Admin node has connectivity to the network and to your Server
+node (e.g., ensure ``iptables``, ``ufw`` or other tools that may prevent
+connections, traffic forwarding, etc. to allow what you need).
+
+.. tip:: The ``ceph-deploy`` tool is new and you may encounter some issues
+   without  effective error messages. 
+
+Once you have completed this pre-flight checklist, you are ready to begin using
+``ceph-deploy``.
 
 .. _OS Recommendations: ../../../install/os-recommendations
