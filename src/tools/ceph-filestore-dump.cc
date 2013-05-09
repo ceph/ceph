@@ -253,10 +253,16 @@ struct metadata_section {
   epoch_t map_epoch;
   pg_info_t info;
   pg_log_t log;
+
   metadata_section(__u8 struct_ver, epoch_t map_epoch, const pg_info_t &info,
-    const pg_log_t &log): struct_ver(struct_ver),
-    map_epoch(map_epoch), info(info), log(log) { }
-  metadata_section() { }
+		   const pg_log_t &log)
+    : struct_ver(struct_ver),
+      map_epoch(map_epoch),
+      info(info),
+      log(log) { }
+  metadata_section()
+    : struct_ver(0),
+      map_epoch(0) { }
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
