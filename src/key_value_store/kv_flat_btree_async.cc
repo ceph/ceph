@@ -1935,6 +1935,7 @@ int KvFlatBtreeAsync::remove_all() {
     return err;
   }
   oro_aioc->wait_for_safe();
+  oro_aioc->release();
 
   librados::ObjectWriteOperation rm_index;
   librados::AioCompletion * rm_index_aioc = rados.aio_create_completion();
@@ -1944,6 +1945,7 @@ int KvFlatBtreeAsync::remove_all() {
   rm_index.omap_set(new_index);
   io_ctx.aio_operate(index_name, rm_index_aioc, &rm_index);
   err = rm_index_aioc->get_return_value();
+  rm_index_aioc->release();
   if (err < 0) {
     if (verbose) cout << "rm index aioc failed with " << err
 	<< std::endl;
