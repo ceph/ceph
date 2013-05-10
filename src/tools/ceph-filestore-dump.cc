@@ -600,7 +600,7 @@ int export_file(ObjectStore *store, coll_t cid, hobject_t &obj)
   if (ret)
     return ret;
 
-  if (out.size() > 0) {
+  if (!out.empty()) {
     omap_section oms(out);
     ret = write_section(TYPE_OMAP, oms, file_fd);
     if (ret)

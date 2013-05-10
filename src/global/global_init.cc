@@ -175,8 +175,6 @@ void global_init_daemonize(CephContext *cct, int flags)
 
 void global_init_postfork(CephContext *cct, int flags)
 {
-  int ret;
-
   // restart log thread
   g_ceph_context->_log->start();
 
@@ -208,7 +206,7 @@ void global_init_postfork(CephContext *cct, int flags)
     exit(1);
   }
   if (!(flags & CINIT_FLAG_NO_CLOSE_STDERR)) {
-    ret = global_init_shutdown_stderr(cct);
+    int ret = global_init_shutdown_stderr(cct);
     if (ret) {
       derr << "global_init_daemonize: global_init_shutdown_stderr failed with "
 	   << "error code " << ret << dendl;
