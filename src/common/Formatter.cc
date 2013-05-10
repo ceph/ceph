@@ -61,6 +61,20 @@ Formatter::~Formatter()
 {
 }
 
+Formatter *
+new_formatter(const std::string &type)
+{
+    if (type == "json")
+      return new JSONFormatter(false);
+    else if (type == "json-pretty")
+      return new JSONFormatter(true);
+    else if (type == "xml")
+      return new XMLFormatter(false);
+    else if (type == "xml-pretty")
+      return new XMLFormatter(true);
+    else
+      return (Formatter *)NULL;
+}
 // -----------------------
 JSONFormatter::JSONFormatter(bool p)
   : m_pretty(p), m_is_pending_string(false)
