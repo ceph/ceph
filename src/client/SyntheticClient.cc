@@ -3390,6 +3390,7 @@ int SyntheticClient::lookup_ino(inodeno_t ino)
 int SyntheticClient::chunk_file(string &filename)
 {
   int fd = client->open(filename.c_str(), O_RDONLY);
+  int ret;
 
   struct stat st;
   client->fstat(fd, &st);
@@ -3401,7 +3402,9 @@ int SyntheticClient::chunk_file(string &filename)
   inode_t inode;
   memset(&inode, 0, sizeof(inode));
   inode.ino = st.st_ino;
-  client->describe_layout(fd, &inode.layout);
+  ret = client->describe_layout(fd, &inode.layout);
+  if (ret < 0)
+    return ret;
 
   uint64_t pos = 0;
   bufferlist from_before;
