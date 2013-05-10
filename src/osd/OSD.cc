@@ -456,7 +456,7 @@ int OSD::convert_collection(ObjectStore *store, coll_t cid)
     store->apply_transaction(t);
   }
 
-  clear_temp(store, tmp1);
+  recursive_remove_collection(store, tmp1);
   store->sync_and_flush();
   store->sync();
   return 0;
@@ -487,10 +487,10 @@ int OSD::do_convertfs(ObjectStore *store)
        ++i) {
     pg_t pgid;
     if (i->is_temp(pgid))
-      clear_temp(store, *i);
+      recursive_remove_collection(store, *i);
     else if (i->to_str() == "convertfs_temp" ||
 	     i->to_str() == "convertfs_temp1")
-      clear_temp(store, *i);
+      recursive_remove_collection(store, *i);
   }
   store->flush();
 
@@ -1507,8 +1507,14 @@ int OSD::read_superblock()
 
 
 
-void OSD::clear_temp(ObjectStore *store, coll_t tmp)
+void OSD::recursive_remove_collection(ObjectStore *store, coll_t tmp)
 {
+  OSDriver driver(
+    store,
+    coll_t(),
+    make_snapmapper_oid());
+  SnapMapper mapper(&driver, 0, 0, 0);
+
   vector<hobject_t> objects;
   store->collection_list(tmp, objects);
 
@@ -1518,6 +1524,10 @@ void OSD::clear_temp(ObjectStore *store, coll_t tmp)
   for (vector<hobject_t>::iterator p = objects.begin();
        p != objects.end();
        ++p, removed++) {
+    OSDriver::OSTransaction _t(driver.get_transaction(&t));
+    int r = mapper.remove_oid(*p, &_t);
+    if (r != 0 && r != -ENOENT)
+      assert(0);
     t.collection_remove(tmp, *p);
     if (removed > 300) {
       int r = store->apply_transaction(t);
@@ -1636,9 +1646,24 @@ PG *OSD::_create_lock_pg(
 
   PG *pg = _open_lock_pg(createmap, pgid, true, hold_map_lock);
 
-  t.create_collection(coll_t(pgid));
+  DeletingStateRef df = service.deleting_pgs.lookup(pgid);
+  bool backfill = false;
 
-  pg->init(role, up, acting, history, pi, &t);
+  if (df && df->try_stop_deletion()) {
+    dout(10) << __func__ << ": halted deletion on pg " << pgid << dendl;
+    backfill = true;
+    service.deleting_pgs.remove(pgid); // PG is no longer being removed!
+  } else {
+    if (df) {
+      // raced, ensure we don't see DeletingStateRef when we try to
+      // delete this pg
+      service.deleting_pgs.remove(pgid);
+    }
+    // either it's not deleting, or we failed to get to it in time
+    t.create_collection(coll_t(pgid));
+  }
+
+  pg->init(role, up, acting, history, pi, backfill, &t);
 
   dout(7) << "_create_lock_pg " << *pg << dendl;
   return pg;
@@ -1699,10 +1724,12 @@ void OSD::load_pgs()
        ++it) {
     pg_t pgid;
     snapid_t snap;
+    uint64_t seq;
 
-    if (it->is_temp(pgid)) {
+    if (it->is_temp(pgid) ||
+	it->is_removal(&seq, &pgid)) {
       dout(10) << "load_pgs " << *it << " clearing temp" << dendl;
-      clear_temp(store, *it);
+      recursive_remove_collection(store, *it);
       continue;
     }
 
@@ -1715,21 +1742,6 @@ void OSD::load_pgs()
 	pgs[pgid];
 	head_pgs.insert(pgid);
       }
-      continue;
-    }
-
-    uint64_t seq;
-    if (it->is_removal(&seq, &pgid)) {
-      if (seq >= next_removal_seq)
-	next_removal_seq = seq + 1;
-      dout(10) << "load_pgs queueing " << *it << " for removal, seq is "
-	       << seq << " pgid is " << pgid << dendl;
-      boost::tuple<coll_t, SequencerRef, DeletingStateRef> *to_queue =
-	new boost::tuple<coll_t, SequencerRef, DeletingStateRef>;
-      to_queue->get<0>() = *it;
-      to_queue->get<1>() = service.osr_registry.lookup_or_create(pgid, stringify(pgid));
-      to_queue->get<2>() = service.deleting_pgs.lookup_or_create(pgid);
-      remove_wq.queue(to_queue);
       continue;
     }
 
@@ -2806,42 +2818,98 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 }
 
 // =========================================
-void OSD::RemoveWQ::_process(boost::tuple<coll_t, SequencerRef, DeletingStateRef> *item)
-{
-  OSDriver driver(
-    store,
-    coll_t(),
-    make_snapmapper_oid());
-  SnapMapper mapper(&driver, 0, 0, 0);
-  coll_t &coll = item->get<0>();
-  ObjectStore::Sequencer *osr = item->get<1>().get();
-  if (osr)
-    osr->flush();
+bool remove_dir(
+  ObjectStore *store, SnapMapper *mapper,
+  OSDriver *osdriver,
+  ObjectStore::Sequencer *osr,
+  coll_t coll, DeletingStateRef dstate) {
   vector<hobject_t> olist;
-  store->collection_list(coll, olist);
-  //*_dout << "OSD::RemoveWQ::_process removing coll " << coll << std::endl;
   int64_t num = 0;
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  for (vector<hobject_t>::iterator i = olist.begin();
-       i != olist.end();
-       ++i, ++num) {
-    OSDriver::OSTransaction _t(driver.get_transaction(t));
-    int r = mapper.remove_oid(*i, &_t);
-    if (r != 0 && r != -ENOENT) {
-      assert(0);
+  hobject_t next;
+  while (!next.is_max()) {
+    store->collection_list_partial(
+      coll,
+      next,
+      store->get_ideal_list_min(),
+      store->get_ideal_list_max(),
+      0,
+      &olist,
+      &next);
+    for (vector<hobject_t>::iterator i = olist.begin();
+	 i != olist.end();
+	 ++i, ++num) {
+      OSDriver::OSTransaction _t(osdriver->get_transaction(t));
+      int r = mapper->remove_oid(*i, &_t);
+      if (r != 0 && r != -ENOENT) {
+	assert(0);
+      }
+      t->remove(coll, *i);
+      if (num >= g_conf->osd_target_transaction_size) {
+	store->apply_transaction(osr, *t);
+	delete t;
+	if (!dstate->check_canceled()) {
+	  // canceled!
+	  return false;
+	}
+	t = new ObjectStore::Transaction;
+	num = 0;
+      }
     }
-    t->remove(coll, *i);
-    if (num >= g_conf->osd_target_transaction_size) {
-      store->apply_transaction(osr, *t);
-      delete t;
-      t = new ObjectStore::Transaction;
-      num = 0;
-    }
+    olist.clear();
   }
-  t->remove_collection(coll);
-  store->apply_transaction(*t);
+  store->apply_transaction(osr, *t);
   delete t;
-  delete item;
+  return true;
+}
+
+void OSD::RemoveWQ::_process(pair<PGRef, DeletingStateRef> item)
+{
+  PGRef pg(item.first);
+  SnapMapper &mapper = pg->snap_mapper;
+  OSDriver &driver = pg->osdriver;
+  coll_t coll = coll_t(pg->info.pgid);
+  pg->osr->flush();
+
+  if (!item.second->start_clearing())
+    return;
+
+  if (pg->have_temp_coll()) {
+    bool cont = remove_dir(
+      store, &mapper, &driver, pg->osr.get(), pg->get_temp_coll(), item.second);
+    if (!cont)
+      return;
+  }
+  bool cont = remove_dir(
+    store, &mapper, &driver, pg->osr.get(), coll, item.second);
+  if (!cont)
+    return;
+
+  if (!item.second->start_deleting())
+    return;
+
+  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  PG::clear_info_log(
+    pg->info.pgid,
+    OSD::make_infos_oid(),
+    pg->log_oid,
+    t);
+  if (pg->have_temp_coll())
+    t->remove_collection(pg->get_temp_coll());
+  t->remove_collection(coll);
+
+  // We need the sequencer to stick around until the op is complete
+  store->queue_transaction(
+    pg->osr.get(),
+    t,
+    0, // onapplied
+    0, // oncommit
+    0, // onreadable sync
+    new ObjectStore::C_DeleteTransactionHolder<PGRef>(
+      t, pg), // oncomplete
+    TrackedOpRef());
+
+  item.second->finish_deleting();
 }
 // =========================================
 
@@ -5946,14 +6014,8 @@ void OSD::_remove_pg(PG *pg)
 
   service.cancel_pending_splits_for_parent(pg->info.pgid);
 
-  coll_t to_remove = get_next_removal_coll(pg->info.pgid);
-  removals.push_back(to_remove);
-  rmt->collection_rename(coll_t(pg->info.pgid), to_remove);
-  if (pg->have_temp_coll()) {
-    to_remove = get_next_removal_coll(pg->info.pgid);
-    removals.push_back(to_remove);
-    rmt->collection_rename(pg->get_temp_coll(), to_remove);
-  }
+  DeletingStateRef deleting = service.deleting_pgs.lookup_or_create(pg->info.pgid);
+  remove_wq.queue(make_pair(PGRef(pg), deleting));
 
   store->queue_transaction(
     pg->osr.get(), rmt,
@@ -5961,15 +6023,6 @@ void OSD::_remove_pg(PG *pg)
       SequencerRef>(rmt, pg->osr),
     new ContainerContext<
       SequencerRef>(pg->osr));
-
-  DeletingStateRef deleting = service.deleting_pgs.lookup_or_create(pg->info.pgid);
-  for (vector<coll_t>::iterator i = removals.begin();
-       i != removals.end();
-       ++i) {
-    remove_wq.queue(new boost::tuple<coll_t, SequencerRef, DeletingStateRef>(
-		      *i, pg->osr, deleting));
-  }
-
 
   // remove from map
   pg_map.erase(pg->info.pgid);

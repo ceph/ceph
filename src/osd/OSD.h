@@ -142,20 +142,84 @@ typedef std::tr1::shared_ptr<ObjectStore::Sequencer> SequencerRef;
 
 class DeletingState {
   Mutex lock;
-  list<Context *> on_deletion_complete;
+  Cond cond;
+  enum {
+    QUEUED,
+    CLEARING_DIR,
+    DELETING_DIR,
+    DELETED_DIR,
+    CANCELED,
+  } status;
+  bool stop_deleting;
 public:
-  DeletingState() : lock("DeletingState::lock") {}
-  void register_on_delete(Context *completion) {
+  DeletingState() :
+    lock("DeletingState::lock"), status(QUEUED), stop_deleting(false) {}
+
+  /// check whether removal was canceled
+  bool check_canceled() {
     Mutex::Locker l(lock);
-    on_deletion_complete.push_front(completion);
-  }
-  ~DeletingState() {
-    for (list<Context *>::iterator i = on_deletion_complete.begin();
-	 i != on_deletion_complete.end();
-	 ++i) {
-      (*i)->complete(0);
+    assert(status == CLEARING_DIR);
+    if (stop_deleting) {
+      status = CANCELED;
+      cond.Signal();
+      return false;
     }
+    return true;
+  } ///< @return false if canceled, true if we should continue
+
+  /// transition status to clearing
+  bool start_clearing() {
+    Mutex::Locker l(lock);
+    assert(
+      status == QUEUED ||
+      status == DELETED_DIR);
+    if (stop_deleting) {
+      status = CANCELED;
+      cond.Signal();
+      return false;
+    }
+    status = CLEARING_DIR;
+    return true;
+  } ///< @return false if we should cancel deletion
+
+  /// transition status to deleting
+  bool start_deleting() {
+    Mutex::Locker l(lock);
+    assert(status == CLEARING_DIR);
+    if (stop_deleting) {
+      status = CANCELED;
+      cond.Signal();
+      return false;
+    }
+    status = DELETING_DIR;
+    return true;
+  } ///< @return false if we should cancel deletion
+
+  /// signal collection removal queued
+  void finish_deleting() {
+    Mutex::Locker l(lock);
+    assert(status == DELETING_DIR);
+    status = DELETED_DIR;
+    cond.Signal();
   }
+
+  /// try to halt the deletion
+  bool try_stop_deletion() {
+    Mutex::Locker l(lock);
+    stop_deleting = true;
+    /**
+     * If we are in DELETING_DIR or DELETED_DIR, there are in progress
+     * operations we have to wait for before continuing on.  States
+     * DELETED_DIR, QUEUED, and CANCELED either check for stop_deleting
+     * prior to performing any operations or signify the end of the
+     * deleting process.  We don't want to wait to leave the QUEUED
+     * state, because this might block the caller behind entire pg
+     * removals.
+     */
+    while (status == DELETING_DIR || status == DELETING_DIR)
+      cond.Wait(lock);
+    return status != DELETED_DIR;
+  } ///< @return true if we don't need to recreate the collection
 };
 typedef std::tr1::shared_ptr<DeletingState> DeletingStateRef;
 
@@ -566,7 +630,7 @@ public:
     hobject_t oid(sobject_t("infos", CEPH_NOSNAP));
     return oid;
   }
-  static void clear_temp(ObjectStore *store, coll_t tmp);
+  static void recursive_remove_collection(ObjectStore *store, coll_t tmp);
   
 
 private:
@@ -1451,36 +1515,36 @@ protected:
   } rep_scrub_wq;
 
   // -- removing --
-  struct RemoveWQ : public ThreadPool::WorkQueue<boost::tuple<coll_t, SequencerRef, DeletingStateRef> > {
+  struct RemoveWQ :
+    public ThreadPool::WorkQueueVal<pair<PGRef, DeletingStateRef> > {
     ObjectStore *&store;
-    list<boost::tuple<coll_t, SequencerRef, DeletingStateRef> *> remove_queue;
+    list<pair<PGRef, DeletingStateRef> > remove_queue;
     RemoveWQ(ObjectStore *&o, time_t ti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<boost::tuple<coll_t, SequencerRef, DeletingStateRef> >("OSD::RemoveWQ", ti, 0, tp),
+      : ThreadPool::WorkQueueVal<pair<PGRef, DeletingStateRef> >(
+	"OSD::RemoveWQ", ti, 0, tp),
 	store(o) {}
 
     bool _empty() {
       return remove_queue.empty();
     }
-    bool _enqueue(boost::tuple<coll_t, SequencerRef, DeletingStateRef> *item) {
+    void _enqueue(pair<PGRef, DeletingStateRef> item) {
       remove_queue.push_back(item);
-      return true;
     }
-    void _dequeue(boost::tuple<coll_t, SequencerRef, DeletingStateRef> *item) {
+    void _enqueue_front(pair<PGRef, DeletingStateRef> item) {
+      remove_queue.push_front(item);
+    }
+    bool _dequeue(pair<PGRef, DeletingStateRef> item) {
       assert(0);
     }
-    boost::tuple<coll_t, SequencerRef, DeletingStateRef> *_dequeue() {
-      if (remove_queue.empty())
-	return NULL;
-      boost::tuple<coll_t, SequencerRef, DeletingStateRef> *item = remove_queue.front();
+    pair<PGRef, DeletingStateRef> _dequeue() {
+      assert(!remove_queue.empty());
+      pair<PGRef, DeletingStateRef> item = remove_queue.front();
       remove_queue.pop_front();
       return item;
     }
-    void _process(boost::tuple<coll_t, SequencerRef, DeletingStateRef> *item);
+    void _process(pair<PGRef, DeletingStateRef>);
     void _clear() {
-      while (!remove_queue.empty()) {
-	delete remove_queue.front();
-	remove_queue.pop_front();
-      }
+      remove_queue.clear();
     }
   } remove_wq;
   uint64_t next_removal_seq;

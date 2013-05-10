@@ -2407,10 +2407,13 @@ void PG::clear_publish_stats()
  * @param newacting acting set
  * @param history pg history
  * @param pi past_intervals
+ * @param backfill true if info should be marked as backfill
  * @param t transaction to write out our new state in
  */
-void PG::init(int role, vector<int>& newup, vector<int>& newacting, pg_history_t& history,
+void PG::init(int role, vector<int>& newup, vector<int>& newacting,
+	      pg_history_t& history,
 	      pg_interval_map_t& pi,
+	      bool backfill,
 	      ObjectStore::Transaction *t)
 {
   dout(10) << "init role " << role << " up " << newup << " acting " << newacting
@@ -2428,6 +2431,12 @@ void PG::init(int role, vector<int>& newup, vector<int>& newacting, pg_history_t
   info.stats.up = up;
   info.stats.acting = acting;
   info.stats.mapping_epoch = info.history.same_interval_since;
+
+  if (backfill) {
+    dout(10) << __func__ << ": Setting backfill" << dendl;
+    info.last_backfill = hobject_t();
+    info.last_complete = info.last_update;
+  }
 
   reg_next_scrub();
 
@@ -4993,9 +5002,6 @@ void PG::start_flush(ObjectStore::Transaction *t,
   flushed = false;
   on_applied->push_back(new ContainerContext<FlushStateRef>(flush_trigger));
   on_safe->push_back(new ContainerContext<FlushStateRef>(flush_trigger));
-  DeletingStateRef del = osd->deleting_pgs.lookup(info.pgid);
-  if (del)
-    del->register_on_delete(new ContainerContext<FlushStateRef>(flush_trigger));
 }
 
 /* Called before initializing peering during advance_map */
