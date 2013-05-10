@@ -163,7 +163,8 @@ TEST(MonCap, AllowAll) {
 
   ASSERT_TRUE(cap.parse("allow *", NULL));
   ASSERT_TRUE(cap.is_allow_all());
-  ASSERT_TRUE(cap.is_capable(NULL, "foo", "asdf", map<string,string>(), true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, entity_name_t::CLIENT(0),
+			     "foo", "asdf", map<string,string>(), true, true, true));
 
   MonCap cap2;
   ASSERT_FALSE(cap2.is_allow_all());

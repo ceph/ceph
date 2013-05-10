@@ -8,6 +8,7 @@
 using std::ostream;
 
 #include "include/types.h"
+#include "msg/msg_types.h"
 
 class CephContext;
 
@@ -98,6 +99,7 @@ struct MonCap {
    * @return true if the operation is allowed, false otherwise
    */
   bool is_capable(CephContext *cct,
+		  entity_name_t name,
 		  const string& service,
 		  const string& command, const map<string,string>& command_args,
 		  bool op_may_read, bool op_may_write, bool op_may_exec) const;

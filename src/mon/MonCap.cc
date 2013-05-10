@@ -115,6 +115,7 @@ static string get(const map<string,string>& m, string key) {
 }
 
 bool MonCap::is_capable(CephContext *cct,
+			entity_name_t name,
 			const string& service,
 			const string& command, const map<string,string>& command_args,
 			bool op_may_read, bool op_may_write, bool op_may_exec) const
