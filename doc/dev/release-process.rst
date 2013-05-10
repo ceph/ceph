@@ -1,6 +1,6 @@
-===================
-  Release Process
-===================
+======================
+  Ceph Release Process
+======================
 
 1. Build environment
 ====================
@@ -37,7 +37,7 @@ Clone the ceph and ceph-build source trees::
     git clone http://github.com/ceph/ceph.git
     git clone http://github.com/ceph/ceph-build.git
 
-In the ceph source directory, checkout next branch (for point releases use the testing branch)::
+In the ceph source directory, checkout next branch (for point releases use the {codename} branch)::
 
     git checkout next
 
@@ -119,24 +119,32 @@ For a development release::
 
 For a stable release, replace {CODENAME} with the release codename (e.g., ``argonaut`` or ``bobtail``)::
 
-	rcp ceph-0.xx.tar.bz2 \
-	     ceph_site@ceph.com:ceph.com/downloads/ceph-0.xx{CODENAME}.tar.bz2
-	rcp ceph-0.xx.tar.gz  \
-	     ceph_site@ceph.com:ceph.com/downloads/ceph-0.xx{CODENAME}.tar.gz
-	rsync -av /tmp/rpm-repo/0.xx/ ceph_site@ceph.com:ceph.com/rpm-{CODENAME}
-	rsync -auv /tmp/debian-repo/ ceph_site@ceph.com:ceph.com/debian-{CODENAME}
-
+        rcp ceph-0.xx.tar.bz2 \
+            ceph_site@ceph.com:ceph.com/downloads/ceph-0.xx.tar.bz2
+        rcp ceph-0.xx.tar.gz  \
+            ceph_site@ceph.com:ceph.com/downloads/ceph-0.xx.tar.gz
+        rsync -av /tmp/rpm-repo/0.xx/ ceph_site@ceph.com:ceph.com/rpm-{CODENAME}
+        rsync -auv /tmp/debian-repo/ ceph_site@ceph.com:ceph.com/debian-{CODENAME}
 
 10. Update Git
 ==============
 
-Development release
--------------------
+Point release
+-------------
+
+For point releases just push the version number update to the
+branch and the new tag:
+
+    git push origin {codename}
+    git push origin v0.xx
+
+Development and Stable releases
+-------------------------------
 
 For a development release, update tags for ``ceph.git``::
 
     git push origin v0.xx
-    git push origin HEAD:testing
+    git push origin HEAD:last
     git checkout master
     git merge next
     git push origin master
@@ -146,23 +154,30 @@ Similarly, for a development release, for both ``teuthology.git`` and ``ceph-qa-
 
     git checkout master
     git reset --hard origin/master
-    git branch -f testing origin/next
-    git push -f origin testing
+    git branch -f last origin/next
+    git push -f origin last
     git push -f origin master:next
 
 Stable release
 --------------
 
-For ``ceph.git``::
-
-	git push origin stable
-
-
-Point release
--------------
+Also, for ``ceph.git``:
 
 Just push the new tag::
 
 	git push origin v0.xx
 
+=============================
+  Ceph-deploy Release Process
+=============================
+
+1. Build environment
+====================
+
+=============================
+  Backports
+=============================
+
+1. Build environment
+====================
 
