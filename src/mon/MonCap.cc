@@ -125,15 +125,18 @@ bool MonCap::is_capable(CephContext *cct,
     if (cct)
       ldout(cct, 20) << " allow so far " << allow << ", doing grant " << *p << dendl;
 
+    if (p->is_allow_all())
+      return true;
+
     // check enumerated caps
     if (p->is_match(service, command, command_args)) {
       allow = allow | p->allow;
-      if ((op_may_read && !(allow & MON_CAP_R)) ||
-	  (op_may_write && !(allow & MON_CAP_W)) ||
-	  (op_may_exec && !(allow & MON_CAP_X)))
-	continue;
-      return true;
+      if (!((op_may_read && !(allow & MON_CAP_R)) ||
+	    (op_may_write && !(allow & MON_CAP_W)) ||
+	    (op_may_exec && !(allow & MON_CAP_X))))
+	return true;
     }
+
     // match against profiles
     if (p->profile == "osd" || p->profile == "mds" || p->profile == "mon") {
       // daemons can log
