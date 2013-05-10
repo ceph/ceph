@@ -42,10 +42,11 @@ struct MonCapGrant {
 
   MonCapGrant() : allow(0) {}
   MonCapGrant(mon_rwxa_t a) : allow(a) {}
+  /*
   MonCapGrant(std::string s, mon_rwxa_t a) : service(s), allow(a) {}
   MonCapGrant(std::string p) : profile(p), allow(0) {}
   MonCapGrant(std::string c, map<std::string,std::string> m) : command(c), command_args(m), allow(0) {}
-
+  */
   /**
    * check if given request parameters match our constraints
    *

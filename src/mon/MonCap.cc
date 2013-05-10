@@ -17,6 +17,8 @@
 #include <boost/fusion/include/std_pair.hpp>
 #include <boost/spirit/include/phoenix.hpp>
 #include <boost/spirit/include/qi_uint.hpp>
+#include <boost/fusion/adapted/struct/adapt_struct.hpp>
+#include <boost/fusion/include/adapt_struct.hpp>
 
 #include "MonCap.h"
 #include "include/stringify.h"
@@ -62,6 +64,15 @@ ostream& operator<<(ostream& out, const MonCapGrant& m)
     out << " " << m.allow;
   return out;
 }
+
+typedef map<string,string> kvmap;
+
+BOOST_FUSION_ADAPT_STRUCT(MonCapGrant,
+			  (std::string, service)
+			  (std::string, profile)
+			  (std::string, command)
+			  (kvmap, command_args)
+			  (mon_rwxa_t, allow))
 
 bool MonCapGrant::is_match(const std::string& s, const std::string& c,
 			   const map<string,string>& c_args) const
@@ -259,6 +270,7 @@ namespace qi = boost::spirit::qi;
 namespace ascii = boost::spirit::ascii;
 namespace phoenix = boost::phoenix;
 
+
 template <typename Iterator>
 struct MonCapParser : qi::grammar<Iterator, MonCap()>
 {
@@ -287,21 +299,24 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
     // command := command[=]cmd [k1=v1 k2=v2 ...]
     kv_pair = str >> '=' >> str;
     kv_map %= kv_pair >> *(spaces >> kv_pair);
-    command_match =
-      (-spaces >> lit("allow") >> spaces >> lit("command") >> (lit('=') | spaces) >> str
-       >> spaces >> lit("with") >> spaces >> kv_map)
-             [_val = phoenix::construct<MonCapGrant>(_1, _2)] ||
-      (-spaces >> lit("allow") >> spaces >> lit("command") >> (lit('=') | spaces) >> str)
-             [_val = phoenix::construct<MonCapGrant>(_1, map<string,string>())];
+    command_match1 = -spaces >> lit("allow") >> spaces >> lit("command") >> (lit('=') | spaces)
+			     >> qi::attr(string()) >> qi::attr(string()) >> str
+			     >> spaces >> lit("with") >> spaces >> kv_map >> qi::attr(0);
+    command_match2 = -spaces >> lit("allow") >> spaces >> lit("command") >> (lit('=') | spaces)
+			     >> qi::attr(string()) >> qi::attr(string()) >> str >> qi::attr(map<string,string>())
+			     >> qi::attr(0);
 
     // service
-    service_match %= -spaces >> lit("allow") >> spaces >> lit("service") >> (lit('=') | spaces) >>
-      (str >> spaces >> rwxa)[_val = phoenix::construct<MonCapGrant>(_1, _2)];
+    service_match %= -spaces >> lit("allow") >> spaces >> lit("service") >> (lit('=') | spaces)
+			     >> str >> qi::attr(string()) >> qi::attr(string()) >> qi::attr(map<string,string>())
+			     >> spaces >> rwxa;
 
-    profile_match = -spaces >> lit("allow") >> spaces >> lit("profile") >> (lit('=') | spaces) >> str
-      [_val = phoenix::construct<MonCapGrant>(_1)];
+    profile_match %= -spaces >> lit("allow") >> spaces >> lit("profile") >> (lit('=') | spaces)
+			     >> qi::attr(string()) >> str >> qi::attr(string()) >> qi::attr(map<string,string>()) >> qi::attr(0);
 
-    rwxa_match %= -spaces >> lit("allow") >> spaces >> rwxa   [_val = phoenix::construct<MonCapGrant>(_1)];
+    rwxa_match %= -spaces >> lit("allow") >> spaces
+			  >> qi::attr(string()) >> qi::attr(string()) >> qi::attr(string()) >> qi::attr(map<string,string>())
+			  >> rwxa;
 
     // rwxa := * | [r][w][x]
     rwxa =
@@ -314,11 +329,12 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
 	);
 
     // grant := allow ...
-    grant = profile_match | rwxa_match | command_match | service_match;
+    grant = rwxa_match | profile_match | service_match | command_match1 | command_match2;
 
     // moncap := grant [grant ...]
     grants %= (grant % (*lit(' ') >> (lit(';') | lit(',')) >> *lit(' ')));
     moncap = grants  [_val = phoenix::construct<MonCap>(_1)]; 
+
   }
   qi::rule<Iterator> spaces;
   qi::rule<Iterator, unsigned()> rwxa;
@@ -330,7 +346,7 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
   qi::rule<Iterator, map<string, string>()> kv_map;
 
   qi::rule<Iterator, MonCapGrant()> rwxa_match;
-  qi::rule<Iterator, MonCapGrant()> command_match;
+  qi::rule<Iterator, MonCapGrant()> command_match1, command_match2;
   qi::rule<Iterator, MonCapGrant()> service_match;
   qi::rule<Iterator, MonCapGrant()> profile_match;
   qi::rule<Iterator, MonCapGrant()> grant;
