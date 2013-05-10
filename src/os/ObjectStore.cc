@@ -439,6 +439,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
 	f->dump_stream("rem") << rem;
 	f->dump_stream("dest") << dest;
       }
+      break;
 
     default:
       f->dump_string("op_name", "unknown");
