@@ -455,7 +455,7 @@ int OSD::convert_collection(ObjectStore *store, coll_t cid)
     store->apply_transaction(t);
   }
 
-  clear_temp(store, tmp1);
+  recursive_remove_collection(store, tmp1);
   store->sync_and_flush();
   store->sync();
   return 0;
@@ -486,10 +486,10 @@ int OSD::do_convertfs(ObjectStore *store)
        ++i) {
     pg_t pgid;
     if (i->is_temp(pgid))
-      clear_temp(store, *i);
+      recursive_remove_collection(store, *i);
     else if (i->to_str() == "convertfs_temp" ||
 	     i->to_str() == "convertfs_temp1")
-      clear_temp(store, *i);
+      recursive_remove_collection(store, *i);
   }
   store->flush();
 
@@ -1505,7 +1505,7 @@ int OSD::read_superblock()
 
 
 
-void OSD::clear_temp(ObjectStore *store, coll_t tmp)
+void OSD::recursive_remove_collection(ObjectStore *store, coll_t tmp)
 {
   OSDriver driver(
     store,
@@ -1727,7 +1727,7 @@ void OSD::load_pgs()
     if (it->is_temp(pgid) ||
 	it->is_removal(&seq, &pgid)) {
       dout(10) << "load_pgs " << *it << " clearing temp" << dendl;
-      clear_temp(store, *it);
+      recursive_remove_collection(store, *it);
       continue;
     }
 
