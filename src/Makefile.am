@@ -75,7 +75,7 @@ endif
 LIBOS_LDA += -lleveldb -lsnappy
 
 # monitor
-ceph_mon_SOURCES = ceph_mon.cc common/TextTable.cc
+ceph_mon_SOURCES = ceph_mon.cc common/TextTable.cc common/cmdparse.cc
 ceph_mon_LDFLAGS = $(AM_LDFLAGS)
 ceph_mon_LDADD = libmon.a $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 ceph_mon_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
@@ -1931,6 +1931,7 @@ noinst_HEADERS = \
 	mon/MonmapMonitor.h\
         mon/MonCaps.h\
         mon/MonClient.h\
+	mon/MonCommands.h\
         mon/MonMap.h\
         mon/Monitor.h\
 	mon/MonitorStore.h\
@@ -2070,7 +2071,8 @@ noinst_HEADERS = \
 	os/ObjectMap.h \
 	os/DBObjectMap.h \
 	os/KeyValueDB.h \
-	os/LevelDBStore.h
+	os/LevelDBStore.h \
+	common/cmdparse.h
 
 if ENABLE_COVERAGE
 COV_DIR = $(DESTDIR)$(libdir)/ceph/coverage
