@@ -2243,6 +2243,7 @@ reprotect_and_return_err:
     Context *ctx = reinterpret_cast<Context *>(arg);
     AioCompletion *comp = reinterpret_cast<AioCompletion *>(cb);
     ctx->complete(comp->get_return_value());
+    comp->release();
   }
 
   int64_t read_iterate(ImageCtx *ictx, uint64_t off, uint64_t len,
@@ -2293,7 +2294,6 @@ reprotect_and_return_err:
 	cond.Wait(mylock);
       mylock.Unlock();
 
-      c->release();
       if (ret < 0)
 	return ret;
 
@@ -2529,7 +2529,6 @@ reprotect_and_return_err:
       cond.Wait(mylock);
     mylock.Unlock();
 
-    c->release();
     return ret;
   }
 
@@ -2564,7 +2563,6 @@ reprotect_and_return_err:
       cond.Wait(mylock);
     mylock.Unlock();
 
-    c->release();
     if (ret < 0)
       return ret;
 
@@ -2601,7 +2599,6 @@ reprotect_and_return_err:
       cond.Wait(mylock);
     mylock.Unlock();
 
-    c->release();
     if (ret < 0)
       return ret;
 
