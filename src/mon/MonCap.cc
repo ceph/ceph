@@ -107,6 +107,13 @@ void MonCap::set_allow_all()
   grants.push_back(MonCapGrant(MON_CAP_ANY));
 }
 
+static string get(const map<string,string>& m, string key) {
+  map<string,string>::const_iterator p = m.find(key);
+  if (p == m.end())
+    return string();
+  return p->second;
+}
+
 bool MonCap::is_capable(CephContext *cct,
 			const string& service,
 			const string& command, const map<string,string>& command_args,
@@ -157,6 +164,29 @@ bool MonCap::is_capable(CephContext *cct,
     }
     if (p->profile == "mon") {
       if (service == "mon")
+	return true;
+    }
+    if (p->profile == "bootstrap-osd") {
+      if (command == "osd create")
+	return true;
+      if (command == "osd crush set")
+	return true;
+      if (command == "auth add" &&
+	  get(command_args, "name").find("osd.") == 0 &&
+	  get(command_args, "caps_mon") == "allow profile osd" &&
+	  get(command_args, "caps_osd") == "allow *")
+	return true;
+      if (command == "mon getmap")
+	return true;
+    }
+    if (p->profile == "bootstrap-mds") {
+      if (command == "mon getmap")
+	return true;
+      if (command == "auth get-or-create" &&
+	  get(command_args, "name").find("mds.") == 0 &&
+	  get(command_args, "caps_osd") == "allow rwx" &&
+	  get(command_args, "caps_mon") == "allow profile mds" &&
+	  get(command_args, "caps_mds") == "allow")
 	return true;
     }
     if (p->profile == "fs-client") {
