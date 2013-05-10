@@ -7902,9 +7902,9 @@ void MDCache::_find_ino_dir(inodeno_t ino, Context *fin, bufferlist& bl, int r)
   C_MDS_FindInoDir *c = new C_MDS_FindInoDir(this, ino, fin);
   c->bl = bl;
   r = path_traverse(NULL, NULL, c, path, &trace, NULL, MDS_TRAVERSE_DISCOVER);
+  delete c;  // path_traverse doesn't clean it up for us.
   if (r > 0)
     return; 
-  delete c;  // path_traverse doesn't clean it up for us.
   
   fin->finish(r);
   delete fin;
