@@ -6379,6 +6379,9 @@ int Client::get_caps_issued(int fd) {
   Mutex::Locker lock(client_lock);
 
   Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
+
   return f->inode->caps_issued();
 }
 
