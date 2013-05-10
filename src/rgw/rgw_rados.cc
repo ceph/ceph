@@ -2653,14 +2653,6 @@ int RGWRados::set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl
   if (state && r >= 0)
     state->attrset[name] = bl;
 
-  if (r == -ECANCELED) {
-    /* a race! object was replaced, we need to set attr on the original obj */
-    ldout(cct, 0) << "NOTICE: RGWRados::set_attr: raced with another process, going to the shadow obj instead" << dendl;
-    string loc = obj.loc();
-    rgw_obj shadow(obj.bucket, state->shadow_obj, loc, shadow_ns);
-    r = set_attr(NULL, shadow, name, bl);
-  }
-
   if (r < 0)
     return r;
 
@@ -2719,15 +2711,6 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
     return 0;
 
   r = io_ctx.operate(actual_obj, &op);
-
-  if (r == -ECANCELED) {
-    /* a race! object was replaced, we need to set attr on the original obj */
-    ldout(cct, 0) << "NOTICE: RGWRados::set_obj_attrs: raced with another process, going to the shadow obj instead" << dendl;
-    string loc = obj.loc();
-    rgw_obj shadow(obj.bucket, state->shadow_obj, loc, shadow_ns);
-    r = set_attrs(NULL, shadow, attrs, rmattrs);
-  }
-
   if (r < 0)
     return r;
 
@@ -3219,15 +3202,6 @@ int RGWRados::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **hand
   r = state->io_ctx.operate(oid, &op, NULL);
   ldout(cct, 20) << "rados->read r=" << r << " bl.length=" << bl.length() << dendl;
 
-  if (r == -ECANCELED) {
-    /* a race! object was replaced, we need to set attr on the original obj */
-    ldout(cct, 0) << "NOTICE: RGWRados::get_obj: raced with another process, going to the shadow obj instead" << dendl;
-    string loc = obj.loc();
-    rgw_obj shadow(bucket, astate->shadow_obj, loc, shadow_ns);
-    r = get_obj(NULL, NULL, handle, shadow, bl, ofs, end);
-    goto done_ret;
-  }
-
   if (merge_bl)
     bl.append(read_bl);
 
@@ -3684,15 +3658,7 @@ int RGWRados::read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& 
 
   op.read(ofs, size, &bl, NULL);
 
-  r = io_ctx.operate(oid, &op, NULL);
-  if (r == -ECANCELED) {
-    /* a race! object was replaced, we need to set attr on the original obj */
-    ldout(cct, 0) << "NOTICE: RGWRados::get_obj: raced with another process, going to the shadow obj instead" << dendl;
-    string loc = obj.loc();
-    rgw_obj shadow(obj.bucket, astate->shadow_obj, loc, shadow_ns);
-    r = read(NULL, shadow, ofs, size, bl);
-  }
-  return r;
+  return io_ctx.operate(oid, &op, NULL);
 }
 
 int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch, map<string, bufferlist> *attrs, bufferlist *first_chunk,
