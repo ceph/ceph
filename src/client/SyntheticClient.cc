@@ -701,6 +701,7 @@ int SyntheticClient::run()
 	}
 	did_run_me();
       }
+      break;
 
     case SYNCLIENT_MODE_WRSHARED:
       {
