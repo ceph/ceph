@@ -315,7 +315,6 @@ int OmapBench::write_omap_asynchronously(AioWriter *aiow,
 int OmapBench::generate_uniform_omap(const int omap_entries, const int key_size,
     const int value_size, std::map<std::string,bufferlist> * out_omap) {
   bufferlist bl;
-  int err = 0;
 
   //setup omap
   for (int i = 0; i < omap_entries; i++) {
@@ -324,18 +323,13 @@ int OmapBench::generate_uniform_omap(const int omap_entries, const int key_size,
     string key = random_string(key_size);
     (*out_omap)[key]= omap_val;
   }
-  if (err < 0) {
-    cout << "generating uniform omap failed - "
-	<< "appending random string to omap failed" << std::endl;
-  }
-  return err;
+  return 0;
 }
 
 int OmapBench::generate_non_uniform_omap(const int omap_entries,
     const int key_size, const int value_size,
     std::map<std::string,bufferlist> * out_omap) {
   bufferlist bl;
-  int err = 0;
 
   int num_entries = rand() % omap_entries + 1;
   int key_len = rand() % key_size +1;
@@ -348,11 +342,7 @@ int OmapBench::generate_non_uniform_omap(const int omap_entries,
     string key = random_string(key_len);
     (*out_omap)[key] = omap_val;
   }
-  if (err < 0) {
-    cout << "generating non-uniform omap failed - "
-	"appending random string to omap failed" << std::endl;
-  }
-  return err;
+  return 0;
 }
 
 int OmapBench::generate_small_non_random_omap(const int omap_entries,
@@ -360,7 +350,6 @@ int OmapBench::generate_small_non_random_omap(const int omap_entries,
     std::map<std::string,bufferlist> * out_omap) {
   bufferlist bl;
   stringstream key;
-  int err = 0;
 
   //setup omap
   for (int i = 0; i < omap_entries; i++) {
@@ -370,11 +359,7 @@ int OmapBench::generate_small_non_random_omap(const int omap_entries,
     key << "Key " << i;
     (*out_omap)[key.str()]= omap_val;
   }
-  if (err < 0) {
-    cout << "generating uniform omap failed - "
-	<< "appending random string to omap failed" << std::endl;
-  }
-  return err;
+  return 0;
 }
 
 //tests
