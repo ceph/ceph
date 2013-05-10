@@ -251,7 +251,6 @@ void* AdminSocket::entry()
 
 bool AdminSocket::do_accept()
 {
-  int ret;
   struct sockaddr_un address;
   socklen_t address_length = sizeof(address);
   ldout(m_cct, 30) << "AdminSocket: calling accept" << dendl;
@@ -269,7 +268,7 @@ bool AdminSocket::do_accept()
   int pos = 0;
   string c;
   while (1) {
-    ret = safe_read(connection_fd, &cmd[pos], 1);
+    int ret = safe_read(connection_fd, &cmd[pos], 1);
     if (ret <= 0) {
       lderr(m_cct) << "AdminSocket: error reading request code: "
 		   << cpp_strerror(ret) << dendl;
@@ -356,8 +355,7 @@ bool AdminSocket::do_accept()
       lderr(m_cct) << "AdminSocket: error writing response length "
 		   << cpp_strerror(ret) << dendl;
     } else {
-      ret = out.write_fd(connection_fd);
-      if (ret >= 0)
+      if (out.write_fd(connection_fd) >= 0)
 	rval = true;
     }
   }

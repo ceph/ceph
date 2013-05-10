@@ -701,7 +701,7 @@ void RGWListBuckets::execute()
 
     done = (m.size() < read_count || (limit > 0 && total_count == limit));
 
-    if (m.size()) {
+    if (!m.empty()) {
       send_response_data(buckets);
 
       map<string, RGWBucketEnt>::reverse_iterator riter = m.rbegin();
