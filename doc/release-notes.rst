@@ -32,7 +32,7 @@ Upgrading from v0.60
   would like to transition to the new tool, there is a migration
   path, documented at `Transitioning to ceph-deploy`_.
 
-.. _Transitioning to ceph-deploy: rados/deployment/ceph-deploy-transition
+.. _Transitioning to ceph-deploy: ../rados/deployment/ceph-deploy-transition
 
 * The sysvinit script (/etc/init.d/ceph) will now verify (and, if
   necessary, update) the OSD's position in the CRUSH map on startup.
