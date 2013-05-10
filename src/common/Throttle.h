@@ -88,7 +88,9 @@ private:
 
 class C_SimpleThrottle : public Context {
 public:
-  C_SimpleThrottle(SimpleThrottle *throttle) : m_throttle(throttle) {}
+  C_SimpleThrottle(SimpleThrottle *throttle) : m_throttle(throttle) {
+    m_throttle->start_op();
+  }
   virtual void finish(int r) {
     m_throttle->end_op(r);
   }

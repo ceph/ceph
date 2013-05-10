@@ -169,7 +169,6 @@ namespace librbd {
       ldout(cct, 2) << "trim_image objects " << delete_start << " to "
 		    << (num_objects - 1) << dendl;
       for (uint64_t i = delete_start; i < num_objects; ++i) {
-	throttle.start_op();
 	string oid = ictx->get_object_name(i);
 	Context *req_comp = new C_SimpleThrottle(&throttle);
 	librados::AioCompletion *rados_completion =
@@ -190,7 +189,6 @@ namespace librbd {
       for (vector<ObjectExtent>::iterator p = extents.begin();
 	   p != extents.end(); ++p) {
 	ldout(ictx->cct, 20) << " ex " << *p << dendl;
-	throttle.start_op();
 	Context *req_comp = new C_SimpleThrottle(&throttle);
 	librados::AioCompletion *rados_completion =
 	  librados::Rados::aio_create_completion(req_comp, NULL, rados_ctx_cb);
@@ -339,7 +337,6 @@ namespace librbd {
 
     for (uint64_t i = 0; i < numseg; i++) {
       string oid = ictx->get_object_name(i);
-      throttle.start_op();
       Context *req_comp = new C_SimpleThrottle(&throttle);
       librados::AioCompletion *rados_completion =
 	librados::Rados::aio_create_completion(req_comp, NULL, rados_ctx_cb);
@@ -2142,7 +2139,6 @@ reprotect_and_return_err:
 
       bufferlist bl;
       string oid = ictx->get_object_name(ono);
-      throttle.start_op();
       Context *comp = new C_SimpleThrottle(&throttle);
       AioWrite *req = new AioWrite(ictx, oid, ono, 0, objectx, object_overlap,
 				   bl, snapc, CEPH_NOSNAP, comp);
