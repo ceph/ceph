@@ -5791,7 +5791,7 @@ void OSD::handle_pg_backfill_reserve(OpRequestRef op)
 	new PG::CephPeeringEvt(
 	  m->query_epoch,
 	  m->query_epoch,
-	  PG::RequestBackfill())));
+	  PG::RequestBackfillPrio(m->priority))));
   } else if (m->type == MBackfillReserve::GRANT) {
     pg->queue_peering_event(
       PG::CephPeeringEvtRef(
@@ -6194,15 +6194,6 @@ void OSD::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
   recovery_wq._wake();
   recovery_wq.unlock();
 }
-
-void OSD::defer_recovery(PG *pg)
-{
-  dout(10) << "defer_recovery " << *pg << dendl;
-
-  // move pg to the end of the queue...
-  recovery_wq.queue(pg);
-}
-
 
 // =========================================================
 // OPS
