@@ -355,9 +355,10 @@ def main():
             import subprocess
             subprocess.check_call(["kill", "-9", str(ctx.pid)]);
 
-    nuke(ctx, log, ctx.unlock, ctx.synch_clocks, ctx.reboot_all)
+    nuke(ctx, log, ctx.unlock, ctx.synch_clocks, ctx.reboot_all, ctx.noipmi)
 
-def nuke(ctx, log, should_unlock, sync_clocks=True, reboot_all=True):
+def nuke(ctx, log, should_unlock, sync_clocks=True, reboot_all=True,
+         noipmi=False):
     from teuthology.parallel import parallel
     total_unnuked = {}
     with parallel() as p:
@@ -371,6 +372,7 @@ def nuke(ctx, log, should_unlock, sync_clocks=True, reboot_all=True):
                 sync_clocks,
                 reboot_all,
                 ctx.config.get('check-locks', True),
+                noipmi,
                 )
         for unnuked in p:
             if unnuked:
@@ -378,7 +380,8 @@ def nuke(ctx, log, should_unlock, sync_clocks=True, reboot_all=True):
     if total_unnuked:
         log.error('Could not nuke the following targets:\n' + '\n  '.join(['targets:', ] + yaml.safe_dump(total_unnuked, default_flow_style=False).splitlines()))
 
-def nuke_one(ctx, targets, log, should_unlock, synch_clocks, reboot_all, check_locks):
+def nuke_one(ctx, targets, log, should_unlock, synch_clocks, reboot_all,
+             check_locks, noipmi):
     from teuthology.lock import unlock
     ret = None
     ctx = argparse.Namespace(
@@ -389,7 +392,7 @@ def nuke_one(ctx, targets, log, should_unlock, synch_clocks, reboot_all, check_l
         reboot_all=reboot_all,
         teuthology_config=ctx.teuthology_config,
         name=ctx.name,
-        noipmi=ctx.noipmi,
+        noipmi=noipmi,
         )
     try:
         nuke_helper(ctx, log)
