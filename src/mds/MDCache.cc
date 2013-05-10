@@ -7902,9 +7902,9 @@ void MDCache::_find_ino_dir(inodeno_t ino, Context *fin, bufferlist& bl, int r)
   C_MDS_FindInoDir *c = new C_MDS_FindInoDir(this, ino, fin);
   c->bl = bl;
   r = path_traverse(NULL, NULL, c, path, &trace, NULL, MDS_TRAVERSE_DISCOVER);
+  delete c;  // path_traverse doesn't clean it up for us.
   if (r > 0)
     return; 
-  delete c;  // path_traverse doesn't clean it up for us.
   
   fin->finish(r);
   delete fin;
@@ -9193,7 +9193,7 @@ void MDCache::handle_discover(MDiscover *dis)
     cur = get_inode(dis->get_base_ino(), snapid);
     if (!cur && snapid != CEPH_NOSNAP) {
       cur = get_inode(dis->get_base_ino());
-      if (!cur->is_multiversion())
+      if (cur && !cur->is_multiversion())
 	cur = NULL;  // nope!
     }
     
@@ -10080,7 +10080,8 @@ CDir *MDCache::force_dir_fragment(CInode *diri, frag_t fg)
       src.push_back(pdir);
       adjust_dir_fragments(diri, src, parent, split, result, waiters, true);
       dir = diri->get_dirfrag(fg);
-      dout(10) << "force_dir_fragment result " << *dir << dendl;
+      if (dir)
+        dout(10) << "force_dir_fragment result " << *dir << dendl;
       return dir;
     }
     if (parent == frag_t())
