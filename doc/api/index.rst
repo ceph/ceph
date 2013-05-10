@@ -34,9 +34,18 @@ See `S3-compatible API`_.
 
 .. _S3-compatible API: ../radosgw/s3/
 
+
 Ceph RADOS Gateway Swift API
 ============================
 
 See `Swift-compatible API`_.
 
 .. _Swift-compatible API: ../radosgw/swift/
+
+
+Ceph RADOS Gateway Admin Ops API
+================================
+
+See `Admin Ops API`_. 
+
+.. _Admin Ops API: ../radosgw/adminops
