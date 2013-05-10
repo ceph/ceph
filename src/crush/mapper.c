@@ -188,7 +188,7 @@ static int terminal(int x)
 static int bucket_tree_choose(struct crush_bucket_tree *bucket,
 			      int x, int r)
 {
-	int n, l;
+	int n;
 	__u32 w;
 	__u64 t;
 
@@ -203,7 +203,7 @@ static int bucket_tree_choose(struct crush_bucket_tree *bucket,
 		t = t >> 32;
 
 		/* descend to the left or right? */
-		l = left(n);
+		int l = left(n);
 		if (t < bucket->node_weights[l])
 			n = l;
 		else
@@ -493,7 +493,6 @@ int crush_do_rule(const struct crush_map *map,
 	__u32 step;
 	int i, j;
 	int numrep;
-	int firstn;
 	const int descend_once = 0;
 
 	if ((__u32)ruleno >= map->max_rules) {
@@ -509,7 +508,7 @@ int crush_do_rule(const struct crush_map *map,
 	for (step = 0; step < rule->len; step++) {
 		struct crush_rule_step *curstep = &rule->steps[step];
 
-		firstn = 0;
+		int firstn = 0;
 		switch (curstep->op) {
 		case CRUSH_RULE_TAKE:
 			w[0] = curstep->arg1;

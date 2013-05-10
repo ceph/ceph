@@ -103,7 +103,6 @@ static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
 {
   unsigned snap_count = 0;
   uint64_t snap_names_len = 0;
-  int rc;
   struct rbd_obj_header_ondisk *header;
 
   CLS_LOG(20, "snapshots_list");
@@ -113,7 +112,7 @@ static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
       snap_count * sizeof(struct rbd_obj_snap_ondisk) +
       snap_names_len;
 
-    rc = cls_cxx_read(hctx, 0, len, &bl);
+    int rc = cls_cxx_read(hctx, 0, len, &bl);
     if (rc < 0)
       return rc;
 
