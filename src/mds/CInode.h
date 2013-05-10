@@ -332,7 +332,7 @@ public:
       //assert(g_conf->debug_mds < 2 || dirfragtree.is_leaf(fg)); // performance hack FIXME
       return dirfrags[fg];
     } else
-      return 0;
+      return NULL;
   }
   bool get_dirfrags_under(frag_t fg, list<CDir*>& ls);
   CDir* get_approx_dirfrag(frag_t fg);

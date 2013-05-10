@@ -10082,7 +10082,8 @@ CDir *MDCache::force_dir_fragment(CInode *diri, frag_t fg)
       src.push_back(pdir);
       adjust_dir_fragments(diri, src, parent, split, result, waiters, true);
       dir = diri->get_dirfrag(fg);
-      dout(10) << "force_dir_fragment result " << *dir << dendl;
+      if (dir)
+        dout(10) << "force_dir_fragment result " << *dir << dendl;
       return dir;
     }
     if (parent == frag_t())
