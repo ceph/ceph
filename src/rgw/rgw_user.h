@@ -80,22 +80,6 @@ extern int rgw_delete_user(RGWRados *store, RGWUserInfo& user);
  * Store a list of the user's buckets, with associated functinos.
  */
 
-/**
- * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
- * Returns: 0 on success, -ERR# on failure.
- */
-//extern int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& buckets, bool need_stats);
-
-/**
- * Store the set of buckets associated with a user.
- * This completely overwrites any previously-stored list, so be careful!
- * Returns 0 on success, -ERR# otherwise.
- */
-//extern int rgw_write_buckets_attr(RGWRados *store, string user_id, RGWUserBuckets& buckets);
-
-//extern int rgw_add_bucket(RGWRados *store, string user_id, rgw_bucket& bucket);
-//extern int rgw_remove_user_bucket_info(RGWRados *store, string user_id, rgw_bucket& bucket);
-
 /*
  * remove the different indexes
  */

@@ -185,10 +185,11 @@ class RGWCache  : public T
 public:
   RGWCache() {}
 
-  int set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl);
+  int set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl, RGWObjVersionTracker *objv_tracker);
   int set_attrs(void *ctx, rgw_obj& obj, 
                 map<string, bufferlist>& attrs,
-                map<string, bufferlist>* rmattrs);
+                map<string, bufferlist>* rmattrs,
+                RGWObjVersionTracker *objv_tracker);
   int put_obj_meta_impl(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
                    map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
                    map<std::string, bufferlist>* rmattrs, const bufferlist *data,
@@ -286,7 +287,7 @@ int RGWCache<T>::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **h
 }
 
 template <class T>
-int RGWCache<T>::set_attr(void *ctx, rgw_obj& obj, const char *attr_name, bufferlist& bl)
+int RGWCache<T>::set_attr(void *ctx, rgw_obj& obj, const char *attr_name, bufferlist& bl, RGWObjVersionTracker *objv_tracker)
 {
   rgw_bucket bucket;
   string oid;
@@ -299,7 +300,7 @@ int RGWCache<T>::set_attr(void *ctx, rgw_obj& obj, const char *attr_name, buffer
     info.status = 0;
     info.flags = CACHE_FLAG_MODIFY_XATTRS;
   }
-  int ret = T::set_attr(ctx, obj, attr_name, bl);
+  int ret = T::set_attr(ctx, obj, attr_name, bl, objv_tracker);
   if (cacheable) {
     string name = normal_name(bucket, oid);
     if (ret >= 0) {
@@ -318,7 +319,8 @@ int RGWCache<T>::set_attr(void *ctx, rgw_obj& obj, const char *attr_name, buffer
 template <class T>
 int RGWCache<T>::set_attrs(void *ctx, rgw_obj& obj, 
                            map<string, bufferlist>& attrs,
-                           map<string, bufferlist>* rmattrs) 
+                           map<string, bufferlist>* rmattrs,
+                           RGWObjVersionTracker *objv_tracker) 
 {
   rgw_bucket bucket;
   string oid;
@@ -333,7 +335,7 @@ int RGWCache<T>::set_attrs(void *ctx, rgw_obj& obj,
     info.status = 0;
     info.flags = CACHE_FLAG_MODIFY_XATTRS;
   }
-  int ret = T::set_attrs(ctx, obj, attrs, rmattrs);
+  int ret = T::set_attrs(ctx, obj, attrs, rmattrs, objv_tracker);
   if (cacheable) {
     string name = normal_name(bucket, oid);
     if (ret >= 0) {

@@ -822,7 +822,8 @@ public:
    * dest: bufferlist to store the result in
    * Returns: 0 on success, -ERR# otherwise.
    */
-  virtual int get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& dest);
+  virtual int get_attr(void *ctx, rgw_obj& obj, const char *name,
+                       bufferlist& dest, RGWObjVersionTracker *objv_tracker);
 
   /**
    * Set an attr on an object.
@@ -832,11 +833,13 @@ public:
    * bl: the contents of the attr
    * Returns: 0 on success, -ERR# otherwise.
    */
-  virtual int set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl);
+  virtual int set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl,
+                       RGWObjVersionTracker *objv_tracker);
 
   virtual int set_attrs(void *ctx, rgw_obj& obj,
                         map<string, bufferlist>& attrs,
-                        map<string, bufferlist>* rmattrs);
+                        map<string, bufferlist>* rmattrs,
+                        RGWObjVersionTracker *objv_tracker);
 
 /**
  * Get data about an object out of RADOS and into memory.
