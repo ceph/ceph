@@ -2415,7 +2415,7 @@ int SyntheticClient::read_random(string& fn, int size, int rdsize)   // size is 
 
     // cleanup before call 'new'
     if (buf != NULL) {
-	delete [] buf;
+	delete[] buf;
 	buf = NULL;
     }
     if ( x < 0.5) 
@@ -2586,6 +2586,11 @@ int SyntheticClient::read_random_ex(string& fn, int size, int rdsize)   // size 
     
     //dout(0) << "RANDOM NUMBER RETURN |" << x << "|" << dendl;
     
+    // cleanup before call 'new'
+    if (buf != NULL) {
+	delete[] buf;
+	buf = NULL;
+    }
     if ( x < 0.5) 
       {
         //dout(0) << "DECIDED TO READ " << x << dendl;
