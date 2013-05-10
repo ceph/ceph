@@ -630,7 +630,7 @@ public:
     hobject_t oid(sobject_t("infos", CEPH_NOSNAP));
     return oid;
   }
-  static void clear_temp(ObjectStore *store, coll_t tmp);
+  static void recursive_remove_collection(ObjectStore *store, coll_t tmp);
   
 
 private:
