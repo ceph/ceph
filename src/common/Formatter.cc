@@ -379,7 +379,6 @@ void XMLFormatter::dump_string_with_attrs(const char *name, std::string s, const
 
 std::ostream& XMLFormatter::dump_stream(const char *name)
 {
-  assert(m_pending_string_name.empty());
   print_spaces();
   m_pending_string_name = name;
   m_ss << "<" << m_pending_string_name << ">";
