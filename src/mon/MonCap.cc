@@ -26,6 +26,8 @@
 using std::ostream;
 using std::vector;
 
+#define dout_subsys ceph_subsys_mon
+
 ostream& operator<<(ostream& out, mon_rwxa_t p)
 { 
   if (p == MON_CAP_ANY)
@@ -63,6 +65,8 @@ ostream& operator<<(ostream& out, const MonCapGrant& m)
 bool MonCapGrant::is_match(const std::string& s, const std::string& c,
 			   const map<string,string>& c_args) const
 {
+  if (profile.length())
+    return false;
   if (service.length()) {
     if (service != s)
       return false;
@@ -79,6 +83,16 @@ bool MonCapGrant::is_match(const std::string& s, const std::string& c,
   return true;
 }
 
+ostream& operator<<(ostream&out, const MonCap& m)
+{
+  for (vector<MonCapGrant>::const_iterator p = m.grants.begin(); p != m.grants.end(); ++p) {
+    if (p != m.grants.begin())
+      out << ", ";
+    out << *p;
+  }
+  return out;
+}
+
 bool MonCap::is_allow_all() const
 {
   for (vector<MonCapGrant>::const_iterator p = grants.begin(); p != grants.end(); ++p)
@@ -93,13 +107,24 @@ void MonCap::set_allow_all()
   grants.push_back(MonCapGrant(MON_CAP_ANY));
 }
 
-bool MonCap::is_capable(const string& service,
+bool MonCap::is_capable(CephContext *cct,
+			const string& service,
 			const string& command, const map<string,string>& command_args,
 			bool op_may_read, bool op_may_write, bool op_may_exec) const
 {
+  if (cct)
+    ldout(cct, 20) << "is_capable service=" << service << " command=" << command
+		   << (op_may_read ? " read":"")
+		   << (op_may_write ? " write":"")
+		   << (op_may_exec ? " exec":"")
+		   << " on cap " << *this
+		   << dendl;
   mon_rwxa_t allow = 0;
   for (vector<MonCapGrant>::const_iterator p = grants.begin();
        p != grants.end(); ++p) {
+    if (cct)
+      ldout(cct, 20) << " allow so far " << allow << ", doing grant " << *p << dendl;
+
     // check enumerated caps
     if (p->is_match(service, command, command_args)) {
       allow = allow | p->allow;

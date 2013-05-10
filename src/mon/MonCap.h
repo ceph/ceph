@@ -9,6 +9,8 @@ using std::ostream;
 
 #include "include/types.h"
 
+class CephContext;
+
 static const __u8 MON_CAP_R     = (1 << 1);      // read
 static const __u8 MON_CAP_W     = (1 << 2);      // write
 static const __u8 MON_CAP_X     = (1 << 3);      // execute
@@ -95,7 +97,8 @@ struct MonCap {
    * @param op_may_exec whether the operation may exec
    * @return true if the operation is allowed, false otherwise
    */
-  bool is_capable(const string& service,
+  bool is_capable(CephContext *cct,
+		  const string& service,
 		  const string& command, const map<string,string>& command_args,
 		  bool op_may_read, bool op_may_write, bool op_may_exec) const;
 
@@ -106,9 +109,6 @@ struct MonCap {
 };
 WRITE_CLASS_ENCODER(MonCap)
 
-static inline ostream& operator<<(ostream& out, const MonCap& cap)
-{
-  return out << "moncap" << cap.grants;
-}
+ostream& operator<<(ostream& out, const MonCap& cap);
 
 #endif

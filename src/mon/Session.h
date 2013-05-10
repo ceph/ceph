@@ -78,7 +78,8 @@ struct MonSession : public RefCountedObject {
 
   bool is_capable(string service, int mask) {
     map<string,string> args;
-    return caps.is_capable(service, "", args,
+    return caps.is_capable(g_ceph_context,
+			   service, "", args,
 			   mask & MON_CAP_R, mask & MON_CAP_W, mask & MON_CAP_X);
   }
 };
