@@ -1141,7 +1141,7 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
     __u8 tag = 'e';
     bufferlist bl;
     ::encode(tag, bl);
-    bl.write_fd(fd);
+    r = bl.write_fd(fd);
     if (r < 0)
       return r;
   }
