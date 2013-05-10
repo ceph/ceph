@@ -2801,30 +2801,41 @@ bool remove_dir(
   ObjectStore::Sequencer *osr,
   coll_t coll, DeletingStateRef dstate) {
   vector<hobject_t> olist;
-  store->collection_list(coll, olist);
   int64_t num = 0;
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  for (vector<hobject_t>::iterator i = olist.begin();
-       i != olist.end();
-       ++i, ++num) {
-    OSDriver::OSTransaction _t(osdriver->get_transaction(t));
-    int r = mapper->remove_oid(*i, &_t);
-    if (r != 0 && r != -ENOENT) {
-      assert(0);
-    }
-    t->remove(coll, *i);
-    if (num >= g_conf->osd_target_transaction_size) {
-      store->apply_transaction(osr, *t);
-      delete t;
-      if (!dstate->check_canceled()) {
-	// canceled!
-	return false;
+  hobject_t next;
+  while (!next.is_max()) {
+    store->collection_list_partial(
+      coll,
+      next,
+      store->get_ideal_list_min(),
+      store->get_ideal_list_max(),
+      0,
+      &olist,
+      &next);
+    for (vector<hobject_t>::iterator i = olist.begin();
+	 i != olist.end();
+	 ++i, ++num) {
+      OSDriver::OSTransaction _t(osdriver->get_transaction(t));
+      int r = mapper->remove_oid(*i, &_t);
+      if (r != 0 && r != -ENOENT) {
+	assert(0);
       }
-      t = new ObjectStore::Transaction;
-      num = 0;
+      t->remove(coll, *i);
+      if (num >= g_conf->osd_target_transaction_size) {
+	store->apply_transaction(osr, *t);
+	delete t;
+	if (!dstate->check_canceled()) {
+	  // canceled!
+	  return false;
+	}
+	t = new ObjectStore::Transaction;
+	num = 0;
+      }
     }
+    olist.clear();
   }
-  store->apply_transaction(*t);
+  store->apply_transaction(osr, *t);
   delete t;
   return true;
 }
