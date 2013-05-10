@@ -193,7 +193,8 @@ static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx, RG
   int ret = 0;
 
   if (obj.bucket.name.size()) {
-    ret = store->get_attr(ctx, obj, RGW_ATTR_ACL, bl);
+    RGWObjVersionTracker objv_tracker;
+    ret = store->get_attr(ctx, obj, RGW_ATTR_ACL, bl, &objv_tracker);
 
     if (ret >= 0) {
       bufferlist::iterator iter = bl.begin();
@@ -213,7 +214,6 @@ static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx, RG
       /* object exists, but policy is broken */
       RGWBucketInfo info;
       RGWUserInfo uinfo;
-      RGWObjVersionTracker objv_tracker;
       int r = store->get_bucket_info(ctx, obj.bucket.name, info, &objv_tracker);
       if (r < 0)
         goto done;
@@ -229,11 +229,12 @@ done:
   return ret;
 }
 
-static int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs, uint64_t *obj_size)
+static int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs,
+                         uint64_t *obj_size, RGWObjVersionTracker *objv_tracker)
 {
   void *handle;
   int ret = store->prepare_get_obj(s->obj_ctx, obj, NULL, NULL, &attrs, NULL,
-                                      NULL, NULL, NULL, NULL, NULL, obj_size, NULL, &handle, &s->err);
+                                      NULL, NULL, NULL, NULL, NULL, obj_size, objv_tracker, &handle, &s->err);
   store->finish_get_obj(&handle);
   return ret;
 }
@@ -1573,6 +1574,8 @@ void RGWPutMetadata::execute()
   map<string, bufferlist>::iterator iter;
   bufferlist bl, cors_bl;
 
+  bool object_op = (!s->object_str.empty());
+
   rgw_obj obj(s->bucket, s->object_str);
 
   store->set_atomic(s->obj_ctx, obj);
@@ -1583,8 +1586,13 @@ void RGWPutMetadata::execute()
 
   rgw_get_request_metadata(s, attrs);
 
+  RGWObjVersionTracker objv_tracker;
+
+  /* no need to track object versioning, need it for bucket's data only */
+  RGWObjVersionTracker *ptracker = (object_op ? NULL : &objv_tracker);
+
   /* check if obj exists, read orig attrs */
-  ret = get_obj_attrs(store, s, obj, orig_attrs, NULL);
+  ret = get_obj_attrs(store, s, obj, orig_attrs, NULL, ptracker);
   if (ret < 0)
     return;
 
@@ -1606,7 +1614,11 @@ void RGWPutMetadata::execute()
     cors_config.encode(cors_bl);
     attrs[RGW_ATTR_CORS] = cors_bl;
   }
-  ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs);
+  if (object_op) {
+    ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs, ptracker);
+  } else {
+    ret = rgw_bucket_set_attrs(store, obj, attrs, &rmattrs, ptracker);
+  }
 }
 
 int RGWDeleteObj::verify_permission()
@@ -1883,10 +1895,15 @@ void RGWPutACLs::execute()
     *_dout << dendl;
   }
 
+  bool object_op = (!s->object_str.empty());
+
+  RGWObjVersionTracker objv_tracker;
+  RGWObjVersionTracker *ptracker = (object_op ? NULL : &objv_tracker);
+
   new_policy.encode(bl);
   obj.init(s->bucket, s->object_str);
   store->set_atomic(s->obj_ctx, obj);
-  ret = store->set_attr(s->obj_ctx, obj, RGW_ATTR_ACL, bl);
+  ret = store->set_attr(s->obj_ctx, obj, RGW_ATTR_ACL, bl, ptracker);
 }
 
 int RGWGetCORS::verify_permission()
@@ -1953,11 +1970,16 @@ void RGWPutCORS::execute()
     *_dout << dendl;
   }
 
+  bool object_op = (!s->object_str.empty());
+
+  RGWObjVersionTracker objv_tracker;
+  RGWObjVersionTracker *ptracker = (object_op ? NULL : &objv_tracker);
+
   string no_obj;
   cors_config->encode(bl);
   obj.init(s->bucket, no_obj);
   store->set_atomic(s->obj_ctx, obj);
-  ret = store->set_attr(s->obj_ctx, obj, RGW_ATTR_CORS, bl);
+  ret = store->set_attr(s->obj_ctx, obj, RGW_ATTR_CORS, bl, ptracker);
 }
 
 int RGWDeleteCORS::verify_permission()
@@ -1982,8 +2004,13 @@ void RGWDeleteCORS::execute()
   store->set_atomic(s->obj_ctx, obj);
   map<string, bufferlist> orig_attrs, attrs, rmattrs;
   map<string, bufferlist>::iterator iter;
+  bool object_op = (!s->object_str.empty());
+
+  RGWObjVersionTracker objv_tracker;
+  RGWObjVersionTracker *ptracker = (object_op ? NULL : &objv_tracker);
+
   /* check if obj exists, read orig attrs */
-  ret = get_obj_attrs(store, s, obj, orig_attrs, NULL);
+  ret = get_obj_attrs(store, s, obj, orig_attrs, NULL, ptracker);
   if (ret < 0)
     return;
 
@@ -1997,7 +2024,7 @@ void RGWDeleteCORS::execute()
       attrs[name] = iter->second;
     }
   }
-  ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs);
+  ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs, ptracker);
 }
 
 void RGWOptionsCORS::get_response_params(string& hdrs, string& exp_hdrs, unsigned *max_age) {
@@ -2132,7 +2159,7 @@ static int get_multiparts_info(RGWRados *store, struct req_state *s, string& met
   rgw_obj obj;
   obj.init_ns(s->bucket, meta_oid, mp_ns);
 
-  int ret = get_obj_attrs(store, s, obj, attrs, NULL);
+  int ret = get_obj_attrs(store, s, obj, attrs, NULL, NULL);
   if (ret < 0)
     return ret;
 
@@ -2571,7 +2598,7 @@ int RGWHandler::read_cors_config(void)
   string no_object;
   rgw_obj no_obj(s->bucket, no_object);
   if (no_obj.bucket.name.size()) {
-    ret = store->get_attr(s->obj_ctx, no_obj, RGW_ATTR_CORS, bl);
+    ret = store->get_attr(s->obj_ctx, no_obj, RGW_ATTR_CORS, bl, NULL);
     if (ret >= 0) {
       bufferlist::iterator iter = bl.begin();
       s->bucket_cors = new RGWCORSConfiguration();

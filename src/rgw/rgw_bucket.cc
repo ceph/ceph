@@ -72,24 +72,6 @@ int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& bucke
   return 0;
 }
 
-/**
- * Store the set of buckets associated with a user on a n xattr
- * not used with all backends
- * This completely overwrites any previously-stored list, so be careful!
- * Returns 0 on success, -ERR# otherwise.
- */
-int rgw_write_buckets_attr(RGWRados *store, string user_id, RGWUserBuckets& buckets)
-{
-  bufferlist bl;
-  buckets.encode(bl);
-
-  rgw_obj obj(store->zone.user_uid_pool, user_id);
-
-  int ret = store->set_attr(NULL, obj, RGW_ATTR_BUCKETS, bl);
-
-  return ret;
-}
-
 int rgw_add_bucket(RGWRados *store, string user_id, rgw_bucket& bucket)
 {
   int ret;
@@ -170,7 +152,7 @@ int RGWBucket::create_bucket(string bucket_str, string& user_id, string& display
 
   obj.init(bucket, no_oid);
 
-  ret = store->set_attr(NULL, obj, RGW_ATTR_ACL, aclbl);
+  ret = store->set_attr(NULL, obj, RGW_ATTR_ACL, aclbl, &objv_tracker);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: failed to set acl on bucket" << dendl;
     goto done;
@@ -182,6 +164,15 @@ int RGWBucket::create_bucket(string bucket_str, string& user_id, string& display
     ret = 0;
 done:
   return ret;
+}
+
+int rgw_bucket_set_attrs(RGWRados *store, rgw_obj& obj,
+                         map<string, bufferlist>& attrs,
+                         map<string, bufferlist>* rmattrs,
+                         RGWObjVersionTracker *objv_tracker)
+{
+  return store->meta_mgr->set_attrs(bucket_meta_handler, obj.bucket.name,
+                                    obj, attrs, rmattrs, objv_tracker);
 }
 
 static void dump_mulipart_index_results(list<std::string>& objs_to_unlink,
@@ -401,8 +392,9 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
   string uid_str(user_id);
   bufferlist aclbl;
   rgw_obj obj(bucket, no_oid);
+  RGWObjVersionTracker objv_tracker;
 
-  int r = store->get_attr(NULL, obj, RGW_ATTR_ACL, aclbl);
+  int r = store->get_attr(NULL, obj, RGW_ATTR_ACL, aclbl, &objv_tracker);
   if (r >= 0) {
     RGWAccessControlPolicy policy;
     ACLOwner owner;
@@ -438,7 +430,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     aclbl.clear();
     policy.encode(aclbl);
 
-    r = store->set_attr(NULL, obj, RGW_ATTR_ACL, aclbl);
+    r = store->set_attr(NULL, obj, RGW_ATTR_ACL, aclbl, &objv_tracker);
     if (r < 0)
       return r;
 
@@ -699,7 +691,7 @@ int RGWBucket::get_policy(RGWBucketAdminOpState& op_state, ostream& o)
 
   bufferlist bl;
   rgw_obj obj(bucket, object_name);
-  int ret = store->get_attr(NULL, obj, RGW_ATTR_ACL, bl);
+  int ret = store->get_attr(NULL, obj, RGW_ATTR_ACL, bl, NULL);
   if (ret < 0)
     return ret;
 
@@ -1326,7 +1318,6 @@ public:
   };
 
   int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) {
-#warning FIXME: use objv_tracker
     rgw_bucket bucket;
     int r = init_bucket(store, entry, bucket, &objv_tracker);
     if (r < 0) {
