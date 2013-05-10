@@ -234,7 +234,8 @@ namespace librbd {
   }
 
   void AbstractWrite::send_copyup() {
-    m_copyup.exec("rbd", "copyup", m_read_data);
+    if (!m_read_data.is_zero())
+      m_copyup.exec("rbd", "copyup", m_read_data);
     add_copyup_ops();
 
     librados::AioCompletion *rados_completion =
