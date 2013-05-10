@@ -277,8 +277,10 @@ Lock, unlock, or query lock status of machines.
                 if vmachine['locked']:
                     vmachines.append(vmachine['name'])
         if vmachines:
-            scan_for_locks(ctx, vmachines)
+            # Avoid ssh-keyscans for everybody when listing all machines
+            # Listing specific machines will update the keys.
             if machines:
+                scan_for_locks(ctx, vmachines)
                 statuses = [ls.get_status(ctx, machine) for machine in machines]
             else:
                 statuses = list_locks(ctx)
