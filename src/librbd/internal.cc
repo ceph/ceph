@@ -1886,10 +1886,54 @@ reprotect_and_return_err:
     return r;
   }
 
+  class C_CopyWrite : public Context {
+  public:
+    C_CopyWrite(SimpleThrottle *throttle, bufferlist *bl)
+      : m_throttle(throttle), m_bl(bl) {}
+    virtual void finish(int r) {
+      delete m_bl;
+      m_throttle->end_op(r);
+    }
+  private:
+    SimpleThrottle *m_throttle;
+    bufferlist *m_bl;
+  };
+
+  class C_CopyRead : public Context {
+  public:
+    C_CopyRead(SimpleThrottle *throttle, ImageCtx *dest, uint64_t offset,
+	       bufferlist *bl)
+      : m_throttle(throttle), m_dest(dest), m_offset(offset), m_bl(bl) {
+      m_throttle->start_op();
+    }
+    virtual void finish(int r) {
+      if (r < 0) {
+	lderr(m_dest->cct) << "error reading from source image at offset "
+			   << m_offset << ": " << cpp_strerror(r) << dendl;
+	delete m_bl;
+	m_throttle->end_op(r);
+	return;
+      }
+      assert(m_bl->length() == (size_t)r);
+      Context *ctx = new C_CopyWrite(m_throttle, m_bl);
+      AioCompletion *comp = aio_create_completion_internal(ctx, rbd_ctx_cb);
+      r = aio_write(m_dest, m_offset, m_bl->length(), m_bl->c_str(), comp);
+      if (r < 0) {
+	ctx->complete(r);
+	comp->release();
+	lderr(m_dest->cct) << "error writing to destination image at offset "
+			   << m_offset << ": " << cpp_strerror(r) << dendl;
+      }
+    }
+  private:
+    SimpleThrottle *m_throttle;
+    ImageCtx *m_dest;
+    uint64_t m_offset;
+    bufferlist *m_bl;
+  };
+
   int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx)
   {
-    CopyProgressCtx cp(prog_ctx);
-
     src->md_lock.get_read();
     src->snap_lock.get_read();
     uint64_t src_size = src->get_image_size(src->snap_id);
@@ -1902,22 +1946,37 @@ reprotect_and_return_err:
     dest->snap_lock.put_read();
     dest->md_lock.put_read();
 
+    CephContext *cct = src->cct;
     if (dest_size < src_size) {
-      lderr(src->cct) << " src size " << src_size << " != dest size " << dest_size << dendl;
+      lderr(cct) << " src size " << src_size << " >= dest size "
+		 << dest_size << dendl;
       return -EINVAL;
     }
-
-    cp.destictx = dest;
-    cp.src_size = src_size;
-
-    int64_t r = read_iterate(src, 0, src_size, do_copy_extent, &cp);
-
-    if (r >= 0) {
-      // don't return total bytes read, which may not fit in an int
-      r = 0;
-      prog_ctx.update_progress(cp.src_size, cp.src_size);
+    int r;
+    SimpleThrottle throttle(cct->_conf->rbd_concurrent_management_ops, false);
+    uint64_t period = src->get_stripe_period();
+    for (uint64_t offset = 0; offset < src_size; offset += period) {
+      uint64_t len = min(period, src_size - offset);
+      bufferlist *bl = new bufferlist();
+      Context *ctx = new C_CopyRead(&throttle, dest, offset, bl);
+      AioCompletion *comp = aio_create_completion_internal(ctx, rbd_ctx_cb);
+      r = aio_read(src, offset, len, NULL, bl, comp);
+      if (r < 0) {
+	ctx->complete(r);
+	comp->release();
+	throttle.wait_for_ret();
+	lderr(cct) << "could not read from source image from "
+		   << offset << " to " << offset + len << ": "
+		   << cpp_strerror(r) << dendl;
+	return r;
+      }
+      prog_ctx.update_progress(offset, src_size);
     }
-    return (int)r;
+
+    r = throttle.wait_for_ret();
+    if (r >= 0)
+      prog_ctx.update_progress(src_size, src_size);
+    return r;
   }
 
   // common snap_set functionality for snap_set and open_image
