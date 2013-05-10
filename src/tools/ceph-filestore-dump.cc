@@ -402,7 +402,7 @@ int finish_remove_pgs(ObjectStore *store, uint64_t *next_removal_seq)
 
     if (it->is_temp(pgid)) {
       cout << "finish_remove_pgs " << *it << " clearing temp" << std::endl;
-      OSD::clear_temp(store, *it);
+      OSD::recursive_remove_collection(store, *it);
       continue;
     }
 
