@@ -17,7 +17,7 @@ Notable Changes
 * sysvinit: do not assume default osd_data when automatically weighting OSD
 * osd: avoid crash from ill-behaved classes using getomapvals
 * debian: fix squeeze dependency
-* mon: debug options to log or dump leveldb transactactions
+* mon: debug options to log or dump leveldb transactions
 
 For more detailed information, see :download:`the complete changelog <changelog/v0.61.1.txt>`.
 
@@ -32,7 +32,6 @@ Upgrading from v0.60
   would like to transition to the new tool, there is a migration
   path, documented at `Transitioning to ceph-deploy`_.
 
-.. _Transitioning to ceph-deploy: ../rados/deployment/ceph-deploy-transition
 
 * The sysvinit script (/etc/init.d/ceph) will now verify (and, if
   necessary, update) the OSD's position in the CRUSH map on startup.
@@ -46,7 +45,7 @@ Upgrading from v0.60
 * radosgw-admin now uses the term zone instead of cluster to describe
   each instance of the radosgw data store (and corresponding
   collection of radosgw daemons).  The usage for the radosgw-admin
-  command and the 'rgw zone root pool' config optoins have changed
+  command and the 'rgw zone root pool' config options have changed
   accordingly.
 
 * rbd progress indicators now go to standard error instead of standard
@@ -63,7 +62,7 @@ Upgrading from v0.60
 
 * The sysvinit script now uses the ceph.conf file on the remote host
   when starting remote daemons via the '-a' option.  Note that if '-a'
-  is used in conjuction with '-c path', the path must also be present
+  is used in conjunction with '-c path', the path must also be present
   on the remote host (it is not copied to a temporary file, as it was
   previously).
 
@@ -80,7 +79,7 @@ Please see `Upgrading from Bobtail to Cuttlefish`_ for details.
   would like to transition to the new tool, there is a migration
   path, documented at `Transitioning to ceph-deploy`_.
 
-.. _Transitioning to ceph-deploy: rados/deployment/ceph-deploy-transition
+.. _Transitioning to ceph-deploy: ../rados/deployment/ceph-deploy-transition
 
 * The sysvinit script (/etc/init.d/ceph) will now verify (and, if
   necessary, update) the OSD's position in the CRUSH map on startup.
