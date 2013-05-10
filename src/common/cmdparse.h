@@ -1,5 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
+#ifndef CEPH_COMMON_CMDPARSE_H
+#define CEPH_COMMON_CMDPARSE_H
+
 #include <string>
 #include <sstream>
 #include <map>
@@ -12,8 +15,6 @@ typedef boost::variant<std::string, bool, int64_t, double, std::vector<std::stri
 
 bool cmdmap_from_json(std::vector<std::string> cmd, std::map<std::string,
 		      cmd_vartype> *mapp, std::stringstream &ss);
-void build_fullcmd(string &prefix, map<string, cmd_vartype>&cmdmap,
-		   vector<string> *fullcmd);
 
 template <typename T>
 bool
@@ -51,3 +52,5 @@ cmd_putval(CephContext *cct, std::map<std::string, cmd_vartype>& cmdmap, std::st
 {
   cmdmap[k] = val;
 }
+
+#endif
