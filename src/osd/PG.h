@@ -844,7 +844,6 @@ public:
   void cancel_recovery();
   void clear_recovery_state();
   virtual void _clear_recovery_state() = 0;
-  void defer_recovery();
   virtual void check_recovery_sources(const OSDMapRef newmap) = 0;
   void start_recovery_op(const hobject_t& soid);
   void finish_recovery_op(const hobject_t& soid, bool dequeue=false);
@@ -1201,6 +1200,15 @@ public:
 			  query_epoch(q) {}
     void print(std::ostream *out) const {
       *out << "Activate from " << query_epoch;
+    }
+  };
+  struct RequestBackfillPrio : boost::statechart::event< RequestBackfillPrio > {
+    unsigned priority;
+    RequestBackfillPrio(unsigned prio) :
+              boost::statechart::event< RequestBackfillPrio >(),
+			  priority(prio) {}
+    void print(std::ostream *out) const {
+      *out << "RequestBackfillPrio: priority " << priority;
     }
   };
 #define TrivialEvent(T) struct T : boost::statechart::event< T > { \
@@ -1606,11 +1614,12 @@ public:
 
     struct RepNotRecovering : boost::statechart::state< RepNotRecovering, ReplicaActive>, NamedState {
       typedef boost::mpl::list<
-	boost::statechart::transition< RequestBackfill, RepWaitBackfillReserved >,
+	boost::statechart::custom_reaction< RequestBackfillPrio >,
         boost::statechart::transition< RequestRecovery, RepWaitRecoveryReserved >,
 	boost::statechart::transition< RecoveryDone, RepNotRecovering >  // for compat with pre-reservation peers
 	> reactions;
       RepNotRecovering(my_context ctx);
+      boost::statechart::result react(const RequestBackfillPrio &evt);
       void exit();
     };
 

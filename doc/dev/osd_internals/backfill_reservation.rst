@@ -10,9 +10,9 @@ incoming backfills on a single node.
 Each OSDService now has two AsyncReserver instances: one for backfills going
 from the osd (local_reserver) and one for backfills going to the osd
 (remote_reserver).  An AsyncReserver (common/AsyncReserver.h) manages a queue
-of waiting items and a set of current reservation holders.  When a slot frees
-up, the AsyncReserver queues the Context* associated with the next item in the
-finisher provided to the constructor.
+by priority of waiting items and a set of current reservation holders.  When a
+slot frees up, the AsyncReserver queues the Context* associated with the next
+item on the highest priority queue in the finisher provided to the constructor.
 
 For a primary to initiate a backfill, it must first obtain a reservation from
 its own local_reserver.  Then, it must obtain a reservation from the backfill
@@ -25,3 +25,10 @@ ReplicaActive.
 
 It's important that we always grab the local reservation before the remote
 reservation in order to prevent a circular dependency.
+
+We want to minimize the risk of data loss by prioritizing the order in which
+PGs are recovered.  We use 3 AsyncReserver priorities to hand out reservations.
+The highest priority is log based recovery (RECOVERY) since this must always
+complete before backfill can start.  The next priority is backfill of degraded
+PGs (BACKFILL_HIGH).  The lowest priority is backfill of non-degraded PGs
+(BACKFILL_LOW).
