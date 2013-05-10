@@ -172,6 +172,40 @@ TEST(MonCap, AllowAll) {
   ASSERT_TRUE(cap2.is_allow_all());
 }
 
+TEST(MonCap, ProfileOSD) {
+  MonCap cap;
+  bool r = cap.parse("allow profile osd", NULL);
+  ASSERT_TRUE(r);
+
+  entity_name_t name = entity_name_t::OSD(123);
+  map<string,string> ca;
+
+  ASSERT_TRUE(cap.is_capable(NULL, name, "osd", "", ca, true, false, false));
+  ASSERT_TRUE(cap.is_capable(NULL, name, "osd", "", ca, true, true, false));
+  ASSERT_TRUE(cap.is_capable(NULL, name, "osd", "", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, name, "osd", "", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, name, "mon", "", ca, true, false,false));
+
+  ASSERT_FALSE(cap.is_capable(NULL, name, "mds", "", ca, true, true, true));
+  ASSERT_FALSE(cap.is_capable(NULL, name, "mon", "", ca, true, true, true));
+
+  ca.clear();
+  ASSERT_FALSE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
+  ca["key"] = "osd.123";
+  ASSERT_FALSE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
+  ca["key"] = "osd.12/asdf";
+  ASSERT_FALSE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
+  ca["key"] = "osd.123/";
+  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
+  ca["key"] = "osd.123/foo";
+  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key put", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key exists", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key delete", ca, true, true, true));
+}
+
 #if 0
 
 TEST(MonCap, AllowPool) {

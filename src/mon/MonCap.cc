@@ -19,6 +19,7 @@
 #include <boost/spirit/include/qi_uint.hpp>
 
 #include "MonCap.h"
+#include "include/stringify.h"
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/Formatter.h"
@@ -153,6 +154,13 @@ bool MonCap::is_capable(CephContext *cct,
       // everyone can read mon, osd maps
       if ((service == "mon" || service == "osd" || service == "pg") &&
 	  !op_may_write && !op_may_exec)
+	return true;
+      // allow access to config keys prefixed by the '$name/'
+      if ((command == "config-key get" ||
+	   command == "config-key put" ||
+	   command == "config-key exists" ||
+	   command == "config-key delete") &&
+	  get(command_args, "key").find(stringify(name) + "/") == 0)
 	return true;
     }
     if (p->profile == "mds") {
