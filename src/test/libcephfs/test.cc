@@ -436,6 +436,7 @@ TEST(LibCephFS, Xattrs) {
 
     char gxattrv[128];
     int alen = ceph_getxattr(cmount, test_xattr_file, p, (void *) gxattrv, 128);
+    ASSERT_LT(alen, 0);
     sprintf(xattrv, "testxattr%c", i);
     ASSERT_TRUE(!strncmp(xattrv, gxattrv, alen));
 

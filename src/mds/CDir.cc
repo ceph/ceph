@@ -1574,7 +1574,7 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
 	// add inode
 	CInode *in = cache->get_inode(inode.ino, last);
 	if (!in || undef_inode) {
-	  if (undef_inode)
+	  if (undef_inode && in)
 	    in->first = first;
 	  else
 	    in = new CInode(cache, true, first, last);

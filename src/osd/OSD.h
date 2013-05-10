@@ -1233,6 +1233,7 @@ protected:
     void _process(Command *c) {
       osd->osd_lock.Lock();
       if (osd->is_stopping()) {
+	osd->osd_lock.Unlock();
 	delete c;
 	return;
       }
