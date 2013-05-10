@@ -1494,8 +1494,6 @@ void Server::dispatch_slave_request(MDRequest *mdr)
 	  wrlocks.insert(lock);
 	  replycode = MMDSSlaveRequest::OP_WRLOCKACK;
 	  break;
-	default:
-	  assert(0);
 	}
 	
 	if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
