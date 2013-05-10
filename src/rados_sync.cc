@@ -185,14 +185,6 @@ std::string ExportDir::get_fs_path(const std::string &rados_name) const
       c = '_';
       need_hash = true;
     }
-    else if (c == '\n') {
-      c = '@';
-      need_hash = true;
-    }
-    else if (c == '\r') {
-      c = '@';
-      need_hash = true;
-    }
     fs_path[i] = c;
   }
 
