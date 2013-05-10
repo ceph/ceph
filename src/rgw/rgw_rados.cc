@@ -2630,46 +2630,9 @@ int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj,
  */
 int RGWRados::set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl, RGWObjVersionTracker *objv_tracker)
 {
-  rgw_bucket bucket;
-  std::string oid, key;
-  get_obj_bucket_and_oid_key(obj, bucket, oid, key);
-  librados::IoCtx io_ctx;
-  rgw_bucket actual_bucket = bucket;
-  string actual_obj = oid;
-  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
-
-  if (actual_obj.size() == 0) {
-    actual_obj = bucket.name;
-    actual_bucket = zone.domain_root;
-  }
-
-  int r = open_bucket_data_ctx(actual_bucket, io_ctx);
-  if (r < 0)
-    return r;
-
-  ObjectWriteOperation op;
-  RGWObjState *state = NULL;
-
-  r = append_atomic_test(rctx, obj, op, &state);
-  if (r < 0)
-    return r;
-
-  if (objv_tracker) {
-    objv_tracker->prepare_op_for_write(&op);
-  }
-
-  op.setxattr(name, bl);
-
-  io_ctx.locator_set_key(key);
-  r = io_ctx.operate(actual_obj, &op);
-
-  if (state && r >= 0)
-    state->attrset[name] = bl;
-
-  if (r < 0)
-    return r;
-
-  return 0;
+  map<string, bufferlist> attrs;
+  attrs[name] = bl;
+  return set_attrs(ctx, obj, attrs, NULL, objv_tracker);
 }
 
 int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
@@ -2731,6 +2694,17 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
   r = io_ctx.operate(actual_obj, &op);
   if (r < 0)
     return r;
+
+  if (state) {
+    if (rmattrs) {
+      for (iter = rmattrs->begin(); iter != rmattrs->end(); ++iter) {
+        state->attrset.erase(iter->first);
+      }
+    }
+    for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+      state->attrset[iter->first] = iter->second;
+    }
+  }
 
   return 0;
 }
