@@ -358,6 +358,7 @@ fi
 %{_docdir}/ceph/sample.ceph.conf
 %{_docdir}/ceph/sample.fetch_config
 %{_bindir}/ceph
+%{_bindir}/ceph-legacy-cli
 %{_bindir}/cephfs
 %{_bindir}/ceph-conf
 %{_bindir}/ceph-clsinfo
