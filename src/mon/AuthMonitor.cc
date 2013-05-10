@@ -548,10 +548,8 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
   }
 
   MonSession *session = m->get_session();
-  vector<string> fullcmd;
-  build_fullcmd(prefix, cmdmap, &fullcmd);
   if (!session ||
-      (!mon->_allowed_command(session, fullcmd))) {
+      (!mon->_allowed_command(session, cmdmap))) {
     mon->reply_command(m, -EACCES, "access denied", rdata, get_version());
     return true;
   }
@@ -666,11 +664,9 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
-  vector<string> fullcmd;
-  build_fullcmd(prefix, cmdmap, &fullcmd);
   MonSession *session = m->get_session();
   if (!session ||
-      (!mon->_allowed_command(session, fullcmd))) {
+      (!mon->_allowed_command(session, cmdmap))) {
     mon->reply_command(m, -EACCES, "access denied", rdata, get_version());
     return true;
   }

@@ -2131,12 +2131,23 @@ void Monitor::finish_election()
 }
 
 
-bool Monitor::_allowed_command(MonSession *s, const vector<string>& cmd)
+bool Monitor::_allowed_command(MonSession *s, map<string, cmd_vartype>& cmd)
 {
   if (s->caps.is_allow_all())
     return true;
 
-  // REIMPLEMENT ME
+  string prefix;
+  cmd_getval(g_ceph_context, cmd, "prefix", prefix);
+
+  map<string,string> strmap;
+  for (map<string, cmd_vartype>::const_iterator p = cmd.begin(); p != cmd.end(); ++p)
+    if (p->first != "prefix")
+      cmd_getval(g_ceph_context, cmd, p->first, strmap[p->first]);
+
+  if (s->caps.is_capable(g_ceph_context, s->inst.name,
+			 "", prefix, strmap, false, false, false))
+    return true;
+
   return false;
 }
 
@@ -2598,10 +2609,11 @@ void Monitor::handle_command(MMonCommand *m)
   string format;
   cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(new_formatter(format));
-  build_fullcmd(prefix, cmdmap, &fullcmd);
+
+  get_str_vec(prefix, fullcmd);
   module = fullcmd[0];
 
-  access_cmd = _allowed_command(session, fullcmd);
+  access_cmd = _allowed_command(session, cmdmap);
   access_r = (session->is_capable("mon", MON_CAP_R) || access_cmd);
   access_all = (session->caps.is_allow_all() || access_cmd);
 

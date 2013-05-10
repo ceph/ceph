@@ -37,6 +37,7 @@
 
 #include "common/LogClient.h"
 #include "common/SimpleRNG.h"
+#include "common/cmdparse.h"
 
 #include "auth/cephx/CephxKeyServer.h"
 #include "auth/AuthMethodList.h"
@@ -1264,7 +1265,7 @@ public:
   void handle_get_version(MMonGetVersion *m);
   void handle_subscribe(MMonSubscribe *m);
   void handle_mon_get_map(MMonGetMap *m);
-  bool _allowed_command(MonSession *s, const vector<std::string>& cmd);
+  bool _allowed_command(MonSession *s, map<std::string, cmd_vartype>& cmd);
   void _mon_status(ostream& ss);
   void _quorum_status(ostream& ss);
   void _sync_status(ostream& ss);

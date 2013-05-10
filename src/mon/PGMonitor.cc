@@ -1100,13 +1100,11 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 
   string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
-  vector<string> fullcmd;
-  build_fullcmd(prefix, cmdmap, &fullcmd);
 
   MonSession *session = m->get_session();
   if (!session ||
       (!session->is_capable("pg", MON_CAP_R) &&
-       !mon->_allowed_command(session, fullcmd))) {
+       !mon->_allowed_command(session, cmdmap))) {
     mon->reply_command(m, -EACCES, "access denied", rdata, get_version());
     return true;
   }
@@ -1313,12 +1311,10 @@ bool PGMonitor::prepare_command(MMonCommand *m)
   string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
-  vector<string> fullcmd;
-  build_fullcmd(prefix, cmdmap, &fullcmd);
   MonSession *session = m->get_session();
   if (!session ||
       (!session->is_capable("pg", MON_CAP_W) &&
-       !mon->_allowed_command(session, fullcmd))) {
+       !mon->_allowed_command(session, cmdmap))) {
     mon->reply_command(m, -EACCES, "access denied", get_version());
     return true;
   }
