@@ -347,9 +347,9 @@ void dump_owner(struct req_state *s, string& id, string& name, const char *secti
 void dump_access_control(struct req_state *s, const char *origin, const char *meth,
                          const char *hdr, const char *exp_hdr, uint32_t max_age) {
   if (origin && (origin[0] != '\0')) {
-    s->cio->print("Access-Control-Allow-Origin: %s\n", origin?origin:"");
+    s->cio->print("Access-Control-Allow-Origin: %s\n", origin);
     if (meth && (meth[0] != '\0'))
-      s->cio->print("Access-Control-Allow-Methods: %s\n", meth?meth:"");
+      s->cio->print("Access-Control-Allow-Methods: %s\n", meth);
     if (hdr && (hdr[0] != '\0'))
       s->cio->print("Access-Control-Allow-Headers: %s\n", hdr);
     if (exp_hdr && (exp_hdr[0] != '\0')) {
