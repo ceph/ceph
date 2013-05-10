@@ -24,7 +24,7 @@
 // comment out the value types you don't need to reduce build times and intermediate file sizes
 #define JSON_SPIRIT_VALUE_ENABLED
 //#define JSON_SPIRIT_WVALUE_ENABLED
-//#define JSON_SPIRIT_MVALUE_ENABLED
+#define JSON_SPIRIT_MVALUE_ENABLED
 //#define JSON_SPIRIT_WMVALUE_ENABLED
 
 namespace json_spirit
