@@ -9195,7 +9195,7 @@ void MDCache::handle_discover(MDiscover *dis)
     cur = get_inode(dis->get_base_ino(), snapid);
     if (!cur && snapid != CEPH_NOSNAP) {
       cur = get_inode(dis->get_base_ino());
-      if (!cur->is_multiversion())
+      if (cur && !cur->is_multiversion())
 	cur = NULL;  // nope!
     }
     
