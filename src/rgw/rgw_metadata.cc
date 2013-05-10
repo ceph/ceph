@@ -469,11 +469,10 @@ void RGWMetadataManager::get_sections(list<string>& sections)
   }
 }
 
-int RGWMetadataManager::put_entry(RGWMetadataHandler *handler, string& key, bufferlist& bl, bool exclusive,
-                                  RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs)
+int RGWMetadataManager::pre_modify(RGWMetadataHandler *handler, string& section, string& key,
+                                   RGWMetadataLogData& log_data, RGWObjVersionTracker *objv_tracker)
 {
-  bufferlist logbl;
-  string section = handler->get_type();
+  section = handler->get_type();
 
   /* if write version has not been set, and there's a read version, set it so that we can
    * log it
@@ -484,15 +483,42 @@ int RGWMetadataManager::put_entry(RGWMetadataHandler *handler, string& key, buff
     objv_tracker->write_version.ver++;
   }
 
-  RGWMetadataLogData log_data;
   log_data.read_version = objv_tracker->read_version;
   log_data.write_version = objv_tracker->write_version;
 
   log_data.status = MDLOG_STATUS_WRITING;
 
+  bufferlist logbl;
   ::encode(log_data, logbl);
 
   int ret = md_log->add_entry(store, section, key, logbl);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
+int RGWMetadataManager::post_modify(string& section, string& key, RGWMetadataLogData& log_data,
+                                    RGWObjVersionTracker *objv_tracker)
+{
+  log_data.status = MDLOG_STATUS_COMPLETE;
+
+  bufferlist logbl;
+  ::encode(log_data, logbl);
+
+  int ret = md_log->add_entry(store, section, key, logbl);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
+int RGWMetadataManager::put_entry(RGWMetadataHandler *handler, string& key, bufferlist& bl, bool exclusive,
+                                  RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs)
+{
+  string section;
+  RGWMetadataLogData log_data;
+  int ret = pre_modify(handler, section, key, log_data, objv_tracker);
   if (ret < 0)
     return ret;
 
@@ -500,15 +526,31 @@ int RGWMetadataManager::put_entry(RGWMetadataHandler *handler, string& key, buff
   if (ret < 0)
     return ret;
 
-  log_data.status = MDLOG_STATUS_COMPLETE;
-
-  logbl.clear();
-  ::encode(log_data, logbl);
-
-  ret = md_log->add_entry(store, section, key, logbl);
+  ret = post_modify(section, key, log_data, objv_tracker);
   if (ret < 0)
     return ret;
 
   return 0;
 }
 
+int RGWMetadataManager::set_attrs(RGWMetadataHandler *handler, string& key,
+                                  rgw_obj& obj, map<string, bufferlist>& attrs,
+                                  map<string, bufferlist>* rmattrs,
+                                  RGWObjVersionTracker *objv_tracker)
+{
+  string section;
+  RGWMetadataLogData log_data;
+  int ret = pre_modify(handler, section, key, log_data, objv_tracker);
+  if (ret < 0)
+    return ret;
+
+  ret = store->set_attrs(NULL, obj, attrs, rmattrs, objv_tracker);
+  if (ret < 0)
+    return ret;
+
+  ret = post_modify(section, key, log_data, objv_tracker);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}

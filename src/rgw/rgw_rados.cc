@@ -2481,7 +2481,8 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state
  * dest: bufferlist to store the result in
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& dest)
+int RGWRados::get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& dest,
+                       RGWObjVersionTracker *objv_tracker)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -2513,8 +2514,17 @@ int RGWRados::get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& de
       return 0;
     return -ENODATA;
   }
+
+  ObjectReadOperation op;
+
+  if (objv_tracker) {
+    objv_tracker->prepare_op_for_read(&op);
+  }
+
+  int rval;
+  op.getxattr(name, &dest, &rval);
   
-  r = io_ctx.getxattr(actual_obj, name, dest);
+  r = io_ctx.operate(actual_obj, &op, NULL);
   if (r < 0)
     return r;
 
@@ -2618,7 +2628,7 @@ int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj,
  * bl: the contents of the attr
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl)
+int RGWRados::set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl, RGWObjVersionTracker *objv_tracker)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -2643,6 +2653,10 @@ int RGWRados::set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl
   r = append_atomic_test(rctx, obj, op, &state);
   if (r < 0)
     return r;
+
+  if (objv_tracker) {
+    objv_tracker->prepare_op_for_write(&op);
+  }
 
   op.setxattr(name, bl);
 
@@ -2660,7 +2674,8 @@ int RGWRados::set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl
 
 int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
                         map<string, bufferlist>& attrs,
-                        map<string, bufferlist>* rmattrs)
+                        map<string, bufferlist>* rmattrs,
+                        RGWObjVersionTracker *objv_tracker)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -2687,6 +2702,10 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
   r = append_atomic_test(rctx, obj, op, &state);
   if (r < 0)
     return r;
+
+  if (objv_tracker) {
+    objv_tracker->prepare_op_for_write(&op);
+  }
 
   map<string, bufferlist>::iterator iter;
   if (rmattrs) {
@@ -2827,7 +2846,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
     }
   }
   if (if_match || if_nomatch) {
-    r = get_attr(rctx, obj, RGW_ATTR_ETAG, etag);
+    r = get_attr(rctx, obj, RGW_ATTR_ETAG, etag, NULL);
     if (r < 0)
       goto done_err;
 

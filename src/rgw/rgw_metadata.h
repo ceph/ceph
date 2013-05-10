@@ -92,6 +92,8 @@ public:
   int trim(RGWRados *store, utime_t& from_time, utime_t& end_time);
 };
 
+class RGWMetadataLogData;
+
 class RGWMetadataManager {
   map<string, RGWMetadataHandler *> handlers;
   CephContext *cct;
@@ -101,6 +103,10 @@ class RGWMetadataManager {
   void parse_metadata_key(const string& metadata_key, string& type, string& entry);
 
   int find_handler(const string& metadata_key, RGWMetadataHandler **handler, string& entry);
+  int pre_modify(RGWMetadataHandler *handler, string& section, string& key,
+                 RGWMetadataLogData& log_data, RGWObjVersionTracker *objv_tracker);
+  int post_modify(string& section, string& key, RGWMetadataLogData& log_data,
+                 RGWObjVersionTracker *objv_tracker);
 
 public:
   RGWMetadataManager(CephContext *_cct, RGWRados *_store);
@@ -112,6 +118,12 @@ public:
 
   int put_entry(RGWMetadataHandler *handler, string& key, bufferlist& bl, bool exclusive,
                 RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs = NULL);
+  int set_attr(RGWMetadataHandler *handler, string& key, rgw_obj& obj, string& attr, bufferlist& bl,
+               RGWObjVersionTracker *objv_tracker);
+ int set_attrs(RGWMetadataHandler *handler, string& key,
+               rgw_obj& obj, map<string, bufferlist>& attrs,
+               map<string, bufferlist>* rmattrs,
+               RGWObjVersionTracker *objv_tracker);
   int get(string& metadata_key, Formatter *f);
   int put(string& metadata_key, bufferlist& bl);
   int remove(string& metadata_key);
