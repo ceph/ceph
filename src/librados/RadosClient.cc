@@ -546,3 +546,60 @@ void librados::RadosClient::watch_notify(MWatchNotify *m)
   finisher.queue(new C_WatchNotify(wc, &lock, m->opcode, m->ver, m->notify_id, m->bl));
   m->put();
 }
+
+int librados::RadosClient::mon_command(const vector<string>& cmd,
+					      bufferlist &inbl,
+					      bufferlist *outbl, string *outs)
+{
+  Mutex mylock("RadosClient::mon_command::mylock");
+  Cond cond;
+  bool done;
+  int rval;
+  lock.Lock();
+  monclient.start_mon_command(cmd, inbl, outbl, outs,
+			       new C_SafeCond(&mylock, &cond, &done, &rval));
+  lock.Unlock();
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+  return rval;
+}
+
+int librados::RadosClient::osd_command(int osd, vector<string>& cmd,
+					bufferlist& inbl,
+					bufferlist *poutbl, string *prs)
+{
+  Mutex mylock("RadosClient::osd_command::mylock");
+  Cond cond;
+  bool done;
+  int ret;
+  lock.Lock();
+  objecter->osd_command(osd, cmd, inbl, poutbl, prs,
+			 new C_SafeCond(&mylock, &cond, &done, &ret));
+  lock.Unlock();
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+  return ret;
+}
+
+int librados::RadosClient::pg_command(pg_t pgid, vector<string>& cmd,
+					bufferlist& inbl,
+					bufferlist *poutbl, string *prs)
+{
+  Mutex mylock("RadosClient::pg_command::mylock");
+  Cond cond;
+  bool done;
+  int ret;
+  lock.Lock();
+  objecter->pg_command(pgid, cmd, inbl, poutbl, prs,
+		        new C_SafeCond(&mylock, &cond, &done, &ret));
+  lock.Unlock();
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+  return ret;
+}
