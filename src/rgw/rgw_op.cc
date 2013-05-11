@@ -187,14 +187,14 @@ static int policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrse
  * object: name of the object to get the ACL for.
  * Returns: 0 on success, -ERR# otherwise.
  */
-static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx, RGWAccessControlPolicy *policy, rgw_obj& obj)
+static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx, RGWAccessControlPolicy *policy, rgw_obj& obj,
+                                RGWObjVersionTracker *objv_tracker)
 {
   bufferlist bl;
   int ret = 0;
 
   if (obj.bucket.name.size()) {
-    RGWObjVersionTracker objv_tracker;
-    ret = store->get_attr(ctx, obj, RGW_ATTR_ACL, bl, &objv_tracker);
+    ret = store->get_attr(ctx, obj, RGW_ATTR_ACL, bl, objv_tracker);
 
     if (ret >= 0) {
       bufferlist::iterator iter = bl.begin();
@@ -214,7 +214,7 @@ static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx, RG
       /* object exists, but policy is broken */
       RGWBucketInfo info;
       RGWUserInfo uinfo;
-      int r = store->get_bucket_info(ctx, obj.bucket.name, info, &objv_tracker);
+      int r = store->get_bucket_info(ctx, obj.bucket.name, info, objv_tracker);
       if (r < 0)
         goto done;
       r = rgw_get_user_info_by_uid(store, info.owner, uinfo);
@@ -258,14 +258,14 @@ static int read_policy(RGWRados *store, struct req_state *s, RGWBucketInfo& buck
   } else {
     obj.init(bucket, oid);
   }
-  int ret = get_policy_from_attr(s->cct, store, s->obj_ctx, policy, obj);
+  int ret = get_policy_from_attr(s->cct, store, s->obj_ctx, policy, obj, &s->objv_tracker);
   if (ret == -ENOENT && object.size()) {
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
     RGWAccessControlPolicy bucket_policy(s->cct);
     string no_object;
     rgw_obj no_obj(bucket, no_object);
-    ret = get_policy_from_attr(s->cct, store, s->obj_ctx, &bucket_policy, no_obj);
+    ret = get_policy_from_attr(s->cct, store, s->obj_ctx, &bucket_policy, no_obj, &s->objv_tracker);
     if (ret < 0)
       return ret;
     string& owner = bucket_policy.get_owner().get_id();
@@ -297,8 +297,7 @@ int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bucket, b
 
   RGWBucketInfo bucket_info;
   if (s->bucket_name_str.size()) {
-    RGWObjVersionTracker objv_tracker;
-    ret = store->get_bucket_info(s->obj_ctx, s->bucket_name_str, bucket_info, &objv_tracker);
+    ret = store->get_bucket_info(s->obj_ctx, s->bucket_name_str, bucket_info, &s->objv_tracker);
     if (ret < 0) {
       ldout(s->cct, 0) << "NOTICE: couldn't get bucket from bucket_name (name=" << s->bucket_name_str << ")" << dendl;
       return ret;
@@ -499,8 +498,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
 
   if (bucket_name.compare(s->bucket.name) != 0) {
     RGWBucketInfo bucket_info;
-    RGWObjVersionTracker objv_tracker;
-    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, &objv_tracker);
+    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, &s->objv_tracker);
     if (r < 0) {
       ldout(s->cct, 0) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return r;
@@ -855,7 +853,7 @@ void RGWCreateBucket::execute()
 
   s->bucket_owner.set_id(s->user.user_id);
   s->bucket_owner.set_name(s->user.display_name);
-  r = get_policy_from_attr(s->cct, store, s->obj_ctx, &old_policy, obj);
+  r = get_policy_from_attr(s->cct, store, s->obj_ctx, &old_policy, obj, &s->objv_tracker);
   if (r >= 0)  {
     if (old_policy.get_owner().get_id().compare(s->user.user_id) != 0) {
       ret = -EEXIST;
@@ -885,8 +883,7 @@ void RGWCreateBucket::execute()
      */
     RGWBucketInfo info;
     map<string, bufferlist> attrs;
-    RGWObjVersionTracker objv_tracker;
-    int r = store->get_bucket_info(NULL, s->bucket.name, info, &objv_tracker, &attrs);
+    int r = store->get_bucket_info(NULL, s->bucket.name, info, &s->objv_tracker, &attrs);
     if (r < 0) {
       ldout(s->cct, 0) << "ERROR: get_bucket_info on bucket=" << s->bucket.name << " returned err=" << r << " after create_bucket returned -EEXIST" << dendl;
       ret = r;
@@ -1584,10 +1581,8 @@ void RGWPutMetadata::execute()
 
   rgw_get_request_metadata(s, attrs);
 
-  RGWObjVersionTracker objv_tracker;
-
   /* no need to track object versioning, need it for bucket's data only */
-  RGWObjVersionTracker *ptracker = (s->object ? NULL : &objv_tracker);
+  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->objv_tracker);
 
   /* check if obj exists, read orig attrs */
   ret = get_obj_attrs(store, s, obj, orig_attrs, NULL, ptracker);
@@ -1893,8 +1888,7 @@ void RGWPutACLs::execute()
     *_dout << dendl;
   }
 
-  RGWObjVersionTracker objv_tracker;
-  RGWObjVersionTracker *ptracker = (s->object ? NULL : &objv_tracker);
+  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->objv_tracker);
 
   new_policy.encode(bl);
   obj.init(s->bucket, s->object_str);
@@ -1972,8 +1966,7 @@ void RGWPutCORS::execute()
     *_dout << dendl;
   }
 
-  RGWObjVersionTracker objv_tracker;
-  RGWObjVersionTracker *ptracker = (s->object ? NULL : &objv_tracker);
+  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->objv_tracker);
 
   string no_obj;
   cors_config->encode(bl);
@@ -2005,8 +1998,7 @@ void RGWDeleteCORS::execute()
   map<string, bufferlist> orig_attrs, attrs, rmattrs;
   map<string, bufferlist>::iterator iter;
 
-  RGWObjVersionTracker objv_tracker;
-  RGWObjVersionTracker *ptracker = (s->object ? NULL : &objv_tracker);
+  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->objv_tracker);
 
   /* check if obj exists, read orig attrs */
   ret = get_obj_attrs(store, s, obj, orig_attrs, NULL, ptracker);

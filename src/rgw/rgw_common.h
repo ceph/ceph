@@ -29,6 +29,8 @@
 #include "include/utime.h"
 #include "rgw_acl.h"
 #include "rgw_cors.h"
+#include "cls/version/cls_version_types.h"
+#include "include/rados/librados.hpp"
 
 using namespace std;
 
@@ -602,6 +604,37 @@ struct RGWEnv;
 
 class RGWClientIO;
 
+struct RGWObjVersionTracker {
+  obj_version read_version;
+  obj_version write_version;
+
+  obj_version *version_for_read() {
+    return &read_version;
+  }
+
+  obj_version *version_for_write() {
+    if (write_version.ver == 0)
+      return NULL;
+
+    return &write_version;
+  }
+
+  obj_version *version_for_check() {
+    if (read_version.ver == 0)
+      return NULL;
+
+    return &read_version;
+  }
+
+  void prepare_op_for_read(librados::ObjectReadOperation *op);
+  void prepare_op_for_write(librados::ObjectWriteOperation *op);
+
+  void apply_write() {
+    read_version = write_version;
+    write_version = obj_version();
+  }
+};
+
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
    CephContext *cct;
@@ -638,6 +671,8 @@ struct req_state {
    string object_str;
    ACLOwner bucket_owner;
    ACLOwner owner;
+
+   RGWObjVersionTracker objv_tracker;
 
    map<string, string> x_meta_map;
    bool has_bad_meta;

@@ -13,10 +13,11 @@ enum {
   REMOVE_OBJ,
 };
 
-#define CACHE_FLAG_DATA           0x1
-#define CACHE_FLAG_XATTRS         0x2
-#define CACHE_FLAG_META           0x4
-#define CACHE_FLAG_MODIFY_XATTRS  0x8
+#define CACHE_FLAG_DATA           0x01
+#define CACHE_FLAG_XATTRS         0x02
+#define CACHE_FLAG_META           0x04
+#define CACHE_FLAG_MODIFY_XATTRS  0x08
+#define CACHE_FLAG_OBJV           0x10
 
 #define mydout(v) lsubdout(T::cct, rgw, v)
 
@@ -54,11 +55,12 @@ struct ObjectCacheInfo {
   map<string, bufferlist> xattrs;
   map<string, bufferlist> rm_xattrs;
   ObjectMetaInfo meta;
+  obj_version version;
 
   ObjectCacheInfo() : status(0), flags(0), epoch(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(4, 3, bl);
+    ENCODE_START(5, 3, bl);
     ::encode(status, bl);
     ::encode(flags, bl);
     ::encode(data, bl);
@@ -66,10 +68,11 @@ struct ObjectCacheInfo {
     ::encode(meta, bl);
     ::encode(rm_xattrs, bl);
     ::encode(epoch, bl);
+    ::encode(version, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
     ::decode(status, bl);
     ::decode(flags, bl);
     ::decode(data, bl);
@@ -79,6 +82,8 @@ struct ObjectCacheInfo {
       ::decode(rm_xattrs, bl);
     if (struct_v >= 4)
       ::decode(epoch, bl);
+    if (struct_v >= 5)
+      ::decode(version, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -248,7 +253,12 @@ int RGWCache<T>::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **h
   string name = normal_name(obj.bucket, oid);
 
   ObjectCacheInfo info;
-  if (cache.get(name, info, CACHE_FLAG_DATA) == 0) {
+
+  uint32_t flags = CACHE_FLAG_DATA;
+  if (objv_tracker)
+    flags |= CACHE_FLAG_OBJV;
+  
+  if (cache.get(name, info, flags) == 0) {
     if (info.status < 0)
       return info.status;
 
@@ -259,6 +269,8 @@ int RGWCache<T>::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **h
     obl.clear();
 
     i.copy_all(obl);
+    if (objv_tracker)
+      objv_tracker->read_version = info.version;
     return bl.length();
   }
   int r = T::get_obj(ctx, objv_tracker, handle, obj, obl, ofs, end);
@@ -281,7 +293,10 @@ int RGWCache<T>::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **h
   bufferlist::iterator o = obl.begin();
   o.copy_all(bl);
   info.status = 0;
-  info.flags = CACHE_FLAG_DATA;
+  info.flags = flags;
+  if (objv_tracker) {
+    info.version = objv_tracker->read_version;
+  }
   cache.put(name, info);
   return r;
 }
@@ -299,6 +314,10 @@ int RGWCache<T>::set_attr(void *ctx, rgw_obj& obj, const char *attr_name, buffer
     info.xattrs[attr_name] = bl;
     info.status = 0;
     info.flags = CACHE_FLAG_MODIFY_XATTRS;
+    if (objv_tracker) {
+      info.version = objv_tracker->write_version;
+      info.flags |= CACHE_FLAG_OBJV;
+    }
   }
   int ret = T::set_attr(ctx, obj, attr_name, bl, objv_tracker);
   if (cacheable) {
@@ -334,6 +353,10 @@ int RGWCache<T>::set_attrs(void *ctx, rgw_obj& obj,
       info.rm_xattrs = *rmattrs;
     info.status = 0;
     info.flags = CACHE_FLAG_MODIFY_XATTRS;
+    if (objv_tracker) {
+      info.version = objv_tracker->write_version;
+      info.flags |= CACHE_FLAG_OBJV;
+    }
   }
   int ret = T::set_attrs(ctx, obj, attrs, rmattrs, objv_tracker);
   if (cacheable) {
@@ -371,6 +394,10 @@ int RGWCache<T>::put_obj_meta_impl(void *ctx, rgw_obj& obj, uint64_t size, time_
     if (data) {
       info.data = *data;
       info.flags |= CACHE_FLAG_DATA;
+    }
+    if (objv_tracker) {
+      info.version = objv_tracker->write_version;
+      info.flags |= CACHE_FLAG_OBJV;
     }
   }
   int ret = T::put_obj_meta_impl(ctx, obj, size, mtime, attrs, category, flags, rmattrs, data, manifest, ptag, remove_objs,
@@ -443,7 +470,10 @@ int RGWCache<T>::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmti
   uint64_t epoch;
 
   ObjectCacheInfo info;
-  int r = cache.get(name, info, CACHE_FLAG_META | CACHE_FLAG_XATTRS);
+  uint32_t flags = CACHE_FLAG_META | CACHE_FLAG_XATTRS;
+  if (objv_tracker)
+    flags |= CACHE_FLAG_OBJV;
+  int r = cache.get(name, info, flags);
   if (r == 0) {
     if (info.status < 0)
       return info.status;
@@ -451,6 +481,8 @@ int RGWCache<T>::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmti
     size = info.meta.size;
     mtime = info.meta.mtime;
     epoch = info.epoch;
+    if (objv_tracker)
+      objv_tracker->read_version = info.version;
     goto done;
   }
   r = T::obj_stat(ctx, obj, &size, &mtime, &epoch, &info.xattrs, first_chunk, objv_tracker);
@@ -466,6 +498,10 @@ int RGWCache<T>::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmti
   info.meta.mtime = mtime;
   info.meta.size = size;
   info.flags = CACHE_FLAG_META | CACHE_FLAG_XATTRS;
+  if (objv_tracker) {
+    info.flags |= CACHE_FLAG_OBJV;
+    info.version = objv_tracker->read_version;
+  }
   cache.put(name, info);
 done:
   if (psize)
