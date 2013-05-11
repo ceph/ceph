@@ -1653,6 +1653,76 @@ extern "C" int rados_pool_list(rados_t cluster, char *buf, size_t len)
   return needed + 1;
 }
 
+extern "C" int rados_mon_command(rados_t cluster, const char *cmd, const char *inbuf, char *outbuf, unsigned int outbuflen, char *outs, unsigned int outslen)
+{
+    librados::RadosClient *client = (librados::RadosClient *)cluster;
+    bufferlist inbl;
+    bufferlist outbl;
+    string outstring;
+    vector<string> cmdvec;
+
+    cmdvec.push_back(cmd);
+    inbl.append(inbuf);
+    int ret = client->mon_command(cmdvec, inbl, &outbl, &outstring);
+
+    if ((outbl.length() > outbuflen) || (outstring.length() > outslen))
+      return -EOVERFLOW;
+
+    strncpy(outbuf, outbl.c_str(), outbl.length());
+    strncpy(outs, outstring.c_str(), outstring.length());
+    return ret;
+}
+
+extern "C" int rados_osd_command(rados_t cluster, int osdid, const char *cmd,
+				 const char *inbuf,
+				 char *outbuf, unsigned int outbuflen,
+				 char *outs, unsigned int outslen)
+{
+    librados::RadosClient *client = (librados::RadosClient *)cluster;
+    bufferlist inbl;
+    bufferlist outbl;
+    string outstring;
+    vector<string> cmdvec;
+
+    cmdvec.push_back(cmd);
+    inbl.append(inbuf);
+    int ret = client->osd_command(osdid, cmdvec, inbl, &outbl, &outstring);
+
+    if ((outbl.length() > outbuflen) || (outstring.length() > outslen))
+      return -EOVERFLOW;
+
+    strncpy(outbuf, outbl.c_str(), outbl.length());
+    strncpy(outs, outstring.c_str(), outstring.length());
+    return ret;
+}
+
+extern "C" int rados_pg_command(rados_t cluster, const char *pgstr,
+				const char *cmd, const char *inbuf,
+				char *outbuf, unsigned int outbuflen,
+				char *outs, unsigned int outslen)
+{
+    librados::RadosClient *client = (librados::RadosClient *)cluster;
+    bufferlist inbl;
+    bufferlist outbl;
+    string outstring;
+    pg_t pgid;
+    vector<string> cmdvec;
+
+    cmdvec.push_back(cmd);
+    inbl.append(inbuf);
+    if (!pgid.parse(pgstr))
+      return -EINVAL;
+
+    int ret = client->pg_command(pgid, cmdvec, inbl, &outbl, &outstring);
+
+    if ((outbl.length() > outbuflen) || (outstring.length() > outslen))
+      return -EOVERFLOW;
+
+    strncpy(outbuf, outbl.c_str(), outbl.length());
+    strncpy(outs, outstring.c_str(), outstring.length());
+    return ret;
+}
+
 extern "C" int rados_ioctx_create(rados_t cluster, const char *name, rados_ioctx_t *io)
 {
   librados::RadosClient *client = (librados::RadosClient *)cluster;
@@ -2326,6 +2396,7 @@ extern "C" int rados_aio_stat(rados_ioctx_t io, const char *o,
   return ctx->aio_stat(oid, (librados::AioCompletionImpl*)completion, 
 		       psize, pmtime);
 }
+
 
 struct C_WatchCB : public librados::WatchCtx {
   rados_watchcb_t wcb;

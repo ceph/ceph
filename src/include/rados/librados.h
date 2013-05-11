@@ -928,7 +928,7 @@ int rados_append(rados_ioctx_t io, const char *oid, const char *buf, size_t len)
  *
  * The io context determines the snapshot to read from, if any was set
  * by rados_ioctx_snap_set_read().
- * 
+ *
  * @param io the context in which to perform the read
  * @param oid the name of the object to read from
  * @param buf where to store the results
@@ -1570,6 +1570,37 @@ int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t handle);
 int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver, const char *buf, int buf_len);
 
 /** @} Watch/Notify */
+
+/**
+ * @defgroup librados_h_commands Mon/OSD/PG Commands
+ *
+ * These interfaces send commands relating to the monitor, OSD, or PGs.
+ *
+ * @{
+ */
+
+/**
+ * Send monitor command.
+ *
+ * @note Takes command string in carefully-formatted JSON; must match
+ * defined commands, types, etc.  See XXX.
+ *
+ * @param cluster cluster handle
+ * @param cmd the command string (in JSON)
+ * @param inbuf any bulk input data (crush map, etc.)
+ * @param outbuf bulk output data
+ * @param outbuflen allocated length of outbuf
+ * @param outs status/short output data
+ * @param outslen allocated length of outs
+ * @returns 0 on success, negative error code on failure
+ */
+int rados_mon_command(rados_t cluster, const char *cmd, const char *inbuf, char *outbuf, unsigned int outbuflen, char *outs, unsigned int outslen);
+
+int rados_osd_command(rados_t cluster, int osdid, const char *cmd, const char *inbuf, char *outbuf, unsigned int outbuflen, char *outs, unsigned int outslen);
+
+int rados_pg_command(rados_t cluster, const char *pgstr, const char *cmd, const char *inbuf, char *outbuf, unsigned int outbuflen, char *outs, unsigned int outslen);
+
+/** @} Mon/OSD/PG commands */
 
 #ifdef __cplusplus
 }

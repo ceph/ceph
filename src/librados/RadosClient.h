@@ -100,6 +100,12 @@ public:
   void register_watcher(librados::WatchContext *wc, uint64_t *cookie);
   void unregister_watcher(uint64_t cookie);
   void watch_notify(MWatchNotify *m);
+  int mon_command(const vector<string>& cmd, bufferlist &inbl,
+	          bufferlist *outbl, string *outs);
+  int osd_command(int osd, vector<string>& cmd, bufferlist& inbl,
+                  bufferlist *poutbl, string *prs);
+  int pg_command(pg_t pgid, vector<string>& cmd, bufferlist& inbl,
+	         bufferlist *poutbl, string *prs);
   void get();
   bool put();
 };
