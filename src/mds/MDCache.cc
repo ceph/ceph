@@ -9175,7 +9175,8 @@ void MDCache::handle_discover(MDiscover *dis)
   snapid_t snapid = dis->get_snapid();
 
   // get started.
-  if (MDS_INO_IS_BASE(dis->get_base_ino())) {
+  if (MDS_INO_IS_BASE(dis->get_base_ino()) &&
+      !dis->wants_base_dir() && dis->get_want().depth() == 0) {
     // wants root
     dout(7) << "handle_discover from mds." << from
 	    << " wants base + " << dis->get_want().get_path()
