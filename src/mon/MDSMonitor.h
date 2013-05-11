@@ -69,6 +69,7 @@ class MDSMonitor : public PaxosService {
 
   void create_new_fs(MDSMap &m, int metadata_pool, int data_pool);
 
+  int parse_mds_id(const char *s, stringstream *pss);
 
   // service methods
   void create_initial();
