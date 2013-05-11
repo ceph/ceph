@@ -42,37 +42,6 @@ static inline void get_obj_bucket_and_oid_key(rgw_obj& obj, rgw_bucket& bucket, 
   prepend_bucket_marker(bucket, obj.key, key);
 }
 
-struct RGWObjVersionTracker {
-  obj_version read_version;
-  obj_version write_version;
-
-  obj_version *version_for_read() {
-    return &read_version;
-  }
-
-  obj_version *version_for_write() {
-    if (write_version.ver == 0)
-      return NULL;
-
-    return &write_version;
-  }
-
-  obj_version *version_for_check() {
-    if (read_version.ver == 0)
-      return NULL;
-
-    return &read_version;
-  }
-
-  void prepare_op_for_read(librados::ObjectReadOperation *op);
-  void prepare_op_for_write(librados::ObjectWriteOperation *op);
-
-  void apply_write() {
-    read_version = write_version;
-    write_version = obj_version();
-  }
-};
-
 struct RGWUsageBatch {
   map<utime_t, rgw_usage_log_entry> m;
 
