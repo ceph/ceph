@@ -1,7 +1,5 @@
 tasks:
-- pexec:
-    client.0:
-      - mkdir $TESTDIR/mnt.0
+- localdir: [client.0]
 - samba:
     samba.0:
       ceph: "{testdir}/mnt.0"
