@@ -362,6 +362,12 @@ void librados::ObjectWriteOperation::clone_range(uint64_t dst_off,
   o->clone_range(src_oid, src_off, len, dst_off);
 }
 
+void librados::ObjectWriteOperation::selfmanaged_snap_rollback(snap_t snapid)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->rollback(snapid);
+}
+
 librados::WatchCtx::
 ~WatchCtx()
 {
