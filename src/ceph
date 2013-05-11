@@ -323,6 +323,8 @@ class CephName(CephArgtype):
     def valid(self, s, partial=False):
         if s == '*':
             self.val = s
+            self.nametype = None
+            self.nameid = None
             return True
         if s.find('.') == -1:
             raise ArgumentFormat('no .')
@@ -336,6 +338,8 @@ class CephName(CephArgtype):
                 raise ArgumentFormat('osd id ' + i + ' not integer')
             # could check for valid id?
         self.val = s
+        self.nametype = t
+        self.nameid = i
         return True
 
     def __str__(self):
@@ -376,9 +380,10 @@ Openable file
 class CephFilepath(CephArgtype):
     def valid(self, s, partial=False):
         try:
-            open(s, 'a+')
+            f = open(s, 'a+')
         except Exception as e:
             raise ArgumentValid('can\'t open {}: {}'.format(s, e))
+        f.close()
         self.val = s
         return True
 
@@ -951,9 +956,23 @@ def json_command(prefix=None, argdict=None, inbuf=''):
     if argdict:
         cmddict.update(argdict)
     try:
-        ret, outbl, outs = cluster.mon_command(json.dumps(cmddict), inbuf)
+        if cmddict['prefix'] == 'pg' and cmddict.has_key('pgid'):
+            pgid = cmddict.pop('pgid')
+            ret, outbl, outs = \
+                cluster.pg_command(pgid, json.dumps(cmddict), inbuf)
+        elif cmddict['prefix'] == 'tell' and cmddict.has_key('target'):
+            targ = CephName()
+            targ.valid(cmddict['target'])
+            if targ.nametype == 'osd':
+                osdid = targ.nameid
+                ret, outbl, outs = \
+                    cluster.osd_command(osdid, json.dumps(cmddict), inbuf)
+            else:
+                raise RuntimeError('Unhandled tell: {}'.format(targ.val))
+        else:
+            ret, outbl, outs = cluster.mon_command(json.dumps(cmddict), inbuf)
     except Exception as e:
-        raise RuntimeError('error invoking prefix {}: {}'.format(prefix, outs))
+        raise RuntimeError('"{}": exception {}: {}'.format(prefix, e))
 
     return ret, outbl, outs
 
@@ -1057,7 +1076,7 @@ def main():
 
     # -s behaves like a command (ceph status). 
     if parsed_args.status:
-        argdict = {'prefix':'status'}
+        valid_dict = {'prefix':'status'}
         got_command = True
 
     if not got_command:
@@ -1093,6 +1112,8 @@ def main():
         outf.close()
     else:
         sys.stdout.write(outbuf)
+        # XXX this should not be necessary
+        sys.stdout.write(outs)
 
 if __name__ == '__main__':
     sys.exit(main())
