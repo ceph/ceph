@@ -30,8 +30,8 @@ tasks:
       - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.disconnect
       - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.samba3error
       - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.smb
-      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.bench-holdcon
-      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.bench-holdopen
+#      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.bench-holdcon
+#      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.bench-holdopen
       - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.bench-readwrite
       - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.bench-torture
       - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.scan-pipe_number
