@@ -182,7 +182,7 @@ OPTION(mon_sync_debug_provider, OPT_INT, -1) // monitor to be used as the sync p
 OPTION(mon_sync_debug_provider_fallback, OPT_INT, -1) // monitor to be used as fallback if sync provider fails
 
 // dump transactions
-OPTION(mon_debug_dump_transactions, OPT_BOOL, true)
+OPTION(mon_debug_dump_transactions, OPT_BOOL, false)
 OPTION(mon_debug_dump_location, OPT_STR, "/var/log/ceph/$cluster-$name.tdump")
 
 OPTION(mon_sync_leader_kill_at, OPT_INT, 0) // kill the sync leader at a specifc point in the work flow
