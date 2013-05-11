@@ -1,12 +1,6 @@
 tasks:
-- install:
-- install:
-    project: samba
-    extra_packages: ['samba']
-- ceph:
-- samba:
 - pexec:
-    client.0:
+    client.1:
       - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.lock
       - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.fdpass
       - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.unlink
