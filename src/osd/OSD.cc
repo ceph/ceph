@@ -114,6 +114,9 @@
 
 #include "objclass/objclass.h"
 
+#include "common/cmdparse.h"
+#include "include/str_list.h"
+
 #include "include/assert.h"
 #include "common/config.h"
 
@@ -3328,60 +3331,79 @@ void OSD::handle_command(MCommand *m)
 void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist& data)
 {
   int r = 0;
-  ostringstream ss;
+  stringstream ss;
+  string rs;
   bufferlist odata;
 
   dout(20) << "do_command tid " << tid << " " << cmd << dendl;
+
+  map<string, cmd_vartype> cmdmap;
+  string prefix;
 
   if (cmd.empty()) {
     ss << "no command given";
     goto out;
   }
-  else if (cmd[0] == "version") {
+
+  if (!cmdmap_from_json(cmd, &cmdmap, ss)) {
+    r = -EINVAL;
+    goto out;
+  }
+
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+
+  if (prefix == "version") {
     ss << pretty_version_to_str();
     goto out;
   }
-  else if (cmd[0] == "injectargs") {
-    if (cmd.size() < 2) {
+  else if (prefix == "injectargs") {
+    vector<string> argsvec;
+    cmd_getval(g_ceph_context, cmdmap, "injected_args", argsvec);
+
+    if (argsvec.empty()) {
       r = -EINVAL;
       ss << "ignoring empty injectargs";
       goto out;
     }
+    string args = argsvec.front();
+    for (vector<string>::iterator a = ++argsvec.begin(); a != argsvec.end(); a++)
+      args += " " + *a;
     osd_lock.Unlock();
-    g_conf->injectargs(cmd[1], &ss);
+    g_conf->injectargs(args, &ss);
     osd_lock.Lock();
   }
 
-  else if (cmd[0] == "pg") {
+  else if (prefix == "pg") {
     pg_t pgid;
+    string pgidstr;
 
-    if (cmd.size() < 2) {
+    if (!cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr)) {
       ss << "no pgid specified";
       r = -EINVAL;
-    } else if (!pgid.parse(cmd[1].c_str())) {
-      ss << "couldn't parse pgid '" << cmd[1] << "'";
+    } else if (!pgid.parse(pgidstr.c_str())) {
+      ss << "couldn't parse pgid '" << pgidstr << "'";
       r = -EINVAL;
     } else {
+      vector<string> args;
+      cmd_getval(g_ceph_context, cmdmap, "args", args);
       PG *pg = _lookup_lock_pg(pgid);
       if (!pg) {
 	ss << "i don't have pgid " << pgid;
 	r = -ENOENT;
       } else {
-	cmd.erase(cmd.begin(), cmd.begin() + 2);
-	r = pg->do_command(cmd, ss, data, odata);
+	r = pg->do_command(args, ss, data, odata);
 	pg->unlock();
       }
     }
   }
 
-  else if (cmd[0] == "bench") {
-    uint64_t count = 1 << 30;  // 1gb
-    uint64_t bsize = 4 << 20;
-    if (cmd.size() > 1)
-      bsize = atoll(cmd[1].c_str());
-    if (cmd.size() > 2)
-      count = atoll(cmd[2].c_str());
-    
+  else if (prefix == "bench") {
+    int64_t count;
+    int64_t bsize;
+    // default count 1G, size 4MB
+    cmd_getval(g_ceph_context, cmdmap, "count", count, (int64_t)1 << 30);
+    cmd_getval(g_ceph_context, cmdmap, "bsize", bsize, (int64_t)4 << 20);
+
     bufferlist bl;
     bufferptr bp(bsize);
     bp.zero();
@@ -3391,7 +3413,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
 
     store->sync_and_flush();
     utime_t start = ceph_clock_now(g_ceph_context);
-    for (uint64_t pos = 0; pos < count; pos += bsize) {
+    for (int64_t pos = 0; pos < count; pos += bsize) {
       char nm[30];
       snprintf(nm, sizeof(nm), "disk_bw_test_%lld", (long long)pos);
       object_t oid(nm);
@@ -3413,91 +3435,105 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
        << (end-start) << " sec at " << prettybyte_t(rate) << "/sec";
   }
 
-  else if (!cmd.empty() && cmd[0] == "flush_pg_stats") {
+  else if (prefix == "flush_pg_stats") {
     flush_pg_stats();
   }
   
-  else if (cmd[0] == "heap") {
-    if (ceph_using_tcmalloc()) {
-      ceph_heap_profiler_handle_command(cmd, ss);
-    } else {
+  else if (prefix == "heap") {
+    if (!ceph_using_tcmalloc()) {
       r = -EOPNOTSUPP;
       ss << "could not issue heap profiler command -- not using tcmalloc!";
+    } else {
+      string heapcmd;
+      cmd_getval(g_ceph_context, cmdmap, "heapcmd", heapcmd);
+      ostringstream ss;
+      // XXX 1-element vector, change at callee or make vector here?
+      vector<string> heapcmd_vec;
+      get_str_vec(heapcmd, heapcmd_vec);
+      ceph_heap_profiler_handle_command(heapcmd_vec, ss);
+      rs = ss.str();
     }
   }
 
-  else if (cmd.size() > 1 && cmd[0] == "debug") {
-    if (cmd.size() == 3 && cmd[1] == "dump_missing") {
-      const string &file_name(cmd[2]);
-      std::ofstream fout(file_name.c_str());
-      if (!fout.is_open()) {
+  else if (prefix == "debug dump_missing") {
+    string file_name;
+    cmd_getval(g_ceph_context, cmdmap, "filename", file_name);
+    std::ofstream fout(file_name.c_str());
+    if (!fout.is_open()) {
 	ss << "failed to open file '" << file_name << "'";
 	r = -EINVAL;
 	goto out;
-      }
-
-      std::set <pg_t> keys;
-      for (hash_map<pg_t, PG*>::const_iterator pg_map_e = pg_map.begin();
-	   pg_map_e != pg_map.end(); ++pg_map_e) {
-	keys.insert(pg_map_e->first);
-      }
-
-      fout << "*** osd " << whoami << ": dump_missing ***" << std::endl;
-      for (std::set <pg_t>::iterator p = keys.begin();
-	   p != keys.end(); ++p) {
-	hash_map<pg_t, PG*>::iterator q = pg_map.find(*p);
-	assert(q != pg_map.end());
-	PG *pg = q->second;
-	pg->lock();
-
-	fout << *pg << std::endl;
-	std::map<hobject_t, pg_missing_t::item>::iterator mend = pg->missing.missing.end();
-	std::map<hobject_t, pg_missing_t::item>::iterator mi = pg->missing.missing.begin();
-	for (; mi != mend; ++mi) {
-	  fout << mi->first << " -> " << mi->second << std::endl;
-	  map<hobject_t, set<int> >::const_iterator mli =
-	    pg->missing_loc.find(mi->first);
-	  if (mli == pg->missing_loc.end())
-	    continue;
-	  const set<int> &mls(mli->second);
-	  if (mls.empty())
-	    continue;
-	  fout << "missing_loc: " << mls << std::endl;
-	}
-	pg->unlock();
-	fout << std::endl;
-      }
-
-      fout.close();
     }
-    else if (cmd.size() == 3 && cmd[1] == "kick_recovery_wq") {
-      r = g_conf->set_val("osd_recovery_delay_start", cmd[2].c_str());
-      if (r != 0) {
-	ss << "kick_recovery_wq: error setting "
-	   << "osd_recovery_delay_start to '" << cmd[2] << "': error "
-	   << r;
-	goto out;
-      }
-      g_conf->apply_changes(NULL);
-      ss << "kicking recovery queue. set osd_recovery_delay_start "
-	 << "to " << g_conf->osd_recovery_delay_start;
-      defer_recovery_until = ceph_clock_now(g_ceph_context);
-      defer_recovery_until += g_conf->osd_recovery_delay_start;
-      recovery_wq.wake();
+
+    std::set <pg_t> keys;
+    for (hash_map<pg_t, PG*>::const_iterator pg_map_e = pg_map.begin();
+	 pg_map_e != pg_map.end(); ++pg_map_e) {
+      keys.insert(pg_map_e->first);
     }
+
+    fout << "*** osd " << whoami << ": dump_missing ***" << std::endl;
+    for (std::set <pg_t>::iterator p = keys.begin();
+	 p != keys.end(); ++p) {
+      hash_map<pg_t, PG*>::iterator q = pg_map.find(*p);
+      assert(q != pg_map.end());
+      PG *pg = q->second;
+      pg->lock();
+
+      fout << *pg << std::endl;
+      std::map<hobject_t, pg_missing_t::item>::iterator mend = pg->missing.missing.end();
+      std::map<hobject_t, pg_missing_t::item>::iterator mi = pg->missing.missing.begin();
+      for (; mi != mend; ++mi) {
+	fout << mi->first << " -> " << mi->second << std::endl;
+	map<hobject_t, set<int> >::const_iterator mli =
+	  pg->missing_loc.find(mi->first);
+	if (mli == pg->missing_loc.end())
+	  continue;
+	const set<int> &mls(mli->second);
+	if (mls.empty())
+	  continue;
+	fout << "missing_loc: " << mls << std::endl;
+      }
+      pg->unlock();
+      fout << std::endl;
+    }
+
+    fout.close();
+  }
+  else if (prefix == "debug kick_recovery_wq") {
+    int64_t delay;
+    cmd_getval(g_ceph_context, cmdmap, "delay", delay);
+    ostringstream oss;
+    oss << delay;
+    r = g_conf->set_val("osd_recovery_delay_start", oss.str().c_str());
+    if (r != 0) {
+      ss << "kick_recovery_wq: error setting "
+	 << "osd_recovery_delay_start to '" << delay << "': error "
+	 << r;
+      goto out;
+    }
+    g_conf->apply_changes(NULL);
+    ss << "kicking recovery queue. set osd_recovery_delay_start "
+       << "to " << g_conf->osd_recovery_delay_start;
+    defer_recovery_until = ceph_clock_now(g_ceph_context);
+    defer_recovery_until += g_conf->osd_recovery_delay_start;
+    recovery_wq.wake();
   }
 
-  else if (cmd[0] == "cpu_profiler") {
-    cpu_profiler_handle_command(cmd, ss);
+  else if (prefix == "cpu_profiler") {
+    string arg;
+    cmd_getval(g_ceph_context, cmdmap, "arg", arg);
+    vector<string> argvec;
+    get_str_vec(arg, argvec);
+    cpu_profiler_handle_command(argvec, ss);
   }
 
-  else if (cmd[0] == "dump_pg_recovery_stats") {
+  else if (prefix == "dump_pg_recovery_stats") {
     stringstream s;
     pg_recovery_stats.dump(s);
     ss << "dump pg recovery stats: " << s.str();
   }
 
-  else if (cmd[0] == "reset_pg_recovery_stats") {
+  else if (prefix == "reset_pg_recovery_stats") {
     ss << "reset pg recovery stats";
     pg_recovery_stats.reset();
   }
@@ -3508,7 +3544,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
   }
 
  out:
-  string rs = ss.str();
+  rs = ss.str();
   dout(0) << "do_command r=" << r << " " << rs << dendl;
   clog.info() << rs << "\n";
   if (con) {
@@ -3519,7 +3555,6 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
   }
   return;
 }
-
 
 
 
