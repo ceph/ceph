@@ -3,6 +3,9 @@ overrides:
     conf:
       osd:
         filestore flush min: 0
+      mds:
+        debug ms: 1
+        debug mds: 20
 tasks:
 - ceph-fuse:
 - workunit:
