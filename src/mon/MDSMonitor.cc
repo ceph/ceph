@@ -527,6 +527,27 @@ void MDSMonitor::dump_info(Formatter *f)
   f->close_section();
 }
 
+int MDSMonitor::parse_mds_id(const char *s, stringstream *pss)
+{
+  // osd.NNN?
+  if (strncmp(s, "mds.", 4) == 0) {
+    s += 4;
+  }
+
+  // NNN?
+  ostringstream ss;
+  long id = parse_pos_long(s, &ss);
+  if (id < 0) {
+    *pss << ss.str();
+    return id;
+  }
+  if (id > 0xffff) {
+    *pss << "mds id " << id << " is too large";
+    return -ERANGE;
+  }
+  return id;
+}
+
 bool MDSMonitor::preprocess_command(MMonCommand *m)
 {
   int r = -1;
@@ -656,18 +677,22 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	}
       } else {
 	errno = 0;
-	int who = strtol(m->cmd[0].c_str(), 0, 10);
-	m->cmd.erase(m->cmd.begin()); //done with target num now
-	if (!errno && who >= 0) {
-	  if (mdsmap.is_up(who)) {
-	    mon->send_command(mdsmap.get_inst(who), m->cmd, get_version());
-	    r = 0;
-	    ss << "ok";
-	  } else {
-	    ss << "mds." << who << " no up";
-	    r = -ENOENT;
+	int who = parse_mds_id(m->cmd[0].c_str(), &ss);
+	if (who < 0) {
+	  r = -EINVAL;
+	} else {
+	  m->cmd.erase(m->cmd.begin()); //done with target num now
+	  if (!errno && who >= 0) {
+	    if (mdsmap.is_up(who)) {
+	      mon->send_command(mdsmap.get_inst(who), m->cmd, get_version());
+	      r = 0;
+	      ss << "ok";
+	    } else {
+	      ss << "mds." << who << " no up";
+	      r = -ENOENT;
+	    }
 	  }
-	} else ss << "specify mds number or *";
+	}
       }
     }
     else if (m->cmd[1] == "compat") {
@@ -717,9 +742,9 @@ void MDSMonitor::fail_mds_gid(uint64_t gid)
 
 int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
 {
-  std::string err;
-  int w = strict_strtoll(arg.c_str(), 10, &err);
-  if (!err.empty()) {
+  stringstream ss2;
+  int w = parse_mds_id(arg.c_str(), &ss2);
+  if (w < 0) {
     // Try to interpret the arg as an MDS name
     const MDSMap::mds_info_t *mds_info = mdsmap.find_by_name(arg);
     if (!mds_info) {
@@ -731,7 +756,7 @@ int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
 
   if (!mon->osdmon()->is_writeable()) {
     return -EAGAIN;
- }
+  }
 
   bool failed_mds_gid = false;
   if (pending_mdsmap.up.count(w)) {
