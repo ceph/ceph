@@ -204,7 +204,9 @@ namespace librbd {
   // raw callbacks
   int simple_read_cb(uint64_t ofs, size_t len, const char *buf, void *arg);
   void rados_req_cb(rados_completion_t cb, void *arg);
+  void rados_ctx_cb(rados_completion_t cb, void *arg);
   void rbd_req_cb(completion_t cb, void *arg);
+  void rbd_ctx_cb(completion_t cb, void *arg);
 }
 
 #endif

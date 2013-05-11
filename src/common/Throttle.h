@@ -59,4 +59,43 @@ public:
 };
 
 
+/**
+ * @class SimpleThrottle
+ * This is a simple way to bound the number of concurrent operations.
+ *
+ * It tracks the first error encountered, and makes it available
+ * when all requests are complete. wait_for_ret() should be called
+ * before the instance is destroyed.
+ *
+ * Re-using the same instance isn't safe if you want to check each set
+ * of operations for errors, since the return value is not reset.
+ */
+class SimpleThrottle {
+public:
+  SimpleThrottle(uint64_t max, bool ignore_enoent);
+  ~SimpleThrottle();
+  void start_op();
+  void end_op(int r);
+  int wait_for_ret();
+private:
+  Mutex m_lock;
+  Cond m_cond;
+  uint64_t m_max;
+  uint64_t m_current;
+  int m_ret;
+  bool m_ignore_enoent;
+};
+
+class C_SimpleThrottle : public Context {
+public:
+  C_SimpleThrottle(SimpleThrottle *throttle) : m_throttle(throttle) {
+    m_throttle->start_op();
+  }
+  virtual void finish(int r) {
+    m_throttle->end_op(r);
+  }
+private:
+  SimpleThrottle *m_throttle;
+};
+
 #endif
