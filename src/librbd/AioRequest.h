@@ -66,7 +66,8 @@ namespace librbd {
 	    vector<pair<uint64_t,uint64_t> >& be,
 	    librados::snap_t snap_id, bool sparse,
 	    Context *completion)
-      : AioRequest(ictx, oid, objectno, offset, len, snap_id, completion, false),
+      : AioRequest(ictx, oid, objectno, offset, len, snap_id, completion,
+		   false),
 	m_buffer_extents(be),
 	m_tried_parent(false), m_sparse(sparse) {
     }
