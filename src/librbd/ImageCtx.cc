@@ -238,6 +238,18 @@ namespace librbd {
     delete perfcounter;
   }
 
+  int ImageCtx::get_read_flags(snap_t snap_id) {
+    int flags = librados::OPERATION_NOFLAG;
+    if (snap_id == LIBRADOS_SNAP_HEAD)
+      return flags;
+
+    if (cct->_conf->rbd_balance_snap_reads)
+      flags |= librados::OPERATION_BALANCE_READS;
+    else if (cct->_conf->rbd_localize_snap_reads)
+      flags |= librados::OPERATION_LOCALIZE_READS;
+    return flags;
+  }
+
   int ImageCtx::snap_set(string in_snap_name)
   {
     map<string, SnapInfo>::iterator it = snaps_by_name.find(in_snap_name);
