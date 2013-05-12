@@ -145,6 +145,14 @@ void librados::ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *p
   o->read(off, len, pbl, prval);
 }
 
+void librados::ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
+						std::map<uint64_t,uint64_t> *m,
+						bufferlist *data_bl, int *prval)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->sparse_read(off, len, m, data_bl, prval);
+}
+
 void librados::ObjectReadOperation::tmap_get(bufferlist *pbl, int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
