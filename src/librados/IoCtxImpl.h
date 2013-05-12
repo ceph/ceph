@@ -156,16 +156,6 @@ struct librados::IoCtxImpl {
     void finish(int r);
   };
 
-  struct C_aio_sparse_read_Ack : public Context {
-    AioCompletionImpl *c;
-    bufferlist *data_bl;
-    std::map<uint64_t, uint64_t> *m;
-    C_aio_sparse_read_Ack(AioCompletionImpl *_c,
-			  bufferlist *data,
-			  std::map<uint64_t, uint64_t> *extents);
-    void finish(int r);
-  };
-
   struct C_aio_Safe : public Context {
     AioCompletionImpl *c;
     C_aio_Safe(AioCompletionImpl *_c);
