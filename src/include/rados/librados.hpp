@@ -251,6 +251,11 @@ namespace librados
     void getxattr(const char *name, bufferlist *pbl, int *prval);
     void getxattrs(std::map<std::string, bufferlist> *pattrs, int *prval);
     void read(size_t off, uint64_t len, bufferlist *pbl, int *prval);
+    /**
+     * see aio_sparse_read()
+     */
+    void sparse_read(uint64_t off, uint64_t len, std::map<uint64_t,uint64_t> *m,
+                    bufferlist *data_bl, int *prval);
     void tmap_get(bufferlist *pbl, int *prval);
 
     /**
