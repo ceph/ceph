@@ -185,7 +185,9 @@ struct ObjectOperation {
     uint64_t *psize;
     utime_t *pmtime;
     time_t *ptime;
-    C_ObjectOperation_stat(uint64_t *ps, utime_t *pm, time_t *pt) : psize(ps), pmtime(pm), ptime(pt) {}
+    int *prval;
+    C_ObjectOperation_stat(uint64_t *ps, utime_t *pm, time_t *pt, int *prval)
+      : psize(ps), pmtime(pm), ptime(pt), prval(prval) {}
     void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
@@ -200,9 +202,9 @@ struct ObjectOperation {
 	    *pmtime = mtime;
 	  if (ptime)
 	    *ptime = mtime.sec();
-	}
-	catch (buffer::error& e) {
-	  r = -EIO;
+	} catch (buffer::error& e) {
+	  if (prval)
+	    *prval = -EIO;
 	}
       }
     }
@@ -210,7 +212,8 @@ struct ObjectOperation {
   void stat(uint64_t *psize, utime_t *pmtime, int *prval) {
     add_op(CEPH_OSD_OP_STAT);
     unsigned p = ops.size() - 1;
-    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, pmtime, NULL);
+    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, pmtime, NULL,
+							   prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
     out_rval[p] = prval;
@@ -218,7 +221,8 @@ struct ObjectOperation {
   void stat(uint64_t *psize, time_t *ptime, int *prval) {
     add_op(CEPH_OSD_OP_STAT);
     unsigned p = ops.size() - 1;
-    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, NULL, ptime);
+    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, NULL, ptime,
+							   prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
     out_rval[p] = prval;
