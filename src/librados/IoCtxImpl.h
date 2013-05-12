@@ -140,7 +140,8 @@ struct librados::IoCtxImpl {
   int operate_read(const object_t& oid, ::ObjectOperation *o, bufferlist *pbl);
   int aio_operate(const object_t& oid, ::ObjectOperation *o,
 		  AioCompletionImpl *c, const SnapContext& snap_context);
-  int aio_operate_read(const object_t& oid, ::ObjectOperation *o, AioCompletionImpl *c, bufferlist *pbl);
+  int aio_operate_read(const object_t& oid, ::ObjectOperation *o,
+		       AioCompletionImpl *c, int flags, bufferlist *pbl);
 
   struct C_aio_Ack : public Context {
     librados::AioCompletionImpl *c;
