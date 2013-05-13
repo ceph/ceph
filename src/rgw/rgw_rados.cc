@@ -2387,7 +2387,6 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
         r = -ERR_NOT_MODIFIED;
         goto done_err;
       }
-      if_nomatch = if_nomatch_str.c_str();
     }
   }
 
