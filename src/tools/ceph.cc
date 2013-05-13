@@ -194,6 +194,7 @@ static int get_indata(const char *in_file, bufferlist &indata)
     int err = errno;
     derr << "error getting size of in_file '" << in_file << "': "
 	 << cpp_strerror(err) << dendl;
+    TEMP_FAILURE_RETRY(::close(fd));
     return 1;
   }
 
