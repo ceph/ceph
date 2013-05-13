@@ -548,6 +548,7 @@ private:
 	version(0),
 	timeout(NULL),
 	sync_state(STATE_NONE),
+	crc(0),
 	crc_available(false),
 	attempts(0)
     { }
