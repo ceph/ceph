@@ -437,7 +437,6 @@ Rados object in state %s." % (self.state))
         outslen = 2 << 10           # status should not be so large
         outbuf = create_string_buffer(outbuflen)
         outs = create_string_buffer(outslen)
-        print >> sys.stderr, 'mon_command("{}", "{}")'.format(cmd, inbuf)
         ret = self.librados.rados_mon_command(self.cluster, c_char_p(cmd),
             c_char_p(inbuf), outbuf, outbuflen, outs, outslen)
         if ret < 0:
@@ -456,8 +455,6 @@ Rados object in state %s." % (self.state))
         outslen = 1024
         outbuf = create_string_buffer(outbuflen)
         outs = create_string_buffer(outslen)
-        print >> sys.stderr, 'osd_command({}, "{}", "{}")'.format(osdid,
-                                                                  cmd, inbuf)
         ret = self.librados.rados_osd_command(self.cluster, osdid,
             c_char_p(cmd), c_char_p(inbuf), outbuf, outbuflen, outs, outslen)
         if ret == -errno.EOVERFLOW:
@@ -478,7 +475,6 @@ Rados object in state %s." % (self.state))
         outslen = 1024
         outbuf = create_string_buffer(outbuflen)
         outs = create_string_buffer(outslen)
-        print >> sys.stderr, 'pg_command({} "{}", "{}")'.format(pgid, cmd, inbuf)
         ret = self.librados.rados_pg_command(self.cluster, c_char_p(pgid),
                                              c_char_p(cmd), c_char_p(inbuf),
                                              outbuf, outbuflen, outs, outslen)
