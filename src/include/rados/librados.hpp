@@ -105,9 +105,26 @@ namespace librados
     PoolAsyncCompletionImpl *pc;
   };
 
+  /**
+   * These are per-op flags which may be different among
+   * ops added to an ObjectOperation.
+   */
   enum ObjectOperationFlags {
     OP_EXCL =   1,
     OP_FAILOK = 2,
+  };
+
+  /**
+   * These flags apply to the ObjectOperation as a whole.
+   *
+   * BALANCE_READS and LOCALIZE_READS should only be used
+   * when reading from data you're certain won't change,
+   * like a snapshot, or where eventual consistency is ok.
+   */
+  enum ObjectOperationGlobalFlags {
+    OPERATION_NOFLAG         = 0,
+    OPERATION_BALANCE_READS  = 1,
+    OPERATION_LOCALIZE_READS = 2,
   };
 
   /*
@@ -251,6 +268,11 @@ namespace librados
     void getxattr(const char *name, bufferlist *pbl, int *prval);
     void getxattrs(std::map<std::string, bufferlist> *pattrs, int *prval);
     void read(size_t off, uint64_t len, bufferlist *pbl, int *prval);
+    /**
+     * see aio_sparse_read()
+     */
+    void sparse_read(uint64_t off, uint64_t len, std::map<uint64_t,uint64_t> *m,
+                    bufferlist *data_bl, int *prval);
     void tmap_get(bufferlist *pbl, int *prval);
 
     /**
@@ -581,7 +603,10 @@ namespace librados
     int aio_operate(const std::string& oid, AioCompletion *c,
 		    ObjectWriteOperation *op, snap_t seq,
 		    std::vector<snap_t>& snaps);
-    int aio_operate(const std::string& oid, AioCompletion *c, ObjectReadOperation *op,
+    int aio_operate(const std::string& oid, AioCompletion *c,
+		    ObjectReadOperation *op, bufferlist *pbl);
+    int aio_operate(const std::string& oid, AioCompletion *c,
+		    ObjectReadOperation *op, snap_t snapid, int flags,
 		    bufferlist *pbl);
 
     // watch/notify

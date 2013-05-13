@@ -145,6 +145,14 @@ void librados::ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *p
   o->read(off, len, pbl, prval);
 }
 
+void librados::ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
+						std::map<uint64_t,uint64_t> *m,
+						bufferlist *data_bl, int *prval)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->sparse_read(off, len, m, data_bl, prval);
+}
+
 void librados::ObjectReadOperation::tmap_get(bufferlist *pbl, int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
@@ -883,10 +891,28 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 				  snapc);
 }
 
-int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c, librados::ObjectReadOperation *o, bufferlist *pbl)
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+				 librados::ObjectReadOperation *o,
+				 bufferlist *pbl)
 {
   object_t obj(oid);
-  return io_ctx_impl->aio_operate_read(obj, (::ObjectOperation*)o->impl, c->pc, pbl);
+  return io_ctx_impl->aio_operate_read(obj, (::ObjectOperation*)o->impl, c->pc,
+				       0, pbl);
+}
+
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+				 librados::ObjectReadOperation *o, 
+				 snap_t snapid, int flags, bufferlist *pbl)
+{
+  object_t obj(oid);
+  int op_flags = 0;
+  if (flags & OPERATION_BALANCE_READS)
+    op_flags |= CEPH_OSD_FLAG_BALANCE_READS;
+  if (flags & OPERATION_LOCALIZE_READS)
+    op_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
+
+  return io_ctx_impl->aio_operate_read(obj, (::ObjectOperation*)o->impl, c->pc,
+				       op_flags, pbl);
 }
 
 void librados::IoCtx::snap_set_read(snap_t seq)
