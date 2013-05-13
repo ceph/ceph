@@ -2,6 +2,7 @@
 
 import argparse
 import copy
+import errno
 import fcntl
 import json
 import os
@@ -1087,7 +1088,24 @@ def main():
     # as part of the validated argument JSON object
 
     ret, outbl, outs = json_command('get_command_descriptions')
-    if ret:
+    if ret == -errno.EINVAL:
+        # this was an old monitor; send the original command unmodified
+        # XXX restructure this so we don't duplicate error printing code
+        ret, outbl, outs = cluster.mon_command(' '.join(sys.argv[1:]), inbuf)
+        if ret:
+            sys.stderr.write('Error {}: {}'.format(ret, outs))
+            return ret
+
+        if (parsed_args.output_file):
+            outf.write(outbuf)
+            outf.close()
+        else:
+            sys.stdout.write(outbuf)
+
+        # XXX make sure outs only has error or status
+        sys.stderr.write(outs)
+        return 0
+    elif ret:
         print >> sys.stderr, 'Problem getting command descriptions from ceph-mon, error {}'.format(ret)
         return ret
 
