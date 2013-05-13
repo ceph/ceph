@@ -4065,7 +4065,8 @@ void PG::classic_scrub()
  * scrubber.state encodes the current state of the scrub (refer to state diagram
  * for details).
  */
-void PG::chunky_scrub() {
+void PG::chunky_scrub()
+{
   // check for map changes
   if (scrubber.is_chunky_scrub_active()) {
     if (scrubber.epoch_start != info.history.same_interval_since) {
@@ -4283,7 +4284,8 @@ void PG::scrub_clear_state()
   _scrub_clear_state();
 }
 
-bool PG::scrub_gather_replica_maps() {
+bool PG::scrub_gather_replica_maps()
+{
   assert(scrubber.waiting_on == 0);
   assert(_lock.is_locked());
 
