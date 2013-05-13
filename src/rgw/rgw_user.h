@@ -75,7 +75,7 @@ extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, 
 /**
  * Given an RGWUserInfo, deletes the user and its bucket ACLs.
  */
-extern int rgw_delete_user(RGWRados *store, RGWUserInfo& user);
+extern int rgw_delete_user(RGWRados *store, RGWUserInfo& user, RGWObjVersionTracker& objv_tracker);
 /**
  * Store a list of the user's buckets, with associated functinos.
  */

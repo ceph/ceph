@@ -2075,8 +2075,7 @@ int RGWRados::delete_bucket(rgw_bucket& bucket)
     }
   } while (is_truncated);
 
-  rgw_obj obj(zone.domain_root, bucket.name);
-  r = delete_obj(NULL, obj);
+  r = rgw_bucket_delete_bucket_obj(this, bucket.name);
   if (r < 0)
     return r;
 

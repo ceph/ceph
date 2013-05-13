@@ -16,6 +16,14 @@ class RGWObjVersionTracker;
 struct obj_version;
 
 
+enum RGWMDLogStatus {
+  MDLOG_STATUS_UNKNOWN,
+  MDLOG_STATUS_WRITE,
+  MDLOG_STATUS_SETATTRS,
+  MDLOG_STATUS_REMOVE,
+  MDLOG_STATUS_COMPLETE,
+};
+
 class RGWMetadataObject {
 protected:
   obj_version objv;
@@ -103,7 +111,8 @@ class RGWMetadataManager {
 
   int find_handler(const string& metadata_key, RGWMetadataHandler **handler, string& entry);
   int pre_modify(RGWMetadataHandler *handler, string& section, string& key,
-                 RGWMetadataLogData& log_data, RGWObjVersionTracker *objv_tracker);
+                 RGWMetadataLogData& log_data, RGWObjVersionTracker *objv_tracker,
+                 RGWMDLogStatus op_type);
   int post_modify(string& section, string& key, RGWMetadataLogData& log_data,
                  RGWObjVersionTracker *objv_tracker);
 
@@ -117,12 +126,13 @@ public:
 
   int put_entry(RGWMetadataHandler *handler, string& key, bufferlist& bl, bool exclusive,
                 RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs = NULL);
+  int remove_entry(RGWMetadataHandler *handler, string& key, RGWObjVersionTracker *objv_tracker);
   int set_attr(RGWMetadataHandler *handler, string& key, rgw_obj& obj, string& attr, bufferlist& bl,
                RGWObjVersionTracker *objv_tracker);
- int set_attrs(RGWMetadataHandler *handler, string& key,
-               rgw_obj& obj, map<string, bufferlist>& attrs,
-               map<string, bufferlist>* rmattrs,
-               RGWObjVersionTracker *objv_tracker);
+  int set_attrs(RGWMetadataHandler *handler, string& key,
+                rgw_obj& obj, map<string, bufferlist>& attrs,
+                map<string, bufferlist>* rmattrs,
+                RGWObjVersionTracker *objv_tracker);
   int get(string& metadata_key, Formatter *f);
   int put(string& metadata_key, bufferlist& bl);
   int remove(string& metadata_key);

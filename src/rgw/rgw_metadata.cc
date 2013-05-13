@@ -9,13 +9,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-enum RGWMDLogStatus {
-  MDLOG_STATUS_UNKNOWN,
-  MDLOG_STATUS_WRITING,
-  MDLOG_STATUS_REMOVING,
-  MDLOG_STATUS_COMPLETE,
-};
-
 struct LogStatusDump {
   RGWMDLogStatus status;
 
@@ -23,11 +16,14 @@ struct LogStatusDump {
   void dump(Formatter *f) const {
     string s;
     switch (status) {
-      case MDLOG_STATUS_WRITING:
-        s = "writing";
+      case MDLOG_STATUS_WRITE:
+        s = "write";
         break;
-      case MDLOG_STATUS_REMOVING:
-        s = "removing";
+      case MDLOG_STATUS_SETATTRS:
+        s = "set_attrs";
+        break;
+      case MDLOG_STATUS_REMOVE:
+        s = "remove";
         break;
       case MDLOG_STATUS_COMPLETE:
         s = "complete";
@@ -363,37 +359,7 @@ int RGWMetadataManager::remove(string& metadata_key)
 
   objv_tracker.read_version = obj->get_version();
 
-
-  RGWMetadataLogData log_data;
-  bufferlist logbl;
-
-  log_data.read_version = objv_tracker.read_version;
-  log_data.write_version = objv_tracker.write_version;
-
-  log_data.status = MDLOG_STATUS_REMOVING;
-
-  ::encode(log_data, logbl);
-
-  string section, key;
-  parse_metadata_key(entry, section, key);
-
-  ret = md_log->add_entry(store, section, key, logbl);
-  if (ret < 0)
-    return ret;
-
-  ret = handler->remove(store, entry, objv_tracker);
-  if (ret < 0) {
-    return ret;
-  }
-
-  logbl.clear();
-  log_data.status = MDLOG_STATUS_COMPLETE;
-
-  ret = md_log->add_entry(store, section, key, logbl);
-  if (ret < 0)
-    return ret;
-
-  return 0;
+  return handler->remove(store, entry, objv_tracker);
 }
 
 
@@ -472,7 +438,8 @@ void RGWMetadataManager::get_sections(list<string>& sections)
 }
 
 int RGWMetadataManager::pre_modify(RGWMetadataHandler *handler, string& section, string& key,
-                                   RGWMetadataLogData& log_data, RGWObjVersionTracker *objv_tracker)
+                                   RGWMetadataLogData& log_data, RGWObjVersionTracker *objv_tracker,
+                                   RGWMDLogStatus op_type)
 {
   section = handler->get_type();
 
@@ -488,7 +455,7 @@ int RGWMetadataManager::pre_modify(RGWMetadataHandler *handler, string& section,
   log_data.read_version = objv_tracker->read_version;
   log_data.write_version = objv_tracker->write_version;
 
-  log_data.status = MDLOG_STATUS_WRITING;
+  log_data.status = op_type;
 
   bufferlist logbl;
   ::encode(log_data, logbl);
@@ -520,7 +487,7 @@ int RGWMetadataManager::put_entry(RGWMetadataHandler *handler, string& key, buff
 {
   string section;
   RGWMetadataLogData log_data;
-  int ret = pre_modify(handler, section, key, log_data, objv_tracker);
+  int ret = pre_modify(handler, section, key, log_data, objv_tracker, MDLOG_STATUS_WRITE);
   if (ret < 0)
     return ret;
 
@@ -542,6 +509,32 @@ int RGWMetadataManager::put_entry(RGWMetadataHandler *handler, string& key, buff
   return 0;
 }
 
+int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler, string& key, RGWObjVersionTracker *objv_tracker)
+{
+  string section;
+  RGWMetadataLogData log_data;
+  int ret = pre_modify(handler, section, key, log_data, objv_tracker, MDLOG_STATUS_REMOVE);
+  if (ret < 0)
+    return ret;
+
+  string oid;
+  rgw_bucket bucket;
+
+  handler->get_pool_and_oid(store, key, bucket, oid);
+
+  rgw_obj obj(bucket, oid);
+
+  ret = store->delete_obj(NULL, obj);
+  if (ret < 0)
+    return ret;
+
+  ret = post_modify(section, key, log_data, objv_tracker);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
 int RGWMetadataManager::set_attrs(RGWMetadataHandler *handler, string& key,
                                   rgw_obj& obj, map<string, bufferlist>& attrs,
                                   map<string, bufferlist>* rmattrs,
@@ -549,7 +542,7 @@ int RGWMetadataManager::set_attrs(RGWMetadataHandler *handler, string& key,
 {
   string section;
   RGWMetadataLogData log_data;
-  int ret = pre_modify(handler, section, key, log_data, objv_tracker);
+  int ret = pre_modify(handler, section, key, log_data, objv_tracker, MDLOG_STATUS_SETATTRS);
   if (ret < 0)
     return ret;
 
