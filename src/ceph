@@ -1044,7 +1044,7 @@ def main():
     # default '' means default conf search
     conffile = ''
     if parsed_args.cephconf:
-        conf = parsed_args.cephconf
+        conffile = parsed_args.cephconf
 
     """
     XXX need to handle watch here
