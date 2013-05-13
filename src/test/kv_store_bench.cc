@@ -373,6 +373,7 @@ int KvStoreBench::test_teuthology_aio(next_gen_t distr,
       kv = (((KvStoreBench *)this)->*distr)(true);
       if (kv.first == "") {
 	i--;
+	delete cb_args;
 	continue;
       }
       ops_in_flight++;
@@ -384,6 +385,7 @@ int KvStoreBench::test_teuthology_aio(next_gen_t distr,
       kv = (((KvStoreBench *)this)->*distr)(false);
       if (kv.first == "") {
 	i--;
+	delete cb_args;
 	continue;
       }
       ops_in_flight++;
@@ -395,6 +397,7 @@ int KvStoreBench::test_teuthology_aio(next_gen_t distr,
       kv = (((KvStoreBench *)this)->*distr)(false);
       if (kv.first == "") {
 	i--;
+	delete cb_args;
 	continue;
       }
       key_set.erase(kv.first);
@@ -406,6 +409,7 @@ int KvStoreBench::test_teuthology_aio(next_gen_t distr,
       kv = (((KvStoreBench *)this)->*distr)(false);
       if (kv.first == "") {
 	i--;
+	delete cb_args;
 	continue;
       }
       bufferlist val;
@@ -414,6 +418,10 @@ int KvStoreBench::test_teuthology_aio(next_gen_t distr,
       kvs->aio_get(kv.first, &cb_args->val, aio_callback_timed,
 	  cb_args, &cb_args->err);
       break;
+    }
+
+    if (cb_args) {
+      delete cb_args;
     }
   }
 
