@@ -4404,23 +4404,54 @@ void Monitor::StoreConverter::_convert_machines(string machine)
       dout(20) << __func__ << " " << machine
 	       << " ver " << ver << " -> " << gv << dendl;
 
+      MonitorDBStore::Transaction paxos_tx;
+
       if (gvs.count(gv) == 0) {
-	gvs.insert(gv);
+        gvs.insert(gv);
       } else {
 	dout(0) << __func__ << " " << machine
 		<< " gv " << gv << " already exists"
 		<< dendl;
-	assert(0 == "Duplicate GV -- something is wrong!");
+
+        // Duplicates aren't supposed to happen, but an old bug introduced
+	// them and the mds state machine wasn't ever trimmed, so many users
+	// will see them.  So we'll just merge them all in one
+        // single paxos version.
+        // We know that they are either from another paxos machine or
+        // they are from the same paxos machine but their version is
+        // lower than ours -- given that we are iterating all versions
+        // from the lowest to the highest, duh!
+        // We'll just append our stuff to the existing paxos transaction
+        // as if nothing had happened.
+
+        // Just make sure we are correct. This shouldn't take long and
+        // should never be triggered!
+        set<pair<string,version_t> >& s = gv_map[gv];
+        for (set<pair<string,version_t> >::iterator it = s.begin();
+             it != s.end(); ++it) {
+          if (it->first == machine)
+            assert(it->second + 1 == ver);
+        }
+
+        bufferlist paxos_bl;
+        int r = db->get("paxos", gv, paxos_bl);
+        assert(r >= 0);
+        paxos_tx.append_from_encoded(paxos_bl);
       }
+      gv_map[gv].insert(make_pair(machine,ver));
 
       bufferlist tx_bl;
       tx.encode(tx_bl);
-      tx.put("paxos", gv, tx_bl);
+      paxos_tx.append_from_encoded(tx_bl);
+      bufferlist paxos_bl;
+      paxos_tx.encode(paxos_bl);
+      tx.put("paxos", gv, paxos_bl);
     }
     db->apply_transaction(tx);
   }
 
   version_t lc = db->get(machine, "last_committed");
+  dout(20) << __func__ << " lc " << lc << " last_committed " << last_committed << dendl;
   assert(lc == last_committed);
 
   MonitorDBStore::Transaction tx;
