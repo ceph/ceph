@@ -460,9 +460,9 @@ Rados object in state %s." % (self.state))
                                                                   cmd, inbuf)
         ret = self.librados.rados_osd_command(self.cluster, osdid,
             c_char_p(cmd), c_char_p(inbuf), outbuf, outbuflen, outs, outslen)
-        if ret == -EOVERFLOW:
+        if ret == -errno.EOVERFLOW:
             raise make_ex(ret, "osd_command: outbuf or outs not long enough")
-        if ret == -EINVAL:
+        if ret == -errno.EINVAL:
             raise make_ex(ret, "osd_command: invalid arg (osdid?)")
         return (ret, outbuf.value, outs.value)
 
@@ -482,9 +482,9 @@ Rados object in state %s." % (self.state))
         ret = self.librados.rados_pg_command(self.cluster, c_char_p(pgid),
                                              c_char_p(cmd), c_char_p(inbuf),
                                              outbuf, outbuflen, outs, outslen)
-        if ret == -EOVERFLOW:
+        if ret == -errno.EOVERFLOW:
             raise make_ex(ret, "pg_command: outbuf or outs not long enough")
-        if ret == -EINVAL:
+        if ret == -errno.EINVAL:
             raise make_ex(ret, "pg_command: invalid arg (pgid?)")
         return (ret, outbuf.value, outs.value)
 
