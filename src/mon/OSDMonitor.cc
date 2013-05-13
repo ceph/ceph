@@ -931,8 +931,8 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   }
 
   if (failed_for >= grace &&
-      ((int)fi.reporters.size() >= g_conf->osd_min_down_reporters) &&
-      (fi.num_reports >= g_conf->osd_min_down_reports)) {
+      ((int)fi.reporters.size() >= g_conf->mon_osd_min_down_reporters) &&
+      (fi.num_reports >= g_conf->mon_osd_min_down_reports)) {
     dout(1) << " we have enough reports/reporters to mark osd." << target_osd << " down" << dendl;
     pending_inc.new_state[target_osd] = CEPH_OSD_UP;
 

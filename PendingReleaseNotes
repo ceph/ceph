@@ -1,1 +1,6 @@
-
+- The 'osd min down {reporters|reports}' config options have been
+  renamed to 'mon osd min down {reporters|reports}', and the
+  documentation has been updated to reflect that these options apply
+  to the monitors (who process failure reports) and not OSDs.  If you
+  have adjusted these settings, please update your ``ceph.conf''
+  accordingly.

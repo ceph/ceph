@@ -69,8 +69,8 @@ You can change the minimum number of ``osd down`` reports by adding an ``osd min
 down reports`` setting under the ``[osd]`` section of your Ceph configuration
 file, or by setting the value at runtime. By default, only one OSD is required
 to report another OSD down. You can change the number of OSDs required to report
-a monitor down by adding an ``osd min down reporters`` setting under the
-``[osd]`` section of your Ceph configuration file, or by setting the value at
+a monitor down by adding an ``mon osd min down reporters`` setting under the
+``[mon]`` section of your Ceph configuration file, or by setting the value at
 runtime.
 
 
@@ -271,6 +271,21 @@ Monitor Settings
 :Type: 32-bit Integer
 :Default: ``900``
 
+``mon osd min down reporters`` 
+
+:Description: The minimum number of OSDs required to report a ``down`` OSD.
+:Type: 32-bit Integer
+:Default: ``1``
+
+
+``mon osd min down reports`` 
+
+:Description: The minimum number of times an OSD must report that another 
+              is ``down``.
+
+:Type: 32-bit Integer
+:Default: ``3`` 
+
 
 
 OSD Settings
@@ -332,20 +347,4 @@ OSD Settings
 
 :Type: 32-bit Integer
 :Default: ``30`` 
-
-
-``osd min down reporters`` 
-
-:Description: The minimum number of OSDs required to report a ``down`` OSD.
-:Type: 32-bit Integer
-:Default: ``1``
-
-
-``osd min down reports`` 
-
-:Description: The minimum number of times an OSD must report that another 
-              is ``down``.
-
-:Type: 32-bit Integer
-:Default: ``3`` 
 
