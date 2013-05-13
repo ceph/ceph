@@ -216,7 +216,7 @@ public:
      * state, because this might block the caller behind entire pg
      * removals.
      */
-    while (status == DELETING_DIR || status == DELETING_DIR)
+    while (status == DELETING_DIR || status == DELETED_DIR)
       cond.Wait(lock);
     return status != DELETED_DIR;
   } ///< @return true if we don't need to recreate the collection
