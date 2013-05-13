@@ -232,7 +232,8 @@ int do_admin_socket(string path, string cmd)
   if (connect(fd, (struct sockaddr *) &address, 
 	      sizeof(struct sockaddr_un)) != 0) {
     cerr << "connect to " << path << " failed with " << cpp_strerror(errno) << std::endl;
-    return -1;
+    r = -1;
+    goto out;
   }
   
   char *buf;
