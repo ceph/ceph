@@ -1150,17 +1150,20 @@ def main():
                     print "invalid command"
 
     ret, outbuf, outs = json_command(argdict=valid_dict, inbuf=inbuf)
+
     if ret:
         sys.stderr.write('Error {}: {}'.format(ret, outs))
-        return 1
+        return ret
 
     if (parsed_args.output_file):
         outf.write(outbuf)
         outf.close()
     else:
         sys.stdout.write(outbuf)
-        # XXX this should not be necessary
-        sys.stdout.write(outs)
+
+    # XXX make sure outs always has only error or status
+    sys.stderr.write(outs)
+    return 0
 
 if __name__ == '__main__':
     sys.exit(main())
