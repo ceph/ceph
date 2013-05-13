@@ -33,8 +33,7 @@ class RGWMetadataHandler {
   friend class RGWMetadataManager;
 
 protected:
-  virtual int put_entry(RGWRados *store, string& key, bufferlist& bl, bool exclusive,
-                        RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs = NULL) = 0;
+  virtual void get_pool_and_oid(RGWRados *store, string& key, rgw_bucket& bucket, string& oid) = 0;
 public:
   virtual ~RGWMetadataHandler() {}
   virtual string get_type() = 0;

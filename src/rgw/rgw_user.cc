@@ -2287,11 +2287,9 @@ public:
     return rgw_delete_user(store, info);
   }
 
-  int put_entry(RGWRados *store, string& key, bufferlist& bl, bool exclusive,
-                RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs) {
-    return rgw_put_system_obj(store, store->zone.user_uid_pool, key,
-                              bl.c_str(), bl.length(), exclusive,
-                              objv_tracker, pattrs);
+  void get_pool_and_oid(RGWRados *store, string& key, rgw_bucket& bucket, string& oid) {
+    oid = key;
+    bucket = store->zone.user_uid_pool;
   }
 
   int list_keys_init(RGWRados *store, void **phandle)
