@@ -208,15 +208,15 @@ public:
     Mutex::Locker l(lock);
     stop_deleting = true;
     /**
-     * If we are in DELETING_DIR or DELETED_DIR, there are in progress
+     * If we are in DELETING_DIR or CLEARING_DIR, there are in progress
      * operations we have to wait for before continuing on.  States
      * DELETED_DIR, QUEUED, and CANCELED either check for stop_deleting
      * prior to performing any operations or signify the end of the
      * deleting process.  We don't want to wait to leave the QUEUED
-     * state, because this might block the caller behind entire pg
-     * removals.
+     * state, because this might block the caller behind an entire pg
+     * removal.
      */
-    while (status == DELETING_DIR || status == DELETED_DIR)
+    while (status == DELETING_DIR || status == CLEARING_DIR)
       cond.Wait(lock);
     return status != DELETED_DIR;
   } ///< @return true if we don't need to recreate the collection
