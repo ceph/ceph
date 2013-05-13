@@ -150,6 +150,9 @@ fi
 
 ARGS="-c $conf"
 
+export PYTHONPATH=./pybind
+export LD_LIBRARY_PATH=.libs
+
 run() {
     type=$1
     shift
@@ -562,4 +565,8 @@ EOF
 fi
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
+
+echo ""
+echo "export PYTHONPATH=./pybind"
+echo "export LD_LIBRARY_PATH=.libs"
 
