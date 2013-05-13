@@ -963,7 +963,8 @@ def json_command(prefix=None, argdict=None, inbuf=''):
                 cluster.pg_command(pgid, json.dumps(cmddict), inbuf)
         elif cmddict['prefix'] == 'tell' and cmddict.has_key('target'):
             targ = CephName()
-            targ.valid(cmddict['target'])
+            target = cmddict.pop('target')
+            targ.valid(target)
             if targ.nametype == 'osd':
                 osdid = targ.nameid
                 ret, outbl, outs = \
