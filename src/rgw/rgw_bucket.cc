@@ -331,6 +331,12 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
   return ret;
 }
 
+int rgw_bucket_delete_bucket_obj(RGWRados *store, string& bucket_name)
+{
+  RGWObjVersionTracker objv_tracker;
+  return store->meta_mgr->remove_entry(bucket_meta_handler, bucket_name, &objv_tracker);
+}
+
 static void set_err_msg(std::string *sink, std::string msg)
 {
   if (sink && !msg.empty())

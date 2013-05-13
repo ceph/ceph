@@ -224,9 +224,17 @@ int rgw_remove_key_index(RGWRados *store, RGWAccessKey& access_key)
 
 int rgw_remove_uid_index(RGWRados *store, string& uid)
 {
-  rgw_obj obj(store->zone.user_uid_pool, uid);
-  int ret = store->delete_obj(NULL, obj);
-  return ret;
+  RGWObjVersionTracker objv_tracker;
+  RGWUserInfo info;
+  int ret = rgw_get_user_info_by_uid(store, uid, info, &objv_tracker);
+  if (ret < 0)
+    return ret;
+
+  ret = store->meta_mgr->remove_entry(user_meta_handler, uid, &objv_tracker);
+  if (ret < 0)
+    return ret;
+
+  return 0;
 }
 
 int rgw_remove_email_index(RGWRados *store, string& email)
@@ -249,7 +257,7 @@ int rgw_remove_swift_name_index(RGWRados *store, string& swift_name)
  * from the user and user email pools. This leaves the pools
  * themselves alone, as well as any ACLs embedded in object xattrs.
  */
-int rgw_delete_user(RGWRados *store, RGWUserInfo& info) {
+int rgw_delete_user(RGWRados *store, RGWUserInfo& info, RGWObjVersionTracker& objv_tracker) {
   string marker;
   vector<rgw_bucket> buckets_vec;
 
@@ -319,7 +327,7 @@ int rgw_delete_user(RGWRados *store, RGWUserInfo& info) {
   
   rgw_obj uid_obj(store->zone.user_uid_pool, info.user_id);
   ldout(store->ctx(), 10) << "removing user index: " << info.user_id << dendl;
-  ret = store->delete_obj(NULL, uid_obj);
+  ret = store->meta_mgr->remove_entry(user_meta_handler, info.user_id, &objv_tracker);
   if (ret < 0 && ret != -ENOENT) {
     ldout(store->ctx(), 0) << "ERROR: could not remove " << info.user_id << ":" << uid_obj << ", should be fixed (err=" << ret << ")" << dendl;
     return ret;
@@ -1748,7 +1756,9 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg)
     done = (m.size() < max_buckets);
   } while (!done);
 
-  ret = rgw_delete_user(store, user_info);
+  RGWObjVersionTracker objv_tracker;
+
+  ret = rgw_delete_user(store, user_info, objv_tracker);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to remove user from RADOS");
     return ret;
@@ -2276,15 +2286,12 @@ public:
   };
 
   int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) {
-#warning FIXME: use objv_tracker
-
     RGWUserInfo info;
-    RGWObjVersionTracker ot;
-    int ret = rgw_get_user_info_by_uid(store, entry, info, &ot);
+    int ret = rgw_get_user_info_by_uid(store, entry, info, &objv_tracker);
     if (ret < 0)
       return ret;
 
-    return rgw_delete_user(store, info);
+    return rgw_delete_user(store, info, objv_tracker);
   }
 
   void get_pool_and_oid(RGWRados *store, string& key, rgw_bucket& bucket, string& oid) {
