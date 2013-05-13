@@ -437,6 +437,7 @@ int initiate_new_remove_pg(ObjectStore *store, pg_t r_pgid,
         << std::endl;
       rmt->collection_rename(coll_t(r_pgid), to_remove);
   } else {
+    delete rmt;
     return ENOENT;
   }
 
