@@ -4145,7 +4145,7 @@ void PG::chunky_scrub() {
         scrubber.block_writes = true;
 
         // walk the log to find the latest update that affects our chunk
-        scrubber.subset_last_update = eversion_t();
+        scrubber.subset_last_update = log.tail;
         for (list<pg_log_entry_t>::iterator p = log.log.begin();
              p != log.log.end();
              ++p) {
