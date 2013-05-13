@@ -1300,11 +1300,15 @@ public:
   }
 
   int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, JSONObj *obj) {
-    RGWBucketCompleteInfo bci;
-
+    RGWBucketCompleteInfo bci, old_bci;
     decode_json_obj(bci, obj);
 
-    int ret = store->put_bucket_info(entry, bci.info, false, &objv_tracker, &bci.attrs);
+
+    int ret = store->get_bucket_info(NULL, entry, old_bci.info, &objv_tracker, &old_bci.attrs);
+    if (ret < 0)
+      return ret;
+
+    ret = store->put_bucket_info(entry, bci.info, false, &objv_tracker, &bci.attrs);
     if (ret < 0)
       return ret;
 
