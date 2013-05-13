@@ -37,6 +37,7 @@
 #include "messages/MGetPoolStatsReply.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDMap.h"
+#include "messages/MCommandReply.h"
 
 #include "AioCompletionImpl.h"
 #include "IoCtxImpl.h"
@@ -334,6 +335,10 @@ bool librados::RadosClient::_dispatch(Message *m)
 
   case CEPH_MSG_POOLOP_REPLY:
     objecter->handle_pool_op_reply(static_cast<MPoolOpReply*>(m));
+    break;
+
+  case MSG_COMMAND_REPLY:
+    objecter->handle_command_reply(static_cast<MCommandReply*>(m));
     break;
 
   case CEPH_MSG_WATCH_NOTIFY:
