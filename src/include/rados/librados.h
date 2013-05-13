@@ -1583,22 +1583,42 @@ int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver, const char *buf,
  * Send monitor command.
  *
  * @note Takes command string in carefully-formatted JSON; must match
- * defined commands, types, etc.  See XXX.
+ * defined commands, types, etc.
+ *
+ * The result buffers are allocated on the heapt; the caller is
+ * expected to release that memory with rados_buffer_free().  The
+ * buffer and length pointers can all be NULL, in which case they are
+ * not filled in.
  *
  * @param cluster cluster handle
  * @param cmd the command string (in JSON)
  * @param inbuf any bulk input data (crush map, etc.)
- * @param outbuf bulk output data
- * @param outbuflen allocated length of outbuf
- * @param outs status/short output data
- * @param outslen allocated length of outs
+ * @param outbuf double pointer to output buffer
+ * @param outbuflen pointer to output buffer length
+ * @param outs double pointer to status string
+ * @param outslen pointer to status string length
  * @returns 0 on success, negative error code on failure
  */
-int rados_mon_command(rados_t cluster, const char *cmd, const char *inbuf, char *outbuf, unsigned int outbuflen, char *outs, unsigned int outslen);
+int rados_mon_command(rados_t cluster, const char *cmd, const char *inbuf,
+		       char **outbuf, size_t *outbuflen,
+		       char **outs, size_t *outslen);
 
-int rados_osd_command(rados_t cluster, int osdid, const char *cmd, const char *inbuf, char *outbuf, unsigned int outbuflen, char *outs, unsigned int outslen);
+/**
+ * free a rados-allocated buffer
+ *
+ * Release memory allocated by librados calls like rados_mon_command().
+ *
+ * @param buf buffer pointer
+ */
+void rados_buffer_free(char *buf);
 
-int rados_pg_command(rados_t cluster, const char *pgstr, const char *cmd, const char *inbuf, char *outbuf, unsigned int outbuflen, char *outs, unsigned int outslen);
+int rados_osd_command(rados_t cluster, int osdid, const char *cmd, const char *inbuf,
+		      char **outbuf, size_t *outbuflen,
+		      char **outs, size_t *outslen);
+
+int rados_pg_command(rados_t cluster, const char *pgstr, const char *cmd, const char *inbuf,
+		     char **outbuf, size_t *outbuflen,
+		     char **outs, size_t *outslen);
 
 /** @} Mon/OSD/PG commands */
 
