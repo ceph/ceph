@@ -75,7 +75,7 @@ endif
 LIBOS_LDA += -lleveldb -lsnappy
 
 # monitor
-ceph_mon_SOURCES = ceph_mon.cc common/TextTable.cc
+ceph_mon_SOURCES = ceph_mon.cc common/TextTable.cc common/cmdparse.cc
 ceph_mon_LDFLAGS = $(AM_LDFLAGS)
 ceph_mon_LDADD = libmon.a $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 ceph_mon_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
@@ -107,12 +107,13 @@ bin_PROGRAMS += ceph-mds
 ceph_mds_CXXFLAGS = ${AM_CXXFLAGS}
 
 # admin tools
-ceph_SOURCES = \
+ceph_legacy_cli_SOURCES = \
 	tools/ceph.cc \
 	tools/common.cc \
-	mon/PGMap.cc
-ceph_LDADD = $(LIBGLOBAL_LDA) $(LIBEDIT_LIBS)
-ceph_CXXFLAGS = ${AM_CXXFLAGS}
+	mon/PGMap.cc \
+	common/cmdparse.cc
+ceph_legacy_cli_LDADD = $(LIBGLOBAL_LDA) $(LIBEDIT_LIBS)
+ceph_legacy_cli_CXXFLAGS = ${AM_CXXFLAGS}
 
 ceph_conf_SOURCES = ceph_conf.cc
 ceph_conf_LDADD = $(LIBGLOBAL_LDA)
@@ -126,7 +127,7 @@ ceph_filestore_dump_LDADD = libosd.a $(LIBOS_LDA) $(LIBGLOBAL_LDA) -lboost_progr
 if LINUX
 ceph_filestore_dump_LDADD += -ldl
 endif
-bin_PROGRAMS += ceph ceph-conf ceph-authtool ceph_filestore_dump
+bin_PROGRAMS += ceph-legacy-cli ceph-conf ceph-authtool ceph_filestore_dump
 
 ceph_osdomap_tool_SOURCES = tools/ceph-osdomap-tool.cc \
 			  os/LevelDBStore.cc
@@ -181,7 +182,7 @@ ceph_syn_LDADD = libclient.la $(LIBGLOBAL_LDA)
 bin_PROGRAMS += ceph-syn
 
 base: ceph-mon ceph-osd ceph-mds \
-	ceph cephfs \
+	ceph-legacy-cli cephfs \
 	ceph-syn \
 	rados radosgw librados-config \
 	ceph-conf monmaptool osdmaptool crushtool ceph-authtool \
@@ -881,6 +882,12 @@ unittest_osd_osdcap_LDADD =  ${UNITTEST_LDADD} ${LIBGLOBAL_LDA}
 unittest_osd_osdcap_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_osd_osdcap
 
+unittest_mon_moncap_SOURCES = test/mon/moncap.cc mon/MonCap.cc
+unittest_mon_moncap_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
+unittest_mon_moncap_LDADD =  ${UNITTEST_LDADD} ${LIBGLOBAL_LDA}
+unittest_mon_moncap_CXXFLAGS = ${CRYPTO_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_mon_moncap
+
 #if WITH_RADOSGW
 #unittest_librgw_SOURCES = test/librgw.cc
 #unittest_librgw_LDFLAGS = -lrt $(PTHREAD_CFLAGS) -lcurl ${AM_LDFLAGS}
@@ -1349,7 +1356,7 @@ libcommon_files = \
 	json_spirit/json_spirit_value.cpp \
 	log/Log.cc \
 	log/SubsystemMap.cc \
-	mon/MonCaps.cc \
+	mon/MonCap.cc \
 	mon/MonClient.cc \
 	mon/MonMap.cc \
 	msg/Accepter.cc \
@@ -1491,7 +1498,8 @@ libosd_a_SOURCES = \
 	osd/Watch.cc \
 	osd/ClassHandler.cc \
 	osd/OpRequest.cc \
-	osd/SnapMapper.cc
+	osd/SnapMapper.cc \
+	common/cmdparse.cc
 libosd_a_CXXFLAGS= ${AM_CXXFLAGS}
 noinst_LIBRARIES += libosd.a
 
@@ -1928,8 +1936,9 @@ noinst_HEADERS = \
         mon/HealthService.h\
         mon/MDSMonitor.h\
 	mon/MonmapMonitor.h\
-        mon/MonCaps.h\
+        mon/MonCap.h\
         mon/MonClient.h\
+	mon/MonCommands.h\
         mon/MonMap.h\
         mon/Monitor.h\
 	mon/MonitorStore.h\
@@ -2069,7 +2078,8 @@ noinst_HEADERS = \
 	os/ObjectMap.h \
 	os/DBObjectMap.h \
 	os/KeyValueDB.h \
-	os/LevelDBStore.h
+	os/LevelDBStore.h \
+	common/cmdparse.h
 
 if ENABLE_COVERAGE
 COV_DIR = $(DESTDIR)$(libdir)/ceph/coverage

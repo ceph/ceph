@@ -425,6 +425,69 @@ Rados object in state %s." % (self.state))
             raise make_ex(ret, "error opening ioctx '%s'" % ioctx_name)
         return Ioctx(ioctx_name, self.librados, ioctx)
 
+    def mon_command(self, cmd, inbuf):
+        """
+        mon_command(cmd, inbuf, outbuf, outbuflen, outs, outslen)
+        returns (int ret, string outbuf, string outs)
+        raises if outbuf or outs are not long enough
+        """
+        import sys
+        self.require_state("connected")
+        outbuflen = 2 << 20         # pg dump can get large
+        outslen = 2 << 10           # status should not be so large
+        outbuf = create_string_buffer(outbuflen)
+        outs = create_string_buffer(outslen)
+        print >> sys.stderr, 'mon_command("{}", "{}")'.format(cmd, inbuf)
+        ret = self.librados.rados_mon_command(self.cluster, c_char_p(cmd),
+            c_char_p(inbuf), outbuf, outbuflen, outs, outslen)
+        if ret < 0:
+            raise make_ex(ret, "mon_command: outbuf or outs not long enough")
+        return (ret, outbuf.value, outs.value)
+
+    def osd_command(self, osdid, cmd, inbuf):
+        """
+        osd_command(osdid, cmd, inbuf, outbuf, outbuflen, outs, outslen)
+        returns (int ret, string outbuf, string outs)
+        raises if outbuf or outs are not long enough
+        """
+        import sys
+        self.require_state("connected")
+        outbuflen = 1024
+        outslen = 1024
+        outbuf = create_string_buffer(outbuflen)
+        outs = create_string_buffer(outslen)
+        print >> sys.stderr, 'osd_command({}, "{}", "{}")'.format(osdid,
+                                                                  cmd, inbuf)
+        ret = self.librados.rados_osd_command(self.cluster, osdid,
+            c_char_p(cmd), c_char_p(inbuf), outbuf, outbuflen, outs, outslen)
+        if ret == -EOVERFLOW:
+            raise make_ex(ret, "osd_command: outbuf or outs not long enough")
+        if ret == -EINVAL:
+            raise make_ex(ret, "osd_command: invalid arg (osdid?)")
+        return (ret, outbuf.value, outs.value)
+
+    def pg_command(self, pgid, cmd, inbuf):
+        """
+        pg_command(pgid, cmd, inbuf, outbuf, outbuflen, outs, outslen)
+        returns (int ret, string outbuf, string outs)
+        raises if outbuf or outs are not long enough
+        """
+        import sys
+        self.require_state("connected")
+        outbuflen = 1024
+        outslen = 1024
+        outbuf = create_string_buffer(outbuflen)
+        outs = create_string_buffer(outslen)
+        print >> sys.stderr, 'pg_command({} "{}", "{}")'.format(pgid, cmd, inbuf)
+        ret = self.librados.rados_pg_command(self.cluster, c_char_p(pgid),
+                                             c_char_p(cmd), c_char_p(inbuf),
+                                             outbuf, outbuflen, outs, outslen)
+        if ret == -EOVERFLOW:
+            raise make_ex(ret, "pg_command: outbuf or outs not long enough")
+        if ret == -EINVAL:
+            raise make_ex(ret, "pg_command: invalid arg (pgid?)")
+        return (ret, outbuf.value, outs.value)
+
 class ObjectIterator(object):
     """rados.Ioctx Object iterator"""
     def __init__(self, ioctx):

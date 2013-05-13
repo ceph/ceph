@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <limits.h>
+#include <cstring>
 
 #include "Monitor.h"
 #include "common/version.h"
@@ -77,6 +78,7 @@
 #include "auth/KeyRing.h"
 
 #include "common/config.h"
+#include "common/cmdparse.h"
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -172,9 +174,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   health_monitor = QuorumServiceRef(new HealthMonitor(this));
   config_key_service = ConfigKeyServiceRef(new ConfigKeyService(this, paxos));
 
-  mon_caps = new MonCaps();
-  mon_caps->set_allow_all(true);
-  mon_caps->text = "allow *";
+  mon_caps = new MonCap();
+  mon_caps->parse("allow *", NULL);
 
   exited_quorum = ceph_clock_now(g_ceph_context);
 }
@@ -2130,27 +2131,22 @@ void Monitor::finish_election()
 }
 
 
-bool Monitor::_allowed_command(MonSession *s, const vector<string>& cmd)
+bool Monitor::_allowed_command(MonSession *s, map<string, cmd_vartype>& cmd)
 {
-  for (list<list<string> >::iterator p = s->caps.cmd_allow.begin();
-       p != s->caps.cmd_allow.end();
-       ++p) {
-    list<string>::iterator q;
-    unsigned i;
-    dout(0) << "cmd " << cmd << " vs " << *p << dendl;
-    for (q = p->begin(), i = 0; q != p->end() && i < cmd.size(); ++q, ++i) {
-      if (*q == "*")
-	continue;
-      if (*q == "...") {
-	i = cmd.size() - 1;
-	continue;
-      }	
-      if (*q != cmd[i])
-	break;
-    }
-    if (q == p->end() && i == cmd.size())
-      return true;   // match
-  }
+  if (s->caps.is_allow_all())
+    return true;
+
+  string prefix;
+  cmd_getval(g_ceph_context, cmd, "prefix", prefix);
+
+  map<string,string> strmap;
+  for (map<string, cmd_vartype>::const_iterator p = cmd.begin(); p != cmd.end(); ++p)
+    if (p->first != "prefix")
+      cmd_getval(g_ceph_context, cmd, p->first, strmap[p->first]);
+
+  if (s->caps.is_capable(g_ceph_context, s->inst.name,
+			 "", prefix, strmap, false, false, false))
+    return true;
 
   return false;
 }
@@ -2462,6 +2458,75 @@ void Monitor::get_status(stringstream &ss, Formatter *f)
   }
 }
 
+/**
+ * Read a command description list out of cmds, and dump it to f.
+ * A signature description is a set of space-separated words;
+ * see MonCommands.h for more info.
+ */
+
+static void
+dump_cmds_to_json(Formatter *f, const char *cmds)
+{
+  // put whole command signature in an already-opened container
+  // elements are: "name", meaning "the typeless name that means a literal"
+  // an object {} with key:value pairs representing an argument
+
+  int argnum = 0;
+  stringstream ss(cmds);
+  std::string word;
+
+  while (std::getline(ss, word, ' ')) {
+    argnum++;
+    // if no , or =, must be a plain word to put out
+    if (word.find_first_of(",=") == string::npos) {
+      f->dump_string("arg", word);
+      continue;
+    }
+    // Snarf up all the key=val,key=val pairs, put 'em in a dict.
+    // no '=val' implies '=True'.
+    std::stringstream argdesc(word);
+    std::string keyval, name;
+    std::map<std::string, std::string>desckv;
+    // accumulate descriptor keywords in desckv
+    size_t pos;
+
+    while (std::getline(argdesc, keyval, ',')) {
+      // key=value; key by itself implies value is bool true
+      // name="name" means arg dict will be titled 'name'
+      pos = keyval.find('=');
+      std::string key, val;
+      if (pos != std::string::npos) {
+	key = keyval.substr(0, pos);
+	val = keyval.substr(pos+1);
+      } else {
+        key = keyval;
+        val = true;
+      }
+      desckv.insert(std::pair<std::string, std::string> (key, val));
+    }
+    // name the individual desc object based on the name key
+    f->open_object_section(desckv["name"].c_str());
+    // dump all the keys including name into the array
+    for (std::map<std::string, std::string>::iterator it = desckv.begin();
+	 it != desckv.end(); it++) {
+      f->dump_string(it->first.c_str(), it->second);
+    }
+    f->close_section(); // attribute object for individual desc
+  }
+}
+
+#define ARRAY_SIZE(a)	(sizeof(a) / sizeof(*a))
+
+#undef COMMAND
+struct MonCommand {
+  const char *cmdstring;
+  const char *helpstring;
+} mon_commands[] = {
+#define COMMAND(parsesig, helptext) \
+  {parsesig, helptext},
+#include <mon/MonCommands.h>
+};
+
 void Monitor::handle_command(MMonCommand *m)
 {
   if (m->fsid != monmap->fsid) {
@@ -2477,45 +2542,104 @@ void Monitor::handle_command(MMonCommand *m)
     return;
   }
 
-  bool access_cmd = _allowed_command(session, m->cmd);
-  bool access_r = (session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) ||
-		   access_cmd);
-  bool access_all = (session->caps.get_allow_all() || access_cmd);
+  if (m->cmd.empty()) {
+    string rs = "No command supplied";
+    reply_command(m, -EINVAL, rs, 0);
+    return;
+  }
 
-  dout(0) << "handle_command " << *m << dendl;
+  string prefix;
+  vector<string> fullcmd;
+  map<string, cmd_vartype> cmdmap;
+  stringstream ss;
   bufferlist rdata;
   string rs;
   int r = -EINVAL;
   rs = "unrecognized command";
-  if (m->cmd.empty())
-    goto out;
 
-  if (m->cmd[0] == "mds") {
+  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+    // ss has reason for failure
+    r = -EINVAL;
+    rs = ss.str();
+    if (!m->get_source().is_mon())  // don't reply to mon->mon commands
+      reply_command(m, r, rs, 0);
+    else
+      m->put();
+    return;
+  }
+
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  if (prefix == "get_command_descriptions") {
+    int cmdnum = 0;
+    JSONFormatter *f = new JSONFormatter();
+    f->open_object_section("command_descriptions");
+    for (MonCommand *cp = mon_commands;
+	 cp < &mon_commands[ARRAY_SIZE(mon_commands)]; cp++) {
+
+      ostringstream secname;
+      secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
+      f->open_object_section(secname.str().c_str());
+      f->open_array_section("sig");
+      dump_cmds_to_json(f, cp->cmdstring);
+      f->close_section();  // desc array
+      f->dump_string("help", string(cp->helpstring));
+      f->close_section(); // overall object
+      cmdnum++;
+    }
+    f->close_section();	// command_descriptions
+
+    stringstream ds, ss;
+    bufferlist rdata;
+    f->flush(ds);
+    delete f;
+    rdata.append(ds);
+    reply_command(m, 0, "", rdata, 0);
+    return;
+  }
+
+  bool access_cmd;
+  bool access_r;
+  bool access_all;
+
+  string module;
+  string err;
+
+  dout(0) << "handle_command " << *m << dendl;
+
+  string format;
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  boost::scoped_ptr<Formatter> f(new_formatter(format));
+
+  get_str_vec(prefix, fullcmd);
+  module = fullcmd[0];
+
+  access_cmd = _allowed_command(session, cmdmap);
+  access_r = (session->is_capable("mon", MON_CAP_R) || access_cmd);
+  access_all = (session->caps.is_allow_all() || access_cmd);
+
+  if (module == "mds") {
     mdsmon()->dispatch(m);
     return;
   }
-  if (m->cmd[0] == "osd") {
+  if (module == "osd") {
     osdmon()->dispatch(m);
     return;
   }
-  if (m->cmd[0] == "pg") {
+
+  if (module == "pg") {
     pgmon()->dispatch(m);
     return;
   }
-  if (m->cmd[0] == "mon") {
+  if (module == "mon") {
     monmon()->dispatch(m);
     return;
   }
-  if (m->cmd[0] == "class") {
-    reply_command(m, -EINVAL, "class distribution is no longer handled by the monitor", 0);
-    return;
-  }
-  if (m->cmd[0] == "auth") {
+  if (module == "auth") {
     authmon()->dispatch(m);
     return;
   }
 
-  if (m->cmd[0] == "config-key") {
+  if (module == "config-key") {
     if (!access_all) {
       r = -EACCES;
       rs = "access denied";
@@ -2525,123 +2649,96 @@ void Monitor::handle_command(MMonCommand *m)
     return;
   }
 
-  if (m->cmd[0] == "fsid") {
+  if (prefix == "fsid") {
     stringstream ss;
     ss << monmap->fsid;
     reply_command(m, 0, ss.str(), rdata, 0);
     return;
   }
-  if (m->cmd[0] == "log") {
+  if (prefix == "log") {
     if (!access_r) {
       r = -EACCES;
       rs = "access denied";
       goto out;
     }
+    vector<string> logtext;
+    cmd_getval(g_ceph_context, cmdmap, "logtext", logtext);
     stringstream ss;
-    for (unsigned i=1; i<m->cmd.size(); i++) {
-      if (i > 1)
-        ss << ' ';
-      ss << m->cmd[i];
-    }
+    std::copy(logtext.begin(), logtext.end(),
+	      ostream_iterator<string>(ss, " "));
     clog.info(ss);
     rs = "ok";
     reply_command(m, 0, rs, rdata, 0);
     return;
   }
 
-  if (m->cmd[0] == "injectargs") {
+  if (prefix == "injectargs") {
     if (!access_all) {
       r = -EACCES;
       rs = "access denied";
       goto out;
     }
-    if (m->cmd.size() == 2) {
-      dout(0) << "parsing injected options '" << m->cmd[1] << "'" << dendl;
+    vector<string> injected_args;
+    cmd_getval(g_ceph_context, cmdmap, "injected_args", injected_args);
+    if (!injected_args.empty()) {
+      dout(0) << "parsing injected options '" << injected_args << "'" << dendl;
+      ostringstream argss;
+      std::copy(injected_args.begin(), injected_args.end(),
+		ostream_iterator<string>(argss, " "));
       ostringstream oss;
-      g_conf->injectargs(m->cmd[1], &oss);
-      derr << "injectargs:" << dendl;
-      derr << oss.str() << dendl;
-      rs = "parsed options";
-      r = 0;
+      r = g_conf->injectargs(argss.str().c_str(), &oss);
+      ss << "injectargs:"  << oss.str();
+      rs = ss.str();
+      goto out;
     } else {
       rs = "must supply options to be parsed in a single string";
       r = -EINVAL;
     }
-  } else if ((m->cmd[0] == "status") || (m->cmd[0] == "health")
-      || (m->cmd[0] == "df")) {
+  } else if (prefix == "status" ||
+	     prefix == "health" ||
+	     prefix == "df") {
     if (!access_r) {
       r = -EACCES;
       rs = "access denied";
       goto out;
     }
 
-    vector<const char *> args;
-    for (unsigned int i = 0; i < m->cmd.size(); ++i)
-      args.push_back(m->cmd[i].c_str());
-
-    string format = "plain";
-    JSONFormatter *jf = NULL;
-    for (vector<const char*>::iterator i = args.begin(); i != args.end();) {
-      string val;
-      if (ceph_argparse_witharg_daemon(args, i, &val,
-            "-f", "--format", (char*)NULL)) {
-        format = val;
-      } else {
-        ++i;
-      }
-    }
-
-    if (format != "plain") {
-      if (format == "json") {
-        jf = new JSONFormatter(true);
-      } else {
-        r = -EINVAL;
-        stringstream err_ss;
-        err_ss << "unrecognized format '" << format
-          << "' (available: plain, json)";
-        rs = err_ss.str();
-        goto out;
-      }
-    }
-
     stringstream ss;
-    if (string(args[0]) == "status") {
-      get_status(ss, jf);
+    string detail;
+    cmd_getval(g_ceph_context, cmdmap, "detail", detail);
 
-      if (jf) {
-        jf->flush(ss);
+    if (prefix == "status") {
+      // get_status handles f == NULL
+      get_status(ss, f.get());
+
+      if (f) {
+        f->flush(ss);
         ss << '\n';
       }
-    } else if (string(args[0]) == "health") {
+    } else if (prefix == "health") {
       string health_str;
-      get_health(health_str, (args.size() > 1) ? &rdata : NULL, jf);
-      if (jf) {
-        jf->flush(ss);
+      get_health(health_str, detail == "detail" ? &rdata : NULL, f.get());
+      if (f) {
+        f->flush(ss);
         ss << '\n';
       } else {
         ss << health_str;
       }
-    } else if (string(args[0]) == "df") {
-      if (args.size() > 1) {
-        if (string(args[1]) != "detail") {
-	  delete jf;
-          r = -EINVAL;
-          rs = "usage: df [detail]";
-          goto out;
-        }
-      }
-      bool verbose = (args.size() > 1);
-      if (jf)
-        jf->open_object_section("stats");
+      rs = ss.str();
+      r = 0;
+    } else if (prefix == "df") {
+      bool verbose = (detail == "detail");
+      if (f)
+        f->open_object_section("stats");
 
-      pgmon()->dump_fs_stats(ss, jf, verbose);
-      if (!jf)
+      pgmon()->dump_fs_stats(ss, f.get(), verbose);
+      if (!f)
         ss << '\n';
-      pgmon()->dump_pool_stats(ss, jf, verbose);
+      pgmon()->dump_pool_stats(ss, f.get(), verbose);
 
-      if (jf) {
-        jf->close_section();
-        jf->flush(ss);
+      if (f) {
+        f->close_section();
+        f->flush(ss);
         ss << '\n';
       }
     } else {
@@ -2650,39 +2747,42 @@ void Monitor::handle_command(MMonCommand *m)
     }
     rs = ss.str();
     r = 0;
-  } else if (m->cmd[0] == "report") {
+  } else if (prefix == "report") {
     if (!access_r) {
       r = -EACCES;
       rs = "access denied";
       goto out;
     }
 
-    JSONFormatter jf(true);
+    // this must be formatted, in its current form
+    if (!f)
+      f.reset(new_formatter("json-pretty"));
+    f->open_object_section("report");
+    f->dump_string("version", ceph_version_to_str());
+    f->dump_string("commit", git_version_to_str());
+    f->dump_stream("timestamp") << ceph_clock_now(NULL);
 
-    jf.open_object_section("report");
-    jf.dump_string("version", ceph_version_to_str());
-    jf.dump_string("commit", git_version_to_str());
-    jf.dump_stream("timestamp") << ceph_clock_now(NULL);
-
-    string d;
-    for (unsigned i = 1; i < m->cmd.size(); i++) {
-      if (i > 1)
-        d += " ";
-      d += m->cmd[i];
-    }
-    jf.dump_string("tag", d);
+    vector<string> tagsvec;
+    cmd_getval(g_ceph_context, cmdmap, "tags", tagsvec);
+    stringstream tags;
+    std::copy(tagsvec.begin(), tagsvec.end(),
+	      ostream_iterator<string>(tags, " "));
+    string tagstr = tags.str();
+    if (!tagstr.empty())
+      tagstr = tagstr.substr(0, tagstr.find_last_of(' '));
+    f->dump_string("tag", tagstr);
 
     string hs;
-    get_health(hs, NULL, &jf);
+    get_health(hs, NULL, f.get());
 
-    monmon()->dump_info(&jf);
-    osdmon()->dump_info(&jf);
-    mdsmon()->dump_info(&jf);
-    pgmon()->dump_info(&jf);
+    monmon()->dump_info(f.get());
+    osdmon()->dump_info(f.get());
+    mdsmon()->dump_info(f.get());
+    pgmon()->dump_info(f.get());
 
-    jf.close_section();
+    f->close_section();
     stringstream ss;
-    jf.flush(ss);
+    f->flush(ss);
 
     bufferlist bl;
     bl.append("-------- BEGIN REPORT --------\n");
@@ -2693,7 +2793,7 @@ void Monitor::handle_command(MMonCommand *m)
     rdata.append(ss2.str());
     rs = string();
     r = 0;
-  } else if (m->cmd[0] == "quorum_status") {
+  } else if (prefix == "quorum_status") {
     if (!access_r) {
       r = -EACCES;
       rs = "access denied";
@@ -2709,7 +2809,7 @@ void Monitor::handle_command(MMonCommand *m)
     _quorum_status(ss);
     rs = ss.str();
     r = 0;
-  } else if (m->cmd[0] == "mon_status") {
+  } else if (prefix == "mon_status") {
     if (!access_r) {
       r = -EACCES;
       rs = "access denied";
@@ -2719,36 +2819,33 @@ void Monitor::handle_command(MMonCommand *m)
     _mon_status(ss);
     rs = ss.str();
     r = 0;
-  } else if (m->cmd[0] == "sync") {
+  } else if (prefix == "sync status") {
       if (!access_r) {
 	r = -EACCES;
 	rs = "access denied";
 	goto out;
       }
-      if (m->cmd[1] == "status") {
-	stringstream ss;
-	_sync_status(ss);
-	rs = ss.str();
-	r = 0;
-      } else if (m->cmd[1] == "force") {
-        if (m->cmd.size() < 4 || m->cmd[2] != "--yes-i-really-mean-it"
-            || m->cmd[3] != "--i-know-what-i-am-doing") {
-          r = -EINVAL;
-          rs = "are you SURE? this will mean the monitor store will be "
-               "erased.  pass '--yes-i-really-mean-it "
-               "--i-know-what-i-am-doing' if you really do.";
-          goto out;
-        }
-	stringstream ss;
-	_sync_force(ss);
-	rs = ss.str();
-	r = 0;
-      } else {
-	rs = "unknown command";
-	r = -EINVAL;
-	goto out;
-      }
-  } else if (m->cmd[0] == "heap") {
+      stringstream ss;
+      _sync_status(ss);
+      rs = ss.str();
+      r = 0;
+  } else if (prefix == "sync force") {
+    string validate1, validate2;
+    cmd_getval(g_ceph_context, cmdmap, "validate1", validate1);
+    cmd_getval(g_ceph_context, cmdmap, "validate2", validate2);
+    if (validate1 != "--yes-i-really-mean-it" ||
+	validate2 != "--i-know-what-i-am-doing") {
+      r = -EINVAL;
+      rs = "are you SURE? this will mean the monitor store will be "
+	   "erased.  pass '--yes-i-really-mean-it "
+	   "--i-know-what-i-am-doing' if you really do.";
+      goto out;
+    }
+    stringstream ss;
+    _sync_force(ss);
+    rs = ss.str();
+    r = 0;
+  } else if (prefix == "heap") {
     if (!access_all) {
       r = -EACCES;
       rs = "access denied";
@@ -2757,37 +2854,39 @@ void Monitor::handle_command(MMonCommand *m)
     if (!ceph_using_tcmalloc())
       rs = "tcmalloc not enabled, can't use heap profiler commands\n";
     else {
+      string heapcmd;
+      cmd_getval(g_ceph_context, cmdmap, "heapcmd", heapcmd);
       ostringstream ss;
-      ceph_heap_profiler_handle_command(m->cmd, ss);
+      // XXX 1-element vector, change at callee or make vector here?
+      vector<string> heapcmd_vec;
+      get_str_vec(heapcmd, heapcmd_vec);
+      ceph_heap_profiler_handle_command(heapcmd_vec, ss);
       rs = ss.str();
     }
-  } else if (m->cmd[0] == "quorum") {
+  } else if (prefix == "quorum") {
     if (!access_all) {
       r = -EACCES;
       rs = "access denied";
       goto out;
     }
-    if (m->cmd.size() < 2) {
-      r = -EINVAL;
-      rs = "'quorum' requires an argument: 'exit' or 'enter'";
-      goto out;
-    }
-    if (m->cmd[1] == "exit") {
+    string quorumcmd;
+    cmd_getval(g_ceph_context, cmdmap, "quorumcmd", quorumcmd);
+    if (quorumcmd == "exit") {
       reset();
       start_election();
       elector.stop_participating();
       rs = "stopped responding to quorum, initiated new election";
       r = 0;
-    } else if (m->cmd[1] == "enter") {
+    } else if (quorumcmd == "enter") {
       elector.start_participating();
       reset();
       start_election();
       rs = "started responding to quorum, initiated new election";
       r = 0;
-    } else {
-      rs = "unknown quorum subcommand; use exit or enter";
-      r = -EINVAL;
     }
+  } else if (!access_cmd) {
+    r = -EACCES;
+    rs = "access denied";
   }
 
  out:
@@ -2806,6 +2905,7 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, version_t 
 void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version)
 {
   MMonCommandAck *reply = new MMonCommandAck(m->cmd, rc, rs, version);
+  reply->set_tid(m->get_tid());
   reply->set_data(rdata);
   send_reply(m, reply);
   m->put();
@@ -2864,7 +2964,7 @@ void Monitor::handle_forward(MForward *m)
   MonSession *session = static_cast<MonSession *>(m->get_connection()->get_priv());
   assert(session);
 
-  if (!session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+  if (!session->is_capable("mon", MON_CAP_X)) {
     dout(0) << "forward from entity with insufficient caps! " 
 	    << session->caps << dendl;
   } else {
@@ -2972,7 +3072,7 @@ void Monitor::handle_route(MRoute *m)
 {
   MonSession *session = static_cast<MonSession *>(m->get_connection()->get_priv());
   //check privileges
-  if (session && !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+  if (session && !session->is_capable("mon", MON_CAP_X)) {
     dout(0) << "MRoute received from entity without appropriate perms! "
 	    << dendl;
     session->put();
@@ -3121,7 +3221,7 @@ bool Monitor::_ms_dispatch(Message *m)
 
   Connection *connection = m->get_connection();
   MonSession *s = NULL;
-  MonCaps caps;
+  MonCap caps;
   EntityName entity_name;
   bool src_is_mon;
 
@@ -3157,7 +3257,7 @@ bool Monitor::_ms_dispatch(Message *m)
 	//give it monitor caps; the peer type has been authenticated
 	reuse_caps = false;
 	dout(5) << "setting monitor caps on this connection" << dendl;
-	if (!s->caps.allow_all) //but no need to repeatedly copy
+	if (!s->caps.is_allow_all()) //but no need to repeatedly copy
 	  s->caps = *mon_caps;
       }
       if (reuse_caps)
@@ -3268,7 +3368,7 @@ bool Monitor::_ms_dispatch(Message *m)
       {
 	MMonPaxos *pm = static_cast<MMonPaxos*>(m);
 	if (!src_is_mon && 
-	    !s->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+	    !s->is_capable("mon", MON_CAP_X)) {
 	  //can't send these!
 	  pm->put();
 	  break;
@@ -3309,7 +3409,7 @@ bool Monitor::_ms_dispatch(Message *m)
     case MSG_MON_ELECTION:
       //check privileges here for simplicity
       if (s &&
-	  !s->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+	  !s->is_capable("mon", MON_CAP_X)) {
 	dout(0) << "MMonElection received from entity without enough caps!"
 		<< s->caps << dendl;
 	m->put();
@@ -3744,15 +3844,15 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
 			       m->get_connection()->has_feature(CEPH_FEATURE_INCSUBOSDMAP));
 
     if (p->first == "mdsmap") {
-      if ((int)s->caps.check_privileges(PAXOS_MDSMAP, MON_CAP_R)) {
+      if ((int)s->is_capable("mds", MON_CAP_R)) {
         mdsmon()->check_sub(s->sub_map["mdsmap"]);
       }
     } else if (p->first == "osdmap") {
-      if ((int)s->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_R)) {
+      if ((int)s->is_capable("osd", MON_CAP_R)) {
         osdmon()->check_sub(s->sub_map["osdmap"]);
       }
     } else if (p->first == "osd_pg_creates") {
-      if ((int)s->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W)) {
+      if ((int)s->is_capable("osd", MON_CAP_W)) {
 	pgmon()->check_sub(s->sub_map["osd_pg_creates"]);
       }
     } else if (p->first == "monmap") {
