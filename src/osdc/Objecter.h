@@ -185,7 +185,9 @@ struct ObjectOperation {
     uint64_t *psize;
     utime_t *pmtime;
     time_t *ptime;
-    C_ObjectOperation_stat(uint64_t *ps, utime_t *pm, time_t *pt) : psize(ps), pmtime(pm), ptime(pt) {}
+    int *prval;
+    C_ObjectOperation_stat(uint64_t *ps, utime_t *pm, time_t *pt, int *prval)
+      : psize(ps), pmtime(pm), ptime(pt), prval(prval) {}
     void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
@@ -200,9 +202,9 @@ struct ObjectOperation {
 	    *pmtime = mtime;
 	  if (ptime)
 	    *ptime = mtime.sec();
-	}
-	catch (buffer::error& e) {
-	  r = -EIO;
+	} catch (buffer::error& e) {
+	  if (prval)
+	    *prval = -EIO;
 	}
       }
     }
@@ -210,7 +212,8 @@ struct ObjectOperation {
   void stat(uint64_t *psize, utime_t *pmtime, int *prval) {
     add_op(CEPH_OSD_OP_STAT);
     unsigned p = ops.size() - 1;
-    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, pmtime, NULL);
+    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, pmtime, NULL,
+							   prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
     out_rval[p] = prval;
@@ -218,7 +221,8 @@ struct ObjectOperation {
   void stat(uint64_t *psize, time_t *ptime, int *prval) {
     add_op(CEPH_OSD_OP_STAT);
     unsigned p = ops.size() - 1;
-    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, NULL, ptime);
+    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, NULL, ptime,
+							   prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
     out_rval[p] = prval;
@@ -230,6 +234,40 @@ struct ObjectOperation {
     add_data(CEPH_OSD_OP_READ, off, len, bl);
     unsigned p = ops.size() - 1;
     out_bl[p] = pbl;
+    out_rval[p] = prval;
+  }
+
+  struct C_ObjectOperation_sparse_read : public Context {
+    bufferlist bl;
+    bufferlist *data_bl;
+    std::map<uint64_t, uint64_t> *extents;
+    int *prval;
+    C_ObjectOperation_sparse_read(bufferlist *data_bl,
+				  std::map<uint64_t, uint64_t> *extents,
+				  int *prval)
+      : data_bl(data_bl), extents(extents), prval(prval) {}
+    void finish(int r) {
+      bufferlist::iterator iter = bl.begin();
+      if (r >= 0) {
+	try {
+	  ::decode(*extents, iter);
+	  ::decode(*data_bl, iter);
+	} catch (buffer::error& e) {
+	  if (prval)
+	    *prval = -EIO;
+	}
+      }
+    }
+  };
+  void sparse_read(uint64_t off, uint64_t len, std::map<uint64_t,uint64_t> *m,
+		   bufferlist *data_bl, int *prval) {
+    bufferlist bl;
+    add_data(CEPH_OSD_OP_SPARSE_READ, off, len, bl);
+    unsigned p = ops.size() - 1;
+    C_ObjectOperation_sparse_read *h =
+      new C_ObjectOperation_sparse_read(data_bl, m, prval);
+    out_bl[p] = &h->bl;
+    out_handler[p] = h;
     out_rval[p] = prval;
   }
   void write(uint64_t off, bufferlist& bl) {
@@ -1279,23 +1317,6 @@ private:
     o->outbl = pbl;
     return op_submit(o);
   }
-  tid_t sparse_read(const object_t& oid, const object_locator_t& oloc,
-	     uint64_t off, uint64_t len, snapid_t snap, bufferlist *pbl, int flags,
-	     Context *onfinish,
-	     eversion_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
-    vector<OSDOp> ops;
-    int i = init_ops(ops, 1, extra_ops);
-    ops[i].op.op = CEPH_OSD_OP_SPARSE_READ;
-    ops[i].op.extent.offset = off;
-    ops[i].op.extent.length = len;
-    ops[i].op.extent.truncate_size = 0;
-    ops[i].op.extent.truncate_seq = 0;
-    Op *o = new Op(oid, oloc, ops, flags | global_op_flags | CEPH_OSD_FLAG_READ, onfinish, 0, objver);
-    o->snapid = snap;
-    o->outbl = pbl;
-    return op_submit(o);
-  }
-
   tid_t getxattr(const object_t& oid, const object_locator_t& oloc,
 	     const char *name, snapid_t snap, bufferlist *pbl, int flags,
 	     Context *onfinish,

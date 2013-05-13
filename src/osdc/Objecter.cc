@@ -1433,6 +1433,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		   << " len " << p->outdata.length() << dendl;
     if (*pb)
       **pb = p->outdata;
+    // set rval before running handlers so that handlers
+    // can change it if e.g. decoding fails
     if (*pr)
       **pr = p->rval;
     if (*ph) {

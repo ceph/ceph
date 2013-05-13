@@ -695,7 +695,9 @@ int librados::IoCtxImpl::operate_read(const object_t& oid,
 
 int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 					  ::ObjectOperation *o,
-					  AioCompletionImpl *c, bufferlist *pbl)
+					  AioCompletionImpl *c,
+					  int flags,
+					  bufferlist *pbl)
 {
   Context *onack = new C_aio_Ack(c);
 
@@ -705,7 +707,7 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 
   Mutex::Locker l(*lock);
   objecter->read(oid, oloc,
-		 *o, snap_seq, pbl, 0,
+		 *o, snap_seq, pbl, flags,
 		 onack, &c->objver);
   return 0;
 }
@@ -775,6 +777,17 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
   return 0;
 }
 
+class C_ObjectOperation : public Context {
+public:
+  ::ObjectOperation m_ops;
+  C_ObjectOperation(Context *c) : m_ctx(c) {}
+  virtual void finish(int r) {
+    m_ctx->complete(r);
+  }
+private:
+  Context *m_ctx;
+};
+
 int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
 					 AioCompletionImpl *c,
 					 std::map<uint64_t,uint64_t> *m,
@@ -784,16 +797,19 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
   if (len > (size_t) INT_MAX)
     return -EDOM;
 
-  C_aio_sparse_read_Ack *onack = new C_aio_sparse_read_Ack(c, data_bl, m);
-  eversion_t ver;
+  Context *nested = new C_aio_Ack(c);
+  C_ObjectOperation *onack = new C_ObjectOperation(nested);
 
+  c->is_read = true;
   c->io = this;
   c->pbl = NULL;
 
+  onack->m_ops.sparse_read(off, len, m, data_bl, NULL);
+
   Mutex::Locker l(*lock);
-  objecter->sparse_read(oid, oloc,
-		 off, len, snapid, &c->bl, 0,
-		 onack);
+  objecter->read(oid, oloc,
+		 onack->m_ops, snap_seq, NULL, 0,
+		 onack, &c->objver);
   return 0;
 }
 
@@ -1207,32 +1223,14 @@ int librados::IoCtxImpl::sparse_read(const object_t& oid,
   if (len > (size_t) INT_MAX)
     return -EDOM;
 
-  bufferlist bl;
-
-  Mutex mylock("IoCtxImpl::read::mylock");
-  Cond cond;
-  bool done;
   int r;
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  ::ObjectOperation rd;
+  prepare_assert_ops(&rd);
+  rd.sparse_read(off, len, &m, &data_bl, NULL);
 
-  lock->Lock();
-  objecter->sparse_read(oid, oloc,
-			off, len, snap_seq, &bl, 0,
-			onack);
-  lock->Unlock();
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-  ldout(client->cct, 10) << "Objecter returned from read r=" << r << dendl;
-
+  r = operate_read(oid, &rd, NULL);
   if (r < 0)
     return r;
-
-  bufferlist::iterator iter = bl.begin();
-  ::decode(m, iter);
-  ::decode(data_bl, iter);
 
   return m.size();
 }
@@ -1639,36 +1637,6 @@ void librados::IoCtxImpl::C_aio_stat_Ack::finish(int r)
 
   if (r >= 0 && pmtime) {
     *pmtime = mtime.sec();
-  }
-
-  if (c->callback_complete) {
-    c->io->client->finisher.queue(new C_AioComplete(c));
-  }
-
-  c->put_unlock();
-}
-
-/////////////////////// C_aio_sparse_read_Ack //////////////////////////
-
-librados::IoCtxImpl::C_aio_sparse_read_Ack::C_aio_sparse_read_Ack(AioCompletionImpl *_c,
-								  bufferlist *data,
-								  std::map<uint64_t, uint64_t> *extents)
-  : c(_c), data_bl(data), m(extents)
-{
-  c->get();
-}
-
-void librados::IoCtxImpl::C_aio_sparse_read_Ack::finish(int r)
-{
-  c->lock.Lock();
-  c->rval = r;
-  c->ack = true;
-  c->cond.Signal();
-
-  bufferlist::iterator iter = c->bl.begin();
-  if (r >= 0) {
-    ::decode(*m, iter);
-    ::decode(*data_bl, iter);
   }
 
   if (c->callback_complete) {
