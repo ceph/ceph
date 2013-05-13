@@ -179,6 +179,23 @@ int ceph_conf_read_file(struct ceph_mount_info *cmount, const char *path_list);
  */
 int ceph_conf_parse_argv(struct ceph_mount_info *cmount, int argc, const char **argv);
 
+/**
+ * Configure the cluster handle based on an environment variable
+ *
+ * The contents of the environment variable are parsed as if they were
+ * Ceph command line options. If var is NULL, the CEPH_ARGS
+ * environment variable is used.
+ *
+ * @pre ceph_mount() has not been called on the handle
+ *
+ * @note BUG: this is not threadsafe - it uses a static buffer
+ *
+ * @param cmount handle to configure
+ * @param var name of the environment variable to read
+ * @returns 0 on success, negative error code on failure
+ */
+int ceph_conf_parse_env(struct ceph_mount_info *cmount, const char *var);
+
 /** Sets a configuration value from a string.
  *
  * @param cmount the mount handle to set the configuration value on

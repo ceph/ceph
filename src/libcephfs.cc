@@ -172,6 +172,18 @@ public:
     return 0;
   }
 
+  int conf_parse_env(const char *name)
+  {
+    md_config_t *conf = cct->_conf;
+    vector<const char*> args;
+    env_to_vec(args, name);
+    int ret = conf->parse_argv(args);
+    if (ret)
+      return ret;
+    conf->apply_changes(NULL);
+    return 0;
+  }
+
   int conf_set(const char *option, const char *value)
   {
     int ret = cct->_conf->set_val(option, value);
@@ -282,6 +294,11 @@ extern "C" int ceph_conf_parse_argv(struct ceph_mount_info *cmount, int argc,
 				     const char **argv)
 {
   return cmount->conf_parse_argv(argc, argv);
+}
+
+extern "C" int ceph_conf_parse_env(struct ceph_mount_info *cmount, const char *name)
+{
+  return cmount->conf_parse_env(name);
 }
 
 extern "C" int ceph_conf_set(struct ceph_mount_info *cmount, const char *option,
