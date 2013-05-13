@@ -237,7 +237,7 @@ void SimpleThrottle::end_op(int r)
 {
   Mutex::Locker l(m_lock);
   --m_current;
-  if (r < 0 && !m_ret && (r != -ENOENT || m_ignore_enoent))
+  if (r < 0 && !m_ret && !(r == -ENOENT && m_ignore_enoent))
     m_ret = r;
   m_cond.Signal();
 }
