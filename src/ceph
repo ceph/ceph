@@ -973,7 +973,7 @@ def json_command(prefix=None, argdict=None, inbuf=''):
         else:
             ret, outbl, outs = cluster.mon_command(json.dumps(cmddict), inbuf)
     except Exception as e:
-        raise RuntimeError('"{}": exception {}: {}'.format(prefix, e))
+        raise RuntimeError('"{}": exception {}'.format(prefix, e))
 
     return ret, outbl, outs
 
