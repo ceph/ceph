@@ -155,7 +155,8 @@ def run_qemu(ctx, config):
         log_dir = '{tdir}/archive/qemu/{client}'.format(tdir=testdir, client=client)
         remote.run(
             args=[
-                'mkdir', log_dir,
+                'mkdir', log_dir, run.Raw('&&'),
+                'sudo', 'modprobe', 'kvm',
                 ]
             )
 
