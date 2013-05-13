@@ -5,6 +5,7 @@
 #include "cls/version/cls_version_types.h"
 
 #include "rgw_rados.h"
+#include "rgw_tools.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -183,8 +184,9 @@ public:
 
   virtual int get(RGWRados *store, string& entry, RGWMetadataObject **obj) { return -ENOTSUP; }
   virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, JSONObj *obj) { return -ENOTSUP; }
-  virtual int put_entry(RGWRados *store, string& key, bufferlist& bl, bool exclusive,
-                        RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs) { return -ENOTSUP; }
+
+  virtual void get_pool_and_oid(RGWRados *store, string& key, rgw_bucket& bucket, string& oid) {}
+
   virtual int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) { return -ENOTSUP; }
 
   virtual int list_keys_init(RGWRados *store, void **phandle) {
@@ -522,7 +524,14 @@ int RGWMetadataManager::put_entry(RGWMetadataHandler *handler, string& key, buff
   if (ret < 0)
     return ret;
 
-  ret = handler->put_entry(store, key, bl, exclusive, objv_tracker, pattrs);
+  string oid;
+  rgw_bucket bucket;
+
+  handler->get_pool_and_oid(store, key, bucket, oid);
+
+  ret = rgw_put_system_obj(store, bucket, oid,
+                           bl.c_str(), bl.length(), exclusive,
+                           objv_tracker, pattrs);
   if (ret < 0)
     return ret;
 

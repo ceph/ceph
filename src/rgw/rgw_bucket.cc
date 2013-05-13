@@ -1331,11 +1331,9 @@ public:
     return store->delete_bucket(bucket);
   }
 
-  int put_entry(RGWRados *store, string& key, bufferlist& bl, bool exclusive,
-                RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs) {
-    return rgw_put_system_obj(store, store->zone.domain_root, key,
-                              bl.c_str(), bl.length(), exclusive,
-                              objv_tracker, pattrs);
+  void get_pool_and_oid(RGWRados *store, string& key, rgw_bucket& bucket, string& oid) {
+    oid = key;
+    bucket = store->zone.domain_root;
   }
 
   int list_keys_init(RGWRados *store, void **phandle)
