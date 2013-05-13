@@ -1450,6 +1450,8 @@ public:
     boost::scoped_ptr<MonitorStore> store;
 
     set<version_t> gvs;
+    map<version_t, set<pair<string,version_t> > > gv_map;
+
     version_t highest_last_pn;
     version_t highest_accepted_pn;
 
