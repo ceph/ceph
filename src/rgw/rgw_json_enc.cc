@@ -507,7 +507,7 @@ void RGWRegion::dump(Formatter *f) const
   encode_json("is_master", is_master, f);
   encode_json("endpoints", endpoints, f);
   encode_json("master_zone", master_zone, f);
-  encode_json("zones", zones, f);
+  encode_json_map("zones", zones, f); /* more friendly representation */
 }
 
 static void decode_zones(map<string, RGWZone>& zones, JSONObj *o)
