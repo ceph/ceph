@@ -20,19 +20,14 @@ deleted.  Each DeletingState object in deleting_pgs lives while at
 least one reference to it remains.  Each item in RemoveWQ carries a
 reference to the DeletingState for the relevant pg such that
 deleting_pgs.lookup(pgid) will return a null ref only if there are no
-collections currently being deleted for that pg.  DeletingState allows
-you to register a callback to be called when the deletion is finally
-complete.  See PG::start_flush.  We use this mechanism to prevent the
-pg from being "flushed" until any pending deletes are complete.
-Metadata operations are safe since we did remove the old metadata
-objects and we inherit the osr from the previous copy of the pg.
+collections currently being deleted for that pg. 
 
 The DeletingState for a pg also carries information about the status
 of the current deletion and allows the deletion to be cancelled.
 The possible states are:
 
   1. QUEUED: the PG is in the RemoveWQ
-  2. CLEARING_DIR: the PG's contents are being removed syncronously
+  2. CLEARING_DIR: the PG's contents are being removed synchronously
   3. DELETING_DIR: the PG's directories and metadata being queued for removal
   4. DELETED_DIR: the final removal transaction has been queued
   5. CANCELED: the deletion has been canceled
@@ -46,7 +41,7 @@ fails to stop the deletion will not return until the final removal
 transaction is queued.  This ensures that any operations queued after
 that point will be ordered after the pg deletion.
 
-_create_lock_pg must handle two cases:
+OSD::_create_lock_pg must handle two cases:
 
   1. Either there is no DeletingStateRef for the pg, or it failed to cancel
   2. We succeeded in canceling the deletion.
