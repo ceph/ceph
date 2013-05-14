@@ -697,6 +697,104 @@ public:
   int get_caps_issued(int fd);
   int get_caps_issued(const char *path);
 
+  // low-level interface v2
+  inodeno_t ll_get_inodeno(Inode *in);
+  snapid_t ll_get_snapid(Inode *in);
+  vinodeno_t ll_get_vino(Inode *in); // ref+
+  Inode *ll_get_inode(vinodeno_t vino);
+  int ll_lookup(Inode *parent, const char *name, struct stat *attr,
+		Inode **out, int uid = -1, int gid = -1);
+  bool ll_forget(Inode *in, int count);
+  bool ll_put(Inode *in);
+  int ll_getattr(Inode *in, struct stat *st, int uid = -1, int gid = -1);
+  int ll_setattr(Inode *in, struct stat *st, int mask, int uid = -1,
+		 int gid = -1);
+  int ll_getxattr(Inode *in, const char *name, void *value, size_t size,
+		  int uid=-1, int gid=-1);
+  int ll_setxattr(Inode *in, const char *name, const void *value, size_t size,
+		  int flags, int uid=-1, int gid=-1);
+  int ll_removexattr(Inode *in, const char *name, int uid=-1, int gid=-1);
+  int ll_listxattr(Inode *in, char *list, size_t size, int uid=-1, int gid=-1);
+  int ll_opendir(Inode *in, dir_result_t **dirpp, int uid = -1, int gid = -1);
+  int ll_releasedir(dir_result_t* dirp);
+  int ll_readlink(Inode *in, const char **value, int uid = -1, int gid = -1);
+  int ll_mknod(Inode *in, const char *name, mode_t mode, dev_t rdev,
+	       struct stat *attr, Inode **out, int uid = -1, int gid = -1);
+  int ll_mkdir(Inode *in, const char *name, mode_t mode, struct stat *attr,
+	       Inode **out, int uid = -1, int gid = -1);
+  int ll_symlink(Inode *in, const char *name, const char *value,
+		 struct stat *attr, Inode **out, int uid = -1, int gid = -1);
+  int ll_unlink(Inode *in, const char *name, int uid = -1, int gid = -1);
+  int ll_rmdir(Inode *in, const char *name, int uid = -1, int gid = -1);
+  int ll_rename(Inode *parent, const char *name, Inode *newparent,
+		const char *newname, int uid = -1, int gid = -1);
+  int ll_link(Inode *in, Inode *newparent, const char *newname,
+	      struct stat *attr, int uid = -1, int gid = -1);
+  int ll_open(Inode *in, int flags, Fh **fh, int uid = -1, int gid = -1);
+  int ll_create(Inode *parent, const char *name, mode_t mode, int flags,
+		struct stat *attr, Inode **out, int uid = -1, int gid = -1);
+  int ll_create_fh(Inode *in, int flags, int cmode, Fh **fhp);
+  int ll_read_block(Inode *in, uint64_t blockid, char *buf,  uint64_t offset,
+		    uint64_t length, ceph_file_layout* layout);
+
+  /* async block write barrier support */
+  map<uint64_t, BarrierContext* > barriers;
+
+  int ll_write_block(Inode *in, uint64_t blockid,
+		     char* buf, uint64_t offset,
+		     uint64_t length, ceph_file_layout* layout,
+		     uint64_t snapseq, uint32_t sync);
+  int ll_commit_blocks(Inode *in, uint64_t offset, uint64_t length);
+
+  int ll_statfs(Inode *in, struct statvfs *stbuf);
+  int ll_walk(const char* name, struct stat *attr); // XXX in?
+  int ll_listxattr_chunks(Inode *in, char *names, size_t size,
+			  int *cookie, int *eol, int uid, int gid);
+  uint32_t ll_stripe_unit(Inode *in);
+  int ll_file_layout(Inode *in, ceph_file_layout *layout);
+  uint64_t ll_snap_seq(Inode *in);
+
+
+  int ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl);
+  int ll_write(Fh *fh, loff_t off, loff_t len, const char *data);
+  loff_t ll_lseek(Fh *fh, loff_t offset, int whence);
+  int ll_flush(Fh *fh);
+  int ll_fsync(Fh *fh, bool syncdataonly);
+  int ll_release(Fh *fh);
+
+  int ll_get_stripe_osd(struct Inode *in, uint64_t blockno,
+			ceph_file_layout* layout);
+  uint64_t ll_get_internal_offset(struct Inode *in, uint64_t blockno);
+
+  int ll_num_osds(void);
+  int ll_osdaddr(int osd, uint32_t *addr);
+  int ll_osdaddr(int osd, char* buf, size_t size);
+
+  // DEPRECATED
+  int ll_connectable_x(struct Inode *in, uint64_t* parent_ino,
+		       uint32_t* parent_hash);
+
+  // DEPRECATED
+  int ll_connectable_m(vinodeno_t*, uint64_t parent_ino,
+		       uint32_t parent_hash);
+
+  uint32_t ll_hold_rw(struct Inode *in,
+		      bool write,
+		      bool(*cb)(vinodeno_t, bool, void*),
+		      void *opaque,
+		      uint64_t* serial,
+		      uint64_t* max_fs);
+
+  void ll_return_rw(struct Inode *in, uint64_t serial);
+
+  // XXX ino?
+  void ll_register_ino_invalidate_cb(client_ino_callback_t cb, void *handle);
+
+  void ll_register_getgroups_cb(client_getgroups_callback_t cb, void *handle);
+};
+
+#if 0
+
   // low-level interface
   int ll_lookup(vinodeno_t parent, const char *name, struct stat *attr,
 		int uid = -1, int gid = -1);
@@ -772,5 +870,7 @@ public:
 
   void ll_register_getgroups_cb(client_getgroups_callback_t cb, void *handle);
 };
+
+#endif // 0 TODO: removeme
 
 #endif
