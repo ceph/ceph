@@ -3,7 +3,7 @@ This module is a thin wrapper around librados.
 
 Copyright 2011, Hannu Valtonen <hannu.valtonen@ormod.com>
 """
-from ctypes import CDLL, c_char_p, c_size_t, c_void_p, c_int, c_long, \
+from ctypes import CDLL, c_char_p, c_size_t, c_void_p, c_char, c_int, c_long, \
     create_string_buffer, byref, Structure, c_uint64, c_ubyte, pointer, \
     CFUNCTYPE
 import threading
@@ -429,60 +429,88 @@ Rados object in state %s." % (self.state))
         """
         mon_command(cmd, inbuf, outbuf, outbuflen, outs, outslen)
         returns (int ret, string outbuf, string outs)
-        raises if outbuf or outs are not long enough
         """
         import sys
         self.require_state("connected")
-        outbuflen = 2 << 20         # pg dump can get large
-        outslen = 2 << 10           # status should not be so large
-        outbuf = create_string_buffer(outbuflen)
-        outs = create_string_buffer(outslen)
+        outbufp = pointer(pointer(c_char()))
+        outbuflen = c_long()
+        outsp = pointer(pointer(c_char()))
+        outslen = c_long()
+
         ret = self.librados.rados_mon_command(self.cluster, c_char_p(cmd),
-            c_char_p(inbuf), outbuf, outbuflen, outs, outslen)
+                                              c_char_p(inbuf),
+                                              outbufp, byref(outbuflen),
+                                              outsp, byref(outslen))
         if ret < 0:
-            raise make_ex(ret, "mon_command: outbuf or outs not long enough")
-        return (ret, outbuf.value, outs.value)
+            raise make_ex(ret, "mon_command")
+
+        # copy returned memory
+        my_outbuf = outbufp.contents[:(outbuflen.value)]
+        my_outs = outsp.contents[:(outslen.value)]
+
+        # free callee's allocations
+        self.librados.rados_buffer_free(outbufp.contents)
+        self.librados.rados_buffer_free(outsp.contents)
+
+        return (ret, my_outbuf, my_outs)
 
     def osd_command(self, osdid, cmd, inbuf):
         """
         osd_command(osdid, cmd, inbuf, outbuf, outbuflen, outs, outslen)
         returns (int ret, string outbuf, string outs)
-        raises if outbuf or outs are not long enough
         """
         import sys
         self.require_state("connected")
-        outbuflen = 1024
-        outslen = 1024
-        outbuf = create_string_buffer(outbuflen)
-        outs = create_string_buffer(outslen)
+        outbufp = pointer(pointer(c_char()))
+        outbuflen = c_long()
+        outsp = pointer(pointer(c_char()))
+        outslen = c_long()
         ret = self.librados.rados_osd_command(self.cluster, osdid,
-            c_char_p(cmd), c_char_p(inbuf), outbuf, outbuflen, outs, outslen)
-        if ret == -errno.EOVERFLOW:
-            raise make_ex(ret, "osd_command: outbuf or outs not long enough")
+                                              c_char_p(cmd), c_char_p(inbuf),
+                                              outbufp, byref(outbuflen),
+                                              outsp, byref(outslen))
         if ret == -errno.EINVAL:
             raise make_ex(ret, "osd_command: invalid arg (osdid?)")
-        return (ret, outbuf.value, outs.value)
+
+        # copy returned memory
+        my_outbuf = outbufp.contents[:(outbuflen.value)]
+        my_outs = outsp.contents[:(outslen.value)]
+
+        # free callee's allocations
+        self.librados.rados_buffer_free(outbufp.contents)
+        self.librados.rados_buffer_free(outsp.contents)
+
+        return (ret, my_outbuf, my_outs)
 
     def pg_command(self, pgid, cmd, inbuf):
         """
         pg_command(pgid, cmd, inbuf, outbuf, outbuflen, outs, outslen)
         returns (int ret, string outbuf, string outs)
-        raises if outbuf or outs are not long enough
         """
         import sys
         self.require_state("connected")
-        outbuflen = 1024
-        outslen = 1024
-        outbuf = create_string_buffer(outbuflen)
-        outs = create_string_buffer(outslen)
+        outbufp = pointer(pointer(c_char()))
+        outbuflen = c_long()
+        outsp = pointer(pointer(c_char()))
+        outslen = c_long()
         ret = self.librados.rados_pg_command(self.cluster, c_char_p(pgid),
                                              c_char_p(cmd), c_char_p(inbuf),
-                                             outbuf, outbuflen, outs, outslen)
+                                             outbufp, byref(outbuflen),
+                                             outsp, byref(outslen))
         if ret == -errno.EOVERFLOW:
             raise make_ex(ret, "pg_command: outbuf or outs not long enough")
         if ret == -errno.EINVAL:
             raise make_ex(ret, "pg_command: invalid arg (pgid?)")
-        return (ret, outbuf.value, outs.value)
+
+        # copy returned memory
+        my_outbuf = outbufp.contents[:(outbuflen.value)]
+        my_outs = outsp.contents[:(outslen.value)]
+
+        # free callee's allocations
+        self.librados.rados_buffer_free(outbufp.contents)
+        self.librados.rados_buffer_free(outsp.contents)
+
+        return (ret, my_outbuf, my_outs)
 
 class ObjectIterator(object):
     """rados.Ioctx Object iterator"""
