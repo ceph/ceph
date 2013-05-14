@@ -381,8 +381,26 @@ public:
     snap_mapper.update_bits(bits);
   }
 protected:
+  // Ops waiting for map, should be queued at back
+  Mutex map_lock;
+  list<OpRequestRef> waiting_for_map;
   OSDMapRef osdmap_ref;
   PGPool pool;
+
+  void queue_op(OpRequestRef op);
+  void take_op_map_waiters();
+
+  void update_osdmap_ref(OSDMapRef newmap) {
+    assert(_lock.is_locked_by_me());
+    Mutex::Locker l(map_lock);
+    osdmap_ref = newmap;
+  }
+
+  OSDMapRef get_osdmap_with_maplock() const {
+    assert(map_lock.is_locked());
+    assert(osdmap_ref);
+    return osdmap_ref;
+  }
 
   OSDMapRef get_osdmap() const {
     assert(is_locked());
@@ -419,13 +437,6 @@ public:
     assert(!dirty_log);
     _lock.Unlock();
   }
-
-  /* During handle_osd_map, the osd holds a write lock to the osdmap.
-   * *_with_map_lock_held assume that the map_lock is already held */
-  void lock_with_map_lock_held(bool no_lockdep = false);
-
-  // assert we still have lock held, and update our map ref
-  void reassert_lock_with_map_lock_held();
 
   void assert_locked() {
     assert(_lock.is_locked());
@@ -699,8 +710,6 @@ protected:
 
   // Ops waiting on backfill_pos to change
   list<OpRequestRef> waiting_for_backfill_pos;
-
-  list<OpRequestRef> waiting_for_map;
   list<OpRequestRef>            waiting_for_active;
   list<OpRequestRef>            waiting_for_all_missing;
   map<hobject_t, list<OpRequestRef> > waiting_for_missing_object,
@@ -1954,13 +1963,16 @@ public:
   bool can_discard_backfill(OpRequestRef op);
   bool can_discard_request(OpRequestRef op);
 
-  bool must_delay_request(OpRequestRef op);
+  static bool op_must_wait_for_map(OSDMapRef curmap, OpRequestRef op);
 
   static bool split_request(OpRequestRef op, unsigned match, unsigned bits);
 
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch);
   bool old_peering_evt(CephPeeringEvtRef evt) {
     return old_peering_msg(evt->get_epoch_sent(), evt->get_epoch_requested());
+  }
+  static bool have_same_or_newer_map(OSDMapRef osdmap, epoch_t e) {
+    return e <= osdmap->get_epoch();
   }
   bool have_same_or_newer_map(epoch_t e) {
     return e <= get_osdmap()->get_epoch();
