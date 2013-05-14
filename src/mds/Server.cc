@@ -6210,7 +6210,7 @@ void Server::_rename_prepare(MDRequest *mdr,
   
   // guarantee stray dir is processed first during journal replay. unlink the old inode,
   // then link the source inode to destdn
-  if (destdnl->is_primary() && straydn->is_auth()) {
+  if (destdnl->is_primary() && straydn && straydn->is_auth()) {
     metablob->add_dir_context(straydn->get_dir());
     metablob->add_dir(straydn->get_dir(), true);
   }
