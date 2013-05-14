@@ -949,7 +949,6 @@ void FileJournal::align_bl(off64_t pos, bufferlist& bl)
 
 int FileJournal::write_bl(off64_t& pos, bufferlist& bl)
 {
-  align_bl(pos, bl);
   int ret;
 
   off64_t spos = ::lseek64(fd, pos, SEEK_SET);
@@ -964,6 +963,8 @@ int FileJournal::write_bl(off64_t& pos, bufferlist& bl)
     return ret;
   }
   pos += bl.length();
+  if (pos == header.max_size)
+    pos = get_top();
   return 0;
 }
 
@@ -985,8 +986,6 @@ void FileJournal::do_write(bufferlist& bl)
     hbp = prepare_header();
   }
 
-  write_lock.Unlock();
-
   dout(15) << "do_write writing " << write_pos << "~" << bl.length() 
 	   << (hbp.length() ? " + header":"")
 	   << dendl;
@@ -995,6 +994,14 @@ void FileJournal::do_write(bufferlist& bl)
 
   // entry
   off64_t pos = write_pos;
+
+  // Adjust write_pos
+  align_bl(pos, bl);
+  write_pos += bl.length();
+  if (write_pos >= header.max_size)
+    write_pos = write_pos - header.max_size + get_top();
+
+  write_lock.Unlock();
 
   // split?
   off64_t split = 0;
@@ -1012,13 +1019,12 @@ void FileJournal::do_write(bufferlist& bl)
 	   << ") failed" << dendl;
       ceph_abort();
     }
-    assert(pos == header.max_size);
+    assert(pos == get_top());
     if (hbp.length()) {
       // be sneaky: include the header in the second fragment
       second.push_front(hbp);
       pos = 0;          // we included the header
-    } else
-      pos = get_top();  // no header, start after that
+    }
     if (write_bl(pos, second)) {
       derr << "FileJournal::do_write: write_bl(pos=" << pos
 	   << ") failed" << dendl;
@@ -1073,10 +1079,7 @@ void FileJournal::do_write(bufferlist& bl)
 
   write_lock.Lock();    
 
-  // wrap if we hit the end of the journal
-  if (pos == header.max_size)
-    pos = get_top();
-  write_pos = pos;
+  assert(write_pos == pos);
   assert(write_pos % header.alignment == 0);
 
   {
