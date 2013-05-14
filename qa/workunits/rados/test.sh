@@ -8,6 +8,7 @@ ceph_test_rados_api_pool
 ceph_test_rados_api_snapshots
 ceph_test_rados_api_stat
 ceph_test_rados_api_watch_notify
+ceph_test_rados_api_cmd
 
 ceph_test_rados_list_parallel
 ceph_test_rados_open_pools_parallel
