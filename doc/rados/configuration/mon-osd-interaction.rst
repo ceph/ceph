@@ -63,15 +63,17 @@ Ceph configuration file, or by setting the value at runtime.
 OSDs Report Down OSDs
 =====================
 
-By default, an OSD must report to the monitors that another OSD is ``down``
-three times before the monitors acknowledge that the reported OSD is ``down``.
-You can change the minimum number of ``osd down`` reports by adding an ``osd min
-down reports`` setting under the ``[osd]`` section of your Ceph configuration
-file, or by setting the value at runtime. By default, only one OSD is required
-to report another OSD down. You can change the number of OSDs required to report
-a monitor down by adding an ``mon osd min down reporters`` setting under the
-``[mon]`` section of your Ceph configuration file, or by setting the value at
-runtime.
+By default, an OSD must report to the monitors that another OSD is
+``down`` three times before the monitors acknowledge that the reported
+OSD is ``down``.  You can change the minimum number of ``osd down``
+reports by adding an ``mon osd min down reports`` setting (``osd min
+down reports`` prior to v0.62) under the ``[mon]`` section of your
+Ceph configuration file, or by setting the value at runtime. By
+default, only one OSD is required to report another OSD down. You can
+change the number of OSDs required to report a monitor down by adding
+an ``mon osd min down reporters`` setting (``osd min down reporters''
+prior to v0.62) under the ``[mon]`` section of your Ceph configuration
+file, or by setting the value at runtime.
 
 
 .. ditaa:: +---------+     +---------+
