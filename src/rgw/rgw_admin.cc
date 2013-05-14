@@ -387,35 +387,32 @@ static int init_bucket(string& bucket_name, rgw_bucket& bucket)
 
 static int read_input(const string& infile, bufferlist& bl)
 {
-  int fd = 0;
+  int err = 0;
+
   if (infile.size()) {
+    int fd = 0;
+    int r;
+
     fd = open(infile.c_str(), O_RDONLY);
     if (fd < 0) {
-      int err = -errno;
-      cerr << "error reading input file " << infile << std::endl;
+      err = -errno;
+      cerr << "error (" << cpp_strerror(err) << ") reading input file " << infile << std::endl;
       return err;
     }
-  }
-
 #define READ_CHUNK 8196
-  int r;
-  int err;
+    do {
+      char buf[READ_CHUNK];
 
-  do {
-    char buf[READ_CHUNK];
-
-    r = read(fd, buf, READ_CHUNK);
-    if (r < 0) {
-      err = -errno;
-      cerr << "error while reading input" << std::endl;
-      goto out;
-    }
-    bl.append(buf, r);
-  } while (r > 0);
-  err = 0;
-
- out:
-  if (infile.size()) {
+      r = read(fd, buf, READ_CHUNK);
+      if (r < 0) {
+        err = -errno;
+        cerr << "error (" << cpp_strerror(err) << ") while reading input" << std::endl;
+        goto out;
+      }
+      bl.append(buf, r);
+    } while (r > 0);
+    err = 0;
+out:
     close(fd);
   }
   return err;
