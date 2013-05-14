@@ -1248,6 +1248,11 @@ static void test_list_children(rbd_image_t image, ssize_t num_expected, ...)
     ASSERT_TRUE(found);
   }
   va_end(ap);
+
+  if (pools)
+    free(pools);
+  if (children)
+    free(children);
 }
 
 TEST(LibRBD, ListChildren)

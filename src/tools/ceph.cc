@@ -194,6 +194,7 @@ static int get_indata(const char *in_file, bufferlist &indata)
     int err = errno;
     derr << "error getting size of in_file '" << in_file << "': "
 	 << cpp_strerror(err) << dendl;
+    TEMP_FAILURE_RETRY(::close(fd));
     return 1;
   }
 
@@ -231,10 +232,11 @@ int do_admin_socket(string path, string cmd)
   if (connect(fd, (struct sockaddr *) &address, 
 	      sizeof(struct sockaddr_un)) != 0) {
     cerr << "connect to " << path << " failed with " << cpp_strerror(errno) << std::endl;
+    ::close(fd);
     return -1;
   }
   
-  char *buf;
+  char *buf = NULL;
   uint32_t len;
   r = safe_write(fd, cmd.c_str(), cmd.length() + 1);
   if (r < 0) {
@@ -266,6 +268,8 @@ int do_admin_socket(string path, string cmd)
   r = 0;
 
  out:
+  if (buf)
+    delete[] buf;
   ::close(fd);
   return r;
 }

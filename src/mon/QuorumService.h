@@ -29,7 +29,6 @@
 
 class QuorumService : public RefCountedObject
 {
-  uint32_t flags;
   Context *tick_event;
   double tick_period;
 

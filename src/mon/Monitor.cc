@@ -150,6 +150,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   sync_provider(),
 
   timecheck_round(0),
+  timecheck_acks(0),
   timecheck_event(NULL),
 
   probe_timeout_event(NULL),
