@@ -24,7 +24,7 @@ but we found that was leading to corruption in certain cases (because we
 couldn't set our internal metadata), so the next release will assert/crash
 in that case (fail-stop instead of fail-maybe-eventually-corrupt).
 
-XFS does not have an xattr size limit and thus does have this problem.
+XFS does not have an xattr size limit and thus does not have this problem.
 
 
 OSD journal replay of non-idempotent transactions
