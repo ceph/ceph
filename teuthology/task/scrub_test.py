@@ -12,6 +12,20 @@ log = logging.getLogger(__name__)
 def task(ctx, config):
     """
     Test [deep] scrub
+
+    tasks:
+    - chef:
+    - install:
+    - ceph:
+        log-whitelist:
+        - '!= known digest'
+        - '!= known omap_digest'
+        - deep-scrub 0 missing, 1 inconsistent objects
+        - deep-scrub 1 errors
+        - repair 0 missing, 1 inconsistent objects
+        - repair 1 errors, 1 fixed
+    - scrub_test: 
+    
     """
     if config is None:
         config = {}
@@ -91,7 +105,7 @@ def task(ctx, config):
 
     # put a single \0 at the beginning of the file
     osd_remote.run(
-        args=[ 'dd',
+        args=[ 'sudo', 'dd',
                'if=/dev/zero',
                'of=%s' % os.path.join(data_path, osdfilename),
                'bs=1', 'count=1', 'conv=notrunc'
