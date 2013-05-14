@@ -40,7 +40,8 @@ using namespace std;
 extern "C" int ceph_armor(char *dst, const char *dst_end, 
                           const char *src, const char *end);
 enum key_type {
-  KEY_TYPE_SWIFT = 1,
+  KEY_TYPE_UNDEFINED = 0,
+  KEY_TYPE_SWIFT,
   KEY_TYPE_S3
 };
 
@@ -65,7 +66,7 @@ class test_cors_helper {
     unsigned resp_code;
     key_type kt;
   public:
-    test_cors_helper() : resp_data(NULL){
+    test_cors_helper() : resp_data(NULL), kt(KEY_TYPE_UNDEFINED){
       curl_global_init(CURL_GLOBAL_ALL);
     }
     ~test_cors_helper(){
@@ -247,8 +248,11 @@ int test_cors_helper::send_request(string method, string res,
       string s3auth;
       if(get_s3_auth(method, creds, date, res, s3auth) < 0)return -1;
       auth.append(string("Authorization: AWS ") + s3auth);
-    }else if(kt == KEY_TYPE_SWIFT){
+    } else if(kt == KEY_TYPE_SWIFT){
       auth.append(string("X-Auth-Token: ") + creds);
+    } else {
+      cout << "Unknown state (" << kt << ")\n";
+      return -1;
     }
 
     struct curl_slist *slist = NULL;
