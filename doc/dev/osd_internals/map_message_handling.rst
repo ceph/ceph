@@ -5,7 +5,7 @@ Map and PG Message handling
 Overview
 --------
 The OSD handles routing incoming messages to PGs, creating the PG if necessary
-in come cases.
+in some cases.
 
 PG messages generally come in two varieties:
 
