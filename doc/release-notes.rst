@@ -2,6 +2,21 @@
  Release Notes
 ===============
 
+v0.61.2 "Cuttlefish"
+--------------------
+
+This release disables a monitor debug log that consumes disk space and
+fixes a bug when upgrade some monitors from bobtail to cuttlefish.
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* mon: fix conversion of stores with duplicated GV values
+* mon: disable 'mon debug dump transactions' by default
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.61.2.txt>`.
+
+
 v0.61.1 "Cuttlefish"
 --------------------
 
