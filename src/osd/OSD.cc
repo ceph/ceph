@@ -5291,6 +5291,11 @@ void OSD::handle_pg_create(OpRequestRef op)
     pg_history_t history;
     history.epoch_created = created;
     history.last_epoch_clean = created;
+    // Newly created PGs don't need to scrub immediately, so mark them
+    // as scrubbed at creation time.
+    utime_t now = ceph_clock_now(NULL);
+    history.last_scrub_stamp = now;
+    history.last_deep_scrub_stamp = now;
     project_pg_history(pgid, history, created, up, acting);
     
     // register.
