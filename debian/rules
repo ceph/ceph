@@ -37,6 +37,13 @@ ifneq ($(DEB_HOST_ARCH), amd64)
 endif
 endif
 
+DEBIAN_DIST_NAME := $(shell lsb_release -sc)
+ifneq ($(filter $(DEBIAN_DIST_NAME), lucid squeeze),)
+ SUBSTVARS = -Vdist:Depends="cryptsetup"
+else
+ SUBSTVARS = -Vdist:Depends="cryptsetup-bin"
+endif
+
 configure: configure-stamp
 configure-stamp:
 	dh_testdir
@@ -104,7 +111,7 @@ binary-indep: build install
 	dh_fixperms -i
 	dh_python2 -i
 	dh_installdeb -i
-	dh_gencontrol -i
+	dh_gencontrol -i -- $(SUBSTVARS)
 	dh_md5sums -i
 	dh_builddeb -i
 
@@ -150,7 +157,7 @@ binary-arch: build install
 	dh_python2 -a
 	dh_installdeb -a
 	dh_shlibdeps -a
-	dh_gencontrol -a
+	dh_gencontrol -a -- $(SUBSTVARS)
 	dh_md5sums -a
 	dh_builddeb -a
 

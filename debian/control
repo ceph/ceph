@@ -32,6 +32,7 @@ Build-Depends: autoconf,
                libsnappy-dev,
                libtool,
                libxml2-dev,
+               lsb-release,
                pkg-config,
                python (>= 2.6.6-3~),
                uuid-dev
@@ -41,7 +42,7 @@ Package: ceph
 Architecture: linux-any
 Depends: binutils,
          ceph-common,
-         cryptsetup-bin | cryptsetup,
+         ${dist:Depends},
          gdisk,
          parted,
          python,
