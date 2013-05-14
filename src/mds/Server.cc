@@ -6943,7 +6943,7 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   bool force_journal_dest = false;
   if (in && in->is_dir() && srcdn->authority().first != whoami)
     force_journal_src = _need_force_journal(in, false);
-  if (target && target->is_dir())
+  if (in && target && target->is_dir())
     force_journal_dest = _need_force_journal(in, true);
   
   version_t srcdnpv = 0;
