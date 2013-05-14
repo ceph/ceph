@@ -414,7 +414,7 @@ void decode_json_obj(bool& val, JSONObj *obj)
     return;
   }
   if (strcasecmp(s.c_str(), "false") == 0) {
-    val = true;
+    val = false;
     return;
   }
   int i;
