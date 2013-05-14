@@ -7103,9 +7103,10 @@ void Server::_rename_rollback_finish(Mutation *mut, MDRequest *mdr, CDentry *src
   if (destdn) {
     CInode *oldin = destdn->get_linkage()->get_inode();
     // update subtree map?
-    assert(straydn);
-    if (oldin && oldin->is_dir())
+    if (oldin && oldin->is_dir()) {
+      assert(straydn);
       mdcache->adjust_subtree_after_rename(oldin, straydn->get_dir(), true);
+    }
   }
 
   if (mds->is_resolve()) {
