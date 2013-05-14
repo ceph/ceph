@@ -2,6 +2,21 @@
  Release Notes
 ===============
 
+v0.62
+-----
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+ * mon: fix validation of mds ids from CLI commands
+ * osd: fix for an op ordering bug
+ * osd, mon: optionally dump leveldb transactions to a log
+ * osd: fix handling for split after upgrade from bobtail
+ * debian, specfile: packaging cleanups
+ * radosgw-admin: create keys for new users by default
+ * librados python binding cleanups
+ * misc code cleanups
+
 v0.61.2 "Cuttlefish"
 --------------------
 
