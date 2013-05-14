@@ -357,7 +357,7 @@ void remove_coll(ObjectStore *store, const coll_t &coll)
     r = store->collection_list_partial(coll, next, 200, 300, 0,
       &objects, &next);
     if (r < 0)
-      return;
+      goto out;
     for (vector<hobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i, ++num) {
@@ -380,6 +380,7 @@ void remove_coll(ObjectStore *store, const coll_t &coll)
   }
   t->remove_collection(coll);
   store->apply_transaction(*t);
+out:
   delete t;
 }
 
@@ -437,6 +438,7 @@ int initiate_new_remove_pg(ObjectStore *store, pg_t r_pgid,
         << std::endl;
       rmt->collection_rename(coll_t(r_pgid), to_remove);
   } else {
+    delete rmt;
     return ENOENT;
   }
 

@@ -992,7 +992,8 @@ int RGWAccessKeyPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg
 RGWSubUserPool::RGWSubUserPool(RGWUser *usr)
 {
   subusers_allowed = (usr != NULL);
-  store = usr->get_store();
+  if (usr)
+    store = usr->get_store();
   user = usr;
   subuser_map = NULL;
 }

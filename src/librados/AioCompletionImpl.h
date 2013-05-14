@@ -212,9 +212,12 @@ struct C_AioCompleteAndSafe : public Context {
   }
 
   void finish(int r) {
+    c->lock.Lock();
     c->rval = r;
     c->ack = true;
     c->safe = true;
+    c->put_unlock();
+
     rados_callback_t cb_complete = c->callback_complete;
     void *cb_arg = c->callback_arg;
     if (cb_complete)
