@@ -31,7 +31,13 @@ int dupstore(ObjectStore* src, ObjectStore* dst)
 
   // collections
   vector<coll_t> collections;
-  src->list_collections(collections);
+
+  int ret =  src->list_collections(collections);
+  if (ret < 0) {
+      cerr << "Error " << ret << " while listing collections" << std::endl;
+      return 1;
+  }
+
   int num = collections.size();
   cout << num << " collections" << std::endl;
   int i = 1;
