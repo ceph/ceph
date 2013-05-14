@@ -959,6 +959,12 @@ ceph_test_mon_workloadgen_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 ceph_test_mon_workloadgen_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_mon_workloadgen
 
+ceph_test_rados_api_cmd_SOURCES = test/librados/cmd.cc test/librados/test.cc
+ceph_test_rados_api_cmd_LDFLAGS = ${AM_LDFLAGS}
+ceph_test_rados_api_cmd_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
+ceph_test_rados_api_cmd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += ceph_test_rados_api_cmd
+
 ceph_test_rados_api_io_SOURCES = test/librados/io.cc test/librados/test.cc
 ceph_test_rados_api_io_LDFLAGS = ${AM_LDFLAGS}
 ceph_test_rados_api_io_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
