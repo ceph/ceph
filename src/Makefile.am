@@ -1363,7 +1363,6 @@ libcommon_files = \
 	log/Log.cc \
 	log/SubsystemMap.cc \
 	mon/MonCap.cc \
-	mon/MonCaps.cc \
 	mon/MonClient.cc \
 	mon/MonMap.cc \
 	msg/Accepter.cc \
@@ -1944,7 +1943,6 @@ noinst_HEADERS = \
         mon/MDSMonitor.h\
 	mon/MonmapMonitor.h\
         mon/MonCap.h\
-        mon/MonCaps.h\
         mon/MonClient.h\
 	mon/MonCommands.h\
         mon/MonMap.h\

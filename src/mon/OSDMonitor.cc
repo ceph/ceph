@@ -666,7 +666,7 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
   MonSession *session = m->get_session();
   if (!session)
     goto didit;
-  if (!session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
+  if (!session->is_capable("osd", MON_CAP_X)) {
     dout(0) << "got MOSDFailure from entity with insufficient caps "
 	    << session->caps << dendl;
     goto didit;
@@ -960,7 +960,7 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
   MonSession *session = m->get_session();
   if (!session)
     goto ignore;
-  if (!session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
+  if (!session->is_capable("osd", MON_CAP_X)) {
     dout(0) << "got preprocess_boot message from entity with insufficient caps"
 	    << session->caps << dendl;
     goto ignore;
@@ -1141,7 +1141,7 @@ bool OSDMonitor::preprocess_alive(MOSDAlive *m)
   MonSession *session = m->get_session();
   if (!session)
     goto ignore;
-  if (!session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
+  if (!session->is_capable("osd", MON_CAP_X)) {
     dout(0) << "attempt to send MOSDAlive from entity with insufficient privileges:"
 	    << session->caps << dendl;
     goto ignore;
@@ -1205,7 +1205,7 @@ bool OSDMonitor::preprocess_pgtemp(MOSDPGTemp *m)
   MonSession *session = m->get_session();
   if (!session)
     goto ignore;
-  if (!session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
+  if (!session->is_capable("osd", MON_CAP_X)) {
     dout(0) << "attempt to send MOSDPGTemp from entity with insufficient caps "
 	    << session->caps << dendl;
     goto ignore;
@@ -1261,7 +1261,7 @@ bool OSDMonitor::preprocess_remove_snaps(MRemoveSnaps *m)
   MonSession *session = m->get_session();
   if (!session)
     goto ignore;
-  if (!session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_RW)) {
+  if (!session->is_capable("osd", MON_CAP_R | MON_CAP_W)) {
     dout(0) << "got preprocess_remove_snaps from entity with insufficient caps "
 	    << session->caps << dendl;
     goto ignore;
@@ -1834,8 +1834,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 
   MonSession *session = m->get_session();
   if (!session ||
-      (!session->caps.get_allow_all() &&
-       !session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_R) &&
+      (!session->is_capable("osd", MON_CAP_R) &&
        !mon->_allowed_command(session, fullcmd))) {
     mon->reply_command(m, -EACCES, "access denied", rdata, get_version());
     return true;
@@ -2289,7 +2288,7 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
   if (m->auid)
     return prepare_new_pool(m->name, m->auid, m->crush_rule, 0, 0);
   else
-    return prepare_new_pool(m->name, session->caps.auid, m->crush_rule, 0, 0);
+    return prepare_new_pool(m->name, session->auid, m->crush_rule, 0, 0);
 }
 
 /**
@@ -2412,8 +2411,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 
   MonSession *session = m->get_session();
   if (!session ||
-      (!session->caps.get_allow_all() &&
-       !session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W) &&
+      (!session->is_capable("osd", MON_CAP_W) &&
        !mon->_allowed_command(session, fullcmd))) {
     mon->reply_command(m, -EACCES, "access denied", get_version());
     return true;
@@ -3516,8 +3514,7 @@ bool OSDMonitor::preprocess_pool_op_create(MPoolOp *m)
     _pool_op_reply(m, -EPERM, osdmap.get_epoch());
     return true;
   }
-  if ((m->auid && !session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W, m->auid)) &&
-      !session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W)) {
+  if (!session->is_capable("osd", MON_CAP_W)) {
     dout(5) << "attempt to create new pool without sufficient auid privileges!"
 	    << "message: " << *m  << std::endl
 	    << "caps: " << session->caps << dendl;
@@ -3537,12 +3534,11 @@ bool OSDMonitor::preprocess_pool_op_create(MPoolOp *m)
 bool OSDMonitor::prepare_pool_op(MPoolOp *m)
 {
   dout(10) << "prepare_pool_op " << *m << dendl;
-  if (m->op == POOL_OP_CREATE) {
+  if (m->op == POOL_OP_CREATE ||
+      m->op == POOL_OP_AUID_CHANGE) {
     return prepare_pool_op_create(m);
   } else if (m->op == POOL_OP_DELETE) {
     return prepare_pool_op_delete(m);
-  } else if (m->op == POOL_OP_AUID_CHANGE) {
-    return prepare_pool_op_auid(m);
   }
 
   int ret = 0;
@@ -3678,31 +3674,6 @@ bool OSDMonitor::prepare_pool_op_delete(MPoolOp *m)
 {
   int ret = _prepare_remove_pool(m->pool);
   wait_for_finished_proposal(new OSDMonitor::C_PoolOp(this, m, ret, pending_inc.epoch));
-  return true;
-}
-
-bool OSDMonitor::prepare_pool_op_auid(MPoolOp *m)
-{
-  // check that current user can write to new auid
-  MonSession *session = m->get_session();
-  if (!session)
-    goto fail;
-  if (session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W, m->auid)) {
-    // check that current user can write to old auid
-    int old_auid = osdmap.get_pg_pool(m->pool)->auid;
-    if (session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W, old_auid)) {
-      // update pg_pool_t with new auid
-      if (pending_inc.new_pools.count(m->pool) == 0)
-	pending_inc.new_pools[m->pool] = *(osdmap.get_pg_pool(m->pool));
-      pending_inc.new_pools[m->pool].auid = m->auid;
-      wait_for_finished_proposal(new OSDMonitor::C_PoolOp(this, m, 0, pending_inc.epoch));
-      return true;
-    }
-  }
-
- fail:
-  // if it gets here it failed a permissions check
-  _pool_op_reply(m, -EPERM, pending_inc.epoch);
   return true;
 }
 

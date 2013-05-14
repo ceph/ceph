@@ -174,9 +174,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   health_monitor = QuorumServiceRef(new HealthMonitor(this));
   config_key_service = ConfigKeyServiceRef(new ConfigKeyService(this, paxos));
 
-  mon_caps = new MonCaps();
-  mon_caps->set_allow_all(true);
-  mon_caps->text = "allow *";
+  mon_caps = new MonCap();
+  mon_caps->parse("allow *", NULL);
 
   exited_quorum = ceph_clock_now(g_ceph_context);
 }
@@ -2134,26 +2133,10 @@ void Monitor::finish_election()
 
 bool Monitor::_allowed_command(MonSession *s, const vector<string>& cmd)
 {
-  for (list<list<string> >::iterator p = s->caps.cmd_allow.begin();
-       p != s->caps.cmd_allow.end();
-       ++p) {
-    list<string>::iterator q;
-    unsigned i;
-    dout(0) << "cmd " << cmd << " vs " << *p << dendl;
-    for (q = p->begin(), i = 0; q != p->end() && i < cmd.size(); ++q, ++i) {
-      if (*q == "*")
-	continue;
-      if (*q == "...") {
-	i = cmd.size() - 1;
-	continue;
-      }	
-      if (*q != cmd[i])
-	break;
-    }
-    if (q == p->end() && i == cmd.size())
-      return true;   // match
-  }
+  if (s->caps.is_allow_all())
+    return true;
 
+  // REIMPLEMENT ME
   return false;
 }
 
@@ -2619,10 +2602,8 @@ void Monitor::handle_command(MMonCommand *m)
   module = fullcmd[0];
 
   access_cmd = _allowed_command(session, fullcmd);
-
-  access_r = (session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) ||
-		   access_cmd);
-  access_all = (session->caps.get_allow_all() || access_cmd);
+  access_r = (session->is_capable("mon", MON_CAP_R) || access_cmd);
+  access_all = (session->caps.is_allow_all() || access_cmd);
 
   if (module == "mds") {
     mdsmon()->dispatch(m);
@@ -2971,7 +2952,7 @@ void Monitor::handle_forward(MForward *m)
   MonSession *session = static_cast<MonSession *>(m->get_connection()->get_priv());
   assert(session);
 
-  if (!session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+  if (!session->is_capable("mon", MON_CAP_X)) {
     dout(0) << "forward from entity with insufficient caps! " 
 	    << session->caps << dendl;
   } else {
@@ -3079,7 +3060,7 @@ void Monitor::handle_route(MRoute *m)
 {
   MonSession *session = static_cast<MonSession *>(m->get_connection()->get_priv());
   //check privileges
-  if (session && !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+  if (session && !session->is_capable("mon", MON_CAP_X)) {
     dout(0) << "MRoute received from entity without appropriate perms! "
 	    << dendl;
     session->put();
@@ -3228,7 +3209,7 @@ bool Monitor::_ms_dispatch(Message *m)
 
   Connection *connection = m->get_connection();
   MonSession *s = NULL;
-  MonCaps caps;
+  MonCap caps;
   EntityName entity_name;
   bool src_is_mon;
 
@@ -3264,7 +3245,7 @@ bool Monitor::_ms_dispatch(Message *m)
 	//give it monitor caps; the peer type has been authenticated
 	reuse_caps = false;
 	dout(5) << "setting monitor caps on this connection" << dendl;
-	if (!s->caps.allow_all) //but no need to repeatedly copy
+	if (!s->caps.is_allow_all()) //but no need to repeatedly copy
 	  s->caps = *mon_caps;
       }
       if (reuse_caps)
@@ -3375,7 +3356,7 @@ bool Monitor::_ms_dispatch(Message *m)
       {
 	MMonPaxos *pm = static_cast<MMonPaxos*>(m);
 	if (!src_is_mon && 
-	    !s->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+	    !s->is_capable("mon", MON_CAP_X)) {
 	  //can't send these!
 	  pm->put();
 	  break;
@@ -3416,7 +3397,7 @@ bool Monitor::_ms_dispatch(Message *m)
     case MSG_MON_ELECTION:
       //check privileges here for simplicity
       if (s &&
-	  !s->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+	  !s->is_capable("mon", MON_CAP_X)) {
 	dout(0) << "MMonElection received from entity without enough caps!"
 		<< s->caps << dendl;
 	m->put();
@@ -3851,15 +3832,15 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
 			       m->get_connection()->has_feature(CEPH_FEATURE_INCSUBOSDMAP));
 
     if (p->first == "mdsmap") {
-      if ((int)s->caps.check_privileges(PAXOS_MDSMAP, MON_CAP_R)) {
+      if ((int)s->is_capable("mds", MON_CAP_R)) {
         mdsmon()->check_sub(s->sub_map["mdsmap"]);
       }
     } else if (p->first == "osdmap") {
-      if ((int)s->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_R)) {
+      if ((int)s->is_capable("osd", MON_CAP_R)) {
         osdmon()->check_sub(s->sub_map["osdmap"]);
       }
     } else if (p->first == "osd_pg_creates") {
-      if ((int)s->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W)) {
+      if ((int)s->is_capable("osd", MON_CAP_W)) {
 	pgmon()->check_sub(s->sub_map["osd_pg_creates"]);
       }
     } else if (p->first == "monmap") {

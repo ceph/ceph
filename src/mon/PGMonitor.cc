@@ -349,7 +349,7 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   MonSession *session = statfs->get_session();
   if (!session)
     goto out;
-  if (!session->caps.check_privileges(PAXOS_PGMAP, MON_CAP_R)) {
+  if (!session->is_capable("pg", MON_CAP_R)) {
     dout(0) << "MStatfs received from entity with insufficient privileges "
 	    << session->caps << dendl;
     goto out;
@@ -385,7 +385,7 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
   MonSession *session = m->get_session();
   if (!session)
     goto out;
-  if (!session->caps.check_privileges(PAXOS_PGMAP, MON_CAP_R)) {
+  if (!session->is_capable("pg", MON_CAP_R)) {
     dout(0) << "MGetPoolStats received from entity with insufficient caps "
 	    << session->caps << dendl;
     goto out;
@@ -426,7 +426,7 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
     stats->put();
     return true;
   }
-  if (!session->caps.check_privileges(PAXOS_PGMAP, MON_CAP_R)) {
+  if (!session->is_capable("pg", MON_CAP_R)) {
     derr << "PGMonitor::preprocess_pg_stats: MPGStats received from entity "
          << "with insufficient privileges " << session->caps << dendl;
     stats->put();
@@ -1105,8 +1105,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 
   MonSession *session = m->get_session();
   if (!session ||
-      (!session->caps.get_allow_all() &&
-       !session->caps.check_privileges(PAXOS_PGMAP, MON_CAP_R) &&
+      (!session->is_capable("pg", MON_CAP_R) &&
        !mon->_allowed_command(session, fullcmd))) {
     mon->reply_command(m, -EACCES, "access denied", rdata, get_version());
     return true;
@@ -1318,8 +1317,7 @@ bool PGMonitor::prepare_command(MMonCommand *m)
   build_fullcmd(prefix, cmdmap, &fullcmd);
   MonSession *session = m->get_session();
   if (!session ||
-      (!session->caps.get_allow_all() &&
-       !session->caps.check_privileges(PAXOS_PGMAP, MON_CAP_W) &&
+      (!session->is_capable("pg", MON_CAP_W) &&
        !mon->_allowed_command(session, fullcmd))) {
     mon->reply_command(m, -EACCES, "access denied", get_version());
     return true;

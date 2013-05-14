@@ -189,7 +189,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   MonSession *session = m->get_session();
   if (!session)
     goto out;
-  if (!session->caps.check_privileges(PAXOS_MDSMAP, MON_CAP_X)) {
+  if (!session->is_capable("mds", MON_CAP_X)) {
     dout(0) << "preprocess_beason got MMDSBeacon from entity with insufficient privileges "
 	    << session->caps << dendl;
     goto out;
@@ -306,7 +306,7 @@ bool MDSMonitor::preprocess_offload_targets(MMDSLoadTargets* m)
   MonSession *session = m->get_session();
   if (!session)
     goto done;
-  if (!session->caps.check_privileges(PAXOS_MDSMAP, MON_CAP_X)) {
+  if (!session->is_capable("mds", MON_CAP_X)) {
     dout(0) << "preprocess_offload_targets got MMDSLoadTargets from entity with insufficient caps "
 	    << session->caps << dendl;
     goto done;
@@ -552,8 +552,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 
   MonSession *session = m->get_session();
   if (!session ||
-      (!session->caps.get_allow_all() &&
-       !session->caps.check_privileges(PAXOS_MDSMAP, MON_CAP_R) &&
+      (!session->is_capable("mds", MON_CAP_R) &&
        !mon->_allowed_command(session, fullcmd))) {
     mon->reply_command(m, -EACCES, "access denied", rdata, get_version());
     return true;
@@ -795,8 +794,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 
   MonSession *session = m->get_session();
   if (!session ||
-      (!session->caps.get_allow_all() &&
-       !session->caps.check_privileges(PAXOS_MDSMAP, MON_CAP_W) &&
+      (!session->is_capable("mds", MON_CAP_W) &&
        !mon->_allowed_command(session, fullcmd))) {
     mon->reply_command(m, -EACCES, "access denied", rdata, get_version());
     return true;
