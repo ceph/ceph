@@ -167,6 +167,9 @@ private:
 	sub_have[what].start = got + 1;
     }
   }
+  void _sub_unwant(string what) {
+    sub_have.erase(what);
+  }
 
   // auth tickets
 public:
@@ -183,6 +186,10 @@ public:
   void sub_got(string what, version_t have) {
     Mutex::Locker l(monc_lock);
     _sub_got(what, have);
+  }
+  void sub_unwant(string what) {
+    Mutex::Locker l(monc_lock);
+    _sub_unwant(what);
   }
   
   KeyRing *keyring;
