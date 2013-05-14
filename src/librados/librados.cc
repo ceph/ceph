@@ -1721,6 +1721,7 @@ extern "C" int rados_osd_command(rados_t cluster, int osdid, const char *cmd,
 }
 
 
+
 extern "C" int rados_pg_command(rados_t cluster, const char *pgstr,
 				const char *cmd, const char *inbuf,
 				char **outbuf, size_t *outbuflen,
@@ -1749,6 +1750,12 @@ extern "C" void rados_buffer_free(char *buf)
 {
   if (buf)
     free(buf);
+}
+
+extern "C" int rados_monitor_log(rados_t cluster, const char *level, rados_log_callback_t cb, void *arg)
+{
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  return client->monitor_log(level, cb, arg);
 }
 
 

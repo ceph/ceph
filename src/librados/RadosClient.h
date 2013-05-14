@@ -31,6 +31,7 @@ class Connection;
 struct md_config_t;
 class Message;
 class MWatchNotify;
+class MLog;
 class SimpleMessenger;
 
 class librados::RadosClient : public Dispatcher
@@ -63,6 +64,11 @@ private:
   Cond cond;
   SafeTimer timer;
   int refcnt;
+
+  version_t log_last_version;
+  rados_log_callback_t log_cb;
+  void *log_cb_arg;
+  string log_watch;
 
 public:
   Finisher finisher;
@@ -106,6 +112,10 @@ public:
                   bufferlist *poutbl, string *prs);
   int pg_command(pg_t pgid, vector<string>& cmd, bufferlist& inbl,
 	         bufferlist *poutbl, string *prs);
+
+  void handle_log(MLog *m);
+  int monitor_log(const string& level, rados_log_callback_t cb, void *arg);
+
   void get();
   bool put();
 };
