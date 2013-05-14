@@ -1626,7 +1626,7 @@ static void do_out_buffer(bufferlist& outbl, char **outbuf, size_t *outbuflen)
   if (outbuf) {
     if (outbl.length() > 0) {
       *outbuf = (char *)malloc(outbl.length());
-      strncpy(*outbuf, outbl.c_str(), outbl.length());
+      memcpy(*outbuf, outbl.c_str(), outbl.length());
     } else {
       *outbuf = NULL;
     }
@@ -1640,7 +1640,7 @@ static void do_out_buffer(string& outbl, char **outbuf, size_t *outbuflen)
   if (outbuf) {
     if (outbl.length() > 0) {
       *outbuf = (char *)malloc(outbl.length());
-      strncpy(*outbuf, outbl.c_str(), outbl.length());
+      memcpy(*outbuf, outbl.c_str(), outbl.length());
     } else {
       *outbuf = NULL;
     }
