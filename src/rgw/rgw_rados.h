@@ -927,7 +927,12 @@ public:
     RGWRados *store = init_storage_provider(cct, use_gc_thread);
     return store;
   }
+  static RGWRados *get_raw_storage(CephContext *cct) {
+    RGWRados *store = init_raw_storage_provider(cct);
+    return store;
+  }
   static RGWRados *init_storage_provider(CephContext *cct, bool use_gc_thread);
+  static RGWRados *init_raw_storage_provider(CephContext *cct);
   static void close_storage(RGWRados *store);
 
 };
