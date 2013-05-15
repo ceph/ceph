@@ -684,7 +684,7 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
     return false;
   }
 
-  s->swift_user = info.user;
+  s->swift_user = info.user.to_str();
   s->swift_groups = info.auth_groups;
 
   string swift_user = s->swift_user;

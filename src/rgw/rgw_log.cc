@@ -175,14 +175,15 @@ static void log_usage(struct req_state *s, const string& op_name)
   if (!usage_logger)
     return;
 
-  string user;
+  rgw_user user;
 
   if (!s->bucket_name_str.empty())
     user = s->bucket_owner.get_id();
   else
     user = s->user.user_id;
 
-  rgw_usage_log_entry entry(user, s->bucket.name);
+  string id = user.to_str();
+  rgw_usage_log_entry entry(id, s->bucket.name);
 
   uint64_t bytes_sent = s->cio->get_bytes_sent();
   uint64_t bytes_received = s->cio->get_bytes_received();
@@ -207,8 +208,9 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
   entry.time.gmtime(formatter->dump_stream("time"));      // UTC
   entry.time.localtime(formatter->dump_stream("time_local"));
   formatter->dump_string("remote_addr", entry.remote_addr);
-  if (entry.object_owner.length())
-    formatter->dump_string("object_owner", entry.object_owner);
+  string obj_owner = entry.object_owner.to_str();
+  if (obj_owner.length())
+    formatter->dump_string("object_owner", obj_owner);
   formatter->dump_string("user", entry.user);
   formatter->dump_string("operation", entry.op);
   formatter->dump_string("uri", entry.uri);
@@ -310,7 +312,7 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
   set_param_str(s, "REQUEST_URI", entry.uri);
   set_param_str(s, "REQUEST_METHOD", entry.op);
 
-  entry.user = s->user.user_id;
+  entry.user = s->user.user_id.to_str();
   if (s->object_acl)
     entry.object_owner = s->object_acl->get_owner().get_id();
   entry.bucket_owner = s->bucket_owner.get_id();

@@ -29,26 +29,26 @@ void RGWAccessControlList::_add_grant(ACLGrant *grant)
     break;
   default:
     {
-      string id;
+      rgw_user id;
       if (!grant->get_id(id)) {
         ldout(cct, 0) << "ERROR: grant->get_id() failed" << dendl;
       }
-      acl_user_map[id] |= perm.get_permissions();
+      acl_user_map[id.to_str()] |= perm.get_permissions();
     }
   }
 }
 
 void RGWAccessControlList::add_grant(ACLGrant *grant)
 {
-  string id;
+  rgw_user id;
   grant->get_id(id); // not that this will return false for groups, but that's ok, we won't search groups
-  grant_map.insert(pair<string, ACLGrant>(id, *grant));
+  grant_map.insert(pair<string, ACLGrant>(id.to_str(), *grant));
   _add_grant(grant);
 }
 
-int RGWAccessControlList::get_perm(string& id, int perm_mask) {
+int RGWAccessControlList::get_perm(rgw_user& id, int perm_mask) {
   ldout(cct, 5) << "Searching permissions for uid=" << id << " mask=" << perm_mask << dendl;
-  map<string, int>::iterator iter = acl_user_map.find(id);
+  map<string, int>::iterator iter = acl_user_map.find(id.to_str());
   if (iter != acl_user_map.end()) {
     ldout(cct, 5) << "Found permission: " << iter->second << dendl;
     return iter->second & perm_mask;
@@ -68,7 +68,7 @@ int RGWAccessControlList::get_group_perm(ACLGroupTypeEnum group, int perm_mask) 
   return 0;
 }
 
-int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
+int RGWAccessControlPolicy::get_perm(rgw_user& id, int perm_mask) {
   int perm = acl.get_perm(id, perm_mask);
 
   if (id.compare(owner.get_id()) == 0) {
@@ -82,7 +82,7 @@ int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
   if ((perm & perm_mask) != perm_mask) {
     perm |= acl.get_group_perm(ACL_GROUP_ALL_USERS, perm_mask);
 
-    if (!compare_group_name(id, ACL_GROUP_ALL_USERS)) {
+    if (!compare_group_name(id.id, ACL_GROUP_ALL_USERS)) {
       /* this is not the anonymous user */
       perm |= acl.get_group_perm(ACL_GROUP_AUTHENTICATED_USERS, perm_mask);
     }
@@ -93,7 +93,7 @@ int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
   return perm;
 }
 
-bool RGWAccessControlPolicy::verify_permission(string& uid, int user_perm_mask, int perm)
+bool RGWAccessControlPolicy::verify_permission(rgw_user& uid, int user_perm_mask, int perm)
 {
   int test_perm = perm | RGW_PERM_READ_OBJS | RGW_PERM_WRITE_OBJS;
 
