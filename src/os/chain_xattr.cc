@@ -41,7 +41,6 @@
 
 static void get_raw_xattr_name(const char *name, int i, char *raw_name, int raw_len)
 {
-  int r;
   int pos = 0;
 
   while (*name) {
@@ -66,7 +65,7 @@ static void get_raw_xattr_name(const char *name, int i, char *raw_name, int raw_
   if (!i) {
     *raw_name = '\0';
   } else {
-    r = snprintf(raw_name, raw_len, "@%d", i);
+    int r = snprintf(raw_name, raw_len, "@%d", i);
     assert(r < raw_len - pos);
   }
 }
