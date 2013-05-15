@@ -323,6 +323,9 @@ protected:
     LogSegment *ls;
     list<Context*> waiters;
     bool safe;
+    bool committing;
+    bool recovering;
+    umaster() : committing(false), recovering(false) {}
   };
   map<metareqid_t, umaster>                 uncommitted_masters;         // master: req -> slave set
 
