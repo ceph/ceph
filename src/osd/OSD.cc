@@ -2970,7 +2970,8 @@ bool remove_dir(
   ObjectStore *store, SnapMapper *mapper,
   OSDriver *osdriver,
   ObjectStore::Sequencer *osr,
-  coll_t coll, DeletingStateRef dstate) {
+  coll_t coll, DeletingStateRef dstate)
+{
   vector<hobject_t> olist;
   int64_t num = 0;
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
