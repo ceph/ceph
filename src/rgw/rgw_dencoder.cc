@@ -257,8 +257,8 @@ ACLGroupTypeEnum ACLGrant_S3::uri_to_group(string& uri)
 
 void ACLGrant::generate_test_instances(list<ACLGrant*>& o)
 {
-  string id, name, email;
-  id = "rgw";
+  rgw_user id("rgw");
+  string name, email;
   name = "Mr. RGW";
   email = "r@gw";
 
@@ -314,7 +314,7 @@ void RGWAccessControlPolicy::generate_test_instances(list<RGWAccessControlPolicy
     p->acl = *l;
 
     string name = "radosgw";
-    string id = "rgw";
+    rgw_user id("rgw");
     p->owner.set_name(name);
     p->owner.set_id(id);
 
