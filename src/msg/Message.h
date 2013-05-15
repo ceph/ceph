@@ -124,6 +124,8 @@
 #define MSG_MDS_DENTRYLINK         0x20c
 #define MSG_MDS_FINDINO            0x20d
 #define MSG_MDS_FINDINOREPLY       0x20e
+#define MSG_MDS_OPENINO            0x20f
+#define MSG_MDS_OPENINOREPLY       0x210
 
 #define MSG_MDS_LOCK               0x300
 #define MSG_MDS_INODEFILECAPS      0x301

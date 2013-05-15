@@ -112,6 +112,8 @@ using namespace std;
 #include "messages/MMDSCacheRejoin.h"
 #include "messages/MMDSFindIno.h"
 #include "messages/MMDSFindInoReply.h"
+#include "messages/MMDSOpenIno.h"
+#include "messages/MMDSOpenInoReply.h"
 
 #include "messages/MDirUpdate.h"
 #include "messages/MDiscover.h"
@@ -531,6 +533,13 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     break;
   case MSG_MDS_FINDINOREPLY:
     m = new MMDSFindInoReply;
+    break;
+
+  case MSG_MDS_OPENINO:
+    m = new MMDSOpenIno;
+    break;
+  case MSG_MDS_OPENINOREPLY:
+    m = new MMDSOpenInoReply;
     break;
 
   case MSG_MDS_FRAGMENTNOTIFY:
