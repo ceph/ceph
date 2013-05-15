@@ -753,7 +753,7 @@ int RGWPutCORS_ObjStore::get_params()
   return ret;
 }
 
-static int read_all_chunked_input(req_state *s, char **pdata, int *plen)
+static int read_all_chunked_input(req_state *s, char **pdata, int *plen, int max_read)
 {
 #define READ_CHUNK 4096
 #define MAX_READ_CHUNK (128 * 1024)
@@ -777,6 +777,10 @@ static int read_all_chunked_input(req_state *s, char **pdata, int *plen)
       if (need_to_read < MAX_READ_CHUNK)
 	need_to_read *= 2;
 
+      if (total > max_read) {
+        free(data);
+        return -ERANGE;
+      }
       total += need_to_read;
 
       void *p = realloc(data, total + 1);
@@ -798,6 +802,43 @@ static int read_all_chunked_input(req_state *s, char **pdata, int *plen)
   return 0;
 }
 
+int rgw_rest_read_all_input(struct req_state *s, char **pdata, int *plen, int max_len)
+{
+  size_t cl = 0;
+  int len = 0;
+  char *data = NULL;
+
+  if (s->length)
+    cl = atoll(s->length);
+  if (cl) {
+    if (cl > (size_t)max_len) {
+      return -ERANGE;
+    }
+    data = (char *)malloc(cl + 1);
+    if (!data) {
+       return -ENOMEM;
+    }
+    int ret = s->cio->read(data, cl, &len);
+    if (ret < 0)
+      return ret;
+    data[len] = '\0';
+  } else if (!s->length) {
+    const char *encoding = s->env->get("HTTP_TRANSFER_ENCODING");
+    if (!encoding || strcmp(encoding, "chunked") != 0)
+      return -ERR_LENGTH_REQUIRED;
+
+    int ret = read_all_chunked_input(s, &data, &len, max_len);
+    if (ret < 0)
+      return ret;
+  }
+
+  *plen = len;
+  *pdata = data;
+
+  return 0;
+}
+
+
 int RGWCompleteMultipart_ObjStore::get_params()
 {
   upload_id = s->args.get("uploadId");
@@ -806,31 +847,13 @@ int RGWCompleteMultipart_ObjStore::get_params()
     ret = -ENOTSUP;
     return ret;
   }
-  size_t cl = 0;
 
-  if (s->length)
-    cl = atoll(s->length);
-  if (cl) {
-    data = (char *)malloc(cl + 1);
-    if (!data) {
-       ret = -ENOMEM;
-       return ret;
-    }
-    ret = s->cio->read(data, cl, &len);
-    if (ret < 0)
-      return ret;
-    data[len] = '\0';
-  } else {
-    const char *encoding = s->env->get("HTTP_TRANSFER_ENCODING");
-    if (!encoding || strcmp(encoding, "chunked") != 0)
-      return -ERR_LENGTH_REQUIRED;
+#define COMPLETE_MULTIPART_MAX_LEN (1024 * 1024) /* api defines max 10,000 parts, this should be enough */
+  ret = rgw_rest_read_all_input(s, &data, &len, COMPLETE_MULTIPART_MAX_LEN);
+  if (ret < 0)
+    return ret;
 
-    ret = read_all_chunked_input(s, &data, &len);
-    if (ret < 0)
-      return ret;
-  }
-
-  return ret;
+  return 0;
 }
 
 int RGWListMultipart_ObjStore::get_params()
