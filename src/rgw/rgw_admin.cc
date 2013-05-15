@@ -633,7 +633,14 @@ int main(int argc, char **argv)
 
   RGWStreamFlusher f(formatter, cout);
 
-  store = RGWStoreManager::get_storage(g_ceph_context, false);
+  bool raw_storage_op = (opt_cmd == OPT_REGION_INFO);
+
+
+  if (raw_storage_op) {
+    store = RGWStoreManager::get_raw_storage(g_ceph_context);
+  } else {
+    store = RGWStoreManager::get_storage(g_ceph_context, false);
+  }
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
     return 5; //EIO
@@ -641,11 +648,20 @@ int main(int argc, char **argv)
 
   StoreDestructor store_destructor(store);
 
-  /* populate user operation */
+  if (raw_storage_op) {
+    if (opt_cmd == OPT_REGION_INFO) {
+      RGWRegion region;
+      int ret = region.init(g_ceph_context, store);
+      if (ret < 0) {
+        cerr << "failed to init region: " << cpp_strerror(-ret) << std::endl;
+      }
 
-  if (!user_id.empty()) {
-    user_op.set_user_id(user_id);
-    bucket_op.set_user_id(user_id);
+      encode_json("region", region, formatter);
+      formatter->flush(cout);
+      cout << std::endl;
+    }
+
+    return 0;
   }
 
   if (!display_name.empty())
@@ -1189,7 +1205,7 @@ next:
   }
 
   if (opt_cmd == OPT_ZONE_INFO) {
-    store->zone.dump(formatter);
+    encode_json("zone", store->zone, formatter);
     formatter->flush(cout);
   }
 
@@ -1207,7 +1223,7 @@ next:
       return 1;
     }
 
-    zone.dump(formatter);
+    encode_json("zone", store->zone, formatter);
     formatter->flush(cout);
   }
 

@@ -4273,6 +4273,21 @@ RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_t
   return store;
 }
 
+RGWRados *RGWStoreManager::init_raw_storage_provider(CephContext *cct)
+{
+  RGWRados *store = NULL;
+  store = new RGWRados;
+
+  store->set_context(cct);
+
+  if (store->init_rados() < 0) {
+    delete store;
+    return NULL;
+  }
+
+  return store;
+}
+
 void RGWStoreManager::close_storage(RGWRados *store)
 {
   if (!store)
