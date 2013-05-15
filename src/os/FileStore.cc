@@ -4451,13 +4451,12 @@ bool FileStore::collection_empty(coll_t c)
 int FileStore::collection_list_range(coll_t c, hobject_t start, hobject_t end,
                                      snapid_t seq, vector<hobject_t> *ls)
 {
-  int r = 0;
   bool done = false;
   hobject_t next = start;
 
   while (!done) {
     vector<hobject_t> next_objects;
-    r = collection_list_partial(c, next,
+    int r = collection_list_partial(c, next,
                                 get_ideal_list_min(), get_ideal_list_max(),
                                 seq, &next_objects, &next);
     if (r < 0)
