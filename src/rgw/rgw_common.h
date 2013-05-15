@@ -566,21 +566,25 @@ struct RGWBucketInfo
   rgw_bucket bucket;
   string owner;
   uint32_t flags;
+  string region;
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(4, 4, bl);
+     ENCODE_START(5, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner, bl);
      ::encode(flags, bl);
+     ::encode(region, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(4, 4, 4, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(5, 4, 4, bl);
      ::decode(bucket, bl);
      if (struct_v >= 2)
        ::decode(owner, bl);
      if (struct_v >= 3)
        ::decode(flags, bl);
+     if (struct_v >= 5)
+       ::decode(region, bl);
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
