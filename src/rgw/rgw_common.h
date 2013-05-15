@@ -113,6 +113,7 @@ using ceph::crypto::MD5;
 #define ERR_INVALID_REQUEST      2021
 #define ERR_TOO_SMALL            2022
 #define ERR_NOT_FOUND            2023
+#define ERR_PERMANENT_REDIRECT   2024
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 
@@ -497,7 +498,7 @@ struct rgw_bucket {
     data_pool = index_pool = n;
     marker = "";
   }
-  rgw_bucket(const char *n, const char *dp, const char *ip, const char *m, const char *id) :
+  rgw_bucket(const char *n, const char *dp, const char *ip, const char *m, const char *id, const char *h) :
     name(n), data_pool(dp), index_pool(ip), marker(m), bucket_id(id) {}
 
   void clear() {
@@ -509,7 +510,7 @@ struct rgw_bucket {
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(5, 3, bl);
+     ENCODE_START(6, 3, bl);
     ::encode(name, bl);
     ::encode(data_pool, bl);
     ::encode(marker, bl);
@@ -518,7 +519,7 @@ struct rgw_bucket {
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
     ::decode(name, bl);
     ::decode(data_pool, bl);
     if (struct_v >= 2) {

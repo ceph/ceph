@@ -404,12 +404,14 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("bucket", bucket, f);
   encode_json("owner", owner, f);
   encode_json("flags", flags, f);
+  encode_json("region", region, f);
 }
 
 void RGWBucketInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("bucket", bucket, obj);
   JSONDecoder::decode_json("owner", owner, obj);
   JSONDecoder::decode_json("flags", flags, obj);
+  JSONDecoder::decode_json("region", region, obj);
 }
 
 void RGWObjEnt::dump(Formatter *f) const
