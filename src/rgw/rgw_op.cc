@@ -320,7 +320,7 @@ static int read_policy(RGWRados *store, struct req_state *s,
     ret = get_policy_from_attr(s->cct, store, s->obj_ctx, bucket_info, bucket_attrs, &bucket_policy, no_obj);
     if (ret < 0)
       return ret;
-    string& owner = bucket_policy.get_owner().get_id();
+    rgw_user& owner = bucket_policy.get_owner().get_id();
     if (!s->system_request && owner.compare(s->user.user_id) != 0 &&
         !bucket_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_READ))
       ret = -EACCES;

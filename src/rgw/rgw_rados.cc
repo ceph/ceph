@@ -2149,15 +2149,16 @@ int RGWRados::log_usage(map<rgw_user_bucket, RGWUsageBatch>& usage_info)
   return 0;
 }
 
-int RGWRados::read_usage(string& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
+int RGWRados::read_usage(const rgw_user& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
                          bool *is_truncated, RGWUsageIter& usage_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage)
 {
   uint32_t num = max_entries;
   string hash, first_hash;
-  usage_log_hash(cct, user, first_hash, 0);
+  string user_str = user.to_str();
+  usage_log_hash(cct, user_str, first_hash, 0);
 
   if (usage_iter.index) {
-    usage_log_hash(cct, user, hash, usage_iter.index);
+    usage_log_hash(cct, user_str, hash, usage_iter.index);
   } else {
     hash = first_hash;
   }
@@ -8197,7 +8198,7 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, RGWModifyOp op, string& tag,
   dir_meta.accounted_size = ent.size;
   dir_meta.mtime = utime_t(ent.mtime, 0);
   dir_meta.etag = ent.etag;
-  dir_meta.owner = ent.owner;
+  dir_meta.owner = ent.owner.to_str();
   dir_meta.owner_display_name = ent.owner_display_name;
   dir_meta.content_type = ent.content_type;
   dir_meta.category = category;

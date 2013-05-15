@@ -1406,9 +1406,9 @@ public:
 
   // log bandwidth info
   int log_usage(map<rgw_user_bucket, RGWUsageBatch>& usage_info);
-  int read_usage(string& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
+  int read_usage(rgw_user& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
                  bool *is_truncated, RGWUsageIter& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage);
-  int trim_usage(string& user, uint64_t start_epoch, uint64_t end_epoch);
+  int trim_usage(rgw_user& user, uint64_t start_epoch, uint64_t end_epoch);
 
   virtual int create_pool(rgw_bucket& bucket);
 
