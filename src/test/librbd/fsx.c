@@ -415,7 +415,6 @@ void
 check_buffers(char *good_buf, char *temp_buf, unsigned offset, unsigned size)
 {
 	if (memcmp(good_buf + offset, temp_buf, size) != 0) {
-		unsigned char c, t;
 		unsigned i = 0;
 		unsigned n = 0;
 		unsigned op = 0;
@@ -425,8 +424,8 @@ check_buffers(char *good_buf, char *temp_buf, unsigned offset, unsigned size)
 		    offset, size, iname);
 		prt("OFFSET\tGOOD\tBAD\tRANGE\n");
 		while (size > 0) {
-			c = good_buf[offset];
-			t = temp_buf[i];
+			char c = good_buf[offset];
+			char t = temp_buf[i];
 			if (c != t) {
 			        if (n < 16) {
 					bad = short_at(&temp_buf[i]);
