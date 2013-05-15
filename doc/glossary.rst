@@ -66,7 +66,8 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 		Third party cloud provisioning platforms such as OpenStack, CloudStack, 
 		OpenNebula, ProxMox, etc.
 
-	Object Storage Device (OSD)
+	Object Storage Device
+	OSD
 		A physical or logical storage unit (*e.g.*, LUN). Ceph users often 
 		conflate the term OSD with "Ceph OSD Daemon."
 		
