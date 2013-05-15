@@ -677,7 +677,9 @@ void librados::RadosClient::handle_log(MLog *m)
 	e.stamp.to_timespec(&stamp);
 
 	ldout(cct, 20) << __func__ << " delivering " << ss.str() << dendl;
-	log_cb(log_cb_arg, line.c_str(), who.c_str(), stamp, e.seq, level.c_str(), e.msg.c_str());
+	log_cb(log_cb_arg, line.c_str(), who.c_str(),
+	       stamp.tv_sec, stamp.tv_nsec,
+	       e.seq, level.c_str(), e.msg.c_str());
       }
 
       /*

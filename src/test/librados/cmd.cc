@@ -109,7 +109,7 @@ struct Log {
 
 void log_cb(void *arg,
 	     const char *line,
-	     const char *who, struct timespec stamp,
+	     const char *who, uint64_t stampsec, uint64_t stamp_nsec,
 	     uint64_t seq, const char *level,
 	     const char *msg) {
   Log *l = (Log *)arg;

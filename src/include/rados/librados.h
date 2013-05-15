@@ -1638,7 +1638,8 @@ int rados_pg_command(rados_t cluster, const char *pgstr, const char *cmd, const 
  */
 typedef void (*rados_log_callback_t)(void *arg,
 				     const char *line,
-				     const char *who, struct timespec stamp,
+				     const char *who, 
+				     uint64_t sec, uint64_t nsec,
 				     uint64_t seq, const char *level,
 				     const char *msg);
 
