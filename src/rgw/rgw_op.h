@@ -235,6 +235,7 @@ class RGWCreateBucket : public RGWOp {
 protected:
   int ret;
   RGWAccessControlPolicy policy;
+  string location_constraint;
 
 public:
   RGWCreateBucket() : ret(0) {}
