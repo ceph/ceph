@@ -4611,7 +4611,6 @@ void PG::scrub_process_inconsistent() {
     osd->clog.error(ss);
     if (repair) {
       state_clear(PG_STATE_CLEAN);
-      scrub_after_recovery = true;
       for (map<hobject_t, pair<ScrubMap::object, int> >::iterator i =
 	     scrubber.authoritative.begin();
 	   i != scrubber.authoritative.end();
@@ -4715,6 +4714,17 @@ void PG::scrub_finish() {
   if (scrubber.deep) {
     info.history.last_deep_scrub = info.last_update;
     info.history.last_deep_scrub_stamp = now;
+  }
+  // Since we don't know which errors were fixed, we can only clear them
+  // when every one has been fixed.
+  if (repair) {
+    if (scrubber.fixed == scrubber.shallow_errors + scrubber.deep_errors) {
+      assert(deep_scrub);
+      scrubber.shallow_errors = scrubber.deep_errors = 0;
+    } else {
+      // Deep scrub in order to get corrected error counts
+      scrub_after_recovery = true;
+    }
   }
   if (deep_scrub) {
     if ((scrubber.shallow_errors == 0) && (scrubber.deep_errors == 0))
