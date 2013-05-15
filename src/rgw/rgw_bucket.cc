@@ -32,9 +32,9 @@ static RGWMetadataHandler *bucket_meta_handler = NULL;
 static RGWMetadataHandler *bucket_instance_meta_handler = NULL;
 
 // define as static when RGWBucket implementation compete
-void rgw_get_buckets_obj(const string& user_id, string& buckets_obj_id)
+void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id)
 {
-  buckets_obj_id = user_id;
+  buckets_obj_id = user_id.to_str();
   buckets_obj_id += RGW_BUCKETS_OBJ_SUFFIX;
 }
 
@@ -43,7 +43,7 @@ void rgw_get_buckets_obj(const string& user_id, string& buckets_obj_id)
  * Returns: 0 on success, -ERR# on failure.
  */
 int rgw_read_user_buckets(RGWRados * store,
-                          string user_id,
+                          const rgw_user& user_id,
                           RGWUserBuckets& buckets,
                           const string& marker,
                           uint64_t max,
@@ -95,7 +95,7 @@ int rgw_read_user_buckets(RGWRados * store,
   return 0;
 }
 
-int rgw_bucket_sync_user_stats(RGWRados *store, const string& user_id, rgw_bucket& bucket)
+int rgw_bucket_sync_user_stats(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket)
 {
   string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
@@ -123,7 +123,7 @@ int rgw_bucket_sync_user_stats(RGWRados *store, const string& bucket_name)
   return 0;
 }
 
-int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t creation_time, bool update_entrypoint)
+int rgw_link_bucket(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket, time_t creation_time, bool update_entrypoint)
 {
   int ret;
   string& bucket_name = bucket.name;
@@ -182,7 +182,7 @@ done_err:
   return ret;
 }
 
-int rgw_unlink_bucket(RGWRados *store, string user_id, const string& bucket_name, bool update_entrypoint)
+int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id, const string& bucket_name, bool update_entrypoint)
 {
   int ret;
 
@@ -313,7 +313,7 @@ static void dump_mulipart_index_results(list<rgw_obj_key>& objs_to_unlink,
   f->close_section();
 }
 
-void check_bad_user_bucket_mapping(RGWRados *store, const string& user_id, bool fix)
+void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id, bool fix)
 {
   RGWUserBuckets user_buckets;
   bool done;
@@ -392,7 +392,7 @@ int rgw_remove_object(RGWRados *store, RGWBucketInfo& bucket_info, rgw_bucket& b
   return ret;
 }
 
-int rgw_remove_bucket(RGWRados *store, const string& bucket_owner, rgw_bucket& bucket, bool delete_children)
+int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
 {
   int ret;
   map<RGWObjCategory, RGWStorageStats> stats;
@@ -476,7 +476,7 @@ int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state)
 
   store = storage;
 
-  string user_id = op_state.get_user_id();
+  rgw_user user_id = op_state.get_user_id();
   bucket_name = op_state.get_bucket_name();
   RGWUserBuckets user_buckets;
   RGWObjectCtx obj_ctx(store);
@@ -553,7 +553,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
 
     r = rgw_unlink_bucket(store, owner.get_id(), bucket.name);
     if (r < 0) {
-      set_err_msg(err_msg, "could not unlink policy from user " + owner.get_id());
+      set_err_msg(err_msg, "could not unlink policy from user " + owner.get_id().to_str());
       return r;
     }
 
@@ -608,7 +608,7 @@ int RGWBucket::remove(RGWBucketAdminOpState& op_state, std::string *err_msg)
   bool delete_children = op_state.will_delete_children();
   rgw_bucket bucket = op_state.get_bucket();
 
-  int ret = rgw_remove_bucket(store, bucket_info.owner, bucket, delete_children);
+  int ret = rgw_remove_bucket(store, bucket, delete_children);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to remove bucket" + cpp_strerror(-ret));
     return ret;
@@ -1031,7 +1031,7 @@ static int bucket_stats(RGWRados *store, std::string&  bucket_name, Formatter *f
   formatter->dump_string("index_pool", bucket.index_pool);
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
-  formatter->dump_string("owner", bucket_info.owner);
+  ::encode_json("owner", bucket_info.owner, formatter);
   formatter->dump_string("ver", bucket_ver);
   formatter->dump_string("master_ver", master_ver);
   formatter->dump_stream("mtime") << ut;

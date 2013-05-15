@@ -321,7 +321,7 @@ static int read_policy(RGWRados *store, struct req_state *s,
     ret = get_policy_from_attr(s->cct, store, s->obj_ctx, bucket_info, bucket_attrs, &bucket_policy, no_obj);
     if (ret < 0)
       return ret;
-    string& owner = bucket_policy.get_owner().get_id();
+    rgw_user& owner = bucket_policy.get_owner().get_id();
     if (!s->system_request && owner.compare(s->user.user_id) != 0 &&
         !bucket_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_READ))
       ret = -EACCES;
@@ -1366,8 +1366,9 @@ static int forward_request_to_master(struct req_state *s, obj_version *objv, RGW
   }
   ldout(s->cct, 0) << "sending create_bucket request to master region" << dendl;
   bufferlist response;
+  string uid_str = s->user.user_id.to_str();
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
-  int ret = store->rest_master_conn->forward(s->user.user_id, s->info, objv, MAX_REST_RESPONSE, &in_data, &response);
+  int ret = store->rest_master_conn->forward(uid_str, s->info, objv, MAX_REST_RESPONSE, &in_data, &response);
   if (ret < 0)
     return ret;
 

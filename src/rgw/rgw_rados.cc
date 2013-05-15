@@ -2169,15 +2169,16 @@ int RGWRados::log_usage(map<rgw_user_bucket, RGWUsageBatch>& usage_info)
   return 0;
 }
 
-int RGWRados::read_usage(string& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
+int RGWRados::read_usage(const rgw_user& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
                          bool *is_truncated, RGWUsageIter& usage_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage)
 {
   uint32_t num = max_entries;
   string hash, first_hash;
-  usage_log_hash(cct, user, first_hash, 0);
+  string user_str = user.to_str();
+  usage_log_hash(cct, user_str, first_hash, 0);
 
   if (usage_iter.index) {
-    usage_log_hash(cct, user, hash, usage_iter.index);
+    usage_log_hash(cct, user_str, hash, usage_iter.index);
   } else {
     hash = first_hash;
   }
@@ -2188,7 +2189,7 @@ int RGWRados::read_usage(string& user, uint64_t start_epoch, uint64_t end_epoch,
     map<rgw_user_bucket, rgw_usage_log_entry> ret_usage;
     map<rgw_user_bucket, rgw_usage_log_entry>::iterator iter;
 
-    int ret =  cls_obj_usage_log_read(hash, user, start_epoch, end_epoch, num,
+    int ret =  cls_obj_usage_log_read(hash, user_str, start_epoch, end_epoch, num,
                                     usage_iter.read_iter, ret_usage, is_truncated);
     if (ret == -ENOENT)
       goto next;
@@ -2205,22 +2206,23 @@ int RGWRados::read_usage(string& user, uint64_t start_epoch, uint64_t end_epoch,
 next:
     if (!*is_truncated) {
       usage_iter.read_iter.clear();
-      usage_log_hash(cct, user, hash, ++usage_iter.index);
+      usage_log_hash(cct, user_str, hash, ++usage_iter.index);
     }
   } while (num && !*is_truncated && hash != first_hash);
   return 0;
 }
 
-int RGWRados::trim_usage(string& user, uint64_t start_epoch, uint64_t end_epoch)
+int RGWRados::trim_usage(rgw_user& user, uint64_t start_epoch, uint64_t end_epoch)
 {
   uint32_t index = 0;
   string hash, first_hash;
-  usage_log_hash(cct, user, first_hash, index);
+  string user_str = user.to_str();
+  usage_log_hash(cct, user_str, first_hash, index);
 
   hash = first_hash;
 
   do {
-    int ret =  cls_obj_usage_log_trim(hash, user, start_epoch, end_epoch);
+    int ret =  cls_obj_usage_log_trim(hash, user_str, start_epoch, end_epoch);
     if (ret == -ENOENT)
       goto next;
 
@@ -2228,7 +2230,7 @@ int RGWRados::trim_usage(string& user, uint64_t start_epoch, uint64_t end_epoch)
       return ret;
 
 next:
-    usage_log_hash(cct, user, hash, ++index);
+    usage_log_hash(cct, user_str, hash, ++index);
   } while (hash != first_hash);
 
   return 0;
@@ -3948,7 +3950,7 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj)
 }
 
 int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
-               const string& user_id,
+               const rgw_user& user_id,
                const string& client_id,
                const string& op_id,
                req_info *info,
@@ -4106,7 +4108,7 @@ set_err_state:
 int RGWRados::copy_obj_to_remote_dest(RGWObjState *astate,
                                       map<string, bufferlist>& src_attrs,
                                       RGWRados::Object::Read& read_op,
-                                      const string& user_id,
+                                      const rgw_user& user_id,
                                       rgw_obj& dest_obj,
                                       time_t *mtime)
 {
@@ -4145,7 +4147,7 @@ int RGWRados::copy_obj_to_remote_dest(RGWObjState *astate,
  * Returns: 0 on success, -ERR# otherwise.
  */
 int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
-               const string& user_id,
+               const rgw_user& user_id,
                const string& client_id,
                const string& op_id,
                req_info *info,
@@ -4899,7 +4901,7 @@ int RGWRados::Object::Delete::delete_obj()
 
       struct rgw_bucket_dir_entry_meta meta;
 
-      meta.owner = params.obj_owner.get_id();
+      meta.owner = params.obj_owner.get_id().to_str();
       meta.owner_display_name = params.obj_owner.get_display_name();
       meta.mtime = ceph_clock_now(store->ctx());
 
@@ -7430,10 +7432,12 @@ public:
   }
 };
 
-int RGWRados::get_user_stats(const string& user, RGWStorageStats& stats)
+int RGWRados::get_user_stats(const rgw_user& user, RGWStorageStats& stats)
 {
+  string user_str = user.to_str();
+
   cls_user_header header;
-  int r = cls_user_get_header(user, &header);
+  int r = cls_user_get_header(user_str, &header);
   if (r < 0)
     return r;
 
@@ -7446,10 +7450,12 @@ int RGWRados::get_user_stats(const string& user, RGWStorageStats& stats)
   return 0;
 }
 
-int RGWRados::get_user_stats_async(const string& user, RGWGetUserStats_CB *ctx)
+int RGWRados::get_user_stats_async(const rgw_user& user, RGWGetUserStats_CB *ctx)
 {
+  string user_str = user.to_str();
+
   RGWGetUserStatsContext *get_ctx = new RGWGetUserStatsContext(ctx);
-  int r = cls_user_get_header_async(user, get_ctx);
+  int r = cls_user_get_header_async(user_str, get_ctx);
   if (r < 0) {
     ctx->put();
     delete get_ctx;
@@ -8218,7 +8224,7 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, RGWModifyOp op, string& tag,
   dir_meta.accounted_size = ent.size;
   dir_meta.mtime = utime_t(ent.mtime, 0);
   dir_meta.etag = ent.etag;
-  dir_meta.owner = ent.owner;
+  dir_meta.owner = ent.owner.to_str();
   dir_meta.owner_display_name = ent.owner_display_name;
   dir_meta.content_type = ent.content_type;
   dir_meta.category = category;
@@ -8578,7 +8584,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   list_state.meta.content_type = content_type;
   if (astate->obj_tag.length() > 0)
     list_state.tag = astate->obj_tag.c_str();
-  list_state.meta.owner = owner.get_id();
+  list_state.meta.owner = owner.get_id().to_str();
   list_state.meta.owner_display_name = owner.get_display_name();
 
   list_state.exists = true;
@@ -8777,7 +8783,7 @@ int RGWRados::cls_user_update_buckets(rgw_obj& obj, list<cls_user_bucket_entry>&
   return 0;
 }
 
-int RGWRados::complete_sync_user_stats(const string& user_id)
+int RGWRados::complete_sync_user_stats(const rgw_user& user_id)
 {
   string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
@@ -8829,7 +8835,7 @@ int RGWRados::cls_user_remove_bucket(rgw_obj& obj, const cls_user_bucket& bucket
   return 0;
 }
 
-int RGWRados::check_quota(const string& bucket_owner, rgw_bucket& bucket,
+int RGWRados::check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
                           RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size)
 {
   return quota_handler->check_quota(bucket_owner, bucket, user_quota, bucket_quota, 1, obj_size);
