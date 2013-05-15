@@ -16,6 +16,8 @@ extern void rgw_flush_formatter_and_reset(struct req_state *s,
 extern void rgw_flush_formatter(struct req_state *s,
                                          ceph::Formatter *formatter);
 
+extern int rgw_rest_read_all_input(struct req_state *s, char **data, int *plen, int max_len);
+
 class RESTArgs {
 public:
   static int get_string(struct req_state *s, const string& name, const string& def_val, string *val, bool *existed = NULL);
