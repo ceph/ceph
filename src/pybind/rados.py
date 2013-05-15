@@ -4,11 +4,11 @@ This module is a thin wrapper around librados.
 Copyright 2011, Hannu Valtonen <hannu.valtonen@ormod.com>
 """
 from ctypes import CDLL, c_char_p, c_size_t, c_void_p, c_char, c_int, c_long, \
-    create_string_buffer, byref, Structure, c_uint64, c_ubyte, pointer, \
-    CFUNCTYPE
-import threading
+    c_ulong, create_string_buffer, byref, Structure, c_uint64, c_ubyte, \
+    pointer, CFUNCTYPE
 import ctypes
 import errno
+import threading
 import time
 from datetime import datetime
 
@@ -1477,3 +1477,63 @@ class Object(object):
     def rm_xattr(self, xattr_name):
         self.require_object_exists()
         return self.ioctx.rm_xattr(self.key, xattr_name)
+
+MONITOR_LEVELS = [
+   "debug",
+   "info",
+   "warn",
+   "err",
+   "sec",
+   ]
+
+
+class MonitorLog(object):
+    """
+    For watching cluster log messages.  Instantiate an object and keep
+    it around while callback is periodically called.  Construct with
+    'level' to monitor 'level' messages (one of MONITOR_LEVELS).
+    arg will be passed to the callback.
+
+    callback will be called with:
+        arg (given to __init__)
+        line (the full line, including timestamp, who, level, msg)
+        who (which entity issued the log message)
+        timestamp_sec (sec of a struct timespec)
+        timestamp_nsec (sec of a struct timespec)
+        seq (sequence number)
+        level (string representing the level of the log message)
+        msg (the message itself)
+    callback's return value is ignored
+    """
+
+    def monitor_log_callback(self, arg, line, who, sec, nsec, seq, level, msg):
+        """
+        Local callback wrapper, in case we decide to do something
+        """
+        self.callback(arg, line, who, sec, nsec, seq, level, msg)
+        return 0
+
+    def __init__(self, cluster, level, callback, arg):
+        if level not in MONITOR_LEVELS:
+            raise LogicError("invalid monitor level " + level)
+        if not callable(callback):
+            raise LogicError("callback must be a callable function")
+        self.level = level
+        self.callback = callback
+        self.arg = arg
+        callback_factory = CFUNCTYPE(c_int,    # return type (really void)
+                                     c_void_p, # arg
+                                     c_char_p, # line
+                                     c_char_p, # who
+                                     c_uint64, # timestamp_sec
+                                     c_uint64, # timestamp_nsec
+                                     c_ulong,  # seq
+                                     c_char_p, # level
+                                     c_char_p) # msg
+        self.internal_callback = callback_factory(self.monitor_log_callback)
+
+        r = cluster.librados.rados_monitor_log(cluster.cluster, level,
+                                               self.internal_callback, arg)
+        if r:
+            raise make_ex(r, 'error calling rados_monitor_log')
+
