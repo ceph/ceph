@@ -1143,10 +1143,10 @@ public:
 
 class RGWGetUserStats_CB : public RefCountedObject {
 protected:
-  string user;
+  rgw_user user;
   RGWStorageStats stats;
 public:
-  RGWGetUserStats_CB(const string& _user) : user(_user) {}
+  RGWGetUserStats_CB(const rgw_user& _user) : user(_user) {}
   virtual ~RGWGetUserStats_CB() {}
   virtual void handle_response(int r) = 0;
   virtual void set_response(RGWStorageStats& _stats) {
@@ -1406,9 +1406,9 @@ public:
 
   // log bandwidth info
   int log_usage(map<rgw_user_bucket, RGWUsageBatch>& usage_info);
-  int read_usage(string& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
+  int read_usage(const rgw_user& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
                  bool *is_truncated, RGWUsageIter& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage);
-  int trim_usage(string& user, uint64_t start_epoch, uint64_t end_epoch);
+  int trim_usage(rgw_user& user, uint64_t start_epoch, uint64_t end_epoch);
 
   virtual int create_pool(rgw_bucket& bucket);
 
@@ -1600,7 +1600,7 @@ public:
         const string *ptag;
         list<rgw_obj_key> *remove_objs;
         time_t set_mtime;
-        string owner;
+        rgw_user owner;
         RGWObjCategory category;
         int flags;
         const char *if_match;
@@ -1623,7 +1623,7 @@ public:
       RGWRados::Object *target;
 
       struct DeleteParams {
-        string bucket_owner;
+        rgw_user bucket_owner;
         int versioning_status;
         ACLOwner obj_owner; /* needed for creation of deletion marker */
         uint64_t olh_epoch;
@@ -1790,7 +1790,7 @@ public:
 
   int rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj);
   int fetch_remote_obj(RGWObjectCtx& obj_ctx,
-                       const string& user_id,
+                       const rgw_user& user_id,
                        const string& client_id,
                        const string& op_id,
                        req_info *info,
@@ -1819,7 +1819,7 @@ public:
   int copy_obj_to_remote_dest(RGWObjState *astate,
                               map<string, bufferlist>& src_attrs,
                               RGWRados::Object::Read& read_op,
-                              const string& user_id,
+                              const rgw_user& user_id,
                               rgw_obj& dest_obj,
                               time_t *mtime);
   /**
@@ -1838,7 +1838,7 @@ public:
    * Returns: 0 on success, -ERR# otherwise.
    */
   virtual int copy_obj(RGWObjectCtx& obj_ctx,
-               const string& user_id,
+               const rgw_user& user_id,
                const string& client_id,
                const string& op_id,
                req_info *info,
@@ -2049,8 +2049,8 @@ public:
   int get_bucket_stats(rgw_bucket& bucket, string *bucket_ver, string *master_ver,
       map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker);
   int get_bucket_stats_async(rgw_bucket& bucket, RGWGetBucketStats_CB *cb);
-  int get_user_stats(const string& user, RGWStorageStats& stats);
-  int get_user_stats_async(const string& user, RGWGetUserStats_CB *cb);
+  int get_user_stats(const rgw_user& user, RGWStorageStats& stats);
+  int get_user_stats_async(const rgw_user& user, RGWGetUserStats_CB *cb);
   void get_bucket_instance_obj(rgw_bucket& bucket, rgw_obj& obj);
   void get_bucket_instance_entry(rgw_bucket& bucket, string& entry);
   void get_bucket_meta_oid(rgw_bucket& bucket, string& oid);
@@ -2174,11 +2174,11 @@ public:
   int cls_user_add_bucket(rgw_obj& obj, const cls_user_bucket_entry& entry);
   int cls_user_update_buckets(rgw_obj& obj, list<cls_user_bucket_entry>& entries, bool add);
   int cls_user_complete_stats_sync(rgw_obj& obj);
-  int complete_sync_user_stats(const string& user_id);
+  int complete_sync_user_stats(const rgw_user& user_id);
   int cls_user_add_bucket(rgw_obj& obj, list<cls_user_bucket_entry>& entries);
   int cls_user_remove_bucket(rgw_obj& obj, const cls_user_bucket& bucket);
 
-  int check_quota(const string& bucket_owner, rgw_bucket& bucket,
+  int check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
                   RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size);
 
   string unique_id(uint64_t unique_num) {
