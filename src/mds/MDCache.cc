@@ -5216,9 +5216,22 @@ void MDCache::open_snap_parents()
     gather.set_finisher(new C_MDC_OpenSnapParents(this));
     gather.activate();
   } else {
+    if (!reconnected_snaprealms.empty()) {
+      stringstream warn_str;
+      for (map<inodeno_t,map<client_t,snapid_t> >::iterator p = reconnected_snaprealms.begin();
+	   p != reconnected_snaprealms.end();
+	   ++p) {
+	warn_str << " unconnected snaprealm " << p->first << "\n";
+	for (map<client_t,snapid_t>::iterator q = p->second.begin();
+	     q != p->second.end();
+	     ++q)
+	  warn_str << "  client." << q->first << " snapid " << q->second << "\n";
+      }
+      mds->clog.warn() << "open_snap_parents has:" << "\n";
+      mds->clog.warn(warn_str);
+    }
     assert(rejoin_waiters.empty());
     assert(missing_snap_parents.empty());
-    assert(reconnected_snaprealms.empty());
     dout(10) << "open_snap_parents - all open" << dendl;
     do_delayed_cap_imports();
 
