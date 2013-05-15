@@ -1967,13 +1967,11 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	  f->flush(ds);
 	} else {
 	  p->print(ds);
-	  r = 0;
 	} 
-	if (r == 0) {
-	  rdata.append(ds);
-	  if (!f)
-	    ss << " ";
-	}
+	rdata.append(ds);
+	r = 0;
+	if (!f)
+	  ss << " ";
       } else if (prefix == "osd ls") {
 	stringstream ds;
 	if (f) {
