@@ -503,7 +503,7 @@ void Client::trim_dentry(Dentry *dn)
     dn->dir->parent_inode->flags &= ~I_COMPLETE;
     dn->dir->release_count++;
   }
-  unlink(dn, false);
+  unlink(dn, false, false);
 }
 
 
@@ -728,7 +728,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       ldout(cct, 10) << " dir is open on empty dir " << in->ino << " with "
 		     << in->dir->dentry_map.size() << " entries, tearing down" << dendl;
       while (!in->dir->dentry_map.empty())
-	unlink(in->dir->dentry_map.begin()->second, true);
+	unlink(in->dir->dentry_map.begin()->second, true, true);
       close_dir(in->dir);
     }
   }
@@ -762,15 +762,15 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
       ldout(cct, 12) << " had dentry " << dname
 	       << " with WRONG vino " << dn->inode->vino()
 	       << dendl;
-      unlink(dn, true);
+      unlink(dn, true, false);
       dn = NULL;
     }
   }
   
   if (!dn || dn->inode == 0) {
     in->get();
-    if (old_dentry && old_dentry->dir)
-      unlink(old_dentry, dir == old_dentry->dir);  // keep dir open if its the same dir
+    if (old_dentry)
+      unlink(old_dentry, dir == old_dentry->dir, false);  // keep dir open if its the same dir
     dn = link(dir, dname, in, dn);
     put_inode(in);
     if (set_offset) {
@@ -910,7 +910,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 	  ldout(cct, 15) << "insert_trace  unlink '" << pd->first << "'" << dendl;
 	  Dentry *dn = pd->second;
 	  ++pd;
-	  unlink(dn, true);
+	  unlink(dn, true, false);
 	} else {
 	  ++pd;
 	}
@@ -929,7 +929,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 	if (pd->second->inode != in) {
 	  // replace incorrect dentry
 	  ++pd;  // we are about to unlink this guy, move past it.
-	  unlink(olddn, true);
+	  unlink(olddn, true, false);
 	  dn = link(dir, dname, in, NULL);
 	} else {
 	  // keep existing dn
@@ -959,7 +959,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 	  ldout(cct, 15) << "insert_trace  unlink '" << pd->first << "'" << dendl;
 	  Dentry *dn = pd->second;
 	  ++pd;
-	  unlink(dn, true);
+	  unlink(dn, true, false);
 	} else
 	  ++pd;
       }
@@ -1043,7 +1043,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
       if (diri->dir && diri->dir->dentries.count(dname)) {
 	Dentry *dn = diri->dir->dentries[dname];
 	if (dn->inode)
-	  unlink(dn, false);
+	  unlink(dn, true, true);
       }
     }
   } else if (reply->head.op == CEPH_MDS_OP_LOOKUPSNAP ||
@@ -1067,7 +1067,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
       if (diri->dir && diri->dir->dentries.count(dname)) {
 	Dentry *dn = diri->dir->dentries[dname];
 	if (dn->inode)
-	  unlink(dn, false);
+	  unlink(dn, true, true);
       }
     }
   }
@@ -1265,7 +1265,7 @@ int Client::verify_reply_trace(int r,
 	// the same here.
 	Dentry *od = request->old_dentry();
 	if (od) {
-	  unlink(od, false);
+	  unlink(od, false, false);
 	}
 
 	if (d->dir) {
@@ -2255,7 +2255,7 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
     if (in->is_dir() && !in->dn_set.empty()) {
       Dentry *olddn = in->get_first_parent();
       assert(olddn->dir != dir || olddn->name != name);
-      unlink(olddn, false);
+      unlink(olddn, false, false);
     }
 
     in->dn_set.insert(dn);
@@ -2266,7 +2266,7 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
   return dn;
 }
 
-void Client::unlink(Dentry *dn, bool keepdir)
+void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 {
   Inode *in = dn->inode;
   ldout(cct, 15) << "unlink dir " << dn->dir->parent_inode << " '" << dn->name << "' dn " << dn
@@ -2286,17 +2286,21 @@ void Client::unlink(Dentry *dn, bool keepdir)
     ldout(cct, 20) << "unlink  inode " << in << " parents now " << in->dn_set << dendl; 
     put_inode(in);
   }
-        
-  // unlink from dir
-  dn->dir->dentries.erase(dn->name);
-  dn->dir->dentry_map.erase(dn->name);
-  if (dn->dir->is_empty() && !keepdir) 
-    close_dir(dn->dir);
-  dn->dir = 0;
 
-  // delete den
-  lru.lru_remove(dn);
-  dn->put();
+  if (!keepdentry) {
+    ldout(cct, 15) << "unlink  removing '" << dn->name << "' dn " << dn << dendl;
+
+    // unlink from dir
+    dn->dir->dentries.erase(dn->name);
+    dn->dir->dentry_map.erase(dn->name);
+    if (dn->dir->is_empty() && !keepdir)
+      close_dir(dn->dir);
+    dn->dir = 0;
+
+    // delete den
+    lru.lru_remove(dn);
+    dn->put();
+  }
 }
 
 
@@ -7935,7 +7939,7 @@ int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
   if (res == 0) {
     if (dir->dir && dir->dir->dentries.count(name)) {
       Dentry *dn = dir->dir->dentries[name];
-      unlink(dn, false);
+      unlink(dn, false, false);
     }
   }
   ldout(cct, 10) << "unlink result is " << res << dendl;
@@ -8000,7 +8004,7 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
       if (dn->inode->dir && dn->inode->dir->is_empty() &&
 	  (dn->inode->dn_set.size() == 1))
 	close_dir(dn->inode->dir);  // FIXME: maybe i shoudl proactively hose the whole subtree from cache?
-      unlink(dn, false);
+      unlink(dn, false, false);
     }
   }
 
