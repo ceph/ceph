@@ -1094,7 +1094,7 @@ void PGMonitor::dump_info(Formatter *f)
 
 bool PGMonitor::preprocess_command(MMonCommand *m)
 {
-  int r = -1;
+  int r = 0;
   bufferlist rdata;
   stringstream ss;
 
@@ -1117,37 +1117,34 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     return true;
   }
 
+  // perhaps these would be better in the parsing, but it's weird
+  if (prefix == "pg dump_json") {
+    cmd_putval(g_ceph_context, cmdmap, "format", string("json"));
+    cmd_putval(g_ceph_context, cmdmap, "dumpcontents", string("all"));
+    prefix = "pg dump";
+  } else if (prefix == "dump_pools_json") {
+    cmd_putval(g_ceph_context, cmdmap, "format", string("json"));
+    cmd_putval(g_ceph_context, cmdmap, "dumpcontents", string("pool"));
+    prefix = "pg dump";
+  }
+
+  string format;
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("json"));
+  boost::scoped_ptr<Formatter> f(new_formatter(format));
+
   if (prefix == "pg stat") {
     ss << pg_map;
-    r = 0;
   } else if (prefix == "pg getmap") {
     pg_map.encode(rdata);
     ss << "got pgmap version " << pg_map.version;
-    r = 0;
   } else if (prefix == "pg map_pg_creates") {
     map_pg_creates();
     ss << "mapped pg creates ";
-    r = 0;
   } else if (prefix == "pg send_pg_creates") {
     send_pg_creates();
     ss << "sent pg creates ";
-    r = 0;
-  } else if (prefix == "pg dump" ||
-	     prefix == "pg dump_json" ||
-	     prefix == "pg dump_pools_json") {
-    string format;
+  } else if (prefix == "pg dump") {
     string val;
-    r = 0;
-    // perhaps these would be better in the parsing, but it's weird
-    if (prefix == "pg dump_json") {
-      cmd_putval(g_ceph_context, cmdmap, "format", string("json"));
-      cmd_putval(g_ceph_context, cmdmap, "dumpcontents", string("all"));
-    } else if (prefix == "dump_pools_json") {
-      cmd_putval(g_ceph_context, cmdmap, "format", string("json"));
-      cmd_putval(g_ceph_context, cmdmap, "dumpcontents", string("pool"));
-    }
-    cmd_getval(g_ceph_context, cmdmap, "format", format, string("json"));
-    boost::scoped_ptr<Formatter> f(new_formatter(format));
     stringstream ds;
     vector<string> dumpcontents;
     set<string> what;
@@ -1191,69 +1188,73 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     }
     rdata.append(ds);
     ss << "dumped " << what << " in format " << format;
-    r = 0;
   } else if (prefix == "pg dump_stuck") {
     vector<string> stuckop_vec;
     string format;
     cmd_getval(g_ceph_context, cmdmap, "stuckops", stuckop_vec);
-    cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
     if (stuckop_vec.empty())
       stuckop_vec.push_back("unclean");
     int64_t threshold;
     cmd_getval(g_ceph_context, cmdmap, "threshold", threshold,
 	       int64_t(g_conf->mon_pg_stuck_threshold));
 
-    r = dump_stuck_pg_stats(ss, rdata, format, (int)threshold, stuckop_vec);
+    r = dump_stuck_pg_stats(f.get(), (int)threshold, stuckop_vec);
+    ss << "ok";
   } else if (prefix == "pg map") {
     pg_t pgid;
-    r = -EINVAL;
     string pgidstr;
     cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr);
-    if (pgid.parse(pgidstr.c_str())) {
-      vector<int> up, acting;
-      if (mon->osdmon()->osdmap.have_pg_pool(pgid.pool())) {
-	pg_t mpgid = mon->osdmon()->osdmap.raw_pg_to_pg(pgid);
-	mon->osdmon()->osdmap.pg_to_up_acting_osds(pgid, up, acting);
-	ss << "osdmap e" << mon->osdmon()->osdmap.get_epoch()
-	  << " pg " << pgid << " (" << mpgid << ")"
-	  << " -> up " << up << " acting " << acting;
-	r = 0;
-      } else {
-	r = -ENOENT;
-	ss << "pg '" << pgidstr << "' does not exist";
-      }
-    } else {
+    if (!pgid.parse(pgidstr.c_str())) {
       ss << "invalid pgid '" << pgidstr << "'";
+      r = -EINVAL;
+      goto reply;
     }
+    vector<int> up, acting;
+    if (!mon->osdmon()->osdmap.have_pg_pool(pgid.pool())) {
+      r = -ENOENT;
+      ss << "pg '" << pgidstr << "' does not exist";
+      goto reply;
+    }
+    pg_t mpgid = mon->osdmon()->osdmap.raw_pg_to_pg(pgid);
+    mon->osdmon()->osdmap.pg_to_up_acting_osds(pgid, up, acting);
+    ss << "osdmap e" << mon->osdmon()->osdmap.get_epoch()
+       << " pg " << pgid << " (" << mpgid << ")"
+       << " -> up " << up << " acting " << acting;
   } else if (prefix == "pg scrub" || 
 	     prefix == "pg repair" || 
 	     prefix == "pg deep-scrub") {
     string scrubop = prefix.substr(3, string::npos);
     pg_t pgid;
-    r = -EINVAL;
     string pgidstr;
     cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr);
-    if (pgid.parse(pgidstr.c_str())) {
-      if (pg_map.pg_stat.count(pgid)) {
-	if (pg_map.pg_stat[pgid].acting.size()) {
-	  int osd = pg_map.pg_stat[pgid].acting[0];
-	  if (mon->osdmon()->osdmap.is_up(osd)) {
-	    vector<pg_t> pgs(1);
-	    pgs[0] = pgid;
-	    mon->try_send_message(new MOSDScrub(mon->monmap->fsid, pgs,
-						scrubop == "repair",
-						scrubop == "deep-scrub"),
-				  mon->osdmon()->osdmap.get_inst(osd));
-	    ss << "instructing pg " << pgid << " on osd." << osd << " to " << scrubop;
-	    r = 0;
-	  } else
-	    ss << "pg " << pgid << " primary osd." << osd << " not up";
-	} else
-	  ss << "pg " << pgid << " has no primary osd";
-      } else
-	ss << "pg " << pgid << " dne";
-    } else
+    if (!pgid.parse(pgidstr.c_str())) {
       ss << "invalid pgid '" << pgidstr << "'";
+      r = -EINVAL;
+      goto reply;
+    }
+    if (!pg_map.pg_stat.count(pgid)) {
+      ss << "pg " << pgid << " dne";
+      r = -ENOENT;
+      goto reply;
+    }
+    if (!pg_map.pg_stat[pgid].acting.size()) {
+      ss << "pg " << pgid << " has no primary osd";
+      r = -EAGAIN;
+      goto reply;
+    }
+    int osd = pg_map.pg_stat[pgid].acting[0];
+    if (!mon->osdmon()->osdmap.is_up(osd)) {
+      ss << "pg " << pgid << " primary osd." << osd << " not up";
+      r = -EAGAIN;
+      goto reply;
+    }
+    vector<pg_t> pgs(1);
+    pgs[0] = pgid;
+    mon->try_send_message(new MOSDScrub(mon->monmap->fsid, pgs,
+					scrubop == "repair",
+					scrubop == "deep-scrub"),
+			  mon->osdmon()->osdmap.get_inst(osd));
+    ss << "instructing pg " << pgid << " on osd." << osd << " to " << scrubop;
   } else if (prefix == "pg debug") {
     string debugop;
     cmd_getval(g_ceph_context, cmdmap, "debugop", debugop, string("unfound_objects_exist"));
@@ -1286,18 +1287,17 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       else
 	ss << "FALSE";
     }
-    r = 0;
   } else {
     ss << "unknown command " << prefix;
+    r = -EINVAL;
+    goto reply;
   }
 
-  if (r != -1) {
-    string rs;
-    getline(ss, rs);
-    mon->reply_command(m, r, rs, rdata, get_version());
-    return true;
-  } else
-    return false;
+ reply:
+  string rs;
+  getline(ss, rs);
+  mon->reply_command(m, r, rs, rdata, get_version());
+  return true;
 }
 
 bool PGMonitor::prepare_command(MMonCommand *m)
@@ -1305,7 +1305,7 @@ bool PGMonitor::prepare_command(MMonCommand *m)
   stringstream ss;
   pg_t pgid;
   epoch_t epoch = mon->osdmon()->osdmap.get_epoch();
-  int r = -EINVAL;
+  int r = 0;
   string rs;
 
   map<string, cmd_vartype> cmdmap;
@@ -1332,15 +1332,18 @@ bool PGMonitor::prepare_command(MMonCommand *m)
     cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr);
     if (!pgid.parse(pgidstr.c_str())) {
       ss << "pg " << pgidstr << " invalid";
-      goto out;
+      r = -EINVAL;
+      goto reply;
     }
     if (!pg_map.pg_stat.count(pgid)) {
       ss << "pg " << pgid << " dne";
-      goto out;
+      r = -ENOENT;
+      goto reply;
     }
     if (pg_map.creating_pgs.count(pgid)) {
       ss << "pg " << pgid << " already creating";
-      goto out;
+      r = 0;
+      goto reply;
     }
     {
       pg_stat_t& s = pending_inc.pg_stat_updates[pgid];
@@ -1349,8 +1352,7 @@ bool PGMonitor::prepare_command(MMonCommand *m)
       s.last_change = ceph_clock_now(g_ceph_context);
     }
     ss << "pg " << pgidstr << " now creating, ok";
-    getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+    goto update;
   } else if (prefix == "pg set_full_ratio" || 
 	     prefix == "pg set_nearfull_ratio") {
     double n;
@@ -1360,16 +1362,23 @@ bool PGMonitor::prepare_command(MMonCommand *m)
       pending_inc.full_ratio = n;
     else if (op == "set_nearfull_ratio")
       pending_inc.nearfull_ratio = n;
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+    goto update;
+  } else {
+    r = -EINVAL;
+    goto reply;
   }
-  return true;
 
- out:
+ reply:
   getline(ss, rs);
   if (r < 0 && rs.length() == 0)
     rs = cpp_strerror(r);
   mon->reply_command(m, r, rs, get_version());
   return false;
+
+ update:
+  getline(ss, rs);
+  wait_for_finished_proposal(new Monitor::C_Command(mon, m, r, rs, get_version()));
+  return true;
 }
 
 static void note_stuck_detail(enum PGMap::StuckPG what,
@@ -1557,9 +1566,7 @@ void PGMonitor::check_full_osd_health(list<pair<health_status_t,string> >& summa
   }
 }
 
-int PGMonitor::dump_stuck_pg_stats(ostream& ss,
-				   bufferlist& rdata,
-				   string format,
+int PGMonitor::dump_stuck_pg_stats(Formatter *f,
 				   int threshold,
 				   vector<string>& args) const
 {
@@ -1578,16 +1585,8 @@ int PGMonitor::dump_stuck_pg_stats(ostream& ss,
   utime_t now(ceph_clock_now(g_ceph_context));
   utime_t cutoff = now - utime_t(threshold, 0);
 
-  stringstream ds;
-  boost::scoped_ptr<Formatter> f(new_formatter(format));
-  if (f) {
-    pg_map.dump_stuck(f.get(), stuck_type, cutoff);
-    f->flush(ds);
-  } else {
-    pg_map.dump_stuck_plain(ds, stuck_type, cutoff);
-  }
-  rdata.append(ds);
-  ss << "ok";
+  pg_map.dump_stuck(f, stuck_type, cutoff);
+
   return 0;
 }
 
