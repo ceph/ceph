@@ -2,8 +2,9 @@
  Deploying with ``mkcephfs``
 =============================
 
-To deploy a test or development cluster, you can use the ``mkcephfs`` tool.
-We do not recommend using this tool for production environments.
+The ``mkcephfs`` tool is the old method of deploying new Ceph
+clusters.  It is now deprecated in favor of ``ceph-deploy``, which has
+better support for modifying an existing cluster.
 
 
 Enable Login to Cluster Hosts as ``root``
