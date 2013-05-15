@@ -308,6 +308,13 @@ public:
       if (p->second.state >= STATE_REPLAY && p->second.state <= STATE_STOPPING)
 	s.insert(p->second.rank);
   }
+  void get_clientreplay_or_active_or_stopping_mds_set(set<int>& s) {
+    for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
+	 p != mds_info.end();
+	 ++p)
+      if (p->second.state >= STATE_CLIENTREPLAY && p->second.state <= STATE_STOPPING)
+	s.insert(p->second.rank);
+  }
   void get_mds_set(set<int>& s, int state) {
     for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();

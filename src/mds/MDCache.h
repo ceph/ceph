@@ -53,6 +53,8 @@ class MDentryUnlink;
 class MLock;
 class MMDSFindIno;
 class MMDSFindInoReply;
+class MMDSOpenIno;
+class MMDSOpenInoReply;
 
 class Message;
 class MClientRequest;
@@ -756,6 +758,47 @@ public:
 				   C_GatherBuilder &gather_bld);
 
   void make_trace(vector<CDentry*>& trace, CInode *in);
+
+protected:
+  struct open_ino_info_t {
+    vector<inode_backpointer_t> ancestors;
+    set<int> checked;
+    int checking;
+    int auth_hint;
+    bool check_peers;
+    bool fetch_backtrace;
+    bool discover;
+    bool want_replica;
+    bool want_xlocked;
+    version_t tid;
+    int64_t pool;
+    list<Context*> waiters;
+    open_ino_info_t() : checking(-1), auth_hint(-1),
+      check_peers(true), fetch_backtrace(true), discover(false) {}
+  };
+  tid_t open_ino_last_tid;
+  map<inodeno_t,open_ino_info_t> opening_inodes;
+
+  void _open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err);
+  void _open_ino_parent_opened(inodeno_t ino, int ret);
+  void _open_ino_traverse_dir(inodeno_t ino, open_ino_info_t& info, int err);
+  Context* _open_ino_get_waiter(inodeno_t ino, MMDSOpenIno *m);
+  int open_ino_traverse_dir(inodeno_t ino, MMDSOpenIno *m,
+			    vector<inode_backpointer_t>& ancestors,
+			    bool discover, bool want_xlocked, int *hint);
+  void open_ino_finish(inodeno_t ino, open_ino_info_t& info, int err);
+  void do_open_ino(inodeno_t ino, open_ino_info_t& info, int err);
+  void do_open_ino_peer(inodeno_t ino, open_ino_info_t& info);
+  void handle_open_ino(MMDSOpenIno *m);
+  void handle_open_ino_reply(MMDSOpenInoReply *m);
+  friend class C_MDC_OpenInoBacktraceFetched;
+  friend class C_MDC_OpenInoTraverseDir;
+  friend class C_MDC_OpenInoParentOpened;
+
+public:
+  void kick_open_ino_peers(int who);
+  void open_ino(inodeno_t ino, int64_t pool, Context *fin,
+		bool want_replica=true, bool want_xlocked=false);
   
   // -- find_ino_peer --
   struct find_ino_peer_info_t {
