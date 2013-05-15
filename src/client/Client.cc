@@ -2720,18 +2720,17 @@ void Client::_flush_range(Inode *in, int64_t offset, uint64_t size)
   Cond cond;
   bool safe = false;
   Context *onflush = new C_SafeCond(&flock, &cond, &safe);
-  safe = objectcacher->file_flush(&in->oset, &in->layout, in->snaprealm->get_snap_context(),
+  int r = objectcacher->file_flush(&in->oset, &in->layout, in->snaprealm->get_snap_context(),
 				  offset, size, onflush);
-  if (safe)
-    return;
-
-  // wait for flush
-  client_lock.Unlock();
-  flock.Lock();
-  while (!safe)
-    cond.Wait(flock);
-  flock.Unlock();
-  client_lock.Lock();
+  if (r == 0) {
+    // wait for flush
+    client_lock.Unlock();
+    flock.Lock();
+    while (!safe)
+      cond.Wait(flock);
+    flock.Unlock();
+    client_lock.Lock();
+  }
 }
 
 void Client::flush_set_callback(ObjectCacher::ObjectSet *oset)
