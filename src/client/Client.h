@@ -384,7 +384,7 @@ protected:
    * a new inode to a pre-created Dentry
    */
   Dentry* link(Dir *dir, const string& name, Inode *in, Dentry *dn);
-  void unlink(Dentry *dn, bool keepdir);
+  void unlink(Dentry *dn, bool keepdir, bool keepdentry);
 
   // path traversal for high-level interface
   Inode *cwd;
