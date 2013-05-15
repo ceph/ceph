@@ -429,11 +429,9 @@ static const s3_acl_header acl_header_perms[] = {
 int RGWAccessControlPolicy_S3::create_from_headers(RGWRados *store, RGWEnv *env, ACLOwner& _owner)
 {
   std::list<ACLGrant> grants;
-  int ret;
 
   for (const struct s3_acl_header *p = acl_header_perms; p->rgw_perm; p++) {
-    ret = parse_acl_header(store, env, p, grants);
-    if (ret < 0)
+    if (parse_acl_header(store, env, p, grants) < 0)
       return false;
   }
 
