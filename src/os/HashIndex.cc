@@ -298,9 +298,9 @@ int HashIndex::_lookup(const hobject_t &hoid,
   vector<string> path_comp;
   get_path_components(hoid, &path_comp);
   vector<string>::iterator next = path_comp.begin();
-  int r, exists;
+  int exists;
   while (1) {
-    r = path_exists(*path, &exists);
+    int r = path_exists(*path, &exists);
     if (r < 0)
       return r;
     if (!exists) {
