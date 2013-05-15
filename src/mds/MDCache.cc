@@ -2174,7 +2174,7 @@ void MDCache::committed_master_slave(metareqid_t r, int from)
   dout(10) << "committed_master_slave mds." << from << " on " << r << dendl;
   assert(uncommitted_masters.count(r));
   uncommitted_masters[r].slaves.erase(from);
-  if (uncommitted_masters[r].slaves.empty())
+  if (!uncommitted_masters[r].recovering && uncommitted_masters[r].slaves.empty())
     log_master_commit(r);
 }
 
@@ -2191,20 +2191,20 @@ void MDCache::logged_master_update(metareqid_t reqid)
 }
 
 /*
- * The mds could crash after receiving all slaves' commit acknowledgement,
- * but before journalling the ECommitted.
+ * Master may crash after receiving all slaves' commit acks, but before journalling
+ * the final commit. Slaves may crash after journalling the slave commit, but before
+ * sending commit ack to the master. Commit masters with no uncommitted slave when
+ * resolve finishes.
  */
 void MDCache::finish_committed_masters()
 {
-  map<metareqid_t, umaster>::iterator p = uncommitted_masters.begin();
-  while (p != uncommitted_masters.end()) {
-    if (p->second.slaves.empty()) {
-      metareqid_t reqid = p->first;
-      dout(10) << "finish_committed_masters " << reqid << dendl;
-      ++p;
-      log_master_commit(reqid);
-    } else {
-      ++p;
+  for (map<metareqid_t, umaster>::iterator p = uncommitted_masters.begin();
+       p != uncommitted_masters.end();
+       ++p) {
+    p->second.recovering = false;
+    if (!p->second.committing && p->second.slaves.empty()) {
+      dout(10) << "finish_committed_masters " << p->first << dendl;
+      log_master_commit(p->first);
     }
   }
 }
@@ -2700,6 +2700,16 @@ void MDCache::handle_mds_failure(int who)
     }
   }
 
+  for (map<metareqid_t, umaster>::iterator p = uncommitted_masters.begin();
+       p != uncommitted_masters.end();
+       ++p) {
+    // The failed MDS may have already committed the slave update
+    if (p->second.slaves.count(who)) {
+      p->second.recovering = true;
+      p->second.slaves.erase(who);
+    }
+  }
+
   while (!finish.empty()) {
     dout(10) << "cleaning up slave request " << *finish.front() << dendl;
     request_finish(finish.front());
@@ -2959,17 +2969,18 @@ void MDCache::maybe_resolve_finish()
     dout(10) << "maybe_resolve_finish still waiting for resolves ("
 	     << resolve_gather << ")" << dendl;
     return;
+  }
+
+  dout(10) << "maybe_resolve_finish got all resolves+resolve_acks, done." << dendl;
+  disambiguate_imports();
+  finish_committed_masters();
+  if (mds->is_resolve()) {
+    trim_unlinked_inodes();
+    recalc_auth_bits();
+    trim_non_auth();
+    mds->resolve_done();
   } else {
-    dout(10) << "maybe_resolve_finish got all resolves+resolve_acks, done." << dendl;
-    disambiguate_imports();
-    if (mds->is_resolve()) {
-      trim_unlinked_inodes();
-      recalc_auth_bits();
-      trim_non_auth(); 
-      mds->resolve_done();
-    } else {
-      maybe_send_pending_rejoins();
-    }
+    maybe_send_pending_rejoins();
   }
 }
 
