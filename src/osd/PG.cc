@@ -4742,7 +4742,7 @@ void PG::scrub_finish() {
   }
 
 
-  if (scrubber.fixed) {
+  if (repair) {
     queue_peering_event(
       CephPeeringEvtRef(
 	new CephPeeringEvt(
