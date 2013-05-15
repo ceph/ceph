@@ -1098,18 +1098,39 @@ def main():
     if parsed_args.cephconf:
         conffile = parsed_args.cephconf
 
-    """
-    XXX need to handle watch here
+    if len(extraconf) == 0:
+        extraconf = None
+
+    try:
+        cluster = rados.Rados(rados_id=name, conf=extraconf, conffile=conffile)
+        cluster.connect()
+    except KeyboardInterrupt:
+        print >> sys.stderr, "connection aborted"
+        return 1
+
+    # implement -w/--watch_*
     # This is ugly, but Namespace() isn't quite rich enough.
-    # Handle any --watch or -w command by marking endless,
-    # passing on.
+    level = ''
     for k,v in parsed_args._get_kwargs():
         if k.startswith('watch') and v:
-            arg = '--' + k.replace('_', '-')
-            command.append(arg)
-            endless = True;
-            got_command = True
-    """
+            if k == 'watch':
+                level = 'info'
+            else:
+                level = k.replace('watch_', '')
+    if level:
+        def watch_cb(arg, line, who, stamp_sec, stamp_nsec, seq, level, msg):
+            # s = 'arg: {}\nline: {}\nwho: {}\nstamp_sec: {}\nstamp_nsec: {}\nseq: {}\n level: {}\nmsg: {}\n'.format(str(arg), line, who, stamp_sec, stamp_nsec, seq, level, msg)
+            # print >> sys.stderr, s
+            print >> sys.stderr, line
+
+        logwatch = rados.MonitorLog(cluster, level, watch_cb, 0)
+        # loop forever letting watch_cb print lines
+        while True:
+            try:
+                pass
+            except KeyboardInterrupt:
+                # or until ^C, at least
+                return 0
 
     # For now, --admin-daemon is handled as usual
     if parsed_args.admin_socket:
@@ -1126,9 +1147,6 @@ def main():
         else:
             print >> sys.stderr, 'Daemon requires at least 2 arguments'
             return 1
-
-    if len(extraconf) == 0:
-        extraconf = None
 
     # read input file, if any
     inbuf = ''
@@ -1147,9 +1165,6 @@ def main():
         except:
             print >> sys.stderr, 'Can\'t open output file {}: {}'.format(parsed_args.output_file, e)
             return 1
-
-    cluster = rados.Rados(rados_id=name, conf=extraconf, conffile=conffile)
-    cluster.connect()
 
     # fetch JSON sigs from command
     # each line contains one command signature (a placeholder name
