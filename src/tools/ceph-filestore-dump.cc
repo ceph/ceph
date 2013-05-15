@@ -623,10 +623,9 @@ int export_files(ObjectStore *store, coll_t coll)
 {
   vector<hobject_t> objects;
   hobject_t next;
-  int r = 0;
 
   while (!next.is_max()) {
-    r = store->collection_list_partial(coll, next, 200, 300, 0,
+    int r = store->collection_list_partial(coll, next, 200, 300, 0,
       &objects, &next);
     if (r < 0)
       return r;
