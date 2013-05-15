@@ -304,6 +304,55 @@ static int create_s3_policy(struct req_state *s, RGWRados *store, RGWAccessContr
   return s3policy.create_canned(s->owner, s->bucket_owner, s->canned_acl);
 }
 
+class RGWLocationConstraint : public XMLObj
+{
+public:
+  RGWLocationConstraint() {}
+  ~RGWLocationConstraint() {}
+  bool xml_end(const char *el) {
+    if (!el)
+      return false;
+
+    location_constraint = get_data();
+
+    return true;
+  }
+
+  string location_constraint;
+};
+
+class RGWCreateBucketConfig : public XMLObj
+{
+public:
+  RGWCreateBucketConfig() {}
+  ~RGWCreateBucketConfig() {}
+};
+
+class RGWCreateBucketParser : public RGWXMLParser
+{
+  XMLObj *alloc_obj(const char *el) {
+    return new XMLObj;
+  }
+
+public:
+  RGWCreateBucketParser() {}
+  ~RGWCreateBucketParser() {}
+
+  bool get_location_constraint(string& region) {
+    XMLObj *config = find_first("CreateBucketConfiguration");
+    if (!config)
+      return false;
+
+    XMLObj *constraint = config->find_first("LocationConstraint");
+    if (!constraint)
+      return false;
+
+    region = constraint->get_data();
+
+    return true;
+  }
+};
+
 int RGWCreateBucket_ObjStore_S3::get_params()
 {
   RGWAccessControlPolicy_S3 s3policy(s->cct);
@@ -313,6 +362,38 @@ int RGWCreateBucket_ObjStore_S3::get_params()
     return r;
 
   policy = s3policy;
+
+  int len;
+  char *data;
+#define CREATE_BUCKET_MAX_REQ_LEN (512 * 1024) /* this is way more than enough */
+  ret = rgw_rest_read_all_input(s, &data, &len, CREATE_BUCKET_MAX_REQ_LEN);
+  if (ret < 0)
+    return ret;
+
+  if (len) {
+    RGWCreateBucketParser parser;
+
+    if (!parser.init()) {
+      ldout(s->cct, 0) << "ERROR: failed to initialize parser" << dendl;
+      return -EIO;
+    }
+
+    bool success = parser.parse(data, len, 1);
+    ldout(s->cct, 20) << "create bucket input data=" << data << dendl;
+    free(data);
+
+    if (!success) {
+      ldout(s->cct, 0) << "failed to parse input: " << data << dendl;
+      return -EINVAL;
+    }
+
+    if (!parser.get_location_constraint(location_constraint)) {
+      ldout(s->cct, 0) << "provided input did not specify location constraint correctly" << dendl;
+      return -EINVAL;
+    }
+
+    ldout(s->cct, 10) << "create bucket location constraint: " << location_constraint << dendl;
+  }
 
   return 0;
 }
