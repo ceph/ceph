@@ -2230,6 +2230,7 @@ string KvFlatBtreeAsync::str() {
     all_sizes[indexer] = all_maps[indexer].size();
     all_versions[indexer] = aioc->get_version();
     indexer++;
+    aioc->release();
   }
 
   ret << "///////////////////OBJECT NAMES////////////////" << std::endl;
