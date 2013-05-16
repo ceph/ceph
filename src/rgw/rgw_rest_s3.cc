@@ -2486,6 +2486,7 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
   } /* if keystone_result < 0 */
 
   // populate the owner info
+  s->tenant = s->user.user_id.tenant;
   s->owner.set_id(s->user.user_id);
   s->owner.set_name(s->user.display_name);
 
