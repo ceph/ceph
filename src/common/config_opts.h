@@ -535,6 +535,7 @@ OPTION(journal_align_min_size, OPT_INT, 64 << 10)  // align data payloads >= thi
 OPTION(journal_replay_from, OPT_INT, 0)
 OPTION(journal_zero_on_create, OPT_BOOL, false)
 OPTION(journal_ignore_corruption, OPT_BOOL, false) // assume journal is not corrupt
+
 OPTION(rbd_cache, OPT_BOOL, false) // whether to enable caching (writeback unless rbd_cache_max_dirty is 0)
 OPTION(rbd_cache_writethrough_until_flush, OPT_BOOL, false) // whether to make writeback caching writethrough until flush is called, to be sure the user of librbd will send flushs so that writeback is safe
 OPTION(rbd_cache_size, OPT_LONGLONG, 32<<20)         // cache size in bytes
@@ -542,6 +543,28 @@ OPTION(rbd_cache_max_dirty, OPT_LONGLONG, 24<<20)    // dirty limit in bytes - s
 OPTION(rbd_cache_target_dirty, OPT_LONGLONG, 16<<20) // target dirty limit in bytes
 OPTION(rbd_cache_max_dirty_age, OPT_FLOAT, 1.0)      // seconds in cache before writeback starts
 OPTION(rbd_cache_block_writes_upfront, OPT_BOOL, false) // whether to block writes to the cache before the aio_write call completes (true), or block before the aio completion is called (false)
+
+/*
+ * The following options change the behavior for librbd's image creation methods that
+ * don't require all of the parameters. These are provided so that older programs
+ * can take advantage of newer features without being rewritten to use new versions
+ * of the image creation functions.
+ *
+ * rbd_create()/RBD::create() are affected by all of these options.
+ *
+ * rbd_create2()/RBD::create2() and rbd_clone()/RBD::clone() are affected by:
+ * - rbd_default_order
+ * - rbd_default_stripe_count
+ * - rbd_default_stripe_size
+ *
+ * rbd_create3()/RBD::create3() and rbd_clone2/RBD::clone2() are only
+ * affected by rbd_default_order.
+ */
+OPTION(rbd_default_format, OPT_INT, 1)
+OPTION(rbd_default_order, OPT_INT, 22)
+OPTION(rbd_default_stripe_count, OPT_U64, 1) // changing requires stripingv2 feature
+OPTION(rbd_default_stripe_unit, OPT_U64, 4194304) // changing to non-object size requires stripingv2 feature
+OPTION(rbd_default_features, OPT_INT, 3) // 1 for layering, 3 for layering+stripingv2. only applies to format 2 images
 
 OPTION(nss_db_path, OPT_STR, "") // path to nss db
 
