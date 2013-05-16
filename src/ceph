@@ -985,7 +985,8 @@ def json_command(prefix=None, argdict=None, inbuf=''):
                 ret, outbuf, outs = \
                     cluster.osd_command(osdid, json.dumps(cmddict), inbuf)
             else:
-                raise RuntimeError('Unhandled tell: {}'.format(targ.val))
+                ret, outbuf, outs = \
+                    cluster.mon_command(json.dumps(cmddict), inbuf)
         else:
             ret, outbuf, outs = cluster.mon_command(json.dumps(cmddict), inbuf)
     except Exception as e:
@@ -1203,7 +1204,9 @@ def main():
 
     ret, outbuf, outs = prevalidated_command(outbuf, inbuf, verbose)
 
-        sys.stderr.write('Error {}: {}'.format(ret, outs))
+    if ret < 0:
+        ret = -ret
+        print >> sys.stderr, 'Error {}: {}'.format(errno.errorcode[ret], outs)
         return ret
 
     if (parsed_args.output_file):
