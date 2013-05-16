@@ -1879,7 +1879,7 @@ void RGWRados::pick_control_oid(const string& key, string& notify_oid)
   notify_oid.append(buf);
 }
 
-int RGWRados::open_bucket_pool_ctx(const string& bucket_name, const string& pool, librados::IoCtx&  io_ctx)
+int RGWRados::open_bucket_pool_ctx(const string& tenant, const string& bucket_name, const string& pool, librados::IoCtx&  io_ctx)
 {
   librados::Rados *rad = get_rados_handle();
   int r = rad->ioctx_create(pool.c_str(), io_ctx);
@@ -7467,7 +7467,11 @@ int RGWRados::get_user_stats_async(const rgw_user& user, RGWGetUserStats_CB *ctx
 
 void RGWRados::get_bucket_instance_entry(rgw_bucket& bucket, string& entry)
 {
-  entry = bucket.name + ":" + bucket.bucket_id;
+  if (bucket.tenant.empty()) {
+    entry = bucket.name + ":" + bucket.bucket_id;
+  } else {
+    entry = bucket.tenant + ":" + bucket.name + ":" + bucket.bucket_id;
+  }
 }
 
 void RGWRados::get_bucket_meta_oid(rgw_bucket& bucket, string& oid)
@@ -7596,7 +7600,15 @@ int RGWRados::convert_old_bucket_info(RGWObjectCtx& obj_ctx, string& bucket_name
   return 0;
 }
 
-int RGWRados::get_bucket_info(RGWObjectCtx& obj_ctx, const string& bucket_name, RGWBucketInfo& info,
+struct bucket_info_entry {
+  RGWBucketInfo info;
+  time_t mtime;
+  map<string, bufferlist> attrs;
+};
+
+static RGWChainedCacheImpl<bucket_info_entry> binfo_cache;
+
+int RGWRados::get_bucket_info(RGWObjectCtx& obj_ctx, const string& tenant, const string& bucket_name, RGWBucketInfo& info,
                               time_t *pmtime, map<string, bufferlist> *pattrs)
 {
   bucket_info_entry e;
@@ -7615,7 +7627,7 @@ int RGWRados::get_bucket_info(RGWObjectCtx& obj_ctx, const string& bucket_name, 
   time_t ep_mtime;
   RGWObjVersionTracker ot;
   rgw_cache_entry_info entry_cache_info;
-  int ret = get_bucket_entrypoint_info(obj_ctx, bucket_name, entry_point, &ot, &ep_mtime, pattrs, &entry_cache_info);
+  int ret = get_bucket_entrypoint_info(obj_ctx, tenant, bucket_name, entry_point, &ot, &ep_mtime, pattrs, &entry_cache_info);
   if (ret < 0) {
     info.bucket.name = bucket_name; /* only init this field */
     return ret;
@@ -7624,6 +7636,7 @@ int RGWRados::get_bucket_info(RGWObjectCtx& obj_ctx, const string& bucket_name, 
   if (entry_point.has_bucket_info) {
     info = entry_point.old_bucket_info;
     info.bucket.oid = bucket_name;
+    info.bucket.tenant = tenant;
     info.ep_objv = ot.read_version;
     ldout(cct, 20) << "rgw_get_bucket_info: old bucket info, bucket=" << info.bucket << " owner " << info.owner << dendl;
     return 0;
@@ -7674,7 +7687,7 @@ int RGWRados::get_bucket_info(RGWObjectCtx& obj_ctx, const string& bucket_name, 
   return 0;
 }
 
-int RGWRados::put_bucket_entrypoint_info(const string& bucket_name, RGWBucketEntryPoint& entry_point,
+int RGWRados::put_bucket_entrypoint_info(const string& tenant, const string& bucket_name, RGWBucketEntryPoint& entry_point,
                                          bool exclusive, RGWObjVersionTracker& objv_tracker, time_t mtime,
                                          map<string, bufferlist> *pattrs)
 {
