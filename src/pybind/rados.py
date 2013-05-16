@@ -489,10 +489,8 @@ Rados object in state %s." % (self.state))
         ret = run_in_thread(self.librados.rados_mon_command,
                             (self.cluster, c_char_p(cmd), c_char_p(inbuf),
                             outbufp, byref(outbuflen), outsp, byref(outslen)))
-        if ret < 0:
-            raise make_ex(ret, "mon_command")
 
-        # copy returned memory
+        # copy returned memory (ctypes makes a copy, not a reference)
         my_outbuf = outbufp.contents[:(outbuflen.value)]
         my_outs = outsp.contents[:(outslen.value)]
 
@@ -517,8 +515,6 @@ Rados object in state %s." % (self.state))
                             (self.cluster, osdid, c_char_p(cmd),
                             c_char_p(inbuf),
                             outbufp, byref(outbuflen), outsp, byref(outslen)))
-        if ret == -errno.EINVAL:
-            raise make_ex(ret, "osd_command: invalid arg (osdid?)")
 
         # copy returned memory
         my_outbuf = outbufp.contents[:(outbuflen.value)]
@@ -545,9 +541,6 @@ Rados object in state %s." % (self.state))
                             (self.cluster, c_char_p(pgid), c_char_p(cmd),
                             c_char_p(inbuf),
                             outbufp, byref(outbuflen), outsp, byref(outslen)))
-
-        if ret == -errno.EINVAL:
-            raise make_ex(ret, "pg_command: invalid arg (pgid?)")
 
         # copy returned memory
         my_outbuf = outbufp.contents[:(outbuflen.value)]
