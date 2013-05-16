@@ -2550,6 +2550,24 @@ void Monitor::handle_command(MMonCommand *m)
     return;
   }
 
+  if (m->cmd[0] == "compact") {
+    if (!access_all) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
+    }
+    dout(10) << "triggering compaction" << dendl;
+    utime_t start = ceph_clock_now(g_ceph_context);
+    store->compact();
+    utime_t end = ceph_clock_now(g_ceph_context);
+    dout(10) << "finished compaction" << dendl;
+    end -= start;
+    ostringstream oss;
+    oss << "compacted leveldb in " << end;
+    rs = oss.str();
+    r = 0;
+  }
+
   if (m->cmd[0] == "injectargs") {
     if (!access_all) {
       r = -EACCES;
