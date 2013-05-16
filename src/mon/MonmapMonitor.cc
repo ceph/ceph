@@ -305,7 +305,7 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
       stringstream ss;
       MMonCommand *newm = new MMonCommand(m->fsid, m->version);
       newm->cmd.insert(newm->cmd.begin(), argvec.begin(), argvec.end());
-      mon->messenger->send_message(newm, mon->monmap->get_inst(whostr));
+      mon->messenger->send_message(newm, mon->monmap->get_inst(who));
       ss << "fw to mon." << whostr;
       r = 0;
     }
