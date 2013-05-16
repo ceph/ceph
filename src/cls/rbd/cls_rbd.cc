@@ -679,7 +679,7 @@ int set_stripe_unit_count(cls_method_context_t hctx, bufferlist *in, bufferlist 
     CLS_ERR("failed to read the order off of disk: %s", strerror(r));
     return r;
   }
-  if ((1ull << order) % stripe_unit) {
+  if ((1ull << order) % stripe_unit || stripe_unit > (1ull << order)) {
     CLS_ERR("stripe unit %llu is not a factor of the object size %llu",
             (unsigned long long)stripe_unit, 1ull << order);
     return -EINVAL;
