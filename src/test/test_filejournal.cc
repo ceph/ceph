@@ -52,8 +52,6 @@ public:
       cond.Wait(lock);
     //cout << "waited" << std::endl;
     lock.Unlock();
-    if (c)
-      delete c;
   }
 };
 
