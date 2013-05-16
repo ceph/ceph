@@ -1932,8 +1932,7 @@ void Locker::request_inode_file_caps(CInode *in)
     }
 
     int auth = in->authority().first;
-    if (in->is_rejoining() &&
-	mds->mdsmap->get_state(auth) == MDSMap::STATE_REJOIN) {
+    if (mds->mdsmap->get_state(auth) == MDSMap::STATE_REJOIN) {
       mds->wait_for_active_peer(auth, new C_MDL_RequestInodeFileCaps(this, in));
       return;
     }
@@ -1954,7 +1953,7 @@ void Locker::request_inode_file_caps(CInode *in)
 void Locker::handle_inode_file_caps(MInodeFileCaps *m)
 {
   // nobody should be talking to us during recovery.
-  assert(mds->is_rejoin() || mds->is_clientreplay() || mds->is_active() || mds->is_stopping());
+  assert(mds->is_clientreplay() || mds->is_active() || mds->is_stopping());
 
   // ok
   CInode *in = mdcache->get_inode(m->get_ino());
