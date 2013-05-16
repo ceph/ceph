@@ -80,6 +80,8 @@ def tweak_ssh_config(ctx, config):
                 run.Raw('/dev/null'),
                 run.Raw('>>'),
                 run.Raw('/home/ubuntu/.ssh/config'),
+                run.Raw('&&'),
+                run.Raw('chmod 600 /home/ubuntu/.ssh/config'),
             ],
             wait=False,
         )
