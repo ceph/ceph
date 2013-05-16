@@ -345,6 +345,7 @@ namespace librbd {
       ictx->data_ctx.aio_operate(oid, rados_completion, &op);
       ldout(cct, 10) << "scheduling selfmanaged_snap_rollback on "
 		     << oid << " to " << snap_id << dendl;
+      rados_completion->release();
       prog_ctx.update_progress(i * bsize, numseg * bsize);
     }
 
