@@ -2,23 +2,25 @@
  Monitor Config Reference
 ==========================
 
-Understanding how to configure a Ceph monitor is an important part of building a
-reliable Ceph cluster. **All Ceph clusters have at least one monitor**. A
-monitor configuration usually remains fairly consistent, but you can add,
-remove or replace a monitor in a cluster. See `Adding/Removing a Monitor`_
-for details.
+Understanding how to configure a :term:`Ceph Monitor` is an important part of
+building a reliable :term:`Ceph Storage Cluster`. **All Ceph Storage Clusters
+have at least one monitor**. A monitor configuration usually remains fairly
+consistent, but you can add, remove or replace a monitor in a cluster. See
+`Adding/Removing a Monitor`_ and `Add/Remove a Monitor (ceph-deploy)`_ for
+details.
+
 
 Background
 ==========
 
-Monitors maintain a "master copy" of the cluster map, which means a client can
-determine the location of all monitors, OSDs, and metadata servers just by
-connecting to one monitor and retrieving a current cluster map. Before Ceph
-clients can read from or write to OSDs or metadata servers, they must connect to
-a monitor first. With a current copy of the cluster map and the CRUSH algorithm,
-a client can compute the location for any object. The ability to compute object
-locations allows a client to talk directly to OSDs, which is a very important
-aspect of Ceph's high scalability and performance.
+Monitors maintain a "master copy" of the :term:`cluster map`, which means a
+client can determine the location of all monitors, OSDs, and metadata servers
+just by connecting to one monitor and retrieving a current cluster map. Before
+Ceph clients can read from or write to OSDs or metadata servers, they must
+connect to a monitor first. With a current copy of the cluster map and the CRUSH
+algorithm, a client can compute the location for any object. The ability to
+compute object locations allows a client to talk directly to OSDs, which is a
+very important aspect of Ceph's high scalability and performance.
 
 The primary role of the monitor is to maintain a master copy of the cluster map.
 Monitors also provide authentication and logging services. Ceph monitors write
@@ -80,6 +82,7 @@ When operating your cluster, keeping track of these states is an important
 part of your system administration duties. See `Monitoring a Cluster`_ and
 `Monitoring OSDs and PGs`_ for details.
 
+.. index:: high availability, quorum
 
 Monitor Quorum
 --------------
@@ -96,6 +99,7 @@ When a cluster runs multiple monitors for high availability, Ceph monitors use
 requires a majority of monitors running to establish a quorum for consensus
 about the cluster map (e.g., 1; 2 out of 3; 3 out of 5; 4 out of 6; etc.).
 
+.. index:: monitor map, cluster map
 
 Consistency
 -----------
@@ -789,6 +793,7 @@ Miscellaneous
 .. _Network Configuration Reference: ../network-config-ref
 .. _ACID: http://en.wikipedia.org/wiki/ACID
 .. _Adding/Removing a Monitor: ../../operations/add-or-rm-mons
+.. _Add/Remove a Monitor (ceph-deploy): ../../deployment/ceph-deploy-mon
 .. _Monitoring a Cluster: ../../operations/monitoring
 .. _Monitoring OSDs and PGs: ../../operations/monitoring-osd-pg
 .. _Bootstrapping a Monitor: ../../../dev/mon-bootstrap
