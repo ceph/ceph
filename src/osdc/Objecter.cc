@@ -499,8 +499,6 @@ void Objecter::handle_osd_map(MOSDMap *m)
   list<LingerOp*> need_resend_linger;
   map<tid_t, Op*> need_resend;
 
-  bool skipped_map = false;
-
   if (m->get_last() <= osdmap->get_epoch()) {
     ldout(cct, 3) << "handle_osd_map ignoring epochs [" 
             << m->get_first() << "," << m->get_last() 
@@ -513,6 +511,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
             << dendl;
 
     if (osdmap->get_epoch()) {
+      bool skipped_map = false;
       // we want incrementals
       for (epoch_t e = osdmap->get_epoch() + 1;
 	   e <= m->get_last();

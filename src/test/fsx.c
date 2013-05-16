@@ -348,19 +348,18 @@ report_failure(int status)
 void
 check_buffers(unsigned offset, unsigned size)
 {
-	unsigned char c, t;
-	unsigned i = 0;
-	unsigned n = 0;
-	unsigned op = 0;
-	unsigned bad = 0;
-
 	if (memcmp(good_buf + offset, temp_buf, size) != 0) {
+		unsigned i = 0;
+		unsigned n = 0;
+		unsigned op = 0;
+		unsigned bad = 0;
+
 		prt("READ BAD DATA: offset = 0x%x, size = 0x%x\n",
 		    offset, size);
 		prt("OFFSET\tGOOD\tBAD\tRANGE\n");
 		while (size > 0) {
-			c = good_buf[offset];
-			t = temp_buf[i];
+			char c = good_buf[offset];
+			char t = temp_buf[i];
 			if (c != t) {
 				if (n == 0) {
 					bad = short_at(&temp_buf[i]);
@@ -781,7 +780,6 @@ docloseopen(void)
 void
 test(void)
 {
-	unsigned long	offset;
 	unsigned long	size = maxoplen;
 	unsigned long	rv = random();
 	unsigned long	op = rv % (3 + !lite + mapped_writes);
@@ -820,7 +818,7 @@ test(void)
 		if (lite ? 0 : op == 3)
 			dotruncate(size);
 		else {
-			offset = random();
+			int offset = random();
 			if (op == 1 || op == (lite ? 3 : 4)) {
 				offset %= maxfilelen;
 				if (offset + size > maxfilelen)

@@ -6005,7 +6005,6 @@ void OSD::handle_pg_remove(OpRequestRef op)
 
 void OSD::_remove_pg(PG *pg)
 {
-  vector<coll_t> removals;
   ObjectStore::Transaction *rmt = new ObjectStore::Transaction;
 
   // on_removal, which calls remove_watchers_and_notifies, and the erasure from
