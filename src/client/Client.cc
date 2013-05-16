@@ -7956,13 +7956,6 @@ int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
   req->set_inode(dir);
 
   res = make_request(req, uid, gid);
-  if (res == 0) {
-    if (dir->dir && dir->dir->dentries.count(name)) {
-      Dentry *dn = dir->dir->dentries[name];
-      unlink(dn, false, false);
-    }
-  }
-  ldout(cct, 10) << "unlink result is " << res << dendl;
 
   trim_cache();
   ldout(cct, 3) << "unlink(" << path << ") = " << res << dendl;
@@ -8018,15 +8011,6 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
   req->set_inode(in);
 
   res = make_request(req, uid, gid);
-  if (res == 0) {
-    if (dir->dir && dir->dir->dentries.count(name) ) {
-      Dentry *dn = dir->dir->dentries[name];
-      if (dn->inode->dir && dn->inode->dir->is_empty() &&
-	  (dn->inode->dn_set.size() == 1))
-	close_dir(dn->inode->dir);  // FIXME: maybe i shoudl proactively hose the whole subtree from cache?
-      unlink(dn, false, false);
-    }
-  }
 
   trim_cache();
   ldout(cct, 3) << "rmdir(" << path << ") = " << res << dendl;
