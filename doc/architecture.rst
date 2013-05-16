@@ -99,6 +99,7 @@ The following sections provide additional details on how CRUSH works. For a
 detailed discussion of CRUSH, see `CRUSH - Controlled, Scalable, Decentralized
 Placement of Replicated Data`_.
 
+.. index:: cluster map
 
 Cluster Map
 ~~~~~~~~~~~
@@ -138,6 +139,7 @@ Each map maintains an iterative history of its operating state changes. Ceph
 Monitors maintain a master copy of the cluster map including the cluster
 members, state, changes, and the overall health of the Ceph Storage Cluster.
 
+.. index:: high availability
 
 High Availability Monitors
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -158,6 +160,7 @@ current state of the cluster.
 
 For details on configuring monitors, see the `Monitor Config Reference`_.
 
+.. index:: high availability
 
 High Availability Authentication
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -272,7 +275,7 @@ intelligent Ceph OSD Daemon. Let's take a deeper look at how CRUSH works to
 enable modern cloud storage infrastructures to place data, rebalance the cluster
 and recover from faults dynamically.
 
-.. index:: pool, pools
+.. index:: pool
 
 About Pools
 ~~~~~~~~~~~
@@ -385,7 +388,7 @@ Hashing)` algorithm allows a client to compute where objects *should* be stored,
 and enables the client to contact the primary OSD to store or retrieve the
 objects.
 
-.. index:: PG Peering, PG Sets
+.. index:: PG Peering; PG Sets
 
 Peering and Sets
 ~~~~~~~~~~~~~~~~
@@ -487,7 +490,7 @@ disk that weren't apparent in a light scrub.
 See `Data Scrubbing`_ for details on configuring scrubbing.
 
 
-.. index:: Ceph Classes, RADOS classes
+.. index:: Ceph Classes; RADOS classes
 
 Extending Ceph
 --------------
@@ -530,7 +533,7 @@ power of the OSDs to perform the work. When referring to `Hardware
 Recommendations`_ and the `Network Config Reference`_,  be cognizant of the
 foregoing concepts to understand how Ceph utilizes computing resources.
 
-.. index:: RADOS Protocol, librados
+.. index:: RADOS Protocol; librados
 
 Ceph Protocol
 =============
@@ -571,7 +574,7 @@ provides direct, parallel access to objects throughout the cluster.
 - Object Classes
 
 
-.. index:: watch, notify, watch/notify, object watch/notify
+.. index:: watch; notify; watch/notify; object watch/notify
 
 Object Watch/Notify
 -------------------
@@ -850,7 +853,7 @@ architecture.
             +---------------+ +---------------+ +---------------+
 
 
-.. index:: S3, Swift, Ceph Object Storage, RADOS Gateway, radosgw
+.. index:: S3; Swift; Ceph Object Storage; RADOS Gateway; radosgw
 
 Ceph Object Storage
 -------------------
@@ -876,7 +879,7 @@ another application.
 See `Ceph Object Storage`_ for details.
 
 
-.. index:: Ceph Block Device, block device, RBD, Rados Block Device
+.. index:: Ceph Block Device; block device; RBD; Rados Block Device
 
 Ceph Block Device
 -----------------
@@ -903,7 +906,7 @@ client. Other virtualization technologies such as Xen can access the Ceph Block
 Device kernel object(s). This is done with the  command-line tool ``rbd``.
 
 
-.. index:: Ceph FS, Ceph Filesystem, libcephfs, MDS, metadata server, ceph-mds
+.. index:: Ceph FS; Ceph Filesystem; libcephfs; MDS; metadata server; ceph-mds
 
 Ceph Filesystem
 ---------------
