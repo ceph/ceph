@@ -2,6 +2,8 @@
  Recovering from Monitor Failures
 ==================================
 
+.. index:: monitor, high availability
+
 In production clusters, we recommend running the cluster with a minimum
 of three monitors. The failure of a single monitor should not take down
 the entire monitor cluster, provided a majority of the monitors remain
@@ -50,3 +52,21 @@ that clients can access the ports associated with your Ceph monitors (i.e., port
 
 	iptables -A INPUT -m multiport -p tcp -s {ip-address}/{netmask} --dports 6789,6800:6810 -j ACCEPT
  
+
+Latency with Down Monitors
+==========================
+
+When you have a monitor that is down, you may experience some latency as
+clients will try to connect to a monitor in the configuration even though
+it is down. If the client fails to connect to the monitor within a timeout 
+window, the client will try another monitor in the cluster.
+
+You can also specify the ``-m`` option to point to a monitor that is up
+and in the quorum to avoid latency.
+
+
+
+
+
+
+=
