@@ -1054,9 +1054,9 @@ void PGMonitor::dump_fs_stats(stringstream &ss, Formatter *f, bool verbose)
     if (verbose) {
       tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::LEFT);
     }
-    tbl << stringify(si_t(pg_map.osd_sum.kb))
-        << stringify(si_t(pg_map.osd_sum.kb_avail))
-        << stringify(si_t(pg_map.osd_sum.kb_used));
+    tbl << stringify(si_t(pg_map.osd_sum.kb*1024))
+        << stringify(si_t(pg_map.osd_sum.kb_avail*1024))
+        << stringify(si_t(pg_map.osd_sum.kb_used*1024));
     tbl << percentify(((float)pg_map.osd_sum.kb_used / pg_map.osd_sum.kb)*100);
     if (verbose) {
       tbl << stringify(si_t(pg_map.pg_sum.stats.sum.num_objects));
