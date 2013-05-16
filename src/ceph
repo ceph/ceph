@@ -973,7 +973,8 @@ def json_command(prefix=None, argdict=None, inbuf=''):
 
     try:
         if cmddict['prefix'] == 'pg' and cmddict.has_key('pgid'):
-            pgid = cmddict.pop('pgid')
+            # leave it in cmddict for the OSD to use too
+            pgid = cmddict['pgid']
             ret, outbuf, outs = \
                 cluster.pg_command(pgid, json.dumps(cmddict), inbuf)
         elif cmddict['prefix'] == 'tell' and cmddict.has_key('target'):
