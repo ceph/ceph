@@ -2221,7 +2221,8 @@ void FileStore::_close_replay_guard(coll_t cid,
   get_cdir(cid, fn, sizeof(fn));
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
-    derr << "_set_replay_guard " << cid << " error " << fd << dendl;
+    int err = errno;
+    derr << "_set_replay_guard " << cid << " error " << cpp_strerror(err) << dendl;
     assert(0 == "_close_replay_guard failed");
   }
   _close_replay_guard(fd, spos);
