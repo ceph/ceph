@@ -81,6 +81,8 @@ namespace librbd {
   int list_children(ImageCtx *ictx,
 		    std::set<pair<std::string, std::string> > & names);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
+	     int *order);
+  int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     bool old_format, uint64_t features, int *order,
 	     uint64_t stripe_unit, uint64_t stripe_count);
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,

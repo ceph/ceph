@@ -788,6 +788,15 @@ reprotect_and_return_err:
     return r;
   }
 
+  int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
+	     int *order)
+  {
+    CephContext *cct = (CephContext *)io_ctx.cct();
+    bool old_format = cct->_conf->rbd_default_format == 1;
+    uint64_t features = old_format ? 0 : cct->_conf->rbd_default_features;
+    return create(io_ctx, imgname, size, old_format, features, order, 0, 0);
+  }
+
   int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     bool old_format, uint64_t features, int *order,
 	     uint64_t stripe_unit, uint64_t stripe_count)
@@ -820,6 +829,11 @@ reprotect_and_return_err:
     if (!order)
       return -EINVAL;
 
+    if (!*order)
+      *order = cct->_conf->rbd_default_order;
+    if (!*order)
+      *order = RBD_DEFAULT_OBJ_ORDER;
+
     if (*order && (*order > 64 || *order < 12)) {
       lderr(cct) << "order must be in the range [12, 64]" << dendl;
       return -EDOM;
@@ -827,8 +841,12 @@ reprotect_and_return_err:
 
     uint64_t bid = rbd_assign_bid(io_ctx);
 
-    if (!*order)
-      *order = RBD_DEFAULT_OBJ_ORDER;
+    // if striping is enabled, use possibly custom defaults
+    if (!old_format && (features & RBD_FEATURE_STRIPINGV2) &&
+	!stripe_unit && !stripe_count) {
+      stripe_unit = cct->_conf->rbd_default_stripe_unit;
+      stripe_count = cct->_conf->rbd_default_stripe_count;
+    }
 
     // normalize for default striping
     if (stripe_unit == (1ull << *order) && stripe_count == 1) {
@@ -940,7 +958,8 @@ reprotect_and_return_err:
     if (!order)
       order = p_imctx->order;
 
-    r = create(c_ioctx, c_name, size, false, features, &order, stripe_unit, stripe_count);
+    r = create(c_ioctx, c_name, size, false, features, &order,
+	       stripe_unit, stripe_count);
     if (r < 0) {
       lderr(cct) << "error creating child: " << cpp_strerror(r) << dendl;
       goto err_close_parent;
