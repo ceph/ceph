@@ -58,7 +58,6 @@ public:
 
   int run(void)
   {
-    int ret;
     rados_t cl;
     RETURN1_IF_NONZERO(rados_create(&cl, NULL));
     rados_conf_parse_argv(cl, m_argc, m_argv);
@@ -94,7 +93,7 @@ public:
       }
       std::string oid(d->second);
       to_delete.erase(d);
-      ret = rados_remove(io_ctx, oid.c_str());
+      int ret = rados_remove(io_ctx, oid.c_str());
       if (ret != 0) {
 	printf("%s: rados_remove(%s) failed with error %d\n",
 	       get_id_str(), oid.c_str(), ret);
@@ -139,7 +138,6 @@ public:
 
   int run(void)
   {
-    int ret;
     rados_t cl;
     RETURN1_IF_NONZERO(rados_create(&cl, NULL));
     rados_conf_parse_argv(cl, m_argc, m_argv);
@@ -177,7 +175,7 @@ public:
       to_add.erase(d);
 
       std::string buf(StRadosCreatePool::get_random_buf(256));
-      ret = rados_write(io_ctx, oid.c_str(), buf.c_str(), buf.size(), 0);
+      int ret = rados_write(io_ctx, oid.c_str(), buf.c_str(), buf.size(), 0);
       if (ret != (int)buf.size()) {
 	printf("%s: rados_write(%s) failed with error %d\n",
 	       get_id_str(), oid.c_str(), ret);

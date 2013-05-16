@@ -1135,9 +1135,8 @@ void LFNIndex::build_filename(const char *old_filename, int i, char *filename, i
 
   hash_filename(old_filename, hash, sizeof(hash));
   int ofs = FILENAME_PREFIX_LEN;
-  int suffix_len;
   while (1) {
-    suffix_len = sprintf(filename + ofs, "_%s_%d_%s", hash, i, FILENAME_COOKIE.c_str());
+    int suffix_len = sprintf(filename + ofs, "_%s_%d_%s", hash, i, FILENAME_COOKIE.c_str());
     if (ofs + suffix_len <= FILENAME_SHORT_LEN || !ofs)
       break;
     ofs--;

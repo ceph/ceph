@@ -275,7 +275,6 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
     return ret;
 
   obj.bucket = bucket;
-  int max = 1000;
 
   ret = rgw_get_obj(store, NULL, store->zone.domain_root,\
            bucket.name, bl, NULL);
@@ -289,6 +288,7 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
   }
 
   if (delete_children) {
+    int max = 1000;
     ret = store->list_objects(bucket, max, prefix, delim, marker,\
             objs, common_prefixes,\
             false, ns, (bool *)false, NULL);
