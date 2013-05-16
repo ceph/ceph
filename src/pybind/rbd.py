@@ -653,6 +653,26 @@ class Image(object):
 returned %d, but %d was the maximum number of bytes it could have \
 written." % (self.name, ret, length))
 
+    def stripe_unit(self):
+        """
+        Returns the stripe unit used for the image.
+        """
+        stripe_unit = c_uint64()
+        ret = self.librbd.rbd_get_stripe_unit(self.image, byref(stripe_unit))
+        if ret != 0:
+            raise make_ex(ret, 'error getting stripe unit for image' % (self.name))
+        return stripe_unit.value
+
+    def stripe_count(self):
+        """
+        Returns the stripe count used for the image.
+        """
+        stripe_count = c_uint64()
+        ret = self.librbd.rbd_get_stripe_count(self.image, byref(stripe_count))
+        if ret != 0:
+            raise make_ex(ret, 'error getting stripe count for image' % (self.name))
+        return stripe_count.value
+
     def flatten(self):
         """
         Flatten clone image (copy all blocks from parent to child)
