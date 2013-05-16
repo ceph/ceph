@@ -5653,9 +5653,11 @@ void MDCache::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
 
   if (r != 0) {
     dout(0) << "recovery error! " << r << dendl;
-    if (r == -EBLACKLISTED)
+    if (r == -EBLACKLISTED) {
       mds->suicide();
-    assert(0);
+      return;
+    }
+    assert(0 == "unexpected error from osd during recovery");
   }
 
   file_recovering.erase(in);
