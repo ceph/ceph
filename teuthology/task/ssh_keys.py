@@ -8,7 +8,6 @@ from cStringIO import StringIO
 from teuthology import contextutil
 import teuthology.misc as misc
 from ..orchestra import run
-from ..orchestra.connection import create_key
 
 log = logging.getLogger(__name__)
 ssh_keys_user = 'ssh-keys-user'
@@ -71,9 +70,15 @@ def tweak_ssh_config(ctx, config):
     run.wait(
         ctx.cluster.run(
             args=[
-                'echo', 
-                'StrictHostKeyChecking no\n', 
-                run.Raw('>'), 
+                'echo',
+                'StrictHostKeyChecking no\n',
+                run.Raw('>'),
+                run.Raw('/home/ubuntu/.ssh/config'),
+                run.Raw('&&'),
+                'echo',
+                'UserKnownHostsFile ',
+                run.Raw('/dev/null'),
+                run.Raw('>>'),
                 run.Raw('/home/ubuntu/.ssh/config'),
             ],
             wait=False,
@@ -164,9 +169,9 @@ def task(ctx, config):
     pre_run_cleanup_keys(ctx)
 
     with contextutil.nested(
+        lambda: tweak_ssh_config(ctx, config),
         lambda: push_keys_to_host(ctx, config, public_key_string, private_key_string),
-        lambda: tweak_ssh_config(ctx, config),   
-
+        #lambda: tweak_ssh_config(ctx, config),
         ):
         yield
 
