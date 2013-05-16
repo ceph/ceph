@@ -99,9 +99,8 @@ static void build_filename(char *filename, int len, const char *old_filename, in
 
   hash_filename(old_filename, hash, sizeof(hash));
   int ofs = FILENAME_PREFIX_LEN;
-  int suffix_len;
   while (1) {
-    suffix_len = sprintf(filename + ofs, "_%s_%d_" FILENAME_COOKIE, hash, i);
+    int suffix_len = sprintf(filename + ofs, "_%s_%d_" FILENAME_COOKIE, hash, i);
     if (ofs + suffix_len <= FILENAME_SHORT_LEN || !ofs)
       break;
     ofs--;

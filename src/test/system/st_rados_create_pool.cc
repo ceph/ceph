@@ -79,7 +79,6 @@ run()
   }
 
   RETURN1_IF_NONZERO(rados_connect(cl));
-  int ret;
 
   printf("%s: creating pool %s\n", get_id_str(), m_pool_name.c_str());
   rados_pool_create(cl, m_pool_name.c_str());
@@ -90,7 +89,7 @@ run()
     char oid[128];
     snprintf(oid, sizeof(oid), "%d%s", i, m_suffix.c_str());
     std::string buf(get_random_buf(256));
-    ret = rados_write(io_ctx, oid, buf.c_str(), buf.size(), 0);
+    int ret = rados_write(io_ctx, oid, buf.c_str(), buf.size(), 0);
     if (ret < static_cast<int>(buf.size())) {
       printf("%s: rados_write error %d\n", get_id_str(), ret);
       return ret;

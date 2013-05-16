@@ -168,10 +168,10 @@ join()
 std::string SysTestRunnable::
 run_until_finished(std::vector < SysTestRunnable * > &runnables)
 {
-  int ret, index = 0;
+  int index = 0;
   for (std::vector < SysTestRunnable * >::const_iterator r = runnables.begin();
       r != runnables.end(); ++r) {
-    ret = (*r)->start();
+    int ret = (*r)->start();
     if (ret) {
       ostringstream oss;
       oss << "run_until_finished: got error " << ret

@@ -621,11 +621,10 @@ int DBObjectMap::merge_new_complete(Header header,
   map<string, bufferlist> to_add;
 
   string begin, end;
-  int r = 0;
   while (i != new_complete.end()) {
     string new_begin = i->first;
     string new_end = i->second;
-    r = iter->in_complete_region(new_begin, &begin, &end);
+    int r = iter->in_complete_region(new_begin, &begin, &end);
     if (r < 0)
       return r;
     if (r) {
@@ -711,11 +710,10 @@ int DBObjectMap::rm_keys(const hobject_t &hoid,
     iter->seek_to_first();
     map<string, string> new_complete;
     map<string, bufferlist> to_write;
-    unsigned copied = 0;
     for(set<string>::const_iterator i = to_clear.begin();
 	i != to_clear.end();
       ) {
-      copied = 0;
+      unsigned copied = 0;
       iter->lower_bound(*i);
       ++i;
       if (!iter->valid())

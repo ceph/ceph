@@ -1151,7 +1151,6 @@ next:
   }
 
   if (opt_cmd == OPT_GC_LIST) {
-    int ret;
     int index = 0;
     string marker;
     bool truncated;
@@ -1159,7 +1158,7 @@ next:
 
     do {
       list<cls_rgw_gc_obj_info> result;
-      ret = store->list_gc_objs(&index, marker, 1000, result, &truncated);
+      int ret = store->list_gc_objs(&index, marker, 1000, result, &truncated);
       if (ret < 0) {
 	cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret) << std::endl;
 	return 1;

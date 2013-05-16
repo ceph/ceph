@@ -217,7 +217,7 @@ TEST(LibRBD, ResizeAndStatPP)
 int test_ls(rados_ioctx_t io_ctx, size_t num_expected, ...)
 {
   int num_images, i, j;
-  char *expected, *names, *cur_name;
+  char *names, *cur_name;
   va_list ap;
   size_t max_size = 1024;
 
@@ -232,7 +232,7 @@ int test_ls(rados_ioctx_t io_ctx, size_t num_expected, ...)
 
   va_start(ap, num_expected);
   for (i = num_expected; i > 0; i--) {
-    expected = va_arg(ap, char *);
+    char *expected = va_arg(ap, char *);
     printf("expected = %s\n", expected);
     int found = 0;
     for (j = 0, cur_name = names; j < num_images; j++) {
@@ -288,7 +288,6 @@ int test_ls_pp(librbd::RBD& rbd, librados::IoCtx& io_ctx, size_t num_expected, .
 {
   int r;
   size_t i;
-  char *expected;
   va_list ap;
   vector<string> names;
   r = rbd.list(io_ctx, names);
@@ -305,7 +304,7 @@ int test_ls_pp(librbd::RBD& rbd, librados::IoCtx& io_ctx, size_t num_expected, .
 
   va_start(ap, num_expected);
   for (i = num_expected; i > 0; i--) {
-    expected = va_arg(ap, char *);
+    char *expected = va_arg(ap, char *);
     cout << "expected = " << expected << endl;
     vector<string>::iterator listed_name = find(names.begin(), names.end(), string(expected));
     assert(listed_name != names.end());
@@ -430,8 +429,7 @@ TEST(LibRBD, TestCopyPP)
 int test_ls_snaps(rbd_image_t image, int num_expected, ...)
 {
   rbd_snap_info_t *snaps;
-  int num_snaps, i, j, expected_size, max_size = 10;
-  char *expected;
+  int num_snaps, i, j, max_size = 10;
   va_list ap;
   snaps = (rbd_snap_info_t *) malloc(sizeof(rbd_snap_info_t *) * 10);
   num_snaps = rbd_snap_list(image, snaps, &max_size);
@@ -443,8 +441,8 @@ int test_ls_snaps(rbd_image_t image, int num_expected, ...)
 
   va_start(ap, num_expected);
   for (i = num_expected; i > 0; i--) {
-    expected = va_arg(ap, char *);
-    expected_size = va_arg(ap, int);
+    char *expected = va_arg(ap, char *);
+    int expected_size = va_arg(ap, int);
     int found = 0;
     for (j = 0; j < num_snaps; j++) {
       if (snaps[j].name == NULL)
@@ -506,8 +504,7 @@ TEST(LibRBD, TestCreateLsDeleteSnap)
 int test_ls_snaps(librbd::Image& image, size_t num_expected, ...)
 {
   int r;
-  size_t i, j, expected_size;
-  char *expected;
+  size_t i, j;
   va_list ap;
   vector<librbd::snap_info_t> snaps;
   r = image.snap_list(snaps);
@@ -521,8 +518,8 @@ int test_ls_snaps(librbd::Image& image, size_t num_expected, ...)
 
   va_start(ap, num_expected);
   for (i = num_expected; i > 0; i--) {
-    expected = va_arg(ap, char *);
-    expected_size = va_arg(ap, int);
+    char *expected = va_arg(ap, char *);
+    size_t expected_size = va_arg(ap, int);
     int found = 0;
     for (j = 0; j < snaps.size(); j++) {
       if (snaps[j].name == "")

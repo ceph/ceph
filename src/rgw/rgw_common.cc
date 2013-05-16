@@ -734,9 +734,8 @@ int RGWUserCaps::remove_cap(const string& cap)
 int RGWUserCaps::add_from_string(const string& str)
 {
   int start = 0;
-  int end;
   do {
-    end = str.find(';', start);
+    int end = str.find(';', start);
     if (end < 0)
       end = str.size();
 
@@ -753,9 +752,8 @@ int RGWUserCaps::add_from_string(const string& str)
 int RGWUserCaps::remove_from_string(const string& str)
 {
   int start = 0;
-  int end;
   do {
-    end = str.find(';', start);
+    int end = str.find(';', start);
     if (end < 0)
       end = str.size();
 
