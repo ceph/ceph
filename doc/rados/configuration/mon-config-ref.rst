@@ -58,6 +58,7 @@ perform store-wide synchronization.
 In Ceph versions 0.58 and earlier, Ceph monitors use a Paxos instance for
 each service and store the map as a file. 
 
+.. index:: cluster map
 
 Cluster Maps
 ------------
