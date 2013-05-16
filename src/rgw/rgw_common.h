@@ -587,6 +587,7 @@ struct RGWUserInfo
 WRITE_CLASS_ENCODER(RGWUserInfo)
 
 struct rgw_bucket {
+  std::string tenant;
   std::string name;
   std::string data_pool;
   std::string data_extra_pool; /* if not set, then we should use data_pool instead */
@@ -624,18 +625,21 @@ struct rgw_bucket {
     b->bucket_id = bucket_id;
   }
 
+  rgw_bucket(const char *t, const char *n, const char *p, const char *m, const char *id) :
+    tenant(t), name(n), pool(p), marker(m), bucket_id(id) {}
   void encode(bufferlist& bl) const {
-     ENCODE_START(7, 3, bl);
+     ENCODE_START(8, 3, bl);
     ::encode(name, bl);
     ::encode(data_pool, bl);
     ::encode(marker, bl);
     ::encode(bucket_id, bl);
     ::encode(index_pool, bl);
     ::encode(data_extra_pool, bl);
+    ::encode(tenant, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
     ::decode(name, bl);
     ::decode(data_pool, bl);
     if (struct_v >= 2) {
@@ -657,6 +661,9 @@ struct rgw_bucket {
     }
     if (struct_v >= 7) {
       ::decode(data_extra_pool, bl);
+    }
+    if (struct_v >= 8) {
+      ::decode(tenant, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -1060,6 +1067,7 @@ struct req_state {
    bool has_bad_meta;
 
    RGWUserInfo user; 
+   string tenant;
    RGWAccessControlPolicy *bucket_acl;
    RGWAccessControlPolicy *object_acl;
 
