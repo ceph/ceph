@@ -734,21 +734,24 @@ def parse_cmdargs(args=None, usage='', epilog='', add_help=True):
                         help='keyring file')
     parser.add_argument('--admin-daemon', dest='admin_socket',
                         help='submit admin-socket commands (\"help\" for help')
-    parser.add_argument('-s', '--status', action='store_true', help='show cluster status')
-    parser.add_argument('-w', '--watch', action='store_true', help='watch live cluster changes')
+    parser.add_argument('-s', '--status', action='store_true',
+                        help='show cluster status')
+    parser.add_argument('-w', '--watch', action='store_true',
+                        help='watch live cluster changes')
     parser.add_argument('--watch-debug', action='store_true',
                         help='watch debug events')
     parser.add_argument('--watch-info', action='store_true',
                         help='watch info events')
     parser.add_argument('--watch-sec', action='store_true',
-                        help='watch sec events')
+                        help='watch security events')
     parser.add_argument('--watch-warn', action='store_true',
                         help='watch warn events')
     parser.add_argument('--watch-error', action='store_true',
                         help='watch error events')
     parser.add_argument('-v', '--verbose', action="store_true")
     parser.add_argument('--concise')
-    parser.add_argument('-f', '--format', choices=['json', 'json-pretty', 'xml', 'xml-pretty', 'plain'], dest='output_format')
+    parser.add_argument('-f', '--format', choices=['json', 'json-pretty',
+                        'xml', 'xml-pretty', 'plain'], dest='output_format')
     # for pg dump_stuck
     parser.add_argument('--threshold', type=int, help='number of seconds for a pg to be considered stuck for pg dump_stuck')
     # returns a Namespace with the parsed args, and a list of all extras
@@ -951,12 +954,23 @@ def validate_command(parsed_args, sigdict, args):
         return valid_dict
 
 def json_command(prefix=None, argdict=None, inbuf=''):
+    """
+    Send a prevalidated command to a daemon using librados's
+    mon_command, osd_command, or pg_command.  Prefix may be supplied
+    separately or in argdict.  Any bulk input data comes in inbuf.
+    Returns (ret, outbuf, outs); ret is the return code, outbuf is
+    the outbl "bulk useful output" buffer, and outs is any status
+    or error message (intended for stderr).
+    """
     global cluster
     cmddict = {}
     if prefix:
         cmddict.update({'prefix':prefix})
     if argdict:
         cmddict.update(argdict)
+    # make sure it's set for error reporting
+    prefix = cmddict['prefix']
+
     try:
         if cmddict['prefix'] == 'pg' and cmddict.has_key('pgid'):
             pgid = cmddict.pop('pgid')
@@ -1057,6 +1071,8 @@ def prevalidated_command(command_descs, inbuf, verbose):
                 cmdargs = parse_cmdargs(interactive_input.split())[1]
                 valid_dict = validate_command(parsed_args, sigdict, cmdargs)
                 if valid_dict:
+                    if verbose:
+                        print >> sys.stderr, "Submitting command ", valid_dict
                     ret, outbuf, outs = json_command(argdict=valid_dict)
                     if ret:
                         sys.stderr.write('Error {}: {}'.format(ret, outs))
@@ -1064,6 +1080,8 @@ def prevalidated_command(command_descs, inbuf, verbose):
                 else:
                     print "invalid command"
 
+    if verbose:
+        print >> sys.stderr, "Submitting command ", valid_dict
     return json_command(argdict=valid_dict, inbuf=inbuf)
 
 
@@ -1163,7 +1181,9 @@ def main():
         try:
             outf = open(parsed_args.output_file, 'w')
         except:
-            print >> sys.stderr, 'Can\'t open output file {}: {}'.format(parsed_args.output_file, e)
+            print >> sys.stderr, \
+                'Can\'t open output file {}: {}'.\
+                format(parsed_args.output_file, e)
             return 1
 
     # fetch JSON sigs from command
@@ -1176,12 +1196,13 @@ def main():
         # send command to old monitor
         ret, outbuf, outs = cluster.mon_command(' '.join(sys.argv[1:]), inbuf)
     elif ret:
-        print >> sys.stderr, 'Problem getting command descriptions from ceph-mon, error {}'.format(ret)
+        print >> sys.stderr, \
+            'Problem getting command descriptions from ceph-mon, error {}'.\
+            format(ret)
         return ret
 
     ret, outbuf, outs = prevalidated_command(outbuf, inbuf, verbose)
 
-    if ret:
         sys.stderr.write('Error {}: {}'.format(ret, outs))
         return ret
 
@@ -1191,8 +1212,8 @@ def main():
     else:
         sys.stdout.write(outbuf)
 
-    # XXX make sure outs always has only error or status
-    sys.stderr.write(outs)
+    # this assumes outs never has useful command output, only status
+    print >> sys.stderr, outs
     return 0
 
 if __name__ == '__main__':
