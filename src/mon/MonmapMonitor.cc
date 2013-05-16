@@ -278,9 +278,24 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
       ss << "bcast to all mons";
       r = 0;
     } else {
-      // find target
-      long who = parse_pos_long(whostr.c_str(), &ss);
-      if (who >= (long)mon->monmap->size()) {
+      // find target.  Ignore error from parsing long as we probably
+      // have a string instead
+      long who = parse_pos_long(whostr.c_str(), NULL);
+      EntityName name;
+      if (who < 0) {
+
+	// not numeric; try as name or id, and see if in monmap
+	if (!name.from_str(whostr))
+	  name.set("mon", whostr);
+
+	if (mon->monmap->contains(name.get_id())) {
+	  who = mon->monmap->get_rank(name.get_id());
+	} else {
+	  ss << "bad mon name \"" << whostr << "\"";
+	  r = -ENOENT;
+	  goto out;
+	}
+      } else if (who >= (long)mon->monmap->size()) {
 	ss << "mon." << whostr << " does not exist";
 	r = -ENOENT;
 	goto out;
