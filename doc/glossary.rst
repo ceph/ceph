@@ -38,6 +38,11 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	RADOS Cluster
 		The core set of storage software which stores the user's data (MON+OSD).
 
+	Ceph Cluster Map
+	cluster map
+		The set of maps comprising the monitor map, OSD map, PG map, MDS map and 
+		CRUSH map. See `Cluster Map`_ for details.
+
 	Ceph Object Storage
 		The object storage "product", service or capabilities, which consists
 		essentially of a Ceph Storage Cluster and a Ceph Object Gateway.
@@ -121,6 +126,9 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	Teuthology
 		The collection of software that performs scripted tests on Ceph.
 
-
+	CRUSH
+		Controlled Replication Under Scalable Hashing. It is the algorithm
+		Ceph uses to compute object storage locations.
 
 .. _http://github.com/ceph: http://github.com/ceph
+.. _Cluster Map: ../architecture#cluster-map
