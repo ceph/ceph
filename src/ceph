@@ -318,7 +318,9 @@ class CephPgid(CephArgtype):
         return '<pgid>'
 
 """
-Name, or type.id, where type is osd|mon|client|mds, and id is a base10 int.
+Name, or type.id, where type is osd|mon|client|mds, and id is a base10 int,
+or just id.
+
 Also accept '*'
 """
 class CephName(CephArgtype):
@@ -329,18 +331,18 @@ class CephName(CephArgtype):
             self.nameid = None
             return True
         if s.find('.') == -1:
-            raise ArgumentFormat('no .')
-        t, i = s.split('.')
-        if not t in ('osd', 'mon', 'client', 'mds'):
-            raise ArgumentValid('unknown type ' + self.t)
-        if t == 'osd':
-            try:
-                i = int(i)
-            except:
-                raise ArgumentFormat('osd id ' + i + ' not integer')
-            # could check for valid id?
+            i = s
+        else:
+            t, i = s.split('.')
+            if not t in ('osd', 'mon', 'client', 'mds'):
+                raise ArgumentValid('unknown type ' + self.t)
+            if t == 'osd':
+                try:
+                    i = int(i)
+                except:
+                    raise ArgumentFormat('osd id ' + i + ' not integer')
+            self.nametype = t
         self.val = s
-        self.nametype = t
         self.nameid = i
         return True
 
