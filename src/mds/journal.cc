@@ -185,6 +185,17 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
   assert(g_conf->mds_kill_journal_expire_at != 3);
 
   // backtraces to be stored/updated
+  for (elist<CInode*>::iterator p = dirty_parent_inodes.begin(); !p.end(); ++p) {
+    CInode *in = *p;
+    assert(in->is_auth());
+    if (in->can_auth_pin()) {
+      dout(15) << "try_to_expire waiting for storing backtrace on " << *in << dendl;
+      in->store_backtrace(gather_bld.new_sub());
+    } else {
+      dout(15) << "try_to_expire waiting for unfreeze on " << *in << dendl;
+      in->add_waiter(CInode::WAIT_UNFREEZE, gather_bld.new_sub());
+    }
+  }
   for (elist<BacktraceInfo*>::iterator p = update_backtraces.begin(); !p.end(); ++p) {
     BacktraceInfo *btinfo = *p;
     store_backtrace_update(mds, btinfo, gather_bld.new_sub());
@@ -1178,6 +1189,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       }
 
       assert(g_conf->mds_kill_journal_replay_at != 2);
+      if (p->is_dirty_parent())
+	in->_mark_dirty_parent(logseg, p->is_dirty_pool());
 
       // store backtrace for allocated inos (create, mkdir, symlink, mknod)
       if (allocated_ino || used_preallocated_ino) {

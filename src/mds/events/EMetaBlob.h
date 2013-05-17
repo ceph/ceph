@@ -470,9 +470,19 @@ private:
   // convenience: primary or remote?  figure it out.
   void add_dentry(CDentry *dn, bool dirty) {
     dirlump& lump = add_dir(dn->get_dir(), false);
-    add_dentry(lump, dn, dirty);
+    add_dentry(lump, dn, dirty, false, false);
   }
-  void add_dentry(dirlump& lump, CDentry *dn, bool dirty) {
+  void add_import_dentry(CDentry *dn) {
+    bool dirty_parent = false;
+    bool dirty_pool = false;
+    if (dn->get_linkage()->is_primary()) {
+      dirty_parent = dn->get_linkage()->get_inode()->is_dirty_parent();
+      dirty_pool = dn->get_linkage()->get_inode()->is_dirty_pool();
+    }
+    dirlump& lump = add_dir(dn->get_dir(), false);
+    add_dentry(lump, dn, dn->is_dirty(), dirty_parent, dirty_pool);
+  }
+  void add_dentry(dirlump& lump, CDentry *dn, bool dirty, bool dirty_parent, bool dirty_pool) {
     // primary or remote
     if (dn->get_projected_linkage()->is_remote()) {
       add_remote_dentry(dn, dirty);
@@ -482,7 +492,7 @@ private:
       return;
     }
     assert(dn->get_projected_linkage()->is_primary());
-    add_primary_dentry(dn, 0, dirty);
+    add_primary_dentry(dn, 0, dirty, dirty_parent, dirty_pool);
   }
 
   void add_root(bool dirty, CInode *in, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,

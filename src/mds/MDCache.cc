@@ -235,6 +235,8 @@ void MDCache::remove_inode(CInode *o)
 
   if (o->is_dirty())
     o->mark_clean();
+  if (o->is_dirty_parent())
+    o->clear_dirty_parent();
 
   o->filelock.remove_dirty();
   o->nestlock.remove_dirty();
@@ -1585,7 +1587,13 @@ void MDCache::journal_dirty_inode(Mutation *mut, EMetaBlob *metablob, CInode *in
     CDentry *dn = in->get_projected_parent_dn();
     if (!dn->get_projected_linkage()->is_null())  // no need to cow a null dentry
       journal_cow_dentry(mut, metablob, dn, follows);
-    metablob->add_primary_dentry(dn, in, true);
+    if (in->get_projected_inode()->is_backtrace_updated()) {
+      bool dirty_pool = in->get_projected_inode()->layout.fl_pg_pool !=
+			in->get_previous_projected_inode()->layout.fl_pg_pool;
+      metablob->add_primary_dentry(dn, in, true, true, dirty_pool);
+    } else {
+      metablob->add_primary_dentry(dn, in, true);
+    }
   }
 }
 
@@ -3403,6 +3411,8 @@ void MDCache::recalc_auth_bits()
 	    dnl->get_inode()->state_clear(CInode::STATE_AUTH);
 	    if (dnl->get_inode()->is_dirty())
 	      dnl->get_inode()->mark_clean();
+	    if (dnl->get_inode()->is_dirty_parent())
+	      dnl->get_inode()->clear_dirty_parent();
 	    // avoid touching scatterlocks for our subtree roots!
 	    if (subtree_inodes.count(dnl->get_inode()) == 0)
 	      dnl->get_inode()->clear_scatter_dirty();
