@@ -445,6 +445,8 @@ void Paxos::handle_last(MMonPaxos *last)
 	dout(10) << "that's everyone.  active!" << dendl;
 	extend_lease();
 
+        finish_proposal();
+
 	finish_contexts(g_ceph_context, waiting_for_active);
 	finish_contexts(g_ceph_context, waiting_for_readable);
 	finish_contexts(g_ceph_context, waiting_for_writeable);
