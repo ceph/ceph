@@ -547,25 +547,20 @@ static void fuse_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  Inode *i2, *i1 = cfuse->iget(parent);
+  Inode *i1 = cfuse->iget(parent);
   struct fuse_entry_param fe;
   Fh *fh = NULL;
 
   memset(&fe, 0, sizeof(fe));
 
-  int r = cfuse->client->ll_create(i1, name, mode, fi->flags, &fe.attr, &i2,
-				   ctx->uid, ctx->gid);
+  int r = cfuse->client->ll_create(i1, name, mode, fi->flags, &fe.attr, NULL,
+				   &fh, ctx->uid, ctx->gid);
   if (r == 0) {
-    r = cfuse->client->ll_create_fh(i2, fi->flags, mode, &fh);
-    if (r == 0) {
-      fi->fh = (long)fh;
-      fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
-      fuse_reply_create(req, &fe, fi);
-    } else
-      fuse_reply_err(req, -r);
-  } else {
+    fi->fh = (long)fh;
+    fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
+    fuse_reply_create(req, &fe, fi);
+  } else
     fuse_reply_err(req, -r);
-  }
   // XXX NB, we dont iput(i2) because FUSE will do so in a matching
   // fuse_ll_forget()
   cfuse->iput(i1); // iput required
