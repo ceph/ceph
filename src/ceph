@@ -910,6 +910,11 @@ def validate_command(parsed_args, sigdict, args):
     found = []
     valid_dict = {}
     if args:
+        # Repulsive hack to handle tell: lop off 'tell' and target
+        # and validate the rest of the command.  'target' is already
+        # determined in our callers, so it's ok to remove it here.
+        if args[0] == 'tell':
+            args = args[2:]
         # look for best match, accumulate possibles in bestsigs
         # (so we can maybe give a more-useful error message)
         best_match_cnt = 0
