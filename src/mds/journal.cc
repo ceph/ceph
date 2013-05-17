@@ -485,10 +485,10 @@ void EMetaBlob::update_segment(LogSegment *ls)
 // EMetaBlob::fullbit
 
 void EMetaBlob::fullbit::encode(bufferlist& bl) const {
-  ENCODE_START(5, 5, bl);
+  ENCODE_START(6, 5, bl);
   if (!_enc.length()) {
     fullbit copy(dn, dnfirst, dnlast, dnv, inode, dirfragtree, xattrs, symlink,
-		 snapbl, dirty, &old_inodes);
+		 snapbl, state, &old_inodes);
     bl.append(copy._enc);
   } else {
     bl.append(_enc);
@@ -497,7 +497,7 @@ void EMetaBlob::fullbit::encode(bufferlist& bl) const {
 }
 
 void EMetaBlob::fullbit::decode(bufferlist::iterator &bl) {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
   ::decode(dn, bl);
   ::decode(dnfirst, bl);
   ::decode(dnlast, bl);
@@ -519,7 +519,14 @@ void EMetaBlob::fullbit::decode(bufferlist::iterator &bl) {
       }
     }
   }
-  ::decode(dirty, bl);
+  if (struct_v >= 6) {
+    ::decode(state, bl);
+  } else {
+    bool dirty;
+    ::decode(dirty, bl);
+    state = dirty ? EMetaBlob::fullbit::STATE_DIRTY : 0;
+  }
+
   if (struct_v >= 3) {
     bool old_inodes_present;
     ::decode(old_inodes_present, bl);
@@ -571,7 +578,7 @@ void EMetaBlob::fullbit::dump(Formatter *f) const
       f->close_section(); // file layout policy
     }
   }
-  f->dump_string("dirty", dirty ? "true" : "false");
+  f->dump_string("state", state_string());
   if (!old_inodes.empty()) {
     f->open_array_section("old inodes");
     for (old_inodes_t::const_iterator iter = old_inodes.begin();
@@ -1004,7 +1011,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 
     if (isnew)
       mds->mdcache->add_inode(in);
-    if ((*p)->dirty) in->_mark_dirty(logseg);
+    if ((*p)->is_dirty()) in->_mark_dirty(logseg);
     dout(10) << "EMetaBlob.replay " << (isnew ? " added root ":" updated root ") << *in << dendl;    
   }
 
@@ -1106,11 +1113,11 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       if (!dn) {
 	dn = dir->add_null_dentry(p->dn, p->dnfirst, p->dnlast);
 	dn->set_version(p->dnv);
-	if (p->dirty) dn->_mark_dirty(logseg);
+	if (p->is_dirty()) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
       } else {
 	dn->set_version(p->dnv);
-	if (p->dirty) dn->_mark_dirty(logseg);
+	if (p->is_dirty()) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay for [" << p->dnfirst << "," << p->dnlast << "] had " << *dn << dendl;
 	dn->first = p->dnfirst;
 	assert(dn->last == p->dnlast);
@@ -1135,7 +1142,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	if (unlinked.count(in))
 	  linked.insert(in);
 	dir->link_primary_inode(dn, in);
-	if (p->dirty) in->_mark_dirty(logseg);
+	if (p->is_dirty()) in->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *in << dendl;
       } else {
 	if (dn->get_linkage()->get_inode() != in && in->get_parent_dn()) {
@@ -1146,7 +1153,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	if (in->get_parent_dn() && in->inode.anchored != p->inode.anchored)
 	  in->get_parent_dn()->adjust_nested_anchors( (int)p->inode.anchored - (int)in->inode.anchored );
 	p->update_inode(mds, in);
-	if (p->dirty) in->_mark_dirty(logseg);
+	if (p->is_dirty()) in->_mark_dirty(logseg);
 	if (dn->get_linkage()->get_inode() != in) {
 	  if (!dn->get_linkage()->is_null()) { // note: might be remote.  as with stray reintegration.
 	    if (dn->get_linkage()->is_primary()) {
