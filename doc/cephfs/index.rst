@@ -13,7 +13,7 @@ one metadata server in your ``ceph.conf`` configuration file.
 
 	Mount Ceph FS<kernel>
 	Mount Ceph FS as FUSE <fuse>
-	Mount Ceph FS in ``fstab`` <fstab>
+	Mount Ceph FS in fstab <fstab>
 	Using Ceph with Hadoop <hadoop>
 	MDS Configuration <mds-config-ref>
 	Journaler Configuration <journaler>
