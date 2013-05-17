@@ -4247,6 +4247,7 @@ int Client::_do_lookup(Inode *dir, const string& name, Inode **target)
 int Client::_lookup(Inode *dir, const string& dname, Inode **target)
 {
   int r = 0;
+  Dentry *dn = NULL;
 
   if (!dir->is_dir()) {
     r = -ENOTDIR;
@@ -4279,7 +4280,7 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
 
   if (dir->dir &&
       dir->dir->dentries.count(dname)) {
-    Dentry *dn = dir->dir->dentries[dname];
+    dn = dir->dir->dentries[dname];
 
     ldout(cct, 20) << "_lookup have dn " << dname << " mds." << dn->lease_mds << " ttl " << dn->lease_ttl
 	     << " seq " << dn->lease_seq
@@ -4294,12 +4295,10 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
 	MetaSession *s = mds_sessions[dn->lease_mds];
 	if (s->cap_ttl > now &&
 	    s->cap_gen == dn->lease_gen) {
-	  *target = dn->inode;
 	  // touch this mds's dir cap too, even though we don't _explicitly_ use it here, to
 	  // make trim_caps() behave.
 	  dir->try_touch_cap(dn->lease_mds);
-	  touch_dn(dn);
-	  goto done;
+	  goto hit_dn;
 	}
 	ldout(cct, 20) << " bad lease, cap_ttl " << s->cap_ttl << ", cap_gen " << s->cap_gen
 		       << " vs lease_gen " << dn->lease_gen << dendl;
@@ -4307,9 +4306,7 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
       // dir lease?
       if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED) &&
 	  dn->cap_shared_gen == dir->shared_gen) {
-	*target = dn->inode;
-	touch_dn(dn);
-	goto done;
+	goto hit_dn;
       }
     } else {
       ldout(cct, 20) << " no cap on " << dn->inode->vino() << dendl;
@@ -4324,6 +4321,15 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
   }
 
   r = _do_lookup(dir, dname, target);
+  goto done;
+
+ hit_dn:
+  if (dn->inode) {
+    *target = dn->inode;
+  } else {
+    r = -ENOENT;
+  }
+  touch_dn(dn);
 
  done:
   if (r < 0)
