@@ -1072,7 +1072,12 @@ int ceph_ll_fsync(struct ceph_mount_info *cmount, struct Fh *fh,
 		  int syncdataonly);
 int ceph_ll_write(struct ceph_mount_info *cmount, struct Fh* filehandle,
 		  int64_t off, uint64_t len, const char *data);
+int64_t ceph_ll_readv(struct ceph_mount_info *cmount, struct Fh *fh,
+		      const struct iovec *iov, int iovcnt, int64_t off);
+int64_t ceph_ll_writev(struct ceph_mount_info *cmount, struct Fh *fh,
+		       const struct iovec *iov, int iovcnt, int64_t off);
 int ceph_ll_close(struct ceph_mount_info *cmount, struct Fh* filehandle);
+int ceph_ll_iclose(struct ceph_mount_info *cmount, struct Inode *in, int mode);
 int ceph_ll_getxattr(struct ceph_mount_info *cmount, struct Inode *in,
 		     const char *name, void *value, size_t size, int uid,
 		     int gid);
@@ -1083,7 +1088,7 @@ int ceph_ll_removexattr(struct ceph_mount_info *cmount, struct Inode *in,
 			const char *name, int uid, int gid);
 int ceph_ll_create(struct ceph_mount_info *cmount, struct Inode *parent,
 		   const char *name, mode_t mode, int flags,
-		   struct Inode **in, struct stat *attr, int uid, int gid);
+		   struct Fh **fh, struct stat *attr, int uid, int gid);
 int ceph_ll_mkdir(struct ceph_mount_info *cmount, struct Inode *parent,
 		  const char *name, mode_t mode, struct stat *attr,
 		  Inode **out, int uid, int gid);

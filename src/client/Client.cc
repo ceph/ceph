@@ -565,7 +565,8 @@ void Client::update_inode_file_bits(Inode *in,
   }
 }
 
-Inode * Client::add_update_inode(InodeStat *st, utime_t from, MetaSession *session)
+Inode * Client::add_update_inode(InodeStat *st, utime_t from,
+				 MetaSession *session)
 {
   Inode *in;
   bool was_new = false;
@@ -4350,11 +4351,13 @@ int Client::_getattr(Inode *in, int mask, int uid, int gid, bool force)
   return res;
 }
 
-int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid, Inode **inp)
+int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
+		     Inode **inp)
 {
   int issued = in->caps_issued();
 
-  ldout(cct, 10) << "_setattr mask " << mask << " issued " << ccap_string(issued) << dendl;
+  ldout(cct, 10) << "_setattr mask " << mask << " issued " <<
+    ccap_string(issued) << dendl;
 
   if (in->snapid != CEPH_NOSNAP) {
     return -EROFS;
@@ -5496,7 +5499,7 @@ int Client::_release_fh(Fh *f)
     in->snap_cap_refs--;
   }
 
-  put_inode( in );
+  put_inode(in);
   delete f;
 
   return 0;
@@ -5536,7 +5539,8 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
 
   // success?
   if (result >= 0) {
-    *fhp = _create_fh(in, flags, cmode);
+    if (fhp)
+      *fhp = _create_fh(in, flags, cmode);
   } else {
     in->put_open_ref(cmode);
   }
@@ -7132,8 +7136,11 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
     goto reply_error;
   }
 
-  (*inp)->get_open_ref(cmode);
-  *fhp = _create_fh(*inp, flags, cmode);
+  /* If the caller passed a value in fhp, do the open */
+  if(fhp) {
+    (*inp)->get_open_ref(cmode);
+    *fhp = _create_fh(*inp, flags, cmode);
+  }
 
  reply_error:
   trim_cache();
@@ -7755,17 +7762,19 @@ int Client::ll_open(Inode *in, int flags, Fh **fhp, int uid, int gid)
   if (r < 0)
     goto out;
 
-  r = _open(in, flags, 0, fhp, uid, gid);
+  r = _open(in, flags, 0, fhp /* may be NULL */, uid, gid);
 
  out:
-  tout(cct) << (unsigned long)*fhp << std::endl;
-  ldout(cct, 3) << "ll_open " << vino << " " << flags << " = " << r << " (" << *fhp << ")" << dendl;
+  Fh *fhptr = fhp ? *fhp : NULL;
+  tout(cct) << (unsigned long)fhptr << std::endl;
+  ldout(cct, 3) << "ll_open " << vino << " " << flags << " = " << r << " (" <<
+    fhptr << ")" << dendl;
   return r;
 }
 
 int Client::ll_create(Inode *parent, const char *name, mode_t mode,
-		      int flags, struct stat *attr, Inode **outp, int uid,
-		      int gid)
+		      int flags, struct stat *attr, Inode **outp, Fh **fhp,
+		      int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
 
@@ -7781,16 +7790,19 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
 
   bool created = false;
   Inode *in = NULL;
-  Fh *fhp;
   int r = _lookup(parent, name, &in);
+
   if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
     return -EEXIST;
-  if (r == -ENOENT && (flags & O_CREAT)) {
-    r = _create(parent, name, flags, mode, &in, &fhp,
-	        0, 0, 0,
-		NULL, &created, uid, gid);
+
+   if (r == -ENOENT && (flags & O_CREAT)) {
+     r = _create(parent, name, flags, mode, &in, fhp /* may be NULL */,
+	        0, 0, 0, NULL, &created, uid, gid);
     if (r < 0)
       goto out;
+
+    if ((!in) && fhp)
+      in = (*fhp)->inode;
   }
 
   if (r < 0)
@@ -7798,44 +7810,41 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
 
   assert(in);
   fill_stat(in, attr);
-  _ll_get(in);
 
   ldout(cct, 20) << "ll_create created = " << created << dendl;
+  if (!created) {
+    r = check_permissions(in, flags, uid, gid);
+    if (r < 0) {
+      if (fhp && *fhp) {
+	_release_fh(*fhp);
+      }
+      goto out;
+    }
+    if (fhp && (*fhp == NULL)) {
+      r = _open(in, flags, mode, fhp);
+      if (r < 0)
+	goto out;
+    }
+  }
 
 out:
-  if (fhp)
-    _release_fh(fhp);
-    
   if (r < 0)
     attr->st_ino = 0;
 
+  Fh *fhptr = fhp ? *fhp : NULL;
+  tout(cct) << (unsigned long)fhptr << std::endl;
   tout(cct) << attr->st_ino << std::endl;
-  ldout(cct, 3) << "ll_create " << parent << " " << name << " 0" << oct << mode
-		<< dec << " " << flags << " = " << r << " (" << hex <<
-    attr->st_ino << dec << ")" << dendl;
-  *outp = in;
+  ldout(cct, 3) << "ll_create " << parent << " " << name << " 0" << oct <<
+    mode << dec << " " << flags << " = " << r << " (" << fhptr << " " <<
+    hex << attr->st_ino << dec << ")" << dendl;
+
+  // passing an Inode in outp requires an additional ref
+  if (outp) {
+    _ll_get(in);
+    *outp = in;
+  }
+
   return r;
-}
-
-int Client::ll_create_fh(Inode *in, int flags, int cmode, Fh **fhp)
-{
-  Mutex::Locker lock(client_lock);
-
-  vinodeno_t vino = ll_get_vino(in);
-
-  ldout(cct, 3) << "ll_create_fh " << vino << " " << " 0" << oct <<
-    cmode << dec << " " << flags << dendl;
-  tout(cct) << "ll_create" << std::endl;
-  tout(cct) << vino.ino.val << std::endl;
-  tout(cct) << cmode << std::endl;
-  tout(cct) << flags << std::endl;
-
-  *fhp = _create_fh(in, flags, cmode);
-
-  if (fhp)
-      return 0;
-  else
-    return -EINVAL;
 }
 
 loff_t Client::ll_lseek(Fh *fh, loff_t offset, int whence)
@@ -8034,8 +8043,9 @@ int Client::ll_fsync(Fh *fh, bool syncdataonly)
 int Client::ll_release(Fh *fh)
 {
   Mutex::Locker lock(client_lock);
-  ldout(cct, 3) << "ll_release " << fh << " " << fh->inode->ino << " " << dendl;
-  tout(cct) << "ll_release" << std::endl;
+  ldout(cct, 3) << "ll_release (fh)" << fh << " " << fh->inode->ino << " " <<
+    dendl;
+  tout(cct) << "ll_release (fh)" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
 
   _release_fh(fh);

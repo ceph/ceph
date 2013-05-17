@@ -732,8 +732,8 @@ public:
 	      struct stat *attr, int uid = -1, int gid = -1);
   int ll_open(Inode *in, int flags, Fh **fh, int uid = -1, int gid = -1);
   int ll_create(Inode *parent, const char *name, mode_t mode, int flags,
-		struct stat *attr, Inode **out, int uid = -1, int gid = -1);
-  int ll_create_fh(Inode *in, int flags, int cmode, Fh **fhp);
+		struct stat *attr, Inode **out, Fh **fhp, int uid = -1,
+		int gid = -1);
   int ll_read_block(Inode *in, uint64_t blockid, char *buf,  uint64_t offset,
 		    uint64_t length, ceph_file_layout* layout);
 
@@ -761,7 +761,6 @@ public:
   int ll_flush(Fh *fh);
   int ll_fsync(Fh *fh, bool syncdataonly);
   int ll_release(Fh *fh);
-
   int ll_get_stripe_osd(struct Inode *in, uint64_t blockno,
 			ceph_file_layout* layout);
   uint64_t ll_get_internal_offset(struct Inode *in, uint64_t blockno);
