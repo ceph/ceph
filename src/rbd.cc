@@ -1296,16 +1296,13 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     fd = 0;
     size = 1ULL << *order;
   } else {
-    fd = open(path, O_RDONLY);
-
-    if (fd < 0) {
+    if ((fd = open(path, O_RDONLY)) < 0) {
       r = -errno;
       cerr << "rbd: error opening " << path << std::endl;
       goto done2;
     }
 
-    r = fstat(fd, &stat_buf);
-    if (r < 0) {
+    if ((fstat(fd, &stat_buf)) < 0) {
       r = -errno;
       cerr << "rbd: stat error " << path << std::endl;
       goto done;
