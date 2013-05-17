@@ -91,6 +91,7 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 		The Ceph metadata software.
 
 	Ceph Clients
+	Ceph Client
 		The collection of Ceph components which can access a Ceph Storage 
 		Cluster. These include the Ceph Object Gateway, the Ceph Black Device, 
 		the Ceph Filesystem,	and their corresponding libraries, kernel modules, 
