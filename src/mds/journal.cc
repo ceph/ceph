@@ -196,10 +196,6 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
       in->add_waiter(CInode::WAIT_UNFREEZE, gather_bld.new_sub());
     }
   }
-  for (elist<BacktraceInfo*>::iterator p = update_backtraces.begin(); !p.end(); ++p) {
-    BacktraceInfo *btinfo = *p;
-    store_backtrace_update(mds, btinfo, gather_bld.new_sub());
-  }
 
   assert(g_conf->mds_kill_journal_expire_at != 4);
 
@@ -278,101 +274,6 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
   }
 }
 
-// ----------------------------
-// backtrace handling
-
-// BacktraceInfo is used for keeping the
-// current state of the backtrace to be stored later on
-// logsegment expire.  Constructing a BacktraceInfo
-// automatically puts it on the LogSegment list that is passed in,
-// after building the backtrace based on the current state of the inode.  We
-// construct the backtrace here to avoid keeping a ref to the inode.
-BacktraceInfo::BacktraceInfo(
-    int64_t l, CInode *i, LogSegment *ls, int64_t p) :
-        location(l), pool(p) {
-
-  // on setlayout cases, forward pointers mean
-  // pool != location, but for all others it does
-  if (pool == -1) pool = location;
-
-  bt.pool = pool;
-  i->build_backtrace(l, &bt);
-  ls->update_backtraces.push_back(&item_logseg);
-}
-
-// When the info_t is destroyed, it just needs to remove itself
-// from the LogSegment list
-BacktraceInfo::~BacktraceInfo() {
-  item_logseg.remove_myself();
-}
-
-// Queue a backtrace for later
-void LogSegment::queue_backtrace_update(CInode *inode, int64_t location, int64_t pool) {
-    // allocating a pointer here and not setting it to anything
-    // might look strange, but the constructor adds itself to the backtraces
-    // list of this LogSegment, which is how we keep track of it
-    new BacktraceInfo(location, inode, this, pool);
-}
-
-void LogSegment::remove_pending_backtraces(inodeno_t ino, int64_t pool) {
-  elist<BacktraceInfo*>::iterator i = update_backtraces.begin();
-  while(!i.end()) {
-    ++i;
-    if((*i)->bt.ino == ino && (*i)->location == pool) {
-      delete (*i);
-    }
-  }
-}
-
-unsigned LogSegment::encode_parent_mutation(ObjectOperation& m, BacktraceInfo *info)
-{
-  bufferlist parent;
-  ::encode(info->bt, parent);
-  m.setxattr("parent", parent);
-  return parent.length();
-}
-
-struct C_LogSegment_StoredBacktrace : public Context {
-  LogSegment *ls;
-  BacktraceInfo *info;
-  Context *fin;
-  C_LogSegment_StoredBacktrace(LogSegment *l, BacktraceInfo *c,
-			       Context *f) : ls(l), info(c), fin(f) {}
-  void finish(int r) {
-    ls->_stored_backtrace(info, fin);
-  }
-};
-
-void LogSegment::store_backtrace_update(MDS *mds, BacktraceInfo *info, Context *fin)
-{
-  ObjectOperation m;
-  // prev_pool will be the target pool on create,mkdir,etc.
-  encode_parent_mutation(m, info);
-
-  // write it.
-  SnapContext snapc;
-
-  object_t oid = CInode::get_object_name(info->bt.ino, frag_t(), "");
-
-  dout(10) << "store_parent for oid " << oid << " location " << info->location << " pool " << info->pool << dendl;
-
-  // store the backtrace in the specified pool
-  object_locator_t oloc(info->location);
-
-  mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(g_ceph_context), 0,
-		        NULL, new C_LogSegment_StoredBacktrace(this, info, fin) );
-
-}
-
-void LogSegment::_stored_backtrace(BacktraceInfo *info, Context *fin)
-{
-  delete info;
-  if (fin) {
-    fin->finish(0);
-    delete fin;
-  }
-}
-
 #undef DOUT_COND
 #define DOUT_COND(cct, l) (l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_log)
 
@@ -383,8 +284,6 @@ void LogSegment::_stored_backtrace(BacktraceInfo *info, Context *fin)
 EMetaBlob::EMetaBlob(MDLog *mdlog) : opened_ino(0), renamed_dirino(0),
 				     inotablev(0), sessionmapv(0),
 				     allocated_ino(0),
-				     old_pool(-1),
-				     update_bt(false),
 				     last_subtree_map(mdlog ? mdlog->get_last_segment_offset() : 0),
 				     my_offset(mdlog ? mdlog->get_write_pos() : 0) //, _segment(0)
 { }
@@ -842,7 +741,7 @@ void EMetaBlob::dirlump::generate_test_instances(list<dirlump*>& ls)
  */
 void EMetaBlob::encode(bufferlist& bl) const
 {
-  ENCODE_START(6, 5, bl);
+  ENCODE_START(7, 5, bl);
   ::encode(lump_order, bl);
   ::encode(lump_map, bl);
   ::encode(roots, bl);
@@ -860,13 +759,18 @@ void EMetaBlob::encode(bufferlist& bl) const
   ::encode(client_reqs, bl);
   ::encode(renamed_dirino, bl);
   ::encode(renamed_dir_frags, bl);
-  ::encode(old_pool, bl);
-  ::encode(update_bt, bl);
+  {
+    // make MDS use v6 format happy
+    int64_t i = -1;
+    bool b = false;
+    ::encode(i, bl);
+    ::encode(b, bl);
+  }
   ENCODE_FINISH(bl);
 }
 void EMetaBlob::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
   ::decode(lump_order, bl);
   ::decode(lump_map, bl);
   if (struct_v >= 4) {
@@ -905,8 +809,11 @@ void EMetaBlob::decode(bufferlist::iterator &bl)
     ::decode(renamed_dir_frags, bl);
   }
   if (struct_v >= 6) {
-    ::decode(old_pool, bl);
-    ::decode(update_bt, bl);
+    // ignore
+    int64_t i;
+    bool b;
+    ::decode(i, bl);
+    ::decode(b, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -1191,35 +1098,6 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       assert(g_conf->mds_kill_journal_replay_at != 2);
       if (p->is_dirty_parent())
 	in->_mark_dirty_parent(logseg, p->is_dirty_pool());
-
-      // store backtrace for allocated inos (create, mkdir, symlink, mknod)
-      if (allocated_ino || used_preallocated_ino) {
-	if (in->inode.is_dir()) {
-	  logseg->queue_backtrace_update(in, mds->mdsmap->get_metadata_pool());
-	} else {
-	  logseg->queue_backtrace_update(in, in->inode.layout.fl_pg_pool);
-	}
-      }
-      // handle change of pool with backtrace update
-      if (old_pool != -1 && old_pool != in->inode.layout.fl_pg_pool) {
-	// update backtrace on new data pool
-	logseg->queue_backtrace_update(in, in->inode.layout.fl_pg_pool);
-
-	// set forwarding pointer on old backtrace
-	logseg->queue_backtrace_update(in, old_pool, in->inode.layout.fl_pg_pool);
-      }
-      // handle backtrace update if specified (used by rename)
-      if (update_bt) {
-	if (in->is_dir()) {
-	  // replace previous backtrace on this inode with myself
-	  logseg->remove_pending_backtraces(in->ino(), mds->mdsmap->get_metadata_pool());
-	  logseg->queue_backtrace_update(in, mds->mdsmap->get_metadata_pool());
-	} else {
-	  // remove all pending backtraces going to the same pool
-	  logseg->remove_pending_backtraces(in->ino(), in->inode.layout.fl_pg_pool);
-	  logseg->queue_backtrace_update(in, in->inode.layout.fl_pg_pool);
-	}
-      }
     }
 
     // remote dentries

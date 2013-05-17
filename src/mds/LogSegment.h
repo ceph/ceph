@@ -33,19 +33,6 @@ class CDentry;
 class MDS;
 class MDSlaveUpdate;
 
-// The backtrace info struct here is used to maintain the backtrace in
-// a queue that we will eventually want to write out (on journal segment
-// expiry).
-class BacktraceInfo {
-public:
-  int64_t location;
-  int64_t pool;
-  struct inode_backtrace_t bt;
-  elist<BacktraceInfo*>::item item_logseg;
-  BacktraceInfo(int64_t l, CInode *i, LogSegment *ls, int64_t p = -1);
-  ~BacktraceInfo();
-};
-
 class LogSegment {
  public:
   uint64_t offset, end;
@@ -62,8 +49,6 @@ class LogSegment {
   elist<CInode*>  dirty_dirfrag_dir;
   elist<CInode*>  dirty_dirfrag_nest;
   elist<CInode*>  dirty_dirfrag_dirfragtree;
-
-  elist<BacktraceInfo*> update_backtraces;
 
   elist<MDSlaveUpdate*> slave_updates;
   
@@ -95,17 +80,9 @@ class LogSegment {
     dirty_dirfrag_dir(member_offset(CInode, item_dirty_dirfrag_dir)),
     dirty_dirfrag_nest(member_offset(CInode, item_dirty_dirfrag_nest)),
     dirty_dirfrag_dirfragtree(member_offset(CInode, item_dirty_dirfrag_dirfragtree)),
-    update_backtraces(member_offset(BacktraceInfo, item_logseg)),
     slave_updates(0), // passed to begin() manually
     inotablev(0), sessionmapv(0)
   { }
-
-  // backtrace handling
-  void queue_backtrace_update(CInode *in, int64_t location, int64_t pool = -1);
-  void remove_pending_backtraces(inodeno_t ino, int64_t pool);
-  void store_backtrace_update(MDS *mds, BacktraceInfo *info, Context *fin);
-  void _stored_backtrace(BacktraceInfo *info, Context *fin);
-  unsigned encode_parent_mutation(ObjectOperation& m, BacktraceInfo *info);
 };
 
 #endif

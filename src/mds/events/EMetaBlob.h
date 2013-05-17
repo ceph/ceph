@@ -338,9 +338,6 @@ private:
   // idempotent op(s)
   list<pair<metareqid_t,uint64_t> > client_reqs;
 
-  int64_t old_pool;
-  bool update_bt;
-
  public:
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
@@ -556,13 +553,6 @@ private:
   static const int TO_ROOT = 1;
   
   void add_dir_context(CDir *dir, int mode = TO_AUTH_SUBTREE_ROOT);
- 
-  void add_old_pool(int64_t pool) {
-    old_pool = pool;
-  }
-  void update_backtrace() {
-    update_bt = true;
-  }
 
   void print(ostream& out) const {
     out << "[metablob";
