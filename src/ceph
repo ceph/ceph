@@ -3,12 +3,11 @@
 import argparse
 import copy
 import errno
-import fcntl
 import json
 import os
 import rados
+# for raw_input to do readline cmd editing
 import readline
-import select
 import socket
 import stat
 import string
@@ -655,17 +654,19 @@ def matchnum(args, signature, partial=False):
     for desc in mysig:
         setattr(desc, 'numseen', 0)
         while desc.numseen < desc.n:
+            # if there are no more arguments, return
             if not words:
                 return matchcnt;
             word = words.pop(0)
-            # may raise exception
             try:
                 validate_one(word, desc, partial)
             except:
                 if not desc.req:
+                    # this wasn't required, so word may match the next desc
                     words.insert(0, word)
                     break
                 else:
+                    # it was required, and didn't match, return
                     return matchcnt
         if desc.req:
             matchcnt += 1
@@ -777,52 +778,6 @@ def parse_cmdargs(args=None, usage='', epilog='', add_help=True):
     # returns a Namespace with the parsed args, and a list of all extras
     return parser.parse_known_args(args)
 
-def get_process_output(args):
-    if verbose:
-        print >> sys.stderr, "get_process_output({})".format(args)
-
-    p = subprocess.Popen(args, stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE)
-    outdata, errdata = p.communicate()
-    if (len(errdata)):
-        print "error: ", errdata
-    return outdata
-
-def do_command(command, d, endless=False):
-
-    def make_nonblocking(filelist):
-        for f in filelist:
-            flags = fcntl.fcntl(f, fcntl.F_GETFL)
-            fcntl.fcntl(f, fcntl.F_SETFL, flags | os.O_NONBLOCK)
-
-    full_command = command + [ json.dumps(d) ]
-    if verbose:
-        print >> sys.stderr, "invoking ", full_command
-    p = subprocess.Popen(full_command, stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE)
-    if endless:
-        try:
-            make_nonblocking([p.stdout, p.stderr])
-            fdlist = [p.stdout.fileno(), p.stderr.fileno()]
-            while not p.poll():
-                (r, _, e) = select.select(fdlist, [], fdlist, 1)
-                if (p.stdout.fileno() in r):
-                    sys.stdout.write(p.stdout.read())
-                if (p.stderr.fileno() in r):
-                    sys.stderr.write(p.stderr.read())
-                if e:
-                    print >> sys.stderr, "error on process stdout/stderr"
-        except KeyboardInterrupt:
-            p.terminate()
-            pass
-
-    else:
-        outdata, errdata = p.communicate()
-        if len(errdata):
-            sys.stderr.write(errdata)
-        sys.stdout.write(outdata)
-    return p.returncode
-
 """
 sort descriptors by prefixes, defined as the concatenation of all simple
 strings in the descriptor; this works out to just the leading strings.
@@ -925,15 +880,15 @@ def validate_command(parsed_args, sigdict, args):
             if (matched > best_match_cnt):
                 if verbose:
                     print >> sys.stderr, \
-                        "better match: {} > {}:{}:{} ".format(matched,
-                                      cmdtag, best_match_cnt, concise_sig(sig))
+                        "better match: {} > {}: {}:{} ".format(matched,
+                                      best_match_cnt, cmdtag, concise_sig(sig))
                 best_match_cnt = matched
                 bestsigs = [{cmdtag:cmd}]
             elif matched == best_match_cnt:
                 if verbose:
                     print >> sys.stderr, \
-                        "equal match: {} > {}:{}:{} ".format(matched,
-                                      cmdtag, best_match_cnt, concise_sig(sig))
+                        "equal match: {} > {}: {}:{} ".format(matched,
+                                      best_match_cnt, cmdtag, concise_sig(sig))
                 bestsigs.append({cmdtag:cmd})
 
         if verbose:
@@ -1220,10 +1175,10 @@ def main():
                 level = k.replace('watch_', '')
     if level:
         def watch_cb(arg, line, who, stamp_sec, stamp_nsec, seq, level, msg):
-            # s = 'arg: {}\nline: {}\nwho: {}\nstamp_sec: {}\nstamp_nsec: {}\nseq: {}\n level: {}\nmsg: {}\n'.format(str(arg), line, who, stamp_sec, stamp_nsec, seq, level, msg)
-            # print >> sys.stderr, s
             print >> sys.stderr, line
 
+        # this instance keeps the watch connection alive, but is 
+        # otherwise unused
         logwatch = rados.MonitorLog(cluster, level, watch_cb, 0)
         # loop forever letting watch_cb print lines
         while True:
