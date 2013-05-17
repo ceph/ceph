@@ -78,6 +78,8 @@ public:
   pool_stat_t pg_sum_delta;
   utime_t stamp_delta;
 
+  void clear_delta();
+
   set<pg_t> creating_pgs;   // lru: front = new additions, back = recently pinged
   map<int,set<pg_t> > creating_pgs_by_osd;
 
