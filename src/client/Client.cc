@@ -1006,14 +1006,17 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     }
 
     if (d && reply->get_result() == 0) {
-      Dentry *od = request->old_dentry();
-      if (od) {
+      if (request->head.op == CEPH_MDS_OP_RENAME) {
 	// rename
+	Dentry *od = request->old_dentry();
+	ldout(cct, 10) << " unlinking rename src dn " << od << " for traceless reply" << dendl;
+	assert(od);
 	unlink(od, false, false);
       } else if (request->head.op == CEPH_MDS_OP_RMDIR ||
 		 request->head.op == CEPH_MDS_OP_UNLINK) {
 	// unlink, rmdir
-	// ...
+	ldout(cct, 10) << " unlinking unlink/rmdir dn " << d << " for traceless reply" << dendl;
+	unlink(d, true, true);
       }
     }
     return NULL;
