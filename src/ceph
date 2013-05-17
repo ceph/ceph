@@ -973,43 +973,64 @@ def validate_command(parsed_args, sigdict, args):
 
         return valid_dict
 
-def json_command(prefix=None, argdict=None, inbuf=''):
+def json_command(target=('mon', ''), prefix=None, argdict=None, inbuf=''):
     """
-    Send a prevalidated command to a daemon using librados's
+    Send a new_style command to a daemon using librados's
     mon_command, osd_command, or pg_command.  Prefix may be supplied
     separately or in argdict.  Any bulk input data comes in inbuf.
     Returns (ret, outbuf, outs); ret is the return code, outbuf is
     the outbl "bulk useful output" buffer, and outs is any status
     or error message (intended for stderr).
+
+    If target is osd.N, send command to that osd (except for pgid cmds)
     """
     global cluster
+    global verbose
     cmddict = {}
     if prefix:
         cmddict.update({'prefix':prefix})
     if argdict:
         cmddict.update(argdict)
-    # make sure it's set for error reporting
+
+    # grab prefix for error messages
     prefix = cmddict['prefix']
 
     try:
-        if cmddict['prefix'] == 'pg' and cmddict.has_key('pgid'):
+        if target[0] == 'osd':
+            osdtarg = CephName()
+            if 'target' in cmddict:
+                osdtarget = cmddict.pop('target')
+            else:
+                osdtarget = '{}.{}'.format(target[0], target[1])
+
+            try:
+                osdtarg.valid(osdtarget)
+                osdid = osdtarg.nameid
+            except:
+                # uh..I dunno, try osd.0?
+                osdid = 0
+
+            if verbose:
+                print >> sys.stderr, 'submit {} to osd.{}'.\
+                    format(json.dumps(cmddict), osdid)
+            ret, outbuf, outs = \
+                cluster.osd_command(osdid, json.dumps(cmddict), inbuf)
+
+        elif target[0] == 'pg':
             # leave it in cmddict for the OSD to use too
-            pgid = cmddict['pgid']
+            pgid = target[1]
+            if verbose:
+                print >> sys.stderr, 'submit {} for pgid {}'.\
+                    format(json.dumps(cmddict), pgid)
             ret, outbuf, outs = \
                 cluster.pg_command(pgid, json.dumps(cmddict), inbuf)
-        elif cmddict['prefix'] == 'tell' and cmddict.has_key('target'):
-            targ = CephName()
-            target = cmddict.pop('target')
-            targ.valid(target)
-            if targ.nametype == 'osd':
-                osdid = targ.nameid
-                ret, outbuf, outs = \
-                    cluster.osd_command(osdid, json.dumps(cmddict), inbuf)
-            else:
-                ret, outbuf, outs = \
-                    cluster.mon_command(json.dumps(cmddict), inbuf)
-        else:
+
+        elif target[0] == 'mon':
+            if verbose:
+                print >> sys.stderr, '{} to {}'.\
+                    format(json.dumps(cmddict), target[0])
             ret, outbuf, outs = cluster.mon_command(json.dumps(cmddict), inbuf)
+
     except Exception as e:
         raise RuntimeError('"{}": exception {}'.format(prefix, e))
 
@@ -1051,9 +1072,10 @@ def ceph_conf(field, name):
         raise RuntimeError('unable to get conf option %s for %s: %s' % (field, name, errdata))
     return outdata.rstrip()
 
-def prevalidated_command(command_descs, inbuf, verbose):
+def new_style_command(target, command_descs, inbuf, verbose):
     """
     Do new-style command dance.
+    target: daemon to receive command: mon (any) or osd.N
     command_descs - the JSON output from the new monitor describing commands
     inbuf - any -i input file data
     verbose - bool
@@ -1091,11 +1113,13 @@ def prevalidated_command(command_descs, inbuf, verbose):
                 if interactive_input in ['q', 'quit', 'Q']:
                     return 0, '', ''
                 cmdargs = parse_cmdargs(interactive_input.split())[1]
+                target = find_cmd_target(cmdargs)
                 valid_dict = validate_command(parsed_args, sigdict, cmdargs)
                 if valid_dict:
                     if verbose:
                         print >> sys.stderr, "Submitting command ", valid_dict
-                    ret, outbuf, outs = json_command(argdict=valid_dict)
+                    ret, outbuf, outs = json_command(target=target,
+                                                     argdict=valid_dict)
                     if ret:
                         sys.stderr.write('Error {}: {}'.format(ret, outs))
                         return ret, '', outs
@@ -1104,8 +1128,40 @@ def prevalidated_command(command_descs, inbuf, verbose):
 
     if verbose:
         print >> sys.stderr, "Submitting command ", valid_dict
-    return json_command(argdict=valid_dict, inbuf=inbuf)
+    return json_command(target=target, argdict=valid_dict, inbuf=inbuf)
 
+OSD_TELL_MATCH = { \
+    'sig': ['tell', {'name':'target','type':'CephName'}], \
+    'matchnum': 2, \
+    'return_key': 'target', \
+}
+PGID_MATCH = { \
+    'sig': ['pg', {'name':'pgid','type':'CephPgid'}], \
+    'matchnum': 2, \
+    'return_key': 'pgid', \
+}
+
+def find_cmd_target(childargs):
+    """
+    Using a minimal validation, figure out whether the command
+    should be sent to a monitor or an osd.  We do this before even
+    asking for the 'real' set of command signatures, so we can ask the
+    right daemon.
+    Returns ('osd', osdid), ('pg', pgid), or ('mon', '')
+    """
+    sig = parse_funcsig(['tell', {'name':'target','type':'CephName'}])
+    valid_dict = validate(childargs, sig, partial=True);
+    if len(valid_dict) == 2:
+        name = CephName()
+        name.valid(valid_dict['target'])
+        return 'osd', name.nameid
+
+    sig = parse_funcsig(['pg', {'name':'pgid','type':'CephPgid'}])
+    valid_dict = validate(childargs, sig, partial=True);
+    if len(valid_dict) == 2:
+        return 'pg', valid_dict['pgid']
+
+    return 'mon', ''
 
 ###
 # main
@@ -1208,12 +1264,15 @@ def main():
                 format(parsed_args.output_file, e)
             return 1
 
+    target = find_cmd_target(childargs)
+
     # fetch JSON sigs from command
     # each line contains one command signature (a placeholder name
     # of the form 'cmdNNN' followed by an array of argument descriptors)
     # as part of the validated argument JSON object
 
-    ret, outbuf, outs = json_command('get_command_descriptions')
+    ret, outbuf, outs = json_command(target=target,
+                                     prefix='get_command_descriptions')
     if ret == -errno.EINVAL:
         # send command to old monitor
         ret, outbuf, outs = cluster.mon_command(' '.join(sys.argv[1:]), inbuf)
@@ -1223,7 +1282,7 @@ def main():
             format(ret)
         return ret
 
-    ret, outbuf, outs = prevalidated_command(outbuf, inbuf, verbose)
+    ret, outbuf, outs = new_style_command(target, outbuf, inbuf, verbose)
 
     if ret < 0:
         ret = -ret
