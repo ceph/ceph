@@ -1728,11 +1728,11 @@ public:
 
 class C_Dir_Committed : public Context {
   CDir *dir;
-  version_t version, last_renamed_version;
+  version_t version;
 public:
-  C_Dir_Committed(CDir *d, version_t v, version_t lrv) : dir(d), version(v), last_renamed_version(lrv) { }
+  C_Dir_Committed(CDir *d, version_t v) : dir(d), version(v) { }
   void finish(int r) {
-    dir->_committed(version, last_renamed_version);
+    dir->_committed(version);
   }
 };
 
@@ -1993,12 +1993,9 @@ void CDir::_commit(version_t want)
 
   if (committed_dn == items.end())
     cache->mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(g_ceph_context), 0, NULL,
-                                 new C_Dir_Committed(this, get_version(),
-                                       inode->inode.last_renamed_version));
+                                 new C_Dir_Committed(this, get_version()));
   else { // send in a different Context
-    C_GatherBuilder gather(g_ceph_context, 
-	    new C_Dir_Committed(this, get_version(),
-		      inode->inode.last_renamed_version));
+    C_GatherBuilder gather(g_ceph_context, new C_Dir_Committed(this, get_version()));
     while (committed_dn != items.end()) {
       ObjectOperation n = ObjectOperation();
       committed_dn = _commit_partial(n, snaps, max_write_size, committed_dn);
@@ -2027,9 +2024,9 @@ void CDir::_commit(version_t want)
  *
  * @param v version i just committed
  */
-void CDir::_committed(version_t v, version_t lrv)
+void CDir::_committed(version_t v)
 {
-  dout(10) << "_committed v " << v << " (last renamed " << lrv << ") on " << *this << dendl;
+  dout(10) << "_committed v " << v << " on " << *this << dendl;
   assert(is_auth());
 
   bool stray = inode->is_stray();
