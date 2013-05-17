@@ -190,31 +190,6 @@ COMMAND("tell " \
 	"name=target,type=CephName " \
 	"name=args,type=CephString,n=N", \
 	"send a command to a specific daemon")
-/*
- * Really, these are OSD commands (tell)
- */
-
-COMMAND("pg name=pgid,type=CephPgid " \
-	"name=args,type=CephString,n=N", \
-	"send a command to a specific pg")
-COMMAND("bench " \
-	"name=count,type=CephInt,req=false " \
-	"name=size,type=CephInt,req=false ", \
-	"OSD benchmark: write <count> <size>-byte objects, " \
-	"(default 1G size 4MB). Results in log.")
-COMMAND("flush_pg_stats", "flush pg stats")
-COMMAND("debug dump_missing " \
-	"name=filename,type=CephFilepath",
-	"dump missing objects to a named file")
-COMMAND("debug kick_recovery_wq " \
-	"name=delay,type=CephInt,range=0",
-	"set osd_recovery_delay_start to <val>")
-COMMAND("cpu_profiler " \
-	"name=arg,type=CephChoices,strings=status|flush",
-	"run cpu profiling on daemon")
-COMMAND("dump_pg_recovery_stats", "dump pg recovery statistics")
-COMMAND("reset_pg_recovery_stats", "reset pg recovery statistics")
-
 
 /*
  * MDS commands (MDSMonitor.cc)
