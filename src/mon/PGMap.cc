@@ -675,6 +675,13 @@ void PGMap::recovery_summary(ostream& out) const
   }
 }
 
+void PGMap::clear_delta()
+{
+  pg_sum_delta = pool_stat_t();
+  pg_sum_deltas.clear();
+  stamp_delta = ceph_clock_now(g_ceph_context);
+}
+
 void PGMap::print_summary(ostream& out) const
 {
   std::stringstream ss;
