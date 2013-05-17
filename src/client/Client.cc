@@ -988,6 +988,12 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 	   << dendl;
 
   bufferlist::iterator p = reply->get_trace_bl().begin();
+  if (request->got_unsafe) {
+    ldout(cct, 10) << "insert_trace -- already got unsafe; ignoring" << dendl;
+    assert(p.end());
+    return NULL;
+  }
+
   if (p.end()) {
     ldout(cct, 10) << "insert_trace -- no trace" << dendl;
 
