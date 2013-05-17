@@ -1444,7 +1444,12 @@ private:
   Monitor(const Monitor& rhs);
   Monitor& operator=(const Monitor &rhs);
 
+  set<string> bootstrap_ready_services;
+
 public:
+  void prepare_bootstrap();
+  void mark_bootstrap_ready(string name);
+
   class StoreConverter {
     const string path;
     boost::scoped_ptr<MonitorDBStore> db;
