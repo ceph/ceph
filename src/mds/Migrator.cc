@@ -1098,6 +1098,8 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, list<Context*>& fini
 
   in->item_open_file.remove_myself();
 
+  in->clear_dirty_parent();
+
   // waiters
   in->take_waiting(CInode::WAIT_ANY_MASK, finished);
 
@@ -2074,6 +2076,8 @@ void Migrator::import_reverse(CDir *dir)
 	if (!in->has_subtree_root_dirfrag(mds->get_nodeid()))
 	  in->clear_scatter_dirty();
 
+	in->clear_dirty_parent();
+
 	in->authlock.clear_gather();
 	in->linklock.clear_gather();
 	in->dirfragtreelock.clear_gather();
@@ -2515,7 +2519,7 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
     
     // add dentry to journal entry
     if (le)
-      le->metablob.add_dentry(dn, dn->is_dirty());
+      le->metablob.add_import_dentry(dn);
   }
   
 #ifdef MDS_VERIFY_FRAGSTAT
