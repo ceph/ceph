@@ -2688,6 +2688,7 @@ public:
     // dirty inode, dn, dir
     newi->inode.version--;   // a bit hacky, see C_MDS_mknod_finish
     newi->mark_dirty(newi->inode.version+1, mdr->ls);
+    newi->_mark_dirty_parent(mdr->ls);
 
     mdr->apply();
 
@@ -2821,6 +2822,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   dn->push_projected_linkage(in);
 
   in->inode.version = dn->pre_dirty();
+  in->inode.update_backtrace();
   if (cmode & CEPH_FILE_MODE_WR) {
     in->inode.client_ranges[client].range.first = 0;
     in->inode.client_ranges[client].range.last = in->inode.get_layout_size_increment();
@@ -2839,7 +2841,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  le->metablob.add_primary_dentry(dn, in, true);
+  le->metablob.add_primary_dentry(dn, in, true, true);
 
   // do the open
   mds->locker->issue_new_caps(in, cmode, mdr->session, realm, req->is_replay());
@@ -3771,6 +3773,8 @@ void Server::handle_set_vxattr(MDRequest *mdr, CInode *cur,
     }
 
     pi->version = cur->pre_dirty();
+    if (cur->is_file())
+      pi->update_backtrace();
 
     // log + wait
     mdr->ls = mdlog->get_current_segment();
@@ -4013,6 +4017,7 @@ public:
     // a new version of hte inode since it's just been created)
     newi->inode.version--; 
     newi->mark_dirty(newi->inode.version + 1, mdr->ls);
+    newi->_mark_dirty_parent(mdr->ls);
 
     // mkdir?
     if (newi->inode.is_dir()) { 
@@ -4095,6 +4100,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
     newi->inode.mode |= S_IFREG;
   newi->inode.version = dn->pre_dirty();
   newi->inode.rstat.rfiles = 1;
+  newi->inode.update_backtrace();
 
   // if the client created a _regular_ file via MKNOD, it's highly likely they'll
   // want to write to it (e.g., if they are reexporting NFS)
@@ -4135,7 +4141,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(),
 				    PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  le->metablob.add_primary_dentry(dn, newi, true);
+  le->metablob.add_primary_dentry(dn, newi, true, true);
 
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
@@ -4175,6 +4181,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
 
   newi->inode.version = dn->pre_dirty();
   newi->inode.rstat.rsubdirs = 1;
+  newi->inode.update_backtrace();
 
   dout(12) << " follows " << follows << dendl;
   if (follows >= dn->first)
@@ -4193,7 +4200,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  le->metablob.add_primary_dentry(dn, newi, true);
+  le->metablob.add_primary_dentry(dn, newi, true, true);
   le->metablob.add_new_dir(newdir); // dirty AND complete AND new
   
   // issue a cap on the directory
@@ -4251,6 +4258,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   newi->inode.rstat.rbytes = newi->inode.size;
   newi->inode.rstat.rfiles = 1;
   newi->inode.version = dn->pre_dirty();
+  newi->inode.update_backtrace();
 
   if (follows >= dn->first)
     dn->first = follows + 1;
@@ -4263,7 +4271,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  le->metablob.add_primary_dentry(dn, newi, true);
+  le->metablob.add_primary_dentry(dn, newi, true, true);
 
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
