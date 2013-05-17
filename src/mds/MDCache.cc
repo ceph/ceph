@@ -8637,6 +8637,20 @@ void MDCache::eval_remote(CDentry *dn)
   }
 }
 
+void MDCache::fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin)
+{
+  object_t oid = CInode::get_object_name(ino, frag_t(), "");
+  mds->objecter->getxattr(oid, object_locator_t(pool), "parent", CEPH_NOSNAP, &bl, 0, fin);
+}
+
+void MDCache::remove_backtrace(inodeno_t ino, int64_t pool, Context *fin)
+{
+  SnapContext snapc;
+  object_t oid = CInode::get_object_name(ino, frag_t(), "");
+  mds->objecter->removexattr(oid, object_locator_t(pool), "parent", snapc,
+			     ceph_clock_now(g_ceph_context), 0, NULL, fin);
+}
+
 class C_MDC_PurgeStrayPurged : public Context {
   MDCache *cache;
   CDentry *dn;
@@ -8651,13 +8665,12 @@ public:
 class C_MDC_PurgeForwardingPointers : public Context {
   MDCache *cache;
   CDentry *dn;
-  Context *fin;
 public:
-  inode_backtrace_t backtrace;
-  C_MDC_PurgeForwardingPointers(MDCache *c, CDentry *d, Context *f) :
-    cache(c), dn(d), fin(f) {}
+  bufferlist bl;
+  C_MDC_PurgeForwardingPointers(MDCache *c, CDentry *d) :
+    cache(c), dn(d) {}
   void finish(int r) {
-    cache->_purge_forwarding_pointers(&backtrace, dn, r, fin);
+    cache->_purge_forwarding_pointers(bl, dn, r);
   }
 };
 
@@ -8672,18 +8685,22 @@ public:
   }
 };
 
-void MDCache::_purge_forwarding_pointers(inode_backtrace_t *backtrace, CDentry *d, int r, Context *fin)
+void MDCache::_purge_forwarding_pointers(bufferlist& bl, CDentry *dn, int r)
 {
   assert(r == 0 || r == -ENOENT || r == -ENODATA);
+  inode_backtrace_t backtrace;
+  if (r == 0)
+    ::decode(backtrace, bl);
+
   // setup gathering context
   C_GatherBuilder gather_bld(g_ceph_context);
 
   // remove all the objects with forwarding pointer backtraces (aka sentinels)
-  for (set<int64_t>::const_iterator i = backtrace->old_pools.begin();
-       i != backtrace->old_pools.end();
+  for (set<int64_t>::const_iterator i = backtrace.old_pools.begin();
+       i != backtrace.old_pools.end();
        ++i) {
     SnapContext snapc;
-    object_t oid = CInode::get_object_name(backtrace->ino, frag_t(), "");
+    object_t oid = CInode::get_object_name(backtrace.ino, frag_t(), "");
     object_locator_t oloc(*i);
 
     mds->objecter->remove(oid, oloc, snapc, ceph_clock_now(g_ceph_context), 0,
@@ -8691,10 +8708,10 @@ void MDCache::_purge_forwarding_pointers(inode_backtrace_t *backtrace, CDentry *
   }
 
   if (gather_bld.has_subs()) {
-    gather_bld.set_finisher(fin);
+    gather_bld.set_finisher(new C_MDC_PurgeStray(this, dn));
     gather_bld.activate();
   } else {
-    fin->finish(r);
+    _purge_stray(dn, r);
   }
 }
 
@@ -8758,17 +8775,12 @@ void MDCache::purge_stray(CDentry *dn)
   if (in->is_dir()) {
     dout(10) << "purge_stray dir ... implement me!" << dendl;  // FIXME XXX
     // remove the backtrace
-    SnapContext snapc;
-    object_t oid = CInode::get_object_name(in->ino(), frag_t(), "");
-    object_locator_t oloc(mds->mdsmap->get_metadata_pool());
-
-    mds->objecter->removexattr(oid, oloc, "parent", snapc, ceph_clock_now(g_ceph_context), 0,
-                               NULL, new C_MDC_PurgeStrayPurged(this, dn));
+    remove_backtrace(in->ino(), mds->mdsmap->get_metadata_pool(),
+		     new C_MDC_PurgeStrayPurged(this, dn));
   } else if (in->is_file()) {
     // get the backtrace before blowing away the object
-    C_MDC_PurgeStray *strayfin = new C_MDC_PurgeStray(this, dn);
-    C_MDC_PurgeForwardingPointers *fpfin = new C_MDC_PurgeForwardingPointers(this, dn, strayfin);
-    in->fetch_backtrace(&fpfin->backtrace, fpfin);
+    C_MDC_PurgeForwardingPointers *fin = new C_MDC_PurgeForwardingPointers(this, dn);
+    fetch_backtrace(in->ino(), in->get_inode().layout.fl_pg_pool, fin->bl, fin);
   } else {
     // not a dir or file; purged!
     _purge_stray_purged(dn);
