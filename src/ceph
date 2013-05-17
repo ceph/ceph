@@ -537,6 +537,46 @@ def concise_sig(sig):
         s += d.helpstr()
     return s
 
+def parse_funcsig(sig):
+    """
+    parse a single descriptor (array of strings or dicts) into a
+    dict of function descriptor/validators (objects of CephXXX type)
+    """
+    newsig = []
+    argnum = 0
+    for desc in sig:
+        argnum += 1
+        if isinstance(desc, types.StringTypes):
+            t = CephPrefix
+            desc = {'type':t, 'name':'prefix', 'prefix':desc}
+        else:
+            # not a simple string, must be dict
+            if not 'type' in desc:
+                s = 'JSON descriptor {} has no type'.format(sig)
+                raise JsonFormat(s)
+            # look up type string in our globals() dict; if it's an
+            # object of type types.TypeType, it must be a
+            # locally-defined class. otherwise, we haven't a clue.
+            if desc['type'] in globals():
+                t = globals()[desc['type']]
+                if type(t) != types.TypeType:
+                    s = 'unknown type {}'.format(desc['type'])
+                    raise JsonFormat(s)
+            else:
+                s = 'unknown type {}'.format(desc['type'])
+                raise JsonFormat(s)
+
+        kwargs = dict()
+        for key, val in desc.items():
+            if key not in ['type', 'name', 'n', 'req']:
+                kwargs[key] = val
+        newsig.append(argdesc(t,
+                              name=desc.get('name', None),
+                              n=desc.get('n', 1),
+                              req=desc.get('req', True),
+                              **kwargs))
+    return newsig
+
 """
 parse_json_funcsigs(s)
 
@@ -564,8 +604,7 @@ each dict contains 'sig' with the array of descriptors, and 'help'
 with the helptext.
 """
 
-
-def parse_json_funcsig(s):
+def parse_json_funcsigs(s):
     try:
         overall = json.loads(s)
     except Exception as e:
@@ -579,40 +618,7 @@ def parse_json_funcsig(s):
         except KeyError:
             s = "JSON descriptor {} has no 'sig'".format(cmdtag)
             raise JsonFormat(s)
-
-        newsig = []
-        argnum = 0
-        for desc in sig:
-            argnum += 1
-            if isinstance(desc, types.StringTypes):
-                t = CephPrefix
-                desc = {'type':t, 'name':'prefix', 'prefix':desc}
-            else:
-                # not a simple string, must be dict
-                if not 'type' in desc:
-                    s = 'JSON descriptor {} has no type'.format(sig)
-                    raise JsonFormat(s)
-                # look up type string in our globals() dict; if it's an
-                # object of type types.TypeType, it must be a
-                # locally-defined class. otherwise, we haven't a clue.
-                if desc['type'] in globals():
-                    t = globals()[desc['type']]
-                    if type(t) != types.TypeType:
-                        s = 'unknown type {}'.format(desc['type'])
-                        raise JsonFormat(s)
-                else:
-                    s = 'unknown type {}'.format(desc['type'])
-                    raise JsonFormat(s)
-
-            kwargs = dict()
-            for key, val in desc.items():
-                if key not in ['type', 'name', 'n', 'req']:
-                    kwargs[key] = val
-            newsig.append(argdesc(t,
-                                  name=desc.get('name', None),
-                                  n=desc.get('n', 1),
-                                  req=desc.get('req', True),
-                                  **kwargs))
+        newsig = parse_funcsig(sig)
         sigdict[cmdtag] = {'sig':newsig, 'helptext':helptext}
     return sigdict
 
@@ -1041,7 +1047,7 @@ def prevalidated_command(command_descs, inbuf, verbose):
     verbose - bool
     """
 
-    sigdict = parse_json_funcsig(command_descs)
+    sigdict = parse_json_funcsigs(command_descs)
 
     parsed_args, cmdargs = parse_cmdargs(epilog='\nAvailable commands: \n\n'
                                            + format_help(sigdict))
