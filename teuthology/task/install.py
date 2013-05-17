@@ -28,7 +28,7 @@ def _get_system_type(remote):
     log.debug("System to be installed: %s" % system_value)
     if system_value in ['Ubuntu','Debian',]:
         return "deb"
-    if system_value in ['CentOS',]:
+    if system_value in ['CentOS', 'RedHatEnterpriseServer']:
         return "rpm"
     return system_value
 
@@ -201,8 +201,16 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
             remote.run(args=['sudo', 'yum', 'install', pkg2add, '-y',],
                     stderr=pk_err_mess)
         except:
-            if not pk_err_mess.getvalue().strip() == "Error: Nothing to do":
-                raise
+            err_str = pk_err_mess.getvalue().strip()
+            if err_str.find("Error: ") >= 0:
+                ok_msg_loc = err_str.find("Error: Nothing to do")
+                if ok_msg_loc < 0:
+                    raise
+                # Check for other error strings (I'm being paranoid).
+                if err_str[0:ok_msg_loc].find("Error: ") > 0:
+                    raise
+                if err_str[ok_msg_loc+1:].find("Error: ") > 0:
+                    raise
 
 def purge_data(ctx):
     """
