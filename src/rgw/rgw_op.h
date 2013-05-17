@@ -27,7 +27,6 @@ struct req_state;
 class RGWHandler;
 
 void rgw_get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs);
-int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bucket, bool prefetch_data);
 
 
 /**
