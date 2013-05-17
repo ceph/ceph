@@ -1973,6 +1973,7 @@ noinst_HEADERS = \
         os/FileStore.h\
 	os/FlatIndex.h\
 	os/HashIndex.h\
+	os/FDCache.h\
 	os/IndexManager.h\
         os/Journal.h\
         os/JournalingObjectStore.h\
