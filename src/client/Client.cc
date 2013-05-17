@@ -726,10 +726,14 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     in->flags |= I_COMPLETE;
     if (in->dir) {
       ldout(cct, 10) << " dir is open on empty dir " << in->ino << " with "
-		     << in->dir->dentry_map.size() << " entries, tearing down" << dendl;
-      while (!in->dir->dentry_map.empty())
+		     << in->dir->dentry_map.size() << " entries, marking all dentries null" << dendl;
+      for (map<string, Dentry*>::iterator p = in->dir->dentry_map.begin();
+	   p != in->dir->dentry_map.end();
+	   ++p) {
 	unlink(in->dir->dentry_map.begin()->second, true, true);
-      close_dir(in->dir);
+      }
+      if (in->dir->dentry_map.empty())
+	close_dir(in->dir);
     }
   }
 
@@ -3799,7 +3803,7 @@ void Client::_invalidate_inode_parents(Inode *in)
     // FIXME: we play lots of unlink/link tricks when handling MDS replies,
     //        so in->dn_set doesn't always reflect the state of kernel's dcache.
     _schedule_invalidate_dentry_callback(dn, true);
-    unlink(dn, false);
+    unlink(dn, true, true);
   }
 }
 
