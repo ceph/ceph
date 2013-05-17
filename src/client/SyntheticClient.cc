@@ -1391,11 +1391,9 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       if (ll_inos.count(i)) {
 	Fh *fhp;
 	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
-	if (client->ll_create(i1, n, m, f, &attr, &i2) == 0) {
+	if (client->ll_create(i1, n, m, f, &attr, NULL, &fhp) == 0) {
 	  ll_inos[ri] = attr.st_ino;
-	  if (client->ll_create_fh(i2, f, m, &fhp) == 0)
-	    ll_files[r] = fhp;
-	  client->ll_put(i2);
+	  ll_files[r] = fhp;
 	}
 	client->ll_put(i1);
       }
