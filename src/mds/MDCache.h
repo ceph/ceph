@@ -820,12 +820,15 @@ public:
       eval_stray(dn);
   }
 protected:
-  void _purge_forwarding_pointers(inode_backtrace_t *backtrace, CDentry *dn, int r, Context *fin);
+  void fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin);
+  void remove_backtrace(inodeno_t ino, int64_t pool, Context *fin);
+  void _purge_forwarding_pointers(bufferlist& bl, CDentry *dn, int r);
   void _purge_stray(CDentry *dn, int r);
   void purge_stray(CDentry *dn);
   void _purge_stray_purged(CDentry *dn, int r=0);
   void _purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls);
   void _purge_stray_logged_truncate(CDentry *dn, LogSegment *ls);
+  friend class C_MDC_FetchedBacktrace;
   friend class C_MDC_PurgeForwardingPointers;
   friend class C_MDC_PurgeStray;
   friend class C_MDC_PurgeStrayLogged;

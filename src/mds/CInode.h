@@ -535,10 +535,7 @@ private:
   void fetch(Context *fin);
   void _fetched(bufferlist& bl, bufferlist& bl2, Context *fin);  
 
-  void fetch_backtrace(inode_backtrace_t *bt, Context *fin);
-  void _fetched_backtrace(bufferlist *bl, inode_backtrace_t *bt, Context *fin);
-
-  void build_backtrace(int64_t location, inode_backtrace_t* bt);
+  void build_backtrace(int64_t pool, inode_backtrace_t& bt);
   void store_backtrace(Context *fin);
   void _stored_backtrace(version_t v, Context *fin);
   void _mark_dirty_parent(LogSegment *ls, bool dirty_pool=false);

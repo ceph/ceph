@@ -973,63 +973,28 @@ void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
   delete fin;
 }
 
-class C_CInode_FetchedBacktrace : public Context {
-  CInode *in;
-  inode_backtrace_t *backtrace;
-  Context *fin;
-public:
-  bufferlist bl;
-  C_CInode_FetchedBacktrace(CInode *i, inode_backtrace_t *bt, Context *f) :
-    in(i), backtrace(bt), fin(f) {}
-
-  void finish(int r) {
-    if (r == 0) {
-      in->_fetched_backtrace(&bl, backtrace, fin);
-    } else {
-      fin->finish(r);
-    }
-  }
-};
-
-void CInode::fetch_backtrace(inode_backtrace_t *bt, Context *fin)
+void CInode::build_backtrace(int64_t pool, inode_backtrace_t& bt)
 {
-  object_t oid = get_object_name(ino(), frag_t(), "");
-  object_locator_t oloc(inode.layout.fl_pg_pool);
-
-  SnapContext snapc;
-  C_CInode_FetchedBacktrace *c = new C_CInode_FetchedBacktrace(this, bt, fin);
-  mdcache->mds->objecter->getxattr(oid, oloc, "parent", CEPH_NOSNAP, &c->bl, 0, c);
-}
-
-void CInode::_fetched_backtrace(bufferlist *bl, inode_backtrace_t *bt, Context *fin)
-{
-  ::decode(*bt, *bl);
-  if (fin) {
-    fin->finish(0);
-  }
-}
-
-void CInode::build_backtrace(int64_t location, inode_backtrace_t* bt)
-{
-  bt->ino = inode.ino;
-  bt->ancestors.clear();
+  bt.ino = inode.ino;
+  bt.ancestors.clear();
+  bt.pool = pool;
 
   CInode *in = this;
   CDentry *pdn = get_parent_dn();
   while (pdn) {
     CInode *diri = pdn->get_dir()->get_inode();
-    bt->ancestors.push_back(inode_backpointer_t(diri->ino(), pdn->name, in->inode.version));
+    bt.ancestors.push_back(inode_backpointer_t(diri->ino(), pdn->name, in->inode.version));
     in = diri;
     pdn = in->get_parent_dn();
   }
   vector<int64_t>::iterator i = inode.old_pools.begin();
   while(i != inode.old_pools.end()) {
     // don't add our own pool id to old_pools to avoid looping (e.g. setlayout 0, 1, 0)
-    if (*i == location) {
+    if (*i == pool) {
       ++i;
       continue;
     }
-    bt->old_pools.insert(*i);
+    bt.old_pools.insert(*i);
     ++i;
   }
 }
@@ -1058,7 +1023,7 @@ void CInode::store_backtrace(Context *fin)
     pool = inode.layout.fl_pg_pool;
 
   inode_backtrace_t bt;
-  build_backtrace(pool, &bt);
+  build_backtrace(pool, bt);
   bufferlist bl;
   ::encode(bt, bl);
 
