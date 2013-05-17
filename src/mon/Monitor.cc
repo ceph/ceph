@@ -2459,65 +2459,6 @@ void Monitor::get_status(stringstream &ss, Formatter *f)
   }
 }
 
-/**
- * Read a command description list out of cmds, and dump it to f.
- * A signature description is a set of space-separated words;
- * see MonCommands.h for more info.
- */
-
-static void
-dump_cmds_to_json(Formatter *f, const char *cmds)
-{
-  // put whole command signature in an already-opened container
-  // elements are: "name", meaning "the typeless name that means a literal"
-  // an object {} with key:value pairs representing an argument
-
-  int argnum = 0;
-  stringstream ss(cmds);
-  std::string word;
-
-  while (std::getline(ss, word, ' ')) {
-    argnum++;
-    // if no , or =, must be a plain word to put out
-    if (word.find_first_of(",=") == string::npos) {
-      f->dump_string("arg", word);
-      continue;
-    }
-    // Snarf up all the key=val,key=val pairs, put 'em in a dict.
-    // no '=val' implies '=True'.
-    std::stringstream argdesc(word);
-    std::string keyval, name;
-    std::map<std::string, std::string>desckv;
-    // accumulate descriptor keywords in desckv
-    size_t pos;
-
-    while (std::getline(argdesc, keyval, ',')) {
-      // key=value; key by itself implies value is bool true
-      // name="name" means arg dict will be titled 'name'
-      pos = keyval.find('=');
-      std::string key, val;
-      if (pos != std::string::npos) {
-	key = keyval.substr(0, pos);
-	val = keyval.substr(pos+1);
-      } else {
-        key = keyval;
-        val = true;
-      }
-      desckv.insert(std::pair<std::string, std::string> (key, val));
-    }
-    // name the individual desc object based on the name key
-    f->open_object_section(desckv["name"].c_str());
-    // dump all the keys including name into the array
-    for (std::map<std::string, std::string>::iterator it = desckv.begin();
-	 it != desckv.end(); it++) {
-      f->dump_string(it->first.c_str(), it->second);
-    }
-    f->close_section(); // attribute object for individual desc
-  }
-}
-
-#define ARRAY_SIZE(a)	(sizeof(a) / sizeof(*a))
-
 #undef COMMAND
 struct MonCommand {
   const char *cmdstring;
