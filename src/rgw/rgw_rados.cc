@@ -1360,6 +1360,7 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
   RGWBucketInfo info;
   info.bucket = bucket;
   info.owner = owner;
+  info.region = region.name;
   ret = put_bucket_info(bucket.name, info, exclusive, &objv_tracker, &attrs);
   if (ret == -EEXIST) {
     index_ctx.remove(dir_oid);

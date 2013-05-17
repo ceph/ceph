@@ -287,7 +287,7 @@ static int read_policy(RGWRados *store, struct req_state *s, RGWBucketInfo& buck
  * only_bucket: If true, reads the bucket ACL rather than the object ACL.
  * Returns: 0 on success, -ERR# otherwise.
  */
-int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bucket, bool prefetch_data)
+static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bucket, bool prefetch_data)
 {
   int ret = 0;
   string obj_str;
@@ -309,6 +309,13 @@ int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bucket, b
     ret = read_policy(store, s, bucket_info, s->bucket_acl, s->bucket, no_obj);
 
     s->bucket_owner = s->bucket_acl->get_owner();
+
+    string& region = bucket_info.region;
+    if ((region.empty() && !store->region.is_master) &&
+        (region != store->region.name)) {
+      ldout(s->cct, 0) << "NOTICE: request for data in a different region (" << region << " != " << store->region.name << ")" << dendl;
+      return -ERR_PERMANENT_REDIRECT;
+    }
   }
 
   /* we're passed only_bucket = true when we specifically need the bucket's
@@ -850,6 +857,14 @@ void RGWCreateBucket::execute()
   ret = get_params();
   if (ret < 0)
     return;
+
+  if (!store->region.is_master) {
+    if (store->region.api_name != location_constraint) {
+      ldout(s->cct, 0) << "location constraint (" << location_constraint << ") doesn't match region" << dendl;
+      ret = -EINVAL;
+      return;
+    }
+  }
 
   s->bucket_owner.set_id(s->user.user_id);
   s->bucket_owner.set_name(s->user.display_name);
