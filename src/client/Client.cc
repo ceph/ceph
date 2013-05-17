@@ -1260,18 +1260,25 @@ int Client::verify_reply_trace(int r,
       Inode *target = 0;  // ptarget may be NULL
       Dentry *d = request->dentry();
       if (d) {
-	// rename is special: we handle old_dentry unlink explicitly in insert_dentry_inode(), so
-	// we need to compensate and do the same here.
+	// rename is special: we handle old_dentry unlink explicitly
+	// in insert_dentry_inode(), so we need to compensate and do
+	// the same here.
 	Dentry *od = request->old_dentry();
 	if (od) {
 	  unlink(od, false);
 	}
-	ldout(cct, 10) << "make_request got traceless reply, looking up #"
-		       << d->dir->parent_inode->ino << "/" << d->name
-		       << " got_ino " << got_created_ino
-		       << " ino " << created_ino
-		       << dendl;
-	r = _do_lookup(d->dir->parent_inode, d->name, &target);
+
+	if (d->dir) {
+	  ldout(cct, 10) << "make_request got traceless reply, looking up #"
+			 << d->dir->parent_inode->ino << "/" << d->name
+			 << " got_ino " << got_created_ino
+			 << " ino " << created_ino
+			 << dendl;
+	  r = _do_lookup(d->dir->parent_inode, d->name, &target);
+	} else {
+	  // if the dentry is not linked, just do our best. see #5021.
+	  assert(0 == "how did this happen?  i want logs!");
+	}
       } else {
 	Inode *in = request->inode();
 	ldout(cct, 10) << "make_request got traceless reply, forcing getattr on #"
