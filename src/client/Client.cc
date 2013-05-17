@@ -998,6 +998,18 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
       d->dir->parent_inode->flags &= ~I_COMPLETE;
       d->dir->release_count++;
     }
+
+    if (d && reply->get_result() == 0) {
+      Dentry *od = request->old_dentry();
+      if (od) {
+	// rename
+	unlink(od, false, false);
+      } else if (request->head.op == CEPH_MDS_OP_RMDIR ||
+		 request->head.op == CEPH_MDS_OP_UNLINK) {
+	// unlink, rmdir
+	// ...
+      }
+    }
     return NULL;
   }
 
@@ -1264,14 +1276,6 @@ int Client::verify_reply_trace(int r,
       Inode *target = 0;  // ptarget may be NULL
       Dentry *d = request->dentry();
       if (d) {
-	// rename is special: we handle old_dentry unlink explicitly
-	// in insert_dentry_inode(), so we need to compensate and do
-	// the same here.
-	Dentry *od = request->old_dentry();
-	if (od) {
-	  unlink(od, false, false);
-	}
-
 	if (d->dir) {
 	  ldout(cct, 10) << "make_request got traceless reply, looking up #"
 			 << d->dir->parent_inode->ino << "/" << d->name
