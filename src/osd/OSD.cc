@@ -3328,6 +3328,56 @@ void OSD::handle_command(MCommand *m)
   m->put();
 }
 
+struct OSDCommand {
+  const char *cmdstring;
+  const char *helpstring;
+} osd_commands[] = {
+
+#define COMMAND(parsesig, helptext) \
+  {parsesig, helptext},
+
+// yes, these are really pg commands, but there's a limit to how
+// much work it's worth.  The OSD returns all of them.
+
+COMMAND("pg " \
+	"name=pgid,type=CephPgid " \
+	"name=cmd,type=CephChoices,strings=query", \
+	"show details of a specific pg")
+COMMAND("pg " \
+	"name=pgid,type=CephPgid " \
+	"name=cmd,type=CephChoices,strings=mark_unfound_lost " \
+	"name=mulcmd,type=CephChoices,strings=revert", \
+	"mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available")
+COMMAND("pg " \
+	"name=pgid,type=CephPgid " \
+	"name=cmd,type=CephChoices,strings=list_missing " \
+	"name=offset,type=CephString,req=false",
+	"list missing objects on this pg, perhaps starting at an offset given in JSON")
+
+COMMAND("version", "report version of OSD")
+COMMAND("injectargs " \
+	"name=injected_args,type=CephString,n=N",
+	"inject configuration arguments into running OSD")
+COMMAND("bench " \
+	"name=count,type=CephInt,req=false " \
+	"name=size,type=CephInt,req=false ", \
+	"OSD benchmark: write <count> <size>-byte objects, " \
+	"(default 1G size 4MB). Results in log.")
+COMMAND("flush_pg_stats", "flush pg stats")
+COMMAND("debug dump_missing " \
+	"name=filename,type=CephFilepath",
+	"dump missing objects to a named file")
+COMMAND("debug kick_recovery_wq " \
+	"name=delay,type=CephInt,range=0",
+	"set osd_recovery_delay_start to <val>")
+COMMAND("cpu_profiler " \
+	"name=arg,type=CephChoices,strings=status|flush",
+	"run cpu profiling on daemon")
+COMMAND("dump_pg_recovery_stats", "dump pg recovery statistics")
+COMMAND("reset_pg_recovery_stats", "reset pg recovery statistics")
+
+};
+
 void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist& data)
 {
   int r = 0;
@@ -3351,6 +3401,32 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
   }
 
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+
+  if (prefix == "get_command_descriptions") {
+    stringstream ds;
+    int cmdnum = 0;
+    JSONFormatter *f = new JSONFormatter();
+    f->open_object_section("command_descriptions");
+    for (OSDCommand *cp = osd_commands;
+	 cp < &osd_commands[ARRAY_SIZE(osd_commands)]; cp++) {
+
+      ostringstream secname;
+      secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
+      f->open_object_section(secname.str().c_str());
+      f->open_array_section("sig");
+      dump_cmds_to_json(f, cp->cmdstring);
+      f->close_section();  // desc array
+      f->dump_string("help", string(cp->helpstring));
+      f->close_section(); // overall object
+      cmdnum++;
+    }
+    f->close_section();	// command_descriptions
+
+    f->flush(ds);
+    odata.append(ds);
+    delete f;
+    goto out;
+  }
 
   if (prefix == "version") {
     ss << pretty_version_to_str();
@@ -3391,7 +3467,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
 	ss << "i don't have pgid " << pgid;
 	r = -ENOENT;
       } else {
-	r = pg->do_command(args, ss, data, odata);
+	r = pg->do_command(cmd, ss, data, odata);
 	pg->unlock();
       }
     }

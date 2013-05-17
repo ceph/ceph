@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -40,6 +41,7 @@
 
 #include "common/config.h"
 #include "include/compat.h"
+#include "common/cmdparse.h"
 
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"
@@ -262,7 +264,30 @@ int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
 int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss,
 			     bufferlist& idata, bufferlist& odata)
 {
-  if (cmd.size() && cmd[0] == "query") {
+
+  map<string, cmd_vartype> cmdmap;
+  string prefix;
+
+  if (cmd.empty()) {
+    ss << "no command given";
+    return -EINVAL;
+  }
+
+  stringstream ss2;
+  if (!cmdmap_from_json(cmd, &cmdmap, ss2)) {
+    ss << ss2.str();
+    return -EINVAL;
+  }
+
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  if (prefix != "pg") {
+    ss << "ReplicatedPG::do_command: not pg command";
+    return -EINVAL;
+  }
+
+  string command;
+  cmd_getval(g_ceph_context, cmdmap, "cmd", command);
+  if (command == "query") {
     JSONFormatter jsf(true);
     jsf.open_object_section("pg");
     jsf.dump_string("state", pg_state_string(get_state()));
@@ -289,17 +314,10 @@ int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss,
     odata.append(dss);
     return 0;
   }
-  else if (cmd.size() > 1 &&
-	   cmd[0] == "mark_unfound_lost") {
-    if (cmd.size() > 2) {
-      ss << "too many arguments";
-      return -EINVAL;
-    }
-    if (cmd.size() == 1) {
-      ss << "too few arguments; must specify mode as 'revert' (mark and delete not yet implemented)";
-      return -EINVAL;
-    }
-    if (cmd[1] != "revert") {
+  else if (command == "mark_unfound_lost") {
+    string mulcmd;
+    cmd_getval(g_ceph_context, cmdmap, "mulcmd", mulcmd);
+    if (mulcmd != "revert") {
       ss << "mode must be 'revert'; mark and delete not yet implemented";
       return -EINVAL;
     }
@@ -326,13 +344,14 @@ int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss,
     mark_all_unfound_lost(mode);
     return 0;
   }
-  else if (!cmd.empty() && cmd[0] == "list_missing") {
+  else if (command == "list_missing") {
     JSONFormatter jf(true);
     hobject_t offset;
-    if (cmd.size() > 1) {
+    string offset_json;
+    if (cmd_getval(g_ceph_context, cmdmap, "offset", offset_json)) {
       json_spirit::Value v;
       try {
-	if (!json_spirit::read(cmd[1], v))
+	if (!json_spirit::read(offset_json, v))
 	  throw std::runtime_error("bad json");
 	offset.decode(v);
       } catch (std::runtime_error& e) {
