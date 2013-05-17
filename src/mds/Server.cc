@@ -6228,7 +6228,6 @@ void Server::_rename_prepare(MDRequest *mdr,
 
   if (!silent) {
     if (pi) {
-      pi->last_renamed_version = pi->version;
       pi->ctime = mdr->now;
       if (linkmerge)
 	pi->nlink--;
