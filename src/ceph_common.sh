@@ -146,36 +146,23 @@ get_local_daemon_list() {
 }
 
 get_local_name_list() {
-    orig=$1
+    # enumerate local directories
     local=""
-
-    if [ -z "$orig" ]; then
-	# enumerate local directories
-	get_local_daemon_list "mon"
-	get_local_daemon_list "osd"
-	get_local_daemon_list "mds"
-	return
-    fi
-
-    for f in $orig; do
-	type=`echo $f | cut -c 1-3`   # e.g. 'mon', if $item is 'mon1'
-	id=`echo $f | cut -c 4- | sed 's/\\.//'`
-	get_local_daemon_list $type
-
-	# FIXME
-    done
+    get_local_daemon_list "mon"
+    get_local_daemon_list "osd"
+    get_local_daemon_list "mds"
 }
 
 get_name_list() {
     orig="$*"
 
     # extract list of monitors, mdss, osds defined in startup.conf
-    allconf=`$CCONF -c $conf -l mon | egrep -v '^mon$' || true ; \
+    allconf="$local "`$CCONF -c $conf -l mon | egrep -v '^mon$' || true ; \
 	$CCONF -c $conf -l mds | egrep -v '^mds$' || true ; \
 	$CCONF -c $conf -l osd | egrep -v '^osd$' || true`
 
     if [ -z "$orig" ]; then
-	what="$allconf $local"
+	what="$allconf"
 	return
     fi
 
@@ -185,7 +172,11 @@ get_name_list() {
 	id=`echo $f | cut -c 4- | sed 's/\\.//'`
 	case $f in
 	    mon | osd | mds)
-		what="$what "`echo "$allconf" "$local" | grep ^$type || true`
+		for d in $allconf; do
+		    if echo $d | grep -q ^$type; then
+			what="$what $d"
+		    fi
+		done
 		;;
 	    *)
 		if ! echo " " $allconf $local " " | egrep -q "( $type$id | $type.$id )"; then
