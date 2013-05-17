@@ -150,7 +150,7 @@ def build_ceph_cluster(ctx, config):
     mon_hostname = str(mon_hostname)
     gather_keys = './ceph-deploy gatherkeys'+" "+mon_hostname
     deploy_mds = './ceph-deploy mds create'+" "+mds_nodes
-
+    no_of_osds = 0
     if mon_nodes is not None:
         estatus_new = execute_ceph_deploy(ctx, config, new_mon)
         if estatus_new == 0:
@@ -172,13 +172,15 @@ def build_ceph_cluster(ctx, config):
                             osd_create_cmds = './ceph-deploy osd create --zap-disk'+" "+d
                             estatus_osd = execute_ceph_deploy(ctx, config, osd_create_cmds)
                             if estatus_osd==0:
-                                log.info('success')
+                                log.info('successfully created osd')
+                                no_of_osds += 1
                             else:
                                 zap_disk = './ceph-deploy zapdisk'+" "+d
                                 execute_ceph_deploy(ctx, config, zap_disk)
                                 estatus_osd = execute_ceph_deploy(ctx, config, osd_create_cmds)
                                 if estatus_osd==0:
                                     log.info('successfully created osd')
+                                    no_of_osds += 1
                                 else:
                                     log.info('failed to create osd')
                     else:
@@ -192,67 +194,73 @@ def build_ceph_cluster(ctx, config):
     else:
         log.info('no monitor nodes in the config file')
 
-    log.info('Setting up client nodes...')
-    conf_path = '/etc/ceph/ceph.conf'
-    admin_keyring_path = '/etc/ceph/ceph.client.admin.keyring'
-    first_mon = teuthology.get_first_mon(ctx, config)
-    (mon0_remote,) = ctx.cluster.only(first_mon).remotes.keys()
-    conf_data = teuthology.get_file(
-        remote=mon0_remote,
-        path=conf_path,
-        sudo=True,
-        )
-    admin_keyring = teuthology.get_file(
-        remote=mon0_remote,
-        path=admin_keyring_path,
-        sudo=True,
-        )
+    if config.get('wait-for-healthy', True) and no_of_osds >= 2:
+        is_healthy(ctx=ctx, config=None)
 
-    clients = ctx.cluster.only(teuthology.is_type('client'))
-    for remot, roles_for_host in clients.remotes.iteritems():
-        for id_ in teuthology.roles_of_type(roles_for_host, 'client'):
-            client_keyring = '/etc/ceph/ceph.client.{id}.keyring'.format(id=id_)
-            mon0_remote.run(
-                args=[
-                    'cd',
-                    '{tdir}'.format(tdir=testdir),
-                    run.Raw('&&'),
-                    'sudo','bash','-c',
-                    run.Raw('"'),'ceph',
-                    'auth',
-                    'get-or-create',
-                    'client.{id}'.format(id=id_),
-                    'mds', 'allow',
-                    'mon', 'allow *',
-                    'osd', 'allow *',
-                    run.Raw('>'),
-                    client_keyring,
-                    run.Raw('"'),
-                    ],
+        log.info('Setting up client nodes...')
+        conf_path = '/etc/ceph/ceph.conf'
+        admin_keyring_path = '/etc/ceph/ceph.client.admin.keyring'
+        first_mon = teuthology.get_first_mon(ctx, config)
+        (mon0_remote,) = ctx.cluster.only(first_mon).remotes.keys()
+        conf_data = teuthology.get_file(
+            remote=mon0_remote,
+            path=conf_path,
+            sudo=True,
+            )
+        admin_keyring = teuthology.get_file(
+            remote=mon0_remote,
+            path=admin_keyring_path,
+            sudo=True,
+            )
+
+        clients = ctx.cluster.only(teuthology.is_type('client'))
+        for remot, roles_for_host in clients.remotes.iteritems():
+            for id_ in teuthology.roles_of_type(roles_for_host, 'client'):
+                client_keyring = '/etc/ceph/ceph.client.{id}.keyring'.format(id=id_)
+                mon0_remote.run(
+                    args=[
+                        'cd',
+                        '{tdir}'.format(tdir=testdir),
+                        run.Raw('&&'),
+                        'sudo','bash','-c',
+                        run.Raw('"'),'ceph',
+                        'auth',
+                        'get-or-create',
+                        'client.{id}'.format(id=id_),
+                        'mds', 'allow',
+                        'mon', 'allow *',
+                        'osd', 'allow *',
+                        run.Raw('>'),
+                        client_keyring,
+                        run.Raw('"'),
+                        ],
+                    )
+                key_data = teuthology.get_file(
+                    remote=mon0_remote,
+                    path=client_keyring,
+                    sudo=True,
+                    )
+                teuthology.sudo_write_file(
+                    remote=remot,
+                    path=client_keyring,
+                    data=key_data,
+                    perms='0644'
                 )
-            key_data = teuthology.get_file(
-                remote=mon0_remote,
-                path=client_keyring,
-                sudo=True,
+                teuthology.sudo_write_file(
+                    remote=remot,
+                    path=admin_keyring_path,
+                    data=admin_keyring,
+                    perms='0644'
                 )
-            teuthology.sudo_write_file(
-                remote=remot,
-                path=client_keyring,
-                data=key_data,
-                perms='0644'
-            )
-            teuthology.sudo_write_file(
-                remote=remot,
-                path=admin_keyring_path,
-                data=admin_keyring,
-                perms='0644'
-            )
-            teuthology.sudo_write_file(
-                remote=remot,
-                path=conf_path,
-                data=conf_data,
-                perms='0644'
-            )
+                teuthology.sudo_write_file(
+                    remote=remot,
+                    path=conf_path,
+                    data=conf_data,
+                    perms='0644'
+                )
+    else:
+        raise Exception("The cluster is NOT operational due to insufficient OSDs")
+
     try:
         yield
 
@@ -361,6 +369,4 @@ def task(ctx, config):
                  branch=config.get('branch',{}),
                  )),
         ):
-        if config.get('wait-for-healthy', True):
-          is_healthy(ctx=ctx, config=None)
         yield
