@@ -672,16 +672,18 @@ def matchnum(args, signature, partial=False):
     return matchcnt
 
 """
-validate(s, signature)
+validate(s, signature, partial=False)
 
 Assumes s represents a possible command input following format of
 signature.  Runs a validation; no exception means it's OK.  Return
 a dict containing all arguments named by their descriptor name
 (with duplicate args per name accumulated into a space-separated
 value).
+
+If partial is set, allow partial matching (with partial dict returned)
 """
 
-def validate(args, signature):
+def validate(args, signature, partial=False):
     words = args[:]
     mysig = copy.deepcopy(signature)
     d = dict()
@@ -693,17 +695,27 @@ def validate(args, signature):
             else:
                 if desc.req:
                     if desc.N and desc.numseen < 1:
+                        # wanted N, didn't even get 1
+                        if partial:
+                            return d
                         raise ArgumentNumber('saw {} of {}, expected at least 1'.format(desc.numseen, desc))
                     elif not desc.N and desc.numseen < desc.n:
+                        # wanted n, got too few
+                        if partial:
+                            return d
                         raise ArgumentNumber('saw {} of {}, expected {}'.format(desc.numseen, desc, desc.n))
                 break
             try:
                 validate_one(word, desc)
             except Exception as e:
+                # not valid; if not required, just push back for the next one
                 if not desc.req:
                     words.insert(0, word)
                     break
                 else:
+                    # hm, but it was required, so quit
+                    if partial:
+                        return d
                     raise e
 
             if desc.N:
