@@ -4038,10 +4038,7 @@ void OSD::sched_scrub()
 
   dout(20) << "sched_scrub load_is_low=" << (int)load_is_low << dendl;
 
-  utime_t max = ceph_clock_now(g_ceph_context);
-  utime_t min = max;
-  min -= g_conf->osd_scrub_min_interval;
-  max -= g_conf->osd_scrub_max_interval;
+  utime_t now = ceph_clock_now(g_ceph_context);
   
   //dout(20) << " " << last_scrub_pg << dendl;
 
@@ -4050,15 +4047,18 @@ void OSD::sched_scrub()
     do {
       utime_t t = pos.first;
       pg_t pgid = pos.second;
-      dout(30) << " " << pgid << " at " << t << dendl;
+      dout(30) << "sched_scrub examine " << pgid << " at " << t << dendl;
 
-      if (t > min) {
-	dout(10) << " " << pgid << " at " << t
-		 << " > min " << min << " (" << g_conf->osd_scrub_min_interval << " seconds ago)" << dendl;
+      utime_t diff = now - t;
+      if ((double)diff < g_conf->osd_scrub_min_interval) {
+	dout(10) << "sched_scrub " << pgid << " at " << t
+		 << ": " << (double)diff << " < min (" << g_conf->osd_scrub_min_interval << " seconds)" << dendl;
 	break;
       }
-      if (t > max && !load_is_low) {
+      if ((double)diff < g_conf->osd_scrub_max_interval && !load_is_low) {
 	// save ourselves some effort
+	dout(10) << "sched_scrub " << pgid << " high load at " << t
+		 << ": " << (double)diff << " < max (" << g_conf->osd_scrub_max_interval << " seconds)" << dendl;
 	break;
       }
 
@@ -4066,11 +4066,11 @@ void OSD::sched_scrub()
       if (pg) {
 	if (pg->is_active() &&
 	    (load_is_low ||
-	     t < max ||
+	     (double)diff >= g_conf->osd_scrub_max_interval ||
 	     pg->scrubber.must_scrub)) {
-	  dout(10) << " " << pgid << " at " << t
-		   << (pg->scrubber.must_scrub ? ", explicitly requested" : "")
-		   << (t < max ? ", last_scrub < max" : "")
+	  dout(10) << "sched_scrub scrubbing " << pgid << " at " << t
+		   << (pg->scrubber.must_scrub ? ", explicitly requested" :
+		   ( (double)diff >= g_conf->osd_scrub_max_interval ? ", diff >= max" : ""))
 		   << dendl;
 	  if (pg->sched_scrub()) {
 	    pg->unlock();
@@ -5288,6 +5288,11 @@ void OSD::handle_pg_create(OpRequestRef op)
     pg_history_t history;
     history.epoch_created = created;
     history.last_epoch_clean = created;
+    // Newly created PGs don't need to scrub immediately, so mark them
+    // as scrubbed at creation time.
+    utime_t now = ceph_clock_now(NULL);
+    history.last_scrub_stamp = now;
+    history.last_deep_scrub_stamp = now;
     project_pg_history(pgid, history, created, up, acting);
     
     // register.
@@ -6000,7 +6005,6 @@ void OSD::handle_pg_remove(OpRequestRef op)
 
 void OSD::_remove_pg(PG *pg)
 {
-  vector<coll_t> removals;
   ObjectStore::Transaction *rmt = new ObjectStore::Transaction;
 
   // on_removal, which calls remove_watchers_and_notifies, and the erasure from

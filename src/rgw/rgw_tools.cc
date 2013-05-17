@@ -35,14 +35,13 @@ int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, string& oid, cons
 
 int rgw_get_obj(RGWRados *rgwstore, void *ctx, rgw_bucket& bucket, string& key, bufferlist& bl, map<string, bufferlist> *pattrs)
 {
-  int ret;
   struct rgw_err err;
   void *handle = NULL;
   bufferlist::iterator iter;
   int request_len = READ_CHUNK_LEN;
   rgw_obj obj(bucket, key);
   do {
-    ret = rgwstore->prepare_get_obj(ctx, obj, NULL, NULL, pattrs, NULL,
+    int ret = rgwstore->prepare_get_obj(ctx, obj, NULL, NULL, pattrs, NULL,
                                   NULL, NULL, NULL, NULL, NULL, NULL, &handle, &err);
     if (ret < 0)
       return ret;

@@ -27,6 +27,7 @@ TEST(LibCephFS, OpenEmptyComponent) {
   pid_t mypid = getpid();
   struct ceph_mount_info *cmount;
   ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
 
@@ -48,6 +49,7 @@ TEST(LibCephFS, OpenEmptyComponent) {
   ceph_shutdown(cmount);
 
   ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
 
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
@@ -64,6 +66,7 @@ TEST(LibCephFS, MountNonExist) {
   struct ceph_mount_info *cmount;
 
   ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_NE(0, ceph_mount(cmount, "/non-exist"));
 }
@@ -73,6 +76,7 @@ TEST(LibCephFS, MountDouble) {
   struct ceph_mount_info *cmount;
 
   ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
   ASSERT_EQ(-EISCONN, ceph_mount(cmount, "/"));
@@ -84,6 +88,7 @@ TEST(LibCephFS, MountRemount) {
   struct ceph_mount_info *cmount;
 
   ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
 
   CephContext *cct = ceph_get_mount_context(cmount);
@@ -101,6 +106,7 @@ TEST(LibCephFS, UnmountUnmounted) {
   struct ceph_mount_info *cmount;
 
   ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_EQ(-ENOTCONN, ceph_unmount(cmount));
 }
@@ -110,6 +116,7 @@ TEST(LibCephFS, ReleaseUnmounted) {
   struct ceph_mount_info *cmount;
 
   ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_EQ(0, ceph_release(cmount));
 }
@@ -119,6 +126,7 @@ TEST(LibCephFS, ReleaseMounted) {
   struct ceph_mount_info *cmount;
 
   ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
   ASSERT_EQ(-EISCONN, ceph_release(cmount));
@@ -130,6 +138,7 @@ TEST(LibCephFS, UnmountRelease) {
   struct ceph_mount_info *cmount;
 
   ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
   ASSERT_EQ(0, ceph_unmount(cmount));
@@ -139,11 +148,13 @@ TEST(LibCephFS, UnmountRelease) {
 TEST(LibCephFS, Mount) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
   ceph_shutdown(cmount);
 
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
   ceph_shutdown(cmount);
@@ -152,6 +163,7 @@ TEST(LibCephFS, Mount) {
 TEST(LibCephFS, OpenLayout) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
@@ -198,6 +210,7 @@ TEST(LibCephFS, DirLs) {
 
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, "/"), 0);
 
@@ -356,6 +369,7 @@ TEST(LibCephFS, DirLs) {
 TEST(LibCephFS, ManyNestedDirs) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
@@ -400,6 +414,7 @@ TEST(LibCephFS, ManyNestedDirs) {
 TEST(LibCephFS, Xattrs) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
@@ -422,7 +437,7 @@ TEST(LibCephFS, Xattrs) {
   char *p = xattrlist;
   char *n;
   i = 'a';
-  while(len > 0) {
+  while (len > 0) {
     // skip/ignore the dir layout
     if (strcmp(p, "ceph.dir.layout") == 0 ||
 	strcmp(p, "ceph.file.layout") == 0) {
@@ -435,6 +450,7 @@ TEST(LibCephFS, Xattrs) {
     ASSERT_STREQ(p, xattrk);
 
     char gxattrv[128];
+    std::cout << "getting attr " << p << std::endl;
     int alen = ceph_getxattr(cmount, test_xattr_file, p, (void *) gxattrv, 128);
     ASSERT_GT(alen, 0);
     sprintf(xattrv, "testxattr%c", i);
@@ -460,6 +476,7 @@ TEST(LibCephFS, Xattrs) {
 TEST(LibCephFS, LstatSlashdot) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
@@ -474,6 +491,7 @@ TEST(LibCephFS, DoubleChmod) {
 
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
@@ -528,6 +546,7 @@ TEST(LibCephFS, DoubleChmod) {
 TEST(LibCephFS, Fchmod) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
@@ -571,6 +590,7 @@ TEST(LibCephFS, Fchmod) {
 TEST(LibCephFS, Fchown) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
@@ -596,6 +616,7 @@ TEST(LibCephFS, Fchown) {
 TEST(LibCephFS, Symlinks) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
@@ -650,6 +671,7 @@ TEST(LibCephFS, Symlinks) {
 TEST(LibCephFS, DirSyms) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
@@ -681,6 +703,7 @@ TEST(LibCephFS, DirSyms) {
 TEST(LibCephFS, LoopSyms) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
@@ -724,6 +747,7 @@ TEST(LibCephFS, HardlinkNoOriginal) {
 
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
@@ -748,6 +772,7 @@ TEST(LibCephFS, HardlinkNoOriginal) {
 
   // now cleanup
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
   ASSERT_EQ(ceph_chdir(cmount, dir), 0);
@@ -760,6 +785,7 @@ TEST(LibCephFS, HardlinkNoOriginal) {
 TEST(LibCephFS, BadFileDesc) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
@@ -788,6 +814,7 @@ TEST(LibCephFS, BadFileDesc) {
 TEST(LibCephFS, ReadEmptyFile) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
@@ -816,6 +843,7 @@ TEST(LibCephFS, ReadEmptyFile) {
 TEST(LibCephFS, StripeUnitGran) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
   ASSERT_GT(ceph_get_stripe_unit_granularity(cmount), 0);
@@ -825,6 +853,7 @@ TEST(LibCephFS, StripeUnitGran) {
 TEST(LibCephFS, Rename) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
@@ -859,6 +888,7 @@ TEST(LibCephFS, Rename) {
 TEST(LibCephFS, UseUnmounted) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
 
   struct statvfs stvfs;
@@ -939,6 +969,7 @@ TEST(LibCephFS, UseUnmounted) {
 TEST(LibCephFS, GetPoolId) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
@@ -952,6 +983,7 @@ TEST(LibCephFS, GetPoolId) {
 TEST(LibCephFS, GetPoolReplication) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
@@ -969,6 +1001,7 @@ TEST(LibCephFS, GetPoolReplication) {
 TEST(LibCephFS, GetExtentOsds) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
 
   EXPECT_EQ(-ENOTCONN, ceph_get_file_extent_osds(cmount, 0, 0, NULL, NULL, 0));
 
@@ -1019,6 +1052,7 @@ TEST(LibCephFS, GetExtentOsds) {
 TEST(LibCephFS, GetOsdCrushLocation) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
 
   EXPECT_EQ(-ENOTCONN, ceph_get_osd_crush_location(cmount, 0, NULL, 0));
 
@@ -1068,6 +1102,7 @@ TEST(LibCephFS, GetOsdCrushLocation) {
 TEST(LibCephFS, GetOsdAddr) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
 
   EXPECT_EQ(-ENOTCONN, ceph_get_osd_addr(cmount, 0, NULL));
 
