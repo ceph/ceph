@@ -838,6 +838,19 @@ extern "C" int ceph_get_file_pool_name(struct ceph_mount_info *cmount, int fh, c
   return name.length();
 }
 
+extern "C" int ceph_get_pool_name(struct ceph_mount_info *cmount, int pool, char *buf, size_t len)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  string name = cmount->get_client()->get_pool_name(pool);
+  if (len == 0)
+    return name.length();
+  if (name.length() > len)
+    return -ERANGE;
+  strncpy(buf, name.c_str(), len);
+  return name.length();
+}
+
 extern "C" int ceph_get_path_pool_name(struct ceph_mount_info *cmount, const char *path, char *buf, size_t len)
 {
   struct ceph_file_layout l;
