@@ -503,7 +503,7 @@ void Client::trim_dentry(Dentry *dn)
     dn->dir->parent_inode->flags &= ~I_COMPLETE;
     dn->dir->release_count++;
   }
-  unlink(dn, false, false);
+  unlink(dn, false, false);  // drop dir, drop dentry
 }
 
 
@@ -730,7 +730,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       for (map<string, Dentry*>::iterator p = in->dir->dentry_map.begin();
 	   p != in->dir->dentry_map.end();
 	   ++p) {
-	unlink(in->dir->dentry_map.begin()->second, true, true);
+	unlink(p->second, true, true);  // keep dir, keep dentry
       }
       if (in->dir->dentry_map.empty())
 	close_dir(in->dir);
@@ -766,15 +766,14 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
       ldout(cct, 12) << " had dentry " << dname
 	       << " with WRONG vino " << dn->inode->vino()
 	       << dendl;
-      unlink(dn, true, false);
-      dn = NULL;
+      unlink(dn, true, true);  // keep dir, keep dentry
     }
   }
   
   if (!dn || dn->inode == 0) {
     in->get();
     if (old_dentry)
-      unlink(old_dentry, dir == old_dentry->dir, false);  // keep dir open if its the same dir
+      unlink(old_dentry, dir == old_dentry->dir, false);  // drop dentry, keep dir open if its the same dir
     dn = link(dir, dname, in, dn);
     put_inode(in);
     if (set_offset) {
@@ -914,7 +913,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 	  ldout(cct, 15) << "insert_trace  unlink '" << pd->first << "'" << dendl;
 	  Dentry *dn = pd->second;
 	  ++pd;
-	  unlink(dn, true, false);
+	  unlink(dn, true, true);  // keep dir, dentry
 	} else {
 	  ++pd;
 	}
@@ -933,8 +932,9 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 	if (pd->second->inode != in) {
 	  // replace incorrect dentry
 	  ++pd;  // we are about to unlink this guy, move past it.
-	  unlink(olddn, true, false);
-	  dn = link(dir, dname, in, NULL);
+	  unlink(olddn, true, true);  // keep dir, dentry
+	  dn = link(dir, dname, in, olddn);
+	  assert(dn == olddn);
 	} else {
 	  // keep existing dn
 	  dn = olddn;
@@ -963,7 +963,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 	  ldout(cct, 15) << "insert_trace  unlink '" << pd->first << "'" << dendl;
 	  Dentry *dn = pd->second;
 	  ++pd;
-	  unlink(dn, true, false);
+	  unlink(dn, true, true); // keep dir, dentry
 	} else
 	  ++pd;
       }
@@ -1011,12 +1011,12 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 	Dentry *od = request->old_dentry();
 	ldout(cct, 10) << " unlinking rename src dn " << od << " for traceless reply" << dendl;
 	assert(od);
-	unlink(od, false, false);
+	unlink(od, true, true);  // keep dir, dentry
       } else if (request->head.op == CEPH_MDS_OP_RMDIR ||
 		 request->head.op == CEPH_MDS_OP_UNLINK) {
 	// unlink, rmdir
 	ldout(cct, 10) << " unlinking unlink/rmdir dn " << d << " for traceless reply" << dendl;
-	unlink(d, true, true);
+	unlink(d, true, true);  // keep dir, dentry
       }
     }
     return NULL;
@@ -1068,7 +1068,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
       if (diri->dir && diri->dir->dentries.count(dname)) {
 	Dentry *dn = diri->dir->dentries[dname];
 	if (dn->inode)
-	  unlink(dn, true, true);
+	  unlink(dn, true, true);  // keep dir, dentry
       }
     }
   } else if (reply->head.op == CEPH_MDS_OP_LOOKUPSNAP ||
@@ -1092,7 +1092,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
       if (diri->dir && diri->dir->dentries.count(dname)) {
 	Dentry *dn = diri->dir->dentries[dname];
 	if (dn->inode)
-	  unlink(dn, true, true);
+	  unlink(dn, true, true);  // keep dir, dentry
       }
     }
   }
@@ -2272,7 +2272,7 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
     if (in->is_dir() && !in->dn_set.empty()) {
       Dentry *olddn = in->get_first_parent();
       assert(olddn->dir != dir || olddn->name != name);
-      unlink(olddn, false, false);
+      unlink(olddn, true, true);  // keep dir, dentry
     }
 
     in->dn_set.insert(dn);
