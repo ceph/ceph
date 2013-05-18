@@ -637,14 +637,34 @@ def upgrade(ctx, config):
 def task(ctx, config):
     """
     Install packages
+
+    tasks:
+    - install:
+        project: ceph
+        branch: bar
+    - install:
+        project: samba
+        branch: foo
+        extra_packages: ['samba']
+
+    Overrides are project specific:
+
+    overrides:
+      install:
+        ceph:
+          sha1: ...
+
     """
     if config is None:
         config = {}
     assert isinstance(config, dict), \
         "task install only supports a dictionary for configuration"
 
-    overrides = ctx.config.get('overrides', {})
-    teuthology.deep_merge(config, overrides.get('install', {}))
+    project, = config.get('project', 'ceph'),
+    log.debug('project %s' % project)
+    overrides = ctx.config.get('overrides', {}).get('install', {})
+    teuthology.deep_merge(config, overrides.get(project, {}))
+    log.debug('config %s' % config)
 
     # Flavor tells us what gitbuilder to fetch the prebuilt software
     # from. It's a combination of possible keywords, in a specific
@@ -677,7 +697,7 @@ def task(ctx, config):
                 extra_packages=config.get('extra_packages', []),
                 extras=config.get('extras',None),
                 wait_for_package=ctx.config.get('wait-for-package', False),
-                project=config.get('project', 'ceph'),
+                project=project,
                 )),
         ):
         yield

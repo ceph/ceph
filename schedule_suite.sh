@@ -70,7 +70,8 @@ overrides:
   s3tests:
     branch: $s3branch
   install:
-    sha1: $CEPH_SHA1
+    ceph:
+      sha1: $CEPH_SHA1
   ceph:
     sha1: $CEPH_SHA1
     conf:
