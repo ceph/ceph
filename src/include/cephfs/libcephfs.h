@@ -927,6 +927,19 @@ int ceph_get_path_pool(struct ceph_mount_info *cmount, const char *path);
 int ceph_get_file_pool_name(struct ceph_mount_info *cmount, int fh, char *buf, size_t buflen);
 
 /**
+ * get the name of a pool by id
+ *
+ * Given a pool's numeric identifier, get the pool's alphanumeric name.
+ *
+ * @param cmount the ceph mount handle to use
+ * @param pool the numeric pool id
+ * @param buf buffer to sore the name in
+ * @param buflen size of the buffer
+ * @returns length in bytes of the pool name, or -ERANGE if the buffer is not large enough
+ */
+int ceph_get_pool_name(struct ceph_mount_info *cmount, int pool, char *buf, size_t buflen);
+
+/**
  * Get the name of the pool a file is stored in
  *
  * Write the name of the file's pool to the buffer.  If buflen is 0, return
