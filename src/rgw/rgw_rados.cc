@@ -1658,7 +1658,7 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
     index_tag = state->write_tag;
   }
 
-  r = prepare_update_index(NULL, bucket, obj, index_tag);
+  r = prepare_update_index(NULL, bucket, CLS_RGW_OP_ADD, obj, index_tag);
   if (r < 0)
     return r;
 
@@ -2321,7 +2321,7 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj)
   bool ret_not_existed = (state && !state->exists);
 
   string tag;
-  r = prepare_update_index(state, bucket, obj, tag);
+  r = prepare_update_index(state, bucket, CLS_RGW_OP_DEL, obj, tag);
   if (r < 0)
     return r;
   cls_refcount_put(op, tag, true);
@@ -2890,7 +2890,7 @@ done_err:
 }
 
 int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
-                                   rgw_obj& obj, string& tag)
+                                   RGWModifyOp op, rgw_obj& obj, string& tag)
 {
   if (bucket_is_system(bucket))
     return 0;
@@ -2912,7 +2912,7 @@ int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
       append_rand_alpha(cct, tag, tag, 32);
     }
   }
-  ret = cls_obj_prepare_op(bucket, CLS_RGW_OP_ADD, tag,
+  ret = cls_obj_prepare_op(bucket, op, tag,
                                obj.object, obj.key);
 
   return ret;
@@ -3046,7 +3046,7 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
   int ret;
 
   if (update_index) {
-    ret = prepare_update_index(state, bucket, dst_obj, tag);
+    ret = prepare_update_index(state, bucket, CLS_RGW_OP_ADD, dst_obj, tag);
     if (ret < 0)
       goto done;
   }

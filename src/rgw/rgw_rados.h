@@ -934,7 +934,7 @@ public:
                       string *last_entry, bool (*force_check_filter)(const string&  name) = NULL);
   int cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header);
   int prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
-                           rgw_obj& oid, string& tag);
+                           RGWModifyOp op, rgw_obj& oid, string& tag);
   int complete_update_index(rgw_bucket& bucket, string& oid, string& tag, int64_t poolid, uint64_t epoch, uint64_t size,
                             utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category,
 			    list<string> *remove_objs);

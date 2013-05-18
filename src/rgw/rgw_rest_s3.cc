@@ -363,11 +363,11 @@ int RGWCreateBucket_ObjStore_S3::get_params()
 
   policy = s3policy;
 
-  int len;
+  int len = 0;
   char *data;
 #define CREATE_BUCKET_MAX_REQ_LEN (512 * 1024) /* this is way more than enough */
   ret = rgw_rest_read_all_input(s, &data, &len, CREATE_BUCKET_MAX_REQ_LEN);
-  if (ret < 0)
+  if ((ret < 0) && (ret != -ERR_LENGTH_REQUIRED))
     return ret;
 
   if (len) {
