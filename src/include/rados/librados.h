@@ -1599,9 +1599,10 @@ int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver, const char *buf,
  * @param outslen pointer to status string length
  * @returns 0 on success, negative error code on failure
  */
-int rados_mon_command(rados_t cluster, const char *cmd, const char *inbuf,
-		       char **outbuf, size_t *outbuflen,
-		       char **outs, size_t *outslen);
+int rados_mon_command(rados_t cluster, const char *cmd,
+		      const char *inbuf, size_t inbuflen,
+	       	      char **outbuf, size_t *outbuflen,
+		      char **outs, size_t *outslen);
 
 /**
  * free a rados-allocated buffer
@@ -1612,11 +1613,13 @@ int rados_mon_command(rados_t cluster, const char *cmd, const char *inbuf,
  */
 void rados_buffer_free(char *buf);
 
-int rados_osd_command(rados_t cluster, int osdid, const char *cmd, const char *inbuf,
+int rados_osd_command(rados_t cluster, int osdid, const char *cmd,
+		      const char *inbuf, size_t inbuflen,
 		      char **outbuf, size_t *outbuflen,
 		      char **outs, size_t *outslen);
 
-int rados_pg_command(rados_t cluster, const char *pgstr, const char *cmd, const char *inbuf,
+int rados_pg_command(rados_t cluster, const char *pgstr, const char *cmd,
+		     const char *inbuf, size_t inbuflen,
 		     char **outbuf, size_t *outbuflen,
 		     char **outs, size_t *outslen);
 

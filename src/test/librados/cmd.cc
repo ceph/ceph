@@ -28,20 +28,20 @@ TEST(LibRadosCmd, MonDescribe) {
   char *buf, *st;
   size_t buflen, stlen;
 
-  ASSERT_EQ(0, rados_mon_command(cluster, "{\"prefix\":\"get_command_descriptions\"}", "", &buf, &buflen, &st, &stlen));
+  ASSERT_EQ(0, rados_mon_command(cluster, "{\"prefix\":\"get_command_descriptions\"}", "", 0, &buf, &buflen, &st, &stlen));
   ASSERT_LT(0u, buflen);
   rados_buffer_free(buf);
   rados_buffer_free(st);
 
-  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, "get_command_descriptions", "", &buf, &buflen, &st, &stlen));
+  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, "get_command_descriptions", "", 0, &buf, &buflen, &st, &stlen));
   rados_buffer_free(buf);
   rados_buffer_free(st);
 
-  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, "asdfqwer", "{}", &buf, &buflen, &st, &stlen));
+  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, "asdfqwer", "{}", 2, &buf, &buflen, &st, &stlen));
   rados_buffer_free(buf);
   rados_buffer_free(st);
 
-  ASSERT_EQ(0, rados_mon_command(cluster, "{\"prefix\":\"mon_status\"}", "", &buf, &buflen, &st, &stlen));
+  ASSERT_EQ(0, rados_mon_command(cluster, "{\"prefix\":\"mon_status\"}", "", 0, &buf, &buflen, &st, &stlen));
   //ASSERT_LTE(0u, buflen);
   ASSERT_LT(0u, stlen);
   rados_buffer_free(buf);
@@ -129,7 +129,7 @@ TEST(LibRadosCmd, WatchLog) {
   Log l;
 
   ASSERT_EQ(0, rados_monitor_log(cluster, "info", log_cb, &l));
-  ASSERT_EQ(0, rados_mon_command(cluster, "{\"prefix\":\"log\", \"logtext\":[\"onexx\"]}", "", &buf, &buflen, &st, &stlen));
+  ASSERT_EQ(0, rados_mon_command(cluster, "{\"prefix\":\"log\", \"logtext\":[\"onexx\"]}", "", 0, &buf, &buflen, &st, &stlen));
   for (int i=0; !l.contains("onexx"); i++) {
     ASSERT_TRUE(i<100);
     sleep(1);
@@ -140,20 +140,20 @@ TEST(LibRadosCmd, WatchLog) {
     changing the subscribe level is currently broken.
 
   ASSERT_EQ(0, rados_monitor_log(cluster, "err", log_cb, &l));
-  ASSERT_EQ(0, rados_mon_command(cluster, "{\"prefix\":\"log\", \"logtext\":[\"twoxx\"]}", "", &buf, &buflen, &st, &stlen));
+  ASSERT_EQ(0, rados_mon_command(cluster, "{\"prefix\":\"log\", \"logtext\":[\"twoxx\"]}", "", 0, &buf, &buflen, &st, &stlen));
   sleep(2);
   ASSERT_FALSE(l.contains("twoxx"));
   */
 
   ASSERT_EQ(0, rados_monitor_log(cluster, "info", log_cb, &l));
-  ASSERT_EQ(0, rados_mon_command(cluster, "{\"prefix\":\"log\", \"logtext\":[\"threexx\"]}", "", &buf, &buflen, &st, &stlen));
+  ASSERT_EQ(0, rados_mon_command(cluster, "{\"prefix\":\"log\", \"logtext\":[\"threexx\"]}", "", 0, &buf, &buflen, &st, &stlen));
   for (int i=0; !l.contains("threexx"); i++) {
     ASSERT_TRUE(i<100);
     sleep(1);
   }
 
   ASSERT_EQ(0, rados_monitor_log(cluster, "info", NULL, NULL));
-  ASSERT_EQ(0, rados_mon_command(cluster, "{\"prefix\":\"log\", \"logtext\":[\"fourxx\"]}", "", &buf, &buflen, &st, &stlen));
+  ASSERT_EQ(0, rados_mon_command(cluster, "{\"prefix\":\"log\", \"logtext\":[\"fourxx\"]}", "", 0, &buf, &buflen, &st, &stlen));
   sleep(2);
   ASSERT_FALSE(l.contains("fourxx"));
 
