@@ -1,6 +1,7 @@
 overrides:
   install:
-    extra_packages: [libcephfs1, libcephfs-java, libcephfs-jni]
+    ceph:
+      extra_packages: [libcephfs1, libcephfs-java, libcephfs-jni]
 
 tasks:
 - install:
