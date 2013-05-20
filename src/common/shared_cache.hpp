@@ -101,7 +101,7 @@ public:
     {
       Mutex::Locker l(lock);
       max_size = new_size;
-      trim_cache(to_release);
+      trim_cache(&to_release);
     }
   }
 
