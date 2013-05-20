@@ -1076,8 +1076,6 @@ protected:
   bool can_create_pg(pg_t pgid);
   void handle_pg_create(OpRequestRef op);
 
-  void do_split(PG *parent, set<pg_t>& children, ObjectStore::Transaction &t, C_Contexts *tfin);
-  void split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction &t);
   void split_pgs(
     PG *parent,
     const set<pg_t> &childpgids, set<boost::intrusive_ptr<PG> > *out_pgs,
