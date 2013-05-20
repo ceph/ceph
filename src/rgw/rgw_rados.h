@@ -239,6 +239,15 @@ struct RGWPoolIterCtx {
   librados::ObjectIterator iter;
 };
 
+struct RGWListRawObjsCtx {
+  bool initialized;
+  RGWPoolIterCtx iter_ctx;
+
+  RGWListRawObjsCtx() : initialized(false) {}
+};
+
+struct RGWRegion;
+
 struct RGWZoneParams {
   rgw_bucket domain_root;
   rgw_bucket control_pool;
@@ -252,12 +261,16 @@ struct RGWZoneParams {
   rgw_bucket user_swift_pool;
   rgw_bucket user_uid_pool;
 
-  int init(CephContext *cct, RGWRados *store);
+  string name;
+
+  static string get_pool_name(CephContext *cct);
+  void init_name(CephContext *cct, RGWRegion& region);
+  int init(CephContext *cct, RGWRados *store, RGWRegion& region);
   void init_default();
-  int store_info(CephContext *cct, RGWRados *store);
+  int store_info(CephContext *cct, RGWRados *store, RGWRegion& region);
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(domain_root, bl);
     ::encode(control_pool, bl);
     ::encode(gc_pool, bl);
@@ -268,11 +281,12 @@ struct RGWZoneParams {
     ::encode(user_email_pool, bl);
     ::encode(user_swift_pool, bl);
     ::encode(user_uid_pool, bl);
+    ::encode(name, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-     DECODE_START(1, bl);
+     DECODE_START(2, bl);
     ::decode(domain_root, bl);
     ::decode(control_pool, bl);
     ::decode(gc_pool, bl);
@@ -283,12 +297,130 @@ struct RGWZoneParams {
     ::decode(user_email_pool, bl);
     ::decode(user_swift_pool, bl);
     ::decode(user_uid_pool, bl);
+    if (struct_v >= 2)
+      ::decode(name, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(RGWZoneParams);
+
+struct RGWZone {
+  string name;
+  list<string> endpoints;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(name, bl);
+    ::encode(endpoints, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(name, bl);
+    ::decode(endpoints, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWZone);
+
+struct RGWDefaultRegionInfo {
+  string default_region;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(default_region, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(default_region, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWDefaultRegionInfo);
+
+struct RGWRegion {
+  string name;
+  string api_name;
+  list<string> endpoints;
+  bool is_master;
+
+  string master_zone;
+  map<string, RGWZone> zones;
+
+  CephContext *cct;
+  RGWRados *store;
+
+  RGWRegion() : is_master(false) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(name, bl);
+    ::encode(api_name, bl);
+    ::encode(is_master, bl);
+    ::encode(endpoints, bl);
+    ::encode(master_zone, bl);
+    ::encode(zones, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(name, bl);
+    ::decode(api_name, bl);
+    ::decode(is_master, bl);
+    ::decode(endpoints, bl);
+    ::decode(master_zone, bl);
+    ::decode(zones, bl);
+    DECODE_FINISH(bl);
+  }
+
+  int init(CephContext *_cct, RGWRados *_store, bool setup_region = true);
+  int create_default();
+  int store_info(bool exclusive);
+  int read_info(const string& region_name);
+  int read_default(RGWDefaultRegionInfo& default_region);
+  int set_as_default();
+
+  static string get_pool_name(CephContext *cct);
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWRegion);
+
+struct RGWRegionMap {
+  Mutex lock;
+  map<string, RGWRegion> regions;
+  map<string, RGWRegion> regions_by_api;
+
+  string master_region;
+
+  RGWRegionMap() : lock("RGWRegionMap") {}
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+
+  void get_params(CephContext *cct, string& pool_name, string& oid);
+  int read(CephContext *cct, RGWRados *store);
+  int store(CephContext *cct, RGWRados *store);
+
+  int update(RGWRegion& region);
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWRegionMap);
+
+
   
 class RGWRados
 {
@@ -385,6 +517,9 @@ protected:
 
   bool pools_initialized;
 
+  string region_name;
+  string zone_name;
+
 public:
   RGWRados() : lock("rados_timer_lock"), timer(NULL),
                gc(NULL), use_gc_thread(false),
@@ -393,6 +528,19 @@ public:
                cct(NULL), rados(NULL),
                pools_initialized(false) {}
 
+  void set_context(CephContext *_cct) {
+    cct = _cct;
+  }
+
+  void set_region(const string& name) {
+    region_name = name;
+  }
+
+  void set_zone(const string& name) {
+    zone_name = name;
+  }
+
+  RGWRegion region;
   RGWZoneParams zone;
 
   virtual ~RGWRados() {
@@ -402,16 +550,22 @@ public:
     }
   }
 
+  int list_raw_prefixed_objs(string pool_name, const string& prefix, list<string>& result);
+  int list_regions(list<string>& regions);
+  int list_zones(list<string>& zones);
+
   void tick();
 
   CephContext *ctx() { return cct; }
   /** do all necessary setup of the storage device */
   int initialize(CephContext *_cct, bool _use_gc_thread) {
-    cct = _cct;
+    set_context(_cct);
     use_gc_thread = _use_gc_thread;
     return initialize();
   }
   /** Initialize the RADOS instance and prepare to do other ops */
+  virtual int init_rados();
+  int init_complete();
   virtual int initialize();
   virtual void finalize();
 
@@ -803,6 +957,10 @@ public:
   int pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<RGWObjEnt>& objs,
                    bool *is_truncated, RGWAccessListFilter *filter);
 
+  int list_raw_objects(rgw_bucket& pool, const string& prefix_filter, int max,
+                       RGWListRawObjsCtx& ctx, vector<string>& oids,
+                       bool *is_truncated);
+
   uint64_t instance_id();
   uint64_t next_bucket_id();
 
@@ -815,7 +973,12 @@ public:
     RGWRados *store = init_storage_provider(cct, use_gc_thread);
     return store;
   }
+  static RGWRados *get_raw_storage(CephContext *cct) {
+    RGWRados *store = init_raw_storage_provider(cct);
+    return store;
+  }
   static RGWRados *init_storage_provider(CephContext *cct, bool use_gc_thread);
+  static RGWRados *init_raw_storage_provider(CephContext *cct);
   static void close_storage(RGWRados *store);
 
 };

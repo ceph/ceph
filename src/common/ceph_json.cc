@@ -57,7 +57,6 @@ JSONObj::~JSONObj()
 
 void JSONObj::add_child(string el, JSONObj *obj)
 {
-  cout << "add_child: " << name << " <- " << el << std::endl;
   children.insert(pair<string, JSONObj *>(el, obj));
 }
 
@@ -171,7 +170,6 @@ JSONObj *JSONObj::get_parent()
 
 bool JSONObj::is_object()
 {
-  cout << data.type() << std::endl;
   return (data.type() == obj_type);
 }
 
@@ -432,6 +430,17 @@ void encode_json(const char *name, const string& val, Formatter *f)
 void encode_json(const char *name, const char *val, Formatter *f)
 {
   f->dump_string(name, val);
+}
+
+void encode_json(const char *name, bool val, Formatter *f)
+{
+  string s;
+  if (val)
+    s = "true";
+  else
+    s = "false";
+
+  f->dump_string(name, s);
 }
 
 void encode_json(const char *name, int val, Formatter *f)

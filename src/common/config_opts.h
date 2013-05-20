@@ -577,7 +577,11 @@ OPTION(rgw_op_thread_suicide_timeout, OPT_INT, 0)
 OPTION(rgw_thread_pool_size, OPT_INT, 100)
 OPTION(rgw_num_control_oids, OPT_INT, 8)
 
-OPTION(rgw_zone_root_pool, OPT_STR, ".rgw.root")
+OPTION(rgw_zone, OPT_STR, "") // zone name
+OPTION(rgw_zone_root_pool, OPT_STR, ".rgw.root")    // pool where zone specific info is stored
+OPTION(rgw_region, OPT_STR, "") // region name
+OPTION(rgw_region_root_pool, OPT_STR, ".rgw.root")  // pool where all region info is stored
+OPTION(rgw_default_region_info_oid, OPT_STR, "default.region")  // oid where default region info is stored
 OPTION(rgw_log_nonexistent_bucket, OPT_BOOL, false)
 OPTION(rgw_log_object_name, OPT_STR, "%Y-%m-%d-%H-%i-%n")      // man date to see codes (a subset are supported)
 OPTION(rgw_log_object_name_utc, OPT_BOOL, false)

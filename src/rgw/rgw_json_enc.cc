@@ -447,4 +447,101 @@ void rgw_obj::dump(Formatter *f) const
   encode_json("object", object, f);
 }
 
+void RGWZoneParams::dump(Formatter *f) const
+{
+  encode_json("domain_root", domain_root.pool, f);
+  encode_json("control_pool", control_pool.pool, f);
+  encode_json("gc_pool", gc_pool.pool, f);
+  encode_json("log_pool", log_pool.pool, f);
+  encode_json("intent_log_pool", intent_log_pool.pool, f);
+  encode_json("usage_log_pool", usage_log_pool.pool, f);
+  encode_json("user_keys_pool", user_keys_pool.pool, f);
+  encode_json("user_email_pool", user_email_pool.pool, f);
+  encode_json("user_swift_pool", user_swift_pool.pool, f);
+  encode_json("user_uid_pool ", user_uid_pool.pool, f);
+}
+
+static void decode_json(const char *field, rgw_bucket& bucket, JSONObj *obj)
+{
+  string pool;
+  JSONDecoder::decode_json(field, pool, obj);
+  if (pool[0] != '.') {
+    pool = string(".") + pool;
+  }
+  bucket = rgw_bucket(pool.c_str());
+}
+
+void RGWZoneParams::decode_json(JSONObj *obj)
+{
+  ::decode_json("domain_root", domain_root, obj);
+  ::decode_json("control_pool", control_pool, obj);
+  ::decode_json("gc_pool", gc_pool, obj);
+  ::decode_json("log_pool", log_pool, obj);
+  ::decode_json("intent_log_pool", intent_log_pool, obj);
+  ::decode_json("usage_log_pool", usage_log_pool, obj);
+  ::decode_json("user_keys_pool", user_keys_pool, obj);
+  ::decode_json("user_email_pool", user_email_pool, obj);
+  ::decode_json("user_swift_pool", user_swift_pool, obj);
+  ::decode_json("user_uid_pool ", user_uid_pool, obj);
+}
+
+void RGWZone::dump(Formatter *f) const
+{
+  encode_json("name", name, f);
+  encode_json("endpoints", endpoints, f);
+}
+
+void RGWZone::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("endpoints", endpoints, obj);
+}
+
+void RGWRegion::dump(Formatter *f) const
+{
+  encode_json("name", name, f);
+  encode_json("api_name", api_name, f);
+  encode_json("is_master", is_master, f);
+  encode_json("endpoints", endpoints, f);
+  encode_json("master_zone", master_zone, f);
+  encode_json("zones", zones, f);
+}
+
+static void decode_zones(map<string, RGWZone>& zones, JSONObj *o)
+{
+  RGWZone z;
+  z.decode_json(o);
+  zones[z.name] = z;
+}
+
+
+void RGWRegion::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("api_name", api_name, obj);
+  JSONDecoder::decode_json("is_master", is_master, obj);
+  JSONDecoder::decode_json("endpoints", endpoints, obj);
+  JSONDecoder::decode_json("master_zone", master_zone, obj);
+  JSONDecoder::decode_json("zones", zones, decode_zones, obj);
+}
+
+
+void RGWRegionMap::dump(Formatter *f) const
+{
+  encode_json("regions", regions, f);
+  encode_json("master_region", master_region, f);
+}
+
+static void decode_regions(map<string, RGWRegion>& regions, JSONObj *o)
+{
+  RGWRegion r;
+  r.decode_json(o);
+  regions[r.name] = r;
+}
+
+
+void RGWRegionMap::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("regions", regions, decode_regions, obj);
+}
 
