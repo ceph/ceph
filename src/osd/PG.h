@@ -257,17 +257,6 @@ public:
 	caller_ops.erase(e.reqid);
     }
 
-
-    // accessors
-    pg_log_entry_t *is_updated(const hobject_t& oid) {
-      if (objects.count(oid) && objects[oid]->is_update()) return objects[oid];
-      return 0;
-    }
-    pg_log_entry_t *is_deleted(const hobject_t& oid) {
-      if (objects.count(oid) && objects[oid]->is_delete()) return objects[oid];
-      return 0;
-    }
-    
     // actors
     void add(pg_log_entry_t& e) {
       // add to log
