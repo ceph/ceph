@@ -18,6 +18,7 @@
 #include "osdc/Filer.h"
 
 #include "common/config.h"
+#include "common/errno.h"
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_mds
@@ -77,6 +78,10 @@ void SessionMap::load(Context *onload)
 void SessionMap::_load_finish(int r, bufferlist &bl)
 { 
   bufferlist::iterator blp = bl.begin();
+  if (r < 0) {
+    derr << "_load_finish got " << cpp_strerror(r) << dendl;
+    assert(0 == "failed to load sessionmap");
+  }
   dump();
   decode(blp);  // note: this sets last_cap_renew = now()
   dout(10) << "_load_finish v " << version 
