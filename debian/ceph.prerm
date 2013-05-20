@@ -1,5 +1,6 @@
 #!/bin/sh
 
 [ -x /sbin/stop ] && stop ceph-all || :
+[ -x /usr/sbin/service ] && service ceph stop || :
 
 exit 0
