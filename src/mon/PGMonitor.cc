@@ -128,6 +128,14 @@ void PGMonitor::tick()
     }
   }
 
+  if (!pg_map.pg_sum_deltas.empty()) {
+    utime_t age = ceph_clock_now(g_ceph_context) - pg_map.stamp;
+    if (age > 2 * g_conf->mon_delta_reset_interval) {
+      dout(10) << " clearing pg_map delta (" << age << " > " << g_conf->mon_delta_reset_interval << " seconds old)" << dendl;
+      pg_map.clear_delta();
+    }
+  }
+
   dout(10) << pg_map << dendl;
 }
 
