@@ -176,6 +176,19 @@ void RGWAccessKey::dump(Formatter *f) const
   encode_json("subuser", subuser, f);
 }
 
+void RGWAccessKey::dump_plain(Formatter *f) const
+{
+  encode_json("access_key", id, f);
+  encode_json("secret_key", key, f);
+}
+
+void encode_json_plain(const char *name, const RGWAccessKey& val, Formatter *f)
+{
+  f->open_object_section(name);
+  val.dump_plain(f);
+  f->close_section();
+}
+
 void RGWAccessKey::dump(Formatter *f, const string& user, bool swift) const
 {
   string u = user;
@@ -464,6 +477,7 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("user_email_pool", user_email_pool.data_pool, f);
   encode_json("user_swift_pool", user_swift_pool.data_pool, f);
   encode_json("user_uid_pool ", user_uid_pool.data_pool, f);
+  encode_json_plain("system_key", system_key, f);
 }
 
 static void decode_json(const char *field, rgw_bucket& bucket, JSONObj *obj)
@@ -488,6 +502,7 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   ::decode_json("user_email_pool", user_email_pool, obj);
   ::decode_json("user_swift_pool", user_swift_pool, obj);
   ::decode_json("user_uid_pool ", user_uid_pool, obj);
+  JSONDecoder::decode_json("system_key", system_key, obj);
 }
 
 void RGWZone::dump(Formatter *f) const
