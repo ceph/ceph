@@ -96,6 +96,10 @@ def task(ctx, config):
 
     if 'powercycle' in config:
 
+        # sync everyone first to avoid collateral damage to / etc.
+        log.info('Doing preliminary sync to avoid collateral damage...')
+        ctx.cluster.run(args=['sync'])
+
         if 'ipmi_user' in ctx.teuthology_config:
             for t, key in ctx.config['targets'].iteritems():
                 host = t.split('@')[-1]
