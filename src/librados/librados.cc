@@ -1681,7 +1681,8 @@ static void do_out_buffer(string& outbl, char **outbuf, size_t *outbuflen)
     *outbuflen = outbl.length();
 }
 
-extern "C" int rados_mon_command(rados_t cluster, const char *cmd, const char *inbuf,
+extern "C" int rados_mon_command(rados_t cluster, const char *cmd,
+				 const char *inbuf, size_t inbuflen,
 				 char **outbuf, size_t *outbuflen,
 				 char **outs, size_t *outslen)
 {
@@ -1692,7 +1693,7 @@ extern "C" int rados_mon_command(rados_t cluster, const char *cmd, const char *i
   vector<string> cmdvec;
 
   cmdvec.push_back(cmd);
-  inbl.append(inbuf);
+  inbl.append(inbuf, inbuflen);
   int ret = client->mon_command(cmdvec, inbl, &outbl, &outstring);
 
   do_out_buffer(outbl, outbuf, outbuflen);
@@ -1701,7 +1702,7 @@ extern "C" int rados_mon_command(rados_t cluster, const char *cmd, const char *i
 }
 
 extern "C" int rados_osd_command(rados_t cluster, int osdid, const char *cmd,
-				 const char *inbuf,
+				 const char *inbuf, size_t inbuflen,
 				 char **outbuf, size_t *outbuflen,
 				 char **outs, size_t *outslen)
 {
@@ -1712,7 +1713,7 @@ extern "C" int rados_osd_command(rados_t cluster, int osdid, const char *cmd,
   vector<string> cmdvec;
 
   cmdvec.push_back(cmd);
-  inbl.append(inbuf);
+  inbl.append(inbuf, inbuflen);
   int ret = client->osd_command(osdid, cmdvec, inbl, &outbl, &outstring);
 
   do_out_buffer(outbl, outbuf, outbuflen);
@@ -1723,7 +1724,8 @@ extern "C" int rados_osd_command(rados_t cluster, int osdid, const char *cmd,
 
 
 extern "C" int rados_pg_command(rados_t cluster, const char *pgstr,
-				const char *cmd, const char *inbuf,
+				const char *cmd,
+				const char *inbuf, size_t inbuflen,
 				char **outbuf, size_t *outbuflen,
 				char **outs, size_t *outslen)
 {
@@ -1735,7 +1737,7 @@ extern "C" int rados_pg_command(rados_t cluster, const char *pgstr,
   vector<string> cmdvec;
 
   cmdvec.push_back(cmd);
-  inbl.append(inbuf);
+  inbl.append(inbuf, inbuflen);
   if (!pgid.parse(pgstr))
     return -EINVAL;
 

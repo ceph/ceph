@@ -487,7 +487,8 @@ Rados object in state %s." % (self.state))
         outslen = c_long()
 
         ret = run_in_thread(self.librados.rados_mon_command,
-                            (self.cluster, c_char_p(cmd), c_char_p(inbuf),
+                            (self.cluster, c_char_p(cmd),
+                            c_char_p(inbuf), len(inbuf),
                             outbufp, byref(outbuflen), outsp, byref(outslen)))
 
         # copy returned memory (ctypes makes a copy, not a reference)
@@ -513,7 +514,7 @@ Rados object in state %s." % (self.state))
         outslen = c_long()
         ret = run_in_thread(self.librados.rados_osd_command,
                             (self.cluster, osdid, c_char_p(cmd),
-                            c_char_p(inbuf),
+                            c_char_p(inbuf), len(inbuf),
                             outbufp, byref(outbuflen), outsp, byref(outslen)))
 
         # copy returned memory
@@ -539,7 +540,7 @@ Rados object in state %s." % (self.state))
         outslen = c_long()
         ret = run_in_thread(self.librados.rados_pg_command,
                             (self.cluster, c_char_p(pgid), c_char_p(cmd),
-                            c_char_p(inbuf),
+                            c_char_p(inbuf), len(inbuf),
                             outbufp, byref(outbuflen), outsp, byref(outslen)))
 
         # copy returned memory
