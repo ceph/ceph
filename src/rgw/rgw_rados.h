@@ -268,6 +268,8 @@ struct RGWZoneParams {
 
   string name;
 
+  RGWAccessKey system_key;
+
   static string get_pool_name(CephContext *cct);
   void init_name(CephContext *cct, RGWRegion& region);
   int init(CephContext *cct, RGWRados *store, RGWRegion& region);
@@ -275,7 +277,7 @@ struct RGWZoneParams {
   int store_info(CephContext *cct, RGWRados *store, RGWRegion& region);
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     ::encode(domain_root, bl);
     ::encode(control_pool, bl);
     ::encode(gc_pool, bl);
@@ -287,11 +289,12 @@ struct RGWZoneParams {
     ::encode(user_swift_pool, bl);
     ::encode(user_uid_pool, bl);
     ::encode(name, bl);
+    ::encode(system_key, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-     DECODE_START(2, bl);
+     DECODE_START(3, bl);
     ::decode(domain_root, bl);
     ::decode(control_pool, bl);
     ::decode(gc_pool, bl);
@@ -304,6 +307,8 @@ struct RGWZoneParams {
     ::decode(user_uid_pool, bl);
     if (struct_v >= 2)
       ::decode(name, bl);
+    if (struct_v >= 3)
+      ::decode(system_key, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
