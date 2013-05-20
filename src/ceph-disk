@@ -1592,6 +1592,10 @@ def main_activate(args):
     if not os.path.exists(args.path):
         raise Error('%s does not exist', args.path)
 
+    if is_suppressed(args.path):
+        LOG.info('suppressed activate request on %s', args.path)
+        return
+
     activate_lock.acquire()
     try:
         mode = os.stat(args.path).st_mode
@@ -1801,6 +1805,72 @@ def main_list(args):
 
 
 ###########################
+#
+# Mark devices that we want to suppress activates on with a
+# file like
+#
+#  /var/lib/ceph/tmp/suppress-activate.sdb
+#
+# where the last bit is the sanitized device name (/dev/X without the
+# /dev/ prefix) and the is_suppress() check matches a prefix.  That
+# means suppressing sdb will stop activate on sdb1, sdb2, etc.
+#
+
+SUPPRESS_PREFIX='/var/lib/ceph/tmp/suppress-activate.'
+
+def is_suppressed(path):
+    disk = os.path.realpath(path)
+    if not disk.startswith('/dev/') or not stat.S_ISBLK(os.lstat(path)):
+        return False
+    try:
+        base = disk[5:]
+        while len(base):
+            if os.path.exists(SUPPRESS_PREFIX + base):
+                return True
+            base = base[:-1]
+    except:
+        return False
+
+def set_suppress(path):
+    disk = os.path.realpath(path)
+    if not os.path.exists(disk):
+        raise Error('does not exist', path);
+    if not stat.S_ISBLK(os.lstat(path)):
+        raise Error('not a block device', path)
+    base = disk[5:]
+
+    with file(SUPPRESS_PREFIX + base, 'w') as f:
+        pass
+    LOG.info('set suppress flag on %s', base)
+
+def unset_suppress(path):
+    disk = os.path.realpath(path)
+    if not os.path.exists(disk):
+        raise Error('does not exist', path);
+    if not stat.S_ISBLK(os.lstat(path)):
+        raise Error('not a block device', path)
+    assert disk.startswith('/dev/')
+    base = disk[5:]
+
+    fn = SUPPRESS_PREFIX + base
+    if not os.path.exists(fn):
+        raise Error('not marked as suppressed', path)
+
+    try:
+        os.unlink(fn)
+        LOG.info('unset suppress flag on %s', base)
+    except e:
+        raise Error('failed to unsuppress', e)
+
+
+def main_suppress(args):
+    set_suppress(args.path)
+
+def main_unsuppress(args):
+    unset_suppress(args.path)
+
+
+###########################
 
 
 def parse_args():
@@ -1934,6 +2004,28 @@ def parse_args():
     list_parser = subparsers.add_parser('list', help='List disks, partitions, and Ceph OSDs')
     list_parser.set_defaults(
         func=main_list,
+        )
+
+    suppress_parser = subparsers.add_parser('suppress-activate', help='Suppress activate on a device (prefix)')
+    suppress_parser.add_argument(
+        'path',
+        metavar='PATH',
+        nargs='?',
+        help='path to block device or directory',
+        )
+    suppress_parser.set_defaults(
+        func=main_suppress,
+        )
+
+    unsuppress_parser = subparsers.add_parser('unsuppress-activate', help='Stop suppressing activate on a device (prefix)')
+    unsuppress_parser.add_argument(
+        'path',
+        metavar='PATH',
+        nargs='?',
+        help='path to block device or directory',
+        )
+    unsuppress_parser.set_defaults(
+        func=main_unsuppress,
         )
 
     args = parser.parse_args()
