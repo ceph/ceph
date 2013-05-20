@@ -41,6 +41,7 @@ using namespace __gnu_cxx;
 #include "ObjectMap.h"
 #include "SequencerPosition.h"
 #include "FDCache.h"
+#include "WBThrottle.h"
 
 #include "include/uuid.h"
 
@@ -201,6 +202,8 @@ private:
 
   Mutex fdcache_lock;
   FDCache fdcache;
+  WBThrottle wbthrottle;
+
   Sequencer default_osr;
   deque<OpSequencer*> op_queue;
   uint64_t op_queue_len, op_queue_bytes;
@@ -253,23 +256,7 @@ private:
   void _journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk);
   friend class C_JournaledAhead;
 
-  // flusher thread
-  Cond flusher_cond;
-  list<uint64_t> flusher_queue;
-  int flusher_queue_len;
-  void flusher_entry();
-  struct FlusherThread : public Thread {
-    FileStore *fs;
-    FlusherThread(FileStore *f) : fs(f) {}
-    void *entry() {
-      fs->flusher_entry();
-      return 0;
-    }
-  } flusher_thread;
-  bool queue_flusher(int fd, uint64_t off, uint64_t len, bool replica);
-
   int open_journal();
-
 
   PerfCounters *logger;
 
@@ -514,15 +501,11 @@ private:
   bool m_filestore_btrfs_snap;
   float m_filestore_commit_timeout;
   bool m_filestore_fiemap;
-  bool m_filestore_flusher;
   bool m_filestore_fsync_flushes_journal_data;
   bool m_filestore_journal_parallel;
   bool m_filestore_journal_trailing;
   bool m_filestore_journal_writeahead;
   int m_filestore_fiemap_threshold;
-  bool m_filestore_sync_flush;
-  int m_filestore_flusher_max_fds;
-  int m_filestore_flush_min;
   double m_filestore_max_sync_interval;
   double m_filestore_min_sync_interval;
   bool m_filestore_fail_eio;
