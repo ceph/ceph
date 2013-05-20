@@ -803,6 +803,7 @@ bool OSDMonitor::prepare_mark_me_down(MOSDMarkMeDown *m)
   assert(osdmap.is_up(target_osd));
   assert(osdmap.get_addr(target_osd) == m->get_target().addr);
 
+  mon->clog.info() << "osd." << target_osd << " marked itself down\n";
   pending_inc.new_state[target_osd] = CEPH_OSD_UP;
   wait_for_finished_proposal(new C_AckMarkedDown(this, m));
   return true;
@@ -1807,6 +1808,7 @@ void OSDMonitor::handle_osd_timeouts(const utime_t &now,
     } else if (can_mark_down(i)) {
       utime_t diff = now - t->second;
       if (diff > timeo) {
+	mon->clog.info() << "osd." << i << " marked down after no pg stats for " << diff << "seconds\n";
 	derr << "no osd or pg stats from osd." << i << " since " << t->second << ", " << diff
 	     << " seconds ago.  marking down" << dendl;
 	pending_inc.new_state[i] = CEPH_OSD_UP;
