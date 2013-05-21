@@ -85,6 +85,17 @@ public:
     assert(weak_refs.empty());
   }
 
+  void clear(K key) {
+    VPtr val; // release any ref we have after we drop the lock
+    {
+      Mutex::Locker l(lock);
+      if (weak_refs.count(key)) {
+	val = weak_refs[key].lock();
+      }
+      lru_remove(key);
+    }
+  }
+
   void set_size(size_t new_size) {
     list<VPtr> to_release;
     {
