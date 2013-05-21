@@ -46,6 +46,8 @@ DEFAULT_VERBOSE=true
 DEFAULT_TEST_CLONES=true
 DEFAULT_LOCAL_FILES=false
 DEFAULT_FORMAT=2
+DEFAULT_DOUBLE_ORDER=true
+DEFAULT_HALF_ORDER=false
 DEFAULT_PAGE_SIZE=4096
 DEFAULT_OBJECT_ORDER=22
 MIN_OBJECT_ORDER=12	# technically 9, but the rbd CLI enforces 12
@@ -87,6 +89,10 @@ function usage() {
 	echo "        test using format 2 rbd images" >&2
 	echo "    -c" >&2
 	echo "        also test rbd clone images (implies format 2)" >&2
+	echo "    -d" >&2
+	echo "        clone object order double its parent's (format 2)" >&2
+	echo "    -h" >&2
+	echo "        clone object order half of its parent's (format 2)" >&2
 	echo "    -l" >&2
 	echo "        use local files rather than rbd images" >&2
 	echo "    -v" >&2
@@ -113,11 +119,14 @@ function parseargs() {
 	local opts="o:p:12clv"
 	local lopts="order:,page_size:,local,clone,verbose"
 	local parsed
+	local clone_order_msg
 
 	# use values from environment if available
 	VERBOSE="${IMAGE_READ_VERBOSE:-${DEFAULT_VERBOSE}}"
 	TEST_CLONES="${IMAGE_READ_TEST_CLONES:-${DEFAULT_TEST_CLONES}}"
 	LOCAL_FILES="${IMAGE_READ_LOCAL_FILES:-${DEFAULT_LOCAL_FILES}}"
+	DOUBLE_ORDER="${IMAGE_READ_DOUBLE_ORDER:-${DEFAULT_DOUBLE_ORDER}}"
+	HALF_ORDER="${IMAGE_READ_HALF_ORDER:-${DEFAULT_HALF_ORDER}}"
 	FORMAT="${IMAGE_READ_FORMAT:-${DEFAULT_FORMAT}}"
 	PAGE_SIZE="${IMAGE_READ_PAGE_SIZE:-${DEFAULT_PAGE_SIZE}}"
 	OBJECT_ORDER="${IMAGE_READ_OBJECT_ORDER:-${DEFAULT_OBJECT_ORDER}}"
@@ -131,6 +140,10 @@ function parseargs() {
 			VERBOSE=$(boolean_toggle "${VERBOSE}");;
 		-c|--clone)
 			TEST_CLONES=$(boolean_toggle "${TEST_CLONES}");;
+		-d|--double)
+			DOUBLE_ORDER=$(boolean_toggle "${DOUBLE_ORDER}");;
+		-h|--half)
+			HALF_ORDER=$(boolean_toggle "${HALF_ORDER}");;
 		-l|--local)
 			LOCAL_FILES=$(boolean_toggle "${LOCAL_FILES}");;
 		-1|-2)
@@ -148,12 +161,45 @@ function parseargs() {
 	done
 	[ $# -gt 0 ] && usage "excess arguments ($*)"
 
+	if [ "${TEST_CLONES}" = true ]; then
+		# If we're using different object orders for clones,
+		# make sure the limits are updated accordingly.  If
+		# both "half" and "double" are specified, just
+		# ignore them both.
+		if [ "${DOUBLE_ORDER}" = true ]; then
+			if [ "${HALF_ORDER}" = true ]; then
+				DOUBLE_ORDER=false
+				HALF_ORDER=false
+			else
+				((MAX_OBJECT_ORDER -= 2))
+			fi
+		elif [ "${HALF_ORDER}" = true ]; then
+			((MIN_OBJECT_ORDER += 2))
+		fi
+	fi
+
 	[ "${OBJECT_ORDER}" -lt "${MIN_OBJECT_ORDER}" ] &&
 		usage "object order (${OBJECT_ORDER}) must be" \
 			"at least ${MIN_OBJECT_ORDER}"
 	[ "${OBJECT_ORDER}" -gt "${MAX_OBJECT_ORDER}" ] &&
 		usage "object order (${OBJECT_ORDER}) must be" \
 			"at most ${MAX_OBJECT_ORDER}"
+
+	if [ "${TEST_CLONES}" = true ]; then
+		if [ "${DOUBLE_ORDER}" = true ]; then
+			((CLONE1_ORDER = OBJECT_ORDER + 1))
+			((CLONE2_ORDER = OBJECT_ORDER + 2))
+			clone_order_msg="double"
+		elif [ "${HALF_ORDER}" = true ]; then
+			((CLONE1_ORDER = OBJECT_ORDER - 1))
+			((CLONE2_ORDER = OBJECT_ORDER - 2))
+			clone_order_msg="half of"
+		else
+			CLONE1_ORDER="${OBJECT_ORDER}"
+			CLONE2_ORDER="${OBJECT_ORDER}"
+			clone_order_msg="the same as"
+		fi
+	fi
 
 	[ "${TEST_CLONES}" != true ] || FORMAT=2
 
@@ -175,8 +221,12 @@ function parseargs() {
 		"there are are ${OBJECT_PAGES} pages in an object"
 	echo "    derived image size is ${IMAGE_SIZE} MB, so" \
 		"there are ${IMAGE_OBJECTS} objects in an image"
-	[ "${TEST_CLONES}" = true ] &&
+	if [ "${TEST_CLONES}" = true ]; then
 		echo "    clone functionality will be tested"
+		echo "    object size for a clone will be ${clone_order_msg}"
+		echo "        the object size of its parent image"
+	fi
+
 	true	# Don't let the clones test spoil our return value
 }
 
@@ -223,9 +273,11 @@ function setup() {
 	# create a snapshot of the original
 	create_image_snap "${ORIGINAL}" "${SNAP1}"
 	map_image_snap "${ORIGINAL}" "${SNAP1}"
+
 	if [ "${TEST_CLONES}" = true ]; then
 		# create a clone of the original snapshot
-		create_snap_clone "${ORIGINAL}" "${SNAP1}" "${CLONE1}"
+		create_snap_clone "${ORIGINAL}" "${SNAP1}" \
+			"${CLONE1}" "${CLONE1_ORDER}"
 		map_image "${CLONE1}"
 
 		# create a snapshot of that clone
@@ -233,7 +285,8 @@ function setup() {
 		map_image_snap "${CLONE1}" "${SNAP2}"
 
 		# create a clone of that clone's snapshot
-		create_snap_clone "${CLONE1}" "${SNAP2}" "${CLONE2}"
+		create_snap_clone "${CLONE1}" "${SNAP2}" \
+			"${CLONE2}" "${CLONE2_ORDER}"
 		map_image "${CLONE2}"
 	fi
 }
@@ -399,10 +452,11 @@ function destroy_image_snap() {
 }
 
 function create_snap_clone() {
-	[ $# -eq 3 ] || exit 99
+	[ $# -eq 4 ] || exit 99
 	local image_name="$1"
 	local snap_name="$2"
 	local clone_name="$3"
+	local clone_order="$4"
 	local image_snap="${image_name}@${snap_name}"
 	local snap_path
 	local clone_path
@@ -418,7 +472,7 @@ function create_snap_clone() {
 	fi
 
 	rbd snap protect "${image_snap}"
-	rbd clone "${image_snap}" "${clone_name}"
+	rbd clone --order "${clone_order}" "${image_snap}" "${clone_name}"
 }
 
 function destroy_snap_clone() {
