@@ -212,7 +212,6 @@ private:
   bool prepare_pool_op (MPoolOp *m);
   bool prepare_pool_op_create (MPoolOp *m);
   bool prepare_pool_op_delete(MPoolOp *m);
-  bool prepare_pool_op_auid(MPoolOp *m);
   int prepare_new_pool(string& name, uint64_t auid, int crush_rule,
                        unsigned pg_num, unsigned pgp_num);
   int prepare_new_pool(MPoolOp *m);
