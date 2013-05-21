@@ -116,7 +116,7 @@ int main(int argc, const char **argv)
 
   bool mkfs = false;
   bool compact = false;
-  std::string osdmapfn, inject_monmap;
+  std::string osdmapfn, inject_monmap, extract_monmap;
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -140,6 +140,8 @@ int main(int argc, const char **argv)
       osdmapfn = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--inject_monmap", (char*)NULL)) {
       inject_monmap = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--extract-monmap", (char*)NULL)) {
+      extract_monmap = val;
     } else {
       ++i;
     }
@@ -380,10 +382,20 @@ int main(int argc, const char **argv)
         cerr << "can't decode monmap: " << e.what() << std::endl;
       }
     } else {
-      std::cerr << "unable to obtain a monmap: "
-                << cpp_strerror(err) << std::endl;
+      derr << "unable to obtain a monmap: " << cpp_strerror(err) << dendl;
+    }
+    if (!extract_monmap.empty()) {
+      int r = mapbl.write_file(extract_monmap.c_str());
+      if (r < 0) {
+	r = -errno;
+	derr << "error writing monmap to " << extract_monmap << ": " << cpp_strerror(r) << dendl;
+	prefork.exit(1);
+      }
+      derr << "wrote monmap to " << extract_monmap << dendl;
+      prefork.exit(0);
     }
   }
+
 
   // this is what i will bind to
   entity_addr_t ipaddr;
