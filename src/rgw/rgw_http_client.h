@@ -5,6 +5,7 @@
 
 class RGWHTTPClient
 {
+protected:
   list<pair<string, string> > headers;
 public:
   virtual ~RGWHTTPClient() {}

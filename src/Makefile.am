@@ -382,6 +382,9 @@ librgw_a_SOURCES =  \
 	rgw/rgw_bucket.cc\
         rgw/rgw_tools.cc \
 	rgw/rgw_rados.cc \
+        rgw/rgw_http_client.cc \
+        rgw/rgw_rest_client.cc \
+	rgw/rgw_rest_conn.cc \
 	rgw/rgw_op.cc \
 	rgw/rgw_common.cc \
 	rgw/rgw_cache.cc \
@@ -413,7 +416,6 @@ radosgw_SOURCES = \
         rgw/rgw_rest_user.cc \
         rgw/rgw_rest_bucket.cc \
         rgw/rgw_rest_metadata.cc \
-        rgw/rgw_http_client.cc \
         rgw/rgw_swift.cc \
 	rgw/rgw_swift_auth.cc \
 	rgw/rgw_main.cc
@@ -2077,6 +2079,8 @@ noinst_HEADERS = \
 	rgw/rgw_rest_usage.h\
 	rgw/rgw_rest_user.h\
 	rgw/rgw_rest_bucket.h\
+	rgw/rgw_rest_client.h\
+	rgw/rgw_rest_conn.h\
 	rgw/rgw_tools.h\
 	rgw/rgw_rest_metadata.h\
 	rgw/rgw_usage.h\

@@ -548,6 +548,19 @@ int RGWRados::init_complete()
   if (ret < 0)
     return ret;
 
+  ret = region_map.read(cct, this);
+  if (ret < 0) {
+    ldout(cct, 0) << "WARNING: cannot read region map" << dendl;
+  } else {
+    string master_region = region_map.master_region;
+    map<string, RGWRegion>::iterator iter = region_map.regions.find(master_region);
+    if (iter == region_map.regions.end()) {
+      lderr(cct) << "ERROR: bad region map: inconsistent master region" << dendl;
+      return -EINVAL;
+    }
+    rest_conn = new RGWRegionConnection(cct, this, iter->second);
+  }
+
   ret = open_root_pool_ctx();
   if (ret < 0)
     return ret;
