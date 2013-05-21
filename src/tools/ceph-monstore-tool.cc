@@ -266,8 +266,7 @@ int main(int argc, char **argv) {
       while (true) {
 	if (!iter.valid())
 	  break;
-	if (num % 20 == 0)
-	  std::cerr << "Replaying trans num " << num << std::endl;
+	std::cerr << "Replaying trans num " << num << std::endl;
 	st.apply_transaction(iter.cur());
 	iter.next();
 	++num;
