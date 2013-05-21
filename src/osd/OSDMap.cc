@@ -315,7 +315,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   ::encode(new_pg_temp, bl);
 
   // extended
-  __u16 ev = 9;
+  __u16 ev = 10;
   ::encode(ev, bl);
   ::encode(new_hb_back_up, bl);
   ::encode(new_up_thru, bl);
@@ -327,6 +327,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   ::encode(cluster_snapshot, bl);
   ::encode(new_uuid, bl);
   ::encode(new_xinfo, bl);
+  ::encode(new_hb_front_up, bl);
 }
 
 void OSDMap::Incremental::decode(bufferlist::iterator &p)
@@ -418,6 +419,8 @@ void OSDMap::Incremental::decode(bufferlist::iterator &p)
     ::decode(new_uuid, p);
   if (ev >= 9)
     ::decode(new_xinfo, p);
+  if (ev >= 10)
+    ::decode(new_hb_front_up, p);
 }
 
 void OSDMap::Incremental::dump(Formatter *f) const
@@ -469,7 +472,8 @@ void OSDMap::Incremental::dump(Formatter *f) const
     f->dump_int("osd", p->first);
     f->dump_stream("public_addr") << p->second;
     f->dump_stream("cluster_addr") << new_up_cluster.find(p->first)->second;
-    f->dump_stream("heartbeat_addr") << new_hb_back_up.find(p->first)->second;
+    f->dump_stream("heartbeat_back_addr") << new_hb_back_up.find(p->first)->second;
+    f->dump_stream("heartbeat_front_addr") << new_hb_front_up.find(p->first)->second;
     f->close_section();
   }
   f->close_section();
@@ -624,6 +628,7 @@ void OSDMap::set_max_osd(int m)
   osd_addrs->client_addr.resize(m);
   osd_addrs->cluster_addr.resize(m);
   osd_addrs->hb_back_addr.resize(m);
+  osd_addrs->hb_front_addr.resize(m);
   osd_uuid->resize(m);
 
   calc_num_osds();
@@ -763,6 +768,11 @@ void OSDMap::dedup(const OSDMap *o, OSDMap *n)
       n->osd_addrs->hb_back_addr[i] = o->osd_addrs->hb_back_addr[i];
     else
       diff++;
+    if ( n->osd_addrs->hb_front_addr[i] &&  o->osd_addrs->hb_front_addr[i] &&
+	*n->osd_addrs->hb_front_addr[i] == *o->osd_addrs->hb_front_addr[i])
+      n->osd_addrs->hb_front_addr[i] = o->osd_addrs->hb_front_addr[i];
+    else
+      diff++;
   }
   if (diff == 0) {
     // zoinks, no differences at all!
@@ -874,6 +884,9 @@ int OSDMap::apply_incremental(const Incremental &inc)
     else
       osd_addrs->hb_back_addr[i->first].reset(
 	new entity_addr_t(inc.new_hb_back_up.find(i->first)->second));
+    if (!inc.new_hb_front_up.empty())
+      osd_addrs->hb_front_addr[i->first].reset(
+	new entity_addr_t(inc.new_hb_front_up.find(i->first)->second));
     osd_info[i->first].up_from = epoch;
   }
   for (map<int32_t,entity_addr_t>::const_iterator i = inc.new_up_cluster.begin();
@@ -1184,7 +1197,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(cbl, bl);
 
   // extended
-  __u16 ev = 9;
+  __u16 ev = 10;
   ::encode(ev, bl);
   ::encode(osd_addrs->hb_back_addr, bl);
   ::encode(osd_info, bl);
@@ -1194,6 +1207,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(cluster_snapshot, bl);
   ::encode(*osd_uuid, bl);
   ::encode(osd_xinfo, bl);
+  ::encode(osd_addrs->hb_front_addr, bl);
 }
 
 void OSDMap::decode(bufferlist& bl)
@@ -1303,6 +1317,11 @@ void OSDMap::decode(bufferlist::iterator& p)
   else
     osd_xinfo.resize(max_osd);
 
+  if (ev >= 10)
+    ::decode(osd_addrs->hb_front_addr, p);
+  else
+    osd_addrs->hb_front_addr.resize(osd_addrs->hb_back_addr.size());
+
   // index pool names
   name_pool.clear();
   for (map<int64_t,string>::iterator i = pool_name.begin(); i != pool_name.end(); ++i)
@@ -1358,7 +1377,8 @@ void OSDMap::dump(Formatter *f) const
       get_info(i).dump(f);
       f->dump_stream("public_addr") << get_addr(i);
       f->dump_stream("cluster_addr") << get_cluster_addr(i);
-      f->dump_stream("heartbeat_addr") << get_hb_back_addr(i);
+      f->dump_stream("heartbeat_back_addr") << get_hb_back_addr(i);
+      f->dump_stream("heartbeat_front_addr") << get_hb_front_addr(i);
 
       set<string> st;
       get_state(i, st);
@@ -1504,7 +1524,8 @@ void OSDMap::print(ostream& out) const
       out << " weight " << get_weightf(i);
       const osd_info_t& info(get_info(i));
       out << " " << info;
-      out << " " << get_addr(i) << " " << get_cluster_addr(i) << " " << get_hb_back_addr(i);
+      out << " " << get_addr(i) << " " << get_cluster_addr(i) << " " << get_hb_back_addr(i)
+	  << " " << get_hb_front_addr(i);
       set<string> st;
       get_state(i, st);
       out << " " << st;

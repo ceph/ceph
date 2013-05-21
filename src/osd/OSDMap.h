@@ -140,6 +140,7 @@ public:
     map<entity_addr_t,utime_t> new_blacklist;
     vector<entity_addr_t> old_blacklist;
     map<int32_t, entity_addr_t> new_hb_back_up;
+    map<int32_t, entity_addr_t> new_hb_front_up;
 
     string cluster_snapshot;
 
@@ -182,6 +183,7 @@ private:
     vector<std::tr1::shared_ptr<entity_addr_t> > client_addr;
     vector<std::tr1::shared_ptr<entity_addr_t> > cluster_addr;
     vector<std::tr1::shared_ptr<entity_addr_t> > hb_back_addr;
+    vector<std::tr1::shared_ptr<entity_addr_t> > hb_front_addr;
     entity_addr_t blank;
   };
   std::tr1::shared_ptr<addrs_s> osd_addrs;
@@ -347,6 +349,10 @@ private:
     assert(exists(osd));
     return osd_addrs->hb_back_addr[osd] ? *osd_addrs->hb_back_addr[osd] : osd_addrs->blank;
   }
+  const entity_addr_t &get_hb_front_addr(int osd) const {
+    assert(exists(osd));
+    return osd_addrs->hb_front_addr[osd] ? *osd_addrs->hb_front_addr[osd] : osd_addrs->blank;
+  }
   entity_inst_t get_inst(int osd) const {
     assert(is_up(osd));
     return entity_inst_t(entity_name_t::OSD(osd), get_addr(osd));
@@ -358,6 +364,10 @@ private:
   entity_inst_t get_hb_back_inst(int osd) const {
     assert(is_up(osd));
     return entity_inst_t(entity_name_t::OSD(osd), get_hb_back_addr(osd));
+  }
+  entity_inst_t get_hb_front_inst(int osd) const {
+    assert(is_up(osd));
+    return entity_inst_t(entity_name_t::OSD(osd), get_hb_front_addr(osd));
   }
 
   const uuid_d& get_uuid(int osd) const {
