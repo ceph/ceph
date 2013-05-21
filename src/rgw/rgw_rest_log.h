@@ -14,7 +14,9 @@
 #ifndef CEPH_RGW_REST_LOG_H
 #define CEPH_RGW_REST_LOG_H
 
-class RGWOp_BILog_List : public RGWRESTOp {
+class RGWOp_BILog_List : public RGWOp {
+  int http_ret;
+  std::ostringstream out_stream;
 public:
   RGWOp_BILog_List() {}
   ~RGWOp_BILog_List() {}
@@ -22,6 +24,10 @@ public:
   int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("bilog", RGW_CAP_READ);
   }
+  int verify_permission() {
+    return check_caps(s->user.caps);
+  }
+  virtual void send_response();
   void execute();
   virtual const char *name() {
     return "list bucket index log";
@@ -42,7 +48,9 @@ public:
   }
 };
 
-class RGWOp_MDLog_List : public RGWRESTOp {
+class RGWOp_MDLog_List : public RGWOp {
+  int http_ret;
+  std::ostringstream out_stream;
 public:
   RGWOp_MDLog_List() {}
   ~RGWOp_MDLog_List() {}
@@ -50,7 +58,11 @@ public:
   int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("mdlog", RGW_CAP_READ);
   }
+  int verify_permission() {
+    return check_caps(s->user.caps);
+  }
   void execute();
+  virtual void send_response();
   virtual const char *name() {
     return "list metadata log";
   }
