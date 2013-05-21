@@ -3381,7 +3381,7 @@ COMMAND("reset_pg_recovery_stats", "reset pg recovery statistics")
 void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist& data)
 {
   int r = 0;
-  stringstream ss;
+  stringstream ss, ds;
   string rs;
   bufferlist odata;
 
@@ -3403,7 +3403,6 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
   if (prefix == "get_command_descriptions") {
-    stringstream ds;
     int cmdnum = 0;
     JSONFormatter *f = new JSONFormatter();
     f->open_object_section("command_descriptions");
@@ -3429,7 +3428,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
   }
 
   if (prefix == "version") {
-    ss << pretty_version_to_str();
+    ds << pretty_version_to_str();
     goto out;
   }
   else if (prefix == "injectargs") {
@@ -3522,12 +3521,10 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     } else {
       string heapcmd;
       cmd_getval(g_ceph_context, cmdmap, "heapcmd", heapcmd);
-      ostringstream ss;
       // XXX 1-element vector, change at callee or make vector here?
       vector<string> heapcmd_vec;
       get_str_vec(heapcmd, heapcmd_vec);
-      ceph_heap_profiler_handle_command(heapcmd_vec, ss);
-      rs = ss.str();
+      ceph_heap_profiler_handle_command(heapcmd_vec, ds);
     }
   }
 
@@ -3600,13 +3597,13 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     cmd_getval(g_ceph_context, cmdmap, "arg", arg);
     vector<string> argvec;
     get_str_vec(arg, argvec);
-    cpu_profiler_handle_command(argvec, ss);
+    cpu_profiler_handle_command(argvec, ds);
   }
 
   else if (prefix == "dump_pg_recovery_stats") {
     stringstream s;
     pg_recovery_stats.dump(s);
-    ss << "dump pg recovery stats: " << s.str();
+    ds << "dump pg recovery stats: " << s.str();
   }
 
   else if (prefix == "reset_pg_recovery_stats") {
@@ -3621,6 +3618,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
 
  out:
   rs = ss.str();
+  odata.append(ds);
   dout(0) << "do_command r=" << r << " " << rs << dendl;
   clog.info() << rs << "\n";
   if (con) {

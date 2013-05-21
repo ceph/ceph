@@ -231,7 +231,7 @@ public:
     ::decode(data, bl);
   }
   bool contains(const EntityName& name) const;
-  void list_secrets(stringstream& ss) const;
+  void list_secrets(stringstream& ss, stringstream &ds) const;
   version_t get_ver() const {
     Mutex::Locker l(lock);
     return data.version;    
