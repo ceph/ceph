@@ -159,49 +159,33 @@ This procedure removes a ``ceph-mon`` daemon from an unhealhty cluster--i.e.,
 a cluster that has placement groups that are persistently not ``active + clean``.
 
 
-#. Identify a surviving monitor. :: 
+#. Identify a surviving monitor and log in to that host. :: 
 
 	ceph mon dump
-
-#. Navigate to a surviving monitor's ``monmap`` directory. :: 
-
 	ssh {mon-host}
-	cd /var/lib/ceph/mon/ceph-{mon-id}/monmap
 
-#. List the directory contents and identify the last commmitted map.
-   Directory contents will show a numeric list of maps. ::
+#. Stop the ``ceph-mon'' daemon and extract a copy of the monap file.  ::
 
-	ls 	
-	1  2  3  4  5  first_committed  last_committed  last_pn  latest
+	service ceph stop mon || stop ceph-mon-all
+        ceph-mon -i {mon-id} --extract-monmap {map-path}
+	# for example,
+        ceph-mon -i a --extract-monmap /tmp/monmap
 
-
-#. Identify the most recently committed map. ::
-
-	sudo cat last_committed
-
-#. Copy the most recently committed file to a temporary directory. ::
-
-	cp /var/lib/ceph/mon/ceph-{mon-id}/monmap/{last_committed} /tmp/surviving_map
-	
 #. Remove the non-surviving monitors. 	For example, if you have three monitors, 
    ``mon.a``, ``mon.b``, and ``mon.c``, where only ``mon.a`` will survive, follow 
    the example below:: 
 
-	monmaptool /tmp/surviving_map --rm {mon-id}
-	#for example
-	monmaptool /tmp/surviving_map --rm b
-	monmaptool /tmp/surviving_map --rm c
-	
-#. Stop all monitors. ::
-
-	service ceph -a stop mon
+	monmaptool {map-path} --rm {mon-id}
+	# for example,
+	monmaptool /tmp/monmap --rm b
+	monmaptool /tmp/monmap --rm c
 	
 #. Inject the surviving map with the removed monitors into the surviving monitors. 
    For example, to inject a map into monitor ``mon.a``, follow the example below:: 
 
 	ceph-mon -i {mon-id} --inject-monmap {map-path}
-	#for example
-	ceph-mon -i a --inject-monmap /etc/surviving_map
+	# for example,
+	ceph-mon -i a --inject-monmap /tmp/monmap
 
 
 .. _Changing a Monitor's IP address:
