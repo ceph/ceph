@@ -711,6 +711,8 @@ void Monitor::reset()
   quorum.clear();
   outside_quorum.clear();
 
+  bootstrap_ready_services.clear();
+
   paxos->restart();
 
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
@@ -3935,6 +3937,26 @@ void Monitor::tick()
   }
 
   new_tick();
+}
+
+void Monitor::prepare_bootstrap()
+{
+  dout(1) << __func__ << dendl;
+  for (vector<PaxosService*>::iterator p = paxos_service.begin();
+       p != paxos_service.end(); ++p) {
+    (*p)->prepare_bootstrap();
+  }
+}
+
+void Monitor::mark_bootstrap_ready(string name)
+{
+  dout(1) << __func__ << dendl;
+  bootstrap_ready_services.insert(name);
+
+  if (bootstrap_ready_services.size() == paxos_service.size()) {
+    dout(1) << __func__ << " preparing paxos to bootstrap" << dendl;
+    paxos->prepare_bootstrap();
+  }
 }
 
 int Monitor::check_fsid()

@@ -31,6 +31,33 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, Paxos *paxos, string 
 		<< ").paxosservice(" << service_name << ") ";
 }
 
+
+void PaxosService::prepare_bootstrap()
+{
+  dout(0) << __func__ << dendl;
+  if (is_bootstrapping()) {
+    dout(1) << __func__ << " already bootstrapping; return." << dendl;
+    return;
+  }
+
+  if (!is_active()) {
+    if (!is_proposing()) {
+      assert(!is_write_ready());
+      mon->mark_bootstrap_ready(get_service_name());
+    }
+  } else {
+    if (is_writeable()) {
+      propose_pending();
+    } else {
+      // otherwise, we either don't have a pending value (which is fine if we
+      // haven't yet gone through _active(), or we are not the leader.  So, we
+      // just mark ourselves as ready to bootstrap and move on.
+      mon->mark_bootstrap_ready(get_service_name());
+    }
+  }
+  going_to_bootstrap = true;
+}
+
 bool PaxosService::dispatch(PaxosServiceMessage *m)
 {
   dout(10) << "dispatch " << *m << " from " << m->get_orig_source_inst() << dendl;
@@ -63,7 +90,7 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
     mon->forward_request_leader(m);
     return true;
   }
-  
+
   // writeable?
   if (!is_writeable()) {
     dout(10) << " waiting for paxos -> writeable" << dendl;
@@ -137,8 +164,6 @@ void PaxosService::propose_pending()
   assert(have_pending);
   assert(mon->is_leader());
   assert(is_active());
-  if (!is_active())
-    return;
 
   if (proposal_timer) {
     mon->timer.cancel_event(proposal_timer);
@@ -201,6 +226,8 @@ void PaxosService::restart()
     proposal_timer = 0;
   }
 
+  going_to_bootstrap = false;
+
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
 
   on_restart();
@@ -232,6 +259,11 @@ void PaxosService::election_finished()
 
 void PaxosService::_active()
 {
+  if (is_bootstrapping()) {
+    mon->mark_bootstrap_ready(get_service_name());
+    return;
+  }
+
   if (!is_active()) {
     dout(10) << "_active - not active" << dendl;
     wait_for_active(new C_Active(this));

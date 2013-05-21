@@ -42,6 +42,9 @@ void Paxos::prepare_bootstrap()
   dout(0) << __func__ << dendl;
 
   going_to_bootstrap = true;
+
+  if (is_active())
+    mon->bootstrap();
 }
 
 MonitorDBStore *Paxos::get_store()

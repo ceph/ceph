@@ -76,7 +76,13 @@ class PaxosService {
    * If the implementation class has anything pending to be proposed to Paxos,
    * then have_pending should be true; otherwise, false.
    */
-  bool have_pending; 
+  bool have_pending;
+  /**
+   * marks the monitor's intention to bootstrap; and we should follow it by
+   * not allowing further proposals besides any pending state we might
+   * currently have.
+   */
+  bool going_to_bootstrap;
   /**
    * The version to trim to. If zero, we assume there is no version to be
    * trimmed; otherwise, we assume we should trim to the version held by
@@ -191,6 +197,7 @@ public:
   PaxosService(Monitor *mn, Paxos *p, string name) 
     : mon(mn), paxos(p), service_name(name),
       service_version(0), proposal_timer(0), have_pending(false),
+      going_to_bootstrap(false),
       trim_version(0),
       last_committed_name("last_committed"),
       first_committed_name("first_committed"),
@@ -302,6 +309,8 @@ public:
 
     other->request_proposal();
   }
+
+  void prepare_bootstrap();
 
   /**
    * Dispatch a message by passing it to several different functions that are
@@ -489,6 +498,10 @@ public:
     return ((int) proposing.read() == 1);
   }
 
+  bool is_bootstrapping() {
+    return going_to_bootstrap;
+  }
+
   /**
    * Check if we are in the Paxos ACTIVE state.
    *
@@ -499,7 +512,7 @@ public:
   bool is_active() {
     return (!is_proposing() && !paxos->is_recovering()
         && !paxos->is_locked()
-	&& !paxos->is_bootstrapping());
+	&& is_bootstrapping());
   }
 
   /**
