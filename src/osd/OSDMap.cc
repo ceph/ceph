@@ -623,7 +623,7 @@ void OSDMap::set_max_osd(int m)
   osd_xinfo.resize(m);
   osd_addrs->client_addr.resize(m);
   osd_addrs->cluster_addr.resize(m);
-  osd_addrs->hb_addr.resize(m);
+  osd_addrs->hb_back_addr.resize(m);
   osd_uuid->resize(m);
 
   calc_num_osds();
@@ -758,9 +758,9 @@ void OSDMap::dedup(const OSDMap *o, OSDMap *n)
       n->osd_addrs->cluster_addr[i] = o->osd_addrs->cluster_addr[i];
     else
       diff++;
-    if ( n->osd_addrs->hb_addr[i] &&  o->osd_addrs->hb_addr[i] &&
-	*n->osd_addrs->hb_addr[i] == *o->osd_addrs->hb_addr[i])
-      n->osd_addrs->hb_addr[i] = o->osd_addrs->hb_addr[i];
+    if ( n->osd_addrs->hb_back_addr[i] &&  o->osd_addrs->hb_back_addr[i] &&
+	*n->osd_addrs->hb_back_addr[i] == *o->osd_addrs->hb_back_addr[i])
+      n->osd_addrs->hb_back_addr[i] = o->osd_addrs->hb_back_addr[i];
     else
       diff++;
   }
@@ -870,9 +870,9 @@ int OSDMap::apply_incremental(const Incremental &inc)
     osd_state[i->first] |= CEPH_OSD_EXISTS | CEPH_OSD_UP;
     osd_addrs->client_addr[i->first].reset(new entity_addr_t(i->second));
     if (inc.new_hb_back_up.empty())
-      osd_addrs->hb_addr[i->first].reset(new entity_addr_t(i->second)); //this is a backward-compatibility hack
+      osd_addrs->hb_back_addr[i->first].reset(new entity_addr_t(i->second)); //this is a backward-compatibility hack
     else
-      osd_addrs->hb_addr[i->first].reset(
+      osd_addrs->hb_back_addr[i->first].reset(
 	new entity_addr_t(inc.new_hb_back_up.find(i->first)->second));
     osd_info[i->first].up_from = epoch;
   }
@@ -1186,7 +1186,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   // extended
   __u16 ev = 9;
   ::encode(ev, bl);
-  ::encode(osd_addrs->hb_addr, bl);
+  ::encode(osd_addrs->hb_back_addr, bl);
   ::encode(osd_info, bl);
   ::encode(blacklist, bl);
   ::encode(osd_addrs->cluster_addr, bl);
@@ -1277,7 +1277,7 @@ void OSDMap::decode(bufferlist::iterator& p)
   __u16 ev = 0;
   if (v >= 5)
     ::decode(ev, p);
-  ::decode(osd_addrs->hb_addr, p);
+  ::decode(osd_addrs->hb_back_addr, p);
   ::decode(osd_info, p);
   if (v < 5)
     ::decode(pool_name, p);
@@ -1358,7 +1358,7 @@ void OSDMap::dump(Formatter *f) const
       get_info(i).dump(f);
       f->dump_stream("public_addr") << get_addr(i);
       f->dump_stream("cluster_addr") << get_cluster_addr(i);
-      f->dump_stream("heartbeat_addr") << get_hb_addr(i);
+      f->dump_stream("heartbeat_addr") << get_hb_back_addr(i);
 
       set<string> st;
       get_state(i, st);
@@ -1504,7 +1504,7 @@ void OSDMap::print(ostream& out) const
       out << " weight " << get_weightf(i);
       const osd_info_t& info(get_info(i));
       out << " " << info;
-      out << " " << get_addr(i) << " " << get_cluster_addr(i) << " " << get_hb_addr(i);
+      out << " " << get_addr(i) << " " << get_cluster_addr(i) << " " << get_hb_back_addr(i);
       set<string> st;
       get_state(i, st);
       out << " " << st;

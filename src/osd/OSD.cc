@@ -3117,7 +3117,7 @@ ConnectionRef OSDService::get_con_osd_hb(int peer, epoch_t from_epoch)
     return NULL;
   }
   ConnectionRef ret(
-    osd->hbclient_messenger->get_connection(next_osdmap->get_hb_inst(peer)));
+    osd->hbclient_messenger->get_connection(next_osdmap->get_hb_back_inst(peer)));
   ret->put(); // Ref from get_connection
   return ret;
 }
@@ -4415,7 +4415,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     } else if (!osdmap->is_up(whoami) ||
 	       !osdmap->get_addr(whoami).probably_equals(client_messenger->get_myaddr()) ||
 	       !osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()) ||
-	       !osdmap->get_hb_addr(whoami).probably_equals(hbserver_messenger->get_myaddr())) {
+	       !osdmap->get_hb_back_addr(whoami).probably_equals(hbserver_messenger->get_myaddr())) {
       if (!osdmap->is_up(whoami)) {
 	if (service.is_preparing_to_stop()) {
 	  service.got_stop_ack();
@@ -4432,9 +4432,9 @@ void OSD::handle_osd_map(MOSDMap *m)
 	clog.error() << "map e" << osdmap->get_epoch()
 		    << " had wrong cluster addr (" << osdmap->get_cluster_addr(whoami)
 		     << " != my " << cluster_messenger->get_myaddr() << ")";
-      else if (!osdmap->get_hb_addr(whoami).probably_equals(hbserver_messenger->get_myaddr()))
+      else if (!osdmap->get_hb_back_addr(whoami).probably_equals(hbserver_messenger->get_myaddr()))
 	clog.error() << "map e" << osdmap->get_epoch()
-		    << " had wrong hb addr (" << osdmap->get_hb_addr(whoami)
+		    << " had wrong hb back addr (" << osdmap->get_hb_back_addr(whoami)
 		     << " != my " << hbserver_messenger->get_myaddr() << ")";
       
       if (!service.is_stopping()) {
