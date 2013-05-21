@@ -34,14 +34,15 @@ int LevelDBStore::init(ostream &out, bool create_if_missing)
     assert(0 == "bloom size set but installed leveldb doesn't support bloom filters");
 #endif
   }
-  if (!options.compression_enabled)
+  if (options.compression_enabled)
+    ldoptions.compression = leveldb::kSnappyCompression;
+  else
     ldoptions.compression = leveldb::kNoCompression;
   if (options.block_restart_interval)
     ldoptions.block_restart_interval = options.block_restart_interval;
 
   ldoptions.error_if_exists = options.error_if_exists;
   ldoptions.paranoid_checks = options.paranoid_checks;
-  ldoptions.compression = leveldb::kNoCompression;
   ldoptions.create_if_missing = create_if_missing;
 
   if (options.log_file.length()) {
