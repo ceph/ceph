@@ -317,7 +317,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   // extended
   __u16 ev = 9;
   ::encode(ev, bl);
-  ::encode(new_hb_up, bl);
+  ::encode(new_hb_back_up, bl);
   ::encode(new_up_thru, bl);
   ::encode(new_last_clean_interval, bl);
   ::encode(new_lost, bl);
@@ -402,7 +402,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator &p)
   __u16 ev = 0;
   if (v >= 5)
     ::decode(ev, p);
-  ::decode(new_hb_up, p);
+  ::decode(new_hb_back_up, p);
   if (v < 5)
     ::decode(new_pool_names, p);
   ::decode(new_up_thru, p);
@@ -469,7 +469,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
     f->dump_int("osd", p->first);
     f->dump_stream("public_addr") << p->second;
     f->dump_stream("cluster_addr") << new_up_cluster.find(p->first)->second;
-    f->dump_stream("heartbeat_addr") << new_hb_up.find(p->first)->second;
+    f->dump_stream("heartbeat_addr") << new_hb_back_up.find(p->first)->second;
     f->close_section();
   }
   f->close_section();
@@ -869,11 +869,11 @@ int OSDMap::apply_incremental(const Incremental &inc)
        ++i) {
     osd_state[i->first] |= CEPH_OSD_EXISTS | CEPH_OSD_UP;
     osd_addrs->client_addr[i->first].reset(new entity_addr_t(i->second));
-    if (inc.new_hb_up.empty())
+    if (inc.new_hb_back_up.empty())
       osd_addrs->hb_addr[i->first].reset(new entity_addr_t(i->second)); //this is a backward-compatibility hack
     else
       osd_addrs->hb_addr[i->first].reset(
-	new entity_addr_t(inc.new_hb_up.find(i->first)->second));
+	new entity_addr_t(inc.new_hb_back_up.find(i->first)->second));
     osd_info[i->first].up_from = epoch;
   }
   for (map<int32_t,entity_addr_t>::const_iterator i = inc.new_up_cluster.begin();

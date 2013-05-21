@@ -139,7 +139,7 @@ public:
 
     map<entity_addr_t,utime_t> new_blacklist;
     vector<entity_addr_t> old_blacklist;
-    map<int32_t, entity_addr_t> new_hb_up;
+    map<int32_t, entity_addr_t> new_hb_back_up;
 
     string cluster_snapshot;
 
