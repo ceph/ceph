@@ -1,4 +1,5 @@
 #!/bin/sh
+# vim: set noet ts=8:
 # postinst script for ceph
 #
 # see: dh_installdeb(1)
@@ -27,7 +28,14 @@ set -e
 case "$1" in
     configure)
 	rm -f /etc/init/ceph.conf
-	[ -x /sbin/start ] && start ceph-all || :
+	invoke-rc.d ceph-all start || {
+		RESULT=$?
+		# Ignore if ceph-all upstart config does not
+		# exist or upstart is not in use
+		if [ $RESULT != 100 ]; then
+			exit $RESULT
+		fi
+	}
     ;;
     abort-upgrade|abort-remove|abort-deconfigure)
 	:
