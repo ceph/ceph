@@ -7462,6 +7462,18 @@ int Client::ll_link(vinodeno_t vino, vinodeno_t newparent, const char *newname, 
   return r;
 }
 
+int Client::ll_describe_layout(Fh *fh, ceph_file_layout* lp)
+{
+  Mutex::Locker lock(client_lock);
+  ldout(cct, 3) << "ll_describe_layout " << fh << " " << fh->inode->ino << dendl;
+  tout(cct) << "ll_describe_layout" << std::endl;
+
+  Inode *in = fh->inode;
+  *lp = in->layout;
+
+  return 0;
+}
+
 int Client::ll_opendir(vinodeno_t vino, void **dirpp, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
