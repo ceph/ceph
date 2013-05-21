@@ -504,6 +504,7 @@ void RGWRados::finalize()
     delete gc;
     gc = NULL;
   }
+  delete rest_conn;
 }
 
 /** 
@@ -553,6 +554,10 @@ int RGWRados::init_complete()
     ldout(cct, 0) << "WARNING: cannot read region map" << dendl;
   } else {
     string master_region = region_map.master_region;
+    if (master_region.empty()) {
+      lderr(cct) << "ERROR: region map does not specify master region" << dendl;
+      return -EINVAL;
+    }
     map<string, RGWRegion>::iterator iter = region_map.regions.find(master_region);
     if (iter == region_map.regions.end()) {
       lderr(cct) << "ERROR: bad region map: inconsistent master region" << dendl;
