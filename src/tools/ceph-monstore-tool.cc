@@ -202,6 +202,8 @@ int main(int argc, char **argv) {
       cout << key.first << " / " << key.second << std::endl;
       iter->next();
     }
+  } else if (cmd == "compact") {
+    st.compact();
   } else if (cmd == "getosdmap") {
     if (!store_path.size()) {
       std::cerr << "need mon store path" << std::endl;
