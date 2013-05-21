@@ -1,5 +1,6 @@
 #include "rgw_common.h"
 #include "rgw_rest_client.h"
+#include "rgw_http_errors.h"
 
 #include "common/ceph_crypto_cms.h"
 #include "common/armor.h"
@@ -21,15 +22,15 @@ int RGWRESTClient::read_header(void *ptr, size_t len)
     }
     if (*s == '\n') {
       *p = '\0';
-      ldout(cct, 10) << "os_auth:" << line << dendl;
+      ldout(cct, 10) << "received header:" << line << dendl;
       // TODO: fill whatever data required here
       char *l = line;
       char *tok = strsep(&l, " \t:");
-      if (tok) {
-        while (l && *l == ' ')
+      if (tok && l) {
+        while (*l == ' ')
           l++;
  
-        if (strcmp(tok, "HTTP") == 0) {
+        if (strcmp(tok, "HTTP") == 0 || strncmp(tok, "HTTP/", 5) == 0) {
           status = atoi(l);
         } else {
           /* convert header field name to upper case  */
@@ -50,7 +51,7 @@ int RGWRESTClient::read_header(void *ptr, size_t len)
   return 0;
 }
 
-int RGWRESTClient::execute(RGWAccessKey& key, const string& method, const string& resource)
+int RGWRESTClient::execute(RGWAccessKey& key, const char *method, const char *resource)
 {
   string new_url = url;
   string new_resource = resource;
@@ -68,6 +69,8 @@ int RGWRESTClient::execute(RGWAccessKey& key, const string& method, const string
 
     list<pair<string, string> >::iterator iter;
     for (iter = params.begin(); iter != params.end(); ++iter) {
+      if (iter != params.begin())
+        new_url.append("?");
       new_url.append(iter->first + "=" + iter->second);
     }
   }
@@ -78,7 +81,7 @@ int RGWRESTClient::execute(RGWAccessKey& key, const string& method, const string
   string date_str = s.str();
   headers.push_back(make_pair<string, string>("HTTP_DATE", date_str));
 
-  string canonical_header = method + " " +
+  string canonical_header = string(method) + " " +
                             "\n" + /* CONTENT_MD5 */
                             "\n" + /* CONTENT_TYPE */
                             date_str + "\n" +
@@ -103,7 +106,11 @@ int RGWRESTClient::execute(RGWAccessKey& key, const string& method, const string
   string auth_hdr = "AWS " + key.id + ":" + b64;
 
   headers.push_back(make_pair<string, string>("AUTHORIZATION", auth_hdr));
-  return process(new_url);
+  int r = process(method, new_url.c_str());
+  if (r < 0)
+    return r;
+
+  return rgw_http_error_to_errno(status);
 }
 
 

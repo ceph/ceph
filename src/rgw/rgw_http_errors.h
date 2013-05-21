@@ -1,15 +1,15 @@
-#ifndef RGW_HTML_ERRORS_H_
-#define RGW_HTML_ERRORS_H_
+#ifndef RGW_HTTP_ERRORS_H_
+#define RGW_HTTP_ERRORS_H_
 
 #include "rgw_common.h"
 
-struct rgw_html_errors {
+struct rgw_http_errors {
   int err_no;
   int http_ret;
   const char *s3_code;
 };
 
-const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
+const static struct rgw_http_errors RGW_HTTP_ERRORS[] = {
     { 0, 200, "" },
     { STATUS_CREATED, 201, "Created" },
     { STATUS_ACCEPTED, 202, "Accepted" },
@@ -50,7 +50,7 @@ const static struct rgw_html_errors RGW_HTML_ERRORS[] = {
     { ERR_INTERNAL_ERROR, 500, "InternalError" },
 };
 
-const static struct rgw_html_errors RGW_HTML_SWIFT_ERRORS[] = {
+const static struct rgw_http_errors RGW_HTTP_SWIFT_ERRORS[] = {
     { EACCES, 401, "AccessDenied" },
     { EPERM, 401, "AccessDenied" },
     { ERR_USER_SUSPENDED, 401, "UserSuspended" },
@@ -60,7 +60,7 @@ const static struct rgw_html_errors RGW_HTML_SWIFT_ERRORS[] = {
 
 #define ARRAY_LEN(arr) (sizeof(arr) / sizeof(arr[0]))
 
-static inline const struct rgw_html_errors *search_err(int err_no, const struct rgw_html_errors *errs, int len)
+static inline const struct rgw_http_errors *search_err(int err_no, const struct rgw_http_errors *errs, int len)
 {
   for (int i = 0; i < len; ++i, ++errs) {
     if (err_no == errs->err_no)
@@ -69,6 +69,26 @@ static inline const struct rgw_html_errors *search_err(int err_no, const struct 
   return NULL;
 }
 
+
+static inline int rgw_http_error_to_errno(int http_err)
+{
+  if (http_err >= 200 && http_err <= 299)
+    return 0;
+  switch (http_err) {
+    case 400:
+      return -EINVAL;
+    case 401:
+      return -EPERM;
+    case 403:
+        return -EACCES;
+    case 404:
+        return -ENOENT;
+    default:
+        return -EIO;
+  }
+
+  return 0; /* unreachable */
+}
 
 
 #endif

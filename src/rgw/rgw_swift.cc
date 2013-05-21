@@ -396,7 +396,7 @@ int RGWSwift::check_revoked()
 
   req.append_header("X-Auth-Token", g_conf->rgw_keystone_admin_token);
 
-  int ret = req.process(url);
+  int ret = req.process(url.c_str());
   if (ret < 0)
     return ret;
 
@@ -604,7 +604,7 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
 
     validate.append_header("X-Auth-Token", g_conf->rgw_keystone_admin_token);
 
-    int ret = validate.process(url);
+    int ret = validate.process(url.c_str());
     if (ret < 0)
       return ret;
   }

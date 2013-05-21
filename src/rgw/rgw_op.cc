@@ -860,10 +860,15 @@ void RGWCreateBucket::execute()
 
   if (!store->region.is_master) {
     if (store->region.api_name != location_constraint) {
-      ldout(s->cct, 0) << "location constraint (" << location_constraint << ") doesn't match region" << dendl;
+      ldout(s->cct, 0) << "location constraint (" << location_constraint << ") doesn't match region" << " (" << store->region.api_name << ")" << dendl;
       ret = -EINVAL;
       return;
     }
+
+    ldout(s->cct, 0) << "sending create_bucket request to master region" << dendl;
+    ret = store->rest_conn->create_bucket(s->user.user_id, s->bucket_name_str);
+    if (ret < 0)
+      return;
   }
 
   s->bucket_owner.set_id(s->user.user_id);

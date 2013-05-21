@@ -39,10 +39,10 @@ void dump_bucket(struct req_state *s, RGWBucketEnt& obj)
   s->formatter->close_section();
 }
 
-void rgw_get_errno_s3(rgw_html_errors *e , int err_no)
+void rgw_get_errno_s3(rgw_http_errors *e , int err_no)
 {
-  const struct rgw_html_errors *r;
-  r = search_err(err_no, RGW_HTML_ERRORS, ARRAY_LEN(RGW_HTML_ERRORS));
+  const struct rgw_http_errors *r;
+  r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
 
   if (r) {
     e->http_ret = r->http_ret;
@@ -1593,7 +1593,7 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(pair<string,int>& resu
       s->formatter->dump_string("Key", result.first);
       s->formatter->close_section();
     } else if (result.first < 0) {
-      struct rgw_html_errors r;
+      struct rgw_http_errors r;
       int err_no;
 
       s->formatter->open_object_section("Error");
