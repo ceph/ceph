@@ -906,6 +906,15 @@ TEST(cls_rbd, stripingv2)
   ASSERT_EQ(8192ull, su);
   ASSERT_EQ(456ull, sc);
 
+  // su must not be larger than an object
+  ASSERT_EQ(-EINVAL, set_stripe_unit_count(&ioctx, "bar", 1 << 23, 1));
+  // su must be a factor of object size
+  ASSERT_EQ(-EINVAL, set_stripe_unit_count(&ioctx, "bar", 511, 1));
+  // su and sc must be non-zero
+  ASSERT_EQ(-EINVAL, set_stripe_unit_count(&ioctx, "bar", 0, 1));
+  ASSERT_EQ(-EINVAL, set_stripe_unit_count(&ioctx, "bar", 1, 0));
+  ASSERT_EQ(-EINVAL, set_stripe_unit_count(&ioctx, "bar", 0, 0));
+
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
