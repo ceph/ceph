@@ -1,5 +1,17 @@
 #!/bin/sh
+# vim: set noet ts=8:
 
-[ -x /sbin/stop ] && stop ceph-all || :
+set -e
+
+invoke-rc.d ceph-all stop || {
+	RESULT=$?
+	# Ignore if ceph-all upstart config does not
+	# exist or upstart is not in use
+	if [ $RESULT != 100 ]; then
+		exit $RESULT
+	fi
+}
+
+#DEBHELPER#
 
 exit 0
