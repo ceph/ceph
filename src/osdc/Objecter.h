@@ -961,7 +961,7 @@ public:
 	onfinish(NULL) {}
   };
 
-  tid_t _submit_command(CommandOp *c);
+  int _submit_command(CommandOp *c, tid_t *ptid);
   int recalc_command_target(CommandOp *c);
   void _send_command(CommandOp *c);
   void _finish_command(CommandOp *c, int r, string rs);
@@ -1234,7 +1234,7 @@ private:
   void clear_global_op_flag(int flags) { global_op_flags &= ~flags; }
 
   // commands
-  tid_t osd_command(int osd, vector<string>& cmd, bufferlist& inbl,
+  int osd_command(int osd, vector<string>& cmd, bufferlist& inbl, tid_t *ptid,
 		    bufferlist *poutbl, string *prs, Context *onfinish) {
     assert(osd >= 0);
     CommandOp *c = new CommandOp;
@@ -1244,9 +1244,9 @@ private:
     c->prs = prs;
     c->onfinish = onfinish;
     c->target_osd = osd;
-    return _submit_command(c);
+    return _submit_command(c, ptid);
   }
-  tid_t pg_command(pg_t pgid, vector<string>& cmd, bufferlist& inbl,
+  int pg_command(pg_t pgid, vector<string>& cmd, bufferlist& inbl, tid_t *ptid,
 		   bufferlist *poutbl, string *prs, Context *onfinish) {
     CommandOp *c = new CommandOp;
     c->cmd = cmd;
@@ -1255,7 +1255,7 @@ private:
     c->prs = prs;
     c->onfinish = onfinish;
     c->target_pg = pgid;
-    return _submit_command(c);
+    return _submit_command(c, ptid);
   }
 
   // mid-level helpers

@@ -2315,7 +2315,7 @@ void Objecter::handle_command_reply(MCommandReply *m)
   m->put();
 }
 
-tid_t Objecter::_submit_command(CommandOp *c)
+int Objecter::_submit_command(CommandOp *c, tid_t *ptid)
 {
   tid_t tid = ++last_tid;
   ldout(cct, 10) << "_submit_command " << tid << " " << c->cmd << dendl;
@@ -2323,13 +2323,18 @@ tid_t Objecter::_submit_command(CommandOp *c)
   command_ops[tid] = c;
   num_homeless_ops++;
   int r = recalc_command_target(c);
+  if (r == RECALC_OP_TARGET_OSD_DNE) {
+    // XXX take back tid incr? 
+    return -ENXIO;
+  }
   if (c->session)
     _send_command(c);
   else
     maybe_request_map();
   if (r == RECALC_OP_TARGET_POOL_DNE)
     _send_command_map_check(c);
-  return tid;
+  *ptid = tid;
+  return 0;
 }
 
 int Objecter::recalc_command_target(CommandOp *c)

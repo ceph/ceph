@@ -587,10 +587,14 @@ int librados::RadosClient::osd_command(int osd, vector<string>& cmd,
   Cond cond;
   bool done;
   int ret;
+  tid_t tid;
   lock.Lock();
-  objecter->osd_command(osd, cmd, inbl, poutbl, prs,
+  // XXX do anything with tid?
+  int r = objecter->osd_command(osd, cmd, inbl, &tid, poutbl, prs,
 			 new C_SafeCond(&mylock, &cond, &done, &ret));
   lock.Unlock();
+  if (r != 0)
+    return r;
   mylock.Lock();
   while (!done)
     cond.Wait(mylock);
@@ -606,10 +610,13 @@ int librados::RadosClient::pg_command(pg_t pgid, vector<string>& cmd,
   Cond cond;
   bool done;
   int ret;
+  tid_t tid;
   lock.Lock();
-  objecter->pg_command(pgid, cmd, inbl, poutbl, prs,
+  int r = objecter->pg_command(pgid, cmd, inbl, &tid, poutbl, prs,
 		        new C_SafeCond(&mylock, &cond, &done, &ret));
   lock.Unlock();
+  if (r != 0)
+    return r;
   mylock.Lock();
   while (!done)
     cond.Wait(mylock);
