@@ -1820,9 +1820,9 @@ SUPPRESS_PREFIX='/var/lib/ceph/tmp/suppress-activate.'
 
 def is_suppressed(path):
     disk = os.path.realpath(path)
-    if not disk.startswith('/dev/') or not stat.S_ISBLK(os.lstat(path)):
-        return False
     try:
+        if not disk.startswith('/dev/') or not stat.S_ISBLK(os.lstat(path).st_mode):
+            return False
         base = disk[5:]
         while len(base):
             if os.path.exists(SUPPRESS_PREFIX + base):
@@ -1835,7 +1835,7 @@ def set_suppress(path):
     disk = os.path.realpath(path)
     if not os.path.exists(disk):
         raise Error('does not exist', path);
-    if not stat.S_ISBLK(os.lstat(path)):
+    if not stat.S_ISBLK(os.lstat(path).st_mode):
         raise Error('not a block device', path)
     base = disk[5:]
 
@@ -1847,7 +1847,7 @@ def unset_suppress(path):
     disk = os.path.realpath(path)
     if not os.path.exists(disk):
         raise Error('does not exist', path);
-    if not stat.S_ISBLK(os.lstat(path)):
+    if not stat.S_ISBLK(os.lstat(path).st_mode):
         raise Error('not a block device', path)
     assert disk.startswith('/dev/')
     base = disk[5:]
