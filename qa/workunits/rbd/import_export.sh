@@ -22,6 +22,11 @@ compare_files_and_ondisk_sizes () {
     [ $origsize = $exportsize ]
 }
 
+# cannot import a dir
+mkdir foo.$$
+rbd import foo.$$ foo.dir && exit 1 || true   # should fail
+rmdir foo.$$
+
 # create a sparse file
 dd if=/bin/sh of=/tmp/img bs=1k count=1 seek=10
 dd if=/bin/dd of=/tmp/img bs=1k count=10 seek=100
