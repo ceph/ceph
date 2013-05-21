@@ -18,7 +18,8 @@ public:
   virtual int read_header(void *ptr, size_t len) { return 0; }
   virtual int read_data(void *ptr, size_t len) { return 0; }
 
-  int process(const string& url);
+  int process(const char *method, const char *url);
+  int process(const char *url) { return process("GET", url); }
 };
 
 #endif

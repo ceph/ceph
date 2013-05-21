@@ -30,7 +30,7 @@ static size_t read_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
   return len;
 }
 
-int RGWHTTPClient::process(const string& url)
+int RGWHTTPClient::process(const char *method, const char *url)
 {
   int ret = 0;
   CURL *curl_handle;
@@ -52,7 +52,8 @@ int RGWHTTPClient::process(const string& url)
     h = curl_slist_append(h, val.c_str());
   }
 
-  curl_easy_setopt(curl_handle, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(curl_handle, CURLOPT_CUSTOMREQUEST, method);
+  curl_easy_setopt(curl_handle, CURLOPT_URL, url);
   curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 1L);
   curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1L);
   curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, read_http_header);

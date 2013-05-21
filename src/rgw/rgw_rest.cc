@@ -189,20 +189,20 @@ void rgw_flush_formatter(struct req_state *s, Formatter *formatter)
 
 void set_req_state_err(struct req_state *s, int err_no)
 {
-  const struct rgw_html_errors *r;
+  const struct rgw_http_errors *r;
 
   if (err_no < 0)
     err_no = -err_no;
   s->err.ret = err_no;
   if (s->prot_flags & RGW_REST_SWIFT) {
-    r = search_err(err_no, RGW_HTML_SWIFT_ERRORS, ARRAY_LEN(RGW_HTML_SWIFT_ERRORS));
+    r = search_err(err_no, RGW_HTTP_SWIFT_ERRORS, ARRAY_LEN(RGW_HTTP_SWIFT_ERRORS));
     if (r) {
       s->err.http_ret = r->http_ret;
       s->err.s3_code = r->s3_code;
       return;
     }
   }
-  r = search_err(err_no, RGW_HTML_ERRORS, ARRAY_LEN(RGW_HTML_ERRORS));
+  r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
   if (r) {
     s->err.http_ret = r->http_ret;
     s->err.s3_code = r->s3_code;
