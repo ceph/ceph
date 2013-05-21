@@ -868,7 +868,10 @@ int OSD::peek_journal_fsid(string path, uuid_d& fsid)
 // cons/des
 
 OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
-	 Messenger *hbclientm, Messenger *hbserverm, MonClient *mc,
+	 Messenger *hb_clientm,
+	 Messenger *hb_front_serverm,
+	 Messenger *hb_back_serverm,
+	 MonClient *mc,
 	 const std::string &dev, const std::string &jdev) :
   Dispatcher(external_messenger->cct),
   osd_lock("OSD::osd_lock"),
@@ -900,8 +903,9 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   paused_recovery(false),
   heartbeat_lock("OSD::heartbeat_lock"),
   heartbeat_stop(false), heartbeat_need_update(true), heartbeat_epoch(0),
-  hbclient_messenger(hbclientm),
-  hbserver_messenger(hbserverm),
+  hbclient_messenger(hb_clientm),
+  hb_front_server_messenger(hb_front_serverm),
+  hb_back_server_messenger(hb_back_serverm),
   heartbeat_thread(this),
   heartbeat_dispatcher(this),
   stat_lock("OSD::stat_lock"),
@@ -1120,7 +1124,8 @@ int OSD::init()
   cluster_messenger->add_dispatcher_head(this);
 
   hbclient_messenger->add_dispatcher_head(&heartbeat_dispatcher);
-  hbserver_messenger->add_dispatcher_head(&heartbeat_dispatcher);
+  hb_front_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
+  hb_back_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
 
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
   r = monc->init();
@@ -1449,7 +1454,8 @@ int OSD::shutdown()
   client_messenger->shutdown();
   cluster_messenger->shutdown();
   hbclient_messenger->shutdown();
-  hbserver_messenger->shutdown();
+  hb_front_server_messenger->shutdown();
+  hb_back_server_messenger->shutdown();
   peering_wq.clear();
   return r;
 }
@@ -2383,7 +2389,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 				curmap->get_epoch(),
 				MOSDPing::PING_REPLY,
 				m->stamp);
-      hbserver_messenger->send_message(r, m->get_connection());
+      hb_back_server_messenger->send_message(r, m->get_connection());
 
       if (curmap->is_up(from)) {
 	note_peer_epoch(from, m->map_epoch);
@@ -3601,7 +3607,7 @@ bool OSD::_share_map_incoming(entity_name_t name, Connection *con, epoch_t epoch
   if (name.is_osd() &&
       osdmap->is_up(name.num()) &&
       (osdmap->get_cluster_addr(name.num()) == con->get_peer_addr() ||
-       osdmap->get_hb_addr(name.num()) == con->get_peer_addr())) {
+       osdmap->get_hb_back_addr(name.num()) == con->get_peer_addr())) {
     // remember
     epoch_t has = note_peer_epoch(name.num(), epoch);
 
@@ -4415,7 +4421,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     } else if (!osdmap->is_up(whoami) ||
 	       !osdmap->get_addr(whoami).probably_equals(client_messenger->get_myaddr()) ||
 	       !osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()) ||
-	       !osdmap->get_hb_back_addr(whoami).probably_equals(hbserver_messenger->get_myaddr())) {
+	       !osdmap->get_hb_back_addr(whoami).probably_equals(hb_back_server_messenger->get_myaddr())) {
       if (!osdmap->is_up(whoami)) {
 	if (service.is_preparing_to_stop()) {
 	  service.got_stop_ack();
@@ -4432,10 +4438,10 @@ void OSD::handle_osd_map(MOSDMap *m)
 	clog.error() << "map e" << osdmap->get_epoch()
 		    << " had wrong cluster addr (" << osdmap->get_cluster_addr(whoami)
 		     << " != my " << cluster_messenger->get_myaddr() << ")";
-      else if (!osdmap->get_hb_back_addr(whoami).probably_equals(hbserver_messenger->get_myaddr()))
+      else if (!osdmap->get_hb_back_addr(whoami).probably_equals(hb_back_server_messenger->get_myaddr()))
 	clog.error() << "map e" << osdmap->get_epoch()
 		    << " had wrong hb back addr (" << osdmap->get_hb_back_addr(whoami)
-		     << " != my " << hbserver_messenger->get_myaddr() << ")";
+		     << " != my " << hb_back_server_messenger->get_myaddr() << ")";
       
       if (!service.is_stopping()) {
 	state = STATE_BOOTING;
@@ -4444,13 +4450,13 @@ void OSD::handle_osd_map(MOSDMap *m)
 	bind_epoch = osdmap->get_epoch();
 
 	int cport = cluster_messenger->get_myaddr().get_port();
-	int hbport = hbserver_messenger->get_myaddr().get_port();
+	int hbport = hb_back_server_messenger->get_myaddr().get_port();
 
 	int r = cluster_messenger->rebind(hbport);
 	if (r != 0)
 	  do_shutdown = true;  // FIXME: do_restart?
 
-	r = hbserver_messenger->rebind(cport);
+	r = hb_back_server_messenger->rebind(cport);
 	if (r != 0)
 	  do_shutdown = true;  // FIXME: do_restart?
 
