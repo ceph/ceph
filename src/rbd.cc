@@ -1310,6 +1310,11 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
       cerr << "rbd: stat error " << path << std::endl;
       goto done;
     }
+    if (S_ISDIR(stat_buf.st_mode)) {
+      r = -EISDIR;
+      cerr << "rbd: cannot import a directory" << std::endl;
+      goto done;
+    }
     if (stat_buf.st_size)
       size = (uint64_t)stat_buf.st_size;
 
