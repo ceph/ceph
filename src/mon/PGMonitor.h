@@ -130,7 +130,9 @@ private:
    */
   int dump_stuck_pg_stats(ostream& ss,
 			  bufferlist& rdata,
-			  vector<const char*>& args) const;
+			  string format,
+			  int threshold,
+			  vector<string>& args) const;
 
   void dump_object_stat_sum(TextTable &tbl, Formatter *f,
                             object_stat_sum_t &sum, bool verbose);
