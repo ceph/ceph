@@ -15,11 +15,9 @@ protected:
 
   map<string, string> out_headers;
   list<pair<string, string> > params;
-
-  RGWRESTClient() : cct(NULL), status(0) {}
 public:
-  RGWRESTClient(CephContext *_cct, string& _url,
-                list<pair<string, string> > *_headers, list<pair<string, string> > *_params) : cct(_cct), url(_url) {
+  RGWRESTClient(CephContext *_cct, string& _url, list<pair<string, string> > *_headers,
+                list<pair<string, string> > *_params) : cct(_cct), status(0), url(_url) {
     if (_headers)
       headers = *_headers;
 
@@ -29,7 +27,7 @@ public:
 
   int read_header(void *ptr, size_t len);
 
-  int execute(RGWAccessKey& key, const string& method, const string& resource);
+  int execute(RGWAccessKey& key, const char *method, const char *resource);
 };
 
 
