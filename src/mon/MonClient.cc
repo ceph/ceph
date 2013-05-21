@@ -794,6 +794,7 @@ int MonClient::start_mon_command(const vector<string>& cmd, bufferlist& inbl,
   r->onfinish = onfinish;
   mon_commands[r->tid] = r;
   _send_command(r);
+  // can't fail
   return 0;
 }
 
