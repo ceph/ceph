@@ -12,6 +12,7 @@
  *
  */
 #include "common/ceph_json.h"
+#include "common/strtol.h"
 #include "rgw_rest.h"
 #include "rgw_op.h"
 #include "rgw_rest_s3.h"
@@ -69,12 +70,24 @@ void RGWOp_MDLog_List::execute() {
          iter != entries.end(); ++iter) {
       cls_log_entry& entry = *iter;
       store->meta_mgr->dump_log_entry(entry, s->formatter);
+      s->formatter->flush(out_stream);
     }
   } while (truncated);
 
   s->formatter->close_section();
+  s->formatter->flush(out_stream);
 
   http_ret = 0;
+}
+
+void RGWOp_MDLog_List::send_response() {
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+  std::string outs(out_stream.str());
+  if (!outs.empty()) {
+    s->cio->write(outs.c_str(), outs.size());
+  }
 }
 
 void RGWOp_MDLog_Delete::execute() {
@@ -108,7 +121,7 @@ void RGWOp_BILog_List::execute() {
          marker = s->args.get("marker"),
          max_entries_str = s->args.get("max-entries");
   RGWBucketInfo bucket_info;
-  int max_entries = -1;
+  int max_entries;
 
   if (bucket_name.empty()) {
     dout(5) << "ERROR: bucket not specified" << dendl;
@@ -122,15 +135,15 @@ void RGWOp_BILog_List::execute() {
     return;
   }
 
-  s->formatter->open_array_section("entries");
   bool truncated;
   int count = 0;
-  istringstream ss(max_entries_str);
+  string err;
   
-  ss >> max_entries;
-  if (max_entries < 0)
+  max_entries = strict_strtol(max_entries_str.c_str(), 10, &err);
+  if (!err.empty())
     max_entries = 1000;
 
+  s->formatter->open_array_section("entries");
   do {
     list<rgw_bi_log_entry> entries;
     http_ret = store->list_bi_log_entries(bucket_info.bucket, 
@@ -148,11 +161,23 @@ void RGWOp_BILog_List::execute() {
       encode_json("entry", entry, s->formatter);
 
       marker = entry.id;
+      s->formatter->flush(out_stream);
     }
   } while (truncated && count < max_entries);
 
   s->formatter->close_section();
+  s->formatter->flush(out_stream);
   http_ret = 0;
+}
+
+void RGWOp_BILog_List::send_response() {
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+  std::string outs(out_stream.str());
+  if (!outs.empty()) {
+    s->cio->write(outs.c_str(), outs.size());
+  }
 }
 
 void RGWOp_BILog_Delete::execute() {
