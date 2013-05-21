@@ -715,7 +715,9 @@ private:
   epoch_t heartbeat_epoch;      ///< last epoch we updated our heartbeat peers
   map<int,HeartbeatInfo> heartbeat_peers;  ///< map of osd id to HeartbeatInfo
   utime_t last_mon_heartbeat;
-  Messenger *hbclient_messenger, *hbserver_messenger;
+  Messenger *hbclient_messenger;
+  Messenger *hb_front_server_messenger;
+  Messenger *hb_back_server_messenger;
   
   void _add_heartbeat_peer(int p);
   bool heartbeat_reset(Connection *con);
@@ -1568,7 +1570,8 @@ protected:
  public:
   /* internal and external can point to the same messenger, they will still
    * be cleaned up properly*/
-  OSD(int id, Messenger *internal, Messenger *external, Messenger *hbmin, Messenger *hbmout,
+  OSD(int id, Messenger *internal, Messenger *external,
+      Messenger *hb_client, Messenger *hb_front_server, Messenger *hb_back_server,
       MonClient *mc, const std::string &dev, const std::string &jdev);
   ~OSD();
 
