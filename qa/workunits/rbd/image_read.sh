@@ -31,7 +31,9 @@
 #
 # Clone functionality is tested as well, in which case a clone is
 # made of the snapshot, and the same ranges of data are again read
-# and compared with the original.
+# and compared with the original.  In addition, a snapshot of that
+# clone is created, and a clone of *that* snapshot is put through
+# the same set of tests.  (Clone testing can be optionally skipped.)
 
 ################################################################
 
@@ -56,6 +58,8 @@ PROGNAME=$(basename $0)
 ORIGINAL=original-$$
 SNAP1=snap1-$$
 CLONE1=clone1-$$
+SNAP2=snap2-$$
+CLONE2=clone2-$$
 
 function err() {
 	if [ $# -gt 0 ]; then
@@ -211,20 +215,38 @@ function setup() {
 		sudo chown ubuntu /sys/bus/rbd/add
 		sudo chown ubuntu /sys/bus/rbd/remove
 	fi
+	# create and fill the original image with some data
 	create_image "${ORIGINAL}"
 	map_image "${ORIGINAL}"
 	fill_original
+
+	# create a snapshot of the original
 	create_image_snap "${ORIGINAL}" "${SNAP1}"
 	map_image_snap "${ORIGINAL}" "${SNAP1}"
 	if [ "${TEST_CLONES}" = true ]; then
+		# create a clone of the original snapshot
 		create_snap_clone "${ORIGINAL}" "${SNAP1}" "${CLONE1}"
 		map_image "${CLONE1}"
+
+		# create a snapshot of that clone
+		create_image_snap "${CLONE1}" "${SNAP2}"
+		map_image_snap "${CLONE1}" "${SNAP2}"
+
+		# create a clone of that clone's snapshot
+		create_snap_clone "${CLONE1}" "${SNAP2}" "${CLONE2}"
+		map_image "${CLONE2}"
 	fi
 }
 
 function teardown() {
 	verbose "===== cleaning up ====="
 	if [ "${TEST_CLONES}" = true ]; then
+		unmap_image "${CLONE2}"					|| true
+		destroy_snap_clone "${CLONE1}" "${SNAP2}" "${CLONE2}"	|| true
+
+		unmap_image_snap "${CLONE1}" "${SNAP2}"			|| true
+		destroy_image_snap "${CLONE1}" "${SNAP2}"		|| true
+
 		unmap_image "${CLONE1}"					|| true
 		destroy_snap_clone "${ORIGINAL}" "${SNAP1}" "${CLONE1}"	|| true
 	fi
@@ -608,6 +630,8 @@ run_using "${ORIGINAL}"
 doit "${ORIGINAL}@${SNAP1}"
 if [ "${TEST_CLONES}" = true ]; then
 	doit "${CLONE1}"
+	doit "${CLONE1}@${SNAP2}"
+	doit "${CLONE2}"
 fi
 rm -rf $(out_data_dir "${ORIGINAL}")
 
