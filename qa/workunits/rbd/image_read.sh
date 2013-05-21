@@ -29,9 +29,9 @@
 # snapshot.  It then compares the data read back with what was read
 # back from the original image, verifying they match.
 #
-# You can optionally test clone functionality as well, in which case
-# a clone is made of the snapshot, and the same ranges of data are
-# again read and compared with the original.
+# Clone functionality is tested as well, in which case a clone is
+# made of the snapshot, and the same ranges of data are again read
+# and compared with the original.
 
 ################################################################
 
@@ -40,13 +40,13 @@
 # with "IMAGE_READ_", for e.g. use IMAGE_READ_PAGE_SIZE=65536
 # to use 65536 as the page size.
 
+DEFAULT_VERBOSE=true
+DEFAULT_TEST_CLONES=true
 DEFAULT_LOCAL_FILES=false
-DEFAULT_VERBOSE=true		# Change parseargs if you switch this to false
-DEFAULT_TEST_CLONES=false
-DEFAULT_FORMAT=1
+DEFAULT_FORMAT=2
 DEFAULT_PAGE_SIZE=4096
 DEFAULT_OBJECT_ORDER=22
-MIN_OBJECT_ORDER=9
+MIN_OBJECT_ORDER=12	# technically 9, but the rbd CLI enforces 12
 MAX_OBJECT_ORDER=32
 
 PROGNAME=$(basename $0)
@@ -101,17 +101,19 @@ function quiet() {
 }
 
 function boolean_toggle() {
-	[ "${VERBOSE}" = true ] && echo "$@"
-
+	[ $# -eq 1 ] || exit 99
+	test "$1" = "true" && echo false || echo true
 }
+
 function parseargs() {
 	local opts="o:p:12clv"
 	local lopts="order:,page_size:,local,clone,verbose"
 	local parsed
 
 	# use values from environment if available
-	LOCAL_FILES="${IMAGE_READ_LOCAL_FILES:-${DEFAULT_LOCAL_FILES}}"
 	VERBOSE="${IMAGE_READ_VERBOSE:-${DEFAULT_VERBOSE}}"
+	TEST_CLONES="${IMAGE_READ_TEST_CLONES:-${DEFAULT_TEST_CLONES}}"
+	LOCAL_FILES="${IMAGE_READ_LOCAL_FILES:-${DEFAULT_LOCAL_FILES}}"
 	FORMAT="${IMAGE_READ_FORMAT:-${DEFAULT_FORMAT}}"
 	PAGE_SIZE="${IMAGE_READ_PAGE_SIZE:-${DEFAULT_PAGE_SIZE}}"
 	OBJECT_ORDER="${IMAGE_READ_OBJECT_ORDER:-${DEFAULT_OBJECT_ORDER}}"
@@ -121,15 +123,24 @@ function parseargs() {
 	eval set -- "${parsed}"
 	while true; do
 		case "$1" in
-		-v|--verbose)	VERBOSE=false; shift;;		# default true
-		-l|--local)	LOCAL_FILES=true; shift;;
-		-1|-2)		FORMAT="${1:1}"; shift;;
-		-c|--clone)	TEST_CLONES=true; shift;;
-		-o|--order)	OBJECT_ORDER="$2"; shift 2;;
-		-p|--page_size)	PAGE_SIZE="$2"; shift 2;;
-		--)		shift ; break ;;
-		*)		err "getopt internal error"
+		-v|--verbose)
+			VERBOSE=$(boolean_toggle "${VERBOSE}");;
+		-c|--clone)
+			TEST_CLONES=$(boolean_toggle "${TEST_CLONES}");;
+		-l|--local)
+			LOCAL_FILES=$(boolean_toggle "${LOCAL_FILES}");;
+		-1|-2)
+			FORMAT="${1:1}";;
+		-p|--page_size)
+			PAGE_SIZE="$2"; shift;;
+		-o|--order)
+			OBJECT_ORDER="$2"; shift;;
+		--)
+			shift; break;;
+		*)
+			err "getopt internal error"
 		esac
+		shift
 	done
 	[ $# -gt 0 ] && usage "excess arguments ($*)"
 
@@ -152,16 +163,16 @@ function parseargs() {
 		usage "object size (${OBJECT_SIZE}) must be" \
 			"at least 4 * page size (${PAGE_SIZE})"
 
-	verbose "parameters for this run:"
-	verbose "    format ${FORMAT} images will be tested"
-	verbose "    object order is ${OBJECT_ORDER}, so" \
+	echo "parameters for this run:"
+	echo "    format ${FORMAT} images will be tested"
+	echo "    object order is ${OBJECT_ORDER}, so" \
 		"objects are ${OBJECT_SIZE} bytes"
-	verbose "    page size is ${PAGE_SIZE} bytes, so" \
+	echo "    page size is ${PAGE_SIZE} bytes, so" \
 		"there are are ${OBJECT_PAGES} pages in an object"
-	verbose "    derived image size is ${IMAGE_SIZE} MB, so" \
+	echo "    derived image size is ${IMAGE_SIZE} MB, so" \
 		"there are ${IMAGE_OBJECTS} objects in an image"
 	[ "${TEST_CLONES}" = true ] &&
-		verbose "    clone functionality will be tested"
+		echo "    clone functionality will be tested"
 	true	# Don't let the clones test spoil our return value
 }
 
@@ -287,7 +298,7 @@ function unmap_image() {
 	fi
 	image_path=$(image_dev_path "${image_name}")
 
-	if [ -e" ${image_path}" ]; then
+	if [ -e "${image_path}" ]; then
 		[ "${SUSER}" = true ] || sudo chown root "${image_path}"
 		udevadm settle
 		rbd unmap "${image_path}"
