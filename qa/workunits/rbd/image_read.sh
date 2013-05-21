@@ -245,11 +245,14 @@ function create_image() {
 	[ $# -eq 1 ] || exit 99
 	local image_name="$1"
 	local image_path
+	local bytes
 
 	verbose "creating image \"${image_name}\""
 	if [ "${LOCAL_FILES}" = true ]; then
 		image_path=$(image_dev_path "${image_name}")
-		touch "${image_path}"
+		bytes=$(echo "${IMAGE_SIZE} * 1024 * 1024 - 1" | bc)
+		quiet dd if=/dev/zero bs=1 count=1 seek="${bytes}" \
+			of="${image_path}"
 		return
 	fi
 
@@ -425,18 +428,12 @@ function source_data() {
 
 function fill_original() {
 	local image_path=$(image_dev_path "${ORIGINAL}")
-	local bytes=$(echo "${IMAGE_SIZE} * 1024 * 1024 - 1" | bc)
 
 	verbose "filling original image"
 	# Fill 16 objects worth of "random" data
 	source_data |
 	quiet dd bs="${PAGE_SIZE}" count=$((16 * OBJECT_PAGES)) \
 		of="${image_path}"
-	if [ "${LOCAL_FILES}" = true ]; then
-		# Extend it another 16 objects, as a hole in the image
-		quiet dd if=/dev/zero bs=1 count=1 seek=${bytes} \
-			of="${image_path}"
-	fi
 }
 
 function do_read() {
