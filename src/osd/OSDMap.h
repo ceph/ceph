@@ -181,7 +181,7 @@ private:
   struct addrs_s {
     vector<std::tr1::shared_ptr<entity_addr_t> > client_addr;
     vector<std::tr1::shared_ptr<entity_addr_t> > cluster_addr;
-    vector<std::tr1::shared_ptr<entity_addr_t> > hb_addr;
+    vector<std::tr1::shared_ptr<entity_addr_t> > hb_back_addr;
     entity_addr_t blank;
   };
   std::tr1::shared_ptr<addrs_s> osd_addrs;
@@ -343,9 +343,9 @@ private:
       return get_addr(osd);
     return *osd_addrs->cluster_addr[osd];
   }
-  const entity_addr_t &get_hb_addr(int osd) const {
+  const entity_addr_t &get_hb_back_addr(int osd) const {
     assert(exists(osd));
-    return osd_addrs->hb_addr[osd] ? *osd_addrs->hb_addr[osd] : osd_addrs->blank;
+    return osd_addrs->hb_back_addr[osd] ? *osd_addrs->hb_back_addr[osd] : osd_addrs->blank;
   }
   entity_inst_t get_inst(int osd) const {
     assert(is_up(osd));
@@ -355,9 +355,9 @@ private:
     assert(is_up(osd));
     return entity_inst_t(entity_name_t::OSD(osd), get_cluster_addr(osd));
   }
-  entity_inst_t get_hb_inst(int osd) const {
+  entity_inst_t get_hb_back_inst(int osd) const {
     assert(is_up(osd));
-    return entity_inst_t(entity_name_t::OSD(osd), get_hb_addr(osd));
+    return entity_inst_t(entity_name_t::OSD(osd), get_hb_back_addr(osd));
   }
 
   const uuid_d& get_uuid(int osd) const {
