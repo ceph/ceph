@@ -164,7 +164,7 @@ int main(int argc, char **argv) {
   }
 
   global_init(
-    &def_args, ceph_options, CEPH_ENTITY_TYPE_OSD,
+    &def_args, ceph_options, CEPH_ENTITY_TYPE_MON,
     CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
@@ -195,7 +195,14 @@ int main(int argc, char **argv) {
       goto done;
     }
   }
-  if (cmd == "getosdmap") {
+  if (cmd == "dump-keys") {
+    KeyValueDB::WholeSpaceIterator iter = st.get_iterator();
+    while (iter->valid()) {
+      pair<string,string> key(iter->raw_key());
+      cout << key.first << " / " << key.second << std::endl;
+      iter->next();
+    }
+  } else if (cmd == "getosdmap") {
     if (!store_path.size()) {
       std::cerr << "need mon store path" << std::endl;
       std::cerr << desc << std::endl;

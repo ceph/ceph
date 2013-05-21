@@ -402,6 +402,13 @@ class MonitorDBStore
     return iter;
   }
 
+  KeyValueDB::WholeSpaceIterator get_iterator() {
+    KeyValueDB::WholeSpaceIterator iter;
+    iter = db->get_snapshot_iterator();
+    iter->seek_to_first();
+    return iter;
+  }
+
   int get(const string& prefix, const string& key, bufferlist& bl) {
     set<string> k;
     k.insert(key);
