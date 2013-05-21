@@ -1237,9 +1237,11 @@ def main():
         # send command to old monitor
         ret, outbuf, outs = cluster.mon_command(' '.join(sys.argv[1:]), inbuf)
     elif ret:
+        if ret < 0:
+            ret = -ret
         print >> sys.stderr, \
-            'Problem getting command descriptions from ceph-mon, error {}'.\
-            format(ret)
+            'Problem getting command descriptions from {}, {}'.\
+            format(target, errno.errorcode[ret])
         return ret
 
     ret, outbuf, outs = new_style_command(target, outbuf, inbuf, verbose)
