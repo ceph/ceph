@@ -713,6 +713,7 @@ public:
   int ll_rmdir(vinodeno_t vino, const char *name, int uid = -1, int gid = -1);
   int ll_rename(vinodeno_t parent, const char *name, vinodeno_t newparent, const char *newname, int uid = -1, int gid = -1);
   int ll_link(vinodeno_t vino, vinodeno_t newparent, const char *newname, struct stat *attr, int uid = -1, int gid = -1);
+  int ll_describe_layout(Fh *fh, ceph_file_layout* layout);
   int ll_open(vinodeno_t vino, int flags, Fh **fh, int uid = -1, int gid = -1);
   int ll_create(vinodeno_t parent, const char *name, mode_t mode, int flags, struct stat *attr, Fh **fh, int uid = -1, int gid = -1);
   int ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl);
