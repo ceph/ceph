@@ -535,7 +535,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 {
   int r = -1;
   bufferlist rdata;
-  stringstream ss;
+  stringstream ss, ds;
 
   map<string, cmd_vartype> cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
@@ -557,7 +557,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
   }
 
   if (prefix == "mds stat") {
-    ss << mdsmap;
+    ds << mdsmap;
     r = 0;
   } else if (prefix == "mds dump") {
     string format;
@@ -662,11 +662,12 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       } else ss << "specify mds number or *";
     }
   } else if (prefix == "mds compat show") {
-      ss << mdsmap.compat;
+      ds << mdsmap.compat;
       r = 0;
   }
 
   if (r != -1) {
+    rdata.append(ds);
     string rs;
     getline(ss, rs);
     mon->reply_command(m, r, rs, rdata, get_version());

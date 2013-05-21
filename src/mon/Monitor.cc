@@ -2493,7 +2493,7 @@ void Monitor::handle_command(MMonCommand *m)
   string prefix;
   vector<string> fullcmd;
   map<string, cmd_vartype> cmdmap;
-  stringstream ss;
+  stringstream ss, ds;
   bufferlist rdata;
   string rs;
   int r = -EINVAL;
@@ -2530,7 +2530,6 @@ void Monitor::handle_command(MMonCommand *m)
     }
     f->close_section();	// command_descriptions
 
-    stringstream ds, ss;
     bufferlist rdata;
     f->flush(ds);
     delete f;
@@ -2592,9 +2591,9 @@ void Monitor::handle_command(MMonCommand *m)
   }
 
   if (prefix == "fsid") {
-    stringstream ss;
-    ss << monmap->fsid;
-    reply_command(m, 0, ss.str(), rdata, 0);
+    ds << monmap->fsid;
+    rdata.append(ds);
+    reply_command(m, 0, "", rdata, 0);
     return;
   }
   if (prefix == "log") {
@@ -2605,12 +2604,11 @@ void Monitor::handle_command(MMonCommand *m)
     }
     vector<string> logtext;
     cmd_getval(g_ceph_context, cmdmap, "logtext", logtext);
-    stringstream ss;
     std::copy(logtext.begin(), logtext.end(),
-	      ostream_iterator<string>(ss, " "));
-    clog.info(ss);
+	      ostream_iterator<string>(ds, " "));
+    clog.info(ds);
     rs = "ok";
-    reply_command(m, 0, rs, rdata, 0);
+    reply_command(m, 0, rs, 0);
     return;
   }
 
@@ -2662,49 +2660,54 @@ void Monitor::handle_command(MMonCommand *m)
       goto out;
     }
 
-    stringstream ss;
     string detail;
     cmd_getval(g_ceph_context, cmdmap, "detail", detail);
 
     if (prefix == "status") {
       // get_status handles f == NULL
-      get_status(ss, f.get());
+      get_status(ds, f.get());
 
       if (f) {
-        f->flush(ss);
-        ss << '\n';
+        f->flush(ds);
+        ds << '\n';
       }
+      rdata.append(ds);
     } else if (prefix == "health") {
       string health_str;
       get_health(health_str, detail == "detail" ? &rdata : NULL, f.get());
       if (f) {
-        f->flush(ss);
-        ss << '\n';
+        f->flush(ds);
+        ds << '\n';
       } else {
-        ss << health_str;
+        ds << health_str;
       }
-      rs = ss.str();
+      bufferlist comb;
+      comb.append(ds);
+      if (detail == "detail")
+	comb.append(rdata);
+      rdata = comb;
       r = 0;
     } else if (prefix == "df") {
       bool verbose = (detail == "detail");
       if (f)
         f->open_object_section("stats");
 
-      pgmon()->dump_fs_stats(ss, f.get(), verbose);
+      pgmon()->dump_fs_stats(ds, f.get(), verbose);
       if (!f)
-        ss << '\n';
-      pgmon()->dump_pool_stats(ss, f.get(), verbose);
+        ds << '\n';
+      pgmon()->dump_pool_stats(ds, f.get(), verbose);
 
       if (f) {
         f->close_section();
-        f->flush(ss);
-        ss << '\n';
+        f->flush(ds);
+        ds << '\n';
       }
     } else {
       assert(0 == "We should never get here!");
       return;
     }
-    rs = ss.str();
+    rdata.append(ds);
+    rs = "";
     r = 0;
   } else if (prefix == "report") {
     if (!access_r) {
@@ -2740,12 +2743,11 @@ void Monitor::handle_command(MMonCommand *m)
     pgmon()->dump_info(f.get());
 
     f->close_section();
-    stringstream ss;
-    f->flush(ss);
+    f->flush(ds);
 
     bufferlist bl;
     bl.append("-------- BEGIN REPORT --------\n");
-    bl.append(ss);
+    bl.append(ds);
     ostringstream ss2;
     ss2 << "\n-------- END REPORT " << bl.crc32c(6789) << " --------\n";
     rdata.append(bl);
@@ -2764,9 +2766,9 @@ void Monitor::handle_command(MMonCommand *m)
       waitfor_quorum.push_back(new C_RetryMessage(this, m));
       return;
     }
-    stringstream ss;
-    _quorum_status(ss);
-    rs = ss.str();
+    _quorum_status(ds);
+    rdata.append(ds);
+    rs = "";
     r = 0;
   } else if (prefix == "mon_status") {
     if (!access_r) {
@@ -2774,9 +2776,9 @@ void Monitor::handle_command(MMonCommand *m)
       rs = "access denied";
       goto out;
     }
-    stringstream ss;
-    _mon_status(ss);
-    rs = ss.str();
+    _mon_status(ds);
+    rdata.append(ds);
+    rs = "";
     r = 0;
   } else if (prefix == "sync status") {
       if (!access_r) {
@@ -2784,9 +2786,9 @@ void Monitor::handle_command(MMonCommand *m)
 	rs = "access denied";
 	goto out;
       }
-      stringstream ss;
-      _sync_status(ss);
-      rs = ss.str();
+      _sync_status(ds);
+      rdata.append(ds);
+      rs = "";
       r = 0;
   } else if (prefix == "sync force") {
     string validate1, validate2;
@@ -2800,9 +2802,8 @@ void Monitor::handle_command(MMonCommand *m)
 	   "--i-know-what-i-am-doing' if you really do.";
       goto out;
     }
-    stringstream ss;
-    _sync_force(ss);
-    rs = ss.str();
+    _sync_force(ds);
+    rs = ds.str();
     r = 0;
   } else if (prefix == "heap") {
     if (!access_all) {
@@ -2815,12 +2816,13 @@ void Monitor::handle_command(MMonCommand *m)
     else {
       string heapcmd;
       cmd_getval(g_ceph_context, cmdmap, "heapcmd", heapcmd);
-      ostringstream ss;
       // XXX 1-element vector, change at callee or make vector here?
       vector<string> heapcmd_vec;
       get_str_vec(heapcmd, heapcmd_vec);
-      ceph_heap_profiler_handle_command(heapcmd_vec, ss);
-      rs = ss.str();
+      ceph_heap_profiler_handle_command(heapcmd_vec, ds);
+      rdata.append(ds);
+      rs = "";
+      r = 0;
     }
   } else if (prefix == "quorum") {
     if (!access_all) {
@@ -4178,9 +4180,9 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
   if (!keyring.get_secret(name, secret) &&
       !key_server.get_secret(name, secret)) {
     dout(0) << " couldn't get secret for mon service from keyring or keyserver" << dendl;
-    stringstream ss;
-    key_server.list_secrets(ss);
-    dout(0) << ss.str() << dendl;
+    stringstream ss, ds;
+    key_server.list_secrets(ss, ds);
+    dout(0) << ss.str() << "\n" << ds.str() << dendl;
     return false;
   }
 

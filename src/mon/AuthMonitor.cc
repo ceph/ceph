@@ -528,7 +528,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
 {
   int r = -1;
   bufferlist rdata;
-  stringstream ss;
+  stringstream ss, ds;
 
   map<string, cmd_vartype> cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
@@ -574,7 +574,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
 	KeyRing kr;
 	kr.add(entity, eauth);
 	kr.encode_plaintext(rdata);
-	ss << "export " << eauth;
+	ds << "export " << eauth;
 	r = 0;
       } else {
 	ss << "no key for " << eauth;
@@ -606,10 +606,10 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
       r = -ENOENT;
       goto done;
     }
-    ss << auth.key;
+    ds << auth.key;
     r = 0;
   } else if (prefix == "auth list") {
-    mon->key_server.list_secrets(ss);
+    mon->key_server.list_secrets(ss, ds);
     r = 0;
     goto done;
   } else {
@@ -618,6 +618,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
   }
 
  done:
+  rdata.append(ds);
   string rs;
   getline(ss, rs, '\0');
   mon->reply_command(m, r, rs, rdata, get_version());
@@ -646,7 +647,7 @@ void AuthMonitor::import_keyring(KeyRing& keyring)
 
 bool AuthMonitor::prepare_command(MMonCommand *m)
 {
-  stringstream ss;
+  stringstream ss, ds;
   bufferlist rdata;
   string rs;
   int err = -EINVAL;
@@ -768,7 +769,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       }
 
       if (prefix == "auth get-or-create-key") {
-	ss << entity_auth.key;
+	ds << entity_auth.key;
       } else {
 	KeyRing kr;
 	kr.add(entity, entity_auth.key);
@@ -807,13 +808,14 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
     push_cephx_inc(auth_inc);
 
     if (prefix == "auth get-or-create-key") {
-      ss << auth_inc.auth.key;
+      ds << auth_inc.auth.key;
     } else {
       KeyRing kr;
       kr.add(entity, auth_inc.auth.key);
       kr.encode_plaintext(rdata);
     }
 
+    rdata.append(ds);
     getline(ss, rs);
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, rdata, get_version()));
     //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
@@ -860,6 +862,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
   }
 
 done:
+  rdata.append(ds);
   getline(ss, rs, '\0');
   mon->reply_command(m, err, rs, rdata, get_version());
   return false;

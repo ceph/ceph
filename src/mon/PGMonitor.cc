@@ -1094,9 +1094,9 @@ void PGMonitor::dump_info(Formatter *f)
 
 bool PGMonitor::preprocess_command(MMonCommand *m)
 {
-  int r = 0;
+  int r = -1;
   bufferlist rdata;
-  stringstream ss;
+  stringstream ss, ds;
 
   map<string, cmd_vartype> cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
@@ -1122,7 +1122,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     cmd_putval(g_ceph_context, cmdmap, "format", string("json"));
     cmd_putval(g_ceph_context, cmdmap, "dumpcontents", string("all"));
     prefix = "pg dump";
-  } else if (prefix == "dump_pools_json") {
+  } else if (prefix == "pg dump_pools_json") {
     cmd_putval(g_ceph_context, cmdmap, "format", string("json"));
     cmd_putval(g_ceph_context, cmdmap, "dumpcontents", string("pool"));
     prefix = "pg dump";
@@ -1133,19 +1133,23 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
   boost::scoped_ptr<Formatter> f(new_formatter(format));
 
   if (prefix == "pg stat") {
-    ss << pg_map;
+    ds << pg_map;
+    rdata.append(ds);
+    r = 0;
   } else if (prefix == "pg getmap") {
     pg_map.encode(rdata);
     ss << "got pgmap version " << pg_map.version;
+    r = 0;
   } else if (prefix == "pg map_pg_creates") {
     map_pg_creates();
     ss << "mapped pg creates ";
+    r = 0;
   } else if (prefix == "pg send_pg_creates") {
     send_pg_creates();
     ss << "sent pg creates ";
+    r = 0;
   } else if (prefix == "pg dump") {
     string val;
-    stringstream ds;
     vector<string> dumpcontents;
     set<string> what;
     if (cmd_getval(g_ceph_context, cmdmap, "dumpcontents", dumpcontents)) {
@@ -1188,6 +1192,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     }
     rdata.append(ds);
     ss << "dumped " << what << " in format " << format;
+    r = 0;
   } else if (prefix == "pg dump_stuck") {
     vector<string> stuckop_vec;
     string format;
@@ -1199,7 +1204,9 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 	       int64_t(g_conf->mon_pg_stuck_threshold));
 
     r = dump_stuck_pg_stats(f.get(), (int)threshold, stuckop_vec);
+    f->flush(ds);
     ss << "ok";
+    r = 0;
   } else if (prefix == "pg map") {
     pg_t pgid;
     string pgidstr;
@@ -1217,9 +1224,10 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     }
     pg_t mpgid = mon->osdmon()->osdmap.raw_pg_to_pg(pgid);
     mon->osdmon()->osdmap.pg_to_up_acting_osds(pgid, up, acting);
-    ss << "osdmap e" << mon->osdmon()->osdmap.get_epoch()
+    ds << "osdmap e" << mon->osdmon()->osdmap.get_epoch()
        << " pg " << pgid << " (" << mpgid << ")"
        << " -> up " << up << " acting " << acting;
+    r = 0;
   } else if (prefix == "pg scrub" || 
 	     prefix == "pg repair" || 
 	     prefix == "pg deep-scrub") {
@@ -1255,6 +1263,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 					scrubop == "deep-scrub"),
 			  mon->osdmon()->osdmap.get_inst(osd));
     ss << "instructing pg " << pgid << " on osd." << osd << " to " << scrubop;
+    r = 0;
   } else if (prefix == "pg debug") {
     string debugop;
     cmd_getval(g_ceph_context, cmdmap, "debugop", debugop, string("unfound_objects_exist"));
@@ -1269,9 +1278,10 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 	}
       }
       if (unfound_objects_exist)
-	ss << "TRUE";
+	ds << "TRUE";
       else
-	ss << "FALSE";
+	ds << "FALSE";
+      r = 0;
     } else if (debugop == "degraded_pgs_exist") {
       bool degraded_pgs_exist = false;
       hash_map<pg_t,pg_stat_t>::const_iterator end = pg_map.pg_stat.end();
@@ -1283,19 +1293,20 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 	}
       }
       if (degraded_pgs_exist)
-	ss << "TRUE";
+	ds << "TRUE";
       else
-	ss << "FALSE";
+	ds << "FALSE";
+      r = 0;
     }
-  } else {
-    ss << "unknown command " << prefix;
-    r = -EINVAL;
-    goto reply;
   }
+
+  if (r == -1)
+    return false;
 
  reply:
   string rs;
   getline(ss, rs);
+  rdata.append(ds);
   mon->reply_command(m, r, rs, rdata, get_version());
   return true;
 }
@@ -1353,7 +1364,7 @@ bool PGMonitor::prepare_command(MMonCommand *m)
     }
     ss << "pg " << pgidstr << " now creating, ok";
     goto update;
-  } else if (prefix == "pg set_full_ratio" || 
+  } else if (prefix == "pg set_full_ratio" ||
 	     prefix == "pg set_nearfull_ratio") {
     double n;
     cmd_getval(g_ceph_context, cmdmap, "ratio", n);

@@ -1904,7 +1904,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 {
   int r = 0;
   bufferlist rdata;
-  stringstream ss;
+  stringstream ss, ds;
 
   map<string, cmd_vartype> cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
@@ -1929,7 +1929,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   boost::scoped_ptr<Formatter> f(new_formatter(format));
 
   if (prefix == "osd stat") {
-    osdmap.print_summary(ss);
+    osdmap.print_summary(ds);
+    rdata.append(ds);
   }
   else if (prefix == "osd dump" ||
 	   prefix == "osd tree" ||
@@ -1968,7 +1969,6 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       if (!f)
 	ss << " ";
     } else if (prefix == "osd ls") {
-      stringstream ds;
       if (f) {
 	f->open_array_section("osds");
 	for (int i = 0; i < osdmap.get_max_osd(); i++) {
@@ -1991,7 +1991,6 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       } 
       rdata.append(ds);
     } else if (prefix == "osd tree") {
-      stringstream ds;
       if (f) {
 	f->open_object_section("tree");
 	p->print_tree(NULL, f.get());
@@ -2011,7 +2010,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     if (p != &osdmap)
       delete p;
   } else if (prefix == "osd getmaxosd") {
-    ss << "max_osd = " << osdmap.get_max_osd() << " in epoch " << osdmap.get_epoch();
+    ds << "max_osd = " << osdmap.get_max_osd() << " in epoch " << osdmap.get_epoch();
+    rdata.append(ds);
   } else if (prefix == "osd tell") {
     string whostr;
     cmd_getval(g_ceph_context, cmdmap, "who", whostr);
@@ -2058,10 +2058,9 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       f->dump_string(p->first.c_str(), p->second);
     f->close_section();
     f->close_section();
-    ostringstream rs;
-    f->flush(rs);
-    rs << "\n";
-    rdata.append(rs.str());
+    f->flush(ds);
+    ds << "\n";
+    rdata.append(ds);
   } else if (prefix == "osd map") {
     string poolstr, objstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
@@ -2078,10 +2077,11 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     pg_t mpgid = osdmap.raw_pg_to_pg(pgid);
     vector<int> up, acting;
     osdmap.pg_to_up_acting_osds(mpgid, up, acting);
-    ss << "osdmap e" << osdmap.get_epoch()
+    ds << "osdmap e" << osdmap.get_epoch()
        << " pool '" << poolstr << "' (" << pool << ") object '" << oid << "' ->"
        << " pg " << pgid << " (" << mpgid << ")"
        << " -> up " << up << " acting " << acting;
+    rdata.append(ds);
   } else if ((prefix == "osd scrub" ||
 	      prefix == "osd deep-scrub" ||
 	      prefix == "osd repair")) {
@@ -2125,9 +2125,10 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	 p != osdmap.pools.end();
 	 ++p) {
       if (!auid || p->second.auid == (uint64_t)auid) {
-	ss << p->first << ' ' << osdmap.pool_name[p->first] << ',';
+	ds << p->first << ' ' << osdmap.pool_name[p->first] << ',';
       }
     }
+    rdata.append(ds);
   } else if (prefix == "osd blacklist ls") {
     for (hash_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
 	 p != osdmap.blacklist.end();
@@ -2446,6 +2447,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
   bool ret = false;
   stringstream ss;
   string rs;
+  bufferlist rdata;
   int err = 0;
 
   map<string, cmd_vartype> cmdmap;
@@ -3439,6 +3441,8 @@ done:
     if (var == "crush_ruleset") {
       ss << "crush_ruleset: " << p->get_crush_ruleset();
     }
+    rdata.append(ss);
+    ss.str("");
     err = 0;
     goto reply;
 
@@ -3472,11 +3476,11 @@ done:
  }
 
 reply:
-getline(ss, rs);
-if (err < 0 && rs.length() == 0)
-  rs = cpp_strerror(err);
-mon->reply_command(m, err, rs, get_version());
-return ret;
+  getline(ss, rs);
+  if (err < 0 && rs.length() == 0)
+    rs = cpp_strerror(err);
+  mon->reply_command(m, err, rs, rdata, get_version());
+  return ret;
 
  update:
   getline(ss, rs);
