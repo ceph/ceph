@@ -102,7 +102,7 @@ static void usage()
   cout << "  ceph osd crush rule create-simple <name> <root> <failure-domain>\n";
   cout << "  ceph osd create [<uuid>]\n";
   cout << "  ceph osd rm <osd-id> [<osd-id>...]\n";
-  cout << "  ceph osd lost [--yes-i-really-mean-it]\n";
+  cout << "  ceph osd lost <osd-id> [--yes-i-really-mean-it]\n";
   cout << "  ceph osd reweight <osd-id> <weight>\n";
   cout << "  ceph osd blacklist add <address>[:source_port] [time]\n";
   cout << "  ceph osd blacklist rm <address>[:source_port]\n";
