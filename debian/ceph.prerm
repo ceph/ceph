@@ -12,6 +12,13 @@ invoke-rc.d ceph-all stop || {
 	fi
 }
 
+invoke-rc.d ceph stop || {
+	RESULT=$?
+	if [ $RESULT != 100 ]; then
+		exit $RESULT
+	fi
+}
+
 #DEBHELPER#
 
 exit 0
