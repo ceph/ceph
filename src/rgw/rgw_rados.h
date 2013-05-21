@@ -10,6 +10,7 @@
 #include "cls/log/cls_log_types.h"
 #include "rgw_log.h"
 #include "rgw_metadata.h"
+#include "rgw_rest_conn.h"
 
 class RGWWatcher;
 class SafeTimer;
@@ -538,7 +539,9 @@ public:
                num_watchers(0), watchers(NULL), watch_handles(NULL),
                bucket_id_lock("rados_bucket_id"), max_bucket_id(0),
                cct(NULL), rados(NULL),
-               pools_initialized(false), meta_mgr(NULL), data_log(NULL) {}
+               pools_initialized(false),
+               rest_conn(NULL),
+               meta_mgr(NULL), data_log(NULL) {}
 
   void set_context(CephContext *_cct) {
     cct = _cct;
@@ -554,6 +557,8 @@ public:
 
   RGWRegion region;
   RGWZoneParams zone;
+  RGWRegionMap region_map;
+  RGWRegionConnection *rest_conn;
 
   RGWMetadataManager *meta_mgr;
 
