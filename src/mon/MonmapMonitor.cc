@@ -206,8 +206,7 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
 
   MonSession *session = m->get_session();
   if (!session ||
-      (!session->caps.get_allow_all() &&
-       !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
+      (!session->is_capable("mon", MON_CAP_R) &&
        !mon->_allowed_command(session, fullcmd))) {
     mon->reply_command(m, -EACCES, "access denied", get_version());
     return true;
@@ -352,8 +351,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
 
   MonSession *session = m->get_session();
   if (!session ||
-      (!session->caps.get_allow_all() &&
-       !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) &&
+      (!session->is_capable("mon", MON_CAP_R) &&
        !mon->_allowed_command(session, fullcmd))) {
     mon->reply_command(m, -EACCES, "access denied", get_version());
     return true;
@@ -432,8 +430,7 @@ bool MonmapMonitor::preprocess_join(MMonJoin *join)
 
   MonSession *session = join->get_session();
   if (!session ||
-      (!session->caps.get_allow_all() &&
-       !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_ALL))) {
+      !session->is_capable("mon", MON_CAP_W | MON_CAP_X)) {
     dout(10) << " insufficient caps" << dendl;
     join->put();
     return true;
