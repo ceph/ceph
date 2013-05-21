@@ -733,14 +733,15 @@ def validate(args, signature, partial=False):
                 d[desc.name] = desc.instance.val
     return d
 
-def parse_cmdargs(args=None, usage='', epilog='', add_help=True):
+def parse_cmdargs(args=None, target='', first=False):
     # alias: let the line-wrapping be sane
     AP = argparse.ArgumentParser
-    # formatter_class: don't linewrap epilog (our custom-formatted help)
-    parser = AP(description='Frontend for ceph CLI', usage=usage,
-                epilog=epilog, add_help=add_help,
-                formatter_class=argparse.RawDescriptionHelpFormatter)
 
+    # format our own help
+    parser = AP(description='Frontend for ceph CLI', add_help=False)
+
+    parser.add_argument('-h', '--help', help='request help',
+                        action='store_true')
     parser.add_argument('-c', dest='cephconf',
                         help='ceph configuration file')
     parser.add_argument('-i', '--in-file', dest='input_file',
@@ -776,7 +777,28 @@ def parse_cmdargs(args=None, usage='', epilog='', add_help=True):
     # for pg dump_stuck
     parser.add_argument('--threshold', type=int, help='number of seconds for a pg to be considered stuck for pg dump_stuck')
     # returns a Namespace with the parsed args, and a list of all extras
-    return parser.parse_known_args(args)
+    parsed_args, extras = parser.parse_known_args(args)
+
+    # handle help ourselves, here and now
+    if (not first) and parsed_args.help:
+        def help_for_target(target):
+            ret, outbuf, outs = json_command(target=target,
+                                             prefix='get_command_descriptions')
+            if ret:
+                print >> sys.stderr, \
+                    "couldn't get command descriptions for {}: {}".\
+                    format(target, outs)
+            else:
+                sys.stdout.write(format_help(parse_json_funcsigs(outbuf)))
+
+        parser.print_help()
+        help_for_target(target=('mon', ''))
+        sys.stdout.write("\nOSD tell commands and pg pgid commands:\n\n")
+        help_for_target(target=('osd', '0'))
+        sys.exit(0)
+
+    return parsed_args, extras
+
 
 """
 sort descriptors by prefixes, defined as the concatenation of all simple
@@ -1043,8 +1065,7 @@ def new_style_command(target, command_descs, inbuf, verbose):
 
     sigdict = parse_json_funcsigs(command_descs)
 
-    parsed_args, cmdargs = parse_cmdargs(epilog='\nAvailable commands: \n\n'
-                                           + format_help(sigdict))
+    parsed_args, cmdargs = parse_cmdargs(target=target)
     if verbose:
         for cmdtag in sorted(sigdict.keys()):
             cmd = sigdict[cmdtag]
@@ -1132,7 +1153,7 @@ def main():
 
     # we have to parse twice, because we have to collect early
     # options to be able to run the "get_command_descriptions" command.
-    parsed_args, childargs = parse_cmdargs(add_help=False)
+    parsed_args, childargs = parse_cmdargs(first=True)
 
     global verbose
     verbose = parsed_args.verbose
