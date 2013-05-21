@@ -3029,18 +3029,20 @@ void OSD::_send_boot()
     cluster_messenger->set_addr_unknowns(cluster_addr);
     dout(10) << " assuming cluster_addr ip matches client_addr" << dendl;
   }
-  entity_addr_t hb_addr = hbserver_messenger->get_myaddr();
-  if (hb_addr.is_blank_ip()) {
-    int port = hb_addr.get_port();
-    hb_addr = cluster_addr;
-    hb_addr.set_port(port);
-    hbserver_messenger->set_addr_unknowns(hb_addr);
+  entity_addr_t hb_back_addr = hb_back_server_messenger->get_myaddr();
+  if (hb_back_addr.is_blank_ip()) {
+    int port = hb_back_addr.get_port();
+    hb_back_addr = cluster_addr;
+    hb_back_addr.set_port(port);
+    hb_back_server_messenger->set_addr_unknowns(hb_back_addr);
     dout(10) << " assuming hb_addr ip matches cluster_addr" << dendl;
   }
-  MOSDBoot *mboot = new MOSDBoot(superblock, boot_epoch, hb_addr, cluster_addr);
+  entity_addr_t hb_front_addr;
+  MOSDBoot *mboot = new MOSDBoot(superblock, boot_epoch, hb_back_addr, hb_front_addr, cluster_addr);
   dout(10) << " client_addr " << client_messenger->get_myaddr()
 	   << ", cluster_addr " << cluster_addr
-	   << ", hb addr " << hb_addr
+	   << ", hb_back_addr " << hb_back_addr
+	   << ", hb_front_addr " << hb_front_addr
 	   << dendl;
   monc->send_mon_message(mboot);
 }
