@@ -216,3 +216,35 @@ TEST(pg_t, split)
   ASSERT_TRUE(s.count(pg_t(7, 0, -1)));
 
 }
+
+TEST(pg_missing_t, constructor)
+{
+  pg_missing_t missing;
+  EXPECT_EQ((unsigned int)0, missing.num_missing());
+  EXPECT_FALSE(missing.have_missing());
+}
+
+TEST(pg_missing_t, add_next_event)
+{
+  pg_missing_t missing;
+
+  // adding a DELETE entry
+  hobject_t oid(object_t("objname"), "key", 123, 456, 0);
+  eversion_t version(1,2);
+  eversion_t prior_version(3,4);
+  pg_log_entry_t e(pg_log_entry_t::DELETE, oid, version, prior_version,
+		   osd_reqid_t(entity_name_t::CLIENT(777), 8, 999), utime_t(8,9));
+  EXPECT_FALSE(missing.have_missing());
+  missing.add_next_event(e);
+  EXPECT_FALSE(missing.have_missing());
+
+  // adding a MODIFY entry
+  e.op = pg_log_entry_t::MODIFY;
+  EXPECT_FALSE(missing.have_missing());
+  missing.add_next_event(e);
+  EXPECT_TRUE(missing.have_missing());
+}
+
+// Local Variables:
+// compile-command: "cd .. ; make unittest_osd_types ; ./unittest_osd_types # --gtest_filter=pg_missing_t.constructor "
+// End:
