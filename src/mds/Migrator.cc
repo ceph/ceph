@@ -2635,6 +2635,7 @@ void Migrator::handle_export_caps(MExportCaps *ex)
   dout(10) << "handle_export_caps " << *ex << " from " << ex->get_source() << dendl;
   CInode *in = cache->get_inode(ex->ino);
   
+  assert(in);
   assert(in->is_auth());
   /*
    * note: i may be frozen, but i won't have been encoded for export (yet)!
