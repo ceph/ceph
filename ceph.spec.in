@@ -21,6 +21,7 @@ Requires:	librados2 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
 Requires:	python
 Requires:	python-argparse
+Requires:	python-ceph
 Requires:	python-lockfile
 Requires:       xfsprogs
 Requires:	cryptsetup
@@ -358,7 +359,6 @@ fi
 %{_docdir}/ceph/sample.ceph.conf
 %{_docdir}/ceph/sample.fetch_config
 %{_bindir}/ceph
-%{_bindir}/ceph-legacy-cli
 %{_bindir}/cephfs
 %{_bindir}/ceph-conf
 %{_bindir}/ceph-clsinfo
