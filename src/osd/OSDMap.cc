@@ -323,7 +323,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   ::encode(new_lost, bl);
   ::encode(new_blacklist, bl);
   ::encode(old_blacklist, bl);
-  ::encode(new_up_internal, bl);
+  ::encode(new_up_cluster, bl);
   ::encode(cluster_snapshot, bl);
   ::encode(new_uuid, bl);
   ::encode(new_xinfo, bl);
@@ -411,7 +411,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator &p)
   ::decode(new_blacklist, p);
   ::decode(old_blacklist, p);
   if (ev >= 6)
-    ::decode(new_up_internal, p);
+    ::decode(new_up_cluster, p);
   if (ev >= 7)
     ::decode(cluster_snapshot, p);
   if (ev >= 8)
@@ -468,7 +468,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
     f->open_object_section("osd");
     f->dump_int("osd", p->first);
     f->dump_stream("public_addr") << p->second;
-    f->dump_stream("cluster_addr") << new_up_internal.find(p->first)->second;
+    f->dump_stream("cluster_addr") << new_up_cluster.find(p->first)->second;
     f->dump_stream("heartbeat_addr") << new_hb_up.find(p->first)->second;
     f->close_section();
   }
@@ -876,8 +876,8 @@ int OSDMap::apply_incremental(const Incremental &inc)
 	new entity_addr_t(inc.new_hb_up.find(i->first)->second));
     osd_info[i->first].up_from = epoch;
   }
-  for (map<int32_t,entity_addr_t>::const_iterator i = inc.new_up_internal.begin();
-       i != inc.new_up_internal.end();
+  for (map<int32_t,entity_addr_t>::const_iterator i = inc.new_up_cluster.begin();
+       i != inc.new_up_cluster.end();
        ++i)
     osd_addrs->cluster_addr[i->first].reset(new entity_addr_t(i->second));
 
