@@ -247,6 +247,10 @@ public:
     return pipe != NULL;
   }
 
+  Messenger *get_messenger() {
+    return msgr;
+  }
+
   int get_peer_type() { return peer_type; }
   void set_peer_type(int t) { peer_type = t; }
   
