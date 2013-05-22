@@ -3035,9 +3035,17 @@ void OSD::_send_boot()
     hb_back_addr = cluster_addr;
     hb_back_addr.set_port(port);
     hb_back_server_messenger->set_addr_unknowns(hb_back_addr);
-    dout(10) << " assuming hb_addr ip matches cluster_addr" << dendl;
+    dout(10) << " assuming hb_back_addr ip matches cluster_addr" << dendl;
   }
-  entity_addr_t hb_front_addr;
+  entity_addr_t hb_front_addr = hb_front_server_messenger->get_myaddr();
+  if (hb_front_addr.is_blank_ip()) {
+    int port = hb_front_addr.get_port();
+    hb_front_addr = client_messenger->get_myaddr();
+    hb_front_addr.set_port(port);
+    hb_front_server_messenger->set_addr_unknowns(hb_front_addr);
+    dout(10) << " assuming hb_front_addr ip matches client_addr" << dendl;
+  }
+
   MOSDBoot *mboot = new MOSDBoot(superblock, boot_epoch, hb_back_addr, hb_front_addr, cluster_addr);
   dout(10) << " client_addr " << client_messenger->get_myaddr()
 	   << ", cluster_addr " << cluster_addr
@@ -4423,7 +4431,8 @@ void OSD::handle_osd_map(MOSDMap *m)
     } else if (!osdmap->is_up(whoami) ||
 	       !osdmap->get_addr(whoami).probably_equals(client_messenger->get_myaddr()) ||
 	       !osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()) ||
-	       !osdmap->get_hb_back_addr(whoami).probably_equals(hb_back_server_messenger->get_myaddr())) {
+	       !osdmap->get_hb_back_addr(whoami).probably_equals(hb_back_server_messenger->get_myaddr()) ||
+	       !osdmap->get_hb_front_addr(whoami).probably_equals(hb_front_server_messenger->get_myaddr())) {
       if (!osdmap->is_up(whoami)) {
 	if (service.is_preparing_to_stop()) {
 	  service.got_stop_ack();
@@ -4444,6 +4453,10 @@ void OSD::handle_osd_map(MOSDMap *m)
 	clog.error() << "map e" << osdmap->get_epoch()
 		    << " had wrong hb back addr (" << osdmap->get_hb_back_addr(whoami)
 		     << " != my " << hb_back_server_messenger->get_myaddr() << ")";
+      else if (!osdmap->get_hb_front_addr(whoami).probably_equals(hb_front_server_messenger->get_myaddr()))
+	clog.error() << "map e" << osdmap->get_epoch()
+		    << " had wrong hb front addr (" << osdmap->get_hb_front_addr(whoami)
+		     << " != my " << hb_front_server_messenger->get_myaddr() << ")";
       
       if (!service.is_stopping()) {
 	state = STATE_BOOTING;
@@ -4459,6 +4472,10 @@ void OSD::handle_osd_map(MOSDMap *m)
 	  do_shutdown = true;  // FIXME: do_restart?
 
 	r = hb_back_server_messenger->rebind(cport);
+	if (r != 0)
+	  do_shutdown = true;  // FIXME: do_restart?
+
+	r = hb_front_server_messenger->rebind(hbport);
 	if (r != 0)
 	  do_shutdown = true;  // FIXME: do_restart?
 
