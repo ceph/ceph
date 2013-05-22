@@ -353,6 +353,9 @@ void RGWUserInfo::dump(Formatter *f) const
   encode_json_map("swift_keys", NULL, "key", NULL, user_info_dump_swift_key,(void *)this, swift_keys, f);
 
   encode_json("caps", caps, f);
+  if (system) { /* no need to show it for every user */
+    encode_json("system", (bool)system, f);
+  }
 }
 
 
@@ -393,6 +396,9 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("subusers", subusers, decode_subusers, obj);
 
   JSONDecoder::decode_json("caps", caps, obj);
+  bool sys;
+  JSONDecoder::decode_json("system", sys, obj);
+  system = (__u8)sys;
 }
 
 void rgw_bucket::dump(Formatter *f) const
