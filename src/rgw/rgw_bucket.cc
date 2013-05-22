@@ -146,7 +146,7 @@ int RGWBucket::create_bucket(string bucket_str, string& user_id, string& display
 
   rgw_bucket& bucket = bucket_info.bucket;
 
-  ret = store->create_bucket(user_id, bucket, attrs);
+  ret = store->create_bucket(user_id, bucket, attrs, objv_tracker);
   if (ret && ret != -EEXIST)
     goto done;
 

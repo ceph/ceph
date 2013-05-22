@@ -641,6 +641,8 @@ struct RGWObjVersionTracker {
     read_version = write_version;
     write_version = obj_version();
   }
+
+  void generate_new_write_ver(CephContext *cct);
 };
 
 /** Store all the state necessary to complete and respond to an HTTP request*/

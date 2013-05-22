@@ -458,6 +458,15 @@ void RGWObjManifest::append(RGWObjManifest& m)
   obj_size += m.obj_size;
 }
 
+void RGWObjVersionTracker::generate_new_write_ver(CephContext *cct)
+{
+  write_version.ver = 1;
+#define TAG_LEN 24
+
+  write_version.tag.clear();
+  append_rand_alpha(cct, write_version.tag, write_version.tag, TAG_LEN);
+}
+
 class RGWWatcher : public librados::WatchCtx {
   RGWRados *rados;
 public:
@@ -1335,6 +1344,7 @@ int RGWRados::create_pool(rgw_bucket& bucket)
  */
 int RGWRados::create_bucket(string& owner, rgw_bucket& bucket, 
 			    map<std::string, bufferlist>& attrs,
+                            RGWObjVersionTracker& objv_tracker,
 			    bool exclusive)
 {
   int ret = 0;
@@ -1374,7 +1384,8 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
   if (r < 0 && r != -EEXIST)
     return r;
 
-  RGWObjVersionTracker objv_tracker;
+  objv_tracker.generate_new_write_ver(cct);
+
   RGWBucketInfo info;
   info.bucket = bucket;
   info.owner = owner;
