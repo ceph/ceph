@@ -5343,10 +5343,14 @@ void Server::do_rmdir_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   assert(mdr || mds->is_resolve());
 
   CDir *dir = mds->mdcache->get_dirfrag(rollback.src_dir);
+  assert(dir);
   CDentry *dn = dir->lookup(rollback.src_dname);
+  assert(dn);
   dout(10) << " dn " << *dn << dendl;
   dir = mds->mdcache->get_dirfrag(rollback.dest_dir);
+  assert(dir);
   CDentry *straydn = dir->lookup(rollback.dest_dname);
+  assert(straydn);
   dout(10) << " straydn " << *dn << dendl;
   CInode *in = straydn->get_linkage()->get_inode();
 
