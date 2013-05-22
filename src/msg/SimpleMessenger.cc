@@ -262,18 +262,19 @@ int SimpleMessenger::bind(const entity_addr_t &bind_addr)
   lock.Unlock();
 
   // bind to a socket
-  int r = accepter.bind(bind_addr);
+  set<int> avoid_ports;
+  int r = accepter.bind(bind_addr, avoid_ports);
   if (r >= 0)
     did_bind = true;
   return r;
 }
 
-int SimpleMessenger::rebind(int avoid_port)
+int SimpleMessenger::rebind(const set<int>& avoid_ports)
 {
-  ldout(cct,1) << "rebind avoid " << avoid_port << dendl;
+  ldout(cct,1) << "rebind avoid " << avoid_ports << dendl;
   mark_down_all();
   assert(did_bind);
-  return accepter.rebind(avoid_port);
+  return accepter.rebind(avoid_ports);
 }
 
 int SimpleMessenger::start()

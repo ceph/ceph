@@ -4464,18 +4464,20 @@ void OSD::handle_osd_map(MOSDMap *m)
 	do_restart = true;
 	bind_epoch = osdmap->get_epoch();
 
-	int cport = cluster_messenger->get_myaddr().get_port();
-	int hbport = hb_back_server_messenger->get_myaddr().get_port();
+	set<int> avoid_ports;
+	avoid_ports.insert(cluster_messenger->get_myaddr().get_port());
+	avoid_ports.insert(hb_back_server_messenger->get_myaddr().get_port());
+	avoid_ports.insert(hb_front_server_messenger->get_myaddr().get_port());
 
-	int r = cluster_messenger->rebind(hbport);
+	int r = cluster_messenger->rebind(avoid_ports);
 	if (r != 0)
 	  do_shutdown = true;  // FIXME: do_restart?
 
-	r = hb_back_server_messenger->rebind(cport);
+	r = hb_back_server_messenger->rebind(avoid_ports);
 	if (r != 0)
 	  do_shutdown = true;  // FIXME: do_restart?
 
-	r = hb_front_server_messenger->rebind(hbport);
+	r = hb_front_server_messenger->rebind(avoid_ports);
 	if (r != 0)
 	  do_shutdown = true;  // FIXME: do_restart?
 

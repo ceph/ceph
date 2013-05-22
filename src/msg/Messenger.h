@@ -341,7 +341,7 @@ public:
    *
    * @param avoid_port An additional port to avoid binding to.
    */
-  virtual int rebind(int avoid_port) { return -EOPNOTSUPP; }
+  virtual int rebind(const set<int>& avoid_ports) { return -EOPNOTSUPP; }
   /**
    * @} // Configuration
    */
