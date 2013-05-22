@@ -642,6 +642,8 @@ int main(int argc, char **argv)
   string start_marker;
   string end_marker;
   int max_entries = -1;
+  int system = false;
+  bool system_specified = false;
 
   std::string val;
   std::ostringstream errs;
@@ -690,6 +692,8 @@ int main(int argc, char **argv)
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &skip_zero_entries, NULL, "--skip_zero_entries", (char*)NULL)) {
       // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &system, NULL, "--system", (char*)NULL)) {
+      system_specified = true;
     } else if (ceph_argparse_withlonglong(args, i, &tmp, &errs, "-a", "--auth-uid", (char*)NULL)) {
       if (!errs.str().empty()) {
 	cerr << errs.str() << std::endl;
@@ -1069,6 +1073,9 @@ int main(int argc, char **argv)
 
   if (max_buckets >= 0)
     user_op.set_max_buckets(max_buckets);
+
+  if (system_specified)
+    user_op.set_system(system);
 
   if (set_perm)
     user_op.set_perm(perm_mask);

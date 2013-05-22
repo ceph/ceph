@@ -122,6 +122,7 @@ struct RGWUserAdminOpState {
   std::string display_name;
   uint32_t max_buckets;
   __u8 suspended;
+  __u8 system;
   std::string caps;
   RGWObjVersionTracker objv;
 
@@ -154,6 +155,7 @@ struct RGWUserAdminOpState {
   bool perm_specified;
   bool caps_specified;
   bool suspension_op;
+  bool system_specified;
   bool key_op;
 
   // req parameters
@@ -235,6 +237,10 @@ struct RGWUserAdminOpState {
   void set_suspension(__u8 is_suspended) {
     suspended = is_suspended;
     suspension_op = true;
+  }
+  void set_system(__u8 is_system) {
+    system = is_system;
+    system_specified = true;
   }
   void set_user_info(RGWUserInfo& user_info) {
     user_id = user_info.user_id;

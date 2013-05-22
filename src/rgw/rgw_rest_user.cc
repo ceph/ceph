@@ -59,6 +59,7 @@ void RGWOp_User_Create::execute()
 
   bool gen_key;
   bool suspended;
+  bool system;
 
   uint32_t max_buckets;
   int32_t key_type = KEY_TYPE_UNDEFINED;
@@ -75,6 +76,13 @@ void RGWOp_User_Create::execute()
   RESTArgs::get_bool(s, "generate-key", true, &gen_key);
   RESTArgs::get_bool(s, "suspended", false, &suspended);
   RESTArgs::get_uint32(s, "max-buckets", RGW_DEFAULT_MAX_BUCKETS, &max_buckets);
+  RESTArgs::get_bool(s, "system", false, &system);
+
+  if (!s->user.system && system) {
+    ldout(s->cct, 0) << "cannot set system flag by non-system user" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
 
   // FIXME: don't do double argument checking
   if (!uid.empty())
@@ -110,6 +118,9 @@ void RGWOp_User_Create::execute()
   if (s->args.exists("suspended"))
     op_state.set_suspension(suspended);
 
+  if (s->args.exists("system"))
+    op_state.set_system(system);
+
   if (gen_key)
     op_state.set_generate_key();
 
@@ -142,6 +153,7 @@ void RGWOp_User_Modify::execute()
 
   bool gen_key;
   bool suspended;
+  bool system;
 
   uint32_t max_buckets;
   int32_t key_type = KEY_TYPE_UNDEFINED;
@@ -158,6 +170,14 @@ void RGWOp_User_Modify::execute()
   RESTArgs::get_bool(s, "suspended", false, &suspended);
   RESTArgs::get_uint32(s, "max-buckets", RGW_DEFAULT_MAX_BUCKETS, &max_buckets);
   RESTArgs::get_string(s, "key-type", key_type_str, &key_type_str);
+
+  RESTArgs::get_bool(s, "system", false, &system);
+
+  if (!s->user.system && system) {
+    ldout(s->cct, 0) << "cannot set system flag by non-system user" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
 
   if (!uid.empty())
     op_state.set_user_id(uid);
@@ -194,6 +214,9 @@ void RGWOp_User_Modify::execute()
 
   if (s->args.exists("suspended"))
     op_state.set_suspension(suspended);
+
+  if (s->args.exists("system"))
+    op_state.set_system(system);
 
   http_ret = RGWUserAdminOp_User::modify(store, op_state, flusher);
 }
