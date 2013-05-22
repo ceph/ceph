@@ -51,7 +51,7 @@ SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
     dispatch_throttler(cct, string("msgr_dispatch_throttler-") + mname, cct->_conf->ms_dispatch_throttle_bytes),
     reaper_started(false), reaper_stop(false),
     timeout(0),
-    local_connection(new Connection)
+    local_connection(new Connection(this))
 {
   pthread_spin_init(&global_seq_lock, PTHREAD_PROCESS_PRIVATE);
   init_local_connection();
