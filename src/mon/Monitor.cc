@@ -473,16 +473,18 @@ int Monitor::preinit()
 
   // unlock while registering to avoid mon_lock -> admin socket lock dependency.
   lock.Unlock();
-  r = admin_socket->register_command("mon_status", admin_hook,
+  r = admin_socket->register_command("mon_status", "mon_status", admin_hook,
 				     "show current monitor status");
   assert(r == 0);
-  r = admin_socket->register_command("quorum_status", admin_hook,
-					 "show current quorum status");
+  r = admin_socket->register_command("quorum_status", "quorum_status",
+				     admin_hook, "show current quorum status");
   assert(r == 0);
-  r = admin_socket->register_command("sync_status", admin_hook,
+  r = admin_socket->register_command("sync_status", "sync_status", admin_hook,
 				     "show current synchronization status");
   assert(r == 0);
-  r = admin_socket->register_command("add_bootstrap_peer_hint", admin_hook,
+  r = admin_socket->register_command("add_bootstrap_peer_hint",
+				     "add_bootstrap_peer_hint name=addr,type=CephIPAddr",
+				     admin_hook,
 				     "add peer address as potential bootstrap peer for cluster bringup");
   assert(r == 0);
   lock.Lock();
@@ -569,6 +571,7 @@ void Monitor::shutdown()
     admin_socket->unregister_command("mon_status");
     admin_socket->unregister_command("quorum_status");
     admin_socket->unregister_command("sync_status");
+    admin_socket->unregister_command("add_bootstrap_peer_hint");
     delete admin_hook;
     admin_hook = NULL;
   }

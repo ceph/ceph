@@ -15,6 +15,7 @@
 #include "common/Thread.h"
 #include "common/admin_socket.h"
 #include "common/config.h"
+#include "common/cmdparse.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
@@ -43,6 +44,7 @@
 #define dout_subsys ceph_subsys_asok
 #undef dout_prefix
 #define dout_prefix *_dout << "asok(" << (void*)m_cct << ") "
+
 
 using std::ostringstream;
 
@@ -365,7 +367,7 @@ bool AdminSocket::do_accept()
   return rval;
 }
 
-int AdminSocket::register_command(std::string command, AdminSocketHook *hook, std::string help)
+int AdminSocket::register_command(std::string command, std::string cmddesc, AdminSocketHook *hook, std::string help)
 {
   int ret;
   m_lock.Lock();
@@ -375,6 +377,7 @@ int AdminSocket::register_command(std::string command, AdminSocketHook *hook, st
   } else {
     ldout(m_cct, 5) << "register_command " << command << " hook " << hook << dendl;
     m_hooks[command] = hook;
+    m_descs[command] = cmddesc;
     if (help.length())
       m_help[command] = help;
     ret = 0;
@@ -390,6 +393,7 @@ int AdminSocket::unregister_command(std::string command)
   if (m_hooks.count(command)) {
     ldout(m_cct, 5) << "unregister_command " << command << dendl;
     m_hooks.erase(command);
+    m_descs.erase(command);
     m_help.erase(command);
     ret = 0;
   } else {
@@ -441,6 +445,35 @@ public:
   }
 };
 
+class GetdescsHook : public AdminSocketHook {
+  AdminSocket *m_as;
+public:
+  GetdescsHook(AdminSocket *as) : m_as(as) {}
+  bool call(string command, string args, bufferlist& out) {
+    int cmdnum = 0;
+    JSONFormatter jf(false);
+    jf.open_object_section("command_descriptions");
+    for (map<string,string>::iterator p = m_as->m_descs.begin();
+	 p != m_as->m_descs.end();
+	 ++p) {
+      ostringstream secname;
+      secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
+      jf.open_object_section(secname.str().c_str());
+      jf.open_array_section("sig");
+      dump_cmds_to_json(&jf, p->second.c_str());
+      jf.close_section(); // sig array
+      jf.dump_string("help", m_as->m_help[p->first]);
+      jf.close_section(); // cmd
+      cmdnum++;
+    }
+    jf.close_section(); // command_descriptions
+    ostringstream ss;
+    jf.flush(ss);
+    out.append(ss.str());
+    return true;
+  }
+};
+
 bool AdminSocket::init(const std::string &path)
 {
   ldout(m_cct, 5) << "init " << path << dendl;
@@ -469,11 +502,14 @@ bool AdminSocket::init(const std::string &path)
   m_path = path;
 
   m_version_hook = new VersionHook;
-  register_command("0", m_version_hook, "");
-  register_command("version", m_version_hook, "get ceph version");
-  register_command("git_version", m_version_hook, "get git sha1");
+  register_command("0", "0", m_version_hook, "");
+  register_command("version", "version", m_version_hook, "get ceph version");
+  register_command("git_version", "git_version", m_version_hook, "get git sha1");
   m_help_hook = new HelpHook(this);
-  register_command("help", m_help_hook, "list available commands");
+  register_command("help", "help", m_help_hook, "list available commands");
+  m_getdescs_hook = new GetdescsHook(this);
+  register_command("get_command_descriptions", "get_command_descriptions",
+		   m_getdescs_hook, "list available commands");
 
   create();
   add_cleanup_file(m_path.c_str());
