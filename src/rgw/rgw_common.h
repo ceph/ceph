@@ -388,11 +388,12 @@ struct RGWUserInfo
   __u8 suspended;
   uint32_t max_buckets;
   RGWUserCaps caps;
+  __u8 system;
 
   RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS) {}
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(11, 9, bl);
+     ENCODE_START(12, 9, bl);
      ::encode(auid, bl);
      string access_key;
      string secret_key;
@@ -423,6 +424,7 @@ struct RGWUserInfo
      ::encode(swift_keys, bl);
      ::encode(max_buckets, bl);
      ::encode(caps, bl);
+     ::encode(system, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -467,6 +469,10 @@ struct RGWUserInfo
     }
     if (struct_v >= 11) {
       ::decode(caps, bl);
+    }
+    system = 0;
+    if (struct_v >= 12) {
+      ::decode(system, bl);
     }
     DECODE_FINISH(bl);
   }
