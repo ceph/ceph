@@ -1960,14 +1960,16 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     if (prefix == "osd dump") {
       stringstream ds;
       if (f) {
+	f->open_object_section("osdmap");
 	p->dump(f.get());
+	f->close_section();
 	f->flush(ds);
       } else {
 	p->print(ds);
       } 
       rdata.append(ds);
       if (!f)
-	ss << " ";
+	ds << " ";
     } else if (prefix == "osd ls") {
       if (f) {
 	f->open_array_section("osds");
