@@ -181,26 +181,25 @@ def assign_devs(roles, devs):
 
 @contextlib.contextmanager
 def valgrind_post(ctx, config):
-    testdir = teuthology.get_testdir(ctx)
     try:
         yield
     finally:
         lookup_procs = list()
-        val_path = '/var/log/ceph/valgrind'.format(tdir=testdir)
         log.info('Checking for errors in any valgrind logs...');
         for remote in ctx.cluster.remotes.iterkeys():
             #look at valgrind logs for each node
             proc = remote.run(
                 args=[
                     'sudo',
-                    'grep', '-r', '<kind>',
-                    run.Raw(val_path),
+                    'zgrep',
+                    '<kind>',
+                    run.Raw('/var/log/ceph/valgrind/*'),
                     run.Raw('|'),
                     'sort',
                     run.Raw('|'),
                     'uniq',
                     ],
-                wait = False,
+                wait=False,
                 check_status=False,
                 stdout=StringIO(),
                 )
@@ -208,6 +207,7 @@ def valgrind_post(ctx, config):
 
         valgrind_exception = None
         for (proc, remote) in lookup_procs:
+            proc.exitstatus.get()
             out = proc.stdout.getvalue()
             for line in out.split('\n'):
                 if line == '':
