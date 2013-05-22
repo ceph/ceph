@@ -458,6 +458,7 @@ int main(int argc, const char **argv)
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_osd_signal);
   unregister_async_signal_handler(SIGTERM, handle_osd_signal);
+  shutdown_async_signal_handler();
 
   // done
   delete osd;
