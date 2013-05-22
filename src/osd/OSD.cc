@@ -4144,21 +4144,20 @@ bool OSDService::prepare_to_stop() {
   if (state != NOT_STOPPING)
     return false;
 
-  state = PREPARING_TO_STOP;
-  monc->send_mon_message(
-    new MOSDMarkMeDown(
-      monc->get_fsid(),
-      get_osdmap()->get_inst(whoami),
-      get_osdmap()->get_epoch(),
-      false
-      ));
-  utime_t now = ceph_clock_now(g_ceph_context);
-  utime_t timeout;
-  timeout.set_from_double(
-    now + g_conf->osd_mon_shutdown_timeout);
-  while ((ceph_clock_now(g_ceph_context) < timeout) &&
-	 (state != STOPPING)) {
-    is_stopping_cond.WaitUntil(is_stopping_lock, timeout);
+  if (get_osdmap()->is_up(whoami)) {
+    state = PREPARING_TO_STOP;
+    monc->send_mon_message(new MOSDMarkMeDown(monc->get_fsid(),
+					      get_osdmap()->get_inst(whoami),
+					      get_osdmap()->get_epoch(),
+					      false
+					      ));
+    utime_t now = ceph_clock_now(g_ceph_context);
+    utime_t timeout;
+    timeout.set_from_double(now + g_conf->osd_mon_shutdown_timeout);
+    while ((ceph_clock_now(g_ceph_context) < timeout) &&
+	   (state != STOPPING)) {
+      is_stopping_cond.WaitUntil(is_stopping_lock, timeout);
+    }
   }
   state = STOPPING;
   return true;
