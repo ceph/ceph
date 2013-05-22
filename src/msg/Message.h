@@ -157,9 +157,11 @@
 
 // abstract Connection, for keeping per-connection state
 
+class Messenger;
 
 struct Connection : public RefCountedObject {
   Mutex lock;
+  Messenger *msgr;
   RefCountedObject *priv;
   int peer_type;
   entity_addr_t peer_addr;
@@ -171,8 +173,9 @@ struct Connection : public RefCountedObject {
   map<tid_t,pair<bufferlist,int> > rx_buffers;
 
 public:
-  Connection()
+  Connection(Messenger *m)
     : lock("Connection::lock"),
+      msgr(m),
       priv(NULL),
       peer_type(-1),
       features(0),
