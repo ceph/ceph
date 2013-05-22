@@ -127,7 +127,7 @@ public:
     map<int64_t,string> new_pool_names;
     set<int64_t> old_pools;
     map<int32_t,entity_addr_t> new_up_client;
-    map<int32_t,entity_addr_t> new_up_internal;
+    map<int32_t,entity_addr_t> new_up_cluster;
     map<int32_t,uint8_t> new_state;             // XORed onto previous state.
     map<int32_t,uint32_t> new_weight;
     map<pg_t,vector<int32_t> > new_pg_temp;     // [] to remove
