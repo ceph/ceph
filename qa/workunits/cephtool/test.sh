@@ -41,6 +41,11 @@ diff authfile authfile2
 rm authfile authfile2
 ceph auth del client.xx
 
+# with and without verbosity
+ceph osd dump | grep '^epoch'
+ceph --concise osd dump | grep '^epoch'
+ceph --verbose osd dump | grep '^epoch'
+
 # df
 ceph df | grep GLOBAL
 ceph df detail | grep CATEGORY
