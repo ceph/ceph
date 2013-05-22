@@ -254,18 +254,18 @@ CephContext::CephContext(uint32_t module_type_)
   _heartbeat_map = new HeartbeatMap(this);
 
   _admin_hook = new CephContextHook(this);
-  _admin_socket->register_command("perfcounters_dump", _admin_hook, "");
-  _admin_socket->register_command("1", _admin_hook, "");
-  _admin_socket->register_command("perf dump", _admin_hook, "dump perfcounters value");
-  _admin_socket->register_command("perfcounters_schema", _admin_hook, "");
-  _admin_socket->register_command("2", _admin_hook, "");
-  _admin_socket->register_command("perf schema", _admin_hook, "dump perfcounters schema");
-  _admin_socket->register_command("config show", _admin_hook, "dump current config settings");
-  _admin_socket->register_command("config set", _admin_hook, "config set <field> <val>: set a config variable");
-  _admin_socket->register_command("config get", _admin_hook, "config get <field>: get the config value");
-  _admin_socket->register_command("log flush", _admin_hook, "flush log entries to log file");
-  _admin_socket->register_command("log dump", _admin_hook, "dump recent log entries to log file");
-  _admin_socket->register_command("log reopen", _admin_hook, "reopen log file");
+  _admin_socket->register_command("perfcounters_dump", "perfcounters_dump", _admin_hook, "");
+  _admin_socket->register_command("1", "1", _admin_hook, "");
+  _admin_socket->register_command("perf dump", "perf dump", _admin_hook, "dump perfcounters value");
+  _admin_socket->register_command("perfcounters_schema", "perfcounters_schema", _admin_hook, "");
+  _admin_socket->register_command("2", "2", _admin_hook, "");
+  _admin_socket->register_command("perf schema", "perf schema", _admin_hook, "dump perfcounters schema");
+  _admin_socket->register_command("config show", "config show", _admin_hook, "dump current config settings");
+  _admin_socket->register_command("config set", "config set name=var,type=CephString name=val,type=CephString",  _admin_hook, "config set <field> <val>: set a config variable");
+  _admin_socket->register_command("config get", "config get name=var,type=CephString", _admin_hook, "config get <field>: get the config value");
+  _admin_socket->register_command("log flush", "log flush", _admin_hook, "flush log entries to log file");
+  _admin_socket->register_command("log dump", "log dump", _admin_hook, "dump recent log entries to log file");
+  _admin_socket->register_command("log reopen", "log reopen", _admin_hook, "reopen log file");
 
   _crypto_none = new CryptoNone;
   _crypto_aes = new CryptoAES;
