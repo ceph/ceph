@@ -435,6 +435,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
     } else {
       if (q->second == IMPORT_ABORTING &&
 	  import_bystanders[dir].count(who)) {
+	assert(dir);
 	dout(10) << "faking export_notify_ack from mds." << who
 		 << " on aborting import " << *dir << " from mds." << import_peer[df] 
 		 << dendl;
@@ -2154,6 +2155,7 @@ void Migrator::import_notify_abort(CDir *dir, set<CDir*>& bounds)
 
 void Migrator::import_reverse_unfreeze(CDir *dir)
 {
+  assert(dir);
   dout(7) << "import_reverse_unfreeze " << *dir << dendl;
   dir->unfreeze_tree();
   list<Context*> ls;
