@@ -75,7 +75,7 @@ endif
 LIBOS_LDA += -lleveldb -lsnappy
 
 # monitor
-ceph_mon_SOURCES = ceph_mon.cc common/TextTable.cc common/cmdparse.cc
+ceph_mon_SOURCES = ceph_mon.cc common/TextTable.cc
 ceph_mon_LDFLAGS = $(AM_LDFLAGS)
 ceph_mon_LDADD = libmon.a $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 ceph_mon_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
@@ -1344,6 +1344,7 @@ libcommon_files = \
 	common/OutputDataSocket.cc \
 	common/admin_socket.cc \
 	common/admin_socket_client.cc \
+	common/cmdparse.cc \
 	common/escape.c \
 	common/Clock.cc \
 	common/Throttle.cc \
@@ -1510,8 +1511,7 @@ libosd_a_SOURCES = \
 	osd/Watch.cc \
 	osd/ClassHandler.cc \
 	osd/OpRequest.cc \
-	osd/SnapMapper.cc \
-	common/cmdparse.cc
+	osd/SnapMapper.cc
 libosd_a_CXXFLAGS= ${AM_CXXFLAGS}
 noinst_LIBRARIES += libosd.a
 
