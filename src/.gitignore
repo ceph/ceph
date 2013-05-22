@@ -7,7 +7,6 @@ Makefile
 /acconfig.h*
 /cephfs
 /crushtool
-/ceph-legacy-cli
 /ceph-authtool
 /ceph-conf
 /ceph-coverage

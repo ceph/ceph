@@ -39,7 +39,7 @@ ceph_sbin_SCRIPTS = \
 sbin_SCRIPTS = \
 	mount.fuse.ceph
 
-bin_SCRIPTS = ceph-run $(srcdir)/ceph-clsinfo ceph-debugpack ceph-rbdnamer
+bin_SCRIPTS = ceph ceph-run $(srcdir)/ceph-clsinfo ceph-debugpack ceph-rbdnamer
 dist_bin_SCRIPTS =
 # C/C++ tests to build will be appended to this
 check_PROGRAMS =
@@ -107,13 +107,6 @@ bin_PROGRAMS += ceph-mds
 ceph_mds_CXXFLAGS = ${AM_CXXFLAGS}
 
 # admin tools
-ceph_legacy_cli_SOURCES = \
-	tools/ceph.cc \
-	tools/common.cc \
-	mon/PGMap.cc \
-	common/cmdparse.cc
-ceph_legacy_cli_LDADD = $(LIBGLOBAL_LDA) $(LIBEDIT_LIBS)
-ceph_legacy_cli_CXXFLAGS = ${AM_CXXFLAGS}
 
 ceph_conf_SOURCES = ceph_conf.cc
 ceph_conf_LDADD = $(LIBGLOBAL_LDA)
@@ -127,7 +120,7 @@ ceph_filestore_dump_LDADD = libosd.a $(LIBOS_LDA) $(LIBGLOBAL_LDA) -lboost_progr
 if LINUX
 ceph_filestore_dump_LDADD += -ldl
 endif
-bin_PROGRAMS += ceph-legacy-cli ceph-conf ceph-authtool ceph_filestore_dump
+bin_PROGRAMS += ceph-conf ceph-authtool ceph_filestore_dump
 
 ceph_osdomap_tool_SOURCES = tools/ceph-osdomap-tool.cc \
 			  os/LevelDBStore.cc
@@ -182,7 +175,7 @@ ceph_syn_LDADD = libclient.la $(LIBGLOBAL_LDA)
 bin_PROGRAMS += ceph-syn
 
 base: ceph-mon ceph-osd ceph-mds \
-	ceph-legacy-cli cephfs \
+	cephfs \
 	ceph-syn \
 	rados radosgw librados-config \
 	ceph-conf monmaptool osdmaptool crushtool ceph-authtool \
@@ -1229,6 +1222,7 @@ EXTRA_DIST += \
 	$(srcdir)/upstart/radosgw.conf \
 	$(srcdir)/upstart/radosgw-all.conf \
 	$(srcdir)/upstart/radosgw-all-starter.conf \
+	ceph \
 	ceph-disk \
 	ceph-disk-prepare \
 	ceph-disk-activate \
