@@ -129,10 +129,14 @@ class RadosThread(threading.Thread):
     def run(self):
         self.retval = self.target(*self.args)
 
-def run_in_thread(target, args):
+# time in seconds between each call to t.join() for child thread
+POLL_TIME_INCR = 0.5
+
+def run_in_thread(target, args, timeout=0):
     import sys
     interrupt = False
 
+    countdown = timeout
     t = RadosThread(target, args)
 
     # allow the main thread to exit (presumably, avoid a join() on this
@@ -144,7 +148,12 @@ def run_in_thread(target, args):
     try:
         # poll for thread exit
         while t.is_alive():
-            t.join(0.5)
+            t.join(POLL_TIME_INCR)
+            if timeout:
+                countdown = countdown - POLL_TIME_INCR
+                if countdown <= 0:
+                    raise KeyboardInterrupt
+
         t.join()        # in case t exits before reaching the join() above
     except KeyboardInterrupt:
         # ..but allow SIGINT to terminate the waiting.  Note: this
@@ -292,12 +301,13 @@ Rados object in state %s." % (self.state))
         if (ret != 0):
             raise make_ex(ret, "error calling conf_set")
 
-    def connect(self):
+    def connect(self, timeout=0):
         """
         Connect to the cluster.
         """
         self.require_state("configuring")
-        ret = run_in_thread(self.librados.rados_connect, (self.cluster,))
+        ret = run_in_thread(self.librados.rados_connect, (self.cluster,),
+                            timeout)
         if (ret != 0):
             raise make_ex(ret, "error calling connect")
         self.state = "connected"
@@ -474,7 +484,7 @@ Rados object in state %s." % (self.state))
             raise make_ex(ret, "error opening ioctx '%s'" % ioctx_name)
         return Ioctx(ioctx_name, self.librados, ioctx)
 
-    def mon_command(self, cmd, inbuf):
+    def mon_command(self, cmd, inbuf, timeout=0):
         """
         mon_command(cmd, inbuf, outbuf, outbuflen, outs, outslen)
         returns (int ret, string outbuf, string outs)
@@ -489,19 +499,21 @@ Rados object in state %s." % (self.state))
         ret = run_in_thread(self.librados.rados_mon_command,
                             (self.cluster, c_char_p(cmd),
                             c_char_p(inbuf), len(inbuf),
-                            outbufp, byref(outbuflen), outsp, byref(outslen)))
+                            outbufp, byref(outbuflen), outsp, byref(outslen)),
+                            timeout)
 
-        # copy returned memory (ctypes makes a copy, not a reference)
-        my_outbuf = outbufp.contents[:(outbuflen.value)]
-        my_outs = outsp.contents[:(outslen.value)]
+        if ret == 0:
+            # copy returned memory (ctypes makes a copy, not a reference)
+            my_outbuf = outbufp.contents[:(outbuflen.value)]
+            my_outs = outsp.contents[:(outslen.value)]
 
-        # free callee's allocations
-        run_in_thread(self.librados.rados_buffer_free, (outbufp.contents,))
-        run_in_thread(self.librados.rados_buffer_free, (outsp.contents,))
+            # free callee's allocations
+            run_in_thread(self.librados.rados_buffer_free, (outbufp.contents,))
+            run_in_thread(self.librados.rados_buffer_free, (outsp.contents,))
 
         return (ret, my_outbuf, my_outs)
 
-    def osd_command(self, osdid, cmd, inbuf):
+    def osd_command(self, osdid, cmd, inbuf, timeout=0):
         """
         osd_command(osdid, cmd, inbuf, outbuf, outbuflen, outs, outslen)
         returns (int ret, string outbuf, string outs)
@@ -515,19 +527,21 @@ Rados object in state %s." % (self.state))
         ret = run_in_thread(self.librados.rados_osd_command,
                             (self.cluster, osdid, c_char_p(cmd),
                             c_char_p(inbuf), len(inbuf),
-                            outbufp, byref(outbuflen), outsp, byref(outslen)))
+                            outbufp, byref(outbuflen), outsp, byref(outslen)),
+                            timeout)
 
-        # copy returned memory
-        my_outbuf = outbufp.contents[:(outbuflen.value)]
-        my_outs = outsp.contents[:(outslen.value)]
+        if ret == 0:
+            # copy returned memory
+            my_outbuf = outbufp.contents[:(outbuflen.value)]
+            my_outs = outsp.contents[:(outslen.value)]
 
-        # free callee's allocations
-        run_in_thread(self.librados.rados_buffer_free, (outbufp.contents,))
-        run_in_thread(self.librados.rados_buffer_free, (outsp.contents,))
+            # free callee's allocations
+            run_in_thread(self.librados.rados_buffer_free, (outbufp.contents,))
+            run_in_thread(self.librados.rados_buffer_free, (outsp.contents,))
 
         return (ret, my_outbuf, my_outs)
 
-    def pg_command(self, pgid, cmd, inbuf):
+    def pg_command(self, pgid, cmd, inbuf, timeout=0):
         """
         pg_command(pgid, cmd, inbuf, outbuf, outbuflen, outs, outslen)
         returns (int ret, string outbuf, string outs)
@@ -541,15 +555,17 @@ Rados object in state %s." % (self.state))
         ret = run_in_thread(self.librados.rados_pg_command,
                             (self.cluster, c_char_p(pgid), c_char_p(cmd),
                             c_char_p(inbuf), len(inbuf),
-                            outbufp, byref(outbuflen), outsp, byref(outslen)))
+                            outbufp, byref(outbuflen), outsp, byref(outslen)),
+                            timeout)
 
-        # copy returned memory
-        my_outbuf = outbufp.contents[:(outbuflen.value)]
-        my_outs = outsp.contents[:(outslen.value)]
+        if ret == 0:
+            # copy returned memory
+            my_outbuf = outbufp.contents[:(outbuflen.value)]
+            my_outs = outsp.contents[:(outslen.value)]
 
-        # free callee's allocations
-        run_in_thread(self.librados.rados_buffer_free, (outbufp.contents,))
-        run_in_thread(self.librados.rados_buffer_free, (outsp.contents,))
+            # free callee's allocations
+            run_in_thread(self.librados.rados_buffer_free, (outbufp.contents,))
+            run_in_thread(self.librados.rados_buffer_free, (outsp.contents,))
 
         return (ret, my_outbuf, my_outs)
 

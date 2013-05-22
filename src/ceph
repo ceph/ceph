@@ -955,7 +955,8 @@ def validate_command(parsed_args, sigdict, args):
 
         return valid_dict
 
-def json_command(target=('mon', ''), prefix=None, argdict=None, inbuf=''):
+def json_command(target=('mon', ''), prefix=None, argdict=None, inbuf='',
+                 timeout=30):
     """
     Send a new_style command to a daemon using librados's
     mon_command, osd_command, or pg_command.  Prefix may be supplied
@@ -996,7 +997,7 @@ def json_command(target=('mon', ''), prefix=None, argdict=None, inbuf=''):
                 print >> sys.stderr, 'submit {} to osd.{}'.\
                     format(json.dumps(cmddict), osdid)
             ret, outbuf, outs = \
-                cluster.osd_command(osdid, json.dumps(cmddict), inbuf)
+                cluster.osd_command(osdid, json.dumps(cmddict), inbuf, timeout)
 
         elif target[0] == 'pg':
             # leave it in cmddict for the OSD to use too
@@ -1005,13 +1006,14 @@ def json_command(target=('mon', ''), prefix=None, argdict=None, inbuf=''):
                 print >> sys.stderr, 'submit {} for pgid {}'.\
                     format(json.dumps(cmddict), pgid)
             ret, outbuf, outs = \
-                cluster.pg_command(pgid, json.dumps(cmddict), inbuf)
+                cluster.pg_command(pgid, json.dumps(cmddict), inbuf, timeout)
 
         elif target[0] == 'mon':
             if verbose:
                 print >> sys.stderr, '{} to {}'.\
                     format(json.dumps(cmddict), target[0])
-            ret, outbuf, outs = cluster.mon_command(json.dumps(cmddict), inbuf)
+            ret, outbuf, outs = cluster.mon_command(json.dumps(cmddict),
+                                                    inbuf, timeout)
 
     except Exception as e:
         raise RuntimeError('"{}": exception {}'.format(prefix, e))
@@ -1180,7 +1182,7 @@ def main():
 
     try:
         cluster = rados.Rados(rados_id=name, conf=extraconf, conffile=conffile)
-        cluster.connect()
+        cluster.connect(timeout=10)
     except KeyboardInterrupt:
         print >> sys.stderr, "connection aborted"
         return 1
