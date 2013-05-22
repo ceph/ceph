@@ -27,6 +27,7 @@ cls_method_handle_t h_rgw_bucket_check_index;
 cls_method_handle_t h_rgw_bucket_rebuild_index;
 cls_method_handle_t h_rgw_bucket_prepare_op;
 cls_method_handle_t h_rgw_bucket_complete_op;
+cls_method_handle_t h_rgw_bi_log_list_op;
 cls_method_handle_t h_rgw_dir_suggest_changes;
 cls_method_handle_t h_rgw_user_usage_log_add;
 cls_method_handle_t h_rgw_user_usage_log_read;
@@ -44,8 +45,13 @@ cls_method_handle_t h_rgw_gc_remove;
 #define BI_BUCKET_OBJS_INDEX 0
 #define BI_BUCKET_LOG_INDEX  1
 
+#define BI_BUCKET_LAST_INDEX  2
+
 static string bucket_index_prefixes[] = { "", /* special handling for the objs index */
-                                          "0_" };
+                                          "0_",
+
+                                          /* this must be the last index */
+                                          "9999_",};
 
 static uint64_t get_rounded_size(uint64_t size)
 {
@@ -91,14 +97,13 @@ static void get_index_ver_key(cls_method_context_t hctx, uint64_t index_ver, str
   *key = buf;
 }
 
-static void bi_log_index_key(cls_method_context_t hctx, string& key, uint64_t index_ver)
+static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id, uint64_t index_ver)
 {
   key = BI_PREFIX_CHAR;
   key.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX]);
 
-  string k;
-  get_index_ver_key(hctx, index_ver, &k);
-  key.append(k);
+  get_index_ver_key(hctx, index_ver, &id);
+  key.append(id);
 }
 
 static int log_index_operation(cls_method_context_t hctx, string& obj, RGWModifyOp op,
@@ -116,11 +121,11 @@ static int log_index_operation(cls_method_context_t hctx, string& obj, RGWModify
   entry.state = state;
   entry.index_ver = index_ver;
   entry.tag = tag;
-  ::encode(entry, bl);
 
   string key;
+  bi_log_index_key(hctx, key, entry.id, index_ver);
 
-  bi_log_index_key(hctx, key, index_ver);
+  ::encode(entry, bl);
 
   return cls_cxx_map_set_val(hctx, key, &bl);
 }
@@ -719,6 +724,133 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
   return 0;
 }
 
+int bi_log_record_decode(bufferlist& bl, rgw_bi_log_entry& e)
+{
+  bufferlist::iterator iter = bl.begin();
+  try {
+    ::decode(e, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: failed to decode rgw_bi_log_entry");
+    return -EIO;
+  }
+  return 0;
+}
+
+static int bi_log_iterate_entries(cls_method_context_t hctx, const string& marker,
+                              string& key_iter, uint32_t max_entries, bool *truncated,
+                              int (*cb)(cls_method_context_t, const string&, rgw_bi_log_entry&, void *),
+                              void *param)
+{
+  CLS_LOG(10, "bi_log_iterate_range");
+
+  map<string, bufferlist> keys;
+  string filter_prefix, end_key;
+  uint32_t i = 0;
+  string key;
+
+  if (truncated)
+    *truncated = false;
+
+  string start_key;
+  if (key_iter.empty()) {
+    key = BI_PREFIX_CHAR;
+    key.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX]);
+    key.append(marker);
+
+    start_key = key;
+  } else {
+    start_key = key_iter;
+  }
+
+  end_key = BI_PREFIX_CHAR;
+  end_key.append(bucket_index_prefixes[BI_BUCKET_LAST_INDEX]);
+
+  CLS_LOG(0, "bi_log_iterate_entries end_key=%s\n", end_key.c_str());
+
+  string filter;
+
+  do {
+#define BI_NUM_KEYS 128
+    int ret = cls_cxx_map_get_vals(hctx, start_key, filter, BI_NUM_KEYS, &keys);
+    if (ret < 0)
+      return ret;
+
+
+    map<string, bufferlist>::iterator iter = keys.begin();
+    if (iter == keys.end())
+      break;
+
+    for (; iter != keys.end(); ++iter) {
+      const string& key = iter->first;
+      rgw_bi_log_entry e;
+
+      CLS_LOG(0, "bi_log_iterate_entries key=%s bl.length=%d\n", key.c_str(), (int)iter->second.length());
+
+      if (key.compare(end_key) >= 0)
+        return 0;
+
+      ret = bi_log_record_decode(iter->second, e);
+      if (ret < 0)
+        return ret;
+
+      if (max_entries && (i >= max_entries)) {
+        if (truncated)
+          *truncated = true;
+        key_iter = key;
+        return 0;
+      }
+
+      ret = cb(hctx, key, e, param);
+      if (ret < 0)
+        return ret;
+      i++;
+
+    }
+    --iter;
+    start_key = iter->first;
+  } while (true);
+  return 0;
+}
+
+static int bi_log_list_cb(cls_method_context_t hctx, const string& key, rgw_bi_log_entry& info, void *param)
+{
+  list<rgw_bi_log_entry> *l = (list<rgw_bi_log_entry> *)param;
+  l->push_back(info);
+  return 0;
+}
+
+static int bi_log_list_entries(cls_method_context_t hctx, const string& marker,
+			   uint32_t max, list<rgw_bi_log_entry>& entries, bool *truncated)
+{
+  string key_iter;
+  int ret = bi_log_iterate_entries(hctx, marker,
+                              key_iter, max, truncated,
+                              bi_log_list_cb, &entries);
+  return ret;
+}
+
+static int rgw_bi_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist::iterator in_iter = in->begin();
+
+  cls_rgw_bi_log_list_op op;
+  try {
+    ::decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_bi_log_list(): failed to decode entry\n");
+    return -EINVAL;
+  }
+
+  cls_rgw_bi_log_list_ret op_ret;
+  int ret = bi_log_list_entries(hctx, op.marker, op.max, op_ret.entries, &op_ret.truncated);
+  if (ret < 0)
+    return ret;
+
+  ::encode(op_ret, *out);
+
+  return 0;
+}
+
 static void usage_record_prefix_by_time(uint64_t epoch, string& key)
 {
   char buf[32];
@@ -1311,6 +1443,7 @@ void __cls_init()
   cls_register_cxx_method(h_class, "bucket_rebuild_index", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_rebuild_index, &h_rgw_bucket_rebuild_index);
   cls_register_cxx_method(h_class, "bucket_prepare_op", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_prepare_op, &h_rgw_bucket_prepare_op);
   cls_register_cxx_method(h_class, "bucket_complete_op", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_complete_op, &h_rgw_bucket_complete_op);
+  cls_register_cxx_method(h_class, "bi_log_list", CLS_METHOD_RD, rgw_bi_log_list, &h_rgw_bi_log_list_op);
   cls_register_cxx_method(h_class, "dir_suggest_changes", CLS_METHOD_RD | CLS_METHOD_WR, rgw_dir_suggest_changes, &h_rgw_dir_suggest_changes);
 
   /* usage logging */

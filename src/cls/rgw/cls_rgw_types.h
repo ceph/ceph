@@ -99,13 +99,33 @@ WRITE_CLASS_ENCODER(rgw_bucket_dir_entry_meta)
 template<class T>
 void encode_packed_val(T val, bufferlist& bl)
 {
-  unsigned char c = 0x80 | (unsigned char)sizeof(T);
-  ::encode(c, bl);
-  ::encode(val, bl);
+  if ((uint64_t)val < 0x80) {
+    ::encode((uint8_t)val, bl);
+  } else {
+    unsigned char c = 0x80;
+
+    if ((uint64_t)val < 0x100) {
+      c |= 1;
+      ::encode(c, bl);
+      ::encode((uint8_t)val, bl);
+    } else if ((uint64_t)val <= 0x10000) {
+      c |= 2;
+      ::encode(c, bl);
+      ::encode((uint16_t)val, bl);
+    } else if ((uint64_t)val <= 0x1000000) {
+      c |= 4;
+      ::encode(c, bl);
+      ::encode((uint32_t)val, bl);
+    } else {
+      c |= 8;
+      ::encode(c, bl);
+      ::encode((uint64_t)val, bl);
+    }
+  }
 }
 
 template<class T>
-void decode_packed_val(T val, bufferlist::iterator& bl)
+void decode_packed_val(T& val, bufferlist::iterator& bl)
 {
   unsigned char c;
   ::decode(c, bl);
@@ -114,7 +134,7 @@ void decode_packed_val(T val, bufferlist::iterator& bl)
     return;
   }
 
-  c ^= 0x80;
+  c &= ~0x80;
 
   switch (c) {
     case 1:

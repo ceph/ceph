@@ -50,7 +50,8 @@
     metadata put               put metadata info
     metadata rm                remove metadata info
     metadata list              list metadata info
-    mdlog show                 show metadata log
+    mdlog list                 list metadata log
+    bilog list                 list bucket index log
   options:
      --uid=<id>                user id
      --subuser=<name>          subuser name

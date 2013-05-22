@@ -384,5 +384,49 @@ struct cls_rgw_gc_remove_op {
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_remove_op)
 
+struct cls_rgw_bi_log_list_op {
+  string marker;
+  uint32_t max;
+
+  cls_rgw_bi_log_list_op() : max(0) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(marker, bl);
+    ::encode(max, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(marker, bl);
+    ::decode(max, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_bi_log_list_op)
+
+struct cls_rgw_bi_log_list_ret {
+  list<rgw_bi_log_entry> entries;
+  bool truncated;
+
+  cls_rgw_bi_log_list_ret() : truncated(false) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(entries, bl);
+    ::encode(truncated, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(entries, bl);
+    ::decode(truncated, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_bi_log_list_ret)
+
 
 #endif
