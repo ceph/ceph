@@ -37,13 +37,6 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, const string& name,
 		<< ") ";
 }
 
-void Paxos::prepare_bootstrap()
-{
-  dout(0) << __func__ << dendl;
-
-  going_to_bootstrap = true;
-}
-
 MonitorDBStore *Paxos::get_store()
 {
   return mon->store;
@@ -836,12 +829,6 @@ void Paxos::finish_proposal()
   first_committed = get_store()->get(get_name(), "first_committed");
   last_committed = get_store()->get(get_name(), "last_committed");
 
-  if (proposals.empty() && going_to_bootstrap) {
-    dout(0) << __func__ << " no more proposals; bootstraping." << dendl;
-    mon->bootstrap();
-    return;
-  }
-
   if (should_trim()) {
     trim();
   }
@@ -1097,8 +1084,6 @@ void Paxos::leader_init()
   if (!proposals.empty())
     finish_contexts(g_ceph_context, proposals, -EAGAIN);
 
-  going_to_bootstrap = false;
-
   if (mon->get_quorum().size() == 1) {
     state = STATE_ACTIVE;
     return;
@@ -1132,7 +1117,6 @@ void Paxos::restart()
   new_value.clear();
 
   state = STATE_RECOVERING;
-  going_to_bootstrap = false;
 
   if (!proposals.empty())
     finish_contexts(g_ceph_context, proposals, -EAGAIN);
