@@ -9490,6 +9490,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 
   // discover ino error
   if (p.end() && m->is_flag_error_ino()) {
+    assert(cur);
     assert(cur->is_dir());
     CDir *dir = cur->get_dirfrag(m->get_base_dir_frag());
     if (dir) {
