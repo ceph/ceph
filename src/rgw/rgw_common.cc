@@ -112,6 +112,8 @@ req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL)
   obj_size = 0;
   prot_flags = 0;
 
+  system_request = false;
+
   os_auth_token = NULL;
   time = ceph_clock_now(cct);
   perm_mask = 0;

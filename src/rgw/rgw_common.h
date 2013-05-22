@@ -699,6 +699,8 @@ struct req_state {
    RGWAccessControlPolicy *object_acl;
    RGWCORSConfiguration   *bucket_cors;
 
+   bool system_request;
+
    string canned_acl;
    bool has_acl_header;
    const char *copy_source;

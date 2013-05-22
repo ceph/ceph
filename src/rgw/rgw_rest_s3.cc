@@ -1901,13 +1901,22 @@ int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClient
   return RGWHandler_ObjStore::init(store, s, cio);
 }
 
-// subresources that we shouldn't include in the uri to sign
-static const char *nonsigned_subresources[] = {
-  "key",
-  "subuser",
-  "caps",
-  "index",
-  "object",
+static const char *signed_subresources[] = {
+  "acl",
+  "lifecycle",
+  "location",
+  "logging",
+  "notification",
+  "partNumber",
+  "policy",
+  "requestPayment",
+  "torrent",
+  "uploadId",
+  "uploads",
+  "versionId",
+  "versioning",
+  "versions",
+  "website",
   NULL
 };
 
@@ -1915,11 +1924,11 @@ static const char *nonsigned_subresources[] = {
  * ?get the canonical amazon-style header for something?
  */
 
-static void get_canon_amz_hdr(struct req_state *s, string& dest)
+static void get_canon_amz_hdr(map<string, string>& meta_map, string& dest)
 {
   dest = "";
   map<string, string>::iterator iter;
-  for (iter = s->x_meta_map.begin(); iter != s->x_meta_map.end(); ++iter) {
+  for (iter = meta_map.begin(); iter != meta_map.end(); ++iter) {
     dest.append(iter->first);
     dest.append(":");
     dest.append(iter->second);
@@ -1930,24 +1939,38 @@ static void get_canon_amz_hdr(struct req_state *s, string& dest)
 /*
  * ?get the canonical representation of the object's location
  */
-static void get_canon_resource(struct req_state *s, string& dest)
+static void get_canon_resource(const char *request_uri, map<string, string>& sub_resources, string& dest)
 {
-  dest.append(s->request_uri.c_str());
+  string s;
 
-  map<string, string>& sub = s->args.get_sub_resources();
-  map<string, string>::iterator iter;
-  for (iter = sub.begin(); iter != sub.end(); ++iter) {
-    if (iter == sub.begin())
-      dest.append("?");
+  if (request_uri)
+    s.append(request_uri);
+
+  string append_str;
+
+  const char **p = signed_subresources;
+
+  for (; *p; ++p) {
+    map<string, string>::iterator iter = sub_resources.find(*p);
+    if (iter == sub_resources.end())
+      continue;
+    
+    if (append_str.empty())
+      append_str.append("?");
     else
-      dest.append("&");     
-    dest.append(iter->first);
+      append_str.append("&");     
+    append_str.append(iter->first);
     if (!iter->second.empty()) {
-      dest.append("=");
-      dest.append(iter->second);
+      append_str.append("=");
+      append_str.append(iter->second);
     }
   }
+  if (!append_str.empty()) {
+    s.append(append_str);
+  }
   dout(10) << "get_canon_resource(): dest=" << dest << dendl;
+
+  dest = s;
 }
 
 static inline bool is_base64_for_content_md5(unsigned char c) {
@@ -1958,29 +1981,58 @@ static inline bool is_base64_for_content_md5(unsigned char c) {
  * get the header authentication  information required to
  * compute a request's signature
  */
-static bool get_auth_header(struct req_state *s, string& dest, bool qsr)
+void rgw_create_s3_auth_header(const char *method, const char *content_md5, const char *content_type, const char *date,
+                            map<string, string>& meta_map, const char *request_uri, map<string, string>& sub_resources,
+                            string& dest_str)
 {
-  dest = "";
-  if (s->method)
-    dest = s->method;
+  string dest;
+
+  if (method)
+    dest = method;
   dest.append("\n");
   
-  const char *md5 = s->env->get("HTTP_CONTENT_MD5");
-  if (md5) {
-    for (const char *p = md5; *p; p++) {
+  if (content_md5) {
+    dest.append(content_md5);
+  }
+  dest.append("\n");
+
+  if (content_type)
+    dest.append(content_type);
+  dest.append("\n");
+
+  if (date)
+    dest.append(date);
+  dest.append("\n");
+
+  string canon_amz_hdr;
+  get_canon_amz_hdr(meta_map, canon_amz_hdr);
+  dest.append(canon_amz_hdr);
+
+  string canon_resource;
+  get_canon_resource(request_uri, sub_resources, canon_resource);
+
+  dest.append(canon_resource);
+
+  dest_str = dest;
+}
+
+/*
+ * get the header authentication  information required to
+ * compute a request's signature
+ */
+static bool get_auth_header(struct req_state *s, string& dest, bool qsr)
+{
+  const char *content_md5 = s->env->get("HTTP_CONTENT_MD5");
+  if (content_md5) {
+    for (const char *p = content_md5; *p; p++) {
       if (!is_base64_for_content_md5(*p)) {
         dout(0) << "NOTICE: bad content-md5 provided (not base64), aborting request p=" << *p << " " << (int)*p << dendl;
         return false;
       }
     }
-    dest.append(md5);
   }
-  dest.append("\n");
 
-  const char *type = s->env->get("CONTENT_TYPE");
-  if (type)
-    dest.append(type);
-  dest.append("\n");
+  const char *content_type = s->env->get("CONTENT_TYPE");
 
   string date;
   if (qsr) {
@@ -2010,33 +2062,12 @@ static bool get_auth_header(struct req_state *s, string& dest, bool qsr)
     s->header_time = utime_t(timegm(&t), 0);
   }
 
-  if (date.size())
-      dest.append(date);
-  dest.append("\n");
+  map<string, string>& meta_map = s->x_meta_map;
+  map<string, string>& sub_resources = s->args.get_sub_resources();
 
-  string canon_amz_hdr;
-  get_canon_amz_hdr(s, canon_amz_hdr);
-  dest.append(canon_amz_hdr);
-
-  string canon_resource;
-  get_canon_resource(s, canon_resource);
-
-  map<string, string> sub_resources = s->args.get_sub_resources();
-  map<string, string>::iterator sres_iter;
-
-  for (const char **sres = nonsigned_subresources; *sres; ++sres) {
-    sres_iter = sub_resources.find(*sres);
-    if (sres_iter != sub_resources.end()) {
-      size_t pos = canon_resource.find(*sres) -1;
-      size_t len = strlen(*sres) + 1;
-      std::string sres_val = sres_iter->second;
-      if (!sres_val.empty())
-        len += sres_val.size();
-      canon_resource.erase(pos, len);
-    }
-  }
-
-  dest.append(canon_resource);
+  rgw_create_s3_auth_header(s->method, content_md5, content_type, date.c_str(),
+                            meta_map, s->request_uri.c_str(), sub_resources,
+                            dest);
 
   return true;
 }
@@ -2148,6 +2179,19 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
 
   if (auth_sign.compare(b64) != 0)
     return -EPERM;
+
+  if (s->user.system) {
+    string effective_uid = s->args.get("rgwx-uid");
+    RGWUserInfo effective_user;
+    if (!effective_uid.empty()) {
+      ret = rgw_get_user_info_by_uid(store, effective_uid, effective_user);
+      if (ret < 0) {
+        ldout(s->cct, 0) << "User lookup failed!" << dendl;
+        return -ENOENT;
+      }
+      s->user = effective_user;
+    }
+  }
 
   return  0;
 }
