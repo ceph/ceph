@@ -1829,7 +1829,7 @@ void OSD::load_pgs()
     PG::RecoveryCtx rctx(0, 0, 0, 0, 0, 0);
     pg->handle_loaded(&rctx);
 
-    dout(10) << "load_pgs loaded " << *pg << " " << pg->log << dendl;
+    dout(10) << "load_pgs loaded " << *pg << " " << pg->pg_log.get_log() << dendl;
     pg->unlock();
   }
   dout(10) << "load_pgs done" << dendl;
@@ -2952,7 +2952,7 @@ void OSD::RemoveWQ::_process(pair<PGRef, DeletingStateRef> item)
     return;
 
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  PG::clear_info_log(
+  PGLog::clear_info_log(
     pg->info.pgid,
     OSD::make_infos_oid(),
     pg->log_oid,
@@ -3530,8 +3530,10 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
 	pg->lock();
 
 	fout << *pg << std::endl;
-	std::map<hobject_t, pg_missing_t::item>::iterator mend = pg->missing.missing.end();
-	std::map<hobject_t, pg_missing_t::item>::iterator mi = pg->missing.missing.begin();
+	std::map<hobject_t, pg_missing_t::item>::const_iterator mend =
+	  pg->pg_log.get_missing().missing.end();
+	std::map<hobject_t, pg_missing_t::item>::const_iterator mi =
+	  pg->pg_log.get_missing().missing.begin();
 	for (; mi != mend; ++mi) {
 	  fout << mi->first << " -> " << mi->second << std::endl;
 	  map<hobject_t, set<int> >::const_iterator mli =
@@ -5638,7 +5640,7 @@ void OSD::handle_pg_trim(OpRequestRef op)
     } else {
       // primary is instructing us to trim
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      pg->trim(*t, m->trim_to);
+      pg->pg_log.trim(*t, m->trim_to, pg->info, pg->log_oid);
       pg->dirty_info = true;
       pg->write_if_dirty(*t);
       int tr = store->queue_transaction(pg->osr.get(), t,
