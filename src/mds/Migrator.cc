@@ -1992,7 +1992,8 @@ void Migrator::import_remove_pins(CDir *dir, set<CDir*>& bounds)
       continue;
     did.insert(p->ino);
     CInode *in = cache->get_inode(p->ino);
-      in->put_stickydirs();
+    assert(in);
+    in->put_stickydirs();
   }
 
   if (import_state[dir->dirfrag()] >= IMPORT_PREPPED) {
