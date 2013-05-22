@@ -59,7 +59,7 @@
     ceph osd crush rule create-simple <name> <root> <failure-domain>
     ceph osd create [<uuid>]
     ceph osd rm <osd-id> [<osd-id>...]
-    ceph osd lost [--yes-i-really-mean-it]
+    ceph osd lost <osd-id> [--yes-i-really-mean-it]
     ceph osd reweight <osd-id> <weight>
     ceph osd blacklist add <address>[:source_port] [time]
     ceph osd blacklist rm <address>[:source_port]
