@@ -885,7 +885,8 @@ void RGWCreateBucket::execute()
   attrs[RGW_ATTR_ACL] = aclbl;
 
   s->bucket.name = s->bucket_name_str;
-  ret = store->create_bucket(s->user.user_id, s->bucket, attrs, true);
+  RGWObjVersionTracker objv_tracker;
+  ret = store->create_bucket(s->user.user_id, s->bucket, attrs, objv_tracker, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can recover
    * from a partial create by retrying it. */
   ldout(s->cct, 20) << "rgw_create_bucket returned ret=" << ret << " bucket=" << s->bucket << dendl;

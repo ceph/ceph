@@ -644,6 +644,7 @@ public:
    */
   virtual int create_bucket(string& owner, rgw_bucket& bucket,
                             map<std::string,bufferlist>& attrs,
+                            RGWObjVersionTracker& objv_tracker,
                             bool exclusive = true);
   virtual int add_bucket_placement(std::string& new_pool);
   virtual int remove_bucket_placement(std::string& new_pool);
