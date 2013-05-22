@@ -5283,7 +5283,6 @@ void ReplicatedPG::submit_push_data(
 void ReplicatedPG::submit_push_complete(ObjectRecoveryInfo &recovery_info,
 					ObjectStore::Transaction *t)
 {
-  remove_snap_mapped_object(*t, recovery_info.soid);
   t->collection_move(coll, get_temp_coll(t), recovery_info.soid);
   for (map<hobject_t, interval_set<uint64_t> >::const_iterator p =
 	 recovery_info.clone_subset.begin();
