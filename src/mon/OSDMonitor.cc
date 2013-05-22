@@ -1600,6 +1600,7 @@ void OSDMonitor::handle_osd_timeouts(const utime_t &now,
       if (diff > timeo) {
 	derr << "no osd or pg stats from osd." << i << " since " << t->second << ", " << diff
 	     << " seconds ago.  marking down" << dendl;
+	mon->clog.info() << "osd." << i << " marked down after no pg stats for " << diff << "seconds\n";
 	pending_inc.new_state[i] = CEPH_OSD_UP;
 	new_down = true;
       }
