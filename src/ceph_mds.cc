@@ -219,7 +219,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  pick_addresses(g_ceph_context);
+  pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 
   // Check for special actions
   if (!action.empty()) {
