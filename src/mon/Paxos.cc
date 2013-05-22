@@ -1087,6 +1087,7 @@ void Paxos::shutdown() {
   finish_contexts(g_ceph_context, waiting_for_commit, -ECANCELED);
   finish_contexts(g_ceph_context, waiting_for_readable, -ECANCELED);
   finish_contexts(g_ceph_context, waiting_for_active, -ECANCELED);
+  finish_contexts(g_ceph_context, proposals, -ECANCELED);
 }
 
 void Paxos::leader_init()
@@ -1094,7 +1095,7 @@ void Paxos::leader_init()
   cancel_events();
   new_value.clear();
   if (!proposals.empty())
-    proposals.clear();
+    finish_contexts(g_ceph_context, proposals, -EAGAIN);
 
   going_to_bootstrap = false;
 
@@ -1121,6 +1122,7 @@ void Paxos::peon_init()
   // no chance to write now!
   finish_contexts(g_ceph_context, waiting_for_writeable, -EAGAIN);
   finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
+  finish_contexts(g_ceph_context, proposals, -EAGAIN);
 }
 
 void Paxos::restart()
@@ -1128,12 +1130,12 @@ void Paxos::restart()
   dout(10) << "restart -- canceling timeouts" << dendl;
   cancel_events();
   new_value.clear();
-  dout(10) << __func__ << " -- clearing queued proposals" << dendl;
-  if (!proposals.empty())
-    proposals.clear();
 
   state = STATE_RECOVERING;
   going_to_bootstrap = false;
+
+  if (!proposals.empty())
+    finish_contexts(g_ceph_context, proposals, -EAGAIN);
 
   finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
   finish_contexts(g_ceph_context, waiting_for_active, -EAGAIN);
