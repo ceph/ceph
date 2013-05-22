@@ -1146,38 +1146,83 @@ int OSD::init()
 
   AdminSocket *admin_socket = cct->get_admin_socket();
   asok_hook = new OSDSocketHook(this);
-  r = admin_socket->register_command("dump_ops_in_flight", asok_hook,
+  r = admin_socket->register_command("dump_ops_in_flight",
+				     "dump_ops_in_flight", asok_hook,
 				     "show the ops currently in flight");
   assert(r == 0);
-  r = admin_socket->register_command("dump_historic_ops", asok_hook,
+  r = admin_socket->register_command("dump_historic_ops", "dump_historic_ops",
+				     asok_hook,
 				     "show slowest recent ops");
   assert(r == 0);
-  r = admin_socket->register_command("dump_op_pq_state", asok_hook,
+  r = admin_socket->register_command("dump_op_pq_state", "dump_op_pq_state",
+				     asok_hook,
 				     "dump op priority queue state");
   assert(r == 0);
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
-  r = admin_socket->register_command("setomapval", test_ops_hook,
-                              "setomapval <pool-id> <obj-name> <key> <val>");
+  r = admin_socket->register_command(
+   "setomapval",
+   "setomapval " \
+   "name=pool,type=CephPoolname " \
+   "name=objname,type=CephObjectname " \
+   "name=key,type=CephString "\
+   "name=val,type=CephString",
+   test_ops_hook,
+   "set omap key");
   assert(r == 0);
-  r = admin_socket->register_command("rmomapkey", test_ops_hook,
-                               "rmomapkey <pool-id> <obj-name> <key>");
+  r = admin_socket->register_command(
+    "rmomapkey",
+    "rmomapkey " \
+    "name=pool,type=CephPoolname " \
+    "name=objname,type=CephObjectname " \
+    "name=key,type=CephString",
+    test_ops_hook,
+    "remove omap key");
   assert(r == 0);
-  r = admin_socket->register_command("setomapheader", test_ops_hook,
-                               "setomapheader <pool-id> <obj-name> <header>");
-  assert(r == 0);
-  r = admin_socket->register_command("getomap", test_ops_hook,
-                               "getomap <pool-id> <obj-name>");
-  assert(r == 0);
-  r = admin_socket->register_command("truncobj", test_ops_hook,
-                               "truncobj <pool-id> <obj-name> <len>");
+  r = admin_socket->register_command(
+    "setomapheader",
+    "setomapheader " \
+    "name=pool,type=CephPoolname " \
+    "name=objname,type=CephObjectname " \
+    "name=header,type=CephString",
+    test_ops_hook,
+    "set omap header");
   assert(r == 0);
 
-  r = admin_socket->register_command("injectdataerr", test_ops_hook,
-				     "injectdataerr <pool-id> <obj-name>");
+  r = admin_socket->register_command(
+    "getomap",
+    "getomap " \
+    "name=pool,type=CephPoolname " \
+    "name=objname,type=CephObjectname",
+    test_ops_hook,
+    "output entire object map");
   assert(r == 0);
 
-  r = admin_socket->register_command("injectmdataerr", test_ops_hook,
-				     "injectmdataerr <pool-id> <obj-name>");
+  r = admin_socket->register_command(
+    "truncobj",
+    "truncobj " \
+    "name=pool,type=CephPoolname " \
+    "name=objname,type=CephObjectname " \
+    "name=len,type=CephInt",
+    test_ops_hook,
+    "truncate object to length");
+  assert(r == 0);
+
+  r = admin_socket->register_command(
+    "injectdataerr",
+    "injectdataerr " \
+    "name=pool,type=CephPoolname " \
+    "name=objname,type=CephObjectname",
+    test_ops_hook,
+    "inject data error into omap");
+  assert(r == 0);
+
+  r = admin_socket->register_command(
+    "injectmdataerr",
+    "injectmdataerr " \
+    "name=pool,type=CephPoolname " \
+    "name=objname,type=CephObjectname",
+    test_ops_hook,
+    "inject metadata error");
   assert(r == 0);
 
   service.init();
