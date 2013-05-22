@@ -2679,7 +2679,3 @@ void Migrator::logged_import_caps(CInode *in,
   mds->send_message_mds(new MExportCapsAck(in->ino()), from);
 }
 
-
-
-
-
