@@ -4468,6 +4468,7 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
   }
 
   ObjectContext *obc = get_object_context(soid, oloc, false);
+  assert(obc);
 
   // clone
   dout(20) << "find_object_context  " << soid << " snaps " << obc->obs.oi.snaps << dendl;
@@ -4542,6 +4543,7 @@ void ReplicatedPG::add_object_context_to_pg_stat(ObjectContext *obc, pg_stat_t *
 				     oi.soid.get_key(),
 				     oi.soid.hash,
 				     false);
+    assert(obc->ssc);
 
     // subtract off clone overlap
     if (obc->ssc->snapset.clone_overlap.count(oi.soid.snap)) {
@@ -5067,6 +5069,7 @@ int ReplicatedPG::pull(
 
     // check snapset
     SnapSetContext *ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, false);
+    assert(ssc);
     dout(10) << " snapset " << ssc->snapset << dendl;
     calc_clone_subsets(ssc->snapset, soid, missing, info.last_backfill,
 		       recovery_info.copy_subset,
@@ -5152,6 +5155,7 @@ void ReplicatedPG::push_to_replica(
     }
     
     SnapSetContext *ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, false);
+    assert(ssc);
     dout(15) << "push_to_replica snapset is " << ssc->snapset << dendl;
     calc_clone_subsets(ssc->snapset, soid, peer_missing[peer],
 		       peer_info[peer].last_backfill,
@@ -5161,6 +5165,7 @@ void ReplicatedPG::push_to_replica(
     // pushing head or unversioned object.
     // base this on partially on replica's clones?
     SnapSetContext *ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, false);
+    assert(ssc);
     dout(15) << "push_to_replica snapset is " << ssc->snapset << dendl;
     calc_head_subsets(obc, ssc->snapset, soid, peer_missing[peer],
 		      peer_info[peer].last_backfill,
@@ -5344,6 +5349,7 @@ ObjectRecoveryInfo ReplicatedPG::recalc_subsets(const ObjectRecoveryInfo& recove
 					    recovery_info.soid.get_key(),
 					    recovery_info.soid.hash,
 					    false);
+  assert(ssc);
   ObjectRecoveryInfo new_info = recovery_info;
   new_info.copy_subset.clear();
   new_info.clone_subset.clear();
