@@ -55,12 +55,39 @@ class RGWMetadataLog {
   RGWRados *store;
   string prefix;
 
+  void get_shard_oid(int id, string& oid) {
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d", id);
+    oid = prefix + buf;
+  }
+
 public:
   RGWMetadataLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store) {
     prefix = META_LOG_OBJ_PREFIX;
   }
 
   int add_entry(RGWRados *store, string& section, string& key, bufferlist& bl);
+
+  struct LogListCtx {
+    RGWRados *store;
+    int cur_shard;
+    string marker;
+    utime_t from_time;
+    utime_t end_time;
+
+    string cur_oid;
+
+    bool done;
+
+    LogListCtx(RGWRados *_store) : store(_store), cur_shard(0), done(false) {}
+  };
+
+  void init_list_entries(RGWRados *store, utime_t& from_time, utime_t& end_time, void **handle);
+  void complete_list_entries(void *handle);
+  int list_entries(void *handle,
+                   int max_entries,
+                   list<cls_log_entry>& entries,
+                   bool *truncated);
 };
 
 class RGWMetadataManager {
