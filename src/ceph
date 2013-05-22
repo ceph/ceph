@@ -771,7 +771,7 @@ def parse_cmdargs(args=None, target='', first=False):
     parser.add_argument('--watch-error', action='store_true',
                         help='watch error events')
     parser.add_argument('-v', '--verbose', action="store_true")
-    parser.add_argument('--concise')
+    parser.add_argument('--concise', dest='verbose', action="store_false")
     parser.add_argument('-f', '--format', choices=['json', 'json-pretty',
                         'xml', 'xml-pretty', 'plain'], dest='output_format')
     # for pg dump_stuck
