@@ -320,7 +320,7 @@ for name in $what; do
 			"$id" \
 			"${osd_weight:-${defaultweight:-1}}" \
 			root=default \
-			host="$(hostname -s)" \
+			host="$host" \
 			$osd_location \
 			|| :
 		fi
