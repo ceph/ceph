@@ -378,20 +378,20 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	break;
 
       case IMPORT_DISCOVERED:
-	dout(10) << "import state=discovered : unpinning inode " << *diri << dendl;
 	assert(diri);
+	dout(10) << "import state=discovered : unpinning inode " << *diri << dendl;
 	import_reverse_discovered(df, diri);
 	break;
 
       case IMPORT_PREPPING:
-	dout(10) << "import state=prepping : unpinning base+bounds " << *dir << dendl;
 	assert(dir);
+	dout(10) << "import state=prepping : unpinning base+bounds " << *dir << dendl;
 	import_reverse_prepping(dir);
 	break;
 
       case IMPORT_PREPPED:
-	dout(10) << "import state=prepped : unpinning base+bounds, unfreezing " << *dir << dendl;
 	assert(dir);
+	dout(10) << "import state=prepped : unpinning base+bounds, unfreezing " << *dir << dendl;
 	{
 	  set<CDir*> bounds;
 	  cache->get_subtree_bounds(dir, bounds);
