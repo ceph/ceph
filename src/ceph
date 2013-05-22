@@ -1028,17 +1028,18 @@ def admin_socket(asok_path, cmd):
 
         len_str = sock.recv(4)
         l, = struct.unpack(">I", len_str)
+        ret = ''
 
         got = 0
         while got < l:
             bit = sock.recv(l - got)
-            print bit
+            ret += bit
             got += len(bit)
 
     except Exception as e:
         raise RuntimeError('exception: {}'.format(e))
 
-    return 0
+    return ret
 
 
 def ceph_conf(field, name):
@@ -1213,16 +1214,19 @@ def main():
 
     # For now, --admin-daemon is handled as usual
     if parsed_args.admin_socket:
-        return admin_socket(parsed_args.admin_socket, childargs)
+        print admin_socket(parsed_args.admin_socket, childargs)
+        return 0
 
     if len(childargs) > 0 and childargs[0] == "daemon":
         if len(childargs) > 2:
             if childargs[1].find('/') >= 0:
-                return admin_socket(childargs[1], childargs[2:])
+                print admin_socket(childargs[1], childargs[2:])
+                return 0
             else:
                 # try resolve daemon name
                 path = ceph_conf('admin_socket', childargs[1])
-                return admin_socket(path, childargs[2:])
+                print admin_socket(path, childargs[2:])
+                return 0
         else:
             print >> sys.stderr, 'Daemon requires at least 2 arguments'
             return 1
