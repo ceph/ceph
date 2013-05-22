@@ -793,8 +793,22 @@ def parse_cmdargs(args=None, target='', first=False):
 
         parser.print_help()
         help_for_target(target=('mon', ''))
+
         sys.stdout.write("\nOSD tell commands and pg pgid commands:\n\n")
         help_for_target(target=('osd', '0'))
+
+        # XXX: all daemons?
+        # XXX: get daemon name from conf or some other output?
+
+        sys.stdout.write("\nOSD daemon commands:\n\n")
+        sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'osd.0'), ['get_command_descriptions']))))
+
+        sys.stdout.write("\nmon daemon commands:\n\n")
+        sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'mon.a'), ['get_command_descriptions']))))
+
+        sys.stdout.write("\nmds daemon commands:\n\n")
+        sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'mds.a'), ['get_command_descriptions']))))
+    
         sys.exit(0)
 
     return parsed_args, extras
