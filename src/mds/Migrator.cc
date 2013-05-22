@@ -1777,6 +1777,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
 	dout(10) << "  had " << *cur << dendl;
       } else if (start == 'f') {
 	in = cache->get_inode(df.ino);
+	assert(in);
 	dout(10) << "  had " << *in << dendl;
 	cur = cache->add_replica_dir(q, in, oldauth, finished);
  	dout(10) << "  added " << *cur << dendl;
