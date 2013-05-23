@@ -69,7 +69,7 @@ void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& 
 }
 void rgw_bucket_entry_ver::dump(Formatter *f) const
 {
-  f->dump_unsigned("pool", pool);
+  f->dump_int("pool", pool);
   f->dump_unsigned("epoch", epoch);
 }
 
@@ -135,6 +135,8 @@ void rgw_bucket_dir_header::generate_test_instances(list<rgw_bucket_dir_header*>
 
 void rgw_bucket_dir_header::dump(Formatter *f) const
 {
+  f->dump_int("ver", ver);
+  f->dump_int("master_ver", master_ver);
   map<uint8_t, struct rgw_bucket_category_stats>::const_iterator iter = stats.begin();
   f->open_array_section("stats");
   for (; iter != stats.end(); ++iter) {
