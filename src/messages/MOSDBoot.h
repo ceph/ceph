@@ -22,12 +22,12 @@
 
 class MOSDBoot : public PaxosServiceMessage {
 
-  static const int HEAD_VERSION = 3;
+  static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 2;
 
  public:
   OSDSuperblock sb;
-  entity_addr_t hb_addr;
+  entity_addr_t hb_back_addr, hb_front_addr;
   entity_addr_t cluster_addr;
   epoch_t boot_epoch;  // last epoch this daemon was added to the map (if any)
 
@@ -35,11 +35,15 @@ class MOSDBoot : public PaxosServiceMessage {
     : PaxosServiceMessage(MSG_OSD_BOOT, 0, HEAD_VERSION, COMPAT_VERSION),
       boot_epoch(0)
   { }
-  MOSDBoot(OSDSuperblock& s, epoch_t be, const entity_addr_t& hb_addr_ref,
+  MOSDBoot(OSDSuperblock& s, epoch_t be,
+	   const entity_addr_t& hb_back_addr_ref,
+	   const entity_addr_t& hb_front_addr_ref,
            const entity_addr_t& cluster_addr_ref)
     : PaxosServiceMessage(MSG_OSD_BOOT, s.current_epoch, HEAD_VERSION, COMPAT_VERSION),
       sb(s),
-      hb_addr(hb_addr_ref), cluster_addr(cluster_addr_ref),
+      hb_back_addr(hb_back_addr_ref),
+      hb_front_addr(hb_front_addr_ref),
+      cluster_addr(cluster_addr_ref),
       boot_epoch(be)
   { }
   
@@ -55,19 +59,22 @@ public:
   void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(sb, payload);
-    ::encode(hb_addr, payload);
+    ::encode(hb_back_addr, payload);
     ::encode(cluster_addr, payload);
     ::encode(boot_epoch, payload);
+    ::encode(hb_front_addr, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(sb, p);
-    ::decode(hb_addr, p);
+    ::decode(hb_back_addr, p);
     if (header.version >= 2)
       ::decode(cluster_addr, p);
     if (header.version >= 3)
       ::decode(boot_epoch, p);
+    if (header.version >= 4)
+      ::decode(hb_front_addr, p);
   }
 };
 
