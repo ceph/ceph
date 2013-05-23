@@ -110,10 +110,10 @@ struct RGWRequest
   }
 
   void log(struct req_state *s, const char *msg) {
-    if (s->method && req_str.size() == 0) {
-      req_str = s->method;
+    if (s->info.method && req_str.size() == 0) {
+      req_str = s->info.method;
       req_str.append(" ");
-      req_str.append(s->request_uri);
+      req_str.append(s->info.request_uri);
     }
     utime_t t = ceph_clock_now(g_ceph_context) - ts;
     dout(2) << "req " << id << ":" << t << ":" << s->dialect << ":" << req_str << ":" << (op ? op->name() : "") << ":" << msg << dendl;

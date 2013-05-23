@@ -26,8 +26,6 @@ using namespace std;
 struct req_state;
 class RGWHandler;
 
-void rgw_get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs);
-
 
 /**
  * Provide the base class for all ops.
