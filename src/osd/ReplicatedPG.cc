@@ -2673,6 +2673,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	dout(10) << "watch: ctx->obc=" << (void *)obc << " cookie=" << cookie
 		 << " oi.version=" << oi.version.version << " ctx->at_version=" << ctx->at_version << dendl;
 	dout(10) << "watch: oi.user_version=" << oi.user_version.version << dendl;
+	dout(10) << "watch: peer_addr="
+	  << ctx->op->request->get_connection()->get_peer_addr() << dendl;
 
 	// FIXME: where does the timeout come from?
 	watch_info_t w(cookie, 30,
@@ -4179,6 +4181,38 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
 
 // -------------------------------------------------------
 
+void ReplicatedPG::check_blacklisted_watchers()
+{
+  dout(20) << "ReplicatedPG::check_blacklisted_watchers for pg " << get_pgid() << dendl;
+  for (map<hobject_t, ObjectContext*>::iterator i = object_contexts.begin();
+       i != object_contexts.end();
+       ++i) {
+    i->second->get();
+    check_blacklisted_obc_watchers(i->second);
+    put_object_context(i->second);
+  }
+}
+
+void ReplicatedPG::check_blacklisted_obc_watchers(ObjectContext *obc)
+{
+  dout(20) << "ReplicatedPG::check_blacklisted_obc_watchers for obc " << obc->obs.oi.soid << dendl;
+  for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator k =
+	 obc->watchers.begin();
+	k != obc->watchers.end();
+	) {
+    //Advance iterator now so handle_watch_timeout() can erase element
+    map<pair<uint64_t, entity_name_t>, WatchRef>::iterator j = k++;
+    dout(30) << "watch: Found " << j->second->get_entity() << " cookie " << j->second->get_cookie() << dendl;
+    entity_addr_t ea = j->second->get_peer_addr();
+    dout(30) << "watch: Check entity_addr_t " << ea << dendl;
+    if (get_osdmap()->is_blacklisted(ea)) {
+      dout(10) << "watch: Found blacklisted watcher for " << ea << dendl;
+      assert(j->second->get_pg() == this);
+      handle_watch_timeout(j->second);
+    }
+  }
+}
+
 void ReplicatedPG::populate_obc_watchers(ObjectContext *obc)
 {
   assert(is_active());
@@ -4209,6 +4243,8 @@ void ReplicatedPG::populate_obc_watchers(ObjectContext *obc)
 	make_pair(p->first.first, p->first.second),
 	watch));
   }
+  // Look for watchers from blacklisted clients and drop
+  check_blacklisted_obc_watchers(obc);
 }
 
 void ReplicatedPG::handle_watch_timeout(WatchRef watch)
