@@ -248,8 +248,8 @@ bool OSDMonitor::thrash()
     dout(5) << "thrash_map osd." << o << " up" << dendl;
     pending_inc.new_state[o] = CEPH_OSD_UP;
     pending_inc.new_up_client[o] = entity_addr_t();
-    pending_inc.new_up_internal[o] = entity_addr_t();
-    pending_inc.new_hb_up[o] = entity_addr_t();
+    pending_inc.new_up_cluster[o] = entity_addr_t();
+    pending_inc.new_hb_back_up[o] = entity_addr_t();
     pending_inc.new_weight[o] = CEPH_OSD_IN;
     thrash_last_up_osd = o;
   }
@@ -1090,7 +1090,9 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
 bool OSDMonitor::prepare_boot(MOSDBoot *m)
 {
   dout(7) << "prepare_boot from " << m->get_orig_source_inst() << " sb " << m->sb
-	  << " cluster_addr " << m->cluster_addr << " hb_addr " << m->hb_addr
+	  << " cluster_addr " << m->cluster_addr
+	  << " hb_back_addr " << m->hb_back_addr
+	  << " hb_front_addr " << m->hb_front_addr
 	  << dendl;
 
   assert(m->get_orig_source().is_osd());
@@ -1126,8 +1128,10 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     // mark new guy up.
     pending_inc.new_up_client[from] = m->get_orig_source_addr();
     if (!m->cluster_addr.is_blank_ip())
-      pending_inc.new_up_internal[from] = m->cluster_addr;
-    pending_inc.new_hb_up[from] = m->hb_addr;
+      pending_inc.new_up_cluster[from] = m->cluster_addr;
+    pending_inc.new_hb_back_up[from] = m->hb_back_addr;
+    if (!m->hb_front_addr.is_blank_ip())
+      pending_inc.new_hb_front_up[from] = m->hb_front_addr;
 
     // mark in?
     if ((g_conf->mon_osd_auto_mark_auto_out_in && (oldstate & CEPH_OSD_AUTOOUT)) ||
