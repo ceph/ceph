@@ -398,6 +398,7 @@ librgw_a_SOURCES =  \
 	rgw/rgw_env.cc \
 	rgw/rgw_cors.cc \
 	rgw/rgw_cors_s3.cc \
+        rgw/rgw_auth_s3.cc \
 	rgw/rgw_metadata.cc
 librgw_a_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librgw_a_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
@@ -2076,6 +2077,7 @@ noinst_HEADERS = \
 	rgw/rgw_rest.h\
 	rgw/rgw_rest_swift.h\
 	rgw/rgw_rest_s3.h\
+	rgw/rgw_auth_s3.h\
 	rgw/rgw_rest_admin.h\
 	rgw/rgw_rest_usage.h\
 	rgw/rgw_rest_user.h\

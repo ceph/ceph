@@ -1,5 +1,6 @@
 #include "rgw_common.h"
 #include "rgw_rest_client.h"
+#include "rgw_auth_s3.h"
 #include "rgw_http_errors.h"
 
 #include "common/ceph_crypto_cms.h"
@@ -64,46 +65,28 @@ int RGWRESTClient::execute(RGWAccessKey& key, const char *method, const char *re
   }
   new_url.append(new_resource);
 
-  if (params.size()) {
-    new_url.append("?");
-
-    list<pair<string, string> >::iterator iter;
-    for (iter = params.begin(); iter != params.end(); ++iter) {
-      if (iter != params.begin())
-        new_url.append("?");
-      new_url.append(iter->first + "=" + iter->second);
-    }
-  }
-
   utime_t tm = ceph_clock_now(cct);
   stringstream s;
   tm.gmtime(s);
   string date_str = s.str();
   headers.push_back(make_pair<string, string>("HTTP_DATE", date_str));
 
-  string canonical_header = string(method) + " " +
-                            "\n" + /* CONTENT_MD5 */
-                            "\n" + /* CONTENT_TYPE */
-                            date_str + "\n" +
-                            "\n" + /* amz headers */
-                            new_resource;
+  string canonical_header;
+  map<string, string> meta_map;
+  map<string, string> sub_resources;
+  rgw_create_s3_canonical_header(method, NULL, NULL, date_str.c_str(),
+                            meta_map, new_url.c_str(), sub_resources,
+                            canonical_header);
 
-  string& k = key.key;
-  
-  char hmac_sha1[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
-  calc_hmac_sha1(k.c_str(), k.size(), canonical_header.c_str(), canonical_header.size(), hmac_sha1);
-
-#define ARMOR_LEN 64
-  char b64[ARMOR_LEN]; /* 64 is really enough */
-  int ret = ceph_armor(b64, b64 + ARMOR_LEN, hmac_sha1,
-		       hmac_sha1 + CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
+  string digest;
+  int ret = rgw_get_s3_header_digest(canonical_header, key.key, digest);
   if (ret < 0) {
-    dout(10) << "ceph_armor failed" << dendl;
-    return -EPERM;
+    return ret;
   }
-  b64[ret] = '\0';
 
-  string auth_hdr = "AWS " + key.id + ":" + b64;
+  string auth_hdr = "AWS " + key.id + ":" + digest;
+
+  ldout(cct, 15) << "generated auth header: " << auth_hdr << dendl;
 
   headers.push_back(make_pair<string, string>("AUTHORIZATION", auth_hdr));
   int r = process(method, new_url.c_str());
@@ -112,5 +95,4 @@ int RGWRESTClient::execute(RGWAccessKey& key, const char *method, const char *re
 
   return rgw_http_error_to_errno(status);
 }
-
 
