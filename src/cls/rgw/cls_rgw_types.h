@@ -155,14 +155,14 @@ struct rgw_bucket_entry_ver {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode_packed_val(pool, bl);
-    ::encode_packed_val(epoch, bl);
+    ::encode(pool, bl);
+    ::encode(epoch, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
-    ::decode_packed_val(pool, bl);
-    ::decode_packed_val(epoch, bl);
+    ::decode(pool, bl);
+    ::decode(epoch, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -183,7 +183,7 @@ struct rgw_bucket_dir_entry {
     exists(false) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(4, 3, bl);
+    ENCODE_START(4, 4, bl);
     ::encode(name, bl);
     ::encode(ver, bl);
     ::encode(exists, bl);
@@ -198,7 +198,7 @@ struct rgw_bucket_dir_entry {
     if (struct_v >= 4) {
       ::decode(ver, bl);
     } else {
-      ver.pool = 0;
+      ver.pool = (uint64_t) -1;
       ::decode(ver.epoch, bl);
     }
     ::decode(exists, bl);

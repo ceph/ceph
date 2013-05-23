@@ -92,7 +92,7 @@ struct rgw_cls_obj_complete_op
     if (struct_v >= 5) {
       ::decode(ver, bl);
     } else {
-      ver.pool = 0;
+      ver.pool = (uint64_t) -1;
       ::decode(ver.epoch, bl);
     }
     ::decode(meta, bl);
