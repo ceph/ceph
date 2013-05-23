@@ -191,7 +191,7 @@ struct rgw_bucket_dir_entry {
     ::encode(meta, bl);
     ::encode(pending_map, bl);
     ::encode(locator, bl);
-    ::encode_packed_val(index_ver, bl);
+    ::encode(index_ver, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -210,7 +210,7 @@ struct rgw_bucket_dir_entry {
       ::decode(locator, bl);
     }
     if (struct_v >= 5) {
-      ::decode_packed_val(index_ver, bl);
+      ::decode(index_ver, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -242,7 +242,7 @@ struct rgw_bi_log_entry {
     ::encode(c, bl);
     c = (uint8_t)state;
     ::encode(c, bl);
-    encode_packed_val(index_ver, bl);
+    ::encode(index_ver, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -257,7 +257,7 @@ struct rgw_bi_log_entry {
     op = (RGWModifyOp)c;
     ::decode(c, bl);
     state = (RGWPendingState)c;
-    decode_packed_val(index_ver, bl);
+    ::decode(index_ver, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
