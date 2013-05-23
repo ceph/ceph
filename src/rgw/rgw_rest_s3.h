@@ -306,10 +306,10 @@ public:
 class RGWHandler_ObjStore_Bucket_S3 : public RGWHandler_ObjStore_S3 {
 protected:
   bool is_acl_op() {
-    return s->args.exists("acl");
+    return s->info.args.exists("acl");
   }
   bool is_cors_op() {
-      return s->args.exists("cors");
+      return s->info.args.exists("cors");
   }
   bool is_obj_update_op() {
     return is_acl_op() || is_cors_op();
@@ -330,10 +330,10 @@ public:
 class RGWHandler_ObjStore_Obj_S3 : public RGWHandler_ObjStore_S3 {
 protected:
   bool is_acl_op() {
-    return s->args.exists("acl");
+    return s->info.args.exists("acl");
   }
   bool is_cors_op() {
-      return s->args.exists("cors");
+      return s->info.args.exists("cors");
   }
   bool is_obj_update_op() {
     return is_acl_op();

@@ -651,6 +651,20 @@ struct RGWObjVersionTracker {
   void generate_new_write_ver(CephContext *cct);
 };
 
+struct req_info {
+  RGWEnv *env;
+  XMLArgs args;
+  map<string, string> x_meta_map;
+
+  const char *host;
+  const char *method;
+  string script_uri;
+  string request_uri;
+  string request_params;
+
+  req_info(CephContext *cct, RGWEnv *_env);
+};
+
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
    CephContext *cct;
@@ -661,11 +675,6 @@ struct req_state {
    ceph::Formatter *formatter;
    string decoded_uri;
    string effective_uri;
-   string request_uri;
-   string script_uri;
-   string request_params;
-   const char *host;
-   const char *method;
    const char *length;
    uint64_t content_length;
    map<string, string> generic_attrs;
@@ -678,8 +687,6 @@ struct req_state {
    uint32_t perm_mask;
    utime_t header_time;
 
-   XMLArgs args;
-
    const char *bucket_name;
    const char *object;
 
@@ -691,7 +698,6 @@ struct req_state {
 
    RGWObjVersionTracker objv_tracker;
 
-   map<string, string> x_meta_map;
    bool has_bad_meta;
 
    RGWUserInfo user; 
@@ -714,13 +720,13 @@ struct req_state {
 
    utime_t time;
 
-   struct RGWEnv *env;
-
    void *obj_ctx;
 
    string dialect;
 
    string req_id;
+
+   req_info info;
 
    req_state(CephContext *_cct, struct RGWEnv *e);
    ~req_state();

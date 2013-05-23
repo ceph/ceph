@@ -28,7 +28,7 @@ const char *RGWOp_Metadata_Get::name() {
 
 static inline void frame_metadata_key(req_state *s, string& out) {
   bool exists;
-  string key = s->args.get("key", &exists);
+  string key = s->info.args.get("key", &exists);
 
   string metadata_key;
   string section;
@@ -127,7 +127,7 @@ int RGWOp_Metadata_Put::get_data(bufferlist& bl) {
     bl.append(data, read_len);
   } else {
     int chunk_size = CEPH_PAGE_SIZE; 
-    const char *enc = s->env->get("HTTP_TRANSFER_ENCODING");
+    const char *enc = s->info.env->get("HTTP_TRANSFER_ENCODING");
     if (!enc || strcmp(enc, "chunked")) {
       return -ERR_LENGTH_REQUIRED;
     }
@@ -181,7 +181,7 @@ void RGWOp_Metadata_Delete::execute() {
 }
 
 RGWOp *RGWHandler_Metadata::op_get() {
-  if (s->args.exists("key"))
+  if (s->info.args.exists("key"))
     return new RGWOp_Metadata_Get;
   else
     return new RGWOp_Metadata_List;
