@@ -197,7 +197,7 @@ public:
    *
    * @param avoid_port An additional port to avoid binding to.
    */
-  int rebind(int avoid_port);
+  int rebind(const set<int>& avoid_ports);
   /** @} Configuration functions */
 
   /**
