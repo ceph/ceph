@@ -3248,7 +3248,9 @@ void PG::sub_op_scrub_map(OpRequestRef op)
 /* 
  * pg lock may or may not be held
  */
-void PG::_scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep)
+void PG::_scan_list(
+  ScrubMap &map, vector<hobject_t> &ls, bool deep,
+  ThreadPool::TPHandle &handle)
 {
   dout(10) << "_scan_list scanning " << ls.size() << " objects"
            << (deep ? " deeply" : "") << dendl;
@@ -3581,8 +3583,10 @@ void PG::_scan_snaps(ScrubMap &smap)
  * build a scrub map over a chunk without releasing the lock
  * only used by chunky scrub
  */
-int PG::build_scrub_map_chunk(ScrubMap &map,
-                              hobject_t start, hobject_t end, bool deep)
+int PG::build_scrub_map_chunk(
+  ScrubMap &map,
+  hobject_t start, hobject_t end, bool deep,
+  ThreadPool::TPHandle &handle)
 {
   dout(10) << "build_scrub_map" << dendl;
   dout(20) << "scrub_map_chunk [" << start << "," << end << ")" << dendl;
@@ -3597,7 +3601,7 @@ int PG::build_scrub_map_chunk(ScrubMap &map,
     return ret;
   }
 
-  _scan_list(map, ls, deep);
+  _scan_list(map, ls, deep, handle);
   _scan_snaps(map);
 
   // pg attrs
@@ -3614,7 +3618,7 @@ int PG::build_scrub_map_chunk(ScrubMap &map,
  * build a (sorted) summary of pg content for purposes of scrubbing
  * called while holding pg lock
  */ 
-void PG::build_scrub_map(ScrubMap &map)
+void PG::build_scrub_map(ScrubMap &map, ThreadPool::TPHandle &handle)
 {
   dout(10) << "build_scrub_map" << dendl;
 
@@ -3631,7 +3635,7 @@ void PG::build_scrub_map(ScrubMap &map)
   vector<hobject_t> ls;
   osd->store->collection_list(coll, ls);
 
-  _scan_list(map, ls, false);
+  _scan_list(map, ls, false, handle);
   lock();
   _scan_snaps(map);
 
@@ -3656,7 +3660,9 @@ void PG::build_scrub_map(ScrubMap &map)
  * build a summary of pg content changed starting after v
  * called while holding pg lock
  */
-void PG::build_inc_scrub_map(ScrubMap &map, eversion_t v)
+void PG::build_inc_scrub_map(
+  ScrubMap &map, eversion_t v,
+  ThreadPool::TPHandle &handle)
 {
   map.valid_through = last_update_applied;
   map.incr_since = v;
@@ -3680,7 +3686,7 @@ void PG::build_inc_scrub_map(ScrubMap &map, eversion_t v)
     }
   }
 
-  _scan_list(map, ls, false);
+  _scan_list(map, ls, false, handle);
   // pg attrs
   osd->store->collection_getattrs(coll, map.attrs);
 
@@ -3728,7 +3734,9 @@ void PG::repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer
  * for pushes to complete in case of recent recovery. Build a single
  * scrubmap of objects that are in the range [msg->start, msg->end).
  */
-void PG::replica_scrub(MOSDRepScrub *msg)
+void PG::replica_scrub(
+  MOSDRepScrub *msg,
+  ThreadPool::TPHandle &handle)
 {
   assert(!scrubber.active_rep_scrub);
   dout(7) << "replica_scrub" << dendl;
@@ -3762,7 +3770,9 @@ void PG::replica_scrub(MOSDRepScrub *msg)
       return;
     }
 
-    build_scrub_map_chunk(map, msg->start, msg->end, msg->deep);
+    build_scrub_map_chunk(
+      map, msg->start, msg->end, msg->deep,
+      handle);
 
   } else {
     if (msg->scrub_from > eversion_t()) {
@@ -3777,10 +3787,10 @@ void PG::replica_scrub(MOSDRepScrub *msg)
           return;
         }
       }
-      build_inc_scrub_map(map, msg->scrub_from);
+      build_inc_scrub_map(map, msg->scrub_from, handle);
       scrubber.finalizing = 0;
     } else {
-      build_scrub_map(map);
+      build_scrub_map(map, handle);
     }
 
     if (msg->map_epoch < info.history.same_interval_since) {
@@ -3808,7 +3818,7 @@ void PG::replica_scrub(MOSDRepScrub *msg)
  * scrub will be chunky if all OSDs in PG support chunky scrub
  * scrub will fall back to classic in any other case
  */
-void PG::scrub()
+void PG::scrub(ThreadPool::TPHandle &handle)
 {
   lock();
   if (deleting) {
@@ -3853,9 +3863,9 @@ void PG::scrub()
   }
 
   if (scrubber.is_chunky) {
-    chunky_scrub();
+    chunky_scrub(handle);
   } else {
-    classic_scrub();
+    classic_scrub(handle);
   }
 
   unlock();
@@ -3900,7 +3910,7 @@ void PG::scrub()
  *    Flag set when we're in the finalize stage.
  *
  */
-void PG::classic_scrub()
+void PG::classic_scrub(ThreadPool::TPHandle &handle)
 {
   if (!scrubber.active) {
     dout(10) << "scrub start" << dendl;
@@ -3931,7 +3941,7 @@ void PG::classic_scrub()
 
     // Unlocks and relocks...
     scrubber.primary_scrubmap = ScrubMap();
-    build_scrub_map(scrubber.primary_scrubmap);
+    build_scrub_map(scrubber.primary_scrubmap, handle);
 
     if (scrubber.epoch_start != info.history.same_interval_since) {
       dout(10) << "scrub  pg changed, aborting" << dendl;
@@ -3978,7 +3988,7 @@ void PG::classic_scrub()
   
   if (scrubber.primary_scrubmap.valid_through != log.head) {
     ScrubMap incr;
-    build_inc_scrub_map(incr, scrubber.primary_scrubmap.valid_through);
+    build_inc_scrub_map(incr, scrubber.primary_scrubmap.valid_through, handle);
     scrubber.primary_scrubmap.merge_incr(incr);
   }
   
@@ -4061,7 +4071,7 @@ void PG::classic_scrub()
  * scrubber.state encodes the current state of the scrub (refer to state diagram
  * for details).
  */
-void PG::chunky_scrub() {
+void PG::chunky_scrub(ThreadPool::TPHandle &handle) {
   // check for map changes
   if (scrubber.is_chunky_scrub_active()) {
     if (scrubber.epoch_start != info.history.same_interval_since) {
@@ -4193,7 +4203,8 @@ void PG::chunky_scrub() {
         // build my own scrub map
         ret = build_scrub_map_chunk(scrubber.primary_scrubmap,
                                     scrubber.start, scrubber.end,
-                                    scrubber.deep);
+                                    scrubber.deep,
+				    handle);
         if (ret < 0) {
           dout(5) << "error building scrub map: " << ret << ", aborting" << dendl;
           scrub_clear_state();
