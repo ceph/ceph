@@ -586,6 +586,13 @@ static void usage_record_prefix_by_time(uint64_t epoch, string& key)
   key = buf;
 }
 
+static void usage_record_prefix_by_user(string& user, uint64_t epoch, string& key)
+{
+  char buf[user.size() + 32];
+  snprintf(buf, sizeof(buf), "%s_%011llu_", user.c_str(), (long long unsigned)epoch);
+  key = buf;
+}
+
 static void usage_record_name_by_time(uint64_t epoch, string& user, string& bucket, string& key)
 {
   char buf[32 + user.size() + bucket.size()];
@@ -695,7 +702,7 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
 
   if (key_iter.empty()) {
     if (by_user) {
-      start_key = user;
+      usage_record_prefix_by_user(user, start, start_key);
     } else {
       usage_record_prefix_by_time(start, start_key);
     }
@@ -704,6 +711,7 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
   }
 
   do {
+    CLS_LOG(20, "usage_iterate_range start_key=%s", start_key.c_str());
     int ret = cls_cxx_map_get_vals(hctx, start_key, filter_prefix, NUM_KEYS, &keys);
     if (ret < 0)
       return ret;
@@ -717,11 +725,15 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
       const string& key = iter->first;
       rgw_usage_log_entry e;
 
-      if (!by_user && key.compare(end_key) >= 0)
+      if (!by_user && key.compare(end_key) >= 0) {
+        CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
         return 0;
+      }
 
-      if (by_user && key.compare(0, user_key.size(), user_key) != 0)
+      if (by_user && key.compare(0, user_key.size(), user_key) != 0) {
+        CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
         return 0;
+      }
 
       ret = usage_record_decode(iter->second, e);
       if (ret < 0)
@@ -741,6 +753,7 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
 
       i++;
       if (max_entries && (i > max_entries)) {
+        CLS_LOG(20, "usage_iterate_range reached max_entries (%d), done", max_entries);
         *truncated = true;
         key_iter = key;
         return 0;
