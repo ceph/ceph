@@ -299,6 +299,7 @@ int main(int argc, const char **argv)
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_mds_signal);
   unregister_async_signal_handler(SIGTERM, handle_mds_signal);
+  shutdown_async_signal_handler();
 
   // yuck: grab the mds lock, so we can be sure that whoever in *mds
   // called shutdown finishes what they were doing.
