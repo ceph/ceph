@@ -1900,65 +1900,6 @@ int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClient
   return RGWHandler_ObjStore::init(store, s, cio);
 }
 
-static inline bool is_base64_for_content_md5(unsigned char c) {
-  return (isalnum(c) || isspace(c) || (c == '+') || (c == '/') || (c == '='));
-}
-
-/*
- * get the header authentication  information required to
- * compute a request's signature
- */
-static bool get_auth_header(req_info& info, utime_t& header_time, string& dest, bool qsr)
-{
-  const char *content_md5 = info.env->get("HTTP_CONTENT_MD5");
-  if (content_md5) {
-    for (const char *p = content_md5; *p; p++) {
-      if (!is_base64_for_content_md5(*p)) {
-        dout(0) << "NOTICE: bad content-md5 provided (not base64), aborting request p=" << *p << " " << (int)*p << dendl;
-        return false;
-      }
-    }
-  }
-
-  const char *content_type = info.env->get("CONTENT_TYPE");
-
-  string date;
-  if (qsr) {
-    date = info.args.get("Expires");
-  } else {
-    const char *str = info.env->get("HTTP_DATE");
-    const char *req_date = str;
-    if (str) {
-      date = str;
-    } else {
-      req_date = info.env->get("HTTP_X_AMZ_DATE");
-      if (!req_date) {
-        dout(0) << "NOTICE: missing date for auth header" << dendl;
-        return false;
-      }
-    }
-
-    struct tm t;
-    if (!parse_rfc2616(req_date, &t)) {
-      dout(0) << "NOTICE: failed to parse date for auth header" << dendl;
-      return false;
-    }
-    if (t.tm_year < 70) {
-      dout(0) << "NOTICE: bad date (predates epoch): " << req_date << dendl;
-      return false;
-    }
-    header_time = utime_t(timegm(&t), 0);
-  }
-
-  map<string, string>& meta_map = info.x_meta_map;
-  map<string, string>& sub_resources = info.args.get_sub_resources();
-
-  rgw_create_s3_canonical_header(info.method, content_md5, content_type, date.c_str(),
-                            meta_map, info.request_uri.c_str(), sub_resources,
-                            dest);
-
-  return true;
-}
 
 /*
  * verify that a signed request comes from the keyholder
@@ -2015,7 +1956,7 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
   /* now verify signature */
    
   string auth_hdr;
-  if (!get_auth_header(s->info, s->header_time, auth_hdr, qsr)) {
+  if (!rgw_create_s3_canonical_header(s->info, s->header_time, auth_hdr, qsr)) {
     dout(10) << "failed to create auth header\n" << auth_hdr << dendl;
     return -EPERM;
   }
