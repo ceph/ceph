@@ -530,7 +530,6 @@ private:
    * @}
    */
 
-  bool going_to_bootstrap;
   /**
    * Should be true if we have proposed to trim, or are in the middle of
    * trimming; false otherwise.
@@ -1017,16 +1016,12 @@ public:
 		   lease_timeout_event(0),
 		   accept_timeout_event(0),
 		   clock_drift_warned(0),
-		   going_to_bootstrap(false),
 		   going_to_trim(false),
 		   trim_disabled_version(0) { }
 
   const string get_name() const {
     return paxos_name;
   }
-
-  bool is_bootstrapping() { return going_to_bootstrap; }
-  void prepare_bootstrap();
 
   void dispatch(PaxosServiceMessage *m);
 
