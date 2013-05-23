@@ -5096,6 +5096,7 @@ void PG::handle_activate_map(RecoveryCtx *rctx)
 	     << last_persisted_osdmap_ref->get_epoch()
 	     << " while current is " << osdmap_ref->get_epoch() << dendl;
   }
+  if (osdmap_ref->check_new_blacklist_entries()) check_blacklisted_watchers();
 }
 
 void PG::handle_loaded(RecoveryCtx *rctx)

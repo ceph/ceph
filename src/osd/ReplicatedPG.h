@@ -449,6 +449,8 @@ protected:
   map<hobject_t, map<client_t, tid_t> > debug_op_order;
 
   void populate_obc_watchers(ObjectContext *obc);
+  void check_blacklisted_obc_watchers(ObjectContext *);
+  void check_blacklisted_watchers();
 public:
   void handle_watch_timeout(WatchRef watch);
 protected:

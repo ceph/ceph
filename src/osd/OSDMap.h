@@ -203,6 +203,7 @@ private:
 
   epoch_t cluster_snapshot_epoch;
   string cluster_snapshot;
+  bool new_blacklist_entries;
 
  public:
   std::tr1::shared_ptr<CrushWrapper> crush;       // hierarchical map
@@ -220,6 +221,7 @@ private:
 	     pg_temp(new map<pg_t,vector<int> >),
 	     osd_uuid(new vector<uuid_d>),
 	     cluster_snapshot_epoch(0),
+	     new_blacklist_entries(false),
 	     crush(new CrushWrapper) {
     memset(&fsid, 0, sizeof(fsid));
   }
@@ -609,6 +611,7 @@ public:
   void dump_json(ostream& out) const;
   void dump(Formatter *f) const;
   static void generate_test_instances(list<OSDMap*>& o);
+  bool check_new_blacklist_entries() const { return new_blacklist_entries; }
 };
 WRITE_CLASS_ENCODER_FEATURES(OSDMap)
 WRITE_CLASS_ENCODER_FEATURES(OSDMap::Incremental)
