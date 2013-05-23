@@ -3258,6 +3258,7 @@ void PG::_scan_list(
   for (vector<hobject_t>::iterator p = ls.begin(); 
        p != ls.end(); 
        ++p, i++) {
+    handle.reset_tp_timeout();
     hobject_t poid = *p;
 
     struct stat st;
@@ -3277,6 +3278,7 @@ void PG::_scan_list(
         while ( (r = osd->store->read(coll, poid, pos,
                                       g_conf->osd_deep_scrub_stride, bl,
 		                      true)) > 0) {
+	  handle.reset_tp_timeout();
           h << bl;
           pos += bl.length();
           bl.clear();
