@@ -498,8 +498,7 @@ public:
    */
   bool is_active() {
     return (!is_proposing() && !paxos->is_recovering()
-        && !paxos->is_locked()
-	&& !paxos->is_bootstrapping());
+        && !paxos->is_locked());
   }
 
   /**
@@ -579,7 +578,7 @@ public:
    * @param c The callback to be awaken once we become active.
    */
   void wait_for_active(Context *c) {
-    if (paxos->is_bootstrapping() || !is_proposing()) {
+    if (!is_proposing()) {
       paxos->wait_for_active(c);
       return;
     }
@@ -612,7 +611,7 @@ public:
    * @param c The callback to be awaken once we become writeable.
    */
   void wait_for_writeable(Context *c) {
-    if (paxos->is_bootstrapping() || !is_proposing()) {
+    if (!is_proposing()) {
       paxos->wait_for_writeable(c);
       return;
     }
