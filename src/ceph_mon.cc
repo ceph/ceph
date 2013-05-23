@@ -528,7 +528,6 @@ int main(int argc, const char **argv)
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_mon_signal);
   unregister_async_signal_handler(SIGTERM, handle_mon_signal);
-
   shutdown_async_signal_handler();
 
   delete mon;

@@ -2262,6 +2262,8 @@ bool OSDMonitor::update_pools_status()
   for (map<int64_t,pg_pool_t>::const_iterator it = pools.begin();
        it != pools.end();
        ++it) {
+    if (!mon->pgmon()->pg_map.pg_pool_sum.count(it->first))
+      continue;
     pool_stat_t& stats = mon->pgmon()->pg_map.pg_pool_sum[it->first];
     object_stat_sum_t& sum = stats.stats.sum;
     const pg_pool_t &pool = it->second;
@@ -2311,6 +2313,8 @@ void OSDMonitor::get_pools_health(
   const map<int64_t,pg_pool_t>& pools = osdmap.get_pools();
   for (map<int64_t,pg_pool_t>::const_iterator it = pools.begin();
        it != pools.end(); ++it) {
+    if (!mon->pgmon()->pg_map.pg_pool_sum.count(it->first))
+      continue;
     pool_stat_t& stats = mon->pgmon()->pg_map.pg_pool_sum[it->first];
     object_stat_sum_t& sum = stats.stats.sum;
     const pg_pool_t &pool = it->second;
