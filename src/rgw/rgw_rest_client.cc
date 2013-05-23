@@ -52,6 +52,14 @@ int RGWRESTClient::read_header(void *ptr, size_t len)
   return 0;
 }
 
+static void get_new_date_str(CephContext *cct, string& date_str)
+{
+  utime_t tm = ceph_clock_now(cct);
+  stringstream s;
+  tm.gmtime(s);
+  date_str = s.str();
+}
+
 int RGWRESTClient::execute(RGWAccessKey& key, const char *method, const char *resource)
 {
   string new_url = url;
@@ -65,10 +73,8 @@ int RGWRESTClient::execute(RGWAccessKey& key, const char *method, const char *re
   }
   new_url.append(new_resource);
 
-  utime_t tm = ceph_clock_now(cct);
-  stringstream s;
-  tm.gmtime(s);
-  string date_str = s.str();
+  string date_str;
+  get_new_date_str(cct, date_str);
   headers.push_back(make_pair<string, string>("HTTP_DATE", date_str));
 
   string canonical_header;
@@ -96,3 +102,45 @@ int RGWRESTClient::execute(RGWAccessKey& key, const char *method, const char *re
   return rgw_http_error_to_errno(status);
 }
 
+int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info)
+{
+
+  RGWEnv new_env = *info.env; /* copy environment */
+
+  string date_str;
+  get_new_date_str(cct, date_str);
+  new_env.set("HTTP_DATE", date_str.c_str());
+
+  req_info new_info(info);
+  new_info.env = &new_env;
+
+  map<string, string>& m = new_env.get_map();
+
+  string canonical_header;
+  utime_t header_time;
+  if (!rgw_create_s3_canonical_header(new_info, header_time, canonical_header, false)) {
+    ldout(cct, 0) << "failed to create canonical s3 header" << dendl;
+    return -EINVAL;
+  }
+
+  string digest;
+  int ret = rgw_get_s3_header_digest(canonical_header, key.key, digest);
+  if (ret < 0) {
+    return ret;
+  }
+
+  string auth_hdr = "AWS " + key.id + ":" + digest;
+  ldout(cct, 15) << "generated auth header: " << auth_hdr << dendl;
+  
+  m["AUTHORIZATION"] = auth_hdr;
+
+  map<string, string>::iterator iter;
+  for (iter = m.begin(); iter != m.end(); ++iter) {
+    headers.push_back(make_pair<string, string>(iter->first, iter->second));
+  }
+  
+  int r = process(new_info.method, new_info.request_uri.c_str());
+  if (r < 0)
+    return r;
+
+  return rgw_http_error_to_errno(status);}

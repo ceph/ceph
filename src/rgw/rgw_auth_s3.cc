@@ -134,4 +134,62 @@ int rgw_get_s3_header_digest(const string& auth_hdr, const string& key, string& 
   return 0;
 }
 
+static inline bool is_base64_for_content_md5(unsigned char c) {
+  return (isalnum(c) || isspace(c) || (c == '+') || (c == '/') || (c == '='));
+}
 
+/*
+ * get the header authentication  information required to
+ * compute a request's signature
+ */
+bool rgw_create_s3_canonical_header(req_info& info, utime_t& header_time, string& dest, bool qsr)
+{
+  const char *content_md5 = info.env->get("HTTP_CONTENT_MD5");
+  if (content_md5) {
+    for (const char *p = content_md5; *p; p++) {
+      if (!is_base64_for_content_md5(*p)) {
+        dout(0) << "NOTICE: bad content-md5 provided (not base64), aborting request p=" << *p << " " << (int)*p << dendl;
+        return false;
+      }
+    }
+  }
+
+  const char *content_type = info.env->get("CONTENT_TYPE");
+
+  string date;
+  if (qsr) {
+    date = info.args.get("Expires");
+  } else {
+    const char *str = info.env->get("HTTP_DATE");
+    const char *req_date = str;
+    if (str) {
+      date = str;
+    } else {
+      req_date = info.env->get("HTTP_X_AMZ_DATE");
+      if (!req_date) {
+        dout(0) << "NOTICE: missing date for auth header" << dendl;
+        return false;
+      }
+    }
+
+    struct tm t;
+    if (!parse_rfc2616(req_date, &t)) {
+      dout(0) << "NOTICE: failed to parse date for auth header" << dendl;
+      return false;
+    }
+    if (t.tm_year < 70) {
+      dout(0) << "NOTICE: bad date (predates epoch): " << req_date << dendl;
+      return false;
+    }
+    header_time = utime_t(timegm(&t), 0);
+  }
+
+  map<string, string>& meta_map = info.x_meta_map;
+  map<string, string>& sub_resources = info.args.get_sub_resources();
+
+  rgw_create_s3_canonical_header(info.method, content_md5, content_type, date.c_str(),
+                            meta_map, info.request_uri.c_str(), sub_resources,
+                            dest);
+
+  return true;
+}

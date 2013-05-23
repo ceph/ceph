@@ -259,6 +259,10 @@ public:
   size_t get_size(const char *name, size_t def_val = 0);
   bool exists(const char *name);
   bool exists_prefix(const char *prefix);
+
+  void remove(const char *name);
+  void set(const char *name, const char *val);
+  std::map<string, string>& get_map() { return env_map; }
 };
 
 class RGWConf {

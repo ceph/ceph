@@ -28,6 +28,7 @@ public:
   int read_header(void *ptr, size_t len);
 
   int execute(RGWAccessKey& key, const char *method, const char *resource);
+  int forward_request(RGWAccessKey& key, req_info& info);
 };
 
 
