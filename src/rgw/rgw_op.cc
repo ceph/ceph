@@ -140,13 +140,13 @@ static void format_xattr(std::string &xattr)
  * attrs: will be filled up with attrs mapped as <attr_name, attr_contents>
  *
  */
-void rgw_get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs)
+static void rgw_get_request_metadata(CephContext *cct, struct req_info& info, map<string, bufferlist>& attrs)
 {
   map<string, string>::iterator iter;
-  for (iter = s->x_meta_map.begin(); iter != s->x_meta_map.end(); ++iter) {
+  for (iter = info.x_meta_map.begin(); iter != info.x_meta_map.end(); ++iter) {
     const string &name(iter->first);
     string &xattr(iter->second);
-    ldout(s->cct, 10) << "x>> " << name << ":" << xattr << dendl;
+    ldout(cct, 10) << "x>> " << name << ":" << xattr << dendl;
     format_xattr(xattr);
     string attr_name(RGW_ATTR_PREFIX);
     attr_name.append(name);
@@ -242,7 +242,7 @@ static int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map
 static int read_policy(RGWRados *store, struct req_state *s, RGWBucketInfo& bucket_info, RGWAccessControlPolicy *policy, rgw_bucket& bucket, string& object)
 {
   string upload_id;
-  upload_id = s->args.get("uploadId");
+  upload_id = s->info.args.get("uploadId");
   string oid = object;
   rgw_obj obj;
 
@@ -1268,10 +1268,10 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, struct req_state *s)
 
   string oid = s->object_str;
   string upload_id;
-  upload_id = s->args.get("uploadId");
+  upload_id = s->info.args.get("uploadId");
   mp.init(oid, upload_id);
 
-  part_num = s->args.get("partNumber");
+  part_num = s->info.args.get("partNumber");
   if (part_num.empty()) {
     return -EINVAL;
   }
@@ -1320,7 +1320,7 @@ RGWPutObjProcessor *RGWPutObj::select_processor()
 {
   RGWPutObjProcessor *processor;
 
-  bool multipart = s->args.exists("uploadId");
+  bool multipart = s->info.args.exists("uploadId");
 
   uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
 
@@ -1451,7 +1451,7 @@ void RGWPutObj::execute()
     attrbl.append(val.c_str(), val.size() + 1);
   }
 
-  rgw_get_request_metadata(s, attrs);
+  rgw_get_request_metadata(s->cct, s->info, attrs);
 
   ret = processor->complete(etag, attrs);
 done:
@@ -1600,7 +1600,7 @@ void RGWPutMetadata::execute()
   if (ret < 0)
     return;
 
-  rgw_get_request_metadata(s, attrs);
+  rgw_get_request_metadata(s->cct, s->info, attrs);
 
   /* no need to track object versioning, need it for bucket's data only */
   RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->objv_tracker);
@@ -1763,7 +1763,7 @@ int RGWCopyObj::init_common()
   dest_policy.encode(aclbl);
 
   attrs[RGW_ATTR_ACL] = aclbl;
-  rgw_get_request_metadata(s, attrs);
+  rgw_get_request_metadata(s->cct, s->info, attrs);
 
   map<string, string>::iterator iter;
   for (iter = s->generic_attrs.begin(); iter != s->generic_attrs.end(); ++iter) {
@@ -2088,7 +2088,7 @@ void RGWOptionsCORS::execute()
     ret = -EACCES;
     return;
   }
-  req_meth = s->env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
+  req_meth = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
   if (!req_meth) {
     dout(0) << 
     "Preflight request without mandatory Access-control-request-method header"
@@ -2096,7 +2096,7 @@ void RGWOptionsCORS::execute()
     ret = -EACCES;
     return;
   }
-  origin = s->env->get("HTTP_ORIGIN");
+  origin = s->info.env->get("HTTP_ORIGIN");
   if (!origin) {
     dout(0) << 
     "Preflight request without mandatory Origin header"
@@ -2104,7 +2104,7 @@ void RGWOptionsCORS::execute()
     ret = -EACCES;
     return;
   }
-  req_hdrs = s->env->get("HTTP_ACCESS_CONTROL_ALLOW_HEADERS");
+  req_hdrs = s->info.env->get("HTTP_ACCESS_CONTROL_ALLOW_HEADERS");
   ret = validate_cors_request();
   if (!rule) {
     origin = req_meth = NULL;
@@ -2144,7 +2144,7 @@ void RGWInitMultipart::execute()
     attrbl.append(val.c_str(), val.size() + 1);
   }
 
-  rgw_get_request_metadata(s, attrs);
+  rgw_get_request_metadata(s->cct, s->info, attrs);
 
   do {
     char buf[33];
@@ -2372,7 +2372,7 @@ void RGWAbortMultipart::execute()
   ret = -EINVAL;
   string upload_id;
   string meta_oid;
-  upload_id = s->args.get("uploadId");
+  upload_id = s->info.args.get("uploadId");
   map<uint32_t, RGWUploadPartInfo> obj_parts;
   map<uint32_t, RGWUploadPartInfo>::iterator obj_iter;
   RGWAccessControlPolicy policy(s->cct);
@@ -2462,7 +2462,7 @@ void RGWListBucketMultiparts::execute()
 
   if (s->prot_flags & RGW_REST_SWIFT) {
     string path_args;
-    path_args = s->args.get("path");
+    path_args = s->info.args.get("path");
     if (!path_args.empty()) {
       if (!delimiter.empty() || !prefix.empty()) {
         ret = -EINVAL;

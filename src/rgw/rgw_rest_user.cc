@@ -115,10 +115,10 @@ void RGWOp_User_Create::execute()
   if (max_buckets != RGW_DEFAULT_MAX_BUCKETS)
     op_state.set_max_buckets(max_buckets);
 
-  if (s->args.exists("suspended"))
+  if (s->info.args.exists("suspended"))
     op_state.set_suspension(suspended);
 
-  if (s->args.exists("system"))
+  if (s->info.args.exists("system"))
     op_state.set_system(system);
 
   if (gen_key)
@@ -212,10 +212,10 @@ void RGWOp_User_Modify::execute()
     op_state.set_key_type(key_type);
   }
 
-  if (s->args.exists("suspended"))
+  if (s->info.args.exists("suspended"))
     op_state.set_suspension(suspended);
 
-  if (s->args.exists("system"))
+  if (s->info.args.exists("system"))
     op_state.set_system(system);
 
   http_ret = RGWUserAdminOp_User::modify(store, op_state, flusher);
@@ -616,13 +616,13 @@ RGWOp *RGWHandler_User::op_get()
 
 RGWOp *RGWHandler_User::op_put()
 {
-  if (s->args.sub_resource_exists("subuser"))
+  if (s->info.args.sub_resource_exists("subuser"))
     return new RGWOp_Subuser_Create;
 
-  if (s->args.sub_resource_exists("key"))
+  if (s->info.args.sub_resource_exists("key"))
     return new RGWOp_Key_Create;
 
-  if (s->args.sub_resource_exists("caps"))
+  if (s->info.args.sub_resource_exists("caps"))
     return new RGWOp_Caps_Add;
 
   return new RGWOp_User_Create;
@@ -630,7 +630,7 @@ RGWOp *RGWHandler_User::op_put()
 
 RGWOp *RGWHandler_User::op_post()
 {
-  if (s->args.sub_resource_exists("subuser"))
+  if (s->info.args.sub_resource_exists("subuser"))
     return new RGWOp_Subuser_Modify;
 
   return new RGWOp_User_Modify;
@@ -638,13 +638,13 @@ RGWOp *RGWHandler_User::op_post()
 
 RGWOp *RGWHandler_User::op_delete()
 {
-  if (s->args.sub_resource_exists("subuser"))
+  if (s->info.args.sub_resource_exists("subuser"))
     return new RGWOp_Subuser_Remove;
 
-  if (s->args.sub_resource_exists("key"))
+  if (s->info.args.sub_resource_exists("key"))
     return new RGWOp_Key_Remove;
 
-  if (s->args.sub_resource_exists("caps"))
+  if (s->info.args.sub_resource_exists("caps"))
     return new RGWOp_Caps_Remove;
 
   return new RGWOp_User_Remove;

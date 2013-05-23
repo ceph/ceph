@@ -274,10 +274,10 @@ void dump_object_from_state(struct req_state *s)
 
 void dump_uri_from_state(struct req_state *s)
 {
-  if (strcmp(s->request_uri.c_str(), "/") == 0) {
+  if (strcmp(s->info.request_uri.c_str(), "/") == 0) {
 
     string location = "http://";
-    string server = s->env->get("SERVER_NAME", "<SERVER_NAME>");
+    string server = s->info.env->get("SERVER_NAME", "<SERVER_NAME>");
     location.append(server);
     location += "/";
     if (!s->bucket_name_str.empty()) {
@@ -290,7 +290,7 @@ void dump_uri_from_state(struct req_state *s)
     }
   }
   else {
-    s->cio->print("Location: \"%s\"\n", s->request_uri.c_str());
+    s->cio->print("Location: \"%s\"\n", s->info.request_uri.c_str());
   }
 }
 
@@ -441,11 +441,11 @@ void dump_range(struct req_state *s, uint64_t ofs, uint64_t end, uint64_t total)
 
 int RGWGetObj_ObjStore::get_params()
 {
-  range_str = s->env->get("HTTP_RANGE");
-  if_mod = s->env->get("HTTP_IF_MODIFIED_SINCE");
-  if_unmod = s->env->get("HTTP_IF_UNMODIFIED_SINCE");
-  if_match = s->env->get("HTTP_IF_MATCH");
-  if_nomatch = s->env->get("HTTP_IF_NONE_MATCH");
+  range_str = s->info.env->get("HTTP_RANGE");
+  if_mod = s->info.env->get("HTTP_IF_MODIFIED_SINCE");
+  if_unmod = s->info.env->get("HTTP_IF_UNMODIFIED_SINCE");
+  if_match = s->info.env->get("HTTP_IF_MATCH");
+  if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");
 
   return 0;
 }
@@ -453,7 +453,7 @@ int RGWGetObj_ObjStore::get_params()
 int RESTArgs::get_string(struct req_state *s, const string& name, const string& def_val, string *val, bool *existed)
 {
   bool exists;
-  *val = s->args.get(name, &exists);
+  *val = s->info.args.get(name, &exists);
 
   if (existed)
     *existed = exists;
@@ -469,7 +469,7 @@ int RESTArgs::get_string(struct req_state *s, const string& name, const string& 
 int RESTArgs::get_uint64(struct req_state *s, const string& name, uint64_t def_val, uint64_t *val, bool *existed)
 {
   bool exists;
-  string sval = s->args.get(name, &exists);
+  string sval = s->info.args.get(name, &exists);
 
   if (existed)
     *existed = exists;
@@ -489,7 +489,7 @@ int RESTArgs::get_uint64(struct req_state *s, const string& name, uint64_t def_v
 int RESTArgs::get_int64(struct req_state *s, const string& name, int64_t def_val, int64_t *val, bool *existed)
 {
   bool exists;
-  string sval = s->args.get(name, &exists);
+  string sval = s->info.args.get(name, &exists);
 
   if (existed)
     *existed = exists;
@@ -509,7 +509,7 @@ int RESTArgs::get_int64(struct req_state *s, const string& name, int64_t def_val
 int RESTArgs::get_uint32(struct req_state *s, const string& name, uint32_t def_val, uint32_t *val, bool *existed)
 {
   bool exists;
-  string sval = s->args.get(name, &exists);
+  string sval = s->info.args.get(name, &exists);
 
   if (existed)
     *existed = exists;
@@ -529,7 +529,7 @@ int RESTArgs::get_uint32(struct req_state *s, const string& name, uint32_t def_v
 int RESTArgs::get_int32(struct req_state *s, const string& name, int32_t def_val, int32_t *val, bool *existed)
 {
   bool exists;
-  string sval = s->args.get(name, &exists);
+  string sval = s->info.args.get(name, &exists);
 
   if (existed)
     *existed = exists;
@@ -549,7 +549,7 @@ int RESTArgs::get_int32(struct req_state *s, const string& name, int32_t def_val
 int RESTArgs::get_time(struct req_state *s, const string& name, const utime_t& def_val, utime_t *val, bool *existed)
 {
   bool exists;
-  string sval = s->args.get(name, &exists);
+  string sval = s->info.args.get(name, &exists);
 
   if (existed)
     *existed = exists;
@@ -573,7 +573,7 @@ int RESTArgs::get_time(struct req_state *s, const string& name, const utime_t& d
 int RESTArgs::get_epoch(struct req_state *s, const string& name, uint64_t def_val, uint64_t *epoch, bool *existed)
 {
   bool exists;
-  string date = s->args.get(name, &exists);
+  string date = s->info.args.get(name, &exists);
 
   if (existed)
     *existed = exists;
@@ -593,7 +593,7 @@ int RESTArgs::get_epoch(struct req_state *s, const string& name, uint64_t def_va
 int RESTArgs::get_bool(struct req_state *s, const string& name, bool def_val, bool *val, bool *existed)
 {
   bool exists;
-  string sval = s->args.get(name, &exists);
+  string sval = s->info.args.get(name, &exists);
 
   if (existed)
     *existed = exists;
@@ -651,7 +651,7 @@ int RGWPutObj_ObjStore::verify_params()
 
 int RGWPutObj_ObjStore::get_params()
 {
-  supplied_md5_b64 = s->env->get("HTTP_CONTENT_MD5");
+  supplied_md5_b64 = s->info.env->get("HTTP_CONTENT_MD5");
 
   return 0;
 }
@@ -684,7 +684,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
   }
 
   if (!ofs)
-    supplied_md5_b64 = s->env->get("HTTP_CONTENT_MD5");
+    supplied_md5_b64 = s->info.env->get("HTTP_CONTENT_MD5");
 
   return len;
 }
@@ -823,7 +823,7 @@ int rgw_rest_read_all_input(struct req_state *s, char **pdata, int *plen, int ma
       return ret;
     data[len] = '\0';
   } else if (!s->length) {
-    const char *encoding = s->env->get("HTTP_TRANSFER_ENCODING");
+    const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
     if (!encoding || strcmp(encoding, "chunked") != 0)
       return -ERR_LENGTH_REQUIRED;
 
@@ -841,7 +841,7 @@ int rgw_rest_read_all_input(struct req_state *s, char **pdata, int *plen, int ma
 
 int RGWCompleteMultipart_ObjStore::get_params()
 {
-  upload_id = s->args.get("uploadId");
+  upload_id = s->info.args.get("uploadId");
 
   if (upload_id.empty()) {
     ret = -ENOTSUP;
@@ -858,16 +858,16 @@ int RGWCompleteMultipart_ObjStore::get_params()
 
 int RGWListMultipart_ObjStore::get_params()
 {
-  upload_id = s->args.get("uploadId");
+  upload_id = s->info.args.get("uploadId");
 
   if (upload_id.empty()) {
     ret = -ENOTSUP;
   }
-  string str = s->args.get("part-number-marker");
+  string str = s->info.args.get("part-number-marker");
   if (!str.empty())
     marker = atoi(str.c_str());
   
-  str = s->args.get("max-parts");
+  str = s->info.args.get("max-parts");
   if (!str.empty())
     max_parts = atoi(str.c_str());
 
@@ -876,16 +876,16 @@ int RGWListMultipart_ObjStore::get_params()
 
 int RGWListBucketMultiparts_ObjStore::get_params()
 {
-  delimiter = s->args.get("delimiter");
-  prefix = s->args.get("prefix");
-  string str = s->args.get("max-parts");
+  delimiter = s->info.args.get("delimiter");
+  prefix = s->info.args.get("prefix");
+  string str = s->info.args.get("max-parts");
   if (!str.empty())
     max_uploads = atoi(str.c_str());
   else
     max_uploads = default_max;
 
-  string key_marker = s->args.get("key-marker");
-  string upload_id_marker = s->args.get("upload-id-marker");
+  string key_marker = s->info.args.get("key-marker");
+  string upload_id_marker = s->info.args.get("upload-id-marker");
   if (!key_marker.empty())
     marker.init(key_marker, upload_id_marker);
 
@@ -994,7 +994,7 @@ static int init_meta_info(struct req_state *s)
 {
   const char *p;
 
-  s->x_meta_map.clear();
+  s->info.x_meta_map.clear();
 
   const char **envp = s->cio->envp();
 
@@ -1027,22 +1027,22 @@ static int init_meta_info(struct req_state *s)
         line_unfold(eq + 1, val);
 
         map<string, string>::iterator iter;
-        iter = s->x_meta_map.find(name_low);
-        if (iter != s->x_meta_map.end()) {
+        iter = s->info.x_meta_map.find(name_low);
+        if (iter != s->info.x_meta_map.end()) {
           string old = iter->second;
           int pos = old.find_last_not_of(" \t"); /* get rid of any whitespaces after the value */
           old = old.substr(0, pos + 1);
           old.append(",");
           old.append(val);
-          s->x_meta_map[name_low] = old;
+          s->info.x_meta_map[name_low] = old;
         } else {
-          s->x_meta_map[name_low] = val;
+          s->info.x_meta_map[name_low] = val;
         }
       }
     }
   }
   map<string, string>::iterator iter;
-  for (iter = s->x_meta_map.begin(); iter != s->x_meta_map.end(); ++iter) {
+  for (iter = s->info.x_meta_map.begin(); iter != s->info.x_meta_map.end(); ++iter) {
     dout(10) << "x>> " << iter->first << ":" << iter->second << dendl;
   }
 
@@ -1053,7 +1053,7 @@ int RGWHandler_ObjStore::allocate_formatter(struct req_state *s, int default_typ
 {
   s->format = default_type;
   if (configurable) {
-    string format_str = s->args.get("format");
+    string format_str = s->info.args.get("format");
     if (format_str.compare("xml") == 0) {
       s->format = RGW_FORMAT_XML;
     } else if (format_str.compare("json") == 0) {
@@ -1154,7 +1154,7 @@ int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
   case OP_PUT:
   case OP_POST:
     /* is it a 'multi-object delete' request? */
-    if (s->request_params == "delete") {
+    if (s->info.request_params == "delete") {
       only_bucket = true;
       break;
     }
@@ -1232,20 +1232,14 @@ RGWRESTMgr::~RGWRESTMgr()
 
 int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
 {
-  s->cio = cio;
-  s->script_uri = s->env->get("SCRIPT_URI", s->cct->_conf->rgw_script_uri.c_str());
-  s->request_uri = s->env->get("REQUEST_URI", s->cct->_conf->rgw_request_uri.c_str());
-  int pos = s->request_uri.find('?');
-  if (pos >= 0) {
-    s->request_params = s->request_uri.substr(pos + 1);
-    s->request_uri = s->request_uri.substr(0, pos);
-  }
-  s->host = s->env->get("HTTP_HOST");
-  if (g_conf->rgw_dns_name.length() && s->host) {
-    string h(s->host);
+  req_info& info = s->info;
 
-    ldout(s->cct, 10) << "host=" << s->host << " rgw_dns_name=" << g_conf->rgw_dns_name << dendl;
-    pos = h.find(g_conf->rgw_dns_name);
+  s->cio = cio;
+  if (g_conf->rgw_dns_name.length() && info.host) {
+    string h(s->info.host);
+
+    ldout(s->cct, 10) << "host=" << s->info.host << " rgw_dns_name=" << g_conf->rgw_dns_name << dendl;
+    int pos = h.find(g_conf->rgw_dns_name);
 
     if (g_conf->rgw_resolve_cname && pos < 0) {
       string cname;
@@ -1264,16 +1258,15 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
     if (pos > 0 && h[pos - 1] == '.') {
       string encoded_bucket = "/";
       encoded_bucket.append(h.substr(0, pos-1));
-      if (s->request_uri[0] != '/')
+      if (s->info.request_uri[0] != '/')
 	encoded_bucket.append("/'");
-      encoded_bucket.append(s->request_uri);
-      s->request_uri = encoded_bucket;
+      encoded_bucket.append(s->info.request_uri);
+      s->info.request_uri = encoded_bucket;
     }
   }
 
-  url_decode(s->request_uri, s->decoded_uri);
-  s->method = s->env->get("REQUEST_METHOD");
-  s->length = s->env->get("CONTENT_LENGTH");
+  url_decode(s->info.request_uri, s->decoded_uri);
+  s->length = info.env->get("CONTENT_LENGTH");
   if (s->length) {
     if (*s->length == '\0')
       s->content_length = 0;
@@ -1283,19 +1276,19 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
 
   map<string, string>::iterator giter;
   for (giter = generic_attrs_map.begin(); giter != generic_attrs_map.end(); ++giter) {
-    const char *env = s->env->get(giter->first.c_str());
+    const char *env = info.env->get(giter->first.c_str());
     if (env) {
       s->generic_attrs[giter->second] = env;
     }
   }
 
-  s->http_auth = s->env->get("HTTP_AUTHORIZATION");
+  s->http_auth = info.env->get("HTTP_AUTHORIZATION");
 
   if (g_conf->rgw_print_continue) {
-    const char *expect = s->env->get("HTTP_EXPECT");
+    const char *expect = info.env->get("HTTP_EXPECT");
     s->expect_cont = (expect && !strcasecmp(expect, "100-continue"));
   }
-  s->op = op_from_method(s->method);
+  s->op = op_from_method(info.method);
 
   init_meta_info(s);
 

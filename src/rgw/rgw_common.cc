@@ -92,12 +92,25 @@ is_err() const
 }
 
 
+req_info::req_info(CephContext *cct, struct RGWEnv *e) : env(e) {
+  method = env->get("REQUEST_METHOD");
+  script_uri = env->get("SCRIPT_URI", cct->_conf->rgw_script_uri.c_str());
+  request_uri = env->get("REQUEST_URI", cct->_conf->rgw_request_uri.c_str());
+  int pos = request_uri.find('?');
+  if (pos >= 0) {
+    request_params = request_uri.substr(pos + 1);
+    request_uri = request_uri.substr(0, pos);
+  }
+  host = env->get("HTTP_HOST");
+}
+
+
 req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL), op(OP_UNKNOWN),
 							    bucket_cors(NULL), has_acl_header(false),
-                                                            os_auth_token(NULL), env(e)
+                                                            os_auth_token(NULL), info(_cct, e)
 {
-  enable_ops_log = env->conf->enable_ops_log;
-  enable_usage_log = env->conf->enable_usage_log;
+  enable_ops_log = e->conf->enable_ops_log;
+  enable_usage_log = e->conf->enable_usage_log;
   content_started = false;
   format = 0;
   formatter = NULL;
@@ -121,8 +134,6 @@ req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL)
   object = NULL;
   bucket_name = NULL;
   has_bad_meta = false;
-  host = NULL;
-  method = NULL;
   length = NULL;
   copy_source = NULL;
   http_auth = NULL;
