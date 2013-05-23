@@ -1081,8 +1081,8 @@ void Paxos::leader_init()
 {
   cancel_events();
   new_value.clear();
-  if (!proposals.empty())
-    finish_contexts(g_ceph_context, proposals, -EAGAIN);
+
+  finish_contexts(g_ceph_context, proposals, -EAGAIN);
 
   if (mon->get_quorum().size() == 1) {
     state = STATE_ACTIVE;
@@ -1118,9 +1118,7 @@ void Paxos::restart()
 
   state = STATE_RECOVERING;
 
-  if (!proposals.empty())
-    finish_contexts(g_ceph_context, proposals, -EAGAIN);
-
+  finish_contexts(g_ceph_context, proposals, -EAGAIN);
   finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
   finish_contexts(g_ceph_context, waiting_for_active, -EAGAIN);
 }
