@@ -1164,8 +1164,6 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 	copy(dumpcontents.begin(), dumpcontents.end(),
 	     inserter(what, what.end()));
       }
-      if (what.empty())
-	what.insert("all");
       if (what.count("all")) {
 	f->open_object_section("pg_map");
 	pg_map.dump(f.get());
@@ -1190,7 +1188,6 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       // plain format ignores dumpcontents
       pg_map.dump(ds);
     }
-    rdata.append(ds);
     ss << "dumped " << what << " in format " << format;
     r = 0;
   } else if (prefix == "pg dump_stuck") {
