@@ -7589,6 +7589,7 @@ int Client::ll_link(Inode *parent, Inode *newparent, const char *newname,
 
 int Client::ll_num_osds(void)
 {
+  Mutex::Locker lock(client_lock);
   return osdmap->get_num_osds();
 }
 
@@ -7832,6 +7833,141 @@ int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
   tout(cct) << len << std::endl;
 
   return _read(fh, off, len, bl);
+}
+
+int Client::ll_read_block(Inode *in, uint64_t blockid,
+			  char *buf,
+			  uint64_t offset,
+			  uint64_t length,
+			  ceph_file_layout* layout)
+{
+  Mutex::Locker lock(client_lock);
+  Mutex flock("Client::ll_read_block flock");
+  Cond cond;
+  vinodeno_t vino = ll_get_vino(in);
+  object_t oid = file_object_t(vino.ino, blockid);
+  int r = 0;
+  bool done = false;
+  Context *onfinish = new C_SafeCond(&flock, &cond, &done, &r);
+  bufferlist bl;
+
+  objecter->read(oid,
+		 object_locator_t(layout->fl_pg_pool),
+		 offset,
+		 length,
+		 vino.snapid,
+		 &bl,
+		 CEPH_OSD_FLAG_READ,
+		 onfinish);
+
+  while (!done)
+      cond.Wait(client_lock);
+
+  if (r >= 0) {
+      bl.copy(0, bl.length(), buf);
+      r = bl.length();
+  }
+
+  return r;
+}
+
+/* It appears that the OSD doesn't return success unless the entire
+   buffer was written, return the write length on success. */
+
+int Client::ll_write_block(Inode *in, uint64_t blockid,
+			   char* buf, uint64_t offset,
+			   uint64_t length, ceph_file_layout* layout,
+			   uint64_t snapseq, uint32_t sync)
+{
+  Mutex flock("Client::ll_write_block flock");
+  vinodeno_t vino = ll_get_vino(in);
+  Cond cond;
+  bool done;
+  int r = 0;
+  Context *onack;
+  Context *onsafe;
+
+  if (length == 0) {
+    return -EINVAL;
+  }
+  if (sync) {
+    /* if write is stable, the epilogue is waiting on
+     * flock */
+    onack = new C_NoopContext;
+    onsafe = new C_SafeCond(&flock, &cond, &done, &r);
+    done = false;
+  } else {
+    /* if write is unstable, we just place a barrier for
+     * future commits to wait on */
+    onack = new C_NoopContext;
+    onsafe = new C_Block_Sync(this, vino.ino,
+			      barrier_interval(offset, offset + length), &r);
+    done = true;
+  }
+  object_t oid = file_object_t(vino.ino, blockid);
+  SnapContext fakesnap;
+  bufferptr bp;
+  if (length > 0) bp = buffer::copy(buf, length);
+  bufferlist bl;
+  bl.push_back(bp);
+
+  ldout(cct, 1) << "ll_block_write for " << vino.ino << "." << blockid
+		<< dendl;
+
+  fakesnap.seq = snapseq;
+
+  /* lock just in time */
+  client_lock.Lock();
+
+  objecter->write(oid,
+		  object_locator_t(layout->fl_pg_pool),
+		  offset,
+		  length,
+		  fakesnap,
+		  bl,
+		  ceph_clock_now(cct),
+		  0,
+		  onack,
+		  onsafe);
+
+  client_lock.Unlock();
+  if (!done /* also !sync */) {
+    flock.Lock();
+    while (! done)
+      cond.Wait(flock);
+    flock.Unlock();
+  }
+
+  if (r < 0) {
+      return r;
+  } else {
+      return length;
+  }
+}
+
+int Client::ll_commit_blocks(Inode *in,
+			     uint64_t offset,
+			     uint64_t length)
+{
+    Mutex::Locker lock(client_lock);
+    BarrierContext *bctx;
+    vinodeno_t vino = ll_get_vino(in);
+    uint64_t ino = vino.ino;
+
+    ldout(cct, 1) << "ll_commit_blocks for " << vino.ino << " from "
+		  << offset << " to " << length << dendl;
+
+    if (length == 0) {
+      return -EINVAL;
+    }
+
+    bctx = this->barriers[ino];
+    if (bctx) {
+      barrier_interval civ(offset, length);
+      bctx->commit_barrier(civ);
+    }
+
+    return 0;
 }
 
 int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
