@@ -5,18 +5,28 @@
 
 class RGWHTTPClient
 {
+  bufferlist send_bl;
+  bufferlist::iterator send_iter;
+  size_t send_len;
+  bool has_send_len;
 protected:
   list<pair<string, string> > headers;
 public:
   virtual ~RGWHTTPClient() {}
-  RGWHTTPClient() {}
+  RGWHTTPClient(): send_len (0), has_send_len(false) {}
 
   void append_header(const string& name, const string& val) {
     headers.push_back(pair<string, string>(name, val));
   }
 
-  virtual int read_header(void *ptr, size_t len) { return 0; }
-  virtual int read_data(void *ptr, size_t len) { return 0; }
+  virtual int receive_header(void *ptr, size_t len) { return 0; }
+  virtual int receive_data(void *ptr, size_t len) { return 0; }
+  virtual int send_data(void *ptr, size_t len) { return 0; }
+
+  void set_send_length(size_t len) {
+    send_len = len;
+    has_send_len = true;
+  }
 
   int process(const char *method, const char *url);
   int process(const char *url) { return process("GET", url); }

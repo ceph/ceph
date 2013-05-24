@@ -369,6 +369,9 @@ int RGWCreateBucket_ObjStore_S3::get_params()
   if (ret < 0)
     return ret;
 
+  bufferptr in_ptr(data, len);
+  in_data.append(in_ptr);
+
   if (len) {
     RGWCreateBucketParser parser;
 

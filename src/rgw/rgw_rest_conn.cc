@@ -26,15 +26,16 @@ int RGWRegionConnection::get_url(string& endpoint)
   return 0;
 }
 
-int RGWRegionConnection::forward(const string& uid, req_info& info)
+int RGWRegionConnection::forward(const string& uid, req_info& info, bufferlist *inbl)
 {
   string url;
   int ret = get_url(url);
   if (ret < 0)
     return ret;
   list<pair<string, string> > params;
+  params.push_back(make_pair<string, string>("uid", uid));
   RGWRESTClient client(cct, url, NULL, &params);
-  return client.forward_request(key, info);
+  return client.forward_request(key, info, inbl);
 }
 
 int RGWRegionConnection::create_bucket(const string& uid, const string& bucket)

@@ -234,6 +234,8 @@ protected:
   RGWAccessControlPolicy policy;
   string location_constraint;
 
+  bufferlist in_data;
+
 public:
   RGWCreateBucket() : ret(0) {}
 

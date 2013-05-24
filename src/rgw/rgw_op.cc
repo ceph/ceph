@@ -866,7 +866,7 @@ void RGWCreateBucket::execute()
     }
 
     ldout(s->cct, 0) << "sending create_bucket request to master region" << dendl;
-    ret = store->rest_conn->forward(s->user.user_id, s->info);
+    ret = store->rest_conn->forward(s->user.user_id, s->info, &in_data);
     if (ret < 0)
       return;
   }
