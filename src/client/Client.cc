@@ -2304,7 +2304,9 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
     put_inode(in);
   }
 
-  if (!keepdentry) {
+  if (keepdentry) {
+    dn->lease_mds = -1;
+  } else {
     ldout(cct, 15) << "unlink  removing '" << dn->name << "' dn " << dn << dendl;
 
     // unlink from dir
