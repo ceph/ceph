@@ -2674,7 +2674,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 		 << " oi.version=" << oi.version.version << " ctx->at_version=" << ctx->at_version << dendl;
 	dout(10) << "watch: oi.user_version=" << oi.user_version.version << dendl;
 
-	watch_info_t w(cookie, 30);  // FIXME: where does the timeout come from?
+	// FIXME: where does the timeout come from?
+	watch_info_t w(cookie, 30,
+	  ctx->op->request->get_connection()->get_peer_addr());
 	if (do_watch) {
 	  if (oi.watchers.count(make_pair(cookie, entity))) {
 	    dout(10) << " found existing watch " << w << " by " << entity << dendl;
@@ -3497,7 +3499,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
 	       << dendl;
       watch = Watch::makeWatchRef(
 	this, osd, ctx->obc, i->timeout_seconds,
-	i->cookie, entity);
+	i->cookie, entity, conn->get_peer_addr());
       ctx->obc->watchers.insert(
 	make_pair(
 	  watcher,
@@ -4199,7 +4201,8 @@ void ReplicatedPG::populate_obc_watchers(ObjectContext *obc)
     dout(10) << "  unconnected watcher " << p->first << " will expire " << expire << dendl;
     WatchRef watch(
       Watch::makeWatchRef(
-	this, osd, obc, p->second.timeout_seconds, p->first.first, p->first.second));
+	this, osd, obc, p->second.timeout_seconds, p->first.first,
+	p->first.second, p->second.addr));
     watch->disconnect();
     obc->watchers.insert(
       make_pair(

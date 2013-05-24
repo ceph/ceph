@@ -1742,8 +1742,10 @@ ostream& operator<<(ostream& out, const SnapSet& cs);
 struct watch_info_t {
   uint64_t cookie;
   uint32_t timeout_seconds;
+  entity_addr_t addr;
 
-  watch_info_t(uint64_t c=0, uint32_t t=0) : cookie(c), timeout_seconds(t) {}
+  watch_info_t() : cookie(0), timeout_seconds(0) { }
+  watch_info_t(uint64_t c, uint32_t t, entity_addr_t a) : cookie(c), timeout_seconds(t), addr(a) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
@@ -1753,11 +1755,13 @@ struct watch_info_t {
 WRITE_CLASS_ENCODER(watch_info_t)
 
 static inline bool operator==(const watch_info_t& l, const watch_info_t& r) {
-  return l.cookie == r.cookie && l.timeout_seconds == r.timeout_seconds;
+  return l.cookie == r.cookie && l.timeout_seconds == r.timeout_seconds
+	    && l.addr == r.addr;
 }
 
 static inline ostream& operator<<(ostream& out, const watch_info_t& w) {
-  return out << "watch(cookie " << w.cookie << " " << w.timeout_seconds << "s)";
+  return out << "watch(cookie " << w.cookie << " " << w.timeout_seconds << "s"
+    << " " << w.addr << ")";
 }
 
 struct notify_info_t {
