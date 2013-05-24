@@ -127,6 +127,7 @@ void MonCapGrant::expand_profile(entity_name_t name) const
   if (profile == "osd") {
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_ALL));
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
+    profile_grants.push_back(MonCapGrant("pg", MON_CAP_R | MON_CAP_W));
   }
   if (profile == "mds") {
     profile_grants.push_back(MonCapGrant("mds", MON_CAP_ALL));
