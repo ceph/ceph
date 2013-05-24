@@ -1921,7 +1921,7 @@ def unset_suppress(path):
     try:
         os.unlink(fn)
         LOG.info('unset suppress flag on %s', base)
-    except e:
+    except OSError as e:
         raise Error('failed to unsuppress', e)
 
 
