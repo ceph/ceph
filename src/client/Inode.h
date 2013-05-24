@@ -58,7 +58,7 @@ struct CapSnap {
   xlist<CapSnap*>::item flushing_item;
 
   CapSnap(Inode *i)
-    : in(i), issued(0), dirty(0), 
+    : in(i), issued(0), dirty(0),
       size(0), time_warp_seq(0), mode(0), uid(0), gid(0), xattr_version(0),
       writing(false), dirty_data(false), flush_tid(0),
       flushing_item(this)
@@ -89,7 +89,7 @@ class Inode {
   gid_t      gid;
 
   // nlink
-  int32_t    nlink;  
+  int32_t    nlink;
 
   // file (data access)
   ceph_dir_layout dir_layout;
@@ -106,7 +106,7 @@ class Inode {
   // dirfrag, recursive accountin
   frag_info_t dirstat;
   nest_info_t rstat;
- 
+
   // special stuff
   version_t version;           // auth only
   version_t xattr_version;
@@ -176,16 +176,16 @@ class Inode {
   void make_long_path(filepath& p);
   void make_nosnap_relative_path(filepath& p);
 
-  void get() { 
-    _ref++; 
+  void get() {
+    _ref++;
     lsubdout(cct, mds, 15) << "inode.get on " << this << " " <<  ino << '.' << snapid
-		   << " now " << _ref << dendl;
+                           << " now " << _ref << dendl;
   }
   /// private method to put a reference; see Client::put_inode()
   int _put(int n=1) {
     _ref -= n; 
     lsubdout(cct, mds, 15) << "inode.put on " << this << " " << ino << '.' << snapid
-		   << " now " << _ref << dendl;
+                           << " now " << _ref << dendl;
     assert(_ref >= 0);
     return _ref;
   }
