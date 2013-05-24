@@ -667,6 +667,7 @@ struct req_info {
   string request_params;
 
   req_info(CephContext *cct, RGWEnv *_env);
+  void rebuild_from(req_info& src);
 };
 
 /** Store all the state necessary to complete and respond to an HTTP request*/
