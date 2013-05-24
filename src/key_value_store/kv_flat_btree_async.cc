@@ -2168,6 +2168,7 @@ string KvFlatBtreeAsync::str() {
   io_ctx.aio_operate(index_name, top_aioc, &oro, NULL);
   top_aioc->wait_for_safe();
   err = top_aioc->get_return_value();
+  top_aioc->release();
   if (err < 0 && err != -5){
     if (verbose) cout << "getting keys failed with error " << err << std::endl;
     return ret.str();
