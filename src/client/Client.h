@@ -34,6 +34,8 @@ using namespace __gnu_cxx;
 #include "include/interval_set.h"
 #include "include/lru.h"
 
+#include "barrier.h"
+
 #include "mds/mdstypes.h"
 
 #include "msg/Message.h"
@@ -301,6 +303,9 @@ protected:
   int num_flushing_caps;
   hash_map<inodeno_t,SnapRealm*> snap_realms;
 
+  /* async block write barrier support */
+  map<uint64_t, BarrierContext* > barriers;
+
   SnapRealm *get_snap_realm(inodeno_t r);
   SnapRealm *get_snap_realm_maybe(inodeno_t r);
   void put_snap_realm(SnapRealm *realm);
@@ -352,6 +357,7 @@ protected:
 
   friend class C_Client_PutInode; // calls put_inode()
   friend class C_Client_CacheInvalidate;  // calls ino_invalidate_cb
+  friend class C_Block_Sync; // Calls block map and protected helpers
 
   //int get_cache_size() { return lru.lru_get_size(); }
   //void set_cache_size(int m) { lru.lru_set_max(m); }
