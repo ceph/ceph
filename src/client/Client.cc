@@ -7587,6 +7587,90 @@ int Client::ll_link(Inode *parent, Inode *newparent, const char *newname,
   return r;
 }
 
+int Client::ll_num_osds(void)
+{
+  return osdmap->get_num_osds();
+}
+
+int Client::ll_osdaddr(int osd, uint32_t *addr)
+{
+  Mutex::Locker lock(client_lock);
+  entity_addr_t g = osdmap->get_addr(osd);
+  uint32_t nb_addr = (g.in4_addr()).sin_addr.s_addr;
+
+  if (!(osdmap->exists(osd))) {
+    return -1;
+  }
+
+  *addr = ntohl(nb_addr);
+
+  return 0;
+}
+
+uint32_t Client::ll_stripe_unit(Inode *in)
+{
+  Mutex::Locker lock(client_lock);
+  return in->layout.fl_stripe_unit;
+}
+
+uint64_t Client::ll_snap_seq(Inode *in)
+{
+  Mutex::Locker lock(client_lock);
+  return in->snaprealm->seq;
+}
+
+int Client::ll_file_layout(Inode *in, ceph_file_layout *layout)
+{
+  Mutex::Locker lock(client_lock);
+  *layout = in->layout;
+  return 0;
+}
+
+/* Currently we cannot take advantage of redundancy in reads, since we
+   would have to go through all possible placement groups (a
+   potentially quite large number determined by a hash), and use CRUSH
+   to calculate the appropriate set of OSDs for each placement group,
+   then index into that.  An array with one entry per OSD is much more
+   tractable and works for demonstration purposes. */
+
+int Client::ll_get_stripe_osd(Inode *in, uint64_t blockno,
+			      ceph_file_layout* layout)
+{
+  Mutex::Locker lock(client_lock);
+  inodeno_t ino = ll_get_inodeno(in);
+  uint32_t object_size = layout->fl_object_size;
+  uint32_t su = layout->fl_stripe_unit;
+  uint32_t stripe_count = layout->fl_stripe_count;
+  uint64_t stripes_per_object = object_size / su;
+
+  uint64_t stripeno = blockno / stripe_count;    // which horizontal stripe        (Y)
+  uint64_t stripepos = blockno % stripe_count;   // which object in the object set (X)
+  uint64_t objectsetno = stripeno / stripes_per_object;       // which object set
+  uint64_t objectno = objectsetno * stripe_count + stripepos;  // object id
+
+  object_t oid = file_object_t(ino, objectno);
+  ceph_object_layout olayout
+    = objecter->osdmap->file_to_object_layout(oid, *layout, "");
+
+  pg_t pg = (pg_t)olayout.ol_pgid;
+  vector<int> osds;
+  osdmap->pg_to_osds(pg, osds);
+  return osds[0];
+}
+
+/* Return the offset of the block, internal to the object */
+
+uint64_t Client::ll_get_internal_offset(Inode *in, uint64_t blockno)
+{
+  Mutex::Locker lock(client_lock);
+  ceph_file_layout *layout=&(in->layout);
+  uint32_t object_size = layout->fl_object_size;
+  uint32_t su = layout->fl_stripe_unit;
+  uint64_t stripes_per_object = object_size / su;
+
+  return (blockno % stripes_per_object) * su;
+}
+
 int Client::ll_opendir(Inode *in, dir_result_t** dirpp, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
