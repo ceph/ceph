@@ -3,7 +3,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-RGWRegionConnection::RGWRegionConnection(CephContext *_cct, RGWRados *store, RGWRegion& upstream) : cct(_cct) {
+RGWRegionConnection::RGWRegionConnection(CephContext *_cct, RGWRados *store, RGWRegion& upstream) : cct(_cct)
+{
   list<string>::iterator iter;
   int i;
   for (i = 0, iter = upstream.endpoints.begin(); iter != upstream.endpoints.end(); ++iter, ++i) {
@@ -25,7 +26,19 @@ int RGWRegionConnection::get_url(string& endpoint)
   return 0;
 }
 
-int RGWRegionConnection::create_bucket(const string& uid, const string& bucket) {
+int RGWRegionConnection::forward(const string& uid, req_info& info)
+{
+  string url;
+  int ret = get_url(url);
+  if (ret < 0)
+    return ret;
+  list<pair<string, string> > params;
+  RGWRESTClient client(cct, url, NULL, &params);
+  return client.forward_request(key, info);
+}
+
+int RGWRegionConnection::create_bucket(const string& uid, const string& bucket)
+{
   list<pair<string, string> > params;
   params.push_back(make_pair<string, string>("uid", uid));
   params.push_back(make_pair<string, string>("bucket", bucket));
