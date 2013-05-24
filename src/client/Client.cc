@@ -5530,7 +5530,8 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
 
   // success?
   if (result >= 0) {
-    *fhp = _create_fh(in, flags, cmode);
+    if (fhp)
+      *fhp = _create_fh(in, flags, cmode);
   } else {
     in->put_open_ref(cmode);
   }
