@@ -21,7 +21,7 @@ ostream& operator<<(ostream &out, Inode &in)
     out << "(";
     for (map<int,Cap*>::iterator p = in.caps.begin(); p != in.caps.end(); ++p) {
       if (p != in.caps.begin())
-	out << ',';
+        out << ',';
       out << p->first << '=' << ccap_string(p->second->issued);
     }
     out << ")";
@@ -126,7 +126,7 @@ bool Inode::put_cap_ref(int cap)
 	assert(cap_refs[c] > 0);
       }
       if (--cap_refs[c] == 0)
-	last = true;      
+        last = true;
       //cout << "inode " << *this << " put " << cap_string(c) << " " << (cap_refs[c]+1) << " -> " << cap_refs[c] << std::endl;
     }
     cap >>= 1;
@@ -140,7 +140,7 @@ bool Inode::is_any_caps()
   return caps.size() || exporting_mds >= 0;
 }
 
-bool Inode::cap_is_valid(Cap* cap) 
+bool Inode::cap_is_valid(Cap* cap)
 {
   /*cout << "cap_gen     " << cap->session-> cap_gen << std::endl
     << "session gen " << cap->gen << std::endl
