@@ -789,7 +789,7 @@ def prepare_journal_dev(
                     '--name={name}'.format(name=os.path.basename(journal)),
                     ],
                 )   
-            journal_symlink='/dev/{symlink}-part{num}'.format(symlink=symlinks.split()[2], num=num)
+            journal_symlink = '/dev/{symlink}-part{num}'.format(symlink=symlinks.split()[2], num=num)
 
         journal_dmcrypt = None
         if journal_dm_keypath:
@@ -1816,7 +1816,7 @@ def main_list(args):
 # means suppressing sdb will stop activate on sdb1, sdb2, etc.
 #
 
-SUPPRESS_PREFIX='/var/lib/ceph/tmp/suppress-activate.'
+SUPPRESS_PREFIX = '/var/lib/ceph/tmp/suppress-activate.'
 
 def is_suppressed(path):
     disk = os.path.realpath(path)
