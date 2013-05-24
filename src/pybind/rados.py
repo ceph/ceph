@@ -510,6 +510,9 @@ Rados object in state %s." % (self.state))
             # free callee's allocations
             run_in_thread(self.librados.rados_buffer_free, (outbufp.contents,))
             run_in_thread(self.librados.rados_buffer_free, (outsp.contents,))
+        else:
+            my_outbuf = ''
+            my_outs = ''
 
         return (ret, my_outbuf, my_outs)
 
@@ -538,6 +541,9 @@ Rados object in state %s." % (self.state))
             # free callee's allocations
             run_in_thread(self.librados.rados_buffer_free, (outbufp.contents,))
             run_in_thread(self.librados.rados_buffer_free, (outsp.contents,))
+        else:
+            my_outbuf = ''
+            my_outs = ''
 
         return (ret, my_outbuf, my_outs)
 
@@ -566,6 +572,9 @@ Rados object in state %s." % (self.state))
             # free callee's allocations
             run_in_thread(self.librados.rados_buffer_free, (outbufp.contents,))
             run_in_thread(self.librados.rados_buffer_free, (outsp.contents,))
+        else:
+            my_outbuf = ''
+            my_outs = ''
 
         return (ret, my_outbuf, my_outs)
 
