@@ -3308,7 +3308,14 @@ void PG::_scan_list(
         ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
           coll, poid);
         assert(iter);
+	uint64_t keys_scanned = 0;
         for (iter->seek_to_first(); iter->valid() ; iter->next()) {
+	  if (g_conf->osd_scan_list_ping_tp_interval &&
+	      (keys_scanned % g_conf->osd_scan_list_ping_tp_interval == 0)) {
+	    handle.reset_tp_timeout();
+	  }
+	  ++keys_scanned;
+
           dout(25) << "CRC key " << iter->key() << " value "
             << string(iter->value().c_str(), iter->value().length()) << dendl;
 
