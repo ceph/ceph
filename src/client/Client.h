@@ -20,9 +20,11 @@
 
 // stl
 #include <string>
+#include <memory>
 #include <set>
 #include <map>
 #include <fstream>
+#include <exception>
 using std::set;
 using std::map;
 using std::fstream;
@@ -567,6 +569,9 @@ private:
 
   int check_permissions(Inode *in, int flags, int uid, int gid);
 
+  vinodeno_t _get_vino(Inode *in);
+  inodeno_t _get_inodeno(Inode *in);
+
 public:
   int mount(const std::string &mount_root);
   void unmount();
@@ -701,38 +706,80 @@ public:
   int get_caps_issued(int fd);
   int get_caps_issued(const char *path);
 
-  // low-level interface
-  int ll_lookup(vinodeno_t parent, const char *name, struct stat *attr, int uid = -1, int gid = -1);
-  bool ll_forget(vinodeno_t vino, int count);
-  Inode *_ll_get_inode(vinodeno_t vino);
-  int ll_getattr(vinodeno_t vino, struct stat *st, int uid = -1, int gid = -1);
-  int ll_setattr(vinodeno_t vino, struct stat *st, int mask, int uid = -1, int gid = -1);
-  int ll_getxattr(vinodeno_t vino, const char *name, void *value, size_t size, int uid=-1, int gid=-1);
-  int ll_setxattr(vinodeno_t vino, const char *name, const void *value, size_t size, int flags, int uid=-1, int gid=-1);
-  int ll_removexattr(vinodeno_t vino, const char *name, int uid=-1, int gid=-1);
-  int ll_listxattr(vinodeno_t vino, char *list, size_t size, int uid=-1, int gid=-1);
-  int ll_opendir(vinodeno_t vino, void **dirpp, int uid = -1, int gid = -1);
-  void ll_releasedir(void *dirp);
-  int ll_readlink(vinodeno_t vino, const char **value, int uid = -1, int gid = -1);
-  int ll_mknod(vinodeno_t vino, const char *name, mode_t mode, dev_t rdev, struct stat *attr, int uid = -1, int gid = -1);
-  int ll_mkdir(vinodeno_t vino, const char *name, mode_t mode, struct stat *attr, int uid = -1, int gid = -1);
-  int ll_symlink(vinodeno_t vino, const char *name, const char *value, struct stat *attr, int uid = -1, int gid = -1);
-  int ll_unlink(vinodeno_t vino, const char *name, int uid = -1, int gid = -1);
-  int ll_rmdir(vinodeno_t vino, const char *name, int uid = -1, int gid = -1);
-  int ll_rename(vinodeno_t parent, const char *name, vinodeno_t newparent, const char *newname, int uid = -1, int gid = -1);
-  int ll_link(vinodeno_t vino, vinodeno_t newparent, const char *newname, struct stat *attr, int uid = -1, int gid = -1);
-  int ll_describe_layout(Fh *fh, ceph_file_layout* layout);
-  int ll_open(vinodeno_t vino, int flags, Fh **fh, int uid = -1, int gid = -1);
-  int ll_create(vinodeno_t parent, const char *name, mode_t mode, int flags, struct stat *attr, Fh **fh, int uid = -1, int gid = -1);
+  // low-level interface v2
+  inodeno_t ll_get_inodeno(Inode *in) {
+    Mutex::Locker lock(client_lock);
+    return _get_inodeno(in);
+  }
+  snapid_t ll_get_snapid(Inode *in);
+  vinodeno_t ll_get_vino(Inode *in) {
+    Mutex::Locker lock(client_lock);
+    return _get_vino(in);
+  }
+  Inode *ll_get_inode(vinodeno_t vino);
+  int ll_lookup(Inode *parent, const char *name, struct stat *attr,
+		Inode **out, int uid = -1, int gid = -1);
+  bool ll_forget(Inode *in, int count);
+  bool ll_put(Inode *in);
+  int ll_getattr(Inode *in, struct stat *st, int uid = -1, int gid = -1);
+  int ll_setattr(Inode *in, struct stat *st, int mask, int uid = -1,
+		 int gid = -1);
+  int ll_getxattr(Inode *in, const char *name, void *value, size_t size,
+		  int uid=-1, int gid=-1);
+  int ll_setxattr(Inode *in, const char *name, const void *value, size_t size,
+		  int flags, int uid=-1, int gid=-1);
+  int ll_removexattr(Inode *in, const char *name, int uid=-1, int gid=-1);
+  int ll_listxattr(Inode *in, char *list, size_t size, int uid=-1, int gid=-1);
+  int ll_opendir(Inode *in, dir_result_t **dirpp, int uid = -1, int gid = -1);
+  int ll_releasedir(dir_result_t* dirp);
+  int ll_readlink(Inode *in, const char **value, int uid = -1, int gid = -1);
+  int ll_mknod(Inode *in, const char *name, mode_t mode, dev_t rdev,
+	       struct stat *attr, Inode **out, int uid = -1, int gid = -1);
+  int ll_mkdir(Inode *in, const char *name, mode_t mode, struct stat *attr,
+	       Inode **out, int uid = -1, int gid = -1);
+  int ll_symlink(Inode *in, const char *name, const char *value,
+		 struct stat *attr, Inode **out, int uid = -1, int gid = -1);
+  int ll_unlink(Inode *in, const char *name, int uid = -1, int gid = -1);
+  int ll_rmdir(Inode *in, const char *name, int uid = -1, int gid = -1);
+  int ll_rename(Inode *parent, const char *name, Inode *newparent,
+		const char *newname, int uid = -1, int gid = -1);
+  int ll_link(Inode *in, Inode *newparent, const char *newname,
+	      struct stat *attr, int uid = -1, int gid = -1);
+  int ll_open(Inode *in, int flags, Fh **fh, int uid = -1, int gid = -1);
+  int ll_create(Inode *parent, const char *name, mode_t mode, int flags,
+		struct stat *attr, Inode **out, Fh **fhp, int uid = -1,
+		int gid = -1);
+  int ll_read_block(Inode *in, uint64_t blockid, char *buf,  uint64_t offset,
+		    uint64_t length, ceph_file_layout* layout);
+
+  int ll_write_block(Inode *in, uint64_t blockid,
+		     char* buf, uint64_t offset,
+		     uint64_t length, ceph_file_layout* layout,
+		     uint64_t snapseq, uint32_t sync);
+  int ll_commit_blocks(Inode *in, uint64_t offset, uint64_t length);
+
+  int ll_statfs(Inode *in, struct statvfs *stbuf);
+  int ll_walk(const char* name, Inode **i, struct stat *attr); // XXX in?
+  int ll_listxattr_chunks(Inode *in, char *names, size_t size,
+			  int *cookie, int *eol, int uid, int gid);
+  uint32_t ll_stripe_unit(Inode *in);
+  int ll_file_layout(Inode *in, ceph_file_layout *layout);
+  uint64_t ll_snap_seq(Inode *in);
+
   int ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl);
   int ll_write(Fh *fh, loff_t off, loff_t len, const char *data);
+  loff_t ll_lseek(Fh *fh, loff_t offset, int whence);
   int ll_flush(Fh *fh);
   int ll_fsync(Fh *fh, bool syncdataonly);
   int ll_release(Fh *fh);
-  int ll_statfs(vinodeno_t vino, struct statvfs *stbuf);
+  int ll_get_stripe_osd(struct Inode *in, uint64_t blockno,
+			ceph_file_layout* layout);
+  uint64_t ll_get_internal_offset(struct Inode *in, uint64_t blockno);
 
+  int ll_num_osds(void);
+  int ll_osdaddr(int osd, uint32_t *addr);
+  int ll_osdaddr(int osd, char* buf, size_t size);
   void ll_register_ino_invalidate_cb(client_ino_callback_t cb, void *handle);
-
   void ll_register_getgroups_cb(client_getgroups_callback_t cb, void *handle);
 };
 
