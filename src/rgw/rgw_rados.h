@@ -290,6 +290,7 @@ struct RGWZoneParams {
     ::encode(user_swift_pool, bl);
     ::encode(user_uid_pool, bl);
     ::encode(name, bl);
+    ::encode(system_key, bl);
     ENCODE_FINISH(bl);
   }
 

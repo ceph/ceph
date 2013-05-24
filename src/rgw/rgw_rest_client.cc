@@ -56,7 +56,7 @@ static void get_new_date_str(CephContext *cct, string& date_str)
 {
   utime_t tm = ceph_clock_now(cct);
   stringstream s;
-  tm.gmtime(s);
+  tm.asctime(s);
   date_str = s.str();
 }
 
@@ -105,23 +105,30 @@ int RGWRESTClient::execute(RGWAccessKey& key, const char *method, const char *re
 int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info)
 {
 
-  RGWEnv new_env = *info.env; /* copy environment */
-
   string date_str;
   get_new_date_str(cct, date_str);
-  new_env.set("HTTP_DATE", date_str.c_str());
 
-  req_info new_info(info);
-  new_info.env = &new_env;
+  RGWEnv new_env;
+  req_info new_info(cct, &new_env);
+  new_info.rebuild_from(info);
+
+  new_env.remove("HTTP_X_AMZ_DATE");
+  new_env.set("HTTP_DATE", date_str.c_str());
 
   map<string, string>& m = new_env.get_map();
 
+  map<string, string>::iterator i;
+  for (i = m.begin(); i != m.end(); ++i) {
+    ldout(cct, 0) << "> " << i->first << " -> " << i->second << dendl;
+  }
+
   string canonical_header;
-  utime_t header_time;
-  if (!rgw_create_s3_canonical_header(new_info, header_time, canonical_header, false)) {
+  if (!rgw_create_s3_canonical_header(new_info, NULL, canonical_header, false)) {
     ldout(cct, 0) << "failed to create canonical s3 header" << dendl;
     return -EINVAL;
   }
+
+  ldout(cct, 10) << "generated canonical header: " << canonical_header << dendl;
 
   string digest;
   int ret = rgw_get_s3_header_digest(canonical_header, key.key, digest);
@@ -138,8 +145,19 @@ int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info)
   for (iter = m.begin(); iter != m.end(); ++iter) {
     headers.push_back(make_pair<string, string>(iter->first, iter->second));
   }
+
+  string new_url = url;
+  string& resource = new_info.request_uri;
+  string new_resource = resource;
+  if (new_url[new_url.size() - 1] == '/' && resource[0] == '/') {
+    new_url = new_url.substr(0, new_url.size() - 1);
+  } else if (resource[0] != '/') {
+    new_resource = "/";
+    new_resource.append(resource);
+  }
+  new_url.append(new_resource);
   
-  int r = process(new_info.method, new_info.request_uri.c_str());
+  int r = process(new_info.method, new_url.c_str());
   if (r < 0)
     return r;
 

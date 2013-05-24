@@ -47,6 +47,10 @@ int RGWHTTPClient::process(const char *method, const char *url)
   for (iter = headers.begin(); iter != headers.end(); ++iter) {
     pair<string, string>& p = *iter;
     string val = p.first;
+
+    if (strncmp(val.c_str(), "HTTP_", 5) == 0) {
+      val = val.substr(5);
+    }
     val.append(": ");
     val.append(p.second);
     h = curl_slist_append(h, val.c_str());

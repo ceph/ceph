@@ -104,6 +104,17 @@ req_info::req_info(CephContext *cct, struct RGWEnv *e) : env(e) {
   host = env->get("HTTP_HOST");
 }
 
+void req_info::rebuild_from(req_info& src)
+{
+  method = src.method;
+  script_uri = src.script_uri;
+  request_uri = src.request_uri;
+  host = src.host;
+
+  x_meta_map = src.x_meta_map;
+  x_meta_map.erase("x-amz-date");
+}
+
 
 req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL), op(OP_UNKNOWN),
 							    bucket_cors(NULL), has_acl_header(false),

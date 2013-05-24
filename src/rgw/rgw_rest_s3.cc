@@ -1956,7 +1956,7 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
   /* now verify signature */
    
   string auth_hdr;
-  if (!rgw_create_s3_canonical_header(s->info, s->header_time, auth_hdr, qsr)) {
+  if (!rgw_create_s3_canonical_header(s->info, &s->header_time, auth_hdr, qsr)) {
     dout(10) << "failed to create auth header\n" << auth_hdr << dendl;
     return -EPERM;
   }
