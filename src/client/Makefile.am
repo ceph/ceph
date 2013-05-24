@@ -1,5 +1,6 @@
 libclient_la_SOURCES = \
 	client/Client.cc \
+	client/barrier.cc \
 	client/Inode.cc \
 	client/Dentry.cc \
 	client/MetaRequest.cc \
@@ -20,6 +21,7 @@ noinst_HEADERS += \
 	client/ClientSnapRealm.h \
 	client/SyntheticClient.h \
 	client/Trace.h \
+	client/barrier.h \
 	client/ioctl.h \
 	client/ObjecterWriteback.h
 
