@@ -28,6 +28,7 @@
 #include "common/safe_io.h"
 #include "include/types.h"
 #include "Client.h"
+#include "Fh.h"
 #include "ioctl.h"
 #include "common/config.h"
 #include "include/assert.h"
@@ -70,6 +71,8 @@ public:
   uint64_t fino_snap(uint64_t fino);
   vinodeno_t fino_vino(inodeno_t fino);
   uint64_t make_fake_ino(inodeno_t ino, snapid_t snapid);
+  Inode * iget(inodeno_t fino);
+  void iput(Inode *in);
 
   int fd_on_success;
   Client *client;
@@ -80,6 +83,7 @@ public:
 
   Mutex stag_lock;
   int last_stag;
+
   hash_map<uint64_t,int> snap_stag_map;
   hash_map<int,uint64_t> stag_snap_map;
 
@@ -90,10 +94,11 @@ static void fuse_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   struct fuse_entry_param fe;
+  Inode *i2, *i1 = cfuse->iget(parent); // see below
   int r;
 
   memset(&fe, 0, sizeof(fe));
-  r = cfuse->client->ll_lookup(cfuse->fino_vino(parent), name, &fe.attr, ctx->uid, ctx->gid);
+  r = cfuse->client->ll_lookup(i1, name, &fe.attr, &i2, ctx->uid, ctx->gid);
   if (r >= 0) {
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
@@ -101,12 +106,17 @@ static void fuse_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   } else {
     fuse_reply_err(req, -r);
   }
+
+  // XXX NB, we dont iput(i2) because FUSE will do so in a matching
+  // fuse_ll_forget()
+  cfuse->iput(i1);
 }
 
-static void fuse_ll_forget(fuse_req_t req, fuse_ino_t ino, long unsigned nlookup)
+static void fuse_ll_forget(fuse_req_t req, fuse_ino_t ino,
+			   long unsigned nlookup)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
-  cfuse->client->ll_forget(cfuse->fino_vino(ino), nlookup);
+  cfuse->client->ll_forget(cfuse->iget(ino), nlookup+1);
   fuse_reply_none(req);
 }
 
@@ -115,16 +125,20 @@ static void fuse_ll_getattr(fuse_req_t req, fuse_ino_t ino,
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  Inode *in = cfuse->iget(ino);
   struct stat stbuf;
   
-  (void) fi;
+  (void) fi; // XXX
 
-  if (cfuse->client->ll_getattr(cfuse->fino_vino(ino), &stbuf, ctx->uid, ctx->gid) == 0) {
+  if (cfuse->client->ll_getattr(in, &stbuf, ctx->uid, ctx->gid)
+      == 0) {
     stbuf.st_ino = cfuse->make_fake_ino(stbuf.st_ino, stbuf.st_dev);
     stbuf.st_rdev = new_encode_dev(stbuf.st_rdev);
     fuse_reply_attr(req, &stbuf, 0);
   } else
     fuse_reply_err(req, ENOENT);
+
+  cfuse->iput(in); // iput required
 }
 
 static void fuse_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
@@ -132,6 +146,7 @@ static void fuse_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  Inode *in = cfuse->iget(ino);
 
   int mask = 0;
   if (to_set & FUSE_SET_ATTR_MODE) mask |= CEPH_SETATTR_MODE;
@@ -141,11 +156,13 @@ static void fuse_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
   if (to_set & FUSE_SET_ATTR_ATIME) mask |= CEPH_SETATTR_ATIME;
   if (to_set & FUSE_SET_ATTR_SIZE) mask |= CEPH_SETATTR_SIZE;
 
-  int r = cfuse->client->ll_setattr(cfuse->fino_vino(ino), attr, mask, ctx->uid, ctx->gid);
+  int r = cfuse->client->ll_setattr(in, attr, mask, ctx->uid, ctx->gid);
   if (r == 0)
     fuse_reply_attr(req, attr, 0);
   else
     fuse_reply_err(req, -r);
+
+  cfuse->iput(in); // iput required
 }
 
 // XATTRS
@@ -155,22 +172,31 @@ static void fuse_ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  int r = cfuse->client->ll_setxattr(cfuse->fino_vino(ino), name, value, size, flags, ctx->uid, ctx->gid);
+  Inode *in = cfuse->iget(ino);
+
+  int r = cfuse->client->ll_setxattr(in, name, value, size, flags, ctx->uid,
+				     ctx->gid);
   fuse_reply_err(req, -r);
+
+  cfuse->iput(in); // iput required
 }
 
 static void fuse_ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  Inode *in = cfuse->iget(ino);
   char buf[size];
-  int r = cfuse->client->ll_listxattr(cfuse->fino_vino(ino), buf, size, ctx->uid, ctx->gid);
+
+  int r = cfuse->client->ll_listxattr(in, buf, size, ctx->uid, ctx->gid);
   if (size == 0 && r >= 0)
     fuse_reply_xattr(req, r);
   else if (r >= 0) 
     fuse_reply_buf(req, buf, r);
   else
     fuse_reply_err(req, -r);
+
+  cfuse->iput(in); // iput required
 }
 
 static void fuse_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
@@ -178,50 +204,68 @@ static void fuse_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  Inode *in = cfuse->iget(ino);
   char buf[size];
-  int r = cfuse->client->ll_getxattr(cfuse->fino_vino(ino), name, buf, size, ctx->uid, ctx->gid);
+
+  int r = cfuse->client->ll_getxattr(in, name, buf, size, ctx->uid, ctx->gid);
   if (size == 0 && r >= 0)
     fuse_reply_xattr(req, r);
   else if (r >= 0)
     fuse_reply_buf(req, buf, r);
   else
     fuse_reply_err(req, -r);
+
+  cfuse->iput(in); // iput required
 }
 
-static void fuse_ll_removexattr(fuse_req_t req, fuse_ino_t ino, const char *name)
+static void fuse_ll_removexattr(fuse_req_t req, fuse_ino_t ino,
+				const char *name)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  int r = cfuse->client->ll_removexattr(cfuse->fino_vino(ino), name, ctx->uid, ctx->gid);
+  Inode *in = cfuse->iget(ino);
+
+  int r = cfuse->client->ll_removexattr(in, name, ctx->uid,
+					ctx->gid);
   fuse_reply_err(req, -r);
+
+  cfuse->iput(in); // iput required
 }
 
-
-
-static void fuse_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+static void fuse_ll_opendir(fuse_req_t req, fuse_ino_t ino,
+			    struct fuse_file_info *fi)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  Inode *in = cfuse->iget(ino);
   void *dirp;
-  int r = cfuse->client->ll_opendir(cfuse->fino_vino(ino), &dirp, ctx->uid, ctx->gid);
+
+  int r = cfuse->client->ll_opendir(in, (dir_result_t **) &dirp, ctx->uid,
+				    ctx->gid);
   if (r >= 0) {
     fi->fh = (long)dirp;
     fuse_reply_open(req, fi);
   } else {
     fuse_reply_err(req, -r);
   }
+
+  cfuse->iput(in); // iput required
 }
 
 static void fuse_ll_readlink(fuse_req_t req, fuse_ino_t ino)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  Inode *in = cfuse->iget(ino);
   const char *value;
-  int r = cfuse->client->ll_readlink(cfuse->fino_vino(ino), &value, ctx->uid, ctx->gid);
+
+  int r = cfuse->client->ll_readlink(in, &value, ctx->uid, ctx->gid);
   if (r == 0) 
     fuse_reply_readlink(req, value);
   else
     fuse_reply_err(req, -r);
+
+  cfuse->iput(in); // iput required
 }
 
 static void fuse_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
@@ -229,10 +273,13 @@ static void fuse_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  Inode *i2, *i1 = cfuse->iget(parent);
   struct fuse_entry_param fe;
+
   memset(&fe, 0, sizeof(fe));
 
-  int r = cfuse->client->ll_mknod(cfuse->fino_vino(parent), name, mode, new_decode_dev(rdev), &fe.attr, ctx->uid, ctx->gid);
+  int r = cfuse->client->ll_mknod(i1, name, mode, new_decode_dev(rdev),
+				  &fe.attr, &i2, ctx->uid, ctx->gid);
   if (r == 0) {
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
@@ -240,6 +287,10 @@ static void fuse_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
   } else {
     fuse_reply_err(req, -r);
   }
+
+  // XXX NB, we dont iput(i2) because FUSE will do so in a matching
+  // fuse_ll_forget()
+  cfuse->iput(i1); // iput required
 }
 
 static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
@@ -247,10 +298,13 @@ static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  Inode *i2, *i1 = cfuse->iget(parent);
   struct fuse_entry_param fe;
+
   memset(&fe, 0, sizeof(fe));
 
-  int r = cfuse->client->ll_mkdir(cfuse->fino_vino(parent), name, mode, &fe.attr, ctx->uid, ctx->gid);
+  int r = cfuse->client->ll_mkdir(i1, name, mode, &fe.attr, &i2, ctx->uid,
+				  ctx->gid);
   if (r == 0) {
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
@@ -258,32 +312,48 @@ static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
   } else {
     fuse_reply_err(req, -r);
   }
+
+  // XXX NB, we dont iput(i2) because FUSE will do so in a matching
+  // fuse_ll_forget()
+  cfuse->iput(i1); // iput required
 }
 
 static void fuse_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  int r = cfuse->client->ll_unlink(cfuse->fino_vino(parent), name, ctx->uid, ctx->gid);
+  Inode *in = cfuse->iget(parent);
+
+  int r = cfuse->client->ll_unlink(in, name, ctx->uid, ctx->gid);
   fuse_reply_err(req, -r);
+
+  cfuse->iput(in); // iput required
 }
 
 static void fuse_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  int r = cfuse->client->ll_rmdir(cfuse->fino_vino(parent), name, ctx->uid, ctx->gid);
+  Inode *in = cfuse->iget(parent);
+
+  int r = cfuse->client->ll_rmdir(in, name, ctx->uid, ctx->gid);
   fuse_reply_err(req, -r);
+
+  cfuse->iput(in); // iput required
 }
 
-static void fuse_ll_symlink(fuse_req_t req, const char *existing, fuse_ino_t parent, const char *name)
+static void fuse_ll_symlink(fuse_req_t req, const char *existing,
+			    fuse_ino_t parent, const char *name)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  Inode *i2, *i1 = cfuse->iget(parent);
   struct fuse_entry_param fe;
+
   memset(&fe, 0, sizeof(fe));
 
-  int r = cfuse->client->ll_symlink(cfuse->fino_vino(parent), name, existing, &fe.attr, ctx->uid, ctx->gid);
+  int r = cfuse->client->ll_symlink(i1, name, existing, &fe.attr, &i2, ctx->uid,
+				    ctx->gid);
   if (r == 0) {
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
@@ -291,6 +361,10 @@ static void fuse_ll_symlink(fuse_req_t req, const char *existing, fuse_ino_t par
   } else {
     fuse_reply_err(req, -r);
   }
+
+  // XXX NB, we dont iput(i2) because FUSE will do so in a matching
+  // fuse_ll_forget()
+  cfuse->iput(i1); // iput required
 }
 
 static void fuse_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
@@ -298,8 +372,14 @@ static void fuse_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  int r = cfuse->client->ll_rename(cfuse->fino_vino(parent), name, cfuse->fino_vino(newparent), newname, ctx->uid, ctx->gid);
+  Inode *in = cfuse->iget(parent);
+  Inode *nin = cfuse->iget(newparent);
+
+  int r = cfuse->client->ll_rename(in, name, nin, newname, ctx->uid, ctx->gid);
   fuse_reply_err(req, -r);
+
+  cfuse->iput(in); // iputs required
+  cfuse->iput(nin);
 }
 
 static void fuse_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
@@ -307,10 +387,14 @@ static void fuse_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  Inode *in = cfuse->iget(ino);
+  Inode *nin = cfuse->iget(newparent);
   struct fuse_entry_param fe;
+
   memset(&fe, 0, sizeof(fe));
   
-  int r = cfuse->client->ll_link(cfuse->fino_vino(ino), cfuse->fino_vino(newparent), newname, &fe.attr, ctx->uid, ctx->gid);
+  int r = cfuse->client->ll_link(in, nin, newname, &fe.attr, ctx->uid,
+				 ctx->gid);
   if (r == 0) {
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
@@ -318,14 +402,20 @@ static void fuse_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
   } else {
     fuse_reply_err(req, -r);
   }
+
+  cfuse->iput(in); // iputs required
+  cfuse->iput(nin);
 }
 
-static void fuse_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+static void fuse_ll_open(fuse_req_t req, fuse_ino_t ino,
+			 struct fuse_file_info *fi)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  Inode *in = cfuse->iget(ino);
   Fh *fh = NULL;
-  int r = cfuse->client->ll_open(cfuse->fino_vino(ino), fi->flags, &fh, ctx->uid, ctx->gid);
+
+  int r = cfuse->client->ll_open(in, fi->flags, &fh, ctx->uid, ctx->gid);
   if (r == 0) {
     fi->fh = (long)fh;
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
@@ -336,6 +426,8 @@ static void fuse_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *
   } else {
     fuse_reply_err(req, -r);
   }
+
+  cfuse->iput(in); // iput required
 }
 
 static void fuse_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
@@ -363,7 +455,8 @@ static void fuse_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
     fuse_reply_err(req, -r);
 }
 
-static void fuse_ll_flush(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+static void fuse_ll_flush(fuse_req_t req, fuse_ino_t ino,
+			  struct fuse_file_info *fi)
 {
   // NOOP
   fuse_reply_err(req, 0);
@@ -385,7 +478,7 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg, st
       struct ceph_file_layout layout;
       struct ceph_ioctl_layout l;
       Fh *fh = (Fh*)fi->fh;
-      cfuse->client->ll_describe_layout(fh, &layout);
+      cfuse->client->ll_file_layout(fh->inode, &layout);
       l.stripe_unit = layout.fl_stripe_unit;
       l.stripe_count = layout.fl_stripe_count;
       l.object_size = layout.fl_object_size;
@@ -399,7 +492,8 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg, st
 }
 #endif
 
-static void fuse_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+static void fuse_ll_release(fuse_req_t req, fuse_ino_t ino,
+			    struct fuse_file_info *fi)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   Fh *fh = (Fh*)fi->fh;
@@ -427,7 +521,8 @@ struct readdir_context {
 /*
  * return 0 on success, -1 if out of space
  */
-static int fuse_ll_add_dirent(void *p, struct dirent *de, struct stat *st, int stmask, off_t next_off)
+static int fuse_ll_add_dirent(void *p, struct dirent *de, struct stat *st,
+			      int stmask, off_t next_off)
 {
   struct readdir_context *c = (struct readdir_context *)p;
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(c->req);
@@ -484,28 +579,38 @@ static void fuse_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  Inode *i1 = cfuse->iget(parent);
   struct fuse_entry_param fe;
-  memset(&fe, 0, sizeof(fe));
   Fh *fh = NULL;
-  int r = cfuse->client->ll_create(cfuse->fino_vino(parent), name, mode, fi->flags, &fe.attr, &fh, ctx->uid, ctx->gid);
+
+  memset(&fe, 0, sizeof(fe));
+
+  int r = cfuse->client->ll_create(i1, name, mode, fi->flags, &fe.attr, NULL,
+				   &fh, ctx->uid, ctx->gid);
   if (r == 0) {
     fi->fh = (long)fh;
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fuse_reply_create(req, &fe, fi);
-  } else {
+  } else
     fuse_reply_err(req, -r);
-  }
+  // XXX NB, we dont iput(i2) because FUSE will do so in a matching
+  // fuse_ll_forget()
+  cfuse->iput(i1); // iput required
 }
 
 static void fuse_ll_statfs(fuse_req_t req, fuse_ino_t ino)
 {
   struct statvfs stbuf;
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
-  int r = cfuse->client->ll_statfs(cfuse->fino_vino(ino), &stbuf);
+  Inode *in = cfuse->iget(ino);
+
+  int r = cfuse->client->ll_statfs(in, &stbuf);
   if (r == 0)
     fuse_reply_statfs(req, &stbuf);
   else
     fuse_reply_err(req, -r);
+
+  cfuse->iput(in); // iput required
 }
 
 static int getgroups_cb(void *handle, uid_t uid, gid_t **sgids)
@@ -534,7 +639,8 @@ static int getgroups_cb(void *handle, uid_t uid, gid_t **sgids)
   return 0;
 }
 
-static void invalidate_cb(void *handle, vinodeno_t vino, int64_t off, int64_t len)
+static void invalidate_cb(void *handle, vinodeno_t vino, int64_t off,
+			  int64_t len)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)handle;
   fuse_ino_t fino = cfuse->make_fake_ino(vino.ino, vino.snapid);
@@ -735,6 +841,17 @@ vinodeno_t CephFuse::Handle::fino_vino(inodeno_t fino)
   return vino;
 }
 
+Inode * CephFuse::Handle::iget(inodeno_t fino)
+{
+  Inode *in =
+    client->ll_get_inode(fino_vino(fino));
+  return in;
+}
+
+void CephFuse::Handle::iput(Inode *in)
+{
+    client->ll_put(in);
+}
 
 uint64_t CephFuse::Handle::make_fake_ino(inodeno_t ino, snapid_t snapid)
 {
