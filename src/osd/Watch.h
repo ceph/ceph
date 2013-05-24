@@ -155,15 +155,19 @@ class Watch {
 
   std::map<uint64_t, NotifyRef> in_progress_notifies;
 
+  // Could have watch_info_t here, but this file includes osd_types.h
   uint32_t timeout;
   uint64_t cookie;
+  entity_addr_t addr;
+
   entity_name_t entity;
   bool discarded;
 
   Watch(
     ReplicatedPG *pg, OSDService *osd,
     ObjectContext *obc, uint32_t timeout,
-    uint64_t cookie, entity_name_t entity);
+    uint64_t cookie, entity_name_t entity,
+    entity_addr_t addr);
 
   /// Registers the timeout callback with watch_timer
   void register_cb();
@@ -183,7 +187,7 @@ public:
   string gen_dbg_prefix();
   static WatchRef makeWatchRef(
     ReplicatedPG *pg, OSDService *osd,
-    ObjectContext *obc, uint32_t timeout, uint64_t cookie, entity_name_t entity);
+    ObjectContext *obc, uint32_t timeout, uint64_t cookie, entity_name_t entity, entity_addr_t addr);
   void set_self(WatchRef _self) {
     self = _self;
   }
@@ -195,6 +199,7 @@ public:
   ObjectContext *get_obc();
   uint64_t get_cookie() const { return cookie; }
   entity_name_t get_entity() const { return entity; }
+  entity_addr_t get_peer_addr() const { return addr; }
 
   /// Generates context for use if watch timeout is delayed by scrub or recovery
   Context *get_delayed_cb();
