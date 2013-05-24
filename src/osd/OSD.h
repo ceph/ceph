@@ -1339,8 +1339,10 @@ protected:
       osd->scrub_queue.pop_front();
       return pg;
     }
-    void _process(PG *pg) {
-      pg->scrub();
+    void _process(
+      PG *pg,
+      ThreadPool::TPHandle &handle) {
+      pg->scrub(handle);
       pg->put("ScrubWQ");
     }
     void _clear() {
@@ -1424,7 +1426,9 @@ protected:
       rep_scrub_queue.pop_front();
       return msg;
     }
-    void _process(MOSDRepScrub *msg) {
+    void _process(
+      MOSDRepScrub *msg,
+      ThreadPool::TPHandle &handle) {
       osd->osd_lock.Lock();
       if (osd->is_stopping()) {
 	osd->osd_lock.Unlock();
@@ -1433,7 +1437,7 @@ protected:
       if (osd->_have_pg(msg->pgid)) {
 	PG *pg = osd->_lookup_lock_pg(msg->pgid);
 	osd->osd_lock.Unlock();
-	pg->replica_scrub(msg);
+	pg->replica_scrub(msg, handle);
 	msg->put();
 	pg->unlock();
       } else {
