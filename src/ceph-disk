@@ -1834,7 +1834,7 @@ def is_suppressed(path):
 def set_suppress(path):
     disk = os.path.realpath(path)
     if not os.path.exists(disk):
-        raise Error('does not exist', path);
+        raise Error('does not exist', path)
     if not stat.S_ISBLK(os.lstat(path).st_mode):
         raise Error('not a block device', path)
     base = disk[5:]
@@ -1846,7 +1846,7 @@ def set_suppress(path):
 def unset_suppress(path):
     disk = os.path.realpath(path)
     if not os.path.exists(disk):
-        raise Error('does not exist', path);
+        raise Error('does not exist', path)
     if not stat.S_ISBLK(os.lstat(path).st_mode):
         raise Error('not a block device', path)
     assert disk.startswith('/dev/')
