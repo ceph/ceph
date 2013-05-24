@@ -789,7 +789,7 @@ def prepare_journal_dev(
                     '--name={name}'.format(name=os.path.basename(journal)),
                     ],
                 )   
-            journal_symlink = '/dev/{symlink}-part{num}'.format(symlink=symlinks.split()[2], num=num)
+            journal_symlink = '/dev/{symlink}-part{num}'.format(symlink=str(symlinks).split()[2], num=num)
 
         journal_dmcrypt = None
         if journal_dm_keypath:
