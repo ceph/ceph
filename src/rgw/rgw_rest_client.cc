@@ -8,13 +8,13 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-int RGWRESTClient::read_header(void *ptr, size_t len)
+int RGWRESTClient::receive_header(void *ptr, size_t len)
 {
   char line[len + 1];
 
   char *s = (char *)ptr, *end = (char *)ptr + len;
   char *p = line;
-  ldout(cct, 10) << "read_http_header" << dendl;
+  ldout(cct, 10) << "receive_http_header" << dendl;
 
   while (s != end) {
     if (*s == '\r') {
@@ -102,7 +102,20 @@ int RGWRESTClient::execute(RGWAccessKey& key, const char *method, const char *re
   return rgw_http_error_to_errno(status);
 }
 
-int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info)
+int RGWRESTClient::send_data(void *ptr, size_t len)
+{
+  if (!send_iter)
+    return 0;
+
+  if (len > send_iter->get_remaining())
+    len = send_iter->get_remaining();
+
+  send_iter->copy(len, (char *)ptr);
+
+  return len;
+}
+
+int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info, bufferlist *inbl)
 {
 
   string date_str;
@@ -156,9 +169,19 @@ int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info)
     new_resource.append(resource);
   }
   new_url.append(new_resource);
-  
+
+  bufferlist::iterator bliter;
+
+  if (inbl) {
+    bliter = inbl->begin();
+    send_iter = &bliter;
+
+    set_send_length(inbl->length());
+  }
+
   int r = process(new_info.method, new_url.c_str());
   if (r < 0)
     return r;
 
-  return rgw_http_error_to_errno(status);}
+  return rgw_http_error_to_errno(status);
+}

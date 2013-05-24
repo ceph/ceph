@@ -6,18 +6,20 @@
 #include "rgw_http_client.h"
 
 class RGWRESTClient : public RGWHTTPClient {
+protected:
   CephContext *cct;
 
-protected:
   int status;
 
   string url;
 
   map<string, string> out_headers;
   list<pair<string, string> > params;
+
+  bufferlist::iterator *send_iter;
 public:
   RGWRESTClient(CephContext *_cct, string& _url, list<pair<string, string> > *_headers,
-                list<pair<string, string> > *_params) : cct(_cct), status(0), url(_url) {
+                list<pair<string, string> > *_params) : cct(_cct), status(0), url(_url), send_iter(NULL) {
     if (_headers)
       headers = *_headers;
 
@@ -25,10 +27,11 @@ public:
       params = *_params;
   }
 
-  int read_header(void *ptr, size_t len);
+  int receive_header(void *ptr, size_t len);
+  int send_data(void *ptr, size_t len);
 
   int execute(RGWAccessKey& key, const char *method, const char *resource);
-  int forward_request(RGWAccessKey& key, req_info& info);
+  int forward_request(RGWAccessKey& key, req_info& info, bufferlist *inbl);
 };
 
 
