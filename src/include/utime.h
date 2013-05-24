@@ -169,6 +169,33 @@ public:
     return out;
   }
 
+  // output
+  ostream& asctime(ostream& out) const {
+    out.setf(std::ios::right);
+    char oldfill = out.fill();
+    out.fill('0');
+    if (sec() < ((time_t)(60*60*24*365*10))) {
+      // raw seconds.  this looks like a relative time.
+      out << (long)sec() << "." << std::setw(6) << usec();
+    } else {
+      // localtime.  this looks like an absolute time.
+      //  aim for http://en.wikipedia.org/wiki/ISO_8601
+      struct tm bdt;
+      time_t tt = sec();
+      gmtime_r(&tt, &bdt);
+
+      char buf[128];
+      asctime_r(&bdt, buf);
+      int len = strlen(buf);
+      if (buf[len - 1] == '\n')
+        buf[len - 1] = '\0';
+      out << buf;
+    }
+    out.fill(oldfill);
+    out.unsetf(std::ios::right);
+    return out;
+  }
+  
   ostream& localtime(ostream& out) const {
     out.setf(std::ios::right);
     char oldfill = out.fill();
