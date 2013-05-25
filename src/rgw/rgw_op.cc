@@ -880,13 +880,24 @@ void RGWCreateBucket::execute()
       return;
     }
   }
+  string region_name;
+
+  if (s->system_request) {
+    region_name = s->info.args.get(RGW_SYS_PARAM_PREFIX "region");
+    if (region_name.empty()) {
+      region_name = store->region.name;
+    }
+  } else {
+    region_name = store->region.name;
+  }
+
   policy.encode(aclbl);
 
   attrs[RGW_ATTR_ACL] = aclbl;
 
   s->bucket.name = s->bucket_name_str;
   RGWObjVersionTracker objv_tracker;
-  ret = store->create_bucket(s->user.user_id, s->bucket, attrs, objv_tracker, true);
+  ret = store->create_bucket(s->user.user_id, s->bucket, region_name, attrs, objv_tracker, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can recover
    * from a partial create by retrying it. */
   ldout(s->cct, 20) << "rgw_create_bucket returned ret=" << ret << " bucket=" << s->bucket << dendl;

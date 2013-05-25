@@ -643,6 +643,7 @@ public:
    * returns 0 on success, -ERR# otherwise.
    */
   virtual int create_bucket(string& owner, rgw_bucket& bucket,
+                            const string& region_name,
                             map<std::string,bufferlist>& attrs,
                             RGWObjVersionTracker& objv_tracker,
                             bool exclusive = true);

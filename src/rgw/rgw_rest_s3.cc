@@ -2001,6 +2001,7 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
     return -EPERM;
 
   if (s->user.system) {
+    s->system_request = true;
     dout(20) << "system request" << dendl;
     s->info.args.set_system();
     string effective_uid = s->info.args.get(RGW_SYS_PARAM_PREFIX "uid");

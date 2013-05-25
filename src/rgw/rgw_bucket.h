@@ -183,7 +183,7 @@ public:
   RGWBucket() : store(NULL), failure(false) {}
   int init(RGWRados *storage, RGWBucketAdminOpState& op_state);
 
-  int create_bucket(string bucket_str, string& user_id, string& display_name);
+  int create_bucket(string bucket_str, string& user_id, string& region_name, string& display_name);
   
   int check_bad_index_multipart(RGWBucketAdminOpState& op_state,
           list<std::string>& objs_to_unlink, std::string *err_msg = NULL);

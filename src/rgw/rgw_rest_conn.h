@@ -12,6 +12,7 @@ class RGWRegionConnection
   CephContext *cct;
   map<int, string> endpoints;
   RGWAccessKey key;
+  string region;
   atomic_t counter;
 public:
 
