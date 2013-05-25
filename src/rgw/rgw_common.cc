@@ -471,7 +471,12 @@ int XMLArgs::parse()
     if (ret >= 0) {
       string& name = nv.get_name();
       string& val = nv.get_val();
-      val_map[name] = val;
+
+      if (name.compare(0, sizeof(RGW_SYS_PARAM_PREFIX) - 1, RGW_SYS_PARAM_PREFIX) == 0) {
+        sys_val_map[name] = val;
+      } else {
+        val_map[name] = val;
+      }
 
       if ((name.compare("acl") == 0) ||
           (name.compare("location") == 0) ||
