@@ -123,7 +123,7 @@ int rgw_bucket_store_info(RGWRados *store, string& bucket_name, bufferlist& bl, 
 }
 
 
-int RGWBucket::create_bucket(string bucket_str, string& user_id, string& display_name)
+int RGWBucket::create_bucket(string bucket_str, string& user_id, string& region_name, string& display_name)
 {
   RGWAccessControlPolicy policy, old_policy;
   map<string, bufferlist> attrs;
@@ -146,7 +146,7 @@ int RGWBucket::create_bucket(string bucket_str, string& user_id, string& display
 
   rgw_bucket& bucket = bucket_info.bucket;
 
-  ret = store->create_bucket(user_id, bucket, attrs, objv_tracker);
+  ret = store->create_bucket(user_id, bucket, region_name, attrs, objv_tracker);
   if (ret && ret != -EEXIST)
     goto done;
 
@@ -445,7 +445,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
       return r;
   } else {
     // the bucket seems not to exist, so we should probably create it...
-    r = create_bucket(bucket_name.c_str(), uid_str, display_name);
+    r = create_bucket(bucket_name.c_str(), uid_str, store->region.name, display_name);
     if (r < 0) {
       set_err_msg(err_msg, "error linking bucket to user r=" + cpp_strerror(-r));
     }
