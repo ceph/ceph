@@ -412,11 +412,12 @@ protected:
   set<int> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
 
   map<inodeno_t,map<client_t,ceph_mds_cap_reconnect> > cap_exports; // ino -> client -> capex
-  map<inodeno_t,filepath> cap_export_paths;
+  map<inodeno_t,int> cap_export_targets; // ino -> auth mds
 
   map<inodeno_t,map<client_t,map<int,ceph_mds_cap_reconnect> > > cap_imports;  // ino -> client -> frommds -> capex
   map<inodeno_t,filepath> cap_import_paths;
   set<inodeno_t> cap_imports_missing;
+  int cap_imports_num_opening;
   
   set<CInode*> rejoin_undef_inodes;
   set<CInode*> rejoin_potential_updated_scatterlocks;
@@ -431,7 +432,6 @@ protected:
   void handle_cache_rejoin_weak(MMDSCacheRejoin *m);
   CInode* rejoin_invent_inode(inodeno_t ino, snapid_t last);
   CDir* rejoin_invent_dirfrag(dirfrag_t df);
-  bool rejoin_fetch_dirfrags(MMDSCacheRejoin *m);
   void handle_cache_rejoin_strong(MMDSCacheRejoin *m);
   void rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack,
 				      set<SimpleLock *>& gather_locks,
@@ -447,11 +447,13 @@ protected:
       rejoin_send_rejoins();
   }
 public:
+  void rejoin_start();
   void rejoin_gather_finish();
   void rejoin_send_rejoins();
-  void rejoin_export_caps(inodeno_t ino, client_t client, cap_reconnect_t& icr) {
-    cap_exports[ino][client] = icr.capinfo;
-    cap_export_paths[ino] = filepath(icr.path, (uint64_t)icr.capinfo.pathbase);
+  void rejoin_export_caps(inodeno_t ino, client_t client, ceph_mds_cap_reconnect& capinfo,
+			  int target=-1) {
+    cap_exports[ino][client] = capinfo;
+    cap_export_targets[ino] = target;
   }
   void rejoin_recovered_caps(inodeno_t ino, client_t client, cap_reconnect_t& icr, 
 			     int frommds=-1) {
@@ -482,7 +484,10 @@ public:
   void add_reconnected_snaprealm(client_t client, inodeno_t ino, snapid_t seq) {
     reconnected_snaprealms[ino][client] = seq;
   }
-  void process_imported_caps();
+
+  friend class C_MDC_RejoinOpenInoFinish;
+  void rejoin_open_ino_finish(inodeno_t ino, int ret);
+  bool process_imported_caps();
   void choose_lock_states_and_reconnect_caps();
   void prepare_realm_split(SnapRealm *realm, client_t client, inodeno_t ino,
 			   map<client_t,MClientSnap*>& splits);

@@ -975,6 +975,8 @@ void MDS::handle_mds_map(MMDSMap *m)
         resolve_start();
       } else if (is_reconnect()) {
         reconnect_start();
+      } else if (is_rejoin()) {
+	rejoin_start();
       } else if (is_clientreplay()) {
         clientreplay_start();
       } else if (is_creating()) {
@@ -1464,6 +1466,11 @@ void MDS::rejoin_joint_start()
 {
   dout(1) << "rejoin_joint_start" << dendl;
   mdcache->rejoin_send_rejoins();
+}
+void MDS::rejoin_start()
+{
+  dout(1) << "rejoin_start" << dendl;
+  mdcache->rejoin_start();
 }
 void MDS::rejoin_done()
 {
