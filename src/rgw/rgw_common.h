@@ -45,6 +45,8 @@ using ceph::crypto::MD5;
 
 #define RGW_AMZ_META_PREFIX "x-amz-meta-"
 
+#define RGW_SYS_PARAM_PREFIX "rgwx-"
+
 #define RGW_ATTR_ACL		RGW_ATTR_PREFIX "acl"
 #define RGW_ATTR_CORS		RGW_ATTR_PREFIX "cors"
 #define RGW_ATTR_ETAG    	RGW_ATTR_PREFIX "etag"
@@ -205,6 +207,7 @@ class XMLArgs
 {
   string str, empty_str;
   map<string, string> val_map;
+  map<string, string> sys_val_map;
   map<string, string> sub_resources;
 
   bool has_resp_modifier;
@@ -234,12 +237,21 @@ class XMLArgs
     map<string, string>::iterator iter = sub_resources.find(name);
     return (iter != sub_resources.end());
   }
+  map<string, string>& get_params() {
+    return val_map;
+  }
   map<string, string>& get_sub_resources() { return sub_resources; }
   unsigned get_num_params() {
     return val_map.size();
   }
   bool has_response_modifier() {
     return has_resp_modifier;
+  }
+  void set_system() { /* make all system params visible */
+    map<string, string>::iterator iter;
+    for (iter = sys_val_map.begin(); iter != sys_val_map.end(); ++iter) {
+      val_map[iter->first] = iter->second;
+    }
   }
 };
 

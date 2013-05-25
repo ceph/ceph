@@ -115,6 +115,33 @@ int RGWRESTClient::send_data(void *ptr, size_t len)
   return len;
 }
 
+void RGWRESTClient::append_param(string& dest, const string& name, const string& val)
+{
+  if (dest.empty()) {
+    dest.append("?");
+  } else {
+    dest.append("&");
+  }
+  dest.append(name);
+
+  if (!val.empty()) {
+    dest.append("=");
+    dest.append(val);
+  }
+}
+
+void RGWRESTClient::get_params_str(map<string, string>& extra_args, string& dest)
+{
+  map<string, string>::iterator miter;
+  for (miter = extra_args.begin(); miter != extra_args.end(); ++miter) {
+    append_param(dest, miter->first, miter->second);
+  }
+  list<pair<string, string> >::iterator iter;
+  for (iter = params.begin(); iter != params.end(); ++iter) {
+    append_param(dest, iter->first, iter->second);
+  }
+}
+
 int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info, bufferlist *inbl)
 {
 
@@ -125,7 +152,6 @@ int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info, bufferlist
   req_info new_info(cct, &new_env);
   new_info.rebuild_from(info);
 
-  new_env.remove("HTTP_X_AMZ_DATE");
   new_env.set("HTTP_DATE", date_str.c_str());
 
   map<string, string>& m = new_env.get_map();
@@ -159,6 +185,10 @@ int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info, bufferlist
     headers.push_back(make_pair<string, string>(iter->first, iter->second));
   }
 
+  string params_str;
+  map<string, string>& args = new_info.args.get_params();
+  get_params_str(args, params_str);
+
   string new_url = url;
   string& resource = new_info.request_uri;
   string new_resource = resource;
@@ -168,7 +198,7 @@ int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info, bufferlist
     new_resource = "/";
     new_resource.append(resource);
   }
-  new_url.append(new_resource);
+  new_url.append(new_resource + params_str);
 
   bufferlist::iterator bliter;
 
