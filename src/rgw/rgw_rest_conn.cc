@@ -33,7 +33,7 @@ int RGWRegionConnection::forward(const string& uid, req_info& info, bufferlist *
   if (ret < 0)
     return ret;
   list<pair<string, string> > params;
-  params.push_back(make_pair<string, string>("uid", uid));
+  params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
   RGWRESTClient client(cct, url, NULL, &params);
   return client.forward_request(key, info, inbl);
 }
