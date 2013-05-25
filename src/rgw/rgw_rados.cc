@@ -1342,7 +1342,8 @@ int RGWRados::create_pool(rgw_bucket& bucket)
  * create a bucket with name bucket and the given list of attrs
  * returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::create_bucket(string& owner, rgw_bucket& bucket, 
+int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
+                            const string& region_name,
 			    map<std::string, bufferlist>& attrs,
                             RGWObjVersionTracker& objv_tracker,
 			    bool exclusive)
@@ -1389,7 +1390,7 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
   RGWBucketInfo info;
   info.bucket = bucket;
   info.owner = owner;
-  info.region = region.name;
+  info.region = region_name;
   ret = put_bucket_info(bucket.name, info, exclusive, &objv_tracker, &attrs);
   if (ret == -EEXIST) {
     index_ctx.remove(dir_oid);

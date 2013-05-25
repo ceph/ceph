@@ -11,6 +11,7 @@ RGWRegionConnection::RGWRegionConnection(CephContext *_cct, RGWRados *store, RGW
     endpoints[i] = *iter;
   }
   key = store->zone.system_key;
+  region = store->region.name;
 }
 
 int RGWRegionConnection::get_url(string& endpoint)
@@ -34,6 +35,7 @@ int RGWRegionConnection::forward(const string& uid, req_info& info, bufferlist *
     return ret;
   list<pair<string, string> > params;
   params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
+  params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
   RGWRESTClient client(cct, url, NULL, &params);
   return client.forward_request(key, info, inbl);
 }
