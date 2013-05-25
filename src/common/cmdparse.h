@@ -17,7 +17,9 @@
 
 typedef boost::variant<std::string, bool, int64_t, double, std::vector<std::string> > cmd_vartype;
 
-void dump_cmds_to_json(Formatter *f, const char *cmds);
+void dump_cmd_to_json(JSONFormatter *f, const string& cmd);
+void dump_cmd_and_help_to_json(JSONFormatter *f, const string& secname,
+			       const string& cmd, const string& helptext);
 bool cmdmap_from_json(std::vector<std::string> cmd, std::map<std::string,
 		      cmd_vartype> *mapp, std::stringstream &ss);
 
