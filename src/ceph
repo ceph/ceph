@@ -749,6 +749,32 @@ def validate(args, signature, partial=False):
                 d[desc.name] = desc.instance.val
     return d
 
+def osdids():
+    ret, outbuf, outs = json_command(prefix='osd ls')
+    if ret:
+        raise RuntimeError('Can\'t contact mon for osd list')
+    return [i for i in outbuf.split('\n')]
+
+def monids():
+    ret, outbuf, outs = json_command(prefix='mon dump',
+                                     argdict={'format':'json'})
+    if ret:
+        raise RuntimeError('Can\'t contact mon for mon list')
+    d = json.loads(outbuf)
+    return [m['name'] for m in d['mons']]
+
+def mdsids():
+    ret, outbuf, outs = json_command(prefix='mds dump',
+                                     argdict={'format':'json'})
+    if ret:
+        raise RuntimeError('Can\'t contact mon for mds list')
+    d = json.loads(outbuf)
+    l = []
+    infodict = d['info']
+    for mdsdict in infodict.values():
+        l.append(mdsdict['name'])
+    return l
+
 def parse_cmdargs(args=None, target='', first=False):
     # alias: let the line-wrapping be sane
     AP = argparse.ArgumentParser
@@ -756,7 +782,9 @@ def parse_cmdargs(args=None, target='', first=False):
     # format our own help
     parser = AP(description='Frontend for ceph CLI', add_help=False)
 
-    parser.add_argument('-h', '--help', help='request help',
+    parser.add_argument('-h', '--help', help='request mon help',
+                        action='store_true')
+    parser.add_argument('--help-all', help='request help for all daemons',
                         action='store_true')
     parser.add_argument('-c', dest='cephconf',
                         help='ceph configuration file')
@@ -797,7 +825,8 @@ def parse_cmdargs(args=None, target='', first=False):
     parsed_args, extras = parser.parse_known_args(args)
 
     # handle help ourselves, here and now
-    if (not first) and parsed_args.help:
+    if (not first) and (parsed_args.help or parsed_args.help_all):
+
         def help_for_target(target):
             ret, outbuf, outs = json_command(target=target,
                                              prefix='get_command_descriptions')
@@ -809,22 +838,35 @@ def parse_cmdargs(args=None, target='', first=False):
                 sys.stdout.write(format_help(parse_json_funcsigs(outbuf)))
 
         parser.print_help()
+        print '\n'
         help_for_target(target=('mon', ''))
 
-        sys.stdout.write("\nOSD tell commands and pg pgid commands:\n\n")
-        help_for_target(target=('osd', '0'))
+        if parsed_args.help_all:
+            # try/except in case there are no daemons of that type
+            try:
+                firstosd = osdids()[0]
+                print '\nOSD.{0} tell commands and pg pgid commands:\n\n'.\
+                    format(firstosd)
+                help_for_target(target=('osd', osdids()[0]))
 
-        # XXX: all daemons?
-        # XXX: get daemon name from conf or some other output?
+                print '\nOSD daemon commands:\n\n'
+                sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'osd.' + firstosd), ['get_command_descriptions']))))
+            except:
+                pass
 
-        sys.stdout.write("\nOSD daemon commands:\n\n")
-        sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'osd.0'), ['get_command_descriptions']))))
+            try:
+                firstmon = monids()[0]
+                print '\nmon.{0} daemon commands:\n\n'.format(firstmon)
+                sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'mon.' + firstmon), ['get_command_descriptions']))))
+            except:
+                pass
 
-        sys.stdout.write("\nmon daemon commands:\n\n")
-        sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'mon.a'), ['get_command_descriptions']))))
-
-        sys.stdout.write("\nmds daemon commands:\n\n")
-        sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'mds.a'), ['get_command_descriptions']))))
+            try:
+                firstmds = mdsids()[0]
+                print '\nmds.{0} daemon commands:\n\n'.format(firstmds)
+                sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'mds.' + firstmds), ['get_command_descriptions']))))
+            except:
+                pass
 
         sys.exit(0)
 
@@ -901,6 +943,8 @@ def format_help(cmddict):
     fullusage = ''
     for cmd in sorted(cmddict.itervalues(), cmp=descsort):
 
+        if not cmd['helptext']:
+            continue
         siglines = [l for l in wrap(concise_sig(cmd['sig']), 40, 1)]
         helplines = [l for l in wrap(cmd['helptext'], 39, 1)]
 
