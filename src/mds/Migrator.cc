@@ -2223,7 +2223,7 @@ void Migrator::import_logged_start(dirfrag_t df, CDir *dir, int from,
   for (map<CInode*, map<client_t,Capability::Export> >::iterator p = import_caps[dir].begin();
        p != import_caps[dir].end();
        ++p) {
-    finish_import_inode_caps(p->first, from, p->second);
+    finish_import_inode_caps(p->first, true, p->second);
   }
   
   // send notify's etc.
@@ -2398,7 +2398,7 @@ void Migrator::decode_import_inode_caps(CInode *in,
   }
 }
 
-void Migrator::finish_import_inode_caps(CInode *in, int from, 
+void Migrator::finish_import_inode_caps(CInode *in, bool auth_cap,
 					map<client_t,Capability::Export> &cap_map)
 {
   for (map<client_t,Capability::Export>::iterator it = cap_map.begin();
@@ -2412,7 +2412,7 @@ void Migrator::finish_import_inode_caps(CInode *in, int from,
     if (!cap) {
       cap = in->add_client_cap(it->first, session);
     }
-    cap->merge(it->second);
+    cap->merge(it->second, auth_cap);
 
     mds->mdcache->do_cap_import(session, in, cap);
   }
@@ -2688,7 +2688,7 @@ void Migrator::logged_import_caps(CInode *in,
   mds->server->finish_force_open_sessions(client_map, sseqmap);
 
   assert(cap_imports.count(in));
-  finish_import_inode_caps(in, from, cap_imports[in]);  
+  finish_import_inode_caps(in, false, cap_imports[in]);
   mds->locker->eval(in, CEPH_CAP_LOCKS, true);
 
   mds->send_message_mds(new MExportCapsAck(in->ino()), from);
