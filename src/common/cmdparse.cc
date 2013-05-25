@@ -19,20 +19,20 @@
 using namespace std;
 
 /**
- * Read a command description list out of cmds, and dump it to f.
+ * Read a command description list out of cmd, and dump it to f.
  * A signature description is a set of space-separated words;
  * see MonCommands.h for more info.
  */
 
 void
-dump_cmds_to_json(Formatter *f, const char *cmds)
+dump_cmd_to_json(JSONFormatter *f, const string& cmd)
 {
   // put whole command signature in an already-opened container
   // elements are: "name", meaning "the typeless name that means a literal"
   // an object {} with key:value pairs representing an argument
 
   int argnum = 0;
-  stringstream ss(cmds);
+  stringstream ss(cmd);
   std::string word;
 
   while (std::getline(ss, word, ' ')) {
@@ -75,6 +75,20 @@ dump_cmds_to_json(Formatter *f, const char *cmds)
   }
 }
 
+void
+dump_cmd_and_help_to_json(JSONFormatter *jf,
+			  const string& secname,
+			  const string& cmdsig,
+			  const string& helptext)
+{
+      jf->open_object_section(secname.c_str());
+      jf->open_array_section("sig");
+      dump_cmd_to_json(jf, cmdsig);
+      jf->close_section(); // sig array
+      jf->dump_string("help", helptext.c_str());
+      jf->close_section(); // cmd
+}
+
 /** Parse JSON in vector cmd into a map from field to map of values
  * (use mValue/mObject)
  * 'cmd' should not disappear over lifetime of map
@@ -95,9 +109,9 @@ cmdmap_from_json(vector<string> cmd, map<string, cmd_vartype> *mapp, stringstrea
 
   try {
     if (!json_spirit::read(fullcmd, v))
-      throw runtime_error("unparseable JSON" + fullcmd);
+      throw runtime_error("unparseable JSON " + fullcmd);
     if (v.type() != json_spirit::obj_type)
-      throw(runtime_error("not JSON object" + fullcmd));
+      throw(runtime_error("not JSON object " + fullcmd));
 
     // allocate new mObject (map) to return
     // make sure all contents are simple types (not arrays or objects)
@@ -114,7 +128,7 @@ cmdmap_from_json(vector<string> cmd, map<string, cmd_vartype> *mapp, stringstrea
 
       case json_spirit::obj_type:
       default:
-	throw(runtime_error("JSON array/object not allowed" + fullcmd));
+	throw(runtime_error("JSON array/object not allowed " + fullcmd));
         break;
 
       case json_spirit::array_type:
