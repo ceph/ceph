@@ -376,6 +376,7 @@ class MDS : public Dispatcher {
   void reconnect_start();
   void reconnect_done();
   void rejoin_joint_start();
+  void rejoin_start();
   void rejoin_done();
   void recovery_done();
   void clientreplay_start();

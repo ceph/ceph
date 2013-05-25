@@ -635,25 +635,16 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       continue;
     }
       
-    filepath path(p->second.path, (uint64_t)p->second.capinfo.pathbase);
     if (in && !in->is_auth()) {
       // not mine.
-      dout(0) << "non-auth " << p->first << " " << path
-	      << ", will pass off to authority" << dendl;
-      
-      // mark client caps stale.
-      MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0, 0, 0);
-      //stale->head.migrate_seq = 0; // FIXME ******
-      mds->send_message_client_counted(stale, session);
-
+      dout(10) << "non-auth " << *in << ", will pass off to authority" << dendl;
       // add to cap export list.
-      mdcache->rejoin_export_caps(p->first, from, p->second);
+      mdcache->rejoin_export_caps(p->first, from, p->second.capinfo,
+				  in->authority().first);
     } else {
       // don't know if the inode is mine
-      dout(0) << "missing " << p->first << " " << path
-	      << " will load or export later" << dendl;
+      dout(10) << "missing ino " << p->first << ", will load later" << dendl;
       mdcache->rejoin_recovered_caps(p->first, from, p->second, -1);
-      mdcache->rejoin_export_caps(p->first, from, p->second);
     }
   }
 
