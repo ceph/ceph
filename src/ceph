@@ -19,54 +19,54 @@ import uuid
 
 verbose = False
 
-"""
-Something wrong with arguments
-"""
 class ArgumentError(Exception):
+    """
+    Something wrong with arguments
+    """
     pass
 
-"""
-Wrong number of a repeated argument
-"""
 class ArgumentNumber(ArgumentError):
+    """
+    Wrong number of a repeated argument
+    """
     pass
 
-"""
-Argument value has wrong format 
-"""
 class ArgumentFormat(ArgumentError):
+    """
+    Argument value has wrong format
+    """
     pass
 
-"""
-Argument value is otherwise invalid (doesn't match choices, for instance)
-"""
 class ArgumentValid(ArgumentError):
+    """
+    Argument value is otherwise invalid (doesn't match choices, for instance)
+    """
     pass
 
-"""
-Special for mismatched prefix; less severe, don't report by default
-"""
 class ArgumentPrefix(ArgumentError):
+    """
+    Special for mismatched prefix; less severe, don't report by default
+    """
     pass
 
-"""
-some semantic issue with the JSON
-"""
 class JsonFormat(Exception):
+    """
+    some syntactic or semantic issue with the JSON
+    """
     pass
 
-"""
-Base class for all Ceph argument types
-
-Instantiating an object sets any validation parameters 
-(allowable strings, numeric ranges, etc.).  The 'valid'
-method validates a string against that initialized instance,
-throwing ArgumentError if there's a problem.
-"""
 class CephArgtype(object):
+    """
+    Base class for all Ceph argument types
+
+    Instantiating an object sets any validation parameters
+    (allowable strings, numeric ranges, etc.).  The 'valid'
+    method validates a string against that initialized instance,
+    throwing ArgumentError if there's a problem.
+    """
     def __init__(self, **kwargs):
         """
-        set any per-instance validation parameters here 
+        set any per-instance validation parameters here
         from kwargs (fixed string sets, integer ranges, etc)
         """
         pass
@@ -103,11 +103,11 @@ class CephArgtype(object):
         """
         return '<{}>'.format(self.__class__.__name__)
 
-"""
-range-limited integers, [+|-][0-9]+ or 0x[0-9a-f]+
-range: list of 1 or 2 ints, [min] or [min,max]
-"""
 class CephInt(CephArgtype):
+    """
+    range-limited integers, [+|-][0-9]+ or 0x[0-9a-f]+
+    range: list of 1 or 2 ints, [min] or [min,max]
+    """
     def __init__(self, range=''):
         if range == '':
             self.range = list()
@@ -139,11 +139,11 @@ class CephInt(CephArgtype):
         return '<int{}>'.format(r)
 
 
-"""
-range-limited float type
-range: list of 1 or 2 floats, [min] or [min, max]
-"""
 class CephFloat(CephArgtype):
+    """
+    range-limited float type
+    range: list of 1 or 2 floats, [min] or [min, max]
+    """
     def __init__(self, range=''):
         if range == '':
             self.range = list()
@@ -173,11 +173,10 @@ class CephFloat(CephArgtype):
             r = '[{}-{}]'.format(self.range[0], self.range[1])
         return '<float{}>'.format(r)
 
-"""
-String.  Not much use for this; maybe we might use illegal chars
-for something?
-"""
 class CephString(CephArgtype):
+    """
+    String; pretty generic.
+    """
     def __init__(self, badchars=''):
         self.badchars = badchars
 
@@ -194,10 +193,10 @@ class CephString(CephArgtype):
             b = '(without chars in {})'.format(self.badchars)
         return '<string{}>'.format(b)
 
-"""
-Admin socket path; check that it's readable and S_ISSOCK
-"""
 class CephSocketpath(CephArgtype):
+    """
+    Admin socket path; check that it's readable and S_ISSOCK
+    """
     def valid(self, s, partial=False):
         mode = os.stat(s).st_mode
         if not stat.S_ISSOCK(mode):
@@ -207,10 +206,10 @@ class CephSocketpath(CephArgtype):
     def __str__(self):
         return '<admin-socket-path>'
 
-"""
-IP address (v4 or v6) with optional port
-"""
 class CephIPAddr(CephArgtype):
+    """
+    IP address (v4 or v6) with optional port
+    """
     def valid(self, s, partial=False):
         # parse off port, use socket to validate addr
         type = 6
@@ -257,9 +256,12 @@ class CephIPAddr(CephArgtype):
         return True
 
     def __str__(self):
-        return '<IPaddr[:port]>' 
+        return '<IPaddr[:port]>'
 
 class CephEntityAddr(CephIPAddr):
+    """
+    EntityAddress, that is, IP address/nonce
+    """
     def valid(self, s, partial=False):
         ip, nonce = s.split('/')
         if not super(self.__class__, self).valid(ip):
@@ -270,12 +272,12 @@ class CephEntityAddr(CephIPAddr):
     def __str__(self):
         return '<EntityAddr>'
 
-"""
-Pool name; checked for presence in cluster
-"""
 class CephPoolname(CephArgtype):
+    """
+    Pool name; checked for presence in cluster
+    """
     def valid(self, s, partial=False):
-        # XXX 
+        # XXX
         # if cluster.pool.exists(s):
         #    raise ArgumentValid("pool {} does not exist".format(s))
         self.val = s
@@ -284,11 +286,11 @@ class CephPoolname(CephArgtype):
     def __str__(self):
         return '<poolname>'
 
-"""
-Object name.  Maybe should be combined with Pool name as they're always
-present in pairs, and then could be checked for presence
-"""
 class CephObjectname(CephArgtype):
+    """
+    Object name.  Maybe should be combined with Pool name as they're always
+    present in pairs, and then could be checked for presence
+    """
     def valid(self, s, partial=False):
         self.val = s
         return True
@@ -296,10 +298,10 @@ class CephObjectname(CephArgtype):
     def __str__(self):
         return '<objectname>'
 
-"""
-pgid, in form N.xxx (N = pool number, xxx = hex pgnum)
-"""
 class CephPgid(CephArgtype):
+    """
+    pgid, in form N.xxx (N = pool number, xxx = hex pgnum)
+    """
     def valid(self, s, partial=False):
         if s.find('.') == -1:
             raise ArgumentFormat('pgid has no .')
@@ -316,13 +318,13 @@ class CephPgid(CephArgtype):
     def __str__(self):
         return '<pgid>'
 
-"""
-Name, or type.id, where type is osd|mon|client|mds, and id is a base10 int,
-or just id.
-
-Also accept '*'
-"""
 class CephName(CephArgtype):
+    """
+    Name, or type.id, where type is osd|mon|client|mds, and id is a base10 int,
+    or just id.
+
+    Also accept '*'
+    """
     def valid(self, s, partial=False):
         if s == '*':
             self.val = s
@@ -348,11 +350,11 @@ class CephName(CephArgtype):
     def __str__(self):
         return '<name (type.id)>'
 
-"""
-Set of string literals; init with valid choices
-"""
 
 class CephChoices(CephArgtype):
+    """
+    Set of string literals; init with valid choices
+    """
     def __init__(self, strings='', **kwargs):
         self.strings=strings.split('|')
 
@@ -377,10 +379,10 @@ class CephChoices(CephArgtype):
         else:
             return '{{{}}}'.format('|'.join(self.strings))
 
-"""
-Openable file
-"""
 class CephFilepath(CephArgtype):
+    """
+    Openable file
+    """
     def valid(self, s, partial=False):
         try:
             f = open(s, 'a+')
@@ -393,10 +395,10 @@ class CephFilepath(CephArgtype):
     def __str__(self):
         return '<outfilename>'
 
-"""
-'Fragment' ??? XXX
-"""
 class CephFragment(CephArgtype):
+    """
+    'Fragment' ??? XXX
+    """
     def valid(self, s, partial=False):
         if s.find('/') == -1:
             raise ArgumentFormat('{}: no /'.format(s))
@@ -419,10 +421,10 @@ class CephFragment(CephArgtype):
         return "<CephFS fragment ID (0xvvv/bbb)>"
 
 
-""" 
-CephUUID: pretty self-explanatory
-"""
 class CephUUID(CephArgtype):
+    """
+    CephUUID: pretty self-explanatory
+    """
     def valid(self, s, partial=False):
         try:
             uuid.UUID(s)
@@ -434,10 +436,11 @@ class CephUUID(CephArgtype):
     def __str__(self):
         return '<uuid>'
 
-"""
-CephPrefix: magic type for "all the first n fixed strings"
-"""
+
 class CephPrefix(CephArgtype):
+    """
+    CephPrefix: magic type for "all the first n fixed strings"
+    """
     def __init__(self, prefix=''):
         self.prefix = prefix
 
@@ -457,20 +460,27 @@ class CephPrefix(CephArgtype):
 
 ############################################################################
 
-# argdesc(typename, [type-specific kwargs], name='name', n=numallowed, req=False, helptext=helptext, **kwargs)
-# validation rules:
-# typename: type(**kwargs) will be constructed
-# later, type.valid(w) will be called with a word in that position
-# name is used for parse errors and for constructing JSON output
-# n is a numeric literal or 'n|N', meaning "at least one, but maybe more"
-# req=False means the argument need not be present in the list
-# helptext is the associated help for the command
-# anything else are arguments to pass to the type constructor.
-# self.instance is an instance of type t constructed with typeargs.
-# valid() will later be called with input to validate against it,
-# and will store the validated value in self.instance.val for extraction.
 
 class argdesc(object):
+    """
+    argdesc(typename, name='name', n=numallowed|N,
+            req=False, helptext=helptext, **kwargs (type-specific))
+
+    validation rules:
+    typename: type(**kwargs) will be constructed
+    later, type.valid(w) will be called with a word in that position
+
+    name is used for parse errors and for constructing JSON output
+    n is a numeric literal or 'n|N', meaning "at least one, but maybe more"
+    req=False means the argument need not be present in the list
+    helptext is the associated help for the command
+    anything else are arguments to pass to the type constructor.
+
+    self.instance is an instance of type t constructed with typeargs.
+
+    valid() will later be called with input to validate against it,
+    and will store the validated value in self.instance.val for extraction.
+    """
     def __init__(self, t, name=None, n=1, req=True, **kwargs):
         if isinstance(t, types.StringTypes):
             self.t = CephPrefix
@@ -526,6 +536,9 @@ class argdesc(object):
         return s
 
 def concise_sig(sig):
+    """
+    Return string representation of sig useful for syntax reference in help
+    """
     first = True
     s = ''
     for d in sig:
@@ -576,34 +589,34 @@ def parse_funcsig(sig):
                               **kwargs))
     return newsig
 
-"""
-parse_json_funcsigs(s)
-
-A function signature is mostly an array of argdesc; it's represented
-in JSON as 
-{ 
-  "cmd1": {"sig":[ "type": type, "name": name, "n": num, "req":true|false <other param>], "help:{"help":helptext}
-   .
-   .
-   .
-  ]
-
-A set of sigs is in an dict mapped by a unique number:
-{
-  "cmd1": {
-     "sig": ["type.. ], "help":{"text":helptext}
-  }
-  "cmd2"{
-     "sig": [.. ], "help":{"text":helptext}
-  }
-}
-
-Parse the string s and return an dict of dicts, keyed by opcode;
-each dict contains 'sig' with the array of descriptors, and 'help'
-with the helptext.
-"""
 
 def parse_json_funcsigs(s):
+    """
+    parse_json_funcsigs(s)
+
+    A function signature is mostly an array of argdesc; it's represented
+    in JSON as
+    {
+      "cmd001": {"sig":[ "type": type, "name": name, "n": num, "req":true|false <other param>], "help":helptext}
+       .
+       .
+       .
+      ]
+
+    A set of sigs is in an dict mapped by a unique number:
+    {
+      "cmd1": {
+         "sig": ["type.. ], "help":{"text":helptext}
+      }
+      "cmd2"{
+         "sig": [.. ], "help":{"text":helptext}
+      }
+    }
+
+    Parse the string s and return an dict of dicts, keyed by opcode;
+    each dict contains 'sig' with the array of descriptors, and 'help'
+    with the helptext.
+    """
     try:
         overall = json.loads(s)
     except Exception as e:
@@ -621,17 +634,15 @@ def parse_json_funcsigs(s):
         sigdict[cmdtag] = {'sig':newsig, 'helptext':helptext}
     return sigdict
 
-"""
-validate_one(word, desc, partial=False)
-
-Return true if word matches desc (or partially, if partial == True).
-Raise exception if not.
-"""
 def validate_one(word, desc, partial=False):
-    # validate word against the constructed instance of the type
-    # in desc.  May raise exception.  If it returns false (and doesn't
-    # raise an exception), desc.instance.val will
-    # contain the validated value (in the appropriate type).
+    """
+    validate_one(word, desc, partial=False)
+
+    validate word against the constructed instance of the type
+    in desc.  May raise exception.  If it returns false (and doesn't
+    raise an exception), desc.instance.val will
+    contain the validated value (in the appropriate type).
+    """
     if desc.instance.valid(word, partial):
         desc.numseen += 1
         if desc.N:
@@ -639,15 +650,14 @@ def validate_one(word, desc, partial=False):
         return True
     return False
 
-"""
-matchnum(s, signature, partial=False)
-
-Returns number of arguments matched in s against signature.
-Can be used to determine most-likely command for full or partial
-matches (partial applies to string matches).
-"""
-
 def matchnum(args, signature, partial=False):
+    """
+    matchnum(s, signature, partial=False)
+
+    Returns number of arguments matched in s against signature.
+    Can be used to determine most-likely command for full or partial
+    matches (partial applies to string matches).
+    """
     words = args[:]
     mysig = copy.deepcopy(signature)
     matchcnt = 0
@@ -672,19 +682,18 @@ def matchnum(args, signature, partial=False):
             matchcnt += 1
     return matchcnt
 
-"""
-validate(s, signature, partial=False)
-
-Assumes s represents a possible command input following format of
-signature.  Runs a validation; no exception means it's OK.  Return
-a dict containing all arguments named by their descriptor name
-(with duplicate args per name accumulated into a space-separated
-value).
-
-If partial is set, allow partial matching (with partial dict returned)
-"""
-
 def validate(args, signature, partial=False):
+    """
+    validate(s, signature, partial=False)
+
+    Assumes s represents a possible command input following format of
+    signature.  Runs a validation; no exception means it's OK.  Return
+    a dict containing all arguments named by their descriptor name
+    (with duplicate args per name accumulated into a space-separated
+    value).
+
+    If partial is set, allow partial matching (with partial dict returned)
+    """
     words = args[:]
     mysig = copy.deepcopy(signature)
     d = dict()
@@ -776,6 +785,7 @@ def parse_cmdargs(args=None, target='', first=False):
                         'xml', 'xml-pretty', 'plain'], dest='output_format')
     # for pg dump_stuck
     parser.add_argument('--threshold', type=int, help='number of seconds for a pg to be considered stuck for pg dump_stuck')
+
     # returns a Namespace with the parsed args, and a list of all extras
     parsed_args, extras = parser.parse_known_args(args)
 
@@ -808,38 +818,38 @@ def parse_cmdargs(args=None, target='', first=False):
 
         sys.stdout.write("\nmds daemon commands:\n\n")
         sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'mds.a'), ['get_command_descriptions']))))
-    
+
         sys.exit(0)
 
     return parsed_args, extras
 
 
-"""
-sort descriptors by prefixes, defined as the concatenation of all simple
-strings in the descriptor; this works out to just the leading strings.
-"""
 def descsort(sh1, sh2):
+    """
+    sort descriptors by prefixes, defined as the concatenation of all simple
+    strings in the descriptor; this works out to just the leading strings.
+    """
     return cmp(concise_sig(sh1['sig']), concise_sig(sh2['sig']))
 
 
-"""
-generator to transform s into a sequence of strings width or shorter,
-for wrapping text to a specific column width.
-Attempt to break on anything but dontsplit characters.
-indent is amount to indent 2nd-through-nth lines.
-
-so "long string long string long string" width=11 indent=1 becomes
-'long string', ' long string', ' long string' so that it can be printed
-as 
-long string
- long string
- long string
-
-Consumes s.
-"""
 dontsplit = string.letters + '{[<>]}'
 
 def wrap(s, width, indent):
+    """
+    generator to transform s into a sequence of strings width or shorter,
+    for wrapping text to a specific column width.
+    Attempt to break on anything but dontsplit characters.
+    indent is amount to indent 2nd-through-nth lines.
+
+    so "long string long string long string" width=11 indent=1 becomes
+    'long string', ' long string', ' long string' so that it can be printed
+    as
+    long string
+     long string
+     long string
+
+    Consumes s.
+    """
     result = ''
     leader = ''
     while len(s):
@@ -875,6 +885,12 @@ def wrap(s, width, indent):
     raise StopIteration
 
 def format_help(cmddict):
+    """
+    Formats all the cmdsigs and helptexts from cmddict into a sorted-by-
+    cmdsig 2-column display, with each column wrapped and indented to
+    fit into 40 characters.
+    """
+
     fullusage = ''
     for cmd in sorted(cmddict.itervalues(), cmp=descsort):
 
@@ -1215,7 +1231,7 @@ def main():
         def watch_cb(arg, line, who, stamp_sec, stamp_nsec, seq, level, msg):
             print >> sys.stderr, line
 
-        # this instance keeps the watch connection alive, but is 
+        # this instance keeps the watch connection alive, but is
         # otherwise unused
         logwatch = rados.MonitorLog(cluster, level, watch_cb, 0)
         # loop forever letting watch_cb print lines
