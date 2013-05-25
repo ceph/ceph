@@ -92,7 +92,7 @@ class CephArgtype(object):
         a = ''
         if hasattr(self, 'typeargs'):
             a = self.typeargs
-        return '{}(\'{}\')'.format(self.__class__.__name__, a)
+        return '{0}(\'{1}\')'.format(self.__class__.__name__, a)
 
     def __str__(self):
         """
@@ -101,7 +101,7 @@ class CephArgtype(object):
         print messages.  Use __str__ to format the argtype descriptor
         as it would be useful in a command usage message.
         """
-        return '<{}>'.format(self.__class__.__name__)
+        return '<{0}>'.format(self.__class__.__name__)
 
 class CephInt(CephArgtype):
     """
@@ -119,24 +119,24 @@ class CephInt(CephArgtype):
         try:
             val = long(s)
         except ValueError:
-            raise ArgumentValid("{} doesn't represent an int".format(s))
+            raise ArgumentValid("{0} doesn't represent an int".format(s))
         if len(self.range) == 2:
             if val < self.range[0] or val > self.range[1]:
-                raise ArgumentValid("{} not in range {}".format(val, self.range))
+                raise ArgumentValid("{0} not in range {1}".format(val, self.range))
         elif len(self.range) == 1:
             if val < self.range[0]:
-                raise ArgumentValid("{} not in range {}".format(val, self.range))
+                raise ArgumentValid("{0} not in range {1}".format(val, self.range))
         self.val = val
         return True
 
     def __str__(self):
         r = ''
         if len(self.range) == 1:
-            r = '[{}-]'.format(self.range[0])
+            r = '[{0}-]'.format(self.range[0])
         if len(self.range) == 2:
-            r = '[{}-{}]'.format(self.range[0], self.range[1])
+            r = '[{0}-{1}]'.format(self.range[0], self.range[1])
 
-        return '<int{}>'.format(r)
+        return '<int{0}>'.format(r)
 
 
 class CephFloat(CephArgtype):
@@ -155,23 +155,23 @@ class CephFloat(CephArgtype):
         try:
             val = float(s)
         except ValueError:
-            raise ArgumentValid("{} doesn't represent a float".format(s))
+            raise ArgumentValid("{0} doesn't represent a float".format(s))
         if len(self.range) == 2:
             if val < self.range[0] or val > self.range[1]:
-                raise ArgumentValid("{} not in range {}".format(val, self.range))
+                raise ArgumentValid("{0} not in range {1}".format(val, self.range))
         elif len(self.range) == 1:
             if val < self.range[0]:
-                raise ArgumentValid("{} not in range {}".format(val, self.range))
+                raise ArgumentValid("{0} not in range {1}".format(val, self.range))
         self.val = val
         return True
 
     def __str__(self):
         r = ''
         if len(self.range) == 1:
-            r = '[{}-]'.format(self.range[0])
+            r = '[{0}-]'.format(self.range[0])
         if len(self.range) == 2:
-            r = '[{}-{}]'.format(self.range[0], self.range[1])
-        return '<float{}>'.format(r)
+            r = '[{0}-{1}]'.format(self.range[0], self.range[1])
+        return '<float{0}>'.format(r)
 
 class CephString(CephArgtype):
     """
@@ -183,15 +183,15 @@ class CephString(CephArgtype):
     def valid(self, s, partial=False):
         for c in self.badchars:
             if c in s:
-                raise ArgumentFormat("bad char {} in {}".format(c, s))
+                raise ArgumentFormat("bad char {0} in {1}".format(c, s))
         self.val = s
         return True
 
     def __str__(self):
         b = ''
         if len(self.badchars):
-            b = '(without chars in {})'.format(self.badchars)
-        return '<string{}>'.format(b)
+            b = '(without chars in {0})'.format(self.badchars)
+        return '<string{0}>'.format(b)
 
 class CephSocketpath(CephArgtype):
     """
@@ -200,7 +200,7 @@ class CephSocketpath(CephArgtype):
     def valid(self, s, partial=False):
         mode = os.stat(s).st_mode
         if not stat.S_ISSOCK(mode):
-            raise ArgumentValid('socket path {} is not a socket'.format(s))
+            raise ArgumentValid('socket path {0} is not a socket'.format(s))
         self.val = s
         return True
     def __str__(self):
@@ -223,25 +223,25 @@ class CephIPAddr(CephArgtype):
                 a = s[:port]
                 p = s[port+1:]
                 if int(p) > 65535:
-                    raise ArgumentValid('{}: invalid IPv4 port'.format(p))
+                    raise ArgumentValid('{0}: invalid IPv4 port'.format(p))
             else:
                 a = s
                 p = None
             try:
                 socket.inet_pton(socket.AF_INET, a)
             except:
-                raise ArgumentValid('{}: invalid IPv4 address'.format(a))
+                raise ArgumentValid('{0}: invalid IPv4 address'.format(a))
         else:
             # v6
             if s.startswith('['):
                 end = s.find(']')
                 if end == -1:
-                    raise ArgumentFormat('{} missing terminating ]'.format(s))
+                    raise ArgumentFormat('{0} missing terminating ]'.format(s))
                 if s[end+1] == ':':
                     try:
                         p = int(s[end+2])
                     except:
-                        raise ArgumentValid('{}: bad port number'.format(s))
+                        raise ArgumentValid('{0}: bad port number'.format(s))
                 a = s[1:end]
             else:
                 a = s
@@ -249,9 +249,9 @@ class CephIPAddr(CephArgtype):
             try:
                 socket.inet_pton(socket.AF_INET6, a)
             except:
-                raise ArgumentValid('{} not valid IPv6 address'.format(s))
+                raise ArgumentValid('{0} not valid IPv6 address'.format(s))
         if p is not None and long(p) > 65535:
-            raise ArgumentValid("{} not a valid port number".format(p))
+            raise ArgumentValid("{0} not a valid port number".format(p))
         self.val = s
         return True
 
@@ -265,7 +265,7 @@ class CephEntityAddr(CephIPAddr):
     def valid(self, s, partial=False):
         ip, nonce = s.split('/')
         if not super(self.__class__, self).valid(ip):
-            raise ArgumentValid('CephEntityAddr {}: ip address invalid'.format(s))
+            raise ArgumentValid('CephEntityAddr {0}: ip address invalid'.format(s))
         self.val = s
         return True
 
@@ -277,9 +277,9 @@ class CephPoolname(CephArgtype):
     Pool name; checked for presence in cluster
     """
     def valid(self, s, partial=False):
-        # XXX
-        # if cluster.pool.exists(s):
-        #    raise ArgumentValid("pool {} does not exist".format(s))
+        global cluster
+        if cluster.pool.exists(s):
+           raise ArgumentValid("pool {0} does not exist".format(s))
         self.val = s
         return True
 
@@ -307,11 +307,11 @@ class CephPgid(CephArgtype):
             raise ArgumentFormat('pgid has no .')
         poolid, pgnum = s.split('.')
         if poolid < 0:
-            raise ArgumentFormat('pool {} < 0'.format(poolid))
+            raise ArgumentFormat('pool {0} < 0'.format(poolid))
         try:
             pgnum = int(pgnum, 16)
         except:
-            raise ArgumentFormat('pgnum {} not hex integer'.format(pgnum))
+            raise ArgumentFormat('pgnum {0} not hex integer'.format(pgnum))
         self.val = s
         return True
 
@@ -362,7 +362,7 @@ class CephChoices(CephArgtype):
         if not partial:
             if not s in self.strings:
                 # show as __str__ does: {s1|s2..}
-                raise ArgumentValid("{} not in {}".format(s, self))
+                raise ArgumentValid("{0} not in {1}".format(s, self))
             self.val = s
             return True
 
@@ -371,13 +371,13 @@ class CephChoices(CephArgtype):
             if t.startswith(s):
                 self.val = s
                 return True
-        raise ArgumentValid("{} not in {}".  format(s, self))
+        raise ArgumentValid("{0} not in {1}".  format(s, self))
 
     def __str__(self):
         if len(self.strings) == 1:
-            return '{}'.format(self.strings[0])
+            return '{0}'.format(self.strings[0])
         else:
-            return '{{{}}}'.format('|'.join(self.strings))
+            return '{{{0}}}'.format('|'.join(self.strings))
 
 class CephFilepath(CephArgtype):
     """
@@ -387,7 +387,7 @@ class CephFilepath(CephArgtype):
         try:
             f = open(s, 'a+')
         except Exception as e:
-            raise ArgumentValid('can\'t open {}: {}'.format(s, e))
+            raise ArgumentValid('can\'t open {0}: {1}'.format(s, e))
         f.close()
         self.val = s
         return True
@@ -401,19 +401,19 @@ class CephFragment(CephArgtype):
     """
     def valid(self, s, partial=False):
         if s.find('/') == -1:
-            raise ArgumentFormat('{}: no /'.format(s))
+            raise ArgumentFormat('{0}: no /'.format(s))
         val, bits = s.split('/')
         # XXX is this right?
         if not val.startswith('0x'):
-            raise ArgumentFormat("{} not a hex integer".format(val))
+            raise ArgumentFormat("{0} not a hex integer".format(val))
         try:
             long(val)
         except:
-            raise ArgumentFormat('can\'t convert {} to integer'.format(val))
+            raise ArgumentFormat('can\'t convert {0} to integer'.format(val))
         try:
             long(bits)
         except:
-            raise ArgumentFormat('can\'t convert {} to integer'.format(bits))
+            raise ArgumentFormat('can\'t convert {0} to integer'.format(bits))
         self.val = s
         return True
 
@@ -429,7 +429,7 @@ class CephUUID(CephArgtype):
         try:
             uuid.UUID(s)
         except Exception as e:
-            raise ArgumentFormat('invalid UUID {}: {}'.format(s, e))
+            raise ArgumentFormat('invalid UUID {0}: {1}'.format(s, e))
         self.val = s
         return True
 
@@ -453,7 +453,7 @@ class CephPrefix(CephArgtype):
             if (s == self.prefix):
                 self.val = s
                 return True
-        raise ArgumentPrefix("no match for {}".format(s))
+        raise ArgumentPrefix("no match for {0}".format(s))
 
     def __str__(self):
         return self.prefix
@@ -509,17 +509,17 @@ class argdesc(object):
                 # undo mods above
                 if k == 'n' and self.N:
                     v = 'N'
-                r += '{}={}, '.format(k,v)
+                r += '{0}={1}, '.format(k,v)
         for (k,v) in self.typeargs.iteritems():
-                r += '{}={}, '.format(k,v)
+                r += '{0}={1}, '.format(k,v)
         return r[:-2] + ')'
 
     def __str__(self):
         if ((self.t == CephChoices and len(self.instance.strings) == 1)
             or (self.t == CephPrefix)):
-            s = '{}'.format(str(self.instance))
+            s = '{0}'.format(str(self.instance))
         else:
-            s = '{}({})'.format(self.name, str(self.instance))
+            s = '{0}({1})'.format(self.name, str(self.instance))
             if self.N:
                 s += ' [' + str(self.instance) + '...]'
         if not self.req:
@@ -532,10 +532,10 @@ class argdesc(object):
         which really needs them)
         """
         if self.t == CephString:
-            chunk = '<{}>'.format(self.name)
+            chunk = '<{0}>'.format(self.name)
         else:
             chunk = str(self.instance)
-        s = '{}'.format(chunk)
+        s = '{0}'.format(chunk)
         if self.N:
             s += ' [' + chunk + '...]'
         if not self.req:
@@ -571,7 +571,7 @@ def parse_funcsig(sig):
         else:
             # not a simple string, must be dict
             if not 'type' in desc:
-                s = 'JSON descriptor {} has no type'.format(sig)
+                s = 'JSON descriptor {0} has no type'.format(sig)
                 raise JsonFormat(s)
             # look up type string in our globals() dict; if it's an
             # object of type types.TypeType, it must be a
@@ -579,10 +579,10 @@ def parse_funcsig(sig):
             if desc['type'] in globals():
                 t = globals()[desc['type']]
                 if type(t) != types.TypeType:
-                    s = 'unknown type {}'.format(desc['type'])
+                    s = 'unknown type {0}'.format(desc['type'])
                     raise JsonFormat(s)
             else:
-                s = 'unknown type {}'.format(desc['type'])
+                s = 'unknown type {0}'.format(desc['type'])
                 raise JsonFormat(s)
 
         kwargs = dict()
@@ -627,7 +627,7 @@ def parse_json_funcsigs(s):
     try:
         overall = json.loads(s)
     except Exception as e:
-        print >> sys.stderr, "Couldn't parse JSON {}: {}".format(s, e)
+        print >> sys.stderr, "Couldn't parse JSON {0}: {1}".format(s, e)
         raise e
     sigdict = {}
     for cmdtag, cmd in overall.iteritems():
@@ -635,7 +635,7 @@ def parse_json_funcsigs(s):
         try:
             sig = cmd['sig']
         except KeyError:
-            s = "JSON descriptor {} has no 'sig'".format(cmdtag)
+            s = "JSON descriptor {0} has no 'sig'".format(cmdtag)
             raise JsonFormat(s)
         newsig = parse_funcsig(sig)
         sigdict[cmdtag] = {'sig':newsig, 'helptext':helptext}
@@ -715,12 +715,12 @@ def validate(args, signature, partial=False):
                         # wanted N, didn't even get 1
                         if partial:
                             return d
-                        raise ArgumentNumber('saw {} of {}, expected at least 1'.format(desc.numseen, desc))
+                        raise ArgumentNumber('saw {0} of {1}, expected at least 1'.format(desc.numseen, desc))
                     elif not desc.N and desc.numseen < desc.n:
                         # wanted n, got too few
                         if partial:
                             return d
-                        raise ArgumentNumber('saw {} of {}, expected {}'.format(desc.numseen, desc, desc.n))
+                        raise ArgumentNumber('saw {0} of {1}, expected {2}'.format(desc.numseen, desc, desc.n))
                 break
             try:
                 validate_one(word, desc)
@@ -803,7 +803,7 @@ def parse_cmdargs(args=None, target='', first=False):
                                              prefix='get_command_descriptions')
             if ret:
                 print >> sys.stderr, \
-                    "couldn't get command descriptions for {}: {}".\
+                    "couldn't get command descriptions for {0}: {1}".\
                     format(target, outs)
             else:
                 sys.stdout.write(format_help(parse_json_funcsigs(outbuf)))
@@ -911,7 +911,7 @@ def format_help(cmddict):
 
         # so we can zip them for output
         for (s, h) in zip(siglines, helplines):
-            fullusage += '{:40s} {}\n'.format(s, h)
+            fullusage += '{0:40s} {1}\n'.format(s, h)
 
     return fullusage
 
@@ -939,14 +939,14 @@ def validate_command(parsed_args, sigdict, args):
             if (matched > best_match_cnt):
                 if verbose:
                     print >> sys.stderr, \
-                        "better match: {} > {}: {}:{} ".format(matched,
+                        "better match: {0} > {1}: {2}:{3} ".format(matched,
                                       best_match_cnt, cmdtag, concise_sig(sig))
                 best_match_cnt = matched
                 bestsigs = [{cmdtag:cmd}]
             elif matched == best_match_cnt:
                 if verbose:
                     print >> sys.stderr, \
-                        "equal match: {} > {}: {}:{} ".format(matched,
+                        "equal match: {0} > {1}: {2}:{3} ".format(matched,
                                       best_match_cnt, cmdtag, concise_sig(sig))
                 bestsigs.append({cmdtag:cmd})
 
@@ -969,10 +969,10 @@ def validate_command(parsed_args, sigdict, args):
                 except ArgumentError as e:
                     # prefixes matched, but some other arg didn't;
                     # this is interesting information
-                    print >> sys.stderr, '{}: invalid command'.\
+                    print >> sys.stderr, '{0}: invalid command'.\
                         format(' '.join(args))
-                    print >> sys.stderr, '{}'.format(e)
-                    print >> sys.stderr, "did you mean {}?\n\t{}".\
+                    print >> sys.stderr, '{0}'.format(e)
+                    print >> sys.stderr, "did you mean {0}?\n\t{1}".\
                         format(concise_sig(sig), helptext)
                     pass
 
@@ -1021,7 +1021,7 @@ def json_command(target=('mon', ''), prefix=None, argdict=None, inbuf='',
             if 'target' in cmddict:
                 osdtarget = cmddict.pop('target')
             else:
-                osdtarget = '{}.{}'.format(target[0], target[1])
+                osdtarget = '{0}.{1}'.format(*target)
 
             try:
                 osdtarg.valid(osdtarget)
@@ -1031,7 +1031,7 @@ def json_command(target=('mon', ''), prefix=None, argdict=None, inbuf='',
                 osdid = 0
 
             if verbose:
-                print >> sys.stderr, 'submit {} to osd.{}'.\
+                print >> sys.stderr, 'submit {0} to osd.{1}'.\
                     format(json.dumps(cmddict), osdid)
             ret, outbuf, outs = \
                 cluster.osd_command(osdid, json.dumps(cmddict), inbuf, timeout)
@@ -1040,20 +1040,20 @@ def json_command(target=('mon', ''), prefix=None, argdict=None, inbuf='',
             # leave it in cmddict for the OSD to use too
             pgid = target[1]
             if verbose:
-                print >> sys.stderr, 'submit {} for pgid {}'.\
+                print >> sys.stderr, 'submit {0} for pgid {1}'.\
                     format(json.dumps(cmddict), pgid)
             ret, outbuf, outs = \
                 cluster.pg_command(pgid, json.dumps(cmddict), inbuf, timeout)
 
         elif target[0] == 'mon':
             if verbose:
-                print >> sys.stderr, '{} to {}'.\
+                print >> sys.stderr, '{0} to {1}'.\
                     format(json.dumps(cmddict), target[0])
             ret, outbuf, outs = cluster.mon_command(json.dumps(cmddict),
                                                     inbuf, timeout)
 
     except Exception as e:
-        raise RuntimeError('"{}": exception {}'.format(prefix, e))
+        raise RuntimeError('"{0}": exception {1}'.format(prefix, e))
 
     return ret, outbuf, outs
 
@@ -1074,7 +1074,7 @@ def admin_socket(asok_path, cmd):
             got += len(bit)
 
     except Exception as e:
-        raise RuntimeError('exception: {}'.format(e))
+        raise RuntimeError('exception: {0}'.format(e))
 
     return ret
 
@@ -1110,7 +1110,7 @@ def new_style_command(target, command_descs, inbuf, verbose):
         for cmdtag in sorted(sigdict.keys()):
             cmd = sigdict[cmdtag]
             sig = cmd['sig']
-            print '{}: {}'.format(cmdtag, concise_sig(sig))
+            print '{0}: {1}'.format(cmdtag, concise_sig(sig))
 
     got_command = False
 
@@ -1142,7 +1142,7 @@ def new_style_command(target, command_descs, inbuf, verbose):
                     ret, outbuf, outs = json_command(target=target,
                                                      argdict=valid_dict)
                     if ret:
-                        sys.stderr.write('Error {}: {}'.format(ret, outs))
+                        sys.stderr.write('Error {0}: {1}'.format(ret, outs))
                         return ret, '', outs
                 else:
                     print "invalid command"
@@ -1275,7 +1275,7 @@ def main():
             with open(parsed_args.input_file, 'r') as f:
                 inbuf = f.read()
         except Exception as e:
-            print >> sys.stderr, 'Can\'t open input file {}: {}'.format(parsed_args.input_file, e)
+            print >> sys.stderr, 'Can\'t open input file {0}: {1}'.format(parsed_args.input_file, e)
             return 1
 
     # prepare output file, if any
@@ -1284,7 +1284,7 @@ def main():
             outf = open(parsed_args.output_file, 'w')
         except:
             print >> sys.stderr, \
-                'Can\'t open output file {}: {}'.\
+                'Can\'t open output file {0}: {1}'.\
                 format(parsed_args.output_file, e)
             return 1
 
@@ -1304,7 +1304,7 @@ def main():
         if ret < 0:
             ret = -ret
         print >> sys.stderr, \
-            'Problem getting command descriptions from {}, {}'.\
+            'Problem getting command descriptions from {0}, {1}'.\
             format(target, errno.errorcode[ret])
         return ret
 
@@ -1312,7 +1312,7 @@ def main():
 
     if ret < 0:
         ret = -ret
-        print >> sys.stderr, 'Error {}: {}'.format(errno.errorcode[ret], outs)
+        print >> sys.stderr, 'Error {0}: {1}'.format(errno.errorcode[ret], outs)
         return ret
 
     if (parsed_args.output_file):
