@@ -2464,8 +2464,8 @@ void Monitor::get_status(stringstream &ss, Formatter *f)
 
 #undef COMMAND
 struct MonCommand {
-  const char *cmdstring;
-  const char *helpstring;
+  string cmdstring;
+  string helpstring;
 } mon_commands[] = {
 #define COMMAND(parsesig, helptext) \
   {parsesig, helptext},
@@ -2523,12 +2523,8 @@ void Monitor::handle_command(MMonCommand *m)
 
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      f->open_object_section(secname.str().c_str());
-      f->open_array_section("sig");
-      dump_cmds_to_json(f, cp->cmdstring);
-      f->close_section();  // desc array
-      f->dump_string("help", string(cp->helpstring));
-      f->close_section(); // overall object
+      dump_cmd_and_help_to_json(f, secname.str(),
+				cp->cmdstring, cp->helpstring);
       cmdnum++;
     }
     f->close_section();	// command_descriptions

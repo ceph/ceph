@@ -458,12 +458,10 @@ public:
 	 ++p) {
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      jf.open_object_section(secname.str().c_str());
-      jf.open_array_section("sig");
-      dump_cmds_to_json(&jf, p->second.c_str());
-      jf.close_section(); // sig array
-      jf.dump_string("help", m_as->m_help[p->first]);
-      jf.close_section(); // cmd
+      dump_cmd_and_help_to_json(&jf,
+				secname.str().c_str(),
+				p->second.c_str(),
+				m_as->m_help[p->first]);
       cmdnum++;
     }
     jf.close_section(); // command_descriptions

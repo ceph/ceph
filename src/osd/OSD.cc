@@ -3374,8 +3374,8 @@ void OSD::handle_command(MCommand *m)
 }
 
 struct OSDCommand {
-  const char *cmdstring;
-  const char *helpstring;
+  string cmdstring;
+  string helpstring;
 } osd_commands[] = {
 
 #define COMMAND(parsesig, helptext) \
@@ -3456,12 +3456,8 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
 
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      f->open_object_section(secname.str().c_str());
-      f->open_array_section("sig");
-      dump_cmds_to_json(f, cp->cmdstring);
-      f->close_section();  // desc array
-      f->dump_string("help", string(cp->helpstring));
-      f->close_section(); // overall object
+      dump_cmd_and_help_to_json(f, secname.str(),
+				cp->cmdstring, cp->helpstring);
       cmdnum++;
     }
     f->close_section();	// command_descriptions
