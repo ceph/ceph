@@ -521,16 +521,23 @@ class argdesc(object):
         else:
             s = '{}({})'.format(self.name, str(self.instance))
             if self.N:
-                s += '[' + str(self.instance) + '...]'
+                s += ' [' + str(self.instance) + '...]'
         if not self.req:
             s = '{' + s + '}'
         return s
 
-    # like above, but omit parameter names
     def helpstr(self):
-        s = '{}'.format(str(self.instance))
+        """
+        like str(), but omit parameter names (except for CephString,
+        which really needs them)
+        """
+        if self.t == CephString:
+            chunk = '<{}>'.format(self.name)
+        else:
+            chunk = str(self.instance)
+        s = '{}'.format(chunk)
         if self.N:
-            s += '[' + str(self.instance) + '...]'
+            s += ' [' + chunk + '...]'
         if not self.req:
             s = '{' + s + '}'
         return s
