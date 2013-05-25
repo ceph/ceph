@@ -1952,10 +1952,6 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
     return -EPERM;
   }
 
-  // populate the owner info
-  s->owner.set_id(s->user.user_id);
-  s->owner.set_name(s->user.display_name);
-
   /* now verify signature */
    
   string auth_hdr;
@@ -2018,6 +2014,11 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
       s->user = effective_user;
     }
   }
+
+  // populate the owner info
+  s->owner.set_id(s->user.user_id);
+  s->owner.set_name(s->user.display_name);
+
 
   return  0;
 }
