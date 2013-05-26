@@ -754,13 +754,16 @@ public:
   void open_remote_ino_2(inodeno_t ino,
 			 vector<Anchor>& anchortrace, bool want_xlocked,
 			 inodeno_t hadino, version_t hadv, Context *onfinish);
-  void open_remote_dentry(CDentry *dn, bool projected, Context *fin);
-  void _open_remote_dentry_finish(int r, CDentry *dn, bool projected, Context *fin);
 
   bool parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_t>& missing);
   bool parallel_fetch_traverse_dir(inodeno_t ino, filepath& path, 
 				   set<CDir*>& fetch_queue, set<inodeno_t>& missing,
 				   C_GatherBuilder &gather_bld);
+
+  void open_remote_dentry(CDentry *dn, bool projected, Context *fin,
+			  bool want_xlocked=false);
+  void _open_remote_dentry_finish(CDentry *dn, inodeno_t ino, Context *fin,
+				  bool want_xlocked, int mode, int r);
 
   void make_trace(vector<CDentry*>& trace, CInode *in);
 
