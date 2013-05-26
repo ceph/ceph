@@ -7342,8 +7342,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // wh
 	} else {
           dout(7) << "remote link to " << dnl->get_remote_ino() << ", which i don't have" << dendl;
 	  assert(mdr);  // we shouldn't hit non-primary dentries doing a non-mdr traversal!
-          open_remote_ino(dnl->get_remote_ino(), _get_waiter(mdr, req, fin),
-			  (null_okay && depth == path.depth() - 1));
+          open_remote_dentry(dn, true, _get_waiter(mdr, req, fin),
+			     (null_okay && depth == path.depth() - 1));
 	  if (mds->logger) mds->logger->inc(l_mds_trino);
           return 1;
         }        
@@ -7790,34 +7790,49 @@ void MDCache::open_remote_ino_2(inodeno_t ino, vector<Anchor>& anchortrace, bool
 struct C_MDC_OpenRemoteDentry : public Context {
   MDCache *mdc;
   CDentry *dn;
-  bool projected;
+  inodeno_t ino;
   Context *onfinish;
-  C_MDC_OpenRemoteDentry(MDCache *m, CDentry *d, bool p, Context *f) :
-    mdc(m), dn(d), projected(p), onfinish(f) {}
+  bool want_xlocked;
+  int mode;
+  C_MDC_OpenRemoteDentry(MDCache *m, CDentry *d, inodeno_t i, Context *f,
+			 bool wx, int md) :
+    mdc(m), dn(d), ino(i), onfinish(f), want_xlocked(wx), mode(md) {}
   void finish(int r) {
-    mdc->_open_remote_dentry_finish(r, dn, projected, onfinish);
+    mdc->_open_remote_dentry_finish(dn, ino, onfinish, want_xlocked, mode, r);
   }
 };
 
-void MDCache::open_remote_dentry(CDentry *dn, bool projected, Context *fin)
+void MDCache::open_remote_dentry(CDentry *dn, bool projected, Context *fin, bool want_xlocked)
 {
   dout(10) << "open_remote_dentry " << *dn << dendl;
   CDentry::linkage_t *dnl = projected ? dn->get_projected_linkage() : dn->get_linkage();
-  open_remote_ino(dnl->get_remote_ino(), 
-		  new C_MDC_OpenRemoteDentry(this, dn, projected, fin));
+  inodeno_t ino = dnl->get_remote_ino();
+  int mode = g_conf->mds_open_remote_link_mode;
+  Context *fin2 =  new C_MDC_OpenRemoteDentry(this, dn, ino, fin, want_xlocked, mode);
+  if (mode == 0)
+    open_remote_ino(ino, fin2, want_xlocked); // anchor
+  else
+    open_ino(ino, -1, fin2, true, want_xlocked); // backtrace
 }
 
-void MDCache::_open_remote_dentry_finish(int r, CDentry *dn, bool projected, Context *fin)
+void MDCache::_open_remote_dentry_finish(CDentry *dn, inodeno_t ino, Context *fin,
+					 bool want_xlocked, int mode, int r)
 {
-  if (r == -ENOENT) {
-    dout(0) << "open_remote_dentry_finish bad remote dentry " << *dn << dendl;
-    dn->state_set(CDentry::STATE_BADREMOTEINO);
-  } else if (r != 0)
-    assert(0);
-  fin->finish(r);
-  delete fin;
+  if (r < 0) {
+    if (mode == 0) {
+      dout(0) << "open_remote_dentry_finish bad remote dentry " << *dn << dendl;
+      dn->state_set(CDentry::STATE_BADREMOTEINO);
+    } else {
+      dout(7) << "open_remote_dentry_finish failed to open ino " << ino
+	      << " for " << *dn << ", retry using anchortable" << dendl;
+      assert(mode == 1);
+      Context *fin2 =  new C_MDC_OpenRemoteDentry(this, dn, ino, fin, want_xlocked, 0);
+      open_remote_ino(ino, fin2, want_xlocked);
+      return;
+    }
+  }
+  fin->complete(r < 0 ? r : 0);
 }
-
 
 
 void MDCache::make_trace(vector<CDentry*>& trace, CInode *in)
