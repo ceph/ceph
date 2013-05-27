@@ -3052,18 +3052,13 @@ void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
     return;
   }
 
-  // if we are not healthy, do not mark ourselves up (yet)
-  if (!g_ceph_context->get_heartbeat_map()->is_healthy()) {
-    dout(5) << "not healthy, deferring boot" << dendl;
-    state = STATE_WAITING_FOR_HEALTHY;
-    return;
-  }
-
   // if our map within recent history, try to add ourselves to the osdmap.
   if (osdmap->test_flag(CEPH_OSDMAP_NOUP)) {
     dout(5) << "osdmap NOUP flag is set, waiting for it to clear" << dendl;
   } else if (!g_ceph_context->get_heartbeat_map()->is_healthy()) {
+    // if we are not healthy, do not mark ourselves up (yet)
     dout(1) << "internal heartbeats indicate we are not healthy; waiting to boot" << dendl;
+    state = STATE_WAITING_FOR_HEALTHY;
   } else if (osdmap->get_epoch() >= oldest - 1 &&
 	     osdmap->get_epoch() + g_conf->osd_map_message_max > newest) {
     _send_boot();
