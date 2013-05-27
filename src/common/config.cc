@@ -63,8 +63,8 @@ struct ceph_file_layout g_default_file_layout = {
  fl_object_size: init_le32(1<<22),
  fl_cas_hash: init_le32(0),
  fl_object_stripe_unit: init_le32(0),
- fl_unused: init_le32(-1),
- fl_pg_pool : init_le32(-1),
+ fl_unused: init_le32((__le32)-1),
+ fl_pg_pool : init_le32((__le32)-1),
 };
 
 #define _STR(x) #x

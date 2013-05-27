@@ -21,7 +21,7 @@ ostream& operator<<(ostream &out, Inode &in)
     out << "(";
     for (map<int,Cap*>::iterator p = in.caps.begin(); p != in.caps.end(); ++p) {
       if (p != in.caps.begin())
-	out << ',';
+        out << ',';
       out << p->first << '=' << ccap_string(p->second->issued);
     }
     out << ")";
@@ -126,7 +126,7 @@ bool Inode::put_cap_ref(int cap)
 	assert(cap_refs[c] > 0);
       }
       if (--cap_refs[c] == 0)
-	last = true;      
+        last = true;
       //cout << "inode " << *this << " put " << cap_string(c) << " " << (cap_refs[c]+1) << " -> " << cap_refs[c] << std::endl;
     }
     cap >>= 1;
@@ -140,7 +140,7 @@ bool Inode::is_any_caps()
   return caps.size() || exporting_mds >= 0;
 }
 
-bool Inode::cap_is_valid(Cap* cap) 
+bool Inode::cap_is_valid(Cap* cap)
 {
   /*cout << "cap_gen     " << cap->session-> cap_gen << std::endl
     << "session gen " << cap->gen << std::endl
@@ -493,4 +493,46 @@ void CapSnap::dump(Formatter *f) const
   f->dump_int("writing", (int)writing);
   f->dump_int("dirty_data", (int)dirty_data);
   f->dump_unsigned("flush_tid", flush_tid);
+}
+
+void Inode::add_revoke_notifier(bool write,
+                                bool(*cb)(vinodeno_t, bool, void*),
+                                void *opaque,
+                                uint64_t *serial)
+{
+  revoke_notifier *revoker = new revoke_notifier(write, cb, opaque);
+  *serial = revoke_serial++;
+  revoke_notifiers[*serial] = revoker;
+}
+
+bool Inode::remove_revoke_notifier(uint64_t serial)
+{
+  revoke_notifier *revoker = revoke_notifiers[serial];
+  bool write = revoker->write;
+  revoke_notifiers.erase(serial);
+  delete revoker;
+  return write;
+}
+
+void Inode::recall_rw_caps(bool write)
+{
+
+  map<uint64_t,revoke_notifier*>::iterator p
+    = revoke_notifiers.begin();
+  bool will_return = false;
+  while (p != revoke_notifiers.end()) {
+    revoke_notifier *revoker = p->second;
+    if (write && !revoker->write) {
+	continue;
+    }
+    will_return = revoker->cb(vino(), revoker->write,
+			      revoker->opaque);
+    if (will_return) {
+      ++p;
+    } else {
+      put_cap_ref(CEPH_CAP_FILE_RD | (write ? CEPH_CAP_FILE_WR : 0));
+      revoke_notifiers.erase(p++);
+      delete revoker;
+    }
+  }
 }

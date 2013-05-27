@@ -88,13 +88,13 @@ inline void decode(bool &v, bufferlist::iterator& p) {
 
 #define WRITE_INTTYPE_ENCODER(type, etype)				\
   inline void encode(type v, bufferlist& bl, uint64_t features=0) {	\
-    __##etype e = init_##etype(v);					\
+    __##etype e = init_##etype((__##etype) v);					\
     encode_raw(e, bl);							\
   }									\
   inline void decode(type &v, bufferlist::iterator& p) {		\
     __##etype e;							\
     decode_raw(e, p);							\
-    v = e;								\
+    v = (type) e;							\
   }
 
 WRITE_INTTYPE_ENCODER(uint64_t, le64)
