@@ -158,6 +158,10 @@ int RGWRegion::init(CephContext *_cct, RGWRados *_store, bool setup_region)
       r = set_as_default();
       if (r < 0)
 	return r;
+      /*Re attempt to read region info from newly created default region */
+      r = read_default(default_info);
+      if (r < 0)
+	return r;
     } else if (r < 0) {
       lderr(cct) << "failed reading default region info: " << cpp_strerror(-r) << dendl;
       return r;
