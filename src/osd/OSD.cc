@@ -2679,7 +2679,7 @@ void OSD::tick()
   logger->set(l_osd_buf, buffer::get_total_alloc());
 
   if (is_waiting_for_healthy()) {
-    if (g_ceph_context->get_heartbeat_map()->is_healthy()) {
+    if (_is_healthy()) {
       dout(1) << "healthy again, booting" << dendl;
       state = STATE_BOOTING;
       start_boot();
@@ -3062,9 +3062,9 @@ void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
   // if our map within recent history, try to add ourselves to the osdmap.
   if (osdmap->test_flag(CEPH_OSDMAP_NOUP)) {
     dout(5) << "osdmap NOUP flag is set, waiting for it to clear" << dendl;
-  } else if (!g_ceph_context->get_heartbeat_map()->is_healthy()) {
+  } else if (!_is_healthy()) {
     // if we are not healthy, do not mark ourselves up (yet)
-    dout(1) << "internal heartbeats indicate we are not healthy; waiting to boot" << dendl;
+    dout(1) << "not healthy; waiting to boot" << dendl;
     state = STATE_WAITING_FOR_HEALTHY;
   } else if (osdmap->get_epoch() >= oldest - 1 &&
 	     osdmap->get_epoch() + g_conf->osd_map_message_max > newest) {
@@ -3078,6 +3078,16 @@ void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
   else
     monc->sub_want("osdmap", oldest - 1, CEPH_SUBSCRIBE_ONETIME);
   monc->renew_subs();
+}
+
+bool OSD::_is_healthy()
+{
+  if (!g_ceph_context->get_heartbeat_map()->is_healthy()) {
+    dout(1) << "is_healthy false -- internal heartbeat failed" << dendl;
+    return false;
+  }
+
+  return true;
 }
 
 void OSD::_send_boot()
