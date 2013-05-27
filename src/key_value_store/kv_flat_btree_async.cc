@@ -1815,6 +1815,7 @@ int KvFlatBtreeAsync::set_many(const map<string, bufferlist> &in_map) {
   io_ctx.aio_exec(index_name, aioc,  "kvs", "read_many", inbl, &outbl);
   aioc->wait_for_safe();
   err = aioc->get_return_value();
+  aioc->release();
   if (err < 0) {
     cerr << "getting index failed with " << err << std::endl;
     return err;
