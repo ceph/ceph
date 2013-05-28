@@ -2975,7 +2975,7 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
     if (local_flush && replica && m_filestore_replica_fadvise) {
       int fa_r = posix_fadvise(fd, offset, len, POSIX_FADV_DONTNEED);
       if (fa_r) {
-	dout(0) << "posic_fadvise failed: " << cpp_strerror(fa_r) << dendl;
+	dout(0) << "posix_fadvise failed: " << cpp_strerror(fa_r) << dendl;
       } else {
 	dout(10) << "posix_fadvise performed after local flush" << dendl;
       }
@@ -3331,7 +3331,7 @@ void FileStore::flusher_entry()
 	  if (replica && m_filestore_replica_fadvise) {
 	    int fa_r = posix_fadvise(fd, off, len, POSIX_FADV_DONTNEED);
 	    if (fa_r) {
-	      dout(0) << "posic_fadvise failed: " << cpp_strerror(fa_r) << dendl;
+	      dout(0) << "posix_fadvise failed: " << cpp_strerror(fa_r) << dendl;
 	    } else {
 	      dout(10) << "posix_fadvise performed after local flush" << dendl;
 	    }
