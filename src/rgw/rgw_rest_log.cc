@@ -38,73 +38,71 @@ static int parse_date_str(string& in, utime_t& out) {
 void RGWOp_MDLog_List::execute() {
   string   shard = s->args.get("id");
 
-  if (!shard.empty()) {
-    string   st = s->args.get("start-time"),
-             et = s->args.get("end-time"),
-             err;
-    utime_t  ut_st, 
-             ut_et;
-    void    *handle;
-    int      shard_id;
-    list<cls_log_entry> entries;
+  string   st = s->args.get("start-time"),
+           et = s->args.get("end-time"),
+           err;
+  utime_t  ut_st, 
+           ut_et;
+  void    *handle;
+  int      shard_id;
 
-    shard_id = strict_strtol(shard.c_str(), 10, &err);
-    if (!err.empty()) {
-      dout(5) << "Error parsing shard_id " << shard << dendl;
-      http_ret = -EINVAL;
-      return;
-    }
-
-    if (parse_date_str(st, ut_st) < 0) {
-      http_ret = -EINVAL;
-      return;
-    }
-
-    if (parse_date_str(et, ut_et) < 0) {
-      http_ret = -EINVAL;
-      return;
-    }
-
-    RGWMetadataLog *meta_log = store->meta_mgr->get_log();
-
-    meta_log->init_list_entries(shard_id, ut_st, ut_et, &handle);
-
-    bool truncated;
-
-    s->formatter->open_array_section("entries");
-    http_ret = meta_log->list_entries(handle, 1000, entries, &truncated);
-    if (http_ret < 0) {
-      return;
-    }
-
-    for (list<cls_log_entry>::iterator iter = entries.begin(); 
-         iter != entries.end(); ++iter) {
-      cls_log_entry& entry = *iter;
-      store->meta_mgr->dump_log_entry(entry, s->formatter);
-      s->formatter->flush(out_stream);
-    }
-
-    s->formatter->close_section();
-    s->formatter->flush(out_stream);
-  } else {
-    unsigned num_objects = s->cct->_conf->rgw_md_log_max_shards;
-    s->formatter->open_object_section("num_ojects");
-    s->formatter->dump_unsigned("num_objects", num_objects);
-    s->formatter->close_section();
-    s->formatter->flush(out_stream);
+  shard_id = strict_strtol(shard.c_str(), 10, &err);
+  if (!err.empty()) {
+    dout(5) << "Error parsing shard_id " << shard << dendl;
+    http_ret = -EINVAL;
+    return;
   }
 
-  http_ret = 0;
+  if (parse_date_str(st, ut_st) < 0) {
+    http_ret = -EINVAL;
+    return;
+  }
+
+  if (parse_date_str(et, ut_et) < 0) {
+    http_ret = -EINVAL;
+    return;
+  }
+
+  RGWMetadataLog *meta_log = store->meta_mgr->get_log();
+
+  meta_log->init_list_entries(shard_id, ut_st, ut_et, &handle);
+
+  bool truncated;
+
+  http_ret = meta_log->list_entries(handle, 1000, entries, &truncated);
 }
 
 void RGWOp_MDLog_List::send_response() {
   set_req_state_err(s, http_ret);
   dump_errno(s);
   end_header(s);
-  std::string outs(out_stream.str());
-  if (!outs.empty()) {
-    s->cio->write(outs.c_str(), outs.size());
+
+  if (http_ret < 0)
+    return;
+
+  s->formatter->open_array_section("entries");
+  for (list<cls_log_entry>::iterator iter = entries.begin(); 
+       iter != entries.end(); ++iter) {
+    cls_log_entry& entry = *iter;
+    store->meta_mgr->dump_log_entry(entry, s->formatter);
+    flusher.flush();
   }
+  s->formatter->close_section();
+}
+
+void RGWOp_MDLog_GetShardsInfo::execute() {
+  num_objects = s->cct->_conf->rgw_md_log_max_shards;
+  http_ret = 0;
+}
+
+void RGWOp_MDLog_GetShardsInfo::send_response() {
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+
+  s->formatter->open_object_section("num_objects");
+  s->formatter->dump_unsigned("num_objects", num_objects);
+  s->formatter->close_section();
 }
 
 void RGWOp_MDLog_Delete::execute() {
@@ -227,48 +225,61 @@ void RGWOp_BILog_List::execute() {
   bool truncated;
   int count = 0;
   string err;
-  
+
   max_entries = strict_strtol(max_entries_str.c_str(), 10, &err);
   if (!err.empty())
     max_entries = 1000;
 
-  s->formatter->open_array_section("entries");
+  send_response();
   do {
     list<rgw_bi_log_entry> entries;
-    http_ret = store->list_bi_log_entries(bucket_info.bucket, 
+    int ret = store->list_bi_log_entries(bucket_info.bucket, 
                                           marker, max_entries - count, 
                                           entries, &truncated);
-    if (http_ret < 0) {
+    if (ret < 0) {
       dout(5) << "ERROR: list_bi_log_entries()" << dendl;
       return;
     }
 
     count += entries.size();
 
-    for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
-      rgw_bi_log_entry& entry = *iter;
-      encode_json("entry", entry, s->formatter);
-
-      marker = entry.id;
-      s->formatter->flush(out_stream);
-    }
+    send_response(entries, marker);
   } while (truncated && count < max_entries);
 
-  s->formatter->close_section();
-  s->formatter->flush(out_stream);
-  http_ret = 0;
+  send_response_end();
 }
 
 void RGWOp_BILog_List::send_response() {
+  if (sent_header)
+    return;
+
   set_req_state_err(s, http_ret);
   dump_errno(s);
   end_header(s);
-  std::string outs(out_stream.str());
-  if (!outs.empty()) {
-    s->cio->write(outs.c_str(), outs.size());
+
+  sent_header = true;
+
+  if (http_ret < 0)
+    return;
+
+  s->formatter->open_array_section("entries");
+}
+
+void RGWOp_BILog_List::send_response(list<rgw_bi_log_entry>& entries, string& marker)
+{
+  for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+    rgw_bi_log_entry& entry = *iter;
+    encode_json("entry", entry, s->formatter);
+
+    marker = entry.id;
+    flusher.flush();
   }
 }
 
+void RGWOp_BILog_List::send_response_end() {
+  s->formatter->close_section();
+}
+      
 void RGWOp_BILog_Delete::execute() {
   string bucket_name = s->args.get("bucket"),
          start_marker = s->args.get("start-marker"),
@@ -303,10 +314,15 @@ RGWOp *RGWHandler_Log::op_get() {
     return NULL;
   }
 
-  if (type.compare("metadata") == 0)
-    return new RGWOp_MDLog_List;
-  else if (type.compare("bucket-index") == 0) 
+  if (type.compare("metadata") == 0) {
+    if (s->args.exists("id")) {
+      return new RGWOp_MDLog_List;
+    } else {
+      return new RGWOp_MDLog_GetShardsInfo;
+    }
+  } else if (type.compare("bucket-index") == 0) {
     return new RGWOp_BILog_List;
+  }
   return NULL;
 }
 
