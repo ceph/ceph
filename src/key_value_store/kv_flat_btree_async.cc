@@ -669,11 +669,13 @@ int KvFlatBtreeAsync::read_object(const string &obj, object_data * odata) {
   err = obj_aioc->get_return_value();
   if (err < 0){
     //possibly -ENOENT, meaning someone else deleted it.
+    obj_aioc->release();
     return err;
   }
   odata->unwritable = string(unw_bl.c_str(), unw_bl.length()) == "1";
   odata->version = obj_aioc->get_version();
   odata->size = odata->omap.size();
+  obj_aioc->release();
   return 0;
 }
 
