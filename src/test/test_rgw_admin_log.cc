@@ -34,6 +34,8 @@ extern "C"{
 #include "global/global_init.h"
 #include "rgw/rgw_common.h"
 #include "rgw/rgw_rados.h"
+#include "include/utime.h"
+#include "include/object.h"
 #define GTEST
 #ifdef GTEST
 #include <gtest/gtest.h>
@@ -482,6 +484,12 @@ static int delete_bucket(void){
   return 0;
 }
 
+size_t read_dummy_post(void *ptr, size_t s, size_t n, void *ud) {
+  int dummy = 0;
+  memcpy(ptr, &dummy, sizeof(dummy));
+  return sizeof(dummy);
+}
+
 size_t read_bucket_object(void *ptr, size_t s, size_t n, void *ud) {
   memcpy(ptr, ud, TEST_BUCKET_OBJECT_SIZE);
   return TEST_BUCKET_OBJECT_SIZE;
@@ -660,6 +668,13 @@ static int get_bilog_list(list<cls_bilog_entry> &entries) {
   return 0;
 }
 
+unsigned get_shard_id(string& key, int max_shards) {
+  string section = "user";
+  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
+  val ^= ceph_str_hash_linux(section.c_str(), section.size());
+  return (unsigned)(val % max_shards);
+}
+
 TEST(TestRGWAdmin, mdlog_list) {
   string start_time, 
          end_time,
@@ -667,13 +682,25 @@ TEST(TestRGWAdmin, mdlog_list) {
   const char *cname = "mdlog",
              *perm = "*";
   string rest_req;
+  unsigned shard_id = get_shard_id(uid, g_ceph_context->_conf->rgw_md_log_max_shards);
+  stringstream ss;
 
   ASSERT_EQ(get_formatted_time(start_time), 0);
   ASSERT_EQ(0, user_create(uid, display_name));
   ASSERT_EQ(0, caps_add(cname, perm));
 
-  rest_req = "/admin/log?type=metadata&start-time=";
-  rest_req.append(start_time);
+  rest_req = "/admin/log?type=metadata";
+  g_test->send_request(string("GET"), rest_req);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+  JSONParser parser;
+  int num_objects;
+  EXPECT_EQ (parse_json_resp(parser), 0);
+  JSONDecoder::decode_json("num_objects", num_objects, (JSONObj *)&parser);
+  ASSERT_EQ(num_objects,g_ceph_context->_conf->rgw_md_log_max_shards);
+
+  ss.str("");
+  ss << "/admin/log?type=metadata&id=" << shard_id << "&start-time=" << start_time;
+  rest_req = ss.str();
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
   
@@ -705,8 +732,9 @@ TEST(TestRGWAdmin, mdlog_list) {
   ASSERT_EQ(0, caps_rm(cname, perm));
   perm="read";
   ASSERT_EQ(0, caps_add(cname, perm));
-  rest_req = "/admin/log?type=metadata&start-time=";
-  rest_req.append(start_time_2);
+  ss.str("");
+  ss << "/admin/log?type=metadata&id=" << shard_id << "&start-time=" << start_time_2;
+  rest_req = ss.str();
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
  
@@ -741,8 +769,9 @@ TEST(TestRGWAdmin, mdlog_list) {
   perm = "*";
   ASSERT_EQ(0, caps_add(cname, perm));
 
-  rest_req = "/admin/log?type=metadata&start-time=";
-  rest_req.append(start_time_2);
+  ss.str("");
+  ss << "/admin/log?type=metadata&id=" << shard_id << "&start-time=" << start_time_2;
+  rest_req = ss.str();
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
   
@@ -769,10 +798,10 @@ TEST(TestRGWAdmin, mdlog_list) {
 
   sleep(1);
   ASSERT_EQ(get_formatted_time(end_time), 0);
-  rest_req = "/admin/log?type=metadata&start-time=";
-  rest_req.append(start_time);
-  rest_req.append("&end-time=");
-  rest_req.append(end_time);
+  ss.str("");
+  ss << "/admin/log?type=metadata&id=" << shard_id << "&start-time=" << start_time 
+    << "&end-time=" << end_time;
+  rest_req = ss.str();
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
   entries.clear();
@@ -781,8 +810,9 @@ TEST(TestRGWAdmin, mdlog_list) {
 
 
   ASSERT_EQ(0, caps_rm(cname, perm));
-  rest_req = "/admin/log?type=metadata&start-time=";
-  rest_req.append(start_time);
+  ss.str("");
+  ss << "/admin/log?type=metadata&id=" << shard_id << "&start-time=" << start_time;
+  rest_req = ss.str();
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(403U, g_test->get_resp_code());
 
@@ -790,10 +820,10 @@ TEST(TestRGWAdmin, mdlog_list) {
   ASSERT_EQ(0, caps_add(cname, perm));
   sleep(1);
   ASSERT_EQ(get_formatted_time(end_time), 0);
-  rest_req = "/admin/log?type=metadata&start-time=";
-  rest_req.append(start_time);
-  rest_req.append("&end-time=");
-  rest_req.append(end_time);
+  ss.str("");
+  ss << "/admin/log?type=metadata&id=" << shard_id << "&start-time=" << start_time 
+    << "&end-time=" << end_time;
+  rest_req = ss.str();
   g_test->send_request(string("DELETE"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
 
@@ -808,14 +838,17 @@ TEST(TestRGWAdmin, mdlog_trim) {
              *perm = "*";
   string rest_req;
   list<cls_log_entry_json> entries;
+  unsigned shard_id = get_shard_id(uid, g_ceph_context->_conf->rgw_md_log_max_shards);
+  ostringstream ss;
 
   sleep(1);
   ASSERT_EQ(get_formatted_time(start_time), 0);
   ASSERT_EQ(0, user_create(uid, display_name));
   ASSERT_EQ(0, caps_add(cname, perm));
 
-  rest_req = "/admin/log?type=metadata&start-time=";
-  rest_req.append(start_time);
+  ss.str("");
+  ss << "/admin/log?type=metadata&id=" << shard_id << "&start-time=" << start_time;
+  rest_req = ss.str();
   g_test->send_request(string("DELETE"), rest_req);
   EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
 
@@ -826,15 +859,15 @@ TEST(TestRGWAdmin, mdlog_trim) {
 
   sleep(1);
   ASSERT_EQ(get_formatted_time(end_time), 0);
-  rest_req = "/admin/log?type=metadata&start-time=";
-  rest_req.append(start_time);
-  rest_req.append("&end-time=");
-  rest_req.append(end_time);
+  ss.str("");
+  ss << "/admin/log?type=metadata&id=" << shard_id << "&start-time=" << start_time << "&end-time=" << end_time;
+  rest_req = ss.str();
   g_test->send_request(string("DELETE"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
 
-  rest_req = "/admin/log?type=metadata&start-time=";
-  rest_req.append(start_time);
+  ss.str("");
+  ss << "/admin/log?type=metadata&id=" << shard_id << "&start-time=" << start_time;
+  rest_req = ss.str();
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
   entries.clear();
@@ -845,16 +878,115 @@ TEST(TestRGWAdmin, mdlog_trim) {
   perm="write";
   ASSERT_EQ(0, caps_add(cname, perm));
   ASSERT_EQ(get_formatted_time(end_time), 0);
-  rest_req = "/admin/log?type=metadata&start-time=";
-  rest_req.append(start_time);
-  rest_req.append("&end-time=");
-  rest_req.append(end_time);
+  ss.str("");
+  ss << "/admin/log?type=metadata&id=" << shard_id << "&start-time=" << start_time << "&end-time=" << end_time;
+  rest_req = ss.str();
   g_test->send_request(string("DELETE"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
 
   ASSERT_EQ(0, caps_rm(cname, perm));
   g_test->send_request(string("DELETE"), rest_req);
   EXPECT_EQ(403U, g_test->get_resp_code());
+  ASSERT_EQ(0, user_rm(uid, display_name));
+}
+
+TEST(TestRGWAdmin, mdlog_lock_unlock) {
+  const char *cname = "mdlog",
+             *perm = "*";
+  string rest_req;
+
+  ASSERT_EQ(0, user_create(uid, display_name));
+  ASSERT_EQ(0, caps_add(cname, perm));
+
+  rest_req = "/admin/log?type=metadata&lock&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+  
+  rest_req = "/admin/log?type=metadata&lock&id=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+  
+  rest_req = "/admin/log?type=metadata&lock&length=3&id=1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+
+  rest_req = "/admin/log?type=metadata&unlock&id=1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+
+  rest_req = "/admin/log?type=metadata&unlock&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+  
+  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/log?type=metadata&unlock&id=1&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&lock_id=ceph1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/log?type=metadata&unlock&id=1&lock_id=ceph1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  utime_t sleep_time(3, 0);
+
+  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&lock_id=ceph1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(500U, g_test->get_resp_code()); 
+
+  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(409U, g_test->get_resp_code()); 
+  sleep_time.sleep();
+
+  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&lock_id=ceph1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/log?type=metadata&unlock&id=1&lock_id=ceph1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+
+  ASSERT_EQ(0, caps_rm(cname, perm));
+  perm = "read";
+  ASSERT_EQ(0, caps_add(cname, perm));
+  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/log?type=metadata&unlock&id=1&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  ASSERT_EQ(0, caps_rm(cname, perm));
+  perm = "write";
+  ASSERT_EQ(0, caps_add(cname, perm));
+  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/log?type=metadata&unlock&id=1&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  ASSERT_EQ(0, caps_rm(cname, perm));
+  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(403U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/log?type=metadata&unlock&id=1&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(403U, g_test->get_resp_code()); 
+  
   ASSERT_EQ(0, user_rm(uid, display_name));
 }
 

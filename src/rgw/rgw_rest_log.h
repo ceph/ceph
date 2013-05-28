@@ -68,6 +68,31 @@ public:
   }
 };
 
+class RGWOp_MDLog_Post : public RGWRESTOp {
+  enum {
+    MDLOG_POST_INVALID = 0,
+    MDLOG_POST_LOCK,
+    MDLOG_POST_UNLOCK
+  };
+  int get_post_type() {
+    bool exists;
+    s->args.get("lock", &exists);
+    if (exists) 
+      return MDLOG_POST_LOCK;
+    s->args.get("unlock", &exists);
+    if (exists)
+      return MDLOG_POST_UNLOCK;
+    return MDLOG_POST_INVALID;
+  }
+public:
+  RGWOp_MDLog_Post() {}
+  ~RGWOp_MDLog_Post() {}
+
+  int check_caps(RGWUserCaps& caps);
+  void execute();
+  virtual const char *name();
+};
+
 class RGWOp_MDLog_Delete : public RGWRESTOp {
 public:
   RGWOp_MDLog_Delete() {}
@@ -86,6 +111,7 @@ class RGWHandler_Log : public RGWHandler_Auth_S3 {
 protected:
   RGWOp *op_get();
   RGWOp *op_delete();
+  RGWOp *op_post();
 
   int read_permissions(RGWOp*) {
     return 0;
