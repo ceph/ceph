@@ -473,7 +473,9 @@ void OSDMap::Incremental::dump(Formatter *f) const
     f->dump_stream("public_addr") << p->second;
     f->dump_stream("cluster_addr") << new_up_cluster.find(p->first)->second;
     f->dump_stream("heartbeat_back_addr") << new_hb_back_up.find(p->first)->second;
-    f->dump_stream("heartbeat_front_addr") << new_hb_front_up.find(p->first)->second;
+    map<int32_t, entity_addr_t>::const_iterator q;
+    if ((q = new_hb_front_up.find(p->first)) != new_hb_front_up.end())
+      f->dump_stream("heartbeat_front_addr") << q->second;
     f->close_section();
   }
   f->close_section();
