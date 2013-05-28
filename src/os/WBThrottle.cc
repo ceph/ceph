@@ -2,10 +2,12 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "os/WBThrottle.h"
+#include "common/perf_counters.h"
 
 WBThrottle::WBThrottle(CephContext *cct) :
   cur_ios(0), cur_size(0),
   cct(cct),
+  logger(NULL),
   stopping(false),
   lock("WBThrottle::lock", false, true, false, cct),
   fs(XFS)
@@ -15,6 +17,20 @@ WBThrottle::WBThrottle(CephContext *cct) :
     set_from_conf();
   }
   assert(cct);
+  PerfCountersBuilder b(
+    cct, string("WBThrottle"),
+    l_wbthrottle_first, l_wbthrottle_last);
+  b.add_u64(l_wbthrottle_bytes_dirtied, "bytes_dirtied");
+  b.add_u64(l_wbthrottle_bytes_wb, "bytes_wb");
+  b.add_u64(l_wbthrottle_ios_dirtied, "ios_dirtied");
+  b.add_u64(l_wbthrottle_ios_wb, "ios_wb");
+  b.add_u64(l_wbthrottle_inodes_dirtied, "inodes_dirtied");
+  b.add_u64(l_wbthrottle_inodes_wb, "inodes_wb");
+  logger = b.create_perf_counters();
+  cct->get_perfcounters_collection()->add(logger);
+  for (unsigned i = l_wbthrottle_first + 1; i != l_wbthrottle_last; ++i)
+    logger->set(i, 0);
+
   cct->_conf->add_observer(this);
   create();
 }
@@ -27,6 +43,8 @@ WBThrottle::~WBThrottle() {
     cond.Signal();
   }
   join();
+  cct->get_perfcounters_collection()->remove(logger);
+  delete logger;
   cct->_conf->remove_observer(this);
 }
 
@@ -133,7 +151,10 @@ void *WBThrottle::entry()
     lock.Lock();
     clearing = hobject_t();
     cur_ios -= wb.get<2>().ios;
+    logger->dec(l_wbthrottle_ios_dirtied, wb.get<2>().ios);
     cur_size -= wb.get<2>().size;
+    logger->dec(l_wbthrottle_bytes_dirtied, wb.get<2>().size);
+    logger->dec(l_wbthrottle_inodes_dirtied);
     cond.Signal();
     wb = boost::tuple<hobject_t, FDRef, PendingWB>();
   }
@@ -153,12 +174,16 @@ void WBThrottle::queue_wb(
 	make_pair(
 	  PendingWB(),
 	  fd))).first;
+    logger->inc(l_wbthrottle_inodes_dirtied);
   } else {
     remove_object(hoid);
   }
 
   cur_ios++;
+  logger->inc(l_wbthrottle_ios_dirtied);
   cur_size += len;
+  logger->inc(l_wbthrottle_bytes_dirtied, len);
+
   wbiter->second.first.add(replica, len, 1);
   insert_object(hoid);
   cond.Signal();
@@ -172,7 +197,10 @@ void WBThrottle::clear()
        i != pending_wbs.end();
        ++i) {
     cur_ios -= i->second.first.ios;
+    logger->dec(l_wbthrottle_ios_dirtied, i->second.first.ios);
     cur_size -= i->second.first.size;
+    logger->dec(l_wbthrottle_bytes_dirtied, i->second.first.size);
+    logger->dec(l_wbthrottle_inodes_dirtied);
   }
   pending_wbs.clear();
   lru.clear();
