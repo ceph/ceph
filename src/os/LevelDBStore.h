@@ -33,6 +33,24 @@ class LevelDBStore : public KeyValueDB {
 
   int init(ostream &out, bool create_if_missing);
 
+  // manage async compactions
+  Mutex compact_queue_lock;
+  Cond compact_queue_cond;
+  list<string> compact_queue;
+  bool compact_queue_stop;
+  class CompactThread : public Thread {
+    LevelDBStore *db;
+  public:
+    CompactThread(LevelDBStore *d) : db(d) {}
+    void *entry() {
+      db->compact_thread_entry();
+      return NULL;
+    }
+    friend class LevelDBStore;
+  } compact_thread;
+
+  void compact_thread_entry();
+
 public:
   /// compact the underlying leveldb store
   void compact() {
@@ -48,6 +66,16 @@ public:
     leveldb::Slice cstart(prefix);
     leveldb::Slice cend(end);
     db->CompactRange(&cstart, &cend);
+  }
+
+  void compact_prefix_async(const string& prefix) {
+    Mutex::Locker l(compact_queue_lock);
+    compact_queue.remove(prefix);     // prevent unbounded dups
+    compact_queue.push_back(prefix);
+    compact_queue_cond.Signal();
+    if (!compact_thread.is_started()) {
+      compact_thread.create();
+    }
   }
 
   /**
@@ -94,10 +122,23 @@ public:
 #ifdef HAVE_LEVELDB_FILTER_POLICY
     filterpolicy(NULL),
 #endif
+    compact_queue_lock("LevelDBStore::compact_thread_lock"),
+    compact_queue_stop(false),
+    compact_thread(this),
     options()
   {}
 
-  ~LevelDBStore() {}
+  ~LevelDBStore() {
+    compact_queue_lock.Lock();
+    if (compact_thread.is_started()) {
+      compact_queue_stop = true;
+      compact_queue_cond.Signal();
+      compact_queue_lock.Unlock();
+      compact_thread.join();
+    } else {
+      compact_queue_lock.Unlock();
+    }
+  }
 
   /// Opens underlying db
   int open(ostream &out) {
