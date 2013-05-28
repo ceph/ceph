@@ -782,6 +782,8 @@ def parse_cmdargs(args=None, target='', first=False):
     # format our own help
     parser = AP(description='Frontend for ceph CLI', add_help=False)
 
+    parser.add_argument('--completion', action='store_true')
+
     parser.add_argument('-h', '--help', help='request mon help',
                         action='store_true')
     parser.add_argument('--help-all', help='request help for all daemons',
@@ -983,7 +985,7 @@ def validate_command(parsed_args, sigdict, args):
         # look for best match, accumulate possibles in bestsigs
         # (so we can maybe give a more-useful error message)
         best_match_cnt = 0
-        bestsigs = []
+        bestcmds = []
         for cmdtag, cmd in sigdict.iteritems():
             sig = cmd['sig']
             matched = matchnum(args, sig, partial=True)
@@ -993,20 +995,20 @@ def validate_command(parsed_args, sigdict, args):
                         "better match: {0} > {1}: {2}:{3} ".format(matched,
                                       best_match_cnt, cmdtag, concise_sig(sig))
                 best_match_cnt = matched
-                bestsigs = [{cmdtag:cmd}]
+                bestcmds = [{cmdtag:cmd}]
             elif matched == best_match_cnt:
                 if verbose:
                     print >> sys.stderr, \
                         "equal match: {0} > {1}: {2}:{3} ".format(matched,
                                       best_match_cnt, cmdtag, concise_sig(sig))
-                bestsigs.append({cmdtag:cmd})
+                bestcmds.append({cmdtag:cmd})
 
         if verbose:
             print >> sys.stderr, "bestsigs: ", bestsigs
 
         # for everything in bestsigs, look for a true match
-        for cmdsig in bestsigs:
-            for (cmdtag, cmd) in cmdsig.iteritems():
+        for cmdsig in bestcmds:
+            for cmd in cmdsig.itervalues():
                 sig = cmd['sig']
                 helptext = cmd['helptext']
                 try:
@@ -1030,7 +1032,7 @@ def validate_command(parsed_args, sigdict, args):
         if not found:
             print >> sys.stderr, 'no valid command found'
             print >> sys.stderr, 'close matches:'
-            for cmdsig in bestsigs:
+            for cmdsig in bestcmds:
                 for (cmdtag, cmd) in cmdsig.iteritems():
                     print >> sys.stderr, concise_sig(cmd['sig'])
             return None
@@ -1145,16 +1147,14 @@ def ceph_conf(field, name):
         raise RuntimeError('unable to get conf option %s for %s: %s' % (field, name, errdata))
     return outdata.rstrip()
 
-def new_style_command(target, command_descs, inbuf, verbose):
+def new_style_command(target, sigdict, inbuf, verbose):
     """
     Do new-style command dance.
     target: daemon to receive command: mon (any) or osd.N
-    command_descs - the JSON output from the new monitor describing commands
+    sigdict - the parsed output from the new monitor describing commands
     inbuf - any -i input file data
     verbose - bool
     """
-
-    sigdict = parse_json_funcsigs(command_descs)
 
     parsed_args, cmdargs = parse_cmdargs(target=target)
     if verbose:
@@ -1234,6 +1234,65 @@ def find_cmd_target(childargs):
         return 'pg', valid_dict['pgid']
 
     return 'mon', ''
+
+def complete(sigdict, args, target):
+    """
+    Command completion.  Match as much of [args] as possible,
+    and print every possible match separated by newlines. 
+    Return exitcode.
+    """
+    # XXX this looks a lot like the front of validate_command().  Refactor?
+
+    complete_verbose = 'COMPVERBOSE' in os.environ
+
+    # Repulsive hack to handle tell: lop off 'tell' and target
+    # and validate the rest of the command.  'target' is already
+    # determined in our callers, so it's ok to remove it here.
+    if len(args) and args[0] == 'tell':
+        args = args[2:]
+    # look for best match, accumulate possibles in bestsigs
+    # (so we can maybe give a more-useful error message)
+    best_match_cnt = 0
+    bestcmds = []
+    for cmdtag, cmd in sigdict.iteritems():
+        sig = cmd['sig']
+        matched = matchnum(args, sig, partial=True)
+        if (matched > best_match_cnt):
+            if complete_verbose:
+                print >> sys.stderr, \
+                    "better match: {0} > {1}: {2}:{3} ".format(matched,
+                                  best_match_cnt, cmdtag, concise_sig(sig))
+            best_match_cnt = matched
+            bestcmds = [{cmdtag:cmd}]
+        elif matched == best_match_cnt:
+            if complete_verbose:
+                print >> sys.stderr, \
+                    "equal match: {0} > {1}: {2}:{3} ".format(matched,
+                                  best_match_cnt, cmdtag, concise_sig(sig))
+            bestcmds.append({cmdtag:cmd})
+
+    # look through all matching sigs
+    comps = []
+    for cmddict in bestcmds:
+        for cmd in cmddict.itervalues():
+            sig = cmd['sig']
+            # either:
+            #   we match everything fully, so we want the next desc, or
+            #   we match more partially, so we want the partial match
+            fullindex = matchnum(args, sig, partial=False) - 1
+            partindex = matchnum(args, sig, partial=True) - 1
+            if complete_verbose:
+                print >> sys.stderr, '{}: f {} p {} len {}'.format(sig, fullindex, partindex, len(sig))
+            if fullindex == partindex and fullindex + 1 < len(sig):
+                d = sig[fullindex + 1]
+            else:
+                d = sig[partindex]
+            comps.append(str(d))
+    if complete_verbose:
+        print >> sys.stderr, '\n'.join(comps)
+    print '\n'.join(comps)
+
+    return 0
 
 ###
 # main
@@ -1359,7 +1418,12 @@ def main():
             format(target, errno.errorcode[ret])
         return ret
 
-    ret, outbuf, outs = new_style_command(target, outbuf, inbuf, verbose)
+    sigdict = parse_json_funcsigs(outbuf)
+
+    if parsed_args.completion:
+        return complete(sigdict, childargs, target)
+
+    ret, outbuf, outs = new_style_command(target, sigdict, inbuf, verbose)
 
     if ret < 0:
         ret = -ret
