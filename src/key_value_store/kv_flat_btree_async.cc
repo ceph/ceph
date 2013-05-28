@@ -690,12 +690,14 @@ int KvFlatBtreeAsync::read_object(const string &obj, rebalance_args * args) {
     if (verbose) cout << "\t\t" << client_name
 	<< "-read_object: reading failed with "
 	<< err << std::endl;
+    a->release();
     return err;
   }
   bufferlist::iterator it = outbl.begin();
   args->decode(it);
   args->odata.name = obj;
   args->odata.version = a->get_version();
+  a->release();
   return err;
 }
 
