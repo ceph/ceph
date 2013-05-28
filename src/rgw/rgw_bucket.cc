@@ -955,6 +955,44 @@ int RGWDataChangesLog::choose_oid(rgw_bucket& bucket) {
     return (int)r;
 }
 
+int RGWDataChangesLog::renew_entries()
+{
+  map<int, list<cls_log_entry> > m;
+
+  map<string, rgw_bucket>::iterator iter;
+  string section;
+  utime_t ut = ceph_clock_now(cct);
+  for (iter = cur_cycle.begin(); iter != cur_cycle.end(); ++iter) {
+    rgw_bucket& bucket = iter->second;
+    int index = choose_oid(bucket);
+
+    cls_log_entry entry;
+
+    rgw_data_change change;
+    bufferlist bl;
+    change.entity_type = ENTITY_TYPE_BUCKET;
+    change.key = bucket.name;
+    ::encode(change, bl);
+
+    store->time_log_prepare_entry(entry, ut, section, bucket.name, bl);
+
+    m[index].push_back(entry);
+  }
+
+  map<int, list<cls_log_entry> >::iterator miter;
+  for (miter = m.begin(); miter != m.end(); ++miter) {
+    list<cls_log_entry>& entries = miter->second;
+
+    int ret = store->time_log_add(oids[miter->first], entries);
+    if (ret < 0) {
+      lderr(cct) << "ERROR: store->time_log_add() returned " << ret << dendl;
+      return ret;
+    }
+  }
+
+  return 0;
+}
+
 int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
   lock.Lock();
 
@@ -963,6 +1001,8 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
     status = ChangeStatusPtr(new ChangeStatus);
     changes.add(bucket.name, status);
   }
+
+  cur_cycle[bucket.name] = bucket;
 
   lock.Unlock();
 
@@ -1079,3 +1119,41 @@ int RGWDataChangesLog::list_entries(utime_t& start_time, utime_t& end_time, int 
 
   return 0;
 }
+
+bool RGWDataChangesLog::going_down()
+{
+  return (down_flag.read() != 0);
+}
+
+RGWDataChangesLog::~RGWDataChangesLog() {
+  down_flag.set(1);
+  renew_thread->stop();
+  renew_thread->join();
+  delete[] oids;
+}
+
+void *RGWDataChangesLog::ChangesRenewThread::entry() {
+  do {
+    dout(2) << "RGWDataChangesLog::ChangesRenewThread: start" << dendl;
+    int r = log->renew_entries();
+    if (r < 0) {
+      dout(0) << "ERROR: RGWDataChangesLog::renew_entries returned error r=" << r << dendl;
+    }
+
+    if (log->going_down())
+      break;
+
+    lock.Lock();
+    cond.WaitInterval(cct, lock, utime_t(20, 0));
+    lock.Unlock();
+  } while (!log->going_down());
+
+  return NULL;
+}
+
+void RGWDataChangesLog::ChangesRenewThread::stop()
+{
+  Mutex::Locker l(lock);
+  cond.Signal();
+}
+
