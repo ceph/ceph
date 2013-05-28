@@ -4150,6 +4150,10 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
   if (lock->get_parent()->is_freezing_or_frozen())
     return;
 
+  // wait for scan
+  if (lock->get_state() == LOCK_SCAN)
+    return;
+
   // excl -> *?
   if (lock->get_state() == LOCK_EXCL) {
     dout(20) << " is excl" << dendl;
