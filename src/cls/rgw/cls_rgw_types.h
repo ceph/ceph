@@ -62,7 +62,6 @@ struct rgw_bucket_dir_entry_meta {
   string etag;
   string owner;
   string owner_display_name;
-  string tag;
   string content_type;
 
   rgw_bucket_dir_entry_meta() :
@@ -128,9 +127,10 @@ struct rgw_bucket_dir_entry {
   struct rgw_bucket_dir_entry_meta meta;
   map<string, struct rgw_bucket_pending_info> pending_map;
   uint64_t index_ver;
+  string tag;
 
   rgw_bucket_dir_entry() :
-    exists(false) {}
+    exists(false), index_ver(0) {}
 
   void encode(bufferlist &bl) const {
     ENCODE_START(5, 4, bl);
@@ -141,6 +141,7 @@ struct rgw_bucket_dir_entry {
     ::encode(pending_map, bl);
     ::encode(locator, bl);
     ::encode(index_ver, bl);
+    ::encode(tag, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -160,6 +161,7 @@ struct rgw_bucket_dir_entry {
     }
     if (struct_v >= 5) {
       ::decode(index_ver, bl);
+      ::decode(tag, bl);
     }
     DECODE_FINISH(bl);
   }

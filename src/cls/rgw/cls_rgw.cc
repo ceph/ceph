@@ -572,6 +572,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       entry.meta = meta;
       entry.name = op.name;
       entry.exists = true;
+      entry.tag = op.tag;
       stats.num_entries++;
       stats.total_size += meta.size;
       stats.total_size_rounded += get_rounded_size(meta.size);
