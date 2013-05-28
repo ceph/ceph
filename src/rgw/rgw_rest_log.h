@@ -14,11 +14,11 @@
 #ifndef CEPH_RGW_REST_LOG_H
 #define CEPH_RGW_REST_LOG_H
 
-class RGWOp_BILog_List : public RGWOp {
+class RGWOp_BILog_List : public RGWRESTOp {
   int http_ret;
-  std::ostringstream out_stream;
+  bool sent_header;
 public:
-  RGWOp_BILog_List() {}
+  RGWOp_BILog_List() : http_ret(0), sent_header(false) {}
   ~RGWOp_BILog_List() {}
 
   int check_caps(RGWUserCaps& caps) {
@@ -28,6 +28,8 @@ public:
     return check_caps(s->user.caps);
   }
   virtual void send_response();
+  virtual void send_response(list<rgw_bi_log_entry>& entries, string& marker);
+  virtual void send_response_end();
   void execute();
   virtual const char *name() {
     return "list bucket index log";
@@ -44,15 +46,15 @@ public:
   }
   void execute();
   virtual const char *name() {
-    return "trim bucket index log";
+    return "trim_bucket_index_log";
   }
 };
 
-class RGWOp_MDLog_List : public RGWOp {
+class RGWOp_MDLog_List : public RGWRESTOp {
+  list<cls_log_entry> entries;
   int http_ret;
-  std::ostringstream out_stream;
 public:
-  RGWOp_MDLog_List() {}
+  RGWOp_MDLog_List() : http_ret(0) {}
   ~RGWOp_MDLog_List() {}
 
   int check_caps(RGWUserCaps& caps) {
@@ -64,7 +66,27 @@ public:
   void execute();
   virtual void send_response();
   virtual const char *name() {
-    return "list metadata log";
+    return "list_metadata_log";
+  }
+};
+
+class RGWOp_MDLog_GetShardsInfo : public RGWRESTOp {
+  unsigned num_objects;
+  int http_ret;
+public:
+  RGWOp_MDLog_GetShardsInfo() : num_objects(0), http_ret(0) {}
+  ~RGWOp_MDLog_GetShardsInfo() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("mdlog", RGW_CAP_READ);
+  }
+  int verify_permission() {
+    return check_caps(s->user.caps);
+  }
+  void execute();
+  virtual void send_response();
+  virtual const char *name() {
+    return "get_metadata_log_shards_info";
   }
 };
 
@@ -103,7 +125,7 @@ public:
   }
   void execute();
   virtual const char *name() {
-    return "trim metadata log";
+    return "trim_metadata_log";
   }
 };
 
