@@ -76,7 +76,6 @@ public:
   int add_entry(RGWRados *store, string& section, string& key, bufferlist& bl);
 
   struct LogListCtx {
-    RGWRados *store;
     int cur_shard;
     string marker;
     utime_t from_time;
@@ -86,17 +85,19 @@ public:
 
     bool done;
 
-    LogListCtx(RGWRados *_store) : store(_store), cur_shard(0), done(false) {}
+    LogListCtx() : done(false) {}
   };
 
-  void init_list_entries(RGWRados *store, utime_t& from_time, utime_t& end_time, void **handle);
+  void init_list_entries(int shard_id, utime_t& from_time, utime_t& end_time, void **handle);
   void complete_list_entries(void *handle);
   int list_entries(void *handle,
                    int max_entries,
                    list<cls_log_entry>& entries,
                    bool *truncated);
 
-  int trim(RGWRados *store, utime_t& from_time, utime_t& end_time);
+  int trim(int shard_id, utime_t& from_time, utime_t& end_time);
+  int lock_exclusive(int shard_id, utime_t& duration, string& owner_id);
+  int unlock(int shard_id, string& owner_id);
 };
 
 class RGWMetadataLogData;

@@ -642,6 +642,7 @@ int main(int argc, char **argv)
   string start_marker;
   string end_marker;
   int max_entries = -1;
+  int shard_id = 0;
 
   std::string val;
   std::ostringstream errs;
@@ -707,6 +708,8 @@ int main(int argc, char **argv)
       start_date = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--end-date", "--end-time", (char*)NULL)) {
       end_date = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--shard-id", (char*)NULL)) {
+      shard_id = atoi(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--access", (char*)NULL)) {
       access = val;
       perm_mask = rgw_str_to_perm(access.c_str());
@@ -1761,7 +1764,7 @@ next:
 
     RGWMetadataLog *meta_log = store->meta_mgr->get_log();
 
-    meta_log->init_list_entries(store, start_time, end_time, &handle);
+    meta_log->init_list_entries(shard_id, start_time, end_time, &handle);
 
     bool truncated;
 
@@ -1797,7 +1800,7 @@ next:
 
     RGWMetadataLog *meta_log = store->meta_mgr->get_log();
 
-    ret = meta_log->trim(store, start_time, end_time);
+    ret = meta_log->trim(shard_id, start_time, end_time);
     if (ret < 0) {
       cerr << "ERROR: meta_log->trim(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
