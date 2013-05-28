@@ -140,3 +140,20 @@ int LevelDBStore::split_key(leveldb::Slice in, string *prefix, string *key)
     *key= string(in_prefix, prefix_len + 1);
   return 0;
 }
+
+void LevelDBStore::compact_thread_entry()
+{
+  compact_queue_lock.Lock();
+  while (!compact_queue_stop) {
+    while (!compact_queue.empty()) {
+      string prefix = compact_queue.front();
+      compact_queue.pop_front();
+      compact_queue_lock.Unlock();
+      compact_prefix(prefix);
+      compact_queue_lock.Lock();
+      continue;
+    }
+    compact_queue_cond.Wait(compact_queue_lock);
+  }
+  compact_queue_lock.Unlock();
+}

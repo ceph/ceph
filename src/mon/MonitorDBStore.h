@@ -215,7 +215,7 @@ class MonitorDBStore
     int r = db->submit_transaction_sync(dbt);
     if (r >= 0) {
       while (!compact_prefixes.empty()) {
-	db->compact_prefix(compact_prefixes.front());
+	db->compact_prefix_async(compact_prefixes.front());
 	compact_prefixes.pop_front();
       }
     }
