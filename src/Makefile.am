@@ -1873,6 +1873,8 @@ noinst_HEADERS = \
 	messages/MMDSFindInoReply.h\
         messages/MMDSFragmentNotify.h\
         messages/MMDSMap.h\
+	messages/MMDSOpenIno.h \
+	messages/MMDSOpenInoReply.h \
         messages/MMDSResolve.h\
         messages/MMDSResolveAck.h\
         messages/MMDSSlaveRequest.h\
