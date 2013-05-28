@@ -140,7 +140,7 @@ COMMAND("auth import", "auth import: read keyring file from input")
 COMMAND("auth add " \
 	"name=entity,type=CephString " \
 	"name=caps,type=CephString,n=N", \
-	"add auth info for <name> from input file, or random key if no input given, and/or any caps specified in the command")
+	"add auth info for <entity> from input file, or random key if no input given, and/or any caps specified in the command")
 COMMAND("auth get-or-create-key " \
 	"name=entity,type=CephString " \
 	"name=caps,type=CephString,n=N,req=false", \
@@ -148,7 +148,7 @@ COMMAND("auth get-or-create-key " \
 COMMAND("auth get-or-create " \
 	"name=entity,type=CephString " \
 	"name=caps,type=CephString,n=N,req=false", \
-	"add auth info for <name> from input file, or random key if no input given, and/or any caps specified in the command")
+	"add auth info for <entity> from input file, or random key if no input given, and/or any caps specified in the command")
 COMMAND("auth caps " \
 	"name=entity,type=CephString " \
 	"name=caps,type=CephString,n=N", \

@@ -377,7 +377,7 @@ class CephChoices(CephArgtype):
         if len(self.strings) == 1:
             return '{0}'.format(self.strings[0])
         else:
-            return '{{{0}}}'.format('|'.join(self.strings))
+            return '{0}'.format('|'.join(self.strings))
 
 class CephFilepath(CephArgtype):
     """
@@ -786,22 +786,27 @@ def parse_cmdargs(args=None, target='', first=False):
                         action='store_true')
     parser.add_argument('--help-all', help='request help for all daemons',
                         action='store_true')
+
     parser.add_argument('-c', dest='cephconf',
                         help='ceph configuration file')
     parser.add_argument('-i', '--in-file', dest='input_file',
                         help='input file')
-    parser.add_argument('--id', dest='client_id',
-                        help='client id for authentication')
-    parser.add_argument('--name', '-n', dest='client_name',
-                        help='client name for authentication')
     parser.add_argument('-o', '--out-file', dest='output_file',
                         help='output file')
     parser.add_argument('-k', '--keyring', dest='keyring_file',
                         help='keyring file')
+
+    parser.add_argument('--id', dest='client_id',
+                        help='client id for authentication')
+    parser.add_argument('--name', '-n', dest='client_name',
+                        help='client name for authentication')
+
     parser.add_argument('--admin-daemon', dest='admin_socket',
                         help='submit admin-socket commands (\"help\" for help')
+
     parser.add_argument('-s', '--status', action='store_true',
                         help='show cluster status')
+
     parser.add_argument('-w', '--watch', action='store_true',
                         help='watch live cluster changes')
     parser.add_argument('--watch-debug', action='store_true',
@@ -814,8 +819,10 @@ def parse_cmdargs(args=None, target='', first=False):
                         help='watch warn events')
     parser.add_argument('--watch-error', action='store_true',
                         help='watch error events')
+
     parser.add_argument('-v', '--verbose', action="store_true")
     parser.add_argument('--concise', dest='verbose', action="store_false")
+
     parser.add_argument('-f', '--format', choices=['json', 'json-pretty',
                         'xml', 'xml-pretty', 'plain'], dest='output_format')
     # for pg dump_stuck
