@@ -2067,6 +2067,7 @@ bool KvFlatBtreeAsync::is_consistent() {
 	  err = aioc->get_return_value();
 	  if (ceph_clock_now(g_ceph_context) - idata.ts > timeout) {
 	    if (err < 0) {
+	      aioc->release();
 	      if (err == -ENOENT) {
 		continue;
 	      } else {
@@ -2085,6 +2086,7 @@ bool KvFlatBtreeAsync::is_consistent() {
 	    }
 	  }
 	  special_names.insert(dit->obj);
+	  aioc->release();
 	}
 	for(vector<create_data >::iterator cit = idata.to_create.begin();
 	    cit != idata.to_create.end(); ++cit) {
