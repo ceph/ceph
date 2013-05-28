@@ -30,9 +30,12 @@ void DumbBackend::_write(
   if (do_sync_file_range)
     ::sync_file_range(fd, offset, bl.length(),
 		      SYNC_FILE_RANGE_WAIT_AFTER);
-  if (do_fadvise)
-    ::posix_fadvise(fd, offset, bl.length(),
-		    POSIX_FADV_DONTNEED);
+  if (do_fadvise) {
+    int fa_r = posix_fadvise(fd, offset, bl.length(), POSIX_FADV_DONTNEED);
+    if (fa_r) {
+        std::cout << "posix_fadvise failed, errno is: " << fa_r << std::endl;
+    }
+  }
   ::close(fd);
   {
     Mutex::Locker l(pending_commit_mutex);
