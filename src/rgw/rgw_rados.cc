@@ -19,6 +19,7 @@
 #include "cls/refcount/cls_refcount_client.h"
 #include "cls/version/cls_version_client.h"
 #include "cls/log/cls_log_client.h"
+#include "cls/lock/cls_lock_client.h"
 
 #include "rgw_tools.h"
 
@@ -57,7 +58,7 @@ static string region_info_oid_prefix = "region_info.";
 
 static string default_region_info_oid = "default.region";
 static string region_map_oid = "region_map";
-
+static string rgw_log_lock_name = "rgw_process";
 
 static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 
@@ -1183,6 +1184,31 @@ int RGWRados::time_log_trim(const string& oid, utime_t& start_time, utime_t& end
     return r;
 
   return cls_log_trim(io_ctx, oid, start_time, end_time);
+}
+
+int RGWRados::log_lock_exclusive(const string& oid, utime_t& duration, string& owner_id) {
+  librados::IoCtx io_ctx;
+
+  const char *log_pool = zone.log_pool.name.c_str();
+  int r = rados->ioctx_create(log_pool, io_ctx);
+  if (r < 0)
+    return r;
+  rados::cls::lock::Lock l(rgw_log_lock_name);
+  l.set_duration(duration);
+  l.set_cookie(owner_id);
+  return l.lock_exclusive(&io_ctx, oid);
+}
+
+int RGWRados::log_unlock(const string& oid, string& owner_id) {
+  librados::IoCtx io_ctx;
+
+  const char *log_pool = zone.log_pool.name.c_str();
+  int r = rados->ioctx_create(log_pool, io_ctx);
+  if (r < 0)
+    return r;
+  rados::cls::lock::Lock l(rgw_log_lock_name);
+  l.set_cookie(owner_id);
+  return l.unlock(&io_ctx, oid);
 }
 
 int RGWRados::decode_policy(bufferlist& bl, ACLOwner *owner)

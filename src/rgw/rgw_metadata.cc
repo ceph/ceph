@@ -79,14 +79,15 @@ int RGWMetadataLog::add_entry(RGWRados *store, string& section, string& key, buf
   return store->time_log_add(oid, now, section, key, bl);
 }
 
-void RGWMetadataLog::init_list_entries(RGWRados *store, utime_t& from_time, utime_t& end_time, void **handle)
+void RGWMetadataLog::init_list_entries(int shard_id, utime_t& from_time, utime_t& end_time, void **handle)
 {
-  LogListCtx *ctx = new LogListCtx(store);
+  LogListCtx *ctx = new LogListCtx();
 
+  ctx->cur_shard = shard_id;
   ctx->from_time = from_time;
   ctx->end_time = end_time;
 
-  get_shard_oid(0, ctx->cur_oid);
+  get_shard_oid(ctx->cur_shard, ctx->cur_oid);
 
   *handle = (void *)ctx;
 }
@@ -102,64 +103,50 @@ int RGWMetadataLog::list_entries(void *handle,
                  bool *truncated) {
   LogListCtx *ctx = (LogListCtx *)handle;
 
-  if (ctx->done || !max_entries) {
+  if (!max_entries) {
     *truncated = false;
     return 0;
   }
 
   entries.clear();
 
-  do {
-    list<cls_log_entry> ents;
-    bool is_truncated;
-    int ret = store->time_log_list(ctx->cur_oid, ctx->from_time, ctx->end_time,
-                                 max_entries - entries.size(), ents, ctx->marker, &is_truncated);
-    if (ret == -ENOENT) {
-      is_truncated = false;
-      ret = 0;
-    }
-    if (ret < 0)
-      return ret;
-
-    if (ents.size()) {
-      entries.splice(entries.end(), ents);
-    }
-
-    if (!is_truncated) {
-      ++ctx->cur_shard;
-      if (ctx->cur_shard < cct->_conf->rgw_md_log_max_shards) {
-        get_shard_oid(ctx->cur_shard, ctx->cur_oid);
-        ctx->marker.clear();
-      } else {
-        ctx->done = true;
-        break;
-      }
-    }
-  } while (entries.size() < (size_t)max_entries);
-
-  *truncated = !ctx->done;
-
+  int ret = store->time_log_list(ctx->cur_oid, ctx->from_time, ctx->end_time,
+                                 max_entries, entries, ctx->marker, truncated);
+  if ((ret < 0) && (ret != -ENOENT))
+    return ret;
   return 0;
 }
 
-int RGWMetadataLog::trim(RGWRados *store, utime_t& from_time, utime_t& end_time)
+int RGWMetadataLog::trim(int shard_id, utime_t& from_time, utime_t& end_time)
 {
   string oid;
-  for (int shard = 0; shard < cct->_conf->rgw_md_log_max_shards; shard++) {
-    get_shard_oid(shard, oid);
+  get_shard_oid(shard_id, oid);
 
-    int ret;
+  int ret;
 
-    ret = store->time_log_trim(oid, from_time, end_time);
+  ret = store->time_log_trim(oid, from_time, end_time);
 
-    if (ret == -ENOENT)
-      ret = 0;
+  if (ret == -ENOENT)
+    ret = 0;
 
-    if (ret < 0)
-      return ret;
-  }
+  if (ret < 0)
+    return ret;
 
   return 0;
+}
+  
+int RGWMetadataLog::lock_exclusive(int shard_id, utime_t& duration, string& owner_id) {
+  string oid;
+  get_shard_oid(shard_id, oid);
+
+  return store->log_lock_exclusive(oid, duration, owner_id);
+}
+
+int RGWMetadataLog::unlock(int shard_id, string& owner_id) {
+  string oid;
+  get_shard_oid(shard_id, oid);
+
+  return store->log_unlock(oid, owner_id);
 }
 
 obj_version& RGWMetadataObject::get_version()
