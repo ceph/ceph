@@ -4381,6 +4381,11 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
   if (oid.snap == CEPH_SNAPDIR) {
     // return head or snapdir, whichever exists.
     ObjectContext *obc = get_object_context(head, oloc, can_create);
+    if (obc && !obc->obs.exists) {
+      // ignore it if the obc exists but the object doesn't
+      put_object_context(obc);
+      obc = NULL;
+    }
     if (!obc) {
       obc = get_object_context(snapdir, oloc, can_create);
     }
