@@ -240,6 +240,7 @@ private:
   const utime_t& get_modified() const { return modified; }
 
   bool is_blacklisted(const entity_addr_t& a) const;
+  void get_blacklist(list<pair<entity_addr_t,utime_t > > *bl) const;
 
   string get_cluster_snapshot() const {
     if (cluster_snapshot_epoch == epoch)
