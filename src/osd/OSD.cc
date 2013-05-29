@@ -2834,7 +2834,10 @@ void OSD::check_ops_in_flight()
 //   setomapval <pool-id> <obj-name> <key> <val>
 //   rmomapkey <pool-id> <obj-name> <key>
 //   setomapheader <pool-id> <obj-name> <header>
+//   getomap <pool> <obj-name>
 //   truncobj <pool-id> <obj-name> <newlen>
+//   injectmdataerr
+//   injectdataerr
 void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
      std::string command, std::string args, ostream &ss)
 {
