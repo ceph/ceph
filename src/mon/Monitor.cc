@@ -2444,6 +2444,7 @@ void Monitor::get_status(stringstream &ss, Formatter *f)
   get_health(health, NULL, f);
 
   if (f) {
+    f->dump_stream("fsid") << monmap->get_fsid();
     f->dump_stream("monmap") << *monmap;
     f->dump_stream("election_epoch") << get_epoch();
     f->dump_stream("quorum") << get_quorum();
@@ -2453,6 +2454,7 @@ void Monitor::get_status(stringstream &ss, Formatter *f)
     f->dump_stream("mdsmap") << mdsmon()->mdsmap;
     f->close_section();
   } else {
+    ss << "  cluster " << monmap->get_fsid() << "\n";
     ss << "   health " << health << "\n";
     ss << "   monmap " << *monmap << ", election epoch " << get_epoch()
       << ", quorum " << get_quorum() << " " << get_quorum_names() << "\n";
