@@ -2303,8 +2303,24 @@ void OSD::need_heartbeat_peer_update()
 void OSD::maybe_update_heartbeat_peers()
 {
   assert(osd_lock.is_locked());
-  Mutex::Locker l(heartbeat_lock);
 
+  if (is_waiting_for_healthy()) {
+    utime_t now = ceph_clock_now(g_ceph_context);
+    if (last_heartbeat_resample == utime_t()) {
+      last_heartbeat_resample = now;
+      heartbeat_need_update = true;
+    } else if (!heartbeat_need_update) {
+      utime_t dur = now - last_heartbeat_resample;
+      if (dur > g_conf->osd_heartbeat_grace) {
+	dout(10) << "maybe_update_heartbeat_peers forcing update after " << dur << " seconds" << dendl;
+	heartbeat_need_update = true;
+	last_heartbeat_resample = now;
+	reset_heartbeat_peers();   // we want *new* peers!
+      }
+    }
+  }
+
+  Mutex::Locker l(heartbeat_lock);
   if (!heartbeat_need_update)
     return;
   heartbeat_need_update = false;
@@ -2735,22 +2751,7 @@ void OSD::tick()
 
   logger->set(l_osd_buf, buffer::get_total_alloc());
 
-  if (is_waiting_for_healthy()) {
-    if (_is_healthy()) {
-      dout(1) << "healthy again, booting" << dendl;
-      state = STATE_BOOTING;
-      start_boot();
-    }
-  }
-
-  if (is_active()) {
-    // periodically kick recovery work queue
-    recovery_tp.wake();
-
-    if (!scrub_random_backoff()) {
-      sched_scrub();
-    }
-
+  if (is_active() || is_waiting_for_healthy()) {
     map_lock.get_read();
 
     maybe_update_heartbeat_peers();
@@ -2758,8 +2759,6 @@ void OSD::tick()
     heartbeat_lock.Lock();
     heartbeat_check();
     heartbeat_lock.Unlock();
-
-    check_replay_queue();
 
     // mon report?
     utime_t now = ceph_clock_now(g_ceph_context);
@@ -2779,6 +2778,25 @@ void OSD::tick()
     }
 
     map_lock.put_read();
+  }
+
+  if (is_waiting_for_healthy()) {
+    if (_is_healthy()) {
+      dout(1) << "healthy again, booting" << dendl;
+      state = STATE_BOOTING;
+      start_boot();
+    }
+  }
+
+  if (is_active()) {
+    // periodically kick recovery work queue
+    recovery_tp.wake();
+
+    if (!scrub_random_backoff()) {
+      sched_scrub();
+    }
+
+    check_replay_queue();
   }
 
   // only do waiters if dispatch() isn't currently running.  (if it is,
@@ -3119,10 +3137,13 @@ void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
   // if our map within recent history, try to add ourselves to the osdmap.
   if (osdmap->test_flag(CEPH_OSDMAP_NOUP)) {
     dout(5) << "osdmap NOUP flag is set, waiting for it to clear" << dendl;
-  } else if (!_is_healthy()) {
+  } else if (is_waiting_for_healthy() || !_is_healthy()) {
     // if we are not healthy, do not mark ourselves up (yet)
     dout(1) << "not healthy; waiting to boot" << dendl;
-    state = STATE_WAITING_FOR_HEALTHY;
+    if (!is_waiting_for_healthy())
+      start_waiting_for_healthy();
+    // send pings sooner rather than later
+    heartbeat_kick();
   } else if (osdmap->get_epoch() >= oldest - 1 &&
 	     osdmap->get_epoch() + g_conf->osd_map_message_max > newest) {
     _send_boot();
@@ -3137,11 +3158,36 @@ void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
   monc->renew_subs();
 }
 
+void OSD::start_waiting_for_healthy()
+{
+  dout(1) << "start_waiting_for_healthy" << dendl;
+  state = STATE_WAITING_FOR_HEALTHY;
+  last_heartbeat_resample = utime_t();
+}
+
 bool OSD::_is_healthy()
 {
   if (!g_ceph_context->get_heartbeat_map()->is_healthy()) {
     dout(1) << "is_healthy false -- internal heartbeat failed" << dendl;
     return false;
+  }
+
+  if (is_waiting_for_healthy()) {
+    Mutex::Locker l(heartbeat_lock);
+    utime_t cutoff = ceph_clock_now(g_ceph_context);
+    cutoff -= g_conf->osd_heartbeat_grace;
+    int num = 0, up = 0;
+    for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
+	 p != heartbeat_peers.end();
+	 ++p) {
+      if (p->second.is_healthy(cutoff))
+	++up;
+      ++num;
+    }
+    if (up < num / 3) {
+      dout(1) << "is_healthy false -- only " << up << "/" << num << " up peers (less than 1/3)" << dendl;
+      return false;
+    }
   }
 
   return true;
@@ -4594,10 +4640,11 @@ void OSD::handle_osd_map(MOSDMap *m)
 		     << " != my " << hb_front_server_messenger->get_myaddr() << ")";
       
       if (!service.is_stopping()) {
-	state = STATE_BOOTING;
 	up_epoch = 0;
 	do_restart = true;
 	bind_epoch = osdmap->get_epoch();
+
+	start_waiting_for_healthy();
 
 	set<int> avoid_ports;
 	avoid_ports.insert(cluster_messenger->get_myaddr().get_port());
@@ -4645,6 +4692,9 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // yay!
   consume_map();
+
+  if (is_active() || is_waiting_for_healthy())
+    maybe_update_heartbeat_peers();
 
   if (!is_active()) {
     dout(10) << " not yet active; waiting for peering wq to drain" << dendl;
@@ -4895,7 +4945,6 @@ void OSD::activate_map()
   dout(7) << "activate_map version " << osdmap->get_epoch() << dendl;
 
   wake_all_pg_waiters();   // the pg mapping may have shifted
-  maybe_update_heartbeat_peers();
 
   if (osdmap->test_flag(CEPH_OSDMAP_FULL)) {
     dout(10) << " osdmap flagged full, doing onetime osdmap subscribe" << dendl;
