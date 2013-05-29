@@ -21,6 +21,7 @@
 
 #include "common/config.h"
 #include "include/assert.h"
+#include "include/stringify.h"
 #include "common/Formatter.h"
 
 #define dout_subsys ceph_subsys_paxos
@@ -959,14 +960,13 @@ void Paxos::trim_to(MonitorDBStore::Transaction *t,
   dout(10) << __func__ << " from " << from << " to " << to << dendl;
   assert(from < to);
 
-  while (from < to) {
-    dout(10) << "trim " << from << dendl;
-    t->erase(get_name(), from);
-    from++;
+  for (version_t v = from; v < to; ++v) {
+    dout(10) << "trim " << v << dendl;
+    t->erase(get_name(), v);
   }
   if (g_conf->mon_compact_on_trim) {
-    dout(10) << " compacting prefix" << dendl;
-    t->compact_prefix(get_name());
+    dout(10) << " compacting trimmed range" << dendl;
+    t->compact_range(get_name(), stringify(from), stringify(to));
   }
 }
 
