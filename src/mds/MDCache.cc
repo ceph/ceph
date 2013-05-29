@@ -2126,6 +2126,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
   }
 
   // now, stick it in the blob
+  assert(parent);
   assert(parent->is_auth());
   blob->add_dir_context(parent);
   blob->add_dir(parent, true);
