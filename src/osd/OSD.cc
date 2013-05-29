@@ -2485,8 +2485,8 @@ void OSD::handle_osd_ping(MOSDPing *m)
   case MOSDPing::YOU_DIED:
     dout(10) << "handle_osd_ping " << m->get_source_inst() << " says i am down in " << m->map_epoch
 	     << dendl;
-    monc->sub_want("osdmap", m->map_epoch, CEPH_SUBSCRIBE_ONETIME);
-    monc->renew_subs();
+    if (monc->sub_want("osdmap", m->map_epoch, CEPH_SUBSCRIBE_ONETIME))
+      monc->renew_subs();
     break;
   }
 
