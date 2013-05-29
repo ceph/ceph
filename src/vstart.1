@@ -1,0 +1,61 @@
+.TH vstart.sh 1 28/05/2013 Ceph "Ceph vstart.sh fake development cluster utility manual"
+
+.SH NAME
+vstart.sh \- Ceph utility to deploy fake local cluster for development purpose
+
+.SH SYNOPSIS
+vstart.sh [\fIOPTIONS\fR]... [\fImon\fR] [\fIosd\fR] [\fImds\fR]
+
+.SH DESCRIPTION
+.B vstart.sh
+allows to deploy a fake local cluster on your machine for development purpose. It start \fImon\fR, \fIosd\fR and/or \fImds\fR, or all of them if not specified.
+.BI stop.sh
+script allow you to stop it.
+
+.SH OPTIONS
+.SS CONFIGURATION
+.TP
+.B \-i \fIip_address\fR
+Bind to the specified \fIip_address\fR instead of guessing and resolve from hostname.
+.TP
+.B \-k
+Keep old configuration files instead of overwritting theses.
+.TP
+.B \-l, \-\-localhost
+Use localhost instead of hostanme.
+.TP
+.B \-m \fIip\fR[:\fIport\fR]
+Specifies monitor \fIip\fR address and \fIport\fR.
+.TP
+.B \-n, \-\-new
+Create a new cluster.
+.TP
+.B \-o \fIconfig\fR
+Add \fIconfig\fR to all sections in the ceph configuration.
+.TP
+.B \-r
+Start radosgw (ceph needs to be compiled with --radosgw), create an apache2 configuration file, and start apache2 with it (needs mod_fastcgi) on port starting from 8000.
+.TP
+.B \-\-nodaemon
+Use ceph-run as wrapper for mon/osd/mds.
+.TP
+.B \-\-smallmds
+Configure mds with small limit cache size.
+.SS AUTHENTICATION
+.TP
+.B \-x
+Enable Cephx (on by default).
+.TP
+.B \-X
+Disable Cephx.
+.SS DEBUGGING
+.TP
+.B \-d, \-\-debug
+Launch in debug mode
+.TP
+.B \-\-valgrind[_{osd,mds,mon}] 'valgrind_toolname [args...]'
+Launch the osd/mds/mon/all the ceph binaries using valgrind with the specified tool and arguments.
+.SH ENVIRONMENT VARIABLES
+.TP
+.B CEPH_NUM_{OSD,MDS,MON,RGW}
+This environment variable will contains the number of instances of the desired ceph process you want to start.
