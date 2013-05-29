@@ -3775,13 +3775,8 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
 
   int ret = rgw_get_system_obj(this, ctx, zone.domain_root, bucket_name, bl, objv_tracker, pattrs);
   if (ret < 0) {
-    if (ret != -ENOENT)
-      return ret;
-
-    info.bucket.name = bucket_name;
-    info.bucket.data_pool = bucket_name; // for now
-    info.bucket.index_pool = bucket_name; // for now
-    return 0;
+    info.bucket.name = bucket_name; /* only init this field */
+    return ret;
   }
 
   bufferlist::iterator iter = bl.begin();

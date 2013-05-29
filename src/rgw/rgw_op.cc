@@ -298,10 +298,14 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
 
   RGWBucketInfo bucket_info;
   if (s->bucket_name_str.size()) {
+    bool exists = true;
     ret = store->get_bucket_info(s->obj_ctx, s->bucket_name_str, bucket_info, &s->objv_tracker);
     if (ret < 0) {
-      ldout(s->cct, 0) << "NOTICE: couldn't get bucket from bucket_name (name=" << s->bucket_name_str << ")" << dendl;
-      return ret;
+      if (ret != -ENOENT) {
+        ldout(s->cct, 0) << "NOTICE: couldn't get bucket from bucket_name (name=" << s->bucket_name_str << ")" << dendl;
+        return ret;
+      }
+      exists = false;
     }
     s->bucket = bucket_info.bucket;
 
@@ -312,7 +316,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     s->bucket_owner = s->bucket_acl->get_owner();
 
     string& region = bucket_info.region;
-    if ((region.empty() && !store->region.is_master) &&
+    if (exists && (region.empty() && !store->region.is_master) &&
         (region != store->region.name)) {
       ldout(s->cct, 0) << "NOTICE: request for data in a different region (" << region << " != " << store->region.name << ")" << dendl;
       return -ERR_PERMANENT_REDIRECT;
