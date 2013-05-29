@@ -868,6 +868,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
  */
 void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, CDentry *tracedn) 
 {
+  assert(mdr);
   MClientRequest *req = mdr->client_request;
   
   char buf[80];
@@ -1124,6 +1125,7 @@ void Server::handle_client_request(MClientRequest *req)
   // trim completed_request list
   if (req->get_oldest_client_tid() > 0) {
     dout(15) << " oldest_client_tid=" << req->get_oldest_client_tid() << dendl;
+    assert(session);
     session->trim_completed_requests(req->get_oldest_client_tid());
   }
 
@@ -1918,12 +1920,14 @@ void Server::apply_allocated_inos(MDRequest *mdr)
     mds->inotable->apply_alloc_id(mdr->alloc_ino);
   }
   if (mdr->prealloc_inos.size()) {
+    assert(session);
     session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
     session->info.prealloc_inos.insert(mdr->prealloc_inos);
     mds->sessionmap.version++;
     mds->inotable->apply_alloc_ids(mdr->prealloc_inos);
   }
   if (mdr->used_prealloc_ino) {
+    assert(session);
     session->info.used_inos.erase(mdr->used_prealloc_ino);
     mds->sessionmap.version++;
   }
@@ -5096,8 +5100,10 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
 
   dn->push_projected_linkage();
 
-  if (in->is_dir())
+  if (in->is_dir()) {
+    assert(straydn);
     mds->mdcache->project_subtree_rename(in, dn->get_dir(), straydn->get_dir());
+  }
 
   journal_and_reply(mdr, 0, dn, le, new C_MDS_unlink_local_finish(mds, mdr, dn, straydn));
 }
@@ -6997,10 +7003,9 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
 	assert(mds->is_resolve());
       destdn->push_projected_linkage();
     }
+    if (straydn)
+      destdn->push_projected_linkage();
   }
-
-  if (straydn)
-    destdn->push_projected_linkage();
 
   if (target) {
     inode_t *ti = NULL;
@@ -7426,8 +7431,8 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
     reply_request(mdr, -EINVAL);   // can't prune a parent snap, currently.
     return;
   }
-  if (diri->snaprealm &&
-      !diri->snaprealm->exists(snapname)) {
+  assert(diri->snaprealm);
+  if (!diri->snaprealm->exists(snapname)) {
     reply_request(mdr, -ENOENT);
     return;
   }

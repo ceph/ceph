@@ -607,7 +607,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
   bool need_issue = false;
 
   int loner_issued = 0, other_issued = 0, xlocker_issued = 0;
-  if (caps && in->is_head()) {
+  if (caps && in && in->is_head()) {
     in->get_caps_issued(&loner_issued, &other_issued, &xlocker_issued,
 			lock->get_cap_shift(), lock->get_cap_mask());
     dout(10) << " next state is " << lock->get_state_name(next) 
@@ -2773,7 +2773,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	!in->filelock.can_wrlock(client) &&
 	!in->filelock.can_force_wrlock(client)) {
       dout(10) << " i want to change file_max, but lock won't allow it (yet)" << dendl;
-      if (in->filelock.is_stable()) {
+      if (cap && in->filelock.is_stable()) {
 	bool need_issue = false;
 	cap->inc_suppress();
 	if (in->mds_caps_wanted.empty() &&
@@ -3422,7 +3422,7 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
     }
     
     if (lock->get_type() == CEPH_LOCK_IFILE &&
-	in->state_test(CInode::STATE_NEEDSRECOVER)) {
+	in && in->state_test(CInode::STATE_NEEDSRECOVER)) {
       mds->mdcache->queue_file_recover(in);
       mds->mdcache->do_file_recover();
       gather++;
@@ -3560,7 +3560,7 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
   }
 
   if (lock->get_type() == CEPH_LOCK_IFILE &&
-      in->state_test(CInode::STATE_NEEDSRECOVER)) {
+      in && in->state_test(CInode::STATE_NEEDSRECOVER)) {
     mds->mdcache->queue_file_recover(in);
     mds->mdcache->do_file_recover();
     gather++;
