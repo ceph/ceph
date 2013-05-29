@@ -5218,7 +5218,7 @@ void MDCache::open_snap_parents()
   } else {
     assert(rejoin_waiters.empty());
     assert(missing_snap_parents.empty());
-    assert(reconnected_snaprealms.empty());
+    //assert(reconnected_snaprealms.empty());  // FIXME: need to properly address #5031
     dout(10) << "open_snap_parents - all open" << dendl;
     do_delayed_cap_imports();
 
@@ -9490,6 +9490,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 
   // discover ino error
   if (p.end() && m->is_flag_error_ino()) {
+    assert(cur);
     assert(cur->is_dir());
     CDir *dir = cur->get_dirfrag(m->get_base_dir_frag());
     if (dir) {
