@@ -762,7 +762,8 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 	   << dendl;
 
   // already pending failure?
-  if (pending_inc.new_state[target_osd] & CEPH_OSD_UP) {
+  if (pending_inc.new_state.count(target_osd) &&
+      pending_inc.new_state[target_osd] & CEPH_OSD_UP) {
     dout(10) << " already pending failure" << dendl;
     return true;
   }
@@ -2593,6 +2594,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 
   done:
       dout(10) << " creating osd." << i << dendl;
+      if (pending_inc.new_state.count(i) == 0)
+	pending_inc.new_state[i] = 0;
       pending_inc.new_state[i] |= CEPH_OSD_EXISTS | CEPH_OSD_NEW;
       if (!uuid.is_zero())
 	pending_inc.new_uuid[i] = uuid;
