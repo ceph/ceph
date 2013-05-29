@@ -146,10 +146,10 @@ void LevelDBStore::compact_thread_entry()
   compact_queue_lock.Lock();
   while (!compact_queue_stop) {
     while (!compact_queue.empty()) {
-      string prefix = compact_queue.front();
+      pair<string,string> range = compact_queue.front();
       compact_queue.pop_front();
       compact_queue_lock.Unlock();
-      compact_prefix(prefix);
+      compact_range(range.first, range.second);
       compact_queue_lock.Lock();
       continue;
     }
