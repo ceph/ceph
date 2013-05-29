@@ -37,13 +37,6 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, const string& name,
 		<< ") ";
 }
 
-void Paxos::prepare_bootstrap()
-{
-  dout(0) << __func__ << dendl;
-
-  going_to_bootstrap = true;
-}
-
 MonitorDBStore *Paxos::get_store()
 {
   return mon->store;
@@ -445,6 +438,8 @@ void Paxos::handle_last(MMonPaxos *last)
 	dout(10) << "that's everyone.  active!" << dendl;
 	extend_lease();
 
+        finish_proposal();
+
 	finish_contexts(g_ceph_context, waiting_for_active);
 	finish_contexts(g_ceph_context, waiting_for_readable);
 	finish_contexts(g_ceph_context, waiting_for_writeable);
@@ -834,12 +829,6 @@ void Paxos::finish_proposal()
   first_committed = get_store()->get(get_name(), "first_committed");
   last_committed = get_store()->get(get_name(), "last_committed");
 
-  if (proposals.empty() && going_to_bootstrap) {
-    dout(0) << __func__ << " no more proposals; bootstraping." << dendl;
-    mon->bootstrap();
-    return;
-  }
-
   if (should_trim()) {
     trim();
   }
@@ -1085,16 +1074,15 @@ void Paxos::shutdown() {
   finish_contexts(g_ceph_context, waiting_for_commit, -ECANCELED);
   finish_contexts(g_ceph_context, waiting_for_readable, -ECANCELED);
   finish_contexts(g_ceph_context, waiting_for_active, -ECANCELED);
+  finish_contexts(g_ceph_context, proposals, -ECANCELED);
 }
 
 void Paxos::leader_init()
 {
   cancel_events();
   new_value.clear();
-  if (!proposals.empty())
-    proposals.clear();
 
-  going_to_bootstrap = false;
+  finish_contexts(g_ceph_context, proposals, -EAGAIN);
 
   if (mon->get_quorum().size() == 1) {
     state = STATE_ACTIVE;
@@ -1119,6 +1107,7 @@ void Paxos::peon_init()
   // no chance to write now!
   finish_contexts(g_ceph_context, waiting_for_writeable, -EAGAIN);
   finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
+  finish_contexts(g_ceph_context, proposals, -EAGAIN);
 }
 
 void Paxos::restart()
@@ -1126,13 +1115,10 @@ void Paxos::restart()
   dout(10) << "restart -- canceling timeouts" << dendl;
   cancel_events();
   new_value.clear();
-  dout(10) << __func__ << " -- clearing queued proposals" << dendl;
-  if (!proposals.empty())
-    proposals.clear();
 
   state = STATE_RECOVERING;
-  going_to_bootstrap = false;
 
+  finish_contexts(g_ceph_context, proposals, -EAGAIN);
   finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
   finish_contexts(g_ceph_context, waiting_for_active, -EAGAIN);
 }
