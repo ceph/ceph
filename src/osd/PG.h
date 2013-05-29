@@ -43,6 +43,7 @@
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDPGLog.h"
 #include "common/tracked_int_ptr.hpp"
+#include "common/WorkQueue.h"
 
 #include <list>
 #include <memory>
@@ -1030,24 +1031,29 @@ public:
 			  map<hobject_t, int> &authoritative,
 			  map<hobject_t, set<int> > &inconsistent_snapcolls,
 			  ostream &errorstream);
-  void scrub();
-  void classic_scrub();
-  void chunky_scrub();
+  void scrub(ThreadPool::TPHandle &handle);
+  void classic_scrub(ThreadPool::TPHandle &handle);
+  void chunky_scrub(ThreadPool::TPHandle &handle);
   void scrub_compare_maps();
   void scrub_process_inconsistent();
   void scrub_finalize();
   void scrub_finish();
   void scrub_clear_state();
   bool scrub_gather_replica_maps();
-  void _scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep);
+  void _scan_list(
+    ScrubMap &map, vector<hobject_t> &ls, bool deep,
+    ThreadPool::TPHandle &handle);
   void _scan_snaps(ScrubMap &map);
   void _request_scrub_map_classic(int replica, eversion_t version);
   void _request_scrub_map(int replica, eversion_t version,
                           hobject_t start, hobject_t end, bool deep);
-  int build_scrub_map_chunk(ScrubMap &map,
-                            hobject_t start, hobject_t end, bool deep);
-  void build_scrub_map(ScrubMap &map);
-  void build_inc_scrub_map(ScrubMap &map, eversion_t v);
+  int build_scrub_map_chunk(
+    ScrubMap &map,
+    hobject_t start, hobject_t end, bool deep,
+    ThreadPool::TPHandle &handle);
+  void build_scrub_map(ScrubMap &map, ThreadPool::TPHandle &handle);
+  void build_inc_scrub_map(
+    ScrubMap &map, eversion_t v, ThreadPool::TPHandle &handle);
   virtual void _scrub(ScrubMap &map) { }
   virtual void _scrub_clear_state() { }
   virtual void _scrub_finish() { }
@@ -1066,7 +1072,9 @@ public:
   void reg_next_scrub();
   void unreg_next_scrub();
 
-  void replica_scrub(class MOSDRepScrub *op);
+  void replica_scrub(
+    class MOSDRepScrub *op,
+    ThreadPool::TPHandle &handle);
   void sub_op_scrub_map(OpRequestRef op);
   void sub_op_scrub_reserve(OpRequestRef op);
   void sub_op_scrub_reserve_reply(OpRequestRef op);
