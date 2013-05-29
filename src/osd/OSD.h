@@ -732,6 +732,7 @@ private:
   Messenger *hb_back_server_messenger;
   
   void _add_heartbeat_peer(int p);
+  void _remove_heartbeat_peer(int p);
   bool heartbeat_reset(Connection *con);
   void maybe_update_heartbeat_peers();
   void reset_heartbeat_peers();

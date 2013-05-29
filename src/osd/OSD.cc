@@ -2274,6 +2274,23 @@ void OSD::_add_heartbeat_peer(int p)
   hi->epoch = osdmap->get_epoch();
 }
 
+void OSD::_remove_heartbeat_peer(int n)
+{
+  map<int,HeartbeatInfo>::iterator q = heartbeat_peers.find(n);
+  assert(q != heartbeat_peers.end());
+  dout(20) << " removing heartbeat peer osd." << n
+	   << " " << q->second.con_back->get_peer_addr()
+	   << " " << (q->second.con_front ? q->second.con_front->get_peer_addr() : entity_addr_t())
+	   << dendl;
+  hbclient_messenger->mark_down(q->second.con_back);
+  q->second.con_back->put();
+  if (q->second.con_front) {
+    hbclient_messenger->mark_down(q->second.con_front);
+    q->second.con_front->put();
+  }
+  heartbeat_peers.erase(q);
+}
+
 void OSD::need_heartbeat_peer_update()
 {
   Mutex::Locker l(heartbeat_lock);
@@ -2361,18 +2378,7 @@ void OSD::maybe_update_heartbeat_peers()
        ++p) {
     if (want.count(*p))
       continue;
-    map<int,HeartbeatInfo>::iterator q = heartbeat_peers.find(*p);
-    dout(20) << " removing heartbeat peer osd." << q->first
-	     << " " << q->second.con_back->get_peer_addr()
-	     << " " << (q->second.con_front ? q->second.con_front->get_peer_addr() : entity_addr_t())
-	     << dendl;
-    hbclient_messenger->mark_down(q->second.con_back);
-    q->second.con_back->put();
-    if (q->second.con_front) {
-      hbclient_messenger->mark_down(q->second.con_front);
-      q->second.con_front->put();
-    }
-    heartbeat_peers.erase(q);
+    _remove_heartbeat_peer(*p);
   }
 
   dout(10) << "maybe_update_heartbeat_peers " << heartbeat_peers.size() << " peers, extras " << extras << dendl;
