@@ -4012,6 +4012,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 	 p != weak->inode_scatterlocks.end();
 	 ++p) {
       CInode *in = get_inode(p->first);
+      assert(in);
       dout(10) << " including base inode (due to potential scatterlock update) " << *in << dendl;
       acked_inodes.insert(in->vino());
       ack->add_inode_base(in);
