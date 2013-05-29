@@ -1328,6 +1328,26 @@ def main():
     if len(extraconf) == 0:
         extraconf = None
 
+    # For now, --admin-daemon is handled as usual.  Try it
+    # first in case we can't connect() to the cluster
+    if parsed_args.admin_socket:
+        print admin_socket(parsed_args.admin_socket, childargs)
+        return 0
+
+    if len(childargs) > 0 and childargs[0] == "daemon":
+        if len(childargs) > 2:
+            if childargs[1].find('/') >= 0:
+                print admin_socket(childargs[1], childargs[2:])
+                return 0
+            else:
+                # try resolve daemon name
+                path = ceph_conf('admin_socket', childargs[1])
+                print admin_socket(path, childargs[2:])
+                return 0
+        else:
+            print >> sys.stderr, 'Daemon requires at least 2 arguments'
+            return 1
+
     try:
         cluster = rados.Rados(rados_id=name, conf=extraconf, conffile=conffile)
         cluster.connect(timeout=10)
@@ -1358,25 +1378,6 @@ def main():
             except KeyboardInterrupt:
                 # or until ^C, at least
                 return 0
-
-    # For now, --admin-daemon is handled as usual
-    if parsed_args.admin_socket:
-        print admin_socket(parsed_args.admin_socket, childargs)
-        return 0
-
-    if len(childargs) > 0 and childargs[0] == "daemon":
-        if len(childargs) > 2:
-            if childargs[1].find('/') >= 0:
-                print admin_socket(childargs[1], childargs[2:])
-                return 0
-            else:
-                # try resolve daemon name
-                path = ceph_conf('admin_socket', childargs[1])
-                print admin_socket(path, childargs[2:])
-                return 0
-        else:
-            print >> sys.stderr, 'Daemon requires at least 2 arguments'
-            return 1
 
     # read input file, if any
     inbuf = ''
