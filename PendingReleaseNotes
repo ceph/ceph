@@ -4,3 +4,12 @@
   to the monitors (who process failure reports) and not OSDs.  If you
   have adjusted these settings, please update your ``ceph.conf''
   accordingly.
+
+- New pools now have the HASHPSPOOL flag set by default to provide
+  better distribution over OSDs.  Support for this feature was
+  introduced in v0.59 and Linux kernel version v3.9.  If you wish to
+  access the cluster from an older kernel, set the 'osd pool default
+  flag hashpspool = false' option in your ceph.conf prior to creating
+  the cluster or creating new pools.  Note that the presense of any
+  pool in the cluster with the flag enabled will make the OSD require
+  support from all clients.

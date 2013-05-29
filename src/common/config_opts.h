@@ -110,7 +110,7 @@ OPTION(ms_die_on_unhandled_msg, OPT_BOOL, false)
 OPTION(ms_dispatch_throttle_bytes, OPT_U64, 100 << 20)
 OPTION(ms_bind_ipv6, OPT_BOOL, false)
 OPTION(ms_bind_port_min, OPT_INT, 6800)
-OPTION(ms_bind_port_max, OPT_INT, 7100)
+OPTION(ms_bind_port_max, OPT_INT, 7300)
 OPTION(ms_rwthread_stack_bytes, OPT_U64, 1024 << 10)
 OPTION(ms_tcp_read_timeout, OPT_U64, 900)
 OPTION(ms_pq_max_tokens_per_priority, OPT_U64, 4194304)
@@ -383,6 +383,8 @@ OPTION(osd_pool_default_min_size, OPT_INT, 0)  // 0 means no specific default; c
 OPTION(osd_pool_default_pg_num, OPT_INT, 8) // number of PGs for new pools. Configure in global or mon section of ceph.conf
 OPTION(osd_pool_default_pgp_num, OPT_INT, 8) // number of PGs for placement purposes. Should be equal to pg_num
 OPTION(osd_pool_default_flags, OPT_INT, 0)   // default flags for new pools
+// default flags for new pools
+OPTION(osd_pool_default_flag_hashpspool, OPT_BOOL, true)
 OPTION(osd_map_dedup, OPT_BOOL, true)
 OPTION(osd_map_cache_size, OPT_INT, 500)
 OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
