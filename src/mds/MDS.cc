@@ -976,6 +976,8 @@ void MDS::handle_mds_map(MMDSMap *m)
         resolve_start();
       } else if (is_reconnect()) {
         reconnect_start();
+      } else if (is_rejoin()) {
+	rejoin_start();
       } else if (is_clientreplay()) {
         clientreplay_start();
       } else if (is_creating()) {
@@ -1012,12 +1014,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     if (g_conf->mds_dump_cache_after_rejoin &&
 	oldmap->is_rejoining() && !mdsmap->is_rejoining()) 
       mdcache->dump_cache();      // for DEBUG only
-  }
-  if (oldmap->is_degraded() && !mdsmap->is_degraded() && state >= MDSMap::STATE_ACTIVE)
-    dout(1) << "cluster recovered." << dendl;
   
-  // did someone go active?
-  if (is_clientreplay() || is_active() || is_stopping()) {
     // ACTIVE|CLIENTREPLAY|REJOIN => we can discover from them.
     set<int> olddis, dis;
     oldmap->get_mds_set(olddis, MDSMap::STATE_ACTIVE);
@@ -1028,9 +1025,17 @@ void MDS::handle_mds_map(MMDSMap *m)
     mdsmap->get_mds_set(dis, MDSMap::STATE_REJOIN);
     for (set<int>::iterator p = dis.begin(); p != dis.end(); ++p) 
       if (*p != whoami &&            // not me
-	  olddis.count(*p) == 0)  // newly so?
+	  olddis.count(*p) == 0) {  // newly so?
 	mdcache->kick_discovers(*p);
+	mdcache->kick_open_ino_peers(*p);
+      }
+  }
 
+  if (oldmap->is_degraded() && !mdsmap->is_degraded() && state >= MDSMap::STATE_ACTIVE)
+    dout(1) << "cluster recovered." << dendl;
+
+  // did someone go active?
+  if (is_clientreplay() || is_active() || is_stopping()) {
     set<int> oldactive, active;
     oldmap->get_mds_set(oldactive, MDSMap::STATE_ACTIVE);
     oldmap->get_mds_set(oldactive, MDSMap::STATE_CLIENTREPLAY);
@@ -1461,8 +1466,12 @@ void MDS::reconnect_done()
 void MDS::rejoin_joint_start()
 {
   dout(1) << "rejoin_joint_start" << dendl;
-  mdcache->finish_committed_masters();
   mdcache->rejoin_send_rejoins();
+}
+void MDS::rejoin_start()
+{
+  dout(1) << "rejoin_start" << dendl;
+  mdcache->rejoin_start();
 }
 void MDS::rejoin_done()
 {

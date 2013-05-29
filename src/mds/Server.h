@@ -120,6 +120,7 @@ public:
   CDir *validate_dentry_dir(MDRequest *mdr, CInode *diri, const string& dname);
   CDir *traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, filepath refpath);
   CDentry *prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dname, bool okexist=false);
+  CDentry *prepare_stray_dentry(MDRequest *mdr, CInode *in);
   CInode* prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino, unsigned mode,
 			    ceph_file_layout *layout=NULL);
   void journal_allocated_inos(MDRequest *mdr, EMetaBlob *blob);
@@ -206,7 +207,7 @@ public:
   void _unlink_local_finish(MDRequest *mdr, 
 			    CDentry *dn, CDentry *straydn,
 			    version_t);
-  void _rmdir_prepare_witness(MDRequest *mdr, int who, CDentry *dn, CDentry *straydn);
+  bool _rmdir_prepare_witness(MDRequest *mdr, int who, CDentry *dn, CDentry *straydn);
   void handle_slave_rmdir_prep(MDRequest *mdr);
   void _logged_slave_rmdir(MDRequest *mdr, CDentry *srcdn, CDentry *straydn);
   void _commit_slave_rmdir(MDRequest *mdr, int r);
@@ -226,7 +227,7 @@ public:
   void _rmsnap_finish(MDRequest *mdr, CInode *diri, snapid_t snapid);
 
   // helpers
-  void _rename_prepare_witness(MDRequest *mdr, int who, set<int> &witnesse,
+  bool _rename_prepare_witness(MDRequest *mdr, int who, set<int> &witnesse,
 			       CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   version_t _rename_prepare_import(MDRequest *mdr, CDentry *srcdn, bufferlist *client_map_bl);
   bool _need_force_journal(CInode *diri, bool empty);
@@ -243,9 +244,9 @@ public:
   void handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
   void _logged_slave_rename(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void _commit_slave_rename(MDRequest *mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
-  void do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr);
-  void _rename_rollback_finish(Mutation *mut, MDRequest *mdr, CDentry *srcdn,
-			       version_t srcdnpv, CDentry *destdn, CDentry *staydn);
+  void do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr, bool finish_mdr=false);
+  void _rename_rollback_finish(Mutation *mut, MDRequest *mdr, CDentry *srcdn, version_t srcdnpv,
+			       CDentry *destdn, CDentry *staydn, bool finish_mdr);
 
 };
 
