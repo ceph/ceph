@@ -6526,7 +6526,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	  dn = dir->lookup(p->first.first, p->first.second);
 	} 
 
-	if (!dn) 
+	if (!dn && dir)
 	  dout(0) << "  missing dentry for " << p->first.first << " snap " << p->first.second << " in " << *dir << dendl;
 	assert(dn);
 	
