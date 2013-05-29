@@ -127,6 +127,7 @@ ostream& operator<<(ostream& out, CInode& in)
   if (in.state_test(CInode::STATE_AMBIGUOUSAUTH)) out << " AMBIGAUTH";
   if (in.state_test(CInode::STATE_NEEDSRECOVER)) out << " needsrecover";
   if (in.state_test(CInode::STATE_RECOVERING)) out << " recovering";
+  if (in.state_test(CInode::STATE_DIRTYPARENT)) out << " dirtyparent";
   if (in.is_freezing_inode()) out << " FREEZING=" << in.auth_pin_freeze_allowance;
   if (in.is_frozen_inode()) out << " FROZEN";
   if (in.is_frozen_auth_pin()) out << " FROZEN_AUTHPIN";
@@ -328,8 +329,13 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
   assert(!projected_nodes.empty());
   dout(15) << "pop_and_dirty_projected_inode " << projected_nodes.front()->inode
 	   << " v" << projected_nodes.front()->inode->version << dendl;
+  int64_t old_pool = inode.layout.fl_pg_pool;
+
   mark_dirty(projected_nodes.front()->inode->version, ls);
   inode = *projected_nodes.front()->inode;
+
+  if (inode.is_backtrace_updated())
+    _mark_dirty_parent(ls, old_pool != inode.layout.fl_pg_pool);
 
   map<string,bufferptr> *px = projected_nodes.front()->xattrs;
   if (px) {
@@ -967,64 +973,131 @@ void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
   delete fin;
 }
 
-class C_CInode_FetchedBacktrace : public Context {
-  CInode *in;
-  inode_backtrace_t *backtrace;
-  Context *fin;
-public:
-  bufferlist bl;
-  C_CInode_FetchedBacktrace(CInode *i, inode_backtrace_t *bt, Context *f) :
-    in(i), backtrace(bt), fin(f) {}
-
-  void finish(int r) {
-    if (r == 0) {
-      in->_fetched_backtrace(&bl, backtrace, fin);
-    } else {
-      fin->finish(r);
-    }
-  }
-};
-
-void CInode::fetch_backtrace(inode_backtrace_t *bt, Context *fin)
+void CInode::build_backtrace(int64_t pool, inode_backtrace_t& bt)
 {
-  object_t oid = get_object_name(ino(), frag_t(), "");
-  object_locator_t oloc(inode.layout.fl_pg_pool);
-
-  SnapContext snapc;
-  C_CInode_FetchedBacktrace *c = new C_CInode_FetchedBacktrace(this, bt, fin);
-  mdcache->mds->objecter->getxattr(oid, oloc, "parent", CEPH_NOSNAP, &c->bl, 0, c);
-}
-
-void CInode::_fetched_backtrace(bufferlist *bl, inode_backtrace_t *bt, Context *fin)
-{
-  ::decode(*bt, *bl);
-  if (fin) {
-    fin->finish(0);
-  }
-}
-
-void CInode::build_backtrace(int64_t location, inode_backtrace_t* bt)
-{
-  bt->ino = inode.ino;
-  bt->ancestors.clear();
+  bt.ino = inode.ino;
+  bt.ancestors.clear();
+  bt.pool = pool;
 
   CInode *in = this;
   CDentry *pdn = get_parent_dn();
   while (pdn) {
     CInode *diri = pdn->get_dir()->get_inode();
-    bt->ancestors.push_back(inode_backpointer_t(diri->ino(), pdn->name, in->inode.version));
+    bt.ancestors.push_back(inode_backpointer_t(diri->ino(), pdn->name, in->inode.version));
     in = diri;
     pdn = in->get_parent_dn();
   }
   vector<int64_t>::iterator i = inode.old_pools.begin();
   while(i != inode.old_pools.end()) {
     // don't add our own pool id to old_pools to avoid looping (e.g. setlayout 0, 1, 0)
-    if (*i == location) {
+    if (*i == pool) {
       ++i;
       continue;
     }
-    bt->old_pools.insert(*i);
+    bt.old_pools.insert(*i);
     ++i;
+  }
+}
+
+struct C_Inode_StoredBacktrace : public Context {
+  CInode *in;
+  version_t version;
+  Context *fin;
+  C_Inode_StoredBacktrace(CInode *i, version_t v, Context *f) : in(i), version(v), fin(f) {}
+  void finish(int r) {
+    in->_stored_backtrace(version, fin);
+  }
+};
+
+void CInode::store_backtrace(Context *fin)
+{
+  dout(10) << "store_backtrace on " << *this << dendl;
+  assert(is_dirty_parent());
+
+  auth_pin(this);
+
+  int64_t pool;
+  if (is_dir())
+    pool = mdcache->mds->mdsmap->get_metadata_pool();
+  else
+    pool = inode.layout.fl_pg_pool;
+
+  inode_backtrace_t bt;
+  build_backtrace(pool, bt);
+  bufferlist bl;
+  ::encode(bt, bl);
+
+  ObjectOperation op;
+  op.create(false);
+  op.setxattr("parent", bl);
+
+  SnapContext snapc;
+  object_t oid = get_object_name(ino(), frag_t(), "");
+  object_locator_t oloc(pool);
+  Context *fin2 = new C_Inode_StoredBacktrace(this, inode.backtrace_version, fin);
+
+  if (!state_test(STATE_DIRTYPOOL)) {
+    mdcache->mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
+				   0, NULL, fin2);
+    return;
+  }
+
+  C_GatherBuilder gather(g_ceph_context, fin2);
+  mdcache->mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
+				 0, NULL, gather.new_sub());
+
+  set<int64_t> old_pools;
+  for (vector<int64_t>::iterator p = inode.old_pools.begin();
+      p != inode.old_pools.end();
+      ++p) {
+    if (*p == pool || old_pools.count(*p))
+      continue;
+
+    ObjectOperation op;
+    op.create(false);
+    op.setxattr("parent", bl);
+
+    object_locator_t oloc(*p);
+    mdcache->mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
+				   0, NULL, gather.new_sub());
+    old_pools.insert(*p);
+  }
+  gather.activate();
+}
+
+void CInode::_stored_backtrace(version_t v, Context *fin)
+{
+  dout(10) << "_stored_backtrace" << dendl;
+
+  if (v == inode.backtrace_version)
+    clear_dirty_parent();
+  auth_unpin(this);
+  if (fin)
+    fin->complete(0);
+}
+
+void CInode::_mark_dirty_parent(LogSegment *ls, bool dirty_pool)
+{
+  if (!state_test(STATE_DIRTYPARENT)) {
+    dout(10) << "mark_dirty_parent" << dendl;
+    state_set(STATE_DIRTYPARENT);
+    get(PIN_DIRTYPARENT);
+    assert(ls);
+  }
+  if (dirty_pool)
+    state_set(STATE_DIRTYPOOL);
+  if (ls)
+    ls->dirty_parent_inodes.push_back(&item_dirty_parent);
+}
+
+void CInode::clear_dirty_parent()
+{
+  if (state_test(STATE_DIRTYPARENT)) {
+    dout(10) << "clear_dirty_parent" << dendl;
+    state_clear(STATE_DIRTYPARENT);
+    state_clear(STATE_DIRTYPOOL);
+    put(PIN_DIRTYPARENT);
+    item_dirty_parent.remove_myself();
   }
 }
 
@@ -2989,11 +3062,10 @@ void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waite
 
 void CInode::encode_export(bufferlist& bl)
 {
-  ENCODE_START(3, 3, bl)
+  ENCODE_START(4, 4, bl)
   _encode_base(bl);
 
-  bool dirty = is_dirty();
-  ::encode(dirty, bl);
+  ::encode(state, bl);
 
   ::encode(pop, bl);
 
@@ -3024,6 +3096,8 @@ void CInode::encode_export(bufferlist& bl)
 
 void CInode::finish_export(utime_t now)
 {
+  state &= MASK_STATE_EXPORT_KEPT;
+
   pop.zero(now);
 
   // just in case!
@@ -3037,14 +3111,21 @@ void CInode::finish_export(utime_t now)
 void CInode::decode_import(bufferlist::iterator& p,
 			   LogSegment *ls)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, p);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, p);
 
   _decode_base(p);
 
-  bool dirty;
-  ::decode(dirty, p);
-  if (dirty) 
+  unsigned s;
+  ::decode(s, p);
+  state |= (s & MASK_STATE_EXPORTED);
+  if (is_dirty()) {
+    get(PIN_DIRTY);
     _mark_dirty(ls);
+  }
+  if (is_dirty_parent()) {
+    get(PIN_DIRTYPARENT);
+    _mark_dirty_parent(ls);
+  }
 
   ::decode(pop, ceph_clock_now(g_ceph_context), p);
 

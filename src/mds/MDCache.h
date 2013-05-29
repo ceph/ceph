@@ -53,6 +53,8 @@ class MDentryUnlink;
 class MLock;
 class MMDSFindIno;
 class MMDSFindInoReply;
+class MMDSOpenIno;
+class MMDSOpenInoReply;
 
 class Message;
 class MClientRequest;
@@ -291,7 +293,7 @@ public:
   }
   void log_master_commit(metareqid_t reqid);
   void logged_master_update(metareqid_t reqid);
-  void _logged_master_commit(metareqid_t reqid, LogSegment *ls, list<Context*> &waiters);
+  void _logged_master_commit(metareqid_t reqid);
   void committed_master_slave(metareqid_t r, int from);
   void finish_committed_masters();
 
@@ -323,6 +325,9 @@ protected:
     LogSegment *ls;
     list<Context*> waiters;
     bool safe;
+    bool committing;
+    bool recovering;
+    umaster() : committing(false), recovering(false) {}
   };
   map<metareqid_t, umaster>                 uncommitted_masters;         // master: req -> slave set
 
@@ -407,11 +412,12 @@ protected:
   set<int> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
 
   map<inodeno_t,map<client_t,ceph_mds_cap_reconnect> > cap_exports; // ino -> client -> capex
-  map<inodeno_t,filepath> cap_export_paths;
+  map<inodeno_t,int> cap_export_targets; // ino -> auth mds
 
   map<inodeno_t,map<client_t,map<int,ceph_mds_cap_reconnect> > > cap_imports;  // ino -> client -> frommds -> capex
   map<inodeno_t,filepath> cap_import_paths;
   set<inodeno_t> cap_imports_missing;
+  int cap_imports_num_opening;
   
   set<CInode*> rejoin_undef_inodes;
   set<CInode*> rejoin_potential_updated_scatterlocks;
@@ -426,7 +432,6 @@ protected:
   void handle_cache_rejoin_weak(MMDSCacheRejoin *m);
   CInode* rejoin_invent_inode(inodeno_t ino, snapid_t last);
   CDir* rejoin_invent_dirfrag(dirfrag_t df);
-  bool rejoin_fetch_dirfrags(MMDSCacheRejoin *m);
   void handle_cache_rejoin_strong(MMDSCacheRejoin *m);
   void rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack,
 				      set<SimpleLock *>& gather_locks,
@@ -442,11 +447,13 @@ protected:
       rejoin_send_rejoins();
   }
 public:
+  void rejoin_start();
   void rejoin_gather_finish();
   void rejoin_send_rejoins();
-  void rejoin_export_caps(inodeno_t ino, client_t client, cap_reconnect_t& icr) {
-    cap_exports[ino][client] = icr.capinfo;
-    cap_export_paths[ino] = filepath(icr.path, (uint64_t)icr.capinfo.pathbase);
+  void rejoin_export_caps(inodeno_t ino, client_t client, ceph_mds_cap_reconnect& capinfo,
+			  int target=-1) {
+    cap_exports[ino][client] = capinfo;
+    cap_export_targets[ino] = target;
   }
   void rejoin_recovered_caps(inodeno_t ino, client_t client, cap_reconnect_t& icr, 
 			     int frommds=-1) {
@@ -477,7 +484,10 @@ public:
   void add_reconnected_snaprealm(client_t client, inodeno_t ino, snapid_t seq) {
     reconnected_snaprealms[ino][client] = seq;
   }
-  void process_imported_caps();
+
+  friend class C_MDC_RejoinOpenInoFinish;
+  void rejoin_open_ino_finish(inodeno_t ino, int ret);
+  bool process_imported_caps();
   void choose_lock_states_and_reconnect_caps();
   void prepare_realm_split(SnapRealm *realm, client_t client, inodeno_t ino,
 			   map<client_t,MClientSnap*>& splits);
@@ -744,15 +754,59 @@ public:
   void open_remote_ino_2(inodeno_t ino,
 			 vector<Anchor>& anchortrace, bool want_xlocked,
 			 inodeno_t hadino, version_t hadv, Context *onfinish);
-  void open_remote_dentry(CDentry *dn, bool projected, Context *fin);
-  void _open_remote_dentry_finish(int r, CDentry *dn, bool projected, Context *fin);
 
   bool parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_t>& missing);
   bool parallel_fetch_traverse_dir(inodeno_t ino, filepath& path, 
 				   set<CDir*>& fetch_queue, set<inodeno_t>& missing,
 				   C_GatherBuilder &gather_bld);
 
+  void open_remote_dentry(CDentry *dn, bool projected, Context *fin,
+			  bool want_xlocked=false);
+  void _open_remote_dentry_finish(CDentry *dn, inodeno_t ino, Context *fin,
+				  bool want_xlocked, int mode, int r);
+
   void make_trace(vector<CDentry*>& trace, CInode *in);
+
+protected:
+  struct open_ino_info_t {
+    vector<inode_backpointer_t> ancestors;
+    set<int> checked;
+    int checking;
+    int auth_hint;
+    bool check_peers;
+    bool fetch_backtrace;
+    bool discover;
+    bool want_replica;
+    bool want_xlocked;
+    version_t tid;
+    int64_t pool;
+    list<Context*> waiters;
+    open_ino_info_t() : checking(-1), auth_hint(-1),
+      check_peers(true), fetch_backtrace(true), discover(false) {}
+  };
+  tid_t open_ino_last_tid;
+  map<inodeno_t,open_ino_info_t> opening_inodes;
+
+  void _open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err);
+  void _open_ino_parent_opened(inodeno_t ino, int ret);
+  void _open_ino_traverse_dir(inodeno_t ino, open_ino_info_t& info, int err);
+  Context* _open_ino_get_waiter(inodeno_t ino, MMDSOpenIno *m);
+  int open_ino_traverse_dir(inodeno_t ino, MMDSOpenIno *m,
+			    vector<inode_backpointer_t>& ancestors,
+			    bool discover, bool want_xlocked, int *hint);
+  void open_ino_finish(inodeno_t ino, open_ino_info_t& info, int err);
+  void do_open_ino(inodeno_t ino, open_ino_info_t& info, int err);
+  void do_open_ino_peer(inodeno_t ino, open_ino_info_t& info);
+  void handle_open_ino(MMDSOpenIno *m);
+  void handle_open_ino_reply(MMDSOpenInoReply *m);
+  friend class C_MDC_OpenInoBacktraceFetched;
+  friend class C_MDC_OpenInoTraverseDir;
+  friend class C_MDC_OpenInoParentOpened;
+
+public:
+  void kick_open_ino_peers(int who);
+  void open_ino(inodeno_t ino, int64_t pool, Context *fin,
+		bool want_replica=true, bool want_xlocked=false);
   
   // -- find_ino_peer --
   struct find_ino_peer_info_t {
@@ -817,12 +871,15 @@ public:
       eval_stray(dn);
   }
 protected:
-  void _purge_forwarding_pointers(inode_backtrace_t *backtrace, CDentry *dn, int r, Context *fin);
+  void fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin);
+  void remove_backtrace(inodeno_t ino, int64_t pool, Context *fin);
+  void _purge_forwarding_pointers(bufferlist& bl, CDentry *dn, int r);
   void _purge_stray(CDentry *dn, int r);
   void purge_stray(CDentry *dn);
   void _purge_stray_purged(CDentry *dn, int r=0);
   void _purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls);
   void _purge_stray_logged_truncate(CDentry *dn, LogSegment *ls);
+  friend class C_MDC_FetchedBacktrace;
   friend class C_MDC_PurgeForwardingPointers;
   friend class C_MDC_PurgeStray;
   friend class C_MDC_PurgeStrayLogged;
