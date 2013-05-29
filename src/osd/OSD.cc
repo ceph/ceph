@@ -2314,23 +2314,25 @@ void OSD::maybe_update_heartbeat_peers()
   heartbeat_epoch = osdmap->get_epoch();
 
   // build heartbeat from set
-  for (hash_map<pg_t, PG*>::iterator i = pg_map.begin();
-       i != pg_map.end();
-       ++i) {
-    PG *pg = i->second;
-    pg->heartbeat_peer_lock.Lock();
-    dout(20) << i->first << " heartbeat_peers " << pg->heartbeat_peers << dendl;
-    for (set<int>::iterator p = pg->heartbeat_peers.begin();
-	 p != pg->heartbeat_peers.end();
-	 ++p)
-      if (osdmap->is_up(*p))
-	_add_heartbeat_peer(*p);
-    for (set<int>::iterator p = pg->probe_targets.begin();
-	 p != pg->probe_targets.end();
-	 ++p)
-      if (osdmap->is_up(*p))
-	_add_heartbeat_peer(*p);
-    pg->heartbeat_peer_lock.Unlock();
+  if (is_active()) {
+    for (hash_map<pg_t, PG*>::iterator i = pg_map.begin();
+	 i != pg_map.end();
+	 ++i) {
+      PG *pg = i->second;
+      pg->heartbeat_peer_lock.Lock();
+      dout(20) << i->first << " heartbeat_peers " << pg->heartbeat_peers << dendl;
+      for (set<int>::iterator p = pg->heartbeat_peers.begin();
+	   p != pg->heartbeat_peers.end();
+	   ++p)
+	if (osdmap->is_up(*p))
+	  _add_heartbeat_peer(*p);
+      for (set<int>::iterator p = pg->probe_targets.begin();
+	   p != pg->probe_targets.end();
+	   ++p)
+	if (osdmap->is_up(*p))
+	  _add_heartbeat_peer(*p);
+      pg->heartbeat_peer_lock.Unlock();
+    }
   }
 
   // include next and previous up osds to ensure we have a fully-connected set
