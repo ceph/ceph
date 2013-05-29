@@ -615,6 +615,14 @@ bool OSDMap::is_blacklisted(const entity_addr_t& a) const
   return blacklist.count(b);
 }
 
+void OSDMap::get_blacklist(list<pair<entity_addr_t,utime_t> > *bl) const
+{
+  for (hash_map<entity_addr_t,utime_t>::const_iterator it = blacklist.begin() ;
+			 it != blacklist.end(); ++it) {
+    bl->push_back(*it);
+  }
+}
+
 void OSDMap::set_max_osd(int m)
 {
   int o = max_osd;
