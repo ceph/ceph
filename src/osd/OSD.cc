@@ -2292,6 +2292,8 @@ void OSD::maybe_update_heartbeat_peers()
     return;
   heartbeat_need_update = false;
 
+  dout(10) << "maybe_update_heartbeat_peers updating" << dendl;
+
   heartbeat_epoch = osdmap->get_epoch();
 
   // build heartbeat from set
@@ -2314,25 +2316,66 @@ void OSD::maybe_update_heartbeat_peers()
     pg->heartbeat_peer_lock.Unlock();
   }
 
-  map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
-  while (p != heartbeat_peers.end()) {
+  // include next and previous up osds to ensure we have a fully-connected set
+  set<int> want, extras;
+  int next = osdmap->get_next_up_osd_after(whoami);
+  if (next >= 0)
+    want.insert(next);
+  int prev = osdmap->get_previous_up_osd_before(whoami);
+  if (prev >= 0)
+    want.insert(prev);
+
+  for (set<int>::iterator p = want.begin(); p != want.end(); ++p) {
+    dout(10) << " adding neighbor peer osd." << *p << dendl;
+    extras.insert(*p);
+    _add_heartbeat_peer(*p);
+  }
+
+  // identify extras
+  for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
+       p != heartbeat_peers.end();
+       ++p) {
     if (p->second.epoch < osdmap->get_epoch()) {
-      dout(20) << " removing heartbeat peer osd." << p->first
-	       << " " << p->second.con_back->get_peer_addr()
-	       << " " << (p->second.con_front ? p->second.con_front->get_peer_addr() : entity_addr_t())
-	       << dendl;
-      hbclient_messenger->mark_down(p->second.con_back);
-      p->second.con_back->put();
-      if (p->second.con_front) {
-	hbclient_messenger->mark_down(p->second.con_front);
-	p->second.con_front->put();
-      }
-      heartbeat_peers.erase(p++);
-    } else {
-      ++p;
+      extras.insert(p->first);
     }
   }
-  dout(10) << "maybe_update_heartbeat_peers " << heartbeat_peers.size() << " peers" << dendl;
+
+  // too few?
+  int start = osdmap->get_next_up_osd_after(whoami);
+  for (int n = start; n >= 0; ) {
+    if ((int)heartbeat_peers.size() >= g_conf->osd_heartbeat_min_peers)
+      break;
+    if (!extras.count(n) && !want.count(n) && n != whoami) {
+      dout(10) << " adding random peer osd." << n << dendl;
+      extras.insert(n);
+      _add_heartbeat_peer(n);
+    }
+    n = osdmap->get_next_up_osd_after(n);
+    if (n == start)
+      break;  // came full circle; stop
+  }
+
+  // too many?
+  for (set<int>::iterator p = extras.begin();
+       (int)heartbeat_peers.size() > g_conf->osd_heartbeat_min_peers && p != extras.end();
+       ++p) {
+    if (want.count(*p))
+      continue;
+    map<int,HeartbeatInfo>::iterator q = heartbeat_peers.find(*p);
+    dout(20) << " removing heartbeat peer osd." << q->first
+	     << " " << q->second.con_back->get_peer_addr()
+	     << " " << (q->second.con_front ? q->second.con_front->get_peer_addr() : entity_addr_t())
+	     << dendl;
+    hbclient_messenger->mark_down(q->second.con_back);
+    q->second.con_back->put();
+    if (q->second.con_front) {
+      hbclient_messenger->mark_down(q->second.con_front);
+      q->second.con_front->put();
+    }
+    heartbeat_peers.erase(q);
+  }
+
+  dout(10) << "maybe_update_heartbeat_peers " << heartbeat_peers.size() << " peers, extras " << extras << dendl;
 }
 
 void OSD::reset_heartbeat_peers()
