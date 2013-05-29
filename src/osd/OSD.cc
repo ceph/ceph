@@ -4281,7 +4281,7 @@ void OSD::note_down_osd(int peer)
     hbclient_messenger->mark_down(p->second.con_back);
     p->second.con_back->put();
     if (p->second.con_front) {
-      hbclient_messenger->mark_down(p->second.con_back);
+      hbclient_messenger->mark_down(p->second.con_front);
       p->second.con_front->put();
     }
     heartbeat_peers.erase(p);
