@@ -3560,7 +3560,7 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
   }
 
   if (lock->get_type() == CEPH_LOCK_IFILE &&
-      in->state_test(CInode::STATE_NEEDSRECOVER)) {
+      in && in->state_test(CInode::STATE_NEEDSRECOVER)) {
     mds->mdcache->queue_file_recover(in);
     mds->mdcache->do_file_recover();
     gather++;
