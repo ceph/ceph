@@ -5097,8 +5097,10 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
 
   dn->push_projected_linkage();
 
-  if (in->is_dir())
+  if (in->is_dir()) {
+    assert(straydn);
     mds->mdcache->project_subtree_rename(in, dn->get_dir(), straydn->get_dir());
+  }
 
   journal_and_reply(mdr, 0, dn, le, new C_MDS_unlink_local_finish(mds, mdr, dn, straydn));
 }
