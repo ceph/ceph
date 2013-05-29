@@ -6523,6 +6523,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	} else {
 	  // which dirfrag for this dentry?
 	  CDir *dir = diri->get_dirfrag(diri->pick_dirfrag(p->first.first));
+	  assert(dir);
 	  assert(dir->is_auth());
 	  dn = dir->lookup(p->first.first, p->first.second);
 	} 
