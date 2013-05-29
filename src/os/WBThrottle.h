@@ -63,13 +63,13 @@ class WBThrottle : Thread, public md_config_obs_t {
    */
   class PendingWB {
   public:
-    bool replica;
+    bool nocache;
     uint64_t size;
     uint64_t ios;
-    PendingWB() : replica(true), size(0), ios(0) {}
-    void add(bool _replica, uint64_t _size, uint64_t _ios) {
-      if (!_replica)
-	replica = false; // only replica if all writes are replica
+    PendingWB() : nocache(true), size(0), ios(0) {}
+    void add(bool _nocache, uint64_t _size, uint64_t _ios) {
+      if (!_nocache)
+	nocache = false; // only nocache if all writes are nocache
       size += _size;
       ios += _ios;
     }
@@ -143,7 +143,7 @@ public:
     const hobject_t &hoid, ///< [in] object
     uint64_t offset,       ///< [in] offset written
     uint64_t len,          ///< [in] length written
-    bool replica           ///< [in] write is for replica
+    bool nocache           ///< [in] try to clear out of cache after write
     );
 
   /// Clear all wb (probably due to sync)

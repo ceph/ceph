@@ -146,7 +146,7 @@ void *WBThrottle::entry()
     clearing = wb.get<0>();
     lock.Unlock();
     ::fsync(**wb.get<1>());
-    if (wb.get<2>().replica)
+    if (wb.get<2>().nocache)
       posix_fadvise(**wb.get<1>(), 0, 0, POSIX_FADV_DONTNEED);
     lock.Lock();
     clearing = hobject_t();
@@ -163,7 +163,7 @@ void *WBThrottle::entry()
 
 void WBThrottle::queue_wb(
   FDRef fd, const hobject_t &hoid, uint64_t offset, uint64_t len,
-  bool replica)
+  bool nocache)
 {
   Mutex::Locker l(lock);
   map<hobject_t, pair<PendingWB, FDRef> >::iterator wbiter =
@@ -184,7 +184,7 @@ void WBThrottle::queue_wb(
   cur_size += len;
   logger->inc(l_wbthrottle_bytes_dirtied, len);
 
-  wbiter->second.first.add(replica, len, 1);
+  wbiter->second.first.add(nocache, len, 1);
   insert_object(hoid);
   cond.Signal();
 }
