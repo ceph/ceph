@@ -865,6 +865,12 @@ void RGWCreateBucket::execute()
       return;
     }
 
+    if (store->rest_conn == 0)
+    {
+      ldout(s->cct, 0) << "rest connection is invalid" << dendl;
+      ret = -EINVAL;
+      return;
+    }
     ldout(s->cct, 0) << "sending create_bucket request to master region" << dendl;
     ret = store->rest_conn->forward(s->user.user_id, s->info, &in_data);
     if (ret < 0)
