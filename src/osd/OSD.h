@@ -1059,10 +1059,12 @@ protected:
   void add_newly_split_pg(PG *pg,
 			  PG::RecoveryCtx *rctx);
 
-  PG *get_or_create_pg(const pg_info_t& info,
-                       pg_interval_map_t& pi,
-                       epoch_t epoch, int from,
-                       bool primary);
+  void handle_pg_peering_evt(
+    const pg_info_t& info,
+    pg_interval_map_t& pi,
+    epoch_t epoch, int from,
+    bool primary,
+    PG::CephPeeringEvtRef evt);
   
   void load_pgs();
   void build_past_intervals_parallel();
