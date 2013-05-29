@@ -2773,7 +2773,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	!in->filelock.can_wrlock(client) &&
 	!in->filelock.can_force_wrlock(client)) {
       dout(10) << " i want to change file_max, but lock won't allow it (yet)" << dendl;
-      if (in->filelock.is_stable()) {
+      if (cap && in->filelock.is_stable()) {
 	bool need_issue = false;
 	cap->inc_suppress();
 	if (in->mds_caps_wanted.empty() &&
