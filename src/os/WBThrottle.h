@@ -46,6 +46,10 @@ enum {
 class WBThrottle : Thread, public md_config_obs_t {
   hobject_t clearing;
 
+  /* *_limits.first is the start_flusher limit and
+   * *_limits.second is the hard limit
+   */
+
   /// Limits on unflushed bytes
   pair<uint64_t, uint64_t> size_limits;
 
