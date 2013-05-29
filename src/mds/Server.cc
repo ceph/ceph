@@ -7003,10 +7003,9 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
 	assert(mds->is_resolve());
       destdn->push_projected_linkage();
     }
+    if (straydn)
+      destdn->push_projected_linkage();
   }
-
-  if (straydn)
-    destdn->push_projected_linkage();
 
   if (target) {
     inode_t *ti = NULL;
