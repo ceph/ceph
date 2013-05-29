@@ -128,10 +128,12 @@ void MonCapGrant::expand_profile(entity_name_t name) const
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_ALL));
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("pg", MON_CAP_R | MON_CAP_W));
+    profile_grants.push_back(MonCapGrant("log", MON_CAP_W));
   }
   if (profile == "mds") {
     profile_grants.push_back(MonCapGrant("mds", MON_CAP_ALL));
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
+    profile_grants.push_back(MonCapGrant("log", MON_CAP_W));
   }
   if (profile == "osd" || profile == "mds" || profile == "mon") {
     string prefix = string("daemon-private/") + stringify(name) + string("/");
