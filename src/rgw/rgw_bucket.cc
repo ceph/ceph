@@ -317,7 +317,9 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
     }
   }
 
-  ret = store->delete_bucket(bucket);
+  RGWObjVersionTracker objv_tracker;
+
+  ret = store->delete_bucket(bucket, objv_tracker);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: could not remove bucket " << bucket.name << dendl;
     return ret;
@@ -331,9 +333,8 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
   return ret;
 }
 
-int rgw_bucket_delete_bucket_obj(RGWRados *store, string& bucket_name)
+int rgw_bucket_delete_bucket_obj(RGWRados *store, string& bucket_name, RGWObjVersionTracker& objv_tracker)
 {
-  RGWObjVersionTracker objv_tracker;
   return store->meta_mgr->remove_entry(bucket_meta_handler, bucket_name, &objv_tracker);
 }
 
@@ -1335,7 +1336,7 @@ public:
       return r;
     }
 
-    return store->delete_bucket(bucket);
+    return store->delete_bucket(bucket, objv_tracker);
   }
 
   void get_pool_and_oid(RGWRados *store, string& key, rgw_bucket& bucket, string& oid) {
