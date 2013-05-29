@@ -206,6 +206,8 @@ void WBThrottle::clear()
   lru.clear();
   rev_lru.clear();
   cond.Signal();
+  assert(cur_ios == 0);
+  assert(cur_size == 0);
 }
 
 void WBThrottle::clear_object(const hobject_t &hoid)
