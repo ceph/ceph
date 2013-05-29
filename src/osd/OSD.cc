@@ -2350,13 +2350,19 @@ void OSD::maybe_update_heartbeat_peers()
     _add_heartbeat_peer(*p);
   }
 
-  // identify extras
-  for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
-       p != heartbeat_peers.end();
-       ++p) {
+  // remove down peers; enumerate extras
+  map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
+  while (p != heartbeat_peers.end()) {
+    if (!osdmap->is_up(p->first)) {
+      int o = p->first;
+      ++p;
+      _remove_heartbeat_peer(o);
+      continue;
+    }
     if (p->second.epoch < osdmap->get_epoch()) {
       extras.insert(p->first);
     }
+    ++p;
   }
 
   // too few?
