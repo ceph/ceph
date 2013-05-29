@@ -2101,7 +2101,7 @@ done_err:
  * bucket: the name of the bucket to delete
  * Returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::delete_bucket(rgw_bucket& bucket)
+int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_tracker)
 {
   librados::IoCtx index_ctx;
   string oid;
@@ -2131,7 +2131,7 @@ int RGWRados::delete_bucket(rgw_bucket& bucket)
     }
   } while (is_truncated);
 
-  r = rgw_bucket_delete_bucket_obj(this, bucket.name);
+  r = rgw_bucket_delete_bucket_obj(this, bucket.name, objv_tracker);
   if (r < 0)
     return r;
 
