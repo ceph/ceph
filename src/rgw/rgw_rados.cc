@@ -1346,57 +1346,77 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
                             const string& region_name,
 			    map<std::string, bufferlist>& attrs,
                             RGWObjVersionTracker& objv_tracker,
+                            obj_version *pobjv,
 			    bool exclusive)
 {
-  int ret = 0;
-  ret = select_bucket_placement(bucket.name, bucket);
-  if (ret < 0)
+#define MAX_CREATE_RETRIES 20 /* need to bound retries */
+  for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
+    int ret = 0;
+    ret = select_bucket_placement(bucket.name, bucket);
+    if (ret < 0)
+      return ret;
+    librados::IoCtx index_ctx; // context for new bucket
+
+    int r = open_bucket_index_ctx(bucket, index_ctx);
+    if (r < 0)
+      return r;
+
+    bufferlist bl;
+    uint32_t nop = 0;
+    ::encode(nop, bl);
+
+    const string& pool = zone.domain_root.name;
+    const char *pool_str = pool.c_str();
+    librados::IoCtx id_io_ctx;
+    r = rados->ioctx_create(pool_str, id_io_ctx);
+    if (r < 0)
+      return r;
+
+    uint64_t iid = instance_id();
+    uint64_t bid = next_bucket_id();
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%llu.%llu", (long long)iid, (long long)bid); 
+    bucket.marker = buf;
+    bucket.bucket_id = bucket.marker;
+
+    string dir_oid =  dir_oid_prefix;
+    dir_oid.append(bucket.marker);
+
+    librados::ObjectWriteOperation op;
+    op.create(true);
+    r = cls_rgw_init_index(index_ctx, op, dir_oid);
+    if (r < 0 && r != -EEXIST)
+      return r;
+
+    if (pobjv) {
+      objv_tracker.write_version = *pobjv;
+    } else {
+      objv_tracker.generate_new_write_ver(cct);
+    }
+
+    RGWBucketInfo info;
+    info.bucket = bucket;
+    info.owner = owner;
+    info.region = region_name;
+    ret = put_bucket_info(bucket.name, info, exclusive, &objv_tracker, &attrs);
+    if (ret == -EEXIST) {
+      index_ctx.remove(dir_oid);
+      /* we need this for this objv_tracker */
+      int r = get_bucket_info(NULL, bucket.name, info, &objv_tracker, NULL);
+      if (r < 0) {
+        if (r == -ENOENT) {
+          continue;
+        }
+        ldout(cct, 0) << "get_bucket_info returned " << r << dendl;
+        return r;
+      }
+    }
     return ret;
-  librados::IoCtx index_ctx; // context for new bucket
-
-  int r = open_bucket_index_ctx(bucket, index_ctx);
-  if (r < 0)
-    return r;
-
-  bufferlist bl;
-  uint32_t nop = 0;
-  ::encode(nop, bl);
-
-  const string& pool = zone.domain_root.name;
-  const char *pool_str = pool.c_str();
-  librados::IoCtx id_io_ctx;
-  r = rados->ioctx_create(pool_str, id_io_ctx);
-  if (r < 0)
-    return r;
-
-  uint64_t iid = instance_id();
-  uint64_t bid = next_bucket_id();
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%llu.%llu", (long long)iid, (long long)bid); 
-  bucket.marker = buf;
-  bucket.bucket_id = bucket.marker;
-
-  string dir_oid =  dir_oid_prefix;
-  dir_oid.append(bucket.marker);
-
-  librados::ObjectWriteOperation op;
-  op.create(true);
-  r = cls_rgw_init_index(index_ctx, op, dir_oid);
-  if (r < 0 && r != -EEXIST)
-    return r;
-
-  objv_tracker.generate_new_write_ver(cct);
-
-  RGWBucketInfo info;
-  info.bucket = bucket;
-  info.owner = owner;
-  info.region = region_name;
-  ret = put_bucket_info(bucket.name, info, exclusive, &objv_tracker, &attrs);
-  if (ret == -EEXIST) {
-    index_ctx.remove(dir_oid);
   }
 
-  return ret;
+  /* this is highly unlikely */
+  ldout(cct, 0) << "ERROR: could not create bucket, continuously raced with bucket creation and removal" << dendl;
+  return -ENOENT;
 }
 
 int RGWRados::select_bucket_placement(string& bucket_name, rgw_bucket& bucket)
