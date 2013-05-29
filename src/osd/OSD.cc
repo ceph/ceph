@@ -2417,6 +2417,13 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	    _share_map_outgoing(from, con.get());
 	  }
 	}
+      } else if (curmap->get_down_at(from) > m->map_epoch) {
+	// tell them they have died
+	Message *r = new MOSDPing(monc->get_fsid(),
+				  curmap->get_epoch(),
+				  MOSDPing::YOU_DIED,
+				  m->stamp);
+	m->get_connection()->get_messenger()->send_message(r, m->get_connection());
       }
     }
     break;
