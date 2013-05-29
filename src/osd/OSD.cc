@@ -1969,7 +1969,7 @@ void OSD::build_past_intervals_parallel()
  */
 PG *OSD::get_or_create_pg(
   const pg_info_t& info, pg_interval_map_t& pi,
-  epoch_t epoch, int from, int& created, bool primary)
+  epoch_t epoch, int from, bool primary)
 {
   PG *pg;
 
@@ -2029,7 +2029,6 @@ PG *OSD::get_or_create_pg(
     pg->write_if_dirty(*rctx.transaction);
     dispatch_context(rctx, pg, osdmap);
       
-    created++;
     dout(10) << *pg << " is new" << dendl;
 
     // kick any waiters
@@ -5628,7 +5627,6 @@ void OSD::handle_pg_notify(OpRequestRef op)
       continue;
     }
 
-    int created = 0;
     if (service.splitting(it->first.info.pgid)) {
       peering_wait_for_split[it->first.info.pgid].push_back(
 	PG::CephPeeringEvtRef(
@@ -5639,7 +5637,7 @@ void OSD::handle_pg_notify(OpRequestRef op)
     }
 
     pg = get_or_create_pg(it->first.info, it->second,
-                          it->first.query_epoch, from, created, true);
+                          it->first.query_epoch, from, true);
     if (!pg)
       continue;
     pg->queue_notify(it->first.epoch_sent, it->first.query_epoch, from, it->first);
@@ -5673,9 +5671,8 @@ void OSD::handle_pg_log(OpRequestRef op)
     return;
   }
 
-  int created = 0;
   PG *pg = get_or_create_pg(m->info, m->past_intervals, m->get_epoch(), 
-                            from, created, false);
+                            from, false);
   if (!pg)
     return;
   op->mark_started();
@@ -5697,8 +5694,6 @@ void OSD::handle_pg_info(OpRequestRef op)
 
   op->mark_started();
 
-  int created = 0;
-
   for (vector<pair<pg_notify_t,pg_interval_map_t> >::iterator p = m->pg_list.begin();
        p != m->pg_list.end();
        ++p) {
@@ -5716,7 +5711,7 @@ void OSD::handle_pg_info(OpRequestRef op)
       continue;
     }
     PG *pg = get_or_create_pg(p->first.info, p->second, p->first.epoch_sent,
-                              from, created, false);
+                              from, false);
     if (!pg)
       continue;
     pg->queue_info(p->first.epoch_sent, p->first.query_epoch, from,
