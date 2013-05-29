@@ -9,10 +9,25 @@
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
 
+void encode_json(const char *name, const obj_version& v, Formatter *f)
+{
+  f->open_object_section(name);
+  f->dump_string("tag", v.tag);
+  f->dump_unsigned("ver", v.ver);
+  f->close_section();
+}
+
+void decode_json_obj(obj_version& v, JSONObj *obj)
+{
+  JSONDecoder::decode_json("tag", v.tag, obj);
+  JSONDecoder::decode_json("ver", v.ver, obj);
+}
+
 void encode_json(const char *name, const RGWUserCaps& val, Formatter *f)
 {
   val.dump(f, name);
 }
+
 
 void RGWObjManifestPart::dump(Formatter *f) const
 {

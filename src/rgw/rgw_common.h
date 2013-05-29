@@ -390,7 +390,10 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWUserCaps);
 
+void encode_json(const char *name, const obj_version& v, Formatter *f);
 void encode_json(const char *name, const RGWUserCaps& val, Formatter *f);
+
+void decode_json_obj(obj_version& v, JSONObj *obj);
 
 struct RGWUserInfo
 {

@@ -115,6 +115,18 @@ int RGWRESTClient::send_data(void *ptr, size_t len)
   return len;
 }
 
+int RGWRESTClient::receive_data(void *ptr, size_t len)
+{
+  if (response.length() > max_response)
+    return 0; /* don't read extra data */
+
+  bufferptr p((char *)ptr, len);
+
+  response.append(p);
+
+  return 0;
+
+}
 void RGWRESTClient::append_param(string& dest, const string& name, const string& val)
 {
   if (dest.empty()) {
@@ -142,7 +154,7 @@ void RGWRESTClient::get_params_str(map<string, string>& extra_args, string& dest
   }
 }
 
-int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info, bufferlist *inbl)
+int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl)
 {
 
   string date_str;
@@ -212,6 +224,12 @@ int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info, bufferlist
   int r = process(new_info.method, new_url.c_str());
   if (r < 0)
     return r;
+
+  response.append((char)0); /* NULL terminate response */
+
+  if (outbl) {
+    outbl->claim(response);
+  }
 
   return rgw_http_error_to_errno(status);
 }

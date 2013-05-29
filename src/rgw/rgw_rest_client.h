@@ -18,11 +18,15 @@ protected:
 
   bufferlist::iterator *send_iter;
 
+  size_t max_response; /* we need this as we don't stream out response */
+  bufferlist response;
+
   void append_param(string& dest, const string& name, const string& val);
   void get_params_str(map<string, string>& extra_args, string& dest);
 public:
   RGWRESTClient(CephContext *_cct, string& _url, list<pair<string, string> > *_headers,
-                list<pair<string, string> > *_params) : cct(_cct), status(0), url(_url), send_iter(NULL) {
+                list<pair<string, string> > *_params) : cct(_cct), status(0), url(_url), send_iter(NULL),
+                                                        max_response(0) {
     if (_headers)
       headers = *_headers;
 
@@ -31,10 +35,13 @@ public:
   }
 
   int receive_header(void *ptr, size_t len);
+  virtual int receive_data(void *ptr, size_t len);
   int send_data(void *ptr, size_t len);
 
+  bufferlist& get_response() { return response; }
+
   int execute(RGWAccessKey& key, const char *method, const char *resource);
-  int forward_request(RGWAccessKey& key, req_info& info, bufferlist *inbl);
+  int forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl);
 };
 
 
