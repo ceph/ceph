@@ -478,6 +478,20 @@ OPTION(osd_mon_shutdown_timeout, OPT_DOUBLE, 5)
 
 OPTION(filestore, OPT_BOOL, false)
 
+/// filestore wb throttle limits
+OPTION(filestore_wbthrottle_btrfs_bytes_start_flusher, OPT_U64, 10<<20)
+OPTION(filestore_wbthrottle_btrfs_bytes_hard_limit, OPT_U64, 100<<20)
+OPTION(filestore_wbthrottle_btrfs_ios_start_flusher, OPT_U64, 100)
+OPTION(filestore_wbthrottle_btrfs_ios_hard_limit, OPT_U64, 1000)
+OPTION(filestore_wbthrottle_btrfs_inodes_start_flusher, OPT_U64, 100)
+OPTION(filestore_wbthrottle_btrfs_inodes_hard_limit, OPT_U64, 1000)
+OPTION(filestore_wbthrottle_xfs_bytes_start_flusher, OPT_U64, 10<<20)
+OPTION(filestore_wbthrottle_xfs_bytes_hard_limit, OPT_U64, 100<<20)
+OPTION(filestore_wbthrottle_xfs_ios_start_flusher, OPT_U64, 10)
+OPTION(filestore_wbthrottle_xfs_ios_hard_limit, OPT_U64, 100)
+OPTION(filestore_wbthrottle_xfs_inodes_start_flusher, OPT_U64, 10)
+OPTION(filestore_wbthrottle_xfs_inodes_hard_limit, OPT_U64, 100)
+
 // Tests index failure paths
 OPTION(filestore_index_retry_probability, OPT_DOUBLE, 0)
 
@@ -498,10 +512,6 @@ OPTION(filestore_btrfs_snap, OPT_BOOL, true)
 OPTION(filestore_btrfs_clone_range, OPT_BOOL, true)
 OPTION(filestore_fsync_flushes_journal_data, OPT_BOOL, false)
 OPTION(filestore_fiemap, OPT_BOOL, false)     // (try to) use fiemap
-OPTION(filestore_flusher, OPT_BOOL, true)
-OPTION(filestore_flusher_max_fds, OPT_INT, 512)
-OPTION(filestore_flush_min, OPT_INT, 65536)
-OPTION(filestore_sync_flush, OPT_BOOL, false)
 OPTION(filestore_journal_parallel, OPT_BOOL, false)
 OPTION(filestore_journal_writeahead, OPT_BOOL, false)
 OPTION(filestore_journal_trailing, OPT_BOOL, false)
@@ -518,6 +528,7 @@ OPTION(filestore_merge_threshold, OPT_INT, 10)
 OPTION(filestore_split_multiple, OPT_INT, 2)
 OPTION(filestore_update_to, OPT_INT, 1000)
 OPTION(filestore_blackhole, OPT_BOOL, false)     // drop any new transactions on the floor
+OPTION(filestore_fd_cache_size, OPT_INT, 128)    // FD lru size
 OPTION(filestore_dump_file, OPT_STR, "")         // file onto which store transaction dumps
 OPTION(filestore_kill_at, OPT_INT, 0)            // inject a failure at the n'th opportunity
 OPTION(filestore_inject_stall, OPT_INT, 0)       // artificially stall for N seconds in op queue thread
