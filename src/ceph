@@ -982,7 +982,7 @@ def validate_command(parsed_args, sigdict, args):
         # determined in our callers, so it's ok to remove it here.
         if args[0] == 'tell':
             args = args[2:]
-        # look for best match, accumulate possibles in bestsigs
+        # look for best match, accumulate possibles in bestcmds
         # (so we can maybe give a more-useful error message)
         best_match_cnt = 0
         bestcmds = []
@@ -1004,9 +1004,9 @@ def validate_command(parsed_args, sigdict, args):
                 bestcmds.append({cmdtag:cmd})
 
         if verbose:
-            print >> sys.stderr, "bestsigs: ", bestsigs
+            print >> sys.stderr, "bestcmds: ", bestcmds
 
-        # for everything in bestsigs, look for a true match
+        # for everything in bestcmds, look for a true match
         for cmdsig in bestcmds:
             for cmd in cmdsig.itervalues():
                 sig = cmd['sig']
@@ -1250,7 +1250,7 @@ def complete(sigdict, args, target):
     # determined in our callers, so it's ok to remove it here.
     if len(args) and args[0] == 'tell':
         args = args[2:]
-    # look for best match, accumulate possibles in bestsigs
+    # look for best match, accumulate possibles in bestcmds
     # (so we can maybe give a more-useful error message)
     best_match_cnt = 0
     bestcmds = []
