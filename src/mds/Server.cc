@@ -868,6 +868,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
  */
 void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, CDentry *tracedn) 
 {
+  assert(mdr);
   MClientRequest *req = mdr->client_request;
   
   char buf[80];
@@ -1919,12 +1920,14 @@ void Server::apply_allocated_inos(MDRequest *mdr)
     mds->inotable->apply_alloc_id(mdr->alloc_ino);
   }
   if (mdr->prealloc_inos.size()) {
+    assert(session);
     session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
     session->info.prealloc_inos.insert(mdr->prealloc_inos);
     mds->sessionmap.version++;
     mds->inotable->apply_alloc_ids(mdr->prealloc_inos);
   }
   if (mdr->used_prealloc_ino) {
+    assert(session);
     session->info.used_inos.erase(mdr->used_prealloc_ino);
     mds->sessionmap.version++;
   }
