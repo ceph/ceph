@@ -24,7 +24,7 @@ class MOSDMarkMeDown : public PaxosServiceMessage {
  public:
   uuid_d fsid;
   entity_inst_t target_osd;
-  epoch_t e;
+  epoch_t epoch;
   bool ack;
 
   MOSDMarkMeDown()
@@ -32,27 +32,27 @@ class MOSDMarkMeDown : public PaxosServiceMessage {
   MOSDMarkMeDown(const uuid_d &fs, const entity_inst_t& f,
 		 epoch_t e, bool ack)
     : PaxosServiceMessage(MSG_OSD_MARK_ME_DOWN, e, HEAD_VERSION),
-      fsid(fs), target_osd(f), ack(ack) {}
+      fsid(fs), target_osd(f), epoch(e), ack(ack) {}
  private:
   ~MOSDMarkMeDown() {}
 
 public: 
   entity_inst_t get_target() { return target_osd; }
-  epoch_t get_epoch() { return e; }
+  epoch_t get_epoch() { return epoch; }
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);
     ::decode(target_osd, p);
-    ::decode(e, p);
+    ::decode(epoch, p);
     ::decode(ack, p);
   }
   void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(target_osd, payload);
-    ::encode(e, payload);
+    ::encode(epoch, payload);
     ::encode(ack, payload);
   }
 

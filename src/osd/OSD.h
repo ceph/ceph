@@ -295,7 +295,7 @@ public:
     next_osdmap = map;
   }
   ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch);
-  ConnectionRef get_con_osd_hb(int peer, epoch_t from_epoch);
+  pair<ConnectionRef,ConnectionRef> get_con_osd_hb(int peer, epoch_t from_epoch);  // (back, front)
   void send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch);
   void send_message_osd_cluster(Message *m, Connection *con) {
     cluster_messenger->send_message(m, con);
@@ -696,11 +696,23 @@ private:
   /// information about a heartbeat peer
   struct HeartbeatInfo {
     int peer;           ///< peer
-    Connection *con;    ///< peer connection
+    Connection *con_front;   ///< peer connection (front)
+    Connection *con_back;    ///< peer connection (back)
     utime_t first_tx;   ///< time we sent our first ping request
     utime_t last_tx;    ///< last time we sent a ping request
-    utime_t last_rx;    ///< last time we got a ping reply
+    utime_t last_rx_front;  ///< last time we got a ping reply on the front side
+    utime_t last_rx_back;   ///< last time we got a ping reply on the back side
     epoch_t epoch;      ///< most recent epoch we wanted this peer
+
+    bool is_healthy(utime_t cutoff) {
+      return
+	(last_rx_front > cutoff ||
+	 (last_rx_front == utime_t() && (last_tx == utime_t() ||
+					 first_tx > cutoff))) &&
+	(last_rx_back > cutoff ||
+	 (last_rx_back == utime_t() && (last_tx == utime_t() ||
+					first_tx > cutoff)));
+    }
   };
   /// state attached to outgoing heartbeat connections
   struct HeartbeatSession : public RefCountedObject {
@@ -715,7 +727,9 @@ private:
   epoch_t heartbeat_epoch;      ///< last epoch we updated our heartbeat peers
   map<int,HeartbeatInfo> heartbeat_peers;  ///< map of osd id to HeartbeatInfo
   utime_t last_mon_heartbeat;
-  Messenger *hbclient_messenger, *hbserver_messenger;
+  Messenger *hbclient_messenger;
+  Messenger *hb_front_server_messenger;
+  Messenger *hb_back_server_messenger;
   
   void _add_heartbeat_peer(int p);
   bool heartbeat_reset(Connection *con);
@@ -1568,7 +1582,8 @@ protected:
  public:
   /* internal and external can point to the same messenger, they will still
    * be cleaned up properly*/
-  OSD(int id, Messenger *internal, Messenger *external, Messenger *hbmin, Messenger *hbmout,
+  OSD(int id, Messenger *internal, Messenger *external,
+      Messenger *hb_client, Messenger *hb_front_server, Messenger *hb_back_server,
       MonClient *mc, const std::string &dev, const std::string &jdev);
   ~OSD();
 

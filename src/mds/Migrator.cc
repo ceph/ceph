@@ -378,20 +378,20 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	break;
 
       case IMPORT_DISCOVERED:
-	dout(10) << "import state=discovered : unpinning inode " << *diri << dendl;
 	assert(diri);
+	dout(10) << "import state=discovered : unpinning inode " << *diri << dendl;
 	import_reverse_discovered(df, diri);
 	break;
 
       case IMPORT_PREPPING:
-	dout(10) << "import state=prepping : unpinning base+bounds " << *dir << dendl;
 	assert(dir);
+	dout(10) << "import state=prepping : unpinning base+bounds " << *dir << dendl;
 	import_reverse_prepping(dir);
 	break;
 
       case IMPORT_PREPPED:
-	dout(10) << "import state=prepped : unpinning base+bounds, unfreezing " << *dir << dendl;
 	assert(dir);
+	dout(10) << "import state=prepped : unpinning base+bounds, unfreezing " << *dir << dendl;
 	{
 	  set<CDir*> bounds;
 	  cache->get_subtree_bounds(dir, bounds);
@@ -435,6 +435,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
     } else {
       if (q->second == IMPORT_ABORTING &&
 	  import_bystanders[dir].count(who)) {
+	assert(dir);
 	dout(10) << "faking export_notify_ack from mds." << who
 		 << " on aborting import " << *dir << " from mds." << import_peer[df] 
 		 << dendl;
@@ -1776,6 +1777,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
 	dout(10) << "  had " << *cur << dendl;
       } else if (start == 'f') {
 	in = cache->get_inode(df.ino);
+	assert(in);
 	dout(10) << "  had " << *in << dendl;
 	cur = cache->add_replica_dir(q, in, oldauth, finished);
  	dout(10) << "  added " << *cur << dendl;
@@ -1991,7 +1993,8 @@ void Migrator::import_remove_pins(CDir *dir, set<CDir*>& bounds)
       continue;
     did.insert(p->ino);
     CInode *in = cache->get_inode(p->ino);
-      in->put_stickydirs();
+    assert(in);
+    in->put_stickydirs();
   }
 
   if (import_state[dir->dirfrag()] >= IMPORT_PREPPED) {
@@ -2154,6 +2157,7 @@ void Migrator::import_notify_abort(CDir *dir, set<CDir*>& bounds)
 
 void Migrator::import_reverse_unfreeze(CDir *dir)
 {
+  assert(dir);
   dout(7) << "import_reverse_unfreeze " << *dir << dendl;
   dir->unfreeze_tree();
   list<Context*> ls;
@@ -2631,6 +2635,7 @@ void Migrator::handle_export_caps(MExportCaps *ex)
   dout(10) << "handle_export_caps " << *ex << " from " << ex->get_source() << dendl;
   CInode *in = cache->get_inode(ex->ino);
   
+  assert(in);
   assert(in->is_auth());
   /*
    * note: i may be frozen, but i won't have been encoded for export (yet)!
@@ -2675,8 +2680,4 @@ void Migrator::logged_import_caps(CInode *in,
 
   mds->send_message_mds(new MExportCapsAck(in->ino()), from);
 }
-
-
-
-
 

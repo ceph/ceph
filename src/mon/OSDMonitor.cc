@@ -247,8 +247,8 @@ bool OSDMonitor::thrash()
     dout(5) << "thrash_map osd." << o << " up" << dendl;
     pending_inc.new_state[o] = CEPH_OSD_UP;
     pending_inc.new_up_client[o] = entity_addr_t();
-    pending_inc.new_up_internal[o] = entity_addr_t();
-    pending_inc.new_hb_up[o] = entity_addr_t();
+    pending_inc.new_up_cluster[o] = entity_addr_t();
+    pending_inc.new_hb_back_up[o] = entity_addr_t();
     pending_inc.new_weight[o] = CEPH_OSD_IN;
     thrash_last_up_osd = o;
   }
@@ -1090,7 +1090,9 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
 bool OSDMonitor::prepare_boot(MOSDBoot *m)
 {
   dout(7) << "prepare_boot from " << m->get_orig_source_inst() << " sb " << m->sb
-	  << " cluster_addr " << m->cluster_addr << " hb_addr " << m->hb_addr
+	  << " cluster_addr " << m->cluster_addr
+	  << " hb_back_addr " << m->hb_back_addr
+	  << " hb_front_addr " << m->hb_front_addr
 	  << dendl;
 
   assert(m->get_orig_source().is_osd());
@@ -1126,8 +1128,10 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     // mark new guy up.
     pending_inc.new_up_client[from] = m->get_orig_source_addr();
     if (!m->cluster_addr.is_blank_ip())
-      pending_inc.new_up_internal[from] = m->cluster_addr;
-    pending_inc.new_hb_up[from] = m->hb_addr;
+      pending_inc.new_up_cluster[from] = m->cluster_addr;
+    pending_inc.new_hb_back_up[from] = m->hb_back_addr;
+    if (!m->hb_front_addr.is_blank_ip())
+      pending_inc.new_hb_front_up[from] = m->hb_front_addr;
 
     // mark in?
     if ((g_conf->mon_osd_auto_mark_auto_out_in && (oldstate & CEPH_OSD_AUTOOUT)) ||
@@ -2208,6 +2212,8 @@ bool OSDMonitor::update_pools_status()
   for (map<int64_t,pg_pool_t>::const_iterator it = pools.begin();
        it != pools.end();
        ++it) {
+    if (!mon->pgmon()->pg_map.pg_pool_sum.count(it->first))
+      continue;
     pool_stat_t& stats = mon->pgmon()->pg_map.pg_pool_sum[it->first];
     object_stat_sum_t& sum = stats.stats.sum;
     const pg_pool_t &pool = it->second;
@@ -2257,6 +2263,8 @@ void OSDMonitor::get_pools_health(
   const map<int64_t,pg_pool_t>& pools = osdmap.get_pools();
   for (map<int64_t,pg_pool_t>::const_iterator it = pools.begin();
        it != pools.end(); ++it) {
+    if (!mon->pgmon()->pg_map.pg_pool_sum.count(it->first))
+      continue;
     pool_stat_t& stats = mon->pgmon()->pg_map.pg_pool_sum[it->first];
     object_stat_sum_t& sum = stats.stats.sum;
     const pg_pool_t &pool = it->second;
@@ -2369,6 +2377,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
   int64_t pool = ++pending_inc.new_pool_max;
   pending_inc.new_pools[pool].type = pg_pool_t::TYPE_REP;
   pending_inc.new_pools[pool].flags = g_conf->osd_pool_default_flags;
+  if (g_conf->osd_pool_default_flag_hashpspool)
+    pending_inc.new_pools[pool].flags |= pg_pool_t::FLAG_HASHPSPOOL;
 
   pending_inc.new_pools[pool].size = g_conf->osd_pool_default_size;
   pending_inc.new_pools[pool].min_size = g_conf->get_osd_pool_default_min_size();

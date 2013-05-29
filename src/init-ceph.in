@@ -310,19 +310,19 @@ for name in $what; do
                     # command line, ceph.conf can override what it wants
 		    get_conf osd_location "" "osd crush location"
 		    get_conf osd_weight "" "osd crush initial weight"
-		    defaultweight=`df $osd_data/. | tail -1 | awk '{ d= $2/1073741824 ; r = sprintf("%.2f", d); print r }'`
+		    defaultweight="$(do_cmd "df $osd_data/. | tail -1 | awk '{ d= \$2/1073741824 ; r = sprintf(\"%.2f\", d); print r }'")"
 		    get_conf osd_keyring "$osd_data/keyring" "keyring"
-		    $BINDIR/ceph \
-			--name="osd.$id" \
-			--keyring="$osd_keyring" \
+		    do_cmd "$BINDIR/ceph \
+			--name=osd.$id \
+			--keyring=$osd_keyring \
 			osd crush create-or-move \
 			-- \
-			"$id" \
-			"${osd_weight:-${defaultweight:-1}}" \
+			$id \
+			${osd_weight:-${defaultweight:-1}} \
 			root=default \
-			host="$(hostname -s)" \
+			host=$host \
 			$osd_location \
-			|| :
+			|| :"
 		fi
 	    fi
 

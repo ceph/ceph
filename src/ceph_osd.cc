@@ -306,7 +306,8 @@ int main(int argc, const char **argv)
     exit(0);
   }
 
-  pick_addresses(g_ceph_context);
+  pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC
+                                |CEPH_PICK_ADDRESS_CLUSTER);
 
   if (g_conf->public_addr.is_blank_ip() && !g_conf->cluster_addr.is_blank_ip()) {
     derr << TEXT_YELLOW
@@ -324,12 +325,16 @@ int main(int argc, const char **argv)
   Messenger *messenger_hbclient = Messenger::create(g_ceph_context,
 						    entity_name_t::OSD(whoami), "hbclient",
 						    getpid());
-  Messenger *messenger_hbserver = Messenger::create(g_ceph_context,
-						    entity_name_t::OSD(whoami), "hbserver",
+  Messenger *messenger_hb_back_server = Messenger::create(g_ceph_context,
+						    entity_name_t::OSD(whoami), "hb_back_server",
+						    getpid());
+  Messenger *messenger_hb_front_server = Messenger::create(g_ceph_context,
+						    entity_name_t::OSD(whoami), "hb_front_server",
 						    getpid());
   cluster_messenger->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   messenger_hbclient->set_cluster_protocol(CEPH_OSD_PROTOCOL);
-  messenger_hbserver->set_cluster_protocol(CEPH_OSD_PROTOCOL);
+  messenger_hb_back_server->set_cluster_protocol(CEPH_OSD_PROTOCOL);
+  messenger_hb_front_server->set_cluster_protocol(CEPH_OSD_PROTOCOL);
 
   cout << "starting osd." << whoami
        << " at " << client_messenger->get_myaddr()
@@ -375,9 +380,11 @@ int main(int argc, const char **argv)
 				Messenger::Policy::stateless_server(0, 0));
 
   messenger_hbclient->set_policy(entity_name_t::TYPE_OSD,
-			     Messenger::Policy::lossy_client(0, 0));
-  messenger_hbserver->set_policy(entity_name_t::TYPE_OSD,
-			     Messenger::Policy::stateless_server(0, 0));
+				 Messenger::Policy::lossy_client(0, 0));
+  messenger_hb_back_server->set_policy(entity_name_t::TYPE_OSD,
+				       Messenger::Policy::stateless_server(0, 0));
+  messenger_hb_front_server->set_policy(entity_name_t::TYPE_OSD,
+					Messenger::Policy::stateless_server(0, 0));
 
   r = client_messenger->bind(g_conf->public_addr);
   if (r < 0)
@@ -386,17 +393,24 @@ int main(int argc, const char **argv)
   if (r < 0)
     exit(1);
 
-  // hb should bind to same ip as cluster_addr (if specified)
-  entity_addr_t hb_addr = g_conf->osd_heartbeat_addr;
-  if (hb_addr.is_blank_ip()) {
-    hb_addr = g_conf->cluster_addr;
-    if (hb_addr.is_ip())
-      hb_addr.set_port(0);
+  // hb back should bind to same ip as cluster_addr (if specified)
+  entity_addr_t hb_back_addr = g_conf->osd_heartbeat_addr;
+  if (hb_back_addr.is_blank_ip()) {
+    hb_back_addr = g_conf->cluster_addr;
+    if (hb_back_addr.is_ip())
+      hb_back_addr.set_port(0);
   }
-  r = messenger_hbserver->bind(hb_addr);
+  r = messenger_hb_back_server->bind(hb_back_addr);
   if (r < 0)
     exit(1);
 
+  // hb front should bind to same ip as public_addr
+  entity_addr_t hb_front_addr = g_conf->public_addr;
+  if (hb_front_addr.is_ip())
+    hb_front_addr.set_port(0);
+  r = messenger_hb_front_server->bind(hb_front_addr);
+  if (r < 0)
+    exit(1);
 
   // Set up crypto, daemonize, etc.
   global_init_daemonize(g_ceph_context, 0);
@@ -417,7 +431,7 @@ int main(int argc, const char **argv)
   global_init_chdir(g_ceph_context);
 
   osd = new OSD(whoami, cluster_messenger, client_messenger,
-		messenger_hbclient, messenger_hbserver,
+		messenger_hbclient, messenger_hb_front_server, messenger_hb_back_server,
 		&mc,
 		g_conf->osd_data, g_conf->osd_journal);
 
@@ -433,7 +447,8 @@ int main(int argc, const char **argv)
 
   client_messenger->start();
   messenger_hbclient->start();
-  messenger_hbserver->start();
+  messenger_hb_front_server->start();
+  messenger_hb_back_server->start();
   cluster_messenger->start();
 
   // install signal handlers
@@ -452,18 +467,21 @@ int main(int argc, const char **argv)
 
   client_messenger->wait();
   messenger_hbclient->wait();
-  messenger_hbserver->wait();
+  messenger_hb_front_server->wait();
+  messenger_hb_back_server->wait();
   cluster_messenger->wait();
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_osd_signal);
   unregister_async_signal_handler(SIGTERM, handle_osd_signal);
+  shutdown_async_signal_handler();
 
   // done
   delete osd;
   delete client_messenger;
   delete messenger_hbclient;
-  delete messenger_hbserver;
+  delete messenger_hb_front_server;
+  delete messenger_hb_back_server;
   delete cluster_messenger;
   client_byte_throttler.reset();
   client_msg_throttler.reset();

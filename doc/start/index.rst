@@ -44,28 +44,28 @@ community by getting involved.
 
 .. raw:: html 
 
-	</td><td><h3>Step 2: Object Store</h3>
+	</td><td><h3>Step 2: Storage Cluster</h3>
 	
 Once you've completed your preflight checklist,  you should be able to begin
-deploying a Ceph cluster.
+deploying a Ceph Storage Cluster.
 
 .. toctree::
 
-	Object Store Quick Start <quick-ceph-deploy>
+	Storage Cluster Quick Start <quick-ceph-deploy>
 
 
 .. raw:: html 
 
 	</td><td><h3>Step 3: Ceph Client(s)</h3>
 	
-Most Ceph users don't store objects directly. They typically use at least one of
-Ceph block devices, the CephFS filesystem, and the RESTful gateway.
+Most Ceph users don't store objects directly in the Ceph Storage Cluster. They typically use at least one of
+Ceph Block Devices, the Ceph FS filesystem, and Ceph Object Storage.
 
 .. toctree::
 	
    Block Device Quick Start <quick-rbd>
-   CephFS Quick Start <quick-cephfs>
-   Gateway Quick Start <quick-rgw>
+   Ceph FS Quick Start <quick-cephfs>
+   Object Storage Quick Start <quick-rgw>
 
 
 .. raw:: html
