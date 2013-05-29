@@ -27,7 +27,7 @@ int RGWRegionConnection::get_url(string& endpoint)
   return 0;
 }
 
-int RGWRegionConnection::forward(const string& uid, req_info& info, bufferlist *inbl)
+int RGWRegionConnection::forward(const string& uid, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl)
 {
   string url;
   int ret = get_url(url);
@@ -37,18 +37,6 @@ int RGWRegionConnection::forward(const string& uid, req_info& info, bufferlist *
   params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
   params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
   RGWRESTClient client(cct, url, NULL, &params);
-  return client.forward_request(key, info, inbl);
+  return client.forward_request(key, info, max_response, inbl, outbl);
 }
 
-int RGWRegionConnection::create_bucket(const string& uid, const string& bucket)
-{
-  list<pair<string, string> > params;
-  params.push_back(make_pair<string, string>("uid", uid));
-  params.push_back(make_pair<string, string>("bucket", bucket));
-  string url;
-  int ret = get_url(url);
-  if (ret < 0)
-    return ret;
-  RGWRESTClient client(cct, url, NULL, &params);
-  return client.execute(key, "PUT", "/admin/bucket");
-}

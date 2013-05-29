@@ -233,6 +233,7 @@ protected:
   int ret;
   RGWAccessControlPolicy policy;
   string location_constraint;
+  RGWObjVersionTracker objv_tracker;
 
   bufferlist in_data;
 

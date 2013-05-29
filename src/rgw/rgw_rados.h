@@ -646,6 +646,7 @@ public:
                             const string& region_name,
                             map<std::string,bufferlist>& attrs,
                             RGWObjVersionTracker& objv_tracker,
+                            obj_version *pobjv,
                             bool exclusive = true);
   virtual int add_bucket_placement(std::string& new_pool);
   virtual int remove_bucket_placement(std::string& new_pool);
