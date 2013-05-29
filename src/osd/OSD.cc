@@ -2622,29 +2622,37 @@ bool OSD::heartbeat_reset(Connection *con)
     }
     map<int,HeartbeatInfo>::iterator p = heartbeat_peers.find(s->peer);
     if (p != heartbeat_peers.end() &&
-	p->second.con_back == con) {
-      pair<ConnectionRef,ConnectionRef> newcon = service.get_con_osd_hb(p->second.peer, p->second.epoch);
-      if (!newcon.first) {
-	dout(10) << "heartbeat_reset reopen failed hb con " << con << " but failed to reopen" << dendl;
-      } else {
-	dout(10) << "heartbeat_reset reopen failed hb con " << con << dendl;
+	(p->second.con_back == con ||
+	 p->second.con_front == con)) {
+      dout(10) << "heartbeat_reset failed hb con " << con << " for osd." << p->second.peer
+	       << ", reopening" << dendl;
+      if (con != p->second.con_back) {
 	hbclient_messenger->mark_down(p->second.con_back);
+	p->second.con_back->put();
+      }
+      p->second.con_back = NULL;
+      if (p->second.con_front && con != p->second.con_front) {
+	hbclient_messenger->mark_down(p->second.con_front);
+	p->second.con_front->put();
+      }
+      p->second.con_front = NULL;
+      pair<ConnectionRef,ConnectionRef> newcon = service.get_con_osd_hb(p->second.peer, p->second.epoch);
+      if (newcon.first) {
 	p->second.con_back = newcon.first.get();
 	p->second.con_back->get();
 	p->second.con_back->set_priv(s);
-	if (p->second.con_front)
-	  hbclient_messenger->mark_down(p->second.con_front);
 	if (newcon.second) {
 	  p->second.con_front = newcon.second.get();
 	  p->second.con_front->get();
 	  p->second.con_front->set_priv(s->get());
-	} else {
-	  p->second.con_front = NULL;
 	}
+      } else {
+	dout(10) << "heartbeat_reset failed hb con " << con << " for osd." << p->second.peer
+		 << ", raced with osdmap update, closing out peer" << dendl;
+	heartbeat_peers.erase(p);
       }
     } else {
       dout(10) << "heartbeat_reset closing (old) failed hb con " << con << dendl;
-      hbclient_messenger->mark_down(con);
     }
     heartbeat_lock.Unlock();
     s->put();
@@ -4273,7 +4281,7 @@ void OSD::note_down_osd(int peer)
     hbclient_messenger->mark_down(p->second.con_back);
     p->second.con_back->put();
     if (p->second.con_front) {
-      hbclient_messenger->mark_down(p->second.con_back);
+      hbclient_messenger->mark_down(p->second.con_front);
       p->second.con_front->put();
     }
     heartbeat_peers.erase(p);
