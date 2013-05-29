@@ -19,9 +19,7 @@ public:
   RGWRegionConnection(CephContext *_cct, RGWRados *store, RGWRegion& upstream);
   int get_url(string& endpoint);
 
-  int forward(const string& uid, req_info& info, bufferlist *inbl);
-  int create_bucket(const string& uid, const string& bucket);
-
+  int forward(const string& uid, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl);
 };
 
 #endif

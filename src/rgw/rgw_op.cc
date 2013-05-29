@@ -8,6 +8,7 @@
 #include "common/armor.h"
 #include "common/mime.h"
 #include "common/utf8.h"
+#include "common/ceph_json.h"
 
 #include "rgw_rados.h"
 #include "rgw_op.h"
@@ -853,22 +854,17 @@ void RGWCreateBucket::execute()
   bool existed;
   int r;
   rgw_obj obj(store->zone.domain_root, s->bucket_name_str);
+  obj_version objv, *pobjv = NULL;
 
   ret = get_params();
   if (ret < 0)
     return;
 
-  if (!store->region.is_master) {
-    if (store->region.api_name != location_constraint) {
-      ldout(s->cct, 0) << "location constraint (" << location_constraint << ") doesn't match region" << " (" << store->region.api_name << ")" << dendl;
-      ret = -EINVAL;
-      return;
-    }
-
-    ldout(s->cct, 0) << "sending create_bucket request to master region" << dendl;
-    ret = store->rest_conn->forward(s->user.user_id, s->info, &in_data);
-    if (ret < 0)
-      return;
+  if (!store->region.is_master &&
+      store->region.api_name != location_constraint) {
+    ldout(s->cct, 0) << "location constraint (" << location_constraint << ") doesn't match region" << " (" << store->region.api_name << ")" << dendl;
+    ret = -EINVAL;
+    return;
   }
 
   s->bucket_owner.set_id(s->user.user_id);
@@ -880,6 +876,28 @@ void RGWCreateBucket::execute()
       return;
     }
   }
+
+  if (!store->region.is_master) {
+    ldout(s->cct, 0) << "sending create_bucket request to master region" << dendl;
+    bufferlist response;
+#define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
+    ret = store->rest_conn->forward(s->user.user_id, s->info, MAX_REST_RESPONSE, &in_data, &response);
+    if (ret < 0)
+      return;
+
+    ldout(s->cct, 20) << "response: " << response.c_str() << dendl;
+    JSONParser jp;
+    ret = jp.parse(response.c_str(), response.length());
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed parsing response from master region" << dendl;
+      return;
+    }
+    JSONDecoder::decode_json("object_ver", objv, &jp);
+    pobjv = &objv;
+
+    ldout(s->cct, 20) << "parsed: objv.tag=" << objv.tag << " objv.ver=" << objv.ver << dendl;
+  }
+
   string region_name;
 
   if (s->system_request) {
@@ -896,8 +914,7 @@ void RGWCreateBucket::execute()
   attrs[RGW_ATTR_ACL] = aclbl;
 
   s->bucket.name = s->bucket_name_str;
-  RGWObjVersionTracker objv_tracker;
-  ret = store->create_bucket(s->user.user_id, s->bucket, region_name, attrs, objv_tracker, true);
+  ret = store->create_bucket(s->user.user_id, s->bucket, region_name, attrs, objv_tracker, pobjv, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can recover
    * from a partial create by retrying it. */
   ldout(s->cct, 20) << "rgw_create_bucket returned ret=" << ret << " bucket=" << s->bucket << dendl;
