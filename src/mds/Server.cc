@@ -7432,8 +7432,8 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
     reply_request(mdr, -EINVAL);   // can't prune a parent snap, currently.
     return;
   }
-  if (diri->snaprealm &&
-      !diri->snaprealm->exists(snapname)) {
+  assert(diri->snaprealm);
+  if (!diri->snaprealm->exists(snapname)) {
     reply_request(mdr, -ENOENT);
     return;
   }
