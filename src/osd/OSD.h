@@ -704,15 +704,19 @@ private:
     utime_t last_rx_back;   ///< last time we got a ping reply on the back side
     epoch_t epoch;      ///< most recent epoch we wanted this peer
 
-    bool is_healthy(utime_t cutoff) {
+    bool is_unhealthy(utime_t cutoff) {
       return
-	(last_rx_front > cutoff ||
-	 (last_rx_front == utime_t() && (last_tx == utime_t() ||
-					 first_tx > cutoff))) &&
-	(last_rx_back > cutoff ||
-	 (last_rx_back == utime_t() && (last_tx == utime_t() ||
-					first_tx > cutoff)));
+	! ((last_rx_front > cutoff ||
+	    (last_rx_front == utime_t() && (last_tx == utime_t() ||
+					    first_tx > cutoff))) &&
+	   (last_rx_back > cutoff ||
+	    (last_rx_back == utime_t() && (last_tx == utime_t() ||
+					   first_tx > cutoff))));
     }
+    bool is_healthy(utime_t cutoff) {
+      return last_rx_front > cutoff && last_rx_back > cutoff;
+    }
+
   };
   /// state attached to outgoing heartbeat connections
   struct HeartbeatSession : public RefCountedObject {
