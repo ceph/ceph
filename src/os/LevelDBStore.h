@@ -36,7 +36,7 @@ class LevelDBStore : public KeyValueDB {
   // manage async compactions
   Mutex compact_queue_lock;
   Cond compact_queue_cond;
-  list<string> compact_queue;
+  list< pair<string,string> > compact_queue;
   bool compact_queue_stop;
   class CompactThread : public Thread {
     LevelDBStore *db;
@@ -51,6 +51,21 @@ class LevelDBStore : public KeyValueDB {
 
   void compact_thread_entry();
 
+  void compact_range(const string& start, const string& end) {
+    leveldb::Slice cstart(start);
+    leveldb::Slice cend(end);
+    db->CompactRange(&cstart, &cend);
+  }
+  void compact_range_async(const string& start, const string& end) {
+    Mutex::Locker l(compact_queue_lock);
+    compact_queue.remove(make_pair(start, end));    // prevent unbounded dups
+    compact_queue.push_back(make_pair(start, end));
+    compact_queue_cond.Signal();
+    if (!compact_thread.is_started()) {
+      compact_thread.create();
+    }
+  }
+
 public:
   /// compact the underlying leveldb store
   void compact() {
@@ -59,23 +74,17 @@ public:
 
   /// compact leveldb for all keys with a given prefix
   void compact_prefix(const string& prefix) {
-    // if we combine the prefix with key by adding a '\0' separator,
-    // a char(1) will capture all such keys.
-    string end = prefix;
-    end += (char)1;
-    leveldb::Slice cstart(prefix);
-    leveldb::Slice cend(end);
-    db->CompactRange(&cstart, &cend);
+    compact_range(prefix, past_prefix(prefix));
+  }
+  void compact_prefix_async(const string& prefix) {
+    compact_range_async(prefix, past_prefix(prefix));
   }
 
-  void compact_prefix_async(const string& prefix) {
-    Mutex::Locker l(compact_queue_lock);
-    compact_queue.remove(prefix);     // prevent unbounded dups
-    compact_queue.push_back(prefix);
-    compact_queue_cond.Signal();
-    if (!compact_thread.is_started()) {
-      compact_thread.create();
-    }
+  void compact_range(const string& prefix, const string& start, const string& end) {
+    compact_range(combine_strings(prefix, start), combine_strings(prefix, end));
+  }
+  void compact_range_async(const string& prefix, const string& start, const string& end) {
+    compact_range_async(combine_strings(prefix, start), combine_strings(prefix, end));
   }
 
   /**
