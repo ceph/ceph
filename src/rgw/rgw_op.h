@@ -255,6 +255,8 @@ class RGWDeleteBucket : public RGWOp {
 protected:
   int ret;
 
+  RGWObjVersionTracker objv_tracker;
+
 public:
   RGWDeleteBucket() : ret(0) {}
 

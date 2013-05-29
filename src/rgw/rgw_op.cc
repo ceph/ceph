@@ -846,6 +846,28 @@ int RGWCreateBucket::verify_permission()
   return 0;
 }
 
+template<class T>
+static int forward_request(struct req_state *s, RGWRados *store, bufferlist& in_data, const char *name, T& obj)
+{
+  ldout(s->cct, 0) << "sending create_bucket request to master region" << dendl;
+  bufferlist response;
+#define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
+  int ret = store->rest_conn->forward(s->user.user_id, s->info, MAX_REST_RESPONSE, &in_data, &response);
+  if (ret < 0)
+    return ret;
+
+  ldout(s->cct, 20) << "response: " << response.c_str() << dendl;
+  JSONParser jp;
+  ret = jp.parse(response.c_str(), response.length());
+  if (ret < 0) {
+    ldout(s->cct, 0) << "failed parsing response from master region" << dendl;
+    return ret;
+  }
+  JSONDecoder::decode_json(name, obj, &jp);
+
+  return 0;
+}
+
 void RGWCreateBucket::execute()
 {
   RGWAccessControlPolicy old_policy(s->cct);
@@ -878,22 +900,9 @@ void RGWCreateBucket::execute()
   }
 
   if (!store->region.is_master) {
-    ldout(s->cct, 0) << "sending create_bucket request to master region" << dendl;
-    bufferlist response;
-#define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
-    ret = store->rest_conn->forward(s->user.user_id, s->info, MAX_REST_RESPONSE, &in_data, &response);
+    ret = forward_request(s, store, in_data, "object_ver", objv);
     if (ret < 0)
       return;
-
-    ldout(s->cct, 20) << "response: " << response.c_str() << dendl;
-    JSONParser jp;
-    ret = jp.parse(response.c_str(), response.length());
-    if (ret < 0) {
-      ldout(s->cct, 0) << "failed parsing response from master region" << dendl;
-      return;
-    }
-    JSONDecoder::decode_json("object_ver", objv, &jp);
-    pobjv = &objv;
 
     ldout(s->cct, 20) << "parsed: objv.tag=" << objv.tag << " objv.ver=" << objv.ver << dendl;
   }
@@ -965,14 +974,23 @@ void RGWDeleteBucket::execute()
 {
   ret = -EINVAL;
 
-  if (s->bucket_name) {
-    ret = store->delete_bucket(s->bucket);
+  if (!s->bucket_name)
+    return;
 
-    if (ret == 0) {
-      ret = rgw_remove_user_bucket_info(store, s->user.user_id, s->bucket);
-      if (ret < 0) {
-        ldout(s->cct, 0) << "WARNING: failed to remove bucket: ret=" << ret << dendl;
-      }
+  if (!store->region.is_master) {
+    bufferlist in_data;
+    ret = forward_request(s, store, in_data, "object_ver", objv_tracker.read_version);
+    if (ret < 0) {
+      return;
+    }
+  }
+
+  ret = store->delete_bucket(s->bucket, objv_tracker);
+
+  if (ret == 0) {
+    ret = rgw_remove_user_bucket_info(store, s->user.user_id, s->bucket);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "WARNING: failed to remove bucket: ret=" << ret << dendl;
     }
   }
 }
