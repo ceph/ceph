@@ -1351,7 +1351,7 @@ void Monitor::sync_store_init()
       return; // this is moot
     } else {
       dout(10) << __func__ << " backup current monmap" << dendl;
-      monmap->encode(latest_monmap, get_quorum_features());
+      monmap->encode(latest_monmap, CEPH_FEATURES_ALL);
     }
   }
 
