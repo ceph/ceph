@@ -14,10 +14,6 @@
 #ifndef CEPH_HEALTH_MONITOR_H
 #define CEPH_HEALTH_MONITOR_H
 
-#include <boost/intrusive_ptr.hpp>
-// Because intusive_ptr clobbers our assert...
-#include "include/assert.h"
-
 #include "mon/Monitor.h"
 #include "mon/QuorumService.h"
 #include "mon/HealthService.h"
@@ -29,16 +25,15 @@
 
 class HealthMonitor : public QuorumService
 {
-  map<int,HealthServiceRef> services;
+  map<int,HealthService*> services;
 
 protected:
   virtual void service_shutdown();
 
 public:
   HealthMonitor(Monitor *m) : QuorumService(m) { }
-  virtual ~HealthMonitor() { }
-  HealthMonitor *get() {
-    return static_cast<HealthMonitor *>(RefCountedObject::get());
+  virtual ~HealthMonitor() {
+    assert(services.empty());
   }
 
 
@@ -52,7 +47,7 @@ public:
   virtual bool service_dispatch(Message *m);
 
   virtual void start_epoch() {
-    for (map<int,HealthServiceRef>::iterator it = services.begin();
+    for (map<int,HealthService*>::iterator it = services.begin();
          it != services.end(); ++it) {
       it->second->start(get_epoch());
     }
@@ -60,9 +55,9 @@ public:
 
   virtual void finish_epoch() {
     generic_dout(20) << "HealthMonitor::finish_epoch()" << dendl;
-    for (map<int,HealthServiceRef>::iterator it = services.begin();
+    for (map<int,HealthService*>::iterator it = services.begin();
          it != services.end(); ++it) {
-      assert(it->second.get() != NULL);
+      assert(it->second != NULL);
       it->second->finish();
     }
   }
@@ -82,6 +77,5 @@ public:
    * @} // HealthMonitor_Inherited_h
    */
 };
-typedef boost::intrusive_ptr<HealthMonitor> HealthMonitorRef;
 
 #endif // CEPH_HEALTH_MONITOR_H
