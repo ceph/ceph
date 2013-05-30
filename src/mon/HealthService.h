@@ -14,10 +14,6 @@
 #ifndef CEPH_MON_HEALTH_SERVICE_H
 #define CEPH_MON_HEALTH_SERVICE_H
 
-#include <boost/intrusive_ptr.hpp>
-// Because intusive_ptr clobbers our assert...
-#include "include/assert.h"
-
 #include "mon/Monitor.h"
 #include "mon/QuorumService.h"
 
@@ -41,14 +37,10 @@ struct HealthService : public QuorumService
   virtual bool service_dispatch(MMonHealth *m) = 0;
 
 public:
-  HealthService *get() {
-    return static_cast<HealthService *>(RefCountedObject::get());
-  }
   virtual health_status_t get_health(Formatter *f,
                           list<pair<health_status_t,string> > *detail) = 0;
   virtual int get_type() = 0;
   virtual string get_name() const = 0;
 };
-typedef boost::intrusive_ptr<HealthService> HealthServiceRef;
 
 #endif // CEPH_MON_HEALTH_SERVICE_H
