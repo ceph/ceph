@@ -1244,6 +1244,12 @@ int librados::Rados::conf_parse_argv(int argc, const char ** argv) const
   return rados_conf_parse_argv((rados_t)client, argc, argv);
 }
 
+int librados::Rados::conf_parse_argv_remainder(int argc, const char ** argv,
+					       const char ** remargv) const
+{
+  return rados_conf_parse_argv_remainder((rados_t)client, argc, argv, remargv);
+}
+
 int librados::Rados::conf_parse_env(const char *name) const
 {
   return rados_conf_parse_env((rados_t)client, name);
@@ -1543,6 +1549,35 @@ extern "C" int rados_conf_parse_argv(rados_t cluster, int argc, const char **arg
   if (ret)
     return ret;
   conf->apply_changes(NULL);
+  return 0;
+}
+
+// like above, but return the remainder of argv to contain remaining
+// unparsed args.  Must be allocated to at least argc by caller.
+// remargv will contain n <= argc pointers to original argv[], the end
+// of which may be NULL
+
+extern "C" int rados_conf_parse_argv_remainder(rados_t cluster, int argc,
+					       const char **argv,
+					       const char **remargv)
+{
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  md_config_t *conf = client->cct->_conf;
+  vector<const char*> args;
+  for (int i=0; i<argc; i++)
+    args.push_back(argv[i]);
+  int ret = conf->parse_argv(args);
+  if (ret)
+    return ret;
+  conf->apply_changes(NULL);
+  assert(args.size() <= (unsigned int)argc);
+  unsigned int i;
+  for (i = 0; i < argc; ++i) {
+    if (i < args.size())
+      remargv[i] = args[i];
+    else
+      remargv[i] = (const char *)NULL;
+  }
   return 0;
 }
 
