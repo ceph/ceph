@@ -20,10 +20,27 @@
 #include "leveldb/filter_policy.h"
 #endif
 
+#include "common/ceph_context.h"
+
+class PerfCounters;
+
+enum {
+  l_leveldb_first = 34300,
+  l_leveldb_gets,
+  l_leveldb_txns,
+  l_leveldb_compact,
+  l_leveldb_compact_range,
+  l_leveldb_compact_queue_merge,
+  l_leveldb_compact_queue_len,
+  l_leveldb_last,
+};
+
 /**
  * Uses LevelDB to implement the KeyValueDB interface
  */
 class LevelDBStore : public KeyValueDB {
+  CephContext *cct;
+  PerfCounters *logger;
   string path;
   boost::scoped_ptr<leveldb::DB> db;
   boost::scoped_ptr<leveldb::Cache> db_cache;
@@ -33,21 +50,48 @@ class LevelDBStore : public KeyValueDB {
 
   int init(ostream &out, bool create_if_missing);
 
+  // manage async compactions
+  Mutex compact_queue_lock;
+  Cond compact_queue_cond;
+  list< pair<string,string> > compact_queue;
+  bool compact_queue_stop;
+  class CompactThread : public Thread {
+    LevelDBStore *db;
+  public:
+    CompactThread(LevelDBStore *d) : db(d) {}
+    void *entry() {
+      db->compact_thread_entry();
+      return NULL;
+    }
+    friend class LevelDBStore;
+  } compact_thread;
+
+  void compact_thread_entry();
+
+  void compact_range(const string& start, const string& end) {
+    leveldb::Slice cstart(start);
+    leveldb::Slice cend(end);
+    db->CompactRange(&cstart, &cend);
+  }
+  void compact_range_async(const string& start, const string& end);
+
 public:
   /// compact the underlying leveldb store
-  void compact() {
-    db->CompactRange(NULL, NULL);
-  }
+  void compact();
 
   /// compact leveldb for all keys with a given prefix
   void compact_prefix(const string& prefix) {
-    // if we combine the prefix with key by adding a '\0' separator,
-    // a char(1) will capture all such keys.
-    string end = prefix;
-    end += (char)1;
-    leveldb::Slice cstart(prefix);
-    leveldb::Slice cend(end);
-    db->CompactRange(&cstart, &cend);
+    compact_range(prefix, past_prefix(prefix));
+  }
+  void compact_prefix_async(const string& prefix) {
+    compact_range_async(prefix, past_prefix(prefix));
+  }
+
+  void compact_range(const string& prefix, const string& start, const string& end) {
+    compact_range(combine_strings(prefix, start), combine_strings(prefix, end));
+  }
+  void compact_range_async(const string& prefix, const string& start, const string& end) {
+    compact_range_async(combine_strings(prefix, start), combine_strings(prefix, end));
   }
 
   /**
@@ -88,16 +132,21 @@ public:
     {}
   } options;
 
-  LevelDBStore(const string &path) :
+  LevelDBStore(CephContext *c, const string &path) :
+    cct(c),
+    logger(NULL),
     path(path),
     db_cache(NULL),
 #ifdef HAVE_LEVELDB_FILTER_POLICY
     filterpolicy(NULL),
 #endif
+    compact_queue_lock("LevelDBStore::compact_thread_lock"),
+    compact_queue_stop(false),
+    compact_thread(this),
     options()
   {}
 
-  ~LevelDBStore() {}
+  ~LevelDBStore();
 
   /// Opens underlying db
   int open(ostream &out) {
@@ -107,6 +156,8 @@ public:
   int create_and_open(ostream &out) {
     return init(out, true);
   }
+
+  void close();
 
   class LevelDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
@@ -133,22 +184,8 @@ public:
       new LevelDBTransactionImpl(this));
   }
 
-  int submit_transaction(KeyValueDB::Transaction t) {
-    LevelDBTransactionImpl * _t =
-      static_cast<LevelDBTransactionImpl *>(t.get());
-    leveldb::Status s = db->Write(leveldb::WriteOptions(), &(_t->bat));
-    return s.ok() ? 0 : -1;
-  }
-
-  int submit_transaction_sync(KeyValueDB::Transaction t) {
-    LevelDBTransactionImpl * _t =
-      static_cast<LevelDBTransactionImpl *>(t.get());
-    leveldb::WriteOptions options;
-    options.sync = true;
-    leveldb::Status s = db->Write(options, &(_t->bat));
-    return s.ok() ? 0 : -1;
-  }
-
+  int submit_transaction(KeyValueDB::Transaction t);
+  int submit_transaction_sync(KeyValueDB::Transaction t);
   int get(
     const string &prefix,
     const std::set<string> &key,
