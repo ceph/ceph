@@ -17,11 +17,16 @@ function get_device_dir {
 }
 
 function clean_up {
-	rbd unmap /dev/rbd/rbd/testimg1 || true
-	rbd unmap /dev/rbd/rbd/testimg1@snap1 || true
+	udevadm settle
+	[ -e /dev/rbd/rbd/testimg1@snap1 ] &&
+		rbd unmap /dev/rbd/rbd/testimg1@snap1 || true
+	if [ -e /dev/rbd/rbd/testimg1 ]; then
+		rbd unmap /dev/rbd/rbd/testimg1 || true
+		rbd snap purge testimg1 || true
+	fi
+	udevadm settle
 	sudo chown root /sys/bus/rbd/add /sys/bus/rbd/remove
-	rbd snap purge testimg1 || true
-	rbd rm testimg1 || true
+	rbd ls | grep testimg1 > /dev/null && rbd rm testimg1 || true
 	sudo rm -f $TMP_FILES
 }
 
@@ -43,39 +48,32 @@ dd if=/dev/zero of=/tmp/img1 count=0 seek=150000
 # import
 rbd import /tmp/img1 testimg1
 rbd map testimg1 --user $CEPH_ID $SECRET_ARGS
+# wait for udev to catch up
+udevadm settle
+
 DEV_ID1=$(get_device_dir rbd testimg1 -)
 echo "dev_id1 = $DEV_ID1"
 cat /sys/bus/rbd/devices/$DEV_ID1/size
 cat /sys/bus/rbd/devices/$DEV_ID1/size | grep 76800000
 
-# wait for udev to catch up
-while test ! -e /dev/rbd/rbd/testimg1
-do
-	sleep 1
-done
 sudo dd if=/dev/rbd/rbd/testimg1 of=/tmp/img1.export
 cmp /tmp/img1 /tmp/img1.export
 
 # snapshot
 rbd snap create testimg1 --snap=snap1
-cat /sys/bus/rbd/devices/$DEV_ID1/snap_snap1/snap_size | grep 76800000
 rbd map --snap=snap1 testimg1 --user $CEPH_ID $SECRET_ARGS
+# wait for udev to catch up
+udevadm settle
+
 DEV_ID2=$(get_device_dir rbd testimg1 snap1)
 cat /sys/bus/rbd/devices/$DEV_ID2/size | grep 76800000
 
-# wait for udev to catch up
-while test ! -e /dev/rbd/rbd/testimg1@snap1
-do
-	sleep 1
-done
 sudo dd if=/dev/rbd/rbd/testimg1@snap1 of=/tmp/img1.snap1
 cmp /tmp/img1 /tmp/img1.snap1
 
 # resize
 rbd resize testimg1 --size=40 --allow-shrink
-echo 1 | sudo tee /sys/bus/rbd/devices/$DEV_ID1/refresh
 cat /sys/bus/rbd/devices/$DEV_ID1/size | grep 41943040
-echo 1 | sudo tee /sys/bus/rbd/devices/$DEV_ID2/refresh
 cat /sys/bus/rbd/devices/$DEV_ID2/size | grep 76800000
 
 sudo dd if=/dev/rbd/rbd/testimg1 of=/tmp/img1.small
@@ -85,9 +83,8 @@ cmp /tmp/img1.trunc /tmp/img1.small
 
 # rollback and check data again
 rbd snap rollback --snap=snap1 testimg1
-echo 1 | sudo tee /sys/bus/rbd/devices/$DEV_ID1/refresh
-cat /sys/bus/rbd/devices/$DEV_ID1/snap_snap1/snap_size | grep 76800000
 cat /sys/bus/rbd/devices/$DEV_ID1/size | grep 76800000
+cat /sys/bus/rbd/devices/$DEV_ID2/size | grep 76800000
 sudo rm -f /tmp/img1.snap1 /tmp/img1.export
 
 sudo dd if=/dev/rbd/rbd/testimg1@snap1 of=/tmp/img1.snap1
