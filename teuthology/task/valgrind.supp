@@ -1,4 +1,29 @@
 {
+	ceph global: deliberate onexit leak
+	Memcheck:Leak
+	...
+	fun:*set_flush_on_exit*
+	...
+}
+{
+	leveldb leaks its environment and various other things
+	Memcheck:Leak
+	...
+	fun:pthread_once
+	...
+	fun:*leveldb*Env*Default*
+	...
+}
+{
+	leveldb leaks a thread
+	Memcheck:Leak
+	...
+	fun:pthread_create*
+	...
+	fun:*leveldb*PosixEnv*Schedule*
+	...
+}
+{
         strptime suckage
         Memcheck:Cond
         fun:__GI___strncasecmp_l
@@ -36,10 +61,11 @@
 	...
 }
 {
-	deliberate onexit leak
+	weird thing from libc
 	Memcheck:Leak
 	...
-	fun:*set_flush_on_exit*
+	fun:*sub_I_comparator*
+	fun:__libc_csu_init
 	...
 }
 {
