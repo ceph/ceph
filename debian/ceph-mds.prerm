@@ -5,12 +5,7 @@ set -e
 
 case "$1" in
     remove)
-	invoke-rc.d ceph-mds-all stop || {
-	    RESULT=$?
-	    if [ $RESULT != 100 ]; then
-		exit $RESULT
-	    fi
-	}
+	stop ceph-mds-all || true
 	invoke-rc.d ceph stop mds || {
 	    RESULT=$?
 	    if [ $RESULT != 100 ]; then
