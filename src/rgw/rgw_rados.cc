@@ -1287,6 +1287,7 @@ int RGWRados::copy_obj(void *ctx,
     /* copying attrs from source, however acls should not be copied */
     attrset[RGW_ATTR_ACL] = attrs[RGW_ATTR_ACL];
   }
+  attrset.erase(RGW_ATTR_ID_TAG);
 
   RGWObjManifest manifest;
   RGWObjState *astate = NULL;
