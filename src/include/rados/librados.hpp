@@ -655,6 +655,8 @@ namespace librados
     void shutdown();
     int conf_read_file(const char * const path) const;
     int conf_parse_argv(int argc, const char ** argv) const;
+    int conf_parse_argv_remainder(int argc, const char ** argv,
+				  const char ** remargv) const;
     int conf_parse_env(const char *env) const;
     int conf_set(const char *option, const char *value);
     int conf_get(const char *option, std::string &val);
