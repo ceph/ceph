@@ -521,7 +521,7 @@ class MonitorDBStore
     os << path.substr(0, path.size() - pos) << "/store.db";
     string full_path = os.str();
 
-    LevelDBStore *db_ptr = new LevelDBStore(full_path);
+    LevelDBStore *db_ptr = new LevelDBStore(g_ceph_context, full_path);
     if (!db_ptr) {
       std::cout << __func__ << " error initializing level db back storage in "
 		<< full_path << std::endl;
