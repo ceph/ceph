@@ -88,6 +88,7 @@ void RGWOp_MDLog_List::send_response() {
     flusher.flush();
   }
   s->formatter->close_section();
+  flusher.flush();
 }
 
 void RGWOp_MDLog_GetShardsInfo::execute() {
@@ -103,6 +104,7 @@ void RGWOp_MDLog_GetShardsInfo::send_response() {
   s->formatter->open_object_section("num_objects");
   s->formatter->dump_unsigned("num_objects", num_objects);
   s->formatter->close_section();
+  flusher.flush();
 }
 
 void RGWOp_MDLog_Delete::execute() {
@@ -278,6 +280,7 @@ void RGWOp_BILog_List::send_response(list<rgw_bi_log_entry>& entries, string& ma
 
 void RGWOp_BILog_List::send_response_end() {
   s->formatter->close_section();
+  flusher.flush();
 }
       
 void RGWOp_BILog_Delete::execute() {
