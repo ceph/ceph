@@ -2095,7 +2095,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       ret = 0;
     
     for (std::list<obj_watch_t>::iterator i = lw.begin(); i != lw.end(); ++i) {
-      cout << "watcher=client." << i->watcher_id << " cookie=" << i->cookie << std::endl;
+      cout << "watcher=" << i->addr << " client." << i->watcher_id << " cookie=" << i->cookie << std::endl;
     }
   } else if (strcmp(nargs[0], "listsnaps") == 0) {
     if (!pool_name || nargs.size() < 2)

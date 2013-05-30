@@ -2322,7 +2322,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           assert(oi_iter->first.second.is_client());
 
           watch_item_t wi(oi_iter->first.second, oi_iter->second.cookie,
-                 oi_iter->second.timeout_seconds);
+		 oi_iter->second.timeout_seconds, oi_iter->second.addr);
           resp.entries.push_back(wi);
         }
 

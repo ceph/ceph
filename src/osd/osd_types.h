@@ -2083,23 +2083,30 @@ struct watch_item_t {
   entity_name_t name;
   uint64_t cookie;
   uint32_t timeout_seconds;
+  entity_addr_t addr;
 
   watch_item_t() : cookie(0), timeout_seconds(0) { }
-  watch_item_t(entity_name_t name, uint64_t cookie, uint32_t timeout)
-    : name(name), cookie(cookie), timeout_seconds(timeout) { }
+  watch_item_t(entity_name_t name, uint64_t cookie, uint32_t timeout,
+     entity_addr_t addr)
+    : name(name), cookie(cookie), timeout_seconds(timeout),
+    addr(addr) { }
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(name, bl);
     ::encode(cookie, bl);
     ::encode(timeout_seconds, bl);
+    ::encode(addr, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(name, bl);
     ::decode(cookie, bl);
     ::decode(timeout_seconds, bl);
+    if (struct_v >= 2) {
+      ::decode(addr, bl);
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -2129,15 +2136,29 @@ struct obj_list_watch_response_t {
       f->dump_stream("watcher") << p->name;
       f->dump_int("cookie", p->cookie);
       f->dump_int("timeout", p->timeout_seconds);
+      f->open_object_section("addr");
+      p->addr.dump(f);
+      f->close_section();
       f->close_section();
     }
     f->close_section();
   }
   static void generate_test_instances(list<obj_list_watch_response_t*>& o) {
+    entity_addr_t ea;
     o.push_back(new obj_list_watch_response_t);
     o.push_back(new obj_list_watch_response_t);
-    o.back()->entries.push_back(watch_item_t(entity_name_t(entity_name_t::TYPE_CLIENT, 1), 10, 30));
-    o.back()->entries.push_back(watch_item_t(entity_name_t(entity_name_t::TYPE_CLIENT, 2), 20, 60));
+    ea.set_nonce(1000);
+    ea.set_family(AF_INET);
+    ea.set_in4_quad(0, 127);
+    ea.set_in4_quad(1, 0);
+    ea.set_in4_quad(2, 0);
+    ea.set_in4_quad(3, 1);
+    ea.set_port(1024);
+    o.back()->entries.push_back(watch_item_t(entity_name_t(entity_name_t::TYPE_CLIENT, 1), 10, 30, ea));
+    ea.set_nonce(1001);
+    ea.set_in4_quad(3, 2);
+    ea.set_port(1025);
+    o.back()->entries.push_back(watch_item_t(entity_name_t(entity_name_t::TYPE_CLIENT, 2), 20, 60, ea));
   }
 };
 
