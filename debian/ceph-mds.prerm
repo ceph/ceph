@@ -3,14 +3,21 @@
 
 set -e
 
-invoke-rc.d ceph-mds-all stop || {
-	RESULT=$?
-	# Ignore if ceph-all upstart config does not
-	# exist or upstart is not in use
-	if [ $RESULT != 100 ]; then
+case "$1" in
+    remove)
+	invoke-rc.d ceph-mds-all stop || {
+	    RESULT=$?
+	    # Ignore if ceph-all upstart config does not
+	    # exist or upstart is not in use
+	    if [ $RESULT != 100 ]; then
 		exit $RESULT
-	fi
-}
+	    fi
+	}
+	;;
+
+    *)
+	;;
+esac
 
 #DEBHELPER#
 
