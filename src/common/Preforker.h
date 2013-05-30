@@ -75,12 +75,12 @@ public:
     return r;
   }
 
-  void exit(int r) {
+  int exit(int r) {
     if (forked) {
       // tell parent
       ::write(fd[1], &r, sizeof(r));
     }
-    ::exit(r);
+    return r;
   }
 
   void daemonize() {
