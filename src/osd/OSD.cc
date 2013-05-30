@@ -6063,7 +6063,12 @@ void OSD::_remove_pg(PG *pg)
 
   service.cancel_pending_splits_for_parent(pg->info.pgid);
 
-  DeletingStateRef deleting = service.deleting_pgs.lookup_or_create(pg->info.pgid);
+  DeletingStateRef deleting = service.deleting_pgs.lookup_or_create(
+    pg->info.pgid,
+    make_pair(
+      pg->info.pgid,
+      PGRef(pg))
+    );
   remove_wq.queue(make_pair(PGRef(pg), deleting));
 
   store->queue_transaction(
