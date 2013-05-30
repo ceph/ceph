@@ -1049,10 +1049,21 @@ protected:
   PG   *_open_lock_pg(OSDMapRef createmap,
 		      pg_t pg, bool no_lockdep_check=false,
 		      bool hold_map_lock=false);
+  enum res_result {
+    RES_PARENT,    // resurrected a parent
+    RES_SELF,      // resurrected self
+    RES_NONE       // nothing relevant deleting
+  };
+  res_result _try_resurrect_pg(
+    OSDMapRef curmap, pg_t pgid, pg_t *resurrected, PGRef *old_pg_state);
   PG   *_create_lock_pg(OSDMapRef createmap,
-			pg_t pgid, bool newly_created,
-			bool hold_map_lock, int role,
-			vector<int>& up, vector<int>& acting,
+			pg_t pgid,
+			bool newly_created,
+			bool hold_map_lock,
+			bool backfill,
+			int role,
+			vector<int>& up,
+			vector<int>& acting,
 			pg_history_t history,
 			pg_interval_map_t& pi,
 			ObjectStore::Transaction& t);
