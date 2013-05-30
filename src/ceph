@@ -17,7 +17,10 @@ import sys
 import types
 import uuid
 
+# just a couple of globals
+
 verbose = False
+cluster = None
 
 class ArgumentError(Exception):
     """
@@ -277,7 +280,6 @@ class CephPoolname(CephArgtype):
     Pool name; checked for presence in cluster
     """
     def valid(self, s, partial=False):
-        global cluster
         if cluster.pool.exists(s):
            raise ArgumentValid("pool {0} does not exist".format(s))
         self.val = s
@@ -1057,8 +1059,6 @@ def json_command(target=('mon', ''), prefix=None, argdict=None, inbuf='',
 
     If target is osd.N, send command to that osd (except for pgid cmds)
     """
-    global cluster
-    global verbose
     cmddict = {}
     if prefix:
         cmddict.update({'prefix':prefix})
@@ -1297,11 +1297,9 @@ def complete(sigdict, args, target):
 ###
 
 def main():
-    global cluster
 
     parsed_args, childargs = parse_cmdargs(first=False)
 
-    global verbose
     verbose = parsed_args.verbose
 
     # pass on --id, --name, -k, -c
