@@ -54,7 +54,7 @@ using namespace std;
 #define HTTP_RESPONSE_STR "RespCode"
 #define CEPH_CRYPTO_HMACSHA1_DIGESTSIZE 20
 #define RGW_ADMIN_RESP_PATH "/tmp/.test_rgw_admin_resp"
-#define TEST_BUCKET_NAME "test_bucket1"
+#define TEST_BUCKET_NAME "test_bucket"
 #define TEST_BUCKET_OBJECT "test_object"
 #define TEST_BUCKET_OBJECT_1 "test_object1"
 #define TEST_BUCKET_OBJECT_SIZE 1024
