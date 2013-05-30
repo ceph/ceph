@@ -56,15 +56,7 @@ class LevelDBStore : public KeyValueDB {
     leveldb::Slice cend(end);
     db->CompactRange(&cstart, &cend);
   }
-  void compact_range_async(const string& start, const string& end) {
-    Mutex::Locker l(compact_queue_lock);
-    compact_queue.remove(make_pair(start, end));    // prevent unbounded dups
-    compact_queue.push_back(make_pair(start, end));
-    compact_queue_cond.Signal();
-    if (!compact_thread.is_started()) {
-      compact_thread.create();
-    }
-  }
+  void compact_range_async(const string& start, const string& end);
 
 public:
   /// compact the underlying leveldb store
