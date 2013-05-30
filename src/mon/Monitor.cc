@@ -169,8 +169,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_LOG] = new LogMonitor(this, paxos, "logm");
   paxos_service[PAXOS_AUTH] = new AuthMonitor(this, paxos, "auth");
 
-  health_monitor = QuorumServiceRef(new HealthMonitor(this));
-  config_key_service = ConfigKeyServiceRef(new ConfigKeyService(this, paxos));
+  health_monitor = new HealthMonitor(this);
+  config_key_service = new ConfigKeyService(this, paxos);
 
   mon_caps = new MonCaps();
   mon_caps->set_allow_all(true);
@@ -202,6 +202,8 @@ Monitor::~Monitor()
 {
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     delete *p;
+  delete health_monitor;
+  delete config_key_service;
   delete paxos;
   assert(session_map.sessions.empty());
   delete mon_caps;

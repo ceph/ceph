@@ -182,13 +182,11 @@ if [ "$debug" -eq 0 ]; then
 else
     echo "** going verbose **"
     CMONDEBUG='
-        lockdep = 1
 	debug mon = 20
         debug paxos = 20
         debug auth = 20
         debug ms = 1'
     COSDDEBUG='
-        lockdep = 1
         debug ms = 1
         debug osd = 25
         debug monc = 20
@@ -196,7 +194,6 @@ else
         debug filestore = 20
         debug objclass = 20'
     CMDSDEBUG='
-        lockdep = 1
         debug ms = 1
         debug mds = 20
         debug auth = 20

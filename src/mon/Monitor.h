@@ -51,9 +51,6 @@
 #include <memory>
 #include <tr1/memory>
 #include <errno.h>
-#include <boost/intrusive_ptr.hpp>
-// Because intusive_ptr clobbers our assert...
-#include "include/assert.h"
 
 
 #define CEPH_MON_PROTOCOL     10 /* cluster internal */
@@ -1248,8 +1245,8 @@ public:
   friend class PGMonitor;
   friend class LogMonitor;
 
-  boost::intrusive_ptr<QuorumService> health_monitor;
-  boost::intrusive_ptr<QuorumService> config_key_service;
+  QuorumService *health_monitor;
+  QuorumService *config_key_service;
 
   // -- sessions --
   MonSessionMap session_map;
