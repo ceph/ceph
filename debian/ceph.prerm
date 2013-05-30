@@ -1,6 +1,23 @@
 #!/bin/sh
+# vim: set noet ts=8:
 
-[ -x /sbin/stop ] && stop ceph-all || :
-[ -x /usr/sbin/service ] && service ceph stop || :
+set -e
+
+case "$1" in
+    remove)
+	[ -x /sbin/stop ] && stop ceph-all || true
+	invoke-rc.d ceph stop || {
+	    RESULT=$?
+	    if [ $RESULT != 100 ]; then
+		exit $RESULT
+	    fi
+	}
+	;;
+
+    *)
+	;;
+esac
+
+#DEBHELPER#
 
 exit 0
