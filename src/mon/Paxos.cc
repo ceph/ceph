@@ -966,7 +966,7 @@ void Paxos::trim_to(MonitorDBStore::Transaction *t,
   }
   if (g_conf->mon_compact_on_trim) {
     dout(10) << " compacting trimmed range" << dendl;
-    t->compact_range(get_name(), stringify(from), stringify(to));
+    t->compact_range(get_name(), stringify(from - 1), stringify(to));
   }
 }
 

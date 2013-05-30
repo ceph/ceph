@@ -158,24 +158,27 @@ void LevelDBStore::compact_thread_entry()
   compact_queue_lock.Unlock();
 }
 
-void compact_range_async(const string& start, const string& end)
+void LevelDBStore::compact_range_async(const string& start, const string& end)
 {
   Mutex::Locker l(compact_queue_lock);
 
   // try to merge adjacent ranges.  this is O(n), but the queue should
-  // be short.
-  list< pair<string,string> >::iterator p = compact_queue.begin();
-  while (p != compact_queue.end(); ++p) {
+  // be short.  note that we do not cover all overlap cases and merge
+  // opportunities here, but we capture the ones we currently need.
+  list< pair<string,string> >::iterator p;
+  for (p = compact_queue.begin(); p != compact_queue.end(); ++p) {
     if (p->first == start && p->second == end) {
       // dup; no-op
       return;
     } else if (p->first <= end && p->first > start) {
       // merge with existing range to the right
       compact_queue.push_back(make_pair(start, p->second));
+      compact_queue.erase(p);
       break;
     } else if (p->second >= start && p->second < end) {
       // merge with existing range to the left
       compact_queue.push_back(make_pair(p->first, end));
+      compact_queue.erase(p);
       break;
     } else {
       ++p;
