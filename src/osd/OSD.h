@@ -152,8 +152,11 @@ class DeletingState {
   } status;
   bool stop_deleting;
 public:
-  DeletingState() :
-    lock("DeletingState::lock"), status(QUEUED), stop_deleting(false) {}
+  const pg_t pgid;
+  const PGRef old_pg_state;
+  DeletingState(const pair<pg_t, PGRef> &in) :
+    lock("DeletingState::lock"), status(QUEUED), stop_deleting(false),
+    pgid(in.first), old_pg_state(in.second) {}
 
   /// check whether removal was canceled
   bool check_canceled() {
