@@ -7,8 +7,12 @@ case "$1" in
     remove)
 	invoke-rc.d ceph-mds-all stop || {
 	    RESULT=$?
-	    # Ignore if ceph-all upstart config does not
-	    # exist or upstart is not in use
+	    if [ $RESULT != 100 ]; then
+		exit $RESULT
+	    fi
+	}
+	invoke-rc.d ceph stop mds || {
+	    RESULT=$?
 	    if [ $RESULT != 100 ]; then
 		exit $RESULT
 	    fi
