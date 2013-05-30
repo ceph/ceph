@@ -157,3 +157,36 @@ void LevelDBStore::compact_thread_entry()
   }
   compact_queue_lock.Unlock();
 }
+
+void compact_range_async(const string& start, const string& end)
+{
+  Mutex::Locker l(compact_queue_lock);
+
+  // try to merge adjacent ranges.  this is O(n), but the queue should
+  // be short.
+  list< pair<string,string> >::iterator p = compact_queue.begin();
+  while (p != compact_queue.end(); ++p) {
+    if (p->first == start && p->second == end) {
+      // dup; no-op
+      return;
+    } else if (p->first <= end && p->first > start) {
+      // merge with existing range to the right
+      compact_queue.push_back(make_pair(start, p->second));
+      break;
+    } else if (p->second >= start && p->second < end) {
+      // merge with existing range to the left
+      compact_queue.push_back(make_pair(p->first, end));
+      break;
+    } else {
+      ++p;
+    }
+  }
+  if (p == compact_queue.end()) {
+    // no merge, new entry.
+    compact_queue.push_back(make_pair(start, end));
+  }
+  compact_queue_cond.Signal();
+  if (!compact_thread.is_started()) {
+    compact_thread.create();
+  }
+}
