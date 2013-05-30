@@ -298,6 +298,22 @@ int rados_conf_read_file(rados_t cluster, const char *path);
  */
 int rados_conf_parse_argv(rados_t cluster, int argc, const char **argv);
 
+
+/**
+ * Configure the cluster handle with command line arguments, returning
+ * any remainders.  Same rados_conf_parse_argv, except for extra
+ * remargv argument to hold returns unrecognized arguments.
+ *
+ * @pre rados_connect() has not been called on the cluster handle
+ *
+ * @param cluster cluster handle to configure
+ * @param argc number of arguments in argv
+ * @param argv arguments to parse
+ * @param remargv char* array for returned unrecognized arguments
+ * @returns 0 on success, negative error code on failure
+ */
+int rados_conf_parse_argv_remainder(rados_t cluster, int argc,
+				    const char **argv, const char **remargv);
 /**
  * Configure the cluster handle based on an environment variable
  *
