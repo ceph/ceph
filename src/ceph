@@ -1366,7 +1366,14 @@ def main():
                 level = k.replace('watch_', '')
     if level:
         def watch_cb(arg, line, who, stamp_sec, stamp_nsec, seq, level, msg):
-            print >> sys.stderr, line
+            print line
+
+        # first do a ceph status
+        ret, outbuf, outs = json_command(prefix='status')
+        if ret:
+            print >> sys.stderr, "status query failed: ", outs
+            return ret
+        print outbuf
 
         # this instance keeps the watch connection alive, but is
         # otherwise unused
