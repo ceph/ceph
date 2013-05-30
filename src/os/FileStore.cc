@@ -1648,7 +1648,7 @@ int FileStore::mount()
   }
 
   {
-    LevelDBStore *omap_store = new LevelDBStore(omap_dir);
+    LevelDBStore *omap_store = new LevelDBStore(g_ceph_context, omap_dir);
 
     omap_store->options.write_buffer_size = g_conf->osd_leveldb_write_buffer_size;
     omap_store->options.cache_size = g_conf->osd_leveldb_cache_size;
