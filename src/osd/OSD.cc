@@ -3766,6 +3766,7 @@ bool OSD::ms_dispatch(Message *m)
   osd_lock.Lock();
   if (is_stopping()) {
     osd_lock.Unlock();
+    m->put();
     return true;
   }
 
