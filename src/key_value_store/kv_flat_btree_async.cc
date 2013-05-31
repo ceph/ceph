@@ -1371,9 +1371,13 @@ int KvFlatBtreeAsync::setup(int argc, const char** argv) {
   make_max_obj.setxattr("unwritable", to_bl("0"));
   make_max_obj.setxattr("size", to_bl("0"));
   r = io_ctx.operate(client_name, &make_max_obj);
+  if (r < 0) {
+    if (verbose) cout << client_name << ": Setting xattr failed with code "
+	<< r
+	<< std::endl;
+  }
 
   return 0;
-
 }
 
 int KvFlatBtreeAsync::set(const string &key, const bufferlist &val,
