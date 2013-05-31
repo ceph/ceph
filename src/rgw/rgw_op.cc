@@ -853,6 +853,10 @@ int RGWCreateBucket::verify_permission()
 template<class T>
 static int forward_request(struct req_state *s, RGWRados *store, bufferlist& in_data, const char *name, T& obj)
 {
+  if (!store->rest_conn) {
+    ldout(s->cct, 0) << "rest connection is invalid" << dendl;
+    return -EINVAL;
+  }
   ldout(s->cct, 0) << "sending create_bucket request to master region" << dendl;
   bufferlist response;
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
