@@ -105,13 +105,13 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
   version_t latest_full = get_version_latest_full();
   dout(10) << __func__ << " latest full " << latest_full << dendl;
   if ((latest_full > 0) && (latest_full > summary.version)) {
-      bufferlist latest_bl;
-      get_version_full(latest_full, latest_bl);
-      assert(latest_bl.length() != 0);
-      dout(7) << __func__ << " loading summary e" << latest_full << dendl;
-      bufferlist::iterator p = latest_bl.begin();
-      ::decode(summary, p);
-      dout(7) << __func__ << " loaded summary e" << summary.version << dendl;
+    bufferlist latest_bl;
+    get_version_full(latest_full, latest_bl);
+    assert(latest_bl.length() != 0);
+    dout(7) << __func__ << " loading summary e" << latest_full << dendl;
+    bufferlist::iterator p = latest_bl.begin();
+    ::decode(summary, p);
+    dout(7) << __func__ << " loaded summary e" << summary.version << dendl;
   }
 
   // walk through incrementals
