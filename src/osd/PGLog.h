@@ -137,7 +137,8 @@ struct PGLog {
 
       // to our index
       objects[e.soid] = &(log.back());
-      caller_ops[e.reqid] = &(log.back());
+      if (e.reqid_is_indexed())
+	caller_ops[e.reqid] = &(log.back());
     }
 
     void trim(ObjectStore::Transaction &t, hobject_t& oid, eversion_t s);
