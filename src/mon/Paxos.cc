@@ -715,7 +715,7 @@ void Paxos::handle_commit(MMonPaxos *commit)
 
   commit->put();
 
-  mon->refresh_from_paxos();
+  mon->refresh_from_paxos(NULL);
 
   finish_contexts(g_ceph_context, waiting_for_commit);
 }
@@ -786,7 +786,8 @@ void Paxos::finish_proposal()
   assert(mon->is_leader());
 
   // make sure we have the latest state loaded up
-  mon->refresh_from_paxos();
+  bool need_bootstrap = false;
+  mon->refresh_from_paxos(&need_bootstrap);
 
   // finish off the last proposal
   if (!proposals.empty()) {
@@ -820,6 +821,12 @@ void Paxos::finish_proposal()
    */
   first_committed = get_store()->get(get_name(), "first_committed");
   last_committed = get_store()->get(get_name(), "last_committed");
+
+  if (need_bootstrap) {
+    dout(10) << " doing requested bootstrap" << dendl;
+    mon->bootstrap();
+    return;
+  }
 
   if (should_trim()) {
     trim();

@@ -314,7 +314,7 @@ public:
    */
   bool dispatch(PaxosServiceMessage *m);
 
-  void refresh();
+  void refresh(bool *need_bootstrap);
 
   /**
    * @defgroup PaxosService_h_override_funcs Functions that should be
@@ -338,7 +338,7 @@ public:
    *
    * @returns 'true' on success; 'false' otherwise.
    */
-  virtual void update_from_paxos() = 0;
+  virtual void update_from_paxos(bool *need_bootstrap) = 0;
 
   /**
    * Init on startup

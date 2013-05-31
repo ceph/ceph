@@ -522,7 +522,7 @@ void Monitor::init_paxos()
 
   // update paxos
   if (paxos->is_consistent())
-    refresh_from_paxos();
+    refresh_from_paxos(NULL);
 
   // init services
   for (int i = 0; i < PAXOS_NUM; ++i) {
@@ -532,11 +532,11 @@ void Monitor::init_paxos()
   }
 }
 
-void Monitor::refresh_from_paxos()
+void Monitor::refresh_from_paxos(bool *need_bootstrap)
 {
   dout(10) << __func__ << dendl;
   for (int i = 0; i < PAXOS_NUM; ++i) {
-    paxos_service[i]->refresh();
+    paxos_service[i]->refresh(need_bootstrap);
   }
 }
 
