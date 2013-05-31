@@ -83,7 +83,8 @@ class CephArgtype(object):
         thereof, for example), and return True
         if not, throw ArgumentError(msg-as-to-why)
         """
-        pass
+        self.val = s
+        return True
 
     def __repr__(self):
         """
@@ -277,14 +278,8 @@ class CephEntityAddr(CephIPAddr):
 
 class CephPoolname(CephArgtype):
     """
-    Pool name; checked for presence in cluster
+    Pool name; very little utility
     """
-    def valid(self, s, partial=False):
-        if cluster.pool.exists(s):
-           raise ArgumentValid("pool {0} does not exist".format(s))
-        self.val = s
-        return True
-
     def __str__(self):
         return '<poolname>'
 
@@ -800,7 +795,7 @@ def parse_cmdargs(args=None, target='', first=False):
     parser.add_argument('-k', '--keyring', dest='keyring_file',
                         help='keyring file')
 
-    parser.add_argument('--id', dest='client_id',
+    parser.add_argument('--id', '--user', dest='client_id',
                         help='client id for authentication')
     parser.add_argument('--name', '-n', dest='client_name',
                         help='client name for authentication')
@@ -1147,7 +1142,7 @@ def ceph_conf(field, name):
         raise RuntimeError('unable to get conf option %s for %s: %s' % (field, name, errdata))
     return outdata.rstrip()
 
-def new_style_command(parsed_args, childargs, target, sigdict, inbuf, verbose):
+def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
     """
     Do new-style command dance.
     target: daemon to receive command: mon (any) or osd.N
@@ -1300,17 +1295,15 @@ def main():
 
     parsed_args, childargs = parse_cmdargs(first=False)
 
+    global verbose
     verbose = parsed_args.verbose
 
-    # pass on --id, --name, -k, -c
+    # pass on --id, --name, --conf
     name = None
     if parsed_args.client_id:
         name = 'client.' + parsed_args.client_id
     if parsed_args.client_name:
         name = parsed_args.client_name
-
-    if parsed_args.keyring_file:
-        extraconf.update({'keyring':parsed_args.keyring_file})
 
     # default '' means default conf search
     conffile = ''
@@ -1340,12 +1333,22 @@ def main():
     global cluster
     cluster = rados.Rados(rados_id=name, conffile='')
     retargs = cluster.conf_parse_argv(childargs)
-    childargs = retargs[:]
+    #tmp = childargs
+    childargs = retargs
+    if not childargs:
+        childargs = []
+
+    # -- means "stop parsing args", but we don't want to see it either
+    if '--' in childargs:
+        childargs.remove('--')
 
     try:
         cluster.connect(timeout=15)
     except KeyboardInterrupt:
         print >> sys.stderr, "connection aborted"
+        return 1
+    except:
+        print >> sys.stderr, "connection to cluster timed out"
         return 1
 
     # implement -w/--watch_*
