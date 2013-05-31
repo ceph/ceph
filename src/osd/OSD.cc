@@ -3755,6 +3755,7 @@ bool OSD::ms_dispatch(Message *m)
 {
   if (m->get_type() == MSG_OSD_MARK_ME_DOWN) {
     service.got_stop_ack();
+    m->put();
     return true;
   }
 
@@ -4218,7 +4219,8 @@ void OSDService::dec_scrubs_active()
   sched_scrub_lock.Unlock();
 }
 
-bool OSDService::prepare_to_stop() {
+bool OSDService::prepare_to_stop()
+{
   Mutex::Locker l(is_stopping_lock);
   if (state != NOT_STOPPING)
     return false;
@@ -4242,12 +4244,15 @@ bool OSDService::prepare_to_stop() {
   return true;
 }
 
-void OSDService::got_stop_ack() {
+void OSDService::got_stop_ack()
+{
   Mutex::Locker l(is_stopping_lock);
   dout(10) << "Got stop ack" << dendl;
   state = STOPPING;
   is_stopping_cond.Signal();
 }
+
+
 // =====================================================
 // MAP
 
