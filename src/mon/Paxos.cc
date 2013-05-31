@@ -435,7 +435,6 @@ void Paxos::handle_last(MMonPaxos *last)
 	begin(uncommitted_value);
       } else {
 	// active!
-	state = STATE_ACTIVE;
 	dout(10) << "that's everyone.  active!" << dendl;
 	extend_lease();
 
@@ -508,7 +507,6 @@ void Paxos::begin(bufferlist& v)
   if (mon->get_quorum().size() == 1) {
     // we're alone, take it easy
     commit();
-    state = STATE_ACTIVE;
     finish_proposal();
     finish_contexts(g_ceph_context, waiting_for_active);
     finish_contexts(g_ceph_context, waiting_for_commit);
@@ -624,7 +622,6 @@ void Paxos::handle_accept(MMonPaxos *accept)
     accept_timeout_event = 0;
 
     // yay!
-    state = STATE_ACTIVE;
     extend_lease();
 
     finish_proposal();
@@ -723,7 +720,7 @@ void Paxos::handle_commit(MMonPaxos *commit)
 void Paxos::extend_lease()
 {
   assert(mon->is_leader());
-  assert(is_active());
+  //assert(is_active());
 
   lease_expire = ceph_clock_now(g_ceph_context);
   lease_expire += g_conf->mon_lease;
@@ -788,6 +785,9 @@ void Paxos::finish_proposal()
   // make sure we have the latest state loaded up
   bool need_bootstrap = false;
   mon->refresh_from_paxos(&need_bootstrap);
+
+  // ok, now go active!
+  state = STATE_ACTIVE;
 
   // finish off the last proposal
   if (!proposals.empty()) {
