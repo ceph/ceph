@@ -45,7 +45,7 @@ void MonmapMonitor::create_initial()
   pending_map.epoch = 1;
 }
 
-void MonmapMonitor::update_from_paxos()
+void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
 {
   version_t version = get_version();
   if (version <= mon->monmap->get_epoch())
@@ -93,7 +93,10 @@ void MonmapMonitor::update_from_paxos()
       mon->monmap->decode(latest_bl);
   }
    */
-  bool need_restart = version != mon->monmap->get_epoch();  
+  if (need_bootstrap && version != mon->monmap->get_epoch()) {
+    dout(10) << " signaling that we need a bootstrap" << dendl;
+    *need_bootstrap = true;
+  }
 
   // read and decode
   monmap_bl.clear();
@@ -108,10 +111,6 @@ void MonmapMonitor::update_from_paxos()
     MonitorDBStore::Transaction t;
     erase_mkfs(&t);
     mon->store->apply_transaction(t);
-  }
-
-  if (need_restart) {
-    mon->bootstrap();
   }
 }
 

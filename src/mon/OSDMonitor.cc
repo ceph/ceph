@@ -106,7 +106,7 @@ void OSDMonitor::create_initial()
   newmap.encode(pending_inc.fullmap);
 }
 
-void OSDMonitor::update_from_paxos()
+void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 {
   version_t version = get_version();
   if (version == osdmap.epoch)

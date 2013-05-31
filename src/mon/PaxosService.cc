@@ -104,7 +104,7 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
   return true;
 }
 
-void PaxosService::refresh()
+void PaxosService::refresh(bool *need_bootstrap)
 {
   // update cached versions
   cached_first_committed = mon->store->get(get_service_name(), first_committed_name);
@@ -112,7 +112,7 @@ void PaxosService::refresh()
 
   dout(10) << __func__ << dendl;
 
-  update_from_paxos();
+  update_from_paxos(need_bootstrap);
 }
 
 

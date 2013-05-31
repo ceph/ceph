@@ -80,7 +80,7 @@ void MDSMonitor::create_initial()
 }
 
 
-void MDSMonitor::update_from_paxos()
+void MDSMonitor::update_from_paxos(bool *need_bootstrap)
 {
   version_t version = get_version();
   if (version == mdsmap.epoch)

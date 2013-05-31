@@ -127,7 +127,7 @@ private:
   void election_finished();
   bool should_propose(double& delay);
   void create_initial();
-  void update_from_paxos();
+  void update_from_paxos(bool *need_bootstrap);
   void create_pending();  // prepare a new pending
   bool prepare_global_id(MMonGlobalID *m);
   void increase_max_global_id();

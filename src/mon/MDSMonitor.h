@@ -69,7 +69,7 @@ class MDSMonitor : public PaxosService {
 
   // service methods
   void create_initial();
-  void update_from_paxos();
+  void update_from_paxos(bool *need_bootstrap);
   void create_pending(); 
   void encode_pending(MonitorDBStore::Transaction *t);
   // we don't require full versions; don't encode any.
