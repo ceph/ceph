@@ -50,6 +50,20 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_inf
   bufferlist bl;
   info.encode(bl);
   int ret;
+  RGWObjVersionTracker ot;
+
+  if (objv_tracker) {
+    ot = *objv_tracker;
+  }
+
+  if (ot.write_version.tag.empty()) {
+    if (ot.read_version.tag.empty()) {
+      ot.generate_new_write_ver(store->ctx());
+    } else {
+      ot.write_version = ot.read_version;
+      ot.write_version.ver++;
+    }
+  }
 
   map<string, RGWAccessKey>::iterator iter;
   for (iter = info.swift_keys.begin(); iter != info.swift_keys.end(); ++iter) {
@@ -91,7 +105,7 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_inf
   ::encode(ui, data_bl);
   ::encode(info, data_bl);
 
-  ret = store->meta_mgr->put_entry(user_meta_handler, info.user_id, data_bl, exclusive, objv_tracker);
+  ret = store->meta_mgr->put_entry(user_meta_handler, info.user_id, data_bl, exclusive, &ot);
   if (ret < 0)
     return ret;
 
@@ -1757,9 +1771,7 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg)
     done = (m.size() < max_buckets);
   } while (!done);
 
-  RGWObjVersionTracker objv_tracker;
-
-  ret = rgw_delete_user(store, user_info, objv_tracker);
+  ret = rgw_delete_user(store, user_info, op_state.objv);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to remove user from RADOS");
     return ret;
@@ -2273,7 +2285,7 @@ public:
 
     RGWUserInfo old_info;
     int ret = rgw_get_user_info_by_uid(store, entry, old_info, &objv_tracker);
-    if (ret < 0)
+    if (ret < 0 && ret != -ENOENT)
       return ret;
 
 
