@@ -114,6 +114,10 @@ int RGWMetadataLog::list_entries(void *handle,
                                  max_entries, entries, ctx->marker, truncated);
   if ((ret < 0) && (ret != -ENOENT))
     return ret;
+
+  if (ret == -ENOENT)
+    *truncated = false;
+
   return 0;
 }
 
