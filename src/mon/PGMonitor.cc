@@ -1129,7 +1129,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
   }
 
   string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("json"));
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(new_formatter(format));
 
   if (prefix == "pg stat") {
@@ -1192,7 +1192,6 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     r = 0;
   } else if (prefix == "pg dump_stuck") {
     vector<string> stuckop_vec;
-    string format;
     cmd_getval(g_ceph_context, cmdmap, "stuckops", stuckop_vec);
     if (stuckop_vec.empty())
       stuckop_vec.push_back("unclean");
@@ -1200,8 +1199,8 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     cmd_getval(g_ceph_context, cmdmap, "threshold", threshold,
 	       int64_t(g_conf->mon_pg_stuck_threshold));
 
-    r = dump_stuck_pg_stats(f.get(), (int)threshold, stuckop_vec);
-    f->flush(ds);
+    boost::scoped_ptr<Formatter> f(new_formatter("json"));
+    r = dump_stuck_pg_stats(ds, f.get(), (int)threshold, stuckop_vec);
     ss << "ok";
     r = 0;
   } else if (prefix == "pg map") {
@@ -1574,13 +1573,11 @@ void PGMonitor::check_full_osd_health(list<pair<health_status_t,string> >& summa
   }
 }
 
-int PGMonitor::dump_stuck_pg_stats(Formatter *f,
+int PGMonitor::dump_stuck_pg_stats(stringstream &ds,
+				   Formatter *f,
 				   int threshold,
 				   vector<string>& args) const
 {
-  string val;
-  ostringstream err;
-
   PGMap::StuckPG stuck_type;
   string type = args[0];
   if (type == "inactive")
@@ -1593,7 +1590,12 @@ int PGMonitor::dump_stuck_pg_stats(Formatter *f,
   utime_t now(ceph_clock_now(g_ceph_context));
   utime_t cutoff = now - utime_t(threshold, 0);
 
-  pg_map.dump_stuck(f, stuck_type, cutoff);
+  if (!f) {
+    pg_map.dump_stuck_plain(ds, stuck_type, cutoff);
+  } else {
+    pg_map.dump_stuck(f, stuck_type, cutoff);
+    f->flush(ds);
+  }
 
   return 0;
 }
