@@ -1795,6 +1795,7 @@ public:
   virtual void on_flushed() = 0;
   virtual void on_shutdown() = 0;
   virtual void check_blacklisted_watchers() = 0;
+  virtual void get_watchers(std::list<obj_watch_item_t>&) = 0;
 };
 
 ostream& operator<<(ostream& out, const PG& pg);

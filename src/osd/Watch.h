@@ -200,6 +200,7 @@ public:
   uint64_t get_cookie() const { return cookie; }
   entity_name_t get_entity() const { return entity; }
   entity_addr_t get_peer_addr() const { return addr; }
+  uint32_t get_timeout() const { return timeout; }
 
   /// Generates context for use if watch timeout is delayed by scrub or recovery
   Context *get_delayed_cb();
