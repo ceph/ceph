@@ -1,25 +1,27 @@
-====================
- RADOS Object Store
-====================
+======================
+ Ceph Storage Cluster
+======================
 
-Ceph's :abbr:`RADOS (Reliable Autonomic Distributed Object Store)` Object Store
-is the foundation for all Ceph clusters. When you use object store clients such
-as the CephFS filesystem, the RESTful Gateway or Ceph block devices, Ceph reads
-data from and writes data to the object store. Ceph's RADOS Object Stores
-consist of two types of daemons: Object Storage Daemons (OSDs) store data as
-objects on storage nodes; and Monitors maintain a master copy of the cluster
-map. A Ceph cluster may contain thousands of storage nodes. A minimal system 
-will have at least two OSDs for data replication. 
+The :term:`Ceph Storage Cluster` is the foundation for all Ceph deployments.
+Based upon :abbr:`RADOS (Reliable Autonomic Distributed Object Store)`, Ceph
+Storage Clusters consist of two types of daemons: a :term:`Ceph OSD Daemon`
+(OSD) stores data as objects on a storage node; and a :term:`Ceph Monitor`
+maintains a master copy of the cluster map. A Ceph Storage Cluster may contain
+thousands of storage nodes. A minimal system will have at least one 
+Ceph Monitor and two Ceph OSD Daemons for data replication. 
+
+The Ceph Filesystem, Ceph Object Storage and Ceph Block Devices read data from
+and write data to the Ceph Storage Cluster.
 
 .. raw:: html
 
 	<style type="text/css">div.body h3{margin:5px 0px 0px 0px;}</style>
 	<table cellpadding="10"><colgroup><col width="33%"><col width="33%"><col width="33%"></colgroup><tbody valign="top"><tr><td><h3>Config and Deploy</h3>
 
-Once you have installed Ceph packages, you must configure. There are a  a few
-required settings, but most configuration settings have default  values.
-Following the initial configuration, you must deploy Ceph. Deployment consists
-of creating and initializing data directories,  keys, etc. 
+Ceph Storage Clusters have a few required settings, but most configuration
+settings have default values. A typical deployment uses a deployment tool 
+to define a cluster and bootstrap a monitor. See `Deployment`_ for details 
+on ``ceph-deploy.``
 
 .. toctree::
 	:maxdepth: 2
@@ -31,7 +33,8 @@ of creating and initializing data directories,  keys, etc.
 
 	</td><td><h3>Operations</h3>
 
-Once you have a deployed Ceph cluster, you may begin operating your cluster.
+Once you have a deployed a Ceph Storage Cluster, you may begin operating 
+your cluster.
 
 .. toctree::
 	:maxdepth: 2
@@ -54,9 +57,9 @@ Once you have a deployed Ceph cluster, you may begin operating your cluster.
 
 	</td><td><h3>APIs</h3>
 
-Most Ceph deployments use Ceph `block devices`_, the `gateway`_ and/or the
-`CephFS filesystem`_. You  may also develop applications that talk directly to
-the Ceph object store.
+Most Ceph deployments use `Ceph Block Devices`_, `Ceph Object Storage`_ and/or the
+`Ceph Filesystem`_. You  may also develop applications that talk directly to
+the Ceph Storage Cluster.
 
 .. toctree::
 	:maxdepth: 2
@@ -67,6 +70,7 @@ the Ceph object store.
 
 	</td></tr></tbody></table>
 
-.. _block devices: ../rbd/rbd
-.. _CephFS filesystem: ../cephfs/
-.. _gateway: ../radosgw/
+.. _Ceph Block Devices: ../rbd/rbd
+.. _Ceph Filesystem: ../cephfs/
+.. _Ceph Object Storage: ../radosgw/
+.. _Deployment: ../rados/deployment/
