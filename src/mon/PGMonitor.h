@@ -128,7 +128,7 @@ private:
    *
    * @return 0 on success, negative error code on failure
    */
-  int dump_stuck_pg_stats(Formatter *f,
+  int dump_stuck_pg_stats(stringstream &ds, Formatter *f,
 			  int threshold,
 			  vector<string>& args) const;
 
