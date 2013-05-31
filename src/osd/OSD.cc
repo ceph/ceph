@@ -1393,6 +1393,8 @@ int OSD::shutdown()
 
   osd_lock.Lock();
 
+  reset_heartbeat_peers();
+
   tick_timer.shutdown();
 
   // note unmount epoch
