@@ -1,6 +1,6 @@
-===============
- Block Devices
-===============
+===================
+ Ceph Block Device
+===================
 
 A block is a sequence of bytes (for example, a 512-byte block of data).
 Block-based storage interfaces are the most common way to store data with
