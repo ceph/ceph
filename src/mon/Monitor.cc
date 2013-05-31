@@ -521,12 +521,11 @@ void Monitor::init_paxos()
   paxos->init();
 
   // update paxos
-  if (paxos->is_consistent())
+  if (paxos->is_consistent()) {
     refresh_from_paxos(NULL);
 
-  // init services
-  for (int i = 0; i < PAXOS_NUM; ++i) {
-    if (paxos->is_consistent()) {
+    // init services
+    for (int i = 0; i < PAXOS_NUM; ++i) {
       paxos_service[i]->init();
     }
   }
