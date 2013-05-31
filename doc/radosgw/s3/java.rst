@@ -28,6 +28,31 @@ classes to be imported:
 	import com.amazonaws.services.s3.model.S3ObjectSummary;
 
 
+If you are just testing the Ceph Object Storage services, consider
+using HTTP protocol instead of HTTPS protocol. 
+
+First, import the ``ClientConfiguration`` and ``Protocol`` classes. 
+
+.. code-block:: java
+
+	import com.amazonaws.ClientConfiguration;
+	import com.amazonaws.Protocol;
+
+
+Then, define the client configuration, and add the client configuration
+as an argument for the S3 client.
+
+.. code-block:: java
+
+	AWSCredentials credentials = new BasicAWSCredentials(accessKey, secretKey);
+			 	
+	ClientConfiguration clientConfig = new ClientConfiguration();
+	clientConfig.setProtocol(Protocol.HTTP);
+			
+	AmazonS3 conn = new AmazonS3Client(credentials, clientConfig);
+	conn.setEndpoint("endpoint.com");
+
+
 Creating a Connection
 ---------------------
 
