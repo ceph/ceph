@@ -772,7 +772,7 @@ def mdsids():
         l.append(mdsdict['name'])
     return l
 
-def parse_cmdargs(args=None, target='', first=False):
+def parse_cmdargs(args=None, target=''):
     # alias: let the line-wrapping be sane
     AP = argparse.ArgumentParser
 
@@ -830,53 +830,59 @@ def parse_cmdargs(args=None, target='', first=False):
     # returns a Namespace with the parsed args, and a list of all extras
     parsed_args, extras = parser.parse_known_args(args)
 
-    # handle help ourselves, here and now
-    if (not first) and (parsed_args.help or parsed_args.help_all):
+    return parser, parsed_args, extras
 
-        def help_for_target(target):
-            ret, outbuf, outs = json_command(target=target,
-                                             prefix='get_command_descriptions')
-            if ret:
-                print >> sys.stderr, \
-                    "couldn't get command descriptions for {0}: {1}".\
-                    format(target, outs)
-            else:
-                sys.stdout.write(format_help(parse_json_funcsigs(outbuf)))
+def do_help(parser, help_all = False):
+    """
+    Print basic parser help
+    If the cluster is available:
+        get and print monitor help; 
+        if help_all, print help for daemon commands as well 
+    """
 
-        parser.print_help()
-        print '\n'
+    def help_for_target(target):
+        ret, outbuf, outs = json_command(target=target,
+                                         prefix='get_command_descriptions')
+        if ret:
+            print >> sys.stderr, \
+                "couldn't get command descriptions for {0}: {1}".\
+                format(target, outs)
+        else:
+            sys.stdout.write(format_help(parse_json_funcsigs(outbuf)))
+
+    parser.print_help()
+    print '\n'
+    if (cluster):
         help_for_target(target=('mon', ''))
 
-        if parsed_args.help_all:
-            # try/except in case there are no daemons of that type
-            try:
-                firstosd = osdids()[0]
-                print '\nOSD.{0} tell commands and pg pgid commands:\n\n'.\
-                    format(firstosd)
-                help_for_target(target=('osd', osdids()[0]))
+    if help_all and cluster:
+        # try/except in case there are no daemons of that type
+        try:
+            firstosd = osdids()[0]
+            print '\nOSD.{0} tell commands and pg pgid commands:\n\n'.\
+                format(firstosd)
+            help_for_target(target=('osd', osdids()[0]))
 
-                print '\nOSD daemon commands:\n\n'
-                sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'osd.' + firstosd), ['get_command_descriptions']))))
-            except:
-                pass
+            print '\nOSD daemon commands:\n\n'
+            sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'osd.' + firstosd), ['get_command_descriptions']))))
+        except:
+            pass
 
-            try:
-                firstmon = monids()[0]
-                print '\nmon.{0} daemon commands:\n\n'.format(firstmon)
-                sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'mon.' + firstmon), ['get_command_descriptions']))))
-            except:
-                pass
+        try:
+            firstmon = monids()[0]
+            print '\nmon.{0} daemon commands:\n\n'.format(firstmon)
+            sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'mon.' + firstmon), ['get_command_descriptions']))))
+        except:
+            pass
 
-            try:
-                firstmds = mdsids()[0]
-                print '\nmds.{0} daemon commands:\n\n'.format(firstmds)
-                sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'mds.' + firstmds), ['get_command_descriptions']))))
-            except:
-                pass
+        try:
+            firstmds = mdsids()[0]
+            print '\nmds.{0} daemon commands:\n\n'.format(firstmds)
+            sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'mds.' + firstmds), ['get_command_descriptions']))))
+        except:
+            pass
 
-        sys.exit(0)
-
-    return parsed_args, extras
+    return 0
 
 
 def descsort(sh1, sh2):
@@ -1177,7 +1183,7 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                 interactive_input = raw_input('ceph> ')
                 if interactive_input in ['q', 'quit', 'Q']:
                     return 0, '', ''
-                cmdargs = parse_cmdargs(interactive_input.split())[1]
+                cmdargs = parse_cmdargs(interactive_input.split())[2]
                 target = find_cmd_target(cmdargs)
                 valid_dict = validate_command(parsed_args, sigdict, cmdargs)
                 if valid_dict:
@@ -1293,7 +1299,7 @@ def complete(sigdict, args, target):
 
 def main():
 
-    parsed_args, childargs = parse_cmdargs(first=False)
+    parser, parsed_args, childargs = parse_cmdargs()
 
     global verbose
     verbose = parsed_args.verbose
@@ -1332,6 +1338,7 @@ def main():
     # handle any 'generic' ceph arguments that we didn't parse here
     global cluster
     cluster = rados.Rados(rados_id=name, conffile='')
+
     retargs = cluster.conf_parse_argv(childargs)
     #tmp = childargs
     childargs = retargs
@@ -1350,6 +1357,9 @@ def main():
     except:
         print >> sys.stderr, "connection to cluster timed out"
         return 1
+
+    if parsed_args.help or parsed_args.help_all:
+        return do_help(parser, parsed_args.help_all)
 
     # implement -w/--watch_*
     # This is ugly, but Namespace() isn't quite rich enough.
