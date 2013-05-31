@@ -4181,6 +4181,38 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
 
 // -------------------------------------------------------
 
+void ReplicatedPG::get_watchers(list<obj_watch_item_t> &pg_watchers)
+{
+  for (map<hobject_t, ObjectContext*>::iterator i = object_contexts.begin();
+       i != object_contexts.end();
+       ++i) {
+    i->second->get();
+    get_obc_watchers(i->second, pg_watchers);
+    put_object_context(i->second);
+  }
+}
+
+void ReplicatedPG::get_obc_watchers(ObjectContext *obc, list<obj_watch_item_t> &pg_watchers)
+{
+  for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator j =
+	 obc->watchers.begin();
+	j != obc->watchers.end();
+	++j) {
+    obj_watch_item_t owi;
+
+    owi.obj = obc->obs.oi.soid;
+    owi.wi.addr = j->second->get_peer_addr();
+    owi.wi.name = j->second->get_entity();
+    owi.wi.cookie = j->second->get_cookie();
+    owi.wi.timeout_seconds = j->second->get_timeout();
+
+    dout(30) << "watch: Found oid=" << owi.obj << " addr=" << owi.wi.addr
+      << " name=" << owi.wi.name << " cookie=" << owi.wi.cookie << dendl;
+
+    pg_watchers.push_back(owi);
+  }
+}
+
 void ReplicatedPG::check_blacklisted_watchers()
 {
   dout(20) << "ReplicatedPG::check_blacklisted_watchers for pg " << get_pgid() << dendl;

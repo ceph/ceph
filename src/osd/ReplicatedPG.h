@@ -451,6 +451,8 @@ protected:
   void populate_obc_watchers(ObjectContext *obc);
   void check_blacklisted_obc_watchers(ObjectContext *);
   void check_blacklisted_watchers();
+  void get_watchers(list<obj_watch_item_t> &pg_watchers);
+  void get_obc_watchers(ObjectContext *obc, list<obj_watch_item_t> &pg_watchers);
 public:
   void handle_watch_timeout(WatchRef watch);
 protected:

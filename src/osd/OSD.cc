@@ -1025,6 +1025,48 @@ bool OSD::asok_command(string command, string args, ostream& ss)
     }
     f.close_section(); //blacklist
     f.flush(ss);
+  } else if (command == "dump_watchers") {
+    list<obj_watch_item_t> watchers;
+    osd_lock.Lock();
+    // scan pg's
+    for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
+	 it != pg_map.end();
+	 ++it) {
+
+      list<obj_watch_item_t> pg_watchers;
+      PG *pg = it->second;
+      pg->lock();
+      pg->get_watchers(pg_watchers);
+      pg->unlock();
+      watchers.splice(watchers.end(), pg_watchers);
+    }
+    osd_lock.Unlock();
+
+    JSONFormatter f(true);
+    f.open_array_section("watchers");
+    for (list<obj_watch_item_t>::iterator it = watchers.begin();
+	it != watchers.end(); ++it) {
+
+      f.open_array_section("watch");
+
+      f.dump_string("object", it->obj.oid.name);
+
+      f.open_object_section("entity_name");
+      it->wi.name.dump(&f);
+      f.close_section(); //entity_name_t
+
+      f.dump_int("cookie", it->wi.cookie);
+      f.dump_int("timeout", it->wi.timeout_seconds);
+
+      f.open_object_section("entity_addr_t");
+      it->wi.addr.dump(&f);
+      f.close_section(); //entity_addr_t
+
+      f.close_section(); //watch
+    }
+
+    f.close_section(); //watches
+    f.flush(ss);
   } else {
     assert(0 == "broken asok registration");
   }
@@ -1177,6 +1219,9 @@ int OSD::init()
   assert(r == 0);
   r = admin_socket->register_command("dump_blacklist", asok_hook,
 				     "dump_blacklist");
+  assert(r == 0);
+  r = admin_socket->register_command("dump_watchers", asok_hook,
+				     "dump_watchers");
   assert(r == 0);
 
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
@@ -1377,6 +1422,7 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("dump_historic_ops");
   cct->get_admin_socket()->unregister_command("dump_op_pq_state");
   cct->get_admin_socket()->unregister_command("dump_blacklist");
+  cct->get_admin_socket()->unregister_command("dump_watchers");
   delete asok_hook;
   asok_hook = NULL;
 
