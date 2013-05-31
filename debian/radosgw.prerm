@@ -5,8 +5,8 @@ set -e
 
 case "$1" in
     remove)
-	stop ceph-all || true
-	invoke-rc.d ceph stop || {
+	stop radosgw-all || true
+	invoke-rc.d radosgw stop || {
 	    RESULT=$?
 	    if [ $RESULT != 100 ]; then
 		exit $RESULT
