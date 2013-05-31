@@ -11,7 +11,7 @@ tasks:
 - ssh_keys:
 - ceph-deploy:
      branch:
-	stable: cuttlefish
+        stable: cuttlefish
 - ceph-fuse:
 - workunit:
      clients:
