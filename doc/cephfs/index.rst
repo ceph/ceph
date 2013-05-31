@@ -1,11 +1,11 @@
-=========
- Ceph FS
-=========
+=================
+ Ceph Filesystem
+=================
 
-The :term:`Ceph FS` file system is a POSIX-compliant file system that uses a
-Ceph Storage Cluster to store its data. Ceph FS uses the same Ceph Storage
-Cluster system as Ceph Block Devices, Ceph Object Storage with its S3 and Swift
-APIs, or native bindings (librados).
+The :term:`Ceph Filesystem` (Ceph FS) is a POSIX-compliant filesystem that uses
+a Ceph Storage Cluster to store its data. The Ceph filesystem uses the same Ceph
+Storage Cluster system as Ceph Block Devices, Ceph Object Storage with its S3
+and Swift APIs, or native bindings (librados).
 
 
 .. ditaa::
@@ -26,8 +26,8 @@ APIs, or native bindings (librados).
             +---------------+ +---------------+ +---------------+
 
 
-Using Ceph FS requires at least one :term:`Ceph Metadata Server` in your
-Ceph Storage Cluster.
+Using the Ceph Filesystem requires at least one :term:`Ceph Metadata Server` in
+your Ceph Storage Cluster.
 
 
 
@@ -36,8 +36,8 @@ Ceph Storage Cluster.
 	<style type="text/css">div.body h3{margin:5px 0px 0px 0px;}</style>
 	<table cellpadding="10"><colgroup><col width="33%"><col width="33%"><col width="33%"></colgroup><tbody valign="top"><tr><td><h3>Step 1: Metadata Server</h3>
 
-To run Ceph FS, you must have a running Ceph Storage Cluster with at least
-one :term:`Ceph Metadata Server` running.
+To run the Ceph Filesystem, you must have a running Ceph Storage Cluster with at
+least one :term:`Ceph Metadata Server` running.
 
 
 .. toctree:: 
@@ -53,7 +53,7 @@ one :term:`Ceph Metadata Server` running.
 	</td><td><h3>Step 2: Mount Ceph FS</h3>
 
 Once you have a healthy Ceph Storage Cluster with at least
-one Ceph Metadata Server, you may mount your Ceph FS filesystem.
+one Ceph Metadata Server, you may mount your Ceph Filesystem.
 Ensure that you client has network connectivity and the proper
 authentication keyring.
 
