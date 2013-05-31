@@ -518,6 +518,7 @@ void Monitor::init_paxos()
   // update paxos
   for (int i = 0; i < PAXOS_NUM; ++i) {
     if (paxos->is_consistent()) {
+      paxos_service[i]->update_cached_versions();
       paxos_service[i]->update_from_paxos();
     }
   }
@@ -3321,6 +3322,7 @@ bool Monitor::_ms_dispatch(Message *m)
 	if (paxos->is_active()) {
 	  vector<PaxosService*>::iterator service_it = paxos_service.begin();
 	  for ( ; service_it != paxos_service.end(); ++service_it)
+            (*service_it)->update_cached_versions();
 	    (*service_it)->update_from_paxos();
 	}
       }
