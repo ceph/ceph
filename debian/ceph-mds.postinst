@@ -21,7 +21,7 @@ set -e
 
 case "$1" in
     configure)
-	start ceph-mds-all || true
+	[ -x /sbin/start ] && start ceph-mds-all || :
     ;;
     abort-upgrade|abort-remove|abort-deconfigure)
 	:
