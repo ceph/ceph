@@ -3526,7 +3526,7 @@ void MDCache::rejoin_send_rejoins()
   if (mds->is_rejoin()) {
     for (map<inodeno_t,map<client_t,ceph_mds_cap_reconnect> >::iterator p = cap_exports.begin();
          p != cap_exports.end();
-	 p++) {
+	 ++p) {
       assert(cap_export_targets.count(p->first));
       rejoins[cap_export_targets[p->first]]->cap_exports[p->first] = p->second;
     }
@@ -4972,7 +4972,7 @@ bool MDCache::process_imported_caps()
   } else {
     for (map<inodeno_t,map<client_t,ceph_mds_cap_reconnect> >::iterator q = cap_exports.begin();
 	 q != cap_exports.end();
-	 q++) {
+	 ++q) {
       for (map<client_t,ceph_mds_cap_reconnect>::iterator r = q->second.begin();
 	   r != q->second.end();
 	   ++r) {
