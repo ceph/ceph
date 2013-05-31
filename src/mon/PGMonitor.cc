@@ -149,7 +149,7 @@ void PGMonitor::create_initial()
   dout(10) << "create_initial -- creating initial map" << dendl;
 }
 
-void PGMonitor::update_from_paxos()
+void PGMonitor::update_from_paxos(bool *need_bootstrap)
 {
   version_t version = get_version();
   if (version == pg_map.version)
