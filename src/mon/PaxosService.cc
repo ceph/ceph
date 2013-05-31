@@ -44,6 +44,18 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
     return true;
   }
 
+  // make sure the client is still connected.  note that a proxied
+  // connection will be disconnected with a null message; don't drop
+  // those.  also ignore loopback (e.g., log) messages.
+  if (!m->get_connection()->is_connected() &&
+      m->get_connection() != mon->messenger->get_loopback_connection() &&
+      m->get_connection()->get_messenger() != NULL) {
+    dout(10) << " discarding message from disconnected client "
+	     << m->get_source_inst() << " " << *m << dendl;
+    m->put();
+    return true;
+  }
+
   // make sure our map is readable and up to date
   if (!is_readable(m->version)) {
     dout(10) << " waiting for paxos -> readable (v" << m->version << ")" << dendl;
