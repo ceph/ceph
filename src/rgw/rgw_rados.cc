@@ -19,6 +19,7 @@
 #include "cls/refcount/cls_refcount_client.h"
 #include "cls/version/cls_version_client.h"
 #include "cls/log/cls_log_client.h"
+#include "cls/lock/cls_lock_client.h"
 
 #include "rgw_tools.h"
 
@@ -57,7 +58,7 @@ static string region_info_oid_prefix = "region_info.";
 
 static string default_region_info_oid = "default.region";
 static string region_map_oid = "region_map";
-
+static string rgw_log_lock_name = "rgw_process";
 
 static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 
@@ -1216,6 +1217,31 @@ int RGWRados::time_log_trim(const string& oid, utime_t& start_time, utime_t& end
   return cls_log_trim(io_ctx, oid, start_time, end_time);
 }
 
+int RGWRados::log_lock_exclusive(const string& oid, utime_t& duration, string& owner_id) {
+  librados::IoCtx io_ctx;
+
+  const char *log_pool = zone.log_pool.name.c_str();
+  int r = rados->ioctx_create(log_pool, io_ctx);
+  if (r < 0)
+    return r;
+  rados::cls::lock::Lock l(rgw_log_lock_name);
+  l.set_duration(duration);
+  l.set_cookie(owner_id);
+  return l.lock_exclusive(&io_ctx, oid);
+}
+
+int RGWRados::log_unlock(const string& oid, string& owner_id) {
+  librados::IoCtx io_ctx;
+
+  const char *log_pool = zone.log_pool.name.c_str();
+  int r = rados->ioctx_create(log_pool, io_ctx);
+  if (r < 0)
+    return r;
+  rados::cls::lock::Lock l(rgw_log_lock_name);
+  l.set_cookie(owner_id);
+  return l.unlock(&io_ctx, oid);
+}
+
 int RGWRados::decode_policy(bufferlist& bl, ACLOwner *owner)
 {
   bufferlist::iterator i = bl.begin();
@@ -1713,7 +1739,7 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
     index_tag = state->write_tag;
   }
 
-  r = prepare_update_index(NULL, bucket, obj, index_tag);
+  r = prepare_update_index(NULL, bucket, CLS_RGW_OP_ADD, obj, index_tag);
   if (r < 0)
     return r;
 
@@ -2376,7 +2402,7 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj)
   bool ret_not_existed = (state && !state->exists);
 
   string tag;
-  r = prepare_update_index(state, bucket, obj, tag);
+  r = prepare_update_index(state, bucket, CLS_RGW_OP_DEL, obj, tag);
   if (r < 0)
     return r;
   cls_refcount_put(op, tag, true);
@@ -2945,7 +2971,7 @@ done_err:
 }
 
 int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
-                                   rgw_obj& obj, string& tag)
+                                   RGWModifyOp op, rgw_obj& obj, string& tag)
 {
   if (bucket_is_system(bucket))
     return 0;
@@ -2967,7 +2993,7 @@ int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
       append_rand_alpha(cct, tag, tag, 32);
     }
   }
-  ret = cls_obj_prepare_op(bucket, CLS_RGW_OP_ADD, tag,
+  ret = cls_obj_prepare_op(bucket, op, tag,
                                obj.object, obj.key);
 
   return ret;
@@ -3101,7 +3127,7 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
   int ret;
 
   if (update_index) {
-    ret = prepare_update_index(state, bucket, dst_obj, tag);
+    ret = prepare_update_index(state, bucket, CLS_RGW_OP_ADD, dst_obj, tag);
     if (ret < 0)
       goto done;
   }
