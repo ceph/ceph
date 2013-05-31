@@ -644,7 +644,8 @@ int main(int argc, char **argv)
   int max_entries = -1;
   int system = false;
   bool system_specified = false;
-  int shard_id = 0;
+  int shard_id = -1;
+  bool specified_shard_id = false;
 
   std::string val;
   std::ostringstream errs;
@@ -714,6 +715,7 @@ int main(int argc, char **argv)
       end_date = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--shard-id", (char*)NULL)) {
       shard_id = atoi(val.c_str());
+      specified_shard_id = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--access", (char*)NULL)) {
       access = val;
       perm_mask = rgw_str_to_perm(access.c_str());
@@ -1756,9 +1758,6 @@ next:
   }
 
   if (opt_cmd == OPT_MDLOG_LIST) {
-    void *handle;
-    list<cls_log_entry> entries;
-
     utime_t start_time, end_time;
 
     int ret = parse_date_str(start_date, start_time);
@@ -1769,26 +1768,39 @@ next:
     if (ret < 0)
       return -ret;
 
-    RGWMetadataLog *meta_log = store->meta_mgr->get_log();
 
-    meta_log->init_list_entries(shard_id, start_time, end_time, &handle);
-
-    bool truncated;
+    int i = (specified_shard_id ? shard_id : 0);
 
     formatter->open_array_section("entries");
-    do {
-      int ret = meta_log->list_entries(handle, 1000, entries, &truncated);
-      if (ret < 0) {
-        cerr << "ERROR: meta_log->list_entries(): " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
+    for (; i < g_ceph_context->_conf->rgw_md_log_max_shards; i++) {
+      RGWMetadataLog *meta_log = store->meta_mgr->get_log();
+      void *handle;
+      list<cls_log_entry> entries;
 
-      for (list<cls_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
-        cls_log_entry& entry = *iter;
-        store->meta_mgr->dump_log_entry(entry, formatter);
-      }
-      formatter->flush(cout);
-    } while (truncated);
+
+      meta_log->init_list_entries(i, start_time, end_time, &handle);
+
+      bool truncated;
+      do {
+        int ret = meta_log->list_entries(handle, 1000, entries, &truncated);
+        if (ret < 0) {
+          cerr << "ERROR: meta_log->list_entries(): " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+
+        for (list<cls_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+          cls_log_entry& entry = *iter;
+          store->meta_mgr->dump_log_entry(entry, formatter);
+        }
+        formatter->flush(cout);
+      } while (truncated);
+
+      meta_log->complete_list_entries(handle);
+
+      if (specified_shard_id)
+        break;
+    }
+  
 
     formatter->close_section();
     formatter->flush(cout);
@@ -1796,6 +1808,11 @@ next:
 
   if (opt_cmd == OPT_MDLOG_TRIM) {
     utime_t start_time, end_time;
+
+    if (!specified_shard_id) {
+      cerr << "ERROR: shard-id must be specified for trim operation" << std::endl;
+      return EINVAL;
+    }
 
     int ret = parse_date_str(start_date, start_time);
     if (ret < 0)
