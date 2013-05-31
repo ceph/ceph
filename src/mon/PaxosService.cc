@@ -24,11 +24,12 @@
 
 #define dout_subsys ceph_subsys_paxos
 #undef dout_prefix
-#define dout_prefix _prefix(_dout, mon, paxos, service_name)
-static ostream& _prefix(std::ostream *_dout, Monitor *mon, Paxos *paxos, string service_name) {
+#define dout_prefix _prefix(_dout, mon, paxos, service_name, get_first_committed(), get_last_committed())
+static ostream& _prefix(std::ostream *_dout, Monitor *mon, Paxos *paxos, string service_name,
+			version_t fc, version_t lc) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name()
-		<< ").paxosservice(" << service_name << ") ";
+		<< ").paxosservice(" << service_name << " " << fc << ".." << lc << ") ";
 }
 
 bool PaxosService::dispatch(PaxosServiceMessage *m)
@@ -254,9 +255,6 @@ void PaxosService::_active()
     return;
   }
   dout(10) << "_active" << dendl;
-
-  // pull latest from paxos
-  refresh();
 
   scrub();
 
