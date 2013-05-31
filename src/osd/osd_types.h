@@ -2112,6 +2112,11 @@ struct watch_item_t {
 };
 WRITE_CLASS_ENCODER(watch_item_t)
 
+struct obj_watch_item_t {
+  hobject_t obj;
+  watch_item_t wi;
+};
+
 /**
  * obj list watch response format
  *
