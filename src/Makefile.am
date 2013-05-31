@@ -1497,6 +1497,7 @@ noinst_LIBRARIES += libos.a
 
 libosd_a_SOURCES = \
 	osd/PG.cc \
+	osd/PGLog.cc \
 	osd/ReplicatedPG.cc \
 	osd/Ager.cc \
 	osd/OSD.cc \
@@ -1993,6 +1994,7 @@ noinst_HEADERS = \
 	osd/OpRequest.h\
 	osd/SnapMapper.h\
         osd/PG.h\
+        osd/PGLog.h\
         osd/ReplicatedPG.h\
         osd/Watch.h\
         osd/osd_types.h\

@@ -32,7 +32,7 @@
 #include "os/FileStore.h"
 #include "common/perf_counters.h"
 #include "common/errno.h"
-#include "osd/PG.h"
+#include "osd/PGLog.h"
 #include "osd/OSD.h"
 
 namespace po = boost::program_options;
@@ -322,12 +322,12 @@ static void invalid_path(string &path)
 }
 
 int get_log(ObjectStore *fs, coll_t coll, pg_t pgid, const pg_info_t &info,
-   PG::IndexedLog &log, pg_missing_t &missing)
+   PGLog::IndexedLog &log, pg_missing_t &missing)
 { 
-  PG::OndiskLog ondisklog;
+  PGLog::OndiskLog ondisklog;
   try {
     ostringstream oss;
-    PG::read_log(fs, coll, log_oid, info, ondisklog, log, missing, oss);
+    PGLog::read_log(fs, coll, log_oid, info, ondisklog, log, missing, oss);
     if (debug && oss.str().size())
       cerr << oss.str() << std::endl;
   }
@@ -514,7 +514,7 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
 void write_log(ObjectStore::Transaction &t, pg_log_t &log)
 {
   map<eversion_t, hobject_t> divergent_priors;
-  PG::_write_log(t, log, log_oid, divergent_priors);
+  PGLog::write_log(t, log, log_oid, divergent_priors);
 }
 
 int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
@@ -666,7 +666,7 @@ void write_super()
 int do_export(ObjectStore *fs, coll_t coll, pg_t pgid, pg_info_t &info,
     epoch_t map_epoch, __u8 struct_ver)
 {
-  PG::IndexedLog log;
+  PGLog::IndexedLog log;
   pg_missing_t missing;
 
   int ret = get_log(fs, coll, pgid, info, log, missing);
@@ -913,7 +913,7 @@ int do_import(ObjectStore *store)
 {
   bufferlist ebl;
   pg_info_t info;
-  PG::IndexedLog log;
+  PGLog::IndexedLog log;
 
   uint64_t next_removal_seq = 0;	//My local seq
   finish_remove_pgs(store, &next_removal_seq);
@@ -1268,7 +1268,7 @@ int main(int argc, char **argv)
       formatter->flush(cout);
       cout << std::endl;
     } else if (type == "log") {
-      PG::IndexedLog log;
+      PGLog::IndexedLog log;
       pg_missing_t missing;
       ret = get_log(fs, coll, pgid, info, log, missing);
       if (ret > 0)
