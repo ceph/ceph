@@ -19,6 +19,12 @@ get_pg()
 	echo $pg
 }
 
+expect_false()
+{
+	set -x
+	if "$@"; then return 1; else return 0; fi
+}
+
 #
 # Assumes there are at least 3 MDSes and two OSDs
 #
@@ -31,7 +37,7 @@ ceph auth get-key client.xx
 ceph auth print-key client.xx
 ceph auth print_key client.xx
 ceph auth caps client.xx osd "allow rw"
-! (ceph auth get client.xx | grep caps | grep mon)
+expect_false "(ceph auth get client.xx | grep caps | grep mon)"
 ceph auth get client.xx | grep osd | grep "allow rw"
 ceph auth export | grep client.xx
 ceph auth export -o authfile
@@ -60,24 +66,24 @@ ceph health detail
 ceph health --format json-pretty
 ceph health detail --format xml-pretty
 
-ceph injectargs --debug_ms=1
-ceph injectargs --debug-ms=1
-! ceph injectargs debug_ms=1
+ceph injectargs -- --debug_ms=1
+ceph injectargs -- --debug-ms=1
+expect_false ceph injectargs -- debug_ms=1
 mymsg="this is a test log message $$.$(date)"
 ceph log "$mymsg"
 logfile=$(ceph-conf --name=mon.a --lookup log_file)
 grep "$mymsg" $logfile
 ceph mds cluster_down 2>&1 | grep "marked mdsmap DOWN"
-! ceph mds cluster_down
+expect_false ceph mds cluster_down
 ceph mds cluster_up 2>&1 | grep "unmarked mdsmap DOWN"
-! ceph mds cluster_up
+expect_false ceph mds cluster_up
 
 # XXX is this a reasonable test?
 ceph mds compat rm_incompat 5
-! ceph mds rm_compat 5
+expect_false ceph mds rm_compat 5
 
 ceph mds compat show
-! ceph mds deactivate 2
+expect_false ceph mds deactivate 2
 ceph mds dump
 # XXX mds fail, but how do you undo it?
 mdsmapfile=/tmp/mdsmap.$$
@@ -114,7 +120,7 @@ bl=192.168.0.1:0/1000
 ceph osd blacklist add $bl
 ceph osd blacklist ls | grep $bl
 ceph osd blacklist rm $bl
-! ceph osd blacklist ls | grep $bl
+expect_false "(ceph osd blacklist ls | grep $bl)"
 
 ceph osd crush tunables legacy
 ceph osd crush tunables bobtail
@@ -217,13 +223,13 @@ ceph -s
 ceph sync status | grep paxos_version
 
 ceph tell osd.0 version
-! ceph tell osd.9999 version 
-! ceph tell osd.foo version
+expect_false ceph tell osd.9999 version 
+expect_false ceph tell osd.foo version
 
 ceph tell osd.0 dump_pg_recovery_stats | grep Started
 
 ceph osd reweight 0 0.9
-! ceph osd reweight 0 -1
+expect_false ceph osd reweight 0 -1
 ceph osd reweight 0 1
 
 for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset; do
