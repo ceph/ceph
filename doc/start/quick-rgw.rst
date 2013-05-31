@@ -26,7 +26,7 @@ the following procedure:
 	sudo a2enmod fastcgi
 
 #. Add a line for the ``ServerName`` in the Apache configuration file 
-   (e.g., ``/etc/apache2/httpd.conf`` or ``/etc/apache2/apache2.conf). 
+   (e.g., ``/etc/apache2/httpd.conf`` or ``/etc/apache2/apache2.conf``). 
    Provide the fully qualified domain name of the server machine 
    (e.g., ``hostname -f``). ::
 
@@ -41,7 +41,7 @@ Install Ceph Object Storage
 ===========================
 
 Once you have installed and configured Apache and FastCGI, you may install
-Ceph Object Storage. ::
+the Ceph Object Storage daemon (``radosgw``). ::
 
 	sudo apt-get install radosgw
 
@@ -84,7 +84,6 @@ On the admin node, perform the following steps:
 	ceph-deploy --overwrite-conf config push {hostname}
 
 
-
 Create a Gateway Configuration File
 ===================================
 
@@ -102,6 +101,8 @@ follow the steps below to modify it (on your server node).
    
 #. Replace the ``{email.address}`` entry with the email address for the 
    server administrator.
+   
+#. Add a ``ServerAlias`` if you wish to use S3-style subdomains.
    
 #. Save the contents to the  ``/etc/apache2/sites-available`` directory on 
    the server machine.
@@ -177,7 +178,8 @@ for Apache on the server machine. ::
 
 	sudo a2enmod ssl
 
-Once you enable SSL, you should generate an SSL certificate. :: 
+Once you enable SSL, you should use a trusted SSL certificate. You can
+generate a non-trusted SSL certificate using the following:: 
 
 	sudo mkdir /etc/apache2/ssl
 	sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/apache2/ssl/apache.key -out /etc/apache2/ssl/apache.crt
@@ -185,6 +187,44 @@ Once you enable SSL, you should generate an SSL certificate. ::
 Then, restart Apache. ::
 
 	service apache2 restart
+
+
+Add Wildcard to DNS
+===================
+
+To use Ceph with S3-style subdomains (e.g., ``bucket-name.domain-name.com``),
+you need to add a wildcard to the DNS record of the DNS server you use with the
+``radosgw`` daemon.
+
+.. tip:: The address of the DNS must also be specified in the Ceph 
+   configuration file with the ``rgw dns name = {hostname}`` setting.
+
+For ``dnsmasq``, consider addding the following ``address`` setting with a dot
+(.) prepended to the host name:: 
+
+	address=/.{hostname-or-fqdn}/{host-ip-address}
+	address=/.ceph-node/192.168.0.1
+
+For ``bind``, consider adding the a wildcard to the DNS record::
+
+	$TTL	604800
+	@	IN	SOA	ceph-node. root.ceph-node. (
+				      2		; Serial
+				 604800		; Refresh
+				  86400		; Retry
+				2419200		; Expire
+				 604800 )	; Negative Cache TTL
+	;
+	@	IN	NS	ceph-node.
+	@	IN	A	192.168.122.113
+	*	IN	CNAME	@
+
+Restart your DNS server and ping your server with a subdomain to 
+ensure that your Ceph Object Store ``radosgw`` daemon can process
+the subdomain requests. :: 
+
+	ping mybucket.{fqdn}
+	ping mybucket.ceph-node
 
 
 Restart Services
@@ -296,9 +336,16 @@ RGW's ``user:subuser`` tuple maps to the ``tenant:user`` tuple expected by Swift
    `RGW Configuration`_ for Keystone integration details.
 
 
+Summary
+-------
+
+Once you have completed this Quick Start, you may use the Ceph Object Store
+tutorials. See the `S3-compatible`_ and `Swift-compatible`_ APIs for details.
 
 
 .. _Create rgw.conf: ../../radosgw/config/index.html#create-rgw-conf
 .. _Ceph Deploy Quick Start: ../quick-ceph-deploy
 .. _Ceph Object Storage Manual Install: ../../radosgw/manual-install
 .. _RGW Configuration: ../../radosgw/config
+.. _S3-compatible: ../../radosgw/s3
+.. _Swift-compatible: ../../radosgw/swift
