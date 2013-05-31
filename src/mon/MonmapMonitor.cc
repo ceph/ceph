@@ -56,45 +56,6 @@ void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
   dout(10) << __func__ << " version " << version
 	   << ", my v " << mon->monmap->epoch << dendl;
   
-  /* It becomes clear here that we used the stashed version as a consistency
-   * mechanism. Take the 'if' we use: if our latest committed version is
-   * greater than 0 (i.e., exists one), and this version is different from
-   * our stashed version, then we will take the stashed monmap as our owm.
-   * 
-   * This is cleary to address the case in which we have a failure during
-   * the old MonitorStore updates. If a stashed version exists and it has
-   * a grater value than the last committed version, it means something
-   * went awry, and we did stashed a version (either after updating paxos
-   * and before proposing a new value, or during paxos itself) but it
-   * never became the last committed (for instance, because the system failed
-   * in the mean time).
-   *
-   * We no longer need to address these concerns. We are using transactions
-   * now and it should be the Paxos applying them. If the Paxos applies a
-   * transaction with the value we proposed, then it will be consistent
-   * with the Paxos values themselves. No need to hack our way in the
-   * store and create stashed versions to handle inconsistencies that are
-   * addressed by our MonitorDBStore.
-   *
-   * NOTE: this is not entirely true for the remaining services. In this one,
-   * the MonmapMonitor, we don't keep incrementals and each version is a full
-   * monmap. In the remaining services however, we keep mostly incrementals and
-   * we used to stash full versions of each map/summary. We still do it. We
-   * just don't need to do it here. Just check the code below and compare it
-   * with the code further down the line where we 'get' the latest committed
-   * version: it's the same code.
-   *
-  version_t latest_full = get_version_latest_full();
-  if ((latest_full > 0) && (latest_full > mon->monmap->get_epoch())) {
-    bufferlist latest_bl;
-    int err = get_version_full(latest_full, latest_bl);
-    assert(err == 0);
-    dout(7) << __func__ << " loading latest full monmap v"
-	    << latest_full << dendl;
-    if (latest_bl.length() > 0)
-      mon->monmap->decode(latest_bl);
-  }
-   */
   if (need_bootstrap && version != mon->monmap->get_epoch()) {
     dout(10) << " signaling that we need a bootstrap" << dendl;
     *need_bootstrap = true;
