@@ -251,7 +251,7 @@ void PGLog::proc_replica_log(ObjectStore::Transaction& t,
  *
  * return true if entry is not divergent.
  */
-bool PGLog::merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe, pg_info_t& info, list<hobject_t>& remove_snap, bool &dirty_log)
+bool PGLog::merge_old_entry(ObjectStore::Transaction& t, const pg_log_entry_t& oe, const pg_info_t& info, list<hobject_t>& remove_snap, bool &dirty_log)
 {
   if (oe.soid > info.last_backfill) {
     dout(20) << "merge_old_entry  had " << oe << " : beyond last_backfill" << dendl;
