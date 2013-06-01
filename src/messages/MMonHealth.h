@@ -36,14 +36,11 @@ struct MMonHealth : public MMonQuorumService
   DataStats data_stats;
 
   MMonHealth() : MMonQuorumService(MSG_MON_HEALTH, HEAD_VERSION) { }
-  MMonHealth(uint32_t type) :
-    MMonQuorumService(MSG_MON_HEALTH, HEAD_VERSION),
-    service_type(type)
-  { }
-  MMonHealth(uint32_t type, int op) :
+  MMonHealth(uint32_t type, int op = 0) :
     MMonQuorumService(MSG_MON_HEALTH, HEAD_VERSION),
     service_type(type),
-    service_op(op)
+    service_op(op),
+    flags(0)
   { }
 
 private:
