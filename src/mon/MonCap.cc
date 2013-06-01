@@ -235,6 +235,7 @@ void MonCap::set_allow_all()
 {
   grants.clear();
   grants.push_back(MonCapGrant(MON_CAP_ANY));
+  text = "allow *";
 }
 
 bool MonCap::is_capable(CephContext *cct,
