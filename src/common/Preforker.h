@@ -76,12 +76,16 @@ public:
     return r;
   }
 
-  int exit(int r) {
+  int signal_exit(int r) {
     if (forked) {
       // tell parent
       (void)::write(fd[1], &r, sizeof(r));
     }
     return r;
+  }
+  void exit(int r) {
+    signal_exit(r);
+    exit(r);
   }
 
   void daemonize() {

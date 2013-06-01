@@ -544,6 +544,7 @@ int main(int argc, const char **argv)
     dout(0) << "ceph-mon: gmon.out should be in " << s << dendl;
   }
 
-  return prefork.exit(0);
+  prefork.signal_exit(0);
+  return 0;
 }
 
