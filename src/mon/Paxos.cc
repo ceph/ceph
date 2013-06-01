@@ -878,10 +878,7 @@ void Paxos::handle_lease(MMonPaxos *lease)
   mon->messenger->send_message(ack, lease->get_source_inst());
 
   // (re)set timeout event.
-  if (lease_timeout_event) 
-    mon->timer.cancel_event(lease_timeout_event);
-  lease_timeout_event = new C_LeaseTimeout(this);
-  mon->timer.add_event_after(g_conf->mon_lease_ack_timeout, lease_timeout_event);
+  reset_lease_timeout();
 
   // kick waiters
   finish_contexts(g_ceph_context, waiting_for_active);
@@ -934,6 +931,15 @@ void Paxos::lease_ack_timeout()
 
   lease_ack_timeout_event = 0;
   mon->bootstrap();
+}
+
+void Paxos::reset_lease_timeout()
+{
+  dout(20) << "reset_lease_timeout - setting timeout event" << dendl;
+  if (lease_timeout_event)
+    mon->timer.cancel_event(lease_timeout_event);
+  lease_timeout_event = new C_LeaseTimeout(this);
+  mon->timer.add_event_after(g_conf->mon_lease_ack_timeout, lease_timeout_event);
 }
 
 void Paxos::lease_timeout()
@@ -1103,6 +1109,9 @@ void Paxos::peon_init()
   state = STATE_RECOVERING;
   lease_expire = utime_t();
   dout(10) << "peon_init -- i am a peon" << dendl;
+
+  // start a timer, in case the leader never manages to issue a lease
+  reset_lease_timeout();
 
   // no chance to write now!
   finish_contexts(g_ceph_context, waiting_for_writeable, -EAGAIN);

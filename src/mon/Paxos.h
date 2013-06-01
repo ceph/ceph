@@ -956,6 +956,9 @@ private:
    */
   void lease_timeout();        // on peon, if lease isn't extended
 
+  /// restart the lease timeout timer
+  void reset_lease_timeout();
+
   /**
    * Cancel all of Paxos' timeout/renew events. 
    */
