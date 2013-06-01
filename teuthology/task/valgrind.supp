@@ -24,11 +24,27 @@
 	...
 }
 {
+	leveldb leaks a thread
+	Memcheck:Leak
+	...
+	fun:pthread_create*
+	...
+	fun:*leveldb*DB*Open*
+	...
+}
+{
 	leveldb leaks something else
 	Memcheck:Leak
 	...
 	fun:pthread_once
 	fun:*leveldb*InitOnce*
+	...
+}
+{
+	leveldb compaction crap
+	Memcheck:Leak
+	...
+	fun:*leveldb*DBImpl*BackgroundCompaction*
 	...
 }
 {
