@@ -64,7 +64,7 @@ public:
   const char *get_type_name() const { return "forward"; }
   void print(ostream& o) const {
     if (msg)
-      o << "forward(" << *msg << ") to leader";
+      o << "forward(" << *msg << " caps " << client_caps << ") to leader";
     else o << "forward(??? ) to leader";
   }
 };
