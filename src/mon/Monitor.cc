@@ -176,7 +176,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   config_key_service = ConfigKeyServiceRef(new ConfigKeyService(this, paxos));
 
   mon_caps = new MonCap();
-  mon_caps->parse("allow *", NULL);
+  bool r = mon_caps->parse("allow *", NULL);
+  assert(r);
 
   exited_quorum = ceph_clock_now(g_ceph_context);
 }
@@ -2943,6 +2944,7 @@ void Monitor::handle_forward(MForward *m)
     c->set_peer_type(m->client.name.type());
 
     s->caps = m->client_caps;
+    dout(10) << " caps are " << s->caps << dendl;
     s->proxy_con = m->get_connection()->get();
     s->proxy_tid = m->tid;
 
