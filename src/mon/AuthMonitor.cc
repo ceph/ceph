@@ -67,7 +67,6 @@ void AuthMonitor::tick()
 {
   if (!is_active()) return;
 
-  update_from_paxos();
   dout(10) << *this << dendl;
 
   if (!mon->is_leader()) return; 

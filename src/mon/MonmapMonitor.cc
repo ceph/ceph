@@ -476,7 +476,6 @@ bool MonmapMonitor::should_propose(double& delay)
 
 void MonmapMonitor::tick()
 {
-  update_from_paxos();
 }
 
 void MonmapMonitor::get_health(list<pair<health_status_t, string> >& summary,

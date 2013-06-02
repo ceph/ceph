@@ -1080,7 +1080,6 @@ void MDSMonitor::tick()
   // ...if i am an active leader
   if (!is_active()) return;
 
-  update_from_paxos();
   dout(10) << mdsmap << dendl;
   
   bool do_propose = false;
