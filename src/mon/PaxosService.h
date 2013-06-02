@@ -313,6 +313,8 @@ public:
    */
   bool dispatch(PaxosServiceMessage *m);
 
+  void refresh();
+
   /**
    * @defgroup PaxosService_h_override_funcs Functions that should be
    *					     overridden.
