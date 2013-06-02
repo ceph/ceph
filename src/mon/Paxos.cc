@@ -509,12 +509,12 @@ void Paxos::begin(bufferlist& v)
     // we're alone, take it easy
     commit();
     state = STATE_ACTIVE;
+    mon->refresh_from_paxos();
     finish_proposal();
     finish_contexts(g_ceph_context, waiting_for_active);
     finish_contexts(g_ceph_context, waiting_for_commit);
     finish_contexts(g_ceph_context, waiting_for_readable);
     finish_contexts(g_ceph_context, waiting_for_writeable);
-
     return;
   }
 
@@ -627,6 +627,8 @@ void Paxos::handle_accept(MMonPaxos *accept)
     // yay!
     state = STATE_ACTIVE;
     extend_lease();
+
+    mon->refresh_from_paxos();
   
     finish_proposal();
 
@@ -713,8 +715,10 @@ void Paxos::handle_commit(MMonPaxos *commit)
   }
 
   store_state(commit);
-  
+
   commit->put();
+
+  mon->refresh_from_paxos();
 
   finish_contexts(g_ceph_context, waiting_for_commit);
 }
