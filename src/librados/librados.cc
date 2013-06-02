@@ -1572,7 +1572,7 @@ extern "C" int rados_conf_parse_argv_remainder(rados_t cluster, int argc,
   conf->apply_changes(NULL);
   assert(args.size() <= (unsigned int)argc);
   unsigned int i;
-  for (i = 0; i < argc; ++i) {
+  for (i = 0; i < (unsigned int)argc; ++i) {
     if (i < args.size())
       remargv[i] = args[i];
     else
