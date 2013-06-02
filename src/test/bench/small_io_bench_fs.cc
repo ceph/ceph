@@ -125,8 +125,16 @@ int main(int argc, char **argv)
 
   FileStore fs(vm["filestore-path"].as<string>(),
 	       vm["journal-path"].as<string>());
-  fs.mkfs();
-  fs.mount();
+
+  if (fs.mkfs() < 0) {
+    cout << "mkfs failed" << std::endl;
+    return 1;
+  }
+
+  if (fs.mount() < 0) {
+    cout << "mount failed" << std::endl;
+    return 1;
+  }
 
   ostream *detailed_ops = 0;
   ofstream myfile;

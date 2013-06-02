@@ -615,6 +615,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
   bool need_issue = false;
 
   int loner_issued = 0, other_issued = 0, xlocker_issued = 0;
+  assert(!caps || in != NULL);
   if (caps && in->is_head()) {
     in->get_caps_issued(&loner_issued, &other_issued, &xlocker_issued,
 			lock->get_cap_shift(), lock->get_cap_mask());
@@ -2793,7 +2794,8 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
       dout(10) << " i want to change file_max, but lock won't allow it (yet)" << dendl;
       if (in->filelock.is_stable()) {
 	bool need_issue = false;
-	cap->inc_suppress();
+	if (cap)
+	  cap->inc_suppress();
 	if (in->mds_caps_wanted.empty() &&
 	    (in->get_loner() >= 0 || (in->get_wanted_loner() >= 0 && in->try_set_loner()))) {
 	  if (in->filelock.get_state() != LOCK_EXCL)
@@ -2802,7 +2804,8 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	  simple_lock(&in->filelock, &need_issue);
 	if (need_issue)
 	  issue_caps(in);
-	cap->dec_suppress();
+	if (cap)
+	  cap->dec_suppress();
       }
       if (!in->filelock.can_wrlock(client) &&
 	  !in->filelock.can_force_wrlock(client)) {
@@ -3463,11 +3466,13 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
       }
     }
     
-    if (lock->get_type() == CEPH_LOCK_IFILE &&
-	in->state_test(CInode::STATE_NEEDSRECOVER)) {
-      mds->mdcache->queue_file_recover(in);
-      mds->mdcache->do_file_recover();
-      gather++;
+    if (lock->get_type() == CEPH_LOCK_IFILE) {
+      assert(in);
+      if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
+        mds->mdcache->queue_file_recover(in);
+        mds->mdcache->do_file_recover();
+        gather++;
+      }
     }
     
     if (!gather && lock->is_dirty()) {
@@ -3601,11 +3606,13 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
     }
   }
 
-  if (lock->get_type() == CEPH_LOCK_IFILE &&
-      in->state_test(CInode::STATE_NEEDSRECOVER)) {
-    mds->mdcache->queue_file_recover(in);
-    mds->mdcache->do_file_recover();
-    gather++;
+  if (lock->get_type() == CEPH_LOCK_IFILE) {
+    assert(in);
+    if(in->state_test(CInode::STATE_NEEDSRECOVER)) {
+      mds->mdcache->queue_file_recover(in);
+      mds->mdcache->do_file_recover();
+      gather++;
+    }
   }
 
   if (lock->get_parent()->is_replicated() &&

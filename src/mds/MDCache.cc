@@ -496,6 +496,7 @@ void MDCache::_create_system_file_finish(Mutation *mut, CDentry *dn, version_t d
   CDir *dir = 0;
   if (in->inode.is_dir()) {
     dir = in->get_dirfrag(frag_t());
+    assert(dir);
     dir->mark_dirty(1, mut->ls);
     dir->mark_new(mut->ls);
   }
@@ -2126,6 +2127,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
   }
 
   // now, stick it in the blob
+  assert(parent);
   assert(parent->is_auth());
   blob->add_dir_context(parent);
   blob->add_dir(parent, true);
@@ -4011,6 +4013,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 	 p != weak->inode_scatterlocks.end();
 	 ++p) {
       CInode *in = get_inode(p->first);
+      assert(in);
       dout(10) << " including base inode (due to potential scatterlock update) " << *in << dendl;
       acked_inodes.insert(in->vino());
       ack->add_inode_base(in);
@@ -6625,9 +6628,10 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	} else {
 	  // which dirfrag for this dentry?
 	  CDir *dir = diri->get_dirfrag(diri->pick_dirfrag(p->first.first));
+	  assert(dir); 
 	  assert(dir->is_auth());
 	  dn = dir->lookup(p->first.first, p->first.second);
-	} 
+	}
 
 	if (!dn) 
 	  dout(0) << "  missing dentry for " << p->first.first << " snap " << p->first.second << " in " << *dir << dendl;

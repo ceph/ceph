@@ -414,11 +414,13 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	break;
 
       case IMPORT_LOGGINGSTART:
+	assert(dir);
 	dout(10) << "import state=loggingstart : reversing import on " << *dir << dendl;
 	import_reverse(dir);
 	break;
 
       case IMPORT_ACKING:
+	assert(dir);
 	// hrm.  make this an ambiguous import, and wait for exporter recovery to disambiguate
 	dout(10) << "import state=acking : noting ambiguous import " << *dir << dendl;
 	{
@@ -429,6 +431,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	break;
 	
       case IMPORT_ABORTING:
+	assert(dir);
 	dout(10) << "import state=aborting : ignoring repeat failure " << *dir << dendl;
 	break;
       }
@@ -2518,6 +2521,7 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
     }
     else if (icode == 'I') {
       // inode
+      assert(le);
       decode_import_inode(dn, blp, oldauth, ls, le->get_start_off(), cap_imports, updated_scatterlocks);
     }
     
