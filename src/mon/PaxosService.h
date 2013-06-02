@@ -197,7 +197,8 @@ public:
       first_committed_name("first_committed"),
       last_accepted_name("last_accepted"),
       mkfs_name("mkfs"),
-      full_version_name("full"), full_latest_name("latest")
+      full_version_name("full"), full_latest_name("latest"),
+      cached_first_committed(0), cached_last_committed(0)
   {
   }
 
@@ -469,6 +470,22 @@ public:
   const string mkfs_name;
   const string full_version_name;
   const string full_latest_name;
+  /**
+   * @}
+   */
+
+  /**
+   * @defgroup PaxosService_h_version_cache Variables holding cached values
+   *                                        for the most used versions (first
+   *                                        and last committed); we only have
+   *                                        to read them when the store is
+   *                                        updated, so in-between updates we
+   *                                        may very well use cached versions
+   *                                        and avoid the overhead.
+   * @{
+   */
+  version_t cached_first_committed;
+  version_t cached_last_committed;
   /**
    * @}
    */
@@ -874,13 +891,19 @@ public:
    *					the back store for reading purposes
    * @{
    */
+
+  /**
+   * @defgroup PaxosService_h_version_cache Obtain cached versions for this
+   *                                        service.
+   * @{
+   */
   /**
    * Get the first committed version
    *
    * @returns Our first committed version (that is available)
    */
   version_t get_first_committed() {
-    return mon->store->get(get_service_name(), first_committed_name);
+    return cached_first_committed;
   }
   /**
    * Get the last committed version
@@ -888,7 +911,7 @@ public:
    * @returns Our last committed version
    */
   version_t get_last_committed() {
-    return mon->store->get(get_service_name(), last_committed_name);
+    return cached_last_committed;
   }
   /**
    * Get our current version
@@ -898,6 +921,11 @@ public:
   version_t get_version() {
     return get_last_committed();
   }
+
+  /**
+   * @}
+   */
+
   /**
    * Get the contents of a given version @p ver
    *
