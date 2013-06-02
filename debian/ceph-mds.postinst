@@ -21,14 +21,7 @@ set -e
 
 case "$1" in
     configure)
-	invoke-rc.d ceph-mds-all start || {
-		RESULT=$?
-		# Ignore if ceph-mds-all upstart config does not
-		# exist or upstart is not in use
-		if [ $RESULT != 100 ]; then
-			exit $RESULT
-		fi
-	}
+	[ -x /sbin/start ] && start ceph-mds-all || :
     ;;
     abort-upgrade|abort-remove|abort-deconfigure)
 	:

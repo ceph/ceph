@@ -27,7 +27,7 @@ class StoreTool
 
   public:
   StoreTool(const string &path) {
-    LevelDBStore *db_ptr = new LevelDBStore(path);
+    LevelDBStore *db_ptr = new LevelDBStore(g_ceph_context, path);
     assert(!db_ptr->open(std::cerr));
     db.reset(db_ptr);
   }

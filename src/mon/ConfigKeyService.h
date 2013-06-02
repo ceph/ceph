@@ -14,9 +14,6 @@
 #ifndef CEPH_MON_CONFIG_KEY_SERVICE_H
 #define CEPH_MON_CONFIG_KEY_SERVICE_H
 
-#include <boost/intrusive_ptr.hpp>
-#include "include/assert.h"
-
 #include "mon/Monitor.h"
 #include "mon/QuorumService.h"
 
@@ -48,9 +45,6 @@ public:
     paxos(p)
   { }
   virtual ~ConfigKeyService() { }
-  ConfigKeyService *get() {
-    return static_cast<ConfigKeyService *>(RefCountedObject::get());
-  }
 
 
   /**
@@ -82,6 +76,5 @@ public:
    * @} // ConfigKeyService_Inherited_h
    */
 };
-typedef boost::intrusive_ptr<ConfigKeyService> ConfigKeyServiceRef;
 
 #endif // CEPH_MON_CONFIG_KEY_SERVICE_H

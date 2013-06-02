@@ -14,10 +14,6 @@
 #ifndef CEPH_MON_QUORUM_SERVICE_H
 #define CEPH_MON_QUORUM_SERVICE_H
 
-#include <boost/intrusive_ptr.hpp>
-// Because intusive_ptr clobbers our assert...
-#include "include/assert.h"
-
 #include <errno.h>
 
 #include "include/types.h"
@@ -27,14 +23,14 @@
 
 #include "mon/Monitor.h"
 
-class QuorumService : public RefCountedObject
+class QuorumService
 {
   Context *tick_event;
   double tick_period;
 
   struct C_Tick : public Context {
-    boost::intrusive_ptr<QuorumService> s;
-    C_Tick(boost::intrusive_ptr<QuorumService> qs) : s(qs) { }
+    QuorumService *s;
+    C_Tick(QuorumService *qs) : s(qs) { }
     void finish(int r) {
       if (r < 0)
         return;
@@ -74,8 +70,7 @@ protected:
     if (tick_period <= 0)
       return;
 
-    tick_event = new C_Tick(
-        boost::intrusive_ptr<QuorumService>(this));
+    tick_event = new C_Tick(this);
     mon->timer.add_event_after(tick_period, tick_event);
   }
 
@@ -97,9 +92,6 @@ protected:
 
 public:
   virtual ~QuorumService() { }
-  QuorumService *get() {
-    return static_cast<QuorumService *>(RefCountedObject::get());
-  }
 
   void start(epoch_t new_epoch) {
     epoch = new_epoch;
@@ -138,6 +130,5 @@ public:
   virtual string get_name() const = 0;
 
 };
-typedef boost::intrusive_ptr<QuorumService> QuorumServiceRef;
 
 #endif /* CEPH_MON_QUORUM_SERVICE_H */

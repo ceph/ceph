@@ -44,6 +44,18 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
     return true;
   }
 
+  // make sure the client is still connected.  note that a proxied
+  // connection will be disconnected with a null message; don't drop
+  // those.  also ignore loopback (e.g., log) messages.
+  if (!m->get_connection()->is_connected() &&
+      m->get_connection() != mon->messenger->get_loopback_connection() &&
+      m->get_connection()->get_messenger() != NULL) {
+    dout(10) << " discarding message from disconnected client "
+	     << m->get_source_inst() << " " << *m << dendl;
+    m->put();
+    return true;
+  }
+
   // make sure our map is readable and up to date
   if (!is_readable(m->version)) {
     dout(10) << " waiting for paxos -> readable (v" << m->version << ")" << dendl;
@@ -314,11 +326,12 @@ void PaxosService::trim(MonitorDBStore::Transaction *t,
 {
   dout(10) << __func__ << " from " << from << " to " << to << dendl;
   assert(from != to);
-  for (; from < to; from++) {
-    dout(20) << __func__ << " " << from << dendl;
-    t->erase(get_service_name(), from);
 
-    string full_key = mon->store->combine_strings("full", from);
+  for (version_t v = from; v < to; ++v) {
+    dout(20) << __func__ << " " << v << dendl;
+    t->erase(get_service_name(), v);
+
+    string full_key = mon->store->combine_strings("full", v);
     if (mon->store->exists(get_service_name(), full_key)) {
       dout(20) << __func__ << " " << full_key << dendl;
       t->erase(get_service_name(), full_key);
@@ -326,7 +339,7 @@ void PaxosService::trim(MonitorDBStore::Transaction *t,
   }
   if (g_conf->mon_compact_on_trim) {
     dout(20) << " compacting prefix " << get_service_name() << dendl;
-    t->compact_prefix(get_service_name());
+    t->compact_range(get_service_name(), stringify(from - 1), stringify(to));
   }
 }
 
