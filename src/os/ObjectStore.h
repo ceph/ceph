@@ -155,6 +155,7 @@ public:
       OP_SPLIT_COLLECTION = 35, // cid, bits, destination
       OP_SPLIT_COLLECTION2 = 36, /* cid, bits, destination
 				    doesn't create the destination */
+      OP_OMAP_RMKEYRANGE = 37,  // cid, oid, firstkey, lastkey
     };
 
   private:
@@ -353,6 +354,11 @@ public:
 	return len;
       }
       string get_attrname() {
+	string s;
+	::decode(s, p);
+	return s;
+      }
+      string get_key() {
 	string s;
 	::decode(s, p);
 	return s;
@@ -603,6 +609,22 @@ public:
       ::encode(cid, tbl);
       ::encode(hoid, tbl);
       ::encode(keys, tbl);
+      ops++;
+    }
+
+    /// Remove key range from hoid omap
+    void omap_rmkeyrange(
+      coll_t cid,             ///< [in] Collection containing hoid
+      const hobject_t &hoid,  ///< [in] Object from which to remove the omap
+      const string& first,    ///< [in] first key in range
+      const string& last      ///< [in] first key past range
+      ) {
+      __u32 op = OP_OMAP_RMKEYRANGE;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(hoid, tbl);
+      ::encode(first, tbl);
+      ::encode(last, tbl);
       ops++;
     }
 
