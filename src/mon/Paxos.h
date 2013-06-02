@@ -994,7 +994,6 @@ private:
    * Begin proposing the Proposal at the front of the proposals queue.
    */
   void propose_queued();
-  void finish_queued_proposal();
   void finish_proposal();
 
 public:
