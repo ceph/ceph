@@ -1778,14 +1778,13 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
       ::decode(start, q);
       dout(10) << " trace from " << df << " start " << start << " len " << p->length() << dendl;
 
-      CInode *in;
       CDir *cur = 0;
       if (start == 'd') {
 	cur = cache->get_dirfrag(df);
 	assert(cur);
 	dout(10) << "  had " << *cur << dendl;
       } else if (start == 'f') {
-	in = cache->get_inode(df.ino);
+	CInode *in = cache->get_inode(df.ino);
 	assert(in);
 	dout(10) << "  had " << *in << dendl;
 	cur = cache->add_replica_dir(q, in, oldauth, finished);
@@ -1794,6 +1793,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
 	// nothing
       } else
 	assert(0 == "unrecognized start char");
+
       while (start != '-') {
 	CDentry *dn = cache->add_replica_dentry(q, cur, finished);
 	dout(10) << "  added " << *dn << dendl;
