@@ -120,7 +120,6 @@ void PGMonitor::tick()
 {
   if (!is_active()) return;
 
-  update_from_paxos();
   handle_osd_timeouts();
 
   if (mon->is_leader()) {
