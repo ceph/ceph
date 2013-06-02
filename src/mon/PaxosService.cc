@@ -68,9 +68,6 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
     return true;
   }
 
-  // make sure service has latest from paxos.
-  update_from_paxos();
-
   // preprocess
   if (preprocess_query(m)) 
     return true;  // easy!
@@ -110,6 +107,13 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
   }     
   return true;
 }
+
+void PaxosService::refresh()
+{
+  dout(10) << __func__ << dendl;
+  update_from_paxos();
+}
+
 
 void PaxosService::scrub()
 {
@@ -257,7 +261,7 @@ void PaxosService::_active()
   dout(10) << "_active" << dendl;
 
   // pull latest from paxos
-  update_from_paxos();
+  refresh();
 
   scrub();
 
