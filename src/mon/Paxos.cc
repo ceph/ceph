@@ -21,6 +21,7 @@
 
 #include "common/config.h"
 #include "include/assert.h"
+#include "include/stringify.h"
 #include "common/Formatter.h"
 
 #define dout_subsys ceph_subsys_paxos
@@ -877,10 +878,7 @@ void Paxos::handle_lease(MMonPaxos *lease)
   mon->messenger->send_message(ack, lease->get_source_inst());
 
   // (re)set timeout event.
-  if (lease_timeout_event) 
-    mon->timer.cancel_event(lease_timeout_event);
-  lease_timeout_event = new C_LeaseTimeout(this);
-  mon->timer.add_event_after(g_conf->mon_lease_ack_timeout, lease_timeout_event);
+  reset_lease_timeout();
 
   // kick waiters
   finish_contexts(g_ceph_context, waiting_for_active);
@@ -935,6 +933,15 @@ void Paxos::lease_ack_timeout()
   mon->bootstrap();
 }
 
+void Paxos::reset_lease_timeout()
+{
+  dout(20) << "reset_lease_timeout - setting timeout event" << dendl;
+  if (lease_timeout_event)
+    mon->timer.cancel_event(lease_timeout_event);
+  lease_timeout_event = new C_LeaseTimeout(this);
+  mon->timer.add_event_after(g_conf->mon_lease_ack_timeout, lease_timeout_event);
+}
+
 void Paxos::lease_timeout()
 {
   dout(5) << "lease_timeout -- calling new election" << dendl;
@@ -959,14 +966,13 @@ void Paxos::trim_to(MonitorDBStore::Transaction *t,
   dout(10) << __func__ << " from " << from << " to " << to << dendl;
   assert(from < to);
 
-  while (from < to) {
-    dout(10) << "trim " << from << dendl;
-    t->erase(get_name(), from);
-    from++;
+  for (version_t v = from; v < to; ++v) {
+    dout(10) << "trim " << v << dendl;
+    t->erase(get_name(), v);
   }
   if (g_conf->mon_compact_on_trim) {
-    dout(10) << " compacting prefix" << dendl;
-    t->compact_prefix(get_name());
+    dout(10) << " compacting trimmed range" << dendl;
+    t->compact_range(get_name(), stringify(from - 1), stringify(to));
   }
 }
 
@@ -1103,6 +1109,9 @@ void Paxos::peon_init()
   state = STATE_RECOVERING;
   lease_expire = utime_t();
   dout(10) << "peon_init -- i am a peon" << dendl;
+
+  // start a timer, in case the leader never manages to issue a lease
+  reset_lease_timeout();
 
   // no chance to write now!
   finish_contexts(g_ceph_context, waiting_for_writeable, -EAGAIN);

@@ -37,7 +37,7 @@ public:
   virtual void SetUp() {
     assert(!store_path.empty());
 
-    LevelDBStore *db_ptr = new LevelDBStore(store_path);
+    LevelDBStore *db_ptr = new LevelDBStore(g_ceph_context, store_path);
     assert(!db_ptr->create_and_open(std::cerr));
     db.reset(db_ptr);
     mock.reset(new KeyValueDBMemory());
