@@ -106,7 +106,12 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
 
 void PaxosService::refresh()
 {
+  // update cached versions
+  cached_first_committed = mon->store->get(get_service_name(), first_committed_name);
+  cached_last_committed = mon->store->get(get_service_name(), last_committed_name);
+
   dout(10) << __func__ << dendl;
+
   update_from_paxos();
 }
 
