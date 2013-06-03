@@ -252,6 +252,7 @@ void PaxosService::_active()
   dout(10) << "_active" << dendl;
 
   // pull latest from paxos
+  update_cached_versions();
   update_from_paxos();
 
   scrub();
