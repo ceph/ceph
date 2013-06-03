@@ -493,9 +493,8 @@ void MDCache::_create_system_file_finish(Mutation *mut, CDentry *dn, version_t d
   in->inode.version--;
   in->mark_dirty(in->inode.version + 1, mut->ls);
 
-  CDir *dir = 0;
   if (in->inode.is_dir()) {
-    dir = in->get_dirfrag(frag_t());
+    CDir *dir = in->get_dirfrag(frag_t());
     assert(dir);
     dir->mark_dirty(1, mut->ls);
     dir->mark_new(mut->ls);
