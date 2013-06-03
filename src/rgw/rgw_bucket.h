@@ -341,8 +341,14 @@ public:
   int renew_entries();
   int list_entries(int shard, utime_t& start_time, utime_t& end_time, int max_entries,
                list<rgw_data_change>& entries, string& marker, bool *truncated);
+  int trim_entries(int shard_id, utime_t& start_time, utime_t& end_time);
   int trim_entries(utime_t& start_time, utime_t& end_time);
-
+  int lock_exclusive(int shard_id, utime_t& duration, string& owner_id) {
+    return store->log_lock_exclusive(oids[shard_id], duration, owner_id);
+  }
+  int unlock(int shard_id, string& owner_id) {
+    return store->log_unlock(oids[shard_id], owner_id);
+  }
   struct LogMarker {
     int shard;
     string marker;

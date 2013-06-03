@@ -129,6 +129,85 @@ public:
   }
 };
 
+class RGWOp_DATALog_List : public RGWRESTOp {
+  list<rgw_data_change> entries;
+  int http_ret;
+public:
+  RGWOp_DATALog_List() : http_ret(0) {}
+  ~RGWOp_DATALog_List() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("datalog", RGW_CAP_READ);
+  }
+  int verify_permission() {
+    return check_caps(s->user.caps);
+  }
+  void execute();
+  virtual void send_response();
+  virtual const char *name() {
+    return "list_data_changes_log";
+  }
+};
+
+class RGWOp_DATALog_GetShardsInfo : public RGWRESTOp {
+  unsigned num_objects;
+  int http_ret;
+public:
+  RGWOp_DATALog_GetShardsInfo() : num_objects(0), http_ret(0) {}
+  ~RGWOp_DATALog_GetShardsInfo() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("datalog", RGW_CAP_READ);
+  }
+  int verify_permission() {
+    return check_caps(s->user.caps);
+  }
+  void execute();
+  virtual void send_response();
+  virtual const char *name() {
+    return "get_data_changes_log_shards_info";
+  }
+};
+
+class RGWOp_DATALog_Post : public RGWRESTOp {
+  enum {
+    DATALOG_POST_INVALID = 0,
+    DATALOG_POST_LOCK,
+    DATALOG_POST_UNLOCK
+  };
+  int get_post_type() {
+    bool exists;
+    s->args.get("lock", &exists);
+    if (exists) 
+      return DATALOG_POST_LOCK;
+    s->args.get("unlock", &exists);
+    if (exists)
+      return DATALOG_POST_UNLOCK;
+    return DATALOG_POST_INVALID;
+  }
+public:
+  RGWOp_DATALog_Post() {}
+  ~RGWOp_DATALog_Post() {}
+
+  int check_caps(RGWUserCaps& caps);
+  void execute();
+  virtual const char *name();
+};
+
+class RGWOp_DATALog_Delete : public RGWRESTOp {
+public:
+  RGWOp_DATALog_Delete() {}
+  ~RGWOp_DATALog_Delete() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("datalog", RGW_CAP_WRITE);
+  }
+  void execute();
+  virtual const char *name() {
+    return "trim_data_changes_log";
+  }
+};
+
 class RGWHandler_Log : public RGWHandler_Auth_S3 {
 protected:
   RGWOp *op_get();
