@@ -42,8 +42,8 @@ TEST(LibRadosCmd, MonDescribe) {
   rados_buffer_free(st);
 
   ASSERT_EQ(0, rados_mon_command(cluster, "{\"prefix\":\"mon_status\"}", "", 0, &buf, &buflen, &st, &stlen));
-  //ASSERT_LTE(0u, buflen);
-  ASSERT_LT(0u, stlen);
+  ASSERT_LT(0u, buflen);
+  //ASSERT_LT(0u, stlen);
   rados_buffer_free(buf);
   rados_buffer_free(st);
 
