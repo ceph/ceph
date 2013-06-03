@@ -212,7 +212,11 @@ def valgrind_post(ctx, config):
             for line in out.split('\n'):
                 if line == '':
                     continue
-                (file, kind) = line.split(':')
+                try:
+                    (file, kind) = line.split(':')
+                except:
+                    log.error('failed to split line %s', line)
+                    raise
                 log.debug('file %s kind %s', file, kind)
                 if file.find('mds') >= 0 and kind.find('Lost') > 0:
                     continue
