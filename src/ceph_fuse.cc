@@ -81,29 +81,6 @@ int main(int argc, const char **argv, const char *envp[]) {
     cerr << std::endl;
   }
 
-  // get monmap
-  MonClient mc(g_ceph_context);
-  int ret = mc.build_initial_monmap();
-  if (ret == -EINVAL)
-    usage();
-
-  if (ret < 0)
-    return -1;
-
-  // start up network
-  Messenger *messenger = Messenger::create(g_ceph_context,
-					   entity_name_t::CLIENT(), "client",
-					   getpid());
-  Client *client = new Client(messenger, &mc);
-
-  messenger->set_default_policy(Messenger::Policy::lossy_client(0, 0));
-  messenger->set_policy(entity_name_t::TYPE_MDS,
-			Messenger::Policy::lossless_client(0, 0));
-
-  if (filer_flags) {
-    client->set_filer_flags(filer_flags);
-  }
-
   // we need to handle the forking ourselves.
   int fd[2] = {0, 0};  // parent's, child's
   pid_t childpid = 0;
@@ -130,8 +107,35 @@ int main(int argc, const char **argv, const char *envp[]) {
     if (restart_log)
       g_ceph_context->_log->start();
 
+    int r;
+    Messenger *messenger;
+    Client *client;
+
     cout << "ceph-fuse[" << getpid() << "]: starting ceph client" << std::endl;
-    int r = messenger->start();
+
+    // get monmap
+    MonClient mc(g_ceph_context);
+    r = mc.build_initial_monmap();
+    if (r == -EINVAL)
+      usage();
+    if (r < 0)
+      goto out_mc_start_failed;
+
+    // start up network
+    messenger = Messenger::create(g_ceph_context,
+				  entity_name_t::CLIENT(), "client",
+				  getpid());
+    client = new Client(messenger, &mc);
+
+    messenger->set_default_policy(Messenger::Policy::lossy_client(0, 0));
+    messenger->set_policy(entity_name_t::TYPE_MDS,
+			  Messenger::Policy::lossless_client(0, 0));
+
+    if (filer_flags) {
+      client->set_filer_flags(filer_flags);
+    }
+
+    r = messenger->start();
     if (r < 0) {
       cerr << "ceph-fuse[" << getpid() << "]: ceph mount failed with " << cpp_strerror(-r) << std::endl;
       goto out_messenger_start_failed;
@@ -167,6 +171,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     messenger->wait();
   out_messenger_start_failed:
     delete client;
+  out_mc_start_failed:
 
     if (g_conf->daemonize) {
       //cout << "child signalling parent with " << r << std::endl;
