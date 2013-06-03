@@ -1451,6 +1451,14 @@ def main():
         outf.write(outbuf)
         outf.close()
     else:
+        # hack: old code printed status line before many json outputs
+        # (osd dump, etc.) that consumers know to ignore.  Add blank line
+        # to satisfy consumers that skip the first line, but not annoy
+        # consumers that don't.
+        if parsed_args.output_format and \
+           parsed_args.output_format.startswith('json'):
+            sys.stdout.write('\n');
+
         sys.stdout.write(outbuf)
 
     # this assumes outs never has useful command output, only status
