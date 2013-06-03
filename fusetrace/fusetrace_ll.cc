@@ -1170,9 +1170,11 @@ int main(int argc, char *argv[])
 			       NULL);
 	if (se != NULL) {
 	    if (fuse_set_signal_handlers(se) != -1) {
-		int err = -1;
 		fuse_session_add_chan(se, ch);
-		err = fuse_session_loop(se);
+		if (fuse_session_loop(se) <= -1) {
+		    cout << "Failed fuse_session_loop() call." << endl;
+		    return 1;
+		}
 		fuse_remove_signal_handlers(se);
 		fuse_session_remove_chan(ch);
 	    }
