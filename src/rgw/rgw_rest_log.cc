@@ -309,6 +309,173 @@ void RGWOp_BILog_Delete::execute() {
   return;
 }
 
+void RGWOp_DATALog_List::execute() {
+  string   shard = s->args.get("id");
+
+  string   st = s->args.get("start-time"),
+           et = s->args.get("end-time"),
+           err;
+  utime_t  ut_st, 
+           ut_et;
+  int      shard_id;
+
+  shard_id = strict_strtol(shard.c_str(), 10, &err);
+  if (!err.empty()) {
+    dout(5) << "Error parsing shard_id " << shard << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  if (parse_date_str(st, ut_st) < 0) {
+    http_ret = -EINVAL;
+    return;
+  }
+
+  if (parse_date_str(et, ut_et) < 0) {
+    http_ret = -EINVAL;
+    return;
+  }
+
+  string marker;
+  bool truncated;
+#define DATALOG_LIST_MAX_ENTRIES 1000
+
+  http_ret = store->data_log->list_entries(shard_id, ut_st, ut_et, 
+                               DATALOG_LIST_MAX_ENTRIES, entries, marker, &truncated);
+}
+
+void RGWOp_DATALog_List::send_response() {
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+
+  if (http_ret < 0)
+    return;
+
+  s->formatter->open_array_section("entries");
+  for (list<rgw_data_change>::iterator iter = entries.begin(); 
+       iter != entries.end(); ++iter) {
+    rgw_data_change& entry = *iter;
+    encode_json("entry", entry, s->formatter);
+    flusher.flush();
+  }
+  s->formatter->close_section();
+  flusher.flush();
+}
+
+
+void RGWOp_DATALog_GetShardsInfo::execute() {
+  num_objects = s->cct->_conf->rgw_data_log_num_shards;
+  http_ret = 0;
+}
+
+void RGWOp_DATALog_GetShardsInfo::send_response() {
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+
+  s->formatter->open_object_section("num_objects");
+  s->formatter->dump_unsigned("num_objects", num_objects);
+  s->formatter->close_section();
+  flusher.flush();
+}
+
+int RGWOp_DATALog_Post::check_caps(RGWUserCaps& caps) {
+  if (caps.check_cap("datalog", RGW_CAP_READ) &&
+      caps.check_cap("datalog", RGW_CAP_WRITE)) {
+    return -EPERM;
+  }
+  return 0;
+}
+
+const char *RGWOp_DATALog_Post::name() {
+  int pt = get_post_type();
+  if (pt == DATALOG_POST_LOCK) 
+    return "lock datalog object";
+  else if (pt == DATALOG_POST_UNLOCK)
+    return "unlock datalog object";
+  return NULL;
+}
+
+void RGWOp_DATALog_Post::execute() {
+  string shard_id_str, duration_str, lock_id;
+  int shard_id;
+  int pt = get_post_type();
+
+  http_ret = 0;
+
+  shard_id_str = s->args.get("id");
+  if (pt == DATALOG_POST_LOCK)
+    duration_str = s->args.get("length");
+  lock_id      = s->args.get("lock_id");
+
+  if (shard_id_str.empty() ||
+      (pt == DATALOG_POST_LOCK && duration_str.empty()) ||
+      lock_id.empty()) {
+    dout(5) << "Error invalid parameter list" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  string err;
+  shard_id = strict_strtol(shard_id_str.c_str(), 10, &err);
+  if (!err.empty()) {
+    dout(5) << "Error parsing shard_id param " << shard_id_str << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  if (pt == DATALOG_POST_LOCK) {
+    int dur;
+    dur = strict_strtol(duration_str.c_str(), 10, &err);
+    if (!err.empty() || dur <= 0) {
+      dout(5) << "invalid length param " << duration_str << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    utime_t time(dur, 0);
+    http_ret = store->data_log->lock_exclusive(shard_id, time, lock_id);
+  } else if (pt == DATALOG_POST_UNLOCK) {
+    http_ret = store->data_log->unlock(shard_id, lock_id);
+  } else 
+    http_ret = -EINVAL;
+}
+
+void RGWOp_DATALog_Delete::execute() {
+  string   st = s->args.get("start-time"),
+           et = s->args.get("end-time"),
+           shard = s->args.get("id"),
+           err;
+  utime_t  ut_st, 
+           ut_et;
+  int     shard_id;
+
+  http_ret = 0;
+
+  shard_id = strict_strtol(shard.c_str(), 10, &err);
+  if (!err.empty()) {
+    dout(5) << "Error parsing shard_id " << shard << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+  if (st.empty() || et.empty()) {
+    http_ret = -EINVAL;
+    return;
+  }
+
+  if (parse_date_str(st, ut_st) < 0) {
+    http_ret = -EINVAL;
+    return;
+  }
+
+  if (parse_date_str(et, ut_et) < 0) {
+    http_ret = -EINVAL;
+    return;
+  }
+
+  http_ret = store->data_log->trim_entries(shard_id, ut_st, ut_et);
+}
+
 RGWOp *RGWHandler_Log::op_get() {
   bool exists;
   string type = s->info.args.get("type", &exists);
@@ -325,6 +492,12 @@ RGWOp *RGWHandler_Log::op_get() {
     }
   } else if (type.compare("bucket-index") == 0) {
     return new RGWOp_BILog_List;
+  } else if (type.compare("data") == 0) {
+    if (s->args.exists("id")) {
+      return new RGWOp_DATALog_List;
+    } else {
+      return new RGWOp_DATALog_GetShardsInfo;
+    }
   }
   return NULL;
 }
@@ -341,6 +514,8 @@ RGWOp *RGWHandler_Log::op_delete() {
     return new RGWOp_MDLog_Delete;
   else if (type.compare("bucket-index") == 0) 
     return new RGWOp_BILog_Delete;
+  else if (type.compare("data") == 0)
+    return new RGWOp_DATALog_Delete;
   return NULL;
 }
 
@@ -354,6 +529,8 @@ RGWOp *RGWHandler_Log::op_post() {
 
   if (type.compare("metadata") == 0)
     return new RGWOp_MDLog_Post;
+  else if (type.compare("data") == 0)
+    return new RGWOp_DATALog_Post;
   return NULL;
 }
 
