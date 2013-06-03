@@ -305,7 +305,7 @@ fi
 
 [client]
         keyring = $keyring_fn
-        log file = out/\$name.log
+        log file = out/\$name.\$pid.log
 
 [mds]
 $DAEMONOPTS
