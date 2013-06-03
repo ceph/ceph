@@ -33,6 +33,7 @@ extern "C"{
 #include "common/Finisher.h"
 #include "global/global_init.h"
 #include "rgw/rgw_common.h"
+#include "rgw/rgw_bucket.h"
 #include "rgw/rgw_rados.h"
 #include "include/utime.h"
 #include "include/object.h"
@@ -243,7 +244,7 @@ void get_date(string& d){
           days[tm.tm_wday], 
           tm.tm_mday, months[tm.tm_mon], 
           tm.tm_year + 1900,
-          tm.tm_hour, tm.tm_min, 0 /*tm.tm_sec*/);
+          tm.tm_hour, tm.tm_min, tm.tm_sec);
   d = date;
 }
 
@@ -668,11 +669,358 @@ static int get_bilog_list(list<cls_bilog_entry> &entries) {
   return 0;
 }
 
-unsigned get_shard_id(string& key, int max_shards) {
+static int decode_json(JSONObj *obj, rgw_data_change& ret) {
+  string entity;
+
+  JSONDecoder::decode_json("entity_type", entity, obj);
+  if (entity.compare("bucket") == 0)
+    ret.entity_type = ENTITY_TYPE_BUCKET;
+  JSONDecoder::decode_json("key", ret.key, obj);
+  return 0;
+}
+
+static int get_datalog_list(list<rgw_data_change> &entries) {
+  JSONParser parser;
+
+  if (parse_json_resp(parser) != 0)
+    return -1;
+  if (!parser.is_array()) 
+    return -1;
+
+  vector<string> l;
+  l = parser.get_array_elements();
+  int loop = 0;
+  for(vector<string>::iterator it = l.begin();
+      it != l.end(); it++, loop++) {
+    JSONParser jp;
+    rgw_data_change entry;
+
+    if(!jp.parse((*it).c_str(), (*it).length())) {
+      cerr << "Error parsing log json object" << std::endl;
+      return -1;
+    }
+    EXPECT_EQ(decode_json((JSONObj *)&jp, entry), 0);
+    entries.push_back(entry);
+  }
+  return 0;
+}
+
+unsigned get_mdlog_shard_id(string& key, int max_shards) {
   string section = "user";
   uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
   val ^= ceph_str_hash_linux(section.c_str(), section.size());
   return (unsigned)(val % max_shards);
+}
+
+unsigned get_datalog_shard_id(const char *bucket_name, int max_shards) {
+  uint32_t r = ceph_str_hash_linux(bucket_name, strlen(bucket_name)) % max_shards;
+  return (int)r;
+}
+
+TEST(TestRGWAdmin, datalog_list) {
+  string start_time, 
+         end_time,
+         start_time_2;
+  const char *cname = "datalog",
+             *perm = "*";
+  string rest_req;
+  unsigned shard_id = get_datalog_shard_id(TEST_BUCKET_NAME, g_ceph_context->_conf->rgw_data_log_num_shards);
+  stringstream ss;
+  list<rgw_data_change> entries;
+
+  ASSERT_EQ(get_formatted_time(start_time), 0);
+  ASSERT_EQ(0, user_create(uid, display_name));
+  ASSERT_EQ(0, caps_add(cname, perm));
+
+  rest_req = "/admin/log?type=data";
+  g_test->send_request(string("GET"), rest_req);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+  JSONParser parser;
+  int num_objects;
+  EXPECT_EQ (parse_json_resp(parser), 0);
+  JSONDecoder::decode_json("num_objects", num_objects, (JSONObj *)&parser);
+  ASSERT_EQ(num_objects,g_ceph_context->_conf->rgw_data_log_num_shards);
+  
+  ASSERT_EQ(0, create_bucket());
+  
+  char *bucket_obj = (char *)malloc(TEST_BUCKET_OBJECT_SIZE);
+  ASSERT_TRUE(bucket_obj != NULL);
+  EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
+  free(bucket_obj);
+  
+  ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time;
+  rest_req = ss.str();
+  g_test->send_request(string("GET"), rest_req);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+  entries.clear();
+  get_datalog_list(entries);
+  EXPECT_EQ(1U, entries.size());
+  if (entries.size() == 1) {
+    rgw_data_change entry = *(entries.begin());
+    EXPECT_EQ(entry.entity_type, ENTITY_TYPE_BUCKET);
+    EXPECT_EQ(entry.key.compare(TEST_BUCKET_NAME), 0);
+  }
+
+  ASSERT_EQ(0, delete_obj(TEST_BUCKET_OBJECT));
+  sleep(1);
+  ASSERT_EQ(get_formatted_time(end_time), 0);
+  ss.str("");
+  ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time;
+  rest_req = ss.str();
+  g_test->send_request(string("GET"), rest_req);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+  entries.clear();
+  get_datalog_list(entries);
+  EXPECT_EQ(1U, entries.size());
+  if (entries.size() == 1) {
+    list<rgw_data_change>::iterator it = (entries.begin());
+    EXPECT_EQ((*it).entity_type, ENTITY_TYPE_BUCKET);
+    EXPECT_EQ((*it).key.compare(TEST_BUCKET_NAME), 0);
+  }
+
+  sleep(1);
+  EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
+  sleep(20);
+  ss.str("");
+  ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time;
+  rest_req = ss.str();
+  g_test->send_request(string("GET"), rest_req);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+  entries.clear();
+  get_datalog_list(entries);
+  EXPECT_EQ(2U, entries.size());
+  if (entries.size() == 2) {
+    list<rgw_data_change>::iterator it = (entries.begin());
+    EXPECT_EQ((*it).entity_type, ENTITY_TYPE_BUCKET);
+    EXPECT_EQ((*it).key.compare(TEST_BUCKET_NAME), 0);
+    it++; 
+    EXPECT_EQ((*it).entity_type, ENTITY_TYPE_BUCKET);
+    EXPECT_EQ((*it).key.compare(TEST_BUCKET_NAME), 0);
+  }
+
+  ss.str("");
+  ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time 
+    << "&end-time=" << end_time;
+  rest_req = ss.str();
+  g_test->send_request(string("GET"), rest_req);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+  entries.clear();
+  get_datalog_list(entries);
+  EXPECT_EQ(1U, entries.size());
+
+  ASSERT_EQ(0, caps_rm(cname, perm));
+  perm = "read";
+  ASSERT_EQ(0, caps_add(cname, perm));
+  ss.str("");
+  ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time;
+  rest_req = ss.str();
+  g_test->send_request(string("GET"), rest_req);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+  ASSERT_EQ(0, caps_rm(cname, perm));
+  ss.str("");
+  ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time;
+  rest_req = ss.str();
+
+  g_test->send_request(string("GET"), rest_req);
+  EXPECT_EQ(403U, g_test->get_resp_code());
+
+  ASSERT_EQ(0, delete_obj(TEST_BUCKET_OBJECT));
+  ASSERT_EQ(0, delete_bucket());
+  ASSERT_EQ(0, user_rm(uid, display_name));
+}
+
+TEST(TestRGWAdmin, datalog_lock_unlock) {
+  const char *cname = "datalog",
+             *perm = "*";
+  string rest_req;
+
+  ASSERT_EQ(0, user_create(uid, display_name));
+  ASSERT_EQ(0, caps_add(cname, perm));
+
+  rest_req = "/admin/log?type=data&lock&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+  
+  rest_req = "/admin/log?type=data&lock&id=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+  
+  rest_req = "/admin/log?type=data&lock&length=3&id=1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+
+  rest_req = "/admin/log?type=data&unlock&id=1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+
+  rest_req = "/admin/log?type=data&unlock&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+  
+  rest_req = "/admin/log?type=data&lock&id=1&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/log?type=data&unlock&id=1&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/log?type=data&lock&id=1&length=3&lock_id=ceph1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/log?type=data&unlock&id=1&lock_id=ceph1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/log?type=data&lock&id=1&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  utime_t sleep_time(3, 0);
+
+  rest_req = "/admin/log?type=data&lock&id=1&length=3&lock_id=ceph1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(500U, g_test->get_resp_code()); 
+
+  rest_req = "/admin/log?type=data&lock&id=1&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(409U, g_test->get_resp_code()); 
+  sleep_time.sleep();
+
+  rest_req = "/admin/log?type=data&lock&id=1&length=3&lock_id=ceph1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/log?type=data&unlock&id=1&lock_id=ceph1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+
+  ASSERT_EQ(0, caps_rm(cname, perm));
+  perm = "read";
+  ASSERT_EQ(0, caps_add(cname, perm));
+  rest_req = "/admin/log?type=data&lock&id=1&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/log?type=data&unlock&id=1&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  ASSERT_EQ(0, caps_rm(cname, perm));
+  perm = "write";
+  ASSERT_EQ(0, caps_add(cname, perm));
+  rest_req = "/admin/log?type=data&lock&id=1&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/log?type=data&unlock&id=1&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  ASSERT_EQ(0, caps_rm(cname, perm));
+  rest_req = "/admin/log?type=data&lock&id=1&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(403U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/log?type=data&unlock&id=1&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(403U, g_test->get_resp_code()); 
+  
+  ASSERT_EQ(0, user_rm(uid, display_name));
+}
+
+TEST(TestRGWAdmin, datalog_trim) {
+  string start_time, 
+         end_time;
+  const char *cname = "datalog",
+             *perm = "*";
+  string rest_req;
+  unsigned shard_id = get_datalog_shard_id(TEST_BUCKET_NAME, g_ceph_context->_conf->rgw_data_log_num_shards);
+  stringstream ss;
+  list<rgw_data_change> entries;
+
+  ASSERT_EQ(get_formatted_time(start_time), 0);
+  ASSERT_EQ(0, user_create(uid, display_name));
+  ASSERT_EQ(0, caps_add(cname, perm));
+
+  rest_req = "/admin/log?type=data";
+  g_test->send_request(string("DELETE"), rest_req);
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+  
+  ss.str("");
+  ss << "/admin/log?type=data&start-time=" << start_time;
+  rest_req = ss.str();
+  g_test->send_request(string("DELETE"), rest_req);
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+ 
+  ss.str("");
+  ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time;
+  rest_req = ss.str();
+  g_test->send_request(string("DELETE"), rest_req);
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+  
+  ASSERT_EQ(0, create_bucket());
+
+  char *bucket_obj = (char *)malloc(TEST_BUCKET_OBJECT_SIZE);
+  ASSERT_TRUE(bucket_obj != NULL);
+  EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
+  ASSERT_EQ(0, delete_obj(TEST_BUCKET_OBJECT));
+  sleep(1);
+  EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
+  ASSERT_EQ(0, delete_obj(TEST_BUCKET_OBJECT));
+  sleep(20);
+  free(bucket_obj);
+
+  ASSERT_EQ(get_formatted_time(end_time), 0);
+  ss.str("");
+  ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time 
+    << "&end-time=" << end_time;
+  rest_req = ss.str();
+  g_test->send_request(string("GET"), rest_req);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+  entries.clear();
+  get_datalog_list(entries);
+  EXPECT_TRUE(entries.size() > 0);
+
+  ss.str("");
+  ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time 
+    << "&end-time=" << end_time;
+  rest_req = ss.str();
+  g_test->send_request(string("DELETE"), rest_req);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+
+  ss.str("");
+  ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time 
+    << "&end-time=" << end_time;
+  rest_req = ss.str();
+  g_test->send_request(string("GET"), rest_req);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+  entries.clear();
+  get_datalog_list(entries);
+  EXPECT_TRUE(entries.size() == 0);
+
+  ASSERT_EQ(0, caps_rm(cname, perm));
+  perm = "write";
+  ASSERT_EQ(0, caps_add(cname, perm));
+  ss.str("");
+  ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time 
+    << "&end-time=" << end_time;
+  rest_req = ss.str();
+  g_test->send_request(string("DELETE"), rest_req);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+
+  ASSERT_EQ(0, caps_rm(cname, perm));
+  perm = "";
+  ASSERT_EQ(0, caps_add(cname, perm));
+  ss.str("");
+  ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time 
+    << "&end-time=" << end_time;
+  rest_req = ss.str();
+  g_test->send_request(string("DELETE"), rest_req);
+  EXPECT_EQ(403U, g_test->get_resp_code());
+
+  ASSERT_EQ(0, delete_bucket());
+  ASSERT_EQ(0, user_rm(uid, display_name));
 }
 
 TEST(TestRGWAdmin, mdlog_list) {
@@ -682,9 +1030,10 @@ TEST(TestRGWAdmin, mdlog_list) {
   const char *cname = "mdlog",
              *perm = "*";
   string rest_req;
-  unsigned shard_id = get_shard_id(uid, g_ceph_context->_conf->rgw_md_log_max_shards);
+  unsigned shard_id = get_mdlog_shard_id(uid, g_ceph_context->_conf->rgw_md_log_max_shards);
   stringstream ss;
 
+  sleep(2);
   ASSERT_EQ(get_formatted_time(start_time), 0);
   ASSERT_EQ(0, user_create(uid, display_name));
   ASSERT_EQ(0, caps_add(cname, perm));
@@ -838,7 +1187,7 @@ TEST(TestRGWAdmin, mdlog_trim) {
              *perm = "*";
   string rest_req;
   list<cls_log_entry_json> entries;
-  unsigned shard_id = get_shard_id(uid, g_ceph_context->_conf->rgw_md_log_max_shards);
+  unsigned shard_id = get_mdlog_shard_id(uid, g_ceph_context->_conf->rgw_md_log_max_shards);
   ostringstream ss;
 
   sleep(1);
