@@ -198,6 +198,12 @@ void rados_version(int *major, int *minor, int *extra);
 int rados_create(rados_t *cluster, const char * const id);
 
 /**
+ * As in rados_create, but don't assume 'client.'+id; allow full
+ * specification of name
+ */
+int rados_create2(rados_t *cluster, const char * const name);
+
+/**
  * Initialize a cluster handle from an existing configuration.
  *
  * Share configuration state with another rados_t instance.

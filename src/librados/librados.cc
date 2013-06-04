@@ -1203,6 +1203,11 @@ int librados::Rados::init(const char * const id)
   return rados_create((rados_t *)&client, id);
 }
 
+int librados::Rados::init2(const char * const name)
+{
+  return rados_create2((rados_t *)&client, name);
+}
+
 int librados::Rados::init_with_context(config_t cct_)
 {
   return rados_create_with_context((rados_t *)&client, (rados_config_t)cct_);
@@ -1457,14 +1462,10 @@ librados::ObjectOperation::~ObjectOperation()
 }
 
 ///////////////////////////// C API //////////////////////////////
-extern "C" int rados_create(rados_t *pcluster, const char * const id)
+static
+int rados_create_common(rados_t *pcluster, CephInitParameters *iparams)
 {
-  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
-  if (id) {
-    iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
-  }
-
-  CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
+  CephContext *cct = common_preinit(*iparams, CODE_ENVIRONMENT_LIBRARY, 0);
   cct->_conf->parse_env(); // environment variables override
   cct->_conf->apply_changes(NULL);
 
@@ -1474,6 +1475,27 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
   cct->put();
   return 0;
 }
+
+extern "C" int rados_create(rados_t *pcluster, const char * const id)
+{
+  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
+  if (id) {
+    iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
+  }
+  return rados_create_common(pcluster, &iparams);
+}
+
+// as above, but don't assume 'client.'; name is a full type.id namestr
+extern "C" int rados_create2(rados_t *pcluster, const char * const name)
+{
+  // client is assumed, but from_str will override
+  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
+  if (name) {
+    iparams.name.from_str(name);
+  }
+  return rados_create_common(pcluster, &iparams);
+}
+
 
 /* This function is intended for use by Ceph daemons. These daemons have
  * already called global_init and want to use that particular configuration for
