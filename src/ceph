@@ -842,7 +842,8 @@ def do_help(parser, help_all = False):
 
     def help_for_target(target):
         ret, outbuf, outs = json_command(target=target,
-                                         prefix='get_command_descriptions')
+                                         prefix='get_command_descriptions', 
+                                         timeout=10)
         if ret:
             print >> sys.stderr, \
                 "couldn't get command descriptions for {0}: {1}".\
@@ -1049,7 +1050,7 @@ def validate_command(parsed_args, sigdict, args):
         return valid_dict
 
 def json_command(target=('mon', ''), prefix=None, argdict=None, inbuf='',
-                 timeout=30):
+                 timeout=0):
     """
     Send a new_style command to a daemon using librados's
     mon_command, osd_command, or pg_command.  Prefix may be supplied
@@ -1350,7 +1351,7 @@ def main():
         childargs.remove('--')
 
     try:
-        cluster.connect(timeout=15)
+        cluster.connect()
     except KeyboardInterrupt:
         print >> sys.stderr, "connection aborted"
         return 1
