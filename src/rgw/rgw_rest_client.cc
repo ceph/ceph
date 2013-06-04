@@ -154,19 +154,9 @@ void RGWRESTClient::get_params_str(map<string, string>& extra_args, string& dest
   }
 }
 
-int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl)
+int RGWRESTClient::sign_request(RGWAccessKey& key, RGWEnv& env, req_info& info)
 {
-
-  string date_str;
-  get_new_date_str(cct, date_str);
-
-  RGWEnv new_env;
-  req_info new_info(cct, &new_env);
-  new_info.rebuild_from(info);
-
-  new_env.set("HTTP_DATE", date_str.c_str());
-
-  map<string, string>& m = new_env.get_map();
+  map<string, string>& m = env.get_map();
 
   map<string, string>::iterator i;
   for (i = m.begin(); i != m.end(); ++i) {
@@ -174,7 +164,7 @@ int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info, size_t max
   }
 
   string canonical_header;
-  if (!rgw_create_s3_canonical_header(new_info, NULL, canonical_header, false)) {
+  if (!rgw_create_s3_canonical_header(info, NULL, canonical_header, false)) {
     ldout(cct, 0) << "failed to create canonical s3 header" << dendl;
     return -EINVAL;
   }
@@ -192,6 +182,28 @@ int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info, size_t max
   
   m["AUTHORIZATION"] = auth_hdr;
 
+  return 0;
+}
+
+int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl)
+{
+
+  string date_str;
+  get_new_date_str(cct, date_str);
+
+  RGWEnv new_env;
+  req_info new_info(cct, &new_env);
+  new_info.rebuild_from(info);
+
+  new_env.set("HTTP_DATE", date_str.c_str());
+
+  int ret = sign_request(key, new_env, new_info);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
+    return ret;
+  }
+
+  map<string, string>& m = new_env.get_map();
   map<string, string>::iterator iter;
   for (iter = m.begin(); iter != m.end(); ++iter) {
     headers.push_back(make_pair<string, string>(iter->first, iter->second));
@@ -237,19 +249,43 @@ int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info, size_t max
 int RGWRESTClient::put_obj(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, void (*get_data)(uint64_t ofs, uint64_t len, bufferlist& bl, void *))
 {
   string resource = obj.bucket.name + "/" + obj.object;
-  string new_url = url + "/" + resource;
+  string new_url = url;
+  if (new_url[new_url.size() - 1] != '/')
+    new_url.append("/");
+
   string date_str;
   get_new_date_str(cct, date_str);
 
   RGWEnv new_env;
   req_info new_info(cct, &new_env);
   
+  string params_str;
+  map<string, string>& args = new_info.args.get_params();
+  get_params_str(args, params_str);
+
+  new_url.append(resource + params_str);
+
   new_env.set("HTTP_DATE", date_str.c_str());
 
-  new_info.script_uri = resource;
-  new_info.request_uri = resource;
+  new_info.method = "PUT";
 
-  int r = process("PUT", new_url.c_str());
+  new_info.script_uri = "/";
+  new_info.script_uri.append(resource);
+  new_info.request_uri = new_info.script_uri;
+
+  int ret = sign_request(key, new_env, new_info);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
+    return ret;
+  }
+
+  map<string, string>& m = new_env.get_map();
+  map<string, string>::iterator iter;
+  for (iter = m.begin(); iter != m.end(); ++iter) {
+    headers.push_back(make_pair<string, string>(iter->first, iter->second));
+  }
+
+  int r = process(new_info.method, new_url.c_str());
   if (r < 0)
     return r;
 

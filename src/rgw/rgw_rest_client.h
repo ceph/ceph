@@ -23,6 +23,8 @@ protected:
 
   void append_param(string& dest, const string& name, const string& val);
   void get_params_str(map<string, string>& extra_args, string& dest);
+
+  int sign_request(RGWAccessKey& key, RGWEnv& env, req_info& info);
 public:
   RGWRESTClient(CephContext *_cct, string& _url, list<pair<string, string> > *_headers,
                 list<pair<string, string> > *_params) : cct(_cct), status(0), url(_url), send_iter(NULL),
