@@ -16,9 +16,6 @@
 #include <stdlib.h>
 #include <limits.h>
 
-#include <boost/intrusive_ptr.hpp>
-#include "include/assert.h"
-
 #include "mon/Monitor.h"
 #include "mon/QuorumService.h"
 #include "mon/ConfigKeyService.h"

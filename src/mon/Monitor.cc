@@ -172,8 +172,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_LOG] = new LogMonitor(this, paxos, "logm");
   paxos_service[PAXOS_AUTH] = new AuthMonitor(this, paxos, "auth");
 
-  health_monitor = QuorumServiceRef(new HealthMonitor(this));
-  config_key_service = ConfigKeyServiceRef(new ConfigKeyService(this, paxos));
+  health_monitor = new HealthMonitor(this);
+  config_key_service = new ConfigKeyService(this, paxos);
 
   mon_caps = new MonCap();
   bool r = mon_caps->parse("allow *", NULL);
@@ -205,6 +205,8 @@ Monitor::~Monitor()
 {
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     delete *p;
+  delete health_monitor;
+  delete config_key_service;
   delete paxos;
   assert(session_map.sessions.empty());
   delete mon_caps;
@@ -1356,7 +1358,7 @@ void Monitor::sync_store_init()
       return; // this is moot
     } else {
       dout(10) << __func__ << " backup current monmap" << dendl;
-      monmap->encode(latest_monmap, get_quorum_features());
+      monmap->encode(latest_monmap, CEPH_FEATURES_ALL);
     }
   }
 
@@ -2937,7 +2939,7 @@ void Monitor::handle_forward(MForward *m)
     dout(0) << "forward from entity with insufficient caps! " 
 	    << session->caps << dendl;
   } else {
-    Connection *c = new Connection(NULL);
+    Connection *c = new Connection(NULL);  // msgr must be null; see PaxosService::dispatch()
     MonSession *s = new MonSession(m->msg->get_source_inst(), c);
     c->set_priv(s);
     c->set_peer_addr(m->client.addr);

@@ -29,8 +29,8 @@ TYPEWITHSTRAYDATA(OSDMap::Incremental)
 #include "crush/CrushWrapper.h"
 TYPE(CrushWrapper)
 
-#include "osd/PG.h"
-TYPE(PG::OndiskLog)
+#include "osd/PGLog.h"
+TYPE(PGLog::OndiskLog)
 
 #include "osd/osd_types.h"
 TYPE(osd_reqid_t)

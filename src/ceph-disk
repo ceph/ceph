@@ -789,7 +789,7 @@ def prepare_journal_dev(
                     '--name={name}'.format(name=os.path.basename(journal)),
                     ],
                 )   
-            journal_symlink='/dev/{symlink}-part{num}'.format(symlink=symlinks.split()[2], num=num)
+            journal_symlink = '/dev/{symlink}-part{num}'.format(symlink=str(symlinks).split()[2], num=num)
 
         journal_dmcrypt = None
         if journal_dm_keypath:
@@ -1816,7 +1816,7 @@ def main_list(args):
 # means suppressing sdb will stop activate on sdb1, sdb2, etc.
 #
 
-SUPPRESS_PREFIX='/var/lib/ceph/tmp/suppress-activate.'
+SUPPRESS_PREFIX = '/var/lib/ceph/tmp/suppress-activate.'
 
 def is_suppressed(path):
     disk = os.path.realpath(path)
@@ -1834,7 +1834,7 @@ def is_suppressed(path):
 def set_suppress(path):
     disk = os.path.realpath(path)
     if not os.path.exists(disk):
-        raise Error('does not exist', path);
+        raise Error('does not exist', path)
     if not stat.S_ISBLK(os.lstat(path).st_mode):
         raise Error('not a block device', path)
     base = disk[5:]
@@ -1846,7 +1846,7 @@ def set_suppress(path):
 def unset_suppress(path):
     disk = os.path.realpath(path)
     if not os.path.exists(disk):
-        raise Error('does not exist', path);
+        raise Error('does not exist', path)
     if not stat.S_ISBLK(os.lstat(path).st_mode):
         raise Error('not a block device', path)
     assert disk.startswith('/dev/')
@@ -1859,7 +1859,7 @@ def unset_suppress(path):
     try:
         os.unlink(fn)
         LOG.info('unset suppress flag on %s', base)
-    except e:
+    except OSError as e:
         raise Error('failed to unsuppress', e)
 
 

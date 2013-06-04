@@ -1400,6 +1400,24 @@ struct pg_log_t {
     return head.version - tail.version;
   }
 
+  list<pg_log_entry_t>::const_iterator find_entry(eversion_t v) const {
+    int fromhead = head.version - v.version;
+    int fromtail = v.version - tail.version;
+    list<pg_log_entry_t>::const_iterator p;
+    if (fromhead < fromtail) {
+      p = log.end();
+      --p;
+      while (p->version > v)
+	--p;
+      return p;
+    } else {
+      p = log.begin();
+      while (p->version < v)
+	++p;
+      return p;
+    }      
+  }
+
   list<pg_log_entry_t>::iterator find_entry(eversion_t v) {
     int fromhead = head.version - v.version;
     int fromtail = v.version - tail.version;
