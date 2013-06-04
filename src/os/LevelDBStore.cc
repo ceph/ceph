@@ -89,7 +89,8 @@ void LevelDBStore::close()
     compact_queue_lock.Unlock();
   }
 
-  cct->get_perfcounters_collection()->remove(logger);
+  if (logger)
+    cct->get_perfcounters_collection()->remove(logger);
 }
 
 int LevelDBStore::submit_transaction(KeyValueDB::Transaction t)
