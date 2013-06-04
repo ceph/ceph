@@ -1324,7 +1324,7 @@ public:
 
 
     int ret = store->get_bucket_info(NULL, entry, old_bci.info, &objv_tracker, &old_bci.attrs);
-    if (ret < 0)
+    if (ret < 0 && ret != -ENOENT)
       return ret;
 
     ret = store->put_bucket_info(entry, bci.info, false, &objv_tracker, &bci.attrs);
