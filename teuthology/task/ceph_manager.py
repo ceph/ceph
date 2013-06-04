@@ -268,8 +268,10 @@ class CephManager:
             self.log = tmp
         if self.config is None:
             self.config = dict()
+        pools = self.list_pools()
         self.pools = {}
-        self.pools['data'] = self.get_pool_property('data', 'pg_num')
+        for pool in pools:
+            self.pools[pool] = self.get_pool_property(pool, 'pg_num')
 
     def raw_cluster_cmd(self, *args):
         testdir = teuthology.get_testdir(self.ctx)
@@ -315,6 +317,18 @@ class CephManager:
             wait=True,
             )
         return proc
+
+    def rados_write_objects(
+        self, pool, num_objects, size, timelimit, threads, cleanup=False):
+        args = [
+            '-p', pool,
+            '--num-objects', num_objects,
+            '-b', size,
+            'bench', timelimit,
+            'write'
+            ]
+        if not cleanup: args.append('--no-cleanup')
+        return self.do_rados(self.controller, map(str, args))
 
     def do_put(self, pool, obj, fname):
         return self.do_rados(
@@ -406,6 +420,21 @@ class CephManager:
             if i['pool_name'] == pool:
                 return int(i['pool'])
         assert False
+
+    def list_pools(self):
+        """
+        list all pool names
+        """
+        out = self.raw_cluster_cmd('osd','dump','--format=json')
+        j = json.loads('\n'.join(out.split('\n')[1:]))
+        self.log(j['pools'])
+        return [str(i['pool_name']) for i in j['pools']]
+
+    def clear_pools(self):
+        """
+        remove all pools
+        """
+        [self.remove_pool(i) for i in self.list_pools()]
 
     def kick_recovery_wq(self, osdnum):
         return self.raw_cluster_cmd(
