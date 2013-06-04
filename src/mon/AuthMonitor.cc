@@ -315,12 +315,6 @@ bool AuthMonitor::prepare_update(PaxosServiceMessage *m)
   }
 }
 
-void AuthMonitor::election_finished()
-{
-  dout(10) << "AuthMonitor::election_starting" << dendl;
-  last_allocated_id = 0;
-}
-
 uint64_t AuthMonitor::assign_global_id(MAuth *m, bool should_increase_max)
 {
   int total_mon = mon->monmap->size();
