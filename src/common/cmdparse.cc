@@ -12,9 +12,11 @@
  *
  */
 
+#include <cxxabi.h>
 #include "common/cmdparse.h"
 #include "include/str_list.h"
 #include "json_spirit/json_spirit.h"
+#include "common/debug.h"
 
 using namespace std;
 
@@ -170,3 +172,19 @@ cmdmap_from_json(vector<string> cmd, map<string, cmd_vartype> *mapp, stringstrea
   }
 }
 
+void
+handle_bad_get(CephContext *cct, string k, const char *tname)
+{
+  ostringstream errstr;
+  int status;
+  const char *typestr = abi::__cxa_demangle(tname, 0, 0, &status);
+  if (status != 0) 
+    typestr = tname;
+  errstr << "bad boost::get: key " << k << " is not type " << typestr;
+  lderr(cct) << errstr.str() << dendl;
+
+  BackTrace bt(1);
+  ostringstream oss;
+  bt.print(oss);
+  lderr(cct) << oss << dendl;
+}
