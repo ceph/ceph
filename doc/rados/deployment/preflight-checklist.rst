@@ -84,43 +84,12 @@ to logging in as the user you created when no username is specified. ::
 		User ceph
 
 
-Install git
-===========
+Install ceph-deploy
+===================
 
-To clone the ``ceph-deploy`` repository, you will need install ``git``
-on your admin node. ::
+To install ``ceph-deploy``, execute the following:: 
 
-	sudo apt-get install git
-	
-
-Clone ceph-deploy
-=================
-
-To begin working with ``ceph-deploy``, clone its repository. :: 
-
-	git clone https://github.com/ceph/ceph-deploy.git ceph-deploy
-
-
-Install python-virtualenv
-=========================
-
-To bootstrap ``ceph-deploy`` and run it, you must install the
-``python-virtualenv`` package. :: 
-
-	sudo apt-get install python-virtualenv
-
-
-Bootstrap ceph-deploy
-=====================
-
-After you clone the repository, bootstrap ``ceph-deploy``. :: 
-
-	cd ceph-deploy
-	./bootstrap
-
-Add ``ceph-deploy`` to your path (e.g., ``/etc/environment``,
-``~/.pam_environment``) so that you can execute it without remaining in the
-directory that contains ``ceph-deploy``. 
+	sudo apt-get install ceph-deploy
 
 
 Ensure Connectivity
