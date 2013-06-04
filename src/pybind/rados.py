@@ -217,7 +217,7 @@ Rados object in state %s." % (self.state))
         length = 20
         while True:
             ret_buf = create_string_buffer(length)
-            ret = self.librados.rados_conf_get(self.cluster, option,
+            ret = self.librados.rados_conf_get(self.cluster, c_char_p(option),
                                                 ret_buf, c_size_t(length))
             if (ret == 0):
                 return ret_buf.value
@@ -394,11 +394,11 @@ Rados object in state %s." % (self.state))
         :returns: str - cluster fsid
         """
         self.require_state("connected")
-        fsid_len = 36
-        fsid = create_string_buffer(fsid_len + 1)
+        buf_len = 37
+        fsid = create_string_buffer(buf_len)
         ret = self.librados.rados_cluster_fsid(self.cluster,
                                                byref(fsid),
-                                               fsid_len + 1)
+                                               c_size_t(buf_len))
         if ret < 0:
             raise make_ex(ret, "error getting cluster fsid")
         return fsid.value
@@ -501,7 +501,7 @@ class SnapIterator(object):
         while True:
             self.snaps = (ctypes.c_uint64 * num_snaps)()
             ret = self.ioctx.librados.rados_ioctx_snap_list(self.ioctx.io,
-                                self.snaps, num_snaps)
+                                self.snaps, c_int(num_snaps))
             if (ret >= 0):
                 self.max_snap = ret
                 break
@@ -528,7 +528,7 @@ ioctx '%s'" % self.ioctx.name)
         while True:
             name = create_string_buffer(name_len)
             ret = self.ioctx.librados.rados_ioctx_snap_get_name(self.ioctx.io, \
-                                snap_id, byref(name), name_len)
+                                c_uint64(snap_id), byref(name), c_int(name_len))
             if (ret == 0):
                 name_len = ret
                 break
@@ -1102,7 +1102,7 @@ written." % (self.name, ret, length))
         self.require_ioctx_open()
         if not isinstance(key, str):
             raise TypeError('key must be a string')
-        ret = self.librados.rados_trunc(self.io, c_char_p(key), c_size_t(size))
+        ret = self.librados.rados_trunc(self.io, c_char_p(key), c_uint64(size))
         if ret < 0:
             raise make_ex(ret, "Ioctx.trunc(%s): failed to truncate %s" % (self.name, key))
         return ret
