@@ -3597,8 +3597,7 @@ bool OSDMonitor::preprocess_pool_op_create(MPoolOp *m)
 bool OSDMonitor::prepare_pool_op(MPoolOp *m)
 {
   dout(10) << "prepare_pool_op " << *m << dendl;
-  if (m->op == POOL_OP_CREATE ||
-      m->op == POOL_OP_AUID_CHANGE) {
+  if (m->op == POOL_OP_CREATE) {
     return prepare_pool_op_create(m);
   } else if (m->op == POOL_OP_DELETE) {
     return prepare_pool_op_delete(m);
@@ -3665,6 +3664,13 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
   case POOL_OP_DELETE_UNMANAGED_SNAP:
     if (!pp.is_removed_snap(m->snapid)) {
       pp.remove_unmanaged_snap(m->snapid);
+      changed = true;
+    }
+    break;
+
+  case POOL_OP_AUID_CHANGE:
+    if (pp.auid != m->auid) {
+      pp.auid = m->auid;
       changed = true;
     }
     break;
