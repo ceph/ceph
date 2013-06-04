@@ -90,7 +90,8 @@ void LevelDBStore::close()
     compact_queue_lock.Unlock();
   }
 
-  cct->get_perfcounters_collection()->remove(logger);
+  if (logger)
+    cct->get_perfcounters_collection()->remove(logger);
 }
 
 int LevelDBStore::submit_transaction(KeyValueDB::Transaction t)
@@ -229,26 +230,27 @@ void LevelDBStore::compact_range_async(const string& start, const string& end)
   // try to merge adjacent ranges.  this is O(n), but the queue should
   // be short.  note that we do not cover all overlap cases and merge
   // opportunities here, but we capture the ones we currently need.
-  list< pair<string,string> >::iterator p;
-  for (p = compact_queue.begin(); p != compact_queue.end(); ++p) {
+  list< pair<string,string> >::iterator p = compact_queue.begin();
+  while (p != compact_queue.end()) {
     if (p->first == start && p->second == end) {
       // dup; no-op
       return;
-    } else if (p->first <= end && p->first > start) {
+    }
+    if (p->first <= end && p->first > start) {
       // merge with existing range to the right
       compact_queue.push_back(make_pair(start, p->second));
       compact_queue.erase(p);
       logger->inc(l_leveldb_compact_queue_merge);
       break;
-    } else if (p->second >= start && p->second < end) {
+    }
+    if (p->second >= start && p->second < end) {
       // merge with existing range to the left
       compact_queue.push_back(make_pair(p->first, end));
       compact_queue.erase(p);
       logger->inc(l_leveldb_compact_queue_merge);
       break;
-    } else {
-      ++p;
     }
+    ++p;
   }
   if (p == compact_queue.end()) {
     // no merge, new entry.
