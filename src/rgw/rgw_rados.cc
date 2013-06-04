@@ -1871,8 +1871,10 @@ bool RGWRados::aio_completed(void *handle)
  * Returns: 0 on success, -ERR# otherwise.
  */
 int RGWRados::copy_obj(void *ctx,
+               const string& user_id,
                rgw_obj& dest_obj,
                rgw_obj& src_obj,
+               RGWBucketInfo& dest_bucket_info,
                time_t *mtime,
                const time_t *mod_ptr,
                const time_t *unmod_ptr,
@@ -1942,6 +1944,18 @@ int RGWRados::copy_obj(void *ctx,
     }
   }
 
+
+  if ((dest_bucket_info.region.empty() && !region.is_master) ||
+      (dest_bucket_info.region != region.name)) {
+    /* dest is in a different region, copy it there */
+
+    map<string, bufferlist> src_attrs;
+  
+    int ret = rest_conn->put_obj(user_id, dest_obj, astate->size, NULL);
+    if (ret < 0)
+      return ret;
+  }
+      
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     return copy_obj_data(ctx, handle, end, dest_obj, src_obj, mtime, attrset, category, ptag, err);
   }
