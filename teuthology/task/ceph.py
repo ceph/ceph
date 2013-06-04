@@ -194,6 +194,7 @@ def valgrind_post(ctx, config):
                     'zgrep',
                     '<kind>',
                     run.Raw('/var/log/ceph/valgrind/*'),
+                    '/dev/null', # include a second file so that we always get a filename prefix on the output
                     run.Raw('|'),
                     'sort',
                     run.Raw('|'),
