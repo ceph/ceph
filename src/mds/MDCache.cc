@@ -8584,7 +8584,7 @@ void MDCache::eval_stray(CDentry *dn)
       dout(20) << " pending recovery" << dendl;
       return;  // don't mess with file size probing
     }
-    if (in->get_num_ref() > (int)in->is_dirty() + (int)in->is_dirty_parent()) {
+    if (in->get_num_ref() > (int)in->is_dirty()) {
       dout(20) << " too many inode refs" << dendl;
       return;
     }
@@ -8865,9 +8865,6 @@ void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
   // drop inode
   if (in->is_dirty())
     in->mark_clean();
-  if (in->is_dirty_parent())
-    in->clear_dirty_parent();
-
   remove_inode(in);
 
   // drop dentry?
