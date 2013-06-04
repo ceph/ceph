@@ -404,6 +404,30 @@ private:
     return -1;
   }
 
+  int get_next_up_osd_after(int n) const {
+    for (int i = n + 1; i != n; ++i) {
+      if (i >= get_max_osd())
+	i = 0;
+      if (i == n)
+	break;
+      if (is_up(i))
+	return i;
+    }
+    return -1;
+  }
+
+  int get_previous_up_osd_before(int n) const {
+    for (int i = n - 1; i != n; --i) {
+      if (i < 0)
+	i = get_max_osd() - 1;
+      if (i == n)
+	break;
+      if (is_up(i))
+	return i;
+    }
+    return -1;
+  }
+
   /**
    * get feature bits required by the current structure
    *

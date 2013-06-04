@@ -22,7 +22,14 @@ void DumbBackend::_write(
     std::cout << full_path << ": errno is " << errno << std::endl;
     assert(0);
   }
-  ::lseek(fd, offset, SEEK_SET);
+
+  int r =  ::lseek(fd, offset, SEEK_SET);
+  if (r < 0) {
+    r = errno;
+    std::cout << "lseek failed, errno is: " << r << std::endl;
+    ::close(fd);
+    return;
+  }
   bl.write_fd(fd);
   on_applied->complete(0);
   if (do_fsync)
@@ -30,9 +37,12 @@ void DumbBackend::_write(
   if (do_sync_file_range)
     ::sync_file_range(fd, offset, bl.length(),
 		      SYNC_FILE_RANGE_WAIT_AFTER);
-  if (do_fadvise)
-    ::posix_fadvise(fd, offset, bl.length(),
-		    POSIX_FADV_DONTNEED);
+  if (do_fadvise) {
+    int fa_r = ::posix_fadvise(fd, offset, bl.length(), POSIX_FADV_DONTNEED);
+    if (fa_r) {
+        std::cout << "posix_fadvise failed, errno is: " << fa_r << std::endl;
+    }
+  }
   ::close(fd);
   {
     Mutex::Locker l(pending_commit_mutex);
@@ -55,6 +65,8 @@ void DumbBackend::read(
 
   int r = ::lseek(fd, offset, SEEK_SET);
   if (r < 0) {
+    r = errno;
+    std::cout << "lseek failed, errno is: " << r << std::endl;
     ::close(fd);
     return;
   }

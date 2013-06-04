@@ -36,6 +36,7 @@
 #include "include/atomic.h"
 #include "SnapMapper.h"
 
+#include "PGLog.h"
 #include "OpRequest.h"
 #include "OSDMap.h"
 #include "os/ObjectStore.h"
@@ -43,6 +44,7 @@
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDPGLog.h"
 #include "common/tracked_int_ptr.hpp"
+#include "common/WorkQueue.h"
 
 #include <list>
 #include <memory>
@@ -154,211 +156,7 @@ struct PGPool {
 
 class PG {
 public:
-  /* Exceptions */
-  class read_log_error : public buffer::error {
-  public:
-    explicit read_log_error(const char *what) {
-      snprintf(buf, sizeof(buf), "read_log_error: %s", what);
-    }
-    const char *what() const throw () {
-      return buf;
-    }
-  private:
-    char buf[512];
-  };
-
   std::string gen_prefix() const;
-
-
-  /**
-   * IndexLog - adds in-memory index of the log, by oid.
-   * plus some methods to manipulate it all.
-   */
-  struct IndexedLog : public pg_log_t {
-    hash_map<hobject_t,pg_log_entry_t*> objects;  // ptrs into log.  be careful!
-    hash_map<osd_reqid_t,pg_log_entry_t*> caller_ops;
-
-    // recovery pointers
-    list<pg_log_entry_t>::iterator complete_to;  // not inclusive of referenced item
-    version_t last_requested;           // last object requested by primary
-
-    /****/
-    IndexedLog() : last_requested(0) {}
-
-    void claim_log(const pg_log_t& o) {
-      log = o.log;
-      head = o.head;
-      tail = o.tail;
-      index();
-    }
-
-    void split_into(
-      pg_t child_pgid,
-      unsigned split_bits,
-      IndexedLog *olog);
-
-    void zero() {
-      unindex();
-      pg_log_t::clear();
-      reset_recovery_pointers();
-    }
-    void reset_recovery_pointers() {
-      complete_to = log.end();
-      last_requested = 0;
-    }
-
-    bool logged_object(const hobject_t& oid) const {
-      return objects.count(oid);
-    }
-    bool logged_req(const osd_reqid_t &r) const {
-      return caller_ops.count(r);
-    }
-    eversion_t get_request_version(const osd_reqid_t &r) const {
-      hash_map<osd_reqid_t,pg_log_entry_t*>::const_iterator p = caller_ops.find(r);
-      if (p == caller_ops.end())
-	return eversion_t();
-      return p->second->version;    
-    }
-
-    void index() {
-      objects.clear();
-      caller_ops.clear();
-      for (list<pg_log_entry_t>::iterator i = log.begin();
-           i != log.end();
-           ++i) {
-        objects[i->soid] = &(*i);
-	if (i->reqid_is_indexed()) {
-	  //assert(caller_ops.count(i->reqid) == 0);  // divergent merge_log indexes new before unindexing old
-	  caller_ops[i->reqid] = &(*i);
-	}
-      }
-    }
-
-    void index(pg_log_entry_t& e) {
-      if (objects.count(e.soid) == 0 || 
-          objects[e.soid]->version < e.version)
-        objects[e.soid] = &e;
-      if (e.reqid_is_indexed()) {
-	//assert(caller_ops.count(i->reqid) == 0);  // divergent merge_log indexes new before unindexing old
-	caller_ops[e.reqid] = &e;
-      }
-    }
-    void unindex() {
-      objects.clear();
-      caller_ops.clear();
-    }
-    void unindex(pg_log_entry_t& e) {
-      // NOTE: this only works if we remove from the _tail_ of the log!
-      if (objects.count(e.soid) && objects[e.soid]->version == e.version)
-        objects.erase(e.soid);
-      if (e.reqid_is_indexed() &&
-	  caller_ops.count(e.reqid) &&  // divergent merge_log indexes new before unindexing old
-	  caller_ops[e.reqid] == &e)
-	caller_ops.erase(e.reqid);
-    }
-
-    // actors
-    void add(pg_log_entry_t& e) {
-      // add to log
-      log.push_back(e);
-      assert(e.version > head);
-      assert(head.version == 0 || e.version.version > head.version);
-      head = e.version;
-
-      // to our index
-      objects[e.soid] = &(log.back());
-      caller_ops[e.reqid] = &(log.back());
-    }
-
-    void trim(ObjectStore::Transaction &t, hobject_t& oid, eversion_t s);
-
-    ostream& print(ostream& out) const;
-  };
-  
-
-  /**
-   * OndiskLog - some info about how we store the log on disk.
-   */
-  class OndiskLog {
-  public:
-    // ok
-    uint64_t tail;                     // first byte of log. 
-    uint64_t head;                     // byte following end of log.
-    uint64_t zero_to;                // first non-zeroed byte of log.
-    bool has_checksums;
-
-    /**
-     * We reconstruct the missing set by comparing the recorded log against
-     * the objects in the pg collection.  Unfortunately, it's possible to
-     * have an object in the missing set which is not in the log due to
-     * a divergent operation with a prior_version pointing before the
-     * pg log tail.  To deal with this, we store alongside the log a mapping
-     * of divergent priors to be checked along with the log during read_state.
-     */
-    map<eversion_t, hobject_t> divergent_priors;
-    void add_divergent_prior(eversion_t version, hobject_t obj) {
-      divergent_priors.insert(make_pair(version, obj));
-    }
-
-    OndiskLog() : tail(0), head(0), zero_to(0),
-		  has_checksums(true) {}
-
-    uint64_t length() { return head - tail; }
-    bool trim_to(eversion_t v, ObjectStore::Transaction& t);
-
-    void zero() {
-      tail = 0;
-      head = 0;
-      zero_to = 0;
-    }
-
-    void encode(bufferlist& bl) const {
-      ENCODE_START(5, 3, bl);
-      ::encode(tail, bl);
-      ::encode(head, bl);
-      ::encode(zero_to, bl);
-      ::encode(divergent_priors, bl);
-      ENCODE_FINISH(bl);
-    }
-    void decode(bufferlist::iterator& bl) {
-      DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
-      has_checksums = (struct_v >= 2);
-      ::decode(tail, bl);
-      ::decode(head, bl);
-      if (struct_v >= 4)
-	::decode(zero_to, bl);
-      else
-	zero_to = 0;
-      if (struct_v >= 5)
-	::decode(divergent_priors, bl);
-      DECODE_FINISH(bl);
-    }
-    void dump(Formatter *f) const {
-      f->dump_unsigned("head", head);
-      f->dump_unsigned("tail", tail);
-      f->dump_unsigned("zero_to", zero_to);
-      f->open_array_section("divergent_priors");
-      for (map<eversion_t, hobject_t>::const_iterator p = divergent_priors.begin();
-	   p != divergent_priors.end();
-	   ++p) {
-	f->open_object_section("prior");
-	f->dump_stream("version") << p->first;
-	f->dump_stream("object") << p->second;
-	f->close_section();
-      }
-      f->close_section();
-    }
-    static void generate_test_instances(list<OndiskLog*>& o) {
-      o.push_back(new OndiskLog);
-      o.push_back(new OndiskLog);
-      o.back()->tail = 2;
-      o.back()->head = 3;
-      o.back()->zero_to = 1;
-    }
-  };
-  WRITE_CLASS_ENCODER(OndiskLog)
-
-
 
   /*** PG ****/
 protected:
@@ -374,6 +172,7 @@ protected:
   Mutex map_lock;
   list<OpRequestRef> waiting_for_map;
   OSDMapRef osdmap_ref;
+  OSDMapRef last_persisted_osdmap_ref;
   PGPool pool;
 
   void queue_op(OpRequestRef op);
@@ -465,7 +264,7 @@ public:
     const interval_set<snapid_t> &snapcolls);
 
   const coll_t coll;
-  IndexedLog  log;
+  PGLog  pg_log;
   static string get_info_key(pg_t pgid) {
     return stringify(pgid) + "_info";
   }
@@ -477,8 +276,6 @@ public:
   }
   hobject_t    log_oid;
   hobject_t    biginfo_oid;
-  OndiskLog   ondisklog;
-  pg_missing_t     missing;
   map<hobject_t, set<int> > missing_loc;
   set<int> missing_loc_sources;           // superset of missing_loc locations
   
@@ -783,16 +580,6 @@ public:
   bool proc_replica_info(int from, const pg_info_t &info);
   void remove_snap_mapped_object(
     ObjectStore::Transaction& t, const hobject_t& soid);
-  bool merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe);
-
-  /**
-   * Merges authoratative log/info into current log/info/store
-   *
-   * @param [in,out] t used to delete obsolete objects
-   * @param [in,out] oinfo recieved authoritative info
-   * @param [in,out] olog recieved authoritative log
-   * @param [in] from peer which sent the information
-   */
   void merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from);
   void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead);
   bool search_for_missing(const pg_info_t &oinfo, const pg_missing_t *omissing,
@@ -821,10 +608,10 @@ public:
   void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
 
   bool have_unfound() const { 
-    return missing.num_missing() > missing_loc.size();
+    return pg_log.get_missing().num_missing() > missing_loc.size();
   }
   int get_num_unfound() const {
-    return missing.num_missing() - missing_loc.size();
+    return pg_log.get_missing().num_missing() - missing_loc.size();
   }
 
   virtual void clean_up_local(ObjectStore::Transaction& t) = 0;
@@ -1030,24 +817,29 @@ public:
 			  map<hobject_t, int> &authoritative,
 			  map<hobject_t, set<int> > &inconsistent_snapcolls,
 			  ostream &errorstream);
-  void scrub();
-  void classic_scrub();
-  void chunky_scrub();
+  void scrub(ThreadPool::TPHandle &handle);
+  void classic_scrub(ThreadPool::TPHandle &handle);
+  void chunky_scrub(ThreadPool::TPHandle &handle);
   void scrub_compare_maps();
   void scrub_process_inconsistent();
   void scrub_finalize();
   void scrub_finish();
   void scrub_clear_state();
   bool scrub_gather_replica_maps();
-  void _scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep);
+  void _scan_list(
+    ScrubMap &map, vector<hobject_t> &ls, bool deep,
+    ThreadPool::TPHandle &handle);
   void _scan_snaps(ScrubMap &map);
   void _request_scrub_map_classic(int replica, eversion_t version);
   void _request_scrub_map(int replica, eversion_t version,
                           hobject_t start, hobject_t end, bool deep);
-  int build_scrub_map_chunk(ScrubMap &map,
-                            hobject_t start, hobject_t end, bool deep);
-  void build_scrub_map(ScrubMap &map);
-  void build_inc_scrub_map(ScrubMap &map, eversion_t v);
+  int build_scrub_map_chunk(
+    ScrubMap &map,
+    hobject_t start, hobject_t end, bool deep,
+    ThreadPool::TPHandle &handle);
+  void build_scrub_map(ScrubMap &map, ThreadPool::TPHandle &handle);
+  void build_inc_scrub_map(
+    ScrubMap &map, eversion_t v, ThreadPool::TPHandle &handle);
   virtual void _scrub(ScrubMap &map) { }
   virtual void _scrub_clear_state() { }
   virtual void _scrub_finish() { }
@@ -1066,7 +858,9 @@ public:
   void reg_next_scrub();
   void unreg_next_scrub();
 
-  void replica_scrub(class MOSDRepScrub *op);
+  void replica_scrub(
+    class MOSDRepScrub *op,
+    ThreadPool::TPHandle &handle);
   void sub_op_scrub_map(OpRequestRef op);
   void sub_op_scrub_reserve(OpRequestRef op);
   void sub_op_scrub_reserve_reply(OpRequestRef op);
@@ -1870,35 +1664,18 @@ private:
   void write_log(ObjectStore::Transaction& t);
 
 public:
-  static void clear_info_log(
-    pg_t pgid,
-    const hobject_t &infos_oid,
-    const hobject_t &log_oid,
-    ObjectStore::Transaction *t);
-
   static int _write_info(ObjectStore::Transaction& t, epoch_t epoch,
     pg_info_t &info, coll_t coll,
     map<epoch_t,pg_interval_t> &past_intervals,
     interval_set<snapid_t> &snap_collections,
     hobject_t &infos_oid,
     __u8 info_struct_v, bool dirty_big_info, bool force_ver = false);
-  static void _write_log(ObjectStore::Transaction& t, pg_log_t &log,
-    const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors);
   void write_if_dirty(ObjectStore::Transaction& t);
 
   void add_log_entry(pg_log_entry_t& e, bufferlist& log_bl);
   void append_log(
     vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t);
-
-  /// return true if the log should be rewritten
-  static bool read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
-    const pg_info_t &info, OndiskLog &ondisklog, IndexedLog &log,
-    pg_missing_t &missing, ostringstream &oss, const PG *passedpg = NULL);
-  static void read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
-    const pg_info_t &info, OndiskLog &ondisklog, IndexedLog &log,
-    pg_missing_t &missing, ostringstream &oss, const PG *passedpg = NULL);
   bool check_log_for_corruption(ObjectStore *store);
-  void trim(ObjectStore::Transaction& t, eversion_t v);
   void trim_peers();
 
   std::string get_corrupt_pg_log_name() const;
@@ -2018,8 +1795,6 @@ public:
   virtual void on_flushed() = 0;
   virtual void on_shutdown() = 0;
 };
-
-WRITE_CLASS_ENCODER(PG::OndiskLog)
 
 ostream& operator<<(ostream& out, const PG& pg);
 

@@ -15,6 +15,9 @@
 #ifndef __CEPH_OS_HOBJECT_H
 #define __CEPH_OS_HOBJECT_H
 
+#include <string.h>
+#include "include/types.h"
+#include "include/rados.h"
 #include "include/object.h"
 #include "include/cmp.h"
 

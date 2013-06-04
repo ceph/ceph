@@ -40,6 +40,8 @@ using namespace __gnu_cxx;
 #include "IndexManager.h"
 #include "ObjectMap.h"
 #include "SequencerPosition.h"
+#include "FDCache.h"
+#include "WBThrottle.h"
 
 #include "include/uuid.h"
 
@@ -198,6 +200,10 @@ private:
 
   friend ostream& operator<<(ostream& out, const OpSequencer& s);
 
+  Mutex fdcache_lock;
+  FDCache fdcache;
+  WBThrottle wbthrottle;
+
   Sequencer default_osr;
   deque<OpSequencer*> op_queue;
   uint64_t op_queue_len, op_queue_bytes;
@@ -250,23 +256,7 @@ private:
   void _journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk);
   friend class C_JournaledAhead;
 
-  // flusher thread
-  Cond flusher_cond;
-  list<uint64_t> flusher_queue;
-  int flusher_queue_len;
-  void flusher_entry();
-  struct FlusherThread : public Thread {
-    FileStore *fs;
-    FlusherThread(FileStore *f) : fs(f) {}
-    void *entry() {
-      fs->flusher_entry();
-      return 0;
-    }
-  } flusher_thread;
-  bool queue_flusher(int fd, uint64_t off, uint64_t len, bool replica);
-
   int open_journal();
-
 
   PerfCounters *logger;
 
@@ -274,13 +264,14 @@ public:
   int lfn_find(coll_t cid, const hobject_t& oid, IndexedPath *path);
   int lfn_truncate(coll_t cid, const hobject_t& oid, off_t length);
   int lfn_stat(coll_t cid, const hobject_t& oid, struct stat *buf);
-  int lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode,
-	       IndexedPath *path);
-  int lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode,
-	       IndexedPath *path, Index *index);
-  int lfn_open(coll_t cid, const hobject_t& oid, int flags, mode_t mode);
-  int lfn_open(coll_t cid, const hobject_t& oid, int flags);
-  void lfn_close(int fd);
+  int lfn_open(
+    coll_t cid,
+    const hobject_t& oid,
+    bool create,
+    FDRef *outfd,
+    IndexedPath *path = 0,
+    Index *index = 0);
+  void lfn_close(FDRef fd);
   int lfn_link(coll_t c, coll_t cid, const hobject_t& o) ;
   int lfn_unlink(coll_t cid, const hobject_t& o, const SequencerPosition &spos);
 
@@ -510,15 +501,11 @@ private:
   bool m_filestore_btrfs_snap;
   float m_filestore_commit_timeout;
   bool m_filestore_fiemap;
-  bool m_filestore_flusher;
   bool m_filestore_fsync_flushes_journal_data;
   bool m_filestore_journal_parallel;
   bool m_filestore_journal_trailing;
   bool m_filestore_journal_writeahead;
   int m_filestore_fiemap_threshold;
-  bool m_filestore_sync_flush;
-  int m_filestore_flusher_max_fds;
-  int m_filestore_flush_min;
   double m_filestore_max_sync_interval;
   double m_filestore_min_sync_interval;
   bool m_filestore_fail_eio;

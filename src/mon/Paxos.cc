@@ -21,6 +21,7 @@
 
 #include "common/config.h"
 #include "include/assert.h"
+#include "include/stringify.h"
 #include "common/Formatter.h"
 
 #define dout_subsys ceph_subsys_paxos
@@ -35,13 +36,6 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, const string& name,
 		<< ".paxos(" << paxos_name << " " << Paxos::get_statename(state)
 		<< " c " << first_committed << ".." << last_committed
 		<< ") ";
-}
-
-void Paxos::prepare_bootstrap()
-{
-  dout(0) << __func__ << dendl;
-
-  going_to_bootstrap = true;
 }
 
 MonitorDBStore *Paxos::get_store()
@@ -445,6 +439,8 @@ void Paxos::handle_last(MMonPaxos *last)
 	dout(10) << "that's everyone.  active!" << dendl;
 	extend_lease();
 
+        finish_proposal();
+
 	finish_contexts(g_ceph_context, waiting_for_active);
 	finish_contexts(g_ceph_context, waiting_for_readable);
 	finish_contexts(g_ceph_context, waiting_for_writeable);
@@ -834,12 +830,6 @@ void Paxos::finish_proposal()
   first_committed = get_store()->get(get_name(), "first_committed");
   last_committed = get_store()->get(get_name(), "last_committed");
 
-  if (proposals.empty() && going_to_bootstrap) {
-    dout(0) << __func__ << " no more proposals; bootstraping." << dendl;
-    mon->bootstrap();
-    return;
-  }
-
   if (should_trim()) {
     trim();
   }
@@ -888,10 +878,7 @@ void Paxos::handle_lease(MMonPaxos *lease)
   mon->messenger->send_message(ack, lease->get_source_inst());
 
   // (re)set timeout event.
-  if (lease_timeout_event) 
-    mon->timer.cancel_event(lease_timeout_event);
-  lease_timeout_event = new C_LeaseTimeout(this);
-  mon->timer.add_event_after(g_conf->mon_lease_ack_timeout, lease_timeout_event);
+  reset_lease_timeout();
 
   // kick waiters
   finish_contexts(g_ceph_context, waiting_for_active);
@@ -946,6 +933,15 @@ void Paxos::lease_ack_timeout()
   mon->bootstrap();
 }
 
+void Paxos::reset_lease_timeout()
+{
+  dout(20) << "reset_lease_timeout - setting timeout event" << dendl;
+  if (lease_timeout_event)
+    mon->timer.cancel_event(lease_timeout_event);
+  lease_timeout_event = new C_LeaseTimeout(this);
+  mon->timer.add_event_after(g_conf->mon_lease_ack_timeout, lease_timeout_event);
+}
+
 void Paxos::lease_timeout()
 {
   dout(5) << "lease_timeout -- calling new election" << dendl;
@@ -970,14 +966,13 @@ void Paxos::trim_to(MonitorDBStore::Transaction *t,
   dout(10) << __func__ << " from " << from << " to " << to << dendl;
   assert(from < to);
 
-  while (from < to) {
-    dout(10) << "trim " << from << dendl;
-    t->erase(get_name(), from);
-    from++;
+  for (version_t v = from; v < to; ++v) {
+    dout(10) << "trim " << v << dendl;
+    t->erase(get_name(), v);
   }
   if (g_conf->mon_compact_on_trim) {
-    dout(10) << " compacting prefix" << dendl;
-    t->compact_prefix(get_name());
+    dout(10) << " compacting trimmed range" << dendl;
+    t->compact_range(get_name(), stringify(from - 1), stringify(to));
   }
 }
 
@@ -1085,16 +1080,15 @@ void Paxos::shutdown() {
   finish_contexts(g_ceph_context, waiting_for_commit, -ECANCELED);
   finish_contexts(g_ceph_context, waiting_for_readable, -ECANCELED);
   finish_contexts(g_ceph_context, waiting_for_active, -ECANCELED);
+  finish_contexts(g_ceph_context, proposals, -ECANCELED);
 }
 
 void Paxos::leader_init()
 {
   cancel_events();
   new_value.clear();
-  if (!proposals.empty())
-    proposals.clear();
 
-  going_to_bootstrap = false;
+  finish_contexts(g_ceph_context, proposals, -EAGAIN);
 
   if (mon->get_quorum().size() == 1) {
     state = STATE_ACTIVE;
@@ -1116,9 +1110,13 @@ void Paxos::peon_init()
   lease_expire = utime_t();
   dout(10) << "peon_init -- i am a peon" << dendl;
 
+  // start a timer, in case the leader never manages to issue a lease
+  reset_lease_timeout();
+
   // no chance to write now!
   finish_contexts(g_ceph_context, waiting_for_writeable, -EAGAIN);
   finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
+  finish_contexts(g_ceph_context, proposals, -EAGAIN);
 }
 
 void Paxos::restart()
@@ -1126,13 +1124,10 @@ void Paxos::restart()
   dout(10) << "restart -- canceling timeouts" << dendl;
   cancel_events();
   new_value.clear();
-  dout(10) << __func__ << " -- clearing queued proposals" << dendl;
-  if (!proposals.empty())
-    proposals.clear();
 
   state = STATE_RECOVERING;
-  going_to_bootstrap = false;
 
+  finish_contexts(g_ceph_context, proposals, -EAGAIN);
   finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
   finish_contexts(g_ceph_context, waiting_for_active, -EAGAIN);
 }

@@ -828,4 +828,5 @@ void MonClient::handle_get_version_reply(MMonGetVersionReply* m)
     finisher.queue(req->context, 0);
     delete req;
   }
+  m->put();
 }
