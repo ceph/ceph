@@ -759,8 +759,11 @@ public:
    * err: stores any errors resulting from the get of the original object
    * Returns: 0 on success, -ERR# otherwise.
    */
-  virtual int copy_obj(void *ctx, rgw_obj& dest_obj,
+  virtual int copy_obj(void *ctx,
+               const string& user_id,
+               rgw_obj& dest_obj,
                rgw_obj& src_obj,
+               RGWBucketInfo& dest_bucket_info,
                time_t *mtime,
                const time_t *mod_ptr,
                const time_t *unmod_ptr,
