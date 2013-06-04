@@ -586,7 +586,7 @@ class CephManager:
         return r
 
     def get_pg_stats(self):
-        out = self.raw_cluster_cmd('--', 'pg','dump','--format=json')
+        out = self.raw_cluster_cmd('pg','dump','--format=json')
         j = json.loads('\n'.join(out.split('\n')[1:]))
         return j['pg_stats']
 
