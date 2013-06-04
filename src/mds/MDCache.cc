@@ -144,6 +144,7 @@ MDCache::MDCache(MDS *m)
                         (0.9 *(g_conf->osd_max_write_size << 20));
 
   discover_last_tid = 0;
+  open_ino_last_tid = 0;
   find_ino_peer_last_tid = 0;
 
   last_cap_id = 0;
@@ -151,6 +152,10 @@ MDCache::MDCache(MDS *m)
   client_lease_durations[0] = 5.0;
   client_lease_durations[1] = 30.0;
   client_lease_durations[2] = 300.0;
+
+  resolves_pending = false;
+  rejoins_pending = false;
+  cap_imports_num_opening = 0;
 
   opening_root = open = false;
   lru.lru_set_max(g_conf->mds_cache_size);
