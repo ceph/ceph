@@ -786,7 +786,7 @@ def parse_cmdargs(args=None, target=''):
     parser.add_argument('--help-all', help='request help for all daemons',
                         action='store_true')
 
-    parser.add_argument('-c', dest='cephconf',
+    parser.add_argument('-c', '--conf', dest='cephconf',
                         help='ceph configuration file')
     parser.add_argument('-i', '--in-file', dest='input_file',
                         help='input file')
@@ -1447,6 +1447,10 @@ def main():
         print >> sys.stderr, 'Error {0}: {1}'.format(errno.errorcode[ret], outs)
         return ret
 
+    # this assumes outs never has useful command output, only status
+    if outs:
+        print >> sys.stderr, outs
+
     if (parsed_args.output_file):
         outf.write(outbuf)
         outf.close()
@@ -1461,8 +1465,6 @@ def main():
 
         sys.stdout.write(outbuf)
 
-    # this assumes outs never has useful command output, only status
-    print >> sys.stderr, outs
     return 0
 
 if __name__ == '__main__':
