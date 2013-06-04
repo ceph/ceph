@@ -19,11 +19,13 @@
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/types.h"
+#include <include/stringify.h>
 
 #include "librados/AioCompletionImpl.h"
 #include "librados/IoCtxImpl.h"
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "librados/RadosClient.h"
+#include <cls/lock/cls_lock_client.h>
 
 #include <string>
 #include <map>
@@ -979,6 +981,83 @@ int librados::IoCtx::selfmanaged_snap_rollback(const std::string& oid, uint64_t 
   return io_ctx_impl->selfmanaged_snap_rollback_object(oid,
 						       io_ctx_impl->snapc,
 						       snapid);
+}
+
+int librados::IoCtx::lock_exclusive(const std::string &oid, const std::string &name,
+				    const std::string &cookie,
+				    const std::string &description,
+				    struct timeval * duration, uint8_t flags)
+{
+  utime_t dur = utime_t();
+  if (duration)
+    dur.set_from_timeval(duration);
+
+  return rados::cls::lock::lock(this, oid, name, LOCK_EXCLUSIVE, cookie, "",
+		  		description, dur, flags);
+}
+
+int librados::IoCtx::lock_shared(const std::string &oid, const std::string &name,
+				 const std::string &cookie, const std::string &tag,
+				 const std::string &description,
+				 struct timeval * duration, uint8_t flags)
+{
+  utime_t dur = utime_t();
+  if (duration)
+    dur.set_from_timeval(duration);
+
+  return rados::cls::lock::lock(this, oid, name, LOCK_SHARED, cookie, tag,
+		  		description, dur, flags);
+}
+
+int librados::IoCtx::unlock(const std::string &oid, const std::string &name,
+			    const std::string &cookie)
+{
+  return rados::cls::lock::unlock(this, oid, name, cookie);
+}
+
+int librados::IoCtx::break_lock(const std::string &oid, const std::string &name,
+				const std::string &client, const std::string &cookie)
+{
+  entity_name_t locker;
+  if (!locker.parse(client))
+    return -EINVAL;
+  return rados::cls::lock::break_lock(this, oid, name, cookie, locker);
+}
+
+int librados::IoCtx::list_lockers(const std::string &oid, const std::string &name,
+				  int *exclusive,
+				  std::string *tag,
+				  std::list<librados::locker_t> *lockers)
+{
+  std::list<librados::locker_t> tmp_lockers;
+  map<rados::cls::lock::locker_id_t, rados::cls::lock::locker_info_t> rados_lockers;
+  std::string tmp_tag;
+  ClsLockType tmp_type;
+  int r = rados::cls::lock::get_lock_info(this, oid, name, &rados_lockers, &tmp_type, &tmp_tag);
+  if (r < 0)
+	  return r;
+
+  map<rados::cls::lock::locker_id_t, rados::cls::lock::locker_info_t>::iterator map_it;
+  for (map_it = rados_lockers.begin(); map_it != rados_lockers.end(); ++map_it) {
+    librados::locker_t locker;
+    locker.client = stringify(map_it->first.locker);
+    locker.cookie = map_it->first.cookie;
+    locker.address = stringify(map_it->second.addr);
+    tmp_lockers.push_back(locker);
+  }
+
+  if (lockers)
+    *lockers = tmp_lockers;
+  if (tag)
+    *tag = tmp_tag;
+  if (exclusive) {
+    if (tmp_type == LOCK_EXCLUSIVE)
+      *exclusive = 1;
+    else
+      *exclusive = 0;
+  }
+
+  return tmp_lockers.size();
 }
 
 librados::ObjectIterator librados::IoCtx::objects_begin()
@@ -2365,4 +2444,104 @@ int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver, const char *buf,
     bl.push_back(p);
   }
   return ctx->notify(oid, ver, bl);
+}
+
+extern "C" int rados_lock_exclusive(rados_ioctx_t io, const char * o,
+			  const char * name, const char * cookie,
+			  const char * desc, struct timeval * duration,
+			  uint8_t flags)
+{
+  librados::IoCtx ctx;
+  librados::IoCtx::from_rados_ioctx_t(io, ctx);
+
+  return ctx.lock_exclusive(o, name, cookie, desc, duration, flags);
+}
+
+extern "C" int rados_lock_shared(rados_ioctx_t io, const char * o,
+			  const char * name, const char * cookie,
+			  const char * tag, const char * desc,
+			  struct timeval * duration, uint8_t flags)
+{
+  librados::IoCtx ctx;
+  librados::IoCtx::from_rados_ioctx_t(io, ctx);
+
+  return ctx.lock_shared(o, name, cookie, tag, desc, duration, flags);
+}
+extern "C" int rados_unlock(rados_ioctx_t io, const char *o, const char *name,
+			    const char *cookie)
+{
+  librados::IoCtx ctx;
+  librados::IoCtx::from_rados_ioctx_t(io, ctx);
+
+  return ctx.unlock(o, name, cookie);
+
+}
+
+extern "C" ssize_t rados_list_lockers(rados_ioctx_t io, const char *o,
+				      const char *name, int *exclusive,
+				      char *tag, size_t *tag_len,
+				      char *clients, size_t *clients_len,
+				      char *cookies, size_t *cookies_len,
+				      char *addrs, size_t *addrs_len)
+{
+  librados::IoCtx ctx;
+  librados::IoCtx::from_rados_ioctx_t(io, ctx);
+  std::string name_str = name;
+  std::string oid = o;
+  std::string tag_str;
+  int tmp_exclusive;
+  std::list<librados::locker_t> lockers;
+  int r = ctx.list_lockers(oid, name_str, &tmp_exclusive, &tag_str, &lockers);
+  if (r < 0)
+	  return r;
+
+  size_t clients_total = 0;
+  size_t cookies_total = 0;
+  size_t addrs_total = 0;
+  list<librados::locker_t>::const_iterator it;
+  for (it = lockers.begin(); it != lockers.end(); ++it) {
+    clients_total += it->client.length() + 1;
+    cookies_total += it->cookie.length() + 1;
+    addrs_total += it->address.length() + 1;
+  }
+
+  bool too_short = ((clients_total > *clients_len) ||
+                    (cookies_total > *cookies_len) ||
+                    (addrs_total > *addrs_len) ||
+                    (tag_str.length() + 1 > *tag_len));
+  *clients_len = clients_total;
+  *cookies_len = cookies_total;
+  *addrs_len = addrs_total;
+  *tag_len = tag_str.length() + 1;
+  if (too_short)
+    return -ERANGE;
+
+  strcpy(tag, tag_str.c_str());
+  char *clients_p = clients;
+  char *cookies_p = cookies;
+  char *addrs_p = addrs;
+  for (it = lockers.begin(); it != lockers.end(); ++it) {
+    strcpy(clients_p, it->client.c_str());
+    clients_p += it->client.length() + 1;
+    strcpy(cookies_p, it->cookie.c_str());
+    cookies_p += it->cookie.length() + 1;
+    strcpy(addrs_p, it->address.c_str());
+    addrs_p += it->address.length() + 1;
+  }
+  if (tmp_exclusive)
+    *exclusive = 1;
+  else
+    *exclusive = 0;
+
+  return lockers.size();
+}
+
+extern "C" int rados_break_lock(rados_ioctx_t io, const char *o,
+				const char *name, const char *client,
+				const char *cookie)
+{
+  librados::IoCtx ctx;
+  librados::IoCtx::from_rados_ioctx_t(io, ctx);
+
+  return ctx.break_lock(o, name, client, cookie);
 }

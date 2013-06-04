@@ -47,6 +47,12 @@ namespace librados
     uint64_t num_rd, num_rd_kb, num_wr, num_wr_kb;
   };
 
+  typedef struct {
+    std::string client;
+    std::string cookie;
+    std::string address;
+  } locker_t;
+
   typedef std::map<std::string, pool_stat_t> stats_map;
 
   typedef void *completion_t;
@@ -487,6 +493,29 @@ namespace librados
     int selfmanaged_snap_remove(uint64_t snapid);
 
     int selfmanaged_snap_rollback(const std::string& oid, uint64_t snapid);
+
+    // Advisory locking on rados objects.
+    int lock_exclusive(const std::string &oid, const std::string &name,
+		       const std::string &cookie,
+		       const std::string &description,
+		       struct timeval * duration, uint8_t flags);
+
+    int lock_shared(const std::string &oid, const std::string &name,
+		    const std::string &cookie, const std::string &tag,
+		    const std::string &description,
+		    struct timeval * duration, uint8_t flags);
+
+    int unlock(const std::string &oid, const std::string &name,
+	       const std::string &cookie);
+
+    int break_lock(const std::string &oid, const std::string &name,
+		   const std::string &client, const std::string &cookie);
+
+    int list_lockers(const std::string &oid, const std::string &name,
+		     int *exclusive,
+		     std::string *tag,
+		     std::list<librados::locker_t> *lockers);
+
 
     ObjectIterator objects_begin();
     const ObjectIterator& objects_end() const;
