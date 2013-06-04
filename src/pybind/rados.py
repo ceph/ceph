@@ -182,16 +182,21 @@ class Rados(object):
         raise RadosStateError("You cannot perform that operation on a \
 Rados object in state %s." % (self.state))
 
-    def __init__(self, rados_id=None, conf=None, conffile=None):
+    def __init__(self, rados_id=None, conf=None, conffile=None, name=None):
         self.librados = CDLL('librados.so.2')
         self.cluster = c_void_p()
         self.rados_id = rados_id
-        if rados_id is not None and not isinstance(rados_id, str):
+        if rados_id and not isinstance(rados_id, str):
             raise TypeError('rados_id must be a string or None')
-        if conffile is not None and not isinstance(conffile, str):
+        if conffile and not isinstance(conffile, str):
             raise TypeError('conffile must be a string or None')
-        ret = run_in_thread(self.librados.rados_create,
-                           (byref(self.cluster), c_char_p(rados_id)))
+        if rados_id and name:
+            raise Error("Rados(): can't supply both rados_id and name")
+        fn = self.librados.rados_create
+        if name:
+            fn = self.librados.rados_create2
+        ret = run_in_thread(fn, (byref(self.cluster), c_char_p(rados_id)))
+
         if ret != 0:
             raise Error("rados_initialize failed with error code: %d" % ret)
         self.state = "configuring"

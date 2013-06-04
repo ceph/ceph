@@ -1337,7 +1337,7 @@ def main():
 
     # handle any 'generic' ceph arguments that we didn't parse here
     global cluster
-    cluster = rados.Rados(rados_id=name, conffile='')
+    cluster = rados.Rados(name=name, conffile='')
 
     retargs = cluster.conf_parse_argv(childargs)
     #tmp = childargs
