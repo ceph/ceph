@@ -172,6 +172,25 @@ cmdmap_from_json(vector<string> cmd, map<string, cmd_vartype> *mapp, stringstrea
   }
 }
 
+class stringify_visitor : public boost::static_visitor<string>
+{
+  public:
+    template <typename T>
+    string operator()(T &operand) const
+      {
+	ostringstream oss;
+	oss << operand;
+	return oss.str();
+      }
+};
+
+string 
+cmd_vartype_stringify(const cmd_vartype &v)
+{
+  return boost::apply_visitor(stringify_visitor(), v);
+}
+
+
 void
 handle_bad_get(CephContext *cct, string k, const char *tname)
 {

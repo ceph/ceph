@@ -2137,6 +2137,8 @@ void Monitor::finish_election()
 
 bool Monitor::_allowed_command(MonSession *s, map<string, cmd_vartype>& cmd)
 {
+  bool retval = false;
+
   if (s->caps.is_allow_all())
     return true;
 
@@ -2144,15 +2146,19 @@ bool Monitor::_allowed_command(MonSession *s, map<string, cmd_vartype>& cmd)
   cmd_getval(g_ceph_context, cmd, "prefix", prefix);
 
   map<string,string> strmap;
-  for (map<string, cmd_vartype>::const_iterator p = cmd.begin(); p != cmd.end(); ++p)
-    if (p->first != "prefix")
-      cmd_getval(g_ceph_context, cmd, p->first, strmap[p->first]);
+  for (map<string, cmd_vartype>::const_iterator p = cmd.begin();
+       p != cmd.end(); ++p) {
+    if (p->first != "prefix") {
+      strmap[p->first] = cmd_vartype_stringify(p->second);
+    }
+  }
 
   if (s->caps.is_capable(g_ceph_context, s->inst.name,
-			 "", prefix, strmap, false, false, false))
-    return true;
+			 "", prefix, strmap, false, false, false)) {
+    retval = true; 
+  }
 
-  return false;
+  return retval;
 }
 
 void Monitor::_sync_status(ostream& ss)
