@@ -1742,8 +1742,6 @@ int RGWCopyObj::verify_permission()
   if (ret < 0)
     return ret;
 
-  RGWBucketInfo src_bucket_info, dest_bucket_info;
-
   /* get buckets info (source and dest) */
 
   ret = store->get_bucket_info(s->obj_ctx, src_bucket_name, src_bucket_info, NULL);
@@ -1838,11 +1836,28 @@ void RGWCopyObj::execute()
   src_obj.init(src_bucket, src_object);
   dst_obj.init(dest_bucket, dest_object);
   store->set_atomic(s->obj_ctx, src_obj);
+#if 0
+
+  if ((dest_bucket_info.region.empty() && !store->region.is_master) ||
+      (dest_bucket_info.region != store->region.name)) {
+
+    map<string, bufferlist> src_attrs;
+  
+    int ret = get_obj_attrs(store, s, src_obj, src_attrs
+                         uint64_t *obj_size, RGWObjVersionTracker *objv_tracker)
+
+    int ret = store->rest_conn->put_obj(s->user.user_id, dst_obj, 
+    if (ret < 0)
+      return ret;
+  }
+#endif
   store->set_atomic(s->obj_ctx, dst_obj);
 
   ret = store->copy_obj(s->obj_ctx,
+                        s->user.user_id,
                         dst_obj,
                         src_obj,
+                        dest_bucket_info,
                         &mtime,
                         mod_ptr,
                         unmod_ptr,
