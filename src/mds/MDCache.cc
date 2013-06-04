@@ -169,7 +169,6 @@ MDCache::MDCache(MDS *m)
   memset(&default_log_layout, 0, sizeof(default_log_layout));
 
   did_shutdown_log_cap = false;
-  rejoins_pending = false;
 }
 
 MDCache::~MDCache() 
