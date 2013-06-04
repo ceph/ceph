@@ -431,7 +431,7 @@ int test_ls_snaps(rbd_image_t image, int num_expected, ...)
   rbd_snap_info_t *snaps;
   int num_snaps, i, j, max_size = 10;
   va_list ap;
-  snaps = (rbd_snap_info_t *) malloc(sizeof(rbd_snap_info_t *) * 10);
+  snaps = (rbd_snap_info_t *) malloc(sizeof(rbd_snap_info_t *) * max_size);
   num_snaps = rbd_snap_list(image, snaps, &max_size);
   printf("num snaps is: %d\nexpected: %d\n", num_snaps, num_expected);
 
@@ -442,14 +442,14 @@ int test_ls_snaps(rbd_image_t image, int num_expected, ...)
   va_start(ap, num_expected);
   for (i = num_expected; i > 0; i--) {
     char *expected = va_arg(ap, char *);
-    int expected_size = va_arg(ap, int);
+    uint64_t expected_size = va_arg(ap, uint64_t);
     int found = 0;
     for (j = 0; j < num_snaps; j++) {
       if (snaps[j].name == NULL)
 	continue;
       if (strcmp(snaps[j].name, expected) == 0) {
 	printf("found %s with size %llu\n", snaps[j].name, (unsigned long long) snaps[j].size);
-	assert((int)snaps[j].size == expected_size);
+	assert(snaps[j].size == expected_size);
 	free((void *) snaps[j].name);
 	snaps[j].name = NULL;
 	found = 1;
@@ -519,14 +519,14 @@ int test_ls_snaps(librbd::Image& image, size_t num_expected, ...)
   va_start(ap, num_expected);
   for (i = num_expected; i > 0; i--) {
     char *expected = va_arg(ap, char *);
-    size_t expected_size = va_arg(ap, int);
+    uint64_t expected_size = va_arg(ap, uint64_t);
     int found = 0;
     for (j = 0; j < snaps.size(); j++) {
       if (snaps[j].name == "")
 	continue;
       if (strcmp(snaps[j].name.c_str(), expected) == 0) {
 	cout << "found " << snaps[j].name << " with size " << snaps[j].size << endl;
-	assert(snaps[j].size == (size_t) expected_size);
+	assert(snaps[j].size == expected_size);
 	snaps[j].name = "";
 	found = 1;
 	break;
