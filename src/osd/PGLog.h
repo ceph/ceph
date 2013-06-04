@@ -236,6 +236,9 @@ protected:
   IndexedLog  log;
 
 public:
+
+  void clear();
+
   //////////////////// get or set missing ////////////////////
 
   const pg_missing_t& get_missing() const { return missing; }
@@ -353,8 +356,8 @@ public:
 			pg_missing_t& omissing, int from);
 
 protected:
-  bool merge_old_entry(ObjectStore::Transaction& t, pg_log_entry_t& oe,
-		       pg_info_t& info, list<hobject_t>& remove_snap, bool &dirty_log);
+  bool merge_old_entry(ObjectStore::Transaction& t, const pg_log_entry_t& oe,
+		       const pg_info_t& info, list<hobject_t>& remove_snap, bool &dirty_log);
 public:
   void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead,
                             pg_info_t &info, list<hobject_t>& remove_snap,
