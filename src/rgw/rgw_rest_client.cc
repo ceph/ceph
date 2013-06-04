@@ -233,3 +233,26 @@ int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info, size_t max
 
   return rgw_http_error_to_errno(status);
 }
+
+int RGWRESTClient::put_obj(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, void (*get_data)(uint64_t ofs, uint64_t len, bufferlist& bl, void *))
+{
+  string resource = obj.bucket.name + "/" + obj.object;
+  string new_url = url + "/" + resource;
+  string date_str;
+  get_new_date_str(cct, date_str);
+
+  RGWEnv new_env;
+  req_info new_info(cct, &new_env);
+  
+  new_env.set("HTTP_DATE", date_str.c_str());
+
+  new_info.script_uri = resource;
+  new_info.request_uri = resource;
+
+  int r = process("PUT", new_url.c_str());
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+

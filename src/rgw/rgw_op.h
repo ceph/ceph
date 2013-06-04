@@ -441,6 +441,9 @@ protected:
   string dest_object;
   time_t mtime;
   bool replace_attrs;
+  RGWBucketInfo src_bucket_info;
+  RGWBucketInfo dest_bucket_info;
+
 
   int init_common();
 

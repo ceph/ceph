@@ -20,6 +20,7 @@ public:
   int get_url(string& endpoint);
 
   int forward(const string& uid, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl);
+  int put_obj(const string& uid, rgw_obj& obj, uint64_t obj_size, void (*get_data)(uint64_t ofs, uint64_t len, bufferlist& bl, void *));
 };
 
 #endif

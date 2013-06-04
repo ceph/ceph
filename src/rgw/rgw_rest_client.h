@@ -42,6 +42,8 @@ public:
 
   int execute(RGWAccessKey& key, const char *method, const char *resource);
   int forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl);
+
+  int put_obj(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, void (*get_data)(uint64_t ofs, uint64_t len, bufferlist& bl, void *));
 };
 
 

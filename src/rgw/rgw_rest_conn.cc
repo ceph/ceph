@@ -40,3 +40,17 @@ int RGWRegionConnection::forward(const string& uid, req_info& info, size_t max_r
   return client.forward_request(key, info, max_response, inbl, outbl);
 }
 
+int RGWRegionConnection::put_obj(const string& uid, rgw_obj& obj, uint64_t obj_size, void (*get_data)(uint64_t ofs, uint64_t len, bufferlist& bl, void *))
+{
+  string url;
+  int ret = get_url(url);
+  if (ret < 0)
+    return ret;
+
+  list<pair<string, string> > params;
+  params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
+  params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
+  RGWRESTClient client(cct, url, NULL, &params);
+  return client.put_obj(key, obj, obj_size, get_data);
+}
+
