@@ -24,7 +24,7 @@ extern "C" {
 #endif
 
 #define LIBRADOS_VER_MAJOR 0
-#define LIBRADOS_VER_MINOR 52
+#define LIBRADOS_VER_MINOR 53
 #define LIBRADOS_VER_EXTRA 0
 
 #define LIBRADOS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
@@ -32,6 +32,11 @@ extern "C" {
 #define LIBRADOS_VERSION_CODE LIBRADOS_VERSION(LIBRADOS_VER_MAJOR, LIBRADOS_VER_MINOR, LIBRADOS_VER_EXTRA)
 
 #define LIBRADOS_SUPPORTS_WATCH 1
+
+/* RADOS lock flags
+ * They are also defined in cls_lock_types.h. Keep them in sync!
+ */
+#define LIBRADOS_LOCK_FLAG_RENEW 0x1
 
 /**
  * @defgroup librados_h_xattr_comp xattr comparison operations
@@ -1571,6 +1576,101 @@ int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver, const char *buf,
 
 /** @} Watch/Notify */
 
+/**
+ * Take an exclusive lock on an object.
+ *
+ * @param io the context to operate in
+ * @param oid the name of the object
+ * @param name the name of the lock
+ * @param cookie user-defined identifier for this instance of the lock
+ * @param desc user-defined lock description
+ * @param duration the duration of the lock. Set to NULL for infinite duration.
+ * @param flags lock flags
+ * @returns 0 on success, negative error code on failure
+ * @returns -EBUSY if the lock is already held by another (client, cookie) pair
+ * @returns -EEXIST if the lock is already held by the same (client, cookie) pair
+ */
+int rados_lock_exclusive(rados_ioctx_t io, const char * o, const char * name,
+	       const char * cookie, const char * desc, struct timeval * duration,
+	       uint8_t flags);
+
+/**
+ * Take a shared lock on an object.
+ *
+ * @param io the context to operate in
+ * @param o the name of the object
+ * @param name the name of the lock
+ * @param cookie user-defined identifier for this instance of the lock
+ * @param tag The tag of the lock
+ * @param desc user-defined lock description
+ * @param duration the duration of the lock. Set to NULL for infinite duration.
+ * @param flags lock flags
+ * @returns 0 on success, negative error code on failure
+ * @returns -EBUSY if the lock is already held by another (client, cookie) pair
+ * @returns -EEXIST if the lock is already held by the same (client, cookie) pair
+ */
+int rados_lock_shared(rados_ioctx_t io, const char * o, const char * name,
+	       const char * cookie, const char * tag, const char * desc,
+	       struct timeval * duration, uint8_t flags);
+
+/**
+ * Release a shared or exclusive lock on an object.
+ *
+ * @param io the context to operate in
+ * @param o the name of the object
+ * @param name the name of the lock
+ * @param cookie user-defined identifier for the instance of the lock
+ * @returns 0 on success, negative error code on failure
+ * @returns -ENOENT if the lock is not held by the specified (client, cookie) pair
+ */
+int rados_unlock(rados_ioctx_t io, const char *o, const char *name,
+		 const char *cookie);
+
+/**
+ * List clients that have locked the named object lock and information about
+ * the lock.
+ *
+ * The number of bytes required in each buffer is put in the
+ * corresponding size out parameter. If any of the provided buffers
+ * are too short, -ERANGE is returned after these sizes are filled in.
+ *
+ * @param io the context to operate in
+ * @param o the name of the object
+ * @param name the name of the lock
+ * @param exclusive where to store whether the lock is exclusive (1) or shared (0)
+ * @param tag where to store the tag associated with the object lock
+ * @param tag_len number of bytes in tag buffer
+ * @param clients buffer in which locker clients are stored, separated by '\0'
+ * @param clients_len number of bytes in the clients buffer
+ * @param cookies buffer in which locker cookies are stored, separated by '\0'
+ * @param cookies_len number of bytes in the cookies buffer
+ * @param addrs buffer in which locker addresses are stored, separated by '\0'
+ * @param addrs_len number of bytes in the clients buffer
+ * @returns number of lockers on success, negative error code on failure
+ * @returns -ERANGE if any of the buffers are too short
+ */
+ssize_t rados_list_lockers(rados_ioctx_t io, const char *o,
+			   const char *name, int *exclusive,
+			   char *tag, size_t *tag_len,
+			   char *clients, size_t *clients_len,
+			   char *cookies, size_t *cookies_len,
+			   char *addrs, size_t *addrs_len);
+
+/**
+ * Releases a shared or exclusive lock on an object, which was taken by the
+ * specified client.
+ *
+ * @param io the context to operate in
+ * @param o the name of the object
+ * @param name the name of the lock
+ * @param client the client currently holding the lock
+ * @param cookie user-defined identifier for the instance of the lock
+ * @returns 0 on success, negative error code on failure
+ * @returns -ENOENT if the lock is not held by the specified (client, cookie) pair
+ * @returns -EINVAL if the client cannot be parsed
+ */
+int rados_break_lock(rados_ioctx_t io, const char *o, const char *name,
+		     const char *client, const char *cookie);
 #ifdef __cplusplus
 }
 #endif

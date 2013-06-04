@@ -357,7 +357,10 @@ librados_SOURCES = \
 	librados/RadosClient.cc \
 	librados/IoCtxImpl.cc \
 	osdc/Objecter.cc \
-	osdc/Striper.cc
+	osdc/Striper.cc \
+	cls/lock/cls_lock_client.cc \
+	cls/lock/cls_lock_types.cc \
+	cls/lock/cls_lock_ops.cc
 librados_la_SOURCES = ${librados_SOURCES}
 librados_la_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librados_la_CXXFLAGS = ${AM_CXXFLAGS}
