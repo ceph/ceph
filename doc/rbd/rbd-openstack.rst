@@ -171,10 +171,17 @@ Configuring Cinder/nova-volume
 
 OpenStack requires a driver to interact with Ceph block devices. You must also
 specify the pool name for the block device. On your OpenStack host,
-edit ``/etc/cinder/cinder.conf`` and add::
+edit ``/etc/cinder/cinder.conf`` and add this for Folsom or earlier
+versions of OpenStack::
 
-	volume_driver=cinder.volume.driver.RBDDriver
-	rbd_pool=volumes
+    volume_driver=cinder.volume.driver.RBDDriver
+    rbd_pool=volumes
+
+For Grizzly, use::
+
+    volume_driver=cinder.volume.drivers.rbd.RBDDriver
+    rbd_pool=volumes
+    glance_api_version=2
 
 If you're not using Cinder, replace Cinder with Nova in the previous section.
 

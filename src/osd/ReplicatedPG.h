@@ -677,7 +677,7 @@ protected:
 			 const hobject_t &last_backfill,
 			 interval_set<uint64_t>& data_subset,
 			 map<hobject_t, interval_set<uint64_t> >& clone_subsets);
-  void calc_clone_subsets(SnapSet& snapset, const hobject_t& poid, pg_missing_t& missing,
+  void calc_clone_subsets(SnapSet& snapset, const hobject_t& poid, const pg_missing_t& missing,
 			  const hobject_t &last_backfill,
 			  interval_set<uint64_t>& data_subset,
 			  map<hobject_t, interval_set<uint64_t> >& clone_subsets);

@@ -926,7 +926,8 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 	   << dendl;
 
   // already pending failure?
-  if (pending_inc.new_state[target_osd] & CEPH_OSD_UP) {
+  if (pending_inc.new_state.count(target_osd) &&
+      pending_inc.new_state[target_osd] & CEPH_OSD_UP) {
     dout(10) << " already pending failure" << dendl;
     return true;
   }

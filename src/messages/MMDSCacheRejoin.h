@@ -167,9 +167,7 @@ class MMDSCacheRejoin : public Message {
   map<vinodeno_t, inode_strong> strong_inodes;
 
   // open
-  bufferlist cap_export_bl;
   map<inodeno_t,map<client_t, ceph_mds_cap_reconnect> > cap_exports;
-  map<inodeno_t,filepath> cap_export_paths;
 
   // full
   bufferlist inode_base;
@@ -258,10 +256,6 @@ public:
     in->encode_lock_state(CEPH_LOCK_IDFT, inode_scatterlocks[in->ino()].dft);
   }
 
-  void copy_cap_exports(bufferlist &bl) {
-    cap_export_bl = bl;
-  }
-  
   // dirfrags
   void add_strong_dirfrag(dirfrag_t df, int n, int dr) {
     strong_dirfrags[df] = dirfrag_strong(n, dr);
@@ -304,7 +298,7 @@ public:
     ::encode(frozen_authpin_inodes, payload);
     ::encode(xlocked_inodes, payload);
     ::encode(wrlocked_inodes, payload);
-    ::encode(cap_export_bl, payload);
+    ::encode(cap_exports, payload);
     ::encode(strong_dirfrags, payload);
     ::encode(dirfrag_bases, payload);
     ::encode(weak, payload);
@@ -325,12 +319,7 @@ public:
     ::decode(frozen_authpin_inodes, p);
     ::decode(xlocked_inodes, p);
     ::decode(wrlocked_inodes, p);
-    ::decode(cap_export_bl, p);
-    if (cap_export_bl.length()) {
-      bufferlist::iterator q = cap_export_bl.begin();
-      ::decode(cap_exports, q);
-      ::decode(cap_export_paths, q);
-    }
+    ::decode(cap_exports, p);
     ::decode(strong_dirfrags, p);
     ::decode(dirfrag_bases, p);
     ::decode(weak, p);

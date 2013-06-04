@@ -530,7 +530,6 @@ private:
    * @}
    */
 
-  bool going_to_bootstrap;
   /**
    * Should be true if we have proposed to trim, or are in the middle of
    * trimming; false otherwise.
@@ -957,6 +956,9 @@ private:
    */
   void lease_timeout();        // on peon, if lease isn't extended
 
+  /// restart the lease timeout timer
+  void reset_lease_timeout();
+
   /**
    * Cancel all of Paxos' timeout/renew events. 
    */
@@ -1017,16 +1019,12 @@ public:
 		   lease_timeout_event(0),
 		   accept_timeout_event(0),
 		   clock_drift_warned(0),
-		   going_to_bootstrap(false),
 		   going_to_trim(false),
 		   trim_disabled_version(0) { }
 
   const string get_name() const {
     return paxos_name;
   }
-
-  bool is_bootstrapping() { return going_to_bootstrap; }
-  void prepare_bootstrap();
 
   void dispatch(PaxosServiceMessage *m);
 
@@ -1159,7 +1157,8 @@ public:
    */
   void trim() {
     assert(should_trim());
-    version_t trim_to_version = get_version() - g_conf->paxos_max_join_drift;
+    version_t trim_to_version = MIN(get_version() - g_conf->paxos_max_join_drift,
+				    get_first_committed() + g_conf->paxos_trim_max);
     trim_to(trim_to_version);
   }
   /**
@@ -1193,7 +1192,7 @@ public:
   bool should_trim() {
     int available_versions = (get_version() - get_first_committed());
     int maximum_versions =
-      (g_conf->paxos_max_join_drift + g_conf->paxos_trim_tolerance);
+      (g_conf->paxos_max_join_drift + g_conf->paxos_trim_min);
 
     if (going_to_trim || (available_versions <= maximum_versions))
       return false;

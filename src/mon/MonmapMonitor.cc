@@ -113,7 +113,7 @@ void MonmapMonitor::update_from_paxos()
   }
 
   if (need_restart) {
-    paxos->prepare_bootstrap();
+    mon->bootstrap();
   }
 }
 

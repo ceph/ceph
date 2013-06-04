@@ -1319,6 +1319,7 @@ int RGWRados::copy_obj(void *ctx,
     /* copying attrs from source, however acls should not be copied */
     attrset[RGW_ATTR_ACL] = attrs[RGW_ATTR_ACL];
   }
+  attrset.erase(RGW_ATTR_ID_TAG);
 
   RGWObjManifest manifest;
   RGWObjState *astate = NULL;
@@ -2692,31 +2693,31 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
 
   state->io_ctx.locator_set_key(key);
 
+  read_len = len;
+
   if (reading_from_head) {
     /* only when reading from the head object do we need to do the atomic test */
     r = append_atomic_test(rctx, read_obj, op, &astate);
     if (r < 0)
       goto done_ret;
-  }
 
-  read_len = len;
+    if (astate) {
+      if (!ofs && astate->data.length() >= len) {
+        bl = astate->data;
+        goto done;
+      }
 
-  if (astate) {
-    if (!ofs && astate->data.length() >= len) {
-      bl = astate->data;
-      goto done;
-    }
+      if (ofs < astate->data.length()) {
+        unsigned copy_len = min((uint64_t)astate->data.length() - ofs, len);
+        astate->data.copy(ofs, copy_len, bl);
+        read_len -= copy_len;
+        read_ofs += copy_len;
+        if (!read_len)
+	  goto done;
 
-    if (ofs < astate->data.length()) {
-      unsigned copy_len = min((uint64_t)astate->data.length(), len);
-      astate->data.copy(ofs, copy_len, bl);
-      read_len -= copy_len;
-      read_ofs += copy_len;
-      if (!read_len)
-	goto done;
-
-      merge_bl = true;
-      pbl = &read_bl;
+        merge_bl = true;
+        pbl = &read_bl;
+      }
     }
   }
 

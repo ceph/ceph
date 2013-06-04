@@ -301,8 +301,8 @@ int main(int argc, const char **argv)
     }
   }
 
-  MonitorDBStore store(g_conf->mon_data);
-  err = store.open(std::cerr);
+  MonitorDBStore *store = new MonitorDBStore(g_conf->mon_data);
+  err = store->open(std::cerr);
   if (err < 0) {
     cerr << argv[0] << ": error opening mon data store at '"
          << g_conf->mon_data << "': " << cpp_strerror(err) << std::endl;
@@ -311,7 +311,7 @@ int main(int argc, const char **argv)
   assert(err == 0);
 
   bufferlist magicbl;
-  err = store.get(Monitor::MONITOR_NAME, "magic", magicbl);
+  err = store->get(Monitor::MONITOR_NAME, "magic", magicbl);
   if (!magicbl.length()) {
     cerr << "unable to read magic from mon data.. did you run mkcephfs?" << std::endl;
     prefork.exit(1);
@@ -322,7 +322,7 @@ int main(int argc, const char **argv)
     prefork.exit(1);
   }
 
-  err = Monitor::check_features(&store);
+  err = Monitor::check_features(store);
   if (err < 0) {
     cerr << "error checking features: " << cpp_strerror(err) << std::endl;
     prefork.exit(1);
@@ -340,7 +340,7 @@ int main(int argc, const char **argv)
     }
 
     // get next version
-    version_t v = store.get("monmap", "last_committed");
+    version_t v = store->get("monmap", "last_committed");
     cout << "last committed monmap epoch is " << v << ", injected map will be " << (v+1) << std::endl;
     v++;
 
@@ -362,7 +362,7 @@ int main(int argc, const char **argv)
     t.put("monmap", v, mapbl);
     t.put("monmap", "latest", final);
     t.put("monmap", "last_committed", v);
-    store.apply_transaction(t);
+    store->apply_transaction(t);
 
     cout << "done." << std::endl;
     prefork.exit(0);
@@ -374,7 +374,7 @@ int main(int argc, const char **argv)
     // note that even if we don't find a viable monmap, we should go ahead
     // and try to build it up in the next if-else block.
     bufferlist mapbl;
-    int err = obtain_monmap(store, mapbl);
+    int err = obtain_monmap(*store, mapbl);
     if (err >= 0) {
       try {
         monmap.decode(mapbl);
@@ -497,7 +497,7 @@ int main(int argc, const char **argv)
     prefork.exit(1);
 
   // start monitor
-  mon = new Monitor(g_ceph_context, g_conf->name.get_id(), &store, 
+  mon = new Monitor(g_ceph_context, g_conf->name.get_id(), store, 
 		    messenger, &monmap);
 
   err = mon->preinit();
@@ -531,6 +531,7 @@ int main(int argc, const char **argv)
   shutdown_async_signal_handler();
 
   delete mon;
+  delete store;
   delete messenger;
   delete client_throttler;
   delete daemon_throttler;
@@ -543,6 +544,6 @@ int main(int argc, const char **argv)
     dout(0) << "ceph-mon: gmon.out should be in " << s << dendl;
   }
 
-  prefork.exit(0);
+  return prefork.exit(0);
 }
 

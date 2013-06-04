@@ -42,6 +42,7 @@ usage=$usage"\t-d, --debug\n"
 usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
 usage=$usage"\t-l, --localhost: use localhost instead of hostname\n"
 usage=$usage"\t-i <ip>: bind to specific ip\n"
+usage=$usage"\t-r start radosgw (needs ceph compiled with --radosgw and apache2 with mod_fastcgi)\n"
 usage=$usage"\t-n, --new\n"
 usage=$usage"\t--valgrind[_{osd,mds,mon}] 'toolname args...'\n"
 usage=$usage"\t--nodaemon: use ceph-run as wrapper for mon/osd/mds\n"
@@ -185,13 +186,11 @@ if [ "$debug" -eq 0 ]; then
 else
     echo "** going verbose **"
     CMONDEBUG='
-        lockdep = 1
 	debug mon = 20
         debug paxos = 20
         debug auth = 20
         debug ms = 1'
     COSDDEBUG='
-        lockdep = 1
         debug ms = 1
         debug osd = 25
         debug monc = 20
@@ -199,7 +198,6 @@ else
         debug filestore = 20
         debug objclass = 20'
     CMDSDEBUG='
-        lockdep = 1
         debug ms = 1
         debug mds = 20
         debug auth = 20

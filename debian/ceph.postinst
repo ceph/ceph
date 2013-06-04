@@ -28,14 +28,7 @@ set -e
 case "$1" in
     configure)
 	rm -f /etc/init/ceph.conf
-	invoke-rc.d ceph-all start || {
-		RESULT=$?
-		# Ignore if ceph-all upstart config does not
-		# exist or upstart is not in use
-		if [ $RESULT != 100 ]; then
-			exit $RESULT
-		fi
-	}
+	[ -x /sbin/start ] && start ceph-all || :
     ;;
     abort-upgrade|abort-remove|abort-deconfigure)
 	:

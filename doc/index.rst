@@ -46,5 +46,4 @@ cluster to ensure that the storage hosts are running smoothly.
    architecture
    Development <dev/index>
    release-notes
-   FAQ <faq>
    Glossary <glossary>

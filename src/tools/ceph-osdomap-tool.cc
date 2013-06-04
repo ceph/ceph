@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  LevelDBStore* store(new LevelDBStore(store_path));
+  LevelDBStore* store(new LevelDBStore(g_ceph_context, store_path));
   if (paranoid) {
     std::cerr << "Enabling paranoid checks" << std::endl;
     store->options.paranoid_checks = paranoid;

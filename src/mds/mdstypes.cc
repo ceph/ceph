@@ -236,7 +236,7 @@ void inode_t::encode(bufferlist &bl) const
   ::encode(version, bl);
   ::encode(file_data_version, bl);
   ::encode(xattr_version, bl);
-  ::encode(last_renamed_version, bl);
+  ::encode(backtrace_version, bl);
   ::encode(old_pools, bl);
 
   ENCODE_FINISH(bl);
@@ -291,7 +291,7 @@ void inode_t::decode(bufferlist::iterator &p)
   ::decode(file_data_version, p);
   ::decode(xattr_version, p);
   if (struct_v >= 2)
-    ::decode(last_renamed_version, p);
+    ::decode(backtrace_version, p);
   if (struct_v >= 7)
     ::decode(old_pools, p);
 
@@ -357,7 +357,7 @@ void inode_t::dump(Formatter *f) const
   f->dump_unsigned("version", version);
   f->dump_unsigned("file_data_version", file_data_version);
   f->dump_unsigned("xattr_version", xattr_version);
-  f->dump_unsigned("last_renamed_version", last_renamed_version);
+  f->dump_unsigned("backtrace_version", backtrace_version);
 }
 
 void inode_t::generate_test_instances(list<inode_t*>& ls)

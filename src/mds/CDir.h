@@ -494,7 +494,7 @@ private:
                        unsigned max_write_size=-1,
                        map_t::iterator last_committed_dn=map_t::iterator());
   void _encode_dentry(CDentry *dn, bufferlist& bl, const set<snapid_t> *snaps);
-  void _committed(version_t v, version_t last_renamed_version);
+  void _committed(version_t v);
   void wait_for_commit(Context *c, version_t v=0);
 
   // -- dirtyness --
