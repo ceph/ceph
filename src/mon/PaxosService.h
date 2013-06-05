@@ -523,28 +523,19 @@ public:
   /**
    * Check if we are readable.
    *
-   * We consider that a given version @p ver is readable if:
+   * This mirrors on the paxos check, except that we also verify that
    *
-   *  - it exists (i.e., is lower than the last committed version);
-   *  - we have at least one committed version (i.e., last committed version
-   *    is greater than zero);
-   *  - our monitor is a member of the cluster (either a peon or the leader);
-   *  - we are not proposing a new version;
-   *  - the Paxos is not recovering;
-   *  - we either belong to a quorum and have a valid lease, or we belong to
-   *    a quorum of one.
+   *  - the client hasn't seen the future relative to this PaxosService
+   *  - this service isn't proposing.
    *
    * @param ver The version we want to check if is readable
    * @returns true if it is readable; false otherwise
    */
   bool is_readable(version_t ver = 0) {
-    if ((ver > get_last_committed())
-	|| ((!mon->is_peon() && !mon->is_leader()))
-	|| (is_proposing() || paxos->is_recovering() || paxos->is_locked())
-	|| (get_last_committed() <= 0)
-	|| ((mon->get_quorum().size() != 1) && !paxos->is_lease_valid())) {
+    if (ver > get_last_committed() ||
+	is_proposing() ||
+	!paxos->is_readable(0))
       return false;
-    }
     return true;
   }
 
@@ -617,8 +608,8 @@ public:
      * Paxos; otherwise, we may assert on Paxos::wait_for_readable() if it
      * happens to be readable at that specific point in time.
      */
-    if (is_proposing() || (ver > get_last_committed())
-	|| (get_last_committed() <= 0))
+    if (is_proposing() ||
+	ver > get_last_committed())
       wait_for_finished_proposal(c);
     else
       paxos->wait_for_readable(c);
