@@ -1979,7 +1979,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       usage_exit();
     RadosBencher bencher(rados, io_ctx);
     bencher.set_show_time(show_time);
-    ret = bencher.aio_bench(operation, seconds, concurrent_ios, op_size, cleanup);
+    ret = bencher.aio_bench(operation, seconds, num_objs,
+			    concurrent_ios, op_size, cleanup);
     if (ret != 0)
       cerr << "error during benchmark: " << ret << std::endl;
   }

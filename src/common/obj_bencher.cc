@@ -164,7 +164,10 @@ void *ObjBencher::status_printer(void *_bencher) {
   return NULL;
 }
 
-int ObjBencher::aio_bench(int operation, int secondsToRun, int concurrentios, int op_size, bool cleanup) {
+int ObjBencher::aio_bench(
+  int operation, int secondsToRun,
+  int maxObjectsToCreate,
+  int concurrentios, int op_size, bool cleanup) {
   int object_size = op_size;
   int num_objects = 0;
   char* contentsChars = new char[op_size];
@@ -203,7 +206,7 @@ int ObjBencher::aio_bench(int operation, int secondsToRun, int concurrentios, in
   sanitize_object_contents(&data, data.object_size);
 
   if (OP_WRITE == operation) {
-    r = write_bench(secondsToRun, concurrentios);
+    r = write_bench(secondsToRun, maxObjectsToCreate, concurrentios);
     if (r != 0) goto out;
   }
   else if (OP_SEQ_READ == operation) {
@@ -296,10 +299,15 @@ int ObjBencher::fetch_bench_metadata(const std::string& metadata_file, int* obje
   return 0;
 }
 
-int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
+int ObjBencher::write_bench(int secondsToRun, int maxObjectsToCreate,
+			    int concurrentios) {
+  if (maxObjectsToCreate > 0 && concurrentios > maxObjectsToCreate)
+    concurrentios = maxObjectsToCreate;
   out(cout) << "Maintaining " << concurrentios << " concurrent writes of "
-       << data.object_size << " bytes for at least "
-       << secondsToRun << " seconds." << std::endl;
+	    << data.object_size << " bytes for up to "
+	    << secondsToRun << " seconds or "
+	    << maxObjectsToCreate << " objects"
+	    << std::endl;
   bufferlist* newContents = 0;
 
   std::string prefix = generate_object_prefix();
@@ -356,8 +364,9 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
   runtime.set_from_double(secondsToRun);
   stopTime = data.start_time + runtime;
   slot = 0;
-  while( ceph_clock_now(g_ceph_context) < stopTime ) {
-    lock.Lock();
+  lock.Lock();
+  while( ceph_clock_now(g_ceph_context) < stopTime &&
+	 (!maxObjectsToCreate || data.started < maxObjectsToCreate)) {
     bool found = false;
     while (1) {
       int old_slot = slot;
@@ -410,15 +419,15 @@ int ObjBencher::write_bench(int secondsToRun, int concurrentios) {
     if (r < 0) {//naughty; doesn't clean up heap space.
       goto ERR;
     }
-    lock.Lock();
-    ++data.started;
-    ++data.in_flight;
-    lock.Unlock();
     delete contents[slot];
     name[slot] = newName;
     contents[slot] = newContents;
     newContents = 0;
+    lock.Lock();
+    ++data.started;
+    ++data.in_flight;
   }
+  lock.Unlock();
 
   while (data.finished < data.started) {
     slot = data.finished % concurrentios;
