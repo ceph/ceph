@@ -566,6 +566,7 @@ protected:
 		ObjectRecoveryProgress progress);
   void submit_push_data(const ObjectRecoveryInfo &recovery_info,
 			bool first,
+			bool complete,
 			const interval_set<uint64_t> &intervals_included,
 			bufferlist data_included,
 			bufferlist omap_header,
