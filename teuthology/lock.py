@@ -483,7 +483,7 @@ def scan_for_locks(ctx, machines):
 def do_summary(ctx):
     lockd = collections.defaultdict(lambda: [0,0,'unknown'])
     for l in list_locks(ctx):
-        if l['type'] != ctx.machine_type:
+        if ctx.machine_type != 'all' and l['type'] != ctx.machine_type:
             continue
         who =  l['locked_by'] if l['locked'] == 1 else '(free)', l['type']
         lockd[who][0] += 1
