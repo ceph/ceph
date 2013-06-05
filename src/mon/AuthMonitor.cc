@@ -87,6 +87,8 @@ void AuthMonitor::on_active()
 /*
   check_rotate();
 */
+
+  upgrade_format();
 }
 
 void AuthMonitor::create_initial()
@@ -193,8 +195,12 @@ void AuthMonitor::update_from_paxos()
   if (last_allocated_id == 0)
     last_allocated_id = max_global_id;
 
+  format_version = get_version(get_service_name(), "format_version");
+
   dout(10) << "update_from_paxos() last_allocated_id=" << last_allocated_id
-	   << " max_global_id=" << max_global_id << dendl;
+	   << " max_global_id=" << max_global_id
+	   << " format_version " << format_version
+	   << dendl;
  
   /*
   bufferlist bl;
@@ -241,6 +247,10 @@ void AuthMonitor::encode_pending(MonitorDBStore::Transaction *t)
   vector<Incremental>::iterator p;
   for (p = pending_auth.begin(); p != pending_auth.end(); ++p)
     p->encode(bl, mon->get_quorum_features());
+
+  if (format_version > 0) {
+    t->put(get_service_name(), "format_version", format_version);
+  }
 
   version_t version = get_version() + 1;
   put_version(t, version, bl);
@@ -869,4 +879,75 @@ bool AuthMonitor::prepare_global_id(MMonGlobalID *m)
 
   m->put();
   return true;
+}
+
+void AuthMonitor::upgrade_format()
+{
+  int current = 1;
+  if (format_version >= current) {
+    dout(20) << __func__ << " format " << format_version << " is current" << dendl;
+    return;
+  }
+
+  dout(1) << __func__ << " upgrading from format " << format_version << " to " << current << dendl;
+  bool changed = false;
+  map<EntityName, EntityAuth>::iterator p;
+  for (p = mon->key_server.secrets_begin();
+       p != mon->key_server.secrets_end();
+       ++p) {
+    // grab mon caps, if any
+    string mon_caps;
+    if (p->second.caps.count("mon") == 0)
+      continue;
+    try {
+      bufferlist::iterator it = p->second.caps["mon"].begin();
+      ::decode(mon_caps, it);
+    }
+    catch (buffer::error) {
+      dout(10) << __func__ << " unable to parse mon cap for "
+               << p->first << dendl;
+      continue;
+    }
+
+    string n = p->first.to_str();
+    string new_caps;
+
+    // set daemon profiles
+    if ((p->first.is_osd() || p->first.is_mds()) &&
+	mon_caps == "allow rwx") {
+      new_caps = string("allow profile ") + string(p->first.get_type_name());
+    }
+
+    // update bootstrap keys
+    if (n == "client.bootstrap-osd") {
+      new_caps = "allow profile bootstrap-osd";
+    }
+    if (n == "client.bootstrap-mds") {
+      new_caps = "allow profile bootstrap-mds";
+    }
+
+    if (new_caps.length() > 0) {
+      dout(5) << __func__ << " updating " << p->first << " mon cap from "
+	      << mon_caps << " to " << new_caps << dendl;
+
+      bufferlist bl;
+      ::encode(new_caps, bl);
+
+      KeyServerData::Incremental auth_inc;
+      auth_inc.name = p->first;
+      auth_inc.auth = p->second;
+      auth_inc.auth.caps["mon"] = bl;
+      auth_inc.op = KeyServerData::AUTH_INC_ADD;
+      push_cephx_inc(auth_inc);
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    // note new format
+    dout(10) << __func__ << " proposing update from format " << format_version
+	     << " -> " << current << dendl;
+    format_version = current;
+    propose_pending();
+  }
 }
