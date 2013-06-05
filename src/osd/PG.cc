@@ -1526,7 +1526,6 @@ void PG::activate(ObjectStore::Transaction& t,
   // write pg info, log
   dirty_info = true;
   dirty_big_info = true; // maybe
-  dirty_log = true;
 
   // clean up stray objects
   clean_up_local(t); 
