@@ -62,7 +62,10 @@ public:
     : Message(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION) {}
   MMonProbe(const uuid_d& f, int o, const string& n, bool hej)
     : Message(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION),
-      fsid(f), op(o), name(n), has_ever_joined(hej),
+      fsid(f), op(o), name(n),
+      paxos_first_version(0),
+      paxos_last_version(0),
+      has_ever_joined(hej),
       latest_version(0), newest_version(0), oldest_version(0) {}
 private:
   ~MMonProbe() {}

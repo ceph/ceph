@@ -48,7 +48,7 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
   // connection will be disconnected with a null message; don't drop
   // those.  also ignore loopback (e.g., log) messages.
   if (!m->get_connection()->is_connected() &&
-      m->get_connection() != mon->messenger->get_loopback_connection() &&
+      m->get_connection() != mon->con_self &&
       m->get_connection()->get_messenger() != NULL) {
     dout(10) << " discarding message from disconnected client "
 	     << m->get_source_inst() << " " << *m << dendl;
