@@ -3,6 +3,7 @@
 ceph_test_rados_api_aio
 ceph_test_rados_api_io
 ceph_test_rados_api_list
+ceph_test_rados_api_lock
 ceph_test_rados_api_misc
 ceph_test_rados_api_pool
 ceph_test_rados_api_snapshots
