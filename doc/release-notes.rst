@@ -17,6 +17,54 @@ Notable Changes
  * librados python binding cleanups
  * misc code cleanups
 
+
+v0.61.3 "Cuttlefish"
+--------------------
+
+This release resolves a number of problems with the monitors and leveldb that users have
+been seeing.  Please upgrade.
+
+Upgrading
+~~~~~~~~~
+
+* There is one known problem with mon upgrades from bobtail.  If the
+  ceph-mon conversion on startup is aborted or fails for some reason, we
+  do not correctly error out, but instead continue with (in certain cases)
+  odd results.  Please be careful if you have to restart the mons during
+  the upgrade.  A 0.61.4 release with a fix will be out shortly.
+
+* In the meantime, for current cuttlefish users, v0.61.3 is safe to use.
+
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* mon: paxos state trimming fix (resolves runaway disk usage)
+* mon: finer-grained compaction on trim
+* mon: discard messages from disconnected clients (lowers load)
+* mon: leveldb compaction and other stats available via admin socket
+* mon: async compaction (lower overhead)
+* mon: fix bug incorrectly marking osds down with insufficient failure reports
+* osd: fixed small bug in pg request map
+* osd: avoid rewriting pg info on every osdmap
+* osd: avoid internal heartbeta timeouts when scrubbing very large objects
+* osd: fix narrow race with journal replay
+* mon: fixed narrow pg split race
+* rgw: fix leaked space when copying object
+* rgw: fix iteration over large/untrimmed usage logs
+* rgw: fix locking issue with ops log socket
+* rgw: require matching version of librados
+* librbd: make image creation defaults configurable (e.g., create format 2 images via qemu-img)
+* fix units in 'ceph df' output
+* debian: fix prerm/postinst hooks to start/stop daemons appropriately
+* upstart: allow uppercase daemons names (and thus hostnames)
+* sysvinit: fix enumeration of local daemons by type
+* sysvinit: fix osd weight calcuation when using -a
+* fix build on unsigned char platforms (e.g., arm)
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.61.3.txt>`.
+
+
 v0.61.2 "Cuttlefish"
 --------------------
 
