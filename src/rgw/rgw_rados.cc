@@ -1950,10 +1950,22 @@ int RGWRados::copy_obj(void *ctx,
     /* dest is in a different region, copy it there */
 
     map<string, bufferlist> src_attrs;
+
+    RGWRESTStreamRequest *out_stream_req;
   
-    int ret = rest_conn->put_obj(user_id, dest_obj, astate->size, NULL);
+    int ret = rest_conn->put_obj_init(user_id, dest_obj, astate->size, &out_stream_req);
     if (ret < 0)
       return ret;
+
+    ret = get_obj_iterate(ctx, &handle, src_obj, 0, astate->size - 1, out_stream_req->get_out_cb());
+    if (ret < 0)
+      return ret;
+
+    ret = rest_conn->complete_request(out_stream_req);
+    if (ret < 0)
+      return ret;
+
+    return 0;
   }
       
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
