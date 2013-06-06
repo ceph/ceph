@@ -1378,7 +1378,8 @@ def main():
         print >> sys.stderr, 'Cluster connection aborted'
         return 1
     except Exception as e:
-        print >> sys.stderr, 'Error connecting to cluster: {0}'.format(e)
+        print >> sys.stderr, 'Error connecting to cluster: {0}'.\
+            format(e.__class__.__name__)
         return 1
 
     if parsed_args.help or parsed_args.help_all:
@@ -1452,6 +1453,8 @@ def main():
                                      prefix='get_command_descriptions')
     if ret == -errno.EINVAL:
         # send command to old monitor
+        if verbose:
+            print '{0} to old monitor'.format(' '.join(childargs))
         ret, outbuf, outs = cluster_handle.mon_command(' '.join(childargs),
                                                        inbuf)
     elif ret:
