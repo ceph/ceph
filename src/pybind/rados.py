@@ -86,7 +86,7 @@ def make_ex(ret, msg):
     if ret in errors:
         return errors[ret](msg)
     else:
-        return Error(msg + (": error code %d" % ret))
+        return Error(msg + (": errno %s" % errno.errorcode[ret]))
 
 class rados_pool_stat_t(Structure):
     """ Usage information for a pool """
