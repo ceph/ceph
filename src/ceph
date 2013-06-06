@@ -1375,10 +1375,10 @@ def main():
     try:
         cluster_handle.connect()
     except KeyboardInterrupt:
-        print >> sys.stderr, "connection aborted"
+        print >> sys.stderr, 'Cluster connection aborted'
         return 1
-    except:
-        print >> sys.stderr, "connection to cluster timed out"
+    except Exception as e:
+        print >> sys.stderr, 'Error connecting to cluster: {0}'.format(e)
         return 1
 
     if parsed_args.help or parsed_args.help_all:
