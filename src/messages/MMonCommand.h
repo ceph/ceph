@@ -26,7 +26,7 @@ class MMonCommand : public PaxosServiceMessage {
   vector<string> cmd;
 
   MMonCommand() : PaxosServiceMessage(MSG_MON_COMMAND, 0) {}
-  MMonCommand(uuid_d &f, version_t v) : 
+  MMonCommand(const uuid_d &f, version_t v) : 
     PaxosServiceMessage(MSG_MON_COMMAND, v),
     fsid(f) { }
 

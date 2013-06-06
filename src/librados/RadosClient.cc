@@ -511,6 +511,10 @@ void librados::RadosClient::unregister_watcher(uint64_t cookie)
   }
 }
 
+void librados::RadosClient::blacklist_self(bool set) {
+  Mutex::Locker l(lock);
+  objecter->blacklist_self(set);
+}
 
 class C_WatchNotify : public Context {
   librados::WatchContext *ctx;
