@@ -1168,11 +1168,6 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
 
     got_command = False
 
-    # -s behaves like a command (ceph status).
-    if parsed_args.status:
-        valid_dict = {'prefix':'status'}
-        got_command = True
-
     if not got_command:
         if cmdargs:
             # Validate input args against list of sigs
@@ -1442,6 +1437,10 @@ def main():
                 format(parsed_args.output_file, e)
             return 1
 
+    # -s behaves like a command (ceph status).
+    if parsed_args.status:
+        childargs.insert(0, 'status')
+
     target = find_cmd_target(childargs)
 
     # fetch JSON sigs from command
@@ -1452,11 +1451,8 @@ def main():
     ret, outbuf, outs = json_command(target=target,
                                      prefix='get_command_descriptions')
     if ret == -errno.EINVAL:
-        if parsed_args.status:
-            sys.argv[sys.argv.index('-s')] = 'status'
-
         # send command to old monitor
-        ret, outbuf, outs = cluster_handle.mon_command(' '.join(sys.argv[1:]),
+        ret, outbuf, outs = cluster_handle.mon_command(' '.join(childargs),
                                                        inbuf)
     elif ret:
         if ret < 0:
