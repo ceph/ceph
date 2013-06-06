@@ -20,7 +20,7 @@ import uuid
 # just a couple of globals
 
 verbose = False
-cluster = None
+cluster_handle = None
 
 class ArgumentError(Exception):
     """
@@ -799,6 +799,7 @@ def parse_cmdargs(args=None, target=''):
                         help='client id for authentication')
     parser.add_argument('--name', '-n', dest='client_name',
                         help='client name for authentication')
+    parser.add_argument('--cluster', help='cluster name')
 
     parser.add_argument('--admin-daemon', dest='admin_socket',
                         help='submit admin-socket commands (\"help\" for help')
@@ -853,10 +854,10 @@ def do_help(parser, help_all = False):
 
     parser.print_help()
     print '\n'
-    if (cluster):
+    if (cluster_handle):
         help_for_target(target=('mon', ''))
 
-    if help_all and cluster:
+    if help_all and cluster_handle:
         # try/except in case there are no daemons of that type
         try:
             firstosd = osdids()[0]
@@ -1089,7 +1090,8 @@ def json_command(target=('mon', ''), prefix=None, argdict=None, inbuf='',
                 print >> sys.stderr, 'submit {0} to osd.{1}'.\
                     format(json.dumps(cmddict), osdid)
             ret, outbuf, outs = \
-                cluster.osd_command(osdid, json.dumps(cmddict), inbuf, timeout)
+                cluster_handle.osd_command(osdid, json.dumps(cmddict), inbuf,
+                                           timeout)
 
         elif target[0] == 'pg':
             # leave it in cmddict for the OSD to use too
@@ -1098,14 +1100,15 @@ def json_command(target=('mon', ''), prefix=None, argdict=None, inbuf='',
                 print >> sys.stderr, 'submit {0} for pgid {1}'.\
                     format(json.dumps(cmddict), pgid)
             ret, outbuf, outs = \
-                cluster.pg_command(pgid, json.dumps(cmddict), inbuf, timeout)
+                cluster_handle.pg_command(pgid, json.dumps(cmddict), inbuf,
+                                          timeout)
 
         elif target[0] == 'mon':
             if verbose:
                 print >> sys.stderr, '{0} to {1}'.\
                     format(json.dumps(cmddict), target[0])
-            ret, outbuf, outs = cluster.mon_command(json.dumps(cmddict),
-                                                    inbuf, timeout)
+            ret, outbuf, outs = cluster_handle.mon_command(json.dumps(cmddict),
+                                                           inbuf, timeout)
 
     except Exception as e:
         raise RuntimeError('"{0}": exception {1}'.format(prefix, e))
@@ -1337,10 +1340,20 @@ def main():
             return 1
 
     # handle any 'generic' ceph arguments that we didn't parse here
-    global cluster
-    cluster = rados.Rados(name=name, conffile='')
+    global cluster_handle
 
-    retargs = cluster.conf_parse_argv(childargs)
+    # rados.Rados() will call rados_create2, and then read the conf file,
+    # and then set the keys from the dict.  So we must do these
+    # "pre-file defaults" first (see common_preinit in librados)
+    conf_defaults = {
+        'log_to_stderr':'true',
+        'err_to_stderr':'true',
+        'log_flush_on_exit':'true',
+    }
+    cluster_handle = rados.Rados(name=name, clustername=parsed_args.cluster,
+                                 conf_defaults=conf_defaults, conffile='')
+
+    retargs = cluster_handle.conf_parse_argv(childargs)
     #tmp = childargs
     childargs = retargs
     if not childargs:
@@ -1351,7 +1364,7 @@ def main():
         childargs.remove('--')
 
     try:
-        cluster.connect()
+        cluster_handle.connect()
     except KeyboardInterrupt:
         print >> sys.stderr, "connection aborted"
         return 1
@@ -1386,7 +1399,7 @@ def main():
 
         # this instance keeps the watch connection alive, but is
         # otherwise unused
-        logwatch = rados.MonitorLog(cluster, level, watch_cb, 0)
+        logwatch = rados.MonitorLog(cluster_handle, level, watch_cb, 0)
         # loop forever letting watch_cb print lines
         while True:
             try:
@@ -1426,7 +1439,8 @@ def main():
                                      prefix='get_command_descriptions')
     if ret == -errno.EINVAL:
         # send command to old monitor
-        ret, outbuf, outs = cluster.mon_command(' '.join(sys.argv[1:]), inbuf)
+        ret, outbuf, outs = cluster_handle.mon_command(' '.join(sys.argv[1:]),
+                                                       inbuf)
     elif ret:
         if ret < 0:
             ret = -ret
