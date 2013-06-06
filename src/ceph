@@ -1447,6 +1447,9 @@ def main():
     ret, outbuf, outs = json_command(target=target,
                                      prefix='get_command_descriptions')
     if ret == -errno.EINVAL:
+        if parsed_args.status:
+            sys.argv[sys.argv.index('-s')] = 'status'
+
         # send command to old monitor
         ret, outbuf, outs = cluster_handle.mon_command(' '.join(sys.argv[1:]),
                                                        inbuf)
@@ -1457,14 +1460,14 @@ def main():
             'Problem getting command descriptions from {0}, {1}'.\
             format(target, errno.errorcode[ret])
         return ret
+    else:
+        sigdict = parse_json_funcsigs(outbuf)
 
-    sigdict = parse_json_funcsigs(outbuf)
+        if parsed_args.completion:
+            return complete(sigdict, childargs, target)
 
-    if parsed_args.completion:
-        return complete(sigdict, childargs, target)
-
-    ret, outbuf, outs = new_style_command(parsed_args, childargs, target,
-                                          sigdict, inbuf, verbose)
+        ret, outbuf, outs = new_style_command(parsed_args, childargs, target,
+                                              sigdict, inbuf, verbose)
 
     if ret < 0:
         ret = -ret
