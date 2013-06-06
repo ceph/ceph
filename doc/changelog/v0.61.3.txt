@@ -1,0 +1,831 @@
+commit 92b1e398576d55df8e5888dd1a9545ed3fd99532
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Wed Jun 5 11:10:05 2013 -0700
+
+    v0.61.3
+
+commit 7d549cb82ab8ebcf1cc104fc557d601b486c7635
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jun 4 10:42:13 2013 -0700
+
+    os/LevelDBStore: only remove logger if non-null
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit ce67c58db7d3e259ef5a8222ef2ebb1febbf7362)
+    Fixes: #5255
+
+commit 8544ea751884617616addc17b4467b9a86bd9d8a
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Jun 3 15:57:23 2013 -0700
+
+    test_librbd: use correct type for varargs snap test
+
+    uint64_t is passed in, but int was extracted. This fails on 32-bit builds.
+
+    Fixes: #5220
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 17029b270dee386e12e5f42c2494a5feffd49b08)
+
+commit b226e117b5a72c3b04b74aec50a9198601f3730b
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jun 2 18:07:34 2013 -0700
+
+    os/LevelDBStore: fix merge loop
+
+    We were double-incrementing p, both in the for statement and in the
+    body.  While we are here, drop the unnecessary else's.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit eb6d5fcf994d2a25304827d7384eee58f40939af)
+
+commit d017afb5b075a1958cb19213dd95e41d54065e45
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jun 2 17:27:10 2013 -0700
+
+    msgr: add get_messenger() to Connection
+
+    This was part of commit 27381c0c6259ac89f5f9c592b4bfb585937a1cfc.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit ffb87918fa7b829a5199eec08804dc540a819bf2
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri May 31 17:09:19 2013 -0700
+
+    mon: start lease timer from peon_init()
+
+    In the scenario:
+
+     - leader wins, peons lose
+     - leader sees it is too far behind on paxos and bootstraps
+     - leader tries to sync with someone, waits for a quorum of the others
+     - peons sit around forever waiting
+
+    The problem is that they never time out because paxos never issues a lease,
+    which is the normal timeout that lets them detect a leader failure.
+
+    Avoid this by starting the lease timeout as soon as we lose the election.
+    The timeout callback just does a bootstrap and does not rely on any other
+    state.
+
+    I see one possible danger here: there may be some "normal" cases where the
+    leader takes a long time to issue its first lease that we currently
+    tolerate, but won't with this new check in place.  I hope that raising
+    the lease interval/timeout or reducing the allowed paxos drift will make
+    that a non-issue.  If it is problematic, we will need a separate explicit
+    "i am alive" from the leader while it is getting ready to issue the lease
+    to prevent a live-lock.
+
+    Backport: cuttlefish, bobtail
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit f1ccb2d808453ad7ef619c2faa41a8f6e0077bd9)
+
+commit 38f8d850d35500e3d8751cd14c5cdaaff682c7d7
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 30 22:52:21 2013 -0700
+
+    mon: discard messages from disconnected clients
+
+    If the client is not connected, discard the message.  They will
+    reconnect and resend anyway, so there is no point in processing it
+    twice (now and later).
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit fb3cd0c2a8f27a1c8d601a478fd896cc0b609011)
+
+commit 36d948981685114d2fe807f480c19aade7497194
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed May 22 08:13:21 2013 -0700
+
+    msgr: add Messenger reference to Connection
+
+    This allows us to get the messenger associated with a connection.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 92a558bf0e5fee6d5250e1085427bff22fe4bbe4)
+
+commit 61135964419ecf5165366724d064b623b517fb4e
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 30 15:59:49 2013 -0700
+
+    mon/Paxos: adjust trimming defaults up; rename options
+
+    - trim more at a time (by an order of magnitude)
+    - rename fields to paxos_trim_{min,max}; only trim when there are min items
+      that are trimmable, and trim at most max items at a time.
+    - adjust the paxos_service_trim_{min,max} values up by a factor of 2.
+
+    Since we are compacting every time we trim, adjusting these up mean less
+    frequent compactions and less overall work for the monitor.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 6b8e74f0646a7e0d31db24eb29f3663fafed4ecc)
+
+commit 2dc402815f71204cfe592cfb3d6758486d84166d
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed May 8 16:42:24 2013 -0700
+
+    common/Preforker: fix warnings
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a284c9ece85f11d020d492120be66a9f4c997416)
+
+commit 48ee9283de288c101d3387cc48df6eb8ea889fb7
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 30 15:53:35 2013 -0700
+
+    fix test users of LevelDBStore
+
+    Need to pass in cct.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 446e0770c77de5d72858dcf7a95c5b19f642cf98)
+
+commit 3372235d307172b404a48e4c4d24702a96116d00
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 30 21:43:50 2013 -0700
+
+    mon: destroy MonitorDBStore before g_ceph_context
+
+    Put it on the heap so that we can destroy it before the g_ceph_context
+    cct that it references.  This fixes a crash like
+
+    *** Caught signal (Segmentation fault) **
+    in thread 4034a80
+    ceph version 0.63-204-gcf9aa7a (cf9aa7a0037e56eada8b3c1bb59d59d0bfe7bba5)
+    1: ceph-mon() [0x59932a]
+    2: (()+0xfcb0) [0x4e41cb0]
+    3: (Mutex::Lock(bool)+0x1b) [0x6235bb]
+    4: (PerfCountersCollection::remove(PerfCounters*)+0x27) [0x6a0877]
+    5: (LevelDBStore::~LevelDBStore()+0x1b) [0x582b2b]
+    6: (LevelDBStore::~LevelDBStore()+0x9) [0x582da9]
+    7: (main()+0x1386) [0x48db16]
+    8: (__libc_start_main()+0xed) [0x658076d]
+    9: ceph-mon() [0x4909ad]
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit df2d06db6f3f7e858bdadcc8cd2b0ade432df413)
+
+commit d284eaf9ce7d2022ba62562236d5fa41c26c1eb3
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 30 11:07:06 2013 -0700
+
+    mon: fix leak of health_monitor and config_key_service
+
+    Switch to using regular pointers here.  The lifecycle of these services is
+    very simple such that refcounting is overkill.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c888d1d3f1b77e62d1a8796992e918d12a009b9d)
+
+commit cc88cdfe8de02da675f9051e95b70da11f7fbe9e
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed May 29 17:54:17 2013 -0700
+
+    mon: return instead of exit(3) via preforker
+
+    This lets us run all the locally-scoped dtors so that leak checking will
+    work.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 3c5706163b72245768958155d767abf561e6d96d)
+
+commit 85d629a5f8e1deef9a562d9a7b371707d90c5ba1
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 30 14:57:42 2013 -0700
+
+    os/LevelDBStore: add perfcounters
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 7802292e0a49be607d7ba139b44d5ea1f98e07e6)
+
+commit 0109fa8ae70671c2d8ca19bcc95662d5f41cac66
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 30 14:36:41 2013 -0700
+
+    mon: make compaction bounds overlap
+
+    When we trim items N to M, compact over range (N-1) to M so that the
+    items in the queue will share bounds and get merged.  There is no harm in
+    compacting over a larger range here when the lower bound is a key that
+    doesn't exist anyway.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a47ca583980523ee0108774b466718b303bd3f46)
+
+commit 83b1edac07dd74b91ba2cdfe8b63236d7930c9b1
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 30 14:26:42 2013 -0700
+
+    os/LevelDBStore: merge adjacent ranges in compactionqueue
+
+    If we get behind and multiple adjacent ranges end up in the queue, merge
+    them so that we fire off compaction on larger ranges.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit f628dd0e4a5ace079568773edfab29d9f764d4f0)
+
+commit d14665e550d9b2dfc47684b73427042b0744127f
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed May 29 08:40:32 2013 -0700
+
+    mon: compact trimmed range, not entire prefix
+
+    This will reduce the work that leveldb is asked to do by only triggering
+    compaction of the keys that were just trimmed.
+
+    We ma want to further reduce the work by compacting less frequently, but
+    this is at least a step in that direction.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 6da4b20ca53fc8161485c8a99a6b333e23ace30e)
+
+commit dcd9b793fb0b05976b55be029315114d6f1df0e5
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed May 29 08:35:44 2013 -0700
+
+    mon/MonitorDBStore: allow compaction of ranges
+
+    Allow a transaction to describe the compaction of a range of keys.  Do this
+    in a backward compatible say, such that older code will interpret the
+    compaction of a prefix + range as compaction of the entire prefix.  This
+    allows us to avoid introducing any new feature bits.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit ab09f1e5c1305a64482ebbb5a6156a0bb12a63a4)
+
+    Conflicts:
+
+	src/mon/MonitorDBStore.h
+
+commit 6543da740a12c6ad085b807c9038d5b7b5aeaba6
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed May 29 08:34:13 2013 -0700
+
+    os/LevelDBStore: allow compaction of key ranges
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e20c9a3f79ccfeb816ed634ca25de29fc5975ea8)
+
+commit 87dcba2dd12a673fdc63ad64fb23e6e9f841d74f
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue May 28 16:35:55 2013 -0700
+
+    os/LevelDBStore: do compact_prefix() work asynchronously
+
+    We generally do not want to block while compacting a range of leveldb.
+    Push the blocking+waiting off to a separate thread.  (leveldb will do what
+    it can to avoid blocking internally; no reason for us to wait explicitly.)
+
+    This addresses part of #5176.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4af917d4478ec07734a69447420280880d775fa2)
+
+commit bac5720b2a583e799c6961c733c4a9132a002440
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat May 11 17:36:13 2013 -0700
+
+    qa: rsync test: exclude /usr/local
+
+    Some plana have non-world-readable crap in /usr/local/samba.  Avoid
+    /usr/local entirely for that and any similar landmines.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 82211f2197241c4f3d3135fd5d7f0aa776eaeeb6)
+
+commit 9f1afe1a8e7906bdc54158a4813f011933f6a78f
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri May 31 21:16:54 2013 -0700
+
+    mon: fix uninitialized fields in MMonHealth
+
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit d7e2ab1451e284cd4273cca47eec75e1d323f113)
+
+commit d5b67d49c87b4fe6a90cdd0bf4fac4f9d9377e81
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Fri May 31 13:44:39 2013 -0700
+
+    PGLog: only add entry to caller_ops in add() if reqid_is_indexed()
+
+    Fixes: #5216
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit a5f6d8967fbbe87f34b23cfcceea84317b647f62
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Mon Apr 15 16:33:48 2013 -0700
+
+    PG: don't write out pg map epoch every handle_activate_map
+
+    We don't actually need to write out the pg map epoch on every
+    activate_map as long as:
+    a) the osd does not trim past the oldest pg map persisted
+    b) the pg does update the persisted map epoch from time
+    to time.
+
+    To that end, we now keep a reference to the last map persisted.
+    The OSD already does not trim past the oldest live OSDMapRef.
+    Second, handle_activate_map will trim if the difference between
+    the current map and the last_persisted_map is large enough.
+
+    Fixes: #4731
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 2c5a9f0e178843e7ed514708bab137def840ab89)
+
+    Conflicts:
+
+	src/common/config_opts.h
+	src/osd/PG.cc
+	- last_persisted_osdmap_ref gets set in the non-static
+	  PG::write_info
+
+commit 9aaff1492a00e137f84af9b03e3a4608cea4b520
+Author: Alexandre Marangone <alexandre.marangone@inktank.com>
+Date:   Fri May 31 12:33:11 2013 -0700
+
+    upstart: handle upper case in cluster name and id
+
+    Signed-off-by: Alexandre Marangone <alexandre.marangone@inktank.com>
+    (cherry picked from commit 851619ab6645967e5d7659d9b0eea63d5c402b15)
+
+commit f87a19d34f9a03493eaca654dd176992676c5812
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue May 21 15:22:56 2013 -0700
+
+    OSDMonitor: skip new pools in update_pools_status() and get_pools_health()
+
+    New pools won't be full.  mon->pgmon()->pg_map.pg_pool_sum[poolid] will
+    implicitly create an entry for poolid causing register_new_pgs() to assume that
+    the newly created pgs in the new pool are in fact a result of a split
+    preventing MOSDPGCreate messages from being sent out.
+
+    Fixes: #4813
+    Backport: cuttlefish
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 0289c445be0269157fa46bbf187c92639a13db46)
+
+commit 34733bdc3b9da13195dfac8a25f98c6de64070d7
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu May 30 12:58:11 2013 -0700
+
+    rgw: only append prefetched data if reading from head
+
+    Fixes: #5209
+    Backport: bobtail, cuttlefish
+    If the head object wrongfully contains data, but according to the
+    manifest we don't read from the head, we shouldn't copy the prefetched
+    data. Also fix the length calculation for that data.
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit c5fc52ae0fc851444226abd54a202af227d7cf17)
+
+commit 3d91301e5d788f9f9f52ba4067006f39a89e1531
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu May 30 09:34:21 2013 -0700
+
+    rgw: don't copy object idtag when copying object
+
+    Fixes: #5204
+    When copying object we ended up also copying the original
+    object idtag which overrode the newly generated one. When
+    refcount put is called with the wrong idtag the count
+    does't go down.
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit b1312f94edc016e604f1d05ccfe2c788677f51d1)
+
+commit 131dca7d10d5b0b7dca5c5cbe9b0b54938805015
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 30 08:53:22 2013 -0700
+
+    debian: sync up postinst and prerm with latest
+
+    - do not use invoke-rc.d for upstart
+    - do not stop daemons on upgrade
+    - misc other cleanups
+
+    This corresponds to the state of master as of cf9aa7a.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 8b7ca687ded06fe0b67d98e81fa1dabbed440853
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Thu May 30 18:17:28 2013 +0100
+
+    mon: Monitor: backup monmap using all ceph features instead of quorum's
+
+    When a monitor is freshly created and for some reason its initial sync is
+    aborted, it will end up with an incorrect backup monmap.  This monmap is
+    incorrect in the sense that it will not contain the monitor's names as
+    it will expect on the next run.
+
+    This results from us being using the quorum features to encode the monmap
+    when backing it up, instead of CEPH_FEATURES_ALL.
+
+    Fixes: #5203
+
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 626de387e617db457d6d431c16327c275b0e8a34)
+
+commit 02ef6e918e4fe0368b02fbc700a4d921ae298dc3
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed May 29 09:49:11 2013 -0700
+
+    osd: do not assume head obc object exists when getting snapdir
+
+    For a list-snaps operation on the snapdir, do not assume that the obc for the
+    head means the object exists.  This fixes a race between a head deletion and
+    a list-snaps that wrongly returns ENOENT, triggered by the DiffItersateStress
+    test when thrashing OSDs.
+
+    Fixes: #5183
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 29e4e7e316fe3f3028e6930bb5987cfe3a5e59ab)
+
+commit 85ad65e294f2b3d4bd1cfef6ae613e31d1cea635
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed May 29 16:50:04 2013 -0700
+
+    osd: initialize new_state field when we use it
+
+    If we use operator[] on a new int field its value is undefined; avoid
+    reading it or using |= et al until we initialize it.
+
+    Fixes: #4967
+    Backport: cuttlefish, bobtail
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 50ac8917f175d1b107c18ecb025af1a7b103d634)
+
+commit 65236a4a2541799a0d946df7f3048d4404678f64
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue May 28 11:10:05 2013 -0700
+
+    HashIndex: sync top directory during start_split,merge,col_split
+
+    Otherwise, the links might be ordered after the in progress
+    operation tag write.  We need the in progress operation tag to
+    correctly recover from an interrupted merge, split, or col_split.
+
+    Fixes: #5180
+    Backport: cuttlefish, bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 5bca9c38ef5187c7a97916970a7fa73b342755ac)
+
+commit 0e127dc4ef16d19d56a3603ca90fa6b076d905b0
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Wed May 22 13:59:08 2013 +0100
+
+    mon: Paxos: get rid of the 'prepare_bootstrap()' mechanism
+
+    We don't need it after all.  If we are in the middle of some proposal,
+    then we guarantee that said proposal is likely to be retried.  If we
+    haven't yet proposed, then it's forever more likely that a client will
+    eventually retry the message that triggered this proposal.
+
+    Basically, this mechanism attempted at fixing a non-problem, and was in
+    fact triggering some unforeseen issues that would have required increasing
+    the code complexity for no good reason.
+
+    Fixes: #5102
+
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit e15d29094503f279d444eda246fc45c09f5535c9)
+
+commit f29206bdd950d1e916a1422b4826caaf4a8cef3a
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Wed May 22 13:51:13 2013 +0100
+
+    mon: Paxos: finish queued proposals instead of clearing the list
+
+    By finishing these Contexts, we make sure the Contexts they enclose (to be
+    called once the proposal goes through) will behave as their were initially
+    planned:  for instance, a C_Command() may retry the command if a -EAGAIN
+    is passed to 'finish_contexts', while a C_Trimmed() will simply set
+    'going_to_trim' to false.
+
+    This aims at fixing at least a bug in which Paxos will stop trimming if an
+    election is triggered while a trim is queued but not yet finished.  Such
+    happens because it is the C_Trimmed() context that is responsible for
+    resetting 'going_to_trim' back to false.  By clearing all the contexts on
+    the proposal list instead of finishing them, we stay forever unable to
+    trim Paxos again as 'going_to_trim' will stay True till the end of time as
+    we know it.
+
+    Fixes: #4895
+
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 586e8c2075f721456fbd40f738dab8ccfa657aa8)
+
+commit b73d7c6b7e83fe8ce29e7150f25a4cca7647cccd
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Fri May 17 18:23:36 2013 +0100
+
+    mon: Paxos: finish_proposal() when we're finished recovering
+
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 2ff23fe784245f3b86bc98e0434b21a5318e0a7b)
+
+commit 79eb61c4eadd9d94b3b8087d85b7210f4ab71d54
+Merge: a460e53 8682248
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu May 23 20:09:29 2013 -0700
+
+    Merge branch 'wip_scrub_tphandle' into cuttlefish
+
+    Fixes: #5159
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit 86822485e518d61d7b2c02a6ff25eb2c4b4bc307
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu May 23 17:40:44 2013 -0700
+
+    PG: ping tphandle during omap loop as well
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+
+commit d62716dd4ceb29032759bf84e864d214fe38a17c
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu May 23 15:24:39 2013 -0700
+
+    PG: reset timeout in _scan_list for each object, read chunk
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+
+commit b8a25e08a638c31b9cfc2c1bf6d9bad40e921a9f
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu May 23 15:23:05 2013 -0700
+
+    OSD,PG: pass tphandle down to _scan_list
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+
+commit a460e53ecac03e9c8f54c402a790e6d8cf75b38c
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed May 22 21:34:52 2013 -0700
+
+    rgw: iterate usage entries from correct entry
+
+    Fixes: #5152
+    When iterating through usage entries, and when user id was
+    provided, we started at the user's first entry and not from
+    the entry indexed by the request start time.
+    This commit fixes the issue.
+
+    Backport: bobtail
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 8b3a04dec8be13559716667d4b16cde9e9543feb)
+
+commit 48e1b11bcbdbdf8661cb560c8563f91738034287
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 16 20:37:05 2013 -0700
+
+    sysvinit: fix enumeration of local daemons when specifying type only
+
+    - prepend $local to the $allconf list at the top
+    - remove $local special case for all case
+    - fix the type prefix checks to explicitly check for prefixes
+
+    Fugly bash, but works!
+
+    Backport: cuttlefish, bobtail
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit c80c6a032c8112eab4f80a01ea18e1fa2c7aa6ed)
+
+commit 6e5f0db75a2bf591bd1fc0a5c2a93051f83ebc5d
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed May 22 09:47:29 2013 -0700
+
+    sysvinit: fix osd weight calculation on remote hosts
+
+    We need to do df on the remote host, not locally.
+
+    Simlarly, the ceph command uses the osd key, which exists remotely; run it there.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit d81d0ea5c442699570bd93a90bea0d97a288a1e9)
+
+commit 674e75bc0783cd9befe9c20e36fbc2cfdac62e5a
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed May 22 09:47:03 2013 -0700
+
+    sysvinit: use known hostname $host instead of (incorrectly) recalculating
+
+    We would need to do hostname -s on the remote node, not the local one.
+    But we already have $host; use it!
+
+    Reported-by: Xiaoxi Chen <xiaoxi.chen@intel.com>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit caa15a34cb5d918c0c8b052cd012ec8a12fca150)
+
+commit f4cd61d339419738355a26d7f4fce04eac9dedee
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon May 20 12:41:30 2013 -0700
+
+    mon: be a bit more verbose about osd mark down events
+
+    Put these in the cluster log; they are interesting.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 87767fb1fb9a52d11b11f0b641cebbd9998f089e)
+
+commit e04b1894ed7f3a6e95007e58dae5b35357e5c507
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Mon May 13 14:23:00 2013 -0700
+
+    PG: subset_last_update must be at least log.tail
+
+    Fixes: 5020
+    Backport: bobtail, cuttlefish
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 72bf5f4813c273210b5ced7f7793bc1bf813690c)
+
+commit 3a02e00d1d3b904b312db283faedf4dff37b0f6f
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue May 14 16:35:48 2013 -0700
+
+    FileJournal: adjust write_pos prior to unlocking write_lock
+
+    In committed_thru, we use write_pos to reset the header.start value in cases
+    where seq is past the end of our journalq.  It is therefore important that the
+    journalq be updated atomically with write_pos (that is, under the write_lock).
+
+    The call to align_bl() is moved into do_write in order to ensure that write_pos
+    is adjusted correctly prior to write_bl().
+
+    Also, we adjust pos at the end of write_bl() such that pos \in [get_top(),
+    header.max_size) after write_bl().
+
+    Fixes: #5020
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit eaf3abf3f9a7b13b81736aa558c9084a8f07fdbe)
+
+commit 8a030eb0e1b61121f7b1e2b7a551bb213d1c428b
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue May 21 14:36:11 2013 -0700
+
+    mon: implement --extract-monmap <filename>
+
+    This will make for a simpler process for
+      http://ceph.com/docs/master/rados/operations/add-or-rm-mons/#removing-monitors-from-an-unhealthy-cluster
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c0268e27497a4d8228ef54da9d4ca12f3ac1f1bf)
+
+commit 4ad13c945fd29a2d183f7ea6c6ac8a51d24dabe1
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu May 16 15:28:40 2013 -0700
+
+    librbd: make image creation defaults configurable
+
+    Programs using older versions of the image creation functions can't
+    set newer parameters like image format and fancier striping.
+
+    Setting these options lets them use all the new functionality without
+    being patched and recompiled to use e.g. rbd_create3().
+    This is particularly useful for things like qemu-img, which does not
+    know how to create format 2 images yet.
+
+    Refs: #5067
+    backport: cuttlefish, bobtail
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit aacc9adc4e9ca90bbe73ac153cc754a3a5b2c0a1)
+
+commit 684444f88f2a7cf28f2e685c18f0771730a1d48f
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu May 16 15:21:24 2013 -0700
+
+    rbd.py: fix stripe_unit() and stripe_count()
+
+    These matched older versions of the functions, but would segfault
+    using the current versions.
+
+    backport: cuttlefish, bobtail
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 53ee6f965e8f06c7256848210ad3c4f89d0cb5a0)
+
+commit 9c7faf957fffb2721ccb915b68ca90ffb0d04a9f
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu May 16 15:19:46 2013 -0700
+
+    cls_rbd: make sure stripe_unit is not larger than object size
+
+    Test a few other cases too.
+
+    backport: cuttlefish, bobtail
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 810306a2a76eec1c232fd28ec9c351e827fa3031)
+
+commit 4071d7a79585ee2768d0a63819d99405a083369f
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri May 3 12:57:00 2013 -0700
+
+    rgw: protect ops log socket formatter
+
+    Fixes: #4905
+    Ops log (through the unix domain socket) uses a formatter, which wasn't
+    protected.
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit d48f1edb07a4d8727ac956f70e663c1b4e33e1dd)
+
+commit 57a6a54db4020debd826a493cccca4695934f693
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed May 15 23:02:10 2013 -0700
+
+    Makefle: force char to be signed
+
+    On an armv7l build, we see errors like
+
+     warning: rgw/rgw_common.cc:626:16: comparison is always false due to limited range of data type [-Wtype-limits]
+
+    from code
+
+          char c1 = hex_to_num(*src++);
+    ...
+          if (c1 < 0)
+
+    Force char to be signed (regardless of any weird architecture's default)
+    to avoid risk of this leading to misbehavior.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit 769a16d6674122f3b537f03e17514ad974bf2a2f)
+
+commit 85fb422a084785176af3b694882964841e02195d
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon May 20 13:34:27 2013 -0700
+
+    debian: stop sysvinit on ceph.prerm
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 2f193fb931ed09d921e6fa5a985ab87aa4874589)
+
+commit eac3cd2d8334db7c70cbba433610136ff76e447f
+Author: Mike Kelly <pioto@pioto.org>
+Date:   Thu May 16 12:29:50 2013 -0400
+
+    ceph df: fix si units for 'global' stats
+
+    si_t expects bytes, but it was being given kilobytes.
+
+    Signed-off-by: Mike Kelly <pioto@pioto.org>
+    (cherry picked from commit 0c2b738d8d07994fee4c73dd076ac9364a64bdb2)
+
+commit 7bc7c9d4bc6f5bbadbb5e6f9844a0e1f66373c90
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 16 18:40:29 2013 -0700
+
+    udev: install disk/by-partuuid rules
+
+    Wheezy's udev (175-7.2) has broken rules for the /dev/disk/by-partuuid/
+    symlinks that ceph-disk relies on.  Install parallel rules that work.  On
+    new udev, this is harmless; old older udev, this will make life better.
+
+    Fixes: #4865
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit d8d7113c35b59902902d487738888567e3a6b933)
+
+commit c2acecbdab93177227a80a114ecc4ce71dbdbe49
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 16 13:17:45 2013 -0700
+
+    debian: make radosgw require matching version of librados2
+
+    ...indirectly via ceph-common.  We get bad behavior when they diverge, I
+    think because of libcommon.la being linked both statically and dynamically.
+
+    Fixes: #4997
+    Backport: cuttlefish, bobtail
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Gary Lowell <gary.lowell@inktank.com>
+    (cherry picked from commit 604c83ff18f9a40c4f44bc8483ef22ff41efc8ad)
+
+commit 4c0d3eb72c045c39e8b38fd5abf9ddfbb2219f9c
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri May 10 22:14:05 2013 -0700
+
+    mon: fix validatation of mds ids in mon commands
+
+    Fixes: #4996
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 5c305d63043762027323052b4bb3ae3063665c6f)
