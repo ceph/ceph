@@ -2,13 +2,14 @@
 #include "rgw_rest_client.h"
 #include "rgw_auth_s3.h"
 #include "rgw_http_errors.h"
+#include "rgw_rados.h"
 
 #include "common/ceph_crypto_cms.h"
 #include "common/armor.h"
 
 #define dout_subsys ceph_subsys_rgw
 
-int RGWRESTClient::receive_header(void *ptr, size_t len)
+int RGWRESTSimpleRequest::receive_header(void *ptr, size_t len)
 {
   char line[len + 1];
 
@@ -60,7 +61,7 @@ static void get_new_date_str(CephContext *cct, string& date_str)
   date_str = s.str();
 }
 
-int RGWRESTClient::execute(RGWAccessKey& key, const char *method, const char *resource)
+int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *method, const char *resource)
 {
   string new_url = url;
   string new_resource = resource;
@@ -102,7 +103,7 @@ int RGWRESTClient::execute(RGWAccessKey& key, const char *method, const char *re
   return rgw_http_error_to_errno(status);
 }
 
-int RGWRESTClient::send_data(void *ptr, size_t len)
+int RGWRESTSimpleRequest::send_data(void *ptr, size_t len)
 {
   if (!send_iter)
     return 0;
@@ -115,7 +116,7 @@ int RGWRESTClient::send_data(void *ptr, size_t len)
   return len;
 }
 
-int RGWRESTClient::receive_data(void *ptr, size_t len)
+int RGWRESTSimpleRequest::receive_data(void *ptr, size_t len)
 {
   if (response.length() > max_response)
     return 0; /* don't read extra data */
@@ -127,7 +128,8 @@ int RGWRESTClient::receive_data(void *ptr, size_t len)
   return 0;
 
 }
-void RGWRESTClient::append_param(string& dest, const string& name, const string& val)
+
+void RGWRESTSimpleRequest::append_param(string& dest, const string& name, const string& val)
 {
   if (dest.empty()) {
     dest.append("?");
@@ -142,7 +144,7 @@ void RGWRESTClient::append_param(string& dest, const string& name, const string&
   }
 }
 
-void RGWRESTClient::get_params_str(map<string, string>& extra_args, string& dest)
+void RGWRESTSimpleRequest::get_params_str(map<string, string>& extra_args, string& dest)
 {
   map<string, string>::iterator miter;
   for (miter = extra_args.begin(); miter != extra_args.end(); ++miter) {
@@ -154,7 +156,7 @@ void RGWRESTClient::get_params_str(map<string, string>& extra_args, string& dest
   }
 }
 
-int RGWRESTClient::sign_request(RGWAccessKey& key, RGWEnv& env, req_info& info)
+int RGWRESTSimpleRequest::sign_request(RGWAccessKey& key, RGWEnv& env, req_info& info)
 {
   map<string, string>& m = env.get_map();
 
@@ -185,7 +187,7 @@ int RGWRESTClient::sign_request(RGWAccessKey& key, RGWEnv& env, req_info& info)
   return 0;
 }
 
-int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl)
+int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl)
 {
 
   string date_str;
@@ -246,7 +248,43 @@ int RGWRESTClient::forward_request(RGWAccessKey& key, req_info& info, size_t max
   return rgw_http_error_to_errno(status);
 }
 
-int RGWRESTClient::put_obj(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, void (*get_data)(uint64_t ofs, uint64_t len, bufferlist& bl, void *))
+class RGWRESTStreamOutCB : public RGWGetDataCB {
+  RGWRESTStreamRequest *req;
+public:
+  RGWRESTStreamOutCB(RGWRESTStreamRequest *_req) : req(_req) {}
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len); /* callback for object iteration when sending data */
+};
+
+int RGWRESTStreamOutCB::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
+{
+  dout(20) << "RGWRESTStreamOutCB::handle_data bl.length()=" << bl.length() << " bl_ofs=" << bl_ofs << " bl_len=" << bl_len << dendl;
+  if (!bl_ofs && bl_len == bl.length()) {
+    return req->add_output_data(bl);
+  }
+
+  bufferptr bp(bl.c_str() + bl_ofs, bl_len);
+  bufferlist new_bl;
+  new_bl.push_back(bp);
+
+  return req->add_output_data(new_bl);
+}
+
+RGWRESTStreamRequest::~RGWRESTStreamRequest()
+{
+  delete cb;
+}
+
+int RGWRESTStreamRequest::add_output_data(bufferlist& bl)
+{
+  lock.Lock();
+  pending_send.push_back(bl);
+  lock.Unlock();
+
+  bool done;
+  return process_request(handle, &done);
+}
+
+int RGWRESTStreamRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size)
 {
   string resource = obj.bucket.name + "/" + obj.object;
   string new_url = url;
@@ -285,10 +323,61 @@ int RGWRESTClient::put_obj(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, v
     headers.push_back(make_pair<string, string>(iter->first, iter->second));
   }
 
-  int r = process(new_info.method, new_url.c_str());
+  cb = new RGWRESTStreamOutCB(this);
+
+  set_send_length(obj_size);
+
+  int r = init_async(new_info.method, new_url.c_str(), &handle);
   if (r < 0)
     return r;
 
   return 0;
 }
 
+int RGWRESTStreamRequest::send_data(void *ptr, size_t len)
+{
+  uint64_t sent = 0;
+
+  dout(20) << "RGWRESTStreamRequest::send_data()" << dendl;
+  lock.Lock();
+  if (pending_send.empty()) {
+    lock.Unlock();
+    return 0;
+  }
+
+  list<bufferlist>::iterator iter = pending_send.begin();
+  while (iter != pending_send.end() && len > 0) {
+    bufferlist& bl = *iter;
+    
+    list<bufferlist>::iterator next_iter = iter;
+    ++next_iter;
+    lock.Unlock();
+
+    uint64_t send_len = min(len, (size_t)bl.length());
+
+    memcpy(ptr, bl.c_str(), send_len);
+
+    len -= send_len;
+    sent += send_len;
+
+    lock.Lock();
+    pending_send.pop_front();
+
+    if (bl.length() > send_len) {
+      bufferptr bp(bl.c_str() + send_len, bl.length() - send_len);
+      bufferlist new_bl;
+      new_bl.append(bp);
+      pending_send.push_front(new_bl);
+    }
+    iter = next_iter;
+  }
+  lock.Unlock();
+
+  return sent;
+}
+
+
+int RGWRESTStreamRequest::complete()
+{
+  return complete_request(handle);
+}
