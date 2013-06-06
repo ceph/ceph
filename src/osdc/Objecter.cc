@@ -35,6 +35,7 @@
 #include "messages/MStatfsReply.h"
 
 #include "messages/MOSDFailure.h"
+#include "messages/MMonCommand.h"
 
 #include <errno.h>
 
@@ -2177,4 +2178,25 @@ bool Objecter::RequestStateHook::call(std::string command, std::string args, buf
   formatter.flush(ss);
   out.append(ss);
   return true;
+}
+
+void Objecter::blacklist_self(bool set)
+{
+  ldout(cct, 10) << "blacklist_self " << (set ? "add" : "rm") << dendl;
+
+  vector<string> cmd;
+  cmd.push_back("osd");
+  cmd.push_back("blacklist");
+  if (set)
+    cmd.push_back("add");
+  else
+    cmd.push_back("rm");
+  stringstream ss;
+  ss << messenger->get_myaddr();
+  cmd.push_back(ss.str());
+
+  MMonCommand *m = new MMonCommand(monc->get_fsid(), last_seen_osdmap_version);
+  m->cmd = cmd;
+
+  monc->send_mon_message(m);
 }
