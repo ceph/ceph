@@ -24,6 +24,7 @@
 #include "librados/IoCtxImpl.h"
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "librados/RadosClient.h"
+#include "include/str_list.h"
 
 #include <string>
 #include <map>
@@ -1761,6 +1762,7 @@ extern "C" int rados_mon_command(rados_t cluster, const char *cmd,
   string outstring;
   vector<string> cmdvec;
 
+  get_str_vec(string(cmd), cmdvec);
   cmdvec.push_back(cmd);
   inbl.append(inbuf, inbuflen);
   int ret = client->mon_command(cmdvec, inbl, &outbl, &outstring);
@@ -1781,7 +1783,7 @@ extern "C" int rados_osd_command(rados_t cluster, int osdid, const char *cmd,
   string outstring;
   vector<string> cmdvec;
 
-  cmdvec.push_back(cmd);
+  get_str_vec(string(cmd), cmdvec);
   inbl.append(inbuf, inbuflen);
   int ret = client->osd_command(osdid, cmdvec, inbl, &outbl, &outstring);
 
@@ -1805,7 +1807,7 @@ extern "C" int rados_pg_command(rados_t cluster, const char *pgstr,
   pg_t pgid;
   vector<string> cmdvec;
 
-  cmdvec.push_back(cmd);
+  get_str_vec(string(cmd), cmdvec);
   inbl.append(inbuf, inbuflen);
   if (!pgid.parse(pgstr))
     return -EINVAL;
