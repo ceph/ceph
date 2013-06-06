@@ -238,11 +238,10 @@ void RGWAccessKey::decode_json(JSONObj *obj, bool swift) {
   }
 
   if (!JSONDecoder::decode_json("subuser", subuser, obj)) {
-    string user;
-    JSONDecoder::decode_json("user", user, obj, true);
-    int pos = user.find(':');
+    JSONDecoder::decode_json("user", id, obj, true);
+    int pos = id.find(':');
     if (pos >= 0) {
-      subuser = user.substr(pos + 1);
+      subuser = id.substr(pos + 1);
     }
   }
   JSONDecoder::decode_json("secret_key", key, obj, true);
