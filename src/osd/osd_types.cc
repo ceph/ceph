@@ -2717,7 +2717,6 @@ void ScrubMap::merge_incr(const ScrubMap &l)
 {
   assert(valid_through == l.incr_since);
   attrs = l.attrs;
-  logbl = l.logbl;
   valid_through = l.valid_through;
 
   for (map<hobject_t,object>::const_iterator p = l.objects.begin();
@@ -2739,7 +2738,8 @@ void ScrubMap::encode(bufferlist& bl) const
   ENCODE_START(3, 2, bl);
   ::encode(objects, bl);
   ::encode(attrs, bl);
-  ::encode(logbl, bl);
+  bufferlist old_logbl;  // not used
+  ::encode(old_logbl, bl);
   ::encode(valid_through, bl);
   ::encode(incr_since, bl);
   ENCODE_FINISH(bl);
@@ -2750,7 +2750,8 @@ void ScrubMap::decode(bufferlist::iterator& bl, int64_t pool)
   DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   ::decode(objects, bl);
   ::decode(attrs, bl);
-  ::decode(logbl, bl);
+  bufferlist old_logbl;   // not used
+  ::decode(old_logbl, bl);
   ::decode(valid_through, bl);
   ::decode(incr_since, bl);
   DECODE_FINISH(bl);

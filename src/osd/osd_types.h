@@ -1852,7 +1852,6 @@ struct ScrubMap {
 
   map<hobject_t,object> objects;
   map<string,bufferptr> attrs;
-  bufferlist logbl;
   eversion_t valid_through;
   eversion_t incr_since;
 
