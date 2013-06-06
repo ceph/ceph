@@ -182,30 +182,34 @@ class Rados(object):
         raise RadosStateError("You cannot perform that operation on a \
 Rados object in state %s." % (self.state))
 
-    def __init__(self, rados_id=None, conf=None, conffile=None, name=None):
+    def __init__(self, rados_id=None, name=None, clustername='ceph',
+                 conf_defaults=None, conffile=None, conf=None, flags=0):
         self.librados = CDLL('librados.so.2')
         self.cluster = c_void_p()
         self.rados_id = rados_id
         if rados_id and not isinstance(rados_id, str):
             raise TypeError('rados_id must be a string or None')
-        if conffile and not isinstance(conffile, str):
+        if conffile is not None and not isinstance(conffile, str):
             raise TypeError('conffile must be a string or None')
         if rados_id and name:
             raise Error("Rados(): can't supply both rados_id and name")
-        fn = self.librados.rados_create
-        if name:
-            fn = self.librados.rados_create2
-        ret = run_in_thread(fn, (byref(self.cluster), c_char_p(rados_id)))
+        ret = run_in_thread(self.librados.rados_create2,
+                            (byref(self.cluster), c_char_p(clustername),
+                            c_char_p(rados_id), c_uint64(flags)))
 
         if ret != 0:
             raise Error("rados_initialize failed with error code: %d" % ret)
         self.state = "configuring"
+        # order is important: conf_defaults, then conffile, then conf
+        if conf_defaults:
+            for key, value in conf_defaults.iteritems():
+                self.conf_set(key, value)
         if conffile is not None:
             # read the default conf file when '' is given
             if conffile == '':
                 conffile = None
             self.conf_read_file(conffile)
-        if conf is not None:
+        if conf:
             for key, value in conf.iteritems():
                 self.conf_set(key, value)
 

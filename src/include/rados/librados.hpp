@@ -649,7 +649,8 @@ namespace librados
     ~Rados();
 
     int init(const char * const id);
-    int init2(const char * const name);
+    int init2(const char * const name, const char * const clustername,
+	      uint64_t flags);
     int init_with_context(config_t cct_);
     config_t cct();
     int connect();
