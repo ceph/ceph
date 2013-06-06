@@ -883,7 +883,7 @@ bool AuthMonitor::prepare_global_id(MMonGlobalID *m)
 
 void AuthMonitor::upgrade_format()
 {
-  int current = 1;
+  unsigned int current = 1;
   if (format_version >= current) {
     dout(20) << __func__ << " format " << format_version << " is current" << dendl;
     return;
