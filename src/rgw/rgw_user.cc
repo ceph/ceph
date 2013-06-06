@@ -74,7 +74,8 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_inf
     RGWUserInfo inf;
     int r = rgw_get_user_info_by_swift(store, k.id, inf);
     if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
-      ldout(store->ctx(), 0) << "WARNING: can't store user info, swift id already mapped to another user" << dendl;
+      ldout(store->ctx(), 0) << "WARNING: can't store user info, swift id (" << k.id
+        << ") already mapped to another user (" << info.user_id << ")" << dendl;
       return -EEXIST;
     }
   }
