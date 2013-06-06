@@ -674,6 +674,9 @@ namespace librados
 
     int ioctx_create(const char *name, IoCtx &pioctx);
 
+    // Features useful for test cases
+    void test_blacklist_self(bool set);
+
     /* listing objects */
     int pool_list(std::list<std::string>& v);
     int get_pool_stats(std::list<std::string>& v,

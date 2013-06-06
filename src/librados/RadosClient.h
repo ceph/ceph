@@ -102,6 +102,7 @@ public:
   void watch_notify(MWatchNotify *m);
   void get();
   bool put();
+  void blacklist_self(bool set);
 };
 
 #endif
