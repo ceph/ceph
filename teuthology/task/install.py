@@ -629,7 +629,7 @@ def upgrade(ctx, config):
                 for var, branch_val in kkeys.iteritems():
                     if var == 'branch' or var == 'tag' or var == 'sha1':
                         branch = branch_val
-                        _upgrade_packages(ctx, config, remote, debs[project], branch)
+                        _upgrade_packages(ctx, config, remote, debs, branch)
                         list_roles.append(remote)
     yield
 
