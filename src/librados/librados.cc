@@ -1503,9 +1503,9 @@ extern "C" int rados_create2(rados_t *pcluster, const char *const clustername,
 {
   // client is assumed, but from_str will override
   CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
-  if (name) {
-    iparams.name.from_str(name);
-  }
+  if (!name || !iparams.name.from_str(name)) 
+    return -EINVAL;
+
   return rados_create_common(pcluster, clustername, &iparams);
 }
 

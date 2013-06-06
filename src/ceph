@@ -1309,7 +1309,7 @@ def main():
     verbose = parsed_args.verbose
 
     # pass on --id, --name, --conf
-    name = None
+    name = 'client.admin'
     if parsed_args.client_id:
         name = 'client.' + parsed_args.client_id
     if parsed_args.client_name:
@@ -1359,7 +1359,12 @@ def main():
         'err_to_stderr':'true',
         'log_flush_on_exit':'true',
     }
-    cluster_handle = rados.Rados(name=name, clustername=parsed_args.cluster,
+
+    clustername = 'ceph'
+    if parsed_args.cluster:
+        clustername = parsed_args.cluster
+
+    cluster_handle = rados.Rados(name=name, clustername=clustername,
                                  conf_defaults=conf_defaults, conffile='')
 
     retargs = cluster_handle.conf_parse_argv(childargs)
