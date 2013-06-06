@@ -1,11 +1,12 @@
-#ifndef CEPH_RGW_REST_REQ_H
-#define CEPH_RGW_REST_REQ_H
+#ifndef CEPH_RGW_REST_CONN_H
+#define CEPH_RGW_REST_CONN_H
 
 #include "rgw_rest_client.h"
 
 class CephContext;
 class RGWRados;
 class RGWRegion;
+class RGWGetObjData;
 
 class RGWRegionConnection
 {
@@ -19,8 +20,12 @@ public:
   RGWRegionConnection(CephContext *_cct, RGWRados *store, RGWRegion& upstream);
   int get_url(string& endpoint);
 
+  /* sync request */
   int forward(const string& uid, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl);
-  int put_obj(const string& uid, rgw_obj& obj, uint64_t obj_size, void (*get_data)(uint64_t ofs, uint64_t len, bufferlist& bl, void *));
+
+  /* async request */
+  int put_obj_init(const string& uid, rgw_obj& obj, uint64_t obj_size, RGWRESTStreamRequest **req);
+  int complete_request(RGWRESTStreamRequest *req);
 };
 
 #endif
