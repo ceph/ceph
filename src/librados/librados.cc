@@ -1419,6 +1419,11 @@ int librados::Rados::ioctx_create(const char *name, IoCtx &io)
   return 0;
 }
 
+void librados::Rados::test_blacklist_self(bool set)
+{
+  client->blacklist_self(set);
+}
+
 int librados::Rados::get_pool_stats(std::list<string>& v, std::map<string, stats_map>& result)
 {
   string category;

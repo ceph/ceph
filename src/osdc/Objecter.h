@@ -30,6 +30,7 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <sstream>
 using namespace std;
 using namespace __gnu_cxx;
 
@@ -368,6 +369,9 @@ struct ObjectOperation {
             for (list<watch_item_t>::iterator i = resp.entries.begin() ;
                     i != resp.entries.end() ; ++i) {
               obj_watch_t ow;
+	      ostringstream sa;
+	      sa << i->addr;
+	      strncpy(ow.addr, sa.str().c_str(), 256);
               ow.watcher_id = i->name.num();
               ow.cookie = i->cookie;
               ow.timeout_seconds = i->timeout_seconds;
@@ -1668,6 +1672,7 @@ public:
   void ms_handle_connect(Connection *con);
   void ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con);
+  void blacklist_self(bool set);
 };
 
 #endif
