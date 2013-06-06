@@ -215,6 +215,9 @@ create a metadata node::
 Summary
 =======
 
+Deploying a Ceph cluster with ``ceph-deploy`` automatically starts the cluster.
+To operate the cluster daemons, see `Running Ceph with Upstart`_.
+
 Once you deploy a Ceph cluster, you can try out some of the administration
 functionality, the object store command line, and then proceed to Quick Start
 guides for RBD, CephFS, and the Ceph Gateway.
@@ -233,3 +236,4 @@ See `Ceph Deploy`_ for additional details.
 .. _Ceph Deploy: ../../rados/deployment
 .. _ceph-deploy install -h: ../../rados/deployment/ceph-deploy-install
 .. _ceph-deploy new -h: ../../rados/deployment/ceph-deploy-new
+.. _Running Ceph with Upstart: ../../rados/operations/operating#running-ceph-with-upstart
