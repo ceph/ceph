@@ -39,9 +39,9 @@ void entity_addr_t::generate_test_instances(list<entity_addr_t*>& o)
   b->set_nonce(5);
   b->set_family(AF_INET);
   b->set_in4_quad(0, 127);
-  b->set_in4_quad(0, 0);
-  b->set_in4_quad(0, 1);
-  b->set_in4_quad(0, 2);
+  b->set_in4_quad(1, 0);
+  b->set_in4_quad(2, 1);
+  b->set_in4_quad(3, 2);
   b->set_port(2);
   o.push_back(b);
 }

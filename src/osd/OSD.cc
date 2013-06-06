@@ -1007,6 +1007,66 @@ bool OSD::asok_command(string command, string args, ostream& ss)
     op_wq.dump(&f);
     f.close_section();
     f.flush(ss);
+  } else if (command == "dump_blacklist") {
+    list<pair<entity_addr_t,utime_t> > bl;
+    OSDMapRef curmap = service.get_osdmap();
+
+    JSONFormatter f(true);
+    f.open_array_section("blacklist");
+    curmap->get_blacklist(&bl);
+    for (list<pair<entity_addr_t,utime_t> >::iterator it = bl.begin();
+	it != bl.end(); ++it) {
+      f.open_array_section("entry");
+      f.open_object_section("entity_addr_t");
+      it->first.dump(&f);
+      f.close_section(); //entity_addr_t
+      it->second.localtime(f.dump_stream("expire_time"));
+      f.close_section(); //entry
+    }
+    f.close_section(); //blacklist
+    f.flush(ss);
+  } else if (command == "dump_watchers") {
+    list<obj_watch_item_t> watchers;
+    osd_lock.Lock();
+    // scan pg's
+    for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
+	 it != pg_map.end();
+	 ++it) {
+
+      list<obj_watch_item_t> pg_watchers;
+      PG *pg = it->second;
+      pg->lock();
+      pg->get_watchers(pg_watchers);
+      pg->unlock();
+      watchers.splice(watchers.end(), pg_watchers);
+    }
+    osd_lock.Unlock();
+
+    JSONFormatter f(true);
+    f.open_array_section("watchers");
+    for (list<obj_watch_item_t>::iterator it = watchers.begin();
+	it != watchers.end(); ++it) {
+
+      f.open_array_section("watch");
+
+      f.dump_string("object", it->obj.oid.name);
+
+      f.open_object_section("entity_name");
+      it->wi.name.dump(&f);
+      f.close_section(); //entity_name_t
+
+      f.dump_int("cookie", it->wi.cookie);
+      f.dump_int("timeout", it->wi.timeout_seconds);
+
+      f.open_object_section("entity_addr_t");
+      it->wi.addr.dump(&f);
+      f.close_section(); //entity_addr_t
+
+      f.close_section(); //watch
+    }
+
+    f.close_section(); //watches
+    f.flush(ss);
   } else {
     assert(0 == "broken asok registration");
   }
@@ -1157,6 +1217,13 @@ int OSD::init()
   r = admin_socket->register_command("dump_op_pq_state", asok_hook,
 				     "dump op priority queue state");
   assert(r == 0);
+  r = admin_socket->register_command("dump_blacklist", asok_hook,
+				     "dump_blacklist");
+  assert(r == 0);
+  r = admin_socket->register_command("dump_watchers", asok_hook,
+				     "dump_watchers");
+  assert(r == 0);
+
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
   r = admin_socket->register_command("setomapval", test_ops_hook,
                               "setomapval <pool-id> <obj-name> <key> <val>");
@@ -1354,6 +1421,8 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("dump_ops_in_flight");
   cct->get_admin_socket()->unregister_command("dump_historic_ops");
   cct->get_admin_socket()->unregister_command("dump_op_pq_state");
+  cct->get_admin_socket()->unregister_command("dump_blacklist");
+  cct->get_admin_socket()->unregister_command("dump_watchers");
   delete asok_hook;
   asok_hook = NULL;
 
@@ -2834,7 +2903,10 @@ void OSD::check_ops_in_flight()
 //   setomapval <pool-id> <obj-name> <key> <val>
 //   rmomapkey <pool-id> <obj-name> <key>
 //   setomapheader <pool-id> <obj-name> <header>
+//   getomap <pool> <obj-name>
 //   truncobj <pool-id> <obj-name> <newlen>
+//   injectmdataerr
+//   injectdataerr
 void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
      std::string command, std::string args, ostream &ss)
 {
@@ -2970,7 +3042,8 @@ bool remove_dir(
   ObjectStore *store, SnapMapper *mapper,
   OSDriver *osdriver,
   ObjectStore::Sequencer *osr,
-  coll_t coll, DeletingStateRef dstate) {
+  coll_t coll, DeletingStateRef dstate)
+{
   vector<hobject_t> olist;
   int64_t num = 0;
   ObjectStore::Transaction *t = new ObjectStore::Transaction;

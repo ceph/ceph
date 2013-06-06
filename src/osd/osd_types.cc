@@ -2478,21 +2478,25 @@ ostream& operator<<(ostream& out, const SnapSet& cs)
 
 void watch_info_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(3, 3, bl);
+  ENCODE_START(4, 3, bl);
   ::encode(cookie, bl);
   ::encode(timeout_seconds, bl);
+  ::encode(addr, bl);
   ENCODE_FINISH(bl);
 }
 
 void watch_info_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
   ::decode(cookie, bl);
   if (struct_v < 2) {
     uint64_t ver;
     ::decode(ver, bl);
   }
   ::decode(timeout_seconds, bl);
+  if (struct_v >= 4) {
+    ::decode(addr, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -2500,6 +2504,9 @@ void watch_info_t::dump(Formatter *f) const
 {
   f->dump_unsigned("cookie", cookie);
   f->dump_unsigned("timeout_seconds", timeout_seconds);
+  f->open_object_section("addr");
+  addr.dump(f);
+  f->close_section();
 }
 
 void watch_info_t::generate_test_instances(list<watch_info_t*>& o)
@@ -2508,6 +2515,15 @@ void watch_info_t::generate_test_instances(list<watch_info_t*>& o)
   o.push_back(new watch_info_t);
   o.back()->cookie = 123;
   o.back()->timeout_seconds = 99;
+  entity_addr_t ea;
+  ea.set_nonce(1);
+  ea.set_family(AF_INET);
+  ea.set_in4_quad(0, 127);
+  ea.set_in4_quad(1, 0);
+  ea.set_in4_quad(2, 1);
+  ea.set_in4_quad(3, 2);
+  ea.set_port(2);
+  o.back()->addr = ea;
 }
 
 

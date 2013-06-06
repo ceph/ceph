@@ -45,7 +45,8 @@ static ostream& _prefix(std::ostream *_dout, const PG *pg)
   return *_dout << pg->gen_prefix();
 }
 
-void PG::get(const string &tag) {
+void PG::get(const string &tag) 
+{
   ref.inc();
 #ifdef PG_DEBUG_REFS
   Mutex::Locker l(_ref_id_lock);
@@ -55,7 +56,9 @@ void PG::get(const string &tag) {
   _tag_counts[tag]++;
 #endif
 }
-void PG::put(const string &tag) {
+
+void PG::put(const string &tag)
+{
 #ifdef PG_DEBUG_REFS
   {
     Mutex::Locker l(_ref_id_lock);
@@ -71,7 +74,8 @@ void PG::put(const string &tag) {
 }
 
 #ifdef PG_DEBUG_REFS
-uint64_t PG::get_with_id() {
+uint64_t PG::get_with_id()
+{
   ref.inc();
   Mutex::Locker l(_ref_id_lock);
   uint64_t id = ++_ref_id;
@@ -84,7 +88,8 @@ uint64_t PG::get_with_id() {
   return id;
 }
 
-void PG::put_with_id(uint64_t id) {
+void PG::put_with_id(uint64_t id)
+{
   dout(20) << __func__ << ": " << info.pgid << " put id " << id << dendl;
   {
     Mutex::Locker l(_ref_id_lock);
@@ -95,7 +100,8 @@ void PG::put_with_id(uint64_t id) {
     delete this;
 }
 
-void PG::dump_live_ids() {
+void PG::dump_live_ids()
+{
   Mutex::Locker l(_ref_id_lock);
   dout(0) << "\t" << __func__ << ": " << info.pgid << " live ids:" << dendl;
   for (map<uint64_t, string>::iterator i = _live_ids.begin();
@@ -4056,7 +4062,8 @@ void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,
   }
 }
 
-void PG::scrub_compare_maps() {
+void PG::scrub_compare_maps() 
+{
   dout(10) << "scrub_compare_maps has maps, analyzing" << dendl;
 
   // construct authoritative scrub map for type specific scrubbing
@@ -4114,7 +4121,8 @@ void PG::scrub_compare_maps() {
   _scrub(authmap);
 }
 
-void PG::scrub_process_inconsistent() {
+void PG::scrub_process_inconsistent()
+{
   dout(10) << "process_inconsistent() checking authoritative" << dendl;
   bool repair = state_test(PG_STATE_REPAIR);
   bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
@@ -4174,7 +4182,8 @@ void PG::scrub_process_inconsistent() {
   }
 }
 
-void PG::scrub_finalize() {
+void PG::scrub_finalize()
+{
   lock();
   if (deleting) {
     unlock();
@@ -4206,7 +4215,8 @@ void PG::scrub_finalize() {
 }
 
 // the part that actually finalizes a scrub
-void PG::scrub_finish() {
+void PG::scrub_finish() 
+{
   bool repair = state_test(PG_STATE_REPAIR);
   bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
   const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
@@ -5086,6 +5096,7 @@ void PG::handle_activate_map(RecoveryCtx *rctx)
 	     << last_persisted_osdmap_ref->get_epoch()
 	     << " while current is " << osdmap_ref->get_epoch() << dendl;
   }
+  if (osdmap_ref->check_new_blacklist_entries()) check_blacklisted_watchers();
 }
 
 void PG::handle_loaded(RecoveryCtx *rctx)
