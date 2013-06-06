@@ -152,8 +152,11 @@ class DeletingState {
   } status;
   bool stop_deleting;
 public:
-  DeletingState() :
-    lock("DeletingState::lock"), status(QUEUED), stop_deleting(false) {}
+  const pg_t pgid;
+  const PGRef old_pg_state;
+  DeletingState(const pair<pg_t, PGRef> &in) :
+    lock("DeletingState::lock"), status(QUEUED), stop_deleting(false),
+    pgid(in.first), old_pg_state(in.second) {}
 
   /// check whether removal was canceled
   bool check_canceled() {
@@ -1046,10 +1049,21 @@ protected:
   PG   *_open_lock_pg(OSDMapRef createmap,
 		      pg_t pg, bool no_lockdep_check=false,
 		      bool hold_map_lock=false);
+  enum res_result {
+    RES_PARENT,    // resurrected a parent
+    RES_SELF,      // resurrected self
+    RES_NONE       // nothing relevant deleting
+  };
+  res_result _try_resurrect_pg(
+    OSDMapRef curmap, pg_t pgid, pg_t *resurrected, PGRef *old_pg_state);
   PG   *_create_lock_pg(OSDMapRef createmap,
-			pg_t pgid, bool newly_created,
-			bool hold_map_lock, int role,
-			vector<int>& up, vector<int>& acting,
+			pg_t pgid,
+			bool newly_created,
+			bool hold_map_lock,
+			bool backfill,
+			int role,
+			vector<int>& up,
+			vector<int>& acting,
 			pg_history_t history,
 			pg_interval_map_t& pi,
 			ObjectStore::Transaction& t);
@@ -1059,10 +1073,12 @@ protected:
   void add_newly_split_pg(PG *pg,
 			  PG::RecoveryCtx *rctx);
 
-  PG *get_or_create_pg(const pg_info_t& info,
-                       pg_interval_map_t& pi,
-                       epoch_t epoch, int from, int& pcreated,
-                       bool primary);
+  void handle_pg_peering_evt(
+    const pg_info_t& info,
+    pg_interval_map_t& pi,
+    epoch_t epoch, int from,
+    bool primary,
+    PG::CephPeeringEvtRef evt);
   
   void load_pgs();
   void build_past_intervals_parallel();

@@ -1708,9 +1708,68 @@ void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
     _remove_pg(pg);
 }
 
+OSD::res_result OSD::_try_resurrect_pg(
+  OSDMapRef curmap, pg_t pgid, pg_t *resurrected, PGRef *old_pg_state)
+{
+  assert(resurrected);
+  assert(old_pg_state);
+  // find nearest ancestor
+  DeletingStateRef df;
+  pg_t cur(pgid);
+  while (cur.ps()) {
+    df = service.deleting_pgs.lookup(pgid);
+    if (df)
+      break;
+    cur = cur.get_parent();
+  }
+  if (!df)
+    return RES_NONE; // good to go
+
+  df->old_pg_state->lock();
+  OSDMapRef create_map = df->old_pg_state->get_osdmap();
+  df->old_pg_state->unlock();
+
+  set<pg_t> children;
+  if (cur == pgid) {
+    if (df->try_stop_deletion()) {
+      dout(10) << __func__ << ": halted deletion on pg " << pgid << dendl;
+      *resurrected = cur;
+      *old_pg_state = df->old_pg_state;
+      service.deleting_pgs.remove(pgid); // PG is no longer being removed!
+      return RES_SELF;
+    } else {
+      // raced, ensure we don't see DeletingStateRef when we try to
+      // delete this pg
+      service.deleting_pgs.remove(pgid);
+      return RES_NONE;
+    }
+  } else if (cur.is_split(create_map->get_pg_num(cur.pool()),
+			  curmap->get_pg_num(cur.pool()),
+			  &children) &&
+	     children.count(pgid)) {
+    if (df->try_stop_deletion()) {
+      dout(10) << __func__ << ": halted deletion on ancestor pg " << pgid
+	       << dendl;
+      *resurrected = cur;
+      *old_pg_state = df->old_pg_state;
+      service.deleting_pgs.remove(pgid); // PG is no longer being removed!
+      return RES_PARENT;
+    } else {
+      /* this is not a problem, failing to cancel proves that all objects
+       * have been removed, so no hobject_t overlap is possible
+       */
+      return RES_NONE;
+    }
+  }
+  return RES_NONE;
+}
+
 PG *OSD::_create_lock_pg(
   OSDMapRef createmap,
-  pg_t pgid, bool newly_created, bool hold_map_lock,
+  pg_t pgid,
+  bool newly_created,
+  bool hold_map_lock,
+  bool backfill,
   int role, vector<int>& up, vector<int>& acting, pg_history_t history,
   pg_interval_map_t& pi,
   ObjectStore::Transaction& t)
@@ -1720,22 +1779,7 @@ PG *OSD::_create_lock_pg(
 
   PG *pg = _open_lock_pg(createmap, pgid, true, hold_map_lock);
 
-  DeletingStateRef df = service.deleting_pgs.lookup(pgid);
-  bool backfill = false;
-
-  if (df && df->try_stop_deletion()) {
-    dout(10) << __func__ << ": halted deletion on pg " << pgid << dendl;
-    backfill = true;
-    service.deleting_pgs.remove(pgid); // PG is no longer being removed!
-  } else {
-    if (df) {
-      // raced, ensure we don't see DeletingStateRef when we try to
-      // delete this pg
-      service.deleting_pgs.remove(pgid);
-    }
-    // either it's not deleting, or we failed to get to it in time
-    t.create_collection(coll_t(pgid));
-  }
+  service.init_splits_between(pgid, pg->get_osdmap(), service.get_osdmap());
 
   pg->init(role, up, acting, history, pi, backfill, &t);
 
@@ -2036,16 +2080,23 @@ void OSD::build_past_intervals_parallel()
  * look up a pg.  if we have it, great.  if not, consider creating it IF the pg mapping
  * hasn't changed since the given epoch and we are the primary.
  */
-PG *OSD::get_or_create_pg(
-  const pg_info_t& info, pg_interval_map_t& pi,
-  epoch_t epoch, int from, int& created, bool primary)
+void OSD::handle_pg_peering_evt(
+  const pg_info_t& info,
+  pg_interval_map_t& pi,
+  epoch_t epoch,
+  int from,
+  bool primary,
+  PG::CephPeeringEvtRef evt)
 {
-  PG *pg;
+  if (service.splitting(info.pgid)) {
+    peering_wait_for_split[info.pgid].push_back(evt);
+    return;
+  }
 
   if (!_have_pg(info.pgid)) {
     // same primary?
     if (!osdmap->have_pg_pool(info.pgid.pool()))
-      return 0;
+      return;
     vector<int> up, acting;
     osdmap->pg_to_up_acting_osds(info.pgid, up, acting);
     int role = osdmap->calc_pg_role(whoami, acting, acting.size());
@@ -2056,7 +2107,7 @@ PG *OSD::get_or_create_pg(
     if (epoch < history.same_interval_since) {
       dout(10) << "get_or_create_pg " << info.pgid << " acting changed in "
 	       << history.same_interval_since << " (msg from " << epoch << ")" << dendl;
-      return NULL;
+      return;
     }
 
     if (service.splitting(info.pgid)) {
@@ -2073,13 +2124,13 @@ PG *OSD::get_or_create_pg(
 	if (creating_pgs.count(info.pgid)) {
 	  creating_pgs[info.pgid].prior.erase(from);
 	  if (!can_create_pg(info.pgid))
-	    return NULL;
+	    return;
 	  history = creating_pgs[info.pgid].history;
 	  create = true;
 	} else {
 	  dout(10) << "get_or_create_pg " << info.pgid
 		   << " DNE on source, but creation probe, ignoring" << dendl;
-	  return NULL;
+	  return;
 	}
       }
       creating_pgs.erase(info.pgid);
@@ -2088,34 +2139,115 @@ PG *OSD::get_or_create_pg(
       assert(!info.dne());  // and pg exists if we are hearing about it
     }
 
-    // ok, create PG locally using provided Info and History
+    // do we need to resurrect a deleting pg?
+    pg_t resurrected;
+    PGRef old_pg_state;
+    res_result result = _try_resurrect_pg(
+      service.get_osdmap(),
+      info.pgid,
+      &resurrected,
+      &old_pg_state);
+
     PG::RecoveryCtx rctx = create_context();
-    pg = _create_lock_pg(
-      get_map(epoch),
-      info.pgid, create, false, role, up, acting, history, pi,
-      *rctx.transaction);
-    pg->handle_create(&rctx);
-    pg->write_if_dirty(*rctx.transaction);
-    dispatch_context(rctx, pg, osdmap);
+    switch (result) {
+    case RES_NONE: {
+      // ok, create the pg locally using provided Info and History
+      rctx.transaction->create_collection(coll_t(info.pgid));
+      PG *pg = _create_lock_pg(
+	get_map(epoch),
+	info.pgid, create, false, result == RES_SELF,
+	role, up, acting, history, pi,
+	*rctx.transaction);
+      pg->handle_create(&rctx);
+      pg->write_if_dirty(*rctx.transaction);
+      dispatch_context(rctx, pg, osdmap);
+
+      dout(10) << *pg << " is new" << dendl;
+
+      // kick any waiters
+      wake_pg_waiters(pg->info.pgid);
       
-    created++;
-    dout(10) << *pg << " is new" << dendl;
+      pg->queue_peering_event(evt);
+      pg->unlock();
+      return;
+    }
+    case RES_SELF: {
+      old_pg_state->lock();
+      PG *pg = _create_lock_pg(
+	old_pg_state->get_osdmap(),
+	resurrected,
+	false,
+	false,
+	true,
+	old_pg_state->role,
+	old_pg_state->up,
+	old_pg_state->acting,
+	old_pg_state->info.history,
+	old_pg_state->past_intervals,
+	*rctx.transaction);
+      old_pg_state->unlock();
+      pg->handle_create(&rctx);
+      pg->write_if_dirty(*rctx.transaction);
+      dispatch_context(rctx, pg, osdmap);
 
-    // kick any waiters
-    wake_pg_waiters(pg->info.pgid);
+      dout(10) << *pg << " is new (resurrected)" << dendl;
 
+      // kick any waiters
+      wake_pg_waiters(pg->info.pgid);
+
+      pg->queue_peering_event(evt);
+      pg->unlock();
+      return;
+    }
+    case RES_PARENT: {
+      assert(old_pg_state);
+      old_pg_state->lock();
+      PG *parent = _create_lock_pg(
+	old_pg_state->get_osdmap(),
+	resurrected,
+	false,
+	false,
+	true,
+	old_pg_state->role,
+	old_pg_state->up,
+	old_pg_state->acting,
+	old_pg_state->info.history,
+	old_pg_state->past_intervals,
+	*rctx.transaction
+	);
+      old_pg_state->unlock();
+      parent->handle_create(&rctx);
+      parent->write_if_dirty(*rctx.transaction);
+      dispatch_context(rctx, parent, osdmap);
+
+      dout(10) << *parent << " is new" << dendl;
+
+      // kick any waiters
+      wake_pg_waiters(parent->info.pgid);
+
+      assert(service.splitting(info.pgid));
+      peering_wait_for_split[info.pgid].push_back(evt);
+
+      //parent->queue_peering_event(evt);
+      parent->queue_null(osdmap->get_epoch(), osdmap->get_epoch());
+      parent->unlock();
+      return;
+    }
+    }
   } else {
     // already had it.  did the mapping change?
-    pg = _lookup_lock_pg(info.pgid);
+    PG *pg = _lookup_lock_pg(info.pgid);
     if (epoch < pg->info.history.same_interval_since) {
       dout(10) << *pg << " get_or_create_pg acting changed in "
 	       << pg->info.history.same_interval_since
 	       << " (msg from " << epoch << ")" << dendl;
       pg->unlock();
-      return NULL;
+      return;
     }
+    pg->queue_peering_event(evt);
+    pg->unlock();
+    return;
   }
-  return pg;
 }
 
 
@@ -5454,10 +5586,11 @@ void OSD::handle_pg_create(OpRequestRef op)
     if (can_create_pg(pgid)) {
       pg_interval_map_t pi;
       pg = _create_lock_pg(
-	osdmap, pgid, true, false,
+	osdmap, pgid, true, false, false,
 	0, creating_pgs[pgid].acting, creating_pgs[pgid].acting,
 	history, pi,
 	*rctx.transaction);
+      rctx.transaction->create_collection(coll_t(pgid));
       pg->info.last_epoch_started = pg->info.history.last_epoch_started;
       creating_pgs.erase(pgid);
       wake_pg_waiters(pg->info.pgid);
@@ -5694,29 +5827,20 @@ void OSD::handle_pg_notify(OpRequestRef op)
   for (vector<pair<pg_notify_t, pg_interval_map_t> >::iterator it = m->get_pg_list().begin();
        it != m->get_pg_list().end();
        ++it) {
-    PG *pg = 0;
 
     if (it->first.info.pgid.preferred() >= 0) {
       dout(20) << "ignoring localized pg " << it->first.info.pgid << dendl;
       continue;
     }
 
-    int created = 0;
-    if (service.splitting(it->first.info.pgid)) {
-      peering_wait_for_split[it->first.info.pgid].push_back(
-	PG::CephPeeringEvtRef(
-	  new PG::CephPeeringEvt(
-	    it->first.epoch_sent, it->first.query_epoch,
-	    PG::MNotifyRec(from, it->first))));
-      continue;
-    }
-
-    pg = get_or_create_pg(it->first.info, it->second,
-                          it->first.query_epoch, from, created, true);
-    if (!pg)
-      continue;
-    pg->queue_notify(it->first.epoch_sent, it->first.query_epoch, from, it->first);
-    pg->unlock();
+    handle_pg_peering_evt(
+      it->first.info, it->second,
+      it->first.query_epoch, from, true,
+      PG::CephPeeringEvtRef(
+	new PG::CephPeeringEvt(
+	  it->first.epoch_sent, it->first.query_epoch,
+	  PG::MNotifyRec(from, it->first)))
+      );
   }
 }
 
@@ -5737,23 +5861,15 @@ void OSD::handle_pg_log(OpRequestRef op)
     return;
   }
 
-  if (service.splitting(m->info.pgid)) {
-    peering_wait_for_split[m->info.pgid].push_back(
-      PG::CephPeeringEvtRef(
-	new PG::CephPeeringEvt(
-	  m->get_epoch(), m->get_query_epoch(),
-	  PG::MLogRec(from, m))));
-    return;
-  }
-
-  int created = 0;
-  PG *pg = get_or_create_pg(m->info, m->past_intervals, m->get_epoch(), 
-                            from, created, false);
-  if (!pg)
-    return;
   op->mark_started();
-  pg->queue_log(m->get_epoch(), m->get_query_epoch(), from, m);
-  pg->unlock();
+  handle_pg_peering_evt(
+    m->info, m->past_intervals, m->get_epoch(),
+    from, false,
+    PG::CephPeeringEvtRef(
+      new PG::CephPeeringEvt(
+	m->get_epoch(), m->get_query_epoch(),
+	PG::MLogRec(from, m)))
+    );
 }
 
 void OSD::handle_pg_info(OpRequestRef op)
@@ -5770,8 +5886,6 @@ void OSD::handle_pg_info(OpRequestRef op)
 
   op->mark_started();
 
-  int created = 0;
-
   for (vector<pair<pg_notify_t,pg_interval_map_t> >::iterator p = m->pg_list.begin();
        p != m->pg_list.end();
        ++p) {
@@ -5780,21 +5894,14 @@ void OSD::handle_pg_info(OpRequestRef op)
       continue;
     }
 
-    if (service.splitting(p->first.info.pgid)) {
-      peering_wait_for_split[p->first.info.pgid].push_back(
-	PG::CephPeeringEvtRef(
-	  new PG::CephPeeringEvt(
-	    p->first.epoch_sent, p->first.query_epoch,
-	    PG::MInfoRec(from, p->first.info, p->first.epoch_sent))));
-      continue;
-    }
-    PG *pg = get_or_create_pg(p->first.info, p->second, p->first.epoch_sent,
-                              from, created, false);
-    if (!pg)
-      continue;
-    pg->queue_info(p->first.epoch_sent, p->first.query_epoch, from,
-		   p->first.info);
-    pg->unlock();
+    handle_pg_peering_evt(
+      p->first.info, p->second, p->first.epoch_sent,
+      from, false,
+      PG::CephPeeringEvtRef(
+	new PG::CephPeeringEvt(
+	  p->first.epoch_sent, p->first.query_epoch,
+	  PG::MInfoRec(from, p->first.info, p->first.epoch_sent)))
+      );
   }
 }
 
@@ -6152,7 +6259,12 @@ void OSD::_remove_pg(PG *pg)
 
   service.cancel_pending_splits_for_parent(pg->info.pgid);
 
-  DeletingStateRef deleting = service.deleting_pgs.lookup_or_create(pg->info.pgid);
+  DeletingStateRef deleting = service.deleting_pgs.lookup_or_create(
+    pg->info.pgid,
+    make_pair(
+      pg->info.pgid,
+      PGRef(pg))
+    );
   remove_wq.queue(make_pair(PGRef(pg), deleting));
 
   store->queue_transaction(
