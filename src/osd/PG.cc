@@ -3630,10 +3630,7 @@ int PG::build_scrub_map_chunk(
 
   // pg attrs
   osd->store->collection_getattrs(coll, map.attrs);
-
-  // log
-  osd->store->read(coll_t(), log_oid, 0, 0, map.logbl);
-  dout(10) << " done.  pg log is " << map.logbl.length() << " bytes" << dendl;
+  dout(10) << __func__ << " done." << dendl;
 
   return 0;
 }
@@ -3674,9 +3671,7 @@ void PG::build_scrub_map(ScrubMap &map, ThreadPool::TPHandle &handle)
   // pg attrs
   osd->store->collection_getattrs(coll, map.attrs);
 
-  // log
-  osd->store->read(coll_t(), log_oid, 0, 0, map.logbl);
-  dout(10) << " done.  pg log is " << map.logbl.length() << " bytes" << dendl;
+  dout(10) << __func__ << " done." << dendl;
 }
 
 
@@ -3713,9 +3708,6 @@ void PG::build_inc_scrub_map(
   _scan_list(map, ls, false, handle);
   // pg attrs
   osd->store->collection_getattrs(coll, map.attrs);
-
-  // log
-  osd->store->read(coll_t(), log_oid, 0, 0, map.logbl);
 }
 
 void PG::repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer)
