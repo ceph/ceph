@@ -518,7 +518,7 @@ public:
   bool is_active() {
     return
       !is_proposing() &&
-      (paxos->is_active() || paxos->is_updating() || paxos->is_updating_previous());
+      (paxos->is_active() || paxos->is_updating());
   }
 
   /**
