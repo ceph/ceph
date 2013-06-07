@@ -509,12 +509,6 @@ def vm_setup(ctx, config):
 
 def _handle_vm_init(remote):
     log.info('Running ceph_qa_chef on ', remote)
-    # /usr/bin/make and /usr/bin/gcc are not automatically installed on rhel . They should be added
-    # to the chef task, but these next two lines probably do not hurt things.
-    if not os.path.isfile('/usr/bin/make'):
-        remote.run(args=['sudo', 'yum', 'install', 'make', '-y'])
-    if not os.path.isfile('/usr/bin/gcc'):
-        remote.run(args=['sudo', 'yum', 'install', 'gcc', '-y'])
     remote.run(args=['wget','-q','-O-',
             'https://raw.github.com/ceph/ceph-qa-chef/master/solo/solo-from-scratch',
             run.Raw('|'),
