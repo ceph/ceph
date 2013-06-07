@@ -5,8 +5,11 @@ import logging
 log = logging.getLogger(__name__)
 
 def _lock_url(ctx):
-    return ctx.teuthology_config['lock_server']
-
+    try:
+        return ctx.teuthology_config['lock_server']
+    except (AttributeError, KeyError):
+        return "http://teuthology.front.sepia.ceph.com/locker/lock"
+ 
 def send_request(method, url, body=None, headers=None):
     http = httplib2.Http()
     resp, content = http.request(url, method=method, body=body, headers=headers)
@@ -21,5 +24,3 @@ def get_status(ctx, name):
     if success:
         return json.loads(content)
     return None
-
-
