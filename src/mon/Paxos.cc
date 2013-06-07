@@ -431,7 +431,7 @@ void Paxos::handle_last(MMonPaxos *last)
       if (uncommitted_v == last_committed+1 &&
 	  uncommitted_value.length()) {
 	dout(10) << "that's everyone.  begin on old learned value" << dendl;
-	state = STATE_PREPARING | STATE_LOCKED;
+	state = STATE_LOCKED;
 	begin(uncommitted_value);
       } else {
 	// active!
@@ -470,8 +470,6 @@ void Paxos::begin(bufferlist& v)
 	   << dendl;
 
   assert(mon->is_leader());
-  assert(is_preparing());
-  state &= ~STATE_PREPARING;
   state |= STATE_UPDATING;
 
   // we must already have a majority for this to work.
@@ -1252,8 +1250,6 @@ void Paxos::propose_queued()
   assert(is_active());
   assert(!proposals.empty());
 
-  state = STATE_PREPARING;
-
   C_Proposal *proposal = static_cast<C_Proposal*>(proposals.front());
   assert(!proposal->proposed);
 
@@ -1266,6 +1262,7 @@ void Paxos::propose_queued()
   list_proposals(*_dout);
   *_dout << dendl;
 
+  state = 0;
   begin(proposal->bl);
 }
 
