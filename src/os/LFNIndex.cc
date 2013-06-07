@@ -47,7 +47,8 @@ const string LFNIndex::FILENAME_COOKIE = "long";
 const int LFNIndex::FILENAME_PREFIX_LEN =  FILENAME_SHORT_LEN - FILENAME_HASH_LEN - 
 								FILENAME_COOKIE.size() - 
 								FILENAME_EXTRA;
-void LFNIndex::maybe_inject_failure() {
+void LFNIndex::maybe_inject_failure()
+{
   if (error_injection_enabled) {
     if (current_failure > last_failure &&
 	(((double)(rand() % 10000))/((double)(10000))
@@ -62,15 +63,18 @@ void LFNIndex::maybe_inject_failure() {
 
 /* Public methods */
 
-void LFNIndex::set_ref(std::tr1::shared_ptr<CollectionIndex> ref) {
+void LFNIndex::set_ref(std::tr1::shared_ptr<CollectionIndex> ref)
+{
   self_ref = ref;
 }
 
-int LFNIndex::init() {
+int LFNIndex::init()
+{
   return _init();
 }
 
-int LFNIndex::created(const hobject_t &hoid, const char *path) {
+int LFNIndex::created(const hobject_t &hoid, const char *path)
+{
   vector<string> path_comp;
   string short_name;
   int r;
@@ -83,7 +87,8 @@ int LFNIndex::created(const hobject_t &hoid, const char *path) {
   return _created(path_comp, hoid, short_name);
 }
 
-int LFNIndex::unlink(const hobject_t &hoid) {
+int LFNIndex::unlink(const hobject_t &hoid)
+{
   WRAP_RETRY(
   vector<string> path;
   string short_name;
@@ -127,7 +132,8 @@ int LFNIndex::lookup(const hobject_t &hoid,
   );
 }
 
-int LFNIndex::collection_list(vector<hobject_t> *ls) {
+int LFNIndex::collection_list(vector<hobject_t> *ls)
+{
   return _collection_list(ls);
 }
 
@@ -137,13 +143,15 @@ int LFNIndex::collection_list_partial(const hobject_t &start,
 				      int max_count,
 				      snapid_t seq,
 				      vector<hobject_t> *ls,
-				      hobject_t *next) {
+				      hobject_t *next)
+{
   return _collection_list_partial(start, min_count, max_count, seq, ls, next);
 }
 
 /* Derived class utility methods */
 
-int LFNIndex::fsync_dir(const vector<string> &path) {
+int LFNIndex::fsync_dir(const vector<string> &path)
+{
   maybe_inject_failure();
   int fd = ::open(get_full_path_subdir(path).c_str(), O_RDONLY);
   if (fd < 0)
@@ -448,7 +456,8 @@ int LFNIndex::list_subdirs(const vector<string> &to_list,
   return 0;
 }
 
-int LFNIndex::create_path(const vector<string> &to_create) {
+int LFNIndex::create_path(const vector<string> &to_create)
+{
   maybe_inject_failure();
   int r = ::mkdir(get_full_path_subdir(to_create).c_str(), 0777);
   maybe_inject_failure();
@@ -458,7 +467,8 @@ int LFNIndex::create_path(const vector<string> &to_create) {
     return 0;
 }
 
-int LFNIndex::remove_path(const vector<string> &to_remove) {
+int LFNIndex::remove_path(const vector<string> &to_remove)
+{
   maybe_inject_failure();
   int r = ::rmdir(get_full_path_subdir(to_remove).c_str());
   maybe_inject_failure();
@@ -468,7 +478,8 @@ int LFNIndex::remove_path(const vector<string> &to_remove) {
     return 0;
 }
 
-int LFNIndex::path_exists(const vector<string> &to_check, int *exists) {
+int LFNIndex::path_exists(const vector<string> &to_check, int *exists)
+{
   string full_path = get_full_path_subdir(to_check);
   struct stat buf;
   if (::stat(full_path.c_str(), &buf)) {
@@ -529,7 +540,8 @@ int LFNIndex::remove_attr_path(const vector<string> &path,
   return chain_removexattr(full_path.c_str(), mangled_attr_name.c_str());
 }
   
-string LFNIndex::lfn_generate_object_name_keyless(const hobject_t &hoid) {
+string LFNIndex::lfn_generate_object_name_keyless(const hobject_t &hoid)
+{
   char s[FILENAME_MAX_LEN];
   char *end = s + sizeof(s);
   char *t = s;
@@ -569,7 +581,8 @@ string LFNIndex::lfn_generate_object_name_keyless(const hobject_t &hoid) {
 
 static void append_escaped(string::const_iterator begin,
 			   string::const_iterator end, 
-			   string *out) {
+			   string *out)
+{
   for (string::const_iterator i = begin; i != end; ++i) {
     if (*i == '\\') {
       out->append("\\\\");
@@ -585,7 +598,8 @@ static void append_escaped(string::const_iterator begin,
   }
 }
 
-string LFNIndex::lfn_generate_object_name(const hobject_t &hoid) {
+string LFNIndex::lfn_generate_object_name(const hobject_t &hoid)
+{
   if (index_version == HASH_INDEX_TAG)
     return lfn_generate_object_name_keyless(hoid);
   if (index_version == HASH_INDEX_TAG_2)
@@ -632,7 +646,8 @@ string LFNIndex::lfn_generate_object_name(const hobject_t &hoid) {
   return full_name;
 }
 
-string LFNIndex::lfn_generate_object_name_poolless(const hobject_t &hoid) {
+string LFNIndex::lfn_generate_object_name_poolless(const hobject_t &hoid)
+{
   if (index_version == HASH_INDEX_TAG)
     return lfn_generate_object_name_keyless(hoid);
 
@@ -667,7 +682,8 @@ string LFNIndex::lfn_generate_object_name_poolless(const hobject_t &hoid) {
 int LFNIndex::lfn_get_name(const vector<string> &path, 
 			   const hobject_t &hoid,
 			   string *mangled_name, string *out_path,
-			   int *exists) {
+			   int *exists)
+{
   string subdir_path = get_full_path_subdir(path);
   string full_name = lfn_generate_object_name(hoid);
   int r;
@@ -739,7 +755,8 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
 
 int LFNIndex::lfn_created(const vector<string> &path,
 			  const hobject_t &hoid,
-			  const string &mangled_name) {
+			  const string &mangled_name)
+{
   if (!lfn_is_hashed_filename(mangled_name))
     return 0;
   string full_path = get_full_path(path, mangled_name);
@@ -751,7 +768,8 @@ int LFNIndex::lfn_created(const vector<string> &path,
 
 int LFNIndex::lfn_unlink(const vector<string> &path,
 			 const hobject_t &hoid,
-			 const string &mangled_name) {
+			 const string &mangled_name)
+{
   if (!lfn_is_hashed_filename(mangled_name)) {
     string full_path = get_full_path(path, mangled_name);
     maybe_inject_failure();
@@ -809,7 +827,8 @@ int LFNIndex::lfn_unlink(const vector<string> &path,
 
 int LFNIndex::lfn_translate(const vector<string> &path,
 			    const string &short_name,
-			    hobject_t *out) {
+			    hobject_t *out)
+{
   if (!lfn_is_hashed_filename(short_name)) {
     return lfn_parse_object_name(short_name, out);
   }
@@ -826,11 +845,13 @@ int LFNIndex::lfn_translate(const vector<string> &path,
   return lfn_parse_object_name(long_name, out);
 }
 
-bool LFNIndex::lfn_is_object(const string &short_name) {
+bool LFNIndex::lfn_is_object(const string &short_name)
+{
   return lfn_is_hashed_filename(short_name) || !lfn_is_subdir(short_name, 0);
 }
 
-bool LFNIndex::lfn_is_subdir(const string &name, string *demangled) {
+bool LFNIndex::lfn_is_subdir(const string &name, string *demangled)
+{
   if (name.substr(0, SUBDIR_PREFIX.size()) == SUBDIR_PREFIX) {
     if (demangled)
       *demangled = demangle_path_component(name);
@@ -889,7 +910,8 @@ static int parse_object(const char *s, hobject_t& o)
   return 0;
 }
 
-bool LFNIndex::lfn_parse_object_name_keyless(const string &long_name, hobject_t *out) {
+bool LFNIndex::lfn_parse_object_name_keyless(const string &long_name, hobject_t *out)
+{
   bool r = parse_object(long_name.c_str(), *out);
   int64_t pool = -1;
   pg_t pg;
@@ -991,7 +1013,8 @@ bool LFNIndex::lfn_parse_object_name_poolless(const string &long_name,
 }
 
 
-bool LFNIndex::lfn_parse_object_name(const string &long_name, hobject_t *out) {
+bool LFNIndex::lfn_parse_object_name(const string &long_name, hobject_t *out)
+{
   string name;
   string key;
   string ns;
@@ -1077,7 +1100,8 @@ bool LFNIndex::lfn_parse_object_name(const string &long_name, hobject_t *out) {
   return true;
 }
 
-bool LFNIndex::lfn_is_hashed_filename(const string &name) {
+bool LFNIndex::lfn_is_hashed_filename(const string &name)
+{
   if (name.size() < (unsigned)FILENAME_SHORT_LEN) {
     return 0;
   }
@@ -1089,7 +1113,8 @@ bool LFNIndex::lfn_is_hashed_filename(const string &name) {
   }
 }
 
-bool LFNIndex::lfn_must_hash(const string &long_name) {
+bool LFNIndex::lfn_must_hash(const string &long_name)
+{
   return (int)long_name.size() >= FILENAME_SHORT_LEN;
 }
 
@@ -1143,7 +1168,8 @@ void LFNIndex::build_filename(const char *old_filename, int i, char *filename, i
   }
 }
 
-string LFNIndex::lfn_get_short_name(const hobject_t &hoid, int i) {
+string LFNIndex::lfn_get_short_name(const hobject_t &hoid, int i)
+{
   string long_name = lfn_generate_object_name(hoid);
   assert(lfn_must_hash(long_name));
   char buf[FILENAME_SHORT_LEN + 4];
@@ -1151,11 +1177,13 @@ string LFNIndex::lfn_get_short_name(const hobject_t &hoid, int i) {
   return string(buf);
 }
 
-const string &LFNIndex::get_base_path() {
+const string &LFNIndex::get_base_path()
+{
   return base_path;
 }
 
-string LFNIndex::get_full_path_subdir(const vector<string> &rel) {
+string LFNIndex::get_full_path_subdir(const vector<string> &rel)
+{
   string retval = get_base_path();
   for (vector<string>::const_iterator i = rel.begin();
        i != rel.end();
@@ -1166,20 +1194,24 @@ string LFNIndex::get_full_path_subdir(const vector<string> &rel) {
   return retval;
 }
 
-string LFNIndex::get_full_path(const vector<string> &rel, const string &name) {
+string LFNIndex::get_full_path(const vector<string> &rel, const string &name)
+{
   return get_full_path_subdir(rel) + "/" + name;
 }
 
-string LFNIndex::mangle_path_component(const string &component) {
+string LFNIndex::mangle_path_component(const string &component)
+{
   return SUBDIR_PREFIX + component;
 }
 
-string LFNIndex::demangle_path_component(const string &component) {
+string LFNIndex::demangle_path_component(const string &component)
+{
   return component.substr(SUBDIR_PREFIX.size(), component.size() - SUBDIR_PREFIX.size());
 }
 
 int LFNIndex::decompose_full_path(const char *in, vector<string> *out,
-				  hobject_t *hoid, string *shortname) {
+				  hobject_t *hoid, string *shortname)
+{
   const char *beginning = in + get_base_path().size();
   const char *end = beginning;
   while (1) {
@@ -1202,6 +1234,7 @@ int LFNIndex::decompose_full_path(const char *in, vector<string> *out,
   return 0;
 }
 
-string LFNIndex::mangle_attr_name(const string &attr) {
+string LFNIndex::mangle_attr_name(const string &attr)
+{
   return PHASH_ATTR_PREFIX + attr;
 }
