@@ -316,8 +316,8 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     s->bucket_owner = s->bucket_acl->get_owner();
 
     string& region = bucket_info.region;
-    if (exists && (region.empty() && !store->region.is_master) &&
-        (region != store->region.name)) {
+    if (exists && ((region.empty() && !store->region.is_master) ||
+        (region != store->region.name))) {
       ldout(s->cct, 0) << "NOTICE: request for data in a different region (" << region << " != " << store->region.name << ")" << dendl;
       return -ERR_PERMANENT_REDIRECT;
     }
