@@ -1751,7 +1751,8 @@ static void do_out_buffer(string& outbl, char **outbuf, size_t *outbuflen)
     *outbuflen = outbl.length();
 }
 
-extern "C" int rados_mon_command(rados_t cluster, const char *cmd,
+extern "C" int rados_mon_command(rados_t cluster, const char **cmd,
+				 size_t cmdlen,
 				 const char *inbuf, size_t inbuflen,
 				 char **outbuf, size_t *outbuflen,
 				 char **outs, size_t *outslen)
@@ -1762,8 +1763,9 @@ extern "C" int rados_mon_command(rados_t cluster, const char *cmd,
   string outstring;
   vector<string> cmdvec;
 
-  get_str_vec(string(cmd), cmdvec);
-  cmdvec.push_back(cmd);
+  for (size_t i = 0; i < cmdlen; i++)
+    cmdvec.push_back(cmd[i]);
+
   inbl.append(inbuf, inbuflen);
   int ret = client->mon_command(cmdvec, inbl, &outbl, &outstring);
 
@@ -1772,7 +1774,8 @@ extern "C" int rados_mon_command(rados_t cluster, const char *cmd,
   return ret;
 }
 
-extern "C" int rados_osd_command(rados_t cluster, int osdid, const char *cmd,
+extern "C" int rados_osd_command(rados_t cluster, int osdid, const char **cmd,
+				 size_t cmdlen,
 				 const char *inbuf, size_t inbuflen,
 				 char **outbuf, size_t *outbuflen,
 				 char **outs, size_t *outslen)
@@ -1783,7 +1786,9 @@ extern "C" int rados_osd_command(rados_t cluster, int osdid, const char *cmd,
   string outstring;
   vector<string> cmdvec;
 
-  get_str_vec(string(cmd), cmdvec);
+  for (size_t i = 0; i < cmdlen; i++)
+    cmdvec.push_back(cmd[i]);
+
   inbl.append(inbuf, inbuflen);
   int ret = client->osd_command(osdid, cmdvec, inbl, &outbl, &outstring);
 
@@ -1795,7 +1800,7 @@ extern "C" int rados_osd_command(rados_t cluster, int osdid, const char *cmd,
 
 
 extern "C" int rados_pg_command(rados_t cluster, const char *pgstr,
-				const char *cmd,
+				const char **cmd, size_t cmdlen,
 				const char *inbuf, size_t inbuflen,
 				char **outbuf, size_t *outbuflen,
 				char **outs, size_t *outslen)
@@ -1807,7 +1812,9 @@ extern "C" int rados_pg_command(rados_t cluster, const char *pgstr,
   pg_t pgid;
   vector<string> cmdvec;
 
-  get_str_vec(string(cmd), cmdvec);
+  for (size_t i = 0; i < cmdlen; i++)
+    cmdvec.push_back(cmd[i]);
+
   inbl.append(inbuf, inbuflen);
   if (!pgid.parse(pgstr))
     return -EINVAL;
