@@ -28,12 +28,13 @@ def _get_system_type(remote):
     log.debug("System to be installed: %s" % system_value)
     if system_value in ['Ubuntu','Debian',]:
         return "deb"
-    if system_value in ['CentOS',]:
+    if system_value in ['CentOS','Fedora',]:
         return "rpm"
     return system_value
 
 def _get_baseurlinfo_and_dist(ctx, remote, config):
     retval = {}
+    relval = None
     r = remote.run(
             args=['lsb_release', '-sc'],
             stdout=StringIO(),
@@ -44,6 +45,32 @@ def _get_baseurlinfo_and_dist(ctx, remote, config):
             stdout=StringIO(),
             )
     retval['arch'] = r.stdout.getvalue().strip()
+    r = remote.run(
+            args=['lsb_release', '-is'],
+            stdout=StringIO(),
+            )
+    retval['distro'] = r.stdout.getvalue().strip()
+    r = remote.run(
+        args=[
+            'lsb_release', '-rs'], stdout=StringIO())
+    retval['relval'] = r.stdout.getvalue().strip()
+    dist_name = None
+    if retval['distro'] == 'Centos':
+        distri = retval['distro']
+        distri = distri.lower()
+        dist_name = 'el'
+        relval = retval['relval']
+        relval = relval[0:relval.find('.')]
+        retval['distro_release'] = '%s' %(relval)
+        retval['dist_release'] = '%s%s' %(dist_name, retval['relval'])
+    elif retval['distro'] == 'Fedora':
+        distri = retval['distro']
+        dist_name = 'fc'
+        retval['distro_release'] = '%s%s' %(dist_name, retval['relval'])
+        retval['dist_release'] = '%s%s' %(dist_name, retval['relval'])
+    else:
+        retval['distro_release'] = None
+        retval['dist_release'] = None
 
     # branch/tag/sha1 flavor
     retval['flavor'] = config.get('flavor', 'basic')
@@ -144,15 +171,11 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
             pkglist=", ".join(rpm), arch=baseparms['arch']))
     host=ctx.teuthology_config.get('gitbuilder_host',
                                        'gitbuilder.ceph.com')
-    r = remote.run(
-        args=[
-            'lsb_release', '-rs'], stdout=StringIO())
-    relval = r.stdout.getvalue()
-    relval = relval[0:relval.find('.')]
-    
-    start_of_url = 'http://{host}/ceph-rpm-centos{relval}-{arch}-{flavor}/{uri}'.format(host=host,relval=relval,**baseparms)
-    ceph_release = 'ceph-release-{release}.el{relval}.noarch'.format(
-            release=RELEASE,relval=relval)
+    dist_release = baseparms['dist_release']
+    distro_release = baseparms['distro_release']
+    start_of_url = 'http://{host}/ceph-rpm-{distro_release}-{arch}-{flavor}/{uri}'.format(host=host,**baseparms)
+    ceph_release = 'ceph-release-{release}.{dist_release}.noarch'.format(
+            release=RELEASE,dist_release=dist_release)
     rpm_name = "{rpm_nm}.rpm".format(rpm_nm=ceph_release)
     base_url = "{start_of_url}/noarch/{rpm_name}".format(
             start_of_url=start_of_url, rpm_name=rpm_name)
@@ -193,7 +216,7 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     dloc = tmp_vers.rfind('-')
     t_vers1 = tmp_vers[0:dloc]
     t_vers2 = tmp_vers[dloc+1:]
-    trailer = "-{tv1}.{tv2}.el6".format(tv1=t_vers1, tv2=t_vers2)
+    trailer = "-{tv1}.{tv2}.{dist_release}".format(tv1=t_vers1, tv2=t_vers2, dist_release=dist_release)
     for cpack in rpm:
         pk_err_mess = StringIO()
         pkg2add = "{cpack}{trailer}".format(cpack=cpack,trailer=trailer)
@@ -248,7 +271,7 @@ def install_packages(ctx, pkgs, config):
                 install_pkgs[system_type],
                 ctx, remote, pkgs[system_type], config)
 
-def _remove_deb(config, remote, debs):
+def _remove_deb(ctx, config, remote, debs):
     log.info("Removing packages: {pkglist} on Debian system.".format(
             pkglist=", ".join(debs)))
     # first ask nicely
@@ -289,9 +312,11 @@ def _remove_deb(config, remote, debs):
         stdout=StringIO(),
         )
 
-def _remove_rpm(config, remote, rpm):
+def _remove_rpm(ctx, config, remote, rpm):
     log.info("Removing packages: {pkglist} on rpm system.".format(
             pkglist=", ".join(rpm)))
+    baseparms = _get_baseurlinfo_and_dist(ctx, remote, config)
+    dist_release = baseparms['dist_release']
     remote.run(
         args=[
             'for', 'd', 'in',
@@ -310,7 +335,7 @@ def _remove_rpm(config, remote, rpm):
         args=[
             'sudo', 'yum', 'clean', 'all',
             ])
-    projRelease = '%s-release-%s.el6.noarch' % (config.get('project','ceph'), RELEASE)
+    projRelease = '%s-release-%s.%s.noarch' % (config.get('project','ceph'), RELEASE, dist_release)
     remote.run(args=['sudo', 'yum', 'erase', projRelease, '-y'])
     remote.run(
         args=[
@@ -325,7 +350,7 @@ def remove_packages(ctx, config, pkgs):
     with parallel() as p:
         for remote in ctx.cluster.remotes.iterkeys():
             system_type = _get_system_type(remote)
-            p.spawn(remove_pkgs[system_type], config, remote, pkgs[system_type])
+            p.spawn(remove_pkgs[system_type], ctx, config, remote, pkgs[system_type])
 
 def _remove_sources_list_deb(remote, proj):
     remote.run(
