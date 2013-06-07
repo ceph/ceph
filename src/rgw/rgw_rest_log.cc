@@ -143,37 +143,18 @@ void RGWOp_MDLog_Delete::execute() {
   http_ret = meta_log->trim(shard_id, ut_st, ut_et);
 }
 
-int RGWOp_MDLog_Post::check_caps(RGWUserCaps& caps) {
-  if (caps.check_cap("mdlog", RGW_CAP_READ) &&
-      caps.check_cap("mdlog", RGW_CAP_WRITE)) {
-    return -EPERM;
-  }
-  return 0;
-}
-
-const char *RGWOp_MDLog_Post::name() {
-  int pt = get_post_type();
-  if (pt == MDLOG_POST_LOCK) 
-    return "lock mdlog object";
-  else if (pt == MDLOG_POST_UNLOCK)
-    return "unlock mdlog object";
-  return NULL;
-}
-
-void RGWOp_MDLog_Post::execute() {
+void RGWOp_MDLog_Lock::execute() {
   string shard_id_str, duration_str, lock_id;
   int shard_id;
-  int pt = get_post_type();
 
   http_ret = 0;
 
   shard_id_str = s->info.args.get("id");
-  if (pt == MDLOG_POST_LOCK)
-    duration_str = s->info.args.get("length");
+  duration_str = s->info.args.get("length");
   lock_id      = s->info.args.get("lock_id");
 
   if (shard_id_str.empty() ||
-      (pt == MDLOG_POST_LOCK && duration_str.empty()) ||
+      (duration_str.empty()) ||
       lock_id.empty()) {
     dout(5) << "Error invalid parameter list" << dendl;
     http_ret = -EINVAL;
@@ -189,20 +170,43 @@ void RGWOp_MDLog_Post::execute() {
   }
 
   RGWMetadataLog *meta_log = store->meta_mgr->get_log();
-  if (pt == MDLOG_POST_LOCK) {
-    int dur;
-    dur = strict_strtol(duration_str.c_str(), 10, &err);
-    if (!err.empty() || dur <= 0) {
-      dout(5) << "invalid length param " << duration_str << dendl;
-      http_ret = -EINVAL;
-      return;
-    }
-    utime_t time(dur, 0);
-    http_ret = meta_log->lock_exclusive(shard_id, time, lock_id);
-  } else if (pt == MDLOG_POST_UNLOCK) {
-    http_ret = meta_log->unlock(shard_id, lock_id);
-  } else 
+  int dur;
+  dur = strict_strtol(duration_str.c_str(), 10, &err);
+  if (!err.empty() || dur <= 0) {
+    dout(5) << "invalid length param " << duration_str << dendl;
     http_ret = -EINVAL;
+    return;
+  }
+  utime_t time(dur, 0);
+  http_ret = meta_log->lock_exclusive(shard_id, time, lock_id);
+}
+
+void RGWOp_MDLog_Unlock::execute() {
+  string shard_id_str, lock_id;
+  int shard_id;
+
+  http_ret = 0;
+
+  shard_id_str = s->info.args.get("id");
+  lock_id      = s->info.args.get("lock_id");
+
+  if (shard_id_str.empty() ||
+      lock_id.empty()) {
+    dout(5) << "Error invalid parameter list" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  string err;
+  shard_id = strict_strtol(shard_id_str.c_str(), 10, &err);
+  if (!err.empty()) {
+    dout(5) << "Error parsing shard_id param " << shard_id_str << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  RGWMetadataLog *meta_log = store->meta_mgr->get_log();
+  http_ret = meta_log->unlock(shard_id, lock_id);
 }
 
 void RGWOp_BILog_List::execute() {
@@ -310,10 +314,10 @@ void RGWOp_BILog_Delete::execute() {
 }
 
 void RGWOp_DATALog_List::execute() {
-  string   shard = s->args.get("id");
+  string   shard = s->info.args.get("id");
 
-  string   st = s->args.get("start-time"),
-           et = s->args.get("end-time"),
+  string   st = s->info.args.get("start-time"),
+           et = s->info.args.get("end-time"),
            err;
   utime_t  ut_st, 
            ut_et;
@@ -380,37 +384,18 @@ void RGWOp_DATALog_GetShardsInfo::send_response() {
   flusher.flush();
 }
 
-int RGWOp_DATALog_Post::check_caps(RGWUserCaps& caps) {
-  if (caps.check_cap("datalog", RGW_CAP_READ) &&
-      caps.check_cap("datalog", RGW_CAP_WRITE)) {
-    return -EPERM;
-  }
-  return 0;
-}
-
-const char *RGWOp_DATALog_Post::name() {
-  int pt = get_post_type();
-  if (pt == DATALOG_POST_LOCK) 
-    return "lock datalog object";
-  else if (pt == DATALOG_POST_UNLOCK)
-    return "unlock datalog object";
-  return NULL;
-}
-
-void RGWOp_DATALog_Post::execute() {
+void RGWOp_DATALog_Lock::execute() {
   string shard_id_str, duration_str, lock_id;
   int shard_id;
-  int pt = get_post_type();
 
   http_ret = 0;
 
-  shard_id_str = s->args.get("id");
-  if (pt == DATALOG_POST_LOCK)
-    duration_str = s->args.get("length");
-  lock_id      = s->args.get("lock_id");
+  shard_id_str = s->info.args.get("id");
+  duration_str = s->info.args.get("length");
+  lock_id      = s->info.args.get("lock_id");
 
   if (shard_id_str.empty() ||
-      (pt == DATALOG_POST_LOCK && duration_str.empty()) ||
+      (duration_str.empty()) ||
       lock_id.empty()) {
     dout(5) << "Error invalid parameter list" << dendl;
     http_ret = -EINVAL;
@@ -425,26 +410,48 @@ void RGWOp_DATALog_Post::execute() {
     return;
   }
 
-  if (pt == DATALOG_POST_LOCK) {
-    int dur;
-    dur = strict_strtol(duration_str.c_str(), 10, &err);
-    if (!err.empty() || dur <= 0) {
-      dout(5) << "invalid length param " << duration_str << dendl;
-      http_ret = -EINVAL;
-      return;
-    }
-    utime_t time(dur, 0);
-    http_ret = store->data_log->lock_exclusive(shard_id, time, lock_id);
-  } else if (pt == DATALOG_POST_UNLOCK) {
-    http_ret = store->data_log->unlock(shard_id, lock_id);
-  } else 
+  int dur;
+  dur = strict_strtol(duration_str.c_str(), 10, &err);
+  if (!err.empty() || dur <= 0) {
+    dout(5) << "invalid length param " << duration_str << dendl;
     http_ret = -EINVAL;
+    return;
+  }
+  utime_t time(dur, 0);
+  http_ret = store->data_log->lock_exclusive(shard_id, time, lock_id);
+}
+
+void RGWOp_DATALog_Unlock::execute() {
+  string shard_id_str, lock_id;
+  int shard_id;
+
+  http_ret = 0;
+
+  shard_id_str = s->info.args.get("id");
+  lock_id      = s->info.args.get("lock_id");
+
+  if (shard_id_str.empty() ||
+      lock_id.empty()) {
+    dout(5) << "Error invalid parameter list" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  string err;
+  shard_id = strict_strtol(shard_id_str.c_str(), 10, &err);
+  if (!err.empty()) {
+    dout(5) << "Error parsing shard_id param " << shard_id_str << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  http_ret = store->data_log->unlock(shard_id, lock_id);
 }
 
 void RGWOp_DATALog_Delete::execute() {
-  string   st = s->args.get("start-time"),
-           et = s->args.get("end-time"),
-           shard = s->args.get("id"),
+  string   st = s->info.args.get("start-time"),
+           et = s->info.args.get("end-time"),
+           shard = s->info.args.get("id"),
            err;
   utime_t  ut_st, 
            ut_et;
@@ -493,7 +500,7 @@ RGWOp *RGWHandler_Log::op_get() {
   } else if (type.compare("bucket-index") == 0) {
     return new RGWOp_BILog_List;
   } else if (type.compare("data") == 0) {
-    if (s->args.exists("id")) {
+    if (s->info.args.exists("id")) {
       return new RGWOp_DATALog_List;
     } else {
       return new RGWOp_DATALog_GetShardsInfo;
@@ -527,10 +534,17 @@ RGWOp *RGWHandler_Log::op_post() {
     return NULL;
   }
 
-  if (type.compare("metadata") == 0)
-    return new RGWOp_MDLog_Post;
-  else if (type.compare("data") == 0)
-    return new RGWOp_DATALog_Post;
+  if (type.compare("metadata") == 0) {
+    if (s->info.args.exists("lock"))
+      return new RGWOp_MDLog_Lock;
+    else if (s->info.args.exists("unlock"))
+      return new RGWOp_MDLog_Unlock;
+  } else if (type.compare("data") == 0) {
+    if (s->info.args.exists("lock"))
+      return new RGWOp_DATALog_Lock;
+    else if (s->info.args.exists("unlock"))
+      return new RGWOp_DATALog_Unlock;
+  }
   return NULL;
 }
 
