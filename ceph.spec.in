@@ -21,6 +21,7 @@ Requires:	librados2 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
 Requires:	python
 Requires:	python-argparse
+Requires:	python-ceph
 Requires:	python-lockfile
 Requires:       xfsprogs
 Requires:	cryptsetup

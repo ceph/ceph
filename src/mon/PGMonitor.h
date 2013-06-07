@@ -128,9 +128,9 @@ private:
    *
    * @return 0 on success, negative error code on failure
    */
-  int dump_stuck_pg_stats(ostream& ss,
-			  bufferlist& rdata,
-			  vector<const char*>& args) const;
+  int dump_stuck_pg_stats(stringstream &ds, Formatter *f,
+			  int threshold,
+			  vector<string>& args) const;
 
   void dump_object_stat_sum(TextTable &tbl, Formatter *f,
                             object_stat_sum_t &sum, bool verbose);
