@@ -516,8 +516,9 @@ public:
    * @returns true if in state ACTIVE; false otherwise.
    */
   bool is_active() {
-    return (!is_proposing() && !paxos->is_recovering()
-        && !paxos->is_locked());
+    return
+      !is_proposing() &&
+      (paxos->is_active() || paxos->is_updating() || paxos->is_updating_previous());
   }
 
   /**
