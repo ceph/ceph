@@ -91,13 +91,20 @@ script, then rsyncs the results back tot the specified release directory.::
 7. Create RPM Repo
 ==================
 
-Copy the rpms to the destination repo, creates the yum repository
-rpm and indexes.::
+Copy the rpms to the destination repo
 
-	../ceph-build/push_to_rpm_repo.sh /tmp/release /tmp/rpm-repo 0.xx
+       mkdir /tmp/rpm-repo
+       ../ceph-build/push_to_rpm_repo.sh /tmp/release /tmp/rpm-repo 0.xx
+
+Next add any additional rpms to the repo that are needed such as leveldb and
+and ceph-deploy.  See RPM Backports section
+
+Finally, sign the rpms and build the repo indexes
+
+  ../ceph-build/sign_and_index_rpm_repo.sh /tmp/release /tmp/rpm-repo 0.xx
 
 
-8. Create debian repo
+8. Create Debian repo
 =====================
 
 The key-id used below is the id of the ceph release key from step 2::
@@ -105,6 +112,13 @@ The key-id used below is the id of the ceph release key from step 2::
 	mkdir /tmp/debian-repo
 	../ceph-build/gen_reprepro_conf.sh /tmp/debian-repo key-id
 	../ceph-build/push_to_deb_repo.sh /tmp/release /tmp/debian-repo 0.xx main
+
+
+Next add any addition debian packages that are needed such as leveldb and
+ceph-deploy.  See the Debian Backports section below.
+
+Debian packages are signed when added to the repo, so no furthur action is
+needed.
 
 
 9.  Push repos to ceph.org
