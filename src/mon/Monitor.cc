@@ -121,6 +121,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   name(nm),
   rank(-1), 
   messenger(m),
+  con_self(m ? m->get_loopback_connection() : NULL),
   lock("Monitor::lock"),
   timer(cct_, lock),
   has_ever_joined(false),
@@ -210,6 +211,8 @@ Monitor::~Monitor()
   delete paxos;
   assert(session_map.sessions.empty());
   delete mon_caps;
+  if (con_self)
+    con_self->put();
 }
 
 
