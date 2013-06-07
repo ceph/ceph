@@ -163,20 +163,24 @@ public:
    * @defgroup Paxos_h_states States on which the leader/peon may be.
    * @{
    */
-  /**
-   * Leader/Peon is in Paxos' Recovery state
-   */
-  const static int STATE_RECOVERING = 0x01;
-  /**
-   * Leader/Peon is idle, and the Peon may or may not have a valid lease.
-   */
-  const static int STATE_ACTIVE     = 0x02;
-  /**
-   * Leader/Peon is updating to a new value.
-   */
-  const static int STATE_UPDATING   = 0x04;
-
-  const static int STATE_LOCKED     = 0x10;
+  enum {
+    /**
+     * Leader/Peon is in Paxos' Recovery state
+     */
+    STATE_RECOVERING,
+    /**
+     * Leader/Peon is idle, and the Peon may or may not have a valid lease.
+     */
+    STATE_ACTIVE,
+    /**
+     * Leader/Peon is updating to a new value.
+     */
+    STATE_UPDATING,
+    /*
+     * Leader proposing an old value
+     */
+    STATE_UPDATING_PREVIOUS,
+  };
 
   /**
    * Obtain state name from constant value.
@@ -188,23 +192,18 @@ public:
    * @return The state's name.
    */
   static const string get_statename(int s) {
-    stringstream ss;
-    if (s & STATE_RECOVERING) {
-      ss << "recovering";
-      assert(!(s & ~(STATE_RECOVERING|STATE_LOCKED)));
-    } else if (s & STATE_ACTIVE) {
-      ss << "active";
-      assert(s == STATE_ACTIVE);
-    } else if (s & STATE_UPDATING) {
-      ss << "updating";
-      assert(!(s & ~(STATE_UPDATING|STATE_LOCKED)));
-    } else {
-      assert(0 == "We shouldn't have gotten here!");
+    switch (s) {
+    case STATE_RECOVERING:
+      return "recovering";
+    case STATE_ACTIVE:
+      return "active";
+    case STATE_UPDATING:
+      return "updating";
+    case STATE_UPDATING_PREVIOUS:
+      return "updating-previous";
+    default:
+      return "UNKNOWN";
     }
-
-    if (s & STATE_LOCKED)
-      ss << " (locked)";
-    return ss.str();
   }
 
 private:
@@ -234,9 +233,13 @@ public:
    *
    * @return 'true' if we are on the Updating state; 'false' otherwise.
    */
-  bool is_updating() const { return (state & STATE_UPDATING); }
+  bool is_updating() const { return state == STATE_UPDATING; }
 
-  bool is_locked() const { return (state & STATE_LOCKED); }
+  /**
+   * Check if we are updating/proposing a previous value from a
+   * previous quorum
+   */
+  bool is_updating_previous() const { return state == STATE_UPDATING_PREVIOUS; }
 
 private:
   /**

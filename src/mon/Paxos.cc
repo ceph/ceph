@@ -431,7 +431,7 @@ void Paxos::handle_last(MMonPaxos *last)
       if (uncommitted_v == last_committed+1 &&
 	  uncommitted_value.length()) {
 	dout(10) << "that's everyone.  begin on old learned value" << dendl;
-	state = STATE_LOCKED;
+	state = STATE_UPDATING_PREVIOUS;
 	begin(uncommitted_value);
       } else {
 	// active!
@@ -470,7 +470,7 @@ void Paxos::begin(bufferlist& v)
 	   << dendl;
 
   assert(mon->is_leader());
-  state |= STATE_UPDATING;
+  assert(is_updating() || is_updating_previous());
 
   // we must already have a majority for this to work.
   assert(mon->get_quorum().size() == 1 ||
@@ -599,7 +599,7 @@ void Paxos::handle_accept(MMonPaxos *accept)
   assert(accept->last_committed == last_committed ||   // not committed
 	 accept->last_committed == last_committed-1);  // committed
 
-  assert(is_updating());
+  assert(is_updating() || is_updating_previous());
   assert(accepted.count(from) == 0);
   accepted.insert(from);
   dout(10) << " now " << accepted << " have accepted" << dendl;
@@ -638,7 +638,7 @@ void Paxos::accept_timeout()
   dout(5) << "accept timeout, calling fresh election" << dendl;
   accept_timeout_event = 0;
   assert(mon->is_leader());
-  assert(is_updating());
+  assert(is_updating() || is_updating_previous());
   mon->bootstrap();
 }
 
@@ -1198,7 +1198,6 @@ bool Paxos::is_readable(version_t v)
   return 
     (mon->is_peon() || mon->is_leader()) &&
     (is_active() || is_updating()) &&
-    !is_locked() &&
     last_committed > 0 &&           // must have a value
     (mon->get_quorum().size() == 1 ||  // alone, or
      is_lease_valid()); // have lease
@@ -1263,7 +1262,7 @@ void Paxos::propose_queued()
   list_proposals(*_dout);
   *_dout << dendl;
 
-  state = 0;
+  state = STATE_UPDATING;
   begin(proposal->bl);
 }
 
