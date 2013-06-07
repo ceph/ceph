@@ -43,6 +43,7 @@ usr/bin/ceph_test_objectcacher_stress
 usr/bin/ceph_test_rados
 usr/bin/ceph_test_rados_api_aio
 usr/bin/ceph_test_rados_api_cls
+usr/bin/ceph_test_rados_api_cmd
 usr/bin/ceph_test_rados_api_io
 usr/bin/ceph_test_rados_api_list
 usr/bin/ceph_test_rados_api_lock

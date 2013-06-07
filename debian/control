@@ -152,7 +152,8 @@ Description: debugging symbols for rbd-fuse
 
 Package: ceph-common
 Architecture: linux-any
-Depends: librbd1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
+Depends: librbd1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends},
+         python-ceph
 Conflicts: ceph-client-tools
 Replaces: ceph-client-tools
 Suggests: ceph, ceph-mds
