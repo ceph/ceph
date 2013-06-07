@@ -1183,8 +1183,8 @@ RGWRESTMgr *RGWRESTMgr::get_resource_mgr(struct req_state *s, const string& uri)
   for (iter = resources_by_size.rbegin(); iter != resources_by_size.rend(); ++iter) {
     string& resource = iter->second;
     if (uri.compare(0, iter->first, resource) == 0 &&
-	(resource.size() == iter->first ||
-	 resource[iter->first] == '/')) {
+	(uri.size() == iter->first ||
+	 uri[iter->first] == '/')) {
       string suffix = uri.substr(iter->first);
       return resource_mgrs[resource]->get_resource_mgr(s, suffix);
     }
