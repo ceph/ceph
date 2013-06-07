@@ -1198,6 +1198,7 @@ bool Paxos::is_readable(version_t v)
   return 
     (mon->is_peon() || mon->is_leader()) &&
     (is_active() || is_updating()) &&
+    !is_locked() &&
     last_committed > 0 &&           // must have a value
     (mon->get_quorum().size() == 1 ||  // alone, or
      is_lease_valid()); // have lease
