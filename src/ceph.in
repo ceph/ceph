@@ -1,4 +1,6 @@
-#!/usr/bin/python
+#
+# Processed in Makefile to add python #! line and version variable
+#
 
 import argparse
 import copy
@@ -820,6 +822,7 @@ def parse_cmdargs(args=None, target=''):
     parser.add_argument('--watch-error', action='store_true',
                         help='watch error events')
 
+    parser.add_argument('-v', action="store_true")
     parser.add_argument('--verbose', action="store_true")
     parser.add_argument('--concise', dest='verbose', action="store_false")
 
@@ -1299,6 +1302,10 @@ def complete(sigdict, args, target):
 def main():
 
     parser, parsed_args, childargs = parse_cmdargs()
+
+    if parsed_args.v:
+        print 'ceph version {0} ({1})'.format(CEPH_GIT_NICE_VER, CEPH_GIT_VER)
+	return 0
 
     global verbose
     verbose = parsed_args.verbose
