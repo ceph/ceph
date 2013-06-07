@@ -1426,7 +1426,8 @@ def main():
             # try old mon
             ret, outbuf, outs = send_command(cmd=['status'])
             # old mon returns status to outs...ick
-            outbuf = outs
+            if ret == 0:
+                outbuf += outs
         if ret:
             print >> sys.stderr, "status query failed: ", outs
             return ret
@@ -1487,6 +1488,11 @@ def main():
         if verbose:
             print '{0} to old {1}'.format(' '.join(childargs), target[0])
         ret, outbuf, outs = send_command(target, childargs, inbuf)
+        # combine nonerror outbuf and outs; either may have cmd output
+        if ret == 0:
+            outbuf += outs
+            # clear outs so generic code below doesn't print it to stderr
+            outs = ''
     elif ret:
         if ret < 0:
             ret = -ret
