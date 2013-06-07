@@ -985,11 +985,6 @@ def validate_command(parsed_args, sigdict, args):
     found = []
     valid_dict = {}
     if args:
-        # Repulsive hack to handle tell: lop off 'tell' and target
-        # and validate the rest of the command.  'target' is already
-        # determined in our callers, so it's ok to remove it here.
-        if args[0] == 'tell':
-            args = args[2:]
         # look for best match, accumulate possibles in bestcmds
         # (so we can maybe give a more-useful error message)
         best_match_cnt = 0
@@ -1053,15 +1048,55 @@ def validate_command(parsed_args, sigdict, args):
 
         return valid_dict
 
-def json_command(target=('mon', ''), prefix=None, argdict=None, inbuf='',
-                 timeout=0):
+def send_command(target=('mon', ''), cmd=[], inbuf='', timeout=0):
     """
-    Send a new_style command to a daemon using librados's
-    mon_command, osd_command, or pg_command.  Prefix may be supplied
-    separately or in argdict.  Any bulk input data comes in inbuf.
+    Send a command to a daemon using librados's
+    mon_command, osd_command, or pg_command.  Any bulk input data
+    comes in inbuf.
+
     Returns (ret, outbuf, outs); ret is the return code, outbuf is
     the outbl "bulk useful output" buffer, and outs is any status
     or error message (intended for stderr).
+
+    If target is osd.N, send command to that osd (except for pgid cmds)
+    """
+    try:
+        if target[0] == 'osd':
+            osdid = target[1]
+
+            if verbose:
+                print >> sys.stderr, 'submit {0} to osd.{1}'.\
+                    format(cmd, osdid)
+            ret, outbuf, outs = \
+                cluster_handle.osd_command(osdid, cmd, inbuf, timeout)
+
+        elif target[0] == 'pg':
+            # leave it in cmddict for the OSD to use too
+            pgid = target[1]
+            if verbose:
+                print >> sys.stderr, 'submit {0} for pgid {1}'.\
+                    format(cmd, pgid)
+            ret, outbuf, outs = \
+                cluster_handle.pg_command(pgid, cmd, inbuf, timeout)
+
+        elif target[0] == 'mon':
+            if verbose:
+                print >> sys.stderr, '{0} to {1}'.\
+                    format(cmd, target[0])
+            ret, outbuf, outs = cluster_handle.mon_command(cmd, inbuf,
+                                                           timeout)
+
+    except Exception as e:
+        raise RuntimeError('"{0}": exception {1}'.format(cmd, e))
+
+    return ret, outbuf, outs
+
+def json_command(target=('mon', ''), prefix=None, argdict=None, inbuf='',
+                 timeout=0):
+    """
+    Format up a JSON command and send it with send_command() above.
+    Prefix may be supplied separately or in argdict.  Any bulk input
+    data comes in inbuf.
 
     If target is osd.N, send command to that osd (except for pgid cmds)
     """
@@ -1077,41 +1112,19 @@ def json_command(target=('mon', ''), prefix=None, argdict=None, inbuf='',
     try:
         if target[0] == 'osd':
             osdtarg = CephName()
+            osdtarget = '{0}.{1}'.format(*target)
+            # prefer target from cmddict if present and valid
             if 'target' in cmddict:
                 osdtarget = cmddict.pop('target')
-            else:
-                osdtarget = '{0}.{1}'.format(*target)
-
             try:
                 osdtarg.valid(osdtarget)
-                osdid = osdtarg.nameid
+                target = ('osd', osdtarg.nameid)
             except:
-                # uh..I dunno, try osd.0?
-                osdid = 0
+                # use the target we were originally given
+                pass
 
-            if verbose:
-                print >> sys.stderr, 'submit {0} to osd.{1}'.\
-                    format(json.dumps(cmddict), osdid)
-            ret, outbuf, outs = \
-                cluster_handle.osd_command(osdid, json.dumps(cmddict), inbuf,
-                                           timeout)
-
-        elif target[0] == 'pg':
-            # leave it in cmddict for the OSD to use too
-            pgid = target[1]
-            if verbose:
-                print >> sys.stderr, 'submit {0} for pgid {1}'.\
-                    format(json.dumps(cmddict), pgid)
-            ret, outbuf, outs = \
-                cluster_handle.pg_command(pgid, json.dumps(cmddict), inbuf,
-                                          timeout)
-
-        elif target[0] == 'mon':
-            if verbose:
-                print >> sys.stderr, '{0} to {1}'.\
-                    format(json.dumps(cmddict), target[0])
-            ret, outbuf, outs = cluster_handle.mon_command(json.dumps(cmddict),
-                                                           inbuf, timeout)
+        ret, outbuf, outs = send_command(target, [json.dumps(cmddict)],
+                                         inbuf, timeout)
 
     except Exception as e:
         raise RuntimeError('"{0}": exception {1}'.format(prefix, e))
@@ -1409,6 +1422,11 @@ def main():
 
         # first do a ceph status
         ret, outbuf, outs = json_command(prefix='status')
+        if ret == -errno.EINVAL:
+            # try old mon
+            ret, outbuf, outs = send_command(cmd=['status'])
+            # old mon returns status to outs...ick
+            outbuf = outs
         if ret:
             print >> sys.stderr, "status query failed: ", outs
             return ret
@@ -1451,6 +1469,12 @@ def main():
 
     target = find_cmd_target(childargs)
 
+    # Repulsive hack to handle tell: lop off 'tell' and target
+    # and validate the rest of the command.  'target' is already
+    # determined in our callers, so it's ok to remove it here.
+    if childargs[0] == 'tell':
+        childargs = childargs[2:]
+
     # fetch JSON sigs from command
     # each line contains one command signature (a placeholder name
     # of the form 'cmdNNN' followed by an array of argument descriptors)
@@ -1459,10 +1483,10 @@ def main():
     ret, outbuf, outs = json_command(target=target,
                                      prefix='get_command_descriptions')
     if ret == -errno.EINVAL:
-        # send command to old monitor
+        # send command to old monitor or OSD
         if verbose:
-            print '{0} to old monitor'.format(' '.join(childargs))
-        ret, outbuf, outs = cluster_handle.mon_command(childargs, inbuf)
+            print '{0} to old {1}'.format(' '.join(childargs), target[0])
+        ret, outbuf, outs = send_command(target, childargs, inbuf)
     elif ret:
         if ret < 0:
             ret = -ret
