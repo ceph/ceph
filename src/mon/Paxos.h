@@ -175,10 +175,6 @@ public:
    * Leader/Peon is updating to a new value.
    */
   const static int STATE_UPDATING   = 0x04;
-  /**
-   * Leader is about to propose a new value, but hasn't gotten to do it yet.
-   */
-  const static int STATE_PREPARING  = 0x08;
 
   const static int STATE_LOCKED     = 0x10;
 
@@ -202,9 +198,6 @@ public:
     } else if (s & STATE_UPDATING) {
       ss << "updating";
       assert(!(s & ~(STATE_UPDATING|STATE_LOCKED)));
-    } else if (s & STATE_PREPARING) {
-      ss << "preparing update";
-      assert(!(s & ~(STATE_PREPARING|STATE_LOCKED)));
     } else {
       assert(0 == "We shouldn't have gotten here!");
     }
@@ -243,7 +236,6 @@ public:
    */
   bool is_updating() const { return (state & STATE_UPDATING); }
 
-  bool is_preparing() const { return (state & STATE_PREPARING); }
   bool is_locked() const { return (state & STATE_LOCKED); }
 
 private:
