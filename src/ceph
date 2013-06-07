@@ -820,7 +820,7 @@ def parse_cmdargs(args=None, target=''):
     parser.add_argument('--watch-error', action='store_true',
                         help='watch error events')
 
-    parser.add_argument('-v', '--verbose', action="store_true")
+    parser.add_argument('--verbose', action="store_true")
     parser.add_argument('--concise', dest='verbose', action="store_false")
 
     parser.add_argument('-f', '--format', choices=['json', 'json-pretty',
