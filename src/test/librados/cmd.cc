@@ -27,21 +27,28 @@ TEST(LibRadosCmd, MonDescribe) {
 
   char *buf, *st;
   size_t buflen, stlen;
+  char *cmd[2];
 
-  ASSERT_EQ(0, rados_mon_command(cluster, "{\"prefix\":\"get_command_descriptions\"}", "", 0, &buf, &buflen, &st, &stlen));
+  cmd[1] = NULL;
+
+  cmd[0] = (char *)"{\"prefix\":\"get_command_descriptions\"}";
+  ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
   ASSERT_LT(0u, buflen);
   rados_buffer_free(buf);
   rados_buffer_free(st);
 
-  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, "get_command_descriptions", "", 0, &buf, &buflen, &st, &stlen));
+  cmd[0] = (char *)"get_command_descriptions";
+  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
   rados_buffer_free(buf);
   rados_buffer_free(st);
 
-  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, "asdfqwer", "{}", 2, &buf, &buflen, &st, &stlen));
+  cmd[0] = (char *)"asdfqwer";
+  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, (const char **)cmd, 1, "{}", 2, &buf, &buflen, &st, &stlen));
   rados_buffer_free(buf);
   rados_buffer_free(st);
 
-  ASSERT_EQ(0, rados_mon_command(cluster, "{\"prefix\":\"mon_status\"}", "", 0, &buf, &buflen, &st, &stlen));
+  cmd[0] = (char *)"{\"prefix\":\"mon_status\"}";
+  ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
   ASSERT_LT(0u, buflen);
   //ASSERT_LT(0u, stlen);
   rados_buffer_free(buf);
@@ -49,7 +56,7 @@ TEST(LibRadosCmd, MonDescribe) {
 
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
-/*
+
 TEST(LibRadosCmd, OSDCmd) {
   rados_t cluster;
   std::string pool_name = get_temp_pool_name();
@@ -57,10 +64,15 @@ TEST(LibRadosCmd, OSDCmd) {
 
   char *buf, *st;
   size_t buflen, stlen;
+  char *cmd[2];
+  cmd[1] = NULL;
 
-  ASSERT_EQ(-22, rados_osd_command(cluster, 0, "asdfasdf", "", &buf, &buflen, &st, &stlen));
-  ASSERT_EQ(-22, rados_osd_command(cluster, 0, "version", "", &buf, &buflen, &st, &stlen));
-  ASSERT_EQ(0, rados_osd_command(cluster, 0, "{prefix:\"version\"}", "", &buf, &buflen, &st, &stlen));
+  cmd[0] = (char *)"asdfasdf";
+  ASSERT_EQ(-22, rados_osd_command(cluster, 0, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+  cmd[0] = (char *)"version";
+  ASSERT_EQ(-22, rados_osd_command(cluster, 0, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+  cmd[0] = (char *)"{\"prefix\":\"version\"}";
+  ASSERT_EQ(0, rados_osd_command(cluster, 0, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
   ASSERT_LT(0u, buflen);
   rados_buffer_free(buf);
   rados_buffer_free(st);
@@ -75,21 +87,26 @@ TEST(LibRadosCmd, PGCmd) {
 
   char *buf, *st;
   size_t buflen, stlen;
+  char *cmd[2];
+  cmd[1] = NULL;
 
   int64_t poolid = rados_pool_lookup(cluster, pool_name.c_str());
   ASSERT_LT(0, poolid);
 
   string pgid = stringify(poolid) + ".0";
 
-  ASSERT_EQ(-22, rados_pg_command(cluster, pgid.c_str(), "asdfasdf", "", &buf, &buflen, &st, &stlen));
-  ASSERT_EQ(0, rados_pg_command(cluster, pgid.c_str(), "query", "", &buf, &buflen, &st, &stlen));
+  cmd[0] = (char *)"asdfasdf";
+  ASSERT_EQ(-22, rados_pg_command(cluster, pgid.c_str(), (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+  string qstr = "{\"prefix\":\"pg\", \"cmd\":\"query\", \"pgid\":\"" +  pgid + "\"}";
+  cmd[0] = (char *)qstr.c_str();
+  ASSERT_EQ(0, rados_pg_command(cluster, pgid.c_str(), (const char **)cmd, 1, "", 0,  &buf, &buflen, &st, &stlen));
   ASSERT_LT(0u, buflen);
   rados_buffer_free(buf);
   rados_buffer_free(st);
 
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
-*/
+
 struct Log {
   list<string> log;
   Cond cond;
@@ -125,11 +142,14 @@ TEST(LibRadosCmd, WatchLog) {
   ASSERT_EQ("", create_one_pool(pool_name, &cluster));
 
   char *buf, *st;
+  char *cmd[2];
+  cmd[1] = NULL;
   size_t buflen, stlen;
   Log l;
 
   ASSERT_EQ(0, rados_monitor_log(cluster, "info", log_cb, &l));
-  ASSERT_EQ(0, rados_mon_command(cluster, "{\"prefix\":\"log\", \"logtext\":[\"onexx\"]}", "", 0, &buf, &buflen, &st, &stlen));
+  cmd[0] = (char *)"{\"prefix\":\"log\", \"logtext\":[\"onexx\"]}";
+  ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
   for (int i=0; !l.contains("onexx"); i++) {
     ASSERT_TRUE(i<100);
     sleep(1);
@@ -139,25 +159,27 @@ TEST(LibRadosCmd, WatchLog) {
   /*
     changing the subscribe level is currently broken.
 
+  cmd[0] = (char *)"{\"prefix\":\"log\", \"logtext\":[\"twoxx\"]}";
   ASSERT_EQ(0, rados_monitor_log(cluster, "err", log_cb, &l));
-  ASSERT_EQ(0, rados_mon_command(cluster, "{\"prefix\":\"log\", \"logtext\":[\"twoxx\"]}", "", 0, &buf, &buflen, &st, &stlen));
+  ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
   sleep(2);
   ASSERT_FALSE(l.contains("twoxx"));
   */
 
   ASSERT_EQ(0, rados_monitor_log(cluster, "info", log_cb, &l));
-  ASSERT_EQ(0, rados_mon_command(cluster, "{\"prefix\":\"log\", \"logtext\":[\"threexx\"]}", "", 0, &buf, &buflen, &st, &stlen));
+  cmd[0] = (char *)"{\"prefix\":\"log\", \"logtext\":[\"threexx\"]}";
+  ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
   for (int i=0; !l.contains("threexx"); i++) {
     ASSERT_TRUE(i<100);
     sleep(1);
   }
 
   ASSERT_EQ(0, rados_monitor_log(cluster, "info", NULL, NULL));
-  ASSERT_EQ(0, rados_mon_command(cluster, "{\"prefix\":\"log\", \"logtext\":[\"fourxx\"]}", "", 0, &buf, &buflen, &st, &stlen));
+  cmd[0] = (char *)"{\"prefix\":\"log\", \"logtext\":[\"fourxx\"]}";
+  ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
   sleep(2);
   ASSERT_FALSE(l.contains("fourxx"));
 
 
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
- 

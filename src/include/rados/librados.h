@@ -1616,7 +1616,8 @@ int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver, const char *buf,
  * not filled in.
  *
  * @param cluster cluster handle
- * @param cmd the command string (in JSON)
+ * @param cmd an array of char *'s representing the command
+ * @param cmdlen count of valid entries in cmd
  * @param inbuf any bulk input data (crush map, etc.)
  * @param outbuf double pointer to output buffer
  * @param outbuflen pointer to output buffer length
@@ -1624,7 +1625,7 @@ int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver, const char *buf,
  * @param outslen pointer to status string length
  * @returns 0 on success, negative error code on failure
  */
-int rados_mon_command(rados_t cluster, const char *cmd,
+int rados_mon_command(rados_t cluster, const char **cmd, size_t cmdlen,
 		      const char *inbuf, size_t inbuflen,
 	       	      char **outbuf, size_t *outbuflen,
 		      char **outs, size_t *outslen);
@@ -1638,12 +1639,14 @@ int rados_mon_command(rados_t cluster, const char *cmd,
  */
 void rados_buffer_free(char *buf);
 
-int rados_osd_command(rados_t cluster, int osdid, const char *cmd,
+int rados_osd_command(rados_t cluster, int osdid, const char **cmd,
+		      size_t cmdlen,
 		      const char *inbuf, size_t inbuflen,
 		      char **outbuf, size_t *outbuflen,
 		      char **outs, size_t *outslen);
 
-int rados_pg_command(rados_t cluster, const char *pgstr, const char *cmd,
+int rados_pg_command(rados_t cluster, const char *pgstr, const char **cmd,
+		     size_t cmdlen,
 		     const char *inbuf, size_t inbuflen,
 		     char **outbuf, size_t *outbuflen,
 		     char **outs, size_t *outslen);
