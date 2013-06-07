@@ -203,6 +203,15 @@ void rados_version(int *major, int *minor, int *extra);
 int rados_create(rados_t *cluster, const char * const id);
 
 /**
+ * Like rados_create, but 
+ * 1) don't assume 'client.'+id; allow full specification of name
+ * 2) allow specification of cluster name
+ * 3) flags for future expansion
+ */
+int rados_create2(rados_t *pcluster, const char *const clustername,
+	          const char * const name, uint64_t flags);
+
+/**
  * Initialize a cluster handle from an existing configuration.
  *
  * Share configuration state with another rados_t instance.
@@ -303,6 +312,22 @@ int rados_conf_read_file(rados_t cluster, const char *path);
  */
 int rados_conf_parse_argv(rados_t cluster, int argc, const char **argv);
 
+
+/**
+ * Configure the cluster handle with command line arguments, returning
+ * any remainders.  Same rados_conf_parse_argv, except for extra
+ * remargv argument to hold returns unrecognized arguments.
+ *
+ * @pre rados_connect() has not been called on the cluster handle
+ *
+ * @param cluster cluster handle to configure
+ * @param argc number of arguments in argv
+ * @param argv arguments to parse
+ * @param remargv char* array for returned unrecognized arguments
+ * @returns 0 on success, negative error code on failure
+ */
+int rados_conf_parse_argv_remainder(rados_t cluster, int argc,
+				    const char **argv, const char **remargv);
 /**
  * Configure the cluster handle based on an environment variable
  *
@@ -933,7 +958,7 @@ int rados_append(rados_ioctx_t io, const char *oid, const char *buf, size_t len)
  *
  * The io context determines the snapshot to read from, if any was set
  * by rados_ioctx_snap_set_read().
- * 
+ *
  * @param io the context in which to perform the read
  * @param oid the name of the object to read from
  * @param buf where to store the results
@@ -1671,6 +1696,88 @@ ssize_t rados_list_lockers(rados_ioctx_t io, const char *o,
  */
 int rados_break_lock(rados_ioctx_t io, const char *o, const char *name,
 		     const char *client, const char *cookie);
+/**
+ * @defgroup librados_h_commands Mon/OSD/PG Commands
+ *
+ * These interfaces send commands relating to the monitor, OSD, or PGs.
+ *
+ * @{
+ */
+
+/**
+ * Send monitor command.
+ *
+ * @note Takes command string in carefully-formatted JSON; must match
+ * defined commands, types, etc.
+ *
+ * The result buffers are allocated on the heapt; the caller is
+ * expected to release that memory with rados_buffer_free().  The
+ * buffer and length pointers can all be NULL, in which case they are
+ * not filled in.
+ *
+ * @param cluster cluster handle
+ * @param cmd an array of char *'s representing the command
+ * @param cmdlen count of valid entries in cmd
+ * @param inbuf any bulk input data (crush map, etc.)
+ * @param outbuf double pointer to output buffer
+ * @param outbuflen pointer to output buffer length
+ * @param outs double pointer to status string
+ * @param outslen pointer to status string length
+ * @returns 0 on success, negative error code on failure
+ */
+int rados_mon_command(rados_t cluster, const char **cmd, size_t cmdlen,
+		      const char *inbuf, size_t inbuflen,
+	       	      char **outbuf, size_t *outbuflen,
+		      char **outs, size_t *outslen);
+
+/**
+ * free a rados-allocated buffer
+ *
+ * Release memory allocated by librados calls like rados_mon_command().
+ *
+ * @param buf buffer pointer
+ */
+void rados_buffer_free(char *buf);
+
+int rados_osd_command(rados_t cluster, int osdid, const char **cmd,
+		      size_t cmdlen,
+		      const char *inbuf, size_t inbuflen,
+		      char **outbuf, size_t *outbuflen,
+		      char **outs, size_t *outslen);
+
+int rados_pg_command(rados_t cluster, const char *pgstr, const char **cmd,
+		     size_t cmdlen,
+		     const char *inbuf, size_t inbuflen,
+		     char **outbuf, size_t *outbuflen,
+		     char **outs, size_t *outslen);
+
+/**
+ * monitor cluster log
+ *
+ * Monitor events logged to the cluster log.  The callback get each
+ * log entry both as a single formatted line and with each field in a
+ * separate arg.
+ *
+ * Calling with a cb argument of NULL will deregister any previously
+ * registered callback.
+ *
+ * @param cluster cluster handle
+ * @param level minimum log level (debug, info, warn|warning, err|error)
+ * @param cb callback to run for each log message
+ * @param arg void argument to pass to cb
+ * @returns 0 on success, negative code on error
+ */
+typedef void (*rados_log_callback_t)(void *arg,
+				     const char *line,
+				     const char *who, 
+				     uint64_t sec, uint64_t nsec,
+				     uint64_t seq, const char *level,
+				     const char *msg);
+
+int rados_monitor_log(rados_t cluster, const char *level, rados_log_callback_t cb, void *arg);
+
+/** @} Mon/OSD/PG commands */
+
 #ifdef __cplusplus
 }
 #endif
