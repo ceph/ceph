@@ -3,7 +3,6 @@
 ============================
 
 
-
 ``filestore debug omap check``
 
 :Description: Debugging check on synchronization. Expensive. For debugging only.
@@ -12,10 +11,12 @@
 :Default: ``0``
 
 
+.. index:: xattr
+
 Extended Attributes
 ===================
 
-Extended Attributes (XATTRs) are an imporant aspect in your configuration. 
+Extended Attributes (XATTRs) are an important aspect in your configuration. 
 Some file systems have limits on the number of bytes stored in XATTRS. 
 Additionally, in some cases, the filesystem may not be as fast as an alternative
 method of storing XATTRs. The following settings may help improve performance
@@ -51,6 +52,7 @@ xattrs`` threshold are reached.
 :Required: No
 :Default: ``2``
 
+.. index:: filestore synchronization; synchronization
 
 Synchronization Intervals
 =========================
@@ -79,6 +81,8 @@ optimally--potentially resulting in more efficient synchronization.
 :Required: No
 :Default: ``.01``
 
+
+.. index:: filestore flusher; flusher
 
 Flusher
 =======
@@ -119,6 +123,8 @@ performance in some cases.
 :Required: No
 :Default: ``false``
 
+
+.. index:: filestore queue
 
 Queue
 =====
@@ -247,7 +253,10 @@ Misc
 
 ``filestore split multiple``
 
-:Description: filestore_split_multiple*filestore_merge_threshold*16 is the max files in a subdir before splitting into child directories.
+:Description:  ``filestore_split_multiple * filestore_merge_threshold * 16`` 
+               is the maximum number of files in a subdirectory before 
+               splitting into child directories.
+
 :Type: Integer
 :Required: No
 :Default: ``2``
@@ -271,7 +280,7 @@ Misc
 
 ``filestore dump file``
 
-:Description: File onto which store transaction dumps?
+:Description: File onto which store transaction dumps.
 :Type: Boolean
 :Required: No
 :Default: ``false``
