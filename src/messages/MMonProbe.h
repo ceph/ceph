@@ -57,7 +57,8 @@ public:
     : Message(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION) {}
   MMonProbe(const uuid_d& f, int o, const string& n, bool hej)
     : Message(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION),
-      fsid(f), op(o), name(n), has_ever_joined(hej) {}
+      fsid(f), op(o), name(n),
+      has_ever_joined(hej) {}
 private:
   ~MMonProbe() {}
 
