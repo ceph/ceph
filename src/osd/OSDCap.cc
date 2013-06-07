@@ -24,7 +24,7 @@
 using std::ostream;
 using std::vector;
 
-ostream& operator<<(ostream& out, rwxa_t p)
+ostream& operator<<(ostream& out, osd_rwxa_t p)
 { 
   if (p == OSD_CAP_ANY)
     return out << "*";
@@ -93,7 +93,7 @@ ostream& operator<<(ostream& out, const OSDCapGrant& g)
 bool OSDCap::allow_all() const
 {
   for (vector<OSDCapGrant>::const_iterator p = grants.begin(); p != grants.end(); ++p)
-    if (p->spec.allow_all())
+    if (p->match.is_match(string(), CEPH_AUTH_UID_DEFAULT, string()) && p->spec.allow_all())
       return true;
   return false;
 }
@@ -109,11 +109,11 @@ bool OSDCap::is_capable(const string& pool_name, int64_t pool_auid,
 			bool op_may_write, bool op_may_class_read,
 			bool op_may_class_write) const
 {
-  rwxa_t allow = 0;
+  osd_rwxa_t allow = 0;
   for (vector<OSDCapGrant>::const_iterator p = grants.begin();
        p != grants.end(); ++p) {
     if (p->match.is_match(pool_name, pool_auid, object)) {
-      allow |= p->spec.allow;
+      allow = allow | p->spec.allow;
       if ((op_may_read && !(allow & OSD_CAP_R)) ||
 	  (op_may_write && !(allow & OSD_CAP_W)) ||
 	  (op_may_class_read && !(allow & OSD_CAP_CLS_R)) ||

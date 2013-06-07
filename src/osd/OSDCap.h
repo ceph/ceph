@@ -39,17 +39,28 @@ static const __u8 OSD_CAP_CLS_W = (1 << 4);      // class write
 static const __u8 OSD_CAP_X     = (OSD_CAP_CLS_R | OSD_CAP_CLS_W); // execute
 static const __u8 OSD_CAP_ANY   = 0xff;          // *
 
-typedef __u8 rwxa_t;
+struct osd_rwxa_t {
+  __u8 val;
 
-ostream& operator<<(ostream& out, rwxa_t p);
+  osd_rwxa_t(__u8 v = 0) : val(v) {}
+  osd_rwxa_t& operator=(__u8 v) {
+    val = v;
+    return *this;
+  }
+  operator __u8() const {
+    return val;
+  }
+};
+
+ostream& operator<<(ostream& out, osd_rwxa_t p);
 
 struct OSDCapSpec {
-  rwxa_t allow;
+  osd_rwxa_t allow;
   std::string class_name;
   std::string class_allow;
 
   OSDCapSpec() : allow(0) {}
-  OSDCapSpec(rwxa_t v) : allow(v) {}
+  OSDCapSpec(osd_rwxa_t v) : allow(v) {}
   OSDCapSpec(std::string n) : allow(0), class_name(n) {}
   OSDCapSpec(std::string n, std::string a) : allow(0), class_name(n), class_allow(a) {}
 
