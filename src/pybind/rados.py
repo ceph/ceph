@@ -529,9 +529,10 @@ Rados object in state %s." % (self.state))
         outbuflen = c_long()
         outsp = pointer(pointer(c_char()))
         outslen = c_long()
+        cmdarr = (c_char_p * len(cmd))(*cmd)
 
         ret = run_in_thread(self.librados.rados_mon_command,
-                            (self.cluster, c_char_p(cmd),
+                            (self.cluster, cmdarr, len(cmd),
                             c_char_p(inbuf), len(inbuf),
                             outbufp, byref(outbuflen), outsp, byref(outslen)),
                             timeout)
@@ -561,8 +562,9 @@ Rados object in state %s." % (self.state))
         outbuflen = c_long()
         outsp = pointer(pointer(c_char()))
         outslen = c_long()
+        cmdarr = (c_char_p * len(cmd))(*cmd)
         ret = run_in_thread(self.librados.rados_osd_command,
-                            (self.cluster, osdid, c_char_p(cmd),
+                            (self.cluster, osdid, cmdarr, len(cmd),
                             c_char_p(inbuf), len(inbuf),
                             outbufp, byref(outbuflen), outsp, byref(outslen)),
                             timeout)
@@ -592,8 +594,9 @@ Rados object in state %s." % (self.state))
         outbuflen = c_long()
         outsp = pointer(pointer(c_char()))
         outslen = c_long()
+        cmdarr = (c_char_p * len(cmd))(*cmd)
         ret = run_in_thread(self.librados.rados_pg_command,
-                            (self.cluster, c_char_p(pgid), c_char_p(cmd),
+                            (self.cluster, c_char_p(pgid), cmdarr, len(cmd),
                             c_char_p(inbuf), len(inbuf),
                             outbufp, byref(outbuflen), outsp, byref(outslen)),
                             timeout)

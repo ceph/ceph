@@ -1455,8 +1455,7 @@ def main():
         # send command to old monitor
         if verbose:
             print '{0} to old monitor'.format(' '.join(childargs))
-        ret, outbuf, outs = cluster_handle.mon_command(' '.join(childargs),
-                                                       inbuf)
+        ret, outbuf, outs = cluster_handle.mon_command(childargs, inbuf)
     elif ret:
         if ret < 0:
             ret = -ret
