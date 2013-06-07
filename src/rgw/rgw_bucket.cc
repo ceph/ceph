@@ -1331,6 +1331,10 @@ public:
     if (ret < 0)
       return ret;
 
+    ret = rgw_add_bucket(store, bci.info.owner, bci.info.bucket);
+    if (ret < 0)
+      return ret;
+
     return 0;
   }
 
