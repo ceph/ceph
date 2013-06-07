@@ -1282,6 +1282,12 @@ int librados::Rados::init(const char * const id)
   return rados_create((rados_t *)&client, id);
 }
 
+int librados::Rados::init2(const char * const name,
+			   const char * const clustername, uint64_t flags)
+{
+  return rados_create2((rados_t *)&client, clustername, name, flags);
+}
+
 int librados::Rados::init_with_context(config_t cct_)
 {
   return rados_create_with_context((rados_t *)&client, (rados_config_t)cct_);
@@ -1321,6 +1327,12 @@ int librados::Rados::conf_read_file(const char * const path) const
 int librados::Rados::conf_parse_argv(int argc, const char ** argv) const
 {
   return rados_conf_parse_argv((rados_t)client, argc, argv);
+}
+
+int librados::Rados::conf_parse_argv_remainder(int argc, const char ** argv,
+					       const char ** remargv) const
+{
+  return rados_conf_parse_argv_remainder((rados_t)client, argc, argv, remargv);
 }
 
 int librados::Rados::conf_parse_env(const char *name) const
@@ -1535,14 +1547,16 @@ librados::ObjectOperation::~ObjectOperation()
 }
 
 ///////////////////////////// C API //////////////////////////////
-extern "C" int rados_create(rados_t *pcluster, const char * const id)
+static
+int rados_create_common(rados_t *pcluster,
+			const char * const clustername,
+			CephInitParameters *iparams)
 {
-  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
-  if (id) {
-    iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
-  }
-
-  CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
+  // missing things compared to global_init:
+  // g_ceph_context, g_conf, g_lockdep, signal handlers
+  CephContext *cct = common_preinit(*iparams, CODE_ENVIRONMENT_LIBRARY, 0);
+  if (clustername)
+    cct->_conf->cluster = clustername;
   cct->_conf->parse_env(); // environment variables override
   cct->_conf->apply_changes(NULL);
 
@@ -1551,6 +1565,32 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
 
   cct->put();
   return 0;
+}
+
+extern "C" int rados_create(rados_t *pcluster, const char * const id)
+{
+  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
+  if (id) {
+    iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
+  }
+  return rados_create_common(pcluster, "ceph", &iparams);
+}
+
+// as above, but 
+// 1) don't assume 'client.'; name is a full type.id namestr
+// 2) allow setting clustername
+// 3) flags is for future expansion (maybe some of the global_init()
+//    behavior is appropriate for some consumers of librados, for instance)
+
+extern "C" int rados_create2(rados_t *pcluster, const char *const clustername,
+			     const char * const name, uint64_t flags)
+{
+  // client is assumed, but from_str will override
+  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
+  if (!name || !iparams.name.from_str(name)) 
+    return -EINVAL;
+
+  return rados_create_common(pcluster, clustername, &iparams);
 }
 
 /* This function is intended for use by Ceph daemons. These daemons have
@@ -1627,6 +1667,35 @@ extern "C" int rados_conf_parse_argv(rados_t cluster, int argc, const char **arg
   if (ret)
     return ret;
   conf->apply_changes(NULL);
+  return 0;
+}
+
+// like above, but return the remainder of argv to contain remaining
+// unparsed args.  Must be allocated to at least argc by caller.
+// remargv will contain n <= argc pointers to original argv[], the end
+// of which may be NULL
+
+extern "C" int rados_conf_parse_argv_remainder(rados_t cluster, int argc,
+					       const char **argv,
+					       const char **remargv)
+{
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  md_config_t *conf = client->cct->_conf;
+  vector<const char*> args;
+  for (int i=0; i<argc; i++)
+    args.push_back(argv[i]);
+  int ret = conf->parse_argv(args);
+  if (ret)
+    return ret;
+  conf->apply_changes(NULL);
+  assert(args.size() <= (unsigned int)argc);
+  unsigned int i;
+  for (i = 0; i < (unsigned int)argc; ++i) {
+    if (i < args.size())
+      remargv[i] = args[i];
+    else
+      remargv[i] = (const char *)NULL;
+  }
   return 0;
 }
 
@@ -1736,6 +1805,122 @@ extern "C" int rados_pool_list(rados_t cluster, char *buf, size_t len)
   }
   return needed + 1;
 }
+
+static void do_out_buffer(bufferlist& outbl, char **outbuf, size_t *outbuflen)
+{
+  if (outbuf) {
+    if (outbl.length() > 0) {
+      *outbuf = (char *)malloc(outbl.length());
+      memcpy(*outbuf, outbl.c_str(), outbl.length());
+    } else {
+      *outbuf = NULL;
+    }
+  }
+  if (outbuflen)
+    *outbuflen = outbl.length();
+}
+
+static void do_out_buffer(string& outbl, char **outbuf, size_t *outbuflen)
+{
+  if (outbuf) {
+    if (outbl.length() > 0) {
+      *outbuf = (char *)malloc(outbl.length());
+      memcpy(*outbuf, outbl.c_str(), outbl.length());
+    } else {
+      *outbuf = NULL;
+    }
+  }
+  if (outbuflen)
+    *outbuflen = outbl.length();
+}
+
+extern "C" int rados_mon_command(rados_t cluster, const char **cmd,
+				 size_t cmdlen,
+				 const char *inbuf, size_t inbuflen,
+				 char **outbuf, size_t *outbuflen,
+				 char **outs, size_t *outslen)
+{
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  bufferlist inbl;
+  bufferlist outbl;
+  string outstring;
+  vector<string> cmdvec;
+
+  for (size_t i = 0; i < cmdlen; i++)
+    cmdvec.push_back(cmd[i]);
+
+  inbl.append(inbuf, inbuflen);
+  int ret = client->mon_command(cmdvec, inbl, &outbl, &outstring);
+
+  do_out_buffer(outbl, outbuf, outbuflen);
+  do_out_buffer(outstring, outs, outslen);
+  return ret;
+}
+
+extern "C" int rados_osd_command(rados_t cluster, int osdid, const char **cmd,
+				 size_t cmdlen,
+				 const char *inbuf, size_t inbuflen,
+				 char **outbuf, size_t *outbuflen,
+				 char **outs, size_t *outslen)
+{
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  bufferlist inbl;
+  bufferlist outbl;
+  string outstring;
+  vector<string> cmdvec;
+
+  for (size_t i = 0; i < cmdlen; i++)
+    cmdvec.push_back(cmd[i]);
+
+  inbl.append(inbuf, inbuflen);
+  int ret = client->osd_command(osdid, cmdvec, inbl, &outbl, &outstring);
+
+  do_out_buffer(outbl, outbuf, outbuflen);
+  do_out_buffer(outstring, outs, outslen);
+  return ret;
+}
+
+
+
+extern "C" int rados_pg_command(rados_t cluster, const char *pgstr,
+				const char **cmd, size_t cmdlen,
+				const char *inbuf, size_t inbuflen,
+				char **outbuf, size_t *outbuflen,
+				char **outs, size_t *outslen)
+{
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  bufferlist inbl;
+  bufferlist outbl;
+  string outstring;
+  pg_t pgid;
+  vector<string> cmdvec;
+
+  for (size_t i = 0; i < cmdlen; i++)
+    cmdvec.push_back(cmd[i]);
+
+  inbl.append(inbuf, inbuflen);
+  if (!pgid.parse(pgstr))
+    return -EINVAL;
+
+  int ret = client->pg_command(pgid, cmdvec, inbl, &outbl, &outstring);
+
+  do_out_buffer(outbl, outbuf, outbuflen);
+  do_out_buffer(outstring, outs, outslen);
+  return ret;
+}
+
+extern "C" void rados_buffer_free(char *buf)
+{
+  if (buf)
+    free(buf);
+}
+
+extern "C" int rados_monitor_log(rados_t cluster, const char *level, rados_log_callback_t cb, void *arg)
+{
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  return client->monitor_log(level, cb, arg);
+}
+
 
 extern "C" int rados_ioctx_create(rados_t cluster, const char *name, rados_ioctx_t *io)
 {
@@ -2410,6 +2595,7 @@ extern "C" int rados_aio_stat(rados_ioctx_t io, const char *o,
   return ctx->aio_stat(oid, (librados::AioCompletionImpl*)completion, 
 		       psize, pmtime);
 }
+
 
 struct C_WatchCB : public librados::WatchCtx {
   rados_watchcb_t wcb;

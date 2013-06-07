@@ -151,6 +151,9 @@ fi
 
 ARGS="-c $conf"
 
+export PYTHONPATH=./pybind
+export LD_LIBRARY_PATH=.libs
+
 run() {
     type=$1
     shift
@@ -423,7 +426,7 @@ EOF
 
 	    key_fn=dev/osd$osd/keyring
 	    echo adding osd$osd key to auth repository
-	    $SUDO $CEPH_ADM -i $key_fn auth add osd.$osd osd "allow *" mon "allow rwx"
+	    $SUDO $CEPH_ADM -i $key_fn auth add osd.$osd osd "allow *" mon "allow profile osd"
 	fi
 	echo start osd$osd
 	run 'osd' $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS $COSD_ARGS
@@ -462,7 +465,7 @@ EOF
 		fi
 	    fi
 	    $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mds.$name $key_fn
-	    $SUDO $CEPH_ADM -i $key_fn auth add mds.$name mon 'allow *' osd 'allow *' mds 'allow'
+	    $SUDO $CEPH_ADM -i $key_fn auth add mds.$name mon 'allow profile mds' osd 'allow *' mds 'allow'
 	    if [ "$standby" -eq 1 ]; then
 		    $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mds.${name}s \
 			dev/mds.${name}s/keyring
@@ -560,4 +563,8 @@ EOF
 fi
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
+
+echo ""
+echo "export PYTHONPATH=./pybind"
+echo "export LD_LIBRARY_PATH=.libs"
 

@@ -231,7 +231,7 @@ public:
     ::decode(data, bl);
   }
   bool contains(const EntityName& name) const;
-  void list_secrets(stringstream& ss) const;
+  void list_secrets(stringstream& ss, stringstream &ds) const;
   version_t get_ver() const {
     Mutex::Locker l(lock);
     return data.version;    
@@ -289,6 +289,10 @@ public:
   bool get_service_caps(const EntityName& name, uint32_t service_id,
 			AuthCapsInfo& caps) const;
 
+  map<EntityName, EntityAuth>::iterator secrets_begin()
+  { return data.secrets_begin(); }
+  map<EntityName, EntityAuth>::iterator secrets_end()
+  { return data.secrets_end(); }
 };
 WRITE_CLASS_ENCODER(KeyServer);
 
