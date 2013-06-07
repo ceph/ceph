@@ -644,15 +644,14 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
 
     if (lock->get_sm() == &sm_filelock) {
       assert(in);
-      if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
+      if (in->state_test(CInode::STATE_RECOVERING)) {
+	dout(7) << "eval_gather finished gather, but still recovering" << dendl;
+      } else if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
 	dout(7) << "eval_gather finished gather, but need to recover" << dendl;
 	mds->mdcache->queue_file_recover(in);
 	mds->mdcache->do_file_recover();
       }
-      if (in->state_test(CInode::STATE_RECOVERING)) {
-	dout(7) << "eval_gather finished gather, but still recovering" << dendl;
-	return;
-      }
+      return;
     }
 
     if (!lock->get_parent()->is_auth()) {
