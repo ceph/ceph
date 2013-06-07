@@ -1163,8 +1163,33 @@ void RGWRESTMgr::register_resource(string resource, RGWRESTMgr *mgr)
 {
   string r = "/";
   r.append(resource);
+
+  /* do we have a resource manager registered for this entry point? */
+  map<string, RGWRESTMgr *>::iterator iter = resource_mgrs.find(r);
+  if (iter != resource_mgrs.end()) {
+    delete iter->second;
+  }
   resource_mgrs[r] = mgr;
   resources_by_size.insert(pair<size_t, string>(r.size(), r));
+
+  /* now build default resource managers for the path (instead of nested entry points)
+   * e.g., if the entry point is /auth/v1.0/ then we'd want to create a default
+   * manager for /auth/
+   */
+
+  size_t pos = r.find('/', 1);
+
+  while (pos != r.size() - 1 && pos != string::npos) {
+    string s = r.substr(0, pos);
+
+    iter = resource_mgrs.find(s);
+    if (iter == resource_mgrs.end()) { /* only register it if one does not exist */
+      resource_mgrs[s] = new RGWRESTMgr; /* a default do-nothing manager */
+      resources_by_size.insert(pair<size_t, string>(s.size(), s));
+    }
+
+    pos = r.find('/', pos + 1);
+  }
 }
 
 void RGWRESTMgr::register_default_mgr(RGWRESTMgr *mgr)
@@ -1183,8 +1208,8 @@ RGWRESTMgr *RGWRESTMgr::get_resource_mgr(struct req_state *s, const string& uri)
   for (iter = resources_by_size.rbegin(); iter != resources_by_size.rend(); ++iter) {
     string& resource = iter->second;
     if (uri.compare(0, iter->first, resource) == 0 &&
-	(resource.size() == iter->first ||
-	 resource[iter->first] == '/')) {
+	(uri.size() == iter->first ||
+	 uri[iter->first] == '/')) {
       string suffix = uri.substr(iter->first);
       return resource_mgrs[resource]->get_resource_mgr(s, suffix);
     }
