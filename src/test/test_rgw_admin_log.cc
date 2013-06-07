@@ -740,14 +740,15 @@ TEST(TestRGWAdmin, datalog_list) {
   EXPECT_EQ (parse_json_resp(parser), 0);
   JSONDecoder::decode_json("num_objects", num_objects, (JSONObj *)&parser);
   ASSERT_EQ(num_objects,g_ceph_context->_conf->rgw_data_log_num_shards);
-  
+ 
+  sleep(1);
   ASSERT_EQ(0, create_bucket());
   
   char *bucket_obj = (char *)malloc(TEST_BUCKET_OBJECT_SIZE);
   ASSERT_TRUE(bucket_obj != NULL);
   EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
   free(bucket_obj);
-  
+  sleep(1); 
   ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time;
   rest_req = ss.str();
   g_test->send_request(string("GET"), rest_req);
@@ -760,7 +761,6 @@ TEST(TestRGWAdmin, datalog_list) {
     EXPECT_EQ(entry.entity_type, ENTITY_TYPE_BUCKET);
     EXPECT_EQ(entry.key.compare(TEST_BUCKET_NAME), 0);
   }
-
   ASSERT_EQ(0, delete_obj(TEST_BUCKET_OBJECT));
   sleep(1);
   ASSERT_EQ(get_formatted_time(end_time), 0);
@@ -900,11 +900,11 @@ TEST(TestRGWAdmin, datalog_lock_unlock) {
   ASSERT_EQ(0, caps_add(cname, perm));
   rest_req = "/admin/log?type=data&lock&id=1&length=3&lock_id=ceph";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
-  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  EXPECT_EQ(403U, g_test->get_resp_code()); 
   
   rest_req = "/admin/log?type=data&unlock&id=1&lock_id=ceph";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
-  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  EXPECT_EQ(403U, g_test->get_resp_code()); 
   
   ASSERT_EQ(0, caps_rm(cname, perm));
   perm = "write";
@@ -1310,11 +1310,11 @@ TEST(TestRGWAdmin, mdlog_lock_unlock) {
   ASSERT_EQ(0, caps_add(cname, perm));
   rest_req = "/admin/log?type=metadata&lock&id=1&length=3&lock_id=ceph";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
-  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  EXPECT_EQ(403U, g_test->get_resp_code()); 
   
   rest_req = "/admin/log?type=metadata&unlock&id=1&lock_id=ceph";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
-  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  EXPECT_EQ(403U, g_test->get_resp_code()); 
   
   ASSERT_EQ(0, caps_rm(cname, perm));
   perm = "write";

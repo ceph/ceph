@@ -145,6 +145,8 @@ public:
   void dump_log_entry(cls_log_entry& entry, Formatter *f);
 
   void get_sections(list<string>& sections);
+  int lock_exclusive(string& metadata_key, utime_t duration, string& owner_id);
+  int unlock(string& metadata_key, string& owner_id);
 
   RGWMetadataLog *get_log() { return md_log; }
 };

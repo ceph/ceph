@@ -51,8 +51,9 @@ using namespace std;
 #define HTTP_RESPONSE_STR "RespCode"
 #define CEPH_CRYPTO_HMACSHA1_DIGESTSIZE 20
 #define RGW_ADMIN_RESP_PATH "/tmp/.test_rgw_admin_resp"
+#define CEPH_UID  "ceph"
 
-static string uid = "ceph";
+static string uid = CEPH_UID;
 static string display_name = "CEPH";
 static string meta_caps = "metadata";
 
@@ -350,7 +351,7 @@ int run_rgw_admin(string& cmd, string& resp) {
       resp = data;
       free(data);
       unlink(RGW_ADMIN_RESP_PATH);
-      /* cout << "radosgw-admin " << cmd << ": " << resp << std::endl; */
+      /* cout << "radosgw-admin " << cmd << ": " << resp << std::endl;*/
     }
   } else 
     return -1;
@@ -530,6 +531,13 @@ int compare_user_info(RGWUserInfo& i1, RGWUserInfo& i2) {
     return -1;
   return 0;
 }
+
+size_t read_dummy_post(void *ptr, size_t s, size_t n, void *ud) {
+  int dummy = 0;
+  memcpy(ptr, &dummy, sizeof(dummy));
+  return sizeof(dummy);
+}
+
 
 int parse_json_resp(JSONParser &parser) {
   string *resp;
@@ -780,6 +788,101 @@ TEST(TestRGWAdmin, meta_put){
     g_test->send_request(string("PUT"), (string("/admin/metadata/user?key=") + uid));
     EXPECT_EQ(403U, g_test->get_resp_code());
   }
+  ASSERT_EQ(0, user_rm(uid, display_name));
+}
+
+TEST(TestRGWAdmin, meta_lock_unlock) {
+  const char *perm = "*";
+  string rest_req;
+
+  ASSERT_EQ(0, user_create(uid, display_name));
+  ASSERT_EQ(0, meta_caps_add(perm));
+
+  rest_req = "/admin/metadata/user?key="CEPH_UID"&lock&length=3";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+  
+  rest_req = "/admin/metadata/user?lock&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+
+  rest_req = "/admin/metadata/user?key="CEPH_UID"&unlock";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+
+  rest_req = "/admin/metadata/user?unlock&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+  
+  rest_req = "/admin/metadata/user?key="CEPH_UID"&lock&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/metadata/user?key="CEPH_UID"&unlock&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/metadata/user?key="CEPH_UID"&lock&length=3&lock_id=ceph1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/metadata/user?key="CEPH_UID"&unlock&lock_id=ceph1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/metadata/user?key="CEPH_UID"&lock&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  utime_t sleep_time(3, 0);
+
+  rest_req = "/admin/metadata/user?key="CEPH_UID"&lock&length=3&lock_id=ceph1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(500U, g_test->get_resp_code()); 
+
+  rest_req = "/admin/metadata/user?key="CEPH_UID"&lock&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(409U, g_test->get_resp_code()); 
+  sleep_time.sleep();
+
+  rest_req = "/admin/metadata/user?key="CEPH_UID"&lock&length=3&lock_id=ceph1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/metadata/user?key="CEPH_UID"&unlock&lock_id=ceph1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+
+  ASSERT_EQ(0, meta_caps_rm(perm));
+  perm = "read";
+  ASSERT_EQ(0, meta_caps_add(perm));
+  rest_req = "/admin/metadata/user?key="CEPH_UID"&lock&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(403U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/metadata/user?key="CEPH_UID"&unlock&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(403U, g_test->get_resp_code()); 
+  
+  ASSERT_EQ(0, meta_caps_rm(perm));
+  perm = "write";
+  ASSERT_EQ(0, meta_caps_add(perm));
+  rest_req = "/admin/metadata/user?key="CEPH_UID"&lock&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/metadata/user?key="CEPH_UID"&unlock&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
+  
+  ASSERT_EQ(0, meta_caps_rm(perm));
+  rest_req = "/admin/metadata/user?key="CEPH_UID"&lock&length=3&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(403U, g_test->get_resp_code()); 
+  
+  rest_req = "/admin/metadata/user?key="CEPH_UID"&unlock&lock_id=ceph";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(403U, g_test->get_resp_code()); 
+  
   ASSERT_EQ(0, user_rm(uid, display_name));
 }
 

@@ -344,10 +344,10 @@ public:
   int trim_entries(int shard_id, utime_t& start_time, utime_t& end_time);
   int trim_entries(utime_t& start_time, utime_t& end_time);
   int lock_exclusive(int shard_id, utime_t& duration, string& owner_id) {
-    return store->log_lock_exclusive(oids[shard_id], duration, owner_id);
+    return store->lock_exclusive(store->zone.log_pool, oids[shard_id], duration, owner_id);
   }
   int unlock(int shard_id, string& owner_id) {
-    return store->log_unlock(oids[shard_id], owner_id);
+    return store->unlock(store->zone.log_pool, oids[shard_id], owner_id);
   }
   struct LogMarker {
     int shard;

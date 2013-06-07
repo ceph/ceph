@@ -19,8 +19,9 @@
 #include "rgw_rest_metadata.h"
 #include "rgw_client_io.h"
 #include "common/errno.h"
-#define dout_subsys ceph_subsys_rgw
+#include "common/strtol.h"
 
+#define dout_subsys ceph_subsys_rgw
 
 const char *RGWOp_Metadata_Get::name() {
   return "get_metadata";
@@ -180,6 +181,58 @@ void RGWOp_Metadata_Delete::execute() {
   http_ret = 0;
 }
 
+void RGWOp_Metadata_Lock::execute() {
+  string duration_str, lock_id;
+  string metadata_key;
+
+  frame_metadata_key(s, metadata_key);
+
+  http_ret = 0;
+
+  duration_str = s->info.args.get("length");
+  lock_id      = s->info.args.get("lock_id");
+
+  if ((!s->info.args.exists("key")) || 
+      (duration_str.empty()) ||
+      lock_id.empty()) {
+    dout(5) << "Error invalid parameter list" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  int dur;
+  string err;
+
+  dur = strict_strtol(duration_str.c_str(), 10, &err);
+  if (!err.empty() || dur <= 0) {
+    dout(5) << "invalid length param " << duration_str << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+  utime_t time(dur, 0);
+  http_ret = store->meta_mgr->lock_exclusive(metadata_key, time, lock_id);
+}
+
+void RGWOp_Metadata_Unlock::execute() {
+  string lock_id;
+  string metadata_key;
+
+  frame_metadata_key(s, metadata_key);
+
+  http_ret = 0;
+
+  lock_id = s->info.args.get("lock_id");
+
+  if ((!s->info.args.exists("key")) || 
+      lock_id.empty()) {
+    dout(5) << "Error invalid parameter list" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  http_ret = store->meta_mgr->unlock(metadata_key, lock_id);
+}
+
 RGWOp *RGWHandler_Metadata::op_get() {
   if (s->info.args.exists("key"))
     return new RGWOp_Metadata_Get;
@@ -194,3 +247,13 @@ RGWOp *RGWHandler_Metadata::op_put() {
 RGWOp *RGWHandler_Metadata::op_delete() {
   return new RGWOp_Metadata_Delete;
 }
+
+RGWOp *RGWHandler_Metadata::op_post() {
+  if (s->info.args.exists("lock"))
+    return new RGWOp_Metadata_Lock;
+  else if (s->info.args.exists("unlock"))
+    return new RGWOp_Metadata_Unlock;
+
+  return NULL;
+}
+

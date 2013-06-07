@@ -1197,11 +1197,14 @@ int RGWDataChangesLog::list_entries(utime_t& start_time, utime_t& end_time, int 
 
 int RGWDataChangesLog::trim_entries(int shard_id, utime_t& start_time, utime_t& end_time)
 {
-  int ret = store->time_log_trim(oids[shard_id], start_time, end_time);
-  if ((ret < 0) && (ret != -ENOENT))
-    return ret;
+  int ret;
 
-  return 0;
+  ret = store->time_log_trim(oids[shard_id], start_time, end_time);
+
+  if (ret == -ENOENT)
+    ret = 0;
+
+  return ret;
 }
 
 int RGWDataChangesLog::trim_entries(utime_t& start_time, utime_t& end_time)

@@ -133,24 +133,21 @@ int RGWMetadataLog::trim(int shard_id, utime_t& from_time, utime_t& end_time)
   if (ret == -ENOENT)
     ret = 0;
 
-  if (ret < 0)
-    return ret;
-
-  return 0;
+  return ret;
 }
   
 int RGWMetadataLog::lock_exclusive(int shard_id, utime_t& duration, string& owner_id) {
   string oid;
   get_shard_oid(shard_id, oid);
 
-  return store->log_lock_exclusive(oid, duration, owner_id);
+  return store->lock_exclusive(store->zone.log_pool, oid, duration, owner_id);
 }
 
 int RGWMetadataLog::unlock(int shard_id, string& owner_id) {
   string oid;
   get_shard_oid(shard_id, oid);
 
-  return store->log_unlock(oid, owner_id);
+  return store->unlock(store->zone.log_pool, oid, owner_id);
 }
 
 obj_version& RGWMetadataObject::get_version()
@@ -353,6 +350,38 @@ int RGWMetadataManager::remove(string& metadata_key)
   return handler->remove(store, entry, objv_tracker);
 }
 
+int RGWMetadataManager::lock_exclusive(string& metadata_key, utime_t duration, string& owner_id) {
+  RGWMetadataHandler *handler;
+  string entry;
+
+  int ret = find_handler(metadata_key, &handler, entry);
+  if (ret < 0) 
+    return ret;
+
+  rgw_bucket pool;
+  string oid;
+
+  handler->get_pool_and_oid(store, entry, pool, oid);
+
+  return store->lock_exclusive(pool, oid, duration, owner_id);  
+}
+
+int RGWMetadataManager::unlock(string& metadata_key, string& owner_id) {
+  librados::IoCtx io_ctx;
+  RGWMetadataHandler *handler;
+  string entry;
+
+  int ret = find_handler(metadata_key, &handler, entry);
+  if (ret < 0) 
+    return ret;
+
+  rgw_bucket pool;
+  string oid;
+
+  handler->get_pool_and_oid(store, entry, pool, oid);
+
+  return store->unlock(pool, oid, owner_id);  
+}
 
 struct list_keys_handle {
   void *handle;

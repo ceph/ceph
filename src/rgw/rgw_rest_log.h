@@ -90,29 +90,32 @@ public:
   }
 };
 
-class RGWOp_MDLog_Post : public RGWRESTOp {
-  enum {
-    MDLOG_POST_INVALID = 0,
-    MDLOG_POST_LOCK,
-    MDLOG_POST_UNLOCK
-  };
-  int get_post_type() {
-    bool exists;
-    s->info.args.get("lock", &exists);
-    if (exists) 
-      return MDLOG_POST_LOCK;
-    s->info.args.get("unlock", &exists);
-    if (exists)
-      return MDLOG_POST_UNLOCK;
-    return MDLOG_POST_INVALID;
-  }
+class RGWOp_MDLog_Lock : public RGWRESTOp {
 public:
-  RGWOp_MDLog_Post() {}
-  ~RGWOp_MDLog_Post() {}
+  RGWOp_MDLog_Lock() {}
+  ~RGWOp_MDLog_Lock() {}
 
-  int check_caps(RGWUserCaps& caps);
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("mdlog", RGW_CAP_WRITE);
+  }
   void execute();
-  virtual const char *name();
+  virtual const char *name() {
+    return "lock_mdlog_object";
+  }
+};
+
+class RGWOp_MDLog_Unlock : public RGWRESTOp {
+public:
+  RGWOp_MDLog_Unlock() {}
+  ~RGWOp_MDLog_Unlock() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("mdlog", RGW_CAP_WRITE);
+  }
+  void execute();
+  virtual const char *name() {
+    return "unlock_mdlog_object";
+  }
 };
 
 class RGWOp_MDLog_Delete : public RGWRESTOp {
@@ -169,29 +172,32 @@ public:
   }
 };
 
-class RGWOp_DATALog_Post : public RGWRESTOp {
-  enum {
-    DATALOG_POST_INVALID = 0,
-    DATALOG_POST_LOCK,
-    DATALOG_POST_UNLOCK
-  };
-  int get_post_type() {
-    bool exists;
-    s->args.get("lock", &exists);
-    if (exists) 
-      return DATALOG_POST_LOCK;
-    s->args.get("unlock", &exists);
-    if (exists)
-      return DATALOG_POST_UNLOCK;
-    return DATALOG_POST_INVALID;
-  }
+class RGWOp_DATALog_Lock : public RGWRESTOp {
 public:
-  RGWOp_DATALog_Post() {}
-  ~RGWOp_DATALog_Post() {}
+  RGWOp_DATALog_Lock() {}
+  ~RGWOp_DATALog_Lock() {}
 
-  int check_caps(RGWUserCaps& caps);
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("datalog", RGW_CAP_WRITE);
+  }
   void execute();
-  virtual const char *name();
+  virtual const char *name() {
+    return "lock_datalog_object";
+  }
+};
+
+class RGWOp_DATALog_Unlock : public RGWRESTOp {
+public:
+  RGWOp_DATALog_Unlock() {}
+  ~RGWOp_DATALog_Unlock() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("datalog", RGW_CAP_WRITE);
+  }
+  void execute();
+  virtual const char *name() {
+    return "unlock_datalog_object";
+  }
 };
 
 class RGWOp_DATALog_Delete : public RGWRESTOp {

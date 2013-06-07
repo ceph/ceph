@@ -58,7 +58,6 @@ static string region_info_oid_prefix = "region_info.";
 
 static string default_region_info_oid = "default.region";
 static string region_map_oid = "region_map";
-static string rgw_log_lock_name = "rgw_process";
 
 static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 
@@ -1217,28 +1216,37 @@ int RGWRados::time_log_trim(const string& oid, utime_t& start_time, utime_t& end
   return cls_log_trim(io_ctx, oid, start_time, end_time);
 }
 
-int RGWRados::log_lock_exclusive(const string& oid, utime_t& duration, string& owner_id) {
+
+int RGWRados::lock_exclusive(rgw_bucket& pool, const string& oid, utime_t& duration, string& owner_id) {
   librados::IoCtx io_ctx;
 
-  const char *log_pool = zone.log_pool.name.c_str();
-  int r = rados->ioctx_create(log_pool, io_ctx);
+  const char *pool_name = pool.name.c_str();
+  
+  int r = rados->ioctx_create(pool_name, io_ctx);
   if (r < 0)
     return r;
-  rados::cls::lock::Lock l(rgw_log_lock_name);
+  
+  string lock_name = RGW_INDEX_LOCK_NAME;
+  rados::cls::lock::Lock l(lock_name);
   l.set_duration(duration);
   l.set_cookie(owner_id);
+  
   return l.lock_exclusive(&io_ctx, oid);
 }
 
-int RGWRados::log_unlock(const string& oid, string& owner_id) {
+int RGWRados::unlock(rgw_bucket& pool, const string& oid, string& owner_id) {
   librados::IoCtx io_ctx;
 
-  const char *log_pool = zone.log_pool.name.c_str();
-  int r = rados->ioctx_create(log_pool, io_ctx);
+  const char *pool_name = pool.name.c_str();
+
+  int r = rados->ioctx_create(pool_name, io_ctx);
   if (r < 0)
     return r;
-  rados::cls::lock::Lock l(rgw_log_lock_name);
+  
+  string lock_name = RGW_INDEX_LOCK_NAME;
+  rados::cls::lock::Lock l(lock_name);
   l.set_cookie(owner_id);
+  
   return l.unlock(&io_ctx, oid);
 }
 

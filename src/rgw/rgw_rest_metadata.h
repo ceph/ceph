@@ -63,11 +63,40 @@ public:
   virtual const char *name() { return "remove_metadata"; }
 };
 
+class RGWOp_Metadata_Lock : public RGWRESTOp {
+public:
+  RGWOp_Metadata_Lock() {}
+  ~RGWOp_Metadata_Lock() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("metadata", RGW_CAP_WRITE);
+  }
+  void execute();
+  virtual const char *name() {
+    return "lock_metadata_object";
+  }
+};
+
+class RGWOp_Metadata_Unlock : public RGWRESTOp {
+public:
+  RGWOp_Metadata_Unlock() {}
+  ~RGWOp_Metadata_Unlock() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("metadata", RGW_CAP_WRITE);
+  }
+  void execute();
+  virtual const char *name() {
+    return "unlock_metadata_object";
+  }
+};
+
 class RGWHandler_Metadata : public RGWHandler_Auth_S3 {
 protected:
   RGWOp *op_get();
   RGWOp *op_put();
   RGWOp *op_delete();
+  RGWOp *op_post();
 
   int read_permissions(RGWOp*) {
     return 0;
