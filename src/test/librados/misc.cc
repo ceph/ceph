@@ -474,3 +474,4 @@ TEST(LibRadosMisc, AssertExistsPP) {
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
+

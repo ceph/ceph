@@ -85,9 +85,8 @@ TYPE(PGMap)
 #include "mon/MonMap.h"
 TYPE_FEATUREFUL(MonMap)
 
-#include "mon/MonCaps.h"
+#include "mon/MonCap.h"
 TYPE(MonCap)
-TYPE(MonCaps)
 
 #include "os/DBObjectMap.h"
 TYPE(DBObjectMap::_Header)

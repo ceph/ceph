@@ -127,12 +127,9 @@ def bootstrap_key(cluster, type_, caps):
         'auth',
         'get-or-create',
         'client.bootstrap-{type}'.format(type=type_),
+        'mon',
+        'allow profile bootstrap-{type}'.format(type=type_),
         ]
-    for subsystem, subcaps in caps.iteritems():
-        args.extend([
-            subsystem,
-            '; '.join(subcaps),
-            ])
 
     while True:
         try:
@@ -212,25 +209,10 @@ def main():
     bootstrap_key(
         cluster=args.cluster,
         type_='osd',
-        caps=dict(
-            mon=[
-                'allow command osd create ...',
-                'allow command osd crush set ...',
-                r'allow command auth add * osd allow\ * mon allow\ rwx',
-                'allow command mon getmap',
-                ],
-            ),
         )
-
     bootstrap_key(
         cluster=args.cluster,
         type_='mds',
-        caps=dict(
-            mon=[
-                r'allow command auth get-or-create * osd allow\ * mds allow mon allow\ rwx',
-                'allow command mon getmap',
-                ],
-            ),
         )
 
 

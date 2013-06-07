@@ -44,6 +44,7 @@ class MPoolOpReply;
 
 class MGetPoolStatsReply;
 class MStatfsReply;
+class MCommandReply;
 
 class PerfCounters;
 
@@ -820,6 +821,14 @@ public:
     void finish(int r);
   };
 
+  struct C_Command_Map_Latest : public Context {
+    Objecter *objecter;
+    uint64_t tid;
+    version_t latest;
+    C_Command_Map_Latest(Objecter *o, tid_t t) :  objecter(o), tid(t), latest(0) {}
+    void finish(int r);
+  };
+
   struct C_Stat : public Context {
     bufferlist bl;
     uint64_t *psize;
@@ -934,6 +943,34 @@ public:
 	       auid(0), crush_rule(0), snapid(0), blp(NULL) {}
   };
 
+  // -- osd commands --
+  struct CommandOp : public RefCountedObject {
+    xlist<CommandOp*>::item session_item;
+    OSDSession *session;
+    tid_t tid;
+    vector<string> cmd;
+    bufferlist inbl;
+    bufferlist *poutbl;
+    string *prs;
+    int target_osd;
+    pg_t target_pg;
+    epoch_t map_dne_bound;
+    Context *onfinish;
+    utime_t last_submit;
+
+    CommandOp()
+      : session_item(this), session(NULL),
+	tid(0), poutbl(NULL), prs(NULL), target_osd(-1),
+	map_dne_bound(0),
+	onfinish(NULL) {}
+  };
+
+  int _submit_command(CommandOp *c, tid_t *ptid);
+  int recalc_command_target(CommandOp *c);
+  void _send_command(CommandOp *c);
+  void _finish_command(CommandOp *c, int r, string rs);
+  void handle_command_reply(MCommandReply *m);
+
 
   // -- lingering ops --
 
@@ -1020,6 +1057,7 @@ public:
   struct OSDSession {
     xlist<Op*> ops;
     xlist<LingerOp*> linger_ops;
+    xlist<CommandOp*> command_ops;
     int osd;
     int incarnation;
     Connection *con;
@@ -1037,11 +1075,13 @@ public:
   map<tid_t,PoolStatOp*>    poolstat_ops;
   map<tid_t,StatfsOp*>      statfs_ops;
   map<tid_t,PoolOp*>        pool_ops;
+  map<tid_t,CommandOp*>     command_ops;
 
   // ops waiting for an osdmap with a new pool or confirmation that
   // the pool does not exist (may be expanded to other uses later)
   map<uint64_t, LingerOp*>  check_latest_map_lingers;
   map<tid_t, Op*>           check_latest_map_ops;
+  map<tid_t, CommandOp*>    check_latest_map_commands;
 
   map<epoch_t,list< pair<Context*, int> > > waiting_for_map;
 
@@ -1053,6 +1093,7 @@ public:
     RECALC_OP_TARGET_NO_ACTION = 0,
     RECALC_OP_TARGET_NEED_RESEND,
     RECALC_OP_TARGET_POOL_DNE,
+    RECALC_OP_TARGET_OSD_DNE,
   };
   int recalc_op_target(Op *op);
   bool recalc_linger_op_target(LingerOp *op);
@@ -1067,6 +1108,9 @@ public:
   void check_linger_pool_dne(LingerOp *op);
   void _send_linger_map_check(LingerOp *op);
   void linger_cancel_map_check(LingerOp *op);
+  void check_command_pool_dne(CommandOp *op);
+  void _send_command_map_check(CommandOp *op);
+  void command_cancel_map_check(CommandOp *op);
 
   void kick_requests(OSDSession *session);
 
@@ -1149,7 +1193,8 @@ public:
 
   void scan_requests(bool skipped_map,
 		     map<tid_t, Op*>& need_resend,
-		     list<LingerOp*>& need_resend_linger);
+		     list<LingerOp*>& need_resend_linger,
+		     map<tid_t, CommandOp*>& need_resend_command);
 
   // messages
  public:
@@ -1191,6 +1236,31 @@ private:
   void add_global_op_flags(int flag) { global_op_flags |= flag; }
   /** Clear the passed flags from the global op flag set */
   void clear_global_op_flag(int flags) { global_op_flags &= ~flags; }
+
+  // commands
+  int osd_command(int osd, vector<string>& cmd, bufferlist& inbl, tid_t *ptid,
+		    bufferlist *poutbl, string *prs, Context *onfinish) {
+    assert(osd >= 0);
+    CommandOp *c = new CommandOp;
+    c->cmd = cmd;
+    c->inbl = inbl;
+    c->poutbl = poutbl;
+    c->prs = prs;
+    c->onfinish = onfinish;
+    c->target_osd = osd;
+    return _submit_command(c, ptid);
+  }
+  int pg_command(pg_t pgid, vector<string>& cmd, bufferlist& inbl, tid_t *ptid,
+		   bufferlist *poutbl, string *prs, Context *onfinish) {
+    CommandOp *c = new CommandOp;
+    c->cmd = cmd;
+    c->inbl = inbl;
+    c->poutbl = poutbl;
+    c->prs = prs;
+    c->onfinish = onfinish;
+    c->target_pg = pgid;
+    return _submit_command(c, ptid);
+  }
 
   // mid-level helpers
   tid_t mutate(const object_t& oid, const object_locator_t& oloc, 

@@ -294,7 +294,7 @@ bool KeyServer::contains(const EntityName& name) const
   return data.contains(name);
 }
 
-void KeyServer::list_secrets(stringstream& ss) const
+void KeyServer::list_secrets(stringstream& ss, stringstream &ds) const
 {
   Mutex::Locker l(lock);
 
@@ -304,9 +304,9 @@ void KeyServer::list_secrets(stringstream& ss) const
 
     while (mapiter != data.secrets_end()) {
       const EntityName& name = mapiter->first;
-      ss << name.to_str() << std::endl;
+      ds << name.to_str() << std::endl;
 
-      ss << "\tkey: " << mapiter->second.key << std::endl;
+      ds << "\tkey: " << mapiter->second.key << std::endl;
 
       map<string, bufferlist>::const_iterator capsiter =
 	  mapiter->second.caps.begin();
@@ -316,7 +316,7 @@ void KeyServer::list_secrets(stringstream& ss) const
         bufferlist::iterator dataiter = bl->begin();
         string caps;
         ::decode(caps, dataiter);
-	ss << "\tcaps: [" << capsiter->first << "] " << caps << std::endl;
+	ds << "\tcaps: [" << capsiter->first << "] " << caps << std::endl;
       }
      
       ++mapiter;
