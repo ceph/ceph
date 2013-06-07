@@ -12,13 +12,14 @@
  *
  */
 
-#include <iostream>
-#include <list>
-#include <set>
+#include "include/str_list.h"
 
 using std::string;
+using std::vector;
+using std::set;
+using std::list;
 
-static bool get_next_token(const std::string &s, size_t& pos, const char *delims, string& token)
+static bool get_next_token(const string &s, size_t& pos, const char *delims, string& token)
 {
   int start = s.find_first_not_of(delims, pos);
   int end;
@@ -39,17 +40,11 @@ static bool get_next_token(const std::string &s, size_t& pos, const char *delims
   return true;
 }
 
-static bool get_next_token(const std::string &s, size_t& pos, string& token)
-{
-  const char *delims = ";,= \t";
-  return get_next_token(s, pos, delims, token);
-}
-
-void get_str_list(const std::string& str, const char *delims, std::list<string>& str_list)
+void get_str_list(const string& str, const char *delims, list<string>& str_list)
 {
   size_t pos = 0;
   string token;
-  
+
   str_list.clear();
 
   while (pos < str.size()) {
@@ -61,13 +56,34 @@ void get_str_list(const std::string& str, const char *delims, std::list<string>&
   }
 }
 
-void get_str_list(const std::string& str, std::list<string>& str_list)
+void get_str_list(const string& str, list<string>& str_list)
 {
   const char *delims = ";,= \t";
   return get_str_list(str, delims, str_list);
 }
 
-void get_str_set(const std::string& str, std::set<std::string>& str_set)
+void get_str_vec(const string& str, const char *delims, vector<string>& str_vec)
+{
+  size_t pos = 0;
+  string token;
+  str_vec.clear();
+
+  while (pos < str.size()) {
+    if (get_next_token(str, pos, delims, token)) {
+      if (token.size() > 0) {
+        str_vec.push_back(token);
+      }
+    }
+  }
+}
+
+void get_str_vec(const string& str, vector<string>& str_vec)
+{
+  const char *delims = ";,= \t";
+  return get_str_vec(str, delims, str_vec);
+}
+
+void get_str_set(const string& str, const char *delims, set<string>& str_set)
 {
   size_t pos = 0;
   string token;
@@ -75,10 +91,16 @@ void get_str_set(const std::string& str, std::set<std::string>& str_set)
   str_set.clear();
 
   while (pos < str.size()) {
-    if (get_next_token(str, pos, token)) {
+    if (get_next_token(str, pos, delims, token)) {
       if (token.size() > 0) {
         str_set.insert(token);
       }
     }
   }
+}
+
+void get_str_set(const string& str, set<string>& str_set)
+{
+  const char *delims = ";,= \t";
+  return get_str_set(str, delims, str_set);
 }
