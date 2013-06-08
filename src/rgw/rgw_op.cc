@@ -297,6 +297,29 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
   s->bucket_acl = new RGWAccessControlPolicy(s->cct);
 
   RGWBucketInfo bucket_info;
+
+  bool source_in_domain = false;
+
+  if (s->copy_source) { /* check if copy source is within the current domain */
+    const char *src = s->copy_source;
+    if (*src == '/')
+      ++src;
+    string copy_source_str(src);
+
+    int pos = copy_source_str.find('/');
+    if (pos > 0)
+      copy_source_str = copy_source_str.substr(0, pos);
+
+    RGWBucketInfo source_info;
+
+    ret = store->get_bucket_info(s->obj_ctx, copy_source_str, source_info, NULL);
+    if (ret == 0) {
+      string& region = source_info.region;
+      source_in_domain = (region.empty() && store->region.is_master) ||
+                         (region == store->region.name);
+    }
+  }
+    
   if (s->bucket_name_str.size()) {
     bool exists = true;
     ret = store->get_bucket_info(s->obj_ctx, s->bucket_name_str, bucket_info, &s->objv_tracker);
@@ -319,7 +342,14 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     if (exists && ((region.empty() && !store->region.is_master) ||
         (region != store->region.name))) {
       ldout(s->cct, 0) << "NOTICE: request for data in a different region (" << region << " != " << store->region.name << ")" << dendl;
-      return -ERR_PERMANENT_REDIRECT;
+      /* we now need to make sure that the operation actually requires copy source, that is
+       * it's a copy operation
+       */
+      if (!source_in_domain ||
+          (s->op != OP_PUT && s->op != OP_COPY) ||
+          s->object_str.empty()) {
+        return -ERR_PERMANENT_REDIRECT;
+      }
     }
   }
 
