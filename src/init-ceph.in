@@ -12,8 +12,6 @@
 # Description:       Enable Ceph distributed file system services.
 ### END INIT INFO
 
-RUN_DIR=/var/run/ceph
-
 # if we start up as ./mkcephfs, assume everything else is in the
 # current directory too.
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
@@ -181,7 +179,9 @@ for name in $what; do
     binary="$BINDIR/ceph-$type"
     cmd="$binary -i $id"
 
-    get_conf pid_file "$RUN_DIR/$type.$id.pid" "pid file"
+    get_conf run_dir "/var/run/ceph" "run dir"
+
+    get_conf pid_file "$run_dir/$type.$id.pid" "pid file"
 
     if [ "$command" = "start" ]; then
 	if [ -n "$pid_file" ]; then
@@ -236,7 +236,7 @@ for name in $what; do
 	lockfile=""
     fi
 
-    get_conf asok "$RUN_DIR/ceph-$type.$id.asok" "admin socket"
+    get_conf asok "$run_dir/ceph-$type.$id.asok" "admin socket"
 
     case "$command" in
 	start)
@@ -327,7 +327,7 @@ for name in $what; do
 	    fi
 
 	    echo Starting Ceph $name on $host...
-	    mkdir -p $RUN_DIR
+	    mkdir -p $run_dir
 	    get_conf pre_start_eval "" "pre start eval"
 	    [ -n "$pre_start_eval" ] && $pre_start_eval
 	    get_conf pre_start "" "pre start command"
