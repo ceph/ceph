@@ -933,6 +933,7 @@ void Objecter::close_session(OSDSession *s)
   }
   s->ops.clear();
   s->linger_ops.clear();
+  s->command_ops.clear();
   osd_sessions.erase(s->osd);
   delete s;
 
