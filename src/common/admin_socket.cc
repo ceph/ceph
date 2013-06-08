@@ -540,6 +540,8 @@ void AdminSocket::shutdown()
   delete m_version_hook;
   unregister_command("help");
   delete m_help_hook;
+  unregister_command("get_command_descriptions");
+  delete m_getdescs_hook;
 
   remove_cleanup_file(m_path.c_str());
   m_path.clear();
