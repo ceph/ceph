@@ -35,6 +35,172 @@ public:
   }
 };
 
+TEST_F(PGLogTest, rewind_divergent_log) {
+  // newhead > log.tail : throw an assert
+  {
+    clear();
+
+    ObjectStore::Transaction t;
+    pg_info_t info;
+    list<hobject_t> remove_snap;
+    bool dirty_log = false;
+    bool dirty_info = false;
+    bool dirty_big_info = false;
+
+    log.tail = eversion_t(2, 1);
+    EXPECT_THROW(rewind_divergent_log(t, eversion_t(1, 1), info, remove_snap,
+				      dirty_log, dirty_info, dirty_big_info),
+		 FailedAssertion);
+  }
+
+  /*        +----------------+
+            |  log           | 
+            +--------+-------+
+            |        |object |
+            |version | hash  |
+            |        |       |
+       tail > (1,1)  |  x5   |
+            |        |       |
+            |        |       |
+            | (1,4)  |  x9   < newhead
+            | MODIFY |       |
+            |        |       |
+       head > (1,5)  |  x9   |
+            | DELETE |       |
+            |        |       |
+            +--------+-------+
+
+  */
+  {
+    clear();
+
+    ObjectStore::Transaction t;
+    pg_info_t info;
+    list<hobject_t> remove_snap;
+    bool dirty_log = false;
+    bool dirty_info = false;
+    bool dirty_big_info = false;
+
+    hobject_t divergent_object;
+    eversion_t divergent_version;
+    eversion_t newhead;
+    {
+      pg_log_entry_t e;
+
+      e.version = eversion_t(1, 1);
+      e.soid.hash = 0x5;
+      log.tail = e.version;
+      log.log.push_back(e);
+      e.version = newhead = eversion_t(1, 4);
+      e.soid.hash = 0x9;
+      e.op = pg_log_entry_t::MODIFY;
+      log.log.push_back(e);
+      log.index();
+      e.version = divergent_version = eversion_t(1, 5);
+      e.soid.hash = 0x9;
+      divergent_object = e.soid;
+      e.op = pg_log_entry_t::DELETE;
+      log.log.push_back(e);
+      log.head = e.version;
+
+      info.last_update = log.head;
+      info.last_complete = log.head;
+    }
+
+    EXPECT_FALSE(missing.have_missing());
+    EXPECT_EQ(3U, log.log.size());
+    EXPECT_EQ(0U, ondisklog.length());
+    EXPECT_TRUE(remove_snap.empty());
+    EXPECT_TRUE(t.empty());
+    EXPECT_EQ(log.head, info.last_update);
+    EXPECT_EQ(log.head, info.last_complete);
+    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty_info);
+    EXPECT_FALSE(dirty_big_info);
+
+    rewind_divergent_log(t, newhead, info, remove_snap,
+			 dirty_log, dirty_info, dirty_big_info);
+
+    EXPECT_TRUE(missing.is_missing(divergent_object));
+    EXPECT_EQ(1U, log.objects.count(divergent_object));
+    EXPECT_EQ(2U, log.log.size());
+    EXPECT_EQ(0U, ondisklog.length());
+    EXPECT_TRUE(remove_snap.empty());
+    EXPECT_TRUE(t.empty());
+    EXPECT_EQ(newhead, info.last_update);
+    EXPECT_EQ(newhead, info.last_complete);
+    EXPECT_TRUE(dirty_log);
+    EXPECT_TRUE(dirty_info);
+    EXPECT_TRUE(dirty_big_info);
+  }
+
+  /*        +----------------+
+            |  log           | 
+            +--------+-------+
+            |        |object |
+            |version | hash  |
+            |        |       |
+       tail > (1,1)  | NULL  | 
+            |        |       |
+            | (1,4)  | NULL  < newhead
+            |        |       |
+       head > (1,5)  |  x9   |
+            |        |       |
+            +--------+-------+
+
+  */
+  {
+    clear();
+
+    ObjectStore::Transaction t;
+    pg_info_t info;
+    list<hobject_t> remove_snap;
+    bool dirty_log = false;
+    bool dirty_info = false;
+    bool dirty_big_info = false;
+
+    hobject_t divergent_object;
+    eversion_t divergent_version;
+    eversion_t prior_version;
+    eversion_t newhead;
+    {
+      pg_log_entry_t e;
+
+      info.log_tail = log.tail = eversion_t(1, 1);
+      newhead = eversion_t(1, 3);
+      e.version = divergent_version = eversion_t(1, 5);
+      e.soid.hash = 0x9;
+      divergent_object = e.soid;
+      e.op = pg_log_entry_t::DELETE;
+      e.prior_version = prior_version = eversion_t(0, 2);
+      log.log.push_back(e);
+      log.head = e.version;
+    }
+
+    EXPECT_FALSE(missing.have_missing());
+    EXPECT_EQ(1U, log.log.size());
+    EXPECT_EQ(0U, ondisklog.length());
+    EXPECT_TRUE(remove_snap.empty());
+    EXPECT_TRUE(t.empty());
+    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty_info);
+    EXPECT_FALSE(dirty_big_info);
+
+    rewind_divergent_log(t, newhead, info, remove_snap,
+			 dirty_log, dirty_info, dirty_big_info);
+
+    EXPECT_TRUE(missing.is_missing(divergent_object));
+    EXPECT_EQ(0U, log.objects.count(divergent_object));
+    EXPECT_TRUE(log.empty());
+    EXPECT_EQ(0U, ondisklog.length());
+    EXPECT_TRUE(remove_snap.empty());
+    EXPECT_TRUE(t.empty());
+    EXPECT_TRUE(dirty_log);
+    EXPECT_TRUE(dirty_info);
+    EXPECT_TRUE(dirty_big_info);
+  }
+}
+
 TEST_F(PGLogTest, merge_old_entry) {
   // entries > last_backfill are silently ignored
   {
